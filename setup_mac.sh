@@ -48,3 +48,6 @@ sh -c "$(curl -fsSL https://raw.github.com/robbyrussell/oh-my-zsh/master/tools/i
 
 echo "Setting ZSH as shell..."
 chsh -s /bin/zsh
+
+echo "Downloading keychain"
+wget http://www.funtoo.org/distfiles/keychain/keychain-2.8.2.tar.bz2 ~/Downloads/keychain-2.8.2.tar.bz2
