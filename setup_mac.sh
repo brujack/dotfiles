@@ -39,12 +39,9 @@ echo "Copying dotfiles from Github"
 cd ~
 git clone --recursive git@github.com:brujack/dotfiles.git dotfiles
 
-echo "Copying dotfiles to their home"
-cp -a ~/dotfiles/.zshrc ~/.zshrc
-cp -a ~/dofiles/bruce.zsh-theme ~/.oh-my-zsh/themes/bruce.zsh-theme
-
-echo "Installing Oh My ZSH..."
-sh -c "$(curl -fsSL https://raw.github.com/robbyrussell/oh-my-zsh/master/tools/install.sh)"
+echo "Linking dotfiles to their home"
+ln -s ~/dotfiles/.zshrc ~/.zshrc
+ln -s ~/dofiles/bruce.zsh-theme ~/.oh-my-zsh/themes/bruce.zsh-theme
 
 echo "Setting ZSH as shell..."
 chsh -s /bin/zsh
