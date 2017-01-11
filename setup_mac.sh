@@ -41,7 +41,7 @@ git clone --recursive git@github.com:brujack/dotfiles.git dotfiles
 
 echo "Linking dotfiles to their home"
 ln -s ~/dotfiles/.zshrc ~/.zshrc
-ln -s ~/dofiles/bruce.zsh-theme ~/.oh-my-zsh/themes/bruce.zsh-theme
+ln -s ~/dotfiles/bruce.zsh-theme ~/.oh-my-zsh/themes/bruce.zsh-theme
 
 echo "Setting ZSH as shell..."
 chsh -s /bin/zsh
