@@ -60,11 +60,12 @@ cd ~
 git clone --recursive git@github.com:brujack/dotfiles.git ~/git-repos/personal/dotfiles
 
 #echo "creating link for git-prompt
-#ln -s ~/git-repos/personal/git/contrib/completion/git-prompt.sh ~/.bash_git
+ln -s ~/git-repos/personal/git/contrib/completion/git-prompt.sh ~/.bash_git
 
 echo "Linking dotfiles to their home"
-ln -s ~/dotfiles/.zshrc ~/.zshrc
-ln -s ~/dotfiles/bruce.zsh-theme ~/.oh-my-zsh/themes/bruce.zsh-theme
+ln -s ~/git-repos/personal/dotfiles/.bash_profile ~/.bash_profile
+ln -s ~/git-repos/personal/dotfiles/.zshrc ~/.zshrc
+ln -s ~/git-repos/personal/dotfiles/bruce.zsh-theme ~/.oh-my-zsh/themes/bruce.zsh-theme
 
 echo "Setting ZSH as shell..."
 chsh -s /bin/zsh
