@@ -32,12 +32,35 @@ brew cleanup
 echo "Installing homebrew cask"
 brew install caskroom/cask/brew-cask
 
+echo "Installing ansible via pip"
+pip install ansible
+
+echo "Installing boto via pip"
+pip install boto
+
 echo "Installing Oh My ZSH..."
 sh -c "$(curl -fsSL https://raw.github.com/robbyrussell/oh-my-zsh/master/tools/install.sh)"
 
+echo "Creating ~/git-repos
+if [ ! ~/git-repos ]; then
+  mkdir ~/git-repos
+fi
+
+echo "Creating ~/git-repos/personal
+if [ ! ~/git-repos/personal ]; then
+  mkdir ~/git-repos/personal
+fi
+
+echo "Downloading git-prompt via full git repo"
+cd ~
+git clone --recursive https://github.com/git/git.git ~/git-repos/personal/git
+
 echo "Copying dotfiles from Github"
 cd ~
-git clone --recursive git@github.com:brujack/dotfiles.git dotfiles
+git clone --recursive git@github.com:brujack/dotfiles.git ~/git-repos/personal/dotfiles
+
+#echo "creating link for git-prompt
+#ln -s ~/git-repos/personal/git/contrib/completion/git-prompt.sh ~/.bash_git
 
 echo "Linking dotfiles to their home"
 ln -s ~/dotfiles/.zshrc ~/.zshrc
