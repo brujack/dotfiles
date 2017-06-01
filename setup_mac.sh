@@ -22,7 +22,7 @@ brew install tree
 brew install wget
 brew install htop-osx
 brew install the_silver_searcher
-brew install ansible
+#brew install ansible
 brew install zsh
 brew install vim
 
