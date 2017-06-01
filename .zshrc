@@ -102,3 +102,5 @@ export PATH="/opt/local/bin:/opt/local/sbin:$PATH"
 alias work='ssh root@23.253.126.73'
 alias monitor='ssh root@192.168.3.3'
 alias toolshed='ssh root@192.168.3.82'
+alias home='ssh bruce@conecrazy.ca'
+
