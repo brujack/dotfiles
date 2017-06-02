@@ -66,6 +66,7 @@ echo "Linking dotfiles to their home"
 ln -s ~/git-repos/personal/dotfiles/.bash_profile ~/.bash_profile
 ln -s ~/git-repos/personal/dotfiles/.zshrc ~/.zshrc
 ln -s ~/git-repos/personal/dotfiles/bruce.zsh-theme ~/.oh-my-zsh/themes/bruce.zsh-theme
+ln -s ~/git-repos/personal/dotfiles/.ssh/config ~/.ssh/config
 
 echo "Setting ZSH as shell..."
 chsh -s /bin/zsh
