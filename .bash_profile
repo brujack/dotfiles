@@ -21,6 +21,12 @@ if [ -d "/Applications/VMware Fusion.app/Contents/Library" ]; then
     export PATH=$PATH:"/Applications/VMware Fusion.app/Contents/Library"
 fi
 
+# for brew path includes
+export PATH="/usr/local/bin:/usr/local/sbin:$PATH"
+
+# MacPorts Installer addition
+export PATH="/opt/local/bin:/opt/local/sbin:$PATH"
+
 # for keychain ssh key management
 eval `~/keychain/keychain --eval --agents ssh --inherit any id_rsa`
 
