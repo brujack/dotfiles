@@ -71,7 +71,15 @@ echo "Setting ZSH as shell..."
 chsh -s /bin/zsh
 
 echo "Downloading keychain"
-wget -O ~/Downloads/keychain-2.8.3.tar.bz2 http://www.funtoo.org/distfiles/keychain/keychain-2.8.3.tar.bz2 
+wget -O ~/Downloads/keychain-2.8.3.tar.bz2 http://www.funtoo.org/distfiles/keychain/keychain-2.8.3.tar.bz2
 
 echo "Deploying keychain"
-
+bunzip2 ~/Downloads/keychain-2.8.3.tar.bz2
+cd ~
+tar xvf ~/Downloads/keychain-2.8.3.tar
+if [ ~/keychain ]; then
+  rm -rf ~/keychain
+  ln -s ~/keychain-2.8.3 ~/keychain
+else
+  ln -s ~/keychain-2.8.3 ~/keychain
+fi
