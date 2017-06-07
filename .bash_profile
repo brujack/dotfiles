@@ -27,6 +27,9 @@ export PATH="/usr/local/bin:/usr/local/sbin:$PATH"
 # MacPorts Installer addition
 export PATH="/opt/local/bin:/opt/local/sbin:$PATH"
 
+# PYTHONPATH for correct use for ansible
+export PYTHONPATH="~/Library/Python/2.7/lib/python/site-packages:/Library/Python/2.7/site-packages:."
+
 # for keychain ssh key management
 eval `~/keychain/keychain --eval --agents ssh --inherit any id_rsa`
 

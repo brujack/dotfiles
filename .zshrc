@@ -91,6 +91,9 @@ export PATH="/usr/local/bin:/usr/local/sbin:$PATH"
 # adding an appropriate PATH variable for use with MacPorts.
 export PATH="/opt/local/bin:/opt/local/sbin:$PATH"
 
+# PYTHONPATH for correct use for ansible
+export PYTHONPATH="~/Library/Python/2.7/lib/python/site-packages:/Library/Python/2.7/site-packages:."
+
 # Set personal aliases, overriding those provided by oh-my-zsh libs,
 # plugins, and themes. Aliases can be placed here, though oh-my-zsh
 # users are encouraged to define aliases within the ZSH_CUSTOM folder.
@@ -103,4 +106,3 @@ alias work='ssh root@23.253.126.73'
 alias monitor='ssh root@192.168.3.3'
 alias toolshed='ssh root@192.168.3.82'
 alias home='ssh bruce@conecrazy.ca'
-
