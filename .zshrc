@@ -86,13 +86,20 @@ eval `~/keychain/keychain --eval --agents ssh --inherit any id_rsa`
 # export SSH_KEY_PATH="~/.ssh/rsa_id"
 
 # for brew path includes
-export PATH="/usr/local/bin:/usr/local/sbin:$PATH"
+path+='/usr/local/bin'
+path+='/usr/local/sbin'
+#export PATH="/usr/local/bin:/usr/local/sbin:$PATH"
 
 # adding an appropriate PATH variable for use with MacPorts.
-export PATH="/opt/local/bin:/opt/local/sbin:$PATH"
+path+='/opt/local/bin'
+path+='/opt/local/sbin'
+#export PATH="/opt/local/bin:/opt/local/sbin:$PATH"
+
+#export the PATH
+export PATH
 
 # PYTHONPATH for correct use for ansible
-export PYTHONPATH="~/Library/Python/2.7/lib/python/site-packages:/Library/Python/2.7/site-packages:."
+export PYTHONPATH="~/Library/Python/2.7/lib/python/site-packages:/Library/Python/2.7/site-packages"
 
 # Set personal aliases, overriding those provided by oh-my-zsh libs,
 # plugins, and themes. Aliases can be placed here, though oh-my-zsh
