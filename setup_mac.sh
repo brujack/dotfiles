@@ -1,7 +1,7 @@
-!/bin/bash
+#!/bin/bash
 
 # locations of directories
-GITREPOS="~/git-repos"
+GITREPOS="$HOME/git-repos"
 PERSONAL_GITREPOS="$GITREPOS/personal"
 DOTFILES="dotfiles"
 
@@ -49,18 +49,21 @@ echo "Installing Oh My ZSH..."
 sh -c "$(curl -fsSL https://raw.github.com/robbyrussell/oh-my-zsh/master/tools/install.sh)"
 
 echo "Creating $GITREPOS"
-if [ ! -d "$GITREPOS" ]; then
+if [[ ! -d "$GITREPOS" ]]
+then
   mkdir "$GITREPOS"
 fi
 
 echo "Creating $PERSONAL_GITREPOS"
-if [ ! -d "$PERSONAL_GITREPOS" ]; then
+if [[ ! -d "$PERSONAL_GITREPOS" ]]
+then
   mkdir "$PERSONAL_GITREPOS"
 fi
 
 echo "Copying $DOTFILES from Github"
-if [ ! -d "$PERSONAL_GITREPOS"/"$DOTFILES" ]; then
-  cd ~
+if [[ ! -d "$PERSONAL_GITREPOS"/"$DOTFILES" ]]
+then
+  cd "$HOME"
   git clone --recursive git@github.com:brujack/"$DOTFILES".git "$PERSONAL_GITREPOS"/"$DOTFILES"
 else
   cd "$PERSONAL_GITREPOS"/"$DOTFILES"
@@ -68,60 +71,71 @@ else
 fi
 
 echo "Downloading git-prompt via full git repo"
-if [ ! -d "$PERSONAL_GITREPOS"/git ]; then
-  cd ~
+if [[ ! -d "$PERSONAL_GITREPOS"/git ]]
+then
+  cd "$HOME"
   git clone --recursive https://github.com/git/git.git "$PERSONAL_GITREPOS"/git
 else
   cd "$PERSONAL_GITREPOS"/git
   git pull
 fi
 
-echo "creating link for git-prompt"   -L "$file" && -d "$file"
-if [ ! -L ~/.bash_git && -d  ~/.bash_git ]; then
-  ln -s "$PERSONAL_GITREPOS"/git/contrib/completion/git-prompt.sh ~/.bash_git
+echo "creating link for git-prompt"
+if [[ ! -L "$HOME"/.bash_git && -d "$HOME"/.bash_git ]]
+then
+  ln -s "$PERSONAL_GITREPOS"/git/contrib/completion/git-prompt.sh "$HOME"/.bash_git
 else
-  rm ~/.bash_git
-  ln -s "$PERSONAL_GITREPOS"/git/contrib/completion/git-prompt.sh ~/.bash_git
+  rm "$HOME/.bash_git"
+  ln -s "$PERSONAL_GITREPOS"/git/contrib/completion/git-prompt.sh "$HOME"/.bash_git
 fi
 
 echo "Linking $DOTFILES to their home"
-if [ ! -L ~/.bash_profile && -d ~/.bash_profile ]; then
-  ln -s "$PERSONAL_GITREPOS"/"$DOTFILES"/.bash_profile ~/.bash_profile
+if [[ ! -L "$HOME"/.bash_profile && -d "$HOME"/.bash_profile ]]
+then
+  ln -s "$PERSONAL_GITREPOS"/"$DOTFILES"/.bash_profile "$HOME"/.bash_profile
 else
-  rm ~/.bash_profile
-  ln -s "$PERSONAL_GITREPOS"/"$DOTFILES"/.bash_profile ~/.bash_profile
+  rm "$HOME"/.bash_profile
+  ln -s "$PERSONAL_GITREPOS"/"$DOTFILES"/.bash_profile "$HOME"/.bash_profile
 fi
-if [ ! -L ~/.zshrc && -d ~/.zshrc ]; then
-  ln -s "$PERSONAL_GITREPOS"/"$DOTFILES"/.zshrc ~/.zshrc
+if [[ ! -L "$HOME"/.zshrc && -d "$HOME"/.zshrc ]]
+then
+  ln -s "$PERSONAL_GITREPOS"/"$DOTFILES"/.zshrc "$HOME"/.zshrc
 else
-  rm ~/.zshrc
-  ln -s "$PERSONAL_GITREPOS"/"$DOTFILES"/.zshrc ~/.zshrc
+  rm "$HOME"/.zshrc
+  ln -s "$PERSONAL_GITREPOS"/"$DOTFILES"/.zshrc "$HOME"/.zshrc
 fi
-if [ ! -L ~/.oh-my-zsh/themes/bruce.zsh-theme && -d ~/.oh-my-zsh/themes/bruce.zsh-theme ]; then
-  ln -s "$PERSONAL_GITREPOS"/"$DOTFILES"/bruce.zsh-theme ~/.oh-my-zsh/themes/bruce.zsh-theme
+
+if [[ ! -L "$HOME"/.oh-my-zsh/themes/bruce.zsh-theme && -d "$HOME"/.oh-my-zsh/themes/bruce.zsh-theme ]]
+then
+  ln -s "$PERSONAL_GITREPOS"/"$DOTFILES"/bruce.zsh-theme "$HOME"/.oh-my-zsh/themes/bruce.zsh-theme
 else
-  rm ~/.oh-my-zsh/themes/bruce.zsh-theme
-  ln -s "$PERSONAL_GITREPOS"/"$DOTFILES"/bruce.zsh-theme ~/.oh-my-zsh/themes/bruce.zsh-theme
-if [ ! -L ~/.ssh/config && -d ~/.ssh/config ]; then
-  ln -s "$PERSONAL_GITREPOS"/"$DOTFILES"/.ssh/config ~/.ssh/config
+  rm "$HOME"/.oh-my-zsh/themes/bruce.zsh-theme
+  ln -s "$PERSONAL_GITREPOS"/"$DOTFILES"/bruce.zsh-theme "$HOME"/.oh-my-zsh/themes/bruce.zsh-theme
+fi
+if [[ ! -L "$HOME"/.ssh/config && -d "$HOME"/.ssh/config ]]
+then
+  ln -s "$PERSONAL_GITREPOS"/"$DOTFILES"/.ssh/config "$HOME"/.ssh/config
 else
-  rm ~/.ssh/config
-  ln -s "$PERSONAL_GITREPOS"/"$DOTFILES"/.ssh/config ~/.ssh/config
+  rm "$HOME"/.ssh/config
+  ln -s "$PERSONAL_GITREPOS"/"$DOTFILES"/.ssh/config "$HOME"/.ssh/config
 fi
 
 echo "Setting ZSH as shell..."
 chsh -s /bin/zsh
 
 echo "Downloading keychain"
-wget -O ~/Downloads/keychain-2.8.3.tar.bz2 http://www.funtoo.org/distfiles/keychain/keychain-2.8.3.tar.bz2
+wget -O "$HOME"/Downloads/keychain-2.8.3.tar.bz2 http://www.funtoo.org/distfiles/keychain/keychain-2.8.3.tar.bz2
 
 echo "Deploying keychain"
-bunzip2 ~/Downloads/keychain-2.8.3.tar.bz2
-cd ~
-tar xvf ~/Downloads/keychain-2.8.3.tar
-if [ ! -L ~/keychain && -d ~/keychain ]; then
-  ln -s ~/keychain-2.8.3 ~/keychain
+bunzip2 "$HOME"/Downloads/keychain-2.8.3.tar.bz2
+cd "$HOME"
+tar xvf "$HOME"/Downloads/keychain-2.8.3.tar
+if [[ ! -L "$HOME"/keychain && -d "$HOME"/keychain ]]
+then
+  ln -s "$HOME"/keychain-2.8.3 "$HOME"/keychain
 else
-  rm -f ~/keychain
-  ln -s ~/keychain-2.8.3 ~/keychain
+  rm -f "$HOME"/keychain
+  ln -s "$HOME"/keychain-2.8.3 "$HOME"/keychain
 fi
+
+exit 0
