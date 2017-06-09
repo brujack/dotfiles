@@ -46,7 +46,10 @@ pip install boto boto3 botocore
 # sudo -H pip install boto boto3 botocore --ignore-installed six
 
 echo "Installing Oh My ZSH..."
-sh -c "$(curl -fsSL https://raw.github.com/robbyrussell/oh-my-zsh/master/tools/install.sh)"
+if [[ ! -d "$HOME"/.oh-my-zsh ]]
+then
+  sh -c "$(curl -fsSL https://raw.github.com/robbyrussell/oh-my-zsh/master/tools/install.sh)"
+fi
 
 echo "Creating $GITREPOS"
 if [[ ! -d "$GITREPOS" ]]
@@ -80,7 +83,7 @@ else
   git pull
 fi
 
-echo "creating link for git-prompt"
+echo "Creating link for git-prompt"
 if [[ ! -L "$HOME"/.bash_git && -d "$HOME"/.bash_git ]]
 then
   ln -s "$PERSONAL_GITREPOS"/git/contrib/completion/git-prompt.sh "$HOME"/.bash_git
@@ -121,17 +124,37 @@ else
 fi
 
 echo "Setting ZSH as shell..."
-chsh -s /bin/zsh
+if [[ ! $SHELL = "/bin/zsh" ]]
+then
+  chsh -s /bin/zsh
+fi
 
 echo "Downloading keychain"
-wget -O "$HOME"/Downloads/keychain-2.8.3.tar.bz2 http://www.funtoo.org/distfiles/keychain/keychain-2.8.3.tar.bz2
+if [[ ! -f "$HOME"/Downloads/keychain-2.8.3.tar.bz2 ]]
+then
+  wget -O "$HOME"/Downloads/keychain-2.8.3.tar.bz2 http://www.funtoo.org/distfiles/keychain/keychain-2.8.3.tar.bz2
+fi
 
 echo "Deploying keychain"
-bunzip2 "$HOME"/Downloads/keychain-2.8.3.tar.bz2
-cd "$HOME"
-tar xvf "$HOME"/Downloads/keychain-2.8.3.tar
+if [[ ! -d "$HOME"/Downloads/keychain-2.8.3 ]]
+then
+  if [[ ! -f "$HOME"/Downloads/keychain-2.8.3.tar.bz2 ]]
+  then
+    bunzip2 "$HOME"/Downloads/keychain-2.8.3.tar.bz2
+    cd "$HOME"
+  fi
+  if [[ ! -f "$HOME"/Downloads/keychain-2.8.3.tar ]]
+  then
+    tar xvf "$HOME"/Downloads/keychain-2.8.3.tar
+  fi
+fi
+
 if [[ ! -L "$HOME"/keychain && -d "$HOME"/keychain ]]
 then
+  ln -s "$HOME"/keychain-2.8.3 "$HOME"/keychain
+elif [[ -d "$HOME"/keychain ]]
+then
+  rm -rf "$HOME"/keychain
   ln -s "$HOME"/keychain-2.8.3 "$HOME"/keychain
 else
   rm -f "$HOME"/keychain
