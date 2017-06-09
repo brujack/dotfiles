@@ -30,43 +30,79 @@ echo "Cleaning up brew"
 brew cleanup
 
 echo "Installing homebrew cask"
-brew install caskroom/cask/brew-cask
+brew tap caskroom/cask
 
 echo "Installing ansible via pip"
 pip install ansible
+# sudo -H pip install ansible
 
 echo "Installing boto via pip"
-pip install boto
+pip install boto boto3 botocore
+# sudo -H pip install boto boto3 botocore --ignore-installed six
 
 echo "Installing Oh My ZSH..."
 sh -c "$(curl -fsSL https://raw.github.com/robbyrussell/oh-my-zsh/master/tools/install.sh)"
 
-echo "Creating ~/git-repos
+echo "Creating ~/git-repos"
 if [ ! ~/git-repos ]; then
   mkdir ~/git-repos
 fi
 
-echo "Creating ~/git-repos/personal
+echo "Creating ~/git-repos/personal"
 if [ ! ~/git-repos/personal ]; then
   mkdir ~/git-repos/personal
 fi
 
-echo "Downloading git-prompt via full git repo"
-cd ~
-git clone --recursive https://github.com/git/git.git ~/git-repos/personal/git
-
 echo "Copying dotfiles from Github"
-cd ~
-git clone --recursive git@github.com:brujack/dotfiles.git ~/git-repos/personal/dotfiles
+if [ ! ~/git-repos/personal/dotfiles ]; then
+  cd ~
+  git clone --recursive git@github.com:brujack/dotfiles.git ~/git-repos/personal/dotfiles
+else
+  cd ~/git-repos/personal/dotfiles
+  git pull
+fi
 
-#echo "creating link for git-prompt
-ln -s ~/git-repos/personal/git/contrib/completion/git-prompt.sh ~/.bash_git
+echo "Downloading git-prompt via full git repo"
+if [ ! ~/git-repos/personal/git ]; then
+  cd ~
+  git clone --recursive https://github.com/git/git.git ~/git-repos/personal/git
+else
+  cd ~/git-repos/personal/git
+  git pull
+fi
+
+echo "creating link for git-prompt"
+if [ ! ~/.bash_git ]; then
+  ln -s ~/git-repos/personal/git/contrib/completion/git-prompt.sh ~/.bash_git
+else
+  rm ~/.bash_git
+  ln -s ~/git-repos/personal/git/contrib/completion/git-prompt.sh ~/.bash_git
+fi
 
 echo "Linking dotfiles to their home"
-ln -s ~/git-repos/personal/dotfiles/.bash_profile ~/.bash_profile
-ln -s ~/git-repos/personal/dotfiles/.zshrc ~/.zshrc
-ln -s ~/git-repos/personal/dotfiles/bruce.zsh-theme ~/.oh-my-zsh/themes/bruce.zsh-theme
-ln -s ~/git-repos/personal/dotfiles/.ssh/config ~/.ssh/config
+if [ ! ~/.bash_profile ]; then
+  ln -s ~/git-repos/personal/dotfiles/.bash_profile ~/.bash_profile
+else
+  rm ~/.bash_profile
+  ln -s ~/git-repos/personal/dotfiles/.bash_profile ~/.bash_profile
+fi
+if [ ! ~/.zshrc ]; then
+  ln -s ~/git-repos/personal/dotfiles/.zshrc ~/.zshrc
+else
+  rm ~/.zshrc
+  ln -s ~/git-repos/personal/dotfiles/.zshrc ~/.zshrc
+fi
+if [ ! ~/.oh-my-zsh/themes/bruce.zsh-theme ]; then
+  ln -s ~/git-repos/personal/dotfiles/bruce.zsh-theme ~/.oh-my-zsh/themes/bruce.zsh-theme
+else
+  rm ~/.oh-my-zsh/themes/bruce.zsh-theme
+  ln -s ~/git-repos/personal/dotfiles/bruce.zsh-theme ~/.oh-my-zsh/themes/bruce.zsh-theme
+if [ ! ~/.ssh/config ]; then
+  ln -s ~/git-repos/personal/dotfiles/.ssh/config ~/.ssh/config
+else
+  rm ~/.ssh/config
+  ln -s ~/git-repos/personal/dotfiles/.ssh/config ~/.ssh/config
+fi
 
 echo "Setting ZSH as shell..."
 chsh -s /bin/zsh
@@ -78,9 +114,9 @@ echo "Deploying keychain"
 bunzip2 ~/Downloads/keychain-2.8.3.tar.bz2
 cd ~
 tar xvf ~/Downloads/keychain-2.8.3.tar
-if [ ~/keychain ]; then
-  rm -rf ~/keychain
+if [ ! ~/keychain ]; then
   ln -s ~/keychain-2.8.3 ~/keychain
 else
+  rm -f ~/keychain
   ln -s ~/keychain-2.8.3 ~/keychain
 fi
