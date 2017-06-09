@@ -1,5 +1,10 @@
 !/bin/bash
 
+# locations of directories
+GITREPOS="~/git-repos"
+PERSONAL_GITREPOS="$GITREPOS/personal"
+DOTFILES="dotfiles"
+
 echo "Installing xcode-stuff"
 xcode-select --install
 
@@ -43,65 +48,65 @@ pip install boto boto3 botocore
 echo "Installing Oh My ZSH..."
 sh -c "$(curl -fsSL https://raw.github.com/robbyrussell/oh-my-zsh/master/tools/install.sh)"
 
-echo "Creating ~/git-repos"
-if [ ! ~/git-repos ]; then
-  mkdir ~/git-repos
+echo "Creating $GITREPOS"
+if [ ! -d "$GITREPOS" ]; then
+  mkdir "$GITREPOS"
 fi
 
-echo "Creating ~/git-repos/personal"
-if [ ! ~/git-repos/personal ]; then
-  mkdir ~/git-repos/personal
+echo "Creating $PERSONAL_GITREPOS"
+if [ ! -d "$PERSONAL_GITREPOS" ]; then
+  mkdir "$PERSONAL_GITREPOS"
 fi
 
-echo "Copying dotfiles from Github"
-if [ ! ~/git-repos/personal/dotfiles ]; then
+echo "Copying $DOTFILES from Github"
+if [ ! -d "$PERSONAL_GITREPOS"/"$DOTFILES" ]; then
   cd ~
-  git clone --recursive git@github.com:brujack/dotfiles.git ~/git-repos/personal/dotfiles
+  git clone --recursive git@github.com:brujack/"$DOTFILES".git "$PERSONAL_GITREPOS"/"$DOTFILES"
 else
-  cd ~/git-repos/personal/dotfiles
+  cd "$PERSONAL_GITREPOS"/"$DOTFILES"
   git pull
 fi
 
 echo "Downloading git-prompt via full git repo"
-if [ ! ~/git-repos/personal/git ]; then
+if [ ! -d "$PERSONAL_GITREPOS"/git ]; then
   cd ~
-  git clone --recursive https://github.com/git/git.git ~/git-repos/personal/git
+  git clone --recursive https://github.com/git/git.git "$PERSONAL_GITREPOS"/git
 else
-  cd ~/git-repos/personal/git
+  cd "$PERSONAL_GITREPOS"/git
   git pull
 fi
 
-echo "creating link for git-prompt"
-if [ ! ~/.bash_git ]; then
-  ln -s ~/git-repos/personal/git/contrib/completion/git-prompt.sh ~/.bash_git
+echo "creating link for git-prompt"   -L "$file" && -d "$file"
+if [ ! -L ~/.bash_git && -d  ~/.bash_git ]; then
+  ln -s "$PERSONAL_GITREPOS"/git/contrib/completion/git-prompt.sh ~/.bash_git
 else
   rm ~/.bash_git
-  ln -s ~/git-repos/personal/git/contrib/completion/git-prompt.sh ~/.bash_git
+  ln -s "$PERSONAL_GITREPOS"/git/contrib/completion/git-prompt.sh ~/.bash_git
 fi
 
-echo "Linking dotfiles to their home"
-if [ ! ~/.bash_profile ]; then
-  ln -s ~/git-repos/personal/dotfiles/.bash_profile ~/.bash_profile
+echo "Linking $DOTFILES to their home"
+if [ ! -L ~/.bash_profile && -d ~/.bash_profile ]; then
+  ln -s "$PERSONAL_GITREPOS"/"$DOTFILES"/.bash_profile ~/.bash_profile
 else
   rm ~/.bash_profile
-  ln -s ~/git-repos/personal/dotfiles/.bash_profile ~/.bash_profile
+  ln -s "$PERSONAL_GITREPOS"/"$DOTFILES"/.bash_profile ~/.bash_profile
 fi
-if [ ! ~/.zshrc ]; then
-  ln -s ~/git-repos/personal/dotfiles/.zshrc ~/.zshrc
+if [ ! -L ~/.zshrc && -d ~/.zshrc ]; then
+  ln -s "$PERSONAL_GITREPOS"/"$DOTFILES"/.zshrc ~/.zshrc
 else
   rm ~/.zshrc
-  ln -s ~/git-repos/personal/dotfiles/.zshrc ~/.zshrc
+  ln -s "$PERSONAL_GITREPOS"/"$DOTFILES"/.zshrc ~/.zshrc
 fi
-if [ ! ~/.oh-my-zsh/themes/bruce.zsh-theme ]; then
-  ln -s ~/git-repos/personal/dotfiles/bruce.zsh-theme ~/.oh-my-zsh/themes/bruce.zsh-theme
+if [ ! -L ~/.oh-my-zsh/themes/bruce.zsh-theme && -d ~/.oh-my-zsh/themes/bruce.zsh-theme ]; then
+  ln -s "$PERSONAL_GITREPOS"/"$DOTFILES"/bruce.zsh-theme ~/.oh-my-zsh/themes/bruce.zsh-theme
 else
   rm ~/.oh-my-zsh/themes/bruce.zsh-theme
-  ln -s ~/git-repos/personal/dotfiles/bruce.zsh-theme ~/.oh-my-zsh/themes/bruce.zsh-theme
-if [ ! ~/.ssh/config ]; then
-  ln -s ~/git-repos/personal/dotfiles/.ssh/config ~/.ssh/config
+  ln -s "$PERSONAL_GITREPOS"/"$DOTFILES"/bruce.zsh-theme ~/.oh-my-zsh/themes/bruce.zsh-theme
+if [ ! -L ~/.ssh/config && -d ~/.ssh/config ]; then
+  ln -s "$PERSONAL_GITREPOS"/"$DOTFILES"/.ssh/config ~/.ssh/config
 else
   rm ~/.ssh/config
-  ln -s ~/git-repos/personal/dotfiles/.ssh/config ~/.ssh/config
+  ln -s "$PERSONAL_GITREPOS"/"$DOTFILES"/.ssh/config ~/.ssh/config
 fi
 
 echo "Setting ZSH as shell..."
@@ -114,7 +119,7 @@ echo "Deploying keychain"
 bunzip2 ~/Downloads/keychain-2.8.3.tar.bz2
 cd ~
 tar xvf ~/Downloads/keychain-2.8.3.tar
-if [ ! ~/keychain ]; then
+if [ ! -L ~/keychain && -d ~/keychain ]; then
   ln -s ~/keychain-2.8.3 ~/keychain
 else
   rm -f ~/keychain
