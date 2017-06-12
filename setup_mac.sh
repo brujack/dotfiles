@@ -138,13 +138,13 @@ fi
 echo "Deploying keychain"
 if [[ ! -d "$HOME"/Downloads/keychain-2.8.3 ]]
 then
-  if [[ -f "$HOME"/Downloads/keychain-2.8.3.tar.bz2 ]]
+  if [[ ! -f "$HOME"/Downloads/keychain-2.8.3.tar ]]
   then
     bunzip2 "$HOME"/Downloads/keychain-2.8.3.tar.bz2
-    cd "$HOME"
   fi
-  if [[ -f "$HOME"/Downloads/keychain-2.8.3.tar ]]
+  if [[ ! -d "$HOME"/keychain-2.8.3 ]]
   then
+    cd "$HOME"
     tar xvf "$HOME"/Downloads/keychain-2.8.3.tar
   fi
 fi
