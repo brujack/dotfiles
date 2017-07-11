@@ -30,6 +30,7 @@ brew install the_silver_searcher
 #brew install ansible
 brew install zsh
 brew install vim
+brew install thefuck
 
 echo "Cleaning up brew"
 brew cleanup
