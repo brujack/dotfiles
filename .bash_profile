@@ -36,3 +36,7 @@ eval `~/keychain/keychain --eval --agents ssh --inherit any id_rsa`
 # for go home
 export GOPATH=~/git_repos/go_work
 export PATH=$PATH:"~/git_repos/go_work/bin"
+
+# for chruby setup
+source /usr/local/opt/chruby/share/chruby/chruby.sh
+source /usr/local/opt/chruby/share/chruby/auto.sh
