@@ -111,3 +111,7 @@ export PYTHONPATH="~/Library/Python/2.7/lib/python/site-packages:/Library/Python
 # alias ohmyzsh="mate ~/.oh-my-zsh"
 alias home='ssh bruce@conecrazy.ca'
 eval $(thefuck --alias)
+
+# for chruby setup
+source /usr/local/opt/chruby/share/chruby/chruby.sh
+source /usr/local/opt/chruby/share/chruby/auto.sh

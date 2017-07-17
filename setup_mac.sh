@@ -31,6 +31,8 @@ brew install the_silver_searcher
 brew install zsh
 brew install vim
 brew install thefuck
+brew install chruby
+brew install ruby-install
 
 echo "Cleaning up brew"
 brew cleanup
