@@ -110,8 +110,6 @@ export PYTHONPATH="~/Library/Python/2.7/lib/python/site-packages:/Library/Python
 # alias zshconfig="mate ~/.zshrc"
 # alias ohmyzsh="mate ~/.oh-my-zsh"
 alias home='ssh bruce@conecrazy.ca'
-alias rancher='sudo -u rancher rancher'
-alias rancheru='sudo -u ubuntu rancher'
 eval $(thefuck --alias)
 
 # for chruby setup

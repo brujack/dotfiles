@@ -34,6 +34,7 @@ brew install thefuck
 brew install chruby
 brew install ruby-install
 brew install node
+brew install rancher-cli
 
 echo "Cleaning up brew"
 brew cleanup
