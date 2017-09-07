@@ -110,6 +110,14 @@ export PYTHONPATH="~/Library/Python/2.7/lib/python/site-packages:/Library/Python
 # alias zshconfig="mate ~/.zshrc"
 # alias ohmyzsh="mate ~/.oh-my-zsh"
 alias home='ssh bruce@conecrazy.ca'
+alias mac='ssh bruce@mac'
+alias server='ssh bruce@server'
+alias hack='ssh bruce@hack'
+alias sauna='ssh ssh ubuntu@sauna.us-stg.full.rx'
+alias daredevil='ssh ssh ubuntu@daredevil.us-stg.full.rx'
+alias heroes='ssh ssh ubuntu@heroes.us-stg.full.rx'
+alias toolbox-01='ssh toolbox-01.ca-stg.full.rx'
+alias toolbox-02='ssh toolbox-01.glb.full.rx'
 eval $(thefuck --alias)
 
 # for chruby setup
