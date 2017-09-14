@@ -113,6 +113,7 @@ alias home='ssh bruce@conecrazy.ca'
 alias mac='ssh bruce@mac'
 alias server='ssh bruce@server'
 alias hack='ssh bruce@hack'
+alias ratna='ssh bruce@ratna'
 # aliases for fullscript servers
 alias ca1='ssh ubuntu@ca1.ca-prd.full.rx'
 alias lithium='ssh rancher@lithium.ca-prd.full.rx'
