@@ -114,6 +114,7 @@ alias mac='ssh bruce@mac'
 alias server='ssh bruce@server'
 alias hack='ssh bruce@hack'
 # aliases for fullscript servers
+alias mini='ssh fullscript@mini-01.full.rx'
 alias ca1='ssh ubuntu@ca1.ca-prd.full.rx'
 alias lithium='ssh rancher@lithium.ca-prd.full.rx'
 alias willet='ssh rancher@willet.ca-prd.full.rx'
