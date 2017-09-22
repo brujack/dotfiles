@@ -43,12 +43,12 @@ echo "Installing homebrew cask"
 brew tap caskroom/cask
 
 echo "Installing ansible via pip"
-pip install ansible
-# sudo -H pip install ansible
+# pip install ansible
+sudo -H pip install ansible
 
 echo "Installing boto via pip"
-pip install boto boto3 botocore
-# sudo -H pip install boto boto3 botocore --ignore-installed six
+# pip install boto boto3 botocore
+sudo -H pip install boto boto3 botocore --ignore-installed six
 
 echo "Installing Oh My ZSH..."
 if [[ ! -d "$HOME"/.oh-my-zsh ]]
