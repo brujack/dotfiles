@@ -42,6 +42,9 @@ brew cleanup
 echo "Installing homebrew cask"
 brew tap caskroom/cask
 
+echo "Installing pip"
+sudo -H easy_install pip
+
 echo "Installing ansible via pip"
 # pip install ansible
 sudo -H pip install ansible
