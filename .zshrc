@@ -56,7 +56,7 @@ export HISTIGNORE="ls:cd:cd -:pwd:exit:date:* --help";
 # Custom plugins may be added to ~/.oh-my-zsh/custom/plugins/
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
-plugins=(git osx brew thefuck)
+plugins=(git osx brew)
 
 source $ZSH/oh-my-zsh.sh
 
@@ -142,8 +142,6 @@ alias xero='ssh ubuntu@xero.us-prd.full.rx'
 alias sauna='ssh ubuntu@sauna.us-stg.full.rx'
 alias daredevil='ssh ubuntu@daredevil.us-stg.full.rx'
 alias heroes='ssh ubuntu@heroes.us-stg.full.rx'
-
-eval $(thefuck --alias)
 
 # for chruby setup
 source /usr/local/opt/chruby/share/chruby/chruby.sh
