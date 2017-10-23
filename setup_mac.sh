@@ -30,7 +30,7 @@ brew install the_silver_searcher
 #brew install ansible
 brew install zsh
 brew install vim
-brew install thefuck
+#brew install thefuck
 brew install chruby
 brew install ruby-install
 brew install node
