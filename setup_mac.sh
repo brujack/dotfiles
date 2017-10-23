@@ -25,7 +25,7 @@ brew upgrade
 echo "Installing other brew stuff..."
 brew install tree
 brew install wget
-brew install htop-osx
+brew install htop
 brew install the_silver_searcher
 #brew install ansible
 brew install zsh
