@@ -53,6 +53,12 @@ echo "Installing boto via pip"
 # pip install boto boto3 botocore
 sudo -H pip install boto boto3 botocore --ignore-installed six
 
+echo "Installing awscli via pip"
+sudo -H pip install awscli
+
+echo "Installing json2yaml via npm"
+npm install json2yaml
+
 echo "Installing Oh My ZSH..."
 if [[ ! -d "$HOME"/.oh-my-zsh ]]
 then
