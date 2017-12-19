@@ -4,6 +4,7 @@
 GITREPOS="$HOME/git-repos"
 PERSONAL_GITREPOS="$GITREPOS/personal"
 DOTFILES="dotfiles"
+RANCHERSSH="~/.rancherssh"
 
 echo "Installing xcode-stuff"
 xcode-select --install
@@ -35,6 +36,7 @@ brew install chruby
 brew install ruby-install
 brew install node
 brew install rancher-cli
+brew install fangli/dev/rancherssh
 
 echo "Cleaning up brew"
 brew cleanup
@@ -173,6 +175,12 @@ then
 else
   rm -f "$HOME"/keychain
   ln -s "$HOME"/keychain-2.8.3 "$HOME"/keychain
+fi
+
+echo "Creating $RANCHERSSH"
+if [[ ! -d "$RANCHERSSH" ]]
+then
+  mkdir "$RANCHERSSH"
 fi
 
 exit 0
