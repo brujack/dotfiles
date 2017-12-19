@@ -146,3 +146,12 @@ alias heroes='ssh ubuntu@heroes.us-stg.full.rx'
 # for chruby setup
 source /usr/local/opt/chruby/share/chruby/chruby.sh
 source /usr/local/opt/chruby/share/chruby/auto.sh
+
+# functions
+# rancherssh will do fuzzy find for your query between %%
+# rssh container-keyword
+rssh () {
+  cd ~/.rancherssh
+  rancherssh %"$1"%
+  cd -
+}
