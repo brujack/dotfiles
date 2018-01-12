@@ -135,6 +135,11 @@ then
   brew cask install alfred
 fi
 
+if [[ ! -d /Applications/AppCleaner.app ]]
+then
+  brew cask install appcleaner
+fi
+
 if [[ ! -d /Applications/Atom.app ]]
 then
   brew cask install atom
@@ -323,5 +328,7 @@ if [[ ! -d "$RANCHERSSH" ]]
 then
   mkdir "$RANCHERSSH"
 fi
+
+source ~/.zshrc
 
 exit 0
