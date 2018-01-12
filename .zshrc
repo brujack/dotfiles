@@ -1,6 +1,19 @@
 # If you come from bash you might have to change your $PATH.
 # export PATH=$HOME/bin:/usr/local/bin:$PATH
 
+# setup some functions
+quiet_which() {
+  which "$1" &>/dev/null
+}
+
+# rancherssh will do fuzzy find for your query between %%
+# rssh container-keyword
+rssh () {
+  cd ~/.rancherssh
+  rancherssh %"$1"%
+  cd -
+}
+
 # Path to your oh-my-zsh installation.
 export ZSH=~/.oh-my-zsh
 
@@ -21,7 +34,7 @@ ZSH_THEME="bruce"
 # DISABLE_AUTO_UPDATE="true"
 
 # Uncomment the following line to change how often to auto-update (in days).
-# export UPDATE_ZSH_DAYS=13
+export UPDATE_ZSH_DAYS=3
 
 # Uncomment the following line to disable colors in ls.
 # DISABLE_LS_COLORS="true"
@@ -112,12 +125,11 @@ export PYTHONPATH="~/Library/Python/2.7/lib/python/site-packages:/Library/Python
 alias home='ssh bruce@conecrazy.ca'
 alias mac='ssh bruce@mac'
 alias server='ssh bruce@server'
-alias hack='ssh bruce@hack'
 alias ratna='ssh bruce@ratna'
 alias docker-01='ssh root@docker-01'
 alias compute-01='ssh root@compute-01'
 # aliases for fullscript servers
-alias mini='ssh fullscript@mini-01.full.rx'
+alias mini='ssh fullscript@mini-02.full.rx'
 alias ca1='ssh ubuntu@ca1.ca-prd.full.rx'
 alias lithium='ssh rancher@lithium.ca-prd.full.rx'
 alias willet='ssh rancher@willet.ca-prd.full.rx'
@@ -143,15 +155,20 @@ alias sauna='ssh ubuntu@sauna.us-stg.full.rx'
 alias daredevil='ssh ubuntu@daredevil.us-stg.full.rx'
 alias heroes='ssh ubuntu@heroes.us-stg.full.rx'
 
+if quiet_which exa
+then
+  alias ls="exa -lg --git"
+else
+  alias ls="ls -l"
+fi
+
 # for chruby setup
 source /usr/local/opt/chruby/share/chruby/chruby.sh
 source /usr/local/opt/chruby/share/chruby/auto.sh
 
-# functions
-# rancherssh will do fuzzy find for your query between %%
-# rssh container-keyword
-rssh () {
-  cd ~/.rancherssh
-  rancherssh %"$1"%
-  cd -
-}
+# zsh options
+# Share history between instances
+setopt share_history
+
+# Remove unnecessary blanks from history
+setopt hist_reduce_blanks

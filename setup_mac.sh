@@ -6,8 +6,18 @@ PERSONAL_GITREPOS="$GITREPOS/personal"
 DOTFILES="dotfiles"
 RANCHERSSH="~/.rancherssh"
 
+# Xcode mas id 497799835
+mas install 497799835
 echo "Installing xcode-stuff"
 xcode-select --install
+
+# setup some functions
+quiet_which() {
+  which "$1" &>/dev/null
+}
+
+# check hostname
+HOSTNAME=`hostname -s`
 
 # Check for Homebrew,
 # Install if we don't have it
@@ -24,25 +34,156 @@ echo "Upgrading homebrew"
 brew upgrade
 
 echo "Installing other brew stuff..."
-brew install tree
-brew install wget
-brew install htop
-brew install the_silver_searcher
-#brew install ansible
-brew install zsh
-brew install vim
-#brew install thefuck
+
 brew install chruby
-brew install ruby-install
+brew install exa
+brew install fd
+brew install git
+brew install glide
+brew install go
+brew install htop
 brew install node
 brew install rancher-cli
 brew install fangli/dev/rancherssh
+brew install mas
+brew install openssl
+brew install ruby-install
+brew install the_silver_searcher
+brew install tree
+brew install vim
+brew install wget
+brew install zsh
 
 echo "Cleaning up brew"
 brew cleanup
 
 echo "Installing homebrew cask"
 brew tap caskroom/cask
+
+echo "Installing common apps via mas"
+
+
+# 443987910 1Password
+# 414209656 Better Rename 9
+# 425264550 Blackmagic Disk Speed Test
+# 406056744 Evernote
+# 682658836 GarageBand
+# 1175706108 Geekbench 4
+# 408981434 iMovie
+# 403304796 iNet Network Scanner
+# 409183694 Keynote
+# 430255202 Mactracker
+# 715768417 Microsoft Remote Desktop
+# 409203825 Numbers
+# 409201541 Pages
+# 407963104 Pixelmator
+# 594432954 Read CHM
+# 409907375 Remote Desktop
+# 692867256 Simplenote
+# 803453959 Slack
+# 1153157709 Speedtest
+# 425424353 The Unarchiver
+# 403388562 Transmit
+# 747648890 Telegram
+# 497799835 Xcode
+
+mas install 443987910
+mas install 414209656
+mas install 425264550
+mas install 406056744
+mas install 682658836
+mas install 1175706108
+mas install 408981434
+mas install 403304796
+mas install 409183694
+mas install 430255202
+mas install 715768417
+mas install 409203825
+mas install 409201541
+mas install 407963104
+mas install 594432954
+mas install 409907375
+mas install 692867256
+mas install 803453959
+mas install 1153157709
+mas install 425424353
+mas install 403388562
+mas install 747648890
+
+echo "Installing server apps via mas"
+# 883878097 Server
+if [[ $HOSTNAME == "mac" ]] || [[ $HOSTNAME == "server" ]]
+then
+  mas install 883878097
+fi
+
+echo "Installing developer apps via mas"
+# 1025345625 SQLPro for Postgres
+# 604825918 Valentina Studio
+if [[ $HOSTNAME == "ratna" ]] || [[ $HOSTNAME == "Bruces-MacBook-Pro" ]] || [[ $HOSTNAME == "Bruces-MacBook-Air" ]]
+then
+  mas install 1025345625
+  mas install 604825918
+fi
+
+echo "Updating app store apps via mas"
+mas upgrade
+
+echo "Installing apps via cask"
+if [[ ! -d /Applications/Alfred\ 3.app ]]
+then
+  brew cask install alfred
+fi
+
+if [[ ! -d /Applications/Atom.app ]]
+then
+  brew cask install atom
+fi
+
+if [[ ! -d /Applications/DaisyDisk.app ]]
+then
+  brew cask install daisydisk
+fi
+
+if [[ ! -d /Applications/Dropbox.app ]]
+then
+  brew cask install dropbox
+fi
+
+if [[ ! -d /Applications/Google\ Chrome.app ]]
+then
+  brew cask install google-chrome
+fi
+
+if [[ ! -d /Applications/MySQLWorkbench.app ]]
+then
+  brew cask install mysqlworkbench
+fi
+
+if [[ ! -d /Applications/SourceTree.app ]]
+then
+  brew cask install sourcetree
+fi
+
+if [[ ! -d /Applications/SourceTree.app ]]
+then
+  brew cask install sourcetree
+fi
+
+if [[ ! -d /Applications/Spotify.app ]]
+then
+  brew cask install spotify
+fi
+
+if [[ ! -d /Applications/TeamViewer.app ]]
+then
+  brew cask install teamviewer
+fi
+
+if [[ ! -d /Applications/Telegram.app ]]
+then
+  brew cask install telegram
+fi
 
 echo "Installing pip"
 sudo -H easy_install pip
