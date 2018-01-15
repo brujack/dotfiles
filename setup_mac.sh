@@ -87,44 +87,44 @@ echo "Installing common apps via mas"
 # 747648890 Telegram
 # 497799835 Xcode
 
-mas install 443987910
-mas install 414209656
-mas install 425264550
-mas install 406056744
-mas install 682658836
-mas install 1175706108
-mas install 408981434
-mas install 403304796
-mas install 409183694
-mas install 430255202
-mas install 715768417
-mas install 409203825
-mas install 409201541
-mas install 407963104
-mas install 594432954
-mas install 409907375
-mas install 692867256
-mas install 803453959
-mas install 1153157709
-mas install 425424353
-mas install 403388562
-mas install 747648890
+# mas install 443987910
+# mas install 414209656
+# mas install 425264550
+# mas install 406056744
+# mas install 682658836
+# mas install 1175706108
+# mas install 408981434
+# mas install 403304796
+# mas install 409183694
+# mas install 430255202
+# mas install 715768417
+# mas install 409203825
+# mas install 409201541
+# mas install 407963104
+# mas install 594432954
+# mas install 409907375
+# mas install 692867256
+# mas install 803453959
+# mas install 1153157709
+# mas install 425424353
+# mas install 403388562
+# mas install 747648890
 
-echo "Installing server apps via mas"
-# 883878097 Server
-if [[ $HOSTNAME == "mac" ]] || [[ $HOSTNAME == "server" ]]
-then
-  mas install 883878097
-fi
-
-echo "Installing developer apps via mas"
-# 1025345625 SQLPro for Postgres
-# 604825918 Valentina Studio
-if [[ $HOSTNAME == "ratna" ]] || [[ $HOSTNAME == "Bruces-MacBook-Pro" ]] || [[ $HOSTNAME == "Bruces-MacBook-Air" ]]
-then
-  mas install 1025345625
-  mas install 604825918
-fi
+# echo "Installing server apps via mas"
+# # 883878097 Server
+# if [[ $HOSTNAME == "mac" ]] || [[ $HOSTNAME == "server" ]]
+# then
+#   mas install 883878097
+# fi
+#
+# echo "Installing developer apps via mas"
+# # 1025345625 SQLPro for Postgres
+# # 604825918 Valentina Studio
+# if [[ $HOSTNAME == "ratna" ]] || [[ $HOSTNAME == "Bruces-MacBook-Pro" ]] || [[ $HOSTNAME == "Bruces-MacBook-Air" ]]
+# then
+#   mas install 1025345625
+#   mas install 604825918
+# fi
 
 echo "Updating app store apps via mas"
 mas upgrade
