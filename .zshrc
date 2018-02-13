@@ -172,3 +172,6 @@ setopt share_history
 
 # Remove unnecessary blanks from history
 setopt hist_reduce_blanks
+
+# add in aws creds for terraform
+source ~/.aws_creds
