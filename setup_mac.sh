@@ -190,6 +190,12 @@ then
   brew cask install telegram
 fi
 
+if [[ ! -d /Applications/Docker.app ]]
+then
+  brew cask install docker
+fi
+
+
 echo "Installing pip"
 sudo -H easy_install pip
 
