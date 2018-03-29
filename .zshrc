@@ -85,8 +85,8 @@ if [[ -n $SSH_CONNECTION ]]; then
   export EDITOR='vim'
   export GIT_EDITOR='vim'
 else
-  export EDITOR='atom'
-  export GIT_EDITOR='atom'
+  export EDITOR='code'
+  export GIT_EDITOR='code'
 fi
 
 # Compilation flags
@@ -112,7 +112,12 @@ path+='/opt/local/sbin'
 export PATH
 
 # PYTHONPATH for correct use for ansible
-export PYTHONPATH="~/Library/Python/2.7/lib/python/site-packages:/Library/Python/2.7/site-packages"
+# not needed as of Mar 28, 2018
+# export PYTHONPATH="~/Library/Python/2.7/lib/python/site-packages:/Library/Python/2.7/site-packages"
+# export PYTHONPATH="/usr/local/lib/python3.6/site-packages"
+
+# export ANSIBLEUSER so that we run as the correct user
+export ANSIBLEUSER="ubuntu"
 
 # Set personal aliases, overriding those provided by oh-my-zsh libs,
 # plugins, and themes. Aliases can be placed here, though oh-my-zsh
@@ -129,7 +134,9 @@ alias ratna='ssh bruce@ratna'
 alias docker-01='ssh bruce@docker-01'
 alias compute-01='ssh bruce@compute-01'
 # aliases for fullscript servers
-alias mini='ssh fullscript@mini-02.full.rx'
+alias mini-01='ssh fullscript@mini-01.ott.full.rx'
+alias mini-02='ssh fullscript@mini-02.ott.full.rx'
+alias router-01='ssh bjackson@router-01.ott.full.rx'
 alias ca1='ssh ubuntu@ca1.ca-prd.full.rx'
 alias lithium='ssh rancher@lithium.ca-prd.full.rx'
 alias willet='ssh rancher@willet.ca-prd.full.rx'
@@ -155,12 +162,13 @@ alias sauna='ssh ubuntu@sauna.us-stg.full.rx'
 alias daredevil='ssh ubuntu@daredevil.us-stg.full.rx'
 alias heroes='ssh ubuntu@heroes.us-stg.full.rx'
 
-if quiet_which exa
-then
-  alias ls="exa -lg --git"
-else
-  alias ls="ls -l"
-fi
+#if quiet_which exa
+# alias for ls to exa removed due to breaking globbing for ansible aws integration
+#then
+#  alias ls="exa -lg --git"
+#else
+#  alias ls="ls -l"
+#fi
 
 # for chruby setup
 source /usr/local/opt/chruby/share/chruby/chruby.sh
@@ -173,8 +181,16 @@ setopt share_history
 # Remove unnecessary blanks from history
 setopt hist_reduce_blanks
 
-# add in aws creds for terraform
+# add in aws creds for terraform and ansible
 if [ -f ~/.aws_creds ]
 then
   source ~/.aws_creds
+fi
+
+# setup for python 3.6.4 for ansible by using virtualenv
+source /usr/local/bin/virtualenvwrapper.sh
+workon ansible
+if [ -f ~/.vault_pass.txt ]
+then
+  export ANSIBLE_VAULT_PASSWORD_FILE=~/.vault_pass.txt
 fi

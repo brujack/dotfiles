@@ -52,6 +52,7 @@ brew install the_silver_searcher
 brew install tree
 brew install vim
 brew install wget
+brew install python3
 brew install zsh
 
 echo "Cleaning up brew"
@@ -190,25 +191,50 @@ then
   brew cask install telegram
 fi
 
-if [[ ! -d /Applications/Docker.app ]]
-then
-  brew cask install docker
-fi
-
-
 echo "Installing pip"
 sudo -H easy_install pip
 
+echo "Installing virtualenv for python"
+sudo -H pip install virtualenv virtualenvwrapper
+
+# setup virtualenv for python if virtualenv there
+if ! [ -f ~/.virtualenvs ]
+then
+  mkdir ~/.virtualenvs
+fi
+
+cd ~/.virtualenvs
+source /usr/local/bin/virtualenvwrapper.sh
+
+if ! [ -f ~/.virtualenvs/ansible ]
+then
+  if [ -f /usr/local/bin/virtualenv ]
+  then
+    mkvirtualenv ansible -p python3
+    # mkvirtualenv ansible
+  fi
+fi
+
 echo "Installing ansible via pip"
 # pip install ansible
-sudo -H pip install ansible
+pip3 install ansible
 
 echo "Installing boto via pip"
 # pip install boto boto3 botocore
-sudo -H pip install boto boto3 botocore --ignore-installed six
+pip3 install boto boto3 botocore
+
+# override boto provided endpoints with a more correct version that has all of the regions
+if [ -f ~/git-repos/fullscript/aws-terraform ]
+then
+  if [ -f ~/.virtualenvs/ansible/lib/python3.6/site-packages/boto/endpoints.json ]
+  then
+    mv ~/.virtualenvs/ansible/lib/python3.6/site-packages/boto/endpoints.json ~/.virtualenvs/ansible/lib/python3.6/site-packages/boto/endpoints.json.orig
+    ln -s ~/git-repos/fullscript/aws-terraform/docker/ansible/boto.json ~/.virtualenvs/ansible/lib/python3.6/site-packages/boto/endpoints.json
+  fi
+fi
 
 echo "Installing awscli via pip"
-sudo -H pip install awscli
+pip3 install awscli
 
 echo "Installing json2yaml via npm"
 npm install json2yaml
@@ -276,12 +302,12 @@ else
   ln -s "$PERSONAL_GITREPOS"/"$DOTFILES"/.zshrc "$HOME"/.zshrc
 fi
 
-if [[ ! -L "$HOME"/.oh-my-zsh/themes/bruce.zsh-theme && -d "$HOME"/.oh-my-zsh/themes/bruce.zsh-theme ]]
+if [[ ! -L "$HOME"/.oh-my-zsh/custom/bruce.zsh-theme && -d "$HOME"/.oh-my-zsh/custom/bruce.zsh-theme ]]
 then
-  ln -s "$PERSONAL_GITREPOS"/"$DOTFILES"/bruce.zsh-theme "$HOME"/.oh-my-zsh/themes/bruce.zsh-theme
+  ln -s "$PERSONAL_GITREPOS"/"$DOTFILES"/bruce.zsh-theme "$HOME"/.oh-my-zsh/custom/bruce.zsh-theme
 else
   rm "$HOME"/.oh-my-zsh/themes/bruce.zsh-theme
-  ln -s "$PERSONAL_GITREPOS"/"$DOTFILES"/bruce.zsh-theme "$HOME"/.oh-my-zsh/themes/bruce.zsh-theme
+  ln -s "$PERSONAL_GITREPOS"/"$DOTFILES"/bruce.zsh-theme "$HOME"/.oh-my-zsh/custom/bruce.zsh-theme
 fi
 if [[ ! -L "$HOME"/.ssh/config && -d "$HOME"/.ssh/config ]]
 then
