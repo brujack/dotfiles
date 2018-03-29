@@ -162,13 +162,14 @@ alias sauna='ssh ubuntu@sauna.us-stg.full.rx'
 alias daredevil='ssh ubuntu@daredevil.us-stg.full.rx'
 alias heroes='ssh ubuntu@heroes.us-stg.full.rx'
 
-#if quiet_which exa
+if quiet_which exa
 # alias for ls to exa removed due to breaking globbing for ansible aws integration
-#then
-#  alias ls="exa -lg --git"
-#else
-#  alias ls="ls -l"
-#fi
+then
+  alias gs="exa -lg --git"
+  alias ls="ls -l"
+else
+  alias ls="ls -l"
+fi
 
 # for chruby setup
 source /usr/local/opt/chruby/share/chruby/chruby.sh
