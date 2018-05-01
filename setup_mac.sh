@@ -245,6 +245,12 @@ then
   sh -c "$(curl -fsSL https://raw.github.com/robbyrussell/oh-my-zsh/master/tools/install.sh)"
 fi
 
+# setup for test-kitchen
+gem install test-kitchen
+gem install kitchen-ansible
+gem install kitchen-docker
+gem install kitchen-verifier-serverspec
+
 echo "Creating $GITREPOS"
 if [[ ! -d "$GITREPOS" ]]
 then
