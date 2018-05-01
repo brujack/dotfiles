@@ -307,6 +307,14 @@ else
   rm "$HOME"/.zshrc
   ln -s "$PERSONAL_GITREPOS"/"$DOTFILES"/.zshrc "$HOME"/.zshrc
 fi
+if [[ ! -L "$HOME"/.gitconfig && -d "$HOME"/.gitconfig ]]
+then
+  ln -s "$PERSONAL_GITREPOS"/"$DOTFILES"/.gitconfig "$HOME"/.gitconfig
+else
+  rm "$HOME"/.gitconfig
+  ln -s "$PERSONAL_GITREPOS"/"$DOTFILES"/.gitconfig "$HOME"/.gitconfig
+fi
+
 
 if [[ ! -L "$HOME"/.oh-my-zsh/custom/bruce.zsh-theme && -d "$HOME"/.oh-my-zsh/custom/bruce.zsh-theme ]]
 then
