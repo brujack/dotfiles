@@ -134,6 +134,7 @@ alias ratna='ssh bruce@ratna'
 alias docker-0='ssh bruce@docker-0'
 alias docker-1='ssh bruce@docker-1'
 # aliases for fullscript servers
+alias work='ssh bjackson@10.200.0.92'
 alias mini-01='ssh fullscript@mini-01.ott.full.rx'
 alias mini-02='ssh fullscript@mini-02.ott.full.rx'
 alias router-01='ssh bjackson@router-01.ott.full.rx'
