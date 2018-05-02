@@ -35,25 +35,55 @@ brew upgrade
 
 echo "Installing other brew stuff..."
 
+brew install autoconf
+brew install automake
+brew install bison
 brew install chruby
 brew install exa
 brew install fd
+brew install findutils
+brew install gdbm
+brew install gettext
 brew install git
 brew install glide
 brew install go
 brew install htop
-brew install node
-brew install rancher-cli
-brew install fangli/dev/rancherssh
+brew install icu4c
+brew install imagemagick
+brew install imagemagick@6
+brew install jpeg
+brew install libffi
+brew install libidn2
+brew install libpng
+brew install libtiff
+brew install libtool
+brew install libunistring
+brew install libyaml
 brew install mas
+brew install mysql
+brew install node
 brew install openssl
+brew install openssl@1.1
+brew install packer
+brew install pcre
+brew install perl
+prew install pkg-config
+brew install python3
+brew install rancher-cli
+brew install rancherssh
+brew install readline
+brew install redis
+brew install ruby
 brew install ruby-install
+brew install sqlite
+brew install terraform
 brew install the_silver_searcher
 brew install tree
 brew install vim
 brew install wget
-brew install python3
+brew install xz
 brew install zsh
+brew install fangli/dev/rancherssh
 
 echo "Cleaning up brew"
 brew cleanup
@@ -245,7 +275,18 @@ then
   sh -c "$(curl -fsSL https://raw.github.com/robbyrussell/oh-my-zsh/master/tools/install.sh)"
 fi
 
-# setup for test-kitchen
+echo "setup ruby 2.3.5"
+if [[ ! -d ~/.rubies/ruby-2.3.5/bin ]]
+then
+  ruby-install ruby 2.3.5
+fi
+
+
+# setup for test-kitchen and ruby-2.3.5 for fullscript
+echo "Setup kitchen"
+source /usr/local/opt/chruby/share/chruby/chruby.sh
+source /usr/local/opt/chruby/share/chruby/auto.sh
+chruby ruby-2.3.5
 gem install test-kitchen
 gem install kitchen-ansible
 gem install kitchen-docker

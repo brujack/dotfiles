@@ -172,6 +172,8 @@ fi
 source /usr/local/opt/chruby/share/chruby/chruby.sh
 source /usr/local/opt/chruby/share/chruby/auto.sh
 
+chruby ruby-2.3.5
+
 # zsh options
 # Share history between instances
 setopt share_history
