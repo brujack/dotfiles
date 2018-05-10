@@ -196,4 +196,7 @@ then
 fi
 
 # setup kubectl autocompletion to save typing
-source <(kubectl completion zsh)
+if [ -f /usr/local/bin/kubectl ]
+then
+  source <(kubectl completion zsh)
+fi
