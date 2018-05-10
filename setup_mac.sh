@@ -355,6 +355,13 @@ else
   rm "$HOME"/.gitconfig
   ln -s "$PERSONAL_GITREPOS"/"$DOTFILES"/.gitconfig "$HOME"/.gitconfig
 fi
+if [[ ! -L "$HOME"/.vimrc && -d "$HOME"/.vimrc ]]
+then
+  ln -s "$PERSONAL_GITREPOS"/"$DOTFILES"/.vimrc "$HOME"/.vimrc
+else
+  rm "$HOME"/.vimrc
+  ln -s "$PERSONAL_GITREPOS"/"$DOTFILES"/.vimrc "$HOME"/.vimrc
+fi
 
 
 if [[ ! -L "$HOME"/.oh-my-zsh/custom/bruce.zsh-theme && -d "$HOME"/.oh-my-zsh/custom/bruce.zsh-theme ]]
