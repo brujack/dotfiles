@@ -194,3 +194,6 @@ if [ -f ~/.vault_pass.txt ]
 then
   export ANSIBLE_VAULT_PASSWORD_FILE=~/.vault_pass.txt
 fi
+
+# setup kubectl autocompletion to save typing
+source <(kubectl completion zsh)
