@@ -52,6 +52,7 @@ brew install icu4c
 brew install imagemagick
 brew install imagemagick@6
 brew install jpeg
+brew install kubernetes-helm
 brew install libffi
 brew install libidn2
 brew install libpng
