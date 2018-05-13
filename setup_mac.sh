@@ -68,7 +68,7 @@ brew install openssl@1.1
 brew install packer
 brew install pcre
 brew install perl
-prew install pkg-config
+brew install pkg-config
 brew install python3
 brew install rancher-cli
 brew install rancherssh
