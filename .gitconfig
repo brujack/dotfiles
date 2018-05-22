@@ -6,8 +6,8 @@
 	cmd = /Applications/SourceTree.app/Contents/Resources/opendiff-w.sh \"$LOCAL\" \"$REMOTE\" -ancestor \"$BASE\" -merge \"$MERGED\"
 	trustExitCode = true
 [user]
-	name =
-	email =
+	name = Bruce Jackson
+	email = bruce.jackson@fullscript.com
 [commit]
 	template = /Users/bruce/.stCommitMsg
 [alias]
