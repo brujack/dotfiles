@@ -307,6 +307,7 @@ then
   sudo -H apt-get install htop -y
   sudo -H apt-get install iotop -y
   sudo -H apt-get install keychain -y
+  sudo -H apt-get install make -y
   sudo -H apt-get install python-setuptools -y
   sudo -H apt-get install zsh -y
   # install go 1.10
