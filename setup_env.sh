@@ -116,7 +116,7 @@ then
     mkdir ${BREWFILE_LOC}
   fi
 
-  if [[ ! -L ${BREWFILE_LOC}/Brewfile && -d ${BREWFILE_LOC}/Brewfile ]]
+  if [[ ! -L ${BREWFILE_LOC}/Brewfile ]]
   then
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile $BREWFILE_LOC/Brewfile
   else
