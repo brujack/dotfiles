@@ -1,6 +1,10 @@
 # If you come from bash you might have to change your $PATH.
 # export PATH=$HOME/bin:/usr/local/bin:$PATH
 
+# choose which env we are running on
+[ $(uname -s) = "Darwin" ] && export MACOS=1
+[ $(uname -s) = "Linux" ] && export LINUX=1
+
 # setup some functions
 quiet_which() {
   which "$1" &>/dev/null
@@ -81,7 +85,7 @@ source $ZSH/oh-my-zsh.sh
 # export LANG=en_US.UTF-8
 
 # Preferred editor for local and remote sessions
-if [[ -n $SSH_CONNECTION ]]; then
+if [[ -n $SSH_CONNECTION || ${LINUX} ]]; then
   export EDITOR='vim'
   export GIT_EDITOR='vim'
 else
@@ -93,20 +97,40 @@ fi
 # export ARCHFLAGS="-arch x86_64"
 
 # for keychain ssh key management
-eval `~/keychain/keychain --eval --agents ssh --inherit any id_rsa`
-
+if [[ ${MACOS} ]]
+then
+  eval `/usr/local/bin/keychain --eval --agents ssh --inherit any id_rsa`
+elif [[ ${LINUX} ]]
+then
+  eval `/usr/bin/keychain --eval --agents ssh --inherit any id_rsa`
+fi
 # ssh
 # export SSH_KEY_PATH="~/.ssh/rsa_id"
 
-# for brew path includes
+# for /usr/local includes
 path+='/usr/local/bin'
 path+='/usr/local/sbin'
 #export PATH="/usr/local/bin:/usr/local/sbin:$PATH"
 
-# adding an appropriate PATH variable for use with MacPorts.
+# for /opt/local includes
 path+='/opt/local/bin'
 path+='/opt/local/sbin'
 #export PATH="/opt/local/bin:/opt/local/sbin:$PATH"
+
+# adding in local go path
+if [[ -d /Users/bjackson ]]
+then
+  path+='/Users/bjackson/go/bin'
+fi
+if [[ -d /Users/bruce ]]
+then
+  path+='/Users/bruce/go/bin'
+fi
+
+if [[ ${LINUX} ]]
+then
+  path+='/usr/lib/go-1.10/bin'
+fi
 
 #export the PATH
 export PATH
@@ -182,7 +206,7 @@ setopt share_history
 setopt hist_reduce_blanks
 
 # add in aws creds for terraform and ansible
-if [ -f ~/.aws_creds ]
+if [[ -f ~/.aws_creds ]]
 then
   source ~/.aws_creds
 fi
@@ -190,13 +214,16 @@ fi
 # setup for python 3.6.4 for ansible by using virtualenv
 source /usr/local/bin/virtualenvwrapper.sh
 workon ansible
-if [ -f ~/.vault_pass.txt ]
+if [[ -f ~/.vault_pass.txt ]]
 then
   export ANSIBLE_VAULT_PASSWORD_FILE=~/.vault_pass.txt
 fi
 
 # setup kubectl autocompletion to save typing
-if [ -f /usr/local/bin/kubectl ]
+if [[ -f /usr/local/bin/kubectl ]]
 then
   source <(kubectl completion zsh)
 fi
+
+# setup gpg
+export GPG_TTY=$(tty)
