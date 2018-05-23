@@ -6,7 +6,7 @@
 
 # locations of directories
 GITREPOS="${HOME}/git-repos"
-PERSONAL_GITREPOS="$GITREPOS/personal"
+PERSONAL_GITREPOS="${GITREPOS}/personal"
 DOTFILES="dotfiles"
 RANCHERSSH="${HOME}/.rancherssh"
 BREWFILE_LOC="${HOME}/brew"
@@ -23,25 +23,25 @@ HOSTNAME=`hostname -s`
 # setup variables based off of environment
 if [[ ${MACOS} ]]
 then
-  VSCODE="$HOME/Library/Application Support/Code/User"
+  VSCODE="${HOME}/Library/Application Support/Code/User"
 elif [[ ${LINUX} ]]
 then
-  VSCODE="$HOME/.config/Code/User"
+  VSCODE="${HOME}/.config/Code/User"
 fi
 
-echo "Creating $GITREPOS"
-if [[ ! -d "$GITREPOS" ]]
+echo "Creating ${GITREPOS}"
+if [[ ! -d ${GITREPOS} ]]
 then
-  mkdir "$GITREPOS"
+  mkdir ${GITREPOS}
 fi
 
-echo "Creating $PERSONAL_GITREPOS"
+echo "Creating ${PERSONAL_GITREPOS}"
 if [[ ! -d ${PERSONAL_GITREPOS} ]]
 then
   mkdir ${PERSONAL_GITREPOS}
 fi
 
-echo "Copying $DOTFILES from Github"
+echo "Copying ${DOTFILES} from Github"
 if [[ ! -d ${PERSONAL_GITREPOS}/${DOTFILES} ]]
 then
   cd ${HOME}
@@ -51,27 +51,34 @@ else
   git pull
 fi
 
-echo "Linking $DOTFILES to their home"
-if [[ ! -L ${HOME}/.zshrc && -d ${HOME}/.zshrc ]]
+echo "Linking ${DOTFILES} to their home"
+if [[ ! -L ${HOME}/.zshrc && -f ${HOME}/.zshrc ]]
 then
   ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.zshrc ${HOME}/.zshrc
 else
   rm ${HOME}/.zshrc
   ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.zshrc ${HOME}/.zshrc
 fi
-if [[ ! -L ${HOME}/.gitconfig && -d ${HOME}/.gitconfig ]]
+if [[ ! -L ${HOME}/.gitconfig && -f ${HOME}/.gitconfig ]]
 then
   ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig ${HOME}/.gitconfig
 else
   rm ${HOME}/.gitconfig
   ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig ${HOME}/.gitconfig
 fi
-if [[ ! -L ${HOME}/.vimrc && -d ${HOME}/.vimrc ]]
+if [[ ! -L ${HOME}/.vimrc && -f ${HOME}/.vimrc ]]
 then
   ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.vimrc ${HOME}/.vimrc
 else
   rm ${HOME}/.vimrc
   ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.vimrc ${HOME}/.vimrc
+fi
+if [[ ! -L "$VSCODE"/settings.json && -f "$VSCODE"/settings.json ]]
+then
+  ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/vscode-settings.json "$VSCODE"/settings.json
+else
+  rm "$VSCODE"/settings.json
+  ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/vscode-settings.json "$VSCODE"/settings.json
 fi
 
 echo "Installing Oh My ZSH..."
@@ -198,6 +205,10 @@ then
   if [[ ! -d "/Applications/TeamViewer.app" ]]
   then
     brew cask install teamviewer
+  fi
+  if [[ ! -d "/Applications/Visual Studio Code.app" ]]
+  then
+    brew cask install visual-studio-code
   fi
 
   echo "Cleaning up brew"
