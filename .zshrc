@@ -193,10 +193,12 @@ else
 fi
 
 # for chruby setup
-source /usr/local/opt/chruby/share/chruby/chruby.sh
-source /usr/local/opt/chruby/share/chruby/auto.sh
-
-chruby ruby-2.3.5
+if [[ ${MACOS} ]]
+then
+  source /usr/local/opt/chruby/share/chruby/chruby.sh
+  source /usr/local/opt/chruby/share/chruby/auto.sh
+  chruby ruby-2.3.5
+fi
 
 # zsh options
 # Share history between instances
