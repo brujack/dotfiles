@@ -1,6 +1,5 @@
 {
     "files.autoSave": "onFocusChange",
-    "editor.fontFamily": "'SF Mono', Consolas, monospace",
     "editor.renderWhitespace": "boundary",
     "editor.multiCursorModifier": "ctrlCmd",
     "editor.wordWrap": "bounded",
