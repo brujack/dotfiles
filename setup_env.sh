@@ -163,9 +163,13 @@ then
   then
     brew cask install atom
   fi
-  if [[ ! -d "/Applications/Atom.app" ]]
+  if [[ ! -d "/Applications/DaisyDisk.app" ]]
   then
     brew cask install daisydisk
+  fi
+  if [[ ! -d "/Applications/Carbon Copy Cloner.app" ]]
+  then
+    brew cask install carbon-copy-cloner
   fi
   if [[ ! -d "/Applications/Dropbox.app" ]]
   then
