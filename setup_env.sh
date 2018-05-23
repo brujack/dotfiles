@@ -204,8 +204,6 @@ then
   # 443987910 1Password
   # 414209656 Better Rename 9
   # 425264550 Blackmagic Disk Speed Test
-  # 406056744 Evernote
-  # 682658836 GarageBand
   # 1175706108 Geekbench 4
   # 406056744 Evernote
   # 408981434 iMovie
@@ -231,8 +229,6 @@ then
   mas install 443987910
   mas install 414209656
   mas install 425264550
-  mas install 406056744
-  mas install 682658836
   mas install 1175706108
   mas install 406056744
   mas install 408981434
