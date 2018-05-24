@@ -240,6 +240,9 @@ then
   echo "Cleaning up brew"
   brew cleanup
 
+  echo "Updating app store apps via mas"
+  mas upgrade
+  
   echo "Installing common apps via mas"
   if [[ ! -d "/Applications/1Password.app" ]]
   then
@@ -340,9 +343,6 @@ then
   then
     mas install 883878097
   fi
-
-  echo "Updating app store apps via mas"
-  mas upgrade
 
   echo "setup ruby 2.3.5"
   if [[ ! -d ~/.rubies/ruby-2.3.5/bin ]]
