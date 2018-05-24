@@ -179,9 +179,12 @@ then
   then
     brew cask install carbon-copy-cloner
   fi
-  if [[ ! -d "/Applications/Docker.app" ]]
+  if [[ ! ${HOSTNAME} == "server" ]]
   then
-    brew cask install caskroom/versions/docker-edge
+    if [[ ! -d "/Applications/Docker.app" ]]
+    then
+      brew cask install caskroom/versions/docker-edge
+    fi
   fi
   if [[ ! -d "/Applications/Dropbox.app" ]]
   then
@@ -331,7 +334,7 @@ then
 
   echo "Installing server apps via mas"
   # 883878097 Server
-  if [[ ${HOSTNAME} == "mac" ]] || [[ $HOSTNAME == "server" ]]
+  if [[ ${HOSTNAME} == "mac" ]] || [[ ${HOSTNAME} == "server" ]]
   then
     mas install 883878097
   fi
