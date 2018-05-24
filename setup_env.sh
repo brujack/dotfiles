@@ -242,11 +242,11 @@ then
 
   echo "Updating app store apps via mas"
   mas upgrade
-  
+
   echo "Installing common apps via mas"
-  if [[ ! -d "/Applications/1Password.app" ]]
+  if [[ ! -d "/Applications/1Password 7.app" ]]
   then
-    mas install 443987910
+    mas install 1333542190
   fi
   if [[ ! -d "/Applications/Better Rename 9.app" ]]
   then
