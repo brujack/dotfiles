@@ -150,6 +150,8 @@ then
   echo "Installing other brew stuff..."
   brew tap homebrew/bundle
   brew tap caskroom/cask
+  # for zsh brew completions
+  brew install zsh-completions
   cd ${BREWFILE_LOC} && brew bundle
   cd ${PERSONAL_GITREPOS}/${DOTFILES}
 
@@ -169,17 +171,37 @@ then
   then
     brew cask install daisydisk
   fi
+  if [[ ! -d "/Applications/Beyond Compare.app" ]]
+  then
+    brew cask install beyond-compare
+  fi
   if [[ ! -d "/Applications/Carbon Copy Cloner.app" ]]
   then
     brew cask install carbon-copy-cloner
+  fi
+  if [[ ! -d "/Applications/Docker.app" ]]
+  then
+    brew cask install caskroom/versions/docker-edge
   fi
   if [[ ! -d "/Applications/Dropbox.app" ]]
   then
     brew cask install dropbox
   fi
+  if [[ ! -d "/Applications/Firefox.app" ]]
+  then
+    brew cask install firefox
+  fi
+  if [[ ! -d "/Applications/Funter.app" ]]
+  then
+    brew cask install funter
+  fi
   if [[ ! -d "/Applications/Google Chrome.app" ]]
   then
     brew cask install google-chrome
+  fi
+  if [[ ! -d "/Applications/iTerm.app" ]]
+  then
+    brew cask install iterm2
   fi
   if [[ ! -d "/Applications/Malwarebytes.app" ]]
   then
@@ -189,11 +211,15 @@ then
   then
     brew cask install mysqlworkbench
   fi
+  if [[ ! -d "/Applications/Postman.app" ]]
+  then
+    brew cask install postman
+  fi
   if [[ ! -d "/Applications/SourceTree.app" ]]
   then
     brew cask install sourcetree
   fi
-  if [[ ! -d "/Applications/SourceTree.app" ]]
+  if [[ ! -d "/Applications/Spotify.app" ]]
   then
     brew cask install spotify
   fi
@@ -210,55 +236,98 @@ then
   brew cleanup
 
   echo "Installing common apps via mas"
-  # This is the key values of the mas id to a commom name:
-  # 443987910 1Password
-  # 414209656 Better Rename 9
-  # 425264550 Blackmagic Disk Speed Test
-  # 1175706108 Geekbench 4
-  # 406056744 Evernote
-  # 408981434 iMovie
-  # 403304796 iNet Network Scanner
-  # 409183694 Keynote
-  # 430255202 Mactracker
-  # 715768417 Microsoft Remote Desktop
-  # 409203825 Numbers
-  # 409201541 Pages
-  # 407963104 Pixelmator
-  # 594432954 Read CHM
-  # 409907375 Remote Desktop
-  # 692867256 Simplenote
-  # 803453959 Slack
-  # 1153157709 Speedtest
-  # 1025345625 SQLPro for Postgres
-  # 425424353 The Unarchiver
-  # 403388562 Transmit
-  # 747648890 Telegram
-  # 604825918 Valentina Studio
-  # 497799835 Xcode
-
-  mas install 443987910
-  mas install 414209656
-  mas install 425264550
-  mas install 1175706108
-  mas install 406056744
-  mas install 408981434
-  mas install 403304796
-  mas install 409183694
-  mas install 430255202
-  mas install 715768417
-  mas install 409203825
-  mas install 409201541
-  mas install 407963104
-  mas install 594432954
-  mas install 409907375
-  mas install 692867256
-  mas install 803453959
-  mas install 1153157709
-  mas install 1025345625
-  mas install 425424353
-  mas install 403388562
-  mas install 747648890
-  mas install 604825918
+  if [[ ! -d "/Applications/1Password.app" ]]
+  then
+    mas install 443987910
+  fi
+  if [[ ! -d "/Applications/Better Rename 9.app" ]]
+  then
+    mas install 414209656
+  fi
+  if [[ ! -d "/Applications/Blackmagic Disk Speed Test.app" ]]
+  then
+    mas install 425264550
+  fi
+  if [[ ! -d "/Applications/Geekbench 4.app" ]]
+  then
+    mas install 1175706108
+  fi
+  if [[ ! -d "/Applications/Evernote.app" ]]
+  then
+    mas install 406056744
+  fi
+  if [[ ! -d "/Applications/iMovie.app" ]]
+  then
+    mas install 408981434
+  fi
+  if [[ ! -d "/Applications/iNet Network Scanner.app" ]]
+  then
+    mas install 403304796
+  fi
+  if [[ ! -d "/Applications/Keynote.app" ]]
+  then
+    mas install 409183694
+  fi
+  if [[ ! -d "/Applications/Mactracker.app" ]]
+  then
+    mas install 430255202
+  fi
+  if [[ ! -d "/Applications/Microsoft Remote Desktop.app" ]]
+  then
+    mas install 715768417
+  fi
+  if [[ ! -d "/Applications/Numbers.app" ]]
+  then
+    mas install 409203825
+  fi
+  if [[ ! -d "/Applications/Pages.app" ]]
+  then
+    mas install 409201541
+  fi
+  if [[ ! -d "/Applications/Pixelmator.app" ]]
+  then
+    mas install 407963104
+  fi
+  if [[ ! -d "/Applications/Read CHM.app" ]]
+  then
+    mas install 594432954
+  fi
+  if [[ ! -d "/Applications/Remote Desktop.app" ]]
+  then
+    mas install 409907375
+  fi
+  if [[ ! -d "/Applications/Simplenote.app" ]]
+  then
+    mas install 692867256
+  fi
+  if [[ ! -d "/Applications/Slack.app" ]]
+  then
+    mas install 803453959
+  fi
+  if [[ ! -d "/Applications/Speedtest.app" ]]
+  then
+    mas install 1153157709
+  fi
+  if [[ ! -d "/Applications/SQLPro for Postgres.app" ]]
+  then
+    mas install 1025345625
+  fi
+  if [[ ! -d "/Applications/The Unarchiver.app" ]]
+  then
+    mas install 425424353
+  fi
+  if [[ ! -d "/Applications/Transmit.app" ]]
+  then
+    mas install 403388562
+  fi
+  if [[ ! -d "/Applications/Telegram.app" ]]
+  then
+    mas install 747648890
+  fi
+  if [[ ! -d "/Applications/Valentina Studio.app" ]]
+  then
+    mas install 604825918
+  fi
 
   echo "Installing server apps via mas"
   # 883878097 Server
