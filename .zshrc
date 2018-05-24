@@ -229,3 +229,9 @@ fi
 
 # setup gpg
 export GPG_TTY=$(tty)
+
+# for brew zsh-completions
+if [[ ${MACOS} ]]
+then
+  fpath=(/usr/local/share/zsh-completions $fpath)
+fi

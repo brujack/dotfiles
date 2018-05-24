@@ -150,8 +150,6 @@ then
   echo "Installing other brew stuff..."
   brew tap homebrew/bundle
   brew tap caskroom/cask
-  # for zsh brew completions
-  brew install zsh-completions
   cd ${BREWFILE_LOC} && brew bundle
   cd ${PERSONAL_GITREPOS}/${DOTFILES}
 
@@ -233,6 +231,10 @@ then
   if [[ ! -d "/Applications/Visual Studio Code.app" ]]
   then
     brew cask install visual-studio-code
+  fi
+  if [[ ! -d "/usr/local/Cellar/zsh-completions" ]]
+  then
+    brew cask install zsh-completions
   fi
 
   echo "Cleaning up brew"
