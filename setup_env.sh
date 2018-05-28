@@ -17,9 +17,6 @@ quiet_which() {
   which "$1" &>/dev/null
 }
 
-# get hostname
-HOSTNAME=`hostname -s`
-
 # setup variables based off of environment
 if [[ ${MACOS} ]]
 then
