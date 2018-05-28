@@ -337,7 +337,10 @@ then
   # 883878097 Server
   if [[ ${HOSTNAME} == "mac" ]] || [[ ${HOSTNAME} == "server" ]]
   then
-    mas install 883878097
+    if [[ ! -d "/Applications/Server.app" ]]
+    then
+      mas install 883878097
+    fi
   fi
 
   echo "setup ruby 2.3.5"
