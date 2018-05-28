@@ -232,10 +232,6 @@ then
   then
     brew cask install visual-studio-code
   fi
-  if [[ ! -d "/usr/local/Cellar/zsh-completions" ]]
-  then
-    brew cask install zsh-completions
-  fi
 
   echo "Cleaning up brew"
   brew cleanup
