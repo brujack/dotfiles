@@ -213,6 +213,12 @@ then
   source ~/.aws_creds
 fi
 
+# add in google cloud creds for terraform
+if [[ -f ~/.google_creds ]]
+then
+  source ~/.google_creds
+fi
+
 # setup for python 3.6.4 for ansible by using virtualenv
 source /usr/local/bin/virtualenvwrapper.sh
 workon ansible
