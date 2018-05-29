@@ -197,6 +197,10 @@ then
   then
     brew cask install google-chrome
   fi
+  if [[ ! -d "/usr/local/Caskroom/google-cloud-sdk" ]]
+  then
+    brew cask install google-cloud-sdk
+  fi
   if [[ ! -d "/Applications/iTerm.app" ]]
   then
     brew cask install iterm2
