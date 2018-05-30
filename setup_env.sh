@@ -383,7 +383,7 @@ then
   # install go 1.10
   sudo add-apt-repository ppa:gophers/archive
   sudo apt-get update
-  sudo apt-get install golang-1.10-go
+  sudo apt-get install golang-1.10-go -y
 fi
 
 echo "Installing pip"
