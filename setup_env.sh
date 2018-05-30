@@ -371,6 +371,7 @@ fi
 if [ ${LINUX} ]
 then
   sudo -H apt-get update
+  sudo -H apt-get install git -y
   sudo -H apt-get install docker.io -y
   sudo -H apt-get install gcc -y
   sudo -H apt-get install htop -y
