@@ -380,6 +380,8 @@ then
   sudo -H apt-get install make -y
   sudo -H apt-get install python-setuptools -y
   sudo -H apt-get install zsh -y
+  # install for bonded links
+  sudo -H apt-get install ifenslave bridge-utils -y
   # install go 1.10
   sudo add-apt-repository ppa:gophers/archive
   sudo apt-get update
