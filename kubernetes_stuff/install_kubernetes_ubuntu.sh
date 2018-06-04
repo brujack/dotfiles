@@ -42,7 +42,7 @@ sudo -H swapoff -a
 
 # fix the kubelet startup script to use the correct cgroup driver that matches what docker uses
 KUBELET_CGROUP_ARGS=$(sudo -H docker info | grep -i cgroup | awk -F ':' '{print $2}' | sed -e 's/^[[:space:]]*//')
-TEE_OUTPUT="Environment="KUBELET_CGROUP_ARGS=--cgroup-driver=${KUBELET_CGROUP_ARGS}"
+TEE_OUTPUT="Environment="KUBELET_CGROUP_ARGS=--cgroup-driver=${KUBELET_CGROUP_ARGS}""
 echo ${TEE_OUTPUT} > sudo tee -a /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
 sudo -H systemctl daemon-reload && sudo -H systemctl restart kubelet
 
