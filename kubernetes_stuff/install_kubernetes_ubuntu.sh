@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 GITREPOS="${HOME}/git-repos"
 PERSONAL_GITREPOS="${GITREPOS}/personal"
 
@@ -47,7 +49,6 @@ sudo -H systemctl daemon-reload && sudo -H systemctl restart kubelet
 sudo -H kubeadm init --pod-network-cidr=192.168.10.0/24
 
 sleep 120
-exit 0
 # setup .kube environment
 sudo -H chmod 644 /etc/kubernetes/admin.conf
 mkdir -p ~/.kube
