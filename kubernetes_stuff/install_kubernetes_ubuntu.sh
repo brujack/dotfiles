@@ -38,6 +38,8 @@ go get github.com/kubernetes-incubator/cri-tools/cmd/crictl
 sudo -H sed -i '/ swap / s/^/#/' /etc/fstab
 sudo -H swapoff -a
 
+exit 0
+
 # fix the kubelet startup script to use the correct cgroup driver that matches what docker uses
 KUBELET_CGROUP_ARGS=$(sudo -H docker info | grep -i cgroup | awk -F ':' '{print $2}' | sed -e 's/^[[:space:]]*//')
 echo Environment="KUBELET_CGROUP_ARGS=--cgroup-driver=${KUBELET_CGROUP_ARGS}" > /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
