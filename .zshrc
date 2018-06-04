@@ -129,6 +129,7 @@ fi
 
 if [[ ${LINUX} ]]
 then
+  path+='/home/bruce/go/bin'
   path+='/usr/lib/go-1.10/bin'
 fi
 
