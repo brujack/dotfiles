@@ -6,7 +6,7 @@
     "editor.renderWhitespace": "boundary",
     "editor.multiCursorModifier": "ctrlCmd",
     "editor.wordWrap": "bounded",
-    "editor.cursorStyle": "line",
+    "editor.cursorStyle": "underline",
     "editor.fontSize": 13,
     "editor.tabSize": 2,
     "editor.renderLineHighlight": "none",
