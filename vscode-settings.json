@@ -5,7 +5,6 @@
     "files.insertFinalNewline": true,
     "editor.renderWhitespace": "boundary",
     "editor.multiCursorModifier": "ctrlCmd",
-    "editor.wordWrap": "bounded",
     "editor.cursorStyle": "underline",
     "editor.fontSize": 13,
     "editor.tabSize": 2,
