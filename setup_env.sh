@@ -396,8 +396,8 @@ then
    $(lsb_release -cs) \
    stable"
   sudo -H apt-get update
-  sudo -H apt-get install docker-ce=17.03.2~ce-0~ubuntu-xenial
-  sudo -H apt-mark hold docker-ce
+  sudo -H apt-get install docker-ce=17.03.2~ce-0~ubuntu-xenial -y
+  sudo -H apt-mark hold docker-ce -y
 fi
 
 echo "Installing pip"
