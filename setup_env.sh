@@ -371,6 +371,7 @@ fi
 if [ ${LINUX} ]
 then
   sudo -H apt-get update
+  sudo -H apt-get install zsh -y
   sudo -H apt-get install git -y
   sudo -H apt-get install gcc -y
   sudo -H apt-get install htop -y
@@ -378,7 +379,7 @@ then
   sudo -H apt-get install keychain -y
   sudo -H apt-get install make -y
   sudo -H apt-get install python-setuptools -y
-  sudo -H apt-get install zsh -y
+  sudo -H apt-get install npm -y
   # install for bonded links
   sudo -H apt-get install ifenslave bridge-utils -y
   # install go 1.10
