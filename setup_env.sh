@@ -82,8 +82,6 @@ then
   fi
 fi
 
-exit 0
-
 echo "Installing Oh My ZSH..."
 if [[ ! -d ${HOME}/.oh-my-zsh ]]
 then
