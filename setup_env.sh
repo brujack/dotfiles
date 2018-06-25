@@ -56,11 +56,13 @@ then
 fi
 if [[ -e ${HOME}/.gitconfig ]]
 then
+  echo "gitconfig"
   rm ${HOME}/.gitconfig
   ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig ${HOME}/.gitconfig
 fi
 if [[ -e ${HOME}/.vimrc ]]
 then
+  echo "vimrc"
   rm ${HOME}/.vimrc
   ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.vimrc ${HOME}/.vimrc
 fi
@@ -72,6 +74,8 @@ then
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/vscode-settings.json "$VSCODE"/settings.json
   fi
 fi
+
+exit 0
 
 echo "Installing Oh My ZSH..."
 if [[ ! -d ${HOME}/.oh-my-zsh ]]
