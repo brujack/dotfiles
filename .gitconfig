@@ -11,6 +11,7 @@
 [commit]
 	template = /Users/bruce/.stCommitMsg
 [alias]
+	p = pull
   br = branch
   ci = commit
   co = checkout
