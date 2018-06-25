@@ -49,28 +49,34 @@ else
 fi
 
 echo "Linking ${DOTFILES} to their home"
-if [[ -e ${HOME}/.zshrc ]]
+
+if [[ ! -L ${HOME}/.zshrc ]]
 then
-  echo "zshrc"
+  ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.zshrc ${HOME}/.zshrc
+else
   rm ${HOME}/.zshrc
   ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.zshrc ${HOME}/.zshrc
 fi
-if [[ -e ${HOME}/.gitconfig ]]
+if [[ ! -L ${HOME}/.gitconfig ]]
 then
-  echo "gitconfig"
+  ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig ${HOME}/.gitconfig
+else
   rm ${HOME}/.gitconfig
   ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig ${HOME}/.gitconfig
 fi
-if [[ -e ${HOME}/.vimrc ]]
+if [[ ! -L ${HOME}/.vimrc ]]
 then
-  echo "vimrc"
+  ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.vimrc ${HOME}/.vimrc
+else
   rm ${HOME}/.vimrc
   ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.vimrc ${HOME}/.vimrc
 fi
 if [[ ${MACOS} ]]
 then
-  if [[ -e "$VSCODE"/settings.json ]]
+  if [[ ! -L "$VSCODE"/settings.json ]]
   then
+    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/vscode-settings.json "$VSCODE"/settings.json
+  else
     rm "$VSCODE"/settings.json
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/vscode-settings.json "$VSCODE"/settings.json
   fi
