@@ -51,6 +51,7 @@ fi
 echo "Linking ${DOTFILES} to their home"
 if [[ -e ${HOME}/.zshrc ]]
 then
+  echo "zshrc"
   rm ${HOME}/.zshrc
   ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.zshrc ${HOME}/.zshrc
 fi
