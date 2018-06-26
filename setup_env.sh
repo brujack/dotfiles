@@ -26,6 +26,12 @@ then
   VSCODE="${HOME}/.config/Code/User"
 fi
 
+echo "Creating home bin"
+if [[ ! -d ${HOME}/bin ]]
+then
+  mkdir ${HOME}/bin
+fi
+
 echo "Creating ${GITREPOS}"
 if [[ ! -d ${GITREPOS} ]]
 then

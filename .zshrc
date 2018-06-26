@@ -107,6 +107,16 @@ fi
 # ssh
 # export SSH_KEY_PATH="~/.ssh/rsa_id"
 
+# adding in home go path
+if [[ -d /Users/bjackson ]]
+then
+  path+='/Users/bjackson/bin'
+fi
+if [[ -d /Users/bruce ]]
+then
+  path+='/Users/bruce/bin'
+fi
+
 # for /usr/local includes
 path+='/usr/local/bin'
 path+='/usr/local/sbin'
@@ -117,7 +127,7 @@ path+='/opt/local/bin'
 path+='/opt/local/sbin'
 #export PATH="/opt/local/bin:/opt/local/sbin:$PATH"
 
-# adding in local go path
+# adding in home go path
 if [[ -d /Users/bjackson ]]
 then
   path+='/Users/bjackson/go/bin'
