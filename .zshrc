@@ -75,7 +75,14 @@ source $ZSH/oh-my-zsh.sh
 # Custom plugins may be added to ~/.oh-my-zsh/custom/plugins/
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
-plugins=(git osx brew terraform vscode)
+if [[ ${MACOS} ]]
+then
+  plugins=(aws brew git kubectl osx terraform vscode)
+elif [[ ${LINUX} ]]
+then
+  plugins=(aws git kubectl ubuntu terraform)
+fi
+
 
 # User configuration
 
