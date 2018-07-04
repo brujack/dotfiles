@@ -32,6 +32,12 @@ then
   mkdir ${HOME}/bin
 fi
 
+echo "Creating home aws"
+if [[ ! -d ${HOME}/.aws ]]
+then
+  mkdir ${HOME}/.aws
+fi
+
 echo "Creating ${GITREPOS}"
 if [[ ! -d ${GITREPOS} ]]
 then
@@ -360,7 +366,7 @@ then
   fi
 
   echo "setup ruby 2.3.5"
-  if [[ ! -d ~/.rubies/ruby-2.3.5/bin ]]
+  if [[ ! -d ${HOME}/.rubies/ruby-2.3.5/bin ]]
   then
     ruby-install ruby 2.3.5
   fi
@@ -423,15 +429,15 @@ echo "Installing virtualenv for python"
 sudo -H pip install virtualenv virtualenvwrapper
 
 # setup virtualenv for python if virtualenv there
-if ! [ -d ~/.virtualenvs ]
+if ! [ -d ${HOME}/.virtualenvs ]
 then
   mkdir ${HOME}/.virtualenvs
 fi
 
-cd ~/.virtualenvs
+cd ${HOME}/.virtualenvs
 source /usr/local/bin/virtualenvwrapper.sh
 
-if ! [[ -f ~/.virtualenvs/ansible ]]
+if ! [[ -f ${HOME}/.virtualenvs/ansible ]]
 then
   if [[ -f /usr/local/bin/virtualenv ]]
   then
@@ -449,12 +455,12 @@ echo "Installing boto via pip"
 pip3 install boto boto3 botocore
 
 # override boto provided endpoints with a more correct version that has all of the regions
-if [[ -f ~/git-repos/fullscript/aws-terraform ]]
+if [[ -f ${HOME}/git-repos/fullscript/aws-terraform ]]
 then
-  if [[ -f ~/.virtualenvs/ansible/lib/python3.6/site-packages/boto/endpoints.json ]]
+  if [[ -f ${HOME}/.virtualenvs/ansible/lib/python3.6/site-packages/boto/endpoints.json ]]
   then
-    mv ~/.virtualenvs/ansible/lib/python3.6/site-packages/boto/endpoints.json ~/.virtualenvs/ansible/lib/python3.6/site-packages/boto/endpoints.json.orig
-    ln -s ~/git-repos/fullscript/aws-terraform/docker/ansible/boto.json ~/.virtualenvs/ansible/lib/python3.6/site-packages/boto/endpoints.json
+    mv ${HOME}/.virtualenvs/ansible/lib/python3.6/site-packages/boto/endpoints.json ${HOME}/.virtualenvs/ansible/lib/python3.6/site-packages/boto/endpoints.json.orig
+    ln -s ${HOME}/git-repos/fullscript/aws-terraform/docker/ansible/boto.json ${HOME}/.virtualenvs/ansible/lib/python3.6/site-packages/boto/endpoints.json
   fi
 fi
 
@@ -464,6 +470,6 @@ pip3 install awscli
 echo "Installing json2yaml via npm"
 npm install json2yaml
 
-source ~/.zshrc
+source ${HOME}/.zshrc
 
 exit 0

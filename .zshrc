@@ -13,13 +13,13 @@ quiet_which() {
 # rancherssh will do fuzzy find for your query between %%
 # rssh container-keyword
 rssh () {
-  cd ~/.rancherssh
+  cd ${HOME}/.rancherssh
   rancherssh %"$1"%
   cd -
 }
 
 # Path to your oh-my-zsh installation.
-export ZSH=~/.oh-my-zsh
+export ZSH=${HOME}/.oh-my-zsh
 
 # Set name of the theme to load. Optionally, if you set this to "random"
 # it'll load a random theme each time that oh-my-zsh is loaded.
@@ -69,13 +69,13 @@ export HISTIGNORE="ls:cd:cd -:pwd:exit:date:* --help";
 # Would you like to use another custom folder than $ZSH/custom?
 # ZSH_CUSTOM=/path/to/new-custom-folder
 
+source $ZSH/oh-my-zsh.sh
+
 # Which plugins would you like to load? (plugins can be found in ~/.oh-my-zsh/plugins/*)
 # Custom plugins may be added to ~/.oh-my-zsh/custom/plugins/
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
-plugins=(git osx brew terraform)
-
-source $ZSH/oh-my-zsh.sh
+plugins=(git osx brew terraform vscode)
 
 # User configuration
 
@@ -219,23 +219,25 @@ setopt share_history
 setopt hist_reduce_blanks
 
 # add in aws creds for terraform and ansible
-if [[ -f ~/.aws_creds ]]
+export AWS_HOME=${HOME}/.aws
+
+if [[ -f ${AWS_HOME}/.aws_creds ]]
 then
-  source ~/.aws_creds
+  source ${AWS_HOME}/.aws_creds
 fi
 
 # add in google cloud creds for terraform
-if [[ -f ~/.google_creds ]]
+if [[ -f ${HOME}/.google_creds ]]
 then
-  source ~/.google_creds
+  source ${HOME}/.google_creds
 fi
 
 # setup for python 3.6.4 for ansible by using virtualenv
 source /usr/local/bin/virtualenvwrapper.sh
 workon ansible
-if [[ -f ~/.vault_pass.txt ]]
+if [[ -f ${HOME}/.vault_pass.txt ]]
 then
-  export ANSIBLE_VAULT_PASSWORD_FILE=~/.vault_pass.txt
+  export ANSIBLE_VAULT_PASSWORD_FILE=${HOME}/.vault_pass.txt
 fi
 
 # setup kubectl autocompletion to save typing
