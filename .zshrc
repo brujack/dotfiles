@@ -1,6 +1,3 @@
-# If you come from bash you might have to change your $PATH.
-# export PATH=$HOME/bin:/usr/local/bin:$PATH
-
 # choose which env we are running on
 [ $(uname -s) = "Darwin" ] && export MACOS=1
 [ $(uname -s) = "Linux" ] && export LINUX=1
@@ -66,11 +63,6 @@ COMPLETION_WAITING_DOTS="true"
 export HISTCONTROL=ignoredups;
 export HISTIGNORE="ls:cd:cd -:pwd:exit:date:* --help";
 
-# Would you like to use another custom folder than $ZSH/custom?
-# ZSH_CUSTOM=/path/to/new-custom-folder
-
-source $ZSH/oh-my-zsh.sh
-
 # Which plugins would you like to load? (plugins can be found in ~/.oh-my-zsh/plugins/*)
 # Custom plugins may be added to ~/.oh-my-zsh/custom/plugins/
 # Example format: plugins=(rails git textmate ruby lighthouse)
@@ -83,13 +75,7 @@ then
   plugins=(aws git kubectl ubuntu terraform)
 fi
 
-
-# User configuration
-
-# export MANPATH="/usr/local/man:$MANPATH"
-
-# You may need to manually set your language environment
-# export LANG=en_US.UTF-8
+source $ZSH/oh-my-zsh.sh
 
 # Preferred editor for local and remote sessions
 if [[ -n $SSH_CONNECTION || ${LINUX} ]]; then
@@ -100,9 +86,6 @@ else
   export GIT_EDITOR='code'
 fi
 
-# Compilation flags
-# export ARCHFLAGS="-arch x86_64"
-
 # for keychain ssh key management
 if [[ ${MACOS} ]]
 then
@@ -111,8 +94,6 @@ elif [[ ${LINUX} ]]
 then
   eval `/usr/bin/keychain --eval --agents ssh --inherit any id_rsa`
 fi
-# ssh
-# export SSH_KEY_PATH="~/.ssh/rsa_id"
 
 # adding in home go path
 if [[ -d /Users/bjackson ]]
@@ -127,12 +108,10 @@ fi
 # for /usr/local includes
 path+='/usr/local/bin'
 path+='/usr/local/sbin'
-#export PATH="/usr/local/bin:/usr/local/sbin:$PATH"
 
 # for /opt/local includes
 path+='/opt/local/bin'
 path+='/opt/local/sbin'
-#export PATH="/opt/local/bin:/opt/local/sbin:$PATH"
 
 # adding in home go path
 if [[ -d /Users/bjackson ]]
@@ -152,11 +131,6 @@ fi
 
 #export the PATH
 export PATH
-
-# PYTHONPATH for correct use for ansible
-# not needed as of Mar 28, 2018
-# export PYTHONPATH="~/Library/Python/2.7/lib/python/site-packages:/Library/Python/2.7/site-packages"
-# export PYTHONPATH="/usr/local/lib/python3.6/site-packages"
 
 # export ANSIBLEUSER so that we run as the correct user
 export ANSIBLEUSER="ubuntu"
