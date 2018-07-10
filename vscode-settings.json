@@ -21,4 +21,5 @@
     "workbench.colorTheme": "macOS Classic",
     "workbench.iconTheme": "macos-classic-icons",
     "workbench.startupEditor": "none",
+    "git.confirmSync": false,
 }
