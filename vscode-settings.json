@@ -22,4 +22,5 @@
     "workbench.iconTheme": "macos-classic-icons",
     "workbench.startupEditor": "none",
     "git.confirmSync": false,
+    "git.autofetch": true,
 }

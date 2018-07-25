@@ -237,9 +237,25 @@ then
 fi
 
 # for kubeconfig setup
-if [[ -f ${HOME}/.kube ]]
+if [[ -f ${HOME}/.kube/config ]]
 then
-  export KUBECONFIG=${HOME}/.kube/config:${HOME}/.kube/eks-stg-1/config:${HOME}/.kube/eks-test-1/config:${HOME}/.kube/local/config
+  export KUBECONFIG=${HOME}/.kube/config
+fi
+if [[ -f ${HOME}/.kube/eks-stg-1/config ]]
+then
+  export KUBECONFIG=${KUBECONFIG}:${HOME}/.kube/eks-stg-1/config
+fi
+if [[ -f ${HOME}/.kube/eks-test-1/config ]]
+then
+  export KUBECONFIG=${KUBECONFIG}:${HOME}/.kube/eks-test-1/config
+fi
+if [[ -f ${HOME}/.kube/local/config ]]
+then
+  export KUBECONFIG=${KUBECONFIG}:${HOME}/.kube/local/config
+fi
+if [[ -f ${HOME}/.kube/rancher-conecrazy/config ]]
+then
+  export KUBECONFIG=${KUBECONFIG}:${HOME}/.kube/rancher-conecrazy/config
 fi
 
 # for aws info at the cli
