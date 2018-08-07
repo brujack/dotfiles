@@ -210,6 +210,10 @@ then
   then
     brew cask install firefox
   fi
+  if [[ ! -d "/Applications/Franz.app" ]]
+  then
+    brew cask install franz
+  fi
   if [[ ! -d "/Applications/Funter.app" ]]
   then
     brew cask install funter
