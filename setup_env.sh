@@ -210,9 +210,12 @@ then
   then
     brew cask install firefox
   fi
-  if [[ ! -d "/Applications/Franz.app" ]]
+  if [[ ! ${HOSTNAME} == "server" ]] || [[ ! ${HOSTNAME} == "mac" ]]
   then
-    brew cask install franz
+    if [[ ! -d "/Applications/Franz.app" ]]
+    then
+      brew cask install franz
+    fi
   fi
   if [[ ! -d "/Applications/Funter.app" ]]
   then
