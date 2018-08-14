@@ -3,7 +3,7 @@
 # choose which env we are running on
 [ $(uname -s) = "Darwin" ] && export MACOS=1
 [ $(uname -s) = "Linux" ] && export LINUX=1
-uname -s | "Microsoft" && export WINDOWS=1
+uname -s | grep "Microsoft" && export WINDOWS=1
 [ $(hostname -s) = "kube-0" ] && export KUBE=1
 [ $(hostname -s) = "kube-1" ] && export KUBE=1
 [ $(hostname -s) = "kube-2" ] && export KUBE=1
