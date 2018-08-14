@@ -27,9 +27,6 @@ quiet_which() {
 if [[ ${MACOS} ]]
 then
   VSCODE="${HOME}/Library/Application Support/Code/User"
-elif [[ ${LINUX} ]]
-then
-  VSCODE="${HOME}/.config/Code/User"
 elif [[ ${{WINDOWS} ]]
 then
   #%APPDATA%\Code\User\
