@@ -90,7 +90,7 @@ else
   rm ${HOME}/.vimrc
   ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.vimrc ${HOME}/.vimrc
 fi
-if [[ ${MACOS} || ${WINDOWS} ]]
+if [[ ${MACOS} ]]
 then
   if [[ ! -L "$VSCODE"/settings.json ]]
   then
@@ -98,6 +98,16 @@ then
   else
     rm "$VSCODE"/settings.json
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/vscode-settings.json "$VSCODE"/settings.json
+  fi
+fi
+if [[ ${WINDOWS} ]]
+then
+  if [[ ! -L "$VSCODE"/settings.json ]]
+  then
+    ln -s ${WSL_HOME}/git-repos/personal/${DOTFILES}/vscode-settings.json "$VSCODE"/settings.json
+  else
+    rm "$VSCODE"/settings.json
+    ln -s ${WSL_HOME}/git-repos/personal/${DOTFILES}/vscode-settings.json "$VSCODE"/settings.json
   fi
 fi
 
