@@ -4,6 +4,7 @@
 [ $(uname -s) = "Darwin" ] && export MACOS=1
 [ $(uname -s) = "Linux" ] && export LINUX=1
 
+
 # locations of directories
 GITREPOS="${HOME}/git-repos"
 PERSONAL_GITREPOS="${GITREPOS}/personal"
@@ -400,6 +401,7 @@ if [ ${LINUX} ]
 then
   sudo -H apt-get update
   sudo -H apt-get install zsh -y
+  sudo -H apt-get install zsh-doc -y
   sudo -H apt-get install git -y
   sudo -H apt-get install gcc -y
   sudo -H apt-get install htop -y
