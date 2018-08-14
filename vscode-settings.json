@@ -23,4 +23,5 @@
     "workbench.startupEditor": "none",
     "git.confirmSync": false,
     "git.autofetch": true,
+    "breadcrumbs.enabled": true,
 }
