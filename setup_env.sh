@@ -3,7 +3,7 @@
 # choose which env we are running on
 [ $(uname -s) = "Darwin" ] && export MACOS=1
 [ $(uname -s) = "Linux" ] && export LINUX=1
-uname -s | grep "Microsoft" && export WINDOWS=1
+[[ $(uname -r) =~ Microsoft$ ]] && export WINDOWS=1
 [ $(hostname -s) = "kube-0" ] && export KUBE=1
 [ $(hostname -s) = "kube-1" ] && export KUBE=1
 [ $(hostname -s) = "kube-2" ] && export KUBE=1
@@ -35,7 +35,6 @@ then
   #%APPDATA%\Code\User\
   VSCODE="${WSL_HOME}/AppData/Roaming/Code/User"
 fi
-
 
 echo "Creating home bin"
 if [[ ! -d ${HOME}/bin ]]
