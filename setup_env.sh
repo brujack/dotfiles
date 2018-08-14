@@ -3,6 +3,10 @@
 # choose which env we are running on
 [ $(uname -s) = "Darwin" ] && export MACOS=1
 [ $(uname -s) = "Linux" ] && export LINUX=1
+uname -s | "Microsoft" && export WINDOWS=1
+[ $(hostname -s) = "kube-0" ] && export KUBE=1
+[ $(hostname -s) = "kube-1" ] && export KUBE=1
+[ $(hostname -s) = "kube-2" ] && export KUBE=1
 
 
 # locations of directories
@@ -12,6 +16,7 @@ DOTFILES="dotfiles"
 RANCHERSSH="${HOME}/.rancherssh"
 BREWFILE_LOC="${HOME}/brew"
 HOSTNAME=$(hostname -s)
+WSL_HOME="/mnt/c/Users/${USER}"
 
 # setup some functions
 quiet_which() {
@@ -25,7 +30,12 @@ then
 elif [[ ${LINUX} ]]
 then
   VSCODE="${HOME}/.config/Code/User"
+elif [[ ${{WINDOWS} ]]
+then
+  #%APPDATA%\Code\User\
+  VSCODE="${WSL_HOME}/AppData/Roaming/Code/User"
 fi
+
 
 echo "Creating home bin"
 if [[ ! -d ${HOME}/bin ]]
@@ -84,7 +94,7 @@ else
   rm ${HOME}/.vimrc
   ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.vimrc ${HOME}/.vimrc
 fi
-if [[ ${MACOS} ]]
+if [[ ${MACOS} || ${WINDOWS} ]]
 then
   if [[ ! -L "$VSCODE"/settings.json ]]
   then
@@ -410,25 +420,29 @@ then
   sudo -H apt-get install make -y
   sudo -H apt-get install python-setuptools -y
   sudo -H apt-get install npm -y
-  # install for bonded links
-  sudo -H apt-get install ifenslave bridge-utils -y
-  # install go 1.10
+    # install go 1.10
   sudo add-apt-repository ppa:gophers/archive
   sudo apt-get update
   sudo apt-get install golang-1.10-go -y
-  # for docker setup for rancher kubernetes setup
-  sudo -H apt-get install apt-transport-https -y
-  sudo -H apt-get install ca-certificates -y
-  sudo -H apt-get install curl -y
-  sudo -H apt-get install software-properties-common -y
-  curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo -H apt-key add -
-  sudo -H add-apt-repository \
-   "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
-   $(lsb_release -cs) \
-   stable"
-  sudo -H apt-get update
-  sudo -H apt-get install docker-ce=17.03.2~ce-0~ubuntu-xenial -y
-  sudo -H apt-mark hold docker-ce
+  # on KUBE systems:
+  if [ ${KUBE} ]
+  then
+    # install for bonded links
+    sudo -H apt-get install ifenslave bridge-utils -y
+    # for docker setup for rancher kubernetes setup
+    sudo -H apt-get install apt-transport-https -y
+    sudo -H apt-get install ca-certificates -y
+    sudo -H apt-get install curl -y
+    sudo -H apt-get install software-properties-common -y
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo -H apt-key add -
+    sudo -H add-apt-repository \
+    "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
+    $(lsb_release -cs) \
+    stable"
+    sudo -H apt-get update
+    sudo -H apt-get install docker-ce=17.03.2~ce-0~ubuntu-xenial -y
+    sudo -H apt-mark hold docker-ce
+  fi
 fi
 
 echo "Installing pip"
