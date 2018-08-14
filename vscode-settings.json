@@ -16,12 +16,11 @@
     "editor.renderIndentGuides": true,
     "editor.selectionHighlight": false,
     "window.titleBarStyle": "native",
-    "workbench.startupEditor": "newUntitledFile",
     "workbench.editor.tabCloseButton": "left",
     "workbench.colorTheme": "macOS Classic",
     "workbench.iconTheme": "macos-classic-icons",
     "workbench.startupEditor": "none",
     "git.confirmSync": false,
     "git.autofetch": true,
-    "breadcrumbs.enabled": true,
+    "breadcrumbs.enabled": true
 }
