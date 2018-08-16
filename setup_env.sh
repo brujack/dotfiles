@@ -102,12 +102,12 @@ then
 fi
 if [[ ${WINDOWS} ]]
 then
-  if [[ ! -L "$VSCODE"/settings.json ]]
+  if [[ ! -e "$VSCODE"/settings.json ]]
   then
-    ln -s ${WSL_HOME}/git-repos/personal/${DOTFILES}/vscode-settings.json "$VSCODE"/settings.json
+    cp -a ${WSL_HOME}/git-repos/personal/${DOTFILES}/vscode-settings.json "$VSCODE"/settings.json
   else
     rm "$VSCODE"/settings.json
-    ln -s ${WSL_HOME}/git-repos/personal/${DOTFILES}/vscode-settings.json "$VSCODE"/settings.json
+    cp -a ${WSL_HOME}/git-repos/personal/${DOTFILES}/vscode-settings.json "$VSCODE"/settings.json
   fi
 fi
 
