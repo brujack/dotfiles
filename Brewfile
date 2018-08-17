@@ -37,7 +37,7 @@ brew "python3"
 brew "rancher-cli"
 brew "rancherssh"
 brew "readline"
-brew "redis"
+brew "redis", restart_service: changed, link: true
 brew "ruby"
 brew "ruby-install"
 brew "sops"

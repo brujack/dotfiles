@@ -201,12 +201,14 @@ then
     brew cask upgrade
 
     echo "Installing other brew stuff..."
+
+    #https://github.com/Homebrew/homebrew-bundle
     brew tap homebrew/bundle
     brew tap caskroom/cask
     cd ${BREWFILE_LOC} && brew bundle
     cd ${PERSONAL_GITREPOS}/${DOTFILES}
 
-    # the below casks are not in a brewfile since they will "fail" if already installed
+    # the below casks and mas are not in a brewfile since they will "fail" if already installed
     if [[ ! -d "/Applications/Alfred 3.app" ]]
     then
       brew cask install alfred
