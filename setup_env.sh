@@ -206,6 +206,7 @@ then
     cd ${BREWFILE_LOC} && brew bundle
     cd ${PERSONAL_GITREPOS}/${DOTFILES}
 
+    # the below casks are not in a brewfile since they will "fail" if already installed
     if [[ ! -d "/Applications/Alfred 3.app" ]]
     then
       brew cask install alfred
