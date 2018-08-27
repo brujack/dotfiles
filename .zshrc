@@ -153,6 +153,11 @@ alias kube-2='ssh bruce@kube-2'
 # aliases for work servers
 alias work='ssh bjackson@10.200.0.92'
 
+# command aliases
+alias au='sudo apt-get update'
+alias ag='sudo apt-get dist-upgrade -y'
+alias aa='sudo apt-get autoremove -y'
+
 if quiet_which exa
 # alias for ls to exa removed due to breaking globbing for ansible aws integration
 then
