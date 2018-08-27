@@ -157,6 +157,7 @@ alias work='ssh bjackson@10.200.0.92'
 alias au='sudo apt-get update'
 alias ag='sudo apt-get dist-upgrade -y'
 alias aa='sudo apt-get autoremove -y'
+alias dot='cd ~/git-repos/personal/dotfiles && git pl'
 
 if quiet_which exa
 # alias for ls to exa removed due to breaking globbing for ansible aws integration
