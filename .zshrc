@@ -1,6 +1,7 @@
 # choose which env we are running on
 [ $(uname -s) = "Darwin" ] && export MACOS=1
 [ $(uname -s) = "Linux" ] && export LINUX=1
+[[ $(uname -r) =~ Microsoft$ ]] && export WINDOWS=1
 
 # setup some functions
 quiet_which() {
@@ -253,3 +254,8 @@ function options() {
         echo "\n\nPlugin: $plugin"; grep -r "^function \w*" $PLUGIN_PATH$plugin | awk '{print $2}' | sed 's/()//'| tr '\n' ', '; grep -r "^alias" $PLUGIN_PATH$plugin | awk '{print $2}' | sed 's/=.*//' |  tr '\n' ', '
     done
 }
+
+if [[ ${WINDOWS} ]]
+then
+  export DOCKER_HOST=tcp://0.0.0.0:2375
+fi
