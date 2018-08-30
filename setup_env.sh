@@ -37,7 +37,7 @@ DOTFILES="dotfiles"
 RANCHERSSH="${HOME}/.rancherssh"
 BREWFILE_LOC="${HOME}/brew"
 HOSTNAME=$(hostname -s)
-WSL_HOME="/mnt/c/Users/${USER}"
+WSL_HOME="/c/Users/${USER}"
 
 # setup variables based off of environment
 if [[ ${MACOS} ]]

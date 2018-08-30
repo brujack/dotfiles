@@ -8,7 +8,7 @@
 	trustExitCode = true
 [user]
 	name = Bruce Jackson
-	email = bruce.jackson@fullscript.com
+	email = bjackson@leonovus.com
 [commit]
 	template = /Users/bruce/.stCommitMsg
 [alias]
