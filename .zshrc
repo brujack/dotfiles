@@ -151,6 +151,11 @@ alias ratna='ssh bruce@ratna'
 alias kube-0='ssh bruce@kube-0'
 alias kube-1='ssh bruce@kube-1'
 alias kube-2='ssh bruce@kube-2'
+alias us-24='ssh bruce@us-24'
+alias us-16='ssh bruce@us-16'
+alias us-8-1='ssh bruce@us-8-1'
+alias us-pro='ssh bruce@us-pro'
+alias nano-hd='ssh bruce@nano-hd'
 # aliases for work servers
 alias work='ssh bjackson@10.200.0.92'
 

@@ -327,6 +327,10 @@ then
     then
       mas install 406056744
     fi
+    if [[ ! -d "/Applications/Flycut.app" ]]
+    then
+      mas install 442160987
+    fi
     if [[ ! -d "/Applications/iMovie.app" ]]
     then
       mas install 408981434
