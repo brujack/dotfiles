@@ -447,7 +447,7 @@ then
     sudo -H apt-get install python-setuptools -y
     sudo -H apt-get install npm -y
       # install go 1.10
-    sudo add-apt-repository ppa:gophers/archive
+    sudo add-apt-repository ppa:gophers/archive -y
     sudo apt-get update
     sudo apt-get install golang-1.10-go -y
     # on KUBE systems:
