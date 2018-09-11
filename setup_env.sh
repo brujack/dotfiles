@@ -267,6 +267,10 @@ then
     then
       brew cask install google-cloud-sdk
     fi
+    if [[ ! -d "/Applications/iStat Menus.app" ]]
+    then
+      brew cask install istat-menus
+    fi
     if [[ ! -d "/Applications/iTerm.app" ]]
     then
       brew cask install iterm2
