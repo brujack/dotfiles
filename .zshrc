@@ -157,7 +157,7 @@ alias us-8-1='ssh bruce@us-8-1'
 alias us-pro='ssh bruce@us-pro'
 alias nano-hd='ssh bruce@nano-hd'
 # aliases for work servers
-alias work='ssh bjackson@10.200.0.92'
+alias work='ssh bruce@172.16.1.73'
 
 # command aliases
 alias au='sudo apt-get update'
