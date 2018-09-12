@@ -6,7 +6,14 @@
 # setup some variables for virtualenv
 export WORKON_HOME=${HOME}/.virtualenvs
 export PROJECT_HOME=${HOME}./virtualenvs
-export VIRTUALENVWRAPPER_SCRIPT="${HOME}/.virtualenvs/ansible/bin/python3"
+if [[ ${MACOS} ]]
+then
+  VIRTUALENVWRAPPER_SCRIPT=${HOME}/Library/Python/3.7/bin/virtualenvwrapper.sh
+fi
+if [[ ${LINUX} ]]
+then
+  VIRTUALENVWRAPPER_SCRIPT=/usr/local/bin/virtualenvwrapper.sh
+fi
 
 # setup some functions
 quiet_which() {
