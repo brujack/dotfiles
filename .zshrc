@@ -3,8 +3,10 @@
 [ $(uname -s) = "Linux" ] && export LINUX=1
 [[ $(uname -r) =~ Microsoft$ ]] && export WINDOWS=1
 
-# set VIRTUALENVWRAPPER_PYTHON to be correct for use later on
-export VIRTUALENVWRAPPER_PYTHON="${HOME}/.virtualenvs/ansible/bin/python3"
+# setup some variables for virtualenv
+export WORKON_HOME=${HOME}/.virtualenvs
+export PROJECT_HOME=${HOME}./virtualenvs
+export VIRTUALENVWRAPPER_SCRIPT="${HOME}/.virtualenvs/ansible/bin/python3"
 
 # setup some functions
 quiet_which() {
@@ -213,7 +215,14 @@ fi
 
 # setup for python 3.7 for ansible by using virtualenv
 #source /usr/local/bin/virtualenvwrapper.sh
-source ${HOME}/Library/Python/3.7/bin/virtualenvwrapper.sh
+if [[ ${MACOS} ]]
+then
+  source ${HOME}/Library/Python/3.7/bin/virtualenvwrapper.sh
+fi
+if [[ ${LINUX} ]]
+then
+  source /usr/local/bin/virtualenvwrapper.sh
+fi
 workon ansible
 if [[ -f ${HOME}/.vault_pass.txt ]]
 then
