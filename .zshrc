@@ -9,6 +9,7 @@ export PROJECT_HOME=${HOME}./virtualenvs
 if [[ ${MACOS} ]]
 then
   VIRTUALENVWRAPPER_SCRIPT=${HOME}/Library/Python/3.7/bin/virtualenvwrapper.sh
+  VIRTUALENVWRAPPER_PYTHON=${HOME}/.virtualenv/ansible/bin/python3
 fi
 if [[ ${LINUX} ]]
 then
