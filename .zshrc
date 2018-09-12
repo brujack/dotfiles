@@ -208,8 +208,9 @@ then
   source ${HOME}/.google_creds
 fi
 
-# setup for python 3.6.4 for ansible by using virtualenv
-source /usr/local/bin/virtualenvwrapper.sh
+# setup for python 3.7 for ansible by using virtualenv
+#source /usr/local/bin/virtualenvwrapper.sh
+source ${HOME}/Library/Python/3.7/bin/virtualenvwrapper.sh
 workon ansible
 if [[ -f ${HOME}/.vault_pass.txt ]]
 then

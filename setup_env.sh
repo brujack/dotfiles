@@ -493,7 +493,8 @@ then
   fi
 
   cd ${HOME}/.virtualenvs
-  source /usr/local/bin/virtualenvwrapper.sh
+  #source /usr/local/bin/virtualenvwrapper.sh
+  source ${HOME}/Library/Python/3.7/bin/virtualenvwrapper.sh
 
   if ! [[ -f ${HOME}/.virtualenvs/ansible ]]
   then
