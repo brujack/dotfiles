@@ -3,6 +3,9 @@
 [ $(uname -s) = "Linux" ] && export LINUX=1
 [[ $(uname -r) =~ Microsoft$ ]] && export WINDOWS=1
 
+# set VIRTUALENVWRAPPER_PYTHON to be correct for use later on
+export VIRTUALENVWRAPPER_PYTHON="${HOME}/.virtualenvs/ansible/bin/python3"
+
 # setup some functions
 quiet_which() {
   which "$1" &>/dev/null
