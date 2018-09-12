@@ -160,9 +160,9 @@ alias nano-hd='ssh bruce@nano-hd'
 alias work='ssh bruce@172.16.1.73'
 alias vader='ssh bjackson@vader'
 alias yoda='ssh bjackson@yoda'
-alias kube-00 'ssh bjackson@172.16.1.21'
-alias kube-10 'ssh bjackson@172.16.1.22'
-alias kube-20 'ssh bjackson@172.16.1.23'
+alias kube-00='ssh bjackson@172.16.1.21'
+alias kube-10='ssh bjackson@172.16.1.22'
+alias kube-20='ssh bjackson@172.16.1.23'
 
 # command aliases
 alias au='sudo apt-get update'

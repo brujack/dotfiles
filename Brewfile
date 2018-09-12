@@ -36,7 +36,6 @@ brew "pkg-config"
 brew "postgres"
 brew "python3"
 brew "rancher-cli"
-brew "rancherssh"
 brew "readline"
 brew "redis", restart_service: :changed, link: true
 brew "ruby"
