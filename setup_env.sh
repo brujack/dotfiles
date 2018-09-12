@@ -484,7 +484,7 @@ then
   sudo -H easy_install pip
 
   echo "Installing virtualenv for python"
-  sudo -H pip install virtualenv virtualenvwrapper
+  pip3 install virtualenv virtualenvwrapper --user
 
   # setup virtualenv for python if virtualenv there
   if ! [ -d ${HOME}/.virtualenvs ]
