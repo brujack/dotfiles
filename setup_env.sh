@@ -524,6 +524,9 @@ then
   echo "Installing awscli via pip"
   pip3 install awscli
 
+  echo "Installing pylint for python linting via pip"
+  pip3 install pylint
+
   echo "Installing json2yaml via npm"
   npm install json2yaml
 fi
