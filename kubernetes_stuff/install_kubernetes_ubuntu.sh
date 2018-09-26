@@ -2,6 +2,22 @@
 
 set -e
 
+usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 0; }
+[ $# -eq 0 ] &&usage
+
+# get command line options
+while getopts ":hn:" arg; do
+  case $arg in
+    n) # Specify c of the kubernetes cluster name.
+      CLUSTER_NAME=${OPTARG}
+      ;;
+    h | *) # Display help.
+      usage
+      exit 0
+      ;;
+  esac
+done
+
 GITREPOS="${HOME}/git-repos"
 
 mkdir -p ${GITREPOS}
@@ -57,13 +73,13 @@ sudo -H kubeadm init --pod-network-cidr=192.168.10.0/24
 sleep 120
 # setup .kube environment
 sudo -H chmod 644 /etc/kubernetes/admin.conf
-mkdir -p ${HOME}/.kube
-sudo -H cp -i /etc/kubernetes/admin.conf ${HOME}/.kube/config
+mkdir -p ${HOME}/.kube/${CLUSTER_NAME}
+sudo -H cp -i /etc/kubernetes/admin.conf ${HOME}/.kube/${CLUSTER_NAME}/config
 sudo -H chown -R $(id -u):$(id -g) ${HOME}/.kube
 
 sleep 60
 
-export KUBECONFIG=/etc/kubernetes/admin.conf && sudo kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+export KUBECONFIG=${HOME}/.kube/${CLUSTER_NAME}/config && sudo kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
 
 # Allow workloads to be scheduled to the master node
 #sudo -H kubectl taint nodes `hostname` node-role.kubernetes.io/master:NoSchedule-
