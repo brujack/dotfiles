@@ -257,13 +257,9 @@ if [[ -f ${HOME}/.kube/config ]]
 then
   export KUBECONFIG=${HOME}/.kube/config
 fi
-if [[ -f ${HOME}/.kube/eks-stg-1/config ]]
+if [[ -f ${HOME}/.kube/kube-0-leo-obj/config ]]
 then
-  export KUBECONFIG=${KUBECONFIG}:${HOME}/.kube/eks-stg-1/config
-fi
-if [[ -f ${HOME}/.kube/eks-test-1/config ]]
-then
-  export KUBECONFIG=${KUBECONFIG}:${HOME}/.kube/eks-test-1/config
+  export KUBECONFIG=${KUBECONFIG}:${HOME}/.kube/kube-0-leo-obj/config
 fi
 if [[ -f ${HOME}/.kube/local/config ]]
 then
