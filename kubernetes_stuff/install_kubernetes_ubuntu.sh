@@ -37,14 +37,14 @@ sudo -H add-apt-repository ppa:gophers/archive
 sudo -H apt-get update
 sudo -H apt-get install golang-1.10-go -y
 
+# disable swap as kubernetes expects it to be off
+sudo -H sed -i '/ swap / s/^/#/' /etc/fstab
+sudo -H swapoff -a
+
 # install crictl from go
 sudo -H apt update
 sudo -H apt-get install gcc -y
 go get github.com/kubernetes-incubator/cri-tools/cmd/crictl
-
-# disable swap as kubernetes expects it to be off
-sudo -H sed -i '/ swap / s/^/#/' /etc/fstab
-sudo -H swapoff -a
 
 # fix the kubelet startup script to use the correct cgroup driver that matches what docker uses
 KUBELET_CGROUP_ARGS=$(sudo -H docker info | grep -i cgroup | awk -F ':' '{print $2}' | sed -e 's/^[[:space:]]*//')
