@@ -58,13 +58,13 @@ sudo -H kubeadm init --pod-network-cidr=192.168.10.0/24
 sleep 120
 # setup .kube environment
 sudo -H chmod 644 /etc/kubernetes/admin.conf
-mkdir -p ~/.kube
-sudo -H cp -i /etc/kubernetes/admin.conf ~/.kube/config
-sudo -H chown -R $(id -u):$(id -g) ~/.kube
+mkdir -p ${HOME}/.kube
+sudo -H cp -i /etc/kubernetes/admin.conf ${HOME}/.kube/config
+sudo -H chown -R $(id -u):$(id -g) ${HOME}/.kube
 
 sleep 60
 
-export KUBECONFIG=/etc/kubernetes/admin.conf && sudo kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/v0.9.1/Documentation/kube-flannel.yml
+export KUBECONFIG=/etc/kubernetes/admin.conf && sudo kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
 
 # Allow workloads to be scheduled to the master node
 #sudo -H kubectl taint nodes `hostname` node-role.kubernetes.io/master:NoSchedule-
@@ -83,7 +83,7 @@ sudo -H kubectl create -f deploy/kube-config/influxdb/
 sudo -H kubectl create -f deploy/kube-config/rbac/heapster-rbac.yaml
 
 # install the Kubernetes dashboard
-cd ~
+cd ${HOME}
 wget https://raw.githubusercontent.com/kubernetes/dashboard/master/src/deploy/recommended/kubernetes-dashboard.yaml
 echo '  type: NodePort' >> kubernetes-dashboard.yaml
 sudo -H kubectl create -f kubernetes-dashboard.yaml
