@@ -3,9 +3,8 @@
 set -e
 
 GITREPOS="${HOME}/git-repos"
-PERSONAL_GITREPOS="${GITREPOS}/personal"
 
-mkdir -p ${PERSONAL_GITREPOS}
+mkdir -p ${GITREPOS}
 
 sudo -H apt-get update
 sudo -H apt-get dist-upgrade -y
@@ -72,9 +71,9 @@ export KUBECONFIG=/etc/kubernetes/admin.conf && sudo kubectl apply -f https://ra
 # Deploy the monitoring stack based on Heapster, Influxdb and Grafana
 sudo -H apt-get update
 sudo -H apt-get install git -y
-cd ${PERSONAL_GITREPOS}
+cd ${GITREPOS}
 git clone https://github.com/kubernetes/heapster.git
-cd ${PERSONAL_GITREPOS}/heapster
+cd ${GITREPOS}/heapster
 
 # Change the default Grafana config to use NodePort so we can reach the Grafana UI over the Public/Floating IP
 sed -i 's/# type: NodePort/type: NodePort/' deploy/kube-config/influxdb/grafana.yaml
