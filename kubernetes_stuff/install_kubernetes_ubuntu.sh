@@ -31,7 +31,11 @@ sudo -H apt-get update
 sudo -H apt-get install -y kubelet kubeadm kubectl
 
 # install latest version of go via snap
-sudo -H snap install --classic go
+#sudo -H snap install --classic go
+# changed to regular go
+sudo -H add-apt-repository ppa:gophers/archive
+sudo -H apt-get update
+sudo -H apt-get install golang-1.10-go -y
 
 # install crictl from go
 sudo -H apt update
