@@ -5,6 +5,8 @@ set -e
 GITREPOS="${HOME}/git-repos"
 PERSONAL_GITREPOS="${GITREPOS}/personal"
 
+mkdir -p ${PERSONAL_GITREPOS}
+
 sudo -H apt-get update
 sudo -H apt-get dist-upgrade -y
 sudo -H apt-get install apt-transport-https ca-certificates curl software-properties-common -y
