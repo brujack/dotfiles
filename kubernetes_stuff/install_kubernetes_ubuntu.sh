@@ -12,7 +12,7 @@ sudo -H apt-get dist-upgrade -y
 sudo -H apt-get install apt-transport-https ca-certificates curl software-properties-common -y
 sudo -H apt-get autoremove -y
 
-sudo -H apt-get install docker.io -y
+sudo -H apt-get install docker-ce -y
 
 sudo -H bash -c 'cat << EOF > /etc/docker/daemon.json
 {
