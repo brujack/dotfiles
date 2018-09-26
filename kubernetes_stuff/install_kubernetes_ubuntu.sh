@@ -67,7 +67,7 @@ sleep 60
 export KUBECONFIG=/etc/kubernetes/admin.conf && sudo kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/v0.9.1/Documentation/kube-flannel.yml
 
 # Allow workloads to be scheduled to the master node
-sudo -H kubectl taint nodes `hostname` node-role.kubernetes.io/master:NoSchedule-
+#sudo -H kubectl taint nodes `hostname` node-role.kubernetes.io/master:NoSchedule-
 
 # Deploy the monitoring stack based on Heapster, Influxdb and Grafana
 sudo -H apt-get update
