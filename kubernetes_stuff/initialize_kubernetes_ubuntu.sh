@@ -47,7 +47,7 @@ export KUBECONFIG=${HOME}/.kube/${CLUSTER_NAME}/config
 # setup flannel kubernetes internal network
 # https://kubernetes.io/docs/setup/independent/create-cluster-kubeadm/#pod-network
 sudo -H sysctl net.bridge.bridge-nf-call-iptables=1
-sudo -H kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/c5d10c8/Documentation/kube-flannel.yml
+sudo -H kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/v0.9.1/Documentation/kube-flannel.yml
 
 # Allow workloads to be scheduled to the master node
 #sudo -H kubectl taint nodes `hostname` node-role.kubernetes.io/master:NoSchedule-
