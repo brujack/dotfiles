@@ -27,7 +27,7 @@ GITREPOS="${HOME}/git-repos"
 # initialize a master
 sudo -H kubeadm init --node-name=${CLUSTER_NAME} --pod-network-cidr=10.244.0.0/16
 echo "waiting for master node to initialize"
-sleep 60
+sleep 120
 
 # setup .kube environment and copy over the config file
 sudo -H chmod 644 /etc/kubernetes/admin.conf
@@ -47,7 +47,7 @@ export KUBECONFIG=${HOME}/.kube/${CLUSTER_NAME}/config
 # setup flannel kubernetes internal network
 # https://kubernetes.io/docs/setup/independent/create-cluster-kubeadm/#pod-network
 sudo -H sysctl net.bridge.bridge-nf-call-iptables=1
-sudo -H kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/v0.9.1/Documentation/kube-flannel.yml
+sudo -H kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/v0.10.0/Documentation/kube-flannel.yml
 
 # Allow workloads to be scheduled to the master node
 #sudo -H kubectl taint nodes `hostname` node-role.kubernetes.io/master:NoSchedule-
