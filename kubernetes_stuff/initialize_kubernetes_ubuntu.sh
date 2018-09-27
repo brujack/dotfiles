@@ -12,7 +12,7 @@ usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 0; }
 # get command line options
 while getopts ":hn:" arg; do
   case $arg in
-    n) # Specify the kubernetes cluster name.
+    n) # Specify the kubernetes cluster name to be initialized. Use only dashes in the name.
       CLUSTER_NAME=${OPTARG}
       ;;
     h | *) # Display help.
