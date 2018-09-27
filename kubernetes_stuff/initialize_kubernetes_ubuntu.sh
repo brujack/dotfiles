@@ -24,23 +24,27 @@ done
 
 GITREPOS="${HOME}/git-repos"
 
-# setup .kube environment for the config file
+# initialize a master
+sudo -H kubeadm init --node-name=${CLUSTER_NAME} --pod-network-cidr=192.168.10.0/24
+echo "waiting for master node to initialize"
+sleep 60
+
+# setup .kube environment and copy over the config file
 sudo -H chmod 644 /etc/kubernetes/admin.conf
 mkdir -p ${HOME}/.kube/${CLUSTER_NAME}
 sudo -H cp -i /etc/kubernetes/admin.conf ${HOME}/.kube/${CLUSTER_NAME}/config
 sudo -H chown -R $(id -u):$(id -g) ${HOME}/.kube
 # change the name of the cluster to not be the default
-sed -i '0,/name: kubernetes/{s/name: kubernetes/name: '${CLUSTER_NAME}'/}' ${HOME}/.kube/${CLUSTER_NAME}/config
-sed -i '0,/cluster: kubernetes/{s/cluster: kubernetes/cluster: '${CLUSTER_NAME}'/}' ${HOME}/.kube/${CLUSTER_NAME}/config
-sed -i '0,/name: kubernetes-admin@kubernetes/{s/name: kubernetes-admin@kubernetes/name: kubernetes-admin@'${CLUSTER_NAME}'/}' ${HOME}/.kube/${CLUSTER_NAME}/config
-sed -i '0,/current-context: kubernetes-admin@kubernetes/{s/current-context: kubernetes-admin@kubernetes/current-context: kubernetes-admin@'${CLUSTER_NAME}'/}' ${HOME}/.kube/${CLUSTER_NAME}/config
+#sed -i '0,/name: kubernetes/{s/name: kubernetes/name: '${CLUSTER_NAME}'/}' ${HOME}/.kube/${CLUSTER_NAME}/config
+#sed -i '0,/cluster: kubernetes/{s/cluster: kubernetes/cluster: '${CLUSTER_NAME}'/}' ${HOME}/.kube/${CLUSTER_NAME}/config
+#sed -i '0,/name: kubernetes-admin@kubernetes/{s/name: kubernetes-admin@kubernetes/name: kubernetes-admin@'${CLUSTER_NAME}'/}' ${HOME}/.kube/${CLUSTER_NAME}/config
+#sed -i '0,/current-context: kubernetes-admin@kubernetes/{s/current-context: kubernetes-admin@kubernetes/current-context: kubernetes-admin@'${CLUSTER_NAME}'/}' ${HOME}/.kube/${CLUSTER_NAME}/config
 export KUBECONFIG=${HOME}/.kube/${CLUSTER_NAME}/config
 
 # initialize a kubernetes master
-sudo -H kubeadm init --config=${HOME}/.kube/${CLUSTER_NAME}/config --pod-network-cidr=192.168.10.0/24
+#sudo -H kubeadm init --config=${HOME}/.kube/${CLUSTER_NAME}/config --pod-network-cidr=192.168.10.0/24
 
-echo "waiting for master node to initialize"
-sleep 120
+
 
 sudo -H kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
 
