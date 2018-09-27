@@ -6,22 +6,6 @@
 
 set -e
 
-usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 0; }
-[ $# -eq 0 ] &&usage
-
-# get command line options
-while getopts ":hn:" arg; do
-  case $arg in
-    n) # Specify the kubernetes cluster name to be initialized.
-      CLUSTER_NAME=${OPTARG}
-      ;;
-    h | *) # Display help.
-      usage
-      exit 0
-      ;;
-  esac
-done
-
 GITREPOS="${HOME}/git-repos"
 
 mkdir -p ${GITREPOS}
