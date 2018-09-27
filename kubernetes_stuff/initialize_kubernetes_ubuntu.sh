@@ -44,8 +44,9 @@ export KUBECONFIG=${HOME}/.kube/${CLUSTER_NAME}/config
 # initialize a kubernetes master
 #sudo -H kubeadm init --config=${HOME}/.kube/${CLUSTER_NAME}/config --pod-network-cidr=192.168.10.0/24
 
-
-
+# setup flannel kubernetes internal network
+# https://kubernetes.io/docs/setup/independent/create-cluster-kubeadm/#pod-network
+sudo -H sysctl net.bridge.bridge-nf-call-iptables=1
 sudo -H kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/v0.10.0/Documentation/kube-flannel.yml
 
 # Allow workloads to be scheduled to the master node
