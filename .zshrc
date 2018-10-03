@@ -170,16 +170,18 @@ alias us-8-1='ssh bruce@us-8-1'
 alias us-pro='ssh bruce@us-pro'
 alias nano-hd='ssh bruce@nano-hd'
 # aliases for work servers
-alias work='ssh bruce@172.16.1.73'
+alias work='ssh bruce@172.16.1.51'
 alias vader='ssh bjackson@vader.leo.obj'
 alias yoda='ssh bjackson@yoda.leo.obj'
 alias kube-00='ssh bjackson@kube-0.leo.obj'
 alias kube-10='ssh bjackson@kube-1.leo.obj'
 alias kube-20='ssh bjackson@kube-2.leo.obj'
-alias ns0='ssh bjackson@ns0.leo.obj'
-alias ns1='ssh bjackson@ns0.leo.obj'
+alias ns0='ssh bjackson@ns0.lab.leo.obj'
+alias ns1='ssh bjackson@ns0.lab.leo.obj'
+alias deploy-1='ssh bjackson@deploy-1.leo.obj'
+alias deploy-2='ssh bjackson@deploy-2.leo.obj'
 
-# command aliases
+# command aliasesssh
 alias au='sudo apt-get update'
 alias ag='sudo apt-get dist-upgrade -y'
 alias aa='sudo apt-get autoremove -y'
