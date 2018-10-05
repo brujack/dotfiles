@@ -16,8 +16,11 @@ set showmatch
 " How many tenths of a second to blink when matching brackets
 set mat=2
 
-" 1 tab == 2
+" 1 tab == 2 spaces
 set tabstop=2
+set shiftwidth=2
+set softtabstop=2
+set expandtab
 
 set autoindent
 set smartindent
