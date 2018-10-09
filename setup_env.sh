@@ -139,15 +139,21 @@ then
   then
     rm ${HOME}/.zshrc
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.zshrc ${HOME}/.zshrc
+  elif [[ ! -L ${HOME}/.zshrc ]]
+    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.zshrc ${HOME}/.zshrc
   fi
   if [[ -f ${HOME}/.gitconfig ]]
   then
     rm ${HOME}/.gitconfig
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig ${HOME}/.gitconfig
+  elif [[ ! -L ${HOME}/.gitconfig ]]
+    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig ${HOME}/.gitconfig
   fi
   if [[ -f ${HOME}/.vimrc ]]
   then
     rm ${HOME}/.vimrc
+    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.vimrc ${HOME}/.vimrc
+  elif [[ ! -L ${HOME}/.vimrc ]]
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.vimrc ${HOME}/.vimrc
   fi
   if [[ ${MACOS} ]]
