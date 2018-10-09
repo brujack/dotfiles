@@ -36,9 +36,9 @@ then
   export REDHAT=1
 fi
 [[ $(uname -r) =~ Microsoft$ ]] && export WINDOWS=1
-[ $(hostname -s) = "kube-0" ] && export KUBE=1
-[ $(hostname -s) = "kube-1" ] && export KUBE=1
-[ $(hostname -s) = "kube-2" ] && export KUBE=1
+[ $(hostname -f) = "kube-0.conecrazy.ca" ] && export KUBE=1
+[ $(hostname -f) = "kube-1.conecrazy.ca" ] && export KUBE=1
+[ $(hostname -f) = "kube-2.conecrazy.ca" ] && export KUBE=1
 
 # locations of directories
 GITREPOS="${HOME}/git-repos"
