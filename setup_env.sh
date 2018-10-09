@@ -214,6 +214,7 @@ fi
 
 # full setup and installation of all packages
 if [[ ${SETUP} ]]
+then
   if [[ ${MACOS} ]]
   then
     echo "Creating $BREWFILE_LOC"
