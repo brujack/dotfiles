@@ -184,12 +184,12 @@ then
   fi
 
   echo "Linking custom bruce.zsh-theme"
-  if [[ ! -L ${HOME}/.oh-my-zsh/custom/bruce.zsh-theme && -d ${HOME}/.oh-my-zsh/custom/bruce.zsh-theme ]]
+  if [[ ! -L ${HOME}/.oh-my-zsh/custom/themes/bruce.zsh-theme && -d ${HOME}/.oh-my-zsh/custom/themes/bruce.zsh-theme ]]
   then
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/bruce.zsh-theme ${HOME}/.oh-my-zsh/custom/bruce.zsh-theme
+    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/bruce.zsh-theme ${HOME}/.oh-my-zsh/custom/themes/bruce.zsh-theme
   else
-    rm ${HOME}/.oh-my-zsh/custom/bruce.zsh-theme
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/bruce.zsh-theme ${HOME}/.oh-my-zsh/custom/bruce.zsh-theme
+    rm ${HOME}/.oh-my-zsh/custom/themes/bruce.zsh-theme
+    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/bruce.zsh-theme ${HOME}/.oh-my-zsh/custom/themes/bruce.zsh-theme
   fi
 
   if [[ ! -d ${HOME}/.ssh ]]
