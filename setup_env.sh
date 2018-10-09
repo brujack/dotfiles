@@ -97,7 +97,6 @@ then
     sudo -H yum install keychain -y
     sudo -H yum install make -y
     sudo -H yum install python3-setuptools -y
-    sudo -H yum install npm -y
   fi
 
   echo "Creating home bin"
