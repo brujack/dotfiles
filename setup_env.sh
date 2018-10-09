@@ -135,17 +135,15 @@ then
 
   echo "Linking ${DOTFILES} to their home"
 
-  if [[ ! -L ${HOME}/.zshrc ]]
+  if [[ ! -L ${HOME}/.zshrc && -f ${HOME}/.zshrc ]]
   then
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.zshrc ${HOME}/.zshrc
   else
     rm ${HOME}/.zshrc
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.zshrc ${HOME}/.zshrc
   fi
-  if [[ ! -L ${HOME}/.gitconfig ]]
+  if [[ -f ${HOME}/.gitconfig ]]
   then
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig ${HOME}/.gitconfig
-  else
     rm ${HOME}/.gitconfig
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig ${HOME}/.gitconfig
   fi
@@ -197,7 +195,7 @@ then
     mkdir ${HOME}/.ssh
     chmod 755 ${HOME}/.ssh
   fi
-  if [[ ! -L ${HOME}/.ssh/config && -d ${HOME}/.ssh/config ]]
+  if [[ ! -L ${HOME}/.ssh/config && -f ${HOME}/.ssh/config ]]
   then
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.ssh/config ${HOME}/.ssh/config
   else
