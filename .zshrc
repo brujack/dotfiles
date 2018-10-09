@@ -228,18 +228,21 @@ fi
 
 # setup for python 3.7 for ansible by using virtualenv
 #source /usr/local/bin/virtualenvwrapper.sh
-if [[ ${MACOS} ]]
+if [[ -d ~/.virtualenvs ]]
 then
-  source ${HOME}/Library/Python/3.7/bin/virtualenvwrapper.sh
-fi
-if [[ ${LINUX} ]]
-then
-  source /usr/local/bin/virtualenvwrapper.sh
-fi
-workon ansible
-if [[ -f ${HOME}/.vault_pass.txt ]]
-then
-  export ANSIBLE_VAULT_PASSWORD_FILE=${HOME}/.vault_pass.txt
+  if [[ ${MACOS} ]]
+  then
+    source ${HOME}/Library/Python/3.7/bin/virtualenvwrapper.sh
+  fi
+  if [[ ${LINUX} ]]
+  then
+    source /usr/local/bin/virtualenvwrapper.sh
+  fi
+  workon ansible
+  if [[ -f ${HOME}/.vault_pass.txt ]]
+  then
+    export ANSIBLE_VAULT_PASSWORD_FILE=${HOME}/.vault_pass.txt
+  fi
 fi
 
 # setup kubectl autocompletion to save typing
