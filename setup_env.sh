@@ -86,11 +86,11 @@ then
     sudo -H apt-get install keychain -y
     sudo -H apt-get install make -y
     sudo -H apt-get install python-setuptools -y
-    sudo -H apt-get install npm -y
   fi
   if [[ ${REDHAT} ]]
   then
     sudo -H yum install git -y
+    sudo -H yum install zsh -y
     sudo -H yum install gcc -y
     sudo -H yum install htop -y
     sudo -H yum install iotop -y
