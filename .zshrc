@@ -186,6 +186,7 @@ alias au='sudo apt-get update'
 alias ag='sudo apt-get dist-upgrade -y'
 alias aa='sudo apt-get autoremove -y'
 alias dot='cd ~/git-repos/personal/dotfiles && git pl'
+alias oh='cd ~/.oh-my-zsh && git pl'
 
 if quiet_which exa
 # alias for ls to exa removed due to breaking globbing for ansible aws integration
