@@ -185,7 +185,7 @@ alias deploy-2='ssh bjackson@deploy-2.leo.obj'
 alias au='sudo apt-get update'
 alias ag='sudo apt-get dist-upgrade -y'
 alias aa='sudo apt-get autoremove -y'
-alias dot='cd ~/git-repos/personal/dotfiles && git pl'
+alias dot='cd ~/git-repos/personal/dotfiles && git pl && source ~/.zshrc'
 alias oh='cd ~/.oh-my-zsh && git pl'
 
 if quiet_which exa
