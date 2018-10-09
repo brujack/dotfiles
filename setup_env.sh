@@ -11,9 +11,10 @@ usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 0; }
 # get command line options
 while getopts ":ht:" arg; do
   case $arg in
-    t) # Specify t of either 'setup_user', 'setup' or 'update'.
+    t) # Specify t of either 'setup_user', 'setup', 'developer' or 'update'.
       [ ${OPTARG} = "setup_user" ] && export SETUP_USER=1
       [ ${OPTARG} = "setup" ] && export SETUP=1
+      [ ${OPTARG} = "developer" ] && export DEVELOPER=1
       [ ${OPTARG} = "update" ] && export UPDATE=1
       ;;
     h | *) # Display help.
@@ -59,7 +60,7 @@ fi
 
 # Setup is run rarely as it should be run when setting up a new device or when doing a controlled change after changing items in setup
 # setup_user is run to setup a user without a full host setup
-if [[ ${SETUP} || ${SETUP_USER} ]]
+if [[ ${SETUP} || ${SETUP_USER} || ${DEVELOPER} ]]
 then
   # need to make sure that git is installed
   echo "Installing git"
@@ -213,7 +214,7 @@ then
 fi
 
 # full setup and installation of all packages
-if [[ ${SETUP} ]]
+if [[ ${SETUP} || ${DEVELOPER} ]]
 then
   if [[ ${MACOS} ]]
   then
@@ -525,7 +526,11 @@ then
     fi
     sudo -H apt-get autoremove -y
   fi
+fi
 
+if [[ ${DEVELOPER} ]]
+then
+  echo "DEVELOPER setup"
   echo "Installing pip"
   sudo -H easy_install pip
 
@@ -593,7 +598,7 @@ then
     echo "Updating app store apps via mas"
     mas upgrade
   fi
-  if [[ ${LINUX} ]]
+  if [[ ${UBUNTU} ]]
   then
     sudo -H apt-get update
     sudo -H apt-get dist-upgrade -y
