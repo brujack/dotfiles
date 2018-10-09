@@ -487,7 +487,7 @@ then
 
   fi
 
-  if [ ${LINUX} ]
+  if [ ${UBUNTU} ]
   then
     sudo -H apt-get update
     sudo -H apt-get install zsh -y
@@ -499,7 +499,6 @@ then
     sudo -H apt-get install keychain -y
     sudo -H apt-get install make -y
     sudo -H apt-get install python-setuptools -y
-    sudo -H apt-get install npm -y
       # install go 1.10
     sudo add-apt-repository ppa:gophers/archive -y
     sudo apt-get update
@@ -602,6 +601,10 @@ then
     sudo -H apt-get update
     sudo -H apt-get dist-upgrade -y
     sudo -H apt-get autoremove -y
+  fi
+  if [[ ${REDHAT} ]]
+  then
+    sudo -H yum update -y
   fi
   if [[ ${WINDOWS} ]]
   then
