@@ -135,14 +135,6 @@ then
 
   echo "Linking ${DOTFILES} to their home"
 
-  if [[ -f ${HOME}/.zshrc ]]
-  then
-    rm ${HOME}/.zshrc
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.zshrc ${HOME}/.zshrc
-  elif [[ ! -L ${HOME}/.zshrc ]]
-  then
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.zshrc ${HOME}/.zshrc
-  fi
   if [[ -f ${HOME}/.gitconfig ]]
   then
     rm ${HOME}/.gitconfig
@@ -182,6 +174,15 @@ then
   if [[ ! -d ${HOME}/.oh-my-zsh ]]
   then
     sh -c "$(curl -fsSL https://raw.github.com/robbyrussell/oh-my-zsh/master/tools/install.sh)"
+  fi
+
+  if [[ -f ${HOME}/.zshrc ]]
+  then
+    rm ${HOME}/.zshrc
+    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.zshrc ${HOME}/.zshrc
+  elif [[ ! -L ${HOME}/.zshrc ]]
+  then
+    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.zshrc ${HOME}/.zshrc
   fi
 
   echo "Linking custom bruce.zsh-theme"
