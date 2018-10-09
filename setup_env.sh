@@ -11,7 +11,8 @@ usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 0; }
 # get command line options
 while getopts ":ht:" arg; do
   case $arg in
-    t) # Specify t of either 'setup' or 'update'.
+    t) # Specify t of either 'setup_user', 'setup' or 'update'.
+      [ ${OPTARG} = "setup_user" ] && export SETUP_USER=1
       [ ${OPTARG} = "setup" ] && export SETUP=1
       [ ${OPTARG} = "update" ] && export UPDATE=1
       ;;
@@ -25,6 +26,14 @@ done
 # choose which env we are running on
 [ $(uname -s) = "Darwin" ] && export MACOS=1
 [ $(uname -s) = "Linux" ] && export LINUX=1
+if [ -f /etc/lsb-release ];
+then
+  export UBUNTU=1
+fi
+if [ -f /etc/redhat-release ];
+then
+  export REDHAT=1
+fi
 [[ $(uname -r) =~ Microsoft$ ]] && export WINDOWS=1
 [ $(hostname -s) = "kube-0" ] && export KUBE=1
 [ $(hostname -s) = "kube-1" ] && export KUBE=1
@@ -34,7 +43,6 @@ done
 GITREPOS="${HOME}/git-repos"
 PERSONAL_GITREPOS="${GITREPOS}/personal"
 DOTFILES="dotfiles"
-RANCHERSSH="${HOME}/.rancherssh"
 BREWFILE_LOC="${HOME}/brew"
 HOSTNAME=$(hostname -s)
 WSL_HOME="/c/Users/${USER}"
@@ -50,8 +58,47 @@ then
 fi
 
 # Setup is run rarely as it should be run when setting up a new device or when doing a controlled change after changing items in setup
-if [[ ${SETUP} ]]
+# setup_user is run to setup a user without a full host setup
+if [[ ${SETUP} | ${SETUP_USER} ]]
 then
+  # need to make sure that git is installed
+  echo "Installing git"
+  if [[ ${MACOS} ]]
+  then
+  # Check for Homebrew,
+    # Install if we don't have it
+    if test ! $(which brew); then
+      echo "Installing homebrew..."
+      ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
+    fi
+    brew install git
+  fi
+  if [[ ${UBUNTU} ]]
+  then
+    sudo -H apt-get update
+    sudo -H apt-get install git -y
+    sudo -H apt-get install zsh -y
+    sudo -H apt-get install zsh-doc -y
+    sudo -H apt-get install gcc -y
+    sudo -H apt-get install htop -y
+    sudo -H apt-get install iotop -y
+    sudo -H apt-get install keychain -y
+    sudo -H apt-get install make -y
+    sudo -H apt-get install python-setuptools -y
+    sudo -H apt-get install npm -y
+  fi
+  if [[ ${REDHAT} ]]
+  then
+    sudo -H yum install git -y
+    sudo -H yum install gcc -y
+    sudo -H yum install htop -y
+    sudo -H yum install iotop -y
+    sudo -H yum install keychain -y
+    sudo -H yum install make -y
+    sudo -H yum install python3-setuptools -y
+    sudo -H yum install npm -y
+  fi
+
   echo "Creating home bin"
   if [[ ! -d ${HOME}/bin ]]
   then
@@ -163,7 +210,10 @@ then
   then
     chsh -s /bin/zsh
   fi
+fi
 
+# full setup and installation of all packages
+if [[ ${SETUP} ]]
   if [[ ${MACOS} ]]
   then
     echo "Creating $BREWFILE_LOC"
@@ -424,7 +474,7 @@ then
       ruby-install ruby 2.3.5
     fi
 
-    # setup for test-kitchen and ruby-2.3.5 for fullscript
+    # setup for test-kitchen
     echo "Setup kitchen"
     source /usr/local/opt/chruby/share/chruby/chruby.sh
     source /usr/local/opt/chruby/share/chruby/auto.sh
@@ -434,11 +484,6 @@ then
     gem install kitchen-docker
     gem install kitchen-verifier-serverspec
 
-    echo "Creating ${RANCHERSSH}"
-    if [[ ! -d ${RANCHERSSH} ]]
-    then
-      mkdir ${RANCHERSSH}
-    fi
   fi
 
   if [ ${LINUX} ]

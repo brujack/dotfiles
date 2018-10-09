@@ -177,7 +177,7 @@ alias kube-00='ssh bjackson@kube-0.leo.obj'
 alias kube-10='ssh bjackson@kube-1.leo.obj'
 alias kube-20='ssh bjackson@kube-2.leo.obj'
 alias ns0='ssh bjackson@ns0.lab.leo.obj'
-alias ns1='ssh bjackson@ns0.lab.leo.obj'
+alias ns1='ssh bjackson@ns1.lab.leo.obj'
 alias deploy-1='ssh bjackson@deploy-1.leo.obj'
 alias deploy-2='ssh bjackson@deploy-2.leo.obj'
 
