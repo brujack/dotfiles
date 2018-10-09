@@ -59,7 +59,7 @@ fi
 
 # Setup is run rarely as it should be run when setting up a new device or when doing a controlled change after changing items in setup
 # setup_user is run to setup a user without a full host setup
-if [[ ${SETUP} | ${SETUP_USER} ]]
+if [[ ${SETUP} || ${SETUP_USER} ]]
 then
   # need to make sure that git is installed
   echo "Installing git"
