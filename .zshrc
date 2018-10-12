@@ -1,6 +1,14 @@
 # choose which env we are running on
 [ $(uname -s) = "Darwin" ] && export MACOS=1
 [ $(uname -s) = "Linux" ] && export LINUX=1
+if [ -f /etc/lsb-release ];
+then
+  export UBUNTU=1
+fi
+if [ -f /etc/redhat-release ];
+then
+  export REDHAT=1
+fi
 [[ $(uname -r) =~ Microsoft$ ]] && export WINDOWS=1
 
 [ $(hostname -s) = "ratna" ] && export RATNA=1
@@ -93,11 +101,14 @@ export HISTIGNORE="ls:cd:cd -:pwd:exit:date:* --help";
 # Add wisely, as too many plugins slow down shell startup.
 if [[ ${MACOS} ]]
 then
-  plugins=(aws brew git kubectl osx terraform vscode)
-elif [[ ${LINUX} ]]
+  plugins=(aws brew docker git helm kubectl osx terraform vscode)
+elif [[ ${UBUNTU} ]]
 then
-  plugins=(aws git kubectl ubuntu terraform)
+  plugins=(aws git docker kubectl ubuntu)
 fi
+elif [[ ${REDHAT} ]]
+then
+  plugins=(aws git docker kubectl fedora)
 
 source $ZSH/oh-my-zsh.sh
 
