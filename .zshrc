@@ -13,6 +13,7 @@ fi
 
 [ $(hostname -s) = "ratna" ] && export RATNA=1
 [ $(hostname -s) = "bjackson" ] && export BJACKSON=1
+[ $(hostname -s) = "laptop" ] && export LAPTOP=1
 
 # setup some variables for virtualenv
 export WORKON_HOME=${HOME}/.virtualenvs
@@ -20,7 +21,7 @@ export PROJECT_HOME=${HOME}./virtualenvs
 if [[ ${MACOS} ]]
 then
   VIRTUALENVWRAPPER_SCRIPT=/usr/local/bin/virtualenvwrapper.sh
-  if [[ ${RATNA} ]]
+  if [[ ${RATNA} || ${LAPTOP} ]]
   then
     VIRTUALENVWRAPPER_PYTHON=/usr/bin/python
   fi
