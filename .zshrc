@@ -8,7 +8,7 @@ export WORKON_HOME=${HOME}/.virtualenvs
 export PROJECT_HOME=${HOME}./virtualenvs
 if [[ ${MACOS} ]]
 then
-  VIRTUALENVWRAPPER_SCRIPT=${HOME}/Library/Python/3.7/bin/virtualenvwrapper.sh
+  VIRTUALENVWRAPPER_SCRIPT=/usr/local/bin/virtualenvwrapper.sh
   VIRTUALENVWRAPPER_PYTHON=/usr/local/bin/python3
 fi
 if [[ ${LINUX} ]]
@@ -232,7 +232,7 @@ if [[ -d ~/.virtualenvs ]]
 then
   if [[ ${MACOS} ]]
   then
-    source ${HOME}/Library/Python/3.7/bin/virtualenvwrapper.sh
+    source /usr/local/bin/virtualenvwrapper.sh
   fi
   if [[ ${LINUX} ]]
   then

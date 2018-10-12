@@ -533,11 +533,9 @@ fi
 if [[ ${DEVELOPER} ]]
 then
   echo "DEVELOPER setup"
-  echo "Installing pip"
-  sudo -H easy_install pip
 
   echo "Installing virtualenv for python"
-  pip3 install virtualenv virtualenvwrapper --user
+  pip3 install virtualenv virtualenvwrapper
 
   # setup virtualenv for python if virtualenv there
   if ! [ -d ${HOME}/.virtualenvs ]
@@ -546,15 +544,13 @@ then
   fi
 
   cd ${HOME}/.virtualenvs
-  #source /usr/local/bin/virtualenvwrapper.sh
-  source ${HOME}/Library/Python/3.7/bin/virtualenvwrapper.sh
+  source /usr/local/bin/virtualenvwrapper.sh
 
   if ! [[ -f ${HOME}/.virtualenvs/ansible ]]
   then
     if [[ -f /usr/local/bin/virtualenv ]]
     then
       mkvirtualenv ansible -p python3
-      # mkvirtualenv ansible
     fi
   fi
 
