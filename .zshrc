@@ -102,13 +102,15 @@ export HISTIGNORE="ls:cd:cd -:pwd:exit:date:* --help";
 if [[ ${MACOS} ]]
 then
   plugins=(aws brew docker git helm kubectl osx terraform vscode)
-elif [[ ${UBUNTU} ]]
+fi
+if [[ ${UBUNTU} ]]
 then
   plugins=(aws git docker kubectl ubuntu)
 fi
-elif [[ ${REDHAT} ]]
+if [[ ${REDHAT} ]]
 then
   plugins=(aws git docker kubectl fedora)
+fi
 
 source $ZSH/oh-my-zsh.sh
 
