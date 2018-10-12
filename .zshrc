@@ -3,13 +3,23 @@
 [ $(uname -s) = "Linux" ] && export LINUX=1
 [[ $(uname -r) =~ Microsoft$ ]] && export WINDOWS=1
 
+[ $(hostname -s) = "ratna" ] && export RATNA=1
+[ $(hostname -s) = "bjackson" ] && export BJACKSON=1
+
 # setup some variables for virtualenv
 export WORKON_HOME=${HOME}/.virtualenvs
 export PROJECT_HOME=${HOME}./virtualenvs
 if [[ ${MACOS} ]]
 then
   VIRTUALENVWRAPPER_SCRIPT=/usr/local/bin/virtualenvwrapper.sh
-  VIRTUALENVWRAPPER_PYTHON=/usr/local/bin/python3
+  if [[ ${RATNA} ]]
+  then
+    VIRTUALENVWRAPPER_PYTHON=/usr/bin/python
+  fi
+  if [[ ${BJACKSON} ]]
+  then
+    VIRTUALENVWRAPPER_PYTHON=/usr/local/bin/python3
+  fi
 fi
 if [[ ${LINUX} ]]
 then
