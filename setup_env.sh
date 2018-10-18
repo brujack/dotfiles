@@ -130,6 +130,8 @@ then
   then
     cd ${HOME}
     git clone --recursive git@github.com:brujack/${DOTFILES}.git ${PERSONAL_GITREPOS}/${DOTFILES}
+    # for regular https github used on machines that will not push changes
+    # git clone --recursive https://github.com/brujack/${DOTFILES}.git ${PERSONAL_GITREPOS}/${DOTFILES}
   else
     cd ${PERSONAL_GITREPOS}/${DOTFILES}
     git pull

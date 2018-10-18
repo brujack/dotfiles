@@ -23,5 +23,6 @@
     "git.confirmSync": false,
     "git.autofetch": true,
     "breadcrumbs.enabled": true,
-    "window.zoomLevel": 0
+    "window.zoomLevel": 0,
+    "team.showWelcomeMessage": false
 }
