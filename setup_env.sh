@@ -557,7 +557,7 @@ then
   fi
 
   echo "Installing ansible via pip"
-  pip3 install ansible
+  pip3 install ansible ansible-cmdb
 
   echo "Installing boto via pip"
   pip3 install boto boto3 botocore
