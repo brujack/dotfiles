@@ -194,7 +194,7 @@ alias us-8-1='ssh bruce@us-8-1'
 alias us-pro='ssh bruce@us-pro'
 alias nano-hd='ssh bruce@nano-hd'
 # aliases for work servers
-alias work='ssh bjackson@172.16.1.124'
+alias work='ssh bjackson@172.16.2.25'
 alias vader='ssh bjackson@vader.leo.obj'
 alias yoda='ssh bjackson@yoda.leo.obj'
 alias kube-00='ssh bjackson@kube-0.leo.obj'
