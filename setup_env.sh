@@ -87,6 +87,7 @@ then
     sudo -H apt-get install make -y
     sudo -H apt-get install python-setuptools -y
     sudo -H apt-get install python3-setuptools -y
+    sudo -H apt-get install silversearcher-ag -y
   fi
   if [[ ${REDHAT} ]]
   then
@@ -99,6 +100,7 @@ then
     sudo -H yum install make -y
     sudo -H yum install python-setuptools -y
     sudo -H yum install python3-setuptools -y
+    sudo -H yum install the_silver_searcher -y
   fi
 
   echo "Creating home bin"
@@ -505,6 +507,7 @@ then
     sudo -H apt-get install keychain -y
     sudo -H apt-get install make -y
     sudo -H apt-get install python-setuptools -y
+    sudo -H apt-get install silversearcher-ag -y
       # install go 1.10
     sudo add-apt-repository ppa:gophers/archive -y
     sudo apt-get update

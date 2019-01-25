@@ -210,7 +210,7 @@ alias deploy-2='ssh bjackson@deploy-2.leo.obj'
 
 # command aliasesssh
 alias au='sudo apt-get update'
-alias ag='sudo apt-get dist-upgrade -y'
+alias ad='sudo apt-get dist-upgrade -y'
 alias aa='sudo apt-get autoremove -y'
 alias dot='cd ~/git-repos/personal/dotfiles && git pl && source ~/.zshrc'
 alias oh='cd ~/.oh-my-zsh && git pl'
