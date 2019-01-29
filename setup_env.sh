@@ -87,6 +87,7 @@ then
     sudo -H apt-get install python-setuptools -y
     sudo -H apt-get install python3-setuptools -y
     sudo -H apt-get install silversearcher-ag -y
+    sudo -H apt-get install unzip -y
     sudo -H apt-get install wget -y
     sudo -H apt-get install zsh -y
     sudo -H apt-get install zsh-doc -y
@@ -104,6 +105,7 @@ then
     sudo -H dnf install python-setuptools -y
     sudo -H dnf install python3-setuptools -y
     sudo -H dnf install the_silver_searcher -y
+    sudo -H dnf install unzip -y
     sudo -H dnf install wget -y
     sudo -H dnf install zsh -y
   fi
