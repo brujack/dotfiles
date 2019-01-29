@@ -77,9 +77,8 @@ then
   if [[ ${UBUNTU} ]]
   then
     sudo -H apt-get update
+    sudo -H apt-get install curl -y
     sudo -H apt-get install git -y
-    sudo -H apt-get install zsh -y
-    sudo -H apt-get install zsh-doc -y
     sudo -H apt-get install gcc -y
     sudo -H apt-get install htop -y
     sudo -H apt-get install iotop -y
@@ -88,19 +87,25 @@ then
     sudo -H apt-get install python-setuptools -y
     sudo -H apt-get install python3-setuptools -y
     sudo -H apt-get install silversearcher-ag -y
+    sudo -H apt-get install wget -y
+    sudo -H apt-get install zsh -y
+    sudo -H apt-get install zsh-doc -y
   fi
   if [[ ${REDHAT} ]]
   then
-    sudo -H yum install git -y
-    sudo -H yum install zsh -y
-    sudo -H yum install gcc -y
-    sudo -H yum install htop -y
-    sudo -H yum install iotop -y
-    sudo -H yum install keychain -y
-    sudo -H yum install make -y
-    sudo -H yum install python-setuptools -y
-    sudo -H yum install python3-setuptools -y
-    sudo -H yum install the_silver_searcher -y
+    sudo -H dnf update -y
+    sudo -H dnf install curl -y
+    sudo -H dnf install gcc -y
+    sudo -H dnf install git -y
+    sudo -H dnf install htop -y
+    sudo -H dnf install iotop -y
+    sudo -H dnf install keychain -y
+    sudo -H dnf install make -y
+    sudo -H dnf install python-setuptools -y
+    sudo -H dnf install python3-setuptools -y
+    sudo -H dnf install the_silver_searcher -y
+    sudo -H dnf install wget -y
+    sudo -H dnf install zsh -y
   fi
 
   echo "Creating home bin"
@@ -609,7 +614,7 @@ then
   fi
   if [[ ${REDHAT} ]]
   then
-    sudo -H yum update -y
+    sudo -H dnf update -y
   fi
   if [[ ${WINDOWS} ]]
   then
