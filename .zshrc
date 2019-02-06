@@ -242,11 +242,6 @@ setopt hist_reduce_blanks
 # add in aws creds for terraform and ansible
 export AWS_HOME=${HOME}/.aws
 
-if [[ -f ${AWS_HOME}/.aws_creds ]]
-then
-  source ${AWS_HOME}/.aws_creds
-fi
-
 # add in google cloud creds for terraform
 if [[ -f ${HOME}/.google_creds ]]
 then
