@@ -164,6 +164,15 @@ then
   then
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.vimrc ${HOME}/.vimrc
   fi
+
+  if [[ -f ${HOME}/switch_terra_account.sh ]]
+  then
+    rm ${HOME}/switch_terra_account.sh
+    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/switch_terra_account.sh ${HOME}/switch_terra_account.sh
+  elif [[ ! -L ${HOME}/switch_terra_account.sh ]]
+  then
+    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/switch_terra_account.sh ${HOME}/switch_terra_account.sh
+  fi
   if [[ ${MACOS} ]]
   then
     if [[ -f "$VSCODE"/settings.json ]]
@@ -299,6 +308,10 @@ then
     then
       brew cask install carbon-copy-cloner
     fi
+    if [[ ! -d "/Applications/DBeaver.app" ]]
+    then
+      brew cask install dbeaver-community
+    fi
     if [[ ! ${HOSTNAME} == "server" ]]
     then
       if [[ ! -d "/Applications/Docker.app" ]]
@@ -313,13 +326,6 @@ then
     if [[ ! -d "/Applications/Firefox.app" ]]
     then
       brew cask install firefox
-    fi
-    if [[ ! ${HOSTNAME} == "server" ]] || [[ ! ${HOSTNAME} == "mac" ]]
-    then
-      if [[ ! -d "/Applications/Franz.app" ]]
-      then
-        brew cask install franz
-      fi
     fi
     if [[ ! -d "/Applications/Funter.app" ]]
     then
