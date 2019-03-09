@@ -24,5 +24,7 @@
     "git.autofetch": true,
     "breadcrumbs.enabled": true,
     "window.zoomLevel": 0,
-    "team.showWelcomeMessage": false
+    "team.showWelcomeMessage": false,
+    "editor.suggestSelection": "first",
+    "vsintellicode.modify.editor.suggestSelection": "automaticallyOverrodeDefaultValue"
 }
