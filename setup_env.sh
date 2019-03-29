@@ -363,6 +363,10 @@ then
     then
       brew cask install sourcetree
     fi
+    if [[ ! -d "/Applications/PowerShell.app" ]]
+    then
+      brew cask install powershell
+    fi
     if [[ ! -d "/Applications/Spotify.app" ]]
     then
       brew cask install spotify
