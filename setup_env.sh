@@ -15,6 +15,7 @@ while getopts ":ht:" arg; do
       [ ${OPTARG} = "setup_user" ] && export SETUP_USER=1
       [ ${OPTARG} = "setup" ] && export SETUP=1
       [ ${OPTARG} = "developer" ] && export DEVELOPER=1
+      [ ${OPTARG} = "ansible" ] && export ANSIBLE=1
       [ ${OPTARG} = "update" ] && export UPDATE=1
       ;;
     h | *) # Display help.
@@ -552,9 +553,9 @@ then
   fi
 fi
 
-if [[ ${DEVELOPER} ]]
+if [[ ${DEVELOPER} || ${ANSIBLE} ]]
 then
-  echo "DEVELOPER setup"
+  echo "ANSIBLE setup"
 
   echo "Installing virtualenv for python"
   pip3 install virtualenv virtualenvwrapper
