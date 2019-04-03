@@ -1,5 +1,6 @@
 brew "autoconf"
 brew "automake"
+brew "azure-cli"
 brew "bison"
 brew "chruby"
 brew "ctags"
