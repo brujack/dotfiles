@@ -288,6 +288,12 @@ then
   export KUBECONFIG=${HOME}/.kube/config
 fi
 
+# for helm charts
+if [[ -d ${HOME}/.helm ]]
+then
+  export HELM_HOME=${HOME}/.helm
+fi
+
 # for aws info at the cli
 # add a "--region xxx" to change regions
 alias idesc="aws ec2 describe-instances --query 'Reservations[*].Instances[*].[Placement.AvailabilityZone, State.Name, InstanceId,InstanceType,Tags]' --output text"
