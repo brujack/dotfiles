@@ -102,15 +102,15 @@ export HISTIGNORE="ls:cd:cd -:pwd:exit:date:* --help";
 # Add wisely, as too many plugins slow down shell startup.
 if [[ ${MACOS} ]]
 then
-  plugins=(aws brew docker git helm kubectl osx terraform vscode)
+  plugins=(ansible aws brew docker git helm kubectl osx terraform vscode)
 fi
 if [[ ${UBUNTU} ]]
 then
-  plugins=(aws git docker kubectl ubuntu)
+  plugins=(aws git docker helm kubectl ubuntu)
 fi
 if [[ ${REDHAT} ]]
 then
-  plugins=(aws git docker kubectl fedora)
+  plugins=(aws git docker helm kubectl fedora)
 fi
 
 source $ZSH/oh-my-zsh.sh
