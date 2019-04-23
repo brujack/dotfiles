@@ -146,7 +146,6 @@ then
     sudo -H yum install zsh -y
   fi
 
-
   echo "Creating home bin"
   if [[ ! -d ${HOME}/bin ]]
   then
@@ -294,8 +293,8 @@ then
 
     # Xcode mas id 497799835
     # needed early in order to install other stuff
-    mas install 497799835
     echo "Installing xcode-stuff"
+    mas install 497799835
     xcode-select --install
 
     # Check for Homebrew,
