@@ -53,6 +53,7 @@ then
   then
     export FEDORA=1
   fi
+fi
 [[ $(uname -r) =~ Microsoft$ ]] && export WINDOWS=1
 [ $(hostname -f) = "kube-0.conecrazy.ca" ] && export KUBE=1
 [ $(hostname -f) = "kube-1.conecrazy.ca" ] && export KUBE=1
