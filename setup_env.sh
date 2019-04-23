@@ -557,35 +557,41 @@ then
   cd ${HOME}/.virtualenvs
   source /usr/local/bin/virtualenvwrapper.sh
 
-  if ! [[ -f ${HOME}/.virtualenvs/ansible ]]
+  if ! [[ -d ${HOME}/.virtualenvs/ansible ]]
   then
     if [[ -f /usr/local/bin/virtualenv ]]
     then
       mkvirtualenv ansible -p python3
+      echo "Installing ansible via pip"
+      pip3 install ansible ansible-cmdb
+      echo "Installing boto via pip"
+      pip3 install boto boto3 botocore
+      echo "Installing awscli via pip"
+      pip3 install awscli
+      echo "Installing pylint for python linting via pip"
+      pip3 install pylint
     fi
   fi
-
-  echo "Installing ansible via pip"
-  pip3 install ansible ansible-cmdb
-
-  echo "Installing boto via pip"
-  pip3 install boto boto3 botocore
 
   # override boto provided endpoints with a more correct version that has all of the regions
-  if [[ -f ${HOME}/git-repos/fullscript/aws-terraform ]]
+  # you can get the newest version from:  https://github.com/aws/aws-sdk-net/blob/master/sdk/src/Core/endpoints.json
+  if [[ -f ${HOME}/.virtualenvs/ansible/lib/python3.6/site-packages/boto/endpoints.json ]]
   then
-    if [[ -f ${HOME}/.virtualenvs/ansible/lib/python3.6/site-packages/boto/endpoints.json ]]
-    then
-      mv ${HOME}/.virtualenvs/ansible/lib/python3.6/site-packages/boto/endpoints.json ${HOME}/.virtualenvs/ansible/lib/python3.6/site-packages/boto/endpoints.json.orig
-      ln -s ${HOME}/git-repos/fullscript/aws-terraform/docker/ansible/boto.json ${HOME}/.virtualenvs/ansible/lib/python3.6/site-packages/boto/endpoints.json
-    fi
+    rm ${HOME}/.virtualenvs/ansible/lib/python3.6/site-packages/boto/endpoints.json
+    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/endpoints.json ${HOME}/.virtualenvs/ansible/lib/python3.6/site-packages/boto/endpoints.json
+  elif [[ ! -L ${HOME}/.virtualenvs/ansible/lib/python3.6/site-packages/boto/endpoints.json ]]
+  then
+    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/endpoints.json ${HOME}/.virtualenvs/ansible/lib/python3.6/site-packages/boto/endpoints.json
   fi
 
-  echo "Installing awscli via pip"
-  pip3 install awscli
-
-  echo "Installing pylint for python linting via pip"
-  pip3 install pylint
+  if [[ -f ${HOME}/.virtualenvs/ansible/lib/python3.7/site-packages/boto/endpoints.json ]]
+  then
+    rm ${HOME}/.virtualenvs/ansible/lib/python3.7/site-packages/boto/endpoints.json
+    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/endpoints.json ${HOME}/.virtualenvs/ansible/lib/python3.7/site-packages/boto/endpoints.json
+  elif [[ ! -L ${HOME}/.virtualenvs/ansible/lib/python3.7/site-packages/boto/endpoints.json ]]
+  then
+    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/endpoints.json ${HOME}/.virtualenvs/ansible/lib/python3.7/site-packages/boto/endpoints.json
+  fi
 
   echo "Installing json2yaml via npm"
   npm install json2yaml
