@@ -36,7 +36,7 @@ done
 
 if [[ ${LINUX} ]]
 then
-  LINUX_TYPE = "awk -F= '/^NAME/{print $2}' /etc/os-release"
+  LINUX_TYPE="awk -F= '/^NAME/{print $2}' /etc/os-release"
   if [ ${LINUX_TYPE} == '"Ubuntu"' ];
   then
     export UBUNTU=1
