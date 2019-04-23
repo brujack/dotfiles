@@ -500,17 +500,17 @@ then
       fi
     fi
 
-    echo "setup ruby 2.3.5"
-    if [[ ! -d ${HOME}/.rubies/ruby-2.3.5/bin ]]
+    echo "setup ruby 2.6.3"
+    if [[ ! -d ${HOME}/.rubies/ruby-2.6.3/bin ]]
     then
-      ruby-install ruby 2.3.5
+      ruby-install ruby 2.6.3
     fi
 
     # setup for test-kitchen
     echo "Setup kitchen"
     source /usr/local/opt/chruby/share/chruby/chruby.sh
     source /usr/local/opt/chruby/share/chruby/auto.sh
-    chruby ruby-2.3.5
+    chruby ruby-2.6.3
     gem install test-kitchen
     gem install kitchen-ansible
     gem install kitchen-docker
