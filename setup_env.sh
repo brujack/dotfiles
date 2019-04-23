@@ -9,6 +9,11 @@ usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 0; }
 [ $# -eq 0 ] &&usage
 
 # get command line options
+# setup_user: just sets up a basic user environment for the current user
+# setup: runs a full machine and developer setup
+# developer: runs a full setup and developer setup with python virtual environment for running ansible
+# ansible: just runs the ansible setup using a python virtual environment.  Typically used after a python update. To run, "rm ~/.virtualenvs/ansible && ./setup_env.sh -t ansible"
+# update: does a system update
 while getopts ":ht:" arg; do
   case $arg in
     t) # Specify t of either 'setup_user', 'setup', 'developer' or 'update'.
@@ -60,7 +65,7 @@ then
 fi
 
 # Setup is run rarely as it should be run when setting up a new device or when doing a controlled change after changing items in setup
-# setup_user is run to setup a user without a full host setup
+# The following code is used to setup the base system with some base packages and the basic layout of the users home directory
 if [[ ${SETUP} || ${SETUP_USER} || ${DEVELOPER} ]]
 then
   # need to make sure that git is installed
@@ -516,8 +521,6 @@ then
   if [ ${UBUNTU} ]
   then
     sudo -H apt-get update
-    sudo -H apt-get install zsh -y
-    sudo -H apt-get install zsh-doc -y
     sudo -H apt-get install git -y
     sudo -H apt-get install gcc -y
     sudo -H apt-get install htop -y
@@ -526,10 +529,12 @@ then
     sudo -H apt-get install make -y
     sudo -H apt-get install python-setuptools -y
     sudo -H apt-get install silversearcher-ag -y
-      # install go 1.10
-    sudo add-apt-repository ppa:gophers/archive -y
+    sudo -H apt-get install zsh -y
+    sudo -H apt-get install zsh-doc -y
+      # install go 1.12
+    sudo add-apt-repository ppa:longsleep/golang-backports -y
     sudo apt-get update
-    sudo apt-get install golang-1.10-go -y
+    sudo apt-get install golang-1.12-go -y
     # on KUBE systems:
     if [ ${KUBE} ]
     then
@@ -547,6 +552,7 @@ then
       stable"
       sudo -H apt-get update
       sudo -H apt-get install docker-ce -y
+      sudo -H apt-get install docker-ce-cli -y
     fi
     sudo -H apt-get autoremove -y
   fi
