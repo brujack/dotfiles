@@ -33,14 +33,26 @@ done
 # choose which env we are running on
 [ $(uname -s) = "Darwin" ] && export MACOS=1
 [ $(uname -s) = "Linux" ] && export LINUX=1
-if [ -f /etc/lsb-release ];
+
+if [[ ${LINUX} ]]
 then
-  export UBUNTU=1
-fi
-if [ -f /etc/redhat-release ];
-then
-  export REDHAT=1
-fi
+  LINUX_TYPE = "awk -F= '/^NAME/{print $2}' /etc/os-release"
+  if [ ${LINUX_TYPE} == '"Ubuntu"' ];
+  then
+    export UBUNTU=1
+  fi
+  if [ ${LINUX_TYPE} == '"CentOS Linux"' ];
+  then
+    export CENTOS=1
+  fi
+  if [ ${LINUX_TYPE} == '"Red Hat Enterprise Linux Server"' ];
+  then
+    export REDHAT=1
+  fi
+  if [ ${LINUX_TYPE} == '"Fedora"' ];
+  then
+    export FEDORA=1
+  fi
 [[ $(uname -r) =~ Microsoft$ ]] && export WINDOWS=1
 [ $(hostname -f) = "kube-0.conecrazy.ca" ] && export KUBE=1
 [ $(hostname -f) = "kube-1.conecrazy.ca" ] && export KUBE=1
@@ -98,7 +110,7 @@ then
     sudo -H apt-get install zsh -y
     sudo -H apt-get install zsh-doc -y
   fi
-  if [[ ${REDHAT} ]]
+  if [[ ${REDHAT} || ${FEDORA} ]]
   then
     sudo -H dnf update -y
     sudo -H dnf install curl -y
@@ -115,6 +127,24 @@ then
     sudo -H dnf install wget -y
     sudo -H dnf install zsh -y
   fi
+  if [[ ${CENTOS} ]]
+  then
+    sudo -H yum update -y
+    sudo -H yum install curl -y
+    sudo -H yum install gcc -y
+    sudo -H yum install git -y
+    sudo -H yum install htop -y
+    sudo -H yum install iotop -y
+    sudo -H yum install keychain -y
+    sudo -H yum install make -y
+    sudo -H yum install python-setuptools -y
+    sudo -H yum install python3-setuptools -y
+    sudo -H yum install the_silver_searcher -y
+    sudo -H yum install unzip -y
+    sudo -H yum install wget -y
+    sudo -H yum install zsh -y
+  fi
+
 
   echo "Creating home bin"
   if [[ ! -d ${HOME}/bin ]]
@@ -636,9 +666,13 @@ then
     sudo -H apt-get dist-upgrade -y
     sudo -H apt-get autoremove -y
   fi
-  if [[ ${REDHAT} ]]
+  if [[ ${REDHAT} || ${FEDORA} ]]
   then
     sudo -H dnf update -y
+  fi
+  if [[ ${CENTOS} ]]
+  then
+    sudo -H yum update -y
   fi
   if [[ ${WINDOWS} ]]
   then
