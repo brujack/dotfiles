@@ -37,19 +37,19 @@ done
 if [[ ${LINUX} ]]
 then
   LINUX_TYPE="awk -F= '/^NAME/{print $2}' /etc/os-release"
-  if [ ${LINUX_TYPE} == '"Ubuntu"' ];
+  if [ ${LINUX_TYPE} == '"Ubuntu"' ]
   then
     export UBUNTU=1
   fi
-  if [ ${LINUX_TYPE} == '"CentOS Linux"' ];
+  if [ ${LINUX_TYPE} == '"CentOS Linux"' ]
   then
     export CENTOS=1
   fi
-  if [ ${LINUX_TYPE} == '"Red Hat Enterprise Linux Server"' ];
+  if [ ${LINUX_TYPE} == '"Red Hat Enterprise Linux Server"' ]
   then
     export REDHAT=1
   fi
-  if [ ${LINUX_TYPE} == '"Fedora"' ];
+  if [ ${LINUX_TYPE} == '"Fedora"' ]
   then
     export FEDORA=1
   fi
