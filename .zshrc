@@ -250,7 +250,7 @@ fi
 
 # setup for python 3.7 for ansible by using virtualenv
 #source /usr/local/bin/virtualenvwrapper.sh
-if [[ -d ~/.virtualenvs ]]
+if [[ -d ~/.virtualenvs/ansible ]]
 then
   if [[ ${MACOS} ]]
   then
