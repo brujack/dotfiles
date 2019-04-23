@@ -499,23 +499,6 @@ then
         mas install 883878097
       fi
     fi
-
-    echo "setup ruby 2.6.3"
-    if [[ ! -d ${HOME}/.rubies/ruby-2.6.3/bin ]]
-    then
-      ruby-install ruby 2.6.3
-    fi
-
-    # setup for test-kitchen
-    echo "Setup kitchen"
-    source /usr/local/opt/chruby/share/chruby/chruby.sh
-    source /usr/local/opt/chruby/share/chruby/auto.sh
-    chruby ruby-2.6.3
-    gem install test-kitchen
-    gem install kitchen-ansible
-    gem install kitchen-docker
-    gem install kitchen-verifier-serverspec
-
   fi
 
   if [ ${UBUNTU} ]
@@ -606,6 +589,23 @@ then
 
   echo "Installing json2yaml via npm"
   npm install json2yaml
+
+  echo "setup ruby 2.6.3"
+  if [[ ! -d ${HOME}/.rubies/ruby-2.6.3/bin ]]
+  then
+    ruby-install ruby 2.6.3
+  fi
+
+  # setup for test-kitchen
+  echo "Setup kitchen"
+  source /usr/local/opt/chruby/share/chruby/chruby.sh
+  source /usr/local/opt/chruby/share/chruby/auto.sh
+  chruby ruby-2.6.3
+  gem install test-kitchen
+  gem install kitchen-ansible
+  gem install kitchen-docker
+  gem install kitchen-verifier-serverspec
+
 fi
 
 # update is run more often to keep the device up to date with patches
