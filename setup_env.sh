@@ -11,7 +11,7 @@ usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 0; }
 # get command line options
 # setup_user: just sets up a basic user environment for the current user
 # setup: runs a full machine and developer setup
-# developer: runs a full setup and developer setup with python virtual environment for running ansible
+# developer: runs a developer setup with packages and python virtual environment for running ansible
 # ansible: just runs the ansible setup using a python virtual environment.  Typically used after a python update. To run, "rm ~/.virtualenvs/ansible && ./setup_env.sh -t ansible"
 # update: does a system update
 while getopts ":ht:" arg; do
@@ -79,7 +79,7 @@ fi
 
 # Setup is run rarely as it should be run when setting up a new device or when doing a controlled change after changing items in setup
 # The following code is used to setup the base system with some base packages and the basic layout of the users home directory
-if [[ ${SETUP} || ${SETUP_USER} || ${DEVELOPER} ]]
+if [[ ${SETUP} || ${SETUP_USER} ]]
 then
   # need to make sure that git is installed
   echo "Installing git"
@@ -296,6 +296,8 @@ then
     echo "Installing xcode-stuff"
     mas install 497799835
     xcode-select --install
+    # Accept Xcode license
+    sudo xcodebuild -license accept
 
     # Check for Homebrew,
     # Install if we don't have it
