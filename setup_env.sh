@@ -420,7 +420,7 @@ then
     brew cleanup
 
     echo "Updating app store apps via mas"
-    mas upgrade
+    sudo -H softwareupdate --install --all --verbose
 
     echo "Installing common apps via mas"
     if [[ ! -d "/Applications/1Password 7.app" ]]
@@ -657,8 +657,8 @@ then
     brew cask upgrade
     echo "Cleaning up brew"
     brew cleanup
-    echo "Updating app store apps via mas"
-    mas upgrade
+    echo "Updating app store apps softwareupdate"
+    sudo -H softwareupdate --install --all --verbose
   fi
   if [[ ${UBUNTU} ]]
   then
