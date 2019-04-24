@@ -421,7 +421,7 @@ then
     echo "Cleaning up brew"
     brew cleanup
 
-    echo "Updating app store apps via mas"
+    echo "Updating app store apps via softwareupdate"
     sudo -H softwareupdate --install --all --verbose
 
     echo "Installing common apps via mas"
