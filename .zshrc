@@ -1,13 +1,26 @@
 # choose which env we are running on
 [ $(uname -s) = "Darwin" ] && export MACOS=1
 [ $(uname -s) = "Linux" ] && export LINUX=1
-if [ -f /etc/lsb-release ];
+
+if [[ ${LINUX} ]]
 then
-  export UBUNTU=1
-fi
-if [ -f /etc/redhat-release ];
-then
-  export REDHAT=1
+  LINUX_TYPE=$(awk -F= '/^NAME/{print $2}' /etc/os-release | tr -d '"')
+  if [ ${LINUX_TYPE} == "Ubuntu" ]
+  then
+    export UBUNTU=1
+  fi
+  if [ ${LINUX_TYPE} == "CentOS Linux" ]
+  then
+    export CENTOS=1
+  fi
+  if [ ${LINUX_TYPE} == "Red Hat Enterprise Linux Server" ]
+  then
+    export REDHAT=1
+  fi
+  if [ ${LINUX_TYPE} == "Fedora" ]
+  then
+    export FEDORA=1
+  fi
 fi
 [[ $(uname -r) =~ Microsoft$ ]] && export WINDOWS=1
 
@@ -54,7 +67,6 @@ export ZSH=${HOME}/.oh-my-zsh
 # Set name of the theme to load. Optionally, if you set this to "random"
 # it'll load a random theme each time that oh-my-zsh is loaded.
 # See https://github.com/robbyrussell/oh-my-zsh/wiki/Themes
-#ZSH_THEME="robbyrussell"
 ZSH_THEME="bruce"
 
 # Uncomment the following line to use case-sensitive completion.
@@ -107,6 +119,14 @@ fi
 if [[ ${UBUNTU} ]]
 then
   plugins=(aws git git-prompt docker helm kubectl ubuntu terraform vscode)
+fi
+if [[ ${FEDORA} ]]
+then
+  plugins=(aws git git-prompt docker helm kubectl fedora terraform vscode)
+fi
+if [[ ${CENTOS} ]]
+then
+  plugins=(aws git git-prompt docker helm kubectl fedora terraform vscode)
 fi
 if [[ ${REDHAT} ]]
 then
