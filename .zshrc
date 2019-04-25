@@ -106,11 +106,11 @@ then
 fi
 if [[ ${UBUNTU} ]]
 then
-  plugins=(aws git docker helm kubectl ubuntu)
+  plugins=(aws git git-prompt docker helm kubectl ubuntu terraform vscode)
 fi
 if [[ ${REDHAT} ]]
 then
-  plugins=(aws git docker helm kubectl fedora)
+  plugins=(aws git git-prompt docker helm kubectl fedora terraform vscode)
 fi
 
 source $ZSH/oh-my-zsh.sh
