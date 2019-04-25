@@ -2,49 +2,40 @@
 [ $(uname -s) = "Darwin" ] && export MACOS=1
 [ $(uname -s) = "Linux" ] && export LINUX=1
 
-if [[ ${LINUX} ]]
-then
+if [[ ${LINUX} ]]; then
   LINUX_TYPE=$(awk -F= '/^NAME/{print $2}' /etc/os-release | tr -d '"')
-  if [ ${LINUX_TYPE} == "Ubuntu" ]
-  then
+  if [[ ${LINUX_TYPE} = "Ubuntu" ]]; then
     export UBUNTU=1
   fi
-  if [ ${LINUX_TYPE} == "CentOS Linux" ]
-  then
+  if [[ ${LINUX_TYPE} = "CentOS Linux" ]]; then
     export CENTOS=1
   fi
-  if [ ${LINUX_TYPE} == "Red Hat Enterprise Linux Server" ]
-  then
+  if [[ ${LINUX_TYPE} = "Red Hat Enterprise Linux Server" ]]; then
     export REDHAT=1
   fi
-  if [ ${LINUX_TYPE} == "Fedora" ]
-  then
+  if [[ ${LINUX_TYPE} = "Fedora" ]]; then
     export FEDORA=1
   fi
 fi
 [[ $(uname -r) =~ Microsoft$ ]] && export WINDOWS=1
 
-[ $(hostname -s) = "ratna" ] && export RATNA=1
-[ $(hostname -s) = "bjackson" ] && export BJACKSON=1
-[ $(hostname -s) = "laptop" ] && export LAPTOP=1
+[[ $(hostname -s) = "ratna" ]] && export RATNA=1
+[[ $(hostname -s) = "bjackson" ] && export BJACKSON=1
+[[ $(hostname -s) = "laptop" ]] && export LAPTOP=1
 
 # setup some variables for virtualenv
 export WORKON_HOME=${HOME}/.virtualenvs
 export PROJECT_HOME=${HOME}./virtualenvs
-if [[ ${MACOS} ]]
-then
+if [[ ${MACOS} ]]; then
   VIRTUALENVWRAPPER_SCRIPT=/usr/local/bin/virtualenvwrapper.sh
-  if [[ ${RATNA} || ${LAPTOP} ]]
-  then
+  if [[ ${RATNA} || ${LAPTOP} ]]; then
     VIRTUALENVWRAPPER_PYTHON=/usr/bin/python
   fi
-  if [[ ${BJACKSON} ]]
-  then
+  if [[ ${BJACKSON} ]]; then
     VIRTUALENVWRAPPER_PYTHON=/usr/local/bin/python3
   fi
 fi
-if [[ ${LINUX} ]]
-then
+if [[ ${LINUX} ]]; then
   VIRTUALENVWRAPPER_SCRIPT=/usr/local/bin/virtualenvwrapper.sh
 fi
 
@@ -112,24 +103,19 @@ export HISTIGNORE="ls:cd:cd -:pwd:exit:date:* --help";
 # Custom plugins may be added to ~/.oh-my-zsh/custom/plugins/
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
-if [[ ${MACOS} ]]
-then
+if [[ ${MACOS} ]]; then
   plugins=(ansible aws brew docker git git-prompt helm kubectl osx terraform vscode)
 fi
-if [[ ${UBUNTU} ]]
-then
+if [[ ${UBUNTU} ]]; then
   plugins=(aws git git-prompt docker helm kubectl ubuntu terraform vscode)
 fi
-if [[ ${FEDORA} ]]
-then
+if [[ ${FEDORA} ]]; then
   plugins=(aws git git-prompt docker helm kubectl fedora terraform vscode)
 fi
-if [[ ${CENTOS} ]]
-then
+if [[ ${CENTOS} ]]; then
   plugins=(aws git git-prompt docker helm kubectl fedora terraform vscode)
 fi
-if [[ ${REDHAT} ]]
-then
+if [[ ${REDHAT} ]]; then
   plugins=(aws git git-prompt docker helm kubectl fedora terraform vscode)
 fi
 
@@ -145,21 +131,17 @@ else
 fi
 
 # for keychain ssh key management
-if [[ ${MACOS} ]]
-then
+if [[ ${MACOS} ]]; then
   eval `/usr/local/bin/keychain --eval --agents ssh --inherit any id_rsa`
-elif [[ ${LINUX} ]]
-then
+elif [[ ${LINUX} ]]; then
   eval `/usr/bin/keychain --eval --agents ssh --inherit any id_rsa`
 fi
 
 # adding in home go path
-if [[ -d /Users/bjackson ]]
-then
+if [[ -d /Users/bjackson ]]; then
   path+='/Users/bjackson/bin'
 fi
-if [[ -d /Users/bruce ]]
-then
+if [[ -d /Users/bruce ]]; then
   path+='/Users/bruce/bin'
 fi
 
@@ -172,17 +154,14 @@ path+='/opt/local/bin'
 path+='/opt/local/sbin'
 
 # adding in home go path
-if [[ -d /Users/bjackson ]]
-then
+if [[ -d /Users/bjackson ]]; then
   path+='/Users/bjackson/go/bin'
 fi
-if [[ -d /Users/bruce ]]
-then
+if [[ -d /Users/bruce ]]; then
   path+='/Users/bruce/go/bin'
 fi
 
-if [[ ${LINUX} ]]
-then
+if [[ ${LINUX} ]]; then
   path+='/home/bruce/go/bin'
   path+='/usr/lib/go-1.10/bin'
 fi
@@ -245,8 +224,7 @@ else
 fi
 
 # for chruby setup
-if [[ ${MACOS} ]]
-then
+if [[ ${MACOS} ]]; then
   source /usr/local/opt/chruby/share/chruby/chruby.sh
   source /usr/local/opt/chruby/share/chruby/auto.sh
   chruby ruby-2.3.5
@@ -263,33 +241,27 @@ setopt hist_reduce_blanks
 export AWS_HOME=${HOME}/.aws
 
 # add in google cloud creds for terraform
-if [[ -f ${HOME}/.google_creds ]]
-then
+if [[ -f ${HOME}/.google_creds ]]; then
   source ${HOME}/.google_creds
 fi
 
 # setup for python 3.7 for ansible by using virtualenv
 #source /usr/local/bin/virtualenvwrapper.sh
-if [[ -d ~/.virtualenvs/ansible ]]
-then
-  if [[ ${MACOS} ]]
-  then
+if [[ -d ~/.virtualenvs/ansible ]]; then
+  if [[ ${MACOS} ]]; then
     source /usr/local/bin/virtualenvwrapper.sh
   fi
-  if [[ ${LINUX} ]]
-  then
+  if [[ ${LINUX} ]]; then
     source /usr/local/bin/virtualenvwrapper.sh
   fi
   workon ansible
-  if [[ -f ${HOME}/.vault_pass.txt ]]
-  then
+  if [[ -f ${HOME}/.vault_pass.txt ]]; then
     export ANSIBLE_VAULT_PASSWORD_FILE=${HOME}/.vault_pass.txt
   fi
 fi
 
 # setup kubectl autocompletion to save typing
-if [[ -f /usr/local/bin/kubectl ]]
-then
+if [[ -f /usr/local/bin/kubectl ]]; then
   source <(kubectl completion zsh)
 fi
 
@@ -297,20 +269,17 @@ fi
 export GPG_TTY=$(tty)
 
 # for brew zsh-completions
-if [[ ${MACOS} ]]
-then
+if [[ ${MACOS} ]]; then
   fpath=(/usr/local/share/zsh-completions $fpath)
 fi
 
 # for kubeconfig setup
-if [[ -f ${HOME}/.kube/config ]]
-then
+if [[ -f ${HOME}/.kube/config ]]; then
   export KUBECONFIG=${HOME}/.kube/config
 fi
 
 # for helm charts
-if [[ -d ${HOME}/.helm ]]
-then
+if [[ -d ${HOME}/.helm ]]; then
   export HELM_HOME=${HOME}/.helm
 fi
 
@@ -326,7 +295,6 @@ function options() {
     done
 }
 
-if [[ ${WINDOWS} ]]
-then
+if [[ ${WINDOWS} ]]; then
   export DOCKER_HOST=tcp://0.0.0.0:2375
 fi
