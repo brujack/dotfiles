@@ -102,7 +102,7 @@ export HISTIGNORE="ls:cd:cd -:pwd:exit:date:* --help";
 # Add wisely, as too many plugins slow down shell startup.
 if [[ ${MACOS} ]]
 then
-  plugins=(ansible aws brew docker git helm kubectl osx terraform vscode)
+  plugins=(ansible aws brew docker git git-prompt helm kubectl osx terraform vscode)
 fi
 if [[ ${UBUNTU} ]]
 then
