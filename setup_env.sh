@@ -6,7 +6,7 @@ quiet_which() {
 }
 
 usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 0; }
-[ $# -eq 0 ] &&usage
+[[ $# -eq 0 ]] &&usage
 
 # get command line options
 # setup_user: just sets up a basic user environment for the current user
@@ -17,11 +17,11 @@ usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 0; }
 while getopts ":ht:" arg; do
   case $arg in
     t) # Specify t of either 'setup_user', 'setup', 'developer' or 'update'.
-      [ ${OPTARG} = "setup_user" ] && export SETUP_USER=1
-      [ ${OPTARG} = "setup" ] && export SETUP=1
-      [ ${OPTARG} = "developer" ] && export DEVELOPER=1
-      [ ${OPTARG} = "ansible" ] && export ANSIBLE=1
-      [ ${OPTARG} = "update" ] && export UPDATE=1
+      [[ ${OPTARG} = "setup_user" ]] && export SETUP_USER=1
+      [[ ${OPTARG} = "setup" ]] && export SETUP=1
+      [[ ${OPTARG} = "developer" ]] && export DEVELOPER=1
+      [[ ${OPTARG} = "ansible" ]] && export ANSIBLE=1
+      [[ ${OPTARG} = "update" ]] && export UPDATE=1
       ;;
     h | *) # Display help.
       usage
@@ -31,33 +31,20 @@ while getopts ":ht:" arg; do
 done
 
 # choose which env we are running on
-[ $(uname -s) = "Darwin" ] && export MACOS=1
-[ $(uname -s) = "Linux" ] && export LINUX=1
+[[ $(uname -s) = "Darwin" ]] && export MACOS=1
+[[ $(uname -s) = "Linux" ]] && export LINUX=1
 
-if [[ ${LINUX} ]]
-then
+if [[ ${LINUX} ]]; then
   LINUX_TYPE=$(awk -F= '/^NAME/{print $2}' /etc/os-release | tr -d '"')
-  if [ ${LINUX_TYPE} == "Ubuntu" ]
-  then
-    export UBUNTU=1
-  fi
-  if [ ${LINUX_TYPE} == "CentOS Linux" ]
-  then
-    export CENTOS=1
-  fi
-  if [ ${LINUX_TYPE} == "Red Hat Enterprise Linux Server" ]
-  then
-    export REDHAT=1
-  fi
-  if [ ${LINUX_TYPE} == "Fedora" ]
-  then
-    export FEDORA=1
-  fi
+  [[ ${LINUX_TYPE} = "Ubuntu" ]] && export UBUNTU=1
+  [[ ${LINUX_TYPE} = "CentOS Linux" ]] && export CENTOS=1
+  [[ ${LINUX_TYPE} = "Red Hat Enterprise Linux Server" ]] && export REDHAT=1
+  [[ ${LINUX_TYPE} = "Fedora" ]] && export FEDORA=1
 fi
 [[ $(uname -r) =~ Microsoft$ ]] && export WINDOWS=1
-[ $(hostname -f) = "kube-0.conecrazy.ca" ] && export KUBE=1
-[ $(hostname -f) = "kube-1.conecrazy.ca" ] && export KUBE=1
-[ $(hostname -f) = "kube-2.conecrazy.ca" ] && export KUBE=1
+[[ $(hostname -f) = "kube-0.conecrazy.ca" ]] && export KUBE=1
+[[ $(hostname -f) = "kube-1.conecrazy.ca" ]] && export KUBE=1
+[[ $(hostname -f) = "kube-2.conecrazy.ca" ]] && export KUBE=1
 
 # locations of directories
 GITREPOS="${HOME}/git-repos"
@@ -68,23 +55,19 @@ HOSTNAME=$(hostname -s)
 WSL_HOME="/c/Users/${USER}"
 
 # setup variables based off of environment
-if [[ ${MACOS} ]]
-then
+if [[ ${MACOS} ]]; then
   VSCODE="${HOME}/Library/Application Support/Code/User"
-elif [[ ${WINDOWS} ]]
-then
+elif [[ ${WINDOWS} ]]; then
   #%APPDATA%\Code\User\ in windows parlance
   VSCODE="${WSL_HOME}/AppData/Roaming/Code/User"
 fi
 
 # Setup is run rarely as it should be run when setting up a new device or when doing a controlled change after changing items in setup
 # The following code is used to setup the base system with some base packages and the basic layout of the users home directory
-if [[ ${SETUP} || ${SETUP_USER} ]]
-then
+if [[ ${SETUP} || ${SETUP_USER} ]]; then
   # need to make sure that git is installed
   echo "Installing git"
-  if [[ ${MACOS} ]]
-  then
+  if [[ ${MACOS} ]]; then
   # Check for Homebrew,
     # Install if we don't have it
     if test ! $(quiet_which brew); then
@@ -93,8 +76,7 @@ then
     fi
     brew install git
   fi
-  if [[ ${UBUNTU} ]]
-  then
+  if [[ ${UBUNTU} ]]; then
     sudo -H apt-get update
     sudo -H apt-get install curl -y
     sudo -H apt-get install git -y
@@ -111,8 +93,7 @@ then
     sudo -H apt-get install zsh -y
     sudo -H apt-get install zsh-doc -y
   fi
-  if [[ ${REDHAT} || ${FEDORA} ]]
-  then
+  if [[ ${REDHAT} || ${FEDORA} ]]; then
     sudo -H dnf update -y
     sudo -H dnf install curl -y
     sudo -H dnf install gcc -y
@@ -128,8 +109,7 @@ then
     sudo -H dnf install wget -y
     sudo -H dnf install zsh -y
   fi
-  if [[ ${CENTOS} ]]
-  then
+  if [[ ${CENTOS} ]]; then
     sudo -H yum update -y
     sudo -H yum install curl -y
     sudo -H yum install gcc -y
@@ -147,32 +127,27 @@ then
   fi
 
   echo "Creating home bin"
-  if [[ ! -d ${HOME}/bin ]]
-  then
+  if [[ ! -d ${HOME}/bin ]]; then
     mkdir ${HOME}/bin
   fi
 
   echo "Creating home aws"
-  if [[ ! -d ${HOME}/.aws ]]
-  then
+  if [[ ! -d ${HOME}/.aws ]]; then
     mkdir ${HOME}/.aws
   fi
 
   echo "Creating ${GITREPOS}"
-  if [[ ! -d ${GITREPOS} ]]
-  then
+  if [[ ! -d ${GITREPOS} ]]; then
     mkdir ${GITREPOS}
   fi
 
   echo "Creating ${PERSONAL_GITREPOS}"
-  if [[ ! -d ${PERSONAL_GITREPOS} ]]
-  then
+  if [[ ! -d ${PERSONAL_GITREPOS} ]]; then
     mkdir ${PERSONAL_GITREPOS}
   fi
 
   echo "Copying ${DOTFILES} from Github"
-  if [[ ! -d ${PERSONAL_GITREPOS}/${DOTFILES} ]]
-  then
+  if [[ ! -d ${PERSONAL_GITREPOS}/${DOTFILES} ]]; then
     cd ${HOME}
     git clone --recursive git@github.com:brujack/${DOTFILES}.git ${PERSONAL_GITREPOS}/${DOTFILES}
     # for regular https github used on machines that will not push changes
@@ -184,43 +159,33 @@ then
 
   echo "Linking ${DOTFILES} to their home"
 
-  if [[ -f ${HOME}/.gitconfig ]]
-  then
+  if [[ -f ${HOME}/.gitconfig ]]; then
     rm ${HOME}/.gitconfig
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig ${HOME}/.gitconfig
-  elif [[ ! -L ${HOME}/.gitconfig ]]
-  then
+  elif [[ ! -L ${HOME}/.gitconfig ]]; then
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig ${HOME}/.gitconfig
   fi
-  if [[ -f ${HOME}/.vimrc ]]
-  then
+  if [[ -f ${HOME}/.vimrc ]]; then
     rm ${HOME}/.vimrc
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.vimrc ${HOME}/.vimrc
-  elif [[ ! -L ${HOME}/.vimrc ]]
-  then
+  elif [[ ! -L ${HOME}/.vimrc ]]; then
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.vimrc ${HOME}/.vimrc
   fi
 
-  if [[ -f ${HOME}/switch_terra_account.sh ]]
-  then
+  if [[ -f ${HOME}/switch_terra_account.sh ]]; then
     rm ${HOME}/switch_terra_account.sh
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/switch_terra_account.sh ${HOME}/switch_terra_account.sh
-  elif [[ ! -L ${HOME}/switch_terra_account.sh ]]
-  then
+  elif [[ ! -L ${HOME}/switch_terra_account.sh ]]; then
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/switch_terra_account.sh ${HOME}/switch_terra_account.sh
   fi
-  if [[ ${MACOS} ]]
-  then
-    if [[ -f "$VSCODE"/settings.json ]]
-    then
+  if [[ ${MACOS} ]]; then
+    if [[ -f "$VSCODE"/settings.json ]]; then
       rm "$VSCODE"/settings.json
       ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/vscode-settings.json "$VSCODE"/settings.json
     fi
   fi
-  if [[ ${WINDOWS} ]]
-  then
-    if [[ ! -e "$VSCODE"/settings.json ]]
-    then
+  if [[ ${WINDOWS} ]]; then
+    if [[ ! -e "$VSCODE"/settings.json ]]; then
       cp -a ${WSL_HOME}/git-repos/personal/${DOTFILES}/vscode-settings.json "$VSCODE"/settings.json
     else
       rm "$VSCODE"/settings.json
@@ -229,36 +194,30 @@ then
   fi
 
   echo "Installing Oh My ZSH..."
-  if [[ ! -d ${HOME}/.oh-my-zsh ]]
-  then
+  if [[ ! -d ${HOME}/.oh-my-zsh ]]; then
     sh -c "$(curl -fsSL https://raw.github.com/robbyrussell/oh-my-zsh/master/tools/install.sh)"
   fi
 
-  if [[ -f ${HOME}/.zshrc ]]
-  then
+  if [[ -f ${HOME}/.zshrc ]]; then
     rm ${HOME}/.zshrc
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.zshrc ${HOME}/.zshrc
-  elif [[ ! -L ${HOME}/.zshrc ]]
-  then
+  elif [[ ! -L ${HOME}/.zshrc ]]; then
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.zshrc ${HOME}/.zshrc
   fi
 
   echo "Linking custom bruce.zsh-theme"
-  if [[ ! -L ${HOME}/.oh-my-zsh/custom/themes/bruce.zsh-theme && -d ${HOME}/.oh-my-zsh/custom/themes ]]
-  then
+  if [[ ! -L ${HOME}/.oh-my-zsh/custom/themes/bruce.zsh-theme && -d ${HOME}/.oh-my-zsh/custom/themes ]]; then
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/bruce.zsh-theme ${HOME}/.oh-my-zsh/custom/themes/bruce.zsh-theme
   else
     rm ${HOME}/.oh-my-zsh/custom/themes/bruce.zsh-theme
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/bruce.zsh-theme ${HOME}/.oh-my-zsh/custom/themes/bruce.zsh-theme
   fi
 
-  if [[ ! -d ${HOME}/.ssh ]]
-  then
+  if [[ ! -d ${HOME}/.ssh ]]; then
     mkdir ${HOME}/.ssh
     chmod 755 ${HOME}/.ssh
   fi
-  if [[ ! -L ${HOME}/.ssh/config && -f ${HOME}/.ssh/config ]]
-  then
+  if [[ ! -L ${HOME}/.ssh/config && -f ${HOME}/.ssh/config ]]; then
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.ssh/config ${HOME}/.ssh/config
   else
     rm ${HOME}/.ssh/config
@@ -266,25 +225,20 @@ then
   fi
 
   echo "Setting ZSH as shell..."
-  if [[ ! ${SHELL} = "/bin/zsh" ]]
-  then
+  if [[ ! ${SHELL} = "/bin/zsh" ]]; then
     chsh -s /bin/zsh
   fi
 fi
 
 # full setup and installation of all packages
-if [[ ${SETUP} || ${DEVELOPER} ]]
-then
-  if [[ ${MACOS} ]]
-  then
+if [[ ${SETUP} || ${DEVELOPER} ]]; then
+  if [[ ${MACOS} ]]; then
     echo "Creating $BREWFILE_LOC"
-    if [[ ! -d ${BREWFILE_LOC} ]]
-    then
+    if [[ ! -d ${BREWFILE_LOC} ]]; then
       mkdir ${BREWFILE_LOC}
     fi
 
-    if [[ ! -L ${BREWFILE_LOC}/Brewfile ]]
-    then
+    if [[ ! -L ${BREWFILE_LOC}/Brewfile ]]; then
       ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile $BREWFILE_LOC/Brewfile
     else
       rm $BREWFILE_LOC/Brewfile
@@ -322,99 +276,75 @@ then
     cd ${PERSONAL_GITREPOS}/${DOTFILES}
 
     # the below casks and mas are not in a brewfile since they will "fail" if already installed
-    if [[ ! -d "/Applications/Alfred 3.app" ]]
-    then
+    if [[ ! -d "/Applications/Alfred 3.app" ]]; then
       brew cask install alfred
     fi
-    if [[ ! -d "/Applications/AppCleaner.app" ]]
-    then
+    if [[ ! -d "/Applications/AppCleaner.app" ]]; then
       brew cask install appcleaner
     fi
-    if [[ ! -d "/Applications/Atom.app" ]]
-    then
+    if [[ ! -d "/Applications/Atom.app" ]]; then
       brew cask install atom
     fi
-    if [[ ! -d "/Applications/DaisyDisk.app" ]]
-    then
+    if [[ ! -d "/Applications/DaisyDisk.app" ]]; then
       brew cask install daisydisk
     fi
-    if [[ ! -d "/Applications/Beyond Compare.app" ]]
-    then
+    if [[ ! -d "/Applications/Beyond Compare.app" ]]; then
       brew cask install beyond-compare
     fi
-    if [[ ! -d "/Applications/Carbon Copy Cloner.app" ]]
-    then
+    if [[ ! -d "/Applications/Carbon Copy Cloner.app" ]]; then
       brew cask install carbon-copy-cloner
     fi
-    if [[ ! -d "/Applications/DBeaver.app" ]]
-    then
+    if [[ ! -d "/Applications/DBeaver.app" ]]; then
       brew cask install dbeaver-community
     fi
-    if [[ ! ${HOSTNAME} == "server" ]]
-    then
-      if [[ ! -d "/Applications/Docker.app" ]]
-      then
+    if [[ ! ${HOSTNAME} == "server" ]]; then
+      if [[ ! -d "/Applications/Docker.app" ]]; then
         brew cask install caskroom/versions/docker-edge
       fi
     fi
-    if [[ ! -d "/Applications/Dropbox.app" ]]
-    then
+    if [[ ! -d "/Applications/Dropbox.app" ]]; then
       brew cask install dropbox
     fi
-    if [[ ! -d "/Applications/Firefox.app" ]]
-    then
+    if [[ ! -d "/Applications/Firefox.app" ]]; then
       brew cask install firefox
     fi
-    if [[ ! -d "/Applications/Funter.app" ]]
-    then
+    if [[ ! -d "/Applications/Funter.app" ]]; then
       brew cask install funter
     fi
-    if [[ ! -d "/Applications/Google Chrome.app" ]]
-    then
+    if [[ ! -d "/Applications/Google Chrome.app" ]]; then
       brew cask install google-chrome
     fi
-    if [[ ! -d "/usr/local/Caskroom/google-cloud-sdk" ]]
-    then
+    if [[ ! -d "/usr/local/Caskroom/google-cloud-sdk" ]]; then
       brew cask install google-cloud-sdk
     fi
-    if [[ ! -d "/Applications/iStat Menus.app" ]]
-    then
+    if [[ ! -d "/Applications/iStat Menus.app" ]]; then
       brew cask install istat-menus
     fi
-    if [[ ! -d "/Applications/iTerm.app" ]]
-    then
+    if [[ ! -d "/Applications/iTerm.app" ]]; then
       brew cask install iterm2
     fi
-    if [[ ! -d "/Applications/Malwarebytes.app" ]]
-    then
+    if [[ ! -d "/Applications/Malwarebytes.app" ]]; then
       brew cask install malwarebytes
     fi
-    if [[ ! -d "/Applications/MySQLWorkbench.app" ]]
-    then
+    if [[ ! -d "/Applications/MySQLWorkbench.app" ]]; then
       brew cask install mysqlworkbench
     fi
-    if [[ ! -d "/Applications/Postman.app" ]]
-    then
+    if [[ ! -d "/Applications/Postman.app" ]]; then
       brew cask install postman
     fi
-    if [[ ! -d "/Applications/SourceTree.app" ]]
-    then
+    if [[ ! -d "/Applications/SourceTree.app" ]]; then
       brew cask install sourcetree
     fi
-    if [[ ! -d "/Applications/PowerShell.app" ]]
-    then
+    if [[ ! -d "/Applications/PowerShell.app" ]]; then
       brew cask install powershell
     fi
-    if [[ ! -d "/Applications/Spotify.app" ]]
-    then
+    if [[ ! -d "/Applications/Spotify.app" ]]; then
       brew cask install spotify
     fi
-    if [[ ! -d "/Applications/TeamViewer.app" ]]
-    then
+    if [[ ! -d "/Applications/TeamViewer.app" ]]; then
       brew cask install teamviewer
     fi
-    if [[ ! -d "/Applications/Visual Studio Code.app" ]]
-    then
+    if [[ ! -d "/Applications/Visual Studio Code.app" ]]; then
       brew cask install visual-studio-code
     fi
 
@@ -425,116 +355,89 @@ then
     sudo -H softwareupdate --install --all --verbose
 
     echo "Installing common apps via mas"
-    if [[ ! -d "/Applications/1Password 7.app" ]]
-    then
+    if [[ ! -d "/Applications/1Password 7.app" ]]; then
       mas install 1333542190
     fi
-    if [[ ! -d "/Applications/Better Rename 9.app" ]]
-    then
+    if [[ ! -d "/Applications/Better Rename 9.app" ]]; then
       mas install 414209656
     fi
-    if [[ ! -d "/Applications/Blackmagic Disk Speed Test.app" ]]
-    then
+    if [[ ! -d "/Applications/Blackmagic Disk Speed Test.app" ]]; then
       mas install 425264550
     fi
-    if [[ ! -d "/Applications/Geekbench 4.app" ]]
-    then
+    if [[ ! -d "/Applications/Geekbench 4.app" ]]; then
       mas install 1175706108
     fi
-    if [[ ! -d "/Applications/Evernote.app" ]]
-    then
+    if [[ ! -d "/Applications/Evernote.app" ]]; then
       mas install 406056744
     fi
-    if [[ ! -d "/Applications/Flycut.app" ]]
-    then
+    if [[ ! -d "/Applications/Flycut.app" ]]; then
       mas install 442160987
     fi
-    if [[ ! -d "/Applications/iMovie.app" ]]
-    then
+    if [[ ! -d "/Applications/iMovie.app" ]]; then
       mas install 408981434
     fi
-    if [[ ! -d "/Applications/iNet Network Scanner.app" ]]
-    then
+    if [[ ! -d "/Applications/iNet Network Scanner.app" ]]; then
       mas install 403304796
     fi
-    if [[ ! -d "/Applications/Keynote.app" ]]
-    then
+    if [[ ! -d "/Applications/Keynote.app" ]]; then
       mas install 409183694
     fi
-    if [[ ! -d "/Applications/Mactracker.app" ]]
-    then
+    if [[ ! -d "/Applications/Mactracker.app" ]]; then
       mas install 430255202
     fi
-    if [[ ! -d "/Applications/Microsoft Remote Desktop.app" ]]
-    then
+    if [[ ! -d "/Applications/Microsoft Remote Desktop.app" ]]; then
       mas install 715768417
     fi
-    if [[ ! -d "/Applications/Numbers.app" ]]
-    then
+    if [[ ! -d "/Applications/Numbers.app" ]]; then
       mas install 409203825
     fi
-    if [[ ! -d "/Applications/Pages.app" ]]
-    then
+    if [[ ! -d "/Applications/Pages.app" ]]; then
       mas install 409201541
     fi
-    if [[ ! -d "/Applications/Pixelmator.app" ]]
-    then
+    if [[ ! -d "/Applications/Pixelmator.app" ]]; then
       mas install 407963104
     fi
-    if [[ ! -d "/Applications/Read CHM.app" ]]
-    then
+    if [[ ! -d "/Applications/Read CHM.app" ]]; then
       mas install 594432954
     fi
-    if [[ ! -d "/Applications/Remote Desktop.app" ]]
-    then
+    if [[ ! -d "/Applications/Remote Desktop.app" ]]; then
       mas install 409907375
     fi
-    if [[ ! -d "/Applications/Simplenote.app" ]]
-    then
+    if [[ ! -d "/Applications/Simplenote.app" ]]; then
       mas install 692867256
     fi
-    if [[ ! -d "/Applications/Slack.app" ]]
-    then
+    if [[ ! -d "/Applications/Slack.app" ]]; then
       mas install 803453959
     fi
-    if [[ ! -d "/Applications/Speedtest.app" ]]
-    then
+    if [[ ! -d "/Applications/Speedtest.app" ]]; then
       mas install 1153157709
     fi
-    if [[ ! -d "/Applications/SQLPro for Postgres.app" ]]
-    then
+    if [[ ! -d "/Applications/SQLPro for Postgres.app" ]]; then
       mas install 1025345625
     fi
-    if [[ ! -d "/Applications/The Unarchiver.app" ]]
-    then
+    if [[ ! -d "/Applications/The Unarchiver.app" ]]; then
       mas install 425424353
     fi
-    if [[ ! -d "/Applications/Transmit.app" ]]
-    then
+    if [[ ! -d "/Applications/Transmit.app" ]]; then
       mas install 403388562
     fi
-    if [[ ! -d "/Applications/Telegram.app" ]]
-    then
+    if [[ ! -d "/Applications/Telegram.app" ]]; then
       mas install 747648890
     fi
-    if [[ ! -d "/Applications/Valentina Studio.app" ]]
-    then
+    if [[ ! -d "/Applications/Valentina Studio.app" ]]; then
       mas install 604825918
     fi
 
     echo "Installing server apps via mas"
     # 883878097 Server
-    if [[ ${HOSTNAME} == "mac" ]] || [[ ${HOSTNAME} == "server" ]]
-    then
-      if [[ ! -d "/Applications/Server.app" ]]
-      then
+    if [[ ${HOSTNAME} == "mac" ]] || [[ ${HOSTNAME} == "server" ]]; then
+      if [[ ! -d "/Applications/Server.app" ]]; then
         mas install 883878097
       fi
     fi
   fi
 
-  if [ ${UBUNTU} ]
-  then
+  if [[ ${UBUNTU} ]]; then
     sudo -H apt-get update
     sudo -H apt-get install git -y
     sudo -H apt-get install gcc -y
@@ -551,8 +454,7 @@ then
     sudo apt-get update
     sudo apt-get install golang-1.12-go -y
     # on KUBE systems:
-    if [ ${KUBE} ]
-    then
+    if [[ ${KUBE} ]]; then
       # install for bonded links
       sudo -H apt-get install ifenslave bridge-utils -y
       # for docker setup for rancher kubernetes setup
@@ -573,26 +475,21 @@ then
   fi
 fi
 
-if [[ ${DEVELOPER} || ${ANSIBLE} ]]
-then
+if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
   echo "ANSIBLE setup"
-
   echo "Installing virtualenv for python"
   pip3 install virtualenv virtualenvwrapper
 
   # setup virtualenv for python if virtualenv there
-  if ! [ -d ${HOME}/.virtualenvs ]
-  then
+  if ! [[ -d ${HOME}/.virtualenvs ]]; then
     mkdir ${HOME}/.virtualenvs
   fi
 
   cd ${HOME}/.virtualenvs
   source /usr/local/bin/virtualenvwrapper.sh
 
-  if ! [[ -d ${HOME}/.virtualenvs/ansible ]]
-  then
-    if [[ -f /usr/local/bin/virtualenv ]]
-    then
+  if ! [[ -d ${HOME}/.virtualenvs/ansible ]]; then
+    if [[ -f /usr/local/bin/virtualenv ]]; then
       mkvirtualenv ansible -p python3
       echo "Installing ansible via pip"
       pip3 install ansible ansible-cmdb
@@ -607,21 +504,17 @@ then
 
   # override boto provided endpoints with a more correct version that has all of the regions
   # you can get the newest version from:  https://github.com/aws/aws-sdk-net/blob/master/sdk/src/Core/endpoints.json
-  if [[ -f ${HOME}/.virtualenvs/ansible/lib/python3.6/site-packages/boto/endpoints.json ]]
-  then
+  if [[ -f ${HOME}/.virtualenvs/ansible/lib/python3.6/site-packages/boto/endpoints.json ]]; then
     rm ${HOME}/.virtualenvs/ansible/lib/python3.6/site-packages/boto/endpoints.json
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/endpoints.json ${HOME}/.virtualenvs/ansible/lib/python3.6/site-packages/boto/endpoints.json
-  elif [[ ! -L ${HOME}/.virtualenvs/ansible/lib/python3.6/site-packages/boto/endpoints.json ]]
-  then
+  elif [[ ! -L ${HOME}/.virtualenvs/ansible/lib/python3.6/site-packages/boto/endpoints.json ]]; then
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/endpoints.json ${HOME}/.virtualenvs/ansible/lib/python3.6/site-packages/boto/endpoints.json
   fi
 
-  if [[ -f ${HOME}/.virtualenvs/ansible/lib/python3.7/site-packages/boto/endpoints.json ]]
-  then
+  if [[ -f ${HOME}/.virtualenvs/ansible/lib/python3.7/site-packages/boto/endpoints.json ]]; then
     rm ${HOME}/.virtualenvs/ansible/lib/python3.7/site-packages/boto/endpoints.json
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/endpoints.json ${HOME}/.virtualenvs/ansible/lib/python3.7/site-packages/boto/endpoints.json
-  elif [[ ! -L ${HOME}/.virtualenvs/ansible/lib/python3.7/site-packages/boto/endpoints.json ]]
-  then
+  elif [[ ! -L ${HOME}/.virtualenvs/ansible/lib/python3.7/site-packages/boto/endpoints.json ]]; then
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/endpoints.json ${HOME}/.virtualenvs/ansible/lib/python3.7/site-packages/boto/endpoints.json
   fi
 
@@ -629,8 +522,7 @@ then
   npm install json2yaml
 
   echo "setup ruby 2.6.3"
-  if [[ ! -d ${HOME}/.rubies/ruby-2.6.3/bin ]]
-  then
+  if [[ ! -d ${HOME}/.rubies/ruby-2.6.3/bin ]]; then
     ruby-install ruby 2.6.3
   fi
 
@@ -647,10 +539,8 @@ then
 fi
 
 # update is run more often to keep the device up to date with patches
-if [[ ${UPDATE} ]]
-then
-  if [[ ${MACOS} ]]
-  then
+if [[ ${UPDATE} ]]; then
+  if [[ ${MACOS} ]]; then
     echo "Updating homebrew..."
     brew update
     echo "Upgrading brew's"
@@ -662,24 +552,19 @@ then
     echo "Updating app store apps softwareupdate"
     sudo -H softwareupdate --install --all --verbose
   fi
-  if [[ ${UBUNTU} ]]
-  then
+  if [[ ${UBUNTU} ]]; then
     sudo -H apt-get update
     sudo -H apt-get dist-upgrade -y
     sudo -H apt-get autoremove -y
   fi
-  if [[ ${REDHAT} || ${FEDORA} ]]
-  then
+  if [[ ${REDHAT} || ${FEDORA} ]]; then
     sudo -H dnf update -y
   fi
-  if [[ ${CENTOS} ]]
-  then
+  if [[ ${CENTOS} ]]; then
     sudo -H yum update -y
   fi
-  if [[ ${WINDOWS} ]]
-  then
-    if [[ ! -e "$VSCODE"/settings.json ]]
-    then
+  if [[ ${WINDOWS} ]]; then
+    if [[ ! -e "$VSCODE"/settings.json ]]; then
       cp -a ${WSL_HOME}/git-repos/personal/${DOTFILES}/vscode-settings.json "$VSCODE"/settings.json
     else
       rm "$VSCODE"/settings.json
