@@ -173,7 +173,7 @@ export ANSIBLEUSER="ubuntu"
 # Example aliases
 # alias zshconfig="mate ~/.zshrc"
 # alias ohmyzsh="mate ~/.oh-my-zsh"
-alias home='ssh bruce@conecrazy.ca'
+alias home='ssh bruce@home.conecrazy.ca'
 alias mac='ssh bruce@mac'
 alias server='ssh bruce@server'
 alias ratna='ssh bruce@ratna'
@@ -207,8 +207,8 @@ alias aa='sudo apt-get autoremove -y'
 alias dot='cd ~/git-repos/personal/dotfiles && git pl && source ~/.zshrc'
 alias oh='cd ~/.oh-my-zsh && git pl'
 
-if quiet_which exa
 # alias for ls to exa removed due to breaking globbing for ansible aws integration
+if quiet_which exa
 then
   alias gs="exa -lg --git"
   alias ls="ls -l"
