@@ -385,7 +385,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/Mactracker.app" ]]; then
       mas install 430255202
     fi
-    if [[ ! -d "/Applications/Markoff.app"]]; then
+    if [[ ! -d "/Applications/Markoff.app" ]]; then
       mas install 1084713122
     fi
     if [[ ! -d "/Applications/Microsoft Remote Desktop.app" ]]; then
