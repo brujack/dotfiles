@@ -31,6 +31,6 @@
         "baseUrlSuffix": "atlassian.net"
     },
     "yaml.schemas": {
-        "file:///Users/bjackson/.vscode/extensions/atlassian.atlascode-1.2.2/resources/schemas/pipelines-schema.json": "bitbucket-pipelines.yml"
+        "file:///${HOME}/.vscode/extensions/atlassian.atlascode-1.2.3/resources/schemas/pipelines-schema.json": "bitbucket-pipelines.yml"
     }
 }
