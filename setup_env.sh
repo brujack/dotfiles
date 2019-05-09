@@ -299,7 +299,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     fi
     if [[ ! ${HOSTNAME} == "server" ]]; then
       if [[ ! -d "/Applications/Docker.app" ]]; then
-        brew cask install caskroom/versions/docker-edge
+        brew cask install caskroom/versions/docker
       fi
     fi
     if [[ ! -d "/Applications/Dropbox.app" ]]; then
