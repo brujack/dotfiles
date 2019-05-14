@@ -189,23 +189,15 @@ alias us-pro='ssh bruce@us-pro'
 alias nano-hd='ssh bruce@nano-hd'
 alias mesh='ssh bruce@mesh'
 # aliases for work servers
-alias work='ssh bjackson@172.16.2.25'
-alias vader='ssh bjackson@vader.leo.obj'
-alias yoda='ssh bjackson@yoda.leo.obj'
-alias kube-00='ssh bjackson@kube-0.leo.obj'
-alias kube-10='ssh bjackson@kube-1.leo.obj'
-alias kube-20='ssh bjackson@kube-2.leo.obj'
-alias ns0='ssh bjackson@ns0.lab.leo.obj'
-alias ns1='ssh bjackson@ns1.lab.leo.obj'
-alias deploy-1='ssh bjackson@deploy-1.leo.obj'
-alias deploy-2='ssh bjackson@deploy-2.leo.obj'
 
-# command aliasesssh
+# command aliases
 alias au='sudo apt-get update'
 alias ad='sudo apt-get dist-upgrade -y'
 alias aa='sudo apt-get autoremove -y'
 alias dot='cd ~/git-repos/personal/dotfiles && git pl && source ~/.zshrc'
 alias oh='cd ~/.oh-my-zsh && git pl'
+alias tp='terraform plan -out terraform-plan'
+alias ta='terraform apply "terraform-plan"'
 
 # alias for ls to exa removed due to breaking globbing for ansible aws integration
 if quiet_which exa
@@ -287,6 +279,13 @@ function options() {
         echo "\n\nPlugin: $plugin"; grep -r "^function \w*" $PLUGIN_PATH$plugin | awk '{print $2}' | sed 's/()//'| tr '\n' ', '; grep -r "^alias" $PLUGIN_PATH$plugin | awk '{print $2}' | sed 's/=.*//' |  tr '\n' ', '
     done
 }
+
+# for gcloud command completion
+if [[ ${MACOS} ]]; then
+  if [[ -d /usr/local/Caskroom/google-cloud-sdk ]]; then
+    source '/usr/local/Caskroom/google-cloud-sdk/latest/google-cloud-sdk/completion.zsh.inc'
+  fi
+fi
 
 if [[ ${WINDOWS} ]]; then
   export DOCKER_HOST=tcp://0.0.0.0:2375
