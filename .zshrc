@@ -13,7 +13,7 @@ fi
 [[ $(uname -r) =~ Microsoft$ ]] && export WINDOWS=1
 
 [[ $(hostname -s) = "ratna" ]] && export RATNA=1
-[[ $(hostname -s) = "bjackson" ]] && export BJACKSON=1
+[[ $(hostname -s) = "bjackson-work" ]] && export BJACKSON=1
 [[ $(hostname -s) = "laptop" ]] && export LAPTOP=1
 
 # setup some variables for virtualenv
@@ -21,10 +21,7 @@ export WORKON_HOME=${HOME}/.virtualenvs
 export PROJECT_HOME=${HOME}./virtualenvs
 if [[ ${MACOS} ]]; then
   VIRTUALENVWRAPPER_SCRIPT=/usr/local/bin/virtualenvwrapper.sh
-  if [[ ${RATNA} || ${LAPTOP} ]]; then
-    VIRTUALENVWRAPPER_PYTHON=/usr/bin/python
-  fi
-  if [[ ${BJACKSON} ]]; then
+  if [[ ${RATNA} || ${LAPTOP} || ${BJACKSON} ]]; then
     VIRTUALENVWRAPPER_PYTHON=/usr/local/bin/python3
   fi
 fi
@@ -214,7 +211,7 @@ fi
 if [[ ${MACOS} ]]; then
   source /usr/local/opt/chruby/share/chruby/chruby.sh
   source /usr/local/opt/chruby/share/chruby/auto.sh
-  chruby ruby-2.3.5
+  chruby ruby-2.6.3
 fi
 
 # zsh options
