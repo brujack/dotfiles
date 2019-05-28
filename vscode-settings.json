@@ -27,10 +27,4 @@
     "team.showWelcomeMessage": false,
     "editor.suggestSelection": "first",
     "vsintellicode.modify.editor.suggestSelection": "automaticallyOverrodeDefaultValue",
-    "atlascode.jira.workingSite": {
-        "baseUrlSuffix": "atlassian.net"
-    },
-    "yaml.schemas": {
-        "file:///${HOME}/.vscode/extensions/atlassian.atlascode-1.2.3/resources/schemas/pipelines-schema.json": "bitbucket-pipelines.yml"
-    }
 }
