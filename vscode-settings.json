@@ -27,4 +27,5 @@
     "team.showWelcomeMessage": false,
     "editor.suggestSelection": "first",
     "vsintellicode.modify.editor.suggestSelection": "automaticallyOverrodeDefaultValue",
+    "terraform.indexing.enable": "true"
 }
