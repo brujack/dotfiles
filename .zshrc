@@ -195,7 +195,8 @@ alias dot='cd ~/git-repos/personal/dotfiles && git pl && source ~/.zshrc'
 alias oh='cd ~/.oh-my-zsh && git pl'
 alias tp='terraform plan -out terraform-plan'
 alias ta='terraform apply "terraform-plan"'
-alias ti='terraform init --upgrade'
+alias tiu='terraform init --upgrade'
+alias ti='terraform init'
 alias td='terraform destroy'
 
 # alias for ls to exa removed due to breaking globbing for ansible aws integration
