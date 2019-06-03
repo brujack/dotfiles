@@ -197,7 +197,7 @@ alias tp='terraform plan -out terraform-plan'
 alias ta='terraform apply "terraform-plan"'
 alias tiu='terraform init --upgrade'
 alias ti='terraform init'
-alias td='terraform destroy'
+alias tv='terraform validate'
 
 # alias for ls to exa removed due to breaking globbing for ansible aws integration
 if quiet_which exa
