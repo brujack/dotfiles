@@ -66,64 +66,33 @@ fi
 # The following code is used to setup the base system with some base packages and the basic layout of the users home directory
 if [[ ${SETUP} || ${SETUP_USER} ]]; then
   # need to make sure that git is installed
-  echo "Installing git"
-  if [[ ${MACOS} ]]; then
-  # Check for Homebrew,
-    # Install if we don't have it
-    if test $(quiet_which brew); then
-      echo "Installing homebrew..."
-      ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
+  if test $(quiet_which git); then
+    echo "Installing git"
+    if [[ ${MACOS} ]]; then
+      # Check for Homebrew,
+      # Install if we don't have it
+      if test $(quiet_which brew); then
+        echo "Installing homebrew..."
+        ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
+      fi
+      brew install git
     fi
-    brew install git
-  fi
-  if [[ ${UBUNTU} ]]; then
-    sudo -H apt-get update
-    sudo -H apt-get install curl -y
-    sudo -H apt-get install git -y
-    sudo -H apt-get install gcc -y
-    sudo -H apt-get install htop -y
-    sudo -H apt-get install iotop -y
-    sudo -H apt-get install keychain -y
-    sudo -H apt-get install make -y
-    sudo -H apt-get install python-setuptools -y
-    sudo -H apt-get install python3-setuptools -y
-    sudo -H apt-get install silversearcher-ag -y
-    sudo -H apt-get install unzip -y
-    sudo -H apt-get install wget -y
-    sudo -H apt-get install zsh -y
-    sudo -H apt-get install zsh-doc -y
-  fi
-  if [[ ${REDHAT} || ${FEDORA} ]]; then
-    sudo -H dnf update -y
-    sudo -H dnf install curl -y
-    sudo -H dnf install gcc -y
-    sudo -H dnf install git -y
-    sudo -H dnf install htop -y
-    sudo -H dnf install iotop -y
-    sudo -H dnf install keychain -y
-    sudo -H dnf install make -y
-    sudo -H dnf install python-setuptools -y
-    sudo -H dnf install python3-setuptools -y
-    sudo -H dnf install the_silver_searcher -y
-    sudo -H dnf install unzip -y
-    sudo -H dnf install wget -y
-    sudo -H dnf install zsh -y
-  fi
-  if [[ ${CENTOS} ]]; then
-    sudo -H yum update -y
-    sudo -H yum install curl -y
-    sudo -H yum install gcc -y
-    sudo -H yum install git -y
-    sudo -H yum install htop -y
-    sudo -H yum install iotop -y
-    sudo -H yum install keychain -y
-    sudo -H yum install make -y
-    sudo -H yum install python-setuptools -y
-    sudo -H yum install python3-setuptools -y
-    sudo -H yum install the_silver_searcher -y
-    sudo -H yum install unzip -y
-    sudo -H yum install wget -y
-    sudo -H yum install zsh -y
+    if [[ ${UBUNTU} ]]; then
+      sudo -H apt-get update
+      sudo -H apt-get install git -y
+      sudo -H apt-get install zsh -y
+      sudo -H apt-get install zsh-doc -y
+    fi
+    if [[ ${REDHAT} || ${FEDORA} ]]; then
+      sudo -H dnf update -y
+      sudo -H dnf install git -y
+      sudo -H dnf install zsh -y
+    fi
+    if [[ ${CENTOS} ]]; then
+      sudo -H yum update -y
+      sudo -H yum install git -y
+      sudo -H yum install zsh -y
+    fi
   fi
 
   echo "Creating home bin"
@@ -442,6 +411,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
 
   if [[ ${UBUNTU} ]]; then
     sudo -H apt-get update
+    sudo -H apt-get install curl -y
     sudo -H apt-get install git -y
     sudo -H apt-get install gcc -y
     sudo -H apt-get install htop -y
@@ -449,10 +419,14 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt-get install keychain -y
     sudo -H apt-get install make -y
     sudo -H apt-get install python-setuptools -y
+    sudo -H apt-get install python3-setuptools -y
     sudo -H apt-get install silversearcher-ag -y
+    sudo -H apt-get install unzip -y
+    sudo -H apt-get install wget -y
     sudo -H apt-get install zsh -y
     sudo -H apt-get install zsh-doc -y
-      # install go 1.12
+
+    # install go 1.12
     sudo add-apt-repository ppa:longsleep/golang-backports -y
     sudo apt-get update
     sudo apt-get install golang-1.12-go -y
@@ -475,6 +449,38 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo -H apt-get install docker-ce-cli -y
     fi
     sudo -H apt-get autoremove -y
+  fi
+  if [[ ${REDHAT} || ${FEDORA} ]]; then
+    sudo -H dnf update -y
+    sudo -H dnf install curl -y
+    sudo -H dnf install gcc -y
+    sudo -H dnf install git -y
+    sudo -H dnf install htop -y
+    sudo -H dnf install iotop -y
+    sudo -H dnf install keychain -y
+    sudo -H dnf install make -y
+    sudo -H dnf install python-setuptools -y
+    sudo -H dnf install python3-setuptools -y
+    sudo -H dnf install the_silver_searcher -y
+    sudo -H dnf install unzip -y
+    sudo -H dnf install wget -y
+    sudo -H dnf install zsh -y
+  fi
+  if [[ ${CENTOS} ]]; then
+    sudo -H yum update -y
+    sudo -H yum install curl -y
+    sudo -H yum install gcc -y
+    sudo -H yum install git -y
+    sudo -H yum install htop -y
+    sudo -H yum install iotop -y
+    sudo -H yum install keychain -y
+    sudo -H yum install make -y
+    sudo -H yum install python-setuptools -y
+    sudo -H yum install python3-setuptools -y
+    sudo -H yum install the_silver_searcher -y
+    sudo -H yum install unzip -y
+    sudo -H yum install wget -y
+    sudo -H yum install zsh -y
   fi
 fi
 
