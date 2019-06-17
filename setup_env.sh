@@ -214,14 +214,6 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile $BREWFILE_LOC/Brewfile
     fi
 
-    # Xcode mas id 497799835
-    # needed early in order to install other stuff
-    echo "Installing xcode-stuff"
-    mas install 497799835
-    xcode-select --install
-    # Accept Xcode license
-    sudo xcodebuild -license accept
-
     # Check for Homebrew,
     # Install if we don't have it
     if test $(quiet_which brew); then
@@ -399,6 +391,13 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/Valentina Studio.app" ]]; then
       mas install 604825918
     fi
+    echo "Installing xcode-stuff"
+    if [[ ! -d "/Applications/Xcode.app"]]; then
+      mas install 497799835
+    fi
+    xcode-select --install
+    # Accept Xcode license
+    sudo xcodebuild -license accept
 
     echo "Installing server apps via mas"
     # 883878097 Server
