@@ -260,7 +260,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     fi
     if [[ ! ${HOSTNAME} == "server" ]]; then
       if [[ ! -d "/Applications/Docker.app" ]]; then
-        brew cask install caskroom/versions/docker
+        brew cask install docker
       fi
     fi
     if [[ ! -d "/Applications/Dropbox.app" ]]; then
