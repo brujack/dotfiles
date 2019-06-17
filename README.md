@@ -16,3 +16,5 @@ setup: runs a full machine and developer setup
 developer: runs a developer setup with packages and python virtual environment for running ansible
 ansible: just runs the ansible setup using a python virtual environment.  Typically used after a python update. To run, "rm ~/.virtualenvs/ansible && ./setup_env.sh -t ansible"
 update: does a system update of packages including brew packages
+
+After changing to zsh, you will need to do another './setup_env.sh -t setup' if that is what you wanted, since by changing shells, you will lose the original shell process and need to start over again.
