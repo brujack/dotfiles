@@ -16,7 +16,7 @@ brew "go"
 brew "gpg"
 brew "htop"
 brew "icu4c"
-brew "imagemagick", args: ['--with-ghostscript']
+brew "imagemagick", args: ['with-ghostscript']
 brew "jpeg"
 brew "jq"
 brew "keychain"

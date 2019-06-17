@@ -2,13 +2,13 @@
 	excludesfile = /Users/bjackson/.gitignore_global
 [difftool "sourcetree"]
 	cmd = opendiff \"$LOCAL\" \"$REMOTE\"
-	path = 
+	path =
 [mergetool "sourcetree"]
 	cmd = /Applications/Sourcetree.app/Contents/Resources/opendiff-w.sh \"$LOCAL\" \"$REMOTE\" -ancestor \"$BASE\" -merge \"$MERGED\"
 	trustExitCode = true
 [user]
 	name = Bruce Jackson
-	email = bjackson@leonovus.com
+	email = bjackson@pobox.com
 [commit]
 	template = /Users/bruce/.stCommitMsg
 [alias]
