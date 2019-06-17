@@ -70,7 +70,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
   if [[ ${MACOS} ]]; then
   # Check for Homebrew,
     # Install if we don't have it
-    if test ! $(quiet_which brew); then
+    if test $(quiet_which brew); then
       echo "Installing homebrew..."
       ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
     fi
@@ -255,7 +255,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
 
     # Check for Homebrew,
     # Install if we don't have it
-    if test ! $(quiet_which brew); then
+    if test $(quiet_which brew); then
       echo "Installing homebrew..."
       ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
     fi
