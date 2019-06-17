@@ -392,7 +392,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       mas install 604825918
     fi
     echo "Installing xcode-stuff"
-    if [[ ! -d "/Applications/Xcode.app"]]; then
+    if [[ ! -d "/Applications/Xcode.app" ]]; then
       mas install 497799835
     fi
     xcode-select --install
