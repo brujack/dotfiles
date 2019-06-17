@@ -215,7 +215,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
 
   if [[ ! -d ${HOME}/.ssh ]]; then
     mkdir ${HOME}/.ssh
-    chmod 755 ${HOME}/.ssh
+    chmod 700 ${HOME}/.ssh
   fi
   if [[ ! -L ${HOME}/.ssh/config && -f ${HOME}/.ssh/config ]]; then
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.ssh/config ${HOME}/.ssh/config
