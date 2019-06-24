@@ -301,4 +301,7 @@ if [[ ${MACOS} || ${LINUX} ]]; then
   if [[ -f /usr/local/bin/consul ]]; then
     complete -o nospace -C /usr/local/bin/consul consul
   fi
+  if [[ -f /usr/local/bin/nomad ]]; then
+    complete -o nospace -C /usr/local/bin/nomad nomad
+  fi
 fi
