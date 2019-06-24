@@ -291,3 +291,14 @@ fi
 if [[ ${WINDOWS} ]]; then
   export DOCKER_HOST=tcp://0.0.0.0:2375
 fi
+
+# for hashicorp vault and consul cli autocompletion
+if [[ ${MACOS} ]]; then
+  autoload -U +X bashcompinit && bashcompinit
+  if [[ -f /usr/local/bin/vault ]]; then
+    complete -o nospace -C /usr/local/bin/vault vault
+  fi
+  if [[ -f /usr/local/bin/consul ]]; then
+    complete -o nospace -C /usr/local/bin/consul consul
+  fi
+fi
