@@ -293,7 +293,7 @@ if [[ ${WINDOWS} ]]; then
 fi
 
 # for hashicorp vault and consul cli autocompletion
-if [[ ${MACOS} ]]; then
+if [[ ${MACOS} || ${LINUX} ]]; then
   autoload -U +X bashcompinit && bashcompinit
   if [[ -f /usr/local/bin/vault ]]; then
     complete -o nospace -C /usr/local/bin/vault vault
