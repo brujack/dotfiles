@@ -16,7 +16,7 @@ usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 0; }
 # update: does a system update of packages including brew packages
 while getopts ":ht:" arg; do
   case $arg in
-    t) # Specify t of either 'setup_user', 'setup', 'developer' or 'update'.
+    t) # Specify t of either 'setup_user', 'setup', 'developer' 'ansible' or 'update'.
       [[ ${OPTARG} = "setup_user" ]] && export SETUP_USER=1
       [[ ${OPTARG} = "setup" ]] && export SETUP=1
       [[ ${OPTARG} = "developer" ]] && export DEVELOPER=1
