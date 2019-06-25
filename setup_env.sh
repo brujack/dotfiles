@@ -95,6 +95,32 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     fi
   fi
 
+  if test $(quiet_which zsh); then
+    echo "Installing zsh"
+    if [[ ${MACOS} ]]; then
+      # Check for Homebrew,
+      # Install if we don't have it
+      if test $(quiet_which brew); then
+        echo "Installing homebrew..."
+        ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
+      fi
+      brew install zsh
+    fi
+    if [[ ${UBUNTU} ]]; then
+      sudo -H apt-get update
+      sudo -H apt-get install zsh -y
+      sudo -H apt-get install zsh-doc -y
+    fi
+    if [[ ${REDHAT} || ${FEDORA} ]]; then
+      sudo -H dnf update -y
+      sudo -H dnf install zsh -y
+    fi
+    if [[ ${CENTOS} ]]; then
+      sudo -H yum update -y
+      sudo -H yum install zsh -y
+    fi
+  fi
+
   echo "Creating home bin"
   if [[ ! -d ${HOME}/bin ]]; then
     mkdir ${HOME}/bin
@@ -155,10 +181,10 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
   fi
   if [[ ${WINDOWS} ]]; then
     if [[ ! -e "$VSCODE"/settings.json ]]; then
-      cp -a ${WSL_HOME}/git-repos/personal/${DOTFILES}/vscode-settings.json "$VSCODE"/settings.json
+      cp -a ${HOME}/git-repos/personal/${DOTFILES}/vscode-settings.json "$VSCODE"/settings.json
     else
       rm "$VSCODE"/settings.json
-      cp -a ${WSL_HOME}/git-repos/personal/${DOTFILES}/vscode-settings.json "$VSCODE"/settings.json
+      cp -a ${HOME}/git-repos/personal/${DOTFILES}/vscode-settings.json "$VSCODE"/settings.json
     fi
   fi
 
@@ -573,10 +599,10 @@ if [[ ${UPDATE} ]]; then
   fi
   if [[ ${WINDOWS} ]]; then
     if [[ ! -e "$VSCODE"/settings.json ]]; then
-      cp -a ${WSL_HOME}/git-repos/personal/${DOTFILES}/vscode-settings.json "$VSCODE"/settings.json
+      cp -a ${HOME}/git-repos/personal/${DOTFILES}/vscode-settings.json "$VSCODE"/settings.json
     else
       rm "$VSCODE"/settings.json
-      cp -a ${WSL_HOME}/git-repos/personal/${DOTFILES}/vscode-settings.json "$VSCODE"/settings.json
+      cp -a ${HOME}/git-repos/personal/${DOTFILES}/vscode-settings.json "$VSCODE"/settings.json
     fi
   fi
 fi
