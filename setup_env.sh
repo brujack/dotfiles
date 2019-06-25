@@ -94,7 +94,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
       sudo -H yum install zsh -y
     fi
   fi
-
+  echo "test for zsh"
   if test $(quiet_which zsh); then
     echo "Installing zsh"
     if [[ ${MACOS} ]]; then
