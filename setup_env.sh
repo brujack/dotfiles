@@ -52,7 +52,7 @@ PERSONAL_GITREPOS="${GITREPOS}/personal"
 DOTFILES="dotfiles"
 BREWFILE_LOC="${HOME}/brew"
 HOSTNAME=$(hostname -s)
-WSL_HOME="/c/Users/${USER}"
+WSL_HOME="/mnt/c/Users/${USER}"
 
 # setup variables based off of environment
 if [[ ${MACOS} ]]; then
