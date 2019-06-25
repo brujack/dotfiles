@@ -66,13 +66,12 @@ fi
 # The following code is used to setup the base system with some base packages and the basic layout of the users home directory
 if [[ ${SETUP} || ${SETUP_USER} ]]; then
   # need to make sure that git is installed
-  which git
-  if [ $? -eq 0 ]; then
+  if ! [ -x "$(command -v git)" ]; then
     echo "Installing git"
     if [[ ${MACOS} ]]; then
       # Check for Homebrew,
       # Install if we don't have it
-      if test $(quiet_which brew); then
+      if ! [ -x "$(command -v brew)" ]; then
         echo "Installing homebrew..."
         ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
       fi
@@ -96,13 +95,12 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     fi
   fi
   echo "test for zsh"
-  which zsh
-  if [ $? -eq 0 ]; then
+  if ! [ -x "$(command -v zsh)" ]; then
     echo "Installing zsh"
     if [[ ${MACOS} ]]; then
       # Check for Homebrew,
       # Install if we don't have it
-      if test $(quiet_which brew); then
+      if ! [ -x "$(command -v brew)" ]; then
         echo "Installing homebrew..."
         ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
       fi
@@ -244,7 +242,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
 
     # Check for Homebrew,
     # Install if we don't have it
-    if test $(quiet_which brew); then
+    if ! [ -x "$(command -v brew)" ]; then
       echo "Installing homebrew..."
       ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
     fi
