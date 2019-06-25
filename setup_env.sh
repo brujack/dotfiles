@@ -66,7 +66,7 @@ fi
 # The following code is used to setup the base system with some base packages and the basic layout of the users home directory
 if [[ ${SETUP} || ${SETUP_USER} ]]; then
   # need to make sure that git is installed
-  quiet_which git
+  which git
   if [ $? -eq 0 ]; then
     echo "Installing git"
     if [[ ${MACOS} ]]; then
@@ -96,7 +96,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     fi
   fi
   echo "test for zsh"
-  quiet_which zsh
+  which zsh
   if [ $? -eq 0 ]; then
     echo "Installing zsh"
     if [[ ${MACOS} ]]; then
