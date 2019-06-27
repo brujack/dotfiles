@@ -54,7 +54,7 @@ brew "terraform"
 brew "terraform_landscape"
 brew "the_silver_searcher"
 brew "tree"
-brew "vault"
+brew "vault", args: ["--with-ui"]
 brew "vim"
 brew "wget"
 brew "xz"
