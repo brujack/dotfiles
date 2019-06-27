@@ -310,6 +310,9 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/iTerm.app" ]]; then
       brew cask install iterm2
     fi
+    if [[ ! -d "/Applications/MacDown.app" ]]; then
+      brew cask install macdown
+    fi
     if [[ ! -d "/Applications/Malwarebytes.app" ]]; then
       brew cask install malwarebytes
     fi
