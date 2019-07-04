@@ -305,3 +305,10 @@ if [[ ${MACOS} || ${LINUX} ]]; then
     complete -o nospace -C /usr/local/bin/nomad nomad
   fi
 fi
+
+# for ibmcloud command completion
+if [[ ${MACOS} ]]; then
+  if [[ -d /usr/local/ibmcloud/autocomplete/zsh_autocomplete ]]; then
+    source '/usr/local/ibmcloud/autocomplete/zsh_autocomplete'
+  fi
+fi
