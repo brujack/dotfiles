@@ -94,7 +94,7 @@ export HISTIGNORE="ls:cd:cd -:pwd:exit:date:* --help";
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
 if [[ ${MACOS} ]]; then
-  plugins=(ansible aws brew docker git git-prompt helm kubectl osx terraform vscode)
+  plugins=(ansible python aws brew docker git git-prompt helm kubectl osx terraform vscode)
 fi
 if [[ ${UBUNTU} ]]; then
   plugins=(aws git git-prompt docker helm kubectl ubuntu terraform vscode)
