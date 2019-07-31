@@ -1,3 +1,6 @@
+# First you would need to have run windows_boxstarter.ps1 to install boxstarter
+# Second you can run this script using a boxstarter shell
+
 
 # set windows options
 Set-WindowsExplorerOptions -EnableShowHiddenFilesFoldersDrives -EnableShowProtectedOSFiles -EnableShowFileExtensions -EnableShowFullPathInTitleBar
