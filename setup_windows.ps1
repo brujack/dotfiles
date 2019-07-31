@@ -58,15 +58,30 @@ Set-ExecutionPolicy Unrestricted -Scope CurrentUser
 
 # install packages with chocolatey
 cinst -y 1password
+cinst -y atom
+cinst -y awscli
+cinst -y azure-cli
+cinst -y beyond-compare
+cinst -y dbeaver
 cinst -y docker-desktop
 cinst -y dropbox
 cinst -y evernote
+cinst -y firefox
+cinst -y gcloudsdk
 cinst -y git
 cinst -y googlechrome
 cinst -y hyper
+cinst -y kubernetes-cli
+cinst -y kubernetes-helm
+cinst -y postman
 cinst -y putty.install
 cinst -y puttygen
+cinst -y python3
 cinst -y sourcetree
+cinst -y spotify
+cinst -y teamviewer
+cinst -y terraform
+cinst -y typora
 cinst -y vscode
 cinst -y winscp
 cinst -y wox
