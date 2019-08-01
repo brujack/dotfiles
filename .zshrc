@@ -13,7 +13,6 @@ fi
 [[ $(uname -r) =~ Microsoft$ ]] && export WINDOWS=1
 
 [[ $(hostname -s) = "ratna" ]] && export RATNA=1
-[[ $(hostname -s) = "bjackson-work" ]] && export BJACKSON=1
 [[ $(hostname -s) = "laptop" ]] && export LAPTOP=1
 
 # setup some variables for virtualenv
@@ -21,13 +20,15 @@ export WORKON_HOME=${HOME}/.virtualenvs
 export PROJECT_HOME=${HOME}./virtualenvs
 if [[ ${MACOS} ]]; then
   VIRTUALENVWRAPPER_SCRIPT=/usr/local/bin/virtualenvwrapper.sh
-  if [[ ${RATNA} || ${LAPTOP} || ${BJACKSON} ]]; then
+  if [[ ${RATNA} || ${LAPTOP} ]]; then
     VIRTUALENVWRAPPER_PYTHON=/usr/local/bin/python3
+    CHRUBY_LOC="/usr/local/opt/chruby/share"
   fi
 fi
 if [[ ${LINUX} ]]; then
   VIRTUALENVWRAPPER_SCRIPT=${HOME}/.local/bin/virtualenvwrapper.sh
   VIRTUALENVWRAPPER_PYTHON=/usr/bin/python3
+  CHRUBY_LOC="/usr/local/share"
 fi
 
 # setup some functions
@@ -211,16 +212,9 @@ else
 fi
 
 # for chruby setup
-if [[ -d /usr/local/opt/chruby ]]; then
-  source /usr/local/opt/chruby/share/chruby/chruby.sh
-  source /usr/local/opt/chruby/share/chruby/auto.sh
-  chruby ruby-2.6.3
-fi
-
-
-if [[ -d /usr/local/chruby ]]; then
-  source /usr/local/chruby/share/chruby/chruby.sh
-  source /usr/local/chruby/share/chruby/auto.sh
+if [[ -d ${CHRUBY_LOC}/chruby ]]; then
+  source ${CHRUBY_LOC}/chruby/chruby.sh
+  source ${CHRUBY_LOC}/chruby/auto.sh
   chruby ruby-2.6.3
 fi
 

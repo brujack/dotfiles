@@ -62,9 +62,11 @@ WSL_HOME="/mnt/c/Users/${USER}"
 if [[ ${MACOS} ]]; then
   VSCODE="${HOME}/Library/Application Support/Code/User"
   VIRTUALENV_LOC="/usr/local/bin"
+  CHRUBY_LOC="/usr/local/opt/chruby/share"
 elif [[ ${LINUX} ]]; then
   VIRTUALENV_LOC="${HOME}/.local/bin"
   VIRTUALENVWRAPPER_PYTHON="/usr/bin/python3"
+  CHRUBY_LOC="/usr/local/share"
 elif [[ ${WINDOWS} ]]; then
   #%APPDATA%\Code\User\ in windows parlance
   VSCODE="${WSL_HOME}/AppData/Roaming/Code/User"
@@ -614,14 +616,8 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
 
   # setup for test-kitchen
   echo "Setup kitchen"
-  if [[ -d /usr/local/opt/chruby ]]; then
-    source /usr/local/opt/chruby/share/chruby/chruby.sh
-    source /usr/local/opt/chruby/share/chruby/auto.sh
-  fi
-  if [[ -d /usr/local/chruby ]]; then
-    source /usr/local/chruby/share/chruby/chruby.sh
-    source /usr/local/chruby/share/chruby/auto.sh
-  fi
+  source ${CHRUBY_LOC}/chruby/chruby.sh
+  source ${CHRUBY_LOC}/chruby/auto.sh
   chruby ruby-${RUBY_VER}
   gem install test-kitchen
   gem install kitchen-ansible
