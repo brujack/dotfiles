@@ -594,7 +594,7 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
   if [[ ${LINUX} ]]; then
     if [[ ! -d ${HOME}/ruby-install-${RUBY_INSTALL_VER} ]]; then
       wget -O ${HOME}/ruby-install-${RUBY_INSTALL_VER}.tar.gz https://github.com/postmodern/ruby-install/archive/v${RUBY_INSTALL_VER}.tar.gz
-      tar -xzvf ${HOME}/ruby-install-${RUBY_INSTALL_VER}.tar.gz
+      tar -xzvf ${HOME}/ruby-install-${RUBY_INSTALL_VER}.tar.gz -C ${HOME}/
       cd ${HOME}/ruby-install-${RUBY_INSTALL_VER}/
       sudo make install
     fi
@@ -604,7 +604,7 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
   if [[ ${LINUX} ]]; then
     if [[ ! -d ${HOME}/chruby-${CHRUBY_VER} ]]; then
       wget -O ${HOME}/chruby-${CHRUBY_VER}.tar.gz https://github.com/postmodern/chruby/archive/v${CHRUBY_VER}.tar.gz
-      tar -xzvf ${HOME}/chruby-${CHRUBY_VER}.tar.gz
+      tar -xzvf ${HOME}/chruby-${CHRUBY_VER}.tar.gz -C ${HOME}/
       cd ${HOME}/chruby-${CHRUBY_VER}/
       sudo make install
     fi
