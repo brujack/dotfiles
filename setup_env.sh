@@ -61,6 +61,10 @@ WSL_HOME="/mnt/c/Users/${USER}"
 # setup variables based off of environment
 if [[ ${MACOS} ]]; then
   VSCODE="${HOME}/Library/Application Support/Code/User"
+  VIRTUALENV_LOC="/usr/local/bin"
+elif [[ ${LINUX} ]]; then
+  VIRTUALENV_LOC="${HOME}/.local/bin"
+  VIRTUALENVWRAPPER_PYTHON="/usr/bin/python3"
 elif [[ ${WINDOWS} ]]; then
   #%APPDATA%\Code\User\ in windows parlance
   VSCODE="${WSL_HOME}/AppData/Roaming/Code/User"
@@ -542,9 +546,6 @@ fi
 if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
   echo "ANSIBLE setup"
   echo "Installing virtualenv for python"
-  if [[ ${LINUX} ]]; then
-    VIRTUALENVWRAPPER_PYTHON=/usr/bin/python3
-  fi
   pip3 install virtualenv virtualenvwrapper
 
   # setup virtualenv for python if virtualenv there
@@ -553,25 +554,18 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
   fi
 
   cd ${HOME}/.virtualenvs
-  if [[ -f /usr/local/bin/virtualenvwrapper.sh ]]; then
-    source /usr/local/bin/virtualenvwrapper.sh
-  fi
-  if [[ -f ${HOME}/.local/bin/virtualenvwrapper.sh ]]; then
-    source ${HOME}/.local/bin/virtualenvwrapper.sh
-  fi
+  source ${VIRTUALENV_LOC}/virtualenvwrapper.sh
 
   if ! [[ -d ${HOME}/.virtualenvs/ansible ]]; then
-    if [[ -f /usr/local/bin/virtualenv ]]; then
-      mkvirtualenv ansible -p python3
-      echo "Installing ansible via pip"
-      pip3 install ansible ansible-cmdb
-      echo "Installing boto via pip"
-      pip3 install boto boto3 botocore
-      echo "Installing awscli via pip"
-      pip3 install awscli
-      echo "Installing pylint for python linting via pip"
-      pip3 install pylint
-    fi
+    mkvirtualenv ansible -p python3
+    echo "Installing ansible via pip"
+    pip3 install ansible ansible-cmdb
+    echo "Installing boto via pip"
+    pip3 install boto boto3 botocore
+    echo "Installing awscli via pip"
+    pip3 install awscli
+    echo "Installing pylint for python linting via pip"
+    pip3 install pylint
   fi
 
   # override boto provided endpoints with a more correct version that has all of the regions
