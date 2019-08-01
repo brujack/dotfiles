@@ -210,9 +210,16 @@ else
 fi
 
 # for chruby setup
-if [[ ${MACOS} ]]; then
+if [[ -d /usr/local/opt/chruby ]]; then
   source /usr/local/opt/chruby/share/chruby/chruby.sh
   source /usr/local/opt/chruby/share/chruby/auto.sh
+  chruby ruby-2.6.3
+fi
+
+
+if [[ -d /usr/local/chruby ]]; then
+  source /usr/local/chruby/share/chruby/chruby.sh
+  source /usr/local/chruby/share/chruby/auto.sh
   chruby ruby-2.6.3
 fi
 
