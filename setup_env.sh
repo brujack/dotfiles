@@ -544,7 +544,12 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
   fi
 
   cd ${HOME}/.virtualenvs
-  source /usr/local/bin/virtualenvwrapper.sh
+  if [[ -f /usr/local/bin/virtualenvwrapper.sh ]]; then
+    source /usr/local/bin/virtualenvwrapper.sh
+  fi
+  if [[ -f ${HOME}/.local/bin/virtualenvwrapper.sh ]]; then
+    source ${HOME}/.local/bin/virtualenvwrapper.sh
+  fi
 
   if ! [[ -d ${HOME}/.virtualenvs/ansible ]]; then
     if [[ -f /usr/local/bin/virtualenv ]]; then
