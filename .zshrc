@@ -26,7 +26,7 @@ if [[ ${MACOS} ]]; then
   fi
 fi
 if [[ ${LINUX} ]]; then
-  VIRTUALENVWRAPPER_SCRIPT=/usr/local/bin/virtualenvwrapper.sh
+  VIRTUALENVWRAPPER_SCRIPT=${HOME}/.local/bin/virtualenvwrapper.sh
 fi
 
 # setup some functions

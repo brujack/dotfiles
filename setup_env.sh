@@ -1,5 +1,9 @@
 #!/bin/bash
 
+RUBY_INSTALL_VER="0.7.0"
+CHRUBY_VER="0.3.9"
+RUBY_VER="2.6.3"
+
 # setup some functions
 quiet_which() {
   which "$1" &>/dev/null
@@ -455,6 +459,8 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt-get install iotop -y
     sudo -H apt-get install keychain -y
     sudo -H apt-get install make -y
+    sudo -H apt-get install nodejs -y
+    sudo -H apt-get install npm -y
     sudo -H apt-get install python-setuptools -y
     sudo -H apt-get install python3-setuptools -y
     sudo -H apt-get install python3-pip -y
@@ -584,16 +590,36 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
   echo "Installing json2yaml via npm"
   npm install json2yaml
 
-  echo "setup ruby 2.6.3"
-  if [[ ! -d ${HOME}/.rubies/ruby-2.6.3/bin ]]; then
-    ruby-install ruby 2.6.3
+  echo "Installing ruby-install on linux"
+  if [[ ${LINUX} ]]; then
+    if [[ ! -d ${HOME}/ruby-install-${RUBY_INSTALL_VER} ]]; then
+      wget -O ${HOME}/ruby-install-${RUBY_INSTALL_VER}.tar.gz https://github.com/postmodern/ruby-install/archive/v${RUBY_INSTALL_VER}.tar.gz
+      tar -xzvf ${HOME}/ruby-install-${RUBY_INSTALL_VER}.tar.gz
+      cd ${HOME}/ruby-install-${RUBY_INSTALL_VER}/
+      sudo make install
+    fi
+  fi
+
+  echo "Installing chruby on linux"
+  if [[ ${LINUX} ]]; then
+    if [[ ! -d ${HOME}/chruby-${CHRUBY_VER} ]]; then
+      wget -O ${HOME}/chruby-${CHRUBY_VER}.tar.gz https://github.com/postmodern/chruby/archive/v${CHRUBY_VER}.tar.gz
+      tar -xzvf ${HOME}/chruby-${CHRUBY_VER}.tar.gz
+      cd ${HOME}/chruby-${CHRUBY_VER}/
+      sudo make install
+    fi
+  fi
+
+  echo "install ruby ${RUBY_VER}"
+  if [[ ! -d ${HOME}/.rubies/ruby-${RUBY_VER}/bin ]]; then
+    ruby-install ruby ${RUBY_VER}
   fi
 
   # setup for test-kitchen
   echo "Setup kitchen"
   source /usr/local/opt/chruby/share/chruby/chruby.sh
   source /usr/local/opt/chruby/share/chruby/auto.sh
-  chruby ruby-2.6.3
+  chruby ruby-${RUBY_VER}
   gem install test-kitchen
   gem install kitchen-ansible
   gem install kitchen-docker
