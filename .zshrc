@@ -24,12 +24,10 @@ if [[ ${MACOS} ]]; then
   if [[ ${RATNA} || ${LAPTOP} || ${BJACKSON} ]]; then
     VIRTUALENVWRAPPER_PYTHON=/usr/local/bin/python3
   fi
-  if [[ ${LINUX} ]]; then
-    VIRTUALENVWRAPPER_PYTHON=/usr/bin/python3
-  fi
 fi
 if [[ ${LINUX} ]]; then
   VIRTUALENVWRAPPER_SCRIPT=${HOME}/.local/bin/virtualenvwrapper.sh
+  VIRTUALENVWRAPPER_PYTHON=/usr/bin/python3
 fi
 
 # setup some functions
@@ -242,13 +240,12 @@ if [[ -f ${HOME}/.google_creds ]]; then
 fi
 
 # setup for python 3.7 for ansible by using virtualenv
-#source /usr/local/bin/virtualenvwrapper.sh
 if [[ -d ~/.virtualenvs/ansible ]]; then
   if [[ ${MACOS} ]]; then
     source /usr/local/bin/virtualenvwrapper.sh
   fi
   if [[ ${LINUX} ]]; then
-    source /usr/local/bin/virtualenvwrapper.sh
+    source ${HOME}/.local/bin/virtualenvwrapper.sh
   fi
   workon ansible
   if [[ -f ${HOME}/.vault_pass.txt ]]; then
