@@ -617,8 +617,14 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
 
   # setup for test-kitchen
   echo "Setup kitchen"
-  source /usr/local/opt/chruby/share/chruby/chruby.sh
-  source /usr/local/opt/chruby/share/chruby/auto.sh
+  if [[ -d /usr/local/opt/chruby ]]; then
+    source /usr/local/opt/chruby/share/chruby/chruby.sh
+    source /usr/local/opt/chruby/share/chruby/auto.sh
+  fi
+  if [[ -d /usr/local/chruby ]]; then
+    source /usr/local/chruby/share/chruby/chruby.sh
+    source /usr/local/chruby/share/chruby/auto.sh
+  fi
   chruby ruby-${RUBY_VER}
   gem install test-kitchen
   gem install kitchen-ansible
