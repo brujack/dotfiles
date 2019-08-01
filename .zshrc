@@ -24,6 +24,9 @@ if [[ ${MACOS} ]]; then
   if [[ ${RATNA} || ${LAPTOP} || ${BJACKSON} ]]; then
     VIRTUALENVWRAPPER_PYTHON=/usr/local/bin/python3
   fi
+  if [[ ${LINUX} ]]; then
+    VIRTUALENVWRAPPER_PYTHON=/usr/bin/python3
+  fi
 fi
 if [[ ${LINUX} ]]; then
   VIRTUALENVWRAPPER_SCRIPT=${HOME}/.local/bin/virtualenvwrapper.sh

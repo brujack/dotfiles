@@ -542,6 +542,9 @@ fi
 if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
   echo "ANSIBLE setup"
   echo "Installing virtualenv for python"
+  if [[ ${LINUX} ]]; then
+    VIRTUALENVWRAPPER_PYTHON=/usr/bin/python3
+  fi
   pip3 install virtualenv virtualenvwrapper
 
   # setup virtualenv for python if virtualenv there
