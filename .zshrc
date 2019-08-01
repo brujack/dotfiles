@@ -131,13 +131,8 @@ fi
 
 if [[ ! ${WINDOWS} ]]; then
 
-  # adding in home go path
-  if [[ -d /Users/bjackson ]]; then
-    path+='/Users/bjackson/bin'
-  fi
-  if [[ -d /Users/bruce ]]; then
-    path+='/Users/bruce/bin'
-  fi
+  # adding in home bin path
+  path+='${HOME}/bin'
 
   # for /usr/local includes
   path+='/usr/local/bin'
@@ -148,15 +143,10 @@ if [[ ! ${WINDOWS} ]]; then
   path+='/opt/local/sbin'
 
   # adding in home go path
-  if [[ -d /Users/bjackson ]]; then
-    path+='/Users/bjackson/go/bin'
-  fi
-  if [[ -d /Users/bruce ]]; then
-    path+='/Users/bruce/go/bin'
-  fi
+  path+='${HOME}/go/bin'
 
   if [[ ${LINUX} ]]; then
-    path+='/home/bruce/go/bin'
+    path+='${HOME}/go/bin'
     path+='/usr/lib/go-1.12/bin'
   fi
 
@@ -172,7 +162,7 @@ if [[ ${WINDOWS} ]]; then
     /usr/lib/go-1.12/bin
     ${HOME}/go/bin
     /mnt/c/ProgramData/chocolatey/bin
-    /mnt/c/Program Files/Microsoft VS Code/bin
+    /mnt/c/Program\ Files/Microsoft\ VS\ Code/bin
     /mnt/c/WINDOWS/system32
     /mnt/c/WINDOWS
     /mnt/c/WINDOWS/System32/Wbem
