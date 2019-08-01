@@ -467,6 +467,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt-get install make -y
     sudo -H apt-get install nodejs -y
     sudo -H apt-get install npm -y
+    sudo -H apt-get install powershell -y
     sudo -H apt-get install python-setuptools -y
     sudo -H apt-get install python3-setuptools -y
     sudo -H apt-get install python3-pip -y
@@ -661,6 +662,6 @@ if [[ ${UPDATE} ]]; then
   fi
 fi
 
-source ${HOME}/.zshrc
+/bin/zsh source ${HOME}/.zshrc
 
 exit 0

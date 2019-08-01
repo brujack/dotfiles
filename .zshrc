@@ -129,37 +129,64 @@ elif [[ ${LINUX} ]]; then
   eval `/usr/bin/keychain --eval --agents ssh --inherit any id_rsa`
 fi
 
-# adding in home go path
-if [[ -d /Users/bjackson ]]; then
-  path+='/Users/bjackson/bin'
-fi
-if [[ -d /Users/bruce ]]; then
-  path+='/Users/bruce/bin'
+if [[ ! ${WINDOWS} ]]; then
+
+  # adding in home go path
+  if [[ -d /Users/bjackson ]]; then
+    path+='/Users/bjackson/bin'
+  fi
+  if [[ -d /Users/bruce ]]; then
+    path+='/Users/bruce/bin'
+  fi
+
+  # for /usr/local includes
+  path+='/usr/local/bin'
+  path+='/usr/local/sbin'
+
+  # for /opt/local includes
+  path+='/opt/local/bin'
+  path+='/opt/local/sbin'
+
+  # adding in home go path
+  if [[ -d /Users/bjackson ]]; then
+    path+='/Users/bjackson/go/bin'
+  fi
+  if [[ -d /Users/bruce ]]; then
+    path+='/Users/bruce/go/bin'
+  fi
+
+  if [[ ${LINUX} ]]; then
+    path+='/home/bruce/go/bin'
+    path+='/usr/lib/go-1.12/bin'
+  fi
+
+  #export the PATH
+  export PATH
+
 fi
 
-# for /usr/local includes
-path+='/usr/local/bin'
-path+='/usr/local/sbin'
-
-# for /opt/local includes
-path+='/opt/local/bin'
-path+='/opt/local/sbin'
-
-# adding in home go path
-if [[ -d /Users/bjackson ]]; then
-  path+='/Users/bjackson/go/bin'
+# on wsl (windows subsystem for linux) we want to specifically define a path so that do not inherit a path from windows
+if [[ ${WINDOWS} ]]; then
+  path=(
+    ${HOME}/.local/bin/
+    /usr/lib/go-1.12/bin
+    ${HOME}/go/bin
+    /mnt/c/ProgramData/chocolatey/bin
+    /mnt/c/Program Files/Microsoft VS Code/bin
+    /mnt/c/WINDOWS/system32
+    /mnt/c/WINDOWS
+    /mnt/c/WINDOWS/System32/Wbem
+    /opt/local/sbin
+    /opt/local/bin
+    /usr/local/sbin
+    /usr/local/bin
+    /usr/sbin
+    /usr/bin
+    /sbin
+    /bin
+  )
+  export PATH
 fi
-if [[ -d /Users/bruce ]]; then
-  path+='/Users/bruce/go/bin'
-fi
-
-if [[ ${LINUX} ]]; then
-  path+='/home/bruce/go/bin'
-  path+='/usr/lib/go-1.10/bin'
-fi
-
-#export the PATH
-export PATH
 
 # export ANSIBLEUSER so that we run as the correct user
 export ANSIBLEUSER="ubuntu"
