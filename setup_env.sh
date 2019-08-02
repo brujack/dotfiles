@@ -526,32 +526,40 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt-get install google-cloud-sdk-app-engine-go -y
 
     echo "Installing Hashicorp Consul"
-    wget -O ${HOME}/downloads/consul_${CONSUL_VER}_linux_amd64.zip https://releases.hashicorp.com/consul/${CONSUL_VER}/consul_${CONSUL_VER}_linux_amd64.zip
-    unzip ${HOME}/downloads/consul_${CONSUL_VER}_linux_amd64.zip -d ${HOME}/downloads/consul_${CONSUL_VER}
-    sudo cp -a ${HOME}/downloads/consul_${CONSUL_VER}/consul /usr/local/bin/
-    sudo chmod 755 /usr/local/bin/consul
-    sudo chown root:root /usr/local/bin/consul
+    if [[ ! -d ${HOME}/downloads/consul_${CONSUL_VER} ]]; then
+      wget -O ${HOME}/downloads/consul_${CONSUL_VER}_linux_amd64.zip https://releases.hashicorp.com/consul/${CONSUL_VER}/consul_${CONSUL_VER}_linux_amd64.zip
+      unzip ${HOME}/downloads/consul_${CONSUL_VER}_linux_amd64.zip -d ${HOME}/downloads/consul_${CONSUL_VER}
+      sudo cp -a ${HOME}/downloads/consul_${CONSUL_VER}/consul /usr/local/bin/
+      sudo chmod 755 /usr/local/bin/consul
+      sudo chown root:root /usr/local/bin/consul
+    fi
 
     echo "Installing Hashicorp Vault"
-    wget -O ${HOME}/downloads/vault_${VAULT_VER}_linux_amd64.zip https://releases.hashicorp.com/vault/${VAULT_VER}/vault_${VAULT_VER}_linux_amd64.zip
-    unzip ${HOME}/downloads/vault_${VAULT_VER}_linux_amd64.zip -d ${HOME}/downloads/vault_${VAULT_VER}
-    sudo cp -a ${HOME}/downloads/vault_${VAULT_VER}/vault /usr/local/bin/
-    sudo chmod 755 /usr/local/bin/vault
-    sudo chown root:root /usr/local/bin/vault
+    if [[ ! -d ${HOME}/downloads/vault_${VAULT_VER} ]]; then
+      wget -O ${HOME}/downloads/vault_${VAULT_VER}_linux_amd64.zip https://releases.hashicorp.com/vault/${VAULT_VER}/vault_${VAULT_VER}_linux_amd64.zip
+      unzip ${HOME}/downloads/vault_${VAULT_VER}_linux_amd64.zip -d ${HOME}/downloads/vault_${VAULT_VER}
+      sudo cp -a ${HOME}/downloads/vault_${VAULT_VER}/vault /usr/local/bin/
+      sudo chmod 755 /usr/local/bin/vault
+      sudo chown root:root /usr/local/bin/vault
+    fi
 
     echo "Installing Hashicorp Nomad"
-    wget -O ${HOME}/downloads/nomad_${NOMAD_VER}_linux_amd64.zip https://releases.hashicorp.com/nomad/${NOMAD_VER}/nomad_${NOMAD_VER}_linux_amd64.zip
-    unzip ${HOME}/downloads/nomad_${NOMAD_VER}_linux_amd64.zip -d ${HOME}/downloads/nomad_${NOMAD_VER}
-    sudo cp -a ${HOME}/downloads/nomad_${NOMAD_VER}/nomad /usr/local/bin/
-    sudo chmod 755 /usr/local/bin/nomad
-    sudo chown root:root /usr/local/bin/nomad
+    if [[ ! -d ${HOME}/downloads/nomad_${NOMAD_VER} ]]; then
+      wget -O ${HOME}/downloads/nomad_${NOMAD_VER}_linux_amd64.zip https://releases.hashicorp.com/nomad/${NOMAD_VER}/nomad_${NOMAD_VER}_linux_amd64.zip
+      unzip ${HOME}/downloads/nomad_${NOMAD_VER}_linux_amd64.zip -d ${HOME}/downloads/nomad_${NOMAD_VER}
+      sudo cp -a ${HOME}/downloads/nomad_${NOMAD_VER}/nomad /usr/local/bin/
+      sudo chmod 755 /usr/local/bin/nomad
+      sudo chown root:root /usr/local/bin/nomad
+    fi
 
     echo "Installing Hashicorp Packer"
-    wget -O ${HOME}/downloads/packer_${PACKER_VER}_linux_amd64.zip https://releases.hashicorp.com/packer/${PACKER_VER}/packer_${PACKER_VER}_linux_amd64.zip
-    unzip ${HOME}/downloads/packer_${PACKER_VER}_linux_amd64.zip -d ${HOME}/downloads/packer_${PACKER_VER}
-    sudo cp -a ${HOME}/downloads/packer_${PACKER_VER}/packer /usr/local/bin/
-    sudo chmod 755 /usr/local/bin/packer
-    sudo chown root:root /usr/local/bin/packer
+    if [[ ! -d ${HOME}/downloads/packer_${PACKER_VER} ]]; then
+      wget -O ${HOME}/downloads/packer_${PACKER_VER}_linux_amd64.zip https://releases.hashicorp.com/packer/${PACKER_VER}/packer_${PACKER_VER}_linux_amd64.zip
+      unzip ${HOME}/downloads/packer_${PACKER_VER}_linux_amd64.zip -d ${HOME}/downloads/packer_${PACKER_VER}
+      sudo cp -a ${HOME}/downloads/packer_${PACKER_VER}/packer /usr/local/bin/
+      sudo chmod 755 /usr/local/bin/packer
+      sudo chown root:root /usr/local/bin/packer
+    fi
 
     # install glances cpu monitor
     pip3 install glances

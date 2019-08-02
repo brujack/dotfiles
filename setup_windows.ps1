@@ -5,11 +5,12 @@
 # set windows options
 Set-WindowsExplorerOptions -EnableShowHiddenFilesFoldersDrives -EnableShowProtectedOSFiles -EnableShowFileExtensions -EnableShowFullPathInTitleBar
 
-#enable hyper-v and containers
+# enable hyper-v and containers
 Enable-WindowsOptionalFeature -Online -FeatureName:Microsoft-Hyper-V -All
 Enable-WindowsOptionalFeature -Online -FeatureName:Containers-DisposableClientVM -All
 
-
+# enable wsl
+Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux
 
 # enable current user to be able to execute powershell scripts
 Set-ExecutionPolicy Unrestricted -Scope CurrentUser
