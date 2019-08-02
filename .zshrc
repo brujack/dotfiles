@@ -98,6 +98,9 @@ export HISTIGNORE="ls:cd:cd -:pwd:exit:date:* --help";
 if [[ ${MACOS} ]]; then
   plugins=(ansible python aws brew docker git git-prompt helm kubectl osx terraform vscode)
 fi
+if [[ ${WINDOWS} ]]; then
+  plugins=(ansible python aws docker git git-prompt helm kubectl terraform vscode)
+fi
 if [[ ${UBUNTU} ]]; then
   plugins=(aws git git-prompt docker helm kubectl ubuntu terraform vscode)
 fi
