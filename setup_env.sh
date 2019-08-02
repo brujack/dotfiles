@@ -513,16 +513,16 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H add-apt-repository \
     "deb [arch=amd64] https://packages.microsoft.com/repos/azure-cli/ $AZ_REPO main"
     sudo -H apt-get update
-    sudo -H apt-get install azure-cli
+    sudo -H apt-get install azure-cli -y
 
     echo "Installing gcloud-sdk"
     echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
     curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
     sudo apt-get update
-    sudo -H apt-get install google-cloud-sdk
-    sudo -H apt-get install google-cloud-sdk-app-engine-python
-    sudo -H apt-get install google-cloud-sdk-app-engine-python-extras
-    sudo -H apt-get install google-cloud-sdk-app-engine-go
+    sudo -H apt-get install google-cloud-sdk -y
+    sudo -H apt-get install google-cloud-sdk-app-engine-python -y
+    sudo -H apt-get install google-cloud-sdk-app-engine-python-extras -y
+    sudo -H apt-get install google-cloud-sdk-app-engine-go -y
 
     echo "Installing Hashicorp Consul"
     wget -O ${HOME}/downloads/consul_${CONSUL_VER}_linux_amd64.zip https://releases.hashicorp.com/consul/${CONSUL_VER}/consul_${CONSUL_VER}_linux_amd64.zip
