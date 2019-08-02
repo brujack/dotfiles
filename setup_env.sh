@@ -456,6 +456,8 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
   if [[ ${UBUNTU} ]]; then
     sudo -H apt-get update
     sudo -H apt-get install apt-transport-https -y
+    sudo -H apt-get install autoconf -y
+    sudo -H apt-get install automake -y
     sudo -H apt-get install ca-certificates -y
     sudo -H apt-get install curl -y
     sudo -H apt-get install gcc -y
@@ -463,6 +465,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt-get install gnupg -y
     sudo -H apt-get install htop -y
     sudo -H apt-get install iotop -y
+    sudo -H apt-get install jq -y
     sudo -H apt-get install keychain -y
     sudo -H apt-get install make -y
     sudo -H apt-get install nodejs -y
@@ -478,12 +481,12 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt-get install zsh -y
     sudo -H apt-get install zsh-doc -y
 
-    # install go 1.12
+    echo "Installing go 1.12"
     sudo add-apt-repository ppa:longsleep/golang-backports -y
-    sudo apt-get update
-    sudo apt-get install golang-1.12-go -y
+    sudo -H apt-get update
+    sudo -H apt-get install golang-1.12-go -y
 
-    # for docker setup
+    echo "Installing docker desktop"
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo -H apt-key add -
     sudo -H add-apt-repository \
     "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
@@ -493,15 +496,24 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt-get install docker-ce -y
     sudo -H apt-get install docker-ce-cli -y
 
-    # to install azure-cli
+    echo "Installing azure-cli"
     curl -sL https://packages.microsoft.com/keys/microsoft.asc | \
     gpg --dearmor | \
     sudo tee /etc/apt/trusted.gpg.d/microsoft.asc.gpg > /dev/null
     AZ_REPO=$(lsb_release -cs)
     sudo -H add-apt-repository \
     "deb [arch=amd64] https://packages.microsoft.com/repos/azure-cli/ $AZ_REPO main"
+    sudo -H apt-get update
+    sudo -H apt-get install azure-cli
+
+    echo "Installing gcloud-sdk"
+    echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+    curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
     sudo apt-get update
-    sudo apt-get install azure-cli
+    sudo -H apt-get install google-cloud-sdk
+    sudo -H apt-get install google-cloud-sdk-app-engine-python
+    sudo -H apt-get install google-cloud-sdk-app-engine-python-extras
+    sudo -H apt-get install google-cloud-sdk-app-engine-go
 
     # on KUBE systems:
     if [[ ${KUBE} ]]; then
@@ -662,6 +674,6 @@ if [[ ${UPDATE} ]]; then
   fi
 fi
 
-/bin/zsh source ${HOME}/.zshrc
+source ${HOME}/.zshrc
 
 exit 0
