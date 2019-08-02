@@ -58,6 +58,7 @@ Set-ExecutionPolicy Unrestricted -Scope CurrentUser
 
 # install packages with chocolatey
 cinst -y 1password
+cinst -y ag
 cinst -y atom
 cinst -y awscli
 cinst -y azure-cli
