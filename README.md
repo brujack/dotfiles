@@ -18,3 +18,11 @@ ansible: just runs the ansible setup using a python virtual environment.  Typica
 update: does a system update of packages including brew packages
 
 After changing to zsh, you will need to do another './setup_env.sh -t setup' if that is what you wanted, since by changing shells, you will lose the original shell process and need to start over again.
+
+# For Windows setup:
+1. Windows 10 Pro current so that you can run containers and wsl
+2. Boxstarter installed from https://boxstarter.org/ using the command in windows_boxstarter.ps1 in this repo
+3. An ability to clone this repo, which means you will need git installed and I recommend Sourcetree from https://www.sourcetreeap.com/
+4. Run setup_windows.ps1 to install windows programs/services
+5. Install a linux distribution from the Windows App store, I recommend Ubuntu 18.04 as this is where things were tested and I use
+6. Run './setup_env.sh -t OPTION' to setup a linux development environment inside of wsl
