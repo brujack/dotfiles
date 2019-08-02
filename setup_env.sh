@@ -545,6 +545,9 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo chmod 755 /usr/local/bin/nomad
     sudo chown root:root /usr/local/bin/nomad
 
+    # install glances cpu monitor
+    pip3 install glances
+
     # on KUBE systems:
     if [[ ${KUBE} ]]; then
       # install for bonded links
