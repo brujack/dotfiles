@@ -3,6 +3,9 @@
 RUBY_INSTALL_VER="0.7.0"
 CHRUBY_VER="0.3.9"
 RUBY_VER="2.6.3"
+CONSUL_VER="1.5.3"
+VAULT_VER="1.2.0"
+NOMAD_VER="0.9.4"
 
 # setup some functions
 quiet_which() {
@@ -453,6 +456,12 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     fi
   fi
 
+  if [[ ${LINUX} ]]; then
+    if ! [[ -d ${HOME}/downloads ]]; then
+    mkdir ${HOME}/downloads
+    fi
+  fi
+
   if [[ ${UBUNTU} ]]; then
     sudo -H apt-get update
     sudo -H apt-get install apt-transport-https -y
@@ -514,6 +523,27 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt-get install google-cloud-sdk-app-engine-python
     sudo -H apt-get install google-cloud-sdk-app-engine-python-extras
     sudo -H apt-get install google-cloud-sdk-app-engine-go
+
+    echo "Installing Hashicorp Consul"
+    wget -O ${HOME}/downloads/consul_${CONSUL_VER}_linux_amd64.zip https://releases.hashicorp.com/consul/${CONSUL_VER}/consul_${CONSUL_VER}_linux_amd64.zip
+    unzip ${HOME}/downloads/consul_${CONSUL_VER}_linux_amd64.zip -d ${HOME}/downloads/consul_${CONSUL_VER}
+    sudo cp -a ${HOME}/downloads/consul_${CONSUL_VER}/consul /usr/local/bin/
+    sudo chmod 755 /usr/local/bin/consul
+    sudo chown root:root /usr/local/bin/consul
+
+    echo "Installing Hashicorp Vault"
+    wget -O ${HOME}/downloads/vault_${VAULT_VER}_linux_amd64.zip https://releases.hashicorp.com/vault/${VAULT_VER}/vault_${VAULT_VER}_linux_amd64.zip
+    unzip ${HOME}/downloads/vault_${VAULT_VER}_linux_amd64.zip -d ${HOME}/downloads/vault_${VAULT_VER}
+    sudo cp -a ${HOME}/downloads/vault_${VAULT_VER}/vault /usr/local/bin/
+    sudo chmod 755 /usr/local/bin/vault
+    sudo chown root:root /usr/local/bin/vault
+
+    echo "Installing Hashicorp Nomad"
+    wget -O ${HOME}/downloads/nomad_${NOMAD_VER}_linux_amd64.zip https://releases.hashicorp.com/nomad/${NOMAD_VER}/nomad_${NOMAD_VER}_linux_amd64.zip
+    unzip ${HOME}/downloads/nomad_${NOMAD_VER}_linux_amd64.zip -d ${HOME}/downloads/nomad_${NOMAD_VER}
+    sudo cp -a ${HOME}/downloads/nomad_${NOMAD_VER}/nomad /usr/local/bin/
+    sudo chmod 755 /usr/local/bin/nomad
+    sudo chown root:root /usr/local/bin/nomad
 
     # on KUBE systems:
     if [[ ${KUBE} ]]; then
@@ -604,20 +634,20 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
 
   echo "Installing ruby-install on linux"
   if [[ ${LINUX} ]]; then
-    if [[ ! -d ${HOME}/ruby-install-${RUBY_INSTALL_VER} ]]; then
-      wget -O ${HOME}/ruby-install-${RUBY_INSTALL_VER}.tar.gz https://github.com/postmodern/ruby-install/archive/v${RUBY_INSTALL_VER}.tar.gz
-      tar -xzvf ${HOME}/ruby-install-${RUBY_INSTALL_VER}.tar.gz -C ${HOME}/
-      cd ${HOME}/ruby-install-${RUBY_INSTALL_VER}/
+    if [[ ! -d ${HOME}/downloads/ruby-install-${RUBY_INSTALL_VER} ]]; then
+      wget -O ${HOME}/downloads/ruby-install-${RUBY_INSTALL_VER}.tar.gz https://github.com/postmodern/ruby-install/archive/v${RUBY_INSTALL_VER}.tar.gz
+      tar -xzvf ${HOME}/downloads/ruby-install-${RUBY_INSTALL_VER}.tar.gz -C ${HOME}/downloads/
+      cd ${HOME}/downloads/ruby-install-${RUBY_INSTALL_VER}/
       sudo make install
     fi
   fi
 
   echo "Installing chruby on linux"
   if [[ ${LINUX} ]]; then
-    if [[ ! -d ${HOME}/chruby-${CHRUBY_VER} ]]; then
-      wget -O ${HOME}/chruby-${CHRUBY_VER}.tar.gz https://github.com/postmodern/chruby/archive/v${CHRUBY_VER}.tar.gz
-      tar -xzvf ${HOME}/chruby-${CHRUBY_VER}.tar.gz -C ${HOME}/
-      cd ${HOME}/chruby-${CHRUBY_VER}/
+    if [[ ! -d ${HOME}/downloads/chruby-${CHRUBY_VER} ]]; then
+      wget -O ${HOME}/downloads/chruby-${CHRUBY_VER}.tar.gz https://github.com/postmodern/chruby/archive/v${CHRUBY_VER}.tar.gz
+      tar -xzvf ${HOME}/downloads/chruby-${CHRUBY_VER}.tar.gz -C ${HOME}/downloads/
+      cd ${HOME}/downloads/chruby-${CHRUBY_VER}/
       sudo make install
     fi
   fi
