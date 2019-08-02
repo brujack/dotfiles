@@ -6,6 +6,7 @@ RUBY_VER="2.6.3"
 CONSUL_VER="1.5.3"
 VAULT_VER="1.2.0"
 NOMAD_VER="0.9.4"
+PACKER_VER="1.4.2"
 
 # setup some functions
 quiet_which() {
@@ -545,8 +546,19 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo chmod 755 /usr/local/bin/nomad
     sudo chown root:root /usr/local/bin/nomad
 
+    echo "Installing Hashicorp Packer"
+    wget -O ${HOME}/downloads/packer_${PACKER_VER}_linux_amd64.zip https://releases.hashicorp.com/packer/${PACKER_VER}/packer_${PACKER_VER}_linux_amd64.zip
+    unzip ${HOME}/downloads/packer_${PACKER_VER}_linux_amd64.zip -d ${HOME}/downloads/packer_${PACKER_VER}
+    sudo cp -a ${HOME}/downloads/packer_${PACKER_VER}/packer /usr/local/bin/
+    sudo chmod 755 /usr/local/bin/packer
+    sudo chown root:root /usr/local/bin/packer
+
     # install glances cpu monitor
     pip3 install glances
+
+    # install packages via snap
+    sudo snap install helm --classic
+    sudo snap install kubectl --classic
 
     # on KUBE systems:
     if [[ ${KUBE} ]]; then
