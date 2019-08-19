@@ -8,6 +8,7 @@ VAULT_VER="1.2.0"
 NOMAD_VER="0.9.4"
 PACKER_VER="1.4.2"
 GIT_VER="2.22.1"
+ZSH_VER="5.7.1"
 
 # setup some functions
 quiet_which() {
@@ -130,6 +131,14 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
         ./configure --prefix=/usr
         make all doc
         sudo -H make install install-doc install-html
+      fi
+      if [[ ! -f ${HOME}/downloads/zsh-${ZSH_VER}.tar.xz ]]; then
+        wget -O ${HOME}/downloads/zsh-${ZSH_VER}.tar.xz http://www.zsh.org/pub/zsh-${ZSH_VER}.tar.xz
+        tar -xvf ${HOME}/downloads/zsh-${ZSH_VER}.tar.xz -C ${HOME}/downloads
+        cd ${HOME}/downloads/zsh-${ZSH_VER}
+        ./configure --prefix=/usr/local --binddir=/usr/local/bin --sysconfdir=/etc/zsh --enable-etcdir=/etc/zsh
+        make
+        sudo -H make install
       fi
     fi
   fi
@@ -617,6 +626,11 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H dnf install unzip -y
     sudo -H dnf install wget -y
     sudo -H dnf install zsh -y
+    #keychain install
+    sudo -H rpm --import http://wiki.psychotic.ninja/RPM-GPG-KEY-psychotic
+    sudo -H rpm -ivh http://packages.psychotic.ninja/6/base/i386/RPMS/psychotic-release-1.0.0-1.el6.psychotic.noarch.rpm
+    sudo yum --enablerepo=psychotic install keychain -y
+
   fi
   if [[ ${CENTOS} ]]; then
     sudo -H yum update -y
