@@ -137,6 +137,8 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
   fi
 
   if [[ ${REDHAT} ]]; then
+    sudo -H yum update
+    sudo -H yum install ncurses-devel -y
     if [[ ! -f ${HOME}/downloads/zsh-${ZSH_VER}.tar.xz ]]; then
       echo "Installing Redhat zsh"
       wget -O ${HOME}/downloads/zsh-${ZSH_VER}.tar.xz http://www.zsh.org/pub/zsh-${ZSH_VER}.tar.xz
