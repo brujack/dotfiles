@@ -7,6 +7,7 @@ CONSUL_VER="1.5.3"
 VAULT_VER="1.2.0"
 NOMAD_VER="0.9.4"
 PACKER_VER="1.4.2"
+GIT_VER="2.22.1"
 
 # setup some functions
 quiet_which() {
@@ -79,7 +80,15 @@ fi
 # Setup is run rarely as it should be run when setting up a new device or when doing a controlled change after changing items in setup
 # The following code is used to setup the base system with some base packages and the basic layout of the users home directory
 if [[ ${SETUP} || ${SETUP_USER} ]]; then
-  # need to make sure that git is installed
+  # need to make sure that some base packages are installed
+  if [[ ${REDHAT} || ${FEDORA} ]]; then
+    if ! [ -x "$(command -v dnf)"]; then
+      echo "Installing dnf"
+      sudo -H yum update -y
+      sudo -H yum install dnf -y
+    fi
+  fi
+
   if ! [ -x "$(command -v git)" ]; then
     echo "Installing git"
     if [[ ${MACOS} ]]; then
@@ -94,18 +103,34 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     if [[ ${UBUNTU} ]]; then
       sudo -H apt-get update
       sudo -H apt-get install git -y
-      sudo -H apt-get install zsh -y
-      sudo -H apt-get install zsh-doc -y
     fi
-    if [[ ${REDHAT} || ${FEDORA} ]]; then
+    if [[ ${FEDORA} ]]; then
       sudo -H dnf update -y
       sudo -H dnf install git -y
-      sudo -H dnf install zsh -y
     fi
     if [[ ${CENTOS} ]]; then
       sudo -H yum update -y
       sudo -H yum install git -y
-      sudo -H yum install zsh -y
+    fi
+    if [[ ${REDHAT} ]]; then
+      sudo -H dnf update -y
+      sudo -H dnf install wget -y
+      sudo -H dnf install make -y
+      sudo -H dnf install cpan -y
+      cpan
+      cpan App::cpanminus
+      cpanm Test::Simple
+      cpanm Fatal
+      cpanm XML::SAX
+      if [[ ! -f ${HOME}/downloads/git-${GIT_VER}.tar.gz ]]; then
+        wget -O ${HOME}/downloads/git-${GIT_VER}.tar.gz https://mirrors.edge.kernel.org/pub/software/scm/git/git-${GIT_VER}.tar.gz
+        tar -zxvf ${HOME}/downloads/git-${GIT_VER}.tar.gz -C ${HOME}/downloads
+        cd ${HOME}/downloads/git-${GIT_VER}
+        make configure
+        ./configure --prefix=/usr
+        make all doc
+        sudo -H make install install-doc install-html
+      fi
     fi
   fi
 
@@ -469,6 +494,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt-get install autoconf -y
     sudo -H apt-get install automake -y
     sudo -H apt-get install ca-certificates -y
+    sudo -H apt-get install cpan -y
     sudo -H apt-get install curl -y
     sudo -H apt-get install gcc -y
     sudo -H apt-get install git -y
@@ -577,9 +603,9 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
   fi
   if [[ ${REDHAT} || ${FEDORA} ]]; then
     sudo -H dnf update -y
+    sudo -H dnf install cpan -y
     sudo -H dnf install curl -y
     sudo -H dnf install gcc -y
-    sudo -H dnf install git -y
     sudo -H dnf install htop -y
     sudo -H dnf install iotop -y
     sudo -H dnf install keychain -y
