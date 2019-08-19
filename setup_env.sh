@@ -136,7 +136,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
         wget -O ${HOME}/downloads/zsh-${ZSH_VER}.tar.xz http://www.zsh.org/pub/zsh-${ZSH_VER}.tar.xz
         tar -xvf ${HOME}/downloads/zsh-${ZSH_VER}.tar.xz -C ${HOME}/downloads
         cd ${HOME}/downloads/zsh-${ZSH_VER}
-        ./configure --prefix=/usr/local --binddir=/usr/local/bin --sysconfdir=/etc/zsh --enable-etcdir=/etc/zsh
+        ./configure --prefix=/usr/local --bindir=/usr/local/bin --sysconfdir=/etc/zsh --enable-etcdir=/etc/zsh
         make
         sudo -H make install
       fi
