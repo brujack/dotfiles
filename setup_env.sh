@@ -15,6 +15,14 @@ quiet_which() {
   which "$1" &>/dev/null
 }
 
+function rhel_installed {
+  if yum list installed "$@" >/dev/null 2>&1; then
+    true
+  else
+    false
+  fi
+}
+
 usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 0; }
 [[ $# -eq 0 ]] &&usage
 
@@ -149,6 +157,14 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
       ./configure --prefix=/usr/local --bindir=/usr/local/bin --sysconfdir=/etc/zsh --enable-etcdir=/etc/zsh
       make
       sudo -H make install
+      if ! [ grep -Fxq "/usr/local/bin/zsh" /etc/shells]; then
+        sudo -H sh -c 'echo /usr/local/bin/zsh >> /etc/shells'
+      fi
+      if rhel_installed zsh; then
+        sudo -H yum remove zsh
+      else
+        sudo ln -s /usr/local/bin/zsh /bin/zsh
+      fi
     fi
   fi
 
@@ -168,7 +184,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
       sudo -H apt-get install zsh -y
       sudo -H apt-get install zsh-doc -y
     fi
-    if [[ ${REDHAT} || ${FEDORA} ]]; then
+    if [[ ${FEDORA} ]]; then
       sudo -H dnf update -y
       sudo -H dnf install zsh -y
     fi
