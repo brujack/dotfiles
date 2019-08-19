@@ -144,30 +144,6 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     fi
   fi
 
-  if [[ ${REDHAT} ]]; then
-    sudo -H yum update
-    sudo -H yum install gcc
-    sudo -H yum install make
-    sudo -H yum install ncurses-devel -y
-    if [[ ! -f ${HOME}/downloads/zsh-${ZSH_VER}.tar.xz ]]; then
-      echo "Installing Redhat zsh"
-      wget -O ${HOME}/downloads/zsh-${ZSH_VER}.tar.xz http://www.zsh.org/pub/zsh-${ZSH_VER}.tar.xz
-      tar -xvf ${HOME}/downloads/zsh-${ZSH_VER}.tar.xz -C ${HOME}/downloads
-      cd ${HOME}/downloads/zsh-${ZSH_VER}
-      ./configure --prefix=/usr/local --bindir=/usr/local/bin --sysconfdir=/etc/zsh --enable-etcdir=/etc/zsh
-      make
-      sudo -H make install
-      if ! [ grep -Fxq "/usr/local/bin/zsh" /etc/shells]; then
-        sudo -H sh -c 'echo /usr/local/bin/zsh >> /etc/shells'
-      fi
-      if rhel_installed zsh; then
-        sudo -H yum remove zsh
-      else
-        sudo ln -s /usr/local/bin/zsh /bin/zsh
-      fi
-    fi
-  fi
-
   if ! [ -x "$(command -v zsh)" ]; then
     echo "Installing zsh"
     if [[ ${MACOS} ]]; then
@@ -191,6 +167,29 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     if [[ ${CENTOS} ]]; then
       sudo -H yum update -y
       sudo -H yum install zsh -y
+    fi
+    if [[ ${REDHAT} ]]; then
+      sudo -H yum update
+      sudo -H yum install gcc
+      sudo -H yum install make
+      sudo -H yum install ncurses-devel -y
+      if [[ ! -f ${HOME}/downloads/zsh-${ZSH_VER}.tar.xz ]]; then
+        echo "Installing Redhat zsh"
+        wget -O ${HOME}/downloads/zsh-${ZSH_VER}.tar.xz http://www.zsh.org/pub/zsh-${ZSH_VER}.tar.xz
+        tar -xvf ${HOME}/downloads/zsh-${ZSH_VER}.tar.xz -C ${HOME}/downloads
+        cd ${HOME}/downloads/zsh-${ZSH_VER}
+        ./configure --prefix=/usr/local --bindir=/usr/local/bin --sysconfdir=/etc/zsh --enable-etcdir=/etc/zsh
+        make
+        sudo -H make install
+        if ! [ grep -Fxq "/usr/local/bin/zsh" /etc/shells]; then
+          sudo -H sh -c 'echo /usr/local/bin/zsh >> /etc/shells'
+        fi
+        if rhel_installed zsh; then
+          sudo -H yum remove zsh -y
+        else
+          sudo ln -s /usr/local/bin/zsh /bin/zsh
+        fi
+      fi
     fi
   fi
 
@@ -656,7 +655,6 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H dnf install the_silver_searcher -y
     sudo -H dnf install unzip -y
     sudo -H dnf install wget -y
-    sudo -H dnf install zsh -y
     #keychain install
     sudo -H rpm --import http://wiki.psychotic.ninja/RPM-GPG-KEY-psychotic
     sudo -H rpm -ivh http://packages.psychotic.ninja/6/base/i386/RPMS/psychotic-release-1.0.0-1.el6.psychotic.noarch.rpm
