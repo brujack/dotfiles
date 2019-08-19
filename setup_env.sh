@@ -138,6 +138,8 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
 
   if [[ ${REDHAT} ]]; then
     sudo -H yum update
+    sudo -H yum install gcc
+    sudo -H yum install make
     sudo -H yum install ncurses-devel -y
     if [[ ! -f ${HOME}/downloads/zsh-${ZSH_VER}.tar.xz ]]; then
       echo "Installing Redhat zsh"
@@ -270,8 +272,14 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
   fi
 
   echo "Setting ZSH as shell..."
-  if [[ ! ${SHELL} = "/bin/zsh" ]]; then
-    chsh -s /bin/zsh
+  if [[ ! ${REDHAT} ]]; then
+    if [[ ! ${SHELL} = "/bin/zsh" ]]; then
+      chsh -s /bin/zsh
+    fi
+  elif [[ ${REDHAT} ]]; then
+    if [[ ! ${SHELL} = "/usr/local/bin/zsh" ]]; then
+      chsh -s /usr/local/bin/zsh
+    fi
   fi
 fi
 
