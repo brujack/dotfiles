@@ -133,15 +133,18 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
         make all doc
         sudo -H make install install-doc install-html
       fi
-      if [[ ! -f ${HOME}/downloads/zsh-${ZSH_VER}.tar.xz ]]; then
-        echo "Installing Redhat zsh"
-        wget -O ${HOME}/downloads/zsh-${ZSH_VER}.tar.xz http://www.zsh.org/pub/zsh-${ZSH_VER}.tar.xz
-        tar -xvf ${HOME}/downloads/zsh-${ZSH_VER}.tar.xz -C ${HOME}/downloads
-        cd ${HOME}/downloads/zsh-${ZSH_VER}
-        ./configure --prefix=/usr/local --bindir=/usr/local/bin --sysconfdir=/etc/zsh --enable-etcdir=/etc/zsh
-        make
-        sudo -H make install
-      fi
+    fi
+  fi
+
+  if [[ ${REDHAT} ]]; then
+    if [[ ! -f ${HOME}/downloads/zsh-${ZSH_VER}.tar.xz ]]; then
+      echo "Installing Redhat zsh"
+      wget -O ${HOME}/downloads/zsh-${ZSH_VER}.tar.xz http://www.zsh.org/pub/zsh-${ZSH_VER}.tar.xz
+      tar -xvf ${HOME}/downloads/zsh-${ZSH_VER}.tar.xz -C ${HOME}/downloads
+      cd ${HOME}/downloads/zsh-${ZSH_VER}
+      ./configure --prefix=/usr/local --bindir=/usr/local/bin --sysconfdir=/etc/zsh --enable-etcdir=/etc/zsh
+      make
+      sudo -H make install
     fi
   fi
 
