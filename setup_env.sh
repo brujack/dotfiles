@@ -83,7 +83,7 @@ fi
 if [[ ${SETUP} || ${SETUP_USER} ]]; then
   # need to make sure that some base packages are installed
   if [[ ${REDHAT} || ${FEDORA} ]]; then
-    if ! [ -x "$(command -v dnf)"]; then
+    if ! [ -x "$(command -v dnf)" ]; then
       echo "Installing dnf"
       sudo -H yum update -y
       sudo -H yum install dnf -y
@@ -124,6 +124,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
       cpanm Fatal
       cpanm XML::SAX
       if [[ ! -f ${HOME}/downloads/git-${GIT_VER}.tar.gz ]]; then
+        echo "Installing Redhat git"
         wget -O ${HOME}/downloads/git-${GIT_VER}.tar.gz https://mirrors.edge.kernel.org/pub/software/scm/git/git-${GIT_VER}.tar.gz
         tar -zxvf ${HOME}/downloads/git-${GIT_VER}.tar.gz -C ${HOME}/downloads
         cd ${HOME}/downloads/git-${GIT_VER}
@@ -133,6 +134,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
         sudo -H make install install-doc install-html
       fi
       if [[ ! -f ${HOME}/downloads/zsh-${ZSH_VER}.tar.xz ]]; then
+        echo "Installing Redhat zsh"
         wget -O ${HOME}/downloads/zsh-${ZSH_VER}.tar.xz http://www.zsh.org/pub/zsh-${ZSH_VER}.tar.xz
         tar -xvf ${HOME}/downloads/zsh-${ZSH_VER}.tar.xz -C ${HOME}/downloads
         cd ${HOME}/downloads/zsh-${ZSH_VER}
