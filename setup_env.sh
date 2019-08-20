@@ -7,6 +7,7 @@ CONSUL_VER="1.5.3"
 VAULT_VER="1.2.0"
 NOMAD_VER="0.9.4"
 PACKER_VER="1.4.2"
+TERRAFORM_VER="11.11"
 GIT_VER="2.22.1"
 ZSH_VER="5.7.1"
 
@@ -640,6 +641,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     fi
     sudo -H apt-get autoremove -y
   fi
+
   if [[ ${REDHAT} || ${FEDORA} ]]; then
     sudo -H dnf update -y
     sudo -H dnf install cpan -y
@@ -658,8 +660,28 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     #keychain install
     sudo -H rpm --import http://wiki.psychotic.ninja/RPM-GPG-KEY-psychotic
     sudo -H rpm -ivh http://packages.psychotic.ninja/6/base/i386/RPMS/psychotic-release-1.0.0-1.el6.psychotic.noarch.rpm
-    sudo yum --enablerepo=psychotic install keychain -y
+    sudo -H yum --enablerepo=psychotic install keychain -y
 
+    # install azure-cli
+    sudo -H rpm --import https://packages.microsoft.com/keys/microsoft.asc
+    sudo -H sh -c 'echo -e "[azure-cli]\nname=Azure CLI\nbaseurl=https://packages.microsoft.com/yumrepos/azure-cli\nenabled=1\ngpgcheck=1\ngpgkey=https://packages.microsoft.com/keys/microsoft.asc" > /etc/yum.repos.d/azure-cli.repo'
+    sudo -H dnf install azure-cli
+
+    # install packages via snap
+    sudo snap install helm --classic
+    sudo snap install kubectl --classic
+
+    # install glances cpu monitor
+    pip3 install glances
+
+    echo "Installing Hashicorp Terraform"
+    if [[ ! -d ${HOME}/downloads/terraform_${TERRAFORM_VER} ]]; then
+      wget -O ${HOME}/downloads/terraform_${TERRAFORM_VER}_linux_amd64.zip https://releases.hashicorp.com/terraform/${TERRAFORM_VER}/terraform_${TERRAFORM_VER}_linux_amd64.zip
+      unzip ${HOME}/downloads/terraform_${TERRAFORM_VER}_linux_amd64.zip -d ${HOME}/downloads/terraform_${TERRAFORM_VER}
+      sudo cp -a ${HOME}/downloads/terraform_${TERRAFORM_VER}/terraform /usr/local/bin/
+      sudo chmod 755 /usr/local/bin/terraform
+      sudo chown root:root /usr/local/bin/terraform
+    fi
   fi
   if [[ ${CENTOS} ]]; then
     sudo -H yum update -y
