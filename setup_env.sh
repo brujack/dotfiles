@@ -602,7 +602,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
 
     echo "Installing Hashicorp Consul"
     if [[ ! -d ${HOME}/downloads/consul_${CONSUL_VER} ]]; then
-      wget -O ${HOME}/downloads/consul_${CONSUL_VER}_linux_amd64.zip https://releases.hashicorp.com/consul/${CONSUL_VER}/consul_${CONSUL_VER}_linux_amd64.zip
+      wget -O ${HOME}/downloads/consul_${CONSUL_VER}_linux_amd64.zip https://releases.hashicorp.com/consul_${CONSUL_VER}/consul_${CONSUL_VER}_linux_amd64.zip
       unzip ${HOME}/downloads/consul_${CONSUL_VER}_linux_amd64.zip -d ${HOME}/downloads/consul_${CONSUL_VER}
       sudo cp -a ${HOME}/downloads/consul_${CONSUL_VER}/consul /usr/local/bin/
       sudo chmod 755 /usr/local/bin/consul
@@ -611,7 +611,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
 
     echo "Installing Hashicorp Vault"
     if [[ ! -d ${HOME}/downloads/vault_${VAULT_VER} ]]; then
-      wget -O ${HOME}/downloads/vault_${VAULT_VER}_linux_amd64.zip https://releases.hashicorp.com/vault/${VAULT_VER}/vault_${VAULT_VER}_linux_amd64.zip
+      wget -O ${HOME}/downloads/vault_${VAULT_VER}_linux_amd64.zip https://releases.hashicorp.com/vault/vault_${VAULT_VER}/vault_${VAULT_VER}_linux_amd64.zip
       unzip ${HOME}/downloads/vault_${VAULT_VER}_linux_amd64.zip -d ${HOME}/downloads/vault_${VAULT_VER}
       sudo cp -a ${HOME}/downloads/vault_${VAULT_VER}/vault /usr/local/bin/
       sudo chmod 755 /usr/local/bin/vault
@@ -620,7 +620,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
 
     echo "Installing Hashicorp Nomad"
     if [[ ! -d ${HOME}/downloads/nomad_${NOMAD_VER} ]]; then
-      wget -O ${HOME}/downloads/nomad_${NOMAD_VER}_linux_amd64.zip https://releases.hashicorp.com/nomad/${NOMAD_VER}/nomad_${NOMAD_VER}_linux_amd64.zip
+      wget -O ${HOME}/downloads/nomad_${NOMAD_VER}_linux_amd64.zip https://releases.hashicorp.com/nomad/nomad_${NOMAD_VER}/nomad_${NOMAD_VER}_linux_amd64.zip
       unzip ${HOME}/downloads/nomad_${NOMAD_VER}_linux_amd64.zip -d ${HOME}/downloads/nomad_${NOMAD_VER}
       sudo cp -a ${HOME}/downloads/nomad_${NOMAD_VER}/nomad /usr/local/bin/
       sudo chmod 755 /usr/local/bin/nomad
@@ -629,7 +629,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
 
     echo "Installing Hashicorp Packer"
     if [[ ! -d ${HOME}/downloads/packer_${PACKER_VER} ]]; then
-      wget -O ${HOME}/downloads/packer_${PACKER_VER}_linux_amd64.zip https://releases.hashicorp.com/packer/${PACKER_VER}/packer_${PACKER_VER}_linux_amd64.zip
+      wget -O ${HOME}/downloads/packer_${PACKER_VER}_linux_amd64.zip https://releases.hashicorp.com/packer_${PACKER_VER}/packer_${PACKER_VER}_linux_amd64.zip
       unzip ${HOME}/downloads/packer_${PACKER_VER}_linux_amd64.zip -d ${HOME}/downloads/packer_${PACKER_VER}
       sudo cp -a ${HOME}/downloads/packer_${PACKER_VER}/packer /usr/local/bin/
       sudo chmod 755 /usr/local/bin/packer
@@ -676,16 +676,12 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H sh -c 'echo -e "[azure-cli]\nname=Azure CLI\nbaseurl=https://packages.microsoft.com/yumrepos/azure-cli\nenabled=1\ngpgcheck=1\ngpgkey=https://packages.microsoft.com/keys/microsoft.asc" > /etc/yum.repos.d/azure-cli.repo'
     sudo -H dnf install azure-cli
 
-    # install packages via snap
-    sudo snap install helm --classic
-    sudo snap install kubectl --classic
-
     # install glances cpu monitor
     pip3 install glances
 
     echo "Installing Hashicorp Terraform"
     if [[ ! -d ${HOME}/downloads/terraform_${TERRAFORM_VER} ]]; then
-      wget -O ${HOME}/downloads/terraform_${TERRAFORM_VER}_linux_amd64.zip https://releases.hashicorp.com/terraform/${TERRAFORM_VER}/terraform_${TERRAFORM_VER}_linux_amd64.zip
+      wget -O ${HOME}/downloads/terraform_${TERRAFORM_VER}_linux_amd64.zip https://releases.hashicorp.com/terraform/terraform_${TERRAFORM_VER}/terraform_${TERRAFORM_VER}_linux_amd64.zip
       unzip ${HOME}/downloads/terraform_${TERRAFORM_VER}_linux_amd64.zip -d ${HOME}/downloads/terraform_${TERRAFORM_VER}
       sudo cp -a ${HOME}/downloads/terraform_${TERRAFORM_VER}/terraform /usr/local/bin/
       sudo chmod 755 /usr/local/bin/terraform
