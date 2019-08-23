@@ -170,6 +170,9 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
       sudo -H yum install zsh -y
     fi
     if [[ ${REDHAT} ]]; then
+      if rhel_installed zsh; then
+        sudo -H yum remove zsh -y
+      fi
       sudo -H yum update
       sudo -H yum install gcc
       sudo -H yum install make
@@ -185,10 +188,13 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
         if ! [ grep -Fxq "/usr/local/bin/zsh" /etc/shells]; then
           sudo -H sh -c 'echo /usr/local/bin/zsh >> /etc/shells'
         fi
-        if rhel_installed zsh; then
-          sudo -H yum remove zsh -y
-        else
-          sudo ln -s /usr/local/bin/zsh /bin/zsh
+      fi
+      if [[ -f /bin/zsh ]]; then
+        sudo -H rm -f /bin/zsh
+      fi
+      if [[ ! -L /bin/zsh ]]; then
+        if [[ -f /usr/local/bin/zsh ]]; then
+          sudo -H ln -s /usr/local/bin/zsh /bin/zsh
         fi
       fi
     fi
