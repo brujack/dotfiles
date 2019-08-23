@@ -188,6 +188,9 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
         if ! [ grep -Fxq "/usr/local/bin/zsh" /etc/shells]; then
           sudo -H sh -c 'echo /usr/local/bin/zsh >> /etc/shells'
         fi
+        if ! [ grep -Fxq "/bin/zsh" /etc/shells]; then
+          sudo -H sh -c 'echo /bin/zsh >> /etc/shells'
+        fi
       fi
       if [[ -f /bin/zsh ]]; then
         sudo -H rm -f /bin/zsh
