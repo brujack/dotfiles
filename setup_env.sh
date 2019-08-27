@@ -684,7 +684,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H dnf install azure-cli -y
 
     echo "Installing git credential manager RHEL"
-    sudo -H dnf install https://github.com/Microsoft/Git-Credential-Manager-for-Mac-and-Linux/releases/download/git-credential-manager-2.0.4/git-credential-manager-2.0.4-1.noarch.rpm
+    sudo -H dnf install https://github.com/Microsoft/Git-Credential-Manager-for-Mac-and-Linux/releases/download/git-credential-manager-2.0.4/git-credential-manager-2.0.4-1.noarch.rpm -y
 
     echo "Installing powershell RHEL"
     curl https://packages.microsoft.com/config/rhel/7/prod.repo | sudo -H tee /etc/yum.repos.d/microsoft.repo
