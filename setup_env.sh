@@ -555,7 +555,6 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt-get install make -y
     sudo -H apt-get install nodejs -y
     sudo -H apt-get install npm -y
-    sudo -H apt-get install powershell -y
     sudo -H apt-get install python-setuptools -y
     sudo -H apt-get install python3-setuptools -y
     sudo -H apt-get install python3-pip -y
@@ -565,6 +564,12 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt-get install wget -y
     sudo -H apt-get install zsh -y
     sudo -H apt-get install zsh-doc -y
+
+    echo "Installing powershell Ubuntu"
+    wget -q https://packages.microsoft.com/config/ubuntu/18.04/packages-microsoft-prod.deb | sudo -H dpkg -i packages-microsoft-prod.deb
+    sudo apt-get update
+    sudo -H add-apt-repository universe
+    sudo -H apt-get install powershell -y
 
     echo "Installing go 1.12"
     sudo add-apt-repository ppa:longsleep/golang-backports -y
@@ -674,7 +679,13 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     # install azure-cli
     sudo -H rpm --import https://packages.microsoft.com/keys/microsoft.asc
     sudo -H sh -c 'echo -e "[azure-cli]\nname=Azure CLI\nbaseurl=https://packages.microsoft.com/yumrepos/azure-cli\nenabled=1\ngpgcheck=1\ngpgkey=https://packages.microsoft.com/keys/microsoft.asc" > /etc/yum.repos.d/azure-cli.repo'
-    sudo -H dnf install azure-cli
+    sudo -H dnf update -y
+    sudo -H dnf install azure-cli -y
+
+    # install powershell
+    curl https://packages.microsoft.com/config/rhel/7/prod.repo | sudo -H tee /etc/yum.repos.d/microsoft.repo
+    sudo -H dnf update -y
+    sudo -H dnf install powershell -y
 
     # install glances cpu monitor
     pip3 install glances
