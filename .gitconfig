@@ -1,5 +1,5 @@
 [core]
-	excludesfile = /Users/bjackson/.gitignore_global
+	excludesfile = /Users/bruce/.gitignore_global
 [difftool "sourcetree"]
 	cmd = opendiff \"$LOCAL\" \"$REMOTE\"
 	path =
@@ -21,3 +21,5 @@
   lg = log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit --date=relative
 [diff "sopsdiffer"]
 	textconv = sops -d
+[credential]
+	helper = !/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.222.b10-0.el7_6.x86_64/jre/bin/java -Ddebug=false -Djava.net.useSystemProxies=true -jar /usr/lib/git-credential-manager-2.0.4.jar
