@@ -605,7 +605,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt-get install google-cloud-sdk-app-engine-python-extras -y
     sudo -H apt-get install google-cloud-sdk-app-engine-go -y
 
-    echo "Installing Hashicorp Consul"
+    echo "Installing Hashicorp Consul Ubuntu"
     if [[ ! -d ${HOME}/downloads/consul_${CONSUL_VER} ]]; then
       wget -O ${HOME}/downloads/consul_${CONSUL_VER}_linux_amd64.zip https://releases.hashicorp.com/consul_${CONSUL_VER}/consul_${CONSUL_VER}_linux_amd64.zip
       unzip ${HOME}/downloads/consul_${CONSUL_VER}_linux_amd64.zip -d ${HOME}/downloads/consul_${CONSUL_VER}
@@ -614,7 +614,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo chown root:root /usr/local/bin/consul
     fi
 
-    echo "Installing Hashicorp Vault"
+    echo "Installing Hashicorp Vault Ubuntu"
     if [[ ! -d ${HOME}/downloads/vault_${VAULT_VER} ]]; then
       wget -O ${HOME}/downloads/vault_${VAULT_VER}_linux_amd64.zip https://releases.hashicorp.com/vault/vault_${VAULT_VER}/vault_${VAULT_VER}_linux_amd64.zip
       unzip ${HOME}/downloads/vault_${VAULT_VER}_linux_amd64.zip -d ${HOME}/downloads/vault_${VAULT_VER}
@@ -623,7 +623,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo chown root:root /usr/local/bin/vault
     fi
 
-    echo "Installing Hashicorp Nomad"
+    echo "Installing Hashicorp Nomad Ubuntu"
     if [[ ! -d ${HOME}/downloads/nomad_${NOMAD_VER} ]]; then
       wget -O ${HOME}/downloads/nomad_${NOMAD_VER}_linux_amd64.zip https://releases.hashicorp.com/nomad/nomad_${NOMAD_VER}/nomad_${NOMAD_VER}_linux_amd64.zip
       unzip ${HOME}/downloads/nomad_${NOMAD_VER}_linux_amd64.zip -d ${HOME}/downloads/nomad_${NOMAD_VER}
@@ -632,7 +632,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo chown root:root /usr/local/bin/nomad
     fi
 
-    echo "Installing Hashicorp Packer"
+    echo "Installing Hashicorp Packer Ubuntu"
     if [[ ! -d ${HOME}/downloads/packer_${PACKER_VER} ]]; then
       wget -O ${HOME}/downloads/packer_${PACKER_VER}_linux_amd64.zip https://releases.hashicorp.com/packer_${PACKER_VER}/packer_${PACKER_VER}_linux_amd64.zip
       unzip ${HOME}/downloads/packer_${PACKER_VER}_linux_amd64.zip -d ${HOME}/downloads/packer_${PACKER_VER}
@@ -671,18 +671,19 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H dnf install the_silver_searcher -y
     sudo -H dnf install unzip -y
     sudo -H dnf install wget -y
-    #keychain install
+
+    echo "Installing keychain RHEL"
     sudo -H rpm --import http://wiki.psychotic.ninja/RPM-GPG-KEY-psychotic
     sudo -H rpm -ivh http://packages.psychotic.ninja/6/base/i386/RPMS/psychotic-release-1.0.0-1.el6.psychotic.noarch.rpm
     sudo -H yum --enablerepo=psychotic install keychain -y
 
-    # install azure-cli
+    echo "Installing azure-cli RHEL"
     sudo -H rpm --import https://packages.microsoft.com/keys/microsoft.asc
     sudo -H sh -c 'echo -e "[azure-cli]\nname=Azure CLI\nbaseurl=https://packages.microsoft.com/yumrepos/azure-cli\nenabled=1\ngpgcheck=1\ngpgkey=https://packages.microsoft.com/keys/microsoft.asc" > /etc/yum.repos.d/azure-cli.repo'
     sudo -H dnf update -y
     sudo -H dnf install azure-cli -y
 
-    # install powershell
+    echo "Installing powershell RHEL"
     curl https://packages.microsoft.com/config/rhel/7/prod.repo | sudo -H tee /etc/yum.repos.d/microsoft.repo
     sudo -H dnf update -y
     sudo -H dnf install powershell -y
