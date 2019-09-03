@@ -1,15 +1,24 @@
 #!/bin/bash
 
+# software versions to install
 RUBY_INSTALL_VER="0.7.0"
 CHRUBY_VER="0.3.9"
 RUBY_VER="2.6.3"
-CONSUL_VER="1.5.3"
-VAULT_VER="1.2.0"
-NOMAD_VER="0.9.4"
-PACKER_VER="1.4.2"
+CONSUL_VER="1.6.0"
+VAULT_VER="1.2.2"
+NOMAD_VER="0.9.5"
+PACKER_VER="1.4.3"
 TERRAFORM_VER="11.11"
 GIT_VER="2.22.1"
 ZSH_VER="5.7.1"
+
+# locations of directories
+GITREPOS="${HOME}/git-repos"
+PERSONAL_GITREPOS="${GITREPOS}/personal"
+DOTFILES="dotfiles"
+BREWFILE_LOC="${HOME}/brew"
+HOSTNAME=$(hostname -s)
+WSL_HOME="/mnt/c/Users/${USER}"
 
 # setup some functions
 quiet_which() {
@@ -64,14 +73,6 @@ fi
 [[ $(hostname -f) = "kube-0.conecrazy.ca" ]] && export KUBE=1
 [[ $(hostname -f) = "kube-1.conecrazy.ca" ]] && export KUBE=1
 [[ $(hostname -f) = "kube-2.conecrazy.ca" ]] && export KUBE=1
-
-# locations of directories
-GITREPOS="${HOME}/git-repos"
-PERSONAL_GITREPOS="${GITREPOS}/personal"
-DOTFILES="dotfiles"
-BREWFILE_LOC="${HOME}/brew"
-HOSTNAME=$(hostname -s)
-WSL_HOME="/mnt/c/Users/${USER}"
 
 # setup variables based off of environment
 if [[ ${MACOS} ]]; then
@@ -169,6 +170,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
       sudo -H yum update -y
       sudo -H yum install zsh -y
     fi
+    # for REDHAT need to download/build/install a much newer version of zsh
     if [[ ${REDHAT} ]]; then
       if rhel_installed zsh; then
         sudo -H yum remove zsh -y
@@ -308,7 +310,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
   fi
 fi
 
-# full setup and installation of all packages
+# full setup and installation of all packages for a development environment
 if [[ ${SETUP} || ${DEVELOPER} ]]; then
 
   echo "Creating home aws"
@@ -357,7 +359,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     cd ${PERSONAL_GITREPOS}/${DOTFILES}
 
     # the below casks and mas are not in a brewfile since they will "fail" if already installed
-    if [[ ! -d "/Applications/Alfred 3.app" ]]; then
+    if [[ ! -d "/Applications/Alfred 4.app" ]]; then
       brew cask install alfred
     fi
     if [[ ! -d "/Applications/AppCleaner.app" ]]; then
