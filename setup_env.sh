@@ -568,10 +568,12 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt-get install zsh-doc -y
 
     echo "Installing powershell Ubuntu"
-    wget -q https://packages.microsoft.com/config/ubuntu/18.04/packages-microsoft-prod.deb | sudo -H dpkg -i packages-microsoft-prod.deb
-    sudo apt-get update
-    sudo -H add-apt-repository universe
-    sudo -H apt-get install powershell -y
+    if [[ ! -f /tmp/packages-microsoft-prod.deb ]]; then
+      wget -O /tmp/packages-microsoft-prod.deb https://packages.microsoft.com/config/ubuntu/18.04/packages-microsoft-prod.deb | sudo -H dpkg -i /tmp/packages-microsoft-prod.deb
+      sudo apt-get update
+      sudo -H add-apt-repository universe
+      sudo -H apt-get install powershell -y
+    fi
 
     echo "Installing go 1.12"
     sudo add-apt-repository ppa:longsleep/golang-backports -y
