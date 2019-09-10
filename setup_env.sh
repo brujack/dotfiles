@@ -11,6 +11,7 @@ PACKER_VER="1.4.3"
 TERRAFORM_VER="0.11.11"
 GIT_VER="2.22.1"
 ZSH_VER="5.7.1"
+GO_VER="1.13"
 
 # locations of directories
 GITREPOS="${HOME}/git-repos"
@@ -252,6 +253,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
   elif [[ ! -L ${HOME}/switch_terra_account.sh ]]; then
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/switch_terra_account.sh ${HOME}/switch_terra_account.sh
   fi
+
   if [[ ${MACOS} ]]; then
     if [[ -f "$VSCODE"/settings.json ]]; then
       rm "$VSCODE"/settings.json
@@ -312,7 +314,6 @@ fi
 
 # full setup and installation of all packages for a development environment
 if [[ ${SETUP} || ${DEVELOPER} ]]; then
-
   echo "Creating home aws"
   if [[ ! -d ${HOME}/.aws ]]; then
     mkdir ${HOME}/.aws
@@ -577,10 +578,10 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo -H apt-get install powershell -y
     fi
 
-    echo "Installing go 1.13"
+    echo "Installing go Ubuntu"
     sudo add-apt-repository ppa:longsleep/golang-backports -y
     sudo -H apt-get update
-    sudo -H apt-get install golang-1.13-go -y
+    sudo -H apt-get install golang-${GO_VER}-go -y
 
     echo "Installing docker desktop"
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo -H apt-key add -
@@ -703,9 +704,17 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H dnf update -y
     sudo -H dnf install nodejs -y
 
-    # install glances cpu monitor
+    echo "Installing glances cpu monitor RHEL"
     sudo -H pip3 install glances
+
+    echo "Installing go RHEL"
+    if [[ ! -f ${HOME}/downloads/go${GO_VER}.linux-amd64.tar.gz ]]; then
+      wget -O ${HOME}/downloads/go${GO_VER}.linux-amd64.tar.gz https://dl.google.com/go/go${GO_VER}.linux-amd64.tar.gz
+      sudo tar -C /usr/local -xzf ${HOME}/downloads/go${GO_VER}.linux-amd64.tar.gz
+    fi
+
   fi
+
   if [[ ${CENTOS} ]]; then
     sudo -H yum update -y
     sudo -H yum install curl -y
@@ -734,7 +743,6 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
     # necessary to install virtualenv to site-packages for linux
     sudo pip3 install virtualenv virtualenvwrapper
   fi
-
 
   # setup virtualenv for python if virtualenv there
   if ! [[ -d ${HOME}/.virtualenvs ]]; then
