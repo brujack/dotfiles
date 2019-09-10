@@ -722,7 +722,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
 
     echo "Installing kubectl RHEL"
     if [[ ! -f /etc/yum.repos.d/kubernetes.repo ]]; then
-      sudo ${RHEL_KUBECTL_REPO} > /etc/yum.repos.d/kubernetes.repo
+      sudo echo ${RHEL_KUBECTL_REPO} > /etc/yum.repos.d/kubernetes.repo
     fi
     sudo -H dnf update -y
     sudo -H dnf install kubectl -y
