@@ -259,7 +259,7 @@ if [[ -d ~/.virtualenvs/ansible ]]; then
     source /usr/local/bin/virtualenvwrapper.sh
   fi
   if [[ ${LINUX} ]]; then
-    source ${HOME}/.local/bin/virtualenvwrapper.sh
+    source ${VIRTUALENVWRAPPER_SCRIPT}
   fi
   workon ansible
   if [[ -f ${HOME}/.vault_pass.txt ]]; then
