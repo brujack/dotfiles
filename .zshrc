@@ -2,6 +2,8 @@
 [ $(uname -s) = "Darwin" ] && export MACOS=1
 [ $(uname -s) = "Linux" ] && export LINUX=1
 
+GO_VER="1.13"
+
 if [[ ${LINUX} ]]; then
   LINUX_TYPE=$(awk -F= '/^NAME/{print $2}' /etc/os-release | tr -d '"')
   [[ ${LINUX_TYPE} = "Ubuntu" ]] && export UBUNTU=1
@@ -133,7 +135,6 @@ elif [[ ${LINUX} ]]; then
 fi
 
 if [[ ! ${WINDOWS} ]]; then
-
   # adding in home bin path
   path+='${HOME}/bin'
 
@@ -145,24 +146,18 @@ if [[ ! ${WINDOWS} ]]; then
   path+='/opt/local/bin'
   path+='/opt/local/sbin'
 
-  # adding in home go path
-  path+='${HOME}/go/bin'
-
-  if [[ ${LINUX} ]]; then
-    path+='${HOME}/go/bin'
-    path+='/usr/lib/go-1.12/bin'
+  if [[ ${REDHAT} ]]; then
+    path+='/usr/sbin'
+    path+='/usr/local/go/bin'
   fi
-
-  #export the PATH
   export PATH
-
 fi
 
 # on wsl (windows subsystem for linux) we want to specifically define a path so that do not inherit a path from windows
 if [[ ${WINDOWS} ]]; then
   path=(
     ${HOME}/.local/bin/
-    /usr/lib/go-1.12/bin
+    /usr/lib/go-${GO_VER}/bin
     ${HOME}/go/bin
     /mnt/c/ProgramData/chocolatey/bin
     /mnt/c/Program\ Files/Microsoft\ VS\ Code/bin
@@ -204,9 +199,11 @@ alias us-24='ssh bruce@us-24'
 alias us-16='ssh bruce@us-16'
 alias us-8-1='ssh bruce@us-8-1'
 alias us-8-2='ssh bruce@us-8-2'
-alias us-pro='ssh bruce@us-pro'
-alias nano-hd='ssh bruce@nano-hd'
-alias mesh='ssh bruce@mesh'
+alias upstairs='ssh bruce@upstairs'
+alias downstairs='ssh bruce@downstairs'
+alias basement='ssh bruce@basement'
+alias backyard='ssh bruce@mesh'
+alias attic='ssh bruce@mesh-pro'
 # aliases for work servers
 
 # command aliases
