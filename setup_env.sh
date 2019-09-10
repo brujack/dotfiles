@@ -5,10 +5,10 @@ RUBY_INSTALL_VER="0.7.0"
 CHRUBY_VER="0.3.9"
 RUBY_VER="2.6.3"
 CONSUL_VER="1.6.0"
-VAULT_VER="1.2.2"
+VAULT_VER="1.2.3"
 NOMAD_VER="0.9.5"
 PACKER_VER="1.4.3"
-TERRAFORM_VER="11.11"
+TERRAFORM_VER="0.11.11"
 GIT_VER="2.22.1"
 ZSH_VER="5.7.1"
 
@@ -554,7 +554,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt-get install iotop -y
     sudo -H apt-get install jq -y
     sudo -H apt-get install keychain -y
-    sudo -H apt-get install libpython3.6-dev -y
+    sudo -H apt-get install libpython3-dev -y
     sudo -H apt-get install make -y
     sudo -H apt-get install nodejs -y
     sudo -H apt-get install npm -y
@@ -613,7 +613,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
 
     echo "Installing Hashicorp Consul Ubuntu"
     if [[ ! -d ${HOME}/downloads/consul_${CONSUL_VER} ]]; then
-      wget -O ${HOME}/downloads/consul_${CONSUL_VER}_linux_amd64.zip https://releases.hashicorp.com/consul_${CONSUL_VER}/consul_${CONSUL_VER}_linux_amd64.zip
+      wget -O ${HOME}/downloads/consul_${CONSUL_VER}_linux_amd64.zip https://releases.hashicorp.com/consul/${CONSUL_VER}/consul_${CONSUL_VER}_linux_amd64.zip
       unzip ${HOME}/downloads/consul_${CONSUL_VER}_linux_amd64.zip -d ${HOME}/downloads/consul_${CONSUL_VER}
       sudo cp -a ${HOME}/downloads/consul_${CONSUL_VER}/consul /usr/local/bin/
       sudo chmod 755 /usr/local/bin/consul
@@ -622,7 +622,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
 
     echo "Installing Hashicorp Vault Ubuntu"
     if [[ ! -d ${HOME}/downloads/vault_${VAULT_VER} ]]; then
-      wget -O ${HOME}/downloads/vault_${VAULT_VER}_linux_amd64.zip https://releases.hashicorp.com/vault/vault_${VAULT_VER}/vault_${VAULT_VER}_linux_amd64.zip
+      wget -O ${HOME}/downloads/vault_${VAULT_VER}_linux_amd64.zip https://releases.hashicorp.com/vault/${VAULT_VER}/vault_${VAULT_VER}_linux_amd64.zip
       unzip ${HOME}/downloads/vault_${VAULT_VER}_linux_amd64.zip -d ${HOME}/downloads/vault_${VAULT_VER}
       sudo cp -a ${HOME}/downloads/vault_${VAULT_VER}/vault /usr/local/bin/
       sudo chmod 755 /usr/local/bin/vault
@@ -631,7 +631,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
 
     echo "Installing Hashicorp Nomad Ubuntu"
     if [[ ! -d ${HOME}/downloads/nomad_${NOMAD_VER} ]]; then
-      wget -O ${HOME}/downloads/nomad_${NOMAD_VER}_linux_amd64.zip https://releases.hashicorp.com/nomad/nomad_${NOMAD_VER}/nomad_${NOMAD_VER}_linux_amd64.zip
+      wget -O ${HOME}/downloads/nomad_${NOMAD_VER}_linux_amd64.zip https://releases.hashicorp.com/nomad/${NOMAD_VER}/nomad_${NOMAD_VER}_linux_amd64.zip
       unzip ${HOME}/downloads/nomad_${NOMAD_VER}_linux_amd64.zip -d ${HOME}/downloads/nomad_${NOMAD_VER}
       sudo cp -a ${HOME}/downloads/nomad_${NOMAD_VER}/nomad /usr/local/bin/
       sudo chmod 755 /usr/local/bin/nomad
@@ -640,7 +640,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
 
     echo "Installing Hashicorp Packer Ubuntu"
     if [[ ! -d ${HOME}/downloads/packer_${PACKER_VER} ]]; then
-      wget -O ${HOME}/downloads/packer_${PACKER_VER}_linux_amd64.zip https://releases.hashicorp.com/packer_${PACKER_VER}/packer_${PACKER_VER}_linux_amd64.zip
+      wget -O ${HOME}/downloads/packer_${PACKER_VER}_linux_amd64.zip https://releases.hashicorp.com/packer/${PACKER_VER}/packer_${PACKER_VER}_linux_amd64.zip
       unzip ${HOME}/downloads/packer_${PACKER_VER}_linux_amd64.zip -d ${HOME}/downloads/packer_${PACKER_VER}
       sudo cp -a ${HOME}/downloads/packer_${PACKER_VER}/packer /usr/local/bin/
       sudo chmod 755 /usr/local/bin/packer
@@ -699,11 +699,11 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H dnf install powershell -y
 
     # install glances cpu monitor
-    pip3 install glances
+    sudo -H pip3 install glances
 
     echo "Installing Hashicorp Terraform"
     if [[ ! -d ${HOME}/downloads/terraform_${TERRAFORM_VER} ]]; then
-      wget -O ${HOME}/downloads/terraform_${TERRAFORM_VER}_linux_amd64.zip https://releases.hashicorp.com/terraform/terraform_${TERRAFORM_VER}/terraform_${TERRAFORM_VER}_linux_amd64.zip
+      wget -O ${HOME}/downloads/terraform_${TERRAFORM_VER}_linux_amd64.zip https://releases.hashicorp.com/terraform/${TERRAFORM_VER}/terraform_${TERRAFORM_VER}_linux_amd64.zip
       unzip ${HOME}/downloads/terraform_${TERRAFORM_VER}_linux_amd64.zip -d ${HOME}/downloads/terraform_${TERRAFORM_VER}
       sudo cp -a ${HOME}/downloads/terraform_${TERRAFORM_VER}/terraform /usr/local/bin/
       sudo chmod 755 /usr/local/bin/terraform
