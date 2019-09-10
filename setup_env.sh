@@ -12,7 +12,14 @@ TERRAFORM_VER="0.11.11"
 GIT_VER="2.22.1"
 ZSH_VER="5.7.1"
 GO_VER="1.13"
-RHEL_KUBECTL_REPO="[kubernetes]\nname=Kubernetes\nbaseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64\nenabled=1\ngpgcheck=1\nrepo_gpgcheck=1\ngpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg"
+RHEL_KUBECTL_REPO="[kubernetes]
+name=Kubernetes
+baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+"
 
 # locations of directories
 GITREPOS="${HOME}/git-repos"
@@ -716,7 +723,10 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
 
     echo "Installing kubectl RHEL"
     if [[ ! -f /etc/yum.repos.d/kubernetes.repo ]]; then
-      sudo echo ${RHEL_KUBECTL_REPO} > /etc/yum.repos.d/kubernetes.repo
+      sudo echo "${RHEL_KUBECTL_REPO}" > /tmp/kubernetes.repo
+      sudo chown root:root /tmp/kubernetes.repo
+      sudo chmod 644 /tmp/kubernetes.repo
+      sudo mv /tmp/kubernetes.repo /etc/yum.repos.d/kubernetes.repo
     fi
     sudo -H dnf update -y
     sudo -H dnf install kubectl -y
