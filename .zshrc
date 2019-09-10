@@ -26,7 +26,7 @@ if [[ ${MACOS} ]]; then
   fi
 fi
 if [[ ${LINUX} ]]; then
-  VIRTUALENVWRAPPER_SCRIPT=${HOME}/.local/bin/virtualenvwrapper.sh
+  VIRTUALENVWRAPPER_SCRIPT=${HOME}/usr/local/bin/virtualenvwrapper.sh
   VIRTUALENVWRAPPER_PYTHON=/usr/bin/python3
   CHRUBY_LOC="/usr/local/share"
 fi
