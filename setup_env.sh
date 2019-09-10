@@ -698,6 +698,11 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H dnf update -y
     sudo -H dnf install powershell -y
 
+    echo "Installing npm RHEL"
+    curl -sL https://rpm.nodesource.com/setup_12.x | sudo -E bash -
+    sudo -H dnf update -y
+    sudo -H dnf install nodejs -y
+
     # install glances cpu monitor
     sudo -H pip3 install glances
   fi
