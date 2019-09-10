@@ -554,6 +554,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt-get install iotop -y
     sudo -H apt-get install jq -y
     sudo -H apt-get install keychain -y
+    sudo -H apt-get install libpython3.6-dev -y
     sudo -H apt-get install make -y
     sudo -H apt-get install nodejs -y
     sudo -H apt-get install npm -y
@@ -576,10 +577,10 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo -H apt-get install powershell -y
     fi
 
-    echo "Installing go 1.12"
+    echo "Installing go 1.13"
     sudo add-apt-repository ppa:longsleep/golang-backports -y
     sudo -H apt-get update
-    sudo -H apt-get install golang-1.12-go -y
+    sudo -H apt-get install golang-1.13-go -y
 
     echo "Installing docker desktop"
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo -H apt-key add -
@@ -672,6 +673,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H dnf install make -y
     sudo -H dnf install python-setuptools -y
     sudo -H dnf install python3-setuptools -y
+    sudo -H dnf install python3-devel -y
     sudo -H dnf install python3-pip -y
     sudo -H dnf install the_silver_searcher -y
     sudo -H dnf install unzip -y
