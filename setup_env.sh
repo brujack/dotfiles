@@ -700,15 +700,6 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
 
     # install glances cpu monitor
     sudo -H pip3 install glances
-
-    echo "Installing Hashicorp Terraform"
-    if [[ ! -d ${HOME}/downloads/terraform_${TERRAFORM_VER} ]]; then
-      wget -O ${HOME}/downloads/terraform_${TERRAFORM_VER}_linux_amd64.zip https://releases.hashicorp.com/terraform/${TERRAFORM_VER}/terraform_${TERRAFORM_VER}_linux_amd64.zip
-      unzip ${HOME}/downloads/terraform_${TERRAFORM_VER}_linux_amd64.zip -d ${HOME}/downloads/terraform_${TERRAFORM_VER}
-      sudo cp -a ${HOME}/downloads/terraform_${TERRAFORM_VER}/terraform /usr/local/bin/
-      sudo chmod 755 /usr/local/bin/terraform
-      sudo chown root:root /usr/local/bin/terraform
-    fi
   fi
   if [[ ${CENTOS} ]]; then
     sudo -H yum update -y
@@ -808,6 +799,16 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
   gem install kitchen-docker
   gem install kitchen-verifier-serverspec
 
+  echo "Installing Hashicorp Terraform"
+  if [[ ${REDHAT} || ${FEDORA} ]]; then
+    if [[ ! -d ${HOME}/downloads/terraform_${TERRAFORM_VER} ]]; then
+      wget -O ${HOME}/downloads/terraform_${TERRAFORM_VER}_linux_amd64.zip https://releases.hashicorp.com/terraform/${TERRAFORM_VER}/terraform_${TERRAFORM_VER}_linux_amd64.zip
+      unzip ${HOME}/downloads/terraform_${TERRAFORM_VER}_linux_amd64.zip -d ${HOME}/downloads/terraform_${TERRAFORM_VER}
+      sudo cp -a ${HOME}/downloads/terraform_${TERRAFORM_VER}/terraform /usr/local/bin/
+      sudo chmod 755 /usr/local/bin/terraform
+      sudo chown root:root /usr/local/bin/terraform
+    fi
+  fi
 fi
 
 # update is run more often to keep the device up to date with patches
