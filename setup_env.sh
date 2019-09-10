@@ -80,7 +80,7 @@ if [[ ${MACOS} ]]; then
   VIRTUALENV_LOC="/usr/local/bin"
   CHRUBY_LOC="/usr/local/opt/chruby/share"
 elif [[ ${LINUX} ]]; then
-  VIRTUALENV_LOC="${HOME}/.local/bin"
+  VIRTUALENV_LOC="/usr/local/bin"
   VIRTUALENVWRAPPER_PYTHON="/usr/bin/python3"
   CHRUBY_LOC="/usr/local/share"
 elif [[ ${WINDOWS} ]]; then
@@ -723,7 +723,13 @@ fi
 if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
   echo "ANSIBLE setup"
   echo "Installing virtualenv for python"
-  pip3 install virtualenv virtualenvwrapper
+  if [[ ${MACOS} ]]; then
+    pip3 install virtualenv virtualenvwrapper
+  elif [[ ${LINUX} ]]; then
+    # necessary to install virtualenv to site-packages for linux
+    sudo pip3 install virtualenv virtualenvwrapper
+  fi
+
 
   # setup virtualenv for python if virtualenv there
   if ! [[ -d ${HOME}/.virtualenvs ]]; then
