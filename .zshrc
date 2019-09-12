@@ -202,8 +202,8 @@ alias us-8-2='ssh bruce@us-8-2'
 alias upstairs='ssh bruce@upstairs'
 alias downstairs='ssh bruce@downstairs'
 alias basement='ssh bruce@basement'
-alias backyard='ssh bruce@mesh'
-alias attic='ssh bruce@mesh-pro'
+alias backyard='ssh bruce@backyard'
+alias attic='ssh bruce@attic'
 # aliases for work servers
 
 # command aliases
