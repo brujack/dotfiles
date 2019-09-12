@@ -91,7 +91,7 @@ if [[ ${MACOS} ]]; then
 elif [[ ${LINUX} ]]; then
   if [[ -f "${HOME}/.local/bin/virtualenv" ]]; then
     VIRTUALENV_LOC="${HOME}/.local/bin"
-  elif [[ -f /usr/loca/bin/virtualenv ]]; then
+  elif [[ -f "/usr/local/bin/virtualenv" ]]; then
     VIRTUALENV_LOC="/usr/local/bin"
   fi
   VIRTUALENVWRAPPER_PYTHON="/usr/bin/python3"

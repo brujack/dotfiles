@@ -30,7 +30,7 @@ fi
 if [[ ${LINUX} ]]; then
   if [[ -f "${HOME}/.local/bin/virtualenvwrapper.sh" ]]; then
     VIRTUALENVWRAPPER_SCRIPT="${HOME}/.local/bin/virtualenvwrapper.sh"
-  elif [[ -f "/usr/loca/bin/virtualenvwrapper.sh" ]]; then
+  elif [[ -f "/usr/local/bin/virtualenvwrapper.sh" ]]; then
     VIRTUALENVWRAPPER_SCRIPT="/usr/local/bin/virtualenvwrapper.sh"
   fi
   VIRTUALENVWRAPPER_PYTHON=/usr/bin/python3
