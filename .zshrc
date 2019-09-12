@@ -28,7 +28,11 @@ if [[ ${MACOS} ]]; then
   fi
 fi
 if [[ ${LINUX} ]]; then
-  VIRTUALENVWRAPPER_SCRIPT=/usr/local/bin/virtualenvwrapper.sh
+  if [[ -f "${HOME}/.local/bin/virtualenvwrapper.sh" ]]; then
+    VIRTUALENVWRAPPER_SCRIPT="${HOME}/.local/bin/virtualenvwrapper.sh"
+  elif [[ -f "/usr/loca/bin/virtualenvwrapper.sh" ]]; then
+    VIRTUALENVWRAPPER_SCRIPT="/usr/local/bin/virtualenvwrapper.sh"
+  fi
   VIRTUALENVWRAPPER_PYTHON=/usr/bin/python3
   CHRUBY_LOC="/usr/local/share"
 fi
@@ -252,10 +256,7 @@ fi
 
 # setup for python 3.7 for ansible by using virtualenv
 if [[ -d ~/.virtualenvs/ansible ]]; then
-  if [[ ${MACOS} ]]; then
-    source ${VIRTUALENVWRAPPER_SCRIPT}
-  fi
-  if [[ ${LINUX} ]]; then
+  if [[ ${MACOS} || ${LINUX} ]]; then
     source ${VIRTUALENVWRAPPER_SCRIPT}
   fi
   workon ansible
