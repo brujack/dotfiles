@@ -28,7 +28,7 @@ update: does a system update of packages including brew packages
 
 After changing to zsh, you will need to do another './setup_env.sh -t setup' if that is what you wanted, since by changing shells, you will lose the original shell process and need to start over again.
 
-## For Windows setup
+## For Windows/wsl setup
 
 1. Windows 10 Pro current so that you can run containers and wsl
 2. Boxstarter installed from [boxstarter](https://boxstarter.org/) using the command in windows_boxstarter.ps1 in this repo
