@@ -50,6 +50,7 @@ brew "readline"
 brew "redis", restart_service: :changed, link: true
 brew "ruby"
 brew "ruby-install"
+brew "shellcheck"
 brew "sops"
 brew "sqlite"
 brew "terraform"
