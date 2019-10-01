@@ -575,6 +575,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt-get install python3-setuptools -y
     sudo -H apt-get install python3-pip -y
     sudo -H apt-get install silversearcher-ag -y
+    sudo -H apt-get install shellcheck
     sudo -H apt-get install software-properties-common -y
     sudo -H apt-get install unzip -y
     sudo -H apt-get install wget -y
@@ -688,6 +689,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H dnf install python3-setuptools -y
     sudo -H dnf install python3-devel -y
     sudo -H dnf install python3-pip -y
+    sudo -H dnf install ShellCheck -y
     sudo -H dnf install the_silver_searcher -y
     sudo -H dnf install unzip -y
     sudo -H dnf install wget -y
