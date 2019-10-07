@@ -27,5 +27,13 @@
     "team.showWelcomeMessage": false,
     "editor.suggestSelection": "first",
     "vsintellicode.modify.editor.suggestSelection": "automaticallyOverrodeDefaultValue",
-    "terraform.indexing.enable": "true"
+    "terraform.indexing.enable": "true",
+    "markdownlint.customRules": [
+        "{docsmsft.docs-markdown}/markdownlint-custom-rules/rules.js"
+    ],
+    "markdownlint.config": {
+        "MD025": {
+            "front_matter_title": ""
+        }
+    }
 }
