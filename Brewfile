@@ -55,6 +55,7 @@ brew "sops"
 brew "sqlite"
 brew "terraform"
 brew "terraform_landscape"
+brew "tflint"
 brew "the_silver_searcher"
 brew "tree"
 brew "vault", args: ["--with-ui"]
