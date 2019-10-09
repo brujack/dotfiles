@@ -786,6 +786,8 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
     pip3 install awscli
     echo "Installing pylint for python linting via pip"
     pip3 install pylint
+    echo "Installing jmespath-terminal via pip"
+    pip3 install jmespath-terminal
   fi
 
   # override boto provided endpoints with a more correct version that has all of the regions
