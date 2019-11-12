@@ -223,9 +223,9 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     mkdir ${HOME}/bin
   fi
 
-  echo "Creating ${GITREPOS}"
-  if [[ ! -d ${GITREPOS} ]]; then
-    mkdir ${GITREPOS}
+  echo "Creating home bin"
+  if [[ ! -d ${HOME}/bin ]]; then
+    mkdir ${HOME}/bin
   fi
 
   echo "Creating ${PERSONAL_GITREPOS}"
@@ -252,11 +252,19 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
   elif [[ ! -L ${HOME}/.gitconfig ]]; then
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig ${HOME}/.gitconfig
   fi
+
   if [[ -f ${HOME}/.vimrc ]]; then
     rm ${HOME}/.vimrc
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.vimrc ${HOME}/.vimrc
   elif [[ ! -L ${HOME}/.vimrc ]]; then
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.vimrc ${HOME}/.vimrc
+  fi
+
+  if [[ -d ${HOME}/scripts ]]; then
+    rm -rf ${HOME}/scripts
+    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/scripts ${HOME}/scripts
+  elif [[ ! -L ${HOME}/scripts ]]; then
+    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/scripts ${HOME}/scripts
   fi
 
   if [[ -f ${HOME}/switch_terra_account.sh ]]; then
