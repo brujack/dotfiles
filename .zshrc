@@ -237,8 +237,10 @@ alias td='terraform destroy'
 if quiet_which exa
 then
   alias gs="exa -lg --git"
+  alias ll="ls -la"
   alias ls="ls -l"
 else
+  alias ll="ls -la"
   alias ls="ls -l"
 fi
 
