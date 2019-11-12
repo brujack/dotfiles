@@ -183,6 +183,15 @@ fi
 # export ANSIBLEUSER so that we run as the correct user
 export ANSIBLEUSER="ubuntu"
 
+# setting PSHOME for powershell use
+if [[ ${MACOS} ]]; then
+  export PSHOME="/usr/local/microsoft/powershell/6/"
+fi
+
+if [[ ${LINUX} ]]; then
+  export PSHOME="/opt/microsoft/powershell/6/"
+fi
+
 # Set personal aliases, overriding those provided by oh-my-zsh libs,
 # plugins, and themes. Aliases can be placed here, though oh-my-zsh
 # users are encouraged to define aliases within the ZSH_CUSTOM folder.
