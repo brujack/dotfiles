@@ -3,6 +3,7 @@
 [ $(uname -s) = "Linux" ] && export LINUX=1
 
 GO_VER="1.13"
+RUBY_VER="2.6.5"
 
 if [[ ${LINUX} ]]; then
   LINUX_TYPE=$(awk -F= '/^NAME/{print $2}' /etc/os-release | tr -d '"')
@@ -290,7 +291,7 @@ fi
 if [[ -d ${CHRUBY_LOC}/chruby ]]; then
   source ${CHRUBY_LOC}/chruby/chruby.sh
   source ${CHRUBY_LOC}/chruby/auto.sh
-  chruby ruby-2.6.3
+  chruby ${RUBY_VER}
 fi
 
 # zsh options
