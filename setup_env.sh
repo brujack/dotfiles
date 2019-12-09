@@ -52,7 +52,7 @@ usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 0; }
 # developer: runs a developer setup with packages and python virtual environment for running ansible
 # ansible: just runs the ansible setup using a python virtual environment.  Typically used after a python update. To run, "rm ~/.virtualenvs/ansible && ./setup_env.sh -t ansible"
 # update: does a system update of packages including brew packages
-while getopts ":hwt:" arg; do
+while getopts ":het:" arg; do
   case $arg in
     t) # Specify t of either 'setup_user', 'setup', 'developer' 'ansible' or 'update'.
       [[ ${OPTARG} = "setup_user" ]] && export SETUP_USER=1
@@ -61,8 +61,9 @@ while getopts ":hwt:" arg; do
       [[ ${OPTARG} = "ansible" ]] && export ANSIBLE=1
       [[ ${OPTARG} = "update" ]] && export UPDATE=1
       ;;
-    w) # Specify whether a work redhat computer -- sets up terraform 0.11 instead of 0.12
-      export WORK=1
+    e) # Specify whether a work redhat computer -- sets up terraform 0.11 instead of 0.12
+      [[ ${OPTARG} = "home" ]] && export HOME=1
+      [[ ${OPTARG} = "work" ]] && export WORK=1
       ;;
     h | *) # Display help.
       usage
