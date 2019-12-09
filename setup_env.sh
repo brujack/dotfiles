@@ -8,7 +8,8 @@ CONSUL_VER="1.6.2"
 VAULT_VER="1.3.0"
 NOMAD_VER="0.10.1"
 PACKER_VER="1.4.5"
-TERRAFORM_VER="0.11.11"
+WORK_TERRAFORM_VER="0.11.14"
+TERRAFORM_VER="0.12.17"
 GIT_VER="2.24.0"
 ZSH_VER="5.7.1"
 GO_VER="1.13"
@@ -59,6 +60,9 @@ while getopts ":ht:" arg; do
       [[ ${OPTARG} = "developer" ]] && export DEVELOPER=1
       [[ ${OPTARG} = "ansible" ]] && export ANSIBLE=1
       [[ ${OPTARG} = "update" ]] && export UPDATE=1
+      ;;
+    w) # Specify whether a work redhat computer -- sets up terraform 0.11 instead of 0.12
+      export WORK=1
       ;;
     h | *) # Display help.
       usage
@@ -854,13 +858,22 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
 
   echo "Installing Hashicorp Terraform"
   if [[ ${REDHAT} || ${FEDORA} ]]; then
-    if [[ ! -d ${HOME}/downloads/terraform_${TERRAFORM_VER} ]]; then
-      wget -O ${HOME}/downloads/terraform_${TERRAFORM_VER}_linux_amd64.zip https://releases.hashicorp.com/terraform/${TERRAFORM_VER}/terraform_${TERRAFORM_VER}_linux_amd64.zip
-      unzip ${HOME}/downloads/terraform_${TERRAFORM_VER}_linux_amd64.zip -d ${HOME}/downloads/terraform_${TERRAFORM_VER}
-      sudo cp -a ${HOME}/downloads/terraform_${TERRAFORM_VER}/terraform /usr/local/bin/
-      sudo chmod 755 /usr/local/bin/terraform
-      sudo chown root:root /usr/local/bin/terraform
-    fi
+    if [[ ${WORK} ]]; then
+      if [[ ! -d ${HOME}/downloads/terraform_${WORK_TERRAFORM_VER} ]]; then
+        wget -O ${HOME}/downloads/terraform_${WORK_TERRAFORM_VER}_linux_amd64.zip https://releases.hashicorp.com/terraform/${WORK_TERRAFORM_VER}/terraform_${WORK_TERRAFORM_VER}_linux_amd64.zip
+        unzip ${HOME}/downloads/terraform_${WORK_TERRAFORM_VER}_linux_amd64.zip -d ${HOME}/downloads/terraform_${WORK_TERRAFORM_VER}
+        sudo cp -a ${HOME}/downloads/terraform_${WORK_TERRAFORM_VER}/terraform /usr/local/bin/
+        sudo chmod 755 /usr/local/bin/terraform
+        sudo chown root:root /usr/local/bin/terraform
+      fi
+    else
+      if [[ ! -d ${HOME}/downloads/terraform_${TERRAFORM_VER} ]]; then
+        wget -O ${HOME}/downloads/terraform_${TERRAFORM_VER}_linux_amd64.zip https://releases.hashicorp.com/terraform/${TERRAFORM_VER}/terraform_${TERRAFORM_VER}_linux_amd64.zip
+        unzip ${HOME}/downloads/terraform_${TERRAFORM_VER}_linux_amd64.zip -d ${HOME}/downloads/terraform_${TERRAFORM_VER}
+        sudo cp -a ${HOME}/downloads/terraform_${TERRAFORM_VER}/terraform /usr/local/bin/
+        sudo chmod 755 /usr/local/bin/terraform
+        sudo chown root:root /usr/local/bin/terraform
+      fi
   fi
 fi
 
