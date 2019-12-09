@@ -52,7 +52,7 @@ usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 0; }
 # developer: runs a developer setup with packages and python virtual environment for running ansible
 # ansible: just runs the ansible setup using a python virtual environment.  Typically used after a python update. To run, "rm ~/.virtualenvs/ansible && ./setup_env.sh -t ansible"
 # update: does a system update of packages including brew packages
-while getopts ":het:" arg; do
+while getopts ":he:t:" arg; do
   case $arg in
     t) # Specify t of either 'setup_user', 'setup', 'developer' 'ansible' or 'update'.
       [[ ${OPTARG} = "setup_user" ]] && export SETUP_USER=1
