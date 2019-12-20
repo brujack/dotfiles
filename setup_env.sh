@@ -791,7 +791,7 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
   if ! [[ -d ${HOME}/.virtualenvs/ansible ]]; then
     mkvirtualenv ansible -p python3
     echo "Installing ansible via pip"
-    pip3 install ansible ansible-cmdb
+    pip3 install ansible ansible-cmdb ansible-lint
     echo "Installing boto via pip"
     pip3 install boto boto3 botocore
     echo "Installing awscli via pip"
