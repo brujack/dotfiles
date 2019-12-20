@@ -695,7 +695,6 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H dnf install gcc -y
     sudo -H dnf install htop -y
     sudo -H dnf install iotop -y
-    sudo -H dnf install keychain -y
     sudo -H dnf install make -y
     sudo -H dnf install python-setuptools -y
     sudo -H dnf install python3-setuptools -y
