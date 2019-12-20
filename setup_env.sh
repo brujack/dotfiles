@@ -144,6 +144,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
       sudo -H dnf update -y
       sudo -H dnf install wget -y
       sudo -H dnf install make -y
+      sudo -H dnf install perl-IO-Socket-SSL -y
       sudo -H dnf install cpan -y
       cpan
       cpan App::cpanminus
