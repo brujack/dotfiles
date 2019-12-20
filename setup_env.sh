@@ -193,8 +193,8 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
         sudo -H yum remove zsh -y
       fi
       sudo -H yum update
-      sudo -H yum install gcc
-      sudo -H yum install make
+      sudo -H yum install gcc -y
+      sudo -H yum install make -y
       sudo -H yum install ncurses-devel -y
       if [[ ! -f ${HOME}/downloads/zsh-${ZSH_VER}.tar.xz ]]; then
         echo "Installing Redhat zsh"
