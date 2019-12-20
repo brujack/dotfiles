@@ -10,7 +10,7 @@ NOMAD_VER="0.10.1"
 PACKER_VER="1.4.5"
 WORK_TERRAFORM_VER="0.11.14"
 TERRAFORM_VER="0.12.17"
-GIT_VER="2.24.0"
+GIT_VER="2.24.1"
 ZSH_VER="5.7.1"
 GO_VER="1.13"
 RHEL_KUBECTL_REPO="[kubernetes]
@@ -158,7 +158,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
         make configure
         ./configure --prefix=/usr
         make all doc
-        sudo -H make install install-doc install-html
+        sudo -H make install install-doc
       fi
     fi
   fi
