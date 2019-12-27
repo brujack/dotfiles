@@ -382,6 +382,8 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     brew tap homebrew/bundle
     brew tap caskroom/cask
     cd ${BREWFILE_LOC} && brew bundle
+    brew tap teamookla/speedtest
+    brew install speedtest
     cd ${PERSONAL_GITREPOS}/${DOTFILES}
 
     # the below casks and mas are not in a brewfile since they will "fail" if already installed
