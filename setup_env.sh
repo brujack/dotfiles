@@ -144,7 +144,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
       sudo -H dnf update -y
       sudo -H dnf install asciidoc -y
       sudo -H dnf install cpan -y
-      sudo -H dnf install docbook2x -y
+      sudo -H dnf install docbook2X -y
       sudo -H dnf install make -y
       sudo -H dnf install perl-IO-Socket-SSL -y
       sudo -H dnf install wget -y
