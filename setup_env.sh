@@ -13,6 +13,7 @@ TERRAFORM_VER="0.12.17"
 GIT_VER="2.24.1"
 ZSH_VER="5.7.1"
 GO_VER="1.13"
+SHELLCHECK_VER="0.7.0"
 RHEL_KUBECTL_REPO="[kubernetes]
 name=Kubernetes
 baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
@@ -423,6 +424,9 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/Firefox.app" ]]; then
       brew cask install firefox
     fi
+    if [[ ! -d "/Applications/Fork.app" ]]; then
+      brew cask install fork
+    fi
     if [[ ! -d "/Applications/Funter.app" ]]; then
       brew cask install funter
     fi
@@ -707,10 +711,20 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H dnf install python3-setuptools -y
     sudo -H dnf install python3-devel -y
     sudo -H dnf install python3-pip -y
-    sudo -H dnf install ShellCheck -y
     sudo -H dnf install the_silver_searcher -y
     sudo -H dnf install unzip -y
     sudo -H dnf install wget -y
+
+    echo "Installing shellcheck RHEL"
+    if [[ ! -d ${HOME}/downloads/shellcheck-v${SHELLCHEK_VER} ]]; then
+      wget -O ${HOME}/downloads/shellcheck-v${SHELLCHEK_VER}.linux.x86_64.tar.xz https://shellcheck.storage.googleapis.com/shellcheck-v${SHELLCHEK_VER}.linux.x86_64.tar.xz
+      xz --decompress ${HOME}/downloads/shellcheck-v${SHELLCHEK_VER}.linux.x86_64.tar.xz
+      cd ${HOME}/downloads
+      tar -xf ${HOME}/downloads/shellcheck-v${SHELLCHEK_VER}.linux.x86_64.tar
+      sudo cp -a ${HOME}/downloads/shellcheck-v${SHELLCHEK_VER}/shellcheck /usr/local/bin/
+      sudo chmod 755 /usr/local/bin/shellcheck
+      sudo chown root:root /usr/local/bin/shellcheck
+    fi
 
     echo "Installing keychain RHEL"
     sudo -H rpm --import http://wiki.psychotic.ninja/RPM-GPG-KEY-psychotic
