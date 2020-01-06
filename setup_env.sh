@@ -143,6 +143,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     if [[ ${REDHAT} ]]; then
       sudo -H dnf update -y
       sudo -H dnf install asciidoc -y
+      sudo -H dnf install autoconf -y
       sudo -H dnf install cpan -y
       sudo -H dnf install docbook2X -y
       sudo -H dnf install make -y
