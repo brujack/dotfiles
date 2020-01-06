@@ -142,10 +142,13 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     fi
     if [[ ${REDHAT} ]]; then
       sudo -H dnf update -y
-      sudo -H dnf install wget -y
+      sudo -H dnf install asciidoc -y
+      sudo -H dnf install cpan -y
+      sudo -H dnf install docbook2x -y
       sudo -H dnf install make -y
       sudo -H dnf install perl-IO-Socket-SSL -y
-      sudo -H dnf install cpan -y
+      sudo -H dnf install wget -y
+      sudo -H dnf install xmlto -y
       cpan
       cpan App::cpanminus
       cpanm Test::Simple
