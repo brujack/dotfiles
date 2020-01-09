@@ -256,11 +256,21 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
 
   echo "Linking ${DOTFILES} to their home"
 
-  if [[ -f ${HOME}/.gitconfig ]]; then
-    rm ${HOME}/.gitconfig
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig ${HOME}/.gitconfig
-  elif [[ ! -L ${HOME}/.gitconfig ]]; then
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig ${HOME}/.gitconfig
+  if [[ ${MACOS} ]]; then
+    if [[ -f ${HOME}/.gitconfig ]]; then
+      rm ${HOME}/.gitconfig
+      ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_macos ${HOME}/.gitconfig
+    elif [[ ! -L ${HOME}/.gitconfig ]]; then
+      ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_macos ${HOME}/.gitconfig
+    fi
+  fi
+  if [[ ${LINUX} ]]; then
+    if [[ -f ${HOME}/.gitconfig ]]; then
+      rm ${HOME}/.gitconfig
+      ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_linux ${HOME}/.gitconfig
+    elif [[ ! -L ${HOME}/.gitconfig ]]; then
+      ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_linux ${HOME}/.gitconfig
+    fi
   fi
 
   if [[ -f ${HOME}/.vimrc ]]; then

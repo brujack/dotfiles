@@ -1,11 +1,5 @@
 [core]
 	excludesfile = /Users/bruce/.gitignore_global
-[difftool "sourcetree"]
-	cmd = opendiff \"$LOCAL\" \"$REMOTE\"
-	path =
-[mergetool "sourcetree"]
-	cmd = /Applications/Sourcetree.app/Contents/Resources/opendiff-w.sh \"$LOCAL\" \"$REMOTE\" -ancestor \"$BASE\" -merge \"$MERGED\"
-	trustExitCode = true
 [user]
 	name = Bruce Jackson
 	email = bjackson@pobox.com
@@ -23,3 +17,4 @@
 	textconv = sops -d
 [credential]
 	helper = !/usr/bin/java -Ddebug=false -Djava.net.useSystemProxies=true -jar /usr/lib/git-credential-manager-2.0.4.jar
+	canFallBackToInsecureStore = true
