@@ -202,6 +202,7 @@ fi
 # alias zshconfig="mate ~/.zshrc"
 # alias ohmyzsh="mate ~/.oh-my-zsh"
 alias home='ssh bruce@home.conecrazy.ca'
+alias bastion='ssh bruce@bastion'
 alias mac='ssh bruce@mac'
 alias server='ssh bruce@server'
 alias ratna='ssh bruce@ratna'
