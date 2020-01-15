@@ -118,7 +118,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     fi
   fi
 
-  if ! [ -x "$(command -v git)" ]; then
+  #if ! [ -x "$(command -v git)" ]; then
     echo "Installing git"
     if [[ ${MACOS} ]]; then
       # Check for Homebrew,
@@ -166,7 +166,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
         make all doc
         sudo -H make install install-doc
       fi
-    fi
+    #fi
   fi
 
   if ! [ -x "$(command -v zsh)" ]; then
