@@ -148,6 +148,8 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
       sudo -H dnf install cpan -y
       sudo -H dnf install docbook2X -y
       sudo -H dnf install make -y
+      sudo -H dnf install perl-App-cpanminus -y
+      sudo -H dnf install perl-ExtUtils-MakeMaker -y
       sudo -H dnf install perl-IO-Socket-SSL -y
       sudo -H dnf install wget -y
       sudo -H dnf install xmlto -y
