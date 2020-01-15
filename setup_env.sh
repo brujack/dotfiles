@@ -166,8 +166,8 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
         make all doc
         sudo -H make install install-doc
       fi
-    #fi
-  fi
+    fi
+  #fi
 
   if ! [ -x "$(command -v zsh)" ]; then
     echo "Installing zsh"
