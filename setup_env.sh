@@ -152,7 +152,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     sudo -H dnf install perl-IO-Socket-SSL -y
     sudo -H dnf install wget -y
     sudo -H dnf install xmlto -y
-    cpan
+    #cpan
     cpan App::cpanminus
     cpanm Test::Simple
     cpanm Fatal
