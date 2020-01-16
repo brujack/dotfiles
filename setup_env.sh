@@ -129,6 +129,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     brew install git
   fi
   if [[ ${UBUNTU} ]]; then
+    sudo -H add-apt-repository ppa:git-core/ppa
     sudo -H apt-get update
     sudo -H apt-get install git -y
   fi
