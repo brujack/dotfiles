@@ -118,58 +118,56 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     fi
   fi
 
-  #if ! [ -x "$(command -v git)" ]; then
-    echo "Installing git"
-    if [[ ${MACOS} ]]; then
-      # Check for Homebrew,
-      # Install if we don't have it
-      if ! [ -x "$(command -v brew)" ]; then
-        echo "Installing homebrew..."
-        ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
-      fi
-      brew install git
+  echo "Installing git"
+  if [[ ${MACOS} ]]; then
+    # Check for Homebrew,
+    # Install if we don't have it
+    if ! [ -x "$(command -v brew)" ]; then
+      echo "Installing homebrew..."
+      ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
     fi
-    if [[ ${UBUNTU} ]]; then
-      sudo -H apt-get update
-      sudo -H apt-get install git -y
+    brew install git
+  fi
+  if [[ ${UBUNTU} ]]; then
+    sudo -H apt-get update
+    sudo -H apt-get install git -y
+  fi
+  if [[ ${FEDORA} ]]; then
+    sudo -H dnf update -y
+    sudo -H dnf install git -y
+  fi
+  if [[ ${CENTOS} ]]; then
+    sudo -H yum update -y
+    sudo -H yum install git -y
+  fi
+  if [[ ${REDHAT} ]]; then
+    sudo -H dnf update -y
+    sudo -H dnf install asciidoc -y
+    sudo -H dnf install autoconf -y
+    sudo -H dnf install cpan -y
+    sudo -H dnf install docbook2X -y
+    sudo -H dnf install make -y
+    sudo -H dnf install perl-App-cpanminus -y
+    sudo -H dnf install perl-ExtUtils-MakeMaker -y
+    sudo -H dnf install perl-IO-Socket-SSL -y
+    sudo -H dnf install wget -y
+    sudo -H dnf install xmlto -y
+    cpan
+    cpan App::cpanminus
+    cpanm Test::Simple
+    cpanm Fatal
+    cpanm XML::SAX
+    if [[ ! -f ${HOME}/downloads/git-${GIT_VER}.tar.gz ]]; then
+      echo "Installing Redhat git"
+      wget -O ${HOME}/downloads/git-${GIT_VER}.tar.gz https://mirrors.edge.kernel.org/pub/software/scm/git/git-${GIT_VER}.tar.gz
+      tar -zxvf ${HOME}/downloads/git-${GIT_VER}.tar.gz -C ${HOME}/downloads
+      cd ${HOME}/downloads/git-${GIT_VER}
+      make configure
+      ./configure --prefix=/usr
+      make all doc
+      sudo -H make install install-doc
     fi
-    if [[ ${FEDORA} ]]; then
-      sudo -H dnf update -y
-      sudo -H dnf install git -y
-    fi
-    if [[ ${CENTOS} ]]; then
-      sudo -H yum update -y
-      sudo -H yum install git -y
-    fi
-    if [[ ${REDHAT} ]]; then
-      sudo -H dnf update -y
-      sudo -H dnf install asciidoc -y
-      sudo -H dnf install autoconf -y
-      sudo -H dnf install cpan -y
-      sudo -H dnf install docbook2X -y
-      sudo -H dnf install make -y
-      sudo -H dnf install perl-App-cpanminus -y
-      sudo -H dnf install perl-ExtUtils-MakeMaker -y
-      sudo -H dnf install perl-IO-Socket-SSL -y
-      sudo -H dnf install wget -y
-      sudo -H dnf install xmlto -y
-      cpan
-      cpan App::cpanminus
-      cpanm Test::Simple
-      cpanm Fatal
-      cpanm XML::SAX
-      if [[ ! -f ${HOME}/downloads/git-${GIT_VER}.tar.gz ]]; then
-        echo "Installing Redhat git"
-        wget -O ${HOME}/downloads/git-${GIT_VER}.tar.gz https://mirrors.edge.kernel.org/pub/software/scm/git/git-${GIT_VER}.tar.gz
-        tar -zxvf ${HOME}/downloads/git-${GIT_VER}.tar.gz -C ${HOME}/downloads
-        cd ${HOME}/downloads/git-${GIT_VER}
-        make configure
-        ./configure --prefix=/usr
-        make all doc
-        sudo -H make install install-doc
-      fi
-    fi
-  #fi
+  fi
 
   if ! [ -x "$(command -v zsh)" ]; then
     echo "Installing zsh"
