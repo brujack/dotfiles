@@ -630,15 +630,17 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt-get update
     sudo -H apt-get install golang-${GO_VER}-go -y
 
-    echo "Installing docker desktop"
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo -H apt-key add -
-    sudo -H add-apt-repository \
-    "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
-    $(lsb_release -cs) \
-    stable"
-    sudo -H apt-get update
-    sudo -H apt-get install docker-ce -y
-    sudo -H apt-get install docker-ce-cli -y
+    if [[ ! ${HOSTNAME} == "bastion" ]]; then
+      echo "Installing docker desktop"
+      curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo -H apt-key add -
+      sudo -H add-apt-repository \
+      "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
+      $(lsb_release -cs) \
+      stable"
+      sudo -H apt-get update
+      sudo -H apt-get install docker-ce -y
+      sudo -H apt-get install docker-ce-cli -y
+    fi
 
     echo "Installing azure-cli"
     curl -sL https://packages.microsoft.com/keys/microsoft.asc | \
