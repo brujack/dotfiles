@@ -286,7 +286,8 @@ alias sas9003='ssh dvo-lconf@sas9003-vm'
 alias sas9004='ssh dvo-lconf@sas9004-vm'
 alias sas9005='ssh dvo-lconf@sas9005-vm'
 alias dvo9000='ssh dvo-lconf@dvo9000-vm'
-alias dvo9002='ssh dvo-lconf@dvo9002-vm'
+alias dvo9003='ssh dvo-lconf@dvo9003-vm'
+alias dvo9004='ssh dvo-lconf@dvo9004-vm'
 
 # command aliases
 alias au='sudo apt-get update'
