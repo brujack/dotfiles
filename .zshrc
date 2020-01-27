@@ -1,9 +1,10 @@
 # choose which env we are running on
-[ $(uname -s) = "Darwin" ] && export MACOS=1
-[ $(uname -s) = "Linux" ] && export LINUX=1
+[ "$(uname -s)" = "Darwin" ] && export MACOS=1
+[ "$(uname -s)" = "Linux" ] && export LINUX=1
 
 GO_VER="1.13"
 RUBY_VER="2.6.5"
+GITREPOS="${HOME}/git-repos"
 
 if [[ ${LINUX} ]]; then
   LINUX_TYPE=$(awk -F= '/^NAME/{print $2}' /etc/os-release | tr -d '"')
@@ -29,7 +30,7 @@ if [[ ${MACOS} ]]; then
   fi
 fi
 if [[ ${LINUX} ]]; then
-  if [[ -f "${HOME}/.local/bin/virtualenvwrapper.sh" ]]; then
+  if [[ -f ${HOME}/.local/bin/virtualenvwrapper.sh ]]; then
     VIRTUALENVWRAPPER_SCRIPT="${HOME}/.local/bin/virtualenvwrapper.sh"
   elif [[ -f "/usr/local/bin/virtualenvwrapper.sh" ]]; then
     VIRTUALENVWRAPPER_SCRIPT="/usr/local/bin/virtualenvwrapper.sh"
@@ -46,9 +47,9 @@ quiet_which() {
 # rancherssh will do fuzzy find for your query between %%
 # rssh container-keyword
 rssh () {
-  cd ${HOME}/.rancherssh
+  cd ${HOME}/.rancherssh || return
   rancherssh %"$1"%
-  cd -
+  cd ${HOME} || return
 }
 
 # Path to your oh-my-zsh installation.
@@ -425,4 +426,9 @@ if [[ ${MACOS} ]]; then
   if [[ -d /usr/local/ibmcloud/autocomplete/zsh_autocomplete ]]; then
     source '/usr/local/ibmcloud/autocomplete/zsh_autocomplete'
   fi
+fi
+
+# for z fuzzy cd
+if [[ -f ${GITREPOS}/z/z.sh ]]; then
+  source ${GITREPOS}/z/z.sh
 fi

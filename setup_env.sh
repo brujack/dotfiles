@@ -14,6 +14,7 @@ GIT_VER="2.25.0"
 ZSH_VER="5.7.1"
 GO_VER="1.13"
 SHELLCHECK_VER="0.7.0"
+Z_GIT="git@github.com:rupa/z.git"
 RHEL_KUBECTL_REPO="[kubernetes]
 name=Kubernetes
 baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
@@ -94,7 +95,7 @@ if [[ ${MACOS} ]]; then
   VIRTUALENV_LOC="/usr/local/bin"
   CHRUBY_LOC="/usr/local/opt/chruby/share"
 elif [[ ${LINUX} ]]; then
-  if [[ -f "${HOME}/.local/bin/virtualenv" ]]; then
+  if [[ -f ${HOME}/.local/bin/virtualenv ]]; then
     VIRTUALENV_LOC="${HOME}/.local/bin"
   elif [[ -f "/usr/local/bin/virtualenv" ]]; then
     VIRTUALENV_LOC="/usr/local/bin"
@@ -162,7 +163,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
       echo "Installing Redhat git"
       wget -O ${HOME}/downloads/git-${GIT_VER}.tar.gz https://mirrors.edge.kernel.org/pub/software/scm/git/git-${GIT_VER}.tar.gz
       tar -zxvf ${HOME}/downloads/git-${GIT_VER}.tar.gz -C ${HOME}/downloads
-      cd ${HOME}/downloads/git-${GIT_VER}
+      cd ${HOME}/downloads/git-${GIT_VER} || return
       make configure
       ./configure --prefix=/usr
       make all doc
@@ -207,7 +208,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
         echo "Installing Redhat zsh"
         wget -O ${HOME}/downloads/zsh-${ZSH_VER}.tar.xz http://www.zsh.org/pub/zsh-${ZSH_VER}.tar.xz
         tar -xvf ${HOME}/downloads/zsh-${ZSH_VER}.tar.xz -C ${HOME}/downloads
-        cd ${HOME}/downloads/zsh-${ZSH_VER}
+        cd ${HOME}/downloads/zsh-${ZSH_VER} || return
         ./configure --prefix=/usr/local --bindir=/usr/local/bin --sysconfdir=/etc/zsh --enable-etcdir=/etc/zsh
         make
         sudo -H make install
@@ -234,11 +235,6 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     mkdir ${HOME}/bin
   fi
 
-  echo "Creating home bin"
-  if [[ ! -d ${HOME}/bin ]]; then
-    mkdir ${HOME}/bin
-  fi
-
   echo "Creating ${PERSONAL_GITREPOS}"
   if [[ ! -d ${PERSONAL_GITREPOS} ]]; then
     mkdir ${PERSONAL_GITREPOS}
@@ -246,12 +242,12 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
 
   echo "Copying ${DOTFILES} from Github"
   if [[ ! -d ${PERSONAL_GITREPOS}/${DOTFILES} ]]; then
-    cd ${HOME}
+    cd ${HOME} || return
     git clone --recursive git@github.com:brujack/${DOTFILES}.git ${PERSONAL_GITREPOS}/${DOTFILES}
     # for regular https github used on machines that will not push changes
     # git clone --recursive https://github.com/brujack/${DOTFILES}.git ${PERSONAL_GITREPOS}/${DOTFILES}
   else
-    cd ${PERSONAL_GITREPOS}/${DOTFILES}
+    cd ${PERSONAL_GITREPOS}/${DOTFILES} || return
     git pull
   fi
 
@@ -296,17 +292,17 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
   fi
 
   if [[ ${MACOS} ]]; then
-    if [[ -f "$VSCODE"/settings.json ]]; then
-      rm "$VSCODE"/settings.json
-      ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/vscode-settings.json "$VSCODE"/settings.json
+    if [[ -f ${VSCODE}/settings.json ]]; then
+      rm ${VSCODE}/settings.json
+      ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/vscode-settings.json ${VSCODE}/settings.json
     fi
   fi
   if [[ ${WINDOWS} ]]; then
-    if [[ ! -e "$VSCODE"/settings.json ]]; then
-      cp -a ${HOME}/git-repos/personal/${DOTFILES}/vscode-settings.json "$VSCODE"/settings.json
+    if [[ ! -e ${VSCODE}/settings.json ]]; then
+      cp -a ${HOME}/git-repos/personal/${DOTFILES}/vscode-settings.json ${VSCODE}/settings.json
     else
-      rm "$VSCODE"/settings.json
-      cp -a ${HOME}/git-repos/personal/${DOTFILES}/vscode-settings.json "$VSCODE"/settings.json
+      rm ${VSCODE}/settings.json
+      cp -a ${HOME}/git-repos/personal/${DOTFILES}/vscode-settings.json ${VSCODE}/settings.json
     fi
   fi
 
@@ -350,6 +346,15 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     if [[ ! ${SHELL} = "/usr/local/bin/zsh" ]]; then
       chsh -s /usr/local/bin/zsh
     fi
+  fi
+  echo "Setting up Z"
+  if [[ ! -d ${GITREPOS}/z ]]; then
+    mkdir ${GITREPOS}/z
+    cd ${HOME} || return
+    git clone --recursive ${Z_GIT} ${GITREPOS}/z
+  else
+    cd ${GITREPOS}/z || return
+    git pull
   fi
 fi
 
@@ -396,11 +401,11 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
 
     #https://github.com/Homebrew/homebrew-bundle
     brew tap homebrew/bundle
-    brew tap caskroom/cask
+    brew tap homebrew/cask
     cd ${BREWFILE_LOC} && brew bundle
     brew tap teamookla/speedtest
     brew install speedtest
-    cd ${PERSONAL_GITREPOS}/${DOTFILES}
+    cd ${PERSONAL_GITREPOS}/${DOTFILES} || return
 
     # the below casks and mas are not in a brewfile since they will "fail" if already installed
     if [[ ! -d "/Applications/Alfred 4.app" ]]; then
@@ -734,7 +739,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d ${HOME}/downloads/shellcheck-v${SHELLCHEK_VER} ]]; then
       wget -O ${HOME}/downloads/shellcheck-v${SHELLCHEK_VER}.linux.x86_64.tar.xz https://shellcheck.storage.googleapis.com/shellcheck-v${SHELLCHEK_VER}.linux.x86_64.tar.xz
       xz --decompress ${HOME}/downloads/shellcheck-v${SHELLCHEK_VER}.linux.x86_64.tar.xz
-      cd ${HOME}/downloads
+      cd ${HOME}/downloads || return
       tar -xf ${HOME}/downloads/shellcheck-v${SHELLCHEK_VER}.linux.x86_64.tar
       sudo cp -a ${HOME}/downloads/shellcheck-v${SHELLCHEK_VER}/shellcheck /usr/local/bin/
       sudo chmod 755 /usr/local/bin/shellcheck
@@ -839,7 +844,7 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
     mkdir ${HOME}/.virtualenvs
   fi
 
-  cd ${HOME}/.virtualenvs
+  cd ${HOME}/.virtualenvs || return
   source ${VIRTUALENV_LOC}/virtualenvwrapper.sh
 
   if ! [[ -d ${HOME}/.virtualenvs/ansible ]]; then
@@ -882,7 +887,7 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
     if [[ ! -d ${HOME}/downloads/ruby-install-${RUBY_INSTALL_VER} ]]; then
       wget -O ${HOME}/downloads/ruby-install-${RUBY_INSTALL_VER}.tar.gz https://github.com/postmodern/ruby-install/archive/v${RUBY_INSTALL_VER}.tar.gz
       tar -xzvf ${HOME}/downloads/ruby-install-${RUBY_INSTALL_VER}.tar.gz -C ${HOME}/downloads/
-      cd ${HOME}/downloads/ruby-install-${RUBY_INSTALL_VER}/
+      cd ${HOME}/downloads/ruby-install-${RUBY_INSTALL_VER}/ || return
       sudo make install
     fi
   fi
@@ -892,7 +897,7 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
     if [[ ! -d ${HOME}/downloads/chruby-${CHRUBY_VER} ]]; then
       wget -O ${HOME}/downloads/chruby-${CHRUBY_VER}.tar.gz https://github.com/postmodern/chruby/archive/v${CHRUBY_VER}.tar.gz
       tar -xzvf ${HOME}/downloads/chruby-${CHRUBY_VER}.tar.gz -C ${HOME}/downloads/
-      cd ${HOME}/downloads/chruby-${CHRUBY_VER}/
+      cd ${HOME}/downloads/chruby-${CHRUBY_VER}/ || return
       sudo make install
     fi
   fi
