@@ -775,16 +775,18 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     fi
 
     echo "Installing google-cloud-sdk RHEL"
-    sudo tee -a /etc/yum.repos.d/google-cloud-sdk.repo << EOM
-    [google-cloud-sdk]
-    name=Google Cloud SDK
-    baseurl=https://packages.cloud.google.com/yum/repos/cloud-sdk-el7-x86_64
-    enabled=1
-    gpgcheck=1
-    repo_gpgcheck=1
-    gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg
-           https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+    if [[ ! -f /etc/yum.repos.d/google-cloud-sdk.repo ]]; then
+      sudo tee -a /etc/yum.repos.d/google-cloud-sdk.repo << EOM
+[google-cloud-sdk]
+name=Google Cloud SDK
+baseurl=https://packages.cloud.google.com/yum/repos/cloud-sdk-el7-x86_64
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg
+       https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
 EOM
+    fi
     sudo -H dnf update -y
     sudo -H dnf install google-cloud-sdk -y
     sudo -H dnf install google-cloud-sdk-app-engine-python -y
