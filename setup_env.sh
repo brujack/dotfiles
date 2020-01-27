@@ -211,10 +211,10 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
         ./configure --prefix=/usr/local --bindir=/usr/local/bin --sysconfdir=/etc/zsh --enable-etcdir=/etc/zsh
         make
         sudo -H make install
-        if ! [ grep -Fxq "/usr/local/bin/zsh" /etc/shells]; then
+        if [[ ! $(grep -Fxq "/usr/local/bin/zsh" /etc/shells) ]]; then
           sudo -H sh -c 'echo /usr/local/bin/zsh >> /etc/shells'
         fi
-        if ! [ grep -Fxq "/bin/zsh" /etc/shells]; then
+        if [[ ! $(grep -Fxq "/bin/zsh" /etc/shells) ]]; then
           sudo -H sh -c 'echo /bin/zsh >> /etc/shells'
         fi
       fi
@@ -653,8 +653,10 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt-get install azure-cli -y
 
     echo "Installing gcloud-sdk"
-    echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
-    curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
+    if [[ ! -f /etc/apt/sources.list.d/google-cloud-sdk.list ]]; then
+      echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+      curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
+    fi
     sudo apt-get update
     sudo -H apt-get install google-cloud-sdk -y
     sudo -H apt-get install google-cloud-sdk-app-engine-python -y
@@ -771,6 +773,23 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       wget -O ${HOME}/downloads/go${GO_VER}.linux-amd64.tar.gz https://dl.google.com/go/go${GO_VER}.linux-amd64.tar.gz
       sudo tar -C /usr/local -xzf ${HOME}/downloads/go${GO_VER}.linux-amd64.tar.gz
     fi
+
+    echo "Installing google-cloud-sdk RHEL"
+    sudo tee -a /etc/yum.repos.d/google-cloud-sdk.repo << EOM
+    [google-cloud-sdk]
+    name=Google Cloud SDK
+    baseurl=https://packages.cloud.google.com/yum/repos/cloud-sdk-el7-x86_64
+    enabled=1
+    gpgcheck=1
+    repo_gpgcheck=1
+    gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg
+          https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+EOM
+    sudo -H dnf update -y
+    sudo -H dnf install google-cloud-sdk -y
+    sudo -H dnf install google-cloud-sdk-app-engine-python -y
+    sudo -H dnf install google-cloud-sdk-app-engine-python-extras -y
+    sudo -H dnf install google-cloud-sdk-app-engine-go -y
 
     echo "Installing kubectl RHEL"
     if [[ ! -f /etc/yum.repos.d/kubernetes.repo ]]; then
