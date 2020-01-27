@@ -783,7 +783,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     gpgcheck=1
     repo_gpgcheck=1
     gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg
-          https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+           https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
 EOM
     sudo -H dnf update -y
     sudo -H dnf install google-cloud-sdk -y
