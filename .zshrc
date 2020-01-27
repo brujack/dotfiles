@@ -387,8 +387,18 @@ function options() {
 
 # for gcloud command completion
 if [[ ${MACOS} ]]; then
-  if [[ -d /usr/local/Caskroom/google-cloud-sdk ]]; then
+  if [[ -f /usr/local/Caskroom/google-cloud-sdk/latest/google-cloud-sdk/completion.zsh.inc ]]; then
     source '/usr/local/Caskroom/google-cloud-sdk/latest/google-cloud-sdk/completion.zsh.inc'
+  fi
+fi
+if [[ ${UBUNTU} ]]; then
+  if [[ -f /usr/share/google-cloud-sdk/completion.zsh.inc ]]; then
+    source '/usr/share/google-cloud-sdk/completion.zsh.inc'
+  fi
+fi
+if [[ ${REDHAT} ]]; then
+  if [[ -f /usr/lib64/google-cloud-sdk/completion.zsh.inc ]]; then
+    source '/usr/lib64/google-cloud-sdk/completion.zsh.inc'
   fi
 fi
 
