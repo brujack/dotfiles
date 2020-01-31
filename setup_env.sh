@@ -437,6 +437,9 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/Dropbox.app" ]]; then
       brew cask install dropbox
     fi
+    if [[ ! -d "/Applications/ExpressVPN.app" ]]; then
+      brew cask install expressvpn
+    fi
     if [[ ! -d "/Applications/Firefox.app" ]]; then
       brew cask install firefox
     fi
