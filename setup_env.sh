@@ -482,6 +482,9 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/PowerShell.app" ]]; then
       brew cask install powershell
     fi
+    if [[ ! -d "/Applications/Slack.app" ]]; then
+      brew cask install slack
+    fi
     if [[ ! -d "/Applications/Spotify.app" ]]; then
       brew cask install spotify
     fi
