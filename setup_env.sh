@@ -491,6 +491,9 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/TeamViewer.app" ]]; then
       brew cask install teamviewer
     fi
+    if [[ ! -d "/Applications/VirtualBox.app" ]]; then
+      brew cask install virtualbox
+    fi
     if [[ ! -d "/Applications/Visual Studio Code.app" ]]; then
       brew cask install visual-studio-code
     fi
