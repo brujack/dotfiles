@@ -494,6 +494,9 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/VirtualBox.app" ]]; then
       brew cask install virtualbox
     fi
+    if [[ ! -d "/Applications/Vagrant.app" ]]; then
+      brew cask install vagrant
+    fi
     if [[ ! -d "/Applications/Visual Studio Code.app" ]]; then
       brew cask install visual-studio-code
     fi
