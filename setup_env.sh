@@ -256,9 +256,9 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
   if [[ ${MACOS} ]]; then
     if [[ -f ${HOME}/.gitconfig ]]; then
       rm ${HOME}/.gitconfig
-      ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_macos ${HOME}/.gitconfig
+      ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_mac ${HOME}/.gitconfig
     elif [[ ! -L ${HOME}/.gitconfig ]]; then
-      ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_macos ${HOME}/.gitconfig
+      ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_mac ${HOME}/.gitconfig
     fi
   fi
   if [[ ${LINUX} ]]; then
