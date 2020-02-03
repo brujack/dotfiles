@@ -13,12 +13,12 @@
 	template = /Users/bruce/.stCommitMsg
 [alias]
 	pl = pull
-  br = branch
-  ci = commit
-  co = checkout
-  st = status
-  undo = reset --soft 'HEAD^'
-  lg = log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit --date=relative
+	br = branch
+	ci = commit
+	co = checkout
+	st = status
+	undo = reset --soft 'HEAD^'
+	lg = log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit --date=relative
 [diff "sopsdiffer"]
 	textconv = sops -d
 [credential]
