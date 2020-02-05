@@ -433,3 +433,17 @@ fi
 if [[ -f ${GITREPOS}/z/z.sh ]]; then
   source ${GITREPOS}/z/z.sh
 fi
+
+# az command completion
+if [[ ${MACOS} ]]; then
+  if [[ -f /usr/local/etc/bash_completion.d/az ]]; then
+    autoload -U +X bashcompinit && bashcompinit
+    source /usr/local/etc/bash_completion.d/az
+  fi
+fi
+if [[ ${LINUX} ]]; then
+  if [[ -f /usr/lib64/az/lib/python3.6/site-packages/argcomplete/bash_completion.d/python-argcomplete ]]; then
+    autoload -U +X bashcompinit && bashcompinit
+    source /usr/lib64/az/lib/python3.6/site-packages/argcomplete/bash_completion.d/python-argcomplete
+  fi
+fi
