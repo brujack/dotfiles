@@ -467,8 +467,10 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/Malwarebytes.app" ]]; then
       brew cask install malwarebytes
     fi
-    if [[ ! -d "/Applications/Microsoft\ Word.app" ]]; then
-      brew cask install microsoft-office
+    if [[ ${HOSTNAME} == "ratna" ]] || [[ ${HOSTNAME} == "laptop" ]] || [[ ${HOSTNAME} == "bruce-work" ]]; then
+      if [[ ! -d "/Applications/Microsoft\ Word.app" ]]; then
+        brew cask install microsoft-office
+      fi
     fi
     if [[ ! -d "/Applications/MySQLWorkbench.app" ]]; then
       brew cask install mysqlworkbench
