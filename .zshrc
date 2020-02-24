@@ -447,3 +447,8 @@ if [[ ${LINUX} ]]; then
     source /usr/lib64/az/lib/python3.6/site-packages/argcomplete/bash_completion.d/python-argcomplete
   fi
 fi
+
+# Powershell modules to install
+# Install-Module -Name Az
+# Install-Module -Name Az.Blueprint
+# Install-Module -Name Microsoft.Graph
