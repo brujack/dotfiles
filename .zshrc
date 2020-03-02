@@ -105,25 +105,28 @@ export HISTIGNORE="ls:cd:cd -:pwd:exit:date:* --help";
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
 if [[ ${MACOS} ]]; then
-  plugins=(ansible python aws brew docker git git-prompt helm kubectl osx terraform vscode)
+  plugins=(ansible python aws brew docker git git-prompt helm kubectl osx terraform vscode history-substring-search)
 fi
 if [[ ${WINDOWS} ]]; then
-  plugins=(ansible python aws docker git git-prompt helm kubectl terraform vscode)
+  plugins=(ansible python aws docker git git-prompt helm kubectl terraform vscode history-substring-search)
 fi
 if [[ ${UBUNTU} ]]; then
-  plugins=(aws git git-prompt docker helm kubectl ubuntu terraform vscode)
+  plugins=(aws git git-prompt docker helm kubectl ubuntu terraform vscode history-substring-search)
 fi
 if [[ ${FEDORA} ]]; then
-  plugins=(aws git git-prompt docker helm kubectl fedora terraform vscode)
+  plugins=(aws git git-prompt docker helm kubectl fedora terraform vscode history-substring-search)
 fi
 if [[ ${CENTOS} ]]; then
-  plugins=(aws git git-prompt docker helm kubectl fedora terraform vscode)
+  plugins=(aws git git-prompt docker helm kubectl fedora terraform vscode history-substring-search)
 fi
 if [[ ${REDHAT} ]]; then
-  plugins=(aws git git-prompt docker helm kubectl fedora terraform vscode)
+  plugins=(aws git git-prompt docker helm kubectl fedora terraform vscode history-substring-search)
 fi
 
 source $ZSH/oh-my-zsh.sh
+
+bindkey "^[[A" history-substring-search-up
+bindkey "^[[B" history-substring-search-down
 
 # Preferred editor for local and remote sessions
 if [[ -n $SSH_CONNECTION || ${LINUX} ]]; then
