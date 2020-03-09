@@ -988,6 +988,10 @@ if [[ ${UPDATE} ]]; then
       cp -a ${HOME}/git-repos/personal/${DOTFILES}/vscode-settings.json "$VSCODE"/settings.json
     fi
   fi
+  echo "Updating pip3 packages"
+  pip3 install --upgrade pip
+  pip3 list --outdated --format=columns | awk '{print $1;}' | awk 'NR>2' | xargs -n1 pip3 install -U
+  pip3 check
 fi
 
 source ${HOME}/.zshrc
