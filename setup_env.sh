@@ -8,6 +8,7 @@ CONSUL_VER="1.7.1"
 VAULT_VER="1.3.3"
 NOMAD_VER="0.10.4"
 PACKER_VER="1.5.4"
+HASHICORP_URL="https://releases.hashicorp.com"
 WORK_TERRAFORM_VER="0.11.14"
 TERRAFORM_VER="0.12.23"
 GIT_VER="2.25.1"
@@ -686,7 +687,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
 
     echo "Installing Hashicorp Consul Ubuntu"
     if [[ ! -d ${HOME}/downloads/consul_${CONSUL_VER} ]]; then
-      wget -O ${HOME}/downloads/consul_${CONSUL_VER}_linux_amd64.zip https://releases.hashicorp.com/consul/${CONSUL_VER}/consul_${CONSUL_VER}_linux_amd64.zip
+      wget -O ${HOME}/downloads/consul_${CONSUL_VER}_linux_amd64.zip ${HASHICORP_URL}/consul/${CONSUL_VER}/consul_${CONSUL_VER}_linux_amd64.zip
       unzip ${HOME}/downloads/consul_${CONSUL_VER}_linux_amd64.zip -d ${HOME}/downloads/consul_${CONSUL_VER}
       sudo cp -a ${HOME}/downloads/consul_${CONSUL_VER}/consul /usr/local/bin/
       sudo chmod 755 /usr/local/bin/consul
@@ -695,7 +696,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
 
     echo "Installing Hashicorp Vault Ubuntu"
     if [[ ! -d ${HOME}/downloads/vault_${VAULT_VER} ]]; then
-      wget -O ${HOME}/downloads/vault_${VAULT_VER}_linux_amd64.zip https://releases.hashicorp.com/vault/${VAULT_VER}/vault_${VAULT_VER}_linux_amd64.zip
+      wget -O ${HOME}/downloads/vault_${VAULT_VER}_linux_amd64.zip ${HASHICORP_URL}/vault/${VAULT_VER}/vault_${VAULT_VER}_linux_amd64.zip
       unzip ${HOME}/downloads/vault_${VAULT_VER}_linux_amd64.zip -d ${HOME}/downloads/vault_${VAULT_VER}
       sudo cp -a ${HOME}/downloads/vault_${VAULT_VER}/vault /usr/local/bin/
       sudo chmod 755 /usr/local/bin/vault
@@ -704,7 +705,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
 
     echo "Installing Hashicorp Nomad Ubuntu"
     if [[ ! -d ${HOME}/downloads/nomad_${NOMAD_VER} ]]; then
-      wget -O ${HOME}/downloads/nomad_${NOMAD_VER}_linux_amd64.zip https://releases.hashicorp.com/nomad/${NOMAD_VER}/nomad_${NOMAD_VER}_linux_amd64.zip
+      wget -O ${HOME}/downloads/nomad_${NOMAD_VER}_linux_amd64.zip ${HASHICORP_URL}/nomad/${NOMAD_VER}/nomad_${NOMAD_VER}_linux_amd64.zip
       unzip ${HOME}/downloads/nomad_${NOMAD_VER}_linux_amd64.zip -d ${HOME}/downloads/nomad_${NOMAD_VER}
       sudo cp -a ${HOME}/downloads/nomad_${NOMAD_VER}/nomad /usr/local/bin/
       sudo chmod 755 /usr/local/bin/nomad
@@ -713,7 +714,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
 
     echo "Installing Hashicorp Packer Ubuntu"
     if [[ ! -d ${HOME}/downloads/packer_${PACKER_VER} ]]; then
-      wget -O ${HOME}/downloads/packer_${PACKER_VER}_linux_amd64.zip https://releases.hashicorp.com/packer/${PACKER_VER}/packer_${PACKER_VER}_linux_amd64.zip
+      wget -O ${HOME}/downloads/packer_${PACKER_VER}_linux_amd64.zip ${HASHICORP_URL}/packer/${PACKER_VER}/packer_${PACKER_VER}_linux_amd64.zip
       unzip ${HOME}/downloads/packer_${PACKER_VER}_linux_amd64.zip -d ${HOME}/downloads/packer_${PACKER_VER}
       sudo cp -a ${HOME}/downloads/packer_${PACKER_VER}/packer /usr/local/bin/
       sudo chmod 755 /usr/local/bin/packer
@@ -937,7 +938,7 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
   if [[ ${REDHAT} || ${FEDORA} ]]; then
     if [[ ${WORK} ]]; then
       if [[ ! -d ${HOME}/downloads/terraform_${WORK_TERRAFORM_VER} ]]; then
-        wget -O ${HOME}/downloads/terraform_${WORK_TERRAFORM_VER}_linux_amd64.zip https://releases.hashicorp.com/terraform/${WORK_TERRAFORM_VER}/terraform_${WORK_TERRAFORM_VER}_linux_amd64.zip
+        wget -O ${HOME}/downloads/terraform_${WORK_TERRAFORM_VER}_linux_amd64.zip ${HASHICORP_URL}/terraform/${WORK_TERRAFORM_VER}/terraform_${WORK_TERRAFORM_VER}_linux_amd64.zip
         unzip ${HOME}/downloads/terraform_${WORK_TERRAFORM_VER}_linux_amd64.zip -d ${HOME}/downloads/terraform_${WORK_TERRAFORM_VER}
         sudo cp -a ${HOME}/downloads/terraform_${WORK_TERRAFORM_VER}/terraform /usr/local/bin/
         sudo chmod 755 /usr/local/bin/terraform
@@ -945,7 +946,7 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
       fi
     else
       if [[ ! -d ${HOME}/downloads/terraform_${TERRAFORM_VER} ]]; then
-        wget -O ${HOME}/downloads/terraform_${TERRAFORM_VER}_linux_amd64.zip https://releases.hashicorp.com/terraform/${TERRAFORM_VER}/terraform_${TERRAFORM_VER}_linux_amd64.zip
+        wget -O ${HOME}/downloads/terraform_${TERRAFORM_VER}_linux_amd64.zip ${HASHICORP_URL}/terraform/${TERRAFORM_VER}/terraform_${TERRAFORM_VER}_linux_amd64.zip
         unzip ${HOME}/downloads/terraform_${TERRAFORM_VER}_linux_amd64.zip -d ${HOME}/downloads/terraform_${TERRAFORM_VER}
         sudo cp -a ${HOME}/downloads/terraform_${TERRAFORM_VER}/terraform /usr/local/bin/
         sudo chmod 755 /usr/local/bin/terraform
