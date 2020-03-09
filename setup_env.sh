@@ -5,12 +5,13 @@ RUBY_INSTALL_VER="0.7.0"
 CHRUBY_VER="0.3.9"
 RUBY_VER="2.7.0"
 CONSUL_VER="1.7.1"
-VAULT_VER="1.3.2"
-NOMAD_VER="0.10.3"
+VAULT_VER="1.3.3"
+NOMAD_VER="0.10.4"
 PACKER_VER="1.5.4"
 WORK_TERRAFORM_VER="0.11.14"
-TERRAFORM_VER="0.12.20"
-GIT_VER="2.25.0"
+TERRAFORM_VER="0.12.23"
+GIT_VER="2.25.1"
+GIT_URL="https://mirrors.edge.kernel.org/pub/software/scm/git"
 ZSH_VER="5.8"
 GO_VER="1.14"
 SHELLCHECK_VER="0.7.0"
@@ -161,7 +162,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     cpanm XML::SAX
     if [[ ! -f ${HOME}/downloads/git-${GIT_VER}.tar.gz ]]; then
       echo "Installing Redhat git"
-      wget -O ${HOME}/downloads/git-${GIT_VER}.tar.gz https://mirrors.edge.kernel.org/pub/software/scm/git/git-${GIT_VER}.tar.gz
+      wget -O ${HOME}/downloads/git-${GIT_VER}.tar.gz ${GIT_URL}/git-${GIT_VER}.tar.gz
       tar -zxvf ${HOME}/downloads/git-${GIT_VER}.tar.gz -C ${HOME}/downloads
       cd ${HOME}/downloads/git-${GIT_VER} || return
       make configure
@@ -171,61 +172,59 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     fi
   fi
 
-  if ! [ -x "$(command -v zsh)" ]; then
-    echo "Installing zsh"
-    if [[ ${MACOS} ]]; then
-      # Check for Homebrew,
-      # Install if we don't have it
-      if ! [ -x "$(command -v brew)" ]; then
-        echo "Installing homebrew..."
-        ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
-      fi
-      brew install zsh
+  echo "Installing zsh"
+  if [[ ${MACOS} ]]; then
+    # Check for Homebrew,
+    # Install if we don't have it
+    if ! [ -x "$(command -v brew)" ]; then
+      echo "Installing homebrew..."
+      ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
     fi
-    if [[ ${UBUNTU} ]]; then
-      sudo -H apt-get update
-      sudo -H apt-get install zsh -y
-      sudo -H apt-get install zsh-doc -y
+    brew install zsh
+  fi
+  if [[ ${UBUNTU} ]]; then
+    sudo -H apt-get update
+    sudo -H apt-get install zsh -y
+    sudo -H apt-get install zsh-doc -y
+  fi
+  if [[ ${FEDORA} ]]; then
+    sudo -H dnf update -y
+    sudo -H dnf install zsh -y
+  fi
+  if [[ ${CENTOS} ]]; then
+    sudo -H yum update -y
+    sudo -H yum install zsh -y
+  fi
+  # for REDHAT need to download/build/install a much newer version of zsh
+  if [[ ${REDHAT} ]]; then
+    if rhel_installed zsh; then
+      sudo -H yum remove zsh -y
     fi
-    if [[ ${FEDORA} ]]; then
-      sudo -H dnf update -y
-      sudo -H dnf install zsh -y
+    sudo -H yum update
+    sudo -H yum install gcc -y
+    sudo -H yum install make -y
+    sudo -H yum install ncurses-devel -y
+    if [[ ! -f ${HOME}/downloads/zsh-${ZSH_VER}.tar.xz ]]; then
+      echo "Installing Redhat zsh"
+      wget -O ${HOME}/downloads/zsh-${ZSH_VER}.tar.xz http://www.zsh.org/pub/zsh-${ZSH_VER}.tar.xz
+      tar -xvf ${HOME}/downloads/zsh-${ZSH_VER}.tar.xz -C ${HOME}/downloads
+      cd ${HOME}/downloads/zsh-${ZSH_VER} || return
+      ./configure --prefix=/usr/local --bindir=/usr/local/bin --sysconfdir=/etc/zsh --enable-etcdir=/etc/zsh
+      make
+      sudo -H make install
+      if [[ ! $(grep -Fxq "/usr/local/bin/zsh" /etc/shells) ]]; then
+        sudo -H sh -c 'echo /usr/local/bin/zsh >> /etc/shells'
+      fi
+      if [[ ! $(grep -Fxq "/bin/zsh" /etc/shells) ]]; then
+        sudo -H sh -c 'echo /bin/zsh >> /etc/shells'
+      fi
     fi
-    if [[ ${CENTOS} ]]; then
-      sudo -H yum update -y
-      sudo -H yum install zsh -y
+    if [[ -f /bin/zsh ]]; then
+      sudo -H rm -f /bin/zsh
     fi
-    # for REDHAT need to download/build/install a much newer version of zsh
-    if [[ ${REDHAT} ]]; then
-      if rhel_installed zsh; then
-        sudo -H yum remove zsh -y
-      fi
-      sudo -H yum update
-      sudo -H yum install gcc -y
-      sudo -H yum install make -y
-      sudo -H yum install ncurses-devel -y
-      if [[ ! -f ${HOME}/downloads/zsh-${ZSH_VER}.tar.xz ]]; then
-        echo "Installing Redhat zsh"
-        wget -O ${HOME}/downloads/zsh-${ZSH_VER}.tar.xz http://www.zsh.org/pub/zsh-${ZSH_VER}.tar.xz
-        tar -xvf ${HOME}/downloads/zsh-${ZSH_VER}.tar.xz -C ${HOME}/downloads
-        cd ${HOME}/downloads/zsh-${ZSH_VER} || return
-        ./configure --prefix=/usr/local --bindir=/usr/local/bin --sysconfdir=/etc/zsh --enable-etcdir=/etc/zsh
-        make
-        sudo -H make install
-        if [[ ! $(grep -Fxq "/usr/local/bin/zsh" /etc/shells) ]]; then
-          sudo -H sh -c 'echo /usr/local/bin/zsh >> /etc/shells'
-        fi
-        if [[ ! $(grep -Fxq "/bin/zsh" /etc/shells) ]]; then
-          sudo -H sh -c 'echo /bin/zsh >> /etc/shells'
-        fi
-      fi
-      if [[ -f /bin/zsh ]]; then
-        sudo -H rm -f /bin/zsh
-      fi
-      if [[ ! -L /bin/zsh ]]; then
-        if [[ -f /usr/local/bin/zsh ]]; then
-          sudo -H ln -s /usr/local/bin/zsh /bin/zsh
-        fi
+    if [[ ! -L /bin/zsh ]]; then
+      if [[ -f /usr/local/bin/zsh ]]; then
+        sudo -H ln -s /usr/local/bin/zsh /bin/zsh
       fi
     fi
   fi
