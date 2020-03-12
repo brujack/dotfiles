@@ -722,7 +722,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     fi
 
     # install glances cpu monitor
-    pip3 install glances
+    python3 -m pip install glances
 
     # install packages via snap
     sudo snap install helm --classic
@@ -788,7 +788,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H dnf install nodejs -y
 
     echo "Installing glances cpu monitor RHEL"
-    sudo -H pip3 install glances
+    sudo -H python3 -m pip install glances
 
     echo "Installing go RHEL"
     if [[ ! -f ${HOME}/downloads/go${GO_VER}.linux-amd64.tar.gz ]]; then
@@ -850,10 +850,10 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
   echo "ANSIBLE setup"
   echo "Installing virtualenv for python"
   if [[ ${MACOS} ]]; then
-    pip3 install virtualenv virtualenvwrapper
+    python3 -m pip install virtualenv virtualenvwrapper
   elif [[ ${LINUX} ]]; then
     # necessary to install virtualenv to site-packages for linux
-    sudo -H pip3 install virtualenv virtualenvwrapper
+    sudo -H python3 -m pip install virtualenv virtualenvwrapper
   fi
 
   # setup virtualenv for python if virtualenv there
@@ -867,17 +867,17 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
   if ! [[ -d ${HOME}/.virtualenvs/ansible ]]; then
     mkvirtualenv ansible -p python3
     echo "Installing ansible via pip"
-    pip3 install ansible ansible-cmdb ansible-lint
+    python3 -m pip install ansible ansible-cmdb ansible-lint
     echo "Installing boto via pip"
-    pip3 install boto boto3 botocore
+    python3 -m pip install boto boto3 botocore
     echo "Installing awscli via pip"
-    pip3 install awscli
+    python3 -m pip install awscli
     echo "Installing pylint for python linting via pip"
-    pip3 install pylint
+    python3 -m pip install pylint
     echo "Installing jmespath-terminal via pip"
-    pip3 install jmespath-terminal
+    python3 -m pip install jmespath-terminal
     echo "Installing psutil"
-    pip3 install psutil
+    python3 -m pip install psutil
   fi
 
   # override boto provided endpoints with a more correct version that has all of the regions
@@ -990,9 +990,9 @@ if [[ ${UPDATE} ]]; then
     fi
   fi
   echo "Updating pip3 packages"
-  pip3 install --upgrade pip
-  pip3 list --outdated --format=columns | awk '{print $1;}' | awk 'NR>2' | xargs -n1 pip3 install -U
-  pip3 check
+  python3 -m pip install --upgrade pip
+  python3 -m pip list --outdated --format=columns | awk '{print $1;}' | awk 'NR>2' | xargs -n1 python3 -m pip install -U
+  python3 -m pip check
 fi
 
 source ${HOME}/.zshrc
