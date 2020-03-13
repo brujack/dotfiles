@@ -1,5 +1,6 @@
 brew "autoconf"
 brew "automake"
+brew "awscli"
 brew "azure-cli"
 brew "bison"
 brew "chruby"

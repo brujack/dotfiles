@@ -869,9 +869,7 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
     echo "Installing ansible via pip"
     python3 -m pip install ansible ansible-cmdb ansible-lint
     echo "Installing boto via pip"
-    python3 -m pip install boto boto3 botocore
-    echo "Installing awscli via pip"
-    python3 -m pip install awscli
+    #python3 -m pip install boto boto3 botocore
     echo "Installing pylint for python linting via pip"
     python3 -m pip install pylint
     echo "Installing jmespath-terminal via pip"
