@@ -59,7 +59,8 @@ brew "terraform_landscape"
 brew "tflint"
 brew "the_silver_searcher"
 brew "tree"
-brew "vault", args: ["--with-ui"]
+#brew "vault", args: ["--with-ui"]
+brew "vault"
 brew "vim"
 brew "wget"
 brew "xz"
