@@ -844,6 +844,50 @@ EOM
     sudo -H yum install wget -y
     sudo -H yum install zsh -y
   fi
+
+  echo "Installing Hashicorp Terraform Linux"
+  if [[ ${REDHAT} || ${FEDORA} ]]; then
+    if [[ ${WORK} ]]; then
+      if [[ ! -d ${HOME}/downloads/terraform_${WORK_TERRAFORM_VER} ]]; then
+        wget -O ${HOME}/downloads/terraform_${WORK_TERRAFORM_VER}_linux_amd64.zip ${HASHICORP_URL}/terraform/${WORK_TERRAFORM_VER}/terraform_${WORK_TERRAFORM_VER}_linux_amd64.zip
+        unzip ${HOME}/downloads/terraform_${WORK_TERRAFORM_VER}_linux_amd64.zip -d ${HOME}/downloads/terraform_${WORK_TERRAFORM_VER}
+        sudo cp -a ${HOME}/downloads/terraform_${WORK_TERRAFORM_VER}/terraform /usr/local/bin/
+        sudo chmod 755 /usr/local/bin/terraform
+        sudo chown root:root /usr/local/bin/terraform
+      fi
+    else
+      if [[ ! -d ${HOME}/downloads/terraform_${TERRAFORM_VER} ]]; then
+        wget -O ${HOME}/downloads/terraform_${TERRAFORM_VER}_linux_amd64.zip ${HASHICORP_URL}/terraform/${TERRAFORM_VER}/terraform_${TERRAFORM_VER}_linux_amd64.zip
+        unzip ${HOME}/downloads/terraform_${TERRAFORM_VER}_linux_amd64.zip -d ${HOME}/downloads/terraform_${TERRAFORM_VER}
+        sudo cp -a ${HOME}/downloads/terraform_${TERRAFORM_VER}/terraform /usr/local/bin/
+        sudo chmod 755 /usr/local/bin/terraform
+        sudo chown root:root /usr/local/bin/terraform
+      fi
+    fi
+  elif [[ ${UBUNTU} ]]; then
+    if [[ ! -d ${HOME}/downloads/terraform_${TERRAFORM_VER} ]]; then
+      wget -O ${HOME}/downloads/terraform_${TERRAFORM_VER}_linux_amd64.zip ${HASHICORP_URL}/terraform/${TERRAFORM_VER}/terraform_${TERRAFORM_VER}_linux_amd64.zip
+      unzip ${HOME}/downloads/terraform_${TERRAFORM_VER}_linux_amd64.zip -d ${HOME}/downloads/terraform_${TERRAFORM_VER}
+      sudo cp -a ${HOME}/downloads/terraform_${TERRAFORM_VER}/terraform /usr/local/bin/
+      sudo chmod 755 /usr/local/bin/terraform
+      sudo chown root:root /usr/local/bin/terraform
+    fi
+  fi
+
+  echo "Installing aws-cli"
+  if [[ ${LINUX} ]]; then
+    if [[ ! -d ${HOME}/downloads/awscli ]]; then
+      mkdir ${HOME}/downloads/awscli
+    fi
+    if [[ ! -d ${HOME}/downloads/awscli/awscliv2.zip ]]; then
+      curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+      cd ${HOME}/downloads/awscli
+      unzip awscliv2.zip
+      sudo -H ./aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin
+      cd ${HOME}
+    fi
+  fi
+
 fi
 
 if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
@@ -931,49 +975,6 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
   gem install kitchen-ansible
   gem install kitchen-docker
   gem install kitchen-verifier-serverspec
-
-  echo "Installing Hashicorp Terraform"
-  if [[ ${REDHAT} || ${FEDORA} ]]; then
-    if [[ ${WORK} ]]; then
-      if [[ ! -d ${HOME}/downloads/terraform_${WORK_TERRAFORM_VER} ]]; then
-        wget -O ${HOME}/downloads/terraform_${WORK_TERRAFORM_VER}_linux_amd64.zip ${HASHICORP_URL}/terraform/${WORK_TERRAFORM_VER}/terraform_${WORK_TERRAFORM_VER}_linux_amd64.zip
-        unzip ${HOME}/downloads/terraform_${WORK_TERRAFORM_VER}_linux_amd64.zip -d ${HOME}/downloads/terraform_${WORK_TERRAFORM_VER}
-        sudo cp -a ${HOME}/downloads/terraform_${WORK_TERRAFORM_VER}/terraform /usr/local/bin/
-        sudo chmod 755 /usr/local/bin/terraform
-        sudo chown root:root /usr/local/bin/terraform
-      fi
-    else
-      if [[ ! -d ${HOME}/downloads/terraform_${TERRAFORM_VER} ]]; then
-        wget -O ${HOME}/downloads/terraform_${TERRAFORM_VER}_linux_amd64.zip ${HASHICORP_URL}/terraform/${TERRAFORM_VER}/terraform_${TERRAFORM_VER}_linux_amd64.zip
-        unzip ${HOME}/downloads/terraform_${TERRAFORM_VER}_linux_amd64.zip -d ${HOME}/downloads/terraform_${TERRAFORM_VER}
-        sudo cp -a ${HOME}/downloads/terraform_${TERRAFORM_VER}/terraform /usr/local/bin/
-        sudo chmod 755 /usr/local/bin/terraform
-        sudo chown root:root /usr/local/bin/terraform
-      fi
-    fi
-  elif [[ ${UBUNTU} ]]; then
-    if [[ ! -d ${HOME}/downloads/terraform_${TERRAFORM_VER} ]]; then
-      wget -O ${HOME}/downloads/terraform_${TERRAFORM_VER}_linux_amd64.zip ${HASHICORP_URL}/terraform/${TERRAFORM_VER}/terraform_${TERRAFORM_VER}_linux_amd64.zip
-      unzip ${HOME}/downloads/terraform_${TERRAFORM_VER}_linux_amd64.zip -d ${HOME}/downloads/terraform_${TERRAFORM_VER}
-      sudo cp -a ${HOME}/downloads/terraform_${TERRAFORM_VER}/terraform /usr/local/bin/
-      sudo chmod 755 /usr/local/bin/terraform
-      sudo chown root:root /usr/local/bin/terraform
-    fi
-  fi
-
-  echo "Installing aws-cli"
-  if [[ ${LINUX} ]]; then
-    if [[ ! -d ${HOME}/downloads/awscli ]]; then
-      mkdir ${HOME}/downloads/awscli
-    fi
-    if [[ ! -d ${HOME}/downloads/awscli/awscliv2.zip ]]; then
-      curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-      cd ${HOME}/downloads/awscli
-      unzip awscliv2.zip
-      sudo -H ./aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin
-      cd ${HOME}
-    fi
-  fi
 fi
 
 # update is run more often to keep the device up to date with patches
