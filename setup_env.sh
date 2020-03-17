@@ -886,6 +886,13 @@ EOM
       sudo -H ./aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin
       cd ${HOME}
     fi
+  elif [[ ${MACOS} ]]; then
+    if [[ ! -d ${HOME}/downloads/AWSCLIV2.pkg ]]; then
+      cd ${HOME}/downloads
+      curl "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "AWSCLIV2.pkg"
+      sudo installer -pkg AWSCLIV2.pkg -target /
+      cd ${HOME}
+    fi
   fi
 
 fi
