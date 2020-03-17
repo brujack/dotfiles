@@ -880,8 +880,8 @@ EOM
       mkdir ${HOME}/downloads/awscli
     fi
     if [[ ! -d ${HOME}/downloads/awscli/awscliv2.zip ]]; then
-      curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
       cd ${HOME}/downloads/awscli
+      curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
       unzip awscliv2.zip
       sudo -H ./aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin
       cd ${HOME}
