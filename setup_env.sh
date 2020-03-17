@@ -951,6 +951,28 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
         sudo chown root:root /usr/local/bin/terraform
       fi
     fi
+  elif [[ ${UBUNTU} ]]; then
+    if [[ ! -d ${HOME}/downloads/terraform_${TERRAFORM_VER} ]]; then
+      wget -O ${HOME}/downloads/terraform_${TERRAFORM_VER}_linux_amd64.zip ${HASHICORP_URL}/terraform/${TERRAFORM_VER}/terraform_${TERRAFORM_VER}_linux_amd64.zip
+      unzip ${HOME}/downloads/terraform_${TERRAFORM_VER}_linux_amd64.zip -d ${HOME}/downloads/terraform_${TERRAFORM_VER}
+      sudo cp -a ${HOME}/downloads/terraform_${TERRAFORM_VER}/terraform /usr/local/bin/
+      sudo chmod 755 /usr/local/bin/terraform
+      sudo chown root:root /usr/local/bin/terraform
+    fi
+  fi
+
+  echo "Installing aws-cli"
+  if [[ ${LINUX} ]]; then
+    if [[ ! -d ${HOME}/downloads/awscli ]]; then
+      mkdir ${HOME}/downloads/awscli
+    fi
+    if [[ ! -d ${HOME}/downloads/awscli/awscliv2.zip ]]; then
+      curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+      cd ${HOME}/downloads/awscli
+      unzip awscliv2.zip
+      sudo -H ./aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin
+      cd ${HOME}
+    fi
   fi
 fi
 
@@ -991,6 +1013,12 @@ if [[ ${UPDATE} ]]; then
   python3 -m pip install --upgrade pip
   python3 -m pip list --outdated --format=columns | awk '{print $1;}' | awk 'NR>2' | xargs -n1 python3 -m pip install -U
   python3 -m pip check
+  if [[ ${LINUX} ]]; then
+    echo "Updating Linux awscli"
+    if [[ -f /usr/local/aws-cli/v2/current/bin/aws ]]; then
+      sudo -H /usr/local/aws-cli/v2/current/bin/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin --update
+    fi
+  fi
 fi
 
 source ${HOME}/.zshrc
