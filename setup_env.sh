@@ -912,30 +912,12 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
     mkvirtualenv ansible -p python3
     echo "Installing ansible via pip"
     python3 -m pip install ansible ansible-cmdb ansible-lint
-    echo "Installing boto via pip"
-    #python3 -m pip install boto boto3 botocore
     echo "Installing pylint for python linting via pip"
     python3 -m pip install pylint
     echo "Installing jmespath-terminal via pip"
     python3 -m pip install jmespath-terminal
     echo "Installing psutil"
     python3 -m pip install psutil
-  fi
-
-  # override boto provided endpoints with a more correct version that has all of the regions
-  # you can get the newest version from:  https://github.com/aws/aws-sdk-net/blob/master/sdk/src/Core/endpoints.json
-  if [[ -f ${HOME}/.virtualenvs/ansible/lib/python3.6/site-packages/boto/endpoints.json ]]; then
-    rm ${HOME}/.virtualenvs/ansible/lib/python3.6/site-packages/boto/endpoints.json
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/endpoints.json ${HOME}/.virtualenvs/ansible/lib/python3.6/site-packages/boto/endpoints.json
-  elif [[ ! -L ${HOME}/.virtualenvs/ansible/lib/python3.6/site-packages/boto/endpoints.json ]]; then
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/endpoints.json ${HOME}/.virtualenvs/ansible/lib/python3.6/site-packages/boto/endpoints.json
-  fi
-
-  if [[ -f ${HOME}/.virtualenvs/ansible/lib/python3.7/site-packages/boto/endpoints.json ]]; then
-    rm ${HOME}/.virtualenvs/ansible/lib/python3.7/site-packages/boto/endpoints.json
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/endpoints.json ${HOME}/.virtualenvs/ansible/lib/python3.7/site-packages/boto/endpoints.json
-  elif [[ ! -L ${HOME}/.virtualenvs/ansible/lib/python3.7/site-packages/boto/endpoints.json ]]; then
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/endpoints.json ${HOME}/.virtualenvs/ansible/lib/python3.7/site-packages/boto/endpoints.json
   fi
 
   echo "Installing json2yaml via npm"
