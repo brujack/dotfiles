@@ -8,6 +8,7 @@ CONSUL_VER="1.7.2"
 VAULT_VER="1.3.3"
 NOMAD_VER="0.10.4"
 PACKER_VER="1.5.4"
+VAGRANT_VER="2.2.7"
 HASHICORP_URL="https://releases.hashicorp.com"
 WORK_TERRAFORM_VER="0.11.14"
 TERRAFORM_VER="0.12.23"
@@ -719,6 +720,15 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo cp -a ${HOME}/downloads/packer_${PACKER_VER}/packer /usr/local/bin/
       sudo chmod 755 /usr/local/bin/packer
       sudo chown root:root /usr/local/bin/packer
+    fi
+
+    echo "Installing Hashicorp Vagrant Ubuntu"
+    if [[ ! -d ${HOME}/downloads/vagrant_${VAGRANT_VER} ]]; then
+      wget -O ${HOME}/downloads/vagrant_${VAGRANT_VER}_linux_amd64.zip ${HASHICORP_URL}/vagrant/${VAGRANT_VER}/vagrant_${VAGRANT_VER}_linux_amd64.zip
+      unzip ${HOME}/downloads/vagrant_${VAGRANT_VER}_linux_amd64.zip -d ${HOME}/downloads/vagrant_${VAGRANT_VER}
+      sudo cp -a ${HOME}/downloads/vagrant_${VAGRANT_VER}/vagrant /usr/local/bin/
+      sudo chmod 755 /usr/local/bin/vagrant
+      sudo chown root:root /usr/local/bin/vagrant
     fi
 
     # install glances cpu monitor
