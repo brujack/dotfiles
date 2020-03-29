@@ -1004,6 +1004,7 @@ if [[ ${UPDATE} ]]; then
     sudo -H apt-get update
     sudo -H apt-get dist-upgrade -y
     sudo -H apt-get autoremove -y
+    sudo snap refresh
   fi
   if [[ ${REDHAT} || ${FEDORA} ]]; then
     sudo -H dnf update -y
