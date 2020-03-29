@@ -503,7 +503,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/Visual Studio Code.app" ]]; then
       brew cask install visual-studio-code
     fi
-    if [[ -d "/usr/local/Caskroom/oracle-jdk" ]]; then
+    if [[ ! -d "/usr/local/Caskroom/oracle-jdk" ]]; then
       brew cask install oracle-jdk
     fi
 
