@@ -503,7 +503,10 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/Visual Studio Code.app" ]]; then
       brew cask install visual-studio-code
     fi
-    brew cask install oracle-jdk
+    if [[ -d "/usr/local/Caskroom/oracle-jdk" ]]; then
+      brew cask install oracle-jdk
+    fi
+
     echo "Cleaning up brew"
     brew cleanup
 
@@ -663,6 +666,13 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo -H apt-get update
       sudo -H apt-get install docker-ce -y
       sudo -H apt-get install docker-ce-cli -y
+
+      echo "Installing Virtualbox"
+      wget -q https://www.virtualbox.org/download/oracle_vbox_2016.asc -O- | sudo apt-key add -
+      wget -q https://www.virtualbox.org/download/oracle_vbox.asc -O- | sudo apt-key add -
+      sudo add-apt-repository "deb http://download.virtualbox.org/virtualbox/debian bionic contrib"
+      sudo -H apt-get update
+      sudo -H apt-get install virtualbox-6.1
     fi
 
     echo "Installing azure-cli"
