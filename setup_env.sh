@@ -672,7 +672,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       wget -q https://www.virtualbox.org/download/oracle_vbox.asc -O- | sudo apt-key add -
       sudo add-apt-repository "deb http://download.virtualbox.org/virtualbox/debian bionic contrib"
       sudo -H apt-get update
-      sudo -H apt-get install virtualbox-6.1
+      sudo -H apt-get install virtualbox-6.1 -y
     fi
 
     echo "Installing azure-cli"
