@@ -899,7 +899,7 @@ EOM
     if [[ ! -d ${HOME}/downloads/awscli ]]; then
       mkdir ${HOME}/downloads/awscli
     fi
-    if [[ ! -d ${HOME}/downloads/awscli/awscliv2.zip ]]; then
+    if [[ ! -f ${HOME}/downloads/awscli/awscliv2.zip ]]; then
       cd ${HOME}/downloads/awscli
       curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
       unzip awscliv2.zip
