@@ -742,17 +742,24 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     fi
 
     if [[ ${HOSTNAME} == "kube-0" ]]; then
-      echo "Installing Sonarr"
+      echo "Installing Dropbox"
+      if [[ ! -f ${HOME}/downloads/dropbox_2020.03.04_amd64.deb ]]; then
+        wget -O ${HOME}/downloads/dropbox_2020.03.04_amd64.deb https://www.dropbox.com/download?dl=packages/ubuntu/dropbox_2020.03.04_amd64.deb
+        sudo dpkg -i ${HOME}/downloads/dropbox_2020.03.04_amd64.deb
+      fi
+
+      echo "Installing mono for Sonarr"
       sudo apt install gnupg ca-certificates
       sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 3FA7E0328081BFF6A14DA29AA6A19B38D3D831EF
       echo "deb https://download.mono-project.com/repo/ubuntu stable-bionic main" | sudo tee /etc/apt/sources.list.d/mono-official-stable.list
       sudo apt update
-      sudo apt install mono-devel
+      sudo -H apt install mono-devel -y
 
+      echo "Installing Sonarr"
       sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 0xA236C58F409091A18ACA53CBEBFF6B99D9B78493
       echo "deb http://apt.sonarr.tv/ master main" | sudo tee /etc/apt/sources.list.d/sonarr.list
       sudo apt update
-      sudo apt install nzbdrone
+      sudo -H apt install nzbdrone -y
     fi
 
     # install glances cpu monitor
