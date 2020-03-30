@@ -743,11 +743,12 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
 
     if [[ ${HOSTNAME} == "kube-0" ]]; then
       echo "Installing Dropbox"
-      if [[ ! -d ${HOME}/downloads/.dropbox-dist ]]; then
-        cd ${HOME}/downloads/ && wget -O - "https://www.dropbox.com/download?plat=lnx.x86" | tar xzf -
+      if [[ ! -d ${HOME}/.dropbox-dist ]]; then
+        cd ${HOME}/downloads/ && wget -O - "https://www.dropbox.com/download?plat=lnx.x86_64" | tar xzf -
       fi
       if [[ ! -f ${HOME}/scripts/dropbox.py ]]; then
         wget -O ${HOME}/scripts/dropbox.py https://www.dropbox.com/download?dl=packages/dropbox.py
+        chmod 775 ${HOME}/scripts/dropbox.py
       fi
 
       echo "Installing mono for Sonarr"
