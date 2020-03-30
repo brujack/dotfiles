@@ -743,9 +743,11 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
 
     if [[ ${HOSTNAME} == "kube-0" ]]; then
       echo "Installing Dropbox"
-      if [[ ! -f ${HOME}/downloads/dropbox_2020.03.04_amd64.deb ]]; then
-        wget -O ${HOME}/downloads/dropbox_2020.03.04_amd64.deb https://www.dropbox.com/download?dl=packages/ubuntu/dropbox_2020.03.04_amd64.deb
-        sudo dpkg -i ${HOME}/downloads/dropbox_2020.03.04_amd64.deb
+      if [[ ! -d ${HOME}/downloads/.dropbox-dist ]]; then
+        cd ${HOME}/downloads/ && wget -O - "https://www.dropbox.com/download?plat=lnx.x86" | tar xzf -
+      fi
+      if [[ ! -f ${HOME}/scripts/dropbox.py ]]; then
+        wget -O ${HOME}/scripts/dropbox.py https://www.dropbox.com/download?dl=packages/dropbox.py
       fi
 
       echo "Installing mono for Sonarr"
