@@ -744,18 +744,27 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ${HOSTNAME} == "kube-0" ]]; then
       echo "Installing Dropbox"
       if [[ ! -d ${HOME}/.dropbox-dist ]]; then
-        cd ${HOME}/downloads/ && wget -O - "https://www.dropbox.com/download?plat=lnx.x86_64" | tar xzf -
+        cd ${HOME} && wget -O - "https://www.dropbox.com/download?plat=lnx.x86_64" | tar xzf -
       fi
       if [[ ! -f ${HOME}/scripts/dropbox.py ]]; then
         wget -O ${HOME}/scripts/dropbox.py https://www.dropbox.com/download?dl=packages/dropbox.py
         chmod 775 ${HOME}/scripts/dropbox.py
       fi
 
+      echo "Installing sabnzb"
+      sudo -H apt install software-properties-common -y
+      sudo -H add-apt-repository multiverse
+      sudo -H add-apt-repository universe
+      sudo -H add-apt-repository ppa:jcfp/nobetas
+      sudo -H add-apt-repository ppa:jcfp/sab-addons
+      sudo -H apt-get update
+      sudo -H apt-get install sabnzbdplus python-sabyenc -y
+
       echo "Installing mono for Sonarr"
-      sudo apt install gnupg ca-certificates
-      sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 3FA7E0328081BFF6A14DA29AA6A19B38D3D831EF
+      sudo -H apt install gnupg ca-certificates
+      sudo -H apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 3FA7E0328081BFF6A14DA29AA6A19B38D3D831EF
       echo "deb https://download.mono-project.com/repo/ubuntu stable-bionic main" | sudo tee /etc/apt/sources.list.d/mono-official-stable.list
-      sudo apt update
+      sudo -H apt-get update
       sudo -H apt install mono-devel -y
 
       echo "Installing Sonarr"
