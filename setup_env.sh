@@ -1075,8 +1075,8 @@ if [[ ${UPDATE} ]]; then
     cd ${HOME}
   elif [[ ${LINUX} ]]; then
     echo "Updating Linux awscli"
-    if [[ -f ${HOME}/awscli/aws ]]; then
-      sudo -H ${HOME}/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin --update
+    if [[ -f ${HOME}/downloads/awscli/aws ]]; then
+      sudo -H ${HOME}/downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin --update
     fi
   fi
 fi
