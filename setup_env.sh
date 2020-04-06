@@ -879,6 +879,15 @@ EOM
     sudo -H dnf update -y
     sudo -H dnf install kubectl -y
 
+    echo "Installing Hashicorp Packer RHEL"
+    if [[ ! -d ${HOME}/downloads/packer_${PACKER_VER} ]]; then
+      wget -O ${HOME}/downloads/packer_${PACKER_VER}_linux_amd64.zip ${HASHICORP_URL}/packer/${PACKER_VER}/packer_${PACKER_VER}_linux_amd64.zip
+      unzip ${HOME}/downloads/packer_${PACKER_VER}_linux_amd64.zip -d ${HOME}/downloads/packer_${PACKER_VER}
+      sudo cp -a ${HOME}/downloads/packer_${PACKER_VER}/packer /usr/local/bin/
+      sudo chmod 755 /usr/local/bin/packer
+      sudo chown root:root /usr/local/bin/packer
+    fi
+
   fi
 
   if [[ ${CENTOS} ]]; then
