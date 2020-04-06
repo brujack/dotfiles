@@ -632,6 +632,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt-get install nodejs -y
     sudo -H apt-get install npm -y
     sudo -H apt-get install python-setuptools -y
+    sudo -H apt-get install python-gpg -y
     sudo -H apt-get install python3-setuptools -y
     sudo -H apt-get install python3-pip -y
     sudo -H apt-get install silversearcher-ag -y
