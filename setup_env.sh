@@ -1067,10 +1067,16 @@ if [[ ${UPDATE} ]]; then
   python3 -m pip install --upgrade pip
   python3 -m pip list --outdated --format=columns | awk '{print $1;}' | awk 'NR>2' | xargs -n1 python3 -m pip install -U
   python3 -m pip check
-  if [[ ${LINUX} ]]; then
+  if [[ ${MACOS} ]]; then
+    echo "Updating Macos awscli"
+    cd ${HOME}/downloads
+    curl "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "AWSCLIV2.pkg"
+    sudo installer -pkg AWSCLIV2.pkg -target /
+    cd ${HOME}
+  elif [[ ${LINUX} ]]; then
     echo "Updating Linux awscli"
-    if [[ -f /usr/local/aws-cli/v2/current/bin/aws ]]; then
-      sudo -H /usr/local/aws-cli/v2/current/bin/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin --update
+    if [[ -f ${HOME}/awscli/aws ]]; then
+      sudo -H ${HOME}/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin --update
     fi
   fi
 fi
