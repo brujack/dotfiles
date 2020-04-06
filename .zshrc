@@ -146,8 +146,8 @@ fi
 
 if [[ ! ${WINDOWS} ]]; then
   # adding in home bin/scripts path
-  path+='${HOME}/bin'
-  path+='${HOME}/scripts'
+  path+="${HOME}/bin"
+  path+="${HOME}/scripts"
 
   # for /usr/local includes
   path+='/usr/local/bin'
