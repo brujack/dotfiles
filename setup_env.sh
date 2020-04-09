@@ -625,6 +625,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt-get install gnupg -y
     sudo -H apt-get install htop -y
     sudo -H apt-get install iotop -y
+    sudo -H apt-get install iperf3 -y
     sudo -H apt-get install jq -y
     sudo -H apt-get install keychain -y
     sudo -H apt-get install libpython3-dev -y
@@ -797,6 +798,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H dnf install gcc -y
     sudo -H dnf install htop -y
     sudo -H dnf install iotop -y
+    sudo -H dnf install iperf3 -y
     sudo -H dnf install make -y
     sudo -H dnf install python-setuptools -y
     sudo -H dnf install python3-setuptools -y
