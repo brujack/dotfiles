@@ -18,7 +18,7 @@ ZSH_VER="5.8"
 GO_VER="1.14"
 SHELLCHECK_VER="0.7.0"
 Z_GIT="https://github.com/rupa/z.git"
-ZABBIX_VER="4.4-1"
+ZABBIX_VER="4.4-1+"
 RHEL_KUBECTL_REPO="[kubernetes]
 name=Kubernetes
 baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
@@ -778,8 +778,8 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
 
       echo "Installing Zabbix"
       if [[ ! -f ${HOME}/downloads/zabbix-release_${ZABBIX_VER}+bionic_all.deb ]]; then
-        wget -O ${HOME}/downloads/zabbix-release_${ZABBIX_VER}+bionic_all.deb https://repo.zabbix.com/zabbix/4.4/debian/pool/main/z/zabbix-release/zabbix-release_${ZABBIX_VER}+bionic_all.deb
-        sudo dpkg -i ${HOME}/downloads/zabbix-release_${ZABBIX_VER}+bionic_all.deb
+        wget -O ${HOME}/downloads/zabbix-release_${ZABBIX_VER}+bionic_all.deb https://repo.zabbix.com/zabbix/4.4/ubuntu/pool/main/z/zabbix-release/zabbix-release_${ZABBIX_VER}bionic_all.deb
+        sudo dpkg -i ${HOME}/downloads/zabbix-release_${ZABBIX_VER}bionic_all.deb
         sudo apt update
         sudo -H apt install zabbix-server-mysql -y
         sudo -H apt install zabbix-frontend-php zabbix-apache-conf
