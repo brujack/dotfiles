@@ -782,7 +782,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
         sudo dpkg -i ${HOME}/downloads/zabbix-release_${ZABBIX_VER}bionic_all.deb
         sudo apt update
         sudo -H apt install zabbix-server-mysql -y
-        sudo -H apt install zabbix-frontend-php zabbix-apache-conf
+        sudo -H apt install zabbix-frontend-php zabbix-apache-conf zabbix-agent -y
       fi
 
       echo "Installing Prometheus"
