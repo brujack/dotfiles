@@ -777,8 +777,8 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo -H apt install nzbdrone -y
 
       echo "Installing Zabbix"
-      if [[ ! -f ${HOME}/downloads/zabbix-release_${ZABBIX_VER}+bionic_all.deb ]]; then
-        wget -O ${HOME}/downloads/zabbix-release_${ZABBIX_VER}+bionic_all.deb https://repo.zabbix.com/zabbix/4.4/ubuntu/pool/main/z/zabbix-release/zabbix-release_${ZABBIX_VER}bionic_all.deb
+      if [[ ! -f ${HOME}/downloads/zabbix-release_${ZABBIX_VER}bionic_all.deb ]]; then
+        wget -O ${HOME}/downloads/zabbix-release_${ZABBIX_VER}bionic_all.deb https://repo.zabbix.com/zabbix/4.4/ubuntu/pool/main/z/zabbix-release/zabbix-release_${ZABBIX_VER}bionic_all.deb
         sudo dpkg -i ${HOME}/downloads/zabbix-release_${ZABBIX_VER}bionic_all.deb
         sudo apt update
         sudo -H apt install zabbix-server-mysql -y
