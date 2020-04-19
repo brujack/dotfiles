@@ -745,48 +745,13 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     fi
 
     if [[ ${HOSTNAME} == "kube-0" ]]; then
-      echo "Installing Dropbox"
-      if [[ ! -d ${HOME}/.dropbox-dist ]]; then
-        cd ${HOME} && wget -O - "https://www.dropbox.com/download?plat=lnx.x86_64" | tar xzf -
-      fi
-      if [[ ! -f ${HOME}/scripts/dropbox.py ]]; then
-        wget -O ${HOME}/scripts/dropbox.py https://www.dropbox.com/download?dl=packages/dropbox.py
-        chmod 775 ${HOME}/scripts/dropbox.py
-      fi
-
-      echo "Installing sabnzb"
-      sudo -H apt install software-properties-common -y
-      sudo -H add-apt-repository multiverse
-      sudo -H add-apt-repository universe
-      sudo -H add-apt-repository ppa:jcfp/nobetas
-      sudo -H add-apt-repository ppa:jcfp/sab-addons
-      sudo -H apt-get update
-      sudo -H apt-get install sabnzbdplus python-sabyenc -y
-
-      echo "Installing mono for Sonarr"
-      sudo -H apt install gnupg ca-certificates
-      sudo -H apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 3FA7E0328081BFF6A14DA29AA6A19B38D3D831EF
-      echo "deb https://download.mono-project.com/repo/ubuntu stable-bionic main" | sudo tee /etc/apt/sources.list.d/mono-official-stable.list
-      sudo -H apt-get update
-      sudo -H apt install mono-devel -y
-
-      echo "Installing Sonarr"
-      sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 0xA236C58F409091A18ACA53CBEBFF6B99D9B78493
-      echo "deb http://apt.sonarr.tv/ master main" | sudo tee /etc/apt/sources.list.d/sonarr.list
+      "Installing Nvidia drivers for folding"
+      sudo -H apt-get install ocl-icd-opencl-dev -y
+      sudo -H apt-get install clinfo -y
+      sudo add-apt-repository ppa:graphics-drivers/ppa
       sudo apt update
-      sudo -H apt install nzbdrone -y
-
-      echo "Installing Zabbix"
-      if [[ ! -f ${HOME}/downloads/zabbix-release_${ZABBIX_VER}bionic_all.deb ]]; then
-        wget -O ${HOME}/downloads/zabbix-release_${ZABBIX_VER}bionic_all.deb https://repo.zabbix.com/zabbix/4.4/ubuntu/pool/main/z/zabbix-release/zabbix-release_${ZABBIX_VER}bionic_all.deb
-        sudo dpkg -i ${HOME}/downloads/zabbix-release_${ZABBIX_VER}bionic_all.deb
-        sudo apt update
-        sudo -H apt install zabbix-server-mysql -y
-        sudo -H apt install zabbix-frontend-php zabbix-apache-conf zabbix-agent -y
-      fi
-
-      echo "Installing Prometheus"
-
+      sudo apt-get install ubuntu-drivers-common -y
+      sudo ubuntu-drivers autoinstall
     fi
 
     # install glances cpu monitor
