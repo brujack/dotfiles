@@ -753,6 +753,15 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo apt-get install ubuntu-drivers-common -y
       sudo ubuntu-drivers autoinstall
     fi
+    if [[ ${HOSTNAME} == "kube-1" ]]; then
+      "Installing Nvidia drivers for folding"
+      sudo -H apt-get install ocl-icd-opencl-dev -y
+      sudo -H apt-get install clinfo -y
+      sudo add-apt-repository ppa:graphics-drivers/ppa
+      sudo apt update
+      sudo apt-get install ubuntu-drivers-common -y
+      sudo ubuntu-drivers autoinstall
+    fi
 
     # install glances cpu monitor
     python3 -m pip install glances
