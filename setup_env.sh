@@ -669,6 +669,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo -H apt-get update
       sudo -H apt-get install docker-ce -y
       sudo -H apt-get install docker-ce-cli -y
+      sudo -H apt-get install containerd.io -y
 
       echo "Installing Virtualbox"
       wget -q https://www.virtualbox.org/download/oracle_vbox_2016.asc -O- | sudo apt-key add -
