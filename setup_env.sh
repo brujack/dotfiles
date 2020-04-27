@@ -3,7 +3,7 @@
 # software versions to install
 RUBY_INSTALL_VER="0.7.0"
 CHRUBY_VER="0.3.9"
-RUBY_VER="2.7.0"
+RUBY_VER="2.7.1"
 CONSUL_VER="1.7.2"
 VAULT_VER="1.4.0"
 NOMAD_VER="0.11.0"
