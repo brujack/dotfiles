@@ -224,7 +224,7 @@ alias upstairs='ssh bruce@upstairs'
 alias downstairs='ssh bruce@downstairs'
 alias basement='ssh bruce@basement'
 alias backyard='ssh bruce@backyard'
-alias attic='ssh bruce@attic'
+alias attic='ssh bruce@frontyard'
 # aliases for work servers
 alias hwk8001='ssh dvo-lconf@hwk8001-vm'
 alias hdp8001='ssh dvo-lconf@hdp8001-vm'
