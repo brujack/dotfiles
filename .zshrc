@@ -25,10 +25,8 @@ export WORKON_HOME=${HOME}/.virtualenvs
 export PROJECT_HOME=${HOME}./virtualenvs
 if [[ ${MACOS} ]]; then
   VIRTUALENVWRAPPER_SCRIPT=/usr/local/bin/virtualenvwrapper.sh
-  if [[ ${RATNA} || ${LAPTOP} || ${BRUCEWORK} ]]; then
-    VIRTUALENVWRAPPER_PYTHON=/usr/local/bin/python3
-    CHRUBY_LOC="/usr/local/opt/chruby/share"
-  fi
+  VIRTUALENVWRAPPER_PYTHON=/usr/local/bin/python3
+  CHRUBY_LOC="/usr/local/opt/chruby/share"
 fi
 if [[ ${LINUX} ]]; then
   if [[ -f ${HOME}/.local/bin/virtualenvwrapper.sh ]]; then
