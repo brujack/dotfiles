@@ -3,7 +3,7 @@
 [ "$(uname -s)" = "Linux" ] && export LINUX=1
 
 GO_VER="1.13"
-RUBY_VER="2.7.0"
+RUBY_VER="2.7.1"
 GITREPOS="${HOME}/git-repos"
 
 if [[ ${LINUX} ]]; then
