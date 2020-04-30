@@ -9,7 +9,7 @@
     "editor.fontSize": 13,
     "editor.tabSize": 2,
     "editor.renderLineHighlight": "none",
-    "editor.scrollbar.horizontal": "hidden",
+    "editor.scrollbar.horizontal": "visible",
     "editor.scrollbar.vertical": "hidden",
     "editor.minimap.enabled": false,
     "editor.glyphMargin": false,
