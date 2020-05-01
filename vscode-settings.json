@@ -31,6 +31,7 @@
     "editor.suggestSelection": "first",
     "vsintellicode.modify.editor.suggestSelection": "automaticallyOverrodeDefaultValue",
     "terraform.indexing.enable": "true",
+    "python.linting.pylint.enable": true,
     "markdownlint.customRules": [
         "{docsmsft.docs-markdown}/markdownlint-custom-rules/rules.js"
     ],
