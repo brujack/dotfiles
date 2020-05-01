@@ -39,7 +39,7 @@
         "MD025": {
             "front_matter_title": ""
         }
-    }
+    },
     "vs-kubernetes": {
         "vs-kubernetes.kubectl-path": "/usr/local/bin/kubectl",
         "vs-kubernetes.kubectl-path.windows": "c:\\ProgramData\\chocolatey\\bin\\kubectl.exe"
