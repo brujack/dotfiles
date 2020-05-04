@@ -745,7 +745,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo chown root:root /usr/local/bin/vagrant
     fi
 
-    if [[ ${HOSTNAME} == "kube-0" ]] || [[ ${HOSTNAME} == "kube-1" ]]; then
+    if [[ ${HOSTNAME} == "kube-0" ]] || [[ ${HOSTNAME} == "kube-1" ]] || [[ ${HOSTNAME} == "kube-2" ]]; then
       "Installing Nvidia drivers for folding"
       sudo -H apt-get install ocl-icd-opencl-dev -y
       sudo -H apt-get install clinfo -y
