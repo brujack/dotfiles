@@ -365,11 +365,25 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
   echo "Creating home aws"
   if [[ ! -d ${HOME}/.aws ]]; then
     mkdir ${HOME}/.aws
+    chmod 700 ${HOME}/.aws
+  fi
+
+  echo "Creating home aws_creds"
+  if [[ ! -d ${HOME}/.aws_creds ]]; then
+    mkdir ${HOME}/.aws_creds
+    chmod 700 ${HOME}/.aws_creds
   fi
 
   echo "Creating home gcloud_creds"
   if [[ ! -d ${HOME}/.gcloud_creds ]]; then
     mkdir ${HOME}/.gcloud_creds
+    chmod 700 ${HOME}/.gcloud_creds
+  fi
+
+  echo "Creating home azure_creds"
+  if [[ ! -d ${HOME}/.azure_creds ]]; then
+    mkdir ${HOME}/.azure_creds
+    chmod 700 ${HOME}/.azure_creds
   fi
 
   if [[ ${MACOS} ]]; then
