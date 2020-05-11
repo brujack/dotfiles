@@ -70,6 +70,7 @@ cinst -y dropbox
 cinst -y evernote
 cinst -y firefox
 cinst -y gcloudsdk
+cinst -y gh
 cinst -y git
 cinst -y googlechrome
 cinst -y hyper
