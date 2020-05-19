@@ -38,7 +38,7 @@ sudo -H apt-get install -y kubelet kubeadm kubectl
 # changed to regular go
 sudo -H add-apt-repository ppa:gophers/archive
 sudo -H apt-get update
-sudo -H apt-get install golang-1.10-go -y
+sudo -H apt-get install golang-1.14-go -y
 
 # disable swap as kubernetes expects it to be off
 sudo -H sed -i '/ swap / s/^/#/' /etc/fstab
