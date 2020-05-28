@@ -662,7 +662,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     echo "Installing python 3.8"
     sudo -H add-apt-repository ppa:deadsnakes/ppa
     sudo -H apt-get update
-    sudo -H apt-get install python3.8
+    sudo -H apt-get install python3.8 -y
 
     echo "Installing powershell Ubuntu"
     if [[ ! -f ${HOME}/downloads/packages-microsoft-prod.deb ]]; then
