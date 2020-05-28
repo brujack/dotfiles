@@ -88,6 +88,13 @@ if [[ ${LINUX} ]]; then
   [[ ${LINUX_TYPE} = "Red Hat Enterprise Linux Server" ]] && export REDHAT=1
   [[ ${LINUX_TYPE} = "Fedora" ]] && export FEDORA=1
 fi
+
+if [[ ${UBUNTU} ]]; then
+  UBUNTU_VERSION=$(lsb_release -rs)
+  [[ ${UBUNTU_VERSION} = "18.04" ]] && export BIONIC=1
+  [[ ${UBUNTU_VERSION} = "20.04" ]] && export FOCAL=1
+fi
+
 [[ $(uname -r) =~ Microsoft$ ]] && export WINDOWS=1
 [[ $(hostname -f) = "kube-0.conecrazy.ca" ]] && export KUBE=1
 [[ $(hostname -f) = "kube-1.conecrazy.ca" ]] && export KUBE=1
@@ -659,10 +666,12 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt-get install zsh -y
     sudo -H apt-get install zsh-doc -y
 
-    echo "Installing python 3.8"
-    sudo -H add-apt-repository ppa:deadsnakes/ppa
-    sudo -H apt-get update
-    sudo -H apt-get install python3.8 -y
+    if [[ ${BIONIC} ]]; then
+      echo "Installing python 3.8 Ubuntu 18.04"
+      sudo -H add-apt-repository ppa:deadsnakes/ppa
+      sudo -H apt-get update
+      sudo -H apt-get install python3.8 -y
+    fi
 
     echo "Installing powershell Ubuntu"
     if [[ ! -f ${HOME}/downloads/packages-microsoft-prod.deb ]]; then
