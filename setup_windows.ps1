@@ -76,6 +76,7 @@ cinst -y googlechrome
 cinst -y hyper
 cinst -y kubernetes-cli
 cinst -y kubernetes-helm
+cinst -y microsoft-windows-terminal
 cinst -y postman
 cinst -y putty.install
 cinst -y puttygen
