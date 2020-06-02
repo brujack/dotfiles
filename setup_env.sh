@@ -917,8 +917,8 @@ EOM
     sudo -H yum install zsh -y
   fi
 
-  echo "Installing Hashicorp Terraform Linux"
   if [[ ${REDHAT} || ${FEDORA} ]]; then
+    echo "Installing Hashicorp Terraform Linux"
     if [[ ${WORK} ]]; then
       if [[ ! -d ${HOME}/downloads/terraform_${WORK_TERRAFORM_VER} ]]; then
         wget -O ${HOME}/downloads/terraform_${WORK_TERRAFORM_VER}_linux_amd64.zip ${HASHICORP_URL}/terraform/${WORK_TERRAFORM_VER}/terraform_${WORK_TERRAFORM_VER}_linux_amd64.zip
