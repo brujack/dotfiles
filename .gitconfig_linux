@@ -18,3 +18,5 @@
 [credential]
 	helper = !/usr/bin/java -Ddebug=false -Djava.net.useSystemProxies=true -jar /usr/lib/git-credential-manager-2.0.4.jar
 	canFallBackToInsecureStore = true
+[pull]
+	rebase = false
