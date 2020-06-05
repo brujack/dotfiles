@@ -478,6 +478,9 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d "/usr/local/Caskroom/google-cloud-sdk" ]]; then
       brew cask install google-cloud-sdk
     fi
+    if [[ ! -d /opt/inspec ]]; then
+      brew cask install chef/chef/inspec
+    fi
     if [[ ! -d "/Applications/iStat Menus.app" ]]; then
       brew cask install istat-menus
     fi
@@ -497,6 +500,9 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     fi
     if [[ ! -d "/Applications/MySQLWorkbench.app" ]]; then
       brew cask install mysqlworkbench
+    fi
+    if [[ ! -d "/usr/local/Caskroom/oracle-jdk" ]]; then
+      brew cask install oracle-jdk
     fi
     if [[ ! -d "/Applications/Postman.app" ]]; then
       brew cask install postman
@@ -524,9 +530,6 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     fi
     if [[ ! -d "/Applications/Visual Studio Code.app" ]]; then
       brew cask install visual-studio-code
-    fi
-    if [[ ! -d "/usr/local/Caskroom/oracle-jdk" ]]; then
-      brew cask install oracle-jdk
     fi
 
     echo "Cleaning up brew"
