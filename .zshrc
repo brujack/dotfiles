@@ -357,16 +357,24 @@ fi
 #   fi
 # fi
 
+# pyenv setup
+if command -v pyenv 1>/dev/null 2>&1; then
+  eval "$(pyenv init -)"
+  eval "$(pyenv virtualenv-init -)"
+fi
+export PYENV_ROOT="$HOME/.pyenv"
+export PATH="$PYENV_ROOT/bin:$PATH"
+
+if ! [[ -d ${HOME}/.pyenv/versions/ansible ]]; then
+  if [[ ${MACOS} || ${LINUX} ]]; then
+    pyenv activate ansible
+    # to fix the prompt so that the python virtualenv is shown at the far left of the prompt
+    export PS1='($(pyenv version-name)) '$PS1
+  fi
+fi
+
 if [[ -d ${HOME}/.pyenv/versions/ansible ]]; then
   if [[ ${MACOS} || ${LINUX} ]]; then
-    # pyenv setup
-    if command -v pyenv 1>/dev/null 2>&1; then
-      eval "$(pyenv init -)"
-      eval "$(pyenv virtualenv-init -)"
-    fi
-    export PYENV_ROOT="$HOME/.pyenv"
-    export PATH="$PYENV_ROOT/bin:$PATH"
-    export PYENV_VIRTUALENV_DISABLE_PROMPT=0
     pyenv shell ansible
     # to fix the prompt so that the python virtualenv is shown at the far left of the prompt
     export PS1='($(pyenv version-name)) '$PS1
