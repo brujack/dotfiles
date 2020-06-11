@@ -1004,46 +1004,6 @@ EOM
 fi
 
 if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
-  echo "ANSIBLE setup"
-  # echo "Installing virtualenv for python"
-  # if [[ ${MACOS} ]]; then
-  #   python3 -m pip install virtualenv virtualenvwrapper
-  # elif [[ ${LINUX} ]]; then
-  #   # necessary to install virtualenv to site-packages for linux
-  #   sudo -H python3 -m pip install virtualenv virtualenvwrapper
-  # fi
-
-  # # setup virtualenv for python if virtualenv there
-  # if ! [[ -d ${HOME}/.virtualenvs ]]; then
-  #   mkdir ${HOME}/.virtualenvs
-  # fi
-
-  # cd ${HOME}/.virtualenvs || return
-  # source ${VIRTUALENV_LOC}/virtualenvwrapper.sh
-
-  # if ! [[ -d ${HOME}/.virtualenvs/ansible ]]; then
-  # install the correct version of python
-  if ! [[ -d ${HOME}/.pyenv/${PYTHON_VER} ]]; then
-      pyenv install ${PYTHON_VER}
-  fi
-  # setup ansible pyenv environment
-  if ! [[ -d ${HOME}/.pyenv/versions/ansible ]]; then
-    # mkvirtualenv ansible -p python3
-    if ! [[ -d ${HOME}/.pyenv/${PYTHON_VER} ]]; then
-      pyenv install ${PYTHON_VER}
-    fi
-    pyenv virtualenv ${PYTHON_VER} ansible
-    pyenv activate ansible
-    echo "Installing ansible via pip"
-    python3 -m pip install ansible ansible-cmdb ansible-lint
-    echo "Installing pylint for python linting via pip"
-    python3 -m pip install pylint
-    echo "Installing jmespath-terminal via pip"
-    python3 -m pip install jmespath-terminal
-    echo "Installing psutil"
-    python3 -m pip install psutil
-  fi
-
   echo "Installing json2yaml via npm"
   npm install json2yaml
 
@@ -1081,6 +1041,48 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
   gem install kitchen-ansible
   gem install kitchen-docker
   gem install kitchen-verifier-serverspec
+
+  echo "ANSIBLE setup"
+  # commented out both ansible setup with virtualenv and pyenv as they are mostly incompatible and using pyenv programtically this way is not working yet Jun 11, 2020
+
+  # echo "Installing virtualenv for python"
+  # if [[ ${MACOS} ]]; then
+  #   python3 -m pip install virtualenv virtualenvwrapper
+  # elif [[ ${LINUX} ]]; then
+  #   # necessary to install virtualenv to site-packages for linux
+  #   sudo -H python3 -m pip install virtualenv virtualenvwrapper
+  # fi
+
+  # # setup virtualenv for python if virtualenv there
+  # if ! [[ -d ${HOME}/.virtualenvs ]]; then
+  #   mkdir ${HOME}/.virtualenvs
+  # fi
+
+  # cd ${HOME}/.virtualenvs || return
+  # source ${VIRTUALENV_LOC}/virtualenvwrapper.sh
+
+  # if ! [[ -d ${HOME}/.virtualenvs/ansible ]]; then
+  # install the correct version of python
+  # if ! [[ -d ${HOME}/.pyenv/${PYTHON_VER} ]]; then
+  #     pyenv install ${PYTHON_VER}
+  # fi
+  # # setup ansible pyenv environment
+  # if ! [[ -d ${HOME}/.pyenv/versions/ansible ]]; then
+  #   # mkvirtualenv ansible -p python3
+  #   if ! [[ -d ${HOME}/.pyenv/${PYTHON_VER} ]]; then
+  #     pyenv install ${PYTHON_VER}
+  #   fi
+  #   pyenv virtualenv ${PYTHON_VER} ansible
+  #   pyenv activate ansible
+  #   echo "Installing ansible via pip"
+  #   python3 -m pip install ansible ansible-cmdb ansible-lint
+  #   echo "Installing pylint for python linting via pip"
+  #   python3 -m pip install pylint
+  #   echo "Installing jmespath-terminal via pip"
+  #   python3 -m pip install jmespath-terminal
+  #   echo "Installing psutil"
+  #   python3 -m pip install psutil
+  # fi
 fi
 
 # update is run more often to keep the device up to date with patches
