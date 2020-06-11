@@ -1022,8 +1022,16 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
   # source ${VIRTUALENV_LOC}/virtualenvwrapper.sh
 
   # if ! [[ -d ${HOME}/.virtualenvs/ansible ]]; then
+  # install the correct version of python
+  if ! [[ -d ${HOME}.pyenv/${PYTHON_VER} ]]; then
+      pyenv install ${PYTHON_VER}
+  fi
+  # setup ansible pyenv environment
   if ! [[ -d ${HOME}/.pyenv/versions/ansible ]]; then
     # mkvirtualenv ansible -p python3
+    if ! [[ -d ${HOME}.pyenv/${PYTHON_VER} ]]; then
+      pyenv install ${PYTHON_VER}
+    fi
     pyenv virtualenv ${PYTHON_VER} ansible
     pyenv activate ansible
     echo "Installing ansible via pip"
