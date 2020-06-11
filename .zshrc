@@ -367,6 +367,7 @@ export PATH="$PYENV_ROOT/bin:$PATH"
 
 if ! [[ -d ${HOME}/.pyenv/versions/ansible ]]; then
   if [[ ${MACOS} || ${LINUX} ]]; then
+    pyenv virtualenv ${PYTHON_VER} ansible
     pyenv activate ansible
     # to fix the prompt so that the python virtualenv is shown at the far left of the prompt
     export PS1='($(pyenv version-name)) '$PS1
