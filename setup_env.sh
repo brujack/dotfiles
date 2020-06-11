@@ -4,6 +4,7 @@
 RUBY_INSTALL_VER="0.7.0"
 CHRUBY_VER="0.3.9"
 RUBY_VER="2.7.1"
+PYTHON_VER="3.8.2"
 CONSUL_VER="1.7.4"
 VAULT_VER="1.4.2"
 NOMAD_VER="0.11.2"
@@ -642,6 +643,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt-get install apt-transport-https -y
     sudo -H apt-get install autoconf -y
     sudo -H apt-get install automake -y
+    sudo -H apt-get install build-essential -y
     sudo -H apt-get install ca-certificates -y
     sudo -H apt-get install cpan -y
     sudo -H apt-get install curl -y
@@ -653,10 +655,20 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt-get install iperf3 -y
     sudo -H apt-get install jq -y
     sudo -H apt-get install keychain -y
+    sudo -H apt-get install libbz2-dev -y
+    sudo -H apt-get install libffi-dev -y
+    sudo -H apt-get install liblzma-dev -y
+    sudo -H apt-get install libncurses5-dev -y
+    sudo -H apt-get install libncursesw5-dev -y
     sudo -H apt-get install libpython3-dev -y
+    sudo -H apt-get install libreadline-dev -y
+    sudo -H apt-get install libssl-dev -y
+    sudo -H apt-get install libsqlite3-dev -y
+    sudo -H apt-get install llvm -y
     sudo -H apt-get install make -y
     sudo -H apt-get install nodejs -y
     sudo -H apt-get install npm -y
+    sudo -H apt-get install python-openssl -y
     sudo -H apt-get install python-setuptools -y
     sudo -H apt-get install python-gpg -y
     sudo -H apt-get install python3-setuptools -y
@@ -664,8 +676,11 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt-get install silversearcher-ag -y
     sudo -H apt-get install shellcheck
     sudo -H apt-get install software-properties-common -y
+    sudo -H apt-get install tk-dev -y
     sudo -H apt-get install unzip -y
     sudo -H apt-get install wget -y
+    sudo -H apt-get install xz-utils -y
+    sudo -H apt-get install zlib1g-dev -y
     sudo -H apt-get install zsh -y
     sudo -H apt-get install zsh-doc -y
 
@@ -675,6 +690,9 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo -H apt-get update
       sudo -H apt-get install python3.8 -y
     fi
+
+    echo "Installing pyenv"
+    curl https://pyenv.run | bash
 
     echo "Installing powershell Ubuntu"
     if [[ ! -f ${HOME}/downloads/packages-microsoft-prod.deb ]]; then
@@ -803,20 +821,33 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
 
   if [[ ${REDHAT} || ${FEDORA} ]]; then
     sudo -H dnf update -y
+    sudo -H dnf install bzip2 -y
+    sudo -H dnf install bzip2-devel -y
     sudo -H dnf install cpan -y
     sudo -H dnf install curl -y
     sudo -H dnf install gcc -y
     sudo -H dnf install htop -y
     sudo -H dnf install iotop -y
     sudo -H dnf install iperf3 -y
+    sudo -H dnf install libffi-devel -y
     sudo -H dnf install make -y
+    sudo -H dnf install openssl-devel -y
     sudo -H dnf install python-setuptools -y
     sudo -H dnf install python3-setuptools -y
     sudo -H dnf install python3-devel -y
     sudo -H dnf install python3-pip -y
+    sudo -H dnf install readline-devel -y
+    sudo -H dnf install sqlite -y
+    sudo -H dnf install sqlite-devel -y
     sudo -H dnf install the_silver_searcher -y
     sudo -H dnf install unzip -y
     sudo -H dnf install wget -y
+    sudo -H dnf install xz -y
+    sudo -H dnf install xa-devel -y
+    sudo -H dnf install zlib-devel -y
+
+    echo "Installing pyenv"
+    curl https://pyenv.run | bash
 
     echo "Installing shellcheck RHEL"
     if [[ ! -d ${HOME}/downloads/shellcheck-v${SHELLCHEK_VER} ]]; then
@@ -974,24 +1005,27 @@ fi
 
 if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
   echo "ANSIBLE setup"
-  echo "Installing virtualenv for python"
-  if [[ ${MACOS} ]]; then
-    python3 -m pip install virtualenv virtualenvwrapper
-  elif [[ ${LINUX} ]]; then
-    # necessary to install virtualenv to site-packages for linux
-    sudo -H python3 -m pip install virtualenv virtualenvwrapper
-  fi
+  # echo "Installing virtualenv for python"
+  # if [[ ${MACOS} ]]; then
+  #   python3 -m pip install virtualenv virtualenvwrapper
+  # elif [[ ${LINUX} ]]; then
+  #   # necessary to install virtualenv to site-packages for linux
+  #   sudo -H python3 -m pip install virtualenv virtualenvwrapper
+  # fi
 
-  # setup virtualenv for python if virtualenv there
-  if ! [[ -d ${HOME}/.virtualenvs ]]; then
-    mkdir ${HOME}/.virtualenvs
-  fi
+  # # setup virtualenv for python if virtualenv there
+  # if ! [[ -d ${HOME}/.virtualenvs ]]; then
+  #   mkdir ${HOME}/.virtualenvs
+  # fi
 
-  cd ${HOME}/.virtualenvs || return
-  source ${VIRTUALENV_LOC}/virtualenvwrapper.sh
+  # cd ${HOME}/.virtualenvs || return
+  # source ${VIRTUALENV_LOC}/virtualenvwrapper.sh
 
-  if ! [[ -d ${HOME}/.virtualenvs/ansible ]]; then
-    mkvirtualenv ansible -p python3
+  # if ! [[ -d ${HOME}/.virtualenvs/ansible ]]; then
+  if ! [[ -d ${HOME}/.pyenv/versions/ansible ]]; then
+    # mkvirtualenv ansible -p python3
+    pyenv virtualenv ${PYTHON_VER} ansible
+    pyenv activate ansible
     echo "Installing ansible via pip"
     python3 -m pip install ansible ansible-cmdb ansible-lint
     echo "Installing pylint for python linting via pip"
