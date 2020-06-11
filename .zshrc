@@ -370,6 +370,7 @@ if ! [[ -d ${HOME}/.pyenv/versions/ansible ]]; then
     pyenv virtualenv ${PYTHON_VER} ansible
     pyenv activate ansible
     # to fix the prompt so that the python virtualenv is shown at the far left of the prompt
+    export PYENV_VIRTUALENV_DISABLE_PROMPT=1
     export PS1='($(pyenv version-name)) '$PS1
   fi
 fi
@@ -378,6 +379,7 @@ if [[ -d ${HOME}/.pyenv/versions/ansible ]]; then
   if [[ ${MACOS} || ${LINUX} ]]; then
     pyenv shell ansible
     # to fix the prompt so that the python virtualenv is shown at the far left of the prompt
+    export PYENV_VIRTUALENV_DISABLE_PROMPT=1
     export PS1='($(pyenv version-name)) '$PS1
   fi
   if [[ -f ${HOME}/.vault_pass.txt ]]; then
