@@ -361,29 +361,27 @@ fi
 if command -v pyenv 1>/dev/null 2>&1; then
   eval "$(pyenv init -)"
   eval "$(pyenv virtualenv-init -)"
-fi
-export PYENV_ROOT="$HOME/.pyenv"
-export PATH="$PYENV_ROOT/bin:$PATH"
-
-if ! [[ -d ${HOME}/.pyenv/versions/ansible ]]; then
-  if [[ ${MACOS} || ${LINUX} ]]; then
-    pyenv virtualenv ${PYTHON_VER} ansible
-    pyenv activate ansible
-    # to fix the prompt so that the python virtualenv is shown at the far left of the prompt
-    export PYENV_VIRTUALENV_DISABLE_PROMPT=1
-    export PS1='($(pyenv version-name)) '$PS1
+  export PYENV_ROOT="$HOME/.pyenv"
+  export PATH="$PYENV_ROOT/bin:$PATH"
+  if ! [[ -d ${HOME}/.pyenv/versions/ansible ]]; then
+    if [[ ${MACOS} || ${LINUX} ]]; then
+      pyenv virtualenv ${PYTHON_VER} ansible
+      pyenv activate ansible
+      # to fix the prompt so that the python virtualenv is shown at the far left of the prompt
+      export PYENV_VIRTUALENV_DISABLE_PROMPT=1
+      export PS1='($(pyenv version-name)) '$PS1
+    fi
   fi
-fi
-
-if [[ -d ${HOME}/.pyenv/versions/ansible ]]; then
-  if [[ ${MACOS} || ${LINUX} ]]; then
-    pyenv shell ansible
-    # to fix the prompt so that the python virtualenv is shown at the far left of the prompt
-    export PYENV_VIRTUALENV_DISABLE_PROMPT=1
-    export PS1='($(pyenv version-name)) '$PS1
-  fi
-  if [[ -f ${HOME}/.vault_pass.txt ]]; then
-    export ANSIBLE_VAULT_PASSWORD_FILE=${HOME}/.vault_pass.txt
+  if [[ -d ${HOME}/.pyenv/versions/ansible ]]; then
+    if [[ ${MACOS} || ${LINUX} ]]; then
+      pyenv shell ansible
+      # to fix the prompt so that the python virtualenv is shown at the far left of the prompt
+      export PYENV_VIRTUALENV_DISABLE_PROMPT=1
+      export PS1='($(pyenv version-name)) '$PS1
+    fi
+    if [[ -f ${HOME}/.vault_pass.txt ]]; then
+      export ANSIBLE_VAULT_PASSWORD_FILE=${HOME}/.vault_pass.txt
+    fi
   fi
 fi
 
