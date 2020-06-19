@@ -88,5 +88,4 @@ cinst -y terraform
 cinst -y typora
 cinst -y vscode
 cinst -y winscp
-cinst -y wox
 cinst -y 7zip
