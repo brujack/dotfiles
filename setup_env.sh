@@ -451,6 +451,9 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/Carbon Copy Cloner.app" ]]; then
       brew cask install carbon-copy-cloner
     fi
+    if [[ ! -d /opt/chefdk ]]; then
+      brew cask install chefdk
+    fi
     if [[ ! -d "/Applications/DBeaver.app" ]]; then
       brew cask install dbeaver-community
     fi
@@ -479,9 +482,6 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     fi
     if [[ ! -d "/usr/local/Caskroom/google-cloud-sdk" ]]; then
       brew cask install google-cloud-sdk
-    fi
-    if [[ ! -d /opt/inspec ]]; then
-      brew cask install chef/chef/inspec
     fi
     if [[ ! -d "/Applications/iStat Menus.app" ]]; then
       brew cask install istat-menus
