@@ -3,7 +3,7 @@
 # software versions to install
 RUBY_INSTALL_VER="0.7.0"
 CHRUBY_VER="0.3.9"
-RUBY_VER="2.7.1"
+RUBY_VER="2.6.6"
 PYTHON_VER="3.8.3"
 CONSUL_VER="1.8.0"
 VAULT_VER="1.4.2"
@@ -1041,7 +1041,10 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
   gem install test-kitchen
   gem install kitchen-ansible
   gem install kitchen-docker
+  gem install kitchen-inspec
+  gem install kitchen-terraform
   gem install kitchen-verifier-serverspec
+  gem install bundle
 
   echo "ANSIBLE setup"
   # commented out both ansible setup with virtualenv and pyenv as they are mostly incompatible and using pyenv programtically this way is not working yet Jun 11, 2020
