@@ -137,7 +137,12 @@ fi
 
 # for keychain ssh key management
 if [[ ${MACOS} ]]; then
-  eval `/usr/local/bin/keychain --eval --agents ssh --inherit any id_rsa`
+  if [[ ${RATNA} ]] || [[ ${BRUCEWORK} ]]; then
+    eval `/usr/local/bin/keychain --eval --agents ssh --inherit any id_rsa`
+    eval `/usr/local/bin/keychain --eval --agents gpg B6DCFA4E5AFEA3AF35CE0A189A997C02283A9062 --inherit any`
+  else
+    eval `/usr/local/bin/keychain --eval --agents ssh --inherit any id_rsa`
+  fi
 elif [[ ${LINUX} ]]; then
   eval `/usr/bin/keychain --eval --agents ssh --inherit any id_rsa`
 fi
