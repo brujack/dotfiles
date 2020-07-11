@@ -179,8 +179,8 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
       cd ${HOME}/downloads/git-${GIT_VER} || return
       make configure
       ./configure --prefix=/usr
-      make all doc
-      sudo -H make install install-doc
+      make all doc info
+      sudo -H make install install-doc install-info
     fi
   fi
 
