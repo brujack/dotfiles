@@ -644,10 +644,12 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt-get install apt-transport-https -y
     sudo -H apt-get install autoconf -y
     sudo -H apt-get install automake -y
+    sudo -H apt-get install bison -y
     sudo -H apt-get install build-essential -y
     sudo -H apt-get install ca-certificates -y
     sudo -H apt-get install cpan -y
     sudo -H apt-get install curl -y
+    sudo -H apt-get install flex -y
     sudo -H apt-get install gcc -y
     sudo -H apt-get install git -y
     sudo -H apt-get install gnupg -y
@@ -659,6 +661,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt-get install libbz2-dev -y
     sudo -H apt-get install libffi-dev -y
     sudo -H apt-get install liblzma-dev -y
+    sudo -H apt-get install libelf-dev -y
     sudo -H apt-get install libncurses5-dev -y
     sudo -H apt-get install libncursesw5-dev -y
     sudo -H apt-get install libpython3-dev -y
