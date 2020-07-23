@@ -699,12 +699,23 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     curl https://pyenv.run | bash
 
     echo "Installing powershell Ubuntu"
-    if [[ ! -f ${HOME}/downloads/packages-microsoft-prod.deb ]]; then
-      wget -O ${HOME}/downloads/packages-microsoft-prod.deb https://packages.microsoft.com/config/ubuntu/18.04/packages-microsoft-prod.deb
-      sudo -H dpkg -i ${HOME}/downloads/packages-microsoft-prod.deb
-      sudo apt-get update
-      sudo -H add-apt-repository universe
-      sudo -H apt-get install powershell -y
+    if [[ $BIONIC ]]; then
+      if [[ ! -f ${HOME}/downloads/packages-microsoft-prod.deb ]]; then
+        wget -O ${HOME}/downloads/packages-microsoft-prod.deb https://packages.microsoft.com/config/ubuntu/18.04/packages-microsoft-prod.deb
+        sudo -H dpkg -i ${HOME}/downloads/packages-microsoft-prod.deb
+        sudo apt-get update
+        sudo -H add-apt-repository universe
+        sudo -H apt-get install powershell -y
+      fi
+    fi
+    if [[ $FOCAL ]]; then
+      if [[ ! -f ${HOME}/downloads/packages-microsoft-prod.deb ]]; then
+        wget -O ${HOME}/downloads/packages-microsoft-prod.deb https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb
+        sudo -H dpkg -i ${HOME}/downloads/packages-microsoft-prod.deb
+        sudo apt-get update
+        sudo -H add-apt-repository universe
+        sudo -H apt-get install powershell -y
+      fi
     fi
 
     echo "Installing go Ubuntu"
