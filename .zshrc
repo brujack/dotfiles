@@ -167,7 +167,7 @@ if [[ ! ${WINDOWS} ]]; then
   # for fzf not installed via a package
   if [[ ${LINUX} ]]; then
     if [[ -d ${HOME}/.fzf ]]; then
-      path+='${HOME}/.fzf/bin*'
+      path+="${HOME}/.fzf/bin*"
     fi
   fi
   export PATH
