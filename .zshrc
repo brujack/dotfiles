@@ -195,11 +195,11 @@ export ANSIBLEUSER="ubuntu"
 
 # setting PSHOME for powershell use
 if [[ ${MACOS} ]]; then
-  export PSHOME="/usr/local/microsoft/powershell/6/"
+  export PSHOME="/usr/local/microsoft/powershell/7/"
 fi
 
 if [[ ${LINUX} ]]; then
-  export PSHOME="/opt/microsoft/powershell/6/"
+  export PSHOME="/opt/microsoft/powershell/7/"
 fi
 
 # Set personal aliases, overriding those provided by oh-my-zsh libs,
