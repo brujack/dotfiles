@@ -681,6 +681,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt-get install shellcheck
     sudo -H apt-get install software-properties-common -y
     sudo -H apt-get install tk-dev -y
+    sudo -H apt-get install tmux -y
     sudo -H apt-get install unzip -y
     sudo -H apt-get install wget -y
     sudo -H apt-get install xz-utils -y
@@ -855,6 +856,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H dnf install sqlite -y
     sudo -H dnf install sqlite-devel -y
     sudo -H dnf install the_silver_searcher -y
+    sudo -H dnf install tmux -y
     sudo -H dnf install unzip -y
     sudo -H dnf install wget -y
     sudo -H dnf install xz -y

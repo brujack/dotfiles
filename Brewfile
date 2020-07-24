@@ -60,6 +60,7 @@ brew "sqlite"
 brew "terraform_landscape"
 brew "tflint"
 brew "tfenv"
+brew "tmux"
 brew "the_silver_searcher"
 brew "tree"
 #brew "vault", args: ["--with-ui"]
