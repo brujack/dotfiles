@@ -496,6 +496,14 @@ if [[ ${LINUX} ]]; then
   fi
 fi
 
+# for fzf zsh command completion
+if [[ -f ${HOME}/.zsh/shell/completion.zsh ]]; then
+  source ${HOME}/.zsh/shell/completion.zsh 2> /dev/null
+fi
+if [[ -f /usr/local/Cellar/fzf/0.21.1/shell/completion.zsh ]]; then
+  source /usr/local/Cellar/fzf/0.21.1/shell/completion.zsh 2> /dev/null
+fi
+
 # Powershell modules to install
 # Install-Module -Name Az
 # Install-Module -Name Az.Blueprint
