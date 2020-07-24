@@ -650,6 +650,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt-get install cpan -y
     sudo -H apt-get install curl -y
     sudo -H apt-get install flex -y
+    sudo -H apt-get install fzf -y
     sudo -H apt-get install gcc -y
     sudo -H apt-get install git -y
     sudo -H apt-get install gnupg -y
@@ -841,6 +842,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H dnf install bzip2-devel -y
     sudo -H dnf install cpan -y
     sudo -H dnf install curl -y
+    sudo -H dnf install fzf -y
     sudo -H dnf install gcc -y
     sudo -H dnf install htop -y
     sudo -H dnf install iotop -y
