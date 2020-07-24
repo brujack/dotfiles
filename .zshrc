@@ -164,6 +164,12 @@ if [[ ! ${WINDOWS} ]]; then
     path+='/usr/sbin'
     path+='/usr/local/go/bin'
   fi
+  # for fzf not installed via a package
+  if [[ ${LINUX} ]]; then
+    if [[ -d ${HOME}/.fzf ]]; then
+      path+='${HOME}/.fzf/bin*'
+    fi
+  fi
   export PATH
 fi
 
