@@ -497,11 +497,17 @@ if [[ ${LINUX} ]]; then
 fi
 
 # for fzf zsh command completion
+# installed via git
 if [[ -f ${HOME}/.zsh/shell/completion.zsh ]]; then
   source ${HOME}/.zsh/shell/completion.zsh 2> /dev/null
 fi
+# installed via brew
 if [[ -f /usr/local/Cellar/fzf/0.21.1/shell/completion.zsh ]]; then
   source /usr/local/Cellar/fzf/0.21.1/shell/completion.zsh 2> /dev/null
+fi
+# installed on ubuntu via package
+if [[ -f /usr/share/doc/fzf/examples/completion.zsh ]]; then
+  source /usr/share/doc/fzf/examples/completion.zsh 2> /dev/null
 fi
 
 # Powershell modules to install
