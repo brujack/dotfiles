@@ -679,7 +679,8 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt-get install python3-setuptools -y
     sudo -H apt-get install python3-pip -y
     sudo -H apt-get install silversearcher-ag -y
-    sudo -H apt-get install shellcheck
+    sudo -H apt-get install shellcheck -y
+    sudo -H apt-get install smartmontools -y
     sudo -H apt-get install software-properties-common -y
     sudo -H apt-get install tk-dev -y
     sudo -H apt-get install tmux -y
