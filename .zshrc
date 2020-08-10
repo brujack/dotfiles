@@ -208,14 +208,7 @@ if [[ ${LINUX} ]]; then
   export PSHOME="/opt/microsoft/powershell/7/"
 fi
 
-# Set personal aliases, overriding those provided by oh-my-zsh libs,
-# plugins, and themes. Aliases can be placed here, though oh-my-zsh
-# users are encouraged to define aliases within the ZSH_CUSTOM folder.
-# For a full list of active aliases, run `alias`.
-#
-# Example aliases
-# alias zshconfig="mate ~/.zshrc"
-# alias ohmyzsh="mate ~/.oh-my-zsh"
+# aliases for home
 alias home='ssh bruce@home.conecrazy.ca'
 alias bastion='ssh bruce@bastion'
 alias mac='ssh bruce@mac'
@@ -236,78 +229,8 @@ alias downstairs='ssh bruce@downstairs'
 alias basement='ssh bruce@basement'
 alias backyard='ssh bruce@backyard'
 alias attic='ssh bruce@frontyard'
+
 # aliases for work servers
-alias hwk8001='ssh jackbr@hwk8001-vm'
-alias hdp8001='ssh jackbr@hdp8001-vm'
-alias hdp8002='ssh jackbr@hdp8002-vm'
-alias hdp8003='ssh jackbr@hdp8003-vm'
-alias hdp8004='ssh jackbr@hdp8004-vm'
-alias hdp8005='ssh jackbr@hdp8005-vm'
-alias hdp8006='ssh jackbr@hdp8006-vm'
-alias hdf8001='ssh jackbr@hdf8001-vm'
-alias hdf8002='ssh jackbr@hdf8002-vm'
-alias hdf8003='ssh jackbr@hdf8003-vm'
-alias hdf8004='ssh jackbr@hdf8004-vm'
-alias hdf8005='ssh jackbr@hdf8005-vm'
-alias hdf8006='ssh jackbr@hdf8006-vm'
-alias hww8001='ssh jackbr@hww8001-vm'
-alias hww8002='ssh jackbr@hww8002-vm'
-alias hww8003='ssh jackbr@hww8003-vm'
-alias hww8004='ssh jackbr@hww8004-vm'
-alias hww8005='ssh jackbr@hww8005-vm'
-alias hww8006='ssh jackbr@hww8006-vm'
-alias hww8007='ssh jackbr@hww8007-vm'
-alias hww8008='ssh jackbr@hww8008-vm'
-alias hwk9001='ssh jackbr@hwk9001-vm'
-alias hdp9001='ssh jackbr@hdp9001-vm'
-alias hdp9002='ssh jackbr@hdp9002-vm'
-alias hdp9003='ssh jackbr@hdp9003-vm'
-alias hdp9004='ssh jackbr@hdp9004-vm'
-alias hdp9005='ssh jackbr@hdp9005-vm'
-alias hdp9006='ssh jackbr@hdp9006-vm'
-alias hdf9001='ssh jackbr@hdf9001-vm'
-alias hdf9002='ssh jackbr@hdf9002-vm'
-alias hdf9003='ssh jackbr@hdf9003-vm'
-alias hdf9004='ssh jackbr@hdf9004-vm'
-alias hdf9005='ssh jackbr@hdf9005-vm'
-alias hdf9006='ssh jackbr@hdf9006-vm'
-alias hww9001='ssh jackbr@hww9001-vm'
-alias hww9002='ssh jackbr@hww9002-vm'
-alias hww9003='ssh jackbr@hww9003-vm'
-alias hww9004='ssh jackbr@hww9004-vm'
-alias hww9005='ssh jackbr@hww9005-vm'
-alias hww9006='ssh jackbr@hww9006-vm'
-alias hww9007='ssh jackbr@hww9007-vm'
-alias hww9008='ssh jackbr@hww9008-vm'
-alias den8001='ssh jackbr@den8001-vm'
-alias den9001='ssh jackbr@den9001-vm'
-alias den9002='ssh jackbr@den9002-vm'
-alias pax8001='ssh jackbr@pax8001-vm'
-alias pax8002='ssh jackbr@pax8002-vm'
-alias pax8003='ssh jackbr@pax8003-vm'
-alias pax8004='ssh jackbr@pax8004-vm'
-alias pax8005='ssh jackbr@pax8005-vm'
-alias pax8006='ssh jackbr@pax8006-vm'
-alias pax9001='ssh jackbr@pax9001-vm'
-alias pax9002='ssh jackbr@pax9002-vm'
-alias pax9003='ssh jackbr@pax9003-vm'
-alias pax9004='ssh jackbr@pax9004-vm'
-alias pax9005='ssh jackbr@pax9005-vm'
-alias pax9006='ssh jackbr@pax9006-vm'
-alias sas8001='ssh jackbr@sas8001-vm'
-alias sas8002='ssh jackbr@sas8002-vm'
-alias sas8003='ssh jackbr@sas8003-vm'
-alias sas9001='ssh jackbr@sas9001-vm'
-alias sas9002='ssh jackbr@sas9002-vm'
-alias sas9003='ssh jackbr@sas9003-vm'
-alias sas9004='ssh jackbr@sas9004-vm'
-alias sas9005='ssh jackbr@sas9005-vm'
-alias dvo9000='ssh jackbr@dvo9000-vm'
-alias dvo9003='ssh jackbr@dvo9003-vm'
-alias dvo9004='ssh jackbr@dvo9004-vm'
-alias wrk9001='ssh jackbr@wrk9001-vm'
-alias wrk9003='ssh jackbr@wrk9003-vm'
-alias wrk9005='ssh jackbr@wrk9005-vm'
 
 # command aliases
 alias au='sudo apt-get update'
@@ -509,8 +432,3 @@ fi
 if [[ -f /usr/share/doc/fzf/examples/completion.zsh ]]; then
   source /usr/share/doc/fzf/examples/completion.zsh 2> /dev/null
 fi
-
-# Powershell modules to install
-# Install-Module -Name Az
-# Install-Module -Name Az.Blueprint
-# Install-Module -Name Microsoft.Graph

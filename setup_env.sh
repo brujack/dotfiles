@@ -1158,6 +1158,10 @@ if [[ ${UPDATE} ]]; then
       sudo -H ${HOME}/downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin --update
     fi
   fi
+  # Powershell modules to install
+  # Install-Module -Name Az
+  # Install-Module -Name Az.Blueprint
+  # Install-Module -Name Microsoft.Graph
 fi
 
 source ${HOME}/.zshrc
