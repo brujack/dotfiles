@@ -14,8 +14,7 @@ if [[ ${LINUX} ]]; then
   [[ ${LINUX_TYPE} = "Fedora" ]] && export FEDORA=1
 fi
 
-[[ $(uname -r) =~ Microsoft$ ]] && export WINDOWS=1
-
+[[ $(uname -r) =~ microsoft ]] && export WINDOWS=1
 [[ $(hostname -s) = "ratna" ]] && export RATNA=1
 [[ $(hostname -s) = "laptop" ]] && export LAPTOP=1
 [[ $(hostname -s) = "bruce-work" ]] && export BRUCEWORK=1
@@ -104,9 +103,6 @@ export HISTIGNORE="ls:cd:cd -:pwd:exit:date:* --help";
 # Add wisely, as too many plugins slow down shell startup.
 if [[ ${MACOS} ]]; then
   plugins=(ansible aws brew docker git git-prompt helm history-substring-search kubectl osx python terraform vscode)
-fi
-if [[ ${WINDOWS} ]]; then
-  plugins=(ansible aws docker git git-prompt helm history-substring-search kubectl python terraform vscode)
 fi
 if [[ ${UBUNTU} ]]; then
   plugins=(ansible aws docker git git-prompt helm history-substring-search kubectl python ubuntu terraform vscode)
@@ -352,10 +348,6 @@ if [[ ${REDHAT} ]]; then
   if [[ -f /usr/lib64/google-cloud-sdk/completion.zsh.inc ]]; then
     source '/usr/lib64/google-cloud-sdk/completion.zsh.inc'
   fi
-fi
-
-if [[ ${WINDOWS} ]]; then
-  export DOCKER_HOST=tcp://0.0.0.0:2375
 fi
 
 # for hashicorp vault, consul and nomad cli autocompletion

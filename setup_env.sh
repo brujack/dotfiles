@@ -96,7 +96,7 @@ if [[ ${UBUNTU} ]]; then
   [[ ${UBUNTU_VERSION} = "20.04" ]] && export FOCAL=1
 fi
 
-[[ $(uname -r) =~ Microsoft$ ]] && export WINDOWS=1
+[[ $(uname -r) =~ microsoft ]] && export WINDOWS=1
 [[ $(hostname -f) = "kube-0.conecrazy.ca" ]] && export KUBE=1
 [[ $(hostname -f) = "kube-1.conecrazy.ca" ]] && export KUBE=1
 [[ $(hostname -f) = "kube-2.conecrazy.ca" ]] && export KUBE=1
