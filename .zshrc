@@ -160,7 +160,7 @@ if [[ ! ${LINUX} ]]; then
   path+='/opt/local/bin'
   path+='/opt/local/sbin'
   if [[ ${UBUNTU} ]]; then
-    path+='/usr/lib/go-${GO_VER}/bin'
+    path+="/usr/lib/go-${GO_VER}/bin"
   fi
   if [[ ${REDHAT} ]]; then
     path+='/usr/sbin'
