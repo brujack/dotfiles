@@ -2,7 +2,7 @@
 [ "$(uname -s)" = "Darwin" ] && export MACOS=1
 [ "$(uname -s)" = "Linux" ] && export LINUX=1
 
-GO_VER="1.13"
+GO_VER="1.14"
 RUBY_VER="2.6.6"
 GITREPOS="${HOME}/git-repos"
 
