@@ -176,29 +176,6 @@ if [[ -d ${HOME}/.fzf ]]; then
 fi
 export PATH
 
-# on wsl (windows subsystem for linux) we want to specifically define a path so that do not inherit a path from windows
-if [[ ${WINDOWS} ]]; then
-  path=(
-    ${HOME}/.local/bin/
-    /usr/lib/go-${GO_VER}/bin
-    ${HOME}/go/bin
-    /mnt/c/ProgramData/chocolatey/bin
-    /mnt/c/Program\ Files/Microsoft\ VS\ Code/bin
-    /mnt/c/WINDOWS/system32
-    /mnt/c/WINDOWS
-    /mnt/c/WINDOWS/System32/Wbem
-    /opt/local/sbin
-    /opt/local/bin
-    /usr/local/sbin
-    /usr/local/bin
-    /usr/sbin
-    /usr/bin
-    /sbin
-    /bin
-  )
-  export PATH
-fi
-
 # export ANSIBLEUSER so that we run as the correct user
 export ANSIBLEUSER="ubuntu"
 
