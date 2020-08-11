@@ -149,26 +149,26 @@ fi
 
 if [[ ! ${LINUX} ]]; then
   # adding in home bin/scripts path
-  path+="${HOME}/bin"
-  path+="${HOME}/scripts"
+  path+=("${HOME}/bin")
+  path+=("${HOME}/scripts")
 
   # for /usr/local includes
-  path+='/usr/local/bin'
-  path+='/usr/local/sbin'
+  path+=('/usr/local/bin')
+  path+=('/usr/local/sbin')
 
   # for /opt/local includes
-  path+='/opt/local/bin'
-  path+='/opt/local/sbin'
+  path+=('/opt/local/bin')
+  path+=('/opt/local/sbin')
   if [[ ${UBUNTU} ]]; then
-    path+="/usr/lib/go-${GO_VER}/bin"
+    path+=("/usr/lib/go-${GO_VER}/bin")
   fi
   if [[ ${REDHAT} ]]; then
-    path+='/usr/sbin'
-    path+='/usr/local/go/bin'
+    path+=('/usr/sbin')
+    path+=('/usr/local/go/bin')
   fi
   # for fzf not installed via a package
   if [[ -d ${HOME}/.fzf ]]; then
-    path+="${HOME}/.fzf/bin"
+    path+=("${HOME}/.fzf/bin")
   fi
   export PATH
 fi
