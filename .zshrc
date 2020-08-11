@@ -102,19 +102,19 @@ export HISTIGNORE="ls:cd:cd -:pwd:exit:date:* --help";
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
 if [[ ${MACOS} ]]; then
-  plugins=(ansible aws brew docker git git-prompt helm history-substring-search kubectl osx python terraform vscode)
+  plugins=(ansible aws brew docker fzf git git-prompt helm history-substring-search kubectl osx python terraform vscode)
 fi
 if [[ ${UBUNTU} ]]; then
-  plugins=(ansible aws docker git git-prompt helm history-substring-search kubectl python ubuntu terraform vscode)
+  plugins=(ansible aws docker fzf git git-prompt helm history-substring-search kubectl python ubuntu terraform vscode)
 fi
 if [[ ${FEDORA} ]]; then
-  plugins=(ansible aws docker git git-prompt docker fedora history-substring-search helm kubectl python terraform vscode)
+  plugins=(ansible aws docker fzf git git-prompt docker fedora history-substring-search helm kubectl python terraform vscode)
 fi
 if [[ ${CENTOS} ]]; then
-  plugins=(ansible aws docker git git-prompt docker fedora history-substring-search helm kubectl python terraform vscode)
+  plugins=(ansible aws docker fzf git git-prompt docker fedora history-substring-search helm kubectl python terraform vscode)
 fi
 if [[ ${REDHAT} ]]; then
-  plugins=(ansible aws docker git git-prompt docker fedora history-substring-search helm kubectl python terraform vscode)
+  plugins=(ansible aws docker fzf git git-prompt docker fedora history-substring-search helm kubectl python terraform vscode)
 fi
 
 source $ZSH/oh-my-zsh.sh
@@ -388,18 +388,4 @@ if [[ ${LINUX} ]]; then
     autoload -U +X bashcompinit && bashcompinit
     source /usr/lib64/az/lib/python3.6/site-packages/argcomplete/bash_completion.d/python-argcomplete
   fi
-fi
-
-# for fzf zsh command completion
-# installed via git
-if [[ -f ${HOME}/.zsh/shell/completion.zsh ]]; then
-  source ${HOME}/.zsh/shell/completion.zsh 2> /dev/null
-fi
-# installed via brew
-if [[ -f /usr/local/Cellar/fzf/0.21.1/shell/completion.zsh ]]; then
-  source /usr/local/Cellar/fzf/0.21.1/shell/completion.zsh 2> /dev/null
-fi
-# installed on ubuntu via package
-if [[ -f /usr/share/doc/fzf/examples/completion.zsh ]]; then
-  source /usr/share/doc/fzf/examples/completion.zsh 2> /dev/null
 fi
