@@ -103,22 +103,22 @@ export HISTIGNORE="ls:cd:cd -:pwd:exit:date:* --help";
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
 if [[ ${MACOS} ]]; then
-  plugins=(ansible python aws brew docker git git-prompt helm kubectl osx terraform vscode history-substring-search)
+  plugins=(ansible aws brew docker git git-prompt helm history-substring-search kubectl osx python terraform vscode)
 fi
 if [[ ${WINDOWS} ]]; then
-  plugins=(ansible python aws docker git git-prompt helm kubectl terraform vscode history-substring-search)
+  plugins=(ansible aws docker git git-prompt helm history-substring-search kubectl python terraform vscode)
 fi
 if [[ ${UBUNTU} ]]; then
-  plugins=(aws git git-prompt docker helm kubectl ubuntu terraform vscode history-substring-search)
+  plugins=(ansible aws docker git git-prompt helm history-substring-search kubectl python ubuntu terraform vscode)
 fi
 if [[ ${FEDORA} ]]; then
-  plugins=(aws git git-prompt docker helm kubectl fedora terraform vscode history-substring-search)
+  plugins=(ansible aws docker git git-prompt docker fedora history-substring-search helm kubectl python terraform vscode)
 fi
 if [[ ${CENTOS} ]]; then
-  plugins=(aws git git-prompt docker helm kubectl fedora terraform vscode history-substring-search)
+  plugins=(ansible aws docker git git-prompt docker fedora history-substring-search helm kubectl python terraform vscode)
 fi
 if [[ ${REDHAT} ]]; then
-  plugins=(aws git git-prompt docker helm kubectl fedora terraform vscode history-substring-search)
+  plugins=(ansible aws docker git git-prompt docker fedora history-substring-search helm kubectl python terraform vscode)
 fi
 
 source $ZSH/oh-my-zsh.sh
@@ -147,7 +147,7 @@ elif [[ ${LINUX} ]]; then
   eval `/usr/bin/keychain --eval --agents ssh --inherit any id_rsa`
 fi
 
-if [[ ! ${WINDOWS} ]]; then
+if [[ ! ${LINUX} ]]; then
   # adding in home bin/scripts path
   path+="${HOME}/bin"
   path+="${HOME}/scripts"
@@ -159,16 +159,16 @@ if [[ ! ${WINDOWS} ]]; then
   # for /opt/local includes
   path+='/opt/local/bin'
   path+='/opt/local/sbin'
-
+  if [[ ${UBUNTU} ]]; then
+    path+='/usr/lib/go-${GO_VER}/bin'
+  fi
   if [[ ${REDHAT} ]]; then
     path+='/usr/sbin'
     path+='/usr/local/go/bin'
   fi
   # for fzf not installed via a package
-  if [[ ${LINUX} ]]; then
-    if [[ -d ${HOME}/.fzf ]]; then
-      path+="${HOME}/.fzf/bin"
-    fi
+  if [[ -d ${HOME}/.fzf ]]; then
+    path+="${HOME}/.fzf/bin"
   fi
   export PATH
 fi
@@ -203,7 +203,6 @@ export ANSIBLEUSER="ubuntu"
 if [[ ${MACOS} ]]; then
   export PSHOME="/usr/local/microsoft/powershell/7/"
 fi
-
 if [[ ${LINUX} ]]; then
   export PSHOME="/opt/microsoft/powershell/7/"
 fi
