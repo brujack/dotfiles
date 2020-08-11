@@ -147,15 +147,18 @@ elif [[ ${LINUX} ]]; then
   eval `/usr/bin/keychain --eval --agents ssh --inherit any id_rsa`
 fi
 
-if [[ ! ${LINUX} ]]; then
-  # adding in home bin/scripts path
-  path+=("${HOME}/bin")
-  path+=("${HOME}/scripts")
+# setting up path
+# for unique path entries
+typeset -U path
+# for /usr/local includes
+path+=('/usr/local/bin')
+path+=('/usr/local/sbin')
 
-  # for /usr/local includes
-  path+=('/usr/local/bin')
-  path+=('/usr/local/sbin')
+# adding in home bin/scripts path
+path+=("${HOME}/bin")
+path+=("${HOME}/scripts")
 
+if [[ ${LINUX} ]]; then
   # for /opt/local includes
   path+=('/opt/local/bin')
   path+=('/opt/local/sbin')
@@ -166,12 +169,12 @@ if [[ ! ${LINUX} ]]; then
     path+=('/usr/sbin')
     path+=('/usr/local/go/bin')
   fi
-  # for fzf not installed via a package
-  if [[ -d ${HOME}/.fzf ]]; then
-    path+=("${HOME}/.fzf/bin")
-  fi
-  export PATH
 fi
+# for fzf not installed via a package
+if [[ -d ${HOME}/.fzf ]]; then
+  path+=("${HOME}/.fzf/bin")
+fi
+export PATH
 
 # on wsl (windows subsystem for linux) we want to specifically define a path so that do not inherit a path from windows
 if [[ ${WINDOWS} ]]; then
