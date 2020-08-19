@@ -1021,6 +1021,23 @@ EOM
     fi
   fi
 
+  echo "vim plugins"
+  if [[ ! -d ${HOME}/.vim ]]; then
+    mkdir ${HOME}/.vim
+    chmod 770 ${HOME}/.vim
+    if [[ ! -d ${HOME}/.vim/plugged ]]; then
+      mkdir ${HOME}/.vim/plugged
+      chmod 770 ${HOME}/.vim/plugged
+    fi
+    if [[ ! -d ${HOME}/.vim/autoload ]]; then
+      mkdir ${HOME}/.vim/autoload
+      chmod 770 ${HOME}/.vim/autoload
+      if [[ ! -f ${HOME}/.vim/autoload/plug.vim ]]; then
+        curl -fLo ${HOME}/.vim/autoload/plug.vim --create-dirs https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
+      fi
+    fi
+  fi
+
 fi
 
 if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
