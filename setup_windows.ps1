@@ -75,6 +75,7 @@ cinst -y gh
 cinst -y git
 cinst -y googlechrome
 cinst -y hyper
+cinst -y iperf3
 cinst -y kubernetes-cli
 cinst -y kubernetes-helm
 cinst -y microsoft-windows-terminal
