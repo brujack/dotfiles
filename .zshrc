@@ -16,7 +16,6 @@ fi
 
 [[ $(uname -r) =~ microsoft ]] && export WINDOWS=1
 [[ $(hostname -s) = "ratna" ]] && export RATNA=1
-[[ $(hostname -s) = "laptop" ]] && export LAPTOP=1
 [[ $(hostname -s) = "bruce-work" ]] && export BRUCEWORK=1
 
 # setup some variables for virtualenv
@@ -190,7 +189,6 @@ alias bastion='ssh bruce@bastion'
 alias mac='ssh bruce@mac'
 alias server='ssh bruce@server'
 alias ratna='ssh bruce@ratna'
-alias laptop='ssh bruce@laptop'
 alias bruce-work='ssh bruce@bruce-work'
 alias kube-0='ssh bruce@kube-0'
 alias kube-1='ssh bruce@kube-1'
