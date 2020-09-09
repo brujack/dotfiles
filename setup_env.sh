@@ -271,6 +271,13 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     elif [[ ! -L ${HOME}/.gitconfig ]]; then
       ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_mac ${HOME}/.gitconfig
     fi
+    if [[ ${HOSTNAME} == "ratna" ]] || [[ ${HOSTNAME} == "bruce-work" ]]; then
+      if [[ ! -L ${HOME}/git-repos/cybernetiq/.gitconfig ]]; then
+        ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_mac_cybernetiq ${HOME}/git-repos/cybernetiq/.gitconfig
+      elif [[ ! -L ${HOME}/git-repos/gitlab/.gitconfig ]]; then
+        ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_mac_gitlab ${HOME}/git-repos/gitlab/.gitconfig
+      fi
+    fi
   fi
   if [[ ${LINUX} ]]; then
     if [[ -f ${HOME}/.gitconfig ]]; then
@@ -420,7 +427,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     echo "Upgrading brew's"
     brew upgrade
     echo "Upgrading brew casks"
-    brew cask upgrade
+    brew upgrade --cask
 
     echo "Installing other brew stuff..."
 
@@ -495,7 +502,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/Malwarebytes.app" ]]; then
       brew cask install malwarebytes
     fi
-    if [[ ${HOSTNAME} == "ratna" ]] || [[ ${HOSTNAME} == "laptop" ]] || [[ ${HOSTNAME} == "bruce-work" ]]; then
+    if [[ ${HOSTNAME} == "ratna" ]] || [[ ${HOSTNAME} == "bruce-work" ]]; then
       if [[ ! -d "/Applications/Microsoft\ Word.app" ]]; then
         brew cask install microsoft-office
       fi
@@ -1133,7 +1140,7 @@ if [[ ${UPDATE} ]]; then
     echo "Upgrading brew's"
     brew upgrade
     echo "Upgrading brew casks"
-    brew cask upgrade
+    brew upgrade --cask
     echo "Cleaning up brew"
     brew cleanup
     echo "Updating app store apps softwareupdate"
