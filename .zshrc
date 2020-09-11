@@ -17,6 +17,7 @@ fi
 [[ $(uname -r) =~ microsoft ]] && export WINDOWS=1
 [[ $(hostname -s) = "ratna" ]] && export RATNA=1
 [[ $(hostname -s) = "bruce-work" ]] && export BRUCEWORK=1
+[[ $(hostname -s) = "workstation" ]] && export WORKSTATION=1
 
 # setup some variables for virtualenv
 export WORKON_HOME=${HOME}/.virtualenvs
@@ -140,7 +141,12 @@ if [[ ${MACOS} ]]; then
     eval `/usr/local/bin/keychain --eval --agents ssh --inherit any id_rsa`
   fi
 elif [[ ${LINUX} ]]; then
-  eval `/usr/bin/keychain --eval --agents ssh --inherit any id_rsa`
+  if [[ ${WORKSTATION} ]]; then
+    eval `/usr/local/bin/keychain --eval --agents ssh --inherit any id_rsa`
+    eval `/usr/local/bin/keychain --eval --agents ssh --inherit any id_ed25519`
+  else
+    eval `/usr/bin/keychain --eval --agents ssh --inherit any id_rsa`
+  fi
 fi
 
 # setting up path
@@ -190,6 +196,7 @@ alias mac='ssh bruce@mac'
 alias server='ssh bruce@server'
 alias ratna='ssh bruce@ratna'
 alias bruce-work='ssh bruce@bruce-work'
+alias workstation='ssh bruce@workstation'
 alias kube-0='ssh bruce@kube-0'
 alias kube-1='ssh bruce@kube-1'
 alias kube-2='ssh bruce@kube-2'

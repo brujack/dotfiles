@@ -271,7 +271,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     elif [[ ! -L ${HOME}/.gitconfig ]]; then
       ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_mac ${HOME}/.gitconfig
     fi
-    if [[ ${HOSTNAME} == "ratna" ]] || [[ ${HOSTNAME} == "bruce-work" ]]; then
+    if [[ ${HOSTNAME} == "ratna" ]] || [[ ${HOSTNAME} == "bruce-work" ]] || [[ ${HOSTNAME} == "workstation" ]]; then
       if [[ ! -L ${HOME}/git-repos/cybernetiq/.gitconfig ]]; then
         ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_mac_cybernetiq ${HOME}/git-repos/cybernetiq/.gitconfig
       elif [[ ! -L ${HOME}/git-repos/gitlab/.gitconfig ]]; then
@@ -733,7 +733,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt-get update
     sudo -H apt-get install golang-${GO_VER}-go -y
 
-    if [[ ! ${HOSTNAME} == "bastion" ]]; then
+    if [[ ! ${HOSTNAME} == "bastion" ]] || [[ ! ${WORKSTATION} ]]; then
       echo "Installing docker desktop"
       curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo -H apt-key add -
       sudo -H add-apt-repository \
@@ -744,11 +744,22 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo -H apt-get install docker-ce -y
       sudo -H apt-get install docker-ce-cli -y
       sudo -H apt-get install containerd.io -y
+    fi
 
+    if [[ ! ${HOSTNAME} == "bastion" ]] [[ ! ${HOSTNAME} == "cruncher" ]] || [[ ! ${WORKSTATION} ]]; then
       echo "Installing Virtualbox"
       wget -q https://www.virtualbox.org/download/oracle_vbox_2016.asc -O- | sudo apt-key add -
       wget -q https://www.virtualbox.org/download/oracle_vbox.asc -O- | sudo apt-key add -
       sudo add-apt-repository "deb http://download.virtualbox.org/virtualbox/debian bionic contrib"
+      sudo -H apt-get update
+      sudo -H apt-get install virtualbox-6.1 -y
+    fi
+
+    if [[ ${WORKSTATION} ]] ; then
+      echo "Installing Virtualbox"
+      wget -q https://www.virtualbox.org/download/oracle_vbox_2016.asc -O- | sudo apt-key add -
+      wget -q https://www.virtualbox.org/download/oracle_vbox.asc -O- | sudo apt-key add -
+      sudo add-apt-repository "deb http://download.virtualbox.org/virtualbox/debian focal contrib"
       sudo -H apt-get update
       sudo -H apt-get install virtualbox-6.1 -y
     fi
