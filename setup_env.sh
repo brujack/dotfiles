@@ -692,6 +692,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt-get install tk-dev -y
     sudo -H apt-get install tmux -y
     sudo -H apt-get install unzip -y
+    sudo -H apt-get install vim -y
     sudo -H apt-get install wget -y
     sudo -H apt-get install xz-utils -y
     sudo -H apt-get install zlib1g-dev -y
