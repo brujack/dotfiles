@@ -142,8 +142,8 @@ if [[ ${MACOS} ]]; then
   fi
 elif [[ ${LINUX} ]]; then
   if [[ ${WORKSTATION} ]]; then
-    eval `/usr/local/bin/keychain --eval --agents ssh --inherit any id_rsa`
-    eval `/usr/local/bin/keychain --eval --agents ssh --inherit any id_ed25519`
+    eval `/usr/bin/keychain --eval --agents ssh --inherit any id_rsa`
+    eval `/usr/bin/keychain --eval --agents ssh --inherit any id_ed25519`
   else
     eval `/usr/bin/keychain --eval --agents ssh --inherit any id_rsa`
   fi
