@@ -496,6 +496,9 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/iTerm.app" ]]; then
       brew cask install iterm2
     fi
+    if [[ ! -d "/Applications/Joplin.app" ]]; then
+      brew cask install joplin
+    fi
     if [[ ! -d "/Applications/MacDown.app" ]]; then
       brew cask install macdown
     fi
