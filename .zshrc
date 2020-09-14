@@ -102,19 +102,19 @@ export HISTIGNORE="ls:cd:cd -:pwd:exit:date:* --help";
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
 if [[ ${MACOS} ]]; then
-  plugins=(ansible aws brew docker fzf git git-prompt osx helm history-substring-search kubectl osx python terraform vscode)
+  plugins=(ansible aws brew docker fzf git git-prompt osx helm history-substring-search kubectl osx python terraform vscode pyenv)
 fi
 if [[ ${UBUNTU} ]]; then
-  plugins=(ansible aws docker fzf git git-prompt ubuntu helm history-substring-search kubectl python terraform vscode)
+  plugins=(ansible aws docker fzf git git-prompt ubuntu helm history-substring-search kubectl python terraform vscode pyenv)
 fi
 if [[ ${FEDORA} ]]; then
-  plugins=(ansible aws docker fzf git git-prompt fedora helm history-substring-search kubectl python terraform vscode)
+  plugins=(ansible aws docker fzf git git-prompt fedora helm history-substring-search kubectl python terraform vscode pyenv)
 fi
 if [[ ${CENTOS} ]]; then
-  plugins=(ansible aws docker fzf git git-prompt fedora helm history-substring-search kubectl python terraform vscode)
+  plugins=(ansible aws docker fzf git git-prompt fedora helm history-substring-search kubectl python terraform vscode pyenv)
 fi
 if [[ ${REDHAT} ]]; then
-  plugins=(ansible aws docker fzf git git-prompt fedora helm history-substring-search kubectl python terraform vscode)
+  plugins=(ansible aws docker fzf git git-prompt fedora helm history-substring-search kubectl python terraform vscode pyenv)
 fi
 
 source $ZSH/oh-my-zsh.sh
