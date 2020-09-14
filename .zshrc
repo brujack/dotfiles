@@ -166,6 +166,7 @@ if [[ ${LINUX} ]]; then
   path+=('/opt/local/sbin')
   if [[ ${UBUNTU} ]]; then
     path+=("/usr/lib/go-${GO_VER}/bin")
+    path+=('/snap/bin')
   fi
   if [[ ${REDHAT} ]]; then
     path+=('/usr/sbin')
