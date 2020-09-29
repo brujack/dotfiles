@@ -737,7 +737,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt-get update
     sudo -H apt-get install golang-${GO_VER}-go -y
 
-    if [[ ! ${HOSTNAME} == "bastion" ]] || [[ ! ${WORKSTATION} ]]; then
+    if [[ ! ${HOSTNAME} == "bastion" ]] || [[ ! ${HOSTNAME} == "workstation" ]]; then
       echo "Installing docker desktop"
       curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo -H apt-key add -
       sudo -H add-apt-repository \
@@ -750,7 +750,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo -H apt-get install containerd.io -y
     fi
 
-    if [[ ! ${HOSTNAME} == "bastion" ]] || [[ ! ${HOSTNAME} == "cruncher" ]] || [[ ! ${WORKSTATION} ]]; then
+    if [[ ! ${HOSTNAME} == "bastion" ]] || [[ ! ${HOSTNAME} == "cruncher" ]] || [[ ! ${HOSTNAME} == "workstation" ]]; then
       echo "Installing Virtualbox"
       wget -q https://www.virtualbox.org/download/oracle_vbox_2016.asc -O- | sudo apt-key add -
       wget -q https://www.virtualbox.org/download/oracle_vbox.asc -O- | sudo apt-key add -
@@ -759,7 +759,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo -H apt-get install virtualbox-6.1 -y
     fi
 
-    if [[ ${WORKSTATION} ]] ; then
+    if [[ ${HOSTNAME} == "workstation" ]] ; then
       echo "Installing Virtualbox"
       wget -q https://www.virtualbox.org/download/oracle_vbox_2016.asc -O- | sudo apt-key add -
       wget -q https://www.virtualbox.org/download/oracle_vbox.asc -O- | sudo apt-key add -
