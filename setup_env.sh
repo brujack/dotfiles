@@ -659,6 +659,8 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt-get install ca-certificates -y
     sudo -H apt-get install cpan -y
     sudo -H apt-get install curl -y
+    sudo -H apt-get install dnstop -y
+    sudo -H apt-get install dnsutils -y
     sudo -H apt-get install flex -y
     sudo -H apt-get install fzf -y
     sudo -H apt-get install gcc -y
@@ -680,25 +682,37 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt-get install libssl-dev -y
     sudo -H apt-get install libsqlite3-dev -y
     sudo -H apt-get install llvm -y
+    sudo -H apt-get install locales -y
+    sudo -H apt-get install lsof -y
     sudo -H apt-get install make -y
+    sudo -H apt-get install ncdu -y
+    sudo -H apt-get install net-tools -y
+    sudo -H apt-get install nload -y
     sudo -H apt-get install nodejs -y
     sudo -H apt-get install npm -y
+    sudo -H apt-get install openssh-server -y
+    sudo -H apt-get install openssl -y
+    sudo -H apt-get install python-gpg -y
     sudo -H apt-get install python-openssl -y
     sudo -H apt-get install python-setuptools -y
-    sudo -H apt-get install python-gpg -y
-    sudo -H apt-get install python3-setuptools -y
     sudo -H apt-get install python3-pip -y
-    sudo -H apt-get install silversearcher-ag -y
+    sudo -H apt-get install python3-setuptools -y
+    sudo -H apt-get install screen -y
     sudo -H apt-get install shellcheck -y
+    sudo -H apt-get install silversearcher-ag -y
     sudo -H apt-get install smartmontools -y
     sudo -H apt-get install software-properties-common -y
+    sudo -H apt-get install sysstat -y
     sudo -H apt-get install tk-dev -y
     sudo -H apt-get install tmux -y
+    sudo -H apt-get install traceroute -y
     sudo -H apt-get install unzip -y
     sudo -H apt-get install vim -y
     sudo -H apt-get install wget -y
+    sudo -H apt-get install xinetd -y
     sudo -H apt-get install xz-utils -y
     sudo -H apt-get install zlib1g-dev -y
+    sudo -H apt-get install zip -y
     sudo -H apt-get install zsh -y
     sudo -H apt-get install zsh-doc -y
 
