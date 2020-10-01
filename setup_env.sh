@@ -144,8 +144,8 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
   fi
   if [[ ${UBUNTU} ]]; then
     sudo -H add-apt-repository ppa:git-core/ppa -y
-    sudo -H apt-get update
-    sudo -H apt-get install git -y
+    sudo -H apt update
+    sudo -H apt install git -y
   fi
   if [[ ${FEDORA} ]]; then
     sudo -H dnf update -y
@@ -195,9 +195,9 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     brew install zsh
   fi
   if [[ ${UBUNTU} ]]; then
-    sudo -H apt-get update
-    sudo -H apt-get install zsh -y
-    sudo -H apt-get install zsh-doc -y
+    sudo -H apt update
+    sudo -H apt install zsh -y
+    sudo -H apt install zsh-doc -y
   fi
   if [[ ${FEDORA} ]]; then
     sudo -H dnf update -y
@@ -650,77 +650,76 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
   fi
 
   if [[ ${UBUNTU} ]]; then
-    sudo -H apt-get update
-    sudo -H apt-get install apt-transport-https -y
-    sudo -H apt-get install autoconf -y
-    sudo -H apt-get install automake -y
-    sudo -H apt-get install bison -y
-    sudo -H apt-get install build-essential -y
-    sudo -H apt-get install ca-certificates -y
-    sudo -H apt-get install cpanminus -y
-    sudo -H apt-get install curl -y
-    sudo -H apt-get install dnstop -y
-    sudo -H apt-get install dnsutils -y
-    sudo -H apt-get install flex -y
-    sudo -H apt-get install fzf -y
-    sudo -H apt-get install gcc -y
-    sudo -H apt-get install git -y
-    sudo -H apt-get install gnupg -y
-    sudo -H apt-get install htop -y
-    sudo -H apt-get install iotop -y
-    sudo -H apt-get install iperf3 -y
-    sudo -H apt-get install jq -y
-    sudo -H apt-get install keychain -y
-    sudo -H apt-get install libbz2-dev -y
-    sudo -H apt-get install libffi-dev -y
-    sudo -H apt-get install liblzma-dev -y
-    sudo -H apt-get install libelf-dev -y
-    sudo -H apt-get install libncurses5-dev -y
-    sudo -H apt-get install libncursesw5-dev -y
-    sudo -H apt-get install libpython3-dev -y
-    sudo -H apt-get install libreadline-dev -y
-    sudo -H apt-get install libssl-dev -y
-    sudo -H apt-get install libsqlite3-dev -y
-    sudo -H apt-get install llvm -y
-    sudo -H apt-get install locales -y
-    sudo -H apt-get install lsof -y
-    sudo -H apt-get install make -y
-    sudo -H apt-get install ncdu -y
-    sudo -H apt-get install net-tools -y
-    sudo -H apt-get install nload -y
-    sudo -H apt-get install nodejs -y
-    sudo -H apt-get install npm -y
-    sudo -H apt-get install openssh-server -y
-    sudo -H apt-get install openssl -y
-    sudo -H apt-get install python-gpg -y
-    sudo -H apt-get install python-openssl -y
-    sudo -H apt-get install python-setuptools -y
-    sudo -H apt-get install python3-pip -y
-    sudo -H apt-get install python3-setuptools -y
-    sudo -H apt-get install screen -y
-    sudo -H apt-get install shellcheck -y
-    sudo -H apt-get install silversearcher-ag -y
-    sudo -H apt-get install smartmontools -y
-    sudo -H apt-get install software-properties-common -y
-    sudo -H apt-get install sysstat -y
-    sudo -H apt-get install tk-dev -y
-    sudo -H apt-get install tmux -y
-    sudo -H apt-get install traceroute -y
-    sudo -H apt-get install unzip -y
-    sudo -H apt-get install vim -y
-    sudo -H apt-get install wget -y
-    sudo -H apt-get install xinetd -y
-    sudo -H apt-get install xz-utils -y
-    sudo -H apt-get install zlib1g-dev -y
-    sudo -H apt-get install zip -y
-    sudo -H apt-get install zsh -y
-    sudo -H apt-get install zsh-doc -y
+    sudo -H apt update
+    sudo -H apt install apt-transport-https -y
+    sudo -H apt install autoconf -y
+    sudo -H apt install automake -y
+    sudo -H apt install bison -y
+    sudo -H apt install build-essential -y
+    sudo -H apt install ca-certificates -y
+    sudo -H apt install cpanminus -y
+    sudo -H apt install curl -y
+    sudo -H apt install dnstop -y
+    sudo -H apt install dnsutils -y
+    sudo -H apt install flex -y
+    sudo -H apt install fzf -y
+    sudo -H apt install gcc -y
+    sudo -H apt install git -y
+    sudo -H apt install htop -y
+    sudo -H apt install iotop -y
+    sudo -H apt install iperf3 -y
+    sudo -H apt install jq -y
+    sudo -H apt install keychain -y
+    sudo -H apt install libbz2-dev -y
+    sudo -H apt install libffi-dev -y
+    sudo -H apt install liblzma-dev -y
+    sudo -H apt install libelf-dev -y
+    sudo -H apt install libncurses5-dev -y
+    sudo -H apt install libncursesw5-dev -y
+    sudo -H apt install libpython3-dev -y
+    sudo -H apt install libreadline-dev -y
+    sudo -H apt install libssl-dev -y
+    sudo -H apt install libsqlite3-dev -y
+    sudo -H apt install llvm -y
+    sudo -H apt install locales -y
+    sudo -H apt install lsof -y
+    sudo -H apt install make -y
+    sudo -H apt install ncdu -y
+    sudo -H apt install net-tools -y
+    sudo -H apt install nload -y
+    sudo -H apt install nodejs -y
+    sudo -H apt install npm -y
+    sudo -H apt install openssh-server -y
+    sudo -H apt install openssl -y
+    sudo -H apt install python-gpg -y
+    sudo -H apt install python-openssl -y
+    sudo -H apt install python-setuptools -y
+    sudo -H apt install python3-pip -y
+    sudo -H apt install python3-setuptools -y
+    sudo -H apt install screen -y
+    sudo -H apt install shellcheck -y
+    sudo -H apt install silversearcher-ag -y
+    sudo -H apt install smartmontools -y
+    sudo -H apt install software-properties-common -y
+    sudo -H apt install sysstat -y
+    sudo -H apt install tk-dev -y
+    sudo -H apt install tmux -y
+    sudo -H apt install traceroute -y
+    sudo -H apt install unzip -y
+    sudo -H apt install vim -y
+    sudo -H apt install wget -y
+    sudo -H apt install xinetd -y
+    sudo -H apt install xz-utils -y
+    sudo -H apt install zlib1g-dev -y
+    sudo -H apt install zip -y
+    sudo -H apt install zsh -y
+    sudo -H apt install zsh-doc -y
 
     if [[ ${BIONIC} ]]; then
       echo "Installing python 3.8 Ubuntu 18.04"
       sudo -H add-apt-repository ppa:deadsnakes/ppa
-      sudo -H apt-get update
-      sudo -H apt-get install python3.8 -y
+      sudo -H apt update
+      sudo -H apt install python3.8 -y
     fi
 
     echo "Installing pyenv"
@@ -731,25 +730,25 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       if [[ ! -f ${HOME}/downloads/packages-microsoft-prod.deb ]]; then
         wget -O ${HOME}/downloads/packages-microsoft-prod.deb https://packages.microsoft.com/config/ubuntu/18.04/packages-microsoft-prod.deb
         sudo -H dpkg -i ${HOME}/downloads/packages-microsoft-prod.deb
-        sudo apt-get update
+        sudo apt update
         sudo -H add-apt-repository universe
-        sudo -H apt-get install powershell -y
+        sudo -H apt install powershell -y
       fi
     fi
     if [[ $FOCAL ]]; then
       if [[ ! -f ${HOME}/downloads/packages-microsoft-prod.deb ]]; then
         wget -O ${HOME}/downloads/packages-microsoft-prod.deb https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb
         sudo -H dpkg -i ${HOME}/downloads/packages-microsoft-prod.deb
-        sudo apt-get update
+        sudo apt update
         sudo -H add-apt-repository universe
-        sudo -H apt-get install powershell -y
+        sudo -H apt install powershell -y
       fi
     fi
 
     echo "Installing go Ubuntu"
     sudo add-apt-repository ppa:longsleep/golang-backports -y
-    sudo -H apt-get update
-    sudo -H apt-get install golang-${GO_VER}-go -y
+    sudo -H apt update
+    sudo -H apt install golang-${GO_VER}-go -y
 
     if [[ ! ${HOSTNAME} == "bastion" ]] || [[ ! ${HOSTNAME} == "workstation" ]]; then
       echo "Installing docker desktop"
@@ -758,10 +757,10 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
       $(lsb_release -cs) \
       stable"
-      sudo -H apt-get update
-      sudo -H apt-get install docker-ce -y
-      sudo -H apt-get install docker-ce-cli -y
-      sudo -H apt-get install containerd.io -y
+      sudo -H apt update
+      sudo -H apt install docker-ce -y
+      sudo -H apt install docker-ce-cli -y
+      sudo -H apt install containerd.io -y
     fi
 
     if [[ ! ${HOSTNAME} == "bastion" ]] || [[ ! ${HOSTNAME} == "cruncher" ]] || [[ ! ${HOSTNAME} == "workstation" ]]; then
@@ -769,8 +768,8 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       wget -q https://www.virtualbox.org/download/oracle_vbox_2016.asc -O- | sudo apt-key add -
       wget -q https://www.virtualbox.org/download/oracle_vbox.asc -O- | sudo apt-key add -
       sudo add-apt-repository "deb http://download.virtualbox.org/virtualbox/debian bionic contrib"
-      sudo -H apt-get update
-      sudo -H apt-get install virtualbox-6.1 -y
+      sudo -H apt update
+      sudo -H apt install virtualbox-6.1 -y
     fi
 
     if [[ ${HOSTNAME} == "workstation" ]] ; then
@@ -778,8 +777,8 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       wget -q https://www.virtualbox.org/download/oracle_vbox_2016.asc -O- | sudo apt-key add -
       wget -q https://www.virtualbox.org/download/oracle_vbox.asc -O- | sudo apt-key add -
       sudo add-apt-repository "deb http://download.virtualbox.org/virtualbox/debian focal contrib"
-      sudo -H apt-get update
-      sudo -H apt-get install virtualbox-6.1 -y
+      sudo -H apt update
+      sudo -H apt install virtualbox-6.1 -y
     fi
 
     echo "Installing azure-cli"
@@ -789,19 +788,19 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     AZ_REPO=$(lsb_release -cs)
     sudo -H add-apt-repository \
     "deb [arch=amd64] https://packages.microsoft.com/repos/azure-cli/ $AZ_REPO main"
-    sudo -H apt-get update
-    sudo -H apt-get install azure-cli -y
+    sudo -H apt update
+    sudo -H apt install azure-cli -y
 
     echo "Installing gcloud-sdk"
     if [[ ! -f /etc/apt/sources.list.d/google-cloud-sdk.list ]]; then
       echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
       curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
     fi
-    sudo apt-get update
-    sudo -H apt-get install google-cloud-sdk -y
-    sudo -H apt-get install google-cloud-sdk-app-engine-python -y
-    sudo -H apt-get install google-cloud-sdk-app-engine-python-extras -y
-    sudo -H apt-get install google-cloud-sdk-app-engine-go -y
+    sudo apt update
+    sudo -H apt install google-cloud-sdk -y
+    sudo -H apt install google-cloud-sdk-app-engine-python -y
+    sudo -H apt install google-cloud-sdk-app-engine-python-extras -y
+    sudo -H apt install google-cloud-sdk-app-engine-go -y
 
     echo "Installing Hashicorp Consul Ubuntu"
     if [[ ! -d ${HOME}/downloads/consul_${CONSUL_VER} ]]; then
@@ -850,11 +849,11 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
 
     if [[ ${HOSTNAME} == "kube-0" ]] || [[ ${HOSTNAME} == "kube-1" ]] || [[ ${HOSTNAME} == "kube-2" ]] || [[ ${HOSTNAME} == "kube-3" ]]; then
       "Installing Nvidia drivers for folding"
-      sudo -H apt-get install ocl-icd-opencl-dev -y
-      sudo -H apt-get install clinfo -y
+      sudo -H apt install ocl-icd-opencl-dev -y
+      sudo -H apt install clinfo -y
       sudo add-apt-repository ppa:graphics-drivers/ppa
       sudo apt update
-      sudo apt-get install ubuntu-drivers-common -y
+      sudo apt install ubuntu-drivers-common -y
       sudo ubuntu-drivers autoinstall
     fi
 
@@ -868,9 +867,9 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     # on KUBE systems:
     if [[ ${KUBE} ]]; then
       # install for bonded links
-      sudo -H apt-get install ifenslave bridge-utils -y
+      sudo -H apt install ifenslave bridge-utils -y
     fi
-    sudo -H apt-get autoremove -y
+    sudo -H apt autoremove -y
   fi
 
   if [[ ${REDHAT} || ${FEDORA} ]]; then
@@ -1176,9 +1175,9 @@ if [[ ${UPDATE} ]]; then
     sudo -H softwareupdate --install --all --verbose
   fi
   if [[ ${UBUNTU} ]]; then
-    sudo -H apt-get update
-    sudo -H apt-get dist-upgrade -y
-    sudo -H apt-get autoremove -y
+    sudo -H apt update
+    sudo -H apt dist-upgrade -y
+    sudo -H apt autoremove -y
     sudo snap refresh
   fi
   if [[ ${REDHAT} || ${FEDORA} ]]; then
