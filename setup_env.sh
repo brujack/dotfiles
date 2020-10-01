@@ -657,7 +657,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt-get install bison -y
     sudo -H apt-get install build-essential -y
     sudo -H apt-get install ca-certificates -y
-    sudo -H apt-get install cpan -y
+    sudo -H apt-get install cpanminus -y
     sudo -H apt-get install curl -y
     sudo -H apt-get install dnstop -y
     sudo -H apt-get install dnsutils -y
