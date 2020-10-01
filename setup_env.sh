@@ -665,6 +665,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt install fzf -y
     sudo -H apt install gcc -y
     sudo -H apt install git -y
+    sudo -H apt install gnupg -y
     sudo -H apt install htop -y
     sudo -H apt install iotop -y
     sudo -H apt install iperf3 -y
@@ -691,7 +692,6 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt install npm -y
     sudo -H apt install openssh-server -y
     sudo -H apt install openssl -y
-    sudo -H apt install python-gpg -y
     sudo -H apt install python-openssl -y
     sudo -H apt install python-setuptools -y
     sudo -H apt install python3-pip -y
