@@ -1104,6 +1104,19 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
     ruby-install ruby ${RUBY_VER}
   fi
 
+  if [[ ${LINUX} ]]; then
+    echo "installing github cli on linux"
+    if [[ ${UBUNTU} ]]; then
+      sudo -H apt-key adv --keyserver keyserver.ubuntu.com --recv-key C99B11DEB97541F0
+      sudo -H apt-add-repository https://cli.github.com/packages
+      sudo -H apt update
+      sudo -H apt install gh
+    elif [[ ${REDHAT} || ${CENTOS} || ${FEDORA} ]]; then
+      sudo -H dnf config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo
+      sudo dnf install gh
+    fi
+  fi
+
   # setup for test-kitchen
   echo "Setup kitchen"
   source ${CHRUBY_LOC}/chruby/chruby.sh
