@@ -18,6 +18,7 @@ fi
 [[ $(hostname -s) = "ratna" ]] && export RATNA=1
 [[ $(hostname -s) = "bruce-work" ]] && export BRUCEWORK=1
 [[ $(hostname -s) = "workstation" ]] && export WORKSTATION=1
+[[ $(hostname -s) = "cruncher" ]] && export CRUNCHER=1
 
 # setup some variables for virtualenv
 export WORKON_HOME=${HOME}/.virtualenvs
@@ -141,7 +142,7 @@ if [[ ${MACOS} ]]; then
     eval `/usr/local/bin/keychain --eval --agents ssh --inherit any id_rsa`
   fi
 elif [[ ${LINUX} ]]; then
-  if [[ ${WORKSTATION} ]]; then
+  if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]]; then
     eval `/usr/bin/keychain --eval --agents ssh --inherit any id_rsa`
     eval `/usr/bin/keychain --eval --agents ssh --inherit any id_ed25519`
   else
