@@ -23,3 +23,7 @@
 	textconv = sops -d
 [pull]
 	rebase = false
+[includeIf "gitdir:~/git-repos/cybernetiq/"]
+	path = ~/git-repos/cybernetiq/.gitconfig
+[includeIf "gitdir:~/git-repos/gitlab/"]
+	path = ~/git-repos/gitlab/.gitconfig
