@@ -97,10 +97,8 @@ if [[ ${UBUNTU} ]]; then
 fi
 
 [[ $(uname -r) =~ microsoft ]] && export WINDOWS=1
-[[ $(hostname -f) = "kube-0.conecrazy.ca" ]] && export KUBE=1
 [[ $(hostname -f) = "kube-1.conecrazy.ca" ]] && export KUBE=1
 [[ $(hostname -f) = "kube-2.conecrazy.ca" ]] && export KUBE=1
-[[ $(hostname -f) = "kube-3.conecrazy.ca" ]] && export KUBE=1
 
 # setup variables based off of environment
 if [[ ${MACOS} ]]; then
@@ -847,7 +845,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo chown root:root /usr/local/bin/vagrant
     fi
 
-    if [[ ${HOSTNAME} == "kube-0" ]] || [[ ${HOSTNAME} == "kube-1" ]] || [[ ${HOSTNAME} == "kube-2" ]] || [[ ${HOSTNAME} == "kube-3" ]]; then
+    if [[ ${HOSTNAME} == "kube-1" ]] || [[ ${HOSTNAME} == "kube-2" ]]; then
       "Installing Nvidia drivers for folding"
       sudo -H apt install ocl-icd-opencl-dev -y
       sudo -H apt install clinfo -y
