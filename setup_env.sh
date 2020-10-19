@@ -327,7 +327,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     sh -c "$(curl -fsSL https://raw.github.com/robbyrussell/oh-my-zsh/master/tools/install.sh)"
   fi
 
-  if [[ -f ${HOME}/.zshrc ]]; thenoh-my-zsh
+  if [[ -f ${HOME}/.zshrc ]]; then
     rm ${HOME}/.zshrc
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.zshrc ${HOME}/.zshrc
   elif [[ ! -L ${HOME}/.zshrc ]]; then
