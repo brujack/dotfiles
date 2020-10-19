@@ -12,7 +12,7 @@ PACKER_VER="1.6.4"
 VAGRANT_VER="2.2.10"
 HASHICORP_URL="https://releases.hashicorp.com"
 WORK_TERRAFORM_VER="0.11.14"
-TERRAFORM_VER="0.12.23"
+TERRAFORM_VER="0.13.4terraform"
 GIT_VER="2.28"
 GIT_URL="https://mirrors.edge.kernel.org/pub/software/scm/git"
 ZSH_VER="5.8"
@@ -1004,32 +1004,22 @@ EOM
     sudo -H yum install zsh -y
   fi
 
-  if [[ ${REDHAT} || ${FEDORA} ]]; then
-    echo "Installing Hashicorp Terraform Linux"
-    if [[ ${WORK} ]]; then
-      if [[ ! -d ${HOME}/downloads/terraform_${WORK_TERRAFORM_VER} ]]; then
-        wget -O ${HOME}/downloads/terraform_${WORK_TERRAFORM_VER}_linux_amd64.zip ${HASHICORP_URL}/terraform/${WORK_TERRAFORM_VER}/terraform_${WORK_TERRAFORM_VER}_linux_amd64.zip
-        unzip ${HOME}/downloads/terraform_${WORK_TERRAFORM_VER}_linux_amd64.zip -d ${HOME}/downloads/terraform_${WORK_TERRAFORM_VER}
-        sudo cp -a ${HOME}/downloads/terraform_${WORK_TERRAFORM_VER}/terraform /usr/local/bin/
-        sudo chmod 755 /usr/local/bin/terraform
-        sudo chown root:root /usr/local/bin/terraform
-      fi
-    else
-      if [[ ! -d ${HOME}/downloads/terraform_${TERRAFORM_VER} ]]; then
-        wget -O ${HOME}/downloads/terraform_${TERRAFORM_VER}_linux_amd64.zip ${HASHICORP_URL}/terraform/${TERRAFORM_VER}/terraform_${TERRAFORM_VER}_linux_amd64.zip
-        unzip ${HOME}/downloads/terraform_${TERRAFORM_VER}_linux_amd64.zip -d ${HOME}/downloads/terraform_${TERRAFORM_VER}
-        sudo cp -a ${HOME}/downloads/terraform_${TERRAFORM_VER}/terraform /usr/local/bin/
-        sudo chmod 755 /usr/local/bin/terraform
-        sudo chown root:root /usr/local/bin/terraform
-      fi
+  if [[ ${LINUX} ]]; then
+    echo "Installing Hashicorp Terraform Linux with tfenv on Linux"
+    if [[ ! -d ${HOME}/.tfenv ]]; then
+      git clone --recursive https://github.com/tfutils/tfenv.git ${HOME}/.tfenv
     fi
-  elif [[ ${UBUNTU} ]]; then
-    if [[ ! -d ${HOME}/downloads/terraform_${TERRAFORM_VER} ]]; then
-      wget -O ${HOME}/downloads/terraform_${TERRAFORM_VER}_linux_amd64.zip ${HASHICORP_URL}/terraform/${TERRAFORM_VER}/terraform_${TERRAFORM_VER}_linux_amd64.zip
-      unzip ${HOME}/downloads/terraform_${TERRAFORM_VER}_linux_amd64.zip -d ${HOME}/downloads/terraform_${TERRAFORM_VER}
-      sudo cp -a ${HOME}/downloads/terraform_${TERRAFORM_VER}/terraform /usr/local/bin/
-      sudo chmod 755 /usr/local/bin/terraform
-      sudo chown root:root /usr/local/bin/terraform
+    if [[ -f /usr/local/bin/terraform ]]; then
+      sudo rm /usr/local/bin/terraform
+    fi
+    if [[ ! -L /usr/local/bin/tfenv ]]; then
+      sudo ln -s ${HOME}/.tfenv/bin/tfenv /usr/local/bin/tfenv
+    fi
+    if [[ ! -L /usr/local/bin/terraform ]]; then
+      sudo ln -s ${HOME}/.tfenv/bin/terraform /usr/local/bin/terraform
+    fi
+    if [[ -f ${HOME}/.tfenv/bin/tfenv ]]; then
+      tfenv install ${TERRAFORM_VER}
     fi
   fi
 
@@ -1214,12 +1204,30 @@ if [[ ${UPDATE} ]]; then
     cd ${HOME}/downloads
     curl "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "AWSCLIV2.pkg"
     sudo installer -pkg AWSCLIV2.pkg -target /
-    cd ${HOME}
+    cd ${PERSONAL_GITREPOS}/${DOTFILES}
   elif [[ ${LINUX} ]]; then
     echo "Updating Linux awscli"
     if [[ -f ${HOME}/downloads/awscli/aws ]]; then
       sudo -H ${HOME}/downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin --update
     fi
+  fi
+  if [[ -d ${HOME}/.tfenv ]]; then
+    echo "Updating tfenv"
+    cd ${HOME}/.tfenv
+    git pull
+    cd ${PERSONAL_GITREPOS}/${DOTFILES}
+  fi
+  if [[ -d ${HOME}/.oh-my-zsh ]]; then
+    echo "Updating oh-my-zsh"
+    cd ${HOME}/.oh-my-zsh
+    git pull
+    cd ${PERSONAL_GITREPOS}/${DOTFILES}
+  fi
+  if [[ -d ${HOME}/git-repos/z ]]; then
+    echo "Updating z"
+    cd ${HOME}/git-repos/z
+    git pull
+    cd ${PERSONAL_GITREPOS}/${DOTFILES}
   fi
   # Powershell modules to install
   # Install-Module -Name Az
