@@ -12,7 +12,7 @@ PACKER_VER="1.6.4"
 VAGRANT_VER="2.2.10"
 HASHICORP_URL="https://releases.hashicorp.com"
 WORK_TERRAFORM_VER="0.11.14"
-TERRAFORM_VER="0.13.4terraform"
+TERRAFORM_VER="0.13.4"
 GIT_VER="2.28"
 GIT_URL="https://mirrors.edge.kernel.org/pub/software/scm/git"
 ZSH_VER="5.8"
@@ -327,7 +327,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     sh -c "$(curl -fsSL https://raw.github.com/robbyrussell/oh-my-zsh/master/tools/install.sh)"
   fi
 
-  if [[ -f ${HOME}/.zshrc ]]; then
+  if [[ -f ${HOME}/.zshrc ]]; thenoh-my-zsh
     rm ${HOME}/.zshrc
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.zshrc ${HOME}/.zshrc
   elif [[ ! -L ${HOME}/.zshrc ]]; then
