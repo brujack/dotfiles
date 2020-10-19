@@ -770,7 +770,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo -H apt install virtualbox-6.1 -y
     fi
 
-    if [[ ${HOSTNAME} == "workstation" ]] || [[ ${HOSTNAME} == "kube-1" ]] ; then
+    if [[ ${HOSTNAME} == "workstation" ]] || [[ ${HOSTNAME} == "kube-1" ]] || [[ ${HOSTNAME} == "kube-2" ]]; then
       echo "Installing Virtualbox"
       wget -q https://www.virtualbox.org/download/oracle_vbox_2016.asc -O- | sudo apt-key add -
       wget -q https://www.virtualbox.org/download/oracle_vbox.asc -O- | sudo apt-key add -
