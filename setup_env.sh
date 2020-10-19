@@ -271,7 +271,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     elif [[ ! -L ${HOME}/.gitconfig ]]; then
       ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_mac ${HOME}/.gitconfig
     fi
-    if [[ ${HOSTNAME} == "ratna" ]] || [[ ${HOSTNAME} == "bruce-work" ]] || [[ ${HOSTNAME} == "workstation" ]]; then
+    if [[ ${HOSTNAME} == "ratna" ]] || [[ ${HOSTNAME} == "bruce-work" ]]; then
       if [[ ! -L ${HOME}/git-repos/cybernetiq/.gitconfig ]]; then
         ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_mac_cybernetiq ${HOME}/git-repos/cybernetiq/.gitconfig
       elif [[ ! -L ${HOME}/git-repos/gitlab/.gitconfig ]]; then
@@ -772,7 +772,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo -H apt install virtualbox-6.1 -y
     fi
 
-    if [[ ${HOSTNAME} == "workstation" ]] ; then
+    if [[ ${HOSTNAME} == "workstation" ]] || [[ ${HOSTNAME} == "kube-1" ]] ; then
       echo "Installing Virtualbox"
       wget -q https://www.virtualbox.org/download/oracle_vbox_2016.asc -O- | sudo apt-key add -
       wget -q https://www.virtualbox.org/download/oracle_vbox.asc -O- | sudo apt-key add -
