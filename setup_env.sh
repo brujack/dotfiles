@@ -1033,14 +1033,14 @@ EOM
       curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
       unzip awscliv2.zip
       sudo -H ./aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin
-      cd ${HOME}
+      cd ${PERSONAL_GITREPOS}/${DOTFILES}
     fi
   elif [[ ${MACOS} ]]; then
     if [[ ! -d ${HOME}/downloads/AWSCLIV2.pkg ]]; then
       cd ${HOME}/downloads
       curl "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "AWSCLIV2.pkg"
       sudo installer -pkg AWSCLIV2.pkg -target /
-      cd ${HOME}
+      cd ${PERSONAL_GITREPOS}/${DOTFILES}
     fi
   fi
 
@@ -1207,9 +1207,11 @@ if [[ ${UPDATE} ]]; then
     cd ${PERSONAL_GITREPOS}/${DOTFILES}
   elif [[ ${LINUX} ]]; then
     echo "Updating Linux awscli"
-    if [[ -f ${HOME}/downloads/awscli/aws ]]; then
-      sudo -H ${HOME}/downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin --update
-    fi
+    cd ${HOME}/downloads/awscli
+    curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+    unzip -u awscliv2.zip
+    sudo -H ${HOME}/downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin --update
+    cd ${PERSONAL_GITREPOS}/${DOTFILES}
   fi
   if [[ -d ${HOME}/.tfenv ]]; then
     echo "Updating tfenv"
