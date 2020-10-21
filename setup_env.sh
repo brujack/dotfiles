@@ -1209,7 +1209,7 @@ if [[ ${UPDATE} ]]; then
     echo "Updating Linux awscli"
     cd ${HOME}/downloads/awscli
     curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-    unzip -u awscliv2.zip
+    unzip -u -o awscliv2.zip
     sudo -H ${HOME}/downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin --update
     cd ${PERSONAL_GITREPOS}/${DOTFILES}
   fi
