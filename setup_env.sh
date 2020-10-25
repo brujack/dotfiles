@@ -861,7 +861,6 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     # install packages via snap
     sudo snap install helm --classic
     sudo snap install kubectl --classic
-    sudo snap install bpytop
 
     # on KUBE systems:
     if [[ ${KUBE} ]]; then
