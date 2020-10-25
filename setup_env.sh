@@ -680,6 +680,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt install libssl-dev -y
     sudo -H apt install libsqlite3-dev -y
     sudo -H apt install llvm -y
+    sudo -H apt install lm-sensors -y
     sudo -H apt install locales -y
     sudo -H apt install lsof -y
     sudo -H apt install make -y
