@@ -861,6 +861,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     # install packages via snap
     sudo snap install helm --classic
     sudo snap install kubectl --classic
+    sudo snap install bpytop
 
     # on KUBE systems:
     if [[ ${KUBE} ]]; then
@@ -1157,7 +1158,7 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
     # echo "Installing jmespath-terminal via pip"
     # python3 -m pip install jmespath-terminal
     # echo "Installing psutil"
-    # python3 -m pip install psutil
+    # python3 -m pip install psutil bpytop
   # fi
 fi
 
