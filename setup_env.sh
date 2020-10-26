@@ -97,8 +97,9 @@ if [[ ${UBUNTU} ]]; then
 fi
 
 [[ $(uname -r) =~ microsoft ]] && export WINDOWS=1
-[[ $(hostname -f) = "kube-1.conecrazy.ca" ]] && export KUBE=1
-[[ $(hostname -f) = "kube-2.conecrazy.ca" ]] && export KUBE=1
+[[ $(hostname -f) = "kube-1.conecrazy.io" ]] && export KUBE=1
+[[ $(hostname -f) = "kube-2.conecrazy.io" ]] && export KUBE=1
+[[ $(hostname -s) = "workstation" ]] && export WORKSTATION=1
 
 # setup variables based off of environment
 if [[ ${MACOS} ]]; then
@@ -713,6 +714,30 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt install zsh -y
     sudo -H apt install zsh-doc -y
 
+    if [[ ${WORKSTATION} ]]; then
+      # apt package installation
+      sudo -H apt install nfs-common -y
+
+      # snap package installation
+      sudo -H snap install snapd
+      sudo -H snap install snap-store
+      sudo -H snap install core
+      sudo -H snap install core18
+      sudo -H snap install core20
+
+      sudo -H snap install 1password
+      sudo -H snap install atom
+      sudo -H snap install canonical-livepatch
+      sudo -H snap install code
+      sudo -H snap install code-insiders
+      sudo -H snap install simplenote
+      sudo -H snap install spotify
+      sudo -H snap install zoom-client
+
+    fi
+
+
+
     if [[ ${BIONIC} ]]; then
       echo "Installing python 3.8 Ubuntu 18.04"
       sudo -H add-apt-repository ppa:deadsnakes/ppa
@@ -724,7 +749,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     curl https://pyenv.run | bash
 
     echo "Installing powershell Ubuntu"
-    if [[ $BIONIC ]]; then
+    if [[ ${BIONIC} ]]; then
       if [[ ! -f ${HOME}/downloads/packages-microsoft-prod.deb ]]; then
         wget -O ${HOME}/downloads/packages-microsoft-prod.deb https://packages.microsoft.com/config/ubuntu/18.04/packages-microsoft-prod.deb
         sudo -H dpkg -i ${HOME}/downloads/packages-microsoft-prod.deb
@@ -733,7 +758,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
         sudo -H apt install powershell -y
       fi
     fi
-    if [[ $FOCAL ]]; then
+    if [[ ${FOCAL} ]]; then
       if [[ ! -f ${HOME}/downloads/packages-microsoft-prod.deb ]]; then
         wget -O ${HOME}/downloads/packages-microsoft-prod.deb https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb
         sudo -H dpkg -i ${HOME}/downloads/packages-microsoft-prod.deb
@@ -748,7 +773,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt update
     sudo -H apt install golang-${GO_VER}-go -y
 
-    if [[ ! ${HOSTNAME} == "bastion" ]] || [[ ! ${HOSTNAME} == "workstation" ]]; then
+    if [[ ! ${HOSTNAME} == "bastion" ]] || [[ ! ${WORKSTATION} ]]; then
       echo "Installing docker desktop"
       curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo -H apt-key add -
       sudo -H add-apt-repository \
@@ -761,7 +786,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo -H apt install containerd.io -y
     fi
 
-    if [[ ! ${HOSTNAME} == "bastion" ]] || [[ ! ${HOSTNAME} == "cruncher" ]] || [[ ! ${HOSTNAME} == "workstation" ]]; then
+    if [[ ! ${HOSTNAME} == "bastion" ]] || [[ ! ${HOSTNAME} == "cruncher" ]] || [[ ! ${WORKSTATION} ]]; then
       echo "Installing Virtualbox"
       wget -q https://www.virtualbox.org/download/oracle_vbox_2016.asc -O- | sudo apt-key add -
       wget -q https://www.virtualbox.org/download/oracle_vbox.asc -O- | sudo apt-key add -
@@ -770,7 +795,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo -H apt install virtualbox-6.1 -y
     fi
 
-    if [[ ${HOSTNAME} == "workstation" ]] || [[ ${HOSTNAME} == "kube-1" ]] || [[ ${HOSTNAME} == "kube-2" ]]; then
+    if [[ ${WORKSTATION} ]] || [[ ${HOSTNAME} == "kube-1" ]] || [[ ${HOSTNAME} == "kube-2" ]]; then
       echo "Installing Virtualbox"
       wget -q https://www.virtualbox.org/download/oracle_vbox_2016.asc -O- | sudo apt-key add -
       wget -q https://www.virtualbox.org/download/oracle_vbox.asc -O- | sudo apt-key add -
