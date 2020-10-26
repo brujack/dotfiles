@@ -685,6 +685,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt install locales -y
     sudo -H apt install lsof -y
     sudo -H apt install make -y
+    sudo -H apt install mtr-tiny -y
     sudo -H apt install ncdu -y
     sudo -H apt install net-tools -y
     sudo -H apt install nload -y
