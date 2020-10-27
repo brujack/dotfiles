@@ -22,11 +22,11 @@ Z_GIT="https://github.com/rupa/z.git"
 ZABBIX_VER="4.4-1+"
 RHEL_KUBECTL_REPO="[kubernetes]
 name=Kubernetes
-baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+baseurl=http://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
 enabled=1
 gpgcheck=1
 repo_gpgcheck=1
-gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+gpgkey=http://packages.cloud.google.com/yum/doc/yum-key.gpg http://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
 "
 
 # locations of directories
@@ -776,7 +776,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     echo "Installing powershell Ubuntu"
     if [[ ${BIONIC} ]]; then
       if [[ ! -f ${HOME}/downloads/packages-microsoft-prod.deb ]]; then
-        wget -O ${HOME}/downloads/packages-microsoft-prod.deb https://packages.microsoft.com/config/ubuntu/18.04/packages-microsoft-prod.deb
+        wget -O ${HOME}/downloads/packages-microsoft-prod.deb http://packages.microsoft.com/config/ubuntu/18.04/packages-microsoft-prod.deb
         sudo -H dpkg -i ${HOME}/downloads/packages-microsoft-prod.deb
         sudo apt update
         sudo -H add-apt-repository universe
@@ -785,7 +785,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     fi
     if [[ ${FOCAL} ]]; then
       if [[ ! -f ${HOME}/downloads/packages-microsoft-prod.deb ]]; then
-        wget -O ${HOME}/downloads/packages-microsoft-prod.deb https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb
+        wget -O ${HOME}/downloads/packages-microsoft-prod.deb http://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb
         sudo -H dpkg -i ${HOME}/downloads/packages-microsoft-prod.deb
         sudo apt update
         sudo -H add-apt-repository universe
@@ -800,9 +800,9 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
 
     if [[ ! ${HOSTNAME} == "bastion" ]] || [[ ! ${WORKSTATION} ]]; then
       echo "Installing docker desktop"
-      curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo -H apt-key add -
+      curl -fsSL http://download.docker.com/linux/ubuntu/gpg | sudo -H apt-key add -
       sudo -H add-apt-repository \
-      "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
+      "deb [arch=amd64] http://download.docker.com/linux/ubuntu \
       $(lsb_release -cs) \
       stable"
       sudo -H apt update
@@ -813,8 +813,8 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
 
     if [[ ! ${HOSTNAME} == "bastion" ]] || [[ ! ${HOSTNAME} == "cruncher" ]] || [[ ! ${WORKSTATION} ]]; then
       echo "Installing Virtualbox"
-      wget -q https://www.virtualbox.org/download/oracle_vbox_2016.asc -O- | sudo apt-key add -
-      wget -q https://www.virtualbox.org/download/oracle_vbox.asc -O- | sudo apt-key add -
+      wget -q http://www.virtualbox.org/download/oracle_vbox_2016.asc -O- | sudo apt-key add -
+      wget -q http://www.virtualbox.org/download/oracle_vbox.asc -O- | sudo apt-key add -
       sudo add-apt-repository "deb http://download.virtualbox.org/virtualbox/debian bionic contrib"
       sudo -H apt update
       sudo -H apt install virtualbox-6.1 -y
@@ -822,27 +822,27 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
 
     if [[ ${WORKSTATION} ]] || [[ ${HOSTNAME} == "kube-1" ]] || [[ ${HOSTNAME} == "kube-2" ]]; then
       echo "Installing Virtualbox"
-      wget -q https://www.virtualbox.org/download/oracle_vbox_2016.asc -O- | sudo apt-key add -
-      wget -q https://www.virtualbox.org/download/oracle_vbox.asc -O- | sudo apt-key add -
+      wget -q http://www.virtualbox.org/download/oracle_vbox_2016.asc -O- | sudo apt-key add -
+      wget -q http://www.virtualbox.org/download/oracle_vbox.asc -O- | sudo apt-key add -
       sudo add-apt-repository "deb http://download.virtualbox.org/virtualbox/debian focal contrib"
       sudo -H apt update
       sudo -H apt install virtualbox-6.1 -y
     fi
 
     echo "Installing azure-cli"
-    curl -sL https://packages.microsoft.com/keys/microsoft.asc | \
+    curl -sL http://packages.microsoft.com/keys/microsoft.asc | \
     gpg --dearmor | \
     sudo tee /etc/apt/trusted.gpg.d/microsoft.asc.gpg > /dev/null
     AZ_REPO=$(lsb_release -cs)
     sudo -H add-apt-repository \
-    "deb [arch=amd64] https://packages.microsoft.com/repos/azure-cli/ $AZ_REPO main"
+    "deb [arch=amd64] http://packages.microsoft.com/repos/azure-cli/ $AZ_REPO main"
     sudo -H apt update
     sudo -H apt install azure-cli -y
 
     echo "Installing gcloud-sdk"
     if [[ ! -f /etc/apt/sources.list.d/google-cloud-sdk.list ]]; then
-      echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
-      curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
+      echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+      curl http://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
     fi
     sudo apt update
     sudo -H apt install google-cloud-sdk -y
@@ -969,21 +969,21 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H yum --enablerepo=psychotic install keychain -y
 
     echo "Installing azure-cli RHEL"
-    sudo -H rpm --import https://packages.microsoft.com/keys/microsoft.asc
-    sudo -H sh -c 'echo -e "[azure-cli]\nname=Azure CLI\nbaseurl=https://packages.microsoft.com/yumrepos/azure-cli\nenabled=1\ngpgcheck=1\ngpgkey=https://packages.microsoft.com/keys/microsoft.asc" > /etc/yum.repos.d/azure-cli.repo'
+    sudo -H rpm --import http://packages.microsoft.com/keys/microsoft.asc
+    sudo -H sh -c 'echo -e "[azure-cli]\nname=Azure CLI\nbaseurl=http://packages.microsoft.com/yumrepos/azure-cli\nenabled=1\ngpgcheck=1\ngpgkey=http://packages.microsoft.com/keys/microsoft.asc" > /etc/yum.repos.d/azure-cli.repo'
     sudo -H dnf update -y
     sudo -H dnf install azure-cli -y
 
     echo "Installing git credential manager RHEL"
-    sudo -H dnf install https://github.com/Microsoft/Git-Credential-Manager-for-Mac-and-Linux/releases/download/git-credential-manager-2.0.4/git-credential-manager-2.0.4-1.noarch.rpm -y
+    sudo -H dnf install http://github.com/Microsoft/Git-Credential-Manager-for-Mac-and-Linux/releases/download/git-credential-manager-2.0.4/git-credential-manager-2.0.4-1.noarch.rpm -y
 
     echo "Installing powershell RHEL"
-    curl https://packages.microsoft.com/config/rhel/7/prod.repo | sudo -H tee /etc/yum.repos.d/microsoft.repo
+    curl http://packages.microsoft.com/config/rhel/7/prod.repo | sudo -H tee /etc/yum.repos.d/microsoft.repo
     sudo -H dnf update -y
     sudo -H dnf install powershell -y
 
     echo "Installing npm RHEL"
-    curl -sL https://rpm.nodesource.com/setup_12.x | sudo -E bash -
+    curl -sL http://rpm.nodesource.com/setup_12.x | sudo -E bash -
     sudo -H dnf update -y
     sudo -H dnf install nodejs -y
 
@@ -1001,12 +1001,12 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo tee -a /etc/yum.repos.d/google-cloud-sdk.repo << EOM
 [google-cloud-sdk]
 name=Google Cloud SDK
-baseurl=https://packages.cloud.google.com/yum/repos/cloud-sdk-el7-x86_64
+baseurl=http://packages.cloud.google.com/yum/repos/cloud-sdk-el7-x86_64
 enabled=1
 gpgcheck=1
 repo_gpgcheck=1
-gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg
-       https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+gpgkey=http://packages.cloud.google.com/yum/doc/yum-key.gpg
+       http://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
 EOM
     fi
     sudo -H dnf update -y
@@ -1150,7 +1150,7 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
       sudo -H apt update
       sudo -H apt install gh
     elif [[ ${REDHAT} || ${CENTOS} || ${FEDORA} ]]; then
-      sudo -H dnf config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo
+      sudo -H dnf config-manager --add-repo http://cli.github.com/packages/rpm/gh-cli.repo
       sudo dnf install gh
     fi
   fi
