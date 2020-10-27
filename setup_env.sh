@@ -373,6 +373,30 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     cd ${GITREPOS}/z || return
     git pull
   fi
+
+  echo "Setting up cheat.sh"
+  if [[ -d ${HOME}/bin ]]; then
+    if [[ ${UBUNTU} ]]; then
+      sudo -H apt update
+      sudo -H apt install curl -y
+    fi
+    if [[ ${CENTOS} ]]; then
+      sudo -H dnf update -y
+      sudo -H dnf install curl -y
+    fi
+    if [[ ${REDHAT} ]] || [[ ${FEDORA} ]]; then
+      sudo -H yum update
+      sudo -H yum install curl -y
+    fi
+    curl https://cht.sh/:cht.sh > ~/bin/cht.sh
+    chmod 754 ${HOME}/bin/cht.sh
+  fi
+  if [[ ! -d ${HOME}/.zsh.d ]]; then
+    mkdir ${HOME}/.zsh.d
+  fi
+  if [[ ! -f ${HOME}/.zsh.d/_cht ]]; then
+    curl https://cheat.sh/:zsh > ${HOME}/.zsh.d/_cht
+  fi
 fi
 
 # full setup and installation of all packages for a development environment
@@ -697,6 +721,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt install python-setuptools -y
     sudo -H apt install python3-pip -y
     sudo -H apt install python3-setuptools -y
+    sudo -H apt install rlwrap -y
     sudo -H apt install screen -y
     sudo -H apt install shellcheck -y
     sudo -H apt install silversearcher-ag -y
@@ -737,8 +762,6 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo -H snap install zoom-client
 
     fi
-
-
 
     if [[ ${BIONIC} ]]; then
       echo "Installing python 3.8 Ubuntu 18.04"
@@ -872,7 +895,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo chown root:root /usr/local/bin/vagrant
     fi
 
-    if [[ ${HOSTNAME} == "kube-1" ]] || [[ ${HOSTNAME} == "kube-2" ]]; then
+    if [[ ${HOSTNAME} == "kube-1" ]] || [[ ${HOSTNAME} == "kube-2" ]] || [[ ${WORKSTATION} ]]; then
       "Installing Nvidia drivers for folding"
       sudo -H apt install ocl-icd-opencl-dev -y
       sudo -H apt install clinfo -y
@@ -1257,6 +1280,15 @@ if [[ ${UPDATE} ]]; then
     cd ${HOME}/git-repos/z
     git pull
     cd ${PERSONAL_GITREPOS}/${DOTFILES}
+  fi
+  if [[ -f ${HOME}/bin/cht.sh ]]; then
+    echo "Updating cheat.sh"
+    curl https://cht.sh/:cht.sh > ~/bin/cht.sh
+    chmod 754 ${HOME}/bin/cht.sh
+  fi
+  if [[ -f ${HOME}/.zsh.d/_cht ]]; then
+    echo "Updating cheat.sh tab completion"
+    curl https://cheat.sh/:zsh > ${HOME}/.zsh.d/_cht
   fi
   # Powershell modules to install
   # Install-Module -Name Az

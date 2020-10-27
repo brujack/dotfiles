@@ -396,3 +396,6 @@ if [[ ${LINUX} ]]; then
     source /usr/lib64/az/lib/python3.6/site-packages/argcomplete/bash_completion.d/python-argcomplete
   fi
 fi
+
+# cheat.sh tab completion
+fpath=(${HOME}/.zsh.d/ $fpath)
