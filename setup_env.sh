@@ -721,6 +721,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt install python-setuptools -y
     sudo -H apt install python3-pip -y
     sudo -H apt install python3-setuptools -y
+    sudo -H apt install rar -y
     sudo -H apt install rlwrap -y
     sudo -H apt install screen -y
     sudo -H apt install shellcheck -y
@@ -731,6 +732,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt install tk-dev -y
     sudo -H apt install tmux -y
     sudo -H apt install traceroute -y
+    sudo -H apt install unrar -y
     sudo -H apt install unzip -y
     sudo -H apt install vim -y
     sudo -H apt install wget -y
@@ -743,7 +745,11 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
 
     if [[ ${WORKSTATION} ]]; then
       # apt package installation
+      sudo -H apt install gnome-tweaks -y
       sudo -H apt install nfs-common -y
+      sudo -H apt install openjdk-11-jdk -y
+      sudo -H apt install steam -y
+      sudo -H apt install ubuntu-restricted-extras -y
 
       # snap package installation
       sudo -H snap install snapd
@@ -759,6 +765,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo -H snap install code-insiders
       sudo -H snap install simplenote
       sudo -H snap install spotify
+      sudo -H snap install vlc
       sudo -H snap install zoom-client
 
     fi
