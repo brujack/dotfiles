@@ -8,7 +8,7 @@ PYTHON_VER="3.8.3"
 CONSUL_VER="1.8.5"
 VAULT_VER="1.5.5"
 NOMAD_VER="0.12.7"
-PACKER_VER="1.6.4"
+PACKER_VER="1.6.5"
 VAGRANT_VER="2.2.10"
 HASHICORP_URL="https://releases.hashicorp.com"
 WORK_TERRAFORM_VER="0.11.14"
@@ -1287,6 +1287,12 @@ if [[ ${UPDATE} ]]; then
   if [[ -d ${HOME}/.oh-my-zsh ]]; then
     echo "Updating oh-my-zsh"
     cd ${HOME}/.oh-my-zsh
+    git pull
+    cd ${PERSONAL_GITREPOS}/${DOTFILES}
+  fi
+  if [[ -d ${HOME}/.oh-my-zsh/themes/powerlevel10k ]]; then
+    echo "Updating oh-my-zsh"
+    cd ${HOME}/.oh-my-zsh/themes/powerlevel10k
     git pull
     cd ${PERSONAL_GITREPOS}/${DOTFILES}
   fi
