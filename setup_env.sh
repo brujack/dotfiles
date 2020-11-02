@@ -294,6 +294,13 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.vimrc ${HOME}/.vimrc
   fi
 
+  if [[ -f ${HOME}/.p10k.zsh ]]; then
+    rm ${HOME}/.p10k.zsh
+    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.p10k.zsh ${HOME}/.p10k.zsh
+  elif [[ ! -L ${HOME}/.p10k.zsh ]]; then
+    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.p10k.zsh ${HOME}/.p10k.zsh
+  fi
+
   if [[ -d ${HOME}/scripts ]]; then
     rm -rf ${HOME}/scripts
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/scripts ${HOME}/scripts
@@ -745,6 +752,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
 
     if [[ ${WORKSTATION} ]]; then
       # apt package installation
+      sudo -H apt install font-manager -y
       sudo -H apt install gnome-tweaks -y
       sudo -H apt install nfs-common -y
       sudo -H apt install openjdk-11-jdk -y
