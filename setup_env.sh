@@ -1295,9 +1295,9 @@ if [[ ${UPDATE} ]]; then
     git pull
     cd ${PERSONAL_GITREPOS}/${DOTFILES}
   fi
-  if [[ -d ${HOME}/.oh-my-zsh/themes/powerlevel10k ]]; then
-    echo "Updating oh-my-zsh"
-    cd ${HOME}/.oh-my-zsh/themes/powerlevel10k
+  if [[ -d ${HOME}/.oh-my-zsh/custom/themes/powerlevel10k ]]; then
+    echo "Updating powerlevel10k"
+    cd ${HOME}/.oh-my-zsh/custom/themes/powerlevel10k
     git pull
     cd ${PERSONAL_GITREPOS}/${DOTFILES}
   fi
