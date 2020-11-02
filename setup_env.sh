@@ -335,6 +335,11 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     sh -c "$(curl -fsSL https://raw.github.com/robbyrussell/oh-my-zsh/master/tools/install.sh)"
   fi
 
+  echo "Installing p10k"
+  if [[ ! =d ${HOME}/.oh-my-zsh/custom//themes/powerlevel10k ]]; then
+    git clone --depth=1 https://github.com/romkatv/powerlevel10k.git ${HOME}/.oh-my-zsh/custom//themes/powerlevel10k
+  fi
+
   if [[ -f ${HOME}/.zshrc ]]; then
     rm ${HOME}/.zshrc
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.zshrc ${HOME}/.zshrc
