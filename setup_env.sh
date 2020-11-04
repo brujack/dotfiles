@@ -744,6 +744,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt install tk-dev -y
     sudo -H apt install tmux -y
     sudo -H apt install traceroute -y
+    sudo -H apt install unattended-upgrades -y
     sudo -H apt install unrar -y
     sudo -H apt install unzip -y
     sudo -H apt install vim -y
