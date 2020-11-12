@@ -20,8 +20,6 @@
     "workbench.editor.limit.enabled": true,
     "workbench.editor.limit.perEditorGroup": true,
     "workbench.editor.limit.value": 8,
-    "workbench.colorTheme": "macOS Classic",
-    "workbench.iconTheme": "macos-classic-icons",
     "workbench.startupEditor": "none",
     "git.confirmSync": false,
     "git.autofetch": true,
@@ -30,8 +28,6 @@
     "team.showWelcomeMessage": false,
     "editor.suggestSelection": "first",
     "vsintellicode.modify.editor.suggestSelection": "automaticallyOverrodeDefaultValue",
-    "terraform.indexing.enable": "true",
-    "python.linting.pylint.enable": true,
     "markdownlint.customRules": [
         "{docsmsft.docs-markdown}/markdownlint-custom-rules/rules.js"
     ],
@@ -42,6 +38,39 @@
     },
     "vs-kubernetes": {
         "vs-kubernetes.kubectl-path": "/usr/local/bin/kubectl",
-        "vs-kubernetes.kubectl-path.windows": "c:\\ProgramData\\chocolatey\\bin\\kubectl.exe"
+        "vs-kubernetes.kubectl-path.windows": "c:\\ProgramData\\chocolatey\\bin\\kubectl.exe",
+        "vs-kubernetes.minikube-path.mac": "/Users/bruce/.vs-kubernetes/tools/minikube/darwin-amd64/minikube",
+        "vs-kubernetes.minikube-path.linux": "/home/bruce/.vs-kubernetes/tools/minikube/linux-amd64/minikube",
+        "vs-kubernetes.draft-path.linux": "/home/bruce/.vs-kubernetes/tools/draft/linux-amd64/draft",
+        "vs-kubernetes.kubectl-path.linux": "/home/bruce/.vs-kubernetes/tools/kubectl/kubectl"
+    },
+    "terraform.indexing": {
+        "enabled": false,
+        "liveIndexing": false,
+        "delay": 500,
+        "exclude": [
+            ".terraform/**/*",
+            "**/.terraform/**/*"
+        ],
+        "enable": "true"
+    },
+    "terraform.languageServer": {
+        "external": true,
+        "args": [
+            "serve"
+        ]
+    },
+    "python.jediEnabled": false,
+    "python.insidersChannel": "weekly",
+    "terraform.format": {
+
+    },
+    "python.languageServer": "Microsoft",
+    "yaml.schemas": {
+        "file:///toc.schema.json": "/toc\\.yml/i"
+    },
+    "terminal.integrated.fontFamily": "MesloLGS NF",
+    "remote.SSH.remotePlatform": {
+        "workstation": "linux"
     }
 }
