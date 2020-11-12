@@ -285,6 +285,13 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     elif [[ ! -L ${HOME}/.gitconfig ]]; then
       ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_linux ${HOME}/.gitconfig
     fi
+    if [[ ${HOSTNAME} == "workstation" ]] || [[ ${HOSTNAME} == "cruncher" ]]; then
+      if [[ ! -L ${HOME}/git-repos/cybernetiq/.gitconfig ]]; then
+        ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_linux_cybernetiq ${HOME}/git-repos/cybernetiq/.gitconfig
+      elif [[ ! -L ${HOME}/git-repos/gitlab/.gitconfig ]]; then
+        ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_linux_gitlab ${HOME}/git-repos/gitlab/.gitconfig
+      fi
+    fi
   fi
 
   if [[ -f ${HOME}/.vimrc ]]; then
