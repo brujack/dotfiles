@@ -78,11 +78,13 @@ cinst -y hyper
 cinst -y iperf3
 cinst -y kubernetes-cli
 cinst -y kubernetes-helm
+cinst -y make
 cinst -y microsoft-windows-terminal
 cinst -y postman
 cinst -y putty.install
 cinst -y puttygen
 cinst -y python3
+cinst -y simplenote
 cinst -y sourcetree
 cinst -y spotify
 cinst -y teamviewer
@@ -90,4 +92,5 @@ cinst -y terraform
 cinst -y typora
 cinst -y vscode
 cinst -y winscp
+cinst -y zoom
 cinst -y 7zip
