@@ -42,7 +42,8 @@
         "vs-kubernetes.minikube-path.mac": "/Users/bruce/.vs-kubernetes/tools/minikube/darwin-amd64/minikube",
         "vs-kubernetes.minikube-path.linux": "/home/bruce/.vs-kubernetes/tools/minikube/linux-amd64/minikube",
         "vs-kubernetes.draft-path.linux": "/home/bruce/.vs-kubernetes/tools/draft/linux-amd64/draft",
-        "vs-kubernetes.kubectl-path.linux": "/home/bruce/.vs-kubernetes/tools/kubectl/kubectl"
+        "vs-kubernetes.kubectl-path.linux": "/home/bruce/.vs-kubernetes/tools/kubectl/kubectl",
+        "vs-kubernetes.helm-path.linux": "/home/bruce/.vs-kubernetes/tools/helm/linux-amd64/helm"
     },
     "terraform.indexing": {
         "enabled": false,
