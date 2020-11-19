@@ -585,6 +585,9 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/Visual Studio Code.app" ]]; then
       brew cask install visual-studio-code
     fi
+    if [[ ! -d "/Applications/zoom.us.app" ]]; then
+      brew cask install zoomus
+    fi
 
     echo "Cleaning up brew"
     brew cleanup
