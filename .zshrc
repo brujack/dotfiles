@@ -246,6 +246,7 @@ alias td='terraform destroy'
 alias mp='make plan'
 alias ma='make apply'
 alias mi='make inspec'
+alias tw='~/scripts/tmux-workstation.sh'
 
 # alias for ls to exa removed due to breaking globbing for ansible aws integration
 if quiet_which exa

@@ -308,6 +308,13 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.p10k.zsh ${HOME}/.p10k.zsh
   fi
 
+  if [[ -f ${HOME}/.tmux.conf ]]; then
+    rm ${HOME}/.tmux.conf
+    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.tmux.conf ${HOME}/.tmux.conf
+  elif [[ ! -L ${HOME}/.tmux.conf ]]; then
+    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.tmux.conf ${HOME}/.tmux.conf
+  fi
+
   if [[ -d ${HOME}/scripts ]]; then
     rm -rf ${HOME}/scripts
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/scripts ${HOME}/scripts
