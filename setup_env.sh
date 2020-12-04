@@ -490,110 +490,110 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
 
     # the below casks and mas are not in a brewfile since they will "fail" if already installed
     if [[ ! -d "/Applications/Alfred 4.app" ]]; then
-      brew cask install alfred
+      brew install --cask alfred
     fi
     if [[ ! -d "/Applications/AppCleaner.app" ]]; then
-      brew cask install appcleaner
+      brew install --cask appcleaner
     fi
     if [[ ! -d "/Applications/Atom.app" ]]; then
-      brew cask install atom
+      brew install --cask atom
     fi
     if [[ ! -d "/Applications/DaisyDisk.app" ]]; then
-      brew cask install daisydisk
+      brew install --cask daisydisk
     fi
     if [[ ! -d "/Applications/Beyond Compare.app" ]]; then
-      brew cask install beyond-compare
+      brew install --cask beyond-compare
     fi
     if [[ ! -d "/Applications/Carbon Copy Cloner.app" ]]; then
-      brew cask install carbon-copy-cloner
+      brew install --cask carbon-copy-cloner
     fi
     if [[ ! -d /opt/chefdk ]]; then
-      brew cask install chefdk
+      brew install --cask chefdk
     fi
     if [[ ! -d "/Applications/DBeaver.app" ]]; then
-      brew cask install dbeaver-community
+      brew install --cask dbeaver-community
     fi
     if [[ ! ${HOSTNAME} == "server" ]]; then
       if [[ ! -d "/Applications/Docker.app" ]]; then
-        brew cask install docker
+        brew install --cask docker
       fi
     fi
     if [[ ! -d "/Applications/Dropbox.app" ]]; then
-      brew cask install dropbox
+      brew install --cask dropbox
     fi
     if [[ ! -d "/Applications/ExpressVPN.app" ]]; then
-      brew cask install expressvpn
+      brew install --cask expressvpn
     fi
     if [[ ! -d "/Applications/Firefox.app" ]]; then
-      brew cask install firefox
+      brew install --cask firefox
     fi
     if [[ ! -d "/Applications/Fork.app" ]]; then
-      brew cask install fork
+      brew install --cask fork
     fi
     if [[ ! -d "/Applications/Funter.app" ]]; then
-      brew cask install funter
+      brew install --cask funter
     fi
     if [[ ! -d "/Applications/Google Chrome.app" ]]; then
-      brew cask install google-chrome
+      brew install --cask google-chrome
     fi
     if [[ ! -d "/usr/local/Caskroom/google-cloud-sdk" ]]; then
-      brew cask install google-cloud-sdk
+      brew install --cask google-cloud-sdk
     fi
     if [[ ! -d "/Applications/iStat Menus.app" ]]; then
-      brew cask install istat-menus
+      brew install --cask istat-menus
     fi
     if [[ ! -d "/Applications/iTerm.app" ]]; then
-      brew cask install iterm2
+      brew install --cask iterm2
     fi
     if [[ ! -d "/Applications/Joplin.app" ]]; then
-      brew cask install joplin
+      brew install --cask joplin
     fi
     if [[ ! -d "/Applications/MacDown.app" ]]; then
-      brew cask install macdown
+      brew install --cask macdown
     fi
     if [[ ! -d "/Applications/Malwarebytes.app" ]]; then
-      brew cask install malwarebytes
+      brew install --cask malwarebytes
     fi
     if [[ ${HOSTNAME} == "ratna" ]] || [[ ${HOSTNAME} == "bruce-work" ]]; then
       if [[ ! -d "/Applications/Microsoft\ Word.app" ]]; then
-        brew cask install microsoft-office
+        brew install --cask microsoft-office
       fi
     fi
     if [[ ! -d "/Applications/MySQLWorkbench.app" ]]; then
-      brew cask install mysqlworkbench
+      brew install --cask mysqlworkbench
     fi
     if [[ ! -d "/usr/local/Caskroom/oracle-jdk" ]]; then
-      brew cask install oracle-jdk
+      brew install --cask oracle-jdk
     fi
     if [[ ! -d "/Applications/Postman.app" ]]; then
-      brew cask install postman
+      brew install --cask postman
     fi
     if [[ ! -d "/Applications/SourceTree.app" ]]; then
-      brew cask install sourcetree
+      brew install --cask sourcetree
     fi
     if [[ ! -d "/Applications/PowerShell.app" ]]; then
-      brew cask install powershell
+      brew install --cask powershell
     fi
     if [[ ! -d "/Applications/Slack.app" ]]; then
-      brew cask install slack
+      brew install --cask slack
     fi
     if [[ ! -d "/Applications/Spotify.app" ]]; then
-      brew cask install spotify
+      brew install --cask spotify
     fi
     if [[ ! -d "/Applications/TeamViewer.app" ]]; then
-      brew cask install teamviewer
+      brew install --cask teamviewer
     fi
     if [[ ! -d "/Applications/VirtualBox.app" ]]; then
-      brew cask install virtualbox
+      brew install --cask virtualbox
     fi
     if [[ ! -d "/Applications/Vagrant.app" ]]; then
-      brew cask install vagrant
+      brew install --cask vagrant
     fi
     if [[ ! -d "/Applications/Visual Studio Code.app" ]]; then
-      brew cask install visual-studio-code
+      brew install --cask visual-studio-code
     fi
     if [[ ! -d "/Applications/zoom.us.app" ]]; then
-      brew cask install zoomus
+      brew install --cask zoom
     fi
 
     echo "Cleaning up brew"
