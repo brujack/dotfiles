@@ -1240,7 +1240,7 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
   #   pyenv virtualenv ${PYTHON_VER} ansible
   #   pyenv activate ansible
     # echo "Installing ansible via pip"
-    # python3 -m pip install ansible ansible-cmdb ansible-lint
+    # python3 -m pip install ansible ansible-cmdb ansible-lint pylint jmespath-terminal psutil bpytop
     # echo "Installing pylint for python linting via pip"
     # python3 -m pip install pylint
     # echo "Installing jmespath-terminal via pip"
