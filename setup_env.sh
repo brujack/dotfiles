@@ -759,6 +759,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt install smartmontools -y
     sudo -H apt install software-properties-common -y
     sudo -H apt install sysstat -y
+    sudo -H apt install thermald -y
     sudo -H apt install tk-dev -y
     sudo -H apt install tmux -y
     sudo -H apt install traceroute -y
