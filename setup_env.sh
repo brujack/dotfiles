@@ -751,6 +751,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt install python-setuptools -y
     sudo -H apt install python3-pip -y
     sudo -H apt install python3-setuptools -y
+    sudo -H apt install ranger -y
     sudo -H apt install rar -y
     sudo -H apt install rlwrap -y
     sudo -H apt install screen -y
