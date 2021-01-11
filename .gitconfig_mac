@@ -17,6 +17,8 @@
 	ci = commit
 	co = checkout
 	st = status
+	ls = branch -l
+	dl = branch -d
 	undo = reset --soft 'HEAD^'
 	lg = log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit --date=relative
 [diff "sopsdiffer"]
