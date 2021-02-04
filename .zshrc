@@ -170,7 +170,7 @@ path+=('/usr/local/sbin')
 path+=("${HOME}/bin")
 path+=("${HOME}/scripts")
 
-if [[ ${MAC} ]]; then
+if [[ ${MACOS} ]]; then
   path+=('/opt/homebrew/bin')
 fi
 
