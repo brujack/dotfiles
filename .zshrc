@@ -170,6 +170,10 @@ path+=('/usr/local/sbin')
 path+=("${HOME}/bin")
 path+=("${HOME}/scripts")
 
+if [[ ${MAC} ]]; then
+  path+=('/opt/homebrew/bin')
+fi
+
 if [[ ${LINUX} ]]; then
   # for /opt/local includes
   path+=('/opt/local/bin')
