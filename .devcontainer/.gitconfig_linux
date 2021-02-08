@@ -1,0 +1,23 @@
+[core]
+	excludesfile = /home/bruce/.gitignore_global
+[user]
+	name = Bruce Jackson
+	email = bjackson@pobox.com
+[commit]
+	template = /home/bruce/.stCommitMsg
+[alias]
+	pl = pull
+	br = branch
+	ci = commit
+	co = checkout
+	st = status
+	ls = branch -l
+	dl = branch -d
+	undo = reset --soft 'HEAD^'
+	lg = log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit --date=relative
+[diff "sopsdiffer"]
+	textconv = sops -d
+[pull]
+	rebase = false
+[gc]
+	autoDetach = false
