@@ -1,0 +1,31 @@
+[core]
+	excludesfile = /Users/bruce/.gitignore_global
+[difftool "sourcetree"]
+	cmd = opendiff \"$LOCAL\" \"$REMOTE\"
+	path =
+[mergetool "sourcetree"]
+	cmd = /Applications/Sourcetree.app/Contents/Resources/opendiff-w.sh \"$LOCAL\" \"$REMOTE\" -ancestor \"$BASE\" -merge \"$MERGED\"
+	trustExitCode = true
+[user]
+	name = Bruce Jackson
+	email = bruce.jackson@cybernetiq.io
+[commit]
+	template = /Users/bruce/.stCommitMsg
+[alias]
+	pl = pull
+	br = branch
+	ci = commit
+	co = checkout
+	st = status
+	ls = branch -l
+	dl = branch -d
+	undo = reset --soft 'HEAD^'
+	lg = log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit --date=relative
+[diff "sopsdiffer"]
+	textconv = sops -d
+[pull]
+	rebase = false
+[includeIf "gitdir:~/git-repos/cybernetiq/"]
+	path = ~/git-repos/cybernetiq/.gitconfig
+[includeIf "gitdir:~/git-repos/gitlab/"]
+	path = ~/git-repos/gitlab/.gitconfig
