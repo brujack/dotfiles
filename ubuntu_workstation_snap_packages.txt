@@ -1,0 +1,14 @@
+snapd
+snap-store
+core
+core18
+core20
+1password
+atom
+canonical-livepatch
+code
+code-insiders
+simplenote
+spotify
+vlc
+zoom-client

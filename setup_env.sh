@@ -351,7 +351,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
 
   echo "Installing p10k"
   if [[ ! -d ${HOME}/.oh-my-zsh/custom//themes/powerlevel10k ]]; then
-    git clone --depth=1 https://github.com/romkatv/powerlevel10k.git ${HOME}/.oh-my-zsh/custom//themes/powerlevel10k
+    git clone --depth=1 https://github.com/romkatv/powerlevel10k.git ${HOME}/.oh-my-zsh/custom/themes/powerlevel10k
   fi
 
   if [[ -f ${HOME}/.zshrc ]]; then
@@ -391,12 +391,12 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     fi
   fi
   echo "Setting up Z"
-  if [[ ! -d ${GITREPOS}/z ]]; then
-    mkdir ${GITREPOS}/z
+  if [[ ! -d ${HOME}/z ]]; then
+    mkdir ${HOME}/z
     cd ${HOME} || return
-    git clone --recursive ${Z_GIT} ${GITREPOS}/z
+    git clone --recursive ${Z_GIT} ${HOME}/z
   else
-    cd ${GITREPOS}/z || return
+    cd ${HOME}/z || return
     git pull
   fi
 
@@ -703,104 +703,14 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
 
   if [[ ${UBUNTU} ]]; then
     sudo -H apt update
-    sudo -H apt install apt-transport-https -y
-    sudo -H apt install autoconf -y
-    sudo -H apt install automake -y
-    sudo -H apt install bison -y
-    sudo -H apt install build-essential -y
-    sudo -H apt install ca-certificates -y
-    sudo -H apt install cpanminus -y
-    sudo -H apt install curl -y
-    sudo -H apt install dnstop -y
-    sudo -H apt install dnsutils -y
-    sudo -H apt install flex -y
-    sudo -H apt install fzf -y
-    sudo -H apt install gcc -y
-    sudo -H apt install git -y
-    sudo -H apt install gnupg -y
-    sudo -H apt install htop -y
-    sudo -H apt install iotop -y
-    sudo -H apt install iperf3 -y
-    sudo -H apt install jq -y
-    sudo -H apt install keychain -y
-    sudo -H apt install libbz2-dev -y
-    sudo -H apt install libffi-dev -y
-    sudo -H apt install liblzma-dev -y
-    sudo -H apt install libelf-dev -y
-    sudo -H apt install libncurses5-dev -y
-    sudo -H apt install libncursesw5-dev -y
-    sudo -H apt install libpython3-dev -y
-    sudo -H apt install libreadline-dev -y
-    sudo -H apt install libssl-dev -y
-    sudo -H apt install libsqlite3-dev -y
-    sudo -H apt install llvm -y
-    sudo -H apt install lm-sensors -y
-    sudo -H apt install locales -y
-    sudo -H apt install lsof -y
-    sudo -H apt install make -y
-    sudo -H apt install mtr-tiny -y
-    sudo -H apt install ncdu -y
-    sudo -H apt install network-manager -y
-    sudo -H apt install net-tools -y
-    sudo -H apt install nload -y
-    sudo -H apt install nodejs -y
-    sudo -H apt install npm -y
-    sudo -H apt install openssh-server -y
-    sudo -H apt install openssl -y
-    sudo -H apt install python-openssl -y
-    sudo -H apt install python-setuptools -y
-    sudo -H apt install python3-pip -y
-    sudo -H apt install python3-setuptools -y
-    sudo -H apt install ranger -y
-    sudo -H apt install rar -y
-    sudo -H apt install rlwrap -y
-    sudo -H apt install screen -y
-    sudo -H apt install shellcheck -y
-    sudo -H apt install silversearcher-ag -y
-    sudo -H apt install smartmontools -y
-    sudo -H apt install software-properties-common -y
-    sudo -H apt install sysstat -y
-    sudo -H apt install thermald -y
-    sudo -H apt install tk-dev -y
-    sudo -H apt install tmux -y
-    sudo -H apt install traceroute -y
-    sudo -H apt install unattended-upgrades -y
-    sudo -H apt install unrar -y
-    sudo -H apt install unzip -y
-    sudo -H apt install vim -y
-    sudo -H apt install wget -y
-    sudo -H apt install xinetd -y
-    sudo -H apt install xz-utils -y
-    sudo -H apt install zlib1g-dev -y
-    sudo -H apt install zip -y
-    sudo -H apt install zsh -y
-    sudo -H apt install zsh-doc -y
+    xargs -a ubuntu_common_packages.txt sudo apt install -y
 
     if [[ ${WORKSTATION} ]]; then
       # apt package installation
-      sudo -H apt install font-manager -y
-      sudo -H apt install gnome-tweaks -y
-      sudo -H apt install nfs-common -y
-      sudo -H apt install openjdk-11-jdk -y
-      sudo -H apt install steam -y
-      sudo -H apt install ubuntu-restricted-extras -y
+      xargs -a ubuntu_workstation_packages.txt sudo apt install -y
 
       # snap package installation
-      sudo -H snap install snapd
-      sudo -H snap install snap-store
-      sudo -H snap install core
-      sudo -H snap install core18
-      sudo -H snap install core20
-
-      sudo -H snap install 1password
-      sudo -H snap install atom
-      sudo -H snap install canonical-livepatch
-      sudo -H snap install code
-      sudo -H snap install code-insiders
-      sudo -H snap install simplenote
-      sudo -H snap install spotify
-      sudo -H snap install vlc
-      sudo -H snap install zoom-client
+      xargs -a ubuntu_workstation_snap_packages.txt sudo snap install
 
     fi
 

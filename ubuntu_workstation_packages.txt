@@ -1,0 +1,6 @@
+font-manager
+gnome-tweaks
+nfs-common
+openjdk-11-jdk
+steam
+ubuntu-restricted-extras
