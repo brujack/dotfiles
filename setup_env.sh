@@ -415,7 +415,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
       sudo -H yum install curl -y
     fi
     curl https://cht.sh/:cht.sh > ~/bin/cht.sh
-    chmod 754 ${HOME}/bin/cht.sh
+    chmod 750 ${HOME}/bin/cht.sh
   fi
   if [[ ! -d ${HOME}/.zsh.d ]]; then
     mkdir ${HOME}/.zsh.d
