@@ -8,6 +8,9 @@ FROM mcr.microsoft.com/vscode/devcontainers/base:0-${VARIANT}
 ARG INSTALL_ZSH="true"
 ARG UPGRADE_PACKAGES="true"
 ARG Z_GIT="https://github.com/rupa/z.git"
+ARG GO_VER="1.15"
+ARG HELM_VER="3.5.2"
+ARG TERRAFORM_VER="0.14.5"
 
 ARG USER_NAME="vscode"
 
@@ -121,3 +124,67 @@ COPY .ssh/config /home/$USER_NAME/.ssh/config
 
 # setup z
 RUN git clone --recursive $Z_GIT /home/$USER_NAME/z
+
+# setup cheat.sh
+RUN curl https://cht.sh/:cht.sh > /home/$USER_NAME/bin/cht.sh
+RUN chmod 750 /home/$USER_NAME/bin/cht.sh
+RUN mkdir /home/$USER_NAME/.zsh.d
+RUN curl https://cheat.sh/:zsh > /home/$USER_NAME/.zsh.d/_cht
+
+# install pyenv
+RUN curl https://pyenv.run | bash
+
+# mkdir downloads directory for tools downloads
+RUN mkdir /home/$USER_NAME/downloads
+
+# install powershell
+RUN wget -O /home/$USER_NAME/downloads/packages-microsoft-prod.deb http://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb
+RUN sudo dpkg -i /home/$USER_NAME/downloads/packages-microsoft-prod.deb
+RUN sudo apt update
+RUN sudo add-apt-repository universe
+RUN sudo apt install powershell -y
+
+# install go
+RUN sudo add-apt-repository ppa:longsleep/golang-backports -y
+RUN sudo apt update
+RUN sudo apt install golang-$GO_VER-go -y
+
+# install awscli
+RUN mkdir /home/$USER_NAME/downloads/awscli
+RUN wget -O /home/$USER_NAME/downloads/awscli/awscliv2.zip "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
+RUN unzip /home/$USER_NAME/downloads/awscli/awscliv2.zip -d /home/$USER_NAME/downloads/awscli
+RUN sudo /home/$USER_NAME/downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin
+
+# install azure-cli
+RUN curl -sL http://packages.microsoft.com/keys/microsoft.asc | \
+  gpg --dearmor | \
+  sudo tee /etc/apt/trusted.gpg.d/microsoft.asc.gpg > /dev/null
+RUN sudo add-apt-repository "deb [arch=amd64] http://packages.microsoft.com/repos/azure-cli/ focal main"
+RUN sudo apt update
+RUN sudo apt install azure-cli -y
+
+# install gcloud-sdk
+RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+RUN curl http://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
+RUN sudo apt update
+RUN sudo apt install google-cloud-sdk -y
+RUN sudo apt install google-cloud-sdk-app-engine-python -y
+RUN sudo apt install google-cloud-sdk-app-engine-python-extras -y
+RUN sudo apt install google-cloud-sdk-app-engine-go -y
+
+# install kubernetes tools
+# helm
+RUN wget -O /home/$USER_NAME/downloads/helm-v$HELM_VER-linux-amd64.tar.gz https://get.helm.sh/helm-v$HELM_VER-linux-amd64.tar.gz
+RUN mkdir /home/$USER_NAME/downloads/helm-v$HELM_VER
+RUN tar zxvf /home/$USER_NAME/downloads/helm-v$HELM_VER-linux-amd64.tar.gz -C /home/$USER_NAME/downloads/helm-v$HELM_VER
+RUN sudo cp -a /home/$USER_NAME/downloads/helm-v$HELM_VER/linux-amd64/helm /usr/local/bin/helm
+#kubectl
+RUN wget -O /home/$USER_NAME/downloads/kubectl "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+RUN sudo cp -a /home/$USER_NAME/downloads/kubectl /usr/local/bin/kubectl
+RUN sudo chmod 755 /usr/local/bin/kubectl
+
+# install hashicorp terraform
+RUN git clone --recursive https://github.com/tfutils/tfenv.git /home/$USER_NAME/.tfenv
+RUN sudo ln -s ${HOME}/.tfenv/bin/tfenv /usr/local/bin/tfenv
+# RUN sudo tfenv install $TERRAFORM_VER
+# RUN sudo tfenv use $TERRAFORM_VER
