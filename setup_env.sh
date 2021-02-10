@@ -13,7 +13,7 @@ VAGRANT_VER="2.2.14"
 HASHICORP_URL="https://releases.hashicorp.com"
 WORK_TERRAFORM_VER="0.11.14"
 TERRAFORM_VER="0.13.4"
-GIT_VER="2.30.0"
+GIT_VER="2.30.1"
 GIT_URL="https://mirrors.edge.kernel.org/pub/software/scm/git"
 ZSH_VER="5.8"
 GO_VER="1.15"
@@ -1027,18 +1027,14 @@ EOM
       mkdir ${HOME}/downloads/awscli
     fi
     if [[ ! -f ${HOME}/downloads/awscli/awscliv2.zip ]]; then
-      cd ${HOME}/downloads/awscli
-      curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-      unzip awscliv2.zip
-      sudo -H ./aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin
-      cd ${PERSONAL_GITREPOS}/${DOTFILES}
+      wget -O ${HOME}/downloads/awscli/awscliv2.zip "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
+      unzip ${HOME}/downloads/awscli/awscliv2.zip -d ${HOME}/downloads/awscli
+      sudo -H ${HOME}/downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin
     fi
   elif [[ ${MACOS} ]]; then
     if [[ ! -d ${HOME}/downloads/AWSCLIV2.pkg ]]; then
-      cd ${HOME}/downloads
-      curl "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "AWSCLIV2.pkg"
-      sudo installer -pkg AWSCLIV2.pkg -target /
-      cd ${PERSONAL_GITREPOS}/${DOTFILES}
+      wget -O ${HOME}/downloads/awscli/AWSCLIV2.pkg "https://awscli.amazonaws.com/AWSCLIV2.pkg"
+      sudo installer -pkg ${HOME}/downloads/awscli/AWSCLIV2.pkg -target /
     fi
   fi
 

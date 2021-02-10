@@ -54,6 +54,7 @@ screen
 shellcheck
 silversearcher-ag
 smartmontools
+snapd
 software-properties-common
 sysstat
 thermald
