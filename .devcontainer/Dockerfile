@@ -10,6 +10,7 @@ ARG UPGRADE_PACKAGES="true"
 ARG Z_GIT="https://github.com/rupa/z.git"
 ARG GO_VER="1.15"
 ARG HELM_VER="3.5.2"
+ARG HASHICORP_URL="https://releases.hashicorp.com"
 ARG TERRAFORM_VER="0.14.5"
 
 ARG USER_NAME="vscode"
@@ -77,6 +78,7 @@ RUN apt update && apt install -y \
   ranger \
   rar \
   rlwrap \
+  ruby-full \
   screen \
   shellcheck \
   silversearcher-ag \
@@ -100,46 +102,46 @@ RUN apt update && apt install -y \
   zsh-doc
 
 # Setup and install of oh-my-zsh
-USER $USER_NAME
+USER ${USER_NAME}
 ENV TERM xterm
 ENV ZSH_THEME powerlevel10k/powerlevel10k
 RUN wget https://github.com/robbyrussell/oh-my-zsh/raw/master/tools/install.sh -O - | zsh || true
-RUN git clone --depth=1 https://github.com/romkatv/powerlevel10k.git /home/$USER_NAME/.oh-my-zsh/custom/themes/powerlevel10k
-COPY .zshrc /home/$USER_NAME/.zshrc
-COPY .p10k.zsh /home/$USER_NAME/.p10k.zsh
+RUN git clone --depth=1 https://github.com/romkatv/powerlevel10k.git /home/${USER_NAME}/.oh-my-zsh/custom/themes/powerlevel10k
+COPY .zshrc /home/${USER_NAME}/.zshrc
+COPY .p10k.zsh /home/${USER_NAME}/.p10k.zsh
 
 # Copy app rc files
-COPY .vimrc /home/$USER_NAME/.vimrc
-COPY .gitconfig_linux /home/$USER_NAME/.gitconfig
-COPY .tmux.conf /home/$USER_NAME/.tmux.conf
+COPY .vimrc /home/${USER_NAME}/.vimrc
+COPY .gitconfig_linux /home/${USER_NAME}/.gitconfig
+COPY .tmux.conf /home/${USER_NAME}/.tmux.conf
 
 # mkdir some things
-RUN mkdir /home/$USER_NAME/bin
-RUN mkdir /home/$USER_NAME/scripts
-RUN mkdir /home/$USER_NAME/.aws
-RUN chmod 700 /home/$USER_NAME/.aws
-RUN mkdir /home/$USER_NAME/.ssh
-RUN chmod 700 /home/$USER_NAME/.ssh
-COPY .ssh/config /home/$USER_NAME/.ssh/config
+RUN mkdir /home/${USER_NAME}/bin
+RUN mkdir /home/${USER_NAME}/scripts
+RUN mkdir /home/${USER_NAME}/.aws
+RUN chmod 700 /home/${USER_NAME}/.aws
+RUN mkdir /home/${USER_NAME}/.ssh
+RUN chmod 700 /home/${USER_NAME}/.ssh
+COPY .ssh/config /home/${USER_NAME}/.ssh/config
 
 # setup z
-RUN git clone --recursive $Z_GIT /home/$USER_NAME/z
+RUN git clone --recursive ${Z_GIT} /home/${USER_NAME}/z
 
 # setup cheat.sh
-RUN curl https://cht.sh/:cht.sh > /home/$USER_NAME/bin/cht.sh
-RUN chmod 750 /home/$USER_NAME/bin/cht.sh
-RUN mkdir /home/$USER_NAME/.zsh.d
-RUN curl https://cheat.sh/:zsh > /home/$USER_NAME/.zsh.d/_cht
+RUN curl https://cht.sh/:cht.sh > /home/${USER_NAME}/bin/cht.sh
+RUN chmod 750 /home/${USER_NAME}/bin/cht.sh
+RUN mkdir /home/${USER_NAME}/.zsh.d
+RUN curl https://cheat.sh/:zsh > /home/${USER_NAME}/.zsh.d/_cht
 
 # install pyenv
 RUN curl https://pyenv.run | bash
 
 # mkdir downloads directory for tools downloads
-RUN mkdir /home/$USER_NAME/downloads
+RUN mkdir /home/${USER_NAME}/downloads
 
 # install powershell
-RUN wget -O /home/$USER_NAME/downloads/packages-microsoft-prod.deb http://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb
-RUN sudo dpkg -i /home/$USER_NAME/downloads/packages-microsoft-prod.deb
+RUN wget -O /home/${USER_NAME}/downloads/packages-microsoft-prod.deb http://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb
+RUN sudo dpkg -i /home/${USER_NAME}/downloads/packages-microsoft-prod.deb
 RUN sudo apt update
 RUN sudo add-apt-repository universe
 RUN sudo apt install powershell -y
@@ -147,13 +149,13 @@ RUN sudo apt install powershell -y
 # install go
 RUN sudo add-apt-repository ppa:longsleep/golang-backports -y
 RUN sudo apt update
-RUN sudo apt install golang-$GO_VER-go -y
+RUN sudo apt install golang-${GO_VER}-go -y
 
 # install awscli
-RUN mkdir /home/$USER_NAME/downloads/awscli
-RUN wget -O /home/$USER_NAME/downloads/awscli/awscliv2.zip "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
-RUN unzip /home/$USER_NAME/downloads/awscli/awscliv2.zip -d /home/$USER_NAME/downloads/awscli
-RUN sudo /home/$USER_NAME/downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin
+RUN mkdir /home/${USER_NAME}/downloads/awscli
+RUN wget -O /home/${USER_NAME}/downloads/awscli/awscliv2.zip "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
+RUN unzip /home/${USER_NAME}/downloads/awscli/awscliv2.zip -d /home/${USER_NAME}/downloads/awscli
+RUN sudo /home/${USER_NAME}/downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin
 
 # install azure-cli
 RUN curl -sL http://packages.microsoft.com/keys/microsoft.asc | \
@@ -174,17 +176,34 @@ RUN sudo apt install google-cloud-sdk-app-engine-go -y
 
 # install kubernetes tools
 # helm
-RUN wget -O /home/$USER_NAME/downloads/helm-v$HELM_VER-linux-amd64.tar.gz https://get.helm.sh/helm-v$HELM_VER-linux-amd64.tar.gz
-RUN mkdir /home/$USER_NAME/downloads/helm-v$HELM_VER
-RUN tar zxvf /home/$USER_NAME/downloads/helm-v$HELM_VER-linux-amd64.tar.gz -C /home/$USER_NAME/downloads/helm-v$HELM_VER
-RUN sudo cp -a /home/$USER_NAME/downloads/helm-v$HELM_VER/linux-amd64/helm /usr/local/bin/helm
+RUN wget -O /home/${USER_NAME}/downloads/helm-v${HELM_VER}-linux-amd64.tar.gz https://get.helm.sh/helm-v${HELM_VER}-linux-amd64.tar.gz
+RUN mkdir /home/${USER_NAME}/downloads/helm-v${HELM_VER}
+RUN tar zxvf /home/${USER_NAME}/downloads/helm-v${HELM_VER}-linux-amd64.tar.gz -C /home/${USER_NAME}/downloads/helm-v${HELM_VER}
+RUN sudo cp -a /home/${USER_NAME}/downloads/helm-v${HELM_VER}/linux-amd64/helm /usr/local/bin/helm
 #kubectl
-RUN wget -O /home/$USER_NAME/downloads/kubectl "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-RUN sudo cp -a /home/$USER_NAME/downloads/kubectl /usr/local/bin/kubectl
+RUN wget -O /home/${USER_NAME}/downloads/kubectl "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+RUN sudo cp -a /home/${USER_NAME}/downloads/kubectl /usr/local/bin/kubectl
 RUN sudo chmod 755 /usr/local/bin/kubectl
+RUN sudo chown root:root /usr/local/bin/kubectl
 
 # install hashicorp terraform
-RUN git clone --recursive https://github.com/tfutils/tfenv.git /home/$USER_NAME/.tfenv
-RUN sudo ln -s ${HOME}/.tfenv/bin/tfenv /usr/local/bin/tfenv
-# RUN sudo tfenv install $TERRAFORM_VER
-# RUN sudo tfenv use $TERRAFORM_VER
+RUN wget -O /home/${USER_NAME}/downloads/terraform_${TERRAFORM_VER}_linux_amd64.zip ${HASHICORP_URL}/terraform/${TERRAFORM_VER}/terraform_${TERRAFORM_VER}_linux_amd64.zip
+RUN unzip /home/${USER_NAME}/downloads/terraform_${TERRAFORM_VER}_linux_amd64.zip -d /home/${USER_NAME}/downloads/terraform_${TERRAFORM_VER}
+RUN sudo cp -a /home/${USER_NAME}/downloads/terraform_${TERRAFORM_VER}/terraform /usr/local/bin/
+RUN sudo chmod 755 /usr/local/bin/terraform
+RUN sudo chown root:root /usr/local/bin/terraform
+
+# install npm json2yaml
+RUN sudo npm install json2yaml
+
+# setup for test-kitchen
+RUN sudo gem install test-kitchen
+RUN sudo gem install kitchen-ansible
+RUN sudo gem install kitchen-docker
+RUN sudo gem install kitchen-inspec
+RUN sudo gem install kitchen-terraform
+RUN sudo gem install kitchen-verifier-serverspec
+RUN sudo gem install bundle
+
+# install of ansible and other required pip packages
+RUN sudo python3 -m pip install ansible ansible-cmdb ansible-lint pylint jmespath-terminal psutil
