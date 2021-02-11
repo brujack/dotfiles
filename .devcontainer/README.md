@@ -30,3 +30,7 @@ docker context list
 ## Rebuild the running container with changes to container config
 
 1. Bottom left hand corner click or open Command Pallette and use "Remote-Containers: Rebuild Container"
+
+## AWS credentials
+
+They are stored in a file "devcontainer.env" and not included in git due to a .gitignore restriction. They are in a standard AWS credentials format.
