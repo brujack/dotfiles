@@ -14,7 +14,28 @@
 	},
 
 	// Add the IDs of extensions you want installed when the container is created.
-	"extensions": [],
+	"extensions": [
+		"vscoss.vscode-ansible",
+		"ms-kubernetes-tools.vscode-aks-tools",
+		"ms-vscode.azurecli",
+		"ms-azuretools.vscode-docker",
+		"patbenatar.advanced-new-file",
+		"moshfeu.compare-folders",
+		"docsmsft.docs-markdown",
+		"docsmsft.docs-yaml",
+		"donjayamanne.githistory",
+		"eamodio.gitlens",
+		"golang.go",
+		"hashicorp.terraform",
+		"eriklynd.json-tools",
+		"davidanson.vscode-markdownlint",
+		"ms-vscode.powershell",
+		"ms-python.python",
+		"timonwong.shellcheck",
+		"vscode-snippet.snippet",
+		"visualstudioexptteam.vscodeintellicode",
+		"redhat.vscode-yaml"
+	],
 
 	// Use 'forwardPorts' to make a list of ports inside the container available locally.
 	// "forwardPorts": [],
@@ -23,5 +44,8 @@
 	// "postCreateCommand": "uname -a",
 
 	// Comment out connect as root instead. More info: https://aka.ms/vscode-remote/containers/non-root.
-	"remoteUser": "vscode"
+	"remoteUser": "vscode",
+	// for aws credentials, see https://www.pulumi.com/blog/vscode-devcontainers/
+	// see also https://code.visualstudio.com/docs/remote/containers-advanced
+	"runArgs": ["--env-file",".devcontainer/devcontainer.env"]
 }

@@ -40,10 +40,10 @@
         "vs-kubernetes.kubectl-path": "/usr/local/bin/kubectl",
         "vs-kubernetes.kubectl-path.windows": "c:\\ProgramData\\chocolatey\\bin\\kubectl.exe",
         "vs-kubernetes.minikube-path.mac": "/Users/bruce/.vs-kubernetes/tools/minikube/darwin-amd64/minikube",
-        "vs-kubernetes.minikube-path.linux": "/home/bruce/.vs-kubernetes/tools/minikube/linux-amd64/minikube",
+        "vs-kubernetes.minikube-path.linux": "/home/vscode/.vs-kubernetes/tools/minikube/linux-amd64/minikube",
         "vs-kubernetes.draft-path.linux": "/home/bruce/.vs-kubernetes/tools/draft/linux-amd64/draft",
-        "vs-kubernetes.kubectl-path.linux": "/home/bruce/.vs-kubernetes/tools/kubectl/kubectl",
-        "vs-kubernetes.helm-path.linux": "/home/bruce/.vs-kubernetes/tools/helm/linux-amd64/helm",
+        "vs-kubernetes.kubectl-path.linux": "/home/vscode/.vs-kubernetes/tools/kubectl/kubectl",
+        "vs-kubernetes.helm-path.linux": "/home/vscode/.vs-kubernetes/tools/helm/linux-amd64/helm",
         "vs-kubernetes.minikube-path.windows": "C:\\Users\\bruce\\.vs-kubernetes\\tools\\minikube\\windows-amd64\\minikube.exe"
     },
     "terraform.indexing": {
@@ -75,5 +75,13 @@
     "remote.SSH.remotePlatform": {
         "workstation": "linux"
     },
-    "workbench.editor.wrapTabs": true
+    "workbench.editor.wrapTabs": true,
+    "window.title": "${activeEditorMedium}${separator}${rootPath}",
+    "bracket-pair-colorizer-2.activeScopeCSS": [
+
+        "borderStyle : solid",
+        "borderWidth : 1px",
+        "borderColor : {color}",
+        "opacity: 0.5"
+    ]
 }
