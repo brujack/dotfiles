@@ -24,7 +24,6 @@
     "git.confirmSync": false,
     "git.autofetch": true,
     "breadcrumbs.enabled": true,
-    "window.zoomLevel": 0,
     "team.showWelcomeMessage": false,
     "editor.suggestSelection": "first",
     "vsintellicode.modify.editor.suggestSelection": "automaticallyOverrodeDefaultValue",
@@ -44,7 +43,9 @@
         "vs-kubernetes.draft-path.linux": "/home/bruce/.vs-kubernetes/tools/draft/linux-amd64/draft",
         "vs-kubernetes.kubectl-path.linux": "/home/bruce/.vs-kubernetes/tools/kubectl/kubectl",
         "vs-kubernetes.helm-path.linux": "/home/bruce/.vs-kubernetes/tools/helm/linux-amd64/helm",
-        "vs-kubernetes.minikube-path.windows": "C:\\Users\\bruce\\.vs-kubernetes\\tools\\minikube\\windows-amd64\\minikube.exe"
+        "vs-kubernetes.minikube-path.windows": "C:\\Users\\bruce\\.vs-kubernetes\\tools\\minikube\\windows-amd64\\minikube.exe",
+        "vscode-kubernetes.minikube-path.linux": "/home/bruce/.vs-kubernetes/tools/minikube/linux-amd64/minikube",
+        "vscode-kubernetes.minikube-path.mac": "/Users/bruce/.vs-kubernetes/tools/minikube/darwin-amd64/minikube"
     },
     "terraform.indexing": {
         "enabled": false,
