@@ -4,7 +4,7 @@
 RUBY_INSTALL_VER="0.7.0"
 CHRUBY_VER="0.3.9"
 RUBY_VER="2.6.6"
-PYTHON_VER="3.9.1"
+PYTHON_VER="3.9.2"
 CONSUL_VER="1.9.3"
 VAULT_VER="1.6.3"
 NOMAD_VER="1.0.4"
@@ -350,7 +350,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
   fi
 
   echo "Installing p10k"
-  if [[ ! -d ${HOME}/.oh-my-zsh/custom//themes/powerlevel10k ]]; then
+  if [[ ! -d ${HOME}/.oh-my-zsh/custom/themes/powerlevel10k ]]; then
     git clone --depth=1 https://github.com/romkatv/powerlevel10k.git ${HOME}/.oh-my-zsh/custom/themes/powerlevel10k
   fi
 
