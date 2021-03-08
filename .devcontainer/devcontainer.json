@@ -45,6 +45,7 @@
 
 	// Comment out connect as root instead. More info: https://aka.ms/vscode-remote/containers/non-root.
 	"remoteUser": "vscode",
+	// "workspaceMount": "source=/home/bruce/git-repos/personal/dotfiles,target=/vscode,type=bind,consistency=delegated",
 	// for aws credentials, see https://www.pulumi.com/blog/vscode-devcontainers/
 	// see also https://code.visualstudio.com/docs/remote/containers-advanced
 	"runArgs": ["--env-file",".devcontainer/devcontainer.env"]

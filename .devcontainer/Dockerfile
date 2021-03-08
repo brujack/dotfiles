@@ -200,7 +200,7 @@ RUN sudo npm install json2yaml
 RUN sudo gem install test-kitchen
 RUN sudo gem install kitchen-ansible
 RUN sudo gem install kitchen-docker
-RUN sudo gem install kitchen-inspec
+#RUN sudo gem install kitchen-inspec
 RUN sudo gem install kitchen-terraform
 RUN sudo gem install kitchen-verifier-serverspec
 RUN sudo gem install bundle
