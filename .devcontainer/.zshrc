@@ -255,6 +255,10 @@ alias mp='make plan'
 alias ma='make apply'
 alias mi='make inspec'
 alias tw='~/scripts/tmux-workstation.sh'
+alias kgp='kubectl get pods'
+alias kgn='kubectl get nodes'
+alias kgd='kubectl get deploy'
+alias kgr='kubectl get rs'
 
 # alias for ls to exa removed due to breaking globbing for ansible aws integration
 if quiet_which exa
@@ -403,8 +407,8 @@ if [[ ${MACOS} ]]; then
 fi
 
 # for z fuzzy cd
-if [[ -f ${HOME}/z/z.sh ]]; then
-  source ${HOME}/z/z.sh
+if [[ -f ${GITREPOS}/z/z.sh ]]; then
+  source ${GITREPOS}/z/z.sh
 fi
 
 # az command completion
