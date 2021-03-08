@@ -12,3 +12,4 @@ simplenote
 spotify
 vlc
 zoom-client
+kustomize
