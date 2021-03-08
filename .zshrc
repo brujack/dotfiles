@@ -255,6 +255,10 @@ alias mp='make plan'
 alias ma='make apply'
 alias mi='make inspec'
 alias tw='~/scripts/tmux-workstation.sh'
+alias kgp='kubectl get pods'
+alias kgn='kubectl get nodes'
+alias kgd='kubectl get deploy'
+alias kgr='kubectl get rs'
 
 # alias for ls to exa removed due to breaking globbing for ansible aws integration
 if quiet_which exa
