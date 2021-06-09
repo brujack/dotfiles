@@ -4,7 +4,7 @@
 RUBY_INSTALL_VER="0.7.0"
 CHRUBY_VER="0.3.9"
 RUBY_VER="2.6.6"
-PYTHON_VER="3.9.2"
+PYTHON_VER="3.9.5"
 CONSUL_VER="1.9.6"
 VAULT_VER="1.7.2"
 NOMAD_VER="1.0.5"
@@ -1114,6 +1114,20 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
 
   echo "ANSIBLE setup"
   # commented out both ansible setup with virtualenv and pyenv as they are mostly incompatible and using pyenv programtically this way is not working yet Jun 11, 2020
+
+  if [[ ${LINUX} ]]; then
+    pyenv update
+  fi
+  if ! [[ -d ${HOME}/.pyenv/versions/${PYTHON_VER} ]]; then
+    pyenv install ${PYTHON_VER}
+  fi
+
+  if ! [[ $(readlink ${HOME}/.pyenv/versions/ansible) == "${HOME}/.pyenv/versions/${PYTHON_VER}/envs/ansible" ]]; then
+    pyenv virtualenv-delete -f ansible
+    pyenv virtualenv ${PYTHON_VER} ansible
+    pyenv activate ansible
+    python3 -m pip install ansible ansible-cmdb ansible-lint pylint jmespath-terminal psutil bpytop
+  fi
 
   # echo "Installing virtualenv for python"
   # if [[ ${MACOS} ]]; then

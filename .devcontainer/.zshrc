@@ -310,9 +310,8 @@ fi
 # pyenv setup
 export PYENV_ROOT="$HOME/.pyenv"
 export PATH="$PYENV_ROOT/bin:$PATH"
+eval "$(pyenv init --path)"
 if command -v pyenv 1>/dev/null 2>&1; then
-  eval "$(pyenv init -)"
-  eval "$(pyenv virtualenv-init -)"
   if ! [[ -d ${HOME}/.pyenv/versions/ansible ]]; then
     if [[ ${MACOS} || ${LINUX} ]]; then
       pyenv virtualenv ${PYTHON_VER} ansible
@@ -333,6 +332,8 @@ if command -v pyenv 1>/dev/null 2>&1; then
       export ANSIBLE_VAULT_PASSWORD_FILE=${HOME}/.vault_pass.txt
     fi
   fi
+  eval "$(pyenv init -)"
+  eval "$(pyenv virtualenv-init -)"
 fi
 
 # setup kubectl autocompletion to save typing
