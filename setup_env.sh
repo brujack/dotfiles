@@ -133,8 +133,6 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
 
   echo "Installing git"
   if [[ ${MACOS} ]]; then
-    # Check for Homebrew,
-    # Install if we don't have it
     if ! [ -x "$(command -v brew)" ]; then
       echo "Installing homebrew..."
       /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install.sh)"
@@ -166,7 +164,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     sudo -H dnf install perl-IO-Socket-SSL -y
     sudo -H dnf install wget -y
     sudo -H dnf install xmlto -y
-    #cpan
+    #cpan to properly compile git on redhat
     cpan App::cpanminus
     cpanm Test::Simple
     cpanm Fatal
@@ -185,8 +183,6 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
 
   echo "Installing zsh"
   if [[ ${MACOS} ]]; then
-    # Check for Homebrew,
-    # Install if we don't have it
     if ! [ -x "$(command -v brew)" ]; then
       echo "Installing homebrew..."
       ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
@@ -464,8 +460,6 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile $BREWFILE_LOC/Brewfile
     fi
 
-    # Check for Homebrew,
-    # Install if we don't have it
     if ! [ -x "$(command -v brew)" ]; then
       echo "Installing homebrew..."
       ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
@@ -853,18 +847,11 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo ubuntu-drivers autoinstall
     fi
 
-    # install glances cpu monitor
     python3 -m pip install glances
 
-    # install packages via snap
     sudo snap install helm --classic
     sudo snap install kubectl --classic
 
-    # on KUBE systems:
-    if [[ ${KUBE} ]]; then
-      # install for bonded links
-      sudo -H apt install ifenslave bridge-utils -y
-    fi
     sudo -H apt autoremove -y
   fi
 
@@ -1099,7 +1086,6 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
     fi
   fi
 
-  # setup for test-kitchen
   echo "Setup kitchen"
   source ${CHRUBY_LOC}/chruby/chruby.sh
   source ${CHRUBY_LOC}/chruby/auto.sh
@@ -1113,8 +1099,6 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
   gem install bundle
 
   echo "ANSIBLE setup"
-  # commented out both ansible setup with virtualenv and pyenv as they are mostly incompatible and using pyenv programtically this way is not working yet Jun 11, 2020
-
   if [[ ${LINUX} ]]; then
     pyenv update
   fi
@@ -1128,45 +1112,6 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
     pyenv activate ansible
     python3 -m pip install ansible ansible-cmdb ansible-lint pylint jmespath-terminal psutil bpytop
   fi
-
-  # echo "Installing virtualenv for python"
-  # if [[ ${MACOS} ]]; then
-  #   python3 -m pip install virtualenv virtualenvwrapper
-  # elif [[ ${LINUX} ]]; then
-  #   # necessary to install virtualenv to site-packages for linux
-  #   sudo -H python3 -m pip install virtualenv virtualenvwrapper
-  # fi
-
-  # # setup virtualenv for python if virtualenv there
-  # if ! [[ -d ${HOME}/.virtualenvs ]]; then
-  #   mkdir ${HOME}/.virtualenvs
-  # fi
-
-  # cd ${HOME}/.virtualenvs || return
-  # source ${VIRTUALENV_LOC}/virtualenvwrapper.sh
-
-  # if ! [[ -d ${HOME}/.virtualenvs/ansible ]]; then
-  # install the correct version of python
-  # if ! [[ -d ${HOME}/.pyenv/${PYTHON_VER} ]]; then
-  #     pyenv install ${PYTHON_VER}
-  # fi
-  # # setup ansible pyenv environment
-  # if ! [[ -d ${HOME}/.pyenv/versions/ansible ]]; then
-  #   # mkvirtualenv ansible -p python3
-  #   if ! [[ -d ${HOME}/.pyenv/${PYTHON_VER} ]]; then
-  #     pyenv install ${PYTHON_VER}
-  #   fi
-  #   pyenv virtualenv ${PYTHON_VER} ansible
-  #   pyenv activate ansible
-    # echo "Installing ansible via pip"
-    # python3 -m pip install ansible ansible-cmdb ansible-lint pylint jmespath-terminal psutil bpytop
-    # echo "Installing pylint for python linting via pip"
-    # python3 -m pip install pylint
-    # echo "Installing jmespath-terminal via pip"
-    # python3 -m pip install jmespath-terminal
-    # echo "Installing psutil"
-    # python3 -m pip install psutil bpytop
-  # fi
 fi
 
 # update is run more often to keep the device up to date with patches
