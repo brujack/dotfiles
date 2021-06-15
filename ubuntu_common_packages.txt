@@ -19,6 +19,7 @@ iotop
 iperf3
 jq
 keychain
+libarchive-tools
 libbz2-dev
 libffi-dev
 liblzma-dev

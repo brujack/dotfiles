@@ -42,7 +42,7 @@ quiet_which() {
   which "$1" &>/dev/null
 }
 
-function rhel_installed {
+rhel_installed() {
   if yum list installed "$@" >/dev/null 2>&1; then
     true
   else
