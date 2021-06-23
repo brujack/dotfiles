@@ -11,7 +11,7 @@ typeset -g POWERLEVEL9K_INSTANT_PROMPT=off
 [ "$(uname -s)" = "Linux" ] && export LINUX=1
 
 GO_VER="1.15"
-RUBY_VER="2.6.6"
+RUBY_VER="3.0.1"
 GITREPOS="${HOME}/git-repos"
 
 if [[ ${LINUX} ]]; then
