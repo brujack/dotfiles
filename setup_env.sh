@@ -3,12 +3,12 @@
 # software versions to install
 RUBY_INSTALL_VER="0.7.0"
 CHRUBY_VER="0.3.9"
-RUBY_VER="2.6.6"
+RUBY_VER="3.0.1"
 PYTHON_VER="3.9.5"
 CONSUL_VER="1.9.6"
-VAULT_VER="1.7.2"
+VAULT_VER="1.7.3"
 NOMAD_VER="1.1.1"
-PACKER_VER="1.7.2"
+PACKER_VER="1.7.3"
 VAGRANT_VER="2.2.14"
 HASHICORP_URL="https://releases.hashicorp.com"
 WORK_TERRAFORM_VER="0.11.14"
@@ -603,17 +603,11 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/Blackmagic Disk Speed Test.app" ]]; then
       mas install 425264550
     fi
-    if [[ ! -d "/Applications/Geekbench 4.app" ]]; then
-      mas install 1175706108
-    fi
     if [[ ! -d "/Applications/Evernote.app" ]]; then
       mas install 406056744
     fi
     if [[ ! -d "/Applications/Flycut.app" ]]; then
       mas install 442160987
-    fi
-    if [[ ! -d "/Applications/iMovie.app" ]]; then
-      mas install 408981434
     fi
     if [[ ! -d "/Applications/iNet Network Scanner.app" ]]; then
       mas install 403304796
@@ -624,20 +618,14 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/Mactracker.app" ]]; then
       mas install 430255202
     fi
+    if [[ ! -d "/Applications/Magnet.app" ]]; then
+      mas install 441258766
+    fi
     if [[ ! -d "/Applications/Markoff.app" ]]; then
       mas install 1084713122
     fi
     if [[ ! -d "/Applications/Microsoft Remote Desktop.app" ]]; then
       mas install 715768417
-    fi
-    if [[ ! -d "/Applications/Numbers.app" ]]; then
-      mas install 409203825
-    fi
-    if [[ ! -d "/Applications/Pages.app" ]]; then
-      mas install 409201541
-    fi
-    if [[ ! -d "/Applications/Pixelmator.app" ]]; then
-      mas install 407963104
     fi
     if [[ ! -d "/Applications/Read CHM.app" ]]; then
       mas install 594432954
@@ -663,19 +651,32 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/Transmit.app" ]]; then
       mas install 403388562
     fi
-    if [[ ! -d "/Applications/Telegram.app" ]]; then
-      mas install 747648890
-    fi
     if [[ ! -d "/Applications/Valentina Studio.app" ]]; then
       mas install 604825918
     fi
-    echo "Installing xcode-stuff"
-    if [[ ! -d "/Applications/Xcode.app" ]]; then
-      mas install 497799835
+
+    if [[ ${HOSTNAME} == "ratna" ]] || [[ ${HOSTNAME} == "bruce-work" ]]; then
+      echo "Installing extra apps via mas"
+      if [[ ! -d "/Applications/iMovie.app" ]]; then
+        mas install 408981434
+      fi
+      if [[ ! -d "/Applications/Numbers.app" ]]; then
+        mas install 409203825
+      fi
+      if [[ ! -d "/Applications/Pages.app" ]]; then
+        mas install 409201541
+      fi
+      if [[ ! -d "/Applications/Pixelmator.app" ]]; then
+        mas install 407963104
+      fi
+      echo "Installing xcode-stuff"
+      if [[ ! -d "/Applications/Xcode.app" ]]; then
+        mas install 497799835
+      fi
+      xcode-select --install
+      # Accept Xcode license
+      sudo xcodebuild -license accept
     fi
-    xcode-select --install
-    # Accept Xcode license
-    sudo xcodebuild -license accept
 
     echo "Installing server apps via mas"
     # 883878097 Server
@@ -683,6 +684,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       if [[ ! -d "/Applications/Server.app" ]]; then
         mas install 883878097
       fi
+
     fi
   fi
 
