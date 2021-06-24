@@ -4,7 +4,6 @@
 if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
   source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
 fi
-typeset -g POWERLEVEL9K_INSTANT_PROMPT=off
 
 # choose which env we are running on
 [ "$(uname -s)" = "Darwin" ] && export MACOS=1
@@ -25,6 +24,7 @@ fi
 [[ $(uname -r) =~ microsoft ]] && export WINDOWS=1
 [[ $(hostname -s) = "ratna" ]] && export RATNA=1
 [[ $(hostname -s) = "bruce-work" ]] && export BRUCEWORK=1
+[[ $(hostname -s) = "L-BJackson" ]] && export WORK=1
 [[ $(hostname -s) = "workstation" ]] && export WORKSTATION=1
 [[ $(hostname -s) = "cruncher" ]] && export CRUNCHER=1
 
@@ -143,7 +143,7 @@ fi
 
 # for keychain ssh key management
 if [[ ${MACOS} ]]; then
-  if [[ ${RATNA} ]] || [[ ${BRUCEWORK} ]]; then
+  if [[ ${RATNA} ]] || [[ ${BRUCEWORK} ]] || [[ ${WORK} ]]; then
     eval `/usr/local/bin/keychain --eval --agents ssh --inherit any id_rsa`
     eval `/usr/local/bin/keychain --eval --agents ssh --inherit any id_ed25519`
     eval `/usr/local/bin/keychain --eval --agents gpg B6DCFA4E5AFEA3AF35CE0A189A997C02283A9062 --inherit any`
