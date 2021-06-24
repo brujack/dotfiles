@@ -624,9 +624,6 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/Microsoft Remote Desktop.app" ]]; then
       mas install 715768417
     fi
-    if [[ ! -d "/Applications/Read CHM.app" ]]; then
-      mas install 594432954
-    fi
     if [[ ! -d "/Applications/Remote Desktop.app" ]]; then
       mas install 409907375
     fi
@@ -668,6 +665,9 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       fi
       if [[ ! -d "/Applications/Pixelmator.app" ]]; then
         mas install 407963104
+      fi
+      if [[ ! -d "/Applications/Read CHM.app" ]]; then
+        mas install 594432954
       fi
       echo "Installing xcode-stuff"
       if [[ ! -d "/Applications/Xcode.app" ]]; then
