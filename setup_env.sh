@@ -612,9 +612,6 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/iNet Network Scanner.app" ]]; then
       mas install 403304796
     fi
-    if [[ ! -d "/Applications/Keynote.app" ]]; then
-      mas install 409183694
-    fi
     if [[ ! -d "/Applications/Mactracker.app" ]]; then
       mas install 430255202
     fi
@@ -657,6 +654,9 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
 
     if [[ ${HOSTNAME} == "ratna" ]] || [[ ${HOSTNAME} == "bruce-work" ]]; then
       echo "Installing extra apps via mas"
+      if [[ ! -d "/Applications/Keynote.app" ]]; then
+        mas install 409183694
+      fi
       if [[ ! -d "/Applications/iMovie.app" ]]; then
         mas install 408981434
       fi
