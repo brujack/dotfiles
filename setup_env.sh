@@ -99,7 +99,13 @@ fi
 [[ $(uname -r) =~ microsoft ]] && export WINDOWS=1
 [[ $(hostname -f) = "kube-1.conecrazy.io" ]] && export KUBE=1
 [[ $(hostname -f) = "kube-2.conecrazy.io" ]] && export KUBE=1
+[[ $(hostname -s) = "kube-1.conecrazy.io" ]] && export KUBE1=1
+[[ $(hostname -s) = "kube-2.conecrazy.io" ]] && export KUBE2=1
+[[ $(hostname -s) = "bruce-work" ]] && export BRUCEWORK=1
+[[ $(hostname -s) = "L-BJackson" ]] && export WORK=1
 [[ $(hostname -s) = "workstation" ]] && export WORKSTATION=1
+[[ $(hostname -s) = "cruncher" ]] && export CRUNCHER=1
+[[ $(hostname -s) = "bastion" ]] && export BASTION=1
 
 # setup variables based off of environment
 if [[ ${MACOS} ]]; then
@@ -266,9 +272,9 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     elif [[ ! -L ${HOME}/.gitconfig ]]; then
       ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_mac ${HOME}/.gitconfig
     fi
-    if [[ ${HOSTNAME} == "ratna" ]] || [[ ${HOSTNAME} == "bruce-work" ]]; then
-      if [[ ! -L ${HOME}/git-repos/cybernetiq/.gitconfig ]]; then
-        ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_mac_cybernetiq ${HOME}/git-repos/cybernetiq/.gitconfig
+    if [[ ${WORK} ]]; then
+      if [[ ! -L ${HOME}/git-repos/securekey/.gitconfig ]]; then
+        ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_mac_securekey ${HOME}/git-repos/securekey/.gitconfig
       elif [[ ! -L ${HOME}/git-repos/gitlab/.gitconfig ]]; then
         ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_mac_gitlab ${HOME}/git-repos/gitlab/.gitconfig
       fi
@@ -281,9 +287,9 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     elif [[ ! -L ${HOME}/.gitconfig ]]; then
       ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_linux ${HOME}/.gitconfig
     fi
-    if [[ ${HOSTNAME} == "workstation" ]] || [[ ${HOSTNAME} == "cruncher" ]]; then
-      if [[ ! -L ${HOME}/git-repos/cybernetiq/.gitconfig ]]; then
-        ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_linux_cybernetiq ${HOME}/git-repos/cybernetiq/.gitconfig
+    if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]]; then
+      if [[ ! -L ${HOME}/git-repos/securekey/.gitconfig ]]; then
+        ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_linux_securekey ${HOME}/git-repos/securekey/.gitconfig
       elif [[ ! -L ${HOME}/git-repos/gitlab/.gitconfig ]]; then
         ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_linux_gitlab ${HOME}/git-repos/gitlab/.gitconfig
       fi
@@ -507,10 +513,8 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/DBeaver.app" ]]; then
       brew install --cask dbeaver-community
     fi
-    if [[ ! ${HOSTNAME} == "server" ]]; then
-      if [[ ! -d "/Applications/Docker.app" ]]; then
-        brew install --cask docker
-      fi
+    if [[ ! -d "/Applications/Docker.app" ]]; then
+      brew install --cask docker
     fi
     if [[ ! -d "/Applications/Dropbox.app" ]]; then
       brew install --cask dropbox
@@ -545,7 +549,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/Malwarebytes.app" ]]; then
       brew install --cask malwarebytes
     fi
-    if [[ ${HOSTNAME} == "ratna" ]] || [[ ${HOSTNAME} == "bruce-work" ]]; then
+    if [[ ${RATNA} ]] || [[ ${BRUCEWORK} ]]; then
       if [[ ! -d "/Applications/Microsoft\ Word.app" ]]; then
         brew install --cask microsoft-office
       fi
@@ -649,7 +653,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       mas install 604825918
     fi
 
-    if [[ ${HOSTNAME} == "ratna" ]] || [[ ${HOSTNAME} == "bruce-work" ]]; then
+    if [[ ${RATNA} ]] || [[ ${BRUCEWORK} ]]; then
       echo "Installing extra apps via mas"
       if [[ ! -d "/Applications/Keynote.app" ]]; then
         mas install 409183694
@@ -676,15 +680,6 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       xcode-select --install
       # Accept Xcode license
       sudo xcodebuild -license accept
-    fi
-
-    echo "Installing server apps via mas"
-    # 883878097 Server
-    if [[ ${HOSTNAME} == "mac" ]] || [[ ${HOSTNAME} == "server" ]]; then
-      if [[ ! -d "/Applications/Server.app" ]]; then
-        mas install 883878097
-      fi
-
     fi
   fi
 
@@ -742,7 +737,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt update
     sudo -H apt install golang-${GO_VER}-go -y
 
-    if [[ ! ${HOSTNAME} == "bastion" ]] || [[ ! ${WORKSTATION} ]]; then
+    if [[ ! ${BASTION} ]] || [[ ! ${WORKSTATION} ]]; then
       echo "Installing docker desktop"
       curl -fsSL http://download.docker.com/linux/ubuntu/gpg | sudo -H apt-key add -
       sudo -H add-apt-repository \
@@ -755,7 +750,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo -H apt install containerd.io -y
     fi
 
-    if [[ ! ${HOSTNAME} == "bastion" ]] || [[ ! ${HOSTNAME} == "cruncher" ]] || [[ ! ${WORKSTATION} ]]; then
+    if [[ ! ${BASTION} ]] || [[ ! ${CRUNCHER} ]] || [[ ! ${WORKSTATION} ]]; then
       echo "Installing Virtualbox"
       wget -q http://www.virtualbox.org/download/oracle_vbox_2016.asc -O- | sudo apt-key add -
       wget -q http://www.virtualbox.org/download/oracle_vbox.asc -O- | sudo apt-key add -
@@ -764,7 +759,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo -H apt install virtualbox-6.1 -y
     fi
 
-    if [[ ${WORKSTATION} ]] || [[ ${HOSTNAME} == "kube-1" ]] || [[ ${HOSTNAME} == "kube-2" ]]; then
+    if [[ ${WORKSTATION} ]] || [[ ${KUBE1} ]] || [[ ${KUBE2} ]]; then
       echo "Installing Virtualbox"
       wget -q http://www.virtualbox.org/download/oracle_vbox_2016.asc -O- | sudo apt-key add -
       wget -q http://www.virtualbox.org/download/oracle_vbox.asc -O- | sudo apt-key add -
@@ -839,8 +834,8 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo chown root:root /usr/local/bin/vagrant
     fi
 
-    if [[ ${HOSTNAME} == "kube-1" ]] || [[ ${HOSTNAME} == "kube-2" ]] || [[ ${WORKSTATION} ]]; then
-      "Installing Nvidia drivers for folding"
+    if [[ ${KUBE1} ]] || [[ ${KUBE2} ]] || [[ ${WORKSTATION} ]]; then
+      "Installing Nvidia drivers"
       sudo -H apt install ocl-icd-opencl-dev -y
       sudo -H apt install clinfo -y
       sudo add-apt-repository ppa:graphics-drivers/ppa

@@ -8,7 +8,7 @@
 	trustExitCode = true
 [user]
 	name = Bruce Jackson
-	email = bruce.jackson@cybernetiq.io
+	email = bruce.jackson@securekey.com
 [commit]
 	template = /Users/bruce/.stCommitMsg
 [alias]
@@ -25,7 +25,5 @@
 	textconv = sops -d
 [pull]
 	rebase = false
-[includeIf "gitdir:~/git-repos/cybernetiq/"]
-	path = ~/git-repos/cybernetiq/.gitconfig
-[includeIf "gitdir:~/git-repos/gitlab/"]
-	path = ~/git-repos/gitlab/.gitconfig
+[includeIf "gitdir:~/git-repos/securekey/"]
+	path = ~/git-repos/securekey/.gitconfig
