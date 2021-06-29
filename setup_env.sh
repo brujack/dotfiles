@@ -20,6 +20,8 @@ GO_VER="1.16"
 SHELLCHECK_VER="0.7.0"
 Z_GIT="https://github.com/rupa/z.git"
 ZABBIX_VER="4.4-1+"
+GP_HOME="GlobalProtect-openconnect"
+GP_GIT_REPO="https://github.com/yuezk/GlobalProtect-openconnect.git"
 RHEL_KUBECTL_REPO="[kubernetes]
 name=Kubernetes
 baseurl=http://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
@@ -835,13 +837,28 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     fi
 
     if [[ ${KUBE1} ]] || [[ ${KUBE2} ]] || [[ ${WORKSTATION} ]]; then
-      "Installing Nvidia drivers"
+      echo "Installing Nvidia drivers"
       sudo -H apt install ocl-icd-opencl-dev -y
       sudo -H apt install clinfo -y
       sudo add-apt-repository ppa:graphics-drivers/ppa
       sudo apt update
       sudo apt install ubuntu-drivers-common -y
       sudo ubuntu-drivers autoinstall
+    fi
+
+    if [[ ${WORKSTATION} ]]; then
+      echo "Installing globalprotect vpn"
+      sudo -H apt install qt5-default libqt5websockets5-dev qtwebengine5-dev
+      if ! [[ -d ${HOME}/${GPHOME} ]]; then
+        mkdir -p ${HOME}/${GPHOME}
+      fi
+      cd ${GITREPOS}
+      git clone ${GP_GIT_REPO}
+      cd ${GITREPOS}/${GP_HOME}
+      git submodule update --init
+      qmake CONFIG+=release
+      make
+      sudo make install
     fi
 
     python3 -m pip install glances
