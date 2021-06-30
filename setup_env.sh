@@ -848,8 +848,8 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
 
     if [[ ${WORKSTATION} ]]; then
       echo "Installing globalprotect vpn"
-      sudo -H apt install qt5-default libqt5websockets5-dev qtwebengine5-dev
-      if ! [[ -d ${HOME}/${GPHOME} ]]; then
+      sudo -H apt install qt5-default libqt5websockets5-dev qtwebengine5-dev openconnect -y
+      if [[ ! -d ${HOME}/${GPHOME} ]]; then
         mkdir -p ${HOME}/${GPHOME}
       fi
       cd ${GITREPOS}
