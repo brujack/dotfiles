@@ -1,4 +1,5 @@
 font-manager
+httpie
 gnome-tweaks
 nfs-common
 openjdk-11-jdk

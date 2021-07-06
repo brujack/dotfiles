@@ -842,6 +842,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d ${HOME}/downloads/docker-compose_${DOCKER_COMPOSE_VER} ]]; then
       wget -O ${HOME}/downloads/docker-compose_${DOCKER_COMPOSE_VER} ${DOCKER_COMPOSE_URL}
       sudo cp -a ${HOME}/downloads/docker-compose_${DOCKER_COMPOSE_VER} /usr/local/bin/
+      sudo mv /usr/local/bin/docker-compose_${DOCKER_COMPOSE_VER} /usr/local/bin/docker-compose
       sudo chmod 755 /usr/local/bin/docker-compose
       sudo chown root:root /usr/local/bin/docker-compose
     fi
