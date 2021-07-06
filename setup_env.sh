@@ -17,6 +17,8 @@ GIT_VER="2.32.0"
 GIT_URL="https://mirrors.edge.kernel.org/pub/software/scm/git"
 ZSH_VER="5.8"
 GO_VER="1.16"
+DOCKER_COMPOSE_VER="1.29.2"
+DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)"
 SHELLCHECK_VER="0.7.0"
 Z_GIT="https://github.com/rupa/z.git"
 ZABBIX_VER="4.4-1+"
@@ -834,6 +836,14 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo cp -a ${HOME}/downloads/vagrant_${VAGRANT_VER}/vagrant /usr/local/bin/
       sudo chmod 755 /usr/local/bin/vagrant
       sudo chown root:root /usr/local/bin/vagrant
+    fi
+
+    echo "Installing docker-compose Ubuntu"
+    if [[ ! -d ${HOME}/downloads/docker-compose_${DOCKER_COMPOSE_VER} ]]; then
+      wget -O ${HOME}/downloads/docker-compose_${DOCKER_COMPOSE_VER} ${DOCKER_COMPOSE_URL}
+      sudo cp -a ${HOME}/downloads/docker-compose_${DOCKER_COMPOSE_VER} /usr/local/bin/
+      sudo chmod 755 /usr/local/bin/docker-compose
+      sudo chown root:root /usr/local/bin/docker-compose
     fi
 
     if [[ ${KUBE1} ]] || [[ ${KUBE2} ]] || [[ ${WORKSTATION} ]]; then
