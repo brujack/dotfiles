@@ -24,6 +24,8 @@ Z_GIT="https://github.com/rupa/z.git"
 ZABBIX_VER="4.4-1+"
 GP_HOME="GlobalProtect-openconnect"
 GP_GIT_REPO="https://github.com/yuezk/GlobalProtect-openconnect.git"
+KIND_VER="0.11.1"
+KIND_URL="https://kind.sigs.k8s.io/dl/v${KIND_VER}/kind-linux-amd64"
 RHEL_KUBECTL_REPO="[kubernetes]
 name=Kubernetes
 baseurl=http://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
@@ -770,6 +772,15 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo add-apt-repository "deb http://download.virtualbox.org/virtualbox/debian focal contrib"
       sudo -H apt update
       sudo -H apt install virtualbox-6.1 -y
+    fi
+
+    if [[ ${WORKSTATION} ]]; then
+      echo "Installing kind on workstation"
+      wget -O ${HOME}/downloads/kind_${KIND_VER} ${KIND_URL}
+      sudo cp -a ${HOME}/downloads/kind_${KIND_VER} /usr/local/bin/
+      sudo mv /usr/local/bin/kind_${KIND_VER} /usr/local/bin/kind
+      sudo chmod 755 /usr/local/bin/kind
+      sudo chown root:root /usr/local/bin/kind
     fi
 
     echo "Installing azure-cli"
