@@ -742,6 +742,10 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo add-apt-repository ppa:longsleep/golang-backports -y
     sudo -H apt update
     sudo -H apt install golang-${GO_VER}-go -y
+    if [[ ${GO_VER} == "1.16" ]]; then
+      sudo ln -s /usr/lib/go-1.16/bin/go /usr/local/bin/go
+      sudo ln -s /usr/lib/go-1.16/bin/gofmt /usr/local/bin/gofmt
+    fi
 
     if [[ ! ${BASTION} ]] || [[ ! ${WORKSTATION} ]]; then
       echo "Installing docker desktop"
