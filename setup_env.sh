@@ -743,6 +743,14 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt update
     sudo -H apt install golang-${GO_VER}-go -y
     if [[ ${GO_VER} == "1.16" ]]; then
+      dpkg -s golang-1.15-go &> /dev/null
+      if [[ $? -eq 1 ]]; then
+        sudo -H apt remove golang-1.15-go -y
+      fi
+      dpkg -s golang-1.15-src &> /dev/null
+      if [[ $? -eq 1 ]]; then
+        sudo -H apt remove golang-1.15-src -y
+      fi
       sudo ln -s /usr/lib/go-1.16/bin/go /usr/local/bin/go
       sudo ln -s /usr/lib/go-1.16/bin/gofmt /usr/local/bin/gofmt
     fi
