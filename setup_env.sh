@@ -751,8 +751,6 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       if [[ $? -eq 1 ]]; then
         sudo -H apt remove golang-1.15-src -y
       fi
-      sudo ln -s /usr/lib/go-1.16/bin/go /usr/local/bin/go
-      sudo ln -s /usr/lib/go-1.16/bin/gofmt /usr/local/bin/gofmt
     fi
 
     if [[ ! ${BASTION} ]] || [[ ! ${WORKSTATION} ]]; then

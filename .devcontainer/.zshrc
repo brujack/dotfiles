@@ -9,7 +9,7 @@ fi
 [ "$(uname -s)" = "Darwin" ] && export MACOS=1
 [ "$(uname -s)" = "Linux" ] && export LINUX=1
 
-GO_VER="1.15"
+GO_VER="1.16"
 RUBY_VER="3.0.1"
 GITREPOS="${HOME}/git-repos"
 
