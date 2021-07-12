@@ -143,14 +143,19 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     fi
   fi
 
-  echo "Installing git"
-  if [[ ${MACOS} ]]; then
+  echo "Installing hombrew"
+  if [[ ${MACOS} || ${LINUX} ]]; then
     if ! [ -x "$(command -v brew)" ]; then
       echo "Installing homebrew..."
       /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install.sh)"
     fi
+  fi
+
+  echo "Installing git"
+  if [[ ${MACOS} ]]; then
     brew install git
   fi
+
   if [[ ${UBUNTU} ]]; then
     sudo -H add-apt-repository ppa:git-core/ppa -y
     sudo -H apt update
@@ -860,13 +865,16 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     fi
 
     echo "Installing docker-compose Ubuntu"
-    if [[ ! -d ${HOME}/downloads/docker-compose_${DOCKER_COMPOSE_VER} ]]; then
+    if [[ ! -f ${HOME}/downloads/docker-compose_${DOCKER_COMPOSE_VER} ]]; then
       wget -O ${HOME}/downloads/docker-compose_${DOCKER_COMPOSE_VER} ${DOCKER_COMPOSE_URL}
       sudo cp -a ${HOME}/downloads/docker-compose_${DOCKER_COMPOSE_VER} /usr/local/bin/
       sudo mv /usr/local/bin/docker-compose_${DOCKER_COMPOSE_VER} /usr/local/bin/docker-compose
       sudo chmod 755 /usr/local/bin/docker-compose
       sudo chown root:root /usr/local/bin/docker-compose
     fi
+
+    echo "Installing k9s via pacman Ubuntu"
+    brew install derailed/k9s/k9s
 
     if [[ ${KUBE1} ]] || [[ ${KUBE2} ]] || [[ ${WORKSTATION} ]]; then
       echo "Installing Nvidia drivers"
@@ -1162,7 +1170,7 @@ fi
 
 # update is run more often to keep the device up to date with patches
 if [[ ${UPDATE} ]]; then
-  if [[ ${MACOS} ]]; then
+  if [[ ${MACOS} || ${LINUX} ]]; then
     echo "Updating homebrew..."
     brew update
     echo "Upgrading brew's"

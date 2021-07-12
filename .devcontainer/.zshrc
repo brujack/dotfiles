@@ -115,7 +115,7 @@ if [[ ${MACOS} ]]; then
   plugins=(ag ansible aws brew docker fzf git git-prompt osx helm history-substring-search kubectl osx python terraform vscode pyenv)
 fi
 if [[ ${UBUNTU} ]]; then
-  plugins=(ag ansible aws docker fzf git git-prompt ubuntu helm history-substring-search kubectl python terraform vscode pyenv)
+  plugins=(ag ansible brew aws docker fzf git git-prompt ubuntu helm history-substring-search kubectl python terraform vscode pyenv)
 fi
 if [[ ${FEDORA} ]]; then
   plugins=(ag ansible aws docker fzf git git-prompt fedora helm history-substring-search kubectl python terraform vscode pyenv)
@@ -176,9 +176,9 @@ if [[ ${MACOS} ]]; then
 fi
 
 if [[ ${LINUX} ]]; then
-  # for /opt/local includes
   path+=('/opt/local/bin')
   path+=('/opt/local/sbin')
+  path+=('/home/linuxbrew/.linuxbrew/bin')
   if [[ ${UBUNTU} ]]; then
     path+=("/usr/lib/go-${GO_VER}/bin")
     path+=('/snap/bin')
