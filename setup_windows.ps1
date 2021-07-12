@@ -66,6 +66,7 @@ cinst -y azure-cli
 cinst -y beyond-compare
 cinst -y dbeaver
 cinst -y docker-desktop
+cinst -y docker-compose
 cinst -y dropbox
 cinst -y evernote
 cinst -y firefox
