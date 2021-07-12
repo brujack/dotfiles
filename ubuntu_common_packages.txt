@@ -44,7 +44,6 @@ nodejs
 npm
 openssh-server
 openssl
-pacman
 python-openssl
 python-setuptools
 python3-pip
