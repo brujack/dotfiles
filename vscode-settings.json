@@ -85,11 +85,8 @@
         "borderColor : {color}",
         "opacity: 0.5"
     ],
-    "workbench.editorAssociations": [
-        {
-            "viewType": "jupyter.notebook.ipynb",
-            "filenamePattern": "*.ipynb"
-        }
-    ],
+    "workbench.editorAssociations": {
+        "*.ipynb": "jupyter.notebook.ipynb"
+    },
     "go.toolsManagement.autoUpdate": true
 }
