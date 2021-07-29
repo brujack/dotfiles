@@ -211,3 +211,6 @@ let g:strip_whitespace_on_save=1
 
 let g:mkdp_auto_close=0
 let g:mkdp_refresh_slow=1
+
+autocmd FileType yaml setlocal ts=2 sts=2 sw=2 expandtab
+let g:indentLine_char = '⦙'
