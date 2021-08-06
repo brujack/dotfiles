@@ -705,6 +705,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
 
   if [[ ${UBUNTU} ]]; then
     sudo -H apt update
+    sudo -H apt install --install-recommends linux-generic-hwe-20.04 -y
     xargs -a ubuntu_common_packages.txt sudo apt install -y
 
     if [[ ${WORKSTATION} ]]; then
