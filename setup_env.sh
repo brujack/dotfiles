@@ -906,9 +906,23 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     fi
 
     python3 -m pip install glances
+    if [[ ! -f /usr/share/keyrings/kubernetes-archive-keyring.gpg ]]; then
+      sudo curl -fsSLo /usr/share/keyrings/kubernetes-archive-keyring.gpg https://packages.cloud.google.com/apt/doc/apt-key.gpg
+      echo "deb [signed-by=/usr/share/keyrings/kubernetes-archive-keyring.gpg] https://apt.kubernetes.io/ kubernetes-xenial main" | sudo tee /etc/apt/sources.list.d/kubernetes.list
+    fi
+    sudo -H apt update
+    sudo -H apt install kubectl -y
 
     sudo snap install helm --classic
-    sudo snap install kubectl --classic
+
+    echo "Installing kustomize"
+    cd ${HOME}/downloads
+    curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+    if [[ -f ${HOME}/downloads/kustomize ]]; then
+      sudo -H mv ${HOME}/downloads/kustomize /usr/local/bin/kustomize
+      sudo chmod 755 /usr/local/bin/kustomize
+      sudo chown root:root /usr/local/bin/kustomize
+    fi
 
     sudo -H apt autoremove -y
   fi
