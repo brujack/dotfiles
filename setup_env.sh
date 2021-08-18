@@ -877,8 +877,10 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo chown root:root /usr/local/bin/docker-compose
     fi
 
-    echo "Installing k9s via pacman Ubuntu"
+    echo "Installing brew packages in Ubuntu"
+    brew update
     brew install derailed/k9s/k9s
+    brew install linkerd
 
     if [[ ${KUBE1} ]] || [[ ${KUBE2} ]] || [[ ${WORKSTATION} ]]; then
       echo "Installing Nvidia drivers"
