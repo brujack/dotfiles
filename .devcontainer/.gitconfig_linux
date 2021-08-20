@@ -14,7 +14,7 @@
 	fe = fetch
 	fl = log -u
 	la = "!git config -l | grep alias | cut -c 7-"
-	lg = log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit --date=relative [diff "sopsdiffer"]
+	lg = log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit --date=relative
 	ll = log --pretty=format:"%C(yellow)%h%Cred%d\\ %Creset%s%Cblue\\ [%cn]" --decorate --numstat
 	ls = branch -l
 	pl = pull origin
@@ -25,6 +25,7 @@
 	st = status -s
 	textconv = sops -d
 	undo = reset --soft 'HEAD^'
+[diff "sopsdiffer"]
 [pull]
 	rebase = false
 [gc]
