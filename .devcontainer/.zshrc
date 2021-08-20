@@ -266,6 +266,9 @@ alias kgp='kubectl get pods'
 alias kgn='kubectl get nodes'
 alias kgd='kubectl get deploy'
 alias kgr='kubectl get rs'
+alias kcv='kubectl config view'
+alias kcc='kubectl config current-context'
+alias kcu='kubectl config use-context $@'
 
 # alias for ls to exa removed due to breaking globbing for ansible aws integration
 if quiet_which exa
