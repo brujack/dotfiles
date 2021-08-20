@@ -6,17 +6,26 @@
 [commit]
 	template = /home/bruce/.stCommitMsg
 [alias]
-	pl = pull
 	br = branch
 	ci = commit
 	co = checkout
-	st = status
-	ls = branch -l
+	cob = checkout -b
 	dl = branch -d
-	undo = reset --soft 'HEAD^'
+	fe = fetch
+	fl = log -u
+	la = "!git config -l | grep alias | cut -c 7-"
 	lg = log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit --date=relative
 [diff "sopsdiffer"]
+	ll = log --pretty=format:"%C(yellow)%h%Cred%d\\ %Creset%s%Cblue\\ [%cn]" --decorate --numstat
+	ls = branch -l
+	pl = pull origin
+	plos = pull origin staging
+	plou = pull origin uat
+	plom = pull origin master
+	sl = stash list
+	st = status -s
 	textconv = sops -d
+	undo = reset --soft 'HEAD^'
 [pull]
 	rebase = false
 [gc]
