@@ -442,3 +442,9 @@ fpath=(${HOME}/.zsh.d/ $fpath)
 
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
+
+# For k8dev work
+if [[ -f ${HOME}/git-repos/securekey/cloud-eng/k8dev/scripts/auto-complete.sh ]]; then
+  source "${HOME}/git-repos/securekey/cloud-eng/k8dev/scripts/auto-complete.sh"
+fi
+[[ -d /home/bruce/.k8dev ]] && export PATH="/home/bruce/.k8dev/bin:$PATH"
