@@ -775,7 +775,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo -H apt install containerd.io -y
     fi
 
-    if [[ ! ${BASTION} ]] || [[ ! ${CRUNCHER} ]] || [[ ! ${WORKSTATION} ]]; then
+    if [[ ! ${CRUNCHER} ]] || [[ ! ${WORKSTATION} ]]; then
       echo "Installing Virtualbox"
       wget -q http://www.virtualbox.org/download/oracle_vbox_2016.asc -O- | sudo apt-key add -
       wget -q http://www.virtualbox.org/download/oracle_vbox.asc -O- | sudo apt-key add -
@@ -793,8 +793,8 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo -H apt install virtualbox-6.1 -y
     fi
 
-    if [[ ${WORKSTATION} ]]; then
-      echo "Installing kind on workstation"
+    if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]]; then
+      echo "Installing kind"
       wget -O ${HOME}/downloads/kind_${KIND_VER} ${KIND_URL}
       sudo cp -a ${HOME}/downloads/kind_${KIND_VER} /usr/local/bin/
       sudo mv /usr/local/bin/kind_${KIND_VER} /usr/local/bin/kind
