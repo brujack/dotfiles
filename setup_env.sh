@@ -760,6 +760,14 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       if [[ $? -eq 1 ]]; then
         sudo -H apt remove golang-1.15-src -y
       fi
+      # dpkg -s golang-1.16-go &> /dev/null
+      # if [[ $? -eq 1 ]]; then
+      #   sudo -H apt remove golang-1.16-go -y
+      # fi
+      # dpkg -s golang-1.16-src &> /dev/null
+      # if [[ $? -eq 1 ]]; then
+      #   sudo -H apt remove golang-1.16-src -y
+      # fi
     fi
 
     if [[ ! ${BASTION} ]] || [[ ! ${WORKSTATION} ]]; then
