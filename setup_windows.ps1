@@ -74,6 +74,7 @@ cinst -y fzf
 cinst -y gcloudsdk
 cinst -y gh
 cinst -y git
+cinst -y golang
 cinst -y googlechrome
 cinst -y hyper
 cinst -y iperf3
