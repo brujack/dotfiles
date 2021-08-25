@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # software versions to install
 RUBY_INSTALL_VER="0.8.1"
