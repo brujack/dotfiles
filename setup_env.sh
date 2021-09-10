@@ -26,6 +26,8 @@ GP_HOME="GlobalProtect-openconnect"
 GP_GIT_REPO="https://github.com/yuezk/GlobalProtect-openconnect.git"
 KIND_VER="0.11.1"
 KIND_URL="https://kind.sigs.k8s.io/dl/v${KIND_VER}/kind-linux-amd64"
+YQ_VER="4.12.2"
+YQ_URL="https://github.com/mikefarah/yq/releases/download/v${YQ_VER}/yq_linux_amd64"
 RHEL_KUBECTL_REPO="[kubernetes]
 name=Kubernetes
 baseurl=http://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
@@ -752,23 +754,19 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt update
     sudo -H apt install golang-${GO_VER}-go -y
     if [[ ${GO_VER} == "1.16" ]]; then
-      dpkg -s golang-1.15-go &> /dev/null
-      if [[ $? -eq 1 ]]; then
+      if [[ $(dpkg-query -W -f='${Status}' golang-1.15-go 2>/dev/null | grep -c "ok installed") -eq 0 ]]; then
         sudo -H apt remove golang-1.15-go -y
       fi
-      dpkg -s golang-1.15-src &> /dev/null
-      if [[ $? -eq 1 ]]; then
+      if [[ $(dpkg-query -W -f='${Status}' golang-1.15-src 2>/dev/null | grep -c "ok installed") -eq 0 ]]; then
         sudo -H apt remove golang-1.15-src -y
       fi
-    # elif [[ ${GO_VER} == "1.17" ]]; then
-    #   dpkg -s golang-1.16-go &> /dev/null
-    #   if [[ $? -eq 1 ]]; then
-    #     sudo -H apt remove golang-1.16-go -y
-    #   fi
-    #   dpkg -s golang-1.16-src &> /dev/null
-    #   if [[ $? -eq 1 ]]; then
-    #     sudo -H apt remove golang-1.16-src -y
-    #   fi
+    elif [[ ${GO_VER} == "1.17" ]]; then
+      if [[ $(dpkg-query -W -f='${Status}' golang-1.16-go 2>/dev/null | grep -c "ok installed") -eq 0 ]]; then
+        sudo -H apt remove golang-1.16-go -y
+      fi
+      if [[ $(dpkg-query -W -f='${Status}' golang-1.16-src 2>/dev/null | grep -c "ok installed") -eq 0 ]]; then
+        sudo -H apt remove golang-1.16-src -y
+      fi
     fi
 
     if [[ ! ${BASTION} ]] || [[ ! ${WORKSTATION} ]]; then
@@ -803,12 +801,25 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     fi
 
     if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]]; then
-      echo "Installing kind"
-      wget -O ${HOME}/downloads/kind_${KIND_VER} ${KIND_URL}
-      sudo cp -a ${HOME}/downloads/kind_${KIND_VER} /usr/local/bin/
-      sudo mv /usr/local/bin/kind_${KIND_VER} /usr/local/bin/kind
-      sudo chmod 755 /usr/local/bin/kind
-      sudo chown root:root /usr/local/bin/kind
+      if [[ ! -f ${HOME}/downloads/kind_${KIND_VER} ]]; then
+        echo "Installing kind"
+        wget -O ${HOME}/downloads/kind_${KIND_VER} ${KIND_URL}
+        sudo cp -a ${HOME}/downloads/kind_${KIND_VER} /usr/local/bin/
+        sudo mv /usr/local/bin/kind_${KIND_VER} /usr/local/bin/kind
+        sudo chmod 755 /usr/local/bin/kind
+        sudo chown root:root /usr/local/bin/kind
+      fi
+    fi
+
+    if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]]; then
+      if [[ ! -f ${HOME}/downloads/yq_${YQ_VER} ]]; then
+        echo "Installing yq"
+        wget -O ${HOME}/downloads/yq_${YQ_VER} ${YQ_URL}
+        sudo cp -a ${HOME}/downloads/yq_${YQ_VER} /usr/local/bin/
+        sudo mv /usr/local/bin/yq_${YQ_VER} /usr/local/bin/yq
+        sudo chmod 755 /usr/local/bin/yq
+        sudo chown root:root /usr/local/bin/yq
+      fi
     fi
 
     echo "Installing azure-cli"
