@@ -822,6 +822,15 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       fi
     fi
 
+    if [[ ${WORKSTATION} ]]; then
+      echo "Installing Albert"
+      curl https://build.opensuse.org/projects/home:manuelschneid3r/public_key | sudo apt-key add -
+      echo 'deb http://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_20.04/ /' | sudo tee /etc/apt/sources.list.d/home:manuelschneid3r.list
+      sudo wget -nv https://download.opensuse.org/repositories/home:manuelschneid3r/xUbuntu_20.04/Release.key -O "/etc/apt/trusted.gpg.d/home:manuelschneid3r.asc"
+      sudo -H apt update
+      sudo -H apt install albert -y
+    fi
+
     echo "Installing azure-cli"
     curl -sL http://packages.microsoft.com/keys/microsoft.asc | \
     gpg --dearmor | \
