@@ -96,12 +96,14 @@ if [[ ${LINUX} ]]; then
   [[ ${LINUX_TYPE} = "CentOS Linux" ]] && export CENTOS=1
   [[ ${LINUX_TYPE} = "Red Hat Enterprise Linux Server" ]] && export REDHAT=1
   [[ ${LINUX_TYPE} = "Fedora" ]] && export FEDORA=1
+  [[ ${LINUX_TYPE} = "elementary OS" ]] && export UBUNTU=1 && export ELEMENTARY=1
 fi
 
 if [[ ${UBUNTU} ]]; then
   UBUNTU_VERSION=$(lsb_release -rs)
   [[ ${UBUNTU_VERSION} = "18.04" ]] && export BIONIC=1
   [[ ${UBUNTU_VERSION} = "20.04" ]] && export FOCAL=1
+  [[ ${UBUNTU_VERSION} = "6" ]] && export FOCAL=1 # elementary os
 fi
 
 [[ $(uname -r) =~ microsoft ]] && export WINDOWS=1
@@ -113,7 +115,7 @@ fi
 [[ $(hostname -s) = "L-BJackson" ]] && export WORK=1
 [[ $(hostname -s) = "workstation" ]] && export WORKSTATION=1
 [[ $(hostname -s) = "cruncher" ]] && export CRUNCHER=1
-[[ $(hostname -s) = "bastion" ]] && export BASTION=1
+[[ $(hostname -s) = "virtualmachine1c4f85d6" ]] && export WORKSTATION=1
 
 # setup variables based off of environment
 if [[ ${MACOS} ]]; then
