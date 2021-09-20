@@ -96,12 +96,14 @@ if [[ ${LINUX} ]]; then
   [[ ${LINUX_TYPE} = "CentOS Linux" ]] && export CENTOS=1
   [[ ${LINUX_TYPE} = "Red Hat Enterprise Linux Server" ]] && export REDHAT=1
   [[ ${LINUX_TYPE} = "Fedora" ]] && export FEDORA=1
+  [[ ${LINUX_TYPE} = "elementary OS" ]] && export UBUNTU=1 && export ELEMENTARY=1
 fi
 
 if [[ ${UBUNTU} ]]; then
   UBUNTU_VERSION=$(lsb_release -rs)
   [[ ${UBUNTU_VERSION} = "18.04" ]] && export BIONIC=1
   [[ ${UBUNTU_VERSION} = "20.04" ]] && export FOCAL=1
+  [[ ${UBUNTU_VERSION} = "6" ]] && export FOCAL=1 # elementary os
 fi
 
 [[ $(uname -r) =~ microsoft ]] && export WINDOWS=1
@@ -113,7 +115,7 @@ fi
 [[ $(hostname -s) = "L-BJackson" ]] && export WORK=1
 [[ $(hostname -s) = "workstation" ]] && export WORKSTATION=1
 [[ $(hostname -s) = "cruncher" ]] && export CRUNCHER=1
-[[ $(hostname -s) = "bastion" ]] && export BASTION=1
+[[ $(hostname -s) = "virtualmachine1c4f85d6" ]] && export WORKSTATION=1
 
 # setup variables based off of environment
 if [[ ${MACOS} ]]; then
@@ -822,6 +824,15 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       fi
     fi
 
+    if [[ ${WORKSTATION} ]]; then
+      echo "Installing Albert"
+      curl https://build.opensuse.org/projects/home:manuelschneid3r/public_key | sudo apt-key add -
+      echo 'deb http://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_20.04/ /' | sudo tee /etc/apt/sources.list.d/home:manuelschneid3r.list
+      sudo wget -nv https://download.opensuse.org/repositories/home:manuelschneid3r/xUbuntu_20.04/Release.key -O "/etc/apt/trusted.gpg.d/home:manuelschneid3r.asc"
+      sudo -H apt update
+      sudo -H apt install albert -y
+    fi
+
     echo "Installing azure-cli"
     curl -sL http://packages.microsoft.com/keys/microsoft.asc | \
     gpg --dearmor | \
@@ -936,6 +947,9 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt install kubectl -y
 
     if [[ ${WORKSTATION} ]]; then
+      echo "snap software with classic option, the other snap packages are installed in ubuntu_workstation_snap_packages.txt"
+      sudo snap install atom --classic
+      sudo snap install code --classic
       sudo snap install helm --classic
     fi
     if [[ ${CRUNCHER} ]]; then
@@ -1212,7 +1226,7 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
     pyenv virtualenv-delete -f ansible
     pyenv virtualenv ${PYTHON_VER} ansible
     pyenv activate ansible
-    python3 -m pip install ansible ansible-cmdb ansible-lint docker docker-compose pylint jmespath-terminal psutil bpytop HttpPy j2cli
+    python3 -m pip install ansible ansible-cmdb ansible-lint boto3 docker docker-compose pylint jmespath-terminal psutil bpytop HttpPy j2cli
   fi
 fi
 

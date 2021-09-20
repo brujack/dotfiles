@@ -10,7 +10,7 @@ fi
 [ "$(uname -s)" = "Linux" ] && export LINUX=1
 
 GO_VER="1.17"
-RUBY_VER="3.0.1"
+RUBY_VER="3.0.2"
 GITREPOS="${HOME}/git-repos"
 
 if [[ ${LINUX} ]]; then
