@@ -5,6 +5,7 @@ canonical-livepatch
 core
 core18
 core20
+gtk-common-themes
 simplenote
 spotify
 vlc

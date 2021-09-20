@@ -1,6 +1,6 @@
 font-manager
-httpie
 gnome-tweaks
+httpie
 nfs-common
 openjdk-11-jdk
 steam
