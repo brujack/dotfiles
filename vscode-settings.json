@@ -68,7 +68,6 @@
     "terraform.format": {
 
     },
-    "python.languageServer": "Microsoft",
     "yaml.schemas": {
         "file:///toc.schema.json": "/toc\\.yml/i"
     },
@@ -89,5 +88,9 @@
         "*.ipynb": "jupyter.notebook.ipynb"
     },
     "go.toolsManagement.autoUpdate": true,
-    "redhat.telemetry.enabled": false
+    "redhat.telemetry.enabled": false,
+    "yaml.customTags": [
+        "!encrypted/pkcs1-oaep scalar",
+        "!vault scalar"
+    ]
 }
