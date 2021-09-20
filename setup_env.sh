@@ -945,6 +945,9 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt install kubectl -y
 
     if [[ ${WORKSTATION} ]]; then
+      echo "snap software with classic option, the other snap packages are installed in ubuntu_workstation_snap_packages.txt"
+      sudo snap install atom --classic
+      sudo snap install code --classic
       sudo snap install helm --classic
     fi
     if [[ ${CRUNCHER} ]]; then
@@ -1221,7 +1224,7 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
     pyenv virtualenv-delete -f ansible
     pyenv virtualenv ${PYTHON_VER} ansible
     pyenv activate ansible
-    python3 -m pip install ansible ansible-cmdb ansible-lint docker docker-compose pylint jmespath-terminal psutil bpytop HttpPy j2cli
+    python3 -m pip install ansible ansible-cmdb ansible-lint boto3 docker docker-compose pylint jmespath-terminal psutil bpytop HttpPy j2cli
   fi
 fi
 
