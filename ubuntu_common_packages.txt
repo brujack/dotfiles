@@ -35,6 +35,7 @@ lm-sensors
 locales
 lsof
 make
+mc
 mtr-tiny
 ncdu
 network-manager
