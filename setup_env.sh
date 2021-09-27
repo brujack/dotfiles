@@ -938,6 +938,13 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo make install
     fi
 
+    if [[ ${WORKSTATION} ]]; then
+      echo "Installing microsoft teams"
+      sudo sh -c 'echo "deb [arch=amd64] https://packages.microsoft.com/repos/ms-teams stable main" > /etc/apt/sources.list.d/teams.list'
+      sudo -H apt update
+      sudo -H apt install teams -y
+    fi
+
     python3 -m pip install glances
     if [[ ! -f /usr/share/keyrings/kubernetes-archive-keyring.gpg ]]; then
       sudo curl -fsSLo /usr/share/keyrings/kubernetes-archive-keyring.gpg https://packages.cloud.google.com/apt/doc/apt-key.gpg
