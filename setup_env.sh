@@ -965,6 +965,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo snap install atom --classic
       sudo snap install code --classic
       sudo snap install helm --classic
+      sudo snap install slack --classic
     fi
     if [[ ${CRUNCHER} ]]; then
       curl https://baltocdn.com/helm/signing.asc | sudo apt-key add -
