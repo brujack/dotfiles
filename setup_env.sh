@@ -945,6 +945,13 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo -H apt install teams -y
     fi
 
+    if [[ ${WORKSTATION} ]]; then
+      echo "Installing microsoft edge"
+      sudo sh -c 'echo "deb [arch=amd64] https://packages.microsoft.com/repos/edge stable main" > /etc/apt/sources.list.d/microsoft-edge-beta.list'
+      sudo -H apt update
+      sudo -H apt install microsoft-edge-beta -y
+    fi
+
     python3 -m pip install glances
     if [[ ! -f /usr/share/keyrings/kubernetes-archive-keyring.gpg ]]; then
       sudo curl -fsSLo /usr/share/keyrings/kubernetes-archive-keyring.gpg https://packages.cloud.google.com/apt/doc/apt-key.gpg
