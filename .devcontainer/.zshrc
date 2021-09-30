@@ -1,3 +1,22 @@
+# for keychain ssh key management
+if [[ ${MACOS} ]]; then
+  if [[ ${RATNA} ]] || [[ ${BRUCEWORK} ]]; then
+    eval `/usr/local/bin/keychain --eval --agents ssh --inherit any id_rsa`
+    eval `/usr/local/bin/keychain --eval --agents ssh --inherit any id_ed25519`
+    eval `/usr/local/bin/keychain --eval --agents gpg B6DCFA4E5AFEA3AF35CE0A189A997C02283A9062 --inherit any`
+  elif [[ ${WORK} ]]; then
+    eval `/usr/local/bin/keychain --eval --agents ssh --inherit any id_rsa`
+    eval `/usr/local/bin/keychain --eval --agents ssh --inherit any id_ed25519`
+  fi
+elif [[ ${LINUX} ]]; then
+  if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]]; then
+    eval `/usr/bin/keychain --eval --agents ssh --inherit any id_rsa`
+    eval `/usr/bin/keychain --eval --agents ssh --inherit any id_ed25519`
+  else
+    eval `/usr/bin/keychain --eval --agents ssh --inherit any id_rsa`
+  fi
+fi
+
 # Enable Powerlevel10k instant prompt. Should stay close to the top of ~/.zshrc.
 # Initialization code that may require console input (password prompts, [y/n]
 # confirmations, etc.) must go above this block; everything else may go below.
@@ -139,25 +158,6 @@ if [[ -n $SSH_CONNECTION || ${LINUX} ]]; then
 else
   export EDITOR='code'
   export GIT_EDITOR='code'
-fi
-
-# for keychain ssh key management
-if [[ ${MACOS} ]]; then
-  if [[ ${RATNA} ]] || [[ ${BRUCEWORK} ]]; then
-    eval `/usr/local/bin/keychain --eval --agents ssh --inherit any id_rsa`
-    eval `/usr/local/bin/keychain --eval --agents ssh --inherit any id_ed25519`
-    eval `/usr/local/bin/keychain --eval --agents gpg B6DCFA4E5AFEA3AF35CE0A189A997C02283A9062 --inherit any`
-  elif [[ ${WORK} ]]; then
-    eval `/usr/local/bin/keychain --eval --agents ssh --inherit any id_rsa`
-    eval `/usr/local/bin/keychain --eval --agents ssh --inherit any id_ed25519`
-  fi
-elif [[ ${LINUX} ]]; then
-  if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]]; then
-    eval `/usr/bin/keychain --eval --agents ssh --inherit any id_rsa`
-    eval `/usr/bin/keychain --eval --agents ssh --inherit any id_ed25519`
-  else
-    eval `/usr/bin/keychain --eval --agents ssh --inherit any id_rsa`
-  fi
 fi
 
 # setting up path
