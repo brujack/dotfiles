@@ -966,6 +966,9 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo snap install code --classic
       sudo snap install helm --classic
       sudo snap install slack --classic
+      sudo snap install certbot --classic
+      sudo snap set certbot trust-plugin-with-root=ok
+      sudo snap install certbot-dns-route53
     fi
     if [[ ${CRUNCHER} ]]; then
       curl https://baltocdn.com/helm/signing.asc | sudo apt-key add -
