@@ -378,6 +378,13 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.zshrc ${HOME}/.zshrc
   fi
 
+  if [[ -f ${HOME}/.zprofile ]]; then
+    rm ${HOME}/.zprofile
+    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.zprofile ${HOME}/.zprofile
+  elif [[ ! -L ${HOME}/.zprofile ]]; then
+    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.zprofile ${HOME}/.zprofile
+  fi
+
   echo "Linking custom bruce.zsh-theme"
   if [[ ! -L ${HOME}/.oh-my-zsh/custom/themes/bruce.zsh-theme && -d ${HOME}/.oh-my-zsh/custom/themes ]]; then
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/bruce.zsh-theme ${HOME}/.oh-my-zsh/custom/themes/bruce.zsh-theme
