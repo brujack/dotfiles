@@ -173,7 +173,7 @@ path+=("${HOME}/scripts")
 
 if [[ ${MACOS} ]]; then
   # for gmake on macos
-  path+=('$(brew --prefix)/opt/make/libexec/gnubin')
+  path=('$(brew --prefix)/opt/make/libexec/gnubin')
   path+=('/opt/homebrew/bin')
 fi
 
