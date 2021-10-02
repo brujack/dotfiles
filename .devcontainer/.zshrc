@@ -172,8 +172,6 @@ path+=("${HOME}/bin")
 path+=("${HOME}/scripts")
 
 if [[ ${MACOS} ]]; then
-  # for gmake on macos
-  path=('/usr/local/opt/make/libexec/gnubin')
   path+=('/opt/homebrew/bin')
 fi
 
@@ -210,6 +208,7 @@ fi
 # aliases for home
 alias home='ssh bruce@home.conecrazy.ca'
 alias bastion='ssh bruce@bastion.conecrazy.io'
+alias downloads='ssh bruce@downloads.conecrazy.io'
 alias mac='ssh bruce@mac.conecrazy.io'
 alias server='ssh bruce@server.conecrazy.io'
 alias ratna='ssh bruce@ratna.conecrazy.io'
@@ -248,6 +247,9 @@ alias frontyard='ssh bruce@frontyard'
 # aliases for work servers
 
 # command aliases
+if [[ ${MACOS} ]]; then
+  alias make='/usr/local/bin/gmake'
+fi
 alias au='sudo apt-get update'
 alias ad='sudo apt-get dist-upgrade -y'
 alias aa='sudo apt-get autoremove -y'
