@@ -8,10 +8,12 @@ FROM mcr.microsoft.com/vscode/devcontainers/base:0-${VARIANT}
 ARG INSTALL_ZSH="true"
 ARG UPGRADE_PACKAGES="true"
 ARG Z_GIT="https://github.com/rupa/z.git"
-ARG GO_VER="1.15"
-ARG HELM_VER="3.5.2"
+ARG GO_VER="1.17"
+ARG HELM_VER="3.7.0"
 ARG HASHICORP_URL="https://releases.hashicorp.com"
-ARG TERRAFORM_VER="0.14.5"
+ARG TERRAFORM_VER="1.0.2"
+ARG YQ_VER="4.12.2"
+ARG YQ_URL="https://github.com/mikefarah/yq/releases/download/v${YQ_VER}/yq_linux_amd64"
 
 ARG USER_NAME="vscode"
 
@@ -47,6 +49,7 @@ RUN apt update && apt install -y \
   iperf3 \
   jq \
   keychain \
+  libarchive-tools \
   libbz2-dev \
   libffi-dev \
   liblzma-dev \
@@ -62,6 +65,7 @@ RUN apt update && apt install -y \
   locales \
   lsof \
   make \
+  mc \
   mtr-tiny \
   ncdu \
   network-manager \
@@ -83,6 +87,7 @@ RUN apt update && apt install -y \
   shellcheck \
   silversearcher-ag \
   smartmontools \
+  snapd \
   software-properties-common \
   sysstat \
   thermald \
@@ -123,6 +128,9 @@ RUN chmod 700 /home/${USER_NAME}/.aws
 RUN mkdir /home/${USER_NAME}/.ssh
 RUN chmod 700 /home/${USER_NAME}/.ssh
 COPY .ssh/config /home/${USER_NAME}/.ssh/config
+
+# install homebrew
+RUN /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install.sh)"
 
 # setup z
 RUN git clone --recursive ${Z_GIT} /home/${USER_NAME}/z
@@ -192,6 +200,13 @@ RUN unzip /home/${USER_NAME}/downloads/terraform_${TERRAFORM_VER}_linux_amd64.zi
 RUN sudo cp -a /home/${USER_NAME}/downloads/terraform_${TERRAFORM_VER}/terraform /usr/local/bin/
 RUN sudo chmod 755 /usr/local/bin/terraform
 RUN sudo chown root:root /usr/local/bin/terraform
+
+# install yq
+RUN wget -O ${HOME}/downloads/yq_${YQ_VER} ${YQ_URL}
+RUN sudo cp -a ${HOME}/downloads/yq_${YQ_VER} /usr/local/bin/
+RUN sudo mv /usr/local/bin/yq_${YQ_VER} /usr/local/bin/yq
+RUN sudo chmod 755 /usr/local/bin/yq
+RUN sudo chown root:root /usr/local/bin/yq
 
 # install npm json2yaml
 RUN sudo npm install json2yaml

@@ -52,6 +52,7 @@ python3-setuptools
 ranger
 rar
 rlwrap
+ruby-full
 screen
 shellcheck
 silversearcher-ag
