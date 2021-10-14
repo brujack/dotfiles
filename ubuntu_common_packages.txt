@@ -38,6 +38,7 @@ make
 mc
 mtr-tiny
 ncdu
+needrestart
 network-manager
 net-tools
 nload
