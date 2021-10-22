@@ -82,6 +82,7 @@ cinst -y kubernetes-cli
 cinst -y kubernetes-helm
 cinst -y make
 cinst -y microsoft-windows-terminal
+cinst -y ohmyposh
 cinst -y postman
 cinst -y putty.install
 cinst -y puttygen
