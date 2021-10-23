@@ -11,7 +11,7 @@ Enable-WindowsOptionalFeature -Online -FeatureName:Microsoft-Hyper-V -All
 # Enable-WindowsOptionalFeature -Online -FeatureName:Containers-DisposableClientVM -All
 
 # enable wsl
-Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux
+dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart
 
 # enable current user to be able to execute powershell scripts
 Set-ExecutionPolicy Unrestricted -Scope CurrentUser
