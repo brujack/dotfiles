@@ -919,6 +919,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     brew update
     brew install derailed/k9s/k9s
     brew install linkerd
+    brew install gh
 
     if [[ ${KUBE1} ]] || [[ ${KUBE2} ]] || [[ ${WORKSTATION} ]]; then
       echo "Installing Nvidia drivers"

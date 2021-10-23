@@ -7,7 +7,8 @@ Set-WindowsExplorerOptions -EnableShowHiddenFilesFoldersDrives -EnableShowProtec
 
 # enable hyper-v and containers
 Enable-WindowsOptionalFeature -Online -FeatureName:Microsoft-Hyper-V -All
-Enable-WindowsOptionalFeature -Online -FeatureName:Containers-DisposableClientVM -All
+# disabled containers for windows 11, as I believe it broke things Oct 23, 2021
+# Enable-WindowsOptionalFeature -Online -FeatureName:Containers-DisposableClientVM -All
 
 # enable wsl
 Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux
@@ -76,7 +77,6 @@ cinst -y gh
 cinst -y git
 cinst -y golang
 cinst -y googlechrome
-cinst -y hyper
 cinst -y iperf3
 cinst -y kubernetes-cli
 cinst -y kubernetes-helm
