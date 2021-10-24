@@ -16,6 +16,9 @@ dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /nores
 # enable current user to be able to execute powershell scripts
 Set-ExecutionPolicy Unrestricted -Scope CurrentUser
 
+# install chocolately
+Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+
 
 # function Install-NeededFor {
 #   param(
@@ -60,11 +63,13 @@ Set-ExecutionPolicy Unrestricted -Scope CurrentUser
 
 # install packages with chocolatey
 cinst -y 1password
+cinst -y adobereader
 cinst -y ag
 cinst -y atom
 cinst -y awscli
 cinst -y azure-cli
 cinst -y beyond-compare
+cinst -y boxstarter
 cinst -y dbeaver
 cinst -y docker-desktop
 cinst -y docker-compose
@@ -81,6 +86,7 @@ cinst -y iperf3
 cinst -y kubernetes-cli
 cinst -y kubernetes-helm
 cinst -y make
+cinst -y microsoft-teams
 cinst -y microsoft-windows-terminal
 cinst -y ohmyposh
 cinst -y postman
