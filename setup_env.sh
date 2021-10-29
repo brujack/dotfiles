@@ -957,7 +957,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       echo "Installing microsoft edge"
       sudo sh -c 'echo "deb [arch=amd64] https://packages.microsoft.com/repos/edge stable main" > /etc/apt/sources.list.d/microsoft-edge-beta.list'
       sudo -H apt update
-      sudo -H apt install microsoft-edge-beta -y
+      sudo -H apt install microsoft-edge-stable -y
     fi
 
     python3 -m pip install glances
