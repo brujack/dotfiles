@@ -968,6 +968,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo snap set certbot trust-plugin-with-root=ok
       sudo snap install certbot-dns-route53
     fi
+    # can't use snap on wsl2
     if [[ ${CRUNCHER} ]]; then
       curl https://baltocdn.com/helm/signing.asc | sudo apt-key add -
       echo "deb https://baltocdn.com/helm/stable/debian/ all main" | sudo tee /etc/apt/sources.list.d/helm-stable-debian.list
