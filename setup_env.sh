@@ -22,8 +22,6 @@ DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/${DOCKER
 SHELLCHECK_VER="0.7.0"
 Z_GIT="https://github.com/rupa/z.git"
 ZABBIX_VER="4.4-1+"
-GP_HOME="GlobalProtect-openconnect"
-GP_GIT_REPO="https://github.com/yuezk/GlobalProtect-openconnect.git"
 KIND_VER="0.11.1"
 KIND_URL="https://kind.sigs.k8s.io/dl/v${KIND_VER}/kind-linux-amd64"
 YQ_VER="4.12.2"
@@ -344,21 +342,6 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/switch_terra_account.sh ${HOME}/switch_terra_account.sh
   elif [[ ! -L ${HOME}/switch_terra_account.sh ]]; then
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/switch_terra_account.sh ${HOME}/switch_terra_account.sh
-  fi
-
-  if [[ ${MACOS} ]]; then
-    if [[ -f ${VSCODE}/settings.json ]]; then
-      rm ${VSCODE}/settings.json
-      ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/vscode-settings.json ${VSCODE}/settings.json
-    fi
-  fi
-  if [[ ${WINDOWS} ]]; then
-    if [[ ! -e ${VSCODE}/settings.json ]]; then
-      cp -a ${HOME}/git-repos/personal/${DOTFILES}/vscode-settings.json ${VSCODE}/settings.json
-    else
-      rm ${VSCODE}/settings.json
-      cp -a ${HOME}/git-repos/personal/${DOTFILES}/vscode-settings.json ${VSCODE}/settings.json
-    fi
   fi
 
   echo "Installing Oh My ZSH..."
@@ -1272,14 +1255,6 @@ if [[ ${UPDATE} ]]; then
   fi
   if [[ ${CENTOS} ]]; then
     sudo -H yum update -y
-  fi
-  if [[ ${WINDOWS} ]]; then
-    if [[ ! -e "$VSCODE"/settings.json ]]; then
-      cp -a ${HOME}/git-repos/personal/${DOTFILES}/vscode-settings.json "$VSCODE"/settings.json
-    else
-      rm "$VSCODE"/settings.json
-      cp -a ${HOME}/git-repos/personal/${DOTFILES}/vscode-settings.json "$VSCODE"/settings.json
-    fi
   fi
   echo "Updating pip3 packages"
   python3 -m pip install --upgrade pip
