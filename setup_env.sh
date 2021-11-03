@@ -932,21 +932,6 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     fi
 
     if [[ ${WORKSTATION} ]]; then
-      echo "Installing globalprotect vpn"
-      sudo -H apt install qt5-default libqt5websockets5-dev qtwebengine5-dev openconnect -y
-      if [[ ! -d ${HOME}/${GPHOME} ]]; then
-        mkdir -p ${HOME}/${GPHOME}
-      fi
-      cd ${GITREPOS}
-      git clone ${GP_GIT_REPO}
-      cd ${GITREPOS}/${GP_HOME}
-      git submodule update --init
-      qmake CONFIG+=release
-      make
-      sudo make install
-    fi
-
-    if [[ ${WORKSTATION} ]]; then
       echo "Installing microsoft teams"
       sudo sh -c 'echo "deb [arch=amd64] https://packages.microsoft.com/repos/ms-teams stable main" > /etc/apt/sources.list.d/teams.list'
       sudo -H apt update
@@ -958,6 +943,11 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo sh -c 'echo "deb [arch=amd64] https://packages.microsoft.com/repos/edge stable main" > /etc/apt/sources.list.d/microsoft-edge-beta.list'
       sudo -H apt update
       sudo -H apt install microsoft-edge-stable -y
+    fi
+
+    if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]]; then
+      echo "Installing .net5 sdk"
+      sudo -H apt install dotnet-sdk-5.0 -y
     fi
 
     python3 -m pip install glances
