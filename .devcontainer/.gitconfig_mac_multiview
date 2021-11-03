@@ -8,7 +8,7 @@
 	trustExitCode = true
 [user]
 	name = Bruce Jackson
-	email = bruce.jackson@securekey.com
+	email = bruce.jackson@multiviewcorp.com
 [commit]
 	template = /Users/bruce/.stCommitMsg
 [alias]
@@ -34,5 +34,5 @@
 [diff "sopsdiffer"]
 [pull]
 	rebase = false
-[includeIf "gitdir:~/git-repos/securekey/"]
-	path = ~/git-repos/securekey/.gitconfig
+[includeIf "gitdir:~/git-repos/multiview/"]
+	path = ~/git-repos/multiview/.gitconfig

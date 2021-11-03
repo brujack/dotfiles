@@ -286,8 +286,8 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
       ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_mac ${HOME}/.gitconfig
     fi
     if [[ ${WORK} ]]; then
-      if [[ ! -L ${HOME}/git-repos/securekey/.gitconfig ]]; then
-        ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_mac_securekey ${HOME}/git-repos/securekey/.gitconfig
+      if [[ ! -L ${HOME}/git-repos/multiview/.gitconfig ]]; then
+        ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_mac_multiview ${HOME}/git-repos/multiview/.gitconfig
       elif [[ ! -L ${HOME}/git-repos/gitlab/.gitconfig ]]; then
         ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_mac_gitlab ${HOME}/git-repos/gitlab/.gitconfig
       fi
@@ -301,8 +301,8 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
       ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_linux ${HOME}/.gitconfig
     fi
     if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]]; then
-      if [[ ! -L ${HOME}/git-repos/securekey/.gitconfig ]]; then
-        ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_linux_securekey ${HOME}/git-repos/securekey/.gitconfig
+      if [[ ! -L ${HOME}/git-repos/multiview/.gitconfig ]]; then
+        ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_linux_multiview ${HOME}/git-repos/multiview/.gitconfig
       elif [[ ! -L ${HOME}/git-repos/gitlab/.gitconfig ]]; then
         ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_linux_gitlab ${HOME}/git-repos/gitlab/.gitconfig
       fi
