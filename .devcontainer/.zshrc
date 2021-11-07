@@ -131,10 +131,10 @@ export HISTIGNORE="ls:cd:cd -:pwd:exit:date:* --help";
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
 if [[ ${MACOS} ]]; then
-  plugins=(ag ansible aws brew docker fzf git git-prompt osx helm history-substring-search kubectl osx python terraform vscode pyenv)
+  plugins=(ag ansible aws brew docker fzf git git-prompt helm history-substring-search kubectl macos python terraform vscode pyenv)
 fi
 if [[ ${UBUNTU} ]]; then
-  plugins=(ag ansible brew aws docker fzf git git-prompt ubuntu helm history-substring-search kubectl python terraform vscode pyenv)
+  plugins=(ag ansible aws brew docker fzf git git-prompt helm history-substring-search kubectl python terraform ubuntu vscode pyenv)
 fi
 if [[ ${FEDORA} ]]; then
   plugins=(ag ansible aws docker fzf git git-prompt fedora helm history-substring-search kubectl python terraform vscode pyenv)
@@ -216,7 +216,7 @@ alias bruce-work='ssh bruce@bruce-work.conecrazy.io'
 alias workstation='ssh bruce@workstation.conecrazy.io'
 alias work='ssh bruce.jackson@work.conecrazy.io'
 alias fah-0='ssh bruce@fah-0.conecrazy.io'
-alias kube-2='ssh bruce@kube-2.conecrazy.io'
+alias fah-1='ssh bruce@fah-1.conecrazy.io'
 alias vmware-0='ssh root@vmware-0.conecrazy.io'
 alias vmware-1='ssh root@vmware-1.conecrazy.io'
 alias vcenter='ssh root@vcenter.conecrazy.io'
