@@ -903,7 +903,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     brew install gh
     brew install derailed/k9s/k9s
     brew install linkerd
-    brew install terragrunt
+    brew install tgenv
 
     if [[ ${KUBE1} ]] || [[ ${KUBE2} ]] || [[ ${WORKSTATION} ]]; then
       echo "Installing Nvidia drivers"
