@@ -900,9 +900,10 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
 
     echo "Installing brew packages in Ubuntu"
     brew update
+    brew install gh
     brew install derailed/k9s/k9s
     brew install linkerd
-    brew install gh
+    brew install terragrunt
 
     if [[ ${KUBE1} ]] || [[ ${KUBE2} ]] || [[ ${WORKSTATION} ]]; then
       echo "Installing Nvidia drivers"
@@ -1213,6 +1214,9 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
   gem install kitchen-terraform
   gem install kitchen-verifier-serverspec
   gem install bundle
+
+  echo "Install terraspace"
+  gem install terraspace
 
   echo "ANSIBLE setup"
   if [[ ${LINUX} ]]; then
