@@ -949,7 +949,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     echo "Installing brew packages in Ubuntu"
     brew update
     brew install gh
-    brew install derailed/k9s/k9s
+    brew install k9s
     brew install linkerd
     brew install tgenv
 
