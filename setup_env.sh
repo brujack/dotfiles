@@ -215,6 +215,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
   if [[ ${UBUNTU} ]]; then
     sudo -H add-apt-repository ppa:git-core/ppa -y
     sudo -H apt update
+    sudo -H apt dist-upgrade -y
     sudo -H apt install git -y
   fi
   if [[ ${FEDORA} ]]; then
