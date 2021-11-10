@@ -196,6 +196,10 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     install_rosetta
   fi
 
+  if ! [[ -d ${HOME}/downloads ]]; then
+      mkdir ${HOME}/downloads
+  fi
+
   if [[ ${MACOS} || ${LINUX} ]]; then
     if ! [ -x "$(command -v brew)" ]; then
       echo "Installing homebrew..."
@@ -738,12 +742,6 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       xcode-select --install
       # Accept Xcode license
       sudo xcodebuild -license accept
-    fi
-  fi
-
-  if [[ ${LINUX} ]]; then
-    if ! [[ -d ${HOME}/downloads ]]; then
-    mkdir ${HOME}/downloads
     fi
   fi
 
