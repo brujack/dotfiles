@@ -196,8 +196,8 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     install_rosetta
   fi
 
-  if ! [[ -d ${HOME}/downloads ]]; then
-      mkdir ${HOME}/downloads
+  if ! [[ -d ${HOME}/software_downloads ]]; then
+    mkdir ${HOME}/software_downloads
   fi
 
   if [[ ${MACOS} || ${LINUX} ]]; then
@@ -242,11 +242,11 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     cpanm Test::Simple
     cpanm Fatal
     cpanm XML::SAX
-    if [[ ! -f ${HOME}/downloads/git-${GIT_VER}.tar.gz ]]; then
+    if [[ ! -f ${HOME}/software_downloads/git-${GIT_VER}.tar.gz ]]; then
       echo "Installing Redhat git"
-      wget -O ${HOME}/downloads/git-${GIT_VER}.tar.gz ${GIT_URL}/git-${GIT_VER}.tar.gz
-      tar -zxvf ${HOME}/downloads/git-${GIT_VER}.tar.gz -C ${HOME}/downloads
-      cd ${HOME}/downloads/git-${GIT_VER} || return
+      wget -O ${HOME}/software_downloads/git-${GIT_VER}.tar.gz ${GIT_URL}/git-${GIT_VER}.tar.gz
+      tar -zxvf ${HOME}/software_downloads/git-${GIT_VER}.tar.gz -C ${HOME}/software_downloads
+      cd ${HOME}/software_downloads/git-${GIT_VER} || return
       make configure
       ./configure --prefix=/usr
       make -j $(nproc) all doc info
@@ -284,11 +284,11 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     sudo -H yum install gcc -y
     sudo -H yum install make -y
     sudo -H yum install ncurses-devel -y
-    if [[ ! -f ${HOME}/downloads/zsh-${ZSH_VER}.tar.xz ]]; then
+    if [[ ! -f ${HOME}/software_downloads/zsh-${ZSH_VER}.tar.xz ]]; then
       echo "Installing Redhat zsh"
-      wget -O ${HOME}/downloads/zsh-${ZSH_VER}.tar.xz http://www.zsh.org/pub/zsh-${ZSH_VER}.tar.xz
-      tar -xvf ${HOME}/downloads/zsh-${ZSH_VER}.tar.xz -C ${HOME}/downloads
-      cd ${HOME}/downloads/zsh-${ZSH_VER} || return
+      wget -O ${HOME}/software_downloads/zsh-${ZSH_VER}.tar.xz http://www.zsh.org/pub/zsh-${ZSH_VER}.tar.xz
+      tar -xvf ${HOME}/software_downloads/zsh-${ZSH_VER}.tar.xz -C ${HOME}/software_downloads
+      cd ${HOME}/software_downloads/zsh-${ZSH_VER} || return
       ./configure --prefix=/usr/local --bindir=/usr/local/bin --sysconfdir=/etc/zsh --enable-etcdir=/etc/zsh
       make
       sudo -H make install
@@ -771,18 +771,18 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
 
     echo "Installing powershell Ubuntu"
     if [[ ${BIONIC} ]]; then
-      if [[ ! -f ${HOME}/downloads/packages-microsoft-prod.deb ]]; then
-        wget -O ${HOME}/downloads/packages-microsoft-prod.deb http://packages.microsoft.com/config/ubuntu/18.04/packages-microsoft-prod.deb
-        sudo -H dpkg -i ${HOME}/downloads/packages-microsoft-prod.deb
+      if [[ ! -f ${HOME}/software_downloads/packages-microsoft-prod.deb ]]; then
+        wget -O ${HOME}/software_downloads/packages-microsoft-prod.deb http://packages.microsoft.com/config/ubuntu/18.04/packages-microsoft-prod.deb
+        sudo -H dpkg -i ${HOME}/software_downloads/packages-microsoft-prod.deb
         sudo apt update
         sudo -H add-apt-repository universe
         sudo -H apt install powershell -y
       fi
     fi
     if [[ ${FOCAL} ]]; then
-      if [[ ! -f ${HOME}/downloads/packages-microsoft-prod.deb ]]; then
-        wget -O ${HOME}/downloads/packages-microsoft-prod.deb http://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb
-        sudo -H dpkg -i ${HOME}/downloads/packages-microsoft-prod.deb
+      if [[ ! -f ${HOME}/software_downloads/packages-microsoft-prod.deb ]]; then
+        wget -O ${HOME}/software_downloads/packages-microsoft-prod.deb http://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb
+        sudo -H dpkg -i ${HOME}/software_downloads/packages-microsoft-prod.deb
         sudo apt update
         sudo -H add-apt-repository universe
         sudo -H apt install powershell -y
@@ -841,10 +841,10 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     fi
 
     if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]]; then
-      if [[ ! -f ${HOME}/downloads/kind_${KIND_VER} ]]; then
+      if [[ ! -f ${HOME}/software_downloads/kind_${KIND_VER} ]]; then
         echo "Installing kind"
-        wget -O ${HOME}/downloads/kind_${KIND_VER} ${KIND_URL}
-        sudo cp -a ${HOME}/downloads/kind_${KIND_VER} /usr/local/bin/
+        wget -O ${HOME}/software_downloads/kind_${KIND_VER} ${KIND_URL}
+        sudo cp -a ${HOME}/software_downloads/kind_${KIND_VER} /usr/local/bin/
         sudo mv /usr/local/bin/kind_${KIND_VER} /usr/local/bin/kind
         sudo chmod 755 /usr/local/bin/kind
         sudo chown root:root /usr/local/bin/kind
@@ -852,10 +852,10 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     fi
 
     if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]]; then
-      if [[ ! -f ${HOME}/downloads/yq_${YQ_VER} ]]; then
+      if [[ ! -f ${HOME}/software_downloads/yq_${YQ_VER} ]]; then
         echo "Installing yq"
-        wget -O ${HOME}/downloads/yq_${YQ_VER} ${YQ_URL}
-        sudo cp -a ${HOME}/downloads/yq_${YQ_VER} /usr/local/bin/
+        wget -O ${HOME}/software_downloads/yq_${YQ_VER} ${YQ_URL}
+        sudo cp -a ${HOME}/software_downloads/yq_${YQ_VER} /usr/local/bin/
         sudo mv /usr/local/bin/yq_${YQ_VER} /usr/local/bin/yq
         sudo chmod 755 /usr/local/bin/yq
         sudo chown root:root /usr/local/bin/yq
@@ -893,54 +893,54 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt install google-cloud-sdk-app-engine-go -y
 
     echo "Installing Hashicorp Consul Ubuntu"
-    if [[ ! -d ${HOME}/downloads/consul_${CONSUL_VER} ]]; then
-      wget -O ${HOME}/downloads/consul_${CONSUL_VER}_linux_amd64.zip ${HASHICORP_URL}/consul/${CONSUL_VER}/consul_${CONSUL_VER}_linux_amd64.zip
-      unzip ${HOME}/downloads/consul_${CONSUL_VER}_linux_amd64.zip -d ${HOME}/downloads/consul_${CONSUL_VER}
-      sudo cp -a ${HOME}/downloads/consul_${CONSUL_VER}/consul /usr/local/bin/
+    if [[ ! -d ${HOME}/software_downloads/consul_${CONSUL_VER} ]]; then
+      wget -O ${HOME}/software_downloads/consul_${CONSUL_VER}_linux_amd64.zip ${HASHICORP_URL}/consul/${CONSUL_VER}/consul_${CONSUL_VER}_linux_amd64.zip
+      unzip ${HOME}/software_downloads/consul_${CONSUL_VER}_linux_amd64.zip -d ${HOME}/software_downloads/consul_${CONSUL_VER}
+      sudo cp -a ${HOME}/software_downloads/consul_${CONSUL_VER}/consul /usr/local/bin/
       sudo chmod 755 /usr/local/bin/consul
       sudo chown root:root /usr/local/bin/consul
     fi
 
     echo "Installing Hashicorp Vault Ubuntu"
-    if [[ ! -d ${HOME}/downloads/vault_${VAULT_VER} ]]; then
-      wget -O ${HOME}/downloads/vault_${VAULT_VER}_linux_amd64.zip ${HASHICORP_URL}/vault/${VAULT_VER}/vault_${VAULT_VER}_linux_amd64.zip
-      unzip ${HOME}/downloads/vault_${VAULT_VER}_linux_amd64.zip -d ${HOME}/downloads/vault_${VAULT_VER}
-      sudo cp -a ${HOME}/downloads/vault_${VAULT_VER}/vault /usr/local/bin/
+    if [[ ! -d ${HOME}/software_downloads/vault_${VAULT_VER} ]]; then
+      wget -O ${HOME}/software_downloads/vault_${VAULT_VER}_linux_amd64.zip ${HASHICORP_URL}/vault/${VAULT_VER}/vault_${VAULT_VER}_linux_amd64.zip
+      unzip ${HOME}/software_downloads/vault_${VAULT_VER}_linux_amd64.zip -d ${HOME}/software_downloads/vault_${VAULT_VER}
+      sudo cp -a ${HOME}/software_downloads/vault_${VAULT_VER}/vault /usr/local/bin/
       sudo chmod 755 /usr/local/bin/vault
       sudo chown root:root /usr/local/bin/vault
     fi
 
     echo "Installing Hashicorp Nomad Ubuntu"
-    if [[ ! -d ${HOME}/downloads/nomad_${NOMAD_VER} ]]; then
-      wget -O ${HOME}/downloads/nomad_${NOMAD_VER}_linux_amd64.zip ${HASHICORP_URL}/nomad/${NOMAD_VER}/nomad_${NOMAD_VER}_linux_amd64.zip
-      unzip ${HOME}/downloads/nomad_${NOMAD_VER}_linux_amd64.zip -d ${HOME}/downloads/nomad_${NOMAD_VER}
-      sudo cp -a ${HOME}/downloads/nomad_${NOMAD_VER}/nomad /usr/local/bin/
+    if [[ ! -d ${HOME}/software_downloads/nomad_${NOMAD_VER} ]]; then
+      wget -O ${HOME}/software_downloads/nomad_${NOMAD_VER}_linux_amd64.zip ${HASHICORP_URL}/nomad/${NOMAD_VER}/nomad_${NOMAD_VER}_linux_amd64.zip
+      unzip ${HOME}/software_downloads/nomad_${NOMAD_VER}_linux_amd64.zip -d ${HOME}/software_downloads/nomad_${NOMAD_VER}
+      sudo cp -a ${HOME}/software_downloads/nomad_${NOMAD_VER}/nomad /usr/local/bin/
       sudo chmod 755 /usr/local/bin/nomad
       sudo chown root:root /usr/local/bin/nomad
     fi
 
     echo "Installing Hashicorp Packer Ubuntu"
-    if [[ ! -d ${HOME}/downloads/packer_${PACKER_VER} ]]; then
-      wget -O ${HOME}/downloads/packer_${PACKER_VER}_linux_amd64.zip ${HASHICORP_URL}/packer/${PACKER_VER}/packer_${PACKER_VER}_linux_amd64.zip
-      unzip ${HOME}/downloads/packer_${PACKER_VER}_linux_amd64.zip -d ${HOME}/downloads/packer_${PACKER_VER}
-      sudo cp -a ${HOME}/downloads/packer_${PACKER_VER}/packer /usr/local/bin/
+    if [[ ! -d ${HOME}/software_downloads/packer_${PACKER_VER} ]]; then
+      wget -O ${HOME}/software_downloads/packer_${PACKER_VER}_linux_amd64.zip ${HASHICORP_URL}/packer/${PACKER_VER}/packer_${PACKER_VER}_linux_amd64.zip
+      unzip ${HOME}/software_downloads/packer_${PACKER_VER}_linux_amd64.zip -d ${HOME}/software_downloads/packer_${PACKER_VER}
+      sudo cp -a ${HOME}/software_downloads/packer_${PACKER_VER}/packer /usr/local/bin/
       sudo chmod 755 /usr/local/bin/packer
       sudo chown root:root /usr/local/bin/packer
     fi
 
     echo "Installing Hashicorp Vagrant Ubuntu"
-    if [[ ! -d ${HOME}/downloads/vagrant_${VAGRANT_VER} ]]; then
-      wget -O ${HOME}/downloads/vagrant_${VAGRANT_VER}_linux_amd64.zip ${HASHICORP_URL}/vagrant/${VAGRANT_VER}/vagrant_${VAGRANT_VER}_linux_amd64.zip
-      unzip ${HOME}/downloads/vagrant_${VAGRANT_VER}_linux_amd64.zip -d ${HOME}/downloads/vagrant_${VAGRANT_VER}
-      sudo cp -a ${HOME}/downloads/vagrant_${VAGRANT_VER}/vagrant /usr/local/bin/
+    if [[ ! -d ${HOME}/software_downloads/vagrant_${VAGRANT_VER} ]]; then
+      wget -O ${HOME}/software_downloads/vagrant_${VAGRANT_VER}_linux_amd64.zip ${HASHICORP_URL}/vagrant/${VAGRANT_VER}/vagrant_${VAGRANT_VER}_linux_amd64.zip
+      unzip ${HOME}/software_downloads/vagrant_${VAGRANT_VER}_linux_amd64.zip -d ${HOME}/software_downloads/vagrant_${VAGRANT_VER}
+      sudo cp -a ${HOME}/software_downloads/vagrant_${VAGRANT_VER}/vagrant /usr/local/bin/
       sudo chmod 755 /usr/local/bin/vagrant
       sudo chown root:root /usr/local/bin/vagrant
     fi
 
     echo "Installing docker-compose Ubuntu"
-    if [[ ! -f ${HOME}/downloads/docker-compose_${DOCKER_COMPOSE_VER} ]]; then
-      wget -O ${HOME}/downloads/docker-compose_${DOCKER_COMPOSE_VER} ${DOCKER_COMPOSE_URL}
-      sudo cp -a ${HOME}/downloads/docker-compose_${DOCKER_COMPOSE_VER} /usr/local/bin/
+    if [[ ! -f ${HOME}/software_downloads/docker-compose_${DOCKER_COMPOSE_VER} ]]; then
+      wget -O ${HOME}/software_downloads/docker-compose_${DOCKER_COMPOSE_VER} ${DOCKER_COMPOSE_URL}
+      sudo cp -a ${HOME}/software_downloads/docker-compose_${DOCKER_COMPOSE_VER} /usr/local/bin/
       sudo mv /usr/local/bin/docker-compose_${DOCKER_COMPOSE_VER} /usr/local/bin/docker-compose
       sudo chmod 755 /usr/local/bin/docker-compose
       sudo chown root:root /usr/local/bin/docker-compose
@@ -1009,10 +1009,10 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     fi
 
     echo "Installing kustomize"
-    cd ${HOME}/downloads
+    cd ${HOME}/software_downloads
     curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
-    if [[ -f ${HOME}/downloads/kustomize ]]; then
-      sudo -H mv ${HOME}/downloads/kustomize /usr/local/bin/kustomize
+    if [[ -f ${HOME}/software_downloads/kustomize ]]; then
+      sudo -H mv ${HOME}/software_downloads/kustomize /usr/local/bin/kustomize
       sudo chmod 755 /usr/local/bin/kustomize
       sudo chown root:root /usr/local/bin/kustomize
     fi
@@ -1053,12 +1053,12 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     curl https://pyenv.run | bash
 
     echo "Installing shellcheck RHEL"
-    if [[ ! -d ${HOME}/downloads/shellcheck-v${SHELLCHEK_VER} ]]; then
-      wget -O ${HOME}/downloads/shellcheck-v${SHELLCHEK_VER}.linux.x86_64.tar.xz https://shellcheck.storage.googleapis.com/shellcheck-v${SHELLCHEK_VER}.linux.x86_64.tar.xz
-      xz --decompress ${HOME}/downloads/shellcheck-v${SHELLCHEK_VER}.linux.x86_64.tar.xz
-      cd ${HOME}/downloads || return
-      tar -xf ${HOME}/downloads/shellcheck-v${SHELLCHEK_VER}.linux.x86_64.tar
-      sudo cp -a ${HOME}/downloads/shellcheck-v${SHELLCHEK_VER}/shellcheck /usr/local/bin/
+    if [[ ! -d ${HOME}/software_downloads/shellcheck-v${SHELLCHEK_VER} ]]; then
+      wget -O ${HOME}/software_downloads/shellcheck-v${SHELLCHEK_VER}.linux.x86_64.tar.xz https://shellcheck.storage.googleapis.com/shellcheck-v${SHELLCHEK_VER}.linux.x86_64.tar.xz
+      xz --decompress ${HOME}/software_downloads/shellcheck-v${SHELLCHEK_VER}.linux.x86_64.tar.xz
+      cd ${HOME}/software_downloads || return
+      tar -xf ${HOME}/software_downloads/shellcheck-v${SHELLCHEK_VER}.linux.x86_64.tar
+      sudo cp -a ${HOME}/software_downloads/shellcheck-v${SHELLCHEK_VER}/shellcheck /usr/local/bin/
       sudo chmod 755 /usr/local/bin/shellcheck
       sudo chown root:root /usr/local/bin/shellcheck
     fi
@@ -1091,9 +1091,9 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H python3 -m pip install glances
 
     echo "Installing go RHEL"
-    if [[ ! -f ${HOME}/downloads/go${GO_VER}.linux-amd64.tar.gz ]]; then
-      wget -O ${HOME}/downloads/go${GO_VER}.linux-amd64.tar.gz https://dl.google.com/go/go${GO_VER}.linux-amd64.tar.gz
-      sudo tar -C /usr/local -xzf ${HOME}/downloads/go${GO_VER}.linux-amd64.tar.gz
+    if [[ ! -f ${HOME}/software_downloads/go${GO_VER}.linux-amd64.tar.gz ]]; then
+      wget -O ${HOME}/software_downloads/go${GO_VER}.linux-amd64.tar.gz https://dl.google.com/go/go${GO_VER}.linux-amd64.tar.gz
+      sudo tar -C /usr/local -xzf ${HOME}/software_downloads/go${GO_VER}.linux-amd64.tar.gz
     fi
 
     echo "Installing google-cloud-sdk RHEL"
@@ -1126,10 +1126,10 @@ EOM
     sudo -H dnf install kubectl -y
 
     echo "Installing Hashicorp Packer RHEL"
-    if [[ ! -d ${HOME}/downloads/packer_${PACKER_VER} ]]; then
-      wget -O ${HOME}/downloads/packer_${PACKER_VER}_linux_amd64.zip ${HASHICORP_URL}/packer/${PACKER_VER}/packer_${PACKER_VER}_linux_amd64.zip
-      unzip ${HOME}/downloads/packer_${PACKER_VER}_linux_amd64.zip -d ${HOME}/downloads/packer_${PACKER_VER}
-      sudo cp -a ${HOME}/downloads/packer_${PACKER_VER}/packer /usr/local/bin/
+    if [[ ! -d ${HOME}/software_downloads/packer_${PACKER_VER} ]]; then
+      wget -O ${HOME}/software_downloads/packer_${PACKER_VER}_linux_amd64.zip ${HASHICORP_URL}/packer/${PACKER_VER}/packer_${PACKER_VER}_linux_amd64.zip
+      unzip ${HOME}/software_downloads/packer_${PACKER_VER}_linux_amd64.zip -d ${HOME}/software_downloads/packer_${PACKER_VER}
+      sudo cp -a ${HOME}/software_downloads/packer_${PACKER_VER}/packer /usr/local/bin/
       sudo chmod 755 /usr/local/bin/packer
       sudo chown root:root /usr/local/bin/packer
     fi
@@ -1175,18 +1175,18 @@ EOM
 
   echo "Installing aws-cli"
   if [[ ${LINUX} ]]; then
-    if [[ ! -d ${HOME}/downloads/awscli ]]; then
-      mkdir ${HOME}/downloads/awscli
+    if [[ ! -d ${HOME}/software_downloads/awscli ]]; then
+      mkdir ${HOME}/software_downloads/awscli
     fi
-    if [[ ! -f ${HOME}/downloads/awscli/awscliv2.zip ]]; then
-      wget -O ${HOME}/downloads/awscli/awscliv2.zip "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
-      unzip ${HOME}/downloads/awscli/awscliv2.zip -d ${HOME}/downloads/awscli
-      sudo -H ${HOME}/downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin
+    if [[ ! -f ${HOME}/software_downloads/awscli/awscliv2.zip ]]; then
+      wget -O ${HOME}/software_downloads/awscli/awscliv2.zip "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
+      unzip ${HOME}/software_downloads/awscli/awscliv2.zip -d ${HOME}/software_downloads/awscli
+      sudo -H ${HOME}/software_downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin
     fi
   elif [[ ${MACOS} ]]; then
-    if [[ ! -d ${HOME}/downloads/AWSCLIV2.pkg ]]; then
-      wget -O ${HOME}/downloads/awscli/AWSCLIV2.pkg "https://awscli.amazonaws.com/AWSCLIV2.pkg"
-      sudo installer -pkg ${HOME}/downloads/awscli/AWSCLIV2.pkg -target /
+    if [[ ! -d ${HOME}/software_downloads/AWSCLIV2.pkg ]]; then
+      wget -O ${HOME}/software_downloads/awscli/AWSCLIV2.pkg "https://awscli.amazonaws.com/AWSCLIV2.pkg"
+      sudo installer -pkg ${HOME}/software_downloads/awscli/AWSCLIV2.pkg -target /
     fi
   fi
 
@@ -1215,20 +1215,20 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
 
   echo "Installing ruby-install on linux"
   if [[ ${LINUX} ]]; then
-    if [[ ! -d ${HOME}/downloads/ruby-install-${RUBY_INSTALL_VER} ]]; then
-      wget -O ${HOME}/downloads/ruby-install-${RUBY_INSTALL_VER}.tar.gz https://github.com/postmodern/ruby-install/archive/v${RUBY_INSTALL_VER}.tar.gz
-      tar -xzvf ${HOME}/downloads/ruby-install-${RUBY_INSTALL_VER}.tar.gz -C ${HOME}/downloads/
-      cd ${HOME}/downloads/ruby-install-${RUBY_INSTALL_VER}/ || return
+    if [[ ! -d ${HOME}/software_downloads/ruby-install-${RUBY_INSTALL_VER} ]]; then
+      wget -O ${HOME}/software_downloads/ruby-install-${RUBY_INSTALL_VER}.tar.gz https://github.com/postmodern/ruby-install/archive/v${RUBY_INSTALL_VER}.tar.gz
+      tar -xzvf ${HOME}/software_downloads/ruby-install-${RUBY_INSTALL_VER}.tar.gz -C ${HOME}/software_downloads/
+      cd ${HOME}/software_downloads/ruby-install-${RUBY_INSTALL_VER}/ || return
       sudo make install
     fi
   fi
 
   echo "Installing chruby on linux"
   if [[ ${LINUX} ]]; then
-    if [[ ! -d ${HOME}/downloads/chruby-${CHRUBY_VER} ]]; then
-      wget -O ${HOME}/downloads/chruby-${CHRUBY_VER}.tar.gz https://github.com/postmodern/chruby/archive/v${CHRUBY_VER}.tar.gz
-      tar -xzvf ${HOME}/downloads/chruby-${CHRUBY_VER}.tar.gz -C ${HOME}/downloads/
-      cd ${HOME}/downloads/chruby-${CHRUBY_VER}/ || return
+    if [[ ! -d ${HOME}/software_downloads/chruby-${CHRUBY_VER} ]]; then
+      wget -O ${HOME}/software_downloads/chruby-${CHRUBY_VER}.tar.gz https://github.com/postmodern/chruby/archive/v${CHRUBY_VER}.tar.gz
+      tar -xzvf ${HOME}/software_downloads/chruby-${CHRUBY_VER}.tar.gz -C ${HOME}/software_downloads/
+      cd ${HOME}/software_downloads/chruby-${CHRUBY_VER}/ || return
       sudo make install
     fi
   fi
@@ -1314,16 +1314,16 @@ if [[ ${UPDATE} ]]; then
   python3 -m pip check
   if [[ ${MACOS} ]]; then
     echo "Updating Macos awscli"
-    cd ${HOME}/downloads
+    cd ${HOME}/software_downloads
     curl "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "AWSCLIV2.pkg"
     sudo installer -pkg AWSCLIV2.pkg -target /
     cd ${PERSONAL_GITREPOS}/${DOTFILES}
   elif [[ ${LINUX} ]]; then
     echo "Updating Linux awscli"
-    cd ${HOME}/downloads/awscli
+    cd ${HOME}/software_downloads/awscli
     curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
     unzip -u -o awscliv2.zip
-    sudo -H ${HOME}/downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin --update
+    sudo -H ${HOME}/software_downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin --update
     cd ${PERSONAL_GITREPOS}/${DOTFILES}
   fi
   if [[ -d ${HOME}/.tfenv ]]; then
