@@ -8,4 +8,4 @@ lint:
 	hadolint Dockerfile
 
 build: lint
-	@docker build -t brujack/devcontainer .
+	@DOCKER_BUILDKIT=1 docker build -t brujack/devcontainer:latest .
