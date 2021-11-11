@@ -240,4 +240,6 @@ RUN sudo gem install test-kitchen \
   && sudo gem install bundle
 
 # install of ansible and other required pip packages
-RUN python3 -m pip install --no-cache-dir ansible ansible-cmdb ansible-lint pylint jmespath-terminal psutil
+RUN python3 -m pip install --no-cache-dir ansible ansible-cmdb ansible-lint pylint jmespath-terminal psutil \
+# cleanup tmp
+  && rm -rf /tmp/* /var/tmp/*
