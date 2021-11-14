@@ -557,6 +557,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     cd ${BREWFILE_LOC} && brew bundle
     brew tap teamookla/speedtest
     brew install speedtest
+    brew install --cask dotnet
     cd ${PERSONAL_GITREPOS}/${DOTFILES} || return
 
     # the below casks and mas are not in a brewfile since they will "fail" if already installed
