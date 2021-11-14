@@ -156,7 +156,7 @@ fi
 [[ $(hostname -s) = "kube-1.conecrazy.io" ]] && export KUBE1=1
 [[ $(hostname -s) = "kube-2.conecrazy.io" ]] && export KUBE2=1
 [[ $(hostname -s) = "bruce-work" ]] && export BRUCEWORK=1
-[[ $(hostname -s) = "L-BJackson" ]] && export WORK=1
+[[ $(hostname -s) = "laptop" ]] && export LAPTOP=1
 [[ $(hostname -s) = "workstation" ]] && export WORKSTATION=1
 [[ $(hostname -s) = "cruncher" ]] && export CRUNCHER=1
 [[ $(hostname -s) = "virtualmachine1c4f85d6" ]] && export WORKSTATION=1
@@ -340,10 +340,13 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     elif [[ ! -L ${HOME}/.gitconfig ]]; then
       ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_mac ${HOME}/.gitconfig
     fi
-    if [[ ${WORK} ]]; then
+    if [[ -d ${HOME}/git-repos/multiview ]]; then
       if [[ ! -L ${HOME}/git-repos/multiview/.gitconfig ]]; then
         ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_mac_multiview ${HOME}/git-repos/multiview/.gitconfig
-      elif [[ ! -L ${HOME}/git-repos/gitlab/.gitconfig ]]; then
+      fi
+    fi
+    if [[ -d ${HOME}/git-repos/gitlab ]]; then
+      if [[ ! -L ${HOME}/git-repos/gitlab/.gitconfig ]]; then
         ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_mac_gitlab ${HOME}/git-repos/gitlab/.gitconfig
       fi
     fi
@@ -356,10 +359,15 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
       ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_linux ${HOME}/.gitconfig
     fi
     if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]]; then
-      if [[ ! -L ${HOME}/git-repos/multiview/.gitconfig ]]; then
-        ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_linux_multiview ${HOME}/git-repos/multiview/.gitconfig
-      elif [[ ! -L ${HOME}/git-repos/gitlab/.gitconfig ]]; then
-        ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_linux_gitlab ${HOME}/git-repos/gitlab/.gitconfig
+      if [[ -d ${HOME}/git-repos/multiview ]]; then
+        if [[ ! -L ${HOME}/git-repos/multiview/.gitconfig ]]; then
+          ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_linux_multiview ${HOME}/git-repos/multiview/.gitconfig
+        fi
+      fi
+      if [[ -d ${HOME}/git-repos/gitlab ]]; then
+        if [[ ! -L ${HOME}/git-repos/gitlab/.gitconfig ]]; then
+          ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_linux_gitlab ${HOME}/git-repos/gitlab/.gitconfig
+        fi
       fi
     fi
   fi
@@ -612,7 +620,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/Malwarebytes.app" ]]; then
       brew install --cask malwarebytes
     fi
-    if [[ ${RATNA} ]] || [[ ${BRUCEWORK} ]]; then
+    if [[ ${RATNA} ]] || [[ ${BRUCEWORK} || ${LAPTOP} ]]; then
       if [[ ! -d "/Applications/Microsoft\ Word.app" ]]; then
         brew install --cask microsoft-office
       fi
@@ -716,7 +724,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       mas install 604825918
     fi
 
-    if [[ ${RATNA} ]] || [[ ${BRUCEWORK} ]]; then
+    if [[ ${RATNA} ]] || [[ ${BRUCEWORK} || $${LAPTOP} ]]; then
       echo "Installing extra apps via mas"
       if [[ ! -d "/Applications/Keynote.app" ]]; then
         mas install 409183694
@@ -981,7 +989,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
 
     if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]]; then
       echo "Installing .net5 sdk"
-      sudo -H apt install dotnet-sdk-5.0 -y
+      sudo -H apt install dotnet-sdk-6.0 -y
     fi
 
     python3 -m pip install glances
