@@ -206,7 +206,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
       xcode-select --install
       # Accept Xcode license
       sudo xcodebuild -license accept
-      /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install.sh)"
+      /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
     fi
   fi
 
