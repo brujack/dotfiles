@@ -203,6 +203,9 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
   if [[ ${MACOS} || ${LINUX} ]]; then
     if ! [ -x "$(command -v brew)" ]; then
       echo "Installing homebrew..."
+      xcode-select --install
+      # Accept Xcode license
+      sudo xcodebuild -license accept
       /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install.sh)"
     fi
   fi
@@ -748,9 +751,6 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       if [[ ! -d "/Applications/Xcode.app" ]]; then
         mas install 497799835
       fi
-      xcode-select --install
-      # Accept Xcode license
-      sudo xcodebuild -license accept
     fi
   fi
 
