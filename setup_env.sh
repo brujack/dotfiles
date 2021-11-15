@@ -748,6 +748,9 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       if [[ ! -d "/Applications/Read CHM.app" ]]; then
         mas install 594432954
       fi
+      if [[ ! -d "/Applications/Telegram.app" ]]; then
+        mas install 747648890
+      fi
       echo "Installing xcode-stuff"
       if [[ ! -d "/Applications/Xcode.app" ]]; then
         mas install 497799835
