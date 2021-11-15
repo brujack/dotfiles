@@ -181,11 +181,17 @@ RUN /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/instal
   && mkdir /home/${USER_NAME}/downloads/helm-v${HELM_VER} \
   && tar zxvf /home/${USER_NAME}/downloads/helm-v${HELM_VER}-linux-amd64.tar.gz -C /home/${USER_NAME}/downloads/helm-v${HELM_VER} \
   && sudo cp -a /home/${USER_NAME}/downloads/helm-v${HELM_VER}/linux-amd64/helm /usr/local/bin/helm \
-  #kubectl
+  # kubectl
   && wget -q -O /home/${USER_NAME}/downloads/kubectl "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" \
   && sudo cp -a /home/${USER_NAME}/downloads/kubectl /usr/local/bin/kubectl \
   && chmod 755 /usr/local/bin/kubectl \
   && sudo chown root:root /usr/local/bin/kubectl \
+  # docker-compose
+  && wget -q -O /home/${USER_NAME}/downloads/docker-compose_${DOCKER_COMPOSE_VER} ${DOCKER_COMPOSE_URL} \
+  && sudo cp -a /home/${USER_NAME}/downloads/docker-compose_${DOCKER_COMPOSE_VER} /usr/local/bin/ \
+  && sudo mv /usr/local/bin/docker-compose_${DOCKER_COMPOSE_VER} /usr/local/bin/docker-compose \
+  && sudo chmod 755 /usr/local/bin/docker-compose \
+  && sudo chown root:root /usr/local/bin/docker-compose \
   # install hashicorp terraform
   && wget -q -O /home/${USER_NAME}/downloads/terraform_${TERRAFORM_VER}_linux_amd64.zip ${HASHICORP_URL}/terraform/${TERRAFORM_VER}/terraform_${TERRAFORM_VER}_linux_amd64.zip \
   && unzip /home/${USER_NAME}/downloads/terraform_${TERRAFORM_VER}_linux_amd64.zip -d /home/${USER_NAME}/downloads/terraform_${TERRAFORM_VER} \
