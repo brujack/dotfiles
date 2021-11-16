@@ -135,6 +135,7 @@ export HISTIGNORE="ls:cd:cd -:pwd:exit:date:* --help";
 if [[ ${LAPTOP} ]]; then
   export FZF_BASE=/opt/homebrew/bin/fzf
 fi
+[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 
 # Which plugins would you like to load? (plugins can be found in ~/.oh-my-zsh/plugins/*)
 # Custom plugins may be added to ~/.oh-my-zsh/custom/plugins/
