@@ -15,6 +15,8 @@ ARG HASHICORP_URL="https://releases.hashicorp.com"
 ARG TERRAFORM_VER="1.0.9"
 ARG YQ_VER="4.14.2"
 ARG YQ_URL="https://github.com/mikefarah/yq/releases/download/v${YQ_VER}/yq_linux_amd64"
+ARG DOCKER_COMPOSE_VER="v2.1.1"
+ARG DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VER}/docker-compose-Linux-x86_64"
 
 ARG USER_NAME="vscode"
 
@@ -32,6 +34,7 @@ RUN apt-get update && apt-get upgrade -y \
   bison \
   build-essential \
   ca-certificates \
+  coreutils \
   cpanminus \
   curl \
   dnstop \
@@ -199,8 +202,8 @@ RUN /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/instal
   && chmod 755 /usr/local/bin/terraform \
   && sudo chown root:root /usr/local/bin/terraform \
   # install yq
-  && wget -q -O ${HOME}/downloads/yq_${YQ_VER} ${YQ_URL} \
-  && sudo cp -a ${HOME}/downloads/yq_${YQ_VER} /usr/local/bin/ \
+  && wget -q -O /home/${USER_NAME}/downloads/yq_${YQ_VER} ${YQ_URL} \
+  && sudo cp -a /home/${USER_NAME}/downloads/yq_${YQ_VER} /usr/local/bin/ \
   && sudo mv /usr/local/bin/yq_${YQ_VER} /usr/local/bin/yq \
   && chmod 755 /usr/local/bin/yq \
   && sudo chown root:root /usr/local/bin/yq \
@@ -217,4 +220,4 @@ RUN /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/instal
   # install of ansible and other required pip packages
   && python3 -m pip install --no-cache-dir ansible ansible-cmdb ansible-lint pylint jmespath-terminal psutil \
   # cleanup tmp
-  && sudo rm -rf /tmp/* /var/tmp/*
+  && sudo rm -rf /tmp/* /var/tmp/* /home/${USER_NAME}
