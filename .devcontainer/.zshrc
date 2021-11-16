@@ -459,3 +459,8 @@ if [[ -f ${HOME}/git-repos/securekey/cloud-eng/k8dev/scripts/auto-complete.sh ]]
   source "${HOME}/git-repos/securekey/cloud-eng/k8dev/scripts/auto-complete.sh"
 fi
 [[ -d /home/bruce/.k8dev ]] && export PATH="/home/bruce/.k8dev/bin:$PATH"
+
+# for fzf
+if [[ ${LAPTOP} ]]; then
+  export FZF_BASE=/opt/homebrew/bin/fzf
+fi
