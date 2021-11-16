@@ -739,6 +739,9 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       if [[ ! -d "/Applications/iMovie.app" ]]; then
         mas install 408981434
       fi
+      if [[ ! -d "/Applications/Magnet.app" ]]; then
+        mas install 441258766
+      fi
       if [[ ! -d "/Applications/Numbers.app" ]]; then
         mas install 409203825
       fi
