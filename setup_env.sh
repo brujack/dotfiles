@@ -563,6 +563,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     brew tap teamookla/speedtest
     brew install speedtest
     brew install --cask dotnet
+    brew install --cask chef/chef/inspec
     cd ${PERSONAL_GITREPOS}/${DOTFILES} || return
 
     # the below casks and mas are not in a brewfile since they will "fail" if already installed
@@ -583,9 +584,6 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     fi
     if [[ ! -d "/Applications/Carbon Copy Cloner.app" ]]; then
       brew install --cask carbon-copy-cloner
-    fi
-    if [[ ! -d /opt/chefdk ]]; then
-      brew install --cask chefdk
     fi
     if [[ ! -d "/Applications/DBeaver.app" ]]; then
       brew install --cask dbeaver-community
