@@ -249,7 +249,12 @@ alias frontyard='ssh bruce@frontyard'
 
 # command aliases
 if [[ ${MACOS} ]]; then
-  alias make='/usr/local/bin/gmake'
+  if [[ ${RATNA} ]]; then
+    alias make='/usr/local/bin/gmake'
+  fi
+  if [[ ${LAPTOP} ]]; then
+    alias make='/opt/homebrew/bin/gmake'
+  fi
 fi
 alias au='sudo apt-get update'
 alias ad='sudo apt-get dist-upgrade -y'
