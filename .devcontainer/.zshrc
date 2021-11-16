@@ -43,7 +43,7 @@ fi
 [[ $(uname -r) =~ microsoft ]] && export WINDOWS=1
 [[ $(hostname -s) = "ratna" ]] && export RATNA=1
 [[ $(hostname -s) = "bruce-work" ]] && export BRUCEWORK=1
-[[ $(hostname -s) = "L-BJackson" ]] && export WORK=1
+[[ $(hostname -s) = "laptop" ]] && export LAPTOP=1
 [[ $(hostname -s) = "workstation" ]] && export WORKSTATION=1
 [[ $(hostname -s) = "cruncher" ]] && export CRUNCHER=1
 
@@ -53,7 +53,12 @@ export PROJECT_HOME=${HOME}./virtualenvs
 if [[ ${MACOS} ]]; then
   VIRTUALENVWRAPPER_SCRIPT=/usr/local/bin/virtualenvwrapper.sh
   VIRTUALENVWRAPPER_PYTHON=/usr/local/bin/python3
-  CHRUBY_LOC="/usr/local/opt/chruby/share"
+  if [[ ${RATNA} ]]; then
+    CHRUBY_LOC="/usr/local/opt/chruby/share"
+  fi
+  if [[ ${LAPTOP} ]]; then
+    CHRUBY_LOC="/opt/homebrew/opt/chruby/share/"
+  fi
 fi
 if [[ ${LINUX} ]]; then
   if [[ -f ${HOME}/.local/bin/virtualenvwrapper.sh ]]; then
@@ -249,12 +254,7 @@ alias frontyard='ssh bruce@frontyard'
 
 # command aliases
 if [[ ${MACOS} ]]; then
-  if [[ ${RATNA} ]]; then
-    alias make='/usr/local/bin/gmake'
-  fi
-  if [[ ${LAPTOP} ]]; then
-    alias make='/opt/homebrew/bin/gmake'
-  fi
+  alias make='/usr/local/bin/gmake'
 fi
 alias au='sudo apt-get update'
 alias ad='sudo apt-get dist-upgrade -y'
