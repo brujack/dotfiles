@@ -165,7 +165,12 @@ fi
 if [[ ${MACOS} ]]; then
   VSCODE="${HOME}/Library/Application Support/Code/User"
   VIRTUALENV_LOC="/usr/local/bin"
-  CHRUBY_LOC="/usr/local/opt/chruby/share"
+  if [[ ${RATNA} ]]; then
+    CHRUBY_LOC="/usr/local/opt/chruby/share"
+  fi
+  if [[ ${LAPTOP} ]]; then
+    CHRUBY_LOC="/opt/homebrew/opt/chruby/share/"
+  fi
 elif [[ ${LINUX} ]]; then
   if [[ -f ${HOME}/.local/bin/virtualenv ]]; then
     VIRTUALENV_LOC="${HOME}/.local/bin"
