@@ -131,6 +131,11 @@ COMPLETION_WAITING_DOTS="true"
 export HISTCONTROL=ignoredups;
 export HISTIGNORE="ls:cd:cd -:pwd:exit:date:* --help";
 
+# for fzf
+if [[ ${LAPTOP} ]]; then
+  export FZF_BASE=/opt/homebrew/bin/fzf
+fi
+
 # Which plugins would you like to load? (plugins can be found in ~/.oh-my-zsh/plugins/*)
 # Custom plugins may be added to ~/.oh-my-zsh/custom/plugins/
 # Example format: plugins=(rails git textmate ruby lighthouse)
@@ -459,8 +464,3 @@ if [[ -f ${HOME}/git-repos/securekey/cloud-eng/k8dev/scripts/auto-complete.sh ]]
   source "${HOME}/git-repos/securekey/cloud-eng/k8dev/scripts/auto-complete.sh"
 fi
 [[ -d /home/bruce/.k8dev ]] && export PATH="/home/bruce/.k8dev/bin:$PATH"
-
-# for fzf
-if [[ ${LAPTOP} ]]; then
-  export FZF_BASE=/opt/homebrew/bin/fzf
-fi
