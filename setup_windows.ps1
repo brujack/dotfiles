@@ -85,6 +85,7 @@ cinst -y googlechrome
 cinst -y iperf3
 cinst -y kubernetes-cli
 cinst -y kubernetes-helm
+cinst -y launchy
 cinst -y make
 cinst -y microsoft-teams
 cinst -y microsoft-windows-terminal
