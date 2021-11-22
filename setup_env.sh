@@ -1328,6 +1328,8 @@ if [[ ${UPDATE} ]]; then
   if [[ ${CENTOS} ]]; then
     sudo -H yum update -y
   fi
+  echo "Updating mas packages"
+  mas upgrade
   echo "Updating pip3 packages"
   python3 -m pip install --upgrade pip
   python3 -m pip list --outdated --format=columns | awk '{print $1;}' | awk 'NR>2' | xargs -n1 python3 -m pip install -U
