@@ -26,6 +26,12 @@ KIND_VER="0.11.1"
 KIND_URL="https://kind.sigs.k8s.io/dl/v${KIND_VER}/kind-linux-amd64"
 YQ_VER="4.14.2"
 YQ_URL="https://github.com/mikefarah/yq/releases/download/v${YQ_VER}/yq_linux_amd64"
+TFLINT_VER="0.33.1"
+TFLINT_URL="https://github.com/terraform-linters/tflint/releases/download/v${TFLINT_VER}/tflint_linux_amd64.zip"
+TFSEC_VER="0.60.1"
+TFSEC_URL="https://github.com/liamg/tfsec/releases/download/v${TFSEC_VER}/tfsec-linux-amd64"
+TERRAGRUNT_VER="0.35.12"
+TERRAGRUNT_URL="https://github.com/gruntwork-io/terragrunt/releases/download/${TERRAGRUNT_VER}/terragrunt_linux_amd64"
 RHEL_KUBECTL_REPO="[kubernetes]
 name=Kubernetes
 baseurl=http://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
@@ -1190,6 +1196,24 @@ EOM
     fi
     if [[ -f ${HOME}/.tfenv/bin/tfenv ]]; then
       tfenv install ${TERRAFORM_VER}
+    fi
+    echo "Installing tflint"
+    if [[ ! -f ${HOME}/software_downloads/tflint_linux_amd64.zip ]]; then
+      wget -O ${HOME}/software_downloads/tflint_linux_amd64.zip ${TFLINT_URL}
+      sudo -H unzip ${HOME}/software_downloads/tflint_linux_amd64.zip -d /usr/local/bin/tflint
+      sudo -H chmod 755 /usr/local/bin/tflint
+    fi
+    echo "Installing tfsec"
+    if [[ ! -f ${HOME}/software_downloads/tfsec-linux-amd64 ]]; then
+      wget -O ${HOME}/software_downloads/tfsec-linux-amd64 ${TFSEC_URL}
+      sudo -H mv ${HOME}/software_downloads/tfsec-linux-amd64 /usr/local/bin/tfsec
+      sudo -H chmod 755 /usr/local/bin/tfsec
+    fi
+    echo "Installing terragrunt"
+    if [[ ! -f ${HOME}/software_downloads/terragrunt_linux_amd64 ]]; then
+      wget -O ${HOME}/software_downloads/terragrunt_linux_amd64 ${TERRAGRUNT_URL}
+      sudo -H mv ${HOME}/software_downloads/terragrunt_linux_amd64 /usr/local/bin/terragrunt
+      sudo -H chmod 755 /usr/local/bin/terragrunt
     fi
   fi
 
