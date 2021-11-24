@@ -1198,7 +1198,12 @@ EOM
       tfenv install ${TERRAFORM_VER}
     fi
     echo "Installing tflint"
-    if [[ ! -f ${HOME}/software_downloads/tflint_linux_amd64.zip ]]; then
+    if [[ -f ${HOME}/software_downloads/tflint_linux_amd64.zip ]]; then
+      rm ${HOME}/software_downloads/tflint_linux_amd64.zip
+      wget -O ${HOME}/software_downloads/tflint_linux_amd64.zip ${TFLINT_URL}
+      sudo -H unzip ${HOME}/software_downloads/tflint_linux_amd64.zip -d /usr/local/bin
+      sudo -H chmod 755 /usr/local/bin/tflint
+    else
       wget -O ${HOME}/software_downloads/tflint_linux_amd64.zip ${TFLINT_URL}
       sudo -H unzip ${HOME}/software_downloads/tflint_linux_amd64.zip -d /usr/local/bin
       sudo -H chmod 755 /usr/local/bin/tflint
