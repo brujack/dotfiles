@@ -161,7 +161,6 @@ fi
 [[ $(hostname -f) = "kube-2.conecrazy.io" ]] && export KUBE=1
 [[ $(hostname -s) = "kube-1.conecrazy.io" ]] && export KUBE1=1
 [[ $(hostname -s) = "kube-2.conecrazy.io" ]] && export KUBE2=1
-[[ $(hostname -s) = "bruce-work" ]] && export BRUCEWORK=1
 [[ $(hostname -s) = "laptop" ]] && export LAPTOP=1
 [[ $(hostname -s) = "workstation" ]] && export WORKSTATION=1
 [[ $(hostname -s) = "cruncher" ]] && export CRUNCHER=1
@@ -633,7 +632,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/Malwarebytes.app" ]]; then
       brew install --cask malwarebytes
     fi
-    if [[ ${RATNA} ]] || [[ ${BRUCEWORK} || ${LAPTOP} ]]; then
+    if [[ ${RATNA} ]] || ${LAPTOP} ]]; then
       if [[ ! -d "/Applications/Microsoft\ Word.app" ]]; then
         brew install --cask microsoft-office
       fi
@@ -658,6 +657,9 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     fi
     if [[ ! -d "/Applications/Spotify.app" ]]; then
       brew install --cask spotify
+    fi
+    if [[ ! -d "/Applications/Streamlabs\ OBS.app" ]]; then
+      brew install --cask streamlabs-obs
     fi
     if [[ ! -d "/Applications/TeamViewer.app" ]]; then
       brew install --cask teamviewer
@@ -737,7 +739,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       mas install 604825918
     fi
 
-    if [[ ${RATNA} ]] || [[ ${BRUCEWORK} || $${LAPTOP} ]]; then
+    if [[ ${RATNA} ]] || $${LAPTOP} ]]; then
       echo "Installing extra apps via mas"
       if [[ ! -d "/Applications/Keynote.app" ]]; then
         mas install 409183694
