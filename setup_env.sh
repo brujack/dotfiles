@@ -567,12 +567,14 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     cd ${BREWFILE_LOC} && brew bundle
     brew tap teamookla/speedtest
     brew install speedtest
-    brew install --cask dotnet
+    brew install --cask balenaetcher
     brew install --cask chef/chef/inspec
+    brew install --cask dotnet
+
     cd ${PERSONAL_GITREPOS}/${DOTFILES} || return
 
     # the below casks and mas are not in a brewfile since they will "fail" if already installed
-    if [[ ! -d "/Applications/Alfred 4.app" ]]; then
+    if [[ ! -d "/Applications/Alfred\ 4.app" ]]; then
       brew install --cask alfred
     fi
     if [[ ! -d "/Applications/AppCleaner.app" ]]; then
@@ -584,10 +586,10 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/DaisyDisk.app" ]]; then
       brew install --cask daisydisk
     fi
-    if [[ ! -d "/Applications/Beyond Compare.app" ]]; then
+    if [[ ! -d "/Applications/Beyond\ Compare.app" ]]; then
       brew install --cask beyond-compare
     fi
-    if [[ ! -d "/Applications/Carbon Copy Cloner.app" ]]; then
+    if [[ ! -d "/Applications/Carbon\ Copy Cloner.app" ]]; then
       brew install --cask carbon-copy-cloner
     fi
     if [[ ! -d "/Applications/DBeaver.app" ]]; then
@@ -605,19 +607,22 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/Firefox.app" ]]; then
       brew install --cask firefox
     fi
+    if [[ ! -d "/Applications/Flycut.app" ]]; then
+      brew install --cask flycut
+    fi
     if [[ ! -d "/Applications/Fork.app" ]]; then
       brew install --cask fork
     fi
     if [[ ! -d "/Applications/Funter.app" ]]; then
       brew install --cask funter
     fi
-    if [[ ! -d "/Applications/Google Chrome.app" ]]; then
+    if [[ ! -d "/Applications/Google\ Chrome.app" ]]; then
       brew install --cask google-chrome
     fi
     if [[ ! -d "/usr/local/Caskroom/google-cloud-sdk" ]]; then
       brew install --cask google-cloud-sdk
     fi
-    if [[ ! -d "/Applications/iStat Menus.app" ]]; then
+    if [[ ! -d "/Applications/iStat\ Menus.app" ]]; then
       brew install --cask istat-menus
     fi
     if [[ ! -d "/Applications/iTerm.app" ]]; then
@@ -625,6 +630,9 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     fi
     if [[ ! -d "/Applications/Lens.app" ]]; then
       brew install --cask lens
+    fi
+    if [[ ! -d "/Applications/LastPass.app.app" ]]; then
+      brew install --cask lastpass
     fi
     if [[ ! -d "/Applications/MacDown.app" ]]; then
       brew install --cask macdown
@@ -658,6 +666,9 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/Spotify.app" ]]; then
       brew install --cask spotify
     fi
+    if [[ ! -d "/Applications/Steam.app" ]]; then
+      brew install --cask steam
+    fi
     if [[ ! -d "/Applications/Streamlabs\ OBS.app" ]]; then
       brew install --cask streamlabs-obs
     fi
@@ -670,8 +681,11 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/Vagrant.app" ]]; then
       brew install --cask vagrant
     fi
-    if [[ ! -d "/Applications/Visual Studio Code.app" ]]; then
+    if [[ ! -d "/Applications/Visual\ Studio\ Code.app" ]]; then
       brew install --cask visual-studio-code
+    fi
+    if [[ ! -d "/Applications/VLC.app" ]]; then
+      brew install --cask vlc
     fi
     if [[ ! -d "/Applications/zoom.us.app" ]]; then
       brew install --cask zoom
@@ -684,13 +698,16 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H softwareupdate --install --all --verbose
 
     echo "Installing common apps via mas"
-    if [[ ! -d "/Applications/1Password 7.app" ]]; then
+    if [[ ! -d "/Applications/1Password\ 7.app" ]]; then
       mas install 1333542190
     fi
-    if [[ ! -d "/Applications/Better Rename 9.app" ]]; then
+    if [[ ! -d "/Applications/Better\ Rename\ 9.app" ]]; then
       mas install 414209656
     fi
-    if [[ ! -d "/Applications/Blackmagic Disk Speed Test.app" ]]; then
+    if [[ ! -d "/Applications/Brother\ iPrint\&Scan.app" ]]; then
+      mas install 1193539993
+    fi
+    if [[ ! -d "/Applications/Blackmagic\ Disk\ Speed\ Test.app" ]]; then
       mas install 425264550
     fi
     if [[ ! -d "/Applications/Evernote.app" ]]; then
@@ -699,7 +716,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/Flycut.app" ]]; then
       mas install 442160987
     fi
-    if [[ ! -d "/Applications/iNet Network Scanner.app" ]]; then
+    if [[ ! -d "/Applications/iNet\ Network\ Scanner.app" ]]; then
       mas install 403304796
     fi
     if [[ ! -d "/Applications/Mactracker.app" ]]; then
@@ -711,10 +728,10 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/Markoff.app" ]]; then
       mas install 1084713122
     fi
-    if [[ ! -d "/Applications/Microsoft Remote Desktop.app" ]]; then
+    if [[ ! -d "/Applications/Microsoft\ Remote\ Desktop.app" ]]; then
       mas install 715768417
     fi
-    if [[ ! -d "/Applications/Remote Desktop.app" ]]; then
+    if [[ ! -d "/Applications/Remote\ Desktop.app" ]]; then
       mas install 409907375
     fi
     if [[ ! -d "/Applications/Simplenote.app" ]]; then
@@ -726,16 +743,19 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/Speedtest.app" ]]; then
       mas install 1153157709
     fi
-    if [[ ! -d "/Applications/SQLPro for Postgres.app" ]]; then
+    if [[ ! -d "/Applications/SQLPro\ for\ Postgres.app" ]]; then
       mas install 1025345625
     fi
-    if [[ ! -d "/Applications/The Unarchiver.app" ]]; then
+    if [[ ! -d "/Applications/Sync\ Folders\ Pro.app" ]]; then
+      mas install 522706442
+    fi
+    if [[ ! -d "/Applications/The\ Unarchiver.app" ]]; then
       mas install 425424353
     fi
     if [[ ! -d "/Applications/Transmit.app" ]]; then
       mas install 403388562
     fi
-    if [[ ! -d "/Applications/Valentina Studio.app" ]]; then
+    if [[ ! -d "/Applications/Valentina\ Studio.app" ]]; then
       mas install 604825918
     fi
 
