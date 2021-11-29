@@ -516,12 +516,6 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     chmod 700 ${HOME}/.aws
   fi
 
-  echo "Creating home aws_creds"
-  if [[ ! -d ${HOME}/.aws_creds ]]; then
-    mkdir ${HOME}/.aws_creds
-    chmod 700 ${HOME}/.aws_creds
-  fi
-
   echo "Creating home gcloud_creds"
   if [[ ! -d ${HOME}/.gcloud_creds ]]; then
     mkdir ${HOME}/.gcloud_creds
@@ -640,7 +634,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/Malwarebytes.app" ]]; then
       brew install --cask malwarebytes
     fi
-    if [[ ${RATNA} ]] || ${LAPTOP} ]]; then
+    if [[ ${RATNA} || ${LAPTOP} ]]; then
       if [[ ! -d "/Applications/Microsoft\ Word.app" ]]; then
         brew install --cask microsoft-office
       fi
