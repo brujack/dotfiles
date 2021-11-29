@@ -1,36 +1,6 @@
-# for keychain ssh key management
-if [[ ${MACOS} ]]; then
-  if [[ ${RATNA} ]] || [[ ${BRUCEWORK} ]]; then
-    eval `/usr/local/bin/keychain --eval --agents ssh --inherit any id_rsa`
-    eval `/usr/local/bin/keychain --eval --agents ssh --inherit any id_ed25519`
-    eval `/usr/local/bin/keychain --eval --agents gpg B6DCFA4E5AFEA3AF35CE0A189A997C02283A9062 --inherit any`
-  elif [[ ${WORK} ]]; then
-    eval `/usr/local/bin/keychain --eval --agents ssh --inherit any id_rsa`
-    eval `/usr/local/bin/keychain --eval --agents ssh --inherit any id_ed25519`
-  fi
-elif [[ ${LINUX} ]]; then
-  if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]]; then
-    eval `/usr/bin/keychain --eval --agents ssh --inherit any id_rsa`
-    eval `/usr/bin/keychain --eval --agents ssh --inherit any id_ed25519`
-  else
-    eval `/usr/bin/keychain --eval --agents ssh --inherit any id_rsa`
-  fi
-fi
-
-# Enable Powerlevel10k instant prompt. Should stay close to the top of ~/.zshrc.
-# Initialization code that may require console input (password prompts, [y/n]
-# confirmations, etc.) must go above this block; everything else may go below.
-if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
-  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
-fi
-
 # choose which env we are running on
 [ "$(uname -s)" = "Darwin" ] && export MACOS=1
 [ "$(uname -s)" = "Linux" ] && export LINUX=1
-
-GO_VER="1.17"
-RUBY_VER="3.0.2"
-GITREPOS="${HOME}/git-repos"
 
 if [[ ${LINUX} ]]; then
   LINUX_TYPE=$(awk -F= '/^NAME/{print $2}' /etc/os-release | tr -d '"')
@@ -46,6 +16,34 @@ fi
 [[ $(hostname -s) = "laptop" ]] && export LAPTOP=1
 [[ $(hostname -s) = "workstation" ]] && export WORKSTATION=1
 [[ $(hostname -s) = "cruncher" ]] && export CRUNCHER=1
+
+# for keychain ssh key management
+if [[ ${MACOS} ]]; then
+  if [[ ${RATNA} ]] || [[ ${LAPTOP} ]]; then
+    eval `/usr/local/bin/keychain --eval --agents ssh --inherit any id_rsa`
+    eval `/usr/local/bin/keychain --eval --agents ssh --inherit any id_ed25519`
+    eval `/usr/local/bin/keychain --eval --agents gpg B6DCFA4E5AFEA3AF35CE0A189A997C02283A9062 --inherit any`
+  fi
+elif [[ ${LINUX} ]]; then
+  if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]]; then
+    eval `/usr/bin/keychain --eval --agents ssh --inherit any id_rsa`
+    eval `/usr/bin/keychain --eval --agents ssh --inherit any id_ed25519`
+    eval `/usr/bin/keychain --eval --agents gpg B6DCFA4E5AFEA3AF35CE0A189A997C02283A9062 --inherit any`
+  else
+    eval `/usr/bin/keychain --eval --agents ssh --inherit any id_rsa`
+  fi
+fi
+
+# Enable Powerlevel10k instant prompt. Should stay close to the top of ~/.zshrc.
+# Initialization code that may require console input (password prompts, [y/n]
+# confirmations, etc.) must go above this block; everything else may go below.
+if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
+  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
+fi
+
+GO_VER="1.17"
+RUBY_VER="3.0.2"
+GITREPOS="${HOME}/git-repos"
 
 # setup some variables for virtualenv
 export WORKON_HOME=${HOME}/.virtualenvs
