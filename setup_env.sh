@@ -213,9 +213,11 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
   if [[ ${MACOS} || ${LINUX} ]]; then
     if ! [ -x "$(command -v brew)" ]; then
       echo "Installing homebrew..."
-      xcode-select --install
-      # Accept Xcode license
-      sudo xcodebuild -license accept
+      if [[ ${MACOS} ]]; then
+        xcode-select --install
+        # Accept Xcode license
+        sudo xcodebuild -license accept
+      fi
       /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
     fi
   fi
@@ -418,6 +420,19 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/switch_terra_account.sh ${HOME}/switch_terra_account.sh
   elif [[ ! -L ${HOME}/switch_terra_account.sh ]]; then
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/switch_terra_account.sh ${HOME}/switch_terra_account.sh
+  fi
+
+  if [[ ${MACOS} || ${LINUX} ]]; then
+    echo "powershell profile"
+    if [[ ! -d ${HOME}/.config/powershell ]]; then
+      mkdir -p ${HOME}/.config/powershell
+    fi
+    if [[ -f ${HOME}/.config/powershell/profile.ps1 ]]; then
+      rm ${HOME}/.config/powershell/profile.ps1
+      ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/profile.ps1 ${HOME}/.config/powershell/profile.ps1
+    elif [[ ! -L ${HOME}/.config/powershell/profile.ps1 ]]; then
+      ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/profile.ps1 ${HOME}/.config/powershell/profile.ps1
+    fi
   fi
 
   echo "Installing Oh My ZSH..."
