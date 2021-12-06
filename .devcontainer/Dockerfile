@@ -15,7 +15,7 @@ ARG HASHICORP_URL="https://releases.hashicorp.com"
 ARG TERRAFORM_VER="1.0.9"
 ARG YQ_VER="4.14.2"
 ARG YQ_URL="https://github.com/mikefarah/yq/releases/download/v${YQ_VER}/yq_linux_amd64"
-ARG DOCKER_COMPOSE_VER="v2.1.1"
+ARG DOCKER_COMPOSE_VER="v2.2.2"
 ARG DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VER}/docker-compose-Linux-x86_64"
 
 ARG USER_NAME="vscode"
