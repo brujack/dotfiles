@@ -640,8 +640,11 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/Lens.app" ]]; then
       brew install --cask lens
     fi
-    if [[ ! -d "/Applications/LastPass.app.app" ]]; then
+    if [[ ! -d "/Applications/LastPass.app" ]]; then
       brew install --cask lastpass
+    fi
+    if [[ ! -d "/Applications/LogMeIn\ Client.app" ]]; then
+      brew install --cask logmein-client
     fi
     if [[ ! -d "/Applications/MacDown.app" ]]; then
       brew install --cask macdown
