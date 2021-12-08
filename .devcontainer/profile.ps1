@@ -1,8 +1,9 @@
-Import-Module posh-git
-Import-Module oh-my-posh
+Import-Module -Name posh-git
+Import-Module -Name oh-my-posh
 Import-Module -Name Microsoft.PowerShell.UnixCompleters
 Import-Module -Name Terminal-Icons
 Import-Module -Name AWSPowerShell.NetCore
+Import-Module -Name posh-aws
 
 # if($env:LC_TERMINAL -eq "iTerm2") {
 #   $ThemeSettings.Options.ConsoleTitle = $false
