@@ -628,6 +628,9 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/Google\ Chrome.app" ]]; then
       brew install --cask google-chrome
     fi
+    if [[ ! -d "/Applications/GitHub\ Desktop.app" ]]; then
+      brew install --cask github
+    fi
     if [[ ! -d "/usr/local/Caskroom/google-cloud-sdk" ]]; then
       brew install --cask google-cloud-sdk
     fi
