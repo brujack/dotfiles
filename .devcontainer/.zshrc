@@ -173,24 +173,29 @@ if [[ ${LAPTOP} ]]; then
 fi
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 
+# zsh-autosuggestions
+if [[ ! -d ${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions ]]; then
+  git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
+fi
+
 # Which plugins would you like to load? (plugins can be found in ~/.oh-my-zsh/plugins/*)
 # Custom plugins may be added to ~/.oh-my-zsh/custom/plugins/
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
 if [[ ${MACOS} ]]; then
-  plugins=(ag ansible aws brew docker fzf git git-prompt helm history-substring-search kubectl macos python terraform vscode pyenv)
+  plugins=(ag ansible aws brew docker fzf git git-prompt helm history-substring-search kubectl macos python terraform vscode pyenv zsh-autosuggestions)
 fi
 if [[ ${UBUNTU} ]]; then
-  plugins=(ag ansible aws brew docker fzf git git-prompt helm history-substring-search kubectl python terraform ubuntu vscode pyenv)
+  plugins=(ag ansible aws brew docker fzf git git-prompt helm history-substring-search kubectl python terraform ubuntu vscode pyenv zsh-autosuggestions)
 fi
 if [[ ${FEDORA} ]]; then
-  plugins=(ag ansible aws docker fzf git git-prompt fedora helm history-substring-search kubectl python terraform vscode pyenv)
+  plugins=(ag ansible aws docker fzf git git-prompt fedora helm history-substring-search kubectl python terraform vscode pyenv zsh-autosuggestions)
 fi
 if [[ ${CENTOS} ]]; then
-  plugins=(ag ansible aws docker fzf git git-prompt fedora helm history-substring-search kubectl python terraform vscode pyenv)
+  plugins=(ag ansible aws docker fzf git git-prompt fedora helm history-substring-search kubectl python terraform vscode pyenv zsh-autosuggestions)
 fi
 if [[ ${REDHAT} ]]; then
-  plugins=(ag ansible aws docker fzf git git-prompt fedora helm history-substring-search kubectl python terraform vscode pyenv)
+  plugins=(ag ansible aws docker fzf git git-prompt fedora helm history-substring-search kubectl python terraform vscode pyenv zsh-autosuggestions)
 fi
 
 source $ZSH/oh-my-zsh.sh

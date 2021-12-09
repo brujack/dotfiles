@@ -1449,6 +1449,12 @@ if [[ ${UPDATE} ]]; then
     echo "Updating cheat.sh tab completion"
     curl https://cheat.sh/:zsh > ${HOME}/.zsh.d/_cht
   fi
+  if [[ -d ${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions ]]; then
+    echo "Updating zsh-autosuggestions"
+    cd ${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions
+    git pull
+    cd ${PERSONAL_GITREPOS}/${DOTFILES}
+  fi
 fi
 
 source ${HOME}/.zshrc
