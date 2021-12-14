@@ -8,4 +8,5 @@ Install-Module -Name Microsoft.PowerShell.UnixCompleters
 Install-Module -Name oh-my-posh
 Install-Module -Name posh-awsp
 Install-Module -Name posh-git
+Install-Module -Name PSFzf
 Install-Module -Name Terminal-Icons
