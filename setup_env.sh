@@ -430,10 +430,8 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     if [[ -f ${HOME}/.config/powershell/profile.ps1 ]]; then
       rm ${HOME}/.config/powershell/profile.ps1
       ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/profile.ps1 ${HOME}/.config/powershell/profile.ps1
-      ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/profile.ps1 ${HOME}/.config/powershell/Microsoft.PowerShell_profile.ps1
     elif [[ ! -L ${HOME}/.config/powershell/profile.ps1 ]]; then
       ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/profile.ps1 ${HOME}/.config/powershell/profile.ps1
-      ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/profile.ps1 ${HOME}/.config/powershell/Microsoft.PowerShell_profile.ps1
     fi
     if [[ -f ${HOME}/.config/powershell/bruce.omp.json ]]; then
       rm ${HOME}/.config/powershell/bruce.omp.json
