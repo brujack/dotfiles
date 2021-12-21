@@ -50,14 +50,11 @@
           }
         },
         {
-          "type": "git",
+          "type": "poshgit",
           "style": "powerline",
           "powerline_symbol": "\uE0B0",
-          "foreground": "#193549",
-          "background": "#95ffa4",
-          "properties": {
-            "template": "{{ .HEAD }}"
-          }
+          "foreground": "#ffffff",
+          "background": "#0077c2"
         },
         {
           "type": "exit",

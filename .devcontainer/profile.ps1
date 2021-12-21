@@ -12,6 +12,8 @@ Import-Module -Name PSFzf
 #Set-PoshPrompt -Theme agnosterplus
 oh-my-posh --init --shell pwsh --config ~/.config/powershell/bruce.omp.json | Invoke-Expression
 
+$env:POSH_GIT_ENABLED = $true
+
 function BackOne {
   Set-Location ..
 }
