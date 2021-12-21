@@ -9,7 +9,8 @@ Import-Module -Name PSFzf
 # if($env:LC_TERMINAL -eq "iTerm2") {
 #   $ThemeSettings.Options.ConsoleTitle = $false
 # }
-Set-PoshPrompt -Theme agnosterplus
+#Set-PoshPrompt -Theme agnosterplus
+oh-my-posh --init --shell pwsh --config ~/.config/powershell/bruce.omp.json | Invoke-Expression
 
 function BackOne {
   Set-Location ..

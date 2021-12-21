@@ -423,15 +423,23 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
   fi
 
   if [[ ${MACOS} || ${LINUX} ]]; then
-    echo "powershell profile"
+    echo "powershell profile and custom oh-my-posh theme"
     if [[ ! -d ${HOME}/.config/powershell ]]; then
       mkdir -p ${HOME}/.config/powershell
     fi
     if [[ -f ${HOME}/.config/powershell/profile.ps1 ]]; then
       rm ${HOME}/.config/powershell/profile.ps1
       ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/profile.ps1 ${HOME}/.config/powershell/profile.ps1
+      ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/profile.ps1 ${HOME}/.config/powershell/Microsoft.PowerShell_profile.ps1
     elif [[ ! -L ${HOME}/.config/powershell/profile.ps1 ]]; then
       ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/profile.ps1 ${HOME}/.config/powershell/profile.ps1
+      ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/profile.ps1 ${HOME}/.config/powershell/Microsoft.PowerShell_profile.ps1
+    fi
+    if [[ -f ${HOME}/.config/powershell/bruce.omp.json ]]; then
+      rm ${HOME}/.config/powershell/bruce.omp.json
+      ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/bruce.omp.json ${HOME}/.config/powershell/bruce.omp.json
+    elif [[ ! -L ${HOME}/.config/powershell/bruce.omp.json ]]; then
+      ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/bruce.omp.json ${HOME}/.config/powershell/bruce.omp.json
     fi
   fi
 
@@ -774,7 +782,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       mas install 604825918
     fi
 
-    if [[ ${RATNA} ]] || $${LAPTOP} ]]; then
+    if [[ ${RATNA} || ${LAPTOP} ]]; then
       echo "Installing extra apps via mas"
       if [[ ! -d "/Applications/Keynote.app" ]]; then
         mas install 409183694
@@ -1270,7 +1278,7 @@ EOM
       sudo -H ${HOME}/software_downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin
     fi
   elif [[ ${MACOS} ]]; then
-    if [[ ! -d ${HOME}/software_downloads/AWSCLIV2.pkg ]]; then
+    if [[ ! -f ${HOME}/software_downloads/AWSCLIV2.pkg ]]; then
       wget -O ${HOME}/software_downloads/awscli/AWSCLIV2.pkg "https://awscli.amazonaws.com/AWSCLIV2.pkg"
       sudo installer -pkg ${HOME}/software_downloads/awscli/AWSCLIV2.pkg -target /
     fi
