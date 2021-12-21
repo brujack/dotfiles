@@ -6,10 +6,6 @@ Import-Module -Name AWSPowerShell.NetCore
 Import-Module -Name posh-awsp
 Import-Module -Name PSFzf
 
-# if($env:LC_TERMINAL -eq "iTerm2") {
-#   $ThemeSettings.Options.ConsoleTitle = $false
-# }
-#Set-PoshPrompt -Theme agnosterplus
 oh-my-posh --init --shell pwsh --config ~/.config/powershell/bruce.omp.json | Invoke-Expression
 
 $env:POSH_GIT_ENABLED = $true
