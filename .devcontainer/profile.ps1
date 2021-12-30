@@ -6,9 +6,11 @@ Import-Module -Name AWSPowerShell.NetCore
 Import-Module -Name posh-awsp
 Import-Module -Name PSFzf
 
-oh-my-posh --init --shell pwsh --config ~/.config/powershell/bruce.omp.json | Invoke-Expression
+# oh-my-posh --init --shell pwsh --config ~/.config/powershell/bruce.omp.json | Invoke-Expression
 
-$env:POSH_GIT_ENABLED = $true
+# $env:POSH_GIT_ENABLED = $true
+
+Invoke-Expression (&starship init powershell)
 
 function BackOne {
   Set-Location ..

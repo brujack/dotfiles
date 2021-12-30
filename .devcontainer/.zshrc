@@ -41,9 +41,9 @@ fi
 # Enable Powerlevel10k instant prompt. Should stay close to the top of ~/.zshrc.
 # Initialization code that may require console input (password prompts, [y/n]
 # confirmations, etc.) must go above this block; everything else may go below.
-if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
-  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
-fi
+# if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
+#   source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
+# fi
 
 GO_VER="1.17"
 RUBY_VER="3.0.2"
@@ -91,8 +91,8 @@ export ZSH=${HOME}/.oh-my-zsh
 # Set name of the theme to load. Optionally, if you set this to "random"
 # it'll load a random theme each time that oh-my-zsh is loaded.
 # See https://github.com/robbyrussell/oh-my-zsh/wiki/Themes
-#ZSH_THEME="bruce"
-ZSH_THEME="powerlevel10k/powerlevel10k"
+# ZSH_THEME="bruce"
+# ZSH_THEME="powerlevel10k/powerlevel10k"
 
 # Uncomment the following line to use case-sensitive completion.
 # CASE_SENSITIVE="true"
@@ -470,10 +470,42 @@ fi
 fpath=(${HOME}/.zsh.d/ $fpath)
 
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
-[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
+# [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
 
-# For k8dev work
-if [[ -f ${HOME}/git-repos/securekey/cloud-eng/k8dev/scripts/auto-complete.sh ]]; then
-  source "${HOME}/git-repos/securekey/cloud-eng/k8dev/scripts/auto-complete.sh"
+# find out which distribution we are running on
+_distro=$(awk '/^ID=/' /etc/*-release | awk -F'=' '{ print tolower($2) }')
+
+if [[ ${LINUX} ]]; then
+  # set an icon based on the distro
+  case $_distro in
+      *kali*)                  ICON="ﴣ";;
+      *arch*)                  ICON="";;
+      *debian*)                ICON="";;
+      *raspbian*)              ICON="";;
+      *ubuntu*)                ICON="";;
+      *elementary*)            ICON="";;
+      *fedora*)                ICON="";;
+      *coreos*)                ICON="";;
+      *gentoo*)                ICON="";;
+      *mageia*)                ICON="";;
+      *centos*)                ICON="";;
+      *opensuse*|*tumbleweed*) ICON="";;
+      *sabayon*)               ICON="";;
+      *slackware*)             ICON="";;
+      *linuxmint*)             ICON="";;
+      *alpine*)                ICON="";;
+      *aosc*)                  ICON="";;
+      *nixos*)                 ICON="";;
+      *devuan*)                ICON="";;
+      *manjaro*)               ICON="";;
+      *rhel*)                  ICON="";;
+      *)                       ICON="";;
+  esac
 fi
-[[ -d /home/bruce/.k8dev ]] && export PATH="/home/bruce/.k8dev/bin:$PATH"
+if [[ ${MACOS} ]]; then
+  ICON=""
+fi
+
+# Load Starship
+export STARSHIP_DISTRO="$ICON "
+eval "$(starship init zsh)"

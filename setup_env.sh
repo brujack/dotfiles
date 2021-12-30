@@ -4,7 +4,7 @@
 RUBY_INSTALL_VER="0.8.1"
 CHRUBY_VER="0.3.9"
 RUBY_VER="3.0.2"
-PYTHON_VER="3.9.7"
+PYTHON_VER="3.10.1"
 CONSUL_VER="1.10.0"
 VAULT_VER="1.8.4"
 NOMAD_VER="1.1.6"
@@ -423,6 +423,12 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
   fi
 
   if [[ ${MACOS} || ${LINUX} ]]; then
+    if [[ ! -d ${HOME}/.config ]]; then
+      mkdir -p ${HOME}/.config
+    fi
+  fi
+
+  if [[ ${MACOS} || ${LINUX} ]]; then
     echo "powershell profile and custom oh-my-posh theme"
     if [[ ! -d ${HOME}/.config/powershell ]]; then
       mkdir -p ${HOME}/.config/powershell
@@ -438,6 +444,16 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
       ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/bruce.omp.json ${HOME}/.config/powershell/bruce.omp.json
     elif [[ ! -L ${HOME}/.config/powershell/bruce.omp.json ]]; then
       ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/bruce.omp.json ${HOME}/.config/powershell/bruce.omp.json
+    fi
+  fi
+
+  if [[ ${MACOS} || ${LINUX} ]]; then
+    echo "starship profile"
+    if [[ -f ${HOME}/.config/starship.toml ]]; then
+      rm ${HOME}/.config/starship.toml
+      ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/starship.toml ${HOME}/.config/starship.toml
+    elif [[ ! -L ${HOME}/.config/starship.toml ]]; then
+      ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/starship.toml ${HOME}/.config/starship.toml
     fi
   fi
 

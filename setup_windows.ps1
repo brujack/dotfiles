@@ -59,7 +59,7 @@ Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManage
 #   iex ((new-object net.webclient).DownloadString('http://chocolatey.org/install.ps1'))
 # }
 
-
+New-Item -ItemType Directory -Force ~/.config
 
 # install packages with chocolatey
 cinst -y 1password
@@ -97,6 +97,7 @@ cinst -y python3
 cinst -y simplenote
 cinst -y sourcetree
 cinst -y spotify
+cinst -y starship
 cinst -y teamviewer
 cinst -y terraform
 cinst -y typora
