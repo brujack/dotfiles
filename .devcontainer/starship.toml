@@ -90,7 +90,7 @@ format = "via [🐋 $context](blue bold)"
 
 [aws]
 format = 'on [$symbol($profile )(\($region\) )]($style)'
-symbol = " "
+symbol = "☁️ "
 
 [azure]
 disabled = true
