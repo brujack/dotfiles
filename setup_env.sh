@@ -1036,6 +1036,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     brew install hadolint
     brew install k9s
     brew install linkerd
+    brew install starship
     brew install tgenv
 
     if [[ ${KUBE1} ]] || [[ ${KUBE2} ]] || [[ ${WORKSTATION} ]]; then
