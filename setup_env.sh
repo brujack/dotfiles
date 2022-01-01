@@ -1387,7 +1387,7 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
     pyenv virtualenv-delete -f ansible
     pyenv virtualenv ${PYTHON_VER} ansible
     pyenv activate ansible
-    python3 -m pip install ansible ansible-cmdb ansible-lint boto3 docker docker-compose pylint jmespath-terminal psutil bpytop HttpPy j2cli wheel
+    python3 -m pip install ansible ansible-cmdb ansible-lint boto3 docker docker-compose pylint psutil bpytop HttpPy j2cli wheel
   fi
 fi
 
