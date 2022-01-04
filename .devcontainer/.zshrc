@@ -472,12 +472,12 @@ fpath=(${HOME}/.zsh.d/ $fpath)
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 # [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
 
-# find out which distribution we are running on
-_distro=$(awk '/^ID=/' /etc/*-release | awk -F'=' '{ print tolower($2) }')
-
 if [[ ${LINUX} ]]; then
+  # find out which distribution we are running on
+  distro=$(awk '/^ID=/' /etc/*-release | awk -F'=' '{ print tolower($2) }')
+
   # set an icon based on the distro
-  case $_distro in
+  case $distro in
       *kali*)                  ICON="ﴣ";;
       *arch*)                  ICON="";;
       *debian*)                ICON="";;
