@@ -1478,6 +1478,8 @@ if [[ ${UPDATE} ]]; then
     git pull
     cd ${PERSONAL_GITREPOS}/${DOTFILES}
   fi
+  echo "updating ruby gems"
+  gem update
 fi
 
 source ${HOME}/.zshrc
