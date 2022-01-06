@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # software versions to install
-RUBY_INSTALL_VER="0.8.1"
+RUBY_INSTALL_VER="0.8.3"
 CHRUBY_VER="0.3.9"
 RUBY_VER="3.0.2"
 PYTHON_VER="3.10.1"
