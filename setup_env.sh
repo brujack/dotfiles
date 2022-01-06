@@ -601,6 +601,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     brew install --cask balenaetcher
     brew install --cask chef/chef/inspec
     brew install --cask dotnet
+    brew install go-task/tap/go-task
 
     cd ${PERSONAL_GITREPOS}/${DOTFILES} || return
 
@@ -1038,6 +1039,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     brew install linkerd
     brew install starship
     brew install tgenv
+    brew install go-task/tap/go-task
 
     if [[ ${KUBE1} ]] || [[ ${KUBE2} ]] || [[ ${WORKSTATION} ]]; then
       echo "Installing Nvidia drivers"
