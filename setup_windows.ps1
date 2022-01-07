@@ -91,6 +91,7 @@ cinst -y microsoft-teams
 cinst -y microsoft-windows-terminal
 cinst -y ohmyposh
 cinst -y postman
+cinst -y powertoys
 cinst -y putty.install
 cinst -y puttygen
 cinst -y python3
