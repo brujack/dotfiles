@@ -12,15 +12,40 @@ function Install-Mods {
     "Terminal-Icons"
   )
 
+  $ModulesToBeInstalledWindows = @(
+    "AWSPowerShell.NetCore",
+    "Az",
+    "Az.Blueprint",
+    "Microsoft.Graph",
+    "oh-my-posh",
+    "posh-awsp",
+    "posh-git",
+    "PSFzf",
+    "Terminal-Icons"
+  )
+
   Set-PSRepository -Name "PSGallery" -InstallationPolicy Trusted
 
-  foreach ($Mod in $ModulesToBeInstalled) {
-    if (Get-Module -ListAvailable $Mod) {
-      Write-Host "Module '$Mod' is already installed"
+  if ($IsLinux -or $IsMacOS) {
+    foreach ($Mod in $ModulesToBeInstalled) {
+      if (Get-Module -ListAvailable $Mod) {
+        Write-Host "Module '$Mod' is already installed"
+      }
+      else {
+        Write-Host "Installing '$Mod'"
+        Install-Module $Mod
+      }
     }
-    else {
-      Write-Host "Installing '$Mod'"
-      Install-Module $Mod
+  }
+  if ($IsWindows) {
+    foreach ($Mod in $ModulesToBeInstalledWindows) {
+      if (Get-Module -ListAvailable $Mod) {
+        Write-Host "Module '$Mod' is already installed"
+      }
+      else {
+        Write-Host "Installing '$Mod'"
+        Install-Module $Mod
+      }
     }
   }
 }
