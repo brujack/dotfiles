@@ -1,12 +1,28 @@
-Set-PSRepository -Name "PSGallery" -InstallationPolicy Trusted
+function Install-Mods {
+  $ModulesToBeInstalled = @(
+    "AWSPowerShell.NetCore",
+    "Az",
+    "Az.Blueprint",
+    "Microsoft.Graph",
+    "Microsoft.PowerShell.UnixCompleters",
+    "oh-my-posh",
+    "posh-awsp",
+    "posh-git",
+    "PSFzf",
+    "Terminal-Icons"
+  )
 
-Install-Module -Name AWSPowerShell.NetCore
-Install-Module -Name Az
-Install-Module -Name Az.Blueprint
-Install-Module -Name Microsoft.Graph
-Install-Module -Name Microsoft.PowerShell.UnixCompleters
-Install-Module -Name oh-my-posh
-Install-Module -Name posh-awsp
-Install-Module -Name posh-git
-Install-Module -Name PSFzf
-Install-Module -Name Terminal-Icons
+  Set-PSRepository -Name "PSGallery" -InstallationPolicy Trusted
+
+  foreach ($Mod in $ModulesToBeInstalled) {
+    if (Get-Module -ListAvailable $Mod) {
+      Write-Host "Module '$Mod' is already installed"
+    }
+    else {
+      Write-Host "Installing '$Mod'"
+      Install-Module $Mod
+    }
+  }
+}
+
+Install-Mods
