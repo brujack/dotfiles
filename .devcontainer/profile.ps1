@@ -1,16 +1,38 @@
-Import-Module -Name posh-git
-Import-Module -Name oh-my-posh
-Import-Module -Name Microsoft.PowerShell.UnixCompleters
-Import-Module -Name Terminal-Icons
-Import-Module -Name AWSPowerShell.NetCore
-Import-Module -Name posh-awsp
-Import-Module -Name PSFzf
+function Import-Modules {
+  $ModulesToBeImported = @(
+    "AWSPowerShell.NetCore",
+    "Microsoft.PowerShell.UnixCompleters",
+    "posh-awsp",
+    "PSFzf",
+    "Terminal-Icons"
+  )
+
+  $ModulesToBeImportedWindows = @(
+    "AWSPowerShell.NetCore",
+    "posh-awsp",
+    "PSFzf",
+    "Terminal-Icons"
+  )
+
+  if ($IsLinux -or $IsMacOS) {
+    foreach ($Mod in $ModulesToBeImported) {
+      if (Get-Module -ListAvailable $Mod) {
+        Import-Module $Mod
+      }
+    }
+  }
+  elseif ($IsWindows) {
+    foreach ($Mod in $ModulesToBeImportedWindows) {
+      if (Get-Module -ListAvailable $Mod) {
+        Import-Module $Mod
+      }
+    }
+  }
+}
 
 # oh-my-posh --init --shell pwsh --config ~/.config/powershell/bruce.omp.json | Invoke-Expression
 
 # $env:POSH_GIT_ENABLED = $true
-
-Invoke-Expression (&starship init powershell)
 
 function BackOne {
   Set-Location ..
@@ -34,6 +56,25 @@ function AWSProfileTest {
 New-Alias -Name '..' -Value 'BackOne'
 New-Alias -Name '...' -Value 'BackTwo'
 New-Alias -Name 'll' -Value 'ShowIcons'
+
+if ($IsLinux -or $IsMacOS) {
+  if (Get-Command "starship") {
+    Invoke-Expression (&starship init powershell)
+  }
+  else {
+    Write-Host "starship not installed"
+  }
+}
+elseif ($IsWindows) {
+  if (Get-Command "starship.exe") {
+    Invoke-Expression (&starship init powershell)
+  }
+  else {
+    Write-Host "starship.exe not installed"
+  }
+}
+
+Import-Modules
 
 Set-PSReadLineKeyHandler -Key UpArrow -Function HistorySearchBackward
 # Set-PSReadLineKeyHandler -Key Tab -Function MenuComplete
