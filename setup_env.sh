@@ -415,13 +415,6 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/scripts ${HOME}/scripts
   fi
 
-  if [[ -f ${HOME}/switch_terra_account.sh ]]; then
-    rm ${HOME}/switch_terra_account.sh
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/switch_terra_account.sh ${HOME}/switch_terra_account.sh
-  elif [[ ! -L ${HOME}/switch_terra_account.sh ]]; then
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/switch_terra_account.sh ${HOME}/switch_terra_account.sh
-  fi
-
   if [[ ${MACOS} || ${LINUX} ]]; then
     if [[ ! -d ${HOME}/.config ]]; then
       mkdir -p ${HOME}/.config
