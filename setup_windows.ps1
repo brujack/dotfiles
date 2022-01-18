@@ -2,7 +2,7 @@ if ($IsWindows) {
 
   function Install-ChocolateyPackages {
     if (-Not (Get-Command "choco.exe" -ErrorAction SilentlyContinue)) {
-      Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+      Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://boxstarter.org/bootstrapper.ps1')); Get-Boxstarter -Force
     }
 
     $ChocoPackagesToBeInstalled = @(
@@ -26,6 +26,7 @@ if ($IsWindows) {
       "git",
       "golang",
       "googlechrome",
+      "go-task",
       "iperf3",
       "kubernetes-cli",
       "kubernetes-helm",
@@ -55,10 +56,14 @@ if ($IsWindows) {
     }
   }
 
-  # First you would need to have run windows_boxstarter.ps1 to install boxstarter
-  # Second you can run this script using a boxstarter shell
-
   # set windows options
+  # enable RDP
+  Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -value 0
+  # turn off firewall
+  Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled False
+
+  Install-ChocolateyPackages
+
   Set-WindowsExplorerOptions -EnableShowHiddenFilesFoldersDrives -EnableShowProtectedOSFiles -EnableShowFileExtensions -EnableShowFullPathInTitleBar
 
   # enable hyper-v and sandbox containers
@@ -73,8 +78,6 @@ if ($IsWindows) {
 
   # enable current user to be able to execute powershell scripts
   Set-ExecutionPolicy Unrestricted -Scope CurrentUser
-
-  Install-ChocolateyPackages
 
   New-Item -ItemType Directory -Force ~/.config
 }
