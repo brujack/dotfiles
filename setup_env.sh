@@ -157,10 +157,6 @@ if [[ ${UBUNTU} ]]; then
 fi
 
 [[ $(uname -r) =~ microsoft ]] && export WINDOWS=1
-[[ $(hostname -f) = "kube-1.conecrazy.io" ]] && export KUBE=1
-[[ $(hostname -f) = "kube-2.conecrazy.io" ]] && export KUBE=1
-[[ $(hostname -s) = "kube-1.conecrazy.io" ]] && export KUBE1=1
-[[ $(hostname -s) = "kube-2.conecrazy.io" ]] && export KUBE2=1
 [[ $(hostname -s) = "laptop" ]] && export LAPTOP=1
 [[ $(hostname -s) = "workstation" ]] && export WORKSTATION=1
 [[ $(hostname -s) = "cruncher" ]] && export CRUNCHER=1
@@ -887,7 +883,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       fi
     fi
 
-    if [[ ! ${BASTION} ]] || [[ ! ${WORKSTATION} ]]; then
+    if [[ ! ${WORKSTATION} ]]; then
       echo "Installing docker desktop"
       curl -fsSL http://download.docker.com/linux/ubuntu/gpg | sudo -H apt-key add -
       sudo -H add-apt-repository \
@@ -909,7 +905,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo -H apt install virtualbox-6.1 -y
     fi
 
-    if [[ ${WORKSTATION} ]] || [[ ${KUBE1} ]] || [[ ${KUBE2} ]]; then
+    if [[ ${WORKSTATION} ]]; then
       echo "Installing Virtualbox"
       wget -q http://www.virtualbox.org/download/oracle_vbox_2016.asc -O- | sudo apt-key add -
       wget -q http://www.virtualbox.org/download/oracle_vbox.asc -O- | sudo apt-key add -
@@ -1034,7 +1030,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     brew install tgenv
     brew install go-task/tap/go-task
 
-    if [[ ${KUBE1} ]] || [[ ${KUBE2} ]] || [[ ${WORKSTATION} ]]; then
+    if [[ ${WORKSTATION} ]]; then
       echo "Installing Nvidia drivers"
       sudo -H apt install ocl-icd-opencl-dev -y
       sudo -H apt install clinfo -y
@@ -1477,6 +1473,6 @@ if [[ ${UPDATE} ]]; then
   gem update
 fi
 
-source ${HOME}/.zshrc
+/usr/bin/env zsh ${HOME}/.zshrc
 
 exit 0
