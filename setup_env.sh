@@ -587,6 +587,10 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     cd ${BREWFILE_LOC} && brew bundle
     brew tap teamookla/speedtest
     brew install speedtest
+    brew install --cask adobe-acrobat-reader
+    if [[ ${LAPTOP} ]]; then
+      brew install --cask adobe-creative-cloud
+    fi
     brew install --cask balenaetcher
     brew install --cask chef/chef/inspec
     brew install --cask dotnet
