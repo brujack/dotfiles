@@ -587,11 +587,6 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     cd ${BREWFILE_LOC} && brew bundle
     brew tap teamookla/speedtest
     brew install speedtest
-    brew install --cask adobe-acrobat-reader
-    if [[ ${LAPTOP} ]]; then
-      brew install --cask adobe-creative-cloud
-    fi
-    brew install --cask balenaetcher
     brew install --cask chef/chef/inspec
     brew install --cask dotnet
     brew install go-task/tap/go-task
@@ -599,6 +594,14 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     cd ${PERSONAL_GITREPOS}/${DOTFILES} || return
 
     # the below casks and mas are not in a brewfile since they will "fail" if already installed
+    if [[ ${LAPTOP} ]]; then
+      if [[ ! -d "/Applications/Adobe\ Creative\ Cloud" ]]; then
+        brew install --cask adobe-creative-cloud
+      fi
+    fi
+    if [[ ! -d "/Applications/Adobe\ Acrobat\ Reader\ DC.app" ]]; then
+      brew install --cask adobe-acrobat-reader
+    fi
     if [[ ! -d "/Applications/Alfred\ 4.app" ]]; then
       brew install --cask alfred
     fi
@@ -608,14 +611,17 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/Atom.app" ]]; then
       brew install --cask atom
     fi
-    if [[ ! -d "/Applications/DaisyDisk.app" ]]; then
-      brew install --cask daisydisk
+    if [[ ! -d "/Applications/balenaEtcher.app" ]]; then
+      brew install --cask balenaetcher
     fi
     if [[ ! -d "/Applications/Beyond\ Compare.app" ]]; then
       brew install --cask beyond-compare
     fi
     if [[ ! -d "/Applications/Carbon\ Copy Cloner.app" ]]; then
       brew install --cask carbon-copy-cloner
+    fi
+    if [[ ! -d "/Applications/DaisyDisk.app" ]]; then
+      brew install --cask daisydisk
     fi
     if [[ ! -d "/Applications/DBeaver.app" ]]; then
       brew install --cask dbeaver-community
