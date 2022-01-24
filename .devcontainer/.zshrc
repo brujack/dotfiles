@@ -22,16 +22,25 @@ if [[ ${MACOS} ]]; then
   if [[ ${RATNA} ]]; then
     eval `/usr/local/bin/keychain --eval --agents ssh --inherit any id_rsa`
     eval `/usr/local/bin/keychain --eval --agents ssh --inherit any id_ed25519`
+    eval `/usr/local/bin/keychain --eval --agents ssh --inherit any home`
+    eval `/usr/local/bin/keychain --eval --agents ssh --inherit any github`
+    eval `/usr/local/bin/keychain --eval --agents ssh --inherit any gitlab`
     eval `/usr/local/bin/keychain --eval --agents gpg B6DCFA4E5AFEA3AF35CE0A189A997C02283A9062 --inherit any`
   elif [[ ${LAPTOP} ]]; then
     eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any id_rsa`
     eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any id_ed25519`
+    eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any home`
+    eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any github`
+    eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any gitlab`
     eval `/opt/homebrew/bin/keychain --eval --agents gpg B6DCFA4E5AFEA3AF35CE0A189A997C02283A9062 --inherit any`
   fi
 elif [[ ${LINUX} ]]; then
   if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]]; then
     eval `/usr/bin/keychain --eval --agents ssh --inherit any id_rsa`
     eval `/usr/bin/keychain --eval --agents ssh --inherit any id_ed25519`
+    eval `/usr/bin/keychain --eval --agents ssh --inherit any home`
+    eval `/usr/bin/keychain --eval --agents ssh --inherit any github`
+    eval `/usr/bin/keychain --eval --agents ssh --inherit any gitlab`
     eval `/usr/bin/keychain --eval --agents gpg B6DCFA4E5AFEA3AF35CE0A189A997C02283A9062 --inherit any`
   else
     eval `/usr/bin/keychain --eval --agents ssh --inherit any id_rsa`

@@ -418,6 +418,15 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
   fi
 
   if [[ ${MACOS} || ${LINUX} ]]; then
+    if [[ ! -d ${HOME}/.tf_creds ]]; then
+      mkdir -p ${HOME}/.tf_creds
+    fi
+    if [[ -d ${HOME}/.tf_creds ]]; then
+      chmod 700 ${HOME}/.tf_creds
+    fi
+  fi
+
+  if [[ ${MACOS} || ${LINUX} ]]; then
     echo "powershell profile and custom oh-my-posh theme"
     if [[ ! -d ${HOME}/.config/powershell ]]; then
       mkdir -p ${HOME}/.config/powershell
