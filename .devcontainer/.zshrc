@@ -1,3 +1,22 @@
+# functions
+Make() {
+  if [ -f Taskfile.yml ]; then
+    task "$@"
+  elif [ -f Taskfile.yaml ]; then
+    task "$@"
+  else
+    if [[ ${MACOS} ]]; then
+      if [[ ${RATNA} ]]; then
+        alias make='/usr/local/bin/gmake'
+      fi
+      if [[ ${LAPTOP} ]]; then
+        alias make='/opt/homebrew/bin/gmake'
+      fi
+    fi
+    make "$@"
+  fi
+}
+
 # choose which env we are running on
 [ "$(uname -s)" = "Darwin" ] && export MACOS=1
 [ "$(uname -s)" = "Linux" ] && export LINUX=1
@@ -275,14 +294,6 @@ alias frontyard='ssh bruce@frontyard'
 # aliases for work servers
 
 # command aliases
-if [[ ${MACOS} ]]; then
-  if [[ ${RATNA} ]]; then
-    alias make='/usr/local/bin/gmake'
-  fi
-  if [[ ${LAPTOP} ]]; then
-    alias make='/opt/homebrew/bin/gmake'
-  fi
-fi
 alias au='sudo apt-get update'
 alias ad='sudo apt-get dist-upgrade -y'
 alias aa='sudo apt-get autoremove -y'
@@ -296,9 +307,11 @@ alias tiu='terraform init --upgrade'
 alias ti='terraform init'
 alias tv='terraform validate'
 alias td='terraform destroy'
+alias make='Make'
+alias m='Make'
 alias mp='make plan'
 alias ma='make apply'
-alias mi='make inspec'
+alias mi='make init'
 alias tw='~/scripts/tmux-workstation.sh'
 alias kgp='kubectl get pods --all-namespaces'
 alias kgn='kubectl get nodes'
