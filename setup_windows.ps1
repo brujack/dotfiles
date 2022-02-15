@@ -99,9 +99,9 @@ if ($IsWindows) {
     }
   }
 
-  if (Test-Path -Path ~/git-repos/personal/.gitconfig -PathType Leaf) {
+  if (Test-Path -Path ~/.gitconfig -PathType Leaf) {
     try {
-      $null = Remove-Item ~/git-repos/personal/.gitconfig -ErrorAction SilentlyContinue
+      $null = Remove-Item ~/.gitconfig -ErrorAction SilentlyContinue
     }
     catch {
       throw $_.Exception.Message
@@ -109,7 +109,7 @@ if ($IsWindows) {
   }
   else {
     try {
-      $null = New-Item -ItemType SymbolicLink -Path ~/git-repos/personal/.gitconfig -Target ~/git-repos/personal/dotfiles/.gitconfig_windows -ErrorAction SilentlyContinue
+      $null = New-Item -ItemType SymbolicLink -Path ~/.gitconfig -Target ~/git-repos/personal/dotfiles/.gitconfig_windows -ErrorAction SilentlyContinue
     }
     catch {
       throw $_.Exception.Message
