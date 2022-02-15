@@ -79,5 +79,42 @@ if ($IsWindows) {
   # enable current user to be able to execute powershell scripts
   Set-ExecutionPolicy Unrestricted -Scope CurrentUser
 
-  New-Item -ItemType Directory -Force ~/.config
+  if (-not(Test-Path -Path ~/.config -PathType Container)) {
+    try {
+      $null = New-Item -ItemType File -Path ~/.config -Force -ErrorAction Stop
+      Write-Host "The directory [~/.config] has been created."
+    }
+    catch {
+        throw $_.Exception.Message
+    }
+  }
+
+  if (-not(Test-Path -Path ~/git-repos/personal -PathType Container)) {
+    try {
+      $null = New-Item -ItemType File -Path ~/git-repos/personal -Force -ErrorAction Stop
+      Write-Host "The directory [~/git-repos/personal] has been created."
+    }
+    catch {
+        throw $_.Exception.Message
+    }
+  }
+
+  if (Test-Path -Path ~/git-repos/personal/.gitconfig -PathType Leaf) {
+    try {
+      $null = Remove-Item ~/git-repos/personal/.gitconfig -ErrorAction SilentlyContinue
+    }
+    catch {
+      throw $_.Exception.Message
+    }
+  }
+
+  if (-not(Get-ItemProperty ~/git-repos/personal/.gitconfig).LinkType){"symboliclink"} {
+    try {
+      $null = New-Item -ItemType SymbolicLink -Path ~/git-repos/personal/.gitconfig -Target ~/git-repos/personal/.gitconfig_windows -ErrorAction SilentlyContinue
+    }
+    catch {
+      throw $_.Exception.Message
+    }
+  }
+
 }
