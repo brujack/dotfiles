@@ -1399,6 +1399,39 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
     pyenv activate ansible
     python3 -m pip install ansible ansible-cmdb ansible-lint boto3 docker docker-compose jmespath pylint psutil bpytop HttpPy j2cli wheel
   fi
+
+  echo "personal git repos cloning"
+  if ! [[ -d ${HOME}/git-repos/personal/dotfiles ]]; then
+    git clone git@github.com:brujack/dotfiles.git ${HOME}/git-repos/personal/dotfiles
+  fi
+  if ! [[ -d ${HOME}/git-repos/personal/aws_terraform_modules ]]; then
+    git clone git@github.com:brujack/aws_terraform_modules.git ${HOME}/git-repos/personal/aws_terraform_modules
+  fi
+  if ! [[ -d ${HOME}/git-repos/personal/aws_terraform_using_modules ]]; then
+    git clone git@github.com:brujack/aws_terraform_using_modules.git ${HOME}/git-repos/personal/aws_terraform_using_modules
+  fi
+  if ! [[ -d ${HOME}/git-repos/personal/docker_container_terraform ]]; then
+    git clone git@github.com:brujack/docker_container_terraform.git ${HOME}/git-repos/personal/docker_container_terraform
+  fi
+  if ! [[ -d ${HOME}/git-repos/personal/docker_container_terraform_packer_ansible ]]; then
+    git clone git@github.com:brujack/docker_container_terraform_packer_ansible.git ${HOME}/git-repos/personal/docker_container_terraform_packer_ansible
+  fi
+  if ! [[ -d ${HOME}/git-repos/personal/kubernetes ]]; then
+    git clone git@github.com:brujack/kubernetes.git ${HOME}/git-repos/personal/kubernetes
+  fi
+  if ! [[ -d ${HOME}/git-repos/personal/pfsense_config ]]; then
+    git clone git@github.com:brujack/pfsense_config.git ${HOME}/git-repos/personal/pfsense_config
+  fi
+  if ! [[ -d ${HOME}/git-repos/personal/python-learning ]]; then
+    git clone git@github.com:brujack/python-learning.git ${HOME}/git-repos/personal/python-learning
+  fi
+  if ! [[ -d ${HOME}/git-repos/personal/terraform_ansible ]]; then
+    git clone git@github.com:brujack/terraform_ansible.git ${HOME}/git-repos/personal/terraform_ansible
+  fi
+  if ! [[ -d ${HOME}/git-repos/personal/terraspace_env ]]; then
+    git clone git@github.com:brujack/terraspace_env.git ${HOME}/git-repos/personal/terraspace_env
+  fi
+
 fi
 
 # update is run more often to keep the device up to date with patches
