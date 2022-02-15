@@ -1401,35 +1401,35 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
   fi
 
   echo "personal git repos cloning"
-  if ! [[ -d ${HOME}/git-repos/personal/dotfiles ]]; then
-    git clone git@github.com:brujack/dotfiles.git ${HOME}/git-repos/personal/dotfiles
+  if ! [[ -d ${PERSONAL_GITREPOS}/dotfiles ]]; then
+    git clone git@github.com:brujack/dotfiles.git ${PERSONAL_GITREPOS}/dotfiles
   fi
-  if ! [[ -d ${HOME}/git-repos/personal/aws_terraform_modules ]]; then
-    git clone git@github.com:brujack/aws_terraform_modules.git ${HOME}/git-repos/personal/aws_terraform_modules
+  if ! [[ -d ${PERSONAL_GITREPOS}/aws_terraform_modules ]]; then
+    git clone git@github.com:brujack/aws_terraform_modules.git ${PERSONAL_GITREPOS}/aws_terraform_modules
   fi
-  if ! [[ -d ${HOME}/git-repos/personal/aws_terraform_using_modules ]]; then
-    git clone git@github.com:brujack/aws_terraform_using_modules.git ${HOME}/git-repos/personal/aws_terraform_using_modules
+  if ! [[ -d ${PERSONAL_GITREPOS}/aws_terraform_using_modules ]]; then
+    git clone git@github.com:brujack/aws_terraform_using_modules.git ${PERSONAL_GITREPOS}/aws_terraform_using_modules
   fi
-  if ! [[ -d ${HOME}/git-repos/personal/docker_container_terraform ]]; then
-    git clone git@github.com:brujack/docker_container_terraform.git ${HOME}/git-repos/personal/docker_container_terraform
+  if ! [[ -d ${PERSONAL_GITREPOS}/docker_container_terraform ]]; then
+    git clone git@github.com:brujack/docker_container_terraform.git ${PERSONAL_GITREPOS}/docker_container_terraform
   fi
-  if ! [[ -d ${HOME}/git-repos/personal/docker_container_terraform_packer_ansible ]]; then
-    git clone git@github.com:brujack/docker_container_terraform_packer_ansible.git ${HOME}/git-repos/personal/docker_container_terraform_packer_ansible
+  if ! [[ -d ${PERSONAL_GITREPOS}/docker_container_terraform_packer_ansible ]]; then
+    git clone git@github.com:brujack/docker_container_terraform_packer_ansible.git ${PERSONAL_GITREPOS}/docker_container_terraform_packer_ansible
   fi
-  if ! [[ -d ${HOME}/git-repos/personal/kubernetes ]]; then
-    git clone git@github.com:brujack/kubernetes.git ${HOME}/git-repos/personal/kubernetes
+  if ! [[ -d ${PERSONAL_GITREPOS}/kubernetes ]]; then
+    git clone git@github.com:brujack/kubernetes.git ${PERSONAL_GITREPOS}/kubernetes
   fi
-  if ! [[ -d ${HOME}/git-repos/personal/pfsense_config ]]; then
-    git clone git@github.com:brujack/pfsense_config.git ${HOME}/git-repos/personal/pfsense_config
+  if ! [[ -d ${PERSONAL_GITREPOS}/pfsense_config ]]; then
+    git clone git@github.com:brujack/pfsense_config.git ${PERSONAL_GITREPOS}/pfsense_config
   fi
-  if ! [[ -d ${HOME}/git-repos/personal/python-learning ]]; then
-    git clone git@github.com:brujack/python-learning.git ${HOME}/git-repos/personal/python-learning
+  if ! [[ -d ${PERSONAL_GITREPOS}/python-learning ]]; then
+    git clone git@github.com:brujack/python-learning.git ${PERSONAL_GITREPOS}/python-learning
   fi
-  if ! [[ -d ${HOME}/git-repos/personal/terraform_ansible ]]; then
-    git clone git@github.com:brujack/terraform_ansible.git ${HOME}/git-repos/personal/terraform_ansible
+  if ! [[ -d ${PERSONAL_GITREPOS}/terraform_ansible ]]; then
+    git clone git@github.com:brujack/terraform_ansible.git ${PERSONAL_GITREPOS}/terraform_ansible
   fi
-  if ! [[ -d ${HOME}/git-repos/personal/terraspace_env ]]; then
-    git clone git@github.com:brujack/terraspace_env.git ${HOME}/git-repos/personal/terraspace_env
+  if ! [[ -d ${PERSONAL_GITREPOS}/terraspace_env ]]; then
+    git clone git@github.com:brujack/terraspace_env.git ${PERSONAL_GITREPOS}/terraspace_env
   fi
 
 fi
