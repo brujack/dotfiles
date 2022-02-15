@@ -109,7 +109,7 @@ if ($IsWindows) {
   }
   else {
     try {
-      $null = New-Item -ItemType SymbolicLink -Path ~/git-repos/personal/.gitconfig -Target ~/git-repos/personal/.gitconfig_windows -ErrorAction SilentlyContinue
+      $null = New-Item -ItemType SymbolicLink -Path ~/git-repos/personal/.gitconfig -Target ~/git-repos/personal/dotfiles/.gitconfig_windows -ErrorAction SilentlyContinue
     }
     catch {
       throw $_.Exception.Message
