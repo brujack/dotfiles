@@ -108,13 +108,11 @@ if ($IsWindows) {
     }
   }
   else {
-    if (-not(Get-ItemProperty ~/git-repos/personal/.gitconfig).LinkType){"symboliclink"} {
-      try {
-        $null = New-Item -ItemType SymbolicLink -Path ~/git-repos/personal/.gitconfig -Target ~/git-repos/personal/.gitconfig_windows -ErrorAction SilentlyContinue
-      }
-      catch {
-        throw $_.Exception.Message
-      }
+    try {
+      $null = New-Item -ItemType SymbolicLink -Path ~/git-repos/personal/.gitconfig -Target ~/git-repos/personal/.gitconfig_windows -ErrorAction SilentlyContinue
+    }
+    catch {
+      throw $_.Exception.Message
     }
   }
 
