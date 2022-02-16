@@ -40,7 +40,6 @@ if ($IsWindows) {
       "powertoys",
       "putty.install",
       "python3",
-      "reflect-free",
       "simplenote",
       "sourcetree",
       "spotify",
