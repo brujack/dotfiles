@@ -56,6 +56,22 @@ if ($IsWindows) {
     }
   }
 
+  function Enable-WindowsOptionalFeatures {
+    # enable hyper-v and sandbox containers
+    $RequiredWindowsOptionalFeatures = @(
+      "Microsoft-Hyper-V"
+      "Containers-DisposableClientVM"
+    )
+    $RequiredWindowsOptionalFeaturesResults = foreach ($feature in $RequiredWindowsOptionalFeatures ) {Get-WindowsOptionalFeature -Online -FeatureName $feature | Where-Object {$_.State -eq "Disabled"}}
+
+    if ($RequiredWindowsOptionalFeaturesResults) {
+      foreach ($features in $RequiredWindowsOptionalFeatures) {
+        Enable-WindowsOptionalFeature -Online -FeatureName $features
+        Write-Host "Enabled feature $features"
+      }
+    }
+  }
+
   # set windows options
   # enable RDP
   Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -value 0
@@ -66,9 +82,7 @@ if ($IsWindows) {
 
   Set-WindowsExplorerOptions -EnableShowHiddenFilesFoldersDrives -EnableShowProtectedOSFiles -EnableShowFileExtensions -EnableShowFullPathInTitleBar
 
-  # enable hyper-v and sandbox containers
-  Enable-WindowsOptionalFeature -Online -FeatureName "Microsoft-Hyper-V" -All
-  Enable-WindowsOptionalFeature -Online -FeatureName "Containers-DisposableClientVM" -All
+  Enable-WindowsOptionalFeatures
 
   # enable wsl
   $WSLEnabled = wsl --status
