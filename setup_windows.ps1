@@ -83,13 +83,12 @@ if ($IsWindows) {
 
   # set windows options
   # enable RDP
-  Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -value 0
+  Set-ItemProperty -Path HKLM:\System\CurrentControlSet\Control\Terminal Server -Name "fDenyTSConnections" -value 0
   # turn off firewall
   Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled False
+  Set-WindowsExplorerOptions -EnableShowHiddenFilesFoldersDrives -EnableShowProtectedOSFiles -EnableShowFileExtensions -EnableShowFullPathInTitleBar
 
   Install-ChocolateyPackages
-
-  Set-WindowsExplorerOptions -EnableShowHiddenFilesFoldersDrives -EnableShowProtectedOSFiles -EnableShowFileExtensions -EnableShowFullPathInTitleBar
 
   Enable-WindowsOptionalFeatures
 
@@ -102,7 +101,7 @@ if ($IsWindows) {
   # enable current user to be able to execute powershell scripts
   Set-ExecutionPolicy Unrestricted -Scope CurrentUser
 
-  if (-not(Test-Path -Path ~/.config -PathType Container)) {
+  if (-Not (Test-Path -Path ~/.config -PathType Container)) {
     try {
       $null = New-Item -ItemType File -Path ~/.config -Force -ErrorAction Stop
       Write-Host "The directory [~/.config] has been created."
@@ -112,7 +111,7 @@ if ($IsWindows) {
     }
   }
 
-  if (-not(Test-Path -Path ~/git-repos/personal -PathType Container)) {
+  if (-Not (Test-Path -Path ~/git-repos/personal -PathType Container)) {
     try {
       $null = New-Item -ItemType File -Path ~/git-repos/personal -Force -ErrorAction Stop
       Write-Host "The directory [~/git-repos/personal] has been created."
