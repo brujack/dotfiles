@@ -51,9 +51,18 @@ if ($IsWindows) {
       "7zip"
     )
 
+    # check to see if a package is installed before installing it
     foreach ($package in $ChocoPackagesToBeInstalled) {
-      choco install $package -y
+      $result = choco list -lo | Where-object { $_.ToLower().StartsWith("$package".ToLower()) }
+      if ($result -eq $null) {
+        choco install $package -y
+        Write-Host "Installed $package"
+      }
+      else {
+        Write-Host "$package already installed"
+      }
     }
+
   }
 
   function Enable-WindowsOptionalFeatures {
@@ -62,7 +71,7 @@ if ($IsWindows) {
       "Microsoft-Hyper-V"
       "Containers-DisposableClientVM"
     )
-    $RequiredWindowsOptionalFeaturesResults = foreach ($feature in $RequiredWindowsOptionalFeatures ) {Get-WindowsOptionalFeature -Online -FeatureName $feature | Where-Object {$_.State -eq "Disabled"}}
+    $RequiredWindowsOptionalFeaturesResults = foreach ($feature in $RequiredWindowsOptionalFeatures) {Get-WindowsOptionalFeature -Online -FeatureName $feature | Where-Object {$_.State -eq "Disabled"}}
 
     if ($RequiredWindowsOptionalFeaturesResults) {
       foreach ($features in $RequiredWindowsOptionalFeatures) {
