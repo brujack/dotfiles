@@ -40,7 +40,7 @@ if ($IsWindows) {
       "powertoys",
       "putty.install",
       "python3",
-      "reflect-free"
+      "reflect-free",
       "simplenote",
       "sourcetree",
       "spotify",
@@ -87,7 +87,7 @@ if ($IsWindows) {
 
   # set windows options
   # enable RDP
-  Set-ItemProperty -Path HKLM:\System\CurrentControlSet\Control\Terminal Server -Name "fDenyTSConnections" -value 0
+  Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -value 0
   # turn off firewall
   Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled False
   Set-WindowsExplorerOptions -EnableShowHiddenFilesFoldersDrives -EnableShowProtectedOSFiles -EnableShowFileExtensions -EnableShowFullPathInTitleBar
