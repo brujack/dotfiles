@@ -13,8 +13,8 @@ Whether to update installed chocolatey, windows packages and powershell modules
 
 param(
   [Parameter(Mandatory=$false)]
-  [Switch]setup
-  [Switch]update
+  [Switch]$setup,
+  [Switch]$update
 )
 if ($IsWindows) {
 
