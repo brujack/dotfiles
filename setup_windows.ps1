@@ -1,3 +1,21 @@
+<#
+.SYNOPSIS
+
+This will setup a new windows 10/11 instance and keep it up to date
+
+.PARAMETER -setup
+Whether to do an initial setup
+
+.PARAMETER -update
+Whether to update installed chocolatey, windows packages and powershell modules
+
+#>
+
+param(
+  [Parameter(Mandatory=$false)]
+  [Switch]setup
+  [Switch]update
+)
 if ($IsWindows) {
 
   function Install-ChocolateyPackages {
@@ -68,71 +86,88 @@ if ($IsWindows) {
 
   }
 
-  function Enable-WindowsOptionalFeatures {
-    # enable hyper-v and sandbox containers
-    $RequiredWindowsOptionalFeatures = @(
-      "Microsoft-Hyper-V"
-      "Containers-DisposableClientVM"
-    )
-    $RequiredWindowsOptionalFeaturesResults = foreach ($feature in $RequiredWindowsOptionalFeatures) {Get-WindowsOptionalFeature -Online -FeatureName $feature | Where-Object {$_.State -eq "Disabled"}}
+  if ($setup.IsPresent) {
+    function Enable-WindowsOptionalFeatures {
+      # enable hyper-v and sandbox containers
+      $RequiredWindowsOptionalFeatures = @(
+        "Microsoft-Hyper-V"
+        "Containers-DisposableClientVM"
+      )
+      $RequiredWindowsOptionalFeaturesResults = foreach ($feature in $RequiredWindowsOptionalFeatures) {Get-WindowsOptionalFeature -Online -FeatureName $feature | Where-Object {$_.State -eq "Disabled"}}
 
-    if ($RequiredWindowsOptionalFeaturesResults) {
-      foreach ($features in $RequiredWindowsOptionalFeatures) {
-        Enable-WindowsOptionalFeature -Online -FeatureName $features
-        Write-Host "Enabled feature $features"
+      if ($RequiredWindowsOptionalFeaturesResults) {
+        foreach ($features in $RequiredWindowsOptionalFeatures) {
+          Enable-WindowsOptionalFeature -Online -FeatureName $features
+          Write-Host "Enabled feature $features"
+        }
       }
     }
-  }
 
-  # set windows options
-  # enable RDP
-  Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -value 0
-  # turn off firewall
-  Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled False
-  Set-WindowsExplorerOptions -EnableShowHiddenFilesFoldersDrives -EnableShowProtectedOSFiles -EnableShowFileExtensions -EnableShowFullPathInTitleBar
+    # set windows options
+    # enable RDP
+    Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -value 0
+    # turn off firewall
+    Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled False
+    Set-WindowsExplorerOptions -EnableShowHiddenFilesFoldersDrives -EnableShowProtectedOSFiles -EnableShowFileExtensions -EnableShowFullPathInTitleBar
 
-  Install-ChocolateyPackages
+    Install-ChocolateyPackages
 
-  Enable-WindowsOptionalFeatures
+    Enable-WindowsOptionalFeatures
 
-  # enable wsl
-  $WSLEnabled = wsl --status
-  if (-Not ($WSLEnabled -contains "Default Version: 2")) {
-    wsl --install
-  }
-
-  # enable current user to be able to execute powershell scripts
-  Set-ExecutionPolicy Unrestricted -Scope CurrentUser
-
-  if (-Not (Test-Path -Path ~/.config -PathType Container)) {
-    try {
-      $null = New-Item -ItemType File -Path ~/.config -Force -ErrorAction Stop
-      Write-Host "The directory [~/.config] has been created."
+    # enable wsl
+    $WSLEnabled = wsl --status
+    if (-Not ($WSLEnabled -contains "Default Version: 2")) {
+      wsl --install
     }
-    catch {
+
+    # enable current user to be able to execute powershell scripts
+    Set-ExecutionPolicy Unrestricted -Scope CurrentUser
+
+    if (-Not (Test-Path -Path ~/.config -PathType Container)) {
+      try {
+        $null = New-Item -ItemType File -Path ~/.config -Force -ErrorAction Stop
+        Write-Host "The directory [~/.config] has been created."
+      }
+      catch {
+          throw $_.Exception.Message
+      }
+    }
+
+    if (-Not (Test-Path -Path ~/git-repos/personal -PathType Container)) {
+      try {
+        $null = New-Item -ItemType File -Path ~/git-repos/personal -Force -ErrorAction Stop
+        Write-Host "The directory [~/git-repos/personal] has been created."
+      }
+      catch {
+          throw $_.Exception.Message
+      }
+    }
+
+    if (Test-Path -Path ~/.gitconfig -PathType Leaf) {
+      try {
+        $null = Remove-Item ~/.gitconfig -ErrorAction SilentlyContinue
+        $null = Copy-Item -Path ~/git-repos/personal/dotfiles/.gitconfig_windows -Destination ~/.gitconfig -ErrorAction SilentlyContinue
+        Write-Host "copied ~/.gitconfig"
+      }
+      catch {
         throw $_.Exception.Message
+      }
     }
+
   }
 
-  if (-Not (Test-Path -Path ~/git-repos/personal -PathType Container)) {
-    try {
-      $null = New-Item -ItemType File -Path ~/git-repos/personal -Force -ErrorAction Stop
-      Write-Host "The directory [~/git-repos/personal] has been created."
-    }
-    catch {
+  if ($update.IsPresent) {
+    Write-Host "Updating chocolatey packages"
+    choco upgrade all -y
+
+    if (Test-Path -Path ./update_powershell_modules.ps1 -PathType Leaf) {
+      try {
+        ./update_powershell_modules.ps1
+      }
+      catch {
         throw $_.Exception.Message
+      }
     }
-  }
 
-  if (Test-Path -Path ~/.gitconfig -PathType Leaf) {
-    try {
-      $null = Remove-Item ~/.gitconfig -ErrorAction SilentlyContinue
-      $null = Copy-Item -Path ~/git-repos/personal/dotfiles/.gitconfig_windows -Destination ~/.gitconfig -ErrorAction SilentlyContinue
-      Write-Host "copied ~/.gitconfig"
-    }
-    catch {
-      throw $_.Exception.Message
-    }
   }
-
 }
