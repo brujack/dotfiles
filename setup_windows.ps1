@@ -162,6 +162,7 @@ if ($IsWindows) {
 
     if (Test-Path -Path ./update_powershell_modules.ps1 -PathType Leaf) {
       try {
+        Write-Host "Updating powershell modules"
         ./update_powershell_modules.ps1
       }
       catch {
