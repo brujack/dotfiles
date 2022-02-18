@@ -29,10 +29,10 @@ function Install-Mods {
   if ($IsLinux -or $IsMacOS) {
     foreach ($Mod in $ModulesToBeInstalled) {
       if (Get-Module -ListAvailable $Mod) {
-        Write-Host "Module '$Mod' is already installed"
+        Write-Output "Module '$Mod' is already installed"
       }
       else {
-        Write-Host "Installing '$Mod'"
+        Write-Output "Installing '$Mod'"
         Install-Module $Mod
       }
     }
@@ -40,10 +40,10 @@ function Install-Mods {
   if ($IsWindows) {
     foreach ($Mod in $ModulesToBeInstalledWindows) {
       if (Get-Module -ListAvailable $Mod) {
-        Write-Host "Module '$Mod' is already installed"
+        Write-Output "Module '$Mod' is already installed"
       }
       else {
-        Write-Host "Installing '$Mod'"
+        Write-Output "Installing '$Mod'"
         Install-Module $Mod
       }
     }

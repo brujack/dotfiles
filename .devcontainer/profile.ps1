@@ -62,7 +62,7 @@ if ($IsLinux -or $IsMacOS) {
     Invoke-Expression (&starship init powershell)
   }
   else {
-    Write-Host "starship not installed"
+    Write-Output "starship not installed"
   }
 }
 elseif ($IsWindows) {
@@ -70,7 +70,7 @@ elseif ($IsWindows) {
     Invoke-Expression (&starship init powershell)
   }
   else {
-    Write-Host "starship.exe not installed"
+    Write-Output "starship.exe not installed"
   }
 }
 
