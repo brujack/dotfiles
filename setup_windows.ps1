@@ -77,10 +77,10 @@ if ($IsWindows) {
       $result = choco list -lo | Where-object { $_.ToLower().StartsWith("$package".ToLower()) }
       if ($result -eq $null) {
         choco install $package -y
-        Write-Host "Installed $package"
+        Write-Output "Installed $package"
       }
       else {
-        Write-Host "$package already installed"
+        Write-Output "$package already installed"
       }
     }
 
@@ -121,7 +121,7 @@ if ($IsWindows) {
       if ($RequiredWindowsOptionalFeaturesResults) {
         foreach ($features in $RequiredWindowsOptionalFeatures) {
           Enable-WindowsOptionalFeature -Online -FeatureName $features
-          Write-Host "Enabled feature $features"
+          Write-Output "Enabled feature $features"
         }
       }
     }
@@ -149,7 +149,7 @@ if ($IsWindows) {
     if (-Not (Test-Path -Path ~/.config -PathType Container)) {
       try {
         $null = New-Item -ItemType File -Path ~/.config -Force -ErrorAction Stop
-        Write-Host "The directory [~/.config] has been created."
+        Write-Output "The directory [~/.config] has been created."
       }
       catch {
           throw $_.Exception.Message
@@ -159,7 +159,7 @@ if ($IsWindows) {
     if (-Not (Test-Path -Path ~/git-repos/personal -PathType Container)) {
       try {
         $null = New-Item -ItemType File -Path ~/git-repos/personal -Force -ErrorAction Stop
-        Write-Host "The directory [~/git-repos/personal] has been created."
+        Write-Output "The directory [~/git-repos/personal] has been created."
       }
       catch {
           throw $_.Exception.Message
@@ -170,7 +170,7 @@ if ($IsWindows) {
       try {
         $null = Remove-Item ~/.gitconfig -ErrorAction SilentlyContinue
         $null = Copy-Item -Path ~/git-repos/personal/dotfiles/.gitconfig_windows -Destination ~/.gitconfig -ErrorAction SilentlyContinue
-        Write-Host "copied ~/.gitconfig"
+        Write-Output "copied ~/.gitconfig"
       }
       catch {
         throw $_.Exception.Message
@@ -180,12 +180,12 @@ if ($IsWindows) {
   }
 
   if ($update.IsPresent) {
-    Write-Host "Updating chocolatey packages"
+    Write-Output "Updating chocolatey packages"
     choco upgrade all -y
 
     if (Test-Path -Path ./update_powershell_modules.ps1 -PathType Leaf) {
       try {
-        Write-Host "Updating powershell modules"
+        Write-Output "Updating powershell modules"
         ./update_powershell_modules.ps1
       }
       catch {
@@ -193,7 +193,7 @@ if ($IsWindows) {
       }
     }
 
-    Write-Host "Installing Windows Updates"
+    Write-Output "Installing Windows Updates"
     Install-WindowsUpdates
   }
 }
