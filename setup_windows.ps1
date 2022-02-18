@@ -86,6 +86,29 @@ if ($IsWindows) {
 
   }
 
+  function Install-WindowsUpdates {
+    # define update criteria
+    $Criteria = "IsInstalled=0"
+
+    # search for relevant updates.
+    $Searcher = New-Object -ComObject Microsoft.Update.Searcher
+    $SearchResult = $Searcher.Search($Criteria).Updates
+
+    # download updates
+    $Session = New-Object -ComObject Microsoft.Update.Session
+    $Downloader = $Session.CreateUpdateDownloader()
+    $Downloader.Updates = $SearchResult
+    $Downloader.Download()
+
+    # install updates
+    $Installer = New-Object -ComObject Microsoft.Update.Installer
+    $Installer.Updates = $SearchResult
+    $Result = $Installer.Install()
+
+    # reboot if required
+    If ($Result.rebootRequired) { shutdown.exe /t 0 /r }
+  }
+
   if ($setup.IsPresent) {
     function Enable-WindowsOptionalFeatures {
       # enable hyper-v and sandbox containers
@@ -170,5 +193,7 @@ if ($IsWindows) {
       }
     }
 
+    Write-Host "Installing Windows Updates"
+    Install-WindowsUpdates
   }
 }
