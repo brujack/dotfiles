@@ -98,12 +98,16 @@ if ($IsWindows) {
     $Session = New-Object -ComObject Microsoft.Update.Session
     $Downloader = $Session.CreateUpdateDownloader()
     $Downloader.Updates = $SearchResult
-    $Downloader.Download()
+    if ($SearchResult) {
+      $Downloader.Download()
+    }
 
     # install updates
     $Installer = New-Object -ComObject Microsoft.Update.Installer
     $Installer.Updates = $SearchResult
-    $Result = $Installer.Install()
+    if ($SearchResult) {
+      $Result = $Installer.Install()
+    }
 
     # reboot if required
     If ($Result.rebootRequired) { shutdown.exe /t 0 /r }
