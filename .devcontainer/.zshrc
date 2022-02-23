@@ -74,7 +74,7 @@ fi
 # fi
 
 GO_VER="1.17"
-RUBY_VER="3.0.2"
+RUBY_VER="3.1.1"
 GITREPOS="${HOME}/git-repos"
 
 # setup some variables for virtualenv
