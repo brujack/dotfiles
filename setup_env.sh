@@ -599,6 +599,8 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     brew install --cask chef/chef/inspec
     brew install --cask dotnet
     brew install go-task/tap/go-task
+    brew tap snyk/tap
+    brew install snyk
 
     cd ${PERSONAL_GITREPOS}/${DOTFILES} || return
 
@@ -1048,6 +1050,8 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     brew install starship
     brew install tgenv
     brew install go-task/tap/go-task
+    brew tap snyk/tap
+    brew install snyk
 
     if [[ ${WORKSTATION} ]]; then
       echo "Installing Nvidia drivers"
