@@ -1054,16 +1054,6 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     brew install snyk
 
     if [[ ${WORKSTATION} ]]; then
-      echo "Installing Nvidia drivers"
-      sudo -H apt install ocl-icd-opencl-dev -y
-      sudo -H apt install clinfo -y
-      sudo add-apt-repository ppa:graphics-drivers/ppa
-      sudo apt update
-      sudo apt install ubuntu-drivers-common -y
-      sudo ubuntu-drivers autoinstall
-    fi
-
-    if [[ ${WORKSTATION} ]]; then
       echo "Installing microsoft teams"
       sudo sh -c 'echo "deb [arch=amd64] https://packages.microsoft.com/repos/ms-teams stable main" > /etc/apt/sources.list.d/teams.list'
       sudo -H apt update

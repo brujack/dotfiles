@@ -46,8 +46,9 @@ if [[ ${MACOS} ]]; then
     eval `/usr/local/bin/keychain --eval --agents ssh --inherit any gitlab`
     eval `/usr/local/bin/keychain --eval --agents gpg B6DCFA4E5AFEA3AF35CE0A189A997C02283A9062 --inherit any`
   elif [[ ${LAPTOP} ]]; then
-    eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any id_rsa`
-    eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any id_ed25519`
+    #eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any yubikey1`
+    #eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any id_rsa`
+    #eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any id_ed25519`
     eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any home`
     eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any github`
     eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any gitlab`
@@ -55,8 +56,8 @@ if [[ ${MACOS} ]]; then
   fi
 elif [[ ${LINUX} ]]; then
   if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]]; then
-    eval `/usr/bin/keychain --eval --agents ssh --inherit any id_rsa`
-    eval `/usr/bin/keychain --eval --agents ssh --inherit any id_ed25519`
+    #eval `/usr/bin/keychain --eval --agents ssh --inherit any id_rsa`
+    #eval `/usr/bin/keychain --eval --agents ssh --inherit any id_ed25519`
     eval `/usr/bin/keychain --eval --agents ssh --inherit any home`
     eval `/usr/bin/keychain --eval --agents ssh --inherit any github`
     eval `/usr/bin/keychain --eval --agents ssh --inherit any gitlab`
@@ -258,24 +259,19 @@ alias downloads='ssh bruce@downloads.conecrazy.io'
 alias mac='ssh bruce@mac.conecrazy.io'
 alias server='ssh bruce@server.conecrazy.io'
 alias ratna='ssh bruce@ratna.conecrazy.io'
-alias bruce-work='ssh bruce@bruce-work.conecrazy.io'
 alias workstation='ssh bruce@workstation.conecrazy.io'
-alias work='ssh bruce.jackson@work.conecrazy.io'
 alias fah-0='ssh bruce@fah-0.conecrazy.io'
 alias fah-1='ssh bruce@fah-1.conecrazy.io'
-alias vmware-0='ssh root@vmware-0.conecrazy.io'
-alias vmware-1='ssh root@vmware-1.conecrazy.io'
-alias vcenter='ssh root@vcenter.conecrazy.io'
-alias apt='ssh bruce@apt.conecrazy.io'
+
+
+
 alias bind-master='ssh bruce@bind-master.conecrazy.io'
 alias bind-slave='ssh bruce@bind-slave.conecrazy.io'
 alias rancher='ssh bruce@rancher.conecrazy.io'
 alias plex='ssh bruce@plex.conecrazy.io'
-alias jenkins='ssh bruce@jenkins.conecrazy.io'
-alias jenkins-agent='ssh bruce@jenkins-agent.conecrazy.io'
+
 alias docker-server='ssh bruce@docker-server.conecrazy.io'
-alias nomad='ssh bruce@nomad.conecrazy.io'
-alias nexus='ssh bruce@nexus.conecrazy.io'
+
 alias nut='ssh bruce@nut.conecrazy.io'
 alias prox-0='ssh root@prox-0.conecrazy.io'
 alias prox-1='ssh root@prox-1.conecrazy.io'
