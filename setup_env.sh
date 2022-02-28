@@ -158,6 +158,7 @@ fi
 
 [[ $(uname -r) =~ microsoft ]] && export WINDOWS=1
 [[ $(hostname -s) = "laptop" ]] && export LAPTOP=1
+[[ $(hostname -s) = "bruce-work" ]] && export BRUCEWORK=1
 [[ $(hostname -s) = "workstation" ]] && export WORKSTATION=1
 [[ $(hostname -s) = "cruncher" ]] && export CRUNCHER=1
 [[ $(hostname -s) = "virtualmachine1c4f85d6" ]] && export WORKSTATION=1
@@ -168,8 +169,9 @@ if [[ ${MACOS} ]]; then
   VIRTUALENV_LOC="/usr/local/bin"
   if [[ ${RATNA} ]]; then
     CHRUBY_LOC="/usr/local/opt/chruby/share"
-  fi
-  if [[ ${LAPTOP} ]]; then
+  elif [[ ${LAPTOP} ]]; then
+    CHRUBY_LOC="/opt/homebrew/opt/chruby/share/"
+  elif [[ ${BRUCEWORK} ]]; then
     CHRUBY_LOC="/opt/homebrew/opt/chruby/share/"
   fi
 elif [[ ${LINUX} ]]; then
@@ -688,7 +690,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/Malwarebytes.app" ]]; then
       brew install --cask malwarebytes
     fi
-    if [[ ${RATNA} || ${LAPTOP} ]]; then
+    if [[ ${RATNA} || ${LAPTOP} || ${BRUCEWORK} ]]; then
       if [[ ! -d "/Applications/Microsoft\ Word.app" ]]; then
         brew install --cask microsoft-office
       fi
@@ -807,7 +809,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       mas install 604825918
     fi
 
-    if [[ ${RATNA} || ${LAPTOP} ]]; then
+    if [[ ${RATNA} || ${LAPTOP} || ${BRUCEWORK} ]]; then
       echo "Installing extra apps via mas"
       if [[ ! -d "/Applications/Keynote.app" ]]; then
         mas install 409183694

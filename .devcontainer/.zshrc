@@ -11,6 +11,8 @@ Make() {
       fi
       if [[ ${LAPTOP} ]]; then
         alias make='/opt/homebrew/bin/gmake'
+      elif [[ ${BRUCEWORK} ]]; then
+        alias make='/opt/homebrew/bin/gmake'
       fi
     fi
     make "$@"
@@ -53,6 +55,11 @@ if [[ ${MACOS} ]]; then
     eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any github`
     eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any gitlab`
     eval `/opt/homebrew/bin/keychain --eval --agents gpg B6DCFA4E5AFEA3AF35CE0A189A997C02283A9062 --inherit any`
+  elif [[ ${BRUCEWORK} ]]; then
+    eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any home`
+    eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any github`
+    eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any gitlab`
+    eval `/opt/homebrew/bin/keychain --eval --agents gpg B6DCFA4E5AFEA3AF35CE0A189A997C02283A9062 --inherit any`
   fi
 elif [[ ${LINUX} ]]; then
   if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]]; then
@@ -88,6 +95,8 @@ if [[ ${MACOS} ]]; then
     CHRUBY_LOC="/usr/local/opt/chruby/share"
   fi
   if [[ ${LAPTOP} ]]; then
+    CHRUBY_LOC="/opt/homebrew/opt/chruby/share/"
+  elif [[ ${BRUCEWORK} ]]; then
     CHRUBY_LOC="/opt/homebrew/opt/chruby/share/"
   fi
 fi
@@ -198,6 +207,8 @@ export PATH
 
 # for fzf
 if [[ ${LAPTOP} ]]; then
+  export FZF_BASE=/opt/homebrew/bin/fzf
+elif [[ ${BRUCEWORK} ]]; then
   export FZF_BASE=/opt/homebrew/bin/fzf
 fi
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
