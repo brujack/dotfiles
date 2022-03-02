@@ -50,6 +50,7 @@ python-openssl
 python-setuptools
 python3-pip
 python3-setuptools
+pwgen
 ranger
 rar
 rlwrap

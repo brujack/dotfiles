@@ -937,6 +937,14 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo -H apt install virtualbox-6.1 -y
     fi
 
+    if [[ ${CRUNCHER} ]] || [[ ${WORKSTATION} ]]; then
+      echo "Installing teleport"
+      wget -q https://deb.releases.teleport.dev/teleport-pubkey.asc -O- | sudo apt-key add -
+      sudo add-apt-repository "deb https://deb.releases.teleport.dev/ stable main"
+      sudo -H apt update
+      sudo -H apt install teleport -y
+    fi
+
     if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]]; then
       if [[ ! -f ${HOME}/software_downloads/kind_${KIND_VER} ]]; then
         echo "Installing kind"

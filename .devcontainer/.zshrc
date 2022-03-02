@@ -273,13 +273,11 @@ alias ratna='ssh bruce@ratna.conecrazy.io'
 alias workstation='ssh bruce@workstation.conecrazy.io'
 alias fah-0='ssh bruce@fah-0.conecrazy.io'
 alias fah-1='ssh bruce@fah-1.conecrazy.io'
-
-
-
 alias bind-master='ssh bruce@bind-master.conecrazy.io'
 alias bind-slave='ssh bruce@bind-slave.conecrazy.io'
 alias rancher='ssh bruce@rancher.conecrazy.io'
 alias plex='ssh bruce@plex.conecrazy.io'
+alias teleport-server='ssh bruce@teleport.conecrazy.io'
 
 alias docker-server='ssh bruce@docker-server.conecrazy.io'
 
