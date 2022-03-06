@@ -945,6 +945,14 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo -H apt install teleport -y
     fi
 
+    if [[ ${CRUNCHER} ]] || [[ ${WORKSTATION} ]]; then
+      echo "Installing cloudflared"
+      wget -q https://pkg.cloudflare.com/cloudflare-main.gpg -O- | sudo apt-key add -
+      sudo add-apt-repository "deb https://pkg.cloudflare.com/ focal main"
+      sudo -H apt update
+      sudo -H apt install cloudflared -y
+    fi
+
     if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]]; then
       if [[ ! -f ${HOME}/software_downloads/kind_${KIND_VER} ]]; then
         echo "Installing kind"
