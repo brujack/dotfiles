@@ -33,7 +33,7 @@ TFSEC_URL="https://github.com/liamg/tfsec/releases/download/v${TFSEC_VER}/tfsec-
 TERRAGRUNT_VER="0.35.12"
 TERRAGRUNT_URL="https://github.com/gruntwork-io/terragrunt/releases/download/v${TERRAGRUNT_VER}/terragrunt_linux_amd64"
 CF_TERRAFORMING_VER="0.6.3"
-CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v${CF_TERRAFORMING_VER}/cf-terraforming_${CF_TERRAFORMING_VER}_linux_arm64.tar.gz"
+CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v${CF_TERRAFORMING_VER}/cf-terraforming_${CF_TERRAFORMING_VER}_linux_amd64.tar.gz"
 RHEL_KUBECTL_REPO="[kubernetes]
 name=Kubernetes
 baseurl=http://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
@@ -1064,9 +1064,9 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     fi
 
     echo "Installing cf-terraforming Ubuntu"
-    if [[ ! -f ${HOME}/software_downloads/cf-terraforming_${CF_TERRAFORMING_VER}_linux_arm64.tar.gz ]]; then
-      wget -O ${HOME}/software_downloads/cf-terraforming_${CF_TERRAFORMING_VER}_linux_arm64.tar.gz ${CF_TERRAFORMING_URL}
-      tar xvf ${HOME}/software_downloads/cf-terraforming_${CF_TERRAFORMING_VER}_linux_arm64.tar.gz -C ${HOME}/software_downloads
+    if [[ ! -f ${HOME}/software_downloads/cf-terraforming_${CF_TERRAFORMING_VER}_linux_amd64.tar.gz ]]; then
+      wget -O ${HOME}/software_downloads/cf-terraforming_${CF_TERRAFORMING_VER}_linux_amd64.tar.gz ${CF_TERRAFORMING_URL}
+      tar xvf ${HOME}/software_downloads/cf-terraforming_${CF_TERRAFORMING_VER}_linux_amd64.tar.gz -C ${HOME}/software_downloads
       if [[ -f ${HOME}/software_downloads/CHANGELOG.md ]]; then
         rm ${HOME}/software_downloads/CHANGELOG.md
       fi
