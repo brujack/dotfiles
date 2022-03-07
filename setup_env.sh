@@ -1063,9 +1063,6 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo chown root:root /usr/local/bin/docker-compose
     fi
 
-
-CF_TERRAFORMING_VER="0.6.3"
-CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v${CF_TERRAFORMING_VER}/cf-terraforming_${CF_TERRAFORMING_VER}_linux_arm64.tar.gz"
     echo "Installing cf-terraforming Ubuntu"
     if [[ ! -f ${HOME}/software_downloads/cf-terraforming_${CF_TERRAFORMING_VER}_linux_arm64.tar.gz ]]; then
       wget -O ${HOME}/software_downloads/cf-terraforming_${CF_TERRAFORMING_VER}_linux_arm64.tar.gz ${CF_TERRAFORMING_URL}
