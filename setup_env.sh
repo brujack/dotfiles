@@ -1066,7 +1066,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     echo "Installing cf-terraforming Ubuntu"
     if [[ ! -f ${HOME}/software_downloads/cf-terraforming_${CF_TERRAFORMING_VER}_linux_arm64.tar.gz ]]; then
       wget -O ${HOME}/software_downloads/cf-terraforming_${CF_TERRAFORMING_VER}_linux_arm64.tar.gz ${CF_TERRAFORMING_URL}
-      tar xvf ${HOME}/software_downloads/cf-terraforming_${CF_TERRAFORMING_VER}_linux_arm64.tar.gz
+      tar xvf ${HOME}/software_downloads/cf-terraforming_${CF_TERRAFORMING_VER}_linux_arm64.tar.gz -C ${HOME}/software_downloads
       if [[ -f ${HOME}/software_downloads/CHANGELOG.md ]]; then
         rm ${HOME}/software_downloads/CHANGELOG.md
       fi
