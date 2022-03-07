@@ -32,6 +32,8 @@ TFSEC_VER="1.5.0"
 TFSEC_URL="https://github.com/liamg/tfsec/releases/download/v${TFSEC_VER}/tfsec-linux-amd64"
 TERRAGRUNT_VER="0.35.12"
 TERRAGRUNT_URL="https://github.com/gruntwork-io/terragrunt/releases/download/v${TERRAGRUNT_VER}/terragrunt_linux_amd64"
+CF_TERRAFORMING_VER="0.6.3"
+CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v${CF_TERRAFORMING_VER}/cf-terraforming_${CF_TERRAFORMING_VER}_linux_arm64.tar.gz"
 RHEL_KUBECTL_REPO="[kubernetes]
 name=Kubernetes
 baseurl=http://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
@@ -603,6 +605,8 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     brew install go-task/tap/go-task
     brew tap snyk/tap
     brew install snyk
+    brew tap cloudflare/cloudflare
+    brew install --cask cloudflare/cloudflare/cf-terraforming
 
     cd ${PERSONAL_GITREPOS}/${DOTFILES} || return
 
@@ -1059,6 +1063,27 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo chown root:root /usr/local/bin/docker-compose
     fi
 
+
+CF_TERRAFORMING_VER="0.6.3"
+CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v${CF_TERRAFORMING_VER}/cf-terraforming_${CF_TERRAFORMING_VER}_linux_arm64.tar.gz"
+    echo "Installing cf-terraforming Ubuntu"
+    if [[ ! -f ${HOME}/software_downloads/cf-terraforming_${CF_TERRAFORMING_VER}_linux_arm64.tar.gz ]]; then
+      wget -O ${HOME}/software_downloads/cf-terraforming_${CF_TERRAFORMING_VER}_linux_arm64.tar.gz ${CF_TERRAFORMING_URL}
+      tar xvf ${HOME}/software_downloads/cf-terraforming_${CF_TERRAFORMING_VER}_linux_arm64.tar.gz
+      if [[ -f ${HOME}/software_downloads/CHANGELOG.md ]]; then
+        rm ${HOME}/software_downloads/CHANGELOG.md
+      fi
+      if [[ -f ${HOME}/software_downloads/LICENSE ]]; then
+        rm ${HOME}/software_downloads/LICENSE
+      fi
+      if [[ -f ${HOME}/software_downloads/README.md ]]; then
+        rm ${HOME}/software_downloads/README.md
+      fi
+      sudo cp -a ${HOME}/software_downloads/cf-terraforming /usr/local/bin/
+      sudo chmod 755 /usr/local/bin/cf-terraforming
+      sudo chown root:root /usr/local/bin/cf-terraforming
+    fi
+
     echo "Installing brew packages in Ubuntu"
     brew update
     brew install gh
@@ -1086,7 +1111,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     fi
 
     if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]]; then
-      echo "Installing .net5 sdk"
+      echo "Installing .net6 sdk"
       sudo -H apt install dotnet-sdk-6.0 -y
     fi
 
