@@ -695,7 +695,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/Malwarebytes.app" ]]; then
       brew install --cask malwarebytes
     fi
-    if [[ ${RATNA} || ${LAPTOP} || [[ ${STUDIO} ]] || ${BRUCEWORK} ]]; then
+    if [[ ${RATNA} ]] || [[ ${LAPTOP} ]] || [[ ${STUDIO} ]] || [[ ${BRUCEWORK} ]]; then
       if [[ ! -d "/Applications/Microsoft\ Word.app" ]]; then
         brew install --cask microsoft-office
       fi
@@ -814,7 +814,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       mas install 604825918
     fi
 
-    if [[ ${RATNA} || ${LAPTOP} || [[ ${STUDIO} ]] || ${BRUCEWORK} ]]; then
+    if [[ ${RATNA} ]] || [[ ${LAPTOP} ]] || [[ ${STUDIO} ]] || [[ ${BRUCEWORK} ]]; then
       echo "Installing extra apps via mas"
       if [[ ! -d "/Applications/Keynote.app" ]]; then
         mas install 409183694
