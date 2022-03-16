@@ -35,6 +35,7 @@ fi
 [[ $(hostname -s) = "ratna" ]] && export RATNA=1
 [[ $(hostname -s) = "bruce-work" ]] && export BRUCEWORK=1
 [[ $(hostname -s) = "laptop" ]] && export LAPTOP=1
+[[ $(hostname -s) = "studio" ]] && export STUDIO=1
 [[ $(hostname -s) = "workstation" ]] && export WORKSTATION=1
 [[ $(hostname -s) = "cruncher" ]] && export CRUNCHER=1
 
@@ -47,7 +48,7 @@ if [[ ${MACOS} ]]; then
     eval `/usr/local/bin/keychain --eval --agents ssh --inherit any github`
     eval `/usr/local/bin/keychain --eval --agents ssh --inherit any gitlab`
     eval `/usr/local/bin/keychain --eval --agents gpg B6DCFA4E5AFEA3AF35CE0A189A997C02283A9062 --inherit any`
-  elif [[ ${LAPTOP} ]]; then
+  elif [[ ${LAPTOP} ]] || [[ ${STUDIO} ]]; then
     #eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any yubikey1`
     #eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any id_rsa`
     #eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any id_ed25519`
@@ -94,7 +95,7 @@ if [[ ${MACOS} ]]; then
   if [[ ${RATNA} ]]; then
     CHRUBY_LOC="/usr/local/opt/chruby/share"
   fi
-  if [[ ${LAPTOP} ]]; then
+  if [[ ${LAPTOP} ]] || [[ ${STUDIO} ]]; then
     CHRUBY_LOC="/opt/homebrew/opt/chruby/share/"
   elif [[ ${BRUCEWORK} ]]; then
     CHRUBY_LOC="/opt/homebrew/opt/chruby/share/"
@@ -206,9 +207,7 @@ fi
 export PATH
 
 # for fzf
-if [[ ${LAPTOP} ]]; then
-  export FZF_BASE=/opt/homebrew/bin/fzf
-elif [[ ${BRUCEWORK} ]]; then
+if [[ ${LAPTOP} ]] || [[ ${STUDIO} ]] || [[ ${BRUCEWORK} ]]; then
   export FZF_BASE=/opt/homebrew/bin/fzf
 fi
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
@@ -370,7 +369,7 @@ fi
 # fi
 
 # pyenv setup
-if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]] || [[ ${RATNA} ]] || [[ ${LAPTOP} ]] || [[ ${BRUCEWORK} ]]; then
+if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]] || [[ ${RATNA} ]] || [[ ${LAPTOP} ]] || [[ ${STUDIO} ]] || [[ ${BRUCEWORK} ]]; then
   export PYENV_ROOT="$HOME/.pyenv"
   export PATH="$PYENV_ROOT/bin:$PATH"
   eval "$(pyenv init --path)"

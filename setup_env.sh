@@ -160,6 +160,7 @@ fi
 
 [[ $(uname -r) =~ microsoft ]] && export WINDOWS=1
 [[ $(hostname -s) = "laptop" ]] && export LAPTOP=1
+[[ $(hostname -s) = "studio" ]] && export STUDIO=1
 [[ $(hostname -s) = "bruce-work" ]] && export BRUCEWORK=1
 [[ $(hostname -s) = "workstation" ]] && export WORKSTATION=1
 [[ $(hostname -s) = "cruncher" ]] && export CRUNCHER=1
@@ -171,7 +172,7 @@ if [[ ${MACOS} ]]; then
   VIRTUALENV_LOC="/usr/local/bin"
   if [[ ${RATNA} ]]; then
     CHRUBY_LOC="/usr/local/opt/chruby/share"
-  elif [[ ${LAPTOP} ]]; then
+  elif [[ ${LAPTOP} ]] || [[ ${STUDIO} ]]; then
     CHRUBY_LOC="/opt/homebrew/opt/chruby/share/"
   elif [[ ${BRUCEWORK} ]]; then
     CHRUBY_LOC="/opt/homebrew/opt/chruby/share/"
@@ -611,7 +612,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     cd ${PERSONAL_GITREPOS}/${DOTFILES} || return
 
     # the below casks and mas are not in a brewfile since they will "fail" if already installed
-    if [[ ${LAPTOP} ]]; then
+    if [[ ${LAPTOP} ]] || [[ ${STUDIO} ]]; then
       if [[ ! -d "/Applications/Adobe\ Creative\ Cloud" ]]; then
         brew install --cask adobe-creative-cloud
       fi
@@ -694,7 +695,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/Malwarebytes.app" ]]; then
       brew install --cask malwarebytes
     fi
-    if [[ ${RATNA} || ${LAPTOP} || ${BRUCEWORK} ]]; then
+    if [[ ${RATNA} || ${LAPTOP} || [[ ${STUDIO} ]] || ${BRUCEWORK} ]]; then
       if [[ ! -d "/Applications/Microsoft\ Word.app" ]]; then
         brew install --cask microsoft-office
       fi
@@ -813,7 +814,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       mas install 604825918
     fi
 
-    if [[ ${RATNA} || ${LAPTOP} || ${BRUCEWORK} ]]; then
+    if [[ ${RATNA} || ${LAPTOP} || [[ ${STUDIO} ]] || ${BRUCEWORK} ]]; then
       echo "Installing extra apps via mas"
       if [[ ! -d "/Applications/Keynote.app" ]]; then
         mas install 409183694
