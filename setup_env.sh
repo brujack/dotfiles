@@ -356,9 +356,9 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     elif [[ ! -L ${HOME}/.gitconfig ]]; then
       ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_mac ${HOME}/.gitconfig
     fi
-    if [[ -d ${HOME}/git-repos/multiview ]]; then
-      if [[ ! -L ${HOME}/git-repos/multiview/.gitconfig ]]; then
-        ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_mac_multiview ${HOME}/git-repos/multiview/.gitconfig
+    if [[ -d ${HOME}/git-repos/fortis ]]; then
+      if [[ ! -L ${HOME}/git-repos/fortis/.gitconfig ]]; then
+        ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_mac_fortis ${HOME}/git-repos/fortis/.gitconfig
       fi
     fi
     if [[ -d ${HOME}/git-repos/gitlab ]]; then
@@ -375,9 +375,9 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
       ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_linux ${HOME}/.gitconfig
     fi
     if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]]; then
-      if [[ -d ${HOME}/git-repos/multiview ]]; then
-        if [[ ! -L ${HOME}/git-repos/multiview/.gitconfig ]]; then
-          ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_linux_multiview ${HOME}/git-repos/multiview/.gitconfig
+      if [[ -d ${HOME}/git-repos/fortis ]]; then
+        if [[ ! -L ${HOME}/git-repos/fortis/.gitconfig ]]; then
+          ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_linux_fortis ${HOME}/git-repos/fortis/.gitconfig
         fi
       fi
       if [[ -d ${HOME}/git-repos/gitlab ]]; then
