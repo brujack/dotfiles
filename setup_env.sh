@@ -608,6 +608,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     brew install snyk
     brew tap cloudflare/cloudflare
     brew install --cask cloudflare/cloudflare/cf-terraforming
+    brew install --cask miro
 
     cd ${PERSONAL_GITREPOS}/${DOTFILES} || return
 
