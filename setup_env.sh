@@ -1479,7 +1479,7 @@ if [[ ${UPDATE} ]]; then
     echo "Upgrading brew's"
     brew upgrade
     echo "Upgrading brew casks"
-    brew upgrade --cask
+    brew upgrade --cask --greedy
     echo "Cleaning up brew"
     brew cleanup
     echo "Updating app store apps softwareupdate"
