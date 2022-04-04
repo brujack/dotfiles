@@ -713,9 +713,6 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/Slack.app" ]]; then
       brew install --cask slack
     fi
-    if [[ ! -d "/Applications/Spotify.app" ]]; then
-      brew install --cask spotify
-    fi
     if [[ ! -d "/Applications/Steam.app" ]]; then
       brew install --cask steam
     fi
