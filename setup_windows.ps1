@@ -60,7 +60,6 @@ if ($IsWindows) {
       "python3",
       "simplenote",
       "sourcetree",
-      "spotify",
       "starship",
       "teamviewer",
       "terraform",
