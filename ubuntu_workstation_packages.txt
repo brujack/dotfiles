@@ -5,3 +5,4 @@ nfs-common
 openjdk-11-jdk
 steam
 ubuntu-restricted-extras
+xrdp
