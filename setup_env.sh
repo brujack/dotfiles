@@ -161,7 +161,7 @@ fi
 [[ $(uname -r) =~ microsoft ]] && export WINDOWS=1
 [[ $(hostname -s) = "laptop" ]] && export LAPTOP=1
 [[ $(hostname -s) = "studio" ]] && export STUDIO=1
-[[ $(hostname -s) = "brucework" ]] && export BRUCEWORK=1
+[[ $(hostname -s) = "fg-bjackson" ]] && export BRUCEWORK=1
 [[ $(hostname -s) = "workstation" ]] && export WORKSTATION=1
 [[ $(hostname -s) = "cruncher" ]] && export CRUNCHER=1
 [[ $(hostname -s) = "virtualmachine1c4f85d6" ]] && export WORKSTATION=1
