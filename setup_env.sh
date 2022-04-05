@@ -716,9 +716,6 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/Steam.app" ]]; then
       brew install --cask steam
     fi
-    if [[ ! -d "/Applications/Streamlabs\ OBS.app" ]]; then
-      brew install --cask streamlabs-obs
-    fi
     if [[ ! -d "/Applications/TeamViewer.app" ]]; then
       brew install --cask teamviewer
     fi
