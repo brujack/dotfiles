@@ -33,7 +33,7 @@ fi
 
 [[ $(uname -r) =~ microsoft ]] && export WINDOWS=1
 [[ $(hostname -s) = "ratna" ]] && export RATNA=1
-[[ $(hostname -s) = "bruce-work" ]] && export BRUCEWORK=1
+[[ $(hostname -s) = "brucework" ]] && export BRUCEWORK=1
 [[ $(hostname -s) = "laptop" ]] && export LAPTOP=1
 [[ $(hostname -s) = "studio" ]] && export STUDIO=1
 [[ $(hostname -s) = "workstation" ]] && export WORKSTATION=1
