@@ -1,6 +1,8 @@
 # pyenv setup
 [[ $(hostname -s) = "laptop" ]] && export LAPTOP=1
+[[ $(hostname -s) = "laptop-1" ]] && export LAPTOP=1
 [[ $(hostname -s) = "studio" ]] && export STUDIO=1
+[[ $(hostname -s) = "studio-1" ]] && export STUDIO=1
 [[ $(hostname -s) = "fg-bjackson" ]] && export BRUCEWORK=1
 export PYENV_ROOT="$HOME/.pyenv"
 export PATH="$PYENV_ROOT/bin:$PATH"
