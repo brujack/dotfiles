@@ -35,7 +35,9 @@ fi
 [[ $(hostname -s) = "ratna" ]] && export RATNA=1
 [[ $(hostname -s) = "fg-bjackson" ]] && export BRUCEWORK=1
 [[ $(hostname -s) = "laptop" ]] && export LAPTOP=1
+[[ $(hostname -s) = "laptop-1" ]] && export LAPTOP=1
 [[ $(hostname -s) = "studio" ]] && export STUDIO=1
+[[ $(hostname -s) = "studio-1" ]] && export STUDIO=1
 [[ $(hostname -s) = "workstation" ]] && export WORKSTATION=1
 [[ $(hostname -s) = "cruncher" ]] && export CRUNCHER=1
 
