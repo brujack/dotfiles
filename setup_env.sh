@@ -514,12 +514,12 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     fi
   fi
   echo "Setting up Z"
-  if [[ ! -d ${HOME}/z ]]; then
-    mkdir ${HOME}/z
+  if [[ ! -d ${HOME}/git-repos/z ]]; then
+    mkdir ${HOME}/git-repos/z
     cd ${HOME} || return
-    git clone --recursive ${Z_GIT} ${HOME}/z
+    git clone --recursive ${Z_GIT} ${HOME}/git-repos/z
   else
-    cd ${HOME}/z || return
+    cd ${HOME}/git-repos/z || return
     git pull
   fi
 
