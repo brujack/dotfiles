@@ -84,7 +84,7 @@ fi
 #   source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
 # fi
 
-GO_VER="1.17"
+GO_VER="1.18"
 RUBY_VER="3.1.1"
 GITREPOS="${HOME}/git-repos"
 
