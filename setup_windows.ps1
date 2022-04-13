@@ -63,6 +63,7 @@ if ($IsWindows) {
       "simplenote",
       "sourcetree",
       "starship",
+      "steam-client",
       "teamviewer",
       "terraform",
       "typora",
