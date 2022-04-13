@@ -1338,11 +1338,6 @@ EOM
       unzip ${HOME}/software_downloads/awscli/awscliv2.zip -d ${HOME}/software_downloads/awscli
       sudo -H ${HOME}/software_downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin
     fi
-  elif [[ ${MACOS} ]]; then
-    if [[ ! -f ${HOME}/software_downloads/AWSCLIV2.pkg ]]; then
-      wget -O ${HOME}/software_downloads/awscli/AWSCLIV2.pkg "https://awscli.amazonaws.com/AWSCLIV2.pkg"
-      sudo installer -pkg ${HOME}/software_downloads/awscli/AWSCLIV2.pkg -target /
-    fi
   fi
 
   echo "vim plugins"
@@ -1504,13 +1499,7 @@ if [[ ${UPDATE} ]]; then
   python3 -m pip install --upgrade pip
   python3 -m pip list --outdated --format=columns | awk '{print $1;}' | awk 'NR>2' | xargs -n1 python3 -m pip install -U
   python3 -m pip check
-  if [[ ${MACOS} ]]; then
-    echo "Updating Macos awscli"
-    cd ${HOME}/software_downloads
-    curl "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "AWSCLIV2.pkg"
-    sudo installer -pkg AWSCLIV2.pkg -target /
-    cd ${PERSONAL_GITREPOS}/${DOTFILES}
-  elif [[ ${LINUX} ]]; then
+  if [[ ${LINUX} ]]; then
     echo "Updating Linux awscli"
     cd ${HOME}/software_downloads/awscli
     curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
