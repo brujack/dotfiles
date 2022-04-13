@@ -325,6 +325,7 @@ alias kgs='kubectl get services --all-namespaces'
 alias kcv='kubectl config view'
 alias kcc='kubectl config current-context'
 alias kcu='kubectl config use-context $@'
+alias lzd='lazydocker'
 
 # alias for ls to exa removed due to breaking globbing for ansible aws integration
 if quiet_which exa
