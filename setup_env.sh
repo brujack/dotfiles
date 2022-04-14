@@ -844,14 +844,14 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
   if [[ ${UBUNTU} ]]; then
     sudo -H apt update
     sudo -H apt install --install-recommends linux-generic-hwe-20.04 -y
-    xargs -a ubuntu_common_packages.txt sudo apt install -y
+    xargs -a ./ubuntu_common_packages.txt sudo apt install -y
 
     if [[ ${WORKSTATION} ]]; then
       # apt package installation
-      xargs -a ubuntu_workstation_packages.txt sudo apt install -y
+      xargs -a ./ubuntu_workstation_packages.txt sudo apt install -y
 
       # snap package installation
-      xargs -a ubuntu_workstation_snap_packages.txt sudo snap install
+      xargs -a ./ubuntu_workstation_snap_packages.txt sudo snap install
 
     fi
 
