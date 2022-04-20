@@ -1435,7 +1435,7 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
       pyenv virtualenv-delete -f ansible
       pyenv virtualenv ${PYTHON_VER} ansible
       pyenv activate ansible
-      python3 -m pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org ansible ansible-cmdb ansible-lint boto3 docker docker-compose jmespath pylint psutil bpytop HttpPy j2cli wheel
+      python3 -m pip --cert ~/nscacerts.pem install ansible ansible-cmdb ansible-lint boto3 docker docker-compose jmespath pylint psutil bpytop HttpPy j2cli wheel
     fi
   fi
 
@@ -1509,9 +1509,9 @@ if [[ ${UPDATE} ]]; then
     python3 -m pip list --outdated --format=columns | awk '{print $1;}' | awk 'NR>2' | xargs -n1 python3 -m pip install -U
     python3 -m pip check
   elif [[ ${BRUCEWORK} ]]; then
-    python3 -m pip install --upgrade pip --trusted-host pypi.org --trusted-host files.pythonhosted.org
-    python3 -m pip list --outdated --format=columns | awk '{print $1;}' | awk 'NR>2' | xargs -n1 python3 -m pip install -U --trusted-host pypi.org --trusted-host files.pythonhosted.org
-    python3 -m pip check --trusted-host pypi.org --trusted-host files.pythonhosted.org
+    python3 -m pip install --upgrade pip --cert ~/nscacerts.pem
+    python3 -m pip list --outdated --format=columns --cert ~/nscacerts.pem | awk '{print $1;}' | awk 'NR>2' | xargs -n1 python3 -m pip install -U --cert ~/nscacerts.pem
+    python3 -m pip check --cert ~/nscacerts.pem
   fi
   if [[ ${LINUX} ]]; then
     echo "Updating Linux awscli"
