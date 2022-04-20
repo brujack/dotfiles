@@ -30,8 +30,6 @@ TFLINT_VER="0.35.0"
 TFLINT_URL="https://github.com/terraform-linters/tflint/releases/download/v${TFLINT_VER}/tflint_linux_amd64.zip"
 TFSEC_VER="1.15.0"
 TFSEC_URL="https://github.com/liamg/tfsec/releases/download/v${TFSEC_VER}/tfsec-linux-amd64"
-TERRAGRUNT_VER="0.36.0"
-TERRAGRUNT_URL="https://github.com/gruntwork-io/terragrunt/releases/download/v${TERRAGRUNT_VER}/terragrunt_linux_amd64"
 CF_TERRAFORMING_VER="0.6.3"
 CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v${CF_TERRAFORMING_VER}/cf-terraforming_${CF_TERRAFORMING_VER}_linux_amd64.tar.gz"
 RHEL_KUBECTL_REPO="[kubernetes]
@@ -1320,12 +1318,6 @@ EOM
       wget -O ${HOME}/software_downloads/tfsec-linux-amd64 ${TFSEC_URL}
       sudo -H mv ${HOME}/software_downloads/tfsec-linux-amd64 /usr/local/bin/tfsec
       sudo -H chmod 755 /usr/local/bin/tfsec
-    fi
-    echo "Installing terragrunt"
-    if [[ ! -f ${HOME}/software_downloads/terragrunt_linux_amd64 ]]; then
-      wget -O ${HOME}/software_downloads/terragrunt_linux_amd64 ${TERRAGRUNT_URL}
-      sudo -H mv ${HOME}/software_downloads/terragrunt_linux_amd64 /usr/local/bin/terragrunt
-      sudo -H chmod 755 /usr/local/bin/terragrunt
     fi
   fi
 
