@@ -1509,8 +1509,8 @@ if [[ ${UPDATE} ]]; then
     python3 -m pip list --outdated --format=columns | awk '{print $1;}' | awk 'NR>2' | xargs -n1 python3 -m pip install -U
     python3 -m pip check
   elif [[ ${BRUCEWORK} ]]; then
-    python3 -m pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org --upgrade pip
-    python3 -m pip list --outdated --format=columns | awk '{print $1;}' | awk 'NR>2' | xargs -n1 python3 -m pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org -U
+    python3 -m pip install --upgrade pip --trusted-host pypi.org --trusted-host files.pythonhosted.org
+    python3 -m pip list --outdated --format=columns | awk '{print $1;}' | awk 'NR>2' | xargs -n1 python3 -m pip install -U --trusted-host pypi.org --trusted-host files.pythonhosted.org
     python3 -m pip check --trusted-host pypi.org --trusted-host files.pythonhosted.org
   fi
   if [[ ${LINUX} ]]; then
