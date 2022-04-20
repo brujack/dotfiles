@@ -1426,10 +1426,17 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
   fi
 
   if ! [[ $(readlink ${HOME}/.pyenv/versions/ansible) == "${HOME}/.pyenv/versions/${PYTHON_VER}/envs/ansible" ]]; then
-    pyenv virtualenv-delete -f ansible
-    pyenv virtualenv ${PYTHON_VER} ansible
-    pyenv activate ansible
-    python3 -m pip install ansible ansible-cmdb ansible-lint boto3 docker docker-compose jmespath pylint psutil bpytop HttpPy j2cli wheel
+    if [[ ${STUDIO} ]] || [[ ${LAPTOP} ]] || [[ ${WORKSTATION} ]] || [[ ${RATNA} ]]; then
+      pyenv virtualenv-delete -f ansible
+      pyenv virtualenv ${PYTHON_VER} ansible
+      pyenv activate ansible
+      python3 -m pip install ansible ansible-cmdb ansible-lint boto3 docker docker-compose jmespath pylint psutil bpytop HttpPy j2cli wheel
+    elif [[ ${BRUCEWORK} ]]; then
+      pyenv virtualenv-delete -f ansible
+      pyenv virtualenv ${PYTHON_VER} ansible
+      pyenv activate ansible
+      python3 -m pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org ansible ansible-cmdb ansible-lint boto3 docker docker-compose jmespath pylint psutil bpytop HttpPy j2cli wheel
+    fi
   fi
 
   echo "personal git repos cloning"
@@ -1497,9 +1504,15 @@ if [[ ${UPDATE} ]]; then
     mas upgrade
   fi
   echo "Updating pip3 packages"
-  python3 -m pip install --upgrade pip
-  python3 -m pip list --outdated --format=columns | awk '{print $1;}' | awk 'NR>2' | xargs -n1 python3 -m pip install -U
-  python3 -m pip check
+  if [[ ${STUDIO} ]] || [[ ${LAPTOP} ]] || [[ ${WORKSTATION} ]] || [[ ${RATNA} ]]; then
+    python3 -m pip install --upgrade pip
+    python3 -m pip list --outdated --format=columns | awk '{print $1;}' | awk 'NR>2' | xargs -n1 python3 -m pip install -U
+    python3 -m pip check
+  elif [[ ${BRUCEWORK} ]]; then
+    python3 -m pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org --upgrade pip
+    python3 -m pip list --outdated --format=columns | awk '{print $1;}' | awk 'NR>2' | xargs -n1 python3 -m pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org -U
+    python3 -m pip check --trusted-host pypi.org --trusted-host files.pythonhosted.org
+  fi
   if [[ ${LINUX} ]]; then
     echo "Updating Linux awscli"
     cd ${HOME}/software_downloads/awscli
