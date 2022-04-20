@@ -1405,6 +1405,7 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
   gem install kitchen-terraform
   gem install kitchen-verifier-serverspec
   gem install bundle
+  gem install bundler
 
   echo "Install terraspace"
   gem install terraspace
