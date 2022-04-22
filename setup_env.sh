@@ -1420,7 +1420,7 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
   fi
 
   if ! [[ $(readlink ${HOME}/.pyenv/versions/ansible) == "${HOME}/.pyenv/versions/${PYTHON_VER}/envs/ansible" ]]; then
-    if [[ ${STUDIO} ]] || [[ ${LAPTOP} ]] || [[ ${WORKSTATION} ]] || [[ ${RATNA} ]]; then
+    if [[ ${STUDIO} ]] || [[ ${LAPTOP} ]] || [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]] || [[ ${RATNA} ]]; then
       pyenv virtualenv-delete -f ansible
       pyenv virtualenv ${PYTHON_VER} ansible
       pyenv activate ansible
