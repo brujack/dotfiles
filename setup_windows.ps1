@@ -56,6 +56,7 @@ if ($IsWindows) {
       "make",
       "microsoft-teams",
       "microsoft-windows-terminal",
+      "neovim",
       "postman",
       "powertoys",
       "putty.install",
