@@ -1088,6 +1088,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     brew install k9s
     brew install lazydocker
     brew install linkerd
+    brew install neovim
     brew install starship
     brew install tgenv
     brew install go-task/tap/go-task
