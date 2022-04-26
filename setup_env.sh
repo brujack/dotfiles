@@ -153,6 +153,7 @@ if [[ ${UBUNTU} ]]; then
   UBUNTU_VERSION=$(lsb_release -rs)
   [[ ${UBUNTU_VERSION} = "18.04" ]] && export BIONIC=1
   [[ ${UBUNTU_VERSION} = "20.04" ]] && export FOCAL=1
+  [[ ${UBUNTU_VERSION} = "22.04" ]] && export JAMMY=1
   [[ ${UBUNTU_VERSION} = "6" ]] && export FOCAL=1 # elementary os
 fi
 
@@ -882,6 +883,15 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
         sudo -H apt install powershell -y
       fi
     fi
+    if [[ ${JAMMY} ]]; then
+      if [[ ! -f ${HOME}/software_downloads/packages-microsoft-prod.deb ]]; then
+        wget -O ${HOME}/software_downloads/packages-microsoft-prod.deb http://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb
+        sudo -H dpkg -i ${HOME}/software_downloads/packages-microsoft-prod.deb
+        sudo apt update
+        sudo -H add-apt-repository universe
+        sudo -H apt install powershell -y
+      fi
+    fi
 
     echo "Installing go Ubuntu"
     sudo add-apt-repository ppa:longsleep/golang-backports -y
@@ -941,6 +951,23 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo -H apt install virtualbox-6.1 -y
     fi
 
+    if [[ ${CRUNCHER} ]]; then
+      echo "Installing Virtualbox"
+      if [[ ${FOCAL} ]]; then
+        wget -q http://www.virtualbox.org/download/oracle_vbox_2016.asc -O- | sudo apt-key add -
+        wget -q http://www.virtualbox.org/download/oracle_vbox.asc -O- | sudo apt-key add -
+        sudo add-apt-repository "deb http://download.virtualbox.org/virtualbox/debian focal contrib"
+        sudo -H apt update
+        sudo -H apt install virtualbox-6.1 -y
+      elif [[ ${JAMMY} ]]; then
+        wget -q http://www.virtualbox.org/download/oracle_vbox_2016.asc -O- | sudo apt-key add -
+        wget -q http://www.virtualbox.org/download/oracle_vbox.asc -O- | sudo apt-key add -
+        sudo add-apt-repository "deb http://download.virtualbox.org/virtualbox/debian focal contrib"
+        sudo -H apt update
+        sudo -H apt install virtualbox-6.1 -y
+      fi
+    fi
+
     if [[ ${CRUNCHER} ]] || [[ ${WORKSTATION} ]]; then
       echo "Installing teleport"
       wget -q https://deb.releases.teleport.dev/teleport-pubkey.asc -O- | sudo apt-key add -
@@ -949,12 +976,25 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo -H apt install teleport -y
     fi
 
-    if [[ ${CRUNCHER} ]] || [[ ${WORKSTATION} ]]; then
+    if [[ ${WORKSTATION} ]]; then
       echo "Installing cloudflared"
       wget -q https://pkg.cloudflare.com/cloudflare-main.gpg -O- | sudo apt-key add -
       sudo add-apt-repository "deb https://pkg.cloudflare.com/ focal main"
       sudo -H apt update
       sudo -H apt install cloudflared -y
+    elif [[ ${CRUNCHER} ]]; then
+      echo "Installing cloudflared"
+      if [[ ${FOCAL} ]]; then
+        wget -q https://pkg.cloudflare.com/cloudflare-main.gpg -O- | sudo apt-key add -
+        sudo add-apt-repository "deb https://pkg.cloudflare.com/ focal main"
+        sudo -H apt update
+        sudo -H apt install cloudflared -y
+      elif [[ ${JAMMY} ]]; then
+        wget -q https://pkg.cloudflare.com/cloudflare-main.gpg -O- | sudo apt-key add -
+        sudo add-apt-repository "deb https://pkg.cloudflare.com/ jammy main"
+        sudo -H apt update
+        sudo -H apt install cloudflared -y
+      fi
     fi
 
     if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]]; then
