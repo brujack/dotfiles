@@ -30,6 +30,8 @@ libpython3-dev
 libreadline-dev
 libssl-dev
 libsqlite3-dev
+libxml2-dev
+libxmlsec1-dev
 llvm
 lm-sensors
 locales

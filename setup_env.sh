@@ -5,15 +5,15 @@ RUBY_INSTALL_VER="0.8.3"
 CHRUBY_VER="0.3.9"
 RUBY_VER="3.1.2"
 PYTHON_VER="3.10.4"
-CONSUL_VER="1.10.0"
-VAULT_VER="1.8.4"
-NOMAD_VER="1.1.6"
-PACKER_VER="1.7.8"
+CONSUL_VER="1.12.0"
+VAULT_VER="1.10.1"
+NOMAD_VER="1.2.6"
+PACKER_VER="1.8.0"
 VAGRANT_VER="2.2.19"
 HASHICORP_URL="https://releases.hashicorp.com"
 WORK_TERRAFORM_VER="1.0.2"
 TERRAFORM_VER="1.0.2"
-GIT_VER="2.33.1"
+GIT_VER="2.36.0"
 GIT_URL="https://mirrors.edge.kernel.org/pub/software/scm/git"
 ZSH_VER="5.8"
 GO_VER="1.18"
@@ -894,7 +894,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     fi
     if [[ ${JAMMY} ]]; then
       if [[ ! -f ${HOME}/software_downloads/packages-microsoft-prod.deb ]]; then
-        wget -O ${HOME}/software_downloads/packages-microsoft-prod.deb http://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb
+        wget -O ${HOME}/software_downloads/packages-microsoft-prod.deb http://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb
         sudo -H dpkg -i ${HOME}/software_downloads/packages-microsoft-prod.deb
         sudo apt update
         sudo -H add-apt-repository universe
