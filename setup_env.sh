@@ -842,8 +842,17 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
 
   if [[ ${UBUNTU} ]]; then
     sudo -H apt update
-    sudo -H apt install --install-recommends linux-generic-hwe-20.04 -y
+    if [[ ${FOCAL} ]]; then
+      sudo -H apt install --install-recommends linux-generic-hwe-20.04 -y
+    elif [[ ${JAMMY} ]]; then
+      sudo -H apt install --install-recommends linux-generic-hwe-22.04 -y
+    fi
     xargs -a ./ubuntu_common_packages.txt sudo apt install -y
+    if [[ ${FOCAL} ]]; then
+      xargs -a ./ubuntu_2004_packages.txt sudo apt install -y
+    elif [[ ${JAMMY} ]]; then
+      xargs -a ./ubuntu_2204_packages.txt sudo apt install -y
+    fi
 
     if [[ ${WORKSTATION} ]]; then
       # apt package installation
@@ -1020,12 +1029,21 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     fi
 
     if [[ ${WORKSTATION} ]]; then
-      echo "Installing Albert"
-      curl https://build.opensuse.org/projects/home:manuelschneid3r/public_key | sudo apt-key add -
-      echo 'deb http://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_20.04/ /' | sudo tee /etc/apt/sources.list.d/home:manuelschneid3r.list
-      sudo wget -nv https://download.opensuse.org/repositories/home:manuelschneid3r/xUbuntu_20.04/Release.key -O "/etc/apt/trusted.gpg.d/home:manuelschneid3r.asc"
-      sudo -H apt update
-      sudo -H apt install albert -y
+      if [[ ${FOCAL} ]]; then
+        echo "Installing Albert"
+        curl https://build.opensuse.org/projects/home:manuelschneid3r/public_key | sudo apt-key add -
+        echo 'deb http://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_20.04/ /' | sudo tee /etc/apt/sources.list.d/home:manuelschneid3r.list
+        sudo wget -nv https://download.opensuse.org/repositories/home:manuelschneid3r/xUbuntu_20.04/Release.key -O "/etc/apt/trusted.gpg.d/home:manuelschneid3r.asc"
+        sudo -H apt update
+        sudo -H apt install albert -y
+      elif [[ ${JAMMY} ]]; then
+        echo "Installing Albert"
+        curl https://build.opensuse.org/projects/home:manuelschneid3r/public_key | sudo apt-key add -
+        echo 'deb http://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_22.04/ /' | sudo tee /etc/apt/sources.list.d/home:manuelschneid3r.list
+        sudo wget -nv https://download.opensuse.org/repositories/home:manuelschneid3r/xUbuntu_22.04/Release.key -O "/etc/apt/trusted.gpg.d/home:manuelschneid3r.asc"
+        sudo -H apt update
+        sudo -H apt install albert -y
+      fi
     fi
 
     echo "Installing azure-cli"
@@ -1538,7 +1556,7 @@ if [[ ${UPDATE} ]]; then
     mas upgrade
   fi
   echo "Updating pip3 packages"
-  if [[ ${STUDIO} ]] || [[ ${LAPTOP} ]] || [[ ${WORKSTATION} ]] || [[ ${RATNA} ]]; then
+  if [[ ${STUDIO} ]] || [[ ${LAPTOP} ]] || [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]] || [[ ${RATNA} ]]; then
     python3 -m pip install --upgrade pip
     python3 -m pip list --outdated --format=columns | awk '{print $1;}' | awk 'NR>2' | xargs -n1 python3 -m pip install -U
     python3 -m pip check
