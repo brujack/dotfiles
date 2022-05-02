@@ -1,3 +1,4 @@
+brew "argocd"
 brew "autoconf"
 brew "automake"
 brew "awscli"
