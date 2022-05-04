@@ -612,6 +612,9 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     cd ${PERSONAL_GITREPOS}/${DOTFILES} || return
 
     # the below casks and mas are not in a brewfile since they will "fail" if already installed
+    if [[ ! -d "/Applications/1Password.app" ]]; then
+      brew install --cask 1password
+    fi
     if [[ ${LAPTOP} ]] || [[ ${STUDIO} ]]; then
       if [[ ! -d "/Applications/Adobe\ Creative\ Cloud" ]]; then
         brew install --cask adobe-creative-cloud
