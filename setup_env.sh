@@ -491,6 +491,14 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/bruce.zsh-theme ${HOME}/.oh-my-zsh/custom/themes/bruce.zsh-theme
   fi
 
+  if [[ ! -d ${HOME}/.tmux ]]; then
+    mkdir ${HOME}/.tmux
+  fi
+
+  if [[ ! -d ${HOME}/.tmux/plugins/tpm ]]; then
+    git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
+  fi
+
   if [[ ! -d ${HOME}/.ssh ]]; then
     mkdir ${HOME}/.ssh
     chmod 700 ${HOME}/.ssh
@@ -744,9 +752,6 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H softwareupdate --install --all --verbose
 
     echo "Installing common apps via mas"
-    if [[ ! -d "/Applications/1Password\ 7.app" ]]; then
-      mas install 1333542190
-    fi
     if [[ ! -d "/Applications/Better\ Rename\ 9.app" ]]; then
       mas install 414209656
     fi
@@ -1598,6 +1603,12 @@ if [[ ${UPDATE} ]]; then
   if [[ -d ${HOME}/git-repos/z ]]; then
     echo "Updating z"
     cd ${HOME}/git-repos/z
+    git pull
+    cd ${PERSONAL_GITREPOS}/${DOTFILES}
+  fi
+  if [[ -d ${HOME}/.tmux/plugins/tpm ]]; then
+    echo "Updating tpm"
+    cd ${HOME}/.tmux/plugins/tpm
     git pull
     cd ${PERSONAL_GITREPOS}/${DOTFILES}
   fi
