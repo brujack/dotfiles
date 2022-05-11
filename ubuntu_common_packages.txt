@@ -10,7 +10,6 @@ dnstop
 dnsutils
 flex
 fonts-powerline
-fzf
 gcc
 git
 gnupg

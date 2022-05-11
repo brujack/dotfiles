@@ -30,6 +30,7 @@ if ($IsWindows) {
       "atom",
       "awscli",
       "azure-cli",
+      "bat",
       "beyondcompare",
       "boxstarter",
       "crystaldiskmark",
@@ -61,6 +62,7 @@ if ($IsWindows) {
       "powertoys",
       "putty.install",
       "python3",
+      "ripgrep",
       "simplenote",
       "sourcetree",
       "starship",
@@ -72,6 +74,7 @@ if ($IsWindows) {
       "vscode",
       "winscp",
       "zoom",
+      "zoxide",
       "7zip"
     )
 

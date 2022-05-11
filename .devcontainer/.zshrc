@@ -328,10 +328,25 @@ alias kcc='kubectl config current-context'
 alias kcu='kubectl config use-context $@'
 alias lzd='lazydocker'
 
+if quiet_which z
+then
+  alias cd="z"
+  alias zz="z -"
+fi
+
+if quiet_which bat
+then
+  alias cat="bat"
+elif quiet_which batcat
+then
+  alias cat="batcat"
+fi
+
 # alias for ls to exa removed due to breaking globbing for ansible aws integration
 if quiet_which exa
 then
   alias gs="exa -lg --git"
+  alias tree="exa --tree"
   alias ll="ls -la"
   alias ls="ls -l"
 else

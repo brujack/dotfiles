@@ -520,15 +520,6 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
       chsh -s /usr/local/bin/zsh
     fi
   fi
-  echo "Setting up Z"
-  if [[ ! -d ${HOME}/git-repos/z ]]; then
-    mkdir ${HOME}/git-repos/z
-    cd ${HOME} || return
-    git clone --recursive ${Z_GIT} ${HOME}/git-repos/z
-  else
-    cd ${HOME}/git-repos/z || return
-    git pull
-  fi
 
   echo "Setting up cheat.sh"
   if [[ -d ${HOME}/bin ]]; then
@@ -1150,12 +1141,16 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     echo "Installing brew packages in Ubuntu"
     brew update
     brew install argocd
+    brew install bat
+    brew install exa
+    brew install fzf
     brew install gh
     brew install hadolint
     brew install k9s
     brew install lazydocker
     brew install linkerd
     brew install neovim
+    brew install ripgrep
     brew install starship
     brew install tgenv
     brew install go-task/tap/go-task
@@ -1597,12 +1592,6 @@ if [[ ${UPDATE} ]]; then
   if [[ -d ${HOME}/.oh-my-zsh/custom/themes/powerlevel10k ]]; then
     echo "Updating powerlevel10k"
     cd ${HOME}/.oh-my-zsh/custom/themes/powerlevel10k
-    git pull
-    cd ${PERSONAL_GITREPOS}/${DOTFILES}
-  fi
-  if [[ -d ${HOME}/git-repos/z ]]; then
-    echo "Updating z"
-    cd ${HOME}/git-repos/z
     git pull
     cd ${PERSONAL_GITREPOS}/${DOTFILES}
   fi
