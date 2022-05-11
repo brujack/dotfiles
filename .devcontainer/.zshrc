@@ -560,6 +560,9 @@ if [[ ${MACOS} ]]; then
   ICON=""
 fi
 
+# for zoxide
+eval "$(zoxide init zsh)"
+
 # Load Starship
 export STARSHIP_DISTRO="$ICON "
 eval "$(starship init zsh)"
