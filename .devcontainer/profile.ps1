@@ -75,10 +75,28 @@ elseif ($IsWindows) {
 }
 
 # for zoxide
-Invoke-Expression (& {
-  $hook = if ($PSVersionTable.PSVersion.Major -lt 6) { 'prompt' } else { 'pwd' }
-  (zoxide init --hook $hook powershell | Out-String)
-})
+if ($IsLinux -or $IsMacOS) {
+  if (Get-Command "zoxide") {
+    Invoke-Expression (& {
+      $hook = if ($PSVersionTable.PSVersion.Major -lt 6) { 'prompt' } else { 'pwd' }
+      (zoxide init --hook $hook powershell | Out-String)
+    })
+  }
+  else {
+    Write-Output "zoxide not installed"
+  }
+}
+elseif ($IsWindows) {
+  if (Get-Command "zoxide.exe") {
+    Invoke-Expression (& {
+      $hook = if ($PSVersionTable.PSVersion.Major -lt 6) { 'prompt' } else { 'pwd' }
+      (zoxide init --hook $hook powershell | Out-String)
+    })
+  }
+  else {
+    Write-Output "zoxide.exe not installed"
+  }
+}
 
 Import-Modules
 
