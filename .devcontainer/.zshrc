@@ -561,7 +561,10 @@ if [[ ${MACOS} ]]; then
 fi
 
 # for zoxide
-eval "$(zoxide init zsh)"
+if quiet_which zoxide
+then
+  eval "$(zoxide init zsh)"
+fi
 
 # Load Starship
 export STARSHIP_DISTRO="$ICON "
