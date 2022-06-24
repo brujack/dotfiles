@@ -1153,6 +1153,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     brew install ripgrep
     brew install starship
     brew install tgenv
+    brew install zoxide
     brew install go-task/tap/go-task
     brew tap snyk/tap
     brew install snyk
