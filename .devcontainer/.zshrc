@@ -224,18 +224,23 @@ fi
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
 if [[ ${MACOS} ]]; then
+  #plugins=(ag ansible aws brew docker fzf git git-prompt helm history-substring-search kubectl macos python terraform vscode zsh-autosuggestions)
   plugins=(ag ansible aws brew docker fzf git git-prompt helm history-substring-search kubectl macos python terraform vscode pyenv zsh-autosuggestions)
 fi
 if [[ ${UBUNTU} ]]; then
+  #plugins=(ag ansible aws brew docker fzf git git-prompt helm history-substring-search kubectl python terraform ubuntu vscode zsh-autosuggestions)
   plugins=(ag ansible aws brew docker fzf git git-prompt helm history-substring-search kubectl python terraform ubuntu vscode pyenv zsh-autosuggestions)
 fi
 if [[ ${FEDORA} ]]; then
+  #plugins=(ag ansible aws docker fzf git git-prompt fedora helm history-substring-search kubectl python terraform vscode zsh-autosuggestions)
   plugins=(ag ansible aws docker fzf git git-prompt fedora helm history-substring-search kubectl python terraform vscode pyenv zsh-autosuggestions)
 fi
 if [[ ${CENTOS} ]]; then
+  #plugins=(ag ansible aws docker fzf git git-prompt fedora helm history-substring-search kubectl python terraform vscode zsh-autosuggestions)
   plugins=(ag ansible aws docker fzf git git-prompt fedora helm history-substring-search kubectl python terraform vscode pyenv zsh-autosuggestions)
 fi
 if [[ ${REDHAT} ]]; then
+  #plugins=(ag ansible aws docker fzf git git-prompt fedora helm history-substring-search kubectl python terraform vscode zsh-autosuggestions)
   plugins=(ag ansible aws docker fzf git git-prompt fedora helm history-substring-search kubectl python terraform vscode pyenv zsh-autosuggestions)
 fi
 
@@ -389,35 +394,35 @@ fi
 # fi
 
 # pyenv setup
-if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]] || [[ ${RATNA} ]] || [[ ${LAPTOP} ]] || [[ ${STUDIO} ]] || [[ ${BRUCEWORK} ]]; then
-  export PYENV_ROOT="$HOME/.pyenv"
-  export PATH="$PYENV_ROOT/bin:$PATH"
-  eval "$(pyenv init --path)"
-  if command -v pyenv 1>/dev/null 2>&1; then
-    if ! [[ -d ${HOME}/.pyenv/versions/ansible ]]; then
-      if [[ ${MACOS} || ${LINUX} ]]; then
-        pyenv virtualenv ${PYTHON_VER} ansible
-        pyenv activate ansible
-        # to fix the prompt so that the python virtualenv is shown at the far left of the prompt
-        export PYENV_VIRTUALENV_DISABLE_PROMPT=1
-        export PS1='($(pyenv version-name)) '$PS1
-      fi
-    fi
-    if [[ -d ${HOME}/.pyenv/versions/ansible ]]; then
-      if [[ ${MACOS} || ${LINUX} ]]; then
-        pyenv shell ansible
-        # to fix the prompt so that the python virtualenv is shown at the far left of the prompt
-        export PYENV_VIRTUALENV_DISABLE_PROMPT=1
-        export PS1='($(pyenv version-name)) '$PS1
-      fi
-      if [[ -f ${HOME}/.vault_pass.txt ]]; then
-        export ANSIBLE_VAULT_PASSWORD_FILE=${HOME}/.vault_pass.txt
-      fi
-    fi
-    eval "$(pyenv init -)"
-    eval "$(pyenv virtualenv-init -)"
-  fi
-fi
+# if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]] || [[ ${RATNA} ]] || [[ ${LAPTOP} ]] || [[ ${STUDIO} ]] || [[ ${BRUCEWORK} ]]; then
+#   export PYENV_ROOT="$HOME/.pyenv"
+#   export PATH="$PYENV_ROOT/bin:$PATH"
+#   eval "$(pyenv init --path)"
+#   if command -v pyenv 1>/dev/null 2>&1; then
+#     if ! [[ -d ${HOME}/.pyenv/versions/ansible ]]; then
+#       if [[ ${MACOS} || ${LINUX} ]]; then
+#         pyenv virtualenv ${PYTHON_VER} ansible
+#         pyenv activate ansible
+#         # to fix the prompt so that the python virtualenv is shown at the far left of the prompt
+#         export PYENV_VIRTUALENV_DISABLE_PROMPT=1
+#         export PS1='($(pyenv version-name)) '$PS1
+#       fi
+#     fi
+#     if [[ -d ${HOME}/.pyenv/versions/ansible ]]; then
+#       if [[ ${MACOS} || ${LINUX} ]]; then
+#         pyenv shell ansible
+#         # to fix the prompt so that the python virtualenv is shown at the far left of the prompt
+#         export PYENV_VIRTUALENV_DISABLE_PROMPT=1
+#         export PS1='($(pyenv version-name)) '$PS1
+#       fi
+#       if [[ -f ${HOME}/.vault_pass.txt ]]; then
+#         export ANSIBLE_VAULT_PASSWORD_FILE=${HOME}/.vault_pass.txt
+#       fi
+#     fi
+#     eval "$(pyenv init -)"
+#     eval "$(pyenv virtualenv-init -)"
+#   fi
+# fi
 
 # setup kubectl autocompletion to save typing
 if [[ -f /usr/local/bin/kubectl ]]; then
