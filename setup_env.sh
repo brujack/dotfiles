@@ -108,6 +108,23 @@ install_rosetta() {
   fi
 }
 
+install_homebrew() {
+  echo "Installing homebrew..."
+  if [[ ${MACOS} ]]; then
+    xcode-select --install
+    # Accept Xcode license
+    sudo xcodebuild -license accept
+  fi
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+}
+
+brew_update() {
+  echo "Updating homebrew..."
+  brew update
+  brew upgrade
+  brew upgrade --cask --greedy
+}
+
 usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 0; }
 [[ $# -eq 0 ]] && usage
 
@@ -129,7 +146,7 @@ while getopts ":ht:w" arg; do
     w) # Optional -- Specify w for a redhat computer, sets up terraform 0.11 instead of default 0.12
       export WORK=1
       ;;
-    h | *) # Display help.
+    h | *) # This script is used to setup a development env on macos/linux (ubuntu, redhat, fedora, centos, elementary os)
       usage
       exit 0
       ;;
@@ -210,21 +227,13 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     mkdir ${HOME}/software_downloads
   fi
 
-  if [[ ${MACOS} || ${LINUX} ]]; then
-    if ! [ -x "$(command -v brew)" ]; then
-      echo "Installing homebrew..."
-      if [[ ${MACOS} ]]; then
-        xcode-select --install
-        # Accept Xcode license
-        sudo xcodebuild -license accept
-      fi
-      /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-    fi
-  fi
-
   echo "Installing git"
   if [[ ${MACOS} ]]; then
-    brew install git
+    if ! [ -x "$(command -v brew)" ]; then
+      install_homebrew
+    elif [ -x "$(command -v brew)" ]; then
+      brew install git
+    fi
   fi
 
   if [[ ${UBUNTU} ]]; then
@@ -273,10 +282,10 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
   echo "Installing zsh"
   if [[ ${MACOS} ]]; then
     if ! [ -x "$(command -v brew)" ]; then
-      echo "Installing homebrew..."
-      ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
+      install_homebrew
+    elif [ -x "$(command -v brew)" ]; then
+      brew install zsh
     fi
-    brew install zsh
   fi
   if [[ ${UBUNTU} ]]; then
     sudo -H apt update
@@ -580,164 +589,156 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     fi
 
     if ! [ -x "$(command -v brew)" ]; then
-      echo "Installing homebrew..."
-      ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
-    fi
+      install_homebrew
+    elif [ -x "$(command -v brew)" ]; then
+      brew_update
+      echo "Installing other brew stuff..."
+      #https://github.com/Homebrew/homebrew-bundle
+      brew tap homebrew/bundle
+      brew tap homebrew/cask
+      cd ${BREWFILE_LOC} && brew bundle
+      brew tap teamookla/speedtest
+      brew install speedtest
+      brew install --cask chef/chef/inspec
+      brew install --cask dotnet
+      brew install go-task/tap/go-task
+      brew tap snyk/tap
+      brew install snyk
+      brew tap cloudflare/cloudflare
+      brew install --cask cloudflare/cloudflare/cf-terraforming
+      brew install --cask miro
 
-    echo "Updating homebrew..."
-    brew update
-    echo "Upgrading brew's"
-    brew upgrade
-    echo "Upgrading brew casks"
-    brew upgrade --cask
+      cd ${PERSONAL_GITREPOS}/${DOTFILES} || return
 
-    echo "Installing other brew stuff..."
-
-    #https://github.com/Homebrew/homebrew-bundle
-    brew tap homebrew/bundle
-    brew tap homebrew/cask
-    cd ${BREWFILE_LOC} && brew bundle
-    brew tap teamookla/speedtest
-    brew install speedtest
-    brew install --cask chef/chef/inspec
-    brew install --cask dotnet
-    brew install go-task/tap/go-task
-    brew tap snyk/tap
-    brew install snyk
-    brew tap cloudflare/cloudflare
-    brew install --cask cloudflare/cloudflare/cf-terraforming
-    brew install --cask miro
-
-    cd ${PERSONAL_GITREPOS}/${DOTFILES} || return
-
-    # the below casks and mas are not in a brewfile since they will "fail" if already installed
-    if [[ ! -d "/Applications/1Password.app" ]]; then
-      brew install --cask 1password
-    fi
-    if [[ ${LAPTOP} ]] || [[ ${STUDIO} ]]; then
-      if [[ ! -d "/Applications/Adobe\ Creative\ Cloud" ]]; then
-        brew install --cask adobe-creative-cloud
+      # the below casks and mas are not in a brewfile since they will "fail" if already installed
+      if [[ ! -d "/Applications/1Password.app" ]]; then
+        brew install --cask 1password
       fi
-    fi
-    if [[ ! -d "/Applications/Adobe\ Acrobat\ Reader\ DC.app" ]]; then
-      brew install --cask adobe-acrobat-reader
-    fi
-    if [[ ! -d "/Applications/Alfred\ 4.app" ]]; then
-      brew install --cask alfred
-    fi
-    if [[ ! -d "/Applications/AppCleaner.app" ]]; then
-      brew install --cask appcleaner
-    fi
-    if [[ ! -d "/Applications/Atom.app" ]]; then
-      brew install --cask atom
-    fi
-    if [[ ! -d "/Applications/balenaEtcher.app" ]]; then
-      brew install --cask balenaetcher
-    fi
-    if [[ ! -d "/Applications/Beyond\ Compare.app" ]]; then
-      brew install --cask beyond-compare
-    fi
-    if [[ ! -d "/Applications/Carbon\ Copy Cloner.app" ]]; then
-      brew install --cask carbon-copy-cloner
-    fi
-    if [[ ! -d "/Applications/DaisyDisk.app" ]]; then
-      brew install --cask daisydisk
-    fi
-    if [[ ! -d "/Applications/DBeaver.app" ]]; then
-      brew install --cask dbeaver-community
-    fi
-    if [[ ! -d "/Applications/Docker.app" ]]; then
-      brew install --cask docker
-    fi
-    if [[ ! -d "/Applications/Dropbox.app" ]]; then
-      brew install --cask dropbox
-    fi
-    if [[ ! -d "/Applications/ExpressVPN.app" ]]; then
-      brew install --cask expressvpn
-    fi
-    if [[ ! -d "/Applications/Firefox.app" ]]; then
-      brew install --cask firefox
-    fi
-    if [[ ! -d "/Applications/Flycut.app" ]]; then
-      brew install --cask flycut
-    fi
-    if [[ ! -d "/Applications/Fork.app" ]]; then
-      brew install --cask fork
-    fi
-    if [[ ! -d "/Applications/Funter.app" ]]; then
-      brew install --cask funter
-    fi
-    if [[ ! -d "/Applications/Google\ Chrome.app" ]]; then
-      brew install --cask google-chrome
-    fi
-    if [[ ! -d "/Applications/GitHub\ Desktop.app" ]]; then
-      brew install --cask github
-    fi
-    if [[ ! -d "/usr/local/Caskroom/google-cloud-sdk" ]]; then
-      brew install --cask google-cloud-sdk
-    fi
-    if [[ ! -d "/Applications/iStat\ Menus.app" ]]; then
-      brew install --cask istat-menus
-    fi
-    if [[ ! -d "/Applications/iTerm.app" ]]; then
-      brew install --cask iterm2
-    fi
-    if [[ ! -d "/Applications/Lens.app" ]]; then
-      brew install --cask lens
-    fi
-    if [[ ! -d "/Applications/MacDown.app" ]]; then
-      brew install --cask macdown
-    fi
-    if [[ ! -d "/Applications/Malwarebytes.app" ]]; then
-      brew install --cask malwarebytes
-    fi
-    if [[ ${RATNA} ]] || [[ ${LAPTOP} ]] || [[ ${STUDIO} ]] || [[ ${BRUCEWORK} ]]; then
-      if [[ ! -d "/Applications/Microsoft\ Word.app" ]]; then
-        brew install --cask microsoft-office
+      if [[ ${LAPTOP} ]] || [[ ${STUDIO} ]]; then
+        if [[ ! -d "/Applications/Adobe\ Creative\ Cloud" ]]; then
+          brew install --cask adobe-creative-cloud
+        fi
       fi
-    fi
-    if [[ ! -d "/Applications/MySQLWorkbench.app" ]]; then
-      brew install --cask mysqlworkbench
-    fi
-    if [[ ! -d "/usr/local/Caskroom/oracle-jdk" ]]; then
-      brew install --cask oracle-jdk
-    fi
-    if [[ ! -d "/Applications/Postman.app" ]]; then
-      brew install --cask postman
-    fi
-    if [[ ! -d "/Applications/SourceTree.app" ]]; then
-      brew install --cask sourcetree
-    fi
-    if [[ ! -d "/Applications/PowerShell.app" ]]; then
-      brew install --cask powershell
-    fi
-    if [[ ! -d "/Applications/Slack.app" ]]; then
-      brew install --cask slack
-    fi
-    if [[ ! -d "/Applications/Steam.app" ]]; then
-      brew install --cask steam
-    fi
-    if [[ ! -d "/Applications/TeamViewer.app" ]]; then
-      brew install --cask teamviewer
-    fi
-    if [[ ! -d "/Applications/VirtualBox.app" ]]; then
-      brew install --cask virtualbox
-    fi
-    if [[ ! -d "/Applications/Vagrant.app" ]]; then
-      brew install --cask vagrant
-    fi
-    if [[ ! -d "/Applications/Visual\ Studio\ Code.app" ]]; then
-      brew install --cask visual-studio-code
-    fi
-    if [[ ! -d "/Applications/VLC.app" ]]; then
-      brew install --cask vlc
-    fi
-    if [[ ! -d "/Applications/zoom.us.app" ]]; then
-      brew install --cask zoom
-    fi
+      if [[ ! -d "/Applications/Adobe\ Acrobat\ Reader\ DC.app" ]]; then
+        brew install --cask adobe-acrobat-reader
+      fi
+      if [[ ! -d "/Applications/Alfred\ 4.app" ]]; then
+        brew install --cask alfred
+      fi
+      if [[ ! -d "/Applications/AppCleaner.app" ]]; then
+        brew install --cask appcleaner
+      fi
+      if [[ ! -d "/Applications/Atom.app" ]]; then
+        brew install --cask atom
+      fi
+      if [[ ! -d "/Applications/balenaEtcher.app" ]]; then
+        brew install --cask balenaetcher
+      fi
+      if [[ ! -d "/Applications/Beyond\ Compare.app" ]]; then
+        brew install --cask beyond-compare
+      fi
+      if [[ ! -d "/Applications/Carbon\ Copy Cloner.app" ]]; then
+        brew install --cask carbon-copy-cloner
+      fi
+      if [[ ! -d "/Applications/DaisyDisk.app" ]]; then
+        brew install --cask daisydisk
+      fi
+      if [[ ! -d "/Applications/DBeaver.app" ]]; then
+        brew install --cask dbeaver-community
+      fi
+      if [[ ! -d "/Applications/Docker.app" ]]; then
+        brew install --cask docker
+      fi
+      if [[ ! -d "/Applications/Dropbox.app" ]]; then
+        brew install --cask dropbox
+      fi
+      if [[ ! -d "/Applications/ExpressVPN.app" ]]; then
+        brew install --cask expressvpn
+      fi
+      if [[ ! -d "/Applications/Firefox.app" ]]; then
+        brew install --cask firefox
+      fi
+      if [[ ! -d "/Applications/Flycut.app" ]]; then
+        brew install --cask flycut
+      fi
+      if [[ ! -d "/Applications/Fork.app" ]]; then
+        brew install --cask fork
+      fi
+      if [[ ! -d "/Applications/Funter.app" ]]; then
+        brew install --cask funter
+      fi
+      if [[ ! -d "/Applications/Google\ Chrome.app" ]]; then
+        brew install --cask google-chrome
+      fi
+      if [[ ! -d "/Applications/GitHub\ Desktop.app" ]]; then
+        brew install --cask github
+      fi
+      if [[ ! -d "/usr/local/Caskroom/google-cloud-sdk" ]]; then
+        brew install --cask google-cloud-sdk
+      fi
+      if [[ ! -d "/Applications/iStat\ Menus.app" ]]; then
+        brew install --cask istat-menus
+      fi
+      if [[ ! -d "/Applications/iTerm.app" ]]; then
+        brew install --cask iterm2
+      fi
+      if [[ ! -d "/Applications/Lens.app" ]]; then
+        brew install --cask lens
+      fi
+      if [[ ! -d "/Applications/MacDown.app" ]]; then
+        brew install --cask macdown
+      fi
+      if [[ ! -d "/Applications/Malwarebytes.app" ]]; then
+        brew install --cask malwarebytes
+      fi
+      if [[ ${RATNA} ]] || [[ ${LAPTOP} ]] || [[ ${STUDIO} ]] || [[ ${BRUCEWORK} ]]; then
+        if [[ ! -d "/Applications/Microsoft\ Word.app" ]]; then
+          brew install --cask microsoft-office
+        fi
+      fi
+      if [[ ! -d "/Applications/MySQLWorkbench.app" ]]; then
+        brew install --cask mysqlworkbench
+      fi
+      if [[ ! -d "/usr/local/Caskroom/oracle-jdk" ]]; then
+        brew install --cask oracle-jdk
+      fi
+      if [[ ! -d "/Applications/Postman.app" ]]; then
+        brew install --cask postman
+      fi
+      if [[ ! -d "/Applications/SourceTree.app" ]]; then
+        brew install --cask sourcetree
+      fi
+      if [[ ! -d "/Applications/PowerShell.app" ]]; then
+        brew install --cask powershell
+      fi
+      if [[ ! -d "/Applications/Slack.app" ]]; then
+        brew install --cask slack
+      fi
+      if [[ ! -d "/Applications/Steam.app" ]]; then
+        brew install --cask steam
+      fi
+      if [[ ! -d "/Applications/TeamViewer.app" ]]; then
+        brew install --cask teamviewer
+      fi
+      if [[ ! -d "/Applications/VirtualBox.app" ]]; then
+        brew install --cask virtualbox
+      fi
+      if [[ ! -d "/Applications/Vagrant.app" ]]; then
+        brew install --cask vagrant
+      fi
+      if [[ ! -d "/Applications/Visual\ Studio\ Code.app" ]]; then
+        brew install --cask visual-studio-code
+      fi
+      if [[ ! -d "/Applications/VLC.app" ]]; then
+        brew install --cask vlc
+      fi
+      if [[ ! -d "/Applications/zoom.us.app" ]]; then
+        brew install --cask zoom
+      fi
 
-    echo "Cleaning up brew"
-    brew cleanup
+      echo "Cleaning up brew"
+      brew cleanup
+    fi
 
     echo "Updating app store apps via softwareupdate"
     sudo -H softwareupdate --install --all --verbose
@@ -1138,25 +1139,29 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo chown root:root /usr/local/bin/cf-terraforming
     fi
 
-    echo "Installing brew packages in Ubuntu"
-    brew update
-    brew install argocd
-    brew install bat
-    brew install exa
-    brew install fzf
-    brew install gh
-    brew install hadolint
-    brew install k9s
-    brew install lazydocker
-    brew install linkerd
-    brew install neovim
-    brew install ripgrep
-    brew install starship
-    brew install tgenv
-    brew install zoxide
-    brew install go-task/tap/go-task
-    brew tap snyk/tap
-    brew install snyk
+    if ! [ -x "$(command -v brew)" ]; then
+      install_homebrew
+    elif [ -x "$(command -v brew)" ]; then
+      echo "Installing brew packages in Ubuntu"
+      brew_update
+      brew install argocd
+      brew install bat
+      brew install exa
+      brew install fzf
+      brew install gh
+      brew install hadolint
+      brew install k9s
+      brew install lazydocker
+      brew install linkerd
+      brew install neovim
+      brew install ripgrep
+      brew install starship
+      brew install tgenv
+      brew install zoxide
+      brew install go-task/tap/go-task
+      brew tap snyk/tap
+      brew install snyk
+    fi
 
     if [[ ${WORKSTATION} ]]; then
       echo "Installing microsoft teams"
@@ -1533,12 +1538,7 @@ fi
 # update is run more often to keep the device up to date with patches
 if [[ ${UPDATE} ]]; then
   if [[ ${MACOS} || ${LINUX} ]]; then
-    echo "Updating homebrew..."
-    brew update
-    echo "Upgrading brew's"
-    brew upgrade
-    echo "Upgrading brew casks"
-    brew upgrade --cask --greedy
+    brew_update
     echo "Cleaning up brew"
     brew cleanup
     echo "Updating app store apps softwareupdate"
