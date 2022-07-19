@@ -88,28 +88,15 @@ GO_VER="1.18"
 RUBY_VER="3.1.2"
 GITREPOS="${HOME}/git-repos"
 
-# setup some variables for virtualenv
-export WORKON_HOME=${HOME}/.virtualenvs
-export PROJECT_HOME=${HOME}./virtualenvs
 if [[ ${MACOS} ]]; then
-  VIRTUALENVWRAPPER_SCRIPT=/usr/local/bin/virtualenvwrapper.sh
-  VIRTUALENVWRAPPER_PYTHON=/usr/local/bin/python3
   if [[ ${RATNA} ]]; then
     CHRUBY_LOC="/usr/local/opt/chruby/share"
   fi
-  if [[ ${LAPTOP} ]] || [[ ${STUDIO} ]]; then
-    CHRUBY_LOC="/opt/homebrew/opt/chruby/share/"
-  elif [[ ${BRUCEWORK} ]]; then
+  if [[ ${LAPTOP} ]] || [[ ${STUDIO} ]] || [[ ${BRUCEWORK} ]]; then
     CHRUBY_LOC="/opt/homebrew/opt/chruby/share/"
   fi
 fi
 if [[ ${LINUX} ]]; then
-  if [[ -f ${HOME}/.local/bin/virtualenvwrapper.sh ]]; then
-    VIRTUALENVWRAPPER_SCRIPT="${HOME}/.local/bin/virtualenvwrapper.sh"
-  elif [[ -f "/usr/local/bin/virtualenvwrapper.sh" ]]; then
-    VIRTUALENVWRAPPER_SCRIPT="/usr/local/bin/virtualenvwrapper.sh"
-  fi
-  VIRTUALENVWRAPPER_PYTHON=/usr/bin/python3
   CHRUBY_LOC="/usr/local/share"
 fi
 
@@ -380,18 +367,6 @@ export AWS_HOME=${HOME}/.aws
 if [[ -f ${HOME}/.google_creds ]]; then
   source ${HOME}/.google_creds
 fi
-
-# setup for python 3.7 for ansible by using virtualenv
-# moved to pyenv
-# if [[ -d ~/.virtualenvs/ansible ]]; then
-#   if [[ ${MACOS} || ${LINUX} ]]; then
-#     source ${VIRTUALENVWRAPPER_SCRIPT}
-#   fi
-#   workon ansible
-#   if [[ -f ${HOME}/.vault_pass.txt ]]; then
-#     export ANSIBLE_VAULT_PASSWORD_FILE=${HOME}/.vault_pass.txt
-#   fi
-# fi
 
 # pyenv setup
 # if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]] || [[ ${RATNA} ]] || [[ ${LAPTOP} ]] || [[ ${STUDIO} ]] || [[ ${BRUCEWORK} ]]; then

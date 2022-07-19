@@ -184,8 +184,6 @@ fi
 
 # setup variables based off of environment
 if [[ ${MACOS} ]]; then
-  VSCODE="${HOME}/Library/Application Support/Code/User"
-  VIRTUALENV_LOC="/usr/local/bin"
   if [[ ${RATNA} ]]; then
     CHRUBY_LOC="/usr/local/opt/chruby/share"
   elif [[ ${LAPTOP} ]] || [[ ${STUDIO} ]]; then
@@ -194,16 +192,7 @@ if [[ ${MACOS} ]]; then
     CHRUBY_LOC="/opt/homebrew/opt/chruby/share/"
   fi
 elif [[ ${LINUX} ]]; then
-  if [[ -f ${HOME}/.local/bin/virtualenv ]]; then
-    VIRTUALENV_LOC="${HOME}/.local/bin"
-  elif [[ -f "/usr/local/bin/virtualenv" ]]; then
-    VIRTUALENV_LOC="/usr/local/bin"
-  fi
-  VIRTUALENVWRAPPER_PYTHON="/usr/bin/python3"
   CHRUBY_LOC="/usr/local/share"
-elif [[ ${WINDOWS} ]]; then
-  #%APPDATA%\Code\User\ in windows parlance
-  VSCODE="${WSL_HOME}/AppData/Roaming/Code/User"
 fi
 
 # Setup is run rarely as it should be run when setting up a new device or when doing a controlled change after changing items in setup
