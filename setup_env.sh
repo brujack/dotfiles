@@ -586,16 +586,22 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       brew tap homebrew/bundle
       brew tap homebrew/cask
       cd ${BREWFILE_LOC} && brew bundle
-      brew tap teamookla/speedtest
-      brew install speedtest
       brew install --cask chef/chef/inspec
-      brew install --cask dotnet
-      brew install go-task/tap/go-task
-      brew tap snyk/tap
-      brew install snyk
       brew tap cloudflare/cloudflare
       brew install --cask cloudflare/cloudflare/cf-terraforming
+      brew install --cask dotnet
+      brew install go-task/tap/go-task
       brew install --cask miro
+      brew tap snyk/tap
+      brew install snyk
+      brew tap teamookla/speedtest
+      brew install speedtest
+      if [[ ${STUDIO} ]] || [[ ${LAPTOP} ]] || [[ ${BRUCEWORK} ]]; then
+        brew install datawire/blackbird/telepresence-arm64
+      fi
+      if [[ ${RATNA} ]]; then
+        brew install datawire/blackbird/telepresence
+      fi
 
       cd ${PERSONAL_GITREPOS}/${DOTFILES} || return
 
