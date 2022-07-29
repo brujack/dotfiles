@@ -32,6 +32,8 @@ TFSEC_VER="1.26.0"
 TFSEC_URL="https://github.com/liamg/tfsec/releases/download/v${TFSEC_VER}/tfsec-linux-amd64"
 CF_TERRAFORMING_VER="0.6.3"
 CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v${CF_TERRAFORMING_VER}/cf-terraforming_${CF_TERRAFORMING_VER}_linux_amd64.tar.gz"
+TELEPRESENCE_URL="https://app.getambassador.io/download/tel2/linux/amd64/latest/telepresence"
+
 RHEL_KUBECTL_REPO="[kubernetes]
 name=Kubernetes
 baseurl=http://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
@@ -925,7 +927,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     fi
 
     if [[ ! ${WORKSTATION} ]]; then
-      echo "Installing docker desktop"
+      echo "Installing docker"
       curl -fsSL http://download.docker.com/linux/ubuntu/gpg | sudo -H apt-key add -
       sudo -H add-apt-repository \
       "deb [arch=amd64] http://download.docker.com/linux/ubuntu \
@@ -1039,6 +1041,14 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
         sudo -H apt update
         sudo -H apt install albert -y
       fi
+    fi
+
+    if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]]; then
+      echo "Installing telepresence"
+      wget -O ${HOME}/software_downloads/telepresence ${TELEPRESENCE_URL}
+      sudo cp -a ${HOME}/software_downloads/telepresence /usr/local/bin/
+      sudo chmod 755 /usr/local/bin/telepresence
+      sudo chown root:root /usr/local/bin/telepresence
     fi
 
     echo "Installing azure-cli"
