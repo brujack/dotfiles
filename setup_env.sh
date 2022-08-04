@@ -902,31 +902,31 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo add-apt-repository ppa:longsleep/golang-backports -y
     sudo -H apt update
     if [[ ${GO_VER} == "1.16" ]]; then
-      if [[ $(dpkg-query -W -f='${Status}' golang-1.15-go 2>/dev/null | grep -c "ok installed") -eq 0 ]]; then
+      if [[ $(dpkg-query -W -f='${Status}' golang-1.15-go 2>/dev/null | grep -c "ok installed") -eq 1 ]]; then
         sudo -H apt remove golang-1.15-go -y
       fi
-      if [[ $(dpkg-query -W -f='${Status}' golang-1.15-src 2>/dev/null | grep -c "ok installed") -eq 0 ]]; then
+      if [[ $(dpkg-query -W -f='${Status}' golang-1.15-src 2>/dev/null | grep -c "ok installed") -eq 1 ]]; then
         sudo -H apt remove golang-1.15-src -y
       fi
     elif [[ ${GO_VER} == "1.17" ]]; then
-      if [[ $(dpkg-query -W -f='${Status}' golang-1.16-go 2>/dev/null | grep -c "ok installed") -eq 0 ]]; then
+      if [[ $(dpkg-query -W -f='${Status}' golang-1.16-go 2>/dev/null | grep -c "ok installed") -eq 1 ]]; then
         sudo -H apt remove golang-1.16-go -y
       fi
-      if [[ $(dpkg-query -W -f='${Status}' golang-1.16-src 2>/dev/null | grep -c "ok installed") -eq 0 ]]; then
+      if [[ $(dpkg-query -W -f='${Status}' golang-1.16-src 2>/dev/null | grep -c "ok installed") -eq 1 ]]; then
         sudo -H apt remove golang-1.16-src -y
       fi
     elif [[ ${GO_VER} == "1.18" ]]; then
-      if [[ $(dpkg-query -W -f='${Status}' golang-1.17-go 2>/dev/null | grep -c "ok installed") -eq 0 ]]; then
+      if [[ $(dpkg-query -W -f='${Status}' golang-1.17-go 2>/dev/null | grep -c "ok installed") -eq 1 ]]; then
         sudo -H apt remove golang-1.17-go -y
       fi
-      if [[ $(dpkg-query -W -f='${Status}' golang-1.17-src 2>/dev/null | grep -c "ok installed") -eq 0 ]]; then
+      if [[ $(dpkg-query -W -f='${Status}' golang-1.17-src 2>/dev/null | grep -c "ok installed") -eq 1 ]]; then
         sudo -H apt remove golang-1.17-src -y
       fi
     elif [[ ${GO_VER} == "1.19" ]]; then
-      if [[ $(dpkg-query -W -f='${Status}' golang-1.18-go 2>/dev/null | grep -c "ok installed") -eq 0 ]]; then
+      if [[ $(dpkg-query -W -f='${Status}' golang-1.18-go 2>/dev/null | grep -c "ok installed") -eq 1 ]]; then
         sudo -H apt remove golang-1.18-go -y
       fi
-      if [[ $(dpkg-query -W -f='${Status}' golang-1.18-src 2>/dev/null | grep -c "ok installed") -eq 0 ]]; then
+      if [[ $(dpkg-query -W -f='${Status}' golang-1.18-src 2>/dev/null | grep -c "ok installed") -eq 1 ]]; then
         sudo -H apt remove golang-1.18-src -y
       fi
       sudo -H apt install golang-${GO_VER}-go -y
