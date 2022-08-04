@@ -923,6 +923,13 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       if [[ $(dpkg-query -W -f='${Status}' golang-1.16-src 2>/dev/null | grep -c "ok installed") -eq 0 ]]; then
         sudo -H apt remove golang-1.17-src -y
       fi
+    elif [[ ${GO_VER} == "1.19" ]]; then
+      if [[ $(dpkg-query -W -f='${Status}' golang-1.16-go 2>/dev/null | grep -c "ok installed") -eq 0 ]]; then
+        sudo -H apt remove golang-1.18-go -y
+      fi
+      if [[ $(dpkg-query -W -f='${Status}' golang-1.16-src 2>/dev/null | grep -c "ok installed") -eq 0 ]]; then
+        sudo -H apt remove golang-1.18-src -y
+      fi
     fi
 
     if [[ ! ${WORKSTATION} ]]; then
