@@ -16,7 +16,7 @@ TERRAFORM_VER="1.0.2"
 GIT_VER="2.37.1"
 GIT_URL="https://mirrors.edge.kernel.org/pub/software/scm/git"
 ZSH_VER="5.9"
-GO_VER="1.18"
+GO_VER="1.19"
 DOCKER_COMPOSE_VER="v2.3.3"
 DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VER}/docker-compose-$(uname -s)-$(uname -m)"
 SHELLCHECK_VER="0.7.0"
@@ -901,7 +901,6 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     echo "Installing go Ubuntu"
     sudo add-apt-repository ppa:longsleep/golang-backports -y
     sudo -H apt update
-    sudo -H apt install golang-${GO_VER}-go -y
     if [[ ${GO_VER} == "1.16" ]]; then
       if [[ $(dpkg-query -W -f='${Status}' golang-1.15-go 2>/dev/null | grep -c "ok installed") -eq 0 ]]; then
         sudo -H apt remove golang-1.15-go -y
@@ -930,6 +929,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       if [[ $(dpkg-query -W -f='${Status}' golang-1.18-src 2>/dev/null | grep -c "ok installed") -eq 0 ]]; then
         sudo -H apt remove golang-1.18-src -y
       fi
+      sudo -H apt install golang-${GO_VER}-go -y
     fi
 
     if [[ ! ${WORKSTATION} ]]; then
