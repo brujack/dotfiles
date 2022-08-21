@@ -872,7 +872,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     echo "Installing powershell Ubuntu"
     if [[ ${BIONIC} ]]; then
       if [[ ! -f ${HOME}/software_downloads/packages-microsoft-prod.deb ]]; then
-        wget -O ${HOME}/software_downloads/packages-microsoft-prod.deb http://packages.microsoft.com/config/ubuntu/18.04/packages-microsoft-prod.deb
+        wget -O ${HOME}/software_downloads/packages-microsoft-prod.deb http://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb
         sudo -H dpkg -i ${HOME}/software_downloads/packages-microsoft-prod.deb
         sudo apt update
         sudo -H add-apt-repository universe
@@ -881,7 +881,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     fi
     if [[ ${FOCAL} ]]; then
       if [[ ! -f ${HOME}/software_downloads/packages-microsoft-prod.deb ]]; then
-        wget -O ${HOME}/software_downloads/packages-microsoft-prod.deb http://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb
+        wget -O ${HOME}/software_downloads/packages-microsoft-prod.deb http://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb
         sudo -H dpkg -i ${HOME}/software_downloads/packages-microsoft-prod.deb
         sudo apt update
         sudo -H add-apt-repository universe
@@ -890,7 +890,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     fi
     if [[ ${JAMMY} ]]; then
       if [[ ! -f ${HOME}/software_downloads/packages-microsoft-prod.deb ]]; then
-        wget -O ${HOME}/software_downloads/packages-microsoft-prod.deb http://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb
+        wget -O ${HOME}/software_downloads/packages-microsoft-prod.deb http://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb
         sudo -H dpkg -i ${HOME}/software_downloads/packages-microsoft-prod.deb
         sudo apt update
         sudo -H add-apt-repository universe
@@ -996,15 +996,15 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       if [[ ${FOCAL} ]]; then
         echo "Installing Albert"
         curl https://build.opensuse.org/projects/home:manuelschneid3r/public_key | sudo apt-key add -
-        echo 'deb http://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_20.04/ /' | sudo tee /etc/apt/sources.list.d/home:manuelschneid3r.list
-        sudo wget -nv https://download.opensuse.org/repositories/home:manuelschneid3r/xUbuntu_20.04/Release.key -O "/etc/apt/trusted.gpg.d/home:manuelschneid3r.asc"
+        echo 'deb http://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_$(lsb_release -rs)/ /' | sudo tee /etc/apt/sources.list.d/home:manuelschneid3r.list
+        sudo wget -nv https://download.opensuse.org/repositories/home:manuelschneid3r/xUbuntu_$(lsb_release -rs)/Release.key -O "/etc/apt/trusted.gpg.d/home:manuelschneid3r.asc"
         sudo -H apt update
         sudo -H apt install albert -y
       elif [[ ${JAMMY} ]]; then
         echo "Installing Albert"
         curl https://build.opensuse.org/projects/home:manuelschneid3r/public_key | sudo apt-key add -
-        echo 'deb http://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_22.04/ /' | sudo tee /etc/apt/sources.list.d/home:manuelschneid3r.list
-        sudo wget -nv https://download.opensuse.org/repositories/home:manuelschneid3r/xUbuntu_22.04/Release.key -O "/etc/apt/trusted.gpg.d/home:manuelschneid3r.asc"
+        echo 'deb http://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_$(lsb_release -rs)/ /' | sudo tee /etc/apt/sources.list.d/home:manuelschneid3r.list
+        sudo wget -nv https://download.opensuse.org/repositories/home:manuelschneid3r/xUbuntu_$(lsb_release -rs)/Release.key -O "/etc/apt/trusted.gpg.d/home:manuelschneid3r.asc"
         sudo -H apt update
         sudo -H apt install albert -y
       fi
