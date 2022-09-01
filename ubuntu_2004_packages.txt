@@ -1,1 +1,2 @@
+linux-generic-hwe-20.04
 python-openssl
