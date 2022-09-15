@@ -642,6 +642,9 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       if [[ ! -d "/Applications/DBeaver.app" ]]; then
         brew install --cask dbeaver-community
       fi
+      if [[ ! -d "/Applications/Discord.app" ]]; then
+        brew install --cask discord
+      fi
       if [[ ! -d "/Applications/Docker.app" ]]; then
         brew install --cask docker
       fi

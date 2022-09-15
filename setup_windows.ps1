@@ -35,6 +35,7 @@ if ($IsWindows) {
       "boxstarter",
       "crystaldiskmark",
       "dbeaver",
+      "discord",
       "docker-desktop",
       "docker-compose",
       "dropbox",
