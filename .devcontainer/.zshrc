@@ -399,6 +399,11 @@ fi
 #   fi
 # fi
 
+# ansible vault pw
+if [[ -f ${HOME}/.fortis_vault_pass.txt ]]; then
+  export ANSIBLE_VAULT_PASSWORD_FILE=${HOME}/.fortis_vault_pass.txt
+fi
+
 # setup kubectl autocompletion to save typing
 if [[ -f /usr/local/bin/kubectl ]]; then
   source <(kubectl completion zsh)
