@@ -1,6 +1,6 @@
 #!/bin/sh
 
 pattern="<defunct>"
-processes=`ps -ef | grep $pattern | grep -v grep | awk '{print $3 }'`
+processes=$(pgrep "${pattern}")
 
-kill -9 ${processes}
+kill -9 "${processes}"

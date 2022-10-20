@@ -4,7 +4,7 @@ sudo /etc/init.d/FAHClient stop
 
 sleep 2
 
-for pid in $(ps -ef | grep -i fah | grep -v grep | awk '{print $2}')
+for pid in $(pgrep fah)
 do
   sudo kill -9 "${pid}"
 done
