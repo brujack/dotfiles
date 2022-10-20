@@ -843,11 +843,6 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
 
   fi
 
-  if [[ ${MACOS} ]]; then
-    echo "Setting up macOS defaults"
-    ~/scripts/.osx.sh
-  fi
-
   if [[ ${UBUNTU} ]]; then
     sudo -H apt update
     if [[ ${FOCAL} ]]; then
