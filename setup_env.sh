@@ -837,6 +837,10 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
         mas install 497799835
       fi
     fi
+
+    echo "Setting up macOS defaults"
+    ~/scripts/.osx.sh
+
   fi
 
   if [[ ${MACOS} ]]; then
