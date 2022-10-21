@@ -704,6 +704,9 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       if [[ ! -d "/Applications/Postman.app" ]]; then
         brew install --cask postman
       fi
+      if [[ ! -f "/usr/local/sessionmanagerplugin/bin/session-manager-plugin" ]]; then
+        brew install --cask session-manager-plugin
+      fi
       if [[ ! -d "/Applications/SourceTree.app" ]]; then
         brew install --cask sourcetree
       fi
