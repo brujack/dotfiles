@@ -618,7 +618,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       if [[ ! -d "/Applications/Adobe\ Acrobat\ Reader\ DC.app" ]]; then
         brew install --cask adobe-acrobat-reader
       fi
-      if [[ ! -d "/Applications/Alfred\ 4.app" ]]; then
+      if [[ ! -d "/Applications/Alfred\ 5.app" ]]; then
         brew install --cask alfred
       fi
       if [[ ! -d "/Applications/AppCleaner.app" ]]; then
@@ -698,13 +698,16 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       if [[ ! -d "/Applications/MySQLWorkbench.app" ]]; then
         brew install --cask mysqlworkbench
       fi
+      if [[ ! -d "/Applications/OBS.app" ]]; then
+        brew install --cask obs
+      fi
       if [[ ! -d "/usr/local/Caskroom/oracle-jdk" ]]; then
         brew install --cask oracle-jdk
       fi
       if [[ ! -d "/Applications/Postman.app" ]]; then
         brew install --cask postman
       fi
-      if [[ ! -f "/usr/local/sessionmanagerplugin/bin/session-manager-plugin" ]]; then
+      if [[ ! -d "/usr/local/sessionmanagerplugin" ]]; then
         brew install --cask session-manager-plugin
       fi
       if [[ ! -d "/Applications/SourceTree.app" ]]; then
