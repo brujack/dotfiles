@@ -63,6 +63,7 @@ if ($IsWindows) {
       "powertoys",
       "putty.install",
       "python3",
+      "reflect-free",
       "ripgrep",
       "simplenote",
       "sourcetree",
