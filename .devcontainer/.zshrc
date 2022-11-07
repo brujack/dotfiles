@@ -1,5 +1,5 @@
 # functions
-Make() {
+function Make() {
   if [ -f Taskfile.yml ]; then
     task "$@"
   elif [ -f Taskfile.yaml ]; then
@@ -17,16 +17,20 @@ Make() {
   fi
 }
 
-quiet_which() {
+function quiet_which() {
   which "$1" &>/dev/null
 }
 
 # rancherssh will do fuzzy find for your query between %%
 # rssh container-keyword
-rssh () {
+function rssh () {
   cd ${HOME}/.rancherssh || return
   rancherssh %"$1"%
   cd ${HOME} || return
+}
+
+function tssh(){
+  tsh ssh bruce@$1
 }
 
 # choose which env we are running on
@@ -320,6 +324,7 @@ alias tlogin='tsh login --proxy=teleport.conecrazy.io --user=teleport-admin --in
 alias tlogout='tsh logout'
 alias tstatus='tsh status'
 alias tlist='tsh ls'
+alias ts='tssh $@'
 
 if quiet_which z
 then
