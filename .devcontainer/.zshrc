@@ -316,6 +316,10 @@ alias kcv='kubectl config view'
 alias kcc='kubectl config current-context'
 alias kcu='kubectl config use-context $@'
 alias lzd='lazydocker'
+alias tlogin='tsh login --proxy=teleport.conecrazy.io --user=teleport-admin --insecure'
+alias tlogout='tsh logout'
+alias tstatus='tsh status'
+alias tlist='tsh ls'
 
 if quiet_which z
 then
