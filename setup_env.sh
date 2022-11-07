@@ -262,7 +262,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
       echo "Installing Redhat git"
       wget -O ${HOME}/software_downloads/git-${GIT_VER}.tar.gz ${GIT_URL}/git-${GIT_VER}.tar.gz
       tar -zxvf ${HOME}/software_downloads/git-${GIT_VER}.tar.gz -C ${HOME}/software_downloads
-      cd ${HOME}/software_downloads/git-${GIT_VER} || return
+      cd ${HOME}/software_downloads/git-${GIT_VER} || exit
       make configure
       ./configure --prefix=/usr
       make -j $(nproc) all doc info
@@ -304,7 +304,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
       echo "Installing Redhat zsh"
       wget -O ${HOME}/software_downloads/zsh-${ZSH_VER}.tar.xz http://www.zsh.org/pub/zsh-${ZSH_VER}.tar.xz
       tar -xvf ${HOME}/software_downloads/zsh-${ZSH_VER}.tar.xz -C ${HOME}/software_downloads
-      cd ${HOME}/software_downloads/zsh-${ZSH_VER} || return
+      cd ${HOME}/software_downloads/zsh-${ZSH_VER} || exit
       ./configure --prefix=/usr/local --bindir=/usr/local/bin --sysconfdir=/etc/zsh --enable-etcdir=/etc/zsh
       make
       sudo -H make install
@@ -342,7 +342,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     # for regular https github used on machines that will not push changes
     # git clone --recursive https://github.com/brujack/${DOTFILES}.git ${PERSONAL_GITREPOS}/${DOTFILES}
   else
-    cd ${PERSONAL_GITREPOS}/${DOTFILES} || return
+    cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
     git pull
   fi
 
@@ -605,7 +605,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
         brew install datawire/blackbird/telepresence
       fi
 
-      cd ${PERSONAL_GITREPOS}/${DOTFILES} || return
+      cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
 
       # the below casks and mas are not in a brewfile since they will "fail" if already installed
       if [[ ! -d "/Applications/1Password.app" ]]; then
@@ -1195,7 +1195,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     fi
 
     echo "Installing kustomize"
-    cd ${HOME}/software_downloads
+    cd ${HOME}/software_downloads || exit
     curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
     if [[ -f ${HOME}/software_downloads/kustomize ]]; then
       sudo -H mv ${HOME}/software_downloads/kustomize /usr/local/bin/kustomize
@@ -1242,7 +1242,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d ${HOME}/software_downloads/shellcheck-v${SHELLCHEK_VER} ]]; then
       wget -O ${HOME}/software_downloads/shellcheck-v${SHELLCHEK_VER}.linux.x86_64.tar.xz https://shellcheck.storage.googleapis.com/shellcheck-v${SHELLCHEK_VER}.linux.x86_64.tar.xz
       xz --decompress ${HOME}/software_downloads/shellcheck-v${SHELLCHEK_VER}.linux.x86_64.tar.xz
-      cd ${HOME}/software_downloads || return
+      cd ${HOME}/software_downloads || exit
       tar -xf ${HOME}/software_downloads/shellcheck-v${SHELLCHEK_VER}.linux.x86_64.tar
       sudo cp -a ${HOME}/software_downloads/shellcheck-v${SHELLCHEK_VER}/shellcheck /usr/local/bin/
       sudo chmod 755 /usr/local/bin/shellcheck
@@ -1416,7 +1416,7 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
     if [[ ! -d ${HOME}/software_downloads/ruby-install-${RUBY_INSTALL_VER} ]]; then
       wget -O ${HOME}/software_downloads/ruby-install-${RUBY_INSTALL_VER}.tar.gz https://github.com/postmodern/ruby-install/archive/v${RUBY_INSTALL_VER}.tar.gz
       tar -xzvf ${HOME}/software_downloads/ruby-install-${RUBY_INSTALL_VER}.tar.gz -C ${HOME}/software_downloads/
-      cd ${HOME}/software_downloads/ruby-install-${RUBY_INSTALL_VER}/ || return
+      cd ${HOME}/software_downloads/ruby-install-${RUBY_INSTALL_VER}/ || exit
       sudo make install
     fi
   fi
@@ -1426,7 +1426,7 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
     if [[ ! -d ${HOME}/software_downloads/chruby-${CHRUBY_VER} ]]; then
       wget -O ${HOME}/software_downloads/chruby-${CHRUBY_VER}.tar.gz https://github.com/postmodern/chruby/archive/v${CHRUBY_VER}.tar.gz
       tar -xzvf ${HOME}/software_downloads/chruby-${CHRUBY_VER}.tar.gz -C ${HOME}/software_downloads/
-      cd ${HOME}/software_downloads/chruby-${CHRUBY_VER}/ || return
+      cd ${HOME}/software_downloads/chruby-${CHRUBY_VER}/ || exit
       sudo make install
     fi
   fi
@@ -1558,35 +1558,35 @@ if [[ ${UPDATE} ]]; then
   fi
   if [[ ${LINUX} ]]; then
     echo "Updating Linux awscli"
-    cd ${HOME}/software_downloads/awscli
+    cd ${HOME}/software_downloads/awscli || exit
     curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
     unzip -u -o awscliv2.zip
     sudo -H ${HOME}/software_downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin --update
-    cd ${PERSONAL_GITREPOS}/${DOTFILES}
+    cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
   fi
   if [[ -d ${HOME}/.tfenv ]]; then
     echo "Updating tfenv"
-    cd ${HOME}/.tfenv
+    cd ${HOME}/.tfenv || exit
     git pull
-    cd ${PERSONAL_GITREPOS}/${DOTFILES}
+    cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
   fi
   if [[ -d ${HOME}/.oh-my-zsh ]]; then
     echo "Updating oh-my-zsh"
-    cd ${HOME}/.oh-my-zsh
+    cd ${HOME}/.oh-my-zsh || exit
     git pull
-    cd ${PERSONAL_GITREPOS}/${DOTFILES}
+    cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
   fi
   if [[ -d ${HOME}/.oh-my-zsh/custom/themes/powerlevel10k ]]; then
     echo "Updating powerlevel10k"
-    cd ${HOME}/.oh-my-zsh/custom/themes/powerlevel10k
+    cd ${HOME}/.oh-my-zsh/custom/themes/powerlevel10k || exit
     git pull
-    cd ${PERSONAL_GITREPOS}/${DOTFILES}
+    cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
   fi
   if [[ -d ${HOME}/.tmux/plugins/tpm ]]; then
     echo "Updating tpm"
-    cd ${HOME}/.tmux/plugins/tpm
+    cd ${HOME}/.tmux/plugins/tpm || exit
     git pull
-    cd ${PERSONAL_GITREPOS}/${DOTFILES}
+    cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
   fi
   if [[ -f ${HOME}/bin/cht.sh ]]; then
     echo "Updating cheat.sh"
@@ -1599,9 +1599,9 @@ if [[ ${UPDATE} ]]; then
   fi
   if [[ -d ${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions ]]; then
     echo "Updating zsh-autosuggestions"
-    cd ${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions
+    cd ${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions || exit
     git pull
-    cd ${PERSONAL_GITREPOS}/${DOTFILES}
+    cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
   fi
   echo "updating ruby gems"
   gem update
