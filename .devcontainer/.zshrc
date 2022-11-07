@@ -29,8 +29,12 @@ function rssh () {
   cd ${HOME} || return
 }
 
-function tssh(){
+function tssh() {
   tsh ssh bruce@$1
+}
+
+function sh() {
+  ssh bruce@$1
 }
 
 # choose which env we are running on
@@ -258,36 +262,9 @@ if [[ ${LINUX} ]]; then
 fi
 
 # aliases for home
-alias home='ssh bruce@home.conecrazy.ca'
-alias bastion='tsh ssh bruce@bastion'
-alias downloads='tsh ssh bruce@downloads'
-alias ratna='ssh bruce@ratna.conecrazy.io'
-alias workstation='ssh bruce@workstation'
-alias laptop='ssh bruce@laptop'
-alias laptop-1='ssh bruce@laptop-1'
-alias brucework='ssh bruce@brucework'
-alias fah-0='tsh ssh bruce@fah-0'
-alias fah-1='tsh ssh bruce@fah-1'
-alias bind-master='tsh ssh bruce@bind-master'
-alias bind-slave='tsh ssh bruce@bind-slave'
-alias plex='tsh ssh bruce@plex'
-alias teleport-server='tsh ssh bruce@teleport'
-alias docker-server='tsh ssh bruce@docker-server'
-alias nut='tsh ssh bruce@nut'
 alias prox-0='tsh ssh root@prox-0'
 alias prox-1='tsh ssh root@prox-1'
 alias prox-2='tsh ssh root@prox-2'
-alias kind-server='tsh ssh bruce@kind'
-alias us-24='ssh bruce@us-24-pro'
-alias us-16-xg-bottom='ssh bruce@us-16-xg-bottom'
-alias us-16-xg-top='ssh bruce@us-16-xg-top'
-alias us-8-1='ssh bruce@us-8-1'
-alias us-8-2='ssh bruce@us-8-2'
-alias frontyard='ssh bruce@frontyard'
-alias downstairs='ssh bruce@downstairs'
-alias basement='ssh bruce@basement'
-alias backyard='ssh bruce@backyard'
-alias frontyard='ssh bruce@frontyard'
 
 # aliases for work servers
 
@@ -324,7 +301,9 @@ alias tlogin='tsh login --proxy=teleport.conecrazy.io --user=teleport-admin --in
 alias tlogout='tsh logout'
 alias tstatus='tsh status'
 alias tlist='tsh ls'
+# tssh and sh are functions defined above
 alias ts='tssh $@'
+alias ss='sh $@'
 
 if quiet_which z
 then
