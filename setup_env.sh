@@ -115,6 +115,7 @@ install_homebrew() {
     xcode-select --install
     # Accept Xcode license
     sudo xcodebuild -license accept
+    sudo xcodebuild -runFirstLaunch
   fi
   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 }
