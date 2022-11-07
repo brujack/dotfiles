@@ -9,14 +9,24 @@ Make() {
       if [[ ${RATNA} ]]; then
         alias make='/usr/local/bin/gmake'
       fi
-      if [[ ${LAPTOP} ]]; then
-        alias make='/opt/homebrew/bin/gmake'
-      elif [[ ${BRUCEWORK} ]]; then
+      if [[ ${LAPTOP} ]] || [[ ${BRUCEWORK} ]] || [[ ${STUDIO} ]]; then
         alias make='/opt/homebrew/bin/gmake'
       fi
     fi
     make "$@"
   fi
+}
+
+quiet_which() {
+  which "$1" &>/dev/null
+}
+
+# rancherssh will do fuzzy find for your query between %%
+# rssh container-keyword
+rssh () {
+  cd ${HOME}/.rancherssh || return
+  rancherssh %"$1"%
+  cd ${HOME} || return
 }
 
 # choose which env we are running on
@@ -99,19 +109,6 @@ fi
 if [[ ${LINUX} ]]; then
   CHRUBY_LOC="/usr/local/share"
 fi
-
-# setup some functions
-quiet_which() {
-  which "$1" &>/dev/null
-}
-
-# rancherssh will do fuzzy find for your query between %%
-# rssh container-keyword
-rssh () {
-  cd ${HOME}/.rancherssh || return
-  rancherssh %"$1"%
-  cd ${HOME} || return
-}
 
 # Path to your oh-my-zsh installation.
 export ZSH=${HOME}/.oh-my-zsh
@@ -324,6 +321,11 @@ if quiet_which z
 then
   alias cd="z"
   alias zz="z -"
+fi
+
+if quiet_which nvim
+then
+  alias vim="nvim"
 fi
 
 if quiet_which bat
