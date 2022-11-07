@@ -56,6 +56,7 @@ function AWSProfileTest {
 New-Alias -Name '..' -Value 'BackOne'
 New-Alias -Name '...' -Value 'BackTwo'
 New-Alias -Name 'll' -Value 'ShowIcons'
+New-Alias -Name 'vim' -Value 'nvim'
 
 if ($IsLinux -or $IsMacOS) {
   if (Get-Command "starship") {
