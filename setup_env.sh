@@ -476,6 +476,13 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.zshrc ${HOME}/.zshrc
   fi
 
+  if [[ ! -L ${HOME}/.config/.zshrc.d && -f ${HOME}/.config/.zshrc.d ]]; then
+    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.config/.zshrc.d ${HOME}/.config/.zshrc.d
+  else
+    rm ${HOME}/.config/.zshrc.d
+    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.config/.zshrc.d ${HOME}/.config/.zshrc.d
+  fi
+
   if [[ -f ${HOME}/.zprofile ]]; then
     rm ${HOME}/.zprofile
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.zprofile ${HOME}/.zprofile
