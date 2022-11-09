@@ -4,25 +4,28 @@
 add_newline = false
 
 # Change the default prompt format
+#format = """\
+#[╭╴](238)$env_var\
+#$all[╰─](238)$character"""
+
 format = """\
-[╭╴](238)$env_var\
-$all[╰─](238)$character"""
+(238)$env_var $all (238)$character"""
 
 # Change the default prompt characters
 [character]
 success_symbol = "[](238)"
 error_symbol = "[](238)"
 
-# Shows an icon that should be included by zshrc script based on the distribution or os
-[env_var.STARSHIP_DISTRO]
-format = '[$env_value](bold white) '
-variable = "STARSHIP_DISTRO"
-disabled = false
-
 [shell]
 zsh_indicator = "zsh"
 powershell_indicator = "pwsh"
 style = "white bold"
+disabled = false
+
+# Shows an icon that should be included by zshrc script based on the distribution or os
+[env_var.STARSHIP_DISTRO]
+format = '[$env_value](bold white) '
+variable = "STARSHIP_DISTRO"
 disabled = false
 
 [username]

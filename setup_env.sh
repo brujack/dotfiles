@@ -499,6 +499,23 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
   fi
 
+  if [[ ! -d ${HOME}/.warp ]]; then
+    mkdir ${HOME}/.warp
+    chmod 700 ${HOME}/.warp
+  fi
+  if [[ ! -L ${HOME}/.ssh/themes && -f ${HOME}/.warp/themes ]]; then
+    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.warp/themes ${HOME}/.warp/themes
+  else
+    rm ${HOME}/.warp/themes
+    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.warp/themes ${HOME}/.warp/themes
+  fi
+  if [[ ! -L ${HOME}/.ssh/launch_configurations && -f ${HOME}/.warp/launch_configurations ]]; then
+    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.warp/launch_configurations ${HOME}/.warp/launch_configurations
+  else
+    rm ${HOME}/.warp/launch_configurations
+    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.warp/launch_configurations ${HOME}/.warp/launch_configurations
+  fi
+
   if [[ ! -d ${HOME}/.ssh ]]; then
     mkdir ${HOME}/.ssh
     chmod 700 ${HOME}/.ssh
@@ -737,6 +754,9 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       fi
       if [[ ! -d "/Applications/VLC.app" ]]; then
         brew install --cask vlc
+      fi
+      if [[ ! -d "/Applications/Warp.app" ]]; then
+        brew install --cask warp
       fi
       if [[ ! -d "/Applications/zoom.us.app" ]]; then
         brew install --cask zoom
