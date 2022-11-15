@@ -13,8 +13,7 @@ call plug#begin('~/.vim/plugged')
 Plug 'rakr/vim-one'
 
 " Integrate fzf with Vim.
-Plug '~/.fzf'
-Plug 'junegunn/fzf.vim'
+set rtp+=/opt/homebrew/opt/fzf
 
 " Automatically show Vim's complete menu while typing.
 Plug 'vim-scripts/AutoComplPop'
