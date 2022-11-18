@@ -533,6 +533,17 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     rm ${HOME}/.ssh/config
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.ssh/config ${HOME}/.ssh/config
   fi
+  if [[ ! -L ${HOME}/.ssh/config && -f ${HOME}/.ssh/teleport.cfg ]]; then
+    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.ssh/teleport.cfg ${HOME}/.ssh/teleport.cfg
+  else
+    rm ${HOME}/.ssh/teleport.cfg
+    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.ssh/teleport.cfg ${HOME}/.ssh/teleport.cfg
+  fi
+
+  if [[ ! -d ${HOME}/.tsh ]]; then
+    mkdir ${HOME}/.tsh
+    chmod 700 ${HOME}/.tsh
+  fi
 
   echo "Setting ZSH as shell..."
   if [[ ! ${REDHAT} ]]; then
