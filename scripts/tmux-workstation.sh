@@ -1,4 +1,5 @@
-#!/bin/sh
+#!/usr/bin/env bash
+
 # tmux \
 #   new -s 'bpytop' -c 'bpytop' \; \
 #   detach-client \; \

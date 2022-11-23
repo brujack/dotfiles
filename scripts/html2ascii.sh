@@ -1,4 +1,5 @@
-#!/bin/sh
+#!/usr/bin/env bash
+
 # html2ascii: a simple html to ascii convertor and tokenizer
 # usage:      html2ascii [file]
 # note:       the html tags (like <p>) will be removed from the file
