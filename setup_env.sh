@@ -125,6 +125,7 @@ brew_update() {
   brew update
   brew upgrade
   brew upgrade --cask --greedy
+  brew cleanup
 }
 
 usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 0; }
@@ -1563,8 +1564,6 @@ fi
 if [[ ${UPDATE} ]]; then
   if [[ ${MACOS} || ${LINUX} ]]; then
     brew_update
-    echo "Cleaning up brew"
-    brew cleanup
     echo "Updating app store apps softwareupdate"
     sudo -H softwareupdate --install --all --verbose
   fi
