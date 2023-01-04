@@ -66,6 +66,7 @@ if ($IsWindows) {
       "reflect-free",
       "ripgrep",
       "simplenote",
+      "slack",
       "sourcetree",
       "starship",
       "steam-client",
