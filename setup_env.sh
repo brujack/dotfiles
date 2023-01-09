@@ -636,6 +636,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       brew install speedtest
       if [[ ${STUDIO} ]] || [[ ${LAPTOP} ]] || [[ ${BRUCEWORK} ]]; then
         brew install datawire/blackbird/telepresence-arm64
+        brew install -cloudflare
       fi
       if [[ ${RATNA} ]]; then
         brew install datawire/blackbird/telepresence
@@ -1517,7 +1518,7 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
       pyenv virtualenv-delete -f ansible
       pyenv virtualenv ${PYTHON_VER} ansible
       pyenv activate ansible
-      python3 -m pip install ansible ansible-cmdb ansible-lint boto3 docker docker-compose jmespath pylint psutil bpytop HttpPy j2cli wheel
+      python3 -m pip install ansible ansible-cmdb ansible-lint certbot certbot-dns-cloudflare boto3 docker docker-compose jmespath pylint psutil bpytop HttpPy j2cli wheel
     elif [[ ${BRUCEWORK} ]]; then
       pyenv virtualenv-delete -f ansible
       pyenv virtualenv ${PYTHON_VER} ansible

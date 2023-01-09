@@ -38,7 +38,7 @@ show_always = true
 [hostname]
 ssh_only = false
 format = "on [$hostname](white bold) "
-trim_at = ".conecrazy.io"
+trim_at = ".home.conecrazy.ca"
 
 [directory]
 truncation_length = 3
