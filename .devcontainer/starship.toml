@@ -67,11 +67,11 @@ behind = "⇣ ${count}"
 stashed = " ${count}"
 modified = " ${count}"
 staged = '[++\($count\)](green)'
-renamed = "襁 "
+renamed = "r ${count}"
 deleted = " ${count}"
 
 [terraform]
-format = "via [ terraform $version]($style) 壟 [$workspace]($style) "
+format = "via [ terraform $version]($style) @ [$workspace]($style) "
 
 [vagrant]
 disabled = true
