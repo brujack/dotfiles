@@ -1173,6 +1173,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       brew install argocd
       brew install bat
       brew install exa
+      brew install git-lfs
       brew install fzf
       brew install gh
       brew install hadolint
