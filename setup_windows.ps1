@@ -46,6 +46,7 @@ if ($IsWindows) {
       "geekbench",
       "gh",
       "git",
+      "git-lfs",
       "golang",
       "googlechrome",
       "go-task",
