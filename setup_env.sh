@@ -3,8 +3,8 @@
 # software versions to install
 RUBY_INSTALL_VER="0.8.3"
 CHRUBY_VER="0.3.9"
-RUBY_VER="3.1.2"
-PYTHON_VER="3.10.6"
+RUBY_VER="3.2.0"
+PYTHON_VER="3.10.9"
 CONSUL_VER="1.12.3"
 VAULT_VER="1.11.2"
 NOMAD_VER="1.3.2"
@@ -189,10 +189,8 @@ fi
 if [[ ${MACOS} ]]; then
   if [[ ${RATNA} ]]; then
     CHRUBY_LOC="/usr/local/opt/chruby/share"
-  elif [[ ${LAPTOP} ]] || [[ ${STUDIO} ]]; then
-    CHRUBY_LOC="/opt/homebrew/opt/chruby/share/"
-  elif [[ ${BRUCEWORK} ]]; then
-    CHRUBY_LOC="/opt/homebrew/opt/chruby/share/"
+  elif [[ ${LAPTOP} ]] || [[ ${STUDIO} ]] || [[ ${BRUCEWORK} ]]; then
+    CHRUBY_LOC="/opt/homebrew/opt/chruby/share"
   fi
 elif [[ ${LINUX} ]]; then
   CHRUBY_LOC="/usr/local/share"
