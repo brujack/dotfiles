@@ -632,12 +632,9 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       brew install snyk
       brew tap teamookla/speedtest
       brew install speedtest
-      if [[ ${STUDIO} ]] || [[ ${LAPTOP} ]] || [[ ${BRUCEWORK} ]]; then
+      if [[ ${STUDIO} ]] || [[ ${LAPTOP} ]] || [[ ${BRUCEWORK} ]] || [[ ${RATNA} ]]; then
         brew install datawire/blackbird/telepresence-arm64
         brew install -cloudflare
-      fi
-      if [[ ${RATNA} ]]; then
-        brew install datawire/blackbird/telepresence
       fi
 
       cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
