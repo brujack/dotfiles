@@ -15,6 +15,9 @@ if [[ ${LINUX} ]]; then
   path+=('/opt/local/bin')
   path+=('/opt/local/sbin')
   path+=('/home/linuxbrew/.linuxbrew/bin')
+  if [[ -d ${HOME}/.local/bin ]]; then
+    path+=("${HOME}/.local/bin")
+  fi
   if [[ ${UBUNTU} ]]; then
     path+=("/usr/lib/go-${GO_VER}/bin")
     path+=('/snap/bin')
