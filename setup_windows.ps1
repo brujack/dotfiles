@@ -59,6 +59,8 @@ if ($IsWindows) {
       "make",
       "microsoft-teams",
       "microsoft-windows-terminal",
+      "mongosh",
+      "mongodb-atlas",
       "neovim",
       "postman",
       "powertoys",
