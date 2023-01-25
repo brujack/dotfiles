@@ -1059,16 +1059,6 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       fi
     fi
 
-    if [[ ${WORKSTATION} ]]; then
-      if [[ ${JAMMY} ]]; then
-        echo "Installing mongodb-atlas"
-        wget -qO - https://pgp.mongodb.com/server-6.0.asc | sudo apt-key add -
-        echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/6.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-6.0.list
-        sudo -H apt update
-        sudo -H apt install mongodb-atlas -y
-      fi
-    fi
-
     if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]]; then
       echo "Installing telepresence"
       wget -O ${HOME}/software_downloads/telepresence ${TELEPRESENCE_URL}
@@ -1185,6 +1175,8 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       brew install k9s
       brew install lazydocker
       brew install linkerd
+      brew install mongosh
+      brew install mongodb-atlas
       brew install neovim
       brew install ripgrep
       brew install starship
