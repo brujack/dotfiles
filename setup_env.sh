@@ -632,6 +632,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       brew install snyk
       brew tap teamookla/speedtest
       brew install speedtest
+      brew install redpanda-data/tap/redpanda
       if [[ ${STUDIO} ]] || [[ ${LAPTOP} ]] || [[ ${BRUCEWORK} ]] || [[ ${RATNA} ]]; then
         brew install datawire/blackbird/telepresence-arm64
         brew install -cloudflare
@@ -1183,6 +1184,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       brew install tgenv
       brew install zoxide
       brew install go-task/tap/go-task
+      brew install redpanda-data/tap/redpanda
       brew tap snyk/tap
       brew install snyk
     fi
