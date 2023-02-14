@@ -25,10 +25,17 @@ if [[ ${MACOS} ]]; then
 fi
 
 if [[ ${LINUX} ]]; then
-  path+=('/opt/local/bin')
-  path+=('/opt/local/sbin')
-  if [[ -d ${HOME}/.linuxbrew/bin ]]; then
-    path+=("${HOME}/.linuxbrew/bin")
+  if [[ -d /opt/local/bin ]]; then
+    path+=('/opt/local/bin')
+  fi
+  if [[ -d /opt/local/sbin ]]; then
+    path+=('/opt/local/sbin')
+  fi
+  if [[ -d /home/linuxbrew/.linuxbrew/bin ]]; then
+    path+=('/home/linuxbrew/.linuxbrew/bin')
+  fi
+  if [[ -d /home/linuxbrew/.linuxbrew/sbin ]]; then
+    path+=('/home/linuxbrew/.linuxbrew/sbin')
   fi
   if [[ -d ${HOME}/.local/bin ]]; then
     path+=("${HOME}/.local/bin")
@@ -37,10 +44,14 @@ if [[ ${LINUX} ]]; then
     if [[ -d /usr/lib/go-${GO_VER}/bin ]]; then
       path+=("/usr/lib/go-${GO_VER}/bin")
     fi
-    path+=('/snap/bin')
+    if [[ -d /snap/bin ]]; then
+      path+=('/snap/bin')
+    fi
   fi
   if [[ ${REDHAT} ]]; then
-    path+=('/usr/sbin')
+    if [[ -d /usr/sbin ]]; then
+      path+=('/usr/sbin')
+    fi
     if [[ -d /usr/local/go/bin ]]; then
       path+=('/usr/local/go/bin')
     fi
