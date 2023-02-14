@@ -1,7 +1,11 @@
 typeset -U path
 # for /usr/local includes
-path+=('/usr/local/bin')
-path+=('/usr/local/sbin')
+if [[ -d /usr/local/bin ]]; then
+  path+=('/usr/local/bin')
+fi
+if [[ -d /usr/local/sbin ]]; then
+  path+=('/usr/local/sbin')
+fi
 
 # adding in home bin/scripts path
 if [[ -d ${HOME}/bin ]]; then
