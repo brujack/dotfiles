@@ -16,7 +16,7 @@ TERRAFORM_VER="1.1.7"
 GIT_VER="2.38.1"
 GIT_URL="https://mirrors.edge.kernel.org/pub/software/scm/git"
 ZSH_VER="5.9"
-GO_VER="1.19"
+GO_VER="1.20"
 DOCKER_COMPOSE_VER="v2.11.2"
 DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VER}/docker-compose-$(uname -s)-$(uname -m)"
 SHELLCHECK_VER="0.7.0"
@@ -978,6 +978,14 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       fi
       if [[ $(dpkg-query -W -f='${Status}' golang-1.18-src 2>/dev/null | grep -c "ok installed") -eq 1 ]]; then
         sudo -H apt remove golang-1.18-src -y
+      fi
+      sudo -H apt install golang-${GO_VER}-go -y
+    elif [[ ${GO_VER} == "1.20" ]]; then
+      if [[ $(dpkg-query -W -f='${Status}' golang-1.19-go 2>/dev/null | grep -c "ok installed") -eq 1 ]]; then
+        sudo -H apt remove golang-1.19-go -y
+      fi
+      if [[ $(dpkg-query -W -f='${Status}' golang-1.19-src 2>/dev/null | grep -c "ok installed") -eq 1 ]]; then
+        sudo -H apt remove golang-1.19-src -y
       fi
       sudo -H apt install golang-${GO_VER}-go -y
     fi
