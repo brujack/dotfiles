@@ -68,6 +68,7 @@ if ($IsWindows) {
       "python3",
       "reflect-free",
       "ripgrep",
+      "rust",
       "simplenote",
       "slack",
       "sourcetree",
