@@ -36,6 +36,14 @@ function sh() {
   ssh bruce@$1
 }
 
+function sshb() {
+  ssh build@$1
+}
+
+function sshu() {
+  ssh build@$1
+}
+
 # show .oh_my_zsh plugins and their shortcuts
 function options() {
   PLUGIN_PATH="$HOME/.oh-my-zsh/plugins/"

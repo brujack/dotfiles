@@ -42,6 +42,8 @@ alias tlist='tsh ls'
 # tssh and sh are functions defined above
 alias ts='tssh $@'
 alias ss='sh $@'
+alias ssb='sshb $@'
+alias ssu='sshu $@'
 
 if quiet_which z
 then
