@@ -83,7 +83,7 @@ brew "redis", restart_service: :changed, link: true
 brew "ripgrep"
 brew "ruby"
 brew "ruby-install"
-brew "rust"
+brew "rustup"
 brew "shellcheck"
 brew "sops"
 brew "sqlite"
