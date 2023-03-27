@@ -1188,7 +1188,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       brew install mongodb-atlas
       brew install neovim
       brew install ripgrep
-      brew install rust
+      brew install rustup
       brew install starship
       brew install tgenv
       brew install zoxide
