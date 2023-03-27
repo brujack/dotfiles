@@ -57,6 +57,9 @@ if [[ ${LINUX} ]]; then
     fi
   fi
 fi
+if [[ -d ${HOME}/.cargo/bin ]]; then
+  path+=("${HOME}/.cargo/bin")
+fi
 # for fzf not installed via a package
 if [[ -d ${HOME}/.fzf ]]; then
   path+=("${HOME}/.fzf/bin")
