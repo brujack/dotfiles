@@ -1253,6 +1253,14 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo chown root:root /usr/local/bin/kustomize
     fi
 
+    # fix for missing libssl1.1 on ubuntu 22.04 and it's requirement for installing python3 via pyenv
+    if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]]; then
+      echo installing libssl1.1
+      echo "deb http://security.ubuntu.com/ubuntu focal-security main" | sudo tee /etc/apt/sources.list.d/focal-security.list
+      sudo -H apt update
+      sudo -H apt install libssl1.1 -y
+    fi
+
     sudo -H apt autoremove -y
   fi
 
