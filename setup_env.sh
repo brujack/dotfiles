@@ -1555,7 +1555,9 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
         eval "$(pyenv init -)"
       fi
       pyenv activate ansible
-      python3 -m pip --cert ~/nscacerts.pem install ansible ansible-lint boto3 docker jmespath netaddr pylint psutil bpytop HttpPy j2cli wheel
+      # for when netskope is blocking pip
+      # python3 -m pip --cert ~/nscacerts.pem install ansible ansible-lint boto3 docker jmespath netaddr pylint psutil bpytop HttpPy j2cli wheel
+      python3 -m pip install ansible ansible-lint boto3 docker jmespath netaddr pylint psutil bpytop HttpPy j2cli wheel
     fi
   fi
 
