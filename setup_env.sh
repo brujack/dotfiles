@@ -4,7 +4,7 @@
 RUBY_INSTALL_VER="0.8.3"
 CHRUBY_VER="0.3.9"
 RUBY_VER="3.2.1"
-PYTHON_VER="3.10.9"
+PYTHON_VER="3.11.2"
 CONSUL_VER="1.15.1"
 VAULT_VER="1.13.0"
 NOMAD_VER="1.5.1"
@@ -1527,13 +1527,27 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
     if [[ ${STUDIO} ]] || [[ ${LAPTOP} ]] || [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]] || [[ ${RATNA} ]]; then
       pyenv virtualenv-delete -f ansible
       pyenv virtualenv ${PYTHON_VER} ansible
+      if quiet_which pyenv
+      then
+        export PYENV_VIRTUALENV_DISABLE_PROMPT=1
+        export PYENV_ROOT="$HOME/.pyenv"
+        command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"
+        eval "$(pyenv init -)"
+      fi
       pyenv activate ansible
-      python3 -m pip install ansible ansible-cmdb ansible-lint certbot certbot-dns-cloudflare boto3 docker docker-compose jmespath netaddr pylint psutil bpytop HttpPy j2cli wheel
+      python3 -m pip install ansible ansible-lint certbot certbot-dns-cloudflare boto3 docker jmespath netaddr pylint psutil bpytop HttpPy j2cli wheel
     elif [[ ${BRUCEWORK} ]]; then
       pyenv virtualenv-delete -f ansible
       pyenv virtualenv ${PYTHON_VER} ansible
+      if quiet_which pyenv
+      then
+        export PYENV_VIRTUALENV_DISABLE_PROMPT=1
+        export PYENV_ROOT="$HOME/.pyenv"
+        command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"
+        eval "$(pyenv init -)"
+      fi
       pyenv activate ansible
-      python3 -m pip --cert ~/nscacerts.pem install ansible ansible-cmdb ansible-lint boto3 docker docker-compose jmespath netaddr pylint psutil bpytop HttpPy j2cli wheel
+      python3 -m pip --cert ~/nscacerts.pem install ansible ansible-lint boto3 docker jmespath netaddr pylint psutil bpytop HttpPy j2cli wheel
     fi
   fi
 

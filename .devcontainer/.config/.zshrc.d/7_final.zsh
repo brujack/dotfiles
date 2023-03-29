@@ -38,6 +38,15 @@ then
   eval "$(zoxide init zsh)"
 fi
 
+# for pyenv
+if quiet_which pyenv
+then
+  export PYENV_VIRTUALENV_DISABLE_PROMPT=1
+  export PYENV_ROOT="$HOME/.pyenv"
+  command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"
+  eval "$(pyenv init -)"
+fi
+
 # Load Starship
 export STARSHIP_DISTRO="$ICON "
 eval "$(starship init zsh)"
