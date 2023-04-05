@@ -633,8 +633,12 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       brew tap teamookla/speedtest
       brew install speedtest
       brew install redpanda-data/tap/redpanda
-      if [[ ${STUDIO} ]] || [[ ${LAPTOP} ]] || [[ ${BRUCEWORK} ]] || [[ ${RATNA} ]]; then
+      if [[ ${STUDIO} ]] || [[ ${LAPTOP} ]] || [[ ${BRUCEWORK} ]]; then
         brew install datawire/blackbird/telepresence-arm64
+        brew install -cloudflare
+      fi
+      if [[ ${RATNA} ]]; then
+        brew install datawire/blackbird/telepresence
         brew install -cloudflare
       fi
 
