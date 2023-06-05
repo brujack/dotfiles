@@ -1,7 +1,6 @@
 brew "argocd"
 brew "autoconf"
 brew "automake"
-brew "awscli"
 brew "azure-cli"
 brew "bat"
 brew "bison"

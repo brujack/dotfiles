@@ -1439,6 +1439,16 @@ EOM
   fi
 
   echo "Installing aws-cli"
+  if [[ ${MACOS} ]]; then
+    if [[ ! -d ${HOME}/software_downloads/awscli ]]; then
+      mkdir ${HOME}/software_downloads/awscli
+    fi
+    if [[ ! -f ${HOME}/software_downloads/awscli/AWSCLIV2.pkg ]]; then
+      wget -O ${HOME}/software_downloads/awscli/AWSCLIV2.pkg "https://awscli.amazonaws.com/AWSCLIV2.pkg"
+      sudo installer -pkg ${HOME}/software_downloads/awscli/AWSCLIV2.pkg -target /
+      rm ${HOME}/software_downloads/awscli/AWSCLIV2.pkg
+    fi
+  fi
   if [[ ${LINUX} ]]; then
     if [[ ! -d ${HOME}/software_downloads/awscli ]]; then
       mkdir ${HOME}/software_downloads/awscli
@@ -1447,6 +1457,7 @@ EOM
       wget -O ${HOME}/software_downloads/awscli/awscliv2.zip "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
       unzip ${HOME}/software_downloads/awscli/awscliv2.zip -d ${HOME}/software_downloads/awscli
       sudo -H ${HOME}/software_downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin
+      rm -rf ${HOME}/software_downloads/awscli
     fi
   fi
 
@@ -1631,6 +1642,14 @@ if [[ ${UPDATE} ]]; then
     python3 -m pip install --upgrade pip --cert ~/nscacerts.pem
     python3 -m pip list --outdated --format=columns --cert ~/nscacerts.pem | awk '{print $1;}' | awk 'NR>2' | xargs -n1 python3 -m pip install -U --cert ~/nscacerts.pem
     python3 -m pip check --cert ~/nscacerts.pem
+  fi
+  if [[ ${MACOS} ]]; then
+    echo "Updating MACOS awscli"
+    cd ${HOME}/software_downloads/awscli || exit
+    curl "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "AWSCLIV2.pkg"
+    sudo -H installer -pkg AWSCLIV2.pkg -target /
+    rm AWSCLIV2.pkg
+    cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
   fi
   if [[ ${LINUX} ]]; then
     echo "Updating Linux awscli"
