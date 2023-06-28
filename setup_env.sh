@@ -3,7 +3,7 @@
 # software versions to install
 RUBY_INSTALL_VER="0.8.3"
 CHRUBY_VER="0.3.9"
-RUBY_VER="3.2.1"
+RUBY_VER="3.2.2"
 PYTHON_VER="3.11.4"
 CONSUL_VER="1.15.1"
 VAULT_VER="1.13.0"
