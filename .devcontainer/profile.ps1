@@ -68,7 +68,7 @@ if ($IsLinux -or $IsMacOS) {
 }
 elseif ($IsWindows) {
   if (Get-Command "starship.exe") {
-    Invoke-Expression (&starship init powershell)
+    Invoke-Expression (& 'C:\Program Files\starship\bin\starship.exe' init powershell)
   }
   else {
     Write-Output "starship.exe not installed"
