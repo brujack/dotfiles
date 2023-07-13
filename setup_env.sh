@@ -1218,7 +1218,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
 
     if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]]; then
       echo "Installing .net6 sdk"
-      sudo -H apt install dotnet-sdk-6.0 -y
+      sudo -H apt install dotnet-sdk-7.0 -y
     fi
 
     python3 -m pip install glances
