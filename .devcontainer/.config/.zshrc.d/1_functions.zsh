@@ -76,9 +76,26 @@ function awsuse() {
   else
     if findStringInFile ~/.aws/config $1; then
       export AWS_PROFILE=${1}
-      echo "AWS command line environment set to [${1}]"
-      aws sso logout
-      aws sso login
+      aws sts get-caller-identity --profile ${1} | grep "Arn: arn:aws:sts::" &> /dev/null
+      if [ $? -eq 0 ]; then
+        echo "AWS command line environment set to [${1}]"
+      else
+        if [ -t 1 ] ; then
+          # is tty session
+          echo "Found that this is an interactive terminal, will run the sso login"
+          aws sso login
+          if [ "$?" -ne 0 ]; then
+            echo "You didnt login, exiting!"
+            exit 1;
+          else
+            echo "AWS command line environment set to [${1}]"
+          fi
+        else
+          # is cron
+          echo "Not in a tty, gracefully exiting due to no active SSO login. Check that your logged in via SSO, or have perms via IAM already setup";
+          exit 1;
+        fi
+      fi
     else
       echo "AWS profile [${1}] not found."
       echo "Please choose from an existing profile:"
