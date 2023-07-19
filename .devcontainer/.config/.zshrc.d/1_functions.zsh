@@ -71,36 +71,34 @@ function findStringInFile() {
 }
 
 function awsuse() {
-  if [ -z "$1" ]; then
-    echo "No environment supplied"
+  if [ $# -eq 0 ]
+    then
+      echo "No arguments supplied. Please provide the AWS profile name."
+      return 1
+  fi
+
+  local profile=$1
+
+  # Check if in a TTY environment
+  if ! tty -s
+  then
+    echo "This function must be run in a TTY environment."
+    return 1
+  fi
+
+  # Check if profile exists
+  if ! aws configure list-profiles | grep -q ${profile}
+  then
+    echo "The specified profile [${profile}] does not exist."
+    return 1
+  fi
+
+  # Check if already logged in
+  if aws sts get-caller-identity --profile ${profile} &> /dev/null
+  then
+    echo "Already logged in to AWS SSO with profile [${profile}]"
   else
-    if findStringInFile ~/.aws/config $1; then
-      export AWS_PROFILE=${1}
-      aws sts get-caller-identity --profile ${1} | grep "Arn: arn:aws:sts::" &> /dev/null
-      if [ $? -eq 0 ]; then
-        echo "AWS command line environment set to [${1}]"
-      else
-        if [ -t 1 ] ; then
-          # is tty session
-          echo "Found that this is an interactive terminal, will run the sso login"
-          aws sso login
-          if [ "$?" -ne 0 ]; then
-            echo "You didnt login, exiting!"
-            exit 1;
-          else
-            echo "AWS command line environment set to [${1}]"
-          fi
-        else
-          # is cron
-          echo "Not in a tty, gracefully exiting due to no active SSO login. Check that your logged in via SSO, or have perms via IAM already setup";
-          exit 1;
-        fi
-      fi
-    else
-      echo "AWS profile [${1}] not found."
-      echo "Please choose from an existing profile:"
-      grep "\[profile" ~/.aws/config
-      echo "Or create a new one."
-    fi
+    echo "Logging in to AWS SSO with profile [${profile}]"
+    aws sso login --profile ${profile}
   fi
 }
