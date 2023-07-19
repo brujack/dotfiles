@@ -71,34 +71,39 @@ function findStringInFile() {
 }
 
 function awsuse() {
-  if [ $# -eq 0 ]
-    then
-      echo "No arguments supplied. Please provide the AWS profile name."
-      return 1
+  if [ $# -eq 0 ]; then
+    echo "No arguments supplied. Please provide the AWS profile name."
+    return 1
   fi
 
   local profile=$1
 
   # Check if in a TTY environment
-  if ! tty -s
-  then
+  if ! tty -s; then
     echo "This function must be run in a TTY environment."
     return 1
   fi
 
   # Check if profile exists
-  if ! aws configure list-profiles | grep -q ${profile}
-  then
+  if ! aws configure list-profiles | grep -q ${profile}; then
     echo "The specified profile [${profile}] does not exist."
     return 1
   fi
 
+  # Check if profile is "bruce" and set AWS_PROFILE if so
+  if [ $profile = "bruce" ]; then
+    echo "Setting AWS_PROFILE to [${profile}]"
+    export AWS_PROFILE=bruce
+    return 0
+  fi
+
   # Check if already logged in
-  if aws sts get-caller-identity --profile ${profile} &> /dev/null
-  then
+  if aws sts get-caller-identity --profile ${profile} &> /dev/null; then
     echo "Already logged in to AWS SSO with profile [${profile}]"
+    export AWS_PROFILE=${profile}
   else
     echo "Logging in to AWS SSO with profile [${profile}]"
     aws sso login --profile ${profile}
+    export AWS_PROFILE=${profile}
   fi
 }
