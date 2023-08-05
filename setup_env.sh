@@ -1506,7 +1506,12 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
 
   echo "install ruby ${RUBY_VER}"
   if [[ ! -d ${HOME}/.rubies/ruby-${RUBY_VER}/bin ]]; then
-    ruby-install ruby ${RUBY_VER}
+    if [[ ${MACOS} ]]; then
+      ruby-install ${RUBY_VER} -- --with-openssl-dir=$(brew --prefix openssl@3)
+    fi
+    if [[ ${LINUX} ]]; then
+      ruby-install ${RUBY_VER}
+    fi
   fi
 
   if [[ ${LINUX} ]]; then
