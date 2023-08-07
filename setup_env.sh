@@ -56,11 +56,11 @@ quiet_which() {
 }
 
 rhel_installed_package() {
-  if yum list installed "$@" >/dev/null 2>&1; then
-    true
-  else
-    false
+  if ! command -v yum &>/dev/null; then
+    echo "yum command not found! Please install yum or run on a supported system."
+    return 1
   fi
+  yum list installed "$@" >/dev/null 2>&1
 }
 
 install_rosetta() {
