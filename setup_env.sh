@@ -185,6 +185,81 @@ brew_update() {
   return 0
 }
 
+install_git() {
+  echo "Installing git"
+  if [[ "$(uname -s)" != "Darwin" ]]; then
+    if brew list | grep '^git$' &> /dev/null; then
+      echo "Git (from Homebrew) is already installed."
+      return 0
+    fi
+    echo "Installing git via Homebrew."
+    if [[ ${MACOS} ]]; then
+      if ! command -v brew &> /dev/null; then
+        install_homebrew
+      fi
+      if command -v brew &> /dev/null; then
+        brew install git
+      else
+        echo "Failed to install Homebrew. Cannot install Git."
+        return 1
+      fi
+    fi
+  elif [[ "$(uname -s)" == "Linux" ]]; then
+    if [[ $(awk -F= '/^NAME/{print $2}' /etc/os-release | tr -d '"') == "Ubuntu" ]]; then
+      echo "Installing git via apt"
+      sudo -H add-apt-repository ppa:git-core/ppa -y
+      sudo -H apt update
+      sudo -H apt dist-upgrade -y
+      sudo -H apt install git -y
+    elif [[ $(awk -F= '/^NAME/{print $2}' /etc/os-release | tr -d '"') == "CentOS Linux" ]]; then
+      echo "Installing git via yum"
+      sudo -H yum update -y
+      sudo -H yum install git -y
+    elif [[ $(awk -F= '/^NAME/{print $2}' /etc/os-release | tr -d '"') == "Fedora" ]]; then
+      echo "Installing git via dnf"
+      sudo -H dnf update -y
+      sudo -H dnf install git -y
+    fi
+  fi
+}
+
+install_zsh() {
+  echo "Installing zsh"
+  if [[ "$(uname -s)" != "Darwin" ]]; then
+    if brew list | grep '^zsh$' &> /dev/null; then
+      echo "zsh (from Homebrew) is already installed."
+      return 0
+    fi
+    echo "Installing zsh via Homebrew."
+    if [[ ${MACOS} ]]; then
+      if ! command -v brew &> /dev/null; then
+        install_homebrew
+      fi
+      if command -v brew &> /dev/null; then
+        brew install zsh
+      else
+        echo "Failed to install Homebrew. Cannot install zsh."
+        return 1
+      fi
+    fi
+  elif [[ "$(uname -s)" == "Linux" ]]; then
+    if [[ $(awk -F= '/^NAME/{print $2}' /etc/os-release | tr -d '"') == "Ubuntu" ]]; then
+      echo "Installing zsh via apt"
+      sudo -H apt update
+      sudo -H apt dist-upgrade -y
+      sudo -H apt install zsh -y
+      sudo -H apt install zsh-doc -y
+    elif [[ $(awk -F= '/^NAME/{print $2}' /etc/os-release | tr -d '"') == "CentOS Linux" ]]; then
+      echo "Installing zsh via yum"
+      sudo -H yum update -y
+      sudo -H yum install zsh -y
+    elif [[ $(awk -F= '/^NAME/{print $2}' /etc/os-release | tr -d '"') == "Fedora" ]]; then
+      echo "Installing zsh via dnf"
+      sudo -H dnf update -y
+      sudo -H dnf install zsh -y
+    fi
+  fi
+}
 
 usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 0; }
 [[ $# -eq 0 ]] && usage
@@ -271,42 +346,13 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     install_rosetta
   fi
 
+  if [[ ${MACOS} || ${FEDORA} || ${CENTOS} ]]; then
+    install_git
+  fi
+
+  # because the version of git is so old on redhat, we need to install a newer version by compiling it
   if ! [[ -d ${HOME}/software_downloads ]]; then
     mkdir ${HOME}/software_downloads
-  fi
-
-  echo "Installing git macos"
-  if [[ ${MACOS} ]]; then
-    if brew list | grep '^git$' &> /dev/null; then
-      echo "Git (from Homebrew) is already installed."
-      return 0
-    fi
-    if [[ ${MACOS} ]]; then
-      if ! command -v brew &> /dev/null; then
-        install_homebrew
-      fi
-      if command -v brew &> /dev/null; then
-        brew install git
-      else
-        echo "Failed to install Homebrew. Cannot install Git."
-        return 1
-      fi
-    fi
-  fi
-
-  if [[ ${UBUNTU} ]]; then
-    sudo -H add-apt-repository ppa:git-core/ppa -y
-    sudo -H apt update
-    sudo -H apt dist-upgrade -y
-    sudo -H apt install git -y
-  fi
-  if [[ ${FEDORA} ]]; then
-    sudo -H dnf update -y
-    sudo -H dnf install git -y
-  fi
-  if [[ ${CENTOS} ]]; then
-    sudo -H yum update -y
-    sudo -H yum install git -y
   fi
   if [[ ${REDHAT} ]]; then
     sudo -H dnf update -y
@@ -337,38 +383,11 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     fi
   fi
 
-  echo "Installing zsh"
-  if [[ ${MACOS} ]]; then
-    if brew list | grep '^zsh$' &> /dev/null; then
-      echo "Git (from Homebrew) is already installed."
-      return 0
-    fi
-    if [[ ${MACOS} ]]; then
-      if ! command -v brew &> /dev/null; then
-        install_homebrew
-      fi
-      if command -v brew &> /dev/null; then
-        brew install zsh
-      else
-        echo "Failed to install Homebrew. Cannot install zsh."
-        return 1
-      fi
-    fi
+  if [[ ${MACOS} || ${FEDORA} || ${CENTOS} ]]; then
+    install_zsh
   fi
-  if [[ ${UBUNTU} ]]; then
-    sudo -H apt update
-    sudo -H apt install zsh -y
-    sudo -H apt install zsh-doc -y
-  fi
-  if [[ ${FEDORA} ]]; then
-    sudo -H dnf update -y
-    sudo -H dnf install zsh -y
-  fi
-  if [[ ${CENTOS} ]]; then
-    sudo -H yum update -y
-    sudo -H yum install zsh -y
-  fi
-  # for REDHAT need to download/build/install a much newer version of zsh
+
+  # because the version of zsh is so old on redhat, we need to install a newer version by compiling it
   if [[ ${REDHAT} ]]; then
     if rhel_installed_package zsh; then
       sudo -H yum remove zsh -y
