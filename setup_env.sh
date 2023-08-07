@@ -152,12 +152,39 @@ install_homebrew() {
 
 
 brew_update() {
-  echo "Updating homebrew..."
-  brew update
-  brew upgrade
-  brew upgrade --cask --greedy
-  brew cleanup
+  if ! command -v brew &>/dev/null; then
+    echo "Homebrew not found, installing Homebrew..."
+    install_homebrew
+  fi
+
+  echo "Updating Homebrew..."
+  if ! brew update; then
+    echo "Failed to update Homebrew. Aborting."
+    return 1
+  fi
+
+  echo "Upgrading installed formulae..."
+  if ! brew upgrade; then
+    echo "Failed to upgrade formulae. Aborting."
+    return 1
+  fi
+
+  echo "Upgrading installed casks..."
+  if ! brew upgrade --cask --greedy; then
+    echo "Failed to upgrade casks. Aborting."
+    return 1
+  fi
+
+  echo "Cleaning up..."
+  if ! brew cleanup; then
+    echo "Failed to clean up. Aborting."
+    return 1
+  fi
+
+  echo "Homebrew update process completed successfully."
+  return 0
 }
+
 
 usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 0; }
 [[ $# -eq 0 ]] && usage
