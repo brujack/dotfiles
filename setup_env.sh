@@ -55,7 +55,7 @@ quiet_which() {
   which "$1" &>/dev/null
 }
 
-rhel_installed() {
+rhel_installed_package() {
   if yum list installed "$@" >/dev/null 2>&1; then
     true
   else
@@ -350,7 +350,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
   fi
   # for REDHAT need to download/build/install a much newer version of zsh
   if [[ ${REDHAT} ]]; then
-    if rhel_installed zsh; then
+    if rhel_installed_package zsh; then
       sudo -H yum remove zsh -y
     fi
     sudo -H yum update
