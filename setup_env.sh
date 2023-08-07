@@ -275,12 +275,22 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     mkdir ${HOME}/software_downloads
   fi
 
-  echo "Installing git"
+  echo "Installing git macos"
   if [[ ${MACOS} ]]; then
-    if ! [ -x "$(command -v brew)" ]; then
-      install_homebrew
-    elif [ -x "$(command -v brew)" ]; then
-      brew install git
+    if brew list | grep '^git$' &> /dev/null; then
+      echo "Git (from Homebrew) is already installed."
+      return 0
+    fi
+    if [[ ${MACOS} ]]; then
+      if ! command -v brew &> /dev/null; then
+        install_homebrew
+      fi
+      if command -v brew &> /dev/null; then
+        brew install git
+      else
+        echo "Failed to install Homebrew. Cannot install Git."
+        return 1
+      fi
     fi
   fi
 
