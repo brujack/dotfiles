@@ -339,10 +339,20 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
 
   echo "Installing zsh"
   if [[ ${MACOS} ]]; then
-    if ! [ -x "$(command -v brew)" ]; then
-      install_homebrew
-    elif [ -x "$(command -v brew)" ]; then
-      brew install zsh
+    if brew list | grep '^zsh$' &> /dev/null; then
+      echo "Git (from Homebrew) is already installed."
+      return 0
+    fi
+    if [[ ${MACOS} ]]; then
+      if ! command -v brew &> /dev/null; then
+        install_homebrew
+      fi
+      if command -v brew &> /dev/null; then
+        brew install zsh
+      else
+        echo "Failed to install Homebrew. Cannot install zsh."
+        return 1
+      fi
     fi
   fi
   if [[ ${UBUNTU} ]]; then
