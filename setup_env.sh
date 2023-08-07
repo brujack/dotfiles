@@ -107,15 +107,49 @@ install_rosetta() {
 
 
 install_homebrew() {
-  echo "Installing homebrew..."
-  if [[ ${MACOS} ]]; then
+  if [[ "$(uname)" != "Darwin" ]]; then
+    echo "Homebrew is only supported on macOS. Aborting."
+    return 1
+  fi
+
+  echo "Installing Homebrew..."
+
+  # Check for Xcode Command Line Tools and install if needed
+  if ! xcode-select --print-path &>/dev/null; then
+    echo "Installing Xcode Command Line Tools..."
     xcode-select --install
+
+    # Check if the installation was successful
+    if [[ $? -ne 0 ]]; then
+      echo "Failed to install Xcode Command Line Tools. Aborting."
+      return 1
+    fi
+
     # Accept Xcode license
+    echo "Accepting Xcode license..."
     sudo xcodebuild -license accept
     sudo xcodebuild -runFirstLaunch
+
+    # Check if the license acceptance was successful
+    if [[ $? -ne 0 ]]; then
+      echo "Failed to accept Xcode license. Aborting."
+      return 1
+    fi
   fi
+
+  # Install Homebrew
   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+  # Check if the installation was successful
+  if [[ $? -ne 0 ]]; then
+    echo "Failed to install Homebrew. Aborting."
+    return 1
+  fi
+
+  echo "Homebrew has been successfully installed."
+  return 0
 }
+
 
 brew_update() {
   echo "Updating homebrew..."
