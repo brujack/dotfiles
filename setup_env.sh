@@ -107,7 +107,7 @@ install_rosetta() {
 
 
 install_homebrew() {
-  if [[ "$(uname)" != "Darwin" ]]; then
+  if [[ "$(uname -s)" != "Darwin" ]]; then
     echo "Homebrew is only supported on macOS. Aborting."
     return 1
   fi
