@@ -351,9 +351,8 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
   fi
 
   # because the version of git is so old on redhat, we need to install a newer version by compiling it
-  if ! [[ -d ${HOME}/software_downloads ]]; then
-    mkdir ${HOME}/software_downloads
-  fi
+  mkdir -p ${HOME}/software_downloads
+
   if [[ ${REDHAT} ]]; then
     sudo -H dnf update -y
     sudo -H dnf install asciidoc -y
@@ -421,15 +420,11 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     fi
   fi
 
-  echo "Creating home bin"
-  if [[ ! -d ${HOME}/bin ]]; then
-    mkdir ${HOME}/bin
-  fi
+  echo "Creating ${HOME}/bin"
+  mkdir -p ${HOME}/bin
 
   echo "Creating ${PERSONAL_GITREPOS}"
-  if [[ ! -d ${PERSONAL_GITREPOS} ]]; then
-    mkdir ${PERSONAL_GITREPOS}
-  fi
+  mkdir -p ${PERSONAL_GITREPOS}
 
   echo "Copying ${DOTFILES} from Github"
   if [[ ! -d ${PERSONAL_GITREPOS}/${DOTFILES} ]]; then
@@ -512,15 +507,13 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
   fi
 
   if [[ ${MACOS} || ${LINUX} ]]; then
-    if [[ ! -d ${HOME}/.config ]]; then
-      mkdir -p ${HOME}/.config
-    fi
+    echo "Creating ${HOME}/.config"
+    mkdir -p ${HOME}/.config
   fi
 
   if [[ ${MACOS} || ${LINUX} ]]; then
-    if [[ ! -d ${HOME}/.tf_creds ]]; then
-      mkdir -p ${HOME}/.tf_creds
-    fi
+    echo "Creating ${HOME}/.tf_creds"
+    mkdir -p ${HOME}/.tf_creds
     if [[ -d ${HOME}/.tf_creds ]]; then
       chmod 700 ${HOME}/.tf_creds
     fi
@@ -528,9 +521,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
 
   if [[ ${MACOS} || ${LINUX} ]]; then
     echo "powershell profile and custom oh-my-posh theme"
-    if [[ ! -d ${HOME}/.config/powershell ]]; then
-      mkdir -p ${HOME}/.config/powershell
-    fi
+    mkdir -p ${HOME}/.config/powershell
     if [[ -f ${HOME}/.config/powershell/profile.ps1 ]]; then
       rm ${HOME}/.config/powershell/profile.ps1
       ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/profile.ps1 ${HOME}/.config/powershell/profile.ps1
@@ -594,16 +585,16 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/bruce.zsh-theme ${HOME}/.oh-my-zsh/custom/themes/bruce.zsh-theme
   fi
 
-  if [[ ! -d ${HOME}/.tmux ]]; then
-    mkdir ${HOME}/.tmux
-  fi
+  echo "Creating ${HOME}/.tmux"
+  mkdir -p ${HOME}/.tmux
 
   if [[ ! -d ${HOME}/.tmux/plugins/tpm ]]; then
     git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
   fi
 
-  if [[ ! -d ${HOME}/.warp ]]; then
-    mkdir ${HOME}/.warp
+  echo "Creating ${HOME}/.warp"
+  mkdir -p ${HOME}/.warp
+  if [[ -d ${HOME}/.warp ]]; then
     chmod 700 ${HOME}/.warp
   fi
   if [[ ! -L ${HOME}/.ssh/themes && -f ${HOME}/.warp/themes ]]; then
@@ -619,10 +610,12 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.warp/launch_configurations ${HOME}/.warp/launch_configurations
   fi
 
-  if [[ ! -d ${HOME}/.ssh ]]; then
-    mkdir ${HOME}/.ssh
+  echo "Creating ${HOME}/.ssh"
+  mkdir -p ${HOME}/.ssh
+  if [[ -d ${HOME}/.ssh ]]; then
     chmod 700 ${HOME}/.ssh
   fi
+
   if [[ ! -L ${HOME}/.ssh/config && -f ${HOME}/.ssh/config ]]; then
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.ssh/config ${HOME}/.ssh/config
   else
@@ -636,21 +629,22 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.ssh/teleport.cfg ${HOME}/.ssh/teleport.cfg
   fi
 
-  if [[ ! -d ${HOME}/.tsh ]]; then
-    mkdir ${HOME}/.tsh
+  echo "Creating ${HOME}/.tsh"
+  mkdir -p ${HOME}/.tsh
+  if [[ -d ${HOME}/.tsh ]]; then
     chmod 700 ${HOME}/.tsh
   fi
 
   echo "Setting ZSH as shell..."
-  if [[ ! ${REDHAT} ]]; then
-    if [[ ! ${SHELL} = "/bin/zsh" ]]; then
-      chsh -s /bin/zsh
-    fi
-  elif [[ ${REDHAT} ]]; then
-    if [[ ! ${SHELL} = "/usr/local/bin/zsh" ]]; then
-      chsh -s /usr/local/bin/zsh
-    fi
+
+  # Set the ZSH path based on the value of REDHAT
+  ZSH_PATH=${REDHAT:+"/usr/local/bin/zsh"}
+  ZSH_PATH=${ZSH_PATH:-"/bin/zsh"}
+
+  if [[ ${SHELL} != "${ZSH_PATH}" ]]; then
+    chsh -s "${ZSH_PATH}"
   fi
+
 
   echo "Setting up cheat.sh"
   if [[ -d ${HOME}/bin ]]; then
@@ -669,9 +663,8 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     curl https://cht.sh/:cht.sh > ~/bin/cht.sh
     chmod 750 ${HOME}/bin/cht.sh
   fi
-  if [[ ! -d ${HOME}/.zsh.d ]]; then
-    mkdir ${HOME}/.zsh.d
-  fi
+  echo "Creating ${HOME}/.zsh.d"
+  mkdir -p ${HOME}/.zsh.d
   if [[ ! -f ${HOME}/.zsh.d/_cht ]]; then
     curl https://cheat.sh/:zsh > ${HOME}/.zsh.d/_cht
   fi
@@ -679,29 +672,27 @@ fi
 
 # full setup and installation of all packages for a development environment
 if [[ ${SETUP} || ${DEVELOPER} ]]; then
-  echo "Creating home aws"
-  if [[ ! -d ${HOME}/.aws ]]; then
-    mkdir ${HOME}/.aws
+  echo "Creating ${HOME}/.aws"
+  mkdir -p ${HOME}/.aws
+  if [[ -d ${HOME}/.aws ]]; then
     chmod 700 ${HOME}/.aws
   fi
 
-  echo "Creating home gcloud_creds"
-  if [[ ! -d ${HOME}/.gcloud_creds ]]; then
-    mkdir ${HOME}/.gcloud_creds
+  echo "Creating ${HOME}/.gcloud_creds"
+  mkdir -p ${HOME}/.gcloud_creds
+  if [[ -d ${HOME}/.gcloud_creds ]]; then
     chmod 700 ${HOME}/.gcloud_creds
   fi
 
-  echo "Creating home azure_creds"
-  if [[ ! -d ${HOME}/.azure_creds ]]; then
-    mkdir ${HOME}/.azure_creds
+  echo "Creating ${HOME}/.azure_creds"
+  mkdir -p ${HOME}/.azure_creds
+  if [[ -d ${HOME}/.azure_creds ]]; then
     chmod 700 ${HOME}/.azure_creds
   fi
 
   if [[ ${MACOS} ]]; then
-    echo "Creating $BREWFILE_LOC"
-    if [[ ! -d ${BREWFILE_LOC} ]]; then
-      mkdir ${BREWFILE_LOC}
-    fi
+    echo "Creating ${BREWFILE_LOC}"
+    mkdir -p ${BREWFILE_LOC}
 
     if [[ ! -L ${BREWFILE_LOC}/Brewfile ]]; then
       ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile $BREWFILE_LOC/Brewfile
@@ -1535,11 +1526,9 @@ EOM
     fi
   fi
 
-  echo "Installing aws-cli"
+  mkdir -p ${HOME}/software_downloads/awscli
   if [[ ${MACOS} ]]; then
-    if [[ ! -d ${HOME}/software_downloads/awscli ]]; then
-      mkdir ${HOME}/software_downloads/awscli
-    fi
+    echo "Installing aws-cli on MacOS"
     if [[ ! -f ${HOME}/software_downloads/awscli/AWSCLIV2.pkg ]]; then
       wget -O ${HOME}/software_downloads/awscli/AWSCLIV2.pkg "https://awscli.amazonaws.com/AWSCLIV2.pkg"
       sudo installer -pkg ${HOME}/software_downloads/awscli/AWSCLIV2.pkg -target /
@@ -1547,9 +1536,7 @@ EOM
     fi
   fi
   if [[ ${LINUX} ]]; then
-    if [[ ! -d ${HOME}/software_downloads/awscli ]]; then
-      mkdir ${HOME}/software_downloads/awscli
-    fi
+    echo "Installing aws-cli on Linux"
     if [[ ! -f ${HOME}/software_downloads/awscli/awscliv2.zip ]]; then
       wget -O ${HOME}/software_downloads/awscli/awscliv2.zip "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
       unzip ${HOME}/software_downloads/awscli/awscliv2.zip -d ${HOME}/software_downloads/awscli
@@ -1558,23 +1545,18 @@ EOM
     fi
   fi
 
-  echo "vim plugins"
-  if [[ ! -d ${HOME}/.vim ]]; then
-    mkdir ${HOME}/.vim
-    chmod 770 ${HOME}/.vim
-    if [[ ! -d ${HOME}/.vim/plugged ]]; then
-      mkdir ${HOME}/.vim/plugged
-      chmod 770 ${HOME}/.vim/plugged
-    fi
-    if [[ ! -d ${HOME}/.vim/autoload ]]; then
-      mkdir ${HOME}/.vim/autoload
-      chmod 770 ${HOME}/.vim/autoload
-      if [[ ! -f ${HOME}/.vim/autoload/plug.vim ]]; then
-        curl -fLo ${HOME}/.vim/autoload/plug.vim --create-dirs https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
-      fi
-    fi
+  echo "vim plugins setup"
+  mkdir -p ${HOME}/.vim/plugged
+  if [[ -d ${HOME}/.vim/plugged ]]; then
+    chmod 770 ${HOME}/.vim/plugged
   fi
-
+  mkdir -p ${HOME}/.vim/autoload
+  if [[ -d ${HOME}/.vim/autoload ]]; then
+    chmod 770 ${HOME}/.vim/autoload
+  fi
+  if [[ ! -f ${HOME}/.vim/autoload/plug.vim ]]; then
+    curl -fLo ${HOME}/.vim/autoload/plug.vim --create-dirs https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
+  fi
 fi
 
 if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
