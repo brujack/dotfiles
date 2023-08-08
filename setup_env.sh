@@ -645,7 +645,6 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     chsh -s "${ZSH_PATH}"
   fi
 
-
   echo "Setting up cheat.sh"
   if [[ -d ${HOME}/bin ]]; then
     if [[ ${UBUNTU} ]]; then
@@ -723,11 +722,11 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       brew install redpanda-data/tap/redpanda
       if [[ ${STUDIO} ]] || [[ ${LAPTOP} ]] || [[ ${BRUCEWORK} ]]; then
         brew install datawire/blackbird/telepresence-arm64
-        brew install -cloudflare
+        brew install cloudflared
       fi
       if [[ ${RATNA} ]]; then
         brew install datawire/blackbird/telepresence
-        brew install -cloudflare
+        brew install cloudflared
       fi
 
       cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
@@ -838,6 +837,9 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       fi
       if [[ ! -d "/Applications/SourceTree.app" ]]; then
         brew install --cask sourcetree
+      fi
+      if [[ ! -d "/Applications/Spotify.app" ]]; then
+        brew install --cask spotify
       fi
       if [[ ! -d "/Applications/PowerShell.app" ]]; then
         brew install --cask powershell
