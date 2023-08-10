@@ -261,33 +261,40 @@ install_zsh() {
   fi
 }
 
-usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 0; }
-[[ $# -eq 0 ]] && usage
+usage() {
+  echo "Usage: $0 -t <type> [-w]"
+  echo "Types:"
+  echo "  setup_user : Sets up a basic user environment for the current user"
+  echo "  setup      : Runs a full machine and developer setup"
+  echo "  developer  : Runs a developer setup with packages and python virtual environment for running ansible"
+  echo "  ansible    : Just runs the ansible setup using a python virtual environment. Typically used after a python update"
+  echo "  update     : Does a system update of packages including brew packages"
+  echo "Options:"
+  echo "  -w : Optional -- Specify w for a redhat computer, sets up terraform 0.11 instead of default 0.12"
+  exit 0
+}
 
-## get command line options
-# setup_user: just sets up a basic user environment for the current user
-# setup: runs a full machine and developer setup
-# developer: runs a developer setup with packages and python virtual environment for running ansible
-# ansible: just runs the ansible setup using a python virtual environment. Typically used after a python update. To run, "pyenv virtualenv-delete -f ansible && ./setup_env.sh -t ansible"
-# update: does a system update of packages including brew packages
-while getopts ":ht:w" arg; do
-  case ${arg} in
-    t) # Specify t of either 'setup_user', 'setup', 'developer' 'ansible' or 'update'.
-      [[ ${OPTARG} = "setup_user" ]] && export SETUP_USER=1
-      [[ ${OPTARG} = "setup" ]] && export SETUP=1
-      [[ ${OPTARG} = "developer" ]] && export DEVELOPER=1
-      [[ ${OPTARG} = "ansible" ]] && export ANSIBLE=1
-      [[ ${OPTARG} = "update" ]] && export UPDATE=1
-      ;;
-    w) # Optional -- Specify w for a redhat computer, sets up terraform 0.11 instead of default 0.12
-      export WORK=1
-      ;;
-    h | *) # This script is used to setup a development env on macos/linux (ubuntu, redhat, fedora, centos, elementary os)
-      usage
-      exit 0
-      ;;
-  esac
-done
+process_args() {
+  while getopts ":ht:w" arg; do
+    case ${arg} in
+      t)
+        case ${OPTARG} in
+          setup_user) export SETUP_USER=1 ;;
+          setup) export SETUP=1 ;;
+          developer) export DEVELOPER=1 ;;
+          ansible) export ANSIBLE=1 ;;
+          update) export UPDATE=1 ;;
+          *) echo "Invalid option for -t"; usage; exit 1 ;;
+        esac
+        ;;
+      w) export WORK=1 ;;
+      h | *) usage; exit 0 ;;
+    esac
+  done
+}
+
+[[ $# -eq 0 ]] && usage
+process_args "$@"
 
 # choose which env we are running on
 [[ $(uname -s) = "Darwin" ]] && export MACOS=1
@@ -1473,7 +1480,7 @@ EOM
     if [[ ! -f ${HOME}/software_downloads/awscli/AWSCLIV2.pkg ]]; then
       wget -O ${HOME}/software_downloads/awscli/AWSCLIV2.pkg "https://awscli.amazonaws.com/AWSCLIV2.pkg"
       sudo installer -pkg ${HOME}/software_downloads/awscli/AWSCLIV2.pkg -target /
-      rm ${HOME}/software_downloads/awscli/AWSCLIV2.pkg
+      rm -f ${HOME}/software_downloads/awscli/AWSCLIV2.pkg
     fi
   fi
   if [[ ${LINUX} ]]; then
@@ -1483,6 +1490,7 @@ EOM
       unzip ${HOME}/software_downloads/awscli/awscliv2.zip -d ${HOME}/software_downloads/awscli
       sudo -H ${HOME}/software_downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin
       rm -rf ${HOME}/software_downloads/awscli
+      rm -f ${HOME}/software_downloads/awscli/awscliv2.zip
     fi
   fi
 
