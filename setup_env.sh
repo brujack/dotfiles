@@ -440,64 +440,40 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
   echo "Linking ${DOTFILES} to their home"
 
   if [[ ${MACOS} ]]; then
-    if [[ -f ${HOME}/.gitconfig ]]; then
-      rm ${HOME}/.gitconfig
-      ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_mac ${HOME}/.gitconfig
-    elif [[ ! -L ${HOME}/.gitconfig ]]; then
-      ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_mac ${HOME}/.gitconfig
-    fi
+    rm -f ${HOME}/.gitconfig
+    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_mac ${HOME}/.gitconfig
     if [[ -d ${HOME}/git-repos/fortis ]]; then
-      if [[ ! -L ${HOME}/git-repos/fortis/.gitconfig ]]; then
-        ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_mac_fortis ${HOME}/git-repos/fortis/.gitconfig
-      fi
+      rm -f ${HOME}/git-repos/fortis/.gitconfig
+      ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_mac_fortis ${HOME}/git-repos/fortis/.gitconfig
     fi
     if [[ -d ${HOME}/git-repos/gitlab ]]; then
-      if [[ ! -L ${HOME}/git-repos/gitlab/.gitconfig ]]; then
-        ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_mac_gitlab ${HOME}/git-repos/gitlab/.gitconfig
-      fi
+      rm -f ${HOME}/git-repos/gitlab/.gitconfig
+      ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_mac_gitlab ${HOME}/git-repos/gitlab/.gitconfig
     fi
   fi
   if [[ ${LINUX} ]]; then
-    if [[ -f ${HOME}/.gitconfig ]]; then
-      rm ${HOME}/.gitconfig
-      ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_linux ${HOME}/.gitconfig
-    elif [[ ! -L ${HOME}/.gitconfig ]]; then
-      ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_linux ${HOME}/.gitconfig
-    fi
+    rm -f ${HOME}/.gitconfig
+    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_linux ${HOME}/.gitconfig
     if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]]; then
       if [[ -d ${HOME}/git-repos/fortis ]]; then
-        if [[ ! -L ${HOME}/git-repos/fortis/.gitconfig ]]; then
-          ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_linux_fortis ${HOME}/git-repos/fortis/.gitconfig
-        fi
+        rm -f ${HOME}/git-repos/fortis/.gitconfig
+        ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_linux_fortis ${HOME}/git-repos/fortis/.gitconfig
       fi
       if [[ -d ${HOME}/git-repos/gitlab ]]; then
-        if [[ ! -L ${HOME}/git-repos/gitlab/.gitconfig ]]; then
-          ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_linux_gitlab ${HOME}/git-repos/gitlab/.gitconfig
-        fi
+        rm -f ${HOME}/git-repos/gitlab/.gitconfig
+        ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_linux_gitlab ${HOME}/git-repos/gitlab/.gitconfig
       fi
     fi
   fi
 
-  if [[ -f ${HOME}/.vimrc ]]; then
-    rm ${HOME}/.vimrc
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.vimrc ${HOME}/.vimrc
-  elif [[ ! -L ${HOME}/.vimrc ]]; then
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.vimrc ${HOME}/.vimrc
-  fi
+  rm -f ${HOME}/.vimrc
+  ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.vimrc ${HOME}/.vimrc
 
-  if [[ -f ${HOME}/.p10k.zsh ]]; then
-    rm ${HOME}/.p10k.zsh
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.p10k.zsh ${HOME}/.p10k.zsh
-  elif [[ ! -L ${HOME}/.p10k.zsh ]]; then
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.p10k.zsh ${HOME}/.p10k.zsh
-  fi
+  rm -f ${HOME}/.p10k.zsh
+  ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.p10k.zsh ${HOME}/.p10k.zsh
 
-  if [[ -f ${HOME}/.tmux.conf ]]; then
-    rm ${HOME}/.tmux.conf
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.tmux.conf ${HOME}/.tmux.conf
-  elif [[ ! -L ${HOME}/.tmux.conf ]]; then
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.tmux.conf ${HOME}/.tmux.conf
-  fi
+  rm -f ${HOME}/.tmux.conf
+  ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.tmux.conf ${HOME}/.tmux.conf
 
   if [[ -d ${HOME}/scripts ]]; then
     rm -rf ${HOME}/scripts
@@ -522,28 +498,16 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
   if [[ ${MACOS} || ${LINUX} ]]; then
     echo "powershell profile and custom oh-my-posh theme"
     mkdir -p ${HOME}/.config/powershell
-    if [[ -f ${HOME}/.config/powershell/profile.ps1 ]]; then
-      rm ${HOME}/.config/powershell/profile.ps1
-      ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/profile.ps1 ${HOME}/.config/powershell/profile.ps1
-    elif [[ ! -L ${HOME}/.config/powershell/profile.ps1 ]]; then
-      ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/profile.ps1 ${HOME}/.config/powershell/profile.ps1
-    fi
-    if [[ -f ${HOME}/.config/powershell/bruce.omp.json ]]; then
-      rm ${HOME}/.config/powershell/bruce.omp.json
-      ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/bruce.omp.json ${HOME}/.config/powershell/bruce.omp.json
-    elif [[ ! -L ${HOME}/.config/powershell/bruce.omp.json ]]; then
-      ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/bruce.omp.json ${HOME}/.config/powershell/bruce.omp.json
-    fi
+    rm -f ${HOME}/.config/powershell/profile.ps1
+    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/profile.ps1 ${HOME}/.config/powershell/profile.ps1
+    rm -f ${HOME}/.config/powershell/bruce.omp.json
+    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/bruce.omp.json ${HOME}/.config/powershell/bruce.omp.json
   fi
 
   if [[ ${MACOS} || ${LINUX} ]]; then
     echo "starship profile"
-    if [[ -f ${HOME}/.config/starship.toml ]]; then
-      rm ${HOME}/.config/starship.toml
-      ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/starship.toml ${HOME}/.config/starship.toml
-    elif [[ ! -L ${HOME}/.config/starship.toml ]]; then
-      ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/starship.toml ${HOME}/.config/starship.toml
-    fi
+    rm -f ${HOME}/.config/starship.toml
+    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/starship.toml ${HOME}/.config/starship.toml
   fi
 
   echo "Installing Oh My ZSH..."
@@ -556,39 +520,27 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     git clone --depth=1 https://github.com/romkatv/powerlevel10k.git ${HOME}/.oh-my-zsh/custom/themes/powerlevel10k
   fi
 
-  if [[ -f ${HOME}/.zshrc ]]; then
-    rm ${HOME}/.zshrc
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.zshrc ${HOME}/.zshrc
-  elif [[ ! -L ${HOME}/.zshrc ]]; then
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.zshrc ${HOME}/.zshrc
-  fi
+  echo "linking .zshrc"
+  rm -f ${HOME}/.zshrc
+  ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.zshrc ${HOME}/.zshrc
 
-  if [[ ! -L ${HOME}/.config/.zshrc.d && -f ${HOME}/.config/.zshrc.d ]]; then
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.config/.zshrc.d ${HOME}/.config/.zshrc.d
-  else
-    rm ${HOME}/.config/.zshrc.d
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.config/.zshrc.d ${HOME}/.config/.zshrc.d
-  fi
+  echo "linking .zshrc.d"
+  rm -f ${HOME}/.config/.zshrc.d
+  ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.config/.zshrc.d ${HOME}/.config/.zshrc.d
 
-  if [[ -f ${HOME}/.zprofile ]]; then
-    rm ${HOME}/.zprofile
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.zprofile ${HOME}/.zprofile
-  elif [[ ! -L ${HOME}/.zprofile ]]; then
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.zprofile ${HOME}/.zprofile
-  fi
+  echo "linking .zprofile"
+  rm -f ${HOME}/.zprofile
+  ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.zprofile ${HOME}/.zprofile
 
   echo "Linking custom bruce.zsh-theme"
-  if [[ ! -L ${HOME}/.oh-my-zsh/custom/themes/bruce.zsh-theme && -d ${HOME}/.oh-my-zsh/custom/themes ]]; then
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/bruce.zsh-theme ${HOME}/.oh-my-zsh/custom/themes/bruce.zsh-theme
-  else
-    rm ${HOME}/.oh-my-zsh/custom/themes/bruce.zsh-theme
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/bruce.zsh-theme ${HOME}/.oh-my-zsh/custom/themes/bruce.zsh-theme
-  fi
+  rm -f ${HOME}/.oh-my-zsh/custom/themes/bruce.zsh-theme
+  ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/bruce.zsh-theme ${HOME}/.oh-my-zsh/custom/themes/bruce.zsh-theme
 
   echo "Creating ${HOME}/.tmux"
   mkdir -p ${HOME}/.tmux
 
   if [[ ! -d ${HOME}/.tmux/plugins/tpm ]]; then
+    echo "Installing TPM"
     git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
   fi
 
@@ -597,18 +549,13 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
   if [[ -d ${HOME}/.warp ]]; then
     chmod 700 ${HOME}/.warp
   fi
-  if [[ ! -L ${HOME}/.ssh/themes && -f ${HOME}/.warp/themes ]]; then
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.warp/themes ${HOME}/.warp/themes
-  else
-    rm ${HOME}/.warp/themes
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.warp/themes ${HOME}/.warp/themes
-  fi
-  if [[ ! -L ${HOME}/.ssh/launch_configurations && -f ${HOME}/.warp/launch_configurations ]]; then
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.warp/launch_configurations ${HOME}/.warp/launch_configurations
-  else
-    rm ${HOME}/.warp/launch_configurations
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.warp/launch_configurations ${HOME}/.warp/launch_configurations
-  fi
+  echo "Linking ${HOME}/.warp/themes"
+  rm -f ${HOME}/.warp/themes
+  ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.warp/themes ${HOME}/.warp/themes
+
+  echo "Linking ${HOME}/.warp/launch_configurations"
+  rm -f ${HOME}/.warp/launch_configurations
+  ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.warp/launch_configurations ${HOME}/.warp/launch_configurations
 
   echo "Creating ${HOME}/.ssh"
   mkdir -p ${HOME}/.ssh
@@ -616,18 +563,13 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     chmod 700 ${HOME}/.ssh
   fi
 
-  if [[ ! -L ${HOME}/.ssh/config && -f ${HOME}/.ssh/config ]]; then
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.ssh/config ${HOME}/.ssh/config
-  else
-    rm ${HOME}/.ssh/config
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.ssh/config ${HOME}/.ssh/config
-  fi
-  if [[ ! -L ${HOME}/.ssh/config && -f ${HOME}/.ssh/teleport.cfg ]]; then
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.ssh/teleport.cfg ${HOME}/.ssh/teleport.cfg
-  else
-    rm ${HOME}/.ssh/teleport.cfg
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.ssh/teleport.cfg ${HOME}/.ssh/teleport.cfg
-  fi
+  echo "Linking ${HOME}/.ssh/config"
+  rm -f ${HOME}/.ssh/config
+  ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.ssh/config ${HOME}/.ssh/config
+
+  echo "Linking ${HOME}/.ssh/teleport.cfg"
+  rm -f ${HOME}/.ssh/teleport.cfg
+  ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.ssh/teleport.cfg ${HOME}/.ssh/teleport.cfg
 
   echo "Creating ${HOME}/.tsh"
   mkdir -p ${HOME}/.tsh
@@ -693,12 +635,9 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     echo "Creating ${BREWFILE_LOC}"
     mkdir -p ${BREWFILE_LOC}
 
-    if [[ ! -L ${BREWFILE_LOC}/Brewfile ]]; then
-      ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile $BREWFILE_LOC/Brewfile
-    else
-      rm $BREWFILE_LOC/Brewfile
-      ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile $BREWFILE_LOC/Brewfile
-    fi
+    rm -f ${BREWFILE_LOC}/Brewfile
+    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile ${BREWFILE_LOC}/Brewfile
+
 
     if ! [ -x "$(command -v brew)" ]; then
       install_homebrew
@@ -1497,15 +1436,15 @@ EOM
     if [[ ! -d ${HOME}/.tfenv ]]; then
       git clone --recursive https://github.com/tfutils/tfenv.git ${HOME}/.tfenv
     fi
-    if [[ -f /usr/local/bin/terraform ]]; then
-      sudo rm /usr/local/bin/terraform
-    fi
-    if [[ ! -L /usr/local/bin/tfenv ]]; then
-      sudo ln -s ${HOME}/.tfenv/bin/tfenv /usr/local/bin/tfenv
-    fi
-    if [[ ! -L /usr/local/bin/terraform ]]; then
-      sudo ln -s ${HOME}/.tfenv/bin/terraform /usr/local/bin/terraform
-    fi
+
+    echo "Linking terraform to /usr/local/bin"
+    sudo rm -f /usr/local/bin/terraform
+    sudo ln -s ${HOME}/.tfenv/bin/terraform /usr/local/bin/terraform
+
+    echo "Linking tfenv to /usr/local/bin"
+    sudo rm -f /usr/local/bin/tfenv
+    sudo ln -s ${HOME}/.tfenv/bin/tfenv /usr/local/bin/tfenv
+
     if [[ -f ${HOME}/.tfenv/bin/tfenv ]]; then
       tfenv install ${TERRAFORM_VER}
     fi
