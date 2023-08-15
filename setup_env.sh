@@ -1580,30 +1580,30 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
     pyenv install ${PYTHON_VER}
   fi
 
-  if ! [[ $(readlink ${HOME}/.pyenv/versions/ansible) == "${HOME}/.pyenv/versions/${PYTHON_VER}/envs/ansible" ]]; then
-    if [[ ${STUDIO} ]] || [[ ${LAPTOP} ]] || [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]] || [[ ${RATNA} ]]; then
-      pyenv virtualenv-delete -f ansible
-      pyenv virtualenv ${PYTHON_VER} ansible
-      if quiet_which pyenv
-      then
-        export PYENV_VIRTUALENV_DISABLE_PROMPT=1
-        export PYENV_ROOT="$HOME/.pyenv"
-        command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"
+  if ! [[ $(readlink "${HOME}/.pyenv/versions/ansible") == "${HOME}/.pyenv/versions/${PYTHON_VER}/envs/ansible" ]]; then
+    if [[ -n ${STUDIO} ]] || [[ -n ${LAPTOP} ]] || [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]] || [[ -n ${RATNA} ]]; then
+      export PYENV_ROOT="$HOME/.pyenv"
+      export PYENV_VIRTUALENV_DISABLE_PROMPT=1
+      if quiet_which pyenv; then
+        export PATH="$PYENV_ROOT/bin:$PATH"
         eval "$(pyenv init -)"
       fi
+      pyenv virtualenv-delete -f ansible
+      pyenv virtualenv "${PYTHON_VER}" ansible
       pyenv activate ansible
+      printf "Installing Ansible dependencies...\n"
       python3 -m pip install ansible ansible-lint certbot certbot-dns-cloudflare boto3 docker jmespath netaddr pylint psutil bpytop HttpPy j2cli wheel shell-gpt
-    elif [[ ${BRUCEWORK} ]]; then
-      pyenv virtualenv-delete -f ansible
-      pyenv virtualenv ${PYTHON_VER} ansible
-      if quiet_which pyenv
-      then
-        export PYENV_VIRTUALENV_DISABLE_PROMPT=1
-        export PYENV_ROOT="$HOME/.pyenv"
-        command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"
+    elif [[ -n ${BRUCEWORK} ]]; then
+      export PYENV_ROOT="$HOME/.pyenv"
+      export PYENV_VIRTUALENV_DISABLE_PROMPT=1
+      if quiet_which pyenv; then
+        export PATH="$PYENV_ROOT/bin:$PATH"
         eval "$(pyenv init -)"
       fi
+      pyenv virtualenv-delete -f ansible
+      pyenv virtualenv "${PYTHON_VER}" ansible
       pyenv activate ansible
+      printf "Installing Ansible dependencies...\n"
       # for when netskope is blocking pip
       # python3 -m pip --cert ~/nscacerts.pem install ansible ansible-lint boto3 docker jmespath netaddr pylint psutil bpytop HttpPy j2cli wheel
       python3 -m pip install ansible ansible-lint boto3 docker jmespath netaddr pylint psutil bpytop HttpPy j2cli wheel shell-gpt
