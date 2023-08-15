@@ -16,7 +16,7 @@ TERRAFORM_VER="1.3.5"
 GIT_VER="2.41.0"
 GIT_URL="https://mirrors.edge.kernel.org/pub/software/scm/git"
 ZSH_VER="5.9"
-GO_VER="1.20"
+GO_VER="1.21"
 DOCKER_COMPOSE_VER="v2.20.2"
 DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VER}/docker-compose-$(uname -s)-$(uname -m)"
 SHELLCHECK_VER="0.7.0"
@@ -994,47 +994,37 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       fi
     fi
 
-    echo "Installing go Ubuntu"
+    printf "Installing Go Ubuntu\n"
     sudo add-apt-repository ppa:longsleep/golang-backports -y
     sudo -H apt update
-    if [[ ${GO_VER} == "1.16" ]]; then
-      if [[ $(dpkg-query -W -f='${Status}' golang-1.15-go 2>/dev/null | grep -c "ok installed") -eq 1 ]]; then
-        sudo -H apt remove golang-1.15-go -y
-      fi
-      if [[ $(dpkg-query -W -f='${Status}' golang-1.15-src 2>/dev/null | grep -c "ok installed") -eq 1 ]]; then
-        sudo -H apt remove golang-1.15-src -y
-      fi
-    elif [[ ${GO_VER} == "1.17" ]]; then
-      if [[ $(dpkg-query -W -f='${Status}' golang-1.16-go 2>/dev/null | grep -c "ok installed") -eq 1 ]]; then
-        sudo -H apt remove golang-1.16-go -y
-      fi
-      if [[ $(dpkg-query -W -f='${Status}' golang-1.16-src 2>/dev/null | grep -c "ok installed") -eq 1 ]]; then
-        sudo -H apt remove golang-1.16-src -y
-      fi
-    elif [[ ${GO_VER} == "1.18" ]]; then
-      if [[ $(dpkg-query -W -f='${Status}' golang-1.17-go 2>/dev/null | grep -c "ok installed") -eq 1 ]]; then
-        sudo -H apt remove golang-1.17-go -y
-      fi
-      if [[ $(dpkg-query -W -f='${Status}' golang-1.17-src 2>/dev/null | grep -c "ok installed") -eq 1 ]]; then
-        sudo -H apt remove golang-1.17-src -y
-      fi
-    elif [[ ${GO_VER} == "1.19" ]]; then
-      if [[ $(dpkg-query -W -f='${Status}' golang-1.18-go 2>/dev/null | grep -c "ok installed") -eq 1 ]]; then
-        sudo -H apt remove golang-1.18-go -y
-      fi
-      if [[ $(dpkg-query -W -f='${Status}' golang-1.18-src 2>/dev/null | grep -c "ok installed") -eq 1 ]]; then
-        sudo -H apt remove golang-1.18-src -y
-      fi
-      sudo -H apt install golang-${GO_VER}-go -y
-    elif [[ ${GO_VER} == "1.20" ]]; then
-      if [[ $(dpkg-query -W -f='${Status}' golang-1.19-go 2>/dev/null | grep -c "ok installed") -eq 1 ]]; then
-        sudo -H apt remove golang-1.19-go -y
-      fi
-      if [[ $(dpkg-query -W -f='${Status}' golang-1.19-src 2>/dev/null | grep -c "ok installed") -eq 1 ]]; then
-        sudo -H apt remove golang-1.19-src -y
-      fi
-      sudo -H apt install golang-${GO_VER}-go -y
+    case ${GO_VER} in
+      1.16)
+        pkgs_to_remove="golang-1.15-go golang-1.15-src"
+        ;;
+      1.17)
+        pkgs_to_remove="golang-1.16-go golang-1.16-src"
+        ;;
+      1.18)
+        pkgs_to_remove="golang-1.17-go golang-1.17-src"
+        ;;
+      1.19)
+        pkgs_to_remove="golang-1.18-go golang-1.18-src"
+        ;;
+      1.20)
+        pkgs_to_remove="golang-1.19-go golang-1.19-src"
+        ;;
+      1.21)
+        pkgs_to_remove="golang-1.20-go golang-1.20-src"
+        ;;
+      *)
+        printf "Error: Unsupported Go version %s\n" "${GO_VER}"
+        exit 1
+        ;;
+    esac
+    if [[ -n ${pkgs_to_remove} ]]; then
+      sudo -H apt remove ${pkgs_to_remove} -y
     fi
+    sudo -H apt install "golang-${GO_VER}-go" -y
 
     if [[ ! -n ${WORKSTATION} ]]; then
       echo "Installing docker"
