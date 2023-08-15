@@ -275,19 +275,20 @@ usage() {
 }
 
 process_args() {
+  local arg OPTARG
   while getopts ":ht:w" arg; do
     case ${arg} in
       t)
         case ${OPTARG} in
-          setup_user) export SETUP_USER=1 ;;
-          setup) export SETUP=1 ;;
-          developer) export DEVELOPER=1 ;;
-          ansible) export ANSIBLE=1 ;;
-          update) export UPDATE=1 ;;
+          setup_user) readonly SETUP_USER=1 ;;
+          setup) readonly SETUP=1 ;;
+          developer) readonly DEVELOPER=1 ;;
+          ansible) readonly ANSIBLE=1 ;;
+          update) readonly UPDATE=1 ;;
           *) echo "Invalid option for -t"; usage; exit 1 ;;
         esac
         ;;
-      w) export WORK=1 ;;
+      w) readonly WORK=1 ;;
       h | *) usage; exit 0 ;;
     esac
   done
@@ -297,33 +298,33 @@ process_args() {
 process_args "$@"
 
 # choose which env we are running on
-[[ $(uname -s) = "Darwin" ]] && export MACOS=1
-[[ $(uname -s) = "Linux" ]] && export LINUX=1
+[[ $(uname -s) = "Darwin" ]] && readonly MACOS=1
+[[ $(uname -s) = "Linux" ]] && readonly LINUX=1
 
 if [[ ${LINUX} ]]; then
   LINUX_TYPE=$(awk -F= '/^NAME/{print $2}' /etc/os-release | tr -d '"')
-  [[ ${LINUX_TYPE} = "Ubuntu" ]] && export UBUNTU=1
-  [[ ${LINUX_TYPE} = "CentOS Linux" ]] && export CENTOS=1
-  [[ ${LINUX_TYPE} = "Red Hat Enterprise Linux Server" ]] && export REDHAT=1
-  [[ ${LINUX_TYPE} = "Fedora" ]] && export FEDORA=1
-  [[ ${LINUX_TYPE} = "elementary OS" ]] && export UBUNTU=1 && export ELEMENTARY=1
+  [[ ${LINUX_TYPE} = "Ubuntu" ]] && readonly UBUNTU=1
+  [[ ${LINUX_TYPE} = "CentOS Linux" ]] && readonly CENTOS=1
+  [[ ${LINUX_TYPE} = "Red Hat Enterprise Linux Server" ]] && readonly REDHAT=1
+  [[ ${LINUX_TYPE} = "Fedora" ]] && readonly FEDORA=1
+  [[ ${LINUX_TYPE} = "elementary OS" ]] && readonly UBUNTU=1 && readonly ELEMENTARY=1
 fi
 
 if [[ ${UBUNTU} ]]; then
   UBUNTU_VERSION=$(lsb_release -rs)
-  [[ ${UBUNTU_VERSION} = "18.04" ]] && export BIONIC=1
-  [[ ${UBUNTU_VERSION} = "20.04" ]] && export FOCAL=1
-  [[ ${UBUNTU_VERSION} = "22.04" ]] && export JAMMY=1
-  [[ ${UBUNTU_VERSION} = "6" ]] && export FOCAL=1 # elementary os
+  [[ ${UBUNTU_VERSION} = "18.04" ]] && readonly BIONIC=1
+  [[ ${UBUNTU_VERSION} = "20.04" ]] && readonly FOCAL=1
+  [[ ${UBUNTU_VERSION} = "22.04" ]] && readonly JAMMY=1
+  [[ ${UBUNTU_VERSION} = "6" ]] && readonly FOCAL=1 # elementary os
 fi
 
-[[ $(uname -r) =~ microsoft ]] && export WINDOWS=1
-[[ $(hostname -s) = "laptop" ]] && export LAPTOP=1
-[[ $(hostname -s) = "studio" ]] && export STUDIO=1
-[[ $(hostname -s) = "fg-bjackson" ]] && export BRUCEWORK=1
-[[ $(hostname -s) = "workstation" ]] && export WORKSTATION=1
-[[ $(hostname -s) = "cruncher" ]] && export CRUNCHER=1
-[[ $(hostname -s) = "virtualmachine1c4f85d6" ]] && export WORKSTATION=1
+[[ $(uname -r) =~ microsoft ]] && readonly WINDOWS=1
+[[ $(hostname -s) = "laptop" ]] && readonly LAPTOP=1
+[[ $(hostname -s) = "studio" ]] && readonly STUDIO=1
+[[ $(hostname -s) = "fg-bjackson" ]] && readonly BRUCEWORK=1
+[[ $(hostname -s) = "workstation" ]] && readonly WORKSTATION=1
+[[ $(hostname -s) = "cruncher" ]] && readonly CRUNCHER=1
+[[ $(hostname -s) = "virtualmachine1c4f85d6" ]] && readonly WORKSTATION=1
 
 # setup variables based off of environment
 if [[ ${MACOS} ]]; then
