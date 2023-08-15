@@ -57,7 +57,7 @@ quiet_which() {
 
 rhel_installed_package() {
   if ! command -v yum &>/dev/null; then
-    printf "yum command not found! Please install yum or run on a supported system."
+    printf "yum command not found! Please install yum or run on a supported system.\\n"
     return 1
   fi
   yum list installed "$@" >/dev/null 2>&1
@@ -80,26 +80,26 @@ install_rosetta() {
     processor=$(/usr/sbin/sysctl -n machdep.cpu.brand_string)
 
     if [[ "$processor" == *"Intel"* ]]; then
-      printf "$processor processor installed. No need to install Rosetta."
+      printf "%s processor installed. No need to install Rosetta.\\n" "${processor}"
     else
 
       # Check for Rosetta "oahd" process. If not found, perform a non-interactive install of Rosetta.
       if /usr/bin/pgrep oahd >/dev/null 2>&1; then
-          printf "Rosetta is already installed and running. Nothing to do."
+          printf "Rosetta is already installed and running. Nothing to do.\\n"
       else
           /usr/sbin/softwareupdate --install-rosetta --agree-to-license
 
           if [[ $? -eq 0 ]]; then
-            printf "Rosetta has been successfully installed."
+            printf "Rosetta has been successfully installed.\\n"
           else
-            printf "Rosetta installation failed!"
+            printf "Rosetta installation failed!\\n"
             exitcode=1
           fi
       fi
     fi
   else
-    printf "Mac is running macOS $osvers_major.$osvers_minor.$osvers_dot_version."
-    printf "No need to install Rosetta on this version of macOS."
+    printf "Mac is running macOS %s\\n" "$osvers_major.$osvers_minor.$osvers_dot_version."
+    printf "No need to install Rosetta on this version of macOS.\\n"
   fi
 
   return $exitcode
@@ -108,31 +108,31 @@ install_rosetta() {
 
 install_homebrew() {
   if [[ "$(uname -s)" != "Darwin" ]]; then
-    printf "Homebrew is only supported on macOS. Aborting."
+    printf "Homebrew is only supported on macOS. Aborting.\\n"
     return 1
   fi
 
-  printf "Installing Homebrew..."
+  printf "Installing Homebrew...\\n"
 
   # Check for Xcode Command Line Tools and install if needed
   if ! xcode-select --print-path &>/dev/null; then
-    printf "Installing Xcode Command Line Tools..."
+    printf "Installing Xcode Command Line Tools...\\n"
     xcode-select --install
 
     # Check if the installation was successful
     if [[ $? -ne 0 ]]; then
-      printf "Failed to install Xcode Command Line Tools. Aborting."
+      printf "Failed to install Xcode Command Line Tools. Aborting.\\n"
       return 1
     fi
 
     # Accept Xcode license
-    printf "Accepting Xcode license..."
+    printf "Accepting Xcode license...\\n"
     sudo xcodebuild -license accept
     sudo xcodebuild -runFirstLaunch
 
     # Check if the license acceptance was successful
     if [[ $? -ne 0 ]]; then
-      printf "Failed to accept Xcode license. Aborting."
+      printf "Failed to accept Xcode license. Aborting.\\n"
       return 1
     fi
   fi
@@ -142,57 +142,57 @@ install_homebrew() {
 
   # Check if the installation was successful
   if [[ $? -ne 0 ]]; then
-    printf "Failed to install Homebrew. Aborting."
+    printf "Failed to install Homebrew. Aborting.\\n"
     return 1
   fi
 
-  printf "Homebrew has been successfully installed."
+  printf "Homebrew has been successfully installed.\\n"
   return 0
 }
 
 
 brew_update() {
   if ! command -v brew &>/dev/null; then
-    printf "Homebrew not found, installing Homebrew..."
+    printf "Homebrew not found, installing Homebrew...\\n"
     install_homebrew
   fi
 
-  printf "Updating Homebrew..."
+  printf "Updating Homebrew...\\n"
   if ! brew update; then
-    printf "Failed to update Homebrew. Aborting."
+    printf "Failed to update Homebrew. Aborting.\\n"
     return 1
   fi
 
-  printf "Upgrading installed formulae..."
+  printf "Upgrading installed formulae...\\n"
   if ! brew upgrade; then
-    printf "Failed to upgrade formulae. Aborting."
+    printf "Failed to upgrade formulae. Aborting.\\n"
     return 1
   fi
 
-  printf "Upgrading installed casks..."
+  printf "Upgrading installed casks...\\n"
   if ! brew upgrade --cask --greedy; then
-    printf "Failed to upgrade casks. Aborting."
+    printf "Failed to upgrade casks. Aborting.\\n"
     return 1
   fi
 
-  printf "Cleaning up..."
+  printf "Cleaning Homebrew up...\\n"
   if ! brew cleanup; then
-    printf "Failed to clean up. Aborting."
+    printf "Failed to clean up. Aborting.\\n"
     return 1
   fi
 
-  printf "Homebrew update process completed successfully."
+  printf "Homebrew update process completed successfully.\\n"
   return 0
 }
 
 install_git() {
-  printf "Installing git"
+  printf "Installing git\\n"
   if [[ "$(uname -s)" != "Darwin" ]]; then
     if brew list | grep '^git$' &> /dev/null; then
-      printf "Git (from Homebrew) is already installed."
+      printf "Git (from Homebrew) is already installed.\\n"
       return 0
     fi
-    printf "Installing git via Homebrew."
+    printf "Installing git via Homebrew.\\n"
     if [[ -n ${MACOS} ]]; then
       if ! command -v brew &> /dev/null; then
         install_homebrew
@@ -200,23 +200,23 @@ install_git() {
       if command -v brew &> /dev/null; then
         brew install git
       else
-        printf "Failed to install Homebrew. Cannot install Git."
+        printf "Failed to install Homebrew. Cannot install Git.\\n"
         return 1
       fi
     fi
   elif [[ "$(uname -s)" == "Linux" ]]; then
     if [[ $(awk -F= '/^NAME/{print $2}' /etc/os-release | tr -d '"') == "Ubuntu" ]]; then
-      printf "Installing git via apt"
+      printf "Installing git via apt\\n"
       sudo -H add-apt-repository ppa:git-core/ppa -y
       sudo -H apt update
       sudo -H apt dist-upgrade -y
       sudo -H apt install git -y
     elif [[ $(awk -F= '/^NAME/{print $2}' /etc/os-release | tr -d '"') == "CentOS Linux" ]]; then
-      printf "Installing git via yum"
+      printf "Installing git via yum\\n"
       sudo -H yum update -y
       sudo -H yum install git -y
     elif [[ $(awk -F= '/^NAME/{print $2}' /etc/os-release | tr -d '"') == "Fedora" ]]; then
-      printf "Installing git via dnf"
+      printf "Installing git via dnf\\n"
       sudo -H dnf update -y
       sudo -H dnf install git -y
     fi
@@ -224,13 +224,13 @@ install_git() {
 }
 
 install_zsh() {
-  printf "Installing zsh"
+  printf "Installing zsh\\n"
   if [[ "$(uname -s)" != "Darwin" ]]; then
     if brew list | grep '^zsh$' &> /dev/null; then
-      printf "zsh (from Homebrew) is already installed."
+      printf "zsh (from Homebrew) is already installed.\\n"
       return 0
     fi
-    printf "Installing zsh via Homebrew."
+    printf "Installing zsh via Homebrew.\\n"
     if [[ -n ${MACOS} ]]; then
       if ! command -v brew &> /dev/null; then
         install_homebrew
@@ -238,23 +238,23 @@ install_zsh() {
       if command -v brew &> /dev/null; then
         brew install zsh
       else
-        printf "Failed to install Homebrew. Cannot install zsh."
+        printf "Failed to install Homebrew. Cannot install zsh.\\n"
         return 1
       fi
     fi
   elif [[ "$(uname -s)" == "Linux" ]]; then
     if [[ $(awk -F= '/^NAME/{print $2}' /etc/os-release | tr -d '"') == "Ubuntu" ]]; then
-      printf "Installing zsh via apt"
+      printf "Installing zsh via apt\\n"
       sudo -H apt update
       sudo -H apt dist-upgrade -y
       sudo -H apt install zsh -y
       sudo -H apt install zsh-doc -y
     elif [[ $(awk -F= '/^NAME/{print $2}' /etc/os-release | tr -d '"') == "CentOS Linux" ]]; then
-      printf "Installing zsh via yum"
+      printf "Installing zsh via yum\\n"
       sudo -H yum update -y
       sudo -H yum install zsh -y
     elif [[ $(awk -F= '/^NAME/{print $2}' /etc/os-release | tr -d '"') == "Fedora" ]]; then
-      printf "Installing zsh via dnf"
+      printf "Installing zsh via dnf\\n"
       sudo -H dnf update -y
       sudo -H dnf install zsh -y
     fi
@@ -345,14 +345,14 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
   # need to make sure that some base packages are installed
   if [[ ${REDHAT} || ${FEDORA} ]]; then
     if ! [ -x "$(command -v dnf)" ]; then
-      printf "Installing dnf"
+      printf "Installing dnf\\n"
       sudo -H yum update -y
       sudo -H yum install dnf -y
     fi
   fi
 
   if [[ -n ${MACOS} ]]; then
-    printf "Installing Rosetta if necessary"
+    printf "Installing Rosetta if necessary\\n"
     install_rosetta
   fi
 
@@ -381,7 +381,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     cpanm Fatal
     cpanm XML::SAX
     if [[ ! -f ${HOME}/software_downloads/git-${GIT_VER}.tar.gz ]]; then
-      printf "Installing Redhat git"
+      printf "Installing Redhat git\\n"
       wget -O ${HOME}/software_downloads/git-${GIT_VER}.tar.gz ${GIT_URL}/git-${GIT_VER}.tar.gz
       tar -zxvf ${HOME}/software_downloads/git-${GIT_VER}.tar.gz -C ${HOME}/software_downloads
       cd ${HOME}/software_downloads/git-${GIT_VER} || exit
@@ -406,7 +406,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     sudo -H yum install make -y
     sudo -H yum install ncurses-devel -y
     if [[ ! -f ${HOME}/software_downloads/zsh-${ZSH_VER}.tar.xz ]]; then
-      printf "Installing Redhat zsh"
+      printf "Installing Redhat zsh\\n"
       wget -O ${HOME}/software_downloads/zsh-${ZSH_VER}.tar.xz http://www.zsh.org/pub/zsh-${ZSH_VER}.tar.xz
       tar -xvf ${HOME}/software_downloads/zsh-${ZSH_VER}.tar.xz -C ${HOME}/software_downloads
       cd ${HOME}/software_downloads/zsh-${ZSH_VER} || exit
@@ -430,13 +430,13 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     fi
   fi
 
-  printf "Creating ${HOME}/bin"
+  printf "Creating %s/bin\\n" "${HOME}"
   mkdir -p ${HOME}/bin
 
-  printf "Creating ${PERSONAL_GITREPOS}"
+  printf "Creating %s\\n" "${PERSONAL_GITREPOS}"
   mkdir -p ${PERSONAL_GITREPOS}
 
-  printf "Copying ${DOTFILES} from Github"
+  printf "Copying %s from Github\\n" "${DOTFILES}"
   if [[ ! -d ${PERSONAL_GITREPOS}/${DOTFILES} ]]; then
     cd ${HOME} || return
     git clone --recursive git@github.com:brujack/${DOTFILES}.git ${PERSONAL_GITREPOS}/${DOTFILES}
@@ -447,7 +447,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     git pull
   fi
 
-  printf "Linking ${DOTFILES} to their home"
+  printf "Linking %s to their home\\n" "${DOTFILES}"
 
   if [[ -n ${MACOS} ]]; then
     rm -f ${HOME}/.gitconfig
@@ -493,12 +493,12 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
   fi
 
   if [[ -n ${MACOS} ]] || [[ -n ${LINUX} ]]; then
-    printf "Creating ${HOME}/.config"
+    printf "Creating %s/.config\\n" "${HOME}"
     mkdir -p ${HOME}/.config
   fi
 
   if [[ -n ${MACOS} ]] || [[ -n ${LINUX} ]]; then
-    printf "Creating ${HOME}/.tf_creds"
+    printf "Creating %s/.tf_creds\\n" "${HOME}"
     mkdir -p ${HOME}/.tf_creds
     if [[ -d ${HOME}/.tf_creds ]]; then
       chmod 700 ${HOME}/.tf_creds
@@ -506,7 +506,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
   fi
 
   if [[ -n ${MACOS} ]] || [[ -n ${LINUX} ]]; then
-    printf "powershell profile and custom oh-my-posh theme"
+    printf "powershell profile and custom oh-my-posh theme\\n"
     mkdir -p ${HOME}/.config/powershell
     rm -f ${HOME}/.config/powershell/profile.ps1
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/profile.ps1 ${HOME}/.config/powershell/profile.ps1
@@ -515,79 +515,79 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
   fi
 
   if [[ -n ${MACOS} ]] || [[ -n ${LINUX} ]]; then
-    printf "starship profile"
+    printf "starship profile\\n"
     rm -f ${HOME}/.config/starship.toml
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/starship.toml ${HOME}/.config/starship.toml
   fi
 
-  printf "Installing Oh My ZSH..."
+  printf "Installing Oh My ZSH...\\n"
   if [[ ! -d ${HOME}/.oh-my-zsh ]]; then
     sh -c "$(curl -fsSL https://raw.github.com/robbyrussell/oh-my-zsh/master/tools/install.sh)"
   fi
 
-  printf "Installing p10k"
+  printf "Installing p10k\\n"
   if [[ ! -d ${HOME}/.oh-my-zsh/custom/themes/powerlevel10k ]]; then
     git clone --depth=1 https://github.com/romkatv/powerlevel10k.git ${HOME}/.oh-my-zsh/custom/themes/powerlevel10k
   fi
 
-  printf "linking .zshrc"
+  printf "linking .zshrc\\n"
   rm -f ${HOME}/.zshrc
   ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.zshrc ${HOME}/.zshrc
 
-  printf "linking .zshrc.d"
+  printf "linking .zshrc.d\\n"
   rm -f ${HOME}/.config/.zshrc.d
   ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.config/.zshrc.d ${HOME}/.config/.zshrc.d
 
-  printf "linking .zprofile"
+  printf "linking .zprofile\\n"
   rm -f ${HOME}/.zprofile
   ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.zprofile ${HOME}/.zprofile
 
-  printf "Linking custom bruce.zsh-theme"
+  printf "Linking custom bruce.zsh-theme\\n"
   rm -f ${HOME}/.oh-my-zsh/custom/themes/bruce.zsh-theme
   ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/bruce.zsh-theme ${HOME}/.oh-my-zsh/custom/themes/bruce.zsh-theme
 
-  printf "Creating ${HOME}/.tmux"
+  printf "Creating %s/.tmux\\n" "${HOME}"
   mkdir -p ${HOME}/.tmux
 
   if [[ ! -d ${HOME}/.tmux/plugins/tpm ]]; then
-    printf "Installing TPM"
+    printf "Installing TPM\\n"
     git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
   fi
 
-  printf "Creating ${HOME}/.warp"
+  printf "Creating %s/.warp\\n" "${HOME}"
   mkdir -p ${HOME}/.warp
   if [[ -d ${HOME}/.warp ]]; then
     chmod 700 ${HOME}/.warp
   fi
-  printf "Linking ${HOME}/.warp/themes"
+  printf "Linking %s/.warp/themes\\n" "${HOME}"
   rm -f ${HOME}/.warp/themes
   ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.warp/themes ${HOME}/.warp/themes
 
-  printf "Linking ${HOME}/.warp/launch_configurations"
+  printf "Linking %s/.warp/launch_configurations\\n" "${HOME}"
   rm -f ${HOME}/.warp/launch_configurations
   ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.warp/launch_configurations ${HOME}/.warp/launch_configurations
 
-  printf "Creating ${HOME}/.ssh"
+  printf "Creating %s/.ssh\\n" "${HOME}"
   mkdir -p ${HOME}/.ssh
   if [[ -d ${HOME}/.ssh ]]; then
     chmod 700 ${HOME}/.ssh
   fi
 
-  printf "Linking ${HOME}/.ssh/config"
+  printf "Linking %s/.ssh/config\\n" "${HOME}"
   rm -f ${HOME}/.ssh/config
   ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.ssh/config ${HOME}/.ssh/config
 
-  printf "Linking ${HOME}/.ssh/teleport.cfg"
+  printf "Linking %s/.ssh/teleport.cfg\\n" "${HOME}"
   rm -f ${HOME}/.ssh/teleport.cfg
   ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.ssh/teleport.cfg ${HOME}/.ssh/teleport.cfg
 
-  printf "Creating ${HOME}/.tsh"
+  printf "Creating %s/.tsh\\n" "${HOME}"
   mkdir -p ${HOME}/.tsh
   if [[ -d ${HOME}/.tsh ]]; then
     chmod 700 ${HOME}/.tsh
   fi
 
-  printf "Setting ZSH as shell..."
+  printf "Setting ZSH as shell...\\n"
 
   # Set the ZSH path based on the value of REDHAT
   ZSH_PATH=${REDHAT:+"/usr/local/bin/zsh"}
@@ -596,13 +596,13 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
   if [[ ${SHELL} != "${ZSH_PATH}" ]]; then
     if which "${ZSH_PATH}" >/dev/null 2>&1; then
       chsh -s "${ZSH_PATH}"
-      printf "Changed default shell to %s\n" "${ZSH_PATH}"
+      printf "Changed default shell to %s\\n" "${ZSH_PATH}"
     else
-      printf "Error: %s does not exist\n" "${ZSH_PATH}"
+      printf "Error: %s does not exist\\n" "${ZSH_PATH}"
     fi
   fi
 
-  printf "Setting up cheat.sh"
+  printf "Setting up cheat.sh\\n"
   if [[ -d ${HOME}/bin ]]; then
     if [[ -n ${UBUNTU} ]]; then
       sudo -H apt update
@@ -619,7 +619,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     curl https://cht.sh/:cht.sh > ~/bin/cht.sh
     chmod 750 ${HOME}/bin/cht.sh
   fi
-  printf "Creating ${HOME}/.zsh.d"
+  printf "Creating %s/.zsh.d\\n" "${HOME}"
   mkdir -p ${HOME}/.zsh.d
   if [[ ! -f ${HOME}/.zsh.d/_cht ]]; then
     curl https://cheat.sh/:zsh > ${HOME}/.zsh.d/_cht
@@ -628,26 +628,26 @@ fi
 
 # full setup and installation of all packages for a development environment
 if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
-  printf "Creating ${HOME}/.aws"
+  printf "Creating %s/.aws\\n" "${HOME}"
   mkdir -p ${HOME}/.aws
   if [[ -d ${HOME}/.aws ]]; then
     chmod 700 ${HOME}/.aws
   fi
 
-  printf "Creating ${HOME}/.gcloud_creds"
+  printf "Creating %s/.gcloud_creds\\n" "${HOME}"
   mkdir -p ${HOME}/.gcloud_creds
   if [[ -d ${HOME}/.gcloud_creds ]]; then
     chmod 700 ${HOME}/.gcloud_creds
   fi
 
-  printf "Creating ${HOME}/.azure_creds"
+  printf "Creating %s/.azure_creds\\n" "${HOME}"
   mkdir -p ${HOME}/.azure_creds
   if [[ -d ${HOME}/.azure_creds ]]; then
     chmod 700 ${HOME}/.azure_creds
   fi
 
   if [[ -n ${MACOS} ]]; then
-    printf "Creating ${BREWFILE_LOC}"
+    printf "Creating %s\\n" "${BREWFILE_LOC}"
     mkdir -p ${BREWFILE_LOC}
 
     rm -f ${BREWFILE_LOC}/Brewfile
@@ -658,7 +658,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       install_homebrew
     elif [ -x "$(command -v brew)" ]; then
       brew_update
-      printf "Installing other brew stuff..."
+      printf "Installing other brew stuff...\\n"
       #https://github.com/Homebrew/homebrew-bundle
       brew tap homebrew/bundle
       brew tap homebrew/cask
@@ -826,14 +826,14 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
         brew install --cask zoom
       fi
 
-      printf "Cleaning up brew"
+      printf "Cleaning Homebrew up...\\n"
       brew cleanup
     fi
 
-    printf "Updating app store apps via softwareupdate"
+    printf "Updating app store apps via softwareupdate\\n"
     sudo -H softwareupdate --install --all --verbose
 
-    printf "Installing common apps via mas"
+    printf "Installing common apps via mas\\n"
     if [[ ! -d "/Applications/Better\ Rename\ 9.app" ]]; then
       mas install 414209656
     fi
@@ -898,7 +898,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     fi
 
     if [[ -n ${RATNA} ]] || [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ ${BRUCEWORK} ]]; then
-      printf "Installing extra apps via mas"
+      printf "Installing extra apps via mas\\n"
       if [[ ! -d "/Applications/Keynote.app" ]]; then
         mas install 409183694
       fi
@@ -923,13 +923,13 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       if [[ ! -d "/Applications/Telegram.app" ]]; then
         mas install 747648890
       fi
-      printf "Installing xcode-stuff"
+      printf "Installing xcode-stuff\\n"
       if [[ ! -d "/Applications/Xcode.app" ]]; then
         mas install 497799835
       fi
     fi
 
-    printf "Setting up macOS defaults"
+    printf "Setting up macOS defaults\\n"
     ~/scripts/.osx.sh
 
   fi
@@ -958,16 +958,16 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     fi
 
     if [[ -n ${BIONIC} ]]; then
-      printf "Installing python 3.8 Ubuntu 18.04"
+      printf "Installing python 3.8 Ubuntu 18.04\\n"
       sudo -H add-apt-repository ppa:deadsnakes/ppa
       sudo -H apt update
       sudo -H apt install python3.8 -y
     fi
 
-    printf "Installing pyenv"
+    printf "Installing pyenv\\n"
     curl https://pyenv.run | bash
 
-    printf "Installing powershell Ubuntu"
+    printf "Installing powershell Ubuntu\\n"
     if [[ -n ${BIONIC} ]]; then
       if [[ ! -f ${HOME}/software_downloads/packages-microsoft-prod.deb ]]; then
         wget -O ${HOME}/software_downloads/packages-microsoft-prod.deb http://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb
@@ -996,7 +996,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       fi
     fi
 
-    printf "Installing Go Ubuntu\n"
+    printf "Installing Go Ubuntu\\n"
     sudo add-apt-repository ppa:longsleep/golang-backports -y
     sudo -H apt update
     case ${GO_VER} in
@@ -1019,7 +1019,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
         pkgs_to_remove="golang-1.20-go golang-1.20-src"
         ;;
       *)
-        printf "Error: Unsupported Go version %s\n" "${GO_VER}"
+        printf "Error: Unsupported Go version %s\\n" "${GO_VER}"
         exit 1
         ;;
     esac
@@ -1028,8 +1028,8 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     fi
     sudo -H apt install "golang-${GO_VER}-go" -y
 
-    if [[ ! -n ${WORKSTATION} ]]; then
-      printf "Installing docker"
+    if [[ -n ${WORKSTATION} ]]; then
+      printf "Installing docker\\n"
       curl -fsSL http://download.docker.com/linux/ubuntu/gpg | sudo -H apt-key add -
       sudo -H add-apt-repository \
       "deb [arch=amd64] http://download.docker.com/linux/ubuntu \
@@ -1041,8 +1041,8 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       sudo -H apt install containerd.io -y
     fi
 
-    if [[ ! -n ${CRUNCHER} ]] || [[ ! -n ${WORKSTATION} ]]; then
-      printf "Installing Virtualbox"
+    if [[ -z ${CRUNCHER} ]] || [[ -z ${WORKSTATION} ]]; then
+      printf "Installing Virtualbox\\n"
       wget -q http://www.virtualbox.org/download/oracle_vbox_2016.asc -O- | sudo apt-key add -
       wget -q http://www.virtualbox.org/download/oracle_vbox.asc -O- | sudo apt-key add -
       sudo add-apt-repository "deb http://download.virtualbox.org/virtualbox/debian $(lsb_release -cs) contrib"
@@ -1051,7 +1051,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     fi
 
     if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
-      printf "Installing teleport"
+      printf "Installing teleport\\n"
       wget -q https://deb.releases.teleport.dev/teleport-pubkey.asc -O- | sudo apt-key add -
       sudo add-apt-repository "deb https://deb.releases.teleport.dev/ stable main"
       sudo -H apt update
@@ -1059,7 +1059,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     fi
 
     if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
-      printf "Installing cloudflared"
+      printf "Installing cloudflared\\n"
       wget -q https://pkg.cloudflare.com/cloudflare-main.gpg -O- | sudo apt-key add -
       sudo add-apt-repository "deb https://pkg.cloudflare.com/ $(lsb_release -cs) main"
       sudo -H apt update
@@ -1068,7 +1068,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
 
     if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
       if [[ ! -f ${HOME}/software_downloads/kind_${KIND_VER} ]]; then
-        printf "Installing kind"
+        printf "Installing kind\\n"
         wget -O ${HOME}/software_downloads/kind_${KIND_VER} ${KIND_URL}
         sudo cp -a ${HOME}/software_downloads/kind_${KIND_VER} /usr/local/bin/
         sudo mv /usr/local/bin/kind_${KIND_VER} /usr/local/bin/kind
@@ -1079,7 +1079,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
 
     if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
       if [[ ! -f ${HOME}/software_downloads/yq_${YQ_VER} ]]; then
-        printf "Installing yq"
+        printf "Installing yq\\n"
         wget -O ${HOME}/software_downloads/yq_${YQ_VER} ${YQ_URL}
         sudo cp -a ${HOME}/software_downloads/yq_${YQ_VER} /usr/local/bin/
         sudo mv /usr/local/bin/yq_${YQ_VER} /usr/local/bin/yq
@@ -1090,14 +1090,14 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
 
     if [[ -n ${WORKSTATION} ]]; then
       if [[ ${FOCAL} ]]; then
-        printf "Installing Albert"
+        printf "Installing Albert\\n"
         curl https://build.opensuse.org/projects/home:manuelschneid3r/public_key | sudo apt-key add -
         echo "deb http://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_$(lsb_release -rs)/ /" | sudo tee /etc/apt/sources.list.d/home:manuelschneid3r.list
         sudo wget -nv https://download.opensuse.org/repositories/home:manuelschneid3r/xUbuntu_$(lsb_release -rs)/Release.key -O "/etc/apt/trusted.gpg.d/home:manuelschneid3r.asc"
         sudo -H apt update
         sudo -H apt install albert -y
       elif [[ ${JAMMY} ]]; then
-        printf "Installing Albert"
+        printf "Installing Albert\\n"
         curl https://build.opensuse.org/projects/home:manuelschneid3r/public_key | sudo apt-key add -
         echo "deb http://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_$(lsb_release -rs)/ /" | sudo tee /etc/apt/sources.list.d/home:manuelschneid3r.list
         sudo wget -nv https://download.opensuse.org/repositories/home:manuelschneid3r/xUbuntu_$(lsb_release -rs)/Release.key -O "/etc/apt/trusted.gpg.d/home:manuelschneid3r.asc"
@@ -1107,14 +1107,14 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     fi
 
     if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
-      printf "Installing telepresence"
+      printf "Installing telepresence\\n"
       wget -O ${HOME}/software_downloads/telepresence ${TELEPRESENCE_URL}
       sudo cp -a ${HOME}/software_downloads/telepresence /usr/local/bin/
       sudo chmod 755 /usr/local/bin/telepresence
       sudo chown root:root /usr/local/bin/telepresence
     fi
 
-    printf "Installing azure-cli"
+    printf "Installing azure-cli\\n"
     curl -sL http://packages.microsoft.com/keys/microsoft.asc | \
     gpg --dearmor | \
     sudo tee /etc/apt/trusted.gpg.d/microsoft.asc.gpg > /dev/null
@@ -1124,7 +1124,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     sudo -H apt update
     sudo -H apt install azure-cli -y
 
-    printf "Installing gcloud-sdk"
+    printf "Installing gcloud-sdk\\n"
     if [[ ! -f /etc/apt/sources.list.d/google-cloud-sdk.list ]]; then
       echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
       curl http://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
@@ -1135,7 +1135,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     sudo -H apt install google-cloud-sdk-app-engine-python-extras -y
     sudo -H apt install google-cloud-sdk-app-engine-go -y
 
-    printf "Installing Hashicorp Consul Ubuntu"
+    printf "Installing Hashicorp Consul Ubuntu\\n"
     if [[ ! -d ${HOME}/software_downloads/consul_${CONSUL_VER} ]]; then
       wget -O ${HOME}/software_downloads/consul_${CONSUL_VER}_linux_amd64.zip ${HASHICORP_URL}/consul/${CONSUL_VER}/consul_${CONSUL_VER}_linux_amd64.zip
       unzip ${HOME}/software_downloads/consul_${CONSUL_VER}_linux_amd64.zip -d ${HOME}/software_downloads/consul_${CONSUL_VER}
@@ -1144,7 +1144,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       sudo chown root:root /usr/local/bin/consul
     fi
 
-    printf "Installing Hashicorp Vault Ubuntu"
+    printf "Installing Hashicorp Vault Ubuntu\\n"
     if [[ ! -d ${HOME}/software_downloads/vault_${VAULT_VER} ]]; then
       wget -O ${HOME}/software_downloads/vault_${VAULT_VER}_linux_amd64.zip ${HASHICORP_URL}/vault/${VAULT_VER}/vault_${VAULT_VER}_linux_amd64.zip
       unzip ${HOME}/software_downloads/vault_${VAULT_VER}_linux_amd64.zip -d ${HOME}/software_downloads/vault_${VAULT_VER}
@@ -1153,7 +1153,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       sudo chown root:root /usr/local/bin/vault
     fi
 
-    printf "Installing Hashicorp Nomad Ubuntu"
+    printf "Installing Hashicorp Nomad Ubuntu\\n"
     if [[ ! -d ${HOME}/software_downloads/nomad_${NOMAD_VER} ]]; then
       wget -O ${HOME}/software_downloads/nomad_${NOMAD_VER}_linux_amd64.zip ${HASHICORP_URL}/nomad/${NOMAD_VER}/nomad_${NOMAD_VER}_linux_amd64.zip
       unzip ${HOME}/software_downloads/nomad_${NOMAD_VER}_linux_amd64.zip -d ${HOME}/software_downloads/nomad_${NOMAD_VER}
@@ -1162,7 +1162,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       sudo chown root:root /usr/local/bin/nomad
     fi
 
-    printf "Installing Hashicorp Packer Ubuntu"
+    printf "Installing Hashicorp Packer Ubuntu\\n"
     if [[ ! -d ${HOME}/software_downloads/packer_${PACKER_VER} ]]; then
       wget -O ${HOME}/software_downloads/packer_${PACKER_VER}_linux_amd64.zip ${HASHICORP_URL}/packer/${PACKER_VER}/packer_${PACKER_VER}_linux_amd64.zip
       unzip ${HOME}/software_downloads/packer_${PACKER_VER}_linux_amd64.zip -d ${HOME}/software_downloads/packer_${PACKER_VER}
@@ -1171,7 +1171,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       sudo chown root:root /usr/local/bin/packer
     fi
 
-    printf "Installing Hashicorp Vagrant Ubuntu"
+    printf "Installing Hashicorp Vagrant Ubuntu\\n"
     if [[ ! -d ${HOME}/software_downloads/vagrant_${VAGRANT_VER} ]]; then
       wget -O ${HOME}/software_downloads/vagrant_${VAGRANT_VER}_linux_amd64.zip ${HASHICORP_URL}/vagrant/${VAGRANT_VER}/vagrant_${VAGRANT_VER}_linux_amd64.zip
       unzip ${HOME}/software_downloads/vagrant_${VAGRANT_VER}_linux_amd64.zip -d ${HOME}/software_downloads/vagrant_${VAGRANT_VER}
@@ -1180,7 +1180,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       sudo chown root:root /usr/local/bin/vagrant
     fi
 
-    printf "Installing docker-compose Ubuntu"
+    printf "Installing docker-compose Ubuntu\\n"
     if [[ ! -f ${HOME}/software_downloads/docker-compose_${DOCKER_COMPOSE_VER} ]]; then
       wget -O ${HOME}/software_downloads/docker-compose_${DOCKER_COMPOSE_VER} ${DOCKER_COMPOSE_URL}
       sudo cp -a ${HOME}/software_downloads/docker-compose_${DOCKER_COMPOSE_VER} /usr/local/bin/
@@ -1189,7 +1189,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       sudo chown root:root /usr/local/bin/docker-compose
     fi
 
-    printf "Installing cf-terraforming Ubuntu"
+    printf "Installing cf-terraforming Ubuntu\\n"
     if [[ ! -f ${HOME}/software_downloads/cf-terraforming_${CF_TERRAFORMING_VER}_linux_amd64.tar.gz ]]; then
       wget -O ${HOME}/software_downloads/cf-terraforming_${CF_TERRAFORMING_VER}_linux_amd64.tar.gz ${CF_TERRAFORMING_URL}
       tar xvf ${HOME}/software_downloads/cf-terraforming_${CF_TERRAFORMING_VER}_linux_amd64.tar.gz -C ${HOME}/software_downloads
@@ -1210,7 +1210,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     if ! [ -x "$(command -v brew)" ]; then
       install_homebrew
     elif [ -x "$(command -v brew)" ]; then
-      printf "Installing brew packages in Ubuntu"
+      printf "Installing brew packages in Ubuntu\\n"
       brew_update
       brew install argocd
       brew install bat
@@ -1237,21 +1237,21 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     fi
 
     if [[ -n ${WORKSTATION} ]]; then
-      printf "Installing microsoft teams"
+      printf "Installing microsoft teams\\n"
       sudo sh -c 'echo "deb [arch=amd64] https://packages.microsoft.com/repos/ms-teams stable main" > /etc/apt/sources.list.d/teams.list'
       sudo -H apt update
       sudo -H apt install teams -y
     fi
 
     if [[ -n ${WORKSTATION} ]]; then
-      printf "Installing microsoft edge"
+      printf "Installing microsoft edge\\n"
       sudo sh -c 'echo "deb [arch=amd64] https://packages.microsoft.com/repos/edge stable main" > /etc/apt/sources.list.d/microsoft-edge.list'
       sudo -H apt update
       sudo -H apt install microsoft-edge-stable -y
     fi
 
     if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
-      printf "Installing .net7 sdk"
+      printf "Installing .net7 sdk\\n"
       sudo -H apt install dotnet-sdk-7.0 -y
     fi
 
@@ -1265,7 +1265,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     sudo -H apt install kubectl -y
 
     if [[ -n ${WORKSTATION} ]]; then
-      printf "snap software with classic option, the other snap packages are installed in ubuntu_workstation_snap_packages.txt"
+      printf "snap software with classic option, the other snap packages are installed in ubuntu_workstation_snap_packages.txt\\n"
       sudo snap install atom --classic
       sudo snap install code --classic
       sudo snap install helm --classic
@@ -1282,7 +1282,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       sudo apt-get install helm
     fi
 
-    printf "Installing kustomize"
+    printf "Installing kustomize\\n"
     cd ${HOME}/software_downloads || exit
     curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
     if [[ -f ${HOME}/software_downloads/kustomize ]]; then
@@ -1293,7 +1293,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
 
     # fix for missing libssl1.1 on ubuntu 22.04 and it's requirement for installing python3 via pyenv
     if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
-      printf installing libssl1.1
+      printf "installing libssl1.1\\n"
       echo "deb http://security.ubuntu.com/ubuntu focal-security main" | sudo tee /etc/apt/sources.list.d/focal-security.list
       sudo -H apt update
       sudo -H apt install libssl1.1 -y
@@ -1331,10 +1331,10 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     sudo -H dnf install xa-devel -y
     sudo -H dnf install zlib-devel -y
 
-    printf "Installing pyenv"
+    printf "Installing pyenv\\n"
     curl https://pyenv.run | bash
 
-    printf "Installing shellcheck RHEL"
+    printf "Installing shellcheck RHEL\\n"
     if [[ ! -d ${HOME}/software_downloads/shellcheck-v${SHELLCHEK_VER} ]]; then
       wget -O ${HOME}/software_downloads/shellcheck-v${SHELLCHEK_VER}.linux.x86_64.tar.xz https://shellcheck.storage.googleapis.com/shellcheck-v${SHELLCHEK_VER}.linux.x86_64.tar.xz
       xz --decompress ${HOME}/software_downloads/shellcheck-v${SHELLCHEK_VER}.linux.x86_64.tar.xz
@@ -1345,40 +1345,40 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       sudo chown root:root /usr/local/bin/shellcheck
     fi
 
-    printf "Installing keychain RHEL"
+    printf "Installing keychain RHEL\\n"
     sudo -H rpm --import http://wiki.psychotic.ninja/RPM-GPG-KEY-psychotic
     sudo -H rpm -ivh http://packages.psychotic.ninja/6/base/i386/RPMS/psychotic-release-1.0.0-1.el6.psychotic.noarch.rpm
     sudo -H yum --enablerepo=psychotic install keychain -y
 
-    printf "Installing azure-cli RHEL"
+    printf "Installing azure-cli RHEL\\n"
     sudo -H rpm --import http://packages.microsoft.com/keys/microsoft.asc
     sudo -H sh -c 'echo -e "[azure-cli]\nname=Azure CLI\nbaseurl=http://packages.microsoft.com/yumrepos/azure-cli\nenabled=1\ngpgcheck=1\ngpgkey=http://packages.microsoft.com/keys/microsoft.asc" > /etc/yum.repos.d/azure-cli.repo'
     sudo -H dnf update -y
     sudo -H dnf install azure-cli -y
 
-    printf "Installing git credential manager RHEL"
+    printf "Installing git credential manager RHEL\\n"
     sudo -H dnf install http://github.com/Microsoft/Git-Credential-Manager-for-Mac-and-Linux/releases/download/git-credential-manager-2.0.4/git-credential-manager-2.0.4-1.noarch.rpm -y
 
-    printf "Installing powershell RHEL"
+    printf "Installing powershell RHEL\\n"
     curl http://packages.microsoft.com/config/rhel/7/prod.repo | sudo -H tee /etc/yum.repos.d/microsoft.repo
     sudo -H dnf update -y
     sudo -H dnf install powershell -y
 
-    printf "Installing npm RHEL"
+    printf "Installing npm RHEL\\n"
     curl -sL http://rpm.nodesource.com/setup_12.x | sudo -E bash -
     sudo -H dnf update -y
     sudo -H dnf install nodejs -y
 
-    printf "Installing glances cpu monitor RHEL"
+    printf "Installing glances cpu monitor RHEL\\n"
     sudo -H python3 -m pip install glances
 
-    printf "Installing go RHEL"
+    printf "Installing go RHEL\\n"
     if [[ ! -f ${HOME}/software_downloads/go${GO_VER}.linux-amd64.tar.gz ]]; then
       wget -O ${HOME}/software_downloads/go${GO_VER}.linux-amd64.tar.gz https://dl.google.com/go/go${GO_VER}.linux-amd64.tar.gz
       sudo tar -C /usr/local -xzf ${HOME}/software_downloads/go${GO_VER}.linux-amd64.tar.gz
     fi
 
-    printf "Installing google-cloud-sdk RHEL"
+    printf "Installing google-cloud-sdk RHEL\\n"
     if [[ ! -f /etc/yum.repos.d/google-cloud-sdk.repo ]]; then
       sudo tee -a /etc/yum.repos.d/google-cloud-sdk.repo << EOM
 [google-cloud-sdk]
@@ -1397,7 +1397,7 @@ EOM
     sudo -H dnf install google-cloud-sdk-app-engine-python-extras -y
     sudo -H dnf install google-cloud-sdk-app-engine-go -y
 
-    printf "Installing kubectl RHEL"
+    printf "Installing kubectl RHEL\\n"
     if [[ ! -f /etc/yum.repos.d/kubernetes.repo ]]; then
       sudo echo "${RHEL_KUBECTL_REPO}" > /tmp/kubernetes.repo
       sudo chown root:root /tmp/kubernetes.repo
@@ -1407,7 +1407,7 @@ EOM
     sudo -H dnf update -y
     sudo -H dnf install kubectl -y
 
-    printf "Installing Hashicorp Packer RHEL"
+    printf "Installing Hashicorp Packer RHEL\\n"
     if [[ ! -d ${HOME}/software_downloads/packer_${PACKER_VER} ]]; then
       wget -O ${HOME}/software_downloads/packer_${PACKER_VER}_linux_amd64.zip ${HASHICORP_URL}/packer/${PACKER_VER}/packer_${PACKER_VER}_linux_amd64.zip
       unzip ${HOME}/software_downloads/packer_${PACKER_VER}_linux_amd64.zip -d ${HOME}/software_downloads/packer_${PACKER_VER}
@@ -1437,23 +1437,23 @@ EOM
   fi
 
   if [[ -n ${LINUX} ]]; then
-    printf "Installing Hashicorp Terraform Linux with tfenv on Linux"
+    printf "Installing Hashicorp Terraform Linux with tfenv on Linux\\n"
     if [[ ! -d ${HOME}/.tfenv ]]; then
       git clone --recursive https://github.com/tfutils/tfenv.git ${HOME}/.tfenv
     fi
 
-    printf "Linking terraform to /usr/local/bin"
+    printf "Linking terraform to /usr/local/bin\\n"
     sudo rm -f /usr/local/bin/terraform
     sudo ln -s ${HOME}/.tfenv/bin/terraform /usr/local/bin/terraform
 
-    printf "Linking tfenv to /usr/local/bin"
+    printf "Linking tfenv to /usr/local/bin\\n"
     sudo rm -f /usr/local/bin/tfenv
     sudo ln -s ${HOME}/.tfenv/bin/tfenv /usr/local/bin/tfenv
 
     if [[ -f ${HOME}/.tfenv/bin/tfenv ]]; then
       tfenv install ${TERRAFORM_VER}
     fi
-    printf "Installing tflint"
+    printf "Installing tflint\\n"
     if [[ -f ${HOME}/software_downloads/tflint_linux_amd64.zip ]]; then
       rm ${HOME}/software_downloads/tflint_linux_amd64.zip
       wget -O ${HOME}/software_downloads/tflint_linux_amd64.zip ${TFLINT_URL}
@@ -1464,7 +1464,7 @@ EOM
       sudo -H unzip ${HOME}/software_downloads/tflint_linux_amd64.zip -d /usr/local/bin
       sudo -H chmod 755 /usr/local/bin/tflint
     fi
-    printf "Installing tfsec"
+    printf "Installing tfsec\\n"
     if [[ ! -f ${HOME}/software_downloads/tfsec-linux-amd64 ]]; then
       wget -O ${HOME}/software_downloads/tfsec-linux-amd64 ${TFSEC_URL}
       sudo -H mv ${HOME}/software_downloads/tfsec-linux-amd64 /usr/local/bin/tfsec
@@ -1474,7 +1474,7 @@ EOM
 
   mkdir -p ${HOME}/software_downloads/awscli
   if [[ -n ${MACOS} ]]; then
-    printf "Installing aws-cli on MacOS"
+    printf "Installing aws-cli on MacOS\\n"
     if [[ ! -f ${HOME}/software_downloads/awscli/AWSCLIV2.pkg ]]; then
       wget -O ${HOME}/software_downloads/awscli/AWSCLIV2.pkg "https://awscli.amazonaws.com/AWSCLIV2.pkg"
       sudo installer -pkg ${HOME}/software_downloads/awscli/AWSCLIV2.pkg -target /
@@ -1482,7 +1482,7 @@ EOM
     fi
   fi
   if [[ -n ${LINUX} ]]; then
-    printf "Installing aws-cli on Linux"
+    printf "Installing aws-cli on Linux\\n"
     if [[ ! -f ${HOME}/software_downloads/awscli/awscliv2.zip ]]; then
       wget -O ${HOME}/software_downloads/awscli/awscliv2.zip "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
       unzip ${HOME}/software_downloads/awscli/awscliv2.zip -d ${HOME}/software_downloads/awscli
@@ -1492,7 +1492,7 @@ EOM
     fi
   fi
 
-  printf "vim plugins setup"
+  printf "vim plugins setup\\n"
   mkdir -p ${HOME}/.vim/plugged
   if [[ -d ${HOME}/.vim/plugged ]]; then
     chmod 770 ${HOME}/.vim/plugged
@@ -1507,10 +1507,10 @@ EOM
 fi
 
 if [[ -n ${DEVELOPER} ]] || [[ -n ${ANSIBLE} ]]; then
-  printf "Installing json2yaml via npm"
+  printf "Installing json2yaml via npm\\n"
   npm install json2yaml
 
-  printf "Installing ruby-install on linux"
+  printf "Installing ruby-install on linux\\n"
   if [[ -n ${LINUX} ]]; then
     if [[ ! -d ${HOME}/software_downloads/ruby-install-${RUBY_INSTALL_VER} ]]; then
       wget -O ${HOME}/software_downloads/ruby-install-${RUBY_INSTALL_VER}.tar.gz https://github.com/postmodern/ruby-install/archive/v${RUBY_INSTALL_VER}.tar.gz
@@ -1520,7 +1520,7 @@ if [[ -n ${DEVELOPER} ]] || [[ -n ${ANSIBLE} ]]; then
     fi
   fi
 
-  printf "Installing chruby on linux"
+  printf "Installing chruby on linux\\n"
   if [[ -n ${LINUX} ]]; then
     if [[ ! -d ${HOME}/software_downloads/chruby-${CHRUBY_VER} ]]; then
       wget -O ${HOME}/software_downloads/chruby-${CHRUBY_VER}.tar.gz https://github.com/postmodern/chruby/archive/v${CHRUBY_VER}.tar.gz
@@ -1530,7 +1530,7 @@ if [[ -n ${DEVELOPER} ]] || [[ -n ${ANSIBLE} ]]; then
     fi
   fi
 
-  printf "install ruby ${RUBY_VER}"
+  printf "install ruby %s\\n" "${RUBY_VER}"
   if [[ ! -d ${HOME}/.rubies/ruby-${RUBY_VER}/bin ]]; then
     if [[ -n ${MACOS} ]]; then
       ruby-install ${RUBY_VER} -- --with-openssl-dir=$(brew --prefix openssl@3)
@@ -1541,7 +1541,7 @@ if [[ -n ${DEVELOPER} ]] || [[ -n ${ANSIBLE} ]]; then
   fi
 
   if [[ -n ${LINUX} ]]; then
-    printf "installing github cli on linux"
+    printf "installing github cli on linux\\n"
     if [[ -n ${UBUNTU} ]]; then
       sudo -H apt-key adv --keyserver keyserver.ubuntu.com --recv-key C99B11DEB97541F0
       sudo -H apt-add-repository https://cli.github.com/packages
@@ -1553,7 +1553,7 @@ if [[ -n ${DEVELOPER} ]] || [[ -n ${ANSIBLE} ]]; then
     fi
   fi
 
-  printf "Setup kitchen"
+  printf "Setup kitchen\\n"
   source ${CHRUBY_LOC}/chruby/chruby.sh
   source ${CHRUBY_LOC}/chruby/auto.sh
   chruby ruby-${RUBY_VER}
@@ -1566,10 +1566,10 @@ if [[ -n ${DEVELOPER} ]] || [[ -n ${ANSIBLE} ]]; then
   gem install bundle
   gem install bundler
 
-  printf "Install terraspace"
+  printf "Install terraspace\\n"
   gem install terraspace
 
-  printf "ANSIBLE setup"
+  printf "ANSIBLE setup\\n"
   if [[ -n ${LINUX} ]]; then
     pyenv update
   fi
@@ -1588,7 +1588,7 @@ if [[ -n ${DEVELOPER} ]] || [[ -n ${ANSIBLE} ]]; then
       pyenv virtualenv-delete -f ansible
       pyenv virtualenv "${PYTHON_VER}" ansible
       pyenv activate ansible
-      printf "Installing Ansible dependencies...\n"
+      printf "Installing Ansible dependencies...\\n"
       python3 -m pip install ansible ansible-lint certbot certbot-dns-cloudflare boto3 docker jmespath netaddr pylint psutil bpytop HttpPy j2cli wheel shell-gpt
     elif [[ -n ${BRUCEWORK} ]]; then
       export PYENV_ROOT="$HOME/.pyenv"
@@ -1600,14 +1600,14 @@ if [[ -n ${DEVELOPER} ]] || [[ -n ${ANSIBLE} ]]; then
       pyenv virtualenv-delete -f ansible
       pyenv virtualenv "${PYTHON_VER}" ansible
       pyenv activate ansible
-      printf "Installing Ansible dependencies...\n"
+      printf "Installing Ansible dependencies...\\n"
       # for when netskope is blocking pip
       # python3 -m pip --cert ~/nscacerts.pem install ansible ansible-lint boto3 docker jmespath netaddr pylint psutil bpytop HttpPy j2cli wheel
       python3 -m pip install ansible ansible-lint boto3 docker jmespath netaddr pylint psutil bpytop HttpPy j2cli wheel shell-gpt
     fi
   fi
 
-  printf "personal git repos cloning"
+  printf "personal git repos cloning\\n"
   if ! [[ -d ${PERSONAL_GITREPOS}/dotfiles ]]; then
     git clone git@github.com:brujack/dotfiles.git ${PERSONAL_GITREPOS}/dotfiles
   fi
@@ -1645,7 +1645,7 @@ fi
 if [[ -n ${UPDATE} ]]; then
   if [[ -n ${MACOS} ]] || [[ -n ${LINUX} ]]; then
     brew_update
-    printf "Updating app store apps softwareupdate"
+    printf "Updating app store apps softwareupdate\\n"
     sudo -H softwareupdate --install --all --verbose
   fi
   if [[ -n ${UBUNTU} ]]; then
@@ -1661,10 +1661,10 @@ if [[ -n ${UPDATE} ]]; then
     sudo -H yum update -y
   fi
   if [[ -n ${MACOS} ]]; then
-    printf "Updating mas packages"
+    printf "Updating mas packages\\n"
     mas upgrade
   fi
-  printf "Updating pip3 packages"
+  printf "Updating pip3 packages\\n"
   if [[ -n ${STUDIO} ]] || [[ -n ${LAPTOP} ]] || [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]] || [[ -n ${RATNA} ]]; then
     python3 -m pip install --upgrade pip
     python3 -m pip list --outdated --format=columns | awk '{print $1;}' | awk 'NR>2' | xargs -n1 python3 -m pip install -U
@@ -1675,7 +1675,7 @@ if [[ -n ${UPDATE} ]]; then
     python3 -m pip check --cert ~/nscacerts.pem
   fi
   if [[ -n ${MACOS} ]]; then
-    printf "Updating MACOS awscli"
+    printf "Updating MACOS awscli\\n"
     cd ${HOME}/software_downloads/awscli || exit
     curl "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "AWSCLIV2.pkg"
     sudo -H installer -pkg AWSCLIV2.pkg -target /
@@ -1683,7 +1683,7 @@ if [[ -n ${UPDATE} ]]; then
     cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
   fi
   if [[ -n ${LINUX} ]]; then
-    printf "Updating Linux awscli"
+    printf "Updating Linux awscli\\n"
     cd ${HOME}/software_downloads/awscli || exit
     curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
     unzip -u -o awscliv2.zip
@@ -1691,45 +1691,45 @@ if [[ -n ${UPDATE} ]]; then
     cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
   fi
   if [[ -d ${HOME}/.tfenv ]]; then
-    printf "Updating tfenv"
+    printf "Updating tfenv\\n"
     cd ${HOME}/.tfenv || exit
     git pull
     cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
   fi
   if [[ -d ${HOME}/.oh-my-zsh ]]; then
-    printf "Updating oh-my-zsh"
+    printf "Updating oh-my-zsh\\n"
     cd ${HOME}/.oh-my-zsh || exit
     git pull
     cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
   fi
   if [[ -d ${HOME}/.oh-my-zsh/custom/themes/powerlevel10k ]]; then
-    printf "Updating powerlevel10k"
+    printf "Updating powerlevel10k\\n"
     cd ${HOME}/.oh-my-zsh/custom/themes/powerlevel10k || exit
     git pull
     cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
   fi
   if [[ -d ${HOME}/.tmux/plugins/tpm ]]; then
-    printf "Updating tpm"
+    printf "Updating tpm\\n"
     cd ${HOME}/.tmux/plugins/tpm || exit
     git pull
     cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
   fi
   if [[ -f ${HOME}/bin/cht.sh ]]; then
-    printf "Updating cheat.sh"
+    printf "Updating cheat.sh\\n"
     curl https://cht.sh/:cht.sh > ~/bin/cht.sh
     chmod 754 ${HOME}/bin/cht.sh
   fi
   if [[ -f ${HOME}/.zsh.d/_cht ]]; then
-    printf "Updating cheat.sh tab completion"
+    printf "Updating cheat.sh tab completion\\n"
     curl https://cheat.sh/:zsh > ${HOME}/.zsh.d/_cht
   fi
   if [[ -d ${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions ]]; then
-    printf "Updating zsh-autosuggestions"
+    printf "Updating zsh-autosuggestions\\n"
     cd ${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions || exit
     git pull
     cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
   fi
-  printf "updating ruby gems"
+  printf "updating ruby gems\\n"
   gem update
 fi
 
