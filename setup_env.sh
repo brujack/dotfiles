@@ -193,7 +193,7 @@ install_git() {
       return 0
     fi
     echo "Installing git via Homebrew."
-    if [[ ${MACOS} ]]; then
+    if [[ -n ${MACOS} ]]; then
       if ! command -v brew &> /dev/null; then
         install_homebrew
       fi
@@ -231,7 +231,7 @@ install_zsh() {
       return 0
     fi
     echo "Installing zsh via Homebrew."
-    if [[ ${MACOS} ]]; then
+    if [[ -n ${MACOS} ]]; then
       if ! command -v brew &> /dev/null; then
         install_homebrew
       fi
@@ -301,7 +301,7 @@ process_args "$@"
 [[ $(uname -s) = "Darwin" ]] && readonly MACOS=1
 [[ $(uname -s) = "Linux" ]] && readonly LINUX=1
 
-if [[ ${LINUX} ]]; then
+if [[ -n ${LINUX} ]]; then
   LINUX_TYPE=$(awk -F= '/^NAME/{print $2}' /etc/os-release | tr -d '"')
   [[ ${LINUX_TYPE} = "Ubuntu" ]] && readonly UBUNTU=1
   [[ ${LINUX_TYPE} = "CentOS Linux" ]] && readonly CENTOS=1
@@ -310,7 +310,7 @@ if [[ ${LINUX} ]]; then
   [[ ${LINUX_TYPE} = "elementary OS" ]] && readonly UBUNTU=1 && readonly ELEMENTARY=1
 fi
 
-if [[ ${UBUNTU} ]]; then
+if [[ -n ${UBUNTU} ]]; then
   UBUNTU_VERSION=$(lsb_release -rs)
   [[ ${UBUNTU_VERSION} = "18.04" ]] && readonly BIONIC=1
   [[ ${UBUNTU_VERSION} = "20.04" ]] && readonly FOCAL=1
@@ -327,13 +327,13 @@ fi
 [[ $(hostname -s) = "virtualmachine1c4f85d6" ]] && readonly WORKSTATION=1
 
 # setup variables based off of environment
-if [[ ${MACOS} ]]; then
-  if [[ ${RATNA} ]]; then
+if [[ -n ${MACOS} ]]; then
+  if [[ -n ${RATNA} ]]; then
     CHRUBY_LOC="/usr/local/opt/chruby/share"
-  elif [[ ${LAPTOP} ]] || [[ ${STUDIO} ]] || [[ ${BRUCEWORK} ]]; then
+  elif [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ ${BRUCEWORK} ]]; then
     CHRUBY_LOC="/opt/homebrew/opt/chruby/share"
   fi
-elif [[ ${LINUX} ]]; then
+elif [[ -n ${LINUX} ]]; then
   CHRUBY_LOC="/usr/local/share"
 fi
 
@@ -349,19 +349,19 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     fi
   fi
 
-  if [[ ${MACOS} ]]; then
+  if [[ -n ${MACOS} ]]; then
     echo "Installing Rosetta if necessary"
     install_rosetta
   fi
 
-  if [[ ${MACOS} || ${FEDORA} || ${CENTOS} ]]; then
+  if [[ -n ${MACOS} ]] || [[ -n ${FEDORA} ]] || [[ -n ${CENTOS} ]]; then
     install_git
   fi
 
   # because the version of git is so old on redhat, we need to install a newer version by compiling it
   mkdir -p ${HOME}/software_downloads
 
-  if [[ ${REDHAT} ]]; then
+  if [[ -n ${REDHAT} ]]; then
     sudo -H dnf update -y
     sudo -H dnf install asciidoc -y
     sudo -H dnf install autoconf -y
@@ -395,7 +395,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
   fi
 
   # because the version of zsh is so old on redhat, we need to install a newer version by compiling it
-  if [[ ${REDHAT} ]]; then
+  if [[ -n ${REDHAT} ]]; then
     if rhel_installed_package zsh; then
       sudo -H yum remove zsh -y
     fi
@@ -447,7 +447,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
 
   echo "Linking ${DOTFILES} to their home"
 
-  if [[ ${MACOS} ]]; then
+  if [[ -n ${MACOS} ]]; then
     rm -f ${HOME}/.gitconfig
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_mac ${HOME}/.gitconfig
     if [[ -d ${HOME}/git-repos/fortis ]]; then
@@ -459,10 +459,10 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
       ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_mac_gitlab ${HOME}/git-repos/gitlab/.gitconfig
     fi
   fi
-  if [[ ${LINUX} ]]; then
+  if [[ -n ${LINUX} ]]; then
     rm -f ${HOME}/.gitconfig
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_linux ${HOME}/.gitconfig
-    if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]]; then
+    if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
       if [[ -d ${HOME}/git-repos/fortis ]]; then
         rm -f ${HOME}/git-repos/fortis/.gitconfig
         ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_linux_fortis ${HOME}/git-repos/fortis/.gitconfig
@@ -490,12 +490,12 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/scripts ${HOME}/scripts
   fi
 
-  if [[ ${MACOS} || ${LINUX} ]]; then
+  if [[ -n ${MACOS} ]] || [[ -n ${LINUX} ]]; then
     echo "Creating ${HOME}/.config"
     mkdir -p ${HOME}/.config
   fi
 
-  if [[ ${MACOS} || ${LINUX} ]]; then
+  if [[ -n ${MACOS} ]] || [[ -n ${LINUX} ]]; then
     echo "Creating ${HOME}/.tf_creds"
     mkdir -p ${HOME}/.tf_creds
     if [[ -d ${HOME}/.tf_creds ]]; then
@@ -503,7 +503,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     fi
   fi
 
-  if [[ ${MACOS} || ${LINUX} ]]; then
+  if [[ -n ${MACOS} ]] || [[ -n ${LINUX} ]]; then
     echo "powershell profile and custom oh-my-posh theme"
     mkdir -p ${HOME}/.config/powershell
     rm -f ${HOME}/.config/powershell/profile.ps1
@@ -512,7 +512,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/bruce.omp.json ${HOME}/.config/powershell/bruce.omp.json
   fi
 
-  if [[ ${MACOS} || ${LINUX} ]]; then
+  if [[ -n ${MACOS} ]] || [[ -n ${LINUX} ]]; then
     echo "starship profile"
     rm -f ${HOME}/.config/starship.toml
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/starship.toml ${HOME}/.config/starship.toml
@@ -592,20 +592,25 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
   ZSH_PATH=${ZSH_PATH:-"/bin/zsh"}
 
   if [[ ${SHELL} != "${ZSH_PATH}" ]]; then
-    chsh -s "${ZSH_PATH}"
+    if which "${ZSH_PATH}" >/dev/null 2>&1; then
+      chsh -s "${ZSH_PATH}"
+      printf "Changed default shell to %s\n" "${ZSH_PATH}"
+    else
+      printf "Error: %s does not exist\n" "${ZSH_PATH}"
+    fi
   fi
 
   echo "Setting up cheat.sh"
   if [[ -d ${HOME}/bin ]]; then
-    if [[ ${UBUNTU} ]]; then
+    if [[ -n ${UBUNTU} ]]; then
       sudo -H apt update
       sudo -H apt install curl -y
     fi
-    if [[ ${CENTOS} ]]; then
+    if [[ -n ${CENTOS} ]]; then
       sudo -H dnf update -y
       sudo -H dnf install curl -y
     fi
-    if [[ ${REDHAT} ]] || [[ ${FEDORA} ]]; then
+    if [[ -n ${REDHAT} ]] || [[ -n ${FEDORA} ]]; then
       sudo -H yum update
       sudo -H yum install curl -y
     fi
@@ -620,7 +625,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
 fi
 
 # full setup and installation of all packages for a development environment
-if [[ ${SETUP} || ${DEVELOPER} ]]; then
+if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
   echo "Creating ${HOME}/.aws"
   mkdir -p ${HOME}/.aws
   if [[ -d ${HOME}/.aws ]]; then
@@ -639,7 +644,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     chmod 700 ${HOME}/.azure_creds
   fi
 
-  if [[ ${MACOS} ]]; then
+  if [[ -n ${MACOS} ]]; then
     echo "Creating ${BREWFILE_LOC}"
     mkdir -p ${BREWFILE_LOC}
 
@@ -667,11 +672,11 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       brew tap teamookla/speedtest
       brew install speedtest
       brew install redpanda-data/tap/redpanda
-      if [[ ${STUDIO} ]] || [[ ${LAPTOP} ]] || [[ ${BRUCEWORK} ]]; then
+      if [[ -n ${STUDIO} ]] || [[ -n ${LAPTOP} ]] || [[ ${BRUCEWORK} ]]; then
         brew install datawire/blackbird/telepresence-arm64
         brew install cloudflared
       fi
-      if [[ ${RATNA} ]]; then
+      if [[ -n ${RATNA} ]]; then
         brew install datawire/blackbird/telepresence
         brew install cloudflared
       fi
@@ -682,7 +687,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       if [[ ! -d "/Applications/1Password.app" ]]; then
         brew install --cask 1password
       fi
-      if [[ ${LAPTOP} ]] || [[ ${STUDIO} ]]; then
+      if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
         if [[ ! -d "/Applications/Adobe\ Creative\ Cloud" ]]; then
           brew install --cask adobe-creative-cloud
         fi
@@ -762,7 +767,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       if [[ ! -d "/Applications/Malwarebytes.app" ]]; then
         brew install --cask malwarebytes
       fi
-      if [[ ${RATNA} ]] || [[ ${LAPTOP} ]] || [[ ${STUDIO} ]] || [[ ${BRUCEWORK} ]]; then
+      if [[ -n ${RATNA} ]] || [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ ${BRUCEWORK} ]]; then
         if [[ ! -d "/Applications/Microsoft\ Word.app" ]]; then
           brew install --cask microsoft-office
         fi
@@ -830,7 +835,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/Better\ Rename\ 9.app" ]]; then
       mas install 414209656
     fi
-    if [[ ${LAPTOP} ]] || [[ ${STUDIO} ]] || [[ ${BRUCEWORK} ]]; then
+    if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ ${BRUCEWORK} ]]; then
       if [[ ! -d "/Applications/Bitwarden.app" ]]; then
         mas install 1352778147
       fi
@@ -890,7 +895,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       mas install 604825918
     fi
 
-    if [[ ${RATNA} ]] || [[ ${LAPTOP} ]] || [[ ${STUDIO} ]] || [[ ${BRUCEWORK} ]]; then
+    if [[ -n ${RATNA} ]] || [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ ${BRUCEWORK} ]]; then
       echo "Installing extra apps via mas"
       if [[ ! -d "/Applications/Keynote.app" ]]; then
         mas install 409183694
@@ -927,7 +932,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
 
   fi
 
-  if [[ ${UBUNTU} ]]; then
+  if [[ -n ${UBUNTU} ]]; then
     sudo -H apt update
     if [[ ${FOCAL} ]]; then
       sudo -H apt install --install-recommends linux-generic-hwe-20.04 -y
@@ -941,7 +946,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       xargs -a ./ubuntu_2204_packages.txt sudo apt install -y
     fi
 
-    if [[ ${WORKSTATION} ]]; then
+    if [[ -n ${WORKSTATION} ]]; then
       # apt package installation
       xargs -a ./ubuntu_workstation_packages.txt sudo apt install -y
 
@@ -950,7 +955,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
 
     fi
 
-    if [[ ${BIONIC} ]]; then
+    if [[ -n ${BIONIC} ]]; then
       echo "Installing python 3.8 Ubuntu 18.04"
       sudo -H add-apt-repository ppa:deadsnakes/ppa
       sudo -H apt update
@@ -961,7 +966,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     curl https://pyenv.run | bash
 
     echo "Installing powershell Ubuntu"
-    if [[ ${BIONIC} ]]; then
+    if [[ -n ${BIONIC} ]]; then
       if [[ ! -f ${HOME}/software_downloads/packages-microsoft-prod.deb ]]; then
         wget -O ${HOME}/software_downloads/packages-microsoft-prod.deb http://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb
         sudo -H dpkg -i ${HOME}/software_downloads/packages-microsoft-prod.deb
@@ -970,7 +975,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
         sudo -H apt install powershell -y
       fi
     fi
-    if [[ ${FOCAL} ]]; then
+    if [[ -n ${FOCAL} ]]; then
       if [[ ! -f ${HOME}/software_downloads/packages-microsoft-prod.deb ]]; then
         wget -O ${HOME}/software_downloads/packages-microsoft-prod.deb http://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb
         sudo -H dpkg -i ${HOME}/software_downloads/packages-microsoft-prod.deb
@@ -979,7 +984,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
         sudo -H apt install powershell -y
       fi
     fi
-    if [[ ${JAMMY} ]]; then
+    if [[ -n ${JAMMY} ]]; then
       if [[ ! -f ${HOME}/software_downloads/packages-microsoft-prod.deb ]]; then
         wget -O ${HOME}/software_downloads/packages-microsoft-prod.deb http://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb
         sudo -H dpkg -i ${HOME}/software_downloads/packages-microsoft-prod.deb
@@ -1031,7 +1036,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo -H apt install golang-${GO_VER}-go -y
     fi
 
-    if [[ ! ${WORKSTATION} ]]; then
+    if [[ ! -n ${WORKSTATION} ]]; then
       echo "Installing docker"
       curl -fsSL http://download.docker.com/linux/ubuntu/gpg | sudo -H apt-key add -
       sudo -H add-apt-repository \
@@ -1044,7 +1049,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo -H apt install containerd.io -y
     fi
 
-    if [[ ! ${CRUNCHER} ]] || [[ ! ${WORKSTATION} ]]; then
+    if [[ ! -n ${CRUNCHER} ]] || [[ ! -n ${WORKSTATION} ]]; then
       echo "Installing Virtualbox"
       wget -q http://www.virtualbox.org/download/oracle_vbox_2016.asc -O- | sudo apt-key add -
       wget -q http://www.virtualbox.org/download/oracle_vbox.asc -O- | sudo apt-key add -
@@ -1053,7 +1058,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo -H apt install virtualbox-6.1 -y
     fi
 
-    if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]]; then
+    if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
       echo "Installing teleport"
       wget -q https://deb.releases.teleport.dev/teleport-pubkey.asc -O- | sudo apt-key add -
       sudo add-apt-repository "deb https://deb.releases.teleport.dev/ stable main"
@@ -1061,7 +1066,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo -H apt install teleport -y
     fi
 
-    if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]]; then
+    if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
       echo "Installing cloudflared"
       wget -q https://pkg.cloudflare.com/cloudflare-main.gpg -O- | sudo apt-key add -
       sudo add-apt-repository "deb https://pkg.cloudflare.com/ $(lsb_release -cs) main"
@@ -1069,7 +1074,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo -H apt install cloudflared -y
     fi
 
-    if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]]; then
+    if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
       if [[ ! -f ${HOME}/software_downloads/kind_${KIND_VER} ]]; then
         echo "Installing kind"
         wget -O ${HOME}/software_downloads/kind_${KIND_VER} ${KIND_URL}
@@ -1080,7 +1085,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       fi
     fi
 
-    if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]]; then
+    if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
       if [[ ! -f ${HOME}/software_downloads/yq_${YQ_VER} ]]; then
         echo "Installing yq"
         wget -O ${HOME}/software_downloads/yq_${YQ_VER} ${YQ_URL}
@@ -1091,7 +1096,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       fi
     fi
 
-    if [[ ${WORKSTATION} ]]; then
+    if [[ -n ${WORKSTATION} ]]; then
       if [[ ${FOCAL} ]]; then
         echo "Installing Albert"
         curl https://build.opensuse.org/projects/home:manuelschneid3r/public_key | sudo apt-key add -
@@ -1109,7 +1114,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       fi
     fi
 
-    if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]]; then
+    if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
       echo "Installing telepresence"
       wget -O ${HOME}/software_downloads/telepresence ${TELEPRESENCE_URL}
       sudo cp -a ${HOME}/software_downloads/telepresence /usr/local/bin/
@@ -1239,21 +1244,21 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       brew install snyk
     fi
 
-    if [[ ${WORKSTATION} ]]; then
+    if [[ -n ${WORKSTATION} ]]; then
       echo "Installing microsoft teams"
       sudo sh -c 'echo "deb [arch=amd64] https://packages.microsoft.com/repos/ms-teams stable main" > /etc/apt/sources.list.d/teams.list'
       sudo -H apt update
       sudo -H apt install teams -y
     fi
 
-    if [[ ${WORKSTATION} ]]; then
+    if [[ -n ${WORKSTATION} ]]; then
       echo "Installing microsoft edge"
       sudo sh -c 'echo "deb [arch=amd64] https://packages.microsoft.com/repos/edge stable main" > /etc/apt/sources.list.d/microsoft-edge.list'
       sudo -H apt update
       sudo -H apt install microsoft-edge-stable -y
     fi
 
-    if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]]; then
+    if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
       echo "Installing .net6 sdk"
       sudo -H apt install dotnet-sdk-7.0 -y
     fi
@@ -1267,7 +1272,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt update
     sudo -H apt install kubectl -y
 
-    if [[ ${WORKSTATION} ]]; then
+    if [[ -n ${WORKSTATION} ]]; then
       echo "snap software with classic option, the other snap packages are installed in ubuntu_workstation_snap_packages.txt"
       sudo snap install atom --classic
       sudo snap install code --classic
@@ -1278,7 +1283,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
       sudo snap install certbot-dns-route53
     fi
     # can't use snap on wsl2
-    if [[ ${CRUNCHER} ]]; then
+    if [[ -n ${CRUNCHER} ]]; then
       curl https://baltocdn.com/helm/signing.asc | sudo apt-key add -
       echo "deb https://baltocdn.com/helm/stable/debian/ all main" | sudo tee /etc/apt/sources.list.d/helm-stable-debian.list
       sudo apt-get update
@@ -1295,7 +1300,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     fi
 
     # fix for missing libssl1.1 on ubuntu 22.04 and it's requirement for installing python3 via pyenv
-    if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]]; then
+    if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
       echo installing libssl1.1
       echo "deb http://security.ubuntu.com/ubuntu focal-security main" | sudo tee /etc/apt/sources.list.d/focal-security.list
       sudo -H apt update
@@ -1305,7 +1310,7 @@ if [[ ${SETUP} || ${DEVELOPER} ]]; then
     sudo -H apt autoremove -y
   fi
 
-  if [[ ${REDHAT} || ${FEDORA} ]]; then
+  if [[ -n ${REDHAT} ]] || [[ -n ${FEDORA} ]]; then
     sudo -H dnf update -y
     sudo -H dnf install bzip2 -y
     sudo -H dnf install bzip2-devel -y
@@ -1421,7 +1426,7 @@ EOM
 
   fi
 
-  if [[ ${CENTOS} ]]; then
+  if [[ -n ${CENTOS} ]]; then
     sudo -H yum update -y
     sudo -H yum install curl -y
     sudo -H yum install gcc -y
@@ -1439,7 +1444,7 @@ EOM
     sudo -H yum install zsh -y
   fi
 
-  if [[ ${LINUX} ]]; then
+  if [[ -n ${LINUX} ]]; then
     echo "Installing Hashicorp Terraform Linux with tfenv on Linux"
     if [[ ! -d ${HOME}/.tfenv ]]; then
       git clone --recursive https://github.com/tfutils/tfenv.git ${HOME}/.tfenv
@@ -1476,7 +1481,7 @@ EOM
   fi
 
   mkdir -p ${HOME}/software_downloads/awscli
-  if [[ ${MACOS} ]]; then
+  if [[ -n ${MACOS} ]]; then
     echo "Installing aws-cli on MacOS"
     if [[ ! -f ${HOME}/software_downloads/awscli/AWSCLIV2.pkg ]]; then
       wget -O ${HOME}/software_downloads/awscli/AWSCLIV2.pkg "https://awscli.amazonaws.com/AWSCLIV2.pkg"
@@ -1484,7 +1489,7 @@ EOM
       rm -f ${HOME}/software_downloads/awscli/AWSCLIV2.pkg
     fi
   fi
-  if [[ ${LINUX} ]]; then
+  if [[ -n ${LINUX} ]]; then
     echo "Installing aws-cli on Linux"
     if [[ ! -f ${HOME}/software_downloads/awscli/awscliv2.zip ]]; then
       wget -O ${HOME}/software_downloads/awscli/awscliv2.zip "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
@@ -1509,12 +1514,12 @@ EOM
   fi
 fi
 
-if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
+if [[ -n ${DEVELOPER} ]] || [[ -n ${ANSIBLE} ]]; then
   echo "Installing json2yaml via npm"
   npm install json2yaml
 
   echo "Installing ruby-install on linux"
-  if [[ ${LINUX} ]]; then
+  if [[ -n ${LINUX} ]]; then
     if [[ ! -d ${HOME}/software_downloads/ruby-install-${RUBY_INSTALL_VER} ]]; then
       wget -O ${HOME}/software_downloads/ruby-install-${RUBY_INSTALL_VER}.tar.gz https://github.com/postmodern/ruby-install/archive/v${RUBY_INSTALL_VER}.tar.gz
       tar -xzvf ${HOME}/software_downloads/ruby-install-${RUBY_INSTALL_VER}.tar.gz -C ${HOME}/software_downloads/
@@ -1524,7 +1529,7 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
   fi
 
   echo "Installing chruby on linux"
-  if [[ ${LINUX} ]]; then
+  if [[ -n ${LINUX} ]]; then
     if [[ ! -d ${HOME}/software_downloads/chruby-${CHRUBY_VER} ]]; then
       wget -O ${HOME}/software_downloads/chruby-${CHRUBY_VER}.tar.gz https://github.com/postmodern/chruby/archive/v${CHRUBY_VER}.tar.gz
       tar -xzvf ${HOME}/software_downloads/chruby-${CHRUBY_VER}.tar.gz -C ${HOME}/software_downloads/
@@ -1535,22 +1540,22 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
 
   echo "install ruby ${RUBY_VER}"
   if [[ ! -d ${HOME}/.rubies/ruby-${RUBY_VER}/bin ]]; then
-    if [[ ${MACOS} ]]; then
+    if [[ -n ${MACOS} ]]; then
       ruby-install ${RUBY_VER} -- --with-openssl-dir=$(brew --prefix openssl@3)
     fi
-    if [[ ${LINUX} ]]; then
+    if [[ -n ${LINUX} ]]; then
       ruby-install ${RUBY_VER}
     fi
   fi
 
-  if [[ ${LINUX} ]]; then
+  if [[ -n ${LINUX} ]]; then
     echo "installing github cli on linux"
-    if [[ ${UBUNTU} ]]; then
+    if [[ -n ${UBUNTU} ]]; then
       sudo -H apt-key adv --keyserver keyserver.ubuntu.com --recv-key C99B11DEB97541F0
       sudo -H apt-add-repository https://cli.github.com/packages
       sudo -H apt update
       sudo -H apt install gh
-    elif [[ ${REDHAT} || ${CENTOS} || ${FEDORA} ]]; then
+    elif [[ -n ${REDHAT} ]] || [[ -n ${CENTOS} ]] || [[ -n ${FEDORA} ]]; then
       sudo -H dnf config-manager --add-repo http://cli.github.com/packages/rpm/gh-cli.repo
       sudo dnf install gh
     fi
@@ -1573,7 +1578,7 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
   gem install terraspace
 
   echo "ANSIBLE setup"
-  if [[ ${LINUX} ]]; then
+  if [[ -n ${LINUX} ]]; then
     pyenv update
   fi
   if ! [[ -d ${HOME}/.pyenv/versions/${PYTHON_VER} ]]; then
@@ -1645,39 +1650,39 @@ if [[ ${DEVELOPER} || ${ANSIBLE} ]]; then
 fi
 
 # update is run more often to keep the device up to date with patches
-if [[ ${UPDATE} ]]; then
-  if [[ ${MACOS} || ${LINUX} ]]; then
+if [[ -n ${UPDATE} ]]; then
+  if [[ -n ${MACOS} ]] || [[ -n ${LINUX} ]]; then
     brew_update
     echo "Updating app store apps softwareupdate"
     sudo -H softwareupdate --install --all --verbose
   fi
-  if [[ ${UBUNTU} ]]; then
+  if [[ -n ${UBUNTU} ]]; then
     sudo -H apt update
     sudo -H apt dist-upgrade -y
     sudo -H apt autoremove -y
     sudo snap refresh
   fi
-  if [[ ${REDHAT} || ${FEDORA} ]]; then
+  if [[ -n ${REDHAT} ]] || [[ -n ${FEDORA} ]]; then
     sudo -H dnf update -y
   fi
-  if [[ ${CENTOS} ]]; then
+  if [[ -n ${CENTOS} ]]; then
     sudo -H yum update -y
   fi
-  if [[ ${MACOS} ]]; then
+  if [[ -n ${MACOS} ]]; then
     echo "Updating mas packages"
     mas upgrade
   fi
   echo "Updating pip3 packages"
-  if [[ ${STUDIO} ]] || [[ ${LAPTOP} ]] || [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]] || [[ ${RATNA} ]]; then
+  if [[ -n ${STUDIO} ]] || [[ -n ${LAPTOP} ]] || [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]] || [[ -n ${RATNA} ]]; then
     python3 -m pip install --upgrade pip
     python3 -m pip list --outdated --format=columns | awk '{print $1;}' | awk 'NR>2' | xargs -n1 python3 -m pip install -U
     python3 -m pip check
-  elif [[ ${BRUCEWORK} ]]; then
+  elif [[ -n ${BRUCEWORK} ]]; then
     python3 -m pip install --upgrade pip --cert ~/nscacerts.pem
     python3 -m pip list --outdated --format=columns --cert ~/nscacerts.pem | awk '{print $1;}' | awk 'NR>2' | xargs -n1 python3 -m pip install -U --cert ~/nscacerts.pem
     python3 -m pip check --cert ~/nscacerts.pem
   fi
-  if [[ ${MACOS} ]]; then
+  if [[ -n ${MACOS} ]]; then
     echo "Updating MACOS awscli"
     cd ${HOME}/software_downloads/awscli || exit
     curl "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "AWSCLIV2.pkg"
@@ -1685,7 +1690,7 @@ if [[ ${UPDATE} ]]; then
     rm AWSCLIV2.pkg
     cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
   fi
-  if [[ ${LINUX} ]]; then
+  if [[ -n ${LINUX} ]]; then
     echo "Updating Linux awscli"
     cd ${HOME}/software_downloads/awscli || exit
     curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
