@@ -41,8 +41,8 @@ if [[ ${LINUX} ]]; then
     path+=("${HOME}/.local/bin")
   fi
   if [[ ${UBUNTU} ]]; then
-    if [[ -d /usr/local/go ]]; then
-      path+=("/usr/local/go")
+    if [[ -d /usr/local/go/bin ]]; then
+      path+=("/usr/local/go/bin")
     fi
     if [[ -d /snap/bin ]]; then
       path+=('/snap/bin')
