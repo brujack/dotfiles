@@ -18,8 +18,8 @@ GIT_URL="https://mirrors.edge.kernel.org/pub/software/scm/git"
 ZSH_VER="5.9"
 GO_VER="1.21"
 # following go vars are for linux
-GO_DOWNLOAD_FILENAME="go-1.21.0-linux-x64.tar.gz"
-GO_DOWNLOAD_URL="https://github.com/actions/go-versions/releases/download/1.21.0-5808081891/${GO_DOWNLOAD_FILENAME}"
+GO_DOWNLOAD_FILENAME="go1.21.linux-amd64.tar.gz"
+GO_DOWNLOAD_URL="https://dl.google.com/go/${GO_DOWNLOAD_FILENAME}"
 DOCKER_COMPOSE_VER="v2.20.2"
 DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VER}/docker-compose-$(uname -s)-$(uname -m)"
 SHELLCHECK_VER="0.7.0"
@@ -627,6 +627,8 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
   if [[ ! -f ${HOME}/.zsh.d/_cht ]]; then
     curl https://cheat.sh/:zsh > ${HOME}/.zsh.d/_cht
   fi
+  printf "Creating %s/go-work\\n" "${HOME}"
+  mkdir -p ${HOME}/go-work
 fi
 
 # full setup and installation of all packages for a development environment
@@ -1054,15 +1056,13 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
           wget -O ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} ${GO_DOWNLOAD_URL}
           mkdir -p ${HOME}/software_downloads/go
           tar xvf ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} -C ${HOME}/software_downloads/go/
-          if [[ -f ${HOME}/software_downloads/go/bin/go ]]; then
-            sudo mv ${HOME}/software_downloads/go/bin/go /usr/local/bin/go
-            sudo chmod 755 /usr/local/bin/go
-            sudo chown root:root /usr/local/bin/go
+          if [[ -d /usr/local/go ]]; then
+            sudo rm -rf /usr/local/go
           fi
-          if [[ -f ${HOME}/software_downloads/go/bin/gofmt ]]; then
-            sudo mv ${HOME}/software_downloads/go/bin/gofmt /usr/local/bin/gofmt
-            sudo chmod 755 /usr/local/bin/gofmt
-            sudo chown root:root /usr/local/bin/gofmt
+          if [[ -d ${HOME}/software_downloads/go ]]; then
+            sudo mv ${HOME}/software_downloads/go /usr/local/go
+            sudo chmod 755 /usr/local/go
+            sudo chown -R root:root /usr/local/go
           fi
           if [[ -d ${HOME}/software_downloads/go ]]; then
             rm -rf ${HOME}/software_downloads/go

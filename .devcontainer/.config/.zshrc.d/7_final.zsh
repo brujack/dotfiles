@@ -32,6 +32,15 @@ if [[ ${MACOS} ]]; then
   ICON=""
 fi
 
+# for go
+
+if [[ -d /usr/local/go ]]; then
+  export GOROOT=/usr/local/go
+fi
+if [[ -d ${HOME}/go-work ]]; then
+  export GOPATH="${HOME}/go-work"
+fi
+
 # for zoxide
 if quiet_which zoxide
 then
