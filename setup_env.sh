@@ -17,6 +17,9 @@ GIT_VER="2.41.0"
 GIT_URL="https://mirrors.edge.kernel.org/pub/software/scm/git"
 ZSH_VER="5.9"
 GO_VER="1.21"
+# following go vars are for linux
+GO_DOWNLOAD_FILENAME="go-1.21.0-linux-x64.tar.gz"
+GO_DOWNLOAD_URL="https://github.com/actions/go-versions/releases/download/1.21.0-5808081891/${GO_DOWNLOAD_FILENAME}"
 DOCKER_COMPOSE_VER="v2.20.2"
 DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VER}/docker-compose-$(uname -s)-$(uname -m)"
 SHELLCHECK_VER="0.7.0"
@@ -997,7 +1000,6 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     fi
 
     printf "Installing Go Ubuntu\\n"
-    sudo add-apt-repository ppa:longsleep/golang-backports -y
     sudo -H apt update
     case ${GO_VER} in
       1.16)
@@ -1026,6 +1028,52 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     if [[ -n ${pkgs_to_remove} ]]; then
       sudo -H apt remove ${pkgs_to_remove} -y
     fi
+    case ${GO_VER} in
+      1.16)
+        sudo add-apt-repository ppa:longsleep/golang-backports -y
+        sudo -H apt install "golang-${GO_VER}-go" -y
+        ;;
+      1.17)
+        sudo add-apt-repository ppa:longsleep/golang-backports -y
+        sudo -H apt install "golang-${GO_VER}-go" -y
+        ;;
+      1.18)
+        sudo add-apt-repository ppa:longsleep/golang-backports -y
+        sudo -H apt install "golang-${GO_VER}-go" -y
+        ;;
+      1.19)
+        sudo add-apt-repository ppa:longsleep/golang-backports -y
+        sudo -H apt install "golang-${GO_VER}-go" -y
+        ;;
+      1.20)
+        sudo add-apt-repository ppa:longsleep/golang-backports -y
+        sudo -H apt install "golang-${GO_VER}-go" -y
+        ;;
+      1.21)
+        if [[ ! -f ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} ]]; then
+          wget -O ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} ${GO_DOWNLOAD_URL}
+          mkdir -p ${HOME}/software_downloads/go
+          tar xvf ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} -C ${HOME}/software_downloads/go/
+          if [[ -f ${HOME}/software_downloads/go/bin/go ]]; then
+            sudo mv ${HOME}/software_downloads/go/bin/go /usr/local/bin/go
+            sudo chmod 755 /usr/local/bin/go
+            sudo chown root:root /usr/local/bin/go
+          fi
+          if [[ -f ${HOME}/software_downloads/go/bin/gofmt ]]; then
+            sudo mv ${HOME}/software_downloads/go/bin/gofmt /usr/local/bin/gofmt
+            sudo chmod 755 /usr/local/bin/gofmt
+            sudo chown root:root /usr/local/bin/gofmt
+          fi
+          if [[ -d ${HOME}/software_downloads/go ]]; then
+            rm -rf ${HOME}/software_downloads/go
+          fi
+        fi
+        ;;
+      *)
+        printf "Error: Unsupported Go version %s\\n" "${GO_VER}"
+        exit 1
+        ;;
+    esac
     sudo -H apt install "golang-${GO_VER}-go" -y
 
     if [[ -n ${WORKSTATION} ]]; then
