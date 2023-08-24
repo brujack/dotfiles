@@ -10,6 +10,7 @@ VAULT_VER="1.14.1"
 NOMAD_VER="1.6.1"
 PACKER_VER="1.9.2"
 VAGRANT_VER="2.3.7"
+VIRTUALBOX_VER="7.0"
 HASHICORP_URL="https://releases.hashicorp.com"
 WORK_TERRAFORM_VER="1.0.2"
 TERRAFORM_VER="1.3.5"
@@ -1095,13 +1096,13 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       sudo -H apt install docker-compose-plugin -y
     fi
 
-    if [[ -z ${CRUNCHER} ]] || [[ -z ${WORKSTATION} ]]; then
+    if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
       printf "Installing Virtualbox\\n"
       wget -q http://www.virtualbox.org/download/oracle_vbox_2016.asc -O- | sudo apt-key add -
       wget -q http://www.virtualbox.org/download/oracle_vbox.asc -O- | sudo apt-key add -
       sudo add-apt-repository "deb http://download.virtualbox.org/virtualbox/debian $(lsb_release -cs) contrib"
       sudo -H apt update
-      sudo -H apt install virtualbox-6.1 -y
+      sudo -H apt install ${VIRTUALBOX_VER} -y
     fi
 
     if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
