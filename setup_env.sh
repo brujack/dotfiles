@@ -1078,6 +1078,9 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
       printf "Installing docker\\n"
       sudo mkdir -p /etc/apt/keyrings
+      if [[ -f /etc/apt/keyrings/docker.gpg ]]; then
+        sudo rm -f /etc/apt/keyrings/docker.gpg
+      fi
       curl -fsSL http://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
       sudo chmod a+r /etc/apt/keyrings/docker.gpg
       echo \
