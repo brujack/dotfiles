@@ -1075,17 +1075,21 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     esac
     sudo -H apt install "golang-${GO_VER}-go" -y
 
-    if [[ -n ${WORKSTATION} ]]; then
+    if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
       printf "Installing docker\\n"
-      curl -fsSL http://download.docker.com/linux/ubuntu/gpg | sudo -H apt-key add -
-      sudo -H add-apt-repository \
-      "deb [arch=amd64] http://download.docker.com/linux/ubuntu \
-      $(lsb_release -cs) \
-      stable"
+      sudo mkdir -p /etc/apt/keyrings
+      curl -fsSL http://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+      sudo chmod a+r /etc/apt/keyrings/docker.gpg
+      echo \
+      "deb [arch='$(dpkg --print-architecture)' signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+      '$(. /etc/os-release && echo "$VERSION_CODENAME")' stable" | \
+      sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
       sudo -H apt update
       sudo -H apt install docker-ce -y
       sudo -H apt install docker-ce-cli -y
       sudo -H apt install containerd.io -y
+      sudo -H apt install docker-buildx-plugin -y
+      sudo -H apt install docker-compose-plugin -y
     fi
 
     if [[ -z ${CRUNCHER} ]] || [[ -z ${WORKSTATION} ]]; then
