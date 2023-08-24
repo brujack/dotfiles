@@ -1074,7 +1074,6 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
         exit 1
         ;;
     esac
-    sudo -H apt install "golang-${GO_VER}-go" -y
 
     if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
       printf "Installing docker\\n"
