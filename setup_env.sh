@@ -1093,6 +1093,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       sudo -H apt install containerd.io -y
       sudo -H apt install docker-buildx-plugin -y
       sudo -H apt install docker-compose-plugin -y
+      sudo usermod -a -G docker bruce
     fi
 
     if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
