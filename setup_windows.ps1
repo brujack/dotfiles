@@ -72,6 +72,7 @@ if ($IsWindows) {
       "simplenote",
       "slack",
       "sourcetree",
+      "spotify",
       "starship",
       "steam-client",
       "teamviewer",
