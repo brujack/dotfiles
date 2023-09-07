@@ -18,8 +18,8 @@ GIT_VER="2.42.0"
 GIT_URL="https://mirrors.edge.kernel.org/pub/software/scm/git"
 ZSH_VER="5.9"
 GO_VER="1.21"
-# following go vars are for linux
-GO_DOWNLOAD_FILENAME="go1.21.0.linux-amd64.tar.gz"
+# following go vars are for linux where go version is >= 1.21
+GO_DOWNLOAD_FILENAME="go1.21.1.linux-amd64.tar.gz"
 GO_DOWNLOAD_URL="https://go.dev/dl/${GO_DOWNLOAD_FILENAME}"
 DOCKER_COMPOSE_VER="v2.20.2"
 DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VER}/docker-compose-$(uname -s)-$(uname -m)"
