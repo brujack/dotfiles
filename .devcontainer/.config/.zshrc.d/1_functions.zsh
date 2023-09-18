@@ -17,6 +17,10 @@ function Make() {
 }
 
 function quiet_which() {
+  if [ $# -eq 0 ]; then
+    echo "No arguments supplied. Please provide the command you are looking for"
+    return 1
+  fi
   which "$1" &>/dev/null
 }
 
@@ -29,22 +33,42 @@ function rssh () {
 }
 
 function tssh() {
+  if [ $# -eq 0 ]; then
+    echo "No arguments supplied. Please provide the hostname/ip to ssh to"
+    return 1
+  fi
   tsh ssh bruce@$1
 }
 
 function sh() {
+  if [ $# -eq 0 ]; then
+    echo "No arguments supplied. Please provide the hostname/ip to ssh to"
+    return 1
+  fi
   ssh bruce@$1
 }
 
 function sshb() {
+  if [ $# -eq 0 ]; then
+    echo "No arguments supplied. Please provide the hostname/ip to ssh to"
+    return 1
+  fi
   ssh build@$1
 }
 
 function sshu() {
-  ssh build@$1
+  if [ $# -eq 0 ]; then
+    echo "No arguments supplied. Please provide the hostname/ip to ssh to"
+    return 1
+  fi
+  ssh ubuntu@$1
 }
 
 search_pkg() {
+  if [ $# -eq 0 ]; then
+    echo "No arguments supplied. Please provide the package to search for"
+    return 1
+  fi
   dpkg -l | grep "$1"
 }
 
