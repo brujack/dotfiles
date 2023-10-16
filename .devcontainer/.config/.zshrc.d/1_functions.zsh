@@ -135,3 +135,20 @@ function awsuse() {
     export AWS_PROFILE=${profile}
   fi
 }
+
+function mkill() {
+  if [ $# -eq 0 ]; then
+    echo "Please provide the name of the process to kill as an argument."
+    exit 1
+  fi
+
+  process_name="$1"
+  process_name_lowercase=$(echo "$process_name" | tr '[:upper:]' '[:lower:]')
+
+  if pgrep -ix "$process_name_lowercase" > /dev/null; then
+    pkill -ix "$process_name_lowercase"
+    echo "Process '$process_name' has been killed."
+  else
+    echo "Process '$process_name' is not running."
+  fi
+}
