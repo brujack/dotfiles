@@ -1493,7 +1493,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
 
     if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
       printf "Installing .net7 sdk\\n"
-      sudo -H apt install dotnet-sdk-7.0 -y
+      sudo -H apt install dotnet-sdk-8.0 -y
     fi
 
     python3 -m pip install glances
