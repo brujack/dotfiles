@@ -38,6 +38,7 @@ if ($IsWindows) {
       "discord",
       "docker-desktop",
       "docker-compose",
+      "dotnet",
       "dropbox",
       "evernote",
       "firefox",
