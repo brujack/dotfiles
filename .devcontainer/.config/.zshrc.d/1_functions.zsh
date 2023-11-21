@@ -48,14 +48,6 @@ function sh() {
   ssh bruce@$1
 }
 
-function sshb() {
-  if [ $# -eq 0 ]; then
-    echo "No arguments supplied. Please provide the hostname/ip to ssh to"
-    return 1
-  fi
-  ssh build@$1
-}
-
 function sshu() {
   if [ $# -eq 0 ]; then
     echo "No arguments supplied. Please provide the hostname/ip to ssh to"
