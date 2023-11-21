@@ -3,8 +3,6 @@ alias prox-0='tsh ssh root@prox-0'
 alias prox-1='tsh ssh root@prox-1'
 alias prox-2='tsh ssh root@prox-2'
 
-# aliases for work servers
-
 # command aliases
 alias au='sudo apt-get update'
 alias ad='sudo apt-get dist-upgrade -y'
