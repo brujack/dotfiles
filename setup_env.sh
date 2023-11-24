@@ -1969,7 +1969,8 @@ if [[ -n ${UPDATE} ]]; then
   fi
   if [[ -n ${UBUNTU} ]]; then
     sudo -H apt update
-    sudo -H apt dist-upgrade -y
+    check_and_install_nala
+    sudo -H nala full-upgrade -y
     sudo -H apt autoremove -y
     sudo snap refresh
     printf "Updated snap packages\\n"
