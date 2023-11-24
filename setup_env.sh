@@ -985,11 +985,6 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/Better\ Rename\ 9.app" ]]; then
       mas install 414209656
     fi
-    if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ ${BRUCEWORK} ]]; then
-      if [[ ! -d "/Applications/Bitwarden.app" ]]; then
-        mas install 1352778147
-      fi
-    fi
     if [[ ! -d "/Applications/Brother\ iPrint\&Scan.app" ]]; then
       mas install 1193539993
     fi
