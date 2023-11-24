@@ -40,8 +40,8 @@ windows:
           cwd: /Users/bruce/git-repos/personal/terraform_ansible/ansible
           commands:
             - exec: ll
-      - title: work
+      - title: ansible
         layout:
-          cwd: /Users/bruce/git-repos/fortis/cen-andromeda-terraform/ansible
+          cwd: /Users/bruce/git-repos/personal/terraform_ansible/ansible
           commands:
             - exec: ll

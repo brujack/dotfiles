@@ -6,7 +6,7 @@ if [[ ${MACOS} ]]; then
   if [[ ${RATNA} ]]; then
     CHRUBY_LOC="/usr/local/opt/chruby/share"
   fi
-  if [[ ${LAPTOP} ]] || [[ ${STUDIO} ]] || [[ ${BRUCEWORK} ]]; then
+  if [[ ${LAPTOP} ]] || [[ ${STUDIO} ]]; then
     CHRUBY_LOC="/opt/homebrew/opt/chruby/share/"
   fi
 fi
@@ -15,7 +15,7 @@ if [[ ${LINUX} ]]; then
 fi
 
 # for fzf
-if [[ ${LAPTOP} ]] || [[ ${STUDIO} ]] || [[ ${BRUCEWORK} ]]; then
+if [[ ${LAPTOP} ]] || [[ ${STUDIO} ]]; then
   export FZF_BASE=/opt/homebrew/bin/fzf
 fi
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
@@ -67,11 +67,6 @@ if [[ -f ${HOME}/.google_creds ]]; then
   source ${HOME}/.google_creds
 fi
 
-# ansible vault pw
-if [[ -f ${HOME}/.fortis_vault_pass.txt ]]; then
-  export ANSIBLE_VAULT_PASSWORD_FILE=${HOME}/.fortis_vault_pass.txt
-fi
-
 # setup kubectl autocompletion to save typing
 if [[ -f /usr/local/bin/kubectl ]]; then
   source <(kubectl completion zsh)
@@ -101,7 +96,7 @@ if [[ ${MACOS} ]]; then
     if [[ -f /usr/local/Caskroom/google-cloud-sdk/latest/google-cloud-sdk/completion.zsh.inc ]]; then
       source '/usr/local/Caskroom/google-cloud-sdk/latest/google-cloud-sdk/completion.zsh.inc'
     fi
-  elif [[ ${LAPTOP} ]] || [[ ${STUDIO} ]] || [[ ${BRUCEWORK} ]]; then
+  elif [[ ${LAPTOP} ]] || [[ ${STUDIO} ]]; then
     if [[ -f /opt/homebrew/Caskroom/google-cloud-sdk/latest/google-cloud-sdk/path.zsh.inc ]]; then
       source '/opt/homebrew/Caskroom/google-cloud-sdk/latest/google-cloud-sdk/path.zsh.inc'
     fi
@@ -189,12 +184,6 @@ if [[ ${MACOS} ]]; then
     eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any github`
     eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any gitlab`
     # eval `/opt/homebrew/bin/keychain --eval --agents gpg B6DCFA4E5AFEA3AF35CE0A189A997C02283A9062 --inherit any`
-  elif [[ ${BRUCEWORK} ]]; then
-    eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any home`
-    eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any github`
-    eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any gitlab`
-    # eval `/opt/homebrew/bin/keychain --eval --agents gpg B6DCFA4E5AFEA3AF35CE0A189A997C02283A9062 --inherit any`
-  fi
 elif [[ ${LINUX} ]]; then
   if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]]; then
     eval `/usr/bin/keychain --eval --agents ssh --inherit any id_rsa`

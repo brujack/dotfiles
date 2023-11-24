@@ -345,7 +345,6 @@ fi
 [[ $(uname -r) =~ microsoft ]] && readonly WINDOWS=1
 [[ $(hostname -s) = "laptop" ]] && readonly LAPTOP=1
 [[ $(hostname -s) = "studio" ]] && readonly STUDIO=1
-[[ $(hostname -s) = "fg-bjackson" ]] && readonly BRUCEWORK=1
 [[ $(hostname -s) = "workstation" ]] && readonly WORKSTATION=1
 [[ $(hostname -s) = "cruncher" ]] && readonly CRUNCHER=1
 [[ $(hostname -s) = "virtualmachine1c4f85d6" ]] && readonly WORKSTATION=1
@@ -354,7 +353,7 @@ fi
 if [[ -n ${MACOS} ]]; then
   if [[ -n ${RATNA} ]]; then
     CHRUBY_LOC="/usr/local/opt/chruby/share"
-  elif [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ ${BRUCEWORK} ]]; then
+  elif [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
     CHRUBY_LOC="/opt/homebrew/opt/chruby/share"
   fi
 elif [[ -n ${LINUX} ]]; then
@@ -501,13 +500,6 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
   if [[ -n ${MACOS} ]]; then
     rm -f ${HOME}/.gitconfig
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_mac ${HOME}/.gitconfig
-    if [[ -d ${HOME}/git-repos/fortis ]]; then
-      rm -f ${HOME}/git-repos/fortis/.gitconfig
-      ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_mac_fortis ${HOME}/git-repos/fortis/.gitconfig
-    fi
-    if [[ -L ${HOME}/git-repos/fortis/.gitconfig ]]; then
-      printf "fortis/.gitconfig is linked\\n"
-    fi
     if [[ -d ${HOME}/git-repos/gitlab ]]; then
       rm -f ${HOME}/git-repos/gitlab/.gitconfig
       ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_mac_gitlab ${HOME}/git-repos/gitlab/.gitconfig
@@ -520,13 +512,6 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     rm -f ${HOME}/.gitconfig
     ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_linux ${HOME}/.gitconfig
     if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
-      if [[ -d ${HOME}/git-repos/fortis ]]; then
-        rm -f ${HOME}/git-repos/fortis/.gitconfig
-        ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_linux_fortis ${HOME}/git-repos/fortis/.gitconfig
-      fi
-      if [[ -L ${HOME}/git-repos/fortis/.gitconfig ]]; then
-        printf "fortis/.gitconfig is linked Linux\\n"
-      fi
       if [[ -d ${HOME}/git-repos/gitlab ]]; then
         rm -f ${HOME}/git-repos/gitlab/.gitconfig
         ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_linux_gitlab ${HOME}/git-repos/gitlab/.gitconfig
@@ -822,7 +807,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       brew tap teamookla/speedtest
       brew install speedtest
       brew install redpanda-data/tap/redpanda
-      if [[ -n ${STUDIO} ]] || [[ -n ${LAPTOP} ]] || [[ ${BRUCEWORK} ]]; then
+      if [[ -n ${STUDIO} ]] || [[ -n ${LAPTOP} ]]; then
         brew install datawire/blackbird/telepresence-arm64
         brew install cloudflared
       fi
@@ -917,7 +902,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       if [[ ! -d "/Applications/Malwarebytes.app" ]]; then
         brew install --cask malwarebytes
       fi
-      if [[ -n ${RATNA} ]] || [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ ${BRUCEWORK} ]]; then
+      if [[ -n ${RATNA} ]] || [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
         if [[ ! -d "/Applications/Microsoft\ Word.app" ]]; then
           brew install --cask microsoft-office
         fi
@@ -1040,7 +1025,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       mas install 604825918
     fi
 
-    if [[ -n ${RATNA} ]] || [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ ${BRUCEWORK} ]]; then
+    if [[ -n ${RATNA} ]] || [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
       printf "Installing extra apps via mas\\n"
       if [[ ! -d "/Applications/Keynote.app" ]]; then
         mas install 409183694
@@ -1908,23 +1893,6 @@ if [[ -n ${DEVELOPER} ]] || [[ -n ${ANSIBLE} ]]; then
       pyenv activate ansible
       printf "Installing Ansible dependencies...\\n"
       python3 -m pip install ansible ansible-lint certbot certbot-dns-cloudflare boto3 docker jmespath netaddr pylint psutil bpytop HttpPy j2cli wheel shell-gpt
-    elif [[ -n ${BRUCEWORK} ]]; then
-      export PYENV_ROOT="$HOME/.pyenv"
-      export PYENV_VIRTUALENV_DISABLE_PROMPT=1
-      if quiet_which pyenv; then
-        export PATH="$PYENV_ROOT/bin:$PATH"
-        eval "$(pyenv init -)"
-      fi
-      pyenv virtualenv-delete -f ansible
-      pyenv virtualenv "${PYTHON_VER}" ansible
-      pyenv activate ansible
-      printf "Installing Ansible dependencies...\\n"
-      # for when netskope is blocking pip
-      # python3 -m pip --cert ~/nscacerts.pem install ansible ansible-lint boto3 docker jmespath netaddr pylint psutil bpytop HttpPy j2cli wheel
-      python3 -m pip install ansible ansible-lint boto3 docker jmespath netaddr pylint psutil bpytop HttpPy j2cli wheel shell-gpt
-      if [[ -x $(command -v ansible) ]]; then
-        printf "ansible is installed\\n"
-      fi
     fi
   fi
 
@@ -1999,10 +1967,6 @@ if [[ -n ${UPDATE} ]]; then
     python3 -m pip list --outdated --format=columns | awk '{print $1;}' | awk 'NR>2' | xargs -n1 python3 -m pip install -U
     python3 -m pip check
     printf "Updated pip packages\\n"
-  elif [[ -n ${BRUCEWORK} ]]; then
-    python3 -m pip install --upgrade pip --cert ~/nscacerts.pem
-    python3 -m pip list --outdated --format=columns --cert ~/nscacerts.pem | awk '{print $1;}' | awk 'NR>2' | xargs -n1 python3 -m pip install -U --cert ~/nscacerts.pem
-    python3 -m pip check --cert ~/nscacerts.pem
   fi
   if [[ -n ${MACOS} ]]; then
     printf "Updating MACOS awscli\\n"

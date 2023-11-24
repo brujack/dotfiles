@@ -12,7 +12,6 @@ fi
 
 [[ $(uname -r) =~ microsoft ]] && export WINDOWS=1
 [[ $(hostname -s) = "ratna" ]] && export RATNA=1
-[[ $(hostname -s) = "fg-bjackson" ]] && export BRUCEWORK=1
 [[ $(hostname -s) = "laptop" ]] && export LAPTOP=1
 [[ $(hostname -s) = "laptop-1" ]] && export LAPTOP=1
 [[ $(hostname -s) = "studio" ]] && export STUDIO=1
