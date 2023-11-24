@@ -1980,9 +1980,7 @@ if [[ -n ${UPDATE} ]]; then
       sudo -H apt autoremove -y
     elif [[ ${JAMMY} ]]; then
       check_and_install_nala
-      sudo -H nala upgrade -y
-      # apt dist-upgrade is here until nala is updated to include a full-upgrade option
-      sudo -H apt dist-upgrade -y
+      sudo -H nala full-upgrade -y
       sudo -H nala autoremove -y
     fi
     sudo snap refresh
