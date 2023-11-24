@@ -1561,7 +1561,12 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       sudo -H apt install libssl1.1 -y
     fi
 
-    sudo -H apt autoremove -y
+    if [[ ${FOCAL} ]]; then
+      sudo -H apt autoremove -y
+    elif [[ ${JAMMY} ]]; then
+      check_and_install_nala
+      sudo -H nala autoremove -y
+    fi
   fi
 
   if [[ -n ${REDHAT} ]] || [[ -n ${FEDORA} ]]; then
@@ -1971,7 +1976,12 @@ if [[ -n ${UPDATE} ]]; then
     sudo -H apt update
     check_and_install_nala
     sudo -H nala full-upgrade -y
-    sudo -H apt autoremove -y
+    if [[ ${FOCAL} ]]; then
+      sudo -H apt autoremove -y
+    elif [[ ${JAMMY} ]]; then
+      check_and_install_nala
+      sudo -H nala autoremove -y
+    fi
     sudo snap refresh
     printf "Updated snap packages\\n"
   fi
