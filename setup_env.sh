@@ -272,8 +272,10 @@ check_and_install_nala() {
     if [[ $(awk -F= '/^NAME/{print $2}' /etc/os-release | tr -d '"') = "Ubuntu" ]]; then
       if ! [ -x "$(command -v nala)" ]; then
         printf "Installing nala via apt\\n"
-        wget -O - https://gitlab.com/volian/volian-archive/uploads/b20bd8237a9b20f5a82f461ed0704ad4/volian-archive-keyring_0.1.0_all.deb | sudo dpkg --install -
-        wget -O - https://gitlab.com/volian/volian-archive/uploads/d6b3a118de5384a0be2462905f7e4301/volian-archive-nala_0.1.0_all.deb | sudo dpkg --install -
+        wget -O ${HOME}/software_downloads/volian-archive-keyring_0.1.0_all.deb https://gitlab.com/volian/volian-archive/uploads/b20bd8237a9b20f5a82f461ed0704ad4/volian-archive-keyring_0.1.0_all.deb
+        sudo -H dpkg --install ${HOME}/software_downloads/volian-archive-keyring_0.1.0_all.deb
+        wget -O ${HOME}/software_downloads/volian-archive-nala_0.1.0_all.deb https://gitlab.com/volian/volian-archive/uploads/d6b3a118de5384a0be2462905f7e4301/volian-archive-nala_0.1.0_all.deb
+        sudo -H dpkg --install ${HOME}/software_downloads/volian-archive-nala_0.1.0_all.deb
         sudo -H apt update
         sudo -H apt install nala -y
       fi
@@ -1974,12 +1976,13 @@ if [[ -n ${UPDATE} ]]; then
   fi
   if [[ -n ${UBUNTU} ]]; then
     sudo -H apt update
-    check_and_install_nala
-    sudo -H nala full-upgrade -y
     if [[ ${FOCAL} ]]; then
       sudo -H apt autoremove -y
     elif [[ ${JAMMY} ]]; then
       check_and_install_nala
+      sudo -H nala upgrade -y
+      # apt dist-upgrade is here until nala is updated to include a full-upgrade option
+      sudo -H apt dist-upgrade -y
       sudo -H nala autoremove -y
     fi
     sudo snap refresh
