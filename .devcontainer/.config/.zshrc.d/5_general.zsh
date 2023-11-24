@@ -67,6 +67,11 @@ if [[ -f ${HOME}/.google_creds ]]; then
   source ${HOME}/.google_creds
 fi
 
+# ansible vault password file
+if [[ -f ${HOME}/.ansible_vault_pass.txt ]]; then
+  export ANSIBLE_VAULT_PASSWORD_FILE=${HOME}/.ansible_vault_pass.txt
+fi
+
 # setup kubectl autocompletion to save typing
 if [[ -f /usr/local/bin/kubectl ]]; then
   source <(kubectl completion zsh)
