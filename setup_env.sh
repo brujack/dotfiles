@@ -252,8 +252,7 @@ install_zsh() {
       printf "Installing zsh via apt\\n"
       sudo -H apt update
       sudo -H apt dist-upgrade -y
-      sudo -H apt install zsh -y
-      sudo -H apt install zsh-doc -y
+      sudo -H apt install zsh zsh-doc -y
     elif [[ $(awk -F= '/^NAME/{print $2}' /etc/os-release | tr -d '"') == "CentOS Linux" ]]; then
       printf "Installing zsh via yum\\n"
       sudo -H yum update -y
@@ -265,6 +264,21 @@ install_zsh() {
     fi
   fi
   printf "Installed zsh\\n"
+}
+
+check_and_install_nala() {
+  printf "Installing nala\\n"
+  if [[ "$(uname -s)" = "Linux" ]]; then
+    if [[ $(awk -F= '/^NAME/{print $2}' /etc/os-release | tr -d '"') = "Ubuntu" ]]; then
+      if ! [ -x "$(command -v nala)" ]; then
+        printf "Installing nala via apt\\n"
+        wget -O - https://gitlab.com/volian/volian-archive/uploads/b20bd8237a9b20f5a82f461ed0704ad4/volian-archive-keyring_0.1.0_all.deb | sudo dpkg --install -
+        wget -O - https://gitlab.com/volian/volian-archive/uploads/d6b3a118de5384a0be2462905f7e4301/volian-archive-nala_0.1.0_all.deb | sudo dpkg --install -
+        sudo -H apt update
+        sudo -H apt install nala -y
+      fi
+    fi
+  fi
 }
 
 usage() {
@@ -1069,22 +1083,23 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
   if [[ -n ${UBUNTU} ]]; then
     sudo -H apt update
     if [[ ${FOCAL} ]]; then
+      printf "Installing hwe, common, and 20.04 packages\\n"
       sudo -H apt install --install-recommends linux-generic-hwe-20.04 -y
-    elif [[ ${JAMMY} ]]; then
-      sudo -H apt install --install-recommends linux-generic-hwe-22.04 -y
-    fi
-    xargs -a ./ubuntu_common_packages.txt sudo apt install -y
-    if [[ ${FOCAL} ]]; then
+      xargs -a ./ubuntu_common_packages.txt sudo apt install -y
       xargs -a ./ubuntu_2004_packages.txt sudo apt install -y
     elif [[ ${JAMMY} ]]; then
-      xargs -a ./ubuntu_2204_packages.txt sudo apt install -y
+      printf "Installing hwe, common, and 22.04 packages\\n"
+      sudo -H apt install --install-recommends linux-generic-hwe-22.04 -y
+      check_and_install_nala
+      xargs -a ./ubuntu_common_packages.txt sudo nala install -y
+      xargs -a ./ubuntu_2204_packages.txt sudo nala install -y
     fi
 
     if [[ -n ${WORKSTATION} ]]; then
-      # apt package installation
+      printf "Installing workstation packages\\n"
       xargs -a ./ubuntu_workstation_packages.txt sudo apt install -y
 
-      # snap package installation
+      printf "Installing workstation snap packages\\n"
       xargs -a ./ubuntu_workstation_snap_packages.txt sudo snap install
 
     fi
