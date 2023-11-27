@@ -47,12 +47,13 @@ gpgkey=http://packages.cloud.google.com/yum/doc/yum-key.gpg http://packages.clou
 "
 
 # locations of directories
+BREWFILE_LOC="${HOME}/brew"
+DOTFILES="dotfiles"
 GITREPOS="${HOME}/git-repos"
 PERSONAL_GITREPOS="${GITREPOS}/personal"
-DOTFILES="dotfiles"
-BREWFILE_LOC="${HOME}/brew"
-HOSTNAME=$(hostname -s)
 WSL_HOME="/mnt/c/Users/${USER}"
+
+HOSTNAME=$(hostname -s)
 
 # setup some functions
 quiet_which() {
