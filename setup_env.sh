@@ -1043,8 +1043,8 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       if [[ ! -d "/Applications/Pages.app" ]]; then
         mas install 409201541
       fi
-      if [[ ! -d "/Applications/Pixelmator.app" ]]; then
-        mas install 407963104
+      if [[ ! -d "/Applications/Pixelmator\ Pro.app" ]]; then
+        mas install 1289583905
       fi
       if [[ ! -d "/Applications/Read CHM.app" ]]; then
         mas install 594432954
