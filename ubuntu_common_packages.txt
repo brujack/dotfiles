@@ -40,7 +40,6 @@ mc
 mtr-tiny
 ncdu
 needrestart
-neovim
 network-manager
 net-tools
 nload

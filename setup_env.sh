@@ -1274,6 +1274,16 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     fi
 
     if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
+      printf "Installing neovim\\n"
+      sudo apt-add-repository ppa:neovim-ppa/stable -y
+      sudo -H apt update
+      sudo -H apt install neovim -y
+      if [[ -x $(command -v nvim) ]]; then
+        printf "neovim is installed\\n"
+      fi
+    fi
+
+    if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
       if [[ ! -f ${HOME}/software_downloads/kind_${KIND_VER} ]]; then
         printf "Installing kind\\n"
         wget -O ${HOME}/software_downloads/kind_${KIND_VER} ${KIND_URL}
