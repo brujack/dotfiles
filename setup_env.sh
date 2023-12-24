@@ -112,37 +112,33 @@ install_rosetta() {
 
 
 install_homebrew() {
-  if [[ "$(uname -s)" != "Darwin" ]]; then
-    printf "Homebrew is only supported on macOS. Aborting.\\n"
-    return 1
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+
+    printf "Installing Xcode Command Line Tools...\\n"
+    if ! xcode-select --print-path &>/dev/null; then
+      printf "Installing Xcode Command Line Tools...\\n"
+      xcode-select --install
+
+      # Check if the installation was successful
+      if [[ $? -ne 0 ]]; then
+        printf "Failed to install Xcode Command Line Tools. Aborting.\\n"
+        return 1
+      fi
+
+      # Accept Xcode license
+      printf "Accepting Xcode license...\\n"
+      sudo xcodebuild -license accept
+      sudo xcodebuild -runFirstLaunch
+
+      # Check if the license acceptance was successful
+      if [[ $? -ne 0 ]]; then
+        printf "Failed to accept Xcode license. Aborting.\\n"
+        return 1
+      fi
+    fi
   fi
 
   printf "Installing Homebrew...\\n"
-
-  # Check for Xcode Command Line Tools and install if needed
-  if ! xcode-select --print-path &>/dev/null; then
-    printf "Installing Xcode Command Line Tools...\\n"
-    xcode-select --install
-
-    # Check if the installation was successful
-    if [[ $? -ne 0 ]]; then
-      printf "Failed to install Xcode Command Line Tools. Aborting.\\n"
-      return 1
-    fi
-
-    # Accept Xcode license
-    printf "Accepting Xcode license...\\n"
-    sudo xcodebuild -license accept
-    sudo xcodebuild -runFirstLaunch
-
-    # Check if the license acceptance was successful
-    if [[ $? -ne 0 ]]; then
-      printf "Failed to accept Xcode license. Aborting.\\n"
-      return 1
-    fi
-  fi
-
-  # Install Homebrew
   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
   # Check if the installation was successful
