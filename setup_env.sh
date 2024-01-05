@@ -383,9 +383,9 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     install_git
   fi
 
-  # because the version of git is so old on redhat, we need to install a newer version by compiling it
   mkdir -p ${HOME}/software_downloads
 
+  # because the version of git is so old on redhat, we need to install a newer version by compiling it
   if [[ -n ${REDHAT} ]]; then
     sudo -H dnf update -y
     sudo -H dnf install asciidoc -y
