@@ -3,6 +3,7 @@ function Import-Modules {
     "AWSPowerShell.NetCore",
     "Microsoft.PowerShell.UnixCompleters",
     "posh-awsp",
+    "posh-git",
     "PSFzf",
     "Terminal-Icons"
   )
@@ -10,6 +11,7 @@ function Import-Modules {
   $ModulesToBeImportedWindows = @(
     "AWSPowerShell.NetCore",
     "posh-awsp",
+    "posh-git",
     "PSFzf",
     "Terminal-Icons"
   )
