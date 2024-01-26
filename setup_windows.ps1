@@ -31,6 +31,7 @@ if ($IsWindows) {
       "awscli",
       "azure-cli",
       "bat",
+      "bambustudio"
       "beyondcompare",
       "boxstarter",
       "crystaldiskmark",

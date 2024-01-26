@@ -839,6 +839,9 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       if [[ ! -d "/Applications/balenaEtcher.app" ]]; then
         brew install --cask balenaetcher
       fi
+      if [[ ! -d "/Applications/BambuStudio.app" ]]; then
+        brew install --cask bambu-studio
+      fi
       if [[ ! -d "/Applications/Beyond\ Compare.app" ]]; then
         brew install --cask beyond-compare
       fi
