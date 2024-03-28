@@ -342,6 +342,10 @@ fi
 [[ $(uname -r) =~ microsoft ]] && readonly WINDOWS=1
 [[ $(hostname -s) = "laptop" ]] && readonly LAPTOP=1
 [[ $(hostname -s) = "studio" ]] && readonly STUDIO=1
+[[ $(hostname -s) = "reception" ]] && readonly RECEPTION=1
+[[ $(hostname -s) = "office" ]] && readonly OFFICE=1
+[[ $(hostname -s) = "home-1" ]] && readonly HOMES=1
+[[ $(hostname -s) = "virtualmachine1c4f85d6" ]] && readonly WORKSTATION=1
 [[ $(hostname -s) = "workstation" ]] && readonly WORKSTATION=1
 [[ $(hostname -s) = "cruncher" ]] && readonly CRUNCHER=1
 [[ $(hostname -s) = "virtualmachine1c4f85d6" ]] && readonly WORKSTATION=1
@@ -350,7 +354,7 @@ fi
 if [[ -n ${MACOS} ]]; then
   if [[ -n ${RATNA} ]]; then
     CHRUBY_LOC="/usr/local/opt/chruby/share"
-  elif [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
+  elif [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]]; then
     CHRUBY_LOC="/opt/homebrew/opt/chruby/share"
   fi
 elif [[ -n ${LINUX} ]]; then
@@ -804,12 +808,8 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       brew tap teamookla/speedtest
       brew install speedtest
       brew install redpanda-data/tap/redpanda
-      if [[ -n ${STUDIO} ]] || [[ -n ${LAPTOP} ]]; then
+      if [[ -n ${STUDIO} ]] || [[ -n ${LAPTOP} ]] || [[ -n ${RATNA} ]]; then
         brew install datawire/blackbird/telepresence-arm64
-        brew install cloudflared
-      fi
-      if [[ -n ${RATNA} ]]; then
-        brew install datawire/blackbird/telepresence
         brew install cloudflared
       fi
 
@@ -836,29 +836,41 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       if [[ ! -d "/Applications/Atom.app" ]]; then
         brew install --cask atom
       fi
-      if [[ ! -d "/Applications/balenaEtcher.app" ]]; then
-        brew install --cask balenaetcher
+      if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
+        if [[ ! -d "/Applications/balenaEtcher.app" ]]; then
+          brew install --cask balenaetcher
+        fi
       fi
-      if [[ ! -d "/Applications/BambuStudio.app" ]]; then
-        brew install --cask bambu-studio
+      if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
+        if [[ ! -d "/Applications/BambuStudio.app" ]]; then
+          brew install --cask bambu-studio
+        fi
       fi
       if [[ ! -d "/Applications/Beyond\ Compare.app" ]]; then
         brew install --cask beyond-compare
       fi
-      if [[ ! -d "/Applications/Carbon\ Copy Cloner.app" ]]; then
-        brew install --cask carbon-copy-cloner
+      if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
+        if [[ ! -d "/Applications/Carbon\ Copy\ Cloner.app" ]]; then
+          brew install --cask carbon-copy-cloner
+        fi
       fi
       if [[ ! -d "/Applications/DaisyDisk.app" ]]; then
         brew install --cask daisydisk
       fi
-      if [[ ! -d "/Applications/DBeaver.app" ]]; then
-        brew install --cask dbeaver-community
+      if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
+        if [[ ! -d "/Applications/DBeaver.app" ]]; then
+          brew install --cask dbeaver-community
+        fi
       fi
-      if [[ ! -d "/Applications/Discord.app" ]]; then
-        brew install --cask discord
+      if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
+        if [[ ! -d "/Applications/Discord.app" ]]; then
+          brew install --cask discord
+        fi
       fi
-      if [[ ! -d "/Applications/Docker.app" ]]; then
-        brew install --cask docker
+      if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
+        if [[ ! -d "/Applications/Docker.app" ]]; then
+          brew install --cask docker
+        fi
       fi
       if [[ ! -d "/Applications/Dropbox.app" ]]; then
         brew install --cask dropbox
@@ -872,11 +884,15 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       if [[ ! -d "/Applications/Flycut.app" ]]; then
         brew install --cask flycut
       fi
-      if [[ ! -d "/Applications/Fork.app" ]]; then
-        brew install --cask fork
+      if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
+        if [[ ! -d "/Applications/Fork.app" ]]; then
+          brew install --cask fork
+        fi
       fi
-      if [[ ! -d "/Applications/Funter.app" ]]; then
-        brew install --cask funter
+      if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
+        if [[ ! -d "/Applications/Funter.app" ]]; then
+          brew install --cask funter
+        fi
       fi
       if [[ ! -d "/Applications/Google\ Chrome.app" ]]; then
         brew install --cask google-chrome
@@ -884,8 +900,10 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       if [[ ! -d "/Applications/GitHub\ Desktop.app" ]]; then
         brew install --cask github
       fi
-      if [[ ! -d "/usr/local/Caskroom/google-cloud-sdk" ]]; then
-        brew install --cask google-cloud-sdk
+      if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
+        if [[ ! -d "/Applications/Google\ Cloud\ SDK.app" ]]; then
+          brew install --cask google-cloud-sdk
+        fi
       fi
       if [[ ! -d "/Applications/iStat\ Menus.app" ]]; then
         brew install --cask istat-menus
@@ -893,8 +911,10 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       if [[ ! -d "/Applications/iTerm.app" ]]; then
         brew install --cask iterm2
       fi
-      if [[ ! -d "/Applications/Lens.app" ]]; then
-        brew install --cask lens
+      if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
+        if [[ ! -d "/Applications/Lens.app" ]]; then
+          brew install --cask lens
+        fi
       fi
       if [[ ! -d "/Applications/MacDown.app" ]]; then
         brew install --cask macdown
@@ -902,28 +922,40 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       if [[ ! -d "/Applications/Malwarebytes.app" ]]; then
         brew install --cask malwarebytes
       fi
-      if [[ -n ${RATNA} ]] || [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
+      if [[ -n ${RATNA} ]] || [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]]; then
         if [[ ! -d "/Applications/Microsoft\ Word.app" ]]; then
           brew install --cask microsoft-office
         fi
       fi
-      if [[ ! -d "/Applications/MySQLWorkbench.app" ]]; then
-        brew install --cask mysqlworkbench
+      if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
+        if [[ ! -d "/Applications/MySQLWorkbench.app" ]]; then
+          brew install --cask mysqlworkbench
+        fi
       fi
-      if [[ ! -d "/Applications/OBS.app" ]]; then
-        brew install --cask obs
+      if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
+        if [[ ! -d "/Applications/OBS.app" ]]; then
+          brew install --cask obs
+        fi
       fi
-      if [[ ! -d "/usr/local/Caskroom/oracle-jdk" ]]; then
-        brew install --cask oracle-jdk
+      if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
+        if [[ ! -d "/usr/local/Caskroom/oracle-jdk" ]]; then
+          brew install --cask oracle-jdk
+        fi
       fi
-      if [[ ! -d "/Applications/Postman.app" ]]; then
-        brew install --cask postman
+      if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
+        if [[ ! -d "/Applications/Postman.app" ]]; then
+          brew install --cask postman
+        fi
       fi
-      if [[ ! -d "/usr/local/sessionmanagerplugin" ]]; then
-        brew install --cask session-manager-plugin
+      if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
+        if [[ ! -d "/usr/local/sessionmanagerplugin" ]]; then
+          brew install --cask session-manager-plugin
+        fi
       fi
-      if [[ ! -d "/Applications/SourceTree.app" ]]; then
-        brew install --cask sourcetree
+      if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
+        if [[ ! -d "/Applications/SourceTree.app" ]]; then
+          brew install --cask sourcetree
+        fi
       fi
       if [[ ! -d "/Applications/Spotify.app" ]]; then
         brew install --cask spotify
@@ -934,17 +966,23 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       if [[ ! -d "/Applications/Slack.app" ]]; then
         brew install --cask slack
       fi
-      if [[ ! -d "/Applications/Steam.app" ]]; then
-        brew install --cask steam
+      if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
+        if [[ ! -d "/Applications/Steam.app" ]]; then
+          brew install --cask steam
+        fi
       fi
       if [[ ! -d "/Applications/TeamViewer.app" ]]; then
         brew install --cask teamviewer
       fi
-      if [[ ! -d "/Applications/VirtualBox.app" ]]; then
-        brew install --cask virtualbox
+      if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
+        if [[ ! -d "/Applications/VirtualBox.app" ]]; then
+          brew install --cask virtualbox
+        fi
       fi
-      if [[ ! -d "/Applications/Vagrant.app" ]]; then
-        brew install --cask vagrant
+      if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
+        if [[ ! -d "/Applications/Vagrant.app" ]]; then
+          brew install --cask vagrant
+        fi
       fi
       if [[ ! -d "/Applications/Visual\ Studio\ Code.app" ]]; then
         brew install --cask visual-studio-code
@@ -976,8 +1014,10 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/Blackmagic\ Disk\ Speed\ Test.app" ]]; then
       mas install 425264550
     fi
-    if [[ ! -d "/Applications/Evernote.app" ]]; then
-      mas install 406056744
+    if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
+      if [[ ! -d "/Applications/Evernote.app" ]]; then
+        mas install 406056744
+      fi
     fi
     if [[ ! -d "/Applications/Flycut.app" ]]; then
       mas install 442160987
@@ -1009,8 +1049,10 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/Speedtest.app" ]]; then
       mas install 1153157709
     fi
-    if [[ ! -d "/Applications/SQLPro\ for\ Postgres.app" ]]; then
-      mas install 1025345625
+    if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
+      if [[ ! -d "/Applications/SQLPro\ for\ Postgres.app" ]]; then
+        mas install 1025345625
+      fi
     fi
     if [[ ! -d "/Applications/Sync\ Folders\ Pro.app" ]]; then
       mas install 522706442
@@ -1021,8 +1063,10 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/Transmit.app" ]]; then
       mas install 403388562
     fi
-    if [[ ! -d "/Applications/Valentina\ Studio.app" ]]; then
-      mas install 604825918
+    if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
+      if [[ ! -d "/Applications/Valentina\ Studio.app" ]]; then
+        mas install 604825918
+      fi
     fi
 
     if [[ -n ${RATNA} ]] || [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
@@ -1756,15 +1800,17 @@ EOM
     fi
   fi
 
-  mkdir -p ${HOME}/software_downloads/awscli
-  if [[ -n ${MACOS} ]]; then
-    printf "Installing aws-cli on MacOS\\n"
-    if [[ ! -f ${HOME}/software_downloads/awscli/AWSCLIV2.pkg ]]; then
-      wget -O ${HOME}/software_downloads/awscli/AWSCLIV2.pkg "https://awscli.amazonaws.com/AWSCLIV2.pkg"
-      sudo installer -pkg ${HOME}/software_downloads/awscli/AWSCLIV2.pkg -target /
-      rm -f ${HOME}/software_downloads/awscli/AWSCLIV2.pkg
-      if [[ -x $(command -v aws) ]]; then
-        printf "aws-cli is installed MacOS\\n"
+  if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RATNA} ]]; then
+    mkdir -p ${HOME}/software_downloads/awscli
+    if [[ -n ${MACOS} ]]; then
+      printf "Installing aws-cli on MacOS\\n"
+      if [[ ! -f ${HOME}/software_downloads/awscli/AWSCLIV2.pkg ]]; then
+        wget -O ${HOME}/software_downloads/awscli/AWSCLIV2.pkg "https://awscli.amazonaws.com/AWSCLIV2.pkg"
+        sudo installer -pkg ${HOME}/software_downloads/awscli/AWSCLIV2.pkg -target /
+        rm -f ${HOME}/software_downloads/awscli/AWSCLIV2.pkg
+        if [[ -x $(command -v aws) ]]; then
+          printf "aws-cli is installed MacOS\\n"
+        fi
       fi
     fi
   fi
@@ -1968,13 +2014,15 @@ if [[ -n ${UPDATE} ]]; then
     python3 -m pip check
     printf "Updated pip packages\\n"
   fi
-  if [[ -n ${MACOS} ]]; then
-    printf "Updating MACOS awscli\\n"
-    cd ${HOME}/software_downloads/awscli || exit
-    curl "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "AWSCLIV2.pkg"
-    sudo -H installer -pkg AWSCLIV2.pkg -target /
-    rm AWSCLIV2.pkg
-    cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
+  if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RATNA} ]]; then
+    if [[ -n ${MACOS} ]]; then
+      printf "Updating MACOS awscli\\n"
+      cd ${HOME}/software_downloads/awscli || exit
+      curl "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "AWSCLIV2.pkg"
+      sudo -H installer -pkg AWSCLIV2.pkg -target /
+      rm AWSCLIV2.pkg
+      cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
+    fi
   fi
   if [[ -n ${LINUX} ]]; then
     printf "Updating Linux awscli\\n"
