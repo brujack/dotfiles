@@ -6,7 +6,7 @@ CHRUBY_VER="0.3.9"
 CONSUL_VER="1.16.0"
 DOCKER_COMPOSE_VER="v2.20.2"
 GIT_VER="2.43.0"
-GO_VER="1.21"
+GO_VER="1.22"
 KIND_VER="0.20.0"
 NOMAD_VER="1.6.1"
 PACKER_VER="1.9.2"
@@ -1201,6 +1201,9 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
         ;;
       1.21)
         pkgs_to_remove="golang-1.20-go golang-1.20-src"
+        ;;
+      1.22)
+        pkgs_to_remove="golang-1.21-go golang-1.21-src"
         ;;
       *)
         printf "Error: Unsupported Go version %s\\n" "${GO_VER}"
