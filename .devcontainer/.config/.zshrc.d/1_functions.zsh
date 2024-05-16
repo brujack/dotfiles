@@ -18,10 +18,15 @@ function Make() {
 
 function quiet_which() {
   if [ $# -eq 0 ]; then
-    echo "No arguments supplied. Please provide the command you are looking for"
+    echo "Usage: quiet_which <command> [command...]"
     return 1
   fi
-  which "$1" &>/dev/null
+
+  for cmd in "$@"; do
+    if ! which "$cmd" &>/dev/null; then
+      return 1
+    fi
+  done
 }
 
 # rancherssh will do fuzzy find for your query between %%
