@@ -1,12 +1,12 @@
 GO_VER="1.20"
-RUBY_VER="3.3.0"
+RUBY_VER="3.3.1"
 GITREPOS="${HOME}/git-repos"
 
 if [[ ${MACOS} ]]; then
   if [[ ${RATNA} ]]; then
     CHRUBY_LOC="/usr/local/opt/chruby/share"
   fi
-  if [[ ${LAPTOP} ]] || [[ ${STUDIO} ]]; then
+  if [[ ${LAPTOP} ]] || [[ ${STUDIO} ]] || [[ ${RECEPTION} ]]; then
     CHRUBY_LOC="/opt/homebrew/opt/chruby/share/"
   fi
 fi
