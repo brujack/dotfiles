@@ -18,3 +18,4 @@ fi
 [[ $(hostname -s) = "studio-1" ]] && export STUDIO=1
 [[ $(hostname -s) = "workstation" ]] && export WORKSTATION=1
 [[ $(hostname -s) = "cruncher" ]] && export CRUNCHER=1
+[[ $(hostname -s) = "reception" ]] && export RECEPTION=1

@@ -189,6 +189,11 @@ if [[ ${MACOS} ]]; then
     eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any github`
     eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any gitlab`
     # eval `/opt/homebrew/bin/keychain --eval --agents gpg B6DCFA4E5AFEA3AF35CE0A189A997C02283A9062 --inherit any`
+  elif [[ ${RECEPTION} ]]; then
+    eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any id_rsa`
+    eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any home`
+    eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any github`
+    eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any gitlab`
   fi
 elif [[ ${LINUX} ]]; then
   if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]]; then

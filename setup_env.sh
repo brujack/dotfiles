@@ -1949,12 +1949,6 @@ if [[ -n ${DEVELOPER} ]] || [[ -n ${ANSIBLE} ]]; then
   if ! [[ -d ${PERSONAL_GITREPOS}/dotfiles ]]; then
     git clone git@github.com:brujack/dotfiles.git ${PERSONAL_GITREPOS}/dotfiles
   fi
-  if ! [[ -d ${PERSONAL_GITREPOS}/aws_terraform_modules ]]; then
-    git clone git@github.com:brujack/aws_terraform_modules.git ${PERSONAL_GITREPOS}/aws_terraform_modules
-  fi
-  if ! [[ -d ${PERSONAL_GITREPOS}/aws_terraform_using_modules ]]; then
-    git clone git@github.com:brujack/aws_terraform_using_modules.git ${PERSONAL_GITREPOS}/aws_terraform_using_modules
-  fi
   if ! [[ -d ${PERSONAL_GITREPOS}/docker_container_terraform ]]; then
     git clone git@github.com:brujack/docker_container_terraform.git ${PERSONAL_GITREPOS}/docker_container_terraform
   fi
