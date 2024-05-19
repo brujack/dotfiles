@@ -48,13 +48,17 @@ then
 fi
 
 # for pyenv
-if quiet_which pyenv
-then
+if command -v pyenv &> /dev/null; then
   export PYENV_VIRTUALENV_DISABLE_PROMPT=1
   export PYENV_ROOT="$HOME/.pyenv"
-  command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"
+
+  if ! command -v pyenv &> /dev/null; then
+    export PATH="$PYENV_ROOT/bin:$PATH"
+  fi
+
   eval "$(pyenv init -)"
 fi
+
 
 # Load Starship
 export STARSHIP_DISTRO="$ICON "
