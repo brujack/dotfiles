@@ -808,7 +808,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       brew tap teamookla/speedtest
       brew install speedtest
       brew install redpanda-data/tap/redpanda
-      if [[ -n ${STUDIO} ]] || [[ -n ${LAPTOP} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${RATNA} ]]; then
+      if [[ -n ${STUDIO} ]] || [[ -n ${LAPTOP} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${RATNA} ]]; then
         brew install datawire/blackbird/telepresence-arm64
         brew install cloudflared
       fi
@@ -819,7 +819,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       if [[ ! -d "/Applications/1Password.app" ]]; then
         brew install --cask 1password
       fi
-      if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
+      if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ ${RECEPTION} ]]; then
         if [[ ! -d "/Applications/Adobe\ Creative\ Cloud" ]]; then
           brew install --cask adobe-creative-cloud
         fi
@@ -836,12 +836,12 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       if [[ ! -d "/Applications/Atom.app" ]]; then
         brew install --cask atom
       fi
-      if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]]; then
+      if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]]; then
         if [[ ! -d "/Applications/balenaEtcher.app" ]]; then
           brew install --cask balenaetcher
         fi
       fi
-      if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]]; then
+      if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]]; then
         if [[ ! -d "/Applications/BambuStudio.app" ]]; then
           brew install --cask bambu-studio
         fi
@@ -862,7 +862,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
           brew install --cask dbeaver-community
         fi
       fi
-      if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]]; then
+      if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]]; then
         if [[ ! -d "/Applications/Discord.app" ]]; then
           brew install --cask discord
         fi
@@ -932,7 +932,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
           brew install --cask mysqlworkbench
         fi
       fi
-      if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]]; then
+      if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]]; then
         if [[ ! -d "/Applications/OBS.app" ]]; then
           brew install --cask obs
         fi
@@ -1014,7 +1014,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     if [[ ! -d "/Applications/Blackmagic\ Disk\ Speed\ Test.app" ]]; then
       mas install 425264550
     fi
-    if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]]; then
+    if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]]; then
       if [[ ! -d "/Applications/Evernote.app" ]]; then
         mas install 406056744
       fi
@@ -1803,7 +1803,7 @@ EOM
     fi
   fi
 
-  if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${RATNA} ]]; then
+  if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${RATNA} ]]; then
     mkdir -p ${HOME}/software_downloads/awscli
     if [[ -n ${MACOS} ]]; then
       printf "Installing aws-cli on MacOS\\n"
@@ -1930,7 +1930,7 @@ if [[ -n ${DEVELOPER} ]] || [[ -n ${ANSIBLE} ]]; then
   fi
 
   if ! [[ $(readlink "${HOME}/.pyenv/versions/ansible") == "${HOME}/.pyenv/versions/${PYTHON_VER}/envs/ansible" ]]; then
-    if [[ -n ${STUDIO} ]] || [[ -n ${LAPTOP} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]] || [[ -n ${RATNA} ]]; then
+    if [[ -n ${STUDIO} ]] || [[ -n ${LAPTOP} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]] || [[ -n ${RATNA} ]]; then
       export PYENV_ROOT="$HOME/.pyenv"
       export PYENV_VIRTUALENV_DISABLE_PROMPT=1
       if quiet_which pyenv; then
@@ -2005,13 +2005,13 @@ if [[ -n ${UPDATE} ]]; then
     mas upgrade
   fi
   printf "Updating pip3 packages\\n"
-  if [[ -n ${STUDIO} ]] || [[ -n ${LAPTOP} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]] || [[ -n ${RATNA} ]]; then
+  if [[ -n ${STUDIO} ]] || [[ -n ${LAPTOP} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]] || [[ -n ${RATNA} ]]; then
     python3 -m pip install --upgrade pip
     python3 -m pip list --outdated --format=columns | awk '{print $1;}' | awk 'NR>2' | xargs -n1 python3 -m pip install -U
     python3 -m pip check
     printf "Updated pip packages\\n"
   fi
-  if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${RATNA} ]]; then
+  if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${RATNA} ]]; then
     if [[ -n ${MACOS} ]]; then
       printf "Updating MACOS awscli\\n"
       cd ${HOME}/software_downloads/awscli || exit

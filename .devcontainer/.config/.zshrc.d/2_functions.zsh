@@ -8,7 +8,7 @@ function Make() {
       if [[ ${RATNA} ]]; then
         alias make='/usr/local/bin/gmake'
       fi
-      if [[ ${LAPTOP} ]] || [[ ${STUDIO} ]] || [[ ${RECEPTION} ]]; then
+      if [[ ${LAPTOP} ]] || [[ ${STUDIO} ]] || [[ ${RECEPTION} ]] || [[ ${OFFICE} ]]; then
         alias make='/opt/homebrew/bin/gmake'
       fi
     fi
