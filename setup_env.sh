@@ -854,6 +854,11 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
           brew install --cask carbon-copy-cloner
         fi
       fi
+      if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]]; then
+        if [[ ! -d "/Applications/ChatGPT.app" ]]; then
+          brew install --cask chatgpt
+        fi
+      fi
       if [[ ! -d "/Applications/DaisyDisk.app" ]]; then
         brew install --cask daisydisk
       fi
