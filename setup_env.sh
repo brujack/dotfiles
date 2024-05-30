@@ -921,6 +921,11 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
           brew install --cask lens
         fi
       fi
+      if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]]; then
+        if [[ ! -d "/Applications/logioptionsplus.app" ]]; then
+          brew install --cask logi-options-plus
+        fi
+      fi
       if [[ ! -d "/Applications/MacDown.app" ]]; then
         brew install --cask macdown
       fi
