@@ -59,6 +59,12 @@ defaults write com.apple.systemuiserver menuExtras -array-add "/System/Library/C
 # Turn off mouse natural scrolling
 defaults write NSGlobalDomain com.apple.swipescrolldirection -bool false
 
+# Hide dock automatically
+defaults write com.apple.dock autohide -bool true
+
+# Set dock magnification to 60
+defaults write com.apple.dock largesize -int 60
+
 # Restart SystemUIServer
 killall SystemUIServer
 
