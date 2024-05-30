@@ -199,7 +199,6 @@ if [[ ${MACOS} ]]; then
     eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any home`
     eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any github`
     eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any gitlab`
-  fi
   elif [[ ${HOMES} ]]; then
     eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any id_rsa`
     eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any home`
