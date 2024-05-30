@@ -6,7 +6,7 @@ if [[ ${MACOS} ]]; then
   if [[ ${RATNA} ]]; then
     CHRUBY_LOC="/usr/local/opt/chruby/share"
   fi
-  if [[ ${LAPTOP} ]] || [[ ${STUDIO} ]] || [[ ${RECEPTION} ]] || [[ ${OFFICE} ]]; then
+  if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]]; then
     CHRUBY_LOC="/opt/homebrew/opt/chruby/share/"
   fi
 fi
@@ -15,7 +15,7 @@ if [[ ${LINUX} ]]; then
 fi
 
 # for fzf
-if [[ ${LAPTOP} ]] || [[ ${STUDIO} ]] || [[ ${RECEPTION} ]] || [[ ${OFFICE} ]]; then
+if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n {OFFICE} ]] || [[ -n ${HOMES} ]]; then
   export FZF_BASE=/opt/homebrew/bin/fzf
 fi
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
@@ -195,6 +195,12 @@ if [[ ${MACOS} ]]; then
     eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any github`
     eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any gitlab`
   elif [[ ${OFFICE} ]]; then
+    eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any id_rsa`
+    eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any home`
+    eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any github`
+    eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any gitlab`
+  fi
+  elif [[ ${HOMES} ]]; then
     eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any id_rsa`
     eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any home`
     eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any github`
