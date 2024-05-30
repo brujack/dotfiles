@@ -56,5 +56,15 @@ defaults write com.apple.ActivityMonitor ShowCategory -int 0
 defaults write com.apple.systemuiserver menuExtras -array-add "/System/Library/CoreServices/Menu Extras/Volume.menu"
 defaults write com.apple.systemuiserver menuExtras -array-add "/System/Library/CoreServices/Menu Extras/Bluetooth.menu"
 
+# Turn off mouse natural scrolling
+defaults write NSGlobalDomain com.apple.swipescrolldirection -bool false
+
 # Restart SystemUIServer
 killall SystemUIServer
+
+# Enable Remote Desktop
+sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -activate -configure -access -on -users bruce -privs -all -restart -agent -menu
+sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -restart -agent
+
+# Enable Remote Login
+sudo launchctl load -w /System/Library/LaunchDaemons/ssh.plist
