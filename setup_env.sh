@@ -12,7 +12,7 @@ NOMAD_VER="1.6.1"
 PACKER_VER="1.9.2"
 PYTHON_VER="3.12.3"
 RUBY_INSTALL_VER="0.9.1"
-RUBY_VER="3.3.1"
+RUBY_VER="3.3.2"
 SHELLCHECK_VER="0.9.0"
 TERRAFORM_VER="1.3.5"
 TFLINT_VER="0.49.0"
@@ -1245,6 +1245,23 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
         sudo -H apt install "golang-${GO_VER}-go" -y
         ;;
       1.21)
+        if [[ ! -f ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} ]]; then
+          wget -O ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} ${GO_DOWNLOAD_URL}
+          tar xvf ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} -C ${HOME}/software_downloads/
+          if [[ -d /usr/local/go ]]; then
+            sudo rm -rf /usr/local/go
+          fi
+          if [[ -d ${HOME}/software_downloads/go ]]; then
+            sudo mv ${HOME}/software_downloads/go /usr/local/go
+            sudo chmod 755 /usr/local/go
+            sudo chown -R root:root /usr/local/go
+          fi
+          if [[ -d ${HOME}/software_downloads/go ]]; then
+            rm -rf ${HOME}/software_downloads/go
+          fi
+        fi
+        ;;
+        1.22)
         if [[ ! -f ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} ]]; then
           wget -O ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} ${GO_DOWNLOAD_URL}
           tar xvf ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} -C ${HOME}/software_downloads/
