@@ -269,10 +269,10 @@ check_and_install_nala() {
     if [[ $(awk -F= '/^NAME/{print $2}' /etc/os-release | tr -d '"') = "Ubuntu" ]]; then
       if ! [ -x "$(command -v nala)" ]; then
         printf "Installing nala via apt\\n"
-        wget -O ${HOME}/software_downloads/volian-archive-keyring_0.1.0_all.deb https://gitlab.com/volian/volian-archive/uploads/b20bd8237a9b20f5a82f461ed0704ad4/volian-archive-keyring_0.1.0_all.deb
+        wget -O ${HOME}/software_downloads/volian-archive-keyring_0.2.0_all.deb https://gitlab.com/-/project/39215670/uploads/d9473098bc12525687dc9aca43d50159/volian-archive-keyring_0.2.0_all.deb
         sudo -H dpkg --install ${HOME}/software_downloads/volian-archive-keyring_0.1.0_all.deb
-        wget -O ${HOME}/software_downloads/volian-archive-nala_0.1.0_all.deb https://gitlab.com/volian/volian-archive/uploads/d6b3a118de5384a0be2462905f7e4301/volian-archive-nala_0.1.0_all.deb
-        sudo -H dpkg --install ${HOME}/software_downloads/volian-archive-nala_0.1.0_all.deb
+        wget -O ${HOME}/software_downloads/volian-archive-nala_0.2.0_all.deb https://gitlab.com/-/project/39215670/uploads/d00e44faaf2cc8aad526ca520165a0af/volian-archive-nala_0.2.0_all.deb
+        sudo -H dpkg --install ${HOME}/software_downloads/volian-archive-nala_0.2.0_all.deb
         sudo -H apt update
         sudo -H apt install nala -y
       fi
@@ -336,6 +336,7 @@ if [[ -n ${UBUNTU} ]]; then
   [[ ${UBUNTU_VERSION} = "18.04" ]] && readonly BIONIC=1
   [[ ${UBUNTU_VERSION} = "20.04" ]] && readonly FOCAL=1
   [[ ${UBUNTU_VERSION} = "22.04" ]] && readonly JAMMY=1
+  [[ ${UBUNTU_VERSION} = "24.04" ]] && readonly NOBLE=1
   [[ ${UBUNTU_VERSION} = "6" ]] && readonly FOCAL=1 # elementary os
 fi
 
@@ -1129,6 +1130,12 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       check_and_install_nala
       xargs -a ./ubuntu_common_packages.txt sudo nala install -y
       xargs -a ./ubuntu_2204_packages.txt sudo nala install -y
+    elif [[ ${NOBLE} ]]; then
+      printf "Installing hwe, common, and 24.04 packages\\n"
+      sudo -H apt install --install-recommends linux-generic-hwe-24.04 -y
+      check_and_install_nala
+      xargs -a ./ubuntu_common_packages.txt sudo nala install -y
+      xargs -a ./ubuntu_2404_packages.txt sudo nala install -y
     fi
 
     if [[ -n ${WORKSTATION} ]]; then
@@ -1187,6 +1194,18 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
         sudo -H apt install powershell -y
         if [[ -x $(command -v pwsh) ]]; then
           printf "pwsh is installed Ubuntu Jammy\\n"
+        fi
+      fi
+    fi
+    if [[ -n ${NOBLE} ]]; then
+      if [[ ! -f ${HOME}/software_downloads/packages-microsoft-prod.deb ]]; then
+        wget -O ${HOME}/software_downloads/packages-microsoft-prod.deb http://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb
+        sudo -H dpkg -i ${HOME}/software_downloads/packages-microsoft-prod.deb
+        sudo apt update
+        sudo -H add-apt-repository universe
+        sudo -H apt install powershell -y
+        if [[ -x $(command -v pwsh) ]]; then
+          printf "pwsh is installed Ubuntu Noble\\n"
         fi
       fi
     fi
@@ -1394,6 +1413,16 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
         sudo -H apt install albert -y
         if [[ -x $(command -v albert) ]]; then
           printf "Albert is installed Ubuntu Jammy\\n"
+        fi
+      elif [[ ${NOBLE} ]]; then
+        printf "Installing Albert Ubuntu Noble\\n"
+        curl https://build.opensuse.org/projects/home:manuelschneid3r/public_key | sudo apt-key add -
+        echo "deb http://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_$(lsb_release -rs)/ /" | sudo tee /etc/apt/sources.list.d/home:manuelschneid3r.list
+        sudo wget -nv https://download.opensuse.org/repositories/home:manuelschneid3r/xUbuntu_$(lsb_release -rs)/Release.key -O "/etc/apt/trusted.gpg.d/home:manuelschneid3r.asc"
+        sudo -H apt update
+        sudo -H apt install albert -y
+        if [[ -x $(command -v albert) ]]; then
+          printf "Albert is installed Ubuntu Noble\\n"
         fi
       fi
     fi
@@ -1620,6 +1649,9 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     if [[ ${FOCAL} ]]; then
       sudo -H apt autoremove -y
     elif [[ ${JAMMY} ]]; then
+      check_and_install_nala
+      sudo -H nala autoremove -y
+    elif [[ ${NOBLE} ]]; then
       check_and_install_nala
       sudo -H nala autoremove -y
     fi
@@ -2012,6 +2044,10 @@ if [[ -n ${UPDATE} ]]; then
     if [[ ${FOCAL} ]]; then
       sudo -H apt autoremove -y
     elif [[ ${JAMMY} ]]; then
+      check_and_install_nala
+      sudo -H nala full-upgrade -y
+      sudo -H nala autoremove -y
+    elif [[ ${NOBLE} ]]; then
       check_and_install_nala
       sudo -H nala full-upgrade -y
       sudo -H nala autoremove -y
