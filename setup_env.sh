@@ -431,7 +431,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     fi
   fi
 
-  if [[ ${MACOS} || ${FEDORA} || ${CENTOS} ]]; then
+  if [[ ${MACOS} || ${UBUNTU} || ${FEDORA} || ${CENTOS} ]]; then
     install_zsh
   fi
 
