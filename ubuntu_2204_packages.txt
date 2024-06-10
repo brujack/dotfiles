@@ -1,1 +1,2 @@
 linux-generic-hwe-22.04
+python-setuptools
