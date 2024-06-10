@@ -2,7 +2,8 @@ font-manager
 gnome-tweaks
 httpie
 nfs-common
-openjdk-11-jdk
-steam
+openjdk-21-jdk
+steam-devices
+steam-installer
 ubuntu-restricted-extras
 xrdp
