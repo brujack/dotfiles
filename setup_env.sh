@@ -1358,10 +1358,10 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
 
     if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
       printf "Installing cloudflared\\n"
-      wget -q https://pkg.cloudflare.com/cloudflare-main.gpg -O- | sudo apt-key add -
-      sudo add-apt-repository "deb https://pkg.cloudflare.com/ $(lsb_release -cs) main"
-      sudo -H apt update
-      sudo -H apt install cloudflared -y
+      curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+      echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ jammy main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
+      sudo apt-get update
+      sudo apt-get install cloudflare-warp -y
       if [[ -x $(command -v cloudflared) ]]; then
         printf "cloudflared is installed\\n"
       fi
