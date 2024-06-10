@@ -22,6 +22,7 @@ VAULT_VER="1.14.1"
 VIRTUALBOX_VER="virtualbox-7.0"
 YQ_VER="4.40.3"
 ZSH_VER="5.9"
+KUBERNETES_VER="v1.30"
 
 CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v${CF_TERRAFORMING_VER}/cf-terraforming_${CF_TERRAFORMING_VER}_linux_amd64.tar.gz"
 GIT_URL="https://mirrors.edge.kernel.org/pub/software/scm/git"
@@ -37,14 +38,15 @@ YQ_URL="https://github.com/mikefarah/yq/releases/download/v${YQ_VER}/yq_linux_am
 GO_DOWNLOAD_FILENAME="go1.21.1.linux-amd64.tar.gz"
 GO_DOWNLOAD_URL="https://go.dev/dl/${GO_DOWNLOAD_FILENAME}"
 
-RHEL_KUBECTL_REPO="[kubernetes]
+RHEL_KUBECTL_REPO="cat <<EOF | sudo tee /etc/yum.repos.d/kubernetes.repo
+[kubernetes]
 name=Kubernetes
-baseurl=http://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+baseurl=https://pkgs.k8s.io/core:/stable:/${KUBERNETES_VER}/rpm/
 enabled=1
 gpgcheck=1
-repo_gpgcheck=1
-gpgkey=http://packages.cloud.google.com/yum/doc/yum-key.gpg http://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
-"
+gpgkey=https://pkgs.k8s.io/core:/stable:/${KUBERNETES_VER}/rpm/repodata/repomd.xml.key
+exclude=kubelet kubeadm kubectl cri-tools kubernetes-cni
+EOF"
 
 # locations of directories
 BREWFILE_LOC="${HOME}/brew"
@@ -1600,10 +1602,9 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     if [[ -x $(command -v glances) ]]; then
       printf "glances is installed\\n"
     fi
-
-    if [[ ! -f /usr/share/keyrings/kubernetes-archive-keyring.gpg ]]; then
-      sudo curl -fsSLo /usr/share/keyrings/kubernetes-archive-keyring.gpg https://packages.cloud.google.com/apt/doc/apt-key.gpg
-      echo "deb [signed-by=/usr/share/keyrings/kubernetes-archive-keyring.gpg] https://apt.kubernetes.io/ kubernetes-xenial main" | sudo tee /etc/apt/sources.list.d/kubernetes.list
+    if [[ ! -f /etc/apt/keyrings/kubernetes-apt-keyring.gpg ]]; then
+      sudo curl -fsSLo https://pkgs.k8s.io/core:/stable:/${KUBERNETES_VER}/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+      echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/${KUBERNETES_VER}/deb/ /" | sudo tee /etc/apt/sources.list.d/kubernetes.list
     fi
     sudo -H apt update
     sudo -H apt install kubectl -y
