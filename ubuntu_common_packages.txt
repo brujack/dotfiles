@@ -47,7 +47,6 @@ nodejs
 npm
 openssh-server
 openssl
-python-setuptools
 python3-pip
 python3-setuptools
 pwgen
