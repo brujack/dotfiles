@@ -1603,8 +1603,8 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       printf "glances is installed\\n"
     fi
     if [[ ! -f /etc/apt/keyrings/kubernetes-apt-keyring.gpg ]]; then
-      sudo curl -fsSLo https://pkgs.k8s.io/core:/stable:/${KUBERNETES_VER}/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-      echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/${KUBERNETES_VER}/deb/ /" | sudo tee /etc/apt/sources.list.d/kubernetes.list
+      sudo curl -fsSL https://pkgs.k8s.io/core:/stable:/${KUBERNETES_VER}/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+      echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/${KUBERNETES_VER}/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list
     fi
     sudo -H apt update
     sudo -H apt install kubectl -y
