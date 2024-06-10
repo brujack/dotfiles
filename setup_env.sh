@@ -599,7 +599,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
 
   printf "Installing Oh My ZSH...\\n"
   if [[ ! -d ${HOME}/.oh-my-zsh ]]; then
-    sh -c "$(curl -fsSL https://raw.github.com/robbyrussell/oh-my-zsh/master/tools/install.sh)"
+    sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
     if [[ -d ${HOME}/.oh-my-zsh ]]; then
       printf "Installed Oh My ZSH\\n"
     fi
