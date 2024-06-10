@@ -229,7 +229,7 @@ install_git() {
 
 install_zsh() {
   printf "Installing zsh\\n"
-  if [[ "$(uname -s)" != "Darwin" ]]; then
+  if [[ "$(uname -s)" == "Darwin" ]]; then
     if brew list | grep '^zsh$' &> /dev/null; then
       printf "zsh (from Homebrew) is already installed.\\n"
       return 0
