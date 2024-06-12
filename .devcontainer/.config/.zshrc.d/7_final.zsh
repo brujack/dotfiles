@@ -65,7 +65,6 @@ if command -v pyenv &> /dev/null; then
 
 fi
 
-
 # Load Starship
 export STARSHIP_DISTRO="$ICON "
 eval "$(starship init zsh)"
