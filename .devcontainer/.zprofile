@@ -7,10 +7,12 @@
 [[ $(hostname -s) = "reception-1" ]] && export RECEPTION=1
 [[ $(hostname -s) = "office" ]] && export OFFICE=1
 [[ $(hostname -s) = "office-1" ]] && export OFFICE=1
+[[ $(hostname -s) = "homes" ]] && export HOMES=1
+[[ $(hostname -s) = "homes-1" ]] && export HOMES=1
 export PYENV_VIRTUALENV_DISABLE_PROMPT=1
 export PYENV_ROOT="$HOME/.pyenv"
 command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"
 if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]]; then
   export PATH="/opt/homebrew/bin:$PATH"
 fi
-eval "$(pyenv init -)"
+eval "$(pyenv virtualenv-init -)"

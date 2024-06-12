@@ -56,7 +56,13 @@ if command -v pyenv &> /dev/null; then
     export PATH="$PYENV_ROOT/bin:$PATH"
   fi
 
-  eval "$(pyenv init -)"
+  eval "$(pyenv virtualenv-init -)"
+  if [[ -n ${STUDIO} ]] || [[ -n ${LAPTOP} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]] || [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]] || [[ -n ${RATNA} ]]; then
+    if [[ "$(pyenv version-name)" != "ansible" ]]; then
+      pyenv activate ansible
+    fi
+  fi
+
 fi
 
 
