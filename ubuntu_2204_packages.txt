@@ -1,2 +1,8 @@
+libbz2-dev
+libffi-dev
+libreadline-dev
+libssl-dev
+libsqlite3-dev
+liblzma-dev
 linux-generic-hwe-22.04
 python-setuptools

@@ -1,1 +1,7 @@
+libbz2-dev
+libffi-dev
+libreadline-dev
+libssl-dev
+libsqlite3-dev
+liblzma-dev
 linux-generic-hwe-24.04
