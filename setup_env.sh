@@ -1878,6 +1878,7 @@ EOM
     fi
   fi
   if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
+    mkdir -p ${HOME}/software_downloads/awscli
     printf "Installing aws-cli on Linux\\n"
     if [[ ! -f ${HOME}/software_downloads/awscli/awscliv2.zip ]]; then
       wget -O ${HOME}/software_downloads/awscli/awscliv2.zip "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
