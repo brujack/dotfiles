@@ -1877,7 +1877,7 @@ EOM
       fi
     fi
   fi
-  if [[ -n ${LINUX} ]]; then
+  if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
     printf "Installing aws-cli on Linux\\n"
     if [[ ! -f ${HOME}/software_downloads/awscli/awscliv2.zip ]]; then
       wget -O ${HOME}/software_downloads/awscli/awscliv2.zip "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
@@ -2085,7 +2085,7 @@ if [[ -n ${UPDATE} ]]; then
       cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
     fi
   fi
-  if [[ -n ${LINUX} ]]; then
+  if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
     printf "Updating Linux awscli\\n"
     cd ${HOME}/software_downloads/awscli || exit
     curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
