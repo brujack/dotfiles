@@ -1618,8 +1618,8 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     fi
     # can't use snap on wsl2
     if [[ -n ${CRUNCHER} ]]; then
-      curl https://baltocdn.com/helm/signing.asc | sudo apt-key add -
-      echo "deb https://baltocdn.com/helm/stable/debian/ all main" | sudo tee /etc/apt/sources.list.d/helm-stable-debian.list
+      curl https://baltocdn.com/helm/signing.asc | sudo gpg --dearmor -o /etc/apt/keyrings/helm-signing.gpg
+      echo "deb [signed-by=/etc/apt/keyrings/helm-signing.gpg] https://baltocdn.com/helm/stable/debian/ all main" | sudo tee /etc/apt/sources.list.d/helm-stable-debian.list
       sudo apt-get update
       sudo apt-get install helm
     fi
