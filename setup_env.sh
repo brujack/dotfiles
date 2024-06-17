@@ -1456,8 +1456,6 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     fi
     sudo apt update
     sudo -H apt install google-cloud-sdk -y
-    sudo -H apt install google-cloud-sdk-app-engine-python -y
-    sudo -H apt install google-cloud-sdk-app-engine-python-extras -y
     sudo -H apt install google-cloud-sdk-app-engine-go -y
     sudo -H apt install google-cloud-cli -y
 
