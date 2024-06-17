@@ -1942,16 +1942,18 @@ if [[ -n ${DEVELOPER} ]] || [[ -n ${ANSIBLE} ]]; then
   if [[ -n ${LINUX} ]]; then
     printf "installing github cli on linux\\n"
     if [[ -n ${UBUNTU} ]]; then
-      sudo -H apt-key adv --keyserver keyserver.ubuntu.com --recv-key C99B11DEB97541F0
-      sudo -H apt-add-repository https://cli.github.com/packages
+      wget -qO- https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null
+      sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
+      echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
       sudo -H apt update
       sudo -H apt install gh
       if [[ -x $(command -v gh) ]]; then
         printf "gh is installed Ubuntu\\n"
       fi
     elif [[ -n ${REDHAT} ]] || [[ -n ${CENTOS} ]] || [[ -n ${FEDORA} ]]; then
+      sudo -H dnf install 'dnf-command(config-manager)'
       sudo -H dnf config-manager --add-repo http://cli.github.com/packages/rpm/gh-cli.repo
-      sudo dnf install gh
+      sudo dnf install gh --repo gh-cli
       if [[ -x $(command -v gh) ]]; then
         printf "gh is installed RHEL\\n"
       fi
