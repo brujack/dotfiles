@@ -1451,14 +1451,15 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
 
     printf "Installing gcloud-sdk\\n"
     if [[ ! -f /etc/apt/sources.list.d/google-cloud-sdk.list ]]; then
-      echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
-      curl http://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
+      curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
+      echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
     fi
     sudo apt update
     sudo -H apt install google-cloud-sdk -y
     sudo -H apt install google-cloud-sdk-app-engine-python -y
     sudo -H apt install google-cloud-sdk-app-engine-python-extras -y
     sudo -H apt install google-cloud-sdk-app-engine-go -y
+    sudo -H apt install google-cloud-cli -y
 
     printf "Installing Hashicorp Consul Ubuntu\\n"
     if [[ ! -d ${HOME}/software_downloads/consul_${CONSUL_VER} ]]; then
