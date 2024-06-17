@@ -1335,9 +1335,8 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
 
     if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
       printf "Installing Virtualbox\\n"
-      wget -q http://www.virtualbox.org/download/oracle_vbox_2016.asc -O- | sudo apt-key add -
-      wget -q http://www.virtualbox.org/download/oracle_vbox.asc -O- | sudo apt-key add -
-      sudo add-apt-repository "deb http://download.virtualbox.org/virtualbox/debian $(lsb_release -cs) contrib"
+      wget -O- https://www.virtualbox.org/download/oracle_vbox_2016.asc | sudo gpg --dearmor --yes --output /usr/share/keyrings/oracle-virtualbox-2016.gpg
+      echo "deb [arch=amd64 signed-by=/usr/share/keyrings/oracle-virtualbox-2016.gpg] http://download.virtualbox.org/virtualbox/debian $(. /etc/os-release && echo "$VERSION_CODENAME") contrib" | sudo tee /etc/apt/sources.list.d/virtualbox.list
       sudo -H apt update
       sudo -H apt install ${VIRTUALBOX_VER} -y
       if [[ -x $(command -v vboxmanage) ]]; then
@@ -1347,7 +1346,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
 
     if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
       printf "Installing teleport\\n"
-      wget -q https://deb.releases.teleport.dev/teleport-pubkey.asc -O- | sudo apt-key add -
+      wget -O- https://deb.releases.teleport.dev/teleport-pubkey.asc | sudo gpg --dearmor --yes --output /usr/share/keyrings/telport-pubkey.gpg
       sudo add-apt-repository "deb https://deb.releases.teleport.dev/ stable main"
       sudo -H apt update
       sudo -H apt install teleport -y
