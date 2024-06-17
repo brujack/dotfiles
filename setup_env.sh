@@ -1397,9 +1397,8 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     if [[ -n ${WORKSTATION} ]]; then
       if [[ ${FOCAL} ]]; then
         printf "Installing Albert Ubuntu Focal\\n"
-        curl https://build.opensuse.org/projects/home:manuelschneid3r/public_key | sudo apt-key add -
-        echo "deb http://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_$(lsb_release -rs)/ /" | sudo tee /etc/apt/sources.list.d/home:manuelschneid3r.list
-        sudo wget -nv https://download.opensuse.org/repositories/home:manuelschneid3r/xUbuntu_$(lsb_release -rs)/Release.key -O "/etc/apt/trusted.gpg.d/home:manuelschneid3r.asc"
+        echo 'deb http://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_$(lsb_release -rs)/ /' | sudo tee /etc/apt/sources.list.d/home:manuelschneid3r.list
+        curl -fsSL https://download.opensuse.org/repositories/home:manuelschneid3r/xUbuntu_$(lsb_release -rs)/Release.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/home_manuelschneid3r.gpg > /dev/null
         sudo -H apt update
         sudo -H apt install albert -y
         if [[ -x $(command -v albert) ]]; then
@@ -1407,9 +1406,8 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
         fi
       elif [[ ${JAMMY} ]]; then
         printf "Installing Albert Ubuntu Jammy\\n"
-        curl https://build.opensuse.org/projects/home:manuelschneid3r/public_key | sudo apt-key add -
-        echo "deb http://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_$(lsb_release -rs)/ /" | sudo tee /etc/apt/sources.list.d/home:manuelschneid3r.list
-        sudo wget -nv https://download.opensuse.org/repositories/home:manuelschneid3r/xUbuntu_$(lsb_release -rs)/Release.key -O "/etc/apt/trusted.gpg.d/home:manuelschneid3r.asc"
+        echo 'deb http://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_$(lsb_release -rs)/ /' | sudo tee /etc/apt/sources.list.d/home:manuelschneid3r.list
+        curl -fsSL https://download.opensuse.org/repositories/home:manuelschneid3r/xUbuntu_$(lsb_release -rs)/Release.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/home_manuelschneid3r.gpg > /dev/null
         sudo -H apt update
         sudo -H apt install albert -y
         if [[ -x $(command -v albert) ]]; then
@@ -1417,9 +1415,8 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
         fi
       elif [[ ${NOBLE} ]]; then
         printf "Installing Albert Ubuntu Noble\\n"
-        curl https://build.opensuse.org/projects/home:manuelschneid3r/public_key | sudo apt-key add -
-        echo "deb http://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_$(lsb_release -rs)/ /" | sudo tee /etc/apt/sources.list.d/home:manuelschneid3r.list
-        sudo wget -nv https://download.opensuse.org/repositories/home:manuelschneid3r/xUbuntu_$(lsb_release -rs)/Release.key -O "/etc/apt/trusted.gpg.d/home:manuelschneid3r.asc"
+        echo 'deb http://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_$(lsb_release -rs)/ /' | sudo tee /etc/apt/sources.list.d/home:manuelschneid3r.list
+        curl -fsSL https://download.opensuse.org/repositories/home:manuelschneid3r/xUbuntu_$(lsb_release -rs)/Release.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/home_manuelschneid3r.gpg > /dev/null
         sudo -H apt update
         sudo -H apt install albert -y
         if [[ -x $(command -v albert) ]]; then
