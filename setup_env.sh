@@ -1397,7 +1397,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     if [[ -n ${WORKSTATION} ]]; then
       if [[ ${FOCAL} ]]; then
         printf "Installing Albert Ubuntu Focal\\n"
-        echo 'deb http://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_$(lsb_release -rs)/ /' | sudo tee /etc/apt/sources.list.d/home:manuelschneid3r.list
+        echo "deb http://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_$(lsb_release -rs)/ /" | sudo tee /etc/apt/sources.list.d/home:manuelschneid3r.list
         curl -fsSL https://download.opensuse.org/repositories/home:manuelschneid3r/xUbuntu_$(lsb_release -rs)/Release.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/home_manuelschneid3r.gpg > /dev/null
         sudo -H apt update
         sudo -H apt install albert -y
@@ -1406,7 +1406,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
         fi
       elif [[ ${JAMMY} ]]; then
         printf "Installing Albert Ubuntu Jammy\\n"
-        echo 'deb http://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_$(lsb_release -rs)/ /' | sudo tee /etc/apt/sources.list.d/home:manuelschneid3r.list
+        echo "deb http://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_$(lsb_release -rs)/ /" | sudo tee /etc/apt/sources.list.d/home:manuelschneid3r.list
         curl -fsSL https://download.opensuse.org/repositories/home:manuelschneid3r/xUbuntu_$(lsb_release -rs)/Release.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/home_manuelschneid3r.gpg > /dev/null
         sudo -H apt update
         sudo -H apt install albert -y
@@ -1415,7 +1415,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
         fi
       elif [[ ${NOBLE} ]]; then
         printf "Installing Albert Ubuntu Noble\\n"
-        echo 'deb http://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_$(lsb_release -rs)/ /' | sudo tee /etc/apt/sources.list.d/home:manuelschneid3r.list
+        echo "deb http://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_$(lsb_release -rs)/ /" | sudo tee /etc/apt/sources.list.d/home:manuelschneid3r.list
         curl -fsSL https://download.opensuse.org/repositories/home:manuelschneid3r/xUbuntu_$(lsb_release -rs)/Release.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/home_manuelschneid3r.gpg > /dev/null
         sudo -H apt update
         sudo -H apt install albert -y
