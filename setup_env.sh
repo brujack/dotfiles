@@ -1165,7 +1165,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     printf "Installing powershell Ubuntu\\n"
     if [[ -n ${BIONIC} ]]; then
       if [[ ! -f ${HOME}/software_downloads/packages-microsoft-prod.deb ]]; then
-        wget -O ${HOME}/software_downloads/packages-microsoft-prod.deb http://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb
+        wget -O ${HOME}/software_downloads/packages-microsoft-prod.deb https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb
         sudo -H dpkg -i ${HOME}/software_downloads/packages-microsoft-prod.deb
         sudo apt update
         sudo -H add-apt-repository universe
@@ -1177,7 +1177,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     fi
     if [[ -n ${FOCAL} ]]; then
       if [[ ! -f ${HOME}/software_downloads/packages-microsoft-prod.deb ]]; then
-        wget -O ${HOME}/software_downloads/packages-microsoft-prod.deb http://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb
+        wget -O ${HOME}/software_downloads/packages-microsoft-prod.deb https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb
         sudo -H dpkg -i ${HOME}/software_downloads/packages-microsoft-prod.deb
         sudo apt update
         sudo -H add-apt-repository universe
@@ -1189,7 +1189,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     fi
     if [[ -n ${JAMMY} ]]; then
       if [[ ! -f ${HOME}/software_downloads/packages-microsoft-prod.deb ]]; then
-        wget -O ${HOME}/software_downloads/packages-microsoft-prod.deb http://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb
+        wget -O ${HOME}/software_downloads/packages-microsoft-prod.deb https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb
         sudo -H dpkg -i ${HOME}/software_downloads/packages-microsoft-prod.deb
         sudo apt update
         sudo -H add-apt-repository universe
@@ -1201,7 +1201,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     fi
     if [[ -n ${NOBLE} ]]; then
       if [[ ! -f ${HOME}/software_downloads/packages-microsoft-prod.deb ]]; then
-        wget -O ${HOME}/software_downloads/packages-microsoft-prod.deb http://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb
+        wget -O ${HOME}/software_downloads/packages-microsoft-prod.deb https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb
         sudo -H dpkg -i ${HOME}/software_downloads/packages-microsoft-prod.deb
         sudo apt update
         sudo -H add-apt-repository universe
