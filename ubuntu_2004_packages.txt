@@ -1,3 +1,5 @@
+libncurses5-dev
+libncursesw5-dev
 linux-generic-hwe-20.04
 python-openssl
 python-setuptools
