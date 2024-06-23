@@ -2085,6 +2085,7 @@ if [[ -n ${UPDATE} ]]; then
   fi
   if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
     printf "Updating Linux awscli\\n"
+    mkdir -p ${HOME}/software_downloads/awscli
     cd ${HOME}/software_downloads/awscli || exit
     curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
     unzip -u -o awscliv2.zip
