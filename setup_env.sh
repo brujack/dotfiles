@@ -1570,6 +1570,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       brew install mongosh
       brew install mongodb-atlas
       brew install neovim
+      brew install rbenv
       brew install ripgrep
       brew install rustup
       brew install starship
@@ -1961,9 +1962,21 @@ if [[ -n ${DEVELOPER} ]] || [[ -n ${ANSIBLE} ]]; then
   fi
 
   printf "Setup kitchen\\n"
-  source ${CHRUBY_LOC}/chruby/chruby.sh
-  source ${CHRUBY_LOC}/chruby/auto.sh
-  chruby ruby-${RUBY_VER}
+  printf "Installing ruby\\n"
+  if [[ -n ${MACOS} ]]; then
+    source ${CHRUBY_LOC}/chruby/chruby.sh
+    source ${CHRUBY_LOC}/chruby/auto.sh
+    chruby ruby-${RUBY_VER}
+  elif [[ -n ${LINUX} ]]; then
+    if [[ -n ${FOCAL} ]] || [[ -n ${JAMMY} ]]; then
+      source ${CHRUBY_LOC}/chruby/chruby.sh
+      source ${CHRUBY_LOC}/chruby/auto.sh
+      chruby ruby-${RUBY_VER}
+    elif [[ -n ${NOBLE} ]]; then
+      rbenv install ${RUBY_VER}
+    fi
+  fi
+
   gem install test-kitchen
   gem install kitchen-ansible
   gem install kitchen-docker

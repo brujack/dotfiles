@@ -50,6 +50,20 @@ if [[ -d ${CHRUBY_LOC}/chruby ]]; then
   source ${CHRUBY_LOC}/chruby/chruby.sh
   source ${CHRUBY_LOC}/chruby/auto.sh
   chruby ${RUBY_VER}
+
+
+  if [[ -n ${MACOS} ]]; then
+    source ${CHRUBY_LOC}/chruby/chruby.sh
+    source ${CHRUBY_LOC}/chruby/auto.sh
+    chruby ${RUBY_VER}
+  elif [[ -n ${LINUX} ]]; then
+    if [[ -n ${FOCAL} ]] || [[ -n ${JAMMY} ]]; then
+      source ${CHRUBY_LOC}/chruby/chruby.sh
+      source ${CHRUBY_LOC}/chruby/auto.sh
+      chruby ${RUBY_VER}
+    elif [[ -n ${NOBLE} ]]; then
+      rbenv local ${RUBY_VER}
+    fi
 fi
 
 # zsh options
