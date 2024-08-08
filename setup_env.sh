@@ -1978,7 +1978,9 @@ if [[ -n ${DEVELOPER} ]] || [[ -n ${ANSIBLE} ]]; then
       source ${CHRUBY_LOC}/chruby/auto.sh
       chruby ruby-${RUBY_VER}
     elif [[ -n ${NOBLE} ]]; then
-      rbenv install ${RUBY_VER}
+      if ! [[ -d ${HOME}/.rbenv/versions/${RUBY_VER} ]]; then
+        rbenv install ${RUBY_VER}
+      fi
     fi
   fi
 
