@@ -1937,7 +1937,9 @@ if [[ -n ${DEVELOPER} ]] || [[ -n ${ANSIBLE} ]]; then
       if [[ -n ${FOCAL} ]] || [[ -n ${JAMMY} ]]; then
         ruby-install ${RUBY_VER}
       elif [[ -n ${NOBLE} ]]; then
-        rbenv install ${RUBY_VER}
+        if ! [[ -d ${HOME}/.rbenv/versions/${RUBY_VER} ]]; then
+          rbenv install ${RUBY_VER}
+        fi
       fi
     fi
     INSTALLED_RUBY_VERSION=$(ruby --version) | awk '{print $2}'
