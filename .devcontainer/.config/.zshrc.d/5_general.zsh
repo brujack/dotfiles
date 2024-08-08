@@ -64,6 +64,7 @@ if [[ -d ${CHRUBY_LOC}/chruby ]]; then
     elif [[ -n ${NOBLE} ]]; then
       rbenv local ${RUBY_VER}
     fi
+  fi
 fi
 
 # zsh options
