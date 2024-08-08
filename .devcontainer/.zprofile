@@ -15,4 +15,4 @@ command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"
 if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]]; then
   export PATH="/opt/homebrew/bin:$PATH"
 fi
-eval "$(pyenv virtualenv-init -)"
+eval "$(pyenv init --path)"
