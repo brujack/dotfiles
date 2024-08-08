@@ -51,19 +51,19 @@ export HISTIGNORE="ls:cd:cd -:pwd:exit:date:* --help";
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
 if [[ ${MACOS} ]]; then
-  plugins=(ag ansible aws brew docker fzf git git-prompt helm history-substring-search kubectl macos python terraform vscode pyenv zsh-autosuggestions)
+  plugins=(ansible aws brew docker fzf git git-prompt helm history-substring-search kubectl macos python terraform vscode pyenv zsh-autosuggestions)
 fi
 if [[ ${UBUNTU} ]]; then
-  plugins=(ag ansible aws brew docker fzf git git-prompt helm history-substring-search kubectl python terraform ubuntu vscode pyenv zsh-autosuggestions)
+  plugins=(ansible aws brew docker fzf git git-prompt helm history-substring-search kubectl python terraform ubuntu vscode pyenv zsh-autosuggestions)
 fi
 if [[ ${FEDORA} ]]; then
-  plugins=(ag ansible aws docker fzf git git-prompt fedora helm history-substring-search kubectl python terraform vscode pyenv zsh-autosuggestions)
+  plugins=(ansible aws docker fzf git git-prompt fedora helm history-substring-search kubectl python terraform vscode pyenv zsh-autosuggestions)
 fi
 if [[ ${CENTOS} ]]; then
-  plugins=(ag ansible aws docker fzf git git-prompt fedora helm history-substring-search kubectl python terraform vscode pyenv zsh-autosuggestions)
+  plugins=(ansible aws docker fzf git git-prompt fedora helm history-substring-search kubectl python terraform vscode pyenv zsh-autosuggestions)
 fi
 if [[ ${REDHAT} ]]; then
-  plugins=(ag ansible aws docker fzf git git-prompt fedora helm history-substring-search kubectl python terraform vscode pyenv zsh-autosuggestions)
+  plugins=(ansible aws docker fzf git git-prompt fedora helm history-substring-search kubectl python terraform vscode pyenv zsh-autosuggestions)
 fi
 
 source $ZSH/oh-my-zsh.sh
