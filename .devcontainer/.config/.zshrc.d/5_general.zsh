@@ -57,6 +57,7 @@ if [[ -d ${CHRUBY_LOC}/chruby ]]; then
       source ${CHRUBY_LOC}/chruby/auto.sh
       chruby ${RUBY_VER}
     elif [[ -n ${NOBLE} ]]; then
+      rbenv init
       rbenv local ${RUBY_VER}
     fi
   fi

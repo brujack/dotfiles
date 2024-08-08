@@ -1918,21 +1918,27 @@ if [[ -n ${DEVELOPER} ]] || [[ -n ${ANSIBLE} ]]; then
 
   printf "Installing chruby on linux\\n"
   if [[ -n ${LINUX} ]]; then
-    if [[ ! -d ${HOME}/software_downloads/chruby-${CHRUBY_VER} ]]; then
-      wget -O ${HOME}/software_downloads/chruby-${CHRUBY_VER}.tar.gz https://github.com/postmodern/chruby/archive/v${CHRUBY_VER}.tar.gz
-      tar -xzvf ${HOME}/software_downloads/chruby-${CHRUBY_VER}.tar.gz -C ${HOME}/software_downloads/
-      cd ${HOME}/software_downloads/chruby-${CHRUBY_VER}/ || exit
-      sudo make install
+    if [[ -n ${FOCAL} ]] || [[ -n ${JAMMY} ]]; then
+      if [[ ! -d ${HOME}/software_downloads/chruby-${CHRUBY_VER} ]]; then
+        wget -O ${HOME}/software_downloads/chruby-${CHRUBY_VER}.tar.gz https://github.com/postmodern/chruby/archive/v${CHRUBY_VER}.tar.gz
+        tar -xzvf ${HOME}/software_downloads/chruby-${CHRUBY_VER}.tar.gz -C ${HOME}/software_downloads/
+        cd ${HOME}/software_downloads/chruby-${CHRUBY_VER}/ || exit
+        sudo make install
+      fi
     fi
   fi
 
-  printf "install ruby %s\\n" "${RUBY_VER}"
   if [[ ! -d ${HOME}/.rubies/ruby-${RUBY_VER}/bin ]]; then
+    printf "Install ruby %s\\n" "${RUBY_VER}"
     if [[ -n ${MACOS} ]]; then
       ruby-install ${RUBY_VER} -- --with-openssl-dir=$(brew --prefix openssl@3)
     fi
     if [[ -n ${LINUX} ]]; then
-      ruby-install ${RUBY_VER}
+      if [[ -n ${FOCAL} ]] || [[ -n ${JAMMY} ]]; then
+        ruby-install ${RUBY_VER}
+      elif [[ -n ${NOBLE} ]]; then
+        rbenv install ${RUBY_VER}
+      fi
     fi
     INSTALLED_RUBY_VERSION=$(ruby --version) | awk '{print $2}'
     if [[ ${INSTALLED_RUBY_VERSION} == ${RUBY_VER} ]]; then
@@ -1962,7 +1968,6 @@ if [[ -n ${DEVELOPER} ]] || [[ -n ${ANSIBLE} ]]; then
   fi
 
   printf "Setup kitchen\\n"
-  printf "Installing ruby\\n"
   if [[ -n ${MACOS} ]]; then
     source ${CHRUBY_LOC}/chruby/chruby.sh
     source ${CHRUBY_LOC}/chruby/auto.sh
