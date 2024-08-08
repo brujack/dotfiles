@@ -1,5 +1,5 @@
 GO_VER="1.22"
-RUBY_VER="3.3.3"
+RUBY_VER="3.3.4"
 GITREPOS="${HOME}/git-repos"
 
 if [[ ${MACOS} ]]; then
