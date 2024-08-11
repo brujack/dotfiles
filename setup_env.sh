@@ -960,6 +960,9 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
           brew install --cask postman
         fi
       fi
+      if [[ ! -d "/Applications/PowerShell.app" ]]; then
+        brew install --cask powershell
+      fi
       if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
         if [[ ! -d "/usr/local/sessionmanagerplugin" ]]; then
           brew install --cask session-manager-plugin
@@ -970,11 +973,13 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
           brew install --cask sourcetree
         fi
       fi
+      if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]]; then
+        if [[ ! -d "/Applications/Sonos.app" ]]; then
+          brew install --cask sonos
+        fi
+      fi
       if [[ ! -d "/Applications/Spotify.app" ]]; then
         brew install --cask spotify
-      fi
-      if [[ ! -d "/Applications/PowerShell.app" ]]; then
-        brew install --cask powershell
       fi
       if [[ ! -d "/Applications/Slack.app" ]]; then
         brew install --cask slack
