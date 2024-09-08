@@ -1,4 +1,4 @@
-GO_VER="1.22"
+GO_VER="1.23"
 RUBY_VER="3.3.5"
 GITREPOS="${HOME}/git-repos"
 

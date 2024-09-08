@@ -6,7 +6,7 @@ CHRUBY_VER="0.3.9"
 CONSUL_VER="1.16.0"
 DOCKER_COMPOSE_VER="v2.20.2"
 GIT_VER="2.43.0"
-GO_VER="1.22"
+GO_VER="1.23"
 KIND_VER="0.20.0"
 NOMAD_VER="1.6.1"
 PACKER_VER="1.9.2"
@@ -1241,6 +1241,9 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       1.22)
         pkgs_to_remove="golang-1.21-go golang-1.21-src"
         ;;
+      1.23)
+        pkgs_to_remove="golang-1.22-go golang-1.22-src"
+        ;;
       *)
         printf "Error: Unsupported Go version %s\\n" "${GO_VER}"
         exit 1
@@ -1304,6 +1307,22 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
           fi
         fi
         ;;
+        1.23)
+        if [[ ! -f ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} ]]; then
+          wget -O ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} ${GO_DOWNLOAD_URL}
+          tar xvf ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} -C ${HOME}/software_downloads/
+          if [[ -d /usr/local/go ]]; then
+            sudo rm -rf /usr/local/go
+          fi
+          if [[ -d ${HOME}/software_downloads/go ]]; then
+            sudo mv ${HOME}/software_downloads/go /usr/local/go
+            sudo chmod 755 /usr/local/go
+            sudo chown -R root:root /usr/local/go
+          fi
+          if [[ -d ${HOME}/software_downloads/go ]]; then
+            rm -rf ${HOME}/software_downloads/go
+          fi
+        fi
       *)
         printf "Error: Unsupported Go version %s\\n" "${GO_VER}"
         exit 1
