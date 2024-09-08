@@ -7,6 +7,9 @@ CONSUL_VER="1.16.0"
 DOCKER_COMPOSE_VER="v2.20.2"
 GIT_VER="2.43.0"
 GO_VER="1.23"
+# following go vars are for linux where go version is >= 1.21
+GO_DOWNLOAD_FILENAME="go1.23.1.linux-amd64.tar.gz"
+GO_DOWNLOAD_URL="https://go.dev/dl/${GO_DOWNLOAD_FILENAME}"
 KIND_VER="0.20.0"
 NOMAD_VER="1.6.1"
 PACKER_VER="1.9.2"
@@ -33,10 +36,6 @@ TELEPRESENCE_URL="https://app.getambassador.io/download/tel2/linux/amd64/latest/
 TFLINT_URL="https://github.com/terraform-linters/tflint/releases/download/v${TFLINT_VER}/tflint_linux_amd64.zip"
 TFSEC_URL="https://github.com/liamg/tfsec/releases/download/v${TFSEC_VER}/tfsec-linux-amd64"
 YQ_URL="https://github.com/mikefarah/yq/releases/download/v${YQ_VER}/yq_linux_amd64"
-
-# following go vars are for linux where go version is >= 1.21
-GO_DOWNLOAD_FILENAME="go1.21.1.linux-amd64.tar.gz"
-GO_DOWNLOAD_URL="https://go.dev/dl/${GO_DOWNLOAD_FILENAME}"
 
 RHEL_KUBECTL_REPO="cat <<EOF | sudo tee /etc/yum.repos.d/kubernetes.repo
 [kubernetes]
