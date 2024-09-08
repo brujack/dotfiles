@@ -1323,6 +1323,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
             rm -rf ${HOME}/software_downloads/go
           fi
         fi
+        ;;
       *)
         printf "Error: Unsupported Go version %s\\n" "${GO_VER}"
         exit 1
