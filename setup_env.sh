@@ -2010,14 +2010,37 @@ if [[ -n ${DEVELOPER} ]] || [[ -n ${ANSIBLE} ]]; then
     fi
   fi
 
-  gem install test-kitchen
-  gem install kitchen-ansible
-  gem install kitchen-docker
-  gem install kitchen-inspec
-  gem install kitchen-terraform
-  gem install kitchen-verifier-serverspec
-  gem install bundle
-  gem install bundler
+  if [[ -n ${MACOS} ]]; then
+    gem install test-kitchen
+    gem install kitchen-ansible
+    gem install kitchen-docker
+    gem install kitchen-inspec
+    gem install kitchen-terraform
+    gem install kitchen-verifier-serverspec
+    gem install bundle
+    gem install bundler
+  elif [[ -n ${LINUX} ]]; then
+    if [[ -n ${FOCAL} ]] || [[ -n ${JAMMY} ]]; then
+      gem install test-kitchen
+      gem install kitchen-ansible
+      gem install kitchen-docker
+      gem install kitchen-inspec
+      gem install kitchen-terraform
+      gem install kitchen-verifier-serverspec
+      gem install bundle
+      gem install bundler
+    elif [[ -n ${NOBLE} ]]; then
+      rbenv shell ${RUBY_VER}
+      gem install test-kitchen
+      gem install kitchen-ansible
+      gem install kitchen-docker
+      gem install kitchen-inspec
+      gem install kitchen-terraform
+      gem install kitchen-verifier-serverspec
+      gem install bundle
+      gem install bundler
+    fi
+  fi
 
   printf "Install terraspace\\n"
   gem install terraspace
