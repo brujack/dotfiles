@@ -9,6 +9,7 @@
 [[ $(hostname -s) = "office-1" ]] && export OFFICE=1
 [[ $(hostname -s) = "homes" ]] && export HOMES=1
 [[ $(hostname -s) = "homes-1" ]] && export HOMES=1
+[[ $(hostname -s) = "workstation" ]] && export WORKSTATION=1
 export PYENV_VIRTUALENV_DISABLE_PROMPT=1
 export PYENV_ROOT="$HOME/.pyenv"
 command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"
