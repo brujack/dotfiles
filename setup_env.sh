@@ -1617,7 +1617,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     fi
 
     if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
-      printf "Installing .net7 sdk\\n"
+      printf "Installing .net8 sdk\\n"
       sudo -H apt install dotnet-sdk-8.0 -y
     fi
 
