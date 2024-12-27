@@ -1604,6 +1604,9 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       brew install redpanda-data/tap/redpanda
       brew tap snyk/tap
       brew install snyk
+      if [[ -n ${WORKSTATION} ]]; then
+        brew install ollama
+      fi
     fi
 
     if [[ -n ${WORKSTATION} ]]; then
