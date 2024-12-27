@@ -16,3 +16,8 @@ if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${
   export PATH="/opt/homebrew/bin:$PATH"
 fi
 eval "$(pyenv init --path)"
+if [[ -n ${WORKSTATION} ]]; then
+  if [[ -f /home/linuxbrew/.linuxbrew/bin/rbenv ]]; then
+    eval "$(/home/linuxbrew/.linuxbrew/bin/rbenv init - --no-rehash zsh)"
+  fi
+fi
