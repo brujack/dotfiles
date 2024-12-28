@@ -5,3 +5,4 @@ libssl-dev
 libsqlite3-dev
 liblzma-dev
 linux-generic-hwe-24.04
+tree

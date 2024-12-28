@@ -8,3 +8,4 @@ libsqlite3-dev
 liblzma-dev
 linux-generic-hwe-22.04
 python-setuptools
+tree
