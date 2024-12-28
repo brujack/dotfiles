@@ -1,5 +1,5 @@
 GO_VER="1.23"
-RUBY_VER="3.3.5"
+RUBY_VER="3.4.1"
 GITREPOS="${HOME}/git-repos"
 
 if [[ ${MACOS} ]]; then
@@ -57,8 +57,12 @@ if [[ -d ${CHRUBY_LOC}/chruby ]]; then
       source ${CHRUBY_LOC}/chruby/auto.sh
       chruby ${RUBY_VER}
     elif [[ -n ${NOBLE} ]]; then
-      rbenv init
-      rbenv local ${RUBY_VER}
+      if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
+        if [[ -f /home/linuxbrew/.linuxbrew/bin/rbenv ]]; then
+          eval "$(/home/linuxbrew/.linuxbrew/bin/rbenv init - --no-rehash zsh)"
+          eval "$(/home/linuxbrew/.linuxbrew/bin/rbenv local ${RUBY_VER})"
+        fi
+      fi
     fi
   fi
 fi
