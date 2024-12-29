@@ -7,5 +7,6 @@ libssl-dev
 libsqlite3-dev
 liblzma-dev
 linux-generic-hwe-22.04
+neovim
 python-setuptools
 tree
