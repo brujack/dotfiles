@@ -879,9 +879,6 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
           brew install --cask docker
         fi
       fi
-      if [[ ! -d "/Applications/Dropbox.app" ]]; then
-        brew install --cask dropbox
-      fi
       if [[ ! -d "/Applications/ExpressVPN.app" ]]; then
         brew install --cask expressvpn
       fi

@@ -40,7 +40,6 @@ if ($IsWindows) {
       "docker-desktop",
       "docker-compose",
       "dotnet",
-      "dropbox",
       "evernote",
       "firefox",
       "fzf",
