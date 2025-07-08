@@ -190,7 +190,7 @@ if [[ ${MACOS} ]]; then
     # eval `/usr/local/bin/keychain --eval B6DCFA4E5AFEA3AF35CE0A189A997C02283A9062`
   elif [[ ${LAPTOP} ]]; then
     # eval `/opt/homebrew/bin/keychain --eval yubikey1`
-    eval `/opt/homebrew/bin/keychain --eval --agents ssh --inherit any id_rsa`
+    eval `/opt/homebrew/bin/keychain --eval id_rsa`
     # eval `/opt/homebrew/bin/keychain --eval id_ed25519`
     eval `/opt/homebrew/bin/keychain --eval home`
     eval `/opt/homebrew/bin/keychain --eval github`
