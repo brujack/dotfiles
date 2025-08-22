@@ -20,9 +20,13 @@ jq
 keychain
 libarchive-tools
 libbz2-dev
+libgdbm-dev
 libffi-dev
 liblzma-dev
 libelf-dev
+libmpdec-dev
+libncursesw5-dev
+libnss3-dev
 libpython3-dev
 libreadline-dev
 libssl-dev
@@ -45,6 +49,7 @@ nodejs
 npm
 openssh-server
 openssl
+pkg-config
 python3-pip
 python3-setuptools
 pwgen
@@ -66,6 +71,7 @@ traceroute
 unattended-upgrades
 unrar
 unzip
+uuid-dev
 vim
 wget
 xinetd
