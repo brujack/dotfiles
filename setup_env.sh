@@ -988,6 +988,9 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       if [[ ! -d "/Applications/TeamViewer.app" ]]; then
         brew install --cask teamviewer
       fi
+      if [[ ! -d "/Applications/TIDAL.app" ]]; then
+        brew install --cask tidal
+      fi
       if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
         if [[ ! -d "/Applications/VirtualBox.app" ]]; then
           brew install --cask virtualbox
