@@ -1982,7 +1982,11 @@ if [[ -n ${DEVELOPER} ]] || [[ -n ${ANSIBLE} ]]; then
         ruby-install ${RUBY_VER}
       elif [[ -n ${NOBLE} ]]; then
         if ! [[ -d ${HOME}/.rbenv/versions/${RUBY_VER} ]]; then
-          rbenv install ${RUBY_VER}
+          # Optional but often helpful: point Ruby at Ubuntu's OpenSSL
+          OPENSSL_DIR="$(pkg-config --variable=libdir openssl 2>/dev/null | sed 's#/lib$##')"
+          RUBY_CONFIGURE_OPTS="--with-openssl-dir=${OPENSSL_DIR:-/usr}" rbenv install ${RUBY_VER}
+          rbenv global ${RUBY_VER}
+          rbenv rehash
         fi
       fi
     fi
