@@ -835,9 +835,6 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       if [[ ! -d "/Applications/AppCleaner.app" ]]; then
         brew install --cask appcleaner
       fi
-      if [[ ! -d "/Applications/Atom.app" ]]; then
-        brew install --cask atom
-      fi
       if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]]; then
         if [[ ! -d "/Applications/balenaEtcher.app" ]]; then
           brew install --cask balenaetcher
