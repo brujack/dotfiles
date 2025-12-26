@@ -2077,7 +2077,13 @@ if [[ -n ${DEVELOPER} ]] || [[ -n ${ANSIBLE} ]]; then
     pyenv update
   fi
   if ! [[ -d ${HOME}/.pyenv/versions/${PYTHON_VER} ]]; then
-    pyenv install ${PYTHON_VER}
+    if [[ -n ${LINUX} ]]; then
+      pyenv update
+      env PYTHON_CONFIGURE_OPTS="--with-system-libmpdec=no" pyenv install 3.13.7
+      pyenv install ${PYTHON_VER}
+    elif [[ -n ${MACOS} ]]; then
+      pyenv install ${PYTHON_VER}
+    fi
   fi
 
   if ! [[ $(readlink "${HOME}/.pyenv/versions/ansible") == "${HOME}/.pyenv/versions/${PYTHON_VER}/envs/ansible" ]]; then
