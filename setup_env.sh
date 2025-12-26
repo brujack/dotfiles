@@ -2073,29 +2073,30 @@ if [[ -n ${DEVELOPER} ]] || [[ -n ${ANSIBLE} ]]; then
   fi
 
   printf "ANSIBLE setup\\n"
-  if [[ -n ${LINUX} ]]; then
-    pyenv update
-  fi
   if ! [[ -d ${HOME}/.pyenv/versions/${PYTHON_VER} ]]; then
-    if [[ -n ${LINUX} ]]; then
+    if [[ -n "${LINUX:-}" ]]; then
+      # Keep pyenv's build definitions current (optional but useful)
       pyenv update
 
       # zsh-safe cleanup (avoids: zsh: no matches found)
       rm -rf /tmp/python-build.*(N) 2>/dev/null || true
 
-      # keep brew out of PATH for this command
+      # Force bundled libmpdec + keep Homebrew out of the build environment
       env -i \
-        HOME="$HOME" USER="$USER" SHELL="$SHELL" TERM="$TERM" \
-        PATH="/usr/bin:/bin:/usr/sbin:/sbin" \
+        HOME="$HOME" USER="$USER" SHELL="${SHELL:-/bin/bash}" TERM="$TERM" \
         PYENV_ROOT="$HOME/.pyenv" \
         PYENV_VIRTUALENV_DISABLE_PROMPT=1 \
         PYTHON_CONFIGURE_OPTS="--with-system-libmpdec=no" \
+        PATH="/usr/bin:/bin:/usr/sbin:/sbin" \
         bash -lc '
+          set -euo pipefail
           export PATH="$PYENV_ROOT/bin:$PATH"
           eval "$(pyenv init -)"
-          pyenv install -v "${PYTHON_VER}"
+          pyenv install -s -v "${PYTHON_VER}"
         '
-    elif [[ -n ${MACOS} ]]; then
+
+    elif [[ -n "${MACOS:-}" ]]; then
+      # macOS: normal pyenv install, use system/brew deps as you already have them
       pyenv install -s "${PYTHON_VER}"
     fi
   fi
