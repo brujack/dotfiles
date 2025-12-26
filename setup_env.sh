@@ -2184,37 +2184,34 @@ if [[ -n ${UPDATE} ]]; then
     printf "Updating mas packages\\n"
     mas upgrade
   fi
-  printf "Updating pip3 packages\\n"
-  if [[ -n ${STUDIO} ]] || [[ -n ${LAPTOP} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]] || [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]] || [[ -n ${RATNA} ]]; then
-    # Always initialize pyenv in non-interactive scripts
+  printf "Updating pip3 packages\n"
+  if [[ -n ${STUDIO-} || -n ${LAPTOP-} || -n ${RECEPTION-} || -n ${OFFICE-} || -n ${HOMES-} || -n ${WORKSTATION-} || -n ${CRUNCHER-} || -n ${RATNA-} ]]; then
     export PYENV_ROOT="$HOME/.pyenv"
     export PATH="$PYENV_ROOT/bin:$PYENV_ROOT/shims:$PATH"
 
     if command -v pyenv >/dev/null 2>&1; then
       eval "$(pyenv init -)"
-      # only needed if you use pyenv-virtualenv:
       eval "$(pyenv virtualenv-init -)" 2>/dev/null || true
     fi
 
-    # Ensure the venv/version is selected for this script run
     pyenv shell ansible 2>/dev/null || true
-    # or: export PYENV_VERSION=ansible
-    python -m pip install --upgrade pip setuptools wheel
-    python -m pip list --outdated \
-      | cut -d= -f1 \
-      | while IFS= read -r pkg; do
-          # Skip empty lines
-          [[ -z "$pkg" ]] && continue
+    PYTHON="$(pyenv which python 2>/dev/null || command -v python3)"
 
-          # Upgrade, but don't kill the whole script if one package fails
-          python -m pip install -U "$pkg" || {
-            echo "WARNING: failed upgrading $pkg (skipping)" >&2
-            continue
-          }
-        done
+    "$PYTHON" -m pip install -U pip setuptools wheel
 
-    python -m pip check || true
-    printf "Updated pip packages\\n"
+    "$PYTHON" - <<'PY'
+import json, subprocess, sys
+
+cmd = [sys.executable, "-m", "pip", "list", "--outdated", "--format=json"]
+out = subprocess.check_output(cmd, text=True)
+pkgs = [p["name"] for p in json.loads(out)]
+
+if pkgs:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-U", *pkgs])
+PY
+
+    "$PYTHON" -m pip check || true
+    printf "Updated pip packages\n"
   fi
   if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]] || [[ -n ${RATNA} ]]; then
     if [[ -n ${MACOS} ]]; then
