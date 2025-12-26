@@ -2079,10 +2079,9 @@ if [[ -n ${DEVELOPER} ]] || [[ -n ${ANSIBLE} ]]; then
   if ! [[ -d ${HOME}/.pyenv/versions/${PYTHON_VER} ]]; then
     if [[ -n ${LINUX} ]]; then
       pyenv update
-      env PYTHON_CONFIGURE_OPTS="--with-system-libmpdec=no" pyenv install ${PYTHON_VER}
-      pyenv install ${PYTHON_VER}
+      PYTHON_CONFIGURE_OPTS="--with-system-libmpdec=no" pyenv install -s "${PYTHON_VER}"
     elif [[ -n ${MACOS} ]]; then
-      pyenv install ${PYTHON_VER}
+      pyenv install -s "${PYTHON_VER}"
     fi
   fi
 
