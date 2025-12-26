@@ -1638,7 +1638,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       sudo -H apt install dotnet-sdk-8.0 -y
     fi
 
-    python3 -m pip install glances
+    python -m pip install glances
     if [[ -x $(command -v glances) ]]; then
       printf "glances is installed\\n"
     fi
@@ -1781,7 +1781,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     sudo -H dnf install nodejs -y
 
     printf "Installing glances cpu monitor RHEL\\n"
-    sudo -H python3 -m pip install glances
+    sudo -H python -m pip install glances
     if [[ -x $(command -v glances) ]]; then
       printf "glances is installed\\n"
     fi
@@ -2098,7 +2098,7 @@ if [[ -n ${DEVELOPER} ]] || [[ -n ${ANSIBLE} ]]; then
       pyenv virtualenv "${PYTHON_VER}" ansible
       pyenv activate ansible
       printf "Installing Ansible dependencies...\\n"
-      python3 -m pip install ansible ansible-lint certbot certbot-dns-cloudflare boto3 docker jmespath netaddr pylint psutil bpytop HttpPy j2cli wheel shell-gpt
+      python -m pip install ansible ansible-lint certbot certbot-dns-cloudflare boto3 docker jmespath netaddr pylint psutil bpytop HttpPy j2cli wheel shell-gpt
     fi
   fi
 
@@ -2167,9 +2167,9 @@ if [[ -n ${UPDATE} ]]; then
   fi
   printf "Updating pip3 packages\\n"
   if [[ -n ${STUDIO} ]] || [[ -n ${LAPTOP} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]] || [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]] || [[ -n ${RATNA} ]]; then
-    python3 -m pip install --upgrade pip
-    python3 -m pip list --outdated --format=columns | awk '{print $1;}' | awk 'NR>2' | xargs -n1 python3 -m pip install -U
-    python3 -m pip check
+    python -m pip install --upgrade pip
+    python -m pip list --outdated --format=columns | awk '{print $1;}' | awk 'NR>2' | xargs -n1 python -m pip install -U
+    python -m pip check
     printf "Updated pip packages\\n"
   fi
   if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]] || [[ -n ${RATNA} ]]; then
