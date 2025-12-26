@@ -2079,7 +2079,7 @@ if [[ -n ${DEVELOPER} ]] || [[ -n ${ANSIBLE} ]]; then
       pyenv update
 
       # zsh-safe cleanup (avoids: zsh: no matches found)
-      rm -rf /tmp/python-build.*(N) 2>/dev/null || true
+      rm -rf "/tmp/python-build.*" 2>/dev/null || true
 
       # Force bundled libmpdec + keep Homebrew out of the build environment
       env -i \
