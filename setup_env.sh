@@ -1007,6 +1007,9 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       if [[ ! -d "/Applications/Warp.app" ]]; then
         brew install --cask warp
       fi
+      if [[ ! -d "/Applications/Zed.app" ]]; then
+        brew install --cask zed
+      fi
       if [[ ! -d "/Applications/zoom.us.app" ]]; then
         brew install --cask zoom
       fi
@@ -2183,9 +2186,9 @@ if [[ -n ${UPDATE} ]]; then
   fi
   printf "Updating pip3 packages\\n"
   if [[ -n ${STUDIO} ]] || [[ -n ${LAPTOP} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]] || [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]] || [[ -n ${RATNA} ]]; then
-    python -m pip install --upgrade pip
-    python -m pip list --outdated --format=columns | awk '{print $1;}' | awk 'NR>2' | xargs -n1 python -m pip install -U
-    python -m pip check
+    python3 -m pip install --upgrade pip
+    python3 -m pip list --outdated --format=columns | awk '{print $1;}' | awk 'NR>2' | xargs -n1 python -m pip install -U
+    python3 -m pip check
     printf "Updated pip packages\\n"
   fi
   if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]] || [[ -n ${RATNA} ]]; then
