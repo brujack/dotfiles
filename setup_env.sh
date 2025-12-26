@@ -2084,6 +2084,7 @@ if [[ -n ${DEVELOPER} ]] || [[ -n ${ANSIBLE} ]]; then
       # Force bundled libmpdec + keep Homebrew out of the build environment
       env -i \
         HOME="$HOME" USER="$USER" SHELL="${SHELL:-/bin/bash}" TERM="$TERM" \
+        PYTHON_VER="${PYTHON_VER}" \
         PYENV_ROOT="$HOME/.pyenv" \
         PYENV_VIRTUALENV_DISABLE_PROMPT=1 \
         PYTHON_CONFIGURE_OPTS="--with-system-libmpdec=no" \
