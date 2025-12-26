@@ -1,6 +1,5 @@
 libbz2-dev
 libffi-dev
-libmpdec-dev
 libreadline-dev
 libssl-dev
 libsqlite3-dev

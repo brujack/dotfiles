@@ -2079,7 +2079,22 @@ if [[ -n ${DEVELOPER} ]] || [[ -n ${ANSIBLE} ]]; then
   if ! [[ -d ${HOME}/.pyenv/versions/${PYTHON_VER} ]]; then
     if [[ -n ${LINUX} ]]; then
       pyenv update
-      unset CPATH LIBRARY_PATH LD_LIBRARY_PATH CPPFLAGS LDFLAGS PKG_CONFIG_PATH
+
+      # zsh-safe cleanup (avoids: zsh: no matches found)
+      rm -rf /tmp/python-build.*(N) 2>/dev/null || true
+
+      # keep brew out of PATH for this command
+      env -i \
+        HOME="$HOME" USER="$USER" SHELL="$SHELL" TERM="$TERM" \
+        PATH="/usr/bin:/bin:/usr/sbin:/sbin" \
+        PYENV_ROOT="$HOME/.pyenv" \
+        PYENV_VIRTUALENV_DISABLE_PROMPT=1 \
+        PYTHON_CONFIGURE_OPTS="--with-system-libmpdec=no" \
+        bash -lc '
+          export PATH="$PYENV_ROOT/bin:$PATH"
+          eval "$(pyenv init -)"
+          pyenv install -v "${PYTHON_VER}"
+        '
     elif [[ -n ${MACOS} ]]; then
       pyenv install -s "${PYTHON_VER}"
     fi
