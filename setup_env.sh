@@ -2186,9 +2186,34 @@ if [[ -n ${UPDATE} ]]; then
   fi
   printf "Updating pip3 packages\\n"
   if [[ -n ${STUDIO} ]] || [[ -n ${LAPTOP} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]] || [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]] || [[ -n ${RATNA} ]]; then
-    python3 -m pip install --upgrade pip
-    python3 -m pip list --outdated --format=columns | awk '{print $1;}' | awk 'NR>2' | xargs -n1 python -m pip install -U
-    python3 -m pip check
+    # Always initialize pyenv in non-interactive scripts
+    export PYENV_ROOT="$HOME/.pyenv"
+    export PATH="$PYENV_ROOT/bin:$PYENV_ROOT/shims:$PATH"
+
+    if command -v pyenv >/dev/null 2>&1; then
+      eval "$(pyenv init -)"
+      # only needed if you use pyenv-virtualenv:
+      eval "$(pyenv virtualenv-init -)" 2>/dev/null || true
+    fi
+
+    # Ensure the venv/version is selected for this script run
+    pyenv shell ansible 2>/dev/null || true
+    # or: export PYENV_VERSION=ansible
+    python -m pip install --upgrade pip setuptools wheel
+    python -m pip list --outdated \
+      | cut -d= -f1 \
+      | while IFS= read -r pkg; do
+          # Skip empty lines
+          [[ -z "$pkg" ]] && continue
+
+          # Upgrade, but don't kill the whole script if one package fails
+          python -m pip install -U "$pkg" || {
+            echo "WARNING: failed upgrading $pkg (skipping)" >&2
+            continue
+          }
+        done
+
+    python -m pip check || true
     printf "Updated pip packages\\n"
   fi
   if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]] || [[ -n ${RATNA} ]]; then
