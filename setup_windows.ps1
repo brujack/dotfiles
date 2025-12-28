@@ -82,6 +82,7 @@ if ($IsWindows) {
       "vlc",
       "vscode",
       "winscp",
+      "zed",
       "zoom",
       "zoxide",
       "7zip"

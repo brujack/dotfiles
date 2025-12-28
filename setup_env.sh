@@ -1007,6 +1007,9 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       if [[ ! -d "/Applications/Warp.app" ]]; then
         brew install --cask warp
       fi
+      if [[ ! -d "/Applications/Zed.app" ]]; then
+        brew install --cask zed
+      fi
       if [[ ! -d "/Applications/zoom.us.app" ]]; then
         brew install --cask zoom
       fi
@@ -1638,7 +1641,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       sudo -H apt install dotnet-sdk-8.0 -y
     fi
 
-    python3 -m pip install glances
+    python -m pip install glances
     if [[ -x $(command -v glances) ]]; then
       printf "glances is installed\\n"
     fi
@@ -1781,7 +1784,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     sudo -H dnf install nodejs -y
 
     printf "Installing glances cpu monitor RHEL\\n"
-    sudo -H python3 -m pip install glances
+    sudo -H python -m pip install glances
     if [[ -x $(command -v glances) ]]; then
       printf "glances is installed\\n"
     fi
@@ -2073,11 +2076,33 @@ if [[ -n ${DEVELOPER} ]] || [[ -n ${ANSIBLE} ]]; then
   fi
 
   printf "ANSIBLE setup\\n"
-  if [[ -n ${LINUX} ]]; then
-    pyenv update
-  fi
   if ! [[ -d ${HOME}/.pyenv/versions/${PYTHON_VER} ]]; then
-    pyenv install ${PYTHON_VER}
+    if [[ -n "${LINUX:-}" ]]; then
+      # Keep pyenv's build definitions current (optional but useful)
+      pyenv update
+
+      # zsh-safe cleanup (avoids: zsh: no matches found)
+      rm -rf "/tmp/python-build.*" 2>/dev/null || true
+
+      # Force bundled libmpdec + keep Homebrew out of the build environment
+      env -i \
+        HOME="$HOME" USER="$USER" SHELL="${SHELL:-/bin/bash}" TERM="$TERM" \
+        PYTHON_VER="${PYTHON_VER}" \
+        PYENV_ROOT="$HOME/.pyenv" \
+        PYENV_VIRTUALENV_DISABLE_PROMPT=1 \
+        PYTHON_CONFIGURE_OPTS="--with-system-libmpdec=no" \
+        PATH="/usr/bin:/bin:/usr/sbin:/sbin" \
+        bash -lc '
+          set -euo pipefail
+          export PATH="$PYENV_ROOT/bin:$PATH"
+          eval "$(pyenv init -)"
+          pyenv install -s -v "${PYTHON_VER}"
+        '
+
+    elif [[ -n "${MACOS:-}" ]]; then
+      # macOS: normal pyenv install, use system/brew deps as you already have them
+      pyenv install -s "${PYTHON_VER}"
+    fi
   fi
 
   if ! [[ $(readlink "${HOME}/.pyenv/versions/ansible") == "${HOME}/.pyenv/versions/${PYTHON_VER}/envs/ansible" ]]; then
@@ -2092,7 +2117,7 @@ if [[ -n ${DEVELOPER} ]] || [[ -n ${ANSIBLE} ]]; then
       pyenv virtualenv "${PYTHON_VER}" ansible
       pyenv activate ansible
       printf "Installing Ansible dependencies...\\n"
-      python3 -m pip install ansible ansible-lint certbot certbot-dns-cloudflare boto3 docker jmespath netaddr pylint psutil bpytop HttpPy j2cli wheel shell-gpt
+      python -m pip install ansible ansible-lint certbot certbot-dns-cloudflare boto3 docker jmespath netaddr pylint psutil bpytop HttpPy j2cli wheel shell-gpt
     fi
   fi
 
@@ -2159,12 +2184,34 @@ if [[ -n ${UPDATE} ]]; then
     printf "Updating mas packages\\n"
     mas upgrade
   fi
-  printf "Updating pip3 packages\\n"
-  if [[ -n ${STUDIO} ]] || [[ -n ${LAPTOP} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]] || [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]] || [[ -n ${RATNA} ]]; then
-    python3 -m pip install --upgrade pip
-    python3 -m pip list --outdated --format=columns | awk '{print $1;}' | awk 'NR>2' | xargs -n1 python3 -m pip install -U
-    python3 -m pip check
-    printf "Updated pip packages\\n"
+  printf "Updating pip3 packages\n"
+  if [[ -n ${STUDIO-} || -n ${LAPTOP-} || -n ${RECEPTION-} || -n ${OFFICE-} || -n ${HOMES-} || -n ${WORKSTATION-} || -n ${CRUNCHER-} || -n ${RATNA-} ]]; then
+    export PYENV_ROOT="$HOME/.pyenv"
+    export PATH="$PYENV_ROOT/bin:$PYENV_ROOT/shims:$PATH"
+
+    if command -v pyenv >/dev/null 2>&1; then
+      eval "$(pyenv init -)"
+      eval "$(pyenv virtualenv-init -)" 2>/dev/null || true
+    fi
+
+    pyenv shell ansible 2>/dev/null || true
+    PYTHON="$(pyenv which python 2>/dev/null || command -v python3)"
+
+    "$PYTHON" -m pip install -U pip setuptools wheel
+
+    "$PYTHON" - <<'PY'
+import json, subprocess, sys
+
+cmd = [sys.executable, "-m", "pip", "list", "--outdated", "--format=json"]
+out = subprocess.check_output(cmd, text=True)
+pkgs = [p["name"] for p in json.loads(out)]
+
+if pkgs:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-U", *pkgs])
+PY
+
+    "$PYTHON" -m pip check || true
+    printf "Updated pip packages\n"
   fi
   if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]] || [[ -n ${RATNA} ]]; then
     if [[ -n ${MACOS} ]]; then
