@@ -2117,7 +2117,7 @@ if [[ -n ${DEVELOPER} ]] || [[ -n ${ANSIBLE} ]]; then
       pyenv virtualenv "${PYTHON_VER}" ansible
       pyenv activate ansible
       printf "Installing Ansible dependencies...\\n"
-      python -m pip install ansible ansible-lint certbot certbot-dns-cloudflare boto3 docker jmespath netaddr pylint psutil bpytop HttpPy j2cli wheel shell-gpt
+      python -m pip install ansible ansible-lint certbot certbot-dns-cloudflare boto3 docker jmespath mpmath netaddr pylint psutil bpytop HttpPy j2cli wheel shell-gpt
     fi
   fi
 
