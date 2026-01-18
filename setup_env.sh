@@ -858,6 +858,11 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
           brew install --cask chatgpt
         fi
       fi
+      if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]]; then
+        if [[ ! -d "/Applications/Claude.app" ]]; then
+          brew install --cask claude
+        fi
+      fi
       if [[ ! -d "/Applications/DaisyDisk.app" ]]; then
         brew install --cask daisydisk
       fi
