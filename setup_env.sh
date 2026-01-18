@@ -5,10 +5,10 @@ CF_TERRAFORMING_VER="0.16.1"
 CHRUBY_VER="0.3.9"
 CONSUL_VER="1.16.0"
 DOCKER_COMPOSE_VER="v2.20.2"
-GIT_VER="2.43.0"
-GO_VER="1.24"
+GIT_VER="2.52.0"
+GO_VER="1.25"
 # following go vars are for linux where go version is >= 1.21
-GO_DOWNLOAD_FILENAME="go1.24.1.linux-amd64.tar.gz"
+GO_DOWNLOAD_FILENAME="go1.25.6.linux-amd64.tar.gz"
 GO_DOWNLOAD_URL="https://go.dev/dl/${GO_DOWNLOAD_FILENAME}"
 KIND_VER="0.20.0"
 NOMAD_VER="1.6.1"
@@ -1251,6 +1251,9 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       1.24)
         pkgs_to_remove="golang-1.23-go golang-1.23-src"
         ;;
+      1.25)
+        pkgs_to_remove="golang-1.24-go golang-1.24-src"
+        ;;
       *)
         printf "Error: Unsupported Go version %s\\n" "${GO_VER}"
         exit 1
@@ -1332,6 +1335,23 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
         fi
         ;;
         1.24)
+        if [[ ! -f ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} ]]; then
+          wget -O ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} ${GO_DOWNLOAD_URL}
+          tar xvf ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} -C ${HOME}/software_downloads/
+          if [[ -d /usr/local/go ]]; then
+            sudo rm -rf /usr/local/go
+          fi
+          if [[ -d ${HOME}/software_downloads/go ]]; then
+            sudo mv ${HOME}/software_downloads/go /usr/local/go
+            sudo chmod 755 /usr/local/go
+            sudo chown -R root:root /usr/local/go
+          fi
+          if [[ -d ${HOME}/software_downloads/go ]]; then
+            rm -rf ${HOME}/software_downloads/go
+          fi
+        fi
+        ;;
+        1.25)
         if [[ ! -f ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} ]]; then
           wget -O ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} ${GO_DOWNLOAD_URL}
           tar xvf ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} -C ${HOME}/software_downloads/
