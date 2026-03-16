@@ -863,6 +863,11 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
           brew install --cask claude
         fi
       fi
+      if [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]]; then
+        if ! command -v claude-code &>/dev/null; then
+          brew install claude-code
+        fi
+      fi
       if [[ ! -d "/Applications/DaisyDisk.app" ]]; then
         brew install --cask daisydisk
       fi
@@ -1649,6 +1654,9 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       brew install redpanda-data/tap/redpanda
       brew tap snyk/tap
       brew install snyk
+      if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
+        brew install claude-code
+      fi
       if [[ -n ${WORKSTATION} ]]; then
         brew install ollama
       fi
