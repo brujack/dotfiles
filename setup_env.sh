@@ -152,8 +152,10 @@ install_homebrew() {
   return 0
 }
 
-
 brew_update() {
+  if ! ensure_not_root; then
+    return 1
+  fi
   if ! command -v brew &>/dev/null; then
     printf "Homebrew not found, installing Homebrew...\\n"
     install_homebrew
@@ -187,6 +189,82 @@ brew_update() {
   return 0
 }
 
+ensure_not_root() {
+  if [[ $(id -u) -eq 0 ]]; then
+    printf "Homebrew cannot run as root. Re-run without sudo.\\n"
+    return 1
+  fi
+  return 0
+}
+
+brew_formula_installed() {
+  local formula="$1"
+  if ! ensure_not_root; then
+    return 1
+  fi
+  if [[ "$formula" == */* ]]; then
+    brew list --formula --full-name | grep -q "^${formula}$"
+  else
+    brew list --formula | grep -q "^${formula}$"
+  fi
+}
+
+brew_cask_installed() {
+  local cask="$1"
+  if ! ensure_not_root; then
+    return 1
+  fi
+  if [[ "$cask" == */* ]]; then
+    brew list --cask --full-name | grep -q "^${cask}$"
+  else
+    brew list --cask | grep -q "^${cask}$"
+  fi
+}
+
+brew_install_formula() {
+  local formula="$1"
+  if ! ensure_not_root; then
+    return 1
+  fi
+  if ! brew_formula_installed "$formula"; then
+    brew install "$formula"
+  fi
+}
+
+brew_install_cask() {
+  local cask="$1"
+  if ! ensure_not_root; then
+    return 1
+  fi
+  if ! brew_cask_installed "$cask"; then
+    brew install --cask --force --overwrite "$cask"
+  fi
+}
+
+brew_tap_installed() {
+  local tap="$1"
+  if ! ensure_not_root; then
+    return 1
+  fi
+  brew tap | grep -q "^${tap}$"
+}
+
+brew_tap_if_missing() {
+  local tap="$1"
+  if ! ensure_not_root; then
+    return 1
+  fi
+  if ! brew_tap_installed "$tap"; then
+    brew tap "$tap"
+  fi
+}
+
+app_dir_exists() {
+  local path="$1"
+  local normalized="${path//\\ / }"
+  [[ -d "$normalized" ]]
+}
+
 install_git() {
   printf "Installing git\\n"
   if [[ "$(uname -s)" != "Darwin" ]]; then
@@ -200,7 +278,7 @@ install_git() {
         install_homebrew
       fi
       if command -v brew &> /dev/null; then
-        brew install git
+        brew_install_formula git
       else
         printf "Failed to install Homebrew. Cannot install Git.\\n"
         return 1
@@ -239,7 +317,7 @@ install_zsh() {
         install_homebrew
       fi
       if command -v brew &> /dev/null; then
-        brew install zsh
+        brew_install_formula zsh
       else
         printf "Failed to install Homebrew. Cannot install zsh.\\n"
         return 1
@@ -796,232 +874,230 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       brew_update
       printf "Installing other brew stuff...\\n"
       #https://github.com/Homebrew/homebrew-bundle
-      brew tap homebrew/bundle
-      brew tap homebrew/cask
-      cd ${BREWFILE_LOC} && brew bundle
-      brew install --cask chef/chef/inspec
-      brew tap cloudflare/cloudflare
-      brew install --cask cloudflare/cloudflare/cf-terraforming
-      brew install --cask dotnet
-      brew install go-task/tap/go-task
-      brew install --cask miro
-      brew tap snyk/tap
-      brew install snyk
-      brew tap teamookla/speedtest
-      brew install speedtest
-      brew install redpanda-data/tap/redpanda
+      brew_tap_if_missing homebrew/bundle
+      if ! brew bundle check --file "${BREWFILE_LOC}/Brewfile"; then
+        brew bundle --file "${BREWFILE_LOC}/Brewfile"
+      fi
+      brew_install_cask chef/chef/inspec
+      brew_tap_if_missing cloudflare/cloudflare
+      brew_install_cask dotnet
+      brew_install_formula go-task/tap/go-task
+      brew_install_cask miro
+      brew_tap_if_missing snyk/tap
+      brew_install_formula snyk
+      brew_tap_if_missing teamookla/speedtest
+      brew_install_formula speedtest
+      brew_install_formula redpanda-data/tap/redpanda
       if [[ -n ${STUDIO} ]] || [[ -n ${LAPTOP} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]] || [[ -n ${RATNA} ]]; then
-        brew install datawire/blackbird/telepresence-arm64
-        brew install cloudflared
+        brew_install_formula datawire/blackbird/telepresence-arm64
+        brew_install_formula cloudflared
       fi
 
       cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
 
       # the below casks and mas are not in a brewfile since they will "fail" if already installed
-      if [[ ! -d "/Applications/1Password.app" ]]; then
-        brew install --cask 1password
+      if ! app_dir_exists "/Applications/1Password.app"; then
+        brew_install_cask 1password
       fi
       if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]]; then
-        if [[ ! -d "/Applications/Adobe\ Creative\ Cloud" ]]; then
-          brew install --cask adobe-creative-cloud
+        if ! app_dir_exists "/Applications/Adobe\ Creative\ Cloud"; then
+          brew_install_cask adobe-creative-cloud
         fi
       fi
-      if [[ ! -d "/Applications/Adobe\ Acrobat\ Reader\ DC.app" ]]; then
-        brew install --cask adobe-acrobat-reader
+      if ! app_dir_exists "/Applications/Adobe\ Acrobat\ Reader\ DC.app"; then
+        brew_install_cask adobe-acrobat-reader
       fi
-      if [[ ! -d "/Applications/Alfred\ 5.app" ]]; then
-        brew install --cask alfred
+      if ! app_dir_exists "/Applications/Alfred\ 5.app"; then
+        brew_install_cask alfred
       fi
-      if [[ ! -d "/Applications/AppCleaner.app" ]]; then
-        brew install --cask appcleaner
+      if ! app_dir_exists "/Applications/AppCleaner.app"; then
+        brew_install_cask appcleaner
       fi
       if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]]; then
-        if [[ ! -d "/Applications/balenaEtcher.app" ]]; then
-          brew install --cask balenaetcher
+        if ! app_dir_exists "/Applications/balenaEtcher.app"; then
+          brew_install_cask balenaetcher
         fi
       fi
       if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]]; then
-        if [[ ! -d "/Applications/BambuStudio.app" ]]; then
-          brew install --cask bambu-studio
+        if ! app_dir_exists "/Applications/BambuStudio.app"; then
+          brew_install_cask bambu-studio
         fi
       fi
-      if [[ ! -d "/Applications/Beyond\ Compare.app" ]]; then
-        brew install --cask beyond-compare
+      if ! app_dir_exists "/Applications/Beyond\ Compare.app"; then
+        brew_install_cask beyond-compare
       fi
       if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
-        if [[ ! -d "/Applications/Carbon\ Copy\ Cloner.app" ]]; then
-          brew install --cask carbon-copy-cloner
+        if ! app_dir_exists "/Applications/Carbon\ Copy\ Cloner.app"; then
+          brew_install_cask carbon-copy-cloner
         fi
       fi
       if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]]; then
-        if [[ ! -d "/Applications/ChatGPT.app" ]]; then
-          brew install --cask chatgpt
+        if ! app_dir_exists "/Applications/ChatGPT.app"; then
+          brew_install_cask chatgpt
         fi
       fi
       if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]]; then
-        if [[ ! -d "/Applications/Claude.app" ]]; then
-          brew install --cask claude
+        if ! app_dir_exists "/Applications/Claude.app"; then
+          brew_install_cask claude
         fi
       fi
       if [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]]; then
-        if ! command -v claude-code &>/dev/null; then
-          brew install claude-code
-        fi
+        brew_install_formula claude-code
       fi
-      if [[ ! -d "/Applications/DaisyDisk.app" ]]; then
-        brew install --cask daisydisk
+      if ! app_dir_exists "/Applications/DaisyDisk.app"; then
+        brew_install_cask daisydisk
       fi
       if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
-        if [[ ! -d "/Applications/DBeaver.app" ]]; then
-          brew install --cask dbeaver-community
+        if ! app_dir_exists "/Applications/DBeaver.app"; then
+          brew_install_cask dbeaver-community
         fi
       fi
       if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]]; then
-        if [[ ! -d "/Applications/Discord.app" ]]; then
-          brew install --cask discord
+        if ! app_dir_exists "/Applications/Discord.app"; then
+          brew_install_cask discord
         fi
       fi
       if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
-        if [[ ! -d "/Applications/Docker.app" ]]; then
-          brew install --cask docker
+        if ! app_dir_exists "/Applications/Docker.app"; then
+          brew_install_cask docker
         fi
       fi
-      if [[ ! -d "/Applications/ExpressVPN.app" ]]; then
-        brew install --cask expressvpn
+      if ! app_dir_exists "/Applications/ExpressVPN.app"; then
+        brew_install_cask expressvpn
       fi
-      if [[ ! -d "/Applications/Firefox.app" ]]; then
-        brew install --cask firefox
+      if ! app_dir_exists "/Applications/Firefox.app"; then
+        brew_install_cask firefox
       fi
-      if [[ ! -d "/Applications/Flycut.app" ]]; then
-        brew install --cask flycut
+      if ! app_dir_exists "/Applications/Flycut.app"; then
+        brew_install_cask flycut
       fi
       if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
-        if [[ ! -d "/Applications/Fork.app" ]]; then
-          brew install --cask fork
+        if ! app_dir_exists "/Applications/Fork.app"; then
+          brew_install_cask fork
         fi
       fi
       if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
-        if [[ ! -d "/Applications/Funter.app" ]]; then
-          brew install --cask funter
+        if ! app_dir_exists "/Applications/Funter.app"; then
+          brew_install_cask funter
         fi
       fi
-      if [[ ! -d "/Applications/Google\ Chrome.app" ]]; then
-        brew install --cask google-chrome
+      if ! app_dir_exists "/Applications/Google\ Chrome.app"; then
+        brew_install_cask google-chrome
       fi
-      if [[ ! -d "/Applications/GitHub\ Desktop.app" ]]; then
-        brew install --cask github
+      if ! app_dir_exists "/Applications/GitHub\ Desktop.app"; then
+        brew_install_cask github
       fi
       if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
-        if [[ ! -d "/Applications/Google\ Cloud\ SDK.app" ]]; then
-          brew install --cask google-cloud-sdk
+        if ! app_dir_exists "/Applications/Google\ Cloud\ SDK.app"; then
+          brew_install_cask google-cloud-sdk
         fi
       fi
-      if [[ ! -d "/Applications/iStat\ Menus.app" ]]; then
-        brew install --cask istat-menus
+      if ! app_dir_exists "/Applications/iStat\ Menus.app"; then
+        brew_install_cask istat-menus
       fi
-      if [[ ! -d "/Applications/iTerm.app" ]]; then
-        brew install --cask iterm2
+      if ! app_dir_exists "/Applications/iTerm.app"; then
+        brew_install_cask iterm2
       fi
       if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
-        if [[ ! -d "/Applications/Lens.app" ]]; then
-          brew install --cask lens
+        if ! app_dir_exists "/Applications/Lens.app"; then
+          brew_install_cask lens
         fi
       fi
       if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]]; then
-        if [[ ! -d "/Applications/logioptionsplus.app" ]]; then
-          brew install --cask logi-options-plus
+        if ! app_dir_exists "/Applications/logioptionsplus.app"; then
+          brew_install_cask logi-options-plus
         fi
       fi
-      if [[ ! -d "/Applications/MacDown.app" ]]; then
-        brew install --cask macdown
+      if ! app_dir_exists "/Applications/MacDown.app"; then
+        brew_install_cask macdown
       fi
-      if [[ ! -d "/Applications/Malwarebytes.app" ]]; then
-        brew install --cask malwarebytes
+      if ! app_dir_exists "/Applications/Malwarebytes.app"; then
+        brew_install_cask malwarebytes
       fi
       if [[ -n ${RATNA} ]] || [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]]; then
-        if [[ ! -d "/Applications/Microsoft\ Word.app" ]]; then
-          brew install --cask microsoft-office
+        if ! app_dir_exists "/Applications/Microsoft\ Word.app"; then
+          brew_install_cask microsoft-office
         fi
       fi
       if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
-        if [[ ! -d "/Applications/MySQLWorkbench.app" ]]; then
-          brew install --cask mysqlworkbench
+        if ! app_dir_exists "/Applications/MySQLWorkbench.app"; then
+          brew_install_cask mysqlworkbench
         fi
       fi
       if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]]; then
-        if [[ ! -d "/Applications/OBS.app" ]]; then
-          brew install --cask obs
+        if ! app_dir_exists "/Applications/OBS.app"; then
+          brew_install_cask obs
         fi
       fi
       if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
-        if [[ ! -d "/usr/local/Caskroom/oracle-jdk" ]]; then
-          brew install --cask oracle-jdk
+        if ! app_dir_exists "/usr/local/Caskroom/oracle-jdk"; then
+          brew_install_cask oracle-jdk
         fi
       fi
       if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
-        if [[ ! -d "/Applications/Postman.app" ]]; then
-          brew install --cask postman
+        if ! app_dir_exists "/Applications/Postman.app"; then
+          brew_install_cask postman
         fi
       fi
-      if [[ ! -d "/Applications/PowerShell.app" ]]; then
-        brew install --cask powershell
+      if ! app_dir_exists "/Applications/PowerShell.app"; then
+        brew_install_cask powershell
       fi
       if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
-        if [[ ! -d "/usr/local/sessionmanagerplugin" ]]; then
-          brew install --cask session-manager-plugin
+        if ! app_dir_exists "/usr/local/sessionmanagerplugin"; then
+          brew_install_cask session-manager-plugin
         fi
       fi
       if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
-        if [[ ! -d "/Applications/SourceTree.app" ]]; then
-          brew install --cask sourcetree
+        if ! app_dir_exists "/Applications/SourceTree.app"; then
+          brew_install_cask sourcetree
         fi
       fi
       if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]]; then
-        if [[ ! -d "/Applications/Sonos.app" ]]; then
-          brew install --cask sonos
+        if ! app_dir_exists "/Applications/Sonos.app"; then
+          brew_install_cask sonos
         fi
       fi
-      if [[ ! -d "/Applications/Spotify.app" ]]; then
-        brew install --cask spotify
+      if ! app_dir_exists "/Applications/Spotify.app"; then
+        brew_install_cask spotify
       fi
-      if [[ ! -d "/Applications/Slack.app" ]]; then
-        brew install --cask slack
+      if ! app_dir_exists "/Applications/Slack.app"; then
+        brew_install_cask slack
       fi
       if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
-        if [[ ! -d "/Applications/Steam.app" ]]; then
-          brew install --cask steam
+        if ! app_dir_exists "/Applications/Steam.app"; then
+          brew_install_cask steam
         fi
       fi
-      if [[ ! -d "/Applications/TeamViewer.app" ]]; then
-        brew install --cask teamviewer
+      if ! app_dir_exists "/Applications/TeamViewer.app"; then
+        brew_install_cask teamviewer
       fi
-      if [[ ! -d "/Applications/TIDAL.app" ]]; then
-        brew install --cask tidal
+      if ! app_dir_exists "/Applications/TIDAL.app"; then
+        brew_install_cask tidal
       fi
       if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
-        if [[ ! -d "/Applications/VirtualBox.app" ]]; then
-          brew install --cask virtualbox
+        if ! app_dir_exists "/Applications/VirtualBox.app"; then
+          brew_install_cask virtualbox
         fi
       fi
       if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
-        if [[ ! -d "/Applications/Vagrant.app" ]]; then
-          brew install --cask vagrant
+        if ! app_dir_exists "/Applications/Vagrant.app"; then
+          brew_install_cask vagrant
         fi
       fi
-      if [[ ! -d "/Applications/Visual\ Studio\ Code.app" ]]; then
-        brew install --cask visual-studio-code
+      if ! app_dir_exists "/Applications/Visual\ Studio\ Code.app"; then
+        brew_install_cask visual-studio-code
       fi
-      if [[ ! -d "/Applications/VLC.app" ]]; then
-        brew install --cask vlc
+      if ! app_dir_exists "/Applications/VLC.app"; then
+        brew_install_cask vlc
       fi
-      if [[ ! -d "/Applications/Warp.app" ]]; then
-        brew install --cask warp
+      if ! app_dir_exists "/Applications/Warp.app"; then
+        brew_install_cask warp
       fi
-      if [[ ! -d "/Applications/Zed.app" ]]; then
-        brew install --cask zed
+      if ! app_dir_exists "/Applications/Zed.app"; then
+        brew_install_cask zed
       fi
-      if [[ ! -d "/Applications/zoom.us.app" ]]; then
-        brew install --cask zoom
+      if ! app_dir_exists "/Applications/zoom.us.app"; then
+        brew_install_cask zoom
       fi
 
       printf "Cleaning Homebrew up...\\n"
@@ -1032,98 +1108,98 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     sudo -H softwareupdate --install --all --verbose
 
     printf "Installing common apps via mas\\n"
-    if [[ ! -d "/Applications/Better\ Rename\ 9.app" ]]; then
+    if ! app_dir_exists "/Applications/Better\ Rename\ 9.app"; then
       mas install 414209656
     fi
-    if [[ ! -d "/Applications/Brother\ iPrint\&Scan.app" ]]; then
+    if ! app_dir_exists "/Applications/Brother\ iPrint\&Scan.app"; then
       mas install 1193539993
     fi
-    if [[ ! -d "/Applications/Blackmagic\ Disk\ Speed\ Test.app" ]]; then
+    if ! app_dir_exists "/Applications/Blackmagic\ Disk\ Speed\ Test.app"; then
       mas install 425264550
     fi
     if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]]; then
-      if [[ ! -d "/Applications/Evernote.app" ]]; then
+      if ! app_dir_exists "/Applications/Evernote.app"; then
         mas install 406056744
       fi
     fi
-    if [[ ! -d "/Applications/Flycut.app" ]]; then
+    if ! app_dir_exists "/Applications/Flycut.app"; then
       mas install 442160987
     fi
-    if [[ ! -d "/Applications/iNet\ Network\ Scanner.app" ]]; then
+    if ! app_dir_exists "/Applications/iNet\ Network\ Scanner.app"; then
       mas install 403304796
     fi
-    if [[ ! -d "/Applications/Mactracker.app" ]]; then
+    if ! app_dir_exists "/Applications/Mactracker.app"; then
       mas install 430255202
     fi
-    if [[ ! -d "/Applications/Magnet.app" ]]; then
+    if ! app_dir_exists "/Applications/Magnet.app"; then
       mas install 441258766
     fi
-    if [[ ! -d "/Applications/Markoff.app" ]]; then
+    if ! app_dir_exists "/Applications/Markoff.app"; then
       mas install 1084713122
     fi
-    if [[ ! -d "/Applications/Microsoft\ Remote\ Desktop.app" ]]; then
+    if ! app_dir_exists "/Applications/Microsoft\ Remote\ Desktop.app"; then
       mas install 715768417
     fi
-    if [[ ! -d "/Applications/Remote\ Desktop.app" ]]; then
+    if ! app_dir_exists "/Applications/Remote\ Desktop.app"; then
       mas install 409907375
     fi
-    if [[ ! -d "/Applications/Simplenote.app" ]]; then
+    if ! app_dir_exists "/Applications/Simplenote.app"; then
       mas install 692867256
     fi
-    if [[ ! -d "/Applications/Slack.app" ]]; then
+    if ! app_dir_exists "/Applications/Slack.app"; then
       mas install 803453959
     fi
-    if [[ ! -d "/Applications/Speedtest.app" ]]; then
+    if ! app_dir_exists "/Applications/Speedtest.app"; then
       mas install 1153157709
     fi
     if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
-      if [[ ! -d "/Applications/SQLPro\ for\ Postgres.app" ]]; then
+      if ! app_dir_exists "/Applications/SQLPro\ for\ Postgres.app"; then
         mas install 1025345625
       fi
     fi
-    if [[ ! -d "/Applications/Sync\ Folders\ Pro.app" ]]; then
+    if ! app_dir_exists "/Applications/Sync\ Folders\ Pro.app"; then
       mas install 522706442
     fi
-    if [[ ! -d "/Applications/The\ Unarchiver.app" ]]; then
+    if ! app_dir_exists "/Applications/The\ Unarchiver.app"; then
       mas install 425424353
     fi
-    if [[ ! -d "/Applications/Transmit.app" ]]; then
+    if ! app_dir_exists "/Applications/Transmit.app"; then
       mas install 403388562
     fi
     if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
-      if [[ ! -d "/Applications/Valentina\ Studio.app" ]]; then
+      if ! app_dir_exists "/Applications/Valentina\ Studio.app"; then
         mas install 604825918
       fi
     fi
 
     if [[ -n ${RATNA} ]] || [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]]; then
       printf "Installing extra apps via mas\\n"
-      if [[ ! -d "/Applications/Keynote.app" ]]; then
+      if ! app_dir_exists "/Applications/Keynote.app"; then
         mas install 409183694
       fi
-      if [[ ! -d "/Applications/iMovie.app" ]]; then
+      if ! app_dir_exists "/Applications/iMovie.app"; then
         mas install 408981434
       fi
-      if [[ ! -d "/Applications/Magnet.app" ]]; then
+      if ! app_dir_exists "/Applications/Magnet.app"; then
         mas install 441258766
       fi
-      if [[ ! -d "/Applications/Numbers.app" ]]; then
+      if ! app_dir_exists "/Applications/Numbers.app"; then
         mas install 409203825
       fi
-      if [[ ! -d "/Applications/Pages.app" ]]; then
+      if ! app_dir_exists "/Applications/Pages.app"; then
         mas install 409201541
       fi
-      if [[ ! -d "/Applications/Pixelmator\ Pro.app" ]]; then
+      if ! app_dir_exists "/Applications/Pixelmator\ Pro.app"; then
         mas install 1289583905
       fi
-      if [[ ! -d "/Applications/Read CHM.app" ]]; then
+      if ! app_dir_exists "/Applications/Read CHM.app"; then
         mas install 594432954
       fi
-      if [[ ! -d "/Applications/Telegram.app" ]]; then
+      if ! app_dir_exists "/Applications/Telegram.app"; then
         mas install 747648890
       fi
       printf "Installing xcode-stuff\\n"
-      if [[ ! -d "/Applications/Xcode.app" ]]; then
+      if ! app_dir_exists "/Applications/Xcode.app"; then
         mas install 497799835
       fi
     fi
@@ -1631,34 +1707,33 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     elif [ -x "$(command -v brew)" ]; then
       printf "Installing brew packages in Ubuntu\\n"
       brew_update
-      brew install argocd
-      brew install bat
-      brew install exa
-      brew install git-lfs
-      brew install fzf
-      brew install gh
-      brew install hadolint
-      brew install k9s
-      brew install lazydocker
-      brew install linkerd
-      brew install mongosh
-      brew install mongodb-atlas
-      brew install neovim
-      brew install rbenv
-      brew install ripgrep
-      brew install rustup
-      brew install starship
-      brew install tgenv
-      brew install zoxide
-      brew install go-task/tap/go-task
-      brew install redpanda-data/tap/redpanda
-      brew tap snyk/tap
-      brew install snyk
+      brew_install_formula argocd
+      brew_install_formula bat
+      brew_install_formula git-lfs
+      brew_install_formula fzf
+      brew_install_formula gh
+      brew_install_formula hadolint
+      brew_install_formula k9s
+      brew_install_formula lazydocker
+      brew_install_formula linkerd
+      brew_install_formula mongosh
+      brew_install_formula mongodb-atlas
+      brew_install_formula neovim
+      brew_install_formula rbenv
+      brew_install_formula ripgrep
+      brew_install_formula rustup
+      brew_install_formula starship
+      brew_install_formula tgenv
+      brew_install_formula zoxide
+      brew_install_formula go-task/tap/go-task
+      brew_install_formula redpanda-data/tap/redpanda
+      brew_tap_if_missing snyk/tap
+      brew_install_formula snyk
       if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
-        brew install claude-code
+        brew_install_formula claude-code
       fi
       if [[ -n ${WORKSTATION} ]]; then
-        brew install ollama
+        brew_install_formula ollama
       fi
     fi
 
