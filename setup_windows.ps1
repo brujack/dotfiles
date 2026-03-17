@@ -34,6 +34,8 @@ if ($IsWindows) {
       "bambustudio"
       "beyondcompare",
       "boxstarter",
+      "claude",
+      "claude-code",
       "crystaldiskmark",
       "dbeaver",
       "discord",
