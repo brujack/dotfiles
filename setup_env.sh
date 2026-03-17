@@ -941,7 +941,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
           brew_install_cask claude
         fi
       fi
-      if [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]]; then
+      if [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${LAPTOP} ]]; then
         brew_install_formula claude-code
       fi
       if ! app_dir_exists "/Applications/DaisyDisk.app"; then
