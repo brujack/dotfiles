@@ -24,7 +24,7 @@ VAGRANT_VER="2.3.7"
 VAULT_VER="1.14.1"
 VIRTUALBOX_VER="virtualbox-7.0"
 YQ_VER="4.40.3"
-ZSH_VER="5.9"
+ZSH_VER="5.10"
 KUBERNETES_VER="v1.30"
 
 CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v${CF_TERRAFORMING_VER}/cf-terraforming_${CF_TERRAFORMING_VER}_linux_amd64.tar.gz"
