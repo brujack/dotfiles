@@ -126,3 +126,4 @@ Uses **BATS** (Bash Automated Testing System) via npm (`node_modules/.bin/bats`)
 - Credential directories (`.aws`, `.tf_creds`, `.tsh`) are created with `chmod 700`
 - Git repos are cloned to `~/git-repos/personal/` and `~/git-repos/work/`
 - Python environments managed via **pyenv** + **pyenv-virtualenv**; the `ansible` venv is the primary one
+- Application installs are kept in alphabetical order
