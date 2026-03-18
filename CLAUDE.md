@@ -110,7 +110,7 @@ All tool versions are defined as constants at the top of `setup_env.sh`:
 ```bash
 GO_VER="1.26"
 PYTHON_VER="3.14.2"
-RUBY_VER="3.4.8"
+RUBY_VER="4.0.2"
 ```
 
 Update these constants when bumping versions — don't hardcode versions elsewhere.

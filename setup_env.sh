@@ -15,7 +15,7 @@ NOMAD_VER="1.6.1"
 PACKER_VER="1.9.2"
 PYTHON_VER="3.14.2"
 RUBY_INSTALL_VER="0.9.1"
-RUBY_VER="3.4.8"
+RUBY_VER="4.0.2"
 SHELLCHECK_VER="0.9.0"
 TERRAFORM_VER="1.3.5"
 TFLINT_VER="0.49.0"
@@ -2109,8 +2109,12 @@ if [[ -n ${DEVELOPER} ]] || [[ -n ${ANSIBLE} ]]; then
       ruby-install ${RUBY_VER} -- --with-openssl-dir=$(brew --prefix openssl@3)
     fi
     if [[ -n ${LINUX} ]]; then
-      if [[ -n ${FOCAL} ]] || [[ -n ${JAMMY} ]]; then
+      if [[ -n ${FOCAL} ]]; then
         ruby-install ${RUBY_VER}
+      elif [[ -n ${JAMMY} ]]; then
+        # Ruby 4.0 requires OpenSSL 3; Jammy ships OpenSSL 3 at /usr by default
+        OPENSSL_DIR="$(pkg-config --variable=prefix openssl 2>/dev/null)"
+        ruby-install ${RUBY_VER} -- --with-openssl-dir="${OPENSSL_DIR:-/usr}"
       elif [[ -n ${NOBLE} ]]; then
         if ! [[ -d ${HOME}/.rbenv/versions/${RUBY_VER} ]]; then
           # Optional but often helpful: point Ruby at Ubuntu's OpenSSL
