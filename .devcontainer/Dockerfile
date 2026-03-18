@@ -9,7 +9,7 @@ FROM mcr.microsoft.com/vscode/devcontainers/base:0-${VARIANT}
 ARG INSTALL_ZSH="true"
 ARG UPGRADE_PACKAGES="true"
 ARG Z_GIT="https://github.com/rupa/z.git"
-ARG GO_VER="1.17"
+ARG GO_VER="1.26"
 ARG HELM_VER="3.7.1"
 ARG HASHICORP_URL="https://releases.hashicorp.com"
 ARG TERRAFORM_VER="1.0.9"

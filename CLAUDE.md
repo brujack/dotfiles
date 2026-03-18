@@ -108,12 +108,13 @@ quiet_which <command>
 All tool versions are defined as constants at the top of `setup_env.sh`:
 
 ```bash
-GO_VER="1.25"
+GO_VER="1.26"
 PYTHON_VER="3.14.2"
 RUBY_VER="3.4.8"
 ```
 
 Update these constants when bumping versions — don't hardcode versions elsewhere.
+When a constant is updated in `setup_env.sh`, update all other references to that constant across the repo.
 
 ## Testing
 
