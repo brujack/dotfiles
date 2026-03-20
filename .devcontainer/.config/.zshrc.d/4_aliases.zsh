@@ -18,9 +18,6 @@ alias ti='terraform init'
 alias tv='terraform validate'
 alias td='terraform destroy'
 unalias make 2>/dev/null
-if [[ "$(uname -s)" == "Darwin" ]]; then
-  alias make='Make'
-fi
 alias m='Make'
 alias mp='Make plan'
 alias ma='Make apply'
