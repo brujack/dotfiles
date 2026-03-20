@@ -6,13 +6,19 @@ function Make() {
   else
     if [[ ${MACOS} ]]; then
       if [[ ${RATNA} ]]; then
-        alias make='/usr/local/bin/gmake'
+        command /usr/local/bin/gmake "$@"
+        return
       fi
       if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]]; then
-        alias make='/opt/homebrew/bin/gmake'
+        command /opt/homebrew/bin/gmake "$@"
+        return
       fi
     fi
-    make "$@"
+    if command -v gmake &>/dev/null; then
+      command gmake "$@"
+    else
+      command make "$@"
+    fi
   fi
 }
 
