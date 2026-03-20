@@ -2378,6 +2378,18 @@ PY
     sudo -H ${HOME}/software_downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin --update
     cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
   fi
+  if [[ -n ${UBUNTU} ]] && { [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; }; then
+    printf "Updating Rust Ubuntu\\n"
+    if [[ -x ${HOME}/.cargo/bin/rustup ]]; then
+      ${HOME}/.cargo/bin/rustup self update
+      ${HOME}/.cargo/bin/rustup update
+    elif command -v rustup >/dev/null 2>&1; then
+      rustup self update
+      rustup update
+    else
+      printf "rustup not found; skipping Rust update\\n"
+    fi
+  fi
   if [[ -d ${HOME}/.tfenv ]]; then
     printf "Updating tfenv\\n"
     cd ${HOME}/.tfenv || exit
