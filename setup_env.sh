@@ -1480,6 +1480,20 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     fi
 
     if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
+      printf "Installing Rust Ubuntu\\n"
+      if [[ ! -x $(command -v rustc) ]] || [[ ! -x $(command -v cargo) ]]; then
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+      fi
+      if [[ -f ${HOME}/.cargo/env ]]; then
+        # shellcheck disable=SC1090
+        . ${HOME}/.cargo/env
+      fi
+      if [[ -x $(command -v rustc) ]] && [[ -x $(command -v cargo) ]]; then
+        printf "Rust is installed\\n"
+      fi
+    fi
+
+    if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
       printf "Installing docker\\n"
       sudo mkdir -p /etc/apt/keyrings
       if [[ -f /etc/apt/keyrings/docker.gpg ]]; then
