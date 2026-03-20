@@ -17,11 +17,14 @@ alias tiu='terraform init --upgrade'
 alias ti='terraform init'
 alias tv='terraform validate'
 alias td='terraform destroy'
-alias make='Make'
+unalias make 2>/dev/null
+if [[ ${MACOS} ]]; then
+  alias make='Make'
+fi
 alias m='Make'
-alias mp='make plan'
-alias ma='make apply'
-alias mi='make init'
+alias mp='Make plan'
+alias ma='Make apply'
+alias mi='Make init'
 alias tw='~/scripts/tmux-workstation.sh'
 alias kgp='kubectl get pods --all-namespaces'
 alias kgn='kubectl get nodes'
