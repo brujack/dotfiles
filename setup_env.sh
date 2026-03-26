@@ -704,6 +704,14 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     printf ".zshrc.d is linked\\n"
   fi
 
+  printf "Linking %s/.config/ccstatusline\\n" "${HOME}"
+  mkdir -p ${HOME}/.config
+  rm -rf ${HOME}/.config/ccstatusline
+  ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.config/ccstatusline ${HOME}/.config/ccstatusline
+  if [[ -L ${HOME}/.config/ccstatusline ]]; then
+    printf ".config/ccstatusline is linked\\n"
+  fi
+
   printf "linking .zprofile\\n"
   rm -f ${HOME}/.zprofile
   ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.zprofile ${HOME}/.zprofile
