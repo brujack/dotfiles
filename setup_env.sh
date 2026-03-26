@@ -763,6 +763,21 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     fi
   fi
 
+  printf "Creating %s/.claude\\n" "${HOME}"
+  mkdir -p ${HOME}/.claude
+  if [[ -d ${HOME}/.claude ]]; then
+    printf "Created %s/.claude\\n" "${HOME}"
+  fi
+  for _claude_item in ${PERSONAL_GITREPOS}/${DOTFILES}/.claude/*; do
+    _claude_target="${HOME}/.claude/$(basename ${_claude_item})"
+    printf "Linking %s\\n" "${_claude_target}"
+    rm -rf ${_claude_target}
+    ln -s ${_claude_item} ${_claude_target}
+    if [[ -L ${_claude_target} ]]; then
+      printf "%s is linked\\n" "${_claude_target}"
+    fi
+  done
+
   printf "Linking %s/.ssh/config\\n" "${HOME}"
   rm -f ${HOME}/.ssh/config
   ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.ssh/config ${HOME}/.ssh/config
@@ -2301,6 +2316,11 @@ if [[ -n ${UPDATE} ]]; then
     brew_update
     printf "Updating app store apps softwareupdate\\n"
     sudo -H softwareupdate --install --all --verbose
+  fi
+  if command -v claude &>/dev/null; then
+    printf "Updating Claude plugins\\n"
+    claude plugins update
+    printf "Updated Claude plugins\\n"
   fi
   if [[ -n ${UBUNTU} ]]; then
     sudo -H apt update
