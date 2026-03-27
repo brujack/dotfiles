@@ -161,6 +161,28 @@ Available mock env vars:
 | `MOCK_CURL_EXIT` | Exit code for `curl` (default: 0) |
 | `MOCK_UNAME_S` | Value returned by `uname -s` |
 | `MOCK_BATS_VER` | BATS_VER used by mock tar to create stub directory |
+| `MOCK_ID_U` | Value returned by `id -u` (default: 1000) |
+| `MOCK_YUM_LIST_EXIT` | Exit code for `yum list installed` (default: 0) |
+| `MOCK_YUM_EXIT` | Exit code for other `yum` commands (default: 0) |
+| `MOCK_AWK_OS_NAME` | Distro name returned when `awk` parses `os-release` |
+| `MOCK_SW_VERS_PRODUCTVERSION` | OS version returned by `sw_vers -productVersion` (default: 12.0.0) |
+| `MOCK_SYSCTL_CPU` | CPU brand string returned by `sysctl -n machdep.cpu.brand_string` (default: Apple M1) |
+| `MOCK_PGREP_EXIT` | Exit code for `pgrep` (default: 1 = process not found) |
+| `MOCK_SOFTWAREUPDATE_EXIT` | Exit code for `softwareupdate` (default: 0) |
+| `MOCK_WGET_EXIT` | Exit code for `wget` (default: 0); `-O` target file is created |
+| `MOCK_DPKG_EXIT` | Exit code for `dpkg` (default: 0) |
+| `MOCK_CHSH_EXIT` | Exit code for `chsh` (default: 0) |
+| `MOCK_APT_ONLY_EXIT` | Exit code for `apt` only (overrides MOCK_APT_EXIT for apt; default: MOCK_APT_EXIT) |
+| `MOCK_ADD_APT_REPO_EXIT` | Exit code for `add-apt-repository` (default: 0) |
+| `MOCK_DNF_EXIT` | Exit code for `dnf` (default: 0) |
+| `MOCK_INSTALLER_EXIT` | Exit code for `installer` (default: 0) |
+| `MOCK_UNZIP_EXIT` | Exit code for `unzip` (default: 0) |
+| `MOCK_GIT_CLONE_EXIT` | Exit code for `git clone` (default: 0); target directory is created |
+| `MOCK_GIT_EXIT` | Exit code for all other `git` commands (default: 0) |
+| `MOCK_MAS_EXIT` | Exit code for `mas` (default: 0) |
+| `MOCK_SNAP_EXIT` | Exit code for `snap` (default: 0) |
+| `MOCK_NALA_EXIT` | Exit code for `nala` (default: 0) |
+| `MOCK_RUSTUP_EXIT` | Exit code for `rustup` (default: 0) |
 
 ## Key Conventions
 
