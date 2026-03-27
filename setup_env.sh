@@ -710,11 +710,11 @@ update_system_packages() {
     sudo -H apt update
     if [[ -n ${FOCAL} ]]; then
       sudo -H apt autoremove -y
-    elif [[ ${JAMMY} ]]; then
+    elif [[ -n ${JAMMY} ]]; then
       check_and_install_nala
       sudo -H nala full-upgrade -y
       sudo -H nala autoremove -y
-    elif [[ ${NOBLE} ]]; then
+    elif [[ -n ${NOBLE} ]]; then
       check_and_install_nala
       sudo -H nala full-upgrade -y
       sudo -H nala autoremove -y
