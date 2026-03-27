@@ -4,4 +4,4 @@ if [[ "$1" == "-n" ]] && [[ "$2" == "machdep.cpu.brand_string" ]]; then
   printf "%s\n" "${MOCK_SYSCTL_CPU:-Apple M1}"
   exit 0
 fi
-exec sysctl "$@"
+exec /usr/sbin/sysctl "$@"
