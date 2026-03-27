@@ -268,7 +268,7 @@ app_dir_exists() {
 
 install_git() {
   printf "Installing git\\n"
-  if [[ "$(uname -s)" != "Darwin" ]]; then
+  if [[ "$(uname -s)" == "Darwin" ]]; then
     if brew list | grep '^git$' &> /dev/null; then
       printf "Git (from Homebrew) is already installed.\\n"
       return 0
