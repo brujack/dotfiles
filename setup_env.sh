@@ -417,6 +417,9 @@ process_args() {
   done
 }
 
+# Allow sourcing for unit testing without executing the main script body
+[[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0
+
 [[ $# -eq 0 ]] && usage
 process_args "$@"
 
