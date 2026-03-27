@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 # software versions to install
+BATS_VER="1.11.0"
 CF_TERRAFORMING_VER="0.16.1"
 CHRUBY_VER="0.3.9"
 CONSUL_VER="1.16.0"
@@ -342,6 +343,28 @@ install_zsh() {
   printf "Installed zsh\\n"
 }
 
+install_bats() {
+  if quiet_which bats; then
+    printf "bats already installed\\n"
+    return 0
+  fi
+
+  printf "Installing bats\\n"
+
+  if [[ -n ${UBUNTU} ]]; then
+    sudo -H apt-get install -y bats
+  elif [[ -n ${REDHAT} ]] || [[ -n ${CENTOS} ]] || [[ -n ${FEDORA} ]]; then
+    curl -fsSL "https://github.com/bats-core/bats-core/archive/refs/tags/v${BATS_VER}.tar.gz" \
+      -o /tmp/bats.tar.gz
+    tar -xzf /tmp/bats.tar.gz -C /tmp
+    sudo -H /tmp/bats-core-${BATS_VER}/install.sh /usr/local
+    rm -rf /tmp/bats.tar.gz /tmp/bats-core-${BATS_VER}
+  else
+    printf "Unsupported platform for bats install\\n"
+    return 1
+  fi
+}
+
 check_and_install_nala() {
   printf "Installing nala\\n"
   if [[ "$(uname -s)" = "Linux" ]]; then
@@ -512,6 +535,10 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
 
   if [[ ${MACOS} || ${UBUNTU} || ${FEDORA} || ${CENTOS} ]]; then
     install_zsh
+  fi
+
+  if [[ -n ${LINUX} ]]; then
+    install_bats
   fi
 
   # because the version of zsh is so old on redhat, we need to install a newer version by compiling it
