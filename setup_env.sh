@@ -705,6 +705,74 @@ setup_zsh_as_default_shell() {
   fi
 }
 
+update_system_packages() {
+  if [[ -n ${UBUNTU} ]]; then
+    sudo -H apt update
+    if [[ ${FOCAL} ]]; then
+      sudo -H apt autoremove -y
+    elif [[ ${JAMMY} ]]; then
+      check_and_install_nala
+      sudo -H nala full-upgrade -y
+      sudo -H nala autoremove -y
+    elif [[ ${NOBLE} ]]; then
+      check_and_install_nala
+      sudo -H nala full-upgrade -y
+      sudo -H nala autoremove -y
+    fi
+    sudo snap refresh
+    printf "Updated snap packages\n"
+  fi
+  if [[ -n ${REDHAT} ]] || [[ -n ${FEDORA} ]]; then
+    sudo -H dnf update -y
+    printf "Updated dnf packages\n"
+  fi
+  if [[ -n ${CENTOS} ]]; then
+    sudo -H yum update -y
+    printf "Updated yum packages\n"
+  fi
+  if [[ -n ${MACOS} ]]; then
+    printf "Updating mas packages\n"
+    mas upgrade
+  fi
+}
+
+update_aws_cli() {
+  if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]] || [[ -n ${RATNA} ]]; then
+    if [[ -n ${MACOS} ]]; then
+      printf "Updating MACOS awscli\n"
+      cd ${HOME}/software_downloads/awscli || exit
+      curl "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "AWSCLIV2.pkg"
+      sudo -H installer -pkg AWSCLIV2.pkg -target /
+      rm AWSCLIV2.pkg
+      cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
+    fi
+  fi
+  if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
+    printf "Updating Linux awscli\n"
+    mkdir -p ${HOME}/software_downloads/awscli
+    cd ${HOME}/software_downloads/awscli || exit
+    curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+    unzip -u -o awscliv2.zip
+    sudo -H ${HOME}/software_downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin --update
+    cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
+  fi
+}
+
+update_rust() {
+  if [[ -n ${UBUNTU} ]] && { [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; }; then
+    printf "Updating Rust Ubuntu\n"
+    if [[ -x ${HOME}/.cargo/bin/rustup ]]; then
+      ${HOME}/.cargo/bin/rustup self update
+      ${HOME}/.cargo/bin/rustup update
+    elif command -v rustup >/dev/null 2>&1; then
+      rustup self update
+      rustup update
+    else
+      printf "rustup not found; skipping Rust update\n"
+    fi
+  fi
+}
+
 # Allow sourcing for unit testing without executing the main script body
 [[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0
 
@@ -2376,34 +2444,7 @@ if [[ -n ${UPDATE} ]]; then
     claude plugins update
     printf "Updated Claude plugins\\n"
   fi
-  if [[ -n ${UBUNTU} ]]; then
-    sudo -H apt update
-    if [[ ${FOCAL} ]]; then
-      sudo -H apt autoremove -y
-    elif [[ ${JAMMY} ]]; then
-      check_and_install_nala
-      sudo -H nala full-upgrade -y
-      sudo -H nala autoremove -y
-    elif [[ ${NOBLE} ]]; then
-      check_and_install_nala
-      sudo -H nala full-upgrade -y
-      sudo -H nala autoremove -y
-    fi
-    sudo snap refresh
-    printf "Updated snap packages\\n"
-  fi
-  if [[ -n ${REDHAT} ]] || [[ -n ${FEDORA} ]]; then
-    sudo -H dnf update -y
-    printf "Updated dnf packages\\n"
-  fi
-  if [[ -n ${CENTOS} ]]; then
-    sudo -H yum update -y
-    printf "Updated yum packages\\n"
-  fi
-  if [[ -n ${MACOS} ]]; then
-    printf "Updating mas packages\\n"
-    mas upgrade
-  fi
+  update_system_packages
   printf "Updating pip3 packages\n"
   if [[ -n ${STUDIO-} || -n ${LAPTOP-} || -n ${RECEPTION-} || -n ${OFFICE-} || -n ${HOMES-} || -n ${WORKSTATION-} || -n ${CRUNCHER-} || -n ${RATNA-} ]]; then
     export PYENV_ROOT="$HOME/.pyenv"
@@ -2433,37 +2474,8 @@ PY
     "$PYTHON" -m pip check || true
     printf "Updated pip packages\n"
   fi
-  if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]] || [[ -n ${RATNA} ]]; then
-    if [[ -n ${MACOS} ]]; then
-      printf "Updating MACOS awscli\\n"
-      cd ${HOME}/software_downloads/awscli || exit
-      curl "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "AWSCLIV2.pkg"
-      sudo -H installer -pkg AWSCLIV2.pkg -target /
-      rm AWSCLIV2.pkg
-      cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
-    fi
-  fi
-  if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
-    printf "Updating Linux awscli\\n"
-    mkdir -p ${HOME}/software_downloads/awscli
-    cd ${HOME}/software_downloads/awscli || exit
-    curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-    unzip -u -o awscliv2.zip
-    sudo -H ${HOME}/software_downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin --update
-    cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
-  fi
-  if [[ -n ${UBUNTU} ]] && { [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; }; then
-    printf "Updating Rust Ubuntu\\n"
-    if [[ -x ${HOME}/.cargo/bin/rustup ]]; then
-      ${HOME}/.cargo/bin/rustup self update
-      ${HOME}/.cargo/bin/rustup update
-    elif command -v rustup >/dev/null 2>&1; then
-      rustup self update
-      rustup update
-    else
-      printf "rustup not found; skipping Rust update\\n"
-    fi
-  fi
+  update_aws_cli
+  update_rust
   if [[ -d ${HOME}/.tfenv ]]; then
     printf "Updating tfenv\\n"
     cd ${HOME}/.tfenv || exit

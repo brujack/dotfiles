@@ -159,3 +159,110 @@ _make_fake_dotfiles() {
   [ "$status" -eq 0 ]
   grep -q "chsh -s /bin/zsh" "${MOCK_CALLS_FILE}"
 }
+
+# ── update_system_packages ───────────────────────────────────────────────────
+
+@test "update_system_packages calls apt update on Ubuntu" {
+  export UBUNTU=1
+  export FOCAL=1
+  unset MACOS LINUX REDHAT FEDORA CENTOS JAMMY NOBLE
+  run update_system_packages
+  [ "$status" -eq 0 ]
+  grep -q "apt update" "${MOCK_CALLS_FILE}"
+}
+
+@test "update_system_packages calls nala full-upgrade on Ubuntu Jammy" {
+  export UBUNTU=1
+  export JAMMY=1
+  unset MACOS LINUX REDHAT FEDORA CENTOS FOCAL NOBLE
+  run update_system_packages
+  [ "$status" -eq 0 ]
+  grep -q "nala full-upgrade" "${MOCK_CALLS_FILE}"
+}
+
+@test "update_system_packages calls dnf update on RHEL" {
+  export REDHAT=1
+  unset MACOS LINUX UBUNTU FEDORA CENTOS
+  run update_system_packages
+  [ "$status" -eq 0 ]
+  grep -q "dnf update" "${MOCK_CALLS_FILE}"
+}
+
+@test "update_system_packages calls yum update on CentOS" {
+  export CENTOS=1
+  unset MACOS LINUX UBUNTU FEDORA REDHAT
+  run update_system_packages
+  [ "$status" -eq 0 ]
+  grep -q "yum update" "${MOCK_CALLS_FILE}"
+}
+
+# ── update_aws_cli ───────────────────────────────────────────────────────────
+
+@test "update_aws_cli on macOS calls curl and installer" {
+  export MACOS=1
+  export LAPTOP=1
+  unset LINUX WORKSTATION CRUNCHER
+  mkdir -p "${FAKE_HOME}/software_downloads/awscli"
+  mkdir -p "${FAKE_DOTFILES_SRC}"
+  run update_aws_cli
+  [ "$status" -eq 0 ]
+  grep -q "curl.*AWSCLIV2.pkg" "${MOCK_CALLS_FILE}"
+  grep -q "installer -pkg" "${MOCK_CALLS_FILE}"
+}
+
+@test "update_aws_cli on Linux calls curl and install script" {
+  export LINUX=1
+  export WORKSTATION=1
+  unset MACOS LAPTOP STUDIO RECEPTION OFFICE HOMES RATNA CRUNCHER
+  mkdir -p "${FAKE_DOTFILES_SRC}"
+  run update_aws_cli
+  [ "$status" -eq 0 ]
+  grep -q "curl.*awscli-exe-linux" "${MOCK_CALLS_FILE}"
+  grep -q "unzip" "${MOCK_CALLS_FILE}"
+}
+
+# ── update_rust ──────────────────────────────────────────────────────────────
+
+@test "update_rust does nothing when not Ubuntu Workstation" {
+  export MACOS=1
+  unset UBUNTU WORKSTATION CRUNCHER
+  run update_rust
+  [ "$status" -eq 0 ]
+  run grep -q "rustup" "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+}
+
+@test "update_rust calls system rustup when cargo rustup is absent" {
+  export UBUNTU=1
+  export WORKSTATION=1
+  unset MACOS CRUNCHER
+  # .cargo/bin/rustup does not exist in FAKE_HOME; rustup mock is in PATH
+  run update_rust
+  [ "$status" -eq 0 ]
+  grep -q "rustup self update" "${MOCK_CALLS_FILE}"
+}
+
+@test "update_rust prints skip message when rustup is not found" {
+  export UBUNTU=1
+  export WORKSTATION=1
+  unset MACOS CRUNCHER
+  # Run in a subshell with a minimal PATH that has no rustup (mock or real)
+  local rustup_mock="${REPO_ROOT}/tests/mocks/rustup"
+  local rustup_hidden="${BATS_TEST_TMPDIR}/rustup_hidden"
+  mv "${rustup_mock}" "${rustup_hidden}"
+  run env PATH="${REPO_ROOT}/tests/mocks:/usr/bin:/bin" bash -c "
+    source '${REPO_ROOT}/tests/helpers/common.bash'
+    load_setup_env
+    export MOCK_CALLS_FILE='${MOCK_CALLS_FILE}'
+    export HOME='${FAKE_HOME}'
+    export PERSONAL_GITREPOS='${PERSONAL_GITREPOS}'
+    export DOTFILES='${DOTFILES}'
+    export UBUNTU=1
+    export WORKSTATION=1
+    unset MACOS CRUNCHER
+    update_rust
+  "
+  mv "${rustup_hidden}" "${rustup_mock}"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"skipping"* ]]
+}
