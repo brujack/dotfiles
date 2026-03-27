@@ -15,6 +15,8 @@ teardown() {
 
 # ── install_git ──────────────────────────────────────────────────────────────
 
+# macOS tests require both MOCK_UNAME_S=Darwin (for the uname -s branch) and
+# MACOS=1 (for the inner [[ -n ${MACOS} ]] guard that calls brew_install_formula).
 @test "install_git on macOS skips when git is already in brew list" {
   export MOCK_UNAME_S=Darwin
   export MACOS=1
@@ -60,6 +62,8 @@ teardown() {
 
 # ── install_zsh ──────────────────────────────────────────────────────────────
 
+# macOS tests require both MOCK_UNAME_S=Darwin (for the uname -s branch) and
+# MACOS=1 (for the inner [[ -n ${MACOS} ]] guard that calls brew_install_formula).
 @test "install_zsh on macOS skips when zsh is already in brew list" {
   export MOCK_UNAME_S=Darwin
   export MACOS=1
@@ -84,7 +88,7 @@ teardown() {
   export MOCK_AWK_OS_NAME="Ubuntu"
   run install_zsh
   [ "$status" -eq 0 ]
-  grep -q "apt install zsh" "${MOCK_CALLS_FILE}"
+  grep -q "apt install zsh zsh-doc" "${MOCK_CALLS_FILE}"
 }
 
 @test "install_zsh on CentOS calls yum install" {
