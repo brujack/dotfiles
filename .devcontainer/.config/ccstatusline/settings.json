@@ -38,6 +38,14 @@
         "type": "separator"
       },
       {
+        "id": "1e1303c0-f6e5-40c4-b2f7-efd296592333",
+        "type": "weekly-usage"
+      },
+      {
+        "id": "492d0dea-0e50-448b-a06b-f61b12201202",
+        "type": "separator"
+      },
+      {
         "id": "7",
         "type": "session-clock",
         "color": "yellow"
