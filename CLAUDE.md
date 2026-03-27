@@ -118,7 +118,49 @@ When a constant is updated in `setup_env.sh`, update all other references to tha
 
 ## Testing
 
-Uses **BATS** (Bash Automated Testing System) via npm (`node_modules/.bin/bats`).
+Uses **BATS** (Bash Automated Testing System), installed natively:
+- macOS: `brew install bats-core` (in `Brewfile`)
+- Ubuntu: `sudo apt-get install -y bats` (via `install_bats()` in `setup_env.sh`)
+- RHEL/CentOS/Fedora: direct GitHub release install (via `install_bats()`)
+
+**Run tests:** `make test`
+**Run unit tests only:** `make test-unit`
+
+### Testing Rules
+
+- Every new function in `setup_env.sh` must have a test in `tests/setup_env/unit.bats` (pure logic) or `tests/setup_env/install_guards.bats` (side effects requiring mocks)
+- Every modification to an existing function must update its test
+- New shell scripts get their own directory under `tests/` (e.g., `tests/scripts/`)
+- Never modify real system state in tests — use PATH-based mocks from `tests/mocks/`
+- `make test` must exit 0 before committing
+
+### Mock Pattern
+
+```bash
+# In setup():
+load_mocks           # prepends tests/mocks/ to PATH
+export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
+export MOCK_BREW_LIST_FORMULA="git wget"  # controls mock brew list output
+export MOCK_WHICH_MISSING=bats            # makes which return 1 for 'bats'
+
+# Assert what was called:
+grep -q "brew install git" "${MOCK_CALLS_FILE}"
+```
+
+Available mock env vars:
+| Variable | Effect |
+|---|---|
+| `MOCK_CALLS_FILE` | File where all mock invocations are logged |
+| `MOCK_BREW_LIST_FORMULA` | Space-separated formulas returned by `brew list --formula` |
+| `MOCK_BREW_LIST_CASK` | Space-separated casks returned by `brew list --cask` |
+| `MOCK_BREW_TAPS` | Space-separated taps returned by `brew tap` |
+| `MOCK_BREW_INSTALL_EXIT` | Exit code for `brew install` (default: 0) |
+| `MOCK_BREW_TAP_EXIT` | Exit code for `brew tap <name>` (default: 0) |
+| `MOCK_APT_EXIT` | Exit code for `apt-get` (default: 0) |
+| `MOCK_WHICH_MISSING` | Command name for which `which` returns 1 |
+| `MOCK_CURL_EXIT` | Exit code for `curl` (default: 0) |
+| `MOCK_UNAME_S` | Value returned by `uname -s` |
+| `MOCK_BATS_VER` | BATS_VER used by mock tar to create stub directory |
 
 ## Key Conventions
 

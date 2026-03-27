@@ -78,8 +78,11 @@ Dotfiles live in `.devcontainer/` and `.claude/`. `setup_env.sh` creates symlink
 
 ## Testing
 
-Uses [BATS](https://github.com/bats-core/bats-core) (Bash Automated Testing System) via npm:
+Uses [BATS](https://github.com/bats-core/bats-core) (Bash Automated Testing System), installed natively.
 
 ```bash
-node_modules/.bin/bats <test-file>
+make test        # run all BATS tests
+make test-unit   # run unit tests only
 ```
+
+Install bats-core first: `brew install bats-core` (macOS) or `sudo apt-get install bats` (Ubuntu).
