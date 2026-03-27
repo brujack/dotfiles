@@ -133,20 +133,18 @@ teardown() {
   export MOCK_ID_U=0
   run ensure_not_root
   [ "$status" -eq 1 ]
-  [[ "$output" == *"cannot run as root"* ]]
+  [[ "$output" == *"Homebrew cannot run as root"* ]]
 }
 
 # ── brew_tap_installed ───────────────────────────────────────────────────────
 
 @test "brew_tap_installed returns 0 when tap is listed" {
-  export MOCK_ID_U=1000
   export MOCK_BREW_TAPS="hashicorp/tap homebrew/cask-versions"
   run brew_tap_installed hashicorp/tap
   [ "$status" -eq 0 ]
 }
 
 @test "brew_tap_installed returns 1 when tap is not listed" {
-  export MOCK_ID_U=1000
   export MOCK_BREW_TAPS=""
   run brew_tap_installed hashicorp/tap
   [ "$status" -eq 1 ]
@@ -155,7 +153,6 @@ teardown() {
 # ── brew_install_cask ────────────────────────────────────────────────────────
 
 @test "brew_install_cask calls brew install --cask when cask is absent" {
-  export MOCK_ID_U=1000
   export MOCK_BREW_LIST_CASK=""
   run brew_install_cask docker
   [ "$status" -eq 0 ]
@@ -163,7 +160,6 @@ teardown() {
 }
 
 @test "brew_install_cask does not call brew install when cask is present" {
-  export MOCK_ID_U=1000
   export MOCK_BREW_LIST_CASK="docker"
   run brew_install_cask docker
   [ "$status" -eq 0 ]
@@ -173,6 +169,8 @@ teardown() {
 # ── rhel_installed_package ───────────────────────────────────────────────────
 
 @test "rhel_installed_package returns 1 when yum is not available" {
+  # command -v is a bash builtin and cannot be intercepted by the which mock.
+  # Run in a subprocess without the mocks directory to simulate yum being absent.
   # Source without mocks in PATH so command -v yum fails on macOS
   local clean_path
   clean_path="$(printf "%s" "${PATH}" | tr ':' '\n' | grep -v "tests/mocks" | tr '\n' ':' | sed 's/:$//')"
@@ -189,10 +187,12 @@ teardown() {
   export MOCK_YUM_LIST_EXIT=0
   run rhel_installed_package zsh
   [ "$status" -eq 0 ]
+  grep -q "yum list installed zsh" "${MOCK_CALLS_FILE}"
 }
 
 @test "rhel_installed_package returns 1 when yum reports package not installed" {
   export MOCK_YUM_LIST_EXIT=1
   run rhel_installed_package zsh
   [ "$status" -eq 1 ]
+  grep -q "yum list installed zsh" "${MOCK_CALLS_FILE}"
 }
