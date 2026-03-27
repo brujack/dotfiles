@@ -417,184 +417,7 @@ process_args() {
   done
 }
 
-# Allow sourcing for unit testing without executing the main script body
-[[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0
-
-[[ $# -eq 0 ]] && usage
-process_args "$@"
-
-# choose which env we are running on
-[[ $(uname -s) = "Darwin" ]] && readonly MACOS=1
-[[ $(uname -s) = "Linux" ]] && readonly LINUX=1
-
-if [[ -n ${LINUX} ]]; then
-  LINUX_TYPE=$(awk -F= '/^NAME/{print $2}' /etc/os-release | tr -d '"')
-  [[ ${LINUX_TYPE} = "Ubuntu" ]] && readonly UBUNTU=1
-  [[ ${LINUX_TYPE} = "CentOS Linux" ]] && readonly CENTOS=1
-  [[ ${LINUX_TYPE} = "Red Hat Enterprise Linux Server" ]] && readonly REDHAT=1
-  [[ ${LINUX_TYPE} = "Fedora" ]] && readonly FEDORA=1
-  [[ ${LINUX_TYPE} = "elementary OS" ]] && readonly UBUNTU=1 && readonly ELEMENTARY=1
-fi
-
-if [[ -n ${UBUNTU} ]]; then
-  UBUNTU_VERSION=$(lsb_release -rs)
-  [[ ${UBUNTU_VERSION} = "18.04" ]] && readonly BIONIC=1
-  [[ ${UBUNTU_VERSION} = "20.04" ]] && readonly FOCAL=1
-  [[ ${UBUNTU_VERSION} = "22.04" ]] && readonly JAMMY=1
-  [[ ${UBUNTU_VERSION} = "24.04" ]] && readonly NOBLE=1
-  [[ ${UBUNTU_VERSION} = "6" ]] && readonly FOCAL=1 # elementary os
-fi
-
-[[ $(uname -r) =~ microsoft ]] && readonly WINDOWS=1
-[[ $(hostname -s) = "laptop" ]] && readonly LAPTOP=1
-[[ $(hostname -s) = "studio" ]] && readonly STUDIO=1
-[[ $(hostname -s) = "reception" ]] && readonly RECEPTION=1
-[[ $(hostname -s) = "office" ]] && readonly OFFICE=1
-[[ $(hostname -s) = "home-1" ]] && readonly HOMES=1
-[[ $(hostname -s) = "virtualmachine1c4f85d6" ]] && readonly WORKSTATION=1
-[[ $(hostname -s) = "workstation" ]] && readonly WORKSTATION=1
-[[ $(hostname -s) = "cruncher" ]] && readonly CRUNCHER=1
-[[ $(hostname -s) = "virtualmachine1c4f85d6" ]] && readonly WORKSTATION=1
-
-# setup variables based off of environment
-if [[ -n ${MACOS} ]]; then
-  if [[ -n ${RATNA} ]]; then
-    CHRUBY_LOC="/usr/local/opt/chruby/share"
-  elif [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]]; then
-    CHRUBY_LOC="/opt/homebrew/opt/chruby/share"
-  fi
-elif [[ -n ${LINUX} ]]; then
-  CHRUBY_LOC="/usr/local/share"
-fi
-
-# Setup is run rarely as it should be run when setting up a new device or when doing a controlled change after changing items in setup
-# The following code is used to setup the base system with some base packages and the basic layout of the users home directory
-if [[ ${SETUP} || ${SETUP_USER} ]]; then
-  # need to make sure that some base packages are installed
-  if [[ ${REDHAT} || ${FEDORA} ]]; then
-    if ! [ -x "$(command -v dnf)" ]; then
-      printf "Installing dnf\\n"
-      sudo -H yum update -y
-      sudo -H yum install dnf -y
-      if ! [ -x "$(command -v dnf)" ]; then
-        printf "Failed to install dnf\\n"
-        exit 1
-      fi
-      printf "Installed dnf\\n"
-    fi
-  fi
-
-  if [[ -n ${MACOS} ]]; then
-    printf "Installing Rosetta if necessary\\n"
-    install_rosetta
-  fi
-
-  if [[ -n ${MACOS} ]] || [[ -n ${FEDORA} ]] || [[ -n ${CENTOS} ]]; then
-    install_git
-  fi
-
-  mkdir -p ${HOME}/software_downloads
-
-  # because the version of git is so old on redhat, we need to install a newer version by compiling it
-  if [[ -n ${REDHAT} ]]; then
-    sudo -H dnf update -y
-    sudo -H dnf install asciidoc -y
-    sudo -H dnf install autoconf -y
-    sudo -H dnf install cpan -y
-    sudo -H dnf install docbook2X -y
-    sudo -H dnf install make -y
-    sudo -H dnf install perl-App-cpanminus -y
-    sudo -H dnf install perl-ExtUtils-MakeMaker -y
-    sudo -H dnf install perl-IO-Socket-SSL -y
-    sudo -H dnf install wget -y
-    sudo -H dnf install xmlto -y
-    #cpan to properly compile git on redhat
-    cpan App::cpanminus
-    cpanm Test::Simple
-    cpanm Fatal
-    cpanm XML::SAX
-    if [[ ! -f ${HOME}/software_downloads/git-${GIT_VER}.tar.gz ]]; then
-      printf "Installing Redhat git\\n"
-      wget -O ${HOME}/software_downloads/git-${GIT_VER}.tar.gz ${GIT_URL}/git-${GIT_VER}.tar.gz
-      tar -zxvf ${HOME}/software_downloads/git-${GIT_VER}.tar.gz -C ${HOME}/software_downloads
-      cd ${HOME}/software_downloads/git-${GIT_VER} || exit
-      make configure
-      ./configure --prefix=/usr
-      make -j $(nproc) all doc info
-      sudo -H make install install-doc install-info
-      if ! [[ -x "$(command -v git)" ]]; then
-        printf "Git is not installed Redhat\\n"
-        exit 1
-      fi
-      INSTALLED_GIT_VERSION=$(git --version | awk '{print $3}')
-      if [[ "${INSTALLED_GIT_VERSION}" == "${GIT_VER}" ]]; then
-        printf "Git %s is installed Redhat\\n" ${GIT_VER}
-      else
-        printf "Git %s is not installed Redhat\\n" ${GIT_VER}
-        exit 1
-      fi
-    fi
-  fi
-
-  if [[ ${MACOS} || ${UBUNTU} || ${FEDORA} || ${CENTOS} ]]; then
-    install_zsh
-  fi
-
-  if [[ -n ${LINUX} ]]; then
-    install_bats
-  fi
-
-  # because the version of zsh is so old on redhat, we need to install a newer version by compiling it
-  if [[ -n ${REDHAT} ]]; then
-    if rhel_installed_package zsh; then
-      sudo -H yum remove zsh -y
-    fi
-    sudo -H yum update
-    sudo -H yum install gcc -y
-    sudo -H yum install make -y
-    sudo -H yum install ncurses-devel -y
-    if [[ ! -f ${HOME}/software_downloads/zsh-${ZSH_VER}.tar.xz ]]; then
-      printf "Installing Redhat zsh\\n"
-      wget -O ${HOME}/software_downloads/zsh-${ZSH_VER}.tar.xz http://www.zsh.org/pub/zsh-${ZSH_VER}.tar.xz
-      tar -xvf ${HOME}/software_downloads/zsh-${ZSH_VER}.tar.xz -C ${HOME}/software_downloads
-      cd ${HOME}/software_downloads/zsh-${ZSH_VER} || exit
-      ./configure --prefix=/usr/local --bindir=/usr/local/bin --sysconfdir=/etc/zsh --enable-etcdir=/etc/zsh
-      make
-      sudo -H make install
-      if [[ ! $(grep -Fxq "/usr/local/bin/zsh" /etc/shells) ]]; then
-        sudo -H sh -c 'echo /usr/local/bin/zsh >> /etc/shells'
-      fi
-      if [[ ! $(grep -Fxq "/bin/zsh" /etc/shells) ]]; then
-        sudo -H sh -c 'echo /bin/zsh >> /etc/shells'
-      fi
-    fi
-    if [[ -f /bin/zsh ]]; then
-      sudo -H rm -f /bin/zsh
-    fi
-    if [[ ! -L /bin/zsh ]]; then
-      if [[ -f /usr/local/bin/zsh ]]; then
-        sudo -H ln -s /usr/local/bin/zsh /bin/zsh
-      fi
-    fi
-    if ! [[ -x "$(command -v zsh)" ]]; then
-        printf "zsh is not installed Redhat\\n"
-        exit 1
-      fi
-      INSTALLED_ZSH_VERSION=$(zsh --version | awk '{print $2}')
-      if [[ "${INSTALLED_ZSH_VERSION}" == "${ZSH_VER}" ]]; then
-        printf "zsh %s is installed Redhat\\n" ${ZSH_VER}
-      else
-        printf "zsh %s is not installed Redhat\\n" ${ZSH_VER}
-        exit 1
-      fi
-  fi
-
-  printf "Creating %s/bin\\n" "${HOME}"
-  mkdir -p ${HOME}/bin
-
-  printf "Creating %s\\n" "${PERSONAL_GITREPOS}"
-  mkdir -p ${PERSONAL_GITREPOS}
-
+clone_or_update_dotfiles() {
   printf "Copying %s from Github\\n" "${DOTFILES}"
   if [[ ! -d ${PERSONAL_GITREPOS}/${DOTFILES} ]]; then
     cd ${HOME} || return
@@ -605,7 +428,9 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
     cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
     git pull
   fi
+}
 
+setup_dotfile_symlinks() {
   printf "Linking %s to their home\\n" "${DOTFILES}"
 
   if [[ -n ${MACOS} ]]; then
@@ -838,6 +663,189 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
       printf "Created %s/.tsh\\n" "${HOME}"
     fi
   fi
+}
+
+# Allow sourcing for unit testing without executing the main script body
+[[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0
+
+[[ $# -eq 0 ]] && usage
+process_args "$@"
+
+# choose which env we are running on
+[[ $(uname -s) = "Darwin" ]] && readonly MACOS=1
+[[ $(uname -s) = "Linux" ]] && readonly LINUX=1
+
+if [[ -n ${LINUX} ]]; then
+  LINUX_TYPE=$(awk -F= '/^NAME/{print $2}' /etc/os-release | tr -d '"')
+  [[ ${LINUX_TYPE} = "Ubuntu" ]] && readonly UBUNTU=1
+  [[ ${LINUX_TYPE} = "CentOS Linux" ]] && readonly CENTOS=1
+  [[ ${LINUX_TYPE} = "Red Hat Enterprise Linux Server" ]] && readonly REDHAT=1
+  [[ ${LINUX_TYPE} = "Fedora" ]] && readonly FEDORA=1
+  [[ ${LINUX_TYPE} = "elementary OS" ]] && readonly UBUNTU=1 && readonly ELEMENTARY=1
+fi
+
+if [[ -n ${UBUNTU} ]]; then
+  UBUNTU_VERSION=$(lsb_release -rs)
+  [[ ${UBUNTU_VERSION} = "18.04" ]] && readonly BIONIC=1
+  [[ ${UBUNTU_VERSION} = "20.04" ]] && readonly FOCAL=1
+  [[ ${UBUNTU_VERSION} = "22.04" ]] && readonly JAMMY=1
+  [[ ${UBUNTU_VERSION} = "24.04" ]] && readonly NOBLE=1
+  [[ ${UBUNTU_VERSION} = "6" ]] && readonly FOCAL=1 # elementary os
+fi
+
+[[ $(uname -r) =~ microsoft ]] && readonly WINDOWS=1
+[[ $(hostname -s) = "laptop" ]] && readonly LAPTOP=1
+[[ $(hostname -s) = "studio" ]] && readonly STUDIO=1
+[[ $(hostname -s) = "reception" ]] && readonly RECEPTION=1
+[[ $(hostname -s) = "office" ]] && readonly OFFICE=1
+[[ $(hostname -s) = "home-1" ]] && readonly HOMES=1
+[[ $(hostname -s) = "virtualmachine1c4f85d6" ]] && readonly WORKSTATION=1
+[[ $(hostname -s) = "workstation" ]] && readonly WORKSTATION=1
+[[ $(hostname -s) = "cruncher" ]] && readonly CRUNCHER=1
+[[ $(hostname -s) = "virtualmachine1c4f85d6" ]] && readonly WORKSTATION=1
+
+# setup variables based off of environment
+if [[ -n ${MACOS} ]]; then
+  if [[ -n ${RATNA} ]]; then
+    CHRUBY_LOC="/usr/local/opt/chruby/share"
+  elif [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]]; then
+    CHRUBY_LOC="/opt/homebrew/opt/chruby/share"
+  fi
+elif [[ -n ${LINUX} ]]; then
+  CHRUBY_LOC="/usr/local/share"
+fi
+
+# Setup is run rarely as it should be run when setting up a new device or when doing a controlled change after changing items in setup
+# The following code is used to setup the base system with some base packages and the basic layout of the users home directory
+if [[ ${SETUP} || ${SETUP_USER} ]]; then
+  # need to make sure that some base packages are installed
+  if [[ ${REDHAT} || ${FEDORA} ]]; then
+    if ! [ -x "$(command -v dnf)" ]; then
+      printf "Installing dnf\\n"
+      sudo -H yum update -y
+      sudo -H yum install dnf -y
+      if ! [ -x "$(command -v dnf)" ]; then
+        printf "Failed to install dnf\\n"
+        exit 1
+      fi
+      printf "Installed dnf\\n"
+    fi
+  fi
+
+  if [[ -n ${MACOS} ]]; then
+    printf "Installing Rosetta if necessary\\n"
+    install_rosetta
+  fi
+
+  if [[ -n ${MACOS} ]] || [[ -n ${FEDORA} ]] || [[ -n ${CENTOS} ]]; then
+    install_git
+  fi
+
+  mkdir -p ${HOME}/software_downloads
+
+  # because the version of git is so old on redhat, we need to install a newer version by compiling it
+  if [[ -n ${REDHAT} ]]; then
+    sudo -H dnf update -y
+    sudo -H dnf install asciidoc -y
+    sudo -H dnf install autoconf -y
+    sudo -H dnf install cpan -y
+    sudo -H dnf install docbook2X -y
+    sudo -H dnf install make -y
+    sudo -H dnf install perl-App-cpanminus -y
+    sudo -H dnf install perl-ExtUtils-MakeMaker -y
+    sudo -H dnf install perl-IO-Socket-SSL -y
+    sudo -H dnf install wget -y
+    sudo -H dnf install xmlto -y
+    #cpan to properly compile git on redhat
+    cpan App::cpanminus
+    cpanm Test::Simple
+    cpanm Fatal
+    cpanm XML::SAX
+    if [[ ! -f ${HOME}/software_downloads/git-${GIT_VER}.tar.gz ]]; then
+      printf "Installing Redhat git\\n"
+      wget -O ${HOME}/software_downloads/git-${GIT_VER}.tar.gz ${GIT_URL}/git-${GIT_VER}.tar.gz
+      tar -zxvf ${HOME}/software_downloads/git-${GIT_VER}.tar.gz -C ${HOME}/software_downloads
+      cd ${HOME}/software_downloads/git-${GIT_VER} || exit
+      make configure
+      ./configure --prefix=/usr
+      make -j $(nproc) all doc info
+      sudo -H make install install-doc install-info
+      if ! [[ -x "$(command -v git)" ]]; then
+        printf "Git is not installed Redhat\\n"
+        exit 1
+      fi
+      INSTALLED_GIT_VERSION=$(git --version | awk '{print $3}')
+      if [[ "${INSTALLED_GIT_VERSION}" == "${GIT_VER}" ]]; then
+        printf "Git %s is installed Redhat\\n" ${GIT_VER}
+      else
+        printf "Git %s is not installed Redhat\\n" ${GIT_VER}
+        exit 1
+      fi
+    fi
+  fi
+
+  if [[ ${MACOS} || ${UBUNTU} || ${FEDORA} || ${CENTOS} ]]; then
+    install_zsh
+  fi
+
+  if [[ -n ${LINUX} ]]; then
+    install_bats
+  fi
+
+  # because the version of zsh is so old on redhat, we need to install a newer version by compiling it
+  if [[ -n ${REDHAT} ]]; then
+    if rhel_installed_package zsh; then
+      sudo -H yum remove zsh -y
+    fi
+    sudo -H yum update
+    sudo -H yum install gcc -y
+    sudo -H yum install make -y
+    sudo -H yum install ncurses-devel -y
+    if [[ ! -f ${HOME}/software_downloads/zsh-${ZSH_VER}.tar.xz ]]; then
+      printf "Installing Redhat zsh\\n"
+      wget -O ${HOME}/software_downloads/zsh-${ZSH_VER}.tar.xz http://www.zsh.org/pub/zsh-${ZSH_VER}.tar.xz
+      tar -xvf ${HOME}/software_downloads/zsh-${ZSH_VER}.tar.xz -C ${HOME}/software_downloads
+      cd ${HOME}/software_downloads/zsh-${ZSH_VER} || exit
+      ./configure --prefix=/usr/local --bindir=/usr/local/bin --sysconfdir=/etc/zsh --enable-etcdir=/etc/zsh
+      make
+      sudo -H make install
+      if [[ ! $(grep -Fxq "/usr/local/bin/zsh" /etc/shells) ]]; then
+        sudo -H sh -c 'echo /usr/local/bin/zsh >> /etc/shells'
+      fi
+      if [[ ! $(grep -Fxq "/bin/zsh" /etc/shells) ]]; then
+        sudo -H sh -c 'echo /bin/zsh >> /etc/shells'
+      fi
+    fi
+    if [[ -f /bin/zsh ]]; then
+      sudo -H rm -f /bin/zsh
+    fi
+    if [[ ! -L /bin/zsh ]]; then
+      if [[ -f /usr/local/bin/zsh ]]; then
+        sudo -H ln -s /usr/local/bin/zsh /bin/zsh
+      fi
+    fi
+    if ! [[ -x "$(command -v zsh)" ]]; then
+        printf "zsh is not installed Redhat\\n"
+        exit 1
+      fi
+      INSTALLED_ZSH_VERSION=$(zsh --version | awk '{print $2}')
+      if [[ "${INSTALLED_ZSH_VERSION}" == "${ZSH_VER}" ]]; then
+        printf "zsh %s is installed Redhat\\n" ${ZSH_VER}
+      else
+        printf "zsh %s is not installed Redhat\\n" ${ZSH_VER}
+        exit 1
+      fi
+  fi
+
+  printf "Creating %s/bin\\n" "${HOME}"
+  mkdir -p ${HOME}/bin
+
+  printf "Creating %s\\n" "${PERSONAL_GITREPOS}"
+  mkdir -p ${PERSONAL_GITREPOS}
+
+  clone_or_update_dotfiles
+
+  setup_dotfile_symlinks
 
   printf "Setting ZSH as shell...\\n"
 
