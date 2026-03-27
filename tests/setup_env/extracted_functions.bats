@@ -24,7 +24,7 @@ teardown() {
 
 # Helper: create all source files that setup_dotfile_symlinks will symlink
 _make_fake_dotfiles() {
-  mkdir -p "${FAKE_DOTFILES_SRC}/.devcontainer/.config/.zshrc.d"
+  mkdir -p "${FAKE_DOTFILES_SRC}/.config/.zshrc.d"
   mkdir -p "${FAKE_DOTFILES_SRC}/.config/ccstatusline"
   mkdir -p "${FAKE_DOTFILES_SRC}/.ssh"
   mkdir -p "${FAKE_DOTFILES_SRC}/.claude"
@@ -46,9 +46,6 @@ _make_fake_dotfiles() {
   touch "${FAKE_DOTFILES_SRC}/.zprofile"
   touch "${FAKE_DOTFILES_SRC}/.ssh/config"
   touch "${FAKE_DOTFILES_SRC}/.ssh/teleport.cfg"
-  mkdir -p "${FAKE_DOTFILES_SRC}/.devcontainer/.config"
-  touch "${FAKE_DOTFILES_SRC}/.devcontainer/.zshrc"
-  touch "${FAKE_DOTFILES_SRC}/.devcontainer/.zprofile"
 }
 
 # ── clone_or_update_dotfiles ─────────────────────────────────────────────────
@@ -106,4 +103,14 @@ _make_fake_dotfiles() {
   run setup_dotfile_symlinks
   [ "$status" -eq 0 ]
   [[ -L "${FAKE_HOME}/.zshrc" ]]
+}
+
+@test "setup_dotfile_symlinks links .config/ccstatusline and .zshrc.d" {
+  _make_fake_dotfiles
+  export MACOS=1
+  unset LINUX
+  run setup_dotfile_symlinks
+  [ "$status" -eq 0 ]
+  [[ -L "${FAKE_HOME}/.config/ccstatusline" ]]
+  [[ -L "${FAKE_HOME}/.config/.zshrc.d" ]]
 }
