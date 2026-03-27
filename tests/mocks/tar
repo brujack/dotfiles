@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+printf "tar %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+# Find -C argument and create stub bats-core directory there
+target=""
+args=("$@")
+for ((i=0; i<${#args[@]}; i++)); do
+  if [[ "${args[i]}" == "-C" ]]; then
+    target="${args[$((i+1))]}"
+    break
+  fi
+done
+if [[ -n "${target}" ]] && [[ -n "${MOCK_BATS_VER}" ]]; then
+  mkdir -p "${target}/bats-core-${MOCK_BATS_VER}"
+  printf '#!/usr/bin/env bash\nprintf "bats installed\n"\n' \
+    > "${target}/bats-core-${MOCK_BATS_VER}/install.sh"
+  chmod +x "${target}/bats-core-${MOCK_BATS_VER}/install.sh"
+fi
+exit 0

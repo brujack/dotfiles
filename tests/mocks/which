@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+if [[ "${MOCK_WHICH_MISSING:-}" == "$1" ]]; then
+  exit 1
+fi
+exec /usr/bin/which "$@"

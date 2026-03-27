@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+printf "brew %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+
+case "$1" in
+  list)
+    if [[ "$*" == *"--cask"* ]]; then
+      printf "%s\n" ${MOCK_BREW_LIST_CASK:-}
+    else
+      printf "%s\n" ${MOCK_BREW_LIST_FORMULA:-}
+    fi
+    exit 0
+    ;;
+  tap)
+    if [[ $# -eq 1 ]]; then
+      printf "%s\n" ${MOCK_BREW_TAPS:-}
+      exit 0
+    fi
+    exit "${MOCK_BREW_TAP_EXIT:-0}"
+    ;;
+  install)
+    exit "${MOCK_BREW_INSTALL_EXIT:-0}"
+    ;;
+  *)
+    exit "${MOCK_BREW_EXIT:-0}"
+    ;;
+esac

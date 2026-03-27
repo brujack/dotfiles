@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+if [[ -n "${MOCK_UNAME_S}" ]] && [[ "$1" == "-s" ]]; then
+  printf "%s\n" "${MOCK_UNAME_S}"
+  exit 0
+fi
+exec /usr/bin/uname "$@"

@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+printf "curl %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+# Handle -o <file>: create an empty placeholder file
+outfile=""
+while [[ $# -gt 0 ]]; do
+  if [[ "$1" == "-o" ]]; then
+    outfile="$2"
+    shift 2
+  else
+    shift
+  fi
+done
+[[ -n "${outfile}" ]] && touch "${outfile}"
+exit "${MOCK_CURL_EXIT:-0}"

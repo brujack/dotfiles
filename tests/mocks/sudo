@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Drop -H flag if present; exec remaining args with current PATH (preserves mocks)
+args=()
+for arg in "$@"; do
+  [[ "$arg" == "-H" ]] && continue
+  args+=("$arg")
+done
+exec "${args[@]}"
