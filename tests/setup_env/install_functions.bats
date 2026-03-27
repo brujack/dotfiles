@@ -106,3 +106,91 @@ teardown() {
   [ "$status" -eq 0 ]
   grep -q "dnf install zsh" "${MOCK_CALLS_FILE}"
 }
+
+# ── install_rosetta ──────────────────────────────────────────────────────────
+
+@test "install_rosetta does nothing on macOS older than 11" {
+  export MOCK_SW_VERS_PRODUCTVERSION="10.15.7"
+  run install_rosetta
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"No need to install Rosetta"* ]]
+  ! grep -q "softwareupdate" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_rosetta skips when processor is Intel" {
+  export MOCK_SW_VERS_PRODUCTVERSION="12.0.0"
+  export MOCK_SYSCTL_CPU="Intel(R) Core(TM) i9-9880H CPU @ 2.30GHz"
+  run install_rosetta
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"No need to install Rosetta"* ]]
+  ! grep -q "softwareupdate" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_rosetta skips when oahd process is already running" {
+  export MOCK_SW_VERS_PRODUCTVERSION="12.0.0"
+  export MOCK_SYSCTL_CPU="Apple M1"
+  export MOCK_PGREP_EXIT=0
+  run install_rosetta
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"already installed"* ]]
+  ! grep -q "softwareupdate --install-rosetta" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_rosetta installs Rosetta on Apple Silicon when oahd is absent" {
+  export MOCK_SW_VERS_PRODUCTVERSION="12.0.0"
+  export MOCK_SYSCTL_CPU="Apple M1"
+  export MOCK_PGREP_EXIT=1
+  export MOCK_SOFTWAREUPDATE_EXIT=0
+  run install_rosetta
+  [ "$status" -eq 0 ]
+  grep -q "softwareupdate --install-rosetta" "${MOCK_CALLS_FILE}"
+  [[ "$output" == *"successfully installed"* ]]
+}
+
+@test "install_rosetta returns 1 when softwareupdate fails" {
+  export MOCK_SW_VERS_PRODUCTVERSION="12.0.0"
+  export MOCK_SYSCTL_CPU="Apple M1"
+  export MOCK_PGREP_EXIT=1
+  export MOCK_SOFTWAREUPDATE_EXIT=1
+  run install_rosetta
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"installation failed"* ]]
+}
+
+# ── check_and_install_nala ───────────────────────────────────────────────────
+
+@test "check_and_install_nala does nothing on non-Linux" {
+  export MOCK_UNAME_S=Darwin
+  run check_and_install_nala
+  [ "$status" -eq 0 ]
+  ! grep -q "dpkg" "${MOCK_CALLS_FILE}"
+}
+
+@test "check_and_install_nala does nothing on non-Ubuntu Linux" {
+  export MOCK_UNAME_S=Linux
+  export MOCK_AWK_OS_NAME="Fedora"
+  run check_and_install_nala
+  [ "$status" -eq 0 ]
+  ! grep -q "dpkg" "${MOCK_CALLS_FILE}"
+}
+
+@test "check_and_install_nala installs nala via dpkg and apt on Ubuntu when absent" {
+  export MOCK_UNAME_S=Linux
+  export MOCK_AWK_OS_NAME="Ubuntu"
+  export HOME="${BATS_TEST_TMPDIR}"
+  mkdir -p "${BATS_TEST_TMPDIR}/software_downloads"
+  # Remove nala mock from PATH so command -v nala fails → install branch taken
+  local mocks_dir
+  mocks_dir="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)/tests/mocks"
+  local tmp_mocks="${BATS_TEST_TMPDIR}/mocks_no_nala"
+  mkdir -p "${tmp_mocks}"
+  for f in "${mocks_dir}"/*; do
+    [[ "$(basename "$f")" == "nala" ]] && continue
+    ln -s "$f" "${tmp_mocks}/$(basename "$f")"
+  done
+  export PATH="${tmp_mocks}:${PATH/${mocks_dir}:/}"
+  run check_and_install_nala
+  [ "$status" -eq 0 ]
+  grep -q "dpkg --install" "${MOCK_CALLS_FILE}"
+  grep -q "apt install nala" "${MOCK_CALLS_FILE}"
+}

@@ -74,7 +74,7 @@ install_rosetta() {
   # Determine OS version
   # Save current IFS state
   OLDIFS=$IFS
-  IFS='.' read osvers_major osvers_minor osvers_dot_version <<< "$(/usr/bin/sw_vers -productVersion)"
+  IFS='.' read osvers_major osvers_minor osvers_dot_version <<< "$(sw_vers -productVersion)"
 
   # Restore IFS to previous state
   IFS=$OLDIFS
@@ -84,17 +84,17 @@ install_rosetta() {
   if [[ ${osvers_major} -ge 11 ]]; then
 
     # Check to see if the Mac needs Rosetta installed by testing the processor
-    processor=$(/usr/sbin/sysctl -n machdep.cpu.brand_string)
+    processor=$(sysctl -n machdep.cpu.brand_string)
 
     if [[ "$processor" == *"Intel"* ]]; then
       printf "%s processor installed. No need to install Rosetta.\\n" "${processor}"
     else
 
       # Check for Rosetta "oahd" process. If not found, perform a non-interactive install of Rosetta.
-      if /usr/bin/pgrep oahd >/dev/null 2>&1; then
+      if pgrep oahd >/dev/null 2>&1; then
           printf "Rosetta is already installed and running. Nothing to do.\\n"
       else
-          /usr/sbin/softwareupdate --install-rosetta --agree-to-license
+          softwareupdate --install-rosetta --agree-to-license
 
           if [[ $? -eq 0 ]]; then
             printf "Rosetta has been successfully installed.\\n"
