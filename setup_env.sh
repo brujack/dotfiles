@@ -665,6 +665,46 @@ setup_dotfile_symlinks() {
   fi
 }
 
+setup_credential_directories() {
+  printf "Creating %s/.aws\\n" "${HOME}"
+  mkdir -p ${HOME}/.aws
+  if [[ -d ${HOME}/.aws ]]; then
+    chmod 700 ${HOME}/.aws
+    printf "Created %s/.aws\\n" "${HOME}"
+  fi
+
+  printf "Creating %s/.gcloud_creds\\n" "${HOME}"
+  mkdir -p ${HOME}/.gcloud_creds
+  if [[ -d ${HOME}/.gcloud_creds ]]; then
+    chmod 700 ${HOME}/.gcloud_creds
+    printf "Created %s/.gcloud_creds\\n" "${HOME}"
+  fi
+
+  printf "Creating %s/.azure_creds\\n" "${HOME}"
+  mkdir -p ${HOME}/.azure_creds
+  if [[ -d ${HOME}/.azure_creds ]]; then
+    chmod 700 ${HOME}/.azure_creds
+    printf "Created %s/.azure_creds\\n" "${HOME}"
+  fi
+}
+
+setup_zsh_as_default_shell() {
+  printf "Setting ZSH as shell...\\n"
+
+  # Set the ZSH path based on the value of REDHAT
+  ZSH_PATH=${REDHAT:+"/usr/local/bin/zsh"}
+  ZSH_PATH=${ZSH_PATH:-"/bin/zsh"}
+
+  if [[ ${SHELL} != "${ZSH_PATH}" ]]; then
+    if which "${ZSH_PATH}" >/dev/null 2>&1; then
+      chsh -s "${ZSH_PATH}"
+      printf "Changed default shell to %s\\n" "${ZSH_PATH}"
+    else
+      printf "Error: %s does not exist\\n" "${ZSH_PATH}"
+    fi
+  fi
+}
+
 # Allow sourcing for unit testing without executing the main script body
 [[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0
 
@@ -847,20 +887,7 @@ if [[ ${SETUP} || ${SETUP_USER} ]]; then
 
   setup_dotfile_symlinks
 
-  printf "Setting ZSH as shell...\\n"
-
-  # Set the ZSH path based on the value of REDHAT
-  ZSH_PATH=${REDHAT:+"/usr/local/bin/zsh"}
-  ZSH_PATH=${ZSH_PATH:-"/bin/zsh"}
-
-  if [[ ${SHELL} != "${ZSH_PATH}" ]]; then
-    if which "${ZSH_PATH}" >/dev/null 2>&1; then
-      chsh -s "${ZSH_PATH}"
-      printf "Changed default shell to %s\\n" "${ZSH_PATH}"
-    else
-      printf "Error: %s does not exist\\n" "${ZSH_PATH}"
-    fi
-  fi
+  setup_zsh_as_default_shell
 
   printf "Setting up cheat.sh\\n"
   if [[ -d ${HOME}/bin ]]; then
@@ -898,26 +925,7 @@ fi
 
 # full setup and installation of all packages for a development environment
 if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
-  printf "Creating %s/.aws\\n" "${HOME}"
-  mkdir -p ${HOME}/.aws
-  if [[ -d ${HOME}/.aws ]]; then
-    chmod 700 ${HOME}/.aws
-    printf "Created %s/.aws\\n" "${HOME}"
-  fi
-
-  printf "Creating %s/.gcloud_creds\\n" "${HOME}"
-  mkdir -p ${HOME}/.gcloud_creds
-  if [[ -d ${HOME}/.gcloud_creds ]]; then
-    chmod 700 ${HOME}/.gcloud_creds
-    printf "Created %s/.gcloud_creds\\n" "${HOME}"
-  fi
-
-  printf "Creating %s/.azure_creds\\n" "${HOME}"
-  mkdir -p ${HOME}/.azure_creds
-  if [[ -d ${HOME}/.azure_creds ]]; then
-    chmod 700 ${HOME}/.azure_creds
-    printf "Created %s/.azure_creds\\n" "${HOME}"
-  fi
+  setup_credential_directories
 
   if [[ -n ${MACOS} ]]; then
     printf "Creating %s\\n" "${BREWFILE_LOC}"

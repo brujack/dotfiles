@@ -114,3 +114,47 @@ _make_fake_dotfiles() {
   [[ -L "${FAKE_HOME}/.config/ccstatusline" ]]
   [[ -L "${FAKE_HOME}/.config/.zshrc.d" ]]
 }
+
+# ── setup_credential_directories ────────────────────────────────────────────
+
+@test "setup_credential_directories creates .aws with chmod 700" {
+  run setup_credential_directories
+  [ "$status" -eq 0 ]
+  [[ -d "${FAKE_HOME}/.aws" ]]
+  perms=$(stat -f "%OLp" "${FAKE_HOME}/.aws" 2>/dev/null || stat -c "%a" "${FAKE_HOME}/.aws")
+  [ "$perms" = "700" ]
+}
+
+@test "setup_credential_directories creates .gcloud_creds with chmod 700" {
+  run setup_credential_directories
+  [ "$status" -eq 0 ]
+  [[ -d "${FAKE_HOME}/.gcloud_creds" ]]
+  perms=$(stat -f "%OLp" "${FAKE_HOME}/.gcloud_creds" 2>/dev/null || stat -c "%a" "${FAKE_HOME}/.gcloud_creds")
+  [ "$perms" = "700" ]
+}
+
+@test "setup_credential_directories creates .azure_creds with chmod 700" {
+  run setup_credential_directories
+  [ "$status" -eq 0 ]
+  [[ -d "${FAKE_HOME}/.azure_creds" ]]
+  perms=$(stat -f "%OLp" "${FAKE_HOME}/.azure_creds" 2>/dev/null || stat -c "%a" "${FAKE_HOME}/.azure_creds")
+  [ "$perms" = "700" ]
+}
+
+# ── setup_zsh_as_default_shell ───────────────────────────────────────────────
+
+@test "setup_zsh_as_default_shell does nothing when shell is already zsh" {
+  export SHELL="/bin/zsh"
+  unset REDHAT
+  run setup_zsh_as_default_shell
+  [ "$status" -eq 0 ]
+  ! grep -q "chsh" "${MOCK_CALLS_FILE}"
+}
+
+@test "setup_zsh_as_default_shell calls chsh when shell is not zsh" {
+  export SHELL="/bin/bash"
+  unset REDHAT
+  run setup_zsh_as_default_shell
+  [ "$status" -eq 0 ]
+  grep -q "chsh -s /bin/zsh" "${MOCK_CALLS_FILE}"
+}
