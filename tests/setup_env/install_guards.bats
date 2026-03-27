@@ -120,3 +120,79 @@ teardown() {
   [ "$status" -eq 1 ]
   [[ "$output" == *"Unsupported platform"* ]]
 }
+
+# ── ensure_not_root ──────────────────────────────────────────────────────────
+
+@test "ensure_not_root returns 0 when not root" {
+  export MOCK_ID_U=1000
+  run ensure_not_root
+  [ "$status" -eq 0 ]
+}
+
+@test "ensure_not_root returns 1 and prints message when root" {
+  export MOCK_ID_U=0
+  run ensure_not_root
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"cannot run as root"* ]]
+}
+
+# ── brew_tap_installed ───────────────────────────────────────────────────────
+
+@test "brew_tap_installed returns 0 when tap is listed" {
+  export MOCK_ID_U=1000
+  export MOCK_BREW_TAPS="hashicorp/tap homebrew/cask-versions"
+  run brew_tap_installed hashicorp/tap
+  [ "$status" -eq 0 ]
+}
+
+@test "brew_tap_installed returns 1 when tap is not listed" {
+  export MOCK_ID_U=1000
+  export MOCK_BREW_TAPS=""
+  run brew_tap_installed hashicorp/tap
+  [ "$status" -eq 1 ]
+}
+
+# ── brew_install_cask ────────────────────────────────────────────────────────
+
+@test "brew_install_cask calls brew install --cask when cask is absent" {
+  export MOCK_ID_U=1000
+  export MOCK_BREW_LIST_CASK=""
+  run brew_install_cask docker
+  [ "$status" -eq 0 ]
+  grep -q "brew install --cask --force --overwrite docker" "${MOCK_CALLS_FILE}"
+}
+
+@test "brew_install_cask does not call brew install when cask is present" {
+  export MOCK_ID_U=1000
+  export MOCK_BREW_LIST_CASK="docker"
+  run brew_install_cask docker
+  [ "$status" -eq 0 ]
+  ! grep -q "brew install --cask" "${MOCK_CALLS_FILE}"
+}
+
+# ── rhel_installed_package ───────────────────────────────────────────────────
+
+@test "rhel_installed_package returns 1 when yum is not available" {
+  # Source without mocks in PATH so command -v yum fails on macOS
+  local clean_path
+  clean_path="$(printf "%s" "${PATH}" | tr ':' '\n' | grep -v "tests/mocks" | tr '\n' ':' | sed 's/:$//')"
+  run bash -c "
+    export PATH='${clean_path}'
+    source '${REPO_ROOT}/setup_env.sh'
+    rhel_installed_package zsh
+  "
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"yum command not found"* ]]
+}
+
+@test "rhel_installed_package returns 0 when yum reports package installed" {
+  export MOCK_YUM_LIST_EXIT=0
+  run rhel_installed_package zsh
+  [ "$status" -eq 0 ]
+}
+
+@test "rhel_installed_package returns 1 when yum reports package not installed" {
+  export MOCK_YUM_LIST_EXIT=1
+  run rhel_installed_package zsh
+  [ "$status" -eq 1 ]
+}
