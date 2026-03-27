@@ -148,7 +148,8 @@ _make_fake_dotfiles() {
   unset REDHAT
   run setup_zsh_as_default_shell
   [ "$status" -eq 0 ]
-  ! grep -q "chsh" "${MOCK_CALLS_FILE}"
+  run grep -q "chsh" "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
 }
 
 @test "setup_zsh_as_default_shell calls chsh when shell is not zsh" {

@@ -696,7 +696,7 @@ setup_zsh_as_default_shell() {
   ZSH_PATH=${ZSH_PATH:-"/bin/zsh"}
 
   if [[ ${SHELL} != "${ZSH_PATH}" ]]; then
-    if which "${ZSH_PATH}" >/dev/null 2>&1; then
+    if [[ -x "${ZSH_PATH}" ]]; then
       chsh -s "${ZSH_PATH}"
       printf "Changed default shell to %s\\n" "${ZSH_PATH}"
     else
