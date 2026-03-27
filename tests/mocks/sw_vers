@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+printf "sw_vers %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+if [[ "$1" == "-productVersion" ]]; then
+  printf "%s\n" "${MOCK_SW_VERS_PRODUCTVERSION:-12.0.0}"
+  exit 0
+fi
+exec /usr/bin/sw_vers "$@"

@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+printf "chsh %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+exit "${MOCK_CHSH_EXIT:-0}"

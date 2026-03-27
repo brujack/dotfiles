@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+printf "yum %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+if [[ "$1" == "list" ]] && [[ "$2" == "installed" ]]; then
+  exit "${MOCK_YUM_LIST_EXIT:-0}"
+fi
+exit "${MOCK_YUM_EXIT:-0}"

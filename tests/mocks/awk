@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+printf "awk %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+for arg in "$@"; do
+  if [[ "$arg" == *"os-release"* ]] && [[ -n "${MOCK_AWK_OS_NAME:-}" ]]; then
+    printf "%s\n" "${MOCK_AWK_OS_NAME}"
+    exit 0
+  fi
+done
+exec /usr/bin/awk "$@"

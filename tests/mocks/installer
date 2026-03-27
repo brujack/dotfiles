@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+printf "installer %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+exit "${MOCK_INSTALLER_EXIT:-0}"

@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+printf "wget %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+i=1
+while [[ $i -le $# ]]; do
+  if [[ "${!i}" == "-O" ]]; then
+    j=$((i+1))
+    mkdir -p "$(dirname "${!j}")" 2>/dev/null
+    touch "${!j}" 2>/dev/null || true
+    break
+  fi
+  ((i++))
+done
+exit "${MOCK_WGET_EXIT:-0}"

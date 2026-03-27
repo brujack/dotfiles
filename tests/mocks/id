@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+printf "id %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+if [[ "$1" == "-u" ]]; then
+  printf "%s\n" "${MOCK_ID_U:-1000}"
+  exit 0
+fi
+exec /usr/bin/id "$@"

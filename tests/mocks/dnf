@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+printf "dnf %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+exit "${MOCK_DNF_EXIT:-0}"

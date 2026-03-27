@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+printf "nala %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+exit "${MOCK_NALA_EXIT:-0}"

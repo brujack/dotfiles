@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+printf "softwareupdate %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+exit "${MOCK_SOFTWAREUPDATE_EXIT:-0}"
