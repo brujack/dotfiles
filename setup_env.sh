@@ -708,7 +708,7 @@ setup_zsh_as_default_shell() {
 update_system_packages() {
   if [[ -n ${UBUNTU} ]]; then
     sudo -H apt update
-    if [[ ${FOCAL} ]]; then
+    if [[ -n ${FOCAL} ]]; then
       sudo -H apt autoremove -y
     elif [[ ${JAMMY} ]]; then
       check_and_install_nala

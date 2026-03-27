@@ -246,23 +246,23 @@ _make_fake_dotfiles() {
   export UBUNTU=1
   export WORKSTATION=1
   unset MACOS CRUNCHER
-  # Run in a subshell with a minimal PATH that has no rustup (mock or real)
-  local rustup_mock="${REPO_ROOT}/tests/mocks/rustup"
-  local rustup_hidden="${BATS_TEST_TMPDIR}/rustup_hidden"
-  mv "${rustup_mock}" "${rustup_hidden}"
-  run env PATH="${REPO_ROOT}/tests/mocks:/usr/bin:/bin" bash -c "
-    source '${REPO_ROOT}/tests/helpers/common.bash'
-    load_setup_env
-    export MOCK_CALLS_FILE='${MOCK_CALLS_FILE}'
+  # Build a PATH that excludes the mocks directory and any directory containing rustup,
+  # so both the mock rustup and any real rustup are invisible to command -v.
+  local clean_path
+  clean_path="$(printf "%s" "${PATH}" | tr ':' '\n' | grep -v "tests/mocks" | while read -r dir; do
+    [[ -x "${dir}/rustup" ]] || printf "%s\n" "${dir}"
+  done | tr '\n' ':' | sed 's/:$//')"
+  run bash -c "
+    export PATH='${clean_path}'
     export HOME='${FAKE_HOME}'
-    export PERSONAL_GITREPOS='${PERSONAL_GITREPOS}'
-    export DOTFILES='${DOTFILES}'
+    export PERSONAL_GITREPOS='${FAKE_PERSONAL_GITREPOS}'
+    export DOTFILES='dotfiles'
     export UBUNTU=1
     export WORKSTATION=1
     unset MACOS CRUNCHER
+    source '${REPO_ROOT}/setup_env.sh'
     update_rust
   "
-  mv "${rustup_hidden}" "${rustup_mock}"
   [ "$status" -eq 0 ]
   [[ "$output" == *"skipping"* ]]
 }
