@@ -33,9 +33,21 @@ At the end of each session, update `~/.claude/CLAUDE.md` and any relevant repo-l
 
 Update the top-level `README.md` whenever a change affects anything it documents — new features, changed commands, updated dependencies, new project structure, etc. The README should always reflect the current state of the repository.
 
-## Testing
+## Test-Driven Development
 
-Write unit tests for all new or changed code. Tests should be added alongside the code they cover, not as a separate pass.
+**TDD is required.** Write the failing test first, then write the minimum code to make it pass. This is not optional — it applies to every new function, feature, or bug fix.
+
+The cycle is:
+1. Write a failing test that defines the expected behavior
+2. Run it and confirm it fails (wrong reason = wrong test)
+3. Write the minimum implementation to make it pass
+4. Run tests and confirm they pass
+5. Commit
+6. Refactor if needed, keeping tests green
+
+**Never write implementation before the test.** If you find yourself writing code and then adding tests afterward, stop — you are doing it wrong.
+
+Tests must be added alongside the code they cover, not as a separate pass. Every new function, every changed function, every bug fix gets a test in the same commit.
 
 ## Linting
 
@@ -43,6 +55,7 @@ Every project Makefile must have a `lint` target, and `test` must depend on it (
 
 - Python: `ruff check .`
 - Rust: `cargo clippy -- -D warnings`
+- PowerShell: `Invoke-ScriptAnalyzer` via PSScriptAnalyzer (use a `PSScriptAnalyzerSettings.psd1` to exclude rules that can't be changed, e.g. `PSAvoidUsingInvokeExpression` for official bootstrapper commands)
 
 ## GitHub Actions / CI
 
@@ -64,6 +77,14 @@ Every project Makefile must have a `lint` target, and `test` must depend on it (
 - **Functions:** `snake_case()` naming
 - **Constants:** `SCREAMING_SNAKE_CASE`, marked `readonly`
 - **Error handling:** Check `$?` or use `|| exit 1`; guard installs with `command -v`
+
+### PowerShell
+
+- **Testing:** Pester v5 (`Invoke-Pester`); `BeforeAll { . "$PSScriptRoot/../script.ps1" }` to dot-source for function-level testing
+- **Mocking:** Pester `Mock` intercepts cmdlets and external commands; COM objects (`New-Object -ComObject`) are Windows-only at parameter binding — extract thin wrapper functions (`Get-UpdateSearcher`, etc.) so they can be mocked cross-platform
+- **Function naming:** Avoid names that shadow built-in cmdlets (e.g. don't name a wrapper `Enable-WindowsOptionalFeature` — it's already a Windows cmdlet)
+- **Cross-platform stubs:** Add `global:` stubs in `BeforeAll` for Windows-only cmdlets (`Get-WindowsOptionalFeature`, `Enable-WindowsOptionalFeature`, etc.) guarded with `if (-Not (Get-Command ...))` so tests run on macOS
+- **Variable escaping in Makefile:** Use `$$var` in Makefile recipes to pass `$var` to PowerShell via `pwsh -Command`
 
 ### General
 
