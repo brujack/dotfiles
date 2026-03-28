@@ -9,14 +9,13 @@ fi
 dir_path="$1"
 dir_ignore="$2"
 
-shopt -s lastpipe
 total_lines=0
 
-git -C "$dir_path" ls-files | grep -v "^$dir_ignore/" | while read -r file
+while read -r file
 do
   lines=$(wc -l <"$dir_path/$file")
   total_lines=$((total_lines + lines))
   echo "$file has $lines lines"
-done
+done < <(git -C "$dir_path" ls-files | grep -v "^$dir_ignore/")
 
 echo "Total lines: $total_lines"
