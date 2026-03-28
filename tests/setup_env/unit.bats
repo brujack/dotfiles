@@ -104,3 +104,16 @@ teardown() {
 @test "BATS_VER matches semver pattern" {
   [[ "${BATS_VER}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
 }
+
+# ── usage ────────────────────────────────────────────────────────────────────
+
+@test "usage prints help text and exits 0" {
+  run usage
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+  [[ "$output" == *"setup_user"* ]]
+  [[ "$output" == *"setup"* ]]
+  [[ "$output" == *"developer"* ]]
+  [[ "$output" == *"ansible"* ]]
+  [[ "$output" == *"update"* ]]
+}

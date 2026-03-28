@@ -266,3 +266,11 @@ _make_fake_dotfiles() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"skipping"* ]]
 }
+
+@test "update_system_packages calls mas upgrade on macOS" {
+  export MACOS=1
+  unset UBUNTU REDHAT FEDORA CENTOS
+  run update_system_packages
+  [ "$status" -eq 0 ]
+  grep -q "mas upgrade" "${MOCK_CALLS_FILE}"
+}
