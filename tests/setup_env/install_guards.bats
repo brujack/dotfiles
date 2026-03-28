@@ -196,3 +196,58 @@ teardown() {
   [ "$status" -eq 1 ]
   grep -q "yum list installed zsh" "${MOCK_CALLS_FILE}"
 }
+
+# ── brew_update ──────────────────────────────────────────────────────────────
+
+@test "brew_update returns 1 when running as root" {
+  export MOCK_ID_U=0
+  run brew_update
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Homebrew cannot run as root"* ]]
+}
+
+@test "brew_update calls install_homebrew when brew is absent" {
+  export MOCK_ID_U=1000
+  export MOCK_XCODE_SELECT_PRINT_PATH_EXIT=0
+  # Build a filtered mocks dir without the brew mock
+  local tmp_mocks="${BATS_TEST_TMPDIR}/mocks_no_brew"
+  mkdir -p "${tmp_mocks}"
+  for f in "${REPO_ROOT}/tests/mocks/"*; do
+    [[ "$(basename "$f")" == "brew" ]] && continue
+    ln -sf "$f" "${tmp_mocks}/$(basename "$f")"
+  done
+  # Build a PATH that excludes tests/mocks and any directory containing a real brew binary
+  local clean_path
+  clean_path="$(printf "%s" "${PATH}" | tr ':' '\n' | grep -v "tests/mocks" | tr '\n' ':' | sed 's/:$//')"
+  clean_path="$(printf "%s" "${clean_path}" | tr ':' '\n' | while read -r dir; do
+    [[ -x "${dir}/brew" ]] || printf "%s\n" "${dir}"
+  done | tr '\n' ':' | sed 's/:$//')"
+  run bash -c "
+    export PATH='${tmp_mocks}:${clean_path}'
+    export MOCK_CALLS_FILE='${MOCK_CALLS_FILE}'
+    export MOCK_ID_U=1000
+    export MOCK_XCODE_SELECT_PRINT_PATH_EXIT=0
+    source '${REPO_ROOT}/setup_env.sh'
+    brew_update
+  "
+  # Function exits non-zero (brew stays absent after install_homebrew) — only assert install was reached
+  grep -q "curl" "${MOCK_CALLS_FILE}"
+}
+
+@test "brew_update returns 1 when brew update fails" {
+  export MOCK_ID_U=1000
+  export MOCK_BREW_UPDATE_EXIT=1
+  run brew_update
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Failed to update Homebrew"* ]]
+}
+
+@test "brew_update runs full update sequence on success" {
+  export MOCK_ID_U=1000
+  run brew_update
+  [ "$status" -eq 0 ]
+  grep -q "brew update" "${MOCK_CALLS_FILE}"
+  grep -q "brew upgrade" "${MOCK_CALLS_FILE}"
+  grep -q "brew cleanup" "${MOCK_CALLS_FILE}"
+  [[ "$output" == *"Homebrew update process completed successfully"* ]]
+}
