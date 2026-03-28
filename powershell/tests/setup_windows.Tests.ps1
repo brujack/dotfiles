@@ -306,7 +306,7 @@ Describe "Install-WSL" {
   }
 
   It "skips wsl --install when WSL2 is already the default" {
-    Mock wsl { "Default Version: 2" } -ParameterFilter { $args -contains '--status' }
+    Mock wsl { "WSL version: 2.3.26`nDefault Version: 2`nKernel version: 5.15.0" } -ParameterFilter { $args -contains '--status' }
     Mock wsl { } -ParameterFilter { $args -contains '--install' }
     Install-WSL
     Should -Invoke wsl -ParameterFilter { $args -contains '--install' } -Times 0

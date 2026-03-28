@@ -159,7 +159,7 @@ function Set-WindowsOption {
 
 function Install-WSL {
   $WSLStatus = wsl --status
-  if (-Not ($WSLStatus -contains "Default Version: 2")) {
+  if (-Not ($WSLStatus -match "Default Version: 2")) {
     wsl --install
   }
 }
@@ -180,7 +180,7 @@ if ($IsWindows) {
 
     # enable wsl
     $WSLEnabled = wsl --status
-    if (-Not ($WSLEnabled -contains "Default Version: 2")) {
+    if (-Not ($WSLEnabled -match "Default Version: 2")) {
       wsl --install
     }
 
