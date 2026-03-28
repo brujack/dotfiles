@@ -9,6 +9,12 @@ BeforeAll {
   if (-Not (Get-Command 'shutdown.exe' -ErrorAction SilentlyContinue)) {
     function global:shutdown.exe { }
   }
+  if (-Not (Get-Command Get-WindowsOptionalFeature -ErrorAction SilentlyContinue)) {
+    function global:Get-WindowsOptionalFeature { }
+  }
+  if (-Not (Get-Command Enable-WindowsOptionalFeature -ErrorAction SilentlyContinue)) {
+    function global:Enable-WindowsOptionalFeature { }
+  }
   . "$PSScriptRoot/../setup_windows.ps1"
 }
 
@@ -256,5 +262,33 @@ Describe "Install-WindowsUpdate" {
     Install-WindowsUpdate
 
     Should -Invoke 'shutdown.exe' -Times 1
+  }
+}
+
+Describe "Enable-RequiredWindowsOptionalFeature" {
+  BeforeEach {
+    Mock Write-Output { }
+  }
+
+  It "enables features that are disabled" {
+    Mock Get-WindowsOptionalFeature {
+      [PSCustomObject]@{ FeatureName = $FeatureName; State = 'Disabled' }
+    }
+    Mock Enable-WindowsOptionalFeature { }
+
+    Enable-RequiredWindowsOptionalFeature
+
+    Should -Invoke Enable-WindowsOptionalFeature -Times 1
+  }
+
+  It "skips enabling features that are already enabled" {
+    Mock Get-WindowsOptionalFeature {
+      [PSCustomObject]@{ FeatureName = $FeatureName; State = 'Enabled' }
+    }
+    Mock Enable-WindowsOptionalFeature { }
+
+    Enable-RequiredWindowsOptionalFeature
+
+    Should -Invoke Enable-WindowsOptionalFeature -Times 0
   }
 }
