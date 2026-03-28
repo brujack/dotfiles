@@ -179,6 +179,20 @@ function New-DirectoryStructure {
   }
 }
 
+function Copy-GitConfig {
+  $GitConfigSource = "~/git-repos/personal/dotfiles/.gitconfig_windows"
+  if (Test-Path -Path $GitConfigSource -PathType Leaf) {
+    try {
+      $null = Remove-Item ~/.gitconfig -ErrorAction SilentlyContinue
+      $null = Copy-Item -Path $GitConfigSource -Destination ~/.gitconfig -ErrorAction SilentlyContinue
+      Write-Output "copied ~/.gitconfig"
+    }
+    catch {
+      throw $_.Exception.Message
+    }
+  }
+}
+
 if ($IsWindows) {
 
   if ($setup.IsPresent) {

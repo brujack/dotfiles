@@ -386,3 +386,29 @@ Describe "New-DirectoryStructure" {
     Should -Invoke New-Item -Times 0
   }
 }
+
+Describe "Copy-GitConfig" {
+  BeforeEach {
+    Mock Remove-Item { }
+    Mock Copy-Item { }
+    Mock Write-Output { }
+  }
+
+  It "copies gitconfig when source exists" {
+    Mock Test-Path { $true }
+    Copy-GitConfig
+    Should -Invoke Copy-Item -Times 1
+  }
+
+  It "removes existing ~/.gitconfig before copying" {
+    Mock Test-Path { $true }
+    Copy-GitConfig
+    Should -Invoke Remove-Item -Times 1
+  }
+
+  It "skips copy when source does not exist" {
+    Mock Test-Path { $false }
+    Copy-GitConfig
+    Should -Invoke Copy-Item -Times 0
+  }
+}
