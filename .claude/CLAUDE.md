@@ -37,6 +37,13 @@ Update the top-level `README.md` whenever a change affects anything it documents
 
 Write unit tests for all new or changed code. Tests should be added alongside the code they cover, not as a separate pass.
 
+## Linting
+
+Every project Makefile must have a `lint` target, and `test` must depend on it (`test: lint`).
+
+- Python: `ruff check .`
+- Rust: `cargo clippy -- -D warnings`
+
 ## GitHub Actions / CI
 
 - All jobs must run on Node.js 24
