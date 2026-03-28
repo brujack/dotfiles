@@ -184,7 +184,7 @@ function Copy-GitConfig {
   if (Test-Path -Path $GitConfigSource -PathType Leaf) {
     try {
       $null = Remove-Item ~/.gitconfig -ErrorAction SilentlyContinue
-      $null = Copy-Item -Path $GitConfigSource -Destination ~/.gitconfig -ErrorAction SilentlyContinue
+      $null = Copy-Item -Path $GitConfigSource -Destination ~/.gitconfig -ErrorAction Stop
       Write-Output "copied ~/.gitconfig"
     }
     catch {
