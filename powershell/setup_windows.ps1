@@ -164,6 +164,21 @@ function Install-WSL {
   }
 }
 
+function New-DirectoryStructure {
+  $Dirs = @("~/.config", "~/git-repos/personal")
+  foreach ($dir in $Dirs) {
+    if (-Not (Test-Path -Path $dir -PathType Container)) {
+      try {
+        $null = New-Item -ItemType Directory -Path $dir -Force -ErrorAction Stop
+        Write-Output "The directory [$dir] has been created."
+      }
+      catch {
+        throw $_.Exception.Message
+      }
+    }
+  }
+}
+
 if ($IsWindows) {
 
   if ($setup.IsPresent) {

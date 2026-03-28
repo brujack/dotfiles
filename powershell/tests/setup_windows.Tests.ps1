@@ -356,3 +356,33 @@ Describe "Enable-RequiredWindowsOptionalFeature" {
     Should -Invoke Enable-WindowsOptionalFeature -Times 1 -Exactly
   }
 }
+
+Describe "New-DirectoryStructure" {
+  BeforeEach {
+    Mock New-Item { }
+    Mock Write-Output { }
+    Mock Test-Path { $true }
+  }
+
+  It "creates ~/.config when it does not exist" {
+    Mock Test-Path { $false } -ParameterFilter { $Path -like '*/.config' }
+    New-DirectoryStructure
+    Should -Invoke New-Item -ParameterFilter { $Path -like '*/.config' } -Times 1
+  }
+
+  It "skips ~/.config when it already exists" {
+    New-DirectoryStructure
+    Should -Invoke New-Item -ParameterFilter { $Path -like '*/.config' } -Times 0
+  }
+
+  It "creates ~/git-repos/personal when it does not exist" {
+    Mock Test-Path { $false } -ParameterFilter { $Path -like '*/git-repos/personal' }
+    New-DirectoryStructure
+    Should -Invoke New-Item -ParameterFilter { $Path -like '*/git-repos/personal' } -Times 1
+  }
+
+  It "skips both directories when they already exist" {
+    New-DirectoryStructure
+    Should -Invoke New-Item -Times 0
+  }
+}
