@@ -7,7 +7,7 @@ help:
 	@printf "  make help   Show this help\n"
 
 lint:
-	pwsh -Command 'Import-Module PSScriptAnalyzer; $$r = Invoke-ScriptAnalyzer -Path ./setup_windows.ps1 -Settings ./PSScriptAnalyzerSettings.psd1; if ($$r) { $$r | Format-Table -AutoSize; exit 1 }'
+	pwsh -NoProfile -File ./run-lint.ps1
 
 test:
-	pwsh -File ./run-tests.ps1
+	pwsh -NoProfile -File ./run-tests.ps1
