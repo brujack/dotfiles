@@ -132,7 +132,7 @@ if ($IsWindows) {
   }
 
   if ($setup.IsPresent) {
-    function Enable-WindowsOptionalFeature {
+    function Enable-RequiredWindowsOptionalFeature {
       # enable hyper-v and sandbox containers
       $RequiredWindowsOptionalFeatures = @(
         "Microsoft-Hyper-V"
@@ -157,7 +157,7 @@ if ($IsWindows) {
 
     Install-ChocolateyPackage
 
-    Enable-WindowsOptionalFeature
+    Enable-RequiredWindowsOptionalFeature
 
     # enable wsl
     $WSLEnabled = wsl --status
