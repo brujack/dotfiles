@@ -16,138 +16,139 @@ param(
   [Switch]$setup,
   [Switch]$update
 )
+
+function Install-ChocolateyPackage {
+  if (-Not (Get-Command "choco.exe" -ErrorAction SilentlyContinue)) {
+    Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://boxstarter.org/bootstrapper.ps1')); Get-Boxstarter -Force
+  }
+
+  $ChocoPackagesToBeInstalled = @(
+    "1password",
+    "adobereader",
+    "ag",
+    "atom",
+    "awscli",
+    "azure-cli",
+    "bat",
+    "bambustudio"
+    "beyondcompare",
+    "boxstarter",
+    "claude",
+    "claude-code",
+    "crystaldiskmark",
+    "dbeaver",
+    "discord",
+    "docker-desktop",
+    "docker-compose",
+    "dotnet",
+    "evernote",
+    "firefox",
+    "fzf",
+    "gcloudsdk",
+    "geekbench",
+    "gh",
+    "git",
+    "git-lfs",
+    "golang",
+    "googlechrome",
+    "go-task",
+    "iperf3",
+    "k9s",
+    "kubernetes-cli",
+    "kubernetes-helm",
+    "launchy",
+    "lazydocker",
+    "make",
+    "microsoft-teams",
+    "microsoft-windows-terminal",
+    "mongosh",
+    "mongodb-atlas",
+    "neovim",
+    "postman",
+    "powertoys",
+    "putty.install",
+    "python3",
+    "reflect-free",
+    "ripgrep",
+    "rust",
+    "simplenote",
+    "slack",
+    "sourcetree",
+    "spotify",
+    "starship",
+    "steam-client",
+    "teamviewer",
+    "terraform",
+    "typora",
+    "vlc",
+    "vscode",
+    "winscp",
+    "zed",
+    "zoom",
+    "zoxide",
+    "7zip"
+  )
+
+  # check to see if a package is installed before installing it
+  foreach ($package in $ChocoPackagesToBeInstalled) {
+    $result = choco list -lo | Where-object { $_.ToLower().StartsWith("$package".ToLower()) }
+    if ($null -eq $result) {
+      choco install $package -y
+      Write-Output "Installed $package"
+    }
+    else {
+      Write-Output "$package already installed"
+    }
+  }
+
+}
+
+function Install-WindowsUpdate {
+  # define update criteria
+  $Criteria = "IsInstalled=0"
+
+  # search for relevant updates.
+  $Searcher = New-Object -ComObject Microsoft.Update.Searcher
+  $SearchResult = $Searcher.Search($Criteria).Updates
+
+  # download updates
+  $Session = New-Object -ComObject Microsoft.Update.Session
+  $Downloader = $Session.CreateUpdateDownloader()
+  $Downloader.Updates = $SearchResult
+  if ($SearchResult) {
+    $Downloader.Download()
+  }
+
+  # install updates
+  $Installer = New-Object -ComObject Microsoft.Update.Installer
+  $Installer.Updates = $SearchResult
+  if ($SearchResult) {
+    $Result = $Installer.Install()
+  }
+
+  # reboot if required
+  If ($Result.rebootRequired) { shutdown.exe /t 0 /r }
+}
+
+function Enable-RequiredWindowsOptionalFeature {
+  # enable hyper-v and sandbox containers
+  $RequiredWindowsOptionalFeatures = @(
+    "Microsoft-Hyper-V"
+    "Containers-DisposableClientVM"
+  )
+  $RequiredWindowsOptionalFeaturesResults = foreach ($feature in $RequiredWindowsOptionalFeatures) {Get-WindowsOptionalFeature -Online -FeatureName $feature | Where-Object {$_.State -eq "Disabled"}}
+
+  if ($RequiredWindowsOptionalFeaturesResults) {
+    foreach ($features in $RequiredWindowsOptionalFeatures) {
+      Enable-WindowsOptionalFeature -Online -FeatureName $features
+      Write-Output "Enabled feature $features"
+    }
+  }
+}
+
 if ($IsWindows) {
 
-  function Install-ChocolateyPackage {
-    if (-Not (Get-Command "choco.exe" -ErrorAction SilentlyContinue)) {
-      Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://boxstarter.org/bootstrapper.ps1')); Get-Boxstarter -Force
-    }
-
-    $ChocoPackagesToBeInstalled = @(
-      "1password",
-      "adobereader",
-      "ag",
-      "atom",
-      "awscli",
-      "azure-cli",
-      "bat",
-      "bambustudio"
-      "beyondcompare",
-      "boxstarter",
-      "claude",
-      "claude-code",
-      "crystaldiskmark",
-      "dbeaver",
-      "discord",
-      "docker-desktop",
-      "docker-compose",
-      "dotnet",
-      "evernote",
-      "firefox",
-      "fzf",
-      "gcloudsdk",
-      "geekbench",
-      "gh",
-      "git",
-      "git-lfs",
-      "golang",
-      "googlechrome",
-      "go-task",
-      "iperf3",
-      "k9s",
-      "kubernetes-cli",
-      "kubernetes-helm",
-      "launchy",
-      "lazydocker",
-      "make",
-      "microsoft-teams",
-      "microsoft-windows-terminal",
-      "mongosh",
-      "mongodb-atlas",
-      "neovim",
-      "postman",
-      "powertoys",
-      "putty.install",
-      "python3",
-      "reflect-free",
-      "ripgrep",
-      "rust",
-      "simplenote",
-      "slack",
-      "sourcetree",
-      "spotify",
-      "starship",
-      "steam-client",
-      "teamviewer",
-      "terraform",
-      "typora",
-      "vlc",
-      "vscode",
-      "winscp",
-      "zed",
-      "zoom",
-      "zoxide",
-      "7zip"
-    )
-
-    # check to see if a package is installed before installing it
-    foreach ($package in $ChocoPackagesToBeInstalled) {
-      $result = choco list -lo | Where-object { $_.ToLower().StartsWith("$package".ToLower()) }
-      if ($null -eq $result) {
-        choco install $package -y
-        Write-Output "Installed $package"
-      }
-      else {
-        Write-Output "$package already installed"
-      }
-    }
-
-  }
-
-  function Install-WindowsUpdate {
-    # define update criteria
-    $Criteria = "IsInstalled=0"
-
-    # search for relevant updates.
-    $Searcher = New-Object -ComObject Microsoft.Update.Searcher
-    $SearchResult = $Searcher.Search($Criteria).Updates
-
-    # download updates
-    $Session = New-Object -ComObject Microsoft.Update.Session
-    $Downloader = $Session.CreateUpdateDownloader()
-    $Downloader.Updates = $SearchResult
-    if ($SearchResult) {
-      $Downloader.Download()
-    }
-
-    # install updates
-    $Installer = New-Object -ComObject Microsoft.Update.Installer
-    $Installer.Updates = $SearchResult
-    if ($SearchResult) {
-      $Result = $Installer.Install()
-    }
-
-    # reboot if required
-    If ($Result.rebootRequired) { shutdown.exe /t 0 /r }
-  }
-
   if ($setup.IsPresent) {
-    function Enable-RequiredWindowsOptionalFeature {
-      # enable hyper-v and sandbox containers
-      $RequiredWindowsOptionalFeatures = @(
-        "Microsoft-Hyper-V"
-        "Containers-DisposableClientVM"
-      )
-      $RequiredWindowsOptionalFeaturesResults = foreach ($feature in $RequiredWindowsOptionalFeatures) {Get-WindowsOptionalFeature -Online -FeatureName $feature | Where-Object {$_.State -eq "Disabled"}}
-
-      if ($RequiredWindowsOptionalFeaturesResults) {
-        foreach ($features in $RequiredWindowsOptionalFeatures) {
-          Enable-WindowsOptionalFeature -Online -FeatureName $features
-          Write-Output "Enabled feature $features"
-        }
-      }
-    }
-
     # set windows options
     # enable RDP
     Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -value 0
