@@ -14,6 +14,7 @@ dotfiles/
 │   ├── setup_windows.ps1     # Windows/PowerShell bootstrap
 │   ├── Makefile              # lint + test targets for PowerShell
 │   ├── PSScriptAnalyzerSettings.psd1  # PSScriptAnalyzer rule config
+│   ├── run-tests.ps1         # combined lint+test script (called by make test)
 │   └── tests/
 │       └── setup_windows.Tests.ps1   # Pester v5 unit tests (22 tests)
 ├── .devcontainer/            # Central dotfiles storage + dev container config
