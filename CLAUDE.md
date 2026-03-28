@@ -10,7 +10,12 @@ Personal development environment bootstrapping system for macOS and Linux (Ubunt
 dotfiles/
 ├── setup_env.sh              # Main entry point (2388 lines) — run with -t <type>
 ├── Brewfile                  # Homebrew bundle manifest (100+ formulae/casks)
-├── setup_windows.ps1         # Windows/PowerShell bootstrap
+├── powershell/
+│   ├── setup_windows.ps1     # Windows/PowerShell bootstrap
+│   ├── Makefile              # lint + test targets for PowerShell
+│   ├── PSScriptAnalyzerSettings.psd1  # PSScriptAnalyzer rule config
+│   └── tests/
+│       └── setup_windows.Tests.ps1   # Pester v5 unit tests (9 tests)
 ├── .devcontainer/            # Central dotfiles storage + dev container config
 │   ├── .zshrc                # Main zsh config (sources .zshrc.d modules)
 │   ├── .zprofile             # Zsh login shell config
@@ -29,11 +34,17 @@ dotfiles/
 │       └── 7_final.zsh       # Final setup, completions
 ├── scripts/
 │   ├── .osx.sh               # macOS system defaults (run during setup)
+│   ├── count_lines.sh        # Count lines across files in a directory
+│   ├── count_lines_git.sh    # Count lines across git-tracked files
+│   ├── html2ascii.sh         # Strip HTML tags, output one token per line
+│   ├── kill_zombie.sh        # Kill zombie (defunct) processes
+│   ├── mkill.sh              # Kill processes by name pattern
+│   ├── restart_fah.sh        # Restart Folding@Home client
+│   ├── synch_git-repos.sh    # Rsync git-repos to remote hosts (studio only)
 │   └── tmux-workstation.sh   # Multi-session tmux layout
 ├── kubernetes_stuff/         # Kubernetes installation/init scripts
 ├── .ssh/                     # SSH config
-├── ubuntu_*_packages.txt     # Package lists per Ubuntu version
-└── node_modules/             # bats (testing), json2yaml
+└── ubuntu_*_packages.txt     # Package lists per Ubuntu version
 ```
 
 ## Entry Points
@@ -103,6 +114,15 @@ brew_cask_installed <cask>
 quiet_which <command>
 ```
 
+### PowerShell Scripts
+
+- **Noun naming:** Functions must use singular nouns (`Install-ChocolateyPackage`, not `Install-ChocolateyPackages`) — PSUseSingularNouns rule
+- **Avoid built-in collisions:** Do not name functions the same as Windows built-in cmdlets (e.g., use `Enable-RequiredWindowsOptionalFeature`, not `Enable-WindowsOptionalFeature`)
+- **COM object wrappers:** Wrap `New-Object -ComObject` calls in thin functions (`Get-UpdateSearcher`, etc.) so Pester can mock them on macOS
+- **Null comparisons:** `$null -eq $result` not `$result -eq $null` (PSPossibleIncorrectComparisonWithNull)
+- **No aliases:** `Invoke-Expression` not `iex`; full cmdlet names throughout
+- **Cross-platform test stubs:** Windows-only cmdlets that don't exist on macOS must be stubbed as `function global:CmdletName { }` in `BeforeAll`
+
 ### Version Pinning
 
 All tool versions are defined as constants at the top of `setup_env.sh`:
@@ -123,8 +143,9 @@ Uses **BATS** (Bash Automated Testing System), installed natively:
 - Ubuntu: `sudo apt-get install -y bats` (via `install_bats()` in `setup_env.sh`)
 - RHEL/CentOS/Fedora: direct GitHub release install (via `install_bats()`)
 
-**Run tests:** `make test`
+**Run tests:** `make test` (runs lint then all BATS tests)
 **Run unit tests only:** `make test-unit`
+**Run lint only:** `make lint`
 
 ### Testing Rules
 
@@ -133,6 +154,23 @@ Uses **BATS** (Bash Automated Testing System), installed natively:
 - New shell scripts get their own directory under `tests/` (e.g., `tests/scripts/`)
 - Never modify real system state in tests — use PATH-based mocks from `tests/mocks/`
 - `make test` must exit 0 before committing
+
+### PowerShell Testing
+
+Run from the `powershell/` directory:
+
+```bash
+cd powershell
+make test   # runs PSScriptAnalyzer lint then Pester tests
+make lint   # PSScriptAnalyzer only
+```
+
+Prerequisites (one-time):
+```bash
+brew install --cask powershell
+pwsh -Command "Install-Module Pester -Force -Scope CurrentUser -MinimumVersion 5.0"
+pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
+```
 
 ### Mock Pattern
 
