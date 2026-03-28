@@ -80,7 +80,7 @@ Dotfiles live in `.devcontainer/` and `.claude/`. `setup_env.sh` creates symlink
 1. Windows 10 Pro or later (required for containers and WSL)
 2. Install [Boxstarter](https://boxstarter.org/) using the command in `windows_boxstarter.ps1`
 3. Clone this repo (recommended: [Sourcetree](https://www.sourcetreeapp.com/))
-4. Run `setup_windows.ps1` to install Windows programs and services
+4. Run `powershell/setup_windows.ps1` to install Windows programs and services
 5. Install Ubuntu from the Microsoft Store
 6. Run `./setup_env.sh -t setup` inside WSL
 
