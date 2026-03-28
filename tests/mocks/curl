@@ -11,4 +11,7 @@ while [[ $# -gt 0 ]]; do
   fi
 done
 [[ -n "${outfile}" ]] && touch "${outfile}"
+# Emit MOCK_CURL_STDOUT to stdout if set — used by install_homebrew's
+# /bin/bash -c "$(curl -fsSL ...)" so the substituted snippet is controllable
+[[ -n "${MOCK_CURL_STDOUT:-}" ]] && printf "%s\n" "${MOCK_CURL_STDOUT}"
 exit "${MOCK_CURL_EXIT:-0}"

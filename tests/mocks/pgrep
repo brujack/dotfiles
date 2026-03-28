@@ -1,3 +1,6 @@
 #!/usr/bin/env bash
 printf "pgrep %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+# Emit MOCK_PGREP_OUTPUT to stdout if set — used to simulate found PIDs
+# so that for-loop callers (mkill.sh, restart_fah.sh) can be tested
+[[ -n "${MOCK_PGREP_OUTPUT:-}" ]] && printf "%s\n" "${MOCK_PGREP_OUTPUT}"
 exit "${MOCK_PGREP_EXIT:-1}"

@@ -20,6 +20,15 @@ case "$1" in
   install)
     exit "${MOCK_BREW_INSTALL_EXIT:-0}"
     ;;
+  update)
+    exit "${MOCK_BREW_UPDATE_EXIT:-0}"
+    ;;
+  upgrade)
+    exit "${MOCK_BREW_UPGRADE_EXIT:-0}"
+    ;;
+  cleanup)
+    exit "${MOCK_BREW_CLEANUP_EXIT:-0}"
+    ;;
   *)
     exit "${MOCK_BREW_EXIT:-0}"
     ;;
