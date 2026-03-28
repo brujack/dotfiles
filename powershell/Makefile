@@ -7,7 +7,16 @@ help:
 	@printf "  make help   Show this help\n"
 
 lint:
-	pwsh -Command 'Import-Module PSScriptAnalyzer; $$r = Invoke-ScriptAnalyzer -Path ./setup_windows.ps1 -Settings ./PSScriptAnalyzerSettings.psd1; if ($$r) { $$r | Format-Table -AutoSize; exit 1 }'
+	pwsh -NoProfile -Command 'Import-Module PSScriptAnalyzer; $$r = Invoke-ScriptAnalyzer -Path ./setup_windows.ps1 -Settings ./PSScriptAnalyzerSettings.psd1; if ($$r) { $$r | Format-Table -AutoSize; exit 1 }'
 
-test: lint
-	pwsh -Command 'Import-Module Pester; $$config = New-PesterConfiguration; $$config.Run.Path = "tests/"; $$config.Output.Verbosity = "Detailed"; $$config.Run.Exit = $$true; Invoke-Pester -Configuration $$config'
+test:
+	pwsh -NoProfile -Command '\
+		Import-Module PSScriptAnalyzer; \
+		$$r = Invoke-ScriptAnalyzer -Path ./setup_windows.ps1 -Settings ./PSScriptAnalyzerSettings.psd1; \
+		if ($$r) { $$r | Format-Table -AutoSize; exit 1 }; \
+		Import-Module Pester; \
+		$$config = New-PesterConfiguration; \
+		$$config.Run.Path = "tests/"; \
+		$$config.Output.Verbosity = "Detailed"; \
+		$$config.Run.Exit = $$true; \
+		Invoke-Pester -Configuration $$config'
