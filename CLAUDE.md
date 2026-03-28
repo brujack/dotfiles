@@ -192,3 +192,4 @@ Available mock env vars:
 - Git repos are cloned to `~/git-repos/personal/` and `~/git-repos/work/`
 - Python environments managed via **pyenv** + **pyenv-virtualenv**; the `ansible` venv is the primary one
 - Application installs are kept in alphabetical order
+- For shell syntax-only fixes in `setup_env.sh`, validate with both `bash -n setup_env.sh` and `zsh -n setup_env.sh` before commit
