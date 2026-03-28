@@ -1,10 +1,13 @@
-# Restore user module paths not added when running with -NoProfile
+# Restore user module paths not added when running with -NoProfile.
+# Use GetFolderPath('MyDocuments') instead of $HOME/Documents so that
+# OneDrive-redirected Documents folders on Windows are resolved correctly.
 $sep = [IO.Path]::PathSeparator
+$docs = [Environment]::GetFolderPath('MyDocuments')
 @(
-    (Join-Path $HOME 'Documents' 'PowerShell' 'Modules')        # pwsh, Windows
-    (Join-Path $HOME 'Documents' 'WindowsPowerShell' 'Modules') # Windows PowerShell, Windows
     (Join-Path $HOME '.local' 'share' 'powershell' 'Modules')   # pwsh, macOS/Linux
-) | Where-Object { (Test-Path $_) -and ($env:PSModulePath -split $sep) -notcontains $_ } |
+    (Join-Path $docs 'PowerShell' 'Modules')                    # pwsh, Windows
+    (Join-Path $docs 'WindowsPowerShell' 'Modules')             # Windows PowerShell, Windows
+) | Where-Object { $_ -and (Test-Path $_) -and ($env:PSModulePath -split $sep) -notcontains $_ } |
     ForEach-Object { $env:PSModulePath = $_ + $sep + $env:PSModulePath }
 
 Import-Module PSScriptAnalyzer
