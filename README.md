@@ -57,6 +57,13 @@ dotfiles/
 │   └── settings.json         # Claude Code settings
 ├── scripts/
 │   ├── .osx.sh               # macOS system defaults
+│   ├── count_lines.sh        # Count lines across files in a directory
+│   ├── count_lines_git.sh    # Count lines across git-tracked files
+│   ├── html2ascii.sh         # Strip HTML tags, output one token per line
+│   ├── kill_zombie.sh        # Kill zombie (defunct) processes
+│   ├── mkill.sh              # Kill processes by name pattern
+│   ├── restart_fah.sh        # Restart Folding@Home client
+│   ├── synch_git-repos.sh    # Rsync git-repos to remote hosts (studio only)
 │   └── tmux-workstation.sh   # Multi-session tmux layout
 ├── kubernetes_stuff/         # Kubernetes install/init scripts
 ├── .ssh/                     # SSH config
@@ -81,8 +88,9 @@ Dotfiles live in `.devcontainer/` and `.claude/`. `setup_env.sh` creates symlink
 Uses [BATS](https://github.com/bats-core/bats-core) (Bash Automated Testing System), installed natively.
 
 ```bash
-make test        # run all BATS tests
-make test-unit   # run unit tests only
+make test        # lint all .sh files then run all BATS tests
+make test-unit   # run unit tests only (no lint)
+make lint        # check bash/zsh syntax of all .sh files
 ```
 
 Install bats-core first: `brew install bats-core` (macOS) or `sudo apt-get install bats` (Ubuntu).
