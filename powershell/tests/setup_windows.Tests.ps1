@@ -291,4 +291,20 @@ Describe "Enable-RequiredWindowsOptionalFeature" {
 
     Should -Invoke Enable-WindowsOptionalFeature -Times 0
   }
+
+  It "enables only the disabled feature when one is disabled and one is already enabled" {
+    Mock Get-WindowsOptionalFeature {
+      param([switch]$Online, $FeatureName)
+      if ($FeatureName -eq 'Microsoft-Hyper-V') {
+        [PSCustomObject]@{ FeatureName = 'Microsoft-Hyper-V'; State = 'Disabled' }
+      } else {
+        [PSCustomObject]@{ FeatureName = $FeatureName; State = 'Enabled' }
+      }
+    }
+    Mock Enable-WindowsOptionalFeature { }
+
+    Enable-RequiredWindowsOptionalFeature
+
+    Should -Invoke Enable-WindowsOptionalFeature -Times 1 -Exactly
+  }
 }

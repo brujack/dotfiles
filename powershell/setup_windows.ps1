@@ -143,9 +143,9 @@ function Enable-RequiredWindowsOptionalFeature {
   $RequiredWindowsOptionalFeaturesResults = foreach ($feature in $RequiredWindowsOptionalFeatures) {Get-WindowsOptionalFeature -Online -FeatureName $feature | Where-Object {$_.State -eq "Disabled"}}
 
   if ($RequiredWindowsOptionalFeaturesResults) {
-    foreach ($features in $RequiredWindowsOptionalFeatures) {
-      Enable-WindowsOptionalFeature -Online -FeatureName $features
-      Write-Output "Enabled feature $features"
+    foreach ($feature in $RequiredWindowsOptionalFeaturesResults) {
+      Enable-WindowsOptionalFeature -Online -FeatureName $feature.FeatureName
+      Write-Output "Enabled feature $($feature.FeatureName)"
     }
   }
 }
