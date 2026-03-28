@@ -103,16 +103,20 @@ function Install-ChocolateyPackage {
 
 }
 
+function Get-UpdateSearcher  { New-Object -ComObject Microsoft.Update.Searcher  }
+function Get-UpdateSession   { New-Object -ComObject Microsoft.Update.Session    }
+function Get-UpdateInstaller { New-Object -ComObject Microsoft.Update.Installer  }
+
 function Install-WindowsUpdate {
   # define update criteria
   $Criteria = "IsInstalled=0"
 
   # search for relevant updates.
-  $Searcher = New-Object -ComObject Microsoft.Update.Searcher
+  $Searcher = Get-UpdateSearcher
   $SearchResult = $Searcher.Search($Criteria).Updates
 
   # download updates
-  $Session = New-Object -ComObject Microsoft.Update.Session
+  $Session = Get-UpdateSession
   $Downloader = $Session.CreateUpdateDownloader()
   $Downloader.Updates = $SearchResult
   if ($SearchResult) {
@@ -120,7 +124,7 @@ function Install-WindowsUpdate {
   }
 
   # install updates
-  $Installer = New-Object -ComObject Microsoft.Update.Installer
+  $Installer = Get-UpdateInstaller
   $Installer.Updates = $SearchResult
   if ($SearchResult) {
     $Result = $Installer.Install()

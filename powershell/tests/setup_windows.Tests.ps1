@@ -6,6 +6,9 @@ BeforeAll {
   if (-Not (Get-Command choco -ErrorAction SilentlyContinue)) {
     function global:choco { }
   }
+  if (-Not (Get-Command 'shutdown.exe' -ErrorAction SilentlyContinue)) {
+    function global:shutdown.exe { }
+  }
   . "$PSScriptRoot/../setup_windows.ps1"
 }
 
@@ -123,5 +126,135 @@ Describe "Install-ChocolateyPackage" {
     Mock choco { } -ParameterFilter { $args[0] -eq 'install' }
     Install-ChocolateyPackage
     Should -Invoke choco -ParameterFilter { $args[0] -eq 'install' } -Times 0
+  }
+}
+
+Describe "Install-WindowsUpdate" {
+  BeforeEach {
+    Mock 'shutdown.exe' { }
+  }
+
+  It "calls Download and Install when updates are found" {
+    $script:downloadCalled = $false
+    $script:installCalled  = $false
+    $script:installResult  = [PSCustomObject]@{ rebootRequired = $false }
+
+    $fakeDownloader = [PSCustomObject]@{ Updates = $null }
+    $fakeDownloader | Add-Member -MemberType ScriptMethod -Name 'Download' -Value {
+      $script:downloadCalled = $true
+    }
+
+    $fakeInstaller = [PSCustomObject]@{ Updates = $null }
+    $fakeInstaller | Add-Member -MemberType ScriptMethod -Name 'Install' -Value {
+      $script:installCalled = $true
+      return $script:installResult
+    }
+
+    $fakeUpdates       = @([PSCustomObject]@{ Title = 'Security Update 1' })
+    $fakeSearchResult  = [PSCustomObject]@{ Updates = $fakeUpdates }
+    $fakeSearcher      = [PSCustomObject]@{}
+    $fakeSearcher | Add-Member -MemberType ScriptMethod -Name 'Search' -Value {
+      return $script:searchResult
+    }
+
+    $fakeSession = [PSCustomObject]@{}
+    $fakeSession | Add-Member -MemberType ScriptMethod -Name 'CreateUpdateDownloader' -Value {
+      return $script:downloader
+    }
+
+    $script:searchResult = $fakeSearchResult
+    $script:downloader   = $fakeDownloader
+    $script:searcher     = $fakeSearcher
+    $script:session      = $fakeSession
+    $script:installer    = $fakeInstaller
+
+    Mock Get-UpdateSearcher  { return $script:searcher  }
+    Mock Get-UpdateSession   { return $script:session   }
+    Mock Get-UpdateInstaller { return $script:installer }
+
+    Install-WindowsUpdate
+
+    $script:downloadCalled | Should -Be $true
+    $script:installCalled  | Should -Be $true
+  }
+
+  It "skips Download and Install when no updates are found" {
+    $script:downloadCalled = $false
+    $script:installCalled  = $false
+
+    $fakeDownloader = [PSCustomObject]@{ Updates = $null }
+    $fakeDownloader | Add-Member -MemberType ScriptMethod -Name 'Download' -Value {
+      $script:downloadCalled = $true
+    }
+
+    $fakeInstaller = [PSCustomObject]@{ Updates = $null }
+    $fakeInstaller | Add-Member -MemberType ScriptMethod -Name 'Install' -Value {
+      $script:installCalled = $true
+      return [PSCustomObject]@{ rebootRequired = $false }
+    }
+
+    $fakeSearchResult = [PSCustomObject]@{ Updates = @() }
+    $fakeSearcher     = [PSCustomObject]@{}
+    $fakeSearcher | Add-Member -MemberType ScriptMethod -Name 'Search' -Value {
+      return $script:searchResult
+    }
+
+    $fakeSession = [PSCustomObject]@{}
+    $fakeSession | Add-Member -MemberType ScriptMethod -Name 'CreateUpdateDownloader' -Value {
+      return $script:downloader
+    }
+
+    $script:searchResult = $fakeSearchResult
+    $script:downloader   = $fakeDownloader
+    $script:searcher     = $fakeSearcher
+    $script:session      = $fakeSession
+    $script:installer    = $fakeInstaller
+
+    Mock Get-UpdateSearcher  { return $script:searcher  }
+    Mock Get-UpdateSession   { return $script:session   }
+    Mock Get-UpdateInstaller { return $script:installer }
+
+    Install-WindowsUpdate
+
+    $script:downloadCalled | Should -Be $false
+    $script:installCalled  | Should -Be $false
+  }
+
+  It "calls shutdown when rebootRequired is true" {
+    $script:installResult = [PSCustomObject]@{ rebootRequired = $true }
+
+    $fakeDownloader = [PSCustomObject]@{ Updates = $null }
+    $fakeDownloader | Add-Member -MemberType ScriptMethod -Name 'Download' -Value { }
+
+    $fakeInstaller = [PSCustomObject]@{ Updates = $null }
+    $fakeInstaller | Add-Member -MemberType ScriptMethod -Name 'Install' -Value {
+      return $script:installResult
+    }
+
+    $fakeUpdates      = @([PSCustomObject]@{ Title = 'Update 1' })
+    $fakeSearchResult = [PSCustomObject]@{ Updates = $fakeUpdates }
+    $fakeSearcher     = [PSCustomObject]@{}
+    $fakeSearcher | Add-Member -MemberType ScriptMethod -Name 'Search' -Value {
+      return $script:searchResult
+    }
+
+    $fakeSession = [PSCustomObject]@{}
+    $fakeSession | Add-Member -MemberType ScriptMethod -Name 'CreateUpdateDownloader' -Value {
+      return $script:downloader
+    }
+
+    $script:searchResult = $fakeSearchResult
+    $script:downloader   = $fakeDownloader
+    $script:searcher     = $fakeSearcher
+    $script:session      = $fakeSession
+    $script:installer    = $fakeInstaller
+
+    Mock Get-UpdateSearcher  { return $script:searcher  }
+    Mock Get-UpdateSession   { return $script:session   }
+    Mock Get-UpdateInstaller { return $script:installer }
+
+    Install-WindowsUpdate
+
+    Should -Invoke 'shutdown.exe' -Times 1
   }
 }
