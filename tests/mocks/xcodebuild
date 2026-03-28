@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+printf "xcodebuild %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+exit "${MOCK_XCODEBUILD_EXIT:-0}"

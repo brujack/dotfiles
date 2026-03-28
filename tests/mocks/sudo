@@ -1,8 +1,16 @@
 #!/usr/bin/env bash
-# Drop -H flag if present; exec remaining args with current PATH (preserves mocks)
+# Log the full invocation first (enables assertions in scripts/unit.bats tests
+# that call sudo with absolute paths like /etc/init.d/FAHClient)
+printf "sudo %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+# Drop -H flag; collect remaining args
 args=()
 for arg in "$@"; do
   [[ "$arg" == "-H" ]] && continue
   args+=("$arg")
 done
-exec "${args[@]}"
+# Only exec the target if it exists — absolute paths like /etc/init.d/FAHClient
+# are absent on dev machines and should not cause exec to fail
+if [[ "${#args[@]}" -gt 0 ]] && { [[ -x "${args[0]}" ]] || command -v "${args[0]}" &>/dev/null; }; then
+  exec "${args[@]}"
+fi
+exit "${MOCK_SUDO_EXIT:-0}"

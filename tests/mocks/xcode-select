@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+printf "xcode-select %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+if [[ "$1" == "--print-path" ]]; then
+  exit "${MOCK_XCODE_SELECT_PRINT_PATH_EXIT:-0}"
+fi
+if [[ "$1" == "--install" ]]; then
+  exit "${MOCK_XCODE_SELECT_EXIT:-0}"
+fi
+exit 0
