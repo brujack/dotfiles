@@ -198,3 +198,44 @@ teardown() {
   grep -q "dpkg --install" "${MOCK_CALLS_FILE}"
   grep -q "apt install nala" "${MOCK_CALLS_FILE}"
 }
+
+# ── install_homebrew ─────────────────────────────────────────────────────────
+
+@test "install_homebrew skips xcode setup when xcode-select is already installed" {
+  export MOCK_UNAME_S=Darwin
+  export MOCK_XCODE_SELECT_PRINT_PATH_EXIT=0
+  run install_homebrew
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Homebrew has been successfully installed"* ]]
+  run grep -q "xcode-select --install" "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+}
+
+@test "install_homebrew installs xcode tools when not present" {
+  export MOCK_UNAME_S=Darwin
+  export MOCK_XCODE_SELECT_PRINT_PATH_EXIT=1
+  export MOCK_XCODE_SELECT_EXIT=0
+  export MOCK_XCODEBUILD_EXIT=0
+  run install_homebrew
+  [ "$status" -eq 0 ]
+  grep -q "xcode-select --install" "${MOCK_CALLS_FILE}"
+  grep -q "xcodebuild -license accept" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_homebrew returns 1 when xcode-select --install fails" {
+  export MOCK_UNAME_S=Darwin
+  export MOCK_XCODE_SELECT_PRINT_PATH_EXIT=1
+  export MOCK_XCODE_SELECT_EXIT=1
+  run install_homebrew
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Failed to install Xcode Command Line Tools"* ]]
+}
+
+@test "install_homebrew returns 1 when brew install script fails" {
+  # Use Linux to skip xcode block; test only the brew install failure path
+  export MOCK_UNAME_S=Linux
+  export MOCK_CURL_STDOUT="exit 1"
+  run install_homebrew
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Failed to install Homebrew"* ]]
+}
