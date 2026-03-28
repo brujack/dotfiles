@@ -126,6 +126,7 @@ function Install-WindowsUpdate {
   # install updates
   $Installer = Get-UpdateInstaller
   $Installer.Updates = $SearchResult
+  $Result = $null
   if ($SearchResult) {
     $Result = $Installer.Install()
   }
