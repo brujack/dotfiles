@@ -70,7 +70,8 @@ All tests use the existing BATS framework with PATH-based mock injection (`tests
 
 @test "brew_update calls install_homebrew when brew is absent"
   PATH surgery to hide brew mock → function calls install_homebrew
-  (install_homebrew itself will succeed via xcode-select already-installed + empty curl stdout)
+  Assert: curl appears in MOCK_CALLS_FILE (install_homebrew was reached)
+  Note: function will fail after install_homebrew since brew is still absent; test only asserts the install_homebrew call, not full completion
 
 @test "brew_update returns 1 when brew update fails"
   MOCK_BREW_UPDATE_EXIT=1 → returns 1, prints failure message
@@ -167,6 +168,7 @@ Each script is invoked directly (e.g., `run bash scripts/count_lines.sh`) with `
 1. Calls `sudo ... FAHClient stop` before kill loop
 2. Calls `sudo ... FAHClient start` after kill loop
 3. Calls `pgrep fah` and `kill -9` between stop and start
+Note: `sudo /etc/init.d/FAHClient` uses an absolute path. The sudo mock must log the full invocation and exit without delegating to the real command (consistent with established mock behavior).
 
 **`synch_git-repos.sh` — 2 tests**
 1. Non-studio hostname → prints "needs to be run on studio", no rsync calls
