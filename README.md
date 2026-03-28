@@ -42,7 +42,8 @@ rm ~/.virtualenvs/ansible && ./setup_env.sh -t ansible
 dotfiles/
 ├── setup_env.sh              # Main entry point
 ├── Brewfile                  # Homebrew bundle manifest
-├── setup_windows.ps1         # Windows/PowerShell bootstrap
+├── powershell/
+│   └── setup_windows.ps1     # Windows/PowerShell bootstrap
 ├── .devcontainer/            # Dotfiles storage (symlinked into $HOME)
 │   ├── .zshrc                # Main zsh config
 │   ├── .zprofile             # Zsh login shell config
