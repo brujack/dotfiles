@@ -196,57 +196,13 @@ function Copy-GitConfig {
 if ($IsWindows) {
 
   if ($setup.IsPresent) {
-    # set windows options
-    # enable RDP
-    Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -value 0
-    # turn off firewall
-    Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled False
-    Set-WindowsExplorerOptions -EnableShowHiddenFilesFoldersDrives -EnableShowProtectedOSFiles -EnableShowFileExtensions -EnableShowFullPathInTitleBar
-
+    Set-WindowsOption
     Install-ChocolateyPackage
-
     Enable-RequiredWindowsOptionalFeature
-
-    # enable wsl
-    $WSLEnabled = wsl --status
-    if (-Not ($WSLEnabled -match "Default Version: 2")) {
-      wsl --install
-    }
-
-    # enable current user to be able to execute powershell scripts
+    Install-WSL
     Set-ExecutionPolicy Unrestricted -Scope CurrentUser
-
-    if (-Not (Test-Path -Path ~/.config -PathType Container)) {
-      try {
-        $null = New-Item -ItemType File -Path ~/.config -Force -ErrorAction Stop
-        Write-Output "The directory [~/.config] has been created."
-      }
-      catch {
-          throw $_.Exception.Message
-      }
-    }
-
-    if (-Not (Test-Path -Path ~/git-repos/personal -PathType Container)) {
-      try {
-        $null = New-Item -ItemType File -Path ~/git-repos/personal -Force -ErrorAction Stop
-        Write-Output "The directory [~/git-repos/personal] has been created."
-      }
-      catch {
-          throw $_.Exception.Message
-      }
-    }
-
-    if (Test-Path -Path ~/.gitconfig -PathType Leaf) {
-      try {
-        $null = Remove-Item ~/.gitconfig -ErrorAction SilentlyContinue
-        $null = Copy-Item -Path ~/git-repos/personal/dotfiles/.gitconfig_windows -Destination ~/.gitconfig -ErrorAction SilentlyContinue
-        Write-Output "copied ~/.gitconfig"
-      }
-      catch {
-        throw $_.Exception.Message
-      }
-    }
-
+    New-DirectoryStructure
+    Copy-GitConfig
   }
 
   if ($update.IsPresent) {

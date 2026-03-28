@@ -15,7 +15,7 @@ dotfiles/
 │   ├── Makefile              # lint + test targets for PowerShell
 │   ├── PSScriptAnalyzerSettings.psd1  # PSScriptAnalyzer rule config
 │   └── tests/
-│       └── setup_windows.Tests.ps1   # Pester v5 unit tests (9 tests)
+│       └── setup_windows.Tests.ps1   # Pester v5 unit tests (22 tests)
 ├── .devcontainer/            # Central dotfiles storage + dev container config
 │   ├── .zshrc                # Main zsh config (sources .zshrc.d modules)
 │   ├── .zprofile             # Zsh login shell config
