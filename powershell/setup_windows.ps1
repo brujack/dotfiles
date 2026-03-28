@@ -18,9 +18,9 @@ param(
 )
 if ($IsWindows) {
 
-  function Install-ChocolateyPackages {
+  function Install-ChocolateyPackage {
     if (-Not (Get-Command "choco.exe" -ErrorAction SilentlyContinue)) {
-      Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://boxstarter.org/bootstrapper.ps1')); Get-Boxstarter -Force
+      Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://boxstarter.org/bootstrapper.ps1')); Get-Boxstarter -Force
     }
 
     $ChocoPackagesToBeInstalled = @(
@@ -93,7 +93,7 @@ if ($IsWindows) {
     # check to see if a package is installed before installing it
     foreach ($package in $ChocoPackagesToBeInstalled) {
       $result = choco list -lo | Where-object { $_.ToLower().StartsWith("$package".ToLower()) }
-      if ($result -eq $null) {
+      if ($null -eq $result) {
         choco install $package -y
         Write-Output "Installed $package"
       }
@@ -104,7 +104,7 @@ if ($IsWindows) {
 
   }
 
-  function Install-WindowsUpdates {
+  function Install-WindowsUpdate {
     # define update criteria
     $Criteria = "IsInstalled=0"
 
@@ -132,7 +132,7 @@ if ($IsWindows) {
   }
 
   if ($setup.IsPresent) {
-    function Enable-WindowsOptionalFeatures {
+    function Enable-WindowsOptionalFeature {
       # enable hyper-v and sandbox containers
       $RequiredWindowsOptionalFeatures = @(
         "Microsoft-Hyper-V"
@@ -155,9 +155,9 @@ if ($IsWindows) {
     Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled False
     Set-WindowsExplorerOptions -EnableShowHiddenFilesFoldersDrives -EnableShowProtectedOSFiles -EnableShowFileExtensions -EnableShowFullPathInTitleBar
 
-    Install-ChocolateyPackages
+    Install-ChocolateyPackage
 
-    Enable-WindowsOptionalFeatures
+    Enable-WindowsOptionalFeature
 
     # enable wsl
     $WSLEnabled = wsl --status
@@ -216,6 +216,6 @@ if ($IsWindows) {
     }
 
     Write-Output "Installing Windows Updates"
-    Install-WindowsUpdates
+    Install-WindowsUpdate
   }
 }
