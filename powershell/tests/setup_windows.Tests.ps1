@@ -15,6 +15,12 @@ BeforeAll {
   if (-Not (Get-Command Enable-WindowsOptionalFeature -ErrorAction SilentlyContinue)) {
     function global:Enable-WindowsOptionalFeature { }
   }
+  if (-Not (Get-Command Set-NetFirewallProfile -ErrorAction SilentlyContinue)) {
+    function global:Set-NetFirewallProfile { }
+  }
+  if (-Not (Get-Command Set-WindowsExplorerOptions -ErrorAction SilentlyContinue)) {
+    function global:Set-WindowsExplorerOptions { }
+  }
   . "$PSScriptRoot/../setup_windows.ps1"
 }
 
@@ -262,6 +268,29 @@ Describe "Install-WindowsUpdate" {
     Install-WindowsUpdate
 
     Should -Invoke 'shutdown.exe' -Times 1
+  }
+}
+
+Describe "Set-WindowsOptions" {
+  BeforeEach {
+    Mock Set-ItemProperty { }
+    Mock Set-NetFirewallProfile { }
+    Mock Set-WindowsExplorerOptions { }
+  }
+
+  It "calls Set-ItemProperty to enable RDP" {
+    Set-WindowsOptions
+    Should -Invoke Set-ItemProperty -ParameterFilter { $Name -eq 'fDenyTSConnections' } -Times 1
+  }
+
+  It "calls Set-NetFirewallProfile to disable all profiles" {
+    Set-WindowsOptions
+    Should -Invoke Set-NetFirewallProfile -Times 1
+  }
+
+  It "calls Set-WindowsExplorerOptions with correct flags" {
+    Set-WindowsOptions
+    Should -Invoke Set-WindowsExplorerOptions -Times 1
   }
 }
 
