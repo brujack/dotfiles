@@ -271,7 +271,7 @@ Describe "Install-WindowsUpdate" {
   }
 }
 
-Describe "Set-WindowsOptions" {
+Describe "Set-WindowsOption" {
   BeforeEach {
     Mock Set-ItemProperty { }
     Mock Set-NetFirewallProfile { }
@@ -279,17 +279,17 @@ Describe "Set-WindowsOptions" {
   }
 
   It "calls Set-ItemProperty to enable RDP" {
-    Set-WindowsOptions
+    Set-WindowsOption
     Should -Invoke Set-ItemProperty -ParameterFilter { $Name -eq 'fDenyTSConnections' } -Times 1
   }
 
   It "calls Set-NetFirewallProfile to disable all profiles" {
-    Set-WindowsOptions
+    Set-WindowsOption
     Should -Invoke Set-NetFirewallProfile -Times 1
   }
 
   It "calls Set-WindowsExplorerOptions with correct flags" {
-    Set-WindowsOptions
+    Set-WindowsOption
     Should -Invoke Set-WindowsExplorerOptions -Times 1
   }
 }

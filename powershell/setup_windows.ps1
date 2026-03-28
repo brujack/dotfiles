@@ -151,7 +151,7 @@ function Enable-RequiredWindowsOptionalFeature {
   }
 }
 
-function Set-WindowsOptions {
+function Set-WindowsOption {
   Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -value 0
   Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled False
   Set-WindowsExplorerOptions -EnableShowHiddenFilesFoldersDrives -EnableShowProtectedOSFiles -EnableShowFileExtensions -EnableShowFullPathInTitleBar
