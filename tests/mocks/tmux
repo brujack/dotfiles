@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+printf "tmux %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+exit "${MOCK_TMUX_EXIT:-0}"
