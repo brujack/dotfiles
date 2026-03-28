@@ -183,6 +183,19 @@ Available mock env vars:
 | `MOCK_SNAP_EXIT` | Exit code for `snap` (default: 0) |
 | `MOCK_NALA_EXIT` | Exit code for `nala` (default: 0) |
 | `MOCK_RUSTUP_EXIT` | Exit code for `rustup` (default: 0) |
+| `MOCK_BREW_UPDATE_EXIT` | Exit code for `brew update` (default: 0) |
+| `MOCK_BREW_UPGRADE_EXIT` | Exit code for `brew upgrade` and `brew upgrade --cask --greedy` (default: 0) |
+| `MOCK_BREW_CLEANUP_EXIT` | Exit code for `brew cleanup` (default: 0) |
+| `MOCK_CURL_STDOUT` | Content printed to stdout by `curl` mock (used for `$(curl ...)` substitution; default: empty) |
+| `MOCK_XCODE_SELECT_PRINT_PATH_EXIT` | Exit code for `xcode-select --print-path` (default: 0 = already installed) |
+| `MOCK_XCODE_SELECT_EXIT` | Exit code for `xcode-select --install` (default: 0) |
+| `MOCK_XCODEBUILD_EXIT` | Exit code for `xcodebuild` (default: 0) |
+| `MOCK_KILL_EXIT` | Exit code for `kill` (default: 0) |
+| `MOCK_TMUX_EXIT` | Exit code for `tmux` (default: 0) |
+| `MOCK_RSYNC_EXIT` | Exit code for `rsync` (default: 0) |
+| `MOCK_HOSTNAME_OUTPUT` | Value returned by `hostname -s` (default: `testhost`) |
+| `MOCK_SLEEP_EXIT` | Exit code for `sleep` (default: 0) |
+| `MOCK_PGREP_OUTPUT` | PIDs printed to stdout by `pgrep` mock (default: empty; used to simulate found processes) |
 
 ## Key Conventions
 
