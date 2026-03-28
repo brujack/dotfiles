@@ -21,6 +21,9 @@ BeforeAll {
   if (-Not (Get-Command Set-WindowsExplorerOptions -ErrorAction SilentlyContinue)) {
     function global:Set-WindowsExplorerOptions { }
   }
+  if (-Not (Get-Command wsl -ErrorAction SilentlyContinue)) {
+    function global:wsl { }
+  }
   . "$PSScriptRoot/../setup_windows.ps1"
 }
 
@@ -291,6 +294,22 @@ Describe "Set-WindowsOption" {
   It "calls Set-WindowsExplorerOptions with correct flags" {
     Set-WindowsOption
     Should -Invoke Set-WindowsExplorerOptions -Times 1
+  }
+}
+
+Describe "Install-WSL" {
+  It "calls wsl --install when WSL2 is not configured" {
+    Mock wsl { @() } -ParameterFilter { $args -contains '--status' }
+    Mock wsl { } -ParameterFilter { $args -contains '--install' }
+    Install-WSL
+    Should -Invoke wsl -ParameterFilter { $args -contains '--install' } -Times 1
+  }
+
+  It "skips wsl --install when WSL2 is already the default" {
+    Mock wsl { "Default Version: 2" } -ParameterFilter { $args -contains '--status' }
+    Mock wsl { } -ParameterFilter { $args -contains '--install' }
+    Install-WSL
+    Should -Invoke wsl -ParameterFilter { $args -contains '--install' } -Times 0
   }
 }
 

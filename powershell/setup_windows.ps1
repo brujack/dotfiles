@@ -157,6 +157,13 @@ function Set-WindowsOption {
   Set-WindowsExplorerOptions -EnableShowHiddenFilesFoldersDrives -EnableShowProtectedOSFiles -EnableShowFileExtensions -EnableShowFullPathInTitleBar
 }
 
+function Install-WSL {
+  $WSLStatus = wsl --status
+  if (-Not ($WSLStatus -contains "Default Version: 2")) {
+    wsl --install
+  }
+}
+
 if ($IsWindows) {
 
   if ($setup.IsPresent) {
