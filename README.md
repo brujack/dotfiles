@@ -95,3 +95,19 @@ make lint        # check bash/zsh syntax of all .sh files
 ```
 
 Install bats-core first: `brew install bats-core` (macOS) or `sudo apt-get install bats` (Ubuntu).
+
+### PowerShell
+
+`powershell/` has its own Makefile. Run from the `powershell/` directory:
+
+```bash
+cd powershell
+make test        # lint then run Pester tests
+make lint        # PSScriptAnalyzer only
+```
+
+Prerequisites (one-time install):
+```bash
+pwsh -Command "Install-Module Pester -Force -Scope CurrentUser -MinimumVersion 5.0"
+pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
+```
