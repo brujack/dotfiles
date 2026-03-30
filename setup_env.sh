@@ -2439,7 +2439,7 @@ if [[ -n ${UPDATE} ]]; then
   fi
   if command -v claude &>/dev/null; then
     printf "Updating Claude plugins\\n"
-    claude plugins update
+    claude plugins update superpowers && claude plugins update code-simplifier && claude plugins update context7
     printf "Updated Claude plugins\\n"
   fi
   update_system_packages
