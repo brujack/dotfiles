@@ -1078,6 +1078,11 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       fi
       if [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${LAPTOP} ]]; then
         brew_install_formula claude-code
+        if command -v claude &>/dev/null; then
+          claude plugins install superpowers
+          claude plugins install code-simplifier
+          claude plugins install context7
+        fi
       fi
       if ! app_dir_exists "/Applications/DaisyDisk.app"; then
         brew_install_cask daisydisk
@@ -1900,6 +1905,11 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       brew_install_formula snyk
       if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
         brew_install_formula claude-code
+        if command -v claude &>/dev/null; then
+          claude plugins install superpowers
+          claude plugins install code-simplifier
+          claude plugins install context7
+        fi
       fi
       if [[ -n ${WORKSTATION} ]]; then
         brew_install_formula ollama
