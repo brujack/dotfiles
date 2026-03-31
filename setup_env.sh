@@ -734,32 +734,58 @@ setup_dotfile_symlinks() {
 
   if [[ -n ${MACOS} ]]; then
     CURSOR_USER_DIR="${HOME}/Library/Application Support/Cursor/User"
+    CURSOR_APP_SETTINGS_DIR="${HOME}/Library/Application Support/Cursor/settings"
   elif [[ -n ${LINUX} ]]; then
     CURSOR_USER_DIR="${HOME}/.config/Cursor/User"
+    CURSOR_APP_SETTINGS_DIR=""
   fi
 
   if [[ -n ${CURSOR_USER_DIR:-} ]]; then
-    printf "Cursor User directory is %s\\n" "${CURSOR_USER_DIR}"
-    printf "Creating %s\\n" "${CURSOR_USER_DIR}"
-    mkdir -p "${CURSOR_USER_DIR}"
+    CURSOR_DOTFILES_USER_DIR="${PERSONAL_GITREPOS}/${DOTFILES}/.cursor/User"
 
-    printf "Linking Cursor settings\\n"
-    rm -f "${CURSOR_USER_DIR}/settings.json"
-    ln -s "${PERSONAL_GITREPOS}/${DOTFILES}/.cursor/User/settings.json" "${CURSOR_USER_DIR}/settings.json"
-    if [[ -L "${CURSOR_USER_DIR}/settings.json" ]]; then
-      printf "Cursor settings.json is linked\\n"
-    fi
+    # Only link Cursor settings if Cursor is installed, the app's settings files exist (on macOS),
+    # and the dotfiles Cursor user files exist
+    if app_dir_exists "/Applications/Cursor.app" || command -v cursor &>/dev/null; then
+      CURSOR_APP_SETTINGS_OK=1
+      if [[ -n ${MACOS:-} ]]; then
+        if [[ ! -f "${CURSOR_APP_SETTINGS_DIR}/settings.json" ]] || \
+           [[ ! -f "${CURSOR_APP_SETTINGS_DIR}/keybindings.json" ]]; then
+          CURSOR_APP_SETTINGS_OK=0
+        fi
+      fi
 
-    rm -f "${CURSOR_USER_DIR}/keybindings.json"
-    ln -s "${PERSONAL_GITREPOS}/${DOTFILES}/.cursor/User/keybindings.json" "${CURSOR_USER_DIR}/keybindings.json"
-    if [[ -L "${CURSOR_USER_DIR}/keybindings.json" ]]; then
-      printf "Cursor keybindings.json is linked\\n"
-    fi
+      if [[ ${CURSOR_APP_SETTINGS_OK} -eq 1 ]] && \
+         [[ -f "${CURSOR_DOTFILES_USER_DIR}/settings.json" ]] && \
+         [[ -f "${CURSOR_DOTFILES_USER_DIR}/keybindings.json" ]] && \
+         [[ -d "${CURSOR_DOTFILES_USER_DIR}/snippets" ]]; then
 
-    rm -rf "${CURSOR_USER_DIR}/snippets"
-    ln -s "${PERSONAL_GITREPOS}/${DOTFILES}/.cursor/User/snippets" "${CURSOR_USER_DIR}/snippets"
-    if [[ -L "${CURSOR_USER_DIR}/snippets" ]]; then
-      printf "Cursor snippets is linked\\n"
+        printf "Cursor User directory is %s\\n" "${CURSOR_USER_DIR}"
+        printf "Creating %s\\n" "${CURSOR_USER_DIR}"
+        mkdir -p "${CURSOR_USER_DIR}"
+
+        printf "Linking Cursor settings\\n"
+        rm -f "${CURSOR_USER_DIR}/settings.json"
+        ln -s "${CURSOR_DOTFILES_USER_DIR}/settings.json" "${CURSOR_USER_DIR}/settings.json"
+        if [[ -L "${CURSOR_USER_DIR}/settings.json" ]]; then
+          printf "Cursor settings.json is linked\\n"
+        fi
+
+        rm -f "${CURSOR_USER_DIR}/keybindings.json"
+        ln -s "${CURSOR_DOTFILES_USER_DIR}/keybindings.json" "${CURSOR_USER_DIR}/keybindings.json"
+        if [[ -L "${CURSOR_USER_DIR}/keybindings.json" ]]; then
+          printf "Cursor keybindings.json is linked\\n"
+        fi
+
+        rm -rf "${CURSOR_USER_DIR}/snippets"
+        ln -s "${CURSOR_DOTFILES_USER_DIR}/snippets" "${CURSOR_USER_DIR}/snippets"
+        if [[ -L "${CURSOR_USER_DIR}/snippets" ]]; then
+          printf "Cursor snippets is linked\\n"
+        fi
+      else
+        printf "Skipping Cursor symlinks; Cursor app settings or dotfiles Cursor user files are missing\\n"
+      fi
+    else
+      printf "Skipping Cursor symlinks; Cursor is not installed\\n"
     fi
   fi
 
