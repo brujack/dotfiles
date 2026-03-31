@@ -1084,6 +1084,11 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
           claude plugins install context7
         fi
       fi
+      if [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${LAPTOP} ]]; then
+        if ! app_dir_exists "/Applications/Cursor.app"; then
+          brew_install_cask cursor
+        fi
+      fi
       if ! app_dir_exists "/Applications/DaisyDisk.app"; then
         brew_install_cask daisydisk
       fi

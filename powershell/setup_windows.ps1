@@ -36,6 +36,7 @@ function Install-ChocolateyPackage {
     "claude",
     "claude-code",
     "crystaldiskmark",
+    "cursoride",
     "dbeaver",
     "discord",
     "docker-desktop",
