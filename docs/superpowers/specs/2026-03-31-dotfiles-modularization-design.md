@@ -9,7 +9,7 @@ Modularize `setup_env.sh` into focused `lib/*.sh` files, introduce a profile/cap
 
 ## Scope
 
-- **In scope:** lib/ split, profile abstraction, logging helpers, safe symlinks, ShellCheck lint, GitHub Actions CI with auto-merge, branch workflow, docs update
+- **In scope:** macOS bootstrap script, lib/ split, profile abstraction, logging helpers, safe symlinks, ShellCheck lint, GitHub Actions CI with auto-merge, branch workflow, docs update
 - **Out of scope:** Rewriting bootstrap in another language, removing host-specific behavior, replacing package managers
 
 ---
@@ -20,7 +20,7 @@ All phases run on feature branches. GitHub Actions validates → auto-merges to 
 
 | Phase | Name | Prerequisite |
 |---|---|---|
-| 0 | Function extraction | — (already planned at `docs/superpowers/plans/2026-03-28-setup-env-function-extraction.md`) |
+| 0 | Function extraction + macOS bootstrap script + prerequisite check | — (extraction already planned at `docs/superpowers/plans/2026-03-28-setup-env-function-extraction.md`) |
 | 1 | lib/ split | Phase 0 complete |
 | 2 | Hardening (logging + safe_link) | Phase 1 complete |
 | 3 | Profile abstraction | Phase 2 complete |
@@ -35,6 +35,8 @@ All phases run on feature branches. GitHub Actions validates → auto-merges to 
 
 ```
 setup_env.sh           # ~80-line orchestrator: sources lib/, parses args, dispatches workflows
+scripts/
+  bootstrap_mac.sh     # NEW: one-time macOS prerequisite installer (Homebrew + bash 5)
 config/
   profiles.sh          # hostname → profile map; edit here to add a new machine
 lib/
@@ -87,41 +89,114 @@ fi
 
 ---
 
-## Section 1: `config/profiles.sh`
+## Section 0: macOS Bootstrap Script + Prerequisite Check
 
-Sourced by `lib/detect_env.sh`. Edit this file to add a new machine — no other file needs changing.
+### `scripts/bootstrap_mac.sh`
+
+A standalone script for fresh Mac setup. Run this once manually before `setup_env.sh`. It has no dependencies beyond the macOS system shell (`/bin/bash` 3.2 is sufficient to run it).
+
+```bash
+#!/bin/bash
+# scripts/bootstrap_mac.sh
+# Run once on a fresh Mac before setup_env.sh.
+# Installs Homebrew and bash 5 — the only two prerequisites for setup_env.sh.
+
+set -e
+
+if [[ $(uname -s) != "Darwin" ]]; then
+  printf "[ERROR] This script is macOS only.\n" >&2
+  exit 1
+fi
+
+# Install Homebrew if missing
+if ! command -v brew &>/dev/null; then
+  printf "[INFO]  Installing Homebrew...\n"
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+else
+  printf "[INFO]  Homebrew already installed.\n"
+fi
+
+# Ensure brew is on PATH (Apple Silicon path)
+if [[ -f /opt/homebrew/bin/brew ]]; then
+  eval "$(/opt/homebrew/bin/brew shellenv)"
+fi
+
+# Install bash 5 if missing or version < 5
+BASH_VER=$(brew list --versions bash 2>/dev/null | awk '{print $2}' | cut -d. -f1)
+if [[ "${BASH_VER:-0}" -lt 5 ]]; then
+  printf "[INFO]  Installing bash 5...\n"
+  brew install bash
+else
+  printf "[INFO]  bash 5 already installed.\n"
+fi
+
+printf "[INFO]  Bootstrap complete. You can now run: ./setup_env.sh -t <type>\n"
+```
+
+### Prerequisite check in `setup_env.sh`
+
+Added as the very first executable lines of `setup_env.sh`, before any sourcing or argument parsing:
 
 ```bash
 #!/usr/bin/env bash
-# config/profiles.sh
-# Add a new machine: add a hostname entry to resolve_profile() and
-# add a capability entry to resolve_caps().
-# Uses case statements (not associative arrays) for bash 3.2 compatibility
-# (macOS ships bash 3.2).
 
-resolve_profile() {
-  local hostname="$1"
-  case "${hostname}" in
-    laptop)                echo "personal_laptop" ;;
-    studio|reception)      echo "mac_workstation" ;;
-    office|home-1)         echo "mac_mini" ;;
-    workstation|cruncher)  echo "linux_workstation" ;;
-    *)                     echo "unknown" ;;
-  esac
-}
-
-resolve_caps() {
-  local profile="$1"
-  case "${profile}" in
-    personal_laptop)    echo "gui devtools aws k8s docker rust printing" ;;
-    mac_workstation)    echo "gui devtools aws k8s docker rust printing" ;;
-    mac_mini)           echo "gui printing" ;;
-    linux_workstation)  echo "gui devtools aws k8s docker rust" ;;
-    server)             echo "devtools aws" ;;
-    *)                  echo "" ;;
-  esac
-}
+# Prerequisite check — must be first
+_BASH_MAJOR="${BASH_VERSINFO[0]:-0}"
+if [[ "${_BASH_MAJOR}" -lt 5 ]]; then
+  printf "[ERROR] bash 5+ required (running bash %s).\n" "${BASH_VERSION}" >&2
+  printf "        On macOS, run first: ./scripts/bootstrap_mac.sh\n" >&2
+  exit 1
+fi
+if ! command -v brew &>/dev/null; then
+  printf "[ERROR] Homebrew not found.\n" >&2
+  printf "        On macOS, run first: ./scripts/bootstrap_mac.sh\n" >&2
+  exit 1
+fi
 ```
+
+This check runs under whatever shell invokes the script. If the user runs `./setup_env.sh` with system bash 3.2, they get a clear error pointing to `bootstrap_mac.sh` rather than a cryptic failure deep in the script.
+
+### Impact on `config/profiles.sh`
+
+With bash 5 guaranteed, `config/profiles.sh` uses `declare -A` associative arrays (simpler and more readable than `case` statements):
+
+```bash
+#!/usr/bin/env bash
+# config/profiles.sh — requires bash 5+
+
+declare -A PROFILE_MAP=(
+  [laptop]="personal_laptop"
+  [studio]="mac_workstation"
+  [reception]="mac_workstation"
+  [office]="mac_mini"
+  [home-1]="mac_mini"
+  [workstation]="linux_workstation"
+  [cruncher]="linux_workstation"
+)
+
+declare -A PROFILE_CAPS=(
+  [personal_laptop]="gui devtools aws k8s docker rust printing"
+  [mac_workstation]="gui devtools aws k8s docker rust printing"
+  [mac_mini]="gui printing"
+  [linux_workstation]="gui devtools aws k8s docker rust"
+  [server]="devtools aws"
+)
+```
+
+And `lib/detect_env.sh` resolves directly:
+
+```bash
+PROFILE="${PROFILE_MAP[$(hostname -s)]:-unknown}"
+for cap in ${PROFILE_CAPS[$PROFILE]:-}; do
+  declare -g "HAS_$(printf '%s' "$cap" | tr '[:lower:]' '[:upper:]')=1"
+done
+```
+
+---
+
+## Section 1: `config/profiles.sh`
+
+Sourced by `lib/detect_env.sh`. Edit this file to add a new machine — no other file needs changing. Full `declare -A` implementation defined in Section 0 (bash 5 required, guaranteed by prerequisite check).
 
 **Profile descriptions:**
 
@@ -145,11 +220,11 @@ detect_env() {
   [[ $(uname -s) == "Linux" ]]  && readonly LINUX=1
   # ... existing OS/version detection ...
 
-  # Profile resolution (sources config/profiles.sh for resolve_profile/resolve_caps)
+  # Profile resolution — config/profiles.sh defines PROFILE_MAP and PROFILE_CAPS
   local hostname
   hostname=$(hostname -s)
-  PROFILE="$(resolve_profile "${hostname}")"
-  for cap in $(resolve_caps "${PROFILE}"); do
+  PROFILE="${PROFILE_MAP[$hostname]:-unknown}"
+  for cap in ${PROFILE_CAPS[$PROFILE]:-}; do
     declare -g "HAS_$(printf '%s' "$cap" | tr '[:lower:]' '[:upper:]')=1"
   done
 }
@@ -349,4 +424,4 @@ test-unit:
 | ShellCheck flags existing code that can't be changed | Add `# shellcheck disable=SCxxxx` inline with comment explaining why |
 | Auto-merge merges a broken branch | CI must pass; branch protection blocks direct master pushes |
 | Profile abstraction changes behavior for a machine | Keep legacy hostname vars as aliases until all call sites verified; one machine at a time |
-| `declare -A` not available in bash 3.2 (macOS default) | Use `case` statements in `config/profiles.sh` instead of associative arrays — already reflected in design |
+| Fresh Mac has bash 3.2 and no Homebrew | `scripts/bootstrap_mac.sh` installs both; `setup_env.sh` fails fast with a clear pointer to that script if prerequisites are missing |
