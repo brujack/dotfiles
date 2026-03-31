@@ -1,0 +1,10 @@
+[
+  {
+    "key": "cmd+n",
+    "command": "extension.advancedNewFile"
+  },
+  {
+    "key": "alt+cmd+n",
+    "command": "-extension.advancedNewFile"
+  }
+]

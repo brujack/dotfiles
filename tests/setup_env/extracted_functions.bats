@@ -26,6 +26,7 @@ teardown() {
 _make_fake_dotfiles() {
   mkdir -p "${FAKE_DOTFILES_SRC}/.config/.zshrc.d"
   mkdir -p "${FAKE_DOTFILES_SRC}/.config/ccstatusline"
+  mkdir -p "${FAKE_DOTFILES_SRC}/.cursor/User/snippets"
   mkdir -p "${FAKE_DOTFILES_SRC}/.ssh"
   mkdir -p "${FAKE_DOTFILES_SRC}/.claude"
   mkdir -p "${FAKE_DOTFILES_SRC}/.warp/themes"
@@ -44,6 +45,8 @@ _make_fake_dotfiles() {
   touch "${FAKE_DOTFILES_SRC}/starship.toml"
   touch "${FAKE_DOTFILES_SRC}/.zshrc"
   touch "${FAKE_DOTFILES_SRC}/.zprofile"
+  touch "${FAKE_DOTFILES_SRC}/.cursor/User/settings.json"
+  touch "${FAKE_DOTFILES_SRC}/.cursor/User/keybindings.json"
   touch "${FAKE_DOTFILES_SRC}/.ssh/config"
   touch "${FAKE_DOTFILES_SRC}/.ssh/teleport.cfg"
 }
@@ -113,6 +116,28 @@ _make_fake_dotfiles() {
   [ "$status" -eq 0 ]
   [[ -L "${FAKE_HOME}/.config/ccstatusline" ]]
   [[ -L "${FAKE_HOME}/.config/.zshrc.d" ]]
+}
+
+@test "setup_dotfile_symlinks links Cursor User settings on macOS" {
+  _make_fake_dotfiles
+  export MACOS=1
+  unset LINUX
+  run setup_dotfile_symlinks
+  [ "$status" -eq 0 ]
+  [[ -L "${FAKE_HOME}/Library/Application Support/Cursor/User/settings.json" ]]
+  [[ -L "${FAKE_HOME}/Library/Application Support/Cursor/User/keybindings.json" ]]
+  [[ -L "${FAKE_HOME}/Library/Application Support/Cursor/User/snippets" ]]
+}
+
+@test "setup_dotfile_symlinks links Cursor User settings on Linux" {
+  _make_fake_dotfiles
+  export LINUX=1
+  unset MACOS
+  run setup_dotfile_symlinks
+  [ "$status" -eq 0 ]
+  [[ -L "${FAKE_HOME}/.config/Cursor/User/settings.json" ]]
+  [[ -L "${FAKE_HOME}/.config/Cursor/User/keybindings.json" ]]
+  [[ -L "${FAKE_HOME}/.config/Cursor/User/snippets" ]]
 }
 
 # ── setup_credential_directories ────────────────────────────────────────────

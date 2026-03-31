@@ -56,6 +56,10 @@ dotfiles/
 ├── .claude/                  # Claude Code config (symlinked into ~/.claude)
 │   ├── CLAUDE.md             # Global Claude Code instructions
 │   └── settings.json         # Claude Code settings
+├── .cursor/User/             # Cursor settings (symlinked into Cursor User dir)
+│   ├── settings.json
+│   ├── keybindings.json
+│   └── snippets/
 ├── scripts/
 │   ├── .osx.sh               # macOS system defaults
 │   ├── count_lines.sh        # Count lines across files in a directory
@@ -73,7 +77,9 @@ dotfiles/
 
 ## Symlink Strategy
 
-Dotfiles live in `.devcontainer/` and `.claude/`. `setup_env.sh` creates symlinks from `$HOME` into the repo. For `.claude/`, each item is symlinked individually into `~/.claude/`, preserving any other files already there (history, sessions, cache, etc.).
+Dotfiles live in `.devcontainer/`, `.claude/`, and `.cursor/`. `setup_env.sh` creates symlinks from `$HOME` into the repo. For `.claude/`, each item is symlinked individually into `~/.claude/`, preserving any other files already there (history, sessions, cache, etc.). Cursor user files are symlinked to:
+- macOS: `~/Library/Application Support/Cursor/User/`
+- Linux: `~/.config/Cursor/User/`
 
 ## Windows / WSL Setup
 

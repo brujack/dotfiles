@@ -732,6 +732,36 @@ setup_dotfile_symlinks() {
     printf ".ssh/config is linked\\n"
   fi
 
+  if [[ -n ${MACOS} ]]; then
+    CURSOR_USER_DIR="${HOME}/Library/Application Support/Cursor/User"
+  elif [[ -n ${LINUX} ]]; then
+    CURSOR_USER_DIR="${HOME}/.config/Cursor/User"
+  fi
+
+  if [[ -n ${CURSOR_USER_DIR:-} ]]; then
+    printf "Creating %s\\n" "${CURSOR_USER_DIR}"
+    mkdir -p "${CURSOR_USER_DIR}"
+
+    printf "Linking Cursor settings\\n"
+    rm -f "${CURSOR_USER_DIR}/settings.json"
+    ln -s "${PERSONAL_GITREPOS}/${DOTFILES}/.cursor/User/settings.json" "${CURSOR_USER_DIR}/settings.json"
+    if [[ -L "${CURSOR_USER_DIR}/settings.json" ]]; then
+      printf "Cursor settings.json is linked\\n"
+    fi
+
+    rm -f "${CURSOR_USER_DIR}/keybindings.json"
+    ln -s "${PERSONAL_GITREPOS}/${DOTFILES}/.cursor/User/keybindings.json" "${CURSOR_USER_DIR}/keybindings.json"
+    if [[ -L "${CURSOR_USER_DIR}/keybindings.json" ]]; then
+      printf "Cursor keybindings.json is linked\\n"
+    fi
+
+    rm -rf "${CURSOR_USER_DIR}/snippets"
+    ln -s "${PERSONAL_GITREPOS}/${DOTFILES}/.cursor/User/snippets" "${CURSOR_USER_DIR}/snippets"
+    if [[ -L "${CURSOR_USER_DIR}/snippets" ]]; then
+      printf "Cursor snippets is linked\\n"
+    fi
+  fi
+
   printf "Linking %s/.ssh/teleport.cfg\\n" "${HOME}"
   rm -f ${HOME}/.ssh/teleport.cfg
   ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.ssh/teleport.cfg ${HOME}/.ssh/teleport.cfg
