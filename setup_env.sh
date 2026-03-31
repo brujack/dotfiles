@@ -739,6 +739,7 @@ setup_dotfile_symlinks() {
   fi
 
   if [[ -n ${CURSOR_USER_DIR:-} ]]; then
+    printf "Cursor User directory is %s\\n" "${CURSOR_USER_DIR}"
     printf "Creating %s\\n" "${CURSOR_USER_DIR}"
     mkdir -p "${CURSOR_USER_DIR}"
 
