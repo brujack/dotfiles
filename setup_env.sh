@@ -1,5 +1,20 @@
 #!/usr/bin/env bash
 
+# Prerequisite check — runs only when executed directly (not sourced by tests)
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  _BASH_MAJOR="${BASH_VERSINFO[0]:-0}"
+  if [[ "${_BASH_MAJOR}" -lt 5 ]]; then
+    printf "[ERROR] bash 5+ required (running bash %s).\n" "${BASH_VERSION}" >&2
+    printf "        On macOS, run first: ./scripts/bootstrap_mac.sh\n" >&2
+    exit 1
+  fi
+  if ! which brew &>/dev/null; then
+    printf "[ERROR] Homebrew not found.\n" >&2
+    printf "        On macOS, run first: ./scripts/bootstrap_mac.sh\n" >&2
+    exit 1
+  fi
+fi
+
 # software versions to install
 BATS_VER="1.11.0"
 CF_TERRAFORMING_VER="0.16.1"
