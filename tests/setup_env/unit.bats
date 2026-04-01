@@ -117,3 +117,26 @@ teardown() {
   [[ "$output" == *"ansible"* ]]
   [[ "$output" == *"update"* ]]
 }
+
+# ── prerequisite check ────────────────────────────────────────────────────────
+
+@test "setup_env.sh exits 1 with error when brew is not found" {
+  load_mocks
+  export MOCK_WHICH_MISSING=brew
+  run bash "${BATS_TEST_DIRNAME}/../../setup_env.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Homebrew not found"* ]]
+}
+
+@test "setup_env.sh prereq error message points to bootstrap_mac.sh" {
+  load_mocks
+  export MOCK_WHICH_MISSING=brew
+  run bash "${BATS_TEST_DIRNAME}/../../setup_env.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"bootstrap_mac.sh"* ]]
+}
+
+@test "setup_env.sh contains bash version prerequisite check" {
+  run grep -q 'BASH_VERSINFO' "${BATS_TEST_DIRNAME}/../../setup_env.sh"
+  [ "$status" -eq 0 ]
+}
