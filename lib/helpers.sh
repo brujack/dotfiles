@@ -206,63 +206,28 @@ setup_dotfile_symlinks() {
   log_info "Linking ${DOTFILES} to their home"
 
   if [[ -n ${MACOS} ]]; then
-    rm -f ${HOME}/.gitconfig
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_mac ${HOME}/.gitconfig
+    safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_mac" "${HOME}/.gitconfig"
     if [[ -d ${HOME}/git-repos/gitlab ]]; then
-      rm -f ${HOME}/git-repos/gitlab/.gitconfig
-      ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_mac_gitlab ${HOME}/git-repos/gitlab/.gitconfig
-    fi
-    if [[ -L ${HOME}/git-repos/gitlab/.gitconfig ]]; then
-      log_info "gitlab/.gitconfig is linked"
+      safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_mac_gitlab" "${HOME}/git-repos/gitlab/.gitconfig"
     fi
   fi
   if [[ -n ${LINUX} ]]; then
-    rm -f ${HOME}/.gitconfig
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_linux ${HOME}/.gitconfig
+    safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_linux" "${HOME}/.gitconfig"
     if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
       if [[ -d ${HOME}/git-repos/gitlab ]]; then
-        rm -f ${HOME}/git-repos/gitlab/.gitconfig
-        ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_linux_gitlab ${HOME}/git-repos/gitlab/.gitconfig
-      fi
-      if [[ -L ${HOME}/git-repos/gitlab/.gitconfig ]]; then
-        log_info "gitlab/.gitconfig is linked Linux"
+        safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_linux_gitlab" "${HOME}/git-repos/gitlab/.gitconfig"
       fi
     fi
   fi
 
-  rm -f ${HOME}/.vimrc
-  ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.vimrc ${HOME}/.vimrc
-  if [[ -L ${HOME}/.vimrc ]]; then
-    log_info ".vimrc is linked"
-  fi
-
-  rm -f ${HOME}/.p10k.zsh
-  ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.p10k.zsh ${HOME}/.p10k.zsh
-  if [[ -L ${HOME}/.p10k.zsh ]]; then
-    log_info ".p10k.zsh is linked"
-  fi
-
-  rm -f ${HOME}/.tmux.conf
-  ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.tmux.conf ${HOME}/.tmux.conf
-  if [[ -L ${HOME}/.tmux.conf ]]; then
-    log_info ".tmux.conf is linked"
-  fi
-
-  if [[ -d ${HOME}/scripts ]]; then
-    rm -rf ${HOME}/scripts
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/scripts ${HOME}/scripts
-  elif [[ ! -L ${HOME}/scripts ]]; then
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/scripts ${HOME}/scripts
-  fi
-  if [[ -L ${HOME}/scripts ]]; then
-    log_info "scripts is linked"
-  fi
+  safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.vimrc" "${HOME}/.vimrc"
+  safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.p10k.zsh" "${HOME}/.p10k.zsh"
+  safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.tmux.conf" "${HOME}/.tmux.conf"
+  safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/scripts" "${HOME}/scripts"
 
   if [[ -n ${MACOS} ]] || [[ -n ${LINUX} ]]; then
     log_info "Creating ${HOME}/.config"
     mkdir -p ${HOME}/.config
-  fi
-  if [[ -d ${HOME}/.config ]]; then
     log_info "Created ${HOME}/.config"
   fi
 
@@ -271,8 +236,6 @@ setup_dotfile_symlinks() {
     mkdir -p ${HOME}/.tf_creds
     if [[ -d ${HOME}/.tf_creds ]]; then
       chmod 700 ${HOME}/.tf_creds
-    fi
-    if [[ -d ${HOME}/.tf_creds ]]; then
       log_info "Created ${HOME}/.tf_creds"
     fi
   fi
@@ -280,25 +243,12 @@ setup_dotfile_symlinks() {
   if [[ -n ${MACOS} ]] || [[ -n ${LINUX} ]]; then
     log_info "powershell profile and custom oh-my-posh theme"
     mkdir -p ${HOME}/.config/powershell
-    rm -f ${HOME}/.config/powershell/profile.ps1
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/profile.ps1 ${HOME}/.config/powershell/profile.ps1
-    rm -f ${HOME}/.config/powershell/bruce.omp.json
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/bruce.omp.json ${HOME}/.config/powershell/bruce.omp.json
-    if [[ -L ${HOME}/.config/powershell/profile.ps1 ]]; then
-      log_info "powershell profile is linked"
-    fi
-    if [[ -L ${HOME}/.config/powershell/bruce.omp.json ]]; then
-      log_info "bruce.omp.json is linked"
-    fi
+    safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/profile.ps1" "${HOME}/.config/powershell/profile.ps1"
+    safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/bruce.omp.json" "${HOME}/.config/powershell/bruce.omp.json"
   fi
 
   if [[ -n ${MACOS} ]] || [[ -n ${LINUX} ]]; then
-    log_info "starship profile"
-    rm -f ${HOME}/.config/starship.toml
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/starship.toml ${HOME}/.config/starship.toml
-    if [[ -L ${HOME}/.config/starship.toml ]]; then
-      log_info "starship.toml is linked"
-    fi
+    safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/starship.toml" "${HOME}/.config/starship.toml"
   fi
 
   log_info "Installing Oh My ZSH..."
@@ -317,41 +267,14 @@ setup_dotfile_symlinks() {
     fi
   fi
 
-  log_info "linking .zshrc"
-  rm -f ${HOME}/.zshrc
-  ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.zshrc ${HOME}/.zshrc
-  if [[ -L ${HOME}/.zshrc ]]; then
-    log_info ".zshrc is linked"
-  fi
+  safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.zshrc" "${HOME}/.zshrc"
+  safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.config/.zshrc.d" "${HOME}/.config/.zshrc.d"
 
-  log_info "linking .zshrc.d"
-  rm -f ${HOME}/.config/.zshrc.d
-  ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.config/.zshrc.d ${HOME}/.config/.zshrc.d
-  if [[ -L ${HOME}/.config/.zshrc.d ]]; then
-    log_info ".zshrc.d is linked"
-  fi
-
-  log_info "Linking ${HOME}/.config/ccstatusline"
   mkdir -p ${HOME}/.config
-  rm -rf ${HOME}/.config/ccstatusline
-  ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.config/ccstatusline ${HOME}/.config/ccstatusline
-  if [[ -L ${HOME}/.config/ccstatusline ]]; then
-    log_info ".config/ccstatusline is linked"
-  fi
+  safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.config/ccstatusline" "${HOME}/.config/ccstatusline"
 
-  log_info "linking .zprofile"
-  rm -f ${HOME}/.zprofile
-  ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.zprofile ${HOME}/.zprofile
-  if [[ -L ${HOME}/.zprofile ]]; then
-    log_info ".zprofile is linked"
-  fi
-
-  log_info "Linking custom bruce.zsh-theme"
-  rm -f ${HOME}/.oh-my-zsh/custom/themes/bruce.zsh-theme
-  ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/bruce.zsh-theme ${HOME}/.oh-my-zsh/custom/themes/bruce.zsh-theme
-  if [[ -L ${HOME}/.oh-my-zsh/custom/themes/bruce.zsh-theme ]]; then
-    log_info "bruce.zsh-theme is linked"
-  fi
+  safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.zprofile" "${HOME}/.zprofile"
+  safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/bruce.zsh-theme" "${HOME}/.oh-my-zsh/custom/themes/bruce.zsh-theme"
 
   log_info "Creating ${HOME}/.tmux"
   mkdir -p ${HOME}/.tmux
@@ -371,31 +294,16 @@ setup_dotfile_symlinks() {
   mkdir -p ${HOME}/.warp
   if [[ -d ${HOME}/.warp ]]; then
     chmod 700 ${HOME}/.warp
-    if [[ -d ${HOME}/.warp ]]; then
-      log_info "Created ${HOME}/.warp"
-    fi
+    log_info "Created ${HOME}/.warp"
   fi
-  log_info "Linking ${HOME}/.warp/themes"
-  rm -f ${HOME}/.warp/themes
-  ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.warp/themes ${HOME}/.warp/themes
-  if [[ -L ${HOME}/.warp/themes ]]; then
-    log_info ".warp/themes is linked"
-  fi
-
-  log_info "Linking ${HOME}/.warp/launch_configurations"
-  rm -f ${HOME}/.warp/launch_configurations
-  ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.warp/launch_configurations ${HOME}/.warp/launch_configurations
-  if [[ -L ${HOME}/.warp/launch_configurations ]]; then
-    log_info ".warp/launch_configurations is linked"
-  fi
+  safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.warp/themes" "${HOME}/.warp/themes"
+  safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.warp/launch_configurations" "${HOME}/.warp/launch_configurations"
 
   log_info "Creating ${HOME}/.ssh"
   mkdir -p ${HOME}/.ssh
   if [[ -d ${HOME}/.ssh ]]; then
     chmod 700 ${HOME}/.ssh
-    if [[ -d ${HOME}/.ssh ]]; then
-      log_info "Created ${HOME}/.ssh"
-    fi
+    log_info "Created ${HOME}/.ssh"
   fi
 
   log_info "Creating ${HOME}/.claude"
@@ -405,20 +313,10 @@ setup_dotfile_symlinks() {
   fi
   for _claude_item in ${PERSONAL_GITREPOS}/${DOTFILES}/.claude/*; do
     _claude_target="${HOME}/.claude/$(basename ${_claude_item})"
-    log_info "Linking ${_claude_target}"
-    rm -rf ${_claude_target}
-    ln -s ${_claude_item} ${_claude_target}
-    if [[ -L ${_claude_target} ]]; then
-      log_info "${_claude_target} is linked"
-    fi
+    safe_link "${_claude_item}" "${_claude_target}"
   done
 
-  log_info "Linking ${HOME}/.ssh/config"
-  rm -f ${HOME}/.ssh/config
-  ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.ssh/config ${HOME}/.ssh/config
-  if [[ -L ${HOME}/.ssh/config ]]; then
-    log_info ".ssh/config is linked"
-  fi
+  safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.ssh/config" "${HOME}/.ssh/config"
 
   if [[ -n ${MACOS} ]]; then
     CURSOR_USER_DIR="${HOME}/Library/Application Support/Cursor/User"
@@ -452,23 +350,9 @@ setup_dotfile_symlinks() {
         mkdir -p "${CURSOR_USER_DIR}"
 
         log_info "Linking Cursor settings"
-        rm -f "${CURSOR_USER_DIR}/settings.json"
-        ln -s "${CURSOR_DOTFILES_USER_DIR}/settings.json" "${CURSOR_USER_DIR}/settings.json"
-        if [[ -L "${CURSOR_USER_DIR}/settings.json" ]]; then
-          log_info "Cursor settings.json is linked"
-        fi
-
-        rm -f "${CURSOR_USER_DIR}/keybindings.json"
-        ln -s "${CURSOR_DOTFILES_USER_DIR}/keybindings.json" "${CURSOR_USER_DIR}/keybindings.json"
-        if [[ -L "${CURSOR_USER_DIR}/keybindings.json" ]]; then
-          log_info "Cursor keybindings.json is linked"
-        fi
-
-        rm -rf "${CURSOR_USER_DIR}/snippets"
-        ln -s "${CURSOR_DOTFILES_USER_DIR}/snippets" "${CURSOR_USER_DIR}/snippets"
-        if [[ -L "${CURSOR_USER_DIR}/snippets" ]]; then
-          log_info "Cursor snippets is linked"
-        fi
+        safe_link "${CURSOR_DOTFILES_USER_DIR}/settings.json" "${CURSOR_USER_DIR}/settings.json"
+        safe_link "${CURSOR_DOTFILES_USER_DIR}/keybindings.json" "${CURSOR_USER_DIR}/keybindings.json"
+        safe_link "${CURSOR_DOTFILES_USER_DIR}/snippets" "${CURSOR_USER_DIR}/snippets"
       else
         log_warn "Skipping Cursor symlinks; Cursor app settings or dotfiles Cursor user files are missing"
       fi
@@ -477,20 +361,13 @@ setup_dotfile_symlinks() {
     fi
   fi
 
-  log_info "Linking ${HOME}/.ssh/teleport.cfg"
-  rm -f ${HOME}/.ssh/teleport.cfg
-  ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.ssh/teleport.cfg ${HOME}/.ssh/teleport.cfg
-  if [[ -L ${HOME}/.ssh/teleport.cfg ]]; then
-    log_info ".ssh/teleport.cfg is linked"
-  fi
+  safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.ssh/teleport.cfg" "${HOME}/.ssh/teleport.cfg"
 
   log_info "Creating ${HOME}/.tsh"
   mkdir -p ${HOME}/.tsh
   if [[ -d ${HOME}/.tsh ]]; then
     chmod 700 ${HOME}/.tsh
-    if [[ -d ${HOME}/.tsh ]]; then
-      log_info "Created ${HOME}/.tsh"
-    fi
+    log_info "Created ${HOME}/.tsh"
   fi
 }
 
