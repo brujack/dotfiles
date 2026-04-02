@@ -146,7 +146,7 @@ _make_fake_dotfiles() {
   run setup_credential_directories
   [ "$status" -eq 0 ]
   [[ -d "${FAKE_HOME}/.aws" ]]
-  perms=$(stat -f "%OLp" "${FAKE_HOME}/.aws" 2>/dev/null || stat -c "%a" "${FAKE_HOME}/.aws")
+  perms=$(stat -c "%a" "${FAKE_HOME}/.aws" 2>/dev/null || stat -f "%OLp" "${FAKE_HOME}/.aws")
   [ "$perms" = "700" ]
 }
 
@@ -154,7 +154,7 @@ _make_fake_dotfiles() {
   run setup_credential_directories
   [ "$status" -eq 0 ]
   [[ -d "${FAKE_HOME}/.gcloud_creds" ]]
-  perms=$(stat -f "%OLp" "${FAKE_HOME}/.gcloud_creds" 2>/dev/null || stat -c "%a" "${FAKE_HOME}/.gcloud_creds")
+  perms=$(stat -c "%a" "${FAKE_HOME}/.gcloud_creds" 2>/dev/null || stat -f "%OLp" "${FAKE_HOME}/.gcloud_creds")
   [ "$perms" = "700" ]
 }
 
@@ -162,7 +162,7 @@ _make_fake_dotfiles() {
   run setup_credential_directories
   [ "$status" -eq 0 ]
   [[ -d "${FAKE_HOME}/.azure_creds" ]]
-  perms=$(stat -f "%OLp" "${FAKE_HOME}/.azure_creds" 2>/dev/null || stat -c "%a" "${FAKE_HOME}/.azure_creds")
+  perms=$(stat -c "%a" "${FAKE_HOME}/.azure_creds" 2>/dev/null || stat -f "%OLp" "${FAKE_HOME}/.azure_creds")
   [ "$perms" = "700" ]
 }
 
