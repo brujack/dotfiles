@@ -140,3 +140,35 @@ teardown() {
   run grep -q 'BASH_VERSINFO' "${BATS_TEST_DIRNAME}/../../setup_env.sh"
   [ "$status" -eq 0 ]
 }
+
+# ── lib/ source tests ─────────────────────────────────────────────────────────
+
+@test "lib/constants.sh sources without error" {
+  run bash -c "source '${REPO_ROOT}/lib/constants.sh'"
+  [ "$status" -eq 0 ]
+}
+
+@test "lib/helpers.sh sources without error" {
+  run bash -c "source '${REPO_ROOT}/lib/constants.sh'; source '${REPO_ROOT}/lib/helpers.sh'"
+  [ "$status" -eq 0 ]
+}
+
+@test "lib/detect_env.sh sources without error" {
+  run bash -c "source '${REPO_ROOT}/lib/constants.sh'; source '${REPO_ROOT}/lib/helpers.sh'; source '${REPO_ROOT}/lib/detect_env.sh'"
+  [ "$status" -eq 0 ]
+}
+
+@test "lib/macos.sh sources without error" {
+  run bash -c "source '${REPO_ROOT}/lib/constants.sh'; source '${REPO_ROOT}/lib/helpers.sh'; source '${REPO_ROOT}/lib/macos.sh'"
+  [ "$status" -eq 0 ]
+}
+
+@test "lib/linux.sh sources without error" {
+  run bash -c "source '${REPO_ROOT}/lib/constants.sh'; source '${REPO_ROOT}/lib/helpers.sh'; source '${REPO_ROOT}/lib/linux.sh'"
+  [ "$status" -eq 0 ]
+}
+
+@test "lib/developer.sh sources without error" {
+  run bash -c "source '${REPO_ROOT}/lib/constants.sh'; source '${REPO_ROOT}/lib/helpers.sh'; source '${REPO_ROOT}/lib/developer.sh'"
+  [ "$status" -eq 0 ]
+}
