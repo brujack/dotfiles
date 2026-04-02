@@ -251,3 +251,44 @@ teardown() {
   grep -q "brew cleanup" "${MOCK_CALLS_FILE}"
   [[ "$output" == *"Homebrew update process completed successfully"* ]]
 }
+
+# ── safe_link ─────────────────────────────────────────────────────────────────
+
+@test "safe_link creates symlink when dest does not exist" {
+  local src="${BATS_TEST_TMPDIR}/src_file"
+  local dest="${BATS_TEST_TMPDIR}/dest_link"
+  touch "${src}"
+  run safe_link "${src}" "${dest}"
+  [ "$status" -eq 0 ]
+  [[ -L "${dest}" ]]
+}
+
+@test "safe_link is a no-op when dest is already a symlink" {
+  local src="${BATS_TEST_TMPDIR}/src_file"
+  local dest="${BATS_TEST_TMPDIR}/dest_link"
+  touch "${src}"
+  ln -s "${src}" "${dest}"
+  run safe_link "${src}" "${dest}"
+  [ "$status" -eq 0 ]
+  [[ -L "${dest}" ]]
+}
+
+@test "safe_link backs up existing regular file before linking" {
+  local src="${BATS_TEST_TMPDIR}/src_file"
+  local dest="${BATS_TEST_TMPDIR}/dest_file"
+  touch "${src}"
+  touch "${dest}"
+  run safe_link "${src}" "${dest}"
+  [ "$status" -eq 0 ]
+  [[ -L "${dest}" ]]
+  [[ -f "${dest}.bak" ]]
+}
+
+@test "safe_link output contains Linked message" {
+  local src="${BATS_TEST_TMPDIR}/src_file"
+  local dest="${BATS_TEST_TMPDIR}/dest_link"
+  touch "${src}"
+  run safe_link "${src}" "${dest}"
+  [ "$status" -eq 0 ]
+  [[ "${output}" == *"Linked"* ]]
+}

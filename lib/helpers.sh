@@ -1,6 +1,30 @@
 #!/usr/bin/env bash
 # lib/helpers.sh — install guards, brew helpers, symlink utilities, argument parsing
 
+# ── logging helpers ───────────────────────────────────────────────────────────
+readonly _RED='\033[0;31m'
+readonly _YELLOW='\033[0;33m'
+readonly _GREEN='\033[0;32m'
+readonly _NC='\033[0m'
+
+log_info()  { printf "${_GREEN}[INFO]${_NC}  %s\n" "$*"; }
+log_warn()  { printf "${_YELLOW}[WARN]${_NC}  %s\n" "$*" >&2; }
+log_error() { printf "${_RED}[ERROR]${_NC} %s\n" "$*" >&2; }
+
+# ── symlink helpers ───────────────────────────────────────────────────────────
+safe_link() {
+  local src="$1" dest="$2"
+  if [[ -L "${dest}" ]]; then
+    return 0
+  fi
+  if [[ -e "${dest}" ]]; then
+    log_warn "Backing up existing file: ${dest} → ${dest}.bak"
+    mv "${dest}" "${dest}.bak"
+  fi
+  ln -s "${src}" "${dest}"
+  log_info "Linked ${dest} → ${src}"
+}
+
 quiet_which() {
   which "$1" &>/dev/null
 }
