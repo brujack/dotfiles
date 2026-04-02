@@ -2,7 +2,7 @@
 # lib/developer.sh — cross-platform developer tooling (Ruby, Python, Ansible, AWS CLI, Rust, etc.)
 
 clone_or_update_dotfiles() {
-  printf "Copying %s from Github\\n" "${DOTFILES}"
+  log_info "Copying ${DOTFILES} from Github"
   if [[ ! -d ${PERSONAL_GITREPOS}/${DOTFILES} ]]; then
     cd ${HOME} || return
     git clone --recursive git@github.com:brujack/${DOTFILES}.git ${PERSONAL_GITREPOS}/${DOTFILES}
@@ -17,7 +17,7 @@ clone_or_update_dotfiles() {
 update_aws_cli() {
   if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]] || [[ -n ${RATNA} ]]; then
     if [[ -n ${MACOS} ]]; then
-      printf "Updating MACOS awscli\n"
+      log_info "Updating MACOS awscli"
       cd ${HOME}/software_downloads/awscli || exit
       curl "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "AWSCLIV2.pkg"
       sudo -H installer -pkg AWSCLIV2.pkg -target /
@@ -26,7 +26,7 @@ update_aws_cli() {
     fi
   fi
   if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
-    printf "Updating Linux awscli\n"
+    log_info "Updating Linux awscli"
     mkdir -p ${HOME}/software_downloads/awscli
     cd ${HOME}/software_downloads/awscli || exit
     curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
@@ -38,7 +38,7 @@ update_aws_cli() {
 
 update_rust() {
   if [[ -n ${UBUNTU} ]] && { [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; }; then
-    printf "Updating Rust Ubuntu\n"
+    log_info "Updating Rust Ubuntu"
     if [[ -x ${HOME}/.cargo/bin/rustup ]]; then
       ${HOME}/.cargo/bin/rustup self update
       ${HOME}/.cargo/bin/rustup update
@@ -46,7 +46,7 @@ update_rust() {
       rustup self update
       rustup update
     else
-      printf "rustup not found; skipping Rust update\n"
+      log_warn "rustup not found; skipping Rust update"
     fi
   fi
 }

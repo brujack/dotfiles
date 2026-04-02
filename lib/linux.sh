@@ -3,11 +3,11 @@
 
 install_bats() {
   if quiet_which bats; then
-    printf "bats already installed\\n"
+    log_info "bats already installed"
     return 0
   fi
 
-  printf "Installing bats\\n"
+  log_info "Installing bats"
 
   if [[ -n ${UBUNTU} ]]; then
     sudo -H apt-get install -y bats
@@ -18,7 +18,7 @@ install_bats() {
     sudo -H /tmp/bats-core-${BATS_VER}/install.sh /usr/local
     rm -rf /tmp/bats.tar.gz /tmp/bats-core-${BATS_VER}
   else
-    printf "Unsupported platform for bats install\\n"
+    log_warn "Unsupported platform for bats install"
     return 1
   fi
 }
@@ -38,18 +38,18 @@ update_system_packages() {
       sudo -H nala autoremove -y
     fi
     sudo snap refresh
-    printf "Updated snap packages\n"
+    log_info "Updated snap packages"
   fi
   if [[ -n ${REDHAT} ]] || [[ -n ${FEDORA} ]]; then
     sudo -H dnf update -y
-    printf "Updated dnf packages\n"
+    log_info "Updated dnf packages"
   fi
   if [[ -n ${CENTOS} ]]; then
     sudo -H yum update -y
-    printf "Updated yum packages\n"
+    log_info "Updated yum packages"
   fi
   if [[ -n ${MACOS} ]]; then
-    printf "Updating mas packages\n"
+    log_info "Updating mas packages"
     mas upgrade
   fi
 }
