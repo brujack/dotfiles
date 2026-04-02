@@ -120,6 +120,10 @@ _make_fake_dotfiles() {
 
 @test "setup_dotfile_symlinks links Cursor User settings on macOS" {
   _make_fake_dotfiles
+  # Create fake Cursor app settings dir (guards CURSOR_APP_SETTINGS_OK on macOS)
+  mkdir -p "${FAKE_HOME}/Library/Application Support/Cursor/settings"
+  touch "${FAKE_HOME}/Library/Application Support/Cursor/settings/settings.json"
+  touch "${FAKE_HOME}/Library/Application Support/Cursor/settings/keybindings.json"
   export MACOS=1
   unset LINUX
   run setup_dotfile_symlinks
