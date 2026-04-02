@@ -28,4 +28,4 @@ test-unit:
 ifndef BATS
 	$(error bats not found. Install: brew install bats-core (macOS) or sudo apt-get install bats (Linux))
 endif
-	bats tests/setup_env/unit.bats tests/zshrc.d/unit.bats
+	bats tests/setup_env/unit.bats tests/setup_env/profiles.bats tests/zshrc.d/unit.bats
