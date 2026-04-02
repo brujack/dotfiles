@@ -25,15 +25,24 @@ detect_env() {
   fi
 
   [[ $(uname -r) =~ microsoft ]] && readonly WINDOWS=1
-  [[ $(hostname -s) = "laptop" ]] && readonly LAPTOP=1
-  [[ $(hostname -s) = "studio" ]] && readonly STUDIO=1
-  [[ $(hostname -s) = "reception" ]] && readonly RECEPTION=1
-  [[ $(hostname -s) = "office" ]] && readonly OFFICE=1
-  [[ $(hostname -s) = "home-1" ]] && readonly HOMES=1
-  [[ $(hostname -s) = "virtualmachine1c4f85d6" ]] && readonly WORKSTATION=1
-  [[ $(hostname -s) = "workstation" ]] && readonly WORKSTATION=1
-  [[ $(hostname -s) = "cruncher" ]] && readonly CRUNCHER=1
-  [[ $(hostname -s) = "virtualmachine1c4f85d6" ]] && readonly WORKSTATION=1
+
+  # Profile resolution
+  source "$(dirname "${BASH_SOURCE[0]}")/../config/profiles.sh"
+  local hn
+  hn=$(hostname -s)
+  PROFILE="${PROFILE_MAP[${hn}]:-unknown}"
+  for cap in ${PROFILE_CAPS[${PROFILE}]:-}; do
+    declare -g "HAS_$(printf '%s' "${cap}" | tr '[:lower:]' '[:upper:]')=1"
+  done
+
+  # Legacy hostname var aliases (kept until all call sites updated to use HAS_* vars)
+  [[ "${hn}" == "laptop" ]]      && readonly LAPTOP=1
+  [[ "${hn}" == "studio" ]]      && readonly STUDIO=1
+  [[ "${hn}" == "reception" ]]   && readonly RECEPTION=1
+  [[ "${hn}" == "office" ]]      && readonly OFFICE=1
+  [[ "${hn}" == "home-1" ]]      && readonly HOMES=1
+  [[ "${hn}" == "workstation" ]] && readonly WORKSTATION=1
+  [[ "${hn}" == "cruncher" ]]    && readonly CRUNCHER=1
 
   # setup variables based off of environment
   if [[ -n ${MACOS} ]]; then

@@ -147,7 +147,27 @@ Uses **BATS** (Bash Automated Testing System), installed natively:
 
 **Run tests:** `make test` (runs lint then all BATS tests)
 **Run unit tests only:** `make test-unit`
-**Run lint only:** `make lint`
+**Run lint only:** `make lint` (bash -n + zsh -n + shellcheck on all .sh files)
+
+### ShellCheck
+
+`.shellcheckrc` at the repo root suppresses pervasive intentional patterns:
+- `SC2086`: unquoted variables — intentional style throughout
+- `SC2034`: unused variables — many used externally via source
+- `SC1091`: not following source — expected for sourced lib architecture
+- `SC2181`: checking `$?` directly — intentional pattern
+
+Inline disables (`# shellcheck disable=SCxxxx # reason`) are used for remaining site-specific suppressions.
+
+### CI / GitHub Actions
+
+`.github/workflows/ci.yml` runs on every push to non-master branches and PRs to master:
+- `test` job: installs bats + shellcheck, runs `make test`
+- `auto-merge` job: auto-merges passing PRs (depends on `test`)
+
+CI requirements:
+- All jobs run on `ubuntu-latest` with `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true`
+- Uses `actions/checkout@v5`
 
 ### Testing Rules
 

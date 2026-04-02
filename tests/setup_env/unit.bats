@@ -172,3 +172,24 @@ teardown() {
   run bash -c "source '${REPO_ROOT}/lib/constants.sh'; source '${REPO_ROOT}/lib/helpers.sh'; source '${REPO_ROOT}/lib/developer.sh'"
   [ "$status" -eq 0 ]
 }
+
+# ── logging helpers ───────────────────────────────────────────────────────────
+@test "log_info output contains [INFO] prefix" {
+  run bash -c "source '${REPO_ROOT}/lib/helpers.sh'; log_info 'test message'"
+  [[ "${output}" == *"[INFO]"* ]]
+}
+
+@test "log_info output contains the message" {
+  run bash -c "source '${REPO_ROOT}/lib/helpers.sh'; log_info 'hello world'"
+  [[ "${output}" == *"hello world"* ]]
+}
+
+@test "log_warn output contains [WARN] prefix" {
+  run bash -c "source '${REPO_ROOT}/lib/helpers.sh'; log_warn 'test warning' 2>&1"
+  [[ "${output}" == *"[WARN]"* ]]
+}
+
+@test "log_error output contains [ERROR] prefix" {
+  run bash -c "source '${REPO_ROOT}/lib/helpers.sh'; log_error 'test error' 2>&1"
+  [[ "${output}" == *"[ERROR]"* ]]
+}

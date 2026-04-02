@@ -524,6 +524,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     printf "Installing powershell Ubuntu\\n"
     if [[ -n ${BIONIC} ]]; then
       if [[ ! -f ${HOME}/software_downloads/packages-microsoft-prod.deb ]]; then
+        # shellcheck disable=SC2046
         wget -O ${HOME}/software_downloads/packages-microsoft-prod.deb https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb
         sudo -H dpkg -i ${HOME}/software_downloads/packages-microsoft-prod.deb
         sudo apt update
@@ -536,6 +537,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     fi
     if [[ -n ${FOCAL} ]]; then
       if [[ ! -f ${HOME}/software_downloads/packages-microsoft-prod.deb ]]; then
+        # shellcheck disable=SC2046
         wget -O ${HOME}/software_downloads/packages-microsoft-prod.deb https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb
         sudo -H dpkg -i ${HOME}/software_downloads/packages-microsoft-prod.deb
         sudo apt update
@@ -548,6 +550,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     fi
     if [[ -n ${JAMMY} ]]; then
       if [[ ! -f ${HOME}/software_downloads/packages-microsoft-prod.deb ]]; then
+        # shellcheck disable=SC2046
         wget -O ${HOME}/software_downloads/packages-microsoft-prod.deb https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb
         sudo -H dpkg -i ${HOME}/software_downloads/packages-microsoft-prod.deb
         sudo apt update
@@ -560,6 +563,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     fi
     if [[ -n ${NOBLE} ]]; then
       if [[ ! -f ${HOME}/software_downloads/packages-microsoft-prod.deb ]]; then
+        # shellcheck disable=SC2046
         wget -O ${HOME}/software_downloads/packages-microsoft-prod.deb https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb
         sudo -H dpkg -i ${HOME}/software_downloads/packages-microsoft-prod.deb
         sudo apt update
@@ -744,7 +748,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
         ;;
     esac
     INSTALLED_GO_VER=$(go version | awk '{print $3}' | sed 's/go//g')
-    if [[ ${INSTALLED_GO_VER} == ${GO_VER} ]]; then
+    if [[ ${INSTALLED_GO_VER} == "${GO_VER}" ]]; then
       printf "Go %s is installed\\n" "${GO_VER}"
     fi
 
@@ -850,7 +854,9 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     if [[ -n ${WORKSTATION} ]]; then
       if [[ ${FOCAL} ]]; then
         printf "Installing Albert Ubuntu Focal\\n"
+        # shellcheck disable=SC2046
         echo "deb http://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_$(lsb_release -rs)/ /" | sudo tee /etc/apt/sources.list.d/home:manuelschneid3r.list
+        # shellcheck disable=SC2046
         curl -fsSL https://download.opensuse.org/repositories/home:manuelschneid3r/xUbuntu_$(lsb_release -rs)/Release.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/home_manuelschneid3r.gpg > /dev/null
         sudo -H apt update
         sudo -H apt install albert -y
@@ -859,7 +865,9 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
         fi
       elif [[ ${JAMMY} ]]; then
         printf "Installing Albert Ubuntu Jammy\\n"
+        # shellcheck disable=SC2046
         echo "deb http://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_$(lsb_release -rs)/ /" | sudo tee /etc/apt/sources.list.d/home:manuelschneid3r.list
+        # shellcheck disable=SC2046
         curl -fsSL https://download.opensuse.org/repositories/home:manuelschneid3r/xUbuntu_$(lsb_release -rs)/Release.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/home_manuelschneid3r.gpg > /dev/null
         sudo -H apt update
         sudo -H apt install albert -y
@@ -868,7 +876,9 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
         fi
       elif [[ ${NOBLE} ]]; then
         printf "Installing Albert Ubuntu Noble\\n"
+        # shellcheck disable=SC2046
         echo "deb http://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_$(lsb_release -rs)/ /" | sudo tee /etc/apt/sources.list.d/home:manuelschneid3r.list
+        # shellcheck disable=SC2046
         curl -fsSL https://download.opensuse.org/repositories/home:manuelschneid3r/xUbuntu_$(lsb_release -rs)/Release.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/home_manuelschneid3r.gpg > /dev/null
         sudo -H apt update
         sudo -H apt install albert -y
@@ -1063,7 +1073,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     fi
     if [[ ! -f /etc/apt/keyrings/kubernetes-apt-keyring.gpg ]]; then
       sudo curl -fsSL https://pkgs.k8s.io/core:/stable:/${KUBERNETES_VER}/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-      echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/${KUBERNETES_VER}/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list
+      echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/${KUBERNETES_VER}/deb/ /" | sudo tee /etc/apt/sources.list.d/kubernetes.list
     fi
     sudo -H apt update
     sudo -H apt install kubectl -y
@@ -1153,12 +1163,12 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     fi
 
     printf "Installing shellcheck RHEL\\n"
-    if [[ ! -d ${HOME}/software_downloads/shellcheck-v${SHELLCHEK_VER} ]]; then
-      wget -O ${HOME}/software_downloads/shellcheck-v${SHELLCHEK_VER}.linux.x86_64.tar.xz https://shellcheck.storage.googleapis.com/shellcheck-v${SHELLCHEK_VER}.linux.x86_64.tar.xz
-      xz --decompress ${HOME}/software_downloads/shellcheck-v${SHELLCHEK_VER}.linux.x86_64.tar.xz
+    if [[ ! -d ${HOME}/software_downloads/shellcheck-v${SHELLCHECK_VER} ]]; then
+      wget -O ${HOME}/software_downloads/shellcheck-v${SHELLCHECK_VER}.linux.x86_64.tar.xz https://shellcheck.storage.googleapis.com/shellcheck-v${SHELLCHECK_VER}.linux.x86_64.tar.xz
+      xz --decompress ${HOME}/software_downloads/shellcheck-v${SHELLCHECK_VER}.linux.x86_64.tar.xz
       cd ${HOME}/software_downloads || exit
-      tar -xf ${HOME}/software_downloads/shellcheck-v${SHELLCHEK_VER}.linux.x86_64.tar
-      sudo cp -a ${HOME}/software_downloads/shellcheck-v${SHELLCHEK_VER}/shellcheck /usr/local/bin/
+      tar -xf ${HOME}/software_downloads/shellcheck-v${SHELLCHECK_VER}.linux.x86_64.tar
+      sudo cp -a ${HOME}/software_downloads/shellcheck-v${SHELLCHECK_VER}/shellcheck /usr/local/bin/
       sudo chmod 755 /usr/local/bin/shellcheck
       sudo chown root:root /usr/local/bin/shellcheck
       if [[ -x $(command -v shellcheck) ]]; then
@@ -1235,7 +1245,7 @@ EOM
 
     printf "Installing kubectl RHEL\\n"
     if [[ ! -f /etc/yum.repos.d/kubernetes.repo ]]; then
-      sudo echo "${RHEL_KUBECTL_REPO}" > /tmp/kubernetes.repo
+      echo "${RHEL_KUBECTL_REPO}" | sudo tee /tmp/kubernetes.repo > /dev/null
       sudo chown root:root /tmp/kubernetes.repo
       sudo chmod 644 /tmp/kubernetes.repo
       sudo mv /tmp/kubernetes.repo /etc/yum.repos.d/kubernetes.repo
@@ -1394,6 +1404,7 @@ if [[ -n ${DEVELOPER} ]] || [[ -n ${ANSIBLE} ]]; then
   if [[ ! -d ${HOME}/.rubies/ruby-${RUBY_VER}/bin ]]; then
     printf "Install ruby %s\\n" "${RUBY_VER}"
     if [[ -n ${MACOS} ]]; then
+      # shellcheck disable=SC2046
       ruby-install ${RUBY_VER} -- --with-openssl-dir=$(brew --prefix openssl@3)
     fi
     if [[ -n ${LINUX} ]]; then
@@ -1413,8 +1424,8 @@ if [[ -n ${DEVELOPER} ]] || [[ -n ${ANSIBLE} ]]; then
         fi
       fi
     fi
-    INSTALLED_RUBY_VERSION=$(ruby --version) | awk '{print $2}'
-    if [[ ${INSTALLED_RUBY_VERSION} == ${RUBY_VER} ]]; then
+    INSTALLED_RUBY_VERSION=$(ruby --version | awk '{print $2}')
+    if [[ ${INSTALLED_RUBY_VERSION} == "${RUBY_VER}" ]]; then
       printf "ruby %s is installed\\n" "${RUBY_VER}"
     fi
   fi
@@ -1505,6 +1516,7 @@ if [[ -n ${DEVELOPER} ]] || [[ -n ${ANSIBLE} ]]; then
       rm -rf "/tmp/python-build.*" 2>/dev/null || true
 
       # Force bundled libmpdec + keep Homebrew out of the build environment
+      # shellcheck disable=SC2016 # vars expand inside bash -lc at runtime, not here
       env -i \
         HOME="$HOME" USER="$USER" SHELL="${SHELL:-/bin/bash}" TERM="$TERM" \
         PYTHON_VER="${PYTHON_VER}" \

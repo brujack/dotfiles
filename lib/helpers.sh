@@ -1,13 +1,37 @@
 #!/usr/bin/env bash
 # lib/helpers.sh — install guards, brew helpers, symlink utilities, argument parsing
 
+# ── logging helpers ───────────────────────────────────────────────────────────
+readonly _RED='\033[0;31m'
+readonly _YELLOW='\033[0;33m'
+readonly _GREEN='\033[0;32m'
+readonly _NC='\033[0m'
+
+log_info()  { printf "${_GREEN}[INFO]${_NC}  %s\n" "$*"; }
+log_warn()  { printf "${_YELLOW}[WARN]${_NC}  %s\n" "$*" >&2; }
+log_error() { printf "${_RED}[ERROR]${_NC} %s\n" "$*" >&2; }
+
+# ── symlink helpers ───────────────────────────────────────────────────────────
+safe_link() {
+  local src="$1" dest="$2"
+  if [[ -L "${dest}" ]]; then
+    return 0
+  fi
+  if [[ -e "${dest}" ]]; then
+    log_warn "Backing up existing file: ${dest} → ${dest}.bak"
+    mv "${dest}" "${dest}.bak"
+  fi
+  ln -s "${src}" "${dest}"
+  log_info "Linked ${dest} → ${src}"
+}
+
 quiet_which() {
   which "$1" &>/dev/null
 }
 
 rhel_installed_package() {
   if ! command -v yum &>/dev/null; then
-    printf "yum command not found! Please install yum or run on a supported system.\\n"
+    log_error "yum command not found! Please install yum or run on a supported system."
     return 1
   fi
   yum list installed "$@" >/dev/null 2>&1
@@ -18,41 +42,41 @@ brew_update() {
     return 1
   fi
   if ! command -v brew &>/dev/null; then
-    printf "Homebrew not found, installing Homebrew...\\n"
+    log_info "Homebrew not found, installing Homebrew..."
     install_homebrew
   fi
 
-  printf "Updating Homebrew...\\n"
+  log_info "Updating Homebrew..."
   if ! brew update; then
-    printf "Failed to update Homebrew. Aborting.\\n"
+    log_error "Failed to update Homebrew. Aborting."
     return 1
   fi
 
-  printf "Upgrading installed formulae...\\n"
+  log_info "Upgrading installed formulae..."
   if ! brew upgrade; then
-    printf "Failed to upgrade formulae. Aborting.\\n"
+    log_error "Failed to upgrade formulae. Aborting."
     return 1
   fi
 
-  printf "Upgrading installed casks...\\n"
+  log_info "Upgrading installed casks..."
   if ! brew upgrade --cask --greedy; then
-    printf "Failed to upgrade casks. Aborting.\\n"
+    log_error "Failed to upgrade casks. Aborting."
     return 1
   fi
 
-  printf "Cleaning Homebrew up...\\n"
+  log_info "Cleaning Homebrew up..."
   if ! brew cleanup; then
-    printf "Failed to clean up. Aborting.\\n"
+    log_error "Failed to clean up. Aborting."
     return 1
   fi
 
-  printf "Homebrew update process completed successfully.\\n"
+  log_info "Homebrew update process completed successfully."
   return 0
 }
 
 ensure_not_root() {
   if [[ $(id -u) -eq 0 ]]; then
-    printf "Homebrew cannot run as root. Re-run without sudo.\\n"
+    log_error "Homebrew cannot run as root. Re-run without sudo."
     return 1
   fi
   return 0
@@ -127,11 +151,11 @@ app_dir_exists() {
 }
 
 check_and_install_nala() {
-  printf "Installing nala\\n"
+  log_info "Installing nala"
   if [[ "$(uname -s)" = "Linux" ]]; then
     if [[ $(awk -F= '/^NAME/{print $2}' /etc/os-release | tr -d '"') = "Ubuntu" ]]; then
       if ! [ -x "$(command -v nala)" ]; then
-        printf "Installing nala via apt\\n"
+        log_info "Installing nala via apt"
         wget -O ${HOME}/software_downloads/volian-archive-keyring_0.2.0_all.deb https://gitlab.com/-/project/39215670/uploads/d9473098bc12525687dc9aca43d50159/volian-archive-keyring_0.2.0_all.deb
         sudo -H dpkg --install ${HOME}/software_downloads/volian-archive-keyring_0.2.0_all.deb
         wget -O ${HOME}/software_downloads/volian-archive-nala_0.2.0_all.deb https://gitlab.com/-/project/39215670/uploads/d00e44faaf2cc8aad526ca520165a0af/volian-archive-nala_0.2.0_all.deb
@@ -161,8 +185,10 @@ EOF
 process_args() {
   local arg OPTARG
   while getopts ":ht:w" arg; do
+    # shellcheck disable=SC2317 # exit after usage() is intentional redundancy
     case ${arg} in
       t)
+        # shellcheck disable=SC2317 # exit after usage() is intentional redundancy
         case ${OPTARG} in
           setup_user) readonly SETUP_USER=1 ;;
           setup) readonly SETUP=1 ;;
@@ -179,222 +205,120 @@ process_args() {
 }
 
 setup_dotfile_symlinks() {
-  printf "Linking %s to their home\\n" "${DOTFILES}"
+  log_info "Linking ${DOTFILES} to their home"
 
   if [[ -n ${MACOS} ]]; then
-    rm -f ${HOME}/.gitconfig
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_mac ${HOME}/.gitconfig
+    safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_mac" "${HOME}/.gitconfig"
     if [[ -d ${HOME}/git-repos/gitlab ]]; then
-      rm -f ${HOME}/git-repos/gitlab/.gitconfig
-      ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_mac_gitlab ${HOME}/git-repos/gitlab/.gitconfig
-    fi
-    if [[ -L ${HOME}/git-repos/gitlab/.gitconfig ]]; then
-      printf "gitlab/.gitconfig is linked\\n"
+      safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_mac_gitlab" "${HOME}/git-repos/gitlab/.gitconfig"
     fi
   fi
   if [[ -n ${LINUX} ]]; then
-    rm -f ${HOME}/.gitconfig
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_linux ${HOME}/.gitconfig
+    safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_linux" "${HOME}/.gitconfig"
     if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
       if [[ -d ${HOME}/git-repos/gitlab ]]; then
-        rm -f ${HOME}/git-repos/gitlab/.gitconfig
-        ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_linux_gitlab ${HOME}/git-repos/gitlab/.gitconfig
-      fi
-      if [[ -L ${HOME}/git-repos/gitlab/.gitconfig ]]; then
-        printf "gitlab/.gitconfig is linked Linux\\n"
+        safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_linux_gitlab" "${HOME}/git-repos/gitlab/.gitconfig"
       fi
     fi
   fi
 
-  rm -f ${HOME}/.vimrc
-  ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.vimrc ${HOME}/.vimrc
-  if [[ -L ${HOME}/.vimrc ]]; then
-    printf ".vimrc is linked\\n"
-  fi
-
-  rm -f ${HOME}/.p10k.zsh
-  ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.p10k.zsh ${HOME}/.p10k.zsh
-  if [[ -L ${HOME}/.p10k.zsh ]]; then
-    printf ".p10k.zsh is linked\\n"
-  fi
-
-  rm -f ${HOME}/.tmux.conf
-  ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.tmux.conf ${HOME}/.tmux.conf
-  if [[ -L ${HOME}/.tmux.conf ]]; then
-    printf ".tmux.conf is linked\\n"
-  fi
-
-  if [[ -d ${HOME}/scripts ]]; then
-    rm -rf ${HOME}/scripts
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/scripts ${HOME}/scripts
-  elif [[ ! -L ${HOME}/scripts ]]; then
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/scripts ${HOME}/scripts
-  fi
-  if [[ -L ${HOME}/scripts ]]; then
-    printf "scripts is linked\\n"
-  fi
+  safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.vimrc" "${HOME}/.vimrc"
+  safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.p10k.zsh" "${HOME}/.p10k.zsh"
+  safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.tmux.conf" "${HOME}/.tmux.conf"
+  safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/scripts" "${HOME}/scripts"
 
   if [[ -n ${MACOS} ]] || [[ -n ${LINUX} ]]; then
-    printf "Creating %s/.config\\n" "${HOME}"
+    log_info "Creating ${HOME}/.config"
     mkdir -p ${HOME}/.config
-  fi
-  if [[ -d ${HOME}/.config ]]; then
-    printf "Created %s/.config\\n" "${HOME}"
+    log_info "Created ${HOME}/.config"
   fi
 
   if [[ -n ${MACOS} ]] || [[ -n ${LINUX} ]]; then
-    printf "Creating %s/.tf_creds\\n" "${HOME}"
+    log_info "Creating ${HOME}/.tf_creds"
     mkdir -p ${HOME}/.tf_creds
     if [[ -d ${HOME}/.tf_creds ]]; then
       chmod 700 ${HOME}/.tf_creds
-    fi
-    if [[ -d ${HOME}/.tf_creds ]]; then
-      printf "Created %s/.tf_creds\\n" "${HOME}"
+      log_info "Created ${HOME}/.tf_creds"
     fi
   fi
 
   if [[ -n ${MACOS} ]] || [[ -n ${LINUX} ]]; then
-    printf "powershell profile and custom oh-my-posh theme\\n"
+    log_info "powershell profile and custom oh-my-posh theme"
     mkdir -p ${HOME}/.config/powershell
-    rm -f ${HOME}/.config/powershell/profile.ps1
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/profile.ps1 ${HOME}/.config/powershell/profile.ps1
-    rm -f ${HOME}/.config/powershell/bruce.omp.json
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/bruce.omp.json ${HOME}/.config/powershell/bruce.omp.json
-    if [[ -L ${HOME}/.config/powershell/profile.ps1 ]]; then
-      printf "powershell profile is linked\\n"
-    fi
-    if [[ -L ${HOME}/.config/powershell/bruce.omp.json ]]; then
-      printf "bruce.omp.json is linked\\n"
-    fi
+    safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/profile.ps1" "${HOME}/.config/powershell/profile.ps1"
+    safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/bruce.omp.json" "${HOME}/.config/powershell/bruce.omp.json"
   fi
 
   if [[ -n ${MACOS} ]] || [[ -n ${LINUX} ]]; then
-    printf "starship profile\\n"
-    rm -f ${HOME}/.config/starship.toml
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/starship.toml ${HOME}/.config/starship.toml
-    if [[ -L ${HOME}/.config/starship.toml ]]; then
-      printf "starship.toml is linked\\n"
-    fi
+    safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/starship.toml" "${HOME}/.config/starship.toml"
   fi
 
-  printf "Installing Oh My ZSH...\\n"
+  log_info "Installing Oh My ZSH..."
   if [[ ! -d ${HOME}/.oh-my-zsh ]]; then
     bash -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
     if [[ -d ${HOME}/.oh-my-zsh ]]; then
-      printf "Installed Oh My ZSH\\n"
+      log_info "Installed Oh My ZSH"
     fi
   fi
 
-  printf "Installing p10k\\n"
+  log_info "Installing p10k"
   if [[ ! -d ${HOME}/.oh-my-zsh/custom/themes/powerlevel10k ]]; then
     git clone --depth=1 https://github.com/romkatv/powerlevel10k.git ${HOME}/.oh-my-zsh/custom/themes/powerlevel10k
     if [[ -d ${HOME}/.oh-my-zsh/custom/themes/powerlevel10k ]]; then
-      printf "Installed p10k\\n"
+      log_info "Installed p10k"
     fi
   fi
 
-  printf "linking .zshrc\\n"
-  rm -f ${HOME}/.zshrc
-  ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.zshrc ${HOME}/.zshrc
-  if [[ -L ${HOME}/.zshrc ]]; then
-    printf ".zshrc is linked\\n"
-  fi
+  safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.zshrc" "${HOME}/.zshrc"
+  safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.config/.zshrc.d" "${HOME}/.config/.zshrc.d"
 
-  printf "linking .zshrc.d\\n"
-  rm -f ${HOME}/.config/.zshrc.d
-  ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.config/.zshrc.d ${HOME}/.config/.zshrc.d
-  if [[ -L ${HOME}/.config/.zshrc.d ]]; then
-    printf ".zshrc.d is linked\\n"
-  fi
-
-  printf "Linking %s/.config/ccstatusline\\n" "${HOME}"
   mkdir -p ${HOME}/.config
-  rm -rf ${HOME}/.config/ccstatusline
-  ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.config/ccstatusline ${HOME}/.config/ccstatusline
-  if [[ -L ${HOME}/.config/ccstatusline ]]; then
-    printf ".config/ccstatusline is linked\\n"
-  fi
+  safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.config/ccstatusline" "${HOME}/.config/ccstatusline"
 
-  printf "linking .zprofile\\n"
-  rm -f ${HOME}/.zprofile
-  ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.zprofile ${HOME}/.zprofile
-  if [[ -L ${HOME}/.zprofile ]]; then
-    printf ".zprofile is linked\\n"
-  fi
+  safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.zprofile" "${HOME}/.zprofile"
+  safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/bruce.zsh-theme" "${HOME}/.oh-my-zsh/custom/themes/bruce.zsh-theme"
 
-  printf "Linking custom bruce.zsh-theme\\n"
-  rm -f ${HOME}/.oh-my-zsh/custom/themes/bruce.zsh-theme
-  ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/bruce.zsh-theme ${HOME}/.oh-my-zsh/custom/themes/bruce.zsh-theme
-  if [[ -L ${HOME}/.oh-my-zsh/custom/themes/bruce.zsh-theme ]]; then
-    printf "bruce.zsh-theme is linked\\n"
-  fi
-
-  printf "Creating %s/.tmux\\n" "${HOME}"
+  log_info "Creating ${HOME}/.tmux"
   mkdir -p ${HOME}/.tmux
   if [[ -d ${HOME}/.tmux ]]; then
-    printf "Created %s/.tmux\\n" "${HOME}"
+    log_info "Created ${HOME}/.tmux"
   fi
 
   if [[ ! -d ${HOME}/.tmux/plugins/tpm ]]; then
-    printf "Installing TPM\\n"
+    log_info "Installing TPM"
     git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
     if [[ -d ${HOME}/.tmux/plugins/tpm ]]; then
-      printf "Installed TPM\\n"
+      log_info "Installed TPM"
     fi
   fi
 
-  printf "Creating %s/.warp\\n" "${HOME}"
+  log_info "Creating ${HOME}/.warp"
   mkdir -p ${HOME}/.warp
   if [[ -d ${HOME}/.warp ]]; then
     chmod 700 ${HOME}/.warp
-    if [[ -d ${HOME}/.warp ]]; then
-      printf "Created %s/.warp\\n" "${HOME}"
-    fi
+    log_info "Created ${HOME}/.warp"
   fi
-  printf "Linking %s/.warp/themes\\n" "${HOME}"
-  rm -f ${HOME}/.warp/themes
-  ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.warp/themes ${HOME}/.warp/themes
-  if [[ -L ${HOME}/.warp/themes ]]; then
-    printf ".warp/themes is linked\\n"
-  fi
+  safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.warp/themes" "${HOME}/.warp/themes"
+  safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.warp/launch_configurations" "${HOME}/.warp/launch_configurations"
 
-  printf "Linking %s/.warp/launch_configurations\\n" "${HOME}"
-  rm -f ${HOME}/.warp/launch_configurations
-  ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.warp/launch_configurations ${HOME}/.warp/launch_configurations
-  if [[ -L ${HOME}/.warp/launch_configurations ]]; then
-    printf ".warp/launch_configurations is linked\\n"
-  fi
-
-  printf "Creating %s/.ssh\\n" "${HOME}"
+  log_info "Creating ${HOME}/.ssh"
   mkdir -p ${HOME}/.ssh
   if [[ -d ${HOME}/.ssh ]]; then
     chmod 700 ${HOME}/.ssh
-    if [[ -d ${HOME}/.ssh ]]; then
-      printf "Created %s/.ssh\\n" "${HOME}"
-    fi
+    log_info "Created ${HOME}/.ssh"
   fi
 
-  printf "Creating %s/.claude\\n" "${HOME}"
+  log_info "Creating ${HOME}/.claude"
   mkdir -p ${HOME}/.claude
   if [[ -d ${HOME}/.claude ]]; then
-    printf "Created %s/.claude\\n" "${HOME}"
+    log_info "Created ${HOME}/.claude"
   fi
-  for _claude_item in ${PERSONAL_GITREPOS}/${DOTFILES}/.claude/*; do
+  for _claude_item in "${PERSONAL_GITREPOS}/${DOTFILES}/.claude/"*; do
     _claude_target="${HOME}/.claude/$(basename ${_claude_item})"
-    printf "Linking %s\\n" "${_claude_target}"
-    rm -rf ${_claude_target}
-    ln -s ${_claude_item} ${_claude_target}
-    if [[ -L ${_claude_target} ]]; then
-      printf "%s is linked\\n" "${_claude_target}"
-    fi
+    safe_link "${_claude_item}" "${_claude_target}"
   done
 
-  printf "Linking %s/.ssh/config\\n" "${HOME}"
-  rm -f ${HOME}/.ssh/config
-  ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.ssh/config ${HOME}/.ssh/config
-  if [[ -L ${HOME}/.ssh/config ]]; then
-    printf ".ssh/config is linked\\n"
-  fi
+  safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.ssh/config" "${HOME}/.ssh/config"
 
   if [[ -n ${MACOS} ]]; then
     CURSOR_USER_DIR="${HOME}/Library/Application Support/Cursor/User"
@@ -423,72 +347,51 @@ setup_dotfile_symlinks() {
          [[ -f "${CURSOR_DOTFILES_USER_DIR}/keybindings.json" ]] && \
          [[ -d "${CURSOR_DOTFILES_USER_DIR}/snippets" ]]; then
 
-        printf "Cursor User directory is %s\\n" "${CURSOR_USER_DIR}"
-        printf "Creating %s\\n" "${CURSOR_USER_DIR}"
+        log_info "Cursor User directory is ${CURSOR_USER_DIR}"
+        log_info "Creating ${CURSOR_USER_DIR}"
         mkdir -p "${CURSOR_USER_DIR}"
 
-        printf "Linking Cursor settings\\n"
-        rm -f "${CURSOR_USER_DIR}/settings.json"
-        ln -s "${CURSOR_DOTFILES_USER_DIR}/settings.json" "${CURSOR_USER_DIR}/settings.json"
-        if [[ -L "${CURSOR_USER_DIR}/settings.json" ]]; then
-          printf "Cursor settings.json is linked\\n"
-        fi
-
-        rm -f "${CURSOR_USER_DIR}/keybindings.json"
-        ln -s "${CURSOR_DOTFILES_USER_DIR}/keybindings.json" "${CURSOR_USER_DIR}/keybindings.json"
-        if [[ -L "${CURSOR_USER_DIR}/keybindings.json" ]]; then
-          printf "Cursor keybindings.json is linked\\n"
-        fi
-
-        rm -rf "${CURSOR_USER_DIR}/snippets"
-        ln -s "${CURSOR_DOTFILES_USER_DIR}/snippets" "${CURSOR_USER_DIR}/snippets"
-        if [[ -L "${CURSOR_USER_DIR}/snippets" ]]; then
-          printf "Cursor snippets is linked\\n"
-        fi
+        log_info "Linking Cursor settings"
+        safe_link "${CURSOR_DOTFILES_USER_DIR}/settings.json" "${CURSOR_USER_DIR}/settings.json"
+        safe_link "${CURSOR_DOTFILES_USER_DIR}/keybindings.json" "${CURSOR_USER_DIR}/keybindings.json"
+        safe_link "${CURSOR_DOTFILES_USER_DIR}/snippets" "${CURSOR_USER_DIR}/snippets"
       else
-        printf "Skipping Cursor symlinks; Cursor app settings or dotfiles Cursor user files are missing\\n"
+        log_warn "Skipping Cursor symlinks; Cursor app settings or dotfiles Cursor user files are missing"
       fi
     else
-      printf "Skipping Cursor symlinks; Cursor is not installed\\n"
+      log_warn "Skipping Cursor symlinks; Cursor is not installed"
     fi
   fi
 
-  printf "Linking %s/.ssh/teleport.cfg\\n" "${HOME}"
-  rm -f ${HOME}/.ssh/teleport.cfg
-  ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.ssh/teleport.cfg ${HOME}/.ssh/teleport.cfg
-  if [[ -L ${HOME}/.ssh/teleport.cfg ]]; then
-    printf ".ssh/teleport.cfg is linked\\n"
-  fi
+  safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.ssh/teleport.cfg" "${HOME}/.ssh/teleport.cfg"
 
-  printf "Creating %s/.tsh\\n" "${HOME}"
+  log_info "Creating ${HOME}/.tsh"
   mkdir -p ${HOME}/.tsh
   if [[ -d ${HOME}/.tsh ]]; then
     chmod 700 ${HOME}/.tsh
-    if [[ -d ${HOME}/.tsh ]]; then
-      printf "Created %s/.tsh\\n" "${HOME}"
-    fi
+    log_info "Created ${HOME}/.tsh"
   fi
 }
 
 setup_credential_directories() {
-  printf "Creating %s/.aws\\n" "${HOME}"
+  log_info "Creating ${HOME}/.aws"
   mkdir -p ${HOME}/.aws
   if [[ -d ${HOME}/.aws ]]; then
     chmod 700 ${HOME}/.aws
-    printf "Created %s/.aws\\n" "${HOME}"
+    log_info "Created ${HOME}/.aws"
   fi
 
-  printf "Creating %s/.gcloud_creds\\n" "${HOME}"
+  log_info "Creating ${HOME}/.gcloud_creds"
   mkdir -p ${HOME}/.gcloud_creds
   if [[ -d ${HOME}/.gcloud_creds ]]; then
     chmod 700 ${HOME}/.gcloud_creds
-    printf "Created %s/.gcloud_creds\\n" "${HOME}"
+    log_info "Created ${HOME}/.gcloud_creds"
   fi
 
-  printf "Creating %s/.azure_creds\\n" "${HOME}"
+  log_info "Creating ${HOME}/.azure_creds"
   mkdir -p ${HOME}/.azure_creds
   if [[ -d ${HOME}/.azure_creds ]]; then
     chmod 700 ${HOME}/.azure_creds
-    printf "Created %s/.azure_creds\\n" "${HOME}"
+    log_info "Created ${HOME}/.azure_creds"
   fi
 }
