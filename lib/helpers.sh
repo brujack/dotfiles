@@ -185,8 +185,10 @@ EOF
 process_args() {
   local arg OPTARG
   while getopts ":ht:w" arg; do
+    # shellcheck disable=SC2317 # exit after usage() is intentional redundancy
     case ${arg} in
       t)
+        # shellcheck disable=SC2317 # exit after usage() is intentional redundancy
         case ${OPTARG} in
           setup_user) readonly SETUP_USER=1 ;;
           setup) readonly SETUP=1 ;;
@@ -311,7 +313,7 @@ setup_dotfile_symlinks() {
   if [[ -d ${HOME}/.claude ]]; then
     log_info "Created ${HOME}/.claude"
   fi
-  for _claude_item in ${PERSONAL_GITREPOS}/${DOTFILES}/.claude/*; do
+  for _claude_item in "${PERSONAL_GITREPOS}/${DOTFILES}/.claude/"*; do
     _claude_target="${HOME}/.claude/$(basename ${_claude_item})"
     safe_link "${_claude_item}" "${_claude_target}"
   done

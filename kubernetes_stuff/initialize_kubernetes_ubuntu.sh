@@ -17,6 +17,7 @@ while getopts ":hn:" arg; do
       ;;
     h | *) # Display help.
       usage
+      # shellcheck disable=SC2317 # exit after usage() is intentional redundancy
       exit 0
       ;;
   esac
@@ -33,6 +34,7 @@ sleep 120
 sudo -H chmod 644 /etc/kubernetes/admin.conf
 mkdir -p ${HOME}/.kube/${CLUSTER_NAME}
 sudo -H cp -i /etc/kubernetes/admin.conf ${HOME}/.kube/${CLUSTER_NAME}/config
+# shellcheck disable=SC2046
 sudo -H chown -R $(id -u):$(id -g) ${HOME}/.kube
 # change the name of the cluster to not be the default
 #sed -i '0,/name: kubernetes/{s/name: kubernetes/name: '${CLUSTER_NAME}'/}' ${HOME}/.kube/${CLUSTER_NAME}/config
@@ -110,4 +112,5 @@ sudo -H kubectl get svc -n kube-system | grep grafana
 sudo -H kubectl -n kube-system get service kubernetes-dashboard
 
 # This command will print a token that can be used to authenticate in the Kubernetes dashboard
+# shellcheck disable=SC2046
 sudo -H kubectl -n kube-system describe secret $(kubectl -n kube-system get secret | grep admin-user | awk '{print $1}') | grep "token:"

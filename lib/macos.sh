@@ -5,7 +5,7 @@ install_rosetta() {
   # Determine OS version
   # Save current IFS state
   OLDIFS=$IFS
-  IFS='.' read osvers_major osvers_minor osvers_dot_version <<< "$(sw_vers -productVersion)"
+  IFS='.' read -r osvers_major osvers_minor osvers_dot_version <<< "$(sw_vers -productVersion)"
 
   # Restore IFS to previous state
   IFS=$OLDIFS
@@ -144,7 +144,7 @@ install_git() {
         cd ${HOME}/software_downloads/git-${GIT_VER} || exit
         make configure
         ./configure --prefix=/usr
-        make -j $(nproc) all doc info
+        make -j "$(nproc)" all doc info
         sudo -H make install install-doc install-info
         if ! [[ -x "$(command -v git)" ]]; then
           log_error "Git is not installed Redhat"
@@ -214,9 +214,11 @@ install_zsh() {
         ./configure --prefix=/usr/local --bindir=/usr/local/bin --sysconfdir=/etc/zsh --enable-etcdir=/etc/zsh
         make
         sudo -H make install
+        # shellcheck disable=SC2143 # grep -Fxq has no output; checking if line absent
         if [[ ! $(grep -Fxq "/usr/local/bin/zsh" /etc/shells) ]]; then
           sudo -H sh -c 'echo /usr/local/bin/zsh >> /etc/shells'
         fi
+        # shellcheck disable=SC2143 # grep -Fxq has no output; checking if line absent
         if [[ ! $(grep -Fxq "/bin/zsh" /etc/shells) ]]; then
           sudo -H sh -c 'echo /bin/zsh >> /etc/shells'
         fi

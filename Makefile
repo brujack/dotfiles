@@ -1,4 +1,5 @@
 BATS := $(shell command -v bats 2>/dev/null)
+SHELLCHECK := $(shell command -v shellcheck 2>/dev/null)
 SHELL_FILES := $(shell find . -name "*.sh" -not -path "*/node_modules/*")
 
 .PHONY: test test-unit lint help
@@ -7,7 +8,7 @@ help:
 	@printf "Available targets:\n"
 	@printf "  make test       Run all BATS tests\n"
 	@printf "  make test-unit  Run unit tests only\n"
-	@printf "  make lint       Check bash/zsh syntax of all .sh files\n"
+	@printf "  make lint       Check bash/zsh syntax + ShellCheck all .sh files\n"
 	@printf "  make help       Show this help\n"
 
 lint:
@@ -16,6 +17,11 @@ lint:
 	  bash -n "$$f" && printf "bash  OK  %s\n" "$$f" || { printf "bash FAIL %s\n" "$$f"; failed=1; }; \
 	  zsh  -n "$$f" && printf "zsh   OK  %s\n" "$$f" || { printf "zsh  FAIL %s\n" "$$f"; failed=1; }; \
 	done; \
+	if [ -n "$(SHELLCHECK)" ]; then \
+	  shellcheck $(SHELL_FILES) && printf "shellcheck OK\n" || { printf "shellcheck FAIL\n"; failed=1; }; \
+	else \
+	  printf "shellcheck not found, skipping (install: brew install shellcheck)\n"; \
+	fi; \
 	exit $$failed
 
 test: lint

@@ -120,6 +120,10 @@ _make_fake_dotfiles() {
 
 @test "setup_dotfile_symlinks links Cursor User settings on macOS" {
   _make_fake_dotfiles
+  # Create fake Cursor app settings dir (guards CURSOR_APP_SETTINGS_OK on macOS)
+  mkdir -p "${FAKE_HOME}/Library/Application Support/Cursor/settings"
+  touch "${FAKE_HOME}/Library/Application Support/Cursor/settings/settings.json"
+  touch "${FAKE_HOME}/Library/Application Support/Cursor/settings/keybindings.json"
   export MACOS=1
   unset LINUX
   run setup_dotfile_symlinks
@@ -146,7 +150,7 @@ _make_fake_dotfiles() {
   run setup_credential_directories
   [ "$status" -eq 0 ]
   [[ -d "${FAKE_HOME}/.aws" ]]
-  perms=$(stat -f "%OLp" "${FAKE_HOME}/.aws" 2>/dev/null || stat -c "%a" "${FAKE_HOME}/.aws")
+  perms=$(stat -c "%a" "${FAKE_HOME}/.aws" 2>/dev/null || stat -f "%OLp" "${FAKE_HOME}/.aws")
   [ "$perms" = "700" ]
 }
 
@@ -154,7 +158,7 @@ _make_fake_dotfiles() {
   run setup_credential_directories
   [ "$status" -eq 0 ]
   [[ -d "${FAKE_HOME}/.gcloud_creds" ]]
-  perms=$(stat -f "%OLp" "${FAKE_HOME}/.gcloud_creds" 2>/dev/null || stat -c "%a" "${FAKE_HOME}/.gcloud_creds")
+  perms=$(stat -c "%a" "${FAKE_HOME}/.gcloud_creds" 2>/dev/null || stat -f "%OLp" "${FAKE_HOME}/.gcloud_creds")
   [ "$perms" = "700" ]
 }
 
@@ -162,7 +166,7 @@ _make_fake_dotfiles() {
   run setup_credential_directories
   [ "$status" -eq 0 ]
   [[ -d "${FAKE_HOME}/.azure_creds" ]]
-  perms=$(stat -f "%OLp" "${FAKE_HOME}/.azure_creds" 2>/dev/null || stat -c "%a" "${FAKE_HOME}/.azure_creds")
+  perms=$(stat -c "%a" "${FAKE_HOME}/.azure_creds" 2>/dev/null || stat -f "%OLp" "${FAKE_HOME}/.azure_creds")
   [ "$perms" = "700" ]
 }
 
