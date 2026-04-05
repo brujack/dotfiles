@@ -15,3 +15,13 @@ cask "sourcetree"
 cask "steam"
 cask "vagrant"
 cask "virtualbox"
+mas "iMovie", id: 408981434
+mas "Keynote", id: 409183694
+mas "Numbers", id: 409203825
+mas "Pages", id: 409201541
+mas "Pixelmator Pro", id: 1289583905
+mas "Read CHM", id: 594432954
+mas "SQLPro for Postgres", id: 1025345625
+mas "Telegram", id: 747648890
+mas "Valentina Studio", id: 604825918
+mas "Xcode", id: 497799835
