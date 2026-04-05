@@ -60,8 +60,7 @@ brew_update() {
 
   log_info "Upgrading installed casks..."
   if ! brew upgrade --cask --greedy; then
-    log_error "Failed to upgrade casks. Aborting."
-    return 1
+    log_warn "Some casks failed to upgrade; continuing."
   fi
 
   log_info "Cleaning Homebrew up..."
