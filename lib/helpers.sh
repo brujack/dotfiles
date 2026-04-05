@@ -335,9 +335,13 @@ setup_dotfile_symlinks() {
     if app_dir_exists "/Applications/Cursor.app" || command -v cursor &>/dev/null; then
       CURSOR_APP_SETTINGS_OK=1
       if [[ -n ${MACOS:-} ]]; then
+        # v2: settings live in a separate Cursor/settings/ subdir
+        # v3: settings live directly in Cursor/User/; check User dir exists
         if [[ ! -f "${CURSOR_APP_SETTINGS_DIR}/settings.json" ]] || \
            [[ ! -f "${CURSOR_APP_SETTINGS_DIR}/keybindings.json" ]]; then
-          CURSOR_APP_SETTINGS_OK=0
+          if [[ ! -d "${CURSOR_USER_DIR}" ]]; then
+            CURSOR_APP_SETTINGS_OK=0
+          fi
         fi
       fi
 
