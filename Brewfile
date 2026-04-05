@@ -122,6 +122,7 @@ cask "iterm2"
 cask "macdown"
 cask "malwarebytes"
 cask "powershell"
+cask "slack"
 cask "spotify"
 cask "teamviewer"
 cask "tidal"
@@ -141,7 +142,6 @@ mas "Markoff", id: 1084713122
 mas "Microsoft Remote Desktop", id: 715768417
 mas "Remote Desktop", id: 409907375
 mas "Simplenote", id: 692867256
-mas "Slack", id: 803453959
 mas "Speedtest", id: 1153157709
 mas "Sync Folders Pro", id: 522706442
 mas "The Unarchiver", id: 425424353
