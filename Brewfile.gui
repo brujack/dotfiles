@@ -9,3 +9,4 @@ cask "logi-options-plus"
 cask "microsoft-office"
 cask "obs"
 cask "sonos"
+mas "Evernote", id: 406056744
