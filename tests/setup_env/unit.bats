@@ -140,3 +140,56 @@ teardown() {
   run grep -q 'BASH_VERSINFO' "${BATS_TEST_DIRNAME}/../../setup_env.sh"
   [ "$status" -eq 0 ]
 }
+
+# ── lib/ source tests ─────────────────────────────────────────────────────────
+
+@test "lib/constants.sh sources without error" {
+  run bash -c "source '${REPO_ROOT}/lib/constants.sh'"
+  [ "$status" -eq 0 ]
+}
+
+@test "lib/helpers.sh sources without error" {
+  run bash -c "source '${REPO_ROOT}/lib/constants.sh'; source '${REPO_ROOT}/lib/helpers.sh'"
+  [ "$status" -eq 0 ]
+}
+
+@test "lib/detect_env.sh sources without error" {
+  run bash -c "source '${REPO_ROOT}/lib/constants.sh'; source '${REPO_ROOT}/lib/helpers.sh'; source '${REPO_ROOT}/lib/detect_env.sh'"
+  [ "$status" -eq 0 ]
+}
+
+@test "lib/macos.sh sources without error" {
+  run bash -c "source '${REPO_ROOT}/lib/constants.sh'; source '${REPO_ROOT}/lib/helpers.sh'; source '${REPO_ROOT}/lib/macos.sh'"
+  [ "$status" -eq 0 ]
+}
+
+@test "lib/linux.sh sources without error" {
+  run bash -c "source '${REPO_ROOT}/lib/constants.sh'; source '${REPO_ROOT}/lib/helpers.sh'; source '${REPO_ROOT}/lib/linux.sh'"
+  [ "$status" -eq 0 ]
+}
+
+@test "lib/developer.sh sources without error" {
+  run bash -c "source '${REPO_ROOT}/lib/constants.sh'; source '${REPO_ROOT}/lib/helpers.sh'; source '${REPO_ROOT}/lib/developer.sh'"
+  [ "$status" -eq 0 ]
+}
+
+# ── logging helpers ───────────────────────────────────────────────────────────
+@test "log_info output contains [INFO] prefix" {
+  run bash -c "source '${REPO_ROOT}/lib/helpers.sh'; log_info 'test message'"
+  [[ "${output}" == *"[INFO]"* ]]
+}
+
+@test "log_info output contains the message" {
+  run bash -c "source '${REPO_ROOT}/lib/helpers.sh'; log_info 'hello world'"
+  [[ "${output}" == *"hello world"* ]]
+}
+
+@test "log_warn output contains [WARN] prefix" {
+  run bash -c "source '${REPO_ROOT}/lib/helpers.sh'; log_warn 'test warning' 2>&1"
+  [[ "${output}" == *"[WARN]"* ]]
+}
+
+@test "log_error output contains [ERROR] prefix" {
+  run bash -c "source '${REPO_ROOT}/lib/helpers.sh'; log_error 'test error' 2>&1"
+  [[ "${output}" == *"[ERROR]"* ]]
+}

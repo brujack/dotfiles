@@ -1,0 +1,20 @@
+# .shellcheckrc — project-wide ShellCheck configuration
+#
+# SC2086: Double quote to prevent globbing and word splitting
+#   Intentional style: this codebase uses unquoted vars throughout.
+#   Variables that contain paths/names are guaranteed to have no spaces.
+disable=SC2086
+#
+# SC2034: Variable appears unused
+#   Many vars in lib/constants.sh and config/profiles.sh are used by
+#   callers via source; ShellCheck can't detect cross-file usage.
+disable=SC2034
+#
+# SC1091: Not following: source path not found
+#   Expected: lib/*.sh files source each other at runtime using
+#   $(dirname "${BASH_SOURCE[0]}") paths that don't exist at lint time.
+disable=SC1091
+#
+# SC2181: Check exit code directly with 'if mycmd;'
+#   Intentional: several multi-line commands store $? for readability.
+disable=SC2181

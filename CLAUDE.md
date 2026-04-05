@@ -8,8 +8,21 @@ Personal development environment bootstrapping system for macOS and Linux (Ubunt
 
 ```
 dotfiles/
-├── setup_env.sh              # Main entry point (2388 lines) — run with -t <type>
+├── setup_env.sh              # Main entry point — sources lib/, dispatches workflows
 ├── Brewfile                  # Homebrew bundle manifest (100+ formulae/casks)
+├── config/
+│   └── profiles.sh           # hostname → profile map; edit here to add a new machine
+├── lib/
+│   ├── constants.sh          # Version pins, download URLs, directory vars
+│   ├── helpers.sh            # Logging (log_info/warn/error), safe_link, install guards, brew helpers
+│   ├── detect_env.sh         # OS/version detection + profile/capability resolution
+│   ├── macos.sh              # macOS-specific install functions
+│   ├── linux.sh              # Linux-specific install functions
+│   └── developer.sh          # Cross-platform dev tooling (Ruby, Python, Ansible, etc.)
+├── scripts/
+│   ├── bootstrap_mac.sh      # One-time macOS prerequisite installer (Homebrew + bash 5)
+│   ├── .osx.sh               # macOS system defaults (run during setup)
+│   └── ...                   # utility scripts
 ├── powershell/
 │   ├── setup_windows.ps1     # Windows/PowerShell bootstrap
 │   ├── Makefile              # lint + test targets for PowerShell
@@ -34,16 +47,21 @@ dotfiles/
 │       ├── 5_general.zsh     # General settings
 │       ├── 6_path.zsh        # PATH configuration
 │       └── 7_final.zsh       # Final setup, completions
-├── scripts/
-│   ├── .osx.sh               # macOS system defaults (run during setup)
-│   ├── count_lines.sh        # Count lines across files in a directory
-│   ├── count_lines_git.sh    # Count lines across git-tracked files
-│   ├── html2ascii.sh         # Strip HTML tags, output one token per line
-│   ├── kill_zombie.sh        # Kill zombie (defunct) processes
-│   ├── mkill.sh              # Kill processes by name pattern
-│   ├── restart_fah.sh        # Restart Folding@Home client
-│   ├── synch_git-repos.sh    # Rsync git-repos to remote hosts (studio only)
-│   └── tmux-workstation.sh   # Multi-session tmux layout
+├── tests/
+│   ├── setup_env/
+│   │   ├── unit.bats
+│   │   ├── profiles.bats     # Profile + capability resolution tests
+│   │   ├── install_guards.bats
+│   │   ├── install_functions.bats
+│   │   └── extracted_functions.bats
+│   ├── zshrc.d/
+│   │   └── unit.bats
+│   ├── mocks/                # PATH-injected mock executables
+│   └── helpers/
+│       └── common.bash
+├── .github/
+│   └── workflows/
+│       └── ci.yml            # lint + test + auto-merge on non-master branches
 ├── kubernetes_stuff/         # Kubernetes installation/init scripts
 ├── .ssh/                     # SSH config
 └── ubuntu_*_packages.txt     # Package lists per Ubuntu version
@@ -127,7 +145,7 @@ quiet_which <command>
 
 ### Version Pinning
 
-All tool versions are defined as constants at the top of `setup_env.sh`:
+All tool versions are defined as constants in `lib/constants.sh`:
 
 ```bash
 GO_VER="1.26"
@@ -136,7 +154,7 @@ RUBY_VER="4.0.2"
 ```
 
 Update these constants when bumping versions — don't hardcode versions elsewhere.
-When a constant is updated in `setup_env.sh`, update all other references to that constant across the repo.
+When a constant is updated, update all other references to that constant across the repo.
 
 ## Testing
 
@@ -146,8 +164,28 @@ Uses **BATS** (Bash Automated Testing System), installed natively:
 - RHEL/CentOS/Fedora: direct GitHub release install (via `install_bats()`)
 
 **Run tests:** `make test` (runs lint then all BATS tests)
-**Run unit tests only:** `make test-unit`
-**Run lint only:** `make lint`
+**Run unit tests only:** `make test-unit` (runs `unit.bats`, `profiles.bats`, and `zshrc.d/unit.bats`)
+**Run lint only:** `make lint` (bash -n + zsh -n + shellcheck on all .sh files)
+
+### ShellCheck
+
+`.shellcheckrc` at the repo root suppresses pervasive intentional patterns:
+- `SC2086`: unquoted variables — intentional style throughout
+- `SC2034`: unused variables — many used externally via source
+- `SC1091`: not following source — expected for sourced lib architecture
+- `SC2181`: checking `$?` directly — intentional pattern
+
+Inline disables (`# shellcheck disable=SCxxxx # reason`) are used for remaining site-specific suppressions.
+
+### CI / GitHub Actions
+
+`.github/workflows/ci.yml` runs on every push to non-master branches and PRs to master:
+- `test` job: installs bats + shellcheck, runs `make test`
+- `auto-merge` job: auto-merges passing PRs (depends on `test`)
+
+CI requirements:
+- All jobs run on `ubuntu-latest` with `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true`
+- Uses `actions/checkout@v5`
 
 ### Testing Rules
 
@@ -239,10 +277,44 @@ Available mock env vars:
 
 ## Key Conventions
 
-- Machine roles are detected by **hostname patterns** (`LAPTOP`, `WORKSTATION`, `STUDIO`, etc.) — use these conditionals for machine-specific config
+- Machine roles are now driven by the **profile/capability model** in `config/profiles.sh` — prefer `HAS_*` vars over raw hostname patterns for new code
+- Legacy hostname vars (`LAPTOP`, `STUDIO`, `WORKSTATION`, etc.) are preserved as readonly aliases for backwards compatibility
 - Ubuntu version detection uses `lsb_release -rs` → `FOCAL`, `JAMMY`, `NOBLE` vars
 - Credential directories (`.aws`, `.tf_creds`, `.tsh`) are created with `chmod 700`
 - Git repos are cloned to `~/git-repos/personal/` and `~/git-repos/work/`
 - Python environments managed via **pyenv** + **pyenv-virtualenv**; the `ansible` venv is the primary one
 - Application installs are kept in alphabetical order
 - For shell syntax-only fixes in `setup_env.sh`, validate with both `bash -n setup_env.sh` and `zsh -n setup_env.sh` before commit
+
+## Profile Model
+
+After `detect_env()` runs, the following vars are set:
+
+| Var | Values |
+|---|---|
+| `PROFILE` | String: `personal_laptop`, `mac_workstation`, `mac_mini`, `linux_workstation`, `server`, or `unknown` |
+| `HAS_GUI` | Set for: personal_laptop, mac_workstation, mac_mini, linux_workstation |
+| `HAS_DEVTOOLS` | Set for: personal_laptop, mac_workstation, linux_workstation, server |
+| `HAS_AWS` | Set for: personal_laptop, mac_workstation, linux_workstation, server |
+| `HAS_K8S` | Set for: personal_laptop, mac_workstation, linux_workstation |
+| `HAS_DOCKER` | Set for: personal_laptop, mac_workstation, linux_workstation |
+| `HAS_RUST` | Set for: personal_laptop, mac_workstation, linux_workstation |
+| `HAS_PRINTING` | Set for: personal_laptop, mac_workstation, mac_mini |
+
+## Adding a New Machine
+
+1. Edit `config/profiles.sh` — add the hostname to `PROFILE_MAP`:
+
+```bash
+declare -A PROFILE_MAP=(
+  [laptop]="personal_laptop"
+  [my-new-host]="mac_workstation"   # ← new line
+  ...
+)
+```
+
+2. If the machine needs a new profile, add it to both `PROFILE_MAP` and `PROFILE_CAPS` in `config/profiles.sh`.
+
+3. Push a feature branch — CI validates → auto-merges to master.
+
+No other files need changing.
