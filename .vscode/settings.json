@@ -1,4 +1,5 @@
 {
   "powershell.codeFormatting.addWhitespaceAroundPipe": true,
-  "snyk.advanced.organization": "67bf04f4-75a6-467c-abfb-2a76e841189f"
+  "snyk.advanced.organization": "67bf04f4-75a6-467c-abfb-2a76e841189f",
+  "snyk.advanced.autoSelectOrganization": true
 }
