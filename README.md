@@ -94,8 +94,11 @@ Machines are mapped to profiles in `config/profiles.sh`:
 | `personal_laptop` | laptop | GUI, devtools, AWS, k8s, Docker, Rust, printing |
 | `mac_workstation` | studio, reception | GUI, devtools, AWS, k8s, Docker, Rust, printing |
 | `mac_mini` | office, home-1 | GUI, printing |
-| `linux_workstation` | workstation, cruncher | GUI, devtools, AWS, k8s, Docker, Rust |
+| `linux_workstation` | workstation | GUI, devtools, AWS, k8s, Docker, Rust, snap |
+| `wsl2_workstation` | cruncher | GUI, devtools, AWS, k8s, Docker, Rust |
 | `server` | (future) | devtools, AWS |
+
+**linux_workstation vs wsl2_workstation:** `linux_workstation` (hostname: `workstation`) is a desktop Ubuntu machine with full snap support. `wsl2_workstation` (hostname: `cruncher`) is WSL2 Ubuntu where snap is unavailable — snap-gated installs (Albert, Microsoft Edge, ollama, snap classic packages) are skipped, and Helm is installed via apt instead of snap.
 
 ### Adding a New Machine
 
