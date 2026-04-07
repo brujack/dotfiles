@@ -106,3 +106,43 @@ brew "zlib"
 brew "zoxide"
 brew "zsh"
 brew "zsh-completions"
+cask "1password"
+cask "adobe-acrobat-reader"
+cask "alfred"
+cask "appcleaner"
+cask "beyond-compare"
+cask "daisydisk"
+cask "expressvpn"
+cask "firefox"
+cask "flycut"
+cask "github"
+cask "google-chrome"
+cask "istat-menus"
+cask "iterm2"
+cask "macdown"
+cask "malwarebytes"
+cask "powershell"
+cask "slack"
+cask "spotify"
+cask "teamviewer"
+cask "tidal"
+cask "visual-studio-code"
+cask "vlc"
+cask "warp"
+cask "zed"
+cask "zoom"
+mas "Better Rename 9", id: 414209656
+mas "Blackmagic Disk Speed Test", id: 425264550
+mas "Brother iPrint&Scan", id: 1193539993
+mas "Flycut", id: 442160987
+mas "iNet Network Scanner", id: 403304796
+mas "Mactracker", id: 430255202
+mas "Magnet", id: 441258766
+mas "Markoff", id: 1084713122
+mas "Microsoft Remote Desktop", id: 715768417
+mas "Remote Desktop", id: 409907375
+mas "Simplenote", id: 692867256
+mas "Speedtest", id: 1153157709
+mas "Sync Folders Pro", id: 522706442
+mas "The Unarchiver", id: 425424353
+mas "Transmit", id: 403388562

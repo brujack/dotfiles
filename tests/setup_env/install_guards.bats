@@ -292,3 +292,54 @@ teardown() {
   [ "$status" -eq 0 ]
   [[ "${output}" == *"Linked"* ]]
 }
+
+# ── install_macos_casks ───────────────────────────────────────────────────────
+
+@test "install_macos_casks calls brew bundle with main Brewfile" {
+  export BREWFILE_LOC="${BATS_TEST_TMPDIR}/brew"
+  export PERSONAL_GITREPOS="${BATS_TEST_TMPDIR}/repos"
+  export DOTFILES="dotfiles"
+  unset HAS_GUI HAS_DEVTOOLS
+  run install_macos_casks
+  grep -q "brew bundle" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_macos_casks calls brew bundle with Brewfile.gui when HAS_GUI is set" {
+  export BREWFILE_LOC="${BATS_TEST_TMPDIR}/brew"
+  export PERSONAL_GITREPOS="${BATS_TEST_TMPDIR}/repos"
+  export DOTFILES="dotfiles"
+  export HAS_GUI=1
+  unset HAS_DEVTOOLS
+  run install_macos_casks
+  grep -q "Brewfile\.gui" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_macos_casks does not call brew bundle with Brewfile.gui when HAS_GUI is unset" {
+  export BREWFILE_LOC="${BATS_TEST_TMPDIR}/brew"
+  export PERSONAL_GITREPOS="${BATS_TEST_TMPDIR}/repos"
+  export DOTFILES="dotfiles"
+  unset HAS_GUI HAS_DEVTOOLS
+  run install_macos_casks
+  grep -q "brew bundle" "${MOCK_CALLS_FILE}"
+  ! grep -q "Brewfile\.gui" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_macos_casks calls brew bundle with Brewfile.devtools when HAS_DEVTOOLS is set" {
+  export BREWFILE_LOC="${BATS_TEST_TMPDIR}/brew"
+  export PERSONAL_GITREPOS="${BATS_TEST_TMPDIR}/repos"
+  export DOTFILES="dotfiles"
+  unset HAS_GUI
+  export HAS_DEVTOOLS=1
+  run install_macos_casks
+  grep -q "Brewfile\.devtools" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_macos_casks does not call brew bundle with Brewfile.devtools when HAS_DEVTOOLS is unset" {
+  export BREWFILE_LOC="${BATS_TEST_TMPDIR}/brew"
+  export PERSONAL_GITREPOS="${BATS_TEST_TMPDIR}/repos"
+  export DOTFILES="dotfiles"
+  unset HAS_GUI HAS_DEVTOOLS
+  run install_macos_casks
+  grep -q "brew bundle" "${MOCK_CALLS_FILE}"
+  ! grep -q "Brewfile\.devtools" "${MOCK_CALLS_FILE}"
+}

@@ -263,3 +263,9 @@ setup_zsh_as_default_shell() {
     fi
   fi
 }
+
+install_macos_casks() {
+  brew bundle --file "${BREWFILE_LOC}/Brewfile"
+  [[ -n ${HAS_GUI} ]]      && brew bundle --file "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.gui"
+  [[ -n ${HAS_DEVTOOLS} ]] && brew bundle --file "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.devtools"
+}

@@ -118,12 +118,25 @@ _make_fake_dotfiles() {
   [[ -L "${FAKE_HOME}/.config/.zshrc.d" ]]
 }
 
-@test "setup_dotfile_symlinks links Cursor User settings on macOS" {
+@test "setup_dotfile_symlinks links Cursor User settings on macOS (v2 settings dir)" {
   _make_fake_dotfiles
-  # Create fake Cursor app settings dir (guards CURSOR_APP_SETTINGS_OK on macOS)
+  # Cursor v2: settings live in Cursor/settings/ subdir
   mkdir -p "${FAKE_HOME}/Library/Application Support/Cursor/settings"
   touch "${FAKE_HOME}/Library/Application Support/Cursor/settings/settings.json"
   touch "${FAKE_HOME}/Library/Application Support/Cursor/settings/keybindings.json"
+  export MACOS=1
+  unset LINUX
+  run setup_dotfile_symlinks
+  [ "$status" -eq 0 ]
+  [[ -L "${FAKE_HOME}/Library/Application Support/Cursor/User/settings.json" ]]
+  [[ -L "${FAKE_HOME}/Library/Application Support/Cursor/User/keybindings.json" ]]
+  [[ -L "${FAKE_HOME}/Library/Application Support/Cursor/User/snippets" ]]
+}
+
+@test "setup_dotfile_symlinks links Cursor User settings on macOS (v3 User dir)" {
+  _make_fake_dotfiles
+  # Cursor v3: no settings/ subdir; User dir exists directly
+  mkdir -p "${FAKE_HOME}/Library/Application Support/Cursor/User"
   export MACOS=1
   unset LINUX
   run setup_dotfile_symlinks

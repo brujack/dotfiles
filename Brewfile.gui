@@ -1,0 +1,12 @@
+# Brewfile.gui — installed on HAS_GUI machines (all desktop Macs)
+cask "adobe-creative-cloud"
+cask "balenaetcher"
+cask "bambu-studio"
+cask "chatgpt"
+cask "claude"
+cask "discord"
+cask "logi-options-plus"
+cask "microsoft-office"
+cask "obs"
+cask "sonos"
+mas "Evernote", id: 406056744
