@@ -1002,17 +1002,15 @@ EOM
     fi
   fi
 
-  if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]] || [[ -n ${RATNA} ]]; then
+  if [[ -n ${HAS_AWS} ]] && [[ -n ${MACOS} ]]; then
     mkdir -p ${HOME}/software_downloads/awscli
-    if [[ -n ${MACOS} ]]; then
-      printf "Installing aws-cli on MacOS\\n"
-      if [[ ! -f ${HOME}/software_downloads/awscli/AWSCLIV2.pkg ]]; then
-        wget -O ${HOME}/software_downloads/awscli/AWSCLIV2.pkg "https://awscli.amazonaws.com/AWSCLIV2.pkg"
-        sudo installer -pkg ${HOME}/software_downloads/awscli/AWSCLIV2.pkg -target /
-        rm -f ${HOME}/software_downloads/awscli/AWSCLIV2.pkg
-        if [[ -x $(command -v aws) ]]; then
-          printf "aws-cli is installed MacOS\\n"
-        fi
+    printf "Installing aws-cli on MacOS\\n"
+    if [[ ! -f ${HOME}/software_downloads/awscli/AWSCLIV2.pkg ]]; then
+      wget -O ${HOME}/software_downloads/awscli/AWSCLIV2.pkg "https://awscli.amazonaws.com/AWSCLIV2.pkg"
+      sudo installer -pkg ${HOME}/software_downloads/awscli/AWSCLIV2.pkg -target /
+      rm -f ${HOME}/software_downloads/awscli/AWSCLIV2.pkg
+      if [[ -x $(command -v aws) ]]; then
+        printf "aws-cli is installed MacOS\\n"
       fi
     fi
   fi
