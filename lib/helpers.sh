@@ -214,7 +214,7 @@ setup_dotfile_symlinks() {
   fi
   if [[ -n ${LINUX} ]]; then
     safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_linux" "${HOME}/.gitconfig"
-    if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
+    if [[ -n ${HAS_DEVTOOLS} ]]; then
       if [[ -d ${HOME}/git-repos/gitlab ]]; then
         safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.gitconfig_linux_gitlab" "${HOME}/git-repos/gitlab/.gitconfig"
       fi
