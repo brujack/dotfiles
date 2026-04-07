@@ -41,14 +41,9 @@ detect_env() {
   [[ "${hn}" == "reception" ]]   && readonly RECEPTION=1
   [[ "${hn}" == "office" ]]      && readonly OFFICE=1
   [[ "${hn}" == "home-1" ]]      && readonly HOMES=1
-  [[ "${hn}" == "workstation" ]] && readonly WORKSTATION=1
-  [[ "${hn}" == "cruncher" ]]    && readonly CRUNCHER=1
-
   # setup variables based off of environment
   if [[ -n ${MACOS} ]]; then
-    if [[ -n ${RATNA} ]]; then
-      CHRUBY_LOC="/usr/local/opt/chruby/share"
-    elif [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]]; then
+    if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]]; then
       CHRUBY_LOC="/opt/homebrew/opt/chruby/share"
     fi
   elif [[ -n ${LINUX} ]]; then

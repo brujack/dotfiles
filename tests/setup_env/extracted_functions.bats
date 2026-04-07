@@ -242,8 +242,8 @@ _make_fake_dotfiles() {
 
 @test "update_aws_cli on macOS calls curl and installer" {
   export MACOS=1
-  export LAPTOP=1
-  unset LINUX WORKSTATION CRUNCHER
+  export HAS_AWS=1
+  unset LINUX
   mkdir -p "${FAKE_HOME}/software_downloads/awscli"
   mkdir -p "${FAKE_DOTFILES_SRC}"
   run update_aws_cli
@@ -254,8 +254,8 @@ _make_fake_dotfiles() {
 
 @test "update_aws_cli on Linux calls curl and install script" {
   export LINUX=1
-  export WORKSTATION=1
-  unset MACOS LAPTOP STUDIO RECEPTION OFFICE HOMES RATNA CRUNCHER
+  export HAS_AWS=1
+  unset MACOS
   mkdir -p "${FAKE_DOTFILES_SRC}"
   run update_aws_cli
   [ "$status" -eq 0 ]
@@ -267,7 +267,7 @@ _make_fake_dotfiles() {
 
 @test "update_rust does nothing when not Ubuntu Workstation" {
   export MACOS=1
-  unset UBUNTU WORKSTATION CRUNCHER
+  unset UBUNTU HAS_RUST
   run update_rust
   [ "$status" -eq 0 ]
   run grep -q "rustup" "${MOCK_CALLS_FILE}"
@@ -276,8 +276,8 @@ _make_fake_dotfiles() {
 
 @test "update_rust calls system rustup when cargo rustup is absent" {
   export UBUNTU=1
-  export WORKSTATION=1
-  unset MACOS CRUNCHER
+  export HAS_RUST=1
+  unset MACOS
   # .cargo/bin/rustup does not exist in FAKE_HOME; rustup mock is in PATH
   run update_rust
   [ "$status" -eq 0 ]
@@ -286,8 +286,8 @@ _make_fake_dotfiles() {
 
 @test "update_rust prints skip message when rustup is not found" {
   export UBUNTU=1
-  export WORKSTATION=1
-  unset MACOS CRUNCHER
+  export HAS_RUST=1
+  unset MACOS
   # Build a PATH that excludes the mocks directory and any directory containing rustup,
   # so both the mock rustup and any real rustup are invisible to command -v.
   local clean_path
@@ -300,8 +300,8 @@ _make_fake_dotfiles() {
     export PERSONAL_GITREPOS='${FAKE_PERSONAL_GITREPOS}'
     export DOTFILES='dotfiles'
     export UBUNTU=1
-    export WORKSTATION=1
-    unset MACOS CRUNCHER
+    export HAS_RUST=1
+    unset MACOS
     source '${REPO_ROOT}/setup_env.sh'
     update_rust
   "
