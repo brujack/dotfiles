@@ -278,7 +278,7 @@ Available mock env vars:
 ## Key Conventions
 
 - Machine roles are now driven by the **profile/capability model** in `config/profiles.sh` — prefer `HAS_*` vars over raw hostname patterns for new code
-- Legacy hostname vars (`LAPTOP`, `STUDIO`, `WORKSTATION`, etc.) are preserved as readonly aliases for backwards compatibility
+- Legacy hostname vars (`LAPTOP`, `STUDIO`, `RECEPTION`, `OFFICE`, `HOMES`) are preserved as readonly aliases in `detect_env.sh` — `WORKSTATION` and `CRUNCHER` have been removed; use `HAS_*` vars instead
 - Ubuntu version detection uses `lsb_release -rs` → `FOCAL`, `JAMMY`, `NOBLE` vars
 - Credential directories (`.aws`, `.tf_creds`, `.tsh`) are created with `chmod 700`
 - Git repos are cloned to `~/git-repos/personal/` and `~/git-repos/work/`
