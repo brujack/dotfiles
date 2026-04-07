@@ -1222,7 +1222,7 @@ if [[ -n ${DEVELOPER} ]] || [[ -n ${ANSIBLE} ]]; then
   fi
 
   if ! [[ $(readlink "${HOME}/.pyenv/versions/ansible") == "${HOME}/.pyenv/versions/${PYTHON_VER}/envs/ansible" ]]; then
-    if [[ -n ${STUDIO} ]] || [[ -n ${LAPTOP} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]] || [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]] || [[ -n ${RATNA} ]]; then
+    if [[ -n ${HAS_DEVTOOLS} ]]; then
       export PYENV_ROOT="$HOME/.pyenv"
       export PYENV_VIRTUALENV_DISABLE_PROMPT=1
       if quiet_which pyenv; then
@@ -1279,7 +1279,7 @@ if [[ -n ${UPDATE} ]]; then
   fi
   update_system_packages
   printf "Updating pip3 packages\n"
-  if [[ -n ${STUDIO-} || -n ${LAPTOP-} || -n ${RECEPTION-} || -n ${OFFICE-} || -n ${HOMES-} || -n ${WORKSTATION-} || -n ${CRUNCHER-} || -n ${RATNA-} ]]; then
+  if [[ -n ${HAS_DEVTOOLS} ]]; then
     export PYENV_ROOT="$HOME/.pyenv"
     export PATH="$PYENV_ROOT/bin:$PYENV_ROOT/shims:$PATH"
 
