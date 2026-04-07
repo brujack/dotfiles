@@ -7,6 +7,7 @@ cask "claude"
 cask "discord"
 cask "logi-options-plus"
 cask "microsoft-office"
+cask "miro"
 cask "obs"
 cask "sonos"
 mas "Evernote", id: 406056744
