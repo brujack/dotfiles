@@ -135,20 +135,6 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       #https://github.com/Homebrew/homebrew-bundle
       brew_tap_if_missing homebrew/bundle
       install_macos_casks
-      brew_install_cask chef/chef/inspec
-      brew_tap_if_missing cloudflare/cloudflare
-      brew_install_cask dotnet
-      brew_install_formula go-task/tap/go-task
-      brew_install_cask miro
-      brew_tap_if_missing snyk/tap
-      brew_install_formula snyk
-      brew_tap_if_missing teamookla/speedtest
-      brew_install_formula speedtest
-      brew_install_formula redpanda-data/tap/redpanda
-      if [[ -n ${STUDIO} ]] || [[ -n ${LAPTOP} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]] || [[ -n ${RATNA} ]]; then
-        brew_install_formula datawire/blackbird/telepresence-arm64
-        brew_install_formula cloudflared
-      fi
 
       printf "Cleaning Homebrew up...\\n"
       brew cleanup
