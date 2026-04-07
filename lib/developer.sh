@@ -15,17 +15,15 @@ clone_or_update_dotfiles() {
 }
 
 update_aws_cli() {
-  if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]] || [[ -n ${RATNA} ]]; then
-    if [[ -n ${MACOS} ]]; then
-      log_info "Updating MACOS awscli"
-      cd ${HOME}/software_downloads/awscli || exit
-      curl "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "AWSCLIV2.pkg"
-      sudo -H installer -pkg AWSCLIV2.pkg -target /
-      rm AWSCLIV2.pkg
-      cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
-    fi
+  if [[ -n ${HAS_AWS} ]] && [[ -n ${MACOS} ]]; then
+    log_info "Updating MACOS awscli"
+    cd ${HOME}/software_downloads/awscli || exit
+    curl "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "AWSCLIV2.pkg"
+    sudo -H installer -pkg AWSCLIV2.pkg -target /
+    rm AWSCLIV2.pkg
+    cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
   fi
-  if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
+  if [[ -n ${HAS_AWS} ]] && [[ -n ${LINUX} ]]; then
     log_info "Updating Linux awscli"
     mkdir -p ${HOME}/software_downloads/awscli
     cd ${HOME}/software_downloads/awscli || exit
@@ -37,7 +35,7 @@ update_aws_cli() {
 }
 
 update_rust() {
-  if [[ -n ${UBUNTU} ]] && { [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; }; then
+  if [[ -n ${UBUNTU} ]] && [[ -n ${HAS_RUST} ]]; then
     log_info "Updating Rust Ubuntu"
     if [[ -x ${HOME}/.cargo/bin/rustup ]]; then
       ${HOME}/.cargo/bin/rustup self update

@@ -135,20 +135,6 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       #https://github.com/Homebrew/homebrew-bundle
       brew_tap_if_missing homebrew/bundle
       install_macos_casks
-      brew_install_cask chef/chef/inspec
-      brew_tap_if_missing cloudflare/cloudflare
-      brew_install_cask dotnet
-      brew_install_formula go-task/tap/go-task
-      brew_install_cask miro
-      brew_tap_if_missing snyk/tap
-      brew_install_formula snyk
-      brew_tap_if_missing teamookla/speedtest
-      brew_install_formula speedtest
-      brew_install_formula redpanda-data/tap/redpanda
-      if [[ -n ${STUDIO} ]] || [[ -n ${LAPTOP} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]] || [[ -n ${RATNA} ]]; then
-        brew_install_formula datawire/blackbird/telepresence-arm64
-        brew_install_formula cloudflared
-      fi
 
       printf "Cleaning Homebrew up...\\n"
       brew cleanup
@@ -183,7 +169,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       xargs -a ./ubuntu_2404_packages.txt sudo nala install -y
     fi
 
-    if [[ -n ${WORKSTATION} ]]; then
+    if [[ -n ${HAS_SNAP} ]]; then
       printf "Installing workstation packages\\n"
       xargs -a ./ubuntu_workstation_packages.txt sudo apt install -y
 
@@ -436,7 +422,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       printf "Go %s is installed\\n" "${GO_VER}"
     fi
 
-    if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
+    if [[ -n ${HAS_RUST} ]]; then
       printf "Installing Rust Ubuntu\\n"
       if [[ ! -x $(command -v rustc) ]] || [[ ! -x $(command -v cargo) ]]; then
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
@@ -450,7 +436,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       fi
     fi
 
-    if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
+    if [[ -n ${HAS_DOCKER} ]]; then
       printf "Installing docker\\n"
       sudo mkdir -p /etc/apt/keyrings
       if [[ -f /etc/apt/keyrings/docker.gpg ]]; then
@@ -474,7 +460,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       fi
     fi
 
-    if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
+    if [[ -n ${HAS_DEVTOOLS} ]]; then
       printf "Installing Virtualbox\\n"
       wget -O- https://www.virtualbox.org/download/oracle_vbox_2016.asc | sudo gpg --dearmor --yes --output /usr/share/keyrings/oracle-virtualbox-2016.gpg
       echo "deb [arch=amd64 signed-by=/usr/share/keyrings/oracle-virtualbox-2016.gpg] http://download.virtualbox.org/virtualbox/debian $(. /etc/os-release && echo "$VERSION_CODENAME") contrib" | sudo tee /etc/apt/sources.list.d/virtualbox.list
@@ -485,7 +471,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       fi
     fi
 
-    if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
+    if [[ -n ${HAS_DEVTOOLS} ]]; then
       printf "Installing teleport\\n"
       wget -O- https://deb.releases.teleport.dev/teleport-pubkey.asc | sudo gpg --dearmor --yes --output /usr/share/keyrings/telport-pubkey.gpg
       sudo add-apt-repository "deb https://deb.releases.teleport.dev/ stable main"
@@ -496,7 +482,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       fi
     fi
 
-    if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
+    if [[ -n ${HAS_DEVTOOLS} ]]; then
       printf "Installing cloudflared\\n"
       curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
       echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ jammy main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
@@ -507,7 +493,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       fi
     fi
 
-    if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
+    if [[ -n ${HAS_K8S} ]]; then
       if [[ ! -f ${HOME}/software_downloads/kind_${KIND_VER} ]]; then
         printf "Installing kind\\n"
         wget -O ${HOME}/software_downloads/kind_${KIND_VER} ${KIND_URL}
@@ -521,7 +507,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       fi
     fi
 
-    if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
+    if [[ -n ${HAS_DEVTOOLS} ]]; then
       if [[ ! -f ${HOME}/software_downloads/yq_${YQ_VER} ]]; then
         printf "Installing yq\\n"
         wget -O ${HOME}/software_downloads/yq_${YQ_VER} ${YQ_URL}
@@ -535,7 +521,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       fi
     fi
 
-    if [[ -n ${WORKSTATION} ]]; then
+    if [[ -n ${HAS_SNAP} ]]; then
       if [[ ${FOCAL} ]]; then
         printf "Installing Albert Ubuntu Focal\\n"
         # shellcheck disable=SC2046
@@ -572,7 +558,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       fi
     fi
 
-    if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
+    if [[ -n ${HAS_K8S} ]]; then
       printf "Installing telepresence\\n"
       wget -O ${HOME}/software_downloads/telepresence ${TELEPRESENCE_URL}
       sudo cp -a ${HOME}/software_downloads/telepresence /usr/local/bin/
@@ -726,7 +712,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       brew_install_formula redpanda-data/tap/redpanda
       brew_tap_if_missing snyk/tap
       brew_install_formula snyk
-      if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
+      if [[ -n ${HAS_DEVTOOLS} ]]; then
         brew_install_formula claude-code
         if command -v claude &>/dev/null; then
           claude plugins install superpowers
@@ -734,19 +720,19 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
           claude plugins install context7
         fi
       fi
-      if [[ -n ${WORKSTATION} ]]; then
+      if [[ -n ${HAS_SNAP} ]]; then
         brew_install_formula ollama
       fi
     fi
 
-    if [[ -n ${WORKSTATION} ]]; then
+    if [[ -n ${HAS_SNAP} ]]; then
       printf "Installing microsoft edge\\n"
       sudo sh -c 'echo "deb [arch=amd64] https://packages.microsoft.com/repos/edge stable main" > /etc/apt/sources.list.d/microsoft-edge.list'
       sudo -H apt update
       sudo -H apt install microsoft-edge-stable -y
     fi
 
-    if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
+    if [[ -n ${HAS_DEVTOOLS} ]]; then
       printf "Installing .net8 sdk\\n"
       sudo -H apt install dotnet-sdk-8.0 -y
     fi
@@ -762,7 +748,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     sudo -H apt update
     sudo -H apt install kubectl -y
 
-    if [[ -n ${WORKSTATION} ]]; then
+    if [[ -n ${HAS_SNAP} ]]; then
       printf "snap software with classic option, the other snap packages are installed in ubuntu_workstation_snap_packages.txt\\n"
       sudo snap install atom --classic
       sudo snap install code --classic
@@ -773,7 +759,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
       sudo snap install certbot-dns-route53
     fi
     # can't use snap on wsl2
-    if [[ -n ${CRUNCHER} ]]; then
+    if [[ -z ${HAS_SNAP} ]]; then
       curl https://baltocdn.com/helm/signing.asc | sudo gpg --dearmor -o /etc/apt/keyrings/helm-signing.gpg
       echo "deb [signed-by=/etc/apt/keyrings/helm-signing.gpg] https://baltocdn.com/helm/stable/debian/ all main" | sudo tee /etc/apt/sources.list.d/helm-stable-debian.list
       sudo apt-get update
@@ -793,7 +779,7 @@ if [[ -n ${SETUP} ]] || [[ -n ${DEVELOPER} ]]; then
     fi
 
     # fix for missing libssl1.1 on ubuntu 22.04 and it's requirement for installing python3 via pyenv
-    if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
+    if [[ -n ${HAS_DEVTOOLS} ]]; then
       printf "installing libssl1.1\\n"
       echo "deb http://security.ubuntu.com/ubuntu focal-security main" | sudo tee /etc/apt/sources.list.d/focal-security.list
       sudo -H apt update
@@ -1016,21 +1002,19 @@ EOM
     fi
   fi
 
-  if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]] || [[ -n ${RATNA} ]]; then
+  if [[ -n ${HAS_AWS} ]] && [[ -n ${MACOS} ]]; then
     mkdir -p ${HOME}/software_downloads/awscli
-    if [[ -n ${MACOS} ]]; then
-      printf "Installing aws-cli on MacOS\\n"
-      if [[ ! -f ${HOME}/software_downloads/awscli/AWSCLIV2.pkg ]]; then
-        wget -O ${HOME}/software_downloads/awscli/AWSCLIV2.pkg "https://awscli.amazonaws.com/AWSCLIV2.pkg"
-        sudo installer -pkg ${HOME}/software_downloads/awscli/AWSCLIV2.pkg -target /
-        rm -f ${HOME}/software_downloads/awscli/AWSCLIV2.pkg
-        if [[ -x $(command -v aws) ]]; then
-          printf "aws-cli is installed MacOS\\n"
-        fi
+    printf "Installing aws-cli on MacOS\\n"
+    if [[ ! -f ${HOME}/software_downloads/awscli/AWSCLIV2.pkg ]]; then
+      wget -O ${HOME}/software_downloads/awscli/AWSCLIV2.pkg "https://awscli.amazonaws.com/AWSCLIV2.pkg"
+      sudo installer -pkg ${HOME}/software_downloads/awscli/AWSCLIV2.pkg -target /
+      rm -f ${HOME}/software_downloads/awscli/AWSCLIV2.pkg
+      if [[ -x $(command -v aws) ]]; then
+        printf "aws-cli is installed MacOS\\n"
       fi
     fi
   fi
-  if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
+  if [[ -n ${HAS_AWS} ]] && [[ -n ${LINUX} ]]; then
     mkdir -p ${HOME}/software_downloads/awscli
     printf "Installing aws-cli on Linux\\n"
     if [[ ! -f ${HOME}/software_downloads/awscli/awscliv2.zip ]]; then
@@ -1222,7 +1206,7 @@ if [[ -n ${DEVELOPER} ]] || [[ -n ${ANSIBLE} ]]; then
   fi
 
   if ! [[ $(readlink "${HOME}/.pyenv/versions/ansible") == "${HOME}/.pyenv/versions/${PYTHON_VER}/envs/ansible" ]]; then
-    if [[ -n ${STUDIO} ]] || [[ -n ${LAPTOP} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]] || [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]] || [[ -n ${RATNA} ]]; then
+    if [[ -n ${HAS_DEVTOOLS} ]]; then
       export PYENV_ROOT="$HOME/.pyenv"
       export PYENV_VIRTUALENV_DISABLE_PROMPT=1
       if quiet_which pyenv; then
@@ -1279,7 +1263,7 @@ if [[ -n ${UPDATE} ]]; then
   fi
   update_system_packages
   printf "Updating pip3 packages\n"
-  if [[ -n ${STUDIO-} || -n ${LAPTOP-} || -n ${RECEPTION-} || -n ${OFFICE-} || -n ${HOMES-} || -n ${WORKSTATION-} || -n ${CRUNCHER-} || -n ${RATNA-} ]]; then
+  if [[ -n ${HAS_DEVTOOLS} ]]; then
     export PYENV_ROOT="$HOME/.pyenv"
     export PATH="$PYENV_ROOT/bin:$PYENV_ROOT/shims:$PATH"
 

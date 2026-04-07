@@ -292,13 +292,14 @@ After `detect_env()` runs, the following vars are set:
 
 | Var | Values |
 |---|---|
-| `PROFILE` | String: `personal_laptop`, `mac_workstation`, `mac_mini`, `linux_workstation`, `server`, or `unknown` |
-| `HAS_GUI` | Set for: personal_laptop, mac_workstation, mac_mini, linux_workstation |
-| `HAS_DEVTOOLS` | Set for: personal_laptop, mac_workstation, linux_workstation, server |
-| `HAS_AWS` | Set for: personal_laptop, mac_workstation, linux_workstation, server |
-| `HAS_K8S` | Set for: personal_laptop, mac_workstation, linux_workstation |
-| `HAS_DOCKER` | Set for: personal_laptop, mac_workstation, linux_workstation |
-| `HAS_RUST` | Set for: personal_laptop, mac_workstation, linux_workstation |
+| `PROFILE` | String: `personal_laptop`, `mac_workstation`, `mac_mini`, `linux_workstation`, `wsl2_workstation`, `server`, or `unknown` |
+| `HAS_GUI` | Set for: personal_laptop, mac_workstation, mac_mini, linux_workstation, wsl2_workstation |
+| `HAS_DEVTOOLS` | Set for: personal_laptop, mac_workstation, linux_workstation, wsl2_workstation, server |
+| `HAS_AWS` | Set for: personal_laptop, mac_workstation, linux_workstation, wsl2_workstation, server |
+| `HAS_K8S` | Set for: personal_laptop, mac_workstation, linux_workstation, wsl2_workstation |
+| `HAS_DOCKER` | Set for: personal_laptop, mac_workstation, linux_workstation, wsl2_workstation |
+| `HAS_RUST` | Set for: personal_laptop, mac_workstation, linux_workstation, wsl2_workstation |
+| `HAS_SNAP` | Set for: linux_workstation only (not wsl2_workstation — snap unavailable in WSL2) |
 | `HAS_PRINTING` | Set for: personal_laptop, mac_workstation, mac_mini |
 
 ## Adding a New Machine

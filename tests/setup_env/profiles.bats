@@ -103,3 +103,59 @@ teardown() {
   detect_env
   [ -n "${HAS_PRINTING}" ]
 }
+
+@test "detect_env sets PROFILE=linux_workstation for hostname workstation" {
+  export MOCK_HOSTNAME_OUTPUT="workstation"
+  export MOCK_UNAME_S="Linux"
+  source "${REPO_ROOT}/lib/detect_env.sh"
+  detect_env
+  [ "${PROFILE}" = "linux_workstation" ]
+}
+
+@test "detect_env sets PROFILE=wsl2_workstation for hostname cruncher" {
+  export MOCK_HOSTNAME_OUTPUT="cruncher"
+  export MOCK_UNAME_S="Linux"
+  source "${REPO_ROOT}/lib/detect_env.sh"
+  detect_env
+  [ "${PROFILE}" = "wsl2_workstation" ]
+}
+
+@test "HAS_SNAP is set for linux_workstation" {
+  export MOCK_HOSTNAME_OUTPUT="workstation"
+  export MOCK_UNAME_S="Linux"
+  source "${REPO_ROOT}/lib/detect_env.sh"
+  detect_env
+  [ -n "${HAS_SNAP}" ]
+}
+
+@test "HAS_SNAP is unset for wsl2_workstation" {
+  export MOCK_HOSTNAME_OUTPUT="cruncher"
+  export MOCK_UNAME_S="Linux"
+  source "${REPO_ROOT}/lib/detect_env.sh"
+  detect_env
+  [ -z "${HAS_SNAP:-}" ]
+}
+
+@test "HAS_DEVTOOLS is set for wsl2_workstation" {
+  export MOCK_HOSTNAME_OUTPUT="cruncher"
+  export MOCK_UNAME_S="Linux"
+  source "${REPO_ROOT}/lib/detect_env.sh"
+  detect_env
+  [ -n "${HAS_DEVTOOLS}" ]
+}
+
+@test "HAS_RUST is set for linux_workstation" {
+  export MOCK_HOSTNAME_OUTPUT="workstation"
+  export MOCK_UNAME_S="Linux"
+  source "${REPO_ROOT}/lib/detect_env.sh"
+  detect_env
+  [ -n "${HAS_RUST}" ]
+}
+
+@test "HAS_RUST is set for wsl2_workstation" {
+  export MOCK_HOSTNAME_OUTPUT="cruncher"
+  export MOCK_UNAME_S="Linux"
+  source "${REPO_ROOT}/lib/detect_env.sh"
+  detect_env
+  [ -n "${HAS_RUST}" ]
+}
