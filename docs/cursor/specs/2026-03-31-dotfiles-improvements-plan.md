@@ -1,8 +1,16 @@
 # Dotfiles Repo Improvements Plan
 
 **Date:** 2026-03-31
-**Status:** Draft
+**Status:** Partially Completed
 **Scope:** Improve maintainability, safety, and testability of `setup_env.sh` and related repo structure without changing user-facing behavior.
+
+## Current Status
+
+This plan is partially completed. Major modularization and profile/capability migration work has landed.
+
+For the active continuation plan, see:
+
+- `docs/cursor/specs/2026-04-08-dotfiles-next-steps-plan.md`
 
 ## Goals
 
