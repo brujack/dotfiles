@@ -11,6 +11,15 @@ log_info()  { printf "${_GREEN}[INFO]${_NC}  %s\n" "$*"; }
 log_warn()  { printf "${_YELLOW}[WARN]${_NC}  %s\n" "$*" >&2; }
 log_error() { printf "${_RED}[ERROR]${_NC} %s\n" "$*" >&2; }
 
+# ── command wrapper ───────────────────────────────────────────────────────────
+run_cmd() {
+  if [[ -n ${DRY_RUN:-} ]]; then
+    printf "[DRY RUN] %s\n" "$*"
+  else
+    "$@"
+  fi
+}
+
 # ── symlink helpers ───────────────────────────────────────────────────────────
 safe_link() {
   local src="$1" dest="$2"
@@ -19,9 +28,9 @@ safe_link() {
   fi
   if [[ -e "${dest}" ]]; then
     log_warn "Backing up existing file: ${dest} → ${dest}.bak"
-    mv "${dest}" "${dest}.bak"
+    run_cmd mv "${dest}" "${dest}.bak"
   fi
-  ln -s "${src}" "${dest}"
+  run_cmd ln -s "${src}" "${dest}"
   log_info "Linked ${dest} → ${src}"
 }
 
@@ -168,20 +177,60 @@ check_and_install_nala() {
 
 usage() {
   cat << EOF
-Usage: $0 -t <type> [-w]
+Usage: $0 -t <type> [--dry-run] [-w]
 Types:
   setup_user : Sets up a basic user environment for the current user
   setup      : Runs a full machine and developer setup
   developer  : Runs a developer setup with packages and python virtual environment for running ansible
   ansible    : Just runs the ansible setup using a python virtual environment. Typically used after a python update
   update     : Does a system update of packages including brew packages
+  doctor     : Prints detected OS, profile, capabilities, and key paths (no side effects)
 Options:
-  -w : Optional -- Specify w for a redhat computer, sets up terraform 0.11 instead of default 0.12
+  --dry-run  : Log mutating operations (symlinks, installs, mkdir) without executing them
+  -w         : Optional -- Specify w for a redhat computer, sets up terraform 0.11 instead of default 0.12
 EOF
   exit 0
 }
 
+run_doctor() {
+  printf "=== Doctor Report ===\n"
+  printf "\nOS Detection:\n"
+  printf "  MACOS=%s  LINUX=%s\n" "${MACOS:-<unset>}" "${LINUX:-<unset>}"
+  printf "  UBUNTU=%s  REDHAT=%s  FEDORA=%s  CENTOS=%s\n" \
+    "${UBUNTU:-<unset>}" "${REDHAT:-<unset>}" "${FEDORA:-<unset>}" "${CENTOS:-<unset>}"
+  printf "  FOCAL=%s  JAMMY=%s  NOBLE=%s\n" \
+    "${FOCAL:-<unset>}" "${JAMMY:-<unset>}" "${NOBLE:-<unset>}"
+  printf "\nProfile:\n"
+  printf "  PROFILE=%s\n" "${PROFILE:-unknown}"
+  printf "\nCapabilities:\n"
+  printf "  HAS_GUI=%s\n"      "${HAS_GUI:-<unset>}"
+  printf "  HAS_DEVTOOLS=%s\n" "${HAS_DEVTOOLS:-<unset>}"
+  printf "  HAS_AWS=%s\n"      "${HAS_AWS:-<unset>}"
+  printf "  HAS_K8S=%s\n"      "${HAS_K8S:-<unset>}"
+  printf "  HAS_DOCKER=%s\n"   "${HAS_DOCKER:-<unset>}"
+  printf "  HAS_RUST=%s\n"     "${HAS_RUST:-<unset>}"
+  printf "  HAS_SNAP=%s\n"     "${HAS_SNAP:-<unset>}"
+  printf "  HAS_PRINTING=%s\n" "${HAS_PRINTING:-<unset>}"
+  printf "\nKey Paths:\n"
+  printf "  HOME=%s\n"              "${HOME}"
+  printf "  PERSONAL_GITREPOS=%s\n" "${PERSONAL_GITREPOS:-<unset>}"
+  printf "  DOTFILES=%s\n"          "${DOTFILES:-<unset>}"
+  printf "  BREWFILE_LOC=%s\n"      "${BREWFILE_LOC:-<unset>}"
+  printf "  CHRUBY_LOC=%s\n"        "${CHRUBY_LOC:-<unset>}"
+}
+
 process_args() {
+  # Pre-process long options before getopts (getopts only handles short options)
+  local _short_args=()
+  for _arg in "$@"; do
+    if [[ "${_arg}" == "--dry-run" ]]; then
+      readonly DRY_RUN=1
+    else
+      _short_args+=("${_arg}")
+    fi
+  done
+  set -- "${_short_args[@]}"
+
   local arg OPTARG
   while getopts ":ht:w" arg; do
     # shellcheck disable=SC2317 # exit after usage() is intentional redundancy
@@ -190,11 +239,12 @@ process_args() {
         # shellcheck disable=SC2317 # exit after usage() is intentional redundancy
         case ${OPTARG} in
           setup_user) readonly SETUP_USER=1 ;;
-          setup) readonly SETUP=1 ;;
-          developer) readonly DEVELOPER=1 ;;
-          ansible) readonly ANSIBLE=1 ;;
-          update) readonly UPDATE=1 ;;
-          *) echo "Invalid option for -t"; usage; exit 1 ;;
+          setup)      readonly SETUP=1 ;;
+          developer)  readonly DEVELOPER=1 ;;
+          ansible)    readonly ANSIBLE=1 ;;
+          update)     readonly UPDATE=1 ;;
+          doctor)     readonly DOCTOR=1 ;;
+          *) printf "Invalid option for -t\n"; usage; exit 1 ;;
         esac
         ;;
       w) readonly WORK=1 ;;

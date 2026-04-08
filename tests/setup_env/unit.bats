@@ -97,6 +97,40 @@ teardown() {
   [ -n "${RUBY_VER}" ]
 }
 
+# ── process_args: doctor ──────────────────────────────────────────────────────
+
+@test "process_args sets DOCTOR for -t doctor" {
+  run bash -c "
+    source '${BATS_TEST_DIRNAME}/../../setup_env.sh'
+    process_args -t doctor
+    printf '%s' \"\${DOCTOR}\"
+  "
+  [ "$status" -eq 0 ]
+  [ "$output" = "1" ]
+}
+
+# ── process_args: --dry-run ───────────────────────────────────────────────────
+
+@test "process_args sets DRY_RUN for --dry-run flag" {
+  run bash -c "
+    source '${BATS_TEST_DIRNAME}/../../setup_env.sh'
+    process_args --dry-run -t setup_user
+    printf '%s' \"\${DRY_RUN}\"
+  "
+  [ "$status" -eq 0 ]
+  [ "$output" = "1" ]
+}
+
+@test "process_args sets SETUP_USER when combined with --dry-run" {
+  run bash -c "
+    source '${BATS_TEST_DIRNAME}/../../setup_env.sh'
+    process_args --dry-run -t setup_user
+    printf '%s' \"\${SETUP_USER}\"
+  "
+  [ "$status" -eq 0 ]
+  [ "$output" = "1" ]
+}
+
 @test "TERRAFORM_VER matches semver pattern" {
   [[ "${TERRAFORM_VER}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
 }
@@ -214,4 +248,59 @@ teardown() {
 @test "run_update is defined after sourcing setup_env" {
   declare -f run_update &>/dev/null
   [ "$?" -eq 0 ]
+}
+
+# ── run_cmd ──────────────────────────────────────────────────────────────────
+
+@test "run_cmd executes command when DRY_RUN is unset" {
+  unset DRY_RUN
+  run run_cmd printf "hello"
+  [ "$status" -eq 0 ]
+  [ "$output" = "hello" ]
+}
+
+@test "run_cmd prints dry-run message when DRY_RUN is set" {
+  export DRY_RUN=1
+  run run_cmd ln -s /src /dest
+  unset DRY_RUN
+  [ "$status" -eq 0 ]
+  [[ "$output" == "[DRY RUN]"* ]]
+}
+
+@test "run_cmd dry-run does not execute the command" {
+  export DRY_RUN=1
+  local tmpfile="${BATS_TEST_TMPDIR}/should_not_exist"
+  run run_cmd touch "${tmpfile}"
+  unset DRY_RUN
+  [ ! -f "${tmpfile}" ]
+}
+
+# ── safe_link dry-run ─────────────────────────────────────────────────────────
+
+@test "safe_link does not create symlink when DRY_RUN is set" {
+  export DRY_RUN=1
+  local src="${BATS_TEST_TMPDIR}/src_file"
+  local dest="${BATS_TEST_TMPDIR}/dest_link"
+  touch "${src}"
+  safe_link "${src}" "${dest}"
+  unset DRY_RUN
+  [ ! -L "${dest}" ]
+}
+
+# ── run_doctor ────────────────────────────────────────────────────────────────
+
+@test "run_doctor prints Doctor Report header" {
+  run run_doctor
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Doctor Report"* ]]
+}
+
+@test "run_doctor prints PROFILE line" {
+  run run_doctor
+  [[ "$output" == *"PROFILE="* ]]
+}
+
+@test "run_doctor prints HAS_GUI line" {
+  run run_doctor
+  [[ "$output" == *"HAS_GUI="* ]]
 }
