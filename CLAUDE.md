@@ -188,7 +188,7 @@ Inline disables (`# shellcheck disable=SCxxxx # reason`) are used for remaining 
 - `test` job: installs bats + shellcheck, runs `make test`
 - `lint-macos` job: runs `bash -n` and `zsh -n` on all `.sh` files on `macos-latest` (advisory, not blocking auto-merge)
 - `secret-scan` job: runs gitleaks against recent commits (advisory, not blocking auto-merge)
-- `auto-merge` job: auto-merges dependabot PRs when all three CI jobs pass (depends on `test`, `lint-macos`, `secret-scan`)
+- `auto-merge` job: auto-merges any PR when all three CI jobs pass (depends on `test`, `lint-macos`, `secret-scan`)
 
 CI requirements:
 - All jobs run on `ubuntu-latest` with `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true`

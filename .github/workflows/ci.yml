@@ -68,7 +68,7 @@ jobs:
 
   auto-merge:
     needs: [test, lint-macos, secret-scan]
-    if: github.event_name == 'pull_request' && github.actor == 'dependabot[bot]'
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: write
