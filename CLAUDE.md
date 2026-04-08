@@ -286,6 +286,20 @@ Available mock env vars:
 - Application installs are kept in alphabetical order
 - For shell syntax-only fixes in `setup_env.sh`, validate with both `bash -n setup_env.sh` and `zsh -n setup_env.sh` before commit
 
+## Local-Only State
+
+The following paths are machine-local and must **never** be committed to this repo:
+
+- `~/.aws/` — AWS credentials and config
+- `~/.tf_creds/` — Terraform cloud credentials
+- `~/.ssh/` private keys — only `config` and `teleport.cfg` are tracked in `.ssh/` in the repo
+- `~/.azure_creds/` — Azure credentials
+- `~/.gcloud_creds/` — GCloud credentials
+- `~/.tsh/` — Teleport session tokens
+- `~/.claude/projects/<path>/` conversation history jsonl files — only `memory/` subdirs are tracked
+
+The `secret-scan` CI job (`gitleaks`) scans recent commits for credential patterns. If it fires on a legitimate file, add an allowlist entry to `.gitleaks.toml`.
+
 ## Profile Model
 
 After `detect_env()` runs, the following vars are set:
