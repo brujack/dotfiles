@@ -23,6 +23,12 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
 
 Common types: `feat`, `fix`, `docs`, `ci`, `refactor`, `test`, `chore`.
 
+## Memory for Personal Repos
+
+All repos under `~/git-repos/personal/` have their Claude project memories stored in `~/git-repos/personal/dotfiles/.claude/projects/` and symlinked into `~/.claude/projects/`. This means memories are shared across machines via the dotfiles repo.
+
+When working in any personal repo, save memories as normal — they are automatically persisted and synced.
+
 ## Keeping CLAUDE.md Up To Date
 
 When making any change to a repository, update the relevant `CLAUDE.md` file(s) before finishing. These files are the primary reference for future sessions — stale documentation is worse than none.
