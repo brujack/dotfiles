@@ -25,6 +25,10 @@ Personal development environment bootstrap for macOS, Linux (Ubuntu/RHEL), and W
 | `developer` | Dev packages + Python/Ansible virtualenv |
 | `ansible` | Ansible venv only — typically used after a Python update |
 | `update` | Update all packages (brew, apt/dnf/yum, pip, mas, Claude plugins, etc.) |
+| `doctor` | Print detected OS, profile, capabilities, and key paths (no side effects) |
+
+**Options:**
+- `--dry-run` — log mutating operations (symlinks, installs, mkdir) without executing
 
 ### Re-running after shell change
 
@@ -54,7 +58,8 @@ dotfiles/
 │   ├── detect_env.sh         # OS/version detection + profile/capability resolution
 │   ├── macos.sh              # macOS-specific install functions
 │   ├── linux.sh              # Linux-specific install functions
-│   └── developer.sh          # Cross-platform dev tooling (Ruby, Python, Ansible, etc.)
+│   ├── developer.sh          # Cross-platform dev tooling (Ruby, Python, Ansible, etc.)
+│   └── workflows.sh          # Top-level workflow functions dispatched by setup_env.sh
 ├── scripts/
 │   ├── bootstrap_mac.sh      # One-time macOS prerequisite installer (Homebrew + bash 5)
 │   ├── .osx.sh               # macOS system defaults
@@ -80,7 +85,7 @@ dotfiles/
 │   └── helpers/
 ├── .github/
 │   └── workflows/
-│       └── ci.yml            # lint + test + auto-merge on non-master branches
+│       └── ci.yml            # lint + test + lint-macos + secret-scan + auto-merge
 ├── kubernetes_stuff/         # Kubernetes install/init scripts
 └── ubuntu_*_packages.txt     # Package lists per Ubuntu version
 ```

@@ -186,6 +186,8 @@ Inline disables (`# shellcheck disable=SCxxxx # reason`) are used for remaining 
 
 `.github/workflows/ci.yml` runs on every push to non-master branches and PRs to master:
 - `test` job: installs bats + shellcheck, runs `make test`
+- `lint-macos` job: runs `bash -n` and `zsh -n` on all `.sh` files on `macos-latest` (advisory, not blocking auto-merge)
+- `secret-scan` job: runs gitleaks against recent commits (advisory, not blocking auto-merge)
 - `auto-merge` job: auto-merges passing PRs (depends on `test`)
 
 CI requirements:
