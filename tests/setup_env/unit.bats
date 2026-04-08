@@ -193,3 +193,25 @@ teardown() {
   run bash -c "source '${REPO_ROOT}/lib/helpers.sh'; log_error 'test error' 2>&1"
   [[ "${output}" == *"[ERROR]"* ]]
 }
+
+# ── workflows ────────────────────────────────────────────────────────────────
+
+@test "run_setup_user is defined after sourcing setup_env" {
+  declare -f run_setup_user &>/dev/null
+  [ "$?" -eq 0 ]
+}
+
+@test "run_setup_or_developer is defined after sourcing setup_env" {
+  declare -f run_setup_or_developer &>/dev/null
+  [ "$?" -eq 0 ]
+}
+
+@test "run_developer_or_ansible is defined after sourcing setup_env" {
+  declare -f run_developer_or_ansible &>/dev/null
+  [ "$?" -eq 0 ]
+}
+
+@test "run_update is defined after sourcing setup_env" {
+  declare -f run_update &>/dev/null
+  [ "$?" -eq 0 ]
+}
