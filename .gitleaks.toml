@@ -1,0 +1,23 @@
+title = "dotfiles gitleaks config"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Cursor and Claude settings/keybindings are not credentials"
+paths = [
+  '''^\.cursor/''',
+  '''^\.claude/''',
+]
+
+[[allowlists]]
+description = "Brewfile tap/cask/formula identifiers are not secrets"
+paths = [
+  '''^Brewfile''',
+]
+
+[[allowlists]]
+description = "ubuntu package list files contain no secrets"
+paths = [
+  '''^ubuntu_.*_packages\.txt$''',
+]
