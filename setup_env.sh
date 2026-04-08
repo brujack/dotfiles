@@ -38,4 +38,3 @@ detect_env
 
 /usr/bin/env zsh "${HOME}/.zshrc"
 exit 0
-
