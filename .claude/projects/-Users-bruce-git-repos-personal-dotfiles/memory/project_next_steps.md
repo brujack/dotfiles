@@ -1,16 +1,23 @@
 ---
 name: Next steps plans created
-description: All 5 specs+plans from 2026-04-08 complete — PR C #5, PR E #6, PR A #7, PR D #8, PR B #9 all merged
+description: April batch (PRs 5-9) all merged; 5 new specs written 2026-04-08 awaiting user review and plan creation
 type: project
 ---
 
-On 2026-04-08, created 5 specs and plans for the next dotfiles improvements:
+**April batch — all done:**
 - PR A: lib/workflows.sh extraction — DONE, merged as PR #7
 - PR B: doctor + dry-run support — DONE, merged as PR #9
 - PR C: secrets guardrails — DONE, merged as PR #5
 - PR D: CI safety pass — DONE, merged as PR #8
 - PR E: plan hygiene — DONE, merged as PR #6 (adds docs/superpowers/README.md master status index)
 
-**Why:** From the Cursor next-steps doc (2026-04-08-dotfiles-next-steps-plan.md). User requested specs and plans, then asked to implement secrets first, then plan hygiene, then workflows extraction.
+**Next round — specs written 2026-04-08, awaiting user review:**
+- doctor-enhanced: active health checks with pass/fail, non-zero exit on failure
+- workflow-test-coverage: coarse + conditional branching tests for lib/workflows.sh
+- granular-update-flags: --brew-only, --pip-only, --gems-only, --mas-only, --claude-only
+- local-overrides: config/local.sh sourced after detect_env, git-ignored
+- check-versions: -t check-versions compares constants against GitHub latest releases
 
-**How to apply:** All 5 PRs from the April batch are done or in flight. Status is visible in docs/superpowers/README.md.
+**Why:** User asked for next improvement recommendations; brainstormed and approved all 5 designs. Plans not yet written — user will review specs first.
+
+**How to apply:** When user approves specs, invoke writing-plans skill for each. Recommended order: local-overrides (simplest) → granular-update-flags → doctor-enhanced → workflow-test-coverage → check-versions.
