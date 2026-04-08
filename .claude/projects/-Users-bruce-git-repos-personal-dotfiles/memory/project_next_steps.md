@@ -1,6 +1,6 @@
 ---
 name: Next steps plans created
-description: April batch (PRs 5-9) all merged; 5 new specs written 2026-04-08 awaiting user review and plan creation
+description: April batch (PRs 5-9) all merged; 5 new specs + plans written 2026-04-08, awaiting implementation
 type: project
 ---
 
@@ -11,13 +11,13 @@ type: project
 - PR D: CI safety pass — DONE, merged as PR #8
 - PR E: plan hygiene — DONE, merged as PR #6 (adds docs/superpowers/README.md master status index)
 
-**Next round — specs written 2026-04-08, awaiting user review:**
-- doctor-enhanced: active health checks with pass/fail, non-zero exit on failure
-- workflow-test-coverage: coarse + conditional branching tests for lib/workflows.sh
-- granular-update-flags: --brew-only, --pip-only, --gems-only, --mas-only, --claude-only
+**Next round — specs AND plans written 2026-04-08, ready to implement:**
 - local-overrides: config/local.sh sourced after detect_env, git-ignored
+- granular-update-flags: --brew-only, --pip-only, --gems-only, --mas-only, --claude-only
+- doctor-enhanced: active health checks with pass/fail, non-zero exit on failure
+- workflow-test-coverage: coarse + conditional branching tests for lib/workflows.sh in tests/setup_env/workflows.bats
 - check-versions: -t check-versions compares constants against GitHub latest releases
 
-**Why:** User asked for next improvement recommendations; brainstormed and approved all 5 designs. Plans not yet written — user will review specs first.
+**Why:** User asked for next improvement recommendations; brainstormed and approved all 5 designs. Specs written 2026-04-08, plans written same session.
 
-**How to apply:** When user approves specs, invoke writing-plans skill for each. Recommended order: local-overrides (simplest) → granular-update-flags → doctor-enhanced → workflow-test-coverage → check-versions.
+**How to apply:** Recommended implementation order: local-overrides (simplest) → granular-update-flags → doctor-enhanced → workflow-test-coverage → check-versions. Plans are in docs/superpowers/plans/2026-04-08-*.md.
