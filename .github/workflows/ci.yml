@@ -49,7 +49,7 @@ jobs:
 
   auto-merge:
     needs: [test]
-    if: github.event_name == 'pull_request' && github.actor == 'dependabot[bot]' || github.event_name == 'push'
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: write
