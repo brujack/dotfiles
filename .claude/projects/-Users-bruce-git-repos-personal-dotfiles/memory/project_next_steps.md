@@ -1,12 +1,12 @@
 ---
 name: Next steps plans created
-description: 5 specs+plans created 2026-04-08; PR C #5, PR E #6, PR A #7, PR D #8 all merged; PR B (doctor/dry-run) open as PR #9
+description: All 5 specs+plans from 2026-04-08 complete — PR C #5, PR E #6, PR A #7, PR D #8, PR B #9 all merged
 type: project
 ---
 
 On 2026-04-08, created 5 specs and plans for the next dotfiles improvements:
 - PR A: lib/workflows.sh extraction — DONE, merged as PR #7
-- PR B: doctor + dry-run support — open as PR #9
+- PR B: doctor + dry-run support — DONE, merged as PR #9
 - PR C: secrets guardrails — DONE, merged as PR #5
 - PR D: CI safety pass — DONE, merged as PR #8
 - PR E: plan hygiene — DONE, merged as PR #6 (adds docs/superpowers/README.md master status index)
