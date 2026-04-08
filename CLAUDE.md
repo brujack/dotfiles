@@ -18,7 +18,8 @@ dotfiles/
 │   ├── detect_env.sh         # OS/version detection + profile/capability resolution
 │   ├── macos.sh              # macOS-specific install functions
 │   ├── linux.sh              # Linux-specific install functions
-│   └── developer.sh          # Cross-platform dev tooling (Ruby, Python, Ansible, etc.)
+│   ├── developer.sh          # Cross-platform dev tooling (Ruby, Python, Ansible, etc.)
+│   └── workflows.sh          # Top-level workflow functions dispatched by setup_env.sh
 ├── scripts/
 │   ├── bootstrap_mac.sh      # One-time macOS prerequisite installer (Homebrew + bash 5)
 │   ├── .osx.sh               # macOS system defaults (run during setup)
