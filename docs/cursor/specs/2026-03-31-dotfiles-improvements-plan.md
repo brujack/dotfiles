@@ -1,16 +1,24 @@
 # Dotfiles Repo Improvements Plan
 
 **Date:** 2026-03-31
-**Status:** Partially Completed
+**Status:** Superseded — see `docs/cursor/specs/2026-04-08-dotfiles-next-steps-plan.md`
 **Scope:** Improve maintainability, safety, and testability of `setup_env.sh` and related repo structure without changing user-facing behavior.
 
 ## Current Status
 
-This plan is partially completed. Major modularization and profile/capability migration work has landed.
+This plan is superseded. All phases were either completed or subsumed into superpowers-tracked work.
 
-For the active continuation plan, see:
+**Completed work (as of 2026-04-08):**
+- Phase 0: Baseline tests and CI established
+- Phase 1: `lib/` modularization complete (`constants`, `helpers`, `detect_env`, `macos`, `linux`, `developer`)
+- Phase 2: Idempotency hardening via `safe_link()` and structured logging
+- Phase 3: Profile/capability model (`config/profiles.sh`, `HAS_*` vars, `PROFILE` map)
+- Phase 4: CI gate active (lint + BATS tests + auto-merge)
+- Phase 5: Partially complete — docs updated for profile model, lib architecture documented
 
+**Remaining work is tracked in:**
 - `docs/cursor/specs/2026-04-08-dotfiles-next-steps-plan.md`
+- `docs/superpowers/specs/` and `docs/superpowers/plans/`
 
 ## Goals
 
