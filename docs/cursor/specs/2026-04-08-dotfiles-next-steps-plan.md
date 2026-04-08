@@ -17,11 +17,11 @@ Each step from this plan has a corresponding spec and implementation plan in `do
 
 | Step | Spec | Plan | Status |
 |---|---|---|---|
-| Step 1: Workflows extraction | [spec](../../superpowers/specs/2026-04-08-workflows-extraction-design.md) | [plan](../../superpowers/plans/2026-04-08-workflows-extraction.md) | Pending |
-| Step 2: Doctor + dry-run | [spec](../../superpowers/specs/2026-04-08-doctor-dry-run-design.md) | [plan](../../superpowers/plans/2026-04-08-doctor-dry-run.md) | Pending |
+| Step 1: Workflows extraction | [spec](../../superpowers/specs/2026-04-08-workflows-extraction-design.md) | [plan](../../superpowers/plans/2026-04-08-workflows-extraction.md) | Done |
+| Step 2: Doctor + dry-run | [spec](../../superpowers/specs/2026-04-08-doctor-dry-run-design.md) | [plan](../../superpowers/plans/2026-04-08-doctor-dry-run.md) | Done |
 | Step 3: Secrets guardrails | [spec](../../superpowers/specs/2026-04-08-secrets-guardrails-design.md) | [plan](../../superpowers/plans/2026-04-08-secrets-guardrails.md) | Done |
-| Step 4: CI safety | [spec](../../superpowers/specs/2026-04-08-ci-safety-design.md) | [plan](../../superpowers/plans/2026-04-08-ci-safety.md) | Pending |
-| Step 5: Plan hygiene | [spec](../../superpowers/specs/2026-04-08-plan-hygiene-design.md) | [plan](../../superpowers/plans/2026-04-08-plan-hygiene.md) | In Progress |
+| Step 4: CI safety | [spec](../../superpowers/specs/2026-04-08-ci-safety-design.md) | [plan](../../superpowers/plans/2026-04-08-ci-safety.md) | Done |
+| Step 5: Plan hygiene | [spec](../../superpowers/specs/2026-04-08-plan-hygiene-design.md) | [plan](../../superpowers/plans/2026-04-08-plan-hygiene.md) | Done |
 
 ## Non-Goals
 

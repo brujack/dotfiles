@@ -35,7 +35,7 @@ Master status index for all specs and implementation plans in this directory.
 | 2026-04-07 | [macos-capability-migration](plans/2026-04-07-macos-capability-migration.md) | [spec](specs/2026-04-05-macos-setup-capability-migration-design.md) | Done |
 | 2026-04-07 | [linux-capability-migration](plans/2026-04-07-linux-capability-migration.md) | [spec](specs/2026-04-05-linux-setup-capability-migration-design.md) | Done |
 | 2026-04-08 | [secrets-guardrails](plans/2026-04-08-secrets-guardrails.md) | [spec](specs/2026-04-08-secrets-guardrails-design.md) | Done |
-| 2026-04-08 | [workflows-extraction](plans/2026-04-08-workflows-extraction.md) | [spec](specs/2026-04-08-workflows-extraction-design.md) | Pending |
-| 2026-04-08 | [doctor-dry-run](plans/2026-04-08-doctor-dry-run.md) | [spec](specs/2026-04-08-doctor-dry-run-design.md) | Pending |
-| 2026-04-08 | [ci-safety](plans/2026-04-08-ci-safety.md) | [spec](specs/2026-04-08-ci-safety-design.md) | Pending |
-| 2026-04-08 | [plan-hygiene](plans/2026-04-08-plan-hygiene.md) | [spec](specs/2026-04-08-plan-hygiene-design.md) | In Progress |
+| 2026-04-08 | [workflows-extraction](plans/2026-04-08-workflows-extraction.md) | [spec](specs/2026-04-08-workflows-extraction-design.md) | Done |
+| 2026-04-08 | [doctor-dry-run](plans/2026-04-08-doctor-dry-run.md) | [spec](specs/2026-04-08-doctor-dry-run-design.md) | Done |
+| 2026-04-08 | [ci-safety](plans/2026-04-08-ci-safety.md) | [spec](specs/2026-04-08-ci-safety-design.md) | Done |
+| 2026-04-08 | [plan-hygiene](plans/2026-04-08-plan-hygiene.md) | [spec](specs/2026-04-08-plan-hygiene-design.md) | Done |
