@@ -23,6 +23,30 @@ jobs:
       - name: Run tests
         run: make test
 
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Install gitleaks
+        run: |
+          set -e
+          GITLEAKS_VER="8.21.2"
+          wget -qO /tmp/gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VER}/gitleaks_${GITLEAKS_VER}_linux_x64.tar.gz"
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
+
+      - name: Scan for secrets
+        run: |
+          gitleaks detect \
+            --config .gitleaks.toml \
+            --source . \
+            --log-opts "HEAD~50..HEAD" \
+            --verbose
+
   auto-merge:
     needs: [test]
     if: github.event_name == 'pull_request' && github.actor == 'dependabot[bot]' || github.event_name == 'push'
