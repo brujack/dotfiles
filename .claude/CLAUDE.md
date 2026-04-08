@@ -23,6 +23,10 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
 
 Common types: `feat`, `fix`, `docs`, `ci`, `refactor`, `test`, `chore`.
 
+## Memory
+
+Whenever memory files are created or updated, commit them immediately as part of the same logical unit of work — or as a standalone commit if the session is wrapping up. Memory changes are not committed automatically; you must `git add` and `git commit` them explicitly.
+
 ## Memory for Personal Repos
 
 All repos under `~/git-repos/personal/` have their Claude project memories stored in `~/git-repos/personal/dotfiles/.claude/projects/` and symlinked into `~/.claude/projects/`. This means memories are shared across machines via the dotfiles repo.
