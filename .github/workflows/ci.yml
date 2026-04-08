@@ -23,6 +23,25 @@ jobs:
       - name: Run tests
         run: make test
 
+  lint-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Syntax check all shell scripts (bash)
+        run: |
+          find . -name '*.sh' \
+            -not -path './.worktrees/*' \
+            -not -path './tests/mocks/*' \
+            | xargs -I{} bash -n {}
+
+      - name: Syntax check all shell scripts (zsh)
+        run: |
+          find . -name '*.sh' \
+            -not -path './.worktrees/*' \
+            -not -path './tests/mocks/*' \
+            | xargs -I{} zsh -n {}
+
   secret-scan:
     runs-on: ubuntu-latest
     steps:
