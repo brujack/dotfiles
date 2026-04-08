@@ -286,3 +286,21 @@ teardown() {
   unset DRY_RUN
   [ ! -L "${dest}" ]
 }
+
+# ── run_doctor ────────────────────────────────────────────────────────────────
+
+@test "run_doctor prints Doctor Report header" {
+  run run_doctor
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Doctor Report"* ]]
+}
+
+@test "run_doctor prints PROFILE line" {
+  run run_doctor
+  [[ "$output" == *"PROFILE="* ]]
+}
+
+@test "run_doctor prints HAS_GUI line" {
+  run run_doctor
+  [[ "$output" == *"HAS_GUI="* ]]
+}

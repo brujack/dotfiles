@@ -192,6 +192,33 @@ EOF
   exit 0
 }
 
+run_doctor() {
+  printf "=== Doctor Report ===\n"
+  printf "\nOS Detection:\n"
+  printf "  MACOS=%s  LINUX=%s\n" "${MACOS:-<unset>}" "${LINUX:-<unset>}"
+  printf "  UBUNTU=%s  REDHAT=%s  FEDORA=%s  CENTOS=%s\n" \
+    "${UBUNTU:-<unset>}" "${REDHAT:-<unset>}" "${FEDORA:-<unset>}" "${CENTOS:-<unset>}"
+  printf "  FOCAL=%s  JAMMY=%s  NOBLE=%s\n" \
+    "${FOCAL:-<unset>}" "${JAMMY:-<unset>}" "${NOBLE:-<unset>}"
+  printf "\nProfile:\n"
+  printf "  PROFILE=%s\n" "${PROFILE:-unknown}"
+  printf "\nCapabilities:\n"
+  printf "  HAS_GUI=%s\n"      "${HAS_GUI:-<unset>}"
+  printf "  HAS_DEVTOOLS=%s\n" "${HAS_DEVTOOLS:-<unset>}"
+  printf "  HAS_AWS=%s\n"      "${HAS_AWS:-<unset>}"
+  printf "  HAS_K8S=%s\n"      "${HAS_K8S:-<unset>}"
+  printf "  HAS_DOCKER=%s\n"   "${HAS_DOCKER:-<unset>}"
+  printf "  HAS_RUST=%s\n"     "${HAS_RUST:-<unset>}"
+  printf "  HAS_SNAP=%s\n"     "${HAS_SNAP:-<unset>}"
+  printf "  HAS_PRINTING=%s\n" "${HAS_PRINTING:-<unset>}"
+  printf "\nKey Paths:\n"
+  printf "  HOME=%s\n"              "${HOME}"
+  printf "  PERSONAL_GITREPOS=%s\n" "${PERSONAL_GITREPOS:-<unset>}"
+  printf "  DOTFILES=%s\n"          "${DOTFILES:-<unset>}"
+  printf "  BREWFILE_LOC=%s\n"      "${BREWFILE_LOC:-<unset>}"
+  printf "  CHRUBY_LOC=%s\n"        "${CHRUBY_LOC:-<unset>}"
+}
+
 process_args() {
   # Pre-process long options before getopts (getopts only handles short options)
   local _short_args=()

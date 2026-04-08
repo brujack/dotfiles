@@ -31,6 +31,8 @@ process_args "$@"
 
 detect_env
 
+[[ -n ${DOCTOR:-} ]] && { run_doctor; exit 0; }
+
 [[ -n ${SETUP_USER:-} ]] || [[ -n ${SETUP:-} ]] && run_setup_user
 [[ -n ${SETUP:-} ]] || [[ -n ${DEVELOPER:-} ]] && run_setup_or_developer
 [[ -n ${DEVELOPER:-} ]] || [[ -n ${ANSIBLE:-} ]] && run_developer_or_ansible
