@@ -316,6 +316,11 @@ setup_dotfile_symlinks() {
     _claude_target="${HOME}/.claude/$(basename ${_claude_item})"
     safe_link "${_claude_item}" "${_claude_target}"
   done
+  mkdir -p "${HOME}/.claude/projects"
+  for _claude_proj in "${PERSONAL_GITREPOS}/${DOTFILES}/.claude/projects/"*; do
+    _claude_proj_target="${HOME}/.claude/projects/$(basename ${_claude_proj})"
+    safe_link "${_claude_proj}" "${_claude_proj_target}"
+  done
 
   safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.ssh/config" "${HOME}/.ssh/config"
 

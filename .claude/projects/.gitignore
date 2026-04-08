@@ -1,0 +1,6 @@
+# Ignore conversation history — only track memory/ subdirectories
+*
+!.gitignore
+!*/
+!*/memory/
+!*/memory/**
