@@ -10,6 +10,4 @@ Both specs merged to master on 2026-04-07 (PR #4):
 
 **Why:** Migrate setup_env.sh from deprecated hostname vars to HAS_* capability vars; introduce wsl2_workstation profile for cruncher.
 
-**Next:** `2026-04-05-mas-brewfile-integration-design.md` — deferred, not started.
-
-**How to apply:** The mas-brewfile-integration spec has a plan at `docs/superpowers/plans/2026-04-05-mas-brewfile-integration.md` — check if it exists before writing a new one.
+**Next:** All three specs complete. No pending migration work.
