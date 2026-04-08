@@ -97,6 +97,40 @@ teardown() {
   [ -n "${RUBY_VER}" ]
 }
 
+# ── process_args: doctor ──────────────────────────────────────────────────────
+
+@test "process_args sets DOCTOR for -t doctor" {
+  run bash -c "
+    source '${BATS_TEST_DIRNAME}/../../setup_env.sh'
+    process_args -t doctor
+    printf '%s' \"\${DOCTOR}\"
+  "
+  [ "$status" -eq 0 ]
+  [ "$output" = "1" ]
+}
+
+# ── process_args: --dry-run ───────────────────────────────────────────────────
+
+@test "process_args sets DRY_RUN for --dry-run flag" {
+  run bash -c "
+    source '${BATS_TEST_DIRNAME}/../../setup_env.sh'
+    process_args --dry-run -t setup_user
+    printf '%s' \"\${DRY_RUN}\"
+  "
+  [ "$status" -eq 0 ]
+  [ "$output" = "1" ]
+}
+
+@test "process_args sets SETUP_USER when combined with --dry-run" {
+  run bash -c "
+    source '${BATS_TEST_DIRNAME}/../../setup_env.sh'
+    process_args --dry-run -t setup_user
+    printf '%s' \"\${SETUP_USER}\"
+  "
+  [ "$status" -eq 0 ]
+  [ "$output" = "1" ]
+}
+
 @test "TERRAFORM_VER matches semver pattern" {
   [[ "${TERRAFORM_VER}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
 }

@@ -177,20 +177,33 @@ check_and_install_nala() {
 
 usage() {
   cat << EOF
-Usage: $0 -t <type> [-w]
+Usage: $0 -t <type> [--dry-run] [-w]
 Types:
   setup_user : Sets up a basic user environment for the current user
   setup      : Runs a full machine and developer setup
   developer  : Runs a developer setup with packages and python virtual environment for running ansible
   ansible    : Just runs the ansible setup using a python virtual environment. Typically used after a python update
   update     : Does a system update of packages including brew packages
+  doctor     : Prints detected OS, profile, capabilities, and key paths (no side effects)
 Options:
-  -w : Optional -- Specify w for a redhat computer, sets up terraform 0.11 instead of default 0.12
+  --dry-run  : Log mutating operations (symlinks, installs, mkdir) without executing them
+  -w         : Optional -- Specify w for a redhat computer, sets up terraform 0.11 instead of default 0.12
 EOF
   exit 0
 }
 
 process_args() {
+  # Pre-process long options before getopts (getopts only handles short options)
+  local _short_args=()
+  for _arg in "$@"; do
+    if [[ "${_arg}" == "--dry-run" ]]; then
+      readonly DRY_RUN=1
+    else
+      _short_args+=("${_arg}")
+    fi
+  done
+  set -- "${_short_args[@]}"
+
   local arg OPTARG
   while getopts ":ht:w" arg; do
     # shellcheck disable=SC2317 # exit after usage() is intentional redundancy
@@ -199,11 +212,12 @@ process_args() {
         # shellcheck disable=SC2317 # exit after usage() is intentional redundancy
         case ${OPTARG} in
           setup_user) readonly SETUP_USER=1 ;;
-          setup) readonly SETUP=1 ;;
-          developer) readonly DEVELOPER=1 ;;
-          ansible) readonly ANSIBLE=1 ;;
-          update) readonly UPDATE=1 ;;
-          *) echo "Invalid option for -t"; usage; exit 1 ;;
+          setup)      readonly SETUP=1 ;;
+          developer)  readonly DEVELOPER=1 ;;
+          ansible)    readonly ANSIBLE=1 ;;
+          update)     readonly UPDATE=1 ;;
+          doctor)     readonly DOCTOR=1 ;;
+          *) printf "Invalid option for -t\n"; usage; exit 1 ;;
         esac
         ;;
       w) readonly WORK=1 ;;
