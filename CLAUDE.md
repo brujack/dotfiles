@@ -81,6 +81,10 @@ dotfiles/
 | `developer` | Dev packages + Python/Ansible virtualenv |
 | `ansible` | Ansible venv setup only (after Python updates) |
 | `update` | Update all packages (brew, apt, pip, gems, tools) |
+| `doctor` | Print OS, profile, capabilities, and key paths (no side effects) |
+
+**Options:**
+- `--dry-run` — log mutating operations (symlinks, installs, mkdir) without executing
 
 ## Symlink Strategy
 
