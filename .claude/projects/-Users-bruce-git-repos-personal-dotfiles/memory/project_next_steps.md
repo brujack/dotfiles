@@ -1,13 +1,13 @@
 ---
 name: Next steps plans created
-description: 5 specs and plans created 2026-04-08 for dotfiles next improvements; secrets guardrails (PR C) merged as PR #5; plan hygiene (PR E) merged as PR #6
+description: 5 specs+plans created 2026-04-08; secrets guardrails PR #5 merged; plan hygiene PR #6 merged; workflows extraction open as PR #7
 type: project
 ---
 
 On 2026-04-08, created 5 specs and plans for the next dotfiles improvements:
 - PR A: lib/workflows.sh extraction (spec + plan)
 - PR B: doctor + dry-run support (spec + plan)
-- PR A: lib/workflows.sh extraction — Pending
+- PR A: lib/workflows.sh extraction — open as PR #7
 - PR B: doctor + dry-run support — Pending
 - PR C: secrets guardrails — DONE, merged as PR #5
 - PR D: CI safety pass — Pending
