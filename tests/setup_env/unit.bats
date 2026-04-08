@@ -215,3 +215,40 @@ teardown() {
   declare -f run_update &>/dev/null
   [ "$?" -eq 0 ]
 }
+
+# ── run_cmd ──────────────────────────────────────────────────────────────────
+
+@test "run_cmd executes command when DRY_RUN is unset" {
+  unset DRY_RUN
+  run run_cmd printf "hello"
+  [ "$status" -eq 0 ]
+  [ "$output" = "hello" ]
+}
+
+@test "run_cmd prints dry-run message when DRY_RUN is set" {
+  export DRY_RUN=1
+  run run_cmd ln -s /src /dest
+  unset DRY_RUN
+  [ "$status" -eq 0 ]
+  [[ "$output" == "[DRY RUN]"* ]]
+}
+
+@test "run_cmd dry-run does not execute the command" {
+  export DRY_RUN=1
+  local tmpfile="${BATS_TEST_TMPDIR}/should_not_exist"
+  run run_cmd touch "${tmpfile}"
+  unset DRY_RUN
+  [ ! -f "${tmpfile}" ]
+}
+
+# ── safe_link dry-run ─────────────────────────────────────────────────────────
+
+@test "safe_link does not create symlink when DRY_RUN is set" {
+  export DRY_RUN=1
+  local src="${BATS_TEST_TMPDIR}/src_file"
+  local dest="${BATS_TEST_TMPDIR}/dest_link"
+  touch "${src}"
+  safe_link "${src}" "${dest}"
+  unset DRY_RUN
+  [ ! -L "${dest}" ]
+}

@@ -11,6 +11,15 @@ log_info()  { printf "${_GREEN}[INFO]${_NC}  %s\n" "$*"; }
 log_warn()  { printf "${_YELLOW}[WARN]${_NC}  %s\n" "$*" >&2; }
 log_error() { printf "${_RED}[ERROR]${_NC} %s\n" "$*" >&2; }
 
+# ── command wrapper ───────────────────────────────────────────────────────────
+run_cmd() {
+  if [[ -n ${DRY_RUN:-} ]]; then
+    printf "[DRY RUN] %s\n" "$*"
+  else
+    "$@"
+  fi
+}
+
 # ── symlink helpers ───────────────────────────────────────────────────────────
 safe_link() {
   local src="$1" dest="$2"
@@ -19,9 +28,9 @@ safe_link() {
   fi
   if [[ -e "${dest}" ]]; then
     log_warn "Backing up existing file: ${dest} → ${dest}.bak"
-    mv "${dest}" "${dest}.bak"
+    run_cmd mv "${dest}" "${dest}.bak"
   fi
-  ln -s "${src}" "${dest}"
+  run_cmd ln -s "${src}" "${dest}"
   log_info "Linked ${dest} → ${src}"
 }
 
