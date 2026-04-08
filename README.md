@@ -136,7 +136,7 @@ Dotfiles live in `.devcontainer/`, `.claude/`, and `.cursor/`. `setup_env.sh` cr
 
 ## Branch Workflow
 
-All changes go on feature branches. GitHub Actions CI runs `make test` on every push to a non-master branch and auto-merges the PR to master when tests pass.
+All changes go on feature branches. GitHub Actions CI runs `make test`, `lint-macos`, and `secret-scan` on every push. Dependabot PRs are auto-merged when all three pass; feature PRs require manual merge.
 
 ```bash
 git checkout -b my-feature
