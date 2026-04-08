@@ -1,7 +1,7 @@
 # Dotfiles Next Steps Plan
 
 **Date:** 2026-04-08
-**Status:** Draft
+**Status:** Active — implementation tracked in `docs/superpowers/specs/` and `docs/superpowers/plans/`
 **Scope:** Define the next implementation tranche after the initial modularization and capability migration work.
 
 ## Goals
@@ -10,6 +10,18 @@
 2. Improve operational safety and debuggability with `doctor` and dry-run support.
 3. Strengthen guardrails around secrets, local state, and CI behavior.
 4. Keep changes incremental, test-backed, and low-risk.
+
+## Implementation Tracking
+
+Each step from this plan has a corresponding spec and implementation plan in `docs/superpowers/`:
+
+| Step | Spec | Plan | Status |
+|---|---|---|---|
+| Step 1: Workflows extraction | [spec](../../superpowers/specs/2026-04-08-workflows-extraction-design.md) | [plan](../../superpowers/plans/2026-04-08-workflows-extraction.md) | Pending |
+| Step 2: Doctor + dry-run | [spec](../../superpowers/specs/2026-04-08-doctor-dry-run-design.md) | [plan](../../superpowers/plans/2026-04-08-doctor-dry-run.md) | Pending |
+| Step 3: Secrets guardrails | [spec](../../superpowers/specs/2026-04-08-secrets-guardrails-design.md) | [plan](../../superpowers/plans/2026-04-08-secrets-guardrails.md) | Done |
+| Step 4: CI safety | [spec](../../superpowers/specs/2026-04-08-ci-safety-design.md) | [plan](../../superpowers/plans/2026-04-08-ci-safety.md) | Pending |
+| Step 5: Plan hygiene | [spec](../../superpowers/specs/2026-04-08-plan-hygiene-design.md) | [plan](../../superpowers/plans/2026-04-08-plan-hygiene.md) | In Progress |
 
 ## Non-Goals
 
