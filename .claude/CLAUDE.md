@@ -109,6 +109,11 @@ Every project Makefile must have a `lint` target, and `test` must depend on it (
 
 Every git repository must have a `README.md` at the top level.
 
+Every git repository must have secrets guarding in place:
+- A `gitleaks` secret scan in CI (`.github/workflows/ci.yml`) scanning recent commits
+- A `.gitleaks.toml` allowlist config at the repo root
+- Credential files and secret paths listed in `.gitignore`
+
 ## Approach
 
 - Read and understand existing code before suggesting modifications
