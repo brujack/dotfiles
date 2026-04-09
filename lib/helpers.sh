@@ -158,6 +158,12 @@ app_dir_exists() {
   [[ -d "$normalized" ]]
 }
 
+_any_update_flag() {
+  [[ -n ${UPDATE_BREW:-}   ]] || [[ -n ${UPDATE_PIP:-}    ]] || \
+  [[ -n ${UPDATE_GEMS:-}   ]] || [[ -n ${UPDATE_MAS:-}    ]] || \
+  [[ -n ${UPDATE_CLAUDE:-} ]]
+}
+
 check_and_install_nala() {
   log_info "Installing nala"
   if [[ "$(uname -s)" = "Linux" ]]; then

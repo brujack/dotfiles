@@ -404,3 +404,30 @@ teardown() {
   "
   [ "$status" -eq 0 ]
 }
+
+# ── _any_update_flag ──────────────────────────────────────────────────────────
+
+@test "_any_update_flag returns 1 when no flags set" {
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
+  run _any_update_flag
+  [ "$status" -eq 1 ]
+}
+
+@test "_any_update_flag returns 0 when UPDATE_BREW is set" {
+  export UPDATE_BREW=1
+  run _any_update_flag
+  [ "$status" -eq 0 ]
+}
+
+@test "_any_update_flag returns 0 when UPDATE_PIP is set" {
+  export UPDATE_PIP=1
+  run _any_update_flag
+  [ "$status" -eq 0 ]
+}
+
+@test "_any_update_flag returns 0 when multiple flags are set" {
+  export UPDATE_PIP=1
+  export UPDATE_GEMS=1
+  run _any_update_flag
+  [ "$status" -eq 0 ]
+}
