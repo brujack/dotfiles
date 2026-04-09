@@ -114,6 +114,19 @@ Every git repository must have secrets guarding in place:
 - A `.gitleaks.toml` allowlist config at the repo root
 - Credential files and secret paths listed in `.gitignore`
 
+## Architectural Decision Records
+
+**ADRs are required** for all significant architectural choices in every personal repo under `~/git-repos/personal/`. Write the ADR before or alongside the implementation — not after.
+
+- **Cross-cutting decisions** (testing frameworks, CI patterns, tooling standards that apply across repos) → `dotfiles/docs/adr/`
+- **Repo-specific decisions** → that repo's own `docs/adr/`
+- **Numbering:** Sequential four-digit numbers (`0001`, `0002`, …); each repo's `docs/adr/` starts from `0001` independently
+- **Template:** Context → Decision → Consequences → Related (Nygard-style; see any `dotfiles/docs/adr/` file for the full format)
+- **Index:** Every `docs/adr/` directory must have a `README.md` with a status table listing all ADRs
+- **Status lifecycle:** `Proposed` → `Accepted` → `Deprecated` / `Superseded by ADR-NNNN`
+
+What counts as significant: choice of testing framework, CI tooling, major library adoption, data storage approach, authentication strategy, structural patterns (modularization, lib layout), security guardrails. Routine bug fixes and small features do not need ADRs.
+
 ## Approach
 
 - Read and understand existing code before suggesting modifications

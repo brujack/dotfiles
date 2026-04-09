@@ -12,6 +12,13 @@ dotfiles/
 ├── Brewfile                  # Homebrew bundle manifest (100+ formulae/casks)
 ├── config/
 │   └── profiles.sh           # hostname → profile map; edit here to add a new machine
+├── docs/
+│   ├── adr/                  # Architectural Decision Records (cross-cutting decisions)
+│   │   ├── README.md         # ADR index table
+│   │   └── NNNN-title.md     # Individual ADRs (0001, 0002, …)
+│   └── superpowers/          # Design specs and implementation plans
+│       ├── specs/            # Design documents (YYYY-MM-DD-*-design.md)
+│       └── plans/            # Implementation plans (YYYY-MM-DD-*.md)
 ├── lib/
 │   ├── constants.sh          # Version pins, download URLs, directory vars
 │   ├── helpers.sh            # Logging (log_info/warn/error), safe_link, install guards, brew helpers
