@@ -82,5 +82,5 @@ jobs:
         run: |
           PR=$(gh pr list --head "${{ github.ref_name }}" --json number --jq '.[0].number' 2>/dev/null || echo "")
           if [[ -n "${PR}" ]]; then
-            gh pr merge "${PR}" --auto --squash
+            gh pr merge "${PR}" --squash
           fi
