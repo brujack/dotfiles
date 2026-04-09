@@ -312,6 +312,7 @@ The following paths are machine-local and must **never** be committed to this re
 - `~/.gcloud_creds/` — GCloud credentials
 - `~/.tsh/` — Teleport session tokens
 - `~/.claude/projects/<path>/` conversation history jsonl files — only `memory/` subdirs are tracked
+- `config/local.sh` — machine-local overrides; copy from `config/local.sh.example`, git-ignored
 
 The `secret-scan` CI job (`gitleaks`) scans recent commits for credential patterns. If it fires on a legitimate file, add an allowlist entry to `.gitleaks.toml`.
 

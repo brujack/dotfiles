@@ -31,6 +31,16 @@ Personal development environment bootstrap for macOS, Linux (Ubuntu/RHEL), and W
 **Options:**
 - `--dry-run` — log mutating operations (symlinks, installs, mkdir) without executing
 
+### Machine-Local Overrides
+
+To customize a specific machine without committing changes, copy the example and edit:
+
+```bash
+cp config/local.sh.example config/local.sh
+```
+
+`config/local.sh` is git-ignored and sourced after `detect_env` runs. The `HAS_*` vars, `PROFILE`, and OS vars are all available to override.
+
 ### Re-running after shell change
 
 After switching to zsh, run setup again from the new shell:
