@@ -404,3 +404,90 @@ teardown() {
   "
   [ "$status" -eq 0 ]
 }
+
+# ── _any_update_flag ──────────────────────────────────────────────────────────
+
+@test "_any_update_flag returns 1 when no flags set" {
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
+  run _any_update_flag
+  [ "$status" -eq 1 ]
+}
+
+@test "_any_update_flag returns 0 when UPDATE_BREW is set" {
+  export UPDATE_BREW=1
+  run _any_update_flag
+  [ "$status" -eq 0 ]
+}
+
+@test "_any_update_flag returns 0 when UPDATE_PIP is set" {
+  export UPDATE_PIP=1
+  run _any_update_flag
+  [ "$status" -eq 0 ]
+}
+
+@test "_any_update_flag returns 0 when multiple flags are set" {
+  export UPDATE_PIP=1
+  export UPDATE_GEMS=1
+  run _any_update_flag
+  [ "$status" -eq 0 ]
+}
+
+# ── process_args granular update flags ───────────────────────────────────────
+
+@test "process_args sets UPDATE_BREW for --brew-only" {
+  process_args -t update --brew-only
+  [ "${UPDATE_BREW}" -eq 1 ]
+}
+
+@test "process_args sets UPDATE_PIP for --pip-only" {
+  process_args -t update --pip-only
+  [ "${UPDATE_PIP}" -eq 1 ]
+}
+
+@test "process_args sets UPDATE_GEMS for --gems-only" {
+  process_args -t update --gems-only
+  [ "${UPDATE_GEMS}" -eq 1 ]
+}
+
+@test "process_args sets UPDATE_MAS for --mas-only" {
+  process_args -t update --mas-only
+  [ "${UPDATE_MAS}" -eq 1 ]
+}
+
+@test "process_args sets UPDATE_CLAUDE for --claude-only" {
+  process_args -t update --claude-only
+  [ "${UPDATE_CLAUDE}" -eq 1 ]
+}
+
+@test "process_args sets multiple UPDATE flags when multiple flags given" {
+  process_args -t update --brew-only --pip-only
+  [ "${UPDATE_BREW}" -eq 1 ]
+  [ "${UPDATE_PIP}" -eq 1 ]
+}
+
+# ── run_update flag dispatch ───────────────────────────────────────────────────
+
+@test "run_update with --brew-only calls brew subsystem and skips gems" {
+  load_mocks
+  export MOCK_CALLS_FILE="${TMPDIR_TEST}/mock_calls"
+  touch "${MOCK_CALLS_FILE}"
+  export MACOS=1
+  unset LINUX
+  export UPDATE_BREW=1
+  unset UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
+  run_update
+  grep -q "brew update" "${MOCK_CALLS_FILE}"
+  ! grep -q "gem update" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_update with no flags calls brew and gem subsystems" {
+  load_mocks
+  export MOCK_CALLS_FILE="${TMPDIR_TEST}/mock_calls"
+  touch "${MOCK_CALLS_FILE}"
+  export MACOS=1
+  unset LINUX
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
+  run_update
+  grep -q "brew update" "${MOCK_CALLS_FILE}"
+  grep -q "gem update" "${MOCK_CALLS_FILE}"
+}

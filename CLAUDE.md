@@ -87,7 +87,7 @@ dotfiles/
 | `setup` | Full machine setup (setup_user + all apps) |
 | `developer` | Dev packages + Python/Ansible virtualenv |
 | `ansible` | Ansible venv setup only (after Python updates) |
-| `update` | Update all packages (brew, apt, pip, gems, tools) |
+| `update` | Update all packages (brew, apt/dnf/yum, pip, gems, tools). Supports `--brew-only`, `--pip-only`, `--gems-only`, `--mas-only`, `--claude-only` flags |
 | `doctor` | Print OS, profile, capabilities, and key paths (no side effects) |
 | `check-versions` | Compare pinned versions in `lib/constants.sh` against GitHub latest; exits 1 if outdated |
 
@@ -273,6 +273,7 @@ Available mock env vars:
 | `MOCK_GIT_CLONE_EXIT` | Exit code for `git clone` (default: 0); target directory is created |
 | `MOCK_GIT_EXIT` | Exit code for all other `git` commands (default: 0) |
 | `MOCK_MAS_EXIT` | Exit code for `mas` (default: 0) |
+| `MOCK_GEM_EXIT` | Exit code for `gem` (default: 0) |
 | `MOCK_SNAP_EXIT` | Exit code for `snap` (default: 0) |
 | `MOCK_NALA_EXIT` | Exit code for `nala` (default: 0) |
 | `MOCK_RUSTUP_EXIT` | Exit code for `rustup` (default: 0) |

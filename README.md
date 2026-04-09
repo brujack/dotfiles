@@ -30,6 +30,13 @@ Personal development environment bootstrap for macOS, Linux (Ubuntu/RHEL), and W
 
 **Options:**
 - `--dry-run` — log mutating operations (symlinks, installs, mkdir) without executing
+- `--brew-only` — update Homebrew formulae and casks only (with `-t update`)
+- `--pip-only` — update pip packages only (with `-t update`)
+- `--gems-only` — update Ruby gems only (with `-t update`)
+- `--mas-only` — update Mac App Store apps only (with `-t update`)
+- `--claude-only` — update Claude plugins only (with `-t update`)
+
+Flags are additive: `./setup_env.sh -t update --brew-only --pip-only` runs only brew and pip.
 
 ### Machine-Local Overrides
 

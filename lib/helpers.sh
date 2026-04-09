@@ -158,6 +158,12 @@ app_dir_exists() {
   [[ -d "$normalized" ]]
 }
 
+_any_update_flag() {
+  [[ -n ${UPDATE_BREW:-}   ]] || [[ -n ${UPDATE_PIP:-}    ]] || \
+  [[ -n ${UPDATE_GEMS:-}   ]] || [[ -n ${UPDATE_MAS:-}    ]] || \
+  [[ -n ${UPDATE_CLAUDE:-} ]]
+}
+
 check_and_install_nala() {
   log_info "Installing nala"
   if [[ "$(uname -s)" = "Linux" ]]; then
@@ -184,11 +190,17 @@ Types:
   developer  : Runs a developer setup with packages and python virtual environment for running ansible
   ansible    : Just runs the ansible setup using a python virtual environment. Typically used after a python update
   update     : Does a system update of packages including brew packages
+               Flags: --brew-only, --pip-only, --gems-only, --mas-only, --claude-only
   doctor     : Prints detected OS, profile, capabilities, and key paths (no side effects)
   check-versions : Compare pinned tool versions in lib/constants.sh against latest GitHub releases
 Options:
-  --dry-run  : Log mutating operations (symlinks, installs, mkdir) without executing them
-  -w         : Optional -- Specify w for a redhat computer, sets up terraform 0.11 instead of default 0.12
+  --dry-run     : Log mutating operations (symlinks, installs, mkdir) without executing them
+  --brew-only   : (update only) Update Homebrew formulae and casks only
+  --pip-only    : (update only) Update pip packages only
+  --gems-only   : (update only) Update Ruby gems only
+  --mas-only    : (update only) Update Mac App Store apps only
+  --claude-only : (update only) Update Claude plugins only
+  -w            : Optional -- Specify w for a redhat computer, sets up terraform 0.11 instead of default 0.12
 EOF
   exit 0
 }
@@ -224,11 +236,15 @@ process_args() {
   # Pre-process long options before getopts (getopts only handles short options)
   local _short_args=()
   for _arg in "$@"; do
-    if [[ "${_arg}" == "--dry-run" ]]; then
-      readonly DRY_RUN=1
-    else
-      _short_args+=("${_arg}")
-    fi
+    case "${_arg}" in
+      --dry-run)     readonly DRY_RUN=1 ;;
+      --brew-only)   readonly UPDATE_BREW=1 ;;
+      --pip-only)    readonly UPDATE_PIP=1 ;;
+      --gems-only)   readonly UPDATE_GEMS=1 ;;
+      --mas-only)    readonly UPDATE_MAS=1 ;;
+      --claude-only) readonly UPDATE_CLAUDE=1 ;;
+      *) _short_args+=("${_arg}") ;;
+    esac
   done
   set -- "${_short_args[@]}"
 
