@@ -1217,33 +1217,46 @@ run_developer_or_ansible() {
 }
 
 run_update() {
-  if [[ -n ${MACOS} ]] || [[ -n ${LINUX} ]]; then
-    brew_update
-    printf "Updating app store apps softwareupdate\\n"
-    sudo -H softwareupdate --install --all --verbose
-  fi
-  if command -v claude &>/dev/null; then
-    printf "Updating Claude plugins\\n"
-    claude plugins update superpowers && claude plugins update code-simplifier && claude plugins update context7
-    printf "Updated Claude plugins\\n"
-  fi
-  update_system_packages
-  printf "Updating pip3 packages\n"
-  if [[ -n ${HAS_DEVTOOLS} ]]; then
-    export PYENV_ROOT="$HOME/.pyenv"
-    export PATH="$PYENV_ROOT/bin:$PYENV_ROOT/shims:$PATH"
+  local _run_all=0
+  _any_update_flag || _run_all=1
 
-    if command -v pyenv >/dev/null 2>&1; then
-      eval "$(pyenv init -)"
-      eval "$(pyenv virtualenv-init -)" 2>/dev/null || true
+  if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_BREW:-} ]]; then
+    if [[ -n ${MACOS} ]] || [[ -n ${LINUX} ]]; then
+      brew_update
+      printf "Updating app store apps softwareupdate\\n"
+      sudo -H softwareupdate --install --all --verbose
     fi
+  fi
 
-    pyenv shell ansible 2>/dev/null || true
-    PYTHON="$(pyenv which python 2>/dev/null || command -v python3)"
+  if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_CLAUDE:-} ]]; then
+    if command -v claude &>/dev/null; then
+      printf "Updating Claude plugins\\n"
+      claude plugins update superpowers && claude plugins update code-simplifier && claude plugins update context7
+      printf "Updated Claude plugins\\n"
+    fi
+  fi
 
-    "$PYTHON" -m pip install -U pip setuptools wheel
+  if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_MAS:-} ]]; then
+    update_system_packages
+  fi
 
-    "$PYTHON" - <<'PY'
+  if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_PIP:-} ]]; then
+    printf "Updating pip3 packages\n"
+    if [[ -n ${HAS_DEVTOOLS} ]]; then
+      export PYENV_ROOT="$HOME/.pyenv"
+      export PATH="$PYENV_ROOT/bin:$PYENV_ROOT/shims:$PATH"
+
+      if command -v pyenv >/dev/null 2>&1; then
+        eval "$(pyenv init -)"
+        eval "$(pyenv virtualenv-init -)" 2>/dev/null || true
+      fi
+
+      pyenv shell ansible 2>/dev/null || true
+      PYTHON="$(pyenv which python 2>/dev/null || command -v python3)"
+
+      "$PYTHON" -m pip install -U pip setuptools wheel
+
+      "$PYTHON" - <<'PY'
 import json, subprocess, sys
 
 cmd = [sys.executable, "-m", "pip", "list", "--outdated", "--format=json"]
@@ -1254,52 +1267,59 @@ if pkgs:
     subprocess.check_call([sys.executable, "-m", "pip", "install", "-U", *pkgs])
 PY
 
-    "$PYTHON" -m pip check || true
-    printf "Updated pip packages\n"
+      "$PYTHON" -m pip check || true
+      printf "Updated pip packages\n"
+    fi
   fi
-  update_aws_cli
-  update_rust
-  if [[ -d ${HOME}/.tfenv ]]; then
-    printf "Updating tfenv\\n"
-    cd ${HOME}/.tfenv || exit
-    git pull
-    cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
+
+  if [[ ${_run_all} -eq 1 ]]; then
+    update_aws_cli
+    update_rust
+    if [[ -d ${HOME}/.tfenv ]]; then
+      printf "Updating tfenv\\n"
+      cd ${HOME}/.tfenv || exit
+      git pull
+      cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
+    fi
+    if [[ -d ${HOME}/.oh-my-zsh ]]; then
+      printf "Updating oh-my-zsh\\n"
+      cd ${HOME}/.oh-my-zsh || exit
+      git pull
+      cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
+    fi
+    if [[ -d ${HOME}/.oh-my-zsh/custom/themes/powerlevel10k ]]; then
+      printf "Updating powerlevel10k\\n"
+      cd ${HOME}/.oh-my-zsh/custom/themes/powerlevel10k || exit
+      git pull
+      cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
+    fi
+    if [[ -d ${HOME}/.tmux/plugins/tpm ]]; then
+      printf "Updating tpm\\n"
+      cd ${HOME}/.tmux/plugins/tpm || exit
+      git pull
+      cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
+    fi
+    if [[ -f ${HOME}/bin/cht.sh ]]; then
+      printf "Updating cheat.sh\\n"
+      curl https://cht.sh/:cht.sh > ~/bin/cht.sh
+      chmod 754 ${HOME}/bin/cht.sh
+    fi
+    if [[ -f ${HOME}/.zsh.d/_cht ]]; then
+      printf "Updating cheat.sh tab completion\\n"
+      curl https://cheat.sh/:zsh > ${HOME}/.zsh.d/_cht
+    fi
+    if [[ -d ${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions ]]; then
+      printf "Updating zsh-autosuggestions\\n"
+      cd ${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions || exit
+      git pull
+      cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
+    fi
   fi
-  if [[ -d ${HOME}/.oh-my-zsh ]]; then
-    printf "Updating oh-my-zsh\\n"
-    cd ${HOME}/.oh-my-zsh || exit
-    git pull
-    cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
+
+  if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_GEMS:-} ]]; then
+    printf "updating ruby gems\\n"
+    gem update
   fi
-  if [[ -d ${HOME}/.oh-my-zsh/custom/themes/powerlevel10k ]]; then
-    printf "Updating powerlevel10k\\n"
-    cd ${HOME}/.oh-my-zsh/custom/themes/powerlevel10k || exit
-    git pull
-    cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
-  fi
-  if [[ -d ${HOME}/.tmux/plugins/tpm ]]; then
-    printf "Updating tpm\\n"
-    cd ${HOME}/.tmux/plugins/tpm || exit
-    git pull
-    cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
-  fi
-  if [[ -f ${HOME}/bin/cht.sh ]]; then
-    printf "Updating cheat.sh\\n"
-    curl https://cht.sh/:cht.sh > ~/bin/cht.sh
-    chmod 754 ${HOME}/bin/cht.sh
-  fi
-  if [[ -f ${HOME}/.zsh.d/_cht ]]; then
-    printf "Updating cheat.sh tab completion\\n"
-    curl https://cheat.sh/:zsh > ${HOME}/.zsh.d/_cht
-  fi
-  if [[ -d ${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions ]]; then
-    printf "Updating zsh-autosuggestions\\n"
-    cd ${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions || exit
-    git pull
-    cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
-  fi
-  printf "updating ruby gems\\n"
-  gem update
 }
 
 _fetch_github_latest() {

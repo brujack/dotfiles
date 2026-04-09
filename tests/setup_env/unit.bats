@@ -464,3 +464,30 @@ teardown() {
   [ "${UPDATE_BREW}" -eq 1 ]
   [ "${UPDATE_PIP}" -eq 1 ]
 }
+
+# ── run_update flag dispatch ───────────────────────────────────────────────────
+
+@test "run_update with --brew-only calls brew subsystem and skips gems" {
+  load_mocks
+  export MOCK_CALLS_FILE="${TMPDIR_TEST}/mock_calls"
+  touch "${MOCK_CALLS_FILE}"
+  export MACOS=1
+  unset LINUX
+  export UPDATE_BREW=1
+  unset UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
+  run_update
+  grep -q "brew update" "${MOCK_CALLS_FILE}"
+  ! grep -q "gem update" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_update with no flags calls brew and gem subsystems" {
+  load_mocks
+  export MOCK_CALLS_FILE="${TMPDIR_TEST}/mock_calls"
+  touch "${MOCK_CALLS_FILE}"
+  export MACOS=1
+  unset LINUX
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
+  run_update
+  grep -q "brew update" "${MOCK_CALLS_FILE}"
+  grep -q "gem update" "${MOCK_CALLS_FILE}"
+}
