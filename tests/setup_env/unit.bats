@@ -374,3 +374,9 @@ teardown() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"[SKIP]"* ]]
 }
+
+# ── local overrides ───────────────────────────────────────────────────────────
+
+@test ".gitignore contains config/local.sh" {
+  grep -q '^config/local\.sh$' "${REPO_ROOT}/.gitignore"
+}
