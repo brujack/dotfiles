@@ -43,4 +43,4 @@ Master status index for all specs and implementation plans in this directory.
 | 2026-04-08 | [granular-update-flags](plans/2026-04-08-granular-update-flags.md) | [spec](specs/2026-04-08-granular-update-flags-design.md) | Pending |
 | 2026-04-08 | [doctor-enhanced](plans/2026-04-08-doctor-enhanced.md) | [spec](specs/2026-04-08-doctor-enhanced-design.md) | Pending |
 | 2026-04-08 | [workflow-test-coverage](plans/2026-04-08-workflow-test-coverage.md) | [spec](specs/2026-04-08-workflow-test-coverage-design.md) | Pending |
-| 2026-04-08 | [check-versions](plans/2026-04-08-check-versions.md) | [spec](specs/2026-04-08-check-versions-design.md) | Pending |
+| 2026-04-08 | [check-versions](plans/2026-04-08-check-versions.md) | [spec](specs/2026-04-08-check-versions-design.md) | In Progress |
