@@ -313,9 +313,6 @@ teardown() {
 # ── run_check_versions ────────────────────────────────────────────────────────
 
 @test "run_check_versions exits 0 when all pinned versions match latest" {
-  load_mocks
-  export MOCK_CALLS_FILE="${TMPDIR_TEST}/mock_calls"
-  touch "${MOCK_CALLS_FILE}"
   run_check_versions() {
     local _outdated=0
     local _latest _installed

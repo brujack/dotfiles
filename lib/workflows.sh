@@ -1340,6 +1340,8 @@ _check_one_version() {
   fi
 
   _installed="${_installed#v}"
+  # Strip any leading non-numeric prefix (handles golang's "go1.x.y" tag format)
+  _latest="${_latest#"${_latest%%[0-9]*}"}"
 
   if [[ "${_installed}" == "${_latest}" ]]; then
     printf "  [OK]       %-12s pinned=%-10s latest=%s\n" "${_tool}" "${_pinned}" "${_latest}"
@@ -1358,9 +1360,8 @@ run_check_versions() {
 
   _run_cv_check() {
     local _tool="$1" _pinned="$2" _repo="$3" _cmd="$4" _regex="$5"
-    local _out _rc
+    local _out
     _out=$(_check_one_version "${_tool}" "${_pinned}" "${_repo}" "${_cmd}" "${_regex}" 2>&1)
-    _rc=$?
     printf '%s\n' "${_out}"
     if [[ "${_out}" == *"[SKIP]"* ]];       then _skipped=$(( _skipped + 1 ))
     elif [[ "${_out}" == *"[WARN]"* ]];     then _warned=$(( _warned + 1 ))
