@@ -79,6 +79,9 @@ dotfiles/
 │   └── .config/.zshrc.d/     # Modular zsh config (7 numbered files)
 ├── .claude/                  # Claude Code config (symlinked into ~/.claude)
 ├── .cursor/User/             # Cursor settings (symlinked into Cursor User dir)
+├── docs/
+│   ├── adr/                  # Architectural Decision Records (cross-cutting decisions)
+│   └── superpowers/          # Design specs and implementation plans
 ├── tests/
 │   ├── setup_env/            # BATS tests (unit, profiles, install_guards, etc.)
 │   ├── zshrc.d/              # BATS tests for zsh config modules
@@ -137,7 +140,7 @@ Dotfiles live in `.devcontainer/`, `.claude/`, and `.cursor/`. `setup_env.sh` cr
 
 ## Branch Workflow
 
-All changes go on feature branches. GitHub Actions CI runs `make test`, `lint-macos`, and `secret-scan` on every push. Dependabot PRs are auto-merged when all three pass; feature PRs require manual merge.
+All changes go on feature branches. GitHub Actions CI runs `make test`, `lint-macos`, and `secret-scan` on every push. All PRs are auto-merged when all three pass.
 
 ```bash
 git checkout -b my-feature
