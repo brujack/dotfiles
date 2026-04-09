@@ -26,6 +26,7 @@ Personal development environment bootstrap for macOS, Linux (Ubuntu/RHEL), and W
 | `ansible` | Ansible venv only — typically used after a Python update |
 | `update` | Update all packages (brew, apt/dnf/yum, pip, mas, Claude plugins, etc.) |
 | `doctor` | Print detected OS, profile, capabilities, and key paths (no side effects) |
+| `check-versions` | Compare pinned tool versions in `lib/constants.sh` against latest GitHub releases. Exits 1 if any are outdated |
 
 **Options:**
 - `--dry-run` — log mutating operations (symlinks, installs, mkdir) without executing

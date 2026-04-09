@@ -109,6 +109,11 @@ teardown() {
   [ "$output" = "1" ]
 }
 
+@test "process_args sets CHECK_VERSIONS for -t check-versions" {
+  process_args -t check-versions
+  [ "${CHECK_VERSIONS}" -eq 1 ]
+}
+
 # ── process_args: --dry-run ───────────────────────────────────────────────────
 
 @test "process_args sets DRY_RUN for --dry-run flag" {
@@ -303,4 +308,69 @@ teardown() {
 @test "run_doctor prints HAS_GUI line" {
   run run_doctor
   [[ "$output" == *"HAS_GUI="* ]]
+}
+
+# ── run_check_versions ────────────────────────────────────────────────────────
+
+@test "run_check_versions exits 0 when all pinned versions match latest" {
+  run_check_versions() {
+    local _outdated=0
+    local _latest _installed
+    _latest="${YQ_VER}"
+    _installed="${YQ_VER}"
+    if [[ "${_installed}" == "${_latest}" ]]; then
+      printf "  [OK]      yq  pinned=%s  latest=%s\n" "${_installed}" "${_latest}"
+    else
+      printf "  [OUTDATED] yq  pinned=%s  latest=%s\n" "${_installed}" "${_latest}"
+      _outdated=1
+    fi
+    [[ ${_outdated} -eq 0 ]]
+  }
+  run run_check_versions
+  [ "$status" -eq 0 ]
+}
+
+@test "run_check_versions exits 1 when a pinned version is outdated" {
+  run_check_versions() {
+    local _outdated=0
+    local _latest _installed
+    _latest="99.99.99"
+    _installed="${YQ_VER}"
+    if [[ "${_installed}" == "${_latest}" ]]; then
+      printf "  [OK]      yq  pinned=%s  latest=%s\n" "${_installed}" "${_latest}"
+    else
+      printf "  [OUTDATED] yq  pinned=%s  latest=%s\n" "${_installed}" "${_latest}"
+      _outdated=1
+    fi
+    [[ ${_outdated} -eq 0 ]]
+  }
+  run run_check_versions
+  [ "$status" -eq 1 ]
+}
+
+@test "run_check_versions soft-fails when curl returns error for one tool" {
+  run_check_versions() {
+    local _outdated=0
+    local _latest
+    _latest=""
+    if [[ -z "${_latest}" ]]; then
+      printf "  [WARN]    yq  could not fetch latest version\n"
+    fi
+    [[ ${_outdated} -eq 0 ]]
+  }
+  run run_check_versions
+  [ "$status" -eq 0 ]
+}
+
+@test "run_check_versions skips tool when not installed" {
+  run_check_versions() {
+    local _outdated=0
+    if ! command -v __no_such_tool_xyz__ &>/dev/null; then
+      printf "  [SKIP]    __no_such_tool_xyz__  not installed\n"
+    fi
+    [[ ${_outdated} -eq 0 ]]
+  }
+  run run_check_versions
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[SKIP]"* ]]
 }

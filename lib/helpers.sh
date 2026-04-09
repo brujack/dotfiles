@@ -185,6 +185,7 @@ Types:
   ansible    : Just runs the ansible setup using a python virtual environment. Typically used after a python update
   update     : Does a system update of packages including brew packages
   doctor     : Prints detected OS, profile, capabilities, and key paths (no side effects)
+  check-versions : Compare pinned tool versions in lib/constants.sh against latest GitHub releases
 Options:
   --dry-run  : Log mutating operations (symlinks, installs, mkdir) without executing them
   -w         : Optional -- Specify w for a redhat computer, sets up terraform 0.11 instead of default 0.12
@@ -238,12 +239,13 @@ process_args() {
       t)
         # shellcheck disable=SC2317 # exit after usage() is intentional redundancy
         case ${OPTARG} in
-          setup_user) readonly SETUP_USER=1 ;;
-          setup)      readonly SETUP=1 ;;
-          developer)  readonly DEVELOPER=1 ;;
-          ansible)    readonly ANSIBLE=1 ;;
-          update)     readonly UPDATE=1 ;;
-          doctor)     readonly DOCTOR=1 ;;
+          setup_user)     readonly SETUP_USER=1 ;;
+          setup)          readonly SETUP=1 ;;
+          developer)      readonly DEVELOPER=1 ;;
+          ansible)        readonly ANSIBLE=1 ;;
+          update)         readonly UPDATE=1 ;;
+          doctor)         readonly DOCTOR=1 ;;
+          check-versions) readonly CHECK_VERSIONS=1 ;;
           *) printf "Invalid option for -t\n"; usage; exit 1 ;;
         esac
         ;;
