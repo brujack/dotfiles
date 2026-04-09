@@ -431,3 +431,36 @@ teardown() {
   run _any_update_flag
   [ "$status" -eq 0 ]
 }
+
+# ── process_args granular update flags ───────────────────────────────────────
+
+@test "process_args sets UPDATE_BREW for --brew-only" {
+  process_args -t update --brew-only
+  [ "${UPDATE_BREW}" -eq 1 ]
+}
+
+@test "process_args sets UPDATE_PIP for --pip-only" {
+  process_args -t update --pip-only
+  [ "${UPDATE_PIP}" -eq 1 ]
+}
+
+@test "process_args sets UPDATE_GEMS for --gems-only" {
+  process_args -t update --gems-only
+  [ "${UPDATE_GEMS}" -eq 1 ]
+}
+
+@test "process_args sets UPDATE_MAS for --mas-only" {
+  process_args -t update --mas-only
+  [ "${UPDATE_MAS}" -eq 1 ]
+}
+
+@test "process_args sets UPDATE_CLAUDE for --claude-only" {
+  process_args -t update --claude-only
+  [ "${UPDATE_CLAUDE}" -eq 1 ]
+}
+
+@test "process_args sets multiple UPDATE flags when multiple flags given" {
+  process_args -t update --brew-only --pip-only
+  [ "${UPDATE_BREW}" -eq 1 ]
+  [ "${UPDATE_PIP}" -eq 1 ]
+}

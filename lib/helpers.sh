@@ -230,11 +230,15 @@ process_args() {
   # Pre-process long options before getopts (getopts only handles short options)
   local _short_args=()
   for _arg in "$@"; do
-    if [[ "${_arg}" == "--dry-run" ]]; then
-      readonly DRY_RUN=1
-    else
-      _short_args+=("${_arg}")
-    fi
+    case "${_arg}" in
+      --dry-run)     readonly DRY_RUN=1 ;;
+      --brew-only)   readonly UPDATE_BREW=1 ;;
+      --pip-only)    readonly UPDATE_PIP=1 ;;
+      --gems-only)   readonly UPDATE_GEMS=1 ;;
+      --mas-only)    readonly UPDATE_MAS=1 ;;
+      --claude-only) readonly UPDATE_CLAUDE=1 ;;
+      *) _short_args+=("${_arg}") ;;
+    esac
   done
   set -- "${_short_args[@]}"
 
