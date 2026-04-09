@@ -31,6 +31,12 @@ process_args "$@"
 
 detect_env
 
+# Machine-local overrides (git-ignored, sourced if present)
+_LOCAL_CFG="$(dirname "${BASH_SOURCE[0]}")/config/local.sh"
+# shellcheck disable=SC1090 # path is variable by design — machine-local file
+[[ -f "${_LOCAL_CFG}" ]] && source "${_LOCAL_CFG}"
+unset _LOCAL_CFG
+
 [[ -n ${DOCTOR:-} ]] && { run_doctor; exit 0; }
 [[ -n ${CHECK_VERSIONS:-} ]] && { run_check_versions; exit $?; }
 

@@ -374,3 +374,33 @@ teardown() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"[SKIP]"* ]]
 }
+
+# ── local overrides ───────────────────────────────────────────────────────────
+
+@test ".gitignore contains config/local.sh" {
+  grep -q '^config/local\.sh$' "${REPO_ROOT}/.gitignore"
+}
+
+@test "config/local.sh is sourced when present" {
+  local local_cfg="${REPO_ROOT}/config/local.sh"
+  printf '#!/usr/bin/env bash\nLOCAL_SENTINEL=42\n' > "${local_cfg}"
+  run bash -c "
+    _LOCAL_CFG='${local_cfg}'
+    [[ -f \"\${_LOCAL_CFG}\" ]] && source \"\${_LOCAL_CFG}\"
+    unset _LOCAL_CFG
+    [[ \${LOCAL_SENTINEL} -eq 42 ]]
+  "
+  rm -f "${local_cfg}"
+  [ "$status" -eq 0 ]
+}
+
+@test "config/local.sh absence does not cause errors" {
+  local local_cfg="${REPO_ROOT}/config/local.sh"
+  rm -f "${local_cfg}"
+  run bash -c "
+    _LOCAL_CFG='${local_cfg}'
+    [[ -f \"\${_LOCAL_CFG}\" ]] && source \"\${_LOCAL_CFG}\"
+    unset _LOCAL_CFG
+  "
+  [ "$status" -eq 0 ]
+}

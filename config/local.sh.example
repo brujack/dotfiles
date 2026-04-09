@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# config/local.sh — machine-local overrides (git-ignored, not committed)
+#
+# This file is sourced after detect_env(), so HAS_* vars and PROFILE are set.
+# Copy this file to config/local.sh and customise for this machine.
+#
+# Examples:
+
+# Override a capability var (e.g. disable Docker installs on this machine)
+# unset HAS_DOCKER
+
+# Add a machine-specific PATH entry
+# export PATH="${HOME}/.local/bin:${PATH}"
+
+# Source a work-specific secrets file
+# [[ -f "${HOME}/.work_env" ]] && source "${HOME}/.work_env"
+
+# Add a custom symlink
+# safe_link "${HOME}/work/dotfiles/.gitconfig_work" "${HOME}/.gitconfig_work"
