@@ -1301,3 +1301,83 @@ PY
   printf "updating ruby gems\\n"
   gem update
 }
+
+_fetch_github_latest() {
+  local _repo="$1"
+  local -a _curl_args=(-sf)
+  if [[ -n ${GITHUB_TOKEN:-} ]]; then
+    _curl_args+=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
+  fi
+  curl "${_curl_args[@]}" \
+    "https://api.github.com/repos/${_repo}/releases/latest" \
+    | grep '"tag_name"' \
+    | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/' \
+    | sed 's/^v//'
+}
+
+_check_one_version() {
+  local _tool="$1" _pinned="$2" _repo="$3" _cmd="$4" _regex="$5"
+
+  if ! command -v "${_tool}" &>/dev/null; then
+    printf "  [SKIP]     %-12s not installed\n" "${_tool}"
+    return 0
+  fi
+
+  local _latest
+  _latest=$(_fetch_github_latest "${_repo}")
+  if [[ -z "${_latest}" ]]; then
+    printf "  [WARN]     %-12s could not fetch latest version\n" "${_tool}"
+    return 0
+  fi
+
+  local _raw _installed
+  _raw=$(${_cmd} 2>&1)
+  _installed=$(printf '%s' "${_raw}" | grep -oE "${_regex}" | head -1)
+
+  if [[ -z "${_installed}" ]]; then
+    printf "  [WARN]     %-12s could not parse installed version\n" "${_tool}"
+    return 0
+  fi
+
+  _installed="${_installed#v}"
+
+  if [[ "${_installed}" == "${_latest}" ]]; then
+    printf "  [OK]       %-12s pinned=%-10s latest=%s\n" "${_tool}" "${_pinned}" "${_latest}"
+    return 0
+  else
+    printf "  [OUTDATED] %-12s pinned=%-10s latest=%s  installed=%s\n" \
+      "${_tool}" "${_pinned}" "${_latest}" "${_installed}"
+    return 1
+  fi
+}
+
+run_check_versions() {
+  local _outdated=0 _skipped=0 _warned=0 _ok=0
+
+  printf "=== Version Check ===\n\n"
+
+  _run_cv_check() {
+    local _tool="$1" _pinned="$2" _repo="$3" _cmd="$4" _regex="$5"
+    local _out _rc
+    _out=$(_check_one_version "${_tool}" "${_pinned}" "${_repo}" "${_cmd}" "${_regex}" 2>&1)
+    _rc=$?
+    printf '%s\n' "${_out}"
+    if [[ "${_out}" == *"[SKIP]"* ]];       then _skipped=$(( _skipped + 1 ))
+    elif [[ "${_out}" == *"[WARN]"* ]];     then _warned=$(( _warned + 1 ))
+    elif [[ "${_out}" == *"[OK]"* ]];       then _ok=$(( _ok + 1 ))
+    elif [[ "${_out}" == *"[OUTDATED]"* ]]; then _outdated=$(( _outdated + 1 )); fi
+  }
+
+  _run_cv_check "go"         "${GO_VER}"         "golang/go"           "go version"           "[0-9]+\.[0-9]+(\.[0-9]+)?"
+  _run_cv_check "python3"    "${PYTHON_VER}"      "python/cpython"      "python3 --version"    "[0-9]+\.[0-9]+\.[0-9]+"
+  _run_cv_check "ruby"       "${RUBY_VER}"        "ruby/ruby"           "ruby --version"       "[0-9]+\.[0-9]+\.[0-9]+"
+  _run_cv_check "zsh"        "${ZSH_VER}"         "zsh-users/zsh"       "zsh --version"        "[0-9]+\.[0-9]+(\.[0-9]+)?"
+  _run_cv_check "yq"         "${YQ_VER}"          "mikefarah/yq"        "yq --version"         "[0-9]+\.[0-9]+\.[0-9]+"
+  _run_cv_check "shellcheck" "${SHELLCHECK_VER}"  "koalaman/shellcheck" "shellcheck --version" "[0-9]+\.[0-9]+\.[0-9]+"
+  _run_cv_check "vagrant"    "${VAGRANT_VER}"     "hashicorp/vagrant"   "vagrant --version"    "[0-9]+\.[0-9]+\.[0-9]+"
+
+  printf "\n%d outdated, %d skipped, %d warnings, %d OK\n" \
+    "${_outdated}" "${_skipped}" "${_warned}" "${_ok}"
+
+  [[ ${_outdated} -eq 0 ]]
+}
