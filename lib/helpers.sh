@@ -20,6 +20,22 @@ run_cmd() {
   fi
 }
 
+# ── doctor check primitives ───────────────────────────────────────────────────
+_DOCTOR_PASS=0
+_DOCTOR_FAIL=0
+_DOCTOR_FAILED=0
+
+doctor_pass() {
+  _DOCTOR_PASS=$(( _DOCTOR_PASS + 1 ))
+  printf "  ${_GREEN}[PASS]${_NC} %s\n" "$1"
+}
+
+doctor_fail() {
+  _DOCTOR_FAIL=$(( _DOCTOR_FAIL + 1 ))
+  _DOCTOR_FAILED=1
+  printf "  ${_RED}[FAIL]${_NC} %s: %s\n" "$1" "${2:-}"
+}
+
 # ── symlink helpers ───────────────────────────────────────────────────────────
 safe_link() {
   local src="$1" dest="$2"

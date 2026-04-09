@@ -491,3 +491,35 @@ teardown() {
   grep -q "brew update" "${MOCK_CALLS_FILE}"
   grep -q "gem update" "${MOCK_CALLS_FILE}"
 }
+
+# ── doctor_pass / doctor_fail ─────────────────────────────────────────────────
+
+@test "doctor_pass increments _DOCTOR_PASS" {
+  _DOCTOR_PASS=0
+  doctor_pass "some check"
+  [ "${_DOCTOR_PASS}" -eq 1 ]
+}
+
+@test "doctor_pass prints [PASS] and label" {
+  _DOCTOR_PASS=0
+  run doctor_pass "my label"
+  [[ "$output" == *"[PASS]"* ]]
+  [[ "$output" == *"my label"* ]]
+}
+
+@test "doctor_fail increments _DOCTOR_FAIL and sets _DOCTOR_FAILED" {
+  _DOCTOR_FAIL=0
+  _DOCTOR_FAILED=0
+  doctor_fail "broken thing" "it is missing"
+  [ "${_DOCTOR_FAIL}" -eq 1 ]
+  [ "${_DOCTOR_FAILED}" -eq 1 ]
+}
+
+@test "doctor_fail prints [FAIL] with label and detail" {
+  _DOCTOR_FAIL=0
+  _DOCTOR_FAILED=0
+  run doctor_fail "broken thing" "it is missing"
+  [[ "$output" == *"[FAIL]"* ]]
+  [[ "$output" == *"broken thing"* ]]
+  [[ "$output" == *"it is missing"* ]]
+}
