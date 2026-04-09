@@ -109,6 +109,11 @@ teardown() {
   [ "$output" = "1" ]
 }
 
+@test "process_args sets CHECK_VERSIONS for -t check-versions" {
+  process_args -t check-versions
+  [ "${CHECK_VERSIONS}" -eq 1 ]
+}
+
 # ── process_args: --dry-run ───────────────────────────────────────────────────
 
 @test "process_args sets DRY_RUN for --dry-run flag" {

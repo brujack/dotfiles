@@ -238,12 +238,13 @@ process_args() {
       t)
         # shellcheck disable=SC2317 # exit after usage() is intentional redundancy
         case ${OPTARG} in
-          setup_user) readonly SETUP_USER=1 ;;
-          setup)      readonly SETUP=1 ;;
-          developer)  readonly DEVELOPER=1 ;;
-          ansible)    readonly ANSIBLE=1 ;;
-          update)     readonly UPDATE=1 ;;
-          doctor)     readonly DOCTOR=1 ;;
+          setup_user)     readonly SETUP_USER=1 ;;
+          setup)          readonly SETUP=1 ;;
+          developer)      readonly DEVELOPER=1 ;;
+          ansible)        readonly ANSIBLE=1 ;;
+          update)         readonly UPDATE=1 ;;
+          doctor)         readonly DOCTOR=1 ;;
+          check-versions) readonly CHECK_VERSIONS=1 ;;
           *) printf "Invalid option for -t\n"; usage; exit 1 ;;
         esac
         ;;
