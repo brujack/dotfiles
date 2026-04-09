@@ -185,6 +185,7 @@ Types:
   ansible    : Just runs the ansible setup using a python virtual environment. Typically used after a python update
   update     : Does a system update of packages including brew packages
   doctor     : Prints detected OS, profile, capabilities, and key paths (no side effects)
+  check-versions : Compare pinned tool versions in lib/constants.sh against latest GitHub releases
 Options:
   --dry-run  : Log mutating operations (symlinks, installs, mkdir) without executing them
   -w         : Optional -- Specify w for a redhat computer, sets up terraform 0.11 instead of default 0.12

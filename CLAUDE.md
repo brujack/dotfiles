@@ -82,6 +82,7 @@ dotfiles/
 | `ansible` | Ansible venv setup only (after Python updates) |
 | `update` | Update all packages (brew, apt, pip, gems, tools) |
 | `doctor` | Print OS, profile, capabilities, and key paths (no side effects) |
+| `check-versions` | Compare pinned versions in `lib/constants.sh` against GitHub latest; exits 1 if outdated |
 
 **Options:**
 - `--dry-run` — log mutating operations (symlinks, installs, mkdir) without executing
