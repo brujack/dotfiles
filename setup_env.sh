@@ -32,6 +32,7 @@ process_args "$@"
 detect_env
 
 [[ -n ${DOCTOR:-} ]] && { run_doctor; exit 0; }
+[[ -n ${CHECK_VERSIONS:-} ]] && { run_check_versions; exit $?; }
 
 [[ -n ${SETUP_USER:-} ]] || [[ -n ${SETUP:-} ]] && run_setup_user
 [[ -n ${SETUP:-} ]] || [[ -n ${DEVELOPER:-} ]] && run_setup_or_developer
