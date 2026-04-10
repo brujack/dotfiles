@@ -55,6 +55,10 @@ dotfiles/
 │       ├── 5_general.zsh     # General settings
 │       ├── 6_path.zsh        # PATH configuration
 │       └── 7_final.zsh       # Final setup, completions
+├── .claude/                  # Claude Code config (settings, plugins, memory)
+│   └── projects/             # Per-repo memories (symlinked from ~/.claude/projects/)
+├── .cursor/                  # Cursor config (plugins, skills-cursor)
+│   └── User/                 # Cursor user settings (symlinked into platform Cursor user dir)
 ├── tests/
 │   ├── setup_env/
 │   │   ├── unit.bats
@@ -96,11 +100,11 @@ dotfiles/
 
 ## Symlink Strategy
 
-Dotfiles live in `.devcontainer/` — `setup_env.sh` creates symlinks from `$HOME` into the repo:
+Dotfiles live in `.devcontainer/`, `.claude/`, and `.cursor/`. `setup_env.sh` creates symlinks from `$HOME` into the repo:
 
-```bash
-ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.devcontainer/.zshrc ${HOME}/.zshrc
-```
+- **`.devcontainer/`** — each file symlinked individually into `$HOME` (e.g. `~/.zshrc → …/.devcontainer/.zshrc`)
+- **`.claude/`** — each item symlinked individually into `~/.claude/`, preserving any non-repo files already there
+- **`.cursor/`** — each item (excluding `User/`) symlinked individually into `~/.cursor/`; `User/` contents are symlinked into the platform Cursor user settings dir
 
 Always remove the old file before symlinking (`rm -f` then `ln -s`). Validate symlinks with `[[ -L ${HOME}/.file ]]`.
 
