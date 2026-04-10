@@ -11,3 +11,8 @@ devcontainer.env
 .worktrees/
 
 config/local.sh
+
+# Version manager files (machine-local)
+.ruby-version
+.python-version
+.node-version

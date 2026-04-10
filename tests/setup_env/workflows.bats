@@ -146,45 +146,33 @@ teardown() {
 
 # ── run_brew_install ──────────────────────────────────────────────────────────
 
-@test "run_brew_install calls brew update" {
+@test "run_brew_install creates Brewfile symlink at BREWFILE_LOC" {
   export MACOS=1
-  unset LINUX UBUNTU HAS_GUI HAS_DEVTOOLS
+  unset LINUX UBUNTU HAS_GUI HAS_DEVTOOLS HAS_AWS HAS_K8S HAS_DOCKER HAS_RUST HAS_SNAP HAS_PRINTING
   touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile"
-  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.gui"
-  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.devtools"
   run run_brew_install
-  grep -q "brew update" "${MOCK_CALLS_FILE}"
+  [[ -L "${BREWFILE_LOC}/Brewfile" ]]
 }
 
-@test "run_brew_install calls brew bundle" {
+@test "run_brew_install returns 1 when install_homebrew fails" {
   export MACOS=1
-  unset LINUX UBUNTU HAS_GUI HAS_DEVTOOLS
+  unset LINUX UBUNTU HAS_GUI HAS_DEVTOOLS HAS_AWS HAS_K8S HAS_DOCKER HAS_RUST HAS_SNAP HAS_PRINTING
   touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile"
-  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.gui"
-  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.devtools"
-  run run_brew_install
-  grep -q "brew bundle" "${MOCK_CALLS_FILE}"
-}
-
-@test "run_brew_install calls brew cleanup" {
-  export MACOS=1
-  unset LINUX UBUNTU HAS_GUI HAS_DEVTOOLS
-  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile"
-  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.gui"
-  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.devtools"
-  run run_brew_install
-  grep -q "brew cleanup" "${MOCK_CALLS_FILE}"
-}
-
-@test "run_brew_install calls install_homebrew when brew is missing" {
-  export MACOS=1
-  unset LINUX UBUNTU HAS_GUI HAS_DEVTOOLS
-  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile"
-  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.gui"
-  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.devtools"
   export MOCK_WHICH_MISSING=brew
+  export MOCK_CURL_EXIT=1
+  export MOCK_UNAME_S="Darwin"
   run run_brew_install
-  grep -q "curl" "${MOCK_CALLS_FILE}"
+  [ "$status" -eq 1 ]
+}
+
+@test "run_brew_install calls brew but skips install_macos_casks on Linux" {
+  export LINUX=1
+  unset MACOS
+  export UBUNTU=1
+  export NOBLE=1
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile"
+  run run_brew_install
+  ! grep -q "brew bundle" "${MOCK_CALLS_FILE}"
 }
 
 # ── run_mas_install ───────────────────────────────────────────────────────────

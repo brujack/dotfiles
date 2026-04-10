@@ -50,6 +50,11 @@ unset _LOCAL_CFG
 [[ -n ${DOCTOR:-} ]] && { run_doctor; exit $?; }
 [[ -n ${CHECK_VERSIONS:-} ]] && { run_check_versions; exit $?; }
 
+_exit_code=0
+[[ -n ${SETUP_BREW:-} ]] && { run_brew_install || _exit_code=1; }
+[[ -n ${SETUP_MAS:-} ]]  && { run_mas_install  || _exit_code=1; }
+[[ -n ${SETUP_BREW:-} || -n ${SETUP_MAS:-} ]] && exit ${_exit_code}
+
 [[ -n ${SETUP_USER:-} || -n ${SETUP:-} ]] && run_setup_user
 [[ -n ${SETUP:-} || -n ${DEVELOPER:-} ]] && run_setup_or_developer
 [[ -n ${DEVELOPER:-} || -n ${ANSIBLE:-} ]] && run_developer_or_ansible

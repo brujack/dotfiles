@@ -1222,11 +1222,13 @@ run_brew_install() {
   ln -s "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile" "${BREWFILE_LOC}/Brewfile"
 
   if ! quiet_which brew; then
-    install_homebrew
+    install_homebrew || return 1
   fi
   brew_update
   brew_tap_if_missing homebrew/bundle
-  install_macos_casks
+  if [[ -n ${MACOS} ]]; then
+    install_macos_casks
+  fi
   brew cleanup
 }
 
