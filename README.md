@@ -12,6 +12,16 @@ Personal development environment bootstrap for macOS, Linux (Ubuntu/RHEL), and W
 ./setup_env.sh -t setup
 ```
 
+## Quick Start (Fresh Linux)
+
+```bash
+# Step 1: Install Homebrew prerequisites + Homebrew (one-time)
+./scripts/bootstrap_linux.sh
+
+# Step 2: Run setup
+./setup_env.sh -t setup
+```
+
 ## Usage
 
 ```bash
@@ -80,6 +90,7 @@ dotfiles/
 │   └── workflows.sh          # Top-level workflow functions dispatched by setup_env.sh
 ├── scripts/
 │   ├── bootstrap_mac.sh      # One-time macOS prerequisite installer (Homebrew + bash 5)
+│   ├── bootstrap_linux.sh    # One-time Linux prerequisite installer (Homebrew prerequisites + Homebrew)
 │   ├── .osx.sh               # macOS system defaults
 │   └── ...                   # utility scripts
 ├── powershell/
