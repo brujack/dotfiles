@@ -13,7 +13,8 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     fi
     exit 1
   fi
-  if ! which brew &>/dev/null; then
+  # Use env which (not command -v) so BATS mocks/tests can shadow PATH which
+  if ! env which brew &>/dev/null; then
     printf "[ERROR] Homebrew not found.\n" >&2
     if [[ "${_OS}" == "Darwin" ]]; then
       printf "        On macOS, run first: ./scripts/bootstrap_mac.sh\n" >&2
