@@ -155,6 +155,8 @@ teardown() {
   [[ "$output" == *"developer"* ]]
   [[ "$output" == *"ansible"* ]]
   [[ "$output" == *"update"* ]]
+  [[ "$output" == *"--brew-install"* ]]
+  [[ "$output" == *"--mas-install"* ]]
 }
 
 # ── prerequisite check ────────────────────────────────────────────────────────
@@ -462,6 +464,22 @@ teardown() {
   process_args -t update --brew-only --pip-only
   [ "${UPDATE_BREW}" -eq 1 ]
   [ "${UPDATE_PIP}" -eq 1 ]
+}
+
+@test "process_args sets SETUP_BREW for --brew-install" {
+  process_args -t setup --brew-install
+  [ "${SETUP_BREW}" -eq 1 ]
+}
+
+@test "process_args sets SETUP_MAS for --mas-install" {
+  process_args -t setup --mas-install
+  [ "${SETUP_MAS}" -eq 1 ]
+}
+
+@test "process_args sets both SETUP_BREW and SETUP_MAS when both flags given" {
+  process_args -t setup --brew-install --mas-install
+  [ "${SETUP_BREW}" -eq 1 ]
+  [ "${SETUP_MAS}" -eq 1 ]
 }
 
 # ── run_update flag dispatch ───────────────────────────────────────────────────
