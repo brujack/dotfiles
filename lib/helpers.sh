@@ -294,7 +294,43 @@ _doctor_check_symlinks() {
     fi
   done
 }
-_doctor_check_tools()     { :; }
+_doctor_check_tools() {
+  printf "\nTools:\n"
+  local _tool
+  local -a _common_tools=(git zsh curl tmux bats)
+
+  for _tool in "${_common_tools[@]}"; do
+    if command -v "${_tool}" &>/dev/null; then
+      doctor_pass "${_tool}"
+    else
+      doctor_fail "${_tool}" "not found"
+    fi
+  done
+
+  if [[ -n ${MACOS} ]]; then
+    if command -v brew &>/dev/null; then
+      doctor_pass "brew"
+    else
+      doctor_fail "brew" "not found"
+    fi
+  fi
+
+  if [[ -n ${LINUX} ]]; then
+    if [[ -n ${UBUNTU} ]]; then
+      if command -v apt-get &>/dev/null; then
+        doctor_pass "apt-get"
+      else
+        doctor_fail "apt-get" "not found"
+      fi
+    elif [[ -n ${REDHAT} ]] || [[ -n ${CENTOS} ]] || [[ -n ${FEDORA} ]]; then
+      if command -v dnf &>/dev/null || command -v yum &>/dev/null; then
+        doctor_pass "dnf/yum"
+      else
+        doctor_fail "dnf/yum" "not found"
+      fi
+    fi
+  fi
+}
 _doctor_check_cred_dirs() { :; }
 _doctor_check_versions()  { :; }
 

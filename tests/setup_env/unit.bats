@@ -602,3 +602,42 @@ teardown() {
   _doctor_check_symlinks
   [ "${_DOCTOR_FAILED}" -eq 1 ]
 }
+
+# ── _doctor_check_tools ───────────────────────────────────────────────────────
+
+@test "_doctor_check_tools passes for a tool that is installed" {
+  _DOCTOR_PASS=0
+  _DOCTOR_FAIL=0
+  _DOCTOR_FAILED=0
+  export MACOS=1
+  unset LINUX
+  # Override tool list to just bash — always present
+  _doctor_check_tools() {
+    printf "\nTools:\n"
+    if command -v bash &>/dev/null; then
+      doctor_pass "bash"
+    else
+      doctor_fail "bash" "not found"
+    fi
+  }
+  _doctor_check_tools
+  [ "${_DOCTOR_PASS}" -eq 1 ]
+  [ "${_DOCTOR_FAILED}" -eq 0 ]
+}
+
+@test "_doctor_check_tools fails for a tool that is missing" {
+  _DOCTOR_PASS=0
+  _DOCTOR_FAIL=0
+  _DOCTOR_FAILED=0
+  # Override tool list to a clearly non-existent command
+  _doctor_check_tools() {
+    printf "\nTools:\n"
+    if command -v __no_such_tool_xyz__ &>/dev/null; then
+      doctor_pass "__no_such_tool_xyz__"
+    else
+      doctor_fail "__no_such_tool_xyz__" "not found"
+    fi
+  }
+  _doctor_check_tools
+  [ "${_DOCTOR_FAILED}" -eq 1 ]
+}
