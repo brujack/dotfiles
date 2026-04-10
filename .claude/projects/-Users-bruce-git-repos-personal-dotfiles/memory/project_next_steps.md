@@ -1,6 +1,6 @@
 ---
 name: Next steps plans created
-description: check-versions merged PR #10; ADR practice merged PR #11; 4 features pending
+description: PRs #10-#14 merged; 1 feature pending (workflow-test-coverage)
 type: project
 ---
 
@@ -14,10 +14,10 @@ type: project
 - PR #11: ADR practice — DONE, merged (docs/adr/ + 5 seed ADRs + ~/.claude/CLAUDE.md ADR requirement)
 
 **Pending — not yet started:**
-- local-overrides: plan written (docs/superpowers/plans/2026-04-08-local-overrides.md)
-- granular-update-flags: plan written (docs/superpowers/plans/2026-04-08-granular-update-flags.md)
-- doctor-enhanced: plan written (docs/superpowers/plans/2026-04-08-doctor-enhanced.md)
 - workflow-test-coverage: plan written (docs/superpowers/plans/2026-04-08-workflow-test-coverage.md)
+
+**Also done:**
+- PR #14: doctor-enhanced — DONE, merged 2026-04-10
 
 **Why:** User asked for next improvement recommendations; brainstormed and approved all 5 designs. Specs and plans written 2026-04-08.
 
