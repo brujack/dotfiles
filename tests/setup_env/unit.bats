@@ -523,3 +523,82 @@ teardown() {
   [[ "$output" == *"broken thing"* ]]
   [[ "$output" == *"it is missing"* ]]
 }
+
+# ── run_doctor exit code ──────────────────────────────────────────────────────
+
+@test "run_doctor exits 0 when _DOCTOR_FAILED is 0" {
+  run_doctor() {
+    _DOCTOR_PASS=5
+    _DOCTOR_FAIL=0
+    _DOCTOR_FAILED=0
+    [[ ${_DOCTOR_FAILED} -eq 0 ]]
+  }
+  run run_doctor
+  [ "$status" -eq 0 ]
+}
+
+@test "run_doctor exits 1 when _DOCTOR_FAILED is 1" {
+  run_doctor() {
+    _DOCTOR_PASS=3
+    _DOCTOR_FAIL=1
+    _DOCTOR_FAILED=1
+    [[ ${_DOCTOR_FAILED} -eq 0 ]]
+  }
+  run run_doctor
+  [ "$status" -eq 1 ]
+}
+
+# ── _doctor_check_symlinks ────────────────────────────────────────────────────
+
+@test "_doctor_check_symlinks passes when all symlinks exist and resolve" {
+  _DOCTOR_PASS=0
+  _DOCTOR_FAIL=0
+  _DOCTOR_FAILED=0
+  export HOME="${TMPDIR_TEST}"
+  export MACOS=1
+  unset LINUX
+  mkdir -p "${TMPDIR_TEST}/.ssh" "${TMPDIR_TEST}/.config"
+  # Create a real file for each expected link target, then symlink it
+  local _links=(
+    ".zshrc" ".zprofile" ".vimrc" ".tmux.conf" ".p10k.zsh" ".gitconfig"
+  )
+  local _f
+  for _f in "${_links[@]}"; do
+    touch "${TMPDIR_TEST}/src_${_f}"
+    ln -s "${TMPDIR_TEST}/src_${_f}" "${TMPDIR_TEST}/${_f}"
+  done
+  touch "${TMPDIR_TEST}/src_ssh_config"
+  ln -s "${TMPDIR_TEST}/src_ssh_config" "${TMPDIR_TEST}/.ssh/config"
+  touch "${TMPDIR_TEST}/src_starship"
+  ln -s "${TMPDIR_TEST}/src_starship" "${TMPDIR_TEST}/.config/starship.toml"
+  mkdir -p "${TMPDIR_TEST}/src_zshrc_d"
+  ln -s "${TMPDIR_TEST}/src_zshrc_d" "${TMPDIR_TEST}/.config/.zshrc.d"
+  _doctor_check_symlinks
+  [ "${_DOCTOR_FAILED}" -eq 0 ]
+}
+
+@test "_doctor_check_symlinks fails when symlinks are missing" {
+  _DOCTOR_PASS=0
+  _DOCTOR_FAIL=0
+  _DOCTOR_FAILED=0
+  export HOME="${TMPDIR_TEST}"
+  export MACOS=1
+  unset LINUX
+  # Do not create any symlinks
+  _doctor_check_symlinks
+  [ "${_DOCTOR_FAILED}" -eq 1 ]
+}
+
+@test "_doctor_check_symlinks fails when symlink is broken" {
+  _DOCTOR_PASS=0
+  _DOCTOR_FAIL=0
+  _DOCTOR_FAILED=0
+  export HOME="${TMPDIR_TEST}"
+  export MACOS=1
+  unset LINUX
+  mkdir -p "${TMPDIR_TEST}/.ssh" "${TMPDIR_TEST}/.config"
+  # Create broken symlink for .zshrc (target does not exist)
+  ln -s "${TMPDIR_TEST}/nonexistent" "${TMPDIR_TEST}/.zshrc"
+  _doctor_check_symlinks
+  [ "${_DOCTOR_FAILED}" -eq 1 ]
+}

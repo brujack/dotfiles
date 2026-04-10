@@ -222,6 +222,10 @@ EOF
 }
 
 run_doctor() {
+  _DOCTOR_PASS=0
+  _DOCTOR_FAIL=0
+  _DOCTOR_FAILED=0
+
   printf "=== Doctor Report ===\n"
   printf "\nOS Detection:\n"
   printf "  MACOS=%s  LINUX=%s\n" "${MACOS:-<unset>}" "${LINUX:-<unset>}"
@@ -246,7 +250,53 @@ run_doctor() {
   printf "  DOTFILES=%s\n"          "${DOTFILES:-<unset>}"
   printf "  BREWFILE_LOC=%s\n"      "${BREWFILE_LOC:-<unset>}"
   printf "  CHRUBY_LOC=%s\n"        "${CHRUBY_LOC:-<unset>}"
+
+  printf "\n=== Checks ===\n"
+
+  _doctor_check_symlinks
+  _doctor_check_tools
+  _doctor_check_cred_dirs
+  _doctor_check_versions
+
+  printf "\n=== Summary ===\n"
+  printf "%d checks passed, %d failed\n" "${_DOCTOR_PASS}" "${_DOCTOR_FAIL}"
+
+  [[ ${_DOCTOR_FAILED} -eq 0 ]]
 }
+
+_doctor_check_symlinks() {
+  printf "\nSymlinks:\n"
+  local _label _link
+
+  # shellcheck disable=SC2088 # tildes are display labels, not expanded paths
+  local -a _checks=(
+    "~/.zshrc          ${HOME}/.zshrc"
+    "~/.zprofile       ${HOME}/.zprofile"
+    "~/.vimrc          ${HOME}/.vimrc"
+    "~/.tmux.conf      ${HOME}/.tmux.conf"
+    "~/.p10k.zsh       ${HOME}/.p10k.zsh"
+    "~/.ssh/config     ${HOME}/.ssh/config"
+    "~/.config/starship.toml  ${HOME}/.config/starship.toml"
+    "~/.config/.zshrc.d       ${HOME}/.config/.zshrc.d"
+    "~/.gitconfig      ${HOME}/.gitconfig"
+  )
+
+  local _entry
+  for _entry in "${_checks[@]}"; do
+    _label="${_entry%%  *}"
+    _link="${_entry##*  }"
+    if [[ -L "${_link}" ]] && [[ -e "${_link}" ]]; then
+      doctor_pass "${_label}"
+    elif [[ -L "${_link}" ]]; then
+      doctor_fail "${_label}" "broken symlink (target missing)"
+    else
+      doctor_fail "${_label}" "symlink missing"
+    fi
+  done
+}
+_doctor_check_tools()     { :; }
+_doctor_check_cred_dirs() { :; }
+_doctor_check_versions()  { :; }
 
 process_args() {
   # Pre-process long options before getopts (getopts only handles short options)
