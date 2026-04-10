@@ -50,9 +50,9 @@ unset _LOCAL_CFG
 [[ -n ${DOCTOR:-} ]] && { run_doctor; exit $?; }
 [[ -n ${CHECK_VERSIONS:-} ]] && { run_check_versions; exit $?; }
 
-[[ -n ${SETUP_USER:-} ]] || [[ -n ${SETUP:-} ]] && run_setup_user
-[[ -n ${SETUP:-} ]] || [[ -n ${DEVELOPER:-} ]] && run_setup_or_developer
-[[ -n ${DEVELOPER:-} ]] || [[ -n ${ANSIBLE:-} ]] && run_developer_or_ansible
+[[ -n ${SETUP_USER:-} || -n ${SETUP:-} ]] && run_setup_user
+[[ -n ${SETUP:-} || -n ${DEVELOPER:-} ]] && run_setup_or_developer
+[[ -n ${DEVELOPER:-} || -n ${ANSIBLE:-} ]] && run_developer_or_ansible
 [[ -n ${UPDATE:-} ]] && run_update
 
 /usr/bin/env zsh "${HOME}/.zshrc"
