@@ -2,17 +2,27 @@
 
 # Prerequisite check — runs only when executed directly (not sourced by tests)
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  _OS="$(uname -s)"
   _BASH_MAJOR="${BASH_VERSINFO[0]:-0}"
   if [[ "${_BASH_MAJOR}" -lt 5 ]]; then
     printf "[ERROR] bash 5+ required (running bash %s).\n" "${BASH_VERSION}" >&2
-    printf "        On macOS, run first: ./scripts/bootstrap_mac.sh\n" >&2
+    if [[ "${_OS}" == "Darwin" ]]; then
+      printf "        On macOS, run first: ./scripts/bootstrap_mac.sh\n" >&2
+    elif [[ "${_OS}" == "Linux" ]]; then
+      printf "        On Linux, run first: ./scripts/bootstrap_linux.sh\n" >&2
+    fi
     exit 1
   fi
   if ! which brew &>/dev/null; then
     printf "[ERROR] Homebrew not found.\n" >&2
-    printf "        On macOS, run first: ./scripts/bootstrap_mac.sh\n" >&2
+    if [[ "${_OS}" == "Darwin" ]]; then
+      printf "        On macOS, run first: ./scripts/bootstrap_mac.sh\n" >&2
+    elif [[ "${_OS}" == "Linux" ]]; then
+      printf "        On Linux, run first: ./scripts/bootstrap_linux.sh\n" >&2
+    fi
     exit 1
   fi
+  unset _OS
 fi
 
 source "$(dirname "${BASH_SOURCE[0]}")/lib/constants.sh"
@@ -40,9 +50,9 @@ unset _LOCAL_CFG
 [[ -n ${DOCTOR:-} ]] && { run_doctor; exit $?; }
 [[ -n ${CHECK_VERSIONS:-} ]] && { run_check_versions; exit $?; }
 
-[[ -n ${SETUP_USER:-} ]] || [[ -n ${SETUP:-} ]] && run_setup_user
-[[ -n ${SETUP:-} ]] || [[ -n ${DEVELOPER:-} ]] && run_setup_or_developer
-[[ -n ${DEVELOPER:-} ]] || [[ -n ${ANSIBLE:-} ]] && run_developer_or_ansible
+[[ -n ${SETUP_USER:-} || -n ${SETUP:-} ]] && run_setup_user
+[[ -n ${SETUP:-} || -n ${DEVELOPER:-} ]] && run_setup_or_developer
+[[ -n ${DEVELOPER:-} || -n ${ANSIBLE:-} ]] && run_developer_or_ansible
 [[ -n ${UPDATE:-} ]] && run_update
 
 /usr/bin/env zsh "${HOME}/.zshrc"

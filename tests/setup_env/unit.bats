@@ -167,12 +167,12 @@ teardown() {
   [[ "$output" == *"Homebrew not found"* ]]
 }
 
-@test "setup_env.sh prereq error message points to bootstrap_mac.sh" {
+@test "setup_env.sh prereq error message points to platform bootstrap script" {
   load_mocks
   export MOCK_WHICH_MISSING=brew
   run bash "${BATS_TEST_DIRNAME}/../../setup_env.sh"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"bootstrap_mac.sh"* ]]
+  [[ "$output" == *"bootstrap_mac.sh"* ]] || [[ "$output" == *"bootstrap_linux.sh"* ]]
 }
 
 @test "setup_env.sh contains bash version prerequisite check" {
