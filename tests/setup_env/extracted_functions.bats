@@ -198,6 +198,15 @@ _make_fake_dotfiles() {
   [[ ! -L "${FAKE_HOME}/.cursor/User" ]]
 }
 
+@test "setup_dotfile_symlinks handles .claude/projects/ when directory is empty" {
+  _make_fake_dotfiles
+  rm -rf "${FAKE_DOTFILES_SRC}/.claude/projects"
+  export MACOS=1
+  unset LINUX
+  run setup_dotfile_symlinks
+  [ "$status" -eq 0 ]
+}
+
 # ── setup_credential_directories ────────────────────────────────────────────
 
 @test "setup_credential_directories creates .aws with chmod 700" {

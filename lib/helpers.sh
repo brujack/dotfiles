@@ -577,7 +577,8 @@ setup_dotfile_symlinks() {
   done
   mkdir -p "${HOME}/.claude/projects"
   for _claude_proj in "${PERSONAL_GITREPOS}/${DOTFILES}/.claude/projects/"*; do
-    _claude_proj_target="${HOME}/.claude/projects/$(basename ${_claude_proj})"
+    [[ -e "${_claude_proj}" ]] || continue
+    _claude_proj_target="${HOME}/.claude/projects/$(basename "${_claude_proj}")"
     safe_link "${_claude_proj}" "${_claude_proj_target}"
   done
 
