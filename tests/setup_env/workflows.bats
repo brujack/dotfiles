@@ -143,3 +143,34 @@ teardown() {
   run_update
   grep -q "mas upgrade" "${MOCK_CALLS_FILE}"
 }
+
+# ── run_brew_install ──────────────────────────────────────────────────────────
+
+@test "run_brew_install creates Brewfile symlink at BREWFILE_LOC" {
+  export MACOS=1
+  unset LINUX UBUNTU HAS_GUI HAS_DEVTOOLS HAS_AWS HAS_K8S HAS_DOCKER HAS_RUST HAS_SNAP HAS_PRINTING
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile"
+  run run_brew_install
+  [[ -L "${BREWFILE_LOC}/Brewfile" ]]
+}
+
+@test "run_brew_install returns 1 when install_homebrew fails" {
+  export MACOS=1
+  unset LINUX UBUNTU HAS_GUI HAS_DEVTOOLS HAS_AWS HAS_K8S HAS_DOCKER HAS_RUST HAS_SNAP HAS_PRINTING
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile"
+  export MOCK_WHICH_MISSING=brew
+  export MOCK_CURL_EXIT=1
+  export MOCK_UNAME_S="Darwin"
+  run run_brew_install
+  [ "$status" -eq 1 ]
+}
+
+@test "run_brew_install does not call install_macos_casks on Linux" {
+  export LINUX=1
+  unset MACOS
+  export UBUNTU=1
+  export NOBLE=1
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile"
+  run run_brew_install
+  ! grep -q "brew bundle" "${MOCK_CALLS_FILE}"
+}

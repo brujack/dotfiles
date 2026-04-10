@@ -72,7 +72,12 @@ install_homebrew() {
   fi
 
   log_info "Installing Homebrew..."
-  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+  local _brew_script
+  _brew_script="$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || {
+    log_error "Failed to download Homebrew installer. Aborting."
+    return 1
+  }
+  /bin/bash -c "${_brew_script}"
 
   # Check if the installation was successful
   if [[ $? -ne 0 ]]; then
