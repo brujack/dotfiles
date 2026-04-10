@@ -23,6 +23,8 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
 
 Common types: `feat`, `fix`, `docs`, `ci`, `refactor`, `test`, `chore`.
 
+Before committing, run the pre-commit logic review checklist (see "Logic Review" section) against staged changes.
+
 ## Memory
 
 Whenever memory files are created or updated, commit them immediately as part of the same logical unit of work — or as a standalone commit if the session is wrapping up. Memory changes are not committed automatically; you must `git add` and `git commit` them explicitly.
