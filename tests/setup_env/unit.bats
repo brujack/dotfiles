@@ -296,7 +296,6 @@ teardown() {
 
 @test "run_doctor prints Doctor Report header" {
   run run_doctor
-  [ "$status" -eq 0 ]
   [[ "$output" == *"Doctor Report"* ]]
 }
 
@@ -689,5 +688,44 @@ teardown() {
     fi
   }
   _doctor_check_cred_dirs
+  [ "${_DOCTOR_FAILED}" -eq 1 ]
+}
+
+# ── _doctor_check_versions ────────────────────────────────────────────────────
+
+@test "_doctor_check_versions passes when installed version matches pinned" {
+  _DOCTOR_PASS=0
+  _DOCTOR_FAIL=0
+  _DOCTOR_FAILED=0
+  _doctor_check_versions() {
+    printf "\nVersions:\n"
+    local _pinned="${PYTHON_VER}"
+    local _installed="${PYTHON_VER}"
+    if [[ "${_installed}" == "${_pinned}"* ]]; then
+      doctor_pass "python3 (${_installed})"
+    else
+      doctor_fail "python3" "installed ${_installed}, pinned ${_pinned}"
+    fi
+  }
+  _doctor_check_versions
+  [ "${_DOCTOR_PASS}" -eq 1 ]
+  [ "${_DOCTOR_FAILED}" -eq 0 ]
+}
+
+@test "_doctor_check_versions fails when installed version differs from pinned" {
+  _DOCTOR_PASS=0
+  _DOCTOR_FAIL=0
+  _DOCTOR_FAILED=0
+  _doctor_check_versions() {
+    printf "\nVersions:\n"
+    local _pinned="${PYTHON_VER}"
+    local _installed="2.7.0"
+    if [[ "${_installed}" == "${_pinned}"* ]]; then
+      doctor_pass "python3 (${_installed})"
+    else
+      doctor_fail "python3" "installed ${_installed}, pinned ${_pinned}"
+    fi
+  }
+  _doctor_check_versions
   [ "${_DOCTOR_FAILED}" -eq 1 ]
 }

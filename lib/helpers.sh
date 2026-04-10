@@ -356,7 +356,34 @@ _doctor_check_cred_dirs() {
     fi
   done
 }
-_doctor_check_versions()  { :; }
+_doctor_check_versions() {
+  printf "\nVersions:\n"
+
+  _doctor_check_one_version() {
+    local _tool="$1" _pinned="$2" _cmd="$3" _regex="$4"
+    if ! command -v "${_tool}" &>/dev/null; then
+      log_warn "${_tool}: not installed (skipping version check)"
+      return
+    fi
+    local _raw _installed
+    _raw=$(${_cmd} 2>&1)
+    _installed=$(printf '%s' "${_raw}" | grep -oE "${_regex}" | head -1)
+    if [[ -z "${_installed}" ]]; then
+      log_warn "${_tool}: could not parse version from '${_raw}'"
+      return
+    fi
+    if [[ "${_installed}" == "${_pinned}"* ]]; then
+      doctor_pass "${_tool} (${_installed})"
+    else
+      doctor_fail "${_tool}" "installed ${_installed}, pinned ${_pinned}"
+    fi
+  }
+
+  _doctor_check_one_version "go"      "${GO_VER}"     "go version"        "[0-9]+\.[0-9]+(\.[0-9]+)?"
+  _doctor_check_one_version "python3" "${PYTHON_VER}" "python3 --version" "[0-9]+\.[0-9]+\.[0-9]+"
+  _doctor_check_one_version "ruby"    "${RUBY_VER}"   "ruby --version"    "[0-9]+\.[0-9]+\.[0-9]+"
+  _doctor_check_one_version "zsh"     "${ZSH_VER}"    "zsh --version"     "[0-9]+\.[0-9]+(\.[0-9]+)?"
+}
 
 process_args() {
   # Pre-process long options before getopts (getopts only handles short options)
