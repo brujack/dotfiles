@@ -331,7 +331,31 @@ _doctor_check_tools() {
     fi
   fi
 }
-_doctor_check_cred_dirs() { :; }
+_doctor_check_cred_dirs() {
+  printf "\nCredential directories:\n"
+  local -a _dirs=("${HOME}/.aws" "${HOME}/.tf_creds" "${HOME}/.ssh" "${HOME}/.tsh")
+  local _label _perms
+
+  local _dir
+  for _dir in "${_dirs[@]}"; do
+    # shellcheck disable=SC2088 # display label, not a path
+    _label="~/${_dir##"${HOME}/"}"
+    if [[ ! -d "${_dir}" ]]; then
+      doctor_fail "${_label}" "missing"
+      continue
+    fi
+    if [[ -n ${MACOS} ]]; then
+      _perms=$(stat -f '%OLp' "${_dir}")
+    else
+      _perms=$(stat -c '%a' "${_dir}")
+    fi
+    if [[ "${_perms}" == "700" ]]; then
+      doctor_pass "${_label} (700)"
+    else
+      doctor_fail "${_label}" "expected 700, got ${_perms}"
+    fi
+  done
+}
 _doctor_check_versions()  { :; }
 
 process_args() {

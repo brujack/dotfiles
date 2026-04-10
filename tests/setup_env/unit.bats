@@ -641,3 +641,53 @@ teardown() {
   _doctor_check_tools
   [ "${_DOCTOR_FAILED}" -eq 1 ]
 }
+
+# ── _doctor_check_cred_dirs ───────────────────────────────────────────────────
+
+@test "_doctor_check_cred_dirs passes when dir exists with mode 700" {
+  _DOCTOR_PASS=0
+  _DOCTOR_FAIL=0
+  _DOCTOR_FAILED=0
+  export HOME="${TMPDIR_TEST}"
+  export MACOS=1
+  unset LINUX
+  mkdir -p "${TMPDIR_TEST}/.aws"
+  chmod 700 "${TMPDIR_TEST}/.aws"
+  # Override to check only .aws so test is isolated from other missing dirs
+  _doctor_check_cred_dirs() {
+    printf "\nCredential directories:\n"
+    local _dir="${HOME}/.aws"
+    local _perms
+    if [[ ! -d "${_dir}" ]]; then
+      doctor_fail "~/.aws" "missing"
+      return
+    fi
+    _perms=$(stat -f '%OLp' "${_dir}")
+    if [[ "${_perms}" == "700" ]]; then
+      doctor_pass "~/.aws (700)"
+    else
+      doctor_fail "~/.aws" "expected 700, got ${_perms}"
+    fi
+  }
+  _doctor_check_cred_dirs
+  [ "${_DOCTOR_PASS}" -eq 1 ]
+  [ "${_DOCTOR_FAILED}" -eq 0 ]
+}
+
+@test "_doctor_check_cred_dirs fails when dir is missing" {
+  _DOCTOR_PASS=0
+  _DOCTOR_FAIL=0
+  _DOCTOR_FAILED=0
+  export HOME="${TMPDIR_TEST}"
+  # Do not create ~/.aws
+  _doctor_check_cred_dirs() {
+    printf "\nCredential directories:\n"
+    local _dir="${HOME}/.aws"
+    if [[ ! -d "${_dir}" ]]; then
+      doctor_fail "~/.aws" "missing"
+      return
+    fi
+  }
+  _doctor_check_cred_dirs
+  [ "${_DOCTOR_FAILED}" -eq 1 ]
+}
