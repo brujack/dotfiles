@@ -143,3 +143,46 @@ teardown() {
   run_update
   grep -q "mas upgrade" "${MOCK_CALLS_FILE}"
 }
+
+# ── run_brew_install ──────────────────────────────────────────────────────────
+
+@test "run_brew_install calls brew update" {
+  export MACOS=1
+  unset LINUX UBUNTU HAS_GUI HAS_DEVTOOLS
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile"
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.gui"
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.devtools"
+  run run_brew_install
+  grep -q "brew update" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_brew_install calls brew bundle" {
+  export MACOS=1
+  unset LINUX UBUNTU HAS_GUI HAS_DEVTOOLS
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile"
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.gui"
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.devtools"
+  run run_brew_install
+  grep -q "brew bundle" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_brew_install calls brew cleanup" {
+  export MACOS=1
+  unset LINUX UBUNTU HAS_GUI HAS_DEVTOOLS
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile"
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.gui"
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.devtools"
+  run run_brew_install
+  grep -q "brew cleanup" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_brew_install calls install_homebrew when brew is missing" {
+  export MACOS=1
+  unset LINUX UBUNTU HAS_GUI HAS_DEVTOOLS
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile"
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.gui"
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.devtools"
+  export MOCK_WHICH_MISSING=brew
+  run run_brew_install
+  grep -q "curl" "${MOCK_CALLS_FILE}"
+}

@@ -1216,6 +1216,20 @@ run_developer_or_ansible() {
 
 }
 
+run_brew_install() {
+  mkdir -p "${BREWFILE_LOC}"
+  rm -f "${BREWFILE_LOC}/Brewfile"
+  ln -s "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile" "${BREWFILE_LOC}/Brewfile"
+
+  if ! quiet_which brew; then
+    install_homebrew
+  fi
+  brew_update
+  brew_tap_if_missing homebrew/bundle
+  install_macos_casks
+  brew cleanup
+}
+
 run_update() {
   local _run_all=0
   _any_update_flag || _run_all=1
