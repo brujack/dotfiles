@@ -134,3 +134,12 @@ teardown() {
   run_update
   grep -q "apt" "${MOCK_CALLS_FILE}"
 }
+
+@test "run_update calls mas upgrade on macOS" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE_MAS=1
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_CLAUDE
+  run_update
+  grep -q "mas upgrade" "${MOCK_CALLS_FILE}"
+}

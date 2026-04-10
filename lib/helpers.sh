@@ -221,6 +221,41 @@ EOF
   exit 0
 }
 
+# ── cross-platform install dispatchers ───────────────────────────────────────
+
+install_git() {
+  if [[ -n ${MACOS} ]]; then
+    install_git_macos
+  elif [[ -n ${LINUX} ]]; then
+    install_git_linux
+  fi
+}
+
+install_zsh() {
+  if [[ -n ${MACOS} ]]; then
+    install_zsh_macos
+  elif [[ -n ${LINUX} ]]; then
+    install_zsh_linux
+  fi
+}
+
+setup_zsh_as_default_shell() {
+  log_info "Setting ZSH as shell..."
+
+  # Set the ZSH path based on the value of REDHAT
+  ZSH_PATH=${REDHAT:+"/usr/local/bin/zsh"}
+  ZSH_PATH=${ZSH_PATH:-"/bin/zsh"}
+
+  if [[ ${SHELL} != "${ZSH_PATH}" ]]; then
+    if [[ -x "${ZSH_PATH}" ]]; then
+      chsh -s "${ZSH_PATH}"
+      log_info "Changed default shell to ${ZSH_PATH}"
+    else
+      log_error "Error: ${ZSH_PATH} does not exist"
+    fi
+  fi
+}
+
 run_doctor() {
   _DOCTOR_PASS=0
   _DOCTOR_FAIL=0

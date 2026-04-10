@@ -1238,6 +1238,10 @@ run_update() {
 
   if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_MAS:-} ]]; then
     update_system_packages
+    if [[ -n ${MACOS} ]]; then
+      log_info "Updating mas packages"
+      mas upgrade
+    fi
   fi
 
   if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_PIP:-} ]]; then
