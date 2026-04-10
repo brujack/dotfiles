@@ -37,7 +37,7 @@ _LOCAL_CFG="$(dirname "${BASH_SOURCE[0]}")/config/local.sh"
 [[ -f "${_LOCAL_CFG}" ]] && source "${_LOCAL_CFG}"
 unset _LOCAL_CFG
 
-[[ -n ${DOCTOR:-} ]] && { run_doctor; exit 0; }
+[[ -n ${DOCTOR:-} ]] && { run_doctor; exit $?; }
 [[ -n ${CHECK_VERSIONS:-} ]] && { run_check_versions; exit $?; }
 
 [[ -n ${SETUP_USER:-} ]] || [[ -n ${SETUP:-} ]] && run_setup_user
