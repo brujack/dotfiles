@@ -139,6 +139,18 @@ The subagent reviews against this rubric:
 
 The subagent reports findings as a list of issues with file, line, category, and suggested fix. No issues found = explicit "clean" result.
 
+## Feature Branches
+
+**Never commit implementation work directly to `main`/`master`.** Always work on a feature branch:
+
+1. Create a worktree on a feature branch before starting implementation (use `superpowers:using-git-worktrees`)
+2. Commit work to the feature branch
+3. Open a PR — CI runs and auto-merges on pass
+
+This applies to all repos. Committing directly to master bypasses CI and the review workflow.
+
+Exception: documentation-only fixes (typos, README updates, memory commits) may go directly to master.
+
 ## GitHub Actions / CI
 
 - All jobs must run on Node.js 24
@@ -147,6 +159,13 @@ The subagent reports findings as a list of issues with file, line, category, and
 - Do not add `actions/setup-node` to Rust or Python jobs that don't need it at the user-code level
 - Every Rust build job must upload its release binary as an artifact using `actions/upload-artifact@v5` with 7-day retention
 - Build jobs must depend on their test job (`needs: [test]`) — a build will not run if tests fail
+
+### Personal Repos (`~/git-repos/personal/*`)
+
+Every personal repo CI pipeline must have:
+
+1. **Auto-merge** — an `auto-merge` job that merges the PR when all required jobs pass. Use `gh pr merge --squash --auto` triggered on `pull_request` events. Required jobs must be listed in `needs:`.
+2. **Secrets scanning** — a `secret-scan` job running `gitleaks` against recent commits. Must have a `.gitleaks.toml` allowlist at the repo root. This job is advisory (non-blocking) but must be present.
 
 ## Code Standards
 

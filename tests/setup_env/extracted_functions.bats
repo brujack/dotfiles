@@ -27,6 +27,8 @@ _make_fake_dotfiles() {
   mkdir -p "${FAKE_DOTFILES_SRC}/.config/.zshrc.d"
   mkdir -p "${FAKE_DOTFILES_SRC}/.config/ccstatusline"
   mkdir -p "${FAKE_DOTFILES_SRC}/.cursor/User/snippets"
+  mkdir -p "${FAKE_DOTFILES_SRC}/.cursor/plugins"
+  mkdir -p "${FAKE_DOTFILES_SRC}/.cursor/skills-cursor"
   mkdir -p "${FAKE_DOTFILES_SRC}/.ssh"
   mkdir -p "${FAKE_DOTFILES_SRC}/.claude"
   mkdir -p "${FAKE_DOTFILES_SRC}/.warp/themes"
@@ -155,6 +157,74 @@ _make_fake_dotfiles() {
   [[ -L "${FAKE_HOME}/.config/Cursor/User/settings.json" ]]
   [[ -L "${FAKE_HOME}/.config/Cursor/User/keybindings.json" ]]
   [[ -L "${FAKE_HOME}/.config/Cursor/User/snippets" ]]
+}
+
+@test "setup_dotfile_symlinks creates ~/.cursor/plugins symlink" {
+  _make_fake_dotfiles
+  export MACOS=1
+  unset LINUX
+  run setup_dotfile_symlinks
+  [ "$status" -eq 0 ]
+  [[ -L "${FAKE_HOME}/.cursor/plugins" ]]
+  [[ "$(readlink "${FAKE_HOME}/.cursor/plugins")" == "${FAKE_DOTFILES_SRC}/.cursor/plugins" ]]
+}
+
+@test "setup_dotfile_symlinks creates ~/.cursor/skills-cursor symlink" {
+  _make_fake_dotfiles
+  export MACOS=1
+  unset LINUX
+  run setup_dotfile_symlinks
+  [ "$status" -eq 0 ]
+  [[ -L "${FAKE_HOME}/.cursor/skills-cursor" ]]
+  [[ "$(readlink "${FAKE_HOME}/.cursor/skills-cursor")" == "${FAKE_DOTFILES_SRC}/.cursor/skills-cursor" ]]
+}
+
+@test "setup_dotfile_symlinks creates ~/.cursor/plugins symlink on Linux" {
+  _make_fake_dotfiles
+  export LINUX=1
+  unset MACOS
+  run setup_dotfile_symlinks
+  [ "$status" -eq 0 ]
+  [[ -L "${FAKE_HOME}/.cursor/plugins" ]]
+  [[ "$(readlink "${FAKE_HOME}/.cursor/plugins")" == "${FAKE_DOTFILES_SRC}/.cursor/plugins" ]]
+}
+
+@test "setup_dotfile_symlinks creates ~/.cursor/skills-cursor symlink on Linux" {
+  _make_fake_dotfiles
+  export LINUX=1
+  unset MACOS
+  run setup_dotfile_symlinks
+  [ "$status" -eq 0 ]
+  [[ -L "${FAKE_HOME}/.cursor/skills-cursor" ]]
+  [[ "$(readlink "${FAKE_HOME}/.cursor/skills-cursor")" == "${FAKE_DOTFILES_SRC}/.cursor/skills-cursor" ]]
+}
+
+@test "setup_dotfile_symlinks does not symlink User/ under ~/.cursor" {
+  _make_fake_dotfiles
+  export MACOS=1
+  unset LINUX
+  run setup_dotfile_symlinks
+  [ "$status" -eq 0 ]
+  [[ ! -L "${FAKE_HOME}/.cursor/User" ]]
+}
+
+@test "setup_dotfile_symlinks handles .cursor/ with only User/ present" {
+  _make_fake_dotfiles
+  rm -rf "${FAKE_DOTFILES_SRC}/.cursor/plugins" "${FAKE_DOTFILES_SRC}/.cursor/skills-cursor"
+  export MACOS=1
+  unset LINUX
+  run setup_dotfile_symlinks
+  [ "$status" -eq 0 ]
+  [[ ! -L "${FAKE_HOME}/.cursor/User" ]]
+}
+
+@test "setup_dotfile_symlinks handles .claude/projects/ when directory is absent" {
+  _make_fake_dotfiles
+  rm -rf "${FAKE_DOTFILES_SRC}/.claude/projects"
+  export MACOS=1
+  unset LINUX
+  run setup_dotfile_symlinks
+  [ "$status" -eq 0 ]
 }
 
 # ── setup_credential_directories ────────────────────────────────────────────

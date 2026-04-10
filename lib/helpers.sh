@@ -203,6 +203,7 @@ Usage: $0 -t <type> [--dry-run] [-w]
 Types:
   setup_user : Sets up a basic user environment for the current user
   setup      : Runs a full machine and developer setup
+               Flags: --brew-install, --mas-install
   developer  : Runs a developer setup with packages and python virtual environment for running ansible
   ansible    : Just runs the ansible setup using a python virtual environment. Typically used after a python update
   update     : Does a system update of packages including brew packages
@@ -210,13 +211,15 @@ Types:
   doctor     : Active health checks: symlinks, tools, credential dir permissions, version drift. Exits non-zero on failure
   check-versions : Compare pinned tool versions in lib/constants.sh against latest GitHub releases
 Options:
-  --dry-run     : Log mutating operations (symlinks, installs, mkdir) without executing them
-  --brew-only   : (update only) Update Homebrew formulae and casks only
-  --pip-only    : (update only) Update pip packages only
-  --gems-only   : (update only) Update Ruby gems only
-  --mas-only    : (update only) Update Mac App Store apps only
-  --claude-only : (update only) Update Claude plugins only
-  -w            : Optional -- Specify w for a redhat computer, sets up terraform 0.11 instead of default 0.12
+  --dry-run       : Log mutating operations (symlinks, installs, mkdir) without executing them
+  --brew-install  : (setup only) Ensure Homebrew is installed, update, and run brew bundle installs
+  --mas-install   : (setup only) Install/update Mac App Store apps via mas (macOS only)
+  --brew-only     : (update only) Update Homebrew formulae and casks only
+  --pip-only      : (update only) Update pip packages only
+  --gems-only     : (update only) Update Ruby gems only
+  --mas-only      : (update only) Update Mac App Store apps only
+  --claude-only   : (update only) Update Claude plugins only
+  -w              : Optional -- Specify w for a redhat computer, sets up terraform 0.11 instead of default 0.12
 EOF
   exit 0
 }
@@ -425,12 +428,14 @@ process_args() {
   local _short_args=()
   for _arg in "$@"; do
     case "${_arg}" in
-      --dry-run)     readonly DRY_RUN=1 ;;
-      --brew-only)   readonly UPDATE_BREW=1 ;;
-      --pip-only)    readonly UPDATE_PIP=1 ;;
-      --gems-only)   readonly UPDATE_GEMS=1 ;;
-      --mas-only)    readonly UPDATE_MAS=1 ;;
-      --claude-only) readonly UPDATE_CLAUDE=1 ;;
+      --dry-run)       readonly DRY_RUN=1 ;;
+      --brew-only)     readonly UPDATE_BREW=1 ;;
+      --pip-only)      readonly UPDATE_PIP=1 ;;
+      --gems-only)     readonly UPDATE_GEMS=1 ;;
+      --mas-only)      readonly UPDATE_MAS=1 ;;
+      --claude-only)   readonly UPDATE_CLAUDE=1 ;;
+      --brew-install)  readonly SETUP_BREW=1 ;;
+      --mas-install)   readonly SETUP_MAS=1 ;;
       *) _short_args+=("${_arg}") ;;
     esac
   done
@@ -569,15 +574,28 @@ setup_dotfile_symlinks() {
     log_info "Created ${HOME}/.claude"
   fi
   for _claude_item in "${PERSONAL_GITREPOS}/${DOTFILES}/.claude/"*; do
+    [[ -e "${_claude_item}" ]] || continue
     # Skip projects/ — handled below with per-project symlinks into a real ~/.claude/projects/
-    [[ "$(basename ${_claude_item})" == "projects" ]] && continue
-    _claude_target="${HOME}/.claude/$(basename ${_claude_item})"
+    [[ "$(basename "${_claude_item}")" == "projects" ]] && continue
+    _claude_target="${HOME}/.claude/$(basename "${_claude_item}")"
     safe_link "${_claude_item}" "${_claude_target}"
   done
   mkdir -p "${HOME}/.claude/projects"
   for _claude_proj in "${PERSONAL_GITREPOS}/${DOTFILES}/.claude/projects/"*; do
-    _claude_proj_target="${HOME}/.claude/projects/$(basename ${_claude_proj})"
+    [[ -e "${_claude_proj}" ]] || continue
+    _claude_proj_target="${HOME}/.claude/projects/$(basename "${_claude_proj}")"
     safe_link "${_claude_proj}" "${_claude_proj_target}"
+  done
+
+  log_info "Creating ${HOME}/.cursor"
+  mkdir -p "${HOME}/.cursor"
+  # glob * excludes dotfiles (e.g. .gitignore) — intentional
+  for _cursor_item in "${PERSONAL_GITREPOS}/${DOTFILES}/.cursor/"*; do
+    [[ -e "${_cursor_item}" ]] || continue
+    # Skip User/ — handled separately via CURSOR_USER_DIR symlinks
+    [[ "$(basename "${_cursor_item}")" == "User" ]] && continue
+    _cursor_target="${HOME}/.cursor/$(basename "${_cursor_item}")"
+    safe_link "${_cursor_item}" "${_cursor_target}"
   done
 
   safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.ssh/config" "${HOME}/.ssh/config"
