@@ -165,7 +165,7 @@ teardown() {
   [ "$status" -eq 1 ]
 }
 
-@test "run_brew_install does not call install_macos_casks on Linux" {
+@test "run_brew_install calls brew but skips install_macos_casks on Linux" {
   export LINUX=1
   unset MACOS
   export UBUNTU=1

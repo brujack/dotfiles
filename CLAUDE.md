@@ -84,7 +84,7 @@ dotfiles/
 | Type | Purpose |
 |------|---------|
 | `setup_user` | Configs, shells, directory structure, symlinks |
-| `setup` | Full machine setup (setup_user + all apps) |
+| `setup` | Full machine setup (setup_user + all apps). Flags: `--brew-install`, `--mas-install` |
 | `developer` | Dev packages + Python/Ansible virtualenv |
 | `ansible` | Ansible venv setup only (after Python updates) |
 | `update` | Update all packages (brew, apt/dnf/yum, pip, gems, tools). Supports `--brew-only`, `--pip-only`, `--gems-only`, `--mas-only`, `--claude-only` flags |
