@@ -1,6 +1,6 @@
 BATS := $(shell command -v bats 2>/dev/null)
 SHELLCHECK := $(shell command -v shellcheck 2>/dev/null)
-SHELL_FILES := $(shell find . -name "*.sh" -not -path "*/node_modules/*")
+SHELL_FILES := $(shell find . -name "*.sh" -not -path "*/node_modules/*" -not -path "*/.cursor/plugins/cache/*")
 
 .PHONY: test test-unit lint help
 
