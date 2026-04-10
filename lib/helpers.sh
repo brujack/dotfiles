@@ -207,7 +207,7 @@ Types:
   ansible    : Just runs the ansible setup using a python virtual environment. Typically used after a python update
   update     : Does a system update of packages including brew packages
                Flags: --brew-only, --pip-only, --gems-only, --mas-only, --claude-only
-  doctor     : Prints detected OS, profile, capabilities, and key paths (no side effects)
+  doctor     : Active health checks: symlinks, tools, credential dir permissions, version drift. Exits non-zero on failure
   check-versions : Compare pinned tool versions in lib/constants.sh against latest GitHub releases
 Options:
   --dry-run     : Log mutating operations (symlinks, installs, mkdir) without executing them

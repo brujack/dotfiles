@@ -88,7 +88,7 @@ dotfiles/
 | `developer` | Dev packages + Python/Ansible virtualenv |
 | `ansible` | Ansible venv setup only (after Python updates) |
 | `update` | Update all packages (brew, apt/dnf/yum, pip, gems, tools). Supports `--brew-only`, `--pip-only`, `--gems-only`, `--mas-only`, `--claude-only` flags |
-| `doctor` | Print OS, profile, capabilities, and key paths (no side effects) |
+| `doctor` | Active health checks: symlinks, tool presence, credential dir permissions, version drift. Exits non-zero on any failure |
 | `check-versions` | Compare pinned versions in `lib/constants.sh` against GitHub latest; exits 1 if outdated |
 
 **Options:**
