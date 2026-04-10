@@ -580,6 +580,15 @@ setup_dotfile_symlinks() {
     safe_link "${_claude_proj}" "${_claude_proj_target}"
   done
 
+  log_info "Creating ${HOME}/.cursor"
+  mkdir -p "${HOME}/.cursor"
+  for _cursor_item in "${PERSONAL_GITREPOS}/${DOTFILES}/.cursor/"*; do
+    # Skip User/ — handled separately via CURSOR_USER_DIR symlinks
+    [[ "$(basename ${_cursor_item})" == "User" ]] && continue
+    _cursor_target="${HOME}/.cursor/$(basename ${_cursor_item})"
+    safe_link "${_cursor_item}" "${_cursor_target}"
+  done
+
   safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.ssh/config" "${HOME}/.ssh/config"
 
   if [[ -n ${MACOS} ]]; then
