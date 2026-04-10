@@ -38,6 +38,8 @@ teardown() {
 
 @test "install_git on Ubuntu calls apt install" {
   export MOCK_UNAME_S=Linux
+  export LINUX=1
+  unset MACOS
   export MOCK_AWK_OS_NAME="Ubuntu"
   run install_git
   [ "$status" -eq 0 ]
@@ -46,6 +48,8 @@ teardown() {
 
 @test "install_git on CentOS calls yum install" {
   export MOCK_UNAME_S=Linux
+  export LINUX=1
+  unset MACOS
   export MOCK_AWK_OS_NAME="CentOS Linux"
   run install_git
   [ "$status" -eq 0 ]
@@ -54,6 +58,8 @@ teardown() {
 
 @test "install_git on Fedora calls dnf install" {
   export MOCK_UNAME_S=Linux
+  export LINUX=1
+  unset MACOS
   export MOCK_AWK_OS_NAME="Fedora"
   run install_git
   [ "$status" -eq 0 ]
@@ -85,6 +91,8 @@ teardown() {
 
 @test "install_zsh on Ubuntu calls apt install" {
   export MOCK_UNAME_S=Linux
+  export LINUX=1
+  unset MACOS
   export MOCK_AWK_OS_NAME="Ubuntu"
   run install_zsh
   [ "$status" -eq 0 ]
@@ -93,6 +101,8 @@ teardown() {
 
 @test "install_zsh on CentOS calls yum install" {
   export MOCK_UNAME_S=Linux
+  export LINUX=1
+  unset MACOS
   export MOCK_AWK_OS_NAME="CentOS Linux"
   run install_zsh
   [ "$status" -eq 0 ]
@@ -101,6 +111,8 @@ teardown() {
 
 @test "install_zsh on Fedora calls dnf install" {
   export MOCK_UNAME_S=Linux
+  export LINUX=1
+  unset MACOS
   export MOCK_AWK_OS_NAME="Fedora"
   run install_zsh
   [ "$status" -eq 0 ]
