@@ -569,9 +569,10 @@ setup_dotfile_symlinks() {
     log_info "Created ${HOME}/.claude"
   fi
   for _claude_item in "${PERSONAL_GITREPOS}/${DOTFILES}/.claude/"*; do
+    [[ -e "${_claude_item}" ]] || continue
     # Skip projects/ — handled below with per-project symlinks into a real ~/.claude/projects/
-    [[ "$(basename ${_claude_item})" == "projects" ]] && continue
-    _claude_target="${HOME}/.claude/$(basename ${_claude_item})"
+    [[ "$(basename "${_claude_item}")" == "projects" ]] && continue
+    _claude_target="${HOME}/.claude/$(basename "${_claude_item}")"
     safe_link "${_claude_item}" "${_claude_target}"
   done
   mkdir -p "${HOME}/.claude/projects"
@@ -583,9 +584,10 @@ setup_dotfile_symlinks() {
   log_info "Creating ${HOME}/.cursor"
   mkdir -p "${HOME}/.cursor"
   for _cursor_item in "${PERSONAL_GITREPOS}/${DOTFILES}/.cursor/"*; do
+    [[ -e "${_cursor_item}" ]] || continue
     # Skip User/ — handled separately via CURSOR_USER_DIR symlinks
-    [[ "$(basename ${_cursor_item})" == "User" ]] && continue
-    _cursor_target="${HOME}/.cursor/$(basename ${_cursor_item})"
+    [[ "$(basename "${_cursor_item}")" == "User" ]] && continue
+    _cursor_target="${HOME}/.cursor/$(basename "${_cursor_item}")"
     safe_link "${_cursor_item}" "${_cursor_target}"
   done
 
