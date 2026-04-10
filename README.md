@@ -31,7 +31,7 @@ Personal development environment bootstrap for macOS, Linux (Ubuntu/RHEL), and W
 | Type | Description |
 |------|-------------|
 | `setup_user` | Sets up user environment: configs, symlinks, shell, directory structure |
-| `setup` | Full machine setup (`setup_user` + all apps and tools) |
+| `setup` | Full machine setup (`setup_user` + all apps and tools). Flags: `--brew-install`, `--mas-install` |
 | `developer` | Dev packages + Python/Ansible virtualenv |
 | `ansible` | Ansible venv only — typically used after a Python update |
 | `update` | Update all packages (brew, apt/dnf/yum, pip, mas, Claude plugins, etc.) |
@@ -40,6 +40,8 @@ Personal development environment bootstrap for macOS, Linux (Ubuntu/RHEL), and W
 
 **Options:**
 - `--dry-run` — log mutating operations (symlinks, installs, mkdir) without executing
+- `--brew-install` — (setup only) Ensure Homebrew is installed, update, and run brew bundle installs
+- `--mas-install` — (setup only) Install/update Mac App Store apps via mas (macOS only)
 - `--brew-only` — update Homebrew formulae and casks only (with `-t update`)
 - `--pip-only` — update pip packages only (with `-t update`)
 - `--gems-only` — update Ruby gems only (with `-t update`)
