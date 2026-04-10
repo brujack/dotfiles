@@ -31,7 +31,7 @@ This follows the existing pattern of standalone workflow functions dispatched fr
 ```bash
 [[ -n ${SETUP_BREW:-} ]] && run_brew_install
 [[ -n ${SETUP_MAS:-} ]]  && run_mas_install
-{ [[ -n ${SETUP_BREW:-} ]] || [[ -n ${SETUP_MAS:-} ]]; } && exit 0
+[[ -n ${SETUP_BREW:-} || -n ${SETUP_MAS:-} ]] && exit 0
 ```
 
 `usage()` in `lib/helpers.sh` is updated to document both flags under the setup description.
