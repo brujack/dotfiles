@@ -20,6 +20,22 @@ run_cmd() {
   fi
 }
 
+# ── doctor check primitives ───────────────────────────────────────────────────
+_DOCTOR_PASS=0
+_DOCTOR_FAIL=0
+_DOCTOR_FAILED=0
+
+doctor_pass() {
+  _DOCTOR_PASS=$(( _DOCTOR_PASS + 1 ))
+  printf "  ${_GREEN}[PASS]${_NC} %s\n" "$1"
+}
+
+doctor_fail() {
+  _DOCTOR_FAIL=$(( _DOCTOR_FAIL + 1 ))
+  _DOCTOR_FAILED=1
+  printf "  ${_RED}[FAIL]${_NC} %s: %s\n" "$1" "${2:-}"
+}
+
 # ── symlink helpers ───────────────────────────────────────────────────────────
 safe_link() {
   local src="$1" dest="$2"
@@ -191,7 +207,7 @@ Types:
   ansible    : Just runs the ansible setup using a python virtual environment. Typically used after a python update
   update     : Does a system update of packages including brew packages
                Flags: --brew-only, --pip-only, --gems-only, --mas-only, --claude-only
-  doctor     : Prints detected OS, profile, capabilities, and key paths (no side effects)
+  doctor     : Active health checks: symlinks, tools, credential dir permissions, version drift. Exits non-zero on failure
   check-versions : Compare pinned tool versions in lib/constants.sh against latest GitHub releases
 Options:
   --dry-run     : Log mutating operations (symlinks, installs, mkdir) without executing them
@@ -206,6 +222,10 @@ EOF
 }
 
 run_doctor() {
+  _DOCTOR_PASS=0
+  _DOCTOR_FAIL=0
+  _DOCTOR_FAILED=0
+
   printf "=== Doctor Report ===\n"
   printf "\nOS Detection:\n"
   printf "  MACOS=%s  LINUX=%s\n" "${MACOS:-<unset>}" "${LINUX:-<unset>}"
@@ -230,6 +250,139 @@ run_doctor() {
   printf "  DOTFILES=%s\n"          "${DOTFILES:-<unset>}"
   printf "  BREWFILE_LOC=%s\n"      "${BREWFILE_LOC:-<unset>}"
   printf "  CHRUBY_LOC=%s\n"        "${CHRUBY_LOC:-<unset>}"
+
+  printf "\n=== Checks ===\n"
+
+  _doctor_check_symlinks
+  _doctor_check_tools
+  _doctor_check_cred_dirs
+  _doctor_check_versions
+
+  printf "\n=== Summary ===\n"
+  printf "%d checks passed, %d failed\n" "${_DOCTOR_PASS}" "${_DOCTOR_FAIL}"
+
+  [[ ${_DOCTOR_FAILED} -eq 0 ]]
+}
+
+_doctor_check_symlinks() {
+  printf "\nSymlinks:\n"
+  local _label _link
+
+  # shellcheck disable=SC2088 # tildes are display labels, not expanded paths
+  local -a _checks=(
+    "~/.zshrc          ${HOME}/.zshrc"
+    "~/.zprofile       ${HOME}/.zprofile"
+    "~/.vimrc          ${HOME}/.vimrc"
+    "~/.tmux.conf      ${HOME}/.tmux.conf"
+    "~/.p10k.zsh       ${HOME}/.p10k.zsh"
+    "~/.ssh/config     ${HOME}/.ssh/config"
+    "~/.config/starship.toml  ${HOME}/.config/starship.toml"
+    "~/.config/.zshrc.d       ${HOME}/.config/.zshrc.d"
+    "~/.gitconfig      ${HOME}/.gitconfig"
+  )
+
+  local _entry
+  for _entry in "${_checks[@]}"; do
+    _label="${_entry%%  *}"
+    _link="${_entry##*  }"
+    if [[ -L "${_link}" ]] && [[ -e "${_link}" ]]; then
+      doctor_pass "${_label}"
+    elif [[ -L "${_link}" ]]; then
+      doctor_fail "${_label}" "broken symlink (target missing)"
+    else
+      doctor_fail "${_label}" "symlink missing"
+    fi
+  done
+}
+_doctor_check_tools() {
+  printf "\nTools:\n"
+  local _tool
+  local -a _common_tools=(git zsh curl tmux bats)
+
+  for _tool in "${_common_tools[@]}"; do
+    if command -v "${_tool}" &>/dev/null; then
+      doctor_pass "${_tool}"
+    else
+      doctor_fail "${_tool}" "not found"
+    fi
+  done
+
+  if [[ -n ${MACOS} ]]; then
+    if command -v brew &>/dev/null; then
+      doctor_pass "brew"
+    else
+      doctor_fail "brew" "not found"
+    fi
+  fi
+
+  if [[ -n ${LINUX} ]]; then
+    if [[ -n ${UBUNTU} ]]; then
+      if command -v apt-get &>/dev/null; then
+        doctor_pass "apt-get"
+      else
+        doctor_fail "apt-get" "not found"
+      fi
+    elif [[ -n ${REDHAT} ]] || [[ -n ${CENTOS} ]] || [[ -n ${FEDORA} ]]; then
+      if command -v dnf &>/dev/null || command -v yum &>/dev/null; then
+        doctor_pass "dnf/yum"
+      else
+        doctor_fail "dnf/yum" "not found"
+      fi
+    fi
+  fi
+}
+_doctor_check_cred_dirs() {
+  printf "\nCredential directories:\n"
+  local -a _dirs=("${HOME}/.aws" "${HOME}/.tf_creds" "${HOME}/.ssh" "${HOME}/.tsh")
+  local _label _perms
+
+  local _dir
+  for _dir in "${_dirs[@]}"; do
+    # shellcheck disable=SC2088 # display label, not a path
+    _label="~/${_dir##"${HOME}/"}"
+    if [[ ! -d "${_dir}" ]]; then
+      doctor_fail "${_label}" "missing"
+      continue
+    fi
+    if [[ -n ${MACOS} ]]; then
+      _perms=$(stat -f '%OLp' "${_dir}")
+    else
+      _perms=$(stat -c '%a' "${_dir}")
+    fi
+    if [[ "${_perms}" == "700" ]]; then
+      doctor_pass "${_label} (700)"
+    else
+      doctor_fail "${_label}" "expected 700, got ${_perms}"
+    fi
+  done
+}
+_doctor_check_versions() {
+  printf "\nVersions:\n"
+
+  _doctor_check_one_version() {
+    local _tool="$1" _pinned="$2" _cmd="$3" _regex="$4"
+    if ! command -v "${_tool}" &>/dev/null; then
+      log_warn "${_tool}: not installed (skipping version check)"
+      return
+    fi
+    local _raw _installed
+    _raw=$(${_cmd} 2>&1)
+    _installed=$(printf '%s' "${_raw}" | grep -oE "${_regex}" | head -1)
+    if [[ -z "${_installed}" ]]; then
+      log_warn "${_tool}: could not parse version from '${_raw}'"
+      return
+    fi
+    if [[ "${_installed}" == "${_pinned}"* ]]; then
+      doctor_pass "${_tool} (${_installed})"
+    else
+      doctor_fail "${_tool}" "installed ${_installed}, pinned ${_pinned}"
+    fi
+  }
+
+  _doctor_check_one_version "go"      "${GO_VER}"     "go version"        "[0-9]+\.[0-9]+(\.[0-9]+)?"
+  _doctor_check_one_version "python3" "${PYTHON_VER}" "python3 --version" "[0-9]+\.[0-9]+\.[0-9]+"
+  _doctor_check_one_version "ruby"    "${RUBY_VER}"   "ruby --version"    "[0-9]+\.[0-9]+\.[0-9]+"
+  _doctor_check_one_version "zsh"     "${ZSH_VER}"    "zsh --version"     "[0-9]+\.[0-9]+(\.[0-9]+)?"
 }
 
 process_args() {

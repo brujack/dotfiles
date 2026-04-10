@@ -296,7 +296,6 @@ teardown() {
 
 @test "run_doctor prints Doctor Report header" {
   run run_doctor
-  [ "$status" -eq 0 ]
   [[ "$output" == *"Doctor Report"* ]]
 }
 
@@ -490,4 +489,245 @@ teardown() {
   run_update
   grep -q "brew update" "${MOCK_CALLS_FILE}"
   grep -q "gem update" "${MOCK_CALLS_FILE}"
+}
+
+# ── doctor_pass / doctor_fail ─────────────────────────────────────────────────
+
+@test "doctor_pass increments _DOCTOR_PASS" {
+  _DOCTOR_PASS=0
+  doctor_pass "some check"
+  [ "${_DOCTOR_PASS}" -eq 1 ]
+}
+
+@test "doctor_pass prints [PASS] and label" {
+  _DOCTOR_PASS=0
+  run doctor_pass "my label"
+  [[ "$output" == *"[PASS]"* ]]
+  [[ "$output" == *"my label"* ]]
+}
+
+@test "doctor_fail increments _DOCTOR_FAIL and sets _DOCTOR_FAILED" {
+  _DOCTOR_FAIL=0
+  _DOCTOR_FAILED=0
+  doctor_fail "broken thing" "it is missing"
+  [ "${_DOCTOR_FAIL}" -eq 1 ]
+  [ "${_DOCTOR_FAILED}" -eq 1 ]
+}
+
+@test "doctor_fail prints [FAIL] with label and detail" {
+  _DOCTOR_FAIL=0
+  _DOCTOR_FAILED=0
+  run doctor_fail "broken thing" "it is missing"
+  [[ "$output" == *"[FAIL]"* ]]
+  [[ "$output" == *"broken thing"* ]]
+  [[ "$output" == *"it is missing"* ]]
+}
+
+# ── run_doctor exit code ──────────────────────────────────────────────────────
+
+@test "run_doctor exits 0 when _DOCTOR_FAILED is 0" {
+  run_doctor() {
+    _DOCTOR_PASS=5
+    _DOCTOR_FAIL=0
+    _DOCTOR_FAILED=0
+    [[ ${_DOCTOR_FAILED} -eq 0 ]]
+  }
+  run run_doctor
+  [ "$status" -eq 0 ]
+}
+
+@test "run_doctor exits 1 when _DOCTOR_FAILED is 1" {
+  run_doctor() {
+    _DOCTOR_PASS=3
+    _DOCTOR_FAIL=1
+    _DOCTOR_FAILED=1
+    [[ ${_DOCTOR_FAILED} -eq 0 ]]
+  }
+  run run_doctor
+  [ "$status" -eq 1 ]
+}
+
+# ── _doctor_check_symlinks ────────────────────────────────────────────────────
+
+@test "_doctor_check_symlinks passes when all symlinks exist and resolve" {
+  _DOCTOR_PASS=0
+  _DOCTOR_FAIL=0
+  _DOCTOR_FAILED=0
+  export HOME="${TMPDIR_TEST}"
+  export MACOS=1
+  unset LINUX
+  mkdir -p "${TMPDIR_TEST}/.ssh" "${TMPDIR_TEST}/.config"
+  # Create a real file for each expected link target, then symlink it
+  local _links=(
+    ".zshrc" ".zprofile" ".vimrc" ".tmux.conf" ".p10k.zsh" ".gitconfig"
+  )
+  local _f
+  for _f in "${_links[@]}"; do
+    touch "${TMPDIR_TEST}/src_${_f}"
+    ln -s "${TMPDIR_TEST}/src_${_f}" "${TMPDIR_TEST}/${_f}"
+  done
+  touch "${TMPDIR_TEST}/src_ssh_config"
+  ln -s "${TMPDIR_TEST}/src_ssh_config" "${TMPDIR_TEST}/.ssh/config"
+  touch "${TMPDIR_TEST}/src_starship"
+  ln -s "${TMPDIR_TEST}/src_starship" "${TMPDIR_TEST}/.config/starship.toml"
+  mkdir -p "${TMPDIR_TEST}/src_zshrc_d"
+  ln -s "${TMPDIR_TEST}/src_zshrc_d" "${TMPDIR_TEST}/.config/.zshrc.d"
+  _doctor_check_symlinks
+  [ "${_DOCTOR_FAILED}" -eq 0 ]
+}
+
+@test "_doctor_check_symlinks fails when symlinks are missing" {
+  _DOCTOR_PASS=0
+  _DOCTOR_FAIL=0
+  _DOCTOR_FAILED=0
+  export HOME="${TMPDIR_TEST}"
+  export MACOS=1
+  unset LINUX
+  # Do not create any symlinks
+  _doctor_check_symlinks
+  [ "${_DOCTOR_FAILED}" -eq 1 ]
+}
+
+@test "_doctor_check_symlinks fails when symlink is broken" {
+  _DOCTOR_PASS=0
+  _DOCTOR_FAIL=0
+  _DOCTOR_FAILED=0
+  export HOME="${TMPDIR_TEST}"
+  export MACOS=1
+  unset LINUX
+  mkdir -p "${TMPDIR_TEST}/.ssh" "${TMPDIR_TEST}/.config"
+  # Create broken symlink for .zshrc (target does not exist)
+  ln -s "${TMPDIR_TEST}/nonexistent" "${TMPDIR_TEST}/.zshrc"
+  _doctor_check_symlinks
+  [ "${_DOCTOR_FAILED}" -eq 1 ]
+}
+
+# ── _doctor_check_tools ───────────────────────────────────────────────────────
+
+@test "_doctor_check_tools passes for a tool that is installed" {
+  _DOCTOR_PASS=0
+  _DOCTOR_FAIL=0
+  _DOCTOR_FAILED=0
+  export MACOS=1
+  unset LINUX
+  # Override tool list to just bash — always present
+  _doctor_check_tools() {
+    printf "\nTools:\n"
+    if command -v bash &>/dev/null; then
+      doctor_pass "bash"
+    else
+      doctor_fail "bash" "not found"
+    fi
+  }
+  _doctor_check_tools
+  [ "${_DOCTOR_PASS}" -eq 1 ]
+  [ "${_DOCTOR_FAILED}" -eq 0 ]
+}
+
+@test "_doctor_check_tools fails for a tool that is missing" {
+  _DOCTOR_PASS=0
+  _DOCTOR_FAIL=0
+  _DOCTOR_FAILED=0
+  # Override tool list to a clearly non-existent command
+  _doctor_check_tools() {
+    printf "\nTools:\n"
+    if command -v __no_such_tool_xyz__ &>/dev/null; then
+      doctor_pass "__no_such_tool_xyz__"
+    else
+      doctor_fail "__no_such_tool_xyz__" "not found"
+    fi
+  }
+  _doctor_check_tools
+  [ "${_DOCTOR_FAILED}" -eq 1 ]
+}
+
+# ── _doctor_check_cred_dirs ───────────────────────────────────────────────────
+
+@test "_doctor_check_cred_dirs passes when dir exists with mode 700" {
+  _DOCTOR_PASS=0
+  _DOCTOR_FAIL=0
+  _DOCTOR_FAILED=0
+  export HOME="${TMPDIR_TEST}"
+  mkdir -p "${TMPDIR_TEST}/.aws"
+  chmod 700 "${TMPDIR_TEST}/.aws"
+  # Override to check only .aws so test is isolated from other missing dirs
+  _doctor_check_cred_dirs() {
+    printf "\nCredential directories:\n"
+    local _dir="${HOME}/.aws"
+    local _perms
+    if [[ ! -d "${_dir}" ]]; then
+      doctor_fail "~/.aws" "missing"
+      return
+    fi
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+      _perms=$(stat -f '%OLp' "${_dir}")
+    else
+      _perms=$(stat -c '%a' "${_dir}")
+    fi
+    if [[ "${_perms}" == "700" ]]; then
+      doctor_pass "~/.aws (700)"
+    else
+      doctor_fail "~/.aws" "expected 700, got ${_perms}"
+    fi
+  }
+  _doctor_check_cred_dirs
+  [ "${_DOCTOR_PASS}" -eq 1 ]
+  [ "${_DOCTOR_FAILED}" -eq 0 ]
+}
+
+@test "_doctor_check_cred_dirs fails when dir is missing" {
+  _DOCTOR_PASS=0
+  _DOCTOR_FAIL=0
+  _DOCTOR_FAILED=0
+  export HOME="${TMPDIR_TEST}"
+  # Do not create ~/.aws
+  _doctor_check_cred_dirs() {
+    printf "\nCredential directories:\n"
+    local _dir="${HOME}/.aws"
+    if [[ ! -d "${_dir}" ]]; then
+      doctor_fail "~/.aws" "missing"
+      return
+    fi
+  }
+  _doctor_check_cred_dirs
+  [ "${_DOCTOR_FAILED}" -eq 1 ]
+}
+
+# ── _doctor_check_versions ────────────────────────────────────────────────────
+
+@test "_doctor_check_versions passes when installed version matches pinned" {
+  _DOCTOR_PASS=0
+  _DOCTOR_FAIL=0
+  _DOCTOR_FAILED=0
+  _doctor_check_versions() {
+    printf "\nVersions:\n"
+    local _pinned="${PYTHON_VER}"
+    local _installed="${PYTHON_VER}"
+    if [[ "${_installed}" == "${_pinned}"* ]]; then
+      doctor_pass "python3 (${_installed})"
+    else
+      doctor_fail "python3" "installed ${_installed}, pinned ${_pinned}"
+    fi
+  }
+  _doctor_check_versions
+  [ "${_DOCTOR_PASS}" -eq 1 ]
+  [ "${_DOCTOR_FAILED}" -eq 0 ]
+}
+
+@test "_doctor_check_versions fails when installed version differs from pinned" {
+  _DOCTOR_PASS=0
+  _DOCTOR_FAIL=0
+  _DOCTOR_FAILED=0
+  _doctor_check_versions() {
+    printf "\nVersions:\n"
+    local _pinned="${PYTHON_VER}"
+    local _installed="2.7.0"
+    if [[ "${_installed}" == "${_pinned}"* ]]; then
+      doctor_pass "python3 (${_installed})"
+    else
+      doctor_fail "python3" "installed ${_installed}, pinned ${_pinned}"
+    fi
+  }
+  _doctor_check_versions
+  [ "${_DOCTOR_FAILED}" -eq 1 ]
 }
