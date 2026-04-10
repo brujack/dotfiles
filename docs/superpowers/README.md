@@ -48,3 +48,5 @@ Master status index for all specs and implementation plans in this directory.
 | 2026-04-10 | [brew-mas-install-flags](plans/2026-04-10-brew-mas-install-flags.md) | [spec](specs/2026-04-10-brew-mas-install-flags-design.md) | Done |
 | 2026-04-10 | [cursor-sync](plans/2026-04-10-cursor-sync.md) | [spec](specs/2026-04-10-cursor-sync-design.md) | Done |
 | 2026-04-10 | [logic-review-process](plans/2026-04-10-logic-review-process.md) | [spec](specs/2026-04-10-logic-review-process-design.md) | Done |
+| 2026-04-10 | — | [spec](specs/2026-04-10-workflows-refactor-design.md) | Pending |
+| 2026-04-10 | — | [spec](specs/2026-04-10-interactive-version-update-design.md) | Pending |
