@@ -1230,6 +1230,19 @@ run_brew_install() {
   brew cleanup
 }
 
+run_mas_install() {
+  if [[ -z ${MACOS} ]]; then
+    log_info "Skipping mas install — macOS only"
+    return 0
+  fi
+  if ! quiet_which mas; then
+    log_error "mas not found — run --brew-install first"
+    return 1
+  fi
+  log_info "Installing/updating Mac App Store apps"
+  mas upgrade
+}
+
 run_update() {
   local _run_all=0
   _any_update_flag || _run_all=1
