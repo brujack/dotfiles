@@ -174,3 +174,30 @@ teardown() {
   run run_brew_install
   ! grep -q "brew bundle" "${MOCK_CALLS_FILE}"
 }
+
+# ── run_mas_install ───────────────────────────────────────────────────────────
+
+@test "run_mas_install calls mas upgrade on macOS" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  run run_mas_install
+  grep -q "mas upgrade" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_mas_install is a no-op on Linux" {
+  unset MACOS
+  export LINUX=1
+  export UBUNTU=1
+  run run_mas_install
+  [ "$status" -eq 0 ]
+  ! grep -q "mas" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_mas_install fails when mas is not installed" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  export MOCK_WHICH_MISSING=mas
+  run run_mas_install
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"mas not found"* ]]
+}
