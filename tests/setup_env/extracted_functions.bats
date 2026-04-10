@@ -179,6 +179,26 @@ _make_fake_dotfiles() {
   [[ "$(readlink "${FAKE_HOME}/.cursor/skills-cursor")" == "${FAKE_DOTFILES_SRC}/.cursor/skills-cursor" ]]
 }
 
+@test "setup_dotfile_symlinks creates ~/.cursor/plugins symlink on Linux" {
+  _make_fake_dotfiles
+  export LINUX=1
+  unset MACOS
+  run setup_dotfile_symlinks
+  [ "$status" -eq 0 ]
+  [[ -L "${FAKE_HOME}/.cursor/plugins" ]]
+  [[ "$(readlink "${FAKE_HOME}/.cursor/plugins")" == "${FAKE_DOTFILES_SRC}/.cursor/plugins" ]]
+}
+
+@test "setup_dotfile_symlinks creates ~/.cursor/skills-cursor symlink on Linux" {
+  _make_fake_dotfiles
+  export LINUX=1
+  unset MACOS
+  run setup_dotfile_symlinks
+  [ "$status" -eq 0 ]
+  [[ -L "${FAKE_HOME}/.cursor/skills-cursor" ]]
+  [[ "$(readlink "${FAKE_HOME}/.cursor/skills-cursor")" == "${FAKE_DOTFILES_SRC}/.cursor/skills-cursor" ]]
+}
+
 @test "setup_dotfile_symlinks does not symlink User/ under ~/.cursor" {
   _make_fake_dotfiles
   export MACOS=1
@@ -198,7 +218,7 @@ _make_fake_dotfiles() {
   [[ ! -L "${FAKE_HOME}/.cursor/User" ]]
 }
 
-@test "setup_dotfile_symlinks handles .claude/projects/ when directory is empty" {
+@test "setup_dotfile_symlinks handles .claude/projects/ when directory is absent" {
   _make_fake_dotfiles
   rm -rf "${FAKE_DOTFILES_SRC}/.claude/projects"
   export MACOS=1

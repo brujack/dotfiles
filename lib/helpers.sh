@@ -584,6 +584,7 @@ setup_dotfile_symlinks() {
 
   log_info "Creating ${HOME}/.cursor"
   mkdir -p "${HOME}/.cursor"
+  # glob * excludes dotfiles (e.g. .gitignore) — intentional
   for _cursor_item in "${PERSONAL_GITREPOS}/${DOTFILES}/.cursor/"*; do
     [[ -e "${_cursor_item}" ]] || continue
     # Skip User/ — handled separately via CURSOR_USER_DIR symlinks
