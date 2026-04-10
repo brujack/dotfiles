@@ -45,3 +45,5 @@ Master status index for all specs and implementation plans in this directory.
 | 2026-04-08 | [workflow-test-coverage](plans/2026-04-08-workflow-test-coverage.md) | [spec](specs/2026-04-08-workflow-test-coverage-design.md) | Done |
 | 2026-04-08 | [check-versions](plans/2026-04-08-check-versions.md) | [spec](specs/2026-04-08-check-versions-design.md) | Done |
 | 2026-04-09 | [adr-implementation](plans/2026-04-09-adr-implementation.md) | [spec](specs/2026-04-09-adr-design.md) | Done |
+| 2026-04-10 | [brew-mas-install-flags](plans/2026-04-10-brew-mas-install-flags.md) | [spec](specs/2026-04-10-brew-mas-install-flags-design.md) | Pending |
+| 2026-04-10 | [logic-review-process](plans/2026-04-10-logic-review-process.md) | [spec](specs/2026-04-10-logic-review-process-design.md) | Done |
