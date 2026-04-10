@@ -648,8 +648,6 @@ teardown() {
   _DOCTOR_FAIL=0
   _DOCTOR_FAILED=0
   export HOME="${TMPDIR_TEST}"
-  export MACOS=1
-  unset LINUX
   mkdir -p "${TMPDIR_TEST}/.aws"
   chmod 700 "${TMPDIR_TEST}/.aws"
   # Override to check only .aws so test is isolated from other missing dirs
@@ -661,7 +659,11 @@ teardown() {
       doctor_fail "~/.aws" "missing"
       return
     fi
-    _perms=$(stat -f '%OLp' "${_dir}")
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+      _perms=$(stat -f '%OLp' "${_dir}")
+    else
+      _perms=$(stat -c '%a' "${_dir}")
+    fi
     if [[ "${_perms}" == "700" ]]; then
       doctor_pass "~/.aws (700)"
     else
