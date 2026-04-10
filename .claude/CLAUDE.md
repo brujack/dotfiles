@@ -57,6 +57,28 @@ The cycle is:
 
 **Never write implementation before the test.** If you find yourself writing code and then adding tests afterward, stop — you are doing it wrong.
 
+### Mandatory Test Categories
+
+Every test must cover more than just the happy path. These three categories are required for every function:
+
+**Boundary value tests** — For every function that takes input (arguments, env vars, file paths), test at boundaries:
+- Empty / zero / null input
+- Single element vs multiple elements
+- Minimum and maximum valid values
+- One above and one below valid range (where applicable)
+
+**Error path tests** — For every function that can fail, test:
+- What happens when it fails (correct error message, correct exit code)
+- What happens when a dependency it calls fails (does it propagate or handle?)
+- Partial failure — if step 2 of 3 fails, is state left clean?
+
+**State transition tests** — For functions that modify state (variables, files, symlinks):
+- Before and after assertions — verify the expected state change occurred
+- Verify no unintended side effects (other state unchanged)
+- Idempotency — calling the function twice produces the same result as calling it once
+
+A test that only covers the happy path is incomplete.
+
 Tests must be added alongside the code they cover, not as a separate pass. Every new function, every changed function, every bug fix gets a test in the same commit.
 
 ## Linting
