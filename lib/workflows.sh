@@ -391,6 +391,7 @@ run_check_versions() {
   _run_cv_check "yq"         "${YQ_VER}"          "mikefarah/yq"        "yq --version"         "[0-9]+\.[0-9]+\.[0-9]+"    "YQ_VER"
   _run_cv_check "shellcheck" "${SHELLCHECK_VER}"  "koalaman/shellcheck" "shellcheck --version" "[0-9]+\.[0-9]+\.[0-9]+"    "SHELLCHECK_VER"
   _run_cv_check "vagrant"    "${VAGRANT_VER}"     "hashicorp/vagrant"   "vagrant --version"    "[0-9]+\.[0-9]+\.[0-9]+"    "VAGRANT_VER"
+  _run_cv_check "gitleaks"  "${GITLEAKS_VER}"    "gitleaks/gitleaks"   "gitleaks version"     "[0-9]+\.[0-9]+\.[0-9]+"    "GITLEAKS_VER"
 
   printf "\n%d outdated, %d skipped, %d warnings, %d OK\n" \
     "${_outdated}" "${_skipped}" "${_warned}" "${_ok}"
