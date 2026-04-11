@@ -108,6 +108,10 @@ Dotfiles live in `.devcontainer/`, `.claude/`, and `.cursor/`. `setup_env.sh` cr
 
 Always remove the old file before symlinking (`rm -f` then `ln -s`). Validate symlinks with `[[ -L ${HOME}/.file ]]`.
 
+### Cursor ↔ Claude Code Parity
+
+`.cursor/plugins/` and `.cursor/skills-cursor/` are symlinked from this repo alongside `.claude/`. When adding or updating Claude Code plugins, skills, or MCP servers (Context7, Superpowers, Warp, etc.), check whether the same capability should be reflected in the Cursor config. The symlink setup means both tools share the same plugin/skills files on disk — but Cursor rules, model settings, and MCP server registration live in `.cursor/User/` and may need separate updates.
+
 ## Code Standards
 
 ### Shell Scripts
@@ -119,6 +123,7 @@ Always remove the old file before symlinking (`rm -f` then `ln -s`). Validate sy
 - **Functions:** `snake_case()` naming
 - **Constants:** `SCREAMING_SNAKE_CASE`, marked `readonly` after assignment
 - **Error handling:** Check `$?` or use `|| exit 1`; guard installs with `command -v`/`quiet_which()`
+- **`env which` vs `command -v`:** `setup_env.sh` uses `which` (via `env which`) for the brew prerequisite check instead of `command -v` so that BATS tests can mock `which` through PATH injection. `command -v` is a shell builtin and ignores PATH mocks. Use `command -v` everywhere else; only reach for `which` when testability via PATH mock is required.
 - **No `set -euo pipefail`** at top-level — conditional installs require non-zero exits to continue
 
 ### Installation Guards
