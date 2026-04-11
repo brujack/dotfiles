@@ -210,3 +210,29 @@ teardown() {
   grep -q "tmux new -s cone1" "${MOCK_CALLS_FILE}"
   grep -q "tmux new -s cone2" "${MOCK_CALLS_FILE}"
 }
+
+# ── pre-commit-hook.sh ────────────────────────────────────────────────────────
+
+@test "pre-commit-hook.sh is executable" {
+  [ -x "${REPO_ROOT}/scripts/pre-commit-hook.sh" ]
+}
+
+@test "pre-commit-hook.sh exits 0 when make lint passes" {
+  local tmpdir="${BATS_TEST_TMPDIR}/fakerepo"
+  mkdir -p "${tmpdir}"
+  printf '#!/usr/bin/env bash\nprintf "%%s\n" "${MOCK_GIT_TOPLEVEL:-/tmp}"\n' > "${tmpdir}/git"
+  printf '#!/usr/bin/env bash\nexit "${MOCK_MAKE_EXIT:-0}"\n' > "${tmpdir}/make"
+  chmod +x "${tmpdir}/git" "${tmpdir}/make"
+  run bash -c "MOCK_GIT_TOPLEVEL='${tmpdir}' PATH='${tmpdir}:${PATH}' bash '${REPO_ROOT}/scripts/pre-commit-hook.sh'"
+  [ "$status" -eq 0 ]
+}
+
+@test "pre-commit-hook.sh exits 1 when make lint fails" {
+  local tmpdir="${BATS_TEST_TMPDIR}/fakerepo2"
+  mkdir -p "${tmpdir}"
+  printf '#!/usr/bin/env bash\nprintf "%%s\n" "${MOCK_GIT_TOPLEVEL:-/tmp}"\n' > "${tmpdir}/git"
+  printf '#!/usr/bin/env bash\nexit "${MOCK_MAKE_EXIT:-0}"\n' > "${tmpdir}/make"
+  chmod +x "${tmpdir}/git" "${tmpdir}/make"
+  run bash -c "MOCK_GIT_TOPLEVEL='${tmpdir}' MOCK_MAKE_EXIT=1 PATH='${tmpdir}:${PATH}' bash '${REPO_ROOT}/scripts/pre-commit-hook.sh'"
+  [ "$status" -eq 1 ]
+}
