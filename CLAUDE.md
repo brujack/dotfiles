@@ -231,6 +231,16 @@ pwsh -Command "Install-Module Pester -Force -Scope CurrentUser -MinimumVersion 5
 pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 ```
 
+### Test Seams
+
+Functions that operate on specific file paths use override env vars to redirect to temp files in tests:
+
+| Seam | Used by | Effect |
+|---|---|---|
+| `_OVERRIDE_CONSTANTS_PATH` | `_update_version_pin()` | Redirects to a temp copy of `lib/constants.sh`; defaults to real path when unset |
+
+Pattern: `local _file="${_OVERRIDE_VAR:-$(dirname "${BASH_SOURCE[0]}")/real/path}"`. Tests set the var and pass a writable temp copy; production code leaves it unset.
+
 ### Mock Pattern
 
 ```bash
@@ -294,6 +304,13 @@ Available mock env vars:
 | `MOCK_HOSTNAME_OUTPUT` | Value returned by `hostname -s` (default: `testhost`) |
 | `MOCK_SLEEP_EXIT` | Exit code for `sleep` (default: 0) |
 | `MOCK_PGREP_OUTPUT` | PIDs printed to stdout by `pgrep` mock (default: empty; used to simulate found processes) |
+| `MOCK_LN_EXIT` | Exit code for `ln` (default: 0); real `/bin/ln` is called unless exit ≠ 0 |
+| `MOCK_CHMOD_EXIT` | Exit code for `chmod` (default: 0); real `/bin/chmod` is called unless exit ≠ 0 |
+| `MOCK_MV_EXIT` | Exit code for `mv` (default: 0); real `/bin/mv` is called unless exit ≠ 0 |
+| `MOCK_CP_EXIT` | Exit code for `cp` (default: 0); real `/bin/cp` is called unless exit ≠ 0 |
+| `MOCK_RPM_EXIT` | Exit code for `rpm` (default: 0) |
+
+**Pass-through mocks:** `ln`, `chmod`, `mv`, and `cp` call the real binary (`/bin/cmd "$@" 2>/dev/null || true`) so tests that assert actual filesystem state (permissions, file existence, symlinks) work correctly. Set the corresponding exit var to a non-zero value to simulate failure instead. Any mock that needs to support tests checking real filesystem state must use this pattern — a log-only mock will cause silent assertion failures.
 
 ## Key Conventions
 
