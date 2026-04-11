@@ -210,6 +210,7 @@ Types:
                Flags: --brew-only, --pip-only, --gems-only, --mas-only, --claude-only
   doctor     : Active health checks: symlinks, tools, credential dir permissions, version drift. Exits non-zero on failure
   check-versions : Compare pinned tool versions in lib/constants.sh against latest GitHub releases
+               Flags: --update
 Options:
   --dry-run       : Log mutating operations (symlinks, installs, mkdir) without executing them
   --brew-install  : (setup only) Ensure Homebrew is installed, update, and run brew bundle installs
@@ -219,6 +220,7 @@ Options:
   --gems-only     : (update only) Update Ruby gems only
   --mas-only      : (update only) Update Mac App Store apps only
   --claude-only   : (update only) Update Claude plugins only
+  --update        : (check-versions only) Interactively prompt to update outdated version pins in lib/constants.sh
   -w              : Optional -- Specify w for a redhat computer, sets up terraform 0.11 instead of default 0.12
 EOF
   exit 0
@@ -436,6 +438,7 @@ process_args() {
       --claude-only)   readonly UPDATE_CLAUDE=1 ;;
       --brew-install)  readonly SETUP_BREW=1 ;;
       --mas-install)   readonly SETUP_MAS=1 ;;
+      --update)        readonly UPDATE_VERSIONS=1 ;;
       *) _short_args+=("${_arg}") ;;
     esac
   done

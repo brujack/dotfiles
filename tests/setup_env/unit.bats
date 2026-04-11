@@ -482,6 +482,11 @@ teardown() {
   [ "${SETUP_MAS}" -eq 1 ]
 }
 
+@test "process_args --update sets UPDATE_VERSIONS" {
+  process_args --update -t check-versions
+  [[ -n ${UPDATE_VERSIONS:-} ]]
+}
+
 # ── run_update flag dispatch ───────────────────────────────────────────────────
 
 @test "run_update with --brew-only calls brew subsystem and skips gems" {

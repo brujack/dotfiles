@@ -201,3 +201,96 @@ teardown() {
   [ "$status" -eq 1 ]
   [[ "$output" == *"mas not found"* ]]
 }
+
+# ── _update_version_pin ───────────────────────────────────────────────────────
+
+setup_constants_copy() {
+  # Creates a writable temp copy of lib/constants.sh for update tests
+  _CONSTANTS_COPY="${BATS_TEST_TMPDIR}/constants.sh"
+  cp "${REPO_ROOT}/lib/constants.sh" "${_CONSTANTS_COPY}"
+  export _TEST_CONSTANTS_PATH="${_CONSTANTS_COPY}"
+}
+
+@test "_update_version_pin updates GO_VER in constants.sh" {
+  setup_constants_copy
+  export _OVERRIDE_CONSTANTS_PATH="${_TEST_CONSTANTS_PATH}"
+  _update_version_pin "go" "GO_VER" "1.26" "1.27"
+  grep -q 'GO_VER="1.27"' "${_TEST_CONSTANTS_PATH}"
+}
+
+@test "_update_version_pin does not modify other vars" {
+  setup_constants_copy
+  export _OVERRIDE_CONSTANTS_PATH="${_TEST_CONSTANTS_PATH}"
+  _update_version_pin "go" "GO_VER" "1.26" "1.27"
+  grep -q 'PYTHON_VER=' "${_TEST_CONSTANTS_PATH}"
+  grep -q "PYTHON_VER=\"${PYTHON_VER}\"" "${_TEST_CONSTANTS_PATH}"
+}
+
+@test "_update_version_pin removes .bak file after update" {
+  setup_constants_copy
+  export _OVERRIDE_CONSTANTS_PATH="${_TEST_CONSTANTS_PATH}"
+  _update_version_pin "go" "GO_VER" "1.26" "1.27"
+  [[ ! -f "${_TEST_CONSTANTS_PATH}.bak" ]]
+}
+
+# ── _update_url_pins ──────────────────────────────────────────────────────────
+
+@test "_update_url_pins updates GO_DOWNLOAD_FILENAME for go" {
+  setup_constants_copy
+  sed -i.bak 's|^GO_DOWNLOAD_FILENAME=.*|GO_DOWNLOAD_FILENAME="go1.26.1.linux-amd64.tar.gz"|' "${_TEST_CONSTANTS_PATH}"
+  rm -f "${_TEST_CONSTANTS_PATH}.bak"
+  _update_url_pins "go" "1.26" "1.27" "${_TEST_CONSTANTS_PATH}"
+  grep -q 'go1.27' "${_TEST_CONSTANTS_PATH}"
+}
+
+@test "_update_url_pins updates GO_DOWNLOAD_URL for go" {
+  setup_constants_copy
+  sed -i.bak 's|^GO_DOWNLOAD_FILENAME=.*|GO_DOWNLOAD_FILENAME="go1.26.1.linux-amd64.tar.gz"|' "${_TEST_CONSTANTS_PATH}"
+  rm -f "${_TEST_CONSTANTS_PATH}.bak"
+  _update_url_pins "go" "1.26" "1.27" "${_TEST_CONSTANTS_PATH}"
+  ! grep -q 'go1.26.1' "${_TEST_CONSTANTS_PATH}"
+  grep -q 'go1.27' "${_TEST_CONSTANTS_PATH}"
+}
+
+@test "_update_url_pins updates YQ_URL for yq" {
+  setup_constants_copy
+  _update_url_pins "yq" "${YQ_VER}" "9.9.9" "${_TEST_CONSTANTS_PATH}"
+  grep -q '/v9.9.9/' "${_TEST_CONSTANTS_PATH}"
+}
+
+@test "_update_url_pins leaves constants unchanged for vagrant" {
+  setup_constants_copy
+  cp "${_TEST_CONSTANTS_PATH}" "${BATS_TEST_TMPDIR}/constants_before.sh"
+  _update_url_pins "vagrant" "2.4.9" "2.5.0" "${_TEST_CONSTANTS_PATH}"
+  diff "${_TEST_CONSTANTS_PATH}" "${BATS_TEST_TMPDIR}/constants_before.sh"
+}
+
+@test "_update_url_pins leaves constants unchanged for shellcheck" {
+  setup_constants_copy
+  cp "${_TEST_CONSTANTS_PATH}" "${BATS_TEST_TMPDIR}/constants_before.sh"
+  _update_url_pins "shellcheck" "${SHELLCHECK_VER}" "0.12.0" "${_TEST_CONSTANTS_PATH}"
+  diff "${_TEST_CONSTANTS_PATH}" "${BATS_TEST_TMPDIR}/constants_before.sh"
+}
+
+# ── _prompt_version_update ────────────────────────────────────────────────────
+
+@test "_prompt_version_update calls _update_version_pin on y reply" {
+  setup_constants_copy
+  export _OVERRIDE_CONSTANTS_PATH="${_TEST_CONSTANTS_PATH}"
+  _prompt_version_update "go" "GO_VER" "1.26" "1.27" <<< "y"
+  grep -q 'GO_VER="1.27"' "${_TEST_CONSTANTS_PATH}"
+}
+
+@test "_prompt_version_update skips update on n reply" {
+  setup_constants_copy
+  export _OVERRIDE_CONSTANTS_PATH="${_TEST_CONSTANTS_PATH}"
+  _prompt_version_update "go" "GO_VER" "1.26" "1.27" <<< "n"
+  grep -q 'GO_VER="1.26"' "${_TEST_CONSTANTS_PATH}"
+}
+
+@test "_prompt_version_update skips update on empty reply" {
+  setup_constants_copy
+  export _OVERRIDE_CONSTANTS_PATH="${_TEST_CONSTANTS_PATH}"
+  _prompt_version_update "go" "GO_VER" "1.26" "1.27" <<< ""
+  grep -q 'GO_VER="1.26"' "${_TEST_CONSTANTS_PATH}"
+}
