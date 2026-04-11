@@ -21,3 +21,9 @@ description = "ubuntu package list files contain no secrets"
 paths = [
   '''^ubuntu_.*_packages\.txt$''',
 ]
+
+[[allowlists]]
+description = "Snyk token removed in 484d164; old commit still in HEAD~50 range (rotate token)"
+commits = [
+  "0eb455be89ec4434b32ff29eb1c7d2655f27c6fd",
+]
