@@ -189,3 +189,53 @@ _update_record_end() {
   printf "OK\n" > "${_UPDATE_TMPDIR}/status_${_section}"
   printf "%s\n" "${_result}" > "${_UPDATE_TMPDIR}/result_${_section}"
 }
+
+# _update_summary
+# Reads status/result files, prints formatted table, appends to log file.
+_update_summary() {
+  local _ok=0 _fail=0 _skip=0
+  local _output=""
+  local _timestamp
+  _timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+
+  _output+="=== Update Summary — ${_timestamp} ===\n\n"
+
+  local _section _status _result
+  for _section in "${_UPDATE_SECTION_ORDER[@]}"; do
+    if [[ ! -f "${_UPDATE_TMPDIR}/status_${_section}" ]]; then
+      continue
+    fi
+    _status=$(cat "${_UPDATE_TMPDIR}/status_${_section}")
+    _result=$(cat "${_UPDATE_TMPDIR}/result_${_section}")
+
+    case "${_status}" in
+      OK)
+        _ok=$(( _ok + 1 ))
+        _output+="$(printf "[OK]   %-16s %s" "${_section}" "${_result}")\n"
+        ;;
+      FAIL)
+        _fail=$(( _fail + 1 ))
+        _output+="$(printf "[FAIL] %-16s %s" "${_section}" "${_result}")\n"
+        ;;
+      SKIP)
+        _skip=$(( _skip + 1 ))
+        _output+="$(printf "[SKIP] %-16s %s" "${_section}" "${_result}")\n"
+        ;;
+    esac
+  done
+
+  local _total=$(( _ok + _fail + _skip ))
+  _output+="\n$(printf "%d sections: %d OK, %d failed, %d skipped" "${_total}" "${_ok}" "${_fail}" "${_skip}")\n"
+
+  # Print to terminal
+  printf '%b' "${_output}"
+
+  # Append to log file
+  local _log="${UPDATE_LOG_PATH:-${HOME}/.dotfiles-update.log}"
+  {
+    printf "────────────────────────────────────────────────────────\n"
+    printf '%b' "${_output}"
+  } >> "${_log}" 2>/dev/null || log_warn "Could not write to ${_log}"
+
+  printf "Log appended: %s\n" "${_log}"
+}

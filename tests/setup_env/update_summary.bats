@@ -190,3 +190,108 @@ teardown() {
   _update_record_end "brew" 0
   grep -q "no changes" "${_UPDATE_TMPDIR}/result_brew"
 }
+
+# ── _update_summary ───────────────────────────────────────────────────────────
+
+@test "_update_summary prints OK section with result" {
+  printf "OK\n" > "${_UPDATE_TMPDIR}/status_brew"
+  printf "2 formulae (git 2.45.0, wget 1.22.0)\n" > "${_UPDATE_TMPDIR}/result_brew"
+  local _s
+  for _s in softwareupdate mas claude pip gems oh-my-zsh p10k tpm tfenv cheat.sh; do
+    printf "SKIP\n" > "${_UPDATE_TMPDIR}/status_${_s}"
+    printf "not run\n" > "${_UPDATE_TMPDIR}/result_${_s}"
+  done
+  run _update_summary
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[OK]"* ]]
+  [[ "$output" == *"brew"* ]]
+  [[ "$output" == *"2 formulae"* ]]
+}
+
+@test "_update_summary prints FAIL section with exit code" {
+  printf "FAIL\n" > "${_UPDATE_TMPDIR}/status_claude"
+  printf "exit 1 — see output above\n" > "${_UPDATE_TMPDIR}/result_claude"
+  local _s
+  for _s in brew softwareupdate mas pip gems oh-my-zsh p10k tpm tfenv cheat.sh; do
+    printf "OK\n" > "${_UPDATE_TMPDIR}/status_${_s}"
+    printf "no changes\n" > "${_UPDATE_TMPDIR}/result_${_s}"
+  done
+  run _update_summary
+  [[ "$output" == *"[FAIL]"* ]]
+  [[ "$output" == *"claude"* ]]
+  [[ "$output" == *"exit 1"* ]]
+}
+
+@test "_update_summary prints SKIP section with reason" {
+  printf "SKIP\n" > "${_UPDATE_TMPDIR}/status_mas"
+  printf "%s\n" "--brew-only flag set" > "${_UPDATE_TMPDIR}/result_mas"
+  local _s
+  for _s in brew softwareupdate claude pip gems oh-my-zsh p10k tpm tfenv cheat.sh; do
+    printf "OK\n" > "${_UPDATE_TMPDIR}/status_${_s}"
+    printf "no changes\n" > "${_UPDATE_TMPDIR}/result_${_s}"
+  done
+  run _update_summary
+  [[ "$output" == *"[SKIP]"* ]]
+  [[ "$output" == *"mas"* ]]
+  [[ "$output" == *"--brew-only flag set"* ]]
+}
+
+@test "_update_summary prints totals line" {
+  printf "OK\n" > "${_UPDATE_TMPDIR}/status_brew"
+  printf "no changes\n" > "${_UPDATE_TMPDIR}/result_brew"
+  printf "FAIL\n" > "${_UPDATE_TMPDIR}/status_claude"
+  printf "exit 1\n" > "${_UPDATE_TMPDIR}/result_claude"
+  printf "SKIP\n" > "${_UPDATE_TMPDIR}/status_mas"
+  printf "not needed\n" > "${_UPDATE_TMPDIR}/result_mas"
+  local _s
+  for _s in softwareupdate pip gems oh-my-zsh p10k tpm tfenv cheat.sh; do
+    printf "OK\n" > "${_UPDATE_TMPDIR}/status_${_s}"
+    printf "no changes\n" > "${_UPDATE_TMPDIR}/result_${_s}"
+  done
+  run _update_summary
+  [[ "$output" == *"9 OK"* ]]
+  [[ "$output" == *"1 failed"* ]]
+  [[ "$output" == *"1 skipped"* ]]
+}
+
+@test "_update_summary creates log file when missing" {
+  rm -f "${UPDATE_LOG_PATH}"
+  local _s
+  for _s in brew softwareupdate mas claude pip gems oh-my-zsh p10k tpm tfenv cheat.sh; do
+    printf "OK\n" > "${_UPDATE_TMPDIR}/status_${_s}"
+    printf "no changes\n" > "${_UPDATE_TMPDIR}/result_${_s}"
+  done
+  _update_summary
+  [ -f "${UPDATE_LOG_PATH}" ]
+}
+
+@test "_update_summary appends to existing log file" {
+  printf "previous run\n" > "${UPDATE_LOG_PATH}"
+  local _s
+  for _s in brew softwareupdate mas claude pip gems oh-my-zsh p10k tpm tfenv cheat.sh; do
+    printf "OK\n" > "${_UPDATE_TMPDIR}/status_${_s}"
+    printf "no changes\n" > "${_UPDATE_TMPDIR}/result_${_s}"
+  done
+  _update_summary
+  grep -q "previous run" "${UPDATE_LOG_PATH}"
+  grep -q "Update Summary" "${UPDATE_LOG_PATH}"
+}
+
+@test "_update_summary writes separator before entry in log" {
+  local _s
+  for _s in brew softwareupdate mas claude pip gems oh-my-zsh p10k tpm tfenv cheat.sh; do
+    printf "OK\n" > "${_UPDATE_TMPDIR}/status_${_s}"
+    printf "no changes\n" > "${_UPDATE_TMPDIR}/result_${_s}"
+  done
+  _update_summary
+  head -1 "${UPDATE_LOG_PATH}" | grep -q "─"
+}
+
+@test "_update_summary skips sections with no status file" {
+  printf "OK\n" > "${_UPDATE_TMPDIR}/status_brew"
+  printf "no changes\n" > "${_UPDATE_TMPDIR}/result_brew"
+  run _update_summary
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"brew"* ]]
+  [[ "$output" == *"1 OK"* ]]
+}
