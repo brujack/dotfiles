@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
 # Mock lsb_release for testing
-echo "lsb_release $@" >> "${MOCK_CALLS_FILE}"
-echo "24.04"
+printf "lsb_release %s\n" "$*" >> "${MOCK_CALLS_FILE}"
+printf "24.04\n"
 exit 0

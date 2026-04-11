@@ -388,13 +388,11 @@ teardown() {
 
 @test "clone_personal_repos skips git clone when repo already exists" {
   export MACOS=1
-  # Pre-create the first personal repo dir
+  # Pre-create the dotfiles repo dir so its clone is skipped
   mkdir -p "${PERSONAL_GITREPOS}/dotfiles"
   clone_personal_repos
-  # With dotfiles already present, at least one clone is skipped
-  local total_clones
-  total_clones=$(grep -c "git clone" "${MOCK_CALLS_FILE}" || true)
-  [[ ${total_clones} -ge 0 ]]
+  # dotfiles dir already exists — its clone must not appear in the call log
+  ! grep -q "git clone.*dotfiles" "${MOCK_CALLS_FILE}"
 }
 
 # ── run_update — platform branching ───────────────────────────────────────────
