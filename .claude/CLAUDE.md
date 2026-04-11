@@ -197,7 +197,7 @@ Every personal repo CI pipeline must have:
 
 1. **Auto-merge** — an `auto-merge` job that merges the PR when all required jobs pass. Use `gh pr merge --squash --auto` triggered on `pull_request` events. Required jobs must be listed in `needs:`.
 2. **Secrets scanning** — a `secret-scan` job running `gitleaks` against recent commits. Must have a `.gitleaks.toml` allowlist at the repo root. This job is advisory (non-blocking) but must be present.
-3. **Snyk security scan** — a `snyk-scan` job running `snyk code test` (SAST) for code security issues. Uses the `snyk/actions/node@master` action with `SNYK_TOKEN` from repository secrets. This job is advisory (non-blocking) but must be present. Never commit Snyk tokens to the repo — store them in GitHub Actions secrets only.
+3. **Snyk security scan** — only add a `snyk-scan` job to repos that contain languages Snyk Code supports (Python, JavaScript/TypeScript, Java, Go, Ruby, etc.). Do **not** add it to shell-script or config-only repos — `snyk code test` returns `SNYK-CODE-0006` (no supported files) and will always fail. When present, run `snyk code test` with `SNYK_TOKEN` from repository secrets. Never commit Snyk tokens to the repo.
 4. **GitGuardian pre-commit hook** — the repo's pre-commit hook must include `ggshield secret scan pre-commit` (guarded by `command -v ggshield` so it degrades gracefully if not installed). Install ggshield via `brew install ggshield`. The hook runs `make lint` first, then ggshield.
 
 ## Code Standards
