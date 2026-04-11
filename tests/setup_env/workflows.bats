@@ -246,10 +246,10 @@ setup_constants_copy() {
 @test "_update_url_pins updates GO_DOWNLOAD_URL for go" {
   setup_constants_copy
   sed -i.bak 's|^GO_DOWNLOAD_FILENAME=.*|GO_DOWNLOAD_FILENAME="go1.26.1.linux-amd64.tar.gz"|' "${_TEST_CONSTANTS_PATH}"
-  sed -i.bak "s|go1.26.1.linux-amd64.tar.gz|go1.26.1.linux-amd64.tar.gz|g" "${_TEST_CONSTANTS_PATH}"
   rm -f "${_TEST_CONSTANTS_PATH}.bak"
   _update_url_pins "go" "1.26" "1.27" "${_TEST_CONSTANTS_PATH}"
   ! grep -q 'go1.26.1' "${_TEST_CONSTANTS_PATH}"
+  grep -q 'go1.27' "${_TEST_CONSTANTS_PATH}"
 }
 
 @test "_update_url_pins updates YQ_URL for yq" {
@@ -270,4 +270,27 @@ setup_constants_copy() {
   cp "${_TEST_CONSTANTS_PATH}" "${BATS_TEST_TMPDIR}/constants_before.sh"
   _update_url_pins "shellcheck" "${SHELLCHECK_VER}" "0.12.0" "${_TEST_CONSTANTS_PATH}"
   diff "${_TEST_CONSTANTS_PATH}" "${BATS_TEST_TMPDIR}/constants_before.sh"
+}
+
+# ── _prompt_version_update ────────────────────────────────────────────────────
+
+@test "_prompt_version_update calls _update_version_pin on y reply" {
+  setup_constants_copy
+  export _OVERRIDE_CONSTANTS_PATH="${_TEST_CONSTANTS_PATH}"
+  _prompt_version_update "go" "GO_VER" "1.26" "1.27" <<< "y"
+  grep -q 'GO_VER="1.27"' "${_TEST_CONSTANTS_PATH}"
+}
+
+@test "_prompt_version_update skips update on n reply" {
+  setup_constants_copy
+  export _OVERRIDE_CONSTANTS_PATH="${_TEST_CONSTANTS_PATH}"
+  _prompt_version_update "go" "GO_VER" "1.26" "1.27" <<< "n"
+  grep -q 'GO_VER="1.26"' "${_TEST_CONSTANTS_PATH}"
+}
+
+@test "_prompt_version_update skips update on empty reply" {
+  setup_constants_copy
+  export _OVERRIDE_CONSTANTS_PATH="${_TEST_CONSTANTS_PATH}"
+  _prompt_version_update "go" "GO_VER" "1.26" "1.27" <<< ""
+  grep -q 'GO_VER="1.26"' "${_TEST_CONSTANTS_PATH}"
 }

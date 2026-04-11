@@ -36,7 +36,7 @@ Personal development environment bootstrap for macOS, Linux (Ubuntu/RHEL), and W
 | `ansible` | Ansible venv only — typically used after a Python update |
 | `update` | Update all packages (brew, apt/dnf/yum, pip, mas, Claude plugins, etc.) |
 | `doctor` | Print detected OS, profile, capabilities, and key paths (no side effects) |
-| `check-versions` | Compare pinned tool versions in `lib/constants.sh` against latest GitHub releases. Exits 1 if any are outdated |
+| `check-versions` | Compare pinned tool versions in `lib/constants.sh` against latest GitHub releases. Exits 1 if any are outdated; `--update` prompts to apply each update in-place |
 
 **Options:**
 - `--dry-run` — log mutating operations (symlinks, installs, mkdir) without executing
@@ -47,6 +47,7 @@ Personal development environment bootstrap for macOS, Linux (Ubuntu/RHEL), and W
 - `--gems-only` — update Ruby gems only (with `-t update`)
 - `--mas-only` — update Mac App Store apps only (with `-t update`)
 - `--claude-only` — update Claude plugins only (with `-t update`)
+- `--update` — (check-versions only) interactively prompt to update each outdated pin in `lib/constants.sh`
 
 Flags are additive: `./setup_env.sh -t update --brew-only --pip-only` runs only brew and pip.
 
