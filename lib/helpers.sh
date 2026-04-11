@@ -294,6 +294,7 @@ run_doctor() {
   printf "\n=== Checks ===\n"
 
   _doctor_check_symlinks
+  _doctor_check_symlink_roots
   _doctor_check_tools
   _doctor_check_cred_dirs
   _doctor_check_versions
@@ -333,6 +334,15 @@ _doctor_check_symlinks() {
       doctor_fail "${_label}" "symlink missing"
     fi
   done
+}
+_doctor_check_symlink_roots() {
+  printf "\nSymlink roots:\n"
+  local _dotfiles_root="${PERSONAL_GITREPOS}/${DOTFILES}"
+  if [[ -d "${_dotfiles_root}" ]]; then
+    doctor_pass "${_dotfiles_root}"
+  else
+    doctor_fail "${_dotfiles_root}" "directory missing — symlinks may be broken"
+  fi
 }
 _doctor_check_tools() {
   printf "\nTools:\n"

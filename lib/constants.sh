@@ -3,6 +3,7 @@
 
 # software versions to install
 BATS_VER="1.11.0"
+GITLEAKS_VER="8.21.2"
 CF_TERRAFORMING_VER="0.16.1"
 CHRUBY_VER="0.3.9"
 CONSUL_VER="1.16.0"

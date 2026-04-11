@@ -2,8 +2,6 @@ name: CI
 
 on:
   push:
-    branches-ignore:
-      - master
   pull_request:
     branches:
       - master
@@ -33,6 +31,8 @@ jobs:
           find . -name '*.sh' \
             -not -path './.worktrees/*' \
             -not -path './tests/mocks/*' \
+            -not -path './.cursor/*' \
+            -not -path './.claude/*' \
             | xargs -I{} bash -n {}
 
       - name: Syntax check all shell scripts (zsh)
@@ -40,6 +40,8 @@ jobs:
           find . -name '*.sh' \
             -not -path './.worktrees/*' \
             -not -path './tests/mocks/*' \
+            -not -path './.cursor/*' \
+            -not -path './.claude/*' \
             | xargs -I{} zsh -n {}
 
   secret-scan:
@@ -52,7 +54,7 @@ jobs:
       - name: Install gitleaks
         run: |
           set -e
-          GITLEAKS_VER="8.21.2"
+          source lib/constants.sh
           wget -qO /tmp/gitleaks.tar.gz \
             "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VER}/gitleaks_${GITLEAKS_VER}_linux_x64.tar.gz"
           tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks

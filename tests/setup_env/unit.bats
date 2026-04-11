@@ -754,3 +754,29 @@ teardown() {
   _doctor_check_versions
   [ "${_DOCTOR_FAILED}" -eq 1 ]
 }
+
+# ── _doctor_check_symlink_roots ───────────────────────────────────────────────
+
+@test "_doctor_check_symlink_roots passes when dotfiles repo directory exists" {
+  _DOCTOR_PASS=0
+  _DOCTOR_FAIL=0
+  _DOCTOR_FAILED=0
+  export PERSONAL_GITREPOS="${TMPDIR_TEST}/git-repos/personal"
+  export DOTFILES="dotfiles"
+  mkdir -p "${PERSONAL_GITREPOS}/${DOTFILES}"
+  _doctor_check_symlink_roots
+  [ "${_DOCTOR_PASS}" -eq 1 ]
+  [ "${_DOCTOR_FAILED}" -eq 0 ]
+}
+
+@test "_doctor_check_symlink_roots fails when dotfiles repo directory is missing" {
+  _DOCTOR_PASS=0
+  _DOCTOR_FAIL=0
+  _DOCTOR_FAILED=0
+  export PERSONAL_GITREPOS="${TMPDIR_TEST}/git-repos/personal"
+  export DOTFILES="dotfiles"
+  # Do not create the directory
+  _doctor_check_symlink_roots
+  [ "${_DOCTOR_FAIL}" -eq 1 ]
+  [ "${_DOCTOR_FAILED}" -eq 1 ]
+}
