@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+printf "rpm %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+exit "${MOCK_RPM_EXIT:-0}"
