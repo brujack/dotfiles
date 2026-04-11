@@ -259,3 +259,97 @@ teardown() {
   run bash -c "MOCK_GIT_TOPLEVEL='${tmpdir}' PATH='${tmpdir}:/usr/bin:/bin' bash '${REPO_ROOT}/scripts/pre-commit-hook.sh'"
   [ "$status" -eq 0 ]
 }
+
+# ── bootstrap_mac.sh ─────────────────────────────────────────────────────────
+
+@test "_bootstrap_check_macos passes on Darwin" {
+  source "${REPO_ROOT}/scripts/bootstrap_mac.sh"
+  export MOCK_UNAME_S=Darwin
+  run _bootstrap_check_macos
+  [ "$status" -eq 0 ]
+}
+
+@test "_bootstrap_check_macos fails on Linux" {
+  source "${REPO_ROOT}/scripts/bootstrap_mac.sh"
+  export MOCK_UNAME_S=Linux
+  run _bootstrap_check_macos
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"macOS only"* ]]
+}
+
+@test "_bootstrap_mac_install_homebrew skips when brew already installed" {
+  source "${REPO_ROOT}/scripts/bootstrap_mac.sh"
+  run _bootstrap_mac_install_homebrew
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"already installed"* ]]
+  ! grep -q "curl" "${MOCK_CALLS_FILE}"
+}
+
+@test "_bootstrap_mac_install_homebrew calls curl when brew missing" {
+  source "${REPO_ROOT}/scripts/bootstrap_mac.sh"
+  export MOCK_WHICH_MISSING=brew
+  run _bootstrap_mac_install_homebrew
+  [ "$status" -eq 0 ]
+  grep -q "curl" "${MOCK_CALLS_FILE}"
+}
+
+@test "_bootstrap_mac_install_homebrew returns error when curl fails" {
+  source "${REPO_ROOT}/scripts/bootstrap_mac.sh"
+  export MOCK_WHICH_MISSING=brew
+  export MOCK_CURL_EXIT=1
+  run _bootstrap_mac_install_homebrew
+  [ "$status" -ne 0 ]
+}
+
+@test "_bootstrap_mac_install_bash5 skips when bash >= 5" {
+  source "${REPO_ROOT}/scripts/bootstrap_mac.sh"
+  local _mockbash="${BATS_TEST_TMPDIR}/bash5mock"
+  printf '#!/bin/bash\nprintf "GNU bash, version 5.2.0(1)-release\\n"\n' > "${_mockbash}"
+  chmod +x "${_mockbash}"
+  export BASH="${_mockbash}"
+  run _bootstrap_mac_install_bash5
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"already installed"* ]]
+  ! grep -q "brew install bash" "${MOCK_CALLS_FILE}"
+}
+
+@test "_bootstrap_mac_install_bash5 installs when bash < 5" {
+  source "${REPO_ROOT}/scripts/bootstrap_mac.sh"
+  local _mockbash="${BATS_TEST_TMPDIR}/bash3mock"
+  printf '#!/bin/bash\nprintf "GNU bash, version 3.2.57(1)-release\\n"\n' > "${_mockbash}"
+  chmod +x "${_mockbash}"
+  export BASH="${_mockbash}"
+  run _bootstrap_mac_install_bash5
+  [ "$status" -eq 0 ]
+  grep -q "brew install bash" "${MOCK_CALLS_FILE}"
+}
+
+@test "_bootstrap_mac_install_bash5 returns error when brew install fails" {
+  source "${REPO_ROOT}/scripts/bootstrap_mac.sh"
+  local _mockbash="${BATS_TEST_TMPDIR}/bash3mock2"
+  printf '#!/bin/bash\nprintf "GNU bash, version 3.2.57(1)-release\\n"\n' > "${_mockbash}"
+  chmod +x "${_mockbash}"
+  export BASH="${_mockbash}"
+  export MOCK_BREW_INSTALL_EXIT=1
+  run _bootstrap_mac_install_bash5
+  [ "$status" -ne 0 ]
+}
+
+@test "bootstrap_mac_main calls functions in order on Darwin" {
+  source "${REPO_ROOT}/scripts/bootstrap_mac.sh"
+  export MOCK_UNAME_S=Darwin
+  local _mockbash="${BATS_TEST_TMPDIR}/bash5main"
+  printf '#!/bin/bash\nprintf "GNU bash, version 5.2.0(1)-release\\n"\n' > "${_mockbash}"
+  chmod +x "${_mockbash}"
+  export BASH="${_mockbash}"
+  run bootstrap_mac_main
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Bootstrap complete"* ]]
+}
+
+@test "bootstrap_mac_main fails on non-macOS" {
+  source "${REPO_ROOT}/scripts/bootstrap_mac.sh"
+  export MOCK_UNAME_S=Linux
+  run bootstrap_mac_main
+  [ "$status" -eq 1 ]
+}
