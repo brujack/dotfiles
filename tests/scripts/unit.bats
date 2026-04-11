@@ -222,7 +222,8 @@ teardown() {
   mkdir -p "${tmpdir}"
   printf '#!/usr/bin/env bash\nprintf "%%s\n" "${MOCK_GIT_TOPLEVEL:-/tmp}"\n' > "${tmpdir}/git"
   printf '#!/usr/bin/env bash\nexit "${MOCK_MAKE_EXIT:-0}"\n' > "${tmpdir}/make"
-  chmod +x "${tmpdir}/git" "${tmpdir}/make"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "${tmpdir}/ggshield"
+  chmod +x "${tmpdir}/git" "${tmpdir}/make" "${tmpdir}/ggshield"
   run bash -c "MOCK_GIT_TOPLEVEL='${tmpdir}' PATH='${tmpdir}:${PATH}' bash '${REPO_ROOT}/scripts/pre-commit-hook.sh'"
   [ "$status" -eq 0 ]
 }

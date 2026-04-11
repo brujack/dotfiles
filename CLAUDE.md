@@ -26,6 +26,7 @@ dotfiles/
 │   ├── macos.sh              # macOS install functions (install_macos_packages)
 │   ├── linux.sh              # Linux install functions (install_ubuntu_packages, install_rhel_packages, install_centos_packages, install_linux_packages)
 │   ├── developer.sh          # Cross-platform dev tools (install_ruby_tools, install_ruby, setup_kitchen, setup_ansible, clone_personal_repos, etc.)
+│   ├── update_summary.sh     # Update run tracking and summary reporting
 │   └── workflows.sh          # Top-level workflow functions dispatched by setup_env.sh
 ├── scripts/
 │   ├── bootstrap_mac.sh      # One-time macOS prerequisite installer (Homebrew + bash 5)
@@ -91,7 +92,7 @@ dotfiles/
 | `setup` | Full machine setup (setup_user + all apps). Flags: `--brew-install`, `--mas-install` |
 | `developer` | Dev packages + Python/Ansible virtualenv |
 | `ansible` | Ansible venv setup only (after Python updates) |
-| `update` | Update all packages (brew, apt/dnf/yum, pip, gems, tools). Supports `--brew-only`, `--pip-only`, `--gems-only`, `--mas-only`, `--claude-only` flags |
+| `update` | Update all packages (brew, apt/dnf/yum, pip, gems, tools). Supports `--brew-only`, `--pip-only`, `--gems-only`, `--mas-only`, `--claude-only` flags. Prints a structured summary at the end; each run is appended to `~/.dotfiles-update.log` |
 | `doctor` | Active health checks: symlinks, tool presence, credential dir permissions, version drift. Exits non-zero on any failure |
 | `check-versions` | Compare pinned versions in `lib/constants.sh` against GitHub latest; exits 1 if outdated. `--update` prompts per-tool to apply updates in-place |
 
@@ -245,6 +246,8 @@ Functions that operate on specific file paths use override env vars to redirect 
 | Seam | Used by | Effect |
 |---|---|---|
 | `_OVERRIDE_CONSTANTS_PATH` | `_update_version_pin()` | Redirects to a temp copy of `lib/constants.sh`; defaults to real path when unset |
+| `UPDATE_LOG_PATH` | `_update_summary()` | Redirects log writes to a temp file in tests; defaults to `~/.dotfiles-update.log` |
+| `_UPDATE_TMPDIR` | all summary functions | Set to `${BATS_TEST_TMPDIR}` in tests to isolate snapshot files |
 
 Pattern: `local _file="${_OVERRIDE_VAR:-$(dirname "${BASH_SOURCE[0]}")/real/path}"`. Tests set the var and pass a writable temp copy; production code leaves it unset.
 
