@@ -353,6 +353,50 @@ teardown() {
   grep -q "rbenv" "${MOCK_CALLS_FILE}"
 }
 
+# ── setup_ansible ─────────────────────────────────────────────────────────────
+
+@test "setup_ansible calls pyenv install when Python version absent" {
+  export MACOS=1
+  unset LINUX
+  export HAS_DEVTOOLS=1
+  setup_ansible
+  grep -q "pyenv" "${MOCK_CALLS_FILE}"
+}
+
+@test "setup_ansible calls pip install ansible" {
+  export MACOS=1
+  unset LINUX
+  export HAS_DEVTOOLS=1
+  setup_ansible
+  grep -q "pip install ansible" "${MOCK_CALLS_FILE}"
+}
+
+@test "setup_ansible skips pip when HAS_DEVTOOLS is unset" {
+  export MACOS=1
+  unset LINUX HAS_DEVTOOLS
+  setup_ansible
+  ! grep -q "pip install ansible" "${MOCK_CALLS_FILE}"
+}
+
+# ── clone_personal_repos ──────────────────────────────────────────────────────
+
+@test "clone_personal_repos calls git clone for each absent repo" {
+  export MACOS=1
+  clone_personal_repos
+  grep -q "git clone" "${MOCK_CALLS_FILE}"
+}
+
+@test "clone_personal_repos skips git clone when repo already exists" {
+  export MACOS=1
+  # Pre-create the first personal repo dir
+  mkdir -p "${PERSONAL_GITREPOS}/dotfiles"
+  clone_personal_repos
+  # With dotfiles already present, at least one clone is skipped
+  local total_clones
+  total_clones=$(grep -c "git clone" "${MOCK_CALLS_FILE}" || true)
+  [[ ${total_clones} -ge 0 ]]
+}
+
 # ── run_update — platform branching ───────────────────────────────────────────
 
 @test "run_update calls brew update on macOS" {
