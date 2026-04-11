@@ -144,9 +144,9 @@ install_macos_packages() {
     printf "Brewfile is linked\n"
   fi
 
-  if ! [ -x "$(command -v brew)" ]; then
+  if ! [[ -x "$(command -v brew)" ]]; then
     install_homebrew
-  elif [ -x "$(command -v brew)" ]; then
+  else
     brew_update
     printf "Installing other brew stuff...\n"
     brew_tap_if_missing homebrew/bundle
