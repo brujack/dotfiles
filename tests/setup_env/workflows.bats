@@ -107,6 +107,294 @@ teardown() {
   ! grep -q "apt-get install" "${MOCK_CALLS_FILE}"
 }
 
+# ── install_macos_packages ────────────────────────────────────────────────────
+
+@test "install_macos_packages symlinks Brewfile at BREWFILE_LOC" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile"
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.gui"
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.devtools"
+  mkdir -p "${HOME}/scripts"
+  touch "${HOME}/scripts/.osx.sh"
+  chmod +x "${HOME}/scripts/.osx.sh"
+  run install_macos_packages
+  [[ -L "${BREWFILE_LOC}/Brewfile" ]]
+}
+
+@test "install_macos_packages calls brew update when brew is present" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile"
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.gui"
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.devtools"
+  mkdir -p "${HOME}/scripts"
+  touch "${HOME}/scripts/.osx.sh"
+  chmod +x "${HOME}/scripts/.osx.sh"
+  run install_macos_packages
+  grep -q "brew update" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_macos_packages calls softwareupdate" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile"
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.gui"
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.devtools"
+  mkdir -p "${HOME}/scripts"
+  touch "${HOME}/scripts/.osx.sh"
+  chmod +x "${HOME}/scripts/.osx.sh"
+  run install_macos_packages
+  grep -q "softwareupdate" "${MOCK_CALLS_FILE}"
+}
+
+# ── install_ubuntu_packages ───────────────────────────────────────────────────
+
+@test "install_ubuntu_packages calls apt update on Ubuntu Noble" {
+  unset MACOS
+  export LINUX=1
+  export UBUNTU=1
+  export NOBLE=1
+  # Create mock xargs files to prevent xargs errors
+  touch ubuntu_common_packages.txt ubuntu_2404_packages.txt
+  # Create directory for apt sources
+  mkdir -p /etc/apt/sources.list.d /etc/apt/keyrings /etc/apt/trusted.gpg.d 2>/dev/null || true
+  run install_ubuntu_packages
+  grep -q "apt update" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_ubuntu_packages calls nala on Noble" {
+  unset MACOS
+  export LINUX=1
+  export UBUNTU=1
+  export NOBLE=1
+  # Create mock xargs files to prevent xargs errors
+  touch ubuntu_common_packages.txt ubuntu_2404_packages.txt
+  # Create directory for apt sources
+  mkdir -p /etc/apt/sources.list.d /etc/apt/keyrings /etc/apt/trusted.gpg.d 2>/dev/null || true
+  run install_ubuntu_packages
+  grep -q "nala" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_ubuntu_packages installs snap packages when HAS_SNAP" {
+  unset MACOS
+  export LINUX=1
+  export UBUNTU=1
+  export NOBLE=1
+  export HAS_SNAP=1
+  # Create mock xargs files to prevent xargs errors
+  touch ubuntu_common_packages.txt ubuntu_2404_packages.txt ubuntu_workstation_packages.txt ubuntu_workstation_snap_packages.txt
+  # Create directory for apt sources
+  mkdir -p /etc/apt/sources.list.d /etc/apt/keyrings /etc/apt/trusted.gpg.d 2>/dev/null || true
+  run install_ubuntu_packages
+  grep -q "snap" "${MOCK_CALLS_FILE}"
+}
+
+# ── install_rhel_packages ─────────────────────────────────────────────────────
+
+@test "install_rhel_packages calls dnf on RHEL" {
+  unset MACOS UBUNTU
+  export LINUX=1
+  export REDHAT=1
+  install_rhel_packages
+  grep -q "dnf" "${MOCK_CALLS_FILE}"
+}
+
+# ── install_centos_packages ───────────────────────────────────────────────────
+
+@test "install_centos_packages calls yum on CentOS" {
+  unset MACOS UBUNTU REDHAT
+  export LINUX=1
+  export CENTOS=1
+  install_centos_packages
+  grep -q "yum" "${MOCK_CALLS_FILE}"
+}
+
+# ── install_linux_packages ────────────────────────────────────────────────────
+
+@test "install_linux_packages clones tfenv on Linux" {
+  unset MACOS UBUNTU REDHAT CENTOS
+  export LINUX=1
+  install_linux_packages
+  grep -q "git clone" "${MOCK_CALLS_FILE}"
+}
+
+# ── install_aws_tools ─────────────────────────────────────────────────────────
+
+@test "install_aws_tools calls wget for AWSCLIV2.pkg on macOS with HAS_AWS" {
+  export MACOS=1
+  export HAS_AWS=1
+  unset LINUX
+  mkdir -p "${HOME}/software_downloads/awscli"
+  install_aws_tools
+  grep -q "AWSCLIV2.pkg" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_aws_tools calls wget for awscliv2.zip on Linux with HAS_AWS" {
+  unset MACOS
+  export LINUX=1
+  export HAS_AWS=1
+  mkdir -p "${HOME}/software_downloads/awscli"
+  install_aws_tools
+  grep -q "awscliv2.zip" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_aws_tools is a no-op when HAS_AWS is unset" {
+  export MACOS=1
+  unset HAS_AWS LINUX
+  install_aws_tools
+  ! grep -q "awscli" "${MOCK_CALLS_FILE}"
+}
+
+# ── install_ruby_tools ────────────────────────────────────────────────────────
+
+@test "install_ruby_tools downloads ruby-install on Linux when absent" {
+  unset MACOS
+  export LINUX=1
+  export UBUNTU=1
+  export NOBLE=1
+  install_ruby_tools
+  grep -q "ruby-install" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_ruby_tools downloads chruby on Linux Focal" {
+  unset MACOS
+  export LINUX=1
+  export UBUNTU=1
+  export FOCAL=1
+  install_ruby_tools
+  grep -q "chruby" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_ruby_tools is a no-op on macOS" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  install_ruby_tools
+  ! grep -q "ruby-install" "${MOCK_CALLS_FILE}"
+}
+
+# ── install_ruby ──────────────────────────────────────────────────────────────
+
+@test "install_ruby calls ruby-install on macOS when ruby absent" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  install_ruby
+  grep -q "ruby-install" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_ruby calls rbenv on Noble when ruby absent" {
+  unset MACOS
+  export LINUX=1
+  export UBUNTU=1
+  export NOBLE=1
+  install_ruby
+  grep -q "rbenv" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_ruby skips when ruby dir already exists" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  mkdir -p "${HOME}/.rubies/ruby-${RUBY_VER}/bin"
+  install_ruby
+  ! grep -q "ruby-install" "${MOCK_CALLS_FILE}"
+}
+
+# ── install_github_cli_linux ──────────────────────────────────────────────────
+
+@test "install_github_cli_linux calls apt install gh on Ubuntu" {
+  unset MACOS
+  export LINUX=1
+  export UBUNTU=1
+  export NOBLE=1
+  install_github_cli_linux
+  grep -q "apt install gh" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_github_cli_linux calls dnf on RHEL" {
+  unset MACOS UBUNTU
+  export LINUX=1
+  export REDHAT=1
+  install_github_cli_linux
+  grep -q "dnf" "${MOCK_CALLS_FILE}"
+}
+
+# ── setup_kitchen ─────────────────────────────────────────────────────────────
+
+@test "setup_kitchen calls gem install test-kitchen on macOS" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  export CHRUBY_LOC="${BATS_TEST_TMPDIR}/chruby_stub"
+  mkdir -p "${CHRUBY_LOC}/chruby"
+  printf "# stub\n" > "${CHRUBY_LOC}/chruby/chruby.sh"
+  printf "# stub\n" > "${CHRUBY_LOC}/chruby/auto.sh"
+  setup_kitchen
+  grep -q "gem install test-kitchen" "${MOCK_CALLS_FILE}"
+}
+
+@test "setup_kitchen calls gem install test-kitchen on Linux Jammy" {
+  unset MACOS
+  export LINUX=1
+  export UBUNTU=1
+  export JAMMY=1
+  export CHRUBY_LOC="${BATS_TEST_TMPDIR}/chruby_stub"
+  mkdir -p "${CHRUBY_LOC}/chruby"
+  printf "# stub\n" > "${CHRUBY_LOC}/chruby/chruby.sh"
+  printf "# stub\n" > "${CHRUBY_LOC}/chruby/auto.sh"
+  setup_kitchen
+  grep -q "gem install test-kitchen" "${MOCK_CALLS_FILE}"
+}
+
+@test "setup_kitchen calls rbenv on Noble" {
+  unset MACOS
+  export LINUX=1
+  export UBUNTU=1
+  export NOBLE=1
+  setup_kitchen
+  grep -q "rbenv" "${MOCK_CALLS_FILE}"
+}
+
+# ── setup_ansible ─────────────────────────────────────────────────────────────
+
+@test "setup_ansible calls pyenv install when Python version absent" {
+  export MACOS=1
+  unset LINUX
+  export HAS_DEVTOOLS=1
+  setup_ansible
+  grep -q "pyenv" "${MOCK_CALLS_FILE}"
+}
+
+@test "setup_ansible calls pip install ansible" {
+  export MACOS=1
+  unset LINUX
+  export HAS_DEVTOOLS=1
+  setup_ansible
+  grep -q "pip install ansible" "${MOCK_CALLS_FILE}"
+}
+
+@test "setup_ansible skips pip when HAS_DEVTOOLS is unset" {
+  export MACOS=1
+  unset LINUX HAS_DEVTOOLS
+  setup_ansible
+  ! grep -q "pip install ansible" "${MOCK_CALLS_FILE}"
+}
+
+# ── clone_personal_repos ──────────────────────────────────────────────────────
+
+@test "clone_personal_repos calls git clone for each absent repo" {
+  export MACOS=1
+  clone_personal_repos
+  grep -q "git clone" "${MOCK_CALLS_FILE}"
+}
+
+@test "clone_personal_repos skips git clone when repo already exists" {
+  export MACOS=1
+  # Pre-create the dotfiles repo dir so its clone is skipped
+  mkdir -p "${PERSONAL_GITREPOS}/dotfiles"
+  clone_personal_repos
+  # dotfiles dir already exists — its clone must not appear in the call log
+  ! grep -q "git clone.*dotfiles" "${MOCK_CALLS_FILE}"
+}
+
 # ── run_update — platform branching ───────────────────────────────────────────
 
 @test "run_update calls brew update on macOS" {

@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+printf "ln %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+if [[ "${MOCK_LN_EXIT:-0}" -ne 0 ]]; then
+  exit "${MOCK_LN_EXIT}"
+fi
+/bin/ln "$@" 2>/dev/null || true

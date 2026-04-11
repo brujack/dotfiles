@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+printf "chmod %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+if [[ "${MOCK_CHMOD_EXIT:-0}" -ne 0 ]]; then
+  exit "${MOCK_CHMOD_EXIT}"
+fi
+/bin/chmod "$@" 2>/dev/null || true

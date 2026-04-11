@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+printf "ruby-install %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+exit "${MOCK_RUBY_INSTALL_EXIT:-0}"

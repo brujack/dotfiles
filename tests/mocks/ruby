@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+printf "ruby %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+if [[ "$1" == "--version" ]]; then
+  printf "ruby %s (2024-01-01 revision abc) [x86_64-linux]\n" "${RUBY_VER:-4.0.2}"
+fi
+exit "${MOCK_RUBY_EXIT:-0}"

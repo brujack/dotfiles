@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+printf "cp %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+if [[ "${MOCK_CP_EXIT:-0}" -ne 0 ]]; then
+  exit "${MOCK_CP_EXIT}"
+fi
+/bin/cp "$@" 2>/dev/null || true

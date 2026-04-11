@@ -133,3 +133,32 @@ install_macos_casks() {
   [[ -n ${HAS_GUI} ]]      && brew bundle --file "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.gui"
   [[ -n ${HAS_DEVTOOLS} ]] && brew bundle --file "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.devtools"
 }
+
+install_macos_packages() {
+  printf "Creating %s\n" "${BREWFILE_LOC}"
+  mkdir -p ${BREWFILE_LOC}
+
+  rm -f ${BREWFILE_LOC}/Brewfile
+  ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile ${BREWFILE_LOC}/Brewfile
+  if [[ -L ${BREWFILE_LOC}/Brewfile ]]; then
+    printf "Brewfile is linked\n"
+  fi
+
+  if ! [[ -x "$(command -v brew)" ]]; then
+    install_homebrew
+  else
+    brew_update
+    printf "Installing other brew stuff...\n"
+    brew_tap_if_missing homebrew/bundle
+    install_macos_casks
+
+    printf "Cleaning Homebrew up...\n"
+    brew cleanup
+  fi
+
+  printf "Updating app store apps via softwareupdate\n"
+  sudo -H softwareupdate --install --all --verbose
+
+  printf "Setting up macOS defaults\n"
+  ${HOME}/scripts/.osx.sh
+}

@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Log the call and optionally write to file (for non-sensitive paths)
+printf "tee %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+# Read from stdin and discard (don't write to protected directories)
+cat > /dev/null
+exit "${MOCK_TEE_EXIT:-0}"

@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Mock gpg for testing
+printf "gpg %s\n" "$*" >> "${MOCK_CALLS_FILE}"
+# Handle stdin
+while IFS= read -r line; do
+  :
+done
+exit 0

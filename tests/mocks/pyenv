@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+printf "pyenv %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+# For 'pyenv init -' and 'pyenv virtualenv-init -', output nothing (no-op eval)
+if [[ "$1" == "init" ]] || [[ "$1" == "virtualenv-init" ]]; then
+  printf ""
+  exit 0
+fi
+# For 'pyenv which python', output a path to the mock python
+if [[ "$1" == "which" ]]; then
+  command -v python3 || printf "/usr/bin/python3\n"
+  exit 0
+fi
+exit "${MOCK_PYENV_EXIT:-0}"

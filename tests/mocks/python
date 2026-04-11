@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+printf "python %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+# For 'python -m pip list --outdated --format=json', output empty JSON array
+if [[ "$*" == *"pip list"*"--outdated"* ]]; then
+  printf "[]\n"
+  exit 0
+fi
+exit "${MOCK_PYTHON_EXIT:-0}"
