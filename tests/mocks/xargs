@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Mock xargs for testing
+echo "xargs $@" >> "${MOCK_CALLS_FILE}"
+exit 0

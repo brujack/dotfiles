@@ -148,6 +148,48 @@ teardown() {
   grep -q "softwareupdate" "${MOCK_CALLS_FILE}"
 }
 
+# ── install_ubuntu_packages ───────────────────────────────────────────────────
+
+@test "install_ubuntu_packages calls apt update on Ubuntu Noble" {
+  unset MACOS
+  export LINUX=1
+  export UBUNTU=1
+  export NOBLE=1
+  # Create mock xargs files to prevent xargs errors
+  touch ubuntu_common_packages.txt ubuntu_2404_packages.txt
+  # Create directory for apt sources
+  mkdir -p /etc/apt/sources.list.d /etc/apt/keyrings /etc/apt/trusted.gpg.d 2>/dev/null || true
+  run install_ubuntu_packages
+  grep -q "apt update" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_ubuntu_packages calls nala on Noble" {
+  unset MACOS
+  export LINUX=1
+  export UBUNTU=1
+  export NOBLE=1
+  # Create mock xargs files to prevent xargs errors
+  touch ubuntu_common_packages.txt ubuntu_2404_packages.txt
+  # Create directory for apt sources
+  mkdir -p /etc/apt/sources.list.d /etc/apt/keyrings /etc/apt/trusted.gpg.d 2>/dev/null || true
+  run install_ubuntu_packages
+  grep -q "nala" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_ubuntu_packages installs snap packages when HAS_SNAP" {
+  unset MACOS
+  export LINUX=1
+  export UBUNTU=1
+  export NOBLE=1
+  export HAS_SNAP=1
+  # Create mock xargs files to prevent xargs errors
+  touch ubuntu_common_packages.txt ubuntu_2404_packages.txt ubuntu_workstation_packages.txt ubuntu_workstation_snap_packages.txt
+  # Create directory for apt sources
+  mkdir -p /etc/apt/sources.list.d /etc/apt/keyrings /etc/apt/trusted.gpg.d 2>/dev/null || true
+  run install_ubuntu_packages
+  grep -q "snap" "${MOCK_CALLS_FILE}"
+}
+
 # ── run_update — platform branching ───────────────────────────────────────────
 
 @test "run_update calls brew update on macOS" {
