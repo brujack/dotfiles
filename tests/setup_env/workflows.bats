@@ -201,3 +201,34 @@ teardown() {
   [ "$status" -eq 1 ]
   [[ "$output" == *"mas not found"* ]]
 }
+
+# ── _update_version_pin ───────────────────────────────────────────────────────
+
+setup_constants_copy() {
+  # Creates a writable temp copy of lib/constants.sh for update tests
+  _CONSTANTS_COPY="${BATS_TEST_TMPDIR}/constants.sh"
+  cp "${REPO_ROOT}/lib/constants.sh" "${_CONSTANTS_COPY}"
+  export _TEST_CONSTANTS_PATH="${_CONSTANTS_COPY}"
+}
+
+@test "_update_version_pin updates GO_VER in constants.sh" {
+  setup_constants_copy
+  export _OVERRIDE_CONSTANTS_PATH="${_TEST_CONSTANTS_PATH}"
+  _update_version_pin "go" "GO_VER" "1.26" "1.27"
+  grep -q 'GO_VER="1.27"' "${_TEST_CONSTANTS_PATH}"
+}
+
+@test "_update_version_pin does not modify other vars" {
+  setup_constants_copy
+  export _OVERRIDE_CONSTANTS_PATH="${_TEST_CONSTANTS_PATH}"
+  _update_version_pin "go" "GO_VER" "1.26" "1.27"
+  grep -q 'PYTHON_VER=' "${_TEST_CONSTANTS_PATH}"
+  grep -q "PYTHON_VER=\"${PYTHON_VER}\"" "${_TEST_CONSTANTS_PATH}"
+}
+
+@test "_update_version_pin removes .bak file after update" {
+  setup_constants_copy
+  export _OVERRIDE_CONSTANTS_PATH="${_TEST_CONSTANTS_PATH}"
+  _update_version_pin "go" "GO_VER" "1.26" "1.27"
+  [[ ! -f "${_TEST_CONSTANTS_PATH}.bak" ]]
+}

@@ -1406,6 +1406,19 @@ _check_one_version() {
   fi
 }
 
+# Stub — replaced with full implementation in Task 3
+_update_url_pins() {
+  : # no-op until full implementation
+}
+
+_update_version_pin() {
+  local _tool="$1" _var="$2" _old="$3" _new="$4"
+  local _constants="${_OVERRIDE_CONSTANTS_PATH:-$(dirname "${BASH_SOURCE[0]}")/../lib/constants.sh}"
+  sed -i.bak "s|^${_var}=\"${_old}\"|${_var}=\"${_new}\"|" "${_constants}"
+  rm -f "${_constants}.bak"
+  _update_url_pins "${_tool}" "${_old}" "${_new}" "${_constants}"
+}
+
 run_check_versions() {
   local _outdated=0 _skipped=0 _warned=0 _ok=0
 
