@@ -219,6 +219,33 @@ teardown() {
   grep -q "git clone" "${MOCK_CALLS_FILE}"
 }
 
+# ── install_aws_tools ─────────────────────────────────────────────────────────
+
+@test "install_aws_tools calls wget for AWSCLIV2.pkg on macOS with HAS_AWS" {
+  export MACOS=1
+  export HAS_AWS=1
+  unset LINUX
+  mkdir -p "${HOME}/software_downloads/awscli"
+  install_aws_tools
+  grep -q "AWSCLIV2.pkg" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_aws_tools calls wget for awscliv2.zip on Linux with HAS_AWS" {
+  unset MACOS
+  export LINUX=1
+  export HAS_AWS=1
+  mkdir -p "${HOME}/software_downloads/awscli"
+  install_aws_tools
+  grep -q "awscliv2.zip" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_aws_tools is a no-op when HAS_AWS is unset" {
+  export MACOS=1
+  unset HAS_AWS LINUX
+  install_aws_tools
+  ! grep -q "awscli" "${MOCK_CALLS_FILE}"
+}
+
 # ── run_update — platform branching ───────────────────────────────────────────
 
 @test "run_update calls brew update on macOS" {

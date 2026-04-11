@@ -48,3 +48,47 @@ update_rust() {
     fi
   fi
 }
+
+install_aws_tools() {
+  if [[ -n ${HAS_AWS} ]] && [[ -n ${MACOS} ]]; then
+    mkdir -p ${HOME}/software_downloads/awscli
+    printf "Installing aws-cli on MacOS\\n"
+    if [[ ! -f ${HOME}/software_downloads/awscli/AWSCLIV2.pkg ]]; then
+      wget -O ${HOME}/software_downloads/awscli/AWSCLIV2.pkg "https://awscli.amazonaws.com/AWSCLIV2.pkg"
+      sudo installer -pkg ${HOME}/software_downloads/awscli/AWSCLIV2.pkg -target /
+      rm -f ${HOME}/software_downloads/awscli/AWSCLIV2.pkg
+      if [[ -x $(command -v aws) ]]; then
+        printf "aws-cli is installed MacOS\\n"
+      fi
+    fi
+  fi
+  if [[ -n ${HAS_AWS} ]] && [[ -n ${LINUX} ]]; then
+    mkdir -p ${HOME}/software_downloads/awscli
+    printf "Installing aws-cli on Linux\\n"
+    if [[ ! -f ${HOME}/software_downloads/awscli/awscliv2.zip ]]; then
+      wget -O ${HOME}/software_downloads/awscli/awscliv2.zip "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
+      unzip ${HOME}/software_downloads/awscli/awscliv2.zip -d ${HOME}/software_downloads/awscli
+      sudo -H ${HOME}/software_downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin
+      rm -rf ${HOME}/software_downloads/awscli
+      rm -f ${HOME}/software_downloads/awscli/awscliv2.zip
+      if [[ -x $(command -v aws) ]]; then
+        printf "aws-cli is installed Linux\\n"
+      fi
+    fi
+  fi
+}
+
+setup_vim_plugins() {
+  printf "vim plugins setup\\n"
+  mkdir -p ${HOME}/.vim/plugged
+  if [[ -d ${HOME}/.vim/plugged ]]; then
+    chmod 770 ${HOME}/.vim/plugged
+  fi
+  mkdir -p ${HOME}/.vim/autoload
+  if [[ -d ${HOME}/.vim/autoload ]]; then
+    chmod 770 ${HOME}/.vim/autoload
+  fi
+  if [[ ! -f ${HOME}/.vim/autoload/plug.vim ]]; then
+    curl -fLo ${HOME}/.vim/autoload/plug.vim --create-dirs https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
+  fi
+}
