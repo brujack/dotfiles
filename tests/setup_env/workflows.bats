@@ -299,6 +299,60 @@ teardown() {
   ! grep -q "ruby-install" "${MOCK_CALLS_FILE}"
 }
 
+# ── install_github_cli_linux ──────────────────────────────────────────────────
+
+@test "install_github_cli_linux calls apt install gh on Ubuntu" {
+  unset MACOS
+  export LINUX=1
+  export UBUNTU=1
+  export NOBLE=1
+  install_github_cli_linux
+  grep -q "apt install gh" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_github_cli_linux calls dnf on RHEL" {
+  unset MACOS UBUNTU
+  export LINUX=1
+  export REDHAT=1
+  install_github_cli_linux
+  grep -q "dnf" "${MOCK_CALLS_FILE}"
+}
+
+# ── setup_kitchen ─────────────────────────────────────────────────────────────
+
+@test "setup_kitchen calls gem install test-kitchen on macOS" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  export CHRUBY_LOC="${BATS_TEST_TMPDIR}/chruby_stub"
+  mkdir -p "${CHRUBY_LOC}/chruby"
+  printf "# stub\n" > "${CHRUBY_LOC}/chruby/chruby.sh"
+  printf "# stub\n" > "${CHRUBY_LOC}/chruby/auto.sh"
+  setup_kitchen
+  grep -q "gem install test-kitchen" "${MOCK_CALLS_FILE}"
+}
+
+@test "setup_kitchen calls gem install test-kitchen on Linux Jammy" {
+  unset MACOS
+  export LINUX=1
+  export UBUNTU=1
+  export JAMMY=1
+  export CHRUBY_LOC="${BATS_TEST_TMPDIR}/chruby_stub"
+  mkdir -p "${CHRUBY_LOC}/chruby"
+  printf "# stub\n" > "${CHRUBY_LOC}/chruby/chruby.sh"
+  printf "# stub\n" > "${CHRUBY_LOC}/chruby/auto.sh"
+  setup_kitchen
+  grep -q "gem install test-kitchen" "${MOCK_CALLS_FILE}"
+}
+
+@test "setup_kitchen calls rbenv on Noble" {
+  unset MACOS
+  export LINUX=1
+  export UBUNTU=1
+  export NOBLE=1
+  setup_kitchen
+  grep -q "rbenv" "${MOCK_CALLS_FILE}"
+}
+
 # ── run_update — platform branching ───────────────────────────────────────────
 
 @test "run_update calls brew update on macOS" {
