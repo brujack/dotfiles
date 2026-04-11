@@ -206,9 +206,9 @@ run_update() {
 
   # ── pip ───────────────────────────────────────────────────────────────────
   if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_PIP:-} ]]; then
-    _update_record_start "pip"
-    printf "Updating pip3 packages\n"
     if [[ -n ${HAS_DEVTOOLS} ]]; then
+      _update_record_start "pip"
+      printf "Updating pip3 packages\n"
       export PYENV_ROOT="$HOME/.pyenv"
       export PATH="$PYENV_ROOT/bin:$PYENV_ROOT/shims:$PATH"
 
@@ -222,6 +222,7 @@ run_update() {
 
       "$PYTHON" -m pip install -U pip setuptools wheel
 
+      # _UPDATE_TMPDIR is read by the Python block via os.environ to write pip_outdated
       "$PYTHON" - <<PY
 import json, subprocess, sys, os
 
@@ -240,8 +241,10 @@ PY
 
       "$PYTHON" -m pip check || true
       printf "Updated pip packages\n"
+      _update_record_end "pip" $?
+    else
+      _update_skip "pip" "HAS_DEVTOOLS not set"
     fi
-    _update_record_end "pip" $?
   else
     _update_skip "pip" "flag not set"
   fi
@@ -331,6 +334,7 @@ PY
   _update_summary
 
   rm -rf "${_UPDATE_TMPDIR}"
+  unset _UPDATE_TMPDIR
 }
 
 _fetch_github_latest() {
