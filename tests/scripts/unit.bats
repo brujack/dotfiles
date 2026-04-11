@@ -236,3 +236,25 @@ teardown() {
   run bash -c "MOCK_GIT_TOPLEVEL='${tmpdir}' MOCK_MAKE_EXIT=1 PATH='${tmpdir}:${PATH}' bash '${REPO_ROOT}/scripts/pre-commit-hook.sh'"
   [ "$status" -eq 1 ]
 }
+
+@test "pre-commit-hook.sh exits 1 when ggshield fails" {
+  local tmpdir="${BATS_TEST_TMPDIR}/fakerepo3"
+  mkdir -p "${tmpdir}"
+  printf '#!/usr/bin/env bash\nprintf "%%s\n" "${MOCK_GIT_TOPLEVEL:-/tmp}"\n' > "${tmpdir}/git"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "${tmpdir}/make"
+  printf '#!/usr/bin/env bash\nexit 1\n' > "${tmpdir}/ggshield"
+  chmod +x "${tmpdir}/git" "${tmpdir}/make" "${tmpdir}/ggshield"
+  run bash -c "MOCK_GIT_TOPLEVEL='${tmpdir}' PATH='${tmpdir}:${PATH}' bash '${REPO_ROOT}/scripts/pre-commit-hook.sh'"
+  [ "$status" -eq 1 ]
+}
+
+@test "pre-commit-hook.sh succeeds when ggshield is not installed" {
+  local tmpdir="${BATS_TEST_TMPDIR}/fakerepo4"
+  mkdir -p "${tmpdir}"
+  printf '#!/usr/bin/env bash\nprintf "%%s\n" "${MOCK_GIT_TOPLEVEL:-/tmp}"\n' > "${tmpdir}/git"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "${tmpdir}/make"
+  # No ggshield in PATH — hook should still pass
+  chmod +x "${tmpdir}/git" "${tmpdir}/make"
+  run bash -c "MOCK_GIT_TOPLEVEL='${tmpdir}' PATH='${tmpdir}:/usr/bin:/bin' bash '${REPO_ROOT}/scripts/pre-commit-hook.sh'"
+  [ "$status" -eq 0 ]
+}
