@@ -190,6 +190,35 @@ teardown() {
   grep -q "snap" "${MOCK_CALLS_FILE}"
 }
 
+# ── install_rhel_packages ─────────────────────────────────────────────────────
+
+@test "install_rhel_packages calls dnf on RHEL" {
+  unset MACOS UBUNTU
+  export LINUX=1
+  export REDHAT=1
+  install_rhel_packages
+  grep -q "dnf" "${MOCK_CALLS_FILE}"
+}
+
+# ── install_centos_packages ───────────────────────────────────────────────────
+
+@test "install_centos_packages calls yum on CentOS" {
+  unset MACOS UBUNTU REDHAT
+  export LINUX=1
+  export CENTOS=1
+  install_centos_packages
+  grep -q "yum" "${MOCK_CALLS_FILE}"
+}
+
+# ── install_linux_packages ────────────────────────────────────────────────────
+
+@test "install_linux_packages clones tfenv on Linux" {
+  unset MACOS UBUNTU REDHAT CENTOS
+  export LINUX=1
+  install_linux_packages
+  grep -q "git clone" "${MOCK_CALLS_FILE}"
+}
+
 # ── run_update — platform branching ───────────────────────────────────────────
 
 @test "run_update calls brew update on macOS" {
