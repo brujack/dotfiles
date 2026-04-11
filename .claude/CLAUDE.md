@@ -166,10 +166,21 @@ The subagent reports findings as a list of issues with file, line, category, and
 1. Create a worktree on a feature branch before starting implementation (use `superpowers:using-git-worktrees`)
 2. Commit work to the feature branch
 3. Open a PR — CI runs and auto-merges on pass
+4. After the PR merges, delete the feature branch locally and remotely:
+   ```bash
+   git branch -d feature/branch-name
+   git push origin --delete feature/branch-name
+   ```
 
 This applies to all repos. Committing directly to master bypasses CI and the review workflow.
 
 Exception: documentation-only fixes (typos, README updates, memory commits) may go directly to master.
+
+When wrapping up a session, check for any stale merged branches and delete them:
+```bash
+git branch --merged master | grep -v master   # local merged branches
+git branch -r --merged origin/master | grep -v master  # remote merged branches
+```
 
 ## GitHub Actions / CI
 
