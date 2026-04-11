@@ -297,21 +297,54 @@ What counts as significant: choice of testing framework, CI tooling, major libra
 
 Every repo that uses the superpowers brainstorming → writing-plans workflow must have a `docs/superpowers/README.md` that indexes all specs and plans with their status.
 
-**Required structure:**
+**Required format** (see `dotfiles/docs/superpowers/README.md` as the canonical example):
 
 ```markdown
-## Specs
-| Date | Feature | File |
+# Superpowers Specs and Plans
 
-## Plans
-| Date | Feature | Status | File |
+Master status index for all specs and implementation plans in this directory.
+
+## Status Key
+
+| Status | Meaning |
+|---|---|
+| Done | Implemented and merged to master |
+| In Progress | Currently being implemented |
+| Pending | Not yet started |
+
+---
+
+## All Plans
+
+| Date | Plan | Spec | Status |
+|---|---|---|---|
+| YYYY-MM-DD | [name](plans/file.md) | [spec](specs/file.md) | Done |
+
+---
+
+## Backlog
+
+Ideas approved for future specs, in no particular order:
+
+| Feature | Notes |
+|---|---|
+| feature name | brief description |
+
+---
+
+## Adding a new entry
+
+When a new spec or plan is created, add a row to the All Plans table. Set status to **In Progress** when implementation starts, **Done** when the PR merges. Also add a `> **Status: DONE**` banner at the top of the plan file once complete. Move backlog items to the All Plans table when their spec is written (remove the backlog row).
 ```
 
 **Status values:** `In Progress` while implementation is active; `Done` once the PR merges.
 
 **Maintenance rules:**
-- Add a row to the table when a new spec or plan is created.
+- All Plans is a single combined table — no separate Specs/Plans split.
+- Spec column uses `—` when no spec was written.
+- Add a row to All Plans when a new spec or plan is created.
 - Set status to `Done` and add a `> **Status: DONE**` banner at the top of the plan file once the feature PR merges.
+- Move backlog items to All Plans when their spec is written — delete the backlog row, don't use strikethrough.
 - Keep this index current — a stale index causes future agents to treat completed plans as pending work.
 
 ## Approach

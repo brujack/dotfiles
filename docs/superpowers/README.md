@@ -51,3 +51,18 @@ Master status index for all specs and implementation plans in this directory.
 | 2026-04-10 | [workflows-refactor](plans/2026-04-10-workflows-refactor.md) | [spec](specs/2026-04-10-workflows-refactor-design.md) | Done |
 | 2026-04-10 | [interactive-version-update](plans/2026-04-10-interactive-version-update.md) | [spec](specs/2026-04-10-interactive-version-update-design.md) | Done |
 | 2026-04-11 | [update-summary](plans/2026-04-11-update-summary.md) | [spec](specs/2026-04-11-update-summary-design.md) | Done |
+
+---
+
+## Backlog
+
+Ideas approved for future specs, in no particular order:
+
+| Feature | Notes |
+|---|---|
+
+---
+
+## Adding a new entry
+
+When a new spec or plan is created, add a row to the All Plans table. Set status to **In Progress** when implementation starts, **Done** when the PR merges. Also add a `> **Status: DONE**` banner at the top of the plan file once complete. Move backlog items to the All Plans table when their spec is written (remove the backlog row).
