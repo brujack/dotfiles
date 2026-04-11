@@ -57,3 +57,51 @@ teardown() {
   grep -q "new" "${_UPDATE_TMPDIR}/pre_testcmd"
   ! grep -q "old" "${_UPDATE_TMPDIR}/pre_testcmd"
 }
+
+# ── _update_git_diff ──────────────────────────────────────────────────────────
+
+@test "_update_git_diff returns commit log between old SHA and HEAD" {
+  local _repo="${BATS_TEST_TMPDIR}/gitrepo"
+  mkdir -p "${_repo}"
+  local clean_path
+  clean_path="$(printf "%s" "${PATH}" | tr ':' '\n' | grep -v "tests/mocks" | tr '\n' ':' | sed 's/:$//')"
+  bash -c "
+    export PATH='${clean_path}'
+    git -C '${_repo}' init --quiet
+    git -C '${_repo}' config user.email 'test@test.com'
+    git -C '${_repo}' config user.name 'Test'
+    printf 'a\n' > '${_repo}/file.txt'
+    git -C '${_repo}' add .
+    git -C '${_repo}' commit --quiet -m 'first commit'
+    printf 'b\n' > '${_repo}/file.txt'
+    git -C '${_repo}' add .
+    git -C '${_repo}' commit --quiet -m 'second commit'
+  "
+  local _old_sha
+  _old_sha=$(bash -c "export PATH='${clean_path}'; git -C '${_repo}' log --format='%H' | tail -1")
+  run bash -c "export PATH='${clean_path}'; source '${REPO_ROOT}/lib/update_summary.sh'; _update_git_diff '${_repo}' '${_old_sha}'"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"second commit"* ]]
+  [[ "$output" != *"first commit"* ]]
+}
+
+@test "_update_git_diff returns empty when no new commits" {
+  local _repo="${BATS_TEST_TMPDIR}/gitrepo2"
+  mkdir -p "${_repo}"
+  local clean_path
+  clean_path="$(printf "%s" "${PATH}" | tr ':' '\n' | grep -v "tests/mocks" | tr '\n' ':' | sed 's/:$//')"
+  bash -c "
+    export PATH='${clean_path}'
+    git -C '${_repo}' init --quiet
+    git -C '${_repo}' config user.email 'test@test.com'
+    git -C '${_repo}' config user.name 'Test'
+    printf 'a\n' > '${_repo}/file.txt'
+    git -C '${_repo}' add .
+    git -C '${_repo}' commit --quiet -m 'first commit'
+  "
+  local _sha
+  _sha=$(bash -c "export PATH='${clean_path}'; git -C '${_repo}' rev-parse HEAD")
+  run bash -c "export PATH='${clean_path}'; source '${REPO_ROOT}/lib/update_summary.sh'; _update_git_diff '${_repo}' '${_sha}'"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}

@@ -21,3 +21,10 @@ _update_snapshot() {
   shift
   "$@" > "${_UPDATE_TMPDIR}/pre_${_section}" 2>/dev/null || true
 }
+
+# _update_git_diff DIR OLD_SHA
+# Outputs git log from OLD_SHA to HEAD in DIR (one line per commit).
+_update_git_diff() {
+  local _dir="$1" _old_sha="$2"
+  git -C "${_dir}" log "${_old_sha}..HEAD" --oneline 2>/dev/null
+}
