@@ -249,6 +249,27 @@ Every git repository must have secrets guarding in place:
 
 What counts as significant: choice of testing framework, CI tooling, major library adoption, data storage approach, authentication strategy, structural patterns (modularization, lib layout), security guardrails. Routine bug fixes and small features do not need ADRs.
 
+## Superpowers Plans and Specs
+
+Every repo that uses the superpowers brainstorming → writing-plans workflow must have a `docs/superpowers/README.md` that indexes all specs and plans with their status.
+
+**Required structure:**
+
+```markdown
+## Specs
+| Date | Feature | File |
+
+## Plans
+| Date | Feature | Status | File |
+```
+
+**Status values:** `In Progress` while implementation is active; `Done` once the PR merges.
+
+**Maintenance rules:**
+- Add a row to the table when a new spec or plan is created.
+- Set status to `Done` and add a `> **Status: DONE**` banner at the top of the plan file once the feature PR merges.
+- Keep this index current — a stale index causes future agents to treat completed plans as pending work.
+
 ## Approach
 
 - Read and understand existing code before suggesting modifications
