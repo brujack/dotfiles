@@ -155,31 +155,58 @@ run_update() {
   local _run_all=0
   _any_update_flag || _run_all=1
 
+  _UPDATE_TMPDIR=$(mktemp -d)
+
+  # ── brew + softwareupdate ─────────────────────────────────────────────────
   if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_BREW:-} ]]; then
     if [[ -n ${MACOS} ]] || [[ -n ${LINUX} ]]; then
+      _update_record_start "brew"
       brew_update
+      _update_record_end "brew" $?
+
+      _update_record_start "softwareupdate"
       printf "Updating app store apps softwareupdate\\n"
       sudo -H softwareupdate --install --all --verbose
+      _update_record_end "softwareupdate" $?
+    else
+      _update_skip "brew" "not macOS or Linux"
+      _update_skip "softwareupdate" "not macOS or Linux"
     fi
+  else
+    _update_skip "brew" "flag not set"
+    _update_skip "softwareupdate" "flag not set"
   fi
 
+  # ── claude plugins ────────────────────────────────────────────────────────
   if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_CLAUDE:-} ]]; then
     if command -v claude &>/dev/null; then
+      _update_record_start "claude"
       printf "Updating Claude plugins\\n"
       claude plugins update superpowers && claude plugins update code-simplifier && claude plugins update context7
-      printf "Updated Claude plugins\\n"
+      _update_record_end "claude" $?
+    else
+      _update_skip "claude" "claude not installed"
     fi
+  else
+    _update_skip "claude" "flag not set"
   fi
 
+  # ── mas + system packages ─────────────────────────────────────────────────
   if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_MAS:-} ]]; then
+    _update_record_start "mas"
     update_system_packages
     if [[ -n ${MACOS} ]]; then
       log_info "Updating mas packages"
       mas upgrade
     fi
+    _update_record_end "mas" $?
+  else
+    _update_skip "mas" "flag not set"
   fi
 
+  # ── pip ───────────────────────────────────────────────────────────────────
   if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_PIP:-} ]]; then
+    _update_record_start "pip"
     printf "Updating pip3 packages\n"
     if [[ -n ${HAS_DEVTOOLS} ]]; then
       export PYENV_ROOT="$HOME/.pyenv"
@@ -195,12 +222,17 @@ run_update() {
 
       "$PYTHON" -m pip install -U pip setuptools wheel
 
-      "$PYTHON" - <<'PY'
-import json, subprocess, sys
+      "$PYTHON" - <<PY
+import json, subprocess, sys, os
 
 cmd = [sys.executable, "-m", "pip", "list", "--outdated", "--format=json"]
 out = subprocess.check_output(cmd, text=True)
 pkgs = [p["name"] for p in json.loads(out)]
+
+# Write outdated package names for the update summary
+tmpdir = os.environ.get("_UPDATE_TMPDIR", "/tmp")
+with open(os.path.join(tmpdir, "pip_outdated"), "w") as f:
+    f.write("\\n".join(pkgs))
 
 if pkgs:
     subprocess.check_call([sys.executable, "-m", "pip", "install", "-U", *pkgs])
@@ -209,39 +241,63 @@ PY
       "$PYTHON" -m pip check || true
       printf "Updated pip packages\n"
     fi
+    _update_record_end "pip" $?
+  else
+    _update_skip "pip" "flag not set"
   fi
 
+  # ── git-based tools + misc (run_all only) ─────────────────────────────────
   if [[ ${_run_all} -eq 1 ]]; then
     update_aws_cli
     update_rust
     if [[ -d ${HOME}/.tfenv ]]; then
+      _update_record_start "tfenv"
       printf "Updating tfenv\\n"
       cd ${HOME}/.tfenv || exit
       git pull
       cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
+      _update_record_end "tfenv" $?
+    else
+      _update_skip "tfenv" "not installed"
     fi
     if [[ -d ${HOME}/.oh-my-zsh ]]; then
+      _update_record_start "oh-my-zsh"
       printf "Updating oh-my-zsh\\n"
       cd ${HOME}/.oh-my-zsh || exit
       git pull
       cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
+      _update_record_end "oh-my-zsh" $?
+    else
+      _update_skip "oh-my-zsh" "not installed"
     fi
     if [[ -d ${HOME}/.oh-my-zsh/custom/themes/powerlevel10k ]]; then
+      _update_record_start "p10k"
       printf "Updating powerlevel10k\\n"
       cd ${HOME}/.oh-my-zsh/custom/themes/powerlevel10k || exit
       git pull
       cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
+      _update_record_end "p10k" $?
+    else
+      _update_skip "p10k" "not installed"
     fi
     if [[ -d ${HOME}/.tmux/plugins/tpm ]]; then
+      _update_record_start "tpm"
       printf "Updating tpm\\n"
       cd ${HOME}/.tmux/plugins/tpm || exit
       git pull
       cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
+      _update_record_end "tpm" $?
+    else
+      _update_skip "tpm" "not installed"
     fi
     if [[ -f ${HOME}/bin/cht.sh ]]; then
+      _update_record_start "cheat.sh"
       printf "Updating cheat.sh\\n"
       curl https://cht.sh/:cht.sh > ~/bin/cht.sh
       chmod 754 ${HOME}/bin/cht.sh
+      _update_record_end "cheat.sh" $?
+    else
+      _update_skip "cheat.sh" "not installed"
     fi
     if [[ -f ${HOME}/.zsh.d/_cht ]]; then
       printf "Updating cheat.sh tab completion\\n"
@@ -253,12 +309,28 @@ PY
       git pull
       cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
     fi
+  else
+    _update_skip "tfenv" "flag not set"
+    _update_skip "oh-my-zsh" "flag not set"
+    _update_skip "p10k" "flag not set"
+    _update_skip "tpm" "flag not set"
+    _update_skip "cheat.sh" "flag not set"
   fi
 
+  # ── gems ──────────────────────────────────────────────────────────────────
   if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_GEMS:-} ]]; then
+    _update_record_start "gems"
     printf "updating ruby gems\\n"
     gem update
+    _update_record_end "gems" $?
+  else
+    _update_skip "gems" "flag not set"
   fi
+
+  # ── summary ───────────────────────────────────────────────────────────────
+  _update_summary
+
+  rm -rf "${_UPDATE_TMPDIR}"
 }
 
 _fetch_github_latest() {
