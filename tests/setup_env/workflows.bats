@@ -593,3 +593,42 @@ setup_constants_copy() {
   run_check_versions
   grep -q "gitleaks" "${_checked_tools}"
 }
+
+# ── run_update summary integration ────────────────────────────────────────────
+
+@test "run_update calls _update_summary at end" {
+  export MACOS=1
+  unset LINUX UBUNTU REDHAT FEDORA CENTOS
+  export UPDATE_BREW=1
+  export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
+  run run_update
+  [[ "$output" == *"Update Summary"* ]]
+}
+
+@test "run_update records brew section status" {
+  export MACOS=1
+  unset LINUX UBUNTU REDHAT FEDORA CENTOS
+  export UPDATE_BREW=1
+  export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
+  run run_update
+  [[ "$output" == *"brew"* ]]
+}
+
+@test "run_update skips sections when specific flag is set" {
+  export MACOS=1
+  unset LINUX UBUNTU REDHAT FEDORA CENTOS
+  export UPDATE_BREW=1
+  export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
+  run run_update
+  [[ "$output" == *"[SKIP]"* ]]
+}
+
+@test "run_update appends to log file" {
+  export MACOS=1
+  unset LINUX UBUNTU REDHAT FEDORA CENTOS
+  export UPDATE_BREW=1
+  export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
+  run_update
+  [ -f "${BATS_TEST_TMPDIR}/update.log" ]
+  grep -q "Update Summary" "${BATS_TEST_TMPDIR}/update.log"
+}
