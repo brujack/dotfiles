@@ -85,34 +85,7 @@ run_setup_or_developer() {
   setup_credential_directories
 
   if [[ -n ${MACOS} ]]; then
-    printf "Creating %s\\n" "${BREWFILE_LOC}"
-    mkdir -p ${BREWFILE_LOC}
-
-    rm -f ${BREWFILE_LOC}/Brewfile
-    ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile ${BREWFILE_LOC}/Brewfile
-    if [[ -L ${BREWFILE_LOC}/Brewfile ]]; then
-      printf "Brewfile is linked\\n"
-    fi
-
-    if ! [ -x "$(command -v brew)" ]; then
-      install_homebrew
-    elif [ -x "$(command -v brew)" ]; then
-      brew_update
-      printf "Installing other brew stuff...\\n"
-      #https://github.com/Homebrew/homebrew-bundle
-      brew_tap_if_missing homebrew/bundle
-      install_macos_casks
-
-      printf "Cleaning Homebrew up...\\n"
-      brew cleanup
-    fi
-
-    printf "Updating app store apps via softwareupdate\\n"
-    sudo -H softwareupdate --install --all --verbose
-
-    printf "Setting up macOS defaults\\n"
-    ${HOME}/scripts/.osx.sh
-
+    install_macos_packages
   fi
 
   if [[ -n ${UBUNTU} ]]; then

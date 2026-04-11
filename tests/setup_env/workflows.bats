@@ -107,6 +107,47 @@ teardown() {
   ! grep -q "apt-get install" "${MOCK_CALLS_FILE}"
 }
 
+# ── install_macos_packages ────────────────────────────────────────────────────
+
+@test "install_macos_packages symlinks Brewfile at BREWFILE_LOC" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile"
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.gui"
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.devtools"
+  mkdir -p "${HOME}/scripts"
+  touch "${HOME}/scripts/.osx.sh"
+  chmod +x "${HOME}/scripts/.osx.sh"
+  run install_macos_packages
+  [[ -L "${BREWFILE_LOC}/Brewfile" ]]
+}
+
+@test "install_macos_packages calls brew update when brew is present" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile"
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.gui"
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.devtools"
+  mkdir -p "${HOME}/scripts"
+  touch "${HOME}/scripts/.osx.sh"
+  chmod +x "${HOME}/scripts/.osx.sh"
+  run install_macos_packages
+  grep -q "brew update" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_macos_packages calls softwareupdate" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile"
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.gui"
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.devtools"
+  mkdir -p "${HOME}/scripts"
+  touch "${HOME}/scripts/.osx.sh"
+  chmod +x "${HOME}/scripts/.osx.sh"
+  run install_macos_packages
+  grep -q "softwareupdate" "${MOCK_CALLS_FILE}"
+}
+
 # ── run_update — platform branching ───────────────────────────────────────────
 
 @test "run_update calls brew update on macOS" {
