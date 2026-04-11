@@ -1444,29 +1444,46 @@ _update_version_pin() {
   _update_url_pins "${_tool}" "${_old}" "${_new}" "${_constants}"
 }
 
+_prompt_version_update() {
+  local _tool="$1" _var="$2" _pinned="$3" _latest="$4"
+  local _reply
+  printf "  Update %s from %s to %s? [y/N] " "${_tool}" "${_pinned}" "${_latest}"
+  read -r _reply
+  if [[ "${_reply}" =~ ^[Yy]$ ]]; then
+    _update_version_pin "${_tool}" "${_var}" "${_pinned}" "${_latest}"
+    printf "  Updated %s → %s\n" "${_var}" "${_latest}"
+  fi
+}
+
 run_check_versions() {
   local _outdated=0 _skipped=0 _warned=0 _ok=0
 
   printf "=== Version Check ===\n\n"
 
   _run_cv_check() {
-    local _tool="$1" _pinned="$2" _repo="$3" _cmd="$4" _regex="$5"
-    local _out
+    local _tool="$1" _pinned="$2" _repo="$3" _cmd="$4" _regex="$5" _var="$6"
+    local _out _latest
     _out=$(_check_one_version "${_tool}" "${_pinned}" "${_repo}" "${_cmd}" "${_regex}" 2>&1)
     printf '%s\n' "${_out}"
     if [[ "${_out}" == *"[SKIP]"* ]];       then _skipped=$(( _skipped + 1 ))
     elif [[ "${_out}" == *"[WARN]"* ]];     then _warned=$(( _warned + 1 ))
     elif [[ "${_out}" == *"[OK]"* ]];       then _ok=$(( _ok + 1 ))
-    elif [[ "${_out}" == *"[OUTDATED]"* ]]; then _outdated=$(( _outdated + 1 )); fi
+    elif [[ "${_out}" == *"[OUTDATED]"* ]]; then
+      _outdated=$(( _outdated + 1 ))
+      if [[ -n ${UPDATE_VERSIONS:-} ]]; then
+        _latest=$(printf '%s' "${_out}" | grep -oE 'latest=[^ ]+' | cut -d= -f2)
+        _prompt_version_update "${_tool}" "${_var}" "${_pinned}" "${_latest}"
+      fi
+    fi
   }
 
-  _run_cv_check "go"         "${GO_VER}"         "golang/go"           "go version"           "[0-9]+\.[0-9]+(\.[0-9]+)?"
-  _run_cv_check "python3"    "${PYTHON_VER}"      "python/cpython"      "python3 --version"    "[0-9]+\.[0-9]+\.[0-9]+"
-  _run_cv_check "ruby"       "${RUBY_VER}"        "ruby/ruby"           "ruby --version"       "[0-9]+\.[0-9]+\.[0-9]+"
-  _run_cv_check "zsh"        "${ZSH_VER}"         "zsh-users/zsh"       "zsh --version"        "[0-9]+\.[0-9]+(\.[0-9]+)?"
-  _run_cv_check "yq"         "${YQ_VER}"          "mikefarah/yq"        "yq --version"         "[0-9]+\.[0-9]+\.[0-9]+"
-  _run_cv_check "shellcheck" "${SHELLCHECK_VER}"  "koalaman/shellcheck" "shellcheck --version" "[0-9]+\.[0-9]+\.[0-9]+"
-  _run_cv_check "vagrant"    "${VAGRANT_VER}"     "hashicorp/vagrant"   "vagrant --version"    "[0-9]+\.[0-9]+\.[0-9]+"
+  _run_cv_check "go"         "${GO_VER}"         "golang/go"           "go version"           "[0-9]+\.[0-9]+(\.[0-9]+)?" "GO_VER"
+  _run_cv_check "python3"    "${PYTHON_VER}"      "python/cpython"      "python3 --version"    "[0-9]+\.[0-9]+\.[0-9]+"    "PYTHON_VER"
+  _run_cv_check "ruby"       "${RUBY_VER}"        "ruby/ruby"           "ruby --version"       "[0-9]+\.[0-9]+\.[0-9]+"    "RUBY_VER"
+  _run_cv_check "zsh"        "${ZSH_VER}"         "zsh-users/zsh"       "zsh --version"        "[0-9]+\.[0-9]+(\.[0-9]+)?" "ZSH_VER"
+  _run_cv_check "yq"         "${YQ_VER}"          "mikefarah/yq"        "yq --version"         "[0-9]+\.[0-9]+\.[0-9]+"    "YQ_VER"
+  _run_cv_check "shellcheck" "${SHELLCHECK_VER}"  "koalaman/shellcheck" "shellcheck --version" "[0-9]+\.[0-9]+\.[0-9]+"    "SHELLCHECK_VER"
+  _run_cv_check "vagrant"    "${VAGRANT_VER}"     "hashicorp/vagrant"   "vagrant --version"    "[0-9]+\.[0-9]+\.[0-9]+"    "VAGRANT_VER"
 
   printf "\n%d outdated, %d skipped, %d warnings, %d OK\n" \
     "${_outdated}" "${_skipped}" "${_warned}" "${_ok}"
