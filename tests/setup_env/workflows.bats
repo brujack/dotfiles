@@ -582,3 +582,14 @@ setup_constants_copy() {
   _prompt_version_update "go" "GO_VER" "1.26" "1.27" <<< ""
   grep -q 'GO_VER="1.26"' "${_TEST_CONSTANTS_PATH}"
 }
+
+# ── run_check_versions — tool inclusion ───────────────────────────────────────
+
+@test "run_check_versions checks gitleaks version" {
+  local _checked_tools="${BATS_TEST_TMPDIR}/checked_tools"
+  _check_one_version() {
+    printf '%s\n' "$1" >> "${_checked_tools}"
+  }
+  run_check_versions
+  grep -q "gitleaks" "${_checked_tools}"
+}
