@@ -166,7 +166,12 @@ The subagent reports findings as a list of issues with file, line, category, and
 1. Create a worktree on a feature branch before starting implementation (use `superpowers:using-git-worktrees`)
 2. Commit work to the feature branch
 3. Open a PR — CI runs and auto-merges on pass
-4. After the PR merges, delete the feature branch locally and remotely:
+4. Before pushing or force-pushing to a branch that has an open PR, verify the PR and branch still exist on remote — if the PR already auto-merged the branch may be gone, and pushing would silently recreate it:
+   ```bash
+   gh pr view <number> --json state,headRefName
+   git ls-remote --heads origin <branch-name>
+   ```
+5. After the PR merges, delete the feature branch locally and remotely:
    ```bash
    git branch -d feature/branch-name
    git push origin --delete feature/branch-name
