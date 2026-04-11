@@ -1406,9 +1406,34 @@ _check_one_version() {
   fi
 }
 
-# Stub — replaced with full implementation in Task 3
 _update_url_pins() {
-  : # no-op until full implementation
+  local _tool="$1" _old="$2" _new="$3" _constants="$4"
+
+  case "${_tool}" in
+    go)
+      local _old_filename _new_filename
+      _old_filename=$(grep '^GO_DOWNLOAD_FILENAME=' "${_constants}" | cut -d'"' -f2)
+      # Replace the full semver prefix (e.g. go1.26.1 → go1.27.x)
+      _new_filename=$(printf '%s' "${_old_filename}" | \
+        sed 's|^go[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\.|go'"${_new}"'.|')
+      if [[ "${_old_filename}" != "${_new_filename}" ]]; then
+        sed -i.bak "s|^GO_DOWNLOAD_FILENAME=\"${_old_filename}\"|GO_DOWNLOAD_FILENAME=\"${_new_filename}\"|" "${_constants}"
+        rm -f "${_constants}.bak"
+        # GO_DOWNLOAD_URL embeds the filename — replace old filename with new throughout
+        sed -i.bak "s|${_old_filename}|${_new_filename}|g" "${_constants}"
+        rm -f "${_constants}.bak"
+      fi
+      ;;
+    yq)
+      # YQ_URL may contain a literal version or a ${YQ_VER} variable reference — update both
+      sed -i.bak -e "s|/v${_old}/|/v${_new}/|g" \
+                 -e 's|/v\${YQ_VER}/|/v'"${_new}"'/|g' "${_constants}"
+      rm -f "${_constants}.bak"
+      ;;
+    *)
+      # vagrant, python3, ruby, zsh, shellcheck — no URL vars to update
+      ;;
+  esac
 }
 
 _update_version_pin() {
