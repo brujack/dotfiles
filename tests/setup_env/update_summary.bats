@@ -105,3 +105,88 @@ teardown() {
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
+
+# ── _update_skip ──────────────────────────────────────────────────────────────
+
+@test "_update_skip writes SKIP status and reason" {
+  _update_skip "mas" "--brew-only flag set"
+  [ -f "${_UPDATE_TMPDIR}/status_mas" ]
+  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_mas"
+  [ -f "${_UPDATE_TMPDIR}/result_mas" ]
+  grep -q "\-\-brew-only flag set" "${_UPDATE_TMPDIR}/result_mas"
+}
+
+# ── _update_record_start ──────────────────────────────────────────────────────
+
+@test "_update_record_start creates pre-snapshot for brew section" {
+  export MOCK_BREW_LIST_FORMULA="git wget"
+  export MOCK_BREW_LIST_CASK="docker"
+  _update_record_start "brew"
+  [ -f "${_UPDATE_TMPDIR}/pre_brew_formula" ]
+  [ -f "${_UPDATE_TMPDIR}/pre_brew_cask" ]
+}
+
+@test "_update_record_start creates pre-snapshot for gems section" {
+  _update_record_start "gems"
+  [ -f "${_UPDATE_TMPDIR}/pre_gems" ]
+}
+
+@test "_update_record_start records git SHA for oh-my-zsh section" {
+  local _repo="${BATS_TEST_TMPDIR}/.oh-my-zsh"
+  mkdir -p "${_repo}"
+  local clean_path
+  clean_path="$(printf "%s" "${PATH}" | tr ':' '\n' | grep -v "tests/mocks" | tr '\n' ':' | sed 's/:$//')"
+  bash -c "
+    export PATH='${clean_path}'
+    git -C '${_repo}' init --quiet
+    git -C '${_repo}' config user.email 'test@test.com'
+    git -C '${_repo}' config user.name 'Test'
+    printf 'a\n' > '${_repo}/file.txt'
+    git -C '${_repo}' add .
+    git -C '${_repo}' commit --quiet -m 'init'
+  "
+  _update_record_start "oh-my-zsh"
+  [ -f "${_UPDATE_TMPDIR}/pre_oh-my-zsh" ]
+}
+
+@test "_update_record_start creates no snapshot for claude section" {
+  _update_record_start "claude"
+  [ ! -f "${_UPDATE_TMPDIR}/pre_claude" ]
+}
+
+# ── _update_record_end ────────────────────────────────────────────────────────
+
+@test "_update_record_end with exit 0 writes OK status" {
+  printf "" > "${_UPDATE_TMPDIR}/pre_brew_formula"
+  printf "" > "${_UPDATE_TMPDIR}/pre_brew_cask"
+  export MOCK_BREW_LIST_FORMULA="git"
+  export MOCK_BREW_LIST_CASK=""
+  _update_record_end "brew" 0
+  [ -f "${_UPDATE_TMPDIR}/status_brew" ]
+  grep -q "OK" "${_UPDATE_TMPDIR}/status_brew"
+}
+
+@test "_update_record_end with exit 1 writes FAIL status" {
+  _update_record_end "claude" 1
+  grep -q "FAIL" "${_UPDATE_TMPDIR}/status_claude"
+  grep -q "exit 1" "${_UPDATE_TMPDIR}/result_claude"
+}
+
+@test "_update_record_end diffs brew formulae and reports changes" {
+  printf "git\nwget\n" > "${_UPDATE_TMPDIR}/pre_brew_formula"
+  printf "" > "${_UPDATE_TMPDIR}/pre_brew_cask"
+  export MOCK_BREW_LIST_FORMULA="git wget node"
+  export MOCK_BREW_LIST_CASK=""
+  _update_record_end "brew" 0
+  grep -q "OK" "${_UPDATE_TMPDIR}/status_brew"
+  grep -q "node" "${_UPDATE_TMPDIR}/result_brew"
+}
+
+@test "_update_record_end reports no changes when nothing changed" {
+  printf "git\ndocker\n" > "${_UPDATE_TMPDIR}/pre_brew_formula"
+  printf "" > "${_UPDATE_TMPDIR}/pre_brew_cask"
+  export MOCK_BREW_LIST_FORMULA="git docker"
+  export MOCK_BREW_LIST_CASK=""
+  _update_record_end "brew" 0
+  grep -q "no changes" "${_UPDATE_TMPDIR}/result_brew"
+}
