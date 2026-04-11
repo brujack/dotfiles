@@ -195,6 +195,7 @@ git branch -r --merged origin/master | grep -v master  # remote merged branches
 - Do not add `actions/setup-node` to Rust or Python jobs that don't need it at the user-code level
 - Every Rust build job must upload its release binary as an artifact using `actions/upload-artifact@v5` with 7-day retention
 - Build jobs must depend on their test job (`needs: [test]`) — a build will not run if tests fail
+- CI badge URLs in `README.md` must use `?event=pull_request` (e.g. `badge.svg?event=pull_request`) — workflows use `branches-ignore: [master]` so they never run on master directly; `?branch=master` and bare `badge.svg` both default to master runs and always show "no status"
 
 ### Personal Repos (`~/git-repos/personal/*`)
 
