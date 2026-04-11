@@ -83,6 +83,26 @@ A test that only covers the happy path is incomplete.
 
 Tests must be added alongside the code they cover, not as a separate pass. Every new function, every changed function, every bug fix gets a test in the same commit.
 
+### PATH-Based Mock Pattern (BATS / Shell Tests)
+
+When using PATH-injected mocks, mocks for commands that **modify real filesystem state** must pass-through to the real binary — not just log and exit 0.
+
+**Affected commands:** `ln`, `chmod`, `mv`, `cp`, and any other command where tests assert actual filesystem state (permissions, file existence, symlinks).
+
+The correct pattern:
+```bash
+#!/usr/bin/env bash
+printf "cmd %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+if [[ "${MOCK_CMD_EXIT:-0}" -ne 0 ]]; then
+  exit "${MOCK_CMD_EXIT}"
+fi
+/bin/cmd "$@" 2>/dev/null || true
+```
+
+**Why:** A log-only mock exits 0, so the function under test appears to succeed. But if the test then checks `stat` for permissions, `[[ -f dest.bak ]]`, or `[[ -L symlink ]]`, the assertion fails because the real operation never ran. This produces silent failures that look like implementation bugs but are actually mock infrastructure gaps.
+
+**Before committing any test that checks real filesystem state**, verify that every mock in the call chain either passes through or that the test doesn't depend on the real operation having occurred.
+
 ## Linting
 
 Every project Makefile must have a `lint` target, and `test` must depend on it (`test: lint`).
