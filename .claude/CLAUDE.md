@@ -198,7 +198,35 @@ Every personal repo CI pipeline must have:
 1. **Auto-merge** — an `auto-merge` job that merges the PR when all required jobs pass. Use `gh pr merge --squash --auto` triggered on `pull_request` events. Required jobs must be listed in `needs:`.
 2. **Secrets scanning** — a `secret-scan` job running `gitleaks` against recent commits. Must have a `.gitleaks.toml` allowlist at the repo root. This job is advisory (non-blocking) but must be present.
 3. **Snyk security scan** — only add a `snyk-scan` job to repos that contain languages Snyk Code supports (Python, JavaScript/TypeScript, Java, Go, Ruby, etc.). Do **not** add it to shell-script or config-only repos — `snyk code test` returns `SNYK-CODE-0006` (no supported files) and will always fail. When present, run `snyk code test` with `SNYK_TOKEN` from repository secrets. Never commit Snyk tokens to the repo.
-4. **GitGuardian pre-commit hook** — the repo's pre-commit hook must include `ggshield secret scan pre-commit` (guarded by `command -v ggshield` so it degrades gracefully if not installed). Install ggshield via `brew install ggshield`. The hook runs `make lint` first, then ggshield.
+4. **Pre-commit hook** — every repo must have a `scripts/pre-commit` file (committed to the repo, symlinked or copied to `.git/hooks/pre-commit`). The hook must:
+   - Run `make lint` first — for single-Makefile repos call it directly; for multi-project repos (no root Makefile) iterate over sub-project dirs and run `make -C <dir> lint` for each dir that has staged changes
+   - Run `ggshield secret scan pre-commit` after lint, guarded by `command -v ggshield` so it degrades gracefully if not installed
+   - Use `set -e` so any lint failure aborts the commit
+
+   Template for single-Makefile repos:
+   ```bash
+   #!/usr/bin/env bash
+   set -e
+   make lint
+   if command -v ggshield &>/dev/null; then
+       ggshield secret scan pre-commit
+   fi
+   ```
+
+   Template for multi-project repos (adapt dir list to the repo):
+   ```bash
+   #!/usr/bin/env bash
+   set -e
+   for dir in proj1 proj1/proj1-rs proj2 proj2/proj2-rs; do
+       if git diff --cached --name-only | grep -q "^${dir}/"; then
+           printf "lint: %s\n" "${dir}"
+           make -C "${dir}" lint
+       fi
+   done
+   if command -v ggshield &>/dev/null; then
+       ggshield secret scan pre-commit
+   fi
+   ```
 
 ## Code Standards
 
