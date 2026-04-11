@@ -246,6 +246,59 @@ teardown() {
   ! grep -q "awscli" "${MOCK_CALLS_FILE}"
 }
 
+# ── install_ruby_tools ────────────────────────────────────────────────────────
+
+@test "install_ruby_tools downloads ruby-install on Linux when absent" {
+  unset MACOS
+  export LINUX=1
+  export UBUNTU=1
+  export NOBLE=1
+  install_ruby_tools
+  grep -q "ruby-install" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_ruby_tools downloads chruby on Linux Focal" {
+  unset MACOS
+  export LINUX=1
+  export UBUNTU=1
+  export FOCAL=1
+  install_ruby_tools
+  grep -q "chruby" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_ruby_tools is a no-op on macOS" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  install_ruby_tools
+  ! grep -q "ruby-install" "${MOCK_CALLS_FILE}"
+}
+
+# ── install_ruby ──────────────────────────────────────────────────────────────
+
+@test "install_ruby calls ruby-install on macOS when ruby absent" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  install_ruby
+  grep -q "ruby-install" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_ruby calls rbenv on Noble when ruby absent" {
+  unset MACOS
+  export LINUX=1
+  export UBUNTU=1
+  export NOBLE=1
+  install_ruby
+  grep -q "rbenv" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_ruby skips when ruby dir already exists" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  mkdir -p "${HOME}/.rubies/ruby-${RUBY_VER}/bin"
+  install_ruby
+  ! grep -q "ruby-install" "${MOCK_CALLS_FILE}"
+}
+
 # ── run_update — platform branching ───────────────────────────────────────────
 
 @test "run_update calls brew update on macOS" {

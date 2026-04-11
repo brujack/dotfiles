@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 printf "tar %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
-# Find -C argument and create stub bats-core directory there
+# Find -C argument and create stub directories there, or extract file name from tar ball
 target=""
 args=("$@")
 for ((i=0; i<${#args[@]}; i++)); do
@@ -15,4 +15,30 @@ if [[ -n "${target}" ]] && [[ -n "${MOCK_BATS_VER}" ]]; then
     > "${target}/bats-core-${MOCK_BATS_VER}/install.sh"
   chmod +x "${target}/bats-core-${MOCK_BATS_VER}/install.sh"
 fi
+# Create directories/files for shellcheck extraction (from -xf filename.tar)
+# Look for files matching shellcheck pattern in args
+for arg in "${args[@]}"; do
+  if [[ "$arg" =~ shellcheck-v.*\.tar$ ]]; then
+    # Extract directory name from filename (e.g., shellcheck-v0.11.0.linux.x86_64.tar -> shellcheck-v0.11.0)
+    dirname=$(basename "$arg" .tar | sed 's/\.linux.*//')
+    # Find the cwd where the tar file was supposed to be extracted
+    # In test context, we're in the test tmpdir
+    targetdir="${HOME}/software_downloads"
+    mkdir -p "${targetdir}/${dirname}"
+    touch "${targetdir}/${dirname}/shellcheck"
+  fi
+  # Create stub directories for ruby-install and chruby tarballs
+  if [[ "$arg" =~ ruby-install-.*\.tar\.gz$ ]]; then
+    if [[ -n "${target}" ]]; then
+      dirname=$(basename "$arg" .tar.gz)
+      mkdir -p "${target}/${dirname}"
+    fi
+  fi
+  if [[ "$arg" =~ chruby-.*\.tar\.gz$ ]]; then
+    if [[ -n "${target}" ]]; then
+      dirname=$(basename "$arg" .tar.gz)
+      mkdir -p "${target}/${dirname}"
+    fi
+  fi
+done
 exit 0

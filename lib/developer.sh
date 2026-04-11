@@ -92,3 +92,58 @@ setup_vim_plugins() {
     curl -fLo ${HOME}/.vim/autoload/plug.vim --create-dirs https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
   fi
 }
+
+install_ruby_tools() {
+  printf "Installing ruby-install on linux\\n"
+  if [[ -n ${LINUX} ]]; then
+    if [[ ! -d ${HOME}/software_downloads/ruby-install-${RUBY_INSTALL_VER} ]]; then
+      wget -O ${HOME}/software_downloads/ruby-install-${RUBY_INSTALL_VER}.tar.gz https://github.com/postmodern/ruby-install/archive/v${RUBY_INSTALL_VER}.tar.gz
+      tar -xzvf ${HOME}/software_downloads/ruby-install-${RUBY_INSTALL_VER}.tar.gz -C ${HOME}/software_downloads/
+      cd ${HOME}/software_downloads/ruby-install-${RUBY_INSTALL_VER}/ || exit
+      sudo make install
+    fi
+  fi
+
+  printf "Installing chruby on linux\\n"
+  if [[ -n ${LINUX} ]]; then
+    if [[ -n ${FOCAL} ]] || [[ -n ${JAMMY} ]]; then
+      if [[ ! -d ${HOME}/software_downloads/chruby-${CHRUBY_VER} ]]; then
+        wget -O ${HOME}/software_downloads/chruby-${CHRUBY_VER}.tar.gz https://github.com/postmodern/chruby/archive/v${CHRUBY_VER}.tar.gz
+        tar -xzvf ${HOME}/software_downloads/chruby-${CHRUBY_VER}.tar.gz -C ${HOME}/software_downloads/
+        cd ${HOME}/software_downloads/chruby-${CHRUBY_VER}/ || exit
+        sudo make install
+      fi
+    fi
+  fi
+}
+
+install_ruby() {
+  if [[ ! -d ${HOME}/.rubies/ruby-${RUBY_VER}/bin ]]; then
+    printf "Install ruby %s\\n" "${RUBY_VER}"
+    if [[ -n ${MACOS} ]]; then
+      # shellcheck disable=SC2046
+      ruby-install ${RUBY_VER} -- --with-openssl-dir=$(brew --prefix openssl@3)
+    fi
+    if [[ -n ${LINUX} ]]; then
+      if [[ -n ${FOCAL} ]]; then
+        ruby-install ${RUBY_VER}
+      elif [[ -n ${JAMMY} ]]; then
+        # Ruby 4.0 requires OpenSSL 3; Jammy ships OpenSSL 3 at /usr by default
+        OPENSSL_DIR="$(pkg-config --variable=prefix openssl 2>/dev/null)"
+        ruby-install ${RUBY_VER} -- --with-openssl-dir="${OPENSSL_DIR:-/usr}"
+      elif [[ -n ${NOBLE} ]]; then
+        if ! [[ -d ${HOME}/.rbenv/versions/${RUBY_VER} ]]; then
+          # Optional but often helpful: point Ruby at Ubuntu's OpenSSL
+          OPENSSL_DIR="$(pkg-config --variable=libdir openssl 2>/dev/null | sed 's#/lib$##')"
+          RUBY_CONFIGURE_OPTS="--with-openssl-dir=${OPENSSL_DIR:-/usr}" rbenv install ${RUBY_VER}
+          rbenv global ${RUBY_VER}
+          rbenv rehash
+        fi
+      fi
+    fi
+    INSTALLED_RUBY_VERSION=$(ruby --version | awk '{print $2}')
+    if [[ ${INSTALLED_RUBY_VERSION} == "${RUBY_VER}" ]]; then
+      printf "ruby %s is installed\\n" "${RUBY_VER}"
+    fi
+  fi
+}
