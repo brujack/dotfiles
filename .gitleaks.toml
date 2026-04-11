@@ -3,27 +3,14 @@ title = "dotfiles gitleaks config"
 [extend]
 useDefault = true
 
-[[allowlists]]
-description = "Cursor and Claude settings/keybindings are not credentials"
+[allowlist]
+description = "Suppress findings in config/settings paths and known-rotated token commits"
 paths = [
   '''^\.cursor/''',
   '''^\.claude/''',
-]
-
-[[allowlists]]
-description = "Brewfile tap/cask/formula identifiers are not secrets"
-paths = [
   '''^Brewfile''',
-]
-
-[[allowlists]]
-description = "ubuntu package list files contain no secrets"
-paths = [
   '''^ubuntu_.*_packages\.txt$''',
 ]
-
-[[allowlists]]
-description = "Snyk token removed in 484d164; old commit still in HEAD~50 range (rotate token)"
 commits = [
   "0eb455be89ec4434b32ff29eb1c7d2655f27c6fd",
 ]

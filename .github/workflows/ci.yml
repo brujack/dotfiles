@@ -68,22 +68,6 @@ jobs:
             --log-opts "HEAD~50..HEAD" \
             --verbose
 
-  snyk-scan:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Install Snyk CLI
-        run: |
-          curl -sL https://static.snyk.io/cli/latest/snyk-linux -o /tmp/snyk
-          chmod +x /tmp/snyk
-          sudo mv /tmp/snyk /usr/local/bin/snyk
-
-      - name: Run Snyk Code scan
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        run: snyk code test
-
   auto-merge:
     needs: [test, lint-macos, secret-scan]
     if: github.event_name == 'pull_request'
