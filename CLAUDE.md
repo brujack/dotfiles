@@ -188,6 +188,7 @@ Uses **BATS** (Bash Automated Testing System), installed natively:
 **Run tests:** `make test` (runs lint then all BATS tests)
 **Run unit tests only:** `make test-unit` (runs `unit.bats`, `profiles.bats`, and `zshrc.d/unit.bats`)
 **Run lint only:** `make lint` (bash -n + zsh -n + shellcheck on all .sh files)
+**Install pre-commit hook:** `make install-hooks` (symlinks `scripts/pre-commit-hook.sh` into `.git/hooks/pre-commit`; run once per checkout)
 
 ### ShellCheck
 
@@ -201,7 +202,7 @@ Inline disables (`# shellcheck disable=SCxxxx # reason`) are used for remaining 
 
 ### CI / GitHub Actions
 
-`.github/workflows/ci.yml` runs on every push to non-master branches and PRs to master:
+`.github/workflows/ci.yml` runs on every push (all branches including master) and PRs to master:
 - `test` job: installs bats + shellcheck, runs `make test`
 - `lint-macos` job: runs `bash -n` and `zsh -n` on all `.sh` files on `macos-latest` (advisory, not blocking auto-merge)
 - `secret-scan` job: runs gitleaks against recent commits (advisory, not blocking auto-merge)
