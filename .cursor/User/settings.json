@@ -103,7 +103,7 @@
     "editor.fontFamily": "'MesloLGSDZ Nerd Font Mono'",
     "terminal.integrated.defaultProfile.linux": "zsh",
     "python.languageServer": "None",
-    "snyk.token": "e3147a88-d826-4f01-a0e6-1164251a64aa",
+    "snyk.token": "",
     "snyk.yesWelcomeNotification": false,
     "editor.guides.indentation": true,
     "git.mergeEditor": true,
