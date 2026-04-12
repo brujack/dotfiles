@@ -182,7 +182,10 @@ run_update() {
     if command -v claude &>/dev/null; then
       _update_record_start "claude"
       printf "Updating Claude plugins\\n"
-      claude plugins update superpowers && claude plugins update code-simplifier && claude plugins update context7
+      # CLI matches installed plugins by plugin@marketplace (see `claude plugins list`), not short names.
+      claude plugins update superpowers@claude-plugins-official \
+        && claude plugins update code-simplifier@claude-plugins-official \
+        && claude plugins update context7@claude-plugins-official
       _update_record_end "claude" $?
     else
       _update_skip "claude" "claude not installed"
