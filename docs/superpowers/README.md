@@ -61,6 +61,8 @@ Ideas approved for future specs, in no particular order:
 
 | Feature | Notes |
 |---|---|
+| linux.sh split | Split lib/linux.sh (1029 lines) into focused files; fill in test coverage |
+| Brewfile drift detection | Detect packages installed locally but not in Brewfile, and vice versa |
 
 ---
 
