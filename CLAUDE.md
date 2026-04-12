@@ -248,6 +248,7 @@ Functions that operate on specific file paths use override env vars to redirect 
 | `_OVERRIDE_CONSTANTS_PATH` | `_update_version_pin()` | Redirects to a temp copy of `lib/constants.sh`; defaults to real path when unset |
 | `UPDATE_LOG_PATH` | `_update_summary()` | Redirects log writes to a temp file in tests; defaults to `~/.dotfiles-update.log` |
 | `_UPDATE_TMPDIR` | all summary functions | Set to `${BATS_TEST_TMPDIR}` in tests to isolate snapshot files |
+| `_BOOTSTRAP_OS_RELEASE` | `_bootstrap_linux_detect_distro` | Path to os-release file; defaults to `/etc/os-release` |
 
 Pattern: `local _file="${_OVERRIDE_VAR:-$(dirname "${BASH_SOURCE[0]}")/real/path}"`. Tests set the var and pass a writable temp copy; production code leaves it unset.
 
