@@ -259,3 +259,240 @@ teardown() {
   run bash -c "MOCK_GIT_TOPLEVEL='${tmpdir}' PATH='${tmpdir}:/usr/bin:/bin' bash '${REPO_ROOT}/scripts/pre-commit-hook.sh'"
   [ "$status" -eq 0 ]
 }
+
+# ── bootstrap_mac.sh ─────────────────────────────────────────────────────────
+
+@test "_bootstrap_check_macos passes on Darwin" {
+  source "${REPO_ROOT}/scripts/bootstrap_mac.sh"
+  export MOCK_UNAME_S=Darwin
+  run _bootstrap_check_macos
+  [ "$status" -eq 0 ]
+}
+
+@test "_bootstrap_check_macos fails on Linux" {
+  source "${REPO_ROOT}/scripts/bootstrap_mac.sh"
+  export MOCK_UNAME_S=Linux
+  run _bootstrap_check_macos
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"macOS only"* ]]
+}
+
+@test "_bootstrap_mac_install_homebrew skips when brew already installed" {
+  source "${REPO_ROOT}/scripts/bootstrap_mac.sh"
+  run _bootstrap_mac_install_homebrew
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"already installed"* ]]
+  ! grep -q "curl" "${MOCK_CALLS_FILE}"
+}
+
+@test "_bootstrap_mac_install_homebrew calls curl when brew missing" {
+  source "${REPO_ROOT}/scripts/bootstrap_mac.sh"
+  export MOCK_WHICH_MISSING=brew
+  run _bootstrap_mac_install_homebrew
+  [ "$status" -eq 0 ]
+  grep -q "curl" "${MOCK_CALLS_FILE}"
+}
+
+@test "_bootstrap_mac_install_homebrew returns error when curl fails" {
+  source "${REPO_ROOT}/scripts/bootstrap_mac.sh"
+  export MOCK_WHICH_MISSING=brew
+  export MOCK_CURL_EXIT=1
+  run _bootstrap_mac_install_homebrew
+  [ "$status" -ne 0 ]
+}
+
+@test "_bootstrap_mac_install_bash5 skips when bash >= 5" {
+  source "${REPO_ROOT}/scripts/bootstrap_mac.sh"
+  local _mockbash="${BATS_TEST_TMPDIR}/bash5mock"
+  printf '#!/bin/bash\nprintf "GNU bash, version 5.2.0(1)-release\\n"\n' > "${_mockbash}"
+  chmod +x "${_mockbash}"
+  export BASH="${_mockbash}"
+  run _bootstrap_mac_install_bash5
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"already installed"* ]]
+  ! grep -q "brew install bash" "${MOCK_CALLS_FILE}"
+}
+
+@test "_bootstrap_mac_install_bash5 installs when bash < 5" {
+  source "${REPO_ROOT}/scripts/bootstrap_mac.sh"
+  local _mockbash="${BATS_TEST_TMPDIR}/bash3mock"
+  printf '#!/bin/bash\nprintf "GNU bash, version 3.2.57(1)-release\\n"\n' > "${_mockbash}"
+  chmod +x "${_mockbash}"
+  export BASH="${_mockbash}"
+  run _bootstrap_mac_install_bash5
+  [ "$status" -eq 0 ]
+  grep -q "brew install bash" "${MOCK_CALLS_FILE}"
+}
+
+@test "_bootstrap_mac_install_bash5 returns error when brew install fails" {
+  source "${REPO_ROOT}/scripts/bootstrap_mac.sh"
+  local _mockbash="${BATS_TEST_TMPDIR}/bash3mock2"
+  printf '#!/bin/bash\nprintf "GNU bash, version 3.2.57(1)-release\\n"\n' > "${_mockbash}"
+  chmod +x "${_mockbash}"
+  export BASH="${_mockbash}"
+  export MOCK_BREW_INSTALL_EXIT=1
+  run _bootstrap_mac_install_bash5
+  [ "$status" -ne 0 ]
+}
+
+@test "bootstrap_mac_main calls functions in order on Darwin" {
+  source "${REPO_ROOT}/scripts/bootstrap_mac.sh"
+  export MOCK_UNAME_S=Darwin
+  local _mockbash="${BATS_TEST_TMPDIR}/bash5main"
+  printf '#!/bin/bash\nprintf "GNU bash, version 5.2.0(1)-release\\n"\n' > "${_mockbash}"
+  chmod +x "${_mockbash}"
+  export BASH="${_mockbash}"
+  run bootstrap_mac_main
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Bootstrap complete"* ]]
+}
+
+@test "bootstrap_mac_main fails on non-macOS" {
+  source "${REPO_ROOT}/scripts/bootstrap_mac.sh"
+  export MOCK_UNAME_S=Linux
+  run bootstrap_mac_main
+  [ "$status" -eq 1 ]
+}
+
+# ── bootstrap_linux.sh ────────────────────────────────────────────────────────
+
+@test "_bootstrap_check_linux passes on Linux" {
+  source "${REPO_ROOT}/scripts/bootstrap_linux.sh"
+  export MOCK_UNAME_S=Linux
+  run _bootstrap_check_linux
+  [ "$status" -eq 0 ]
+}
+
+@test "_bootstrap_check_linux fails on Darwin" {
+  source "${REPO_ROOT}/scripts/bootstrap_linux.sh"
+  export MOCK_UNAME_S=Darwin
+  run _bootstrap_check_linux
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Linux only"* ]]
+}
+
+@test "_bootstrap_linux_detect_distro detects Ubuntu" {
+  source "${REPO_ROOT}/scripts/bootstrap_linux.sh"
+  local _osrel="${BATS_TEST_TMPDIR}/os-release"
+  printf 'ID=ubuntu\nID_LIKE=debian\n' > "${_osrel}"
+  export _BOOTSTRAP_OS_RELEASE="${_osrel}"
+  _bootstrap_linux_detect_distro
+  [ "${_DISTRO_FAMILY}" = "ubuntu" ]
+}
+
+@test "_bootstrap_linux_detect_distro detects Fedora" {
+  source "${REPO_ROOT}/scripts/bootstrap_linux.sh"
+  local _osrel="${BATS_TEST_TMPDIR}/os-release"
+  printf 'ID=fedora\n' > "${_osrel}"
+  export _BOOTSTRAP_OS_RELEASE="${_osrel}"
+  _bootstrap_linux_detect_distro
+  [ "${_DISTRO_FAMILY}" = "fedora" ]
+}
+
+@test "_bootstrap_linux_detect_distro detects RHEL via ID" {
+  source "${REPO_ROOT}/scripts/bootstrap_linux.sh"
+  local _osrel="${BATS_TEST_TMPDIR}/os-release"
+  printf 'ID=rhel\n' > "${_osrel}"
+  export _BOOTSTRAP_OS_RELEASE="${_osrel}"
+  _bootstrap_linux_detect_distro
+  [ "${_DISTRO_FAMILY}" = "rhel" ]
+}
+
+@test "_bootstrap_linux_detect_distro detects CentOS via ID_LIKE" {
+  source "${REPO_ROOT}/scripts/bootstrap_linux.sh"
+  local _osrel="${BATS_TEST_TMPDIR}/os-release"
+  printf 'ID=centos\nID_LIKE="rhel fedora"\n' > "${_osrel}"
+  export _BOOTSTRAP_OS_RELEASE="${_osrel}"
+  _bootstrap_linux_detect_distro
+  [ "${_DISTRO_FAMILY}" = "rhel" ]
+}
+
+@test "_bootstrap_linux_detect_distro returns unknown for unrecognized distro" {
+  source "${REPO_ROOT}/scripts/bootstrap_linux.sh"
+  local _osrel="${BATS_TEST_TMPDIR}/os-release"
+  printf 'ID=alpine\n' > "${_osrel}"
+  export _BOOTSTRAP_OS_RELEASE="${_osrel}"
+  _bootstrap_linux_detect_distro
+  [ "${_DISTRO_FAMILY}" = "unknown" ]
+}
+
+@test "_bootstrap_linux_detect_distro handles missing os-release" {
+  source "${REPO_ROOT}/scripts/bootstrap_linux.sh"
+  export _BOOTSTRAP_OS_RELEASE="${BATS_TEST_TMPDIR}/nonexistent"
+  _bootstrap_linux_detect_distro
+  [ "${_DISTRO_FAMILY}" = "unknown" ]
+}
+
+@test "_bootstrap_linux_install_prereqs calls apt-get for ubuntu" {
+  source "${REPO_ROOT}/scripts/bootstrap_linux.sh"
+  _DISTRO_FAMILY="ubuntu"
+  run _bootstrap_linux_install_prereqs
+  [ "$status" -eq 0 ]
+  grep -q "apt-get install" "${MOCK_CALLS_FILE}"
+}
+
+@test "_bootstrap_linux_install_prereqs calls dnf for fedora" {
+  source "${REPO_ROOT}/scripts/bootstrap_linux.sh"
+  _DISTRO_FAMILY="fedora"
+  run _bootstrap_linux_install_prereqs
+  [ "$status" -eq 0 ]
+  grep -q "dnf" "${MOCK_CALLS_FILE}"
+}
+
+@test "_bootstrap_linux_install_prereqs calls yum for rhel" {
+  source "${REPO_ROOT}/scripts/bootstrap_linux.sh"
+  _DISTRO_FAMILY="rhel"
+  run _bootstrap_linux_install_prereqs
+  [ "$status" -eq 0 ]
+  grep -q "yum" "${MOCK_CALLS_FILE}"
+}
+
+@test "_bootstrap_linux_install_prereqs prints warning for unknown" {
+  source "${REPO_ROOT}/scripts/bootstrap_linux.sh"
+  _DISTRO_FAMILY="unknown"
+  run _bootstrap_linux_install_prereqs
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Unknown distro"* ]]
+}
+
+@test "_bootstrap_linux_install_prereqs returns error when apt-get fails" {
+  source "${REPO_ROOT}/scripts/bootstrap_linux.sh"
+  _DISTRO_FAMILY="ubuntu"
+  export MOCK_APT_EXIT=1
+  run _bootstrap_linux_install_prereqs
+  [ "$status" -ne 0 ]
+}
+
+@test "_bootstrap_linux_install_homebrew skips when brew already installed" {
+  source "${REPO_ROOT}/scripts/bootstrap_linux.sh"
+  run _bootstrap_linux_install_homebrew
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"already installed"* ]]
+  ! grep -q "curl" "${MOCK_CALLS_FILE}"
+}
+
+@test "_bootstrap_linux_install_homebrew calls curl when brew missing" {
+  source "${REPO_ROOT}/scripts/bootstrap_linux.sh"
+  export MOCK_WHICH_MISSING=brew
+  run _bootstrap_linux_install_homebrew
+  [ "$status" -eq 0 ]
+  grep -q "curl" "${MOCK_CALLS_FILE}"
+}
+
+@test "bootstrap_linux_main calls functions in order on Linux" {
+  source "${REPO_ROOT}/scripts/bootstrap_linux.sh"
+  export MOCK_UNAME_S=Linux
+  local _osrel="${BATS_TEST_TMPDIR}/os-release"
+  printf 'ID=ubuntu\n' > "${_osrel}"
+  export _BOOTSTRAP_OS_RELEASE="${_osrel}"
+  run bootstrap_linux_main
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Bootstrap complete"* ]]
+}
+
+@test "bootstrap_linux_main fails on non-Linux" {
+  source "${REPO_ROOT}/scripts/bootstrap_linux.sh"
+  export MOCK_UNAME_S=Darwin
+  run bootstrap_linux_main
+  [ "$status" -eq 1 ]
+}
