@@ -1,21 +1,21 @@
 ---
-name: Dotfiles PRs 19 and 20
-description: Both PRs merged 2026-04-11 — workflows refactor and interactive version update
+name: Dotfiles session 2026-04-11
+description: CI hygiene, update summary, bootstrap tests, security tooling — 345 tests on master
 type: project
 ---
 
-Both PRs merged 2026-04-11. Branches and worktrees cleaned up.
+Session 2026-04-11 completed:
 
-**PR #19** ✅ merged — `refactor: split run_setup_or_developer and run_developer_or_ansible into named helpers`
-- `lib/workflows.sh` reduced from 1,437 → 343 lines
-- Extracted 12 named functions into `lib/macos.sh`, `lib/linux.sh`, `lib/developer.sh`
-- ~20 new BATS tests; 254 tests total on master
+- **CI hygiene (PR #21)** — CI runs on master pushes, plugin caches excluded from lint-macos, GITLEAKS_VER pinned in constants.sh, pre-commit hook (make lint + ggshield), doctor symlink root check
+- **Gitleaks check-versions (PR #22)** — gitleaks added to check-versions tool list
+- **Snyk token incident** — was committed in cursor settings; removed + allowlisted old commit; Snyk scan removed from CI (shell-only repo not supported by snyk code test)
+- **ggshield pre-commit** — GitGuardian added to pre-commit hook, ggshield in Brewfile.devtools
+- **Update summary (PR #24)** — structured end-of-run summary for `./setup_env.sh -t update` with per-section diffs (brew/gems/mas/pip/git tools), appended to ~/.dotfiles-update.log
+- **Bootstrap tests (PR #25)** — both bootstrap scripts refactored per ADR 0006 (sourcing guard, function extraction, no set -e), 27 new tests
+- **ADR 0006** — shell script testability conventions (#!/usr/bin/env bash, no set-e, sourcing guard)
 
-**PR #20** ✅ merged — `feat: add --update flag to check-versions for interactive pin updates`
-- `--update` flag on `check-versions` prompts per-tool to update `lib/constants.sh` in-place
-- Handles URL constants embedding the version (GO_DOWNLOAD_FILENAME, GO_DOWNLOAD_URL, YQ_URL)
-- `_OVERRIDE_CONSTANTS_PATH` test seam pattern used for test isolation
+345 tests on master. Backlog: linux.sh split, Brewfile drift detection.
 
-**Why:** Improve maintainability of the install scripts and reduce manual effort for version pin updates.
+**Why:** Close CI gaps, add security scanning, make update workflow observable, make bootstrap scripts testable.
 
-**How to apply:** `lib/workflows.sh` is now a thin dispatcher; future platform-specific installs go into `lib/macos.sh`, `lib/linux.sh`, or `lib/developer.sh`.
+**How to apply:** `lib/update_summary.sh` holds all summary infrastructure. Bootstrap scripts follow ADR 0006 sourcing guard pattern. Pre-commit hook runs lint + ggshield.

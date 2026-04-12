@@ -34,8 +34,8 @@ Personal development environment bootstrap for macOS, Linux (Ubuntu/RHEL), and W
 | `setup` | Full machine setup (`setup_user` + all apps and tools). Flags: `--brew-install`, `--mas-install` |
 | `developer` | Dev packages + Python/Ansible virtualenv |
 | `ansible` | Ansible venv only — typically used after a Python update |
-| `update` | Update all packages (brew, apt/dnf/yum, pip, mas, Claude plugins, etc.) |
-| `doctor` | Print detected OS, profile, capabilities, and key paths (no side effects) |
+| `update` | Update all packages (brew, apt/dnf/yum, pip, mas, Claude plugins, etc.). Prints a structured summary at the end; each run is appended to `~/.dotfiles-update.log` |
+| `doctor` | Active health checks: symlinks, tool presence, credential dir permissions, version drift. Exits non-zero on any failure |
 | `check-versions` | Compare pinned tool versions in `lib/constants.sh` against latest GitHub releases. Exits 1 if any are outdated; `--update` prompts to apply each update in-place |
 
 **Options:**
@@ -90,6 +90,7 @@ dotfiles/
 │   ├── macos.sh              # macOS-specific install functions
 │   ├── linux.sh              # Linux-specific install functions
 │   ├── developer.sh          # Cross-platform dev tooling (Ruby, Python, Ansible, etc.)
+│   ├── update_summary.sh     # Update run tracking and summary reporting
 │   └── workflows.sh          # Top-level workflow functions dispatched by setup_env.sh
 ├── scripts/
 │   ├── bootstrap_mac.sh      # One-time macOS prerequisite installer (Homebrew + bash 5)
@@ -186,9 +187,10 @@ gh pr create
 Uses [BATS](https://github.com/bats-core/bats-core) (Bash Automated Testing System), installed natively.
 
 ```bash
-make test        # lint (bash -n, zsh -n, shellcheck) + all BATS tests
-make test-unit   # unit + profiles tests only (faster)
-make lint        # syntax + shellcheck only
+make test          # lint (bash -n, zsh -n, shellcheck) + all BATS tests
+make test-unit     # unit + profiles tests only (faster)
+make lint          # syntax + shellcheck only
+make install-hooks # install pre-commit hook (runs lint + ggshield before each commit)
 ```
 
 Install bats-core first: `brew install bats-core` (macOS) or `sudo apt-get install bats` (Ubuntu).
