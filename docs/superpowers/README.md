@@ -51,7 +51,7 @@ Master status index for all specs and implementation plans in this directory.
 | 2026-04-10 | [workflows-refactor](plans/2026-04-10-workflows-refactor.md) | [spec](specs/2026-04-10-workflows-refactor-design.md) | Done |
 | 2026-04-10 | [interactive-version-update](plans/2026-04-10-interactive-version-update.md) | [spec](specs/2026-04-10-interactive-version-update-design.md) | Done |
 | 2026-04-11 | [update-summary](plans/2026-04-11-update-summary.md) | [spec](specs/2026-04-11-update-summary-design.md) | Done |
-| 2026-04-11 | [bootstrap-tests](plans/2026-04-11-bootstrap-tests.md) | [spec](specs/2026-04-11-bootstrap-tests-design.md) | In Progress |
+| 2026-04-11 | [bootstrap-tests](plans/2026-04-11-bootstrap-tests.md) | [spec](specs/2026-04-11-bootstrap-tests-design.md) | Done |
 
 ---
 
