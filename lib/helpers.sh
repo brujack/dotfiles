@@ -74,7 +74,7 @@ brew_update() {
   fi
   if ! command -v brew &>/dev/null; then
     log_info "Homebrew not found, installing Homebrew..."
-    install_homebrew
+    install_homebrew || return 1
   fi
 
   log_info "Updating Homebrew..."

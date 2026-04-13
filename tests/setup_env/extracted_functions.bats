@@ -70,6 +70,15 @@ _make_fake_dotfiles() {
   ! grep -q "git clone" "${MOCK_CALLS_FILE}"
 }
 
+@test "clone_or_update_dotfiles returns non-zero when cd to HOME fails" {
+  # Set HOME to a path that does not exist so cd fails in the clone branch.
+  # PERSONAL_GITREPOS is derived from HOME so it also won't exist → clone branch taken.
+  export HOME="${BATS_TEST_TMPDIR}/nonexistent_home"
+  export PERSONAL_GITREPOS="${HOME}/git-repos/personal"
+  run clone_or_update_dotfiles
+  [ "$status" -ne 0 ]
+}
+
 # ── setup_dotfile_symlinks ───────────────────────────────────────────────────
 
 @test "setup_dotfile_symlinks links .gitconfig_mac on macOS" {

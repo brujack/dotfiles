@@ -252,6 +252,34 @@ teardown() {
   [[ "$output" == *"Homebrew update process completed successfully"* ]]
 }
 
+@test "brew_update does not proceed past install_homebrew when install_homebrew fails" {
+  # Subshell approach: remove brew from PATH so command -v brew fails, then stub
+  # install_homebrew to return 1. With || return 1 in place the function stops before
+  # logging "Updating Homebrew"; without it the message appears in output.
+  export MOCK_ID_U=1000
+  local tmp_mocks="${BATS_TEST_TMPDIR}/mocks_no_brew"
+  mkdir -p "${tmp_mocks}"
+  for f in "${REPO_ROOT}/tests/mocks/"*; do
+    [[ "$(basename "$f")" == "brew" ]] && continue
+    ln -sf "$f" "${tmp_mocks}/$(basename "$f")"
+  done
+  local clean_path
+  clean_path="$(printf "%s" "${PATH}" | tr ':' '\n' | grep -v "tests/mocks" | tr '\n' ':' | sed 's/:$//')"
+  clean_path="$(printf "%s" "${clean_path}" | tr ':' '\n' | while read -r dir; do
+    [[ -x "${dir}/brew" ]] || printf "%s\n" "${dir}"
+  done | tr '\n' ':' | sed 's/:$//')"
+  run bash -c "
+    export PATH='${tmp_mocks}:${clean_path}'
+    export MOCK_CALLS_FILE='${MOCK_CALLS_FILE}'
+    export MOCK_ID_U=1000
+    source '${REPO_ROOT}/setup_env.sh'
+    install_homebrew() { return 1; }
+    brew_update
+  "
+  [ "$status" -ne 0 ]
+  [[ "$output" != *"Updating Homebrew"* ]]
+}
+
 # ── safe_link ─────────────────────────────────────────────────────────────────
 
 @test "safe_link creates symlink when dest does not exist" {
