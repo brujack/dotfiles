@@ -70,7 +70,19 @@ _update_record_start() {
     zsh-autosuggestions)
       git -C "${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions" rev-parse HEAD > "${_UPDATE_TMPDIR}/pre_zsh-autosuggestions" 2>/dev/null || true
       ;;
-    # claude, softwareupdate, cheat.sh — no pre-snapshot needed
+    softwareupdate)
+      softwareupdate -l 2>/dev/null \
+        | grep '^\* Label:' \
+        | sed 's/^\* Label: //' \
+        > "${_UPDATE_TMPDIR}/pre_softwareupdate" || true
+      ;;
+    claude)
+      claude plugins list 2>/dev/null \
+        | grep 'Version:' \
+        | sed 's/^[[:space:]]*//' \
+        > "${_UPDATE_TMPDIR}/pre_claude" || true
+      ;;
+    # cheat.sh — no pre-snapshot needed
     *) ;;
   esac
 }
@@ -120,7 +132,9 @@ _update_record_end() {
         local _mas_count
         _mas_count=$(printf '%s' "${_mas_diff}" | grep -c . || true)
         if [[ ${_mas_count} -gt 0 ]]; then
-          _result="${_mas_count} app(s) updated"
+          local _mas_names
+          _mas_names=$(printf '%s' "${_mas_diff}" | awk '{$1=""; sub(/^ /, ""); sub(/ \([^)]*\)$/, ""); print}' | paste -sd', ' -)
+          _result="${_mas_count} app(s) (${_mas_names})"
         else
           _result="no changes"
         fi
@@ -179,6 +193,38 @@ _update_record_end() {
         fi
       else
         _result="no changes"
+      fi
+      ;;
+    softwareupdate)
+      if [[ -f "${_UPDATE_TMPDIR}/pre_softwareupdate" ]]; then
+        local _su_count
+        _su_count=$(wc -l < "${_UPDATE_TMPDIR}/pre_softwareupdate" | tr -d ' ')
+        if [[ ${_su_count} -gt 0 ]]; then
+          _result="${_su_count} update(s) ($(paste -sd', ' - < "${_UPDATE_TMPDIR}/pre_softwareupdate"))"
+        else
+          _result="no changes"
+        fi
+      else
+        _result="updated"
+      fi
+      ;;
+    claude)
+      if [[ -f "${_UPDATE_TMPDIR}/pre_claude" ]]; then
+        claude plugins list 2>/dev/null \
+          | grep 'Version:' \
+          | sed 's/^[[:space:]]*//' \
+          > "${_UPDATE_TMPDIR}/post_claude" || true
+        local _claude_diff
+        _claude_diff=$(_update_diff_lines "${_UPDATE_TMPDIR}/pre_claude" "${_UPDATE_TMPDIR}/post_claude")
+        local _claude_count
+        _claude_count=$(printf '%s' "${_claude_diff}" | grep -c . || true)
+        if [[ ${_claude_count} -gt 0 ]]; then
+          _result="${_claude_count} plugin(s) updated"
+        else
+          _result="no changes"
+        fi
+      else
+        _result="updated"
       fi
       ;;
     *)

@@ -156,6 +156,7 @@ run_update() {
   _any_update_flag || _run_all=1
 
   _UPDATE_TMPDIR=$(mktemp -d)
+  export _UPDATE_TMPDIR
 
   # ── brew + softwareupdate ─────────────────────────────────────────────────
   if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_BREW:-} ]]; then
