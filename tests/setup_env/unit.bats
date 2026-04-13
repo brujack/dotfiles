@@ -177,6 +177,14 @@ teardown() {
   [[ "$output" == *"bootstrap_mac.sh"* ]] || [[ "$output" == *"bootstrap_linux.sh"* ]]
 }
 
+@test "setup_env.sh --brew-install bypasses brew prereq when brew is missing" {
+  load_mocks
+  export MOCK_WHICH_MISSING=brew
+  run bash "${BATS_TEST_DIRNAME}/../../setup_env.sh" --brew-install
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"Homebrew not found"* ]]
+}
+
 @test "setup_env.sh contains bash version prerequisite check" {
   run grep -q 'BASH_VERSINFO' "${BATS_TEST_DIRNAME}/../../setup_env.sh"
   [ "$status" -eq 0 ]
