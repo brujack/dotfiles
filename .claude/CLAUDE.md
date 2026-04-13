@@ -102,7 +102,7 @@ Rule: if a test works in isolation but fails when run after another test, it has
 
 **B. Return value propagation and fail-fast**
 
-Every caller must check the return value of sub-functions. A parent that swallows failures reports success when work was skipped or corrupted. When step N fails, stop — do not proceed to step N+1 with invalid state.
+Every caller must check the return value of sub-functions AND propagate that return code to its own caller. A failure anywhere in the call chain must bubble up to the top — swallowing it at any intermediate level reports false success. When step N fails, stop — do not proceed to step N+1 with invalid state.
 
 | Language | Swallowing pattern (wrong) | Propagating pattern (correct) |
 |---|---|---|
@@ -111,9 +111,11 @@ Every caller must check the return value of sub-functions. A parent that swallow
 | Go | `result, _ := f()` | `result, err := f(); if err != nil { return err }` |
 | Rust | `.unwrap_or_default()` hiding errors | `?` operator or explicit `match` |
 
+The requirement applies at every level: if `leaf()` returns 1, `mid()` must return 1 to its caller, and `top()` must return 1 to its caller. A chain of three functions where only `leaf()` propagates correctly but `mid()` swallows the error is broken — the top-level caller still sees false success.
+
 Cleanup steps (temp file removal, resource release) are the exception — they must run regardless of prior failures. Use `defer` (Go), `finally` (Python), `Drop` (Rust), or `trap` (shell) rather than inline error suppression.
 
-Tests must verify that when step N fails, the parent function returns non-zero AND does not execute step N+1.
+Tests must verify that when step N fails, the parent function returns non-zero AND does not execute step N+1. For multi-level chains, test that the top-level caller also returns non-zero.
 
 **C. Test both branches of every guard/conditional**
 
@@ -415,7 +417,8 @@ Every personal repo CI pipeline must have:
 - **Output:** `printf "message\n"` not `echo`
 - **Functions:** `snake_case()` naming
 - **Constants:** `SCREAMING_SNAKE_CASE`, marked `readonly`
-- **Error handling:** Check `$?` or use `|| exit 1`; guard installs with `command -v`
+- **Error handling in function bodies:** use `|| return 1` (never `|| exit` — `exit` inside a function terminates the entire process, including the test runner). At top-level scripts, `|| exit 1` is acceptable. Guard installs with `command -v`.
+- **Return code propagation:** every function that calls a sub-function must propagate failures with `|| return 1`. The caller of the caller must do the same. Failures must bubble up the entire call chain — swallowing a return code anywhere in the chain reports false success to the top level.
 
 ### PowerShell
 
