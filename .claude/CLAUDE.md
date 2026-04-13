@@ -191,6 +191,34 @@ _update_record_end "pip" ${_pip_rc}
 
 Tests must assert the recorded exit code, not just that the function returned 0.
 
+**9. Exit code propagation and fail-fast**
+
+Every function that calls sub-functions or external commands must propagate failure to its caller. A parent script that swallows exit codes creates silent failures — the caller reports success even when work was skipped or corrupted.
+
+Rules:
+- Functions must return a non-zero exit code when they fail. Never return 0 on failure.
+- Callers must check return values: use `cmd || return 1`, `cmd || exit 1`, or `if ! cmd; then`.
+- Do not use `|| true` on commands whose failure matters — it converts a failure into success.
+- When a step fails in a multi-step function, stop immediately (`return 1`) rather than continuing with invalid state. This is fail-fast: detect the problem at the source, not three steps later when the symptom is confusing.
+- Exception: cleanup steps (removing temp files, unsetting vars) should run regardless of prior failures. Use a `trap` for cleanup rather than inline `|| true`.
+
+```bash
+# Wrong — swallows failure, caller can't detect the problem
+run_setup() {
+  install_packages     # fails silently
+  configure_system     # runs on broken state
+  return 0             # always reports success
+}
+
+# Correct — fail-fast, propagate exit codes
+run_setup() {
+  install_packages || return 1
+  configure_system || return 1
+}
+```
+
+Tests must verify that when a step fails, the parent function returns non-zero AND does not execute subsequent steps.
+
 **5. `wc -l` returns 0 for single-line output without trailing newline**
 
 `wc -l` counts newline characters. A single line with no trailing `\n` (common from Python's `"\n".join(items)`) returns 0. Use `grep -c .` to count non-empty lines regardless of trailing newline.
@@ -215,11 +243,13 @@ process_args() {
   [[ -n "${1}" ]] && readonly DRY_RUN=1
 }
 
-# Correct
+# Correct — use ${VAR+x} (bash 3.2 compatible; [[ -v VAR ]] requires bash 4.2+)
 process_args() {
-  [[ -n "${1}" ]] && { [[ -v DRY_RUN ]] || readonly DRY_RUN=1; }
+  [[ -n "${1}" ]] && { [[ -n "${DRY_RUN+x}" ]] || readonly DRY_RUN=1; }
 }
 ```
+
+Note: `[[ -v VAR ]]` is bash 4.2+ only. macOS ships bash 3.2. Always use `[[ -n "${VAR+x}" ]]` to test whether a variable is set — it works in both bash 3.2 and 4.x.
 
 Every function that sets `readonly` variables must have a test that calls it twice. If the second call crashes, that's the bug.
 
@@ -278,7 +308,8 @@ Run this checklist against staged changes before every commit. Read the diff and
 2. **Boundary values** — Does every conditional handle the boundary case? Off-by-one in loops? Empty string / zero / null inputs?
 3. **Variable state** — Is every variable initialized before use? Could any variable be stale from a prior iteration or branch? Are `readonly` / `export` / `unset` correct?
 4. **Error paths** — Does every function that can fail have its failure handled? Are early returns / exit codes correct?
-5. **Integration assumptions** — If calling another function, does the caller match the callee's actual signature and return behavior?
+5. **Exit code propagation** — Does every caller check the return value of sub-functions? Is `|| true` used only on commands whose failure is genuinely acceptable? Does failure in step N prevent steps N+1 onward from running (fail-fast)?
+6. **Integration assumptions** — If calling another function, does the caller match the callee's actual signature and return behavior?
 
 If any item reveals an issue, fix it before committing.
 
