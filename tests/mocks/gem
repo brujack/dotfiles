@@ -1,3 +1,11 @@
 #!/usr/bin/env bash
 printf "gem %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
-exit "${MOCK_GEM_EXIT:-0}"
+case "$1" in
+  list)
+    printf "%s\n" "${MOCK_GEM_LIST_OUTPUT:-}"
+    exit 0
+    ;;
+  *)
+    exit "${MOCK_GEM_EXIT:-0}"
+    ;;
+esac

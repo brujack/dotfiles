@@ -149,9 +149,25 @@ teardown() {
   [ -f "${_UPDATE_TMPDIR}/pre_oh-my-zsh" ]
 }
 
-@test "_update_record_start creates no snapshot for claude section" {
+@test "_update_record_start creates pre-snapshot for claude section" {
+  export MOCK_CLAUDE_PLUGINS_LIST_OUTPUT="    Version: 5.0.7"
   _update_record_start "claude"
-  [ ! -f "${_UPDATE_TMPDIR}/pre_claude" ]
+  [ -f "${_UPDATE_TMPDIR}/pre_claude" ]
+  grep -q "Version:" "${_UPDATE_TMPDIR}/pre_claude"
+}
+
+@test "_update_record_start creates pre-snapshot for softwareupdate section" {
+  export MOCK_SOFTWAREUPDATE_LIST_OUTPUT="* Label: Xcode-14.3"
+  _update_record_start "softwareupdate"
+  [ -f "${_UPDATE_TMPDIR}/pre_softwareupdate" ]
+  grep -q "Xcode-14.3" "${_UPDATE_TMPDIR}/pre_softwareupdate"
+}
+
+@test "_update_record_start records no softwareupdate updates when none pending" {
+  export MOCK_SOFTWAREUPDATE_LIST_OUTPUT=""
+  _update_record_start "softwareupdate"
+  [ -f "${_UPDATE_TMPDIR}/pre_softwareupdate" ]
+  [ ! -s "${_UPDATE_TMPDIR}/pre_softwareupdate" ]
 }
 
 # ── _update_record_end ────────────────────────────────────────────────────────
@@ -189,6 +205,63 @@ teardown() {
   export MOCK_BREW_LIST_CASK=""
   _update_record_end "brew" 0
   grep -q "no changes" "${_UPDATE_TMPDIR}/result_brew"
+}
+
+@test "_update_record_end diffs gems and reports gem names" {
+  export MOCK_GEM_LIST_OUTPUT="rake (13.0.1)"
+  _update_record_start "gems"
+  export MOCK_GEM_LIST_OUTPUT="rake (13.0.6, 13.0.1)"
+  _update_record_end "gems" 0
+  grep -q "OK" "${_UPDATE_TMPDIR}/status_gems"
+  grep -q "rake" "${_UPDATE_TMPDIR}/result_gems"
+}
+
+@test "_update_record_end reports no changes for gems when versions unchanged" {
+  export MOCK_GEM_LIST_OUTPUT="rake (13.0.1)"
+  _update_record_start "gems"
+  _update_record_end "gems" 0
+  grep -q "no changes" "${_UPDATE_TMPDIR}/result_gems"
+}
+
+@test "_update_record_end shows mas app names in result" {
+  export MOCK_MAS_LIST_OUTPUT="1234567890 Xcode (15.4)"
+  _update_record_start "mas"
+  export MOCK_MAS_LIST_OUTPUT="1234567890 Xcode (15.4)
+9876543210 Slack (4.40)"
+  _update_record_end "mas" 0
+  grep -q "OK" "${_UPDATE_TMPDIR}/status_mas"
+  grep -q "Slack" "${_UPDATE_TMPDIR}/result_mas"
+}
+
+@test "_update_record_end shows softwareupdate labels in result" {
+  export MOCK_SOFTWAREUPDATE_LIST_OUTPUT="* Label: Xcode-14.3"
+  _update_record_start "softwareupdate"
+  _update_record_end "softwareupdate" 0
+  grep -q "OK" "${_UPDATE_TMPDIR}/status_softwareupdate"
+  grep -q "Xcode-14.3" "${_UPDATE_TMPDIR}/result_softwareupdate"
+}
+
+@test "_update_record_end reports no changes for softwareupdate when nothing pending" {
+  export MOCK_SOFTWAREUPDATE_LIST_OUTPUT=""
+  _update_record_start "softwareupdate"
+  _update_record_end "softwareupdate" 0
+  grep -q "no changes" "${_UPDATE_TMPDIR}/result_softwareupdate"
+}
+
+@test "_update_record_end diffs claude plugins and reports count when updated" {
+  export MOCK_CLAUDE_PLUGINS_LIST_OUTPUT="    Version: 5.0.7"
+  _update_record_start "claude"
+  export MOCK_CLAUDE_PLUGINS_LIST_OUTPUT="    Version: 5.0.8"
+  _update_record_end "claude" 0
+  grep -q "OK" "${_UPDATE_TMPDIR}/status_claude"
+  grep -q "1 plugin" "${_UPDATE_TMPDIR}/result_claude"
+}
+
+@test "_update_record_end reports no changes for claude when versions unchanged" {
+  export MOCK_CLAUDE_PLUGINS_LIST_OUTPUT="    Version: 5.0.7"
+  _update_record_start "claude"
+  _update_record_end "claude" 0
+  grep -q "no changes" "${_UPDATE_TMPDIR}/result_claude"
 }
 
 # ── _update_summary ───────────────────────────────────────────────────────────
