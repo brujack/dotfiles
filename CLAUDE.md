@@ -319,6 +319,9 @@ Available mock env vars:
 | `MOCK_MV_EXIT` | Exit code for `mv` (default: 0); real `/bin/mv` is called unless exit ≠ 0 |
 | `MOCK_CP_EXIT` | Exit code for `cp` (default: 0); real `/bin/cp` is called unless exit ≠ 0 |
 | `MOCK_RPM_EXIT` | Exit code for `rpm` (default: 0) |
+| `MOCK_TAR_EXIT` | Exit code for `tar` (default: 0); when non-zero, suppresses stub directory creation so tests can simulate extraction failure and trigger `cd` failure |
+| `MOCK_CPAN_EXIT` | Exit code for `cpan` (default: 0) |
+| `MOCK_CPANM_EXIT` | Exit code for `cpanm` (default: 0) |
 
 **Pass-through mocks:** `ln`, `chmod`, `mv`, and `cp` call the real binary (`/bin/cmd "$@" 2>/dev/null || true`) so tests that assert actual filesystem state (permissions, file existence, symlinks) work correctly. Set the corresponding exit var to a non-zero value to simulate failure instead. Any mock that needs to support tests checking real filesystem state must use this pattern — a log-only mock will cause silent assertion failures.
 

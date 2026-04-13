@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 printf "tar %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+if [[ "${MOCK_TAR_EXIT:-0}" -ne 0 ]]; then
+  exit "${MOCK_TAR_EXIT}"
+fi
 # Find -C argument and create stub directories there, or extract file name from tar ball
 target=""
 args=("$@")

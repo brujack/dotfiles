@@ -251,3 +251,55 @@ teardown() {
   [ "$status" -eq 1 ]
   [[ "$output" == *"Failed to install Homebrew"* ]]
 }
+
+# ── install_ruby_tools ───────────────────────────────────────────────────────
+
+@test "install_ruby_tools returns non-zero when cd to ruby-install dir fails" {
+  export LINUX=1
+  unset MACOS REDHAT UBUNTU FOCAL JAMMY NOBLE
+  local _home="${BATS_TEST_TMPDIR}/home"
+  mkdir -p "${_home}/software_downloads"
+  export HOME="${_home}"
+  export MOCK_TAR_EXIT=1  # tar fails → ruby-install dir not created → cd fails
+  run install_ruby_tools
+  [ "$status" -ne 0 ]
+}
+
+@test "install_ruby_tools returns non-zero when cd to chruby dir fails" {
+  export LINUX=1
+  export FOCAL=1
+  unset MACOS REDHAT UBUNTU JAMMY NOBLE
+  local _home="${BATS_TEST_TMPDIR}/home"
+  mkdir -p "${_home}/software_downloads"
+  mkdir -p "${_home}/software_downloads/ruby-install-${RUBY_INSTALL_VER}"
+  export HOME="${_home}"
+  export MOCK_TAR_EXIT=1  # tar fails → chruby dir not created → cd fails
+  run install_ruby_tools
+  [ "$status" -ne 0 ]
+}
+
+# ── install_git_linux ────────────────────────────────────────────────────────
+
+@test "install_git_linux returns non-zero when cd to git source dir fails" {
+  export REDHAT=1
+  unset MACOS LINUX UBUNTU FOCAL JAMMY NOBLE
+  local _home="${BATS_TEST_TMPDIR}/home"
+  mkdir -p "${_home}/software_downloads"
+  export HOME="${_home}"
+  # tar mock does not create a git-* dir (no matching pattern) → cd fails
+  run install_git_linux
+  [ "$status" -ne 0 ]
+}
+
+# ── install_zsh_linux ────────────────────────────────────────────────────────
+
+@test "install_zsh_linux returns non-zero when cd to zsh source dir fails" {
+  export REDHAT=1
+  unset MACOS LINUX UBUNTU FOCAL JAMMY NOBLE
+  local _home="${BATS_TEST_TMPDIR}/home"
+  mkdir -p "${_home}/software_downloads"
+  export HOME="${_home}"
+  # tar mock does not create a zsh-* dir (no matching pattern) → cd fails
+  run install_zsh_linux
+  [ "$status" -ne 0 ]
+}

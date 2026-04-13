@@ -99,7 +99,7 @@ install_ruby_tools() {
     if [[ ! -d ${HOME}/software_downloads/ruby-install-${RUBY_INSTALL_VER} ]]; then
       wget -O ${HOME}/software_downloads/ruby-install-${RUBY_INSTALL_VER}.tar.gz https://github.com/postmodern/ruby-install/archive/v${RUBY_INSTALL_VER}.tar.gz
       tar -xzvf ${HOME}/software_downloads/ruby-install-${RUBY_INSTALL_VER}.tar.gz -C ${HOME}/software_downloads/
-      cd ${HOME}/software_downloads/ruby-install-${RUBY_INSTALL_VER}/ || exit
+      cd ${HOME}/software_downloads/ruby-install-${RUBY_INSTALL_VER}/ || return 1
       sudo make install
     fi
   fi
@@ -110,7 +110,7 @@ install_ruby_tools() {
       if [[ ! -d ${HOME}/software_downloads/chruby-${CHRUBY_VER} ]]; then
         wget -O ${HOME}/software_downloads/chruby-${CHRUBY_VER}.tar.gz https://github.com/postmodern/chruby/archive/v${CHRUBY_VER}.tar.gz
         tar -xzvf ${HOME}/software_downloads/chruby-${CHRUBY_VER}.tar.gz -C ${HOME}/software_downloads/
-        cd ${HOME}/software_downloads/chruby-${CHRUBY_VER}/ || exit
+        cd ${HOME}/software_downloads/chruby-${CHRUBY_VER}/ || return 1
         sudo make install
       fi
     fi
