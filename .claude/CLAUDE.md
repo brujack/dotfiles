@@ -83,6 +83,69 @@ A test that only covers the happy path is incomplete.
 
 Tests must be added alongside the code they cover, not as a separate pass. Every new function, every changed function, every bug fix gets a test in the same commit.
 
+### Universal Testing Pitfalls (All Languages)
+
+These pitfalls apply regardless of language. Check for each when writing or reviewing tests.
+
+**A. Test isolation — tests must not inherit state**
+
+Every test must set up all state it depends on. State left by a prior test, or leaked from the parent process, produces false passes and order-dependent failures.
+
+| Language | Common leak | Fix |
+|---|---|---|
+| Shell (BATS) | Parent shell env vars (`MACOS=1`, `LINUX=1`) leak into subprocesses | `unset MACOS LINUX` before OS-branching tests |
+| Python | Module-level globals, `os.environ` mutations persist across tests | Use `unittest.mock.patch.dict(os.environ, ...)` or restore in `tearDown` |
+| Go | Package-level vars, `os.Setenv` not cleaned up | `t.Setenv(k, v)` (auto-restores); restore manually in `t.Cleanup` |
+| Rust | Static state, `std::env::set_var` across parallel tests | Run env-sensitive tests with `-- --test-threads=1`; use `temp_env` crate |
+
+Rule: if a test works in isolation but fails when run after another test, it has a state leak.
+
+**B. Return value propagation and fail-fast**
+
+Every caller must check the return value of sub-functions. A parent that swallows failures reports success when work was skipped or corrupted. When step N fails, stop — do not proceed to step N+1 with invalid state.
+
+| Language | Swallowing pattern (wrong) | Propagating pattern (correct) |
+|---|---|---|
+| Shell | `cmd` (unchecked) or `cmd \|\| true` | `cmd \|\| return 1` |
+| Python | `except: pass` or `except Exception: log()` | `raise` or let it propagate |
+| Go | `result, _ := f()` | `result, err := f(); if err != nil { return err }` |
+| Rust | `.unwrap_or_default()` hiding errors | `?` operator or explicit `match` |
+
+Cleanup steps (temp file removal, resource release) are the exception — they must run regardless of prior failures. Use `defer` (Go), `finally` (Python), `Drop` (Rust), or `trap` (shell) rather than inline error suppression.
+
+Tests must verify that when step N fails, the parent function returns non-zero AND does not execute step N+1.
+
+**C. Test both branches of every guard/conditional**
+
+An inverted condition (`if exists { act }` instead of `if ! exists { act }`) passes all tests if only the happy path is tested. For every cache guard, existence check, or install skip condition, write two tests:
+- Condition true → assert the expected action is skipped
+- Condition false → assert the expected action runs
+
+This applies equally to shell `[[ -f file ]]`, Python `if path.exists()`, Go `if _, err := os.Stat(p); err == nil`, etc.
+
+**D. Swallowed errors in pipelines and chains**
+
+An error in the middle of a chain can be silently discarded if a later step succeeds.
+
+| Language | Pattern | Problem |
+|---|---|---|
+| Shell | `cmd1 \| cmd2` | Exit code is `cmd2`'s; `cmd1` failure is invisible |
+| Shell | `cmd; capture=$?` after another command | `$?` is the last command's exit, not `cmd`'s |
+| Python | `subprocess.run(..., check=False)` | Non-zero return ignored unless caller checks `.returncode` |
+| Go | Ignoring `err` from the first of two calls | Only second call's error is checked |
+
+Fix: capture the exit code/error immediately after the command that can fail, before anything else runs.
+
+**E. Mock fidelity — mocks must behave like the real thing**
+
+A mock that returns success without performing the real operation will pass tests that assert on return code but fail tests that assert on side effects (files created, permissions set, state changed).
+
+- Shell (BATS): filesystem mocks (`ln`, `chmod`, `mv`, `cp`) must pass through to the real binary when tests assert on actual filesystem state
+- Python: verify mock return values and side effects match what the real implementation produces
+- Go/Rust: verify that mocked interfaces return the same types and error shapes as real implementations
+
+Before committing any test that asserts on state produced by a mocked call, verify the mock actually performs the operation.
+
 ### PATH-Based Mock Pattern (BATS / Shell Tests)
 
 When using PATH-injected mocks, mocks for commands that **modify real filesystem state** must pass-through to the real binary — not just log and exit 0.
@@ -105,14 +168,14 @@ fi
 
 ### Shell Script Testing Pitfalls (BATS)
 
-These are bugs that shell tests routinely fail to catch. Check for each one when writing or reviewing shell tests.
+Shell-specific traps on top of the universal pitfalls above.
 
 **1. Parent environment leakage**
 
-Shell tests run as subprocesses. If the developer's shell has `MACOS=1`, `LINUX=1`, or any other env var from their dotfiles, it leaks into every test subprocess. Tests that simulate a different OS must explicitly `unset` all conflicting variables before sourcing or calling the function under test.
+If the developer's shell has `MACOS=1`, `LINUX=1`, or any other env var from dotfiles, it leaks into every BATS subprocess. Tests that simulate a different OS must explicitly `unset` all conflicting variables.
 
 ```bash
-# Wrong — MACOS=1 from parent shell leaks in, making CHRUBY_LOC wrong
+# Wrong — MACOS=1 from parent shell leaks in
 @test "CHRUBY_LOC is /usr/local/share on Linux" {
   export MOCK_UNAME_S="Linux"
   detect_env
@@ -121,174 +184,85 @@ Shell tests run as subprocesses. If the developer's shell has `MACOS=1`, `LINUX=
 
 # Correct
 @test "CHRUBY_LOC is /usr/local/share on Linux" {
-  unset MACOS          # must clear parent shell env
+  unset MACOS
   export MOCK_UNAME_S="Linux"
   detect_env
   [ "${CHRUBY_LOC}" = "/usr/local/share" ]
 }
 ```
-
-Rule: for every OS-branching variable (`MACOS`, `LINUX`, `UBUNTU`, etc.), explicitly `unset` the ones that must be absent. Do not rely on them being unset in the parent.
 
 **2. `$(grep -q ...)` captures nothing — condition is always true**
 
-`grep -q` suppresses all stdout. Command substitution captures stdout only. So `$(grep -q "pattern" file)` is always empty string, making `[[ ! $(grep -q ...) ]]` always true regardless of whether the pattern matches.
+`grep -q` suppresses stdout. Command substitution captures stdout only. `$(grep -q "x" file)` is always empty string, making `[[ ! $(grep -q ...) ]]` always true.
 
 ```bash
-# Wrong — always true, never detects existing entry
-if [[ ! $(grep -Fxq "/usr/local/bin/zsh" /etc/shells) ]]; then
-  # appends duplicate every time
-fi
+# Wrong — always true, appends duplicate every run
+if [[ ! $(grep -Fxq "/usr/local/bin/zsh" /etc/shells) ]]; then ...
 
-# Correct — tests exit code directly
-if ! grep -Fxq "/usr/local/bin/zsh" /etc/shells; then
-  # appends only when missing
-fi
+# Correct
+if ! grep -Fxq "/usr/local/bin/zsh" /etc/shells; then ...
 ```
 
-When you see `$( grep -q ... )` or `$( cmd --quiet ... )`, the test for it must verify behavior when the pattern IS present (function skips) and when it is NOT present (function acts).
+Test both: pattern present (function skips) and pattern absent (function acts).
 
 **3. `exit` inside functions terminates the test runner**
 
-Functions that call `exit` (e.g., `cd /path || exit`) will terminate the entire shell process when the function is sourced and called from a test. Use `return 1` inside functions.
+`cd /path || exit` terminates the entire shell when the script is sourced for testing. Use `return 1` inside functions. Grep for `|| exit` in function bodies and treat every occurrence as a bug.
 
 ```bash
-# Wrong — kills the test process when cd fails
-update_repo() {
-  cd "${PERSONAL_GITREPOS}/${DOTFILES}" || exit
-  git pull
-}
+# Wrong
+update_repo() { cd "${DIR}" || exit; git pull; }
 
 # Correct
-update_repo() {
-  cd "${PERSONAL_GITREPOS}/${DOTFILES}" || return 1
-  git pull
-}
+update_repo() { cd "${DIR}" || return 1; git pull; }
 ```
-
-Every function that could `exit` needs a test that triggers the failure path — if the test hangs or the whole suite aborts, that's the signal. Grep for `|| exit` in any function body and treat it as a bug.
 
 **4. Pipeline exit code masking**
 
-`cmd1 | cmd2 || true` — the `|| true` suppresses `cmd2`'s failure, not `cmd1`'s. But even without `|| true`, in a pipeline without `pipefail`, the exit code is `cmd2`'s. If `cmd1` failing matters, capture `$?` immediately after `cmd1` completes, before any subsequent command can overwrite it.
+In a pipeline `cmd1 | cmd2`, the exit code is `cmd2`'s. Capture `$?` immediately after the command that matters, before anything else runs.
 
 ```bash
-# Wrong — pip exit code is lost; $? after `pip check || true` is always 0
+# Wrong — pip_rc is cmd2's exit, not the python heredoc's
 python3 <<'EOF'
-import pip; ...
+...
 EOF
 pip check || true
-_update_record_end "pip" $?   # always 0
+record_result $?        # always 0
 
-# Correct — capture before anything else runs
+# Correct
 python3 <<'EOF'
-import pip; ...
+...
 EOF
-local _pip_rc=$?
+local _rc=$?
 pip check || true
-_update_record_end "pip" ${_pip_rc}
+record_result ${_rc}
 ```
-
-Tests must assert the recorded exit code, not just that the function returned 0.
-
-**9. Exit code propagation and fail-fast**
-
-Every function that calls sub-functions or external commands must propagate failure to its caller. A parent script that swallows exit codes creates silent failures — the caller reports success even when work was skipped or corrupted.
-
-Rules:
-- Functions must return a non-zero exit code when they fail. Never return 0 on failure.
-- Callers must check return values: use `cmd || return 1`, `cmd || exit 1`, or `if ! cmd; then`.
-- Do not use `|| true` on commands whose failure matters — it converts a failure into success.
-- When a step fails in a multi-step function, stop immediately (`return 1`) rather than continuing with invalid state. This is fail-fast: detect the problem at the source, not three steps later when the symptom is confusing.
-- Exception: cleanup steps (removing temp files, unsetting vars) should run regardless of prior failures. Use a `trap` for cleanup rather than inline `|| true`.
-
-```bash
-# Wrong — swallows failure, caller can't detect the problem
-run_setup() {
-  install_packages     # fails silently
-  configure_system     # runs on broken state
-  return 0             # always reports success
-}
-
-# Correct — fail-fast, propagate exit codes
-run_setup() {
-  install_packages || return 1
-  configure_system || return 1
-}
-```
-
-Tests must verify that when a step fails, the parent function returns non-zero AND does not execute subsequent steps.
 
 **5. `wc -l` returns 0 for single-line output without trailing newline**
 
-`wc -l` counts newline characters. A single line with no trailing `\n` (common from Python's `"\n".join(items)`) returns 0. Use `grep -c .` to count non-empty lines regardless of trailing newline.
-
-```bash
-# Wrong — returns 0 for exactly one package (no trailing newline)
-count=$(wc -l < "${file}")
-
-# Correct
-count=$(grep -c . "${file}" || true)
-```
-
-Always test the single-item case (boundary value) separately from the zero-item and multi-item cases.
+`wc -l` counts newlines. A single line from `"\n".join(items)` has no trailing newline → returns 0. Use `grep -c .` for non-empty line count regardless of trailing newline. Always test the single-item boundary case.
 
 **6. `readonly` crash on double-invocation**
 
-`readonly FLAG=1` is a no-op if FLAG is already `readonly` with the same value — but if the variable was previously set (non-readonly) or is readonly with a different value, bash prints an error and the line fails. Functions that set `readonly` variables will crash if called twice in the same shell session (e.g., when sourced by a test setup and then called again).
+`readonly FLAG=1` crashes if FLAG is already set (bash prints an error). Guard with `${VAR+x}`:
 
 ```bash
-# Wrong — crashes on second call
-process_args() {
-  [[ -n "${1}" ]] && readonly DRY_RUN=1
-}
+# Wrong
+[[ -n "${1}" ]] && readonly DRY_RUN=1
 
-# Correct — use ${VAR+x} (bash 3.2 compatible; [[ -v VAR ]] requires bash 4.2+)
-process_args() {
-  [[ -n "${1}" ]] && { [[ -n "${DRY_RUN+x}" ]] || readonly DRY_RUN=1; }
-}
+# Correct — bash 3.2 compatible (macOS ships 3.2; [[ -v VAR ]] requires 4.2+)
+[[ -n "${1}" ]] && { [[ -n "${DRY_RUN+x}" ]] || readonly DRY_RUN=1; }
 ```
 
-Note: `[[ -v VAR ]]` is bash 4.2+ only. macOS ships bash 3.2. Always use `[[ -n "${VAR+x}" ]]` to test whether a variable is set — it works in both bash 3.2 and 4.x.
-
-Every function that sets `readonly` variables must have a test that calls it twice. If the second call crashes, that's the bug.
+Every function that sets `readonly` variables must have a test that calls it twice.
 
 **7. Variables not exported are invisible to subprocesses**
 
-A shell variable set with `VAR=value` is local to the current shell. Child processes (Python scripts, subshells with `bash -c`, etc.) cannot see it. Any variable that a called subprocess reads must be `export`ed.
-
-```bash
-# Wrong — Python subprocess can't find _UPDATE_TMPDIR
-_UPDATE_TMPDIR=$(mktemp -d)
-python3 -c "import os; print(os.environ['_UPDATE_TMPDIR'])"  # KeyError
-
-# Correct
-export _UPDATE_TMPDIR=$(mktemp -d)
-```
-
-If a test passes when run inline but the subprocess writes to a wrong location (e.g., `/tmp` instead of the expected tmpdir), check for missing `export`.
+`VAR=value` is local to the current shell. Any subprocess (Python, `bash -c`, etc.) that reads it via `os.environ` or `$VAR` gets nothing. Use `export VAR=value`.
 
 **8. Inverted conditional logic — test both branches**
 
-When a conditional decides whether to download/install something, both branches must be tested:
-- When the cached artifact exists → should skip download
-- When the cached artifact does not exist → should download
-
-If only the happy path is tested, an inverted condition (downloading when cached, skipping when missing) passes all tests.
-
-```bash
-# Wrong — re-downloads when zip exists, never downloads when zip is absent
-if [[ -f "${ZIP}" ]]; then
-  wget -O "${ZIP}" "${URL}"   # bug: overwrites existing
-fi
-
-# Correct
-if [[ ! -f "${ZIP}" ]]; then
-  wget -O "${ZIP}" "${URL}"
-fi
-```
-
-For every install/cache guard, write two tests: one with the artifact present (assert download is skipped) and one with it absent (assert download runs).
+See Universal pitfall C. For shell specifically: for every `[[ -f file ]]` or `command -v cmd` guard, write one test where the condition is true and one where it is false.
 
 ## Linting
 
@@ -302,14 +276,15 @@ Every project Makefile must have a `lint` target, and `test` must depend on it (
 
 ### Pre-Commit Checklist
 
-Run this checklist against staged changes before every commit. Read the diff and check each item:
+Applies to every language. Read the diff and check each item before committing:
 
-1. **Conditional logic** — Are all operators correct (`&&`/`||`, `-eq`/`-ne`, `==`/`!=`)? Is grouping precedence explicit (no reliance on implicit `||`/`&&` precedence)?
-2. **Boundary values** — Does every conditional handle the boundary case? Off-by-one in loops? Empty string / zero / null inputs?
-3. **Variable state** — Is every variable initialized before use? Could any variable be stale from a prior iteration or branch? Are `readonly` / `export` / `unset` correct?
-4. **Error paths** — Does every function that can fail have its failure handled? Are early returns / exit codes correct?
-5. **Exit code propagation** — Does every caller check the return value of sub-functions? Is `|| true` used only on commands whose failure is genuinely acceptable? Does failure in step N prevent steps N+1 onward from running (fail-fast)?
-6. **Integration assumptions** — If calling another function, does the caller match the callee's actual signature and return behavior?
+1. **Conditional logic** — Are all operators correct (`&&`/`||`, `==`/`!=`, `-eq`/`-ne`, `is`/`is not`)? Is precedence explicit — no reliance on implicit operator precedence across `&&`/`||` chains?
+2. **Boundary values** — Does every conditional handle the boundary case? Off-by-one in loops? Empty string / zero / null / None inputs? Single element vs. multiple?
+3. **Variable/state scope** — Is every variable initialized before use? Could it be stale from a prior iteration or branch? Are scope modifiers (`readonly`, `export`, `final`, `const`, `global`) correct?
+4. **Error paths** — Does every function that can fail have its failure handled? Are early returns / exit codes / exceptions correct? Does partial failure leave state half-modified?
+5. **Exit code and return value propagation** — Does every caller check the return value of sub-functions? Is error suppression (`|| true`, `except: pass`, `_ =`, `.unwrap_or_default()`) used only where failure is genuinely acceptable? Does failure in step N prevent step N+1 from running on broken state (fail-fast)?
+6. **Both branches tested** — For every guard conditional (cache check, existence check, feature flag), is there a test where the condition is true AND a test where it is false? An inverted condition passes all tests if only one branch is exercised.
+7. **Integration assumptions** — If calling another function, does the caller match the callee's actual signature, return value semantics, and side effects?
 
 If any item reveals an issue, fix it before committing.
 
