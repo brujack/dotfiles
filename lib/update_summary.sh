@@ -161,7 +161,7 @@ _update_record_end() {
     pip)
       if [[ -f "${_UPDATE_TMPDIR}/pip_outdated" ]]; then
         local _pip_count
-        _pip_count=$(wc -l < "${_UPDATE_TMPDIR}/pip_outdated" | tr -d ' ')
+        _pip_count=$(grep -c . "${_UPDATE_TMPDIR}/pip_outdated" || true)
         if [[ ${_pip_count} -gt 0 ]]; then
           _result="${_pip_count} package(s) ($(paste -sd', ' - < "${_UPDATE_TMPDIR}/pip_outdated"))"
         else

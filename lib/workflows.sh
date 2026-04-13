@@ -157,6 +157,7 @@ run_update() {
 
   _UPDATE_TMPDIR=$(mktemp -d)
   export _UPDATE_TMPDIR
+  trap 'rm -rf "${_UPDATE_TMPDIR}"; unset _UPDATE_TMPDIR' EXIT INT TERM
 
   # ── brew + softwareupdate ─────────────────────────────────────────────────
   if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_BREW:-} ]]; then
@@ -260,9 +261,9 @@ PY
     if [[ -d ${HOME}/.tfenv ]]; then
       _update_record_start "tfenv"
       printf "Updating tfenv\\n"
-      cd ${HOME}/.tfenv || exit
+      cd "${HOME}/.tfenv" || return 1
       git pull
-      cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
+      cd "${PERSONAL_GITREPOS}/${DOTFILES}" || return 1
       _update_record_end "tfenv" $?
     else
       _update_skip "tfenv" "not installed"
@@ -270,9 +271,9 @@ PY
     if [[ -d ${HOME}/.oh-my-zsh ]]; then
       _update_record_start "oh-my-zsh"
       printf "Updating oh-my-zsh\\n"
-      cd ${HOME}/.oh-my-zsh || exit
+      cd "${HOME}/.oh-my-zsh" || return 1
       git pull
-      cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
+      cd "${PERSONAL_GITREPOS}/${DOTFILES}" || return 1
       _update_record_end "oh-my-zsh" $?
     else
       _update_skip "oh-my-zsh" "not installed"
@@ -280,9 +281,9 @@ PY
     if [[ -d ${HOME}/.oh-my-zsh/custom/themes/powerlevel10k ]]; then
       _update_record_start "p10k"
       printf "Updating powerlevel10k\\n"
-      cd ${HOME}/.oh-my-zsh/custom/themes/powerlevel10k || exit
+      cd "${HOME}/.oh-my-zsh/custom/themes/powerlevel10k" || return 1
       git pull
-      cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
+      cd "${PERSONAL_GITREPOS}/${DOTFILES}" || return 1
       _update_record_end "p10k" $?
     else
       _update_skip "p10k" "not installed"
@@ -290,9 +291,9 @@ PY
     if [[ -d ${HOME}/.tmux/plugins/tpm ]]; then
       _update_record_start "tpm"
       printf "Updating tpm\\n"
-      cd ${HOME}/.tmux/plugins/tpm || exit
+      cd "${HOME}/.tmux/plugins/tpm" || return 1
       git pull
-      cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
+      cd "${PERSONAL_GITREPOS}/${DOTFILES}" || return 1
       _update_record_end "tpm" $?
     else
       _update_skip "tpm" "not installed"
@@ -312,9 +313,9 @@ PY
     fi
     if [[ -d ${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions ]]; then
       printf "Updating zsh-autosuggestions\\n"
-      cd ${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions || exit
+      cd "${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions" || return 1
       git pull
-      cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
+      cd "${PERSONAL_GITREPOS}/${DOTFILES}" || return 1
     fi
   else
     _update_skip "tfenv" "flag not set"
@@ -336,9 +337,6 @@ PY
 
   # ── summary ───────────────────────────────────────────────────────────────
   _update_summary
-
-  rm -rf "${_UPDATE_TMPDIR}"
-  unset _UPDATE_TMPDIR
 }
 
 _fetch_github_latest() {
