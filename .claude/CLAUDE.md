@@ -266,6 +266,24 @@ Every function that sets `readonly` variables must have a test that calls it twi
 
 See Universal pitfall C. For shell specifically: for every `[[ -f file ]]` or `command -v cmd` guard, write one test where the condition is true and one where it is false.
 
+**9. Direct-call error capture — use `|| _rc=$?`, not bare call + `local _rc=$?`**
+
+BATS fires an ERR trap on any non-zero return from a bare command in the test body. If you call a function directly (without `run`) to capture its exit code, a plain call followed by `local _rc=$?` will never reach the capture line — the ERR trap fires first and marks the test failed.
+
+```bash
+# Wrong — ERR trap fires at the bare call; local _rc=$? is never reached
+some_function
+local _rc=$?
+[ "${_rc}" -ne 0 ]
+
+# Correct — || prevents ERR trap; _rc captures the exit code
+local _rc=0
+some_function || _rc=$?
+[ "${_rc}" -ne 0 ]
+```
+
+This also provides TDD signal: with `exit 1` (pre-fix) the BATS shell itself dies — catastrophic failure. With `return 1` (post-fix) the `||` branch captures the code and the assertion passes. A test using `run` can't distinguish the two because both give `$status=1`.
+
 ## Linting
 
 Every project Makefile must have a `lint` target, and `test` must depend on it (`test: lint`).
