@@ -446,15 +446,15 @@ process_args() {
   local _short_args=()
   for _arg in "$@"; do
     case "${_arg}" in
-      --dry-run)       [[ -v DRY_RUN ]]         || readonly DRY_RUN=1 ;;
-      --brew-only)     [[ -v UPDATE_BREW ]]     || readonly UPDATE_BREW=1 ;;
-      --pip-only)      [[ -v UPDATE_PIP ]]      || readonly UPDATE_PIP=1 ;;
-      --gems-only)     [[ -v UPDATE_GEMS ]]     || readonly UPDATE_GEMS=1 ;;
-      --mas-only)      [[ -v UPDATE_MAS ]]      || readonly UPDATE_MAS=1 ;;
-      --claude-only)   [[ -v UPDATE_CLAUDE ]]   || readonly UPDATE_CLAUDE=1 ;;
-      --brew-install)  [[ -v SETUP_BREW ]]      || readonly SETUP_BREW=1 ;;
-      --mas-install)   [[ -v SETUP_MAS ]]       || readonly SETUP_MAS=1 ;;
-      --update)        [[ -v UPDATE_VERSIONS ]] || readonly UPDATE_VERSIONS=1 ;;
+      --dry-run)       [[ -n "${DRY_RUN+x}" ]]         || readonly DRY_RUN=1 ;;
+      --brew-only)     [[ -n "${UPDATE_BREW+x}" ]]     || readonly UPDATE_BREW=1 ;;
+      --pip-only)      [[ -n "${UPDATE_PIP+x}" ]]      || readonly UPDATE_PIP=1 ;;
+      --gems-only)     [[ -n "${UPDATE_GEMS+x}" ]]     || readonly UPDATE_GEMS=1 ;;
+      --mas-only)      [[ -n "${UPDATE_MAS+x}" ]]      || readonly UPDATE_MAS=1 ;;
+      --claude-only)   [[ -n "${UPDATE_CLAUDE+x}" ]]   || readonly UPDATE_CLAUDE=1 ;;
+      --brew-install)  [[ -n "${SETUP_BREW+x}" ]]      || readonly SETUP_BREW=1 ;;
+      --mas-install)   [[ -n "${SETUP_MAS+x}" ]]       || readonly SETUP_MAS=1 ;;
+      --update)        [[ -n "${UPDATE_VERSIONS+x}" ]] || readonly UPDATE_VERSIONS=1 ;;
       *) _short_args+=("${_arg}") ;;
     esac
   done
