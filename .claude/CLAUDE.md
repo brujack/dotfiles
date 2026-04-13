@@ -103,6 +103,163 @@ fi
 
 **Before committing any test that checks real filesystem state**, verify that every mock in the call chain either passes through or that the test doesn't depend on the real operation having occurred.
 
+### Shell Script Testing Pitfalls (BATS)
+
+These are bugs that shell tests routinely fail to catch. Check for each one when writing or reviewing shell tests.
+
+**1. Parent environment leakage**
+
+Shell tests run as subprocesses. If the developer's shell has `MACOS=1`, `LINUX=1`, or any other env var from their dotfiles, it leaks into every test subprocess. Tests that simulate a different OS must explicitly `unset` all conflicting variables before sourcing or calling the function under test.
+
+```bash
+# Wrong — MACOS=1 from parent shell leaks in, making CHRUBY_LOC wrong
+@test "CHRUBY_LOC is /usr/local/share on Linux" {
+  export MOCK_UNAME_S="Linux"
+  detect_env
+  [ "${CHRUBY_LOC}" = "/usr/local/share" ]
+}
+
+# Correct
+@test "CHRUBY_LOC is /usr/local/share on Linux" {
+  unset MACOS          # must clear parent shell env
+  export MOCK_UNAME_S="Linux"
+  detect_env
+  [ "${CHRUBY_LOC}" = "/usr/local/share" ]
+}
+```
+
+Rule: for every OS-branching variable (`MACOS`, `LINUX`, `UBUNTU`, etc.), explicitly `unset` the ones that must be absent. Do not rely on them being unset in the parent.
+
+**2. `$(grep -q ...)` captures nothing — condition is always true**
+
+`grep -q` suppresses all stdout. Command substitution captures stdout only. So `$(grep -q "pattern" file)` is always empty string, making `[[ ! $(grep -q ...) ]]` always true regardless of whether the pattern matches.
+
+```bash
+# Wrong — always true, never detects existing entry
+if [[ ! $(grep -Fxq "/usr/local/bin/zsh" /etc/shells) ]]; then
+  # appends duplicate every time
+fi
+
+# Correct — tests exit code directly
+if ! grep -Fxq "/usr/local/bin/zsh" /etc/shells; then
+  # appends only when missing
+fi
+```
+
+When you see `$( grep -q ... )` or `$( cmd --quiet ... )`, the test for it must verify behavior when the pattern IS present (function skips) and when it is NOT present (function acts).
+
+**3. `exit` inside functions terminates the test runner**
+
+Functions that call `exit` (e.g., `cd /path || exit`) will terminate the entire shell process when the function is sourced and called from a test. Use `return 1` inside functions.
+
+```bash
+# Wrong — kills the test process when cd fails
+update_repo() {
+  cd "${PERSONAL_GITREPOS}/${DOTFILES}" || exit
+  git pull
+}
+
+# Correct
+update_repo() {
+  cd "${PERSONAL_GITREPOS}/${DOTFILES}" || return 1
+  git pull
+}
+```
+
+Every function that could `exit` needs a test that triggers the failure path — if the test hangs or the whole suite aborts, that's the signal. Grep for `|| exit` in any function body and treat it as a bug.
+
+**4. Pipeline exit code masking**
+
+`cmd1 | cmd2 || true` — the `|| true` suppresses `cmd2`'s failure, not `cmd1`'s. But even without `|| true`, in a pipeline without `pipefail`, the exit code is `cmd2`'s. If `cmd1` failing matters, capture `$?` immediately after `cmd1` completes, before any subsequent command can overwrite it.
+
+```bash
+# Wrong — pip exit code is lost; $? after `pip check || true` is always 0
+python3 <<'EOF'
+import pip; ...
+EOF
+pip check || true
+_update_record_end "pip" $?   # always 0
+
+# Correct — capture before anything else runs
+python3 <<'EOF'
+import pip; ...
+EOF
+local _pip_rc=$?
+pip check || true
+_update_record_end "pip" ${_pip_rc}
+```
+
+Tests must assert the recorded exit code, not just that the function returned 0.
+
+**5. `wc -l` returns 0 for single-line output without trailing newline**
+
+`wc -l` counts newline characters. A single line with no trailing `\n` (common from Python's `"\n".join(items)`) returns 0. Use `grep -c .` to count non-empty lines regardless of trailing newline.
+
+```bash
+# Wrong — returns 0 for exactly one package (no trailing newline)
+count=$(wc -l < "${file}")
+
+# Correct
+count=$(grep -c . "${file}" || true)
+```
+
+Always test the single-item case (boundary value) separately from the zero-item and multi-item cases.
+
+**6. `readonly` crash on double-invocation**
+
+`readonly FLAG=1` is a no-op if FLAG is already `readonly` with the same value — but if the variable was previously set (non-readonly) or is readonly with a different value, bash prints an error and the line fails. Functions that set `readonly` variables will crash if called twice in the same shell session (e.g., when sourced by a test setup and then called again).
+
+```bash
+# Wrong — crashes on second call
+process_args() {
+  [[ -n "${1}" ]] && readonly DRY_RUN=1
+}
+
+# Correct
+process_args() {
+  [[ -n "${1}" ]] && { [[ -v DRY_RUN ]] || readonly DRY_RUN=1; }
+}
+```
+
+Every function that sets `readonly` variables must have a test that calls it twice. If the second call crashes, that's the bug.
+
+**7. Variables not exported are invisible to subprocesses**
+
+A shell variable set with `VAR=value` is local to the current shell. Child processes (Python scripts, subshells with `bash -c`, etc.) cannot see it. Any variable that a called subprocess reads must be `export`ed.
+
+```bash
+# Wrong — Python subprocess can't find _UPDATE_TMPDIR
+_UPDATE_TMPDIR=$(mktemp -d)
+python3 -c "import os; print(os.environ['_UPDATE_TMPDIR'])"  # KeyError
+
+# Correct
+export _UPDATE_TMPDIR=$(mktemp -d)
+```
+
+If a test passes when run inline but the subprocess writes to a wrong location (e.g., `/tmp` instead of the expected tmpdir), check for missing `export`.
+
+**8. Inverted conditional logic — test both branches**
+
+When a conditional decides whether to download/install something, both branches must be tested:
+- When the cached artifact exists → should skip download
+- When the cached artifact does not exist → should download
+
+If only the happy path is tested, an inverted condition (downloading when cached, skipping when missing) passes all tests.
+
+```bash
+# Wrong — re-downloads when zip exists, never downloads when zip is absent
+if [[ -f "${ZIP}" ]]; then
+  wget -O "${ZIP}" "${URL}"   # bug: overwrites existing
+fi
+
+# Correct
+if [[ ! -f "${ZIP}" ]]; then
+  wget -O "${ZIP}" "${URL}"
+fi
+```
+
+For every install/cache guard, write two tests: one with the artifact present (assert download is skipped) and one with it absent (assert download runs).
+
 ## Linting
 
 Every project Makefile must have a `lint` target, and `test` must depend on it (`test: lint`).
