@@ -91,7 +91,7 @@ install_homebrew() {
 
 install_git_macos() {
   log_info "Installing git"
-  if brew list | grep '^git$' &> /dev/null; then
+  if command -v brew &> /dev/null && brew list | grep '^git$' &> /dev/null; then
     log_info "Git (from Homebrew) is already installed."
     return 0
   fi
@@ -110,7 +110,7 @@ install_git_macos() {
 
 install_zsh_macos() {
   log_info "Installing zsh"
-  if brew list | grep '^zsh$' &> /dev/null; then
+  if command -v brew &> /dev/null && brew list | grep '^zsh$' &> /dev/null; then
     log_info "zsh (from Homebrew) is already installed."
     return 0
   fi

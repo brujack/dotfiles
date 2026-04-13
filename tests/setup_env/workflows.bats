@@ -632,3 +632,16 @@ setup_constants_copy() {
   [ -f "${BATS_TEST_TMPDIR}/update.log" ]
   grep -q "Update Summary" "${BATS_TEST_TMPDIR}/update.log"
 }
+
+@test "run_update skips softwareupdate on Linux" {
+  export LINUX=1
+  export UBUNTU=1
+  unset MACOS
+  export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
+  export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
+  run_update
+  # softwareupdate must not have been called
+  if [[ -f "${MOCK_CALLS_FILE}" ]]; then
+    ! grep -q "^softwareupdate" "${MOCK_CALLS_FILE}"
+  fi
+}

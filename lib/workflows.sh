@@ -166,10 +166,14 @@ run_update() {
       brew_update
       _update_record_end "brew" $?
 
-      _update_record_start "softwareupdate"
-      printf "Updating app store apps softwareupdate\\n"
-      sudo -H softwareupdate --install --all --verbose
-      _update_record_end "softwareupdate" $?
+      if [[ -n ${MACOS} ]]; then
+        _update_record_start "softwareupdate"
+        printf "Updating app store apps softwareupdate\\n"
+        sudo -H softwareupdate --install --all --verbose
+        _update_record_end "softwareupdate" $?
+      else
+        _update_skip "softwareupdate" "not macOS"
+      fi
     else
       _update_skip "brew" "not macOS or Linux"
       _update_skip "softwareupdate" "not macOS or Linux"
@@ -243,10 +247,11 @@ with open(os.path.join(tmpdir, "pip_outdated"), "w") as f:
 if pkgs:
     subprocess.check_call([sys.executable, "-m", "pip", "install", "-U", *pkgs])
 PY
+      local _pip_rc=$?
 
       "$PYTHON" -m pip check || true
       printf "Updated pip packages\n"
-      _update_record_end "pip" $?
+      _update_record_end "pip" ${_pip_rc}
     else
       _update_skip "pip" "HAS_DEVTOOLS not set"
     fi
