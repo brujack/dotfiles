@@ -40,7 +40,7 @@ install_git_linux() {
       log_info "Installing Redhat git"
       wget -O ${HOME}/software_downloads/git-${GIT_VER}.tar.gz ${GIT_URL}/git-${GIT_VER}.tar.gz
       tar -zxvf ${HOME}/software_downloads/git-${GIT_VER}.tar.gz -C ${HOME}/software_downloads
-      cd ${HOME}/software_downloads/git-${GIT_VER} || exit
+      cd ${HOME}/software_downloads/git-${GIT_VER} || return 1
       make configure
       ./configure --prefix=/usr
       make -j "$(nproc)" all doc info
@@ -90,7 +90,7 @@ install_zsh_linux() {
       log_info "Installing Redhat zsh"
       wget -O ${HOME}/software_downloads/zsh-${ZSH_VER}.tar.xz http://www.zsh.org/pub/zsh-${ZSH_VER}.tar.xz
       tar -xvf ${HOME}/software_downloads/zsh-${ZSH_VER}.tar.xz -C ${HOME}/software_downloads
-      cd ${HOME}/software_downloads/zsh-${ZSH_VER} || exit
+      cd ${HOME}/software_downloads/zsh-${ZSH_VER} || return 1
       ./configure --prefix=/usr/local --bindir=/usr/local/bin --sysconfdir=/etc/zsh --enable-etcdir=/etc/zsh
       make
       sudo -H make install
@@ -211,7 +211,11 @@ install_ubuntu_packages() {
   fi
 
   printf "Installing pyenv\\n"
-  curl https://pyenv.run | bash
+  local _pyenv_script
+  _pyenv_script="$(mktemp)"
+  curl -fsSL https://pyenv.run -o "${_pyenv_script}" || { rm -f "${_pyenv_script}"; return 1; }
+  bash "${_pyenv_script}"
+  rm -f "${_pyenv_script}"
   if [[ -x $(command -v pyenv) ]]; then
     printf "pyenv is installed\\n"
   fi
@@ -792,8 +796,12 @@ install_ubuntu_packages() {
   fi
 
   printf "Installing kustomize\\n"
-  cd ${HOME}/software_downloads || exit
-  curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+  cd ${HOME}/software_downloads || return 1
+  local _kustomize_script
+  _kustomize_script="$(mktemp)"
+  curl -fsSL "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" -o "${_kustomize_script}" || { rm -f "${_kustomize_script}"; return 1; }
+  bash "${_kustomize_script}"
+  rm -f "${_kustomize_script}"
   if [[ -f ${HOME}/software_downloads/kustomize ]]; then
     sudo -H mv ${HOME}/software_downloads/kustomize /usr/local/bin/kustomize
     sudo chmod 755 /usr/local/bin/kustomize
@@ -852,7 +860,11 @@ install_rhel_packages() {
   sudo -H dnf install zlib-devel -y
 
   printf "Installing pyenv\\n"
-  curl https://pyenv.run | bash
+  local _pyenv_script_rhel
+  _pyenv_script_rhel="$(mktemp)"
+  curl -fsSL https://pyenv.run -o "${_pyenv_script_rhel}" || { rm -f "${_pyenv_script_rhel}"; return 1; }
+  bash "${_pyenv_script_rhel}"
+  rm -f "${_pyenv_script_rhel}"
   if [[ -x $(command -v pyenv) ]]; then
     printf "pyenv is installed\\n"
   fi
@@ -861,7 +873,7 @@ install_rhel_packages() {
   if [[ ! -d ${HOME}/software_downloads/shellcheck-v${SHELLCHECK_VER} ]]; then
     wget -O ${HOME}/software_downloads/shellcheck-v${SHELLCHECK_VER}.linux.x86_64.tar.xz https://shellcheck.storage.googleapis.com/shellcheck-v${SHELLCHECK_VER}.linux.x86_64.tar.xz
     xz --decompress ${HOME}/software_downloads/shellcheck-v${SHELLCHECK_VER}.linux.x86_64.tar.xz
-    cd ${HOME}/software_downloads || exit
+    cd ${HOME}/software_downloads || return 1
     tar -xf ${HOME}/software_downloads/shellcheck-v${SHELLCHECK_VER}.linux.x86_64.tar
     sudo cp -a ${HOME}/software_downloads/shellcheck-v${SHELLCHECK_VER}/shellcheck /usr/local/bin/
     sudo chmod 755 /usr/local/bin/shellcheck
