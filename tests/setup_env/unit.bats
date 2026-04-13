@@ -3,8 +3,10 @@
 setup() {
   REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
   source "${REPO_ROOT}/tests/helpers/common.bash"
+  load_mocks
   load_setup_env
   TMPDIR_TEST="$(mktemp -d)"
+  export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
 }
 
 teardown() {
@@ -288,6 +290,44 @@ teardown() {
   run run_cmd touch "${tmpfile}"
   unset DRY_RUN
   [ ! -f "${tmpfile}" ]
+}
+
+# ── safe_link error handling ──────────────────────────────────────────────────
+
+@test "safe_link restores backup when ln fails" {
+  export MOCK_LN_EXIT=1
+  local src="${BATS_TEST_TMPDIR}/src_file"
+  local dest="${BATS_TEST_TMPDIR}/dest_file"
+  touch "${src}" "${dest}"
+  run safe_link "${src}" "${dest}"
+  unset MOCK_LN_EXIT
+  [ "$status" -ne 0 ]
+  [ -f "${dest}" ]
+  [ ! -L "${dest}" ]
+}
+
+@test "safe_link returns 1 when ln fails with no pre-existing file" {
+  export MOCK_LN_EXIT=1
+  local src="${BATS_TEST_TMPDIR}/src_file"
+  local dest="${BATS_TEST_TMPDIR}/dest_link"
+  touch "${src}"
+  run safe_link "${src}" "${dest}"
+  unset MOCK_LN_EXIT
+  [ "$status" -ne 0 ]
+}
+
+# ── process_args double-invocation safety ─────────────────────────────────────
+
+@test "process_args does not crash when called twice with --dry-run" {
+  process_args --dry-run -t setup_user
+  run process_args --dry-run -t setup_user
+  [ "$status" -eq 0 ]
+}
+
+@test "process_args does not crash when called twice with --brew-only" {
+  process_args -t update --brew-only
+  run process_args -t update --brew-only
+  [ "$status" -eq 0 ]
 }
 
 # ── safe_link dry-run ─────────────────────────────────────────────────────────

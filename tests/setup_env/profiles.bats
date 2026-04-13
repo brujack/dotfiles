@@ -97,6 +97,32 @@ teardown() {
   [ -z "${HAS_DOCKER:-}" ]
 }
 
+@test "CHRUBY_LOC is set on macOS for unknown hostname" {
+  export MOCK_HOSTNAME_OUTPUT="unknownhost"
+  export MOCK_UNAME_S="Darwin"
+  source "${REPO_ROOT}/lib/detect_env.sh"
+  detect_env
+  [ -n "${CHRUBY_LOC:-}" ]
+}
+
+@test "CHRUBY_LOC points to homebrew path on macOS" {
+  export MOCK_HOSTNAME_OUTPUT="unknownhost"
+  export MOCK_UNAME_S="Darwin"
+  source "${REPO_ROOT}/lib/detect_env.sh"
+  detect_env
+  [ "${CHRUBY_LOC}" = "/opt/homebrew/opt/chruby/share" ]
+}
+
+@test "CHRUBY_LOC points to local share on Linux" {
+  export MOCK_HOSTNAME_OUTPUT="workstation"
+  export MOCK_UNAME_S="Linux"
+  export MOCK_AWK_OS_NAME="Ubuntu"
+  unset MACOS
+  source "${REPO_ROOT}/lib/detect_env.sh"
+  detect_env
+  [ "${CHRUBY_LOC}" = "/usr/local/share" ]
+}
+
 @test "HAS_PRINTING is set for mac_mini" {
   export MOCK_HOSTNAME_OUTPUT="office"
   source "${REPO_ROOT}/lib/detect_env.sh"

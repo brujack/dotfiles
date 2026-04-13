@@ -46,7 +46,13 @@ safe_link() {
     log_warn "Backing up existing file: ${dest} → ${dest}.bak"
     run_cmd mv "${dest}" "${dest}.bak"
   fi
-  run_cmd ln -s "${src}" "${dest}"
+  if ! run_cmd ln -s "${src}" "${dest}"; then
+    log_error "Failed to create symlink: ${dest} → ${src}"
+    if [[ -e "${dest}.bak" ]]; then
+      run_cmd mv "${dest}.bak" "${dest}"
+    fi
+    return 1
+  fi
   log_info "Linked ${dest} → ${src}"
 }
 
@@ -440,15 +446,15 @@ process_args() {
   local _short_args=()
   for _arg in "$@"; do
     case "${_arg}" in
-      --dry-run)       readonly DRY_RUN=1 ;;
-      --brew-only)     readonly UPDATE_BREW=1 ;;
-      --pip-only)      readonly UPDATE_PIP=1 ;;
-      --gems-only)     readonly UPDATE_GEMS=1 ;;
-      --mas-only)      readonly UPDATE_MAS=1 ;;
-      --claude-only)   readonly UPDATE_CLAUDE=1 ;;
-      --brew-install)  readonly SETUP_BREW=1 ;;
-      --mas-install)   readonly SETUP_MAS=1 ;;
-      --update)        readonly UPDATE_VERSIONS=1 ;;
+      --dry-run)       [[ -v DRY_RUN ]]         || readonly DRY_RUN=1 ;;
+      --brew-only)     [[ -v UPDATE_BREW ]]     || readonly UPDATE_BREW=1 ;;
+      --pip-only)      [[ -v UPDATE_PIP ]]      || readonly UPDATE_PIP=1 ;;
+      --gems-only)     [[ -v UPDATE_GEMS ]]     || readonly UPDATE_GEMS=1 ;;
+      --mas-only)      [[ -v UPDATE_MAS ]]      || readonly UPDATE_MAS=1 ;;
+      --claude-only)   [[ -v UPDATE_CLAUDE ]]   || readonly UPDATE_CLAUDE=1 ;;
+      --brew-install)  [[ -v SETUP_BREW ]]      || readonly SETUP_BREW=1 ;;
+      --mas-install)   [[ -v SETUP_MAS ]]       || readonly SETUP_MAS=1 ;;
+      --update)        [[ -v UPDATE_VERSIONS ]] || readonly UPDATE_VERSIONS=1 ;;
       *) _short_args+=("${_arg}") ;;
     esac
   done
@@ -508,8 +514,7 @@ setup_dotfile_symlinks() {
 
   if [[ -n ${MACOS} ]] || [[ -n ${LINUX} ]]; then
     log_info "Creating ${HOME}/.tf_creds"
-    mkdir -p ${HOME}/.tf_creds
-    if [[ -d ${HOME}/.tf_creds ]]; then
+    if mkdir -p ${HOME}/.tf_creds; then
       chmod 700 ${HOME}/.tf_creds
       log_info "Created ${HOME}/.tf_creds"
     fi
@@ -552,8 +557,7 @@ setup_dotfile_symlinks() {
   safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/bruce.zsh-theme" "${HOME}/.oh-my-zsh/custom/themes/bruce.zsh-theme"
 
   log_info "Creating ${HOME}/.tmux"
-  mkdir -p ${HOME}/.tmux
-  if [[ -d ${HOME}/.tmux ]]; then
+  if mkdir -p ${HOME}/.tmux; then
     log_info "Created ${HOME}/.tmux"
   fi
 
@@ -566,8 +570,7 @@ setup_dotfile_symlinks() {
   fi
 
   log_info "Creating ${HOME}/.warp"
-  mkdir -p ${HOME}/.warp
-  if [[ -d ${HOME}/.warp ]]; then
+  if mkdir -p ${HOME}/.warp; then
     chmod 700 ${HOME}/.warp
     log_info "Created ${HOME}/.warp"
   fi
@@ -575,15 +578,13 @@ setup_dotfile_symlinks() {
   safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.warp/launch_configurations" "${HOME}/.warp/launch_configurations"
 
   log_info "Creating ${HOME}/.ssh"
-  mkdir -p ${HOME}/.ssh
-  if [[ -d ${HOME}/.ssh ]]; then
+  if mkdir -p ${HOME}/.ssh; then
     chmod 700 ${HOME}/.ssh
     log_info "Created ${HOME}/.ssh"
   fi
 
   log_info "Creating ${HOME}/.claude"
-  mkdir -p ${HOME}/.claude
-  if [[ -d ${HOME}/.claude ]]; then
+  if mkdir -p ${HOME}/.claude; then
     log_info "Created ${HOME}/.claude"
   fi
   for _claude_item in "${PERSONAL_GITREPOS}/${DOTFILES}/.claude/"*; do
@@ -663,8 +664,7 @@ setup_dotfile_symlinks() {
   safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.ssh/teleport.cfg" "${HOME}/.ssh/teleport.cfg"
 
   log_info "Creating ${HOME}/.tsh"
-  mkdir -p ${HOME}/.tsh
-  if [[ -d ${HOME}/.tsh ]]; then
+  if mkdir -p ${HOME}/.tsh; then
     chmod 700 ${HOME}/.tsh
     log_info "Created ${HOME}/.tsh"
   fi
@@ -672,22 +672,19 @@ setup_dotfile_symlinks() {
 
 setup_credential_directories() {
   log_info "Creating ${HOME}/.aws"
-  mkdir -p ${HOME}/.aws
-  if [[ -d ${HOME}/.aws ]]; then
+  if mkdir -p ${HOME}/.aws; then
     chmod 700 ${HOME}/.aws
     log_info "Created ${HOME}/.aws"
   fi
 
   log_info "Creating ${HOME}/.gcloud_creds"
-  mkdir -p ${HOME}/.gcloud_creds
-  if [[ -d ${HOME}/.gcloud_creds ]]; then
+  if mkdir -p ${HOME}/.gcloud_creds; then
     chmod 700 ${HOME}/.gcloud_creds
     log_info "Created ${HOME}/.gcloud_creds"
   fi
 
   log_info "Creating ${HOME}/.azure_creds"
-  mkdir -p ${HOME}/.azure_creds
-  if [[ -d ${HOME}/.azure_creds ]]; then
+  if mkdir -p ${HOME}/.azure_creds; then
     chmod 700 ${HOME}/.azure_creds
     log_info "Created ${HOME}/.azure_creds"
   fi

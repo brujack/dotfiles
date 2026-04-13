@@ -94,12 +94,10 @@ install_zsh_linux() {
       ./configure --prefix=/usr/local --bindir=/usr/local/bin --sysconfdir=/etc/zsh --enable-etcdir=/etc/zsh
       make
       sudo -H make install
-      # shellcheck disable=SC2143 # grep -Fxq has no output; checking if line absent
-      if [[ ! $(grep -Fxq "/usr/local/bin/zsh" /etc/shells) ]]; then
+      if ! grep -Fxq "/usr/local/bin/zsh" /etc/shells; then
         sudo -H sh -c 'echo /usr/local/bin/zsh >> /etc/shells'
       fi
-      # shellcheck disable=SC2143 # grep -Fxq has no output; checking if line absent
-      if [[ ! $(grep -Fxq "/bin/zsh" /etc/shells) ]]; then
+      if ! grep -Fxq "/bin/zsh" /etc/shells; then
         sudo -H sh -c 'echo /bin/zsh >> /etc/shells'
       fi
     fi
@@ -512,7 +510,7 @@ install_ubuntu_packages() {
   if [[ -n ${HAS_DEVTOOLS} ]]; then
     printf "Installing cloudflared\\n"
     curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
-    echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ jammy main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
+    echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
     sudo apt-get update
     sudo apt-get install cloudflare-warp -y
     if [[ -x $(command -v cloudflared) ]]; then
@@ -1003,12 +1001,7 @@ install_linux_packages() {
   fi
 
   printf "Installing tflint\\n"
-  if [[ -f ${HOME}/software_downloads/tflint_linux_amd64.zip ]]; then
-    rm ${HOME}/software_downloads/tflint_linux_amd64.zip
-    wget -O ${HOME}/software_downloads/tflint_linux_amd64.zip ${TFLINT_URL}
-    sudo -H unzip ${HOME}/software_downloads/tflint_linux_amd64.zip -d /usr/local/bin
-    sudo -H chmod 755 /usr/local/bin/tflint
-  else
+  if [[ ! -f ${HOME}/software_downloads/tflint_linux_amd64.zip ]]; then
     wget -O ${HOME}/software_downloads/tflint_linux_amd64.zip ${TFLINT_URL}
     sudo -H unzip ${HOME}/software_downloads/tflint_linux_amd64.zip -d /usr/local/bin
     sudo -H chmod 755 /usr/local/bin/tflint
