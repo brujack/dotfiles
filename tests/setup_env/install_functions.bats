@@ -303,3 +303,47 @@ teardown() {
   run install_zsh_linux
   [ "$status" -ne 0 ]
 }
+
+# ── install_git_linux — version verification ──────────────────────────────────
+
+@test "install_git_linux returns non-zero when installed git version does not match" {
+  # Use || _rc=$? so BATS ERR trap does not fire on the non-zero return.
+  # With exit 1 (pre-fix) the BATS shell itself dies — test fails catastrophically.
+  # With return 1 (post-fix) the || branch captures the code and the assertion runs.
+  export REDHAT=1
+  unset MACOS LINUX UBUNTU FEDORA CENTOS
+  local _home="${BATS_TEST_TMPDIR}/home"
+  mkdir -p "${_home}/software_downloads"
+  # Pre-create git source dir with stub configure so ./configure succeeds
+  local _gitdir="${_home}/software_downloads/git-${GIT_VER}"
+  mkdir -p "${_gitdir}"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "${_gitdir}/configure"
+  chmod +x "${_gitdir}/configure"
+  export HOME="${_home}"
+  # git mock outputs nothing to stdout, so git --version | awk returns ""
+  # which will not match GIT_VER, triggering the version-mismatch error branch.
+  local _rc=0
+  install_git_linux || _rc=$?
+  [ "${_rc}" -ne 0 ]
+}
+
+# ── install_ubuntu_packages — unsupported Go version ─────────────────────────
+
+@test "install_ubuntu_packages returns non-zero for unsupported Go version" {
+  # Use || _rc=$? so BATS ERR trap does not fire on the non-zero return.
+  # With exit 1 (pre-fix) the BATS shell itself dies — test fails catastrophically.
+  # With return 1 (post-fix) the || branch captures the code and the assertion runs.
+  export UBUNTU=1
+  export NOBLE=1
+  unset MACOS LINUX REDHAT FEDORA CENTOS FOCAL JAMMY BIONIC HAS_SNAP HAS_RUST
+  export MOCK_UNAME_S=Linux
+  local _home="${BATS_TEST_TMPDIR}/home"
+  mkdir -p "${_home}/software_downloads"
+  export HOME="${_home}"
+  local _saved_go_ver="${GO_VER}"
+  local _rc=0
+  GO_VER="99.99"
+  install_ubuntu_packages || _rc=$?
+  GO_VER="${_saved_go_ver}"
+  [ "${_rc}" -ne 0 ]
+}

@@ -645,3 +645,121 @@ setup_constants_copy() {
     ! grep -q "^softwareupdate" "${MOCK_CALLS_FILE}"
   fi
 }
+
+# ── return-code propagation: run_setup_user ───────────────────────────────────
+
+@test "run_setup_user returns non-zero when install_rosetta fails" {
+  export MACOS=1
+  unset LINUX UBUNTU REDHAT FEDORA CENTOS
+  install_rosetta() { return 1; }
+  run run_setup_user
+  [ "$status" -ne 0 ]
+}
+
+@test "run_setup_user does not call install_git when install_rosetta fails" {
+  export MACOS=1
+  export FEDORA=1
+  unset LINUX UBUNTU REDHAT CENTOS
+  install_rosetta() { return 1; }
+  install_git() { printf "install_git\n" >> "${MOCK_CALLS_FILE}"; return 0; }
+  run run_setup_user
+  ! grep -q "install_git" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_setup_user returns non-zero when clone_or_update_dotfiles fails" {
+  export MACOS=1
+  unset LINUX UBUNTU REDHAT FEDORA CENTOS
+  clone_or_update_dotfiles() { return 1; }
+  run run_setup_user
+  [ "$status" -ne 0 ]
+}
+
+@test "run_setup_user returns non-zero when setup_dotfile_symlinks fails" {
+  export MACOS=1
+  unset LINUX UBUNTU REDHAT FEDORA CENTOS
+  setup_dotfile_symlinks() { return 1; }
+  run run_setup_user
+  [ "$status" -ne 0 ]
+}
+
+@test "run_setup_user returns non-zero when setup_zsh_as_default_shell fails" {
+  export MACOS=1
+  unset LINUX UBUNTU REDHAT FEDORA CENTOS
+  setup_zsh_as_default_shell() { return 1; }
+  run run_setup_user
+  [ "$status" -ne 0 ]
+}
+
+# ── return-code propagation: run_setup_or_developer ───────────────────────────
+
+@test "run_setup_or_developer returns non-zero when install_ubuntu_packages fails" {
+  export UBUNTU=1
+  export NOBLE=1
+  unset MACOS LINUX REDHAT FEDORA CENTOS
+  install_ubuntu_packages() { return 1; }
+  run run_setup_or_developer
+  [ "$status" -ne 0 ]
+}
+
+@test "run_setup_or_developer does not call install_aws_tools when install_ubuntu_packages fails" {
+  export UBUNTU=1
+  export NOBLE=1
+  unset MACOS LINUX REDHAT FEDORA CENTOS
+  install_ubuntu_packages() { return 1; }
+  install_aws_tools() { printf "install_aws_tools\n" >> "${MOCK_CALLS_FILE}"; return 0; }
+  run run_setup_or_developer
+  ! grep -q "install_aws_tools" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_setup_or_developer returns non-zero when install_rhel_packages fails" {
+  export REDHAT=1
+  unset MACOS LINUX UBUNTU FEDORA CENTOS
+  install_rhel_packages() { return 1; }
+  run run_setup_or_developer
+  [ "$status" -ne 0 ]
+}
+
+@test "run_setup_or_developer returns non-zero when install_aws_tools fails" {
+  export MACOS=1
+  unset LINUX UBUNTU REDHAT FEDORA CENTOS
+  install_macos_packages() { return 0; }
+  install_aws_tools() { return 1; }
+  run run_setup_or_developer
+  [ "$status" -ne 0 ]
+}
+
+# ── return-code propagation: run_developer_or_ansible ────────────────────────
+
+@test "run_developer_or_ansible returns non-zero when install_ruby_tools fails" {
+  unset MACOS LINUX UBUNTU REDHAT FEDORA CENTOS
+  install_ruby_tools() { return 1; }
+  run run_developer_or_ansible
+  [ "$status" -ne 0 ]
+}
+
+@test "run_developer_or_ansible does not call install_ruby when install_ruby_tools fails" {
+  unset MACOS LINUX UBUNTU REDHAT FEDORA CENTOS
+  install_ruby_tools() { return 1; }
+  install_ruby() { printf "install_ruby\n" >> "${MOCK_CALLS_FILE}"; return 0; }
+  run run_developer_or_ansible
+  ! grep -q "install_ruby" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_developer_or_ansible returns non-zero when setup_kitchen fails" {
+  unset MACOS LINUX UBUNTU REDHAT FEDORA CENTOS
+  install_ruby_tools() { return 0; }
+  install_ruby()       { return 0; }
+  setup_kitchen()      { return 1; }
+  run run_developer_or_ansible
+  [ "$status" -ne 0 ]
+}
+
+@test "run_developer_or_ansible does not call setup_ansible when setup_kitchen fails" {
+  unset MACOS LINUX UBUNTU REDHAT FEDORA CENTOS
+  install_ruby_tools() { return 0; }
+  install_ruby()       { return 0; }
+  setup_kitchen()      { return 1; }
+  setup_ansible()      { printf "setup_ansible\n" >> "${MOCK_CALLS_FILE}"; return 0; }
+  run run_developer_or_ansible
+  ! grep -q "setup_ansible" "${MOCK_CALLS_FILE}"
+}

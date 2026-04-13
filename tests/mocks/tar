@@ -43,5 +43,11 @@ for arg in "${args[@]}"; do
       mkdir -p "${target}/${dirname}"
     fi
   fi
+  if [[ "$arg" =~ git-.*\.tar\.gz$ ]]; then
+    if [[ -n "${target}" ]]; then
+      dirname=$(basename "$arg" .tar.gz)
+      mkdir -p "${target}/${dirname}"
+    fi
+  fi
 done
 exit 0

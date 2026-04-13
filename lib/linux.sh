@@ -47,14 +47,14 @@ install_git_linux() {
       sudo -H make install install-doc install-info
       if ! [[ -x "$(command -v git)" ]]; then
         log_error "Git is not installed Redhat"
-        exit 1
+        return 1
       fi
       INSTALLED_GIT_VERSION=$(git --version | awk '{print $3}')
       if [[ "${INSTALLED_GIT_VERSION}" == "${GIT_VER}" ]]; then
         log_info "Git ${GIT_VER} is installed Redhat"
       else
         log_error "Git ${GIT_VER} is not installed Redhat"
-        exit 1
+        return 1
       fi
     fi
   fi
@@ -111,14 +111,14 @@ install_zsh_linux() {
     fi
     if ! [[ -x "$(command -v zsh)" ]]; then
       log_error "zsh is not installed Redhat"
-      exit 1
+      return 1
     fi
     INSTALLED_ZSH_VERSION=$(zsh --version | awk '{print $2}')
     if [[ "${INSTALLED_ZSH_VERSION}" == "${ZSH_VER}" ]]; then
       log_info "zsh ${ZSH_VER} is installed Redhat"
     else
       log_error "zsh ${ZSH_VER} is not installed Redhat"
-      exit 1
+      return 1
     fi
   fi
   log_info "Installed zsh"
@@ -312,7 +312,7 @@ install_ubuntu_packages() {
       ;;
     *)
       printf "Error: Unsupported Go version %s\\n" "${GO_VER}"
-      exit 1
+      return 1
       ;;
   esac
   if [[ -n ${pkgs_to_remove} ]]; then
@@ -443,7 +443,7 @@ install_ubuntu_packages() {
       ;;
     *)
       printf "Error: Unsupported Go version %s\\n" "${GO_VER}"
-      exit 1
+      return 1
       ;;
   esac
   INSTALLED_GO_VER=$(go version | awk '{print $3}' | sed 's/go//g')
