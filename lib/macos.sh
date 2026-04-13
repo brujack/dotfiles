@@ -129,9 +129,13 @@ install_zsh_macos() {
 
 
 install_macos_casks() {
-  brew bundle --file "${BREWFILE_LOC}/Brewfile"
-  [[ -n ${HAS_GUI} ]]      && brew bundle --file "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.gui"
-  [[ -n ${HAS_DEVTOOLS} ]] && brew bundle --file "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.devtools"
+  brew bundle --file "${BREWFILE_LOC}/Brewfile" || return 1
+  if [[ -n ${HAS_GUI} ]]; then
+    brew bundle --file "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.gui" || return 1
+  fi
+  if [[ -n ${HAS_DEVTOOLS} ]]; then
+    brew bundle --file "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.devtools" || return 1
+  fi
 }
 
 install_macos_packages() {
@@ -145,12 +149,12 @@ install_macos_packages() {
   fi
 
   if ! [[ -x "$(command -v brew)" ]]; then
-    install_homebrew
+    install_homebrew || return 1
   else
-    brew_update
+    brew_update || return 1
     printf "Installing other brew stuff...\n"
-    brew_tap_if_missing homebrew/bundle
-    install_macos_casks
+    brew_tap_if_missing homebrew/bundle || return 1
+    install_macos_casks || return 1
 
     printf "Cleaning Homebrew up...\n"
     brew cleanup

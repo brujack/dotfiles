@@ -148,6 +148,54 @@ teardown() {
   grep -q "softwareupdate" "${MOCK_CALLS_FILE}"
 }
 
+@test "install_macos_packages returns non-zero when brew_update fails" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile"
+  mkdir -p "${HOME}/scripts"
+  touch "${HOME}/scripts/.osx.sh"
+  chmod +x "${HOME}/scripts/.osx.sh"
+  brew_update() { return 1; }
+  run install_macos_packages
+  [ "$status" -ne 0 ]
+}
+
+@test "install_macos_packages does not call softwareupdate when brew_update fails" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile"
+  mkdir -p "${HOME}/scripts"
+  touch "${HOME}/scripts/.osx.sh"
+  chmod +x "${HOME}/scripts/.osx.sh"
+  brew_update() { return 1; }
+  run install_macos_packages
+  ! grep -q "softwareupdate" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_macos_packages returns non-zero when install_macos_casks fails" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile"
+  mkdir -p "${HOME}/scripts"
+  touch "${HOME}/scripts/.osx.sh"
+  chmod +x "${HOME}/scripts/.osx.sh"
+  install_macos_casks() { return 1; }
+  run install_macos_packages
+  [ "$status" -ne 0 ]
+}
+
+@test "install_macos_packages does not call softwareupdate when install_macos_casks fails" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile"
+  mkdir -p "${HOME}/scripts"
+  touch "${HOME}/scripts/.osx.sh"
+  chmod +x "${HOME}/scripts/.osx.sh"
+  install_macos_casks() { return 1; }
+  run install_macos_packages
+  ! grep -q "softwareupdate" "${MOCK_CALLS_FILE}"
+}
+
 # ── install_ubuntu_packages ───────────────────────────────────────────────────
 
 @test "install_ubuntu_packages calls apt update on Ubuntu Noble" {
@@ -461,6 +509,33 @@ teardown() {
   touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile"
   run run_brew_install
   ! grep -q "brew bundle" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_brew_install returns non-zero when brew_update fails" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile"
+  brew_update() { return 1; }
+  run run_brew_install
+  [ "$status" -ne 0 ]
+}
+
+@test "run_brew_install does not call brew cleanup when brew_update fails" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile"
+  brew_update() { return 1; }
+  run run_brew_install
+  ! grep -q "brew cleanup" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_brew_install returns non-zero when install_macos_casks fails" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile"
+  install_macos_casks() { return 1; }
+  run run_brew_install
+  [ "$status" -ne 0 ]
 }
 
 # ── run_mas_install ───────────────────────────────────────────────────────────

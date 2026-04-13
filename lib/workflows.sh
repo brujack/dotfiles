@@ -130,10 +130,10 @@ run_brew_install() {
   if ! quiet_which brew; then
     install_homebrew || return 1
   fi
-  brew_update
-  brew_tap_if_missing homebrew/bundle
+  brew_update || return 1
+  brew_tap_if_missing homebrew/bundle || return 1
   if [[ -n ${MACOS} ]]; then
-    install_macos_casks
+    install_macos_casks || return 1
   fi
   brew cleanup
 }
