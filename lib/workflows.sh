@@ -10,7 +10,7 @@ run_setup_user() {
       sudo -H yum install dnf -y
       if ! [ -x "$(command -v dnf)" ]; then
         printf "Failed to install dnf\\n"
-        exit 1
+        return 1
       fi
       printf "Installed dnf\\n"
     fi
@@ -18,21 +18,21 @@ run_setup_user() {
 
   if [[ -n ${MACOS} ]]; then
     printf "Installing Rosetta if necessary\\n"
-    install_rosetta
+    install_rosetta || return 1
   fi
 
   if [[ -n ${MACOS} ]] || [[ -n ${FEDORA} ]] || [[ -n ${CENTOS} ]]; then
-    install_git
+    install_git || return 1
   fi
 
   mkdir -p ${HOME}/software_downloads
 
   if [[ ${MACOS} || ${UBUNTU} || ${FEDORA} || ${CENTOS} ]]; then
-    install_zsh
+    install_zsh || return 1
   fi
 
   if [[ -n ${LINUX} ]]; then
-    install_bats
+    install_bats || return 1
   fi
 
   printf "Creating %s/bin\\n" "${HOME}"
@@ -41,11 +41,11 @@ run_setup_user() {
   printf "Creating %s\\n" "${PERSONAL_GITREPOS}"
   mkdir -p ${PERSONAL_GITREPOS}
 
-  clone_or_update_dotfiles
+  clone_or_update_dotfiles || return 1
 
-  setup_dotfile_symlinks
+  setup_dotfile_symlinks || return 1
 
-  setup_zsh_as_default_shell
+  setup_zsh_as_default_shell || return 1
 
   printf "Setting up cheat.sh\\n"
   if [[ -d ${HOME}/bin ]]; then
@@ -82,43 +82,43 @@ run_setup_user() {
 }
 
 run_setup_or_developer() {
-  setup_credential_directories
+  setup_credential_directories || return 1
 
   if [[ -n ${MACOS} ]]; then
-    install_macos_packages
+    install_macos_packages || return 1
   fi
 
   if [[ -n ${UBUNTU} ]]; then
-    install_ubuntu_packages
+    install_ubuntu_packages || return 1
   fi
 
   if [[ -n ${REDHAT} ]] || [[ -n ${FEDORA} ]]; then
-    install_rhel_packages
+    install_rhel_packages || return 1
   fi
 
   if [[ -n ${CENTOS} ]]; then
-    install_centos_packages
+    install_centos_packages || return 1
   fi
 
   if [[ -n ${LINUX} ]]; then
-    install_linux_packages
+    install_linux_packages || return 1
   fi
 
-  install_aws_tools
+  install_aws_tools || return 1
   setup_vim_plugins
 }
 
 run_developer_or_ansible() {
   printf "Installing json2yaml via npm\n"
-  npm install json2yaml
+  npm install json2yaml || return 1
 
-  install_ruby_tools
-  install_ruby
+  install_ruby_tools || return 1
+  install_ruby || return 1
   if [[ -n ${LINUX} ]]; then
-    install_github_cli_linux
+    install_github_cli_linux || return 1
   fi
-  setup_kitchen
-  setup_ansible
+  setup_kitchen || return 1
+  setup_ansible || return 1
   clone_personal_repos
 }
 
