@@ -207,6 +207,21 @@ teardown() {
   grep -q "no changes" "${_UPDATE_TMPDIR}/result_brew"
 }
 
+@test "_update_record_end pip reports single package without trailing newline" {
+  # Python's "\n".join([pkg]) produces no trailing newline — wc -l would return 0
+  # grep -c . correctly counts 1 non-empty line regardless of trailing newline
+  printf "requests" > "${_UPDATE_TMPDIR}/pip_outdated"
+  _update_record_end "pip" 0
+  grep -q "OK" "${_UPDATE_TMPDIR}/status_pip"
+  grep -q "requests" "${_UPDATE_TMPDIR}/result_pip"
+}
+
+@test "_update_record_end pip reports multiple packages" {
+  printf "requests\nboto3\nansible" > "${_UPDATE_TMPDIR}/pip_outdated"
+  _update_record_end "pip" 0
+  grep -q "3 package" "${_UPDATE_TMPDIR}/result_pip"
+}
+
 @test "_update_record_end diffs gems and reports gem names" {
   export MOCK_GEM_LIST_OUTPUT="rake (13.0.1)"
   _update_record_start "gems"

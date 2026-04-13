@@ -51,6 +51,31 @@ Personal development environment bootstrap for macOS, Linux (Ubuntu/RHEL), and W
 
 Flags are additive: `./setup_env.sh -t update --brew-only --pip-only` runs only brew and pip.
 
+### Update Log (`~/.dotfiles-update.log`)
+
+Each `update` run appends a timestamped entry to `~/.dotfiles-update.log`. The entry lists every tracked section with its status and what changed:
+
+```
+=== Update Summary — 2026-04-13 10:00:00 ===
+
+[OK]   brew             3 formulae (git 2.47.0, curl 8.12.1, openssl 3.4.1)
+[OK]   softwareupdate   2 update(s) (Xcode-16.3, macOS Sequoia 15.4.1)
+[OK]   mas              1 app(s) (Slack (4.42))
+[OK]   claude           2 plugin(s) updated (superpowers: 5.0.8, context7: 1.2.0)
+[OK]   pip              3 package(s) (ansible, boto3, requests)
+[OK]   gems             no changes
+[OK]   oh-my-zsh        2 commit(s)
+[OK]   p10k             no changes
+[OK]   tpm              no changes
+[OK]   tfenv            no changes
+[OK]   cheat.sh         updated
+[SKIP] gems             flag not set
+
+6 sections: 5 OK, 0 failed, 1 skipped
+```
+
+Sections show `[OK]`, `[FAIL]`, or `[SKIP]`. `FAIL` entries include the exit code; scroll up in the terminal to see the full command output. The log is append-only and never rotated automatically.
+
 ### Machine-Local Overrides
 
 To customize a specific machine without committing changes, copy the example and edit:
