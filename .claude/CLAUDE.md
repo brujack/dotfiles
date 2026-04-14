@@ -382,6 +382,22 @@ git branch --merged master | grep -v master   # local merged branches
 git branch -r --merged origin/master | grep -v master  # remote merged branches
 ```
 
+### PR Review Gate
+
+Before pushing any feature branch (Option 2 in finishing-a-development-branch),
+run the pr-review skill. Only push when verdict is PASS. If HOLD:
+
+1. Fix all CRITICAL findings
+2. Run make test — confirm no regressions
+3. Commit the fixes
+4. Re-run pr-review
+5. Repeat until PASS, or escalate to user after two failed fix attempts
+
+WARNING and INFO findings are advisory — surface them but do not block the push.
+
+This rule is a durable backup: if `claude plugins update superpowers` overwrites
+the finishing-a-development-branch skill file, this rule still enforces the gate.
+
 ## GitHub Actions / CI
 
 - All jobs must run on Node.js 24

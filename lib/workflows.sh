@@ -204,11 +204,13 @@ run_update() {
   if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_MAS:-} ]]; then
     _update_record_start "mas"
     update_system_packages
+    local _mas_ec=0
     if [[ -n ${MACOS} ]]; then
       log_info "Updating mas packages"
-      mas upgrade
+      mas upgrade 2>&1 | tee "${_UPDATE_TMPDIR}/mas_upgrade_output"
+      _mas_ec="${PIPESTATUS[0]}"
     fi
-    _update_record_end "mas" $?
+    _update_record_end "mas" "${_mas_ec}"
   else
     _update_skip "mas" "flag not set"
   fi
