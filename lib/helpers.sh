@@ -277,6 +277,7 @@ run_doctor() {
   _DOCTOR_PASS=0
   _DOCTOR_FAIL=0
   _DOCTOR_FAILED=0
+  _DOCTOR_WARN=0
 
   printf "=== Doctor Report ===\n"
   printf "\nOS Detection:\n"
@@ -310,9 +311,10 @@ run_doctor() {
   _doctor_check_tools
   _doctor_check_cred_dirs
   _doctor_check_versions
+  _doctor_check_github_mcp
 
   printf "\n=== Summary ===\n"
-  printf "%d checks passed, %d failed\n" "${_DOCTOR_PASS}" "${_DOCTOR_FAIL}"
+  printf "%d checks passed, %d failed, %d warnings\n" "${_DOCTOR_PASS}" "${_DOCTOR_FAIL}" "${_DOCTOR_WARN}"
 
   [[ ${_DOCTOR_FAILED} -eq 0 ]]
 }

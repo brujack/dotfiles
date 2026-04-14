@@ -359,6 +359,30 @@ teardown() {
   [[ "$output" == *"HAS_GUI="* ]]
 }
 
+@test "run_doctor calls _doctor_check_github_mcp" {
+  local _called=0
+  _doctor_check_github_mcp() { _called=1; }
+  # Stub all other sub-checks to avoid side effects
+  _doctor_check_symlinks()      { :; }
+  _doctor_check_symlink_roots() { :; }
+  _doctor_check_tools()         { :; }
+  _doctor_check_cred_dirs()     { :; }
+  _doctor_check_versions()      { :; }
+  run_doctor
+  [ "${_called}" -eq 1 ]
+}
+
+@test "run_doctor summary includes warnings count" {
+  _doctor_check_symlinks()      { :; }
+  _doctor_check_symlink_roots() { :; }
+  _doctor_check_tools()         { :; }
+  _doctor_check_cred_dirs()     { :; }
+  _doctor_check_versions()      { :; }
+  _doctor_check_github_mcp()    { doctor_warn "test" "a warning"; }
+  run run_doctor
+  [[ "$output" == *"1 warnings"* ]]
+}
+
 # ── run_check_versions ────────────────────────────────────────────────────────
 
 @test "run_check_versions exits 0 when all pinned versions match latest" {
