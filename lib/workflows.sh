@@ -1,6 +1,42 @@
 #!/usr/bin/env bash
 # lib/workflows.sh — top-level workflow functions dispatched by setup_env.sh
 
+setup_claude_mcp() {
+  local _template="${PERSONAL_GITREPOS}/${DOTFILES}/.claude/mcp.json.template"
+  local _output="${HOME}/.claude/mcp.json"
+  local _local_config="${PERSONAL_GITREPOS}/${DOTFILES}/config/local.sh"
+
+  # Source config/local.sh to pick up GITHUB_PAT if not already in environment
+  if [[ -f "${_local_config}" ]]; then
+    # shellcheck disable=SC1090
+    source "${_local_config}" || true
+  fi
+
+  if [[ -z "${GITHUB_PAT:-}" ]]; then
+    log_warn "GITHUB_PAT not set — GitHub MCP not configured"
+    log_warn "Add GITHUB_PAT to config/local.sh and re-run: setup_env.sh -t setup_user"
+    return 0
+  fi
+
+  if ! command -v envsubst &>/dev/null; then
+    log_error "envsubst not found — install gettext: brew install gettext or apt-get install gettext-base"
+    return 1
+  fi
+
+  # Remove broken symlink from old setup if present
+  if [[ -L "${_output}" ]] && [[ ! -e "${_output}" ]]; then
+    rm -f "${_output}"
+  fi
+
+  mkdir -p "$(dirname "${_output}")"
+  # shellcheck disable=SC2016 # single quotes intentional — envsubst variable list, not shell expansion
+  if ! GITHUB_PAT="${GITHUB_PAT}" envsubst '${GITHUB_PAT}' < "${_template}" > "${_output}"; then
+    log_error "Failed to generate ${_output} from template"
+    return 1
+  fi
+  log_info "GitHub MCP configured (${_output})"
+}
+
 run_setup_user() {
   # need to make sure that some base packages are installed
   if [[ ${REDHAT} || ${FEDORA} ]]; then
