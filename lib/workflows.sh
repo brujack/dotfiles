@@ -115,6 +115,8 @@ run_setup_user() {
   if [[ -d ${HOME}/go-work ]]; then
     printf "Created %s/go-work\\n" "${HOME}"
   fi
+
+  setup_claude_mcp || return 1
 }
 
 run_setup_or_developer() {

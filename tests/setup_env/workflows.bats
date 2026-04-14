@@ -126,6 +126,23 @@ teardown() {
   grep -q "apt-get install -y bats" "${MOCK_CALLS_FILE}"
 }
 
+@test "run_setup_user calls setup_claude_mcp" {
+  export MACOS=1
+  unset LINUX UBUNTU REDHAT FEDORA CENTOS
+  local _called=0
+  setup_claude_mcp() { _called=1; return 0; }
+  run_setup_user
+  [ "${_called}" -eq 1 ]
+}
+
+@test "run_setup_user returns non-zero when setup_claude_mcp fails" {
+  export MACOS=1
+  unset LINUX UBUNTU REDHAT FEDORA CENTOS
+  setup_claude_mcp() { return 1; }
+  run run_setup_user
+  [ "$status" -ne 0 ]
+}
+
 # ── run_setup_or_developer ────────────────────────────────────────────────────
 
 @test "run_setup_or_developer creates credential directories" {
