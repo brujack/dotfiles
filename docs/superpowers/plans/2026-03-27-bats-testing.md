@@ -13,6 +13,7 @@
 ### Task 1: Remove bats from npm and add bats-core to Brewfile
 
 **Files:**
+
 - Modify: `package.json`
 - Modify: `Brewfile`
 
@@ -35,12 +36,14 @@
 - [ ] **Step 3: Add bats-core to Brewfile (alphabetically between `bat` and `bison`)**
 
   Current lines 6-7 of `Brewfile`:
+
   ```
   brew "bat"
   brew "bison"
   ```
 
   Change to:
+
   ```
   brew "bat"
   brew "bats-core"
@@ -68,6 +71,7 @@
 ### Task 2: Add BATS_VER constant and install_bats() to setup_env.sh
 
 **Files:**
+
 - Modify: `setup_env.sh` (lines 3-4 for constant; after line 343 for function; after line 515 for call)
 
 - [ ] **Step 1: Write the failing test**
@@ -110,11 +114,13 @@
 - [ ] **Step 3: Add BATS_VER constant at line 4 of setup_env.sh (before CF_TERRAFORMING_VER)**
 
   Current line 4:
+
   ```bash
   CF_TERRAFORMING_VER="0.16.1"
   ```
 
   Insert before it:
+
   ```bash
   BATS_VER="1.11.0"
   ```
@@ -151,6 +157,7 @@
 - [ ] **Step 5: Add install_bats call in the setup_user block (after line 515)**
 
   Current lines 513-515:
+
   ```bash
   if [[ ${MACOS} || ${UBUNTU} || ${FEDORA} || ${CENTOS} ]]; then
     install_zsh
@@ -158,6 +165,7 @@
   ```
 
   Insert after this block:
+
   ```bash
   if [[ -n ${LINUX} ]]; then
     install_bats
@@ -184,6 +192,7 @@
 ### Task 3: Add sourcing guard to setup_env.sh
 
 **Files:**
+
 - Modify: `setup_env.sh` (line 396, between end of `process_args` and `[[ $# -eq 0 ]] && usage`)
 
   The guard must go between line 395 (closing `}` of `process_args`) and line 397 (`[[ $# -eq 0 ]] && usage`). When the file is sourced (by BATS), the guard returns before the main execution body. When run directly, it falls through.
@@ -225,6 +234,7 @@
   ```
 
   After the edit, lines 394-400 should read:
+
   ```bash
   done
   }
@@ -243,6 +253,7 @@
   ```
 
   Expected output:
+
   ```
   Usage: setup_env.sh -t <type> [-w]
   Types:
@@ -263,6 +274,7 @@
 ### Task 4: Create Makefile
 
 **Files:**
+
 - Create: `Makefile`
 
 - [ ] **Step 1: Write the failing test (manual)**
@@ -304,6 +316,7 @@
   ```
 
   Expected:
+
   ```
   Available targets:
     make test       Run all BATS tests
@@ -323,6 +336,7 @@
 ### Task 5: Create mock stubs
 
 **Files:**
+
 - Create: `tests/mocks/brew`
 - Create: `tests/mocks/apt-get`
 - Create: `tests/mocks/sudo`
@@ -492,6 +506,7 @@ All mock executables must be `chmod +x`.
 ### Task 6: Create tests/helpers/common.bash
 
 **Files:**
+
 - Create: `tests/helpers/common.bash`
 
 - [ ] **Step 1: Create the file**
@@ -535,6 +550,7 @@ All mock executables must be `chmod +x`.
 ### Task 7: Create tests/setup_env/unit.bats
 
 **Files:**
+
 - Create: `tests/setup_env/unit.bats` (replace skeleton from Task 3)
 
 - [ ] **Step 1: Write the full unit.bats**
@@ -670,6 +686,7 @@ All mock executables must be `chmod +x`.
 ### Task 8: Create tests/setup_env/install_guards.bats
 
 **Files:**
+
 - Modify: `tests/setup_env/install_guards.bats` (replace skeleton from Task 2)
 
 - [ ] **Step 1: Write the full install_guards.bats**
@@ -819,6 +836,7 @@ All mock executables must be `chmod +x`.
 ### Task 9: Create tests/zshrc.d/unit.bats
 
 **Files:**
+
 - Create: `tests/zshrc.d/unit.bats`
 
 - [ ] **Step 1: Write the failing test**
@@ -958,6 +976,7 @@ All mock executables must be `chmod +x`.
   ```
 
   Expected: all test files run, zero failures. Output resembles:
+
   ```
   tests/setup_env/unit.bats
    ✓ quiet_which returns 0 for a command that exists
@@ -996,12 +1015,14 @@ All mock executables must be `chmod +x`.
 ### Task 11: Update CLAUDE.md and README.md
 
 **Files:**
+
 - Modify: `CLAUDE.md`
 - Modify: `README.md`
 
 - [ ] **Step 1: Replace the Testing section in CLAUDE.md**
 
   Current content (lines 119-121):
+
   ```markdown
   ## Testing
 
@@ -1009,10 +1030,12 @@ All mock executables must be `chmod +x`.
   ```
 
   Replace with:
-  ```markdown
+
+  ````markdown
   ## Testing
 
   Uses **BATS** (Bash Automated Testing System), installed natively:
+
   - macOS: `brew install bats-core` (in `Brewfile`)
   - Ubuntu: `sudo apt-get install -y bats` (via `install_bats()` in `setup_env.sh`)
   - RHEL/CentOS/Fedora: direct GitHub release install (via `install_bats()`)
@@ -1040,6 +1063,7 @@ All mock executables must be `chmod +x`.
   # Assert what was called:
   grep -q "brew install git" "${MOCK_CALLS_FILE}"
   ```
+  ````
 
   Available mock env vars:
   | Variable | Effect |
@@ -1055,21 +1079,28 @@ All mock executables must be `chmod +x`.
   | `MOCK_CURL_EXIT` | Exit code for `curl` (default: 0) |
   | `MOCK_UNAME_S` | Value returned by `uname -s` |
   | `MOCK_BATS_VER` | BATS_VER used by mock tar to create stub directory |
+
+  ```
+
   ```
 
 - [ ] **Step 2: Update README.md to add make test**
 
   Find the testing section of `README.md` (or add one). Add:
 
-  ```markdown
+  ````markdown
   ## Testing
 
   ```bash
   make test        # run all BATS tests
   make test-unit   # run unit tests only
   ```
+  ````
 
   Install bats-core first: `brew install bats-core` (macOS) or `sudo apt-get install bats` (Ubuntu).
+
+  ```
+
   ```
 
 - [ ] **Step 3: Commit**
@@ -1085,20 +1116,20 @@ All mock executables must be `chmod +x`.
 
 **Spec coverage check:**
 
-| Spec requirement | Covered by |
-|---|---|
-| Remove npm bats, add bats-core natively | Task 1 |
-| Brewfile: `brew install bats-core` | Task 1 |
-| `install_bats()` for Ubuntu/RHEL in `setup_env.sh` | Task 2 |
-| Sourcing guard for testability | Task 3 |
-| `make test`, `make test-unit`, `make help` | Task 4 |
-| `tests/mocks/` with brew, apt-get, sudo, which, curl, tar, uname | Task 5 |
-| `tests/helpers/common.bash` with `load_mocks()`, `load_setup_env()` | Task 6 |
-| `tests/setup_env/unit.bats` — quiet_which, app_dir_exists, process_args, constants | Task 7 |
-| `tests/setup_env/install_guards.bats` — brew helpers + install_bats | Task 8 |
-| `tests/zshrc.d/unit.bats` — syntax + MACOS/LINUX detection | Task 9 |
-| CLAUDE.md testing section expanded | Task 11 |
-| README.md updated | Task 11 |
+| Spec requirement                                                                   | Covered by |
+| ---------------------------------------------------------------------------------- | ---------- |
+| Remove npm bats, add bats-core natively                                            | Task 1     |
+| Brewfile: `brew install bats-core`                                                 | Task 1     |
+| `install_bats()` for Ubuntu/RHEL in `setup_env.sh`                                 | Task 2     |
+| Sourcing guard for testability                                                     | Task 3     |
+| `make test`, `make test-unit`, `make help`                                         | Task 4     |
+| `tests/mocks/` with brew, apt-get, sudo, which, curl, tar, uname                   | Task 5     |
+| `tests/helpers/common.bash` with `load_mocks()`, `load_setup_env()`                | Task 6     |
+| `tests/setup_env/unit.bats` — quiet_which, app_dir_exists, process_args, constants | Task 7     |
+| `tests/setup_env/install_guards.bats` — brew helpers + install_bats                | Task 8     |
+| `tests/zshrc.d/unit.bats` — syntax + MACOS/LINUX detection                         | Task 9     |
+| CLAUDE.md testing section expanded                                                 | Task 11    |
+| README.md updated                                                                  | Task 11    |
 
 **No placeholders found.** All code blocks are complete and runnable.
 

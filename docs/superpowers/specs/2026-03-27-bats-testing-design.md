@@ -10,16 +10,20 @@ Add full BATS (Bash Automated Testing System) test coverage to the dotfiles repo
 ## BATS Installation
 
 ### macOS
+
 Add `bats-core` to `Brewfile` as a formula. The existing `brew_install_formula` helper handles idempotency.
 
 ### Linux (Ubuntu)
+
 Add `install_bats()` to `setup_env.sh`:
+
 - Focal/Jammy/Noble: `sudo apt-get install -y bats`
 - RHEL: curl the bats-core GitHub release tarball, extract, run `./install.sh /usr/local`
 - Guarded with `if ! command -v bats &>/dev/null`
 - Called in the `setup_user` block (available on all machine types)
 
 ### npm cleanup
+
 - Remove `bats` from `package.json` devDependencies
 - Remove `node_modules/bats/`
 - Update `package-lock.json`
@@ -44,15 +48,16 @@ dotfiles/
 
 ### Makefile targets
 
-| Target | Description |
-|--------|-------------|
-| `make test` | Run all tests (`bats tests/` recursively) |
-| `make test-unit` | Run only `tests/*/unit.bats` |
-| `make help` | List available targets |
+| Target           | Description                               |
+| ---------------- | ----------------------------------------- |
+| `make test`      | Run all tests (`bats tests/` recursively) |
+| `make test-unit` | Run only `tests/*/unit.bats`              |
+| `make help`      | List available targets                    |
 
 ### Mock pattern
 
 Each test file sources `tests/helpers/common.bash` in `setup()`. `load_mocks()` prepends `tests/mocks/` to PATH for the duration of the test. Mock executables:
+
 - Record invocation args to a temp file so tests can assert what was called
 - Return exit code from an env var (e.g., `MOCK_BREW_EXIT=0` for success, `MOCK_BREW_EXIT=1` to simulate not-installed)
 
@@ -81,6 +86,7 @@ Each test file sources `tests/helpers/common.bash` in `setup()`. `load_mocks()` 
 ## CLAUDE.md Updates
 
 The repo-level `CLAUDE.md` Testing section is expanded with:
+
 - How to install BATS (macOS/Linux)
 - `make test` as the standard run command
 - Rules: every new/modified function needs a corresponding test

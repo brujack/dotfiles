@@ -12,22 +12,23 @@
 
 ## Files
 
-| File | Action |
-|---|---|
-| `lib/helpers.sh` | Modify — add logging constants + functions + safe_link() |
-| `lib/constants.sh` | Modify — replace printf calls with log_info/log_error |
-| `lib/detect_env.sh` | Modify — replace printf calls with log_info/log_error |
-| `lib/macos.sh` | Modify — replace printf calls with log_info/log_error |
-| `lib/linux.sh` | Modify — replace printf calls with log_info/log_error |
-| `lib/developer.sh` | Modify — replace printf calls with log_info/log_error |
-| `tests/setup_env/unit.bats` | Modify — add logging function tests |
-| `tests/setup_env/install_guards.bats` | Modify — add safe_link tests |
+| File                                  | Action                                                   |
+| ------------------------------------- | -------------------------------------------------------- |
+| `lib/helpers.sh`                      | Modify — add logging constants + functions + safe_link() |
+| `lib/constants.sh`                    | Modify — replace printf calls with log_info/log_error    |
+| `lib/detect_env.sh`                   | Modify — replace printf calls with log_info/log_error    |
+| `lib/macos.sh`                        | Modify — replace printf calls with log_info/log_error    |
+| `lib/linux.sh`                        | Modify — replace printf calls with log_info/log_error    |
+| `lib/developer.sh`                    | Modify — replace printf calls with log_info/log_error    |
+| `tests/setup_env/unit.bats`           | Modify — add logging function tests                      |
+| `tests/setup_env/install_guards.bats` | Modify — add safe_link tests                             |
 
 ---
 
 ## Task 1: Write failing tests for logging functions
 
 **Files:**
+
 - Modify: `tests/setup_env/unit.bats`
 
 - [ ] **Step 1: Add the failing logging tests to `tests/setup_env/unit.bats`**
@@ -75,6 +76,7 @@ Expected: FAIL — `log_info output contains [INFO] prefix` fails because `log_i
 ## Task 2: Add logging to `lib/helpers.sh`
 
 **Files:**
+
 - Modify: `lib/helpers.sh`
 
 - [ ] **Step 1: Add logging constants and functions at the top of `lib/helpers.sh`** (after the shebang line)
@@ -126,6 +128,7 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 ## Task 3: Write failing tests for `safe_link()`
 
 **Files:**
+
 - Modify: `tests/setup_env/install_guards.bats`
 
 - [ ] **Step 1: Add the failing safe_link tests to `tests/setup_env/install_guards.bats`**
@@ -189,6 +192,7 @@ Expected: FAIL — `safe_link creates symlink when dest does not exist` fails be
 ## Task 4: Add `safe_link()` to `lib/helpers.sh`
 
 **Files:**
+
 - Modify: `lib/helpers.sh`
 
 - [ ] **Step 1: Add `safe_link()` to `lib/helpers.sh`** (after the logging functions, before the existing helper functions)
@@ -241,9 +245,11 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 ## Task 5: Migrate `printf` calls to `log_*` in `lib/*.sh`
 
 **Files:**
+
 - Modify: `lib/constants.sh`, `lib/helpers.sh`, `lib/detect_env.sh`, `lib/macos.sh`, `lib/linux.sh`, `lib/developer.sh`
 
 Rules:
+
 - Informational messages: `printf "Installing...\n"` → `log_info "Installing..."`
 - Error exits: `printf "Error...\n" >&2` → `log_error "Error..."` (log_error already writes to stderr)
 - Non-fatal warnings: `printf "Warning...\n"` → `log_warn "Warning..."`
@@ -258,6 +264,7 @@ Replace every `printf "...\n"` informational line with `log_info "..."`.
 Replace every `printf "...\n" >&2` error line with `log_error "..."`.
 
 Example transformation:
+
 ```bash
 # Before
 printf "Installing Rosetta...\n"
@@ -315,17 +322,20 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 ## Task 6: Migrate `setup_dotfile_symlinks()` to use `safe_link()`
 
 **Files:**
+
 - Modify: `lib/helpers.sh` (where `setup_dotfile_symlinks` lives after Phase 1)
 
 - [ ] **Step 1: Replace all `rm -f + ln -s` pairs in `setup_dotfile_symlinks()`**
 
 For every pattern like:
+
 ```bash
 rm -f ${HOME}/.zshrc
 ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.devcontainer/.zshrc ${HOME}/.zshrc
 ```
 
 Replace with:
+
 ```bash
 safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.devcontainer/.zshrc" "${HOME}/.zshrc"
 ```

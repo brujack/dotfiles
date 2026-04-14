@@ -65,12 +65,12 @@ What results from this decision — both positive and negative trade-offs.
 ```markdown
 # Architectural Decision Records
 
-| ADR | Title | Date | Status |
-|-----|-------|------|--------|
-| [0001](0001-use-bats-for-shell-testing.md) | Use BATS for shell testing | 2026-03-27 | Accepted |
-| [0002](0002-use-gitleaks-for-secret-scanning.md) | Use gitleaks for secret scanning | 2026-04-08 | Accepted |
+| ADR                                                            | Title                                          | Date       | Status   |
+| -------------------------------------------------------------- | ---------------------------------------------- | ---------- | -------- |
+| [0001](0001-use-bats-for-shell-testing.md)                     | Use BATS for shell testing                     | 2026-03-27 | Accepted |
+| [0002](0002-use-gitleaks-for-secret-scanning.md)               | Use gitleaks for secret scanning               | 2026-04-08 | Accepted |
 | [0003](0003-profile-capability-model-for-machine-detection.md) | Profile/capability model for machine detection | 2026-03-31 | Accepted |
-| [0004](0004-lib-modular-structure-for-setup-env.md) | Modular lib/ structure for setup_env.sh | 2026-03-31 | Accepted |
+| [0004](0004-lib-modular-structure-for-setup-env.md)            | Modular lib/ structure for setup_env.sh        | 2026-03-31 | Accepted |
 | [0005](0005-require-secrets-guarding-in-all-personal-repos.md) | Require secrets guarding in all personal repos | 2026-04-09 | Accepted |
 ```
 
@@ -78,13 +78,13 @@ What results from this decision — both positive and negative trade-offs.
 
 Five ADRs are created immediately to capture decisions already in effect. Dates reflect when the decision was made (from git history and spec dates), not the date of ADR creation.
 
-| ADR | Decision | Date |
-|-----|----------|------|
-| 0001 | Use BATS for shell script testing | 2026-03-27 |
-| 0002 | Use gitleaks for secret scanning in CI | 2026-04-08 |
-| 0003 | Profile/capability model (`HAS_*` vars + `PROFILE`) for machine detection | 2026-03-31 |
+| ADR  | Decision                                                                                                                                                       | Date       |
+| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| 0001 | Use BATS for shell script testing                                                                                                                              | 2026-03-27 |
+| 0002 | Use gitleaks for secret scanning in CI                                                                                                                         | 2026-04-08 |
+| 0003 | Profile/capability model (`HAS_*` vars + `PROFILE`) for machine detection                                                                                      | 2026-03-31 |
 | 0004 | Modular `lib/` structure — split `setup_env.sh` into `lib/constants.sh`, `helpers.sh`, `detect_env.sh`, `macos.sh`, `linux.sh`, `developer.sh`, `workflows.sh` | 2026-03-31 |
-| 0005 | Require secrets guarding (gitleaks CI job + `.gitleaks.toml` + `.gitignore` credential paths) in all personal repos | 2026-04-09 |
+| 0005 | Require secrets guarding (gitleaks CI job + `.gitleaks.toml` + `.gitignore` credential paths) in all personal repos                                            | 2026-04-09 |
 
 ## Convention Propagation
 
@@ -97,14 +97,14 @@ Five ADRs are created immediately to capture decisions already in effect. Dates 
 
 ## Files Created/Modified
 
-| Action | File |
-|--------|------|
-| Create | `docs/adr/README.md` |
-| Create | `docs/adr/0001-use-bats-for-shell-testing.md` |
-| Create | `docs/adr/0002-use-gitleaks-for-secret-scanning.md` |
+| Action | File                                                              |
+| ------ | ----------------------------------------------------------------- |
+| Create | `docs/adr/README.md`                                              |
+| Create | `docs/adr/0001-use-bats-for-shell-testing.md`                     |
+| Create | `docs/adr/0002-use-gitleaks-for-secret-scanning.md`               |
 | Create | `docs/adr/0003-profile-capability-model-for-machine-detection.md` |
-| Create | `docs/adr/0004-lib-modular-structure-for-setup-env.md` |
+| Create | `docs/adr/0004-lib-modular-structure-for-setup-env.md`            |
 | Create | `docs/adr/0005-require-secrets-guarding-in-all-personal-repos.md` |
-| Modify | `~/.claude/CLAUDE.md` — add ADR convention section |
-| Modify | `dotfiles/CLAUDE.md` — note docs/adr/ in Layout section |
-| Modify | `dotfiles/README.md` — mention docs/adr/ in Repository Layout |
+| Modify | `~/.claude/CLAUDE.md` — add ADR convention section                |
+| Modify | `dotfiles/CLAUDE.md` — note docs/adr/ in Layout section           |
+| Modify | `dotfiles/README.md` — mention docs/adr/ in Repository Layout     |

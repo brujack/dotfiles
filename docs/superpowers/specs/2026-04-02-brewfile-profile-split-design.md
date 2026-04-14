@@ -12,6 +12,7 @@ Replace ~50 manual `if ! app_dir_exists ...; then brew_install_cask ...; fi` blo
 ## Background
 
 The current code:
+
 - Uses `app_dir_exists "/Applications/Foo.app"` as an install guard — fragile, paths drift
 - Gates installs with legacy hostname vars (`LAPTOP`, `STUDIO`, `RECEPTION`, etc.) instead of `HAS_*` capability vars
 - Has a comment claiming casks "fail if already installed via Brewfile" — this has not been true since Homebrew 2.x; `brew bundle` is fully idempotent
@@ -22,11 +23,11 @@ The current code:
 
 Three Brewfiles in the repo root:
 
-| File | Condition | Contents |
-|---|---|---|
-| `Brewfile` | always (all macOS) | Existing formulae/casks + universal casks |
-| `Brewfile.gui` | `HAS_GUI` | Desktop-only apps |
-| `Brewfile.devtools` | `HAS_DEVTOOLS` | Dev tools |
+| File                | Condition          | Contents                                  |
+| ------------------- | ------------------ | ----------------------------------------- |
+| `Brewfile`          | always (all macOS) | Existing formulae/casks + universal casks |
+| `Brewfile.gui`      | `HAS_GUI`          | Desktop-only apps                         |
+| `Brewfile.devtools` | `HAS_DEVTOOLS`     | Dev tools                                 |
 
 `brew bundle` tracks installation state itself — no `app_dir_exists` checks needed.
 
@@ -131,13 +132,13 @@ Mapping the old per-hostname conditions to `HAS_*` capability buckets means some
 
 ## Files Changed
 
-| File | Action |
-|---|---|
-| `Brewfile` | Modify — append 25 universal casks |
-| `Brewfile.gui` | Create — 10 GUI casks |
-| `Brewfile.devtools` | Create — 16 devtools casks |
-| `setup_env.sh` | Modify — replace lines 137–139 + 157–370 with 4-line brew bundle orchestration |
-| `tests/setup_env/install_guards.bats` | Modify — add brew bundle orchestration tests |
+| File                                  | Action                                                                         |
+| ------------------------------------- | ------------------------------------------------------------------------------ |
+| `Brewfile`                            | Modify — append 25 universal casks                                             |
+| `Brewfile.gui`                        | Create — 10 GUI casks                                                          |
+| `Brewfile.devtools`                   | Create — 16 devtools casks                                                     |
+| `setup_env.sh`                        | Modify — replace lines 137–139 + 157–370 with 4-line brew bundle orchestration |
+| `tests/setup_env/install_guards.bats` | Modify — add brew bundle orchestration tests                                   |
 
 ---
 

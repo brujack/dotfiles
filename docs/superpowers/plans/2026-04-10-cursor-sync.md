@@ -12,20 +12,21 @@
 
 ## Files
 
-| File | Action | Purpose |
-|---|---|---|
-| `lib/helpers.sh` | Modify | Add cursor loop after `.claude/` loop in `setup_dotfile_symlinks()` |
-| `tests/setup_env/extracted_functions.bats` | Modify | Add 3 tests + update `_make_fake_dotfiles()` |
-| `dotfiles/.cursor/.gitignore` | Create | Ignore `plugins/cache/` in dotfiles repo |
-| `dotfiles/.cursor/plugins/` | Create | Move from `~/.cursor/plugins/` |
-| `dotfiles/.cursor/skills-cursor/` | Create | Move from `~/.cursor/skills-cursor/` |
-| `docs/superpowers/README.md` | Modify | Add plan entry |
+| File                                       | Action | Purpose                                                             |
+| ------------------------------------------ | ------ | ------------------------------------------------------------------- |
+| `lib/helpers.sh`                           | Modify | Add cursor loop after `.claude/` loop in `setup_dotfile_symlinks()` |
+| `tests/setup_env/extracted_functions.bats` | Modify | Add 3 tests + update `_make_fake_dotfiles()`                        |
+| `dotfiles/.cursor/.gitignore`              | Create | Ignore `plugins/cache/` in dotfiles repo                            |
+| `dotfiles/.cursor/plugins/`                | Create | Move from `~/.cursor/plugins/`                                      |
+| `dotfiles/.cursor/skills-cursor/`          | Create | Move from `~/.cursor/skills-cursor/`                                |
+| `docs/superpowers/README.md`               | Modify | Add plan entry                                                      |
 
 ---
 
 ## Task 1: Loop in setup_dotfile_symlinks (TDD)
 
 **Files:**
+
 - Modify: `tests/setup_env/extracted_functions.bats:25-52` (`_make_fake_dotfiles`) and after line 158 (after last cursor test)
 - Modify: `lib/helpers.sh:581` (after the `.claude/` loop, before `.ssh/config` line)
 
@@ -121,6 +122,7 @@ git commit -m "feat: add ~/.cursor loop symlinks in setup_dotfile_symlinks"
 ## Task 2: Migrate files and update docs
 
 **Files:**
+
 - Create: `dotfiles/.cursor/.gitignore`
 - Create: `dotfiles/.cursor/plugins/` (moved from `~/.cursor/plugins/`)
 - Create: `dotfiles/.cursor/skills-cursor/` (moved from `~/.cursor/skills-cursor/`)

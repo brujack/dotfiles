@@ -45,17 +45,20 @@ All shell scripts across personal repos must follow these conventions:
 ## Consequences
 
 **Positive:**
+
 - All scripts become testable via BATS with PATH-injected mocks
 - Each branch/condition can be tested independently
 - Consistent patterns reduce cognitive overhead when moving between repos
 - Explicit error handling is easier to reason about than `set -e` behavior
 
 **Negative:**
+
 - Existing scripts (`bootstrap_mac.sh`, `bootstrap_linux.sh`) need refactoring
 - Slightly more verbose than `set -e` for simple linear scripts
 - Developers must remember the sourcing guard pattern
 
 **Migration:**
+
 - Existing scripts are updated as they are touched (no bulk migration)
 - `bootstrap_mac.sh` and `bootstrap_linux.sh` are the first scripts to be refactored under this ADR
 

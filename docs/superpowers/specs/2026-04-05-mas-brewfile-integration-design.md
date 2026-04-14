@@ -5,7 +5,7 @@
 
 ## Summary
 
-Move all `mas install` calls from `setup_env.sh` into the existing Brewfile.* files using `brew bundle`'s native `mas` support. Remove the ~100-line manual mas block from `setup_env.sh`. No new files, no new capabilities, no new functions — `install_macos_casks()` already dispatches all three bundles based on `HAS_GUI` / `HAS_DEVTOOLS`.
+Move all `mas install` calls from `setup_env.sh` into the existing Brewfile.\* files using `brew bundle`'s native `mas` support. Remove the ~100-line manual mas block from `setup_env.sh`. No new files, no new capabilities, no new functions — `install_macos_casks()` already dispatches all three bundles based on `HAS_GUI` / `HAS_DEVTOOLS`.
 
 ## Motivation
 

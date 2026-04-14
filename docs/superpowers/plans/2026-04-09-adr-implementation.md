@@ -12,22 +12,23 @@
 
 ## File Structure
 
-| Action | File | Purpose |
-|--------|------|---------|
-| Create | `docs/adr/README.md` | ADR index table |
-| Create | `docs/adr/0001-use-bats-for-shell-testing.md` | ADR: BATS testing framework |
-| Create | `docs/adr/0002-use-gitleaks-for-secret-scanning.md` | ADR: gitleaks in CI |
-| Create | `docs/adr/0003-profile-capability-model-for-machine-detection.md` | ADR: profile/capability model |
-| Create | `docs/adr/0004-lib-modular-structure-for-setup-env.md` | ADR: lib/ split |
-| Create | `docs/adr/0005-require-secrets-guarding-in-all-personal-repos.md` | ADR: cross-repo secrets policy |
-| Modify | `CLAUDE.md` | Add `docs/` subtree to Layout section |
-| Modify | `README.md` | Add `docs/` subtree to Repository Layout + fix stale auto-merge text |
+| Action | File                                                              | Purpose                                                              |
+| ------ | ----------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Create | `docs/adr/README.md`                                              | ADR index table                                                      |
+| Create | `docs/adr/0001-use-bats-for-shell-testing.md`                     | ADR: BATS testing framework                                          |
+| Create | `docs/adr/0002-use-gitleaks-for-secret-scanning.md`               | ADR: gitleaks in CI                                                  |
+| Create | `docs/adr/0003-profile-capability-model-for-machine-detection.md` | ADR: profile/capability model                                        |
+| Create | `docs/adr/0004-lib-modular-structure-for-setup-env.md`            | ADR: lib/ split                                                      |
+| Create | `docs/adr/0005-require-secrets-guarding-in-all-personal-repos.md` | ADR: cross-repo secrets policy                                       |
+| Modify | `CLAUDE.md`                                                       | Add `docs/` subtree to Layout section                                |
+| Modify | `README.md`                                                       | Add `docs/` subtree to Repository Layout + fix stale auto-merge text |
 
 ---
 
 ### Task 1: Create docs/adr/ directory with index and five seed ADRs
 
 **Files:**
+
 - Create: `docs/adr/README.md`
 - Create: `docs/adr/0001-use-bats-for-shell-testing.md`
 - Create: `docs/adr/0002-use-gitleaks-for-secret-scanning.md`
@@ -44,12 +45,12 @@ No tests — these are documentation files.
 
 Cross-cutting decisions that apply across personal repos. Repo-specific decisions live in that repo's own `docs/adr/`.
 
-| ADR | Title | Date | Status |
-|-----|-------|------|--------|
-| [0001](0001-use-bats-for-shell-testing.md) | Use BATS for shell testing | 2026-03-27 | Accepted |
-| [0002](0002-use-gitleaks-for-secret-scanning.md) | Use gitleaks for secret scanning | 2026-04-08 | Accepted |
+| ADR                                                            | Title                                          | Date       | Status   |
+| -------------------------------------------------------------- | ---------------------------------------------- | ---------- | -------- |
+| [0001](0001-use-bats-for-shell-testing.md)                     | Use BATS for shell testing                     | 2026-03-27 | Accepted |
+| [0002](0002-use-gitleaks-for-secret-scanning.md)               | Use gitleaks for secret scanning               | 2026-04-08 | Accepted |
 | [0003](0003-profile-capability-model-for-machine-detection.md) | Profile/capability model for machine detection | 2026-03-31 | Accepted |
-| [0004](0004-lib-modular-structure-for-setup-env.md) | Modular lib/ structure for setup_env.sh | 2026-03-31 | Accepted |
+| [0004](0004-lib-modular-structure-for-setup-env.md)            | Modular lib/ structure for setup_env.sh        | 2026-03-31 | Accepted |
 | [0005](0005-require-secrets-guarding-in-all-personal-repos.md) | Require secrets guarding in all personal repos | 2026-04-09 | Accepted |
 ```
 
@@ -162,15 +163,15 @@ All capability-gated code checks `HAS_*` vars, never raw hostnames.
 
 Split `setup_env.sh` into a thin dispatcher that sources seven purpose-specific library files in dependency order:
 
-| File | Responsibility |
-|------|---------------|
-| `lib/constants.sh` | Version pins, download URLs, directory variables |
-| `lib/helpers.sh` | Logging (`log_info/warn/error`), `safe_link`, install guards, brew helpers |
-| `lib/detect_env.sh` | OS/version detection + profile/capability resolution |
-| `lib/macos.sh` | macOS-specific install functions |
-| `lib/linux.sh` | Linux-specific install functions |
-| `lib/developer.sh` | Cross-platform dev tooling (Ruby, Python, Ansible, etc.) |
-| `lib/workflows.sh` | Top-level workflow functions dispatched by `setup_env.sh` |
+| File                | Responsibility                                                             |
+| ------------------- | -------------------------------------------------------------------------- |
+| `lib/constants.sh`  | Version pins, download URLs, directory variables                           |
+| `lib/helpers.sh`    | Logging (`log_info/warn/error`), `safe_link`, install guards, brew helpers |
+| `lib/detect_env.sh` | OS/version detection + profile/capability resolution                       |
+| `lib/macos.sh`      | macOS-specific install functions                                           |
+| `lib/linux.sh`      | Linux-specific install functions                                           |
+| `lib/developer.sh`  | Cross-platform dev tooling (Ruby, Python, Ansible, etc.)                   |
+| `lib/workflows.sh`  | Top-level workflow functions dispatched by `setup_env.sh`                  |
 
 `setup_env.sh` itself only parses args and dispatches to `run_*` functions in `lib/workflows.sh`.
 
@@ -240,6 +241,7 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 ### Task 2: Update CLAUDE.md Layout section
 
 **Files:**
+
 - Modify: `CLAUDE.md` (repo-level, at `dotfiles/CLAUDE.md`)
 
 The Layout section's directory tree has no `docs/` entry. Add it after the `config/` block.
@@ -283,9 +285,11 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 ### Task 3: Update README.md Repository Layout and fix stale text
 
 **Files:**
+
 - Modify: `README.md`
 
 Two changes needed:
+
 1. Add `docs/` to the Repository Layout directory tree (currently missing entirely).
 2. Fix stale Branch Workflow text: line currently says "Dependabot PRs are auto-merged when all three pass; feature PRs require manual merge." — CI now auto-merges **all** PRs when CI passes (changed when the `auto-merge` job was restored for all PRs).
 
@@ -340,6 +344,7 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 ### Task 4: Update docs/superpowers/README.md plan index
 
 **Files:**
+
 - Modify: `docs/superpowers/README.md`
 
 Add the ADR implementation plan to the master status index.

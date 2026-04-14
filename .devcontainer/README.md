@@ -2,10 +2,10 @@
 
 ## Background Important Links:
 
-* [VSCODE Developing inside of a Container](https://code.visualstudio.com/docs/remote/containers)
-* [VSCODE Connect to remote Docker over SSH](https://code.visualstudio.com/docs/containers/ssh)
-* [VSCODE Create a Dev Container](https://code.visualstudio.com/docs/remote/create-dev-container)
-* [VSCODE Advanced Container Configureation](https://code.visualstudio.com/docs/remote/containers-advanced)
+- [VSCODE Developing inside of a Container](https://code.visualstudio.com/docs/remote/containers)
+- [VSCODE Connect to remote Docker over SSH](https://code.visualstudio.com/docs/containers/ssh)
+- [VSCODE Create a Dev Container](https://code.visualstudio.com/docs/remote/create-dev-container)
+- [VSCODE Advanced Container Configureation](https://code.visualstudio.com/docs/remote/containers-advanced)
 
 ## Setup for using a remote workstation/server/vm for development
 
@@ -13,7 +13,7 @@
 1. Ensure that you have ssh key access setup from your local environment to the remote
 1. Install docker on your local environment as it is needed to build the container locally before it provisions it on the remote
 1. Install docker on the remote machine if you want to use a remote machine
-    1. ensure that the user you will connecting with can run docker without sudo, they should be part of the docker group on the remote machine
+   1. ensure that the user you will connecting with can run docker without sudo, they should be part of the docker group on the remote machine
 1. Create a docker context pointing to the remote
 
 ```
@@ -28,7 +28,6 @@ docker context ls
 
 7. Open the vscode Command Pallette and set the docker context correctly by doing a "Docker Contexts: Use" and setting to the correct context
 8. Open the folder above the .devcontainer in vscode or alternatively you can use the Command Pallette to do a "Remote-Containers: Open Folder in Container..."
-
 
 ## Rebuild the running container with changes to container config
 

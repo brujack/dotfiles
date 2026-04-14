@@ -36,6 +36,7 @@ tests/zshrc.d/
 **Root cause:** The no-args guard uses `exit 1`, which kills the entire interactive shell session when the function is called without arguments.
 
 **Fix:**
+
 ```zsh
 # Before
 if [ $# -eq 0 ]; then
@@ -58,43 +59,43 @@ All tests source `2_functions.zsh` inside a `zsh -c` subprocess with mock comman
 
 ### `Make()` — 4 tests
 
-| # | Test | Setup | Assert |
-|---|------|-------|--------|
-| 1 | Uses `task` when `Taskfile.yml` exists | Create `Taskfile.yml` in `$BATS_TEST_TMPDIR`; `cd` there; mock `task` | `task` called |
-| 2 | Uses `task` when `Taskfile.yaml` exists | Create `Taskfile.yaml` in `$BATS_TEST_TMPDIR`; `cd` there; mock `task` | `task` called |
-| 3 | Uses `gmake` when no Taskfile and `gmake` in PATH | No Taskfile; mock `gmake` in PATH | `gmake` called |
-| 4 | Falls back to `make` when no Taskfile and no `gmake` | No Taskfile; no `gmake` mock | `make` called |
+| #   | Test                                                 | Setup                                                                  | Assert         |
+| --- | ---------------------------------------------------- | ---------------------------------------------------------------------- | -------------- |
+| 1   | Uses `task` when `Taskfile.yml` exists               | Create `Taskfile.yml` in `$BATS_TEST_TMPDIR`; `cd` there; mock `task`  | `task` called  |
+| 2   | Uses `task` when `Taskfile.yaml` exists              | Create `Taskfile.yaml` in `$BATS_TEST_TMPDIR`; `cd` there; mock `task` | `task` called  |
+| 3   | Uses `gmake` when no Taskfile and `gmake` in PATH    | No Taskfile; mock `gmake` in PATH                                      | `gmake` called |
+| 4   | Falls back to `make` when no Taskfile and no `gmake` | No Taskfile; no `gmake` mock                                           | `make` called  |
 
 ### `quiet_which()` — 3 tests
 
-| # | Test | Assert |
-|---|------|--------|
-| 1 | Returns 1 and prints usage when no args | `status -eq 1`; output contains "Usage" |
-| 2 | Returns 0 when command exists | `status -eq 0` |
-| 3 | Returns 1 when command does not exist | `status -eq 1` |
+| #   | Test                                    | Assert                                  |
+| --- | --------------------------------------- | --------------------------------------- |
+| 1   | Returns 1 and prints usage when no args | `status -eq 1`; output contains "Usage" |
+| 2   | Returns 0 when command exists           | `status -eq 0`                          |
+| 3   | Returns 1 when command does not exist   | `status -eq 1`                          |
 
 ### `mkill()` — 2 tests
 
-| # | Test | Setup | Assert |
-|---|------|-------|--------|
-| 1 | Returns 1 and prints message when no args | — | `status -eq 1`; output contains "Please provide" |
-| 2 | Prints "not running" when process not found | Mock `pgrep` returns 1 | output contains "not running" |
+| #   | Test                                        | Setup                  | Assert                                           |
+| --- | ------------------------------------------- | ---------------------- | ------------------------------------------------ |
+| 1   | Returns 1 and prints message when no args   | —                      | `status -eq 1`; output contains "Please provide" |
+| 2   | Prints "not running" when process not found | Mock `pgrep` returns 1 | output contains "not running"                    |
 
 ### `findStringInFile()` — 2 tests
 
-| # | Test | Assert |
-|---|------|--------|
-| 1 | Prints error when no file arg | output contains "No file supplied" |
-| 2 | Prints error when no string arg | output contains "No string supplied" |
+| #   | Test                            | Assert                               |
+| --- | ------------------------------- | ------------------------------------ |
+| 1   | Prints error when no file arg   | output contains "No file supplied"   |
+| 2   | Prints error when no string arg | output contains "No string supplied" |
 
 ### Arg-validation for external-call functions — 4 tests (1 each)
 
-| # | Function | Assert |
-|---|----------|--------|
-| 1 | `tssh()` | `status -eq 1`; output contains "No arguments" |
-| 2 | `sh()` | `status -eq 1`; output contains "No arguments" |
-| 3 | `sshu()` | `status -eq 1`; output contains "No arguments" |
-| 4 | `search_pkg()` | `status -eq 1`; output contains "No arguments" |
+| #   | Function       | Assert                                         |
+| --- | -------------- | ---------------------------------------------- |
+| 1   | `tssh()`       | `status -eq 1`; output contains "No arguments" |
+| 2   | `sh()`         | `status -eq 1`; output contains "No arguments" |
+| 3   | `sshu()`       | `status -eq 1`; output contains "No arguments" |
+| 4   | `search_pkg()` | `status -eq 1`; output contains "No arguments" |
 
 ---
 
@@ -104,24 +105,24 @@ All tests source `5_general.zsh` inside a `zsh -c` subprocess. Platform variable
 
 ### `EDITOR` / `GIT_EDITOR` — 3 tests
 
-| # | Test | Setup | Assert |
-|---|------|-------|--------|
-| 1 | Sets `EDITOR=vim` on Linux | `LINUX=1`; unset `SSH_CONNECTION` | `EDITOR=vim`; `GIT_EDITOR=vim` |
-| 2 | Sets `EDITOR=code` on macOS without SSH | `MACOS=1`; unset `SSH_CONNECTION` | `EDITOR=code`; `GIT_EDITOR=code` |
-| 3 | Sets `EDITOR=vim` on macOS when SSH | `MACOS=1`; `SSH_CONNECTION=1` | `EDITOR=vim`; `GIT_EDITOR=vim` |
+| #   | Test                                    | Setup                             | Assert                           |
+| --- | --------------------------------------- | --------------------------------- | -------------------------------- |
+| 1   | Sets `EDITOR=vim` on Linux              | `LINUX=1`; unset `SSH_CONNECTION` | `EDITOR=vim`; `GIT_EDITOR=vim`   |
+| 2   | Sets `EDITOR=code` on macOS without SSH | `MACOS=1`; unset `SSH_CONNECTION` | `EDITOR=code`; `GIT_EDITOR=code` |
+| 3   | Sets `EDITOR=vim` on macOS when SSH     | `MACOS=1`; `SSH_CONNECTION=1`     | `EDITOR=vim`; `GIT_EDITOR=vim`   |
 
 ### `PSHOME` — 2 tests
 
-| # | Test | Setup | Assert |
-|---|------|-------|--------|
-| 4 | Sets `PSHOME` on macOS | `MACOS=1` | `PSHOME=/usr/local/microsoft/powershell/7/` |
-| 5 | Sets `PSHOME` on Linux | `LINUX=1` | `PSHOME=/opt/microsoft/powershell/7/` |
+| #   | Test                   | Setup     | Assert                                      |
+| --- | ---------------------- | --------- | ------------------------------------------- |
+| 4   | Sets `PSHOME` on macOS | `MACOS=1` | `PSHOME=/usr/local/microsoft/powershell/7/` |
+| 5   | Sets `PSHOME` on Linux | `LINUX=1` | `PSHOME=/opt/microsoft/powershell/7/`       |
 
 ### `ANSIBLEUSER` — 1 test
 
-| # | Test | Assert |
-|---|------|--------|
-| 6 | Sets `ANSIBLEUSER=ubuntu` always | `ANSIBLEUSER=ubuntu` |
+| #   | Test                             | Assert               |
+| --- | -------------------------------- | -------------------- |
+| 6   | Sets `ANSIBLEUSER=ubuntu` always | `ANSIBLEUSER=ubuntu` |
 
 ---
 
@@ -129,16 +130,16 @@ All tests source `5_general.zsh` inside a `zsh -c` subprocess. Platform variable
 
 All tests source `6_path.zsh` inside a `zsh -c` subprocess. Tests create real temporary directories under `$BATS_TEST_TMPDIR` and override `HOME` to point there, so existence checks (`-d`) work correctly without touching the real filesystem.
 
-| # | Test | Setup | Assert |
-|---|------|-------|--------|
-| 1 | Adds `~/bin` to PATH when it exists | Create `$HOME/bin` | PATH contains `$HOME/bin` |
-| 2 | Does not add `~/bin` when absent | Do not create `$HOME/bin` | PATH does not contain `$HOME/bin` |
-| 3 | Adds `~/scripts` to PATH when it exists | Create `$HOME/scripts` | PATH contains `$HOME/scripts` |
-| 4 | Adds `/opt/homebrew/bin` on macOS when present | `MACOS=1`; `/opt/homebrew/bin` exists on the dev machine | PATH contains `/opt/homebrew/bin` |
-| 5 | Does not add `/opt/homebrew/bin` on Linux | `LINUX=1`; unset `MACOS` | PATH does not contain `/opt/homebrew/bin` |
-| 6 | Adds `~/.cargo/bin` when present | Create `$HOME/.cargo/bin` | PATH contains it |
-| 7 | Adds `/home/linuxbrew/.linuxbrew/bin` on Linux when present | `LINUX=1`; create dir | PATH contains it |
-| 8 | PATH contains no duplicates after sourcing twice | Source `6_path.zsh` twice | No duplicate entries in PATH |
+| #   | Test                                                        | Setup                                                    | Assert                                    |
+| --- | ----------------------------------------------------------- | -------------------------------------------------------- | ----------------------------------------- |
+| 1   | Adds `~/bin` to PATH when it exists                         | Create `$HOME/bin`                                       | PATH contains `$HOME/bin`                 |
+| 2   | Does not add `~/bin` when absent                            | Do not create `$HOME/bin`                                | PATH does not contain `$HOME/bin`         |
+| 3   | Adds `~/scripts` to PATH when it exists                     | Create `$HOME/scripts`                                   | PATH contains `$HOME/scripts`             |
+| 4   | Adds `/opt/homebrew/bin` on macOS when present              | `MACOS=1`; `/opt/homebrew/bin` exists on the dev machine | PATH contains `/opt/homebrew/bin`         |
+| 5   | Does not add `/opt/homebrew/bin` on Linux                   | `LINUX=1`; unset `MACOS`                                 | PATH does not contain `/opt/homebrew/bin` |
+| 6   | Adds `~/.cargo/bin` when present                            | Create `$HOME/.cargo/bin`                                | PATH contains it                          |
+| 7   | Adds `/home/linuxbrew/.linuxbrew/bin` on Linux when present | `LINUX=1`; create dir                                    | PATH contains it                          |
+| 8   | PATH contains no duplicates after sourcing twice            | Source `6_path.zsh` twice                                | No duplicate entries in PATH              |
 
 ---
 
@@ -148,29 +149,29 @@ All tests source `7_final.zsh` inside a `zsh -c` subprocess. `quiet_which` (call
 
 ### `GOROOT` / `GOPATH` — 4 tests
 
-| # | Test | Setup | Assert |
-|---|------|-------|--------|
-| 1 | Sets `GOROOT` when `/usr/local/go` exists | Create dir stub | `GOROOT=/usr/local/go` |
-| 2 | Does not set `GOROOT` when absent | No dir | `GOROOT` unset |
-| 3 | Sets `GOPATH` when `~/go-work` exists | Create `$HOME/go-work` | `GOPATH=$HOME/go-work` |
-| 4 | Does not set `GOPATH` when absent | No dir | `GOPATH` unset |
+| #   | Test                                      | Setup                  | Assert                 |
+| --- | ----------------------------------------- | ---------------------- | ---------------------- |
+| 1   | Sets `GOROOT` when `/usr/local/go` exists | Create dir stub        | `GOROOT=/usr/local/go` |
+| 2   | Does not set `GOROOT` when absent         | No dir                 | `GOROOT` unset         |
+| 3   | Sets `GOPATH` when `~/go-work` exists     | Create `$HOME/go-work` | `GOPATH=$HOME/go-work` |
+| 4   | Does not set `GOPATH` when absent         | No dir                 | `GOPATH` unset         |
 
 ### `ICON` — 2 tests
 
-| # | Test | Setup | Assert |
-|---|------|-------|--------|
-| 5 | Sets macOS icon on macOS | `MACOS=1` | `ICON=` |
-| 6 | Sets Ubuntu icon on Linux | `LINUX=1`; mock `/etc/os-release` with `ID=ubuntu` | `ICON=` |
+| #   | Test                      | Setup                                              | Assert  |
+| --- | ------------------------- | -------------------------------------------------- | ------- |
+| 5   | Sets macOS icon on macOS  | `MACOS=1`                                          | `ICON=` |
+| 6   | Sets Ubuntu icon on Linux | `LINUX=1`; mock `/etc/os-release` with `ID=ubuntu` | `ICON=` |
 
 ---
 
 ## Test Count Projection
 
-| File | Before | Added | After |
-|------|--------|-------|-------|
-| `tests/zshrc.d/unit.bats` | 10 | 0 | 10 |
-| `tests/zshrc.d/functions.bats` | 0 | 13 | 13 |
-| `tests/zshrc.d/general.bats` | 0 | 6 | 6 |
-| `tests/zshrc.d/path.bats` | 0 | 8 | 8 |
-| `tests/zshrc.d/final.bats` | 0 | 6 | 6 |
-| **Total** | **10** | **33** | **43** |
+| File                           | Before | Added  | After  |
+| ------------------------------ | ------ | ------ | ------ |
+| `tests/zshrc.d/unit.bats`      | 10     | 0      | 10     |
+| `tests/zshrc.d/functions.bats` | 0      | 13     | 13     |
+| `tests/zshrc.d/general.bats`   | 0      | 6      | 6      |
+| `tests/zshrc.d/path.bats`      | 0      | 8      | 8      |
+| `tests/zshrc.d/final.bats`     | 0      | 6      | 6      |
+| **Total**                      | **10** | **33** | **43** |

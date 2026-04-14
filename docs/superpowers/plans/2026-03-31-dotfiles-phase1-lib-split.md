@@ -12,18 +12,19 @@
 
 ## Files
 
-| File | Action |
-|---|---|
-| `lib/constants.sh` | Create — version pins, download URLs, directory vars (from lines 3–57 of `setup_env.sh`) |
-| `lib/helpers.sh` | Create — `quiet_which`, `rhel_installed_package`, `brew_formula_installed`, `brew_cask_installed`, `brew_install_formula`, `brew_install_cask`, `brew_tap_installed`, `brew_tap_if_missing`, `brew_update`, `check_and_install_nala`, `app_dir_exists`, `ensure_not_root`, `usage`, `process_args`, `setup_dotfile_symlinks`, `setup_credential_directories` |
-| `lib/detect_env.sh` | Create — `detect_env()` wrapping the inline block at lines 898–930 of `setup_env.sh` |
-| `lib/macos.sh` | Create — `install_rosetta`, `install_homebrew`, `install_git` (macOS), `install_zsh` (macOS), `setup_zsh_as_default_shell` |
-| `lib/linux.sh` | Create — `install_bats`, `install_git` (Linux), `install_zsh` (Linux), `update_system_packages` |
-| `lib/developer.sh` | Create — `clone_or_update_dotfiles`, `update_aws_cli`, `update_rust` + any developer tooling functions extracted in Phase 0 |
-| `setup_env.sh` | Modify — remove all functions and constants; add `source` calls; keep prereq check, sourcing guard, and workflow dispatch blocks |
-| `tests/setup_env/unit.bats` | Modify — add lib/ source tests |
+| File                        | Action                                                                                                                                                                                                                                                                                                                                                       |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `lib/constants.sh`          | Create — version pins, download URLs, directory vars (from lines 3–57 of `setup_env.sh`)                                                                                                                                                                                                                                                                     |
+| `lib/helpers.sh`            | Create — `quiet_which`, `rhel_installed_package`, `brew_formula_installed`, `brew_cask_installed`, `brew_install_formula`, `brew_install_cask`, `brew_tap_installed`, `brew_tap_if_missing`, `brew_update`, `check_and_install_nala`, `app_dir_exists`, `ensure_not_root`, `usage`, `process_args`, `setup_dotfile_symlinks`, `setup_credential_directories` |
+| `lib/detect_env.sh`         | Create — `detect_env()` wrapping the inline block at lines 898–930 of `setup_env.sh`                                                                                                                                                                                                                                                                         |
+| `lib/macos.sh`              | Create — `install_rosetta`, `install_homebrew`, `install_git` (macOS), `install_zsh` (macOS), `setup_zsh_as_default_shell`                                                                                                                                                                                                                                   |
+| `lib/linux.sh`              | Create — `install_bats`, `install_git` (Linux), `install_zsh` (Linux), `update_system_packages`                                                                                                                                                                                                                                                              |
+| `lib/developer.sh`          | Create — `clone_or_update_dotfiles`, `update_aws_cli`, `update_rust` + any developer tooling functions extracted in Phase 0                                                                                                                                                                                                                                  |
+| `setup_env.sh`              | Modify — remove all functions and constants; add `source` calls; keep prereq check, sourcing guard, and workflow dispatch blocks                                                                                                                                                                                                                             |
+| `tests/setup_env/unit.bats` | Modify — add lib/ source tests                                                                                                                                                                                                                                                                                                                               |
 
 **Key orientation:**
+
 - Current `setup_env.sh` structure: lines 1–57 constants, line 58 HOSTNAME, lines 61–890 functions, line 892 sourcing guard, lines 894+ execution.
 - Functions `install_git` and `install_zsh` are long and contain MACOS/LINUX branches — they stay as single cross-platform functions but move to `lib/macos.sh` (since they are predominantly macOS) or split into per-platform functions. Simplest: keep them whole in `lib/macos.sh` since they already have `if [[ -n ${MACOS} ]]` / `elif [[ -n ${LINUX} ]]` guards.
 - `HOSTNAME=$(hostname -s)` at line 58 moves inside `detect_env()`.
@@ -34,6 +35,7 @@
 ## Task 1: Write failing source tests for each lib file
 
 **Files:**
+
 - Modify: `tests/setup_env/unit.bats`
 
 These tests verify each lib file sources without error. They will fail because the lib/ files don't exist yet.
@@ -87,6 +89,7 @@ Expected: all 6 lib source tests fail — `lib/constants.sh: No such file or dir
 ## Task 2: Create `lib/constants.sh`
 
 **Files:**
+
 - Create: `lib/constants.sh`
 
 - [ ] **Step 1: Create `lib/` directory and `lib/constants.sh`**
@@ -174,9 +177,11 @@ Expected: PASS.
 ## Task 3: Create `lib/helpers.sh`
 
 **Files:**
+
 - Create: `lib/helpers.sh`
 
 Move these functions from `setup_env.sh` into `lib/helpers.sh`:
+
 - `quiet_which` (line 61)
 - `rhel_installed_package` (line 65)
 - `brew_update` (line 156)
@@ -223,11 +228,13 @@ Expected: PASS.
 ## Task 4: Create `lib/detect_env.sh`
 
 **Files:**
+
 - Create: `lib/detect_env.sh`
 
 The inline OS/version/hostname detection block currently lives in the main execution area of `setup_env.sh` (after the sourcing guard, around lines 898–930). Wrap it in a `detect_env()` function and move it to `lib/detect_env.sh`.
 
 Current inline block (approximately):
+
 ```bash
 [[ $(uname -s) = "Darwin" ]] && readonly MACOS=1
 [[ $(uname -s) = "Linux" ]] && readonly LINUX=1
@@ -295,9 +302,11 @@ Expected: PASS.
 ## Task 5: Create `lib/macos.sh`
 
 **Files:**
+
 - Create: `lib/macos.sh`
 
 Move these functions from `setup_env.sh`:
+
 - `install_rosetta` (line 73)
 - `install_homebrew` (line 116)
 - `install_git` (line 269) — full function including Linux branch
@@ -335,9 +344,11 @@ Expected: PASS.
 ## Task 6: Create `lib/linux.sh`
 
 **Files:**
+
 - Create: `lib/linux.sh`
 
 Move these functions from `setup_env.sh`:
+
 - `install_bats` (line 430)
 - `update_system_packages` (line 823)
 
@@ -372,9 +383,11 @@ Expected: PASS.
 ## Task 7: Create `lib/developer.sh`
 
 **Files:**
+
 - Create: `lib/developer.sh`
 
 Move these functions from `setup_env.sh`:
+
 - `clone_or_update_dotfiles` (line 504)
 - `update_aws_cli` (line 854)
 - `update_rust` (line 876)
@@ -410,9 +423,11 @@ Expected: PASS.
 ## Task 8: Rewrite `setup_env.sh` as the orchestrator
 
 **Files:**
+
 - Modify: `setup_env.sh`
 
 At this point all functions and constants have been moved to lib/ files. `setup_env.sh` should contain only:
+
 1. The shebang
 2. The Phase 0 prereq check block
 3. The six `source` calls (in dependency order)

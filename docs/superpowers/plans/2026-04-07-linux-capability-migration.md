@@ -25,6 +25,7 @@
 ### Task 1: Add wsl2_workstation profile and HAS_SNAP capability (TDD)
 
 **Files:**
+
 - Test: `tests/setup_env/profiles.bats`
 - Modify: `config/profiles.sh`
 
@@ -159,6 +160,7 @@ EOF
 ### Task 2: Remove CRUNCHER and WORKSTATION legacy aliases from detect_env.sh
 
 **Files:**
+
 - Modify: `lib/detect_env.sh`
 
 The aliases are safe to remove only after all call sites in `setup_env.sh` are replaced (Task 3 does that). However, the aliases for these two vars are removed here because `config/profiles.sh` changes already make the vars redundant from the profile system's perspective. **Do Task 3 immediately after this task in the same session** — don't commit Task 2 until Task 3 is also done and tests pass.
@@ -213,6 +215,7 @@ Expected: `syntax OK`
 ### Task 3: Replace all WORKSTATION/CRUNCHER gates in setup_env.sh
 
 **Files:**
+
 - Modify: `setup_env.sh`
 
 There are 16 sites to update. They are listed below in line-number order (approximate — adjust if prior edits shifted lines). Make all changes then verify syntax and tests together.
@@ -220,6 +223,7 @@ There are 16 sites to update. They are listed below in line-number order (approx
 - [ ] **Step 1: Line ~186 — snap package install gate**
 
 Replace:
+
 ```bash
     if [[ -n ${WORKSTATION} ]]; then
       printf "Installing workstation packages\\n"
@@ -227,6 +231,7 @@ Replace:
 ```
 
 With:
+
 ```bash
     if [[ -n ${HAS_SNAP} ]]; then
       printf "Installing workstation packages\\n"
@@ -236,12 +241,14 @@ With:
 - [ ] **Step 2: Line ~439 — Rust install gate**
 
 Replace:
+
 ```bash
     if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
       printf "Installing Rust Ubuntu\\n"
 ```
 
 With:
+
 ```bash
     if [[ -n ${HAS_RUST} ]]; then
       printf "Installing Rust Ubuntu\\n"
@@ -250,12 +257,14 @@ With:
 - [ ] **Step 3: Line ~453 — Docker install gate**
 
 Replace:
+
 ```bash
     if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
       printf "Installing docker\\n"
 ```
 
 With:
+
 ```bash
     if [[ -n ${HAS_DOCKER} ]]; then
       printf "Installing docker\\n"
@@ -264,12 +273,14 @@ With:
 - [ ] **Step 4: Line ~477 — VirtualBox install gate**
 
 Replace:
+
 ```bash
     if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
       printf "Installing Virtualbox\\n"
 ```
 
 With:
+
 ```bash
     if [[ -n ${HAS_DEVTOOLS} ]]; then
       printf "Installing Virtualbox\\n"
@@ -278,12 +289,14 @@ With:
 - [ ] **Step 5: Line ~488 — Teleport install gate**
 
 Replace:
+
 ```bash
     if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
       printf "Installing teleport\\n"
 ```
 
 With:
+
 ```bash
     if [[ -n ${HAS_DEVTOOLS} ]]; then
       printf "Installing teleport\\n"
@@ -292,12 +305,14 @@ With:
 - [ ] **Step 6: Line ~499 — cloudflared install gate**
 
 Replace:
+
 ```bash
     if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
       printf "Installing cloudflared\\n"
 ```
 
 With:
+
 ```bash
     if [[ -n ${HAS_DEVTOOLS} ]]; then
       printf "Installing cloudflared\\n"
@@ -306,6 +321,7 @@ With:
 - [ ] **Step 7: Line ~510 — kind install gate**
 
 Replace:
+
 ```bash
     if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
       if [[ ! -f ${HOME}/software_downloads/kind_${KIND_VER} ]]; then
@@ -313,6 +329,7 @@ Replace:
 ```
 
 With:
+
 ```bash
     if [[ -n ${HAS_K8S} ]]; then
       if [[ ! -f ${HOME}/software_downloads/kind_${KIND_VER} ]]; then
@@ -322,6 +339,7 @@ With:
 - [ ] **Step 8: Line ~524 — yq install gate**
 
 Replace:
+
 ```bash
     if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
       if [[ ! -f ${HOME}/software_downloads/yq_${YQ_VER} ]]; then
@@ -329,6 +347,7 @@ Replace:
 ```
 
 With:
+
 ```bash
     if [[ -n ${HAS_DEVTOOLS} ]]; then
       if [[ ! -f ${HOME}/software_downloads/yq_${YQ_VER} ]]; then
@@ -338,6 +357,7 @@ With:
 - [ ] **Step 9: Line ~538 — Albert launcher gate**
 
 Replace:
+
 ```bash
     if [[ -n ${WORKSTATION} ]]; then
       if [[ ${FOCAL} ]]; then
@@ -345,6 +365,7 @@ Replace:
 ```
 
 With:
+
 ```bash
     if [[ -n ${HAS_SNAP} ]]; then
       if [[ ${FOCAL} ]]; then
@@ -354,12 +375,14 @@ With:
 - [ ] **Step 10: Line ~575 — telepresence install gate**
 
 Replace:
+
 ```bash
     if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
       printf "Installing telepresence\\n"
 ```
 
 With:
+
 ```bash
     if [[ -n ${HAS_K8S} ]]; then
       printf "Installing telepresence\\n"
@@ -368,12 +391,14 @@ With:
 - [ ] **Step 11: Line ~729 — claude-code + plugins gate**
 
 Replace:
+
 ```bash
       if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
         brew_install_formula claude-code
 ```
 
 With:
+
 ```bash
       if [[ -n ${HAS_DEVTOOLS} ]]; then
         brew_install_formula claude-code
@@ -382,6 +407,7 @@ With:
 - [ ] **Step 12: Line ~737 — ollama gate**
 
 Replace:
+
 ```bash
       if [[ -n ${WORKSTATION} ]]; then
         brew_install_formula ollama
@@ -389,6 +415,7 @@ Replace:
 ```
 
 With:
+
 ```bash
       if [[ -n ${HAS_SNAP} ]]; then
         brew_install_formula ollama
@@ -398,12 +425,14 @@ With:
 - [ ] **Step 13: Line ~742 — Microsoft Edge gate**
 
 Replace:
+
 ```bash
     if [[ -n ${WORKSTATION} ]]; then
       printf "Installing microsoft edge\\n"
 ```
 
 With:
+
 ```bash
     if [[ -n ${HAS_SNAP} ]]; then
       printf "Installing microsoft edge\\n"
@@ -412,6 +441,7 @@ With:
 - [ ] **Step 14: Line ~749 — dotnet-sdk-8.0 gate**
 
 Replace:
+
 ```bash
     if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
       printf "Installing .net8 sdk\\n"
@@ -420,6 +450,7 @@ Replace:
 ```
 
 With:
+
 ```bash
     if [[ -n ${HAS_DEVTOOLS} ]]; then
       printf "Installing .net8 sdk\\n"
@@ -430,6 +461,7 @@ With:
 - [ ] **Step 15: Line ~765 and ~776 — snap classic installs and WSL2 helm**
 
 Replace:
+
 ```bash
     if [[ -n ${WORKSTATION} ]]; then
       printf "snap software with classic option, the other snap packages are installed in ubuntu_workstation_snap_packages.txt\\n"
@@ -451,6 +483,7 @@ Replace:
 ```
 
 With:
+
 ```bash
     if [[ -n ${HAS_SNAP} ]]; then
       printf "snap software with classic option, the other snap packages are installed in ubuntu_workstation_snap_packages.txt\\n"
@@ -476,12 +509,14 @@ Note: the helm-via-apt block was previously gated on `CRUNCHER` (WSL2 only). The
 - [ ] **Step 16: Line ~796 — libssl1.1 gate**
 
 Replace:
+
 ```bash
     if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
       printf "installing libssl1.1\\n"
 ```
 
 With:
+
 ```bash
     if [[ -n ${HAS_DEVTOOLS} ]]; then
       printf "installing libssl1.1\\n"
@@ -490,6 +525,7 @@ With:
 - [ ] **Step 17: Line ~1033 — Linux aws-cli gate**
 
 Replace:
+
 ```bash
   if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
     mkdir -p ${HOME}/software_downloads/awscli
@@ -497,6 +533,7 @@ Replace:
 ```
 
 With:
+
 ```bash
   if [[ -n ${HAS_AWS} ]] && [[ -n ${LINUX} ]]; then
     mkdir -p ${HOME}/software_downloads/awscli
@@ -543,20 +580,21 @@ EOF
 ### Task 4: Update README.md
 
 **Files:**
+
 - Modify: `README.md`
 
 - [ ] **Step 1: Find and update the Machine Profiles table**
 
 Locate the Machine Profiles section in `README.md`. Add a row for `wsl2_workstation` and update the `linux_workstation` row to show `snap` in its capabilities. The table should read:
 
-| Profile | Hostname | HAS_GUI | HAS_DEVTOOLS | HAS_AWS | HAS_K8S | HAS_DOCKER | HAS_RUST | HAS_PRINTING | HAS_SNAP |
-|---|---|---|---|---|---|---|---|---|---|
-| `personal_laptop` | laptop | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | |
-| `mac_workstation` | studio, reception | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | |
-| `mac_mini` | office, home-1 | ✓ | | | | | | ✓ | |
-| `linux_workstation` | workstation | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | | ✓ |
-| `wsl2_workstation` | cruncher | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | | |
-| `server` | (any server) | | ✓ | ✓ | | | | | |
+| Profile             | Hostname          | HAS_GUI | HAS_DEVTOOLS | HAS_AWS | HAS_K8S | HAS_DOCKER | HAS_RUST | HAS_PRINTING | HAS_SNAP |
+| ------------------- | ----------------- | ------- | ------------ | ------- | ------- | ---------- | -------- | ------------ | -------- |
+| `personal_laptop`   | laptop            | ✓       | ✓            | ✓       | ✓       | ✓          | ✓        | ✓            |          |
+| `mac_workstation`   | studio, reception | ✓       | ✓            | ✓       | ✓       | ✓          | ✓        | ✓            |          |
+| `mac_mini`          | office, home-1    | ✓       |              |         |         |            |          | ✓            |          |
+| `linux_workstation` | workstation       | ✓       | ✓            | ✓       | ✓       | ✓          | ✓        |              | ✓        |
+| `wsl2_workstation`  | cruncher          | ✓       | ✓            | ✓       | ✓       | ✓          | ✓        |              |          |
+| `server`            | (any server)      |         | ✓            | ✓       |         |            |          |              |          |
 
 Add a note below the table:
 

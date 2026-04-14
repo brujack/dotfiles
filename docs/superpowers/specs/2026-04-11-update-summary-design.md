@@ -28,29 +28,29 @@ A temp directory created at the start of `run_update()` holds all snapshot files
 
 ## File Structure
 
-| File | Change |
-|---|---|
-| `lib/update_summary.sh` | New — all summary infrastructure |
-| `lib/workflows.sh` | Modified — `run_update()` calls summary functions |
-| `setup_env.sh` | Modified — source `lib/update_summary.sh` |
-| `tests/setup_env/update_summary.bats` | New — unit tests for summary infrastructure |
-| `tests/setup_env/workflows.bats` | Modified — tests that `run_update()` calls summary functions |
+| File                                  | Change                                                       |
+| ------------------------------------- | ------------------------------------------------------------ |
+| `lib/update_summary.sh`               | New — all summary infrastructure                             |
+| `lib/workflows.sh`                    | Modified — `run_update()` calls summary functions            |
+| `setup_env.sh`                        | Modified — source `lib/update_summary.sh`                    |
+| `tests/setup_env/update_summary.bats` | New — unit tests for summary infrastructure                  |
+| `tests/setup_env/workflows.bats`      | Modified — tests that `run_update()` calls summary functions |
 
 ## Snapshot Strategy
 
 Each section captures state before it runs; after it completes the diff determines what changed.
 
-| Section | Pre-snapshot | Diff method |
-|---|---|---|
-| brew formulae | `brew list --formula --versions` | line diff: changed lines = upgrades |
-| brew casks | `brew list --cask --versions` | line diff |
-| softwareupdate | none | parse "Installing X" from section stdout |
-| mas | `mas list` | line diff |
-| pip | outdated package list already built before upgrade in Python block | use directly |
-| gems | `gem list` | line diff |
-| claude plugins | none | pass/fail only |
-| oh-my-zsh, p10k, tpm, tfenv | `git -C DIR rev-parse HEAD` | after pull: `git -C DIR log OLD_SHA..HEAD --oneline` |
-| cheat.sh | none | pass/fail only |
+| Section                     | Pre-snapshot                                                       | Diff method                                          |
+| --------------------------- | ------------------------------------------------------------------ | ---------------------------------------------------- |
+| brew formulae               | `brew list --formula --versions`                                   | line diff: changed lines = upgrades                  |
+| brew casks                  | `brew list --cask --versions`                                      | line diff                                            |
+| softwareupdate              | none                                                               | parse "Installing X" from section stdout             |
+| mas                         | `mas list`                                                         | line diff                                            |
+| pip                         | outdated package list already built before upgrade in Python block | use directly                                         |
+| gems                        | `gem list`                                                         | line diff                                            |
+| claude plugins              | none                                                               | pass/fail only                                       |
+| oh-my-zsh, p10k, tpm, tfenv | `git -C DIR rev-parse HEAD`                                        | after pull: `git -C DIR log OLD_SHA..HEAD --oneline` |
+| cheat.sh                    | none                                                               | pass/fail only                                       |
 
 Snapshots are written to a temp directory (`_UPDATE_TMPDIR`) created at the start of `run_update()`:
 
@@ -181,7 +181,7 @@ Path: `${UPDATE_LOG_PATH:-${HOME}/.dotfiles-update.log}`
 
 ## Test Seams
 
-| Seam | Used by | Effect |
-|---|---|---|
-| `UPDATE_LOG_PATH` | `_update_summary` | Redirects log writes to a temp file in tests; defaults to `~/.dotfiles-update.log` |
-| `_UPDATE_TMPDIR` | all summary functions | Set to `${BATS_TEST_TMPDIR}` in tests to isolate snapshot files |
+| Seam              | Used by               | Effect                                                                             |
+| ----------------- | --------------------- | ---------------------------------------------------------------------------------- |
+| `UPDATE_LOG_PATH` | `_update_summary`     | Redirects log writes to a temp file in tests; defaults to `~/.dotfiles-update.log` |
+| `_UPDATE_TMPDIR`  | all summary functions | Set to `${BATS_TEST_TMPDIR}` in tests to isolate snapshot files                    |

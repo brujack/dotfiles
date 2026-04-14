@@ -22,6 +22,7 @@ Split platform-specific install blocks out of `run_setup_or_developer()` into na
 ### `lib/macos.sh` — new: `install_macos_packages()`
 
 Absorbs the macOS block from `run_setup_or_developer`:
+
 - Symlink Brewfile to `${BREWFILE_LOC}/Brewfile`
 - Install or update Homebrew (`install_homebrew` or `brew_update`)
 - `brew_tap_if_missing homebrew/bundle`
@@ -33,6 +34,7 @@ Absorbs the macOS block from `run_setup_or_developer`:
 ### `lib/linux.sh` — new: `install_ubuntu_packages()`
 
 Absorbs the Ubuntu block from `run_setup_or_developer`:
+
 - `sudo -H apt update`
 - HWE kernel install + package list install (Focal/Jammy/Noble branches)
 - `check_and_install_nala` + nala installs for Jammy/Noble
@@ -75,14 +77,14 @@ Absorbs the vim plugin setup block (plug.vim install, existing plugged dir check
 
 ### `lib/developer.sh` — new helpers from `run_developer_or_ansible()`
 
-| Function | Responsibility |
-|---|---|
-| `install_ruby_tools()` | ruby-install + chruby download/install on Linux |
-| `install_ruby()` | ruby-install for target `RUBY_VER` (platform/distro-aware) |
-| `install_github_cli_linux()` | gh CLI install for Ubuntu and RHEL variants |
-| `setup_kitchen()` | chruby/rbenv activation, gem installs for test-kitchen suite |
-| `setup_ansible()` | pyenv Python install, ansible virtualenv create/activate |
-| `clone_personal_repos()` | clone each personal git repo if missing |
+| Function                     | Responsibility                                               |
+| ---------------------------- | ------------------------------------------------------------ |
+| `install_ruby_tools()`       | ruby-install + chruby download/install on Linux              |
+| `install_ruby()`             | ruby-install for target `RUBY_VER` (platform/distro-aware)   |
+| `install_github_cli_linux()` | gh CLI install for Ubuntu and RHEL variants                  |
+| `setup_kitchen()`            | chruby/rbenv activation, gem installs for test-kitchen suite |
+| `setup_ansible()`            | pyenv Python install, ansible virtualenv create/activate     |
+| `clone_personal_repos()`     | clone each personal git repo if missing                      |
 
 ---
 
@@ -143,31 +145,37 @@ run_developer_or_ansible() {
 New tests in `tests/setup_env/workflows.bats` for the `run_developer_or_ansible` helpers:
 
 ### `install_ruby_tools`
+
 - Calls `wget` to download ruby-install on Linux
 - Calls `wget` to download chruby on Linux (Focal/Jammy)
 - Is a no-op on macOS (neither called)
 
 ### `install_ruby`
+
 - Calls `ruby-install` when `~/.rubies/ruby-<VER>` is absent
 - Skips when `~/.rubies/ruby-<VER>` already exists
 - Calls `ruby-install` with `--with-openssl-dir` on macOS
 - Calls `rbenv install` on Noble
 
 ### `setup_kitchen`
+
 - Calls `gem install test-kitchen` on macOS
 - Calls `gem install test-kitchen` on Linux Focal/Jammy
 - Calls `rbenv install` path on Noble
 
 ### `setup_ansible`
+
 - Calls `pyenv install` when Python version not present
 - Creates ansible virtualenv when symlink absent
 - Calls `pip install ansible` inside venv
 
 ### `clone_personal_repos`
+
 - Calls `git clone` for each repo when directory absent
 - Skips `git clone` for repos that already exist
 
 ### `install_github_cli_linux`
+
 - Calls `apt install gh` on Ubuntu
 - Calls `dnf install gh` on RHEL/Fedora
 - Is a no-op on macOS

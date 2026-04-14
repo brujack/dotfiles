@@ -43,15 +43,16 @@ This means `make test` runs lint first. A syntax error in any `.sh` file blocks 
 
 ## Behavior
 
-| Command | What happens |
-|---|---|
-| `make lint` | Checks all `.sh` files with `bash -n` and `zsh -n`; exits 0 only if all pass |
-| `make test` | Runs lint first, then BATS; syntax error in any `.sh` blocks test run |
-| `make test-unit` | Not changed — does not depend on lint |
+| Command          | What happens                                                                 |
+| ---------------- | ---------------------------------------------------------------------------- |
+| `make lint`      | Checks all `.sh` files with `bash -n` and `zsh -n`; exits 0 only if all pass |
+| `make test`      | Runs lint first, then BATS; syntax error in any `.sh` blocks test run        |
+| `make test-unit` | Not changed — does not depend on lint                                        |
 
 ## Testing
 
 Verify manually:
+
 1. `make lint` passes on the current repo
 2. Introduce a deliberate syntax error in a `.sh` file; confirm `make lint` exits non-zero and names the failing file
 3. `make test` fails when `make lint` fails (before BATS runs)

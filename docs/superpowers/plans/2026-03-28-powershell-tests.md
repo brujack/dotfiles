@@ -13,11 +13,13 @@
 ## File Structure
 
 **New files:**
+
 - `powershell/Makefile` — `lint`, `test`, `help` targets; `test: lint`
 - `powershell/PSScriptAnalyzerSettings.psd1` — excludes `PSAvoidUsingInvokeExpression` (official Chocolatey bootstrapper requires it)
 - `powershell/tests/setup_windows.Tests.ps1` — 9 Pester tests for all 3 functions
 
 **Modified files:**
+
 - `powershell/setup_windows.ps1` — move 3 function definitions above `if ($IsWindows)`; fix `$null -eq $result` comparison order
 
 ---
@@ -25,6 +27,7 @@
 ### Task 1: Create Makefile and PSScriptAnalyzer settings
 
 **Files:**
+
 - Create: `powershell/Makefile`
 - Create: `powershell/PSScriptAnalyzerSettings.psd1`
 
@@ -107,6 +110,7 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 ### Task 2: Restructure setup_windows.ps1
 
 **Files:**
+
 - Modify: `powershell/setup_windows.ps1`
 
 **Context:** The three functions are currently inside `if ($IsWindows)`. On macOS `$IsWindows` is `$false`, so dot-sourcing the script in tests does not define any functions. Moving the definitions above the guard makes them accessible on all platforms. The invocation logic (calls to the functions plus registry/WSL/directory setup) stays inside `if ($IsWindows)`. Also fix `$result -eq $null` → `$null -eq $result` (PSPossibleIncorrectComparisonWithNull).
@@ -361,6 +365,7 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 ### Task 3: Write Install-ChocolateyPackages tests
 
 **Files:**
+
 - Create: `powershell/tests/setup_windows.Tests.ps1`
 
 **Context:** Pester v5 syntax: `Describe`/`It`/`BeforeEach`/`Mock`/`Should -Invoke`. `BeforeAll` dot-sources the script — on macOS `$IsWindows` is `$false` so only the function definitions load. `Mock choco` intercepts all `choco` calls; `-ParameterFilter { $args[0] -eq 'list' }` distinguishes `choco list` from `choco install`. `Should -Invoke cmd -Times 0` asserts never called; `-Times 1` asserts called at least once.
@@ -463,6 +468,7 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 ### Task 4: Write Install-WindowsUpdates tests
 
 **Files:**
+
 - Modify: `powershell/tests/setup_windows.Tests.ps1`
 
 **Context:** `Install-WindowsUpdates` uses COM objects (`New-Object -ComObject`). These can't be mocked at the COM level — instead, mock `New-Object` with `-ParameterFilter { $ComObject -eq '...' }` and return `PSCustomObject` instances with `Add-Member ScriptMethod` for `Search`, `CreateUpdateDownloader`, `Download`, and `Install`. Use script-scoped variables (`$script:`) to track whether methods were called, since Pester's `Should -Invoke` doesn't cover method calls on objects. `shutdown.exe` is a regular external command — mock it with `Mock 'shutdown.exe' { }`.
@@ -629,6 +635,7 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 ### Task 5: Write Enable-WindowsOptionalFeatures tests
 
 **Files:**
+
 - Modify: `powershell/tests/setup_windows.Tests.ps1`
 
 **Context:** `Enable-WindowsOptionalFeatures` calls `Get-WindowsOptionalFeature -Online -FeatureName $feature` (a Windows-only cmdlet) and pipes to `Where-Object {$_.State -eq "Disabled"}`. Mock `Get-WindowsOptionalFeature` to return an object with `State = "Disabled"` or `State = "Enabled"`. Mock `Enable-WindowsOptionalFeature` (also Windows-only) to prevent actual system changes and enable `Should -Invoke` assertions.
@@ -690,6 +697,7 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 ### Task 6: Update README.md
 
 **Files:**
+
 - Modify: `README.md`
 
 **Context:** The README has a `## Testing` section covering BATS. Add a `### PowerShell` subsection explaining how to test the PowerShell script separately. The root `make test` does NOT cover PowerShell (by design — isolated).
@@ -702,7 +710,7 @@ Read `/path/to/dotfiles/README.md`.
 
 After the existing Testing section content, append:
 
-```markdown
+````markdown
 ### PowerShell
 
 `powershell/` has its own Makefile. Run from the `powershell/` directory:
@@ -712,13 +720,16 @@ cd powershell
 make test        # lint then run Pester tests
 make lint        # PSScriptAnalyzer only
 ```
+````
 
 Prerequisites (one-time install):
+
 ```bash
 pwsh -Command "Install-Module Pester -Force -Scope CurrentUser -MinimumVersion 5.0"
 pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 ```
-```
+
+````
 
 - [ ] **Step 3: Commit**
 
@@ -727,15 +738,15 @@ git add README.md
 git commit -m "docs: add PowerShell testing instructions to README
 
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
-```
+````
 
 ---
 
 ## Test count
 
-| File | Tests |
-|---|---|
-| `powershell/tests/setup_windows.Tests.ps1` | 9 |
+| File                                       | Tests |
+| ------------------------------------------ | ----- |
+| `powershell/tests/setup_windows.Tests.ps1` | 9     |
 
 ## Self-review notes
 

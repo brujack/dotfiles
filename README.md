@@ -28,17 +28,18 @@ Personal development environment bootstrap for macOS, Linux (Ubuntu/RHEL), and W
 ./setup_env.sh -t <type>
 ```
 
-| Type | Description |
-|------|-------------|
-| `setup_user` | Sets up user environment: configs, symlinks, shell, directory structure |
-| `setup` | Full machine setup (`setup_user` + all apps and tools). Flags: `--brew-install`, `--mas-install` |
-| `developer` | Dev packages + Python/Ansible virtualenv |
-| `ansible` | Ansible venv only — typically used after a Python update |
-| `update` | Update all packages (brew, apt/dnf/yum, pip, mas, Claude plugins, etc.). Prints a structured summary at the end; each run is appended to `~/.dotfiles-update.log` |
-| `doctor` | Active health checks: symlinks, tool presence, credential dir permissions, version drift. Exits non-zero on any failure |
-| `check-versions` | Compare pinned tool versions in `lib/constants.sh` against latest GitHub releases. Exits 1 if any are outdated; `--update` prompts to apply each update in-place |
+| Type             | Description                                                                                                                                                       |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `setup_user`     | Sets up user environment: configs, symlinks, shell, directory structure                                                                                           |
+| `setup`          | Full machine setup (`setup_user` + all apps and tools). Flags: `--brew-install`, `--mas-install`                                                                  |
+| `developer`      | Dev packages + Python/Ansible virtualenv                                                                                                                          |
+| `ansible`        | Ansible venv only — typically used after a Python update                                                                                                          |
+| `update`         | Update all packages (brew, apt/dnf/yum, pip, mas, Claude plugins, etc.). Prints a structured summary at the end; each run is appended to `~/.dotfiles-update.log` |
+| `doctor`         | Active health checks: symlinks, tool presence, credential dir permissions, version drift. Exits non-zero on any failure                                           |
+| `check-versions` | Compare pinned tool versions in `lib/constants.sh` against latest GitHub releases. Exits 1 if any are outdated; `--update` prompts to apply each update in-place  |
 
 **Options:**
+
 - `--dry-run` — log mutating operations (symlinks, installs, mkdir) without executing
 - `--brew-install` — (setup only) Ensure Homebrew is installed, update, and run brew bundle installs
 - `--mas-install` — (setup only) Install/update Mac App Store apps via mas (macOS only)
@@ -155,14 +156,14 @@ dotfiles/
 
 Machines are mapped to profiles in `config/profiles.sh`:
 
-| Profile | Machines | Capabilities |
-|---|---|---|
-| `personal_laptop` | laptop | GUI, devtools, AWS, k8s, Docker, Rust, printing |
-| `mac_workstation` | studio, reception | GUI, devtools, AWS, k8s, Docker, Rust, printing |
-| `mac_mini` | office, home-1 | GUI, printing |
-| `linux_workstation` | workstation | GUI, devtools, AWS, k8s, Docker, Rust, snap |
-| `wsl2_workstation` | cruncher | GUI, devtools, AWS, k8s, Docker, Rust |
-| `server` | (future) | devtools, AWS |
+| Profile             | Machines          | Capabilities                                    |
+| ------------------- | ----------------- | ----------------------------------------------- |
+| `personal_laptop`   | laptop            | GUI, devtools, AWS, k8s, Docker, Rust, printing |
+| `mac_workstation`   | studio, reception | GUI, devtools, AWS, k8s, Docker, Rust, printing |
+| `mac_mini`          | office, home-1    | GUI, printing                                   |
+| `linux_workstation` | workstation       | GUI, devtools, AWS, k8s, Docker, Rust, snap     |
+| `wsl2_workstation`  | cruncher          | GUI, devtools, AWS, k8s, Docker, Rust           |
+| `server`            | (future)          | devtools, AWS                                   |
 
 **linux_workstation vs wsl2_workstation:** `linux_workstation` (hostname: `workstation`) is a desktop Ubuntu machine with full snap support. `wsl2_workstation` (hostname: `cruncher`) is WSL2 Ubuntu where snap is unavailable — snap-gated installs (Albert, Microsoft Edge, ollama, snap classic packages) are skipped, and Helm is installed via apt instead of snap.
 
@@ -183,6 +184,7 @@ Push a feature branch — CI validates and auto-merges to master.
 ## Symlink Strategy
 
 Dotfiles live in `.devcontainer/`, `.claude/`, and `.cursor/`. `setup_env.sh` creates symlinks from `$HOME` into the repo. For `.claude/`, each item is symlinked individually into `~/.claude/`, preserving any other files already there (history, sessions, cache, etc.). Cursor user files are symlinked to:
+
 - macOS: `~/Library/Application Support/Cursor/User/`
 - Linux: `~/.config/Cursor/User/`
 
@@ -231,6 +233,7 @@ make lint        # PSScriptAnalyzer only
 ```
 
 Prerequisites (one-time install):
+
 ```bash
 pwsh -Command "Install-Module Pester -Force -Scope CurrentUser -MinimumVersion 5.0"
 pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"

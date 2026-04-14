@@ -13,6 +13,7 @@
 ### Task 1: Refactor bootstrap_mac.sh and add tests
 
 **Files:**
+
 - Modify: `scripts/bootstrap_mac.sh`
 - Modify: `tests/scripts/unit.bats`
 
@@ -238,6 +239,7 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 ### Task 2: Refactor bootstrap_linux.sh and add tests
 
 **Files:**
+
 - Modify: `scripts/bootstrap_linux.sh`
 - Modify: `tests/scripts/unit.bats`
 
@@ -534,6 +536,7 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 ### Task 3: Documentation updates
 
 **Files:**
+
 - Modify: `CLAUDE.md`
 - Modify: `docs/superpowers/README.md`
 
@@ -573,23 +576,23 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 
 **Spec coverage check:**
 
-| Spec requirement | Task |
-|---|---|
-| Refactor `bootstrap_mac.sh` — shebang, no set -e, sourcing guard, functions | Task 1 |
-| Refactor `bootstrap_linux.sh` — shebang, no set -e, sourcing guard, functions | Task 2 |
-| `_bootstrap_check_macos` / `_bootstrap_check_linux` | Task 1 / Task 2 |
-| `_bootstrap_mac_install_homebrew` / `_bootstrap_linux_install_homebrew` | Task 1 / Task 2 |
-| `_bootstrap_mac_setup_brew_path` / `_bootstrap_linux_setup_brew_path` | Task 1 / Task 2 |
-| `_bootstrap_mac_install_bash5` with version check via `bash --version` | Task 1 |
-| `_bootstrap_linux_detect_distro` with `_BOOTSTRAP_OS_RELEASE` seam | Task 2 |
-| `_bootstrap_linux_install_prereqs` per distro | Task 2 |
-| `bootstrap_mac_main` / `bootstrap_linux_main` orchestrators | Task 1 / Task 2 |
-| Bash version mock | Task 1 (inline per-test mock, not global) |
-| OS guard tests | Task 1 / Task 2 |
-| Error path tests (curl fails, brew install fails, apt-get fails) | Task 1 / Task 2 |
-| Idempotency (skips when already installed) | Task 1 / Task 2 |
-| Boundary: missing os-release, unknown distro | Task 2 |
-| Docs | Task 3 |
+| Spec requirement                                                              | Task                                      |
+| ----------------------------------------------------------------------------- | ----------------------------------------- |
+| Refactor `bootstrap_mac.sh` — shebang, no set -e, sourcing guard, functions   | Task 1                                    |
+| Refactor `bootstrap_linux.sh` — shebang, no set -e, sourcing guard, functions | Task 2                                    |
+| `_bootstrap_check_macos` / `_bootstrap_check_linux`                           | Task 1 / Task 2                           |
+| `_bootstrap_mac_install_homebrew` / `_bootstrap_linux_install_homebrew`       | Task 1 / Task 2                           |
+| `_bootstrap_mac_setup_brew_path` / `_bootstrap_linux_setup_brew_path`         | Task 1 / Task 2                           |
+| `_bootstrap_mac_install_bash5` with version check via `bash --version`        | Task 1                                    |
+| `_bootstrap_linux_detect_distro` with `_BOOTSTRAP_OS_RELEASE` seam            | Task 2                                    |
+| `_bootstrap_linux_install_prereqs` per distro                                 | Task 2                                    |
+| `bootstrap_mac_main` / `bootstrap_linux_main` orchestrators                   | Task 1 / Task 2                           |
+| Bash version mock                                                             | Task 1 (inline per-test mock, not global) |
+| OS guard tests                                                                | Task 1 / Task 2                           |
+| Error path tests (curl fails, brew install fails, apt-get fails)              | Task 1 / Task 2                           |
+| Idempotency (skips when already installed)                                    | Task 1 / Task 2                           |
+| Boundary: missing os-release, unknown distro                                  | Task 2                                    |
+| Docs                                                                          | Task 3                                    |
 
 **Placeholder scan:** No TBDs, TODOs, or "implement later" found. All code blocks are complete.
 

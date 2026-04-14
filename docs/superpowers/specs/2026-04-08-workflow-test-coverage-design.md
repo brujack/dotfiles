@@ -20,21 +20,25 @@ Each test sources `setup_env.sh` (which sources all of `lib/`), sets the appropr
 For each workflow function, verify that the expected top-level functions are called when run under the right conditions.
 
 **`run_setup_user`** (with `MACOS=1`):
+
 - `clone_or_update_dotfiles` called
 - `setup_dotfile_symlinks` called
 - `setup_zsh_as_default_shell` called
 - `mkdir` called for `${HOME}/bin` and `${HOME}/go-work`
 
 **`run_setup_or_developer`** (with `SETUP=1`, `MACOS=1`):
+
 - `setup_credential_directories` called
 - `brew_update` called
 - `install_homebrew_packages` called (or `brew bundle`)
 
 **`run_developer_or_ansible`** (with `DEVELOPER=1`):
+
 - python virtualenv setup step called
 - ansible install step called
 
 **`run_update`** (with `UPDATE=1`, `MACOS=1`):
+
 - `brew_update` called
 - `gem update` called
 
@@ -43,25 +47,31 @@ For each workflow function, verify that the expected top-level functions are cal
 Test that macOS-only and Linux-only code paths fire (or don't) based on `MOCK_UNAME_S` / OS vars.
 
 **`run_setup_user` on macOS (`MACOS=1`):**
+
 - `install_rosetta` called
 
 **`run_setup_user` on Linux (`LINUX=1`, `UBUNTU=1`):**
+
 - `install_rosetta` NOT called
 - `install_bats` called
 
 **`run_setup_or_developer` on macOS (`MACOS=1`):**
+
 - `brew bundle` (or equivalent) called
 - `apt-get` NOT called
 
 **`run_setup_or_developer` on Linux (`LINUX=1`, `UBUNTU=1`):**
+
 - `apt-get` called
 - `brew` NOT called (or brew guard skipped)
 
 **`run_update` on macOS (`MACOS=1`):**
+
 - `brew_update` called
 - `apt` NOT called
 
 **`run_update` on Linux (`LINUX=1`, `UBUNTU=1`):**
+
 - `apt` or `nala` called
 - `brew` NOT called
 
@@ -90,11 +100,11 @@ For platform branching tests, set OS vars before calling the workflow function:
 
 ## Scope Limit
 
-Tests assert that functions are *called*, not that their internals succeed. The install function internals are already covered by `install_guards.bats` and `install_functions.bats`. This avoids double-testing and keeps workflow tests focused on dispatch logic.
+Tests assert that functions are _called_, not that their internals succeed. The install function internals are already covered by `install_guards.bats` and `install_functions.bats`. This avoids double-testing and keeps workflow tests focused on dispatch logic.
 
 ## Files Modified
 
-| Action | File |
-|---|---|
-| Create | `tests/setup_env/workflows.bats` |
+| Action | File                                                                                           |
+| ------ | ---------------------------------------------------------------------------------------------- |
+| Create | `tests/setup_env/workflows.bats`                                                               |
 | Modify | `Makefile` — ensure `test` target includes `workflows.bats` (verify it's already glob-matched) |

@@ -12,17 +12,18 @@
 
 ## File Map
 
-| Action | File |
-|---|---|
-| Modify | `lib/helpers.sh` |
+| Action | File                                                                   |
+| ------ | ---------------------------------------------------------------------- |
+| Modify | `lib/helpers.sh`                                                       |
 | Modify | `setup_env.sh` (or `lib/workflows.sh` if workflows extraction is done) |
-| Modify | `tests/setup_env/unit.bats` |
+| Modify | `tests/setup_env/unit.bats`                                            |
 
 ---
 
 ### Task 1: Add `run_cmd()` and update `safe_link()`
 
 **Files:**
+
 - Modify: `lib/helpers.sh`
 - Modify: `tests/setup_env/unit.bats`
 
@@ -141,6 +142,7 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 ### Task 2: Add `--dry-run` parsing and `DOCTOR` type to `process_args()`
 
 **Files:**
+
 - Modify: `lib/helpers.sh`
 - Modify: `tests/setup_env/unit.bats`
 
@@ -295,6 +297,7 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 ### Task 3: Add `run_doctor()` and dispatch from `setup_env.sh`
 
 **Files:**
+
 - Modify: `lib/helpers.sh`
 - Modify: `setup_env.sh` (or `lib/workflows.sh` if PR A is merged)
 - Modify: `tests/setup_env/unit.bats`
@@ -407,6 +410,7 @@ Add `--dry-run` to the table as an option:
 
 ```markdown
 **Options:**
+
 - `--dry-run` — log mutating operations (symlinks, installs, mkdir) without executing
 ```
 

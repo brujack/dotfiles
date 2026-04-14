@@ -12,20 +12,21 @@
 
 ## Files
 
-| File | Action |
-|---|---|
-| `lib/macos.sh` | Modify — add `install_macos_casks()` function |
-| `setup_env.sh` | Modify — replace lines 137–139 + 155–370 with `install_macos_casks` call |
-| `Brewfile` | Modify — append 25 universal casks |
-| `Brewfile.gui` | Create — 10 GUI casks |
-| `Brewfile.devtools` | Create — 16 devtools casks |
-| `tests/setup_env/install_guards.bats` | Modify — add `install_macos_casks` tests |
+| File                                  | Action                                                                   |
+| ------------------------------------- | ------------------------------------------------------------------------ |
+| `lib/macos.sh`                        | Modify — add `install_macos_casks()` function                            |
+| `setup_env.sh`                        | Modify — replace lines 137–139 + 155–370 with `install_macos_casks` call |
+| `Brewfile`                            | Modify — append 25 universal casks                                       |
+| `Brewfile.gui`                        | Create — 10 GUI casks                                                    |
+| `Brewfile.devtools`                   | Create — 16 devtools casks                                               |
+| `tests/setup_env/install_guards.bats` | Modify — add `install_macos_casks` tests                                 |
 
 ---
 
 ## Task 1: Write failing tests for `install_macos_casks`
 
 **Files:**
+
 - Modify: `tests/setup_env/install_guards.bats`
 
 - [ ] **Step 1: Append the failing tests to `tests/setup_env/install_guards.bats`**
@@ -98,6 +99,7 @@ Expected: all 5 new tests show `not ok` — `install_macos_casks: command not fo
 ## Task 2: Add `install_macos_casks` to `lib/macos.sh`
 
 **Files:**
+
 - Modify: `lib/macos.sh`
 
 - [ ] **Step 1: Append the function to `lib/macos.sh`**
@@ -151,9 +153,11 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 ## Task 3: Update `setup_env.sh`
 
 **Files:**
+
 - Modify: `setup_env.sh` (lines 137–139 and 155–370)
 
 Current lines 137–139:
+
 ```bash
       if ! brew bundle check --file "${BREWFILE_LOC}/Brewfile"; then
         brew bundle --file "${BREWFILE_LOC}/Brewfile"
@@ -161,6 +165,7 @@ Current lines 137–139:
 ```
 
 Current lines 155–157 (start of block to delete):
+
 ```bash
       cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
 
@@ -171,6 +176,7 @@ Current lines 155–157 (start of block to delete):
 - [ ] **Step 1: Replace lines 137–139 with the `install_macos_casks` call**
 
 Find:
+
 ```bash
       if ! brew bundle check --file "${BREWFILE_LOC}/Brewfile"; then
         brew bundle --file "${BREWFILE_LOC}/Brewfile"
@@ -178,6 +184,7 @@ Find:
 ```
 
 Replace with:
+
 ```bash
       install_macos_casks
 ```
@@ -185,6 +192,7 @@ Replace with:
 - [ ] **Step 2: Delete lines 155–370 (the cd + all if/then cask blocks)**
 
 Delete from:
+
 ```bash
       cd ${PERSONAL_GITREPOS}/${DOTFILES} || exit
 
@@ -195,6 +203,7 @@ Delete from:
 ```
 
 All the way through:
+
 ```bash
       if ! app_dir_exists "/Applications/zoom.us.app"; then
         brew_install_cask zoom
@@ -238,6 +247,7 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 ## Task 4: Add universal casks to `Brewfile`
 
 **Files:**
+
 - Modify: `Brewfile`
 
 - [ ] **Step 1: Append the universal casks to `Brewfile`**
@@ -297,6 +307,7 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 ## Task 5: Create `Brewfile.gui`
 
 **Files:**
+
 - Create: `Brewfile.gui`
 
 - [ ] **Step 1: Create `Brewfile.gui`**
@@ -337,6 +348,7 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 ## Task 6: Create `Brewfile.devtools`
 
 **Files:**
+
 - Create: `Brewfile.devtools`
 
 - [ ] **Step 1: Create `Brewfile.devtools`**

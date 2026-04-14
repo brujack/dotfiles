@@ -11,15 +11,15 @@ Add `-t check-versions` that compares pinned tool versions in `lib/constants.sh`
 
 Only tools that have a GitHub releases page and a reliable way to get the installed version:
 
-| Tool | Pinned constant | GitHub repo | Installed version cmd |
-|---|---|---|---|
-| Go | `GO_VER` | `golang/go` | `go version` |
-| Python | `PYTHON_VER` | `python/cpython` | `python3 --version` |
-| Ruby | `RUBY_VER` | `ruby/ruby` | `ruby --version` |
-| zsh | `ZSH_VER` | `zsh-users/zsh` | `zsh --version` |
-| YQ | `YQ_VER` | `mikefarah/yq` | `yq --version` |
+| Tool       | Pinned constant  | GitHub repo           | Installed version cmd  |
+| ---------- | ---------------- | --------------------- | ---------------------- |
+| Go         | `GO_VER`         | `golang/go`           | `go version`           |
+| Python     | `PYTHON_VER`     | `python/cpython`      | `python3 --version`    |
+| Ruby       | `RUBY_VER`       | `ruby/ruby`           | `ruby --version`       |
+| zsh        | `ZSH_VER`        | `zsh-users/zsh`       | `zsh --version`        |
+| YQ         | `YQ_VER`         | `mikefarah/yq`        | `yq --version`         |
 | Shellcheck | `SHELLCHECK_VER` | `koalaman/shellcheck` | `shellcheck --version` |
-| Vagrant | `VAGRANT_VER` | `hashicorp/vagrant` | `vagrant --version` |
+| Vagrant    | `VAGRANT_VER`    | `hashicorp/vagrant`   | `vagrant --version`    |
 
 Tools not checked (no reliable GitHub releases API or installed via brew with automatic versioning): `BATS_VER`, `CONSUL_VER`, `NOMAD_VER`, `TERRAFORM_VER`, `VAULT_VER` — these are HashiCorp tools where release patterns differ.
 
@@ -97,6 +97,7 @@ If a `GITHUB_TOKEN` env var is set, it's passed as `Authorization: Bearer ${GITH
 ## Testing
 
 New tests in `tests/setup_env/unit.bats`:
+
 - `process_args` sets `CHECK_VERSIONS` for `-t check-versions`
 - `run_check_versions` exits 0 when all versions match (mock curl to return matching version)
 - `run_check_versions` exits 1 when any version is outdated (mock curl to return newer version)
@@ -107,11 +108,11 @@ Mock `curl` via `MOCK_CURL_STDOUT` and `MOCK_CURL_EXIT` from existing mock infra
 
 ## Files Modified
 
-| Action | File |
-|---|---|
+| Action | File                                                                      |
+| ------ | ------------------------------------------------------------------------- |
 | Modify | `lib/helpers.sh` — add `check-versions` to `process_args()` and `usage()` |
-| Modify | `lib/workflows.sh` — add `run_check_versions()` |
-| Modify | `setup_env.sh` — add dispatch line for `CHECK_VERSIONS` |
-| Modify | `tests/setup_env/unit.bats` — add version check tests |
-| Modify | `CLAUDE.md` — add `check-versions` to Entry Points table |
-| Modify | `README.md` — add `check-versions` to Usage table |
+| Modify | `lib/workflows.sh` — add `run_check_versions()`                           |
+| Modify | `setup_env.sh` — add dispatch line for `CHECK_VERSIONS`                   |
+| Modify | `tests/setup_env/unit.bats` — add version check tests                     |
+| Modify | `CLAUDE.md` — add `check-versions` to Entry Points table                  |
+| Modify | `README.md` — add `check-versions` to Usage table                         |

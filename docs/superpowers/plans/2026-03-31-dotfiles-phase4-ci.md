@@ -12,9 +12,9 @@
 
 ## Files
 
-| File | Action |
-|---|---|
-| `Makefile` | Modify — add shellcheck to `lint` target |
+| File                       | Action                                           |
+| -------------------------- | ------------------------------------------------ |
+| `Makefile`                 | Modify — add shellcheck to `lint` target         |
 | `.github/workflows/ci.yml` | Create — CI workflow with test + auto-merge jobs |
 
 ---
@@ -22,6 +22,7 @@
 ## Task 1: Fix ShellCheck issues in existing scripts
 
 **Files:**
+
 - Modify: `setup_env.sh`, `lib/*.sh`, `scripts/*.sh` as needed
 
 ShellCheck must pass before adding it to the lint gate — otherwise CI will fail on the first push.
@@ -43,6 +44,7 @@ shellcheck $(find . -name "*.sh" -not -path "*/node_modules/*")
 Common patterns to fix:
 
 **SC2164 — `cd` without exit guard:**
+
 ```bash
 # Before
 cd ${HOME}/software_downloads/awscli
@@ -52,6 +54,7 @@ cd "${HOME}/software_downloads/awscli" || exit
 ```
 
 **SC2086 — unquoted variable expansion:**
+
 ```bash
 # Before
 ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/.zshrc ${HOME}/.zshrc
@@ -61,6 +64,7 @@ ln -s "${PERSONAL_GITREPOS}/${DOTFILES}/.zshrc" "${HOME}/.zshrc"
 ```
 
 **SC2046 — unquoted command substitution (e.g. `eval` patterns that cannot be fixed):**
+
 ```bash
 # Add inline disable with explanation
 # shellcheck disable=SC2046 — intentional: eval of brew shellenv output
@@ -68,6 +72,7 @@ eval "$(brew shellenv)"
 ```
 
 **RHEL_KUBECTL_REPO heredoc-in-variable (SC2089/SC2090):**
+
 ```bash
 # shellcheck disable=SC2089,SC2090 — intentional: heredoc stored as string for deferred eval
 RHEL_KUBECTL_REPO="cat <<EOF | ..."
@@ -88,6 +93,7 @@ Expected: exit 0 with no output (or only disabled warnings shown inline).
 ## Task 2: Update `Makefile` lint target with ShellCheck
 
 **Files:**
+
 - Modify: `Makefile`
 
 - [ ] **Step 1: Add `SHELLCHECK` variable and update `lint` target**
@@ -154,6 +160,7 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 ## Task 3: Create `.github/workflows/ci.yml`
 
 **Files:**
+
 - Create: `.github/workflows/ci.yml`
 
 - [ ] **Step 1: Create the `.github/workflows/` directory structure**

@@ -9,13 +9,13 @@ Allow `./setup_env.sh -t update` to run only specific subsystems via additive lo
 
 ## Flags
 
-| Flag | Subsystem |
-|---|---|
-| `--brew-only` | Homebrew update + upgrade + cleanup (macOS only) |
-| `--pip-only` | pip / pyenv virtualenv upgrades |
-| `--gems-only` | `gem update` |
-| `--mas-only` | Mac App Store updates via `mas upgrade` (macOS only) |
-| `--claude-only` | Claude Code plugin updates |
+| Flag            | Subsystem                                            |
+| --------------- | ---------------------------------------------------- |
+| `--brew-only`   | Homebrew update + upgrade + cleanup (macOS only)     |
+| `--pip-only`    | pip / pyenv virtualenv upgrades                      |
+| `--gems-only`   | `gem update`                                         |
+| `--mas-only`    | Mac App Store updates via `mas upgrade` (macOS only) |
+| `--claude-only` | Claude Code plugin updates                           |
 
 Flags are additive: `--brew-only --pip-only` runs only brew and pip. Any combination is valid.
 
@@ -91,6 +91,7 @@ Updated to document the new flags under the `update` type description and in the
 ## Testing
 
 New tests in `tests/setup_env/unit.bats`:
+
 - `process_args` sets `UPDATE_BREW` for `--brew-only`
 - `process_args` sets `UPDATE_PIP` for `--pip-only`
 - `process_args` sets multiple flags when multiple `--*-only` flags given
@@ -100,10 +101,10 @@ New tests in `tests/setup_env/unit.bats`:
 
 ## Files Modified
 
-| Action | File |
-|---|---|
+| Action | File                                                                             |
+| ------ | -------------------------------------------------------------------------------- |
 | Modify | `lib/helpers.sh` — extend long-option loop in `process_args()`, update `usage()` |
-| Modify | `lib/workflows.sh` — refactor `run_update()` with `_any_update_flag` guard |
-| Modify | `tests/setup_env/unit.bats` — add flag parsing and update dispatch tests |
-| Modify | `CLAUDE.md` — document new flags in Entry Points section |
-| Modify | `README.md` — document new flags in Usage section |
+| Modify | `lib/workflows.sh` — refactor `run_update()` with `_any_update_flag` guard       |
+| Modify | `tests/setup_env/unit.bats` — add flag parsing and update dispatch tests         |
+| Modify | `CLAUDE.md` — document new flags in Entry Points section                         |
+| Modify | `README.md` — document new flags in Usage section                                |

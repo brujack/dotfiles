@@ -12,20 +12,21 @@
 
 ## Files
 
-| File | Action | Purpose |
-|---|---|---|
-| `lib/helpers.sh` | Modify | Add `--brew-install`/`--mas-install` to `process_args()`; update `usage()` |
-| `lib/workflows.sh` | Modify | Add `run_brew_install()` and `run_mas_install()` |
-| `setup_env.sh` | Modify | Add dispatch lines for `SETUP_BREW` and `SETUP_MAS` |
-| `tests/setup_env/unit.bats` | Modify | Tests for new `process_args` cases and updated `usage()` |
-| `tests/setup_env/workflows.bats` | Modify | Tests for `run_brew_install()` and `run_mas_install()` |
-| `docs/superpowers/README.md` | Modify | Add entry for this plan, mark Done |
+| File                             | Action | Purpose                                                                    |
+| -------------------------------- | ------ | -------------------------------------------------------------------------- |
+| `lib/helpers.sh`                 | Modify | Add `--brew-install`/`--mas-install` to `process_args()`; update `usage()` |
+| `lib/workflows.sh`               | Modify | Add `run_brew_install()` and `run_mas_install()`                           |
+| `setup_env.sh`                   | Modify | Add dispatch lines for `SETUP_BREW` and `SETUP_MAS`                        |
+| `tests/setup_env/unit.bats`      | Modify | Tests for new `process_args` cases and updated `usage()`                   |
+| `tests/setup_env/workflows.bats` | Modify | Tests for `run_brew_install()` and `run_mas_install()`                     |
+| `docs/superpowers/README.md`     | Modify | Add entry for this plan, mark Done                                         |
 
 ---
 
 ## Task 1: process_args flags and usage
 
 **Files:**
+
 - Modify: `tests/setup_env/unit.bats` (after line 465, the existing `process_args sets multiple UPDATE flags` test)
 - Modify: `lib/helpers.sh:200-222` (usage), `lib/helpers.sh:423-460` (process_args)
 
@@ -156,6 +157,7 @@ git commit -m "feat: add --brew-install and --mas-install flags to process_args"
 ## Task 2: run_brew_install
 
 **Files:**
+
 - Modify: `tests/setup_env/workflows.bats` (add after last `run_update` test)
 - Modify: `lib/workflows.sh` (add `run_brew_install()` before `run_update()`)
 
@@ -250,6 +252,7 @@ git commit -m "feat: add run_brew_install workflow function"
 ## Task 3: run_mas_install
 
 **Files:**
+
 - Modify: `tests/setup_env/workflows.bats` (add after `run_brew_install` tests)
 - Modify: `lib/workflows.sh` (add `run_mas_install()` after `run_brew_install()`)
 
@@ -333,6 +336,7 @@ git commit -m "feat: add run_mas_install workflow function"
 ## Task 4: Dispatch and docs
 
 **Files:**
+
 - Modify: `setup_env.sh` (add dispatch lines before existing `SETUP`/`SETUP_USER` lines)
 - Modify: `docs/superpowers/README.md` (add plan entry)
 

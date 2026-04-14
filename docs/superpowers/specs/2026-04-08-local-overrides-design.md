@@ -78,11 +78,11 @@ Committed to the repo as a documented template. Shows the available override pat
 
 ## Files Modified
 
-| Action | File |
-|---|---|
+| Action | File                                             |
+| ------ | ------------------------------------------------ |
 | Modify | `setup_env.sh` — add local override source block |
-| Create | `config/local.sh.example` — documented template |
-| Modify | `.gitignore` — add `config/local.sh` |
+| Create | `config/local.sh.example` — documented template  |
+| Modify | `.gitignore` — add `config/local.sh`             |
 | Modify | `tests/setup_env/unit.bats` — add sourcing tests |
-| Modify | `CLAUDE.md` — document local overrides pattern |
-| Modify | `README.md` — mention `config/local.sh.example` |
+| Modify | `CLAUDE.md` — document local overrides pattern   |
+| Modify | `README.md` — mention `config/local.sh.example`  |

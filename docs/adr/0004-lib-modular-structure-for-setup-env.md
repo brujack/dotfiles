@@ -11,15 +11,15 @@
 
 Split `setup_env.sh` into a thin dispatcher that sources seven purpose-specific library files in dependency order:
 
-| File | Responsibility |
-|------|---------------|
-| `lib/constants.sh` | Version pins, download URLs, directory variables |
-| `lib/helpers.sh` | Logging (`log_info/warn/error`), `safe_link`, install guards, brew helpers |
-| `lib/detect_env.sh` | OS/version detection + profile/capability resolution |
-| `lib/macos.sh` | macOS-specific install functions |
-| `lib/linux.sh` | Linux-specific install functions |
-| `lib/developer.sh` | Cross-platform dev tooling (Ruby, Python, Ansible, etc.) |
-| `lib/workflows.sh` | Top-level workflow functions dispatched by `setup_env.sh` |
+| File                | Responsibility                                                             |
+| ------------------- | -------------------------------------------------------------------------- |
+| `lib/constants.sh`  | Version pins, download URLs, directory variables                           |
+| `lib/helpers.sh`    | Logging (`log_info/warn/error`), `safe_link`, install guards, brew helpers |
+| `lib/detect_env.sh` | OS/version detection + profile/capability resolution                       |
+| `lib/macos.sh`      | macOS-specific install functions                                           |
+| `lib/linux.sh`      | Linux-specific install functions                                           |
+| `lib/developer.sh`  | Cross-platform dev tooling (Ruby, Python, Ansible, etc.)                   |
+| `lib/workflows.sh`  | Top-level workflow functions dispatched by `setup_env.sh`                  |
 
 `setup_env.sh` itself only parses args and dispatches to `run_*` functions in `lib/workflows.sh`.
 

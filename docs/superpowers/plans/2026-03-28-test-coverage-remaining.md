@@ -13,6 +13,7 @@
 ## File Structure
 
 **New mock files (all in `tests/mocks/`):**
+
 - `xcode-select` — configurable exit for `--print-path` and `--install`
 - `xcodebuild` — configurable exit
 - `kill` — logs call, configurable exit
@@ -22,25 +23,30 @@
 - `sleep` — logs call, configurable exit
 
 **Modified mock files:**
+
 - `tests/mocks/sudo` — add logging before delegation; skip exec when target doesn't exist
 - `tests/mocks/brew` — add `update`, `upgrade`, `cleanup` cases with individual exit codes
 - `tests/mocks/curl` — add `MOCK_CURL_STDOUT` output for command-substitution use
 - `tests/mocks/pgrep` — add `MOCK_PGREP_OUTPUT` for PID simulation
 
 **Modified test files:**
+
 - `tests/setup_env/unit.bats` — add 1 test (`usage`)
 - `tests/setup_env/extracted_functions.bats` — add 1 test (macOS mas path)
 - `tests/setup_env/install_functions.bats` — add 4 tests (`install_homebrew`)
 - `tests/setup_env/install_guards.bats` — add 4 tests (`brew_update`)
 
 **New test file:**
+
 - `tests/scripts/unit.bats` — 22 tests for all 8 scripts in `scripts/`
 
 **Bug fixes:**
+
 - `scripts/count_lines.sh` — replace `pipe | while` with `while < <(...)` process substitution
 - `scripts/count_lines_git.sh` — same fix
 
 **Docs:**
+
 - `CLAUDE.md` — add 12 new mock env var rows to the mock table
 
 ---
@@ -48,6 +54,7 @@
 ### Task 1: Create xcode-select and xcodebuild mocks; update sudo mock
 
 **Files:**
+
 - Create: `tests/mocks/xcode-select`
 - Create: `tests/mocks/xcodebuild`
 - Modify: `tests/mocks/sudo`
@@ -132,6 +139,7 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 ### Task 2: Extend brew, curl, and pgrep mocks
 
 **Files:**
+
 - Modify: `tests/mocks/brew`
 - Modify: `tests/mocks/curl`
 - Modify: `tests/mocks/pgrep`
@@ -243,6 +251,7 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 ### Task 3: Add usage and mas tests
 
 **Files:**
+
 - Modify: `tests/setup_env/unit.bats`
 - Modify: `tests/setup_env/extracted_functions.bats`
 
@@ -321,6 +330,7 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 ### Task 4: Add install_homebrew tests
 
 **Files:**
+
 - Modify: `tests/setup_env/install_functions.bats`
 
 **Context:** `install_homebrew` in `setup_env.sh` (lines 116-154) checks `uname -s == Darwin`, runs `xcode-select --print-path` to detect Xcode, installs Xcode tools if absent, then runs `/bin/bash -c "$(curl -fsSL ...)"`. The uname mock is already in place. The xcode-select, xcodebuild mocks were added in Task 1. The curl MOCK_CURL_STDOUT was added in Task 2.
@@ -402,6 +412,7 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 ### Task 5: Add brew_update tests
 
 **Files:**
+
 - Modify: `tests/setup_env/install_guards.bats`
 
 **Context:** `brew_update` (lines 156-191 of `setup_env.sh`) calls `ensure_not_root`, checks `command -v brew` (bash builtin, can't be PATH-mocked), then calls `brew update`, `brew upgrade`, `brew upgrade --cask --greedy`, `brew cleanup`. The "brew absent" test uses a subprocess with PATH surgery to exclude the brew mock AND any real brew from PATH, then verifies that `install_homebrew` was called (curl appears in MOCK_CALLS_FILE). The function's exit status is non-zero in this case (brew stays absent after install), but that's expected — we only assert the install_homebrew call.
@@ -495,6 +506,7 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 ### Task 6: Create script-layer mocks (kill, tmux, rsync, hostname, sleep)
 
 **Files:**
+
 - Create: `tests/mocks/kill`
 - Create: `tests/mocks/tmux`
 - Create: `tests/mocks/rsync`
@@ -587,6 +599,7 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 ### Task 7: Fix count_lines bugs using TDD
 
 **Files:**
+
 - Create: `tests/scripts/unit.bats` (initial version with count_lines tests only)
 - Modify: `scripts/count_lines.sh`
 - Modify: `scripts/count_lines_git.sh`
@@ -789,6 +802,7 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 ### Task 8: Write tests for remaining 6 scripts
 
 **Files:**
+
 - Modify: `tests/scripts/unit.bats`
 
 **Context:** Scripts are invoked as `run bash "${REPO_ROOT}/scripts/foo.sh"`. Mocks (kill, tmux, rsync, hostname, sleep, pgrep, sudo) are loaded via `load_mocks` in setup. `html2ascii.sh` pipes stdin through sed/tr — no mocks needed. `synch_git-repos.sh` uses `hostname -s` which is intercepted by the hostname mock. `restart_fah.sh` calls `sudo /etc/init.d/FAHClient` — the updated sudo mock logs then exits 0 (FAHClient doesn't exist on dev machine). `tmux-workstation.sh` uses the tmux mock.
@@ -951,6 +965,7 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 ### Task 9: Update CLAUDE.md mock table
 
 **Files:**
+
 - Modify: `CLAUDE.md`
 
 - [ ] **Step 1: Add 13 new rows to the mock env var table in CLAUDE.md**

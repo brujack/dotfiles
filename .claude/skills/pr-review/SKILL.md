@@ -43,12 +43,14 @@ git diff "$BASE"...HEAD
 ```
 
 Also run:
+
 ```bash
 git log "$BASE"...HEAD --oneline       # commits in this PR
 git status                              # any unstaged changes to flag
 ```
 
 Identify which of these are present in the diff:
+
 - [ ] Rust (`.rs`)
 - [ ] Python (`.py`)
 - [ ] Bash / Shell (`.sh`, shebangs)
@@ -64,14 +66,14 @@ Identify which of these are present in the diff:
 Read **only** the reference files relevant to what you found in Step 1.
 Do not load all of them — keep context lean.
 
-| Language / Tool | Reference file |
-|---|---|
-| Rust | `references/rust.md` |
-| Python | `references/python.md` |
-| Bash / Shell | `references/bash.md` |
-| PowerShell | `references/powershell.md` |
-| Ansible | `references/ansible.md` |
-| Terraform | `references/terraform.md` |
+| Language / Tool | Reference file             |
+| --------------- | -------------------------- |
+| Rust            | `references/rust.md`       |
+| Python          | `references/python.md`     |
+| Bash / Shell    | `references/bash.md`       |
+| PowerShell      | `references/powershell.md` |
+| Ansible         | `references/ansible.md`    |
+| Terraform       | `references/terraform.md`  |
 
 ---
 
@@ -133,7 +135,7 @@ python -m pytest --tb=short 2>&1 | tail -30
 - [ ] No unnecessary complexity introduced
 - [ ] Variable/function names are clear and consistent with codebase conventions
 - [ ] No copy-paste duplication (DRY principle)
-- [ ] Comments explain *why*, not *what*
+- [ ] Comments explain _why_, not _what_
 - [ ] No debug print statements, commented-out code, or TODO bombs left in
 - Language-specific style checks → see reference file
 
@@ -153,6 +155,7 @@ the same severity as Security — findings here are automatic HOLDs.
 See `references/ansible.md` and `references/terraform.md` for full checklists.
 
 Summary of critical checks:
+
 - No `terraform plan` output showing unexpected destroys on production resources
 - No hardcoded region/account IDs that should be variables
 - Ansible plays don't run as root unless explicitly required and justified
@@ -212,10 +215,12 @@ WARNING and INFO items are advisory — do not block but should be addressed.
 To use this as a Claude Code slash command, create:
 
 **`.claude/commands/pr-review.md`**
+
 ```markdown
 Run a full pre-push PR review using the pr-review skill.
 
 Steps:
+
 1. Read /path/to/skills/pr-review/SKILL.md
 2. Follow the workflow exactly
 3. Emit the structured report with PASS/HOLD verdict

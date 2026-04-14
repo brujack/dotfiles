@@ -86,17 +86,18 @@ dotfiles/
 ./setup_env.sh -t <type>
 ```
 
-| Type | Purpose |
-|------|---------|
-| `setup_user` | Configs, shells, directory structure, symlinks |
-| `setup` | Full machine setup (setup_user + all apps). Flags: `--brew-install`, `--mas-install` |
-| `developer` | Dev packages + Python/Ansible virtualenv |
-| `ansible` | Ansible venv setup only (after Python updates) |
-| `update` | Update all packages (brew, apt/dnf/yum, pip, gems, tools). Supports `--brew-only`, `--pip-only`, `--gems-only`, `--mas-only`, `--claude-only` flags. Prints a structured summary at the end; each run is appended to `~/.dotfiles-update.log` |
-| `doctor` | Active health checks: symlinks, tool presence, credential dir permissions, version drift. Exits non-zero on any failure |
-| `check-versions` | Compare pinned versions in `lib/constants.sh` against GitHub latest; exits 1 if outdated. `--update` prompts per-tool to apply updates in-place |
+| Type             | Purpose                                                                                                                                                                                                                                       |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `setup_user`     | Configs, shells, directory structure, symlinks                                                                                                                                                                                                |
+| `setup`          | Full machine setup (setup_user + all apps). Flags: `--brew-install`, `--mas-install`                                                                                                                                                          |
+| `developer`      | Dev packages + Python/Ansible virtualenv                                                                                                                                                                                                      |
+| `ansible`        | Ansible venv setup only (after Python updates)                                                                                                                                                                                                |
+| `update`         | Update all packages (brew, apt/dnf/yum, pip, gems, tools). Supports `--brew-only`, `--pip-only`, `--gems-only`, `--mas-only`, `--claude-only` flags. Prints a structured summary at the end; each run is appended to `~/.dotfiles-update.log` |
+| `doctor`         | Active health checks: symlinks, tool presence, credential dir permissions, version drift. Exits non-zero on any failure                                                                                                                       |
+| `check-versions` | Compare pinned versions in `lib/constants.sh` against GitHub latest; exits 1 if outdated. `--update` prompts per-tool to apply updates in-place                                                                                               |
 
 **Options:**
+
 - `--dry-run` — log mutating operations (symlinks, installs, mkdir) without executing
 
 ## Symlink Strategy
@@ -182,6 +183,7 @@ When a constant is updated, update all other references to that constant across 
 ## Testing
 
 Uses **BATS** (Bash Automated Testing System), installed natively:
+
 - macOS: `brew install bats-core` (in `Brewfile`)
 - Ubuntu: `sudo apt-get install -y bats` (via `install_bats()` in `setup_env.sh`)
 - RHEL/CentOS/Fedora: direct GitHub release install (via `install_bats()`)
@@ -194,6 +196,7 @@ Uses **BATS** (Bash Automated Testing System), installed natively:
 ### ShellCheck
 
 `.shellcheckrc` at the repo root suppresses pervasive intentional patterns:
+
 - `SC2086`: unquoted variables — intentional style throughout
 - `SC2034`: unused variables — many used externally via source
 - `SC1091`: not following source — expected for sourced lib architecture
@@ -204,12 +207,14 @@ Inline disables (`# shellcheck disable=SCxxxx # reason`) are used for remaining 
 ### CI / GitHub Actions
 
 `.github/workflows/ci.yml` runs on every push (all branches including master) and PRs to master:
+
 - `test` job: installs bats + shellcheck, runs `make test`
 - `lint-macos` job: runs `bash -n` and `zsh -n` on all `.sh` files on `macos-latest` (advisory, not blocking auto-merge)
 - `secret-scan` job: runs gitleaks against recent commits (advisory, not blocking auto-merge)
 - `auto-merge` job: auto-merges any PR when all three CI jobs pass (depends on `test`, `lint-macos`, `secret-scan`)
 
 CI requirements:
+
 - All jobs run on `ubuntu-latest` with `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true`
 - Uses `actions/checkout@v5`
 
@@ -232,6 +237,7 @@ make lint   # PSScriptAnalyzer only
 ```
 
 Prerequisites (one-time):
+
 ```bash
 brew install --cask powershell
 pwsh -Command "Install-Module Pester -Force -Scope CurrentUser -MinimumVersion 5.0"
@@ -242,12 +248,12 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 Functions that operate on specific file paths use override env vars to redirect to temp files in tests:
 
-| Seam | Used by | Effect |
-|---|---|---|
-| `_OVERRIDE_CONSTANTS_PATH` | `_update_version_pin()` | Redirects to a temp copy of `lib/constants.sh`; defaults to real path when unset |
-| `UPDATE_LOG_PATH` | `_update_summary()` | Redirects log writes to a temp file in tests; defaults to `~/.dotfiles-update.log` |
-| `_UPDATE_TMPDIR` | all summary functions | Set to `${BATS_TEST_TMPDIR}` in tests to isolate snapshot files |
-| `_BOOTSTRAP_OS_RELEASE` | `_bootstrap_linux_detect_distro` | Path to os-release file; defaults to `/etc/os-release` |
+| Seam                       | Used by                          | Effect                                                                             |
+| -------------------------- | -------------------------------- | ---------------------------------------------------------------------------------- |
+| `_OVERRIDE_CONSTANTS_PATH` | `_update_version_pin()`          | Redirects to a temp copy of `lib/constants.sh`; defaults to real path when unset   |
+| `UPDATE_LOG_PATH`          | `_update_summary()`              | Redirects log writes to a temp file in tests; defaults to `~/.dotfiles-update.log` |
+| `_UPDATE_TMPDIR`           | all summary functions            | Set to `${BATS_TEST_TMPDIR}` in tests to isolate snapshot files                    |
+| `_BOOTSTRAP_OS_RELEASE`    | `_bootstrap_linux_detect_distro` | Path to os-release file; defaults to `/etc/os-release`                             |
 
 Pattern: `local _file="${_OVERRIDE_VAR:-$(dirname "${BASH_SOURCE[0]}")/real/path}"`. Tests set the var and pass a writable temp copy; production code leaves it unset.
 
@@ -355,17 +361,17 @@ The `secret-scan` CI job (`gitleaks`) scans recent commits for credential patter
 
 After `detect_env()` runs, the following vars are set:
 
-| Var | Values |
-|---|---|
-| `PROFILE` | String: `personal_laptop`, `mac_workstation`, `mac_mini`, `linux_workstation`, `wsl2_workstation`, `server`, or `unknown` |
-| `HAS_GUI` | Set for: personal_laptop, mac_workstation, mac_mini, linux_workstation, wsl2_workstation |
-| `HAS_DEVTOOLS` | Set for: personal_laptop, mac_workstation, linux_workstation, wsl2_workstation, server |
-| `HAS_AWS` | Set for: personal_laptop, mac_workstation, linux_workstation, wsl2_workstation, server |
-| `HAS_K8S` | Set for: personal_laptop, mac_workstation, linux_workstation, wsl2_workstation |
-| `HAS_DOCKER` | Set for: personal_laptop, mac_workstation, linux_workstation, wsl2_workstation |
-| `HAS_RUST` | Set for: personal_laptop, mac_workstation, linux_workstation, wsl2_workstation |
-| `HAS_SNAP` | Set for: linux_workstation only (not wsl2_workstation — snap unavailable in WSL2) |
-| `HAS_PRINTING` | Set for: personal_laptop, mac_workstation, mac_mini |
+| Var            | Values                                                                                                                    |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `PROFILE`      | String: `personal_laptop`, `mac_workstation`, `mac_mini`, `linux_workstation`, `wsl2_workstation`, `server`, or `unknown` |
+| `HAS_GUI`      | Set for: personal_laptop, mac_workstation, mac_mini, linux_workstation, wsl2_workstation                                  |
+| `HAS_DEVTOOLS` | Set for: personal_laptop, mac_workstation, linux_workstation, wsl2_workstation, server                                    |
+| `HAS_AWS`      | Set for: personal_laptop, mac_workstation, linux_workstation, wsl2_workstation, server                                    |
+| `HAS_K8S`      | Set for: personal_laptop, mac_workstation, linux_workstation, wsl2_workstation                                            |
+| `HAS_DOCKER`   | Set for: personal_laptop, mac_workstation, linux_workstation, wsl2_workstation                                            |
+| `HAS_RUST`     | Set for: personal_laptop, mac_workstation, linux_workstation, wsl2_workstation                                            |
+| `HAS_SNAP`     | Set for: linux_workstation only (not wsl2_workstation — snap unavailable in WSL2)                                         |
+| `HAS_PRINTING` | Set for: personal_laptop, mac_workstation, mac_mini                                                                       |
 
 ## Adding a New Machine
 

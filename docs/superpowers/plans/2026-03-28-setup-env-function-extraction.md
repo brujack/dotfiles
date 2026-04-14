@@ -12,16 +12,17 @@
 
 ## Files Modified / Created
 
-| File | Action |
-|---|---|
-| `setup_env.sh` | Add 14 new functions before line 860; replace inline blocks with calls |
-| `tests/setup_env/install_guards.bats` | Add 24 new tests across 8 sections |
-| `tests/mocks/ruby-install` | New mock |
-| `tests/mocks/rbenv` | New mock |
-| `tests/mocks/pyenv` | New mock |
-| `tests/mocks/python3` | New mock |
+| File                                  | Action                                                                 |
+| ------------------------------------- | ---------------------------------------------------------------------- |
+| `setup_env.sh`                        | Add 14 new functions before line 860; replace inline blocks with calls |
+| `tests/setup_env/install_guards.bats` | Add 24 new tests across 8 sections                                     |
+| `tests/mocks/ruby-install`            | New mock                                                               |
+| `tests/mocks/rbenv`                   | New mock                                                               |
+| `tests/mocks/pyenv`                   | New mock                                                               |
+| `tests/mocks/python3`                 | New mock                                                               |
 
 **Key orientation:**
+
 - Functions go after `update_rust()` (ends at line 858), before the comment at line 860.
 - `install_guards.bats` already has `load_mocks` and `MOCK_CALLS_FILE` in `setup()` — new tests just append to the existing file.
 - Sourcing guard: `[[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0` at line 861 — all functions must be BEFORE this line.
@@ -32,6 +33,7 @@
 ## Task 1: `ensure_dnf()`
 
 **Files:**
+
 - Modify: `setup_env.sh` (add function before line 860; replace lines 914–925 in main block)
 - Modify: `tests/setup_env/install_guards.bats` (add 3 tests)
 
@@ -151,6 +153,7 @@ git commit -m "refactor: extract ensure_dnf() with tests"
 ## Task 2: `install_cheatsh()`
 
 **Files:**
+
 - Modify: `setup_env.sh`
 - Modify: `tests/setup_env/install_guards.bats`
 
@@ -282,6 +285,7 @@ git commit -m "refactor: extract install_cheatsh() with tests"
 ## Task 3: `install_go_ubuntu()`
 
 **Files:**
+
 - Modify: `setup_env.sh`
 - Modify: `tests/setup_env/install_guards.bats`
 
@@ -451,6 +455,7 @@ git commit -m "refactor: extract install_go_ubuntu() with tests"
 ## Task 4: `install_ruby()` — add mocks + tests + extract
 
 **Files:**
+
 - Create: `tests/mocks/ruby-install`
 - Create: `tests/mocks/rbenv`
 - Modify: `setup_env.sh`
@@ -587,6 +592,7 @@ git commit -m "refactor: extract install_ruby() with tests; add ruby-install and
 ## Task 5: `install_github_cli()`
 
 **Files:**
+
 - Modify: `setup_env.sh`
 - Modify: `tests/setup_env/install_guards.bats`
 
@@ -692,6 +698,7 @@ git commit -m "refactor: extract install_github_cli() with tests"
 ## Task 6: `setup_ansible_venv()` — add pyenv mock + tests + extract
 
 **Files:**
+
 - Create: `tests/mocks/pyenv`
 - Modify: `setup_env.sh`
 - Modify: `tests/setup_env/install_guards.bats`
@@ -848,6 +855,7 @@ git commit -m "refactor: extract setup_ansible_venv() with tests; add pyenv mock
 ## Task 7: `update_pip_packages()` — add python3 mock + tests + extract
 
 **Files:**
+
 - Create: `tests/mocks/python3`
 - Modify: `setup_env.sh`
 - Modify: `tests/setup_env/install_guards.bats`
@@ -967,6 +975,7 @@ git commit -m "refactor: extract update_pip_packages() with tests; add python3 m
 ## Task 8: `update_git_repos()`
 
 **Files:**
+
 - Modify: `setup_env.sh`
 - Modify: `tests/setup_env/install_guards.bats`
 
@@ -1099,6 +1108,7 @@ git commit -m "refactor: extract update_git_repos() with tests"
 Extract the remaining 8 inline blocks into named functions. No new tests are needed — these are flat install lists or pure side effects. Run `make test` after each to confirm existing tests still pass.
 
 **Files:**
+
 - Modify: `setup_env.sh` only
 
 ### 9a: `setup_brewfile_symlink()`
@@ -1379,8 +1389,8 @@ git commit -m "docs: note new mocks in CLAUDE.md after function extraction"
 
 ## Test Count Summary
 
-| File | Before | Added | After |
-|---|---|---|---|
-| `tests/setup_env/install_guards.bats` | existing | 24 | existing + 24 |
-| `tests/setup_env/unit.bats` | 17 | 0 | 17 |
-| `tests/mocks/` | 34 files | 4 files | 38 files |
+| File                                  | Before   | Added   | After         |
+| ------------------------------------- | -------- | ------- | ------------- |
+| `tests/setup_env/install_guards.bats` | existing | 24      | existing + 24 |
+| `tests/setup_env/unit.bats`           | 17       | 0       | 17            |
+| `tests/mocks/`                        | 34 files | 4 files | 38 files      |

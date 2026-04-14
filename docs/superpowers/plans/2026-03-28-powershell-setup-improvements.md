@@ -11,6 +11,7 @@
 ---
 
 **Files:**
+
 - Modify: `powershell/setup_windows.ps1` — fix 4 bugs, add 4 new functions, refactor setup block
 - Modify: `powershell/tests/setup_windows.Tests.ps1` — add 3 BeforeAll stubs, add 13 new tests
 
@@ -19,6 +20,7 @@
 ### Task 1: Fix `Enable-RequiredWindowsOptionalFeature` bug (regression test + fix)
 
 **Files:**
+
 - Modify: `powershell/tests/setup_windows.Tests.ps1`
 - Modify: `powershell/setup_windows.ps1`
 
@@ -98,6 +100,7 @@ git commit -m "fix: enable only disabled features in Enable-RequiredWindowsOptio
 ### Task 2: Fix `$Result` initialization in `Install-WindowsUpdate`
 
 **Files:**
+
 - Modify: `powershell/setup_windows.ps1`
 
 **Bug:** `$Result` is only assigned inside `if ($SearchResult)`. If no updates are found, `$Result` is never set and `If ($Result.rebootRequired)` silently accesses a property on `$null`. No behavior change on the first call, but the intent is unclear and a second call would see stale state.
@@ -139,6 +142,7 @@ git commit -m "fix: initialize Result to null before conditional assignment in I
 ### Task 3: Add `Set-WindowsOptions` function and tests
 
 **Files:**
+
 - Modify: `powershell/tests/setup_windows.Tests.ps1`
 - Modify: `powershell/setup_windows.ps1`
 
@@ -224,6 +228,7 @@ git commit -m "feat: extract Set-WindowsOptions with tests"
 ### Task 4: Add `Install-WSL` function and tests
 
 **Files:**
+
 - Modify: `powershell/tests/setup_windows.Tests.ps1`
 - Modify: `powershell/setup_windows.ps1`
 
@@ -300,6 +305,7 @@ git commit -m "feat: extract Install-WSL with tests"
 ### Task 5: Add `New-DirectoryStructure` function and tests (fixes Bug 2)
 
 **Files:**
+
 - Modify: `powershell/tests/setup_windows.Tests.ps1`
 - Modify: `powershell/setup_windows.ps1`
 
@@ -390,6 +396,7 @@ git commit -m "feat: extract New-DirectoryStructure with tests; fix -ItemType Fi
 ### Task 6: Add `Copy-GitConfig` function and tests (fixes Bug 3)
 
 **Files:**
+
 - Modify: `powershell/tests/setup_windows.Tests.ps1`
 - Modify: `powershell/setup_windows.ps1`
 
@@ -475,6 +482,7 @@ git commit -m "feat: extract Copy-GitConfig with tests; fix gitconfig copy to ch
 ### Task 7: Refactor `if ($IsWindows)` setup block and update docs
 
 **Files:**
+
 - Modify: `powershell/setup_windows.ps1`
 - Modify: `powershell/CLAUDE.md` (if present) or `CLAUDE.md`
 
@@ -503,6 +511,7 @@ cd powershell && make test
 ```
 
 Expected:
+
 ```
 pwsh -Command "..."
 ...
@@ -529,6 +538,6 @@ git commit -m "refactor: replace setup block inline code with function calls; up
 
 ## Test count projection
 
-| File | Before | Added | After |
-|---|---|---|---|
-| `powershell/tests/setup_windows.Tests.ps1` | 9 | +13 | 22 |
+| File                                       | Before | Added | After |
+| ------------------------------------------ | ------ | ----- | ----- |
+| `powershell/tests/setup_windows.Tests.ps1` | 9      | +13   | 22    |

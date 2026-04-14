@@ -12,19 +12,20 @@
 
 ## File Map
 
-| File | Change |
-|---|---|
-| `lib/macos.sh` | Add `install_macos_packages()` |
-| `lib/linux.sh` | Add `install_ubuntu_packages()`, `install_rhel_packages()`, `install_centos_packages()`, `install_linux_packages()` |
-| `lib/developer.sh` | Add `install_aws_tools()`, `setup_vim_plugins()`, `install_ruby_tools()`, `install_ruby()`, `install_github_cli_linux()`, `setup_kitchen()`, `setup_ansible()`, `clone_personal_repos()` |
-| `lib/workflows.sh` | Replace bodies of `run_setup_or_developer` and `run_developer_or_ansible` with dispatcher calls |
-| `tests/setup_env/workflows.bats` | Add tests for all new `lib/developer.sh` helpers |
+| File                             | Change                                                                                                                                                                                   |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lib/macos.sh`                   | Add `install_macos_packages()`                                                                                                                                                           |
+| `lib/linux.sh`                   | Add `install_ubuntu_packages()`, `install_rhel_packages()`, `install_centos_packages()`, `install_linux_packages()`                                                                      |
+| `lib/developer.sh`               | Add `install_aws_tools()`, `setup_vim_plugins()`, `install_ruby_tools()`, `install_ruby()`, `install_github_cli_linux()`, `setup_kitchen()`, `setup_ansible()`, `clone_personal_repos()` |
+| `lib/workflows.sh`               | Replace bodies of `run_setup_or_developer` and `run_developer_or_ansible` with dispatcher calls                                                                                          |
+| `tests/setup_env/workflows.bats` | Add tests for all new `lib/developer.sh` helpers                                                                                                                                         |
 
 ---
 
 ## Task 1: Extract `install_macos_packages()` into `lib/macos.sh`
 
 **Files:**
+
 - Modify: `lib/macos.sh` (append after line 135)
 - Modify: `lib/workflows.sh:87-116` (macOS block in `run_setup_or_developer`)
 - Test: `tests/setup_env/workflows.bats`
@@ -142,6 +143,7 @@ git commit -m "refactor: extract install_macos_packages into lib/macos.sh"
 ## Task 2: Extract `install_ubuntu_packages()` into `lib/linux.sh`
 
 **Files:**
+
 - Modify: `lib/linux.sh` (append after line 176)
 - Modify: `lib/workflows.sh` (Ubuntu block in `run_setup_or_developer`, currently lines 118–765 after Task 1)
 - Test: `tests/setup_env/workflows.bats`
@@ -252,6 +254,7 @@ git commit -m "refactor: extract install_ubuntu_packages into lib/linux.sh"
 ## Task 3: Extract RHEL, CentOS, and cross-platform Linux functions
 
 **Files:**
+
 - Modify: `lib/linux.sh` (append three new functions)
 - Modify: `lib/workflows.sh` (RHEL, CentOS, Linux blocks in `run_setup_or_developer`)
 - Test: `tests/setup_env/workflows.bats`
@@ -363,6 +366,7 @@ git commit -m "refactor: extract install_rhel/centos/linux_packages into lib/lin
 ## Task 4: Extract `install_aws_tools()` and `setup_vim_plugins()` into `lib/developer.sh`
 
 **Files:**
+
 - Modify: `lib/developer.sh` (append two new functions)
 - Modify: `lib/workflows.sh` (AWS and vim blocks at end of `run_setup_or_developer`)
 - Test: `tests/setup_env/workflows.bats`
@@ -515,6 +519,7 @@ git commit -m "refactor: extract install_aws_tools and setup_vim_plugins into li
 ## Task 5: Extract `install_ruby_tools()` and `install_ruby()` from `run_developer_or_ansible`
 
 **Files:**
+
 - Modify: `lib/developer.sh` (append two new functions)
 - Test: `tests/setup_env/workflows.bats`
 
@@ -661,6 +666,7 @@ git commit -m "refactor: add install_ruby_tools and install_ruby helpers to lib/
 ## Task 6: Extract `install_github_cli_linux()` and `setup_kitchen()` into `lib/developer.sh`
 
 **Files:**
+
 - Modify: `lib/developer.sh`
 - Test: `tests/setup_env/workflows.bats`
 
@@ -826,6 +832,7 @@ git commit -m "refactor: add install_github_cli_linux and setup_kitchen helpers 
 ## Task 7: Extract `setup_ansible()` and `clone_personal_repos()` into `lib/developer.sh`
 
 **Files:**
+
 - Modify: `lib/developer.sh`
 - Test: `tests/setup_env/workflows.bats`
 
@@ -986,6 +993,7 @@ git commit -m "refactor: add setup_ansible and clone_personal_repos helpers to l
 ## Task 8: Wire `run_developer_or_ansible()` as a thin dispatcher
 
 **Files:**
+
 - Modify: `lib/workflows.sh:1013-1217`
 
 - [ ] **Step 1: Replace the body of `run_developer_or_ansible()` in `lib/workflows.sh`**
@@ -1036,6 +1044,7 @@ git commit -m "refactor: run_developer_or_ansible is now a thin dispatcher"
 ## Task 9: Update docs and superpowers index
 
 **Files:**
+
 - Modify: `docs/superpowers/README.md`
 - Modify: `CLAUDE.md`
 

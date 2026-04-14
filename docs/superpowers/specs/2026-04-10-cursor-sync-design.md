@@ -16,11 +16,13 @@ The existing Cursor handling in `setup_dotfile_symlinks()` symlinks `settings.js
 Add a loop in `setup_dotfile_symlinks()` that symlinks `dotfiles/.cursor/*` → `~/.cursor/*`, skipping `User/` (handled by the existing block). Move `~/.cursor/plugins/` and `~/.cursor/skills-cursor/` into `dotfiles/.cursor/`.
 
 **What gets synced** (lives in `dotfiles/.cursor/`, git-tracked per Cursor's `.gitignore`):
+
 - `plugins/` — plugin cache
 - `skills-cursor/` — built-in Cursor skills
 - Any future allowlisted dirs (`skills/`, `commands/`, `plans/`, `subagents/`, `rules/`) are picked up automatically when added to `dotfiles/.cursor/`
 
 **What stays machine-local** (real `~/.cursor/`, never in dotfiles):
+
 - `extensions/` — large, machine-specific installs
 - `ai-tracking/` — local telemetry database
 - `ide_state.json`, `argv.json` — machine-local runtime state
@@ -48,6 +50,7 @@ No platform guard — `~/.cursor/` is the same path on macOS and Linux.
 Tests in `tests/setup_env/extracted_functions.bats`, in the existing `setup_dotfile_symlinks` block. `_make_fake_dotfiles()` gets `dotfiles/.cursor/plugins/` and `dotfiles/.cursor/skills-cursor/` dirs added.
 
 Three tests:
+
 1. `setup_dotfile_symlinks creates ~/.cursor/plugins symlink` — assert symlink points into dotfiles
 2. `setup_dotfile_symlinks creates ~/.cursor/skills-cursor symlink` — same
 3. `setup_dotfile_symlinks does not symlink User/ under ~/.cursor` — assert `~/.cursor/User` is absent (User/ is handled by the separate CURSOR_USER_DIR block)
@@ -55,12 +58,14 @@ Three tests:
 ## Consequences
 
 **Positive:**
+
 - `plugins/` and `skills-cursor/` survive a fresh machine setup
 - Follows the established `.claude/` loop pattern — no new concepts
 - Platform-agnostic: same loop works on macOS and Linux
 - Future allowlisted dirs picked up automatically
 
 **Negative:**
+
 - `plugins/cache/` can grow large — already git-ignored by Cursor's `.gitignore` so only `plugins/local/` (small) is tracked
 - Moving `plugins/` and `skills-cursor/` from `~/.cursor/` into dotfiles requires a one-time manual migration step
 

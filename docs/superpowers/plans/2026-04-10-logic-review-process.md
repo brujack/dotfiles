@@ -12,16 +12,17 @@
 
 ## Files
 
-| File | Action | Purpose |
-|---|---|---|
-| `~/.claude/CLAUDE.md` | Modify | Add logic review process (3 edits to existing file) |
-| `docs/superpowers/README.md` | Modify | Add plan entry to index |
+| File                         | Action | Purpose                                             |
+| ---------------------------- | ------ | --------------------------------------------------- |
+| `~/.claude/CLAUDE.md`        | Modify | Add logic review process (3 edits to existing file) |
+| `docs/superpowers/README.md` | Modify | Add plan entry to index                             |
 
 ---
 
 ## Task 1: Extend TDD section with mandatory test categories
 
 **Files:**
+
 - Modify: `~/.claude/CLAUDE.md:46-60` (Test-Driven Development section)
 
 - [ ] **Step 1: Add test categories after the TDD cycle**
@@ -42,23 +43,25 @@ Insert the following immediately before `Tests must be added alongside the code 
 Every test must cover more than just the happy path. These three categories are required for every function:
 
 **Boundary value tests** — For every function that takes input (arguments, env vars, file paths), test at boundaries:
+
 - Empty / zero / null input
 - Single element vs multiple elements
 - Minimum and maximum valid values
 - One above and one below valid range (where applicable)
 
 **Error path tests** — For every function that can fail, test:
+
 - What happens when it fails (correct error message, correct exit code)
 - What happens when a dependency it calls fails (does it propagate or handle?)
 - Partial failure — if step 2 of 3 fails, is state left clean?
 
 **State transition tests** — For functions that modify state (variables, files, symlinks):
+
 - Before and after assertions — verify the expected state change occurred
 - Verify no unintended side effects (other state unchanged)
 - Idempotency — calling the function twice produces the same result as calling it once
 
 A test that only covers the happy path is incomplete.
-
 ```
 
 - [ ] **Step 2: Verify the edit reads correctly**
@@ -77,6 +80,7 @@ git commit -m "docs: add mandatory test categories to TDD section in global CLAU
 ## Task 2: Add Logic Review section
 
 **Files:**
+
 - Modify: `~/.claude/CLAUDE.md:62-68` (after Linting, before GitHub Actions / CI)
 
 - [ ] **Step 1: Insert the Logic Review section**
@@ -111,33 +115,37 @@ Invoke the code-reviewer subagent after completing a major feature or complex ch
 The subagent reviews against this rubric:
 
 **Conditional logic:**
+
 - Trace each branch — can dead branches exist? Can two branches both execute when only one should?
 - Check negation logic — are `!` / `not` / `-z` / `-n` inverted correctly?
 - Verify grouping — are compound conditions grouped explicitly rather than relying on precedence?
 
 **State and data flow:**
+
 - Trace each variable from assignment to use — can it be modified between those points?
 - Check for stale state across loop iterations, function calls, or conditional branches
 - Verify scope — are variables local when they should be? Could a global leak into a function?
 
 **Integration mismatches:**
+
 - For every function call, verify: argument count, argument types/meaning, return value semantics, side effects
 - Check that mock behavior in tests matches real behavior of the mocked component
 - Verify that changes to a function's contract are reflected in all callers
 
 **Edge cases and boundaries:**
+
 - Empty collections, zero-length strings, single-element vs multi-element
 - First and last iteration of loops
 - Numeric boundaries: 0, 1, -1, MAX, MIN
 - Permission/existence checks before file operations
 
 **Error propagation:**
+
 - Trace what happens when each function in the call chain fails
 - Verify error messages are accurate (do they name the right function/variable?)
 - Check that partial failures don't leave state half-modified
 
 The subagent reports findings as a list of issues with file, line, category, and suggested fix. No issues found = explicit "clean" result.
-
 ```
 
 - [ ] **Step 2: Verify the edit reads correctly**
@@ -156,6 +164,7 @@ git commit -m "docs: add Logic Review section to global CLAUDE.md"
 ## Task 3: Add cross-reference in Committing Work section
 
 **Files:**
+
 - Modify: `~/.claude/CLAUDE.md:10-24` (Committing Work section)
 
 - [ ] **Step 1: Add logic review reference**
@@ -169,7 +178,6 @@ Common types: `feat`, `fix`, `docs`, `ci`, `refactor`, `test`, `chore`.
 Insert the following immediately after that line:
 
 ```markdown
-
 Before committing, run the pre-commit logic review checklist (see "Logic Review" section) against staged changes.
 ```
 
@@ -189,6 +197,7 @@ git commit -m "docs: add pre-commit logic review reference to Committing Work se
 ## Task 4: Update superpowers index
 
 **Files:**
+
 - Modify: `docs/superpowers/README.md`
 
 - [ ] **Step 1: Add plan entry**

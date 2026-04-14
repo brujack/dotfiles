@@ -24,6 +24,7 @@
 ### Task 1: Add entries to Brewfile, Brewfile.gui, and Brewfile.devtools
 
 **Files:**
+
 - Modify: `Brewfile`
 - Modify: `Brewfile.gui`
 - Modify: `Brewfile.devtools`
@@ -147,6 +148,7 @@ EOF
 ### Task 2: Remove inline brew installs from setup_env.sh macOS block
 
 **Files:**
+
 - Modify: `setup_env.sh` (lines 138–151)
 
 The target block is inside `elif [ -x "$(command -v brew)" ]` (line 132). After the change the block ends immediately after `install_macos_casks` and `brew cleanup`.
@@ -234,6 +236,7 @@ EOF
 ### Task 3: Migrate macOS aws-cli hostname gate to HAS_AWS
 
 **Files:**
+
 - Modify: `setup_env.sh` (lines ~1019–1032)
 
 The current block wraps the macOS aws-cli install in `LAPTOP || STUDIO || RECEPTION || OFFICE || HOMES || RATNA`, then has an inner `if [[ -n ${MACOS} ]]`. The spec collapses both into one `HAS_AWS && MACOS` check and removes one level of nesting.
@@ -313,6 +316,7 @@ EOF
 ### Task 4: Migrate Ansible virtualenv and pip update hostname gates to HAS_DEVTOOLS
 
 **Files:**
+
 - Modify: `setup_env.sh` (lines ~1225 and ~1282)
 
 Two separate lines, same replacement pattern. Both currently enumerate all Mac + Linux hostnames including the deprecated `RATNA`.

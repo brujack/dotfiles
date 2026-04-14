@@ -110,16 +110,19 @@ setup_env.sh -t setup --brew-install --mas-install
 New tests added to existing `tests/setup_env/workflows.bats` and `tests/setup_env/unit.bats`.
 
 **`process_args` tests** (`unit.bats`):
+
 - `process_args sets SETUP_BREW when --brew-install is given`
 - `process_args sets SETUP_MAS when --mas-install is given`
 
 **`run_brew_install` tests** (`workflows.bats`):
+
 - `run_brew_install installs homebrew when brew is missing`
 - `run_brew_install calls brew update`
 - `run_brew_install calls install_macos_casks`
 - `run_brew_install calls brew cleanup`
 
 **`run_mas_install` tests** (`workflows.bats`):
+
 - `run_mas_install is a no-op on Linux`
 - `run_mas_install fails when mas is not installed`
 - `run_mas_install calls mas upgrade on macOS`

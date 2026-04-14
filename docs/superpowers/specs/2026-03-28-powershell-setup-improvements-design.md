@@ -187,46 +187,46 @@ if (-Not (Get-Command wsl -ErrorAction SilentlyContinue)) {
 
 ### `Set-WindowsOptions` — 3 tests
 
-| # | Test | Assert |
-|---|------|--------|
-| 1 | Calls `Set-ItemProperty` to enable RDP | `Should -Invoke Set-ItemProperty -ParameterFilter { $Name -eq 'fDenyTSConnections' }` |
-| 2 | Calls `Set-NetFirewallProfile` to disable all profiles | `Should -Invoke Set-NetFirewallProfile -Times 1` |
-| 3 | Calls `Set-WindowsExplorerOptions` with correct flags | `Should -Invoke Set-WindowsExplorerOptions -Times 1` |
+| #   | Test                                                   | Assert                                                                                |
+| --- | ------------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| 1   | Calls `Set-ItemProperty` to enable RDP                 | `Should -Invoke Set-ItemProperty -ParameterFilter { $Name -eq 'fDenyTSConnections' }` |
+| 2   | Calls `Set-NetFirewallProfile` to disable all profiles | `Should -Invoke Set-NetFirewallProfile -Times 1`                                      |
+| 3   | Calls `Set-WindowsExplorerOptions` with correct flags  | `Should -Invoke Set-WindowsExplorerOptions -Times 1`                                  |
 
 ### `Install-WSL` — 2 tests
 
-| # | Test | Setup | Assert |
-|---|------|-------|--------|
-| 1 | Calls `wsl --install` when WSL2 not configured | `Mock wsl { @() }` (returns nothing for `--status`) | `Should -Invoke wsl -ParameterFilter { $args -contains '--install' }` |
-| 2 | Skips `wsl --install` when WSL2 already default | `Mock wsl { "Default Version: 2" } -ParameterFilter { $args -contains '--status' }` | `Should -Invoke wsl -ParameterFilter { $args -contains '--install' } -Times 0` |
+| #   | Test                                            | Setup                                                                               | Assert                                                                         |
+| --- | ----------------------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| 1   | Calls `wsl --install` when WSL2 not configured  | `Mock wsl { @() }` (returns nothing for `--status`)                                 | `Should -Invoke wsl -ParameterFilter { $args -contains '--install' }`          |
+| 2   | Skips `wsl --install` when WSL2 already default | `Mock wsl { "Default Version: 2" } -ParameterFilter { $args -contains '--status' }` | `Should -Invoke wsl -ParameterFilter { $args -contains '--install' } -Times 0` |
 
 ### `New-DirectoryStructure` — 4 tests
 
-| # | Test | Setup | Assert |
-|---|------|-------|--------|
-| 1 | Creates `~/.config` when absent | `Mock Test-Path { $false } -ParameterFilter { $Path -like '*/.config' }` | `Should -Invoke New-Item -ParameterFilter { $Path -like '*/.config' }` |
-| 2 | Skips `~/.config` when present | `Mock Test-Path { $true } -ParameterFilter { $Path -like '*/.config' }` | `Should -Invoke New-Item -ParameterFilter { $Path -like '*/.config' } -Times 0` |
-| 3 | Creates `~/git-repos/personal` when absent | `Mock Test-Path { $false } -ParameterFilter { $Path -like '*/git-repos/personal' }` | `Should -Invoke New-Item -ParameterFilter { $Path -like '*/git-repos/personal' }` |
-| 4 | Skips `~/git-repos/personal` when present | `Mock Test-Path { $true }` for all paths | `Should -Invoke New-Item -Times 0` |
+| #   | Test                                       | Setup                                                                               | Assert                                                                            |
+| --- | ------------------------------------------ | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| 1   | Creates `~/.config` when absent            | `Mock Test-Path { $false } -ParameterFilter { $Path -like '*/.config' }`            | `Should -Invoke New-Item -ParameterFilter { $Path -like '*/.config' }`            |
+| 2   | Skips `~/.config` when present             | `Mock Test-Path { $true } -ParameterFilter { $Path -like '*/.config' }`             | `Should -Invoke New-Item -ParameterFilter { $Path -like '*/.config' } -Times 0`   |
+| 3   | Creates `~/git-repos/personal` when absent | `Mock Test-Path { $false } -ParameterFilter { $Path -like '*/git-repos/personal' }` | `Should -Invoke New-Item -ParameterFilter { $Path -like '*/git-repos/personal' }` |
+| 4   | Skips `~/git-repos/personal` when present  | `Mock Test-Path { $true }` for all paths                                            | `Should -Invoke New-Item -Times 0`                                                |
 
 ### `Copy-GitConfig` — 3 tests
 
-| # | Test | Setup | Assert |
-|---|------|-------|--------|
-| 1 | Copies gitconfig when source exists | `Mock Test-Path { $true }` | `Should -Invoke Copy-Item -Times 1` |
-| 2 | Removes existing `~/.gitconfig` before copying | `Mock Test-Path { $true }` | `Should -Invoke Remove-Item -Times 1` |
-| 3 | Skips copy when source does not exist | `Mock Test-Path { $false }` | `Should -Invoke Copy-Item -Times 0` |
+| #   | Test                                           | Setup                       | Assert                                |
+| --- | ---------------------------------------------- | --------------------------- | ------------------------------------- |
+| 1   | Copies gitconfig when source exists            | `Mock Test-Path { $true }`  | `Should -Invoke Copy-Item -Times 1`   |
+| 2   | Removes existing `~/.gitconfig` before copying | `Mock Test-Path { $true }`  | `Should -Invoke Remove-Item -Times 1` |
+| 3   | Skips copy when source does not exist          | `Mock Test-Path { $false }` | `Should -Invoke Copy-Item -Times 0`   |
 
 ### `Enable-RequiredWindowsOptionalFeature` — 1 new test (regression for bug 1)
 
-| # | Test | Setup | Assert |
-|---|------|-------|--------|
-| 1 | Enables only the disabled feature when one is disabled and one is enabled | `Mock Get-WindowsOptionalFeature` returns `Disabled` for `Microsoft-Hyper-V` and `Enabled` for `Containers-DisposableClientVM` | `Should -Invoke Enable-WindowsOptionalFeature -Times 1` |
+| #   | Test                                                                      | Setup                                                                                                                          | Assert                                                  |
+| --- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------- |
+| 1   | Enables only the disabled feature when one is disabled and one is enabled | `Mock Get-WindowsOptionalFeature` returns `Disabled` for `Microsoft-Hyper-V` and `Enabled` for `Containers-DisposableClientVM` | `Should -Invoke Enable-WindowsOptionalFeature -Times 1` |
 
 ---
 
 ## Test count projection
 
-| File | Before | Added | After |
-|---|---|---|---|
-| `powershell/tests/setup_windows.Tests.ps1` | 9 | +13 | 22 |
+| File                                       | Before | Added | After |
+| ------------------------------------------ | ------ | ----- | ----- |
+| `powershell/tests/setup_windows.Tests.ps1` | 9      | +13   | 22    |

@@ -40,12 +40,12 @@ Add an "Active Roadmap" section listing current work items with links:
 ```markdown
 ## Active Roadmap
 
-| Item | Spec | Plan | Status |
-|---|---|---|---|
+| Item                 | Spec                                                                      | Plan                                                               | Status  |
+| -------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------ | ------- |
 | Workflows extraction | [spec](../../superpowers/specs/2026-04-08-workflows-extraction-design.md) | [plan](../../superpowers/plans/2026-04-08-workflows-extraction.md) | Pending |
-| Doctor + dry-run | [spec](../../superpowers/specs/2026-04-08-doctor-dry-run-design.md) | [plan](../../superpowers/plans/2026-04-08-doctor-dry-run.md) | Pending |
-| Secrets guardrails | [spec](../../superpowers/specs/2026-04-08-secrets-guardrails-design.md) | [plan](../../superpowers/plans/2026-04-08-secrets-guardrails.md) | Pending |
-| CI safety pass | [spec](../../superpowers/specs/2026-04-08-ci-safety-design.md) | [plan](../../superpowers/plans/2026-04-08-ci-safety.md) | Pending |
+| Doctor + dry-run     | [spec](../../superpowers/specs/2026-04-08-doctor-dry-run-design.md)       | [plan](../../superpowers/plans/2026-04-08-doctor-dry-run.md)       | Pending |
+| Secrets guardrails   | [spec](../../superpowers/specs/2026-04-08-secrets-guardrails-design.md)   | [plan](../../superpowers/plans/2026-04-08-secrets-guardrails.md)   | Pending |
+| CI safety pass       | [spec](../../superpowers/specs/2026-04-08-ci-safety-design.md)            | [plan](../../superpowers/plans/2026-04-08-ci-safety.md)            | Pending |
 ```
 
 ## Constraints

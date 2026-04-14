@@ -19,12 +19,15 @@ After all checks run, a summary line prints (`N checks passed, M failed`) and `r
 ## Check Categories
 
 ### 1. Environment vars (existing — keep as-is)
+
 Current var-dump section retained for context. Reformatted as a header block, not pass/fail.
 
 ### 2. Symlink checks
+
 For each expected dotfile symlink, verify it exists (`-L`) and its target exists (`-e`). If the symlink is missing or broken, fail.
 
 Symlinks checked:
+
 - `~/.zshrc` → repo `.zshrc`
 - `~/.zprofile` → repo `.zprofile`
 - `~/.vimrc` → repo `.vimrc`
@@ -36,6 +39,7 @@ Symlinks checked:
 - `~/.gitconfig` → repo `.gitconfig_mac` (macOS) or `.gitconfig_linux` (Linux)
 
 ### 3. Tool presence checks
+
 Verify each tool is reachable via `command -v`. Fail if missing.
 
 Tools checked: `git`, `zsh`, `curl`, `tmux`, `bats`
@@ -45,6 +49,7 @@ macOS-only: `brew`
 Linux-only: `apt-get` or `yum`/`dnf` (whichever matches the distro)
 
 ### 4. Credential directory checks
+
 Verify each directory exists and has mode `700`. Fail if missing or wrong permissions.
 
 Directories: `~/.aws`, `~/.tf_creds`, `~/.ssh`, `~/.tsh`
@@ -52,14 +57,15 @@ Directories: `~/.aws`, `~/.tf_creds`, `~/.ssh`, `~/.tsh`
 Permission check: `stat -c '%a'` (Linux) / `stat -f '%OLp'` (macOS).
 
 ### 5. Version checks
+
 For each pinned tool, compare the pinned constant against the installed version.
 
-| Tool | Pinned constant | Version command |
-|---|---|---|
-| Go | `GO_VER` | `go version` → parse semver |
-| Python | `PYTHON_VER` | `python3 --version` → parse semver |
-| Ruby | `RUBY_VER` | `ruby --version` → parse semver |
-| zsh | `ZSH_VER` | `zsh --version` → parse semver |
+| Tool   | Pinned constant | Version command                    |
+| ------ | --------------- | ---------------------------------- |
+| Go     | `GO_VER`        | `go version` → parse semver        |
+| Python | `PYTHON_VER`    | `python3 --version` → parse semver |
+| Ruby   | `RUBY_VER`      | `ruby --version` → parse semver    |
+| zsh    | `ZSH_VER`       | `zsh --version` → parse semver     |
 
 If the tool is not installed, skip with a warn (not a fail — presence is covered by category 3). If installed version doesn't match pinned, fail.
 
@@ -114,6 +120,7 @@ Versions:
 ## Testing
 
 New tests in `tests/setup_env/unit.bats`:
+
 - `doctor_pass` increments pass count and prints `[PASS]`
 - `doctor_fail` sets `_DOCTOR_FAILED` and prints `[FAIL]`
 - `run_doctor` exits 0 when no failures
@@ -125,9 +132,9 @@ New tests in `tests/setup_env/unit.bats`:
 
 ## Files Modified
 
-| Action | File |
-|---|---|
+| Action | File                                                                        |
+| ------ | --------------------------------------------------------------------------- |
 | Modify | `lib/helpers.sh` — add `doctor_pass`, `doctor_fail`, rewrite `run_doctor()` |
-| Modify | `setup_env.sh` — change `exit 0` to `exit $?` in doctor dispatch |
-| Modify | `tests/setup_env/unit.bats` — add check framework tests |
-| Modify | `CLAUDE.md` — note non-zero exit behavior |
+| Modify | `setup_env.sh` — change `exit 0` to `exit $?` in doctor dispatch            |
+| Modify | `tests/setup_env/unit.bats` — add check framework tests                     |
+| Modify | `CLAUDE.md` — note non-zero exit behavior                                   |

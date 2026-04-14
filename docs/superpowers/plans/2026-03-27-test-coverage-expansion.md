@@ -13,6 +13,7 @@
 ## File Structure
 
 **New mock files (all in `tests/mocks/`):**
+
 - `id` — configurable `id -u` output for `ensure_not_root`
 - `yum` — configurable exit codes for `yum list installed` and other yum calls
 - `awk` — returns `MOCK_AWK_OS_NAME` when invoked against `os-release`, delegates otherwise
@@ -34,12 +35,14 @@
 - `nala` — logs call, returns `MOCK_NALA_EXIT` (default 0)
 
 **Modified files:**
+
 - `setup_env.sh` — fix `install_git` bug (line 271: `!=` → `==`), remove absolute paths in `install_rosetta` (lines 77/87/94/97), add 7 extracted functions, replace inline blocks with function calls
 - `tests/setup_env/install_guards.bats` — add 9 quick-win tests
 - `tests/helpers/common.bash` — no changes needed
 - `CLAUDE.md` — extend mock env var table
 
 **New files:**
+
 - `tests/setup_env/install_functions.bats` — 14 tests for install_git/zsh/rosetta/nala
 - `tests/setup_env/extracted_functions.bats` — 18 tests for 7 extracted functions
 
@@ -48,6 +51,7 @@
 ### Task 1: Add mock executables
 
 **Files:**
+
 - Create: `tests/mocks/id`
 - Create: `tests/mocks/yum`
 - Create: `tests/mocks/awk`
@@ -267,7 +271,7 @@ exit "${MOCK_NALA_EXIT:-0}"
 make test
 ```
 
-Expected: all 41 tests pass (new mocks shadow nothing that existing tests rely on, since mocks only intercept when MOCK_* vars are set).
+Expected: all 41 tests pass (new mocks shadow nothing that existing tests rely on, since mocks only intercept when MOCK\_\* vars are set).
 
 - [ ] **Step 9: Commit**
 
@@ -281,6 +285,7 @@ git commit -m "test: add mock executables for id, yum, awk, sw_vers, sysctl, pgr
 ### Task 2: Quick-win tests — ensure_not_root, brew_tap_installed, brew_install_cask, rhel_installed_package
 
 **Files:**
+
 - Modify: `tests/setup_env/install_guards.bats`
 
 These four functions already work correctly; the tests just need to be written.
@@ -382,6 +387,7 @@ git commit -m "test: add quick-win tests for ensure_not_root, brew_tap_installed
 ### Task 3: Fix install_git bug and add tests for install_git and install_zsh
 
 **Files:**
+
 - Modify: `setup_env.sh` (line 271)
 - Create: `tests/setup_env/install_functions.bats`
 
@@ -464,10 +470,13 @@ Expected: macOS tests pass, Linux tests fail (Linux path unreachable due to `!= 
 - [ ] **Step 3: Fix install_git bug in setup_env.sh**
 
 Line 271 — change:
+
 ```bash
   if [[ "$(uname -s)" != "Darwin" ]]; then
 ```
+
 to:
+
 ```bash
   if [[ "$(uname -s)" == "Darwin" ]]; then
 ```
@@ -563,6 +572,7 @@ test: add install_git and install_zsh tests for macOS and Linux paths"
 ### Task 4: Tests for install_rosetta and check_and_install_nala
 
 **Files:**
+
 - Modify: `setup_env.sh` (lines 77, 87, 94, 97 — remove absolute paths)
 - Modify: `tests/setup_env/install_functions.bats`
 
@@ -699,6 +709,7 @@ covering all install_rosetta decision paths and 3 nala platform cases."
 ### Task 5: Extract clone_or_update_dotfiles() and setup_dotfile_symlinks()
 
 **Files:**
+
 - Modify: `setup_env.sh` (extract from SETUP block, add functions before sourcing guard)
 - Create: `tests/setup_env/extracted_functions.bats`
 
@@ -1139,6 +1150,7 @@ platform-specific gitconfig/vimrc/zshrc symlink creation."
 ### Task 6: Extract setup_credential_directories() and setup_zsh_as_default_shell()
 
 **Files:**
+
 - Modify: `setup_env.sh`
 - Modify: `tests/setup_env/extracted_functions.bats`
 
@@ -1296,6 +1308,7 @@ verify chmod 700, shell setup verifies chsh is called only when needed."
 ### Task 7: Extract update_system_packages(), update_aws_cli(), and update_rust()
 
 **Files:**
+
 - Modify: `setup_env.sh`
 - Modify: `tests/setup_env/extracted_functions.bats`
 
@@ -1550,6 +1563,7 @@ mock and 9 tests covering platform-dispatch logic for each function."
 ### Task 8: Update CLAUDE.md mock table and run final verification
 
 **Files:**
+
 - Modify: `CLAUDE.md`
 
 - [ ] **Step 1: Extend the mock env var table in CLAUDE.md**
@@ -1600,34 +1614,34 @@ git commit -m "docs: update CLAUDE.md mock table with 22 new mock env vars"
 
 ## Coverage After This Plan
 
-| Function | Before | After |
-|---|---|---|
-| `quiet_which` | tested | tested |
-| `app_dir_exists` | tested | tested |
-| `process_args` | tested | tested |
-| `brew_formula_installed` | tested | tested |
-| `brew_cask_installed` | tested | tested |
-| `brew_install_formula` | tested | tested |
-| `brew_tap_if_missing` | tested | tested |
-| `install_bats` | tested | tested |
-| `ensure_not_root` | — | tested |
-| `brew_tap_installed` | — | tested |
-| `brew_install_cask` | — | tested |
-| `rhel_installed_package` | — | tested |
-| `install_git` | — | tested (+ bug fixed) |
-| `install_zsh` | — | tested |
-| `install_rosetta` | — | tested (+ path fix) |
-| `check_and_install_nala` | — | tested |
-| `clone_or_update_dotfiles` | — | extracted + tested |
-| `setup_dotfile_symlinks` | — | extracted + tested |
-| `setup_credential_directories` | — | extracted + tested |
-| `setup_zsh_as_default_shell` | — | extracted + tested |
-| `update_system_packages` | — | extracted + tested |
-| `update_aws_cli` | — | extracted + tested |
-| `update_rust` | — | extracted + tested |
-| `install_homebrew` | — | — (Xcode mock complexity) |
-| `brew_update` | — | — (covered indirectly) |
-| `usage` | — | — (trivial output) |
+| Function                       | Before | After                     |
+| ------------------------------ | ------ | ------------------------- |
+| `quiet_which`                  | tested | tested                    |
+| `app_dir_exists`               | tested | tested                    |
+| `process_args`                 | tested | tested                    |
+| `brew_formula_installed`       | tested | tested                    |
+| `brew_cask_installed`          | tested | tested                    |
+| `brew_install_formula`         | tested | tested                    |
+| `brew_tap_if_missing`          | tested | tested                    |
+| `install_bats`                 | tested | tested                    |
+| `ensure_not_root`              | —      | tested                    |
+| `brew_tap_installed`           | —      | tested                    |
+| `brew_install_cask`            | —      | tested                    |
+| `rhel_installed_package`       | —      | tested                    |
+| `install_git`                  | —      | tested (+ bug fixed)      |
+| `install_zsh`                  | —      | tested                    |
+| `install_rosetta`              | —      | tested (+ path fix)       |
+| `check_and_install_nala`       | —      | tested                    |
+| `clone_or_update_dotfiles`     | —      | extracted + tested        |
+| `setup_dotfile_symlinks`       | —      | extracted + tested        |
+| `setup_credential_directories` | —      | extracted + tested        |
+| `setup_zsh_as_default_shell`   | —      | extracted + tested        |
+| `update_system_packages`       | —      | extracted + tested        |
+| `update_aws_cli`               | —      | extracted + tested        |
+| `update_rust`                  | —      | extracted + tested        |
+| `install_homebrew`             | —      | — (Xcode mock complexity) |
+| `brew_update`                  | —      | — (covered indirectly)    |
+| `usage`                        | —      | — (trivial output)        |
 
 **Coverage: 23/26 functions (88%)**
 **Total tests: 79 (was 41)**

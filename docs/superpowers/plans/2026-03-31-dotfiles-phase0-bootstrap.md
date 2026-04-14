@@ -12,17 +12,18 @@
 
 ## Files
 
-| File | Action |
-|---|---|
-| `scripts/bootstrap_mac.sh` | Create — standalone Homebrew + bash 5 installer |
-| `setup_env.sh` | Modify — add prereq check block after shebang, before existing line 3 |
-| `tests/setup_env/unit.bats` | Modify — add prereq check tests |
+| File                        | Action                                                                |
+| --------------------------- | --------------------------------------------------------------------- |
+| `scripts/bootstrap_mac.sh`  | Create — standalone Homebrew + bash 5 installer                       |
+| `setup_env.sh`              | Modify — add prereq check block after shebang, before existing line 3 |
+| `tests/setup_env/unit.bats` | Modify — add prereq check tests                                       |
 
 ---
 
 ## Task 1: Write failing tests for the prerequisite check
 
 **Files:**
+
 - Modify: `tests/setup_env/unit.bats`
 
 The prereq check runs above the sourcing guard, so it cannot be tested by sourcing `setup_env.sh`. Test it by invoking `bash setup_env.sh` as a subprocess.
@@ -71,9 +72,11 @@ Expected: FAIL — `setup_env.sh exits 1 with error when brew is not found` fail
 ## Task 2: Add the prerequisite check to `setup_env.sh`
 
 **Files:**
+
 - Modify: `setup_env.sh` (insert after line 1, before existing line 3)
 
 Current lines 1–3:
+
 ```bash
 #!/usr/bin/env bash
 
@@ -83,6 +86,7 @@ Current lines 1–3:
 - [ ] **Step 1: Insert the prereq check block**
 
 Replace:
+
 ```bash
 #!/usr/bin/env bash
 
@@ -90,6 +94,7 @@ Replace:
 ```
 
 With:
+
 ```bash
 #!/usr/bin/env bash
 
@@ -151,6 +156,7 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 ## Task 3: Create `scripts/bootstrap_mac.sh`
 
 **Files:**
+
 - Create: `scripts/bootstrap_mac.sh`
 
 - [ ] **Step 1: Verify the scripts/ directory exists**

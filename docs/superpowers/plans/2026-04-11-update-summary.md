@@ -13,6 +13,7 @@
 ### Task 1: Scaffolding and pure diff utilities
 
 **Files:**
+
 - Create: `lib/update_summary.sh`
 - Create: `tests/setup_env/update_summary.bats`
 - Modify: `setup_env.sh:29-35` (add source line)
@@ -159,6 +160,7 @@ git commit -m "feat: add update_summary.sh scaffolding with diff and snapshot ut
 ### Task 2: Git diff utility
 
 **Files:**
+
 - Modify: `lib/update_summary.sh`
 - Modify: `tests/setup_env/update_summary.bats`
 
@@ -257,6 +259,7 @@ git commit -m "feat: add _update_git_diff utility for git-based section diffs"
 ### Task 3: State tracking functions (`_update_record_start`, `_update_record_end`, `_update_skip`)
 
 **Files:**
+
 - Modify: `lib/update_summary.sh`
 - Modify: `tests/setup_env/update_summary.bats`
 
@@ -573,6 +576,7 @@ git commit -m "feat: add state tracking functions (_update_record_start, _update
 ### Task 4: Summary output and log writing
 
 **Files:**
+
 - Modify: `lib/update_summary.sh`
 - Modify: `tests/setup_env/update_summary.bats`
 
@@ -772,6 +776,7 @@ git commit -m "feat: add _update_summary for formatted output and log writing"
 ### Task 5: Wire `run_update()` to call summary functions
 
 **Files:**
+
 - Modify: `lib/workflows.sh:154-262` (`run_update()`)
 - Modify: `tests/setup_env/workflows.bats`
 
@@ -1048,6 +1053,7 @@ git commit -m "feat: wire run_update() to call summary functions for all section
 ### Task 6: Documentation updates
 
 **Files:**
+
 - Modify: `CLAUDE.md` (add update summary docs)
 - Modify: `docs/superpowers/README.md` (add plan row)
 
@@ -1098,25 +1104,25 @@ git commit -m "docs: add update-summary to CLAUDE.md and superpowers index"
 
 **Spec coverage check:**
 
-| Spec requirement | Task |
-|---|---|
-| New `lib/update_summary.sh` | Task 1 (create), Tasks 2-4 (populate) |
-| `_update_diff_lines` | Task 1 |
-| `_update_snapshot` | Task 1 |
-| `_update_git_diff` | Task 2 |
-| `_update_record_start` | Task 3 |
-| `_update_record_end` | Task 3 |
-| `_update_skip` | Task 3 |
-| `_update_summary` | Task 4 |
-| Wire `run_update()` | Task 5 |
-| Log file append | Task 4 (implementation), Task 4 tests |
-| `UPDATE_LOG_PATH` test seam | Task 4 |
-| `_UPDATE_TMPDIR` test seam | Tasks 1-5 |
-| Section order | Task 1 (`_UPDATE_SECTION_ORDER`) |
-| Error handling (snapshot fails) | Task 3 (`|| true` on all snapshot commands) |
-| Error handling (log write fails) | Task 4 (`|| log_warn`) |
-| Integration tests in `workflows.bats` | Task 5 |
-| Docs | Task 6 |
+| Spec requirement                      | Task                                  |
+| ------------------------------------- | ------------------------------------- | --- | ------------------------------- |
+| New `lib/update_summary.sh`           | Task 1 (create), Tasks 2-4 (populate) |
+| `_update_diff_lines`                  | Task 1                                |
+| `_update_snapshot`                    | Task 1                                |
+| `_update_git_diff`                    | Task 2                                |
+| `_update_record_start`                | Task 3                                |
+| `_update_record_end`                  | Task 3                                |
+| `_update_skip`                        | Task 3                                |
+| `_update_summary`                     | Task 4                                |
+| Wire `run_update()`                   | Task 5                                |
+| Log file append                       | Task 4 (implementation), Task 4 tests |
+| `UPDATE_LOG_PATH` test seam           | Task 4                                |
+| `_UPDATE_TMPDIR` test seam            | Tasks 1-5                             |
+| Section order                         | Task 1 (`_UPDATE_SECTION_ORDER`)      |
+| Error handling (snapshot fails)       | Task 3 (`                             |     | true` on all snapshot commands) |
+| Error handling (log write fails)      | Task 4 (`                             |     | log_warn`)                      |
+| Integration tests in `workflows.bats` | Task 5                                |
+| Docs                                  | Task 6                                |
 
 **Placeholder scan:** No TBDs, TODOs, or "implement later" found.
 

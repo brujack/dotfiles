@@ -18,14 +18,14 @@ Modularize `setup_env.sh` into focused `lib/*.sh` files, introduce a profile/cap
 
 All phases run on feature branches. GitHub Actions validates → auto-merges to master on green.
 
-| Phase | Name | Prerequisite |
-|---|---|---|
-| 0 | Function extraction + macOS bootstrap script + prerequisite check | — (extraction already planned at `docs/superpowers/plans/2026-03-28-setup-env-function-extraction.md`) |
-| 1 | lib/ split | Phase 0 complete |
-| 2 | Hardening (logging + safe_link) | Phase 1 complete |
-| 3 | Profile abstraction | Phase 2 complete |
-| 4 | CI + ShellCheck enforcement | Phase 1 complete (can run in parallel with 2–3) |
-| 5 | Docs | Phases 2–4 complete |
+| Phase | Name                                                              | Prerequisite                                                                                           |
+| ----- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| 0     | Function extraction + macOS bootstrap script + prerequisite check | — (extraction already planned at `docs/superpowers/plans/2026-03-28-setup-env-function-extraction.md`) |
+| 1     | lib/ split                                                        | Phase 0 complete                                                                                       |
+| 2     | Hardening (logging + safe_link)                                   | Phase 1 complete                                                                                       |
+| 3     | Profile abstraction                                               | Phase 2 complete                                                                                       |
+| 4     | CI + ShellCheck enforcement                                       | Phase 1 complete (can run in parallel with 2–3)                                                        |
+| 5     | Docs                                                              | Phases 2–4 complete                                                                                    |
 
 ---
 
@@ -200,13 +200,13 @@ Sourced by `lib/detect_env.sh`. Edit this file to add a new machine — no other
 
 **Profile descriptions:**
 
-| Profile | Machines | Description |
-|---|---|---|
-| `personal_laptop` | laptop | MacBook Pro, full dev workstation |
-| `mac_workstation` | studio, reception | Mac Studio, full dev workstation |
-| `mac_mini` | office, home-1 | Mac Mini, GUI apps only, no devtools |
+| Profile             | Machines              | Description                             |
+| ------------------- | --------------------- | --------------------------------------- |
+| `personal_laptop`   | laptop                | MacBook Pro, full dev workstation       |
+| `mac_workstation`   | studio, reception     | Mac Studio, full dev workstation        |
+| `mac_mini`          | office, home-1        | Mac Mini, GUI apps only, no devtools    |
 | `linux_workstation` | workstation, cruncher | Linux, full dev including Docker + Rust |
-| `server` | (future) | Headless Linux, devtools + AWS only |
+| `server`            | (future)              | Headless Linux, devtools + AWS only     |
 
 ---
 
@@ -232,15 +232,15 @@ detect_env() {
 
 **Capability vars set after `detect_env`:**
 
-| Var | Set for profiles |
-|---|---|
-| `HAS_GUI` | personal_laptop, mac_workstation, mac_mini, linux_workstation |
-| `HAS_DEVTOOLS` | personal_laptop, mac_workstation, linux_workstation |
-| `HAS_AWS` | all except mac_mini |
-| `HAS_K8S` | personal_laptop, mac_workstation, linux_workstation |
-| `HAS_DOCKER` | personal_laptop, mac_workstation, linux_workstation |
-| `HAS_RUST` | personal_laptop, mac_workstation, linux_workstation |
-| `HAS_PRINTING` | personal_laptop, mac_workstation, mac_mini |
+| Var            | Set for profiles                                              |
+| -------------- | ------------------------------------------------------------- |
+| `HAS_GUI`      | personal_laptop, mac_workstation, mac_mini, linux_workstation |
+| `HAS_DEVTOOLS` | personal_laptop, mac_workstation, linux_workstation           |
+| `HAS_AWS`      | all except mac_mini                                           |
+| `HAS_K8S`      | personal_laptop, mac_workstation, linux_workstation           |
+| `HAS_DOCKER`   | personal_laptop, mac_workstation, linux_workstation           |
+| `HAS_RUST`     | personal_laptop, mac_workstation, linux_workstation           |
+| `HAS_PRINTING` | personal_laptop, mac_workstation, mac_mini                    |
 
 **Migration:** Existing `LAPTOP`, `STUDIO`, `WORKSTATION` etc. vars are preserved as aliases during Phase 3 migration (set from profile) so tests continue to pass. Removed in a follow-up cleanup commit once all call sites are updated.
 
@@ -290,15 +290,15 @@ Replaces all `rm -f + ln -s` patterns in `setup_dotfile_symlinks()`.
 
 ## Section 4: `lib/` File Responsibilities
 
-| File | Contents |
-|---|---|
-| `lib/constants.sh` | Version pins (`GO_VER`, `PYTHON_VER`, etc.), download URLs, directory vars (`BREWFILE_LOC`, `PERSONAL_GITREPOS`, etc.) |
-| `lib/helpers.sh` | Logging, `safe_link`, install guards, `quiet_which`, brew helpers, `usage`, `process_args` |
-| `lib/detect_env.sh` | `detect_env()`: OS/version detection + profile resolution; sources `config/profiles.sh` |
-| `lib/macos.sh` | `install_rosetta`, `install_git` (macOS), `setup_brewfile_symlink`, `install_macos_casks`, `setup_zsh_as_default_shell` (macOS) |
-| `lib/linux.sh` | `ensure_dnf`, `install_bats`, `install_ubuntu_packages`, `install_rhel_packages`, `install_centos_packages`, `install_go_ubuntu`, `install_cheatsh`, `update_system_packages` |
-| `lib/helpers.sh` (addition) | `setup_dotfile_symlinks` — single function with `if [[ -n ${MACOS} ]]` / `elif [[ -n ${LINUX} ]]` branches; lives in helpers since it is cross-platform |
-| `lib/developer.sh` | `install_ruby`, `install_github_cli`, `install_developer_gems`, `setup_ansible_venv`, `update_pip_packages`, `clone_personal_repos`, `setup_vim_plug`, `update_aws_cli`, `update_rust`, `update_git_repos` |
+| File                        | Contents                                                                                                                                                                                                   |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lib/constants.sh`          | Version pins (`GO_VER`, `PYTHON_VER`, etc.), download URLs, directory vars (`BREWFILE_LOC`, `PERSONAL_GITREPOS`, etc.)                                                                                     |
+| `lib/helpers.sh`            | Logging, `safe_link`, install guards, `quiet_which`, brew helpers, `usage`, `process_args`                                                                                                                 |
+| `lib/detect_env.sh`         | `detect_env()`: OS/version detection + profile resolution; sources `config/profiles.sh`                                                                                                                    |
+| `lib/macos.sh`              | `install_rosetta`, `install_git` (macOS), `setup_brewfile_symlink`, `install_macos_casks`, `setup_zsh_as_default_shell` (macOS)                                                                            |
+| `lib/linux.sh`              | `ensure_dnf`, `install_bats`, `install_ubuntu_packages`, `install_rhel_packages`, `install_centos_packages`, `install_go_ubuntu`, `install_cheatsh`, `update_system_packages`                              |
+| `lib/helpers.sh` (addition) | `setup_dotfile_symlinks` — single function with `if [[ -n ${MACOS} ]]` / `elif [[ -n ${LINUX} ]]` branches; lives in helpers since it is cross-platform                                                    |
+| `lib/developer.sh`          | `install_ruby`, `install_github_cli`, `install_developer_gems`, `setup_ansible_venv`, `update_pip_packages`, `clone_personal_repos`, `setup_vim_plug`, `update_aws_cli`, `update_rust`, `update_git_repos` |
 
 ---
 
@@ -385,16 +385,19 @@ All existing BATS tests carry forward unchanged. Function names are preserved du
 **Phase 1** — `tests/setup_env/unit.bats`: each `lib/*.sh` file sources without error.
 
 **Phase 2** — `tests/setup_env/unit.bats`:
+
 - `log_info` output contains `[INFO]` prefix
 - `log_warn` output contains `[WARN]` prefix
 - `log_error` output contains `[ERROR]` prefix
 
 `tests/setup_env/install_guards.bats`:
+
 - `safe_link` creates symlink when dest absent
 - `safe_link` backs up existing file then creates symlink
 - `safe_link` is a no-op when dest is already a correct symlink
 
 **Phase 3** — new `tests/setup_env/profiles.bats`:
+
 - `detect_env` sets `PROFILE=personal_laptop` for hostname `laptop`
 - `detect_env` sets `PROFILE=mac_workstation` for hostname `studio`
 - `detect_env` sets `PROFILE=mac_workstation` for hostname `reception`
@@ -418,10 +421,10 @@ test-unit:
 
 ## Risks and Mitigations
 
-| Risk | Mitigation |
-|---|---|
-| lib/ split breaks sourcing order (e.g., helpers used before they're defined) | Enforce strict source order in `setup_env.sh`; test each lib file sources independently |
-| ShellCheck flags existing code that can't be changed | Add `# shellcheck disable=SCxxxx` inline with comment explaining why |
-| Auto-merge merges a broken branch | CI must pass; branch protection blocks direct master pushes |
-| Profile abstraction changes behavior for a machine | Keep legacy hostname vars as aliases until all call sites verified; one machine at a time |
-| Fresh Mac has bash 3.2 and no Homebrew | `scripts/bootstrap_mac.sh` installs both; `setup_env.sh` fails fast with a clear pointer to that script if prerequisites are missing |
+| Risk                                                                         | Mitigation                                                                                                                           |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| lib/ split breaks sourcing order (e.g., helpers used before they're defined) | Enforce strict source order in `setup_env.sh`; test each lib file sources independently                                              |
+| ShellCheck flags existing code that can't be changed                         | Add `# shellcheck disable=SCxxxx` inline with comment explaining why                                                                 |
+| Auto-merge merges a broken branch                                            | CI must pass; branch protection blocks direct master pushes                                                                          |
+| Profile abstraction changes behavior for a machine                           | Keep legacy hostname vars as aliases until all call sites verified; one machine at a time                                            |
+| Fresh Mac has bash 3.2 and no Homebrew                                       | `scripts/bootstrap_mac.sh` installs both; `setup_env.sh` fails fast with a clear pointer to that script if prerequisites are missing |

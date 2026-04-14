@@ -9,6 +9,7 @@
 This plan is superseded. All phases were either completed or subsumed into superpowers-tracked work.
 
 **Completed work (as of 2026-04-08):**
+
 - Phase 0: Baseline tests and CI established
 - Phase 1: `lib/` modularization complete (`constants`, `helpers`, `detect_env`, `macos`, `linux`, `developer`)
 - Phase 2: Idempotency hardening via `safe_link()` and structured logging
@@ -17,6 +18,7 @@ This plan is superseded. All phases were either completed or subsumed into super
 - Phase 5: Partially complete — docs updated for profile model, lib architecture documented
 
 **Remaining work is tracked in:**
+
 - `docs/cursor/specs/2026-04-08-dotfiles-next-steps-plan.md`
 - `docs/superpowers/specs/` and `docs/superpowers/plans/`
 
@@ -64,6 +66,7 @@ This plan is superseded. All phases were either completed or subsumed into super
 - Ensure `make lint` and `make test-unit` are green as a baseline.
 
 **Exit Criteria**
+
 - Behavior checklist documented and approved.
 - Baseline tests pass locally.
 
@@ -91,6 +94,7 @@ lib/
 - Preserve function names initially where possible to limit migration risk.
 
 **Exit Criteria**
+
 - All existing tests still pass.
 - A smoke run of each `-t` mode completes without functional regressions.
 
@@ -106,6 +110,7 @@ lib/
 - Add logging helpers for structured output (`info`, `warn`, `error`).
 
 **Exit Criteria**
+
 - Re-running `setup_user` twice produces no destructive side effects.
 - Symlink behavior is deterministic and covered by tests.
 
@@ -118,6 +123,7 @@ lib/
 - Convert feature gates from raw hostname checks to profile/capability checks.
 
 **Exit Criteria**
+
 - Host profile map is centralized and documented.
 - Existing host behavior remains unchanged.
 
@@ -138,6 +144,7 @@ lib/
   - targeted mocked integration tests
 
 **Exit Criteria**
+
 - CI is required for protected branches.
 - New changes fail fast when core flows regress.
 
@@ -156,6 +163,7 @@ lib/
   - release/update checklist
 
 **Exit Criteria**
+
 - Documentation reflects actual architecture and workflow.
 - New contributors can run tests and make safe changes without tribal knowledge.
 

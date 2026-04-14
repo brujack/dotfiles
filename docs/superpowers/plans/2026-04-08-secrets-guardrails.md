@@ -12,17 +12,18 @@
 
 ## File Map
 
-| Action | File |
-|---|---|
-| Create | `.gitleaks.toml` |
+| Action | File                       |
+| ------ | -------------------------- |
+| Create | `.gitleaks.toml`           |
 | Modify | `.github/workflows/ci.yml` |
-| Modify | `CLAUDE.md` |
+| Modify | `CLAUDE.md`                |
 
 ---
 
 ### Task 1: Create `.gitleaks.toml`
 
 **Files:**
+
 - Create: `.gitleaks.toml`
 
 - [ ] **Step 1: Create `.gitleaks.toml`**
@@ -79,6 +80,7 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 ### Task 2: Add `secret-scan` job to CI
 
 **Files:**
+
 - Modify: `.github/workflows/ci.yml`
 
 - [ ] **Step 1: Read current CI file to verify structure**
@@ -90,28 +92,28 @@ Read `.github/workflows/ci.yml` to confirm the current jobs and their structure 
 Add the following job to `.github/workflows/ci.yml` at the same indentation level as the `test` job (after the closing of the `test` job):
 
 ```yaml
-  secret-scan:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
+secret-scan:
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
 
-      - name: Install gitleaks
-        run: |
-          GITLEAKS_VER="8.21.2"
-          wget -qO /tmp/gitleaks.tar.gz \
-            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VER}/gitleaks_${GITLEAKS_VER}_linux_x64.tar.gz"
-          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
-          sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
+    - name: Install gitleaks
+      run: |
+        GITLEAKS_VER="8.21.2"
+        wget -qO /tmp/gitleaks.tar.gz \
+          "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VER}/gitleaks_${GITLEAKS_VER}_linux_x64.tar.gz"
+        tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+        sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
 
-      - name: Scan for secrets
-        run: |
-          gitleaks detect \
-            --config .gitleaks.toml \
-            --source . \
-            --log-opts "HEAD~50..HEAD" \
-            --verbose
+    - name: Scan for secrets
+      run: |
+        gitleaks detect \
+          --config .gitleaks.toml \
+          --source . \
+          --log-opts "HEAD~50..HEAD" \
+          --verbose
 ```
 
 The `secret-scan` job runs in parallel with `test` and does not block `auto-merge` (it is not listed in `auto-merge`'s `needs`). This is intentional: secret scanning is advisory until confidence in the allowlist is established.
@@ -146,6 +148,7 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 ### Task 3: Document local-only state in `CLAUDE.md`
 
 **Files:**
+
 - Modify: `CLAUDE.md`
 
 - [ ] **Step 1: Add local-only state section to `CLAUDE.md`**

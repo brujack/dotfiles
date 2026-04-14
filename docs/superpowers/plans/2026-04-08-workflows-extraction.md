@@ -12,10 +12,10 @@
 
 ## File Map
 
-| Action | File |
-|---|---|
-| Create | `lib/workflows.sh` |
-| Modify | `setup_env.sh` |
+| Action | File                        |
+| ------ | --------------------------- |
+| Create | `lib/workflows.sh`          |
+| Modify | `setup_env.sh`              |
 | Modify | `tests/setup_env/unit.bats` |
 
 ---
@@ -25,6 +25,7 @@
 This task creates the file and verifies it is syntactically valid. The function bodies are filled in Task 2.
 
 **Files:**
+
 - Create: `lib/workflows.sh`
 - Modify: `tests/setup_env/unit.bats`
 
@@ -139,6 +140,7 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 Move each block from `setup_env.sh` into its corresponding function. No code changes inside the blocks — pure mechanical movement.
 
 **Files:**
+
 - Modify: `lib/workflows.sh`
 - Modify: `setup_env.sh`
 
@@ -249,6 +251,7 @@ Lines 1252–1337 of `setup_env.sh` contain the `if [[ -n ${UPDATE} ]]; then ...
 Copy the body into `run_update()` in `lib/workflows.sh`. The function body starts with `if [[ -n ${MACOS} ]] || [[ -n ${LINUX} ]]; then` (the `brew_update` block) and ends before `gem update`.
 
 Wait — include `gem update` and the closing `fi`. The function ends with:
+
 ```bash
   printf "updating ruby gems\\n"
   gem update

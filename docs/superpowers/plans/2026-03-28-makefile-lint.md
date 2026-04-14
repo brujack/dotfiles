@@ -13,6 +13,7 @@
 ## File Structure
 
 **Modified:**
+
 - `Makefile` — add `lint` target, update `.PHONY`, `test`, and `help`
 
 ---
@@ -20,6 +21,7 @@
 ### Task 1: Add lint target to Makefile
 
 **Files:**
+
 - Modify: `Makefile`
 
 - [ ] **Step 1: Establish baseline — run make test and confirm it passes**

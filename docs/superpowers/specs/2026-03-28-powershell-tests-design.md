@@ -25,11 +25,13 @@ PSScriptAnalyzer provides static analysis (undefined variables, deprecated alias
 ### Modified file: `powershell/setup_windows.ps1`
 
 Move these three function definitions above the `if ($IsWindows)` block:
+
 - `Install-ChocolateyPackages`
 - `Install-WindowsUpdates`
 - `Enable-WindowsOptionalFeatures` (currently defined inside `if ($setup.IsPresent)` — move to top level)
 
 The `if ($IsWindows)` block retains only invocation logic:
+
 ```powershell
 function Install-ChocolateyPackages { ... }
 function Install-WindowsUpdates { ... }
@@ -64,29 +66,29 @@ BeforeAll {
 
 ### `Install-ChocolateyPackages` — 4 tests
 
-| # | Test | Setup | Assert |
-|---|------|-------|--------|
-| 1 | Installs choco when absent | Mock `Get-Command` to return `$null` | `iex` called (bootstrapper invoked) |
-| 2 | Skips choco install when present | Mock `Get-Command` to return a fake command object | `iex` not called |
-| 3 | Calls `choco install` for absent package | Mock `choco list -lo` returning list without the package | `choco install <package> -y` called |
-| 4 | Skips `choco install` for present package | Mock `choco list -lo` returning list with the package | `choco install` not called |
+| #   | Test                                      | Setup                                                    | Assert                              |
+| --- | ----------------------------------------- | -------------------------------------------------------- | ----------------------------------- |
+| 1   | Installs choco when absent                | Mock `Get-Command` to return `$null`                     | `iex` called (bootstrapper invoked) |
+| 2   | Skips choco install when present          | Mock `Get-Command` to return a fake command object       | `iex` not called                    |
+| 3   | Calls `choco install` for absent package  | Mock `choco list -lo` returning list without the package | `choco install <package> -y` called |
+| 4   | Skips `choco install` for present package | Mock `choco list -lo` returning list with the package    | `choco install` not called          |
 
 ### `Install-WindowsUpdates` — 3 tests
 
 COM objects are mocked by replacing `New-Object` with a mock that returns fake PSCustomObjects with controllable `Updates`, `Download()`, `Install()`, and `rebootRequired` properties.
 
-| # | Test | Setup | Assert |
-|---|------|-------|--------|
-| 1 | Downloads and installs when updates found | Fake searcher returns non-empty updates | `Download()` and `Install()` called |
-| 2 | Skips download/install when no updates | Fake searcher returns empty updates | `Download()` and `Install()` not called |
-| 3 | Reboots when rebootRequired is true | Fake installer result has `rebootRequired = $true` | `shutdown.exe /t 0 /r` called |
+| #   | Test                                      | Setup                                              | Assert                                  |
+| --- | ----------------------------------------- | -------------------------------------------------- | --------------------------------------- |
+| 1   | Downloads and installs when updates found | Fake searcher returns non-empty updates            | `Download()` and `Install()` called     |
+| 2   | Skips download/install when no updates    | Fake searcher returns empty updates                | `Download()` and `Install()` not called |
+| 3   | Reboots when rebootRequired is true       | Fake installer result has `rebootRequired = $true` | `shutdown.exe /t 0 /r` called           |
 
 ### `Enable-WindowsOptionalFeatures` — 2 tests
 
-| # | Test | Setup | Assert |
-|---|------|-------|--------|
-| 1 | Enables feature when disabled | Mock `Get-WindowsOptionalFeature` returns `State = Disabled` | `Enable-WindowsOptionalFeature` called |
-| 2 | Skips feature when already enabled | Mock `Get-WindowsOptionalFeature` returns `State = Enabled` | `Enable-WindowsOptionalFeature` not called |
+| #   | Test                               | Setup                                                        | Assert                                     |
+| --- | ---------------------------------- | ------------------------------------------------------------ | ------------------------------------------ |
+| 1   | Enables feature when disabled      | Mock `Get-WindowsOptionalFeature` returns `State = Disabled` | `Enable-WindowsOptionalFeature` called     |
+| 2   | Skips feature when already enabled | Mock `Get-WindowsOptionalFeature` returns `State = Enabled`  | `Enable-WindowsOptionalFeature` not called |
 
 ---
 
@@ -120,9 +122,9 @@ test: lint
 
 ## Test count projection
 
-| File | Tests |
-|---|---|
-| `powershell/tests/setup_windows.Tests.ps1` | 9 |
+| File                                       | Tests |
+| ------------------------------------------ | ----- |
+| `powershell/tests/setup_windows.Tests.ps1` | 9     |
 
 ## Dependencies
 

@@ -12,20 +12,21 @@
 
 ## File Map
 
-| Action | File |
-|---|---|
+| Action | File                                                                      |
+| ------ | ------------------------------------------------------------------------- |
 | Modify | `lib/helpers.sh` — add `check-versions` to `process_args()` and `usage()` |
-| Modify | `lib/workflows.sh` — add `run_check_versions()` |
-| Modify | `setup_env.sh` — add dispatch for `CHECK_VERSIONS` |
-| Modify | `tests/setup_env/unit.bats` — add version check tests |
-| Modify | `CLAUDE.md` |
-| Modify | `README.md` |
+| Modify | `lib/workflows.sh` — add `run_check_versions()`                           |
+| Modify | `setup_env.sh` — add dispatch for `CHECK_VERSIONS`                        |
+| Modify | `tests/setup_env/unit.bats` — add version check tests                     |
+| Modify | `CLAUDE.md`                                                               |
+| Modify | `README.md`                                                               |
 
 ---
 
 ### Task 1: Add check-versions to process_args() + tests
 
 **Files:**
+
 - Modify: `lib/helpers.sh`
 - Modify: `tests/setup_env/unit.bats`
 
@@ -96,10 +97,12 @@ git commit -m "feat: add check-versions to process_args"
 ### Task 2: Add run_check_versions() to lib/workflows.sh + tests
 
 **Files:**
+
 - Modify: `lib/workflows.sh`
 - Modify: `tests/setup_env/unit.bats`
 
 The function structure:
+
 1. Print a header
 2. For each tool, call `_check_one_version tool constant repo installed-cmd version-regex`
 3. `_check_one_version` fetches GitHub releases API, compares, prints `[OK]`/`[OUTDATED]`/`[SKIP]`/`[WARN]`
@@ -304,6 +307,7 @@ git commit -m "feat: add run_check_versions for GitHub-based version drift detec
 ### Task 3: Add dispatch to setup_env.sh
 
 **Files:**
+
 - Modify: `setup_env.sh`
 
 - [ ] **Step 1: Add dispatch line**
@@ -359,6 +363,7 @@ git commit -m "feat: dispatch -t check-versions to run_check_versions"
 ### Task 4: Update usage(), CLAUDE.md, and README.md
 
 **Files:**
+
 - Modify: `lib/helpers.sh`
 - Modify: `CLAUDE.md`
 - Modify: `README.md`

@@ -12,19 +12,20 @@
 
 ## File Map
 
-| Action | File |
-|---|---|
+| Action | File                                                                                                       |
+| ------ | ---------------------------------------------------------------------------------------------------------- |
 | Modify | `lib/helpers.sh` — extend long-option loop in `process_args()`, add `_any_update_flag()`, update `usage()` |
-| Modify | `lib/workflows.sh` — refactor `run_update()` |
-| Modify | `tests/setup_env/unit.bats` — add flag parsing and dispatch tests |
-| Modify | `CLAUDE.md` |
-| Modify | `README.md` |
+| Modify | `lib/workflows.sh` — refactor `run_update()`                                                               |
+| Modify | `tests/setup_env/unit.bats` — add flag parsing and dispatch tests                                          |
+| Modify | `CLAUDE.md`                                                                                                |
+| Modify | `README.md`                                                                                                |
 
 ---
 
-### Task 1: Add _any_update_flag() to lib/helpers.sh + tests
+### Task 1: Add \_any_update_flag() to lib/helpers.sh + tests
 
 **Files:**
+
 - Modify: `lib/helpers.sh`
 - Modify: `tests/setup_env/unit.bats`
 
@@ -69,7 +70,7 @@ make test-unit
 
 Expected: FAIL — `_any_update_flag: command not found`
 
-- [ ] **Step 3: Add _any_update_flag() to lib/helpers.sh**
+- [ ] **Step 3: Add \_any_update_flag() to lib/helpers.sh**
 
 In `lib/helpers.sh`, add after the `app_dir_exists()` function and before `check_and_install_nala()`:
 
@@ -101,6 +102,7 @@ git commit -m "feat: add _any_update_flag() helper for granular update flags"
 ### Task 2: Extend process_args() to parse new flags + tests
 
 **Files:**
+
 - Modify: `lib/helpers.sh`
 - Modify: `tests/setup_env/unit.bats`
 
@@ -203,6 +205,7 @@ git commit -m "feat: add --brew-only / --pip-only / --gems-only / --mas-only / -
 ### Task 3: Refactor run_update() in lib/workflows.sh + dispatch tests
 
 **Files:**
+
 - Modify: `lib/workflows.sh`
 - Modify: `tests/setup_env/unit.bats`
 
@@ -387,6 +390,7 @@ git commit -m "feat: guard run_update subsystems with UPDATE_* flags"
 ### Task 4: Update usage() and docs
 
 **Files:**
+
 - Modify: `lib/helpers.sh`
 - Modify: `CLAUDE.md`
 - Modify: `README.md`

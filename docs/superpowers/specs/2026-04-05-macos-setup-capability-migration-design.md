@@ -61,6 +61,7 @@ brew cleanup
 ```
 
 Specifically removed:
+
 - `brew_install_cask chef/chef/inspec` → moved to Brewfile.devtools
 - `brew_tap_if_missing cloudflare/cloudflare` → no longer needed (cloudflared is in universal Brewfile from homebrew-core)
 - `brew_install_cask dotnet` → moved to Brewfile.devtools
@@ -73,7 +74,7 @@ Specifically removed:
 - `brew_install_formula redpanda-data/tap/redpanda` → moved to Brewfile.devtools
 - The entire hostname-gated block (`datawire/blackbird/telepresence-arm64` + `cloudflared`) → telepresence moves to Brewfile.devtools; cloudflared was already in universal Brewfile (duplicate removed)
 
-### setup_env.sh — hostname var → HAS_* migrations
+### setup*env.sh — hostname var → HAS*\* migrations
 
 **macOS aws-cli (line ~1019):** Collapse outer hostname gate + inner `MACOS` check:
 

@@ -77,6 +77,7 @@ Add a section documenting which paths are local-only and must not be committed:
 ## Local-Only State
 
 The following paths are machine-local and must never be committed:
+
 - `~/.aws/` — AWS credentials
 - `~/.tf_creds/` — Terraform credentials
 - `~/.ssh/` — SSH private keys (config and teleport.cfg are tracked in repo)

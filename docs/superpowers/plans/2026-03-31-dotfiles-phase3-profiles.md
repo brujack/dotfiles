@@ -12,14 +12,15 @@
 
 ## Files
 
-| File | Action |
-|---|---|
-| `config/profiles.sh` | Create — associative arrays: hostname→profile, profile→capability string |
-| `lib/detect_env.sh` | Modify — source `config/profiles.sh`, resolve `PROFILE`, set `HAS_*` vars, keep legacy aliases |
-| `tests/setup_env/profiles.bats` | Create — 11 BATS tests covering profile and capability resolution |
-| `Makefile` | Modify — add `tests/setup_env/profiles.bats` to `test-unit` target |
+| File                            | Action                                                                                         |
+| ------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `config/profiles.sh`            | Create — associative arrays: hostname→profile, profile→capability string                       |
+| `lib/detect_env.sh`             | Modify — source `config/profiles.sh`, resolve `PROFILE`, set `HAS_*` vars, keep legacy aliases |
+| `tests/setup_env/profiles.bats` | Create — 11 BATS tests covering profile and capability resolution                              |
+| `Makefile`                      | Modify — add `tests/setup_env/profiles.bats` to `test-unit` target                             |
 
 **Key orientation:**
+
 - `lib/detect_env.sh` is sourced early; `detect_env()` is the single call site for all environment detection.
 - `tests/mocks/hostname` already handles `MOCK_HOSTNAME_OUTPUT` — no new mock needed.
 - `tests/mocks/uname` already handles `MOCK_UNAME_S` — no new mock needed.
@@ -31,6 +32,7 @@
 ## Task 1: Write failing tests in `tests/setup_env/profiles.bats`
 
 **Files:**
+
 - Create: `tests/setup_env/profiles.bats`
 
 - [ ] **Step 1: Create `tests/setup_env/profiles.bats` with all 11 tests**
@@ -156,6 +158,7 @@ Expected: all 11 tests in `profiles.bats` fail — `lib/detect_env.sh` does not 
 ## Task 2: Create `config/profiles.sh`
 
 **Files:**
+
 - Create: `config/profiles.sh`
 
 - [ ] **Step 1: Create the `config/` directory and `config/profiles.sh`**
@@ -199,6 +202,7 @@ Both must exit 0.
 ## Task 3: Update `lib/detect_env.sh` — add profile resolution and legacy aliases
 
 **Files:**
+
 - Modify: `lib/detect_env.sh`
 
 - [ ] **Step 1: Add profile resolution block inside `detect_env()`**
@@ -239,6 +243,7 @@ Both must exit 0.
 ## Task 4: Update `Makefile` `test-unit` target
 
 **Files:**
+
 - Modify: `Makefile`
 
 - [ ] **Step 1: Add `tests/setup_env/profiles.bats` to the `test-unit` recipe**
@@ -303,25 +308,25 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 
 ## Capability Reference
 
-| Capability var | Profiles that set it |
-|---|---|
-| `HAS_GUI` | personal_laptop, mac_workstation, mac_mini, linux_workstation |
-| `HAS_DEVTOOLS` | personal_laptop, mac_workstation, linux_workstation |
-| `HAS_AWS` | personal_laptop, mac_workstation, linux_workstation, server |
-| `HAS_K8S` | personal_laptop, mac_workstation, linux_workstation |
-| `HAS_DOCKER` | personal_laptop, mac_workstation, linux_workstation |
-| `HAS_RUST` | personal_laptop, mac_workstation, linux_workstation |
-| `HAS_PRINTING` | personal_laptop, mac_workstation, mac_mini |
+| Capability var | Profiles that set it                                          |
+| -------------- | ------------------------------------------------------------- |
+| `HAS_GUI`      | personal_laptop, mac_workstation, mac_mini, linux_workstation |
+| `HAS_DEVTOOLS` | personal_laptop, mac_workstation, linux_workstation           |
+| `HAS_AWS`      | personal_laptop, mac_workstation, linux_workstation, server   |
+| `HAS_K8S`      | personal_laptop, mac_workstation, linux_workstation           |
+| `HAS_DOCKER`   | personal_laptop, mac_workstation, linux_workstation           |
+| `HAS_RUST`     | personal_laptop, mac_workstation, linux_workstation           |
+| `HAS_PRINTING` | personal_laptop, mac_workstation, mac_mini                    |
 
 ## Profile-to-hostname Reference
 
-| Hostname | Profile |
-|---|---|
-| `laptop` | `personal_laptop` |
-| `studio` | `mac_workstation` |
-| `reception` | `mac_workstation` |
-| `office` | `mac_mini` |
-| `home-1` | `mac_mini` |
+| Hostname      | Profile             |
+| ------------- | ------------------- |
+| `laptop`      | `personal_laptop`   |
+| `studio`      | `mac_workstation`   |
+| `reception`   | `mac_workstation`   |
+| `office`      | `mac_mini`          |
+| `home-1`      | `mac_mini`          |
 | `workstation` | `linux_workstation` |
-| `cruncher` | `linux_workstation` |
-| *(any other)* | `unknown` |
+| `cruncher`    | `linux_workstation` |
+| _(any other)_ | `unknown`           |

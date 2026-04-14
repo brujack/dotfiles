@@ -7,6 +7,7 @@ type: feedback
 When testing that a shell function returns non-zero, use `|| _rc=$?` instead of a plain direct call followed by `local _rc=$?`. BATS's ERR trap fires on any non-zero return from a bare command in the test body, which marks the test as failed before the assertion runs.
 
 **Wrong:**
+
 ```bash
 some_function
 local _rc=$?
@@ -14,6 +15,7 @@ local _rc=$?
 ```
 
 **Correct:**
+
 ```bash
 local _rc=0
 some_function || _rc=$?

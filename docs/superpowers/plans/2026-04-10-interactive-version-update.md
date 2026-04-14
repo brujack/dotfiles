@@ -12,18 +12,19 @@
 
 ## File Map
 
-| File | Change |
-|---|---|
-| `lib/helpers.sh` | Add `--update` to `process_args()` long-option loop (line 438); add `--update` to `usage()` (line 212) |
-| `lib/workflows.sh` | Add `_update_version_pin()`, `_update_url_pins()`, `_prompt_version_update()` at top of `run_check_versions` scope; add `_var` param to every `_run_cv_check` call; add prompt dispatch in `_run_cv_check` |
-| `tests/setup_env/unit.bats` | Add test for `process_args --update` |
-| `tests/setup_env/workflows.bats` | Add tests for `_update_version_pin`, `_update_url_pins` |
+| File                             | Change                                                                                                                                                                                                     |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lib/helpers.sh`                 | Add `--update` to `process_args()` long-option loop (line 438); add `--update` to `usage()` (line 212)                                                                                                     |
+| `lib/workflows.sh`               | Add `_update_version_pin()`, `_update_url_pins()`, `_prompt_version_update()` at top of `run_check_versions` scope; add `_var` param to every `_run_cv_check` call; add prompt dispatch in `_run_cv_check` |
+| `tests/setup_env/unit.bats`      | Add test for `process_args --update`                                                                                                                                                                       |
+| `tests/setup_env/workflows.bats` | Add tests for `_update_version_pin`, `_update_url_pins`                                                                                                                                                    |
 
 ---
 
 ## Task 1: Add `--update` flag to `process_args()` and `usage()`
 
 **Files:**
+
 - Modify: `lib/helpers.sh:212` (usage string)
 - Modify: `lib/helpers.sh:438` (process_args long-option loop)
 - Test: `tests/setup_env/unit.bats`
@@ -104,6 +105,7 @@ git commit -m "feat: add --update flag to process_args for check-versions"
 ## Task 2: Add `_update_version_pin()` helper
 
 **Files:**
+
 - Modify: `lib/workflows.sh` (add helper before `run_check_versions` at line 1409)
 - Test: `tests/setup_env/workflows.bats`
 
@@ -197,6 +199,7 @@ git commit -m "feat: add _update_version_pin helper to run_check_versions"
 ## Task 3: Add `_update_url_pins()` helper
 
 **Files:**
+
 - Modify: `lib/workflows.sh` (add before `_update_version_pin`)
 - Test: `tests/setup_env/workflows.bats`
 
@@ -317,6 +320,7 @@ git commit -m "feat: add _update_url_pins helper for in-place URL constant updat
 ## Task 4: Wire interactive prompting into `run_check_versions`
 
 **Files:**
+
 - Modify: `lib/workflows.sh` (add `_prompt_version_update`; update `_run_cv_check` and all `_run_cv_check` calls)
 
 No new tests needed for this task — the prompt flow is integration-level and relies on stdin, which is outside the mock harness. Existing `_update_version_pin` and `_update_url_pins` tests already cover the write path.
@@ -422,6 +426,7 @@ git commit -m "feat: wire --update interactive prompting into run_check_versions
 ## Task 5: Update docs and superpowers index
 
 **Files:**
+
 - Modify: `docs/superpowers/README.md`
 - Modify: `README.md`
 

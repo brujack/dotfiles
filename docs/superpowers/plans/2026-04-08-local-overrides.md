@@ -12,20 +12,21 @@
 
 ## File Map
 
-| Action | File |
-|---|---|
-| Modify | `.gitignore` |
-| Create | `config/local.sh.example` |
-| Modify | `setup_env.sh` |
+| Action | File                        |
+| ------ | --------------------------- |
+| Modify | `.gitignore`                |
+| Create | `config/local.sh.example`   |
+| Modify | `setup_env.sh`              |
 | Modify | `tests/setup_env/unit.bats` |
-| Modify | `CLAUDE.md` |
-| Modify | `README.md` |
+| Modify | `CLAUDE.md`                 |
+| Modify | `README.md`                 |
 
 ---
 
 ### Task 1: Add config/local.sh to .gitignore + test
 
 **Files:**
+
 - Modify: `.gitignore`
 - Modify: `tests/setup_env/unit.bats`
 
@@ -77,6 +78,7 @@ git commit -m "chore: git-ignore config/local.sh"
 ### Task 2: Create config/local.sh.example
 
 **Files:**
+
 - Create: `config/local.sh.example`
 
 - [ ] **Step 1: Create the example file**
@@ -125,6 +127,7 @@ git commit -m "feat: add config/local.sh.example template"
 ### Task 3: Add source block to setup_env.sh + tests
 
 **Files:**
+
 - Modify: `setup_env.sh`
 - Modify: `tests/setup_env/unit.bats`
 
@@ -211,6 +214,7 @@ git commit -m "feat: source config/local.sh after detect_env for machine-local o
 ### Task 4: Update docs
 
 **Files:**
+
 - Modify: `CLAUDE.md`
 - Modify: `README.md`
 
@@ -226,7 +230,7 @@ In `CLAUDE.md`, in the `## Local-Only State` section, add after the last bullet:
 
 In `README.md`, after the `**Options:**` block (after the `--dry-run` line), add:
 
-```markdown
+````markdown
 ### Machine-Local Overrides
 
 To customize a specific machine without committing changes, copy the example and edit:
@@ -234,13 +238,15 @@ To customize a specific machine without committing changes, copy the example and
 ```bash
 cp config/local.sh.example config/local.sh
 ```
+````
 
 `config/local.sh` is git-ignored and sourced after `detect_env` runs. The `HAS_*` vars, `PROFILE`, and OS vars are all available to override.
-```
+
+````
 
 - [ ] **Step 3: Commit**
 
 ```bash
 git add CLAUDE.md README.md
 git commit -m "docs: document config/local.sh machine-local overrides"
-```
+````

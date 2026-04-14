@@ -46,26 +46,26 @@ Remove the `CRUNCHER` legacy hostname alias. `cruncher` now has its own profile 
 
 All `WORKSTATION` and `CRUNCHER` references in the Ubuntu block replaced with capability vars:
 
-| Line | Old gate | New gate | Rationale |
-|---|---|---|---|
-| 186 | `WORKSTATION` | `HAS_SNAP` | Snap package installs — desktop only |
-| 439 | `WORKSTATION \|\| CRUNCHER` | `HAS_RUST` | Rust install |
-| 453 | `WORKSTATION \|\| CRUNCHER` | `HAS_DOCKER` | Docker install |
-| 477 | `WORKSTATION \|\| CRUNCHER` | `HAS_DEVTOOLS` | VirtualBox |
-| 488 | `WORKSTATION \|\| CRUNCHER` | `HAS_DEVTOOLS` | Teleport |
-| 499 | `WORKSTATION \|\| CRUNCHER` | `HAS_DEVTOOLS` | cloudflared |
-| 510 | `WORKSTATION \|\| CRUNCHER` | `HAS_K8S` | kind |
-| 524 | `WORKSTATION \|\| CRUNCHER` | `HAS_DEVTOOLS` | yq |
-| 538 | `WORKSTATION` | `HAS_SNAP` | Albert launcher — snap-based |
-| 575 | `WORKSTATION \|\| CRUNCHER` | `HAS_K8S` | telepresence |
-| 729 | `WORKSTATION \|\| CRUNCHER` | `HAS_DEVTOOLS` | claude-code + plugins |
-| 737 | `WORKSTATION` | `HAS_SNAP` | ollama — desktop only |
-| 742 | `WORKSTATION` | `HAS_SNAP` | Microsoft Edge — desktop only |
-| 749 | `WORKSTATION \|\| CRUNCHER` | `HAS_DEVTOOLS` | dotnet-sdk-8.0 |
-| 765 | `WORKSTATION` | `HAS_SNAP` | snap classic installs (code, helm, slack, etc.) |
-| 776 | `CRUNCHER` | `[[ -z ${HAS_SNAP} ]]` | helm via apt — WSL2 only (already inside Ubuntu block) |
-| 796 | `WORKSTATION \|\| CRUNCHER` | `HAS_DEVTOOLS` | libssl1.1 |
-| 1033 | `WORKSTATION \|\| CRUNCHER` | `HAS_AWS` | Linux aws-cli (within Linux block) |
+| Line | Old gate                    | New gate               | Rationale                                              |
+| ---- | --------------------------- | ---------------------- | ------------------------------------------------------ |
+| 186  | `WORKSTATION`               | `HAS_SNAP`             | Snap package installs — desktop only                   |
+| 439  | `WORKSTATION \|\| CRUNCHER` | `HAS_RUST`             | Rust install                                           |
+| 453  | `WORKSTATION \|\| CRUNCHER` | `HAS_DOCKER`           | Docker install                                         |
+| 477  | `WORKSTATION \|\| CRUNCHER` | `HAS_DEVTOOLS`         | VirtualBox                                             |
+| 488  | `WORKSTATION \|\| CRUNCHER` | `HAS_DEVTOOLS`         | Teleport                                               |
+| 499  | `WORKSTATION \|\| CRUNCHER` | `HAS_DEVTOOLS`         | cloudflared                                            |
+| 510  | `WORKSTATION \|\| CRUNCHER` | `HAS_K8S`              | kind                                                   |
+| 524  | `WORKSTATION \|\| CRUNCHER` | `HAS_DEVTOOLS`         | yq                                                     |
+| 538  | `WORKSTATION`               | `HAS_SNAP`             | Albert launcher — snap-based                           |
+| 575  | `WORKSTATION \|\| CRUNCHER` | `HAS_K8S`              | telepresence                                           |
+| 729  | `WORKSTATION \|\| CRUNCHER` | `HAS_DEVTOOLS`         | claude-code + plugins                                  |
+| 737  | `WORKSTATION`               | `HAS_SNAP`             | ollama — desktop only                                  |
+| 742  | `WORKSTATION`               | `HAS_SNAP`             | Microsoft Edge — desktop only                          |
+| 749  | `WORKSTATION \|\| CRUNCHER` | `HAS_DEVTOOLS`         | dotnet-sdk-8.0                                         |
+| 765  | `WORKSTATION`               | `HAS_SNAP`             | snap classic installs (code, helm, slack, etc.)        |
+| 776  | `CRUNCHER`                  | `[[ -z ${HAS_SNAP} ]]` | helm via apt — WSL2 only (already inside Ubuntu block) |
+| 796  | `WORKSTATION \|\| CRUNCHER` | `HAS_DEVTOOLS`         | libssl1.1                                              |
+| 1033 | `WORKSTATION \|\| CRUNCHER` | `HAS_AWS`              | Linux aws-cli (within Linux block)                     |
 
 ### `README.md`
 

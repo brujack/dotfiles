@@ -12,9 +12,9 @@
 
 ## Files
 
-| File | Action |
-|---|---|
-| `README.md` | Create — user-facing documentation |
+| File        | Action                                                              |
+| ----------- | ------------------------------------------------------------------- |
+| `README.md` | Create — user-facing documentation                                  |
 | `CLAUDE.md` | Modify — update Layout, add new conventions, update testing section |
 
 ---
@@ -22,11 +22,12 @@
 ## Task 1: Create `README.md`
 
 **Files:**
+
 - Create: `README.md`
 
 - [ ] **Step 1: Create `README.md` with the following content**
 
-```markdown
+````markdown
 # dotfiles
 
 Personal development environment bootstrap for macOS and Linux.
@@ -40,18 +41,19 @@ Personal development environment bootstrap for macOS and Linux.
 # Step 2: Run setup
 ./setup_env.sh -t setup
 ```
+````
 
 ## Setup Types
 
 Run `./setup_env.sh -t <type>`:
 
-| Type | What it does |
-|------|-------------|
-| `setup_user` | Dotfile symlinks, shell config, credential directories |
-| `setup` | Full machine setup (setup_user + all apps for this machine's profile) |
-| `developer` | Dev packages + Python/Ansible virtualenv |
-| `ansible` | Ansible venv setup only (re-run after Python updates) |
-| `update` | Update all packages (brew, apt, pip, gems, tools) |
+| Type         | What it does                                                          |
+| ------------ | --------------------------------------------------------------------- |
+| `setup_user` | Dotfile symlinks, shell config, credential directories                |
+| `setup`      | Full machine setup (setup_user + all apps for this machine's profile) |
+| `developer`  | Dev packages + Python/Ansible virtualenv                              |
+| `ansible`    | Ansible venv setup only (re-run after Python updates)                 |
+| `update`     | Update all packages (brew, apt, pip, gems, tools)                     |
 
 ## Architecture
 
@@ -80,13 +82,13 @@ tests/
 
 Machines are mapped to profiles in `config/profiles.sh`. Each profile enables a set of capabilities:
 
-| Profile | Machines | Capabilities |
-|---|---|---|
-| `personal_laptop` | laptop | GUI, devtools, AWS, k8s, Docker, Rust, printing |
-| `mac_workstation` | studio, reception | GUI, devtools, AWS, k8s, Docker, Rust, printing |
-| `mac_mini` | office, home-1 | GUI, printing |
-| `linux_workstation` | workstation, cruncher | GUI, devtools, AWS, k8s, Docker, Rust |
-| `server` | (future) | devtools, AWS |
+| Profile             | Machines              | Capabilities                                    |
+| ------------------- | --------------------- | ----------------------------------------------- |
+| `personal_laptop`   | laptop                | GUI, devtools, AWS, k8s, Docker, Rust, printing |
+| `mac_workstation`   | studio, reception     | GUI, devtools, AWS, k8s, Docker, Rust, printing |
+| `mac_mini`          | office, home-1        | GUI, printing                                   |
+| `linux_workstation` | workstation, cruncher | GUI, devtools, AWS, k8s, Docker, Rust           |
+| `server`            | (future)              | devtools, AWS                                   |
 
 ### Adding a New Machine
 
@@ -130,16 +132,17 @@ Dotfiles live in `.devcontainer/`. `setup_user` creates symlinks from `$HOME` in
 
 Shell config is modular under `.devcontainer/.config/.zshrc.d/`:
 
-| File | Purpose |
-|---|---|
-| `1_init.zsh` | OS detection, initial setup |
-| `2_functions.zsh` | Shell functions |
-| `3_oh-my-zsh.zsh` | Oh-My-Zsh config |
-| `4_aliases.zsh` | Aliases |
-| `5_general.zsh` | General settings |
-| `6_path.zsh` | PATH configuration |
-| `7_final.zsh` | Final setup, completions |
-```
+| File              | Purpose                     |
+| ----------------- | --------------------------- |
+| `1_init.zsh`      | OS detection, initial setup |
+| `2_functions.zsh` | Shell functions             |
+| `3_oh-my-zsh.zsh` | Oh-My-Zsh config            |
+| `4_aliases.zsh`   | Aliases                     |
+| `5_general.zsh`   | General settings            |
+| `6_path.zsh`      | PATH configuration          |
+| `7_final.zsh`     | Final setup, completions    |
+
+````
 
 - [ ] **Step 2: Verify the README renders correctly**
 
@@ -151,7 +154,7 @@ fences = content.count('\`\`\`')
 assert fences % 2 == 0, f'Unmatched code fences: {fences}'
 print('README.md looks OK')
 "
-```
+````
 
 Expected: `README.md looks OK`
 
@@ -172,6 +175,7 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 ## Task 2: Update `CLAUDE.md` — Layout section
 
 **Files:**
+
 - Modify: `CLAUDE.md`
 
 - [ ] **Step 1: Replace the Layout section**
@@ -180,46 +184,48 @@ Find the `## Layout` section in `CLAUDE.md`. Replace its content with:
 
 ```markdown
 ## Layout
+```
+
+dotfiles/
+├── setup_env.sh # Orchestrator (~80 lines): sources lib/, dispatches workflows
+├── Brewfile # Homebrew bundle manifest (100+ formulae/casks)
+├── config/
+│ └── profiles.sh # hostname→profile map; edit here to add a new machine
+├── lib/
+│ ├── constants.sh # Version pins, download URLs, directory vars
+│ ├── helpers.sh # Logging (log_info/warn/error), safe_link, install guards, brew helpers
+│ ├── detect_env.sh # OS/version detection + profile/capability resolution
+│ ├── macos.sh # macOS-specific install functions
+│ ├── linux.sh # Linux-specific install functions
+│ └── developer.sh # Cross-platform dev tooling (Ruby, Python, Ansible, etc.)
+├── scripts/
+│ ├── bootstrap_mac.sh # NEW: one-time macOS prerequisite installer (Homebrew + bash 5)
+│ ├── .osx.sh # macOS system defaults
+│ └── ... # utility scripts
+├── powershell/
+│ ├── setup_windows.ps1 # Windows/PowerShell bootstrap
+│ └── tests/ # Pester v5 tests
+├── .devcontainer/ # Central dotfiles storage
+│ ├── .zshrc # Main zsh config (sources .zshrc.d modules)
+│ └── .config/.zshrc.d/ # Modular zsh config (7 numbered files)
+├── tests/
+│ ├── setup_env/
+│ │ ├── unit.bats
+│ │ ├── profiles.bats # Profile + capability resolution tests
+│ │ ├── install_guards.bats
+│ │ ├── install_functions.bats
+│ │ └── extracted_functions.bats
+│ ├── zshrc.d/
+│ │ └── unit.bats
+│ ├── mocks/ # PATH-injected mock executables
+│ └── helpers/
+│ └── common.bash
+└── .github/
+└── workflows/
+└── ci.yml # lint + test + auto-merge on non-master branches
 
 ```
-dotfiles/
-├── setup_env.sh              # Orchestrator (~80 lines): sources lib/, dispatches workflows
-├── Brewfile                  # Homebrew bundle manifest (100+ formulae/casks)
-├── config/
-│   └── profiles.sh           # hostname→profile map; edit here to add a new machine
-├── lib/
-│   ├── constants.sh          # Version pins, download URLs, directory vars
-│   ├── helpers.sh            # Logging (log_info/warn/error), safe_link, install guards, brew helpers
-│   ├── detect_env.sh         # OS/version detection + profile/capability resolution
-│   ├── macos.sh              # macOS-specific install functions
-│   ├── linux.sh              # Linux-specific install functions
-│   └── developer.sh          # Cross-platform dev tooling (Ruby, Python, Ansible, etc.)
-├── scripts/
-│   ├── bootstrap_mac.sh      # NEW: one-time macOS prerequisite installer (Homebrew + bash 5)
-│   ├── .osx.sh               # macOS system defaults
-│   └── ...                   # utility scripts
-├── powershell/
-│   ├── setup_windows.ps1     # Windows/PowerShell bootstrap
-│   └── tests/                # Pester v5 tests
-├── .devcontainer/            # Central dotfiles storage
-│   ├── .zshrc                # Main zsh config (sources .zshrc.d modules)
-│   └── .config/.zshrc.d/     # Modular zsh config (7 numbered files)
-├── tests/
-│   ├── setup_env/
-│   │   ├── unit.bats
-│   │   ├── profiles.bats     # Profile + capability resolution tests
-│   │   ├── install_guards.bats
-│   │   ├── install_functions.bats
-│   │   └── extracted_functions.bats
-│   ├── zshrc.d/
-│   │   └── unit.bats
-│   ├── mocks/                # PATH-injected mock executables
-│   └── helpers/
-│       └── common.bash
-└── .github/
-    └── workflows/
-        └── ci.yml            # lint + test + auto-merge on non-master branches
-```
+
 ```
 
 - [ ] **Step 2: Update the Entry Points table in `CLAUDE.md`**
@@ -231,13 +237,14 @@ The entry point section describes `setup_env.sh -t <type>`. It is still accurate
 ## Task 3: Add "Adding a New Machine" section to `CLAUDE.md`
 
 **Files:**
+
 - Modify: `CLAUDE.md`
 
 - [ ] **Step 1: Insert the new section after the "Key Conventions" section**
 
 Add this section at the end of `CLAUDE.md` (before any trailing content):
 
-```markdown
+````markdown
 ## Adding a New Machine
 
 1. Edit `config/profiles.sh` — add the hostname to `PROFILE_MAP`:
@@ -249,6 +256,7 @@ declare -A PROFILE_MAP=(
   ...
 )
 ```
+````
 
 2. If the machine needs a new profile, add it to both `PROFILE_MAP` and `PROFILE_CAPS` in `config/profiles.sh`.
 
@@ -260,18 +268,19 @@ No other files need changing.
 
 After `detect_env()` runs, the following vars are set:
 
-| Var | Profiles |
-|---|---|
-| `PROFILE` | String: `personal_laptop`, `mac_workstation`, `mac_mini`, `linux_workstation`, `server`, or `unknown` |
-| `HAS_GUI` | personal_laptop, mac_workstation, mac_mini, linux_workstation |
-| `HAS_DEVTOOLS` | personal_laptop, mac_workstation, linux_workstation |
-| `HAS_AWS` | personal_laptop, mac_workstation, linux_workstation, server |
-| `HAS_K8S` | personal_laptop, mac_workstation, linux_workstation |
-| `HAS_DOCKER` | personal_laptop, mac_workstation, linux_workstation |
-| `HAS_RUST` | personal_laptop, mac_workstation, linux_workstation |
-| `HAS_PRINTING` | personal_laptop, mac_workstation, mac_mini |
+| Var            | Profiles                                                                                              |
+| -------------- | ----------------------------------------------------------------------------------------------------- |
+| `PROFILE`      | String: `personal_laptop`, `mac_workstation`, `mac_mini`, `linux_workstation`, `server`, or `unknown` |
+| `HAS_GUI`      | personal_laptop, mac_workstation, mac_mini, linux_workstation                                         |
+| `HAS_DEVTOOLS` | personal_laptop, mac_workstation, linux_workstation                                                   |
+| `HAS_AWS`      | personal_laptop, mac_workstation, linux_workstation, server                                           |
+| `HAS_K8S`      | personal_laptop, mac_workstation, linux_workstation                                                   |
+| `HAS_DOCKER`   | personal_laptop, mac_workstation, linux_workstation                                                   |
+| `HAS_RUST`     | personal_laptop, mac_workstation, linux_workstation                                                   |
+| `HAS_PRINTING` | personal_laptop, mac_workstation, mac_mini                                                            |
 
 Legacy hostname vars (`LAPTOP`, `STUDIO`, `WORKSTATION`, etc.) are preserved as readonly aliases for backwards compatibility.
+
 ```
 
 ---
@@ -287,8 +296,10 @@ In the "Testing" section of `CLAUDE.md`, find the `make test-unit` description a
 
 Current:
 ```
+
 **Run unit tests only:** `make test-unit`
-```
+
+````
 
 The section should note that `test-unit` runs `unit.bats`, `profiles.bats`, and `zshrc.d/unit.bats`.
 
@@ -300,7 +311,7 @@ Add a brief note about the GitHub Actions CI in the Testing section:
 ### CI
 
 GitHub Actions runs `make test` on every push to a non-master branch and auto-merges the PR to master on green. Branch protection on master requires the `test` check to pass.
-```
+````
 
 ---
 

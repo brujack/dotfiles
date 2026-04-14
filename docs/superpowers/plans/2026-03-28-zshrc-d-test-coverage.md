@@ -12,20 +12,21 @@
 
 ## Files
 
-| Action | Path |
-|--------|------|
-| Create | `tests/zshrc.d/functions.bats` |
+| Action | Path                                                                                    |
+| ------ | --------------------------------------------------------------------------------------- |
+| Create | `tests/zshrc.d/functions.bats`                                                          |
 | Modify | `.devcontainer/.config/.zshrc.d/2_functions.zsh` (fix `exit 1` → `return 1` in `mkill`) |
-| Create | `tests/zshrc.d/general.bats` |
-| Create | `tests/zshrc.d/path.bats` |
-| Create | `tests/zshrc.d/final.bats` |
-| Modify | `README.md` (update PowerShell layout section) |
+| Create | `tests/zshrc.d/general.bats`                                                            |
+| Create | `tests/zshrc.d/path.bats`                                                               |
+| Create | `tests/zshrc.d/final.bats`                                                              |
+| Modify | `README.md` (update PowerShell layout section)                                          |
 
 ---
 
 ### Task 1: `functions.bats` — 13 tests + `mkill()` bug fix
 
 **Files:**
+
 - Create: `tests/zshrc.d/functions.bats`
 - Modify: `.devcontainer/.config/.zshrc.d/2_functions.zsh`
 
@@ -291,6 +292,7 @@ git commit -m "test: add functions.bats for 2_functions.zsh; fix mkill exit 1 to
 ### Task 2: `tests/zshrc.d/general.bats` — 6 tests
 
 **Files:**
+
 - Create: `tests/zshrc.d/general.bats`
 
 **Context:** `5_general.zsh` contains an unconditional `git clone` call guarded only by the absence of `~/.oh-my-zsh/custom/plugins/zsh-autosuggestions`. Every test must create that directory under a fake `HOME` (`${BATS_TEST_TMPDIR}/home_<name>`) to prevent a real network call. Setting `HOME` to a fake dir inside `zsh -c` works because `5_general.zsh` uses `${HOME}` (not `~`) for that guard. `2>/dev/null` suppresses errors from optional `source` calls (keychain with absolute path `/usr/bin/keychain` — not in PATH on macOS — evaluates to empty string, which is a no-op), `eval "$(tty)"` errors, and `autoload` failures.
@@ -439,6 +441,7 @@ git commit -m "test: add general.bats for 5_general.zsh (EDITOR, PSHOME, ANSIBLE
 ### Task 3: `tests/zshrc.d/path.bats` — 8 tests
 
 **Files:**
+
 - Create: `tests/zshrc.d/path.bats`
 
 **Context:** `6_path.zsh` adds directories to the `path` array (which is tied to `$PATH`) using `typeset -U path` for automatic deduplication. Tests use a fake `HOME` in `BATS_TEST_TMPDIR` so `${HOME}/bin`, `${HOME}/scripts`, `${HOME}/.cargo/bin` checks hit temp dirs. Tests 4 and 7 use `skip` guards for hardcoded paths (`/opt/homebrew/bin`, `/home/linuxbrew/.linuxbrew/bin`) that can only be tested when those directories exist on the machine.
@@ -614,6 +617,7 @@ git commit -m "test: add path.bats for 6_path.zsh (PATH additions and deduplicat
 ### Task 4: `tests/zshrc.d/final.bats` — 6 tests
 
 **Files:**
+
 - Create: `tests/zshrc.d/final.bats`
 
 **Context:** `7_final.zsh` calls `quiet_which zoxide` (defined in `2_functions.zsh`, not in `7_final.zsh`). Define `function quiet_which() { return 1; }` before sourcing in each test to prevent the undefined-function error and skip the `zoxide init` block. `eval "$(starship init zsh)"` always runs — mock `starship` in each test via a mock dir prepended to PATH that contains a no-op starship script. `GOROOT`/`GOPATH` tests that depend on hardcoded paths use complementary `skip` guards. ICON test 6 tests the "no platform set" case instead of Ubuntu (the Ubuntu distro detection uses a glob `/etc/*-release` that fails silently on macOS, leaving `ICON` unset rather than set to the Ubuntu icon).
@@ -758,6 +762,7 @@ git commit -m "test: add final.bats for 7_final.zsh (GOROOT, GOPATH, ICON)"
 ### Task 5: Update README with current PowerShell layout
 
 **Files:**
+
 - Modify: `README.md`
 
 **Context:** The README `Repository Layout` section still shows the old single-file PowerShell layout from before the Makefile and test infrastructure was added.
@@ -765,12 +770,14 @@ git commit -m "test: add final.bats for 7_final.zsh (GOROOT, GOPATH, ICON)"
 - [ ] **Step 1: Update the PowerShell section in `README.md`**
 
 Find:
+
 ```
 ├── powershell/
 │   └── setup_windows.ps1     # Windows/PowerShell bootstrap
 ```
 
 Replace with:
+
 ```
 ├── powershell/
 │   ├── setup_windows.ps1     # Windows/PowerShell bootstrap
@@ -799,11 +806,11 @@ git commit -m "docs: update README PowerShell layout to reflect current structur
 
 ## Test Count Summary
 
-| File | Before | Added | After |
-|------|--------|-------|-------|
-| `tests/zshrc.d/unit.bats` | 10 | 0 | 10 |
-| `tests/zshrc.d/functions.bats` | 0 | 13 | 13 |
-| `tests/zshrc.d/general.bats` | 0 | 6 | 6 |
-| `tests/zshrc.d/path.bats` | 0 | 8 | 8 |
-| `tests/zshrc.d/final.bats` | 0 | 6 | 6 |
-| **Total** | **10** | **33** | **43** |
+| File                           | Before | Added  | After  |
+| ------------------------------ | ------ | ------ | ------ |
+| `tests/zshrc.d/unit.bats`      | 10     | 0      | 10     |
+| `tests/zshrc.d/functions.bats` | 0      | 13     | 13     |
+| `tests/zshrc.d/general.bats`   | 0      | 6      | 6      |
+| `tests/zshrc.d/path.bats`      | 0      | 8      | 8      |
+| `tests/zshrc.d/final.bats`     | 0      | 6      | 6      |
+| **Total**                      | **10** | **33** | **43** |

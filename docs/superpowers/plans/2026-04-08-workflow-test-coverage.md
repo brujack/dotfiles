@@ -12,9 +12,9 @@
 
 ## File Map
 
-| Action | File |
-|---|---|
-| Create | `tests/setup_env/workflows.bats` |
+| Action | File                                                                                      |
+| ------ | ----------------------------------------------------------------------------------------- |
+| Create | `tests/setup_env/workflows.bats`                                                          |
 | Verify | `Makefile` — no change needed (`bats --recursive tests/` picks up new file automatically) |
 
 ---
@@ -22,6 +22,7 @@
 ### Task 1: Create workflows.bats with setup/teardown skeleton
 
 **Files:**
+
 - Create: `tests/setup_env/workflows.bats`
 
 - [ ] **Step 1: Create the file**
@@ -71,6 +72,7 @@ git commit -m "test: create workflows.bats skeleton"
 ### Task 2: Add coarse-grained tests for run_setup_user (macOS)
 
 **Files:**
+
 - Modify: `tests/setup_env/workflows.bats`
 
 These tests verify that the top-level steps of `run_setup_user` are invoked on macOS. The key calls that leave mock traces are `git clone` (for dotfiles and oh-my-zsh), `mkdir`, and `ln -s` (via safe_link → run_cmd).
@@ -147,6 +149,7 @@ git commit -m "test: add coarse-grained run_setup_user tests for macOS"
 ### Task 3: Add platform-branching tests for run_setup_user
 
 **Files:**
+
 - Modify: `tests/setup_env/workflows.bats`
 
 - [ ] **Step 1: Write the failing tests**
@@ -203,6 +206,7 @@ git commit -m "test: add platform-branching tests for run_setup_user"
 ### Task 4: Add coarse-grained and branching tests for run_setup_or_developer
 
 **Files:**
+
 - Modify: `tests/setup_env/workflows.bats`
 
 - [ ] **Step 1: Write the tests**
@@ -269,6 +273,7 @@ git commit -m "test: add coarse-grained and branching tests for run_setup_or_dev
 ### Task 5: Add coarse-grained and branching tests for run_update
 
 **Files:**
+
 - Modify: `tests/setup_env/workflows.bats`
 
 - [ ] **Step 1: Write the tests**

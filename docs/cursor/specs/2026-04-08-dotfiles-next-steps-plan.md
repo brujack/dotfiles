@@ -15,13 +15,13 @@
 
 Each step from this plan has a corresponding spec and implementation plan in `docs/superpowers/`:
 
-| Step | Spec | Plan | Status |
-|---|---|---|---|
-| Step 1: Workflows extraction | [spec](../../superpowers/specs/2026-04-08-workflows-extraction-design.md) | [plan](../../superpowers/plans/2026-04-08-workflows-extraction.md) | Done |
-| Step 2: Doctor + dry-run | [spec](../../superpowers/specs/2026-04-08-doctor-dry-run-design.md) | [plan](../../superpowers/plans/2026-04-08-doctor-dry-run.md) | Done |
-| Step 3: Secrets guardrails | [spec](../../superpowers/specs/2026-04-08-secrets-guardrails-design.md) | [plan](../../superpowers/plans/2026-04-08-secrets-guardrails.md) | Done |
-| Step 4: CI safety | [spec](../../superpowers/specs/2026-04-08-ci-safety-design.md) | [plan](../../superpowers/plans/2026-04-08-ci-safety.md) | Done |
-| Step 5: Plan hygiene | [spec](../../superpowers/specs/2026-04-08-plan-hygiene-design.md) | [plan](../../superpowers/plans/2026-04-08-plan-hygiene.md) | Done |
+| Step                         | Spec                                                                      | Plan                                                               | Status |
+| ---------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------ | ------ |
+| Step 1: Workflows extraction | [spec](../../superpowers/specs/2026-04-08-workflows-extraction-design.md) | [plan](../../superpowers/plans/2026-04-08-workflows-extraction.md) | Done   |
+| Step 2: Doctor + dry-run     | [spec](../../superpowers/specs/2026-04-08-doctor-dry-run-design.md)       | [plan](../../superpowers/plans/2026-04-08-doctor-dry-run.md)       | Done   |
+| Step 3: Secrets guardrails   | [spec](../../superpowers/specs/2026-04-08-secrets-guardrails-design.md)   | [plan](../../superpowers/plans/2026-04-08-secrets-guardrails.md)   | Done   |
+| Step 4: CI safety            | [spec](../../superpowers/specs/2026-04-08-ci-safety-design.md)            | [plan](../../superpowers/plans/2026-04-08-ci-safety.md)            | Done   |
+| Step 5: Plan hygiene         | [spec](../../superpowers/specs/2026-04-08-plan-hygiene-design.md)         | [plan](../../superpowers/plans/2026-04-08-plan-hygiene.md)         | Done   |
 
 ## Non-Goals
 
@@ -51,6 +51,7 @@ Each step from this plan has a corresponding spec and implementation plan in `do
 - Keep function names and command order stable where possible.
 
 **Exit Criteria**
+
 - `setup_env.sh` only parses args, detects env, and dispatches workflow functions.
 - Existing tests pass with no behavior regression.
 
@@ -69,6 +70,7 @@ Each step from this plan has a corresponding spec and implementation plan in `do
 - Dry-run output should show exactly what would run.
 
 **Exit Criteria**
+
 - `doctor` executes without side effects.
 - `--dry-run` produces deterministic action output for each type.
 
@@ -81,6 +83,7 @@ Each step from this plan has a corresponding spec and implementation plan in `do
 - Document safe handling for repo-managed Cursor and Claude files.
 
 **Exit Criteria**
+
 - Known secret-bearing keys are blocked from commit/merge.
 - Local-only state has a documented and enforceable location.
 
@@ -93,6 +96,7 @@ Each step from this plan has a corresponding spec and implementation plan in `do
 - Add at least one macOS-focused lint/syntax check job for cross-platform drift detection.
 
 **Exit Criteria**
+
 - CI conditionals are unambiguous.
 - Auto-merge policy matches intended trust model.
 - Cross-platform syntax drift is caught in CI.
@@ -107,6 +111,7 @@ Each step from this plan has a corresponding spec and implementation plan in `do
 - Add a short “active roadmap” section to `docs/cursor/specs/README.md`.
 
 **Exit Criteria**
+
 - Latest status is discoverable in one place.
 - Future sessions can continue without reconstructing context.
 

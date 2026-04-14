@@ -5,6 +5,7 @@ type: project
 ---
 
 **Completed 2026-04-09:**
+
 - Added `docs/adr/` with six seed ADRs (0001 Chudnovsky, 0002 Python+Rust dual impl, 0003 segmented sieve, 0004 GMP/rug, 0005 rayon, 0006 per-project CI)
 - Fixed CI lint gaps: `pi-py.yml` now uses `make test` (was calling unittest directly, skipping ruff); all Rust workflows now use `make test` (was using `cargo test`, skipping clippy)
 - Added secrets guardrail: `.gitleaks.toml`, credential paths in `.gitignore`, `secret-scan.yml` workflow

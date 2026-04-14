@@ -79,15 +79,15 @@ _update_version_pin() {
 
 Each tool maps to zero or more URL-embedding vars in `constants.sh`:
 
-| Tool | URL vars to update |
-|---|---|
-| `go` | `GO_DOWNLOAD_FILENAME`, `GO_DOWNLOAD_URL` |
-| `vagrant` | _(none — no URL in constants.sh)_ |
-| `python3` | _(none — pyenv handles downloads)_ |
-| `ruby` | _(none — ruby-install handles downloads)_ |
-| `zsh` | _(none)_ |
-| `yq` | `YQ_URL` |
-| `shellcheck` | _(none — installed via brew/apt)_ |
+| Tool         | URL vars to update                        |
+| ------------ | ----------------------------------------- |
+| `go`         | `GO_DOWNLOAD_FILENAME`, `GO_DOWNLOAD_URL` |
+| `vagrant`    | _(none — no URL in constants.sh)_         |
+| `python3`    | _(none — pyenv handles downloads)_        |
+| `ruby`       | _(none — ruby-install handles downloads)_ |
+| `zsh`        | _(none)_                                  |
+| `yq`         | `YQ_URL`                                  |
+| `shellcheck` | _(none — installed via brew/apt)_         |
 
 ```bash
 _update_url_pins() {
@@ -161,11 +161,13 @@ _run_cv_check "vagrant"    "${VAGRANT_VER}"     "hashicorp/vagrant"   "vagrant -
 ### `tests/setup_env/workflows.bats`
 
 **`_update_version_pin` tests** (use a temp copy of `lib/constants.sh`):
+
 - Updates the named var (e.g. `GO_VER`) from old to new value
 - Does not modify other vars
 - Removes `.bak` file after update
 
 **`_update_url_pins` tests** (use a temp copy of `lib/constants.sh`):
+
 - Updates `GO_DOWNLOAD_FILENAME` when tool is `go`
 - Updates `GO_DOWNLOAD_URL` (embeds filename) when tool is `go`
 - Updates `YQ_URL` when tool is `yq`

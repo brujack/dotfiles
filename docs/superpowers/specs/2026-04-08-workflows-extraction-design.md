@@ -10,6 +10,7 @@ Move the four main workflow blocks from `setup_env.sh` into a new `lib/workflows
 ## Motivation
 
 `setup_env.sh` is ~1340 lines. The main body contains four long `if` blocks that implement the actual workflows. Keeping these inline makes the file hard to read, hard to test in isolation, and risky to edit safely. Extracting them into named functions in a dedicated module:
+
 - makes each workflow independently navigable and testable
 - makes `setup_env.sh` readable at a glance (sources + dispatch calls)
 - unblocks future dry-run and doctor features (which need to wrap or inspect workflow functions)
@@ -20,12 +21,12 @@ Move the four main workflow blocks from `setup_env.sh` into a new `lib/workflows
 
 Four functions extracted from `setup_env.sh` with no behavior change:
 
-| Function | Current location in setup_env.sh |
-|---|---|
-| `run_setup_user()` | Lines 36–114 (the `SETUP \|\| SETUP_USER` block) |
-| `run_setup_or_developer()` | Lines 116–1044 (the `SETUP \|\| DEVELOPER` block) |
+| Function                     | Current location in setup_env.sh                     |
+| ---------------------------- | ---------------------------------------------------- |
+| `run_setup_user()`           | Lines 36–114 (the `SETUP \|\| SETUP_USER` block)     |
+| `run_setup_or_developer()`   | Lines 116–1044 (the `SETUP \|\| DEVELOPER` block)    |
 | `run_developer_or_ansible()` | Lines 1046–1250 (the `DEVELOPER \|\| ANSIBLE` block) |
-| `run_update()` | Lines 1252–1337 (the `UPDATE` block) |
+| `run_update()`               | Lines 1252–1337 (the `UPDATE` block)                 |
 
 ### Modified: `setup_env.sh`
 

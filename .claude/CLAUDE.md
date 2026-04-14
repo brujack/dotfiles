@@ -50,6 +50,7 @@ Update the top-level `README.md` whenever a change affects anything it documents
 **TDD is required.** Write the failing test first, then write the minimum code to make it pass. This is not optional — it applies to every new function, feature, or bug fix.
 
 The cycle is:
+
 1. Write a failing test that defines the expected behavior
 2. Run it and confirm it fails (wrong reason = wrong test)
 3. Write the minimum implementation to make it pass
@@ -64,17 +65,20 @@ The cycle is:
 Every test must cover more than just the happy path. These three categories are required for every function:
 
 **Boundary value tests** — For every function that takes input (arguments, env vars, file paths), test at boundaries:
+
 - Empty / zero / null input
 - Single element vs multiple elements
 - Minimum and maximum valid values
 - One above and one below valid range (where applicable)
 
 **Error path tests** — For every function that can fail, test:
+
 - What happens when it fails (correct error message, correct exit code)
 - What happens when a dependency it calls fails (does it propagate or handle?)
 - Partial failure — if step 2 of 3 fails, is state left clean?
 
 **State transition tests** — For functions that modify state (variables, files, symlinks):
+
 - Before and after assertions — verify the expected state change occurred
 - Verify no unintended side effects (other state unchanged)
 - Idempotency — calling the function twice produces the same result as calling it once
@@ -91,12 +95,12 @@ These pitfalls apply regardless of language. Check for each when writing or revi
 
 Every test must set up all state it depends on. State left by a prior test, or leaked from the parent process, produces false passes and order-dependent failures.
 
-| Language | Common leak | Fix |
-|---|---|---|
-| Shell (BATS) | Parent shell env vars (`MACOS=1`, `LINUX=1`) leak into subprocesses | `unset MACOS LINUX` before OS-branching tests |
-| Python | Module-level globals, `os.environ` mutations persist across tests | Use `unittest.mock.patch.dict(os.environ, ...)` or restore in `tearDown` |
-| Go | Package-level vars, `os.Setenv` not cleaned up | `t.Setenv(k, v)` (auto-restores); restore manually in `t.Cleanup` |
-| Rust | Static state, `std::env::set_var` across parallel tests | Run env-sensitive tests with `-- --test-threads=1`; use `temp_env` crate |
+| Language     | Common leak                                                         | Fix                                                                      |
+| ------------ | ------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Shell (BATS) | Parent shell env vars (`MACOS=1`, `LINUX=1`) leak into subprocesses | `unset MACOS LINUX` before OS-branching tests                            |
+| Python       | Module-level globals, `os.environ` mutations persist across tests   | Use `unittest.mock.patch.dict(os.environ, ...)` or restore in `tearDown` |
+| Go           | Package-level vars, `os.Setenv` not cleaned up                      | `t.Setenv(k, v)` (auto-restores); restore manually in `t.Cleanup`        |
+| Rust         | Static state, `std::env::set_var` across parallel tests             | Run env-sensitive tests with `-- --test-threads=1`; use `temp_env` crate |
 
 Rule: if a test works in isolation but fails when run after another test, it has a state leak.
 
@@ -104,12 +108,12 @@ Rule: if a test works in isolation but fails when run after another test, it has
 
 Every caller must check the return value of sub-functions AND propagate that return code to its own caller. A failure anywhere in the call chain must bubble up to the top — swallowing it at any intermediate level reports false success. When step N fails, stop — do not proceed to step N+1 with invalid state.
 
-| Language | Swallowing pattern (wrong) | Propagating pattern (correct) |
-|---|---|---|
-| Shell | `cmd` (unchecked) or `cmd \|\| true` | `cmd \|\| return 1` |
-| Python | `except: pass` or `except Exception: log()` | `raise` or let it propagate |
-| Go | `result, _ := f()` | `result, err := f(); if err != nil { return err }` |
-| Rust | `.unwrap_or_default()` hiding errors | `?` operator or explicit `match` |
+| Language | Swallowing pattern (wrong)                  | Propagating pattern (correct)                      |
+| -------- | ------------------------------------------- | -------------------------------------------------- |
+| Shell    | `cmd` (unchecked) or `cmd \|\| true`        | `cmd \|\| return 1`                                |
+| Python   | `except: pass` or `except Exception: log()` | `raise` or let it propagate                        |
+| Go       | `result, _ := f()`                          | `result, err := f(); if err != nil { return err }` |
+| Rust     | `.unwrap_or_default()` hiding errors        | `?` operator or explicit `match`                   |
 
 The requirement applies at every level: if `leaf()` returns 1, `mid()` must return 1 to its caller, and `top()` must return 1 to its caller. A chain of three functions where only `leaf()` propagates correctly but `mid()` swallows the error is broken — the top-level caller still sees false success.
 
@@ -120,6 +124,7 @@ Tests must verify that when step N fails, the parent function returns non-zero A
 **C. Test both branches of every guard/conditional**
 
 An inverted condition (`if exists { act }` instead of `if ! exists { act }`) passes all tests if only the happy path is tested. For every cache guard, existence check, or install skip condition, write two tests:
+
 - Condition true → assert the expected action is skipped
 - Condition false → assert the expected action runs
 
@@ -129,12 +134,12 @@ This applies equally to shell `[[ -f file ]]`, Python `if path.exists()`, Go `if
 
 An error in the middle of a chain can be silently discarded if a later step succeeds.
 
-| Language | Pattern | Problem |
-|---|---|---|
-| Shell | `cmd1 \| cmd2` | Exit code is `cmd2`'s; `cmd1` failure is invisible |
-| Shell | `cmd; capture=$?` after another command | `$?` is the last command's exit, not `cmd`'s |
-| Python | `subprocess.run(..., check=False)` | Non-zero return ignored unless caller checks `.returncode` |
-| Go | Ignoring `err` from the first of two calls | Only second call's error is checked |
+| Language | Pattern                                    | Problem                                                    |
+| -------- | ------------------------------------------ | ---------------------------------------------------------- |
+| Shell    | `cmd1 \| cmd2`                             | Exit code is `cmd2`'s; `cmd1` failure is invisible         |
+| Shell    | `cmd; capture=$?` after another command    | `$?` is the last command's exit, not `cmd`'s               |
+| Python   | `subprocess.run(..., check=False)`         | Non-zero return ignored unless caller checks `.returncode` |
+| Go       | Ignoring `err` from the first of two calls | Only second call's error is checked                        |
 
 Fix: capture the exit code/error immediately after the command that can fail, before anything else runs.
 
@@ -155,6 +160,7 @@ When using PATH-injected mocks, mocks for commands that **modify real filesystem
 **Affected commands:** `ln`, `chmod`, `mv`, `cp`, and any other command where tests assert actual filesystem state (permissions, file existence, symlinks).
 
 The correct pattern:
+
 ```bash
 #!/usr/bin/env bash
 printf "cmd %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
@@ -315,27 +321,32 @@ Invoke the code-reviewer subagent after completing a major feature or complex ch
 The subagent reviews against this rubric:
 
 **Conditional logic:**
+
 - Trace each branch — can dead branches exist? Can two branches both execute when only one should?
 - Check negation logic — are `!` / `not` / `-z` / `-n` inverted correctly?
 - Verify grouping — are compound conditions grouped explicitly rather than relying on precedence?
 
 **State and data flow:**
+
 - Trace each variable from assignment to use — can it be modified between those points?
 - Check for stale state across loop iterations, function calls, or conditional branches
 - Verify scope — are variables local when they should be? Could a global leak into a function?
 
 **Integration mismatches:**
+
 - For every function call, verify: argument count, argument types/meaning, return value semantics, side effects
 - Check that mock behavior in tests matches real behavior of the mocked component
 - Verify that changes to a function's contract are reflected in all callers
 
 **Edge cases and boundaries:**
+
 - Empty collections, zero-length strings, single-element vs multi-element
 - First and last iteration of loops
 - Numeric boundaries: 0, 1, -1, MAX, MIN
 - Permission/existence checks before file operations
 
 **Error propagation:**
+
 - Trace what happens when each function in the call chain fails
 - Verify error messages are accurate (do they name the right function/variable?)
 - Check that partial failures don't leave state half-modified
@@ -365,6 +376,7 @@ This applies to all repos. Committing directly to master bypasses CI and the rev
 Exception: documentation-only fixes (typos, README updates, memory commits) may go directly to master.
 
 When wrapping up a session, check for any stale merged branches and delete them:
+
 ```bash
 git branch --merged master | grep -v master   # local merged branches
 git branch -r --merged origin/master | grep -v master  # remote merged branches
@@ -393,6 +405,7 @@ Every personal repo CI pipeline must have:
    - Use `set -e` so any lint failure aborts the commit
 
    Template for single-Makefile repos:
+
    ```bash
    #!/usr/bin/env bash
    set -e
@@ -403,6 +416,7 @@ Every personal repo CI pipeline must have:
    ```
 
    Template for multi-project repos (adapt dir list to the repo):
+
    ```bash
    #!/usr/bin/env bash
    set -e
@@ -460,6 +474,7 @@ Every personal repo CI pipeline must have:
 Every git repository must have a `README.md` at the top level.
 
 Every git repository must have secrets guarding in place:
+
 - A `gitleaks` secret scan in CI (`.github/workflows/ci.yml`) scanning recent commits
 - A `.gitleaks.toml` allowlist config at the repo root
 - Credential files and secret paths listed in `.gitignore`
@@ -490,19 +505,19 @@ Master status index for all specs and implementation plans in this directory.
 
 ## Status Key
 
-| Status | Meaning |
-|---|---|
-| Done | Implemented and merged to master |
-| In Progress | Currently being implemented |
-| Pending | Not yet started |
+| Status      | Meaning                          |
+| ----------- | -------------------------------- |
+| Done        | Implemented and merged to master |
+| In Progress | Currently being implemented      |
+| Pending     | Not yet started                  |
 
 ---
 
 ## All Plans
 
-| Date | Plan | Spec | Status |
-|---|---|---|---|
-| YYYY-MM-DD | [name](plans/file.md) | [spec](specs/file.md) | Done |
+| Date       | Plan                  | Spec                  | Status |
+| ---------- | --------------------- | --------------------- | ------ |
+| YYYY-MM-DD | [name](plans/file.md) | [spec](specs/file.md) | Done   |
 
 ---
 
@@ -510,8 +525,8 @@ Master status index for all specs and implementation plans in this directory.
 
 Ideas approved for future specs, in no particular order:
 
-| Feature | Notes |
-|---|---|
+| Feature      | Notes             |
+| ------------ | ----------------- |
 | feature name | brief description |
 
 ---
@@ -524,6 +539,7 @@ When a new spec or plan is created, add a row to the All Plans table. Set status
 **Status values:** `In Progress` while implementation is active; `Done` once the PR merges.
 
 **Maintenance rules:**
+
 - All Plans is a single combined table — no separate Specs/Plans split.
 - Spec column uses `—` when no spec was written.
 - Add a row to All Plans when a new spec or plan is created.

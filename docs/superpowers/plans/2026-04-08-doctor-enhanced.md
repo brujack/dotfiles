@@ -12,18 +12,19 @@
 
 ## File Map
 
-| Action | File |
-|---|---|
+| Action | File                                                                        |
+| ------ | --------------------------------------------------------------------------- |
 | Modify | `lib/helpers.sh` — add `doctor_pass`, `doctor_fail`, rewrite `run_doctor()` |
-| Modify | `setup_env.sh` — change `exit 0` to `exit $?` in doctor dispatch |
-| Modify | `tests/setup_env/unit.bats` — add check framework tests |
-| Modify | `CLAUDE.md` |
+| Modify | `setup_env.sh` — change `exit 0` to `exit $?` in doctor dispatch            |
+| Modify | `tests/setup_env/unit.bats` — add check framework tests                     |
+| Modify | `CLAUDE.md`                                                                 |
 
 ---
 
 ### Task 1: Add doctor_pass() and doctor_fail() primitives + tests
 
 **Files:**
+
 - Modify: `lib/helpers.sh`
 - Modify: `tests/setup_env/unit.bats`
 
@@ -115,6 +116,7 @@ git commit -m "feat: add doctor_pass / doctor_fail check primitives"
 ### Task 2: Rewrite run_doctor() with environment vars section + exit code tests
 
 **Files:**
+
 - Modify: `lib/helpers.sh`
 - Modify: `setup_env.sh`
 - Modify: `tests/setup_env/unit.bats`
@@ -254,9 +256,10 @@ git commit -m "feat: rewrite run_doctor with pass/fail framework and non-zero ex
 
 ---
 
-### Task 3: Implement _doctor_check_symlinks() + tests
+### Task 3: Implement \_doctor_check_symlinks() + tests
 
 **Files:**
+
 - Modify: `lib/helpers.sh`
 - Modify: `tests/setup_env/unit.bats`
 
@@ -325,7 +328,7 @@ make test-unit
 
 Expected: FAIL — `_doctor_check_symlinks` is a no-op (stub), so `_DOCTOR_FAILED` stays 0 even when links are absent
 
-- [ ] **Step 3: Implement _doctor_check_symlinks() in lib/helpers.sh**
+- [ ] **Step 3: Implement \_doctor_check_symlinks() in lib/helpers.sh**
 
 Replace the `_doctor_check_symlinks() { :; }` stub with:
 
@@ -379,9 +382,10 @@ git commit -m "feat: implement _doctor_check_symlinks in run_doctor"
 
 ---
 
-### Task 4: Implement _doctor_check_tools() + tests
+### Task 4: Implement \_doctor_check_tools() + tests
 
 **Files:**
+
 - Modify: `lib/helpers.sh`
 - Modify: `tests/setup_env/unit.bats`
 
@@ -441,7 +445,7 @@ make test-unit
 
 Expected: FAIL — test overrides are not needed yet because `_doctor_check_tools` is a stub, so `_DOCTOR_PASS` stays 0
 
-- [ ] **Step 3: Implement _doctor_check_tools() in lib/helpers.sh**
+- [ ] **Step 3: Implement \_doctor_check_tools() in lib/helpers.sh**
 
 Replace the `_doctor_check_tools() { :; }` stub with:
 
@@ -504,9 +508,10 @@ git commit -m "feat: implement _doctor_check_tools in run_doctor"
 
 ---
 
-### Task 5: Implement _doctor_check_cred_dirs() + tests
+### Task 5: Implement \_doctor_check_cred_dirs() + tests
 
 **Files:**
+
 - Modify: `lib/helpers.sh`
 - Modify: `tests/setup_env/unit.bats`
 
@@ -576,7 +581,7 @@ make test-unit
 
 Expected: FAIL — `_DOCTOR_PASS` stays 0 (stub is a no-op)
 
-- [ ] **Step 3: Implement _doctor_check_cred_dirs() in lib/helpers.sh**
+- [ ] **Step 3: Implement \_doctor_check_cred_dirs() in lib/helpers.sh**
 
 Replace the `_doctor_check_cred_dirs() { :; }` stub with:
 
@@ -624,9 +629,10 @@ git commit -m "feat: implement _doctor_check_cred_dirs in run_doctor"
 
 ---
 
-### Task 6: Implement _doctor_check_versions() + tests
+### Task 6: Implement \_doctor_check_versions() + tests
 
 **Files:**
+
 - Modify: `lib/helpers.sh`
 - Modify: `tests/setup_env/unit.bats`
 
@@ -685,7 +691,7 @@ make test-unit
 
 Expected: FAIL — stub is a no-op, `_DOCTOR_PASS` stays 0
 
-- [ ] **Step 3: Implement _doctor_check_versions() in lib/helpers.sh**
+- [ ] **Step 3: Implement \_doctor_check_versions() in lib/helpers.sh**
 
 Replace the `_doctor_check_versions() { :; }` stub with:
 
@@ -748,6 +754,7 @@ git commit -m "feat: implement _doctor_check_versions in run_doctor"
 ### Task 7: Update CLAUDE.md
 
 **Files:**
+
 - Modify: `CLAUDE.md`
 
 - [ ] **Step 1: Update CLAUDE.md entry for doctor type**
