@@ -303,6 +303,8 @@ Available mock env vars:
 | `MOCK_GIT_CLONE_EXIT` | Exit code for `git clone` (default: 0); target directory is created |
 | `MOCK_GIT_EXIT` | Exit code for all other `git` commands (default: 0) |
 | `MOCK_MAS_EXIT` | Exit code for `mas` (default: 0) |
+| `MOCK_MAS_UPGRADE_OUTPUT` | Lines printed to stdout by `mas upgrade` mock (default: empty); use `==> Updated AppName (version)` lines to simulate updated apps |
+| `MOCK_TEE_EXIT` | Exit code for `tee` (default: 0); real `/usr/bin/tee` is called unless exit ≠ 0 |
 | `MOCK_GEM_EXIT` | Exit code for `gem` (default: 0) |
 | `MOCK_SNAP_EXIT` | Exit code for `snap` (default: 0) |
 | `MOCK_NALA_EXIT` | Exit code for `nala` (default: 0) |
@@ -329,7 +331,7 @@ Available mock env vars:
 | `MOCK_CPAN_EXIT` | Exit code for `cpan` (default: 0) |
 | `MOCK_CPANM_EXIT` | Exit code for `cpanm` (default: 0) |
 
-**Pass-through mocks:** `ln`, `chmod`, `mv`, and `cp` call the real binary (`/bin/cmd "$@" 2>/dev/null || true`) so tests that assert actual filesystem state (permissions, file existence, symlinks) work correctly. Set the corresponding exit var to a non-zero value to simulate failure instead. Any mock that needs to support tests checking real filesystem state must use this pattern — a log-only mock will cause silent assertion failures.
+**Pass-through mocks:** `ln`, `chmod`, `mv`, `cp`, and `tee` call the real binary (`/bin/cmd "$@" 2>/dev/null || true`) so tests that assert actual filesystem state (permissions, file existence, symlinks, captured output files) work correctly. Set the corresponding exit var to a non-zero value to simulate failure instead. Any mock that needs to support tests checking real filesystem state must use this pattern — a log-only mock will cause silent assertion failures.
 
 ## Key Conventions
 
