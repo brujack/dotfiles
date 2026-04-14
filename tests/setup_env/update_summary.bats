@@ -238,14 +238,17 @@ teardown() {
   grep -q "no changes" "${_UPDATE_TMPDIR}/result_gems"
 }
 
-@test "_update_record_end shows mas app names in result" {
-  export MOCK_MAS_LIST_OUTPUT="1234567890 Xcode (15.4)"
-  _update_record_start "mas"
-  export MOCK_MAS_LIST_OUTPUT="1234567890 Xcode (15.4)
-9876543210 Slack (4.40)"
+@test "_update_record_end shows mas app names and versions in result" {
+  printf "==> Updated Slack (4.40)\n" > "${_UPDATE_TMPDIR}/mas_upgrade_output"
   _update_record_end "mas" 0
   grep -q "OK" "${_UPDATE_TMPDIR}/status_mas"
-  grep -q "Slack" "${_UPDATE_TMPDIR}/result_mas"
+  grep -q "Slack (4.40)" "${_UPDATE_TMPDIR}/result_mas"
+}
+
+@test "_update_record_end shows no changes for mas when upgrade output has no updated lines" {
+  printf "==> Updating mas packages\n" > "${_UPDATE_TMPDIR}/mas_upgrade_output"
+  _update_record_end "mas" 0
+  grep -q "no changes" "${_UPDATE_TMPDIR}/result_mas"
 }
 
 @test "_update_record_end shows softwareupdate labels in result" {

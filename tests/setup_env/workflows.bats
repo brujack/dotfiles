@@ -480,6 +480,39 @@ teardown() {
   grep -q "mas upgrade" "${MOCK_CALLS_FILE}"
 }
 
+@test "run_update mas section summary shows updated app name and version" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE_MAS=1
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_CLAUDE
+  export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
+  export MOCK_MAS_UPGRADE_OUTPUT="==> Updated Windows App (11.3.5)"
+  run run_update
+  [[ "$output" == *"1 app(s) (Windows App (11.3.5))"* ]]
+}
+
+@test "run_update mas section summary shows count for multiple updated apps" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE_MAS=1
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_CLAUDE
+  export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
+  export MOCK_MAS_UPGRADE_OUTPUT="$(printf '==> Updated App One (1.0)\n==> Updated App Two (2.0)')"
+  run run_update
+  [[ "$output" == *"2 app(s)"* ]]
+}
+
+@test "run_update mas section summary shows no changes when mas upgrade reports no updates" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE_MAS=1
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_CLAUDE
+  export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
+  export MOCK_MAS_UPGRADE_OUTPUT=""
+  run run_update
+  [[ "$output" == *"no changes"* ]]
+}
+
 # ── run_brew_install ──────────────────────────────────────────────────────────
 
 @test "run_brew_install creates Brewfile symlink at BREWFILE_LOC" {

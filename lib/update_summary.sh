@@ -125,15 +125,14 @@ _update_record_end() {
       fi
       ;;
     mas)
-      if [[ -f "${_UPDATE_TMPDIR}/pre_mas" ]]; then
-        mas list > "${_UPDATE_TMPDIR}/post_mas" 2>/dev/null || true
-        local _mas_diff
-        _mas_diff=$(_update_diff_lines "${_UPDATE_TMPDIR}/pre_mas" "${_UPDATE_TMPDIR}/post_mas")
+      if [[ -f "${_UPDATE_TMPDIR}/mas_upgrade_output" ]]; then
+        local _mas_updated
+        _mas_updated=$(grep '^==> Updated ' "${_UPDATE_TMPDIR}/mas_upgrade_output" || true)
         local _mas_count
-        _mas_count=$(printf '%s' "${_mas_diff}" | grep -c . || true)
+        _mas_count=$(printf '%s' "${_mas_updated}" | grep -c . || true)
         if [[ ${_mas_count} -gt 0 ]]; then
           local _mas_names
-          _mas_names=$(printf '%s' "${_mas_diff}" | awk '{$1=""; sub(/^ /, ""); sub(/ \([^)]*\)$/, ""); print}' | paste -sd', ' -)
+          _mas_names=$(printf '%s' "${_mas_updated}" | sed 's/^==> Updated //' | paste -sd', ' -)
           _result="${_mas_count} app(s) (${_mas_names})"
         else
           _result="no changes"
