@@ -197,6 +197,44 @@ Dotfiles live in `.devcontainer/`, `.claude/`, and `.cursor/`. `setup_env.sh` cr
 5. Install Ubuntu from the Microsoft Store
 6. Run `./setup_env.sh -t setup` inside WSL
 
+## Claude Code Integration
+
+### GitHub MCP
+
+Claude Code is configured with the GitHub MCP server for native GitHub operations
+(PR review, issue management, repo browsing) across all projects.
+
+**One-time setup per machine:**
+
+1. Create a fine-grained PAT at <https://github.com/settings/tokens?type=beta>
+   - Resource owner: your account
+   - Repository access: All repositories (or specific repos)
+   - Permissions: `Metadata` (read), `Contents` (read), `Issues` (read+write),
+     `Pull requests` (read+write)
+   - Set expiry: maximum 1 year
+
+2. Add to `config/local.sh`:
+
+   ```bash
+   export GITHUB_PAT="github_pat_..."
+   export GITHUB_PAT_EXPIRY="2027-04-14"   # your actual expiry date
+   ```
+
+3. Run setup:
+
+   ```bash
+   ./setup_env.sh -t setup_user
+   ```
+
+4. Verify:
+
+   ```bash
+   ./setup_env.sh -t doctor
+   ```
+
+The generated `~/.claude/mcp.json` is not tracked in git — it is regenerated
+from `.claude/mcp.json.template` on each `setup_user` run.
+
 ## Branch Workflow
 
 All changes go on feature branches. GitHub Actions CI runs `make test`, `lint-macos`, and `secret-scan` on every push. All PRs are auto-merged when all three pass.

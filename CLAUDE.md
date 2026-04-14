@@ -105,7 +105,9 @@ dotfiles/
 Dotfiles live in `.devcontainer/`, `.claude/`, and `.cursor/`. `setup_env.sh` creates symlinks from `$HOME` into the repo:
 
 - **`.devcontainer/`** — each file symlinked individually into `$HOME` (e.g. `~/.zshrc → …/.devcontainer/.zshrc`)
-- **`.claude/`** — each item symlinked individually into `~/.claude/`, preserving any non-repo files already there
+- **`.claude/`** — each item symlinked individually into `~/.claude/`, preserving any non-repo files already there.
+  Exception: `mcp.json.template` is symlinked as `~/.claude/mcp.json.template` (read-only reference); the live
+  `~/.claude/mcp.json` is **generated** by `setup_claude_mcp` via `envsubst` and is not a symlink.
 - **`.cursor/`** — each item (excluding `User/`) symlinked individually into `~/.cursor/`; `User/` contents are symlinked into the platform Cursor user settings dir
 
 Always remove the old file before symlinking (`rm -f` then `ln -s`). Validate symlinks with `[[ -L ${HOME}/.file ]]`.
@@ -281,7 +283,7 @@ Available mock env vars:
 | `MOCK_BREW_TAP_EXIT` | Exit code for `brew tap <name>` (default: 0) |
 | `MOCK_APT_EXIT` | Exit code for `apt-get` (default: 0) |
 | `MOCK_WHICH_MISSING` | Command name for which `which` returns 1 |
-| `MOCK_CURL_EXIT` | Exit code for `curl` (default: 0) |
+| `MOCK_CURL_EXIT` | Exit code for `curl` (default: 0); use 22 for HTTP auth failure (FAIL), 28 for timeout (WARN), 6 for DNS failure (WARN) in `_doctor_check_github_mcp` tests |
 | `MOCK_UNAME_S` | Value returned by `uname -s` |
 | `MOCK_BATS_VER` | BATS_VER used by mock tar to create stub directory |
 | `MOCK_ID_U` | Value returned by `id -u` (default: 1000) |
