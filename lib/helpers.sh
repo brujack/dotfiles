@@ -447,6 +447,73 @@ _doctor_check_versions() {
   _doctor_check_one_version "zsh"     "${ZSH_VER}"    "zsh --version"     "[0-9]+\.[0-9]+(\.[0-9]+)?"
 }
 
+_doctor_check_github_mcp() {
+  printf "\nGitHub MCP:\n"
+  local _mcp_file="${HOME}/.claude/mcp.json"
+
+  # Check generated file exists (not a broken symlink)
+  if [[ -L "${_mcp_file}" ]] && [[ ! -e "${_mcp_file}" ]]; then
+    doctor_fail "${HOME}/.claude/mcp.json" "broken symlink — run: setup_env.sh -t setup_user"
+    return
+  fi
+  if [[ ! -f "${_mcp_file}" ]]; then
+    doctor_fail "${HOME}/.claude/mcp.json" "missing — run: setup_env.sh -t setup_user"
+    return
+  fi
+  doctor_pass "${HOME}/.claude/mcp.json (generated)"
+
+  # Check PAT is set
+  if [[ -z "${GITHUB_PAT:-}" ]]; then
+    doctor_fail "GITHUB_PAT" "unset — add to config/local.sh: https://github.com/settings/tokens?type=beta"
+    return
+  fi
+  doctor_pass "GITHUB_PAT (set)"
+
+  # Check token is live
+  local _curl_rc=0
+  curl --max-time 5 --silent --fail \
+    -H "Authorization: Bearer ${GITHUB_PAT}" \
+    https://api.github.com/user > /dev/null 2>&1 || _curl_rc=$?
+
+  if [[ ${_curl_rc} -eq 22 ]]; then
+    doctor_fail "GitHub PAT" "invalid or revoked — rotate at https://github.com/settings/tokens"
+  elif [[ ${_curl_rc} -eq 28 ]] || [[ ${_curl_rc} -eq 6 ]]; then
+    doctor_warn "GitHub PAT" "network unreachable (offline?) — skipping live check"
+  elif [[ ${_curl_rc} -ne 0 ]]; then
+    doctor_warn "GitHub PAT" "curl error ${_curl_rc} — skipping live check"
+  else
+    doctor_pass "GitHub PAT (live)"
+  fi
+
+  # Check expiry
+  if [[ -z "${GITHUB_PAT_EXPIRY:-}" ]]; then
+    log_info "  [INFO] Set GITHUB_PAT_EXPIRY in config/local.sh to enable expiry checks"
+    return 0
+  fi
+
+  local _expiry_epoch _today_epoch _diff_days
+  if [[ -n "${MACOS:-}" ]]; then
+    _expiry_epoch=$(date -j -f "%Y-%m-%d" "${GITHUB_PAT_EXPIRY}" +%s 2>/dev/null) || true
+  else
+    _expiry_epoch=$(date -d "${GITHUB_PAT_EXPIRY}" +%s 2>/dev/null) || true
+  fi
+  _today_epoch=$(date +%s)
+
+  if [[ -z "${_expiry_epoch:-}" ]]; then
+    doctor_warn "GITHUB_PAT_EXPIRY" "could not parse '${GITHUB_PAT_EXPIRY}' — use format YYYY-MM-DD"
+    return 0
+  fi
+
+  _diff_days=$(( (_expiry_epoch - _today_epoch) / 86400 ))
+  if [[ ${_diff_days} -le 0 ]]; then
+    doctor_fail "GITHUB_PAT_EXPIRY" "PAT expired on ${GITHUB_PAT_EXPIRY} — rotate at https://github.com/settings/tokens"
+  elif [[ ${_diff_days} -le 30 ]]; then
+    doctor_warn "GITHUB_PAT_EXPIRY" "expires in ${_diff_days} days (${GITHUB_PAT_EXPIRY}) — rotate at https://github.com/settings/tokens"
+  else
+    doctor_pass "GITHUB_PAT_EXPIRY (${GITHUB_PAT_EXPIRY}, ${_diff_days} days)"
+  fi
+}
+
 process_args() {
   # Pre-process long options before getopts (getopts only handles short options)
   local _short_args=()

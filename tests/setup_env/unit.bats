@@ -851,3 +851,102 @@ teardown() {
   [ "${_DOCTOR_FAIL}" -eq 1 ]
   [ "${_DOCTOR_FAILED}" -eq 1 ]
 }
+
+# ── _doctor_check_github_mcp ─────────────────────────────────────────────────
+
+@test "_doctor_check_github_mcp fails when ~/.claude/mcp.json is missing" {
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  unset GITHUB_PAT GITHUB_PAT_EXPIRY
+  # HOME is BATS_TEST_TMPDIR — no .claude/mcp.json exists
+  _doctor_check_github_mcp
+  [ "${_DOCTOR_FAIL}" -eq 1 ]
+  [ "${_DOCTOR_FAILED}" -eq 1 ]
+}
+
+@test "_doctor_check_github_mcp fails when GITHUB_PAT is unset" {
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  unset GITHUB_PAT GITHUB_PAT_EXPIRY
+  mkdir -p "${HOME}/.claude"
+  printf '{"mcpServers":{}}\n' > "${HOME}/.claude/mcp.json"
+  _doctor_check_github_mcp
+  [ "${_DOCTOR_FAIL}" -eq 1 ]
+}
+
+@test "_doctor_check_github_mcp fails when curl exits 22 (invalid token)" {
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  export GITHUB_PAT="fake-token"
+  unset GITHUB_PAT_EXPIRY
+  mkdir -p "${HOME}/.claude"
+  printf '{"mcpServers":{}}\n' > "${HOME}/.claude/mcp.json"
+  export MOCK_CURL_EXIT=22
+  _doctor_check_github_mcp
+  [ "${_DOCTOR_FAIL}" -eq 1 ]
+}
+
+@test "_doctor_check_github_mcp warns when curl exits 28 (timeout)" {
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  export GITHUB_PAT="fake-token"
+  unset GITHUB_PAT_EXPIRY
+  mkdir -p "${HOME}/.claude"
+  printf '{"mcpServers":{}}\n' > "${HOME}/.claude/mcp.json"
+  export MOCK_CURL_EXIT=28
+  _doctor_check_github_mcp
+  [ "${_DOCTOR_FAIL}" -eq 0 ]
+  [ "${_DOCTOR_WARN}" -ge 1 ]
+}
+
+@test "_doctor_check_github_mcp warns when curl exits 6 (DNS failure)" {
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  export GITHUB_PAT="fake-token"
+  unset GITHUB_PAT_EXPIRY
+  mkdir -p "${HOME}/.claude"
+  printf '{"mcpServers":{}}\n' > "${HOME}/.claude/mcp.json"
+  export MOCK_CURL_EXIT=6
+  _doctor_check_github_mcp
+  [ "${_DOCTOR_FAIL}" -eq 0 ]
+  [ "${_DOCTOR_WARN}" -ge 1 ]
+}
+
+@test "_doctor_check_github_mcp warns when GITHUB_PAT_EXPIRY within 30 days" {
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  export GITHUB_PAT="fake-token"
+  mkdir -p "${HOME}/.claude"
+  printf '{"mcpServers":{}}\n' > "${HOME}/.claude/mcp.json"
+  export MOCK_CURL_EXIT=0
+  # Set expiry to 5 days from now (within 30-day warning window)
+  if [[ -n "${MACOS:-}" ]]; then
+    export GITHUB_PAT_EXPIRY=$(date -v+5d +%Y-%m-%d)
+  else
+    export GITHUB_PAT_EXPIRY=$(date -d "+5 days" +%Y-%m-%d)
+  fi
+  _doctor_check_github_mcp
+  [ "${_DOCTOR_WARN}" -ge 1 ]
+}
+
+@test "_doctor_check_github_mcp prints INFO when GITHUB_PAT_EXPIRY not set" {
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  export GITHUB_PAT="fake-token"
+  unset GITHUB_PAT_EXPIRY
+  mkdir -p "${HOME}/.claude"
+  printf '{"mcpServers":{}}\n' > "${HOME}/.claude/mcp.json"
+  export MOCK_CURL_EXIT=0
+  run _doctor_check_github_mcp
+  [[ "$output" == *"GITHUB_PAT_EXPIRY"* ]]
+}
+
+@test "_doctor_check_github_mcp passes when all checks pass" {
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  export GITHUB_PAT="fake-token"
+  mkdir -p "${HOME}/.claude"
+  printf '{"mcpServers":{}}\n' > "${HOME}/.claude/mcp.json"
+  export MOCK_CURL_EXIT=0
+  # Set expiry 90 days out (outside warning window)
+  if [[ -n "${MACOS:-}" ]]; then
+    export GITHUB_PAT_EXPIRY=$(date -v+90d +%Y-%m-%d)
+  else
+    export GITHUB_PAT_EXPIRY=$(date -d "+90 days" +%Y-%m-%d)
+  fi
+  _doctor_check_github_mcp
+  [ "${_DOCTOR_FAIL}" -eq 0 ]
+  [ "${_DOCTOR_FAILED}" -eq 0 ]
+}
