@@ -24,6 +24,7 @@ run_cmd() {
 _DOCTOR_PASS=0
 _DOCTOR_FAIL=0
 _DOCTOR_FAILED=0
+_DOCTOR_WARN=0
 
 doctor_pass() {
   _DOCTOR_PASS=$(( _DOCTOR_PASS + 1 ))
@@ -34,6 +35,11 @@ doctor_fail() {
   _DOCTOR_FAIL=$(( _DOCTOR_FAIL + 1 ))
   _DOCTOR_FAILED=1
   printf "  ${_RED}[FAIL]${_NC} %s: %s\n" "$1" "${2:-}"
+}
+
+doctor_warn() {
+  _DOCTOR_WARN=$(( _DOCTOR_WARN + 1 ))
+  printf "  ${_YELLOW}[WARN]${_NC} %s: %s\n" "$1" "${2:-}"
 }
 
 # ── symlink helpers ───────────────────────────────────────────────────────────

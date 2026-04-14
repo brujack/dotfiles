@@ -594,6 +594,29 @@ teardown() {
   [[ "$output" == *"it is missing"* ]]
 }
 
+# ── doctor_warn ──────────────────────────────────────────────────────────────
+
+@test "doctor_warn increments _DOCTOR_WARN" {
+  _DOCTOR_WARN=0
+  doctor_warn "some check" "a warning"
+  [ "${_DOCTOR_WARN}" -eq 1 ]
+}
+
+@test "doctor_warn does not set _DOCTOR_FAILED" {
+  _DOCTOR_FAILED=0
+  _DOCTOR_WARN=0
+  doctor_warn "some check" "a warning"
+  [ "${_DOCTOR_FAILED}" -eq 0 ]
+}
+
+@test "doctor_warn prints [WARN] with label and detail" {
+  _DOCTOR_WARN=0
+  run doctor_warn "my label" "my detail"
+  [[ "$output" == *"[WARN]"* ]]
+  [[ "$output" == *"my label"* ]]
+  [[ "$output" == *"my detail"* ]]
+}
+
 # ── run_doctor exit code ──────────────────────────────────────────────────────
 
 @test "run_doctor exits 0 when _DOCTOR_FAILED is 0" {
