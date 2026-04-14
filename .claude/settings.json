@@ -23,5 +23,18 @@
         "repo": "warpdotdev/claude-code-warp"
       }
     }
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c \"import json,sys,os,subprocess; d=json.load(sys.stdin); p=d.get('tool_input',{}).get('file_path',''); exts=('.md','.mdx','.rst','.txt'); subprocess.run(['npx','prettier','--write',p]) if p and any(p.endswith(e) for e in exts) else None\""
+          }
+        ]
+      }
+    ]
   }
 }
