@@ -398,6 +398,25 @@ WARNING and INFO findings are advisory — surface them but do not block the pus
 This rule is a durable backup: if `claude plugins update superpowers` overwrites
 the finishing-a-development-branch skill file, this rule still enforces the gate.
 
+## GitHub MCP
+
+The GitHub MCP server is configured globally (user scope) via `~/.claude/mcp.json`.
+It provides native GitHub operations — PR review, issue management, repo browsing,
+diff access — across all projects without copy-pasting into chat.
+
+Requires `GITHUB_PAT` to be set in `~/git-repos/personal/dotfiles/config/local.sh`.
+If it isn't set, run `setup_env.sh -t setup_user` after adding the token.
+Verify with `setup_env.sh -t doctor`.
+
+Use it for:
+
+- Fetching PR diffs and changed files
+- Reading and creating issues
+- Posting structured review comments
+- Browsing repo contents
+
+Do not use it to push directly to main/master — normal PR workflow still applies.
+
 ## GitHub Actions / CI
 
 - All jobs must run on Node.js 24
