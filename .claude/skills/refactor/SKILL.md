@@ -101,16 +101,23 @@ When refactoring public APIs:
 
 ## Output Format
 
-When suggesting refactoring:
+Write the refactoring proposal as a spec file in `docs/superpowers/specs/` using
+the filename pattern `YYYY-MM-DD-<name>-design.md`, then add a row to
+`docs/superpowers/README.md`. Use this template:
 
 ```markdown
-## Current Issue
+# <Title> — Design Spec
 
-[Description of the code smell]
+**Date:** YYYY-MM-DD
+**Status:** Accepted
 
-## Proposed Change
+## Context
 
-[Specific refactoring technique]
+[Description of the code smell and why it needs addressing]
+
+## Decision
+
+[Specific refactoring technique chosen and why]
 
 ## Step-by-Step Plan
 
@@ -120,5 +127,9 @@ When suggesting refactoring:
 
 ## Risk Assessment
 
-[What could break and how to verify]
+[What could break and how to verify each step]
+
+## Consequences
+
+[What improves, what tradeoffs are accepted]
 ```
