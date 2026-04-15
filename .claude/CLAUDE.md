@@ -47,16 +47,49 @@ Update the top-level `README.md` whenever a change affects anything it documents
 
 ## Test-Driven Development
 
+Use the `tdd` skill when implementing any feature or bug fix. It provides the full workflow; the rules below are the binding constraints.
+
 **TDD is required.** Write the failing test first, then write the minimum code to make it pass. This is not optional — it applies to every new function, feature, or bug fix.
 
-The cycle is:
+### Tests must verify behavior, not implementation
 
-1. Write a failing test that defines the expected behavior
+Tests must exercise the system through its **public interface** only. A test that breaks when you rename an internal function — without changing behavior — is a bad test. Good tests survive refactors because they don't care about internal structure.
+
+Do not:
+
+- Mock internal collaborators
+- Test private methods
+- Assert on internal state (e.g., querying a database directly instead of using the interface)
+
+### No horizontal slicing
+
+**DO NOT write all tests first, then all implementation.** This produces tests that describe imagined behavior and are insensitive to real changes.
+
+```
+WRONG (horizontal):
+  RED:   test1, test2, test3, test4
+  GREEN: impl1, impl2, impl3, impl4
+
+RIGHT (vertical — one at a time):
+  RED→GREEN: test1→impl1
+  RED→GREEN: test2→impl2
+  ...
+```
+
+### The cycle (one behavior at a time)
+
+Before starting: confirm with the user which behaviors to test (you can't test everything — prioritize critical paths).
+
+For each behavior:
+
+1. Write ONE failing test that describes the behavior through the public interface
 2. Run it and confirm it fails (wrong reason = wrong test)
 3. Write the minimum implementation to make it pass
 4. Run tests and confirm they pass
 5. Commit
-6. Refactor if needed, keeping tests green
+6. Move to the next behavior
+
+Refactor only after all targeted behaviors are green. **Never refactor while RED.**
 
 **Never write implementation before the test.** If you find yourself writing code and then adding tests afterward, stop — you are doing it wrong.
 
