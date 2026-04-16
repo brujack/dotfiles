@@ -170,6 +170,88 @@ teardown() {
   [ ! -s "${_UPDATE_TMPDIR}/pre_softwareupdate" ]
 }
 
+@test "_update_record_start apt creates pre_apt on Ubuntu" {
+  unset MACOS REDHAT FEDORA CENTOS
+  export LINUX=1
+  export UBUNTU=1
+  export MOCK_DPKG_OUTPUT="curl 7.88.1-1ubuntu3
+git 2.43.0-1ubuntu7"
+  _update_record_start "apt"
+  [ -f "${_UPDATE_TMPDIR}/pre_apt" ]
+  grep -q "curl" "${_UPDATE_TMPDIR}/pre_apt"
+}
+
+@test "_update_record_start apt writes SKIP when not Ubuntu" {
+  unset UBUNTU LINUX
+  export MACOS=1
+  _update_record_start "apt"
+  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_apt"
+  grep -q "not applicable" "${_UPDATE_TMPDIR}/result_apt"
+}
+
+@test "_update_record_start snap creates pre_snap on Ubuntu" {
+  unset MACOS REDHAT FEDORA CENTOS
+  export LINUX=1
+  export UBUNTU=1
+  export MOCK_SNAP_LIST_OUTPUT="Name    Version
+firefox 124.0"
+  _update_record_start "snap"
+  [ -f "${_UPDATE_TMPDIR}/pre_snap" ]
+}
+
+@test "_update_record_start snap writes SKIP when not Ubuntu" {
+  unset UBUNTU LINUX
+  export MACOS=1
+  _update_record_start "snap"
+  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_snap"
+  grep -q "not applicable" "${_UPDATE_TMPDIR}/result_snap"
+}
+
+@test "_update_record_start dnf creates pre_dnf on REDHAT" {
+  unset MACOS UBUNTU CENTOS FEDORA
+  export LINUX=1
+  export REDHAT=1
+  export MOCK_RPM_OUTPUT="curl 7.76.1-26.el9
+git 2.43.5-1.el9"
+  _update_record_start "dnf"
+  [ -f "${_UPDATE_TMPDIR}/pre_dnf" ]
+  grep -q "curl" "${_UPDATE_TMPDIR}/pre_dnf"
+}
+
+@test "_update_record_start dnf creates pre_dnf on FEDORA" {
+  unset MACOS UBUNTU CENTOS REDHAT
+  export LINUX=1
+  export FEDORA=1
+  export MOCK_RPM_OUTPUT="curl 7.76.1-26.fc39"
+  _update_record_start "dnf"
+  [ -f "${_UPDATE_TMPDIR}/pre_dnf" ]
+}
+
+@test "_update_record_start dnf writes SKIP when not REDHAT or FEDORA" {
+  unset REDHAT FEDORA LINUX
+  export MACOS=1
+  _update_record_start "dnf"
+  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_dnf"
+  grep -q "not applicable" "${_UPDATE_TMPDIR}/result_dnf"
+}
+
+@test "_update_record_start yum creates pre_yum on CENTOS" {
+  unset MACOS UBUNTU REDHAT FEDORA
+  export LINUX=1
+  export CENTOS=1
+  export MOCK_RPM_OUTPUT="curl 7.76.1-26.el8"
+  _update_record_start "yum"
+  [ -f "${_UPDATE_TMPDIR}/pre_yum" ]
+}
+
+@test "_update_record_start yum writes SKIP when not CENTOS" {
+  unset CENTOS LINUX
+  export MACOS=1
+  _update_record_start "yum"
+  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_yum"
+  grep -q "not applicable" "${_UPDATE_TMPDIR}/result_yum"
+}
+
 # ── _update_record_end ────────────────────────────────────────────────────────
 
 @test "_update_record_end with exit 0 writes OK status" {

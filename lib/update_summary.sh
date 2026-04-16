@@ -3,7 +3,7 @@
 
 # Fixed section order for summary display
 readonly _UPDATE_SECTION_ORDER=(
-  brew softwareupdate mas claude pip gems
+  brew softwareupdate apt snap dnf yum mas claude pip gems
   oh-my-zsh p10k tpm tfenv cheat.sh
 )
 
@@ -75,6 +75,36 @@ _update_record_start() {
         | grep '^\* Label:' \
         | sed 's/^\* Label: //' \
         > "${_UPDATE_TMPDIR}/pre_softwareupdate" || true
+      ;;
+    apt)
+      if [[ -n ${UBUNTU:-} ]]; then
+        dpkg-query -W -f='${Package} ${Version}\n' > "${_UPDATE_TMPDIR}/pre_apt" 2>/dev/null || true
+      else
+        _update_skip "apt" "not applicable"
+      fi
+      ;;
+    snap)
+      if [[ -n ${UBUNTU:-} ]]; then
+        snap list --color=never 2>/dev/null \
+          | awk 'NR>1 {print $1, $2}' \
+          > "${_UPDATE_TMPDIR}/pre_snap" || true
+      else
+        _update_skip "snap" "not applicable"
+      fi
+      ;;
+    dnf)
+      if [[ -n ${REDHAT:-} ]] || [[ -n ${FEDORA:-} ]]; then
+        rpm -qa --qf '%{NAME} %{VERSION}-%{RELEASE}\n' > "${_UPDATE_TMPDIR}/pre_dnf" 2>/dev/null || true
+      else
+        _update_skip "dnf" "not applicable"
+      fi
+      ;;
+    yum)
+      if [[ -n ${CENTOS:-} ]]; then
+        rpm -qa --qf '%{NAME} %{VERSION}-%{RELEASE}\n' > "${_UPDATE_TMPDIR}/pre_yum" 2>/dev/null || true
+      else
+        _update_skip "yum" "not applicable"
+      fi
       ;;
     claude)
       claude plugins list 2>/dev/null \
