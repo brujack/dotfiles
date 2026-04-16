@@ -138,8 +138,8 @@ dotfiles/
 ├── .claude/                  # Claude Code config (symlinked into ~/.claude)
 ├── .cursor/User/             # Cursor settings (symlinked into Cursor User dir)
 ├── docs/
-│   ├── adr/                  # Architectural Decision Records (cross-cutting decisions)
-│   └── superpowers/          # Design specs and implementation plans
+│   ├── adr/                  # Architectural Decision Records (cross-cutting decisions) → [index](docs/adr/README.md)
+│   └── superpowers/          # Design specs and implementation plans → [index](docs/superpowers/README.md)
 ├── tests/
 │   ├── setup_env/            # BATS tests (unit, profiles, install_guards, etc.)
 │   ├── zshrc.d/              # BATS tests for zsh config modules
