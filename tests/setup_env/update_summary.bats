@@ -468,3 +468,113 @@ git 2.43.5-1.el9"
   [[ "$output" == *"brew"* ]]
   [[ "$output" == *"1 OK"* ]]
 }
+
+# ── _update_record_end — SKIP guard ───────────────────────────────────────
+
+@test "_update_record_end does not overwrite SKIP written by _update_record_start for apt" {
+  _update_skip "apt" "not applicable"
+  _update_record_end "apt" 0
+  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_apt"
+  grep -q "not applicable" "${_UPDATE_TMPDIR}/result_apt"
+}
+
+@test "_update_record_end does not overwrite SKIP written by _update_record_start for snap" {
+  _update_skip "snap" "not applicable"
+  _update_record_end "snap" 0
+  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_snap"
+}
+
+@test "_update_record_end does not overwrite SKIP written by _update_record_start for dnf" {
+  _update_skip "dnf" "not applicable"
+  _update_record_end "dnf" 0
+  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_dnf"
+}
+
+@test "_update_record_end does not overwrite SKIP written by _update_record_start for yum" {
+  _update_skip "yum" "not applicable"
+  _update_record_end "yum" 0
+  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_yum"
+}
+
+# ── _update_record_end — apt diff ─────────────────────────────────────────
+
+@test "_update_record_end apt reports changed packages with name and version" {
+  printf "curl 7.88.1-1ubuntu3\ngit 2.43.0-1ubuntu7\n" > "${_UPDATE_TMPDIR}/pre_apt"
+  export MOCK_DPKG_OUTPUT="curl 7.88.1-1ubuntu3
+git 2.44.0-1ubuntu7"
+  _update_record_end "apt" 0
+  grep -q "OK" "${_UPDATE_TMPDIR}/status_apt"
+  grep -q "git 2.44.0" "${_UPDATE_TMPDIR}/result_apt"
+}
+
+@test "_update_record_end apt reports no changes when packages unchanged" {
+  printf "curl 7.88.1-1ubuntu3\n" > "${_UPDATE_TMPDIR}/pre_apt"
+  export MOCK_DPKG_OUTPUT="curl 7.88.1-1ubuntu3"
+  _update_record_end "apt" 0
+  grep -q "no changes" "${_UPDATE_TMPDIR}/result_apt"
+}
+
+@test "_update_record_end apt reports updated when no pre-snapshot" {
+  export MOCK_DPKG_OUTPUT="curl 7.88.1-1ubuntu3"
+  _update_record_end "apt" 0
+  grep -q "updated" "${_UPDATE_TMPDIR}/result_apt"
+}
+
+@test "_update_record_end apt writes FAIL on non-zero exit" {
+  _update_record_end "apt" 1
+  grep -q "FAIL" "${_UPDATE_TMPDIR}/status_apt"
+  grep -q "exit 1" "${_UPDATE_TMPDIR}/result_apt"
+}
+
+# ── _update_record_end — snap diff ────────────────────────────────────────
+
+@test "_update_record_end snap reports changed packages with name and version" {
+  printf "firefox 123.0\n" > "${_UPDATE_TMPDIR}/pre_snap"
+  export MOCK_SNAP_LIST_OUTPUT="Name     Version
+firefox  124.0"
+  _update_record_end "snap" 0
+  grep -q "OK" "${_UPDATE_TMPDIR}/status_snap"
+  grep -q "firefox 124.0" "${_UPDATE_TMPDIR}/result_snap"
+}
+
+@test "_update_record_end snap reports no changes when packages unchanged" {
+  printf "firefox 124.0\n" > "${_UPDATE_TMPDIR}/pre_snap"
+  export MOCK_SNAP_LIST_OUTPUT="Name     Version
+firefox  124.0"
+  _update_record_end "snap" 0
+  grep -q "no changes" "${_UPDATE_TMPDIR}/result_snap"
+}
+
+# ── _update_record_end — dnf diff ─────────────────────────────────────────
+
+@test "_update_record_end dnf reports changed packages with name and version" {
+  printf "curl 7.76.1-26.el9\n" > "${_UPDATE_TMPDIR}/pre_dnf"
+  export MOCK_RPM_OUTPUT="curl 7.76.1-29.el9"
+  _update_record_end "dnf" 0
+  grep -q "OK" "${_UPDATE_TMPDIR}/status_dnf"
+  grep -q "curl 7.76.1-29.el9" "${_UPDATE_TMPDIR}/result_dnf"
+}
+
+@test "_update_record_end dnf reports no changes when packages unchanged" {
+  printf "curl 7.76.1-26.el9\n" > "${_UPDATE_TMPDIR}/pre_dnf"
+  export MOCK_RPM_OUTPUT="curl 7.76.1-26.el9"
+  _update_record_end "dnf" 0
+  grep -q "no changes" "${_UPDATE_TMPDIR}/result_dnf"
+}
+
+# ── _update_record_end — yum diff ─────────────────────────────────────────
+
+@test "_update_record_end yum reports changed packages with name and version" {
+  printf "curl 7.76.1-26.el8\n" > "${_UPDATE_TMPDIR}/pre_yum"
+  export MOCK_RPM_OUTPUT="curl 7.76.1-29.el8"
+  _update_record_end "yum" 0
+  grep -q "OK" "${_UPDATE_TMPDIR}/status_yum"
+  grep -q "curl 7.76.1-29.el8" "${_UPDATE_TMPDIR}/result_yum"
+}
+
+@test "_update_record_end yum reports no changes when packages unchanged" {
+  printf "curl 7.76.1-26.el8\n" > "${_UPDATE_TMPDIR}/pre_yum"
+  export MOCK_RPM_OUTPUT="curl 7.76.1-26.el8"
+  _update_record_end "yum" 0
+  grep -q "no changes" "${_UPDATE_TMPDIR}/result_yum"
+}
