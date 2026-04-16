@@ -1,3 +1,9 @@
 #!/usr/bin/env bash
 printf "rpm %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
-exit "${MOCK_RPM_EXIT:-0}"
+if [[ "${MOCK_RPM_EXIT:-0}" -ne 0 ]]; then
+  exit "${MOCK_RPM_EXIT}"
+fi
+case "$1" in
+  -qa) printf "%s\n" "${MOCK_RPM_OUTPUT:-}" ;;
+esac
+exit 0
