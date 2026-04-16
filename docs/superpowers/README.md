@@ -54,7 +54,7 @@ Master status index for all specs and implementation plans in this directory.
 | 2026-04-11 | [bootstrap-tests](plans/2026-04-11-bootstrap-tests.md)                             | [spec](specs/2026-04-11-bootstrap-tests-design.md)                  | Done    |
 | 2026-04-14 | [pr-review-gate](plans/2026-04-14-pr-review-gate.md)                               | [spec](specs/2026-04-14-pr-review-gate-design.md)                   | Done    |
 | 2026-04-14 | [github-mcp](plans/2026-04-14-github-mcp.md)                                       | [spec](specs/2026-04-14-github-mcp-design.md)                       | Done    |
-| 2026-04-15 | refactor-skill                                                                     | [spec](specs/2026-04-15-refactor-skill-design.md)                   | Done    |
+| 2026-04-15 | [refactor-skill](plans/2026-04-15-refactor-skill.md)                               | [spec](specs/2026-04-15-refactor-skill-design.md)                   | Done    |
 | 2026-04-16 | linux-package-update-tracking                                                      | [spec](specs/2026-04-16-linux-package-update-tracking-design.md)    | Pending |
 
 ---
