@@ -1,6 +1,6 @@
 ---
 name: Dotfiles session 2026-04-11
-description: CI hygiene, update summary, bootstrap tests, security tooling — 345 tests on master
+description: CI hygiene, update summary, bootstrap tests, security tooling — 450 tests on master after linux-package-update-tracking (PR #40)
 type: project
 ---
 
@@ -14,7 +14,7 @@ Session 2026-04-11 completed:
 - **Bootstrap tests (PR #25)** — both bootstrap scripts refactored per ADR 0006 (sourcing guard, function extraction, no set -e), 27 new tests
 - **ADR 0006** — shell script testability conventions (#!/usr/bin/env bash, no set-e, sourcing guard)
 
-345 tests on master. Backlog: linux.sh split, Brewfile drift detection.
+450 tests on master (was 345 after 2026-04-11 session). Backlog: linux.sh split, Brewfile drift detection.
 
 **Why:** Close CI gaps, add security scanning, make update workflow observable, make bootstrap scripts testable.
 

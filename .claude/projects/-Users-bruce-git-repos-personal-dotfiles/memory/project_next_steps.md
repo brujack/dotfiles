@@ -14,9 +14,7 @@ type: project
 - PR #10: check-versions — DONE, merged
 - PR #11: ADR practice — DONE, merged (docs/adr/ + 5 seed ADRs + ~/.claude/CLAUDE.md ADR requirement)
 
-**Pending — not yet started:**
-
-- workflow-test-coverage: plan written (docs/superpowers/plans/2026-04-08-workflow-test-coverage.md)
+**All complete as of 2026-04-16:** workflow-test-coverage is Done (merged).
 
 **Also done:**
 
