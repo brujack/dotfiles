@@ -1023,3 +1023,32 @@ setup_constants_copy() {
   run run_developer_or_ansible
   ! grep -q "setup_ansible" "${MOCK_CALLS_FILE}"
 }
+
+# ── process_args --pkgs-only ──────────────────────────────────────────────
+
+@test "process_args --pkgs-only sets UPDATE_PKGS" {
+  unset UPDATE_PKGS
+  process_args --pkgs-only
+  [ -n "${UPDATE_PKGS:-}" ]
+}
+
+@test "process_args --pkgs-only twice does not crash" {
+  unset UPDATE_PKGS
+  process_args --pkgs-only
+  local _rc=0
+  process_args --pkgs-only || _rc=$?
+  [ "${_rc}" -eq 0 ]
+}
+
+@test "_any_update_flag returns true when UPDATE_PKGS is set" {
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  export UPDATE_PKGS=1
+  _any_update_flag
+}
+
+@test "_any_update_flag returns false when only UPDATE_PKGS is unset among all flags" {
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  local _rc=0
+  _any_update_flag || _rc=$?
+  [ "${_rc}" -ne 0 ]
+}

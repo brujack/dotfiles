@@ -189,7 +189,7 @@ app_dir_exists() {
 _any_update_flag() {
   [[ -n ${UPDATE_BREW:-}   ]] || [[ -n ${UPDATE_PIP:-}    ]] || \
   [[ -n ${UPDATE_GEMS:-}   ]] || [[ -n ${UPDATE_MAS:-}    ]] || \
-  [[ -n ${UPDATE_CLAUDE:-} ]]
+  [[ -n ${UPDATE_PKGS:-}   ]] || [[ -n ${UPDATE_CLAUDE:-} ]]
 }
 
 check_and_install_nala() {
@@ -231,6 +231,7 @@ Options:
   --pip-only      : (update only) Update pip packages only
   --gems-only     : (update only) Update Ruby gems only
   --mas-only      : (update only) Update Mac App Store apps only
+  --pkgs-only     : (update only) Update Linux system packages only (apt/snap/dnf/yum)
   --claude-only   : (update only) Update Claude plugins only
   --update        : (check-versions only) Interactively prompt to update outdated version pins in lib/constants.sh
   -w              : Optional -- Specify w for a redhat computer, sets up terraform 0.11 instead of default 0.12
@@ -527,6 +528,7 @@ process_args() {
       --gems-only)     [[ -n "${UPDATE_GEMS+x}" ]]     || readonly UPDATE_GEMS=1 ;;
       --mas-only)      [[ -n "${UPDATE_MAS+x}" ]]      || readonly UPDATE_MAS=1 ;;
       --claude-only)   [[ -n "${UPDATE_CLAUDE+x}" ]]   || readonly UPDATE_CLAUDE=1 ;;
+      --pkgs-only)     [[ -n "${UPDATE_PKGS+x}" ]]     || readonly UPDATE_PKGS=1 ;;
       --brew-install)  [[ -n "${SETUP_BREW+x}" ]]      || readonly SETUP_BREW=1 ;;
       --mas-install)   [[ -n "${SETUP_MAS+x}" ]]       || readonly SETUP_MAS=1 ;;
       --update)        [[ -n "${UPDATE_VERSIONS+x}" ]] || readonly UPDATE_VERSIONS=1 ;;
