@@ -170,6 +170,88 @@ teardown() {
   [ ! -s "${_UPDATE_TMPDIR}/pre_softwareupdate" ]
 }
 
+@test "_update_record_start apt creates pre_apt on Ubuntu" {
+  unset MACOS REDHAT FEDORA CENTOS
+  export LINUX=1
+  export UBUNTU=1
+  export MOCK_DPKG_OUTPUT="curl 7.88.1-1ubuntu3
+git 2.43.0-1ubuntu7"
+  _update_record_start "apt"
+  [ -f "${_UPDATE_TMPDIR}/pre_apt" ]
+  grep -q "curl" "${_UPDATE_TMPDIR}/pre_apt"
+}
+
+@test "_update_record_start apt writes SKIP when not Ubuntu" {
+  unset UBUNTU LINUX
+  export MACOS=1
+  _update_record_start "apt"
+  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_apt"
+  grep -q "not applicable" "${_UPDATE_TMPDIR}/result_apt"
+}
+
+@test "_update_record_start snap creates pre_snap on Ubuntu" {
+  unset MACOS REDHAT FEDORA CENTOS
+  export LINUX=1
+  export UBUNTU=1
+  export MOCK_SNAP_LIST_OUTPUT="Name    Version
+firefox 124.0"
+  _update_record_start "snap"
+  [ -f "${_UPDATE_TMPDIR}/pre_snap" ]
+}
+
+@test "_update_record_start snap writes SKIP when not Ubuntu" {
+  unset UBUNTU LINUX
+  export MACOS=1
+  _update_record_start "snap"
+  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_snap"
+  grep -q "not applicable" "${_UPDATE_TMPDIR}/result_snap"
+}
+
+@test "_update_record_start dnf creates pre_dnf on REDHAT" {
+  unset MACOS UBUNTU CENTOS FEDORA
+  export LINUX=1
+  export REDHAT=1
+  export MOCK_RPM_OUTPUT="curl 7.76.1-26.el9
+git 2.43.5-1.el9"
+  _update_record_start "dnf"
+  [ -f "${_UPDATE_TMPDIR}/pre_dnf" ]
+  grep -q "curl" "${_UPDATE_TMPDIR}/pre_dnf"
+}
+
+@test "_update_record_start dnf creates pre_dnf on FEDORA" {
+  unset MACOS UBUNTU CENTOS REDHAT
+  export LINUX=1
+  export FEDORA=1
+  export MOCK_RPM_OUTPUT="curl 7.76.1-26.fc39"
+  _update_record_start "dnf"
+  [ -f "${_UPDATE_TMPDIR}/pre_dnf" ]
+}
+
+@test "_update_record_start dnf writes SKIP when not REDHAT or FEDORA" {
+  unset REDHAT FEDORA LINUX
+  export MACOS=1
+  _update_record_start "dnf"
+  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_dnf"
+  grep -q "not applicable" "${_UPDATE_TMPDIR}/result_dnf"
+}
+
+@test "_update_record_start yum creates pre_yum on CENTOS" {
+  unset MACOS UBUNTU REDHAT FEDORA
+  export LINUX=1
+  export CENTOS=1
+  export MOCK_RPM_OUTPUT="curl 7.76.1-26.el8"
+  _update_record_start "yum"
+  [ -f "${_UPDATE_TMPDIR}/pre_yum" ]
+}
+
+@test "_update_record_start yum writes SKIP when not CENTOS" {
+  unset CENTOS LINUX
+  export MACOS=1
+  _update_record_start "yum"
+  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_yum"
+  grep -q "not applicable" "${_UPDATE_TMPDIR}/result_yum"
+}
+
 # ── _update_record_end ────────────────────────────────────────────────────────
 
 @test "_update_record_end with exit 0 writes OK status" {
@@ -385,4 +467,114 @@ teardown() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"brew"* ]]
   [[ "$output" == *"1 OK"* ]]
+}
+
+# ── _update_record_end — SKIP guard ───────────────────────────────────────
+
+@test "_update_record_end does not overwrite SKIP written by _update_record_start for apt" {
+  _update_skip "apt" "not applicable"
+  _update_record_end "apt" 0
+  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_apt"
+  grep -q "not applicable" "${_UPDATE_TMPDIR}/result_apt"
+}
+
+@test "_update_record_end does not overwrite SKIP written by _update_record_start for snap" {
+  _update_skip "snap" "not applicable"
+  _update_record_end "snap" 0
+  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_snap"
+}
+
+@test "_update_record_end does not overwrite SKIP written by _update_record_start for dnf" {
+  _update_skip "dnf" "not applicable"
+  _update_record_end "dnf" 0
+  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_dnf"
+}
+
+@test "_update_record_end does not overwrite SKIP written by _update_record_start for yum" {
+  _update_skip "yum" "not applicable"
+  _update_record_end "yum" 0
+  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_yum"
+}
+
+# ── _update_record_end — apt diff ─────────────────────────────────────────
+
+@test "_update_record_end apt reports changed packages with name and version" {
+  printf "curl 7.88.1-1ubuntu3\ngit 2.43.0-1ubuntu7\n" > "${_UPDATE_TMPDIR}/pre_apt"
+  export MOCK_DPKG_OUTPUT="curl 7.88.1-1ubuntu3
+git 2.44.0-1ubuntu7"
+  _update_record_end "apt" 0
+  grep -q "OK" "${_UPDATE_TMPDIR}/status_apt"
+  grep -q "git 2.44.0" "${_UPDATE_TMPDIR}/result_apt"
+}
+
+@test "_update_record_end apt reports no changes when packages unchanged" {
+  printf "curl 7.88.1-1ubuntu3\n" > "${_UPDATE_TMPDIR}/pre_apt"
+  export MOCK_DPKG_OUTPUT="curl 7.88.1-1ubuntu3"
+  _update_record_end "apt" 0
+  grep -q "no changes" "${_UPDATE_TMPDIR}/result_apt"
+}
+
+@test "_update_record_end apt reports updated when no pre-snapshot" {
+  export MOCK_DPKG_OUTPUT="curl 7.88.1-1ubuntu3"
+  _update_record_end "apt" 0
+  grep -q "updated" "${_UPDATE_TMPDIR}/result_apt"
+}
+
+@test "_update_record_end apt writes FAIL on non-zero exit" {
+  _update_record_end "apt" 1
+  grep -q "FAIL" "${_UPDATE_TMPDIR}/status_apt"
+  grep -q "exit 1" "${_UPDATE_TMPDIR}/result_apt"
+}
+
+# ── _update_record_end — snap diff ────────────────────────────────────────
+
+@test "_update_record_end snap reports changed packages with name and version" {
+  printf "firefox 123.0\n" > "${_UPDATE_TMPDIR}/pre_snap"
+  export MOCK_SNAP_LIST_OUTPUT="Name     Version
+firefox  124.0"
+  _update_record_end "snap" 0
+  grep -q "OK" "${_UPDATE_TMPDIR}/status_snap"
+  grep -q "firefox 124.0" "${_UPDATE_TMPDIR}/result_snap"
+}
+
+@test "_update_record_end snap reports no changes when packages unchanged" {
+  printf "firefox 124.0\n" > "${_UPDATE_TMPDIR}/pre_snap"
+  export MOCK_SNAP_LIST_OUTPUT="Name     Version
+firefox  124.0"
+  _update_record_end "snap" 0
+  grep -q "no changes" "${_UPDATE_TMPDIR}/result_snap"
+}
+
+# ── _update_record_end — dnf diff ─────────────────────────────────────────
+
+@test "_update_record_end dnf reports changed packages with name and version" {
+  printf "curl 7.76.1-26.el9\n" > "${_UPDATE_TMPDIR}/pre_dnf"
+  export MOCK_RPM_OUTPUT="curl 7.76.1-29.el9"
+  _update_record_end "dnf" 0
+  grep -q "OK" "${_UPDATE_TMPDIR}/status_dnf"
+  grep -q "curl 7.76.1-29.el9" "${_UPDATE_TMPDIR}/result_dnf"
+}
+
+@test "_update_record_end dnf reports no changes when packages unchanged" {
+  printf "curl 7.76.1-26.el9\n" > "${_UPDATE_TMPDIR}/pre_dnf"
+  export MOCK_RPM_OUTPUT="curl 7.76.1-26.el9"
+  _update_record_end "dnf" 0
+  grep -q "no changes" "${_UPDATE_TMPDIR}/result_dnf"
+}
+
+# ── _update_record_end — yum diff ─────────────────────────────────────────
+
+@test "_update_record_end yum reports changed packages with name and version" {
+  printf "curl 7.76.1-26.el8\n" > "${_UPDATE_TMPDIR}/pre_yum"
+  export MOCK_RPM_OUTPUT="curl 7.76.1-29.el8"
+  _update_record_end "yum" 0
+  grep -q "OK" "${_UPDATE_TMPDIR}/status_yum"
+  grep -q "curl 7.76.1-29.el8" "${_UPDATE_TMPDIR}/result_yum"
+}
+
+@test "_update_record_end yum reports no changes when packages unchanged" {
+  printf "curl 7.76.1-26.el8\n" > "${_UPDATE_TMPDIR}/pre_yum"
+  export MOCK_RPM_OUTPUT="curl 7.76.1-26.el8"
+  _update_record_end "yum" 0
+  grep -q "no changes" "${_UPDATE_TMPDIR}/result_yum"
 }

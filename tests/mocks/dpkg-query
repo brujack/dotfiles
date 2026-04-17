@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+printf "dpkg-query %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+if [[ "${MOCK_DPKG_QUERY_EXIT:-0}" -ne 0 ]]; then
+  exit "${MOCK_DPKG_QUERY_EXIT}"
+fi
+case "$1" in
+  -W) printf "%s\n" "${MOCK_DPKG_OUTPUT:-}" ;;
+esac
+exit 0

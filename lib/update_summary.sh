@@ -3,7 +3,7 @@
 
 # Fixed section order for summary display
 readonly _UPDATE_SECTION_ORDER=(
-  brew softwareupdate mas claude pip gems
+  brew softwareupdate apt snap dnf yum mas claude pip gems
   oh-my-zsh p10k tpm tfenv cheat.sh
 )
 
@@ -76,6 +76,36 @@ _update_record_start() {
         | sed 's/^\* Label: //' \
         > "${_UPDATE_TMPDIR}/pre_softwareupdate" || true
       ;;
+    apt)
+      if [[ -n ${UBUNTU:-} ]]; then
+        dpkg-query -W -f='${Package} ${Version}\n' > "${_UPDATE_TMPDIR}/pre_apt" 2>/dev/null || true
+      else
+        _update_skip "apt" "not applicable"
+      fi
+      ;;
+    snap)
+      if [[ -n ${UBUNTU:-} ]]; then
+        snap list --color=never 2>/dev/null \
+          | awk 'NR>1 {print $1, $2}' \
+          > "${_UPDATE_TMPDIR}/pre_snap" || true
+      else
+        _update_skip "snap" "not applicable"
+      fi
+      ;;
+    dnf)
+      if [[ -n ${REDHAT:-} ]] || [[ -n ${FEDORA:-} ]]; then
+        rpm -qa --qf '%{NAME} %{VERSION}-%{RELEASE}\n' > "${_UPDATE_TMPDIR}/pre_dnf" 2>/dev/null || true
+      else
+        _update_skip "dnf" "not applicable"
+      fi
+      ;;
+    yum)
+      if [[ -n ${CENTOS:-} ]]; then
+        rpm -qa --qf '%{NAME} %{VERSION}-%{RELEASE}\n' > "${_UPDATE_TMPDIR}/pre_yum" 2>/dev/null || true
+      else
+        _update_skip "yum" "not applicable"
+      fi
+      ;;
     claude)
       claude plugins list 2>/dev/null \
         | grep 'Version:' \
@@ -92,6 +122,15 @@ _update_record_start() {
 _update_record_end() {
   local _section="$1" _exit="$2"
   local _result=""
+
+  # If _update_record_start already wrote a SKIP (e.g. wrong distro), leave it untouched
+  if [[ -f "${_UPDATE_TMPDIR}/status_${_section}" ]]; then
+    local _existing_status
+    _existing_status=$(cat "${_UPDATE_TMPDIR}/status_${_section}")
+    if [[ "${_existing_status}" == "SKIP" ]]; then
+      return 0
+    fi
+  fi
 
   if [[ "${_exit}" -ne 0 ]]; then
     printf "FAIL\n" > "${_UPDATE_TMPDIR}/status_${_section}"
@@ -219,6 +258,53 @@ _update_record_end() {
         _claude_count=$(printf '%s' "${_claude_diff}" | grep -c . || true)
         if [[ ${_claude_count} -gt 0 ]]; then
           _result="${_claude_count} plugin(s) updated"
+        else
+          _result="no changes"
+        fi
+      else
+        _result="updated"
+      fi
+      ;;
+    apt)
+      dpkg-query -W -f='${Package} ${Version}\n' > "${_UPDATE_TMPDIR}/post_apt" 2>/dev/null || true
+      if [[ -f "${_UPDATE_TMPDIR}/pre_apt" ]]; then
+        local _apt_diff _apt_count
+        _apt_diff=$(_update_diff_lines "${_UPDATE_TMPDIR}/pre_apt" "${_UPDATE_TMPDIR}/post_apt")
+        _apt_count=$(printf '%s' "${_apt_diff}" | grep -c . || true)
+        if [[ ${_apt_count} -gt 0 ]]; then
+          _result="${_apt_count} package(s) ($(printf '%s' "${_apt_diff}" | paste -sd', ' -))"
+        else
+          _result="no changes"
+        fi
+      else
+        _result="updated"
+      fi
+      ;;
+    snap)
+      snap list --color=never 2>/dev/null \
+        | awk 'NR>1 {print $1, $2}' \
+        > "${_UPDATE_TMPDIR}/post_snap" || true
+      if [[ -f "${_UPDATE_TMPDIR}/pre_snap" ]]; then
+        local _snap_diff _snap_count
+        _snap_diff=$(_update_diff_lines "${_UPDATE_TMPDIR}/pre_snap" "${_UPDATE_TMPDIR}/post_snap")
+        _snap_count=$(printf '%s' "${_snap_diff}" | grep -c . || true)
+        if [[ ${_snap_count} -gt 0 ]]; then
+          _result="${_snap_count} package(s) ($(printf '%s' "${_snap_diff}" | paste -sd', ' -))"
+        else
+          _result="no changes"
+        fi
+      else
+        _result="updated"
+      fi
+      ;;
+    dnf|yum)
+      rpm -qa --qf '%{NAME} %{VERSION}-%{RELEASE}\n' > "${_UPDATE_TMPDIR}/post_${_section}" 2>/dev/null || true
+      if [[ -f "${_UPDATE_TMPDIR}/pre_${_section}" ]]; then
+        local _rpm_diff _rpm_count
+        _rpm_diff=$(_update_diff_lines "${_UPDATE_TMPDIR}/pre_${_section}" "${_UPDATE_TMPDIR}/post_${_section}")
+        _rpm_count=$(printf '%s' "${_rpm_diff}" | grep -c . || true)
+        if [[ ${_rpm_count} -gt 0 ]]; then
+          _result="${_rpm_count} package(s) ($(printf '%s' "${_rpm_diff}" | paste -sd', ' -))"
         else
           _result="no changes"
         fi
