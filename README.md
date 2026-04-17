@@ -48,6 +48,7 @@ Personal development environment bootstrap for macOS, Linux (Ubuntu/RHEL), and W
 - `--gems-only` — update Ruby gems only (with `-t update`)
 - `--mas-only` — update Mac App Store apps only (with `-t update`)
 - `--claude-only` — update Claude plugins only (with `-t update`)
+- `--pkgs-only` — update Linux system packages only (apt/snap/dnf/yum) (with `-t update`)
 - `--update` — (check-versions only) interactively prompt to update each outdated pin in `lib/constants.sh`
 
 Flags are additive: `./setup_env.sh -t update --brew-only --pip-only` runs only brew and pip.
@@ -61,6 +62,10 @@ Each `update` run appends a timestamped entry to `~/.dotfiles-update.log`. The e
 
 [OK]   brew             3 formulae (git 2.47.0, curl 8.12.1, openssl 3.4.1)
 [OK]   softwareupdate   2 update(s) (Xcode-16.3, macOS Sequoia 15.4.1)
+[OK]   apt              14 package(s) (curl 7.88.1, git 2.44.0, ...)
+[OK]   snap             2 package(s) (firefox 124.0, chromium 123.0)
+[SKIP] dnf              not applicable
+[SKIP] yum              not applicable
 [OK]   mas              1 app(s) (Slack (4.42))
 [OK]   claude           2 plugin(s) updated (superpowers: 5.0.8, context7: 1.2.0)
 [OK]   pip              3 package(s) (ansible, boto3, requests)
