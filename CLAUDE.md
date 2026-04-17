@@ -195,6 +195,13 @@ Uses **BATS** (Bash Automated Testing System), installed natively:
 **Run lint only:** `make lint` (bash -n + zsh -n + shellcheck on all .sh files)
 **Install pre-commit hook:** `make install-hooks` (symlinks `scripts/pre-commit-hook.sh` into `.git/hooks/pre-commit`; run once per checkout)
 
+The pre-commit hook is **required**. It runs on every `git commit`:
+
+1. `make lint` — blocks the commit on any syntax or shellcheck failure
+2. `ggshield secret scan pre-commit` — scans staged changes for secrets before they reach the remote; skipped gracefully if ggshield is not installed
+
+The CI `secret-scan` job (gitleaks) is a backstop, not a substitute for local scanning. Install ggshield: `brew install gitguardian/tap/ggshield && ggshield auth login`.
+
 ### ShellCheck
 
 `.shellcheckrc` at the repo root suppresses pervasive intentional patterns:

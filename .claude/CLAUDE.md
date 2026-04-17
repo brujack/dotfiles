@@ -575,6 +575,7 @@ Every git repository must have secrets guarding in place:
 - A `gitleaks` secret scan in CI (`.github/workflows/ci.yml`) scanning recent commits
 - A `.gitleaks.toml` allowlist config at the repo root
 - Credential files and secret paths listed in `.gitignore`
+- A pre-commit hook that runs `ggshield secret scan pre-commit` locally — this catches secrets before they leave the machine. CI gitleaks is a backstop, not a substitute. Run `make install-hooks` once per checkout to activate it.
 
 ## Architectural Decision Records
 

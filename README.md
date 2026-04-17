@@ -265,6 +265,15 @@ make install-hooks # install pre-commit hook (runs lint + ggshield before each c
 
 Install bats-core first: `brew install bats-core` (macOS) or `sudo apt-get install bats` (Ubuntu).
 
+### Pre-commit Hook (required)
+
+Run `make install-hooks` once per checkout. The hook runs before every `git commit`:
+
+1. `make lint` — syntax check + shellcheck; blocks the commit on failure
+2. `ggshield secret scan pre-commit` — scans staged changes for secrets before they leave the machine; requires [GitGuardian CLI](https://docs.gitguardian.com/ggshield-docs/getting-started) (`brew install gitguardian/tap/ggshield` + `ggshield auth login`); skipped gracefully if not installed
+
+This is the last line of defence before code reaches the remote. The CI `secret-scan` job (gitleaks) is a backstop, not a substitute.
+
 ### PowerShell
 
 `powershell/` has its own Makefile. Run from the `powershell/` directory:
