@@ -6,7 +6,7 @@ type: user
 
 45 years of software development experience across many domains. Strongest in systems and devops.
 
-**Code philosophy:** Optimize for readability and maintainability above all. Clever is not a compliment.
+**Code philosophy:** Optimize for readability and maintainability above all. Clever is not a compliment. Code lives a long time — the person maintaining it in five years may not be you, and probably won't have your context. Write for them.
 
 **Collaboration style:**
 
