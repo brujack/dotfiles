@@ -238,10 +238,35 @@ run_update() {
     _update_skip "claude" "flag not set"
   fi
 
-  # ── mas + system packages ─────────────────────────────────────────────────
+  # ── Linux system packages ─────────────────────────────────────────────────
+  if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_PKGS:-} ]]; then
+    if [[ -n ${LINUX} ]]; then
+      _update_record_start "apt"
+      _update_record_start "snap"
+      _update_record_start "dnf"
+      _update_record_start "yum"
+      update_system_packages
+      local _pkg_ec=$?
+      _update_record_end "apt"  "${_pkg_ec}"
+      _update_record_end "snap" "${_pkg_ec}"
+      _update_record_end "dnf"  "${_pkg_ec}"
+      _update_record_end "yum"  "${_pkg_ec}"
+    else
+      _update_skip "apt"  "not applicable"
+      _update_skip "snap" "not applicable"
+      _update_skip "dnf"  "not applicable"
+      _update_skip "yum"  "not applicable"
+    fi
+  else
+    _update_skip "apt"  "flag not set"
+    _update_skip "snap" "flag not set"
+    _update_skip "dnf"  "flag not set"
+    _update_skip "yum"  "flag not set"
+  fi
+
+  # ── mas ───────────────────────────────────────────────────────────────────
   if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_MAS:-} ]]; then
     _update_record_start "mas"
-    update_system_packages
     local _mas_ec=0
     if [[ -n ${MACOS} ]]; then
       log_info "Updating mas packages"

@@ -828,6 +828,86 @@ setup_constants_copy() {
 
 # ── return-code propagation: run_setup_user ───────────────────────────────────
 
+# ── run_update — Linux system packages block ──────────────────────────────
+
+@test "run_update calls dpkg-query on Ubuntu with no flags" {
+  unset MACOS
+  export LINUX=1
+  export UBUNTU=1
+  export NOBLE=1
+  export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
+  export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  run_update
+  grep -q "dpkg-query" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_update Linux packages block skips apt with not applicable on macOS" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
+  export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  run_update
+  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_apt"
+  grep -q "not applicable" "${_UPDATE_TMPDIR}/result_apt"
+}
+
+@test "run_update Linux packages block skips all four sections when UPDATE_PKGS not set and not run_all" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE_BREW=1
+  unset UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
+  run_update
+  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_apt"
+  grep -q "flag not set" "${_UPDATE_TMPDIR}/result_apt"
+  grep -q "flag not set" "${_UPDATE_TMPDIR}/result_snap"
+  grep -q "flag not set" "${_UPDATE_TMPDIR}/result_dnf"
+  grep -q "flag not set" "${_UPDATE_TMPDIR}/result_yum"
+}
+
+@test "run_update Linux packages block runs when UPDATE_PKGS is set on Ubuntu" {
+  unset MACOS
+  export LINUX=1
+  export UBUNTU=1
+  export NOBLE=1
+  export UPDATE_PKGS=1
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
+  export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
+  export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
+  run_update
+  grep -q "dpkg-query" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_update does not call update_system_packages from mas block on Linux" {
+  unset MACOS
+  export LINUX=1
+  export UBUNTU=1
+  export NOBLE=1
+  export UPDATE_MAS=1
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_CLAUDE UPDATE_PKGS
+  export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
+  export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
+  run_update
+  # dpkg-query is called by update_system_packages on Ubuntu — must NOT appear
+  ! grep -q "dpkg-query" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_update apt section shows not applicable on RHEL" {
+  unset MACOS UBUNTU CENTOS
+  export LINUX=1
+  export REDHAT=1
+  export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
+  export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  run_update
+  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_apt"
+  grep -q "not applicable" "${_UPDATE_TMPDIR}/result_apt"
+}
+
+# ── return-code propagation: run_setup_user ───────────────────────────────────
+
 @test "run_setup_user returns non-zero when install_rosetta fails" {
   export MACOS=1
   unset LINUX UBUNTU REDHAT FEDORA CENTOS
