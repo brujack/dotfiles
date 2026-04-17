@@ -296,6 +296,8 @@ Available mock env vars:
 | `MOCK_SOFTWAREUPDATE_EXIT` | Exit code for `softwareupdate` (default: 0) |
 | `MOCK_WGET_EXIT` | Exit code for `wget` (default: 0); `-O` target file is created |
 | `MOCK_DPKG_EXIT` | Exit code for `dpkg` (default: 0) |
+| `MOCK_DPKG_QUERY_EXIT` | Exit code for `dpkg-query` (default: 0) |
+| `MOCK_DPKG_OUTPUT` | Lines printed to stdout by `dpkg-query -W` mock (default: empty) |
 | `MOCK_CHSH_EXIT` | Exit code for `chsh` (default: 0) |
 | `MOCK_APT_ONLY_EXIT` | Exit code for `apt` only (overrides MOCK_APT_EXIT for apt; default: MOCK_APT_EXIT) |
 | `MOCK_ADD_APT_REPO_EXIT` | Exit code for `add-apt-repository` (default: 0) |
@@ -309,6 +311,7 @@ Available mock env vars:
 | `MOCK_TEE_EXIT` | Exit code for `tee` (default: 0); real `/usr/bin/tee` is called unless exit ≠ 0 |
 | `MOCK_GEM_EXIT` | Exit code for `gem` (default: 0) |
 | `MOCK_SNAP_EXIT` | Exit code for `snap` (default: 0) |
+| `MOCK_SNAP_LIST_OUTPUT` | Lines printed to stdout by `snap list` mock (default: empty); include a header line as first line since awk skips `NR>1` |
 | `MOCK_NALA_EXIT` | Exit code for `nala` (default: 0) |
 | `MOCK_RUSTUP_EXIT` | Exit code for `rustup` (default: 0) |
 | `MOCK_BREW_UPDATE_EXIT` | Exit code for `brew update` (default: 0) |
@@ -329,6 +332,7 @@ Available mock env vars:
 | `MOCK_MV_EXIT` | Exit code for `mv` (default: 0); real `/bin/mv` is called unless exit ≠ 0 |
 | `MOCK_CP_EXIT` | Exit code for `cp` (default: 0); real `/bin/cp` is called unless exit ≠ 0 |
 | `MOCK_RPM_EXIT` | Exit code for `rpm` (default: 0) |
+| `MOCK_RPM_OUTPUT` | Lines printed to stdout by `rpm -qa` mock (default: empty) |
 | `MOCK_TAR_EXIT` | Exit code for `tar` (default: 0); when non-zero, suppresses stub directory creation so tests can simulate extraction failure and trigger `cd` failure |
 | `MOCK_CPAN_EXIT` | Exit code for `cpan` (default: 0) |
 | `MOCK_CPANM_EXIT` | Exit code for `cpanm` (default: 0) |
