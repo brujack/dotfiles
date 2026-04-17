@@ -546,6 +546,16 @@ Every personal repo CI pipeline must have:
 - **Cross-platform stubs:** Add `global:` stubs in `BeforeAll` for Windows-only cmdlets (`Get-WindowsOptionalFeature`, `Enable-WindowsOptionalFeature`, etc.) guarded with `if (-Not (Get-Command ...))` so tests run on macOS
 - **Variable escaping in Makefile:** Use `$$var` in Makefile recipes to pass `$var` to PowerShell via `pwsh -Command`
 
+### Comments
+
+Code lives a long time. The what is the code — don't restate it. Document the why:
+
+- **Decisions** — why this approach over the obvious alternative
+- **Exceptions** — why this case is handled differently
+- **Constraints** — external requirements, bugs worked around, non-obvious invariants
+
+Do not add comments to code that wasn't changed. A comment that describes what the code does is noise. A comment that explains why it does it that way is signal.
+
 ### General
 
 - Avoid over-engineering — only make changes directly requested or clearly necessary
