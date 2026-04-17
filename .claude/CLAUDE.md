@@ -431,6 +431,24 @@ WARNING and INFO findings are advisory — surface them but do not block the pus
 This rule is a durable backup: if `claude plugins update superpowers` overwrites
 the finishing-a-development-branch skill file, this rule still enforces the gate.
 
+### Dispatching Subagents to Worktrees
+
+When using `superpowers:subagent-driven-development` with a worktree, implementer
+subagents must be told the working directory **prominently at the top** of the prompt,
+not just buried in a "Work from:" line at the bottom. Without this, subagents
+default to the parent repo and commit to the wrong directory.
+
+Required pattern in every implementer prompt:
+
+```
+**IMPORTANT: All work must happen in `/path/to/worktree/`. Do not cd anywhere else.**
+```
+
+Also have the spec reviewer verify the commit landed on the correct branch:
+```bash
+git -C /path/to/worktree log --oneline -1
+```
+
 ## GitHub MCP
 
 The GitHub MCP server is configured globally (user scope) via `~/.claude/mcp.json`.
