@@ -519,6 +519,28 @@ Every personal repo CI pipeline must have:
 
 ## Code Standards
 
+### Idempotency
+
+**Idempotency is a cornerstone of all shell, Ansible, and Terraform work.** Running the same operation twice must produce the same result as running it once — no errors, no duplicate state, no unintended side effects.
+
+**Shell:**
+- Always check before acting — guard installs, symlinks, directory creation, and file modifications with existence checks
+- Use `command -v tool` before installing, `[[ -f path ]]` before writing, `[[ -L link ]]` before symlinking
+- Never append to a file without first checking the content isn't already there
+- Tests must verify idempotency: calling a function twice produces the same result as calling it once
+
+**Ansible:**
+- Use modules that declare desired state (`package`, `file`, `template`, `service`) rather than `command`/`shell` wherever possible
+- When `command`/`shell` is unavoidable, add `creates:`, `removes:`, or a `when:` guard so the task skips if already complete
+- Never use `command`/`shell` for something a module handles natively — it bypasses idempotency guarantees
+
+**Terraform:**
+- Resources declare desired state by design — do not work around this with `local-exec` provisioners that have side effects
+- `local-exec` and `remote-exec` provisioners are not idempotent; avoid them except for bootstrapping that cannot be expressed as state
+- Data sources are always safe; prefer them over provisioners for read operations
+
+If a script, playbook, or Terraform config cannot be run twice safely, that is a bug — not an acceptable trade-off.
+
 ### Shell Scripts
 
 - **Shebang:** `#!/usr/bin/env bash` — always, no exceptions (never `#!/bin/bash` or `#!/bin/sh`)
