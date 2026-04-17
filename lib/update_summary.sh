@@ -279,6 +279,18 @@ _update_record_end() {
       else
         _result="updated"
       fi
+      # Check for reboot-required flag written by apt when a kernel or core lib is updated
+      local _reboot_flag="${_REBOOT_REQUIRED_PATH:-/var/run/reboot-required}"
+      if [[ -f "${_reboot_flag}" ]]; then
+        local _reboot_pkgs_file="${_REBOOT_REQUIRED_PKGS_PATH:-/var/run/reboot-required.pkgs}"
+        if [[ -f "${_reboot_pkgs_file}" ]]; then
+          local _reboot_pkgs
+          _reboot_pkgs=$(sort -u "${_reboot_pkgs_file}" | paste -sd', ' -)
+          _result="${_result} — reboot required (${_reboot_pkgs})"
+        else
+          _result="${_result} — reboot required"
+        fi
+      fi
       ;;
     snap)
       snap list --color=never 2>/dev/null \

@@ -578,3 +578,47 @@ firefox  124.0"
   _update_record_end "yum" 0
   grep -q "no changes" "${_UPDATE_TMPDIR}/result_yum"
 }
+
+# ── _update_record_end — apt reboot-required ──────────────────────────────
+
+@test "_update_record_end apt appends reboot required when flag file exists" {
+  printf "curl 7.88.1-1ubuntu3\n" > "${_UPDATE_TMPDIR}/pre_apt"
+  export MOCK_DPKG_OUTPUT="curl 7.88.1-1ubuntu3"
+  local _reboot_file="${BATS_TEST_TMPDIR}/reboot-required"
+  touch "${_reboot_file}"
+  export _REBOOT_REQUIRED_PATH="${_reboot_file}"
+  _update_record_end "apt" 0
+  grep -q "reboot required" "${_UPDATE_TMPDIR}/result_apt"
+}
+
+@test "_update_record_end apt includes package name from reboot-required.pkgs" {
+  printf "curl 7.88.1-1ubuntu3\n" > "${_UPDATE_TMPDIR}/pre_apt"
+  export MOCK_DPKG_OUTPUT="curl 7.88.1-1ubuntu3"
+  local _reboot_file="${BATS_TEST_TMPDIR}/reboot-required"
+  local _reboot_pkgs_file="${BATS_TEST_TMPDIR}/reboot-required.pkgs"
+  touch "${_reboot_file}"
+  printf "linux-image-6.8.0-58-generic\n" > "${_reboot_pkgs_file}"
+  export _REBOOT_REQUIRED_PATH="${_reboot_file}"
+  export _REBOOT_REQUIRED_PKGS_PATH="${_reboot_pkgs_file}"
+  _update_record_end "apt" 0
+  grep -q "linux-image-6.8.0-58-generic" "${_UPDATE_TMPDIR}/result_apt"
+}
+
+@test "_update_record_end apt reboot required without pkgs file shows generic message" {
+  printf "curl 7.88.1-1ubuntu3\n" > "${_UPDATE_TMPDIR}/pre_apt"
+  export MOCK_DPKG_OUTPUT="curl 7.88.1-1ubuntu3"
+  local _reboot_file="${BATS_TEST_TMPDIR}/reboot-required"
+  touch "${_reboot_file}"
+  export _REBOOT_REQUIRED_PATH="${_reboot_file}"
+  unset _REBOOT_REQUIRED_PKGS_PATH
+  _update_record_end "apt" 0
+  grep -q "reboot required" "${_UPDATE_TMPDIR}/result_apt"
+}
+
+@test "_update_record_end apt no reboot warning when flag file absent" {
+  printf "curl 7.88.1-1ubuntu3\n" > "${_UPDATE_TMPDIR}/pre_apt"
+  export MOCK_DPKG_OUTPUT="curl 7.88.1-1ubuntu3"
+  export _REBOOT_REQUIRED_PATH="${BATS_TEST_TMPDIR}/no-such-file"
+  _update_record_end "apt" 0
+  ! grep -q "reboot required" "${_UPDATE_TMPDIR}/result_apt"
+}
