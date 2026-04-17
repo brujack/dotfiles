@@ -553,6 +553,7 @@ Code lives a long time. The what is the code — don't restate it. Document the 
 - **Decisions** — why this approach over the obvious alternative
 - **Exceptions** — why this case is handled differently
 - **Constraints** — external requirements, bugs worked around, non-obvious invariants
+- **External limitations** — link to the upstream bug, RFC, vendor decision, or policy that forced a workaround; without this the workaround looks like a mistake
 
 Do not add comments to code that wasn't changed. A comment that describes what the code does is noise. A comment that explains why it does it that way is signal.
 
