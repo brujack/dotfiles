@@ -415,6 +415,26 @@ git branch --merged master | grep -v master   # local merged branches
 git branch -r --merged origin/master | grep -v master  # remote merged branches
 ```
 
+### PR Monitoring
+
+After opening a PR, monitor it until it is resolved — either merged or failed. Do not consider the work done at push time.
+
+**After every `gh pr create`:**
+
+1. Poll CI status with `gh pr checks <number> --watch` until all checks complete
+2. If any check fails:
+   - Read the failure output: `gh run view <run-id> --log-failed`
+   - Fix the issue on the feature branch, commit, and push
+   - CI re-runs automatically; return to step 1
+3. Once all checks pass and the PR auto-merges, delete the branch:
+   ```bash
+   git branch -d feature/branch-name
+   git push origin --delete feature/branch-name
+   ```
+4. If the PR does not auto-merge (repo has no auto-merge job), notify the user and wait for instructions
+
+If the session ends before CI finishes, note the PR number and status in the conversation so the user can follow up.
+
 ### PR Review Gate
 
 Before pushing any feature branch (Option 2 in finishing-a-development-branch),
