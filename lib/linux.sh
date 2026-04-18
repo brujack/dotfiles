@@ -742,6 +742,8 @@ install_ubuntu_packages() {
     brew_tap_if_missing snyk/tap
     brew_install_formula snyk
     if [[ -n ${HAS_DEVTOOLS} ]]; then
+      brew_tap_if_missing gitguardian/tap
+      brew_install_formula ggshield
       brew_install_formula claude-code
       if command -v claude &>/dev/null; then
         claude plugins install superpowers
@@ -920,6 +922,16 @@ install_rhel_packages() {
   sudo -H python -m pip install glances
   if [[ -x $(command -v glances) ]]; then
     printf "glances is installed\\n"
+  fi
+
+  if [[ -n ${HAS_DEVTOOLS} ]]; then
+    printf "Installing ggshield RHEL\\n"
+    if ! command -v ggshield &>/dev/null; then
+      pip3 install ggshield
+    fi
+    if command -v ggshield &>/dev/null; then
+      printf "ggshield is installed\\n"
+    fi
   fi
 
   printf "Installing go RHEL\\n"
