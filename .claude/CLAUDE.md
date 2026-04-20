@@ -408,12 +408,29 @@ This applies to all repos. Committing directly to master bypasses CI and the rev
 
 Exception: documentation-only fixes (typos, README updates, memory commits) may go directly to master.
 
-When wrapping up a session, check for any stale merged branches and delete them:
+After every PR merge, run a full stale branch sweep (not just the current branch):
 
 ```bash
-git branch --merged master | grep -v master   # local merged branches
-git branch -r --merged origin/master | grep -v master  # remote merged branches
+# Remote: prune tracking refs, then delete any with merged PRs
+git fetch --prune
+for branch in $(git branch -r | grep -v master | sed 's|origin/||'); do
+  if gh pr list --head "$branch" --state merged --json number --jq '.[0].number' 2>/dev/null | grep -q .; then
+    git push origin --delete "$branch"
+  fi
+done
+
+# Local (squash-merged): git branch --merged misses these, check via gh
+for branch in $(git branch | grep -v '^\*' | grep -v master); do
+  if gh pr list --head "$branch" --state merged --json number --jq '.[0].number' 2>/dev/null | grep -q .; then
+    git branch -D "$branch"
+  fi
+done
+
+# Local (regular merged): standard check
+git branch --merged master | grep -v master | xargs -r git branch -d
 ```
+
+Also run this sweep at session start and session end to catch accumulated stale branches.
 
 ### PR Review Gate
 
