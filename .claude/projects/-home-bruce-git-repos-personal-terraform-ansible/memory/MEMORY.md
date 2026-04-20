@@ -1,0 +1,5 @@
+- [Always use feature branches](feedback_always_branch.md) — never commit fix/feat/refactor directly to master, even for single-file changes
+- [Always use git worktrees](feedback_git_worktrees.md) — feature branch work must use git worktrees, not bare git checkout -b
+- [Handle /btw and monitor PRs](feedback_btw_and_monitoring.md) — inline side-requests via /btw, proactively monitor CI/PR status on every PR
+- [Remaining role cleanups](project_remaining_cleanups.md) — 21 roles with stub verify.yml (dead env code done)
+- [AWS Terraform future work](project_aws_terraform.md) — aws-terraform/ directory planned for future session
