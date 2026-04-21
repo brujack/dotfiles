@@ -196,7 +196,7 @@ check_and_install_nala() {
   log_info "Installing nala"
   if [[ "$(uname -s)" = "Linux" ]]; then
     if [[ $(awk -F= '/^NAME/{print $2}' /etc/os-release | tr -d '"') = "Ubuntu" ]]; then
-      if ! [ -x "$(command -v nala)" ]; then
+      if ! dpkg -l nala 2>/dev/null | grep -q '^ii'; then
         log_info "Installing nala via apt"
         wget -O ${HOME}/software_downloads/volian-archive-keyring_0.2.0_all.deb https://gitlab.com/-/project/39215670/uploads/d9473098bc12525687dc9aca43d50159/volian-archive-keyring_0.2.0_all.deb
         sudo -H dpkg --install ${HOME}/software_downloads/volian-archive-keyring_0.2.0_all.deb
