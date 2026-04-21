@@ -660,7 +660,7 @@ If a script, playbook, or Terraform config cannot be run twice safely, that is a
 ### Shell Scripts
 
 - **Shebang:** `#!/usr/bin/env bash` — always, no exceptions (never `#!/bin/bash` or `#!/bin/sh`)
-- **No `set -e`** — handle errors explicitly with `|| exit 1` or return code checks. `set -e` has unpredictable behavior with conditionals, pipes, and subshells. The only exception is pre-commit hooks where `set -e` is acceptable for fail-fast behavior.
+- **No `set -e`** — handle errors explicitly with `|| exit 1` or return code checks. `set -e` has unpredictable behavior with conditionals, pipes, and subshells. The only exception is git hooks (pre-commit, pre-push) where `set -e` is acceptable for fail-fast behavior.
 - **Sourcing guard for testability** — every shell script that will be tested must use the sourcing guard pattern: extract logic into functions, then gate the main execution block so tests can source the file without running it:
   ```bash
   #!/usr/bin/env bash
