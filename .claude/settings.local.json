@@ -4,7 +4,14 @@
       "Bash(make test:*)",
       "Bash(bats:*)",
       "Bash(pwsh -Command \"Import-Module Pester; $c = New-PesterConfiguration; $c.Run.Path = ''tests/''; $c.Output.Verbosity = ''Detailed''; Invoke-Pester -Configuration $c\")",
-      "Bash(make lint:*)"
+      "Bash(make lint:*)",
+      "Bash(git checkout:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)",
+      "Bash(git push:*)",
+      "Bash(gh pr:*)",
+      "Bash(git pull:*)",
+      "Bash(git branch:*)"
     ]
   }
 }
