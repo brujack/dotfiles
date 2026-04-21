@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Pre-push hook: runs full test suite locally before push reaches GitHub.
+# Permanent: provides fast local feedback and conserves GitHub Actions minutes.
+# GitHub Actions is the final merge gate on PRs.
+set -e
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+    [ "${local_sha}" = "0000000000000000000000000000000000000000" ] && exit 0
+done
+
+printf "Running tests locally (pre-push)...\n"
+make -C "$(git rev-parse --show-toplevel)" test
