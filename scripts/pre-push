@@ -4,9 +4,11 @@
 # GitHub Actions is the final merge gate on PRs.
 set -e
 
+real_push=0
 while read -r local_ref local_sha remote_ref remote_sha; do
-    [ "${local_sha}" = "0000000000000000000000000000000000000000" ] && exit 0
+    [ "${local_sha}" != "0000000000000000000000000000000000000000" ] && real_push=1
 done
+[ "${real_push}" -eq 0 ] && exit 0
 
 printf "Running tests locally (pre-push)...\n"
-make -C "$(git rev-parse --show-toplevel)" test
+make -C "$(cd "$(git rev-parse --git-common-dir)/.." && pwd)" test
