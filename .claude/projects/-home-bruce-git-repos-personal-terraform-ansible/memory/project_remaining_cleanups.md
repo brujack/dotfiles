@@ -1,16 +1,19 @@
 ---
 name: Remaining role cleanups
-description: 22 roles have dead env-detection code, 21 have stub verify.yml files — potential future batch cleanup
+description: All stub verify.yml roles done — no remaining cleanup work
 type: project
-originSessionId: 1849ac56-b366-4acc-a759-3bf934f8700b
+originSessionId: 53884645-837c-4251-ac1c-d04814df0368
 ---
 
-Two remaining cleanup patterns across the codebase (as of 2026-04-20):
+**Dead environment-detection code: DONE (PR #38).** Removed from 21 roles.
 
-**Dead environment-detection code: DONE (PR #38).** Removed from 21 roles. The `common` role was excluded — it actually uses `common_is_bare_metal_environment` to gate bare-metal package installation (discovered when molecule test failed during verification).
+**Stub verify.yml — Batch 1 (Docker Compose roles): DONE (PR #39).** 5 roles.
 
-**Stub verify.yml files (21 roles):** uptime_kuma, teleport_server, teleport_node, prometheus_node_exporter, plex_server, nut_server, nut_client, nodejs, netdata, lb, kind, k3s, homepage, heimdall, fah, emotive_users, downloads, docker_server_mounts, dashy, cloudflared_server, apt_cacher_ng. Each just asserts `true` with a TODO comment.
+**Stub verify.yml — Batch 2 (service + config roles): DONE (PR #40).** 7 roles.
 
-**Why:** These are technical debt — the dead code wastes ~110 lines per role and the stub verifies provide no test coverage. Both patterns have established fixes (bind_server is the template for verify, teleport for dead code removal).
+**Stub verify.yml — Batch 3 (remaining 9 roles): DONE (PR pending).** 9 roles.
+docker_server_mounts (local-only, needs NFS guard var), downloads, emotive_users (idempotence fixed), k3s, kind, netdata, nodejs, teleport_node, teleport_server.
 
-**How to apply:** Could be batched into 1-2 PRs. Dead code removal is purely mechanical. Verify assertions require reading each role's tasks to know what to assert on.
+**Also fixed:** emotive_users idempotence — added re-stat after git clone so find+chown pattern runs on first converge. docker_server_mounts now testable in molecule via `docker_server_mounts_nfs_enabled: false` guard.
+
+**How to apply:** All stub verify work is complete. No remaining role cleanups needed.
