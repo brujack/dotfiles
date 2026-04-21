@@ -9,7 +9,7 @@ help:
 	@printf "  make test       Run all BATS tests\n"
 	@printf "  make test-unit  Run unit tests only\n"
 	@printf "  make lint          Check bash/zsh syntax + ShellCheck all .sh files\n"
-	@printf "  make install-hooks Install pre-commit hook (runs make lint before each commit)\n"
+	@printf "  make install-hooks Install pre-commit and pre-push hooks (run once per checkout)\n"
 	@printf "  make help          Show this help\n"
 
 lint:

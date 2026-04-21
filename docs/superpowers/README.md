@@ -56,6 +56,7 @@ Master status index for all specs and implementation plans in this directory.
 | 2026-04-14 | [github-mcp](plans/2026-04-14-github-mcp.md)                                       | [spec](specs/2026-04-14-github-mcp-design.md)                       | Done   |
 | 2026-04-15 | [refactor-skill](plans/2026-04-15-refactor-skill.md)                               | [spec](specs/2026-04-15-refactor-skill-design.md)                   | Done   |
 | 2026-04-16 | [linux-package-update-tracking](plans/2026-04-16-linux-package-update-tracking.md) | [spec](specs/2026-04-16-linux-package-update-tracking-design.md)    | Done   |
+| 2026-04-21 | [dual-mode-ci-dotfiles-math](plans/2026-04-21-dual-mode-ci-dotfiles-math.md)       | [spec](specs/2026-04-21-dual-mode-ci-dotfiles-math-design.md)       | Done   |
 
 ---
 
