@@ -4,3 +4,4 @@
 - [Remaining role cleanups](project_remaining_cleanups.md) — 21 roles with stub verify.yml (dead env code done)
 - [Thorough post-merge cleanup](feedback_post_merge_cleanup.md) — clean ALL stale branches (local+remote) after every merge, not just current
 - [AWS Terraform future work](project_aws_terraform.md) — aws-terraform/ directory planned for future session
+- [Subagent plan file deletion](feedback_subagent_plan_file_deletion.md) — subagents may silently drop plan/spec files and README rows when reformatting superpowers tables; verify after any subagent touches docs/superpowers/
