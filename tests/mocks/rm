@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+printf "rm %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+if [[ "${MOCK_RM_EXIT:-0}" -ne 0 ]]; then
+  exit "${MOCK_RM_EXIT}"
+fi
+/bin/rm "$@" 2>/dev/null || true

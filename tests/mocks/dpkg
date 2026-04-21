@@ -1,3 +1,7 @@
 #!/usr/bin/env bash
 printf "dpkg %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+# When called as 'dpkg -l nala', output the mock package listing if set.
+if [[ "$*" == "-l nala" ]] && [[ -n "${MOCK_DPKG_L_NALA:-}" ]]; then
+  printf "%s\n" "${MOCK_DPKG_L_NALA}"
+fi
 exit "${MOCK_DPKG_EXIT:-0}"
