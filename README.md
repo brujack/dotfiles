@@ -242,7 +242,7 @@ from `.claude/mcp.json.template` on each `setup_user` run.
 
 ## Branch Workflow
 
-All changes go on feature branches. GitHub Actions CI runs `make test`, `lint-macos`, and `secret-scan` on every push. All PRs are auto-merged when all three pass.
+All changes go on feature branches. The pre-push hook runs `make test` locally before the push reaches GitHub. GitHub Actions CI runs `make test`, `lint-macos`, and `secret-scan` on PRs only, and auto-merges when all three pass.
 
 ```bash
 git checkout -b my-feature

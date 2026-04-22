@@ -191,24 +191,24 @@ teardown() {
   export MOCK_AWK_OS_NAME="Ubuntu"
   export HOME="${BATS_TEST_TMPDIR}"
   mkdir -p "${BATS_TEST_TMPDIR}/software_downloads"
-  # nala mock is in tests/mocks/ so command -v nala would succeed by default.
-  # Build a tmp mocks dir without the nala mock so command -v nala fails,
-  # causing check_and_install_nala to take the install branch.
-  mocks_dir="${REPO_ROOT}/tests/mocks"
-  tmp_mocks="${BATS_TEST_TMPDIR}/mocks_no_nala"
-  mkdir -p "${tmp_mocks}"
-  for f in "${mocks_dir}"/*; do
-    [[ "$(basename "$f")" == "nala" ]] && continue
-    ln -sf "$f" "${tmp_mocks}/$(basename "$f")"
-  done
-  # Replace load_mocks PATH entry: swap the real mocks dir for our filtered copy.
-  # load_mocks prepended tests/mocks/ at the start of PATH, so we remove that prefix
-  # and prepend the filtered copy instead.
-  export PATH="${tmp_mocks}:${PATH#${mocks_dir}:}"
+  # The function checks 'dpkg -l nala | grep -q "^ii"' to detect nala.
+  # The dpkg mock outputs nothing, so grep -q fails, taking the install branch.
   run check_and_install_nala
   [ "$status" -eq 0 ]
   grep -q "dpkg --install" "${MOCK_CALLS_FILE}"
   grep -q "apt install nala" "${MOCK_CALLS_FILE}"
+}
+
+@test "check_and_install_nala skips install when nala is already installed" {
+  export MOCK_UNAME_S=Linux
+  export MOCK_AWK_OS_NAME="Ubuntu"
+  export HOME="${BATS_TEST_TMPDIR}"
+  # Simulate nala already installed: make dpkg -l output an 'ii' line.
+  export MOCK_DPKG_L_NALA="ii  nala  0.15.0  amd64  Commandline Package Manager"
+  run check_and_install_nala
+  [ "$status" -eq 0 ]
+  ! grep -q "dpkg --install" "${MOCK_CALLS_FILE}"
+  ! grep -q "apt install nala" "${MOCK_CALLS_FILE}"
 }
 
 # ── install_homebrew ─────────────────────────────────────────────────────────

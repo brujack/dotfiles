@@ -10,3 +10,4 @@
 - [BATS direct-call error-capture pattern](feedback_bats_direct_call_pattern.md) — use `fn || _rc=$?` not bare `fn; local _rc=$?` to avoid ERR trap firing before assertion
 - [Subagent worktree path must be explicit](feedback_subagent_worktree_path.md) — state worktree path prominently at top of implementer prompt or subagent commits to wrong repo
 - [User profile](user_profile.md) — 45yr systems/devops engineer; optimize for readability/maintainability; push back when warranted; don't over-engineer
+- [Mock detection mechanism](feedback_mock_detection_mechanism.md) — use dpkg -l/rpm -q/brew list instead of command -v for package detection; command -v bypasses mock PATH when binary is really installed

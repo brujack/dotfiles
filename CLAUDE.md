@@ -193,12 +193,14 @@ Uses **BATS** (Bash Automated Testing System), installed natively:
 **Run tests:** `make test` (runs lint then all BATS tests)
 **Run unit tests only:** `make test-unit` (runs `unit.bats`, `profiles.bats`, and `zshrc.d/unit.bats`)
 **Run lint only:** `make lint` (bash -n + zsh -n + shellcheck on all .sh files)
-**Install pre-commit hook:** `make install-hooks` (symlinks `scripts/pre-commit-hook.sh` into `.git/hooks/pre-commit`; run once per checkout)
+**Install hooks:** `make install-hooks` (installs pre-commit and pre-push hooks; run once per checkout)
 
 The pre-commit hook is **required**. It runs on every `git commit`:
 
 1. `make lint` — blocks the commit on any syntax or shellcheck failure
 2. `ggshield secret scan pre-commit` — scans staged changes for secrets before they reach the remote; skipped gracefully if ggshield is not installed
+
+The pre-push hook is **permanent**. It runs `make test` (lint + bats) on every push before the push reaches GitHub. Skips branch deletions. This conserves GitHub Actions minutes — CI runs only on PRs.
 
 The CI `secret-scan` job (gitleaks) is a backstop, not a substitute for local scanning. Install ggshield: `brew install gitguardian/tap/ggshield && ggshield auth login`.
 
@@ -215,7 +217,7 @@ Inline disables (`# shellcheck disable=SCxxxx # reason`) are used for remaining 
 
 ### CI / GitHub Actions
 
-`.github/workflows/ci.yml` runs on every push (all branches including master) and PRs to master:
+`.github/workflows/ci.yml` runs on PRs to master only (the pre-push hook gates branch pushes locally):
 
 - `test` job: installs bats + shellcheck, runs `make test`
 - `lint-macos` job: runs `bash -n` and `zsh -n` on all `.sh` files on `macos-latest` (advisory, not blocking auto-merge)
