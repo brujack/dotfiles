@@ -34,4 +34,16 @@ Go applies build constraints file-wide. If `TestProxmoxApply` (which destroys re
 `users_uid_bruce`/`users_gid_bruce` are only defined in `ansible/environments/cross_env_vars.yml`. Add to `extra_arguments` in the ansible provisioner block:
 `"--extra-vars", "@../../ansible/environments/cross_env_vars.yml"`
 
-**How to apply:** Check all of these when adding or modifying anything in `proxmox/packer/`.
+**7. checkov `--framework packer` is not a valid framework — do not add it.**
+
+checkov dropped the `packer` framework. `proxmox/Makefile` lint target omits it intentionally.
+Valid checkov frameworks in this repo: `--framework terraform` only. Do not attempt to add packer
+static analysis via checkov — it will fail with "Invalid frameworks specified: packer."
+
+**8. `terraform validate` requires `terraform init` — it is NOT part of `make lint`.**
+
+`terraform validate` downloads and locks providers. It belongs in `make lint-validate`
+(which also requires credentials). `make lint` is credential-free static analysis only:
+`packer fmt -check`, `terraform fmt -check`, `tflint`, `checkov --framework terraform`.
+
+**How to apply:** Check all of these when adding or modifying anything in `proxmox/`.
