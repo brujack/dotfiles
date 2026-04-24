@@ -5,3 +5,5 @@
 - [cloudflared uses remote API config, not local ingress rules](project_cloudflared_remote_config.md) — local config.yml ingress is ignored; all tunnel routes managed via cloudflare_zero_trust_tunnel_cloudflared_config in Terraform
 - [Cloudflare Access bypass pattern for unauthenticated services](project_cf_access_bypass_pattern.md) — services needing unauthenticated access need explicit bypass ZT application or wildcard policy blocks them
 - [Cloudflare Terraform credentials](reference_cloudflare_credentials.md) — source ~/.cloudflared/.tf_cloudflare_creds before every terraform command
+- [Docker file-level bind mounts track inodes](feedback_docker_file_bind_mount.md) — mount parent directory not single file; Ansible template atomic rename breaks file-level mounts
+- [ntfy user add uses NTFY_PASSWORD env var](feedback_ntfy_user_add_syntax.md) — no --password flag; use docker exec -e NTFY_PASSWORD=... with --ignore-exists
