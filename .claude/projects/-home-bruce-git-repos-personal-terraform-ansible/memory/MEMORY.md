@@ -8,3 +8,4 @@
 - [Proxmox golden image pipeline](project_proxmox_golden_image.md) — Packer+Terraform pipeline complete (PR #44, 2026-04-22); credential files must be created manually from .example files
 - [Packer proxmox gotchas](feedback_packer_proxmox_gotchas.md) — goss plugin dead end, username field required, curl -fL not -sL, ISO version drift, build tag file-scope, cross_env_vars.yml must be passed to Ansible
 - [Use --no-verify for docs-only pushes](feedback_no_verify_docs.md) — docs under ansible/ trigger molecule; use --no-verify for plan/spec/README/CLAUDE.md pushes
+- [Molecule parallel tests starve Docker](project_molecule_docker_contention.md) — 6 parallel molecule jobs disrupt other Docker containers on the workstation; warn user before triggering
