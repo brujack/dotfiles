@@ -33,7 +33,10 @@ fi
 if [[ -n "${SSH_CONNECTION}" && -n "${NTFY_TOPIC:-}" ]]; then
   ntfy_url="${NTFY_URL:-https://ntfy.conecrazy.ca}"
   host=$(hostname -s 2>/dev/null || printf "unknown")
+  ntfy_auth=()
+  [[ -n "${NTFY_USER:-}" && -n "${NTFY_PASSWORD:-}" ]] && ntfy_auth=(-u "${NTFY_USER}:${NTFY_PASSWORD}")
   curl -s \
+    "${ntfy_auth[@]}" \
     -H "Title: Claude Code — ${host} ${subtitle}" \
     -H "Priority: high" \
     -H "Tags: robot" \

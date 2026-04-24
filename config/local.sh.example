@@ -23,6 +23,8 @@
 # Subscribe on iOS/macOS via the ntfy app pointing at https://ntfy.conecrazy.ca
 # export NTFY_TOPIC="claude-XXXXXXXX"
 # export NTFY_URL="https://ntfy.conecrazy.ca"  # default; override if needed
+# export NTFY_USER="bruce"
+# export NTFY_PASSWORD=""  # ntfy user password; required when auth-default-access: deny-all
 
 # GitHub PAT for Claude Code GitHub MCP server
 # Create at: https://github.com/settings/tokens?type=beta (fine-grained PAT)
