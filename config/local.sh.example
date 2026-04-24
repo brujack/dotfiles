@@ -18,6 +18,12 @@
 # Add a custom symlink
 # safe_link "${HOME}/work/dotfiles/.gitconfig_work" "${HOME}/.gitconfig_work"
 
+# ntfy push notifications for SSH Claude Code sessions
+# Topic name is your private channel — pick something non-guessable.
+# Subscribe on iOS/macOS via the ntfy app pointing at https://ntfy.conecrazy.ca
+# export NTFY_TOPIC="claude-XXXXXXXX"
+# export NTFY_URL="https://ntfy.conecrazy.ca"  # default; override if needed
+
 # GitHub PAT for Claude Code GitHub MCP server
 # Create at: https://github.com/settings/tokens?type=beta (fine-grained PAT)
 # Required permissions: metadata:read, contents:read, issues:read+write, pull-requests:read+write
