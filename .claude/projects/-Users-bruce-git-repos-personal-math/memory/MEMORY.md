@@ -7,3 +7,4 @@
 ## Feedback
 
 - [feedback_github_actions_patterns.md](feedback_github_actions_patterns.md) — Three required GitHub Actions patterns: env vars for inputs in run: blocks, randomized GITHUB_OUTPUT delimiter, quoted body: in softprops/action-gh-release
+- [feedback_pr_review_skill.md](feedback_pr_review_skill.md) — Must invoke `pr-review` skill via Skill tool before pushing any branch; running review inline is not acceptable
