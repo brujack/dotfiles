@@ -32,8 +32,9 @@ fi
 # Local Warp sessions skip this — the warp@claude-code-warp plugin handles them.
 if [[ -n "${SSH_CONNECTION}" && -n "${NTFY_TOPIC:-}" ]]; then
   ntfy_url="${NTFY_URL:-https://ntfy.conecrazy.ca}"
+  host=$(hostname -s 2>/dev/null || printf "unknown")
   curl -s \
-    -H "Title: Claude Code — ${subtitle}" \
+    -H "Title: Claude Code — ${host} ${subtitle}" \
     -H "Priority: high" \
     -H "Tags: robot" \
     -d "${message}" \
