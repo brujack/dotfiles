@@ -46,4 +46,36 @@ static analysis via checkov — it will fail with "Invalid frameworks specified:
 (which also requires credentials). `make lint` is credential-free static analysis only:
 `packer fmt -check`, `terraform fmt -check`, `tflint`, `checkov --framework terraform`.
 
+**9. Token format: split into two fields, username and secret UUID.**
+
+`proxmox_username = "user@realm!tokenid"` and `proxmox_token = "<uuid-secret-only>"`. Do NOT put the full `user@realm!tokenid=secret` string in `proxmox_token`. Token also needs `SDN.Use` permission on `/sdn/zones/localnetwork` (add `PVESDNUser` role) for VM creation with network bridges.
+
+**10. `packer build .` not `packer build <file>`.**
+
+`packer build ubuntu-2404-golden.pkr.hcl` only loads that one file — `variables.pkr.hcl` is ignored, causing "unsupported attribute" errors. Always use `packer build .` to load all `.pkr.hcl` files in the directory.
+
+**11. user-data password must be a real hash, not a placeholder.**
+
+`identity.password` in `http/user-data` must be the actual SHA-512 hash of `ssh_build_password`. Generate with `openssl passwd -6 'YOUR_PASSWORD'`. The placeholder `REPLACE_WITH_HASHED_PASSWORD` is not replaced automatically — it must be set manually.
+
+**12. Sudoers setup must go in `late-commands`, not `user-data.runcmd`.**
+
+`runcmd` runs cloud-init on the installed system's first boot, which races with SSH availability. `late-commands` runs during the installer phase before reboot, guaranteeing the sudoers file exists when Packer SSHs in. Use: `echo 'ubuntu ALL=(ALL) NOPASSWD:ALL' > /target/etc/sudoers.d/ubuntu-packer`.
+
+**13. YAML flow-mapping in runcmd — quote strings containing colons.**
+
+`- echo "ubuntu ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/ubuntu-packer` is parsed as a dict by YAML because `NOPASSWD: ALL` looks like a key-value pair. Wrap the entire string in single quotes: `- 'echo "ubuntu ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/ubuntu-packer'`.
+
+**14. Install `acl` package before Ansible runs.**
+
+Ansible's `become` with an unprivileged user requires `setfacl` (from the `acl` package) to set permissions on temp files. Without it: `chmod: invalid mode: 'A+user:bruce:rx:allow'`. Install `acl` in `setup.sh` before the Ansible provisioner step.
+
+**15. Create `/etc/packer` sentinel in setup.sh.**
+
+The `common` role checks for `/etc/packer` to set `common_is_packer_environment`. Without this file, the variable is `false` and packer-skipped tasks (like homebrew install) will run and fail. Add `touch /etc/packer` to `setup.sh`.
+
+**16. Homebrew (`users` role) must skip on packer builds.**
+
+Homebrew refuses to run as root (`Don't run this as root!`). Guard with `not (common_is_packer_environment | default(false))` — use the `default` filter so it works when `common` hasn't run (e.g. molecule tests for the `users` role standalone).
+
 **How to apply:** Check all of these when adding or modifying anything in `proxmox/`.
