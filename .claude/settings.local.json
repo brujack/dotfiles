@@ -11,7 +11,9 @@
       "Bash(git push:*)",
       "Bash(gh pr:*)",
       "Bash(git pull:*)",
-      "Bash(git branch:*)"
+      "Bash(git branch:*)",
+      "Bash(git stash *)",
+      "Bash(git commit *)"
     ]
   }
 }
