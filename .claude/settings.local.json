@@ -13,7 +13,11 @@
       "Bash(git pull:*)",
       "Bash(git branch:*)",
       "Bash(git stash *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Skill(update-config)",
+      "Bash(bash -c 'printf \"\\\\a\"; jq -r \"\\\\\"display notification \\\\\" + \\(.message // \\\\\"Claude needs your attention\\\\\" | @json\\) + \\\\\" with title \\\\\\\\\\\\\"Claude Code\\\\\\\\\\\\\" sound name \\\\\\\\\\\\\"Ping\\\\\\\\\\\\\"\\\\\"\" | osascript 2>/dev/null || true')",
+      "Bash(command -v terminal-notifier)",
+      "Bash(chmod +x *)"
     ]
   }
 }
