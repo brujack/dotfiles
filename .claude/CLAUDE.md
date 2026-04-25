@@ -454,8 +454,11 @@ If the session ends before CI finishes, note the PR number and status in the con
 
 ### PR Review Gate
 
-Before pushing any feature branch (Option 2 in finishing-a-development-branch),
-run the pr-review skill. Only push when verdict is PASS. If HOLD:
+**Always run the `pr-review` skill before pushing any feature branch.** This applies
+regardless of which workflow was used to create the branch — do not skip it even for
+small changes, even if no explicit skill workflow was followed.
+
+Only push when verdict is PASS. If HOLD:
 
 1. Fix all CRITICAL findings
 2. Run make test — confirm no regressions

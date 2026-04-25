@@ -11,3 +11,4 @@
 - [Use --no-verify for docs-only pushes](feedback_no_verify_docs.md) — docs under ansible/ trigger molecule; use --no-verify for plan/spec/README/CLAUDE.md pushes
 - [Molecule parallel tests starve Docker](project_molecule_docker_contention.md) — 6 parallel molecule jobs disrupt other Docker containers on the workstation; warn user before triggering
 - [ntfy iOS Focus Mode gotcha](project_ntfy_ios_focus_mode.md) — ntfy notifications silently blocked by iPhone Personal Focus mode; check allowed apps before debugging server infrastructure
+- [Always invoke pr-review skill](feedback_pr_review_skill.md) — run pr-review before every feature branch push, not just when following a formal skill workflow
