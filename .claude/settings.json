@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.local/bin/claude-ntfy"
+            "command": "~/.claude/hooks/claude-ntfy"
           }
         ]
       }
@@ -15,7 +15,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.local/bin/claude-ntfy"
+            "command": "~/.claude/hooks/claude-ntfy"
           }
         ]
       }
