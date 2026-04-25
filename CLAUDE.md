@@ -116,6 +116,25 @@ Always remove the old file before symlinking (`rm -f` then `ln -s`). Validate sy
 
 `.cursor/plugins/` and `.cursor/skills-cursor/` are symlinked from this repo alongside `.claude/`. When adding or updating Claude Code plugins, skills, or MCP servers (Context7, Superpowers, Warp, etc.), check whether the same capability should be reflected in the Cursor config. The symlink setup means both tools share the same plugin/skills files on disk — but Cursor rules, model settings, and MCP server registration live in `.cursor/User/` and may need separate updates.
 
+## GitHub MCP
+
+The GitHub MCP server is configured globally (user scope) via `~/.claude/mcp.json`.
+It provides native GitHub operations — PR review, issue management, repo browsing,
+diff access — across all projects without copy-pasting into chat.
+
+Requires `GITHUB_PAT` to be set in `~/git-repos/personal/dotfiles/config/local.sh`.
+If it isn't set, run `setup_env.sh -t setup_user` after adding the token.
+Verify with `setup_env.sh -t doctor`.
+
+Use it for:
+
+- Fetching PR diffs and changed files
+- Reading and creating issues
+- Posting structured review comments
+- Browsing repo contents
+
+Do not use it to push directly to main/master — normal PR workflow still applies.
+
 ## Code Standards
 
 ### Shell Scripts
