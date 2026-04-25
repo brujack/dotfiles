@@ -557,6 +557,8 @@ Every personal repo CI pipeline must have:
 
 5. **Pre-push hook (permanent)** — every repo must have a `scripts/pre-push` file that runs the test suite locally before the push reaches GitHub. Install alongside the pre-commit hook via `make install-hooks`. Never remove it — it is permanent, not a temporary workaround.
 
+   **The installed hook is a copy, not a symlink.** After editing `scripts/pre-push`, always re-run `make install-hooks` — the installed `.git/hooks/pre-push` will not pick up changes automatically. Symptom of a stale hook: the full test suite runs on every push regardless of what files changed.
+
    Template for single-Makefile repos:
 
    ```bash
