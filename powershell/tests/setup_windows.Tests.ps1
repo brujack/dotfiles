@@ -85,6 +85,7 @@ Describe "Install-ChocolateyPackage" {
         "claude 1.0",
         "claude-code 1.0",
         "crystaldiskmark 1.0",
+        "cursoride 1.0",
         "dbeaver 1.0",
         "discord 1.0",
         "docker-desktop 1.0",
@@ -385,6 +386,12 @@ Describe "New-DirectoryStructure" {
     New-DirectoryStructure
     Should -Invoke New-Item -Times 0
   }
+
+  It "rethrows when New-Item fails" {
+    Mock Test-Path { $false } -ParameterFilter { $Path -like '*/.config' }
+    Mock New-Item { throw "permission denied" }
+    { New-DirectoryStructure } | Should -Throw "permission denied"
+  }
 }
 
 Describe "Copy-GitConfig" {
@@ -410,5 +417,110 @@ Describe "Copy-GitConfig" {
     Mock Test-Path { $false }
     Copy-GitConfig
     Should -Invoke Copy-Item -Times 0
+  }
+
+  It "rethrows when Copy-Item fails" {
+    Mock Test-Path { $true }
+    Mock Copy-Item { throw "disk full" }
+    { Copy-GitConfig } | Should -Throw "disk full"
+  }
+}
+
+Describe "Invoke-DotfilesSetup" {
+  BeforeEach {
+    Mock Set-WindowsOption                     { }
+    Mock Install-ChocolateyPackage             { }
+    Mock Enable-RequiredWindowsOptionalFeature { }
+    Mock Install-WSL                           { }
+    Mock Set-ExecutionPolicy                   { }
+    Mock New-DirectoryStructure                { }
+    Mock Copy-GitConfig                        { }
+  }
+
+  It "calls Set-WindowsOption" {
+    Invoke-DotfilesSetup
+    Should -Invoke Set-WindowsOption -Times 1 -Exactly
+  }
+  It "calls Install-ChocolateyPackage" {
+    Invoke-DotfilesSetup
+    Should -Invoke Install-ChocolateyPackage -Times 1 -Exactly
+  }
+  It "calls Enable-RequiredWindowsOptionalFeature" {
+    Invoke-DotfilesSetup
+    Should -Invoke Enable-RequiredWindowsOptionalFeature -Times 1 -Exactly
+  }
+  It "calls Install-WSL" {
+    Invoke-DotfilesSetup
+    Should -Invoke Install-WSL -Times 1 -Exactly
+  }
+  It "calls Set-ExecutionPolicy with Unrestricted CurrentUser" {
+    Invoke-DotfilesSetup
+    Should -Invoke Set-ExecutionPolicy -ParameterFilter {
+      $ExecutionPolicy -eq 'Unrestricted' -and $Scope -eq 'CurrentUser'
+    } -Times 1 -Exactly
+  }
+  It "calls New-DirectoryStructure" {
+    Invoke-DotfilesSetup
+    Should -Invoke New-DirectoryStructure -Times 1 -Exactly
+  }
+  It "calls Copy-GitConfig" {
+    Invoke-DotfilesSetup
+    Should -Invoke Copy-GitConfig -Times 1 -Exactly
+  }
+}
+
+Describe "Invoke-DotfilesUpdate" {
+  BeforeEach {
+    Mock choco                 { }
+    Mock Install-WindowsUpdate { }
+    Mock Test-Path             { $false }
+    Mock Write-Output          { }
+  }
+
+  It "runs choco upgrade all -y" {
+    Invoke-DotfilesUpdate
+    Should -Invoke choco -ParameterFilter { $args -contains 'upgrade' -and $args -contains 'all' } -Times 1
+  }
+  It "calls Install-WindowsUpdate" {
+    Invoke-DotfilesUpdate
+    Should -Invoke Install-WindowsUpdate -Times 1 -Exactly
+  }
+  It "skips update_powershell_modules.ps1 when not present" {
+    Mock Test-Path { $false } -ParameterFilter { $Path -like '*update_powershell_modules.ps1' }
+    { Invoke-DotfilesUpdate } | Should -Not -Throw
+  }
+}
+
+Describe "COM update wrappers" {
+  # On macOS/Linux, New-Object lacks the -ComObject parameter entirely, so
+  # parameter binding fails before any mock can intercept. We override
+  # New-Object as a global function inside this Describe so the script's
+  # `New-Object -ComObject ...` calls resolve to our stub.
+  BeforeAll {
+    function global:New-Object {
+      param(
+        [Parameter(Position=0)] [string]$TypeName,
+        [string]$ComObject,
+        [object[]]$ArgumentList,
+        [hashtable]$Property
+      )
+      [PSCustomObject]@{ ComObject = $ComObject; TypeName = $TypeName }
+    }
+  }
+  AfterAll {
+    Remove-Item function:global:New-Object -ErrorAction SilentlyContinue
+  }
+
+  It "Get-UpdateSearcher creates Microsoft.Update.Searcher COM object" {
+    $result = Get-UpdateSearcher
+    $result.ComObject | Should -Be 'Microsoft.Update.Searcher'
+  }
+  It "Get-UpdateSession creates Microsoft.Update.Session COM object" {
+    $result = Get-UpdateSession
+    $result.ComObject | Should -Be 'Microsoft.Update.Session'
+  }
+  It "Get-UpdateInstaller creates Microsoft.Update.Installer COM object" {
+    $result = Get-UpdateInstaller
+    $result.ComObject | Should -Be 'Microsoft.Update.Installer'
   }
 }
