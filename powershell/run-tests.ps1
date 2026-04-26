@@ -32,3 +32,8 @@ if ($null -eq $result.CodeCoverage) {
 }
 Write-Host ""
 Write-Host "Coverage: $($result.CodeCoverage.CoveragePercent)%"
+
+if ($result.CodeCoverage.CoveragePercent -lt 90) {
+    Write-Error "Coverage $($result.CodeCoverage.CoveragePercent)% is below 90% floor"
+    exit 1
+}
