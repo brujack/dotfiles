@@ -15,3 +15,6 @@ config/local.sh
 .ruby-version
 .python-version
 .node-version
+
+# Pester coverage output
+powershell/coverage.xml
