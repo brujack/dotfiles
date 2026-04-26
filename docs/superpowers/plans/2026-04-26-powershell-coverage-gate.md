@@ -260,119 +260,171 @@ If the actual table differs, follow the data, not this list.
 
 The coverage.xml is git-ignored. Move on to Task 4.
 
-### Task 4: Add tests for the top-level dispatcher block
+### Task 4: Extract dispatcher bodies into testable functions
 
 **Files:**
 
+- Modify: `powershell/setup_windows.ps1`
 - Modify: `powershell/tests/setup_windows.Tests.ps1`
 
-The top-level `if ($IsWindows) { if ($setup.IsPresent) { ... } if ($update.IsPresent) { ... } }` block (lines 197-226 of `setup_windows.ps1`) is dot-sourced by every test but never executes the bodies because `$IsWindows` is `$false` on the macOS/Linux test runner and no params are bound. We need a separate Describe that loads the script with `$IsWindows = $true` and asserts the dispatcher calls each function.
+**Why this differs from earlier draft:** The first attempt tried to override `$global:IsWindows = $true` from a Pester `BeforeAll`. PowerShell rejects that — `$IsWindows` is a runtime-set automatic read-only variable. We pivot to a small refactor: pull the bodies of the `if ($setup.IsPresent)` and `if ($update.IsPresent)` blocks into named functions, then test those functions directly using the same Pester mocking pattern as the existing 22 tests.
 
-- [ ] **Step 1: Write the failing tests**
+The top-level `if ($IsWindows) { if ($setup.IsPresent) { Invoke-DotfilesSetup } if ($update.IsPresent) { Invoke-DotfilesUpdate } }` block remains as cross-platform-untestable glue — per tdd.md ("entry-point glue that purely calls already-tested functions") this is an allowed exclusion, documented in CLAUDE.md alongside the runner-script exclusion (Task 9).
 
-Append to `powershell/tests/setup_windows.Tests.ps1`:
+- [ ] **Step 1: Refactor setup_windows.ps1 — extract dispatcher bodies into functions**
+
+Open `powershell/setup_windows.ps1`. Replace the bottom block (currently lines 197-226 — the `if ($IsWindows) { if ($setup.IsPresent) { ... } if ($update.IsPresent) { ... } }` structure) with two new functions plus a slimmed dispatcher:
 
 ```powershell
-Describe "Dispatcher (-setup)" {
-  BeforeAll {
-    # Re-dot-source under simulated Windows with -setup bound, intercepting
-    # all the top-level commands so we only assert which ones were called.
-    $script:setupCalls = [System.Collections.ArrayList]::new()
-    function global:Set-WindowsOption                  { $script:setupCalls.Add('Set-WindowsOption') | Out-Null }
-    function global:Install-ChocolateyPackage          { $script:setupCalls.Add('Install-ChocolateyPackage') | Out-Null }
-    function global:Enable-RequiredWindowsOptionalFeature { $script:setupCalls.Add('Enable-RequiredWindowsOptionalFeature') | Out-Null }
-    function global:Install-WSL                        { $script:setupCalls.Add('Install-WSL') | Out-Null }
-    function global:Set-ExecutionPolicy                { $script:setupCalls.Add('Set-ExecutionPolicy') | Out-Null }
-    function global:New-DirectoryStructure             { $script:setupCalls.Add('New-DirectoryStructure') | Out-Null }
-    function global:Copy-GitConfig                     { $script:setupCalls.Add('Copy-GitConfig') | Out-Null }
-
-    $global:IsWindows = $true
-    try {
-      & "$PSScriptRoot/../setup_windows.ps1" -setup
-    } finally {
-      Remove-Variable -Name IsWindows -Scope Global -ErrorAction SilentlyContinue
-    }
-  }
-
-  It "calls Set-WindowsOption"                     { $script:setupCalls | Should -Contain 'Set-WindowsOption' }
-  It "calls Install-ChocolateyPackage"             { $script:setupCalls | Should -Contain 'Install-ChocolateyPackage' }
-  It "calls Enable-RequiredWindowsOptionalFeature" { $script:setupCalls | Should -Contain 'Enable-RequiredWindowsOptionalFeature' }
-  It "calls Install-WSL"                           { $script:setupCalls | Should -Contain 'Install-WSL' }
-  It "calls New-DirectoryStructure"                { $script:setupCalls | Should -Contain 'New-DirectoryStructure' }
-  It "calls Copy-GitConfig"                        { $script:setupCalls | Should -Contain 'Copy-GitConfig' }
+function Invoke-DotfilesSetup {
+  Set-WindowsOption
+  Install-ChocolateyPackage
+  Enable-RequiredWindowsOptionalFeature
+  Install-WSL
+  Set-ExecutionPolicy Unrestricted -Scope CurrentUser
+  New-DirectoryStructure
+  Copy-GitConfig
 }
 
-Describe "Dispatcher (-update)" {
-  BeforeAll {
-    $script:updateCalls = [System.Collections.ArrayList]::new()
-    function global:choco                  { $script:updateCalls.Add("choco $args") | Out-Null }
-    function global:Install-WindowsUpdate  { $script:updateCalls.Add('Install-WindowsUpdate') | Out-Null }
+function Invoke-DotfilesUpdate {
+  Write-Output "Updating chocolatey packages"
+  choco upgrade all -y
 
-    $global:IsWindows = $true
+  if (Test-Path -Path ./update_powershell_modules.ps1 -PathType Leaf) {
     try {
-      & "$PSScriptRoot/../setup_windows.ps1" -update
-    } finally {
-      Remove-Variable -Name IsWindows -Scope Global -ErrorAction SilentlyContinue
+      Write-Output "Updating powershell modules"
+      ./update_powershell_modules.ps1
+    }
+    catch {
+      throw $_.Exception.Message
     }
   }
 
-  It "runs choco upgrade all" {
-    ($script:updateCalls | Where-Object { $_ -like 'choco upgrade all*' }).Count | Should -BeGreaterThan 0
-  }
-  It "calls Install-WindowsUpdate" {
-    $script:updateCalls | Should -Contain 'Install-WindowsUpdate'
-  }
+  Write-Output "Installing Windows Updates"
+  Install-WindowsUpdate
 }
 
-Describe "Dispatcher (no switches)" {
-  BeforeAll {
-    $script:noSwitchCalls = [System.Collections.ArrayList]::new()
-    function global:Set-WindowsOption                  { $script:noSwitchCalls.Add('Set-WindowsOption') | Out-Null }
-    function global:Install-ChocolateyPackage          { $script:noSwitchCalls.Add('Install-ChocolateyPackage') | Out-Null }
-    function global:Install-WindowsUpdate              { $script:noSwitchCalls.Add('Install-WindowsUpdate') | Out-Null }
-
-    $global:IsWindows = $true
-    try {
-      & "$PSScriptRoot/../setup_windows.ps1"
-    } finally {
-      Remove-Variable -Name IsWindows -Scope Global -ErrorAction SilentlyContinue
-    }
-  }
-
-  It "does not run setup actions" {
-    $script:noSwitchCalls | Should -Not -Contain 'Set-WindowsOption'
-    $script:noSwitchCalls | Should -Not -Contain 'Install-ChocolateyPackage'
-  }
-  It "does not run update actions" {
-    $script:noSwitchCalls | Should -Not -Contain 'Install-WindowsUpdate'
-  }
+if ($IsWindows) {
+  if ($setup.IsPresent)  { Invoke-DotfilesSetup }
+  if ($update.IsPresent) { Invoke-DotfilesUpdate }
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they pass**
+PSScriptAnalyzer must remain clean — verb-noun naming (`Invoke-` is an approved verb) and singular nouns are preserved.
+
+- [ ] **Step 2: Verify lint passes**
+
+```bash
+cd /Users/bruce/git-repos/personal/dotfiles/powershell && make lint
+```
+
+Expected: no PSScriptAnalyzer findings.
+
+- [ ] **Step 3: Verify existing tests still pass after the refactor**
 
 ```bash
 cd /Users/bruce/git-repos/personal/dotfiles/powershell && make test
 ```
 
-Expected: all 22 prior tests pass + the new dispatcher tests pass. If any new test fails, fix the test (do NOT modify `setup_windows.ps1` to make tests pass — these are intent-of-behaviour tests).
+Expected: 22/22 still pass. Coverage may change slightly (the function definitions add covered lines once `BeforeAll` dot-sources the script). If any existing test fails, the refactor is wrong — investigate before adding new tests.
 
-- [ ] **Step 3: Re-measure coverage**
+- [ ] **Step 4: Add Pester tests for the new functions**
 
-`make test` already prints coverage. Note the new percentage. It should rise; if it stayed flat, the new tests didn't actually exercise the dispatcher (likely because `$IsWindows` shadowing didn't work) — investigate before moving on.
+Append to `powershell/tests/setup_windows.Tests.ps1`:
 
-- [ ] **Step 4: Commit**
+```powershell
+Describe "Invoke-DotfilesSetup" {
+  BeforeEach {
+    Mock Set-WindowsOption                     { }
+    Mock Install-ChocolateyPackage             { }
+    Mock Enable-RequiredWindowsOptionalFeature { }
+    Mock Install-WSL                           { }
+    Mock Set-ExecutionPolicy                   { }
+    Mock New-DirectoryStructure                { }
+    Mock Copy-GitConfig                        { }
+  }
+
+  It "calls Set-WindowsOption" {
+    Invoke-DotfilesSetup
+    Should -Invoke Set-WindowsOption -Times 1 -Exactly
+  }
+  It "calls Install-ChocolateyPackage" {
+    Invoke-DotfilesSetup
+    Should -Invoke Install-ChocolateyPackage -Times 1 -Exactly
+  }
+  It "calls Enable-RequiredWindowsOptionalFeature" {
+    Invoke-DotfilesSetup
+    Should -Invoke Enable-RequiredWindowsOptionalFeature -Times 1 -Exactly
+  }
+  It "calls Install-WSL" {
+    Invoke-DotfilesSetup
+    Should -Invoke Install-WSL -Times 1 -Exactly
+  }
+  It "calls Set-ExecutionPolicy with Unrestricted CurrentUser" {
+    Invoke-DotfilesSetup
+    Should -Invoke Set-ExecutionPolicy -ParameterFilter {
+      $ExecutionPolicy -eq 'Unrestricted' -and $Scope -eq 'CurrentUser'
+    } -Times 1 -Exactly
+  }
+  It "calls New-DirectoryStructure" {
+    Invoke-DotfilesSetup
+    Should -Invoke New-DirectoryStructure -Times 1 -Exactly
+  }
+  It "calls Copy-GitConfig" {
+    Invoke-DotfilesSetup
+    Should -Invoke Copy-GitConfig -Times 1 -Exactly
+  }
+}
+
+Describe "Invoke-DotfilesUpdate" {
+  BeforeEach {
+    Mock choco                 { }
+    Mock Install-WindowsUpdate { }
+    Mock Test-Path             { $false }
+    Mock Write-Output          { }
+  }
+
+  It "runs choco upgrade all -y" {
+    Invoke-DotfilesUpdate
+    Should -Invoke choco -ParameterFilter { $args -contains 'upgrade' -and $args -contains 'all' } -Times 1
+  }
+  It "calls Install-WindowsUpdate" {
+    Invoke-DotfilesUpdate
+    Should -Invoke Install-WindowsUpdate -Times 1 -Exactly
+  }
+  It "skips update_powershell_modules.ps1 when not present" {
+    Mock Test-Path { $false } -ParameterFilter { $Path -like '*update_powershell_modules.ps1' }
+    { Invoke-DotfilesUpdate } | Should -Not -Throw
+  }
+}
+```
+
+- [ ] **Step 5: Run tests and verify they pass**
+
+```bash
+cd /Users/bruce/git-repos/personal/dotfiles/powershell && make test
+```
+
+Expected: 22 prior tests pass + 11 new tests pass = 33 tests. Coverage rises substantially from 75% baseline (toward ~92%). Note the new percentage.
+
+- [ ] **Step 6: Commit**
 
 ```bash
 cd /Users/bruce/git-repos/personal/dotfiles
-git add powershell/tests/setup_windows.Tests.ps1
+git add powershell/setup_windows.ps1 powershell/tests/setup_windows.Tests.ps1
 git commit -m "$(cat <<'EOF'
-test(powershell): cover top-level dispatcher branches
+refactor(powershell): extract dispatcher into Invoke-DotfilesSetup/Update
 
-Adds Pester Describe blocks that dot-source setup_windows.ps1 with
-\$IsWindows = \$true and -setup / -update bound, intercepting each
-called function so we can assert dispatch order without executing the
-real bodies. Also covers the no-switches case.
+Pulls the bodies of the if (\$setup.IsPresent) and if (\$update.IsPresent)
+blocks into named functions so they can be tested directly with Pester
+mocks. The top-level if (\$IsWindows) glue remains as untestable
+cross-platform shim - excluded per tdd.md "entry-point glue" rule.
+
+Necessary because \$IsWindows is a runtime read-only automatic variable
+and cannot be overridden from BeforeAll, so the dispatcher could not
+otherwise be exercised on macOS/Linux test runners.
+
+Adds 11 Pester tests covering both new functions.
 
 Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
 EOF
