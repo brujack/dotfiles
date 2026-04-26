@@ -73,6 +73,18 @@ A test that only covers the happy path is incomplete.
 
 Tests must be added alongside the code they cover, not as a separate pass. Every new function, every changed function, every bug fix gets a test in the same commit.
 
+### Minimum Coverage
+
+**>=90% line coverage is the standard for every project.** This applies to all languages — Python (`coverage report`), Rust (`cargo tarpaulin`), Go (`go test -cover`), Shell (`bashcov`/`kcov`), etc.
+
+- New projects must reach 90% before being marked stable.
+- Existing projects below 90% are a known gap — every change that touches an under-covered file must add tests that increase the figure (never decrease it).
+- A drop in coverage from a PR is a HOLD finding in `pr-review`.
+- Coverage is a floor, not a ceiling — high coverage with shallow assertions is still incomplete. The Mandatory Test Categories above (boundary, error path, state transition) take priority over the percentage.
+- Generated code, `main`/entry-point glue that purely calls already-tested functions, and platform-specific branches that can't run in CI may be excluded with a documented reason.
+
+Each project's `CLAUDE.md` Testing section must record the current coverage figure. Update it whenever tests are added or removed.
+
 ### Universal Testing Pitfalls (All Languages)
 
 These pitfalls apply regardless of language. Check for each when writing or reviewing tests.
