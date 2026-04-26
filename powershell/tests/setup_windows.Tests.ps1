@@ -490,3 +490,37 @@ Describe "Invoke-DotfilesUpdate" {
     { Invoke-DotfilesUpdate } | Should -Not -Throw
   }
 }
+
+Describe "COM update wrappers" {
+  # On macOS/Linux, New-Object lacks the -ComObject parameter entirely, so
+  # parameter binding fails before any mock can intercept. We override
+  # New-Object as a global function inside this Describe so the script's
+  # `New-Object -ComObject ...` calls resolve to our stub.
+  BeforeAll {
+    function global:New-Object {
+      param(
+        [Parameter(Position=0)] [string]$TypeName,
+        [string]$ComObject,
+        [object[]]$ArgumentList,
+        [hashtable]$Property
+      )
+      [PSCustomObject]@{ ComObject = $ComObject; TypeName = $TypeName }
+    }
+  }
+  AfterAll {
+    Remove-Item function:global:New-Object -ErrorAction SilentlyContinue
+  }
+
+  It "Get-UpdateSearcher creates Microsoft.Update.Searcher COM object" {
+    $result = Get-UpdateSearcher
+    $result.ComObject | Should -Be 'Microsoft.Update.Searcher'
+  }
+  It "Get-UpdateSession creates Microsoft.Update.Session COM object" {
+    $result = Get-UpdateSession
+    $result.ComObject | Should -Be 'Microsoft.Update.Session'
+  }
+  It "Get-UpdateInstaller creates Microsoft.Update.Installer COM object" {
+    $result = Get-UpdateInstaller
+    $result.ComObject | Should -Be 'Microsoft.Update.Installer'
+  }
+}
