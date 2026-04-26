@@ -274,6 +274,14 @@ pwsh -Command "Install-Module Pester -Force -Scope CurrentUser -MinimumVersion 5
 pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 ```
 
+### Coverage
+
+- **`setup_windows.ps1`: 92.22%** (line coverage, measured by Pester `-CodeCoverage`)
+- Floor: 90%. `make test` and CI both fail on any drop below the floor.
+- Scope: `setup_windows.ps1` only. `run-tests.ps1` and `run-lint.ps1` are excluded as test/lint glue (per tdd.md "entry-point glue that purely calls already-tested functions"). The top-level `if ($IsWindows) { ... }` dispatcher in `setup_windows.ps1` is also excluded for the same reason — `$IsWindows` is a runtime read-only automatic variable that cannot be overridden in tests; the bodies it calls (`Invoke-DotfilesSetup`, `Invoke-DotfilesUpdate`) are tested directly.
+- Re-measure: `cd powershell && make test` prints `Coverage: <N>%` and writes `coverage.xml`.
+- Update this figure whenever tests are added or removed.
+
 ### Test Seams
 
 Functions that operate on specific file paths use override env vars to redirect to temp files in tests:
