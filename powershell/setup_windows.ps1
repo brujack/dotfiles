@@ -194,33 +194,35 @@ function Copy-GitConfig {
   }
 }
 
-if ($IsWindows) {
+function Invoke-DotfilesSetup {
+  Set-WindowsOption
+  Install-ChocolateyPackage
+  Enable-RequiredWindowsOptionalFeature
+  Install-WSL
+  Set-ExecutionPolicy Unrestricted -Scope CurrentUser
+  New-DirectoryStructure
+  Copy-GitConfig
+}
 
-  if ($setup.IsPresent) {
-    Set-WindowsOption
-    Install-ChocolateyPackage
-    Enable-RequiredWindowsOptionalFeature
-    Install-WSL
-    Set-ExecutionPolicy Unrestricted -Scope CurrentUser
-    New-DirectoryStructure
-    Copy-GitConfig
-  }
+function Invoke-DotfilesUpdate {
+  Write-Output "Updating chocolatey packages"
+  choco upgrade all -y
 
-  if ($update.IsPresent) {
-    Write-Output "Updating chocolatey packages"
-    choco upgrade all -y
-
-    if (Test-Path -Path ./update_powershell_modules.ps1 -PathType Leaf) {
-      try {
-        Write-Output "Updating powershell modules"
-        ./update_powershell_modules.ps1
-      }
-      catch {
-        throw $_.Exception.Message
-      }
+  if (Test-Path -Path ./update_powershell_modules.ps1 -PathType Leaf) {
+    try {
+      Write-Output "Updating powershell modules"
+      ./update_powershell_modules.ps1
     }
-
-    Write-Output "Installing Windows Updates"
-    Install-WindowsUpdate
+    catch {
+      throw $_.Exception.Message
+    }
   }
+
+  Write-Output "Installing Windows Updates"
+  Install-WindowsUpdate
+}
+
+if ($IsWindows) {
+  if ($setup.IsPresent)  { Invoke-DotfilesSetup }
+  if ($update.IsPresent) { Invoke-DotfilesUpdate }
 }

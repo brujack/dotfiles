@@ -413,3 +413,68 @@ Describe "Copy-GitConfig" {
     Should -Invoke Copy-Item -Times 0
   }
 }
+
+Describe "Invoke-DotfilesSetup" {
+  BeforeEach {
+    Mock Set-WindowsOption                     { }
+    Mock Install-ChocolateyPackage             { }
+    Mock Enable-RequiredWindowsOptionalFeature { }
+    Mock Install-WSL                           { }
+    Mock Set-ExecutionPolicy                   { }
+    Mock New-DirectoryStructure                { }
+    Mock Copy-GitConfig                        { }
+  }
+
+  It "calls Set-WindowsOption" {
+    Invoke-DotfilesSetup
+    Should -Invoke Set-WindowsOption -Times 1 -Exactly
+  }
+  It "calls Install-ChocolateyPackage" {
+    Invoke-DotfilesSetup
+    Should -Invoke Install-ChocolateyPackage -Times 1 -Exactly
+  }
+  It "calls Enable-RequiredWindowsOptionalFeature" {
+    Invoke-DotfilesSetup
+    Should -Invoke Enable-RequiredWindowsOptionalFeature -Times 1 -Exactly
+  }
+  It "calls Install-WSL" {
+    Invoke-DotfilesSetup
+    Should -Invoke Install-WSL -Times 1 -Exactly
+  }
+  It "calls Set-ExecutionPolicy with Unrestricted CurrentUser" {
+    Invoke-DotfilesSetup
+    Should -Invoke Set-ExecutionPolicy -ParameterFilter {
+      $ExecutionPolicy -eq 'Unrestricted' -and $Scope -eq 'CurrentUser'
+    } -Times 1 -Exactly
+  }
+  It "calls New-DirectoryStructure" {
+    Invoke-DotfilesSetup
+    Should -Invoke New-DirectoryStructure -Times 1 -Exactly
+  }
+  It "calls Copy-GitConfig" {
+    Invoke-DotfilesSetup
+    Should -Invoke Copy-GitConfig -Times 1 -Exactly
+  }
+}
+
+Describe "Invoke-DotfilesUpdate" {
+  BeforeEach {
+    Mock choco                 { }
+    Mock Install-WindowsUpdate { }
+    Mock Test-Path             { $false }
+    Mock Write-Output          { }
+  }
+
+  It "runs choco upgrade all -y" {
+    Invoke-DotfilesUpdate
+    Should -Invoke choco -ParameterFilter { $args -contains 'upgrade' -and $args -contains 'all' } -Times 1
+  }
+  It "calls Install-WindowsUpdate" {
+    Invoke-DotfilesUpdate
+    Should -Invoke Install-WindowsUpdate -Times 1 -Exactly
+  }
+  It "skips update_powershell_modules.ps1 when not present" {
+    Mock Test-Path { $false } -ParameterFilter { $Path -like '*update_powershell_modules.ps1' }
+    { Invoke-DotfilesUpdate } | Should -Not -Throw
+  }
+}
