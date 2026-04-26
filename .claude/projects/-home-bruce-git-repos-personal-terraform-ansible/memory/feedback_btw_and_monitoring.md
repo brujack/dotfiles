@@ -11,4 +11,4 @@ When PRs are open, actively monitor CI status without waiting to be asked. The u
 
 **Why:** User asked "Are you watching pr33?" — indicating the expectation is proactive monitoring, not reactive.
 
-**How to apply:** After pushing a PR, poll CI status periodically. When all checks pass and auto-merge completes, proceed with cleanup (worktree removal, branch deletion, master pull) without prompting. This applies to EVERY PR — not just the first one in a session. The user called this out twice (PR #33 and PR #38), so this is a consistent expectation that must not lapse mid-session.
+**How to apply:** After pushing a PR, poll CI status periodically. When all checks pass and auto-merge completes, proceed with cleanup (worktree removal, branch deletion, master pull) without prompting. This applies to EVERY PR — not just the first one in a session. The user has called this out multiple times (PR #33, PR #38, PR #60) — it is a consistent expectation that must not lapse mid-session or between PRs. After merging one PR and starting a new branch, reset and watch the next PR with the same diligence.
