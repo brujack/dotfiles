@@ -13,3 +13,4 @@
 - [ntfy iOS Focus Mode gotcha](project_ntfy_ios_focus_mode.md) — ntfy notifications silently blocked by iPhone Personal Focus mode; check allowed apps before debugging server infrastructure
 - [Always invoke pr-review skill](feedback_pr_review_skill.md) — run pr-review before every feature branch push, not just when following a formal skill workflow
 - [TDD discipline in proxmox/](feedback_tdd_proxmox.md) — RED→GREEN cycle required in proxmox/ just as in ansible/; tests must precede implementation, not follow it
+- [Home ISP IP addresses](reference_home_ips.md) — Bell primary 184.147.129.245, Rogers secondary 174.116.120.53; pfSense DYNDNS causes dns.tf drift
