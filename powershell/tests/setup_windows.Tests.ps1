@@ -85,6 +85,7 @@ Describe "Install-ChocolateyPackage" {
         "claude 1.0",
         "claude-code 1.0",
         "crystaldiskmark 1.0",
+        "cursoride 1.0",
         "dbeaver 1.0",
         "discord 1.0",
         "docker-desktop 1.0",
