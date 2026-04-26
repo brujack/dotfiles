@@ -11,3 +11,4 @@
 - [feedback_task_tracking.md](feedback_task_tracking.md) — Mark each task completed via TaskUpdate immediately after it finishes; never let the task list fall out of sync
 - [feedback_rust_io_error_other.md](feedback_rust_io_error_other.md) — Use `io::Error::other()` not `io::Error::new(io::ErrorKind::Other, ...)` — clippy io_other_error lint in Rust 1.74+
 - [feedback_injectable_io_pattern.md](feedback_injectable_io_pattern.md) — All CLI Rust crates use run<W,E>(dir) pattern; main() is a thin wrapper; tests inject Vec<u8> + tempdir
+- [feedback_verify_hooks_installed.md](feedback_verify_hooks_installed.md) — Verify .git/hooks/pre-push exists at session start; run `make install-hooks` if missing (user requires local test gate)
