@@ -27,7 +27,7 @@ Add `proxmox_username` as a variable (default `packer@pve!packer`) and wire it t
 
 **5. `//go:build integration` must be at the top of the file, not mid-file.**
 
-Go applies build constraints file-wide. If `TestProxmoxApply` (which destroys real VMs) needs the `integration` tag, it must be in its own file with `//go:build integration` as the first non-blank, non-comment line.
+Go applies build constraints file-wide. Any test that needs the `integration` tag must be in its own file with `//go:build integration` as the first non-blank, non-comment line.
 
 **6. `cross_env_vars.yml` must be passed to Ansible in Packer.**
 
@@ -77,5 +77,9 @@ The `common` role checks for `/etc/packer` to set `common_is_packer_environment`
 **16. Homebrew (`users` role) must skip on packer builds.**
 
 Homebrew refuses to run as root (`Don't run this as root!`). Guard with `not (common_is_packer_environment | default(false))` — use the `default` filter so it works when `common` hasn't run (e.g. molecule tests for the `users` role standalone).
+
+**17. Ubuntu autoinstall default lvm layout leaves root LV at ~50% of disk.**
+
+The default `storage: layout: name: lvm` in `user-data` uses scaled sizing — on a 32 GB disk the root LV ends up at ~15 GB. Add `sizing-policy: all` under the lvm layout to make the root LV occupy 100% of the VG. Without this, cloned VMs have half their disk unusable. Fix for existing VMs: `lvextend -l +100%FREE /dev/ubuntu-vg/ubuntu-lv && resize2fs /dev/mapper/ubuntu--vg-ubuntu--lv`.
 
 **How to apply:** Check all of these when adding or modifying anything in `proxmox/`.

@@ -11,7 +11,7 @@ The Proxmox golden image pipeline is complete (PR #44, merged 2026-04-22).
 
 - `proxmox/packer/ubuntu-2404-golden.pkr.hcl` — Packer `proxmox-iso` source, Ubuntu 24.04 autoinstall, bakes in `common` + `users` Ansible roles via `ansible/playbooks/common-packer.yml`
 - `proxmox/terraform/` — `bpg/proxmox` provider (v0.103.0), `proxmox_virtual_environment_vm` resource, clones the golden template by looking it up via `golden-image` tag
-- `proxmox/terraform/test/` — Terratest (Go) plan test + integration test gated by `//go:build integration`
+- `proxmox/terraform/test/` — Terratest (Go) plan validation test (`TestProxmoxPlan`); no integration test (was removed — it pointed at production state with `defer Destroy`)
 - `proxmox/Makefile` — `make build-image`, `make plan`, `make apply`, `make lint` (no creds), `make lint-validate` (requires credentials.pkrvars.hcl)
 
 **Key credential files (gitignored, must be created manually):**
