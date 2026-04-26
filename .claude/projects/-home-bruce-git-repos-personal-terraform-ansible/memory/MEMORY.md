@@ -14,3 +14,5 @@
 - [Always invoke pr-review skill](feedback_pr_review_skill.md) — run pr-review before every feature branch push, not just when following a formal skill workflow
 - [TDD discipline in proxmox/](feedback_tdd_proxmox.md) — RED→GREEN cycle required in proxmox/ just as in ansible/; tests must precede implementation, not follow it
 - [Home ISP IP addresses](reference_home_ips.md) — Bell primary 184.147.129.245, Rogers secondary 174.116.120.53; pfSense DYNDNS causes dns.tf drift
+- [Google Workspace DKIM From-domain alignment](feedback_email_from_alignment.md) — Workspace only signs when From: matches a Workspace domain; external aliases need Reply-To not DNS fixes
+- [Terratest JSON numbers are float64](feedback_terratest_json_types.md) — all numeric Change.After values deserialise as float64; use float64 literals in assertions
