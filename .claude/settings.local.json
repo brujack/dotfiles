@@ -34,7 +34,8 @@
       "Bash(ansible docker_server -i environments/home/hosts -m command -a \"docker exec ntfy cat /etc/ntfy/server.yml\" --become -v)",
       "Bash(ansible docker_server -i environments/home/hosts -m command -a \"cat /opt/ntfy/server.yml\" --become -v)",
       "Bash(ansible docker_server -i environments/home/hosts -m command -a \"systemctl restart ntfy\" --become)",
-      "Bash(python3 -m json.tool)"
+      "Bash(python3 -m json.tool)",
+      "Bash(git stash *)"
     ]
   }
 }
