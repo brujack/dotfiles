@@ -386,6 +386,12 @@ Describe "New-DirectoryStructure" {
     New-DirectoryStructure
     Should -Invoke New-Item -Times 0
   }
+
+  It "rethrows when New-Item fails" {
+    Mock Test-Path { $false } -ParameterFilter { $Path -like '*/.config' }
+    Mock New-Item { throw "permission denied" }
+    { New-DirectoryStructure } | Should -Throw "permission denied"
+  }
 }
 
 Describe "Copy-GitConfig" {
@@ -411,6 +417,12 @@ Describe "Copy-GitConfig" {
     Mock Test-Path { $false }
     Copy-GitConfig
     Should -Invoke Copy-Item -Times 0
+  }
+
+  It "rethrows when Copy-Item fails" {
+    Mock Test-Path { $true }
+    Mock Copy-Item { throw "disk full" }
+    { Copy-GitConfig } | Should -Throw "disk full"
   }
 }
 
