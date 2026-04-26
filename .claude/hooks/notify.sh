@@ -31,6 +31,7 @@ fi
 # (Mac, iPhone, iPad) regardless of where Claude Code is running.
 # Local Warp sessions skip this — the warp@claude-code-warp plugin handles them.
 if [[ -n "${SSH_CONNECTION}" && -n "${NTFY_TOPIC:-}" ]]; then
+  sleep 5
   ntfy_url="${NTFY_URL:-https://ntfy.conecrazy.ca}"
   host=$(hostname -s 2>/dev/null || printf "unknown")
   ntfy_auth=()
