@@ -21,11 +21,26 @@ INCLUDE_PATH="${REPO_ROOT}/setup_env.sh:${REPO_ROOT}/lib"
 rm -rf "${OUTPUT_DIR}"
 kcov --include-path="${INCLUDE_PATH}" "${OUTPUT_DIR}" bats --recursive "${REPO_ROOT}/tests/"
 
-INDEX="${OUTPUT_DIR}/kcov-merged/index.json"
-if [[ ! -f "${INDEX}" ]]; then
-  printf "ERROR: kcov did not produce %s — verify kcov >= 38\n" "${INDEX}" >&2
+# Debug: show what kcov produced
+printf "\nkcov output directory contents:\n"
+find "${OUTPUT_DIR}" -name "index.json" | head -10 || true
+
+# kcov >= 42 places merged output in kcov-merged/ for multi-process runs;
+# for a single bats invocation it may only create coverage/<executable>/index.json.
+# Accept either location.
+INDEX=""
+if [[ -f "${OUTPUT_DIR}/kcov-merged/index.json" ]]; then
+  INDEX="${OUTPUT_DIR}/kcov-merged/index.json"
+else
+  INDEX=$(find "${OUTPUT_DIR}" -name "index.json" | head -1)
+fi
+
+if [[ -z "${INDEX}" || ! -f "${INDEX}" ]]; then
+  printf "ERROR: kcov did not produce an index.json in %s\n" "${OUTPUT_DIR}" >&2
   exit 1
 fi
+
+printf "\nUsing index: %s\n" "${INDEX}"
 
 failed=0
 printf "\n%-30s %10s %10s %10s\n" "File" "Coverage" "Floor" "Status"
