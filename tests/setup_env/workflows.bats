@@ -763,6 +763,42 @@ setup_constants_copy() {
   grep -q 'GO_VER="1.26"' "${_TEST_CONSTANTS_PATH}"
 }
 
+# ── _fetch_github_latest ─────────────────────────────────────────────────────
+
+@test "_fetch_github_latest extracts version and strips v prefix" {
+  export MOCK_CURL_STDOUT='  "tag_name": "v1.23.4",'
+  run _fetch_github_latest "some/repo"
+  [ "$status" -eq 0 ]
+  [ "$output" = "1.23.4" ]
+}
+
+@test "_fetch_github_latest returns version unchanged when no v prefix" {
+  export MOCK_CURL_STDOUT='  "tag_name": "1.23.4",'
+  run _fetch_github_latest "some/repo"
+  [ "$status" -eq 0 ]
+  [ "$output" = "1.23.4" ]
+}
+
+@test "_fetch_github_latest returns empty when curl fails" {
+  export MOCK_CURL_EXIT=1
+  run _fetch_github_latest "some/repo"
+  [ -z "$output" ]
+}
+
+@test "_fetch_github_latest adds Authorization header when GITHUB_TOKEN is set" {
+  export GITHUB_TOKEN="mytoken"
+  export MOCK_CURL_STDOUT='  "tag_name": "v2.0.0",'
+  _fetch_github_latest "some/repo"
+  grep -q "Authorization: Bearer mytoken" "${MOCK_CALLS_FILE}"
+}
+
+@test "_fetch_github_latest omits Authorization header without GITHUB_TOKEN" {
+  unset GITHUB_TOKEN
+  export MOCK_CURL_STDOUT='  "tag_name": "v1.0.0",'
+  _fetch_github_latest "some/repo"
+  ! grep -q "Authorization" "${MOCK_CALLS_FILE}"
+}
+
 # ── run_check_versions — tool inclusion ───────────────────────────────────────
 
 @test "run_check_versions checks gitleaks version" {
