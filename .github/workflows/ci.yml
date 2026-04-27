@@ -84,6 +84,9 @@ jobs:
           cmake --build /tmp/kcov/build --parallel $(nproc)
           sudo cmake --install /tmp/kcov/build
 
+      - name: Enable ptrace for kcov
+        run: echo 0 | sudo tee /proc/sys/kernel/yama/ptrace_scope
+
       - name: Run coverage gate
         run: make coverage
 
@@ -112,7 +115,7 @@ jobs:
             --verbose
 
   auto-merge:
-    needs: [test, lint-macos, powershell, secret-scan]
+    needs: [test, lint-macos, powershell, bash-coverage, secret-scan]
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
