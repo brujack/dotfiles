@@ -21,3 +21,7 @@ powershell/coverage.xml
 
 # bash/kcov coverage output
 coverage/
+
+# Claude Code local-only generated files
+.claude/mcp.json
+.claude/scheduled_tasks.lock

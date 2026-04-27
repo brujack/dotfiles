@@ -50,7 +50,15 @@
       "Bash(echo \"negative_exit=$?\")",
       "Bash(mv run-tests.ps1.bak run-tests.ps1)",
       "Bash(echo \"pwsh_exit=$?\")",
-      "Bash(python3 -c \"import yaml; yaml.safe_load\\(open\\('.github/workflows/ci.yml'\\)\\)\")"
+      "Bash(python3 -c \"import yaml; yaml.safe_load\\(open\\('.github/workflows/ci.yml'\\)\\)\")",
+      "Bash(gh run *)",
+      "Bash(bash -n scripts/run-coverage.sh)",
+      "Bash(grep -E \"kcov output|Using index|find|index.json|ERROR|no matches|coverage/$\")",
+      "Bash(gem search *)",
+      "Bash(gem install *)",
+      "Bash(bashcov --help)",
+      "Bash(bashcov --root . -- bats tests/setup_env/macos.bats)",
+      "Bash(xargs -r git branch -d)"
     ]
   }
 }
