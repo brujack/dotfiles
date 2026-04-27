@@ -71,7 +71,7 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: ubuntu:24.04
-      options: --security-opt seccomp=unconfined --cap-add SYS_PTRACE
+      options: --privileged
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
     steps:
