@@ -35,6 +35,13 @@ All repos under `~/git-repos/personal/` have their Claude project memories store
 
 When working in any personal repo, save memories as normal — they are automatically persisted and synced.
 
+## After Every PR Merge or Direct Master Commit
+
+Before closing out the work, ask yourself two questions:
+
+1. **What did I learn?** — Any non-obvious pattern, gotcha, constraint, or decision that came up.
+2. **Where should I document this?** — CLAUDE.md, a memory file, an ADR, or a code comment. If it's worth remembering, write it down before moving on.
+
 ## Keeping CLAUDE.md Up To Date
 
 When making any change to a repository, update the relevant `CLAUDE.md` file(s) before finishing. These files are the primary reference for future sessions — stale documentation is worse than none.
