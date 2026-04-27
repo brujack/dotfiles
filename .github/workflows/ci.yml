@@ -78,7 +78,7 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: Install dependencies
-        run: apt-get update && apt-get install -y bats shellcheck zsh jq cmake libcurl4-openssl-dev libelf-dev libdw-dev binutils-dev libiberty-dev make
+        run: apt-get update && apt-get install -y git bats shellcheck zsh jq cmake libcurl4-openssl-dev libelf-dev libdw-dev binutils-dev libiberty-dev make
 
       - name: Install kcov from source
         run: |
