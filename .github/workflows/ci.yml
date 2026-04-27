@@ -69,25 +69,22 @@ jobs:
 
   bash-coverage:
     runs-on: ubuntu-latest
-    container:
-      image: ubuntu:24.04
-      options: --privileged
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
     steps:
       - uses: actions/checkout@v5
 
       - name: Install dependencies
-        run: apt-get update && apt-get install -y git g++ libssl-dev gettext-base bats shellcheck zsh jq cmake libcurl4-openssl-dev libelf-dev libdw-dev binutils-dev libiberty-dev make
+        run: sudo apt-get install -y bats shellcheck zsh jq cmake libcurl4-openssl-dev libelf-dev libdw-dev binutils-dev libiberty-dev
 
       - name: Install kcov from source
         run: |
           git clone --depth 1 https://github.com/SimonKagstrom/kcov.git /tmp/kcov
           cmake -S /tmp/kcov -B /tmp/kcov/build
           cmake --build /tmp/kcov/build --parallel $(nproc)
-          cmake --install /tmp/kcov/build
+          sudo cmake --install /tmp/kcov/build
 
-      - name: Run coverage gate
+      - name: Run coverage
         run: make coverage
 
   secret-scan:
