@@ -18,19 +18,8 @@ declare -A FLOORS=(
 
 INCLUDE_PATH="${REPO_ROOT}/setup_env.sh:${REPO_ROOT}/lib"
 
-# Smoke-test: verify kcov can collect data for a trivial bash script.
-# If this produces no output, kcov is broken in this environment.
-printf "kcov smoke test:\n"
-rm -rf /tmp/kcov-smoke
-kcov /tmp/kcov-smoke bash -c 'echo hello'
-find /tmp/kcov-smoke -name "*.json" | head -5 || printf "  (no json files produced)\n"
-
 rm -rf "${OUTPUT_DIR}"
 kcov --include-path="${INCLUDE_PATH}" "${OUTPUT_DIR}" bats --recursive "${REPO_ROOT}/tests/"
-
-# Debug: show what kcov produced
-printf "\nkcov output directory contents:\n"
-find "${OUTPUT_DIR}" -name "index.json" | head -10 || true
 
 INDEX=""
 if [[ -f "${OUTPUT_DIR}/kcov-merged/index.json" ]]; then
