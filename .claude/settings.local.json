@@ -43,7 +43,14 @@
       "Bash(brew list *)",
       "Skill(schedule)",
       "Bash(gh auth *)",
-      "Bash(gh repo *)"
+      "Bash(gh repo *)",
+      "Bash(pwsh *)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(sed -i.bak 's/-lt 90$/-lt 200/' run-tests.ps1)",
+      "Bash(echo \"negative_exit=$?\")",
+      "Bash(mv run-tests.ps1.bak run-tests.ps1)",
+      "Bash(echo \"pwsh_exit=$?\")",
+      "Bash(python3 -c \"import yaml; yaml.safe_load\\(open\\('.github/workflows/ci.yml'\\)\\)\")"
     ]
   }
 }

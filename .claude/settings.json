@@ -38,5 +38,6 @@
     }
   },
   "autoUpdatesChannel": "stable",
-  "agentPushNotifEnabled": true
+  "agentPushNotifEnabled": true,
+  "model": "sonnet"
 }
