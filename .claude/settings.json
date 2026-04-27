@@ -37,6 +37,5 @@
       }
     }
   },
-  "autoUpdatesChannel": "stable",
-  "model": "opus"
+  "autoUpdatesChannel": "stable"
 }

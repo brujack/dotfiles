@@ -20,6 +20,10 @@ Before creating a skill, gather essential information from the user about:
 5. **Output format preferences**: Are there specific templates, formats, or styles required?
 6. **Existing patterns**: Are there existing examples or conventions to follow?
 
+### Verbatim text from the user
+
+If the user includes exact wording to use in the skill, respect it and use it **verbatim** in `SKILL.md` (same words, same order). Do not paraphrase, soften, or expand their copy, and do not add unrequested headings or commentary around it.
+
 ### Inferring from Context
 
 If you have previous conversation context, infer the skill from what was discussed. You can create skills based on workflows, patterns, or domain knowledge that emerged in the conversation.
