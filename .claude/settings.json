@@ -37,5 +37,6 @@
       }
     }
   },
-  "autoUpdatesChannel": "stable"
+  "autoUpdatesChannel": "stable",
+  "agentPushNotifEnabled": true
 }

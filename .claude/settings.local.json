@@ -40,7 +40,10 @@
       "Bash(kcov --version)",
       "Bash(command -v bashcov)",
       "Bash(bashcov --version)",
-      "Bash(brew list *)"
+      "Bash(brew list *)",
+      "Skill(schedule)",
+      "Bash(gh auth *)",
+      "Bash(gh repo *)"
     ]
   }
 }
