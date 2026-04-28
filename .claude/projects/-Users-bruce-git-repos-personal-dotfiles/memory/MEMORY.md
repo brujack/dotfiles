@@ -12,3 +12,5 @@
 - [User profile](user_profile.md) — 45yr systems/devops engineer; optimize for readability/maintainability; push back when warranted; don't over-engineer
 - [Mock detection mechanism](feedback_mock_detection_mechanism.md) — use dpkg -l/rpm -q/brew list instead of command -v for package detection; command -v bypasses mock PATH when binary is really installed
 - [Bash coverage gate status](project_bash_coverage.md) — kcov/bashcov both fail in GH Actions; CI job is non-blocking; floors defined but gate not enabled
+- [Subagent verbatim-copy must read source file](feedback_subagent_verbatim_copy.md) — extraction tasks must read actual source file; plan code examples may be stale
+- [Rebase feature branch before final code review](feedback_rebase_before_final_review.md) — rebase onto master first so reviewer only sees intentional changes, not stale-branch artifacts

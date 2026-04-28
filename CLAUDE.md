@@ -150,6 +150,7 @@ Do not use it to push directly to main/master — normal PR workflow still appli
 - **Error handling:** Check `$?` or use `|| exit 1`; guard installs with `command -v`/`quiet_which()`
 - **`env which` vs `command -v`:** `setup_env.sh` uses `which` (via `env which`) for the brew prerequisite check instead of `command -v` so that BATS tests can mock `which` through PATH injection. `command -v` is a shell builtin and ignores PATH mocks. Use `command -v` everywhere else; only reach for `which` when testability via PATH mock is required.
 - **No `set -euo pipefail`** at top-level — conditional installs require non-zero exits to continue
+- **Sourcing guard on every lib file:** All files under `lib/` that are tested must include `[[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0` near the top. When extracting functions into new lib files, add this guard explicitly — plan specs may omit it but the test harness requires it.
 
 ### Installation Guards
 
