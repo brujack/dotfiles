@@ -688,6 +688,7 @@ setup_dotfile_symlinks() {
     _cursor_target="${HOME}/.cursor/$(basename "${_cursor_item}")"
     safe_link "${_cursor_item}" "${_cursor_target}"
   done
+  safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.cursor/rules" "${HOME}/.cursor/rules"
 
   safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.ssh/config" "${HOME}/.ssh/config"
 

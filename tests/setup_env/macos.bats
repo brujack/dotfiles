@@ -36,16 +36,28 @@ teardown() {
   export MOCK_SW_VERS_PRODUCTVERSION="12.0.0"
   export MOCK_SYSCTL_CPU="Apple M1"
   export MOCK_PGREP_EXIT=1
+  export MOCK_PKGUTIL_EXIT=1
   export MOCK_SOFTWAREUPDATE_EXIT=0
   run install_rosetta
   [ "$status" -eq 0 ]
   grep -q "softwareupdate --install-rosetta" "${MOCK_CALLS_FILE}"
 }
 
+@test "install_rosetta: Apple Silicon, skips install when Rosetta package already present" {
+  export MOCK_SW_VERS_PRODUCTVERSION="12.0.0"
+  export MOCK_SYSCTL_CPU="Apple M1"
+  export MOCK_PGREP_EXIT=1
+  export MOCK_PKGUTIL_EXIT=0
+  run install_rosetta
+  [ "$status" -eq 0 ]
+  ! grep -q "softwareupdate --install-rosetta" "${MOCK_CALLS_FILE}"
+}
+
 @test "install_rosetta: softwareupdate fails returns exit 1" {
   export MOCK_SW_VERS_PRODUCTVERSION="12.0.0"
   export MOCK_SYSCTL_CPU="Apple M1"
   export MOCK_PGREP_EXIT=1
+  export MOCK_PKGUTIL_EXIT=1
   export MOCK_SOFTWAREUPDATE_EXIT=1
   run install_rosetta
   [ "$status" -eq 1 ]
