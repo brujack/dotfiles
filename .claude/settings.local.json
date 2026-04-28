@@ -58,7 +58,17 @@
       "Bash(gem install *)",
       "Bash(bashcov --help)",
       "Bash(bashcov --root . -- bats tests/setup_env/macos.bats)",
-      "Bash(xargs -r git branch -d)"
+      "Bash(xargs -r git branch -d)",
+      "Bash(awk 'NR>=176 && NR<=833' lib/linux.sh)",
+      "Bash(awk 'NR>=176 && NR<=833{print NR, $0}' lib/linux.sh)",
+      "Bash(wait)",
+      "Bash(bash -n /Users/bruce/git-repos/personal/dotfiles/.worktrees/feature/linux-sh-split/lib/linux_shared.sh)",
+      "Bash(zsh -n /Users/bruce/git-repos/personal/dotfiles/.worktrees/feature/linux-sh-split/lib/linux_shared.sh)",
+      "Bash(make -C /Users/bruce/git-repos/personal/dotfiles/.worktrees/feature/linux-sh-split test)",
+      "Bash(echo \"FAIL with code $?\")",
+      "Bash(bash -n lib/linux_shared.sh)",
+      "Bash(grep -n '[[:space:]]$' lib/linux_shared.sh)",
+      "Bash(awk '{print $1}')"
     ]
   }
 }
