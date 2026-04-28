@@ -57,6 +57,8 @@ Master status index for all specs and implementation plans in this directory.
 | 2026-04-15 | [refactor-skill](plans/2026-04-15-refactor-skill.md)                               | [spec](specs/2026-04-15-refactor-skill-design.md)                   | Done   |
 | 2026-04-16 | [linux-package-update-tracking](plans/2026-04-16-linux-package-update-tracking.md) | [spec](specs/2026-04-16-linux-package-update-tracking-design.md)    | Done   |
 | 2026-04-21 | [dual-mode-ci-dotfiles-math](plans/2026-04-21-dual-mode-ci-dotfiles-math.md)       | [spec](specs/2026-04-21-dual-mode-ci-dotfiles-math-design.md)       | Done   |
+| 2026-04-26 | [powershell-coverage-gate](plans/2026-04-26-powershell-coverage-gate.md)           | [spec](specs/2026-04-26-powershell-coverage-gate-design.md)         | Done   |
+| 2026-04-26 | [bash-coverage-gate](plans/2026-04-26-bash-coverage-gate.md)                       | [spec](specs/2026-04-26-bash-coverage-gate-design.md)               | Done   |
 
 ---
 
