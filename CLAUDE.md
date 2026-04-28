@@ -24,7 +24,9 @@ dotfiles/
 │   ├── helpers.sh            # Logging (log_info/warn/error), safe_link, install guards, brew helpers
 │   ├── detect_env.sh         # OS/version detection + profile/capability resolution
 │   ├── macos.sh              # macOS install functions (install_macos_packages)
-│   ├── linux.sh              # Linux install functions (install_ubuntu_packages, install_rhel_packages, install_centos_packages, install_linux_packages)
+│   ├── linux_shared.sh       # Cross-distro: install_git_linux, install_zsh_linux, install_bats, update_system_packages
+│   ├── linux_ubuntu.sh       # Ubuntu orchestrator (install_ubuntu_packages) + 12 private _install_ubuntu_* helpers
+│   ├── linux_rhel.sh         # RHEL/CentOS: install_rhel_packages, install_centos_packages, install_linux_packages
 │   ├── developer.sh          # Cross-platform dev tools (install_ruby_tools, install_ruby, setup_kitchen, setup_ansible, clone_personal_repos, etc.)
 │   ├── update_summary.sh     # Update run tracking and summary reporting
 │   └── workflows.sh          # Top-level workflow functions dispatched by setup_env.sh
