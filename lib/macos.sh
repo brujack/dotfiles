@@ -21,18 +21,21 @@ install_rosetta() {
       log_info "${processor} processor installed. No need to install Rosetta."
     else
 
-      # Check for Rosetta "oahd" process. If not found, perform a non-interactive install of Rosetta.
-      if pgrep oahd >/dev/null 2>&1; then
-          log_info "Rosetta is already installed and running. Nothing to do."
+      # Prefer package check over process check; oahd may not be running even when Rosetta is installed.
+      if pkgutil --pkg-info com.apple.pkg.RosettaUpdateAuto >/dev/null 2>&1; then
+        log_info "Rosetta package is already installed. Nothing to do."
+      # Keep the process check as a fallback signal used by existing environments/tests.
+      elif pgrep oahd >/dev/null 2>&1; then
+        log_info "Rosetta is already installed and running. Nothing to do."
       else
-          softwareupdate --install-rosetta --agree-to-license
+        softwareupdate --install-rosetta --agree-to-license
 
-          if [[ $? -eq 0 ]]; then
-            log_info "Rosetta has been successfully installed."
-          else
-            log_error "Rosetta installation failed!"
-            exitcode=1
-          fi
+        if [[ $? -eq 0 ]]; then
+          log_info "Rosetta has been successfully installed."
+        else
+          log_error "Rosetta installation failed!"
+          exitcode=1
+        fi
       fi
     fi
   else
