@@ -214,8 +214,18 @@ teardown() {
   [ "$status" -eq 0 ]
 }
 
-@test "lib/linux.sh sources without error" {
-  run bash -c "source '${REPO_ROOT}/lib/constants.sh'; source '${REPO_ROOT}/lib/helpers.sh'; source '${REPO_ROOT}/lib/linux.sh'"
+@test "lib/linux_shared.sh sources without error" {
+  run bash -c "source '${REPO_ROOT}/lib/constants.sh'; source '${REPO_ROOT}/lib/helpers.sh'; source '${REPO_ROOT}/lib/linux_shared.sh'"
+  [ "$status" -eq 0 ]
+}
+
+@test "lib/linux_ubuntu.sh sources without error" {
+  run bash -c "source '${REPO_ROOT}/lib/constants.sh'; source '${REPO_ROOT}/lib/helpers.sh'; source '${REPO_ROOT}/lib/linux_shared.sh'; source '${REPO_ROOT}/lib/linux_ubuntu.sh'"
+  [ "$status" -eq 0 ]
+}
+
+@test "lib/linux_rhel.sh sources without error" {
+  run bash -c "source '${REPO_ROOT}/lib/constants.sh'; source '${REPO_ROOT}/lib/helpers.sh'; source '${REPO_ROOT}/lib/linux_shared.sh'; source '${REPO_ROOT}/lib/linux_rhel.sh'"
   [ "$status" -eq 0 ]
 }
 
