@@ -24,7 +24,9 @@ dotfiles/
 │   ├── helpers.sh            # Logging (log_info/warn/error), safe_link, install guards, brew helpers
 │   ├── detect_env.sh         # OS/version detection + profile/capability resolution
 │   ├── macos.sh              # macOS install functions (install_macos_packages)
-│   ├── linux.sh              # Linux install functions (install_ubuntu_packages, install_rhel_packages, install_centos_packages, install_linux_packages)
+│   ├── linux_shared.sh       # Cross-distro: install_git_linux, install_zsh_linux, install_bats, update_system_packages
+│   ├── linux_ubuntu.sh       # Ubuntu orchestrator (install_ubuntu_packages) + 12 private _install_ubuntu_* helpers
+│   ├── linux_rhel.sh         # RHEL/CentOS: install_rhel_packages, install_centos_packages, install_linux_packages
 │   ├── developer.sh          # Cross-platform dev tools (install_ruby_tools, install_ruby, setup_kitchen, setup_ansible, clone_personal_repos, etc.)
 │   ├── update_summary.sh     # Update run tracking and summary reporting
 │   └── workflows.sh          # Top-level workflow functions dispatched by setup_env.sh
@@ -288,7 +290,7 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 - **Status: measurement mode — gate not yet enabled.** The CI `bash-coverage` job runs but is non-blocking; it exits 0 with a warning when no coverage data is produced.
 - **`make coverage`** runs kcov locally and reports per-file percentages. Works on macOS and Linux VMs where kcov is installed (`brew install kcov`).
-- **Per-file floors defined** (not yet enforced): 90% for `setup_env.sh`, `constants.sh`, `detect_env.sh`, `helpers.sh`, `workflows.sh`, `update_summary.sh`, `developer.sh`; 75% for `linux.sh`, `macos.sh`.
+- **Per-file floors defined** (not yet enforced): 90% for `setup_env.sh`, `constants.sh`, `detect_env.sh`, `helpers.sh`, `workflows.sh`, `update_summary.sh`, `developer.sh`; 75% for `linux_shared.sh`, `linux_ubuntu.sh`, `linux_rhel.sh`, `macos.sh`.
 - **Do not retry kcov or bashcov in GitHub Actions** — both are confirmed broken:
   - **kcov**: ptrace mechanism fails in GH Actions regardless of security settings. Tested: `ptrace_scope=0`, Docker container with `seccomp=unconfined`, `--cap-add SYS_PTRACE`, and `--privileged`. In all cases kcov runs the tests but produces no coverage data and no `index.json`. Root cause: kcov cannot trace bats' test subshells in the GH Actions environment.
   - **bashcov**: incompatible with bats-core. bats hardcodes UUID `608a9069-2672-4fa2-a0e1-2823af783b95` in its temp file paths; bashcov's LINENO parser chokes on it and aborts with no coverage data.
