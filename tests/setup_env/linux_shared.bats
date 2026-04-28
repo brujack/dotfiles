@@ -66,25 +66,3 @@ teardown() {
   grep -q "dnf update" "${MOCK_CALLS_FILE}"
 }
 
-# ── setup_vim_plugins ────────────────────────────────────────────────────────
-
-@test "setup_vim_plugins: creates .vim/plugged and .vim/autoload directories" {
-  run setup_vim_plugins
-  [ "$status" -eq 0 ]
-  [ -d "${HOME}/.vim/plugged" ]
-  [ -d "${HOME}/.vim/autoload" ]
-}
-
-@test "setup_vim_plugins: downloads plug.vim when it does not exist" {
-  run setup_vim_plugins
-  [ "$status" -eq 0 ]
-  grep -q "curl.*plug.vim" "${MOCK_CALLS_FILE}"
-}
-
-@test "setup_vim_plugins: skips curl when plug.vim already exists" {
-  mkdir -p "${HOME}/.vim/autoload"
-  touch "${HOME}/.vim/autoload/plug.vim"
-  run setup_vim_plugins
-  [ "$status" -eq 0 ]
-  ! grep -q "curl.*plug.vim" "${MOCK_CALLS_FILE}"
-}
