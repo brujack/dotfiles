@@ -213,3 +213,5 @@ install_linux_packages() {
     printf "tfsec is installed\\n"
   fi
 }
+
+[[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0

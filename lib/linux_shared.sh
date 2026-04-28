@@ -172,3 +172,5 @@ update_system_packages() {
     log_info "Updated yum packages"
   fi
 }
+
+[[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0

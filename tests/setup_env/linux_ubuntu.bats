@@ -234,6 +234,18 @@ teardown() {
   grep -q "snap install helm" "${MOCK_CALLS_FILE}"
 }
 
+@test "_install_ubuntu_k8s_tools: no HAS_SNAP installs helm via apt" {
+  unset HAS_SNAP
+  export HAS_K8S=1
+  export KIND_VER="0.22.0"
+  export KIND_URL="https://kind.sigs.k8s.io/dl/v0.22.0/kind-linux-amd64"
+  export KUBERNETES_VER="v1.29"
+  export TELEPRESENCE_URL="https://app.getambassador.io/download/tel2/linux/amd64/latest/telepresence"
+  run _install_ubuntu_k8s_tools
+  [ "$status" -eq 0 ]
+  grep -q "apt-get install helm" "${MOCK_CALLS_FILE}"
+}
+
 # ── _install_ubuntu_hashicorp ────────────────────────────────────────────────
 
 @test "_install_ubuntu_hashicorp: calls wget for consul when dir does not exist" {
