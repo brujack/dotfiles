@@ -1,4 +1,5 @@
 {
+  "model": "sonnet",
   "hooks": {
     "PostToolUse": [
       {
@@ -38,6 +39,5 @@
     }
   },
   "autoUpdatesChannel": "stable",
-  "agentPushNotifEnabled": true,
-  "model": "sonnet"
+  "agentPushNotifEnabled": true
 }
