@@ -25,3 +25,4 @@ coverage/
 # Claude Code local-only generated files
 .claude/mcp.json
 .claude/scheduled_tasks.lock
+.claude/settings.local.json
