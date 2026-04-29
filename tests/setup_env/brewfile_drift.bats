@@ -15,6 +15,7 @@ setup() {
 
 teardown() {
   unset _OVERRIDE_BREWFILE_PATH
+  unset MOCK_BREW_LEAVES
   unset MOCK_BREW_LIST_FORMULA
   unset MOCK_BREW_LIST_CASK
   unset MOCK_BREW_TAPS
