@@ -14,3 +14,4 @@
 - [Bash coverage gate status](project_bash_coverage.md) — kcov/bashcov both fail in GH Actions; CI job is non-blocking; floors defined but gate not enabled
 - [Subagent verbatim-copy must read source file](feedback_subagent_verbatim_copy.md) — extraction tasks must read actual source file; plan code examples may be stale
 - [Rebase feature branch before final code review](feedback_rebase_before_final_review.md) — rebase onto master first so reviewer only sees intentional changes, not stale-branch artifacts
+- [Test that conditional file writes don't create the file on false branch](feedback_conditional_file_write_test.md) — OK/skip path tests must assert `[ ! -f detail_file ]` to catch regressions where the file is always written

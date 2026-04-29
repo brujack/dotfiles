@@ -38,7 +38,9 @@ _update_skip() {
 }
 
 # _update_ok SECTION MESSAGE
-# Records a section as passing with the given message.
+# Records a section as passing. Use for advisory check sections (like brew-drift)
+# that bypass _update_record_start/_update_record_end. Do NOT call this on sections
+# that use _update_record_end — it would silently overwrite the timed result.
 _update_ok() {
   local _section="$1" _msg="$2"
   printf "OK\n" > "${_UPDATE_TMPDIR}/status_${_section}"
@@ -46,7 +48,8 @@ _update_ok() {
 }
 
 # _update_warn SECTION MESSAGE
-# Records a section as a non-blocking warning with the given message.
+# Records a section as a non-blocking warning. Same lifecycle constraint as
+# _update_ok: for advisory check sections only, not timed _update_record_end sections.
 _update_warn() {
   local _section="$1" _msg="$2"
   printf "WARN\n" > "${_UPDATE_TMPDIR}/status_${_section}"
