@@ -1,0 +1,58 @@
+---
+description: Global baseline behavior derived from ~/.claude/claude.md and imported standards.
+alwaysApply: true
+---
+
+# Global Claude baseline for Cursor
+
+Apply these rules in all repositories unless a repo-level `AGENTS.md` or local rule is stricter.
+
+## Communication
+
+- Be concise and direct.
+- Lead with the answer or action.
+- No filler, no emojis unless asked.
+- Use short, concrete sentences.
+
+## Development behavior
+
+- Think before coding: read relevant code first.
+- Prefer the smallest change that solves the request.
+- Keep edits surgical; avoid unrelated refactors.
+- Stay on the stated goal; do not expand scope without confirmation.
+
+## TDD and verification
+
+- TDD is required for features and bug fixes: RED -> GREEN -> REFACTOR.
+- Test through public interfaces; avoid implementation-coupled tests.
+- Cover boundary, error-path, and state-transition behavior.
+- For any changed logic, verify both branches of key conditionals.
+
+## Logic and error handling
+
+- Run a pre-commit logic review on your diff:
+  - conditionals and precedence
+  - boundary values and off-by-one cases
+  - scope/initialization
+  - error paths and fail-fast behavior
+  - return/exit propagation through call chains
+- Never swallow errors unless explicitly acceptable and documented.
+
+## Git workflow
+
+- Use feature branches for implementation work; avoid direct commits to `master/main`.
+- Docs-only and memory-only updates may commit directly when appropriate.
+- Before pushing, run a review gate and resolve critical findings first.
+
+## CI and hooks baseline
+
+- Prefer workflows that run on `pull_request` to `master`.
+- Use `actions/checkout@v5` and Node 24-compatible actions.
+- Keep pre-commit and pre-push hooks enabled in each repo.
+- Keep secrets scanning in place (local + CI backstop).
+
+## Standards and hygiene
+
+- Keep repository `README.md` and relevant `CLAUDE.md` files current when behavior or workflow changes.
+- Maintain idempotency for shell/Ansible/Terraform changes.
+- Prefer existing files over new files unless a new file is clearly warranted.
