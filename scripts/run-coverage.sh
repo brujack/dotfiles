@@ -12,7 +12,9 @@ declare -A FLOORS=(
   ["workflows.sh"]=90
   ["update_summary.sh"]=90
   ["developer.sh"]=90
-  ["linux.sh"]=75
+  ["linux_shared.sh"]=75
+  ["linux_ubuntu.sh"]=75
+  ["linux_rhel.sh"]=75
   ["macos.sh"]=75
 )
 
