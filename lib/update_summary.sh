@@ -444,8 +444,11 @@ _update_check_brewfile_drift() {
   grep '^tap "' "${_brewfile}" | sed 's/^tap "//;s/".*//' | sort \
     > "${_UPDATE_TMPDIR}/drift_bf_taps"
 
-  # Get actual installed state
-  brew list --formula 2>/dev/null | sort > "${_UPDATE_TMPDIR}/drift_inst_formulae"
+  # Get actual installed state — two sets:
+  # leaves: top-level installs only (for untracked detection, filters transitive deps)
+  # all: every installed formula (for missing detection, avoids false positives)
+  brew leaves 2>/dev/null | sort > "${_UPDATE_TMPDIR}/drift_inst_formulae_leaves"
+  brew list --formula 2>/dev/null | sort > "${_UPDATE_TMPDIR}/drift_inst_formulae_all"
   brew tap 2>/dev/null | sort > "${_UPDATE_TMPDIR}/drift_inst_taps"
 
   # Compute formula and tap drift
@@ -453,9 +456,9 @@ _update_check_brewfile_drift() {
   # comm -23: lines only in file1 = in Brewfile but not installed (missing)
   local _untracked_formulae _missing_formulae _untracked_taps _missing_taps
   _untracked_formulae=$(comm -13 "${_UPDATE_TMPDIR}/drift_bf_formulae" \
-    "${_UPDATE_TMPDIR}/drift_inst_formulae")
+    "${_UPDATE_TMPDIR}/drift_inst_formulae_leaves")
   _missing_formulae=$(comm -23 "${_UPDATE_TMPDIR}/drift_bf_formulae" \
-    "${_UPDATE_TMPDIR}/drift_inst_formulae")
+    "${_UPDATE_TMPDIR}/drift_inst_formulae_all")
   _untracked_taps=$(comm -13 "${_UPDATE_TMPDIR}/drift_bf_taps" \
     "${_UPDATE_TMPDIR}/drift_inst_taps")
   _missing_taps=$(comm -23 "${_UPDATE_TMPDIR}/drift_bf_taps" \

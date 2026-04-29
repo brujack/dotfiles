@@ -2,6 +2,10 @@
 printf "brew %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
 
 case "$1" in
+  leaves)
+    printf "%s\n" ${MOCK_BREW_LEAVES:-}
+    exit 0
+    ;;
   list)
     if [[ "$*" == *"--cask"* ]]; then
       printf "%s\n" ${MOCK_BREW_LIST_CASK:-}

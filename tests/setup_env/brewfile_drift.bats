@@ -15,6 +15,7 @@ setup() {
 
 teardown() {
   unset _OVERRIDE_BREWFILE_PATH
+  unset MOCK_BREW_LEAVES
   unset MOCK_BREW_LIST_FORMULA
   unset MOCK_BREW_LIST_CASK
   unset MOCK_BREW_TAPS
@@ -57,6 +58,7 @@ teardown() {
   export MACOS=1
   printf 'brew "bat"\nbrew "git"\n' > "${BATS_TEST_TMPDIR}/Brewfile"
   export _OVERRIDE_BREWFILE_PATH="${BATS_TEST_TMPDIR}/Brewfile"
+  export MOCK_BREW_LEAVES="bat git"
   export MOCK_BREW_LIST_FORMULA="bat git"
   export MOCK_BREW_TAPS=""
   run _update_check_brewfile_drift
@@ -66,10 +68,25 @@ teardown() {
   [ ! -f "${_UPDATE_TMPDIR}/detail_brew-drift" ]
 }
 
+@test "_update_check_brewfile_drift: OK when formula is dep of another — not flagged untracked" {
+  export MACOS=1
+  printf 'brew "git"\n' > "${BATS_TEST_TMPDIR}/Brewfile"
+  export _OVERRIDE_BREWFILE_PATH="${BATS_TEST_TMPDIR}/Brewfile"
+  # brew leaves returns only top-level installs; openssl/zstd are transitive deps
+  export MOCK_BREW_LEAVES="git"
+  export MOCK_BREW_LIST_FORMULA="git openssl zstd"
+  export MOCK_BREW_TAPS=""
+  run _update_check_brewfile_drift
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_UPDATE_TMPDIR}/status_brew-drift")" = "OK" ]
+  [ ! -f "${_UPDATE_TMPDIR}/detail_brew-drift" ]
+}
+
 @test "_update_check_brewfile_drift: OK when Brewfile has no brew/tap/cask lines" {
   export MACOS=1
   printf "# comment only\n" > "${BATS_TEST_TMPDIR}/Brewfile"
   export _OVERRIDE_BREWFILE_PATH="${BATS_TEST_TMPDIR}/Brewfile"
+  export MOCK_BREW_LEAVES=""
   export MOCK_BREW_LIST_FORMULA=""
   export MOCK_BREW_TAPS=""
   run _update_check_brewfile_drift
@@ -81,6 +98,7 @@ teardown() {
   export MACOS=1
   printf 'brew "git"\n' > "${BATS_TEST_TMPDIR}/Brewfile"
   export _OVERRIDE_BREWFILE_PATH="${BATS_TEST_TMPDIR}/Brewfile"
+  export MOCK_BREW_LEAVES="git jq"
   export MOCK_BREW_LIST_FORMULA="git jq"
   export MOCK_BREW_TAPS=""
   run _update_check_brewfile_drift
@@ -94,6 +112,7 @@ teardown() {
   export MACOS=1
   printf 'brew "git"\nbrew "missing-tool"\n' > "${BATS_TEST_TMPDIR}/Brewfile"
   export _OVERRIDE_BREWFILE_PATH="${BATS_TEST_TMPDIR}/Brewfile"
+  export MOCK_BREW_LEAVES="git"
   export MOCK_BREW_LIST_FORMULA="git"
   export MOCK_BREW_TAPS=""
   run _update_check_brewfile_drift
@@ -109,6 +128,7 @@ teardown() {
   export MACOS=1
   printf 'brew "git"\n' > "${BATS_TEST_TMPDIR}/Brewfile"
   export _OVERRIDE_BREWFILE_PATH="${BATS_TEST_TMPDIR}/Brewfile"
+  export MOCK_BREW_LEAVES="git"
   export MOCK_BREW_LIST_FORMULA="git"
   export MOCK_BREW_TAPS="homebrew/cask-fonts"
   run _update_check_brewfile_drift
@@ -122,6 +142,7 @@ teardown() {
   export MACOS=1
   printf 'brew "git"\ntap "teamookla/speedtest"\n' > "${BATS_TEST_TMPDIR}/Brewfile"
   export _OVERRIDE_BREWFILE_PATH="${BATS_TEST_TMPDIR}/Brewfile"
+  export MOCK_BREW_LEAVES="git"
   export MOCK_BREW_LIST_FORMULA="git"
   export MOCK_BREW_TAPS=""
   run _update_check_brewfile_drift
@@ -137,6 +158,7 @@ teardown() {
   export MACOS=1
   printf 'brew "git"\ncask "visual-studio-code"\n' > "${BATS_TEST_TMPDIR}/Brewfile"
   export _OVERRIDE_BREWFILE_PATH="${BATS_TEST_TMPDIR}/Brewfile"
+  export MOCK_BREW_LEAVES="git"
   export MOCK_BREW_LIST_FORMULA="git"
   export MOCK_BREW_LIST_CASK="visual-studio-code warp"
   export MOCK_BREW_TAPS=""
@@ -151,6 +173,7 @@ teardown() {
   export MACOS=1
   printf 'brew "git"\ncask "missing-app"\n' > "${BATS_TEST_TMPDIR}/Brewfile"
   export _OVERRIDE_BREWFILE_PATH="${BATS_TEST_TMPDIR}/Brewfile"
+  export MOCK_BREW_LEAVES="git"
   export MOCK_BREW_LIST_FORMULA="git"
   export MOCK_BREW_LIST_CASK=""
   export MOCK_BREW_TAPS=""
@@ -181,7 +204,8 @@ teardown() {
   printf 'brew "git"\ncask "visual-studio-code"\ntap "teamookla/speedtest"\n' \
     > "${BATS_TEST_TMPDIR}/Brewfile"
   export _OVERRIDE_BREWFILE_PATH="${BATS_TEST_TMPDIR}/Brewfile"
-  # jq: untracked formula; git: clean
+  # jq: untracked leaf formula; git: clean
+  export MOCK_BREW_LEAVES="git jq"
   export MOCK_BREW_LIST_FORMULA="git jq"
   # warp: untracked cask; visual-studio-code: missing cask
   export MOCK_BREW_LIST_CASK="warp"
