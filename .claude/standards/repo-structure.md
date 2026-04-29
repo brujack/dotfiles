@@ -9,6 +9,30 @@ Every git repository must have secrets guarding in place:
 - Credential files and secret paths listed in `.gitignore`
 - A pre-commit hook that runs `ggshield secret scan pre-commit` locally — this catches secrets before they leave the machine. CI gitleaks is a backstop, not a substitute. Run `make install-hooks` once per checkout to activate it.
 
+## .gitignore
+
+Every git repository must have a `.gitignore` that includes the common macOS and Linux noise entries. At minimum:
+
+```gitignore
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+.AppleDouble
+.LSOverride
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+```
+
+Add these when creating a new repo or when a repo is missing them. Language- and framework-specific entries (e.g. `__pycache__/`, `target/`, `node_modules/`) belong here too but are repo-dependent.
+
 ## Architectural Decision Records
 
 **ADRs are required** for all significant architectural choices in every personal repo under `~/git-repos/personal/`. Write the ADR before or alongside the implementation — not after.
