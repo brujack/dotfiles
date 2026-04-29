@@ -43,9 +43,9 @@ for line in claude_text.splitlines():
         imports.append(line[len("@~/.claude/"):])
 
 if not imports:
-    raise SystemExit("No standards imports found in .claude/claude.md")
+    raise SystemExit("No standards imports found in .claude/CLAUDE.md")
 
-sources = ["claude.md"] + imports
+sources = ["CLAUDE.md"] + imports
 
 sections = []
 for rel in imports:
@@ -70,7 +70,7 @@ for src in sources:
 lines.append("")
 lines.append("If a repo-level `CLAUDE.md` or `AGENTS.md` is stricter, follow the stricter rule.")
 lines.append("")
-lines.append("## Communication Style (from `.claude/claude.md`)")
+lines.append("## Communication Style (from `.claude/CLAUDE.md`)")
 lines.append("")
 if communication_lines:
     lines.extend(communication_lines)
