@@ -51,6 +51,17 @@ teardown() {
   [ "$status" -eq 0 ]
   [ "$(cat "${_UPDATE_TMPDIR}/status_brew-drift")" = "OK" ]
   grep -q "formulae clean" "${_UPDATE_TMPDIR}/result_brew-drift"
+  [ ! -f "${_UPDATE_TMPDIR}/detail_brew-drift" ]
+}
+
+@test "_update_check_brewfile_drift: OK when Brewfile has no brew/tap/cask lines" {
+  printf "# comment only\n" > "${BATS_TEST_TMPDIR}/Brewfile"
+  export _OVERRIDE_BREWFILE_PATH="${BATS_TEST_TMPDIR}/Brewfile"
+  export MOCK_BREW_LIST_FORMULA=""
+  export MOCK_BREW_TAPS=""
+  run _update_check_brewfile_drift
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_UPDATE_TMPDIR}/status_brew-drift")" = "OK" ]
 }
 
 @test "_update_check_brewfile_drift: WARN when formula installed but not in Brewfile" {
