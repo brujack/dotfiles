@@ -48,6 +48,8 @@ What counts as significant: choice of testing framework, CI tooling, major libra
 
 ## Superpowers Plans and Specs
 
+Every repo must have a `docs/superpowers/` directory with a `README.md` that indexes all specs and plans. Every repo must also have a `docs/cursor/` directory for Cursor-specific documentation, rules, and plans. Create both when initializing a new repo, even if empty at first.
+
 Every repo that uses the superpowers brainstorming → writing-plans workflow must have a `docs/superpowers/README.md` that indexes all specs and plans with their status.
 
 **Required format** (see `dotfiles/docs/superpowers/README.md` as the canonical example):
