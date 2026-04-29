@@ -3,56 +3,81 @@ description: Global baseline behavior derived from ~/.claude/claude.md and impor
 alwaysApply: true
 ---
 
-# Global Claude baseline for Cursor
+# Global Claude standards for Cursor
 
-Apply these rules in all repositories unless a repo-level `AGENTS.md` or local rule is stricter.
+This file is a direct policy mirror of:
 
-## Communication
+- `~/.claude/claude.md`
+- `~/.claude/standards/behavior.md`
+- `~/.claude/standards/tdd.md`
+- `~/.claude/standards/logic-review.md`
+- `~/.claude/standards/git-workflow.md`
+- `~/.claude/standards/ci.md`
+- `~/.claude/standards/code-standards.md`
+- `~/.claude/standards/repo-structure.md`
 
-- Be concise and direct.
-- Lead with the answer or action.
-- No filler, no emojis unless asked.
-- Use short, concrete sentences.
+If a repo-level `CLAUDE.md` or `AGENTS.md` is stricter, follow the stricter rule.
 
-## Development behavior
+## Communication and execution
 
-- Think before coding: read relevant code first.
-- Prefer the smallest change that solves the request.
-- Keep edits surgical; avoid unrelated refactors.
-- Stay on the stated goal; do not expand scope without confirmation.
+- Be concise and direct; lead with answer/action. _(source: `~/.claude/claude.md`, `standards/behavior.md`)_
+- No filler text or emojis unless requested. _(source: `~/.claude/claude.md`)_
+- Think before coding; read relevant code first. _(source: `standards/behavior.md`)_
+- Prefer the smallest workable change. _(source: `standards/behavior.md`)_
+- Keep diffs surgical; do not fix unrelated issues silently. _(source: `standards/behavior.md`)_
+- Stay goal-driven; do not broaden scope without user confirmation. _(source: `standards/behavior.md`)_
 
-## TDD and verification
+## TDD and testing (required)
 
-- TDD is required for features and bug fixes: RED -> GREEN -> REFACTOR.
-- Test through public interfaces; avoid implementation-coupled tests.
-- Cover boundary, error-path, and state-transition behavior.
-- For any changed logic, verify both branches of key conditionals.
+- TDD is required for feature and bug-fix work. _(source: `standards/tdd.md`)_
+- Use vertical RED -> GREEN cycles, one behavior at a time. _(source: `standards/tdd.md`)_
+- Tests must verify public behavior, not internal implementation details. _(source: `standards/tdd.md`)_
+- Mandatory coverage dimensions: boundary values, error paths, state transitions. _(source: `standards/tdd.md`)_
+- Test both branches for every guard/conditional. _(source: `standards/tdd.md`, `standards/logic-review.md`)_
+- Maintain at least 90% line coverage as repository policy unless explicitly documented otherwise. _(source: `standards/tdd.md`)_
+- Add tests in the same commit as the corresponding code change. _(source: `standards/tdd.md`)_
 
-## Logic and error handling
+## Logic review and correctness gates
 
-- Run a pre-commit logic review on your diff:
-  - conditionals and precedence
-  - boundary values and off-by-one cases
-  - scope/initialization
-  - error paths and fail-fast behavior
-  - return/exit propagation through call chains
-- Never swallow errors unless explicitly acceptable and documented.
+- Run pre-commit logic review on changed code: conditionals, boundaries, scope/state, error paths, return/exit propagation, branch coverage, integration assumptions. _(source: `standards/logic-review.md`)_
+- Fail-fast on upstream errors; do not continue on broken intermediate state. _(source: `standards/tdd.md`, `standards/logic-review.md`)_
+- Do not suppress errors (`|| true`, `except: pass`, ignored errors) unless explicitly justified. _(source: `standards/tdd.md`, `standards/logic-review.md`)_
+- For major changes (3+ functions, control-flow heavy, integration points), run deep review before PR. _(source: `standards/logic-review.md`)_
 
-## Git workflow
+## Git workflow rules
 
-- Use feature branches for implementation work; avoid direct commits to `master/main`.
-- Docs-only and memory-only updates may commit directly when appropriate.
-- Before pushing, run a review gate and resolve critical findings first.
+- Do not commit implementation work directly to `master/main`; use feature branches and PRs. _(source: `standards/git-workflow.md`)_
+- Exception: docs-only/memory-only updates may go direct when allowed by repo policy. _(source: `standards/git-workflow.md`)_
+- Use PR monitoring until merged/failed, then clean local/remote stale branches. _(source: `standards/git-workflow.md`)_
+- Run review gate before pushing feature branches; fix all critical findings first. _(source: `standards/git-workflow.md`)_
+- After merge/direct master commit, run learning analysis and document durable learnings. _(source: `~/.claude/claude.md`, `standards/git-workflow.md`)_
 
-## CI and hooks baseline
+## CI, hooks, and security baseline
 
-- Prefer workflows that run on `pull_request` to `master`.
-- Use `actions/checkout@v5` and Node 24-compatible actions.
-- Keep pre-commit and pre-push hooks enabled in each repo.
-- Keep secrets scanning in place (local + CI backstop).
+- CI workflows should trigger on `pull_request` to `master`. _(source: `standards/ci.md`)_
+- All actions should be Node 24 compatible; prefer `actions/checkout@v5`. _(source: `standards/ci.md`)_
+- Build jobs must depend on tests. _(source: `standards/ci.md`)_
+- Keep pre-commit and pre-push hooks present and active in every repo. _(source: `standards/ci.md`)_
+- Pre-commit must include lint and local secret scan (`ggshield` when installed). _(source: `standards/ci.md`, `standards/repo-structure.md`)_
+- CI must include secret scanning (`gitleaks` + `.gitleaks.toml` allowlist). _(source: `standards/ci.md`, `standards/repo-structure.md`)_
+- Add Snyk scan only for supported language repos; do not add to config-only repos. _(source: `standards/ci.md`)_
 
-## Standards and hygiene
+## Code standards baseline
 
-- Keep repository `README.md` and relevant `CLAUDE.md` files current when behavior or workflow changes.
-- Maintain idempotency for shell/Ansible/Terraform changes.
-- Prefer existing files over new files unless a new file is clearly warranted.
+- Keep shell/Ansible/Terraform changes idempotent. _(source: `standards/code-standards.md`)_
+- Shell scripts: `#!/usr/bin/env bash`, `[[ ... ]]`, `${VAR}`, `printf`, explicit error handling. _(source: `standards/code-standards.md`)_
+- Avoid `set -e` in general scripts (acceptable in git hooks). _(source: `standards/code-standards.md`)_
+- In function bodies, use `|| return 1` (not `|| exit`). _(source: `standards/code-standards.md`, `standards/tdd.md`)_
+- Propagate errors across full call chains. _(source: `standards/code-standards.md`, `standards/tdd.md`)_
+- Avoid over-engineering and speculative abstractions. _(source: `standards/code-standards.md`, `standards/behavior.md`)_
+- Prefer editing existing files over adding new files unless required. _(source: `standards/code-standards.md`)_
+- Comments should explain why, not what. _(source: `standards/code-standards.md`)_
+
+## Repository structure baseline
+
+- Every repo must include `README.md`. _(source: `standards/repo-structure.md`)_
+- Every repo should have baseline `.gitignore` entries for macOS/Linux noise. _(source: `standards/repo-structure.md`)_
+- Keep secret paths gitignored. _(source: `standards/repo-structure.md`)_
+- Significant architectural decisions require ADRs. _(source: `standards/repo-structure.md`)_
+- Maintain `docs/superpowers/` and `docs/cursor/` where the standards expect them. _(source: `standards/repo-structure.md`)_
+- Keep docs (`README.md`, relevant `CLAUDE.md`) current when behavior/workflow changes. _(source: `~/.claude/claude.md`)_
