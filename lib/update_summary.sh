@@ -412,3 +412,131 @@ _update_summary() {
 
   printf "Log appended: %s\n" "${_log}"
 }
+
+# _update_check_brewfile_drift
+# Compares Brewfile (formulae, casks on macOS, taps) against locally installed
+# Homebrew packages. Records OK/WARN/SKIP into the update summary.
+# Uses _OVERRIDE_BREWFILE_PATH seam for testing.
+_update_check_brewfile_drift() {
+  local _brewfile="${_OVERRIDE_BREWFILE_PATH:-${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile}"
+
+  if ! quiet_which brew; then
+    _update_skip "brew-drift" "brew not available"
+    return 0
+  fi
+
+  if [[ ! -f "${_brewfile}" ]]; then
+    _update_skip "brew-drift" "Brewfile not found at ${_brewfile}"
+    return 0
+  fi
+
+  # Parse Brewfile into sorted temp files
+  grep '^brew "' "${_brewfile}" | sed 's/^brew "//;s/".*//' | sort \
+    > "${_UPDATE_TMPDIR}/drift_bf_formulae"
+  grep '^tap "' "${_brewfile}" | sed 's/^tap "//;s/".*//' | sort \
+    > "${_UPDATE_TMPDIR}/drift_bf_taps"
+
+  # Get actual installed state
+  brew list --formula 2>/dev/null | sort > "${_UPDATE_TMPDIR}/drift_inst_formulae"
+  brew tap 2>/dev/null | sort > "${_UPDATE_TMPDIR}/drift_inst_taps"
+
+  # Compute formula and tap drift
+  # comm -13: lines only in file2 = installed but not in Brewfile (untracked)
+  # comm -23: lines only in file1 = in Brewfile but not installed (missing)
+  local _untracked_formulae _missing_formulae _untracked_taps _missing_taps
+  _untracked_formulae=$(comm -13 "${_UPDATE_TMPDIR}/drift_bf_formulae" \
+    "${_UPDATE_TMPDIR}/drift_inst_formulae")
+  _missing_formulae=$(comm -23 "${_UPDATE_TMPDIR}/drift_bf_formulae" \
+    "${_UPDATE_TMPDIR}/drift_inst_formulae")
+  _untracked_taps=$(comm -13 "${_UPDATE_TMPDIR}/drift_bf_taps" \
+    "${_UPDATE_TMPDIR}/drift_inst_taps")
+  _missing_taps=$(comm -23 "${_UPDATE_TMPDIR}/drift_bf_taps" \
+    "${_UPDATE_TMPDIR}/drift_inst_taps")
+
+  # Cask drift: macOS only (Linux Homebrew does not support casks)
+  local _untracked_casks="" _missing_casks=""
+  if [[ -n ${MACOS:-} ]]; then
+    grep '^cask "' "${_brewfile}" | sed 's/^cask "//;s/".*//' | sort \
+      > "${_UPDATE_TMPDIR}/drift_bf_casks"
+    brew list --cask 2>/dev/null | sort > "${_UPDATE_TMPDIR}/drift_inst_casks"
+    _untracked_casks=$(comm -13 "${_UPDATE_TMPDIR}/drift_bf_casks" \
+      "${_UPDATE_TMPDIR}/drift_inst_casks")
+    _missing_casks=$(comm -23 "${_UPDATE_TMPDIR}/drift_bf_casks" \
+      "${_UPDATE_TMPDIR}/drift_inst_casks")
+  fi
+
+  # Check for any drift
+  local _has_drift=0
+  [[ -n "${_untracked_formulae}" ]] && _has_drift=1
+  [[ -n "${_missing_formulae}" ]]   && _has_drift=1
+  [[ -n "${_untracked_taps}" ]]     && _has_drift=1
+  [[ -n "${_missing_taps}" ]]       && _has_drift=1
+  [[ -n "${_untracked_casks}" ]]    && _has_drift=1
+  [[ -n "${_missing_casks}" ]]      && _has_drift=1
+
+  if [[ "${_has_drift}" -eq 0 ]]; then
+    local _clean_msg="formulae clean"
+    [[ -n ${MACOS:-} ]] && _clean_msg="${_clean_msg}, casks clean"
+    _clean_msg="${_clean_msg}, taps clean"
+    _update_ok "brew-drift" "${_clean_msg}"
+    return 0
+  fi
+
+  # Build summary string from non-zero drift counts
+  local _untracked_f_count _missing_f_count _untracked_t_count _missing_t_count
+  _untracked_f_count=$(printf '%s\n' "${_untracked_formulae}" | grep -c . || true)
+  _missing_f_count=$(printf '%s\n' "${_missing_formulae}" | grep -c . || true)
+  _untracked_t_count=$(printf '%s\n' "${_untracked_taps}" | grep -c . || true)
+  _missing_t_count=$(printf '%s\n' "${_missing_taps}" | grep -c . || true)
+
+  local _summary=""
+  [[ "${_untracked_f_count}" -gt 0 ]] && _summary+="${_untracked_f_count} untracked formulae, "
+  [[ "${_missing_f_count}" -gt 0 ]]   && _summary+="${_missing_f_count} missing formulae, "
+  if [[ -n ${MACOS:-} ]]; then
+    local _untracked_c_count _missing_c_count
+    _untracked_c_count=$(printf '%s\n' "${_untracked_casks}" | grep -c . || true)
+    _missing_c_count=$(printf '%s\n' "${_missing_casks}" | grep -c . || true)
+    [[ "${_untracked_c_count}" -gt 0 ]] && _summary+="${_untracked_c_count} untracked casks, "
+    [[ "${_missing_c_count}" -gt 0 ]]   && _summary+="${_missing_c_count} missing casks, "
+  fi
+  [[ "${_untracked_t_count}" -gt 0 ]] && _summary+="${_untracked_t_count} untracked taps, "
+  [[ "${_missing_t_count}" -gt 0 ]]   && _summary+="${_missing_t_count} missing taps, "
+  _summary="${_summary%, }"
+
+  _update_warn "brew-drift" "${_summary}"
+
+  # Write detail file
+  local _detail="brew-drift details:\n"
+  if [[ -n "${_untracked_formulae}" ]] || [[ -n "${_untracked_casks}" ]] || [[ -n "${_untracked_taps}" ]]; then
+    _detail+="  Untracked (installed, not in Brewfile):\n"
+    while IFS= read -r _pkg; do
+      [[ -z "${_pkg}" ]] && continue
+      _detail+="    ${_pkg}\n"
+    done <<< "${_untracked_formulae}"
+    while IFS= read -r _pkg; do
+      [[ -z "${_pkg}" ]] && continue
+      _detail+="    cask: ${_pkg}\n"
+    done <<< "${_untracked_casks}"
+    while IFS= read -r _pkg; do
+      [[ -z "${_pkg}" ]] && continue
+      _detail+="    tap: ${_pkg}\n"
+    done <<< "${_untracked_taps}"
+  fi
+  if [[ -n "${_missing_formulae}" ]] || [[ -n "${_missing_casks}" ]] || [[ -n "${_missing_taps}" ]]; then
+    _detail+="  Missing (in Brewfile, not installed):\n"
+    while IFS= read -r _pkg; do
+      [[ -z "${_pkg}" ]] && continue
+      _detail+="    ${_pkg}\n"
+    done <<< "${_missing_formulae}"
+    while IFS= read -r _pkg; do
+      [[ -z "${_pkg}" ]] && continue
+      _detail+="    cask: ${_pkg}\n"
+    done <<< "${_missing_casks}"
+    while IFS= read -r _pkg; do
+      [[ -z "${_pkg}" ]] && continue
+      _detail+="    tap: ${_pkg}\n"
+    done <<< "${_missing_taps}"
+  fi
+
+  printf '%b' "${_detail}" > "${_UPDATE_TMPDIR}/detail_brew-drift"
+}
