@@ -22,7 +22,7 @@ import sys
 
 root = pathlib.Path(sys.argv[1])
 out_path = pathlib.Path(sys.argv[2])
-claude_path = root / ".claude" / "claude.md"
+claude_path = root / ".claude" / "CLAUDE.md"
 
 if not claude_path.exists():
     raise SystemExit(f"Missing required file: {claude_path}")
