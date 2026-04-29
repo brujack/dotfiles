@@ -11,4 +11,8 @@ done
 [ "${real_push}" -eq 0 ] && exit 0
 
 printf "Running tests locally (pre-push)...\n"
-make -C "$(cd "$(git rev-parse --git-common-dir)/.." && pwd)" test
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+if [[ -z "${REPO_ROOT}" ]]; then
+    REPO_ROOT="$(cd "$(git rev-parse --git-common-dir)/.." && pwd)"
+fi
+make -C "${REPO_ROOT}" test
