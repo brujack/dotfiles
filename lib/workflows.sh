@@ -405,6 +405,9 @@ PY
     _update_skip "gems" "flag not set"
   fi
 
+  # ── drift check ───────────────────────────────────────────────────────────
+  _update_check_brewfile_drift
+
   # ── summary ───────────────────────────────────────────────────────────────
   _update_summary
 }
