@@ -61,7 +61,7 @@ Master status index for all specs and implementation plans in this directory.
 | 2026-04-26 | [bash-coverage-gate](plans/2026-04-26-bash-coverage-gate.md)                       | [spec](specs/2026-04-26-bash-coverage-gate-design.md)               | Done    |
 | 2026-04-28 | [linux-sh-split](plans/2026-04-28-linux-sh-split.md)                               | [spec](specs/2026-04-28-linux-sh-split-design.md)                   | Done    |
 | 2026-04-28 | [brewfile-drift](plans/2026-04-28-brewfile-drift.md)                               | [spec](specs/2026-04-28-brewfile-drift-design.md)                   | Done    |
-| 2026-04-29 | —                                                                                  | [spec](specs/2026-04-29-brewfile-drift-leaves-design.md)            | Pending |
+| 2026-04-29 | [brewfile-drift-leaves](plans/2026-04-29-brewfile-drift-leaves.md)                 | [spec](specs/2026-04-29-brewfile-drift-leaves-design.md)            | Pending |
 
 ---
 
