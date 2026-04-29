@@ -4,7 +4,7 @@
 # Fixed section order for summary display
 readonly _UPDATE_SECTION_ORDER=(
   brew softwareupdate apt snap dnf yum mas claude pip gems
-  oh-my-zsh p10k tpm tfenv cheat.sh
+  oh-my-zsh p10k tpm tfenv cheat.sh brew-drift
 )
 
 # _update_diff_lines PRE_FILE POST_FILE
@@ -35,6 +35,22 @@ _update_skip() {
   local _section="$1" _reason="$2"
   printf "SKIP\n" > "${_UPDATE_TMPDIR}/status_${_section}"
   printf "%s\n" "${_reason}" > "${_UPDATE_TMPDIR}/result_${_section}"
+}
+
+# _update_ok SECTION MESSAGE
+# Records a section as passing with the given message.
+_update_ok() {
+  local _section="$1" _msg="$2"
+  printf "OK\n" > "${_UPDATE_TMPDIR}/status_${_section}"
+  printf "%s\n" "${_msg}" > "${_UPDATE_TMPDIR}/result_${_section}"
+}
+
+# _update_warn SECTION MESSAGE
+# Records a section as a non-blocking warning with the given message.
+_update_warn() {
+  local _section="$1" _msg="$2"
+  printf "WARN\n" > "${_UPDATE_TMPDIR}/status_${_section}"
+  printf "%s\n" "${_msg}" > "${_UPDATE_TMPDIR}/result_${_section}"
 }
 
 # _update_record_start SECTION
@@ -336,7 +352,7 @@ _update_record_end() {
 # _update_summary
 # Reads status/result files, prints formatted table, appends to log file.
 _update_summary() {
-  local _ok=0 _fail=0 _skip=0
+  local _ok=0 _fail=0 _skip=0 _warn=0
   local _output=""
   local _timestamp
   _timestamp=$(date '+%Y-%m-%d %H:%M:%S')
@@ -364,20 +380,34 @@ _update_summary() {
         _skip=$(( _skip + 1 ))
         _output+="$(printf "[SKIP] %-16s %s" "${_section}" "${_result}")\n"
         ;;
+      WARN)
+        _warn=$(( _warn + 1 ))
+        _output+="$(printf "[WARN] %-16s %s" "${_section}" "${_result}")\n"
+        ;;
     esac
   done
 
-  local _total=$(( _ok + _fail + _skip ))
-  _output+="\n$(printf "%d sections: %d OK, %d failed, %d skipped" "${_total}" "${_ok}" "${_fail}" "${_skip}")\n"
+  local _total=$(( _ok + _fail + _skip + _warn ))
+  _output+="\n$(printf "%d sections: %d OK, %d failed, %d warnings, %d skipped" "${_total}" "${_ok}" "${_fail}" "${_warn}" "${_skip}")\n"
+
+  # Build detail output (in section order for deterministic output)
+  local _detail_output=""
+  for _section in "${_UPDATE_SECTION_ORDER[@]}"; do
+    if [[ -f "${_UPDATE_TMPDIR}/detail_${_section}" ]]; then
+      _detail_output+="\n$(cat "${_UPDATE_TMPDIR}/detail_${_section}")\n"
+    fi
+  done
 
   # Print to terminal
   printf '%b' "${_output}"
+  [[ -n "${_detail_output}" ]] && printf '%b' "${_detail_output}"
 
   # Append to log file
   local _log="${UPDATE_LOG_PATH:-${HOME}/.dotfiles-update.log}"
   {
     printf "────────────────────────────────────────────────────────\n"
     printf '%b' "${_output}"
+    [[ -n "${_detail_output}" ]] && printf '%b' "${_detail_output}"
   } >> "${_log}" 2>/dev/null || log_warn "Could not write to ${_log}"
 
   printf "Log appended: %s\n" "${_log}"

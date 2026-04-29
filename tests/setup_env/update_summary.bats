@@ -622,3 +622,58 @@ firefox  124.0"
   _update_record_end "apt" 0
   ! grep -q "reboot required" "${_UPDATE_TMPDIR}/result_apt"
 }
+
+# ── _update_ok ───────────────────────────────────────────────────────────────
+
+@test "_update_ok writes OK status and result files" {
+  _update_ok "brew-drift" "formulae clean, taps clean"
+  [ "$(cat "${_UPDATE_TMPDIR}/status_brew-drift")" = "OK" ]
+  [ "$(cat "${_UPDATE_TMPDIR}/result_brew-drift")" = "formulae clean, taps clean" ]
+}
+
+# ── _update_warn ─────────────────────────────────────────────────────────────
+
+@test "_update_warn writes WARN status and result files" {
+  _update_warn "brew-drift" "3 untracked formulae"
+  [ "$(cat "${_UPDATE_TMPDIR}/status_brew-drift")" = "WARN" ]
+  [ "$(cat "${_UPDATE_TMPDIR}/result_brew-drift")" = "3 untracked formulae" ]
+}
+
+# ── _update_summary WARN support ─────────────────────────────────────────────
+
+@test "_update_summary: WARN section printed with [WARN] prefix" {
+  printf "WARN\n" > "${_UPDATE_TMPDIR}/status_brew-drift"
+  printf "2 untracked formulae\n" > "${_UPDATE_TMPDIR}/result_brew-drift"
+  run _update_summary
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[WARN] brew-drift"* ]]
+  [[ "$output" == *"2 untracked formulae"* ]]
+}
+
+@test "_update_summary: WARN counted in warnings, not failures" {
+  printf "WARN\n" > "${_UPDATE_TMPDIR}/status_brew-drift"
+  printf "1 untracked formula\n" > "${_UPDATE_TMPDIR}/result_brew-drift"
+  run _update_summary
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"1 warnings"* ]]
+  [[ "$output" != *"1 failed"* ]]
+}
+
+@test "_update_summary: detail block printed after table" {
+  printf "WARN\n" > "${_UPDATE_TMPDIR}/status_brew-drift"
+  printf "1 untracked formulae\n" > "${_UPDATE_TMPDIR}/result_brew-drift"
+  printf "brew-drift details:\n  Untracked:\n    bat\n" \
+    > "${_UPDATE_TMPDIR}/detail_brew-drift"
+  run _update_summary
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"brew-drift details:"* ]]
+  [[ "$output" == *"bat"* ]]
+}
+
+@test "_update_summary: no detail block when no detail file exists" {
+  printf "OK\n" > "${_UPDATE_TMPDIR}/status_brew"
+  printf "no changes\n" > "${_UPDATE_TMPDIR}/result_brew"
+  run _update_summary
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"details:"* ]]
+}
