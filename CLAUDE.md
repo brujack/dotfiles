@@ -226,6 +226,8 @@ The pre-commit hook is **required**. It runs on every `git commit`:
 
 The pre-push hook is **permanent**. It runs `make test` (lint + bats) on every push before the push reaches GitHub. Skips branch deletions. This conserves GitHub Actions minutes — CI runs only on PRs.
 
+**Worktree compatibility requirement:** `scripts/pre-push` must resolve repo root with `git rev-parse --show-toplevel` first, and use `git rev-parse --git-common-dir` parent only as a fallback. Direct `git-common-dir` resolution can run tests against the shared checkout instead of the active worktree branch.
+
 The CI `secret-scan` job (gitleaks) is a backstop, not a substitute for local scanning. Install ggshield: `brew install gitguardian/tap/ggshield && ggshield auth login`.
 
 ### ShellCheck
