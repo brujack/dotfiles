@@ -33,7 +33,6 @@
 	textconv = sops -d
 	undo = reset --soft 'HEAD^'
 [credential]
-	helper = !/usr/bin/java -Ddebug=false -Djava.net.useSystemProxies=true -jar /usr/local/Cellar/git-credential-manager/2.0.4_2/libexec/git-credential-manager-2.0.4.jar
 	canFallBackToInsecureStore = true
 [diff "sopsdiffer"]
 [pull]
