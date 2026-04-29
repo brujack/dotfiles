@@ -421,6 +421,11 @@ _update_summary() {
 # Homebrew packages. Records OK/WARN/SKIP into the update summary.
 # Uses _OVERRIDE_BREWFILE_PATH seam for testing.
 _update_check_brewfile_drift() {
+  if [[ -z ${MACOS:-} ]]; then
+    _update_skip "brew-drift" "not applicable on Linux"
+    return 0
+  fi
+
   local _brewfile="${_OVERRIDE_BREWFILE_PATH:-${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile}"
 
   if ! quiet_which brew; then

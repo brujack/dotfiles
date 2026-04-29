@@ -24,7 +24,17 @@ teardown() {
 
 # ── skip gates ────────────────────────────────────────────────────────────────
 
+@test "_update_check_brewfile_drift: SKIP on Linux (MACOS unset)" {
+  # MACOS is already unset in setup(); brew is available (no MOCK_WHICH_MISSING)
+  run _update_check_brewfile_drift
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_UPDATE_TMPDIR}/status_brew-drift")" = "SKIP" ]
+  grep -q "not applicable on Linux" "${_UPDATE_TMPDIR}/result_brew-drift"
+  [ ! -f "${_UPDATE_TMPDIR}/detail_brew-drift" ]
+}
+
 @test "_update_check_brewfile_drift: SKIP when brew not available" {
+  export MACOS=1
   export MOCK_WHICH_MISSING=brew
   run _update_check_brewfile_drift
   [ "$status" -eq 0 ]
@@ -33,6 +43,7 @@ teardown() {
 }
 
 @test "_update_check_brewfile_drift: SKIP when Brewfile not found" {
+  export MACOS=1
   export _OVERRIDE_BREWFILE_PATH="${BATS_TEST_TMPDIR}/nonexistent_brewfile"
   run _update_check_brewfile_drift
   [ "$status" -eq 0 ]
@@ -43,6 +54,7 @@ teardown() {
 # ── formula drift ─────────────────────────────────────────────────────────────
 
 @test "_update_check_brewfile_drift: OK when formulae and taps match" {
+  export MACOS=1
   printf 'brew "bat"\nbrew "git"\n' > "${BATS_TEST_TMPDIR}/Brewfile"
   export _OVERRIDE_BREWFILE_PATH="${BATS_TEST_TMPDIR}/Brewfile"
   export MOCK_BREW_LIST_FORMULA="bat git"
@@ -55,6 +67,7 @@ teardown() {
 }
 
 @test "_update_check_brewfile_drift: OK when Brewfile has no brew/tap/cask lines" {
+  export MACOS=1
   printf "# comment only\n" > "${BATS_TEST_TMPDIR}/Brewfile"
   export _OVERRIDE_BREWFILE_PATH="${BATS_TEST_TMPDIR}/Brewfile"
   export MOCK_BREW_LIST_FORMULA=""
@@ -65,6 +78,7 @@ teardown() {
 }
 
 @test "_update_check_brewfile_drift: WARN when formula installed but not in Brewfile" {
+  export MACOS=1
   printf 'brew "git"\n' > "${BATS_TEST_TMPDIR}/Brewfile"
   export _OVERRIDE_BREWFILE_PATH="${BATS_TEST_TMPDIR}/Brewfile"
   export MOCK_BREW_LIST_FORMULA="git jq"
@@ -77,6 +91,7 @@ teardown() {
 }
 
 @test "_update_check_brewfile_drift: WARN when formula in Brewfile but not installed" {
+  export MACOS=1
   printf 'brew "git"\nbrew "missing-tool"\n' > "${BATS_TEST_TMPDIR}/Brewfile"
   export _OVERRIDE_BREWFILE_PATH="${BATS_TEST_TMPDIR}/Brewfile"
   export MOCK_BREW_LIST_FORMULA="git"
@@ -91,6 +106,7 @@ teardown() {
 # ── tap drift ─────────────────────────────────────────────────────────────────
 
 @test "_update_check_brewfile_drift: WARN when tap installed but not in Brewfile" {
+  export MACOS=1
   printf 'brew "git"\n' > "${BATS_TEST_TMPDIR}/Brewfile"
   export _OVERRIDE_BREWFILE_PATH="${BATS_TEST_TMPDIR}/Brewfile"
   export MOCK_BREW_LIST_FORMULA="git"
@@ -103,6 +119,7 @@ teardown() {
 }
 
 @test "_update_check_brewfile_drift: WARN when tap in Brewfile but not installed" {
+  export MACOS=1
   printf 'brew "git"\ntap "teamookla/speedtest"\n' > "${BATS_TEST_TMPDIR}/Brewfile"
   export _OVERRIDE_BREWFILE_PATH="${BATS_TEST_TMPDIR}/Brewfile"
   export MOCK_BREW_LIST_FORMULA="git"
@@ -146,18 +163,15 @@ teardown() {
 
 # ── Linux: casks not checked ──────────────────────────────────────────────────
 
-@test "_update_check_brewfile_drift: OK on Linux — cask lines in Brewfile ignored" {
+@test "_update_check_brewfile_drift: SKIP on Linux — no detail file written" {
+  # Entire check skipped on Linux; brew and Brewfile presence are irrelevant
   unset MACOS
   printf 'brew "git"\ncask "visual-studio-code"\n' > "${BATS_TEST_TMPDIR}/Brewfile"
   export _OVERRIDE_BREWFILE_PATH="${BATS_TEST_TMPDIR}/Brewfile"
-  export MOCK_BREW_LIST_FORMULA="git"
-  export MOCK_BREW_TAPS=""
   run _update_check_brewfile_drift
   [ "$status" -eq 0 ]
-  [ "$(cat "${_UPDATE_TMPDIR}/status_brew-drift")" = "OK" ]
-  local _result
-  _result="$(cat "${_UPDATE_TMPDIR}/result_brew-drift")"
-  [[ "${_result}" != *"cask"* ]]
+  [ "$(cat "${_UPDATE_TMPDIR}/status_brew-drift")" = "SKIP" ]
+  [ ! -f "${_UPDATE_TMPDIR}/detail_brew-drift" ]
 }
 
 # ── mixed drift ───────────────────────────────────────────────────────────────
