@@ -48,7 +48,7 @@ What counts as significant: choice of testing framework, CI tooling, major libra
 
 ## Superpowers Plans and Specs
 
-Every repo must have a `docs/superpowers/` directory with a `README.md` that indexes all specs and plans. Every repo must also have a `docs/cursor/` directory for Cursor-specific documentation, rules, and plans. Create both when initializing a new repo, even if empty at first.
+Every repo must have a `docs/superpowers/` directory with a `README.md` that indexes all specs and plans. Every repo must also have a `docs/cursor/` directory for Cursor-specific documentation, rules, specs, and plans. Create both when initializing a new repo, even if empty at first.
 
 Every repo that uses the superpowers brainstorming → writing-plans workflow must have a `docs/superpowers/README.md` that indexes all specs and plans with their status.
 
@@ -102,3 +102,18 @@ When a new spec or plan is created, add a row to the All Plans table. Set status
 - Set status to `Done` and add a `> **Status: DONE**` banner at the top of the plan file once the feature PR merges.
 - Move backlog items to All Plans when their spec is written — delete the backlog row, don't use strikethrough.
 - Keep this index current — a stale index causes future agents to treat completed plans as pending work.
+
+## Cursor Specs and Plans
+
+Specs and plans created for Cursor workflows must live under `docs/cursor/`:
+
+- Specs: `docs/cursor/specs/`
+- Plans: `docs/cursor/plans/`
+
+Every repo must have `docs/cursor/README.md` that:
+
+1. Lists specs and plans with status (single index table)
+2. Includes a backlog section at the bottom
+3. Is updated when a new spec/plan is created or completed
+
+When both `docs/superpowers/` and `docs/cursor/` exist, default to `docs/cursor/` for newly created specs/plans unless the repo explicitly requires otherwise.
