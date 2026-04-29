@@ -32,7 +32,13 @@ Session 2026-04-11 completed:
 - 19 new tests: 6 WARN infra in `update_summary.bats`, 13 drift tests in new `brewfile_drift.bats`
 - Wired into `run_update()` just before `_update_summary`
 
-Backlog: empty.
+**PR #57 (2026-04-29): Brewfile Linux gate** → 555 tests on master
+
+- `_update_check_brewfile_drift` now returns SKIP immediately when `MACOS` is unset (Linux/non-macOS)
+- Previous behavior ran on Linux but only skipped cask lines; now skips entirely since Brewfile is macOS-only
+- All existing drift tests updated with `export MACOS=1`; one new Linux-gate test added
+
+Backlog: `feature/apt-reboot-required` branch still in-flight.
 
 **Why:** Close CI gaps, add security scanning, make update workflow observable, make bootstrap scripts testable.
 
