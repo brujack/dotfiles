@@ -336,6 +336,7 @@ Available mock env vars:
 | `MOCK_CALLS_FILE` | File where all mock invocations are logged |
 | `MOCK_BREW_LIST_FORMULA` | Space-separated formulas returned by `brew list --formula` |
 | `MOCK_BREW_LIST_CASK` | Space-separated casks returned by `brew list --cask` |
+| `MOCK_BREW_LEAVES` | Space-separated formulae returned by `brew leaves` (top-level installs only; default: empty) |
 | `MOCK_BREW_TAPS` | Space-separated taps returned by `brew tap` |
 | `MOCK_BREW_INSTALL_EXIT` | Exit code for `brew install` (default: 0) |
 | `MOCK_BREW_TAP_EXIT` | Exit code for `brew tap <name>` (default: 0) |
