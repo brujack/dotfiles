@@ -23,7 +23,16 @@ Session 2026-04-11 completed:
 - 12 private _install_ubuntu_\* helpers extracted from 658-line monolith
 - New test files: linux_shared.bats, linux_rhel.bats (8 tests), linux_ubuntu.bats (42 tests), developer.bats (3 tests)
 
-Backlog: Brewfile drift detection.
+**PR #56 (2026-04-29): Brewfile drift detection** → 554 tests on master
+
+- `_update_check_brewfile_drift` in `lib/update_summary.sh` compares Brewfile vs installed packages (formulae, casks on macOS, taps)
+- New `[WARN]` status in `_update_summary`: non-blocking, detail block printed below table
+- `_update_ok` and `_update_warn` direct-write helpers (bypass `_update_record_start`/end)
+- `_OVERRIDE_BREWFILE_PATH` test seam; `quiet_which brew` for mock-testability
+- 19 new tests: 6 WARN infra in `update_summary.bats`, 13 drift tests in new `brewfile_drift.bats`
+- Wired into `run_update()` just before `_update_summary`
+
+Backlog: empty.
 
 **Why:** Close CI gaps, add security scanning, make update workflow observable, make bootstrap scripts testable.
 

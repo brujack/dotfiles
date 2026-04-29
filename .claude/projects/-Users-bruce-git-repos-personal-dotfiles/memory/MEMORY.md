@@ -6,7 +6,7 @@
 - [math repo ADR and CI hardening](project_math_repo.md) — 6 ADRs added, CI lint enforced, secrets guardrail added 2026-04-09
 - [Always use feature branches](feedback_feature_branches.md) — implementation goes on feature branch → PR → CI auto-merge; never commit directly to master
 - [Mock pass-through for filesystem commands](feedback_mock_passthrough.md) — ln/chmod/mv/cp mocks must call real binary; log-only mocks cause silent test failures
-- [Dotfiles session 2026-04-11](project_dotfiles_prs.md) — CI hygiene, update summary, bootstrap tests, security tooling; 450 tests on master after PR #40
+- [Dotfiles session 2026-04-11](project_dotfiles_prs.md) — CI hygiene, update summary, bootstrap tests; 554 tests on master after PR #56 (brewfile drift)
 - [BATS direct-call error-capture pattern](feedback_bats_direct_call_pattern.md) — use `fn || _rc=$?` not bare `fn; local _rc=$?` to avoid ERR trap firing before assertion
 - [Subagent worktree path must be explicit](feedback_subagent_worktree_path.md) — state worktree path prominently at top of implementer prompt or subagent commits to wrong repo
 - [User profile](user_profile.md) — 45yr systems/devops engineer; optimize for readability/maintainability; push back when warranted; don't over-engineer
