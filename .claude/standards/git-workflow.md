@@ -83,6 +83,17 @@ WARNING and INFO findings are advisory — surface them but do not block the pus
 This rule is a durable backup: if `claude plugins update superpowers` overwrites
 the finishing-a-development-branch skill file, this rule still enforces the gate.
 
+### Learning Analysis
+
+**After every PR merge or direct master commit, always run a learning analysis before closing out.** Ask:
+
+1. **What did I learn?** — Any non-obvious pattern, gotcha, constraint, or decision that came up.
+2. **Where should I document it?** — Memory file, ADR, code comment, or CLAUDE.md update.
+
+Write the documentation, commit it, then close out. If nothing new was learned, state that explicitly so the omission is intentional.
+
+This rule is a durable backup: if `claude plugins update superpowers` overwrites the finishing-a-development-branch skill file, this rule still enforces the learning analysis step.
+
 ### Dispatching Subagents to Worktrees
 
 When using `superpowers:subagent-driven-development` with a worktree, implementer
