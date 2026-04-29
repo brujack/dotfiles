@@ -216,6 +216,8 @@ Uses **BATS** (Bash Automated Testing System), installed natively:
 **Run unit tests only:** `make test-unit` (runs `unit.bats`, `profiles.bats`, and `zshrc.d/unit.bats`)
 **Run lint only:** `make lint` (bash -n + zsh -n + shellcheck on all .sh files)
 **Install hooks:** `make install-hooks` (installs pre-commit and pre-push hooks; run once per checkout)
+**Sync agent guidance:** `make sync-agent-guidance` (regenerates `.cursor/rules/global-claude-standards.mdc` from `.claude/claude.md` + `.claude/standards/*.md`)
+**Check agent guidance drift:** `make check-agent-guidance` (fails when generated Cursor guidance is stale)
 
 The pre-commit hook is **required**. It runs on every `git commit`:
 

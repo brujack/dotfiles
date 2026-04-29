@@ -269,6 +269,8 @@ make test          # lint (bash -n, zsh -n, shellcheck) + all BATS tests
 make test-unit     # unit + profiles tests only (faster)
 make lint          # syntax + shellcheck only
 make install-hooks # install pre-commit hook (runs lint + ggshield before each commit)
+make sync-agent-guidance  # regenerate .cursor guidance from .claude sources
+make check-agent-guidance # fail if generated guidance is out of sync
 ```
 
 Install bats-core first: `brew install bats-core` (macOS) or `sudo apt-get install bats` (Ubuntu).
