@@ -303,6 +303,7 @@ Functions that operate on specific file paths use override env vars to redirect 
 
 | Seam                         | Used by                          | Effect                                                                             |
 | ---------------------------- | -------------------------------- | ---------------------------------------------------------------------------------- |
+| `_OVERRIDE_BREWFILE_PATH`    | `_update_check_brewfile_drift`   | Path to Brewfile; defaults to `${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile`          |
 | `_OVERRIDE_CONSTANTS_PATH`   | `_update_version_pin()`          | Redirects to a temp copy of `lib/constants.sh`; defaults to real path when unset   |
 | `UPDATE_LOG_PATH`            | `_update_summary()`              | Redirects log writes to a temp file in tests; defaults to `~/.dotfiles-update.log` |
 | `_UPDATE_TMPDIR`             | all summary functions            | Set to `${BATS_TEST_TMPDIR}` in tests to isolate snapshot files                    |

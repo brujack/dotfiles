@@ -75,12 +75,20 @@ Each `update` run appends a timestamped entry to `~/.dotfiles-update.log`. The e
 [OK]   tpm              no changes
 [OK]   tfenv            no changes
 [OK]   cheat.sh         updated
+[WARN] brew-drift       2 untracked formulae, 1 missing tap
 [SKIP] gems             flag not set
 
-6 sections: 5 OK, 0 failed, 1 skipped
+brew-drift details:
+  Untracked (installed, not in Brewfile):
+    bat
+    jq
+  Missing (in Brewfile, not installed):
+    tap: teamookla/speedtest
+
+7 sections: 5 OK, 0 failed, 1 warnings, 1 skipped
 ```
 
-Sections show `[OK]`, `[FAIL]`, or `[SKIP]`. `FAIL` entries include the exit code; scroll up in the terminal to see the full command output. The log is append-only and never rotated automatically.
+Sections show `[OK]`, `[WARN]`, `[FAIL]`, or `[SKIP]`. `WARN` entries are non-blocking advisory findings (e.g. Brewfile drift); detail lines are printed below the table. `FAIL` entries include the exit code; scroll up in the terminal to see the full command output. The log is append-only and never rotated automatically.
 
 ### Machine-Local Overrides
 
