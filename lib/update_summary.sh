@@ -448,7 +448,7 @@ _update_check_brewfile_drift() {
   # leaves: top-level installs only (for untracked detection, filters transitive deps)
   # all: every installed formula (for missing detection, avoids false positives)
   brew leaves 2>/dev/null | sort > "${_UPDATE_TMPDIR}/drift_inst_formulae_leaves"
-  brew list --formula 2>/dev/null | sort > "${_UPDATE_TMPDIR}/drift_inst_formulae_all"
+  brew list --formula --full-name 2>/dev/null | sort > "${_UPDATE_TMPDIR}/drift_inst_formulae_all"
   brew tap 2>/dev/null | sort > "${_UPDATE_TMPDIR}/drift_inst_taps"
 
   # Compute formula and tap drift

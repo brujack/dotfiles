@@ -68,6 +68,21 @@ teardown() {
   [ ! -f "${_UPDATE_TMPDIR}/detail_brew-drift" ]
 }
 
+@test "_update_check_brewfile_drift: OK when tap formula in Brewfile matches full-name from brew list" {
+  export MACOS=1
+  printf 'brew "teamookla/speedtest/speedtest"\ntap "teamookla/speedtest"\n' \
+    > "${BATS_TEST_TMPDIR}/Brewfile"
+  export _OVERRIDE_BREWFILE_PATH="${BATS_TEST_TMPDIR}/Brewfile"
+  # brew list --formula --full-name returns tap-qualified name; brew leaves also returns full name
+  export MOCK_BREW_LEAVES="teamookla/speedtest/speedtest"
+  export MOCK_BREW_LIST_FORMULA="teamookla/speedtest/speedtest"
+  export MOCK_BREW_TAPS="teamookla/speedtest"
+  run _update_check_brewfile_drift
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_UPDATE_TMPDIR}/status_brew-drift")" = "OK" ]
+  [ ! -f "${_UPDATE_TMPDIR}/detail_brew-drift" ]
+}
+
 @test "_update_check_brewfile_drift: OK when formula is dep of another — not flagged untracked" {
   export MACOS=1
   printf 'brew "git"\n' > "${BATS_TEST_TMPDIR}/Brewfile"

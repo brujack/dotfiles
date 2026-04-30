@@ -38,6 +38,13 @@ Session 2026-04-11 completed:
 - Previous behavior ran on Linux but only skipped cask lines; now skips entirely since Brewfile is macOS-only
 - All existing drift tests updated with `export MACOS=1`; one new Linux-gate test added
 
+**PR #58 (2026-04-29): Brewfile drift leaves** → 556 tests on master
+
+- `_update_check_brewfile_drift` now uses `brew leaves` (top-level installs only) for untracked detection, eliminating transitive-dependency noise (e.g. `abseil`, `brotli`, `zstd`)
+- `brew list --formula` kept for missing detection (avoids false positives when a Brewfile entry is also a dep of another formula)
+- New `MOCK_BREW_LEAVES` mock env var; new test verifying transitive deps are not flagged
+- Also fixed pre-existing Linux CI bug in `scripts/sync-agent-guidance.sh` (lowercase `claude.md` → `CLAUDE.md`)
+
 Backlog: `feature/apt-reboot-required` branch still in-flight.
 
 **Why:** Close CI gaps, add security scanning, make update workflow observable, make bootstrap scripts testable.
