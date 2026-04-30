@@ -411,6 +411,7 @@ _update_summary() {
     printf "────────────────────────────────────────────────────────\n"
     printf '%b' "${_output}"
     [[ -n "${_detail_output}" ]] && printf '%b' "${_detail_output}"
+    :
   } >> "${_log}" 2>/dev/null || log_warn "Could not write to ${_log}"
 
   printf "Log appended: %s\n" "${_log}"
