@@ -334,7 +334,7 @@ Available mock env vars:
 | Variable | Effect |
 |---|---|
 | `MOCK_CALLS_FILE` | File where all mock invocations are logged |
-| `MOCK_BREW_LIST_FORMULA` | Space-separated formulas returned by `brew list --formula` |
+| `MOCK_BREW_LIST_FORMULA` | Space-separated formulas returned by `brew list --formula --full-name` (use tap-qualified names, e.g. `teamookla/speedtest/speedtest`) |
 | `MOCK_BREW_LIST_CASK` | Space-separated casks returned by `brew list --cask` |
 | `MOCK_BREW_LEAVES` | Space-separated formulae returned by `brew leaves` (top-level installs only; default: empty) |
 | `MOCK_BREW_TAPS` | Space-separated taps returned by `brew tap` |
