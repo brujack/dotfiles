@@ -417,15 +417,44 @@ _update_summary() {
   printf "Log appended: %s\n" "${_log}"
 }
 
+# _brewfile_extract_cap LINE
+# Extracts the capability tag from a Brewfile line (e.g. "# [HAS_DEVTOOLS]" → "HAS_DEVTOOLS").
+# Prints nothing if the line has no valid tag.
+_brewfile_extract_cap() {
+  printf '%s\n' "${1}" | sed 's/.*# \[//;s/\].*//' | grep -E '^[A-Z][A-Z0-9_]+$' || true
+}
+
 # _brewfile_parse_section TYPE BREWFILE
-# Reads entries of TYPE (brew, cask, tap) from BREWFILE, skipping any line
-# tagged with # [HAS_*] when that capability variable is not set on this machine.
+# Reads entries of TYPE (brew, cask, tap) from BREWFILE.
+# Lines tagged # [HAS_*] are INCLUDED only when that capability is set on this machine.
+# Lines with no tag are always included.
 _brewfile_parse_section() {
   local _type="${1}" _brewfile="${2}"
   while IFS= read -r _line; do
     local _cap
-    _cap=$(printf '%s\n' "${_line}" | sed 's/.*# \[//;s/\].*//' | grep -E '^[A-Z][A-Z0-9_]+$' || true)
+    _cap=$(_brewfile_extract_cap "${_line}")
     if [[ -n "${_cap}" ]] && [[ -z "${!_cap:-}" ]]; then
+      continue
+    fi
+    case "${_type}" in
+      brew) printf '%s\n' "${_line}" | sed 's/^brew "//;s/".*//' ;;
+      cask) printf '%s\n' "${_line}" | sed 's/^cask "//;s/".*//' ;;
+      tap)  printf '%s\n' "${_line}" | sed 's/^tap "//;s/".*//' ;;
+    esac
+  done < <(grep "^${_type} \"" "${_brewfile}")
+}
+
+# _brewfile_parse_inactive TYPE BREWFILE
+# Reads entries of TYPE (brew, cask, tap) from BREWFILE that are tagged with a
+# capability that is NOT set on this machine.  Used to suppress "untracked"
+# reports for packages that are installed but belong to an inactive profile.
+_brewfile_parse_inactive() {
+  local _type="${1}" _brewfile="${2}"
+  while IFS= read -r _line; do
+    local _cap
+    _cap=$(_brewfile_extract_cap "${_line}")
+    # Only emit entries whose capability tag is explicitly inactive (tag present, var unset)
+    if [[ -z "${_cap}" ]] || [[ -n "${!_cap:-}" ]]; then
       continue
     fi
     case "${_type}" in
@@ -439,8 +468,9 @@ _brewfile_parse_section() {
 # _update_check_brewfile_drift
 # Compares Brewfile (formulae, casks on macOS, taps) against locally installed
 # Homebrew packages. Records OK/WARN/SKIP into the update summary.
-# Entries tagged # [HAS_*] in the Brewfile are excluded from the expected set
-# when that capability is not present on this machine.
+# Entries tagged # [HAS_*] in the Brewfile are invisible to drift detection on
+# machines where that capability is not set — they are neither "missing" nor
+# "untracked", so packages installed for another profile cause no noise.
 # Uses _OVERRIDE_BREWFILE_PATH seam for testing.
 _update_check_brewfile_drift() {
   if [[ -z ${MACOS:-} ]]; then
@@ -460,18 +490,27 @@ _update_check_brewfile_drift() {
     return 0
   fi
 
-  # Parse Brewfile into sorted temp files, filtering by machine capabilities
-  _brewfile_parse_section brew "${_brewfile}" | sort > "${_UPDATE_TMPDIR}/drift_bf_formulae"
-  _brewfile_parse_section tap  "${_brewfile}" | sort > "${_UPDATE_TMPDIR}/drift_bf_taps"
+  # Parse Brewfile: active = expected on this machine; inactive = invisible to drift
+  _brewfile_parse_section  brew "${_brewfile}" | sort > "${_UPDATE_TMPDIR}/drift_bf_formulae"
+  _brewfile_parse_inactive brew "${_brewfile}" | sort > "${_UPDATE_TMPDIR}/drift_ignore_formulae"
+  _brewfile_parse_section  tap  "${_brewfile}" | sort > "${_UPDATE_TMPDIR}/drift_bf_taps"
+  _brewfile_parse_inactive tap  "${_brewfile}" | sort > "${_UPDATE_TMPDIR}/drift_ignore_taps"
 
-  # Get actual installed state — two sets:
+  # Get actual installed state, stripping packages that belong to an inactive profile
+  # so they are invisible to drift detection on this machine.
   # leaves: top-level installs only (for untracked detection, filters transitive deps)
   # all: every installed formula (for missing detection, avoids false positives)
-  brew leaves 2>/dev/null | sort > "${_UPDATE_TMPDIR}/drift_inst_formulae_leaves"
-  brew list --formula --full-name 2>/dev/null | sort > "${_UPDATE_TMPDIR}/drift_inst_formulae_all"
+  brew leaves 2>/dev/null | sort \
+    | comm -23 - "${_UPDATE_TMPDIR}/drift_ignore_formulae" \
+    > "${_UPDATE_TMPDIR}/drift_inst_formulae_leaves"
+  brew list --formula --full-name 2>/dev/null | sort \
+    | comm -23 - "${_UPDATE_TMPDIR}/drift_ignore_formulae" \
+    > "${_UPDATE_TMPDIR}/drift_inst_formulae_all"
   brew tap 2>/dev/null \
     | grep -v -E '^homebrew/(bundle|cask|core|services)$' \
-    | sort > "${_UPDATE_TMPDIR}/drift_inst_taps"
+    | sort \
+    | comm -23 - "${_UPDATE_TMPDIR}/drift_ignore_taps" \
+    > "${_UPDATE_TMPDIR}/drift_inst_taps"
 
   # Compute formula and tap drift
   # comm -13: lines only in file2 = installed but not in Brewfile (untracked)
@@ -489,8 +528,11 @@ _update_check_brewfile_drift() {
   # Cask drift: macOS only (Linux Homebrew does not support casks)
   local _untracked_casks="" _missing_casks=""
   if [[ -n ${MACOS:-} ]]; then
-    _brewfile_parse_section cask "${_brewfile}" | sort > "${_UPDATE_TMPDIR}/drift_bf_casks"
-    brew list --cask 2>/dev/null | sort > "${_UPDATE_TMPDIR}/drift_inst_casks"
+    _brewfile_parse_section  cask "${_brewfile}" | sort > "${_UPDATE_TMPDIR}/drift_bf_casks"
+    _brewfile_parse_inactive cask "${_brewfile}" | sort > "${_UPDATE_TMPDIR}/drift_ignore_casks"
+    brew list --cask 2>/dev/null | sort \
+      | comm -23 - "${_UPDATE_TMPDIR}/drift_ignore_casks" \
+      > "${_UPDATE_TMPDIR}/drift_inst_casks"
     _untracked_casks=$(comm -13 "${_UPDATE_TMPDIR}/drift_bf_casks" \
       "${_UPDATE_TMPDIR}/drift_inst_casks")
     _missing_casks=$(comm -23 "${_UPDATE_TMPDIR}/drift_bf_casks" \

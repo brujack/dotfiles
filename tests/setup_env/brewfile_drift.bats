@@ -272,6 +272,21 @@ teardown() {
   [ ! -f "${_UPDATE_TMPDIR}/detail_brew-drift" ]
 }
 
+@test "_update_check_brewfile_drift: OK when tagged formula installed but capability unset — not untracked" {
+  export MACOS=1
+  # postgresql is tagged [HAS_DEVTOOLS] and IS installed — must not appear as untracked
+  printf 'brew "git"\nbrew "postgresql@14"  # [HAS_DEVTOOLS]\n' > "${BATS_TEST_TMPDIR}/Brewfile"
+  export _OVERRIDE_BREWFILE_PATH="${BATS_TEST_TMPDIR}/Brewfile"
+  unset HAS_DEVTOOLS
+  export MOCK_BREW_LEAVES="git postgresql@14"
+  export MOCK_BREW_LIST_FORMULA="git postgresql@14"
+  export MOCK_BREW_TAPS=""
+  run _update_check_brewfile_drift
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_UPDATE_TMPDIR}/status_brew-drift")" = "OK" ]
+  [ ! -f "${_UPDATE_TMPDIR}/detail_brew-drift" ]
+}
+
 @test "_update_check_brewfile_drift: WARN when tagged formula included because capability set" {
   export MACOS=1
   printf 'brew "git"\nbrew "postgresql@14"  # [HAS_DEVTOOLS]\n' > "${BATS_TEST_TMPDIR}/Brewfile"
@@ -294,6 +309,21 @@ teardown() {
   export MOCK_BREW_LEAVES="git"
   export MOCK_BREW_LIST_FORMULA="git"
   export MOCK_BREW_LIST_CASK=""
+  export MOCK_BREW_TAPS=""
+  run _update_check_brewfile_drift
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_UPDATE_TMPDIR}/status_brew-drift")" = "OK" ]
+  [ ! -f "${_UPDATE_TMPDIR}/detail_brew-drift" ]
+}
+
+@test "_update_check_brewfile_drift: OK when tagged cask installed but capability unset — not untracked" {
+  export MACOS=1
+  printf 'brew "git"\ncask "docker"  # [HAS_DOCKER]\n' > "${BATS_TEST_TMPDIR}/Brewfile"
+  export _OVERRIDE_BREWFILE_PATH="${BATS_TEST_TMPDIR}/Brewfile"
+  unset HAS_DOCKER
+  export MOCK_BREW_LEAVES="git"
+  export MOCK_BREW_LIST_FORMULA="git"
+  export MOCK_BREW_LIST_CASK="docker"
   export MOCK_BREW_TAPS=""
   run _update_check_brewfile_drift
   [ "$status" -eq 0 ]
@@ -324,6 +354,20 @@ teardown() {
   export MOCK_BREW_LEAVES="git"
   export MOCK_BREW_LIST_FORMULA="git"
   export MOCK_BREW_TAPS=""
+  run _update_check_brewfile_drift
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_UPDATE_TMPDIR}/status_brew-drift")" = "OK" ]
+  [ ! -f "${_UPDATE_TMPDIR}/detail_brew-drift" ]
+}
+
+@test "_update_check_brewfile_drift: OK when tagged tap installed but capability unset — not untracked" {
+  export MACOS=1
+  printf 'brew "git"\ntap "datawire/blackbird"  # [HAS_K8S]\n' > "${BATS_TEST_TMPDIR}/Brewfile"
+  export _OVERRIDE_BREWFILE_PATH="${BATS_TEST_TMPDIR}/Brewfile"
+  unset HAS_K8S
+  export MOCK_BREW_LEAVES="git"
+  export MOCK_BREW_LIST_FORMULA="git"
+  export MOCK_BREW_TAPS="datawire/blackbird"
   run _update_check_brewfile_drift
   [ "$status" -eq 0 ]
   [ "$(cat "${_UPDATE_TMPDIR}/status_brew-drift")" = "OK" ]
