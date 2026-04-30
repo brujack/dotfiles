@@ -22,7 +22,6 @@ brew "coreutils"
 brew "ctags"                                 # [HAS_DEVTOOLS]
 brew "datawire/blackbird/telepresence-arm64" # [HAS_K8S]
 brew "driftctl"                              # [HAS_DEVTOOLS]
-brew "exa"                                   # [HAS_DEVTOOLS]
 brew "fd"                                    # [HAS_DEVTOOLS]
 brew "findutils"
 brew "fzf"                                   # [HAS_DEVTOOLS]
