@@ -140,9 +140,7 @@ cask "cursor-cli"                            # [HAS_DEVTOOLS]
 cask "daisydisk"
 cask "dbeaver-community"                     # [HAS_DEVTOOLS]
 cask "discord"
-cask "docker"                                # [HAS_DOCKER]
 cask "docker-desktop"                        # [HAS_DOCKER]
-cask "dotnet"                                # [HAS_DEVTOOLS]
 cask "dotnet-runtime"                        # [HAS_DEVTOOLS]
 cask "expressvpn"                            # [HAS_DEVTOOLS]
 cask "firefox"
@@ -152,7 +150,6 @@ cask "funter"                                # [HAS_DEVTOOLS]
 cask "gcloud-cli"                            # [HAS_DEVTOOLS]
 cask "github"                                # [HAS_DEVTOOLS]
 cask "google-chrome"
-cask "google-cloud-sdk"                      # [HAS_DEVTOOLS]
 cask "inspec"                                # [HAS_DEVTOOLS]
 cask "istat-menus"
 cask "iterm2"                                # [HAS_DEVTOOLS]
