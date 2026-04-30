@@ -460,6 +460,19 @@ git 2.43.5-1.el9"
   head -1 "${UPDATE_LOG_PATH}" | grep -q "─"
 }
 
+@test "_update_summary does not warn 'Could not write' when no WARN detail output exists" {
+  # Regression: group exit code was last-command exit (1 when _detail_output empty),
+  # causing false "Could not write" warning even though the log write succeeded.
+  local _s
+  for _s in brew softwareupdate mas claude pip gems oh-my-zsh p10k tpm tfenv cheat.sh; do
+    printf "OK\n" > "${_UPDATE_TMPDIR}/status_${_s}"
+    printf "no changes\n" > "${_UPDATE_TMPDIR}/result_${_s}"
+  done
+  run _update_summary
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"Could not write"* ]]
+}
+
 @test "_update_summary skips sections with no status file" {
   printf "OK\n" > "${_UPDATE_TMPDIR}/status_brew"
   printf "no changes\n" > "${_UPDATE_TMPDIR}/result_brew"
