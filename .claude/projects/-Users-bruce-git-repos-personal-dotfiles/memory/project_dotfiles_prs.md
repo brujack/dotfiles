@@ -68,6 +68,19 @@ Session 2026-04-11 completed:
 - `brew "powershell"` added — studio has it installed as both a formula and a cask
 - `cask "cf-terraforming"` added — studio has it as a cask in addition to the formula
 
+**PR #64 (2026-04-30): Brewfile capability tags** → 565 tests on master
+
+- Inline `# [HAS_DEVTOOLS]` / `# [HAS_K8S]` etc. tags in Brewfile entries filter expected-set on machines without that capability
+- `_brewfile_parse_section()` extracts capability tag via sed+grep (bash `=~` with `\[` fails on macOS; `[A-Z_]+` silently rejects `HAS_K8S` with digit)
+- Fixes false "Missing" drift reports for dev tools on non-developer macs (mac_mini)
+
+**PR #65 (2026-04-30): Suppress untracked drift for inactive-capability packages** → 568 tests on master
+
+- Capability-tagged packages are now completely invisible to drift — neither "missing" nor "untracked" — on machines where that capability is unset
+- Adds `_brewfile_extract_cap()` helper and `_brewfile_parse_inactive()` to identify inactive-profile packages
+- `comm -23` strips inactive packages from installed sets before computing untracked drift
+- Fixes: dev tools installed on mac_mini from prior `brew bundle` appeared as "Untracked" after PR #64 fixed the missing side
+
 Backlog: `feature/apt-reboot-required` branch still in-flight.
 
 **Why:** Close CI gaps, add security scanning, make update workflow observable, make bootstrap scripts testable.
