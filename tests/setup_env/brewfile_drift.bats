@@ -139,6 +139,21 @@ teardown() {
 
 # ── tap drift ─────────────────────────────────────────────────────────────────
 
+@test "_update_check_brewfile_drift: OK when only homebrew auto-taps installed (not untracked)" {
+  export MACOS=1
+  printf 'brew "git"\n' > "${BATS_TEST_TMPDIR}/Brewfile"
+  export _OVERRIDE_BREWFILE_PATH="${BATS_TEST_TMPDIR}/Brewfile"
+  export MOCK_BREW_LEAVES="git"
+  export MOCK_BREW_LIST_FORMULA="git"
+  # homebrew/bundle, homebrew/cask, homebrew/core, homebrew/services are auto-taps
+  # always present — must be filtered, not reported as untracked
+  export MOCK_BREW_TAPS="homebrew/bundle homebrew/cask homebrew/core homebrew/services"
+  run _update_check_brewfile_drift
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_UPDATE_TMPDIR}/status_brew-drift")" = "OK" ]
+  [ ! -f "${_UPDATE_TMPDIR}/detail_brew-drift" ]
+}
+
 @test "_update_check_brewfile_drift: WARN when tap installed but not in Brewfile" {
   export MACOS=1
   printf 'brew "git"\n' > "${BATS_TEST_TMPDIR}/Brewfile"
