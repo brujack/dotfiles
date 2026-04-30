@@ -9,7 +9,7 @@ Personal development environment bootstrapping system for macOS and Linux (Ubunt
 ```
 dotfiles/
 ├── setup_env.sh              # Main entry point — sources lib/, dispatches workflows
-├── Brewfile                  # Homebrew bundle manifest (100+ formulae/casks)
+├── Brewfile                  # Homebrew bundle manifest (100+ formulae/casks); entries tagged # [HAS_*] are capability-gated
 ├── config/
 │   └── profiles.sh           # hostname → profile map; edit here to add a new machine
 ├── docs/
@@ -181,6 +181,19 @@ brew_formula_installed <formula>
 brew_cask_installed <cask>
 quiet_which <command>
 ```
+
+### Brewfile Capability Tags
+
+Entries in `Brewfile` can be tagged with a trailing `# [HAS_*]` comment to make them profile-aware. The `brew-drift` check (`_update_check_brewfile_drift`) skips tagged entries when the named capability variable is not set on the current machine:
+
+```
+brew "postgresql@14"  # [HAS_DEVTOOLS]
+cask "docker"         # [HAS_DOCKER]
+cask "lens"           # [HAS_K8S]
+brew "rustup"         # [HAS_RUST]
+```
+
+Untagged entries are expected on all macs. When adding a new Brewfile entry that is developer-, K8s-, Docker-, or Rust-specific, add the appropriate tag.
 
 ### PowerShell Scripts
 

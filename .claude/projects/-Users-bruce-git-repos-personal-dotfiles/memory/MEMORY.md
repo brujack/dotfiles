@@ -17,3 +17,4 @@
 - [Test that conditional file writes don't create the file on false branch](feedback_conditional_file_write_test.md) — OK/skip path tests must assert `[ ! -f detail_file ]` to catch regressions where the file is always written
 - [OS gate test update pattern](feedback_os_gate_test_update.md) — when adding a platform gate to an existing function, all prior tests need the gate var set explicitly or they pass vacuously via SKIP
 - [Direct master commits bypass CI](feedback_direct_master_ci_bypass.md) — new CI steps added via direct master commits never run until the next PR; verify on Linux before adding
+- [Bash regex and capability names with digits](feedback_bash_regex_digits.md) — use `[A-Z][A-Z0-9_]+` not `[A-Z_]+` when matching SCREAMING_SNAKE_CASE; HAS_K8S silently rejected by the latter
