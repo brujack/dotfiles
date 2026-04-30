@@ -61,17 +61,8 @@ then
   alias cat="batcat"
 fi
 
-# alias for ls to exa removed due to breaking globbing for ansible aws integration
-if quiet_which exa
-then
-  alias gs="exa -lg --git"
-  alias tree="exa --tree"
-  alias ll="ls -la"
-  alias ls="ls -l"
-else
-  alias ll="ls -la"
-  alias ls="ls -l"
-fi
+alias ll="ls -la"
+alias ls="ls -l"
 
 # for aws info at the cli
 # add a "--region xxx" to change regions
