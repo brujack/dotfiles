@@ -45,6 +45,13 @@ Session 2026-04-11 completed:
 - New `MOCK_BREW_LEAVES` mock env var; new test verifying transitive deps are not flagged
 - Also fixed pre-existing Linux CI bug in `scripts/sync-agent-guidance.sh` (lowercase `claude.md` → `CLAUDE.md`)
 
+**PR #60 (2026-04-30): Brewfile drift fixup** → 557 tests on master
+
+- `brew list --formula --full-name` for missing detection (was `--formula`, returning short names that never matched tap-qualified Brewfile entries like `teamookla/speedtest/speedtest`)
+- `brew leaves` already returns tap-qualified names — untracked side was correct all along
+- Brewfile formula renames: `gpg→gnupg`, `icu4c→icu4c@78`, `mongodb-atlas→mongodb-atlas-cli`, `pkg-config→pkgconf`, `openssl→openssl@3`, `python3→python@3.13`; removed duplicate `brew "gh"`
+- New test: tap-qualified formula in Brewfile matches `--full-name` output → OK
+
 Backlog: `feature/apt-reboot-required` branch still in-flight.
 
 **Why:** Close CI gaps, add security scanning, make update workflow observable, make bootstrap scripts testable.
