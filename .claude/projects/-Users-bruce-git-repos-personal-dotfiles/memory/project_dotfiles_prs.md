@@ -58,6 +58,11 @@ Session 2026-04-11 completed:
 - When `_detail_output` is empty, `[[ -n "" ]] && printf ...` exits 1 → false `|| warn` fires
 - Fix: add `:` as the final command in the group so it always exits 0; `||` only fires on real redirect failure
 
+**PR #62 (2026-04-30): Homebrew auto-tap filter + Brewfile sync** → 559 tests on master
+
+- `brew tap` output always includes `homebrew/bundle`, `homebrew/cask`, `homebrew/core`, `homebrew/services` — Homebrew auto-installs these; filter with `grep -v -E '^homebrew/(bundle|cask|core|services)$'` before drift comparison
+- Brewfile synced to actual installed state: +6 user taps, +5 formulae, +4 tap-qualified formulae, +36 casks; removed `docker-slim`; fixed sort order
+
 Backlog: `feature/apt-reboot-required` branch still in-flight.
 
 **Why:** Close CI gaps, add security scanning, make update workflow observable, make bootstrap scripts testable.
