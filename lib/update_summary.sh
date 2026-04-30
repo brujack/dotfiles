@@ -417,9 +417,30 @@ _update_summary() {
   printf "Log appended: %s\n" "${_log}"
 }
 
+# _brewfile_parse_section TYPE BREWFILE
+# Reads entries of TYPE (brew, cask, tap) from BREWFILE, skipping any line
+# tagged with # [HAS_*] when that capability variable is not set on this machine.
+_brewfile_parse_section() {
+  local _type="${1}" _brewfile="${2}"
+  while IFS= read -r _line; do
+    local _cap
+    _cap=$(printf '%s\n' "${_line}" | sed 's/.*# \[//;s/\].*//' | grep -E '^[A-Z][A-Z0-9_]+$' || true)
+    if [[ -n "${_cap}" ]] && [[ -z "${!_cap:-}" ]]; then
+      continue
+    fi
+    case "${_type}" in
+      brew) printf '%s\n' "${_line}" | sed 's/^brew "//;s/".*//' ;;
+      cask) printf '%s\n' "${_line}" | sed 's/^cask "//;s/".*//' ;;
+      tap)  printf '%s\n' "${_line}" | sed 's/^tap "//;s/".*//' ;;
+    esac
+  done < <(grep "^${_type} \"" "${_brewfile}")
+}
+
 # _update_check_brewfile_drift
 # Compares Brewfile (formulae, casks on macOS, taps) against locally installed
 # Homebrew packages. Records OK/WARN/SKIP into the update summary.
+# Entries tagged # [HAS_*] in the Brewfile are excluded from the expected set
+# when that capability is not present on this machine.
 # Uses _OVERRIDE_BREWFILE_PATH seam for testing.
 _update_check_brewfile_drift() {
   if [[ -z ${MACOS:-} ]]; then
@@ -439,11 +460,9 @@ _update_check_brewfile_drift() {
     return 0
   fi
 
-  # Parse Brewfile into sorted temp files
-  grep '^brew "' "${_brewfile}" | sed 's/^brew "//;s/".*//' | sort \
-    > "${_UPDATE_TMPDIR}/drift_bf_formulae"
-  grep '^tap "' "${_brewfile}" | sed 's/^tap "//;s/".*//' | sort \
-    > "${_UPDATE_TMPDIR}/drift_bf_taps"
+  # Parse Brewfile into sorted temp files, filtering by machine capabilities
+  _brewfile_parse_section brew "${_brewfile}" | sort > "${_UPDATE_TMPDIR}/drift_bf_formulae"
+  _brewfile_parse_section tap  "${_brewfile}" | sort > "${_UPDATE_TMPDIR}/drift_bf_taps"
 
   # Get actual installed state — two sets:
   # leaves: top-level installs only (for untracked detection, filters transitive deps)
@@ -470,8 +489,7 @@ _update_check_brewfile_drift() {
   # Cask drift: macOS only (Linux Homebrew does not support casks)
   local _untracked_casks="" _missing_casks=""
   if [[ -n ${MACOS:-} ]]; then
-    grep '^cask "' "${_brewfile}" | sed 's/^cask "//;s/".*//' | sort \
-      > "${_UPDATE_TMPDIR}/drift_bf_casks"
+    _brewfile_parse_section cask "${_brewfile}" | sort > "${_UPDATE_TMPDIR}/drift_bf_casks"
     brew list --cask 2>/dev/null | sort > "${_UPDATE_TMPDIR}/drift_inst_casks"
     _untracked_casks=$(comm -13 "${_UPDATE_TMPDIR}/drift_bf_casks" \
       "${_UPDATE_TMPDIR}/drift_inst_casks")

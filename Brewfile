@@ -1,60 +1,60 @@
-tap "chef/chef"
-tap "cloudflare/cloudflare"
-tap "datawire/blackbird"
-tap "go-task/tap"
-tap "redpanda-data/tap"
-tap "snyk/tap"
-tap "teamookla/speedtest"
-brew "argocd"
-brew "autoconf"
-brew "automake"
-brew "azure-cli"
+tap "chef/chef"                              # [HAS_DEVTOOLS]
+tap "cloudflare/cloudflare"                  # [HAS_DEVTOOLS]
+tap "datawire/blackbird"                     # [HAS_K8S]
+tap "go-task/tap"                            # [HAS_DEVTOOLS]
+tap "redpanda-data/tap"                      # [HAS_DEVTOOLS]
+tap "snyk/tap"                               # [HAS_DEVTOOLS]
+tap "teamookla/speedtest"                    # [HAS_DEVTOOLS]
+brew "argocd"                                # [HAS_K8S]
+brew "autoconf"                              # [HAS_DEVTOOLS]
+brew "automake"                              # [HAS_DEVTOOLS]
+brew "azure-cli"                             # [HAS_DEVTOOLS]
 brew "bash"
 brew "bat"
-brew "bats-core"
-brew "bison"
+brew "bats-core"                             # [HAS_DEVTOOLS]
+brew "bison"                                 # [HAS_DEVTOOLS]
 brew "bzip2"
-brew "cf-terraforming"
-brew "chruby"
-brew "cloudflared"
-brew "consul"
+brew "cf-terraforming"                       # [HAS_DEVTOOLS]
+brew "chruby"                                # [HAS_DEVTOOLS]
+brew "cloudflared"                           # [HAS_DEVTOOLS]
+brew "consul"                                # [HAS_DEVTOOLS]
 brew "coreutils"
-brew "ctags"
-brew "datawire/blackbird/telepresence-arm64"
-brew "driftctl"
-brew "exa"
-brew "fd"
+brew "ctags"                                 # [HAS_DEVTOOLS]
+brew "datawire/blackbird/telepresence-arm64" # [HAS_K8S]
+brew "driftctl"                              # [HAS_DEVTOOLS]
+brew "exa"                                   # [HAS_DEVTOOLS]
+brew "fd"                                    # [HAS_DEVTOOLS]
 brew "findutils"
-brew "fzf"
+brew "fzf"                                   # [HAS_DEVTOOLS]
 brew "gdbm"
 brew "gettext"
-brew "ggshield"
-brew "gh"
+brew "ggshield"                              # [HAS_DEVTOOLS]
+brew "gh"                                    # [HAS_DEVTOOLS]
 brew "git"
-brew "git-lfs"
-brew "glances"
+brew "git-lfs"                               # [HAS_DEVTOOLS]
+brew "glances"                               # [HAS_DEVTOOLS]
 brew "gmp"
-brew "gnupg"
-brew "go"
-brew "go-task/tap/go-task"
-brew "hadolint"
-brew "helm"
+brew "gnupg"                                 # [HAS_DEVTOOLS]
+brew "go"                                    # [HAS_DEVTOOLS]
+brew "go-task/tap/go-task"                   # [HAS_DEVTOOLS]
+brew "hadolint"                              # [HAS_DOCKER]
+brew "helm"                                  # [HAS_K8S]
 brew "htop"
-brew "httpie"
+brew "httpie"                                # [HAS_DEVTOOLS]
 brew "icu4c@78"
-brew "imagemagick"
-brew "iperf3"
+brew "imagemagick"                           # [HAS_DEVTOOLS]
+brew "iperf3"                                # [HAS_DEVTOOLS]
 brew "jpeg"
 brew "jq"
-brew "k3d"
-brew "k9s"
+brew "k3d"                                   # [HAS_K8S]
+brew "k9s"                                   # [HAS_K8S]
 brew "keychain"
-brew "kind"
-brew "kops"
-brew "kubernetes-cli"
-brew "kustomize"
-brew "lazydocker"
-brew "ldns"
+brew "kind"                                  # [HAS_K8S]
+brew "kops"                                  # [HAS_K8S]
+brew "kubernetes-cli"                        # [HAS_K8S]
+brew "kustomize"                             # [HAS_K8S]
+brew "lazydocker"                            # [HAS_DOCKER]
+brew "ldns"                                  # [HAS_DEVTOOLS]
 brew "libffi"
 brew "libidn2"
 brew "libpng"
@@ -62,125 +62,127 @@ brew "libtiff"
 brew "libtool"
 brew "libunistring"
 brew "libyaml"
-brew "linkerd"
+brew "linkerd"                               # [HAS_K8S]
 brew "make"
 brew "mas"
-brew "mintoolkit"
-brew "mongosh"
-brew "mongodb-atlas-cli"
+brew "mintoolkit"                            # [HAS_DEVTOOLS]
+brew "mongosh"                               # [HAS_DEVTOOLS]
+brew "mongodb-atlas-cli"                     # [HAS_DEVTOOLS]
 brew "mpfr"
-brew "mysql"
+brew "mysql"                                 # [HAS_DEVTOOLS]
 brew "ncdu"
-brew "neovim"
-brew "node"
-brew "nomad"
-brew "ntfy"
+brew "neovim"                                # [HAS_DEVTOOLS]
+brew "node"                                  # [HAS_DEVTOOLS]
+brew "nomad"                                 # [HAS_DEVTOOLS]
+brew "ntfy"                                  # [HAS_DEVTOOLS]
 brew "openssl@3"
-brew "packer"
+brew "packer"                                # [HAS_DEVTOOLS]
 brew "pcre"
-brew "perl"
+brew "perl"                                  # [HAS_DEVTOOLS]
 brew "pkgconf"
-brew "postgresql@14"
-brew "postgresql@15"
+brew "postgresql@14"                         # [HAS_DEVTOOLS]
+brew "postgresql@15"                         # [HAS_DEVTOOLS]
+brew "powershell"                            # [HAS_DEVTOOLS]
 brew "pwgen"
-brew "pyenv"
-brew "pyenv-virtualenv"
-brew "python@3.13"
-brew "rancher-cli"
-brew "ranger"
+brew "pyenv"                                 # [HAS_DEVTOOLS]
+brew "pyenv-virtualenv"                      # [HAS_DEVTOOLS]
+brew "python@3.13"                           # [HAS_DEVTOOLS]
+brew "rancher-cli"                           # [HAS_K8S]
+brew "ranger"                                # [HAS_DEVTOOLS]
 brew "readline"
-brew "redis", restart_service: :changed, link: true
-brew "redpanda-data/tap/redpanda"
-brew "ripgrep"
-brew "ruby"
-brew "ruby-install"
-brew "rustup"
-brew "shellcheck"
-brew "snyk/tap/snyk"
-brew "sops"
+brew "redis", restart_service: :changed, link: true  # [HAS_DEVTOOLS]
+brew "redpanda-data/tap/redpanda"            # [HAS_DEVTOOLS]
+brew "ripgrep"                               # [HAS_DEVTOOLS]
+brew "ruby"                                  # [HAS_DEVTOOLS]
+brew "ruby-install"                          # [HAS_DEVTOOLS]
+brew "rustup"                                # [HAS_RUST]
+brew "shellcheck"                            # [HAS_DEVTOOLS]
+brew "snyk/tap/snyk"                         # [HAS_DEVTOOLS]
+brew "sops"                                  # [HAS_DEVTOOLS]
 brew "sqlite"
-brew "starship"
-brew "teamookla/speedtest/speedtest"
-brew "teleport"
-brew "terraform_landscape"
-brew "tfenv"
-brew "tflint"
-brew "tfsec"
-brew "tgenv"
-brew "the_silver_searcher"
+brew "starship"                              # [HAS_DEVTOOLS]
+brew "teamookla/speedtest/speedtest"         # [HAS_DEVTOOLS]
+brew "teleport"                              # [HAS_DEVTOOLS]
+brew "terraform_landscape"                   # [HAS_DEVTOOLS]
+brew "tfenv"                                 # [HAS_DEVTOOLS]
+brew "tflint"                                # [HAS_DEVTOOLS]
+brew "tfsec"                                 # [HAS_DEVTOOLS]
+brew "tgenv"                                 # [HAS_DEVTOOLS]
+brew "the_silver_searcher"                   # [HAS_DEVTOOLS]
 brew "tmux"
 brew "tree"
 #brew "vault", args: ["--with-ui"]
-brew "vault"
+brew "vault"                                 # [HAS_DEVTOOLS]
 brew "vim"
 brew "wget"
-brew "wireshark"
+brew "wireshark"                             # [HAS_DEVTOOLS]
 brew "xz"
-brew "yq"
+brew "yq"                                    # [HAS_DEVTOOLS]
 brew "zlib"
-brew "zoxide"
+brew "zoxide"                                # [HAS_DEVTOOLS]
 brew "zsh"
 brew "zsh-completions"
 cask "1password"
 cask "adobe-acrobat-reader"
-cask "adobe-creative-cloud"
+cask "adobe-creative-cloud"                  # [HAS_DEVTOOLS]
 cask "alfred"
 cask "appcleaner"
-cask "balenaetcher"
-cask "bambu-studio"
-cask "beyond-compare"
-cask "blender"
-cask "carbon-copy-cloner"
+cask "balenaetcher"                          # [HAS_DEVTOOLS]
+cask "bambu-studio"                          # [HAS_DEVTOOLS]
+cask "beyond-compare"                        # [HAS_DEVTOOLS]
+cask "blender"                               # [HAS_DEVTOOLS]
+cask "carbon-copy-cloner"                    # [HAS_DEVTOOLS]
+cask "cf-terraforming"                       # [HAS_DEVTOOLS]
 cask "chatgpt"
 cask "claude"
-cask "claude-code"
-cask "cursor"
-cask "cursor-cli"
+cask "claude-code"                           # [HAS_DEVTOOLS]
+cask "cursor"                                # [HAS_DEVTOOLS]
+cask "cursor-cli"                            # [HAS_DEVTOOLS]
 cask "daisydisk"
-cask "dbeaver-community"
+cask "dbeaver-community"                     # [HAS_DEVTOOLS]
 cask "discord"
-cask "docker"
-cask "docker-desktop"
-cask "dotnet"
-cask "dotnet-runtime"
-cask "expressvpn"
+cask "docker"                                # [HAS_DOCKER]
+cask "docker-desktop"                        # [HAS_DOCKER]
+cask "dotnet"                                # [HAS_DEVTOOLS]
+cask "dotnet-runtime"                        # [HAS_DEVTOOLS]
+cask "expressvpn"                            # [HAS_DEVTOOLS]
 cask "firefox"
 cask "flycut"
-cask "fork"
-cask "funter"
-cask "gcloud-cli"
-cask "github"
+cask "fork"                                  # [HAS_DEVTOOLS]
+cask "funter"                                # [HAS_DEVTOOLS]
+cask "gcloud-cli"                            # [HAS_DEVTOOLS]
+cask "github"                                # [HAS_DEVTOOLS]
 cask "google-chrome"
-cask "google-cloud-sdk"
-cask "inspec"
+cask "google-cloud-sdk"                      # [HAS_DEVTOOLS]
+cask "inspec"                                # [HAS_DEVTOOLS]
 cask "istat-menus"
-cask "iterm2"
-cask "lens"
+cask "iterm2"                                # [HAS_DEVTOOLS]
+cask "lens"                                  # [HAS_K8S]
 cask "logi-options+"
-cask "macdown"
+cask "macdown"                               # [HAS_DEVTOOLS]
 cask "malwarebytes"
 cask "microsoft-auto-update"
 cask "microsoft-office"
 cask "miro"
-cask "mysqlworkbench"
+cask "mysqlworkbench"                        # [HAS_DEVTOOLS]
 cask "obs"
-cask "oracle-jdk"
-cask "postman"
-cask "powershell"
-cask "session-manager-plugin"
+cask "oracle-jdk"                            # [HAS_DEVTOOLS]
+cask "postman"                               # [HAS_DEVTOOLS]
+cask "powershell"                            # [HAS_DEVTOOLS]
+cask "session-manager-plugin"                # [HAS_DEVTOOLS]
 cask "slack"
 cask "sonos"
-cask "sourcetree"
+cask "sourcetree"                            # [HAS_DEVTOOLS]
 cask "spotify"
-cask "steam"
+cask "steam"                                 # [HAS_DEVTOOLS]
 cask "teamviewer"
 cask "tidal"
-cask "vagrant"
-cask "virtualbox"
+cask "vagrant"                               # [HAS_DEVTOOLS]
+cask "virtualbox"                            # [HAS_DEVTOOLS]
 cask "visual-studio-code"
 cask "vlc"
-cask "warp"
-cask "zed"
+cask "warp"                                  # [HAS_DEVTOOLS]
+cask "zed"                                   # [HAS_DEVTOOLS]
 cask "zoom"
 mas "Better Rename 9", id: 414209656
 mas "Blackmagic Disk Speed Test", id: 425264550
