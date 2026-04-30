@@ -79,7 +79,6 @@ brew "packer"                                # [HAS_DEVTOOLS]
 brew "pcre"
 brew "perl"                                  # [HAS_DEVTOOLS]
 brew "pkgconf"
-brew "postgresql@14"                         # [HAS_DEVTOOLS]
 brew "postgresql@15"                         # [HAS_DEVTOOLS]
 brew "powershell"                            # [HAS_DEVTOOLS]
 brew "pwgen"
@@ -131,7 +130,6 @@ cask "bambu-studio"                          # [HAS_DEVTOOLS]
 cask "beyond-compare"                        # [HAS_DEVTOOLS]
 cask "blender"                               # [HAS_DEVTOOLS]
 cask "carbon-copy-cloner"                    # [HAS_DEVTOOLS]
-cask "cf-terraforming"                       # [HAS_DEVTOOLS]
 cask "chatgpt"
 cask "claude"
 cask "claude-code"                           # [HAS_DEVTOOLS]
@@ -155,7 +153,6 @@ cask "istat-menus"
 cask "iterm2"                                # [HAS_DEVTOOLS]
 cask "lens"                                  # [HAS_K8S]
 cask "logi-options+"
-cask "macdown"                               # [HAS_DEVTOOLS]
 cask "malwarebytes"
 cask "microsoft-auto-update"
 cask "microsoft-office"
@@ -165,7 +162,6 @@ cask "obs"
 cask "oracle-jdk"                            # [HAS_DEVTOOLS]
 cask "postman"                               # [HAS_DEVTOOLS]
 cask "powershell"                            # [HAS_DEVTOOLS]
-cask "session-manager-plugin"                # [HAS_DEVTOOLS]
 cask "slack"
 cask "sonos"
 cask "sourcetree"                            # [HAS_DEVTOOLS]
