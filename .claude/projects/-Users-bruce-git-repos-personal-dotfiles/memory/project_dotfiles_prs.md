@@ -63,6 +63,11 @@ Session 2026-04-11 completed:
 - `brew tap` output always includes `homebrew/bundle`, `homebrew/cask`, `homebrew/core`, `homebrew/services` — Homebrew auto-installs these; filter with `grep -v -E '^homebrew/(bundle|cask|core|services)$'` before drift comparison
 - Brewfile synced to actual installed state: +6 user taps, +5 formulae, +4 tap-qualified formulae, +36 casks; removed `docker-slim`; fixed sort order
 
+**PR #63 (2026-04-30): Brewfile studio drift** → 559 tests on master
+
+- `brew "powershell"` added — studio has it installed as both a formula and a cask
+- `cask "cf-terraforming"` added — studio has it as a cask in addition to the formula
+
 Backlog: `feature/apt-reboot-required` branch still in-flight.
 
 **Why:** Close CI gaps, add security scanning, make update workflow observable, make bootstrap scripts testable.
