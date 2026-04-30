@@ -52,6 +52,12 @@ Session 2026-04-11 completed:
 - Brewfile formula renames: `gpg→gnupg`, `icu4c→icu4c@78`, `mongodb-atlas→mongodb-atlas-cli`, `pkg-config→pkgconf`, `openssl→openssl@3`, `python3→python@3.13`; removed duplicate `brew "gh"`
 - New test: tap-qualified formula in Brewfile matches `--full-name` output → OK
 
+**PR #61 (2026-04-30): Fix false log warning** → 558 tests on master
+
+- `{ ... } >> file || warn` pattern: group exit code is the LAST COMMAND's exit, not the redirect's
+- When `_detail_output` is empty, `[[ -n "" ]] && printf ...` exits 1 → false `|| warn` fires
+- Fix: add `:` as the final command in the group so it always exits 0; `||` only fires on real redirect failure
+
 Backlog: `feature/apt-reboot-required` branch still in-flight.
 
 **Why:** Close CI gaps, add security scanning, make update workflow observable, make bootstrap scripts testable.
