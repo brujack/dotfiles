@@ -14,7 +14,6 @@ brew "bat"
 brew "bats-core"                             # [HAS_DEVTOOLS]
 brew "bison"                                 # [HAS_DEVTOOLS]
 brew "bzip2"
-brew "cf-terraforming"                       # [HAS_DEVTOOLS]
 brew "chruby"                                # [HAS_DEVTOOLS]
 brew "cloudflared"                           # [HAS_DEVTOOLS]
 brew "consul"                                # [HAS_DEVTOOLS]
