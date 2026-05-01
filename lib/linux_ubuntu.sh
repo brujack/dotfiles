@@ -68,233 +68,57 @@ _install_ubuntu_pyenv() {
 
 _install_ubuntu_powershell() {
   printf "Installing powershell Ubuntu\\n"
-  if [[ -n ${BIONIC} ]]; then
-    if [[ ! -f ${HOME}/software_downloads/packages-microsoft-prod.deb ]]; then
-      # shellcheck disable=SC2046
-      wget -O ${HOME}/software_downloads/packages-microsoft-prod.deb https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb
-      sudo -H dpkg -i ${HOME}/software_downloads/packages-microsoft-prod.deb
-      sudo apt update
-      sudo -H add-apt-repository universe
-      sudo -H apt install powershell -y
-      if [[ -x $(command -v pwsh) ]]; then
-        printf "pwsh is installed Ubuntu Bionic\\n"
-      fi
+  if [[ ! -f ${HOME}/software_downloads/packages-microsoft-prod.deb ]]; then
+    # shellcheck disable=SC2046
+    wget -O ${HOME}/software_downloads/packages-microsoft-prod.deb https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb
+    sudo -H dpkg -i ${HOME}/software_downloads/packages-microsoft-prod.deb
+    sudo apt update
+    sudo -H add-apt-repository universe
+    sudo -H apt install powershell -y
+    if [[ -x $(command -v pwsh) ]]; then
+      printf "pwsh is installed\\n"
     fi
   fi
-  if [[ -n ${FOCAL} ]]; then
-    if [[ ! -f ${HOME}/software_downloads/packages-microsoft-prod.deb ]]; then
-      # shellcheck disable=SC2046
-      wget -O ${HOME}/software_downloads/packages-microsoft-prod.deb https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb
-      sudo -H dpkg -i ${HOME}/software_downloads/packages-microsoft-prod.deb
-      sudo apt update
-      sudo -H add-apt-repository universe
-      sudo -H apt install powershell -y
-      if [[ -x $(command -v pwsh) ]]; then
-        printf "pwsh is installed Ubuntu Focal\\n"
-      fi
+}
+
+_install_go_from_tarball() {
+  if [[ ! -f ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} ]]; then
+    wget -O ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} ${GO_DOWNLOAD_URL}
+    tar xvf ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} -C ${HOME}/software_downloads/
+    if [[ -d /usr/local/go ]]; then
+      sudo rm -rf /usr/local/go
     fi
-  fi
-  if [[ -n ${JAMMY} ]]; then
-    if [[ ! -f ${HOME}/software_downloads/packages-microsoft-prod.deb ]]; then
-      # shellcheck disable=SC2046
-      wget -O ${HOME}/software_downloads/packages-microsoft-prod.deb https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb
-      sudo -H dpkg -i ${HOME}/software_downloads/packages-microsoft-prod.deb
-      sudo apt update
-      sudo -H add-apt-repository universe
-      sudo -H apt install powershell -y
-      if [[ -x $(command -v pwsh) ]]; then
-        printf "pwsh is installed Ubuntu Jammy\\n"
-      fi
+    if [[ -d ${HOME}/software_downloads/go ]]; then
+      sudo mv ${HOME}/software_downloads/go /usr/local/go
+      sudo chmod 755 /usr/local/go
+      sudo chown -R root:root /usr/local/go
     fi
-  fi
-  if [[ -n ${NOBLE} ]]; then
-    if [[ ! -f ${HOME}/software_downloads/packages-microsoft-prod.deb ]]; then
-      # shellcheck disable=SC2046
-      wget -O ${HOME}/software_downloads/packages-microsoft-prod.deb https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb
-      sudo -H dpkg -i ${HOME}/software_downloads/packages-microsoft-prod.deb
-      sudo apt update
-      sudo -H add-apt-repository universe
-      sudo -H apt install powershell -y
-      if [[ -x $(command -v pwsh) ]]; then
-        printf "pwsh is installed Ubuntu Noble\\n"
-      fi
+    if [[ -d ${HOME}/software_downloads/go ]]; then
+      rm -rf ${HOME}/software_downloads/go
     fi
   fi
 }
 
 _install_ubuntu_go() {
   printf "Installing Go Ubuntu\\n"
+  local _minor
+  _minor=$(printf '%s' "${GO_VER}" | cut -d. -f2)
+  if [[ ${_minor} -lt 16 ]] || [[ ${_minor} -gt 26 ]]; then
+    printf "Error: Unsupported Go version %s\\n" "${GO_VER}"
+    return 1
+  fi
   sudo -H apt update
-  case ${GO_VER} in
-    1.16)
-      pkgs_to_remove="golang-1.15-go golang-1.15-src"
-      ;;
-    1.17)
-      pkgs_to_remove="golang-1.16-go golang-1.16-src"
-      ;;
-    1.18)
-      pkgs_to_remove="golang-1.17-go golang-1.17-src"
-      ;;
-    1.19)
-      pkgs_to_remove="golang-1.18-go golang-1.18-src"
-      ;;
-    1.20)
-      pkgs_to_remove="golang-1.19-go golang-1.19-src"
-      ;;
-    1.21)
-      pkgs_to_remove="golang-1.20-go golang-1.20-src"
-      ;;
-    1.22)
-      pkgs_to_remove="golang-1.21-go golang-1.21-src"
-      ;;
-    1.23)
-      pkgs_to_remove="golang-1.22-go golang-1.22-src"
-      ;;
-    1.24)
-      pkgs_to_remove="golang-1.23-go golang-1.23-src"
-      ;;
-    1.25)
-      pkgs_to_remove="golang-1.24-go golang-1.24-src"
-      ;;
-    1.26)
-      pkgs_to_remove="golang-1.25-go golang-1.25-src"
-      ;;
-    *)
-      printf "Error: Unsupported Go version %s\\n" "${GO_VER}"
-      return 1
-      ;;
-  esac
+  local _prev_minor=$(( _minor - 1 ))
+  local pkgs_to_remove="golang-1.${_prev_minor}-go golang-1.${_prev_minor}-src"
   if [[ -n ${pkgs_to_remove} ]]; then
     sudo -H apt remove ${pkgs_to_remove} -y
   fi
-  case ${GO_VER} in
-    1.16)
-      sudo add-apt-repository ppa:longsleep/golang-backports -y
-      sudo -H apt install "golang-${GO_VER}-go" -y
-      ;;
-    1.17)
-      sudo add-apt-repository ppa:longsleep/golang-backports -y
-      sudo -H apt install "golang-${GO_VER}-go" -y
-      ;;
-    1.18)
-      sudo add-apt-repository ppa:longsleep/golang-backports -y
-      sudo -H apt install "golang-${GO_VER}-go" -y
-      ;;
-    1.19)
-      sudo add-apt-repository ppa:longsleep/golang-backports -y
-      sudo -H apt install "golang-${GO_VER}-go" -y
-      ;;
-    1.20)
-      sudo add-apt-repository ppa:longsleep/golang-backports -y
-      sudo -H apt install "golang-${GO_VER}-go" -y
-      ;;
-    1.21)
-      if [[ ! -f ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} ]]; then
-        wget -O ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} ${GO_DOWNLOAD_URL}
-        tar xvf ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} -C ${HOME}/software_downloads/
-        if [[ -d /usr/local/go ]]; then
-          sudo rm -rf /usr/local/go
-        fi
-        if [[ -d ${HOME}/software_downloads/go ]]; then
-          sudo mv ${HOME}/software_downloads/go /usr/local/go
-          sudo chmod 755 /usr/local/go
-          sudo chown -R root:root /usr/local/go
-        fi
-        if [[ -d ${HOME}/software_downloads/go ]]; then
-          rm -rf ${HOME}/software_downloads/go
-        fi
-      fi
-      ;;
-      1.22)
-      if [[ ! -f ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} ]]; then
-        wget -O ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} ${GO_DOWNLOAD_URL}
-        tar xvf ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} -C ${HOME}/software_downloads/
-        if [[ -d /usr/local/go ]]; then
-          sudo rm -rf /usr/local/go
-        fi
-        if [[ -d ${HOME}/software_downloads/go ]]; then
-          sudo mv ${HOME}/software_downloads/go /usr/local/go
-          sudo chmod 755 /usr/local/go
-          sudo chown -R root:root /usr/local/go
-        fi
-        if [[ -d ${HOME}/software_downloads/go ]]; then
-          rm -rf ${HOME}/software_downloads/go
-        fi
-      fi
-      ;;
-      1.23)
-      if [[ ! -f ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} ]]; then
-        wget -O ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} ${GO_DOWNLOAD_URL}
-        tar xvf ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} -C ${HOME}/software_downloads/
-        if [[ -d /usr/local/go ]]; then
-          sudo rm -rf /usr/local/go
-        fi
-        if [[ -d ${HOME}/software_downloads/go ]]; then
-          sudo mv ${HOME}/software_downloads/go /usr/local/go
-          sudo chmod 755 /usr/local/go
-          sudo chown -R root:root /usr/local/go
-        fi
-        if [[ -d ${HOME}/software_downloads/go ]]; then
-          rm -rf ${HOME}/software_downloads/go
-        fi
-      fi
-      ;;
-      1.24)
-      if [[ ! -f ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} ]]; then
-        wget -O ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} ${GO_DOWNLOAD_URL}
-        tar xvf ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} -C ${HOME}/software_downloads/
-        if [[ -d /usr/local/go ]]; then
-          sudo rm -rf /usr/local/go
-        fi
-        if [[ -d ${HOME}/software_downloads/go ]]; then
-          sudo mv ${HOME}/software_downloads/go /usr/local/go
-          sudo chmod 755 /usr/local/go
-          sudo chown -R root:root /usr/local/go
-        fi
-        if [[ -d ${HOME}/software_downloads/go ]]; then
-          rm -rf ${HOME}/software_downloads/go
-        fi
-      fi
-      ;;
-      1.25)
-      if [[ ! -f ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} ]]; then
-        wget -O ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} ${GO_DOWNLOAD_URL}
-        tar xvf ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} -C ${HOME}/software_downloads/
-        if [[ -d /usr/local/go ]]; then
-          sudo rm -rf /usr/local/go
-        fi
-        if [[ -d ${HOME}/software_downloads/go ]]; then
-          sudo mv ${HOME}/software_downloads/go /usr/local/go
-          sudo chmod 755 /usr/local/go
-          sudo chown -R root:root /usr/local/go
-        fi
-        if [[ -d ${HOME}/software_downloads/go ]]; then
-          rm -rf ${HOME}/software_downloads/go
-        fi
-      fi
-      ;;
-      1.26)
-      if [[ ! -f ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} ]]; then
-        wget -O ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} ${GO_DOWNLOAD_URL}
-        tar xvf ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} -C ${HOME}/software_downloads/
-        if [[ -d /usr/local/go ]]; then
-          sudo rm -rf /usr/local/go
-        fi
-        if [[ -d ${HOME}/software_downloads/go ]]; then
-          sudo mv ${HOME}/software_downloads/go /usr/local/go
-          sudo chmod 755 /usr/local/go
-          sudo chown -R root:root /usr/local/go
-        fi
-        if [[ -d ${HOME}/software_downloads/go ]]; then
-          rm -rf ${HOME}/software_downloads/go
-        fi
-      fi
-      ;;
-    *)
-      printf "Error: Unsupported Go version %s\\n" "${GO_VER}"
-      return 1
-      ;;
-  esac
+  if [[ ${_minor} -lt 21 ]]; then
+    sudo add-apt-repository ppa:longsleep/golang-backports -y
+    sudo -H apt install "golang-${GO_VER}-go" -y
+  else
+    _install_go_from_tarball
+  fi
   INSTALLED_GO_VER=$(go version | awk '{print $3}' | sed 's/go//g')
   if [[ ${INSTALLED_GO_VER} == "${GO_VER}" ]]; then
     printf "Go %s is installed\\n" "${GO_VER}"
