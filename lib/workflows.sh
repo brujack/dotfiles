@@ -81,6 +81,8 @@ run_setup_user() {
 
   setup_dotfile_symlinks || return 1
 
+  install_terraform_skill || return 1
+
   setup_zsh_as_default_shell || return 1
 
   printf "Setting up cheat.sh\\n"
@@ -326,6 +328,10 @@ PY
 
   # ── git-based tools + misc (run_all only) ─────────────────────────────────
   if [[ ${_run_all} -eq 1 ]]; then
+    _update_record_start "terraform-skill"
+    install_terraform_skill
+    _update_record_end "terraform-skill" $?
+
     update_aws_cli
     update_rust
     if [[ -d ${HOME}/.tfenv ]]; then
