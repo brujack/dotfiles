@@ -1,7 +1,7 @@
 # Dotfiles Repo Improvements Plan
 
 **Date:** 2026-03-31
-**Status:** Superseded — see `docs/cursor/specs/2026-04-08-dotfiles-next-steps-plan.md`
+**Status:** Superseded — see `docs/cursor/plans/2026-04-08-dotfiles-next-steps-plan.md`
 **Scope:** Improve maintainability, safety, and testability of `setup_env.sh` and related repo structure without changing user-facing behavior.
 
 ## Current Status
@@ -19,7 +19,7 @@ This plan is superseded. All phases were either completed or subsumed into super
 
 **Remaining work is tracked in:**
 
-- `docs/cursor/specs/2026-04-08-dotfiles-next-steps-plan.md`
+- `docs/cursor/plans/2026-04-08-dotfiles-next-steps-plan.md`
 - `docs/superpowers/specs/` and `docs/superpowers/plans/`
 
 ## Goals

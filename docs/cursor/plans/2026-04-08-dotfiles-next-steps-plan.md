@@ -105,10 +105,10 @@ Each step from this plan has a corresponding spec and implementation plan in `do
 
 **Objective:** Keep planning docs aligned with repository reality.
 
-- Update `docs/cursor/specs/2026-03-31-dotfiles-improvements-plan.md`:
+- Update `docs/cursor/plans/2026-03-31-dotfiles-improvements-plan.md`:
   - mark completed portions
   - add links to follow-on specs/plans
-- Add a short “active roadmap” section to `docs/cursor/specs/README.md`.
+- Add a short "active roadmap" section to `docs/cursor/specs/README.md`.
 
 **Exit Criteria**
 

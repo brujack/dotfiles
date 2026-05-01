@@ -14,8 +14,8 @@
 
 | Action | File                                                         |
 | ------ | ------------------------------------------------------------ |
-| Modify | `docs/cursor/specs/2026-03-31-dotfiles-improvements-plan.md` |
-| Modify | `docs/cursor/specs/2026-04-08-dotfiles-next-steps-plan.md`   |
+| Modify | `docs/cursor/plans/2026-03-31-dotfiles-improvements-plan.md` |
+| Modify | `docs/cursor/plans/2026-04-08-dotfiles-next-steps-plan.md`   |
 | Modify | `docs/cursor/specs/README.md`                                |
 | Create | `docs/superpowers/README.md`                                 |
 
@@ -25,11 +25,11 @@
 
 **Files:**
 
-- Modify: `docs/cursor/specs/2026-03-31-dotfiles-improvements-plan.md`
+- Modify: `docs/cursor/plans/2026-03-31-dotfiles-improvements-plan.md`
 
 - [ ] **Step 1: Read the file**
 
-Read `docs/cursor/specs/2026-03-31-dotfiles-improvements-plan.md` in full.
+Read `docs/cursor/plans/2026-03-31-dotfiles-improvements-plan.md` in full.
 
 - [ ] **Step 2: Update the status field**
 
@@ -42,7 +42,7 @@ Change the `**Status:**` line from:
 to:
 
 ```markdown
-**Status:** Superseded — see `docs/cursor/specs/2026-04-08-dotfiles-next-steps-plan.md`
+**Status:** Superseded — see `docs/cursor/plans/2026-04-08-dotfiles-next-steps-plan.md`
 ```
 
 - [ ] **Step 3: Update the Current Status section**
@@ -56,7 +56,7 @@ This plan is partially completed. Major modularization and profile/capability mi
 
 For the active continuation plan, see:
 
-- `docs/cursor/specs/2026-04-08-dotfiles-next-steps-plan.md`
+- `docs/cursor/plans/2026-04-08-dotfiles-next-steps-plan.md`
 ```
 
 Update it to:
@@ -77,14 +77,14 @@ This plan is superseded. All phases were either completed or subsumed into super
 
 **Remaining work is tracked in:**
 
-- `docs/cursor/specs/2026-04-08-dotfiles-next-steps-plan.md`
+- `docs/cursor/plans/2026-04-08-dotfiles-next-steps-plan.md`
 - `docs/superpowers/specs/` and `docs/superpowers/plans/`
 ```
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add docs/cursor/specs/2026-03-31-dotfiles-improvements-plan.md
+git add docs/cursor/plans/2026-03-31-dotfiles-improvements-plan.md
 git commit -m "docs: mark 2026-03-31 improvements plan as superseded with completion summary
 
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
@@ -96,11 +96,11 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 
 **Files:**
 
-- Modify: `docs/cursor/specs/2026-04-08-dotfiles-next-steps-plan.md`
+- Modify: `docs/cursor/plans/2026-04-08-dotfiles-next-steps-plan.md`
 
 - [ ] **Step 1: Read the file**
 
-Read `docs/cursor/specs/2026-04-08-dotfiles-next-steps-plan.md` in full.
+Read `docs/cursor/plans/2026-04-08-dotfiles-next-steps-plan.md` in full.
 
 - [ ] **Step 2: Update the status field**
 
@@ -139,7 +139,7 @@ Update the `Status` column for each step as work completes.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add docs/cursor/specs/2026-04-08-dotfiles-next-steps-plan.md
+git add docs/cursor/plans/2026-04-08-dotfiles-next-steps-plan.md
 git commit -m "docs: update next-steps plan status and add superpowers tracking table
 
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"

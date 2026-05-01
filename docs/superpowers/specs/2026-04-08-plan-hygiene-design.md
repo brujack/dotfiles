@@ -13,17 +13,17 @@ The Cursor specs were written as planning documents but were never updated to re
 
 ## Changes
 
-### Modified: `docs/cursor/specs/2026-03-31-dotfiles-improvements-plan.md`
+### Modified: `docs/cursor/plans/2026-03-31-dotfiles-improvements-plan.md`
 
 Update the status header:
 
 ```markdown
-**Status:** Superseded — see docs/cursor/specs/2026-04-08-dotfiles-next-steps-plan.md
+**Status:** Superseded — see docs/cursor/plans/2026-04-08-dotfiles-next-steps-plan.md
 ```
 
 Add a completion note at the top of the Current Status section linking to the superpowers specs.
 
-### Modified: `docs/cursor/specs/2026-04-08-dotfiles-next-steps-plan.md`
+### Modified: `docs/cursor/plans/2026-04-08-dotfiles-next-steps-plan.md`
 
 Update the status header:
 

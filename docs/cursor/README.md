@@ -17,10 +17,10 @@ This file is the Cursor-friendly secondary index and should be kept in sync for 
 
 ## All Plans
 
-| Date       | Plan                                                                         | Spec | Status |
-| ---------- | ---------------------------------------------------------------------------- | ---- | ------ |
-| 2026-03-31 | [dotfiles-improvements-plan](specs/2026-03-31-dotfiles-improvements-plan.md) | —    | Done   |
-| 2026-04-08 | [dotfiles-next-steps-plan](specs/2026-04-08-dotfiles-next-steps-plan.md)     | —    | Done   |
+| Date       | Plan                                                                         | Spec                                                                      | Status |
+| ---------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------ |
+| 2026-03-31 | [dotfiles-improvements-plan](plans/2026-03-31-dotfiles-improvements-plan.md) | [spec](../superpowers/specs/2026-03-31-dotfiles-modularization-design.md) | Done   |
+| 2026-04-08 | [dotfiles-next-steps-plan](plans/2026-04-08-dotfiles-next-steps-plan.md)     | [spec index](../superpowers/specs/README.md)                              | Done   |
 
 ---
 
