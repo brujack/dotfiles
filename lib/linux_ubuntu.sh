@@ -68,56 +68,15 @@ _install_ubuntu_pyenv() {
 
 _install_ubuntu_powershell() {
   printf "Installing powershell Ubuntu\\n"
-  if [[ -n ${BIONIC} ]]; then
-    if [[ ! -f ${HOME}/software_downloads/packages-microsoft-prod.deb ]]; then
-      # shellcheck disable=SC2046
-      wget -O ${HOME}/software_downloads/packages-microsoft-prod.deb https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb
-      sudo -H dpkg -i ${HOME}/software_downloads/packages-microsoft-prod.deb
-      sudo apt update
-      sudo -H add-apt-repository universe
-      sudo -H apt install powershell -y
-      if [[ -x $(command -v pwsh) ]]; then
-        printf "pwsh is installed Ubuntu Bionic\\n"
-      fi
-    fi
-  fi
-  if [[ -n ${FOCAL} ]]; then
-    if [[ ! -f ${HOME}/software_downloads/packages-microsoft-prod.deb ]]; then
-      # shellcheck disable=SC2046
-      wget -O ${HOME}/software_downloads/packages-microsoft-prod.deb https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb
-      sudo -H dpkg -i ${HOME}/software_downloads/packages-microsoft-prod.deb
-      sudo apt update
-      sudo -H add-apt-repository universe
-      sudo -H apt install powershell -y
-      if [[ -x $(command -v pwsh) ]]; then
-        printf "pwsh is installed Ubuntu Focal\\n"
-      fi
-    fi
-  fi
-  if [[ -n ${JAMMY} ]]; then
-    if [[ ! -f ${HOME}/software_downloads/packages-microsoft-prod.deb ]]; then
-      # shellcheck disable=SC2046
-      wget -O ${HOME}/software_downloads/packages-microsoft-prod.deb https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb
-      sudo -H dpkg -i ${HOME}/software_downloads/packages-microsoft-prod.deb
-      sudo apt update
-      sudo -H add-apt-repository universe
-      sudo -H apt install powershell -y
-      if [[ -x $(command -v pwsh) ]]; then
-        printf "pwsh is installed Ubuntu Jammy\\n"
-      fi
-    fi
-  fi
-  if [[ -n ${NOBLE} ]]; then
-    if [[ ! -f ${HOME}/software_downloads/packages-microsoft-prod.deb ]]; then
-      # shellcheck disable=SC2046
-      wget -O ${HOME}/software_downloads/packages-microsoft-prod.deb https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb
-      sudo -H dpkg -i ${HOME}/software_downloads/packages-microsoft-prod.deb
-      sudo apt update
-      sudo -H add-apt-repository universe
-      sudo -H apt install powershell -y
-      if [[ -x $(command -v pwsh) ]]; then
-        printf "pwsh is installed Ubuntu Noble\\n"
-      fi
+  if [[ ! -f ${HOME}/software_downloads/packages-microsoft-prod.deb ]]; then
+    # shellcheck disable=SC2046
+    wget -O ${HOME}/software_downloads/packages-microsoft-prod.deb https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb
+    sudo -H dpkg -i ${HOME}/software_downloads/packages-microsoft-prod.deb
+    sudo apt update
+    sudo -H add-apt-repository universe
+    sudo -H apt install powershell -y
+    if [[ -x $(command -v pwsh) ]]; then
+      printf "pwsh is installed\\n"
     fi
   fi
 }
