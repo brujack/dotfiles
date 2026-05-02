@@ -26,6 +26,8 @@ coverage/
 .claude/mcp.json
 .claude/scheduled_tasks.lock
 .claude/settings.local.json
+# Skills with embedded git repos are managed by Claude Code's plugin system
+.claude/skills/terraform-skill/
 
 # Cursor local-only generated files
 .cursor/skills-cursor/.sync-manifest.json
