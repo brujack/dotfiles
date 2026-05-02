@@ -10,11 +10,20 @@
    gh pr view <number> --json state,headRefName
    git ls-remote --heads origin <branch-name>
    ```
-5. After the PR merges, delete the feature branch locally and remotely:
-   ```bash
-   git branch -d feature/branch-name
-   git push origin --delete feature/branch-name
-   ```
+5. **After the PR merges, clean up completely — mandatory every time.** Do not stop at “merged on GitHub”; finish local and remote hygiene before closing the task:
+   - **Worktree first:** if the branch was developed in a linked worktree, remove it from the main repo checkout:
+     ```bash
+     git worktree remove /path/to/worktree
+     ```
+     Use `git worktree remove --force /path/to/worktree` only when the worktree has no uncommitted work you care about.
+   - **Branches:** delete the feature branch locally and on `origin`:
+     ```bash
+     git branch -d feature/branch-name   # use -D when squash-merge makes -d refuse
+     git push origin --delete feature/branch-name
+     ```
+   - **Main checkout:** `git fetch --prune` and `git pull` on `master` (or `main`) so the primary working tree matches remote.
+
+Skipping cleanup leaves stale worktrees and resurrectable remote branches; treat omission as an incomplete workflow.
 
 This applies to all repos. Committing directly to master bypasses CI and the review workflow.
 
@@ -56,11 +65,7 @@ After opening a PR, monitor it until it is resolved — either merged or failed.
    - Read the failure output: `gh run view <run-id> --log-failed`
    - Fix the issue on the feature branch, commit, and push
    - CI re-runs automatically; return to step 1
-4. Once all checks pass and the PR auto-merges, delete the branch:
-   ```bash
-   git branch -d feature/branch-name
-   git push origin --delete feature/branch-name
-   ```
+4. Once all checks pass and the PR auto-merges, run the full **post-merge cleanup** from Feature Branches step 5 (worktree removal if applicable, local and remote branch deletion, then `git fetch --prune` and `git pull` on the main checkout).
 5. If the PR does not auto-merge (repo has no auto-merge job), notify the user and wait for instructions
 
 If the session ends before CI finishes, note the PR number and status in the conversation so the user can follow up.
