@@ -393,6 +393,7 @@ _install_ubuntu_brew_packages() {
       if command -v claude &>/dev/null; then
         claude plugins install superpowers
         claude plugins install code-simplifier
+        claude plugins install code-review
         claude plugins install context7
       fi
     fi

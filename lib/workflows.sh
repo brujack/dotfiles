@@ -231,6 +231,7 @@ run_update() {
       # CLI matches installed plugins by plugin@marketplace (see `claude plugins list`), not short names.
       claude plugins update superpowers@claude-plugins-official \
         && claude plugins update code-simplifier@claude-plugins-official \
+        && claude plugins update code-review@claude-plugins-official \
         && claude plugins update context7@claude-plugins-official
       _update_record_end "claude" $?
     else
