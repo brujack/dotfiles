@@ -17,3 +17,4 @@
 - [Google Workspace DKIM From-domain alignment](feedback_email_from_alignment.md) — Workspace only signs when From: matches a Workspace domain; external aliases need Reply-To not DNS fixes
 - [Terratest JSON numbers are float64](feedback_terratest_json_types.md) — all numeric Change.After values deserialise as float64; use float64 literals in assertions
 - [Cloudflare v5 policy JSON structure](feedback_cloudflare_policy_json.md) — include/require rules are flat objects with all keys present (nulls); everyone={} not null for bypass
+- [Proxmox cross-node clone node_name](feedback_proxmox_cross_node_clone.md) — clone.node_name required when VM node ≠ template node (prox-3); plan tests cannot catch this, only surfaces at apply

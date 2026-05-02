@@ -5,7 +5,7 @@ type: project
 originSessionId: afe40797-6af6-4b15-9aea-73e3f52ca23b
 ---
 
-Proxmox cluster node layout as of 2026-04-25.
+Proxmox cluster node layout as of 2026-05-02.
 
 **prox-1** — currently offline
 
@@ -14,6 +14,7 @@ Proxmox cluster node layout as of 2026-04-25.
 - bind-slave (VM 105)
 - docker-server (VM 103)
 - downloads (VM 104)
+- etch-cli-test (VM 108) — ubuntu-2404-golden clone, test box
 
 **prox-3** — running workloads + templates:
 
