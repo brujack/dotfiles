@@ -241,6 +241,16 @@ run_update() {
     _update_skip "claude" "flag not set"
   fi
 
+  # ── terraform-skill (git checkouts for Claude + Cursor) ───────────────────
+  # Same trigger as Claude plugins: full update or --claude-only (no claude CLI required).
+  if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_CLAUDE:-} ]]; then
+    _update_record_start "terraform-skill"
+    install_terraform_skill
+    _update_record_end "terraform-skill" $?
+  else
+    _update_skip "terraform-skill" "flag not set"
+  fi
+
   # ── Linux system packages ─────────────────────────────────────────────────
   if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_PKGS:-} ]]; then
     if [[ -n ${LINUX} ]]; then
@@ -329,10 +339,6 @@ PY
 
   # ── git-based tools + misc (run_all only) ─────────────────────────────────
   if [[ ${_run_all} -eq 1 ]]; then
-    _update_record_start "terraform-skill"
-    install_terraform_skill
-    _update_record_end "terraform-skill" $?
-
     update_aws_cli
     update_rust
     if [[ -d ${HOME}/.tfenv ]]; then
