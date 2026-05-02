@@ -82,4 +82,12 @@ Homebrew refuses to run as root (`Don't run this as root!`). Guard with `not (co
 
 The default `storage: layout: name: lvm` in `user-data` uses scaled sizing — on a 32 GB disk the root LV ends up at ~15 GB. Add `sizing-policy: all` under the lvm layout to make the root LV occupy 100% of the VG. Without this, cloned VMs have half their disk unusable. Fix for existing VMs: `lvextend -l +100%FREE /dev/ubuntu-vg/ubuntu-lv && resize2fs /dev/mapper/ubuntu--vg-ubuntu--lv`.
 
+**18. cloud-init overwrites `authorized_keys` baked into the golden image.**
+
+`initialization.user_account.keys` in the bpg/proxmox provider writes a cloud-init NoCloud drive that runs on first VM boot and replaces `/home/bruce/.ssh/authorized_keys` with only the keys listed in Terraform. The `users` role bakes 3 keys into the golden image template, but cloud-init silently discards any key not in `ssh_public_keys`. Fix: keep `ssh_public_keys` (list) in `terraform.tfvars` in sync with the `users` role `authorized_keys` template. After applying the Terraform change, Ansible must be re-run on existing VMs — cloud-init won't re-run on a running VM.
+
+**Why:** Cloud-init's user module treats `users:` as authoritative — it overwrites, not appends.
+
+**How to apply:** When adding a key to the `users` role template, also add it to `ssh_public_keys` in `terraform.tfvars`. When provisioning a new golden-image VM, verify `authorized_keys` after first boot.
+
 **How to apply:** Check all of these when adding or modifying anything in `proxmox/`.

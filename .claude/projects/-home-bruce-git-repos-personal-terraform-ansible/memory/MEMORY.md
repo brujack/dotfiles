@@ -7,7 +7,7 @@
 - [Subagent plan file deletion](feedback_subagent_plan_file_deletion.md) — subagents may silently drop plan/spec files and README rows when reformatting superpowers tables; verify after any subagent touches docs/superpowers/
 - [Proxmox golden image pipeline](project_proxmox_golden_image.md) — Packer+Terraform pipeline complete (PR #44, 2026-04-22); credential files must be created manually from .example files
 - [Proxmox cluster node layout](project_proxmox_cluster_layout.md) — VM IDs and node assignments for prox-2/prox-3; prox-1 offline; plex-3 does not exist
-- [Packer proxmox gotchas](feedback_packer_proxmox_gotchas.md) — goss plugin dead end, username field required, curl -fL not -sL, ISO version drift, build tag file-scope, cross_env_vars.yml must be passed to Ansible
+- [Packer proxmox gotchas](feedback_packer_proxmox_gotchas.md) — goss plugin dead end, username field required, curl -fL not -sL, ISO version drift, cloud-init overwrites baked SSH keys on first boot
 - [Use --no-verify for docs-only pushes](feedback_no_verify_docs.md) — docs under ansible/ trigger molecule; use --no-verify for plan/spec/README/CLAUDE.md pushes
 - [Molecule parallel tests starve Docker](project_molecule_docker_contention.md) — 6 parallel molecule jobs disrupt other Docker containers on the workstation; warn user before triggering
 - [ntfy iOS Focus Mode gotcha](project_ntfy_ios_focus_mode.md) — ntfy notifications silently blocked by iPhone Personal Focus mode; check allowed apps before debugging server infrastructure
@@ -18,3 +18,4 @@
 - [Terratest JSON numbers are float64](feedback_terratest_json_types.md) — all numeric Change.After values deserialise as float64; use float64 literals in assertions
 - [Cloudflare v5 policy JSON structure](feedback_cloudflare_policy_json.md) — include/require rules are flat objects with all keys present (nulls); everyone={} not null for bypass
 - [Proxmox cross-node clone node_name](feedback_proxmox_cross_node_clone.md) — clone.node_name required when VM node ≠ template node (prox-3); plan tests cannot catch this, only surfaces at apply
+- [Worktree tfvars — don't overwrite main repo creds](feedback_worktree_tfvars_main_repo.md) — copying updated gitignored tfvars into main repo breaks pre-push hook when branches have mismatched variable schemas
