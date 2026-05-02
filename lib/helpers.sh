@@ -750,24 +750,20 @@ setup_dotfile_symlinks() {
 
 install_terraform_skill() {
   local _skill_repo="https://github.com/antonbabenko/terraform-skill.git"
-  local _claude_skill_dir="${HOME}/.claude/skills/terraform-skill"
   local _cursor_skill_dir="${HOME}/.cursor/skills/terraform-skill"
-  local _skill_dir=""
 
-  log_info "Ensuring Terraform skill is installed for Claude and Cursor"
-  mkdir -p "${HOME}/.claude/skills" "${HOME}/.cursor/skills"
+  log_info "Ensuring terraform-skill git checkout for Cursor (Claude Code uses the marketplace plugin)"
+  mkdir -p "${HOME}/.cursor/skills"
 
-  for _skill_dir in "${_claude_skill_dir}" "${_cursor_skill_dir}"; do
-    if [[ -d "${_skill_dir}/.git" ]]; then
-      log_info "Updating terraform-skill in ${_skill_dir}"
-      git -C "${_skill_dir}" pull --ff-only || return 1
-    elif [[ -e "${_skill_dir}" ]]; then
-      log_warn "Skipping ${_skill_dir}; path exists but is not a git checkout"
-    else
-      log_info "Cloning terraform-skill into ${_skill_dir}"
-      git clone --depth=1 "${_skill_repo}" "${_skill_dir}" || return 1
-    fi
-  done
+  if [[ -d "${_cursor_skill_dir}/.git" ]]; then
+    log_info "Updating terraform-skill in ${_cursor_skill_dir}"
+    git -C "${_cursor_skill_dir}" pull --ff-only || return 1
+  elif [[ -e "${_cursor_skill_dir}" ]]; then
+    log_warn "Skipping ${_cursor_skill_dir}; path exists but is not a git checkout"
+  else
+    log_info "Cloning terraform-skill into ${_cursor_skill_dir}"
+    git clone --depth=1 "${_skill_repo}" "${_cursor_skill_dir}" || return 1
+  fi
 }
 
 setup_credential_directories() {

@@ -241,7 +241,7 @@ run_update() {
     _update_skip "claude" "flag not set"
   fi
 
-  # ── terraform-skill (git checkouts for Claude + Cursor) ───────────────────
+  # ── terraform-skill (Cursor git checkout; Claude Code uses plugin) ───────────
   # Same trigger as Claude plugins: full update or --claude-only (no claude CLI required).
   if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_CLAUDE:-} ]]; then
     _update_record_start "terraform-skill"
