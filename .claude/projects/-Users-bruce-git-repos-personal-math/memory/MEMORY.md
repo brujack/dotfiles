@@ -4,6 +4,7 @@
 
 - [project_pi_work.md](project_pi_work.md) — Work done on pi calculator (Python multithreading + Rust implementation) in math/pi via CLI session
 - [project_coverage_gate.md](project_coverage_gate.md) — ≥90% coverage enforced via CI tarpaulin (not pre-push); Swatinem cache doesn't cover ~/.cargo/bin
+- [project_cargo_fmt_tarpaulin.md](project_cargo_fmt_tarpaulin.md) — Three patterns: fn_call_width=60% threshold, captured-var format syntax, break; dead probe — for keeping Rust crates above 90% after cargo fmt changes
 
 ## Feedback
 
