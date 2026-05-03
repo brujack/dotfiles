@@ -46,7 +46,8 @@ doctor_warn() {
 safe_link() {
   local src="$1" dest="$2"
   if [[ -L "${dest}" ]]; then
-    return 0
+    [[ "$(readlink "${dest}")" == "${src}" ]] && return 0
+    run_cmd rm "${dest}"
   fi
   if [[ -e "${dest}" ]]; then
     log_warn "Backing up existing file: ${dest} → ${dest}.bak"
@@ -666,16 +667,8 @@ setup_dotfile_symlinks() {
   fi
   for _claude_item in "${PERSONAL_GITREPOS}/${DOTFILES}/.claude/"*; do
     [[ -e "${_claude_item}" ]] || continue
-    # Skip projects/ — handled below with per-project symlinks into a real ~/.claude/projects/
-    [[ "$(basename "${_claude_item}")" == "projects" ]] && continue
     _claude_target="${HOME}/.claude/$(basename "${_claude_item}")"
     safe_link "${_claude_item}" "${_claude_target}"
-  done
-  mkdir -p "${HOME}/.claude/projects"
-  for _claude_proj in "${PERSONAL_GITREPOS}/${DOTFILES}/.claude/projects/"*; do
-    [[ -e "${_claude_proj}" ]] || continue
-    _claude_proj_target="${HOME}/.claude/projects/$(basename "${_claude_proj}")"
-    safe_link "${_claude_proj}" "${_claude_proj_target}"
   done
 
   log_info "Creating ${HOME}/.cursor"
