@@ -291,7 +291,7 @@ teardown() {
   [[ -L "${dest}" ]]
 }
 
-@test "safe_link is a no-op when dest is already a symlink" {
+@test "safe_link is a no-op when dest is already a correct symlink" {
   local src="${BATS_TEST_TMPDIR}/src_file"
   local dest="${BATS_TEST_TMPDIR}/dest_link"
   touch "${src}"
@@ -299,6 +299,20 @@ teardown() {
   run safe_link "${src}" "${dest}"
   [ "$status" -eq 0 ]
   [[ -L "${dest}" ]]
+  [[ "$(readlink "${dest}")" == "${src}" ]]
+}
+
+@test "safe_link replaces symlink pointing to wrong target" {
+  local src="${BATS_TEST_TMPDIR}/src_file"
+  local wrong="${BATS_TEST_TMPDIR}/wrong_target"
+  local dest="${BATS_TEST_TMPDIR}/dest_link"
+  touch "${src}"
+  touch "${wrong}"
+  ln -s "${wrong}" "${dest}"
+  run safe_link "${src}" "${dest}"
+  [ "$status" -eq 0 ]
+  [[ -L "${dest}" ]]
+  [[ "$(readlink "${dest}")" == "${src}" ]]
 }
 
 @test "safe_link backs up existing regular file before linking" {
