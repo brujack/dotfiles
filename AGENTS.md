@@ -18,6 +18,7 @@ Cursor agent instructions for this repo.
 
 ## Dotfiles-specific must-follow items
 
+- After a feature PR merges: always complete post-merge cleanup — remove any linked worktree for that branch, delete the branch locally and on `origin`, then `git fetch --prune` and `git pull` on `master`. See `.claude/standards/git-workflow.md` (Feature Branches step 5).
 - Preserve selective Cursor user linking: only `settings.json`, `keybindings.json`, and `snippets` from `.cursor/User`.
 - Do not introduce broad linking of volatile/local editor state.
 - Preserve pre-commit and pre-push hook behavior and CI conventions.
