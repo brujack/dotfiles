@@ -63,6 +63,7 @@ brew "libyaml"
 brew "linkerd"                               # [HAS_K8S]
 brew "make"
 brew "mas"
+brew "mdbook"                                # [HAS_DEVTOOLS]
 brew "mintoolkit"                            # [HAS_DEVTOOLS]
 brew "mongosh"                               # [HAS_DEVTOOLS]
 brew "mongodb-atlas-cli"                     # [HAS_DEVTOOLS]
