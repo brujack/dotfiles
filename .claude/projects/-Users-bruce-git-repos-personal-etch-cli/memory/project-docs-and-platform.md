@@ -24,3 +24,11 @@ When removing support for a platform (e.g., Windows), these locations need check
 6. README.md and CLAUDE.md — platform support claims
 
 **Why:** Phase 3 removed 11 provider files but left `#[cfg(not(unix))]` stubs in five files. The stubs were no-ops but compiled dead code with no-op behavior, and the docs still listed Windows/winget/FreeBSD/NetBSD as supported.
+
+---
+
+**Comtrya heritage cleanup — complete as of 2026-05-04**
+The following comtrya-origin files were removed as not applicable to this fork:
+`shell.nix`, `Justfile`, `check.sh`, `.trunk/`, `CODE_OF_CONDUCT.md`, `CONTRIBUTING.md`, `.vscode/settings.json`
+
+When inheriting any forked project, these file types commonly reference the upstream community and go stale immediately: `CONTRIBUTING.md` (tool refs, maintainer Discord handles), `CODE_OF_CONDUCT.md` (community name), `.vscode/settings.json` (schema URLs), meta-linter configs (`.trunk/`, stale version pins), and dev-shell files (`shell.nix`, `Justfile`) for toolchains the fork doesn't use.
