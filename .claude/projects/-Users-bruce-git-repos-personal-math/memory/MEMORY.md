@@ -6,6 +6,7 @@
 - [project_coverage_gate.md](project_coverage_gate.md) — ≥90% coverage enforced via CI tarpaulin (not pre-push); Swatinem cache doesn't cover ~/.cargo/bin
 - [project_cargo_fmt_tarpaulin.md](project_cargo_fmt_tarpaulin.md) — Three patterns: fn_call_width=60% threshold, captured-var format syntax, break; dead probe — for keeping Rust crates above 90% after cargo fmt changes
 - [project_parallel_fallback_tests.md](project_parallel_fallback_tests.md) — ProcessPoolExecutor mock pattern and n_workers digit threshold for testing pi/e parallel fallback (PR #43, 2026-05-05)
+- [project_bats_infrastructure.md](project_bats_infrastructure.md) — BATS test infrastructure for hook scripts: mock layout, PATH-stripping for absent-command tests, worktree-safety proof pattern, stderr capture without --separate-stderr (PR #44, 2026-05-05)
 
 ## Feedback
 
