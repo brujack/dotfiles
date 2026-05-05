@@ -31,6 +31,16 @@
           }
         ]
       }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"/Users/bruce/.claude/hooks/context-mode-cache-heal.mjs\""
+          }
+        ]
+      }
     ]
   },
   "statusLine": {
