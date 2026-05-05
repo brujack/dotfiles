@@ -654,6 +654,7 @@ setup_dotfile_symlinks() {
   fi
   safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.warp/themes" "${HOME}/.warp/themes"
   safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.warp/launch_configurations" "${HOME}/.warp/launch_configurations"
+  safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.warp/settings.toml" "${HOME}/.warp/settings.toml"
 
   log_info "Creating ${HOME}/.ssh"
   if mkdir -p ${HOME}/.ssh; then

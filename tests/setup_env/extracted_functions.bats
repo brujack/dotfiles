@@ -33,6 +33,7 @@ _make_fake_dotfiles() {
   mkdir -p "${FAKE_DOTFILES_SRC}/.claude"
   mkdir -p "${FAKE_DOTFILES_SRC}/.warp/themes"
   mkdir -p "${FAKE_DOTFILES_SRC}/.warp/launch_configurations"
+  touch "${FAKE_DOTFILES_SRC}/.warp/settings.toml"
   touch "${FAKE_DOTFILES_SRC}/.gitconfig_mac"
   touch "${FAKE_DOTFILES_SRC}/.gitconfig_linux"
   touch "${FAKE_DOTFILES_SRC}/.gitconfig_mac_gitlab"
@@ -99,6 +100,16 @@ _make_fake_dotfiles() {
   [ "$status" -eq 0 ]
   [[ -L "${FAKE_HOME}/.gitconfig" ]]
   [[ "$(readlink "${FAKE_HOME}/.gitconfig")" == "${FAKE_DOTFILES_SRC}/.gitconfig_linux" ]]
+}
+
+@test "setup_dotfile_symlinks links .warp/settings.toml" {
+  _make_fake_dotfiles
+  export MACOS=1
+  unset LINUX
+  run setup_dotfile_symlinks
+  [ "$status" -eq 0 ]
+  [[ -L "${FAKE_HOME}/.warp/settings.toml" ]]
+  [[ "$(readlink "${FAKE_HOME}/.warp/settings.toml")" == "${FAKE_DOTFILES_SRC}/.warp/settings.toml" ]]
 }
 
 @test "setup_dotfile_symlinks links .vimrc" {
