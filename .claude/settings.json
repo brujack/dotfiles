@@ -43,6 +43,7 @@
     "code-simplifier@claude-plugins-official": true,
     "code-review@claude-plugins-official": true,
     "context7@claude-plugins-official": true,
+    "context-mode@context-mode": true,
     "warp@claude-code-warp": true,
     "terraform-skill@antonbabenko": true
   },
@@ -63,6 +64,12 @@
       "source": {
         "source": "github",
         "repo": "antonbabenko/terraform-skill"
+      }
+    },
+    "context-mode": {
+      "source": {
+        "source": "github",
+        "repo": "mksglu/context-mode"
       }
     }
   },

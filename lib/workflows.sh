@@ -232,7 +232,8 @@ run_update() {
       claude plugins update superpowers@claude-plugins-official \
         && claude plugins update code-simplifier@claude-plugins-official \
         && claude plugins update code-review@claude-plugins-official \
-        && claude plugins update context7@claude-plugins-official
+        && claude plugins update context7@claude-plugins-official \
+        && claude plugins update context-mode@context-mode
       _update_record_end "claude" $?
     else
       _update_skip "claude" "claude not installed"
