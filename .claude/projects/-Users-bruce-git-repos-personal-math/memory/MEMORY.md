@@ -7,6 +7,7 @@
 - [project_cargo_fmt_tarpaulin.md](project_cargo_fmt_tarpaulin.md) — Three patterns: fn_call_width=60% threshold, captured-var format syntax, break; dead probe — for keeping Rust crates above 90% after cargo fmt changes
 - [project_parallel_fallback_tests.md](project_parallel_fallback_tests.md) — ProcessPoolExecutor mock pattern and n_workers digit threshold for testing pi/e parallel fallback (PR #43, 2026-05-05)
 - [project_bats_infrastructure.md](project_bats_infrastructure.md) — BATS test infrastructure for hook scripts: mock layout, PATH-stripping for absent-command tests, worktree-safety proof pattern, stderr capture without --separate-stderr (PR #44, 2026-05-05)
+- [project_auto_merge_gate.md](project_auto_merge_gate.md) — gh pr checks --json unusable with GITHUB_TOKEN (GraphQL workflowRun); use REST check-runs API instead; polling gate must exclude self from non-terminal check (PR #45, 2026-05-06)
 
 ## Feedback
 
