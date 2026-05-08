@@ -323,15 +323,17 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 Functions that operate on specific file paths use override env vars to redirect to temp files in tests:
 
-| Seam                         | Used by                          | Effect                                                                             |
-| ---------------------------- | -------------------------------- | ---------------------------------------------------------------------------------- |
-| `_OVERRIDE_BREWFILE_PATH`    | `_update_check_brewfile_drift`   | Path to Brewfile; defaults to `${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile`          |
-| `_OVERRIDE_CONSTANTS_PATH`   | `_update_version_pin()`          | Redirects to a temp copy of `lib/constants.sh`; defaults to real path when unset   |
-| `UPDATE_LOG_PATH`            | `_update_summary()`              | Redirects log writes to a temp file in tests; defaults to `~/.dotfiles-update.log` |
-| `_UPDATE_TMPDIR`             | all summary functions            | Set to `${BATS_TEST_TMPDIR}` in tests to isolate snapshot files                    |
-| `_BOOTSTRAP_OS_RELEASE`      | `_bootstrap_linux_detect_distro` | Path to os-release file; defaults to `/etc/os-release`                             |
-| `_REBOOT_REQUIRED_PATH`      | `_update_record_end` apt case    | Path to reboot-required flag file; defaults to `/var/run/reboot-required`          |
-| `_REBOOT_REQUIRED_PKGS_PATH` | `_update_record_end` apt case    | Path to reboot-required.pkgs file; defaults to `/var/run/reboot-required.pkgs`     |
+| Seam                         | Used by                            | Effect                                                                                       |
+| ---------------------------- | ---------------------------------- | -------------------------------------------------------------------------------------------- |
+| `_OVERRIDE_BREWFILE_PATH`    | `_update_check_brewfile_drift`     | Path to Brewfile; defaults to `${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile`                    |
+| `_OVERRIDE_CONSTANTS_PATH`   | `_update_version_pin()`            | Redirects to a temp copy of `lib/constants.sh`; defaults to real path when unset             |
+| `UPDATE_LOG_PATH`            | `_update_summary()`                | Redirects log writes to a temp file in tests; defaults to `~/.dotfiles-update.log`           |
+| `_UPDATE_TMPDIR`             | all summary functions              | Set to `${BATS_TEST_TMPDIR}` in tests to isolate snapshot files                              |
+| `_BOOTSTRAP_OS_RELEASE`      | `_bootstrap_linux_detect_distro`   | Path to os-release file; defaults to `/etc/os-release`                                       |
+| `_REBOOT_REQUIRED_PATH`      | `_update_record_end` apt case      | Path to reboot-required flag file; defaults to `/var/run/reboot-required`                    |
+| `_REBOOT_REQUIRED_PKGS_PATH` | `_update_record_end` apt case      | Path to reboot-required.pkgs file; defaults to `/var/run/reboot-required.pkgs`               |
+| `_OVERRIDE_FEATURES_DIR`     | `scripts/whats-new-claude-code.sh` | Redirects output and state files to a temp dir; defaults to `docs/claude-code-new-features/` |
+| `_OVERRIDE_DOTFILES_ROOT`    | `scripts/whats-new-claude-code.sh` | Redirects the repo root used for `cd` before git operations; defaults to `SCRIPT_DIR/..`     |
 
 Pattern: `local _file="${_OVERRIDE_VAR:-$(dirname "${BASH_SOURCE[0]}")/real/path}"`. Tests set the var and pass a writable temp copy; production code leaves it unset.
 
@@ -413,6 +415,9 @@ Available mock env vars:
 | `MOCK_TAR_EXIT` | Exit code for `tar` (default: 0); when non-zero, suppresses stub directory creation so tests can simulate extraction failure and trigger `cd` failure |
 | `MOCK_CPAN_EXIT` | Exit code for `cpan` (default: 0) |
 | `MOCK_CPANM_EXIT` | Exit code for `cpanm` (default: 0) |
+| `MOCK_CLAUDE_EXIT` | Exit code for `claude` (default: 0); applies to all `claude` calls including `-p` |
+| `MOCK_CLAUDE_STDOUT` | Content printed to stdout by `claude -p` mock (default: `## New Features\n- Mock feature added`); used by scripts that call `claude -p "prompt"` to summarize content |
+| `MOCK_CLAUDE_PLUGINS_LIST_OUTPUT` | Lines printed to stdout by `claude plugins list` mock (default: empty) |
 
 **Pass-through mocks:** `ln`, `chmod`, `mv`, `cp`, and `tee` call the real binary (`/bin/cmd "$@" 2>/dev/null || true`) so tests that assert actual filesystem state (permissions, file existence, symlinks, captured output files) work correctly. Set the corresponding exit var to a non-zero value to simulate failure instead. Any mock that needs to support tests checking real filesystem state must use this pattern — a log-only mock will cause silent assertion failures.
 
