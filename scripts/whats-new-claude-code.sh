@@ -2,8 +2,8 @@
 
 CHANGELOG_URL="https://raw.githubusercontent.com/anthropics/claude-code/main/CHANGELOG.md"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DOTFILES_ROOT="${SCRIPT_DIR}/.."
-FEATURES_DIR="${DOTFILES_ROOT}/docs/claude-code-new-features"
+DOTFILES_ROOT="${_OVERRIDE_DOTFILES_ROOT:-${SCRIPT_DIR}/..}"
+FEATURES_DIR="${_OVERRIDE_FEATURES_DIR:-${DOTFILES_ROOT}/docs/claude-code-new-features}"
 STATE_FILE="${FEATURES_DIR}/.changelog-state.md"
 TODAY="$(date +%Y-%m-%d)"
 OUTPUT_FILE="${FEATURES_DIR}/features-${TODAY}.md"

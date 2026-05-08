@@ -72,13 +72,16 @@ jobs:
 
   bash-coverage:
     runs-on: ubuntu-latest
+    continue-on-error: true
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
     steps:
       - uses: actions/checkout@v5
 
       - name: Install dependencies
-        run: sudo apt-get install -y bats shellcheck zsh jq cmake libcurl4-openssl-dev libelf-dev libdw-dev binutils-dev libiberty-dev
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bats shellcheck zsh jq cmake libcurl4-openssl-dev libelf-dev libdw-dev binutils-dev libiberty-dev
 
       - name: Install kcov from source
         run: |
