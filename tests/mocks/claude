@@ -1,9 +1,15 @@
 #!/usr/bin/env bash
 printf "claude %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
-case "$1-$2" in
-  plugins-list)
-    printf "%s\n" "${MOCK_CLAUDE_PLUGINS_LIST_OUTPUT:-}"
+case "$1" in
+  plugins)
+    [[ "$2" == "list" ]] && printf "%s\n" "${MOCK_CLAUDE_PLUGINS_LIST_OUTPUT:-}"
     exit 0
+    ;;
+  -p)
+    [[ "${MOCK_CLAUDE_EXIT:-0}" -ne 0 ]] && exit "${MOCK_CLAUDE_EXIT}"
+    _default="## New Features
+- Mock feature added"
+    printf "%s\n" "${MOCK_CLAUDE_STDOUT:-${_default}}"
     ;;
   *)
     exit "${MOCK_CLAUDE_EXIT:-0}"
