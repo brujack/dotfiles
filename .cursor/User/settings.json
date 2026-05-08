@@ -154,5 +154,6 @@
     "gitlens.ai.model": "vscode",
     "gitlens.ai.vscode.model": "copilot:gpt-4.1",
     "snyk.securityAtInception.autoConfigureSnykMcpServer": true,
-    "snyk.securityAtInception.executionFrequency": "On Code Generation"
+    "snyk.securityAtInception.executionFrequency": "On Code Generation",
+    "window.autoDetectColorScheme": false
 }

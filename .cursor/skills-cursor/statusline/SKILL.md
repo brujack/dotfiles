@@ -46,6 +46,7 @@ The command receives a JSON object on stdin. The TypeScript interface is `Status
   "transcript_path": "/path/to/transcript.jsonl",
   "render_width_chars": 120,
   "cwd": "/Users/me/project",
+  "autorun": false,
   "model": {
     "id": "claude-4-opus",
     "display_name": "Claude 4 Opus",
@@ -88,6 +89,7 @@ The command receives a JSON object on stdin. The TypeScript interface is `Status
 | `transcript_path` | Path to conversation transcript file |
 | `render_width_chars` | Usable terminal columns minus built-in padding |
 | `cwd`, `workspace.current_dir` | Current working directory (both contain the same value) |
+| `autorun` | `true` when auto-run is enabled for the current session |
 | `workspace.project_dir` | Directory where transcripts are stored |
 | `workspace.added_dirs` | Additional directories (empty array for now) |
 | `model.id`, `model.display_name` | Current model identifier and display name |
