@@ -16,6 +16,10 @@ dotfiles/
 │   ├── adr/                  # Architectural Decision Records (cross-cutting decisions)
 │   │   ├── README.md         # ADR index table
 │   │   └── NNNN-title.md     # Individual ADRs (0001, 0002, …)
+│   ├── claude-code-new-features/  # Weekly Claude Code feature digests
+│   │   ├── README.md         # Usage and schedule docs
+│   │   ├── .changelog-state.md   # Last-fetched CHANGELOG snapshot (do not edit)
+│   │   └── features-YYYY-MM-DD.md  # Weekly digest committed each Monday
 │   └── superpowers/          # Design specs and implementation plans
 │       ├── specs/            # Design documents (YYYY-MM-DD-*-design.md)
 │       └── plans/            # Implementation plans (YYYY-MM-DD-*.md)
@@ -33,6 +37,7 @@ dotfiles/
 ├── scripts/
 │   ├── bootstrap_mac.sh      # One-time macOS prerequisite installer (Homebrew + bash 5)
 │   ├── .osx.sh               # macOS system defaults (run during setup)
+│   ├── whats-new-claude-code.sh  # Weekly Claude Code features digest (fetch, summarize, commit)
 │   └── ...                   # utility scripts
 ├── powershell/
 │   ├── setup_windows.ps1     # Windows/PowerShell bootstrap
