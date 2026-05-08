@@ -1,5 +1,5 @@
 ---
-name: cursor-sdk
+name: sdk
 description: >-
   Guide users building apps, scripts, CI pipelines, or automations on top of the
   Cursor TypeScript SDK (`@cursor/sdk`). Use when the user mentions integrating,
