@@ -63,7 +63,7 @@ Master status index for all specs and implementation plans in this directory.
 | 2026-04-28 | [brewfile-drift](plans/2026-04-28-brewfile-drift.md)                               | [spec](specs/2026-04-28-brewfile-drift-design.md)                   | Done    |
 | 2026-04-29 | [brewfile-drift-leaves](plans/2026-04-29-brewfile-drift-leaves.md)                 | [spec](specs/2026-04-29-brewfile-drift-leaves-design.md)            | Done    |
 | 2026-05-01 | [linux-ubuntu-dedup](plans/2026-05-01-linux-ubuntu-dedup.md)                       | [spec](specs/2026-05-01-linux-ubuntu-dedup-design.md)               | Done    |
-| 2026-05-08 | —                                                                                  | [spec](specs/2026-05-08-whats-new-anthropic-design.md)              | Pending |
+| 2026-05-08 | [whats-new-anthropic](plans/2026-05-08-whats-new-anthropic.md)                     | [spec](specs/2026-05-08-whats-new-anthropic-design.md)              | Pending |
 
 ---
 
