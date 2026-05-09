@@ -133,3 +133,57 @@ existing content" "${_state}"
   generate_summary "platform" "sdk" || _rc=$?
   [ "${_rc}" -ne 0 ]
 }
+
+# ── write_output ─────────────────────────────────────────────────────────────
+
+@test "write_output: creates output file with header and summary" {
+  source "${REPO_ROOT}/scripts/whats-new-anthropic.sh"
+  local _today
+  _today="$(date +%Y-%m-%d)"
+  write_output "## Model & API Changes
+- Claude Opus 4.7 launched"
+  [ -f "${_OVERRIDE_FEATURES_DIR}/features-${_today}.md" ]
+  grep -q "Anthropic & Claude API" "${_OVERRIDE_FEATURES_DIR}/features-${_today}.md"
+  grep -q "Claude Opus 4.7" "${_OVERRIDE_FEATURES_DIR}/features-${_today}.md"
+  grep -q "platform.claude.com" "${_OVERRIDE_FEATURES_DIR}/features-${_today}.md"
+}
+
+# ── commit_and_push ──────────────────────────────────────────────────────────
+
+@test "commit_and_push: runs git add, commit, and push" {
+  source "${REPO_ROOT}/scripts/whats-new-anthropic.sh"
+  commit_and_push
+  grep -q "^git add" "${MOCK_CALLS_FILE}"
+  grep -q "^git commit" "${MOCK_CALLS_FILE}"
+  grep -q "^git push" "${MOCK_CALLS_FILE}"
+}
+
+@test "commit_and_push: returns 1 when git commit fails" {
+  source "${REPO_ROOT}/scripts/whats-new-anthropic.sh"
+  export MOCK_GIT_EXIT=1
+  local _rc=0
+  commit_and_push || _rc=$?
+  [ "${_rc}" -ne 0 ]
+}
+
+# ── send_ntfy ────────────────────────────────────────────────────────────────
+
+@test "send_ntfy: sends curl request when NTFY_URL is set" {
+  source "${REPO_ROOT}/scripts/whats-new-anthropic.sh"
+  local _today
+  _today="$(date +%Y-%m-%d)"
+  printf "digest content\n" > "${OUTPUT_FILE}"
+  export NTFY_URL="http://ntfy.example.com/test"
+  send_ntfy
+  grep -q "ntfy.example.com" "${MOCK_CALLS_FILE}"
+}
+
+@test "send_ntfy: skips when NTFY_URL is not set" {
+  source "${REPO_ROOT}/scripts/whats-new-anthropic.sh"
+  local _today
+  _today="$(date +%Y-%m-%d)"
+  printf "digest content\n" > "${OUTPUT_FILE}"
+  unset NTFY_URL
+  send_ntfy
+  ! grep -q "ntfy" "${MOCK_CALLS_FILE}"
+}

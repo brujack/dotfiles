@@ -66,4 +66,32 @@ Rules:
 - Under 400 words total" || { printf "Error: claude CLI failed to generate summary\n" >&2; return 1; }
 }
 
+write_output() {
+  local _summary="$1"
+  {
+    printf "# Anthropic & Claude API — What's New (%s)\n\n" "${TODAY}"
+    printf "%s\n" "${_summary}"
+    printf "\n---\n"
+    printf "_Sources: [Platform release notes](https://platform.claude.com/docs/en/release-notes/api) | [Python SDK CHANGELOG](https://github.com/anthropics/anthropic-sdk-python/blob/main/CHANGELOG.md)_\n"
+  } > "${OUTPUT_FILE}" || { printf "Error: failed to write %s\n" "${OUTPUT_FILE}" >&2; return 1; }
+}
+
+commit_and_push() {
+  cd "${DOTFILES_ROOT}" || return 1
+  git add "${OUTPUT_FILE}" "${PLATFORM_STATE_FILE}" "${SDK_STATE_FILE}"
+  git commit -m "docs: add Anthropic weekly features digest ${TODAY}
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>" || return 1
+  git push || { printf "Warning: git push failed — changes are committed locally\n" >&2; }
+}
+
+send_ntfy() {
+  [[ -z "${NTFY_URL:-}" ]] && return 0
+  curl -sf \
+    -d "$(head -c 4000 "${OUTPUT_FILE}")" \
+    -H "Title: Anthropic & Claude API — Week of ${TODAY}" \
+    -H "Tags: rocket" \
+    "${NTFY_URL}" || printf "Warning: ntfy notification failed\n" >&2
+}
+
 [[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0
