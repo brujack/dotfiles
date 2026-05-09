@@ -94,4 +94,64 @@ send_ntfy() {
     "${NTFY_URL}" || printf "Warning: ntfy notification failed\n" >&2
 }
 
+main() {
+  local _dry_run="false"
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --dry-run) _dry_run="true"; shift ;;
+      -h|--help) usage; return 0 ;;
+      *) printf "Unknown option: %s\n" "$1" >&2; usage >&2; return 1 ;;
+    esac
+  done
+
+  if ! command -v claude &>/dev/null; then
+    printf "Error: claude CLI not found — install Claude Code first\n" >&2
+    return 1
+  fi
+
+  mkdir -p "${FEATURES_DIR}"
+
+  if [[ -f "${OUTPUT_FILE}" ]] && [[ "${_dry_run}" == "false" ]]; then
+    printf "Features file for %s already exists. Skipping.\n" "${TODAY}"
+    return 0
+  fi
+
+  local _rc=0
+  local _platform_current _sdk_current _platform_new _sdk_new _summary
+
+  _platform_current="$(fetch_platform_notes)" || return 1
+  _sdk_current="$(fetch_sdk_changelog)" || return 1
+
+  _platform_new="$(extract_new_content "${_platform_current}" "${PLATFORM_STATE_FILE}")"
+  _sdk_new="$(extract_new_content "${_sdk_current}" "${SDK_STATE_FILE}")"
+
+  if [[ -z "${_platform_new}" ]] && [[ -z "${_sdk_new}" ]]; then
+    printf "No new content since last run.\n"
+    return 0
+  fi
+
+  _summary="$(generate_summary "${_platform_new}" "${_sdk_new}")" || return 1
+
+  if [[ -z "${_summary}" ]]; then
+    printf "Error: empty summary generated\n" >&2
+    return 1
+  fi
+
+  if [[ "${_dry_run}" == "true" ]]; then
+    printf "# Anthropic & Claude API — What's New (%s)\n\n%s\n" "${TODAY}" "${_summary}"
+    return 0
+  fi
+
+  write_output "${_summary}" || return 1
+  printf "%s" "${_platform_current}" > "${PLATFORM_STATE_FILE}"
+  printf "%s" "${_sdk_current}" > "${SDK_STATE_FILE}"
+  commit_and_push || _rc=$?
+  send_ntfy
+
+  printf "Done: %s\n" "${OUTPUT_FILE}"
+  return "${_rc}"
+}
+
 [[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0
+main "$@"

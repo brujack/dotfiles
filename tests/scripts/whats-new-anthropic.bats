@@ -187,3 +187,145 @@ existing content" "${_state}"
   send_ntfy
   ! grep -q "ntfy" "${MOCK_CALLS_FILE}"
 }
+
+# ── main (happy path + boundary) ─────────────────────────────────────────────
+
+@test "main: creates output file and updates both state files on happy path" {
+  local _today
+  _today="$(date +%Y-%m-%d)"
+
+  run env \
+    _OVERRIDE_FEATURES_DIR="${_OVERRIDE_FEATURES_DIR}" \
+    _OVERRIDE_DOTFILES_ROOT="${_OVERRIDE_DOTFILES_ROOT}" \
+    MOCK_CALLS_FILE="${MOCK_CALLS_FILE}" \
+    MOCK_CURL_PLATFORM_STDOUT="${MOCK_CURL_PLATFORM_STDOUT}" \
+    MOCK_CURL_SDK_STDOUT="${MOCK_CURL_SDK_STDOUT}" \
+    MOCK_CLAUDE_STDOUT="${MOCK_CLAUDE_STDOUT}" \
+    PATH="${REPO_ROOT}/tests/mocks:${PATH}" \
+    bash "${REPO_ROOT}/scripts/whats-new-anthropic.sh"
+  [ "$status" -eq 0 ]
+  [ -f "${_OVERRIDE_FEATURES_DIR}/features-${_today}.md" ]
+  [ -f "${_OVERRIDE_FEATURES_DIR}/.platform-state.txt" ]
+  [ -f "${_OVERRIDE_FEATURES_DIR}/.sdk-state.md" ]
+  grep -q "^git add" "${MOCK_CALLS_FILE}"
+  grep -q "^git commit" "${MOCK_CALLS_FILE}"
+}
+
+@test "main: skips when output file already exists (idempotency)" {
+  local _today
+  _today="$(date +%Y-%m-%d)"
+  printf "existing digest\n" > "${_OVERRIDE_FEATURES_DIR}/features-${_today}.md"
+
+  run env \
+    _OVERRIDE_FEATURES_DIR="${_OVERRIDE_FEATURES_DIR}" \
+    _OVERRIDE_DOTFILES_ROOT="${_OVERRIDE_DOTFILES_ROOT}" \
+    MOCK_CALLS_FILE="${MOCK_CALLS_FILE}" \
+    PATH="${REPO_ROOT}/tests/mocks:${PATH}" \
+    bash "${REPO_ROOT}/scripts/whats-new-anthropic.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"already exists"* ]]
+  ! grep -q "^curl" "${MOCK_CALLS_FILE}"
+}
+
+@test "main: exits 0 with no commit when both diffs are empty" {
+  local _today
+  _today="$(date +%Y-%m-%d)"
+  # Pre-populate state files with same content as mock output
+  strip_result="$(printf "%s" "${FAKE_PLATFORM_HTML}" | python3 -c "
+import sys, re
+content = sys.stdin.read()
+text = re.sub(r'<[^>]+>', ' ', content)
+text = re.sub(r'\s+', ' ', text).strip()
+print(text)
+")"
+  printf "%s" "${strip_result}" > "${_OVERRIDE_FEATURES_DIR}/.platform-state.txt"
+  printf "%s" "${FAKE_SDK_CHANGELOG}" > "${_OVERRIDE_FEATURES_DIR}/.sdk-state.md"
+
+  run env \
+    _OVERRIDE_FEATURES_DIR="${_OVERRIDE_FEATURES_DIR}" \
+    _OVERRIDE_DOTFILES_ROOT="${_OVERRIDE_DOTFILES_ROOT}" \
+    MOCK_CALLS_FILE="${MOCK_CALLS_FILE}" \
+    MOCK_CURL_PLATFORM_STDOUT="${MOCK_CURL_PLATFORM_STDOUT}" \
+    MOCK_CURL_SDK_STDOUT="${MOCK_CURL_SDK_STDOUT}" \
+    MOCK_CLAUDE_STDOUT="${MOCK_CLAUDE_STDOUT}" \
+    PATH="${REPO_ROOT}/tests/mocks:${PATH}" \
+    bash "${REPO_ROOT}/scripts/whats-new-anthropic.sh"
+  [ "$status" -eq 0 ]
+  [ ! -f "${_OVERRIDE_FEATURES_DIR}/features-${_today}.md" ]
+  ! grep -q "^git commit" "${MOCK_CALLS_FILE}"
+}
+
+@test "main: proceeds to summary when only platform diff is non-empty" {
+  local _today
+  _today="$(date +%Y-%m-%d)"
+  # Pre-populate SDK state so SDK diff is empty; platform state absent so platform diff is full
+  printf "%s" "${FAKE_SDK_CHANGELOG}" > "${_OVERRIDE_FEATURES_DIR}/.sdk-state.md"
+
+  run env \
+    _OVERRIDE_FEATURES_DIR="${_OVERRIDE_FEATURES_DIR}" \
+    _OVERRIDE_DOTFILES_ROOT="${_OVERRIDE_DOTFILES_ROOT}" \
+    MOCK_CALLS_FILE="${MOCK_CALLS_FILE}" \
+    MOCK_CURL_PLATFORM_STDOUT="${MOCK_CURL_PLATFORM_STDOUT}" \
+    MOCK_CURL_SDK_STDOUT="${MOCK_CURL_SDK_STDOUT}" \
+    MOCK_CLAUDE_STDOUT="${MOCK_CLAUDE_STDOUT}" \
+    PATH="${REPO_ROOT}/tests/mocks:${PATH}" \
+    bash "${REPO_ROOT}/scripts/whats-new-anthropic.sh"
+  [ "$status" -eq 0 ]
+  [ -f "${_OVERRIDE_FEATURES_DIR}/features-${_today}.md" ]
+}
+
+@test "main: proceeds to summary when only SDK diff is non-empty" {
+  local _today
+  _today="$(date +%Y-%m-%d)"
+  # Pre-populate platform state so platform diff is empty; SDK state absent so SDK diff is full
+  strip_result="$(printf "%s" "${FAKE_PLATFORM_HTML}" | python3 -c "
+import sys, re
+content = sys.stdin.read()
+text = re.sub(r'<[^>]+>', ' ', content)
+text = re.sub(r'\s+', ' ', text).strip()
+print(text)
+")"
+  printf "%s" "${strip_result}" > "${_OVERRIDE_FEATURES_DIR}/.platform-state.txt"
+
+  run env \
+    _OVERRIDE_FEATURES_DIR="${_OVERRIDE_FEATURES_DIR}" \
+    _OVERRIDE_DOTFILES_ROOT="${_OVERRIDE_DOTFILES_ROOT}" \
+    MOCK_CALLS_FILE="${MOCK_CALLS_FILE}" \
+    MOCK_CURL_PLATFORM_STDOUT="${MOCK_CURL_PLATFORM_STDOUT}" \
+    MOCK_CURL_SDK_STDOUT="${MOCK_CURL_SDK_STDOUT}" \
+    MOCK_CLAUDE_STDOUT="${MOCK_CLAUDE_STDOUT}" \
+    PATH="${REPO_ROOT}/tests/mocks:${PATH}" \
+    bash "${REPO_ROOT}/scripts/whats-new-anthropic.sh"
+  [ "$status" -eq 0 ]
+  [ -f "${_OVERRIDE_FEATURES_DIR}/features-${_today}.md" ]
+}
+
+@test "main --dry-run: prints summary without creating output file" {
+  local _today
+  _today="$(date +%Y-%m-%d)"
+
+  run env \
+    _OVERRIDE_FEATURES_DIR="${_OVERRIDE_FEATURES_DIR}" \
+    _OVERRIDE_DOTFILES_ROOT="${_OVERRIDE_DOTFILES_ROOT}" \
+    MOCK_CALLS_FILE="${MOCK_CALLS_FILE}" \
+    MOCK_CURL_PLATFORM_STDOUT="${MOCK_CURL_PLATFORM_STDOUT}" \
+    MOCK_CURL_SDK_STDOUT="${MOCK_CURL_SDK_STDOUT}" \
+    MOCK_CLAUDE_STDOUT="${MOCK_CLAUDE_STDOUT}" \
+    PATH="${REPO_ROOT}/tests/mocks:${PATH}" \
+    bash "${REPO_ROOT}/scripts/whats-new-anthropic.sh" --dry-run
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Model & API Changes"* ]]
+  [ ! -f "${_OVERRIDE_FEATURES_DIR}/features-${_today}.md" ]
+  [ ! -f "${_OVERRIDE_FEATURES_DIR}/.platform-state.txt" ]
+}
+
+@test "main --dry-run: exits 1 when claude CLI is missing" {
+  run env \
+    _OVERRIDE_FEATURES_DIR="${_OVERRIDE_FEATURES_DIR}" \
+    _OVERRIDE_DOTFILES_ROOT="${_OVERRIDE_DOTFILES_ROOT}" \
+    MOCK_CALLS_FILE="${MOCK_CALLS_FILE}" \
+    PATH="/usr/bin:/bin" \
+    bash "${REPO_ROOT}/scripts/whats-new-anthropic.sh" --dry-run
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"claude CLI not found"* ]]
+}
