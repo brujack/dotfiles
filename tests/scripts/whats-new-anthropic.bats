@@ -329,3 +329,61 @@ print(text)
   [ "$status" -eq 1 ]
   [[ "$output" == *"claude CLI not found"* ]]
 }
+
+# ── main (error paths) ───────────────────────────────────────────────────────
+
+@test "main: exits 1 when platform fetch fails" {
+  run env \
+    _OVERRIDE_FEATURES_DIR="${_OVERRIDE_FEATURES_DIR}" \
+    _OVERRIDE_DOTFILES_ROOT="${_OVERRIDE_DOTFILES_ROOT}" \
+    MOCK_CALLS_FILE="${MOCK_CALLS_FILE}" \
+    MOCK_CURL_EXIT="1" \
+    PATH="${REPO_ROOT}/tests/mocks:${PATH}" \
+    bash "${REPO_ROOT}/scripts/whats-new-anthropic.sh"
+  [ "$status" -eq 1 ]
+  [ ! -f "${_OVERRIDE_FEATURES_DIR}/.platform-state.txt" ]
+}
+
+@test "main: exits 1 when claude fails, state files not modified" {
+  run env \
+    _OVERRIDE_FEATURES_DIR="${_OVERRIDE_FEATURES_DIR}" \
+    _OVERRIDE_DOTFILES_ROOT="${_OVERRIDE_DOTFILES_ROOT}" \
+    MOCK_CALLS_FILE="${MOCK_CALLS_FILE}" \
+    MOCK_CURL_PLATFORM_STDOUT="${MOCK_CURL_PLATFORM_STDOUT}" \
+    MOCK_CURL_SDK_STDOUT="${MOCK_CURL_SDK_STDOUT}" \
+    MOCK_CLAUDE_EXIT="1" \
+    PATH="${REPO_ROOT}/tests/mocks:${PATH}" \
+    bash "${REPO_ROOT}/scripts/whats-new-anthropic.sh"
+  [ "$status" -eq 1 ]
+  [ ! -f "${_OVERRIDE_FEATURES_DIR}/.platform-state.txt" ]
+  [ ! -f "${_OVERRIDE_FEATURES_DIR}/.sdk-state.md" ]
+}
+
+@test "main: non-zero exit when git push fails but output file exists" {
+  run env \
+    _OVERRIDE_FEATURES_DIR="${_OVERRIDE_FEATURES_DIR}" \
+    _OVERRIDE_DOTFILES_ROOT="${_OVERRIDE_DOTFILES_ROOT}" \
+    MOCK_CALLS_FILE="${MOCK_CALLS_FILE}" \
+    MOCK_CURL_PLATFORM_STDOUT="${MOCK_CURL_PLATFORM_STDOUT}" \
+    MOCK_CURL_SDK_STDOUT="${MOCK_CURL_SDK_STDOUT}" \
+    MOCK_CLAUDE_STDOUT="${MOCK_CLAUDE_STDOUT}" \
+    MOCK_GIT_EXIT="1" \
+    PATH="${REPO_ROOT}/tests/mocks:${PATH}" \
+    bash "${REPO_ROOT}/scripts/whats-new-anthropic.sh"
+  [ "$status" -ne 0 ]
+}
+
+@test "main: ntfy notification sent when NTFY_URL is set" {
+  run env \
+    _OVERRIDE_FEATURES_DIR="${_OVERRIDE_FEATURES_DIR}" \
+    _OVERRIDE_DOTFILES_ROOT="${_OVERRIDE_DOTFILES_ROOT}" \
+    MOCK_CALLS_FILE="${MOCK_CALLS_FILE}" \
+    MOCK_CURL_PLATFORM_STDOUT="${MOCK_CURL_PLATFORM_STDOUT}" \
+    MOCK_CURL_SDK_STDOUT="${MOCK_CURL_SDK_STDOUT}" \
+    MOCK_CLAUDE_STDOUT="${MOCK_CLAUDE_STDOUT}" \
+    NTFY_URL="http://ntfy.example.com/test" \
+    PATH="${REPO_ROOT}/tests/mocks:${PATH}" \
+    bash "${REPO_ROOT}/scripts/whats-new-anthropic.sh"
+  [ "$status" -eq 0 ]
+  grep -q "ntfy.example.com" "${MOCK_CALLS_FILE}"
+}
