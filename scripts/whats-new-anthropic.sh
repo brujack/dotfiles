@@ -45,4 +45,25 @@ extract_new_content() {
   fi
 }
 
+generate_summary() {
+  local _platform_diff="$1"
+  local _sdk_diff="$2"
+  local _combined
+  _combined="$(printf "## Platform Release Notes\n%s\n\n## Python SDK\n%s" "${_platform_diff}" "${_sdk_diff}")"
+  printf "%s" "${_combined}" | claude -p \
+    "Summarize Anthropic and Claude API updates from this content for a developer.
+
+Structure your response as:
+
+## Model & API Changes
+## SDK Changes
+## Bug Fixes
+
+Rules:
+- One bullet per change, one clear sentence each
+- Skip version numbers and dates inside bullets
+- Omit any empty sections
+- Under 400 words total" || { printf "Error: claude CLI failed to generate summary\n" >&2; return 1; }
+}
+
 [[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0

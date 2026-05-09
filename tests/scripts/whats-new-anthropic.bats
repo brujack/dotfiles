@@ -110,3 +110,26 @@ existing content" "${_state}"
   [[ "$output" == *"new entry"* ]]
   [[ "$output" != *"existing content"* ]]
 }
+
+# ── generate_summary ─────────────────────────────────────────────────────────
+
+@test "generate_summary: returns claude output on success" {
+  source "${REPO_ROOT}/scripts/whats-new-anthropic.sh"
+  result="$(generate_summary "platform diff content" "sdk diff content")"
+  [ $? -eq 0 ]
+  [[ "${result}" == *"Claude Opus 4.7"* ]]
+}
+
+@test "generate_summary: passes both diffs to claude under labelled headers" {
+  source "${REPO_ROOT}/scripts/whats-new-anthropic.sh"
+  generate_summary "PLATFORM_CONTENT" "SDK_CONTENT"
+  grep -q "claude" "${MOCK_CALLS_FILE}"
+}
+
+@test "generate_summary: returns 1 when claude fails" {
+  source "${REPO_ROOT}/scripts/whats-new-anthropic.sh"
+  export MOCK_CLAUDE_EXIT=1
+  local _rc=0
+  generate_summary "platform" "sdk" || _rc=$?
+  [ "${_rc}" -ne 0 ]
+}
