@@ -20,6 +20,11 @@ dotfiles/
 │   │   ├── README.md         # Usage and schedule docs
 │   │   ├── .changelog-state.md   # Last-fetched CHANGELOG snapshot (do not edit)
 │   │   └── features-YYYY-MM-DD.md  # Weekly digest committed each Monday
+│   ├── anthropic-new-features/  # Weekly Anthropic & Claude API feature digests
+│   │   ├── README.md                # Usage and schedule docs
+│   │   ├── .platform-state.txt      # Last-fetched platform notes (HTML-stripped; do not edit)
+│   │   ├── .sdk-state.md            # Last-fetched Python SDK CHANGELOG (do not edit)
+│   │   └── features-YYYY-MM-DD.md   # Weekly digest committed each Monday
 │   └── superpowers/          # Design specs and implementation plans
 │       ├── specs/            # Design documents (YYYY-MM-DD-*-design.md)
 │       └── plans/            # Implementation plans (YYYY-MM-DD-*.md)
@@ -38,6 +43,7 @@ dotfiles/
 │   ├── bootstrap_mac.sh      # One-time macOS prerequisite installer (Homebrew + bash 5)
 │   ├── .osx.sh               # macOS system defaults (run during setup)
 │   ├── whats-new-claude-code.sh  # Weekly Claude Code features digest (fetch, summarize, commit)
+│   ├── whats-new-anthropic.sh    # Weekly Anthropic & Claude API digest (fetch, summarize, commit)
 │   └── ...                   # utility scripts
 ├── powershell/
 │   ├── setup_windows.ps1     # Windows/PowerShell bootstrap
@@ -323,17 +329,17 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 Functions that operate on specific file paths use override env vars to redirect to temp files in tests:
 
-| Seam                         | Used by                            | Effect                                                                                       |
-| ---------------------------- | ---------------------------------- | -------------------------------------------------------------------------------------------- |
-| `_OVERRIDE_BREWFILE_PATH`    | `_update_check_brewfile_drift`     | Path to Brewfile; defaults to `${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile`                    |
-| `_OVERRIDE_CONSTANTS_PATH`   | `_update_version_pin()`            | Redirects to a temp copy of `lib/constants.sh`; defaults to real path when unset             |
-| `UPDATE_LOG_PATH`            | `_update_summary()`                | Redirects log writes to a temp file in tests; defaults to `~/.dotfiles-update.log`           |
-| `_UPDATE_TMPDIR`             | all summary functions              | Set to `${BATS_TEST_TMPDIR}` in tests to isolate snapshot files                              |
-| `_BOOTSTRAP_OS_RELEASE`      | `_bootstrap_linux_detect_distro`   | Path to os-release file; defaults to `/etc/os-release`                                       |
-| `_REBOOT_REQUIRED_PATH`      | `_update_record_end` apt case      | Path to reboot-required flag file; defaults to `/var/run/reboot-required`                    |
-| `_REBOOT_REQUIRED_PKGS_PATH` | `_update_record_end` apt case      | Path to reboot-required.pkgs file; defaults to `/var/run/reboot-required.pkgs`               |
-| `_OVERRIDE_FEATURES_DIR`     | `scripts/whats-new-claude-code.sh` | Redirects output and state files to a temp dir; defaults to `docs/claude-code-new-features/` |
-| `_OVERRIDE_DOTFILES_ROOT`    | `scripts/whats-new-claude-code.sh` | Redirects the repo root used for `cd` before git operations; defaults to `SCRIPT_DIR/..`     |
+| Seam                         | Used by                                                              | Effect                                                                             |
+| ---------------------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `_OVERRIDE_BREWFILE_PATH`    | `_update_check_brewfile_drift`                                       | Path to Brewfile; defaults to `${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile`          |
+| `_OVERRIDE_CONSTANTS_PATH`   | `_update_version_pin()`                                              | Redirects to a temp copy of `lib/constants.sh`; defaults to real path when unset   |
+| `UPDATE_LOG_PATH`            | `_update_summary()`                                                  | Redirects log writes to a temp file in tests; defaults to `~/.dotfiles-update.log` |
+| `_UPDATE_TMPDIR`             | all summary functions                                                | Set to `${BATS_TEST_TMPDIR}` in tests to isolate snapshot files                    |
+| `_BOOTSTRAP_OS_RELEASE`      | `_bootstrap_linux_detect_distro`                                     | Path to os-release file; defaults to `/etc/os-release`                             |
+| `_REBOOT_REQUIRED_PATH`      | `_update_record_end` apt case                                        | Path to reboot-required flag file; defaults to `/var/run/reboot-required`          |
+| `_REBOOT_REQUIRED_PKGS_PATH` | `_update_record_end` apt case                                        | Path to reboot-required.pkgs file; defaults to `/var/run/reboot-required.pkgs`     |
+| `_OVERRIDE_FEATURES_DIR`     | `scripts/whats-new-claude-code.sh`, `scripts/whats-new-anthropic.sh` | Redirects output and state files to a temp dir                                     |
+| `_OVERRIDE_DOTFILES_ROOT`    | `scripts/whats-new-claude-code.sh`, `scripts/whats-new-anthropic.sh` | Redirects the repo root used for `cd` before git operations                        |
 
 Pattern: `local _file="${_OVERRIDE_VAR:-$(dirname "${BASH_SOURCE[0]}")/real/path}"`. Tests set the var and pass a writable temp copy; production code leaves it unset.
 
@@ -397,6 +403,8 @@ Available mock env vars:
 | `MOCK_BREW_UPGRADE_EXIT` | Exit code for `brew upgrade` and `brew upgrade --cask --greedy` (default: 0) |
 | `MOCK_BREW_CLEANUP_EXIT` | Exit code for `brew cleanup` (default: 0) |
 | `MOCK_CURL_STDOUT` | Content printed to stdout by `curl` mock (used for `$(curl ...)` substitution; default: empty) |
+| `MOCK_CURL_PLATFORM_STDOUT` | Content returned by `curl` mock when URL contains `platform.claude.com`; used by `whats-new-anthropic.sh` (default: falls back to `MOCK_CURL_STDOUT`) |
+| `MOCK_CURL_SDK_STDOUT` | Content returned by `curl` mock when URL contains `githubusercontent.com`; used by `whats-new-anthropic.sh` (default: falls back to `MOCK_CURL_STDOUT`) |
 | `MOCK_XCODE_SELECT_PRINT_PATH_EXIT` | Exit code for `xcode-select --print-path` (default: 0 = already installed) |
 | `MOCK_XCODE_SELECT_EXIT` | Exit code for `xcode-select --install` (default: 0) |
 | `MOCK_XCODEBUILD_EXIT` | Exit code for `xcodebuild` (default: 0) |
