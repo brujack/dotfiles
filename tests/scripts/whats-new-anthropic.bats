@@ -77,3 +77,36 @@ teardown() {
   fetch_sdk_changelog || _rc=$?
   [ "${_rc}" -ne 0 ]
 }
+
+# ── extract_new_content ──────────────────────────────────────────────────────
+
+@test "extract_new_content: returns full content when state file does not exist" {
+  source "${REPO_ROOT}/scripts/whats-new-anthropic.sh"
+  _state="${BATS_TEST_TMPDIR}/.missing-state"
+  run extract_new_content "line1
+line2" "${_state}"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"line1"* ]]
+  [[ "$output" == *"line2"* ]]
+}
+
+@test "extract_new_content: returns empty when state file matches current content" {
+  source "${REPO_ROOT}/scripts/whats-new-anthropic.sh"
+  _state="${BATS_TEST_TMPDIR}/.state-match"
+  printf "line1\nline2" > "${_state}"
+  run extract_new_content "line1
+line2" "${_state}"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "extract_new_content: returns only new lines when content prepended" {
+  source "${REPO_ROOT}/scripts/whats-new-anthropic.sh"
+  _state="${BATS_TEST_TMPDIR}/.state-old"
+  printf "existing content" > "${_state}"
+  run extract_new_content "new entry
+existing content" "${_state}"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"new entry"* ]]
+  [[ "$output" != *"existing content"* ]]
+}

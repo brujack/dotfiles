@@ -35,4 +35,14 @@ fetch_sdk_changelog() {
   curl -sf "${SDK_URL}" || { printf "Error: failed to fetch Python SDK CHANGELOG\n" >&2; return 1; }
 }
 
+extract_new_content() {
+  local _current="$1"
+  local _state_file="$2"
+  if [[ -f "${_state_file}" ]]; then
+    diff "${_state_file}" <(printf "%s" "${_current}") | grep '^>' | sed 's/^> //'
+  else
+    printf "%s" "${_current}"
+  fi
+}
+
 [[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0
