@@ -139,7 +139,7 @@ cask "daisydisk"
 cask "dbeaver-community"                     # [HAS_DEVTOOLS]
 cask "discord"
 cask "docker-desktop"                        # [HAS_DOCKER]
-cask "dotnet-runtime"                        # [HAS_DEVTOOLS]
+cask "dotnet-runtime"
 cask "expressvpn"                            # [HAS_DEVTOOLS]
 cask "firefox"
 cask "flycut"
@@ -153,6 +153,7 @@ cask "istat-menus"
 cask "iterm2"                                # [HAS_DEVTOOLS]
 cask "lens"                                  # [HAS_K8S]
 cask "logi-options+"
+cask "macdown"
 cask "malwarebytes"
 cask "microsoft-auto-update"
 cask "microsoft-office"
