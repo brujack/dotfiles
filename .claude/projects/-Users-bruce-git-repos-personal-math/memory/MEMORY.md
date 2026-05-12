@@ -12,6 +12,8 @@
 
 ## Feedback
 
+- [feedback_tdd_test_stub_imports.md](feedback_tdd_test_stub_imports.md) — Test file stubs must only import what current test classes use; ruff fails on unused imports blocking make test
+
 - [feedback_python_main_guard.md](feedback_python_main_guard.md) — Subagent TDD implementers test via import; `__main__` guard can be silently missing without test failures (PR #48)
 
 - [feedback_github_actions_patterns.md](feedback_github_actions_patterns.md) — Three required GitHub Actions patterns: env vars for inputs in run: blocks, randomized GITHUB_OUTPUT delimiter, quoted body: in softprops/action-gh-release
