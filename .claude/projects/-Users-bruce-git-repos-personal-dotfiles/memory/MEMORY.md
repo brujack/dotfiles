@@ -20,3 +20,5 @@
 - [Bash regex and capability names with digits](feedback_bash_regex_digits.md) — use `[A-Z][A-Z0-9_]+` not `[A-Z_]+` when matching SCREAMING_SNAKE_CASE; HAS_K8S silently rejected by the latter
 - [Bash version string comparison pitfall](feedback_bash_version_string_compare.md) — never use `[[ ${VER} < "1.21" ]]` for semver; extract integer minor with `cut -d. -f2` and use `-lt`/`-gt`
 - [diff trailing-newline mismatch in BATS tests](feedback_diff_trailing_newline.md) — use prepend pattern (new at top, old at bottom) not append pattern when testing diff logic; trailing-newline ambiguity causes false `c` diffs
+- [Rust clippy ptr_arg lint](feedback_rust_clippy_ptr_arg.md) — use `&mut [T]` not `&mut Vec<T>` in function parameters; clippy fires with -D warnings
+- [Rust clippy manual_is_multiple_of lint](feedback_rust_is_multiple_of.md) — use `n.is_multiple_of(x)` not `n % x == 0`; stabilized Rust 1.86+, always active on stable CI
