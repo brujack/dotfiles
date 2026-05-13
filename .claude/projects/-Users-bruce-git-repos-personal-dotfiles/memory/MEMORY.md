@@ -17,8 +17,4 @@
 - [Test that conditional file writes don't create the file on false branch](feedback_conditional_file_write_test.md) — OK/skip path tests must assert `[ ! -f detail_file ]` to catch regressions where the file is always written
 - [OS gate test update pattern](feedback_os_gate_test_update.md) — when adding a platform gate to an existing function, all prior tests need the gate var set explicitly or they pass vacuously via SKIP
 - [Direct master commits bypass CI](feedback_direct_master_ci_bypass.md) — new CI steps added via direct master commits never run until the next PR; verify on Linux before adding
-- [Bash regex and capability names with digits](feedback_bash_regex_digits.md) — use `[A-Z][A-Z0-9_]+` not `[A-Z_]+` when matching SCREAMING_SNAKE_CASE; HAS_K8S silently rejected by the latter
-- [Bash version string comparison pitfall](feedback_bash_version_string_compare.md) — never use `[[ ${VER} < "1.21" ]]` for semver; extract integer minor with `cut -d. -f2` and use `-lt`/`-gt`
 - [diff trailing-newline mismatch in BATS tests](feedback_diff_trailing_newline.md) — use prepend pattern (new at top, old at bottom) not append pattern when testing diff logic; trailing-newline ambiguity causes false `c` diffs
-- [Rust clippy ptr_arg lint](feedback_rust_clippy_ptr_arg.md) — use `&mut [T]` not `&mut Vec<T>` in function parameters; clippy fires with -D warnings
-- [Rust clippy manual_is_multiple_of lint](feedback_rust_is_multiple_of.md) — use `n.is_multiple_of(x)` not `n % x == 0`; stabilized Rust 1.86+, always active on stable CI
