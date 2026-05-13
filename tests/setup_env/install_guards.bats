@@ -413,3 +413,35 @@ teardown() {
   setup_ai_config || _rc=$?
   [ "${_rc}" -eq 1 ]
 }
+
+# ── setup_dotfile_symlinks (AI_CONFIG_DIR seam) ──────────────────────────────
+
+@test "setup_dotfile_symlinks creates .claude symlinks from AI_CONFIG_DIR" {
+  export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
+  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
+  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude"
+  touch "${_OVERRIDE_AI_CONFIG_DIR}/.claude/CLAUDE.md"
+  local _home="${BATS_TEST_TMPDIR}/home"
+  mkdir -p "${_home}"
+  export HOME="${_home}"
+
+  run setup_dotfile_symlinks
+  [ "${status}" -eq 0 ]
+  [ -L "${_home}/.claude/CLAUDE.md" ]
+  [[ "$(readlink "${_home}/.claude/CLAUDE.md")" == "${_OVERRIDE_AI_CONFIG_DIR}/.claude/CLAUDE.md" ]]
+}
+
+@test "setup_dotfile_symlinks creates .cursor symlinks from AI_CONFIG_DIR" {
+  export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
+  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
+  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.cursor"
+  touch "${_OVERRIDE_AI_CONFIG_DIR}/.cursor/testfile"
+  local _home="${BATS_TEST_TMPDIR}/home"
+  mkdir -p "${_home}"
+  export HOME="${_home}"
+
+  run setup_dotfile_symlinks
+  [ "${status}" -eq 0 ]
+  [ -L "${_home}/.cursor/testfile" ]
+  [[ "$(readlink "${_home}/.cursor/testfile")" == "${_OVERRIDE_AI_CONFIG_DIR}/.cursor/testfile" ]]
+}

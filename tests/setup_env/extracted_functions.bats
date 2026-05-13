@@ -11,11 +11,13 @@ setup() {
   FAKE_HOME="${BATS_TEST_TMPDIR}/home"
   FAKE_PERSONAL_GITREPOS="${BATS_TEST_TMPDIR}/home/git-repos/personal"
   FAKE_DOTFILES_SRC="${FAKE_PERSONAL_GITREPOS}/dotfiles"
+  FAKE_AI_CONFIG_SRC="${BATS_TEST_TMPDIR}/ai-config"
 
   mkdir -p "${FAKE_HOME}"
   export HOME="${FAKE_HOME}"
   export PERSONAL_GITREPOS="${FAKE_PERSONAL_GITREPOS}"
   export DOTFILES="dotfiles"
+  export _OVERRIDE_AI_CONFIG_DIR="${FAKE_AI_CONFIG_SRC}"
 }
 
 teardown() {
@@ -26,9 +28,6 @@ teardown() {
 _make_fake_dotfiles() {
   mkdir -p "${FAKE_DOTFILES_SRC}/.config/.zshrc.d"
   mkdir -p "${FAKE_DOTFILES_SRC}/.config/ccstatusline"
-  mkdir -p "${FAKE_DOTFILES_SRC}/.cursor/User/snippets"
-  mkdir -p "${FAKE_DOTFILES_SRC}/.cursor/plugins"
-  mkdir -p "${FAKE_DOTFILES_SRC}/.cursor/skills-cursor"
   mkdir -p "${FAKE_DOTFILES_SRC}/.ssh"
   mkdir -p "${FAKE_DOTFILES_SRC}/.claude"
   mkdir -p "${FAKE_DOTFILES_SRC}/.warp/themes"
@@ -48,10 +47,14 @@ _make_fake_dotfiles() {
   touch "${FAKE_DOTFILES_SRC}/starship.toml"
   touch "${FAKE_DOTFILES_SRC}/.zshrc"
   touch "${FAKE_DOTFILES_SRC}/.zprofile"
-  touch "${FAKE_DOTFILES_SRC}/.cursor/User/settings.json"
-  touch "${FAKE_DOTFILES_SRC}/.cursor/User/keybindings.json"
   touch "${FAKE_DOTFILES_SRC}/.ssh/config"
   touch "${FAKE_DOTFILES_SRC}/.ssh/teleport.cfg"
+  # .cursor/ and .claude/ items sourced from AI_CONFIG_DIR (ai-config repo)
+  mkdir -p "${FAKE_AI_CONFIG_SRC}/.cursor/User/snippets"
+  mkdir -p "${FAKE_AI_CONFIG_SRC}/.cursor/plugins"
+  mkdir -p "${FAKE_AI_CONFIG_SRC}/.cursor/skills-cursor"
+  touch "${FAKE_AI_CONFIG_SRC}/.cursor/User/settings.json"
+  touch "${FAKE_AI_CONFIG_SRC}/.cursor/User/keybindings.json"
 }
 
 # ── clone_or_update_dotfiles ─────────────────────────────────────────────────
@@ -186,7 +189,7 @@ _make_fake_dotfiles() {
   run setup_dotfile_symlinks
   [ "$status" -eq 0 ]
   [[ -L "${FAKE_HOME}/.cursor/plugins" ]]
-  [[ "$(readlink "${FAKE_HOME}/.cursor/plugins")" == "${FAKE_DOTFILES_SRC}/.cursor/plugins" ]]
+  [[ "$(readlink "${FAKE_HOME}/.cursor/plugins")" == "${FAKE_AI_CONFIG_SRC}/.cursor/plugins" ]]
 }
 
 @test "setup_dotfile_symlinks creates ~/.cursor/skills-cursor symlink" {
@@ -196,7 +199,7 @@ _make_fake_dotfiles() {
   run setup_dotfile_symlinks
   [ "$status" -eq 0 ]
   [[ -L "${FAKE_HOME}/.cursor/skills-cursor" ]]
-  [[ "$(readlink "${FAKE_HOME}/.cursor/skills-cursor")" == "${FAKE_DOTFILES_SRC}/.cursor/skills-cursor" ]]
+  [[ "$(readlink "${FAKE_HOME}/.cursor/skills-cursor")" == "${FAKE_AI_CONFIG_SRC}/.cursor/skills-cursor" ]]
 }
 
 @test "setup_dotfile_symlinks creates ~/.cursor/plugins symlink on Linux" {
@@ -206,7 +209,7 @@ _make_fake_dotfiles() {
   run setup_dotfile_symlinks
   [ "$status" -eq 0 ]
   [[ -L "${FAKE_HOME}/.cursor/plugins" ]]
-  [[ "$(readlink "${FAKE_HOME}/.cursor/plugins")" == "${FAKE_DOTFILES_SRC}/.cursor/plugins" ]]
+  [[ "$(readlink "${FAKE_HOME}/.cursor/plugins")" == "${FAKE_AI_CONFIG_SRC}/.cursor/plugins" ]]
 }
 
 @test "setup_dotfile_symlinks creates ~/.cursor/skills-cursor symlink on Linux" {
@@ -216,7 +219,7 @@ _make_fake_dotfiles() {
   run setup_dotfile_symlinks
   [ "$status" -eq 0 ]
   [[ -L "${FAKE_HOME}/.cursor/skills-cursor" ]]
-  [[ "$(readlink "${FAKE_HOME}/.cursor/skills-cursor")" == "${FAKE_DOTFILES_SRC}/.cursor/skills-cursor" ]]
+  [[ "$(readlink "${FAKE_HOME}/.cursor/skills-cursor")" == "${FAKE_AI_CONFIG_SRC}/.cursor/skills-cursor" ]]
 }
 
 @test "setup_dotfile_symlinks does not symlink User/ under ~/.cursor" {
@@ -230,7 +233,7 @@ _make_fake_dotfiles() {
 
 @test "setup_dotfile_symlinks handles .cursor/ with only User/ present" {
   _make_fake_dotfiles
-  rm -rf "${FAKE_DOTFILES_SRC}/.cursor/plugins" "${FAKE_DOTFILES_SRC}/.cursor/skills-cursor"
+  rm -rf "${FAKE_AI_CONFIG_SRC}/.cursor/plugins" "${FAKE_AI_CONFIG_SRC}/.cursor/skills-cursor"
   export MACOS=1
   unset LINUX
   run setup_dotfile_symlinks

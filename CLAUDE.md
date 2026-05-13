@@ -330,7 +330,7 @@ Functions that operate on specific file paths use override env vars to redirect 
 | `_REBOOT_REQUIRED_PKGS_PATH` | `_update_record_end` apt case                                        | Path to reboot-required.pkgs file; defaults to `/var/run/reboot-required.pkgs`     |
 | `_OVERRIDE_FEATURES_DIR`     | `scripts/whats-new-claude-code.sh`, `scripts/whats-new-anthropic.sh` | Redirects output and state files to a temp dir                                     |
 | `_OVERRIDE_DOTFILES_ROOT`    | `scripts/whats-new-claude-code.sh`, `scripts/whats-new-anthropic.sh` | Redirects the repo root used for `cd` before git operations                        |
-| `_OVERRIDE_AI_CONFIG_DIR`    | `setup_ai_config`                                                     | Overrides `AI_CONFIG_DIR` (readonly) for test isolation                            |
+| `_OVERRIDE_AI_CONFIG_DIR`    | `setup_ai_config`, `setup_dotfile_symlinks`                            | Overrides `AI_CONFIG_DIR` (readonly) for test isolation                            |
 
 Pattern: `local _file="${_OVERRIDE_VAR:-$(dirname "${BASH_SOURCE[0]}")/real/path}"`. Tests set the var and pass a writable temp copy; production code leaves it unset.
 

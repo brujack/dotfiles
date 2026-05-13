@@ -562,6 +562,8 @@ process_args() {
 }
 
 setup_dotfile_symlinks() {
+  # _OVERRIDE_AI_CONFIG_DIR allows tests to redirect AI_CONFIG_DIR (which is readonly)
+  local _ai_config_dir="${_OVERRIDE_AI_CONFIG_DIR:-${AI_CONFIG_DIR}}"
   log_info "Linking ${DOTFILES} to their home"
 
   if [[ -n ${MACOS} ]]; then
@@ -666,7 +668,7 @@ setup_dotfile_symlinks() {
   if mkdir -p ${HOME}/.claude; then
     log_info "Created ${HOME}/.claude"
   fi
-  for _claude_item in "${PERSONAL_GITREPOS}/${DOTFILES}/.claude/"*; do
+  for _claude_item in "${_ai_config_dir}/.claude/"*; do
     [[ -e "${_claude_item}" ]] || continue
     _claude_target="${HOME}/.claude/$(basename "${_claude_item}")"
     safe_link "${_claude_item}" "${_claude_target}"
@@ -675,14 +677,14 @@ setup_dotfile_symlinks() {
   log_info "Creating ${HOME}/.cursor"
   mkdir -p "${HOME}/.cursor"
   # glob * excludes dotfiles (e.g. .gitignore) — intentional
-  for _cursor_item in "${PERSONAL_GITREPOS}/${DOTFILES}/.cursor/"*; do
+  for _cursor_item in "${_ai_config_dir}/.cursor/"*; do
     [[ -e "${_cursor_item}" ]] || continue
     # Skip User/ — handled separately via CURSOR_USER_DIR symlinks
     [[ "$(basename "${_cursor_item}")" == "User" ]] && continue
     _cursor_target="${HOME}/.cursor/$(basename "${_cursor_item}")"
     safe_link "${_cursor_item}" "${_cursor_target}"
   done
-  safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.cursor/rules" "${HOME}/.cursor/rules"
+  safe_link "${_ai_config_dir}/.cursor/rules" "${HOME}/.cursor/rules"
 
   safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.ssh/config" "${HOME}/.ssh/config"
 
@@ -695,7 +697,7 @@ setup_dotfile_symlinks() {
   fi
 
   if [[ -n ${CURSOR_USER_DIR:-} ]]; then
-    CURSOR_DOTFILES_USER_DIR="${PERSONAL_GITREPOS}/${DOTFILES}/.cursor/User"
+    CURSOR_DOTFILES_USER_DIR="${_ai_config_dir}/.cursor/User"
 
     # Only link Cursor settings if Cursor is installed, the app's settings files exist (on macOS),
     # and the dotfiles Cursor user files exist
