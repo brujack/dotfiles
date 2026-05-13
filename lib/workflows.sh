@@ -37,6 +37,14 @@ setup_claude_mcp() {
   log_info "GitHub MCP configured (${_output})"
 }
 
+setup_ai_config() {
+  local _dir="${_OVERRIDE_AI_CONFIG_DIR:-${AI_CONFIG_DIR}}"
+  if [[ ! -d "${_dir}" ]]; then
+    log_info "ai-config not found — cloning..."
+    git clone git@github.com:brujack/ai-config "${_dir}" || return 1
+  fi
+}
+
 run_setup_user() {
   # need to make sure that some base packages are installed
   if [[ ${REDHAT} || ${FEDORA} ]]; then
@@ -78,6 +86,7 @@ run_setup_user() {
   mkdir -p ${PERSONAL_GITREPOS}
 
   clone_or_update_dotfiles || return 1
+  setup_ai_config || return 1
 
   setup_dotfile_symlinks || return 1
 

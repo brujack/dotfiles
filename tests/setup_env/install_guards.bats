@@ -385,3 +385,31 @@ teardown() {
   grep -q "brew bundle" "${MOCK_CALLS_FILE}"
   ! grep -q "Brewfile\.devtools" "${MOCK_CALLS_FILE}"
 }
+
+# ── setup_ai_config ──────────────────────────────────────────────────────────
+
+@test "setup_ai_config clones repo when AI_CONFIG_DIR absent" {
+  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/nonexistent-ai-config"
+
+  run setup_ai_config
+  [ "${status}" -eq 0 ]
+  grep -q "git clone git@github.com:brujack/ai-config ${BATS_TEST_TMPDIR}/nonexistent-ai-config" "${MOCK_CALLS_FILE}"
+}
+
+@test "setup_ai_config skips clone when AI_CONFIG_DIR exists" {
+  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
+  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}"
+
+  run setup_ai_config
+  [ "${status}" -eq 0 ]
+  ! grep -q "git clone" "${MOCK_CALLS_FILE}"
+}
+
+@test "setup_ai_config returns 1 when clone fails" {
+  export MOCK_GIT_CLONE_EXIT=1
+  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/nonexistent-ai-config"
+
+  local _rc=0
+  setup_ai_config || _rc=$?
+  [ "${_rc}" -eq 1 ]
+}
