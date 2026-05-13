@@ -28,6 +28,34 @@ Add `R: BufRead` when stdin is needed. Unit tests inject `Vec<u8>` writers and `
 
 Use `io::Error::other("msg")` — not `io::Error::new(io::ErrorKind::Other, "msg")`. The `clippy::io_other_error` lint fires on the old form in Rust 1.74+. Applies everywhere, including test `FailWriter` stubs.
 
+### Clippy Lints to Know
+
+These fire with `-D warnings` and are easy to write wrong the first time:
+
+**`clippy::ptr_arg` — prefer `&mut [T]` over `&mut Vec<T>`**
+
+When a function takes a mutable Vec but doesn't push/pop/resize it, use a slice reference instead. It's strictly more general and callers don't need to change — `Vec<T>` auto-derefs to `[T]`.
+
+```rust
+// Wrong — clippy::ptr_arg fires
+fn process(cache: &mut Vec<u32>) { ... }
+
+// Correct
+fn process(cache: &mut [u32]) { ... }
+```
+
+**`clippy::manual_is_multiple_of` — use `.is_multiple_of(x)` over `% x == 0`**
+
+Stabilized on all integer primitives in Rust 1.86. CI uses `dtolnay/rust-toolchain@stable` which always pulls the latest stable, so this lint is always active.
+
+```rust
+// Wrong — clippy::manual_is_multiple_of fires on Rust 1.86+
+if n % 2 == 0 { ... }
+
+// Correct
+if n.is_multiple_of(2) { ... }
+```
+
 ### Tarpaulin Coverage
 
 **Coverage gate is CI-only.** `cargo tarpaulin` takes ~8s per crate locally. Do not add it to the pre-push hook; CI is the gate (`cargo tarpaulin --fail-under 90` in the `test` job).
@@ -92,3 +120,7 @@ Add to every Rust crate that has `write!/writeln!` macros with arguments that ap
 ```toml
 use_small_heuristics = "Max"
 ```
+
+### Tarpaulin Instrumentation Limits
+
+Tarpaulin does not instrument inside macro argument expressions for `error!()`, `trace!()`, `warn!()`, `anyhow!()`, or struct literal fields in `return` statements. Lines inside these constructs show as uncovered even when the branch executes. Accept the coverage ceiling rather than writing complex test infrastructure to reach them — these are genuine instrumentation gaps, not missing tests.
