@@ -40,9 +40,11 @@ update_rust() {
     if [[ -x ${HOME}/.cargo/bin/rustup ]]; then
       ${HOME}/.cargo/bin/rustup self update
       ${HOME}/.cargo/bin/rustup update
+      ${HOME}/.cargo/bin/rustup component add rust-analyzer
     elif command -v rustup >/dev/null 2>&1; then
       rustup self update
       rustup update
+      rustup component add rust-analyzer
     else
       log_warn "rustup not found; skipping Rust update"
     fi
@@ -266,7 +268,7 @@ setup_ansible() {
       pyenv virtualenv "${PYTHON_VER}" ansible
       pyenv activate ansible
       printf "Installing Ansible dependencies...\\n"
-      python -m pip install ansible ansible-lint certbot certbot-dns-cloudflare checkov boto3 docker gmpy2 jmespath mpmath netaddr pylint psutil bpytop HttpPy j2cli wheel shell-gpt
+      python -m pip install ansible ansible-lint certbot certbot-dns-cloudflare checkov boto3 docker gmpy2 jmespath mpmath netaddr pylint psutil bpytop HttpPy j2cli wheel shell-gpt pyright
     fi
   fi
 }
