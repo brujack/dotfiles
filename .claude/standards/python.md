@@ -1,5 +1,9 @@
 ## Python
 
+### Linting
+
+`ruff check .`
+
 ### CLI Entry-Point Guard
 
 Every Python CLI script must have an explicit entry-point guard at the bottom:

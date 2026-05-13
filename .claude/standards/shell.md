@@ -1,5 +1,10 @@
 ## Shell Scripts
 
+### Linting
+
+- `shellcheck` on all `.sh` files
+- `bash -n` and `zsh -n` for syntax checks
+
 ### Idempotency
 
 Always check before acting — guard installs, symlinks, directory creation, and file modifications with existence checks:

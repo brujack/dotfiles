@@ -1,5 +1,9 @@
 ## Rust
 
+### Linting
+
+`cargo clippy -- -D warnings`
+
 ### CLI Crate I/O Pattern
 
 All CLI Rust crates must use injectable I/O to keep `fn main()` testable and coverage achievable.

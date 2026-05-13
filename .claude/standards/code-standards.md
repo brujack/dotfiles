@@ -1,10 +1,6 @@
 ## Linting
 
-Every project Makefile must have a `lint` target, and `test` must depend on it (`test: lint`).
-
-- Python: `ruff check .`
-- Rust: `cargo clippy -- -D warnings`
-- PowerShell: `Invoke-ScriptAnalyzer` via PSScriptAnalyzer (use a `PSScriptAnalyzerSettings.psd1` to exclude rules that can't be changed, e.g. `PSAvoidUsingInvokeExpression` for official bootstrapper commands)
+Every project Makefile must have a `lint` target, and `test` must depend on it (`test: lint`). See each language's standards file for the specific tool.
 
 ## Code Standards
 
