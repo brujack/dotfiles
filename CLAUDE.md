@@ -208,12 +208,7 @@ Untagged entries are expected on all macs. When adding a new Brewfile entry that
 
 ### PowerShell Scripts
 
-- **Noun naming:** Functions must use singular nouns (`Install-ChocolateyPackage`, not `Install-ChocolateyPackages`) — PSUseSingularNouns rule
-- **Avoid built-in collisions:** Do not name functions the same as Windows built-in cmdlets (e.g., use `Enable-RequiredWindowsOptionalFeature`, not `Enable-WindowsOptionalFeature`)
-- **COM object wrappers:** Wrap `New-Object -ComObject` calls in thin functions (`Get-UpdateSearcher`, etc.) so Pester can mock them on macOS
-- **Null comparisons:** `$null -eq $result` not `$result -eq $null` (PSPossibleIncorrectComparisonWithNull)
-- **No aliases:** `Invoke-Expression` not `iex`; full cmdlet names throughout
-- **Cross-platform test stubs:** Windows-only cmdlets that don't exist on macOS must be stubbed as `function global:CmdletName { }` in `BeforeAll`
+See `~/.claude/standards/powershell.md` for the full PowerShell coding and testing standards.
 
 ### Version Pinning
 
