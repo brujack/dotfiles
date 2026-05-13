@@ -55,6 +55,8 @@ BREWFILE_LOC="${HOME}/brew"
 DOTFILES="dotfiles"
 GITREPOS="${HOME}/git-repos"
 PERSONAL_GITREPOS="${GITREPOS}/personal"
+readonly AI_CONFIG="ai-config"
+readonly AI_CONFIG_DIR="${PERSONAL_GITREPOS}/${AI_CONFIG}"
 WSL_HOME="/mnt/c/Users/${USER}"
 
 HOSTNAME=$(hostname -s)

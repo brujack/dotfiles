@@ -81,6 +81,16 @@ teardown() {
   [ "${WORK}" -eq 1 ]
 }
 
+# ── directory constants ──────────────────────────────────────────────────────
+
+@test "AI_CONFIG is set to ai-config" {
+  [ "${AI_CONFIG}" = "ai-config" ]
+}
+
+@test "AI_CONFIG_DIR is PERSONAL_GITREPOS/ai-config" {
+  [ "${AI_CONFIG_DIR}" = "${PERSONAL_GITREPOS}/ai-config" ]
+}
+
 # ── version constants ────────────────────────────────────────────────────────
 
 @test "BATS_VER is set and non-empty" {
