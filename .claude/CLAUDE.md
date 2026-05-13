@@ -68,3 +68,4 @@ Update the top-level `README.md` whenever a change affects anything it documents
 @~/.claude/standards/code-standards.md
 @~/.claude/standards/repo-structure.md
 @~/.claude/standards/behavior.md
+@~/.claude/standards/rust.md
