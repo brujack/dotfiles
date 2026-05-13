@@ -66,6 +66,10 @@ Update the top-level `README.md` whenever a change affects anything it documents
 @~/.claude/standards/git-workflow.md
 @~/.claude/standards/ci.md
 @~/.claude/standards/code-standards.md
+@~/.claude/standards/shell.md
+@~/.claude/standards/ansible.md
+@~/.claude/standards/terraform.md
+@~/.claude/standards/powershell.md
 @~/.claude/standards/repo-structure.md
 @~/.claude/standards/behavior.md
 @~/.claude/standards/rust.md
