@@ -94,7 +94,12 @@ the finishing-a-development-branch skill file, this rule still enforces the gate
 **After every PR merge or direct master commit, always run a learning analysis before closing out.** Ask:
 
 1. **What did I learn?** — Any non-obvious pattern, gotcha, constraint, or decision that came up.
-2. **Where should I document it?** — Memory file, ADR, code comment, or CLAUDE.md update.
+2. **Where should I document it?** — Choose the right destination:
+   - **Language-specific pattern or gotcha** (shell, Python, Rust, Ansible, Terraform, PowerShell) → `~/.claude/standards/<language>.md`
+   - **Repo-wide convention or constraint** → repo `CLAUDE.md`
+   - **Cross-cutting architectural decision** → ADR in `docs/adr/`
+   - **Non-obvious behavior to remember across sessions** → memory file
+   - **Inline constraint future readers would miss** → code comment
 
 Write the documentation, commit it, then close out. If nothing new was learned, state that explicitly so the omission is intentional.
 
