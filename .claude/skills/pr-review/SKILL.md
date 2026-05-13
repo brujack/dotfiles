@@ -63,17 +63,18 @@ Identify which of these are present in the diff:
 
 ## Step 2 — Load Language References
 
-Read **only** the reference files relevant to what you found in Step 1.
-Do not load all of them — keep context lean.
+The global language standards files are pre-loaded into every session via `~/.claude/CLAUDE.md` `@` includes — no explicit Read needed. Use them as the authoritative source for language-specific review criteria.
 
-| Language / Tool | Reference file             |
-| --------------- | -------------------------- |
-| Rust            | `references/rust.md`       |
-| Python          | `references/python.md`     |
-| Bash / Shell    | `references/bash.md`       |
-| PowerShell      | `references/powershell.md` |
-| Ansible         | `references/ansible.md`    |
-| Terraform       | `references/terraform.md`  |
+| Language / Tool | Standards file                      |
+| --------------- | ----------------------------------- |
+| Rust            | `~/.claude/standards/rust.md`       |
+| Python          | `~/.claude/standards/python.md`     |
+| Bash / Shell    | `~/.claude/standards/shell.md`      |
+| PowerShell      | `~/.claude/standards/powershell.md` |
+| Ansible         | `~/.claude/standards/ansible.md`    |
+| Terraform       | `~/.claude/standards/terraform.md`  |
+
+If the session context does not already contain the relevant standard (e.g. a new session where CLAUDE.md was not loaded), Read the file explicitly before proceeding.
 
 ---
 
