@@ -14,9 +14,6 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Check agent guidance drift
-        run: make check-agent-guidance
-
       - name: Install dependencies
         run: sudo apt-get install -y bats shellcheck zsh
 
@@ -33,8 +30,6 @@ jobs:
           find . -name '*.sh' \
             -not -path './.worktrees/*' \
             -not -path './tests/mocks/*' \
-            -not -path './.cursor/*' \
-            -not -path './.claude/*' \
             | xargs -I{} bash -n {}
 
       - name: Syntax check all shell scripts (zsh)
@@ -42,8 +37,6 @@ jobs:
           find . -name '*.sh' \
             -not -path './.worktrees/*' \
             -not -path './tests/mocks/*' \
-            -not -path './.cursor/*' \
-            -not -path './.claude/*' \
             | xargs -I{} zsh -n {}
 
   powershell:
