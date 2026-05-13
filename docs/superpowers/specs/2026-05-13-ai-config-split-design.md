@@ -147,6 +147,53 @@ Minimal pipeline — config-only repo, nothing to build or test:
 - Pre-commit hook: `ggshield secret scan pre-commit`
 - Pre-push hook: runs `make check-agent-guidance` (no test suite)
 
+## Migration
+
+The migration must be safe-to-interrupt: `ai-config` is fully operational before
+anything is removed from dotfiles. Never leave the machine in a state where
+symlinks point nowhere.
+
+### Step 1 — Create the ai-config repo
+
+Create a private GitHub repo `brujack/ai-config` via `gh repo create`. Clone it
+locally to `~/git-repos/personal/ai-config`. Add `.gitignore`, `.gitleaks.toml`,
+`README.md`, `Makefile`, and `scripts/` scaffolding. Commit and push.
+
+### Step 2 — Copy content into ai-config
+
+Copy `.claude/` and `.cursor/` from the dotfiles working tree into `ai-config`.
+Use `cp -r` — not `git mv` — because the two repos have separate git histories.
+Commit the full content to `ai-config` as an initial snapshot commit. Push.
+
+Memory files (`dotfiles/.claude/projects/`) are included in this copy. Their git
+history stays in the dotfiles repo but is not carried forward; the content is
+what matters.
+
+### Step 3 — Re-point symlinks on the current machine
+
+Run the updated `setup_symlinks` against `ai-config` to replace the existing
+dotfiles-sourced symlinks with ai-config-sourced ones. Verify `~/.claude/` and
+`~/.cursor/` symlinks all resolve correctly before proceeding.
+
+### Step 4 — Update dotfiles
+
+Remove `.claude/` and `.cursor/` from dotfiles, update `lib/constants.sh`,
+`lib/helpers.sh`, `lib/workflows.sh`, `scripts/sync-agent-guidance.sh`,
+and the dotfiles Makefile. Update `~/.claude/CLAUDE.md` (now in ai-config)
+to reflect the new memory convention. Commit and push dotfiles.
+
+### Step 5 — Verify end-to-end
+
+Run `setup_env.sh -t doctor` and confirm all checks pass. Run
+`make check-agent-guidance` in ai-config to confirm Cursor rules are in sync.
+Open a new Claude Code session and verify skills, standards, and hooks load.
+
+### Step 6 — Add ai-config CI
+
+Add `.github/workflows/ci.yml` (secrets scan + auto-merge), pre-commit hook,
+and pre-push hook to ai-config. Push via a PR to exercise CI before treating
+the repo as stable.
+
 ## New Machine Bootstrap Flow
 
 1. SSH keys in place (prerequisite — unchanged)
