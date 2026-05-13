@@ -2,7 +2,8 @@
 # lib/workflows.sh — top-level workflow functions dispatched by setup_env.sh
 
 setup_claude_mcp() {
-  local _template="${PERSONAL_GITREPOS}/${DOTFILES}/.claude/mcp.json.template"
+  local _ai_config_dir="${_OVERRIDE_AI_CONFIG_DIR:-${AI_CONFIG_DIR}}"
+  local _template="${_ai_config_dir}/.claude/mcp.json.template"
   local _output="${HOME}/.claude/mcp.json"
   local _local_config="${PERSONAL_GITREPOS}/${DOTFILES}/config/local.sh"
 

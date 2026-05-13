@@ -414,6 +414,26 @@ teardown() {
   [ "${_rc}" -eq 1 ]
 }
 
+# ── setup_claude_mcp (AI_CONFIG_DIR seam) ────────────────────────────────────
+
+@test "setup_claude_mcp uses template from AI_CONFIG_DIR" {
+  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
+  export GITHUB_PAT="test-pat-value"
+  # Prevent config/local.sh from overriding GITHUB_PAT by pointing PERSONAL_GITREPOS
+  # to a temp dir where no config/local.sh exists
+  export PERSONAL_GITREPOS="${BATS_TEST_TMPDIR}/git-repos/personal"
+  export DOTFILES="dotfiles"
+  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude"
+  printf '{"token": "${GITHUB_PAT}"}\n' > "${_OVERRIDE_AI_CONFIG_DIR}/.claude/mcp.json.template"
+  local _home="${BATS_TEST_TMPDIR}/home"
+  mkdir -p "${_home}/.claude"
+  export HOME="${_home}"
+
+  run setup_claude_mcp
+  [ "${status}" -eq 0 ]
+  grep -q "test-pat-value" "${_home}/.claude/mcp.json"
+}
+
 # ── setup_dotfile_symlinks (AI_CONFIG_DIR seam) ──────────────────────────────
 
 @test "setup_dotfile_symlinks creates .claude symlinks from AI_CONFIG_DIR" {
