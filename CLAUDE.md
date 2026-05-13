@@ -279,7 +279,7 @@ CI requirements:
 
 ### PowerShell Testing
 
-Run from the `powershell/` directory:
+See `~/.claude/standards/powershell.md` for PowerShell coding and testing standards. Run tests in this repo from the `powershell/` directory:
 
 ```bash
 cd powershell
