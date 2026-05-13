@@ -52,6 +52,10 @@ At the end of each session, update `~/.claude/CLAUDE.md` and any relevant repo-l
 
 Update the top-level `README.md` whenever a change affects anything it documents — new features, changed commands, updated dependencies, new project structure, etc. The README should always reflect the current state of the repository.
 
+## Skills
+
+Local skill modifications must live in `~/.claude/skills/`, never in `~/.claude/plugins/cache/`. Plugin updates overwrite the cache. `~/.claude/skills/` is version-controlled via dotfiles and survives updates.
+
 ## Approach
 
 - Read and understand existing code before suggesting modifications
