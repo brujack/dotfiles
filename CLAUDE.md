@@ -69,10 +69,6 @@ dotfiles/
 │       ├── 5_general.zsh     # General settings
 │       ├── 6_path.zsh        # PATH configuration
 │       └── 7_final.zsh       # Final setup, completions
-├── .claude/                  # Claude Code config (settings, plugins, memory)
-│   └── projects/             # Per-repo memories (symlinked from ~/.claude/projects/)
-├── .cursor/                  # Cursor config (plugins, skills-cursor)
-│   └── User/                 # Cursor user settings (symlinked into platform Cursor user dir)
 ├── tests/
 │   ├── setup_env/
 │   │   ├── unit.bats
@@ -115,13 +111,14 @@ dotfiles/
 
 ## Symlink Strategy
 
-Dotfiles live in `.devcontainer/`, `.claude/`, and `.cursor/`. `setup_env.sh` creates symlinks from `$HOME` into the repo:
+Dotfiles live in `.devcontainer/` (this repo) and `.claude/`/`.cursor/` (ai-config repo at `~/git-repos/personal/ai-config`). `setup_env.sh` creates symlinks from `$HOME` into the repos:
 
 - **`.devcontainer/`** — each file symlinked individually into `$HOME` (e.g. `~/.zshrc → …/.devcontainer/.zshrc`)
-- **`.claude/`** — each item symlinked individually into `~/.claude/`, preserving any non-repo files already there.
+- **`.claude/`** — each item (except `projects/`) symlinked individually into `~/.claude/` from the ai-config repo.
   Exception: `mcp.json.template` is symlinked as `~/.claude/mcp.json.template` (read-only reference); the live
   `~/.claude/mcp.json` is **generated** by `setup_claude_mcp` via `envsubst` and is not a symlink.
-- **`.cursor/`** — each item (excluding `User/`) symlinked individually into `~/.cursor/`; `User/` contents are symlinked into the platform Cursor user settings dir
+  The `projects/` subdirectory is **not** symlinked wholesale — per-repo memories are managed individually.
+- **`.cursor/`** — each item (excluding `User/`) symlinked individually into `~/.cursor/` from the ai-config repo; `User/` contents are symlinked into the platform Cursor user settings dir
 
 Always remove the old file before symlinking (`rm -f` then `ln -s`). Validate symlinks with `[[ -L ${HOME}/.file ]]`.
 
