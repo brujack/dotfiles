@@ -1,1 +1,110 @@
-.devcontainer/starship.toml
+# ~/.config/starship.toml
+
+# Inserts a blank line between shell prompts
+add_newline = false
+
+# Change the default prompt format
+#format = """\
+#[╭╴](238)$env_var\
+#$all[╰─](238)$character"""
+
+format = """\
+(238)$env_var $all (238)$character"""
+
+# Change the default prompt characters
+[character]
+success_symbol = "[](238)"
+error_symbol = "[](238)"
+
+[shell]
+zsh_indicator = "zsh"
+powershell_indicator = "pwsh"
+style = "white bold"
+disabled = false
+
+# Shows an icon that should be included by zshrc script based on the distribution or os
+[env_var.STARSHIP_DISTRO]
+format = '[$env_value](bold white) '
+variable = "STARSHIP_DISTRO"
+disabled = false
+
+[username]
+style_user = "white bold"
+style_root = "black bold"
+format = "[$user]($style) "
+disabled = false
+show_always = true
+
+[hostname]
+ssh_only = false
+format = "on [$hostname](white bold) "
+trim_at = ".home.conecrazy.ca"
+
+[directory]
+truncation_length = 3
+truncation_symbol = "…/"
+home_symbol = " ~"
+read_only_style = "197"
+read_only = "  "
+format = "at [$path]($style)[$read_only]($read_only_style) "
+
+[git_branch]
+symbol = " "
+format = "on [$symbol$branch]($style) "
+truncation_length = 6
+truncation_symbol = "…/"
+style = "bold green"
+
+[git_status]
+format = '([\[$all_status$ahead_behind\]]($style) )'
+style = "bold green"
+conflicted = "🏳 ${count}"
+up_to_date = " "
+untracked = " ${count}"
+ahead = "⇡ ${count}"
+diverged = "⇕⇡${ahead_count}⇣${behind_count}"
+behind = "⇣ ${count}"
+stashed = " ${count}"
+modified = " ${count}"
+staged = '[++\($count\)](green)'
+renamed = "r ${count}"
+deleted = " ${count}"
+
+[terraform]
+format = "via [ terraform $version]($style) @ [$workspace]($style) "
+
+[vagrant]
+disabled = true
+
+[helm]
+format = "via [ $version](bold purple) "
+
+[nodejs]
+disabled = true
+
+[python]
+symbol = " "
+python_binary = "python3"
+
+[ruby]
+disabled = true
+
+[kubernetes]
+format = 'on [ $context\($namespace\)](bold purple) '
+disabled = false
+
+[docker_context]
+format = "via [🐋 $context](blue bold)"
+
+[aws]
+format = 'on [$symbol($profile )(\($region\) )]($style)'
+symbol = "☁️ "
+
+[azure]
+disabled = true
+
+[gcloud]
+disabled = true
+
+[battery]
+disabled = true
