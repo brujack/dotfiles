@@ -279,6 +279,7 @@ CI requirements:
 - New shell scripts get their own directory under `tests/` (e.g., `tests/scripts/`)
 - Never modify real system state in tests — use PATH-based mocks from `tests/mocks/`
 - `make test` must exit 0 before committing
+- When moving or renaming a directory that tests reference, run `grep -r "<old-path>" tests/` before claiming no test changes are needed — hardcoded paths in test fixtures will break even when the production code uses `$PERSONAL_GITREPOS/$DOTFILES/` prefixes
 
 ### PowerShell Testing
 
