@@ -43,6 +43,9 @@ setup_ai_config() {
   if [[ ! -d "${_dir}" ]]; then
     log_info "ai-config not found — cloning..."
     git clone git@github.com:brujack/ai-config "${_dir}" || return 1
+  else
+    log_info "Updating ai-config..."
+    git -C "${_dir}" pull --rebase || return 1
   fi
 }
 
