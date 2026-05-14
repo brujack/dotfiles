@@ -22,10 +22,11 @@ teardown() {
 # ── setup_claude_mcp ─────────────────────────────────────────────────────────
 
 @test "setup_claude_mcp generates mcp.json when GITHUB_PAT is set" {
+  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
   export GITHUB_PAT="test-token-abc"
-  mkdir -p "${PERSONAL_GITREPOS}/${DOTFILES}/.claude"
+  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude"
   printf '{"mcpServers":{"github":{"headers":{"Authorization":"Bearer ${GITHUB_PAT}"}}}}\n' \
-    > "${PERSONAL_GITREPOS}/${DOTFILES}/.claude/mcp.json.template"
+    > "${_OVERRIDE_AI_CONFIG_DIR}/.claude/mcp.json.template"
   setup_claude_mcp
   [[ -f "${HOME}/.claude/mcp.json" ]]
   grep -q "test-token-abc" "${HOME}/.claude/mcp.json"
@@ -33,29 +34,32 @@ teardown() {
 }
 
 @test "setup_claude_mcp returns 0 when GITHUB_PAT is unset" {
+  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
   unset GITHUB_PAT
-  mkdir -p "${PERSONAL_GITREPOS}/${DOTFILES}/.claude"
+  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude"
   printf '{"mcpServers":{"github":{"headers":{"Authorization":"Bearer ${GITHUB_PAT}"}}}}\n' \
-    > "${PERSONAL_GITREPOS}/${DOTFILES}/.claude/mcp.json.template"
+    > "${_OVERRIDE_AI_CONFIG_DIR}/.claude/mcp.json.template"
   local _rc=0
   setup_claude_mcp || _rc=$?
   [ "${_rc}" -eq 0 ]
 }
 
 @test "setup_claude_mcp does not create mcp.json when GITHUB_PAT is unset" {
+  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
   unset GITHUB_PAT
-  mkdir -p "${PERSONAL_GITREPOS}/${DOTFILES}/.claude"
+  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude"
   printf '{"test":"${GITHUB_PAT}"}\n' \
-    > "${PERSONAL_GITREPOS}/${DOTFILES}/.claude/mcp.json.template"
+    > "${_OVERRIDE_AI_CONFIG_DIR}/.claude/mcp.json.template"
   setup_claude_mcp
   [[ ! -f "${HOME}/.claude/mcp.json" ]]
 }
 
 @test "setup_claude_mcp removes broken symlink before generating file" {
+  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
   export GITHUB_PAT="test-token"
-  mkdir -p "${PERSONAL_GITREPOS}/${DOTFILES}/.claude"
+  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude"
   printf '{"auth":"Bearer ${GITHUB_PAT}"}\n' \
-    > "${PERSONAL_GITREPOS}/${DOTFILES}/.claude/mcp.json.template"
+    > "${_OVERRIDE_AI_CONFIG_DIR}/.claude/mcp.json.template"
   mkdir -p "${HOME}/.claude"
   # Create broken symlink (points to non-existent file)
   ln -s "${BATS_TEST_TMPDIR}/nonexistent_target" "${HOME}/.claude/mcp.json"
@@ -65,10 +69,11 @@ teardown() {
 }
 
 @test "setup_claude_mcp returns 1 when envsubst fails" {
+  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
   export GITHUB_PAT="test-token"
-  mkdir -p "${PERSONAL_GITREPOS}/${DOTFILES}/.claude"
+  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude"
   printf '{"auth":"Bearer ${GITHUB_PAT}"}\n' \
-    > "${PERSONAL_GITREPOS}/${DOTFILES}/.claude/mcp.json.template"
+    > "${_OVERRIDE_AI_CONFIG_DIR}/.claude/mcp.json.template"
   envsubst() { return 1; }
   run setup_claude_mcp
   [ "$status" -eq 1 ]

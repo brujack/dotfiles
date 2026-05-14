@@ -1,9 +1,9 @@
 BATS := $(shell command -v bats 2>/dev/null)
 SHELLCHECK := $(shell command -v shellcheck 2>/dev/null)
 KCOV := $(shell command -v kcov 2>/dev/null)
-SHELL_FILES := $(shell find . -name "*.sh" -not -path "*/node_modules/*" -not -path "*/.cursor/plugins/cache/*")
+SHELL_FILES := $(shell find . -name "*.sh" -not -path "*/node_modules/*")
 
-.PHONY: test test-unit lint coverage install-hooks sync-agent-guidance check-agent-guidance help
+.PHONY: test test-unit lint coverage install-hooks help
 
 help:
 	@printf "Available targets:\n"
@@ -12,8 +12,6 @@ help:
 	@printf "  make lint       Check bash/zsh syntax + ShellCheck all .sh files\n"
 	@printf "  make coverage   Run kcov coverage gate (requires kcov; CI-enforced)\n"
 	@printf "  make install-hooks Install pre-commit and pre-push hooks (run once per checkout)\n"
-	@printf "  make sync-agent-guidance Regenerate Cursor guidance from .claude sources\n"
-	@printf "  make check-agent-guidance Fail if Cursor guidance drift is detected\n"
 	@printf "  make help       Show this help\n"
 
 lint:
@@ -46,12 +44,6 @@ install-hooks:
 	ln -sf "$(shell pwd)/scripts/pre-commit-hook.sh" .git/hooks/pre-commit
 	ln -sf "$(shell pwd)/scripts/pre-push" .git/hooks/pre-push
 	@printf "Pre-commit and pre-push hooks installed\n"
-
-sync-agent-guidance:
-	@bash scripts/sync-agent-guidance.sh sync
-
-check-agent-guidance:
-	@bash scripts/sync-agent-guidance.sh check
 
 test-unit:
 ifndef BATS

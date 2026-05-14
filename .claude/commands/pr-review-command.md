@@ -1,1 +1,0 @@
-/Users/bruce/git-repos/personal/dotfiles/.claude/skills/pr-review/pr-review-command.md

@@ -2,7 +2,8 @@
 # lib/workflows.sh — top-level workflow functions dispatched by setup_env.sh
 
 setup_claude_mcp() {
-  local _template="${PERSONAL_GITREPOS}/${DOTFILES}/.claude/mcp.json.template"
+  local _ai_config_dir="${_OVERRIDE_AI_CONFIG_DIR:-${AI_CONFIG_DIR}}"
+  local _template="${_ai_config_dir}/.claude/mcp.json.template"
   local _output="${HOME}/.claude/mcp.json"
   local _local_config="${PERSONAL_GITREPOS}/${DOTFILES}/config/local.sh"
 
@@ -35,6 +36,14 @@ setup_claude_mcp() {
     return 1
   fi
   log_info "GitHub MCP configured (${_output})"
+}
+
+setup_ai_config() {
+  local _dir="${_OVERRIDE_AI_CONFIG_DIR:-${AI_CONFIG_DIR}}"
+  if [[ ! -d "${_dir}" ]]; then
+    log_info "ai-config not found — cloning..."
+    git clone git@github.com:brujack/ai-config "${_dir}" || return 1
+  fi
 }
 
 run_setup_user() {
@@ -78,6 +87,7 @@ run_setup_user() {
   mkdir -p ${PERSONAL_GITREPOS}
 
   clone_or_update_dotfiles || return 1
+  setup_ai_config || return 1
 
   setup_dotfile_symlinks || return 1
 
