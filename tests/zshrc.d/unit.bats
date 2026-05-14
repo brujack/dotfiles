@@ -2,7 +2,7 @@
 
 setup() {
   REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
-  ZSHRC_D="${REPO_ROOT}/.devcontainer/.config/.zshrc.d"
+  ZSHRC_D="${REPO_ROOT}/.config/.zshrc.d"
   source "${REPO_ROOT}/tests/helpers/common.bash"
   # Note: load_mocks() is NOT called here — prepending tests/mocks/ to the outer
   # PATH corrupts PATH for zsh subprocesses. Mocks are injected per-test inside

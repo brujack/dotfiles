@@ -53,22 +53,28 @@ dotfiles/
 │   ├── run-tests.ps1         # combined lint+test script (called by make test)
 │   └── tests/
 │       └── setup_windows.Tests.ps1   # Pester v5 unit tests (22 tests)
-├── .devcontainer/            # Central dotfiles storage + dev container config
-│   ├── .zshrc                # Main zsh config (sources .zshrc.d modules)
-│   ├── .zprofile             # Zsh login shell config
-│   ├── .vimrc                # Vim config with 50+ plugins
-│   ├── .tmux.conf            # Tmux config (Dracula theme, tpm, C-a prefix)
-│   ├── .p10k.zsh             # Powerlevel10k prompt config
-│   ├── .gitconfig_mac        # Git config for macOS
-│   ├── .gitconfig_linux      # Git config for Linux
-│   └── .config/.zshrc.d/     # Modular zsh config (7 numbered files)
-│       ├── 1_init.zsh        # OS detection, initial setup
-│       ├── 2_functions.zsh   # Shell functions
-│       ├── 3_oh-my-zsh.zsh   # Oh-My-Zsh config
-│       ├── 4_aliases.zsh     # Aliases
-│       ├── 5_general.zsh     # General settings
-│       ├── 6_path.zsh        # PATH configuration
-│       └── 7_final.zsh       # Final setup, completions
+├── .zshrc                    # Main zsh config (sources .zshrc.d modules)
+├── .zprofile                 # Zsh login shell config
+├── .vimrc                    # Vim config with 50+ plugins
+├── .tmux.conf                # Tmux config (Dracula theme, tpm, C-a prefix)
+├── .p10k.zsh                 # Powerlevel10k prompt config
+├── .gitconfig_mac            # Git config for macOS
+├── .gitconfig_mac_gitlab     # Git config for macOS (GitLab)
+├── .gitconfig_linux          # Git config for Linux
+├── .gitconfig_linux_gitlab   # Git config for Linux (GitLab)
+├── .config/
+│   ├── .zshrc.d/             # Modular zsh config (7 numbered files)
+│   │   ├── 1_init.zsh        # OS detection, initial setup
+│   │   ├── 2_functions.zsh   # Shell functions
+│   │   ├── 3_oh-my-zsh.zsh   # Oh-My-Zsh config
+│   │   ├── 4_aliases.zsh     # Aliases
+│   │   ├── 5_general.zsh     # General settings
+│   │   ├── 6_path.zsh        # PATH configuration
+│   │   └── 7_final.zsh       # Final setup, completions
+│   └── ccstatusline/         # Claude Code status line config
+├── bruce.omp.json            # Oh My Posh prompt theme
+├── profile.ps1               # PowerShell profile
+├── starship.toml             # Starship prompt config
 ├── tests/
 │   ├── setup_env/
 │   │   ├── unit.bats
@@ -111,9 +117,9 @@ dotfiles/
 
 ## Symlink Strategy
 
-Dotfiles live in `.devcontainer/` (this repo) and `.claude/`/`.cursor/` (ai-config repo at `~/git-repos/personal/ai-config`). `setup_env.sh` creates symlinks from `$HOME` into the repos:
+Dotfiles live at the repo root and in the ai-config repo (`.claude/`/`.cursor/`). `setup_env.sh` creates symlinks from `$HOME` into the repos:
 
-- **`.devcontainer/`** — each file symlinked individually into `$HOME` (e.g. `~/.zshrc → …/.devcontainer/.zshrc`)
+- **Repo root** — each dotfile symlinked individually into `$HOME` (e.g. `~/.zshrc → dotfiles/.zshrc`)
 - **`.claude/`** — each item (except `projects/`) symlinked individually into `~/.claude/` from the ai-config repo.
   Exception: `mcp.json.template` is symlinked as `~/.claude/mcp.json.template` (read-only reference); the live
   `~/.claude/mcp.json` is **generated** by `setup_claude_mcp` via `envsubst` and is not a symlink.
@@ -327,7 +333,7 @@ Functions that operate on specific file paths use override env vars to redirect 
 | `_REBOOT_REQUIRED_PKGS_PATH` | `_update_record_end` apt case                                        | Path to reboot-required.pkgs file; defaults to `/var/run/reboot-required.pkgs`     |
 | `_OVERRIDE_FEATURES_DIR`     | `scripts/whats-new-claude-code.sh`, `scripts/whats-new-anthropic.sh` | Redirects output and state files to a temp dir                                     |
 | `_OVERRIDE_DOTFILES_ROOT`    | `scripts/whats-new-claude-code.sh`, `scripts/whats-new-anthropic.sh` | Redirects the repo root used for `cd` before git operations                        |
-| `_OVERRIDE_AI_CONFIG_DIR`    | `setup_ai_config`, `setup_dotfile_symlinks`                            | Overrides `AI_CONFIG_DIR` (readonly) for test isolation                            |
+| `_OVERRIDE_AI_CONFIG_DIR`    | `setup_ai_config`, `setup_dotfile_symlinks`                          | Overrides `AI_CONFIG_DIR` (readonly) for test isolation                            |
 
 Pattern: `local _file="${_OVERRIDE_VAR:-$(dirname "${BASH_SOURCE[0]}")/real/path}"`. Tests set the var and pass a writable temp copy; production code leaves it unset.
 
