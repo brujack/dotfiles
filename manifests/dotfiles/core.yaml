@@ -1,0 +1,116 @@
+depends:
+  - ./tools
+
+actions:
+  # ── credential directories ──────────────────────────────────────────────
+  - action: directory.create
+    path: "{{ user.home_dir }}/.ssh"
+  - action: command.run
+    command: chmod
+    args:
+      - "700"
+      - "{{ user.home_dir }}/.ssh"
+
+  - action: directory.create
+    path: "{{ user.home_dir }}/.warp"
+  - action: command.run
+    command: chmod
+    args:
+      - "700"
+      - "{{ user.home_dir }}/.warp"
+
+  - action: directory.create
+    path: "{{ user.home_dir }}/.tf_creds"
+  - action: command.run
+    command: chmod
+    args:
+      - "700"
+      - "{{ user.home_dir }}/.tf_creds"
+
+  - action: directory.create
+    path: "{{ user.home_dir }}/.tsh"
+  - action: command.run
+    command: chmod
+    args:
+      - "700"
+      - "{{ user.home_dir }}/.tsh"
+
+  # ── support directories ─────────────────────────────────────────────────
+  - action: directory.create
+    path: "{{ user.home_dir }}/.config/etch"
+
+  - action: directory.create
+    path: "{{ user.home_dir }}/.config/powershell"
+
+  # ── core symlinks ───────────────────────────────────────────────────────
+  - action: file.link
+    source: "{{ user.home_dir }}/git-repos/personal/dotfiles/.vimrc"
+    target: "{{ user.home_dir }}/.vimrc"
+
+  - action: file.link
+    source: "{{ user.home_dir }}/git-repos/personal/dotfiles/.p10k.zsh"
+    target: "{{ user.home_dir }}/.p10k.zsh"
+
+  - action: file.link
+    source: "{{ user.home_dir }}/git-repos/personal/dotfiles/.tmux.conf"
+    target: "{{ user.home_dir }}/.tmux.conf"
+
+  - action: file.link
+    source: "{{ user.home_dir }}/git-repos/personal/dotfiles/scripts"
+    target: "{{ user.home_dir }}/scripts"
+
+  - action: file.link
+    source: "{{ user.home_dir }}/git-repos/personal/dotfiles/.zshrc"
+    target: "{{ user.home_dir }}/.zshrc"
+
+  - action: file.link
+    source: "{{ user.home_dir }}/git-repos/personal/dotfiles/.zprofile"
+    target: "{{ user.home_dir }}/.zprofile"
+
+  - action: file.link
+    source: "{{ user.home_dir }}/git-repos/personal/dotfiles/.config/.zshrc.d"
+    target: "{{ user.home_dir }}/.config/.zshrc.d"
+
+  - action: file.link
+    source: "{{ user.home_dir }}/git-repos/personal/dotfiles/.config/ccstatusline"
+    target: "{{ user.home_dir }}/.config/ccstatusline"
+
+  - action: file.link
+    source: "{{ user.home_dir }}/git-repos/personal/dotfiles/bruce.zsh-theme"
+    target: "{{ user.home_dir }}/.oh-my-zsh/custom/themes/bruce.zsh-theme"
+
+  - action: file.link
+    source: "{{ user.home_dir }}/git-repos/personal/dotfiles/.warp/themes"
+    target: "{{ user.home_dir }}/.warp/themes"
+
+  - action: file.link
+    source: "{{ user.home_dir }}/git-repos/personal/dotfiles/.warp/launch_configurations"
+    target: "{{ user.home_dir }}/.warp/launch_configurations"
+
+  - action: file.link
+    source: "{{ user.home_dir }}/git-repos/personal/dotfiles/.warp/settings.toml"
+    target: "{{ user.home_dir }}/.warp/settings.toml"
+
+  - action: file.link
+    source: "{{ user.home_dir }}/git-repos/personal/dotfiles/.ssh/config"
+    target: "{{ user.home_dir }}/.ssh/config"
+
+  - action: file.link
+    source: "{{ user.home_dir }}/git-repos/personal/dotfiles/.ssh/teleport.cfg"
+    target: "{{ user.home_dir }}/.ssh/teleport.cfg"
+
+  - action: file.link
+    source: "{{ user.home_dir }}/git-repos/personal/dotfiles/profile.ps1"
+    target: "{{ user.home_dir }}/.config/powershell/profile.ps1"
+
+  - action: file.link
+    source: "{{ user.home_dir }}/git-repos/personal/dotfiles/bruce.omp.json"
+    target: "{{ user.home_dir }}/.config/powershell/bruce.omp.json"
+
+  - action: file.link
+    source: "{{ user.home_dir }}/git-repos/personal/dotfiles/starship.toml"
+    target: "{{ user.home_dir }}/.config/starship.toml"
+
+  - action: file.link
+    source: "{{ user.home_dir }}/git-repos/personal/dotfiles/etch.yaml"
+    target: "{{ user.home_dir }}/.config/etch/etch.yaml"

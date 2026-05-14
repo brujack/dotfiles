@@ -1,0 +1,6 @@
+# etch resolves manifest_paths via PathBuf::canonicalize() with no tilde
+# expansion, so an absolute path is required here. On Linux, update this
+# path to /home/<user>/git-repos/personal/dotfiles/manifests, or wait for
+# the shellexpand fix tracked in the etch-cli backlog.
+manifest_paths:
+  - /Users/bruce/git-repos/personal/dotfiles/manifests

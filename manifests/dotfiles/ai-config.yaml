@@ -1,0 +1,93 @@
+depends:
+  - ./core
+
+actions:
+  # ── .claude/ symlinks (projects/ excluded) ─────────────────────────────
+  - action: file.link
+    source: "{{ user.home_dir }}/git-repos/personal/ai-config/.claude/CLAUDE.md"
+    target: "{{ user.home_dir }}/.claude/CLAUDE.md"
+
+  - action: file.link
+    source: "{{ user.home_dir }}/git-repos/personal/ai-config/.claude/commands"
+    target: "{{ user.home_dir }}/.claude/commands"
+
+  - action: file.link
+    source: "{{ user.home_dir }}/git-repos/personal/ai-config/.claude/hooks"
+    target: "{{ user.home_dir }}/.claude/hooks"
+
+  - action: file.link
+    source: "{{ user.home_dir }}/git-repos/personal/ai-config/.claude/mcp.json.template"
+    target: "{{ user.home_dir }}/.claude/mcp.json.template"
+
+  - action: file.link
+    source: "{{ user.home_dir }}/git-repos/personal/ai-config/.claude/settings.json"
+    target: "{{ user.home_dir }}/.claude/settings.json"
+
+  - action: file.link
+    source: "{{ user.home_dir }}/git-repos/personal/ai-config/.claude/settings.local.json"
+    target: "{{ user.home_dir }}/.claude/settings.local.json"
+
+  - action: file.link
+    source: "{{ user.home_dir }}/git-repos/personal/ai-config/.claude/settings.local.json.example"
+    target: "{{ user.home_dir }}/.claude/settings.local.json.example"
+
+  - action: file.link
+    source: "{{ user.home_dir }}/git-repos/personal/ai-config/.claude/skills"
+    target: "{{ user.home_dir }}/.claude/skills"
+
+  - action: file.link
+    source: "{{ user.home_dir }}/git-repos/personal/ai-config/.claude/standards"
+    target: "{{ user.home_dir }}/.claude/standards"
+
+  # ── .cursor/ symlinks (User/ handled separately) ───────────────────────
+  - action: file.link
+    source: "{{ user.home_dir }}/git-repos/personal/ai-config/.cursor/.gitignore"
+    target: "{{ user.home_dir }}/.cursor/.gitignore"
+
+  - action: file.link
+    source: "{{ user.home_dir }}/git-repos/personal/ai-config/.cursor/plugins"
+    target: "{{ user.home_dir }}/.cursor/plugins"
+
+  - action: file.link
+    source: "{{ user.home_dir }}/git-repos/personal/ai-config/.cursor/rules"
+    target: "{{ user.home_dir }}/.cursor/rules"
+
+  - action: file.link
+    source: "{{ user.home_dir }}/git-repos/personal/ai-config/.cursor/skills-cursor"
+    target: "{{ user.home_dir }}/.cursor/skills-cursor"
+
+  # ── .cursor/User/ — macOS ───────────────────────────────────────────────
+  - action: file.link
+    where: 'os.name == "macos"'
+    source: "{{ user.home_dir }}/git-repos/personal/ai-config/.cursor/User/settings.json"
+    target: "{{ user.home_dir }}/Library/Application Support/Cursor/User/settings.json"
+
+  - action: file.link
+    where: 'os.name == "macos"'
+    source: "{{ user.home_dir }}/git-repos/personal/ai-config/.cursor/User/keybindings.json"
+    target: "{{ user.home_dir }}/Library/Application Support/Cursor/User/keybindings.json"
+
+  - action: file.link
+    where: 'os.name == "macos"'
+    source: "{{ user.home_dir }}/git-repos/personal/ai-config/.cursor/User/snippets"
+    target: "{{ user.home_dir }}/Library/Application Support/Cursor/User/snippets"
+
+  # ── .cursor/User/ — Linux ───────────────────────────────────────────────
+  - action: directory.create
+    where: 'os.name == "linux"'
+    path: "{{ user.home_dir }}/.config/Cursor/User"
+
+  - action: file.link
+    where: 'os.name == "linux"'
+    source: "{{ user.home_dir }}/git-repos/personal/ai-config/.cursor/User/settings.json"
+    target: "{{ user.home_dir }}/.config/Cursor/User/settings.json"
+
+  - action: file.link
+    where: 'os.name == "linux"'
+    source: "{{ user.home_dir }}/git-repos/personal/ai-config/.cursor/User/keybindings.json"
+    target: "{{ user.home_dir }}/.config/Cursor/User/keybindings.json"
+
+  - action: file.link
+    where: 'os.name == "linux"'
+    source: "{{ user.home_dir }}/git-repos/personal/ai-config/.cursor/User/snippets"
+    target: "{{ user.home_dir }}/.config/Cursor/User/snippets"
