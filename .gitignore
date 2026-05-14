@@ -22,12 +22,7 @@ powershell/coverage.xml
 # bash/kcov coverage output
 coverage/
 
-# Claude Code local-only generated files
-.claude/mcp.json
-.claude/scheduled_tasks.lock
-.claude/settings.local.json
-# Skills with embedded git repos are managed by Claude Code's plugin system
-.claude/skills/terraform-skill/
-
-# Cursor local-only generated files
-.cursor/skills-cursor/.sync-manifest.json
+# .claude/ and .cursor/ have moved to ~/git-repos/personal/ai-config
+# These entries prevent leftover on-disk directories from being tracked
+.claude/
+.cursor/
