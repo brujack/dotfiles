@@ -1,0 +1,26 @@
+depends:
+  - ./core
+
+actions:
+  - action: directory.create
+    path: "{{ user.home_dir }}/git-repos/gitlab"
+
+  - action: file.link
+    where: 'os.name == "macos"'
+    source: "{{ user.home_dir }}/git-repos/personal/dotfiles/.gitconfig_mac"
+    target: "{{ user.home_dir }}/.gitconfig"
+
+  - action: file.link
+    where: 'os.name == "macos"'
+    source: "{{ user.home_dir }}/git-repos/personal/dotfiles/.gitconfig_mac_gitlab"
+    target: "{{ user.home_dir }}/git-repos/gitlab/.gitconfig"
+
+  - action: file.link
+    where: 'os.name == "linux"'
+    source: "{{ user.home_dir }}/git-repos/personal/dotfiles/.gitconfig_linux"
+    target: "{{ user.home_dir }}/.gitconfig"
+
+  - action: file.link
+    where: 'os.name == "linux"'
+    source: "{{ user.home_dir }}/git-repos/personal/dotfiles/.gitconfig_linux_gitlab"
+    target: "{{ user.home_dir }}/git-repos/gitlab/.gitconfig"
