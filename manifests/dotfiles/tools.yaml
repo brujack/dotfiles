@@ -1,0 +1,14 @@
+actions:
+  - action: command.run
+    command: bash
+    args:
+      - "-c"
+      - "[ -d {{ user.home_dir }}/.oh-my-zsh ] || RUNZSH=no KEEP_ZSHRC=yes sh -c \"$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)\""
+
+  - action: git.clone
+    repo_url: https://github.com/romkatv/powerlevel10k.git
+    directory: "{{ user.home_dir }}/.oh-my-zsh/custom/themes/powerlevel10k"
+
+  - action: git.clone
+    repo_url: https://github.com/tmux-plugins/tpm
+    directory: "{{ user.home_dir }}/.tmux/plugins/tpm"

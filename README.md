@@ -139,15 +139,14 @@ dotfiles/
 ├── powershell/
 │   ├── setup_windows.ps1     # Windows/PowerShell bootstrap
 │   └── tests/                # Pester v5 tests
-├── .devcontainer/            # Dotfiles storage (symlinked into $HOME)
-│   ├── .zshrc                # Main zsh config (sources .zshrc.d modules)
-│   ├── .zprofile             # Zsh login shell config
-│   ├── .vimrc                # Vim config with 50+ plugins
-│   ├── .tmux.conf            # Tmux config (Dracula theme, tpm, C-a prefix)
-│   ├── .p10k.zsh             # Powerlevel10k prompt config
-│   ├── .gitconfig_mac        # Git config for macOS
-│   ├── .gitconfig_linux      # Git config for Linux
-│   └── .config/.zshrc.d/     # Modular zsh config (7 numbered files)
+├── .zshrc                    # Main zsh config (sources .zshrc.d modules)
+├── .zprofile                 # Zsh login shell config
+├── .vimrc                    # Vim config with 50+ plugins
+├── .tmux.conf                # Tmux config (Dracula theme, tpm, C-a prefix)
+├── .p10k.zsh                 # Powerlevel10k prompt config
+├── .gitconfig_mac            # Git config for macOS
+├── .gitconfig_linux          # Git config for Linux
+├── .config/.zshrc.d/         # Modular zsh config (7 numbered files)
 ├── .claude/                  # Claude Code config (symlinked into ~/.claude)
 ├── .cursor/User/             # Cursor settings (symlinked into Cursor User dir)
 ├── docs/
@@ -196,7 +195,7 @@ Push a feature branch — CI validates and auto-merges to master.
 
 ## Symlink Strategy
 
-Dotfiles live in `.devcontainer/`, `.claude/`, and `.cursor/`. `setup_env.sh` creates symlinks from `$HOME` into the repo. For `.claude/`, each item is symlinked individually into `~/.claude/`, preserving any other files already there (history, sessions, cache, etc.). Cursor user files are symlinked to:
+Dotfiles live at the repo root. `.claude/` and `.cursor/` live in the ai-config repo (`~/git-repos/personal/ai-config`). `setup_env.sh` creates symlinks from `$HOME` into the repos. For `.claude/`, each item is symlinked individually into `~/.claude/`, preserving any other files already there (history, sessions, cache, etc.). Cursor user files are symlinked to:
 
 - macOS: `~/Library/Application Support/Cursor/User/`
 - Linux: `~/.config/Cursor/User/`
