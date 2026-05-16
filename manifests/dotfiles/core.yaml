@@ -5,35 +5,27 @@ actions:
   # ── credential directories ──────────────────────────────────────────────
   - action: directory.create
     path: "{{ user.home_dir }}/.ssh"
-  - action: command.run
-    command: chmod
-    args:
-      - "700"
-      - "{{ user.home_dir }}/.ssh"
+  - action: file.chmod
+    path: "{{ user.home_dir }}/.ssh"
+    mode: "700"
 
   - action: directory.create
     path: "{{ user.home_dir }}/.warp"
-  - action: command.run
-    command: chmod
-    args:
-      - "700"
-      - "{{ user.home_dir }}/.warp"
+  - action: file.chmod
+    path: "{{ user.home_dir }}/.warp"
+    mode: "700"
 
   - action: directory.create
     path: "{{ user.home_dir }}/.tf_creds"
-  - action: command.run
-    command: chmod
-    args:
-      - "700"
-      - "{{ user.home_dir }}/.tf_creds"
+  - action: file.chmod
+    path: "{{ user.home_dir }}/.tf_creds"
+    mode: "700"
 
   - action: directory.create
     path: "{{ user.home_dir }}/.tsh"
-  - action: command.run
-    command: chmod
-    args:
-      - "700"
-      - "{{ user.home_dir }}/.tsh"
+  - action: file.chmod
+    path: "{{ user.home_dir }}/.tsh"
+    mode: "700"
 
   # ── support directories ─────────────────────────────────────────────────
   - action: directory.create
