@@ -3,7 +3,7 @@
 
 # Fixed section order for summary display
 readonly _UPDATE_SECTION_ORDER=(
-  brew softwareupdate apt snap dnf yum mas claude pip gems
+  brew softwareupdate apt snap dnf yum mas claude npm pip gems
   oh-my-zsh p10k tpm tfenv cheat.sh brew-drift
 )
 
@@ -130,6 +130,11 @@ _update_record_start() {
         | grep 'Version:' \
         | sed 's/^[[:space:]]*//' \
         > "${_UPDATE_TMPDIR}/pre_claude" || true
+      ;;
+    npm)
+      npm list -g --depth=0 2>/dev/null \
+        | grep -v '^/' \
+        > "${_UPDATE_TMPDIR}/pre_npm" || true
       ;;
     # cheat.sh — no pre-snapshot needed
     *) ;;
@@ -277,6 +282,23 @@ _update_record_end() {
         _claude_count=$(printf '%s' "${_claude_diff}" | grep -c . || true)
         if [[ ${_claude_count} -gt 0 ]]; then
           _result="${_claude_count} plugin(s) updated"
+        else
+          _result="no changes"
+        fi
+      else
+        _result="updated"
+      fi
+      ;;
+    npm)
+      npm list -g --depth=0 2>/dev/null \
+        | grep -v '^/' \
+        > "${_UPDATE_TMPDIR}/post_npm" || true
+      if [[ -f "${_UPDATE_TMPDIR}/pre_npm" ]]; then
+        local _npm_diff _npm_count
+        _npm_diff=$(_update_diff_lines "${_UPDATE_TMPDIR}/pre_npm" "${_UPDATE_TMPDIR}/post_npm")
+        _npm_count=$(printf '%s' "${_npm_diff}" | grep -c . || true)
+        if [[ ${_npm_count} -gt 0 ]]; then
+          _result="${_npm_count} package(s) ($(printf '%s' "${_npm_diff}" | sed 's/^[├└]── //' | paste -sd', ' -))"
         else
           _result="no changes"
         fi

@@ -256,8 +256,7 @@ run_update() {
         && claude plugins update firecrawl@firecrawl \
         && claude plugins update skill-creator@claude-plugins-official \
         && claude plugins update frontend-design@claude-plugins-official \
-        && claude plugins update security-guidance@claude-plugins-official \
-        && npm install -g firecrawl-cli
+        && claude plugins update security-guidance@claude-plugins-official
       _update_record_end "claude" $?
     else
       _update_skip "claude" "claude not installed"
@@ -274,6 +273,17 @@ run_update() {
     _update_record_end "terraform-skill" $?
   else
     _update_skip "terraform-skill" "flag not set"
+  fi
+
+  # ── npm global packages ───────────────────────────────────────────────────
+  # Same trigger as Claude plugins: these packages support Claude tooling.
+  if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_CLAUDE:-} ]]; then
+    _update_record_start "npm"
+    printf "Updating npm global packages\\n"
+    npm install -g firecrawl-cli
+    _update_record_end "npm" $?
+  else
+    _update_skip "npm" "flag not set"
   fi
 
   # ── Linux system packages ─────────────────────────────────────────────────
