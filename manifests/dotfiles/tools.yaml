@@ -3,7 +3,8 @@ actions:
     command: bash
     args:
       - "-c"
-      - "[ -d {{ user.home_dir }}/.oh-my-zsh ] || RUNZSH=no KEEP_ZSHRC=yes sh -c \"$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)\""
+      - "RUNZSH=no KEEP_ZSHRC=yes sh -c \"$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)\""
+    skip_if_exists: "{{ user.home_dir }}/.oh-my-zsh"
 
   - action: git.clone
     repo_url: https://github.com/romkatv/powerlevel10k.git
