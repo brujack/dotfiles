@@ -165,6 +165,9 @@ run_developer_or_ansible() {
   printf "Installing json2yaml via npm\n"
   npm install json2yaml || return 1
 
+  printf "Installing firecrawl-cli via npm\n"
+  npm install -g firecrawl-cli || return 1
+
   install_ruby_tools || return 1
   install_ruby || return 1
   if [[ -n ${LINUX} ]]; then
@@ -253,7 +256,8 @@ run_update() {
         && claude plugins update firecrawl@firecrawl \
         && claude plugins update skill-creator@claude-plugins-official \
         && claude plugins update frontend-design@claude-plugins-official \
-        && claude plugins update security-guidance@claude-plugins-official
+        && claude plugins update security-guidance@claude-plugins-official \
+        && npm install -g firecrawl-cli
       _update_record_end "claude" $?
     else
       _update_skip "claude" "claude not installed"
