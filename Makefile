@@ -43,7 +43,8 @@ endif
 install-hooks:
 	ln -sf "$(shell pwd)/scripts/pre-commit-hook.sh" .git/hooks/pre-commit
 	ln -sf "$(shell pwd)/scripts/pre-push" .git/hooks/pre-push
-	@printf "Pre-commit and pre-push hooks installed\n"
+	ln -sf "$(shell pwd)/scripts/commit-msg" .git/hooks/commit-msg
+	@printf "Pre-commit, pre-push, and commit-msg hooks installed\n"
 
 test-unit:
 ifndef BATS

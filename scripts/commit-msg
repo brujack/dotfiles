@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# commit-msg hook: enforces Conventional Commits format on the first line.
+# Format: <type>(<optional-scope>): <description>
+# Types: feat, fix, docs, chore, refactor, test, ci, build, perf, style, revert
+#
+# Bypassed for: merge commits, revert commits, fixup/squash commits.
+
+set -e
+
+MSG_FILE="${1}"
+FIRST_LINE=$(head -n 1 "${MSG_FILE}")
+
+# Allow git-generated prefixes
+if [[ "${FIRST_LINE}" =~ ^(Merge\ |Revert\ |fixup!\ |squash!\ ) ]]; then
+    exit 0
+fi
+
+# Allow empty commit message (git will reject separately)
+if [[ -z "${FIRST_LINE}" ]]; then
+    exit 0
+fi
+
+# Conventional Commits regex: type(scope)?!?: description
+PATTERN='^(feat|fix|docs|chore|refactor|test|ci|build|perf|style|revert)(\([a-z0-9._/-]+\))?!?:[[:space:]].+'
+
+if ! [[ "${FIRST_LINE}" =~ ${PATTERN} ]]; then
+    printf "ERROR: commit message does not follow Conventional Commits format.\n\n" >&2
+    printf "Expected: <type>(<optional-scope>): <description>\n" >&2
+    printf "Types:    feat | fix | docs | chore | refactor | test | ci | build | perf | style | revert\n\n" >&2
+    printf "Got: %s\n\n" "${FIRST_LINE}" >&2
+    printf "Examples:\n" >&2
+    printf "  feat: add brew.bundle action\n" >&2
+    printf "  fix(parser): handle empty manifest\n" >&2
+    printf "  docs(adr): ADR-0007 — adopt mutation testing\n" >&2
+    exit 1
+fi
