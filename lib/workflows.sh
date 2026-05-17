@@ -257,7 +257,8 @@ run_update() {
         && claude plugins update skill-creator@claude-plugins-official \
         && claude plugins update frontend-design@claude-plugins-official \
         && claude plugins update security-guidance@claude-plugins-official \
-        && claude plugins update ansible-cop-review@claude-ansible-skills
+        && claude plugins update ansible-cop-review@claude-ansible-skills \
+        && claude plugins update warp@claude-code-warp
       _update_record_end "claude" $?
     else
       _update_skip "claude" "claude not installed"
