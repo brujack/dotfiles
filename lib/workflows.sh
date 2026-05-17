@@ -45,7 +45,7 @@ setup_ai_config() {
     git clone git@github.com:brujack/ai-config "${_dir}" || return 1
   else
     log_info "Updating ai-config..."
-    git -C "${_dir}" pull --rebase || return 1
+    git -C "${_dir}" pull --rebase --autostash || return 1
   fi
 }
 
