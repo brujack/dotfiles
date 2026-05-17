@@ -1,5 +1,6 @@
 tap "chef/chef"                              # [HAS_DEVTOOLS]
 tap "cloudflare/cloudflare"                  # [HAS_DEVTOOLS]
+tap "getagentseal/codeburn"                  # [HAS_DEVTOOLS]
 tap "datawire/blackbird"                     # [HAS_K8S]
 tap "go-task/tap"                            # [HAS_DEVTOOLS]
 tap "redpanda-data/tap"                      # [HAS_DEVTOOLS]
@@ -15,6 +16,7 @@ brew "bats-core"                             # [HAS_DEVTOOLS]
 brew "bison"                                 # [HAS_DEVTOOLS]
 brew "bzip2"
 brew "chruby"                                # [HAS_DEVTOOLS]
+brew "codeburn"                              # [HAS_DEVTOOLS]
 brew "cloudflared"                           # [HAS_DEVTOOLS]
 brew "consul"                                # [HAS_DEVTOOLS]
 brew "coreutils"
