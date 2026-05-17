@@ -1,0 +1,19 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c \"import json,sys,subprocess; d=json.load(sys.stdin); p=d.get('tool_input',{}).get('file_path',''); subprocess.run(['shellcheck', p]) if p and p.endswith('.sh') else None\""
+          },
+          {
+            "type": "command",
+            "command": "python3 -c \"import json,sys,subprocess; d=json.load(sys.stdin); p=d.get('tool_input',{}).get('file_path',''); subprocess.run(['ruff', 'check', '--fix', p]) if p and p.endswith('.py') else None\""
+          }
+        ]
+      }
+    ]
+  }
+}

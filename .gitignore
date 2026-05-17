@@ -23,5 +23,6 @@ coverage/
 
 # .claude/ and .cursor/ have moved to ~/git-repos/personal/ai-config
 # These entries prevent leftover on-disk directories from being tracked
-.claude/
+.claude/*
+!.claude/settings.json
 .cursor/
