@@ -251,7 +251,8 @@ run_update() {
         && claude plugins update pyright-lsp@claude-plugins-official \
         && claude plugins update caveman@caveman \
         && claude plugins update firecrawl@firecrawl \
-        && claude plugins update skill-creator@claude-plugins-official
+        && claude plugins update skill-creator@claude-plugins-official \
+        && claude plugins update frontend-design@claude-plugins-official
       _update_record_end "claude" $?
     else
       _update_skip "claude" "claude not installed"
