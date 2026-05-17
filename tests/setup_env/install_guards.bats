@@ -411,7 +411,7 @@ teardown() {
 
   run setup_ai_config
   [ "${status}" -eq 0 ]
-  grep -q "git -C ${_OVERRIDE_AI_CONFIG_DIR} pull --rebase" "${MOCK_CALLS_FILE}"
+  grep -q "git -C ${_OVERRIDE_AI_CONFIG_DIR} pull --rebase --autostash" "${MOCK_CALLS_FILE}"
 }
 
 @test "setup_ai_config returns 1 when pull fails" {
