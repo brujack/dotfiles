@@ -249,7 +249,8 @@ run_update() {
         && claude plugins update context-mode@context-mode \
         && claude plugins update rust-analyzer-lsp@claude-plugins-official \
         && claude plugins update pyright-lsp@claude-plugins-official \
-        && claude plugins update caveman@caveman
+        && claude plugins update caveman@caveman \
+        && claude plugins update firecrawl@firecrawl
       _update_record_end "claude" $?
     else
       _update_skip "claude" "claude not installed"
