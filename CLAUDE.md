@@ -25,6 +25,7 @@ dotfiles/
 │   │   ├── .platform-state.txt      # Last-fetched platform notes (HTML-stripped; do not edit)
 │   │   ├── .sdk-state.md            # Last-fetched Python SDK CHANGELOG (do not edit)
 │   │   └── features-YYYY-MM-DD.md   # Weekly digest committed each Monday
+│   ├── knowledge/            # Reference material (architecture, domain docs, curated research)
 │   └── superpowers/          # Design specs and implementation plans
 │       ├── specs/            # Design documents (YYYY-MM-DD-*-design.md)
 │       └── plans/            # Implementation plans (YYYY-MM-DD-*.md)
@@ -94,6 +95,12 @@ dotfiles/
 ├── .ssh/                     # SSH config
 └── ubuntu_*_packages.txt     # Package lists per Ubuntu version
 ```
+
+## Knowledge Directory
+
+Reference material lives in `docs/knowledge/`. These documents capture architecture overviews, domain reference sheets, and curated research findings — things too detailed for CLAUDE.md but useful to look up. See `docs/knowledge/README.md` for what belongs there and what doesn't.
+
+When web research (web-research skill) or context-mode fetches produce findings worth preserving, save them to `docs/knowledge/<topic>.md`.
 
 ## Entry Points
 
