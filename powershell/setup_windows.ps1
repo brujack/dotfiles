@@ -39,6 +39,19 @@ function New-SafeLink {
   Write-Output "Linked: $Link -> $Target"
 }
 
+function Install-AiConfig {
+  $aiConfigDir = "~/git-repos/personal/ai-config"
+  if (-Not (Test-Path -Path $aiConfigDir -PathType Container)) {
+    Write-Output "Cloning ai-config..."
+    git clone git@github.com:brujack/ai-config $aiConfigDir
+    if ($LASTEXITCODE -ne 0) { throw "git clone failed with exit code $LASTEXITCODE" }
+  } else {
+    Write-Output "Updating ai-config..."
+    git -C $aiConfigDir pull --rebase --autostash
+    if ($LASTEXITCODE -ne 0) { throw "git pull failed with exit code $LASTEXITCODE" }
+  }
+}
+
 function Install-ChocolateyPackage {
   if (-Not (Get-Command "choco.exe" -ErrorAction SilentlyContinue)) {
     Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://boxstarter.org/bootstrapper.ps1')); Get-Boxstarter -Force

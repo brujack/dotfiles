@@ -568,3 +568,36 @@ Describe "New-SafeLink" {
     Should -Invoke New-Item    -Times 1
   }
 }
+
+Describe "Install-AiConfig" {
+  BeforeEach {
+    $global:LASTEXITCODE = 0
+    Mock git          { }
+    Mock Write-Output { }
+    Mock Test-Path    { $false }
+  }
+
+  It "calls git clone when ai-config directory is absent" {
+    Mock Test-Path { $false } -ParameterFilter { $Path -like '*/ai-config' }
+    Install-AiConfig
+    Should -Invoke git -ParameterFilter { $args -contains 'clone' } -Times 1
+  }
+
+  It "calls git pull when ai-config directory is present" {
+    Mock Test-Path { $true } -ParameterFilter { $Path -like '*/ai-config' }
+    Install-AiConfig
+    Should -Invoke git -ParameterFilter { $args -contains 'pull' } -Times 1
+  }
+
+  It "throws when git clone fails" {
+    Mock Test-Path { $false } -ParameterFilter { $Path -like '*/ai-config' }
+    Mock git { $global:LASTEXITCODE = 1 } -ParameterFilter { $args -contains 'clone' }
+    { Install-AiConfig } | Should -Throw
+  }
+
+  It "throws when git pull fails" {
+    Mock Test-Path { $true } -ParameterFilter { $Path -like '*/ai-config' }
+    Mock git { $global:LASTEXITCODE = 1 } -ParameterFilter { $args -contains 'pull' }
+    { Install-AiConfig } | Should -Throw
+  }
+}
