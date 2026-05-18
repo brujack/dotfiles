@@ -528,3 +528,43 @@ Describe "COM update wrappers" {
     $result.ComObject | Should -Be 'Microsoft.Update.Installer'
   }
 }
+
+Describe "New-SafeLink" {
+  BeforeEach {
+    Mock Get-Item     { $null }
+    Mock Remove-Item  { }
+    Mock New-Item     { }
+    Mock Write-Output { }
+  }
+
+  It "creates a symlink when link does not exist" {
+    New-SafeLink -Target "C:/target/file.json" -Link "C:/link/file.json"
+    Should -Invoke New-Item -ParameterFilter { $ItemType -eq 'SymbolicLink' } -Times 1
+  }
+
+  It "creates a junction when -Junction flag is set" {
+    New-SafeLink -Target "C:/target/dir" -Link "C:/link/dir" -Junction
+    Should -Invoke New-Item -ParameterFilter { $ItemType -eq 'Junction' } -Times 1
+  }
+
+  It "skips when link already points to correct target" {
+    Mock Get-Item { [PSCustomObject]@{ Target = "C:/target/file.json" } }
+    New-SafeLink -Target "C:/target/file.json" -Link "C:/link/file.json"
+    Should -Invoke New-Item    -Times 0
+    Should -Invoke Remove-Item -Times 0
+  }
+
+  It "replaces symlink when target has changed" {
+    Mock Get-Item { [PSCustomObject]@{ Target = "C:/old/file.json" } }
+    New-SafeLink -Target "C:/new/file.json" -Link "C:/link/file.json"
+    Should -Invoke Remove-Item -Times 1
+    Should -Invoke New-Item    -ParameterFilter { $ItemType -eq 'SymbolicLink' } -Times 1
+  }
+
+  It "removes regular file before creating symlink" {
+    Mock Get-Item { [PSCustomObject]@{ Target = $null } }
+    New-SafeLink -Target "C:/target/file.json" -Link "C:/link/file.json"
+    Should -Invoke Remove-Item -Times 1
+    Should -Invoke New-Item    -Times 1
+  }
+}

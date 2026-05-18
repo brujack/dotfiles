@@ -17,6 +17,28 @@ param(
   [Switch]$update
 )
 
+function New-SafeLink {
+  param(
+    [string]$Target,
+    [string]$Link,
+    [switch]$Junction
+  )
+  $existing = Get-Item $Link -ErrorAction SilentlyContinue
+  if ($null -ne $existing) {
+    if ($existing.Target -eq $Target) {
+      Write-Output "Already linked: $Link"
+      return
+    }
+    Remove-Item $Link -Force -Recurse
+  }
+  if ($Junction) {
+    $null = New-Item -ItemType Junction -Path $Link -Target $Target
+  } else {
+    $null = New-Item -ItemType SymbolicLink -Path $Link -Target $Target
+  }
+  Write-Output "Linked: $Link -> $Target"
+}
+
 function Install-ChocolateyPackage {
   if (-Not (Get-Command "choco.exe" -ErrorAction SilentlyContinue)) {
     Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://boxstarter.org/bootstrapper.ps1')); Get-Boxstarter -Force
