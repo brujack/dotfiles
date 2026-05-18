@@ -24,6 +24,9 @@ BeforeAll {
   if (-Not (Get-Command wsl -ErrorAction SilentlyContinue)) {
     function global:wsl { }
   }
+  if (-Not (Get-Command npm -ErrorAction SilentlyContinue)) {
+    function global:npm { }
+  }
   . "$PSScriptRoot/../setup_windows.ps1"
 }
 
