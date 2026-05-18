@@ -52,6 +52,36 @@ function Install-AiConfig {
   }
 }
 
+function Set-ClaudeConfig {
+  $aiClaude  = "~/git-repos/personal/ai-config/.claude"
+  $claudeDir = "~/.claude"
+
+  if (-Not (Test-Path -Path $claudeDir -PathType Container)) {
+    $null = New-Item -ItemType Directory -Path $claudeDir -Force
+  }
+
+  foreach ($file in @("settings.json", "CLAUDE.md", "mcp.json.template")) {
+    New-SafeLink -Target "$aiClaude/$file" -Link "$claudeDir/$file" -Junction:$false
+  }
+
+  foreach ($dir in @("skills", "commands", "standards")) {
+    New-SafeLink -Target "$aiClaude/$dir" -Link "$claudeDir/$dir" -Junction
+  }
+
+  $templatePath = "$claudeDir/mcp.json.template"
+  $outputPath   = "$claudeDir/mcp.json"
+  if (Test-Path $templatePath) {
+    $content = Get-Content $templatePath -Raw
+    $pat = $env:GITHUB_PAT
+    if ([string]::IsNullOrEmpty($pat)) {
+      Write-Warning "GITHUB_PAT not set - writing mcp.json without substitution"
+    } else {
+      $content = $content -replace '\$\{GITHUB_PAT\}', $pat
+    }
+    Set-Content -Path $outputPath -Value $content
+  }
+}
+
 function Install-ChocolateyPackage {
   if (-Not (Get-Command "choco.exe" -ErrorAction SilentlyContinue)) {
     Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://boxstarter.org/bootstrapper.ps1')); Get-Boxstarter -Force

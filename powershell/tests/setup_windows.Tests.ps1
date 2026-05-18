@@ -601,3 +601,65 @@ Describe "Install-AiConfig" {
     { Install-AiConfig } | Should -Throw
   }
 }
+
+Describe "Set-ClaudeConfig" {
+  BeforeEach {
+    $script:savedPAT = $env:GITHUB_PAT
+    $env:GITHUB_PAT  = $null
+    Mock New-SafeLink  { }
+    Mock New-Item      { }
+    Mock Test-Path     { $true }
+    Mock Get-Content   { '{"token":"${GITHUB_PAT}"}' }
+    Mock Set-Content   { }
+    Mock Write-Output  { }
+    Mock Write-Warning { }
+  }
+  AfterEach {
+    $env:GITHUB_PAT = $script:savedPAT
+  }
+
+  It "creates ~/.claude when it does not exist" {
+    Mock Test-Path { $false } -ParameterFilter { $Path -like '*/.claude' }
+    Set-ClaudeConfig
+    Should -Invoke New-Item -ParameterFilter { $Path -like '*/.claude' } -Times 1
+  }
+
+  It "links settings.json as a symlink" {
+    Set-ClaudeConfig
+    Should -Invoke New-SafeLink -ParameterFilter {
+      $Link -like '*/settings.json' -and $Junction -eq $false
+    } -Times 1
+  }
+
+  It "links skills directory as a junction" {
+    Set-ClaudeConfig
+    Should -Invoke New-SafeLink -ParameterFilter {
+      $Link -like '*/skills' -and $Junction -eq $true
+    } -Times 1
+  }
+
+  It "links commands and standards directories as junctions" {
+    Set-ClaudeConfig
+    Should -Invoke New-SafeLink -ParameterFilter {
+      $Link -like '*/commands' -and $Junction -eq $true
+    } -Times 1
+    Should -Invoke New-SafeLink -ParameterFilter {
+      $Link -like '*/standards' -and $Junction -eq $true
+    } -Times 1
+  }
+
+  It "writes mcp.json with GITHUB_PAT substituted" {
+    $env:GITHUB_PAT = "ghp_test123"
+    Set-ClaudeConfig
+    Should -Invoke Set-Content -ParameterFilter {
+      $Value -like '*ghp_test123*' -and $Path -like '*/mcp.json'
+    } -Times 1
+  }
+
+  It "warns and writes template unchanged when GITHUB_PAT is unset" {
+    $env:GITHUB_PAT = $null
+    Set-ClaudeConfig
+    Should -Invoke Write-Warning -Times 1
+    Should -Invoke Set-Content   -ParameterFilter { $Path -like '*/mcp.json' } -Times 1
+  }
+}
