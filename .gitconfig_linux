@@ -28,6 +28,6 @@
 	undo = reset --soft 'HEAD^'
 [diff "sopsdiffer"]
 [pull]
-	rebase = false
+	rebase = true
 [gc]
 	autoDetach = false
