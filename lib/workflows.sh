@@ -38,6 +38,42 @@ setup_claude_mcp() {
   log_info "GitHub MCP configured (${_output})"
 }
 
+setup_claude_plugins() {
+  if ! command -v claude &>/dev/null; then
+    log_warn "claude not installed — skipping plugin setup"
+    return 0
+  fi
+
+  local _plugins=(
+    "superpowers@claude-plugins-official"
+    "code-simplifier@claude-plugins-official"
+    "code-review@claude-plugins-official"
+    "context7@claude-plugins-official"
+    "context-mode@context-mode"
+    "rust-analyzer-lsp@claude-plugins-official"
+    "pyright-lsp@claude-plugins-official"
+    "caveman@caveman"
+    "firecrawl@firecrawl"
+    "skill-creator@claude-plugins-official"
+    "frontend-design@claude-plugins-official"
+    "security-guidance@claude-plugins-official"
+    "ansible-cop-review@claude-ansible-skills"
+    "warp@claude-code-warp"
+  )
+
+  local _installed
+  _installed="$(claude plugins list 2>/dev/null)" || true
+
+  for _plugin in "${_plugins[@]}"; do
+    if printf '%s' "${_installed}" | grep -qF "${_plugin}"; then
+      log_info "Claude plugin already installed: ${_plugin}"
+    else
+      log_info "Installing Claude plugin: ${_plugin}"
+      claude plugins install "${_plugin}" || log_warn "Failed to install Claude plugin: ${_plugin}"
+    fi
+  done
+}
+
 setup_ai_config() {
   local _dir="${_OVERRIDE_AI_CONFIG_DIR:-${AI_CONFIG_DIR}}"
   if [[ ! -d "${_dir}" ]]; then
@@ -132,6 +168,7 @@ run_setup_user() {
   fi
 
   setup_claude_mcp || return 1
+  setup_claude_plugins || return 1
 }
 
 run_setup_or_developer() {

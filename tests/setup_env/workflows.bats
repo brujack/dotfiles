@@ -148,6 +148,37 @@ teardown() {
   [ "$status" -ne 0 ]
 }
 
+# ── setup_claude_plugins ──────────────────────────────────────────────────────
+
+@test "setup_claude_plugins installs plugin when not listed" {
+  export MOCK_CLAUDE_PLUGINS_LIST_OUTPUT=""
+  setup_claude_plugins
+  grep -q "claude plugins install superpowers@claude-plugins-official" "${MOCK_CALLS_FILE}"
+}
+
+@test "setup_claude_plugins skips install when plugin already listed" {
+  export MOCK_CLAUDE_PLUGINS_LIST_OUTPUT="superpowers@claude-plugins-official"
+  setup_claude_plugins
+  ! grep -q "claude plugins install superpowers@claude-plugins-official" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_setup_user calls setup_claude_plugins" {
+  export MACOS=1
+  unset LINUX UBUNTU REDHAT FEDORA CENTOS
+  local _called=0
+  setup_claude_plugins() { _called=1; return 0; }
+  run_setup_user
+  [ "${_called}" -eq 1 ]
+}
+
+@test "run_setup_user returns non-zero when setup_claude_plugins fails" {
+  export MACOS=1
+  unset LINUX UBUNTU REDHAT FEDORA CENTOS
+  setup_claude_plugins() { return 1; }
+  run run_setup_user
+  [ "$status" -ne 0 ]
+}
+
 # ── run_setup_or_developer ────────────────────────────────────────────────────
 
 @test "run_setup_or_developer creates credential directories" {
