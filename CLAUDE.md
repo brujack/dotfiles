@@ -431,6 +431,10 @@ Available mock env vars:
 
 **Pass-through mocks:** `ln`, `chmod`, `mv`, `cp`, and `tee` call the real binary (`/bin/cmd "$@" 2>/dev/null || true`) so tests that assert actual filesystem state (permissions, file existence, symlinks, captured output files) work correctly. Set the corresponding exit var to a non-zero value to simulate failure instead. Any mock that needs to support tests checking real filesystem state must use this pattern — a log-only mock will cause silent assertion failures.
 
+## Committing Work
+
+Invoke `caveman:caveman-commit` skill to generate the commit message before running `git commit`. Full format and rules in `~/.claude/CLAUDE.md`.
+
 ## Key Conventions
 
 - Machine roles are now driven by the **profile/capability model** in `config/profiles.sh` — prefer `HAS_*` vars over raw hostname patterns for new code
