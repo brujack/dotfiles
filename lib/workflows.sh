@@ -413,6 +413,9 @@ PY
 
   # ── git-based tools + misc (run_all only) ─────────────────────────────────
   if [[ ${_run_all} -eq 1 ]]; then
+    _update_record_start "ai-config"
+    setup_ai_config
+    _update_record_end "ai-config" $?
     update_aws_cli
     update_rust
     if [[ -d ${HOME}/.tfenv ]]; then

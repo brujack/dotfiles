@@ -3,8 +3,8 @@
 
 # Fixed section order for summary display
 readonly _UPDATE_SECTION_ORDER=(
-  brew softwareupdate apt snap dnf yum mas claude npm pip gems
-  oh-my-zsh p10k tpm tfenv cheat.sh brew-drift
+  brew softwareupdate apt snap dnf yum mas claude terraform-skill npm pip gems
+  ai-config oh-my-zsh p10k tpm tfenv cheat.sh brew-drift
 )
 
 # _update_diff_lines PRE_FILE POST_FILE
