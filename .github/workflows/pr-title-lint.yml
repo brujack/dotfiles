@@ -1,0 +1,28 @@
+name: PR Title Lint
+
+on:
+  pull_request:
+    branches:
+      - master
+    types: [opened, edited, synchronize, reopened]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  pr-title-lint:
+    name: PR Title Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check PR title follows Conventional Commits
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          printf 'PR title: %s\n' "${PR_TITLE}"
+          if ! printf '%s' "${PR_TITLE}" | grep -qE '^(feat|fix|docs|ci|refactor|test|chore|perf|build|style|revert)(\([^)]+\))?(!)?: .+'; then
+            printf 'ERROR: PR title must follow Conventional Commits format.\n'
+            printf 'Expected: <type>[(<scope>)][!]: <description>\n'
+            printf 'Types: feat fix docs ci refactor test chore perf build style revert\n'
+            exit 1
+          fi
+          printf 'OK: PR title is valid.\n'
