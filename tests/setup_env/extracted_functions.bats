@@ -377,6 +377,35 @@ _make_fake_dotfiles() {
   grep -q "rustup self update" "${MOCK_CALLS_FILE}"
 }
 
+@test "update_rust calls curl for nextest update when nextest is installed" {
+  export UBUNTU=1
+  export HAS_RUST=1
+  unset MACOS
+  local _bin_dir="${BATS_TEST_TMPDIR}/nextest_bin"
+  mkdir -p "${_bin_dir}"
+  printf '#!/usr/bin/env bash\n' > "${_bin_dir}/cargo-nextest" && chmod +x "${_bin_dir}/cargo-nextest"
+  mkdir -p "${FAKE_HOME}/.cargo/bin"
+  export PATH="${_bin_dir}:${PATH}"
+  run update_rust
+  grep -q "curl.*nexte.st" "${MOCK_CALLS_FILE}"
+}
+
+@test "update_rust does not call curl for nextest when nextest is absent" {
+  export UBUNTU=1
+  export HAS_RUST=1
+  unset MACOS
+  # Strip any dir containing cargo-nextest so the guard sees it as absent
+  local _clean_path=""
+  IFS=: read -ra _parts <<< "${PATH}"
+  for _p in "${_parts[@]}"; do
+    [[ -x "${_p}/cargo-nextest" ]] && continue
+    [[ -z "${_clean_path}" ]] && _clean_path="${_p}" || _clean_path="${_clean_path}:${_p}"
+  done
+  export PATH="${_clean_path}"
+  run update_rust
+  ! grep -q "curl.*nexte.st" "${MOCK_CALLS_FILE}"
+}
+
 @test "update_rust prints skip message when rustup is not found" {
   export UBUNTU=1
   export HAS_RUST=1

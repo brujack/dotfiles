@@ -137,6 +137,10 @@ _install_ubuntu_rust() {
     fi
     if [[ -x $(command -v rustc) ]] && [[ -x $(command -v cargo) ]]; then
       printf "Rust is installed\\n"
+      if ! command -v cargo-nextest &>/dev/null; then
+        printf "Installing cargo-nextest\\n"
+        curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C "${HOME}/.cargo/bin"
+      fi
     fi
   fi
 }

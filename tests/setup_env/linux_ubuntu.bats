@@ -171,6 +171,38 @@ teardown() {
   grep -q "curl.*rustup.rs" "${MOCK_CALLS_FILE}"
 }
 
+@test "_install_ubuntu_rust: installs cargo-nextest when rust installed but nextest absent" {
+  export HAS_RUST=1
+  local _bin_dir="${BATS_TEST_TMPDIR}/fakebin"
+  mkdir -p "${_bin_dir}"
+  printf '#!/usr/bin/env bash\n' > "${_bin_dir}/rustc" && chmod +x "${_bin_dir}/rustc"
+  printf '#!/usr/bin/env bash\n' > "${_bin_dir}/cargo" && chmod +x "${_bin_dir}/cargo"
+  mkdir -p "${HOME}/.cargo/bin"
+  # Strip any dir containing cargo-nextest from PATH so the absence guard runs
+  local _clean_path=""
+  IFS=: read -ra _parts <<< "${PATH}"
+  for _p in "${_parts[@]}"; do
+    [[ -x "${_p}/cargo-nextest" ]] && continue
+    [[ -z "${_clean_path}" ]] && _clean_path="${_p}" || _clean_path="${_clean_path}:${_p}"
+  done
+  export PATH="${_bin_dir}:${_clean_path}"
+  _install_ubuntu_rust
+  grep -q "curl.*nexte.st" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_rust: skips cargo-nextest install when already present" {
+  export HAS_RUST=1
+  local _bin_dir="${BATS_TEST_TMPDIR}/fakebin"
+  mkdir -p "${_bin_dir}"
+  printf '#!/usr/bin/env bash\n' > "${_bin_dir}/rustc"        && chmod +x "${_bin_dir}/rustc"
+  printf '#!/usr/bin/env bash\n' > "${_bin_dir}/cargo"        && chmod +x "${_bin_dir}/cargo"
+  printf '#!/usr/bin/env bash\n' > "${_bin_dir}/cargo-nextest" && chmod +x "${_bin_dir}/cargo-nextest"
+  mkdir -p "${HOME}/.cargo/bin"
+  export PATH="${_bin_dir}:${PATH}"
+  _install_ubuntu_rust
+  ! grep -q "curl.*nexte.st" "${MOCK_CALLS_FILE}"
+}
+
 # ── _install_ubuntu_docker ───────────────────────────────────────────────────
 
 @test "_install_ubuntu_docker: HAS_DOCKER unset does nothing" {
