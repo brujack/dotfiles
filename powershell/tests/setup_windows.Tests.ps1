@@ -439,6 +439,10 @@ Describe "Invoke-DotfilesSetup" {
     Mock Set-ExecutionPolicy                   { }
     Mock New-DirectoryStructure                { }
     Mock Copy-GitConfig                        { }
+    Mock Install-AiConfig                      { }
+    Mock Set-ClaudeConfig                      { }
+    Mock Set-CursorConfig                      { }
+    Mock Set-NpmGlobalPackages                 { }
   }
 
   It "calls Set-WindowsOption" {
@@ -471,12 +475,30 @@ Describe "Invoke-DotfilesSetup" {
     Invoke-DotfilesSetup
     Should -Invoke Copy-GitConfig -Times 1 -Exactly
   }
+  It "calls Install-AiConfig" {
+    Invoke-DotfilesSetup
+    Should -Invoke Install-AiConfig -Times 1 -Exactly
+  }
+  It "calls Set-ClaudeConfig" {
+    Invoke-DotfilesSetup
+    Should -Invoke Set-ClaudeConfig -Times 1 -Exactly
+  }
+  It "calls Set-CursorConfig" {
+    Invoke-DotfilesSetup
+    Should -Invoke Set-CursorConfig -Times 1 -Exactly
+  }
+  It "calls Set-NpmGlobalPackages" {
+    Invoke-DotfilesSetup
+    Should -Invoke Set-NpmGlobalPackages -Times 1 -Exactly
+  }
 }
 
 Describe "Invoke-DotfilesUpdate" {
   BeforeEach {
     Mock choco                 { }
     Mock Install-WindowsUpdate { }
+    Mock Install-AiConfig      { }
+    Mock Set-NpmGlobalPackages { }
     Mock Test-Path             { $false }
     Mock Write-Output          { }
   }
@@ -492,6 +514,14 @@ Describe "Invoke-DotfilesUpdate" {
   It "skips update_powershell_modules.ps1 when not present" {
     Mock Test-Path { $false } -ParameterFilter { $Path -like '*update_powershell_modules.ps1' }
     { Invoke-DotfilesUpdate } | Should -Not -Throw
+  }
+  It "calls Install-AiConfig to pull latest config" {
+    Invoke-DotfilesUpdate
+    Should -Invoke Install-AiConfig -Times 1 -Exactly
+  }
+  It "calls Set-NpmGlobalPackages to update npm globals" {
+    Invoke-DotfilesUpdate
+    Should -Invoke Set-NpmGlobalPackages -Times 1 -Exactly
   }
 }
 

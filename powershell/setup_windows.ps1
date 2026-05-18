@@ -303,6 +303,10 @@ function Invoke-DotfilesSetup {
   Set-ExecutionPolicy Unrestricted -Scope CurrentUser
   New-DirectoryStructure
   Copy-GitConfig
+  Install-AiConfig
+  Set-ClaudeConfig
+  Set-CursorConfig
+  Set-NpmGlobalPackages
 }
 
 function Invoke-DotfilesUpdate {
@@ -318,6 +322,9 @@ function Invoke-DotfilesUpdate {
       throw $_.Exception.Message
     }
   }
+
+  Install-AiConfig
+  Set-NpmGlobalPackages
 
   Write-Output "Installing Windows Updates"
   Install-WindowsUpdate
