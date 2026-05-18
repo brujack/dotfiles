@@ -82,6 +82,29 @@ function Set-ClaudeConfig {
   }
 }
 
+function Set-CursorConfig {
+  $aiCursor      = "~/git-repos/personal/ai-config/.cursor"
+  $cursorDir     = "~/.cursor"
+  $cursorUserDir = "$env:APPDATA/Cursor/User"
+
+  if (-Not (Test-Path -Path $cursorDir -PathType Container)) {
+    $null = New-Item -ItemType Directory -Path $cursorDir -Force
+  }
+  if (-Not (Test-Path -Path $cursorUserDir -PathType Container)) {
+    $null = New-Item -ItemType Directory -Path $cursorUserDir -Force
+  }
+
+  foreach ($dir in @("plugins", "rules", "skills-cursor")) {
+    New-SafeLink -Target "$aiCursor/$dir" -Link "$cursorDir/$dir" -Junction
+  }
+
+  foreach ($file in @("settings.json", "keybindings.json")) {
+    New-SafeLink -Target "$aiCursor/User/$file" -Link "$cursorUserDir/$file" -Junction:$false
+  }
+
+  New-SafeLink -Target "$aiCursor/User/snippets" -Link "$cursorUserDir/snippets" -Junction
+}
+
 function Install-ChocolateyPackage {
   if (-Not (Get-Command "choco.exe" -ErrorAction SilentlyContinue)) {
     Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://boxstarter.org/bootstrapper.ps1')); Get-Boxstarter -Force

@@ -663,3 +663,50 @@ Describe "Set-ClaudeConfig" {
     Should -Invoke Set-Content   -ParameterFilter { $Path -like '*/mcp.json' } -Times 1
   }
 }
+
+Describe "Set-CursorConfig" {
+  BeforeEach {
+    $env:APPDATA = "C:/Users/Test/AppData/Roaming"
+    Mock New-SafeLink  { }
+    Mock New-Item      { }
+    Mock Test-Path     { $true }
+    Mock Write-Output  { }
+  }
+
+  It "creates ~/.cursor and AppData Cursor User dirs when absent" {
+    Mock Test-Path { $false }
+    Set-CursorConfig
+    Should -Invoke New-Item -ParameterFilter { $Path -like '*/.cursor' }     -Times 1
+    Should -Invoke New-Item -ParameterFilter { $Path -like '*/Cursor/User' } -Times 1
+  }
+
+  It "links plugins, rules, and skills-cursor as junctions into ~/.cursor" {
+    Set-CursorConfig
+    foreach ($dir in @('plugins', 'rules', 'skills-cursor')) {
+      Should -Invoke New-SafeLink -ParameterFilter {
+        $Link -like "*/$dir" -and $Junction -eq $true
+      } -Times 1
+    }
+  }
+
+  It "links settings.json as a symlink into Cursor User dir" {
+    Set-CursorConfig
+    Should -Invoke New-SafeLink -ParameterFilter {
+      $Link -like '*/Cursor/User/settings.json' -and $Junction -eq $false
+    } -Times 1
+  }
+
+  It "links keybindings.json as a symlink into Cursor User dir" {
+    Set-CursorConfig
+    Should -Invoke New-SafeLink -ParameterFilter {
+      $Link -like '*/Cursor/User/keybindings.json' -and $Junction -eq $false
+    } -Times 1
+  }
+
+  It "links snippets as a junction into Cursor User dir" {
+    Set-CursorConfig
+    Should -Invoke New-SafeLink -ParameterFilter {
+      $Link -like '*/Cursor/User/snippets' -and $Junction -eq $true
+    } -Times 1
+  }
+}
