@@ -248,7 +248,7 @@ The pre-commit hook is **required**. It runs on every `git commit`:
 1. `make lint` — blocks the commit on any syntax or shellcheck failure
 2. `ggshield secret scan pre-commit` — scans staged changes for secrets before they reach the remote; skipped gracefully if ggshield is not installed
 
-The pre-push hook is **permanent**. It runs `make test` (lint + bats) on every push before the push reaches GitHub. Skips branch deletions. This conserves GitHub Actions minutes — CI runs only on PRs.
+The pre-push hook is **permanent**. It runs `make test` (lint + bats) on every push before the push reaches GitHub, but only when the push includes changes to `.sh` files, `.bats` files, `Makefile`, or anything under `tests/`. Pushes touching only config files (`.toml`, `.json`, `.md`, etc.) skip the test run entirely. Skips branch deletions. This conserves GitHub Actions minutes — CI runs only on PRs.
 
 **Worktree compatibility requirement:** `scripts/pre-push` must resolve repo root with `git rev-parse --show-toplevel` first, and use `git rev-parse --git-common-dir` parent only as a fallback. Direct `git-common-dir` resolution can run tests against the shared checkout instead of the active worktree branch.
 
