@@ -114,6 +114,7 @@ Describe "Install-ChocolateyPackage" {
         "mongosh 1.0",
         "mongodb-atlas 1.0",
         "neovim 1.0",
+        "nodejs 1.0",
         "postman 1.0",
         "powertoys 1.0",
         "putty.install 1.0",

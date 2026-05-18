@@ -65,6 +65,7 @@ function Install-ChocolateyPackage {
     "mongosh",
     "mongodb-atlas",
     "neovim",
+    "nodejs",
     "postman",
     "powertoys",
     "putty.install",
