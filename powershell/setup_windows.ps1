@@ -105,6 +105,18 @@ function Set-CursorConfig {
   New-SafeLink -Target "$aiCursor/User/snippets" -Link "$cursorUserDir/snippets" -Junction
 }
 
+function Set-NpmGlobalPackages {
+  [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseSingularNouns', '', Justification='Installs multiple npm global packages by design')]
+  [CmdletBinding()]
+  param()
+  if (-Not (Get-Command node -ErrorAction SilentlyContinue)) {
+    Write-Warning "node not found in PATH - skipping npm global package install"
+    return
+  }
+  Write-Output "Installing npm global packages"
+  npm install -g firecrawl-cli
+}
+
 function Install-ChocolateyPackage {
   if (-Not (Get-Command "choco.exe" -ErrorAction SilentlyContinue)) {
     Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://boxstarter.org/bootstrapper.ps1')); Get-Boxstarter -Force

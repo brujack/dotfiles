@@ -710,3 +710,28 @@ Describe "Set-CursorConfig" {
     } -Times 1
   }
 }
+
+Describe "Set-NpmGlobalPackages" {
+  BeforeEach {
+    Mock npm           { }
+    Mock Write-Output  { }
+    Mock Write-Warning { }
+  }
+
+  It "calls npm install -g firecrawl-cli when node is available" {
+    Mock Get-Command {
+      [PSCustomObject]@{ Name = 'node' }
+    } -ParameterFilter { $Name -eq 'node' }
+    Set-NpmGlobalPackages
+    Should -Invoke npm -ParameterFilter {
+      $args -contains 'install' -and $args -contains '-g' -and $args -contains 'firecrawl-cli'
+    } -Times 1
+  }
+
+  It "skips npm and warns when node is not in PATH" {
+    Mock Get-Command { $null } -ParameterFilter { $Name -eq 'node' }
+    Set-NpmGlobalPackages
+    Should -Invoke npm           -Times 0
+    Should -Invoke Write-Warning -Times 1
+  }
+}
