@@ -12,7 +12,6 @@ Whether to update installed chocolatey, windows packages and powershell modules
 #>
 
 param(
-  [Parameter(Mandatory=$false)]
   [Switch]$setup,
   [Switch]$update
 )
@@ -119,7 +118,11 @@ function Set-NpmGlobalPackages {
 
 function Install-ChocolateyPackage {
   if (-Not (Get-Command "choco.exe" -ErrorAction SilentlyContinue)) {
-    Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://boxstarter.org/bootstrapper.ps1')); Get-Boxstarter -Force
+    Set-ExecutionPolicy Bypass -Scope Process -Force
+    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+    $bootstrapScript = (New-Object System.Net.WebClient).DownloadString('https://boxstarter.org/bootstrapper.ps1')
+    Invoke-Expression $bootstrapScript
+    Get-Boxstarter -Force
   }
 
   $ChocoPackagesToBeInstalled = @(
@@ -191,9 +194,8 @@ function Install-ChocolateyPackage {
     "7zip"
   )
 
-  # check to see if a package is installed before installing it
   foreach ($package in $ChocoPackagesToBeInstalled) {
-    $result = choco list -lo | Where-object { $_.ToLower().StartsWith("$package".ToLower()) }
+    $result = choco list --local-only | Where-Object { ($_ -split ' ')[0].ToLower() -eq $package.ToLower() }
     if ($null -eq $result) {
       choco install $package -y
       Write-Output "Installed $package"
@@ -210,14 +212,11 @@ function Get-UpdateSession   { New-Object -ComObject Microsoft.Update.Session   
 function Get-UpdateInstaller { New-Object -ComObject Microsoft.Update.Installer  }
 
 function Install-WindowsUpdate {
-  # define update criteria
   $Criteria = "IsInstalled=0"
 
-  # search for relevant updates.
   $Searcher = Get-UpdateSearcher
   $SearchResult = $Searcher.Search($Criteria).Updates
 
-  # download updates
   $Session = Get-UpdateSession
   $Downloader = $Session.CreateUpdateDownloader()
   $Downloader.Updates = $SearchResult
@@ -225,7 +224,6 @@ function Install-WindowsUpdate {
     $Downloader.Download()
   }
 
-  # install updates
   $Installer = Get-UpdateInstaller
   $Installer.Updates = $SearchResult
   $Result = $null
@@ -233,7 +231,6 @@ function Install-WindowsUpdate {
     $Result = $Installer.Install()
   }
 
-  # reboot if required
   If ($Result.rebootRequired) { shutdown.exe /t 0 /r }
 }
 
