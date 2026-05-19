@@ -41,6 +41,8 @@ jobs:
 
   powershell:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v5
 
@@ -61,7 +63,35 @@ jobs:
 
       - name: Run tests with coverage gate
         working-directory: powershell
-        run: make test
+        run: |
+          set -o pipefail
+          make test | tee /tmp/pester-out.txt
+
+      - name: Publish PowerShell coverage badge
+        run: |
+          PCT=$(grep "^Coverage:" /tmp/pester-out.txt | grep -oP '\d+(?:\.\d+)?' | head -1 | python3 -c "import sys,math; print(math.floor(float(sys.stdin.read().strip())))")
+          if   [ "$PCT" -ge 90 ]; then COLOR="brightgreen"
+          elif [ "$PCT" -ge 80 ]; then COLOR="green"
+          elif [ "$PCT" -ge 70 ]; then COLOR="yellow"
+          elif [ "$PCT" -ge 60 ]; then COLOR="orange"
+          else                         COLOR="red"
+          fi
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git fetch origin coverage-data 2>/dev/null && \
+            git worktree add /tmp/cov-data coverage-data || \
+            git worktree add /tmp/cov-data --orphan coverage-data
+          printf '{"schemaVersion":1,"label":"PowerShell coverage","message":"%s%%","color":"%s"}\n' \
+            "$PCT" "$COLOR" > /tmp/cov-data/powershell.json
+          cd /tmp/cov-data
+          git add .
+          git diff --staged --quiet && exit 0
+          for i in 1 2 3; do
+            git pull origin coverage-data --rebase 2>/dev/null || true
+            git diff --staged --quiet || git commit -m "coverage: powershell.json → ${PCT}%"
+            git push origin coverage-data && break
+            sleep $((RANDOM % 5 + 1))
+          done
 
   bash-coverage:
     runs-on: ubuntu-latest
