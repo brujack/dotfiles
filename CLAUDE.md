@@ -460,6 +460,7 @@ Invoke `caveman:caveman-commit` skill to generate the commit message before runn
 - Python environments managed via **pyenv** + **pyenv-virtualenv**; the `ansible` venv is the primary one
 - Application installs are kept in alphabetical order
 - For shell syntax-only fixes in `setup_env.sh`, validate with both `bash -n setup_env.sh` and `zsh -n setup_env.sh` before commit
+- **`_UPDATE_SECTION_ORDER` coupling:** `lib/update_summary.sh` has a `readonly _UPDATE_SECTION_ORDER=(...)` array that controls which sections appear in the printed update summary. Adding `_update_record_start/end "new-section"` in `run_update()` without also adding `"new-section"` to this array means the section is tracked internally but never printed. Both must be updated together.
 
 ## Local-Only State
 
