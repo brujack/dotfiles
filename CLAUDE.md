@@ -333,7 +333,7 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 #### Bash
 
-- **Status: measurement mode — gate not yet enabled.** The CI `bash-coverage` job runs but is non-blocking; it exits 0 with a warning when no coverage data is produced.
+- **Status: advisory only — removed from auto-merge gate.** The `bash-coverage` job still runs (for visibility) but is no longer in `auto-merge needs:`. It was blocking PRs needlessly since kcov produces no data in GH Actions. Re-add to `needs:` once the coverage tooling is fixed (see Future path below).
 - **`make coverage`** runs kcov locally and reports per-file percentages. Works on macOS and Linux VMs where kcov is installed (`brew install kcov`).
 - **Per-file floors defined** (not yet enforced): 90% for `setup_env.sh`, `constants.sh`, `detect_env.sh`, `helpers.sh`, `workflows.sh`, `update_summary.sh`, `developer.sh`; 75% for `linux_shared.sh`, `linux_ubuntu.sh`, `linux_rhel.sh`, `macos.sh`.
 - **Do not retry kcov or bashcov in GitHub Actions** — both are confirmed broken:
