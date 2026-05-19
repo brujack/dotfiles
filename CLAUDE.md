@@ -53,7 +53,7 @@ dotfiles/
 │   ├── run-lint.ps1          # lint script with module path restoration (called by make lint)
 │   ├── run-tests.ps1         # combined lint+test script (called by make test)
 │   └── tests/
-│       └── setup_windows.Tests.ps1   # Pester v5 unit tests (22 tests)
+│       └── setup_windows.Tests.ps1   # Pester v5 unit tests (65 tests)
 ├── .zshrc                    # Main zsh config (sources .zshrc.d modules)
 ├── .zprofile                 # Zsh login shell config
 ├── .vimrc                    # Vim config with 50+ plugins

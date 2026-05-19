@@ -1,5 +1,7 @@
 # Windows AI-Native Dev Environment Implementation Plan
 
+> **Status: DONE**
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add ai-config Claude/Cursor symlink setup and npm globals to `setup_windows.ps1` so native Windows has a fully configured AI dev environment matching macOS/Linux.
