@@ -1,5 +1,8 @@
 # dotfiles
 
+![bash coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/brujack/dotfiles/coverage-data/bash.json)
+![PowerShell coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/brujack/dotfiles/coverage-data/powershell.json)
+
 Personal development environment bootstrap for macOS, Linux (Ubuntu/RHEL), and Windows/WSL.
 
 ## Quick Start (Fresh Mac)
