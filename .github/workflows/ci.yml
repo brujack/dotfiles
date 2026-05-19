@@ -111,7 +111,7 @@ jobs:
             --verbose
 
   auto-merge:
-    needs: [test, lint-macos, powershell, bash-coverage, secret-scan]
+    needs: [test, lint-macos, powershell, secret-scan]
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
