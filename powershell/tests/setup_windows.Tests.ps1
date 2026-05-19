@@ -24,6 +24,9 @@ BeforeAll {
   if (-Not (Get-Command wsl -ErrorAction SilentlyContinue)) {
     function global:wsl { }
   }
+  if (-Not (Get-Command npm -ErrorAction SilentlyContinue)) {
+    function global:npm { }
+  }
   . "$PSScriptRoot/../setup_windows.ps1"
 }
 
@@ -114,6 +117,7 @@ Describe "Install-ChocolateyPackage" {
         "mongosh 1.0",
         "mongodb-atlas 1.0",
         "neovim 1.0",
+        "nodejs 1.0",
         "postman 1.0",
         "powertoys 1.0",
         "putty.install 1.0",
@@ -435,6 +439,10 @@ Describe "Invoke-DotfilesSetup" {
     Mock Set-ExecutionPolicy                   { }
     Mock New-DirectoryStructure                { }
     Mock Copy-GitConfig                        { }
+    Mock Install-AiConfig                      { }
+    Mock Set-ClaudeConfig                      { }
+    Mock Set-CursorConfig                      { }
+    Mock Set-NpmGlobalPackages                 { }
   }
 
   It "calls Set-WindowsOption" {
@@ -467,12 +475,30 @@ Describe "Invoke-DotfilesSetup" {
     Invoke-DotfilesSetup
     Should -Invoke Copy-GitConfig -Times 1 -Exactly
   }
+  It "calls Install-AiConfig" {
+    Invoke-DotfilesSetup
+    Should -Invoke Install-AiConfig -Times 1 -Exactly
+  }
+  It "calls Set-ClaudeConfig" {
+    Invoke-DotfilesSetup
+    Should -Invoke Set-ClaudeConfig -Times 1 -Exactly
+  }
+  It "calls Set-CursorConfig" {
+    Invoke-DotfilesSetup
+    Should -Invoke Set-CursorConfig -Times 1 -Exactly
+  }
+  It "calls Set-NpmGlobalPackages" {
+    Invoke-DotfilesSetup
+    Should -Invoke Set-NpmGlobalPackages -Times 1 -Exactly
+  }
 }
 
 Describe "Invoke-DotfilesUpdate" {
   BeforeEach {
     Mock choco                 { }
     Mock Install-WindowsUpdate { }
+    Mock Install-AiConfig      { }
+    Mock Set-NpmGlobalPackages { }
     Mock Test-Path             { $false }
     Mock Write-Output          { }
   }
@@ -488,6 +514,14 @@ Describe "Invoke-DotfilesUpdate" {
   It "skips update_powershell_modules.ps1 when not present" {
     Mock Test-Path { $false } -ParameterFilter { $Path -like '*update_powershell_modules.ps1' }
     { Invoke-DotfilesUpdate } | Should -Not -Throw
+  }
+  It "calls Install-AiConfig to pull latest config" {
+    Invoke-DotfilesUpdate
+    Should -Invoke Install-AiConfig -Times 1 -Exactly
+  }
+  It "calls Set-NpmGlobalPackages to update npm globals" {
+    Invoke-DotfilesUpdate
+    Should -Invoke Set-NpmGlobalPackages -Times 1 -Exactly
   }
 }
 
@@ -522,5 +556,212 @@ Describe "COM update wrappers" {
   It "Get-UpdateInstaller creates Microsoft.Update.Installer COM object" {
     $result = Get-UpdateInstaller
     $result.ComObject | Should -Be 'Microsoft.Update.Installer'
+  }
+}
+
+Describe "New-SafeLink" {
+  BeforeEach {
+    Mock Get-Item     { $null }
+    Mock Remove-Item  { }
+    Mock New-Item     { }
+    Mock Write-Output { }
+  }
+
+  It "creates a symlink when link does not exist" {
+    New-SafeLink -Target "C:/target/file.json" -Link "C:/link/file.json"
+    Should -Invoke New-Item -ParameterFilter { $ItemType -eq 'SymbolicLink' } -Times 1
+  }
+
+  It "creates a junction when -Junction flag is set" {
+    New-SafeLink -Target "C:/target/dir" -Link "C:/link/dir" -Junction
+    Should -Invoke New-Item -ParameterFilter { $ItemType -eq 'Junction' } -Times 1
+  }
+
+  It "skips when link already points to correct target" {
+    Mock Get-Item { [PSCustomObject]@{ Target = "C:/target/file.json" } }
+    New-SafeLink -Target "C:/target/file.json" -Link "C:/link/file.json"
+    Should -Invoke New-Item    -Times 0
+    Should -Invoke Remove-Item -Times 0
+  }
+
+  It "replaces symlink when target has changed" {
+    Mock Get-Item { [PSCustomObject]@{ Target = "C:/old/file.json" } }
+    New-SafeLink -Target "C:/new/file.json" -Link "C:/link/file.json"
+    Should -Invoke Remove-Item -Times 1
+    Should -Invoke New-Item    -ParameterFilter { $ItemType -eq 'SymbolicLink' } -Times 1
+  }
+
+  It "removes regular file before creating symlink" {
+    Mock Get-Item { [PSCustomObject]@{ Target = $null } }
+    New-SafeLink -Target "C:/target/file.json" -Link "C:/link/file.json"
+    Should -Invoke Remove-Item -Times 1
+    Should -Invoke New-Item    -Times 1
+  }
+}
+
+Describe "Install-AiConfig" {
+  BeforeEach {
+    $global:LASTEXITCODE = 0
+    Mock git          { }
+    Mock Write-Output { }
+    Mock Test-Path    { $false }
+  }
+
+  It "calls git clone when ai-config directory is absent" {
+    Mock Test-Path { $false } -ParameterFilter { $Path -like '*/ai-config' }
+    Install-AiConfig
+    Should -Invoke git -ParameterFilter { $args -contains 'clone' } -Times 1
+  }
+
+  It "calls git pull when ai-config directory is present" {
+    Mock Test-Path { $true } -ParameterFilter { $Path -like '*/ai-config' }
+    Install-AiConfig
+    Should -Invoke git -ParameterFilter { $args -contains 'pull' } -Times 1
+  }
+
+  It "throws when git clone fails" {
+    Mock Test-Path { $false } -ParameterFilter { $Path -like '*/ai-config' }
+    Mock git { $global:LASTEXITCODE = 1 } -ParameterFilter { $args -contains 'clone' }
+    { Install-AiConfig } | Should -Throw
+  }
+
+  It "throws when git pull fails" {
+    Mock Test-Path { $true } -ParameterFilter { $Path -like '*/ai-config' }
+    Mock git { $global:LASTEXITCODE = 1 } -ParameterFilter { $args -contains 'pull' }
+    { Install-AiConfig } | Should -Throw
+  }
+}
+
+Describe "Set-ClaudeConfig" {
+  BeforeEach {
+    $script:savedPAT = $env:GITHUB_PAT
+    $env:GITHUB_PAT  = $null
+    Mock New-SafeLink  { }
+    Mock New-Item      { }
+    Mock Test-Path     { $true }
+    Mock Get-Content   { '{"token":"${GITHUB_PAT}"}' }
+    Mock Set-Content   { }
+    Mock Write-Output  { }
+    Mock Write-Warning { }
+  }
+  AfterEach {
+    $env:GITHUB_PAT = $script:savedPAT
+  }
+
+  It "creates ~/.claude when it does not exist" {
+    Mock Test-Path { $false } -ParameterFilter { $Path -like '*/.claude' }
+    Set-ClaudeConfig
+    Should -Invoke New-Item -ParameterFilter { $Path -like '*/.claude' } -Times 1
+  }
+
+  It "links settings.json as a symlink" {
+    Set-ClaudeConfig
+    Should -Invoke New-SafeLink -ParameterFilter {
+      $Link -like '*/settings.json' -and $Junction -eq $false
+    } -Times 1
+  }
+
+  It "links skills directory as a junction" {
+    Set-ClaudeConfig
+    Should -Invoke New-SafeLink -ParameterFilter {
+      $Link -like '*/skills' -and $Junction -eq $true
+    } -Times 1
+  }
+
+  It "links commands and standards directories as junctions" {
+    Set-ClaudeConfig
+    Should -Invoke New-SafeLink -ParameterFilter {
+      $Link -like '*/commands' -and $Junction -eq $true
+    } -Times 1
+    Should -Invoke New-SafeLink -ParameterFilter {
+      $Link -like '*/standards' -and $Junction -eq $true
+    } -Times 1
+  }
+
+  It "writes mcp.json with GITHUB_PAT substituted" {
+    $env:GITHUB_PAT = "ghp_test123"
+    Set-ClaudeConfig
+    Should -Invoke Set-Content -ParameterFilter {
+      $Value -like '*ghp_test123*' -and $Path -like '*/mcp.json'
+    } -Times 1
+  }
+
+  It "warns and writes template unchanged when GITHUB_PAT is unset" {
+    $env:GITHUB_PAT = $null
+    Set-ClaudeConfig
+    Should -Invoke Write-Warning -Times 1
+    Should -Invoke Set-Content   -ParameterFilter { $Path -like '*/mcp.json' } -Times 1
+  }
+}
+
+Describe "Set-CursorConfig" {
+  BeforeEach {
+    $env:APPDATA = "C:/Users/Test/AppData/Roaming"
+    Mock New-SafeLink  { }
+    Mock New-Item      { }
+    Mock Test-Path     { $true }
+    Mock Write-Output  { }
+  }
+
+  It "creates ~/.cursor and AppData Cursor User dirs when absent" {
+    Mock Test-Path { $false }
+    Set-CursorConfig
+    Should -Invoke New-Item -ParameterFilter { $Path -like '*/.cursor' }     -Times 1
+    Should -Invoke New-Item -ParameterFilter { $Path -like '*/Cursor/User' } -Times 1
+  }
+
+  It "links plugins, rules, and skills-cursor as junctions into ~/.cursor" {
+    Set-CursorConfig
+    foreach ($dir in @('plugins', 'rules', 'skills-cursor')) {
+      Should -Invoke New-SafeLink -ParameterFilter {
+        $Link -like "*/$dir" -and $Junction -eq $true
+      } -Times 1
+    }
+  }
+
+  It "links settings.json as a symlink into Cursor User dir" {
+    Set-CursorConfig
+    Should -Invoke New-SafeLink -ParameterFilter {
+      $Link -like '*/Cursor/User/settings.json' -and $Junction -eq $false
+    } -Times 1
+  }
+
+  It "links keybindings.json as a symlink into Cursor User dir" {
+    Set-CursorConfig
+    Should -Invoke New-SafeLink -ParameterFilter {
+      $Link -like '*/Cursor/User/keybindings.json' -and $Junction -eq $false
+    } -Times 1
+  }
+
+  It "links snippets as a junction into Cursor User dir" {
+    Set-CursorConfig
+    Should -Invoke New-SafeLink -ParameterFilter {
+      $Link -like '*/Cursor/User/snippets' -and $Junction -eq $true
+    } -Times 1
+  }
+}
+
+Describe "Set-NpmGlobalPackages" {
+  BeforeEach {
+    Mock npm           { }
+    Mock Write-Output  { }
+    Mock Write-Warning { }
+  }
+
+  It "calls npm install -g firecrawl-cli when node is available" {
+    Mock Get-Command {
+      [PSCustomObject]@{ Name = 'node' }
+    } -ParameterFilter { $Name -eq 'node' }
+    Set-NpmGlobalPackages
+    Should -Invoke npm -ParameterFilter {
+      $args -contains 'install' -and $args -contains '-g' -and $args -contains 'firecrawl-cli'
+    } -Times 1
+  }
+
+  It "skips npm and warns when node is not in PATH" {
+    Mock Get-Command { $null } -ParameterFilter { $Name -eq 'node' }
+    Set-NpmGlobalPackages
+    Should -Invoke npm           -Times 0
+    Should -Invoke Write-Warning -Times 1
   }
 }

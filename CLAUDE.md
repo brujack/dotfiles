@@ -215,6 +215,21 @@ Untagged entries are expected on all macs. When adding a new Brewfile entry that
 
 See `~/.claude/standards/powershell.md` for the full PowerShell coding and testing standards.
 
+### Windows AI Config Setup
+
+`setup_windows.ps1 -setup` links ai-config into native Windows alongside WSL2:
+
+- `~/.claude/` — `settings.json`, `CLAUDE.md`, `mcp.json.template` as symlinks; `skills/`, `commands/`, `standards/` as junctions
+- `~/.claude/mcp.json` — generated from template with `$env:GITHUB_PAT` substitution; set `GITHUB_PAT` in system environment before running setup
+- `~/.cursor/` — `plugins/`, `rules/`, `skills-cursor/` as junctions
+- `$env:APPDATA\Cursor\User\` — `settings.json`, `keybindings.json` as symlinks; `snippets/` as junction
+
+**Hooks gap:** `.claude/hooks/` bash scripts are not linked on native Windows — they run only in WSL2 via `setup_env.sh`.
+
+`setup_windows.ps1 -update` pulls the latest ai-config (`Install-AiConfig`) and updates npm globals (`Set-NpmGlobalPackages` → `firecrawl-cli`).
+
+Requires: admin terminal (symlinks need elevation), `GITHUB_PAT` env var for MCP config, Node.js (installed via Chocolatey `nodejs`).
+
 ### Version Pinning
 
 All tool versions are defined as constants in `lib/constants.sh`:
@@ -310,7 +325,7 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 #### PowerShell
 
-- **`setup_windows.ps1`: 92.22%** (line coverage, measured by Pester `-CodeCoverage`)
+- **`setup_windows.ps1`: 95.54%** (line coverage, measured by Pester `-CodeCoverage`)
 - Floor: 90%. `make test` and CI both fail on any drop below the floor.
 - Scope: `setup_windows.ps1` only. `run-tests.ps1` and `run-lint.ps1` are excluded as test/lint glue (per tdd.md "entry-point glue that purely calls already-tested functions"). The top-level `if ($IsWindows) { ... }` dispatcher in `setup_windows.ps1` is also excluded for the same reason — `$IsWindows` is a runtime read-only automatic variable that cannot be overridden in tests; the bodies it calls (`Invoke-DotfilesSetup`, `Invoke-DotfilesUpdate`) are tested directly.
 - Re-measure: `cd powershell && make test` prints `Coverage: <N>%` and writes `coverage.xml`.
