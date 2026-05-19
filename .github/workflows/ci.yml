@@ -80,7 +80,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git fetch origin coverage-data 2>/dev/null && \
             git worktree add /tmp/cov-data coverage-data || \
-            git worktree add /tmp/cov-data --orphan coverage-data
+            git worktree add -b coverage-data --orphan /tmp/cov-data
           printf '{"schemaVersion":1,"label":"PowerShell coverage","message":"%s%%","color":"%s"}\n' \
             "$PCT" "$COLOR" > /tmp/cov-data/powershell.json
           cd /tmp/cov-data
@@ -135,7 +135,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git fetch origin coverage-data 2>/dev/null && \
             git worktree add /tmp/cov-data coverage-data || \
-            git worktree add /tmp/cov-data --orphan coverage-data
+            git worktree add -b coverage-data --orphan /tmp/cov-data
           printf '{"schemaVersion":1,"label":"bash coverage","message":"%s%%","color":"%s"}\n' \
             "$PCT" "$COLOR" > /tmp/cov-data/bash.json
           cd /tmp/cov-data
