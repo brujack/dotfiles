@@ -43,9 +43,9 @@ docs, memory, and config-only changes per the git-workflow standard.
 - New repos must run Step 9 of the `new-repo-bootstrap` skill (branch protection commands)
   and add them to the repo's auto-merge `needs:` pattern
 - Re-running the script is safe and serves as drift detection
-- `required_signatures` on master conflicts with CI auto-merge (`gh pr merge --squash`
-  creates unsigned commits); workaround is `gh pr merge --squash --admin` when
-  `enforce_admins: false`
+- `required_signatures` was removed from all repos on 2026-05-21 — it conflicted with CI
+  auto-merge (unsigned squash commits) and provided no meaningful security benefit for a solo
+  dev. Branch protection now relies on required CI checks, linear history, and no force-push.
 - terraform_ansible will never have required status checks unless a universal (non-path-filtered)
   CI workflow is added
 
