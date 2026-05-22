@@ -154,24 +154,15 @@ install_ruby() {
 }
 
 install_github_cli_linux() {
-  if [[ -n ${LINUX} ]]; then
-    printf "installing github cli on linux\\n"
-    if [[ -n ${UBUNTU} ]]; then
-      wget -qO- https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null
-      sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
-      echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
-      sudo -H apt update
-      sudo -H apt install gh
-      if [[ -x $(command -v gh) ]]; then
-        printf "gh is installed Ubuntu\\n"
-      fi
-    elif [[ -n ${REDHAT} ]] || [[ -n ${CENTOS} ]] || [[ -n ${FEDORA} ]]; then
-      sudo -H dnf install 'dnf-command(config-manager)'
-      sudo -H dnf config-manager --add-repo http://cli.github.com/packages/rpm/gh-cli.repo
-      sudo dnf install gh --repo gh-cli
-      if [[ -x $(command -v gh) ]]; then
-        printf "gh is installed RHEL\\n"
-      fi
+  if [[ -n ${UBUNTU} ]]; then
+    printf "installing github cli on Ubuntu\\n"
+    wget -qO- https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null
+    sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+    sudo -H apt update
+    sudo -H apt install gh
+    if [[ -x $(command -v gh) ]]; then
+      printf "gh is installed Ubuntu\\n"
     fi
   fi
 }

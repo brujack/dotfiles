@@ -280,7 +280,6 @@ _make_fake_dotfiles() {
 
 @test "setup_zsh_as_default_shell does nothing when shell is already zsh" {
   export SHELL="/bin/zsh"
-  unset REDHAT
   run setup_zsh_as_default_shell
   [ "$status" -eq 0 ]
   run grep -q "chsh" "${MOCK_CALLS_FILE}"
@@ -289,7 +288,6 @@ _make_fake_dotfiles() {
 
 @test "setup_zsh_as_default_shell calls chsh when shell is not zsh" {
   export SHELL="/bin/bash"
-  unset REDHAT
   run setup_zsh_as_default_shell
   [ "$status" -eq 0 ]
   grep -q "chsh -s /bin/zsh" "${MOCK_CALLS_FILE}"
@@ -300,7 +298,7 @@ _make_fake_dotfiles() {
 @test "update_system_packages calls apt update on Ubuntu" {
   export UBUNTU=1
   export FOCAL=1
-  unset MACOS LINUX REDHAT FEDORA CENTOS JAMMY NOBLE
+  unset MACOS LINUX JAMMY NOBLE
   run update_system_packages
   [ "$status" -eq 0 ]
   grep -q "apt update" "${MOCK_CALLS_FILE}"
@@ -309,26 +307,10 @@ _make_fake_dotfiles() {
 @test "update_system_packages calls nala full-upgrade on Ubuntu Jammy" {
   export UBUNTU=1
   export JAMMY=1
-  unset MACOS LINUX REDHAT FEDORA CENTOS FOCAL NOBLE
+  unset MACOS LINUX FOCAL NOBLE
   run update_system_packages
   [ "$status" -eq 0 ]
   grep -q "nala full-upgrade" "${MOCK_CALLS_FILE}"
-}
-
-@test "update_system_packages calls dnf update on RHEL" {
-  export REDHAT=1
-  unset MACOS LINUX UBUNTU FEDORA CENTOS
-  run update_system_packages
-  [ "$status" -eq 0 ]
-  grep -q "dnf update" "${MOCK_CALLS_FILE}"
-}
-
-@test "update_system_packages calls yum update on CentOS" {
-  export CENTOS=1
-  unset MACOS LINUX UBUNTU FEDORA REDHAT
-  run update_system_packages
-  [ "$status" -eq 0 ]
-  grep -q "yum update" "${MOCK_CALLS_FILE}"
 }
 
 # ── update_aws_cli ───────────────────────────────────────────────────────────
@@ -433,7 +415,7 @@ _make_fake_dotfiles() {
 
 @test "update_system_packages does not call mas upgrade (mas is called from run_update)" {
   export MACOS=1
-  unset UBUNTU REDHAT FEDORA CENTOS
+  unset UBUNTU
   run update_system_packages
   [ "$status" -eq 0 ]
   ! grep -q "mas upgrade" "${MOCK_CALLS_FILE}"

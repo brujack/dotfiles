@@ -67,14 +67,6 @@ quiet_which() {
   which "$1" &>/dev/null
 }
 
-rhel_installed_package() {
-  if ! command -v yum &>/dev/null; then
-    log_error "yum command not found! Please install yum or run on a supported system."
-    return 1
-  fi
-  yum list installed "$@" >/dev/null 2>&1
-}
-
 brew_update() {
   if ! ensure_not_root; then
     return 1
@@ -232,10 +224,9 @@ Options:
   --pip-only      : (update only) Update pip packages only
   --gems-only     : (update only) Update Ruby gems only
   --mas-only      : (update only) Update Mac App Store apps only
-  --pkgs-only     : (update only) Update Linux system packages only (apt/snap/dnf/yum)
+  --pkgs-only     : (update only) Update Linux system packages only (apt/snap)
   --claude-only   : (update only) Update Claude plugins only
   --update        : (check-versions only) Interactively prompt to update outdated version pins in lib/constants.sh
-  -w              : Optional -- Specify w for a redhat computer, sets up terraform 0.11 instead of default 0.12
 EOF
   exit 0
 }
@@ -261,9 +252,7 @@ install_zsh() {
 setup_zsh_as_default_shell() {
   log_info "Setting ZSH as shell..."
 
-  # Set the ZSH path based on the value of REDHAT
-  ZSH_PATH=${REDHAT:+"/usr/local/bin/zsh"}
-  ZSH_PATH=${ZSH_PATH:-"/bin/zsh"}
+  ZSH_PATH="/bin/zsh"
 
   if [[ ${SHELL} != "${ZSH_PATH}" ]]; then
     if [[ -x "${ZSH_PATH}" ]]; then
@@ -284,8 +273,7 @@ run_doctor() {
   printf "=== Doctor Report ===\n"
   printf "\nOS Detection:\n"
   printf "  MACOS=%s  LINUX=%s\n" "${MACOS:-<unset>}" "${LINUX:-<unset>}"
-  printf "  UBUNTU=%s  REDHAT=%s  FEDORA=%s  CENTOS=%s\n" \
-    "${UBUNTU:-<unset>}" "${REDHAT:-<unset>}" "${FEDORA:-<unset>}" "${CENTOS:-<unset>}"
+  printf "  UBUNTU=%s\n" "${UBUNTU:-<unset>}"
   printf "  FOCAL=%s  JAMMY=%s  NOBLE=%s\n" \
     "${FOCAL:-<unset>}" "${JAMMY:-<unset>}" "${NOBLE:-<unset>}"
   printf "\nProfile:\n"
@@ -387,12 +375,6 @@ _doctor_check_tools() {
         doctor_pass "apt-get"
       else
         doctor_fail "apt-get" "not found"
-      fi
-    elif [[ -n ${REDHAT} ]] || [[ -n ${CENTOS} ]] || [[ -n ${FEDORA} ]]; then
-      if command -v dnf &>/dev/null || command -v yum &>/dev/null; then
-        doctor_pass "dnf/yum"
-      else
-        doctor_fail "dnf/yum" "not found"
       fi
     fi
   fi

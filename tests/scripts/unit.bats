@@ -380,33 +380,6 @@ teardown() {
   [ "${_DISTRO_FAMILY}" = "ubuntu" ]
 }
 
-@test "_bootstrap_linux_detect_distro detects Fedora" {
-  source "${REPO_ROOT}/scripts/bootstrap_linux.sh"
-  local _osrel="${BATS_TEST_TMPDIR}/os-release"
-  printf 'ID=fedora\n' > "${_osrel}"
-  export _BOOTSTRAP_OS_RELEASE="${_osrel}"
-  _bootstrap_linux_detect_distro
-  [ "${_DISTRO_FAMILY}" = "fedora" ]
-}
-
-@test "_bootstrap_linux_detect_distro detects RHEL via ID" {
-  source "${REPO_ROOT}/scripts/bootstrap_linux.sh"
-  local _osrel="${BATS_TEST_TMPDIR}/os-release"
-  printf 'ID=rhel\n' > "${_osrel}"
-  export _BOOTSTRAP_OS_RELEASE="${_osrel}"
-  _bootstrap_linux_detect_distro
-  [ "${_DISTRO_FAMILY}" = "rhel" ]
-}
-
-@test "_bootstrap_linux_detect_distro detects CentOS via ID_LIKE" {
-  source "${REPO_ROOT}/scripts/bootstrap_linux.sh"
-  local _osrel="${BATS_TEST_TMPDIR}/os-release"
-  printf 'ID=centos\nID_LIKE="rhel fedora"\n' > "${_osrel}"
-  export _BOOTSTRAP_OS_RELEASE="${_osrel}"
-  _bootstrap_linux_detect_distro
-  [ "${_DISTRO_FAMILY}" = "rhel" ]
-}
-
 @test "_bootstrap_linux_detect_distro returns unknown for unrecognized distro" {
   source "${REPO_ROOT}/scripts/bootstrap_linux.sh"
   local _osrel="${BATS_TEST_TMPDIR}/os-release"
@@ -429,22 +402,6 @@ teardown() {
   run _bootstrap_linux_install_prereqs
   [ "$status" -eq 0 ]
   grep -q "apt-get install" "${MOCK_CALLS_FILE}"
-}
-
-@test "_bootstrap_linux_install_prereqs calls dnf for fedora" {
-  source "${REPO_ROOT}/scripts/bootstrap_linux.sh"
-  _DISTRO_FAMILY="fedora"
-  run _bootstrap_linux_install_prereqs
-  [ "$status" -eq 0 ]
-  grep -q "dnf" "${MOCK_CALLS_FILE}"
-}
-
-@test "_bootstrap_linux_install_prereqs calls yum for rhel" {
-  source "${REPO_ROOT}/scripts/bootstrap_linux.sh"
-  _DISTRO_FAMILY="rhel"
-  run _bootstrap_linux_install_prereqs
-  [ "$status" -eq 0 ]
-  grep -q "yum" "${MOCK_CALLS_FILE}"
 }
 
 @test "_bootstrap_linux_install_prereqs prints warning for unknown" {

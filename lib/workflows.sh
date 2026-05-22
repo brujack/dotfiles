@@ -85,32 +85,18 @@ setup_ai_config() {
 }
 
 run_setup_user() {
-  # need to make sure that some base packages are installed
-  if [[ ${REDHAT} || ${FEDORA} ]]; then
-    if ! [ -x "$(command -v dnf)" ]; then
-      printf "Installing dnf\\n"
-      sudo -H yum update -y
-      sudo -H yum install dnf -y
-      if ! [ -x "$(command -v dnf)" ]; then
-        printf "Failed to install dnf\\n"
-        return 1
-      fi
-      printf "Installed dnf\\n"
-    fi
-  fi
-
   if [[ -n ${MACOS} ]]; then
     printf "Installing Rosetta if necessary\\n"
     install_rosetta || return 1
   fi
 
-  if [[ -n ${MACOS} ]] || [[ -n ${FEDORA} ]] || [[ -n ${CENTOS} ]]; then
+  if [[ -n ${MACOS} ]]; then
     install_git || return 1
   fi
 
   mkdir -p ${HOME}/software_downloads
 
-  if [[ ${MACOS} || ${UBUNTU} || ${FEDORA} || ${CENTOS} ]]; then
+  if [[ ${MACOS} || ${UBUNTU} ]]; then
     install_zsh || return 1
   fi
 
@@ -138,14 +124,6 @@ run_setup_user() {
     if [[ -n ${UBUNTU} ]]; then
       sudo -H apt update
       sudo -H apt install curl -y
-    fi
-    if [[ -n ${CENTOS} ]]; then
-      sudo -H dnf update -y
-      sudo -H dnf install curl -y
-    fi
-    if [[ -n ${REDHAT} ]] || [[ -n ${FEDORA} ]]; then
-      sudo -H yum update
-      sudo -H yum install curl -y
     fi
     curl https://cht.sh/:cht.sh > ~/bin/cht.sh
     chmod 750 ${HOME}/bin/cht.sh
@@ -179,18 +157,6 @@ run_setup_or_developer() {
 
   if [[ -n ${UBUNTU} ]]; then
     install_ubuntu_packages || return 1
-  fi
-
-  if [[ -n ${REDHAT} ]] || [[ -n ${FEDORA} ]]; then
-    install_rhel_packages || return 1
-  fi
-
-  if [[ -n ${CENTOS} ]]; then
-    install_centos_packages || return 1
-  fi
-
-  if [[ -n ${LINUX} ]]; then
-    install_linux_packages || return 1
   fi
 
   install_aws_tools || return 1
@@ -328,25 +294,17 @@ run_update() {
     if [[ -n ${LINUX} ]]; then
       _update_record_start "apt"
       _update_record_start "snap"
-      _update_record_start "dnf"
-      _update_record_start "yum"
       update_system_packages
       local _pkg_ec=$?
       _update_record_end "apt"  "${_pkg_ec}"
       _update_record_end "snap" "${_pkg_ec}"
-      _update_record_end "dnf"  "${_pkg_ec}"
-      _update_record_end "yum"  "${_pkg_ec}"
     else
       _update_skip "apt"  "not applicable"
       _update_skip "snap" "not applicable"
-      _update_skip "dnf"  "not applicable"
-      _update_skip "yum"  "not applicable"
     fi
   else
     _update_skip "apt"  "flag not set"
     _update_skip "snap" "flag not set"
-    _update_skip "dnf"  "flag not set"
-    _update_skip "yum"  "flag not set"
   fi
 
   # ── mas ───────────────────────────────────────────────────────────────────

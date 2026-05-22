@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # scripts/bootstrap_linux.sh
-# Run once on a fresh Linux machine before setup_env.sh.
+# Run once on a fresh Ubuntu machine before setup_env.sh.
 # Installs Homebrew prerequisites and Homebrew.
 
 _bootstrap_check_linux() {
@@ -22,10 +22,6 @@ _bootstrap_linux_detect_distro() {
 
   if [[ "${ID:-}" == "ubuntu" ]] || [[ "${ID_LIKE:-}" == *"ubuntu"* ]]; then
     _DISTRO_FAMILY="ubuntu"
-  elif [[ "${ID:-}" == "centos" ]] || [[ "${ID:-}" == "rhel" ]] || [[ "${ID_LIKE:-}" == *"rhel"* ]]; then
-    _DISTRO_FAMILY="rhel"
-  elif [[ "${ID:-}" == "fedora" ]] || [[ "${ID_LIKE:-}" == *"fedora"* ]]; then
-    _DISTRO_FAMILY="fedora"
   fi
 }
 
@@ -35,16 +31,6 @@ _bootstrap_linux_install_prereqs() {
       printf "[INFO]  Installing Homebrew prerequisites (Ubuntu)...\n"
       sudo apt-get update || return 1
       sudo apt-get install -y build-essential curl file git procps || return 1
-      ;;
-    fedora)
-      printf "[INFO]  Installing Homebrew prerequisites (Fedora)...\n"
-      sudo dnf groupinstall -y "Development Tools" || return 1
-      sudo dnf install -y curl file git procps-ng || return 1
-      ;;
-    rhel)
-      printf "[INFO]  Installing Homebrew prerequisites (RHEL/CentOS)...\n"
-      sudo yum groupinstall -y "Development Tools" || return 1
-      sudo yum install -y curl file git procps-ng || return 1
       ;;
     *)
       printf "[WARN]  Unknown distro. Ensure Homebrew prerequisites are installed: build tools, curl, file, git, procps.\n"

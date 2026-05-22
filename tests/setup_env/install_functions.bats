@@ -46,26 +46,6 @@ teardown() {
   grep -q "apt install git" "${MOCK_CALLS_FILE}"
 }
 
-@test "install_git on CentOS calls yum install" {
-  export MOCK_UNAME_S=Linux
-  export LINUX=1
-  unset MACOS
-  export MOCK_AWK_OS_NAME="CentOS Linux"
-  run install_git
-  [ "$status" -eq 0 ]
-  grep -q "yum install git" "${MOCK_CALLS_FILE}"
-}
-
-@test "install_git on Fedora calls dnf install" {
-  export MOCK_UNAME_S=Linux
-  export LINUX=1
-  unset MACOS
-  export MOCK_AWK_OS_NAME="Fedora"
-  run install_git
-  [ "$status" -eq 0 ]
-  grep -q "dnf install git" "${MOCK_CALLS_FILE}"
-}
-
 # ── install_zsh ──────────────────────────────────────────────────────────────
 
 # macOS tests require both MOCK_UNAME_S=Darwin (for the uname -s branch) and
@@ -97,26 +77,6 @@ teardown() {
   run install_zsh
   [ "$status" -eq 0 ]
   grep -q "apt install zsh zsh-doc" "${MOCK_CALLS_FILE}"
-}
-
-@test "install_zsh on CentOS calls yum install" {
-  export MOCK_UNAME_S=Linux
-  export LINUX=1
-  unset MACOS
-  export MOCK_AWK_OS_NAME="CentOS Linux"
-  run install_zsh
-  [ "$status" -eq 0 ]
-  grep -q "yum install zsh" "${MOCK_CALLS_FILE}"
-}
-
-@test "install_zsh on Fedora calls dnf install" {
-  export MOCK_UNAME_S=Linux
-  export LINUX=1
-  unset MACOS
-  export MOCK_AWK_OS_NAME="Fedora"
-  run install_zsh
-  [ "$status" -eq 0 ]
-  grep -q "dnf install zsh" "${MOCK_CALLS_FILE}"
 }
 
 # ── install_rosetta ──────────────────────────────────────────────────────────
@@ -256,7 +216,7 @@ teardown() {
 
 @test "install_ruby_tools returns non-zero when cd to ruby-install dir fails" {
   export LINUX=1
-  unset MACOS REDHAT UBUNTU FOCAL JAMMY NOBLE
+  unset MACOS UBUNTU FOCAL JAMMY NOBLE
   local _home="${BATS_TEST_TMPDIR}/home"
   mkdir -p "${_home}/software_downloads"
   export HOME="${_home}"
@@ -268,7 +228,7 @@ teardown() {
 @test "install_ruby_tools returns non-zero when cd to chruby dir fails" {
   export LINUX=1
   export FOCAL=1
-  unset MACOS REDHAT UBUNTU JAMMY NOBLE
+  unset MACOS UBUNTU JAMMY NOBLE
   local _home="${BATS_TEST_TMPDIR}/home"
   mkdir -p "${_home}/software_downloads"
   mkdir -p "${_home}/software_downloads/ruby-install-${RUBY_INSTALL_VER}"
@@ -276,55 +236,6 @@ teardown() {
   export MOCK_TAR_EXIT=1  # tar fails → chruby dir not created → cd fails
   run install_ruby_tools
   [ "$status" -ne 0 ]
-}
-
-# ── install_git_linux ────────────────────────────────────────────────────────
-
-@test "install_git_linux returns non-zero when cd to git source dir fails" {
-  export REDHAT=1
-  unset MACOS LINUX UBUNTU FOCAL JAMMY NOBLE
-  local _home="${BATS_TEST_TMPDIR}/home"
-  mkdir -p "${_home}/software_downloads"
-  export HOME="${_home}"
-  # tar mock does not create a git-* dir (no matching pattern) → cd fails
-  run install_git_linux
-  [ "$status" -ne 0 ]
-}
-
-# ── install_zsh_linux ────────────────────────────────────────────────────────
-
-@test "install_zsh_linux returns non-zero when cd to zsh source dir fails" {
-  export REDHAT=1
-  unset MACOS LINUX UBUNTU FOCAL JAMMY NOBLE
-  local _home="${BATS_TEST_TMPDIR}/home"
-  mkdir -p "${_home}/software_downloads"
-  export HOME="${_home}"
-  # tar mock does not create a zsh-* dir (no matching pattern) → cd fails
-  run install_zsh_linux
-  [ "$status" -ne 0 ]
-}
-
-# ── install_git_linux — version verification ──────────────────────────────────
-
-@test "install_git_linux returns non-zero when installed git version does not match" {
-  # Use || _rc=$? so BATS ERR trap does not fire on the non-zero return.
-  # With exit 1 (pre-fix) the BATS shell itself dies — test fails catastrophically.
-  # With return 1 (post-fix) the || branch captures the code and the assertion runs.
-  export REDHAT=1
-  unset MACOS LINUX UBUNTU FEDORA CENTOS
-  local _home="${BATS_TEST_TMPDIR}/home"
-  mkdir -p "${_home}/software_downloads"
-  # Pre-create git source dir with stub configure so ./configure succeeds
-  local _gitdir="${_home}/software_downloads/git-${GIT_VER}"
-  mkdir -p "${_gitdir}"
-  printf '#!/usr/bin/env bash\nexit 0\n' > "${_gitdir}/configure"
-  chmod +x "${_gitdir}/configure"
-  export HOME="${_home}"
-  # git mock outputs nothing to stdout, so git --version | awk returns ""
-  # which will not match GIT_VER, triggering the version-mismatch error branch.
-  local _rc=0
-  install_git_linux || _rc=$?
-  [ "${_rc}" -ne 0 ]
 }
 
 # ── install_ubuntu_packages — unsupported Go version ─────────────────────────
@@ -335,7 +246,7 @@ teardown() {
   # With return 1 (post-fix) the || branch captures the code and the assertion runs.
   export UBUNTU=1
   export NOBLE=1
-  unset MACOS LINUX REDHAT FEDORA CENTOS FOCAL JAMMY BIONIC HAS_SNAP HAS_RUST
+  unset MACOS LINUX FOCAL JAMMY BIONIC HAS_SNAP HAS_RUST
   export MOCK_UNAME_S=Linux
   local _home="${BATS_TEST_TMPDIR}/home"
   mkdir -p "${_home}/software_downloads"
