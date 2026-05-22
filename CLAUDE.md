@@ -2,7 +2,7 @@
 
 ## Repository Overview
 
-Personal development environment bootstrapping system for macOS and Linux (Ubuntu/RHEL). Manages shell configs, tool installation, and symlink setup across multiple machine types.
+Personal development environment bootstrapping system for macOS and Linux (Ubuntu). Manages shell configs, tool installation, and symlink setup across multiple machine types.
 
 ## Layout
 
@@ -34,9 +34,8 @@ dotfiles/
 │   ├── helpers.sh            # Logging (log_info/warn/error), safe_link, install guards, brew helpers
 │   ├── detect_env.sh         # OS/version detection + profile/capability resolution
 │   ├── macos.sh              # macOS install functions (install_macos_packages)
-│   ├── linux_shared.sh       # Cross-distro: install_git_linux, install_zsh_linux, install_bats, update_system_packages
+│   ├── linux_shared.sh       # Ubuntu: install_git_linux, install_zsh_linux, install_bats, update_system_packages
 │   ├── linux_ubuntu.sh       # Ubuntu orchestrator (install_ubuntu_packages) + 12 private _install_ubuntu_* helpers
-│   ├── linux_rhel.sh         # RHEL/CentOS: install_rhel_packages, install_centos_packages, install_linux_packages
 │   ├── developer.sh          # Cross-platform dev tools (install_ruby_tools, install_ruby, setup_kitchen, setup_ansible, clone_personal_repos, etc.)
 │   ├── update_summary.sh     # Update run tracking and summary reporting
 │   └── workflows.sh          # Top-level workflow functions dispatched by setup_env.sh
@@ -108,15 +107,15 @@ When web research (web-research skill) or context-mode fetches produce findings 
 ./setup_env.sh -t <type>
 ```
 
-| Type             | Purpose                                                                                                                                                                                                                                       |
-| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `setup_user`     | Configs, shells, directory structure, symlinks, GitHub MCP (`setup_claude_mcp`), Claude plugins (`setup_claude_plugins`)                                                                                                                      |
-| `setup`          | Full machine setup (setup_user + all apps). Flags: `--brew-install`, `--mas-install`                                                                                                                                                          |
-| `developer`      | Dev packages + Python/Ansible virtualenv                                                                                                                                                                                                      |
-| `ansible`        | Ansible venv setup only (after Python updates)                                                                                                                                                                                                |
-| `update`         | Update all packages (brew, apt/dnf/yum, pip, gems, tools). Supports `--brew-only`, `--pip-only`, `--gems-only`, `--mas-only`, `--claude-only` flags. Prints a structured summary at the end; each run is appended to `~/.dotfiles-update.log` |
-| `doctor`         | Active health checks: symlinks, tool presence, credential dir permissions, version drift. Exits non-zero on any failure                                                                                                                       |
-| `check-versions` | Compare pinned versions in `lib/constants.sh` against GitHub latest; exits 1 if outdated. `--update` prompts per-tool to apply updates in-place                                                                                               |
+| Type             | Purpose                                                                                                                                                                                                                                    |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `setup_user`     | Configs, shells, directory structure, symlinks, GitHub MCP (`setup_claude_mcp`), Claude plugins (`setup_claude_plugins`)                                                                                                                   |
+| `setup`          | Full machine setup (setup_user + all apps). Flags: `--brew-install`, `--mas-install`                                                                                                                                                       |
+| `developer`      | Dev packages + Python/Ansible virtualenv                                                                                                                                                                                                   |
+| `ansible`        | Ansible venv setup only (after Python updates)                                                                                                                                                                                             |
+| `update`         | Update all packages (brew, apt/snap, pip, gems, tools). Supports `--brew-only`, `--pip-only`, `--gems-only`, `--mas-only`, `--claude-only` flags. Prints a structured summary at the end; each run is appended to `~/.dotfiles-update.log` |
+| `doctor`         | Active health checks: symlinks, tool presence, credential dir permissions, version drift. Exits non-zero on any failure                                                                                                                    |
+| `check-versions` | Compare pinned versions in `lib/constants.sh` against GitHub latest; exits 1 if outdated. `--update` prompts per-tool to apply updates in-place                                                                                            |
 
 **Options:**
 
@@ -249,7 +248,6 @@ Uses **BATS** (Bash Automated Testing System), installed natively:
 
 - macOS: `brew install bats-core` (in `Brewfile`)
 - Ubuntu: `sudo apt-get install -y bats` (via `install_bats()` in `setup_env.sh`)
-- RHEL/CentOS/Fedora: direct GitHub release install (via `install_bats()`)
 
 **Run tests:** `make test` (runs lint then all BATS tests)
 **Run unit tests only:** `make test-unit` (runs `unit.bats`, `profiles.bats`, and `zshrc.d/unit.bats`)
@@ -335,7 +333,7 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 - **Status: advisory only — removed from auto-merge gate.** The `bash-coverage` job still runs (for visibility) but is no longer in `auto-merge needs:`. It was blocking PRs needlessly since kcov produces no data in GH Actions. Re-add to `needs:` once the coverage tooling is fixed (see Future path below).
 - **`make coverage`** runs kcov locally and reports per-file percentages. Works on macOS and Linux VMs where kcov is installed (`brew install kcov`).
-- **Per-file floors defined** (not yet enforced): 90% for `setup_env.sh`, `constants.sh`, `detect_env.sh`, `helpers.sh`, `workflows.sh`, `update_summary.sh`, `developer.sh`; 75% for `linux_shared.sh`, `linux_ubuntu.sh`, `linux_rhel.sh`, `macos.sh`.
+- **Per-file floors defined** (not yet enforced): 90% for `setup_env.sh`, `constants.sh`, `detect_env.sh`, `helpers.sh`, `workflows.sh`, `update_summary.sh`, `developer.sh`; 75% for `linux_shared.sh`, `linux_ubuntu.sh`, `macos.sh`.
 - **Do not retry kcov or bashcov in GitHub Actions** — both are confirmed broken:
   - **kcov**: ptrace mechanism fails in GH Actions regardless of security settings. Tested: `ptrace_scope=0`, Docker container with `seccomp=unconfined`, `--cap-add SYS_PTRACE`, and `--privileged`. In all cases kcov runs the tests but produces no coverage data and no `index.json`. Root cause: kcov cannot trace bats' test subshells in the GH Actions environment.
   - **bashcov**: incompatible with bats-core. bats hardcodes UUID `608a9069-2672-4fa2-a0e1-2823af783b95` in its temp file paths; bashcov's LINENO parser chokes on it and aborts with no coverage data.
@@ -389,8 +387,6 @@ Available mock env vars:
 | `MOCK_UNAME_S` | Value returned by `uname -s` |
 | `MOCK_BATS_VER` | BATS_VER used by mock tar to create stub directory |
 | `MOCK_ID_U` | Value returned by `id -u` (default: 1000) |
-| `MOCK_YUM_LIST_EXIT` | Exit code for `yum list installed` (default: 0) |
-| `MOCK_YUM_EXIT` | Exit code for other `yum` commands (default: 0) |
 | `MOCK_AWK_OS_NAME` | Distro name returned when `awk` parses `os-release` |
 | `MOCK_SW_VERS_PRODUCTVERSION` | OS version returned by `sw_vers -productVersion` (default: 12.0.0) |
 | `MOCK_SYSCTL_CPU` | CPU brand string returned by `sysctl -n machdep.cpu.brand_string` (default: Apple M1) |
@@ -403,7 +399,6 @@ Available mock env vars:
 | `MOCK_CHSH_EXIT` | Exit code for `chsh` (default: 0) |
 | `MOCK_APT_ONLY_EXIT` | Exit code for `apt` only (overrides MOCK_APT_EXIT for apt; default: MOCK_APT_EXIT) |
 | `MOCK_ADD_APT_REPO_EXIT` | Exit code for `add-apt-repository` (default: 0) |
-| `MOCK_DNF_EXIT` | Exit code for `dnf` (default: 0) |
 | `MOCK_INSTALLER_EXIT` | Exit code for `installer` (default: 0) |
 | `MOCK_UNZIP_EXIT` | Exit code for `unzip` (default: 0) |
 | `MOCK_GIT_CLONE_EXIT` | Exit code for `git clone` (default: 0); target directory is created |
@@ -435,11 +430,7 @@ Available mock env vars:
 | `MOCK_CHMOD_EXIT` | Exit code for `chmod` (default: 0); real `/bin/chmod` is called unless exit ≠ 0 |
 | `MOCK_MV_EXIT` | Exit code for `mv` (default: 0); real `/bin/mv` is called unless exit ≠ 0 |
 | `MOCK_CP_EXIT` | Exit code for `cp` (default: 0); real `/bin/cp` is called unless exit ≠ 0 |
-| `MOCK_RPM_EXIT` | Exit code for `rpm` (default: 0) |
-| `MOCK_RPM_OUTPUT` | Lines printed to stdout by `rpm -qa` mock (default: empty) |
 | `MOCK_TAR_EXIT` | Exit code for `tar` (default: 0); when non-zero, suppresses stub directory creation so tests can simulate extraction failure and trigger `cd` failure |
-| `MOCK_CPAN_EXIT` | Exit code for `cpan` (default: 0) |
-| `MOCK_CPANM_EXIT` | Exit code for `cpanm` (default: 0) |
 | `MOCK_CLAUDE_EXIT` | Exit code for `claude` (default: 0); applies to all `claude` calls including `-p` |
 | `MOCK_CLAUDE_STDOUT` | Content printed to stdout by `claude -p` mock (default: `## New Features\n- Mock feature added`); used by scripts that call `claude -p "prompt"` to summarize content |
 | `MOCK_CLAUDE_PLUGINS_LIST_OUTPUT` | Lines printed to stdout by `claude plugins list` mock (default: empty) |
