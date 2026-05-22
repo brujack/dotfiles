@@ -37,18 +37,21 @@ update_aws_cli() {
 update_rust() {
   if [[ -n ${UBUNTU} ]] && [[ -n ${HAS_RUST} ]]; then
     log_info "Updating Rust Ubuntu"
+    local _rustup_found=0
     if [[ -x ${HOME}/.cargo/bin/rustup ]]; then
       ${HOME}/.cargo/bin/rustup self update
       ${HOME}/.cargo/bin/rustup update
       ${HOME}/.cargo/bin/rustup component add rust-analyzer
+      _rustup_found=1
     elif command -v rustup >/dev/null 2>&1; then
       rustup self update
       rustup update
       rustup component add rust-analyzer
+      _rustup_found=1
     else
       log_warn "rustup not found; skipping Rust update"
     fi
-    if command -v cargo-nextest &>/dev/null; then
+    if [[ ${_rustup_found} -eq 1 ]] && command -v cargo-nextest &>/dev/null; then
       curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C "${HOME}/.cargo/bin"
     fi
   fi
