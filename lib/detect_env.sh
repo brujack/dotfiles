@@ -9,7 +9,6 @@ detect_env() {
   if [[ -n ${LINUX} ]]; then
     LINUX_TYPE=$(awk -F= '/^NAME/{print $2}' /etc/os-release | tr -d '"')
     [[ ${LINUX_TYPE} = "Ubuntu" ]] && readonly UBUNTU=1
-    [[ ${LINUX_TYPE} = "elementary OS" ]] && readonly UBUNTU=1 && readonly ELEMENTARY=1
   fi
 
   if [[ -n ${UBUNTU} ]]; then
