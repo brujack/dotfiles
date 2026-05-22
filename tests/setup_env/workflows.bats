@@ -384,15 +384,6 @@ teardown() {
   grep -q "ruby-install" "${MOCK_CALLS_FILE}"
 }
 
-@test "install_ruby_tools downloads chruby on Linux Focal" {
-  unset MACOS
-  export LINUX=1
-  export UBUNTU=1
-  export FOCAL=1
-  install_ruby_tools
-  grep -q "chruby" "${MOCK_CALLS_FILE}"
-}
-
 @test "install_ruby_tools is a no-op on macOS" {
   export MACOS=1
   unset LINUX UBUNTU
@@ -409,11 +400,10 @@ teardown() {
   grep -q "ruby-install" "${MOCK_CALLS_FILE}"
 }
 
-@test "install_ruby calls rbenv on Noble when ruby absent" {
+@test "install_ruby calls rbenv on Linux when ruby absent" {
   unset MACOS
   export LINUX=1
   export UBUNTU=1
-  export NOBLE=1
   install_ruby
   grep -q "rbenv" "${MOCK_CALLS_FILE}"
 }
@@ -432,7 +422,6 @@ teardown() {
   unset MACOS
   export LINUX=1
   export UBUNTU=1
-  export NOBLE=1
   install_github_cli_linux
   grep -q "apt install gh" "${MOCK_CALLS_FILE}"
 }
@@ -450,26 +439,12 @@ teardown() {
   grep -q "gem install test-kitchen" "${MOCK_CALLS_FILE}"
 }
 
-@test "setup_kitchen calls gem install test-kitchen on Linux Jammy" {
+@test "setup_kitchen calls gem install test-kitchen on Linux" {
   unset MACOS
   export LINUX=1
   export UBUNTU=1
-  export JAMMY=1
-  export CHRUBY_LOC="${BATS_TEST_TMPDIR}/chruby_stub"
-  mkdir -p "${CHRUBY_LOC}/chruby"
-  printf "# stub\n" > "${CHRUBY_LOC}/chruby/chruby.sh"
-  printf "# stub\n" > "${CHRUBY_LOC}/chruby/auto.sh"
   setup_kitchen
   grep -q "gem install test-kitchen" "${MOCK_CALLS_FILE}"
-}
-
-@test "setup_kitchen calls rbenv on Noble" {
-  unset MACOS
-  export LINUX=1
-  export UBUNTU=1
-  export NOBLE=1
-  setup_kitchen
-  grep -q "rbenv" "${MOCK_CALLS_FILE}"
 }
 
 # ── setup_ansible ─────────────────────────────────────────────────────────────

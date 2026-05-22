@@ -297,17 +297,15 @@ _make_fake_dotfiles() {
 
 @test "update_system_packages calls apt update on Ubuntu" {
   export UBUNTU=1
-  export FOCAL=1
-  unset MACOS LINUX JAMMY NOBLE
+  unset MACOS LINUX
   run update_system_packages
   [ "$status" -eq 0 ]
   grep -q "apt update" "${MOCK_CALLS_FILE}"
 }
 
-@test "update_system_packages calls nala full-upgrade on Ubuntu Jammy" {
+@test "update_system_packages calls nala full-upgrade on Ubuntu Noble" {
   export UBUNTU=1
-  export JAMMY=1
-  unset MACOS LINUX FOCAL NOBLE
+  unset MACOS LINUX
   run update_system_packages
   [ "$status" -eq 0 ]
   grep -q "nala full-upgrade" "${MOCK_CALLS_FILE}"

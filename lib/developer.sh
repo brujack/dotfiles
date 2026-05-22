@@ -109,17 +109,6 @@ install_ruby_tools() {
     fi
   fi
 
-  printf "Installing chruby on linux\\n"
-  if [[ -n ${LINUX} ]]; then
-    if [[ -n ${FOCAL} ]] || [[ -n ${JAMMY} ]]; then
-      if [[ ! -d ${HOME}/software_downloads/chruby-${CHRUBY_VER} ]]; then
-        wget -O ${HOME}/software_downloads/chruby-${CHRUBY_VER}.tar.gz https://github.com/postmodern/chruby/archive/v${CHRUBY_VER}.tar.gz
-        tar -xzvf ${HOME}/software_downloads/chruby-${CHRUBY_VER}.tar.gz -C ${HOME}/software_downloads/
-        cd ${HOME}/software_downloads/chruby-${CHRUBY_VER}/ || return 1
-        sudo make install
-      fi
-    fi
-  fi
 }
 
 install_ruby() {
@@ -130,20 +119,11 @@ install_ruby() {
       ruby-install ${RUBY_VER} -- --with-openssl-dir=$(brew --prefix openssl@3)
     fi
     if [[ -n ${LINUX} ]]; then
-      if [[ -n ${FOCAL} ]]; then
-        ruby-install ${RUBY_VER}
-      elif [[ -n ${JAMMY} ]]; then
-        # Ruby 4.0 requires OpenSSL 3; Jammy ships OpenSSL 3 at /usr by default
-        OPENSSL_DIR="$(pkg-config --variable=prefix openssl 2>/dev/null)"
-        ruby-install ${RUBY_VER} -- --with-openssl-dir="${OPENSSL_DIR:-/usr}"
-      elif [[ -n ${NOBLE} ]]; then
-        if ! [[ -d ${HOME}/.rbenv/versions/${RUBY_VER} ]]; then
-          # Optional but often helpful: point Ruby at Ubuntu's OpenSSL
-          OPENSSL_DIR="$(pkg-config --variable=libdir openssl 2>/dev/null | sed 's#/lib$##')"
-          RUBY_CONFIGURE_OPTS="--with-openssl-dir=${OPENSSL_DIR:-/usr}" rbenv install ${RUBY_VER}
-          rbenv global ${RUBY_VER}
-          rbenv rehash
-        fi
+      if ! [[ -d ${HOME}/.rbenv/versions/${RUBY_VER} ]]; then
+        OPENSSL_DIR="$(pkg-config --variable=libdir openssl 2>/dev/null | sed 's#/lib$##')"
+        RUBY_CONFIGURE_OPTS="--with-openssl-dir=${OPENSSL_DIR:-/usr}" rbenv install ${RUBY_VER}
+        rbenv global ${RUBY_VER}
+        rbenv rehash
       fi
     fi
     INSTALLED_RUBY_VERSION=$(ruby --version | awk '{print $2}')
@@ -174,14 +154,8 @@ setup_kitchen() {
     source ${CHRUBY_LOC}/chruby/auto.sh
     chruby ruby-${RUBY_VER}
   elif [[ -n ${LINUX} ]]; then
-    if [[ -n ${FOCAL} ]] || [[ -n ${JAMMY} ]]; then
-      source ${CHRUBY_LOC}/chruby/chruby.sh
-      source ${CHRUBY_LOC}/chruby/auto.sh
-      chruby ruby-${RUBY_VER}
-    elif [[ -n ${NOBLE} ]]; then
-      if ! [[ -d ${HOME}/.rbenv/versions/${RUBY_VER} ]]; then
-        rbenv install ${RUBY_VER}
-      fi
+    if ! [[ -d ${HOME}/.rbenv/versions/${RUBY_VER} ]]; then
+      rbenv install ${RUBY_VER}
     fi
   fi
 
@@ -195,26 +169,15 @@ setup_kitchen() {
     gem install bundle
     gem install bundler
   elif [[ -n ${LINUX} ]]; then
-    if [[ -n ${FOCAL} ]] || [[ -n ${JAMMY} ]]; then
-      gem install test-kitchen
-      gem install kitchen-ansible
-      gem install kitchen-docker
-      gem install kitchen-inspec
-      gem install kitchen-terraform
-      gem install kitchen-verifier-serverspec
-      gem install bundle
-      gem install bundler
-    elif [[ -n ${NOBLE} ]]; then
-      rbenv shell ${RUBY_VER}
-      gem install test-kitchen
-      gem install kitchen-ansible
-      gem install kitchen-docker
-      gem install kitchen-inspec
-      gem install kitchen-terraform
-      gem install kitchen-verifier-serverspec
-      gem install bundle
-      gem install bundler
-    fi
+    rbenv shell ${RUBY_VER}
+    gem install test-kitchen
+    gem install kitchen-ansible
+    gem install kitchen-docker
+    gem install kitchen-inspec
+    gem install kitchen-terraform
+    gem install kitchen-verifier-serverspec
+    gem install bundle
+    gem install bundler
   fi
 }
 

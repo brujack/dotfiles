@@ -14,11 +14,7 @@ detect_env() {
 
   if [[ -n ${UBUNTU} ]]; then
     UBUNTU_VERSION=$(lsb_release -rs)
-    [[ ${UBUNTU_VERSION} = "18.04" ]] && readonly BIONIC=1
-    [[ ${UBUNTU_VERSION} = "20.04" ]] && readonly FOCAL=1
-    [[ ${UBUNTU_VERSION} = "22.04" ]] && readonly JAMMY=1
     [[ ${UBUNTU_VERSION} = "24.04" ]] && readonly NOBLE=1
-    [[ ${UBUNTU_VERSION} = "6" ]] && readonly FOCAL=1 # elementary os
   fi
 
   [[ $(uname -r) =~ microsoft ]] && readonly WINDOWS=1

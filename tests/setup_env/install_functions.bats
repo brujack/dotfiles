@@ -216,24 +216,11 @@ teardown() {
 
 @test "install_ruby_tools returns non-zero when cd to ruby-install dir fails" {
   export LINUX=1
-  unset MACOS UBUNTU FOCAL JAMMY NOBLE
+  unset MACOS UBUNTU
   local _home="${BATS_TEST_TMPDIR}/home"
   mkdir -p "${_home}/software_downloads"
   export HOME="${_home}"
   export MOCK_TAR_EXIT=1  # tar fails → ruby-install dir not created → cd fails
-  run install_ruby_tools
-  [ "$status" -ne 0 ]
-}
-
-@test "install_ruby_tools returns non-zero when cd to chruby dir fails" {
-  export LINUX=1
-  export FOCAL=1
-  unset MACOS UBUNTU JAMMY NOBLE
-  local _home="${BATS_TEST_TMPDIR}/home"
-  mkdir -p "${_home}/software_downloads"
-  mkdir -p "${_home}/software_downloads/ruby-install-${RUBY_INSTALL_VER}"
-  export HOME="${_home}"
-  export MOCK_TAR_EXIT=1  # tar fails → chruby dir not created → cd fails
   run install_ruby_tools
   [ "$status" -ne 0 ]
 }
@@ -246,7 +233,7 @@ teardown() {
   # With return 1 (post-fix) the || branch captures the code and the assertion runs.
   export UBUNTU=1
   export NOBLE=1
-  unset MACOS LINUX FOCAL JAMMY BIONIC HAS_SNAP HAS_RUST
+  unset MACOS LINUX HAS_SNAP HAS_RUST
   export MOCK_UNAME_S=Linux
   local _home="${BATS_TEST_TMPDIR}/home"
   mkdir -p "${_home}/software_downloads"

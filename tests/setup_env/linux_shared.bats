@@ -17,10 +17,8 @@ teardown() {
 
 # ── update_system_packages — Noble path ─────────────────────────────────────
 
-@test "update_system_packages: UBUNTU+NOBLE calls nala full-upgrade" {
+@test "update_system_packages: calls nala full-upgrade" {
   export UBUNTU=1
-  export NOBLE=1
-  unset FOCAL JAMMY
   run update_system_packages
   [ "$status" -eq 0 ]
   grep -q "nala full-upgrade" "${MOCK_CALLS_FILE}"

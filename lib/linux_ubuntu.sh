@@ -18,24 +18,11 @@ install_ubuntu_packages() {
 
 _install_ubuntu_base_packages() {
   sudo -H apt update
-  if [[ ${FOCAL} ]]; then
-    printf "Installing hwe, common, and 20.04 packages\\n"
-    sudo -H apt install --install-recommends linux-generic-hwe-20.04 -y
-    xargs -a ./ubuntu_common_packages.txt sudo apt install -y
-    xargs -a ./ubuntu_2004_packages.txt sudo apt install -y
-  elif [[ ${JAMMY} ]]; then
-    printf "Installing hwe, common, and 22.04 packages\\n"
-    sudo -H apt install --install-recommends linux-generic-hwe-22.04 -y
-    check_and_install_nala
-    xargs -a ./ubuntu_common_packages.txt sudo nala install -y
-    xargs -a ./ubuntu_2204_packages.txt sudo nala install -y
-  elif [[ ${NOBLE} ]]; then
-    printf "Installing hwe, common, and 24.04 packages\\n"
-    sudo -H apt install --install-recommends linux-generic-hwe-24.04 -y
-    check_and_install_nala
-    xargs -a ./ubuntu_common_packages.txt sudo nala install -y
-    xargs -a ./ubuntu_2404_packages.txt sudo nala install -y
-  fi
+  printf "Installing hwe, common, and 24.04 packages\\n"
+  sudo -H apt install --install-recommends linux-generic-hwe-24.04 -y
+  check_and_install_nala
+  xargs -a ./ubuntu_common_packages.txt sudo nala install -y
+  xargs -a ./ubuntu_2404_packages.txt sudo nala install -y
 
   if [[ -n ${HAS_SNAP} ]]; then
     printf "Installing workstation packages\\n"
@@ -44,13 +31,6 @@ _install_ubuntu_base_packages() {
     printf "Installing workstation snap packages\\n"
     xargs -a ./ubuntu_workstation_snap_packages.txt sudo snap install
 
-  fi
-
-  if [[ -n ${BIONIC} ]]; then
-    printf "Installing python 3.8 Ubuntu 18.04\\n"
-    sudo -H add-apt-repository ppa:deadsnakes/ppa
-    sudo -H apt update
-    sudo -H apt install python3.8 -y
   fi
 }
 
@@ -420,39 +400,15 @@ _install_ubuntu_gui_tools() {
   fi
 
   if [[ -n ${HAS_SNAP} ]]; then
-    if [[ ${FOCAL} ]]; then
-      printf "Installing Albert Ubuntu Focal\\n"
-      # shellcheck disable=SC2046
-      echo "deb http://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_$(lsb_release -rs)/ /" | sudo tee /etc/apt/sources.list.d/home:manuelschneid3r.list
-      # shellcheck disable=SC2046
-      curl -fsSL https://download.opensuse.org/repositories/home:manuelschneid3r/xUbuntu_$(lsb_release -rs)/Release.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/home_manuelschneid3r.gpg > /dev/null
-      sudo -H apt update
-      sudo -H apt install albert -y
-      if [[ -x $(command -v albert) ]]; then
-        printf "Albert is installed Ubuntu Focal\\n"
-      fi
-    elif [[ ${JAMMY} ]]; then
-      printf "Installing Albert Ubuntu Jammy\\n"
-      # shellcheck disable=SC2046
-      echo "deb http://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_$(lsb_release -rs)/ /" | sudo tee /etc/apt/sources.list.d/home:manuelschneid3r.list
-      # shellcheck disable=SC2046
-      curl -fsSL https://download.opensuse.org/repositories/home:manuelschneid3r/xUbuntu_$(lsb_release -rs)/Release.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/home_manuelschneid3r.gpg > /dev/null
-      sudo -H apt update
-      sudo -H apt install albert -y
-      if [[ -x $(command -v albert) ]]; then
-        printf "Albert is installed Ubuntu Jammy\\n"
-      fi
-    elif [[ ${NOBLE} ]]; then
-      printf "Installing Albert Ubuntu Noble\\n"
-      # shellcheck disable=SC2046
-      echo "deb http://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_$(lsb_release -rs)/ /" | sudo tee /etc/apt/sources.list.d/home:manuelschneid3r.list
-      # shellcheck disable=SC2046
-      curl -fsSL https://download.opensuse.org/repositories/home:manuelschneid3r/xUbuntu_$(lsb_release -rs)/Release.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/home_manuelschneid3r.gpg > /dev/null
-      sudo -H apt update
-      sudo -H apt install albert -y
-      if [[ -x $(command -v albert) ]]; then
-        printf "Albert is installed Ubuntu Noble\\n"
-      fi
+    printf "Installing Albert Ubuntu Noble\\n"
+    # shellcheck disable=SC2046
+    echo "deb http://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_$(lsb_release -rs)/ /" | sudo tee /etc/apt/sources.list.d/home:manuelschneid3r.list
+    # shellcheck disable=SC2046
+    curl -fsSL https://download.opensuse.org/repositories/home:manuelschneid3r/xUbuntu_$(lsb_release -rs)/Release.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/home_manuelschneid3r.gpg > /dev/null
+    sudo -H apt update
+    sudo -H apt install albert -y
+    if [[ -x $(command -v albert) ]]; then
+      printf "Albert is installed Ubuntu Noble\\n"
     fi
   fi
 
@@ -511,23 +467,8 @@ _install_ubuntu_misc() {
     printf "glances is installed\\n"
   fi
 
-  # fix for missing libssl1.1 on ubuntu 22.04 and it's requirement for installing python3 via pyenv
-  if [[ -n ${HAS_DEVTOOLS} ]]; then
-    printf "installing libssl1.1\\n"
-    echo "deb http://security.ubuntu.com/ubuntu focal-security main" | sudo tee /etc/apt/sources.list.d/focal-security.list
-    sudo -H apt update
-    sudo -H apt install libssl1.1 -y
-  fi
-
-  if [[ ${FOCAL} ]]; then
-    sudo -H apt autoremove -y
-  elif [[ ${JAMMY} ]]; then
-    check_and_install_nala
-    sudo -H nala autoremove -y
-  elif [[ ${NOBLE} ]]; then
-    check_and_install_nala
-    sudo -H nala autoremove -y
-  fi
+  check_and_install_nala
+  sudo -H nala autoremove -y
 }
 
 [[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0
