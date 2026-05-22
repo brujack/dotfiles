@@ -15,54 +15,13 @@ teardown() {
   rm -f "${MOCK_CALLS_FILE:-}"
 }
 
-# ── install_git_linux ────────────────────────────────────────────────────────
-
-@test "install_git_linux: CentOS path calls yum install git" {
-  export MOCK_AWK_OS_NAME="CentOS Linux"
-  run install_git_linux
-  [ "$status" -eq 0 ]
-  grep -q "yum install git" "${MOCK_CALLS_FILE}"
-}
-
-@test "install_git_linux: Fedora path calls dnf install git" {
-  export MOCK_AWK_OS_NAME="Fedora"
-  run install_git_linux
-  [ "$status" -eq 0 ]
-  grep -q "dnf install git" "${MOCK_CALLS_FILE}"
-}
-
-# ── install_zsh_linux ────────────────────────────────────────────────────────
-
-@test "install_zsh_linux: CentOS path calls yum install zsh" {
-  export MOCK_AWK_OS_NAME="CentOS Linux"
-  run install_zsh_linux
-  [ "$status" -eq 0 ]
-  grep -q "yum install zsh" "${MOCK_CALLS_FILE}"
-}
-
-@test "install_zsh_linux: Fedora path calls dnf install zsh" {
-  export MOCK_AWK_OS_NAME="Fedora"
-  run install_zsh_linux
-  [ "$status" -eq 0 ]
-  grep -q "dnf install zsh" "${MOCK_CALLS_FILE}"
-}
-
-# ── update_system_packages — Noble and Fedora paths ─────────────────────────
+# ── update_system_packages — Noble path ─────────────────────────────────────
 
 @test "update_system_packages: UBUNTU+NOBLE calls nala full-upgrade" {
   export UBUNTU=1
   export NOBLE=1
-  unset FOCAL JAMMY REDHAT CENTOS FEDORA
+  unset FOCAL JAMMY
   run update_system_packages
   [ "$status" -eq 0 ]
   grep -q "nala full-upgrade" "${MOCK_CALLS_FILE}"
 }
-
-@test "update_system_packages: FEDORA calls dnf update" {
-  export FEDORA=1
-  unset UBUNTU REDHAT CENTOS FOCAL JAMMY NOBLE
-  run update_system_packages
-  [ "$status" -eq 0 ]
-  grep -q "dnf update" "${MOCK_CALLS_FILE}"
-}
-

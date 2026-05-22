@@ -3,7 +3,7 @@
 
 # Fixed section order for summary display
 readonly _UPDATE_SECTION_ORDER=(
-  brew softwareupdate apt snap dnf yum mas claude terraform-skill npm pip gems
+  brew softwareupdate apt snap mas claude terraform-skill npm pip gems
   ai-config oh-my-zsh p10k tpm tfenv cheat.sh brew-drift
 )
 
@@ -109,20 +109,6 @@ _update_record_start() {
           > "${_UPDATE_TMPDIR}/pre_snap" || true
       else
         _update_skip "snap" "not applicable"
-      fi
-      ;;
-    dnf)
-      if [[ -n ${REDHAT:-} ]] || [[ -n ${FEDORA:-} ]]; then
-        rpm -qa --qf '%{NAME} %{VERSION}-%{RELEASE}\n' > "${_UPDATE_TMPDIR}/pre_dnf" 2>/dev/null || true
-      else
-        _update_skip "dnf" "not applicable"
-      fi
-      ;;
-    yum)
-      if [[ -n ${CENTOS:-} ]]; then
-        rpm -qa --qf '%{NAME} %{VERSION}-%{RELEASE}\n' > "${_UPDATE_TMPDIR}/pre_yum" 2>/dev/null || true
-      else
-        _update_skip "yum" "not applicable"
       fi
       ;;
     claude)
@@ -343,21 +329,6 @@ _update_record_end() {
         _snap_count=$(printf '%s' "${_snap_diff}" | grep -c . || true)
         if [[ ${_snap_count} -gt 0 ]]; then
           _result="${_snap_count} package(s) ($(printf '%s' "${_snap_diff}" | paste -sd', ' -))"
-        else
-          _result="no changes"
-        fi
-      else
-        _result="updated"
-      fi
-      ;;
-    dnf|yum)
-      rpm -qa --qf '%{NAME} %{VERSION}-%{RELEASE}\n' > "${_UPDATE_TMPDIR}/post_${_section}" 2>/dev/null || true
-      if [[ -f "${_UPDATE_TMPDIR}/pre_${_section}" ]]; then
-        local _rpm_diff _rpm_count
-        _rpm_diff=$(_update_diff_lines "${_UPDATE_TMPDIR}/pre_${_section}" "${_UPDATE_TMPDIR}/post_${_section}")
-        _rpm_count=$(printf '%s' "${_rpm_diff}" | grep -c . || true)
-        if [[ ${_rpm_count} -gt 0 ]]; then
-          _result="${_rpm_count} package(s) ($(printf '%s' "${_rpm_diff}" | paste -sd', ' -))"
         else
           _result="no changes"
         fi

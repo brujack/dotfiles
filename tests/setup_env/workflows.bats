@@ -83,7 +83,7 @@ teardown() {
 
 @test "run_setup_user clones dotfiles repo on macOS when missing" {
   export MACOS=1
-  unset LINUX UBUNTU REDHAT FEDORA CENTOS
+  unset LINUX UBUNTU
   rm -rf "${PERSONAL_GITREPOS}/${DOTFILES}"
   run_setup_user
   grep -q "git clone" "${MOCK_CALLS_FILE}"
@@ -91,14 +91,14 @@ teardown() {
 
 @test "run_setup_user creates HOME/bin on macOS" {
   export MACOS=1
-  unset LINUX UBUNTU REDHAT FEDORA CENTOS
+  unset LINUX UBUNTU
   run_setup_user
   [ -d "${HOME}/bin" ]
 }
 
 @test "run_setup_user creates HOME/go-work on macOS" {
   export MACOS=1
-  unset LINUX UBUNTU REDHAT FEDORA CENTOS
+  unset LINUX UBUNTU
   run_setup_user
   [ -d "${HOME}/go-work" ]
 }
@@ -133,7 +133,7 @@ teardown() {
 
 @test "run_setup_user calls setup_claude_mcp" {
   export MACOS=1
-  unset LINUX UBUNTU REDHAT FEDORA CENTOS
+  unset LINUX UBUNTU
   local _called=0
   setup_claude_mcp() { _called=1; return 0; }
   run_setup_user
@@ -142,7 +142,7 @@ teardown() {
 
 @test "run_setup_user returns non-zero when setup_claude_mcp fails" {
   export MACOS=1
-  unset LINUX UBUNTU REDHAT FEDORA CENTOS
+  unset LINUX UBUNTU
   setup_claude_mcp() { return 1; }
   run run_setup_user
   [ "$status" -ne 0 ]
@@ -164,7 +164,7 @@ teardown() {
 
 @test "run_setup_user calls setup_claude_plugins" {
   export MACOS=1
-  unset LINUX UBUNTU REDHAT FEDORA CENTOS
+  unset LINUX UBUNTU
   local _called=0
   setup_claude_plugins() { _called=1; return 0; }
   run_setup_user
@@ -173,7 +173,7 @@ teardown() {
 
 @test "run_setup_user returns non-zero when setup_claude_plugins fails" {
   export MACOS=1
-  unset LINUX UBUNTU REDHAT FEDORA CENTOS
+  unset LINUX UBUNTU
   setup_claude_plugins() { return 1; }
   run run_setup_user
   [ "$status" -ne 0 ]
@@ -346,35 +346,6 @@ teardown() {
   grep -q "snap" "${MOCK_CALLS_FILE}"
 }
 
-# ── install_rhel_packages ─────────────────────────────────────────────────────
-
-@test "install_rhel_packages calls dnf on RHEL" {
-  unset MACOS UBUNTU
-  export LINUX=1
-  export REDHAT=1
-  install_rhel_packages
-  grep -q "dnf" "${MOCK_CALLS_FILE}"
-}
-
-# ── install_centos_packages ───────────────────────────────────────────────────
-
-@test "install_centos_packages calls yum on CentOS" {
-  unset MACOS UBUNTU REDHAT
-  export LINUX=1
-  export CENTOS=1
-  install_centos_packages
-  grep -q "yum" "${MOCK_CALLS_FILE}"
-}
-
-# ── install_linux_packages ────────────────────────────────────────────────────
-
-@test "install_linux_packages clones tfenv on Linux" {
-  unset MACOS UBUNTU REDHAT CENTOS
-  export LINUX=1
-  install_linux_packages
-  grep -q "git clone" "${MOCK_CALLS_FILE}"
-}
-
 # ── install_aws_tools ─────────────────────────────────────────────────────────
 
 @test "install_aws_tools calls wget for AWSCLIV2.pkg on macOS with HAS_AWS" {
@@ -464,14 +435,6 @@ teardown() {
   export NOBLE=1
   install_github_cli_linux
   grep -q "apt install gh" "${MOCK_CALLS_FILE}"
-}
-
-@test "install_github_cli_linux calls dnf on RHEL" {
-  unset MACOS UBUNTU
-  export LINUX=1
-  export REDHAT=1
-  install_github_cli_linux
-  grep -q "dnf" "${MOCK_CALLS_FILE}"
 }
 
 # ── setup_kitchen ─────────────────────────────────────────────────────────────
@@ -877,7 +840,7 @@ setup_constants_copy() {
 
 @test "run_update appends to log file" {
   export MACOS=1
-  unset LINUX UBUNTU REDHAT FEDORA CENTOS
+  unset LINUX UBUNTU
   export UPDATE_BREW=1
   export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
   run_update
@@ -925,7 +888,7 @@ setup_constants_copy() {
   grep -q "not applicable" "${_UPDATE_TMPDIR}/result_apt"
 }
 
-@test "run_update Linux packages block skips all four sections when UPDATE_PKGS not set and not run_all" {
+@test "run_update Linux packages block skips apt and snap when UPDATE_PKGS not set and not run_all" {
   export MACOS=1
   unset LINUX UBUNTU
   export UPDATE_BREW=1
@@ -935,8 +898,6 @@ setup_constants_copy() {
   grep -q "SKIP" "${_UPDATE_TMPDIR}/status_apt"
   grep -q "flag not set" "${_UPDATE_TMPDIR}/result_apt"
   grep -q "flag not set" "${_UPDATE_TMPDIR}/result_snap"
-  grep -q "flag not set" "${_UPDATE_TMPDIR}/result_dnf"
-  grep -q "flag not set" "${_UPDATE_TMPDIR}/result_yum"
 }
 
 @test "run_update Linux packages block runs when UPDATE_PKGS is set on Ubuntu" {
@@ -966,23 +927,11 @@ setup_constants_copy() {
   ! grep -q "dpkg-query" "${MOCK_CALLS_FILE}"
 }
 
-@test "run_update apt section shows not applicable on RHEL" {
-  unset MACOS UBUNTU CENTOS
-  export LINUX=1
-  export REDHAT=1
-  export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
-  export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
-  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
-  run_update
-  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_apt"
-  grep -q "not applicable" "${_UPDATE_TMPDIR}/result_apt"
-}
-
 # ── return-code propagation: run_setup_user ───────────────────────────────────
 
 @test "run_setup_user returns non-zero when install_rosetta fails" {
   export MACOS=1
-  unset LINUX UBUNTU REDHAT FEDORA CENTOS
+  unset LINUX UBUNTU
   install_rosetta() { return 1; }
   run run_setup_user
   [ "$status" -ne 0 ]
@@ -990,8 +939,7 @@ setup_constants_copy() {
 
 @test "run_setup_user does not call install_git when install_rosetta fails" {
   export MACOS=1
-  export FEDORA=1
-  unset LINUX UBUNTU REDHAT CENTOS
+  unset LINUX UBUNTU
   install_rosetta() { return 1; }
   install_git() { printf "install_git\n" >> "${MOCK_CALLS_FILE}"; return 0; }
   run run_setup_user
@@ -1000,7 +948,7 @@ setup_constants_copy() {
 
 @test "run_setup_user returns non-zero when clone_or_update_dotfiles fails" {
   export MACOS=1
-  unset LINUX UBUNTU REDHAT FEDORA CENTOS
+  unset LINUX UBUNTU
   clone_or_update_dotfiles() { return 1; }
   run run_setup_user
   [ "$status" -ne 0 ]
@@ -1008,7 +956,7 @@ setup_constants_copy() {
 
 @test "run_setup_user returns non-zero when setup_dotfile_symlinks fails" {
   export MACOS=1
-  unset LINUX UBUNTU REDHAT FEDORA CENTOS
+  unset LINUX UBUNTU
   setup_dotfile_symlinks() { return 1; }
   run run_setup_user
   [ "$status" -ne 0 ]
@@ -1016,7 +964,7 @@ setup_constants_copy() {
 
 @test "run_setup_user returns non-zero when setup_zsh_as_default_shell fails" {
   export MACOS=1
-  unset LINUX UBUNTU REDHAT FEDORA CENTOS
+  unset LINUX UBUNTU
   setup_zsh_as_default_shell() { return 1; }
   run run_setup_user
   [ "$status" -ne 0 ]
@@ -1027,7 +975,7 @@ setup_constants_copy() {
 @test "run_setup_or_developer returns non-zero when install_ubuntu_packages fails" {
   export UBUNTU=1
   export NOBLE=1
-  unset MACOS LINUX REDHAT FEDORA CENTOS
+  unset MACOS LINUX
   install_ubuntu_packages() { return 1; }
   run run_setup_or_developer
   [ "$status" -ne 0 ]
@@ -1036,24 +984,16 @@ setup_constants_copy() {
 @test "run_setup_or_developer does not call install_aws_tools when install_ubuntu_packages fails" {
   export UBUNTU=1
   export NOBLE=1
-  unset MACOS LINUX REDHAT FEDORA CENTOS
+  unset MACOS LINUX
   install_ubuntu_packages() { return 1; }
   install_aws_tools() { printf "install_aws_tools\n" >> "${MOCK_CALLS_FILE}"; return 0; }
   run run_setup_or_developer
   ! grep -q "install_aws_tools" "${MOCK_CALLS_FILE}"
 }
 
-@test "run_setup_or_developer returns non-zero when install_rhel_packages fails" {
-  export REDHAT=1
-  unset MACOS LINUX UBUNTU FEDORA CENTOS
-  install_rhel_packages() { return 1; }
-  run run_setup_or_developer
-  [ "$status" -ne 0 ]
-}
-
 @test "run_setup_or_developer returns non-zero when install_aws_tools fails" {
   export MACOS=1
-  unset LINUX UBUNTU REDHAT FEDORA CENTOS
+  unset LINUX UBUNTU
   install_macos_packages() { return 0; }
   install_aws_tools() { return 1; }
   run run_setup_or_developer
@@ -1063,14 +1003,14 @@ setup_constants_copy() {
 # ── return-code propagation: run_developer_or_ansible ────────────────────────
 
 @test "run_developer_or_ansible returns non-zero when install_ruby_tools fails" {
-  unset MACOS LINUX UBUNTU REDHAT FEDORA CENTOS
+  unset MACOS LINUX UBUNTU
   install_ruby_tools() { return 1; }
   run run_developer_or_ansible
   [ "$status" -ne 0 ]
 }
 
 @test "run_developer_or_ansible does not call install_ruby when install_ruby_tools fails" {
-  unset MACOS LINUX UBUNTU REDHAT FEDORA CENTOS
+  unset MACOS LINUX UBUNTU
   install_ruby_tools() { return 1; }
   install_ruby() { printf "install_ruby\n" >> "${MOCK_CALLS_FILE}"; return 0; }
   run run_developer_or_ansible
@@ -1078,7 +1018,7 @@ setup_constants_copy() {
 }
 
 @test "run_developer_or_ansible returns non-zero when setup_kitchen fails" {
-  unset MACOS LINUX UBUNTU REDHAT FEDORA CENTOS
+  unset MACOS LINUX UBUNTU
   install_ruby_tools() { return 0; }
   install_ruby()       { return 0; }
   setup_kitchen()      { return 1; }
@@ -1087,7 +1027,7 @@ setup_constants_copy() {
 }
 
 @test "run_developer_or_ansible does not call setup_ansible when setup_kitchen fails" {
-  unset MACOS LINUX UBUNTU REDHAT FEDORA CENTOS
+  unset MACOS LINUX UBUNTU
   install_ruby_tools() { return 0; }
   install_ruby()       { return 0; }
   setup_kitchen()      { return 1; }

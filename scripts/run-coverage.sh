@@ -14,7 +14,6 @@ declare -A FLOORS=(
   ["developer.sh"]=90
   ["linux_shared.sh"]=75
   ["linux_ubuntu.sh"]=75
-  ["linux_rhel.sh"]=75
   ["macos.sh"]=75
 )
 
