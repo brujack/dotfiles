@@ -55,6 +55,7 @@ teardown() {
   clean_path="$(printf "%s" "${PATH}" | tr ':' '\n' | grep -v "tests/mocks" | tr '\n' ':' | sed 's/:$//')"
   bash -c "
     export PATH='${clean_path}'
+    unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
     git -C '${tmpdir}' init --quiet
     git -C '${tmpdir}' config user.email 'test@test.com'
     git -C '${tmpdir}' config user.name 'Test'
@@ -63,7 +64,7 @@ teardown() {
     git -C '${tmpdir}' add .
     git -C '${tmpdir}' commit --quiet -m 'test'
   "
-  run bash -c "export PATH='${clean_path}'; bash '${REPO_ROOT}/scripts/count_lines_git.sh' '${tmpdir}'"
+  run bash -c "unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; export PATH='${clean_path}'; bash '${REPO_ROOT}/scripts/count_lines_git.sh' '${tmpdir}'"
   [ "$status" -eq 0 ]
   [[ "$output" == *"Total lines: 5"* ]]
 }
@@ -75,6 +76,7 @@ teardown() {
   clean_path="$(printf "%s" "${PATH}" | tr ':' '\n' | grep -v "tests/mocks" | tr '\n' ':' | sed 's/:$//')"
   bash -c "
     export PATH='${clean_path}'
+    unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
     git -C '${tmpdir}' init --quiet
     git -C '${tmpdir}' config user.email 'test@test.com'
     git -C '${tmpdir}' config user.name 'Test'
@@ -83,7 +85,7 @@ teardown() {
     git -C '${tmpdir}' add .
     git -C '${tmpdir}' commit --quiet -m 'test'
   "
-  run bash -c "export PATH='${clean_path}'; bash '${REPO_ROOT}/scripts/count_lines_git.sh' '${tmpdir}' 'vendor'"
+  run bash -c "unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; export PATH='${clean_path}'; bash '${REPO_ROOT}/scripts/count_lines_git.sh' '${tmpdir}' 'vendor'"
   [ "$status" -eq 0 ]
   [[ "$output" == *"Total lines: 2"* ]]
 }
