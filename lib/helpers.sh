@@ -273,9 +273,7 @@ run_doctor() {
   printf "=== Doctor Report ===\n"
   printf "\nOS Detection:\n"
   printf "  MACOS=%s  LINUX=%s\n" "${MACOS:-<unset>}" "${LINUX:-<unset>}"
-  printf "  UBUNTU=%s\n" "${UBUNTU:-<unset>}"
-  printf "  FOCAL=%s  JAMMY=%s  NOBLE=%s\n" \
-    "${FOCAL:-<unset>}" "${JAMMY:-<unset>}" "${NOBLE:-<unset>}"
+  printf "  UBUNTU=%s  NOBLE=%s\n" "${UBUNTU:-<unset>}" "${NOBLE:-<unset>}"
   printf "\nProfile:\n"
   printf "  PROFILE=%s\n" "${PROFILE:-unknown}"
   printf "\nCapabilities:\n"

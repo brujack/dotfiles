@@ -17,42 +17,22 @@ teardown() {
 
 # ── _install_ubuntu_base_packages ────────────────────────────────────────────
 
-@test "_install_ubuntu_base_packages: FOCAL installs hwe-20.04" {
-  export FOCAL=1
-  unset JAMMY NOBLE BIONIC HAS_SNAP
-  run _install_ubuntu_base_packages
-  [ "$status" -eq 0 ]
-  grep -q "apt install.*linux-generic-hwe-20.04" "${MOCK_CALLS_FILE}"
-}
-
-@test "_install_ubuntu_base_packages: JAMMY installs hwe-22.04" {
-  export JAMMY=1
-  unset FOCAL NOBLE BIONIC HAS_SNAP
-  run _install_ubuntu_base_packages
-  [ "$status" -eq 0 ]
-  grep -q "apt install.*linux-generic-hwe-22.04" "${MOCK_CALLS_FILE}"
-}
-
-@test "_install_ubuntu_base_packages: NOBLE installs hwe-24.04" {
-  export NOBLE=1
-  unset FOCAL JAMMY BIONIC HAS_SNAP
+@test "_install_ubuntu_base_packages: installs hwe-24.04" {
+  unset HAS_SNAP
   run _install_ubuntu_base_packages
   [ "$status" -eq 0 ]
   grep -q "apt install.*linux-generic-hwe-24.04" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_base_packages: HAS_SNAP installs workstation snap packages" {
-  export NOBLE=1
   export HAS_SNAP=1
-  unset FOCAL JAMMY BIONIC
   run _install_ubuntu_base_packages
   [ "$status" -eq 0 ]
   grep -q "snap install" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_base_packages: no HAS_SNAP skips snap install" {
-  export NOBLE=1
-  unset FOCAL JAMMY BIONIC HAS_SNAP
+  unset HAS_SNAP
   run _install_ubuntu_base_packages
   [ "$status" -eq 0 ]
   ! grep -q "snap install" "${MOCK_CALLS_FILE}"
@@ -75,37 +55,17 @@ teardown() {
 
 # ── _install_ubuntu_powershell ───────────────────────────────────────────────
 
-@test "_install_ubuntu_powershell: FOCAL calls wget for packages-microsoft-prod.deb" {
-  export FOCAL=1
-  unset BIONIC JAMMY NOBLE
+@test "_install_ubuntu_powershell: calls wget for packages-microsoft-prod.deb" {
   run _install_ubuntu_powershell
   [ "$status" -eq 0 ]
   grep -q "wget.*packages-microsoft-prod.deb" "${MOCK_CALLS_FILE}"
 }
 
-@test "_install_ubuntu_powershell: FOCAL skips wget when deb already downloaded" {
-  export FOCAL=1
-  unset BIONIC JAMMY NOBLE
+@test "_install_ubuntu_powershell: skips wget when deb already downloaded" {
   touch "${HOME}/software_downloads/packages-microsoft-prod.deb"
   run _install_ubuntu_powershell
   [ "$status" -eq 0 ]
   ! grep -q "wget.*packages-microsoft-prod.deb" "${MOCK_CALLS_FILE}"
-}
-
-@test "_install_ubuntu_powershell: JAMMY calls wget for packages-microsoft-prod.deb" {
-  export JAMMY=1
-  unset BIONIC FOCAL NOBLE
-  run _install_ubuntu_powershell
-  [ "$status" -eq 0 ]
-  grep -q "wget.*packages-microsoft-prod.deb" "${MOCK_CALLS_FILE}"
-}
-
-@test "_install_ubuntu_powershell: NOBLE calls wget for packages-microsoft-prod.deb" {
-  export NOBLE=1
-  unset BIONIC FOCAL JAMMY
-  run _install_ubuntu_powershell
-  [ "$status" -eq 0 ]
-  grep -q "wget.*packages-microsoft-prod.deb" "${MOCK_CALLS_FILE}"
 }
 
 # ── _install_ubuntu_go ───────────────────────────────────────────────────────
@@ -361,30 +321,29 @@ teardown() {
 @test "_install_ubuntu_gui_tools: HAS_DEVTOOLS installs virtualbox" {
   export HAS_DEVTOOLS=1
   export VIRTUALBOX_VER="virtualbox-7.0"
-  unset HAS_SNAP FOCAL JAMMY NOBLE
+  unset HAS_SNAP
   run _install_ubuntu_gui_tools
   [ "$status" -eq 0 ]
   grep -q "apt install ${VIRTUALBOX_VER}" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_gui_tools: no HAS_DEVTOOLS skips virtualbox" {
-  unset HAS_DEVTOOLS HAS_SNAP FOCAL JAMMY NOBLE
+  unset HAS_DEVTOOLS HAS_SNAP
   run _install_ubuntu_gui_tools
   [ "$status" -eq 0 ]
   ! grep -q "apt install virtualbox" "${MOCK_CALLS_FILE}"
 }
 
-@test "_install_ubuntu_gui_tools: HAS_SNAP+FOCAL installs albert" {
+@test "_install_ubuntu_gui_tools: HAS_SNAP installs albert" {
   export HAS_SNAP=1
-  export FOCAL=1
-  unset HAS_DEVTOOLS JAMMY NOBLE
+  unset HAS_DEVTOOLS
   run _install_ubuntu_gui_tools
   [ "$status" -eq 0 ]
   grep -q "apt install albert" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_gui_tools: no HAS_SNAP skips albert and edge" {
-  unset HAS_SNAP HAS_DEVTOOLS FOCAL JAMMY NOBLE
+  unset HAS_SNAP HAS_DEVTOOLS
   run _install_ubuntu_gui_tools
   [ "$status" -eq 0 ]
   ! grep -q "apt install albert" "${MOCK_CALLS_FILE}"
@@ -398,7 +357,7 @@ teardown() {
   export DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64"
   export YQ_VER="4.40.5"
   export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
-  unset HAS_DEVTOOLS FOCAL JAMMY NOBLE
+  unset HAS_DEVTOOLS
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
   grep -q "wget.*docker-compose" "${MOCK_CALLS_FILE}"
@@ -410,7 +369,7 @@ teardown() {
   export YQ_VER="4.40.5"
   export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
   touch "${HOME}/software_downloads/docker-compose_2.24.0"
-  unset HAS_DEVTOOLS FOCAL JAMMY NOBLE
+  unset HAS_DEVTOOLS
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
   ! grep -q "wget.*docker-compose_2.24.0" "${MOCK_CALLS_FILE}"
@@ -422,7 +381,6 @@ teardown() {
   export DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64"
   export YQ_VER="4.40.5"
   export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
-  unset FOCAL JAMMY NOBLE
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
   grep -q "wget.*yq" "${MOCK_CALLS_FILE}"
@@ -434,31 +392,17 @@ teardown() {
   export DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64"
   export YQ_VER="4.40.5"
   export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
-  unset FOCAL JAMMY NOBLE
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
   ! grep -q "wget.*yq" "${MOCK_CALLS_FILE}"
 }
 
-@test "_install_ubuntu_misc: FOCAL calls apt autoremove" {
-  export FOCAL=1
+@test "_install_ubuntu_misc: calls nala autoremove" {
   export DOCKER_COMPOSE_VER="2.24.0"
   export DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64"
   export YQ_VER="4.40.5"
   export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
-  unset HAS_DEVTOOLS JAMMY NOBLE
-  run _install_ubuntu_misc
-  [ "$status" -eq 0 ]
-  grep -q "apt autoremove" "${MOCK_CALLS_FILE}"
-}
-
-@test "_install_ubuntu_misc: JAMMY calls nala autoremove" {
-  export JAMMY=1
-  export DOCKER_COMPOSE_VER="2.24.0"
-  export DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64"
-  export YQ_VER="4.40.5"
-  export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
-  unset HAS_DEVTOOLS FOCAL NOBLE
+  unset HAS_DEVTOOLS
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
   grep -q "nala autoremove" "${MOCK_CALLS_FILE}"
