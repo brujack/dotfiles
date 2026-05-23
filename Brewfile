@@ -3,6 +3,7 @@ tap "cloudflare/cloudflare"                  # [HAS_DEVTOOLS]
 tap "getagentseal/codeburn"                  # [HAS_DEVTOOLS]
 tap "datawire/blackbird"                     # [HAS_K8S]
 tap "go-task/tap"                            # [HAS_DEVTOOLS]
+tap "oven-sh/bun"                            # [HAS_DEVTOOLS]
 tap "redpanda-data/tap"                      # [HAS_DEVTOOLS]
 tap "snyk/tap"                               # [HAS_DEVTOOLS]
 tap "teamookla/speedtest"                    # [HAS_DEVTOOLS]
@@ -14,6 +15,7 @@ brew "bash"
 brew "bat"
 brew "bats-core"                             # [HAS_DEVTOOLS]
 brew "bison"                                 # [HAS_DEVTOOLS]
+brew "oven-sh/bun/bun"                       # [HAS_DEVTOOLS]
 brew "bzip2"
 brew "chruby"                                # [HAS_DEVTOOLS]
 brew "codeburn"                              # [HAS_DEVTOOLS]
