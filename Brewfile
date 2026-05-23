@@ -32,6 +32,7 @@ brew "ggshield"                              # [HAS_DEVTOOLS]
 brew "gh"                                    # [HAS_DEVTOOLS]
 brew "git"
 brew "git-lfs"                               # [HAS_DEVTOOLS]
+brew "git-cliff"                             # changelog generation from conventional commits
 brew "glances"                               # [HAS_DEVTOOLS]
 brew "gmp"
 brew "gnupg"                                 # [HAS_DEVTOOLS]
