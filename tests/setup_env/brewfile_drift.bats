@@ -29,12 +29,28 @@ teardown() {
 
 # ── skip gates ────────────────────────────────────────────────────────────────
 
-@test "_update_check_brewfile_drift: SKIP on Linux (MACOS unset)" {
-  # MACOS is already unset in setup(); brew is available (no MOCK_WHICH_MISSING)
+@test "_update_check_brewfile_drift: Linux SKIP when brew not available" {
+  unset MACOS
+  export MOCK_WHICH_MISSING=brew
   run _update_check_brewfile_drift
   [ "$status" -eq 0 ]
   [ "$(cat "${_UPDATE_TMPDIR}/status_brew-drift")" = "SKIP" ]
-  grep -q "not applicable on Linux" "${_UPDATE_TMPDIR}/result_brew-drift"
+  grep -q "brew not available" "${_UPDATE_TMPDIR}/result_brew-drift"
+  [ ! -f "${_UPDATE_TMPDIR}/detail_brew-drift" ]
+}
+
+@test "_update_check_brewfile_drift: Linux OK when formulae and taps match (no cask check)" {
+  unset MACOS
+  printf 'brew "git"\ncask "visual-studio-code"\n' > "${BATS_TEST_TMPDIR}/Brewfile"
+  export _OVERRIDE_BREWFILE_PATH="${BATS_TEST_TMPDIR}/Brewfile"
+  export MOCK_BREW_LEAVES="git"
+  export MOCK_BREW_LIST_FORMULA="git"
+  export MOCK_BREW_TAPS=""
+  run _update_check_brewfile_drift
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_UPDATE_TMPDIR}/status_brew-drift")" = "OK" ]
+  grep -q "formulae clean" "${_UPDATE_TMPDIR}/result_brew-drift"
+  ! grep -q "casks clean" "${_UPDATE_TMPDIR}/result_brew-drift"
   [ ! -f "${_UPDATE_TMPDIR}/detail_brew-drift" ]
 }
 
@@ -220,15 +236,20 @@ teardown() {
 
 # ── Linux: casks not checked ──────────────────────────────────────────────────
 
-@test "_update_check_brewfile_drift: SKIP on Linux — no detail file written" {
-  # Entire check skipped on Linux; brew and Brewfile presence are irrelevant
+@test "_update_check_brewfile_drift: Linux WARN for formula drift (cask entries ignored)" {
+  # On Linux: formula/tap drift detected; cask entries in Brewfile are invisible
   unset MACOS
   printf 'brew "git"\ncask "visual-studio-code"\n' > "${BATS_TEST_TMPDIR}/Brewfile"
   export _OVERRIDE_BREWFILE_PATH="${BATS_TEST_TMPDIR}/Brewfile"
+  export MOCK_BREW_LEAVES="git jq"
+  export MOCK_BREW_LIST_FORMULA="git jq"
+  export MOCK_BREW_TAPS=""
   run _update_check_brewfile_drift
   [ "$status" -eq 0 ]
-  [ "$(cat "${_UPDATE_TMPDIR}/status_brew-drift")" = "SKIP" ]
-  [ ! -f "${_UPDATE_TMPDIR}/detail_brew-drift" ]
+  [ "$(cat "${_UPDATE_TMPDIR}/status_brew-drift")" = "WARN" ]
+  grep -q "untracked formulae" "${_UPDATE_TMPDIR}/result_brew-drift"
+  grep -q "jq" "${_UPDATE_TMPDIR}/detail_brew-drift"
+  ! grep -q "cask" "${_UPDATE_TMPDIR}/detail_brew-drift"
 }
 
 # ── mixed drift ───────────────────────────────────────────────────────────────
