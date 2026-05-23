@@ -277,6 +277,8 @@ make check-agent-guidance # fail if generated guidance is out of sync
 
 Install bats-core first: `brew install bats-core` (macOS) or `sudo apt-get install bats` (Ubuntu).
 
+- `brew install git-cliff` — CHANGELOG generation (`make changelog`)
+
 ### Pre-commit Hook (required)
 
 Run `make install-hooks` once per checkout. The hook runs before every `git commit`:
