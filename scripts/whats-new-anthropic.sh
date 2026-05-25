@@ -50,6 +50,8 @@ generate_summary() {
   local _sdk_diff="$2"
   local _combined
   _combined="$(printf "## Platform Release Notes\n%s\n\n## Python SDK\n%s" "${_platform_diff}" "${_sdk_diff}")"
+  # Cap at 40000 chars to stay within claude -p prompt limits (first-run changelogs can be huge)
+  _combined="${_combined:0:40000}"
   printf "%s" "${_combined}" | claude -p \
     "Summarize Anthropic and Claude API updates from this content for a developer.
 
