@@ -146,8 +146,10 @@ main() {
   fi
 
   write_output "${_summary}" || return 1
-  printf "%s" "${_platform_current}" > "${PLATFORM_STATE_FILE}"
-  printf "%s" "${_sdk_current}" > "${SDK_STATE_FILE}"
+  # Store only the most recent 20KB of each source; changelogs are reverse-chronological
+  # so head -c captures the newest entries and keeps state files small enough to push.
+  printf "%s" "${_platform_current}" | head -c 20000 > "${PLATFORM_STATE_FILE}"
+  printf "%s" "${_sdk_current}" | head -c 20000 > "${SDK_STATE_FILE}"
   commit_and_push || _rc=$?
   send_ntfy
 
