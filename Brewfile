@@ -67,7 +67,7 @@ brew "libunistring"
 brew "libyaml"
 brew "linkerd"                               # [HAS_K8S]
 brew "make"
-brew "mas"
+brew "mas"                                   # [HAS_PRINTING]
 brew "mdbook"                                # [HAS_DEVTOOLS]
 brew "mintoolkit"                            # [HAS_DEVTOOLS]
 brew "mongosh"                               # [HAS_DEVTOOLS]
