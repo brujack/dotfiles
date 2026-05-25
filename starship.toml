@@ -11,6 +11,8 @@ add_newline = false
 format = """\
 (238)$env_var $all (238)$character"""
 
+right_format = "$memory_usage${custom.cpu_macos}${custom.cpu_linux}"
+
 # Change the default prompt characters
 [character]
 success_symbol = "[](238)"
@@ -105,6 +107,36 @@ disabled = true
 
 [gcloud]
 disabled = true
+
+[memory_usage]
+disabled = false
+threshold = -1
+format = "[$symbol${ram}( | ${swap})]($style) "
+symbol = "󰍛 "
+style = "white bold"
+
+[custom.cpu_macos]
+# top -l 1 exceeds starship command_timeout (500ms); ps sum is instant on macOS
+command = "ps -A -o %cpu= 2>/dev/null | awk '{s+=$1} END { if (s>100) s=100; printf \"%.0f%%\", s+0 }'"
+description = "CPU usage (macOS)"
+format = "[$symbol$output]($style) "
+symbol = "󰻠 "
+style = "white bold"
+when = true
+os = "macos"
+use_stdin = false
+shell = ["bash", "--noprofile", "--norc", "-c"]
+
+[custom.cpu_linux]
+command = "top -bn1 2>/dev/null | sed -n 's/.*, *\\([0-9.]*\\) id.*/\\1/p' | awk '{printf \"%.0f%%\", 100-$1}'"
+description = "CPU usage (Linux)"
+format = "[$symbol$output]($style) "
+symbol = "󰻠 "
+style = "white bold"
+when = true
+os = "linux"
+use_stdin = false
+shell = ["bash", "--noprofile", "--norc", "-c"]
 
 [battery]
 disabled = true
