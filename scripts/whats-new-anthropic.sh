@@ -39,7 +39,10 @@ extract_new_content() {
   local _current="$1"
   local _state_file="$2"
   if [[ -f "${_state_file}" ]]; then
-    diff "${_state_file}" <(printf "%s" "${_current}") | grep '^>' | sed 's/^> //'
+    # Truncate _current to the same 20KB window used when writing state so that
+    # diff sees identical tails; without this, content past the 20KB boundary
+    # would appear as new additions on every run once the state is truncated.
+    diff "${_state_file}" <(printf "%s" "${_current}" | head -c 20000) | grep '^>' | sed 's/^> //'
   else
     printf "%s" "${_current}"
   fi

@@ -111,6 +111,37 @@ existing content" "${_state}"
   [[ "$output" != *"existing content"* ]]
 }
 
+@test "extract_new_content: no false positives when state is 20KB-truncated subset of current" {
+  # Regression: state written with head -c 20000; current has same first 20KB plus
+  # more old entries beyond the boundary. Without the fix, all lines past 20KB
+  # appear as '>'-additions and are returned as false "new content".
+  source "${REPO_ROOT}/scripts/whats-new-anthropic.sh"
+  _state="${BATS_TEST_TMPDIR}/.state-truncated"
+  # Build a string slightly over 20KB with recognisable sections
+  _shared_block="$(python3 -c "print('shared line\n' * 1400)")"  # ~16KB
+  _old_tail="$(python3 -c "print('old tail line\n' * 400)")"     # ~6KB; pushed past 20KB boundary
+  _full_current="${_shared_block}${_old_tail}"
+  # State = first 20KB of the full content (simulates head -c 20000)
+  printf "%s" "${_full_current}" | head -c 20000 > "${_state}"
+  run extract_new_content "${_full_current}" "${_state}"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "extract_new_content: detects new entry at top even when state is 20KB-truncated" {
+  source "${REPO_ROOT}/scripts/whats-new-anthropic.sh"
+  _state="${BATS_TEST_TMPDIR}/.state-truncated-new"
+  _shared_block="$(python3 -c "print('shared line\n' * 1400)")"
+  _old_tail="$(python3 -c "print('old tail line\n' * 400)")"
+  _full_current="${_shared_block}${_old_tail}"
+  printf "%s" "${_full_current}" | head -c 20000 > "${_state}"
+  _with_new_entry="new changelog entry
+${_full_current}"
+  run extract_new_content "${_with_new_entry}" "${_state}"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"new changelog entry"* ]]
+}
+
 # ── generate_summary ─────────────────────────────────────────────────────────
 
 @test "generate_summary: returns claude output on success" {
