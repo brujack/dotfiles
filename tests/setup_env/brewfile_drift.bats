@@ -411,3 +411,139 @@ teardown() {
   # postgresql excluded by tag — must NOT appear in missing list
   ! grep -q "postgresql" "${_UPDATE_TMPDIR}/detail_brew-drift"
 }
+
+# ── _brewfile_extract_cap ─────────────────────────────────────────────────────
+
+@test "_brewfile_extract_cap returns capability name from tagged line" {
+  run _brewfile_extract_cap 'brew "lens"  # [HAS_K8S]'
+  [ "$status" -eq 0 ]
+  [ "$output" = "HAS_K8S" ]
+}
+
+@test "_brewfile_extract_cap returns empty when line has no tag" {
+  run _brewfile_extract_cap 'brew "git"'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "_brewfile_extract_cap returns empty when tag is lowercase (not a valid cap)" {
+  run _brewfile_extract_cap 'brew "foo"  # [lowercase]'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "_brewfile_extract_cap returns cap name containing digits" {
+  run _brewfile_extract_cap 'brew "go"  # [HAS_GO119]'
+  [ "$status" -eq 0 ]
+  [ "$output" = "HAS_GO119" ]
+}
+
+@test "_brewfile_extract_cap returns empty for empty input" {
+  run _brewfile_extract_cap ""
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+# ── _brewfile_parse_section ───────────────────────────────────────────────────
+
+@test "_brewfile_parse_section brew: includes untagged formula" {
+  printf 'brew "git"\n' > "${BATS_TEST_TMPDIR}/Brewfile"
+  run _brewfile_parse_section brew "${BATS_TEST_TMPDIR}/Brewfile"
+  [ "$status" -eq 0 ]
+  [ "$output" = "git" ]
+}
+
+@test "_brewfile_parse_section brew: includes formula when capability is active" {
+  printf 'brew "postgresql@14"  # [HAS_DEVTOOLS]\n' > "${BATS_TEST_TMPDIR}/Brewfile"
+  export HAS_DEVTOOLS=1
+  run _brewfile_parse_section brew "${BATS_TEST_TMPDIR}/Brewfile"
+  [ "$status" -eq 0 ]
+  [ "$output" = "postgresql@14" ]
+}
+
+@test "_brewfile_parse_section brew: excludes formula when capability is inactive" {
+  printf 'brew "postgresql@14"  # [HAS_DEVTOOLS]\n' > "${BATS_TEST_TMPDIR}/Brewfile"
+  unset HAS_DEVTOOLS
+  run _brewfile_parse_section brew "${BATS_TEST_TMPDIR}/Brewfile"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "_brewfile_parse_section brew: does not return cask entries" {
+  printf 'brew "git"\ncask "docker"\n' > "${BATS_TEST_TMPDIR}/Brewfile"
+  run _brewfile_parse_section brew "${BATS_TEST_TMPDIR}/Brewfile"
+  [ "$status" -eq 0 ]
+  [ "$output" = "git" ]
+  [[ "$output" != *"docker"* ]]
+}
+
+@test "_brewfile_parse_section cask: includes untagged cask" {
+  printf 'cask "visual-studio-code"\n' > "${BATS_TEST_TMPDIR}/Brewfile"
+  run _brewfile_parse_section cask "${BATS_TEST_TMPDIR}/Brewfile"
+  [ "$status" -eq 0 ]
+  [ "$output" = "visual-studio-code" ]
+}
+
+@test "_brewfile_parse_section cask: excludes cask when capability is inactive" {
+  printf 'cask "lens"  # [HAS_K8S]\n' > "${BATS_TEST_TMPDIR}/Brewfile"
+  unset HAS_K8S
+  run _brewfile_parse_section cask "${BATS_TEST_TMPDIR}/Brewfile"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "_brewfile_parse_section tap: includes untagged tap" {
+  printf 'tap "homebrew/cask-fonts"\n' > "${BATS_TEST_TMPDIR}/Brewfile"
+  run _brewfile_parse_section tap "${BATS_TEST_TMPDIR}/Brewfile"
+  [ "$status" -eq 0 ]
+  [ "$output" = "homebrew/cask-fonts" ]
+}
+
+@test "_brewfile_parse_section tap: excludes tap when capability is inactive" {
+  printf 'tap "datawire/blackbird"  # [HAS_K8S]\n' > "${BATS_TEST_TMPDIR}/Brewfile"
+  unset HAS_K8S
+  run _brewfile_parse_section tap "${BATS_TEST_TMPDIR}/Brewfile"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+# ── _brewfile_parse_inactive ──────────────────────────────────────────────────
+
+@test "_brewfile_parse_inactive brew: returns formula when capability is inactive" {
+  printf 'brew "postgresql@14"  # [HAS_DEVTOOLS]\n' > "${BATS_TEST_TMPDIR}/Brewfile"
+  unset HAS_DEVTOOLS
+  run _brewfile_parse_inactive brew "${BATS_TEST_TMPDIR}/Brewfile"
+  [ "$status" -eq 0 ]
+  [ "$output" = "postgresql@14" ]
+}
+
+@test "_brewfile_parse_inactive brew: excludes formula when capability is active" {
+  printf 'brew "postgresql@14"  # [HAS_DEVTOOLS]\n' > "${BATS_TEST_TMPDIR}/Brewfile"
+  export HAS_DEVTOOLS=1
+  run _brewfile_parse_inactive brew "${BATS_TEST_TMPDIR}/Brewfile"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "_brewfile_parse_inactive brew: excludes untagged formula" {
+  printf 'brew "git"\n' > "${BATS_TEST_TMPDIR}/Brewfile"
+  run _brewfile_parse_inactive brew "${BATS_TEST_TMPDIR}/Brewfile"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "_brewfile_parse_inactive cask: returns cask when capability is inactive" {
+  printf 'cask "lens"  # [HAS_K8S]\n' > "${BATS_TEST_TMPDIR}/Brewfile"
+  unset HAS_K8S
+  run _brewfile_parse_inactive cask "${BATS_TEST_TMPDIR}/Brewfile"
+  [ "$status" -eq 0 ]
+  [ "$output" = "lens" ]
+}
+
+@test "_brewfile_parse_inactive tap: returns tap when capability is inactive" {
+  printf 'tap "datawire/blackbird"  # [HAS_K8S]\n' > "${BATS_TEST_TMPDIR}/Brewfile"
+  unset HAS_K8S
+  run _brewfile_parse_inactive tap "${BATS_TEST_TMPDIR}/Brewfile"
+  [ "$status" -eq 0 ]
+  [ "$output" = "datawire/blackbird" ]
+}
