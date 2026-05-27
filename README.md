@@ -5,6 +5,121 @@
 
 Personal development environment bootstrap for macOS, Linux (Ubuntu), and Windows/WSL.
 
+## What This Does
+
+Running `setup_env.sh -t setup` on a fresh machine:
+
+- Creates `~/git-repos/personal/` and clones related repos
+- Installs all tools defined in `Brewfile` (via Homebrew)
+- Symlinks dotfiles from this repo into `$HOME` (`.zshrc`, `.vimrc`, `.tmux.conf`, `.gitconfig_*`, etc.)
+- Symlinks Claude Code and Cursor config from the `ai-config` repo into `~/.claude/` and `~/.cursor/`
+- Installs Oh-My-Zsh, Powerlevel10k, tpm (tmux plugins), pyenv, rbenv, and Ansible virtualenv
+- Sets zsh as the default shell
+- Applies macOS system defaults (`.osx.sh`)
+
+## Prerequisites
+
+**macOS:**
+
+- Xcode Command Line Tools: `xcode-select --install`
+- SSH key configured for GitHub (needed to clone via `git@github.com:...`)
+
+**Linux (Ubuntu 24.04):**
+
+- `sudo apt-get install -y git curl`
+- SSH key configured for GitHub
+
+**All platforms:**
+
+- This repo cloned to `~/git-repos/personal/dotfiles` — the path is hardcoded in `lib/constants.sh`
+- The companion `ai-config` repo at `~/git-repos/personal/ai-config` (Claude Code and Cursor config live there)
+
+## Getting Started
+
+### 1. Fork and customize
+
+This is a personal dotfiles repo. Before using it on your own machine:
+
+1. Fork the repo on GitHub
+2. Add your machine's hostname to `config/profiles.sh`:
+
+```bash
+declare -A PROFILE_MAP=(
+  [my-macbook]="personal_laptop"   # ← add your hostname
+  ...
+)
+```
+
+See [Machine Profiles](#machine-profiles) for available profiles and their capabilities.
+
+### 2. Clone to the required path
+
+```bash
+mkdir -p ~/git-repos/personal
+git clone git@github.com:<your-fork>/dotfiles.git ~/git-repos/personal/dotfiles
+cd ~/git-repos/personal/dotfiles
+```
+
+> **Note:** The path `~/git-repos/personal/dotfiles` is required. `lib/constants.sh` hardcodes this location.
+
+### 3. (Optional) Set up machine-local config
+
+Copy the example and add secrets/overrides that should not be committed:
+
+```bash
+cp config/local.sh.example config/local.sh
+```
+
+At minimum, set `GITHUB_PAT` if you want the GitHub MCP server configured automatically (see [Claude Code Integration](#claude-code-integration)).
+
+### 4. Bootstrap and run setup
+
+**macOS:**
+
+```bash
+# One-time: installs Homebrew and bash 5
+./scripts/bootstrap_mac.sh
+
+# Full setup (installs everything)
+./setup_env.sh -t setup --brew-install --mas-install
+```
+
+**Linux (Ubuntu):**
+
+```bash
+# One-time: installs Homebrew prerequisites + Homebrew
+./scripts/bootstrap_linux.sh
+
+# Full setup
+./setup_env.sh -t setup
+```
+
+### 5. Post-setup
+
+```bash
+# Install git hooks (required once per checkout)
+make install-hooks
+
+# Restart your shell to pick up the new config
+exec zsh
+```
+
+### Subsequent machines
+
+On a machine where the repo is already cloned (e.g. synced from another workstation), just run:
+
+```bash
+./setup_env.sh -t setup --brew-install
+```
+
+### Keeping up to date
+
+```bash
+./setup_env.sh -t update
+```
+
+This updates Homebrew, apt/snap packages, pip, Ruby gems, Mac App Store apps, and Claude plugins in one pass. See [Update Log](#update-log-dotfiles-updatelog) for the output format.
+
 ## Quick Start (Fresh Mac)
 
 ```bash
@@ -212,11 +327,11 @@ Dotfiles live at the repo root. `.claude/` and `.cursor/` live in the ai-config 
 ## Windows / WSL Setup
 
 1. Windows 10 Pro or later (required for containers and WSL)
-2. Install [Boxstarter](https://boxstarter.org/) using the command in `windows_boxstarter.ps1`
-3. Clone this repo (recommended: [Sourcetree](https://www.sourcetreeapp.com/))
-4. Run `powershell/setup_windows.ps1` to install Windows programs and services
-5. Install Ubuntu from the Microsoft Store
-6. Run `./setup_env.sh -t setup` inside WSL
+2. Enable WSL2: `wsl --install` in an elevated PowerShell terminal
+3. Install Ubuntu from the Microsoft Store (or `wsl --install -d Ubuntu`)
+4. Clone this repo into WSL: `git clone git@github.com:<your-fork>/dotfiles.git ~/git-repos/personal/dotfiles`
+5. Run `powershell/setup_windows.ps1` in an elevated PowerShell terminal to set up native Windows tooling (Chocolatey, Claude Code, Cursor, symlinks into `~/.claude/` and `~/.cursor/`)
+6. Inside WSL, run `./setup_env.sh -t setup`
 
 ## Claude Code Integration
 
