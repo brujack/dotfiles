@@ -121,6 +121,8 @@ rm ~/.virtualenvs/ansible && ./setup_env.sh -t ansible
 dotfiles/
 ├── setup_env.sh              # Main entry point — sources lib/, dispatches workflows
 ├── Brewfile                  # Homebrew bundle manifest (100+ formulae/casks)
+├── Brewfile.devtools         # Dev-tools-only Brewfile subset
+├── Brewfile.gui              # GUI-only Brewfile subset
 ├── config/
 │   └── profiles.sh           # hostname → profile map; edit here to add a new machine
 ├── lib/
@@ -148,11 +150,16 @@ dotfiles/
 ├── .p10k.zsh                 # Powerlevel10k prompt config
 ├── .gitconfig_mac            # Git config for macOS
 ├── .gitconfig_linux          # Git config for Linux
+├── .gitconfig_windows        # Git config for Windows
 ├── .config/.zshrc.d/         # Modular zsh config (7 numbered files)
 ├── .claude/                  # Claude Code config (symlinked into ~/.claude)
 ├── .cursor/User/             # Cursor settings (symlinked into Cursor User dir)
 ├── docs/
-│   ├── adr/                  # Architectural Decision Records (cross-cutting decisions) → [index](docs/adr/README.md)
+│   ├── adr/                  # Architectural Decision Records → [index](docs/adr/README.md)
+│   ├── claude-code-new-features/  # Weekly Claude Code feature digests
+│   ├── anthropic-new-features/    # Weekly Anthropic & Claude API digests
+│   ├── cursor/               # Cursor specs and plans
+│   ├── knowledge/            # Reference material (architecture, domain docs)
 │   └── superpowers/          # Design specs and implementation plans → [index](docs/superpowers/README.md)
 ├── tests/
 │   ├── setup_env/            # BATS tests (unit, profiles, install_guards, etc.)
