@@ -331,13 +331,17 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 #### Bash
 
-- **Status: advisory only — removed from auto-merge gate.** The `bash-coverage` job still runs (for visibility) but is no longer in `auto-merge needs:`. It was blocking PRs needlessly since kcov produces no data in GH Actions. Re-add to `needs:` once the coverage tooling is fixed (see Future path below).
-- **`make coverage`** runs kcov locally and reports per-file percentages. Works on macOS and Linux VMs where kcov is installed (`brew install kcov`).
-- **Per-file floors defined** (not yet enforced): 90% for `setup_env.sh`, `constants.sh`, `detect_env.sh`, `helpers.sh`, `workflows.sh`, `update_summary.sh`, `developer.sh`; 75% for `linux_shared.sh`, `linux_ubuntu.sh`, `macos.sh`.
-- **Do not retry kcov or bashcov in GitHub Actions** — both are confirmed broken:
-  - **kcov**: ptrace mechanism fails in GH Actions regardless of security settings. Tested: `ptrace_scope=0`, Docker container with `seccomp=unconfined`, `--cap-add SYS_PTRACE`, and `--privileged`. In all cases kcov runs the tests but produces no coverage data and no `index.json`. Root cause: kcov cannot trace bats' test subshells in the GH Actions environment.
-  - **bashcov**: incompatible with bats-core. bats hardcodes UUID `608a9069-2672-4fa2-a0e1-2823af783b95` in its temp file paths; bashcov's LINENO parser chokes on it and aborts with no coverage data.
-- **Future path**: a custom `BASH_ENV` + DEBUG trap tracer (no ptrace required) is the correct approach for CI bash coverage.
+- **Overall: 83%** (measured 2026-05-27 across 570 BATS tests using `make bash-coverage`)
+- **`make bash-coverage`** measures coverage via `BASH_ENV` + PS4 xtrace tracer (`scripts/run-bash-coverage.sh`). Runs all bats tests with xtrace active; filters trace output through a named pipe to keep disk usage small (~200K lines vs ~33M raw).
+- **`make push-bash-coverage`** runs `bash-coverage`, generates `coverage/bash.json` in shields.io format, and pushes it to the `coverage-data` branch. The README badge pulls from that branch.
+- **Cron job (manual install)**: `(crontab -l 2>/dev/null; echo "0 2 * * * cd ~/git-repos/personal/dotfiles && make push-bash-coverage >> ~/.dotfiles-coverage.log 2>&1") | crontab -`
+- **Per-file floors** (not yet enforced): 90% for `setup_env.sh`, `constants.sh`, `detect_env.sh`, `helpers.sh`, `workflows.sh`, `update_summary.sh`, `developer.sh`; 75% for `linux_shared.sh`, `linux_ubuntu.sh`, `macos.sh`.
+- **Status: advisory only — not gated in CI** (kcov/bashcov both fail in GH Actions; xtrace approach is macOS-only because it requires running the full bats suite locally).
+- **Do not retry kcov or bashcov** — both confirmed broken:
+  - **kcov**: works for direct bash scripts but cannot trace scripts sourced through bats; bats's test subshells are not captured. No data produced even locally.
+  - **bashcov**: incompatible with bats-core. bats hardcodes UUID `608a9069-2672-4fa2-a0e1-2823af783b95` in its temp file paths; bashcov's LINENO parser chokes on it.
+  - **BASH_ENV + DEBUG trap**: blocked by bats-core overriding the DEBUG trap with its own `bats_debug_trap`. PS4 xtrace (the implemented approach) works because bats does not clear `set -x` or `BASH_XTRACEFD`.
+- **Coverable lines**: non-blank, non-comment lines only; structural keywords (`fi`, `done`, `}`, `else`, `then`, `do`, `esac`, `;;`) excluded — these are not emitted by bash xtrace and counting them would lower coverage artificially.
 
 ### Test Seams
 

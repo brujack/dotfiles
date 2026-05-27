@@ -1,18 +1,20 @@
 BATS := $(shell command -v bats 2>/dev/null)
 SHELLCHECK := $(shell command -v shellcheck 2>/dev/null)
 KCOV := $(shell command -v kcov 2>/dev/null)
-SHELL_FILES := $(shell find . -name "*.sh" -not -path "*/node_modules/*")
+SHELL_FILES := $(shell find . -name "*.sh" -not -path "*/node_modules/*" -not -path "*/coverage/*")
 
-.PHONY: test test-unit lint coverage install-hooks help changelog
+.PHONY: test test-unit lint coverage bash-coverage push-bash-coverage install-hooks help changelog
 
 help:
 	@printf "Available targets:\n"
-	@printf "  make test       Run all BATS tests\n"
-	@printf "  make test-unit  Run unit tests only\n"
-	@printf "  make lint       Check bash/zsh syntax + ShellCheck all .sh files\n"
-	@printf "  make coverage   Run kcov coverage gate (requires kcov; CI-enforced)\n"
-	@printf "  make install-hooks Install pre-commit and pre-push hooks (run once per checkout)\n"
-	@printf "  make help       Show this help\n"
+	@printf "  make test              Run all BATS tests\n"
+	@printf "  make test-unit         Run unit tests only\n"
+	@printf "  make lint              Check bash/zsh syntax + ShellCheck all .sh files\n"
+	@printf "  make coverage          Run kcov coverage gate (requires kcov; CI-enforced)\n"
+	@printf "  make bash-coverage     Measure bash line coverage via PS4 xtrace tracer\n"
+	@printf "  make push-bash-coverage  Run bash-coverage and push badge JSON to coverage-data branch\n"
+	@printf "  make install-hooks     Install pre-commit and pre-push hooks (run once per checkout)\n"
+	@printf "  make help              Show this help\n"
 
 lint:
 	@failed=0; \
@@ -39,6 +41,18 @@ ifeq ($(KCOV),)
 else
 	@bash scripts/run-coverage.sh
 endif
+
+bash-coverage:
+ifndef BATS
+	$(error bats not found. Install: brew install bats-core (macOS) or sudo apt-get install bats (Linux))
+endif
+	@bash scripts/run-bash-coverage.sh
+
+push-bash-coverage:
+ifndef BATS
+	$(error bats not found. Install: brew install bats-core (macOS) or sudo apt-get install bats (Linux))
+endif
+	@bash scripts/push-bash-coverage.sh
 
 install-hooks:
 	ln -sf "$(shell pwd)/scripts/pre-commit-hook.sh" .git/hooks/pre-commit

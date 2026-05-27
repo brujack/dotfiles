@@ -51,6 +51,7 @@ brew "jpeg"
 brew "jq"
 brew "k3d"                                   # [HAS_K8S]
 brew "k9s"                                   # [HAS_K8S]
+brew "kcov"                                   # [HAS_DEVTOOLS]
 brew "keychain"
 brew "kind"                                  # [HAS_K8S]
 brew "kops"                                  # [HAS_K8S]
