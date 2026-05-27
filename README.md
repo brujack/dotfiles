@@ -3,7 +3,7 @@
 ![bash coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/brujack/dotfiles/coverage-data/bash.json)
 ![PowerShell coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/brujack/dotfiles/coverage-data/powershell.json)
 
-Personal development environment bootstrap for macOS, Linux (Ubuntu/RHEL), and Windows/WSL.
+Personal development environment bootstrap for macOS, Linux (Ubuntu), and Windows/WSL.
 
 ## Quick Start (Fresh Mac)
 
@@ -31,15 +31,15 @@ Personal development environment bootstrap for macOS, Linux (Ubuntu/RHEL), and W
 ./setup_env.sh -t <type>
 ```
 
-| Type             | Description                                                                                                                                                       |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `setup_user`     | Sets up user environment: configs, symlinks, shell, directory structure                                                                                           |
-| `setup`          | Full machine setup (`setup_user` + all apps and tools). Flags: `--brew-install`, `--mas-install`                                                                  |
-| `developer`      | Dev packages + Python/Ansible virtualenv                                                                                                                          |
-| `ansible`        | Ansible venv only — typically used after a Python update                                                                                                          |
-| `update`         | Update all packages (brew, apt/dnf/yum, pip, mas, Claude plugins, etc.). Prints a structured summary at the end; each run is appended to `~/.dotfiles-update.log` |
-| `doctor`         | Active health checks: symlinks, tool presence, credential dir permissions, version drift. Exits non-zero on any failure                                           |
-| `check-versions` | Compare pinned tool versions in `lib/constants.sh` against latest GitHub releases. Exits 1 if any are outdated; `--update` prompts to apply each update in-place  |
+| Type             | Description                                                                                                                                                      |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `setup_user`     | Sets up user environment: configs, symlinks, shell, directory structure                                                                                          |
+| `setup`          | Full machine setup (`setup_user` + all apps and tools). Flags: `--brew-install`, `--mas-install`                                                                 |
+| `developer`      | Dev packages + Python/Ansible virtualenv                                                                                                                         |
+| `ansible`        | Ansible venv only — typically used after a Python update                                                                                                         |
+| `update`         | Update all packages (brew, apt/snap, pip, mas, Claude plugins, etc.). Prints a structured summary at the end; each run is appended to `~/.dotfiles-update.log`   |
+| `doctor`         | Active health checks: symlinks, tool presence, credential dir permissions, version drift. Exits non-zero on any failure                                          |
+| `check-versions` | Compare pinned tool versions in `lib/constants.sh` against latest GitHub releases. Exits 1 if any are outdated; `--update` prompts to apply each update in-place |
 
 **Options:**
 
@@ -51,7 +51,7 @@ Personal development environment bootstrap for macOS, Linux (Ubuntu/RHEL), and W
 - `--gems-only` — update Ruby gems only (with `-t update`)
 - `--mas-only` — update Mac App Store apps only (with `-t update`)
 - `--claude-only` — update Claude plugins only (with `-t update`)
-- `--pkgs-only` — update Linux system packages only (apt/snap/dnf/yum) (with `-t update`)
+- `--pkgs-only` — update Linux system packages only (apt/snap) (with `-t update`)
 - `--update` — (check-versions only) interactively prompt to update each outdated pin in `lib/constants.sh`
 
 Flags are additive: `./setup_env.sh -t update --brew-only --pip-only` runs only brew and pip.
@@ -67,8 +67,6 @@ Each `update` run appends a timestamped entry to `~/.dotfiles-update.log`. The e
 [OK]   softwareupdate   2 update(s) (Xcode-16.3, macOS Sequoia 15.4.1)
 [OK]   apt              14 package(s) (curl 7.88.1, git 2.44.0, ...)
 [OK]   snap             2 package(s) (firefox 124.0, chromium 123.0)
-[SKIP] dnf              not applicable
-[SKIP] yum              not applicable
 [OK]   mas              1 app(s) (Slack (4.42))
 [OK]   claude           2 plugin(s) updated (superpowers: 5.0.8, context7: 1.2.0)
 [OK]   pip              3 package(s) (ansible, boto3, requests)
@@ -130,7 +128,8 @@ dotfiles/
 │   ├── helpers.sh            # Logging, safe_link, install guards, brew helpers
 │   ├── detect_env.sh         # OS/version detection + profile/capability resolution
 │   ├── macos.sh              # macOS-specific install functions
-│   ├── linux.sh              # Linux-specific install functions
+│   ├── linux_shared.sh       # Shared Linux install functions (git, zsh, bats)
+│   ├── linux_ubuntu.sh       # Ubuntu-specific install functions
 │   ├── developer.sh          # Cross-platform dev tooling (Ruby, Python, Ansible, etc.)
 │   ├── update_summary.sh     # Update run tracking and summary reporting
 │   └── workflows.sh          # Top-level workflow functions dispatched by setup_env.sh
