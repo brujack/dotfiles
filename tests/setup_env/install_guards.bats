@@ -664,3 +664,86 @@ teardown() {
   [[ "$(ls -ld "${_home}/.gcloud_creds")" == drwx------* ]]
   [[ "$(ls -ld "${_home}/.azure_creds")" == drwx------* ]]
 }
+
+# ── setup_claude_plugins ──────────────────────────────────────────────────────
+
+@test "setup_claude_plugins: claude not installed → returns 0 with skip message" {
+  local _clean_path
+  _clean_path="$(printf '%s' "${PATH}" | tr ':' '\n' | grep -v 'tests/mocks' | while read -r _dir; do
+    [[ -x "${_dir}/claude" ]] || printf '%s\n' "${_dir}"
+  done | tr '\n' ':' | sed 's/:$//')"
+  run bash -c "
+    export PATH='${_clean_path}'
+    export MOCK_CALLS_FILE='${BATS_TEST_TMPDIR}/mock_calls'
+    source '${REPO_ROOT}/setup_env.sh'
+    setup_claude_plugins
+  "
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"skipping plugin setup"* ]]
+}
+
+@test "setup_claude_plugins: plugin already installed → no install call" {
+  export MOCK_CLAUDE_PLUGINS_LIST_OUTPUT="superpowers@claude-plugins-official"
+  run setup_claude_plugins
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"already installed: superpowers@claude-plugins-official"* ]]
+  ! grep -q "claude plugins install superpowers@claude-plugins-official" "${MOCK_CALLS_FILE}"
+}
+
+@test "setup_claude_plugins: plugin not installed → claude plugins install called" {
+  export MOCK_CLAUDE_PLUGINS_LIST_OUTPUT=""
+  run setup_claude_plugins
+  [ "${status}" -eq 0 ]
+  grep -q "claude plugins install superpowers@claude-plugins-official" "${MOCK_CALLS_FILE}"
+}
+
+# ── run_setup_user (mid-chain failure propagation) ────────────────────────────
+
+@test "run_setup_user: setup_ai_config fails → returns non-zero, setup_dotfile_symlinks not called" {
+  local _home="${BATS_TEST_TMPDIR}/home"
+  local _git_repos="${BATS_TEST_TMPDIR}/git-repos/personal"
+  mkdir -p "${_home}" "${_git_repos}"
+  run bash -c "
+    export PATH='${PATH}'
+    export HOME='${_home}'
+    export PERSONAL_GITREPOS='${_git_repos}'
+    export DOTFILES='dotfiles'
+    export LINUX=1
+    unset MACOS UBUNTU
+    export MOCK_CALLS_FILE='${BATS_TEST_TMPDIR}/mock_calls'
+    source '${REPO_ROOT}/setup_env.sh'
+    clone_or_update_dotfiles() { return 0; }
+    setup_ai_config() { return 1; }
+    setup_dotfile_symlinks() { printf 'DOTFILES_CALLED\n'; return 0; }
+    run_setup_user
+  "
+  [ "${status}" -ne 0 ]
+  ! [[ "${output}" == *"DOTFILES_CALLED"* ]]
+}
+
+@test "run_setup_user: setup_claude_mcp fails → returns non-zero, setup_claude_plugins not called" {
+  local _home="${BATS_TEST_TMPDIR}/home"
+  local _git_repos="${BATS_TEST_TMPDIR}/git-repos/personal"
+  mkdir -p "${_home}" "${_git_repos}"
+  run bash -c "
+    export PATH='${PATH}'
+    export HOME='${_home}'
+    export PERSONAL_GITREPOS='${_git_repos}'
+    export DOTFILES='dotfiles'
+    export LINUX=1
+    unset MACOS UBUNTU
+    export MOCK_CALLS_FILE='${BATS_TEST_TMPDIR}/mock_calls'
+    source '${REPO_ROOT}/setup_env.sh'
+    install_bats() { return 0; }
+    clone_or_update_dotfiles() { return 0; }
+    setup_ai_config() { return 0; }
+    setup_dotfile_symlinks() { return 0; }
+    install_terraform_skill() { return 0; }
+    setup_zsh_as_default_shell() { return 0; }
+    setup_claude_mcp() { return 1; }
+    setup_claude_plugins() { printf 'PLUGINS_CALLED\n'; return 0; }
+    run_setup_user
+  "
+  [ "${status}" -ne 0 ]
+  ! [[ "${output}" == *"PLUGINS_CALLED"* ]]
+}
