@@ -7,9 +7,5 @@ actions:
     skip_if_exists: "{{ user.home_dir }}/.oh-my-zsh"
 
   - action: git.clone
-    repo_url: https://github.com/romkatv/powerlevel10k.git
-    directory: "{{ user.home_dir }}/.oh-my-zsh/custom/themes/powerlevel10k"
-
-  - action: git.clone
     repo_url: https://github.com/tmux-plugins/tpm
     directory: "{{ user.home_dir }}/.tmux/plugins/tpm"

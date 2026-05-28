@@ -704,7 +704,7 @@ teardown() {
   mkdir -p "${TMPDIR_TEST}/.ssh" "${TMPDIR_TEST}/.config"
   # Create a real file for each expected link target, then symlink it
   local _links=(
-    ".zshrc" ".zprofile" ".vimrc" ".tmux.conf" ".p10k.zsh" ".gitconfig"
+    ".zshrc" ".zprofile" ".vimrc" ".tmux.conf" ".gitconfig"
   )
   local _f
   for _f in "${_links[@]}"; do

@@ -38,7 +38,6 @@ _make_fake_dotfiles() {
   touch "${FAKE_DOTFILES_SRC}/.gitconfig_mac_gitlab"
   touch "${FAKE_DOTFILES_SRC}/.gitconfig_linux_gitlab"
   touch "${FAKE_DOTFILES_SRC}/.vimrc"
-  touch "${FAKE_DOTFILES_SRC}/.p10k.zsh"
   touch "${FAKE_DOTFILES_SRC}/.tmux.conf"
   touch "${FAKE_DOTFILES_SRC}/scripts"
   touch "${FAKE_DOTFILES_SRC}/bruce.zsh-theme"

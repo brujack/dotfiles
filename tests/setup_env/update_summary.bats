@@ -325,7 +325,7 @@ firefox 124.0"
   printf "OK\n" > "${_UPDATE_TMPDIR}/status_brew"
   printf "2 formulae (git 2.45.0, wget 1.22.0)\n" > "${_UPDATE_TMPDIR}/result_brew"
   local _s
-  for _s in softwareupdate mas claude pip gems oh-my-zsh p10k tpm tfenv cheat.sh; do
+  for _s in softwareupdate mas claude pip gems oh-my-zsh tpm tfenv cheat.sh; do
     printf "SKIP\n" > "${_UPDATE_TMPDIR}/status_${_s}"
     printf "not run\n" > "${_UPDATE_TMPDIR}/result_${_s}"
   done
@@ -340,7 +340,7 @@ firefox 124.0"
   printf "FAIL\n" > "${_UPDATE_TMPDIR}/status_claude"
   printf "exit 1 — see output above\n" > "${_UPDATE_TMPDIR}/result_claude"
   local _s
-  for _s in brew softwareupdate mas pip gems oh-my-zsh p10k tpm tfenv cheat.sh; do
+  for _s in brew softwareupdate mas pip gems oh-my-zsh tpm tfenv cheat.sh; do
     printf "OK\n" > "${_UPDATE_TMPDIR}/status_${_s}"
     printf "no changes\n" > "${_UPDATE_TMPDIR}/result_${_s}"
   done
@@ -354,7 +354,7 @@ firefox 124.0"
   printf "SKIP\n" > "${_UPDATE_TMPDIR}/status_mas"
   printf "%s\n" "--brew-only flag set" > "${_UPDATE_TMPDIR}/result_mas"
   local _s
-  for _s in brew softwareupdate claude pip gems oh-my-zsh p10k tpm tfenv cheat.sh; do
+  for _s in brew softwareupdate claude pip gems oh-my-zsh tpm tfenv cheat.sh; do
     printf "OK\n" > "${_UPDATE_TMPDIR}/status_${_s}"
     printf "no changes\n" > "${_UPDATE_TMPDIR}/result_${_s}"
   done
@@ -372,12 +372,12 @@ firefox 124.0"
   printf "SKIP\n" > "${_UPDATE_TMPDIR}/status_mas"
   printf "not needed\n" > "${_UPDATE_TMPDIR}/result_mas"
   local _s
-  for _s in softwareupdate pip gems oh-my-zsh p10k tpm tfenv cheat.sh; do
+  for _s in softwareupdate pip gems oh-my-zsh tpm tfenv cheat.sh; do
     printf "OK\n" > "${_UPDATE_TMPDIR}/status_${_s}"
     printf "no changes\n" > "${_UPDATE_TMPDIR}/result_${_s}"
   done
   run _update_summary
-  [[ "$output" == *"9 OK"* ]]
+  [[ "$output" == *"8 OK"* ]]
   [[ "$output" == *"1 failed"* ]]
   [[ "$output" == *"1 skipped"* ]]
 }
@@ -385,7 +385,7 @@ firefox 124.0"
 @test "_update_summary creates log file when missing" {
   rm -f "${UPDATE_LOG_PATH}"
   local _s
-  for _s in brew softwareupdate mas claude pip gems oh-my-zsh p10k tpm tfenv cheat.sh; do
+  for _s in brew softwareupdate mas claude pip gems oh-my-zsh tpm tfenv cheat.sh; do
     printf "OK\n" > "${_UPDATE_TMPDIR}/status_${_s}"
     printf "no changes\n" > "${_UPDATE_TMPDIR}/result_${_s}"
   done
@@ -396,7 +396,7 @@ firefox 124.0"
 @test "_update_summary appends to existing log file" {
   printf "previous run\n" > "${UPDATE_LOG_PATH}"
   local _s
-  for _s in brew softwareupdate mas claude pip gems oh-my-zsh p10k tpm tfenv cheat.sh; do
+  for _s in brew softwareupdate mas claude pip gems oh-my-zsh tpm tfenv cheat.sh; do
     printf "OK\n" > "${_UPDATE_TMPDIR}/status_${_s}"
     printf "no changes\n" > "${_UPDATE_TMPDIR}/result_${_s}"
   done
@@ -407,7 +407,7 @@ firefox 124.0"
 
 @test "_update_summary writes separator before entry in log" {
   local _s
-  for _s in brew softwareupdate mas claude pip gems oh-my-zsh p10k tpm tfenv cheat.sh; do
+  for _s in brew softwareupdate mas claude pip gems oh-my-zsh tpm tfenv cheat.sh; do
     printf "OK\n" > "${_UPDATE_TMPDIR}/status_${_s}"
     printf "no changes\n" > "${_UPDATE_TMPDIR}/result_${_s}"
   done
@@ -419,7 +419,7 @@ firefox 124.0"
   # Regression: group exit code was last-command exit (1 when _detail_output empty),
   # causing false "Could not write" warning even though the log write succeeded.
   local _s
-  for _s in brew softwareupdate mas claude pip gems oh-my-zsh p10k tpm tfenv cheat.sh; do
+  for _s in brew softwareupdate mas claude pip gems oh-my-zsh tpm tfenv cheat.sh; do
     printf "OK\n" > "${_UPDATE_TMPDIR}/status_${_s}"
     printf "no changes\n" > "${_UPDATE_TMPDIR}/result_${_s}"
   done

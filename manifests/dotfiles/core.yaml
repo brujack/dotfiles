@@ -40,10 +40,6 @@ actions:
     target: "{{ user.home_dir }}/.vimrc"
 
   - action: file.link
-    source: "{{ user.home_dir }}/git-repos/personal/dotfiles/.p10k.zsh"
-    target: "{{ user.home_dir }}/.p10k.zsh"
-
-  - action: file.link
     source: "{{ user.home_dir }}/git-repos/personal/dotfiles/.tmux.conf"
     target: "{{ user.home_dir }}/.tmux.conf"
 
