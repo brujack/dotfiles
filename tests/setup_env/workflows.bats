@@ -1039,3 +1039,110 @@ setup_constants_copy() {
   _any_update_flag || _rc=$?
   [ "${_rc}" -ne 0 ]
 }
+
+# ── run_update — optional git-based tools (installed paths) ──────────────────
+
+@test "run_update updates tfenv when ~/.tfenv exists" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  mkdir -p "${HOME}/.tfenv"
+  run_update
+  grep -q "^git pull$" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_update skips tfenv when ~/.tfenv does not exist" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  run_update
+  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_tfenv"
+}
+
+@test "run_update updates oh-my-zsh when ~/.oh-my-zsh exists" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  mkdir -p "${HOME}/.oh-my-zsh"
+  run_update
+  grep -q "^git pull$" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_update skips oh-my-zsh when ~/.oh-my-zsh does not exist" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  run_update
+  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_oh-my-zsh"
+}
+
+@test "run_update updates p10k when powerlevel10k dir exists" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  mkdir -p "${HOME}/.oh-my-zsh/custom/themes/powerlevel10k"
+  run_update
+  grep -q "^git pull$" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_update skips p10k when powerlevel10k dir does not exist" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  run_update
+  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_p10k"
+}
+
+@test "run_update updates tpm when ~/.tmux/plugins/tpm exists" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  mkdir -p "${HOME}/.tmux/plugins/tpm"
+  run_update
+  grep -q "^git pull$" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_update skips tpm when ~/.tmux/plugins/tpm does not exist" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  run_update
+  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_tpm"
+}
+
+@test "run_update updates cheat.sh when ~/bin/cht.sh exists" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  mkdir -p "${HOME}/bin"
+  touch "${HOME}/bin/cht.sh"
+  run_update
+  grep -q "curl https://cht.sh/:cht.sh" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_update skips cheat.sh when ~/bin/cht.sh does not exist" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  run_update
+  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_cheat.sh"
+}
+
+@test "run_update updates cheat.sh tab completion when ~/.zsh.d/_cht exists" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  mkdir -p "${HOME}/.zsh.d"
+  touch "${HOME}/.zsh.d/_cht"
+  run_update
+  grep -q "curl https://cheat.sh/:zsh" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_update updates zsh-autosuggestions when plugin dir exists" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  mkdir -p "${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
+  run_update
+  grep -q "^git pull$" "${MOCK_CALLS_FILE}"
+}
