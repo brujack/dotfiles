@@ -85,7 +85,10 @@ teardown() {
   mkdir -p "${HOME}/.cargo/bin"
   cp "${BATS_TEST_DIRNAME}/../../tests/mocks/rustup" "${HOME}/.cargo/bin/rustup"
   chmod +x "${HOME}/.cargo/bin/rustup"
-  # cargo-nextest mock is in PATH via load_mocks
+  # Create cargo-nextest stub in .cargo/bin so command -v finds it
+  printf '#!/usr/bin/env bash\n' > "${HOME}/.cargo/bin/cargo-nextest"
+  chmod +x "${HOME}/.cargo/bin/cargo-nextest"
+  export PATH="${HOME}/.cargo/bin:${PATH}"
   run update_rust
   [ "$status" -eq 0 ]
   grep -q "get.nexte.st" "${MOCK_CALLS_FILE}"

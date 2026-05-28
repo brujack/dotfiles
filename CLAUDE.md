@@ -440,7 +440,6 @@ Available mock env vars:
 | `MOCK_CLAUDE_EXIT` | Exit code for `claude` (default: 0); applies to all `claude` calls including `-p` |
 | `MOCK_CLAUDE_STDOUT` | Content printed to stdout by `claude -p` mock (default: `## New Features\n- Mock feature added`); used by scripts that call `claude -p "prompt"` to summarize content |
 | `MOCK_CLAUDE_PLUGINS_LIST_OUTPUT` | Lines printed to stdout by `claude plugins list` mock (default: empty) |
-| `MOCK_CARGO_NEXTEST_EXIT` | Exit code for `cargo-nextest` (default: 0) |
 
 **Pass-through mocks:** `ln`, `chmod`, `mv`, `cp`, and `tee` call the real binary (`/bin/cmd "$@" 2>/dev/null || true`) so tests that assert actual filesystem state (permissions, file existence, symlinks, captured output files) work correctly. Set the corresponding exit var to a non-zero value to simulate failure instead. Any mock that needs to support tests checking real filesystem state must use this pattern — a log-only mock will cause silent assertion failures.
 
