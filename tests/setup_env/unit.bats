@@ -197,6 +197,20 @@ teardown() {
   [[ "$output" != *"Homebrew not found"* ]]
 }
 
+@test "setup_env.sh -t doctor bypasses brew prereq when brew is missing" {
+  load_mocks
+  export MOCK_WHICH_MISSING=brew
+  run bash "${BATS_TEST_DIRNAME}/../../setup_env.sh" -t doctor
+  [[ "$output" != *"Homebrew not found"* ]]
+}
+
+@test "setup_env.sh -t check-versions bypasses brew prereq when brew is missing" {
+  load_mocks
+  export MOCK_WHICH_MISSING=brew
+  run bash "${BATS_TEST_DIRNAME}/../../setup_env.sh" -t check-versions
+  [[ "$output" != *"Homebrew not found"* ]]
+}
+
 @test "setup_env.sh contains bash version prerequisite check" {
   run grep -q 'BASH_VERSINFO' "${BATS_TEST_DIRNAME}/../../setup_env.sh"
   [ "$status" -eq 0 ]
