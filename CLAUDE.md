@@ -349,6 +349,7 @@ Functions that operate on specific file paths use override env vars to redirect 
 
 | Seam                         | Used by                                                              | Effect                                                                             |
 | ---------------------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `_OVERRIDE_BASH_MAJOR`       | `setup_env.sh` preamble                                              | Overrides `BASH_VERSINFO[0]` (read-only built-in) to test the bash version < 5 error path |
 | `_OVERRIDE_BREWFILE_PATH`    | `_update_check_brewfile_drift`                                       | Path to Brewfile; defaults to `${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile`          |
 | `_OVERRIDE_CONSTANTS_PATH`   | `_update_version_pin()`                                              | Redirects to a temp copy of `lib/constants.sh`; defaults to real path when unset   |
 | `UPDATE_LOG_PATH`            | `_update_summary()`                                                  | Redirects log writes to a temp file in tests; defaults to `~/.dotfiles-update.log` |

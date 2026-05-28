@@ -216,6 +216,52 @@ teardown() {
   [ "$status" -eq 0 ]
 }
 
+@test "setup_env.sh exits 1 with bash version error on macOS" {
+  load_mocks
+  export _OVERRIDE_BASH_MAJOR=4
+  export MOCK_UNAME_S=Darwin
+  run bash "${BATS_TEST_DIRNAME}/../../setup_env.sh" --update
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"bash 5+ required"* ]]
+  [[ "$output" == *"bootstrap_mac.sh"* ]]
+}
+
+@test "setup_env.sh exits 1 with bash version error on Linux" {
+  load_mocks
+  export _OVERRIDE_BASH_MAJOR=4
+  export MOCK_UNAME_S=Linux
+  run bash "${BATS_TEST_DIRNAME}/../../setup_env.sh" --update
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"bash 5+ required"* ]]
+  [[ "$output" == *"bootstrap_linux.sh"* ]]
+}
+
+@test "setup_env.sh exits 1 with Homebrew error on macOS" {
+  load_mocks
+  export MOCK_WHICH_MISSING=brew
+  export MOCK_UNAME_S=Darwin
+  run bash "${BATS_TEST_DIRNAME}/../../setup_env.sh" --update
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Homebrew not found"* ]]
+  [[ "$output" == *"bootstrap_mac.sh"* ]]
+}
+
+@test "setup_env.sh exits 1 with Homebrew error on Linux" {
+  load_mocks
+  export MOCK_WHICH_MISSING=brew
+  export MOCK_UNAME_S=Linux
+  run bash "${BATS_TEST_DIRNAME}/../../setup_env.sh" --update
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Homebrew not found"* ]]
+  [[ "$output" == *"bootstrap_linux.sh"* ]]
+}
+
+@test "setup_env.sh calls usage when invoked with no arguments" {
+  run bash "${BATS_TEST_DIRNAME}/../../setup_env.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+}
+
 # ── lib/ source tests ─────────────────────────────────────────────────────────
 
 @test "lib/constants.sh sources without error" {
