@@ -411,6 +411,7 @@ Available mock env vars:
 | `MOCK_MAS_UPGRADE_OUTPUT` | Lines printed to stdout by `mas upgrade` mock (default: empty); use `==> Updated AppName (version)` lines to simulate updated apps |
 | `MOCK_TEE_EXIT` | Exit code for `tee` (default: 0); real `/usr/bin/tee` is called unless exit ≠ 0 |
 | `MOCK_GEM_EXIT` | Exit code for `gem` (default: 0) |
+| `MOCK_NPM_EXIT` | Exit code for `npm` (default: 0) |
 | `MOCK_SNAP_EXIT` | Exit code for `snap` (default: 0) |
 | `MOCK_SNAP_LIST_OUTPUT` | Lines printed to stdout by `snap list` mock (default: empty); include a header line as first line since awk skips `NR>1` |
 | `MOCK_NALA_EXIT` | Exit code for `nala` (default: 0) |
