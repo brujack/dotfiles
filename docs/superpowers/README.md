@@ -79,8 +79,14 @@ Master status index for all specs and implementation plans in this directory.
 
 Ideas approved for future specs, in no particular order:
 
-| Feature | Notes |
-| ------- | ----- |
+| Feature                         | Notes                                                                                                                |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| coverage-setup-env-preamble     | setup_env.sh Linux branches: bash-version check + brew-prereq error paths; 14 lines uncovered, ~4-6 tests            |
+| coverage-developer-gaps         | developer.sh error paths: update_rust/clone_personal_repos failures; 21 lines uncovered                              |
+| coverage-workflows-setup-chains | workflows.sh: setup_claude_plugins branches + run_setup_user mid-chain failure propagation                           |
+| coverage-workflows-update-flags | workflows.sh: run_update single-flag isolation (--brew-only, --pip-only, --gems-only, --mas-only)                    |
+| coverage-update-summary-gaps    | update_summary.sh: brewfile drift error paths, \_update_record_end case arms; 70 lines uncovered                     |
+| coverage-helpers-gaps           | helpers.sh: setup_dotfile_symlinks AI config loop arms, setup_credential_directories error paths; 87 lines uncovered |
 
 ---
 
