@@ -3,7 +3,7 @@
 # Prerequisite check — runs only when executed directly (not sourced by tests)
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
   _OS="$(uname -s)"
-  _BASH_MAJOR="${BASH_VERSINFO[0]:-0}"
+  _BASH_MAJOR="${_OVERRIDE_BASH_MAJOR:-${BASH_VERSINFO[0]:-0}}"
   _REQUIRES_BREW_PREREQ=1
 
   # Allow workflows that can run before Homebrew exists.
