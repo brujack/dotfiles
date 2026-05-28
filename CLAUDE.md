@@ -164,6 +164,7 @@ Do not use it to push directly to main/master — normal PR workflow still appli
 See `~/.claude/standards/shell.md` for the full shell coding standards. Dotfiles-specific notes:
 
 - **`env which` vs `command -v`:** `setup_env.sh` uses `which` (via `env which`) for the brew prerequisite check instead of `command -v` so that BATS tests can mock `which` through PATH injection. `command -v` is a shell builtin and ignores PATH mocks. Use `command -v` everywhere else.
+- **`setup_env.sh` prereq bypass tests — assert absence, not `status -eq 0`:** Tests for `-t doctor` and `-t check-versions` bypass paths (in `tests/setup_env/unit.bats`) assert `[[ "$output" != *"Homebrew not found"* ]]` without asserting `[ "$status" -eq 0 ]`. Reason: `--brew-install` terminates cleanly at line 78 (`exit 0`), but `-t doctor` / `-t check-versions` call `run_doctor` / `run_check_versions` whose exit varies with mock environment. Adding `status -eq 0` to the doctor/check-versions tests causes flaky failures.
 - **No `set -euo pipefail`** at top-level — conditional installs require non-zero exits to continue.
 - **Sourcing guard on every lib file:** All files under `lib/` that are tested must include `[[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0` near the top. When extracting functions into new lib files, add this guard explicitly — plan specs may omit it but the test harness requires it.
 
