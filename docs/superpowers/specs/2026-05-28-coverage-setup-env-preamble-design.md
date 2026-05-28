@@ -1,5 +1,7 @@
 # Coverage: setup_env.sh Preamble Branches
 
+> **Status: DONE** — implemented in PR #100 (2026-05-28)
+
 ## Context
 
 `setup_env.sh` has 14 uncovered lines (75% coverage vs 90% floor). All gaps are in
