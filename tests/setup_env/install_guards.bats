@@ -448,3 +448,219 @@ teardown() {
   [ "${status}" -eq 0 ]
   [ ! -L "${_home}/.claude/projects" ]
 }
+
+# ── setup_dotfile_symlinks: gitconfig symlinks ────────────────────────────────
+
+@test "setup_dotfile_symlinks: MACOS creates .gitconfig symlink" {
+  local _home="${BATS_TEST_TMPDIR}/home"
+  mkdir -p "${_home}"
+  export HOME="${_home}"
+  export PERSONAL_GITREPOS="${BATS_TEST_TMPDIR}/git-repos/personal"
+  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
+  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude" "${_OVERRIDE_AI_CONFIG_DIR}/.cursor"
+  export MACOS=1
+  unset LINUX
+
+  run setup_dotfile_symlinks
+  [ "${status}" -eq 0 ]
+  [ -L "${_home}/.gitconfig" ]
+}
+
+@test "setup_dotfile_symlinks: MACOS creates gitlab gitconfig when gitlab dir exists" {
+  local _home="${BATS_TEST_TMPDIR}/home"
+  mkdir -p "${_home}/git-repos/gitlab"
+  export HOME="${_home}"
+  export PERSONAL_GITREPOS="${BATS_TEST_TMPDIR}/git-repos/personal"
+  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
+  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude" "${_OVERRIDE_AI_CONFIG_DIR}/.cursor"
+  export MACOS=1
+  unset LINUX
+
+  run setup_dotfile_symlinks
+  [ "${status}" -eq 0 ]
+  [ -L "${_home}/git-repos/gitlab/.gitconfig" ]
+}
+
+@test "setup_dotfile_symlinks: MACOS skips gitlab gitconfig when gitlab dir absent" {
+  local _home="${BATS_TEST_TMPDIR}/home"
+  mkdir -p "${_home}"
+  export HOME="${_home}"
+  export PERSONAL_GITREPOS="${BATS_TEST_TMPDIR}/git-repos/personal"
+  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
+  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude" "${_OVERRIDE_AI_CONFIG_DIR}/.cursor"
+  export MACOS=1
+  unset LINUX
+
+  run setup_dotfile_symlinks
+  [ "${status}" -eq 0 ]
+  [ ! -L "${_home}/git-repos/gitlab/.gitconfig" ]
+}
+
+@test "setup_dotfile_symlinks: LINUX creates .gitconfig symlink" {
+  local _home="${BATS_TEST_TMPDIR}/home"
+  mkdir -p "${_home}"
+  export HOME="${_home}"
+  export PERSONAL_GITREPOS="${BATS_TEST_TMPDIR}/git-repos/personal"
+  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
+  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude" "${_OVERRIDE_AI_CONFIG_DIR}/.cursor"
+  export LINUX=1
+  unset MACOS
+
+  run setup_dotfile_symlinks
+  [ "${status}" -eq 0 ]
+  [ -L "${_home}/.gitconfig" ]
+}
+
+@test "setup_dotfile_symlinks: LINUX creates gitlab gitconfig with HAS_DEVTOOLS when gitlab dir exists" {
+  local _home="${BATS_TEST_TMPDIR}/home"
+  mkdir -p "${_home}/git-repos/gitlab"
+  export HOME="${_home}"
+  export PERSONAL_GITREPOS="${BATS_TEST_TMPDIR}/git-repos/personal"
+  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
+  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude" "${_OVERRIDE_AI_CONFIG_DIR}/.cursor"
+  export LINUX=1
+  export HAS_DEVTOOLS=1
+  unset MACOS
+
+  run setup_dotfile_symlinks
+  [ "${status}" -eq 0 ]
+  [ -L "${_home}/git-repos/gitlab/.gitconfig" ]
+}
+
+@test "setup_dotfile_symlinks: LINUX skips gitlab gitconfig without HAS_DEVTOOLS" {
+  local _home="${BATS_TEST_TMPDIR}/home"
+  mkdir -p "${_home}/git-repos/gitlab"
+  export HOME="${_home}"
+  export PERSONAL_GITREPOS="${BATS_TEST_TMPDIR}/git-repos/personal"
+  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
+  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude" "${_OVERRIDE_AI_CONFIG_DIR}/.cursor"
+  export LINUX=1
+  unset MACOS HAS_DEVTOOLS
+
+  run setup_dotfile_symlinks
+  [ "${status}" -eq 0 ]
+  [ ! -L "${_home}/git-repos/gitlab/.gitconfig" ]
+}
+
+# ── setup_dotfile_symlinks: oh-my-zsh ────────────────────────────────────────
+
+@test "setup_dotfile_symlinks: skips oh-my-zsh install when already present" {
+  local _home="${BATS_TEST_TMPDIR}/home"
+  mkdir -p "${_home}/.oh-my-zsh"
+  export HOME="${_home}"
+  export PERSONAL_GITREPOS="${BATS_TEST_TMPDIR}/git-repos/personal"
+  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
+  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude" "${_OVERRIDE_AI_CONFIG_DIR}/.cursor"
+
+  run setup_dotfile_symlinks
+  [ "${status}" -eq 0 ]
+  ! grep -q "ohmyzsh" "${MOCK_CALLS_FILE:-/dev/null}"
+}
+
+@test "setup_dotfile_symlinks: installs oh-my-zsh when not present" {
+  local _home="${BATS_TEST_TMPDIR}/home"
+  mkdir -p "${_home}"
+  export HOME="${_home}"
+  export PERSONAL_GITREPOS="${BATS_TEST_TMPDIR}/git-repos/personal"
+  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
+  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude" "${_OVERRIDE_AI_CONFIG_DIR}/.cursor"
+
+  run setup_dotfile_symlinks
+  [ "${status}" -eq 0 ]
+  grep -q "ohmyzsh" "${MOCK_CALLS_FILE}"
+}
+
+# ── setup_dotfile_symlinks: TPM ───────────────────────────────────────────────
+
+@test "setup_dotfile_symlinks: skips TPM when already installed" {
+  local _home="${BATS_TEST_TMPDIR}/home"
+  mkdir -p "${_home}/.oh-my-zsh" "${_home}/.tmux/plugins/tpm"
+  export HOME="${_home}"
+  export PERSONAL_GITREPOS="${BATS_TEST_TMPDIR}/git-repos/personal"
+  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
+  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude" "${_OVERRIDE_AI_CONFIG_DIR}/.cursor"
+
+  run setup_dotfile_symlinks
+  [ "${status}" -eq 0 ]
+  ! grep -q "tmux-plugins/tpm" "${MOCK_CALLS_FILE:-/dev/null}"
+}
+
+@test "setup_dotfile_symlinks: clones TPM when not present" {
+  local _home="${BATS_TEST_TMPDIR}/home"
+  mkdir -p "${_home}/.oh-my-zsh"
+  export HOME="${_home}"
+  export PERSONAL_GITREPOS="${BATS_TEST_TMPDIR}/git-repos/personal"
+  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
+  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude" "${_OVERRIDE_AI_CONFIG_DIR}/.cursor"
+
+  run setup_dotfile_symlinks
+  [ "${status}" -eq 0 ]
+  grep -q "tmux-plugins/tpm" "${MOCK_CALLS_FILE}"
+}
+
+# ── setup_dotfile_symlinks: Cursor User settings ─────────────────────────────
+
+@test "setup_dotfile_symlinks: skips User/ in .cursor glob loop" {
+  local _home="${BATS_TEST_TMPDIR}/home"
+  mkdir -p "${_home}/.oh-my-zsh" "${_home}/.tmux/plugins/tpm"
+  export HOME="${_home}"
+  export PERSONAL_GITREPOS="${BATS_TEST_TMPDIR}/git-repos/personal"
+  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
+  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude" "${_OVERRIDE_AI_CONFIG_DIR}/.cursor/User"
+  touch "${_OVERRIDE_AI_CONFIG_DIR}/.cursor/User/settings.json"
+
+  run setup_dotfile_symlinks
+  [ "${status}" -eq 0 ]
+  [ ! -L "${_home}/.cursor/User" ]
+}
+
+@test "setup_dotfile_symlinks: links Cursor User settings when installed on LINUX" {
+  local _home="${BATS_TEST_TMPDIR}/home"
+  mkdir -p "${_home}/.oh-my-zsh" "${_home}/.tmux/plugins/tpm"
+  export HOME="${_home}"
+  export PERSONAL_GITREPOS="${BATS_TEST_TMPDIR}/git-repos/personal"
+  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
+  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude" \
+           "${_OVERRIDE_AI_CONFIG_DIR}/.cursor/User/snippets"
+  touch "${_OVERRIDE_AI_CONFIG_DIR}/.cursor/User/settings.json"
+  touch "${_OVERRIDE_AI_CONFIG_DIR}/.cursor/User/keybindings.json"
+  export LINUX=1
+  unset MACOS
+
+  run setup_dotfile_symlinks
+  [ "${status}" -eq 0 ]
+  [ -L "${_home}/.config/Cursor/User/settings.json" ]
+  [ -L "${_home}/.config/Cursor/User/keybindings.json" ]
+}
+
+@test "setup_dotfile_symlinks: skips Cursor User symlinks when dotfiles User files missing" {
+  local _home="${BATS_TEST_TMPDIR}/home"
+  mkdir -p "${_home}/.oh-my-zsh" "${_home}/.tmux/plugins/tpm"
+  export HOME="${_home}"
+  export PERSONAL_GITREPOS="${BATS_TEST_TMPDIR}/git-repos/personal"
+  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
+  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude" "${_OVERRIDE_AI_CONFIG_DIR}/.cursor"
+  export LINUX=1
+  unset MACOS
+
+  run setup_dotfile_symlinks
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"Skipping Cursor symlinks"* ]]
+}
+
+# ── setup_credential_directories ─────────────────────────────────────────────
+
+@test "setup_credential_directories: creates .aws .gcloud_creds .azure_creds with mode 700" {
+  local _home="${BATS_TEST_TMPDIR}/home"
+  mkdir -p "${_home}"
+  export HOME="${_home}"
+
+  run setup_credential_directories
+  [ "${status}" -eq 0 ]
+  [ -d "${_home}/.aws" ]
+  [ -d "${_home}/.gcloud_creds" ]
+  [ -d "${_home}/.azure_creds" ]
+  [[ "$(ls -ld "${_home}/.aws")" == drwx------* ]]
+  [[ "$(ls -ld "${_home}/.gcloud_creds")" == drwx------* ]]
+  [[ "$(ls -ld "${_home}/.azure_creds")" == drwx------* ]]
+}

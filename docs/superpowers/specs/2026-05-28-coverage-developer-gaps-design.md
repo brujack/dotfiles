@@ -1,3 +1,5 @@
+> **Status: DONE**
+
 # Coverage: developer.sh Gaps
 
 ## Context
