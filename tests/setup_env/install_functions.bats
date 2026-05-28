@@ -245,3 +245,52 @@ teardown() {
   GO_VER="${_saved_go_ver}"
   [ "${_rc}" -ne 0 ]
 }
+
+# ── install_terraform_skill ───────────────────────────────────────────────────
+
+@test "install_terraform_skill clones repo when skill dir does not exist" {
+  local _home="${BATS_TEST_TMPDIR}/home"
+  mkdir -p "${_home}/.cursor/skills"
+  export HOME="${_home}"
+  run install_terraform_skill
+  [ "$status" -eq 0 ]
+  grep -q "git clone --depth=1" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_terraform_skill runs git pull when .git dir exists" {
+  local _home="${BATS_TEST_TMPDIR}/home"
+  mkdir -p "${_home}/.cursor/skills/terraform-skill/.git"
+  export HOME="${_home}"
+  run install_terraform_skill
+  [ "$status" -eq 0 ]
+  grep -qE "git -C .* pull --ff-only" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_terraform_skill warns and skips when path exists without .git" {
+  local _home="${BATS_TEST_TMPDIR}/home"
+  mkdir -p "${_home}/.cursor/skills/terraform-skill"
+  export HOME="${_home}"
+  run install_terraform_skill
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"not a git checkout"* ]]
+  ! grep -q "git clone" "${MOCK_CALLS_FILE}"
+  ! grep -qE "git -C .* pull" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_terraform_skill returns non-zero when git pull fails" {
+  local _home="${BATS_TEST_TMPDIR}/home"
+  mkdir -p "${_home}/.cursor/skills/terraform-skill/.git"
+  export HOME="${_home}"
+  export MOCK_GIT_EXIT=1
+  run install_terraform_skill
+  [ "$status" -ne 0 ]
+}
+
+@test "install_terraform_skill returns non-zero when git clone fails" {
+  local _home="${BATS_TEST_TMPDIR}/home"
+  mkdir -p "${_home}/.cursor/skills"
+  export HOME="${_home}"
+  export MOCK_GIT_CLONE_EXIT=1
+  run install_terraform_skill
+  [ "$status" -ne 0 ]
+}
