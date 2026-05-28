@@ -70,6 +70,7 @@ Master status index for all specs and implementation plans in this directory.
 | 2026-05-27 | [coverage-brewfile-helpers](plans/2026-05-27-coverage-brewfile-helpers.md)         | —                                                                   | Done   |
 | 2026-05-27 | coverage-run-update-optional-tools                                                 | —                                                                   | Done   |
 | 2026-05-27 | coverage-run-update-sections                                                       | —                                                                   | Done   |
+| 2026-05-27 | coverage-install-terraform-skill                                                   | —                                                                   | Done   |
 
 ---
 
@@ -77,10 +78,9 @@ Master status index for all specs and implementation plans in this directory.
 
 Ideas approved for future specs, in no particular order:
 
-| Feature                          | Notes                                                                                                             |
-| -------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| coverage-install-terraform-skill | `install_terraform_skill` tests — update/warn/clone branches, zero tests today; ~16 lines                         |
-| coverage-setup-env-direct-run    | `setup_env.sh` direct-execution block tests (bash version check, brew prereq) — never hit when sourced; ~15 lines |
+| Feature                       | Notes                                                                                                             |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| coverage-setup-env-direct-run | `setup_env.sh` direct-execution block tests (bash version check, brew prereq) — never hit when sourced; ~15 lines |
 
 ---
 
