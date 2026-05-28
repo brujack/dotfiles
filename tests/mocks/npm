@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+printf "npm %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+exit "${MOCK_NPM_EXIT:-0}"

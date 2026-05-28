@@ -1146,3 +1146,80 @@ setup_constants_copy() {
   run_update
   grep -q "^git pull$" "${MOCK_CALLS_FILE}"
 }
+
+# ── run_update — claude/npm/pip section flags ─────────────────────────────────
+
+@test "run_update calls claude plugins update when UPDATE_CLAUDE is set" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE_CLAUDE=1
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  run_update
+  grep -q "claude plugins update superpowers@claude-plugins-official" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_update skips claude when claude not installed" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE_CLAUDE=1
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  local tmp_mocks="${BATS_TEST_TMPDIR}/mocks_no_claude"
+  mkdir -p "${tmp_mocks}"
+  for f in "${REPO_ROOT}/tests/mocks/"*; do
+    [[ "$(basename "$f")" == "claude" ]] && continue
+    ln -sf "$f" "${tmp_mocks}/$(basename "$f")"
+  done
+  local clean_path
+  clean_path="$(printf "%s" "${PATH}" | tr ':' '\n' | grep -v "tests/mocks" | tr '\n' ':' | sed 's/:$//')"
+  clean_path="$(printf "%s" "${clean_path}" | tr ':' '\n' | while read -r dir; do
+    [[ -x "${dir}/claude" ]] || printf "%s\n" "${dir}"
+  done | tr '\n' ':' | sed 's/:$//')"
+  export PATH="${tmp_mocks}:${clean_path}"
+  run_update
+  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_claude"
+}
+
+@test "run_update skips claude when UPDATE_CLAUDE flag not set" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE_BREW=1
+  unset UPDATE_CLAUDE UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  run_update
+  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_claude"
+}
+
+@test "run_update calls npm install when UPDATE_CLAUDE is set" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE_CLAUDE=1
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  run_update
+  grep -q "npm install -g firecrawl-cli" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_update skips npm when UPDATE_CLAUDE flag not set" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE_BREW=1
+  unset UPDATE_CLAUDE UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  run_update
+  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_npm"
+}
+
+@test "run_update skips pip when HAS_DEVTOOLS not set" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE_PIP=1
+  unset HAS_DEVTOOLS UPDATE_BREW UPDATE_CLAUDE UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  run_update
+  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_pip"
+}
+
+@test "run_update skips pip when UPDATE_PIP flag not set" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE_BREW=1
+  unset UPDATE_PIP UPDATE_CLAUDE UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  run_update
+  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_pip"
+}
