@@ -76,6 +76,7 @@ Master status index for all specs and implementation plans in this directory.
 | 2026-05-28 | coverage-developer-gaps                                                            | [spec](specs/2026-05-28-coverage-developer-gaps-design.md)          | Done   |
 | 2026-05-28 | coverage-helpers-gaps                                                              | —                                                                   | Done   |
 | 2026-05-28 | coverage-workflows-update-flags                                                    | —                                                                   | Done   |
+| 2026-05-28 | coverage-workflows-setup-chains                                                    | —                                                                   | Done   |
 
 ---
 
@@ -83,10 +84,9 @@ Master status index for all specs and implementation plans in this directory.
 
 Ideas approved for future specs, in no particular order:
 
-| Feature                         | Notes                                                                                            |
-| ------------------------------- | ------------------------------------------------------------------------------------------------ |
-| coverage-workflows-setup-chains | workflows.sh: setup_claude_plugins branches + run_setup_user mid-chain failure propagation       |
-| coverage-update-summary-gaps    | update_summary.sh: brewfile drift error paths, \_update_record_end case arms; 70 lines uncovered |
+| Feature                      | Notes                                                                                            |
+| ---------------------------- | ------------------------------------------------------------------------------------------------ |
+| coverage-update-summary-gaps | update_summary.sh: brewfile drift error paths, \_update_record_end case arms; 70 lines uncovered |
 
 ---
 
