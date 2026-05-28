@@ -331,7 +331,7 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 #### Bash
 
-- **Overall: 83%** (measured 2026-05-27 across 614 BATS tests using `make bash-coverage`)
+- **Overall: 83%** (measured 2026-05-27 across 619 BATS tests using `make bash-coverage`)
 - **`make bash-coverage`** measures coverage via `BASH_ENV` + PS4 xtrace tracer (`scripts/run-bash-coverage.sh`). Runs all bats tests with xtrace active; filters trace output through a named pipe to keep disk usage small (~200K lines vs ~33M raw).
 - **`make push-bash-coverage`** runs `bash-coverage`, generates `coverage/bash.json` in shields.io format, and pushes it to the `coverage-data` branch. The README badge pulls from that branch.
 - **Cron job (manual install)**: `(crontab -l 2>/dev/null; echo "0 2 * * * cd ~/git-repos/personal/dotfiles && make push-bash-coverage >> ~/.dotfiles-coverage.log 2>&1") | crontab -`
@@ -347,19 +347,19 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 Functions that operate on specific file paths use override env vars to redirect to temp files in tests:
 
-| Seam                         | Used by                                                              | Effect                                                                             |
-| ---------------------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Seam                         | Used by                                                              | Effect                                                                                    |
+| ---------------------------- | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | `_OVERRIDE_BASH_MAJOR`       | `setup_env.sh` preamble                                              | Overrides `BASH_VERSINFO[0]` (read-only built-in) to test the bash version < 5 error path |
-| `_OVERRIDE_BREWFILE_PATH`    | `_update_check_brewfile_drift`                                       | Path to Brewfile; defaults to `${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile`          |
-| `_OVERRIDE_CONSTANTS_PATH`   | `_update_version_pin()`                                              | Redirects to a temp copy of `lib/constants.sh`; defaults to real path when unset   |
-| `UPDATE_LOG_PATH`            | `_update_summary()`                                                  | Redirects log writes to a temp file in tests; defaults to `~/.dotfiles-update.log` |
-| `_UPDATE_TMPDIR`             | all summary functions                                                | Set to `${BATS_TEST_TMPDIR}` in tests to isolate snapshot files                    |
-| `_BOOTSTRAP_OS_RELEASE`      | `_bootstrap_linux_detect_distro`                                     | Path to os-release file; defaults to `/etc/os-release`                             |
-| `_REBOOT_REQUIRED_PATH`      | `_update_record_end` apt case                                        | Path to reboot-required flag file; defaults to `/var/run/reboot-required`          |
-| `_REBOOT_REQUIRED_PKGS_PATH` | `_update_record_end` apt case                                        | Path to reboot-required.pkgs file; defaults to `/var/run/reboot-required.pkgs`     |
-| `_OVERRIDE_FEATURES_DIR`     | `scripts/whats-new-claude-code.sh`, `scripts/whats-new-anthropic.sh` | Redirects output and state files to a temp dir                                     |
-| `_OVERRIDE_DOTFILES_ROOT`    | `scripts/whats-new-claude-code.sh`, `scripts/whats-new-anthropic.sh` | Redirects the repo root used for `cd` before git operations                        |
-| `_OVERRIDE_AI_CONFIG_DIR`    | `setup_ai_config`, `setup_dotfile_symlinks`                          | Overrides `AI_CONFIG_DIR` (readonly) for test isolation                            |
+| `_OVERRIDE_BREWFILE_PATH`    | `_update_check_brewfile_drift`                                       | Path to Brewfile; defaults to `${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile`                 |
+| `_OVERRIDE_CONSTANTS_PATH`   | `_update_version_pin()`                                              | Redirects to a temp copy of `lib/constants.sh`; defaults to real path when unset          |
+| `UPDATE_LOG_PATH`            | `_update_summary()`                                                  | Redirects log writes to a temp file in tests; defaults to `~/.dotfiles-update.log`        |
+| `_UPDATE_TMPDIR`             | all summary functions                                                | Set to `${BATS_TEST_TMPDIR}` in tests to isolate snapshot files                           |
+| `_BOOTSTRAP_OS_RELEASE`      | `_bootstrap_linux_detect_distro`                                     | Path to os-release file; defaults to `/etc/os-release`                                    |
+| `_REBOOT_REQUIRED_PATH`      | `_update_record_end` apt case                                        | Path to reboot-required flag file; defaults to `/var/run/reboot-required`                 |
+| `_REBOOT_REQUIRED_PKGS_PATH` | `_update_record_end` apt case                                        | Path to reboot-required.pkgs file; defaults to `/var/run/reboot-required.pkgs`            |
+| `_OVERRIDE_FEATURES_DIR`     | `scripts/whats-new-claude-code.sh`, `scripts/whats-new-anthropic.sh` | Redirects output and state files to a temp dir                                            |
+| `_OVERRIDE_DOTFILES_ROOT`    | `scripts/whats-new-claude-code.sh`, `scripts/whats-new-anthropic.sh` | Redirects the repo root used for `cd` before git operations                               |
+| `_OVERRIDE_AI_CONFIG_DIR`    | `setup_ai_config`, `setup_dotfile_symlinks`                          | Overrides `AI_CONFIG_DIR` (readonly) for test isolation                                   |
 
 Pattern: `local _file="${_OVERRIDE_VAR:-$(dirname "${BASH_SOURCE[0]}")/real/path}"`. Tests set the var and pass a writable temp copy; production code leaves it unset.
 

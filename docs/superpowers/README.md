@@ -72,7 +72,8 @@ Master status index for all specs and implementation plans in this directory.
 | 2026-05-27 | coverage-run-update-sections                                                       | —                                                                   | Done        |
 | 2026-05-27 | coverage-install-terraform-skill                                                   | —                                                                   | Done        |
 | 2026-05-27 | coverage-setup-env-direct-run                                                      | —                                                                   | Done        |
-| 2026-05-28 | coverage-setup-env-preamble                                                        | [spec](specs/2026-05-28-coverage-setup-env-preamble-design.md)      | In Progress |
+| 2026-05-28 | coverage-setup-env-preamble                                                        | [spec](specs/2026-05-28-coverage-setup-env-preamble-design.md)      | Done        |
+| 2026-05-28 | coverage-developer-gaps                                                            | [spec](specs/2026-05-28-coverage-developer-gaps-design.md)          | In Progress |
 
 ---
 
@@ -82,7 +83,6 @@ Ideas approved for future specs, in no particular order:
 
 | Feature                         | Notes                                                                                                                |
 | ------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| coverage-developer-gaps         | developer.sh error paths: update_rust/clone_personal_repos failures; 21 lines uncovered                              |
 | coverage-workflows-setup-chains | workflows.sh: setup_claude_plugins branches + run_setup_user mid-chain failure propagation                           |
 | coverage-workflows-update-flags | workflows.sh: run_update single-flag isolation (--brew-only, --pip-only, --gems-only, --mas-only)                    |
 | coverage-update-summary-gaps    | update_summary.sh: brewfile drift error paths, \_update_record_end case arms; 70 lines uncovered                     |
