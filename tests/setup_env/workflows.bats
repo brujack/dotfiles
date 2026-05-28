@@ -1076,23 +1076,6 @@ setup_constants_copy() {
   grep -q "SKIP" "${_UPDATE_TMPDIR}/status_oh-my-zsh"
 }
 
-@test "run_update updates p10k when powerlevel10k dir exists" {
-  export MACOS=1
-  unset LINUX UBUNTU
-  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
-  mkdir -p "${HOME}/.oh-my-zsh/custom/themes/powerlevel10k"
-  run_update
-  grep -q "^git pull$" "${MOCK_CALLS_FILE}"
-}
-
-@test "run_update skips p10k when powerlevel10k dir does not exist" {
-  export MACOS=1
-  unset LINUX UBUNTU
-  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
-  run_update
-  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_p10k"
-}
-
 @test "run_update updates tpm when ~/.tmux/plugins/tpm exists" {
   export MACOS=1
   unset LINUX UBUNTU

@@ -394,16 +394,6 @@ PY
     else
       _update_skip "oh-my-zsh" "not installed"
     fi
-    if [[ -d ${HOME}/.oh-my-zsh/custom/themes/powerlevel10k ]]; then
-      _update_record_start "p10k"
-      printf "Updating powerlevel10k\\n"
-      cd "${HOME}/.oh-my-zsh/custom/themes/powerlevel10k" || return 1
-      git pull
-      cd "${PERSONAL_GITREPOS}/${DOTFILES}" || return 1
-      _update_record_end "p10k" $?
-    else
-      _update_skip "p10k" "not installed"
-    fi
     if [[ -d ${HOME}/.tmux/plugins/tpm ]]; then
       _update_record_start "tpm"
       printf "Updating tpm\\n"
@@ -436,7 +426,6 @@ PY
   else
     _update_skip "tfenv" "flag not set"
     _update_skip "oh-my-zsh" "flag not set"
-    _update_skip "p10k" "flag not set"
     _update_skip "tpm" "flag not set"
     _update_skip "cheat.sh" "flag not set"
   fi

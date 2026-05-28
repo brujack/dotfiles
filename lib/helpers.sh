@@ -317,7 +317,6 @@ _doctor_check_symlinks() {
     "~/.zprofile       ${HOME}/.zprofile"
     "~/.vimrc          ${HOME}/.vimrc"
     "~/.tmux.conf      ${HOME}/.tmux.conf"
-    "~/.p10k.zsh       ${HOME}/.p10k.zsh"
     "~/.ssh/config     ${HOME}/.ssh/config"
     "~/.config/starship.toml  ${HOME}/.config/starship.toml"
     "~/.config/.zshrc.d       ${HOME}/.config/.zshrc.d"
@@ -562,7 +561,6 @@ setup_dotfile_symlinks() {
   fi
 
   safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.vimrc" "${HOME}/.vimrc"
-  safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.p10k.zsh" "${HOME}/.p10k.zsh"
   safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.tmux.conf" "${HOME}/.tmux.conf"
   safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/scripts" "${HOME}/scripts"
 
@@ -599,13 +597,7 @@ setup_dotfile_symlinks() {
     fi
   fi
 
-  log_info "Installing p10k"
-  if [[ ! -d ${HOME}/.oh-my-zsh/custom/themes/powerlevel10k ]]; then
-    git clone --depth=1 https://github.com/romkatv/powerlevel10k.git ${HOME}/.oh-my-zsh/custom/themes/powerlevel10k
-    if [[ -d ${HOME}/.oh-my-zsh/custom/themes/powerlevel10k ]]; then
-      log_info "Installed p10k"
-    fi
-  fi
+
 
   safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.zshrc" "${HOME}/.zshrc"
   safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.config/.zshrc.d" "${HOME}/.config/.zshrc.d"

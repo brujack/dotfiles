@@ -4,7 +4,7 @@
 # Fixed section order for summary display
 readonly _UPDATE_SECTION_ORDER=(
   brew softwareupdate apt snap mas claude terraform-skill npm pip gems
-  ai-config oh-my-zsh p10k tpm tfenv cheat.sh brew-drift
+  ai-config oh-my-zsh tpm tfenv cheat.sh brew-drift
 )
 
 # _update_diff_lines PRE_FILE POST_FILE
@@ -76,9 +76,6 @@ _update_record_start() {
       ;;
     oh-my-zsh)
       git -C "${HOME}/.oh-my-zsh" rev-parse HEAD > "${_UPDATE_TMPDIR}/pre_oh-my-zsh" 2>/dev/null || true
-      ;;
-    p10k)
-      git -C "${HOME}/.oh-my-zsh/custom/themes/powerlevel10k" rev-parse HEAD > "${_UPDATE_TMPDIR}/pre_p10k" 2>/dev/null || true
       ;;
     tpm)
       git -C "${HOME}/.tmux/plugins/tpm" rev-parse HEAD > "${_UPDATE_TMPDIR}/pre_tpm" 2>/dev/null || true
@@ -219,13 +216,12 @@ _update_record_end() {
         _result="updated"
       fi
       ;;
-    oh-my-zsh|p10k|tpm|tfenv|zsh-autosuggestions)
+    oh-my-zsh|tpm|tfenv|zsh-autosuggestions)
       if [[ -f "${_UPDATE_TMPDIR}/pre_${_section}" ]]; then
         local _old_sha _git_dir
         _old_sha=$(cat "${_UPDATE_TMPDIR}/pre_${_section}")
         case "${_section}" in
           oh-my-zsh) _git_dir="${HOME}/.oh-my-zsh" ;;
-          p10k) _git_dir="${HOME}/.oh-my-zsh/custom/themes/powerlevel10k" ;;
           tpm) _git_dir="${HOME}/.tmux/plugins/tpm" ;;
           tfenv) _git_dir="${HOME}/.tfenv" ;;
           zsh-autosuggestions) _git_dir="${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions" ;;

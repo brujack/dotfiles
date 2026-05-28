@@ -187,7 +187,6 @@ Each `update` run appends a timestamped entry to `~/.dotfiles-update.log`. The e
 [OK]   pip              3 package(s) (ansible, boto3, requests)
 [OK]   gems             no changes
 [OK]   oh-my-zsh        2 commit(s)
-[OK]   p10k             no changes
 [OK]   tpm              no changes
 [OK]   tfenv            no changes
 [OK]   cheat.sh         updated
@@ -262,7 +261,6 @@ dotfiles/
 ├── .zprofile                 # Zsh login shell config
 ├── .vimrc                    # Vim config with 50+ plugins
 ├── .tmux.conf                # Tmux config (Dracula theme, tpm, C-a prefix)
-├── .p10k.zsh                 # Powerlevel10k prompt config
 ├── .gitconfig_mac            # Git config for macOS
 ├── .gitconfig_linux          # Git config for Linux
 ├── .gitconfig_windows        # Git config for Windows
