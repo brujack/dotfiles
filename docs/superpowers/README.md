@@ -68,6 +68,7 @@ Master status index for all specs and implementation plans in this directory.
 | 2026-05-14 | [devcontainer-removal](plans/2026-05-14-devcontainer-removal.md)                   | [spec](specs/2026-05-14-devcontainer-removal-design.md)             | Done   |
 | 2026-05-18 | [windows-ai-native-setup](plans/2026-05-18-windows-ai-native-setup.md)             | [spec](specs/2026-05-18-windows-ai-native-setup-design.md)          | Done   |
 | 2026-05-27 | [coverage-brewfile-helpers](plans/2026-05-27-coverage-brewfile-helpers.md)         | —                                                                   | Done   |
+| 2026-05-27 | coverage-run-update-optional-tools                                                 | —                                                                   | Done   |
 
 ---
 
@@ -75,12 +76,11 @@ Master status index for all specs and implementation plans in this directory.
 
 Ideas approved for future specs, in no particular order:
 
-| Feature                            | Notes                                                                                                                       |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| coverage-run-update-optional-tools | `run_update` branches for tfenv/oh-my-zsh/p10k/tpm/cheat.sh installed paths — only skip paths tested today; ~30 lines       |
-| coverage-run-update-sections       | `run_update` claude/npm/pip section tests — UPDATE_CLAUDE flag path, claude-not-installed, pip with HAS_DEVTOOLS; ~25 lines |
-| coverage-install-terraform-skill   | `install_terraform_skill` tests — update/warn/clone branches, zero tests today; ~16 lines                                   |
-| coverage-setup-env-direct-run      | `setup_env.sh` direct-execution block tests (bash version check, brew prereq) — never hit when sourced; ~15 lines           |
+| Feature                          | Notes                                                                                                                       |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| coverage-run-update-sections     | `run_update` claude/npm/pip section tests — UPDATE_CLAUDE flag path, claude-not-installed, pip with HAS_DEVTOOLS; ~25 lines |
+| coverage-install-terraform-skill | `install_terraform_skill` tests — update/warn/clone branches, zero tests today; ~16 lines                                   |
+| coverage-setup-env-direct-run    | `setup_env.sh` direct-execution block tests (bash version check, brew prereq) — never hit when sourced; ~15 lines           |
 
 ---
 
