@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+printf "cargo-nextest %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+exit "${MOCK_CARGO_NEXTEST_EXIT:-0}"
