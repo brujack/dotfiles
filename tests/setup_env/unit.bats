@@ -659,6 +659,68 @@ teardown() {
   grep -q "gem update" "${MOCK_CALLS_FILE}"
 }
 
+@test "run_update --gems-only: calls gem update and skips brew" {
+  export MOCK_CALLS_FILE="${TMPDIR_TEST}/mock_calls"
+  touch "${MOCK_CALLS_FILE}"
+  export MACOS=1
+  unset LINUX
+  export UPDATE_GEMS=1
+  unset UPDATE_BREW UPDATE_PIP UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  run_update
+  grep -q "gem update" "${MOCK_CALLS_FILE}"
+  ! grep -q "brew update" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_update --mas-only on MACOS: calls mas upgrade and skips brew" {
+  export MOCK_CALLS_FILE="${TMPDIR_TEST}/mock_calls"
+  touch "${MOCK_CALLS_FILE}"
+  export MACOS=1
+  unset LINUX
+  export UPDATE_MAS=1
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_CLAUDE UPDATE_PKGS
+  run_update
+  grep -q "mas upgrade" "${MOCK_CALLS_FILE}"
+  ! grep -q "brew update" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_update --brew-only on LINUX: calls brew update and skips gems" {
+  export MOCK_CALLS_FILE="${TMPDIR_TEST}/mock_calls"
+  touch "${MOCK_CALLS_FILE}"
+  export LINUX=1
+  unset MACOS
+  export UPDATE_BREW=1
+  unset UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  run_update
+  grep -q "brew update" "${MOCK_CALLS_FILE}"
+  ! grep -q "gem update" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_update --claude-only: calls claude plugins update and skips brew" {
+  export MOCK_CALLS_FILE="${TMPDIR_TEST}/mock_calls"
+  touch "${MOCK_CALLS_FILE}"
+  export MACOS=1
+  unset LINUX
+  export UPDATE_CLAUDE=1
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  run_update
+  grep -q "claude plugins update" "${MOCK_CALLS_FILE}"
+  ! grep -q "brew update" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_update --pkgs-only on LINUX: calls nala and skips brew and gems" {
+  export MOCK_CALLS_FILE="${TMPDIR_TEST}/mock_calls"
+  touch "${MOCK_CALLS_FILE}"
+  export LINUX=1
+  export MOCK_UNAME_S="Linux"
+  unset MACOS
+  export UPDATE_PKGS=1
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
+  run_update
+  grep -q "nala" "${MOCK_CALLS_FILE}"
+  ! grep -q "brew update" "${MOCK_CALLS_FILE}"
+  ! grep -q "gem update" "${MOCK_CALLS_FILE}"
+}
+
 # ── doctor_pass / doctor_fail ─────────────────────────────────────────────────
 
 @test "doctor_pass increments _DOCTOR_PASS" {
