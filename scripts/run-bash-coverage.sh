@@ -93,6 +93,14 @@ for src_file in "${INCLUDE_FILES[@]}"; do
             "}"|"fi"|"done"|"esac"|";;"|"then"|"do"|"else") continue ;;
         esac
         [[ "${trimmed}" =~ ^[[:space:]]*\)$ ]] && continue
+        # Case branch labels (brew), mas), OK), *)) — xtrace never emits them
+        [[ "${trimmed}" =~ ^[a-zA-Z_*][a-zA-Z0-9_*.-]*\)$ ]] && continue
+        # done with any redirect (done <<< ..., done < <(...), done < file)
+        [[ "${trimmed}" =~ ^done[[:space:]] ]] && continue
+        # Continuation lines of multi-line pipelines (> outfile, > /dev/null)
+        [[ "${trimmed}" =~ ^\> ]] && continue
+        # Closing group command with redirect (} >> file, } | cmd)
+        [[ "${trimmed}" =~ ^\}[[:space:]] ]] && continue
         ((coverable++))
     done < "${src_file}"
 
