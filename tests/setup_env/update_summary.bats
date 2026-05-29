@@ -681,3 +681,25 @@ firefox  124.0"
   grep -q "OK" "${_UPDATE_TMPDIR}/status_cheat.sh"
   grep -q "updated" "${_UPDATE_TMPDIR}/result_cheat.sh"
 }
+
+@test "_update_record_end brew: reports cask-only update when formulae unchanged" {
+  printf "git\n" > "${_UPDATE_TMPDIR}/pre_brew_formula"
+  printf "old-app\n" > "${_UPDATE_TMPDIR}/pre_brew_cask"
+  export MOCK_BREW_LIST_FORMULA="git"
+  export MOCK_BREW_LIST_CASK="new-app"
+  _update_record_end "brew" 0
+  grep -q "OK" "${_UPDATE_TMPDIR}/status_brew"
+  grep -q "1 cask(s)" "${_UPDATE_TMPDIR}/result_brew"
+  grep -q "new-app" "${_UPDATE_TMPDIR}/result_brew"
+}
+
+@test "_update_record_end brew: reports both formulae and cask updates" {
+  printf "git 2.44.0\n" > "${_UPDATE_TMPDIR}/pre_brew_formula"
+  printf "old-app\n" > "${_UPDATE_TMPDIR}/pre_brew_cask"
+  export MOCK_BREW_LIST_FORMULA="git 2.45.0"
+  export MOCK_BREW_LIST_CASK="new-app"
+  _update_record_end "brew" 0
+  grep -q "OK" "${_UPDATE_TMPDIR}/status_brew"
+  grep -q "formulae" "${_UPDATE_TMPDIR}/result_brew"
+  grep -q "cask(s)" "${_UPDATE_TMPDIR}/result_brew"
+}
