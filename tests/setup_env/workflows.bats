@@ -1294,13 +1294,15 @@ setup_constants_copy() {
   mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude"
   printf '{"auth":"Bearer ${GITHUB_PAT}"}\n' \
     > "${_OVERRIDE_AI_CONFIG_DIR}/.claude/mcp.json.template"
-  # Strip envsubst's containing directory from PATH so command -v envsubst fails
-  local _ev_path
-  _ev_path="$(command -v envsubst 2>/dev/null)" || true
-  if [[ -n "${_ev_path}" ]]; then
-    export PATH="$(printf '%s' "$PATH" | tr ':' '\n' | grep -vxF "${_ev_path%/*}" | tr '\n' ':' | sed 's/:$//')"
-  fi
+  # Use only tests/mocks/ in PATH — no envsubst mock exists there, so command -v envsubst fails.
+  # Simple PATH stripping fails on Ubuntu Noble (/bin → /usr/bin symlink; stripping one leaves the other).
+  # Restore PATH after run so BATS cleanup can still find bash.
+  local _saved_path="$PATH"
+  local _mocks_dir
+  _mocks_dir="$(cd "${BATS_TEST_DIRNAME}/../mocks" && pwd)"
+  export PATH="${_mocks_dir}"
   run setup_claude_mcp
+  export PATH="${_saved_path}"
   [ "$status" -eq 1 ]
   [[ "$output" == *"envsubst not found"* ]]
 }
