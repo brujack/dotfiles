@@ -599,3 +599,85 @@ firefox  124.0"
   [ "$status" -eq 0 ]
   [[ "$output" != *"details:"* ]]
 }
+
+# ── _update_record_start tpm/tfenv/zsh-autosuggestions ───────────────────────
+
+@test "_update_record_start tpm: creates pre-snapshot file" {
+  export HOME="${BATS_TEST_TMPDIR}"
+  _update_record_start "tpm"
+  [ -f "${_UPDATE_TMPDIR}/pre_tpm" ]
+}
+
+@test "_update_record_start tfenv: creates pre-snapshot file" {
+  export HOME="${BATS_TEST_TMPDIR}"
+  _update_record_start "tfenv"
+  [ -f "${_UPDATE_TMPDIR}/pre_tfenv" ]
+}
+
+@test "_update_record_start zsh-autosuggestions: creates pre-snapshot file" {
+  export HOME="${BATS_TEST_TMPDIR}"
+  _update_record_start "zsh-autosuggestions"
+  [ -f "${_UPDATE_TMPDIR}/pre_zsh-autosuggestions" ]
+}
+
+# ── _update_record_start npm ──────────────────────────────────────────────────
+
+@test "_update_record_start npm: creates pre-snapshot file" {
+  export MOCK_NPM_LIST_OUTPUT="── firecrawl-mcp@0.1.0"
+  _update_record_start "npm"
+  [ -f "${_UPDATE_TMPDIR}/pre_npm" ]
+}
+
+# ── _update_record_end npm ────────────────────────────────────────────────────
+
+@test "_update_record_end npm: reports package updates when changed" {
+  export MOCK_NPM_LIST_OUTPUT="── firecrawl-mcp@0.1.0"
+  _update_record_start "npm"
+  export MOCK_NPM_LIST_OUTPUT="── firecrawl-mcp@0.2.0"
+  _update_record_end "npm" 0
+  grep -q "OK" "${_UPDATE_TMPDIR}/status_npm"
+  grep -q "package(s)" "${_UPDATE_TMPDIR}/result_npm"
+  grep -q "firecrawl-mcp" "${_UPDATE_TMPDIR}/result_npm"
+}
+
+@test "_update_record_end npm: reports no changes when packages unchanged" {
+  export MOCK_NPM_LIST_OUTPUT="── firecrawl-mcp@0.1.0"
+  _update_record_start "npm"
+  _update_record_end "npm" 0
+  grep -q "no changes" "${_UPDATE_TMPDIR}/result_npm"
+}
+
+@test "_update_record_end npm: reports updated when no pre-snapshot" {
+  _update_record_end "npm" 0
+  grep -q "updated" "${_UPDATE_TMPDIR}/result_npm"
+  grep -q "OK" "${_UPDATE_TMPDIR}/status_npm"
+}
+
+# ── _update_record_end git-SHA group ─────────────────────────────────────────
+
+@test "_update_record_end tpm: reports commit count when updates found" {
+  printf "abc1234\n" > "${_UPDATE_TMPDIR}/pre_tpm"
+  _update_git_diff() { printf "abc1234 update tpm to latest\n"; }
+  _update_record_end "tpm" 0
+  grep -q "OK" "${_UPDATE_TMPDIR}/status_tpm"
+  grep -q "1 commit(s)" "${_UPDATE_TMPDIR}/result_tpm"
+}
+
+@test "_update_record_end tfenv: reports no changes when no new commits" {
+  printf "abc1234\n" > "${_UPDATE_TMPDIR}/pre_tfenv"
+  _update_record_end "tfenv" 0
+  grep -q "no changes" "${_UPDATE_TMPDIR}/result_tfenv"
+}
+
+@test "_update_record_end zsh-autosuggestions: reports no changes when no pre-snapshot" {
+  _update_record_end "zsh-autosuggestions" 0
+  grep -q "no changes" "${_UPDATE_TMPDIR}/result_zsh-autosuggestions"
+}
+
+# ── _update_record_end default case ──────────────────────────────────────────
+
+@test "_update_record_end: default case reports updated for untracked section" {
+  _update_record_end "cheat.sh" 0
+  grep -q "OK" "${_UPDATE_TMPDIR}/status_cheat.sh"
+  grep -q "updated" "${_UPDATE_TMPDIR}/result_cheat.sh"
+}

@@ -1,3 +1,9 @@
 #!/usr/bin/env bash
 printf "npm %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
-exit "${MOCK_NPM_EXIT:-0}"
+if [[ "${MOCK_NPM_EXIT:-0}" -ne 0 ]]; then
+  exit "${MOCK_NPM_EXIT}"
+fi
+case "$1" in
+  list) printf "%s\n" "${MOCK_NPM_LIST_OUTPUT:-}" ;;
+esac
+exit 0
