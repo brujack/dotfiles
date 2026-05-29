@@ -1206,3 +1206,111 @@ setup_constants_copy() {
   run_update
   grep -q "SKIP" "${_UPDATE_TMPDIR}/status_pip"
 }
+
+# ── _check_one_version ────────────────────────────────────────────────────────
+
+@test "_check_one_version prints SKIP when tool is not installed" {
+  local _out
+  _out=$(_check_one_version "nonexistent_tool_xyz_abc" "1.0.0" "some/repo" "printf '1.0.0'" "[0-9]+\.[0-9]+\.[0-9]+")
+  [[ "${_out}" == *"[SKIP]"* ]]
+  [[ "${_out}" == *"not installed"* ]]
+}
+
+@test "_check_one_version prints WARN when latest version cannot be fetched" {
+  _fetch_github_latest() { printf ''; }
+  local _out
+  _out=$(_check_one_version "git" "1.0.0" "some/repo" "printf '1.0.0'" "[0-9]+\.[0-9]+\.[0-9]+")
+  [[ "${_out}" == *"[WARN]"* ]]
+  [[ "${_out}" == *"could not fetch latest"* ]]
+}
+
+@test "_check_one_version prints WARN when installed version cannot be parsed" {
+  _fetch_github_latest() { printf '2.0.0'; }
+  local _out
+  _out=$(_check_one_version "git" "1.0.0" "some/repo" "printf 'no_version_here'" "[0-9]+\.[0-9]+\.[0-9]+")
+  [[ "${_out}" == *"[WARN]"* ]]
+  [[ "${_out}" == *"could not parse"* ]]
+}
+
+@test "_check_one_version prints OK when installed version matches latest" {
+  _fetch_github_latest() { printf '1.2.3'; }
+  local _out
+  _out=$(_check_one_version "git" "1.2.3" "some/repo" "printf '1.2.3'" "[0-9]+\.[0-9]+\.[0-9]+")
+  [[ "${_out}" == *"[OK]"* ]]
+}
+
+@test "_check_one_version prints OUTDATED and returns 1 when installed differs from latest" {
+  _fetch_github_latest() { printf '2.0.0'; }
+  local _out _rc=0
+  _out=$(_check_one_version "git" "1.0.0" "some/repo" "printf '1.0.0'" "[0-9]+\.[0-9]+\.[0-9]+") || _rc=$?
+  [[ "${_out}" == *"[OUTDATED]"* ]]
+  [[ ${_rc} -eq 1 ]]
+}
+
+# ── run_check_versions summary counting ──────────────────────────────────────
+
+@test "run_check_versions counts skipped tools in summary" {
+  _check_one_version() { printf "  [SKIP]     %-12s not installed\n" "$1"; }
+  run run_check_versions
+  [[ "$output" == *"8 skipped"* ]]
+}
+
+@test "run_check_versions counts warned tools in summary" {
+  _check_one_version() { printf "  [WARN]     %-12s could not fetch latest version\n" "$1"; }
+  run run_check_versions
+  [[ "$output" == *"8 warnings"* ]]
+}
+
+@test "run_check_versions counts OK tools in summary" {
+  _check_one_version() { printf "  [OK]       %-12s\n" "$1"; }
+  run run_check_versions
+  [[ "$output" == *"8 OK"* ]]
+}
+
+@test "run_check_versions counts outdated tools and returns non-zero" {
+  _check_one_version() { printf "  [OUTDATED] %-12s\n" "$1"; return 1; }
+  run run_check_versions
+  [[ "$output" == *"8 outdated"* ]]
+  [ "$status" -ne 0 ]
+}
+
+@test "run_check_versions calls _prompt_version_update when UPDATE_VERSIONS set and tool is outdated" {
+  _check_one_version() {
+    printf "  [OUTDATED] %-12s pinned=1.0.0      latest=2.0.0  installed=1.0.0\n" "$1"
+    return 1
+  }
+  local _prompted=0
+  _prompt_version_update() { _prompted=$(( _prompted + 1 )); }
+  export UPDATE_VERSIONS=1
+  run_check_versions || true
+  [[ ${_prompted} -gt 0 ]]
+}
+
+# ── setup_claude_mcp: envsubst not installed ──────────────────────────────────
+
+@test "setup_claude_mcp returns 1 when envsubst is not installed" {
+  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
+  export GITHUB_PAT="test-token"
+  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude"
+  printf '{"auth":"Bearer ${GITHUB_PAT}"}\n' \
+    > "${_OVERRIDE_AI_CONFIG_DIR}/.claude/mcp.json.template"
+  # Strip envsubst's containing directory from PATH so command -v envsubst fails
+  local _ev_path
+  _ev_path="$(command -v envsubst 2>/dev/null)" || true
+  if [[ -n "${_ev_path}" ]]; then
+    export PATH="$(printf '%s' "$PATH" | tr ':' '\n' | grep -vxF "${_ev_path%/*}" | tr '\n' ':' | sed 's/:$//')"
+  fi
+  run setup_claude_mcp
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"envsubst not found"* ]]
+}
+
+# ── run_setup_user: install_zsh failure ───────────────────────────────────────
+
+@test "run_setup_user returns non-zero when install_zsh fails" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  install_zsh() { return 1; }
+  run run_setup_user
+  [ "$status" -ne 0 ]
+}
