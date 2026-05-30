@@ -84,6 +84,12 @@ teardown() {
   ! grep -q "brew install git" "${MOCK_CALLS_FILE}"
 }
 
+@test "brew_install_formula returns 1 when root" {
+  export MOCK_ID_U=0
+  run brew_install_formula git
+  [ "$status" -eq 1 ]
+}
+
 # ── brew_tap_if_missing ──────────────────────────────────────────────────────
 
 @test "brew_tap_if_missing calls brew tap when tap is absent" {
@@ -101,6 +107,12 @@ teardown() {
   count=$(grep -c "brew tap" "${MOCK_CALLS_FILE}")
   [ "$count" -eq 1 ]
   grep -q "brew tap$" "${MOCK_CALLS_FILE}"
+}
+
+@test "brew_tap_if_missing returns 1 when root" {
+  export MOCK_ID_U=0
+  run brew_tap_if_missing hashicorp/tap
+  [ "$status" -eq 1 ]
 }
 
 # ── install_bats ─────────────────────────────────────────────────────────────
@@ -151,6 +163,12 @@ teardown() {
   [ "$status" -eq 1 ]
 }
 
+@test "brew_tap_installed returns 1 when root" {
+  export MOCK_ID_U=0
+  run brew_tap_installed hashicorp/tap
+  [ "$status" -eq 1 ]
+}
+
 # ── brew_install_cask ────────────────────────────────────────────────────────
 
 @test "brew_install_cask calls brew install --cask when cask is absent" {
@@ -165,6 +183,12 @@ teardown() {
   run brew_install_cask docker
   [ "$status" -eq 0 ]
   ! grep -q "brew install --cask" "${MOCK_CALLS_FILE}"
+}
+
+@test "brew_install_cask returns 1 when root" {
+  export MOCK_ID_U=0
+  run brew_install_cask docker
+  [ "$status" -eq 1 ]
 }
 
 # ── brew_update ──────────────────────────────────────────────────────────────

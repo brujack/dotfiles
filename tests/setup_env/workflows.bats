@@ -79,6 +79,19 @@ teardown() {
   [ "$status" -eq 1 ]
 }
 
+@test "setup_claude_mcp sources config/local.sh to read GITHUB_PAT" {
+  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
+  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude"
+  printf '{"auth":"Bearer ${GITHUB_PAT}"}\n' \
+    > "${_OVERRIDE_AI_CONFIG_DIR}/.claude/mcp.json.template"
+  mkdir -p "${PERSONAL_GITREPOS}/${DOTFILES}/config"
+  printf 'export GITHUB_PAT="pat-from-local-sh"\n' \
+    > "${PERSONAL_GITREPOS}/${DOTFILES}/config/local.sh"
+  unset GITHUB_PAT
+  setup_claude_mcp
+  grep -q "pat-from-local-sh" "${HOME}/.claude/mcp.json"
+}
+
 # ── run_setup_user — coarse-grained (macOS) ───────────────────────────────────
 
 @test "run_setup_user clones dotfiles repo on macOS when missing" {
@@ -836,6 +849,15 @@ setup_constants_copy() {
   fi
 }
 
+@test "run_update skips brew when neither macOS nor Linux" {
+  unset MACOS LINUX UBUNTU
+  export UPDATE_BREW=1
+  export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
+  run_update
+  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_brew"
+  grep -q "not macOS or Linux" "${_UPDATE_TMPDIR}/result_brew"
+}
+
 # ── return-code propagation: run_setup_user ───────────────────────────────────
 
 # ── run_update — Linux system packages block ──────────────────────────────
@@ -1009,6 +1031,22 @@ setup_constants_copy() {
   setup_ansible()      { printf "setup_ansible\n" >> "${MOCK_CALLS_FILE}"; return 0; }
   run run_developer_or_ansible
   ! grep -q "setup_ansible" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_developer_or_ansible succeeds on Linux calling setup_ansible and clone_personal_repos" {
+  export LINUX=1
+  unset MACOS UBUNTU
+  install_ruby_tools()       { return 0; }
+  install_ruby()             { return 0; }
+  install_github_cli_linux() { printf "github_cli_linux\n" >> "${MOCK_CALLS_FILE}"; return 0; }
+  setup_kitchen()            { return 0; }
+  setup_ansible()            { printf "setup_ansible\n" >> "${MOCK_CALLS_FILE}"; return 0; }
+  clone_personal_repos()     { printf "clone_repos\n" >> "${MOCK_CALLS_FILE}"; return 0; }
+  run run_developer_or_ansible
+  [ "$status" -eq 0 ]
+  grep -q "github_cli_linux" "${MOCK_CALLS_FILE}"
+  grep -q "setup_ansible" "${MOCK_CALLS_FILE}"
+  grep -q "clone_repos" "${MOCK_CALLS_FILE}"
 }
 
 # ── process_args --pkgs-only ──────────────────────────────────────────────
