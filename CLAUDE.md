@@ -331,7 +331,7 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 #### Bash
 
-- **Overall: 85%** (measured 2026-05-28 across 674 BATS tests using `make bash-coverage`; 683 tests as of 2026-05-29, `update_summary.sh` at 97%)
+- **Overall: 85%** (measured 2026-05-28 across 674 BATS tests using `make bash-coverage`; 693 tests as of 2026-05-30, `update_summary.sh` at 97%)
 - **`make bash-coverage`** measures coverage via `BASH_ENV` + PS4 xtrace tracer (`scripts/run-bash-coverage.sh`). Runs all bats tests with xtrace active; filters trace output through a named pipe to keep disk usage small (~200K lines vs ~33M raw).
 - **`make push-bash-coverage`** runs `bash-coverage`, generates `coverage/bash.json` in shields.io format, and pushes it to the `coverage-data` branch. The README badge pulls from that branch.
 - **Cron job (manual install)**: `(crontab -l 2>/dev/null; echo "0 2 * * * cd ~/git-repos/personal/dotfiles && make push-bash-coverage >> ~/.dotfiles-coverage.log 2>&1") | crontab -`

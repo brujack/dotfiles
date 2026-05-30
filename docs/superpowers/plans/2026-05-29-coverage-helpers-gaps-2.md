@@ -1,5 +1,7 @@
 # Coverage: helpers.sh — Gaps 2 Implementation Plan
 
+> **Status: DONE**
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Raise `helpers.sh` bash coverage from 83% to ≥90% by adding 10 tests for uncovered code paths.
