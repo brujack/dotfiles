@@ -1039,6 +1039,36 @@ teardown() {
   [ "${_DOCTOR_FAILED}" -eq 1 ]
 }
 
+@test "_doctor_check_versions real: warns when tools are not installed" {
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  local _saved_path="$PATH"
+  local _empty="${BATS_TEST_TMPDIR}/empty_tools"
+  mkdir -p "${_empty}"
+  export PATH="${_empty}"  # no binaries here — command -v go/python3/ruby/zsh all fail
+  local _rc=0
+  _doctor_check_versions 2>&1 || _rc=$?
+  export PATH="${_saved_path}"
+  [ "${_rc}" -eq 0 ]
+  [ "${_DOCTOR_FAILED}" -eq 0 ]
+}
+
+@test "_doctor_check_versions real: warns when version output cannot be parsed" {
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  local _tmp="${BATS_TEST_TMPDIR}/version_tools"
+  mkdir -p "${_tmp}"
+  # go: returns unparseable output — exercises the empty _installed path
+  printf '#!/usr/bin/env bash\nprintf "go: totally unparseable output\n"\n' > "${_tmp}/go"
+  chmod +x "${_tmp}/go"
+  # python3/ruby/zsh: absent so they take the "not installed" (warn, non-fatal) path
+  local _saved_path="$PATH"
+  export PATH="${_tmp}"
+  local _rc=0
+  _doctor_check_versions 2>&1 || _rc=$?
+  export PATH="${_saved_path}"
+  [ "${_rc}" -eq 0 ]
+  [ "${_DOCTOR_FAILED}" -eq 0 ]
+}
+
 # ── _doctor_check_symlink_roots ───────────────────────────────────────────────
 
 @test "_doctor_check_symlink_roots passes when dotfiles repo directory exists" {
