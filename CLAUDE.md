@@ -444,6 +444,15 @@ Available mock env vars:
 
 **Pass-through mocks:** `ln`, `chmod`, `mv`, `cp`, and `tee` call the real binary (`/bin/cmd "$@" 2>/dev/null || true`) so tests that assert actual filesystem state (permissions, file existence, symlinks, captured output files) work correctly. Set the corresponding exit var to a non-zero value to simulate failure instead. Any mock that needs to support tests checking real filesystem state must use this pattern — a log-only mock will cause silent assertion failures.
 
+### Doctor Test Conventions
+
+When writing tests for `_doctor_check_*` functions in `tests/setup_env/unit.bats`:
+
+- **`_DOCTOR_FAIL` vs `_DOCTOR_FAILED`:** `_DOCTOR_FAIL` is the count (incremented by `doctor_fail`); `_DOCTOR_FAILED` is the 0/1 flag (set once when any failure occurs). Use `-ge N` on `_DOCTOR_FAIL` to assert a specific failure count; use `-eq 0` on `_DOCTOR_FAILED` to assert no failures. Using `-ge 4` on `_DOCTOR_FAILED` always fails — it can only be 0 or 1.
+- **`log_warn` vs `doctor_warn`:** `log_warn` does **not** increment `_DOCTOR_WARN`. Only `doctor_warn` does. When a branch calls `log_warn` (e.g. tool not installed), assert `_DOCTOR_FAILED -eq 0` and `_rc -eq 0`; do not assert on `_DOCTOR_WARN`.
+- **`_doctor_check_one_version` is nested:** Defined inside `_doctor_check_versions`; cannot be called in isolation. Test it by calling `_doctor_check_versions` directly with PATH controlled to expose the desired branch.
+- **Full PATH isolation for version tests:** For `_doctor_check_versions` tests, use `PATH="${_tmp}"` (minimal — no other tools), not `PATH="${_tmp}:${PATH}"`. Real installed tools (zsh, python3, ruby) found via `${PATH}` may have versions that don't match the pinned constants in `lib/constants.sh`, causing spurious `doctor_fail` calls that break assertions.
+
 ## Committing Work
 
 Invoke `caveman:caveman-commit` skill to generate the commit message before running `git commit`. Full format and rules in `~/.claude/CLAUDE.md`.
