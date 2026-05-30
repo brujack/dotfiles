@@ -1,5 +1,7 @@
 # Coverage: Per-File Gaps (helpers.sh + workflows.sh) Implementation Plan
 
+> **Status: DONE**
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Raise helpers.sh (86%→≥90%) and workflows.sh (85%→≥90%) by adding 12 BATS tests targeting specific uncovered branches.
