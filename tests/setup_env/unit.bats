@@ -1109,3 +1109,25 @@ teardown() {
   [ "${_DOCTOR_FAIL}" -eq 0 ]
   [ "${_DOCTOR_FAILED}" -eq 0 ]
 }
+
+@test "_doctor_check_github_mcp warns when GITHUB_PAT_EXPIRY cannot be parsed" {
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  export GITHUB_PAT="fake-token"
+  mkdir -p "${HOME}/.claude"
+  printf '{"mcpServers":{}}\n' > "${HOME}/.claude/mcp.json"
+  export MOCK_CURL_EXIT=0
+  export GITHUB_PAT_EXPIRY="not-a-date"
+  _doctor_check_github_mcp
+  [ "${_DOCTOR_WARN}" -ge 1 ]
+}
+
+@test "_doctor_check_github_mcp fails when GITHUB_PAT has expired" {
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  export GITHUB_PAT="fake-token"
+  mkdir -p "${HOME}/.claude"
+  printf '{"mcpServers":{}}\n' > "${HOME}/.claude/mcp.json"
+  export MOCK_CURL_EXIT=0
+  export GITHUB_PAT_EXPIRY="2020-01-01"
+  _doctor_check_github_mcp
+  [ "${_DOCTOR_FAILED}" -ge 1 ]
+}
