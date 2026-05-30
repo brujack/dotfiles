@@ -250,6 +250,31 @@ teardown() {
   [[ "$output" != *"Updating Homebrew"* ]]
 }
 
+@test "brew_update returns 1 when brew upgrade fails" {
+  export MOCK_ID_U=1000
+  export MOCK_BREW_UPGRADE_EXIT=1
+  run brew_update
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Failed to upgrade formulae"* ]]
+}
+
+@test "brew_update warns but continues when cask upgrade fails" {
+  export MOCK_ID_U=1000
+  export MOCK_BREW_UPGRADE_CASK_EXIT=1
+  run brew_update
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Some casks failed to upgrade"* ]]
+  [[ "$output" == *"Homebrew update process completed successfully"* ]]
+}
+
+@test "brew_update returns 1 when brew cleanup fails" {
+  export MOCK_ID_U=1000
+  export MOCK_BREW_CLEANUP_EXIT=1
+  run brew_update
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Failed to clean up"* ]]
+}
+
 # ── safe_link ─────────────────────────────────────────────────────────────────
 
 @test "safe_link creates symlink when dest does not exist" {

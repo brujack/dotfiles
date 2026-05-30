@@ -28,6 +28,9 @@ case "$1" in
     exit "${MOCK_BREW_UPDATE_EXIT:-0}"
     ;;
   upgrade)
+    if [[ "$*" == *"--cask"* ]]; then
+      exit "${MOCK_BREW_UPGRADE_CASK_EXIT:-${MOCK_BREW_UPGRADE_EXIT:-0}}"
+    fi
     exit "${MOCK_BREW_UPGRADE_EXIT:-0}"
     ;;
   cleanup)
