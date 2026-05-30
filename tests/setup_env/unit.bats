@@ -970,6 +970,36 @@ teardown() {
   [ "${_DOCTOR_FAILED}" -eq 1 ]
 }
 
+@test "_doctor_check_cred_dirs real: fails when all credential dirs are missing" {
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  export HOME="${TMPDIR_TEST}"
+  # No dirs created — all four dirs are absent
+  _doctor_check_cred_dirs
+  [ "${_DOCTOR_FAIL}" -ge 4 ]
+  [ "${_DOCTOR_PASS}" -eq 0 ]
+}
+
+@test "_doctor_check_cred_dirs real: passes when all dirs have correct 700 perms" {
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  export HOME="${TMPDIR_TEST}"
+  mkdir -p "${TMPDIR_TEST}/.aws" "${TMPDIR_TEST}/.tf_creds" "${TMPDIR_TEST}/.ssh" "${TMPDIR_TEST}/.tsh"
+  chmod 700 "${TMPDIR_TEST}/.aws" "${TMPDIR_TEST}/.tf_creds" "${TMPDIR_TEST}/.ssh" "${TMPDIR_TEST}/.tsh"
+  _doctor_check_cred_dirs
+  [ "${_DOCTOR_PASS}" -eq 4 ]
+  [ "${_DOCTOR_FAILED}" -eq 0 ]
+}
+
+@test "_doctor_check_cred_dirs real: fails when a dir has wrong perms" {
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  export HOME="${TMPDIR_TEST}"
+  mkdir -p "${TMPDIR_TEST}/.aws" "${TMPDIR_TEST}/.tf_creds" "${TMPDIR_TEST}/.ssh" "${TMPDIR_TEST}/.tsh"
+  chmod 700 "${TMPDIR_TEST}/.aws" "${TMPDIR_TEST}/.tf_creds" "${TMPDIR_TEST}/.tsh"
+  chmod 755 "${TMPDIR_TEST}/.ssh"
+  _doctor_check_cred_dirs
+  [ "${_DOCTOR_FAIL}" -ge 1 ]
+  [ "${_DOCTOR_PASS}" -ge 3 ]
+}
+
 # ── _doctor_check_versions ────────────────────────────────────────────────────
 
 @test "_doctor_check_versions passes when installed version matches pinned" {
