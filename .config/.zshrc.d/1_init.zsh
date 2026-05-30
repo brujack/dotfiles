@@ -12,11 +12,11 @@ fi
 
 if [[ -n ${UBUNTU} ]]; then
   UBUNTU_VERSION=$(lsb_release -rs)
-  [[ ${UBUNTU_VERSION} = "18.04" ]] && readonly BIONIC=1
-  [[ ${UBUNTU_VERSION} = "20.04" ]] && readonly FOCAL=1
-  [[ ${UBUNTU_VERSION} = "22.04" ]] && readonly JAMMY=1
-  [[ ${UBUNTU_VERSION} = "24.04" ]] && readonly NOBLE=1
-  [[ ${UBUNTU_VERSION} = "6" ]] && readonly FOCAL=1 # elementary os
+  [[ ${UBUNTU_VERSION} = "18.04" ]] && { [[ -n "${BIONIC+x}" ]] || readonly BIONIC=1; }
+  [[ ${UBUNTU_VERSION} = "20.04" ]] && { [[ -n "${FOCAL+x}" ]] || readonly FOCAL=1; }
+  [[ ${UBUNTU_VERSION} = "22.04" ]] && { [[ -n "${JAMMY+x}" ]] || readonly JAMMY=1; }
+  [[ ${UBUNTU_VERSION} = "24.04" ]] && { [[ -n "${NOBLE+x}" ]] || readonly NOBLE=1; }
+  [[ ${UBUNTU_VERSION} = "6" ]] && { [[ -n "${FOCAL+x}" ]] || readonly FOCAL=1; } # elementary os
 fi
 
 [[ $(uname -r) =~ microsoft ]] && export WINDOWS=1
