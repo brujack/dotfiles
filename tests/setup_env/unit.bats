@@ -894,6 +894,30 @@ teardown() {
   [ "${_DOCTOR_FAILED}" -eq 1 ]
 }
 
+@test "_doctor_check_tools passes apt-get when found on Ubuntu" {
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  export LINUX=1; export UBUNTU=1; unset MACOS
+  _doctor_check_tools
+  [ "${_DOCTOR_FAILED}" -eq 0 ]
+}
+
+@test "_doctor_check_tools fails when apt-get is missing on Ubuntu" {
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  export LINUX=1; export UBUNTU=1; unset MACOS
+  local _saved_path="$PATH"
+  local _mocks_dir; _mocks_dir="$(cd "${BATS_TEST_DIRNAME}/../mocks" && pwd)"
+  local _tmp="${BATS_TEST_TMPDIR}/mocks_no_apt"
+  mkdir -p "${_tmp}"
+  for f in "${_mocks_dir}/"*; do
+    [[ "$(basename "$f")" == "apt-get" ]] && continue
+    ln -sf "$f" "${_tmp}/$(basename "$f")"
+  done
+  export PATH="${_tmp}"
+  _doctor_check_tools
+  export PATH="${_saved_path}"
+  [ "${_DOCTOR_FAILED}" -ge 1 ]
+}
+
 # ── _doctor_check_cred_dirs ───────────────────────────────────────────────────
 
 @test "_doctor_check_cred_dirs passes when dir exists with mode 700" {
@@ -1108,4 +1132,26 @@ teardown() {
   _doctor_check_github_mcp
   [ "${_DOCTOR_FAIL}" -eq 0 ]
   [ "${_DOCTOR_FAILED}" -eq 0 ]
+}
+
+@test "_doctor_check_github_mcp warns when GITHUB_PAT_EXPIRY cannot be parsed" {
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  export GITHUB_PAT="fake-token"
+  mkdir -p "${HOME}/.claude"
+  printf '{"mcpServers":{}}\n' > "${HOME}/.claude/mcp.json"
+  export MOCK_CURL_EXIT=0
+  export GITHUB_PAT_EXPIRY="not-a-date"
+  _doctor_check_github_mcp
+  [ "${_DOCTOR_WARN}" -ge 1 ]
+}
+
+@test "_doctor_check_github_mcp fails when GITHUB_PAT has expired" {
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  export GITHUB_PAT="fake-token"
+  mkdir -p "${HOME}/.claude"
+  printf '{"mcpServers":{}}\n' > "${HOME}/.claude/mcp.json"
+  export MOCK_CURL_EXIT=0
+  export GITHUB_PAT_EXPIRY="2020-01-01"
+  _doctor_check_github_mcp
+  [ "${_DOCTOR_FAILED}" -ge 1 ]
 }

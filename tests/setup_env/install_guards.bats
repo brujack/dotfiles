@@ -35,6 +35,12 @@ teardown() {
   grep -q "brew list --formula --full-name" "${MOCK_CALLS_FILE}"
 }
 
+@test "brew_formula_installed returns 1 when root" {
+  export MOCK_ID_U=0
+  run brew_formula_installed git
+  [ "$status" -eq 1 ]
+}
+
 # ── brew_cask_installed ──────────────────────────────────────────────────────
 
 @test "brew_cask_installed returns 0 when cask is listed" {
@@ -47,6 +53,19 @@ teardown() {
   export MOCK_BREW_LIST_CASK="firefox"
   run brew_cask_installed docker
   [ "$status" -eq 1 ]
+}
+
+@test "brew_cask_installed returns 1 when root" {
+  export MOCK_ID_U=0
+  run brew_cask_installed docker
+  [ "$status" -eq 1 ]
+}
+
+@test "brew_cask_installed uses full-name flag for tap-qualified casks" {
+  export MOCK_BREW_LIST_CASK="hashicorp/tap/vault-secrets-operator"
+  run brew_cask_installed hashicorp/tap/vault-secrets-operator
+  [ "$status" -eq 0 ]
+  grep -q "brew list --cask --full-name" "${MOCK_CALLS_FILE}"
 }
 
 # ── brew_install_formula ─────────────────────────────────────────────────────
@@ -229,6 +248,31 @@ teardown() {
   "
   [ "$status" -ne 0 ]
   [[ "$output" != *"Updating Homebrew"* ]]
+}
+
+@test "brew_update returns 1 when brew upgrade fails" {
+  export MOCK_ID_U=1000
+  export MOCK_BREW_UPGRADE_EXIT=1
+  run brew_update
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Failed to upgrade formulae"* ]]
+}
+
+@test "brew_update warns but continues when cask upgrade fails" {
+  export MOCK_ID_U=1000
+  export MOCK_BREW_UPGRADE_CASK_EXIT=1
+  run brew_update
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Some casks failed to upgrade"* ]]
+  [[ "$output" == *"Homebrew update process completed successfully"* ]]
+}
+
+@test "brew_update returns 1 when brew cleanup fails" {
+  export MOCK_ID_U=1000
+  export MOCK_BREW_CLEANUP_EXIT=1
+  run brew_update
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Failed to clean up"* ]]
 }
 
 # ── safe_link ─────────────────────────────────────────────────────────────────
