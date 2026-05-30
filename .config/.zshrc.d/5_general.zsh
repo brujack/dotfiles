@@ -1,5 +1,5 @@
 GO_VER="1.26"
-RUBY_VER="4.0.2"
+RUBY_VER="3.4.1"
 GITREPOS="${HOME}/git-repos"
 
 if [[ ${MACOS} ]]; then
@@ -19,11 +19,6 @@ if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n {O
   export FZF_BASE=/opt/homebrew/bin/fzf
 fi
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
-
-# zsh-autosuggestions
-if [[ ! -d ${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions ]]; then
-  git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
-fi
 
 # Preferred editor for local and remote sessions
 if [[ -n $SSH_CONNECTION || ${LINUX} ]]; then

@@ -58,8 +58,10 @@ if command -v pyenv &> /dev/null; then
 
   eval "$(pyenv virtualenv-init -)"
   if [[ -n ${STUDIO} ]] || [[ -n ${LAPTOP} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]] || [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]] || [[ -n ${RATNA} ]]; then
-    if [[ "$(pyenv version-name)" != "ansible" ]]; then
-      pyenv activate ansible
+    if [[ -d "${PYENV_ROOT:-${HOME}/.pyenv}/versions/ansible" ]]; then
+      if [[ "$(pyenv version-name)" != "ansible" ]]; then
+        pyenv activate ansible
+      fi
     fi
   fi
 
