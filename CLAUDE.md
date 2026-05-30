@@ -294,6 +294,7 @@ CI requirements:
 
 ### Testing Rules
 
+- **`load_setup_env()` automatically sets OS vars:** All BATS test files in `tests/setup_env/` call `load_setup_env()` in their `setup()` function. This sources `setup_env.sh` → `detect_env.sh`, setting `MACOS=1` on macOS or `LINUX=1` + `UBUNTU=1` on Ubuntu Noble. Tests that call OS-branching functions do NOT need to explicitly export `MACOS` — they inherit the real OS detection. Only override (e.g. `unset MACOS; export LINUX=1; export UBUNTU=1`) when a test needs to simulate a different OS than the test machine.
 - Every new function in `setup_env.sh` must have a test in `tests/setup_env/unit.bats` (pure logic) or `tests/setup_env/install_guards.bats` (side effects requiring mocks)
 - Every modification to an existing function must update its test
 - New shell scripts get their own directory under `tests/` (e.g., `tests/scripts/`)
