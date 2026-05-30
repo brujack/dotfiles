@@ -78,6 +78,10 @@ printf "%-30s  %8s  %8s  %8s\n" "----" "-------" "-----" "---"
 total_covered=0
 total_coverable=0
 
+# Regex for case branch labels — stored in variable to avoid zsh parse error on | inside inline character class
+# Matches: brew), mas), OK), *), oh-my-zsh|tpm|tfenv|zsh-autosuggestions), etc.
+_case_label_re="^[a-zA-Z_*][a-zA-Z0-9_.*-]*([|][a-zA-Z0-9_.*-]+)*[)]$"
+
 for src_file in "${INCLUDE_FILES[@]}"; do
     [[ ! -f "${src_file}" ]] && continue
 
@@ -93,6 +97,15 @@ for src_file in "${INCLUDE_FILES[@]}"; do
             "}"|"fi"|"done"|"esac"|";;"|"then"|"do"|"else") continue ;;
         esac
         [[ "${trimmed}" =~ ^[[:space:]]*\)$ ]] && continue
+        # Case branch labels (brew), mas), OK), *), oh-my-zsh|tpm|...) — xtrace never emits them
+        # Regex in variable avoids zsh parse error on | inside inline character class
+        [[ "${trimmed}" =~ ${_case_label_re} ]] && continue
+        # done with any redirect (done <<< ..., done < <(...), done < file)
+        [[ "${trimmed}" =~ ^done[[:space:]] ]] && continue
+        # Continuation lines of multi-line pipelines (> outfile, > /dev/null)
+        [[ "${trimmed}" =~ ^\> ]] && continue
+        # Closing group command with redirect (} >> file, } | cmd)
+        [[ "${trimmed}" =~ ^\}[[:space:]] ]] && continue
         ((coverable++))
     done < "${src_file}"
 

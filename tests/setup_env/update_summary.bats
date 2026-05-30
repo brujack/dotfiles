@@ -681,3 +681,76 @@ firefox  124.0"
   grep -q "OK" "${_UPDATE_TMPDIR}/status_cheat.sh"
   grep -q "updated" "${_UPDATE_TMPDIR}/result_cheat.sh"
 }
+
+@test "_update_record_end brew: reports cask-only update when formulae unchanged" {
+  printf "git\n" > "${_UPDATE_TMPDIR}/pre_brew_formula"
+  printf "old-app\n" > "${_UPDATE_TMPDIR}/pre_brew_cask"
+  export MOCK_BREW_LIST_FORMULA="git"
+  export MOCK_BREW_LIST_CASK="new-app"
+  _update_record_end "brew" 0
+  grep -q "OK" "${_UPDATE_TMPDIR}/status_brew"
+  grep -q "1 cask(s)" "${_UPDATE_TMPDIR}/result_brew"
+  grep -q "new-app" "${_UPDATE_TMPDIR}/result_brew"
+  [[ "$(<"${_UPDATE_TMPDIR}/result_brew")" != *"formulae"* ]]
+}
+
+@test "_update_record_end brew: reports both formulae and cask updates" {
+  printf "git 2.44.0\n" > "${_UPDATE_TMPDIR}/pre_brew_formula"
+  printf "old-app\n" > "${_UPDATE_TMPDIR}/pre_brew_cask"
+  export MOCK_BREW_LIST_FORMULA="git 2.45.0"
+  export MOCK_BREW_LIST_CASK="new-app"
+  _update_record_end "brew" 0
+  grep -q "OK" "${_UPDATE_TMPDIR}/status_brew"
+  grep -q "formulae" "${_UPDATE_TMPDIR}/result_brew"
+  grep -q "cask(s)" "${_UPDATE_TMPDIR}/result_brew"
+}
+
+@test "_update_record_end gems: reports updated when no pre-snapshot" {
+  rm -f "${_UPDATE_TMPDIR}/pre_gems"
+  _update_record_end "gems" 0
+  grep -q "OK" "${_UPDATE_TMPDIR}/status_gems"
+  grep -q "updated" "${_UPDATE_TMPDIR}/result_gems"
+}
+
+@test "_update_record_end pip: reports no changes when pip_outdated is empty" {
+  touch "${_UPDATE_TMPDIR}/pip_outdated"
+  _update_record_end "pip" 0
+  grep -q "OK" "${_UPDATE_TMPDIR}/status_pip"
+  grep -q "no changes" "${_UPDATE_TMPDIR}/result_pip"
+}
+
+@test "_update_record_end pip: reports updated when no pip_outdated file" {
+  rm -f "${_UPDATE_TMPDIR}/pip_outdated"
+  _update_record_end "pip" 0
+  grep -q "OK" "${_UPDATE_TMPDIR}/status_pip"
+  grep -q "updated" "${_UPDATE_TMPDIR}/result_pip"
+}
+
+@test "_update_record_end zsh-autosuggestions: reports commit count when pre-snapshot and updates found" {
+  printf "abc1234\n" > "${_UPDATE_TMPDIR}/pre_zsh-autosuggestions"
+  _update_git_diff() { printf "abc1234 update zsh-autosuggestions\n"; }
+  _update_record_end "zsh-autosuggestions" 0
+  grep -q "OK" "${_UPDATE_TMPDIR}/status_zsh-autosuggestions"
+  grep -q "1 commit(s)" "${_UPDATE_TMPDIR}/result_zsh-autosuggestions"
+}
+
+@test "_update_record_end softwareupdate: reports updated when no pre-snapshot" {
+  rm -f "${_UPDATE_TMPDIR}/pre_softwareupdate"
+  _update_record_end "softwareupdate" 0
+  grep -q "OK" "${_UPDATE_TMPDIR}/status_softwareupdate"
+  grep -q "updated" "${_UPDATE_TMPDIR}/result_softwareupdate"
+}
+
+@test "_update_record_end claude: reports updated when no pre-snapshot" {
+  rm -f "${_UPDATE_TMPDIR}/pre_claude"
+  _update_record_end "claude" 0
+  grep -q "OK" "${_UPDATE_TMPDIR}/status_claude"
+  grep -q "updated" "${_UPDATE_TMPDIR}/result_claude"
+}
+
+@test "_update_record_end snap: reports updated when no pre-snapshot" {
+  rm -f "${_UPDATE_TMPDIR}/pre_snap"
+  _update_record_end "snap" 0
+  grep -q "OK" "${_UPDATE_TMPDIR}/status_snap"
+  grep -q "updated" "${_UPDATE_TMPDIR}/result_snap"
+}
