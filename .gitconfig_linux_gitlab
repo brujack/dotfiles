@@ -3,8 +3,6 @@
 [user]
 	name = Bruce Jackson
 	email = bjackson@pobox.com
-[commit]
-	template = /home/bruce/.stCommitMsg
 [alias]
 	br = branch
 	ci = commit

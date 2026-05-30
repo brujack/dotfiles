@@ -27,5 +27,7 @@
 [diff "sopsdiffer"]
 [pull]
 	rebase = true
+[includeIf "gitdir:~/git-repos/gitlab/"]
+	path = ~/.gitconfig_linux_gitlab
 [gc]
 	autoDetach = false
