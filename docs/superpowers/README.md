@@ -88,9 +88,9 @@ Master status index for all specs and implementation plans in this directory.
 
 Ideas approved for future specs, in no particular order:
 
-| Feature                 | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| coverage-helpers-gaps-2 | `helpers.sh` at 83% (floor 90%). Uncovered: `ensure_not_root` root path (`id -u` == 0 branch, needed by brew_update/brew_formula_installed/brew_cask_installed guards); `brew_update` failure branches (update/upgrade/cleanup each return 1); `_doctor_check_github_mcp` PAT expiry paths (EXPIRY not set, parse failure, expired, expiring-in-30-days); `_doctor_check_tools` Linux apt-get path; `setup_zsh_as_default_shell` ZSH_PATH not executable branch; `brew_formula_installed`/`brew_cask_installed` tap-qualified (slash) paths. |
+| Feature | Notes         |
+| ------- | ------------- |
+| —       | Backlog empty |
 
 ---
 
