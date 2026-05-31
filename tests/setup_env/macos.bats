@@ -185,6 +185,7 @@ teardown() {
   local _saved_path="${PATH}"
   export PATH="${_no_brew}:/usr/bin:/bin"
   install_homebrew() { return 0; }
+  export -f install_homebrew
   local _rc=0
   local _out
   _out="$(install_git_macos 2>&1)" || _rc=$?
@@ -204,6 +205,7 @@ teardown() {
   local _saved_path="${PATH}"
   export PATH="${_no_brew}:/usr/bin:/bin"
   install_homebrew() { return 0; }
+  export -f install_homebrew
   local _rc=0
   local _out
   _out="$(install_zsh_macos 2>&1)" || _rc=$?
