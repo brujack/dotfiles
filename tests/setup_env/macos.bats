@@ -159,3 +159,79 @@ teardown() {
   run install_macos_casks
   [ "$status" -eq 0 ]
 }
+
+# ── install_homebrew (xcodebuild license failure) ────────────────────────────
+
+@test "install_homebrew: xcodebuild fails after xcode install - returns 1 with license error" {
+  export MOCK_UNAME_S=Darwin
+  export MOCK_XCODE_SELECT_PRINT_PATH_EXIT=1
+  export MOCK_XCODE_SELECT_EXIT=0
+  export MOCK_XCODEBUILD_EXIT=1
+  run install_homebrew
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Failed to accept Xcode license"* ]]
+}
+
+# ── install_git_macos / install_zsh_macos (no-brew error paths) ──────────────
+
+@test "install_git_macos: brew absent after install_homebrew stub - returns error" {
+  local _mocks="${BATS_TEST_DIRNAME}/../mocks"
+  local _no_brew="${BATS_TEST_TMPDIR}/no-brew-bin"
+  mkdir -p "${_no_brew}"
+  for _f in "${_mocks}/"*; do
+    [[ "$(basename "${_f}")" == "brew" ]] && continue
+    cp "${_f}" "${_no_brew}/$(basename "${_f}")"
+  done
+  local _saved_path="${PATH}"
+  export PATH="${_no_brew}:/usr/bin:/bin"
+  install_homebrew() { return 0; }
+  local _rc=0
+  local _out
+  _out="$(install_git_macos 2>&1)" || _rc=$?
+  export PATH="${_saved_path}"
+  [ "${_rc}" -eq 1 ]
+  [[ "${_out}" == *"Failed to install Homebrew. Cannot install Git."* ]]
+}
+
+@test "install_zsh_macos: brew absent after install_homebrew stub - returns error" {
+  local _mocks="${BATS_TEST_DIRNAME}/../mocks"
+  local _no_brew="${BATS_TEST_TMPDIR}/no-brew-bin"
+  mkdir -p "${_no_brew}"
+  for _f in "${_mocks}/"*; do
+    [[ "$(basename "${_f}")" == "brew" ]] && continue
+    cp "${_f}" "${_no_brew}/$(basename "${_f}")"
+  done
+  local _saved_path="${PATH}"
+  export PATH="${_no_brew}:/usr/bin:/bin"
+  install_homebrew() { return 0; }
+  local _rc=0
+  local _out
+  _out="$(install_zsh_macos 2>&1)" || _rc=$?
+  export PATH="${_saved_path}"
+  [ "${_rc}" -eq 1 ]
+  [[ "${_out}" == *"Failed to install Homebrew. Cannot install zsh."* ]]
+}
+
+# ── install_macos_packages (no-brew path) ────────────────────────────────────
+
+@test "install_macos_packages: brew absent, install_homebrew fails - returns 1" {
+  export BREWFILE_LOC="${BATS_TEST_TMPDIR}/brew"
+  export PERSONAL_GITREPOS="${BATS_TEST_TMPDIR}/git-repos/personal"
+  export DOTFILES="dotfiles"
+  mkdir -p "${BREWFILE_LOC}" "${PERSONAL_GITREPOS}/${DOTFILES}"
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile"
+  local _mocks="${BATS_TEST_DIRNAME}/../mocks"
+  local _no_brew="${BATS_TEST_TMPDIR}/no-brew-bin"
+  mkdir -p "${_no_brew}"
+  for _f in "${_mocks}/"*; do
+    [[ "$(basename "${_f}")" == "brew" ]] && continue
+    cp "${_f}" "${_no_brew}/$(basename "${_f}")"
+  done
+  local _saved_path="${PATH}"
+  export PATH="${_no_brew}:/usr/bin:/bin"
+  install_homebrew() { return 1; }
+  local _rc=0
+  install_macos_packages 2>/dev/null || _rc=$?
+  export PATH="${_saved_path}"
+  [ "${_rc}" -eq 1 ]
+}
