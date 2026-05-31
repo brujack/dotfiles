@@ -126,6 +126,25 @@ teardown() {
   [ "${CHECK_VERSIONS}" -eq 1 ]
 }
 
+@test "process_args prints error for invalid -t type" {
+  run bash -c "
+    source '${BATS_TEST_DIRNAME}/../../setup_env.sh'
+    process_args -t bogus
+  "
+  # usage() calls exit 0, so the process exits 0; the error message is the signal
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Invalid option for -t"* ]]
+}
+
+@test "process_args -h exits 0 and prints usage" {
+  run bash -c "
+    source '${BATS_TEST_DIRNAME}/../../setup_env.sh'
+    process_args -h
+  "
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+}
+
 # ── process_args: --dry-run ───────────────────────────────────────────────────
 
 @test "process_args sets DRY_RUN for --dry-run flag" {
@@ -918,6 +937,23 @@ teardown() {
   [ "${_DOCTOR_FAILED}" -ge 1 ]
 }
 
+@test "_doctor_check_tools real: fails when brew is missing on macOS" {
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  export MACOS=1; unset LINUX UBUNTU
+  local _saved_path="$PATH"
+  local _mocks_dir; _mocks_dir="$(cd "${BATS_TEST_DIRNAME}/../mocks" && pwd)"
+  local _tmp="${BATS_TEST_TMPDIR}/mocks_no_brew"
+  mkdir -p "${_tmp}"
+  for f in "${_mocks_dir}/"*; do
+    [[ "$(basename "$f")" == "brew" ]] && continue
+    ln -sf "$f" "${_tmp}/$(basename "$f")"
+  done
+  export PATH="${_tmp}"
+  _doctor_check_tools
+  export PATH="${_saved_path}"
+  [ "${_DOCTOR_FAILED}" -ge 1 ]
+}
+
 # ── _doctor_check_cred_dirs ───────────────────────────────────────────────────
 
 @test "_doctor_check_cred_dirs passes when dir exists with mode 700" {
@@ -1106,6 +1142,19 @@ teardown() {
   [ "${_DOCTOR_FAILED}" -eq 1 ]
 }
 
+@test "_doctor_check_github_mcp fails when mcp.json is a broken symlink" {
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  unset GITHUB_PAT GITHUB_PAT_EXPIRY
+  local _saved_home="${HOME}"
+  export HOME="${BATS_TEST_TMPDIR}/symlink_home"
+  mkdir -p "${HOME}/.claude"
+  ln -s "${HOME}/.claude/nonexistent_target" "${HOME}/.claude/mcp.json"
+  _doctor_check_github_mcp
+  export HOME="${_saved_home}"
+  [ "${_DOCTOR_FAIL}" -eq 1 ]
+  [ "${_DOCTOR_FAILED}" -eq 1 ]
+}
+
 @test "_doctor_check_github_mcp fails when GITHUB_PAT is unset" {
   _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
   unset GITHUB_PAT GITHUB_PAT_EXPIRY
@@ -1145,6 +1194,18 @@ teardown() {
   mkdir -p "${HOME}/.claude"
   printf '{"mcpServers":{}}\n' > "${HOME}/.claude/mcp.json"
   export MOCK_CURL_EXIT=6
+  _doctor_check_github_mcp
+  [ "${_DOCTOR_FAIL}" -eq 0 ]
+  [ "${_DOCTOR_WARN}" -ge 1 ]
+}
+
+@test "_doctor_check_github_mcp warns for other curl errors" {
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  export GITHUB_PAT="fake-token"
+  unset GITHUB_PAT_EXPIRY
+  mkdir -p "${HOME}/.claude"
+  printf '{"mcpServers":{}}\n' > "${HOME}/.claude/mcp.json"
+  export MOCK_CURL_EXIT=7  # CURLE_COULDNT_CONNECT — not 22/28/6, hits the catch-all warn branch
   _doctor_check_github_mcp
   [ "${_DOCTOR_FAIL}" -eq 0 ]
   [ "${_DOCTOR_WARN}" -ge 1 ]
