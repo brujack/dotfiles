@@ -1245,6 +1245,30 @@ setup_constants_copy() {
   grep -q "SKIP" "${_UPDATE_TMPDIR}/status_pip"
 }
 
+@test "run_update runs pip update when UPDATE_PIP and HAS_DEVTOOLS are set" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE_PIP=1 HAS_DEVTOOLS=1
+  unset UPDATE_BREW UPDATE_CLAUDE UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  # pyenv which python must return the mock python so $PYTHON stays in mock PATH
+  export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
+  run_update
+  grep -q "OK" "${_UPDATE_TMPDIR}/status_pip"
+  grep -q "pyenv which python" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_update pip writes pip_outdated when packages are outdated" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE_PIP=1 HAS_DEVTOOLS=1
+  unset UPDATE_BREW UPDATE_CLAUDE UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
+  export MOCK_PYTHON_HEREDOC_PKGS="requests"
+  run_update
+  grep -q "requests" "${_UPDATE_TMPDIR}/pip_outdated"
+  grep -q "OK" "${_UPDATE_TMPDIR}/status_pip"
+}
+
 # ── _check_one_version ────────────────────────────────────────────────────────
 
 @test "_check_one_version prints SKIP when tool is not installed" {
