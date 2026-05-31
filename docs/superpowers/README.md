@@ -85,6 +85,7 @@ Master status index for all specs and implementation plans in this directory.
 | 2026-05-31 | coverage-macos-install-errors                                                      | —                                                                   | Done   |
 | 2026-05-31 | coverage-helpers-doctor-error-paths                                                | —                                                                   | Done   |
 | 2026-05-31 | coverage-helpers-setup-functions                                                   | —                                                                   | Done   |
+| 2026-05-31 | coverage-workflows-pip-update                                                      | —                                                                   | Done   |
 
 ---
 
@@ -94,7 +95,6 @@ Ideas approved for future specs, in no particular order:
 
 | Feature                        | Notes                                                                                                                                                                                                                                                                                                               |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| coverage-workflows-pip-update  | `workflows.sh` 85%→90%: `run_update` pip block lines 327-362 (36L). Mock pyenv/python3/pip; test happy path (packages updated) and no-updates path. Largest single gap.                                                                                                                                             |
 | coverage-workflows-minor-paths | `workflows.sh` minor gaps (8L, bonus): `setup_claude_mcp` local-config-present path (1L); `run_update` neither-macOS-nor-Linux path (2L); `run_developer_or_ansible` Linux body — `install_github_cli_linux`, `setup_ansible`, `clone_personal_repos` (3L); `_check_one_version` + `_run_cv_check` args lines (2L). |
 
 ---
