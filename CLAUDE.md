@@ -336,7 +336,11 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 - **`make bash-coverage`** measures coverage via `BASH_ENV` + PS4 xtrace tracer (`scripts/run-bash-coverage.sh`). Runs all bats tests with xtrace active; filters trace output through a named pipe to keep disk usage small (~200K lines vs ~33M raw).
 - **`make push-bash-coverage`** runs `bash-coverage`, generates `coverage/bash.json` in shields.io format, and pushes it to the `coverage-data` branch. The README badge pulls from that branch.
 - **Cron job (manual install)**: `(crontab -l 2>/dev/null; echo "0 2 * * * cd ~/git-repos/personal/dotfiles && make push-bash-coverage >> ~/.dotfiles-coverage.log 2>&1") | crontab -`
-- **Per-file floors** (not yet enforced): 90% for `setup_env.sh`, `constants.sh`, `detect_env.sh`, `helpers.sh`, `workflows.sh`, `update_summary.sh`, `developer.sh`; 75% for `linux_shared.sh`, `linux_ubuntu.sh`, `macos.sh`.
+- **Per-file floors** (not yet enforced): 90% for `constants.sh`, `detect_env.sh`, `helpers.sh`, `workflows.sh`, `update_summary.sh`, `developer.sh`; 75% for `linux_shared.sh`, `linux_ubuntu.sh`, `macos.sh`.
+- **Per-file ceilings** — some lines are inherently untraceable by the PS4 xtrace approach; don't waste time trying to test them:
+  - `setup_env.sh`: ceiling ~89% — lines 70-85 (the direct-execution dispatch block) are inside `[[ "${BASH_SOURCE[0]}" == "${0}" ]]`; `run bash setup_env.sh` in BATS does not inherit FD 9, so subprocess xtrace output is lost. Floor set to 89% not 90%.
+  - `helpers.sh`/`workflows.sh`: multi-line array literals (individual string entries not traced), `usage()` heredoc content lines, and continuation lines of multi-line curl commands are not emitted by bash xtrace. ~25-30 lines per file are structural non-traceables.
+  - `macos.sh`: function declaration lines (`funcname() {`) not consistently traced across bash versions (~3 lines).
 - **Status: advisory only — not gated in CI** (kcov/bashcov both fail in GH Actions; xtrace approach is macOS-only because it requires running the full bats suite locally).
 - **Do not retry kcov or bashcov** — both confirmed broken:
   - **kcov**: works for direct bash scripts but cannot trace scripts sourced through bats; bats's test subshells are not captured. No data produced even locally.

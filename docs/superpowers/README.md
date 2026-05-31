@@ -89,9 +89,13 @@ Master status index for all specs and implementation plans in this directory.
 
 Ideas approved for future specs, in no particular order:
 
-| Feature | Notes         |
-| ------- | ------------- |
-| —       | Backlog empty |
+| Feature                             | Notes                                                                                                                                                                                                                                                                                                                                                                                           |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| coverage-macos-install-errors       | `macos.sh` 87%→90%+: `install_homebrew` Xcode-license fail path (2L), `install_macos_packages` homebrew call (1L), `install_git/zsh_macos` homebrew-fail paths (6L). Use `MOCK_XCODEBUILD_EXIT=1`. 9 lines total.                                                                                                                                                                               |
+| coverage-helpers-doctor-error-paths | `helpers.sh` 86%→90%: brew helpers `return 1` (4L); `_doctor_check_tools` brew-not-found (1L); `_doctor_check_cred_dirs` missing-dir + wrong-perms (3L); `_doctor_check_one_version` tool-missing + parse-fail (4L); `_doctor_check_github_mcp` broken-symlink/missing/curl-error (5L); `setup_zsh_as_default_shell` ZSH missing (1L); `process_args` invalid-type + `-h` (2L). 20 lines total. |
+| coverage-helpers-setup-functions    | `helpers.sh` bonus after above (~95%): `setup_credential_directories` full function (22L — assert `~/.aws`, `~/.gcloud_creds`, `~/.azure_creds` created with 700 perms); `setup_dotfile_symlinks` OMZ-installed message + Cursor-not-installed path (2L). 24 lines.                                                                                                                             |
+| coverage-workflows-pip-update       | `workflows.sh` 85%→90%: `run_update` pip block lines 327-362 (36L). Mock pyenv/python3/pip; test happy path (packages updated) and no-updates path. Largest single gap.                                                                                                                                                                                                                         |
+| coverage-workflows-minor-paths      | `workflows.sh` minor gaps (8L, bonus): `setup_claude_mcp` local-config-present path (1L); `run_update` neither-macOS-nor-Linux path (2L); `run_developer_or_ansible` Linux body — `install_github_cli_linux`, `setup_ansible`, `clone_personal_repos` (3L); `_check_one_version` + `_run_cv_check` args lines (2L).                                                                             |
 
 ---
 
