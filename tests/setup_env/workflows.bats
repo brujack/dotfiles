@@ -1309,6 +1309,14 @@ setup_constants_copy() {
   [[ ${_rc} -eq 1 ]]
 }
 
+@test "_check_one_version includes pinned and latest version in OK output" {
+  _fetch_github_latest() { printf '2.5.1'; }
+  local _out
+  _out=$(_check_one_version "git" "2.5.1" "some/repo" "printf '2.5.1'" "[0-9]+\.[0-9]+\.[0-9]+")
+  [[ "${_out}" == *"pinned=2.5.1"* ]]
+  [[ "${_out}" == *"latest=2.5.1"* ]]
+}
+
 # ── run_check_versions summary counting ──────────────────────────────────────
 
 @test "run_check_versions counts skipped tools in summary" {
@@ -1346,6 +1354,18 @@ setup_constants_copy() {
   export UPDATE_VERSIONS=1
   run_check_versions || true
   [[ ${_prompted} -gt 0 ]]
+}
+
+@test "_run_cv_check passes extracted latest version to _prompt_version_update" {
+  _check_one_version() {
+    printf "  [OUTDATED] %-12s pinned=1.0.0      latest=9.8.7  installed=1.0.0\n" "$1"
+    return 1
+  }
+  local _latest_received=""
+  _prompt_version_update() { _latest_received="$4"; }
+  export UPDATE_VERSIONS=1
+  run_check_versions || true
+  [[ "${_latest_received}" == "9.8.7" ]]
 }
 
 # ── setup_claude_mcp: envsubst not installed ──────────────────────────────────
