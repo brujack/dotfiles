@@ -249,6 +249,40 @@ _make_fake_dotfiles() {
   [ "$status" -eq 0 ]
 }
 
+@test "setup_dotfile_symlinks logs 'Installed Oh My ZSH' when OMZ install succeeds" {
+  _make_fake_dotfiles
+  export MACOS=1
+  unset LINUX
+  # MOCK_CURL_SDK_STDOUT: curl mock outputs this when URL matches *githubusercontent.com*
+  # bash -c runs the output, creating ~/.oh-my-zsh so the success branch is taken
+  export MOCK_CURL_SDK_STDOUT='mkdir -p "${HOME}/.oh-my-zsh"'
+  run setup_dotfile_symlinks
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Installed Oh My ZSH"* ]]
+}
+
+@test "setup_dotfile_symlinks warns when Cursor is not installed" {
+  _make_fake_dotfiles
+  export MACOS=1
+  unset LINUX
+  mkdir -p "${FAKE_HOME}/.oh-my-zsh"  # skip OMZ install block
+  # Override app_dir_exists — /Applications/Cursor.app exists on dev machine
+  app_dir_exists() { return 1; }
+  # Minimal PATH: mocks (no cursor) + system /bin; excludes /opt/homebrew/bin where real cursor lives
+  local _mocks_dir
+  _mocks_dir="$(cd "${BATS_TEST_DIRNAME}/../mocks" && pwd)"
+  local _tmp="${BATS_TEST_TMPDIR}/mocks_no_cursor"
+  mkdir -p "${_tmp}"
+  for f in "${_mocks_dir}/"*; do
+    [[ "$(basename "$f")" == "cursor" ]] && continue
+    ln -sf "$f" "${_tmp}/$(basename "$f")"
+  done
+  export PATH="${_tmp}:/usr/bin:/bin"
+  run setup_dotfile_symlinks
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Cursor is not installed"* ]]
+}
+
 # ── setup_credential_directories ────────────────────────────────────────────
 
 @test "setup_credential_directories creates .aws with chmod 700" {
