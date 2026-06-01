@@ -87,6 +87,7 @@ Master status index for all specs and implementation plans in this directory.
 | 2026-05-31 | coverage-helpers-setup-functions                                                   | —                                                                   | Done   |
 | 2026-05-31 | coverage-workflows-pip-update                                                      | —                                                                   | Done   |
 | 2026-06-01 | coverage-workflows-minor-paths                                                     | —                                                                   | Done   |
+| 2026-06-01 | coverage-more-tests                                                                | —                                                                   | Done   |
 
 ---
 
