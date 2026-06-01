@@ -326,6 +326,15 @@ _make_fake_dotfiles() {
   grep -q "chsh -s /bin/zsh" "${MOCK_CALLS_FILE}"
 }
 
+@test "setup_zsh_as_default_shell logs error when zsh path does not exist" {
+  export SHELL="/bin/bash"
+  export _OVERRIDE_ZSH_PATH="/nonexistent/zsh"
+  run setup_zsh_as_default_shell
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"does not exist"* ]]
+  ! grep -q "chsh" "${MOCK_CALLS_FILE}"
+}
+
 # ── update_system_packages ───────────────────────────────────────────────────
 
 @test "update_system_packages calls apt update on Ubuntu" {

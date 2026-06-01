@@ -252,7 +252,7 @@ install_zsh() {
 setup_zsh_as_default_shell() {
   log_info "Setting ZSH as shell..."
 
-  ZSH_PATH="/bin/zsh"
+  ZSH_PATH="${_OVERRIDE_ZSH_PATH:-/bin/zsh}"
 
   if [[ ${SHELL} != "${ZSH_PATH}" ]]; then
     if [[ -x "${ZSH_PATH}" ]]; then
