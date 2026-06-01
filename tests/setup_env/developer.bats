@@ -120,3 +120,12 @@ teardown() {
   [ "$status" -eq 0 ]
   grep -q "git clone.*dotfiles" "${MOCK_CALLS_FILE}"
 }
+
+# ── setup_ansible — Linux branch ─────────────────────────────────────────────
+
+@test "setup_ansible: calls pyenv update on Linux when Python version absent" {
+  export LINUX=1; unset MACOS
+  export HAS_DEVTOOLS=1
+  run setup_ansible
+  grep -q "pyenv update" "${MOCK_CALLS_FILE}"
+}
