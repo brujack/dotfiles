@@ -284,8 +284,9 @@ Inline disables (`# shellcheck disable=SCxxxx # reason`) are used for remaining 
 
 - `test` job: installs bats + shellcheck, runs `make test`
 - `lint-macos` job: runs `bash -n` and `zsh -n` on all `.sh` files on `macos-latest` (advisory, not blocking auto-merge)
+- `bash-coverage` job: measures bash line coverage via PS4 xtrace on `ubuntu-latest`; **gates at 90%** — blocks auto-merge if coverage drops below floor
 - `secret-scan` job: runs gitleaks against recent commits (advisory, not blocking auto-merge)
-- `auto-merge` job: auto-merges any PR when all three CI jobs pass (depends on `test`, `lint-macos`, `secret-scan`)
+- `auto-merge` job: auto-merges any PR when all CI jobs pass (depends on `test`, `lint-macos`, `powershell`, `bash-coverage`, `secret-scan`)
 
 CI requirements:
 
@@ -332,7 +333,7 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 #### Bash
 
-- **Overall: 90%** (measured 2026-05-31 across 720 BATS tests using `make bash-coverage`; per-file: `setup_env.sh` 89%, `helpers.sh` 90%+, `workflows.sh` 85%+, `update_summary.sh` 97%, `developer.sh` 91%, `linux_ubuntu.sh` 91%, `macos.sh` 90%+, `constants.sh`/`detect_env.sh`/`linux_shared.sh` 96-100%)
+- **Overall: 92%** (measured 2026-06-01 across 720 BATS tests using `make bash-coverage`; per-file: `setup_env.sh` 89%, `helpers.sh` 90%, `workflows.sh` 91%, `update_summary.sh` 97%, `developer.sh` 91%, `linux_ubuntu.sh` 91%, `macos.sh` 97%, `constants.sh`/`detect_env.sh`/`linux_shared.sh` 96-100%)
 - **`make bash-coverage`** measures coverage via `BASH_ENV` + PS4 xtrace tracer (`scripts/run-bash-coverage.sh`). Runs all bats tests with xtrace active; filters trace output through a named pipe to keep disk usage small (~200K lines vs ~33M raw).
 - **`make push-bash-coverage`** runs `bash-coverage`, generates `coverage/bash.json` in shields.io format, and pushes it to the `coverage-data` branch. The README badge pulls from that branch.
 - **Cron job (manual install)**: `(crontab -l 2>/dev/null; echo "0 2 * * * cd ~/git-repos/personal/dotfiles && make push-bash-coverage >> ~/.dotfiles-coverage.log 2>&1") | crontab -`
@@ -341,7 +342,7 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
   - `setup_env.sh`: ceiling ~89% — lines 70-85 (the direct-execution dispatch block) are inside `[[ "${BASH_SOURCE[0]}" == "${0}" ]]`; `run bash setup_env.sh` in BATS does not inherit FD 9, so subprocess xtrace output is lost. Floor set to 89% not 90%.
   - `helpers.sh`/`workflows.sh`: multi-line array literals (individual string entries not traced), `usage()` heredoc content lines, and continuation lines of multi-line curl commands are not emitted by bash xtrace. ~25-30 lines per file are structural non-traceables.
   - `macos.sh`: function declaration lines (`funcname() {`) not consistently traced across bash versions (~3 lines).
-- **Status: advisory only — not gated in CI** (kcov/bashcov both fail in GH Actions; xtrace approach is macOS-only because it requires running the full bats suite locally).
+- **Status: gated in CI at 90%** — `bash-coverage` job runs on `ubuntu-latest` using the PS4 xtrace approach; blocks auto-merge if overall coverage drops below 90%.
 - **Do not retry kcov or bashcov** — both confirmed broken:
   - **kcov**: works for direct bash scripts but cannot trace scripts sourced through bats; bats's test subshells are not captured. No data produced even locally.
   - **bashcov**: incompatible with bats-core. bats hardcodes UUID `608a9069-2672-4fa2-a0e1-2823af783b95` in its temp file paths; bashcov's LINENO parser chokes on it.

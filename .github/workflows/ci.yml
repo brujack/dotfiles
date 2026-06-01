@@ -95,36 +95,32 @@ jobs:
 
   bash-coverage:
     runs-on: ubuntu-latest
-    continue-on-error: true
     permissions:
       contents: write
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
     steps:
       - uses: actions/checkout@v6
 
       - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y bats shellcheck zsh jq cmake libcurl4-openssl-dev libelf-dev libdw-dev binutils-dev libiberty-dev
+        run: sudo apt-get install -y bats shellcheck zsh
 
-      - name: Install kcov from source
+      - name: Run bash coverage (gate at 90%)
         run: |
-          git clone --depth 1 https://github.com/SimonKagstrom/kcov.git /tmp/kcov
-          cmake -S /tmp/kcov -B /tmp/kcov/build
-          cmake --build /tmp/kcov/build --parallel $(nproc)
-          sudo cmake --install /tmp/kcov/build
-
-      - name: Run coverage
-        run: make coverage
+          make bash-coverage > /tmp/bash-cov-out.txt 2>&1 || { cat /tmp/bash-cov-out.txt; exit 1; }
+          cat /tmp/bash-cov-out.txt
+          PCT=$(grep "^Overall bash coverage:" /tmp/bash-cov-out.txt | grep -oE '[0-9]+')
+          if [ -z "${PCT}" ]; then
+            printf "FAIL: coverage output not found\n" >&2
+            exit 1
+          fi
+          printf "Coverage: %d%%\n" "${PCT}"
+          if [ "${PCT}" -lt 90 ]; then
+            printf "FAIL: bash coverage %d%% is below the 90%% gate\n" "${PCT}" >&2
+            exit 1
+          fi
 
       - name: Publish bash coverage badge
         run: |
-          INDEX="coverage/kcov-merged/index.json"
-          if [ ! -f "$INDEX" ]; then
-            INDEX=$(find coverage -name "index.json" | head -1)
-          fi
-          PCT=$(python3 -c "import json,math; d=json.load(open('$INDEX')); print(math.floor(float(d.get('percent_covered', d.get('covered_percent', 0)))))")
+          PCT=$(grep "^Overall bash coverage:" /tmp/bash-cov-out.txt | grep -oE '[0-9]+')
           if   [ "$PCT" -ge 90 ]; then COLOR="brightgreen"
           elif [ "$PCT" -ge 80 ]; then COLOR="green"
           elif [ "$PCT" -ge 70 ]; then COLOR="yellow"
@@ -173,7 +169,7 @@ jobs:
             --verbose
 
   auto-merge:
-    needs: [test, lint-macos, powershell, secret-scan]
+    needs: [test, lint-macos, powershell, bash-coverage, secret-scan]
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
