@@ -94,14 +94,14 @@ jobs:
           done
 
   bash-coverage:
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v6
 
-      - name: Install bats-core
-        run: brew install bats-core
+      - name: Install dependencies
+        run: sudo apt-get install -y bats shellcheck zsh
 
       - name: Run bash coverage (gate at 90%)
         run: |

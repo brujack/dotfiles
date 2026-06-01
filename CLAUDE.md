@@ -284,7 +284,7 @@ Inline disables (`# shellcheck disable=SCxxxx # reason`) are used for remaining 
 
 - `test` job: installs bats + shellcheck, runs `make test`
 - `lint-macos` job: runs `bash -n` and `zsh -n` on all `.sh` files on `macos-latest` (advisory, not blocking auto-merge)
-- `bash-coverage` job: measures bash line coverage via PS4 xtrace on `macos-latest`; **gates at 90%** — blocks auto-merge if coverage drops below floor
+- `bash-coverage` job: measures bash line coverage via PS4 xtrace on `ubuntu-latest`; **gates at 90%** — blocks auto-merge if coverage drops below floor
 - `secret-scan` job: runs gitleaks against recent commits (advisory, not blocking auto-merge)
 - `auto-merge` job: auto-merges any PR when all CI jobs pass (depends on `test`, `lint-macos`, `powershell`, `bash-coverage`, `secret-scan`)
 
@@ -342,7 +342,7 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
   - `setup_env.sh`: ceiling ~89% — lines 70-85 (the direct-execution dispatch block) are inside `[[ "${BASH_SOURCE[0]}" == "${0}" ]]`; `run bash setup_env.sh` in BATS does not inherit FD 9, so subprocess xtrace output is lost. Floor set to 89% not 90%.
   - `helpers.sh`/`workflows.sh`: multi-line array literals (individual string entries not traced), `usage()` heredoc content lines, and continuation lines of multi-line curl commands are not emitted by bash xtrace. ~25-30 lines per file are structural non-traceables.
   - `macos.sh`: function declaration lines (`funcname() {`) not consistently traced across bash versions (~3 lines).
-- **Status: gated in CI at 90%** — `bash-coverage` job runs on `macos-latest` using the PS4 xtrace approach; blocks auto-merge if overall coverage drops below 90%.
+- **Status: gated in CI at 90%** — `bash-coverage` job runs on `ubuntu-latest` using the PS4 xtrace approach; blocks auto-merge if overall coverage drops below 90%.
 - **Do not retry kcov or bashcov** — both confirmed broken:
   - **kcov**: works for direct bash scripts but cannot trace scripts sourced through bats; bats's test subshells are not captured. No data produced even locally.
   - **bashcov**: incompatible with bats-core. bats hardcodes UUID `608a9069-2672-4fa2-a0e1-2823af783b95` in its temp file paths; bashcov's LINENO parser chokes on it.
