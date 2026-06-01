@@ -95,6 +95,23 @@ teardown() {
   ! grep -q "wget.*${GO_DOWNLOAD_FILENAME}" "${MOCK_CALLS_FILE}"
 }
 
+@test "_install_ubuntu_go: prints success when go version matches after install" {
+  export GO_VER="1.26"
+  export GO_DOWNLOAD_FILENAME="go1.26.linux-amd64.tar.gz"
+  export GO_DOWNLOAD_URL="https://dl.google.com/go/go1.26.linux-amd64.tar.gz"
+  # Pre-create tarball so wget/tar are skipped
+  touch "${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME}"
+  # Fake go binary that reports matching version
+  local _bin_dir="${BATS_TEST_TMPDIR}/gobin"
+  mkdir -p "${_bin_dir}"
+  printf '#!/usr/bin/env bash\nprintf "go version go1.26 linux/amd64\\n"\n' > "${_bin_dir}/go"
+  chmod +x "${_bin_dir}/go"
+  export PATH="${_bin_dir}:${PATH}"
+  run _install_ubuntu_go
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Go 1.26 is installed"* ]]
+}
+
 @test "_install_ubuntu_go: unsupported version returns 1" {
   export GO_VER="1.99"
   local _rc=0
@@ -341,6 +358,15 @@ teardown() {
   run _install_ubuntu_brew_packages
   [ "$status" -eq 0 ]
   ! grep -q "brew install ggshield" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_brew_packages: calls install_homebrew when brew is absent" {
+  install_homebrew() { printf "install_homebrew_called\n"; }
+  local _saved_path="${PATH}"
+  export PATH="/usr/bin:/bin"
+  run _install_ubuntu_brew_packages
+  export PATH="${_saved_path}"
+  [[ "$output" == *"install_homebrew_called"* ]]
 }
 
 # ── _install_ubuntu_gui_tools ────────────────────────────────────────────────
