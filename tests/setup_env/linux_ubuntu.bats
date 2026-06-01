@@ -163,6 +163,33 @@ teardown() {
   ! grep -q "curl.*nexte.st" "${MOCK_CALLS_FILE}"
 }
 
+@test "_install_ubuntu_rust: sources .cargo/env when file exists" {
+  export HAS_RUST=1
+  local _bin_dir="${BATS_TEST_TMPDIR}/fakebin"
+  mkdir -p "${_bin_dir}"
+  printf '#!/usr/bin/env bash\n' > "${_bin_dir}/rustc"         && chmod +x "${_bin_dir}/rustc"
+  printf '#!/usr/bin/env bash\n' > "${_bin_dir}/cargo"         && chmod +x "${_bin_dir}/cargo"
+  printf '#!/usr/bin/env bash\n' > "${_bin_dir}/cargo-nextest" && chmod +x "${_bin_dir}/cargo-nextest"
+  mkdir -p "${HOME}/.cargo/bin"
+  printf '# cargo env stub\n' > "${HOME}/.cargo/env"
+  export PATH="${_bin_dir}:${PATH}"
+  run _install_ubuntu_rust
+  [ "$status" -eq 0 ]
+}
+
+# ── _install_go_from_tarball ──────────────────────────────────────────────────
+
+@test "_install_go_from_tarball: moves software_downloads/go to /usr/local/go when present" {
+  export GO_VER="1.26"
+  export GO_DOWNLOAD_FILENAME="go1.26.linux-amd64.tar.gz"
+  export GO_DOWNLOAD_URL="https://dl.google.com/go/go1.26.linux-amd64.tar.gz"
+  mkdir -p "${HOME}/software_downloads/go"
+  export MOCK_SUDO_EXIT=1
+  run _install_go_from_tarball
+  [ "$status" -eq 0 ]
+  grep -q "sudo mv.*software_downloads/go" "${MOCK_CALLS_FILE}"
+}
+
 # ── _install_ubuntu_docker ───────────────────────────────────────────────────
 
 @test "_install_ubuntu_docker: HAS_DOCKER unset does nothing" {
