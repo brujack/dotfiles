@@ -11,3 +11,4 @@ Cross-cutting decisions that apply across personal repos. Repo-specific decision
 | [0005](0005-require-secrets-guarding-in-all-personal-repos.md) | Require secrets guarding in all personal repos | 2026-04-09 | Accepted |
 | [0006](0006-shell-script-testability-conventions.md)           | Shell script testability conventions           | 2026-04-11 | Accepted |
 | [0007](0007-branch-protection-automation.md)                   | Codify branch protection via script            | 2026-05-19 | Accepted |
+| [0008](0008-bash-coverage-ps4-xtrace.md)                       | Use PS4 xtrace for bash coverage measurement   | 2026-06-01 | Accepted |
