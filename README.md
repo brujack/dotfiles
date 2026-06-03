@@ -13,7 +13,7 @@ Running `setup_env.sh -t setup` on a fresh machine:
 - Installs all tools defined in `Brewfile` (via Homebrew)
 - Symlinks dotfiles from this repo into `$HOME` (`.zshrc`, `.vimrc`, `.tmux.conf`, `.gitconfig_*`, etc.)
 - Symlinks Claude Code and Cursor config from the `ai-config` repo into `~/.claude/` and `~/.cursor/`
-- Installs Oh-My-Zsh, Powerlevel10k, tpm (tmux plugins), pyenv, rbenv, and Ansible virtualenv
+- Installs Oh-My-Zsh, Starship, tpm (tmux plugins), pyenv, rbenv, and Ansible virtualenv
 - Sets zsh as the default shell
 - Applies macOS system defaults (`.osx.sh`)
 
