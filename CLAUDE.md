@@ -534,3 +534,7 @@ A PR or direct master commit is complete when **all** of the following are true:
 - [ ] `README.md` updated if any user-facing command or workflow changed
 - [ ] `pr-review` skill PASS verdict obtained before push (feature branches only)
 - [ ] Learning analysis complete (session-end or post-merge)
+
+---
+
+@~/.claude/standards/powershell.md
