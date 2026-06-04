@@ -221,14 +221,14 @@ run_update() {
   if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_BREW:-} ]]; then
     if [[ -n ${MACOS} ]] || [[ -n ${LINUX} ]]; then
       _update_record_start "brew"
-      brew_update
-      _update_record_end "brew" $?
+      brew_update 2>&1 | tee "${_UPDATE_TMPDIR}/err_brew"
+      _update_record_end "brew" "${PIPESTATUS[0]}"
 
       if [[ -n ${MACOS} ]]; then
         _update_record_start "softwareupdate"
         printf "Updating app store apps softwareupdate\\n"
-        sudo -H softwareupdate --install --all --verbose
-        _update_record_end "softwareupdate" $?
+        sudo -H softwareupdate --install --all --verbose 2>&1 | tee "${_UPDATE_TMPDIR}/err_softwareupdate"
+        _update_record_end "softwareupdate" "${PIPESTATUS[0]}"
       else
         _update_skip "softwareupdate" "not macOS"
       fi
@@ -247,20 +247,34 @@ run_update() {
       _update_record_start "claude"
       printf "Updating Claude plugins\\n"
       # CLI matches installed plugins by plugin@marketplace (see `claude plugins list`), not short names.
-      claude plugins update superpowers@claude-plugins-official \
-        && claude plugins update code-review@claude-plugins-official \
-        && claude plugins update context7@claude-plugins-official \
-        && claude plugins update context-mode@context-mode \
-        && claude plugins update rust-analyzer-lsp@claude-plugins-official \
-        && claude plugins update pyright-lsp@claude-plugins-official \
-        && claude plugins update caveman@caveman \
-        && claude plugins update firecrawl@firecrawl \
-        && claude plugins update skill-creator@claude-plugins-official \
-        && claude plugins update frontend-design@claude-plugins-official \
-        && claude plugins update security-guidance@claude-plugins-official \
-        && claude plugins update ansible-cop-review@claude-ansible-skills \
-        && claude plugins update warp@claude-code-warp
-      _update_record_end "claude" $?
+      # Run each independently so a single failure doesn't abort the rest, and failures are named.
+      local _claude_failed=()
+      local _plugin_rc=0
+      for _plugin in \
+        superpowers@claude-plugins-official \
+        code-review@claude-plugins-official \
+        context7@claude-plugins-official \
+        context-mode@context-mode \
+        rust-analyzer-lsp@claude-plugins-official \
+        pyright-lsp@claude-plugins-official \
+        caveman@caveman \
+        firecrawl@firecrawl \
+        skill-creator@claude-plugins-official \
+        frontend-design@claude-plugins-official \
+        security-guidance@claude-plugins-official \
+        ansible-cop-review@claude-ansible-skills \
+        warp@claude-code-warp; do
+        claude plugins update "${_plugin}" 2>&1 | tee -a "${_UPDATE_TMPDIR}/err_claude"
+        _plugin_rc="${PIPESTATUS[0]}"
+        [[ ${_plugin_rc} -ne 0 ]] && _claude_failed+=("${_plugin%%@*}")
+      done
+      local _claude_rc=0
+      if [[ ${#_claude_failed[@]} -gt 0 ]]; then
+        _claude_rc=1
+        printf "%d plugin(s) failed (%s)\n" "${#_claude_failed[@]}" "${_claude_failed[*]}" \
+          > "${_UPDATE_TMPDIR}/fail_result_claude"
+      fi
+      _update_record_end "claude" "${_claude_rc}"
     else
       _update_skip "claude" "claude not installed"
     fi
@@ -272,8 +286,8 @@ run_update() {
   # Same trigger as Claude plugins: full update or --claude-only (no claude CLI required).
   if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_CLAUDE:-} ]]; then
     _update_record_start "terraform-skill"
-    install_terraform_skill
-    _update_record_end "terraform-skill" $?
+    install_terraform_skill 2>&1 | tee "${_UPDATE_TMPDIR}/err_terraform-skill"
+    _update_record_end "terraform-skill" "${PIPESTATUS[0]}"
   else
     _update_skip "terraform-skill" "flag not set"
   fi
@@ -283,8 +297,8 @@ run_update() {
   if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_CLAUDE:-} ]]; then
     _update_record_start "npm"
     printf "Updating npm global packages\\n"
-    npm install -g firecrawl-cli
-    _update_record_end "npm" $?
+    npm install -g firecrawl-cli 2>&1 | tee "${_UPDATE_TMPDIR}/err_npm"
+    _update_record_end "npm" "${PIPESTATUS[0]}"
   else
     _update_skip "npm" "flag not set"
   fi
@@ -294,8 +308,9 @@ run_update() {
     if [[ -n ${LINUX} ]]; then
       _update_record_start "apt"
       _update_record_start "snap"
-      update_system_packages
-      local _pkg_ec=$?
+      update_system_packages 2>&1 | tee "${_UPDATE_TMPDIR}/err_apt"
+      local _pkg_ec="${PIPESTATUS[0]}"
+      cp "${_UPDATE_TMPDIR}/err_apt" "${_UPDATE_TMPDIR}/err_snap" 2>/dev/null || true
       _update_record_end "apt"  "${_pkg_ec}"
       _update_record_end "snap" "${_pkg_ec}"
     else
@@ -313,7 +328,7 @@ run_update() {
     local _mas_ec=0
     if [[ -n ${MACOS} ]]; then
       log_info "Updating mas packages"
-      mas upgrade 2>&1 | tee "${_UPDATE_TMPDIR}/mas_upgrade_output"
+      mas upgrade 2>&1 | tee "${_UPDATE_TMPDIR}/err_mas"
       _mas_ec="${PIPESTATUS[0]}"
     fi
     _update_record_end "mas" "${_mas_ec}"
@@ -337,10 +352,11 @@ run_update() {
       pyenv shell ansible 2>/dev/null || true
       PYTHON="$(pyenv which python 2>/dev/null || command -v python3)"
 
-      "$PYTHON" -m pip install -U pip setuptools wheel
+      {
+        "$PYTHON" -m pip install -U pip setuptools wheel
 
-      # _UPDATE_TMPDIR is read by the Python block via os.environ to write pip_outdated
-      "$PYTHON" - <<PY
+        # _UPDATE_TMPDIR is read by the Python block via os.environ to write pip_outdated
+        "$PYTHON" - <<PY
 import json, subprocess, sys, os
 
 cmd = [sys.executable, "-m", "pip", "list", "--outdated", "--format=json"]
@@ -355,7 +371,8 @@ with open(os.path.join(tmpdir, "pip_outdated"), "w") as f:
 if pkgs:
     subprocess.check_call([sys.executable, "-m", "pip", "install", "-U", *pkgs])
 PY
-      local _pip_rc=$?
+      } 2>&1 | tee "${_UPDATE_TMPDIR}/err_pip"
+      local _pip_rc="${PIPESTATUS[0]}"
 
       "$PYTHON" -m pip check || true
       printf "Updated pip packages\n"
@@ -370,46 +387,46 @@ PY
   # ── git-based tools + misc (run_all only) ─────────────────────────────────
   if [[ ${_run_all} -eq 1 ]]; then
     _update_record_start "ai-config"
-    setup_ai_config
-    _update_record_end "ai-config" $?
+    setup_ai_config 2>&1 | tee "${_UPDATE_TMPDIR}/err_ai-config"
+    _update_record_end "ai-config" "${PIPESTATUS[0]}"
     update_aws_cli
     update_rust
     if [[ -d ${HOME}/.tfenv ]]; then
       _update_record_start "tfenv"
       printf "Updating tfenv\\n"
-      cd "${HOME}/.tfenv" || return 1
-      git pull
+      { cd "${HOME}/.tfenv" && git pull; } 2>&1 | tee "${_UPDATE_TMPDIR}/err_tfenv"
+      local _tfenv_rc="${PIPESTATUS[0]}"
       cd "${PERSONAL_GITREPOS}/${DOTFILES}" || return 1
-      _update_record_end "tfenv" $?
+      _update_record_end "tfenv" "${_tfenv_rc}"
     else
       _update_skip "tfenv" "not installed"
     fi
     if [[ -d ${HOME}/.oh-my-zsh ]]; then
       _update_record_start "oh-my-zsh"
       printf "Updating oh-my-zsh\\n"
-      cd "${HOME}/.oh-my-zsh" || return 1
-      git pull
+      { cd "${HOME}/.oh-my-zsh" && git pull; } 2>&1 | tee "${_UPDATE_TMPDIR}/err_oh-my-zsh"
+      local _omz_rc="${PIPESTATUS[0]}"
       cd "${PERSONAL_GITREPOS}/${DOTFILES}" || return 1
-      _update_record_end "oh-my-zsh" $?
+      _update_record_end "oh-my-zsh" "${_omz_rc}"
     else
       _update_skip "oh-my-zsh" "not installed"
     fi
     if [[ -d ${HOME}/.tmux/plugins/tpm ]]; then
       _update_record_start "tpm"
       printf "Updating tpm\\n"
-      cd "${HOME}/.tmux/plugins/tpm" || return 1
-      git pull
+      { cd "${HOME}/.tmux/plugins/tpm" && git pull; } 2>&1 | tee "${_UPDATE_TMPDIR}/err_tpm"
+      local _tpm_rc="${PIPESTATUS[0]}"
       cd "${PERSONAL_GITREPOS}/${DOTFILES}" || return 1
-      _update_record_end "tpm" $?
+      _update_record_end "tpm" "${_tpm_rc}"
     else
       _update_skip "tpm" "not installed"
     fi
     if [[ -f ${HOME}/bin/cht.sh ]]; then
       _update_record_start "cheat.sh"
       printf "Updating cheat.sh\\n"
-      curl https://cht.sh/:cht.sh > ~/bin/cht.sh
-      chmod 754 ${HOME}/bin/cht.sh
-      _update_record_end "cheat.sh" $?
+      { curl https://cht.sh/:cht.sh > ~/bin/cht.sh && chmod 754 "${HOME}/bin/cht.sh"; } \
+        2>&1 | tee "${_UPDATE_TMPDIR}/err_cheat.sh"
+      _update_record_end "cheat.sh" "${PIPESTATUS[0]}"
     else
       _update_skip "cheat.sh" "not installed"
     fi
@@ -434,8 +451,8 @@ PY
   if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_GEMS:-} ]]; then
     _update_record_start "gems"
     printf "updating ruby gems\\n"
-    gem update
-    _update_record_end "gems" $?
+    gem update 2>&1 | tee "${_UPDATE_TMPDIR}/err_gems"
+    _update_record_end "gems" "${PIPESTATUS[0]}"
   else
     _update_skip "gems" "flag not set"
   fi
