@@ -219,10 +219,31 @@ firefox 124.0"
   grep -q "OK" "${_UPDATE_TMPDIR}/status_brew"
 }
 
-@test "_update_record_end with exit 1 writes FAIL status" {
+@test "_update_record_end with exit 1 writes FAIL status and exit code" {
   _update_record_end "claude" 1
   grep -q "FAIL" "${_UPDATE_TMPDIR}/status_claude"
   grep -q "exit 1" "${_UPDATE_TMPDIR}/result_claude"
+}
+
+@test "_update_record_end with exit 1 and err file writes detail file" {
+  printf "Error: network timeout\nFailed to fetch plugin\n" > "${_UPDATE_TMPDIR}/err_claude"
+  _update_record_end "claude" 1
+  grep -q "FAIL" "${_UPDATE_TMPDIR}/status_claude"
+  [ -f "${_UPDATE_TMPDIR}/detail_claude" ]
+  grep -q "Failed to fetch plugin" "${_UPDATE_TMPDIR}/detail_claude"
+}
+
+@test "_update_record_end with exit 1 and fail_result file uses that for result line" {
+  printf "2 plugin(s) failed (superpowers warp)\n" > "${_UPDATE_TMPDIR}/fail_result_claude"
+  _update_record_end "claude" 1
+  grep -q "FAIL" "${_UPDATE_TMPDIR}/status_claude"
+  grep -q "2 plugin(s) failed" "${_UPDATE_TMPDIR}/result_claude"
+}
+
+@test "_update_record_end with exit 1 and empty err file does not write detail file" {
+  printf "" > "${_UPDATE_TMPDIR}/err_claude"
+  _update_record_end "claude" 1
+  [ ! -f "${_UPDATE_TMPDIR}/detail_claude" ]
 }
 
 @test "_update_record_end diffs brew formulae and reports changes" {
@@ -276,14 +297,14 @@ firefox 124.0"
 }
 
 @test "_update_record_end shows mas app names and versions in result" {
-  printf "==> Updated Slack (4.40)\n" > "${_UPDATE_TMPDIR}/mas_upgrade_output"
+  printf "==> Updated Slack (4.40)\n" > "${_UPDATE_TMPDIR}/err_mas"
   _update_record_end "mas" 0
   grep -q "OK" "${_UPDATE_TMPDIR}/status_mas"
   grep -q "Slack (4.40)" "${_UPDATE_TMPDIR}/result_mas"
 }
 
 @test "_update_record_end shows no changes for mas when upgrade output has no updated lines" {
-  printf "==> Updating mas packages\n" > "${_UPDATE_TMPDIR}/mas_upgrade_output"
+  printf "==> Updating mas packages\n" > "${_UPDATE_TMPDIR}/err_mas"
   _update_record_end "mas" 0
   grep -q "no changes" "${_UPDATE_TMPDIR}/result_mas"
 }

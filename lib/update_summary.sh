@@ -141,7 +141,21 @@ _update_record_end() {
 
   if [[ "${_exit}" -ne 0 ]]; then
     printf "FAIL\n" > "${_UPDATE_TMPDIR}/status_${_section}"
-    printf "exit %d — see output above\n" "${_exit}" > "${_UPDATE_TMPDIR}/result_${_section}"
+    local _fail_result_file="${_UPDATE_TMPDIR}/fail_result_${_section}"
+    local _err_file="${_UPDATE_TMPDIR}/err_${_section}"
+    if [[ -f "${_fail_result_file}" ]]; then
+      cat "${_fail_result_file}" > "${_UPDATE_TMPDIR}/result_${_section}"
+    else
+      printf "exit %d\n" "${_exit}" > "${_UPDATE_TMPDIR}/result_${_section}"
+    fi
+    if [[ -f "${_err_file}" ]] && [[ -s "${_err_file}" ]]; then
+      local _err_tail
+      _err_tail=$(grep -v '^[[:space:]]*$' "${_err_file}" | tail -10 | sed 's/\x1b\[[0-9;]*m//g; s/\r//')
+      if [[ -n "${_err_tail}" ]]; then
+        printf "[%s error output]\n%s\n" "${_section}" "${_err_tail}" \
+          > "${_UPDATE_TMPDIR}/detail_${_section}"
+      fi
+    fi
     return
   fi
 
@@ -171,9 +185,9 @@ _update_record_end() {
       fi
       ;;
     mas)
-      if [[ -f "${_UPDATE_TMPDIR}/mas_upgrade_output" ]]; then
+      if [[ -f "${_UPDATE_TMPDIR}/err_mas" ]]; then
         local _mas_updated
-        _mas_updated=$(grep '^==> Updated ' "${_UPDATE_TMPDIR}/mas_upgrade_output" || true)
+        _mas_updated=$(grep '^==> Updated ' "${_UPDATE_TMPDIR}/err_mas" || true)
         local _mas_count
         _mas_count=$(printf '%s' "${_mas_updated}" | grep -c . || true)
         if [[ ${_mas_count} -gt 0 ]]; then
