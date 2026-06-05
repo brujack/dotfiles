@@ -96,8 +96,13 @@ Master status index for all specs and implementation plans in this directory.
 
 Ideas approved for future specs, in no particular order:
 
-| Feature | Notes |
-| ------- | ----- |
+| Feature                                  | Notes                                                                                                               |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| zsh smoke-test in CLAUDE.md              | Add `zsh -i -c 'exit'` step to zshrc change workflow; prevents re-source-crash regressions from reaching prod       |
+| Audit CLAUDE.md for knowledge extraction | 58 touches in 30 days; migrate stable sections (mock pattern table, test seams) to `docs/knowledge/`                |
+| BATS test count floor in CI              | Fail CI if test count drops below current floor (729); proxy regression check without full coverage infra           |
+| `export -f` audit across BATS tests      | PR #111 found stub silently not used; grep all tests for mocks of subprocess-spawning functions missing `export -f` |
+| Batch coverage PRs by lib file           | Anti-pattern: 8 PRs in one day (May 28); future coverage sprints = one PR per lib file                              |
 
 ---
 
