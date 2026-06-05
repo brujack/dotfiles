@@ -3,115 +3,112 @@
 
 ## Bug Fixes
 
-- fix choco prefix-match bug; clean early-learning patterns (#86)
+- remove stCommitMsg commit template reference
 
-- skip nextest update when rustup not found
+- wire gitlab includeIf, drop stale commit template and needrestart
 
-- tag mas as HAS_PRINTING to suppress Linux brew-drift false positive (#92)
+- guard readonly vars against re-source crash
 
-- store 20KB state snapshots and cap claude -p prompt
+- fix RUBY_VER, guard pyenv ansible, drop redundant plugin clone
 
-- truncate current content before diff to match 20KB state window (#93)
+- export -f install_homebrew stub for subshell visibility (#111)
 
 
 
 ## CI
 
-- remove bash-coverage from auto-merge gate (#87)
-
-- add bash and PowerShell coverage badges (#88)
+- replace kcov gate with macOS xtrace gate at 90% (#116)
 
 
 
 ## Documentation
 
-- ADR-0007 — Codify branch protection via script
+- update test count to 674, mark coverage-workflows-gaps Done
 
-- update ADR-0007 — required_signatures removed
+- mark coverage-update-summary-casks Done
 
-- add Anthropic weekly features digest 2026-05-25
+- add spec for helpers.sh gaps-2 coverage
 
-- add Claude Code weekly features digest 2026-05-25
+- add plan for coverage-helpers-gaps-2
 
-- remove RHEL/dnf/yum references after distro cleanup
+- update test count to 693, mark coverage-helpers-gaps-2 Done
 
-- add missing Brewfile variants, docs/ subdirs, gitconfig_windows
+- document load_setup_env OS detection side effect
 
-- add getting started guide and fix Windows setup section
+- update bash coverage to 90% (2026-05-30, 693 tests)
 
-- move coverage-brewfile-helpers to Done, add backlog items
+- clear stale backlog entry (coverage-helpers-gaps-2 done)
 
-- update BATS test count to 590
+- add coverage-per-file-gaps plan (In Progress)
 
-- update test count to 602 and mark coverage-run-update-optional-tools Done
+- mark coverage-per-file-gaps Done, 705 tests
 
-- update test count to 609 and mark coverage-run-update-sections Done
+- add doctor test conventions section
 
-- update test count to 614 and mark coverage-install-terraform-skill Done
+- add per-file gap backlog and ceiling notes
 
-- update test count to 616, mark coverage-setup-env-direct-run Done, clear backlog
+- update test count to 709, mark coverage-macos-install-errors Done
 
-- document setup_env prereq bypass test assertion pattern
+- update test count to 714, mark coverage-helpers-doctor-error-paths Done
 
-- note count assertion caveat for section removal
+- mark coverage-helpers-setup-functions Done, 716 tests
 
-- mark coverage-workflows-setup-chains Done
+- mark coverage-workflows-pip-update Done, 718 tests
 
-- mark coverage-update-summary-gaps Done
+- add Claude Code weekly features digest 2026-06-01
 
-- update bash coverage to 85% (2026-05-28, 662 tests)
+- add Anthropic weekly features digest 2026-06-01
+
+- mark coverage-workflows-minor-paths Done, 720 tests
+
+- update BATS test count to 723 after PR #117
+
+- mark coverage-more-tests Done, 723 tests
+
+- mark coverage-gap-tests Done, 726 tests
+
+- add ADR-0008 for PS4 xtrace bash coverage approach
+
+- add ADR-0009 and ADR-0010 for recent decisions
+
+- add ADR-0011 and ADR-0012 for April decisions
+
+- replace Powerlevel10k with Starship in README
+
+- update BATS test count to 729 after PR #119
+
+- document run_update pip hang pattern in Testing Rules
+
+- remove DoD section (all items covered by global behavior.md)
 
 
 
 ## Features
 
-- add Renovate dependency updates
-
-- add git-cliff config and make target (#91)
-
-- enable brew-drift check on Linux
-
-- add memory and CPU to right prompt
-
-- add bash coverage measurement via PS4 xtrace tracer
-
-
-
-## Refactoring
-
-- remove RHEL, CentOS, and Fedora support (#89)
-
-- drop Ubuntu 18.04/20.04/22.04 support (#90)
-
-- remove Elementary OS support
-
-- remove powerlevel10k support (#99)
+- capture stderr per-section for richer failure output (#119)
 
 
 
 ## Testing
 
-- add brewfile helper function tests (#94)
+- raise update_summary.sh coverage from 82% to 97% (#107)
 
-- add run_update optional-tools installed-path tests (#95)
+- raise helpers.sh coverage from 83% to ≥90% (#108)
 
-- add run_update claude/npm/pip section tests (#96)
+- per-file coverage gaps — helpers.sh and workflows.sh (#109)
 
-- add install_terraform_skill tests (#97)
+- cover xcodebuild-fail, no-brew error paths (#110)
 
-- add setup_env.sh -t doctor/-t check-versions bypass tests (#98)
+- cover doctor/process_args error paths (#112)
 
-- cover preamble bash-version and brew error paths (#100)
+- cover OMZ-installed and Cursor-not-installed paths (#113)
 
-- cover update_rust branches and clone_personal_repos (#101)
+- cover run_update pip block, 718 tests (#114)
 
-- cover setup_dotfile_symlinks and credential dirs (#102)
+- cover _check_one_version and _run_cv_check arg behavior, 720 tests (#115)
 
-- cover run_update single-flag isolation (#103)
+- add 3 tests targeting uncovered branches in linux_ubuntu/developer (#117)
 
-- cover setup_claude_plugins branches and run_setup_user chain (#104)
+- cover 3 behavioral gaps in helpers/linux_ubuntu (#118)
 
-- cover npm, tpm/tfenv/zsh-autosuggestions, default case (#105)
-
-- coverage for _check_one_version and run_check_versions (#106)
 
