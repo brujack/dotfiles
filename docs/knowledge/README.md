@@ -53,6 +53,7 @@ Add a row to this table when you create a file:
 
 | File                                      | Category      | Contents                                              |
 | ----------------------------------------- | ------------- | ----------------------------------------------------- |
-| `retrospectives/2026-05-17.md`            | Retrospective | May 2026 retro — brew drift, ai-config split          |
-| `retrospectives/2026-06-retrospective.md` | Retrospective | June 2026 mid-period (May 17–Jun 1) — coverage sprint |
-| `retrospectives/2026-06-05.md`            | Retrospective | June 2026 full 30-day — coverage + cleanup trends     |
+| `retrospectives/2026-05-17.md`            | Retrospective  | May 2026 retro — brew drift, ai-config split          |
+| `retrospectives/2026-06-retrospective.md` | Retrospective  | June 2026 mid-period (May 17–Jun 1) — coverage sprint |
+| `retrospectives/2026-06-05.md`            | Retrospective  | June 2026 full 30-day — coverage + cleanup trends     |
+| `bats-test-infrastructure.md`             | Reference      | Test seams (override env vars) + PATH mock var table  |
