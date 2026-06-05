@@ -25,6 +25,10 @@ Curated findings from the web-research skill (Exa + Firecrawl) that are worth pr
 
 Use file names like `research-<topic>.md` to distinguish from architecture docs.
 
+### Retrospectives
+
+Monthly process reviews capturing trends, recurring issues, and actions across PRs. Written on the 1st of each month (or on demand) with a 30-day lookback.
+
 ### Other reference material
 
 Reference sheets for tools managed by dotfiles (shell, npm, Brewfile structure) that don't fit the above categories.
@@ -47,6 +51,8 @@ Reference sheets for tools managed by dotfiles (shell, npm, Brewfile structure) 
 
 Add a row to this table when you create a file:
 
-| File         | Category | Contents |
-| ------------ | -------- | -------- |
-| _(none yet)_ | —        | —        |
+| File                                      | Category      | Contents                                              |
+| ----------------------------------------- | ------------- | ----------------------------------------------------- |
+| `retrospectives/2026-05-17.md`            | Retrospective | May 2026 retro — brew drift, ai-config split          |
+| `retrospectives/2026-06-retrospective.md` | Retrospective | June 2026 mid-period (May 17–Jun 1) — coverage sprint |
+| `retrospectives/2026-06-05.md`            | Retrospective | June 2026 full 30-day — coverage + cleanup trends     |

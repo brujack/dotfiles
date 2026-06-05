@@ -13,7 +13,7 @@ alt_screen_padding = { custom = { uniform_padding = 0.0 } }
 enabled = true
 
 [appearance.themes]
-theme = { custom = { name = "Green On Black", path = "/Users/bruce/.warp/themes/green_on_black.yaml" } }
+theme = { custom = { name = "Green On Black", path = "green_on_black.yaml" } }
 
 [privacy]
 crash_reporting_enabled = true
