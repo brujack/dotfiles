@@ -20,6 +20,15 @@ jobs:
       - name: Run tests
         run: make test
 
+      - name: Verify test count floor (≥ 729)
+        run: |
+          COUNT=$(grep -r "^@test" tests/ | wc -l | tr -d ' ')
+          printf "Test count: %d\n" "${COUNT}"
+          if [ "${COUNT}" -lt 729 ]; then
+            printf "FAIL: test count %d is below the floor of 729\n" "${COUNT}" >&2
+            exit 1
+          fi
+
   lint-macos:
     runs-on: macos-latest
     steps:
