@@ -384,6 +384,8 @@ _install_ubuntu_brew_packages() {
     if [[ -n ${HAS_SNAP} ]]; then
       brew_install_formula ollama
     fi
+    # Trust third-party taps for Homebrew 6.0 (idempotent — no-op if already trusted or tap absent)
+    brew trust cloudflare/cloudflare datawire/blackbird gitguardian/tap go-task/tap redpanda-data/tap snyk/tap 2>/dev/null || true
   fi
 }
 

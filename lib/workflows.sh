@@ -451,7 +451,10 @@ PY
   if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_GEMS:-} ]]; then
     _update_record_start "gems"
     printf "updating ruby gems\\n"
-    gem update 2>&1 | tee "${_UPDATE_TMPDIR}/err_gems"
+    local _ruby_gem_dir="${HOME}/.rubies/ruby-${RUBY_VER:-4.0.2}/bin"
+    local _extra_gem_path=""
+    [[ -d "${_ruby_gem_dir}" ]] && _extra_gem_path=":${_ruby_gem_dir}"
+    PATH="${PATH}${_extra_gem_path}" gem update 2>&1 | tee "${_UPDATE_TMPDIR}/err_gems"
     _update_record_end "gems" "${PIPESTATUS[0]}"
   else
     _update_skip "gems" "flag not set"
