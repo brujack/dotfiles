@@ -210,6 +210,8 @@ brew "rustup"         # [HAS_RUST]
 
 Untagged entries are expected on all macs. When adding a new Brewfile entry that is developer-, K8s-, Docker-, or Rust-specific, add the appropriate tag.
 
+**Homebrew tap trust (Homebrew 6.0):** When adding a new third-party tap, also add it to the `brew trust` call in the relevant install function — `install_macos_casks` (macOS) and `_install_ubuntu_brew_packages` (Linux). `brew trust` is idempotent and ignores absent taps; omitting a tap causes a warning in Homebrew 5.2+ and will block installs in 6.0.
+
 ### PowerShell Scripts
 
 See `~/.claude/standards/powershell.md` for the full PowerShell coding and testing standards.
