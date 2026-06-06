@@ -369,6 +369,13 @@ teardown() {
   [[ "$output" == *"install_homebrew_called"* ]]
 }
 
+@test "_install_ubuntu_brew_packages: calls brew trust for third-party taps including getagentseal and bun" {
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 0 ]
+  grep -q "brew trust.*getagentseal/codeburn" "${MOCK_CALLS_FILE}"
+  grep -q "brew trust.*oven-sh/bun" "${MOCK_CALLS_FILE}"
+}
+
 # ── _install_ubuntu_gui_tools ────────────────────────────────────────────────
 
 @test "_install_ubuntu_gui_tools: HAS_DEVTOOLS installs virtualbox" {

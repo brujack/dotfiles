@@ -385,7 +385,7 @@ _install_ubuntu_brew_packages() {
       brew_install_formula ollama
     fi
     # Trust third-party taps for Homebrew 6.0 (idempotent — no-op if already trusted or tap absent)
-    brew trust cloudflare/cloudflare datawire/blackbird gitguardian/tap go-task/tap redpanda-data/tap snyk/tap 2>/dev/null || true
+    brew trust cloudflare/cloudflare datawire/blackbird getagentseal/codeburn gitguardian/tap go-task/tap oven-sh/bun redpanda-data/tap snyk/tap 2>/dev/null || true
   fi
 }
 

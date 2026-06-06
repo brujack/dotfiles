@@ -139,6 +139,8 @@ install_macos_casks() {
   if [[ -n ${HAS_DEVTOOLS} ]]; then
     brew bundle --file "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.devtools" || return 1
   fi
+  # Trust third-party taps for Homebrew 6.0 (idempotent — no-op if already trusted or tap absent)
+  brew trust chef/chef cloudflare/cloudflare datawire/blackbird getagentseal/codeburn go-task/tap oven-sh/bun redpanda-data/tap snyk/tap teamookla/speedtest 2>/dev/null || true
 }
 
 install_macos_packages() {

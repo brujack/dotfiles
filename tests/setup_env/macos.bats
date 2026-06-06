@@ -160,6 +160,21 @@ teardown() {
   [ "$status" -eq 0 ]
 }
 
+@test "install_macos_casks: calls brew trust for all macOS third-party taps" {
+  export BREWFILE_LOC="${BATS_TEST_TMPDIR}/brew"
+  export PERSONAL_GITREPOS="${BATS_TEST_TMPDIR}/git-repos/personal"
+  export DOTFILES="dotfiles"
+  mkdir -p "${BREWFILE_LOC}" "${PERSONAL_GITREPOS}/${DOTFILES}"
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.gui"
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.devtools"
+  ln -sf "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.gui" "${BREWFILE_LOC}/Brewfile"
+  unset HAS_GUI HAS_DEVTOOLS
+  run install_macos_casks
+  [ "$status" -eq 0 ]
+  grep -q "brew trust.*chef/chef" "${MOCK_CALLS_FILE}"
+  grep -q "brew trust.*getagentseal/codeburn" "${MOCK_CALLS_FILE}"
+}
+
 # ── install_homebrew (xcodebuild license failure) ────────────────────────────
 
 @test "install_homebrew: xcodebuild fails after xcode install - returns 1 with license error" {
