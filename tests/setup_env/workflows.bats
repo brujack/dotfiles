@@ -68,6 +68,30 @@ teardown() {
   [[ ! -L "${HOME}/.claude/mcp.json" ]]
 }
 
+@test "setup_claude_mcp skips generation when mcp.json is a valid symlink" {
+  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
+  export GITHUB_PAT="test-token"
+  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude"
+  printf '{"auth":"Bearer ${GITHUB_PAT}"}\n' \
+    > "${_OVERRIDE_AI_CONFIG_DIR}/.claude/mcp.json.template"
+  # Sentinel proves target was NOT overwritten by template generation
+  local _real_target="${BATS_TEST_TMPDIR}/real-mcp.json"
+  printf '{"mcpServers":{"exa":"SENTINEL"}}\n' > "${_real_target}"
+  mkdir -p "${HOME}/.claude"
+  ln -s "${_real_target}" "${HOME}/.claude/mcp.json"
+  local _rc=0
+  setup_claude_mcp || _rc=$?
+  [ "${_rc}" -eq 0 ]
+  # Symlink must still exist
+  [[ -L "${HOME}/.claude/mcp.json" ]]
+  # Sentinel must still be present — proves template did not overwrite target
+  run grep "SENTINEL" "${_real_target}"
+  [ "$status" -eq 0 ]
+  # PAT must NOT be in the target file
+  run grep "test-token" "${_real_target}"
+  [ "$status" -ne 0 ]
+}
+
 @test "setup_claude_mcp returns 1 when envsubst fails" {
   export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
   export GITHUB_PAT="test-token"

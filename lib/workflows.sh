@@ -29,6 +29,13 @@ setup_claude_mcp() {
     rm -f "${_output}"
   fi
 
+  # Skip if mcp.json is a valid symlink — writing through it would inject credentials into the symlink target (e.g. a tracked git file)
+  if [[ -L "${_output}" ]] && [[ -e "${_output}" ]]; then
+    log_warn "${_output} is a symlink — skipping template generation to avoid writing credentials into the target"
+    log_warn "To use template-generated mcp.json, remove the symlink first: rm ${_output}"
+    return 0
+  fi
+
   mkdir -p "$(dirname "${_output}")"
   # shellcheck disable=SC2016 # single quotes intentional — envsubst variable list, not shell expansion
   if ! GITHUB_PAT="${GITHUB_PAT}" envsubst '${GITHUB_PAT}' < "${_template}" > "${_output}"; then
