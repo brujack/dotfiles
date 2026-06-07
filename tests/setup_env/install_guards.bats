@@ -504,7 +504,7 @@ teardown() {
   [[ "$(readlink "${_home}/.cursor/testfile")" == "${_OVERRIDE_AI_CONFIG_DIR}/.cursor/testfile" ]]
 }
 
-@test "setup_dotfile_symlinks skips projects/ in .claude loop" {
+@test "setup_dotfile_symlinks symlinks .claude/projects to ai-config (not via loop)" {
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
   export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
   mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude/projects"
@@ -514,7 +514,8 @@ teardown() {
 
   run setup_dotfile_symlinks
   [ "${status}" -eq 0 ]
-  [ ! -L "${_home}/.claude/projects" ]
+  [[ -L "${_home}/.claude/projects" ]]
+  [[ "$(readlink "${_home}/.claude/projects")" == "${_OVERRIDE_AI_CONFIG_DIR}/.claude/projects" ]]
 }
 
 # ── setup_dotfile_symlinks: gitconfig symlinks ────────────────────────────────
