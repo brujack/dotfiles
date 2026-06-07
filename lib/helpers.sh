@@ -646,6 +646,9 @@ setup_dotfile_symlinks() {
     _claude_target="${HOME}/.claude/$(basename "${_claude_item}")"
     safe_link "${_claude_item}" "${_claude_target}"
   done
+  # projects/ is excluded from the loop above — symlink explicitly so memory
+  # files are version-controlled in ai-config rather than machine-local
+  safe_link "${_ai_config_dir}/.claude/projects" "${HOME}/.claude/projects"
 
   log_info "Creating ${HOME}/.cursor"
   mkdir -p "${HOME}/.cursor"

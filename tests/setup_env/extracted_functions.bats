@@ -49,6 +49,7 @@ _make_fake_dotfiles() {
   touch "${FAKE_DOTFILES_SRC}/.ssh/config"
   touch "${FAKE_DOTFILES_SRC}/.ssh/teleport.cfg"
   # .cursor/ and .claude/ items sourced from AI_CONFIG_DIR (ai-config repo)
+  mkdir -p "${FAKE_AI_CONFIG_SRC}/.claude/projects"
   mkdir -p "${FAKE_AI_CONFIG_SRC}/.cursor/User/snippets"
   mkdir -p "${FAKE_AI_CONFIG_SRC}/.cursor/plugins"
   mkdir -p "${FAKE_AI_CONFIG_SRC}/.cursor/skills-cursor"
@@ -240,9 +241,19 @@ _make_fake_dotfiles() {
   [[ ! -L "${FAKE_HOME}/.cursor/User" ]]
 }
 
-@test "setup_dotfile_symlinks handles .claude/projects/ when directory is absent" {
+@test "setup_dotfile_symlinks symlinks ~/.claude/projects to ai-config projects dir" {
   _make_fake_dotfiles
-  rm -rf "${FAKE_DOTFILES_SRC}/.claude/projects"
+  export MACOS=1
+  unset LINUX
+  run setup_dotfile_symlinks
+  [ "$status" -eq 0 ]
+  [[ -L "${FAKE_HOME}/.claude/projects" ]]
+  [[ "$(readlink "${FAKE_HOME}/.claude/projects")" == "${FAKE_AI_CONFIG_SRC}/.claude/projects" ]]
+}
+
+@test "setup_dotfile_symlinks handles .claude/projects/ when absent from ai-config" {
+  _make_fake_dotfiles
+  rm -rf "${FAKE_AI_CONFIG_SRC}/.claude/projects"
   export MACOS=1
   unset LINUX
   run setup_dotfile_symlinks
