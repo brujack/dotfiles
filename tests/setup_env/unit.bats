@@ -101,6 +101,15 @@ teardown() {
   [ "$output" = "unset" ]
 }
 
+@test "process_args exits non-zero when --venv-name has no value" {
+  run bash -c "
+    source '${BATS_TEST_DIRNAME}/../../setup_env.sh'
+    process_args --venv-name
+  "
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"--venv-name requires"* ]]
+}
+
 @test "process_args sets UPDATE for -t update" {
   process_args -t update
   [ "${UPDATE}" -eq 1 ]

@@ -519,6 +519,10 @@ process_args() {
       --update)        [[ -n "${UPDATE_VERSIONS+x}" ]] || readonly UPDATE_VERSIONS=1 ;;
       --venv-name)
         _i=$(( _i + 1 ))
+        if [[ ${_i} -ge ${#_args[@]} || -z "${_args[${_i}]}" ]]; then
+          printf "Error: --venv-name requires a non-empty value\n" >&2
+          exit 1
+        fi
         [[ -n "${VENV_NAME+x}" ]] || readonly VENV_NAME="${_args[${_i}]}"
         ;;
       *) _short_args+=("${_arg}") ;;
