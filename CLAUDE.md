@@ -237,8 +237,8 @@ All tool versions are defined as constants in `lib/constants.sh`:
 
 ```bash
 GO_VER="1.26"
-PYTHON_VER="3.14.2"
-RUBY_VER="4.0.2"
+PYTHON_VER="3.14.5"
+RUBY_VER="4.0.5"
 ```
 
 Update these constants when bumping versions — don't hardcode versions elsewhere.
