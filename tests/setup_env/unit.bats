@@ -71,6 +71,36 @@ teardown() {
   [ "${ANSIBLE}" -eq 1 ]
 }
 
+@test "process_args sets RECREATE_VENV for -t recreate-venv" {
+  run bash -c "
+    source '${BATS_TEST_DIRNAME}/../../setup_env.sh'
+    process_args -t recreate-venv
+    printf '%s' \"\${RECREATE_VENV}\"
+  "
+  [ "$status" -eq 0 ]
+  [ "$output" = "1" ]
+}
+
+@test "process_args sets VENV_NAME from --venv-name flag" {
+  run bash -c "
+    source '${BATS_TEST_DIRNAME}/../../setup_env.sh'
+    process_args --venv-name myenv -t recreate-venv
+    printf '%s' \"\${VENV_NAME}\"
+  "
+  [ "$status" -eq 0 ]
+  [ "$output" = "myenv" ]
+}
+
+@test "process_args leaves VENV_NAME unset when --venv-name absent" {
+  run bash -c "
+    source '${BATS_TEST_DIRNAME}/../../setup_env.sh'
+    process_args -t recreate-venv
+    printf '%s' \"\${VENV_NAME:-unset}\"
+  "
+  [ "$status" -eq 0 ]
+  [ "$output" = "unset" ]
+}
+
 @test "process_args sets UPDATE for -t update" {
   process_args -t update
   [ "${UPDATE}" -eq 1 ]
@@ -188,6 +218,8 @@ teardown() {
   [[ "$output" == *"update"* ]]
   [[ "$output" == *"--brew-install"* ]]
   [[ "$output" == *"--mas-install"* ]]
+  [[ "$output" == *"recreate-venv"* ]]
+  [[ "$output" == *"--venv-name"* ]]
 }
 
 # ── prerequisite check ────────────────────────────────────────────────────────
