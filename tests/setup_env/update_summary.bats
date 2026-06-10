@@ -66,6 +66,7 @@ teardown() {
   local clean_path
   clean_path="$(printf "%s" "${PATH}" | tr ':' '\n' | grep -v "tests/mocks" | tr '\n' ':' | sed 's/:$//')"
   bash -c "
+    unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
     export PATH='${clean_path}'
     git -C '${_repo}' init --quiet
     git -C '${_repo}' config user.email 'test@test.com'
@@ -78,8 +79,8 @@ teardown() {
     git -C '${_repo}' commit --quiet -m 'second commit'
   "
   local _old_sha
-  _old_sha=$(bash -c "export PATH='${clean_path}'; git -C '${_repo}' log --format='%H' | tail -1")
-  run bash -c "export PATH='${clean_path}'; source '${REPO_ROOT}/lib/update_summary.sh'; _update_git_diff '${_repo}' '${_old_sha}'"
+  _old_sha=$(bash -c "unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; export PATH='${clean_path}'; git -C '${_repo}' log --format='%H' | tail -1")
+  run bash -c "unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; export PATH='${clean_path}'; source '${REPO_ROOT}/lib/update_summary.sh'; _update_git_diff '${_repo}' '${_old_sha}'"
   [ "$status" -eq 0 ]
   [[ "$output" == *"second commit"* ]]
   [[ "$output" != *"first commit"* ]]
@@ -91,6 +92,7 @@ teardown() {
   local clean_path
   clean_path="$(printf "%s" "${PATH}" | tr ':' '\n' | grep -v "tests/mocks" | tr '\n' ':' | sed 's/:$//')"
   bash -c "
+    unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
     export PATH='${clean_path}'
     git -C '${_repo}' init --quiet
     git -C '${_repo}' config user.email 'test@test.com'
@@ -100,8 +102,8 @@ teardown() {
     git -C '${_repo}' commit --quiet -m 'first commit'
   "
   local _sha
-  _sha=$(bash -c "export PATH='${clean_path}'; git -C '${_repo}' rev-parse HEAD")
-  run bash -c "export PATH='${clean_path}'; source '${REPO_ROOT}/lib/update_summary.sh'; _update_git_diff '${_repo}' '${_sha}'"
+  _sha=$(bash -c "unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; export PATH='${clean_path}'; git -C '${_repo}' rev-parse HEAD")
+  run bash -c "unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; export PATH='${clean_path}'; source '${REPO_ROOT}/lib/update_summary.sh'; _update_git_diff '${_repo}' '${_sha}'"
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
@@ -137,6 +139,7 @@ teardown() {
   local clean_path
   clean_path="$(printf "%s" "${PATH}" | tr ':' '\n' | grep -v "tests/mocks" | tr '\n' ':' | sed 's/:$//')"
   bash -c "
+    unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
     export PATH='${clean_path}'
     git -C '${_repo}' init --quiet
     git -C '${_repo}' config user.email 'test@test.com'
