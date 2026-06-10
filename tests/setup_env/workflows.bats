@@ -544,6 +544,22 @@ teardown() {
   grep -q "gem update" "${MOCK_CALLS_FILE}"
 }
 
+@test "run_update gem section prepends ruby-install bin so it takes precedence over PATH gem" {
+  export MACOS=1
+  unset LINUX
+  export UPDATE_GEMS=1
+  unset UPDATE_BREW UPDATE_PIP UPDATE_MAS UPDATE_CLAUDE
+  local _rubies_bin="${HOME}/.rubies/ruby-${RUBY_VER}/bin"
+  mkdir -p "${_rubies_bin}"
+  cat > "${_rubies_bin}/gem" << 'EOF'
+#!/usr/bin/env bash
+printf "rubies-gem %s\n" "$*" >> "${MOCK_CALLS_FILE}"
+EOF
+  chmod +x "${_rubies_bin}/gem"
+  run_update
+  grep -q "rubies-gem update" "${MOCK_CALLS_FILE}"
+}
+
 @test "run_update calls apt on Ubuntu" {
   unset MACOS
   export LINUX=1
