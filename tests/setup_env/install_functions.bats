@@ -294,3 +294,46 @@ teardown() {
   run install_terraform_skill
   [ "$status" -ne 0 ]
 }
+
+# ── recreate_python_venv ──────────────────────────────────────────────────────
+
+@test "recreate_python_venv ansible: calls pyenv virtualenv-delete, create, activate, pip install" {
+  export MACOS=1
+  unset LINUX
+  export HAS_DEVTOOLS=1
+  # Point MOCK_PYENV_WHICH_STDOUT to mock python so `pyenv which python` returns
+  # the mock binary — this intercepts the `"${_python}" -m pip install` call.
+  export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
+  export PATH="${BATS_TEST_DIRNAME}/../mocks:${PATH}"
+  recreate_python_venv "ansible"
+  grep -q "virtualenv-delete -f ansible" "${MOCK_CALLS_FILE}"
+  grep -q "virtualenv.*ansible" "${MOCK_CALLS_FILE}"
+  grep -q "activate ansible" "${MOCK_CALLS_FILE}"
+  grep -q "pip install" "${MOCK_CALLS_FILE}"
+}
+
+@test "recreate_python_venv myenv: calls delete, create, activate — no pip install" {
+  export MACOS=1
+  unset LINUX
+  export HAS_DEVTOOLS=1
+  export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
+  export PATH="${BATS_TEST_DIRNAME}/../mocks:${PATH}"
+  recreate_python_venv "myenv"
+  grep -q "virtualenv-delete -f myenv" "${MOCK_CALLS_FILE}"
+  grep -q "virtualenv.*myenv" "${MOCK_CALLS_FILE}"
+  grep -q "activate myenv" "${MOCK_CALLS_FILE}"
+  run grep "pip install" "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+}
+
+@test "recreate_python_venv returns 1 when pyenv not found" {
+  export MACOS=1
+  unset LINUX
+  export HAS_DEVTOOLS=1
+  local _saved_path="$PATH"
+  export PATH="/usr/bin:/bin"
+  local _rc=0
+  recreate_python_venv "ansible" || _rc=$?
+  export PATH="${_saved_path}"
+  [ "${_rc}" -ne 0 ]
+}

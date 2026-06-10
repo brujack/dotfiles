@@ -211,6 +211,8 @@ Types:
                Flags: --brew-install, --mas-install
   developer  : Runs a developer setup with packages and python virtual environment for running ansible
   ansible    : Just runs the ansible setup using a python virtual environment. Typically used after a python update
+  recreate-venv : Force-delete and recreate a pyenv virtualenv
+               Flags: --venv-name (default: ansible)
   update     : Does a system update of packages including brew packages
                Flags: --brew-only, --pip-only, --gems-only, --mas-only, --claude-only
   doctor     : Active health checks: symlinks, tools, credential dir permissions, version drift. Exits non-zero on failure
@@ -227,6 +229,7 @@ Options:
   --pkgs-only     : (update only) Update Linux system packages only (apt/snap)
   --claude-only   : (update only) Update Claude plugins only
   --update        : (check-versions only) Interactively prompt to update outdated version pins in lib/constants.sh
+  --venv-name     : (recreate-venv only) Name of the pyenv virtualenv to recreate (default: ansible)
 EOF
   exit 0
 }
@@ -498,9 +501,11 @@ _doctor_check_github_mcp() {
 }
 
 process_args() {
-  # Pre-process long options before getopts (getopts only handles short options)
   local _short_args=()
-  for _arg in "$@"; do
+  local _i=0
+  local _args=("$@")
+  while [[ ${_i} -lt ${#_args[@]} ]]; do
+    local _arg="${_args[${_i}]}"
     case "${_arg}" in
       --dry-run)       [[ -n "${DRY_RUN+x}" ]]         || readonly DRY_RUN=1 ;;
       --brew-only)     [[ -n "${UPDATE_BREW+x}" ]]     || readonly UPDATE_BREW=1 ;;
@@ -512,8 +517,17 @@ process_args() {
       --brew-install)  [[ -n "${SETUP_BREW+x}" ]]      || readonly SETUP_BREW=1 ;;
       --mas-install)   [[ -n "${SETUP_MAS+x}" ]]       || readonly SETUP_MAS=1 ;;
       --update)        [[ -n "${UPDATE_VERSIONS+x}" ]] || readonly UPDATE_VERSIONS=1 ;;
+      --venv-name)
+        _i=$(( _i + 1 ))
+        if [[ ${_i} -ge ${#_args[@]} || -z "${_args[${_i}]}" ]]; then
+          printf "Error: --venv-name requires a non-empty value\n" >&2
+          exit 1
+        fi
+        [[ -n "${VENV_NAME+x}" ]] || readonly VENV_NAME="${_args[${_i}]}"
+        ;;
       *) _short_args+=("${_arg}") ;;
     esac
+    _i=$(( _i + 1 ))
   done
   set -- "${_short_args[@]}"
 
@@ -531,6 +545,7 @@ process_args() {
           update)         readonly UPDATE=1 ;;
           doctor)         readonly DOCTOR=1 ;;
           check-versions) readonly CHECK_VERSIONS=1 ;;
+          recreate-venv)  readonly RECREATE_VENV=1 ;;
           *) printf "Invalid option for -t\n"; usage; exit 1 ;;
         esac
         ;;

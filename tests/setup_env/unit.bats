@@ -71,6 +71,45 @@ teardown() {
   [ "${ANSIBLE}" -eq 1 ]
 }
 
+@test "process_args sets RECREATE_VENV for -t recreate-venv" {
+  run bash -c "
+    source '${BATS_TEST_DIRNAME}/../../setup_env.sh'
+    process_args -t recreate-venv
+    printf '%s' \"\${RECREATE_VENV}\"
+  "
+  [ "$status" -eq 0 ]
+  [ "$output" = "1" ]
+}
+
+@test "process_args sets VENV_NAME from --venv-name flag" {
+  run bash -c "
+    source '${BATS_TEST_DIRNAME}/../../setup_env.sh'
+    process_args --venv-name myenv -t recreate-venv
+    printf '%s' \"\${VENV_NAME}\"
+  "
+  [ "$status" -eq 0 ]
+  [ "$output" = "myenv" ]
+}
+
+@test "process_args leaves VENV_NAME unset when --venv-name absent" {
+  run bash -c "
+    source '${BATS_TEST_DIRNAME}/../../setup_env.sh'
+    process_args -t recreate-venv
+    printf '%s' \"\${VENV_NAME:-unset}\"
+  "
+  [ "$status" -eq 0 ]
+  [ "$output" = "unset" ]
+}
+
+@test "process_args exits non-zero when --venv-name has no value" {
+  run bash -c "
+    source '${BATS_TEST_DIRNAME}/../../setup_env.sh'
+    process_args --venv-name
+  "
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"--venv-name requires"* ]]
+}
+
 @test "process_args sets UPDATE for -t update" {
   process_args -t update
   [ "${UPDATE}" -eq 1 ]
@@ -188,6 +227,8 @@ teardown() {
   [[ "$output" == *"update"* ]]
   [[ "$output" == *"--brew-install"* ]]
   [[ "$output" == *"--mas-install"* ]]
+  [[ "$output" == *"recreate-venv"* ]]
+  [[ "$output" == *"--venv-name"* ]]
 }
 
 # ── prerequisite check ────────────────────────────────────────────────────────
@@ -354,6 +395,24 @@ teardown() {
 @test "run_developer_or_ansible is defined after sourcing setup_env" {
   declare -f run_developer_or_ansible &>/dev/null
   [ "$?" -eq 0 ]
+}
+
+@test "run_recreate_venv is defined after sourcing setup_env" {
+  declare -f run_recreate_venv &>/dev/null
+  [ "$?" -eq 0 ]
+}
+
+@test "run_recreate_venv calls recreate_python_venv with ansible when VENV_NAME unset" {
+  recreate_python_venv() { printf "recreate_python_venv %s\n" "$1"; }
+  run run_recreate_venv
+  [[ "$output" == *"recreate_python_venv ansible"* ]]
+}
+
+@test "run_recreate_venv calls recreate_python_venv with VENV_NAME when set" {
+  recreate_python_venv() { printf "recreate_python_venv %s\n" "$1"; }
+  VENV_NAME="myenv"
+  run run_recreate_venv
+  [[ "$output" == *"recreate_python_venv myenv"* ]]
 }
 
 @test "run_update is defined after sourcing setup_env" {
