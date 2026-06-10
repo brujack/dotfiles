@@ -177,6 +177,9 @@ run_developer_or_ansible() {
   printf "Installing firecrawl-cli via npm\n"
   npm install -g firecrawl-cli || return 1
 
+  printf "Installing exa-mcp-server via npm\n"
+  npm install -g exa-mcp-server || return 1
+
   install_ruby_tools || return 1
   install_ruby || return 1
   if [[ -n ${LINUX} ]]; then
@@ -309,7 +312,7 @@ run_update() {
   if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_CLAUDE:-} ]]; then
     _update_record_start "npm"
     printf "Updating npm global packages\\n"
-    npm install -g firecrawl-cli 2>&1 | tee "${_UPDATE_TMPDIR}/err_npm"
+    npm install -g firecrawl-cli exa-mcp-server 2>&1 | tee "${_UPDATE_TMPDIR}/err_npm"
     _update_record_end "npm" "${PIPESTATUS[0]}"
   else
     _update_skip "npm" "flag not set"
