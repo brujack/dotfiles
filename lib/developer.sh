@@ -233,6 +233,32 @@ setup_ansible() {
   fi
 }
 
+recreate_python_venv() {
+  local _venv_name="${1:-ansible}"
+  export PYENV_ROOT="$HOME/.pyenv"
+  export PYENV_VIRTUALENV_DISABLE_PROMPT=1
+  if ! quiet_which pyenv; then
+    log_error "pyenv not found — cannot recreate virtualenv"
+    return 1
+  fi
+  export PATH="$PYENV_ROOT/bin:$PATH"
+  eval "$(pyenv init -)"
+
+  printf "Deleting virtualenv '%s'\\n" "${_venv_name}"
+  pyenv virtualenv-delete -f "${_venv_name}" || return 1
+
+  printf "Creating virtualenv '%s' with Python %s\\n" "${_venv_name}" "${PYTHON_VER}"
+  pyenv virtualenv "${PYTHON_VER}" "${_venv_name}" || return 1
+  pyenv activate "${_venv_name}" || return 1
+
+  if [[ "${_venv_name}" == "ansible" ]]; then
+    local _python
+    _python="$(pyenv which python 2>/dev/null || command -v python3)"
+    printf "Installing Ansible dependencies...\\n"
+    "${_python}" -m pip install ansible ansible-lint certbot certbot-dns-cloudflare checkov boto3 docker gmpy2 jmespath mpmath netaddr pylint psutil bpytop HttpPy j2cli wheel shell-gpt pyright mutmut hypothesis || return 1
+  fi
+}
+
 clone_personal_repos() {
   printf "personal git repos cloning\\n"
   if ! [[ -d ${PERSONAL_GITREPOS}/dotfiles ]]; then
