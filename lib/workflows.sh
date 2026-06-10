@@ -64,6 +64,7 @@ setup_claude_plugins() {
     "frontend-design@claude-plugins-official"
     "security-guidance@claude-plugins-official"
     "ansible-cop-review@claude-ansible-skills"
+    "terraform-skill@antonbabenko"
     "warp@claude-code-warp"
   )
 
@@ -278,6 +279,7 @@ run_update() {
         frontend-design@claude-plugins-official \
         security-guidance@claude-plugins-official \
         ansible-cop-review@claude-ansible-skills \
+        terraform-skill@antonbabenko \
         warp@claude-code-warp; do
         claude plugins update "${_plugin}" 2>&1 | tee -a "${_UPDATE_TMPDIR}/err_claude"
         _plugin_rc="${PIPESTATUS[0]}"
