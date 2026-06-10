@@ -727,17 +727,24 @@ teardown() {
 
 @test "run_update with no flags calls brew and gem subsystems" {
   load_mocks
+  export HOME="${TMPDIR_TEST}"
+  export _OVERRIDE_AI_CONFIG_DIR="${TMPDIR_TEST}/ai-config"
+  mkdir -p "${TMPDIR_TEST}/ai-config"
+  setup_ai_config() { true; }
+  update_aws_cli() { true; }
+  update_rust() { true; }
   export MOCK_CALLS_FILE="${TMPDIR_TEST}/mock_calls"
   touch "${MOCK_CALLS_FILE}"
   export MACOS=1
   unset LINUX
-  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
   run_update
   grep -q "brew update" "${MOCK_CALLS_FILE}"
   grep -q "gem update" "${MOCK_CALLS_FILE}"
 }
 
 @test "run_update --gems-only: calls gem update and skips brew" {
+  export HOME="${TMPDIR_TEST}"
   export MOCK_CALLS_FILE="${TMPDIR_TEST}/mock_calls"
   touch "${MOCK_CALLS_FILE}"
   export MACOS=1
