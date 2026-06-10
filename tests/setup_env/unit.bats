@@ -397,6 +397,24 @@ teardown() {
   [ "$?" -eq 0 ]
 }
 
+@test "run_recreate_venv is defined after sourcing setup_env" {
+  declare -f run_recreate_venv &>/dev/null
+  [ "$?" -eq 0 ]
+}
+
+@test "run_recreate_venv calls recreate_python_venv with ansible when VENV_NAME unset" {
+  recreate_python_venv() { printf "recreate_python_venv %s\n" "$1"; }
+  run run_recreate_venv
+  [[ "$output" == *"recreate_python_venv ansible"* ]]
+}
+
+@test "run_recreate_venv calls recreate_python_venv with VENV_NAME when set" {
+  recreate_python_venv() { printf "recreate_python_venv %s\n" "$1"; }
+  VENV_NAME="myenv"
+  run run_recreate_venv
+  [[ "$output" == *"recreate_python_venv myenv"* ]]
+}
+
 @test "run_update is defined after sourcing setup_env" {
   declare -f run_update &>/dev/null
   [ "$?" -eq 0 ]

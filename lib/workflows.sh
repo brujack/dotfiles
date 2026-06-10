@@ -187,6 +187,11 @@ run_developer_or_ansible() {
   clone_personal_repos
 }
 
+run_recreate_venv() {
+  local _venv_name="${VENV_NAME:-ansible}"
+  recreate_python_venv "${_venv_name}" || return 1
+}
+
 run_brew_install() {
   mkdir -p "${BREWFILE_LOC}"
   rm -f "${BREWFILE_LOC}/Brewfile"
