@@ -781,6 +781,7 @@ teardown() {
 }
 
 @test "run_update --claude-only: calls claude plugins update and skips brew" {
+  export HOME="${TMPDIR_TEST}"
   export MOCK_CALLS_FILE="${TMPDIR_TEST}/mock_calls"
   touch "${MOCK_CALLS_FILE}"
   export MACOS=1
