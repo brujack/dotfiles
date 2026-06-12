@@ -14,4 +14,8 @@ if [[ "$1" == "which" ]]; then
   fi
   exit 0
 fi
+# Allow per-subcommand exit code override for virtualenv-delete
+if [[ "$1" == "virtualenv-delete" ]]; then
+  exit "${MOCK_PYENV_VIRTUALENV_DELETE_EXIT:-${MOCK_PYENV_EXIT:-0}}"
+fi
 exit "${MOCK_PYENV_EXIT:-0}"

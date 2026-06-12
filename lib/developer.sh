@@ -245,7 +245,7 @@ recreate_python_venv() {
   eval "$(pyenv init -)"
 
   printf "Deleting virtualenv '%s'\\n" "${_venv_name}"
-  pyenv virtualenv-delete -f "${_venv_name}" || return 1
+  pyenv virtualenv-delete -f "${_venv_name}" 2>/dev/null || true
 
   printf "Creating virtualenv '%s' with Python %s\\n" "${_venv_name}" "${PYTHON_VER}"
   pyenv virtualenv "${PYTHON_VER}" "${_venv_name}" || return 1

@@ -337,3 +337,17 @@ teardown() {
   export PATH="${_saved_path}"
   [ "${_rc}" -ne 0 ]
 }
+
+@test "recreate_python_venv succeeds when virtualenv does not exist (delete returns non-zero)" {
+  export MACOS=1
+  unset LINUX
+  export HAS_DEVTOOLS=1
+  export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
+  export MOCK_PYENV_VIRTUALENV_DELETE_EXIT=1
+  export PATH="${BATS_TEST_DIRNAME}/../mocks:${PATH}"
+  local _rc=0
+  recreate_python_venv "ansible" || _rc=$?
+  [ "${_rc}" -eq 0 ]
+  grep -q "virtualenv-delete -f ansible" "${MOCK_CALLS_FILE}"
+  grep -q "virtualenv.*ansible" "${MOCK_CALLS_FILE}"
+}
