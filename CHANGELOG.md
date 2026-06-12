@@ -3,15 +3,21 @@
 
 ## Bug Fixes
 
-- remove stCommitMsg commit template reference
-
-- wire gitlab includeIf, drop stale commit template and needrestart
-
-- guard readonly vars against re-source crash
-
-- fix RUBY_VER, guard pyenv ansible, drop redundant plugin clone
-
 - export -f install_homebrew stub for subshell visibility (#111)
+
+- use ruby-install gem path; trust Homebrew taps on Linux
+
+- trust remaining third-party taps for Homebrew 6.0 (#121)
+
+- guard setup_claude_mcp against symlinked mcp.json
+
+- symlink ~/.claude/projects to ai-config instead of leaving unset (#122)
+
+- prepend ruby-install bin to PATH so it takes precedence over system gem (#123)
+
+- exa-mcp install, npm update, and GIT_DIR test isolation (#125)
+
+- tolerate missing virtualenv in delete step (#127)
 
 
 
@@ -22,28 +28,6 @@
 
 
 ## Documentation
-
-- update test count to 674, mark coverage-workflows-gaps Done
-
-- mark coverage-update-summary-casks Done
-
-- add spec for helpers.sh gaps-2 coverage
-
-- add plan for coverage-helpers-gaps-2
-
-- update test count to 693, mark coverage-helpers-gaps-2 Done
-
-- document load_setup_env OS detection side effect
-
-- update bash coverage to 90% (2026-05-30, 693 tests)
-
-- clear stale backlog entry (coverage-helpers-gaps-2 done)
-
-- add coverage-per-file-gaps plan (In Progress)
-
-- mark coverage-per-file-gaps Done, 705 tests
-
-- add doctor test conventions section
 
 - add per-file gap backlog and ceiling notes
 
@@ -81,21 +65,27 @@
 
 - remove DoD section (all items covered by global behavior.md)
 
+- add 5 backlog items from 2026-06-05 retro
+
+- update BATS test count 729 → 731 in CLAUDE.md
+
+- note brew trust coupling when adding new taps
+
+- add Claude Code weekly features digest 2026-06-08
+
 
 
 ## Features
 
 - capture stderr per-section for richer failure output (#119)
 
+- add -t recreate-venv to force-recreate a pyenv virtualenv (#124)
+
+- add terraform-skill to plugin install and update lists
+
 
 
 ## Testing
-
-- raise update_summary.sh coverage from 82% to 97% (#107)
-
-- raise helpers.sh coverage from 83% to ≥90% (#108)
-
-- per-file coverage gaps — helpers.sh and workflows.sh (#109)
 
 - cover xcodebuild-fail, no-brew error paths (#110)
 
@@ -110,5 +100,7 @@
 - add 3 tests targeting uncovered branches in linux_ubuntu/developer (#117)
 
 - cover 3 behavioral gaps in helpers/linux_ubuntu (#118)
+
+- isolate run_update --claude-only from real HOME (#126)
 
 
