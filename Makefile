@@ -3,7 +3,7 @@ SHELLCHECK := $(shell command -v shellcheck 2>/dev/null)
 KCOV := $(shell command -v kcov 2>/dev/null)
 SHELL_FILES := $(shell find . -name "*.sh" -not -path "*/node_modules/*" -not -path "*/coverage/*")
 
-.PHONY: test test-unit lint coverage bash-coverage push-bash-coverage install-hooks help changelog
+.PHONY: test test-unit lint coverage bash-coverage push-bash-coverage install-hooks help changelog validate-plan
 
 help:
 	@printf "Available targets:\n"
@@ -68,3 +68,11 @@ endif
 
 changelog:
 	git-cliff -o CHANGELOG.md
+
+# 10-80-10 cycle (ai-config ADR-0009/0010) — validate a plan file
+validate-plan:
+ifndef PLAN
+	@printf "error: PLAN is required, e.g. make validate-plan PLAN=docs/superpowers/plans/foo.md\n" >&2
+	@exit 2
+endif
+	@python3 ~/.claude/scripts/validate-plan.py "$(PLAN)"
