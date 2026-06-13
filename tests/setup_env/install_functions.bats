@@ -310,6 +310,7 @@ teardown() {
   grep -q "virtualenv.*ansible" "${MOCK_CALLS_FILE}"
   grep -q "activate ansible" "${MOCK_CALLS_FILE}"
   grep -q "pip install" "${MOCK_CALLS_FILE}"
+  grep -q "pyenv rehash" "${MOCK_CALLS_FILE}"
 }
 
 @test "recreate_python_venv myenv: calls delete, create, activate — no pip install" {

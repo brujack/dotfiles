@@ -229,6 +229,7 @@ setup_ansible() {
       pyenv activate ansible
       printf "Installing Ansible dependencies...\\n"
       python -m pip install ansible ansible-lint certbot certbot-dns-cloudflare checkov boto3 docker gmpy2 jmespath mpmath netaddr pylint psutil bpytop HttpPy j2cli wheel shell-gpt pyright cosmic-ray hypothesis mlx
+      pyenv rehash
     fi
   fi
 }
@@ -256,6 +257,7 @@ recreate_python_venv() {
     _python="$(pyenv which python 2>/dev/null || command -v python3)"
     printf "Installing Ansible dependencies...\\n"
     "${_python}" -m pip install ansible ansible-lint certbot certbot-dns-cloudflare checkov boto3 docker gmpy2 jmespath mpmath netaddr pylint psutil bpytop HttpPy j2cli wheel shell-gpt pyright cosmic-ray hypothesis mlx || return 1
+    pyenv rehash
   fi
 }
 

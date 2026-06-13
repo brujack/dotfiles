@@ -500,6 +500,7 @@ teardown() {
   export HAS_DEVTOOLS=1
   setup_ansible
   grep -q "pip install ansible" "${MOCK_CALLS_FILE}"
+  grep -q "pyenv rehash" "${MOCK_CALLS_FILE}"
 }
 
 @test "setup_ansible skips pip when HAS_DEVTOOLS is unset" {
