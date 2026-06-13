@@ -63,7 +63,7 @@ setup_claude_plugins() {
     "skill-creator@claude-plugins-official"
     "frontend-design@claude-plugins-official"
     "security-guidance@claude-plugins-official"
-    "ansible-cop-review@claude-ansible-skills"
+    "ansible-good-practices@claude-ansible-skills"
     "terraform-skill@antonbabenko"
     "warp@claude-code-warp"
   )
@@ -278,7 +278,7 @@ run_update() {
         skill-creator@claude-plugins-official \
         frontend-design@claude-plugins-official \
         security-guidance@claude-plugins-official \
-        ansible-cop-review@claude-ansible-skills \
+        ansible-good-practices@claude-ansible-skills \
         terraform-skill@antonbabenko \
         warp@claude-code-warp; do
         claude plugins update "${_plugin}" 2>&1 | tee -a "${_UPDATE_TMPDIR}/err_claude"
