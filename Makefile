@@ -36,11 +36,17 @@ endif
 	bats --recursive tests/
 
 # Validate canonical memory + retrospective schema (ADR-0014)
+# Searches (in order): in-repo copy, dotfile-symlinked $HOME, sibling ai-config checkout (CI pattern)
 validate-memory:
 	@if [ -f .claude/scripts/validate_memory.py ]; then \
 		python3 .claude/scripts/validate_memory.py --all; \
-	else \
+	elif [ -f "$$HOME/.claude/scripts/validate_memory.py" ]; then \
 		python3 "$$HOME/.claude/scripts/validate_memory.py" --all; \
+	elif [ -f ai-config-tools/.claude/scripts/validate_memory.py ]; then \
+		python3 ai-config-tools/.claude/scripts/validate_memory.py --all; \
+	else \
+		printf "validate-memory: validator not found; check out brujack/ai-config to ./ai-config-tools or install dotfiles symlinks.\n" >&2; \
+		exit 1; \
 	fi
 
 coverage:
