@@ -3,7 +3,7 @@ SHELLCHECK := $(shell command -v shellcheck 2>/dev/null)
 KCOV := $(shell command -v kcov 2>/dev/null)
 SHELL_FILES := $(shell find . -name "*.sh" -not -path "*/node_modules/*" -not -path "*/coverage/*")
 
-.PHONY: test test-unit lint coverage bash-coverage push-bash-coverage install-hooks help changelog validate-plan validate-memory
+.PHONY: test test-unit lint coverage bash-coverage push-bash-coverage install-hooks help changelog validate-plan
 
 help:
 	@printf "Available targets:\n"
@@ -29,23 +29,11 @@ lint:
 	fi; \
 	exit $$failed
 
-test: lint validate-memory
+test: lint
 ifndef BATS
 	$(error bats not found. Install: brew install bats-core (macOS) or sudo apt-get install bats (Linux))
 endif
 	bats --recursive tests/
-
-# Validate canonical memory + retrospective schema (ADR-0014)
-# Validator lives in ai-config; reached via dotfile symlink ($HOME) locally.
-# On CI (no dotfile setup) the gate degrades to a warning since ai-config is private.
-validate-memory:
-	@if [ -f .claude/scripts/validate_memory.py ]; then \
-		python3 .claude/scripts/validate_memory.py --all; \
-	elif [ -f "$$HOME/.claude/scripts/validate_memory.py" ]; then \
-		python3 "$$HOME/.claude/scripts/validate_memory.py" --all; \
-	else \
-		printf "validate-memory: validator not found (ai-config not installed); skipping. Local pre-commit gate still enforced.\n" >&2; \
-	fi
 
 coverage:
 ifeq ($(KCOV),)
