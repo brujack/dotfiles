@@ -10,11 +10,16 @@ _changed_memory=$(git diff --cached --name-only \
 if [[ -n "${_changed_memory}" ]]; then
     if [[ -f .claude/scripts/validate_memory.py ]]; then
         _VM=.claude/scripts/validate_memory.py
-    else
+    elif [[ -f "${HOME}/.claude/scripts/validate_memory.py" ]]; then
         _VM="${HOME}/.claude/scripts/validate_memory.py"
+    else
+        printf "pre-commit: validate-memory skipped (ai-config not installed)\n" >&2
+        _VM=""
     fi
-    # shellcheck disable=SC2086
-    python3 "${_VM}" --files ${_changed_memory} || exit 1
+    if [[ -n "${_VM}" ]]; then
+        # shellcheck disable=SC2086
+        python3 "${_VM}" --files ${_changed_memory} || exit 1
+    fi
 fi
 
 if command -v ggshield &>/dev/null; then
