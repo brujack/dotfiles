@@ -20,12 +20,6 @@ jobs:
       - name: Install PyYAML for validate-memory
         run: pip install pyyaml
 
-      - name: Check out ai-config (for validate_memory.py)
-        uses: actions/checkout@v6
-        with:
-          repository: brujack/ai-config
-          path: ai-config-tools
-
       - name: Run tests
         run: make test
 

@@ -36,17 +36,15 @@ endif
 	bats --recursive tests/
 
 # Validate canonical memory + retrospective schema (ADR-0014)
-# Searches (in order): in-repo copy, dotfile-symlinked $HOME, sibling ai-config checkout (CI pattern)
+# Validator lives in ai-config; reached via dotfile symlink ($HOME) locally.
+# On CI (no dotfile setup) the gate degrades to a warning since ai-config is private.
 validate-memory:
 	@if [ -f .claude/scripts/validate_memory.py ]; then \
 		python3 .claude/scripts/validate_memory.py --all; \
 	elif [ -f "$$HOME/.claude/scripts/validate_memory.py" ]; then \
 		python3 "$$HOME/.claude/scripts/validate_memory.py" --all; \
-	elif [ -f ai-config-tools/.claude/scripts/validate_memory.py ]; then \
-		python3 ai-config-tools/.claude/scripts/validate_memory.py --all; \
 	else \
-		printf "validate-memory: validator not found; check out brujack/ai-config to ./ai-config-tools or install dotfiles symlinks.\n" >&2; \
-		exit 1; \
+		printf "validate-memory: validator not found (ai-config not installed); skipping. Local pre-commit gate still enforced.\n" >&2; \
 	fi
 
 coverage:
