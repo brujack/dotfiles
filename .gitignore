@@ -25,4 +25,9 @@ coverage/
 # These entries prevent leftover on-disk directories from being tracked
 .claude/*
 !.claude/settings.json
+# ADR-0014: canonical memory + retrospective layout (unignore tracked dirs)
+!.claude/memory/
+!.claude/retrospectives/
+.claude/memory/*.jsonl
+.claude/memory/.lock
 .cursor/

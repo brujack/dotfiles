@@ -20,6 +20,9 @@ jobs:
       - name: Run tests
         run: make test
 
+      - name: Validate memory frontmatter
+        run: make validate-memory
+
       - name: Verify test count floor (≥ 729)
         run: |
           COUNT=$(grep -r "^@test" tests/ | wc -l | tr -d ' ')
