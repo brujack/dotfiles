@@ -17,8 +17,14 @@ jobs:
       - name: Install dependencies
         run: sudo apt-get install -y bats shellcheck zsh
 
+      - name: Install PyYAML for validate-memory
+        run: pip install pyyaml
+
       - name: Run tests
         run: make test
+
+      - name: Validate memory frontmatter
+        run: make validate-memory
 
       - name: Verify test count floor (≥ 729)
         run: |
