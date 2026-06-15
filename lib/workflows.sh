@@ -186,7 +186,6 @@ run_developer_or_ansible() {
   if [[ -n ${LINUX} ]]; then
     install_github_cli_linux || return 1
   fi
-  setup_kitchen || return 1
   setup_ansible || return 1
   clone_personal_repos
 }
