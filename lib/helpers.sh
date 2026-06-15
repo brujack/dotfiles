@@ -82,6 +82,9 @@ brew_update() {
     return 1
   fi
 
+  # Re-establish tap trust on every update; Homebrew 6.0 trust checks block installs otherwise.
+  brew trust chef/chef cloudflare/cloudflare datawire/blackbird getagentseal/codeburn go-task/tap oven-sh/bun redpanda-data/tap snyk/tap teamookla/speedtest 2>/dev/null || true
+
   log_info "Upgrading installed formulae..."
   if ! brew upgrade; then
     log_error "Failed to upgrade formulae. Aborting."

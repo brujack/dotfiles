@@ -370,15 +370,20 @@ run_update() {
       PYTHON="$(pyenv which python 2>/dev/null || command -v python3)"
 
       {
-        "$PYTHON" -m pip install -U pip setuptools wheel
+        "$PYTHON" -m pip install -U pip setuptools
 
         # _UPDATE_TMPDIR is read by the Python block via os.environ to write pip_outdated
         "$PYTHON" - <<PY
 import json, subprocess, sys, os
 
+# Packages with hard upper bounds from other installed tools — upgrading them
+# independently breaks checkov, ansible-lint, shell-gpt, or bpytop. Let pip's
+# dependency resolver manage these via top-level package installs only.
+SKIP_UPGRADE = {"packaging", "pathspec", "rich", "psutil", "wheel"}
+
 cmd = [sys.executable, "-m", "pip", "list", "--outdated", "--format=json"]
 out = subprocess.check_output(cmd, text=True)
-pkgs = [p["name"] for p in json.loads(out)]
+pkgs = [p["name"] for p in json.loads(out) if p["name"].lower() not in SKIP_UPGRADE]
 
 # Write outdated package names for the update summary
 tmpdir = os.environ.get("_UPDATE_TMPDIR", "/tmp")
