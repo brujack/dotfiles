@@ -510,6 +510,28 @@ teardown() {
   ! grep -q "pip install ansible" "${MOCK_CALLS_FILE}"
 }
 
+@test "setup_ansible on macOS includes mlx in pip install" {
+  export MACOS=1
+  unset LINUX
+  export HAS_DEVTOOLS=1
+  setup_ansible
+  grep -q "pip install" "${MOCK_CALLS_FILE}"
+  grep -q "mlx" "${MOCK_CALLS_FILE}"
+}
+
+@test "setup_ansible on Linux excludes mlx from pip install" {
+  unset MACOS
+  export LINUX=1
+  export UBUNTU=1
+  export HAS_DEVTOOLS=1
+  # Pre-create the Python version dir so the env-i subshell build branch is skipped
+  mkdir -p "${HOME}/.pyenv/versions/${PYTHON_VER}"
+  setup_ansible
+  grep -q "pip install ansible" "${MOCK_CALLS_FILE}"
+  run grep "mlx" "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+}
+
 # ── clone_personal_repos ──────────────────────────────────────────────────────
 
 @test "clone_personal_repos calls git clone for each absent repo" {
