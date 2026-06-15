@@ -167,7 +167,6 @@ setup_kitchen() {
     gem install kitchen-ansible
     gem install kitchen-docker
     gem install kitchen-inspec
-    gem install kitchen-terraform
     gem install kitchen-verifier-serverspec
     gem install bundle
     gem install bundler
@@ -177,7 +176,6 @@ setup_kitchen() {
     gem install kitchen-ansible
     gem install kitchen-docker
     gem install kitchen-inspec
-    gem install kitchen-terraform
     gem install kitchen-verifier-serverspec
     gem install bundle
     gem install bundler
