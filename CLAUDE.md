@@ -220,12 +220,14 @@ Entries in `Brewfile` can be tagged with a trailing `# [HAS_*]` comment to make 
 
 ```
 brew "postgresql@14"  # [HAS_DEVTOOLS]
-brew "docker"         # [HAS_DOCKER]
+brew "lazydocker"     # [HAS_DOCKER]
 cask "lens"           # [HAS_K8S]
 brew "rustup"         # [HAS_RUST]
 ```
 
 Untagged entries are expected on all macs. When adding a new Brewfile entry that is developer-, K8s-, Docker-, or Rust-specific, add the appropriate tag.
+
+**Formula/cask dedup rule:** Never add both a formula and a cask for the same tool. Homebrew installs completion files to the same paths regardless of install method — having both causes `brew bundle` to fail with "Could not symlink" on every setup run. Canonical rule: use whichever form provides the complete tool (cask for GUI apps like Docker Desktop and PowerShell; formula only when no equivalent cask exists). `docker-desktop` cask provides the docker CLI; `powershell` formula provides `pwsh` — no separate formula or cask counterpart needed.
 
 **Homebrew tap trust (Homebrew 6.0):** When adding a new third-party tap, also add it to the `brew trust` call in the relevant install function — `install_macos_casks` (macOS) and `_install_ubuntu_brew_packages` (Linux). `brew trust` is idempotent and ignores absent taps; omitting a tap causes a warning in Homebrew 5.2+ and will block installs in 6.0. `brew_update()` in `lib/helpers.sh` also re-establishes trust on every update run — this covers Homebrew major version upgrades that reset trust without requiring a full setup re-run.
 
