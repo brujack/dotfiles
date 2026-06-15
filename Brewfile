@@ -58,7 +58,6 @@ brew "kind"                                  # [HAS_K8S]
 brew "kops"                                  # [HAS_K8S]
 brew "kubernetes-cli"                        # [HAS_K8S]
 brew "kustomize"                             # [HAS_K8S]
-brew "docker"                                # [HAS_DOCKER]
 brew "lazydocker"                            # [HAS_DOCKER]
 brew "ldns"                                  # [HAS_DEVTOOLS]
 brew "libffi"
@@ -175,7 +174,6 @@ cask "mysqlworkbench"                        # [HAS_DEVTOOLS]
 cask "obs"
 cask "oracle-jdk"                            # [HAS_DEVTOOLS]
 cask "postman"                               # [HAS_DEVTOOLS]
-cask "powershell"                            # [HAS_DEVTOOLS]
 cask "session-manager-plugin"               # [HAS_AWS]
 cask "slack"
 cask "sonos"
