@@ -36,7 +36,7 @@ dotfiles/
 │   ├── macos.sh              # macOS install functions (install_macos_packages)
 │   ├── linux_shared.sh       # Ubuntu: install_git_linux, install_zsh_linux, install_bats, update_system_packages
 │   ├── linux_ubuntu.sh       # Ubuntu orchestrator (install_ubuntu_packages) + 12 private _install_ubuntu_* helpers
-│   ├── developer.sh          # Cross-platform dev tools (install_ruby_tools, install_ruby, setup_kitchen, setup_ansible, clone_personal_repos, etc.)
+│   ├── developer.sh          # Cross-platform dev tools (install_ruby_tools, install_ruby, setup_ansible, clone_personal_repos, etc.)
 │   ├── update_summary.sh     # Update run tracking and summary reporting
 │   └── workflows.sh          # Top-level workflow functions dispatched by setup_env.sh
 ├── scripts/
@@ -220,7 +220,7 @@ Entries in `Brewfile` can be tagged with a trailing `# [HAS_*]` comment to make 
 
 ```
 brew "postgresql@14"  # [HAS_DEVTOOLS]
-cask "docker"         # [HAS_DOCKER]
+brew "docker"         # [HAS_DOCKER]
 cask "lens"           # [HAS_K8S]
 brew "rustup"         # [HAS_RUST]
 ```
