@@ -24,7 +24,6 @@ brew "consul"                                # [HAS_DEVTOOLS]
 brew "coreutils"
 brew "ctags"                                 # [HAS_DEVTOOLS]
 brew "datawire/blackbird/telepresence-arm64" # [HAS_K8S]
-brew "docker"                                # [HAS_DOCKER]
 brew "driftctl"                              # [HAS_DEVTOOLS]
 brew "entr"                                  # [HAS_DEVTOOLS]
 brew "fd"                                    # [HAS_DEVTOOLS]
@@ -151,7 +150,6 @@ cask "daisydisk"
 cask "dbeaver-community"                     # [HAS_DEVTOOLS]
 cask "discord"
 cask "docker-desktop"                        # [HAS_DOCKER]
-cask "dotnet"                                # [HAS_DEVTOOLS]
 cask "dotnet-runtime"
 cask "expressvpn"                            # [HAS_DEVTOOLS]
 cask "firefox"
