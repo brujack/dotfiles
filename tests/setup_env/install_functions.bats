@@ -352,3 +352,28 @@ teardown() {
   grep -q "virtualenv-delete -f ansible" "${MOCK_CALLS_FILE}"
   grep -q "virtualenv.*ansible" "${MOCK_CALLS_FILE}"
 }
+
+@test "recreate_python_venv ansible on macOS includes mlx in pip install" {
+  export MACOS=1
+  unset LINUX
+  export HAS_DEVTOOLS=1
+  export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
+  export PATH="${BATS_TEST_DIRNAME}/../mocks:${PATH}"
+  recreate_python_venv "ansible"
+  grep -q "mlx" "${MOCK_CALLS_FILE}"
+}
+
+@test "recreate_python_venv ansible on Linux excludes mlx from pip install" {
+  unset MACOS
+  export LINUX=1
+  export UBUNTU=1
+  export HAS_DEVTOOLS=1
+  export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
+  export PATH="${BATS_TEST_DIRNAME}/../mocks:${PATH}"
+  local _rc=0
+  recreate_python_venv "ansible" || _rc=$?
+  [ "${_rc}" -eq 0 ]
+  grep -q "pip install" "${MOCK_CALLS_FILE}"
+  run grep "mlx" "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+}
