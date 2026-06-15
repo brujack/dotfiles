@@ -150,40 +150,6 @@ install_github_cli_linux() {
   fi
 }
 
-setup_kitchen() {
-  printf "Setup kitchen\\n"
-  if [[ -n ${MACOS} ]]; then
-    source ${CHRUBY_LOC}/chruby/chruby.sh
-    source ${CHRUBY_LOC}/chruby/auto.sh
-    chruby ruby-${RUBY_VER}
-  elif [[ -n ${LINUX} ]]; then
-    if ! [[ -d ${HOME}/.rbenv/versions/${RUBY_VER} ]]; then
-      rbenv install ${RUBY_VER}
-    fi
-  fi
-
-  if [[ -n ${MACOS} ]]; then
-    gem install test-kitchen
-    gem install kitchen-ansible
-    gem install kitchen-docker
-    gem install kitchen-inspec
-    gem install kitchen-terraform
-    gem install kitchen-verifier-serverspec
-    gem install bundle
-    gem install bundler
-  elif [[ -n ${LINUX} ]]; then
-    rbenv shell ${RUBY_VER}
-    gem install test-kitchen
-    gem install kitchen-ansible
-    gem install kitchen-docker
-    gem install kitchen-inspec
-    gem install kitchen-terraform
-    gem install kitchen-verifier-serverspec
-    gem install bundle
-    gem install bundler
-  fi
-}
-
 setup_ansible() {
   printf "ANSIBLE setup\\n"
   if ! [[ -d ${HOME}/.pyenv/versions/${PYTHON_VER} ]]; then

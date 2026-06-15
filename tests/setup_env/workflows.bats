@@ -463,27 +463,6 @@ teardown() {
   grep -q "apt install gh" "${MOCK_CALLS_FILE}"
 }
 
-# ── setup_kitchen ─────────────────────────────────────────────────────────────
-
-@test "setup_kitchen calls gem install test-kitchen on macOS" {
-  export MACOS=1
-  unset LINUX UBUNTU
-  export CHRUBY_LOC="${BATS_TEST_TMPDIR}/chruby_stub"
-  mkdir -p "${CHRUBY_LOC}/chruby"
-  printf "# stub\n" > "${CHRUBY_LOC}/chruby/chruby.sh"
-  printf "# stub\n" > "${CHRUBY_LOC}/chruby/auto.sh"
-  setup_kitchen
-  grep -q "gem install test-kitchen" "${MOCK_CALLS_FILE}"
-}
-
-@test "setup_kitchen calls gem install test-kitchen on Linux" {
-  unset MACOS
-  export LINUX=1
-  export UBUNTU=1
-  setup_kitchen
-  grep -q "gem install test-kitchen" "${MOCK_CALLS_FILE}"
-}
-
 # ── setup_ansible ─────────────────────────────────────────────────────────────
 
 @test "setup_ansible calls pyenv install when Python version absent" {
@@ -1077,32 +1056,12 @@ setup_constants_copy() {
   ! grep -q "install_ruby" "${MOCK_CALLS_FILE}"
 }
 
-@test "run_developer_or_ansible returns non-zero when setup_kitchen fails" {
-  unset MACOS LINUX UBUNTU
-  install_ruby_tools() { return 0; }
-  install_ruby()       { return 0; }
-  setup_kitchen()      { return 1; }
-  run run_developer_or_ansible
-  [ "$status" -ne 0 ]
-}
-
-@test "run_developer_or_ansible does not call setup_ansible when setup_kitchen fails" {
-  unset MACOS LINUX UBUNTU
-  install_ruby_tools() { return 0; }
-  install_ruby()       { return 0; }
-  setup_kitchen()      { return 1; }
-  setup_ansible()      { printf "setup_ansible\n" >> "${MOCK_CALLS_FILE}"; return 0; }
-  run run_developer_or_ansible
-  ! grep -q "setup_ansible" "${MOCK_CALLS_FILE}"
-}
-
 @test "run_developer_or_ansible succeeds on Linux calling setup_ansible and clone_personal_repos" {
   export LINUX=1
   unset MACOS UBUNTU
   install_ruby_tools()       { return 0; }
   install_ruby()             { return 0; }
   install_github_cli_linux() { printf "github_cli_linux\n" >> "${MOCK_CALLS_FILE}"; return 0; }
-  setup_kitchen()            { return 0; }
   setup_ansible()            { printf "setup_ansible\n" >> "${MOCK_CALLS_FILE}"; return 0; }
   clone_personal_repos()     { printf "clone_repos\n" >> "${MOCK_CALLS_FILE}"; return 0; }
   run run_developer_or_ansible

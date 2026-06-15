@@ -58,6 +58,7 @@ brew "kind"                                  # [HAS_K8S]
 brew "kops"                                  # [HAS_K8S]
 brew "kubernetes-cli"                        # [HAS_K8S]
 brew "kustomize"                             # [HAS_K8S]
+brew "docker"                                # [HAS_DOCKER]
 brew "lazydocker"                            # [HAS_DOCKER]
 brew "ldns"                                  # [HAS_DEVTOOLS]
 brew "libffi"
