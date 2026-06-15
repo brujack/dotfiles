@@ -24,7 +24,9 @@ brew "consul"                                # [HAS_DEVTOOLS]
 brew "coreutils"
 brew "ctags"                                 # [HAS_DEVTOOLS]
 brew "datawire/blackbird/telepresence-arm64" # [HAS_K8S]
+brew "docker"                                # [HAS_DOCKER]
 brew "driftctl"                              # [HAS_DEVTOOLS]
+brew "entr"                                  # [HAS_DEVTOOLS]
 brew "fd"                                    # [HAS_DEVTOOLS]
 brew "findutils"
 brew "fzf"                                   # [HAS_DEVTOOLS]
@@ -126,6 +128,7 @@ brew "wireshark"                             # [HAS_DEVTOOLS]
 brew "xz"
 brew "yq"                                    # [HAS_DEVTOOLS]
 brew "zlib"
+brew "zig"                                   # [HAS_DEVTOOLS]
 brew "zoxide"                                # [HAS_DEVTOOLS]
 brew "zsh"
 brew "zsh-completions"
@@ -148,6 +151,7 @@ cask "daisydisk"
 cask "dbeaver-community"                     # [HAS_DEVTOOLS]
 cask "discord"
 cask "docker-desktop"                        # [HAS_DOCKER]
+cask "dotnet"                                # [HAS_DEVTOOLS]
 cask "dotnet-runtime"
 cask "expressvpn"                            # [HAS_DEVTOOLS]
 cask "firefox"
@@ -157,6 +161,7 @@ cask "funter"                                # [HAS_DEVTOOLS]
 cask "gcloud-cli"                            # [HAS_DEVTOOLS]
 cask "github"                                # [HAS_DEVTOOLS]
 cask "google-chrome"
+cask "iina"
 cask "inspec"                                # [HAS_DEVTOOLS]
 cask "istat-menus"
 cask "iterm2"                                # [HAS_DEVTOOLS]
@@ -172,6 +177,7 @@ cask "obs"
 cask "oracle-jdk"                            # [HAS_DEVTOOLS]
 cask "postman"                               # [HAS_DEVTOOLS]
 cask "powershell"                            # [HAS_DEVTOOLS]
+cask "session-manager-plugin"               # [HAS_AWS]
 cask "slack"
 cask "sonos"
 cask "sourcetree"                            # [HAS_DEVTOOLS]
