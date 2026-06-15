@@ -1,59 +1,7 @@
-# Knowledge Directory — dotfiles
+# Knowledge — dotfiles
 
-Reference material for the dotfiles repo. Not instructions, not workflows, not coding conventions — reference documents for understanding the system, domain concepts, and curated research.
+> **Canonical location:** All knowledge for this repo lives in [`ai-config/docs/knowledge/`](https://github.com/brujack/ai-config/tree/master/docs/knowledge) under `<repo>-<topic>.md` naming.
+>
+> See `ai-config/docs/knowledge/README.md` for the master index. This stub exists only as a discoverability pointer.
 
-## Categories
-
-### Architecture docs (non-ADR)
-
-Descriptions of how the system works that are too detailed or too volatile for CLAUDE.md, but don't rise to the level of an architectural _decision_ record. Examples:
-
-- How the profile model resolves capabilities from hostname
-- The update workflow section order and `_update_record_*` lifecycle
-- How etch manifests are loaded and applied during setup
-- The symlink strategy for `.claude/`, `.cursor/`, and dotfiles
-
-ADRs (`docs/adr/`) record _decisions_. Architecture docs here describe _how things work_.
-
-### Saved web research
-
-Curated findings from the web-research skill (Exa + Firecrawl) that are worth preserving across sessions. Save here instead of re-fetching next time. Examples:
-
-- Homebrew formula/cask API behavior
-- Shell compatibility notes discovered during debugging
-- Tool-specific quirks found in external docs
-
-Use file names like `research-<topic>.md` to distinguish from architecture docs.
-
-### Retrospectives
-
-Monthly process reviews capturing trends, recurring issues, and actions across PRs. Written on the 1st of each month (or on demand) with a 30-day lookback.
-
-### Other reference material
-
-Reference sheets for tools managed by dotfiles (shell, npm, Brewfile structure) that don't fit the above categories.
-
-## What does not belong here
-
-| Content type                         | Where it lives                                  |
-| ------------------------------------ | ----------------------------------------------- |
-| Instructions / behavioral directives | `CLAUDE.md`                                     |
-| Reusable workflows                   | `~/.claude/skills/` or `.cursor/skills-cursor/` |
-| Coding conventions                   | `~/.claude/standards/`                          |
-| Plans and specs                      | `docs/superpowers/` or `docs/cursor/`           |
-| Architectural decisions              | `docs/adr/`                                     |
-
-## File naming
-
-`<topic>.md` or `research-<topic>.md` — lowercase with hyphens. One topic per file.
-
-## Index
-
-Add a row to this table when you create a file:
-
-| File                                      | Category      | Contents                                              |
-| ----------------------------------------- | ------------- | ----------------------------------------------------- |
-| `retrospectives/2026-05-17.md`            | Retrospective  | May 2026 retro — brew drift, ai-config split          |
-| `retrospectives/2026-06-retrospective.md` | Retrospective  | June 2026 mid-period (May 17–Jun 1) — coverage sprint |
-| `retrospectives/2026-06-05.md`            | Retrospective  | June 2026 full 30-day — coverage + cleanup trends     |
-| `bats-test-infrastructure.md`             | Reference      | Test seams (override env vars) + PATH mock var table  |
+See ADR-0020 in ai-config for the consolidation decision.
