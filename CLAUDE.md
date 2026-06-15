@@ -112,9 +112,9 @@ The validator (`~/.claude/scripts/validate-plan.py`, shared from ai-config) enfo
 
 ## Knowledge Directory
 
-Reference material lives in `docs/knowledge/`. These documents capture architecture overviews, domain reference sheets, and curated research findings — things too detailed for CLAUDE.md but useful to look up. See `docs/knowledge/README.md` for what belongs there and what doesn't.
+Reference material for this repo lives in `ai-config/docs/knowledge/` under `dotfiles-<topic>.md` naming (per ADR-0020). The local `docs/knowledge/README.md` is a pointer stub. See `ai-config/docs/knowledge/README.md` for the master index.
 
-When web research (web-research skill) or context-mode fetches produce findings worth preserving, save them to `docs/knowledge/<topic>.md`.
+When web research (web-research skill) or context-mode fetches produce findings worth preserving, save to `ai-config/docs/knowledge/dotfiles-<topic>.md`.
 
 ## Entry Points
 
@@ -122,16 +122,16 @@ When web research (web-research skill) or context-mode fetches produce findings 
 ./setup_env.sh -t <type>
 ```
 
-| Type             | Purpose                                                                                                                                                                                                                                    |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `setup_user`     | Configs, shells, directory structure, symlinks, GitHub MCP (`setup_claude_mcp`), Claude plugins (`setup_claude_plugins`)                                                                                                                   |
-| `setup`          | Full machine setup (setup_user + all apps). Flags: `--brew-install`, `--mas-install`                                                                                                                                                       |
-| `developer`      | Dev packages + Python/Ansible virtualenv                                                                                                                                                                                                   |
-| `ansible`        | Ansible venv setup only (after Python updates)                                                                                                                                                                                             |
-| `recreate-venv`  | Force-delete and recreate a named pyenv virtualenv. Flags: `--venv-name` (default: `ansible`). Runs full pip install when name is `ansible`.                                                                                               |
-| `update`         | Update all packages (brew, apt/snap, pip, gems, tools). Supports `--brew-only`, `--pip-only`, `--gems-only`, `--mas-only`, `--claude-only` flags. Prints a structured summary at the end; each run is appended to `~/.dotfiles-update.log` |
-| `doctor`         | Active health checks: symlinks, tool presence, credential dir permissions, version drift. Exits non-zero on any failure                                                                                                                    |
-| `check-versions` | Compare pinned versions in `lib/constants.sh` against GitHub latest; exits 1 if outdated. `--update` prompts per-tool to apply updates in-place                                                                                            |
+| Type             | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `setup_user`     | Configs, shells, directory structure, symlinks, GitHub MCP (`setup_claude_mcp`), Claude plugins (`setup_claude_plugins`)                                                                                                                                                                                                                                                                                                                                 |
+| `setup`          | Full machine setup (setup_user + all apps). Flags: `--brew-install`, `--mas-install`                                                                                                                                                                                                                                                                                                                                                                     |
+| `developer`      | Dev packages + Python/Ansible virtualenv                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `ansible`        | Ansible venv setup only (after Python updates)                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `recreate-venv`  | Force-delete and recreate a named pyenv virtualenv. Flags: `--venv-name` (default: `ansible`). Runs full pip install when name is `ansible`.                                                                                                                                                                                                                                                                                                             |
+| `update`         | Update all packages (brew, apt/snap, pip, gems, tools). Supports `--brew-only`, `--pip-only`, `--gems-only`, `--mas-only`, `--claude-only` flags. Prints a structured summary at the end; each run is appended to `~/.dotfiles-update.log`. Pip update excludes `packaging`, `pathspec`, `rich`, `psutil`, `wheel` from the "upgrade all outdated" sweep — these have upper-bound conflicts with other installed packages; let the resolver manage them. |
+| `doctor`         | Active health checks: symlinks, tool presence, credential dir permissions, version drift. Exits non-zero on any failure                                                                                                                                                                                                                                                                                                                                  |
+| `check-versions` | Compare pinned versions in `lib/constants.sh` against GitHub latest; exits 1 if outdated. `--update` prompts per-tool to apply updates in-place                                                                                                                                                                                                                                                                                                          |
 
 **Options:**
 
@@ -227,7 +227,7 @@ brew "rustup"         # [HAS_RUST]
 
 Untagged entries are expected on all macs. When adding a new Brewfile entry that is developer-, K8s-, Docker-, or Rust-specific, add the appropriate tag.
 
-**Homebrew tap trust (Homebrew 6.0):** When adding a new third-party tap, also add it to the `brew trust` call in the relevant install function — `install_macos_casks` (macOS) and `_install_ubuntu_brew_packages` (Linux). `brew trust` is idempotent and ignores absent taps; omitting a tap causes a warning in Homebrew 5.2+ and will block installs in 6.0.
+**Homebrew tap trust (Homebrew 6.0):** When adding a new third-party tap, also add it to the `brew trust` call in the relevant install function — `install_macos_casks` (macOS) and `_install_ubuntu_brew_packages` (Linux). `brew trust` is idempotent and ignores absent taps; omitting a tap causes a warning in Homebrew 5.2+ and will block installs in 6.0. `brew_update()` in `lib/helpers.sh` also re-establishes trust on every update run — this covers Homebrew major version upgrades that reset trust without requiring a full setup re-run.
 
 ### PowerShell Scripts
 
@@ -254,7 +254,7 @@ All tool versions are defined as constants in `lib/constants.sh`:
 
 ```bash
 GO_VER="1.26"
-PYTHON_VER="3.14.5"
+PYTHON_VER="3.14.6"
 RUBY_VER="4.0.5"
 ```
 
@@ -353,7 +353,7 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 #### Bash
 
-- **Overall: 92%** (measured 2026-06-01 across 731 BATS tests using `make bash-coverage`; per-file: `setup_env.sh` 89%, `helpers.sh` 90%, `workflows.sh` 91%, `update_summary.sh` 97%, `developer.sh` 91%, `linux_ubuntu.sh` 91%, `macos.sh` 97%, `constants.sh`/`detect_env.sh`/`linux_shared.sh` 96-100%)
+- **Overall: 92%** (measured 2026-06-01 across 745 BATS tests using `make bash-coverage`; per-file: `setup_env.sh` 89%, `helpers.sh` 90%, `workflows.sh` 91%, `update_summary.sh` 97%, `developer.sh` 91%, `linux_ubuntu.sh` 91%, `macos.sh` 97%, `constants.sh`/`detect_env.sh`/`linux_shared.sh` 96-100%)
 - **`make bash-coverage`** measures coverage via `BASH_ENV` + PS4 xtrace tracer (`scripts/run-bash-coverage.sh`). Runs all bats tests with xtrace active; filters trace output through a named pipe to keep disk usage small (~200K lines vs ~33M raw).
 - **`make push-bash-coverage`** runs `bash-coverage`, generates `coverage/bash.json` in shields.io format, and pushes it to the `coverage-data` branch. The README badge pulls from that branch.
 - **Cron job (manual install)**: `(crontab -l 2>/dev/null; echo "0 2 * * * cd ~/git-repos/personal/dotfiles && make push-bash-coverage >> ~/.dotfiles-coverage.log 2>&1") | crontab -`
@@ -372,13 +372,13 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 ### Test Seams
 
-See [`docs/knowledge/bats-test-infrastructure.md`](docs/knowledge/bats-test-infrastructure.md) for the full override env var table.
+See [`ai-config/docs/knowledge/dotfiles-bats-test-infrastructure.md`](https://github.com/brujack/ai-config/blob/master/docs/knowledge/dotfiles-bats-test-infrastructure.md) for the full override env var table (moved to ai-config per ADR-0020).
 
 Pattern: `local _file="${_OVERRIDE_VAR:-$(dirname "${BASH_SOURCE[0]}")/real/path}"`. Tests set the var and pass a writable temp copy; production code leaves it unset.
 
 ### Mock Pattern
 
-See [`docs/knowledge/bats-test-infrastructure.md`](docs/knowledge/bats-test-infrastructure.md) for the full `MOCK_*` env var reference table and the usage pattern.
+See [`ai-config/docs/knowledge/dotfiles-bats-test-infrastructure.md`](https://github.com/brujack/ai-config/blob/master/docs/knowledge/dotfiles-bats-test-infrastructure.md) for the full `MOCK_*` env var reference table and the usage pattern.
 
 **Pass-through mocks:** `ln`, `chmod`, `mv`, `cp`, and `tee` call the real binary (`/bin/cmd "$@" 2>/dev/null || true`) so tests that assert actual filesystem state work correctly. Set the corresponding exit var to a non-zero value to simulate failure instead.
 
