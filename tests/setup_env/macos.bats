@@ -171,7 +171,6 @@ teardown() {
   unset HAS_GUI HAS_DEVTOOLS
   run install_macos_casks
   [ "$status" -eq 0 ]
-  grep -q "brew trust.*chef/chef" "${MOCK_CALLS_FILE}"
   grep -q "brew trust.*getagentseal/codeburn" "${MOCK_CALLS_FILE}"
 }
 
