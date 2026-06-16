@@ -1,4 +1,3 @@
-tap "chef/chef"                              # [HAS_DEVTOOLS]
 tap "cloudflare/cloudflare"                  # [HAS_DEVTOOLS]
 tap "getagentseal/codeburn"                  # [HAS_DEVTOOLS]
 tap "datawire/blackbird"                     # [HAS_K8S]
