@@ -21,8 +21,8 @@ _install_ubuntu_base_packages() {
   printf "Installing hwe, common, and 24.04 packages\\n"
   sudo -H apt install --install-recommends linux-generic-hwe-24.04 -y
   check_and_install_nala
-  xargs -a ./ubuntu_common_packages.txt sudo nala install -y
-  xargs -a ./ubuntu_2404_packages.txt sudo nala install -y
+  xargs -a ./ubuntu_common_packages.txt sudo apt-get install -y
+  xargs -a ./ubuntu_2404_packages.txt sudo apt-get install -y
 
   if [[ -n ${HAS_SNAP} ]]; then
     printf "Installing workstation packages\\n"
@@ -434,9 +434,9 @@ _install_ubuntu_gui_tools() {
 
   if [[ -n ${HAS_SNAP} ]]; then
     printf "Installing Steam via Flatpak\\n"
-    flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-    flatpak install flathub com.valvesoftware.Steam -y
-    if flatpak list | grep -q com.valvesoftware.Steam; then
+    sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+    sudo flatpak install flathub com.valvesoftware.Steam -y
+    if sudo flatpak list | grep -q com.valvesoftware.Steam; then
       printf "Steam is installed\\n"
     fi
   fi
