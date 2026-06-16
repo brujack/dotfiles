@@ -3,7 +3,7 @@ gnome-tweaks
 httpie
 nfs-common
 openjdk-21-jdk
+flatpak
 steam-devices
-steam-installer
 ubuntu-restricted-extras
 xrdp

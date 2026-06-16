@@ -91,7 +91,7 @@ _install_ubuntu_go() {
   local _prev_minor=$(( _minor - 1 ))
   local pkgs_to_remove="golang-1.${_prev_minor}-go golang-1.${_prev_minor}-src"
   if [[ -n ${pkgs_to_remove} ]]; then
-    sudo -H apt remove ${pkgs_to_remove} -y
+    sudo -H apt remove ${pkgs_to_remove} -y 2>/dev/null || true
   fi
   if [[ ${_minor} -lt 21 ]]; then
     sudo add-apt-repository ppa:longsleep/golang-backports -y
@@ -177,10 +177,11 @@ _install_ubuntu_k8s_tools() {
     fi
   fi
 
-  if [[ ! -f /etc/apt/keyrings/kubernetes-apt-keyring.gpg ]]; then
-    sudo curl -fsSL https://pkgs.k8s.io/core:/stable:/${KUBERNETES_VER}/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-    echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/${KUBERNETES_VER}/deb/ /" | sudo tee /etc/apt/sources.list.d/kubernetes.list
-  fi
+  sudo mkdir -p /etc/apt/keyrings
+  curl -fsSL "https://pkgs.k8s.io/core:/stable:/${KUBERNETES_VER}/deb/Release.key" \
+    | sudo gpg --dearmor --yes -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+  printf 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/%s/deb/ /\n' "${KUBERNETES_VER}" \
+    | sudo tee /etc/apt/sources.list.d/kubernetes.list
   sudo -H apt update
   sudo -H apt install kubectl -y
 
@@ -277,8 +278,9 @@ _install_ubuntu_hashicorp() {
 _install_ubuntu_cloud_tools() {
   if [[ -n ${HAS_DEVTOOLS} ]]; then
     printf "Installing teleport\\n"
-    wget -O- https://deb.releases.teleport.dev/teleport-pubkey.asc | sudo gpg --dearmor --yes --output /usr/share/keyrings/telport-pubkey.gpg
-    sudo add-apt-repository "deb https://deb.releases.teleport.dev/ stable main"
+    curl -fsSL https://deb.releases.teleport.dev/teleport-pubkey.asc | sudo gpg --dearmor --yes --output /usr/share/keyrings/teleport-pubkey.gpg
+    sudo rm -f /etc/apt/sources.list.d/archive_uri-https_deb_releases_teleport_dev_-noble.list
+    echo "deb [signed-by=/usr/share/keyrings/teleport-pubkey.gpg] https://deb.releases.teleport.dev/ stable main" | sudo tee /etc/apt/sources.list.d/teleport.list
     sudo -H apt update
     sudo -H apt install teleport -y
     if [[ -x $(command -v tsh) ]]; then
@@ -423,12 +425,20 @@ _install_ubuntu_gui_tools() {
 
   if [[ -n ${HAS_SNAP} ]]; then
     printf "snap software with classic option, the other snap packages are installed in ubuntu_workstation_snap_packages.txt\\n"
-    sudo snap install atom --classic
     sudo snap install code --classic
     sudo snap install slack --classic
     sudo snap install certbot --classic
     sudo snap set certbot trust-plugin-with-root=ok
     sudo snap install certbot-dns-route53
+  fi
+
+  if [[ -n ${HAS_SNAP} ]]; then
+    printf "Installing Steam via Flatpak\\n"
+    flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+    flatpak install flathub com.valvesoftware.Steam -y
+    if flatpak list | grep -q com.valvesoftware.Steam; then
+      printf "Steam is installed\\n"
+    fi
   fi
 }
 
