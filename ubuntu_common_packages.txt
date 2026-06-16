@@ -26,7 +26,6 @@ libgdbm-compat-dev
 libffi-dev
 liblzma-dev
 libelf-dev
-libmpdec-dev
 libncurses5-dev
 libncursesw5-dev
 libnss3-dev
