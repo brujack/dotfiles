@@ -26,8 +26,6 @@ libgdbm-compat-dev
 libffi-dev
 liblzma-dev
 libelf-dev
-libncurses5-dev
-libncursesw5-dev
 libnss3-dev
 libpython3-dev
 libreadline-dev
