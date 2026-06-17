@@ -171,6 +171,35 @@ teardown() {
   ! grep -q "apt install nala" "${MOCK_CALLS_FILE}"
 }
 
+@test "check_and_install_nala on RESOLUTE uses apt install, skips volian wget" {
+  export MOCK_UNAME_S=Linux
+  export MOCK_AWK_OS_NAME="Ubuntu"
+  export RESOLUTE=1
+  export HOME="${BATS_TEST_TMPDIR}"
+  mkdir -p "${BATS_TEST_TMPDIR}/software_downloads"
+  run check_and_install_nala
+  [ "$status" -eq 0 ]
+  run grep -q "apt install nala" "${MOCK_CALLS_FILE}"
+  [ "$status" -eq 0 ]
+  run grep -q "wget" "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+}
+
+@test "check_and_install_nala on NOBLE uses volian wget path" {
+  export MOCK_UNAME_S=Linux
+  export MOCK_AWK_OS_NAME="Ubuntu"
+  export NOBLE=1
+  unset RESOLUTE
+  export HOME="${BATS_TEST_TMPDIR}"
+  mkdir -p "${BATS_TEST_TMPDIR}/software_downloads"
+  run check_and_install_nala
+  [ "$status" -eq 0 ]
+  run grep -q "wget" "${MOCK_CALLS_FILE}"
+  [ "$status" -eq 0 ]
+  run grep -q "dpkg --install" "${MOCK_CALLS_FILE}"
+  [ "$status" -eq 0 ]
+}
+
 # ── install_homebrew ─────────────────────────────────────────────────────────
 
 @test "install_homebrew skips xcode setup when xcode-select is already installed" {
