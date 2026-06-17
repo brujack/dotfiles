@@ -171,6 +171,35 @@ teardown() {
   ! grep -q "apt install nala" "${MOCK_CALLS_FILE}"
 }
 
+@test "check_and_install_nala on RESOLUTE uses apt install, skips volian wget" {
+  export MOCK_UNAME_S=Linux
+  export MOCK_AWK_OS_NAME="Ubuntu"
+  export RESOLUTE=1
+  export HOME="${BATS_TEST_TMPDIR}"
+  mkdir -p "${BATS_TEST_TMPDIR}/software_downloads"
+  run check_and_install_nala
+  [ "$status" -eq 0 ]
+  run grep -q "apt install nala" "${MOCK_CALLS_FILE}"
+  [ "$status" -eq 0 ]
+  run grep -q "wget" "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+}
+
+@test "check_and_install_nala on NOBLE uses volian wget path" {
+  export MOCK_UNAME_S=Linux
+  export MOCK_AWK_OS_NAME="Ubuntu"
+  export NOBLE=1
+  unset RESOLUTE
+  export HOME="${BATS_TEST_TMPDIR}"
+  mkdir -p "${BATS_TEST_TMPDIR}/software_downloads"
+  run check_and_install_nala
+  [ "$status" -eq 0 ]
+  run grep -q "wget" "${MOCK_CALLS_FILE}"
+  [ "$status" -eq 0 ]
+  run grep -q "dpkg --install" "${MOCK_CALLS_FILE}"
+  [ "$status" -eq 0 ]
+}
+
 # ── install_homebrew ─────────────────────────────────────────────────────────
 
 @test "install_homebrew skips xcode setup when xcode-select is already installed" {
@@ -212,6 +241,38 @@ teardown() {
   [[ "$output" == *"Failed to install Homebrew"* ]]
 }
 
+# ── install_ruby — rbenv version guard ──────────────────────────────────────
+
+@test "install_ruby on Linux calls rbenv install when ruby-build has the version" {
+  export LINUX=1
+  unset MACOS UBUNTU
+  export HOME="${BATS_TEST_TMPDIR}"
+  mkdir -p "${BATS_TEST_TMPDIR}/.rbenv"
+  # Version NOT already installed (.rbenv/versions/<ver> absent → rbenv install runs)
+  # ruby-build list includes the version: "  4.0.5"
+  export RUBY_VER="4.0.5"
+  export MOCK_RBENV_LIST_STDOUT="  4.0.5"
+  export MOCK_RUBY_VERSION=""
+  run install_ruby
+  [ "$status" -eq 0 ]
+  run grep -q "rbenv install" "${MOCK_CALLS_FILE}"
+  [ "$status" -eq 0 ]
+}
+
+@test "install_ruby on Linux skips rbenv install when ruby-build lacks the version" {
+  export LINUX=1
+  unset MACOS UBUNTU
+  export HOME="${BATS_TEST_TMPDIR}"
+  mkdir -p "${BATS_TEST_TMPDIR}/.rbenv"
+  # ruby-build list does NOT include the version — only an older version
+  export RUBY_VER="4.0.5"
+  export MOCK_RBENV_LIST_STDOUT="  3.3.0"
+  run install_ruby
+  [ "$status" -eq 0 ]
+  run grep -q "rbenv install 4.0.5" "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+}
+
 # ── install_ruby_tools ───────────────────────────────────────────────────────
 
 @test "install_ruby_tools returns non-zero when cd to ruby-install dir fails" {
@@ -225,25 +286,34 @@ teardown() {
   [ "$status" -ne 0 ]
 }
 
-# ── install_ubuntu_packages — unsupported Go version ─────────────────────────
+# ── _install_ubuntu_go ────────────────────────────────────────────────────────
+# The unsupported-version range guard was removed — always calls tarball install.
 
-@test "install_ubuntu_packages returns non-zero for unsupported Go version" {
-  # Use || _rc=$? so BATS ERR trap does not fire on the non-zero return.
-  # With exit 1 (pre-fix) the BATS shell itself dies — test fails catastrophically.
-  # With return 1 (post-fix) the || branch captures the code and the assertion runs.
+@test "_install_ubuntu_go with GO_VER 1.18 does not call add-apt-repository" {
   export UBUNTU=1
-  export NOBLE=1
-  unset MACOS LINUX HAS_SNAP HAS_RUST
+  unset MACOS LINUX
   export MOCK_UNAME_S=Linux
   local _home="${BATS_TEST_TMPDIR}/home"
   mkdir -p "${_home}/software_downloads"
   export HOME="${_home}"
-  local _saved_go_ver="${GO_VER}"
-  local _rc=0
-  GO_VER="99.99"
-  install_ubuntu_packages || _rc=$?
-  GO_VER="${_saved_go_ver}"
-  [ "${_rc}" -ne 0 ]
+  export GO_VER="1.18"
+  export PATH="${BATS_TEST_DIRNAME}/../mocks:${PATH}"
+  _install_ubuntu_go
+  run grep "add-apt-repository" "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+}
+
+@test "_install_ubuntu_go always calls _install_go_from_tarball" {
+  export UBUNTU=1
+  unset MACOS LINUX
+  export MOCK_UNAME_S=Linux
+  local _home="${BATS_TEST_TMPDIR}/home"
+  mkdir -p "${_home}/software_downloads"
+  export HOME="${_home}"
+  export GO_VER="1.18"
+  export PATH="${BATS_TEST_DIRNAME}/../mocks:${PATH}"
+  _install_ubuntu_go
+  grep -q "wget" "${MOCK_CALLS_FILE}"
 }
 
 # ── install_terraform_skill ───────────────────────────────────────────────────

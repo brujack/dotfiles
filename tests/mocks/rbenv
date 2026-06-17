@@ -1,3 +1,7 @@
 #!/usr/bin/env bash
 printf "rbenv %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+if [[ "$1" == "install" && "$2" == "--list" ]]; then
+  printf "%s\n" "${MOCK_RBENV_LIST_STDOUT:-}"
+  exit 0
+fi
 exit "${MOCK_RBENV_EXIT:-0}"

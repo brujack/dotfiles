@@ -89,11 +89,13 @@ teardown() {
 
 # ── _install_ubuntu_go ───────────────────────────────────────────────────────
 
-@test "_install_ubuntu_go: version <=1.20 calls add-apt-repository" {
+@test "_install_ubuntu_go: any version calls wget for tarball (no PPA path)" {
   export GO_VER="1.20"
+  export GO_DOWNLOAD_FILENAME="go1.20.linux-amd64.tar.gz"
+  export GO_DOWNLOAD_URL="https://dl.google.com/go/go1.20.linux-amd64.tar.gz"
   run _install_ubuntu_go
   [ "$status" -eq 0 ]
-  grep -q "add-apt-repository.*golang-backports" "${MOCK_CALLS_FILE}"
+  grep -q "wget.*${GO_DOWNLOAD_FILENAME}" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_go: version >=1.21 calls wget for tarball" {
@@ -131,11 +133,13 @@ teardown() {
   [[ "$output" == *"Go 1.26 is installed"* ]]
 }
 
-@test "_install_ubuntu_go: unsupported version returns 1" {
+@test "_install_ubuntu_go: any version succeeds (no version range guard)" {
   export GO_VER="1.99"
-  local _rc=0
-  _install_ubuntu_go || _rc=$?
-  [ "${_rc}" -ne 0 ]
+  export GO_DOWNLOAD_FILENAME="go1.99.linux-amd64.tar.gz"
+  export GO_DOWNLOAD_URL="https://dl.google.com/go/go1.99.linux-amd64.tar.gz"
+  run _install_ubuntu_go
+  [ "$status" -eq 0 ]
+  grep -q "wget.*${GO_DOWNLOAD_FILENAME}" "${MOCK_CALLS_FILE}"
 }
 
 # ── _install_ubuntu_rust ─────────────────────────────────────────────────────

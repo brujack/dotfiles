@@ -123,6 +123,11 @@ install_ruby() {
     fi
     if [[ -n ${LINUX} ]]; then
       if ! [[ -d ${HOME}/.rbenv/versions/${RUBY_VER} ]]; then
+        if ! rbenv install --list 2>/dev/null | grep -q "^  ${RUBY_VER}$"; then
+          log_warn "ruby-build has no definition for Ruby ${RUBY_VER} — skipping rbenv install"
+          log_warn "Run 'rbenv install ${RUBY_VER}' manually once ruby-build is updated"
+          return 0
+        fi
         OPENSSL_DIR="$(pkg-config --variable=libdir openssl 2>/dev/null | sed 's#/lib$##')"
         RUBY_CONFIGURE_OPTS="--with-openssl-dir=${OPENSSL_DIR:-/usr}" rbenv install ${RUBY_VER}
         rbenv global ${RUBY_VER}
