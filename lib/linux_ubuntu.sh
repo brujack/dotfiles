@@ -92,24 +92,8 @@ _install_go_from_tarball() {
 
 _install_ubuntu_go() {
   printf "Installing Go Ubuntu\\n"
-  local _minor
-  _minor=$(printf '%s' "${GO_VER}" | cut -d. -f2)
-  if [[ ${_minor} -lt 16 ]] || [[ ${_minor} -gt 26 ]]; then
-    printf "Error: Unsupported Go version %s\\n" "${GO_VER}"
-    return 1
-  fi
   sudo -H apt update
-  local _prev_minor=$(( _minor - 1 ))
-  local pkgs_to_remove="golang-1.${_prev_minor}-go golang-1.${_prev_minor}-src"
-  if [[ -n ${pkgs_to_remove} ]]; then
-    sudo -H apt remove ${pkgs_to_remove} -y 2>/dev/null || true
-  fi
-  if [[ ${_minor} -lt 21 ]]; then
-    sudo add-apt-repository ppa:longsleep/golang-backports -y
-    sudo -H apt install "golang-${GO_VER}-go" -y
-  else
-    _install_go_from_tarball
-  fi
+  _install_go_from_tarball
   INSTALLED_GO_VER=$(go version | awk '{print $3}' | sed 's/go//g')
   if [[ ${INSTALLED_GO_VER} == "${GO_VER}" ]]; then
     printf "Go %s is installed\\n" "${GO_VER}"

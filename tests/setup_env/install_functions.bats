@@ -225,25 +225,34 @@ teardown() {
   [ "$status" -ne 0 ]
 }
 
-# ── install_ubuntu_packages — unsupported Go version ─────────────────────────
+# ── _install_ubuntu_go ────────────────────────────────────────────────────────
+# The unsupported-version range guard was removed — always calls tarball install.
 
-@test "install_ubuntu_packages returns non-zero for unsupported Go version" {
-  # Use || _rc=$? so BATS ERR trap does not fire on the non-zero return.
-  # With exit 1 (pre-fix) the BATS shell itself dies — test fails catastrophically.
-  # With return 1 (post-fix) the || branch captures the code and the assertion runs.
+@test "_install_ubuntu_go with GO_VER 1.18 does not call add-apt-repository" {
   export UBUNTU=1
-  export NOBLE=1
-  unset MACOS LINUX HAS_SNAP HAS_RUST
+  unset MACOS LINUX
   export MOCK_UNAME_S=Linux
   local _home="${BATS_TEST_TMPDIR}/home"
   mkdir -p "${_home}/software_downloads"
   export HOME="${_home}"
-  local _saved_go_ver="${GO_VER}"
-  local _rc=0
-  GO_VER="99.99"
-  install_ubuntu_packages || _rc=$?
-  GO_VER="${_saved_go_ver}"
-  [ "${_rc}" -ne 0 ]
+  export GO_VER="1.18"
+  export PATH="${BATS_TEST_DIRNAME}/../mocks:${PATH}"
+  _install_ubuntu_go
+  run grep "add-apt-repository" "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+}
+
+@test "_install_ubuntu_go always calls _install_go_from_tarball" {
+  export UBUNTU=1
+  unset MACOS LINUX
+  export MOCK_UNAME_S=Linux
+  local _home="${BATS_TEST_TMPDIR}/home"
+  mkdir -p "${_home}/software_downloads"
+  export HOME="${_home}"
+  export GO_VER="1.18"
+  export PATH="${BATS_TEST_DIRNAME}/../mocks:${PATH}"
+  _install_ubuntu_go
+  grep -q "wget" "${MOCK_CALLS_FILE}"
 }
 
 # ── install_terraform_skill ───────────────────────────────────────────────────
