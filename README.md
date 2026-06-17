@@ -369,6 +369,27 @@ Claude Code is configured with the GitHub MCP server for native GitHub operation
 The generated `~/.claude/mcp.json` is not tracked in git — it is regenerated
 from `.claude/mcp.json.template` on each `setup_user` run.
 
+### Troubleshooting: Claude Code plugins after `brew upgrade node` (Linux)
+
+When Node.js is upgraded via Homebrew on Linux, Claude Code plugins bake in
+the old Cellar path at install time. Symptom at Claude startup:
+
+```
+SessionStart:startup hook error
+Failed with non-blocking status code: /bin/sh: 1:
+  /home/linuxbrew/.linuxbrew/Cellar/node/<old-version>/bin/node: not found
+```
+
+**Fix:** replace the hardcoded Cellar path with the stable symlink path across
+all plugin caches:
+
+```bash
+grep -rl "Cellar/node/" ~/.claude/plugins/cache/ 2>/dev/null \
+  | xargs sed -i "s|Cellar/node/[^/]*/bin/node|bin/node|g" 2>/dev/null
+```
+
+Then restart Claude Code. Run this after every `brew upgrade node` on Linux.
+
 ## Branch Workflow
 
 All changes go on feature branches. The pre-push hook runs `make test` locally before the push reaches GitHub. GitHub Actions CI runs `make test`, `lint-macos`, and `secret-scan` on PRs only, and auto-merges when all three pass.
