@@ -217,8 +217,8 @@ _install_ubuntu_k8s_tools() {
 _install_ubuntu_hashicorp() {
   printf "Installing Hashicorp Consul Ubuntu\\n"
   if [[ ! -d ${HOME}/software_downloads/consul_${CONSUL_VER} ]]; then
-    wget -O ${HOME}/software_downloads/consul_${CONSUL_VER}_linux_amd64.zip ${HASHICORP_URL}/consul/${CONSUL_VER}/consul_${CONSUL_VER}_linux_amd64.zip
-    unzip ${HOME}/software_downloads/consul_${CONSUL_VER}_linux_amd64.zip -d ${HOME}/software_downloads/consul_${CONSUL_VER}
+    wget -O ${HOME}/software_downloads/consul_${CONSUL_VER}_linux_${_LINUX_ARCH}.zip ${HASHICORP_URL}/consul/${CONSUL_VER}/consul_${CONSUL_VER}_linux_${_LINUX_ARCH}.zip
+    unzip ${HOME}/software_downloads/consul_${CONSUL_VER}_linux_${_LINUX_ARCH}.zip -d ${HOME}/software_downloads/consul_${CONSUL_VER}
     sudo cp -a ${HOME}/software_downloads/consul_${CONSUL_VER}/consul /usr/local/bin/
     sudo chmod 755 /usr/local/bin/consul
     sudo chown root:root /usr/local/bin/consul
@@ -229,8 +229,8 @@ _install_ubuntu_hashicorp() {
 
   printf "Installing Hashicorp Vault Ubuntu\\n"
   if [[ ! -d ${HOME}/software_downloads/vault_${VAULT_VER} ]]; then
-    wget -O ${HOME}/software_downloads/vault_${VAULT_VER}_linux_amd64.zip ${HASHICORP_URL}/vault/${VAULT_VER}/vault_${VAULT_VER}_linux_amd64.zip
-    unzip ${HOME}/software_downloads/vault_${VAULT_VER}_linux_amd64.zip -d ${HOME}/software_downloads/vault_${VAULT_VER}
+    wget -O ${HOME}/software_downloads/vault_${VAULT_VER}_linux_${_LINUX_ARCH}.zip ${HASHICORP_URL}/vault/${VAULT_VER}/vault_${VAULT_VER}_linux_${_LINUX_ARCH}.zip
+    unzip ${HOME}/software_downloads/vault_${VAULT_VER}_linux_${_LINUX_ARCH}.zip -d ${HOME}/software_downloads/vault_${VAULT_VER}
     sudo cp -a ${HOME}/software_downloads/vault_${VAULT_VER}/vault /usr/local/bin/
     sudo chmod 755 /usr/local/bin/vault
     sudo chown root:root /usr/local/bin/vault
@@ -241,8 +241,8 @@ _install_ubuntu_hashicorp() {
 
   printf "Installing Hashicorp Nomad Ubuntu\\n"
   if [[ ! -d ${HOME}/software_downloads/nomad_${NOMAD_VER} ]]; then
-    wget -O ${HOME}/software_downloads/nomad_${NOMAD_VER}_linux_amd64.zip ${HASHICORP_URL}/nomad/${NOMAD_VER}/nomad_${NOMAD_VER}_linux_amd64.zip
-    unzip ${HOME}/software_downloads/nomad_${NOMAD_VER}_linux_amd64.zip -d ${HOME}/software_downloads/nomad_${NOMAD_VER}
+    wget -O ${HOME}/software_downloads/nomad_${NOMAD_VER}_linux_${_LINUX_ARCH}.zip ${HASHICORP_URL}/nomad/${NOMAD_VER}/nomad_${NOMAD_VER}_linux_${_LINUX_ARCH}.zip
+    unzip ${HOME}/software_downloads/nomad_${NOMAD_VER}_linux_${_LINUX_ARCH}.zip -d ${HOME}/software_downloads/nomad_${NOMAD_VER}
     sudo cp -a ${HOME}/software_downloads/nomad_${NOMAD_VER}/nomad /usr/local/bin/
     sudo chmod 755 /usr/local/bin/nomad
     sudo chown root:root /usr/local/bin/nomad
@@ -253,8 +253,8 @@ _install_ubuntu_hashicorp() {
 
   printf "Installing Hashicorp Packer Ubuntu\\n"
   if [[ ! -d ${HOME}/software_downloads/packer_${PACKER_VER} ]]; then
-    wget -O ${HOME}/software_downloads/packer_${PACKER_VER}_linux_amd64.zip ${HASHICORP_URL}/packer/${PACKER_VER}/packer_${PACKER_VER}_linux_amd64.zip
-    unzip ${HOME}/software_downloads/packer_${PACKER_VER}_linux_amd64.zip -d ${HOME}/software_downloads/packer_${PACKER_VER}
+    wget -O ${HOME}/software_downloads/packer_${PACKER_VER}_linux_${_LINUX_ARCH}.zip ${HASHICORP_URL}/packer/${PACKER_VER}/packer_${PACKER_VER}_linux_${_LINUX_ARCH}.zip
+    unzip ${HOME}/software_downloads/packer_${PACKER_VER}_linux_${_LINUX_ARCH}.zip -d ${HOME}/software_downloads/packer_${PACKER_VER}
     sudo cp -a ${HOME}/software_downloads/packer_${PACKER_VER}/packer /usr/local/bin/
     sudo chmod 755 /usr/local/bin/packer
     sudo chown root:root /usr/local/bin/packer
@@ -265,6 +265,7 @@ _install_ubuntu_hashicorp() {
 
   printf "Installing Hashicorp Vagrant Ubuntu\\n"
   if [[ ! -d ${HOME}/software_downloads/vagrant_${VAGRANT_VER} ]]; then
+    # vagrant has no ARM64 Linux build — amd64 only
     wget -O ${HOME}/software_downloads/vagrant_${VAGRANT_VER}_linux_amd64.zip ${HASHICORP_URL}/vagrant/${VAGRANT_VER}/vagrant_${VAGRANT_VER}_linux_amd64.zip
     unzip ${HOME}/software_downloads/vagrant_${VAGRANT_VER}_linux_amd64.zip -d ${HOME}/software_downloads/vagrant_${VAGRANT_VER}
     sudo cp -a ${HOME}/software_downloads/vagrant_${VAGRANT_VER}/vagrant /usr/local/bin/
@@ -306,7 +307,7 @@ _install_ubuntu_cloud_tools() {
   sudo tee /etc/apt/trusted.gpg.d/microsoft.asc.gpg > /dev/null
   AZ_REPO=$(lsb_release -cs)
   sudo -H add-apt-repository \
-  "deb [arch=amd64] http://packages.microsoft.com/repos/azure-cli/ $AZ_REPO main"
+  "deb [arch=$(dpkg --print-architecture)] http://packages.microsoft.com/repos/azure-cli/ $AZ_REPO main"
   sudo -H apt update
   sudo -H apt install azure-cli -y
   if [[ -x $(command -v az) ]]; then
@@ -324,9 +325,9 @@ _install_ubuntu_cloud_tools() {
   sudo -H apt install google-cloud-cli -y
 
   printf "Installing cf-terraforming Ubuntu\\n"
-  if [[ ! -f ${HOME}/software_downloads/cf-terraforming_${CF_TERRAFORMING_VER}_linux_amd64.tar.gz ]]; then
-    wget -O ${HOME}/software_downloads/cf-terraforming_${CF_TERRAFORMING_VER}_linux_amd64.tar.gz ${CF_TERRAFORMING_URL}
-    tar xvf ${HOME}/software_downloads/cf-terraforming_${CF_TERRAFORMING_VER}_linux_amd64.tar.gz -C ${HOME}/software_downloads
+  if [[ ! -f ${HOME}/software_downloads/cf-terraforming_${CF_TERRAFORMING_VER}_linux_${_LINUX_ARCH}.tar.gz ]]; then
+    wget -O ${HOME}/software_downloads/cf-terraforming_${CF_TERRAFORMING_VER}_linux_${_LINUX_ARCH}.tar.gz ${CF_TERRAFORMING_URL}
+    tar xvf ${HOME}/software_downloads/cf-terraforming_${CF_TERRAFORMING_VER}_linux_${_LINUX_ARCH}.tar.gz -C ${HOME}/software_downloads
     if [[ -f ${HOME}/software_downloads/CHANGELOG.md ]]; then
       rm ${HOME}/software_downloads/CHANGELOG.md
     fi
@@ -396,6 +397,7 @@ _install_ubuntu_gui_tools() {
   if [[ -n ${HAS_DEVTOOLS} ]]; then
     printf "Installing Virtualbox\\n"
     wget -O- https://www.virtualbox.org/download/oracle_vbox_2016.asc | sudo gpg --dearmor --yes --output /usr/share/keyrings/oracle-virtualbox-2016.gpg
+    # VirtualBox has no ARM64 Linux build — amd64 only
     echo "deb [arch=amd64 signed-by=/usr/share/keyrings/oracle-virtualbox-2016.gpg] http://download.virtualbox.org/virtualbox/debian $(. /etc/os-release && echo "$VERSION_CODENAME") contrib" | sudo tee /etc/apt/sources.list.d/virtualbox.list
     sudo -H apt update
     sudo -H apt install ${VIRTUALBOX_VER} -y
@@ -419,6 +421,7 @@ _install_ubuntu_gui_tools() {
 
   if [[ -n ${HAS_SNAP} ]]; then
     printf "Installing microsoft edge\\n"
+    # Microsoft Edge has no ARM64 Linux build — amd64 only
     sudo sh -c 'echo "deb [arch=amd64] https://packages.microsoft.com/repos/edge stable main" > /etc/apt/sources.list.d/microsoft-edge.list'
     sudo -H apt update
     sudo -H apt install microsoft-edge-stable -y
