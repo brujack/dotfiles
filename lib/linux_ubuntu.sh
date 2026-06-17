@@ -155,6 +155,12 @@ _install_ubuntu_docker() {
     sudo -H apt install containerd.io -y
     sudo -H apt install docker-buildx-plugin -y
     sudo -H apt install docker-compose-plugin -y
+    local _daemon_json="${_DOCKER_DAEMON_JSON:-/etc/docker/daemon.json}"
+    if [[ ! -f ${_daemon_json} ]]; then
+      printf "Configuring Docker for cgroup v2\\n"
+      printf '{"exec-opts": ["native.cgroupdriver=systemd"]}\\n' | \
+        sudo tee "${_daemon_json}" > /dev/null
+    fi
     sudo usermod -a -G docker bruce
     if [[ -x $(command -v docker) ]]; then
       printf "Docker is installed\\n"
@@ -483,11 +489,6 @@ _install_ubuntu_misc() {
   if [[ -n ${HAS_DEVTOOLS} ]]; then
     printf "Installing .net8 sdk\\n"
     sudo -H apt install dotnet-sdk-8.0 -y
-  fi
-
-  python -m pip install glances
-  if [[ -x $(command -v glances) ]]; then
-    printf "glances is installed\\n"
   fi
 
   check_and_install_nala

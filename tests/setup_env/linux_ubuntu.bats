@@ -242,6 +242,27 @@ teardown() {
   grep -q "apt install docker-ce" "${MOCK_CALLS_FILE}"
 }
 
+@test "_install_ubuntu_docker: writes daemon.json when absent" {
+  export HAS_DOCKER=1
+  export _DOCKER_DAEMON_JSON="${BATS_TEST_TMPDIR}/daemon.json"
+  run _install_ubuntu_docker
+  [ "$status" -eq 0 ]
+  [ -f "${_DOCKER_DAEMON_JSON}" ]
+  grep -q "native.cgroupdriver=systemd" "${_DOCKER_DAEMON_JSON}"
+}
+
+@test "_install_ubuntu_docker: skips daemon.json when already exists" {
+  export HAS_DOCKER=1
+  export _DOCKER_DAEMON_JSON="${BATS_TEST_TMPDIR}/daemon.json"
+  printf '{"existing": "config"}\n' > "${_DOCKER_DAEMON_JSON}"
+  run _install_ubuntu_docker
+  [ "$status" -eq 0 ]
+  run grep '"existing"' "${_DOCKER_DAEMON_JSON}"
+  [ "$status" -eq 0 ]
+  run grep "tee.*daemon.json" "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+}
+
 # ── _install_ubuntu_k8s_tools ────────────────────────────────────────────────
 
 @test "_install_ubuntu_k8s_tools: HAS_K8S calls wget for kind" {
@@ -485,4 +506,15 @@ teardown() {
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
   grep -q "nala autoremove" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_misc: does not pip install glances" {
+  export DOCKER_COMPOSE_VER="2.24.0"
+  export DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64"
+  export YQ_VER="4.40.5"
+  export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
+  unset HAS_DEVTOOLS
+  run _install_ubuntu_misc
+  run grep "pip.*glances" "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
 }

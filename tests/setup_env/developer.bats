@@ -129,3 +129,10 @@ teardown() {
   run setup_ansible
   grep -q "pyenv update" "${MOCK_CALLS_FILE}"
 }
+
+@test "setup_ansible: pip install includes passlib" {
+  export LINUX=1; unset MACOS
+  export HAS_DEVTOOLS=1
+  run setup_ansible
+  grep -q "pip install.*passlib" "${MOCK_CALLS_FILE}"
+}

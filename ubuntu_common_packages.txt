@@ -12,6 +12,7 @@ flex
 fonts-powerline
 gcc
 git
+glances
 gnupg
 htop
 iotop
