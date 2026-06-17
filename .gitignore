@@ -32,3 +32,4 @@ coverage/
 .claude/memory/*.jsonl
 .claude/memory/.lock
 .cursor/
+.claude/loop-log/*.jsonl

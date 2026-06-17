@@ -51,13 +51,13 @@ npm
 openssh-server
 openssl
 pkg-config
+# PEP 668: use pipx or a pyenv venv — pip install --user is blocked on 26.04
 python3-pip
 python3-setuptools
 pwgen
 ranger
 rar
 rlwrap
-ruby-full
 screen
 shellcheck
 smartmontools
@@ -74,7 +74,6 @@ unzip
 uuid-dev
 vim
 wget
-xinetd
 xz-utils
 zlib1g-dev
 zip
