@@ -24,7 +24,7 @@ Running `setup_env.sh -t setup` on a fresh machine:
 - Xcode Command Line Tools: `xcode-select --install`
 - SSH key configured for GitHub (needed to clone via `git@github.com:...`)
 
-**Linux (Ubuntu 24.04):**
+**Linux (Ubuntu 24.04 Noble or 26.04 Resolute Raccoon):**
 
 - `sudo apt-get install -y git curl`
 - SSH key configured for GitHub
