@@ -252,10 +252,9 @@ teardown() {
   # ruby-build list includes the version: "  4.0.5"
   export RUBY_VER="4.0.5"
   export MOCK_RBENV_LIST_STDOUT="  4.0.5"
-  export MOCK_RUBY_VERSION=""
   run install_ruby
   [ "$status" -eq 0 ]
-  run grep -q "rbenv install" "${MOCK_CALLS_FILE}"
+  run grep -q "rbenv install 4.0.5" "${MOCK_CALLS_FILE}"
   [ "$status" -eq 0 ]
 }
 
