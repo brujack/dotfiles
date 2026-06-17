@@ -241,6 +241,38 @@ teardown() {
   [[ "$output" == *"Failed to install Homebrew"* ]]
 }
 
+# ── install_ruby — rbenv version guard ──────────────────────────────────────
+
+@test "install_ruby on Linux calls rbenv install when ruby-build has the version" {
+  export LINUX=1
+  unset MACOS UBUNTU
+  export HOME="${BATS_TEST_TMPDIR}"
+  mkdir -p "${BATS_TEST_TMPDIR}/.rbenv"
+  # Version NOT already installed (.rbenv/versions/<ver> absent → rbenv install runs)
+  # ruby-build list includes the version: "  4.0.5"
+  export RUBY_VER="4.0.5"
+  export MOCK_RBENV_LIST_STDOUT="  4.0.5"
+  export MOCK_RUBY_VERSION=""
+  run install_ruby
+  [ "$status" -eq 0 ]
+  run grep -q "rbenv install" "${MOCK_CALLS_FILE}"
+  [ "$status" -eq 0 ]
+}
+
+@test "install_ruby on Linux skips rbenv install when ruby-build lacks the version" {
+  export LINUX=1
+  unset MACOS UBUNTU
+  export HOME="${BATS_TEST_TMPDIR}"
+  mkdir -p "${BATS_TEST_TMPDIR}/.rbenv"
+  # ruby-build list does NOT include the version — only an older version
+  export RUBY_VER="4.0.5"
+  export MOCK_RBENV_LIST_STDOUT="  3.3.0"
+  run install_ruby
+  [ "$status" -eq 0 ]
+  run grep -q "rbenv install 4.0.5" "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+}
+
 # ── install_ruby_tools ───────────────────────────────────────────────────────
 
 @test "install_ruby_tools returns non-zero when cd to ruby-install dir fails" {
