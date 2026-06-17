@@ -1,0 +1,20 @@
+# Global gitignore — applies to all repos on this machine
+# Managed by dotfiles; symlinked to ~/.gitignore_global
+
+# Claude Code project-local secrets
+**/.claude/settings.local.json
+
+# Firecrawl skill scratch directory
+.firecrawl/
+
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+
+# Python
+__pycache__/
+*.pyc
+*.pyo

@@ -578,6 +578,7 @@ setup_dotfile_symlinks() {
     fi
   fi
 
+  safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.gitignore_global" "${HOME}/.gitignore_global"
   safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.vimrc" "${HOME}/.vimrc"
   safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.tmux.conf" "${HOME}/.tmux.conf"
   safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/scripts" "${HOME}/scripts"
