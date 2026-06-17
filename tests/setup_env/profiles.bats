@@ -185,3 +185,13 @@ teardown() {
   detect_env
   [ -n "${HAS_RUST}" ]
 }
+
+@test "detect_env sets RESOLUTE=1 for Ubuntu 26.04" {
+  export MOCK_UNAME_S="Linux"
+  export MOCK_AWK_OS_NAME="Ubuntu"
+  export MOCK_LSB_RELEASE_RS="26.04"
+  export MOCK_HOSTNAME_OUTPUT="workstation"
+  source "${REPO_ROOT}/lib/detect_env.sh"
+  detect_env
+  [[ -n ${RESOLUTE} ]]
+}
