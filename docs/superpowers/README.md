@@ -91,7 +91,7 @@ Master status index for all specs and implementation plans in this directory.
 | 2026-06-01 | coverage-gap-tests                                                                 | —                                                                   | Done    |
 | 2026-06-09 | [recreate-venv](plans/2026-06-09-recreate-venv.md)                                 | [spec](specs/2026-06-09-recreate-venv-design.md)                    | Done    |
 | 2026-06-17 | [ubuntu-2604-pr1](plans/2026-06-17-ubuntu-2604-pr1.md)                             | [spec](specs/2026-06-17-ubuntu-2604-pr1-design.md)                  | Done    |
-| 2026-06-17 | —                                                                                  | [spec](specs/2026-06-17-ubuntu-2604-pr2-design.md)                  | Pending |
+| 2026-06-17 | [ubuntu-2604-pr2](plans/2026-06-17-ubuntu-2604-pr2.md)                             | [spec](specs/2026-06-17-ubuntu-2604-pr2-design.md)                  | Pending |
 
 ---
 
