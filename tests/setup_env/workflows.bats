@@ -403,6 +403,16 @@ teardown() {
   grep -q "awscliv2.zip" "${MOCK_CALLS_FILE}"
 }
 
+@test "install_aws_tools uses uname -m arch in URL on Linux (aarch64)" {
+  unset MACOS
+  export LINUX=1
+  export HAS_AWS=1
+  export MOCK_UNAME_M="aarch64"
+  mkdir -p "${HOME}/software_downloads/awscli"
+  install_aws_tools
+  grep -q "awscli-exe-linux-aarch64" "${MOCK_CALLS_FILE}"
+}
+
 @test "install_aws_tools is a no-op when HAS_AWS is unset" {
   export MACOS=1
   unset HAS_AWS LINUX

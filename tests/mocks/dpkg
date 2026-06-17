@@ -4,4 +4,8 @@ printf "dpkg %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
 if [[ "$*" == "-l nala" ]] && [[ -n "${MOCK_DPKG_L_NALA:-}" ]]; then
   printf "%s\n" "${MOCK_DPKG_L_NALA}"
 fi
+# When called as 'dpkg --print-architecture', output the mock arch if set.
+if [[ "$*" == "--print-architecture" ]] && [[ -n "${MOCK_DPKG_PRINT_ARCH:-}" ]]; then
+  printf "%s\n" "${MOCK_DPKG_PRINT_ARCH}"
+fi
 exit "${MOCK_DPKG_EXIT:-0}"

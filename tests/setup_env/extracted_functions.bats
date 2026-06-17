@@ -400,6 +400,17 @@ _make_fake_dotfiles() {
   grep -q "unzip" "${MOCK_CALLS_FILE}"
 }
 
+@test "update_aws_cli on Linux uses uname -m arch in URL (aarch64)" {
+  export LINUX=1
+  export HAS_AWS=1
+  export MOCK_UNAME_M="aarch64"
+  unset MACOS
+  mkdir -p "${FAKE_DOTFILES_SRC}"
+  run update_aws_cli
+  [ "$status" -eq 0 ]
+  grep -q "curl.*awscli-exe-linux-aarch64" "${MOCK_CALLS_FILE}"
+}
+
 # ── update_rust ──────────────────────────────────────────────────────────────
 
 @test "update_rust does nothing when not Ubuntu Workstation" {

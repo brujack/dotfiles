@@ -353,6 +353,32 @@ teardown() {
   ! grep -q "wget.*consul_1.17.0" "${MOCK_CALLS_FILE}"
 }
 
+@test "_install_ubuntu_hashicorp: uses _LINUX_ARCH in consul URL (arm64)" {
+  export CONSUL_VER="2.0.0"
+  export VAULT_VER="2.0.2"
+  export NOMAD_VER="2.0.3"
+  export PACKER_VER="1.15.4"
+  export VAGRANT_VER="2.4.9"
+  export HASHICORP_URL="https://releases.hashicorp.com"
+  export _LINUX_ARCH="arm64"
+  run _install_ubuntu_hashicorp
+  [ "$status" -eq 0 ]
+  grep -q "consul.*arm64" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_hashicorp: vagrant always uses amd64 regardless of _LINUX_ARCH" {
+  export CONSUL_VER="2.0.0"
+  export VAULT_VER="2.0.2"
+  export NOMAD_VER="2.0.3"
+  export PACKER_VER="1.15.4"
+  export VAGRANT_VER="2.4.9"
+  export HASHICORP_URL="https://releases.hashicorp.com"
+  export _LINUX_ARCH="arm64"
+  run _install_ubuntu_hashicorp
+  [ "$status" -eq 0 ]
+  grep -q "vagrant.*amd64" "${MOCK_CALLS_FILE}"
+}
+
 # ── _install_ubuntu_cloud_tools ──────────────────────────────────────────────
 
 @test "_install_ubuntu_cloud_tools: always calls apt install azure-cli" {
@@ -380,6 +406,26 @@ teardown() {
   run _install_ubuntu_cloud_tools
   [ "$status" -eq 0 ]
   ! grep -q "apt install teleport" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_cloud_tools: azure-cli APT stanza uses dpkg --print-architecture" {
+  export CF_TERRAFORMING_VER="0.27.0"
+  export CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v0.27.0/cf-terraforming_0.27.0_linux_arm64.tar.gz"
+  export MOCK_DPKG_PRINT_ARCH="arm64"
+  unset HAS_DEVTOOLS
+  run _install_ubuntu_cloud_tools
+  [ "$status" -eq 0 ]
+  grep -q 'add-apt-repository.*arch=arm64.*azure-cli' "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_cloud_tools: cf-terraforming filename uses _LINUX_ARCH" {
+  export CF_TERRAFORMING_VER="0.27.0"
+  export CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v0.27.0/cf-terraforming_0.27.0_linux_arm64.tar.gz"
+  export _LINUX_ARCH="arm64"
+  unset HAS_DEVTOOLS
+  run _install_ubuntu_cloud_tools
+  [ "$status" -eq 0 ]
+  grep -q "cf-terraforming.*arm64" "${MOCK_CALLS_FILE}"
 }
 
 # ── _install_ubuntu_brew_packages ────────────────────────────────────────────
