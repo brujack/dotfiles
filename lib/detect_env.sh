@@ -14,6 +14,7 @@ detect_env() {
   if [[ -n ${UBUNTU} ]]; then
     UBUNTU_VERSION=$(lsb_release -rs)
     [[ ${UBUNTU_VERSION} = "24.04" ]] && readonly NOBLE=1
+    [[ ${UBUNTU_VERSION} = "26.04" ]] && readonly RESOLUTE=1
   fi
 
   [[ $(uname -r) =~ microsoft ]] && readonly WINDOWS=1

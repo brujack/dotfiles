@@ -85,3 +85,17 @@ setup() {
   [ "$status" -eq 0 ]
   [ "$output" = "unset" ]
 }
+
+@test "1_init.zsh sets RESOLUTE=1 for Ubuntu 26.04" {
+  run zsh -c "
+    export PATH=\"${REPO_ROOT}/tests/mocks:\${PATH}\"
+    export MOCK_UNAME_S=Linux
+    export MOCK_AWK_OS_NAME=Ubuntu
+    export MOCK_LSB_RELEASE_RS=26.04
+    unset MACOS LINUX UBUNTU NOBLE RESOLUTE
+    source '${ZSHRC_D}/1_init.zsh' 2>/dev/null
+    printf '%s\n' \"\${RESOLUTE}\"
+  "
+  [ "$status" -eq 0 ]
+  [ "$output" = "1" ]
+}

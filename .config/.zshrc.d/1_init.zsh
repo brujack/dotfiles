@@ -16,6 +16,7 @@ if [[ -n ${UBUNTU} ]]; then
   [[ ${UBUNTU_VERSION} = "20.04" ]] && { [[ -n "${FOCAL+x}" ]] || readonly FOCAL=1; }
   [[ ${UBUNTU_VERSION} = "22.04" ]] && { [[ -n "${JAMMY+x}" ]] || readonly JAMMY=1; }
   [[ ${UBUNTU_VERSION} = "24.04" ]] && { [[ -n "${NOBLE+x}" ]] || readonly NOBLE=1; }
+  [[ ${UBUNTU_VERSION} = "26.04" ]] && { [[ -n "${RESOLUTE+x}" ]] || readonly RESOLUTE=1; }
   [[ ${UBUNTU_VERSION} = "6" ]] && { [[ -n "${FOCAL+x}" ]] || readonly FOCAL=1; } # elementary os
 fi
 

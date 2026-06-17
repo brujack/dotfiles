@@ -18,11 +18,22 @@ install_ubuntu_packages() {
 
 _install_ubuntu_base_packages() {
   sudo -H apt update
-  printf "Installing hwe, common, and 24.04 packages\\n"
-  sudo -H apt install --install-recommends linux-generic-hwe-24.04 -y
-  check_and_install_nala
-  xargs -a ./ubuntu_common_packages.txt sudo apt-get install -y
-  xargs -a ./ubuntu_2404_packages.txt sudo apt-get install -y
+  if [[ -n ${NOBLE} ]]; then
+    printf "Installing hwe, common, and 24.04 packages\\n"
+    sudo -H apt install --install-recommends linux-generic-hwe-24.04 -y
+    check_and_install_nala
+    xargs -a ./ubuntu_common_packages.txt sudo apt-get install -y
+    xargs -a ./ubuntu_2404_packages.txt sudo apt-get install -y
+  elif [[ -n ${RESOLUTE} ]]; then
+    printf "Installing hwe, common, and 26.04 packages\\n"
+    sudo -H apt install --install-recommends linux-generic-hwe-26.04 -y
+    check_and_install_nala
+    xargs -a ./ubuntu_common_packages.txt sudo apt-get install -y
+    xargs -a ./ubuntu_2604_packages.txt sudo apt-get install -y
+  else
+    log_error "Unsupported Ubuntu version: ${UBUNTU_VERSION:-unknown}"
+    return 1
+  fi
 
   if [[ -n ${HAS_SNAP} ]]; then
     printf "Installing workstation packages\\n"
