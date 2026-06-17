@@ -27,7 +27,7 @@ update_aws_cli() {
     log_info "Updating Linux awscli"
     mkdir -p ${HOME}/software_downloads/awscli
     cd "${HOME}/software_downloads/awscli" || return 1
-    curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+    curl "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o "awscliv2.zip"
     unzip -u -o awscliv2.zip
     sudo -H ${HOME}/software_downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin --update
     cd "${PERSONAL_GITREPOS}/${DOTFILES}" || return 1
@@ -74,7 +74,7 @@ install_aws_tools() {
     mkdir -p ${HOME}/software_downloads/awscli
     printf "Installing aws-cli on Linux\\n"
     if [[ ! -f ${HOME}/software_downloads/awscli/awscliv2.zip ]]; then
-      wget -O ${HOME}/software_downloads/awscli/awscliv2.zip "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
+      wget -O ${HOME}/software_downloads/awscli/awscliv2.zip "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip"
       unzip ${HOME}/software_downloads/awscli/awscliv2.zip -d ${HOME}/software_downloads/awscli
       sudo -H ${HOME}/software_downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin
       rm -f ${HOME}/software_downloads/awscli/awscliv2.zip
