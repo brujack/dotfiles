@@ -97,7 +97,9 @@ Master status index for all specs and implementation plans in this directory.
 
 Ideas approved for future specs, in no particular order:
 
-_(empty)_
+| Feature                               | Notes                                                                                                                                                      |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ubuntu 26.04 Resolute Raccoon support | [Full spec](specs/2026-06-17-ubuntu-2604-support-design.md) — 26 items across 5 PRs (P0–P3); detection, cgroup v2 Docker, Python 3.13, ARM64, housekeeping |
 
 ---
 
