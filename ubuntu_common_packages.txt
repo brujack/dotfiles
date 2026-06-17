@@ -59,7 +59,6 @@ rlwrap
 ruby-full
 screen
 shellcheck
-silversearcher-ag
 smartmontools
 snapd
 software-properties-common
