@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-sudo /etc/init.d/FAHClient stop
+sudo systemctl stop FAHClient
 
 sleep 2
 
@@ -11,4 +11,4 @@ done
 
 sleep 2
 
-sudo /etc/init.d/FAHClient start
+sudo systemctl start FAHClient

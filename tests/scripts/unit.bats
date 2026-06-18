@@ -156,12 +156,12 @@ teardown() {
 
 @test "restart_fah.sh calls FAHClient stop" {
   run bash "${REPO_ROOT}/scripts/restart_fah.sh"
-  grep -q "sudo /etc/init.d/FAHClient stop" "${MOCK_CALLS_FILE}"
+  grep -q "sudo systemctl stop FAHClient" "${MOCK_CALLS_FILE}"
 }
 
 @test "restart_fah.sh calls FAHClient start" {
   run bash "${REPO_ROOT}/scripts/restart_fah.sh"
-  grep -q "sudo /etc/init.d/FAHClient start" "${MOCK_CALLS_FILE}"
+  grep -q "sudo systemctl start FAHClient" "${MOCK_CALLS_FILE}"
 }
 
 @test "restart_fah.sh calls pgrep fah between stop and start" {
