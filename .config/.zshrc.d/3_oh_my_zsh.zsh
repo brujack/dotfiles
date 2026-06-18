@@ -55,15 +55,6 @@ fi
 if [[ ${UBUNTU} ]]; then
   plugins=(ansible aws brew docker fzf git git-prompt helm history-substring-search kubectl python terraform ubuntu vscode pyenv zsh-autosuggestions)
 fi
-if [[ ${FEDORA} ]]; then
-  plugins=(ansible aws docker fzf git git-prompt fedora helm history-substring-search kubectl python terraform vscode pyenv zsh-autosuggestions)
-fi
-if [[ ${CENTOS} ]]; then
-  plugins=(ansible aws docker fzf git git-prompt fedora helm history-substring-search kubectl python terraform vscode pyenv zsh-autosuggestions)
-fi
-if [[ ${REDHAT} ]]; then
-  plugins=(ansible aws docker fzf git git-prompt fedora helm history-substring-search kubectl python terraform vscode pyenv zsh-autosuggestions)
-fi
 
 source $ZSH/oh-my-zsh.sh
 

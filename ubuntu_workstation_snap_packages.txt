@@ -2,11 +2,7 @@ snapd
 snap-store
 1password
 canonical-livepatch
-core
-core18
-core20
 firefox
-gtk-common-themes
 simplenote
 spotify
 vlc

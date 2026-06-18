@@ -52,11 +52,7 @@ if [[ -d ${CHRUBY_LOC}/chruby ]]; then
     source ${CHRUBY_LOC}/chruby/auto.sh
     chruby ${RUBY_VER}
   elif [[ -n ${LINUX} ]]; then
-    if [[ -n ${FOCAL} ]] || [[ -n ${JAMMY} ]]; then
-      source ${CHRUBY_LOC}/chruby/chruby.sh
-      source ${CHRUBY_LOC}/chruby/auto.sh
-      chruby ${RUBY_VER}
-    elif [[ -n ${NOBLE} ]]; then
+    if [[ -n ${NOBLE} ]] || [[ -n ${RESOLUTE} ]]; then
       if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
         if [[ -f /home/linuxbrew/.linuxbrew/bin/rbenv ]]; then
           eval "$(/home/linuxbrew/.linuxbrew/bin/rbenv init - --no-rehash zsh)"
@@ -130,12 +126,6 @@ if [[ ${UBUNTU} ]]; then
     source '/usr/share/google-cloud-sdk/completion.zsh.inc'
   fi
 fi
-if [[ ${REDHAT} ]]; then
-  if [[ -f /usr/lib64/google-cloud-sdk/completion.zsh.inc ]]; then
-    source '/usr/lib64/google-cloud-sdk/completion.zsh.inc'
-  fi
-fi
-
 # for hashicorp vault, consul and nomad cli autocompletion
 if [[ ${MACOS} || ${LINUX} ]]; then
   autoload -U +X bashcompinit && bashcompinit
