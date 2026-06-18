@@ -57,6 +57,31 @@ teardown() {
   [[ "$output" == *"Unsupported Ubuntu version"* ]]
 }
 
+@test "_install_ubuntu_base_packages: NOBLE uses nala for package installs" {
+  export NOBLE=1
+  unset RESOLUTE HAS_SNAP
+  run _install_ubuntu_base_packages
+  [ "$status" -eq 0 ]
+  grep -q "nala install" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_base_packages: RESOLUTE uses nala for package installs" {
+  export RESOLUTE=1
+  unset NOBLE HAS_SNAP
+  run _install_ubuntu_base_packages
+  [ "$status" -eq 0 ]
+  grep -q "nala install" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_base_packages: HAS_SNAP uses nala for workstation packages" {
+  export NOBLE=1
+  export HAS_SNAP=1
+  unset RESOLUTE
+  run _install_ubuntu_base_packages
+  [ "$status" -eq 0 ]
+  grep -q "ubuntu_workstation_packages.*nala install" "${MOCK_CALLS_FILE}"
+}
+
 # ── _install_ubuntu_pyenv ────────────────────────────────────────────────────
 
 @test "_install_ubuntu_pyenv: calls curl to download installer" {
