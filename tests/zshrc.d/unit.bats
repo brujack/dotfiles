@@ -99,3 +99,31 @@ setup() {
   [ "$status" -eq 0 ]
   [ "$output" = "1" ]
 }
+
+@test "1_init.zsh does not set BIONIC for Ubuntu 18.04" {
+  run zsh -c "
+    export PATH=\"${REPO_ROOT}/tests/mocks:\${PATH}\"
+    export MOCK_UNAME_S=Linux
+    export MOCK_AWK_OS_NAME=Ubuntu
+    export MOCK_LSB_RELEASE_RS=18.04
+    unset MACOS LINUX UBUNTU NOBLE RESOLUTE BIONIC
+    source '${ZSHRC_D}/1_init.zsh' 2>/dev/null
+    printf '%s\n' \"\${BIONIC:-unset}\"
+  "
+  [ "$status" -eq 0 ]
+  [ "$output" = "unset" ]
+}
+
+@test "1_init.zsh does not set JAMMY for Ubuntu 22.04" {
+  run zsh -c "
+    export PATH=\"${REPO_ROOT}/tests/mocks:\${PATH}\"
+    export MOCK_UNAME_S=Linux
+    export MOCK_AWK_OS_NAME=Ubuntu
+    export MOCK_LSB_RELEASE_RS=22.04
+    unset MACOS LINUX UBUNTU NOBLE RESOLUTE JAMMY
+    source '${ZSHRC_D}/1_init.zsh' 2>/dev/null
+    printf '%s\n' \"\${JAMMY:-unset}\"
+  "
+  [ "$status" -eq 0 ]
+  [ "$output" = "unset" ]
+}

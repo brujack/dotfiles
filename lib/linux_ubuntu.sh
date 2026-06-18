@@ -436,7 +436,7 @@ _install_ubuntu_gui_tools() {
     sudo snap install certbot-dns-route53
   fi
 
-  if [[ -n ${HAS_SNAP} ]]; then
+  if [[ -n ${HAS_FLATPAK} ]]; then
     printf "Installing Steam via Flatpak\\n"
     sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
     sudo flatpak install flathub com.valvesoftware.Steam -y

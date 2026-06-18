@@ -263,6 +263,13 @@ RUBY_VER="4.0.5"
 Update these constants when bumping versions — don't hardcode versions elsewhere.
 When a constant is updated, update all other references to that constant across the repo.
 
+### Ruby Version Manager Split
+
+Ruby version managers: **rbenv on Linux** (via `lib/developer.sh:_install_linux_rbenv`);
+**chruby on macOS** (via `lib/macos.sh`). The two are not interchangeable across platforms.
+Platform-specific installation and configuration is handled automatically by `install_ruby()` and
+`install_ruby_tools()` in `developer.sh` — no manual intervention required.
+
 ## Testing
 
 Uses **BATS** (Bash Automated Testing System), installed natively:

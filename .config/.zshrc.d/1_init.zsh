@@ -5,19 +5,12 @@
 if [[ ${LINUX} ]]; then
   LINUX_TYPE=$(awk -F= '/^NAME/{print $2}' /etc/os-release | tr -d '"')
   [[ ${LINUX_TYPE} = "Ubuntu" ]] && export UBUNTU=1
-  [[ ${LINUX_TYPE} = "CentOS Linux" ]] && export CENTOS=1
-  [[ ${LINUX_TYPE} = "Red Hat Enterprise Linux Server" ]] && export REDHAT=1
-  [[ ${LINUX_TYPE} = "Fedora" ]] && export FEDORA=1
 fi
 
 if [[ -n ${UBUNTU} ]]; then
   UBUNTU_VERSION=$(lsb_release -rs)
-  [[ ${UBUNTU_VERSION} = "18.04" ]] && { [[ -n "${BIONIC+x}" ]] || readonly BIONIC=1; }
-  [[ ${UBUNTU_VERSION} = "20.04" ]] && { [[ -n "${FOCAL+x}" ]] || readonly FOCAL=1; }
-  [[ ${UBUNTU_VERSION} = "22.04" ]] && { [[ -n "${JAMMY+x}" ]] || readonly JAMMY=1; }
   [[ ${UBUNTU_VERSION} = "24.04" ]] && { [[ -n "${NOBLE+x}" ]] || readonly NOBLE=1; }
   [[ ${UBUNTU_VERSION} = "26.04" ]] && { [[ -n "${RESOLUTE+x}" ]] || readonly RESOLUTE=1; }
-  [[ ${UBUNTU_VERSION} = "6" ]] && { [[ -n "${FOCAL+x}" ]] || readonly FOCAL=1; } # elementary os
 fi
 
 [[ $(uname -r) =~ microsoft ]] && export WINDOWS=1
