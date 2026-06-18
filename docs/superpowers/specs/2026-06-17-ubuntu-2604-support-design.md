@@ -66,15 +66,15 @@ Key facts confirmed via web research (2026-06-17):
 
 ### P3 — Low risk / cleanup
 
-| ID   | File(s)                                 | Issue                                                                                                   |
-| ---- | --------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| P3-1 | `.config/.zshrc.d/1_init.zsh`           | Dead OS branches: `CENTOS`, `REDHAT`, `FEDORA` vars set, nothing uses them                              |
-| P3-2 | _(missing)_                             | No `ubuntu_2204_packages.txt` — Jammy never got a per-version file                                      |
-| P3-3 | `ubuntu_workstation_snap_packages.txt`  | List unaudited for 26.04 — some snaps may have moved to apt or Flatpak                                  |
-| P3-4 | `CLAUDE.md`                             | rbenv (Linux) vs chruby (macOS) split undocumented                                                      |
-| P3-5 | `lib/helpers.sh:check_and_install_nala` | Installs nala then continues using `apt-get`/`apt` — if nala is the goal, switch subsequent calls       |
-| P3-6 | _(note)_                                | SysV init scripts deprecated in 26.04, **removed in 26.10** — no action now but flag for next LTS cycle |
-| P3-7 | `.config/.zshrc.d/1_init.zsh`           | `BIONIC`, `FOCAL`, `JAMMY` version vars set in zshrc but not in `detect_env.sh` — split model           |
+| ID   | File(s)                                 | Issue                                                                                             |
+| ---- | --------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| P3-1 | `.config/.zshrc.d/1_init.zsh`           | Dead OS branches: `CENTOS`, `REDHAT`, `FEDORA` vars set, nothing uses them                        |
+| P3-2 | _(missing)_                             | No `ubuntu_2204_packages.txt` — Jammy never got a per-version file                                |
+| P3-3 | `ubuntu_workstation_snap_packages.txt`  | List unaudited for 26.04 — some snaps may have moved to apt or Flatpak                            |
+| P3-4 | `CLAUDE.md`                             | rbenv (Linux) vs chruby (macOS) split undocumented                                                |
+| P3-5 | `lib/helpers.sh:check_and_install_nala` | Installs nala then continues using `apt-get`/`apt` — if nala is the goal, switch subsequent calls |
+| P3-6 | `scripts/restart_fah.sh`                | SysV init scripts removed in 26.10 — **fixed in PR #150**: migrated `init.d` calls to `systemctl` |
+| P3-7 | `.config/.zshrc.d/1_init.zsh`           | `BIONIC`, `FOCAL`, `JAMMY` version vars set in zshrc but not in `detect_env.sh` — split model     |
 
 ---
 
@@ -102,5 +102,5 @@ PR1 (detection + packages) → PR2 (docker/python) → PR3 (packages/ruby/Go)
 - **X11 GNOME session removed**: XWayland present; GUI apps work. Snap packages with direct X11 deps may need audit (P3-3).
 - **Python 3.13 `crypt` removed**: Handled in P0-6. Also: `walinuxagent` (Azure) affected — not a concern for this repo.
 - **sudo-rs default**: New Rust sudo with asterisk password feedback. No impact on setup scripts.
-- **SysV init deprecated**: No SysV scripts in this repo. Note for 26.10 cycle.
+- **SysV init deprecated**: `scripts/restart_fah.sh` used `/etc/init.d/FAHClient` — migrated to `systemctl` in PR #150.
 - **Docker `pids.limit = 0` now means 1**: No containers defined in this repo. Not applicable.
