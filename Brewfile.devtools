@@ -1,5 +1,4 @@
 # Brewfile.devtools — installed on HAS_DEVTOOLS machines
-tap "chef/chef"
 tap "datawire/blackbird"
 tap "go-task/tap"
 tap "redpanda-data/tap"
@@ -11,7 +10,6 @@ brew "ntfy"
 brew "redpanda-data/tap/redpanda"
 brew "snyk/tap/snyk"
 cask "carbon-copy-cloner"
-cask "chef/chef/inspec"
 cask "cursor"
 cask "cursor-cli"
 cask "dbeaver-community"
