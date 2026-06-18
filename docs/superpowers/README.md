@@ -95,6 +95,7 @@ Master status index for all specs and implementation plans in this directory.
 | 2026-06-17 | [ubuntu-2604-pr3](plans/2026-06-17-ubuntu-2604-pr3.md)                             | [spec](specs/2026-06-17-ubuntu-2604-pr3-design.md)                  | Done   |
 | 2026-06-17 | [ubuntu-2604-pr4](plans/2026-06-17-ubuntu-2604-pr4.md)                             | [spec](specs/2026-06-17-ubuntu-2604-pr4-design.md)                  | Done   |
 | 2026-06-17 | [ubuntu-2604-pr5](plans/2026-06-17-ubuntu-2604-pr5.md)                             | [spec](specs/2026-06-17-ubuntu-2604-pr5-design.md)                  | Done   |
+| 2026-06-18 | ubuntu-2604-p3 cleanup (PR #149)                                                   | [spec](specs/2026-06-17-ubuntu-2604-support-design.md)              | Done   |
 
 ---
 
