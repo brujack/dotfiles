@@ -505,14 +505,14 @@ teardown() {
   unset HAS_DEVTOOLS HAS_SNAP
   run _install_ubuntu_gui_tools
   [ "$status" -eq 0 ]
-  grep -q "flatpak install flathub" "${MOCK_CALLS_FILE}"
+  grep -q "sudo flatpak install flathub" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_gui_tools: no HAS_FLATPAK skips steam" {
   unset HAS_FLATPAK HAS_DEVTOOLS HAS_SNAP
   run _install_ubuntu_gui_tools
   [ "$status" -eq 0 ]
-  run grep "flatpak install" "${MOCK_CALLS_FILE}"
+  run grep "sudo flatpak install" "${MOCK_CALLS_FILE}"
   [ "$status" -ne 0 ]
 }
 

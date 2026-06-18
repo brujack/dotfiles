@@ -17,7 +17,7 @@ declare -A PROFILE_CAPS=(
   [personal_laptop]="gui devtools aws k8s docker rust printing"
   [mac_workstation]="gui devtools aws k8s docker rust printing"
   [mac_mini]="gui printing"
-  [linux_workstation]="gui devtools aws k8s docker rust snap"
+  [linux_workstation]="gui devtools aws k8s docker rust snap flatpak"
   [wsl2_workstation]="gui devtools aws k8s docker rust"
   [server]="devtools aws"
 )
