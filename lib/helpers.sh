@@ -144,7 +144,7 @@ brew_install_formula() {
     return 1
   fi
   if ! brew_formula_installed "$formula"; then
-    brew install "$formula"
+    NONINTERACTIVE=1 brew install "$formula"
   fi
 }
 
@@ -154,7 +154,7 @@ brew_install_cask() {
     return 1
   fi
   if ! brew_cask_installed "$cask"; then
-    brew install --cask --force --overwrite "$cask"
+    NONINTERACTIVE=1 brew install --cask --force --overwrite "$cask"
   fi
 }
 

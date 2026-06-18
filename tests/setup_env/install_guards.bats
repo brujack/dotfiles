@@ -77,6 +77,13 @@ teardown() {
   grep -q "brew install git" "${MOCK_CALLS_FILE}"
 }
 
+@test "brew_install_formula sets NONINTERACTIVE=1 when installing" {
+  export MOCK_BREW_LIST_FORMULA=""
+  run brew_install_formula git
+  [ "$status" -eq 0 ]
+  grep -q "NONINTERACTIVE=1" "${MOCK_CALLS_FILE}"
+}
+
 @test "brew_install_formula does not call brew install when formula is present" {
   export MOCK_BREW_LIST_FORMULA="git"
   run brew_install_formula git
@@ -176,6 +183,13 @@ teardown() {
   run brew_install_cask docker
   [ "$status" -eq 0 ]
   grep -q "brew install --cask --force --overwrite docker" "${MOCK_CALLS_FILE}"
+}
+
+@test "brew_install_cask sets NONINTERACTIVE=1 when installing" {
+  export MOCK_BREW_LIST_CASK=""
+  run brew_install_cask docker
+  [ "$status" -eq 0 ]
+  grep -q "NONINTERACTIVE=1" "${MOCK_CALLS_FILE}"
 }
 
 @test "brew_install_cask does not call brew install when cask is present" {
