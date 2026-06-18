@@ -48,14 +48,6 @@ if [[ ${LINUX} ]]; then
       path+=('/snap/bin')
     fi
   fi
-  if [[ ${REDHAT} ]]; then
-    if [[ -d /usr/sbin ]]; then
-      path+=('/usr/sbin')
-    fi
-    if [[ -d /usr/local/go/bin ]]; then
-      path+=('/usr/local/go/bin')
-    fi
-  fi
 fi
 if [[ -d ${HOME}/.cargo/bin ]]; then
   path+=("${HOME}/.cargo/bin")
