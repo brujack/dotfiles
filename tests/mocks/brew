@@ -22,6 +22,7 @@ case "$1" in
     exit "${MOCK_BREW_TAP_EXIT:-0}"
     ;;
   install)
+    printf "NONINTERACTIVE=%s\n" "${NONINTERACTIVE:-unset}" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
     exit "${MOCK_BREW_INSTALL_EXIT:-0}"
     ;;
   update)
