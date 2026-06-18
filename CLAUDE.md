@@ -446,6 +446,7 @@ After `detect_env()` runs, the following vars are set:
 | `HAS_DOCKER`   | Set for: personal_laptop, mac_workstation, linux_workstation, wsl2_workstation                                            |
 | `HAS_RUST`     | Set for: personal_laptop, mac_workstation, linux_workstation, wsl2_workstation                                            |
 | `HAS_SNAP`     | Set for: linux_workstation only (not wsl2_workstation — snap unavailable in WSL2)                                         |
+| `HAS_FLATPAK`  | Set for: linux_workstation only (gates Steam flatpak install in `_install_ubuntu_gui_tools`)                              |
 | `HAS_PRINTING` | Set for: personal_laptop, mac_workstation, mac_mini                                                                       |
 
 ## Adding a New Machine
