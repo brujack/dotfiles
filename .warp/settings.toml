@@ -99,3 +99,4 @@ play_notification_sound = true
 
 [warpify.ssh]
 use_ssh_tmux_wrapper = true
+ssh_tmux_deprecation_notice_pending = false
