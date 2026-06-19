@@ -199,7 +199,7 @@ setup_ansible() {
       pyenv virtualenv "${PYTHON_VER}" ansible
       pyenv activate ansible
       printf "Installing Ansible dependencies...\\n"
-      local _pip_pkgs=(ansible ansible-lint molecule "molecule-plugins[docker]" certbot certbot-dns-cloudflare checkov boto3 docker gmpy2 jmespath mpmath netaddr pylint psutil bpytop HttpPy j2cli wheel shell-gpt pyright cosmic-ray hypothesis passlib scikit-learn scipy bandit pip-audit)
+      local _pip_pkgs=(ansible ansible-lint molecule "molecule-plugins[docker]" certbot certbot-dns-cloudflare checkov boto3 docker gmpy2 jmespath mpmath netaddr pylint psutil bpytop HttpPy j2cli wheel shell-gpt pyright cosmic-ray hypothesis passlib scikit-learn scipy bandit pip-audit ruff pytest pytest-cov pytest-xdist mypy pandas matplotlib seaborn ipython jupyterlab pre-commit radon vulture)
       [[ -n ${MACOS:-} ]] && _pip_pkgs+=(mlx)
       python -m pip install "${_pip_pkgs[@]}"
       pyenv rehash
@@ -229,7 +229,7 @@ recreate_python_venv() {
     local _python
     _python="$(pyenv which python 2>/dev/null || command -v python3)"
     printf "Installing Ansible dependencies...\\n"
-    local _pip_pkgs=(ansible ansible-lint molecule "molecule-plugins[docker]" certbot certbot-dns-cloudflare checkov boto3 docker gmpy2 jmespath mpmath netaddr pylint psutil bpytop HttpPy j2cli wheel shell-gpt pyright cosmic-ray hypothesis passlib scikit-learn scipy bandit pip-audit)
+    local _pip_pkgs=(ansible ansible-lint molecule "molecule-plugins[docker]" certbot certbot-dns-cloudflare checkov boto3 docker gmpy2 jmespath mpmath netaddr pylint psutil bpytop HttpPy j2cli wheel shell-gpt pyright cosmic-ray hypothesis passlib scikit-learn scipy bandit pip-audit ruff pytest pytest-cov pytest-xdist mypy pandas matplotlib seaborn ipython jupyterlab pre-commit radon vulture)
     [[ -n ${MACOS:-} ]] && _pip_pkgs+=(mlx)
     "${_python}" -m pip install "${_pip_pkgs[@]}" || return 1
     pyenv rehash
