@@ -143,6 +143,7 @@ EOF
   chmod +x "${_tmp_dir}/mock_rbenv"
 
   run zsh -c "
+    unset MACOS
     export PATH=\"${REPO_ROOT}/tests/mocks:\${PATH}\"
     export LINUX=1; export UBUNTU=1; export NOBLE=1; export WORKSTATION=1
     export _OVERRIDE_RBENV_BINARY='${_tmp_dir}/mock_rbenv'
@@ -167,6 +168,7 @@ EOF
   chmod +x "${_tmp_dir}/mock_rbenv"
 
   run zsh -c "
+    unset MACOS
     export PATH=\"${REPO_ROOT}/tests/mocks:\${PATH}\"
     export LINUX=1; export UBUNTU=1; export RESOLUTE=1; export CRUNCHER=1
     export _OVERRIDE_RBENV_BINARY='${_tmp_dir}/mock_rbenv'
