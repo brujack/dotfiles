@@ -3,104 +3,110 @@
 
 ## Bug Fixes
 
-- export -f install_homebrew stub for subshell visibility (#111)
+- add missing existence check for validate_memory.py fallback path (#132)
 
-- use ruby-install gem path; trust Homebrew taps on Linux
+- guard mlx pip install behind macOS check (#135)
 
-- trust remaining third-party taps for Homebrew 6.0 (#121)
+- brew trust, pip dep pins, Brewfile drift (#136)
 
-- guard setup_claude_mcp against symlinked mcp.json
+- remove docker formula and dotnet cask aliases (#137)
 
-- symlink ~/.claude/projects to ai-config instead of leaving unset (#122)
+- add docker formula, remove kitchen (#138)
 
-- prepend ruby-install bin to PATH so it takes precedence over system gem (#123)
+- remove docker formula and powershell cask duplicates (#139)
 
-- exa-mcp install, npm update, and GIT_DIR test isolation (#125)
+- remove chef tap and trust reference (#140)
 
-- tolerate missing virtualenv in delete step (#127)
+- fix 6 Ubuntu Noble setup failures + move Steam to Flatpak (#141)
 
+- apt-get for base packages, sudo for flatpak Steam (#142)
 
+- remove libncurses5-dev/libncursesw5-dev from common packages
 
-## CI
+- cgroup v2 daemon.json, glances via apt, passlib for Python 3.13 (#144)
 
-- replace kcov gate with macOS xtrace gate at 90% (#116)
+- nala, ruby, Go PPA cleanup for Ubuntu 26.04 (#145)
+
+- Ubuntu 26.04 housekeeping — HAS_FLATPAK, VirtualBox 7.1, dead OS vars (#147)
+
+- add gitguardian/tap to install_macos_casks brew trust (#148)
+
+- migrate restart_fah from init.d to systemctl (#150)
+
+- suppress dependency prompt with NONINTERACTIVE=1 (#151)
+
+- add molecule and molecule-plugins[docker] to ansible venv (#152)
+
+- rbenv init on Linux never ran due to chruby guard (#153)
 
 
 
 ## Documentation
 
-- add per-file gap backlog and ceiling notes
+- pointer stub per ADR-0020 (#134)
 
-- update test count to 709, mark coverage-macos-install-errors Done
+- add Claude Code weekly features digest 2026-06-15
 
-- update test count to 714, mark coverage-helpers-doctor-error-paths Done
+- add Anthropic weekly features digest 2026-06-15
 
-- mark coverage-helpers-setup-functions Done, 716 tests
+- sync CLAUDE.md with recent changes
 
-- mark coverage-workflows-pip-update Done, 718 tests
+- sync CLAUDE.md and plan index after PR #138
 
-- add Claude Code weekly features digest 2026-06-01
+- document formula/cask dedup rule and fix docker example
 
-- add Anthropic weekly features digest 2026-06-01
+- add Ubuntu 26.04 Resolute Raccoon support spec
 
-- mark coverage-workflows-minor-paths Done, 720 tests
+- add PR1 Ubuntu 26.04 detection and package files spec
 
-- update BATS test count to 723 after PR #117
+- add Ubuntu 26.04 PR1 implementation plan
 
-- mark coverage-more-tests Done, 723 tests
+- mark ubuntu-2604-pr1 Done after PR #143
 
-- mark coverage-gap-tests Done, 726 tests
+- sync CLAUDE.md and README for Ubuntu 26.04 support
 
-- add ADR-0008 for PS4 xtrace bash coverage approach
+- add PR2 Ubuntu 26.04 Docker cgroup v2 and Python 3.13 spec
 
-- add ADR-0009 and ADR-0010 for recent decisions
+- add Ubuntu 26.04 PR2 implementation plan
 
-- add ADR-0011 and ADR-0012 for April decisions
+- mark ubuntu-2604-pr2 Done after PR #144
 
-- replace Powerlevel10k with Starship in README
+- update test count 749 → 753
 
-- update BATS test count to 729 after PR #119
+- document brew upgrade node plugin fix for Linux
 
-- document run_update pip hang pattern in Testing Rules
+- mark ubuntu-2604-pr3 Done after PR #145
 
-- remove DoD section (all items covered by global behavior.md)
+- update test count 753 → 759
 
-- add 5 backlog items from 2026-06-05 retro
+- ubuntu-2604-pr4 — ARM64 support + version bumps
 
-- update BATS test count 729 → 731 in CLAUDE.md
+- ubuntu-2604-pr4 ARM64 support + version bumps
 
-- note brew trust coupling when adding new taps
+- mark ubuntu-2604-pr4 Done, update test count to 765
 
-- add Claude Code weekly features digest 2026-06-08
+- mark ubuntu-2604-pr5 Done after PR #147
+
+- add HAS_FLATPAK to capability table
+
+- update test count 769 → 772, mark ubuntu-2604-p3 Done after PR #149
+
+- mark P3-6 resolved — restart_fah SysV init fixed in PR #150
 
 
 
 ## Features
 
-- capture stderr per-section for richer failure output (#119)
+- Ubuntu 26.04 Resolute Raccoon detection and package files (#143)
 
-- add -t recreate-venv to force-recreate a pyenv virtualenv (#124)
+- track and symlink .gitignore_global via dotfiles
 
-- add terraform-skill to plugin install and update lists
+- ARM64 support + version bumps (PR4) (#146)
 
 
 
 ## Testing
 
-- cover xcodebuild-fail, no-brew error paths (#110)
-
-- cover doctor/process_args error paths (#112)
-
-- cover OMZ-installed and Cursor-not-installed paths (#113)
-
-- cover run_update pip block, 718 tests (#114)
-
-- cover _check_one_version and _run_cv_check arg behavior, 720 tests (#115)
-
-- add 3 tests targeting uncovered branches in linux_ubuntu/developer (#117)
-
-- cover 3 behavioral gaps in helpers/linux_ubuntu (#118)
-
-- isolate run_update --claude-only from real HOME (#126)
+- tighten rbenv install assertion to match version-specific call
 
 
