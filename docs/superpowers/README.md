@@ -103,9 +103,9 @@ Master status index for all specs and implementation plans in this directory.
 
 Ideas approved for future specs, in no particular order:
 
-| Feature | Notes |
-| ------- | ----- |
-| —       | —     |
+| Feature        | Notes                                                                                                                                                                 |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| pip-venv-audit | Investigate additional pip packages for Python coding and analysis (type checkers, formatters, profilers, ML/data science libs, static analysis beyond pylint/bandit) |
 
 ---
 
