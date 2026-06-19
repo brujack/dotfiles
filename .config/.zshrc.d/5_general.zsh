@@ -45,19 +45,20 @@ if [[ ${LINUX} ]]; then
   export PSHOME="/opt/microsoft/powershell/7/"
 fi
 
-# for chruby setup
-if [[ -d ${CHRUBY_LOC}/chruby ]]; then
-  if [[ -n ${MACOS} ]]; then
+# for chruby (macOS) / rbenv (Linux Noble+) setup
+if [[ -n ${MACOS} ]]; then
+  if [[ -d ${CHRUBY_LOC}/chruby ]]; then
     source ${CHRUBY_LOC}/chruby/chruby.sh
     source ${CHRUBY_LOC}/chruby/auto.sh
     chruby ${RUBY_VER}
-  elif [[ -n ${LINUX} ]]; then
-    if [[ -n ${NOBLE} ]] || [[ -n ${RESOLUTE} ]]; then
-      if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
-        if [[ -f /home/linuxbrew/.linuxbrew/bin/rbenv ]]; then
-          eval "$(/home/linuxbrew/.linuxbrew/bin/rbenv init - --no-rehash zsh)"
-          eval "$(/home/linuxbrew/.linuxbrew/bin/rbenv local ${RUBY_VER})"
-        fi
+  fi
+elif [[ -n ${LINUX} ]]; then
+  if [[ -n ${NOBLE} ]] || [[ -n ${RESOLUTE} ]]; then
+    if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
+      _rbenv_bin="${_OVERRIDE_RBENV_BINARY:-/home/linuxbrew/.linuxbrew/bin/rbenv}"
+      if [[ -f ${_rbenv_bin} ]]; then
+        eval "$(${_rbenv_bin} init - --no-rehash zsh)"
+        "${_rbenv_bin}" local "${RUBY_VER}" 2>/dev/null || true
       fi
     fi
   fi
