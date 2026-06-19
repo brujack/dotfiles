@@ -127,3 +127,65 @@ setup() {
   [ "$status" -eq 0 ]
   [ "$output" = "unset" ]
 }
+
+# ── 5_general.zsh rbenv tests ─────────────────────────────────────────────────
+
+@test "5_general.zsh initializes rbenv on Linux Noble WORKSTATION" {
+  local _tmp_dir
+  _tmp_dir="$(mktemp -d)"
+  cat > "${_tmp_dir}/mock_rbenv" << 'EOF'
+#!/usr/bin/env bash
+if [[ "$1" == "init" ]]; then
+  printf '_RBENV_INIT_CALLED=1\n'
+fi
+exit 0
+EOF
+  chmod +x "${_tmp_dir}/mock_rbenv"
+
+  run zsh -c "
+    export PATH=\"${REPO_ROOT}/tests/mocks:\${PATH}\"
+    export LINUX=1; export UBUNTU=1; export NOBLE=1; export WORKSTATION=1
+    export _OVERRIDE_RBENV_BINARY='${_tmp_dir}/mock_rbenv'
+    source '${ZSHRC_D}/5_general.zsh' 2>/dev/null
+    printf '%s\n' \"\${_RBENV_INIT_CALLED:-unset}\"
+  "
+  rm -rf "${_tmp_dir}"
+  [ "$status" -eq 0 ]
+  [ "$output" = "1" ]
+}
+
+@test "5_general.zsh initializes rbenv on Linux Resolute CRUNCHER" {
+  local _tmp_dir
+  _tmp_dir="$(mktemp -d)"
+  cat > "${_tmp_dir}/mock_rbenv" << 'EOF'
+#!/usr/bin/env bash
+if [[ "$1" == "init" ]]; then
+  printf '_RBENV_INIT_CALLED=1\n'
+fi
+exit 0
+EOF
+  chmod +x "${_tmp_dir}/mock_rbenv"
+
+  run zsh -c "
+    export PATH=\"${REPO_ROOT}/tests/mocks:\${PATH}\"
+    export LINUX=1; export UBUNTU=1; export RESOLUTE=1; export CRUNCHER=1
+    export _OVERRIDE_RBENV_BINARY='${_tmp_dir}/mock_rbenv'
+    source '${ZSHRC_D}/5_general.zsh' 2>/dev/null
+    printf '%s\n' \"\${_RBENV_INIT_CALLED:-unset}\"
+  "
+  rm -rf "${_tmp_dir}"
+  [ "$status" -eq 0 ]
+  [ "$output" = "1" ]
+}
+
+@test "5_general.zsh skips rbenv when rbenv binary absent" {
+  run zsh -c "
+    export PATH=\"${REPO_ROOT}/tests/mocks:\${PATH}\"
+    export LINUX=1; export UBUNTU=1; export NOBLE=1; export WORKSTATION=1
+    export _OVERRIDE_RBENV_BINARY='/nonexistent/rbenv'
+    source '${ZSHRC_D}/5_general.zsh' 2>/dev/null
+    printf '%s\n' \"\${_RBENV_INIT_CALLED:-unset}\"
+  "
+  [ "$status" -eq 0 ]
+  [ "$output" = "unset" ]
+}
