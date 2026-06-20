@@ -345,6 +345,17 @@ teardown() {
   ! grep -q "wget.*kind" "${MOCK_CALLS_FILE}"
 }
 
+@test "_install_ubuntu_k8s_tools: removes stale helm-stable-debian.list before apt update" {
+  # baltocdn sources.list.d file written by pre-PR#155 runs must be purged so
+  # apt-get update does not hit the NOSPLIT/unsigned repo on subsequent runs.
+  unset HAS_SNAP HAS_K8S
+  export KUBERNETES_VER="v1.29"
+  run _install_ubuntu_k8s_tools
+  [ "$status" -eq 0 ]
+  run grep -q "rm.*helm-stable-debian.list" "${MOCK_CALLS_FILE}"
+  [ "$status" -eq 0 ]
+}
+
 @test "_install_ubuntu_k8s_tools: HAS_SNAP installs helm via snap" {
   export HAS_SNAP=1
   export HAS_K8S=1
@@ -508,6 +519,21 @@ teardown() {
   run _install_ubuntu_cloud_tools
   [ "$status" -eq 0 ]
   grep -q 'add-apt-repository.*azure-cli.*noble' "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_cloud_tools: removes stale azure-cli sources before add-apt-repository" {
+  # add-apt-repository appends new dist lines rather than replacing old ones,
+  # leaving a 'resolute' entry alongside the new 'noble' entry; the stale entry
+  # causes apt-get update to 404 on every subsequent run.
+  unset HAS_DEVTOOLS
+  export CF_TERRAFORMING_VER="0.27.0"
+  export CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v0.27.0/cf-terraforming_0.27.0_linux_amd64.tar.gz"
+  run _install_ubuntu_cloud_tools
+  [ "$status" -eq 0 ]
+  # Both the add-apt-repository auto-named file and a canonical azure-cli.list
+  # must be purged so no stale codename persists in apt sources.
+  run grep -E "rm.*(packages.microsoft.com_repos_azure-cli|azure-cli).*\.list" "${MOCK_CALLS_FILE}"
+  [ "$status" -eq 0 ]
 }
 
 # ── _install_ubuntu_brew_packages ────────────────────────────────────────────
