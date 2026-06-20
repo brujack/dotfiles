@@ -447,6 +447,21 @@ teardown() {
   grep -q "mlx" "${MOCK_CALLS_FILE}"
 }
 
+@test "setup_ansible on Linux installs Python build deps before pyenv install" {
+  export LINUX=1
+  unset MACOS UBUNTU
+  export HOME="${BATS_TEST_TMPDIR}"
+  export PYTHON_VER="3.14.6"
+  export HAS_DEVTOOLS=""
+  export PATH="${BATS_TEST_DIRNAME}/../mocks:${PATH}"
+  # Provide pyenv at $PYENV_ROOT/bin so the env -i subprocess finds it
+  mkdir -p "${HOME}/.pyenv/bin"
+  cp "${BATS_TEST_DIRNAME}/../mocks/pyenv" "${HOME}/.pyenv/bin/pyenv"
+  run setup_ansible
+  [ "$status" -eq 0 ]
+  grep -q "apt-get install.*zlib1g-dev" "${MOCK_CALLS_FILE}"
+}
+
 @test "recreate_python_venv ansible on Linux excludes mlx from pip install" {
   unset MACOS
   export LINUX=1

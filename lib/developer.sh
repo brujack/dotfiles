@@ -162,6 +162,16 @@ setup_ansible() {
   printf "ANSIBLE setup\\n"
   if ! [[ -d ${HOME}/.pyenv/versions/${PYTHON_VER} ]]; then
     if [[ -n "${LINUX:-}" ]]; then
+      # Belt-and-suspenders: install Python build deps before compiling.
+      # ubuntu_common_packages.txt has these, but they may be absent when
+      # running -t ansible without -t developer, or if nala failed on a new
+      # Ubuntu release (e.g. 26.04 resolute where zlib1g-dev caused BUILD FAILED).
+      sudo apt-get install -y \
+        zlib1g-dev libssl-dev libbz2-dev libffi-dev \
+        libreadline-dev libsqlite3-dev liblzma-dev tk-dev \
+        uuid-dev libdb-dev libgdbm-dev libgdbm-compat-dev libnss3-dev \
+        2>/dev/null || true
+
       # Keep pyenv's build definitions current (optional but useful)
       pyenv update
 
