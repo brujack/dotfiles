@@ -180,6 +180,11 @@ _install_ubuntu_k8s_tools() {
     fi
   fi
 
+  # Purge stale baltocdn helm APT source left by pre-PR#155 runs — the repo
+  # serves unsigned/NOSPLIT data and has no resolute suite, causing apt update
+  # to fail on every subsequent setup run even after the code was fixed.
+  sudo rm -f /etc/apt/sources.list.d/helm-stable-debian.list 2>/dev/null || true
+
   sudo mkdir -p /etc/apt/keyrings
   curl -fsSL "https://pkgs.k8s.io/core:/stable:/${KUBERNETES_VER}/deb/Release.key" \
     | sudo gpg --dearmor --yes -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
@@ -320,6 +325,12 @@ _install_ubuntu_cloud_tools() {
   AZ_REPO=$(lsb_release -cs)
   # Azure CLI has no Ubuntu 26.04 packages yet; fall back to noble
   [[ -n "${RESOLUTE:-}" ]] && AZ_REPO="noble"
+  # Purge stale azure-cli APT sources before re-adding: add-apt-repository
+  # appends a new dist line rather than replacing the old one, so a prior run
+  # with 'resolute' (before the noble fallback) leaves a stale entry that
+  # causes apt-get update to 404 on every subsequent run.
+  sudo rm -f /etc/apt/sources.list.d/packages.microsoft.com_repos_azure-cli.list 2>/dev/null || true
+  sudo rm -f /etc/apt/sources.list.d/azure-cli.list 2>/dev/null || true
   sudo -H add-apt-repository \
   "deb [arch=$(dpkg --print-architecture)] http://packages.microsoft.com/repos/azure-cli/ $AZ_REPO main"
   sudo -H apt update
