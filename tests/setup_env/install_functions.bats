@@ -243,47 +243,86 @@ teardown() {
 
 # ── install_ruby — rbenv version guard ──────────────────────────────────────
 
-@test "install_ruby on Linux updates ruby-build via brew before checking version" {
+@test "install_ruby on Linux clones ruby-build from git when plugin absent" {
   export LINUX=1
   unset MACOS UBUNTU
   export HOME="${BATS_TEST_TMPDIR}"
   mkdir -p "${BATS_TEST_TMPDIR}/.rbenv"
   export RUBY_VER="4.0.5"
-  export MOCK_RBENV_LIST_STDOUT="  4.0.5"
+  run install_ruby
+  [ "$status" -eq 0 ]
+  # Fresh definitions come from git so a new Ruby installs even when the brew
+  # ruby-build bottle lags upstream (Ubuntu 26.04 / Ruby 4.0.5 regression).
+  run grep -q "git clone --quiet https://github.com/rbenv/ruby-build.git" "${MOCK_CALLS_FILE}"
+  [ "$status" -eq 0 ]
+}
+
+@test "install_ruby on Linux pulls ruby-build when plugin already present" {
+  export LINUX=1
+  unset MACOS UBUNTU
+  export HOME="${BATS_TEST_TMPDIR}"
+  mkdir -p "${BATS_TEST_TMPDIR}/.rbenv/plugins/ruby-build/.git"
+  export RUBY_VER="4.0.5"
+  run install_ruby
+  [ "$status" -eq 0 ]
+  run grep -q "git -C .*ruby-build pull" "${MOCK_CALLS_FILE}"
+  [ "$status" -eq 0 ]
+  run grep -q "git clone" "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+}
+
+@test "install_ruby on Linux updates ruby-build via brew before installing" {
+  export LINUX=1
+  unset MACOS UBUNTU
+  export HOME="${BATS_TEST_TMPDIR}"
+  mkdir -p "${BATS_TEST_TMPDIR}/.rbenv"
+  export RUBY_VER="4.0.5"
   run install_ruby
   [ "$status" -eq 0 ]
   run grep -q "brew upgrade ruby-build" "${MOCK_CALLS_FILE}"
   [ "$status" -eq 0 ]
 }
 
-@test "install_ruby on Linux calls rbenv install when ruby-build has the version" {
+@test "install_ruby on Linux attempts rbenv install for RUBY_VER" {
   export LINUX=1
   unset MACOS UBUNTU
   export HOME="${BATS_TEST_TMPDIR}"
   mkdir -p "${BATS_TEST_TMPDIR}/.rbenv"
-  # Version NOT already installed (.rbenv/versions/<ver> absent → rbenv install runs)
-  # ruby-build list includes the version after brew upgrade ruby-build
   export RUBY_VER="4.0.5"
-  export MOCK_RBENV_LIST_STDOUT="  4.0.5"
   run install_ruby
   [ "$status" -eq 0 ]
-  run grep -q "rbenv install 4.0.5" "${MOCK_CALLS_FILE}"
+  run grep -q "rbenv install --skip-existing 4.0.5" "${MOCK_CALLS_FILE}"
   [ "$status" -eq 0 ]
 }
 
-@test "install_ruby on Linux skips rbenv install when ruby-build lacks the version after update" {
+@test "install_ruby on Linux sets rbenv global and rehash on success" {
   export LINUX=1
   unset MACOS UBUNTU
   export HOME="${BATS_TEST_TMPDIR}"
   mkdir -p "${BATS_TEST_TMPDIR}/.rbenv"
-  # ruby-build list does NOT include the version even after brew upgrade ruby-build
   export RUBY_VER="4.0.5"
-  export MOCK_RBENV_LIST_STDOUT="  3.3.0"
+  export MOCK_RBENV_EXIT=0
   run install_ruby
   [ "$status" -eq 0 ]
-  run grep -q "brew upgrade ruby-build" "${MOCK_CALLS_FILE}"
+  run grep -q "rbenv global 4.0.5" "${MOCK_CALLS_FILE}"
   [ "$status" -eq 0 ]
-  run grep -q "rbenv install 4.0.5" "${MOCK_CALLS_FILE}"
+  run grep -q "rbenv rehash" "${MOCK_CALLS_FILE}"
+  [ "$status" -eq 0 ]
+}
+
+@test "install_ruby on Linux is non-fatal when rbenv install fails" {
+  export LINUX=1
+  unset MACOS UBUNTU
+  export HOME="${BATS_TEST_TMPDIR}"
+  mkdir -p "${BATS_TEST_TMPDIR}/.rbenv"
+  export RUBY_VER="4.0.5"
+  # rbenv install fails (e.g. definition genuinely missing) → warn, return 0,
+  # do not proceed to rbenv global on a broken install.
+  export MOCK_RBENV_EXIT=1
+  run install_ruby
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"rbenv install 4.0.5 failed"* ]]
+  run grep -q "rbenv global" "${MOCK_CALLS_FILE}"
   [ "$status" -ne 0 ]
 }
 
