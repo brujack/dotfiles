@@ -265,10 +265,16 @@ When a constant is updated, update all other references to that constant across 
 
 ### Ruby Version Manager Split
 
-Ruby version managers: **rbenv on Linux** (via `lib/developer.sh:_install_linux_rbenv`);
+Ruby version managers: **rbenv on Linux** (`rbenv` installed via Homebrew in `lib/linux_ubuntu.sh`);
 **chruby on macOS** (via `lib/macos.sh`). The two are not interchangeable across platforms.
 Platform-specific installation and configuration is handled automatically by `install_ruby()` and
 `install_ruby_tools()` in `developer.sh` — no manual intervention required.
+
+On Linux, `install_ruby()` refreshes ruby-build definitions from git (an rbenv plugin clone/pull
+at `~/.rbenv/plugins/ruby-build`, which shadows the brew-managed definitions) before running
+`rbenv install --skip-existing ${RUBY_VER}`. This is required because the Homebrew ruby-build
+bottle lags upstream — e.g. Ruby 4.0.5 on Ubuntu 26.04 was absent from the bottle but present in
+git. A failed `rbenv install` warns and returns 0 (non-fatal) rather than aborting setup.
 
 ## Testing
 

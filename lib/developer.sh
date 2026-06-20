@@ -123,16 +123,29 @@ install_ruby() {
     fi
     if [[ -n ${LINUX} ]]; then
       if ! [[ -d ${HOME}/.rbenv/versions/${RUBY_VER} ]]; then
+        # Refresh ruby-build definitions from git so a newly released Ruby
+        # (e.g. 4.0.5 on Ubuntu 26.04) installs even when the Homebrew
+        # ruby-build bottle lags upstream. An rbenv plugin copy of ruby-build
+        # takes precedence over the brew-managed definitions.
+        local _ruby_build="${HOME}/.rbenv/plugins/ruby-build"
+        if [[ -d ${_ruby_build}/.git ]]; then
+          git -C "${_ruby_build}" pull --quiet 2>/dev/null || true
+        else
+          git clone --quiet https://github.com/rbenv/ruby-build.git "${_ruby_build}" 2>/dev/null || true
+        fi
         if command -v brew &>/dev/null; then
           brew upgrade ruby-build 2>/dev/null || true
         fi
-        if ! rbenv install --list 2>/dev/null | grep -q "^  ${RUBY_VER}$"; then
-          log_warn "ruby-build has no definition for Ruby ${RUBY_VER} — skipping rbenv install"
+        OPENSSL_DIR="$(pkg-config --variable=libdir openssl 2>/dev/null | sed 's#/lib$##')"
+        # Attempt the install directly: ruby-build fails fast if the definition
+        # is genuinely missing, so a fragile pre-flight --list grep (which is
+        # curated and false-negatives on point releases) is not needed.
+        # --skip-existing keeps it idempotent.
+        if ! RUBY_CONFIGURE_OPTS="--with-openssl-dir=${OPENSSL_DIR:-/usr}" rbenv install --skip-existing ${RUBY_VER}; then
+          log_warn "rbenv install ${RUBY_VER} failed — ruby-build may lack the definition"
           log_warn "Run 'rbenv install ${RUBY_VER}' manually once ruby-build is updated"
           return 0
         fi
-        OPENSSL_DIR="$(pkg-config --variable=libdir openssl 2>/dev/null | sed 's#/lib$##')"
-        RUBY_CONFIGURE_OPTS="--with-openssl-dir=${OPENSSL_DIR:-/usr}" rbenv install ${RUBY_VER}
         rbenv global ${RUBY_VER}
         rbenv rehash
       fi
