@@ -191,8 +191,9 @@ _install_ubuntu_k8s_tools() {
   fi
   # can't use snap on wsl2
   if [[ -z ${HAS_SNAP} ]]; then
-    curl https://baltocdn.com/helm/signing.asc | sudo gpg --dearmor -o /etc/apt/keyrings/helm-signing.gpg
-    echo "deb [signed-by=/etc/apt/keyrings/helm-signing.gpg] https://baltocdn.com/helm/stable/debian/ all main" | sudo tee /etc/apt/sources.list.d/helm-stable-debian.list
+    local _helm_sources="${_HELM_SOURCES_LIST:-/etc/apt/sources.list.d/helm-stable-debian.list}"
+    curl -fsSL https://baltocdn.com/helm/signing.asc | sudo gpg --dearmor -o /etc/apt/keyrings/helm-signing.gpg
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/helm-signing.gpg] https://baltocdn.com/helm/stable/debian/ all main" | sudo tee "${_helm_sources}"
     sudo apt-get update
     sudo apt-get install helm
   fi
@@ -292,8 +293,13 @@ _install_ubuntu_cloud_tools() {
 
   if [[ -n ${HAS_DEVTOOLS} ]]; then
     printf "Installing cloudflared\\n"
+    local _cf_codename
+    _cf_codename="$(lsb_release -cs)"
+    # Cloudflare WARP has no Ubuntu 26.04 packages yet; fall back to noble
+    [[ -n "${RESOLUTE:-}" ]] && _cf_codename="noble"
+    local _cf_sources="${_CF_SOURCES_LIST:-/etc/apt/sources.list.d/cloudflare-client.list}"
     curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
-    echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
+    echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ ${_cf_codename} main" | sudo tee "${_cf_sources}"
     sudo apt-get update
     sudo apt-get install cloudflare-warp -y
     if [[ -x $(command -v cloudflared) ]]; then
@@ -306,6 +312,8 @@ _install_ubuntu_cloud_tools() {
   gpg --dearmor | \
   sudo tee /etc/apt/trusted.gpg.d/microsoft.asc.gpg > /dev/null
   AZ_REPO=$(lsb_release -cs)
+  # Azure CLI has no Ubuntu 26.04 packages yet; fall back to noble
+  [[ -n "${RESOLUTE:-}" ]] && AZ_REPO="noble"
   sudo -H add-apt-repository \
   "deb [arch=$(dpkg --print-architecture)] http://packages.microsoft.com/repos/azure-cli/ $AZ_REPO main"
   sudo -H apt update
