@@ -1,4 +1,12 @@
 #!/usr/bin/env bash
 # Mock xargs for testing
 printf "xargs %s\n" "$*" >> "${MOCK_CALLS_FILE}"
+# Drain piped stdin (the filtered package list) and record each token so tests
+# can assert which packages reached the install command. Guarded on a non-tty
+# stdin so the legacy `xargs -a <file>` form (no pipe) does not block.
+if [ ! -t 0 ]; then
+  while IFS= read -r _line; do
+    [ -n "${_line}" ] && printf "xargs-stdin %s\n" "${_line}" >> "${MOCK_CALLS_FILE}"
+  done
+fi
 exit 0

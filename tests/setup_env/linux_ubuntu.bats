@@ -73,13 +73,31 @@ teardown() {
   grep -q "nala install" "${MOCK_CALLS_FILE}"
 }
 
+@test "_install_ubuntu_base_packages: comment lines are not passed to nala" {
+  # Regression: xargs -a fed comment lines straight to nala, and a comment
+  # containing '--user' produced 'No such option: --user', aborting the whole
+  # common-package install. Comments and blank lines must be filtered out.
+  cd "${REPO_ROOT}"
+  export NOBLE=1
+  unset RESOLUTE HAS_SNAP
+  run _install_ubuntu_base_packages
+  [ "$status" -eq 0 ]
+  # Real packages reach the install command...
+  grep -q "xargs-stdin build-essential" "${MOCK_CALLS_FILE}"
+  # ...but comment tokens (e.g. '--user' from the PEP 668 note) do not.
+  run grep "xargs-stdin .*--user" "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+}
+
 @test "_install_ubuntu_base_packages: HAS_SNAP uses nala for workstation packages" {
+  cd "${REPO_ROOT}"
   export NOBLE=1
   export HAS_SNAP=1
   unset RESOLUTE
   run _install_ubuntu_base_packages
   [ "$status" -eq 0 ]
-  grep -q "ubuntu_workstation_packages.*nala install" "${MOCK_CALLS_FILE}"
+  [[ "$output" == *"Installing workstation packages"* ]]
+  grep -q "xargs-stdin font-manager" "${MOCK_CALLS_FILE}"
 }
 
 # ── _install_ubuntu_pyenv ────────────────────────────────────────────────────
@@ -339,7 +357,9 @@ teardown() {
   grep -q "snap install helm" "${MOCK_CALLS_FILE}"
 }
 
-@test "_install_ubuntu_k8s_tools: no HAS_SNAP installs helm via apt" {
+@test "_install_ubuntu_k8s_tools: no HAS_SNAP installs helm via official script" {
+  # baltocdn APT repo returns unsigned/NOSPLIT data on some networks and has no
+  # resolute suite; the version-agnostic get-helm-3 script is used instead.
   unset HAS_SNAP
   export HAS_K8S=1
   export KIND_VER="0.22.0"
@@ -348,21 +368,21 @@ teardown() {
   export TELEPRESENCE_URL="https://app.getambassador.io/download/tel2/linux/amd64/latest/telepresence"
   run _install_ubuntu_k8s_tools
   [ "$status" -eq 0 ]
-  grep -q "apt-get install helm" "${MOCK_CALLS_FILE}"
+  grep -q "curl.*get-helm-3" "${MOCK_CALLS_FILE}"
+  ! grep -q "baltocdn" "${MOCK_CALLS_FILE}"
 }
 
-@test "_install_ubuntu_k8s_tools: helm APT sources includes arch specification" {
+@test "_install_ubuntu_k8s_tools: helm script curl failure returns non-zero" {
   unset HAS_SNAP
   export HAS_K8S=1
   export KIND_VER="0.22.0"
   export KIND_URL="https://kind.sigs.k8s.io/dl/v0.22.0/kind-linux-amd64"
   export KUBERNETES_VER="v1.29"
   export TELEPRESENCE_URL="https://app.getambassador.io/download/tel2/linux/amd64/latest/telepresence"
-  export MOCK_DPKG_PRINT_ARCH="amd64"
-  export _HELM_SOURCES_LIST="${BATS_TEST_TMPDIR}/helm.list"
-  run _install_ubuntu_k8s_tools
-  [ "$status" -eq 0 ]
-  grep -q "arch=amd64" "${_HELM_SOURCES_LIST}"
+  export MOCK_CURL_EXIT=1
+  local _rc=0
+  _install_ubuntu_k8s_tools || _rc=$?
+  [ "${_rc}" -ne 0 ]
 }
 
 # ── _install_ubuntu_hashicorp ────────────────────────────────────────────────
@@ -645,4 +665,28 @@ teardown() {
   run _install_ubuntu_misc
   run grep "pip.*glances" "${MOCK_CALLS_FILE}"
   [ "$status" -ne 0 ]
+}
+
+@test "_install_ubuntu_misc: HAS_DEVTOOLS attempts dotnet-sdk-8.0 install" {
+  export DOCKER_COMPOSE_VER="2.24.0"
+  export DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64"
+  export YQ_VER="4.40.5"
+  export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
+  export HAS_DEVTOOLS=1
+  run _install_ubuntu_misc
+  [ "$status" -eq 0 ]
+  grep -q "apt install dotnet-sdk-8.0" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_misc: dotnet install failure is non-fatal" {
+  # dotnet-sdk-8.0 is missing on resolute; a failed install must warn, not abort.
+  export DOCKER_COMPOSE_VER="2.24.0"
+  export DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64"
+  export YQ_VER="4.40.5"
+  export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
+  export HAS_DEVTOOLS=1
+  export MOCK_APT_EXIT=1
+  run _install_ubuntu_misc
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"dotnet-sdk-8.0 not available"* ]]
 }
