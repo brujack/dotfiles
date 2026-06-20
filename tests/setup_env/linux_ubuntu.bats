@@ -351,6 +351,20 @@ teardown() {
   grep -q "apt-get install helm" "${MOCK_CALLS_FILE}"
 }
 
+@test "_install_ubuntu_k8s_tools: helm APT sources includes arch specification" {
+  unset HAS_SNAP
+  export HAS_K8S=1
+  export KIND_VER="0.22.0"
+  export KIND_URL="https://kind.sigs.k8s.io/dl/v0.22.0/kind-linux-amd64"
+  export KUBERNETES_VER="v1.29"
+  export TELEPRESENCE_URL="https://app.getambassador.io/download/tel2/linux/amd64/latest/telepresence"
+  export MOCK_DPKG_PRINT_ARCH="amd64"
+  export _HELM_SOURCES_LIST="${BATS_TEST_TMPDIR}/helm.list"
+  run _install_ubuntu_k8s_tools
+  [ "$status" -eq 0 ]
+  grep -q "arch=amd64" "${_HELM_SOURCES_LIST}"
+}
+
 # ── _install_ubuntu_hashicorp ────────────────────────────────────────────────
 
 @test "_install_ubuntu_hashicorp: calls wget for consul when dir does not exist" {
@@ -451,6 +465,29 @@ teardown() {
   run _install_ubuntu_cloud_tools
   [ "$status" -eq 0 ]
   grep -q "cf-terraforming.*arm64" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_cloud_tools: on RESOLUTE uses noble for cloudflare repo" {
+  export RESOLUTE=1
+  export HAS_DEVTOOLS=1
+  export CF_TERRAFORMING_VER="0.27.0"
+  export CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v0.27.0/cf-terraforming_0.27.0_linux_amd64.tar.gz"
+  export _CF_SOURCES_LIST="${BATS_TEST_TMPDIR}/cloudflare.list"
+  run _install_ubuntu_cloud_tools
+  [ "$status" -eq 0 ]
+  grep -q "noble" "${_CF_SOURCES_LIST}"
+  run grep "resolute" "${_CF_SOURCES_LIST}"
+  [ "$status" -ne 0 ]
+}
+
+@test "_install_ubuntu_cloud_tools: on RESOLUTE uses noble for azure-cli repo" {
+  export RESOLUTE=1
+  unset HAS_DEVTOOLS
+  export CF_TERRAFORMING_VER="0.27.0"
+  export CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v0.27.0/cf-terraforming_0.27.0_linux_amd64.tar.gz"
+  run _install_ubuntu_cloud_tools
+  [ "$status" -eq 0 ]
+  grep -q 'add-apt-repository.*azure-cli.*noble' "${MOCK_CALLS_FILE}"
 }
 
 # ── _install_ubuntu_brew_packages ────────────────────────────────────────────
