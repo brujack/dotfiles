@@ -22,14 +22,16 @@ _install_ubuntu_base_packages() {
     printf "Installing hwe, common, and 24.04 packages\\n"
     sudo -H apt install --install-recommends linux-generic-hwe-24.04 -y
     check_and_install_nala
-    xargs -a ./ubuntu_common_packages.txt sudo nala install -y
-    xargs -a ./ubuntu_2404_packages.txt sudo nala install -y
+    # Strip comments/blank lines: xargs -a feeds every line to nala, and a
+    # comment token like '--user' aborts the whole install ("No such option").
+    grep -vE '^[[:space:]]*(#|$)' ./ubuntu_common_packages.txt | xargs -r sudo nala install -y
+    grep -vE '^[[:space:]]*(#|$)' ./ubuntu_2404_packages.txt | xargs -r sudo nala install -y
   elif [[ -n ${RESOLUTE} ]]; then
     printf "Installing hwe, common, and 26.04 packages\\n"
     sudo -H apt install --install-recommends linux-generic-hwe-26.04 -y
     check_and_install_nala
-    xargs -a ./ubuntu_common_packages.txt sudo nala install -y
-    xargs -a ./ubuntu_2604_packages.txt sudo nala install -y
+    grep -vE '^[[:space:]]*(#|$)' ./ubuntu_common_packages.txt | xargs -r sudo nala install -y
+    grep -vE '^[[:space:]]*(#|$)' ./ubuntu_2604_packages.txt | xargs -r sudo nala install -y
   else
     log_error "Unsupported Ubuntu version: ${UBUNTU_VERSION:-unknown}"
     return 1
@@ -37,10 +39,10 @@ _install_ubuntu_base_packages() {
 
   if [[ -n ${HAS_SNAP} ]]; then
     printf "Installing workstation packages\\n"
-    xargs -a ./ubuntu_workstation_packages.txt sudo nala install -y
+    grep -vE '^[[:space:]]*(#|$)' ./ubuntu_workstation_packages.txt | xargs -r sudo nala install -y
 
     printf "Installing workstation snap packages\\n"
-    xargs -a ./ubuntu_workstation_snap_packages.txt sudo snap install
+    grep -vE '^[[:space:]]*(#|$)' ./ubuntu_workstation_snap_packages.txt | xargs -r sudo snap install
 
   fi
 }
@@ -189,13 +191,17 @@ _install_ubuntu_k8s_tools() {
   if [[ -n ${HAS_SNAP} ]]; then
     sudo snap install helm --classic
   fi
-  # can't use snap on wsl2
+  # can't use snap on wsl2; the baltocdn APT repo serves unsigned/NOSPLIT data
+  # on some networks and has no resolute suite, so use the official installer.
   if [[ -z ${HAS_SNAP} ]]; then
-    local _helm_sources="${_HELM_SOURCES_LIST:-/etc/apt/sources.list.d/helm-stable-debian.list}"
-    curl -fsSL https://baltocdn.com/helm/signing.asc | sudo gpg --dearmor -o /etc/apt/keyrings/helm-signing.gpg
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/helm-signing.gpg] https://baltocdn.com/helm/stable/debian/ all main" | sudo tee "${_helm_sources}"
-    sudo apt-get update
-    sudo apt-get install helm
+    local _helm_script
+    _helm_script="$(mktemp)"
+    curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 -o "${_helm_script}" || { rm -f "${_helm_script}"; return 1; }
+    bash "${_helm_script}" || { rm -f "${_helm_script}"; return 1; }
+    rm -f "${_helm_script}"
+    if [[ -x $(command -v helm) ]]; then
+      printf "helm is installed\\n"
+    fi
   fi
 
   printf "Installing kustomize\\n"
@@ -483,7 +489,9 @@ _install_ubuntu_misc() {
 
   if [[ -n ${HAS_DEVTOOLS} ]]; then
     printf "Installing .net8 sdk\\n"
-    sudo -H apt install dotnet-sdk-8.0 -y
+    # dotnet-sdk-8.0 is absent from some Ubuntu releases (e.g. 26.04 resolute);
+    # don't abort the rest of setup if the package can't be located.
+    sudo -H apt install dotnet-sdk-8.0 -y || log_warn "dotnet-sdk-8.0 not available on this Ubuntu release; skipping"
   fi
 
   check_and_install_nala
