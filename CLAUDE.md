@@ -391,6 +391,16 @@ See [`ai-config/docs/knowledge/dotfiles-bats-test-infrastructure.md`](https://gi
 
 **Pass-through mocks:** `ln`, `chmod`, `mv`, `cp`, and `tee` call the real binary (`/bin/cmd "$@" 2>/dev/null || true`) so tests that assert actual filesystem state work correctly. Set the corresponding exit var to a non-zero value to simulate failure instead.
 
+**`env -i` subprocess strips PATH — place pyenv mock at `$PYENV_ROOT/bin/pyenv`:** `setup_ansible()` on Linux uses `env -i ... bash -lc '... pyenv install ...'` with a stripped environment. PATH-injected mocks in `tests/mocks/` are invisible to this subprocess because `env -i` clears `PATH`. To intercept pyenv calls in these tests, create the mock directly at `${HOME}/.pyenv/bin/pyenv` (the hardcoded path pyenv resolves to):
+
+```bash
+mkdir -p "${HOME}/.pyenv/bin"
+cp "${BATS_TEST_DIRNAME}/../mocks/pyenv" "${HOME}/.pyenv/bin/pyenv"
+chmod +x "${HOME}/.pyenv/bin/pyenv"
+```
+
+This pattern applies to any function that strips the environment and invokes pyenv by absolute path.
+
 ### Doctor Test Conventions
 
 When writing tests for `_doctor_check_*` functions in `tests/setup_env/unit.bats`:
