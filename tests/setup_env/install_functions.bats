@@ -243,13 +243,26 @@ teardown() {
 
 # ── install_ruby — rbenv version guard ──────────────────────────────────────
 
+@test "install_ruby on Linux updates ruby-build via brew before checking version" {
+  export LINUX=1
+  unset MACOS UBUNTU
+  export HOME="${BATS_TEST_TMPDIR}"
+  mkdir -p "${BATS_TEST_TMPDIR}/.rbenv"
+  export RUBY_VER="4.0.5"
+  export MOCK_RBENV_LIST_STDOUT="  4.0.5"
+  run install_ruby
+  [ "$status" -eq 0 ]
+  run grep -q "brew upgrade ruby-build" "${MOCK_CALLS_FILE}"
+  [ "$status" -eq 0 ]
+}
+
 @test "install_ruby on Linux calls rbenv install when ruby-build has the version" {
   export LINUX=1
   unset MACOS UBUNTU
   export HOME="${BATS_TEST_TMPDIR}"
   mkdir -p "${BATS_TEST_TMPDIR}/.rbenv"
   # Version NOT already installed (.rbenv/versions/<ver> absent → rbenv install runs)
-  # ruby-build list includes the version: "  4.0.5"
+  # ruby-build list includes the version after brew upgrade ruby-build
   export RUBY_VER="4.0.5"
   export MOCK_RBENV_LIST_STDOUT="  4.0.5"
   run install_ruby
@@ -258,15 +271,17 @@ teardown() {
   [ "$status" -eq 0 ]
 }
 
-@test "install_ruby on Linux skips rbenv install when ruby-build lacks the version" {
+@test "install_ruby on Linux skips rbenv install when ruby-build lacks the version after update" {
   export LINUX=1
   unset MACOS UBUNTU
   export HOME="${BATS_TEST_TMPDIR}"
   mkdir -p "${BATS_TEST_TMPDIR}/.rbenv"
-  # ruby-build list does NOT include the version — only an older version
+  # ruby-build list does NOT include the version even after brew upgrade ruby-build
   export RUBY_VER="4.0.5"
   export MOCK_RBENV_LIST_STDOUT="  3.3.0"
   run install_ruby
+  [ "$status" -eq 0 ]
+  run grep -q "brew upgrade ruby-build" "${MOCK_CALLS_FILE}"
   [ "$status" -eq 0 ]
   run grep -q "rbenv install 4.0.5" "${MOCK_CALLS_FILE}"
   [ "$status" -ne 0 ]

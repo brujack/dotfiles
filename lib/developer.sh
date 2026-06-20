@@ -123,6 +123,9 @@ install_ruby() {
     fi
     if [[ -n ${LINUX} ]]; then
       if ! [[ -d ${HOME}/.rbenv/versions/${RUBY_VER} ]]; then
+        if command -v brew &>/dev/null; then
+          brew upgrade ruby-build 2>/dev/null || true
+        fi
         if ! rbenv install --list 2>/dev/null | grep -q "^  ${RUBY_VER}$"; then
           log_warn "ruby-build has no definition for Ruby ${RUBY_VER} — skipping rbenv install"
           log_warn "Run 'rbenv install ${RUBY_VER}' manually once ruby-build is updated"
