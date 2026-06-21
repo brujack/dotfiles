@@ -82,7 +82,7 @@ agent_mode_codebase_context_auto_indexing = true
 is_settings_sync_enabled = true
 
 [general]
-default_session_mode = "agent"
+default_session_mode = "terminal"
 
 [notifications]
 
@@ -98,5 +98,5 @@ play_notification_sound = true
 [warpify]
 
 [warpify.ssh]
-use_ssh_tmux_wrapper = false
-ssh_tmux_deprecation_notice_pending = true
+use_ssh_tmux_wrapper = true
+ssh_tmux_deprecation_notice_pending = false
