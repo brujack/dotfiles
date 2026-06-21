@@ -3,7 +3,6 @@
 
 install_ubuntu_packages() {
   _install_ubuntu_base_packages  || return 1
-  _install_ubuntu_pyenv          || return 1
   _install_ubuntu_powershell     || return 1
   _install_ubuntu_go             || return 1
   _install_ubuntu_rust           || return 1
@@ -44,18 +43,6 @@ _install_ubuntu_base_packages() {
     printf "Installing workstation snap packages\\n"
     grep -vE '^[[:space:]]*(#|$)' ./ubuntu_workstation_snap_packages.txt | xargs -r sudo snap install
 
-  fi
-}
-
-_install_ubuntu_pyenv() {
-  printf "Installing pyenv\\n"
-  local _pyenv_script
-  _pyenv_script="$(mktemp)"
-  curl -fsSL https://pyenv.run -o "${_pyenv_script}" || { rm -f "${_pyenv_script}"; return 1; }
-  bash "${_pyenv_script}"
-  rm -f "${_pyenv_script}"
-  if [[ -x $(command -v pyenv) ]]; then
-    printf "pyenv is installed\\n"
   fi
 }
 
@@ -389,6 +376,8 @@ _install_ubuntu_brew_packages() {
     brew_install_formula mongosh
     brew_install_formula mongodb-atlas
     brew_install_formula neovim
+    brew_install_formula pyenv
+    brew_install_formula pyenv-virtualenv
     brew_install_formula rbenv
     brew_install_formula ripgrep
     brew_install_formula rustup

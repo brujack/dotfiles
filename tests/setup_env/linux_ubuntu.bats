@@ -119,19 +119,25 @@ teardown() {
   grep -q "xargs-stdin font-manager" "${MOCK_CALLS_FILE}"
 }
 
-# ── _install_ubuntu_pyenv ────────────────────────────────────────────────────
+# ── _install_ubuntu_brew_packages (pyenv via brew) ───────────────────────────
 
-@test "_install_ubuntu_pyenv: calls curl to download installer" {
-  run _install_ubuntu_pyenv
+@test "_install_ubuntu_brew_packages: installs pyenv via brew" {
+  run _install_ubuntu_brew_packages
   [ "$status" -eq 0 ]
-  grep -q "curl.*pyenv.run" "${MOCK_CALLS_FILE}"
+  grep -q "brew install pyenv" "${MOCK_CALLS_FILE}"
 }
 
-@test "_install_ubuntu_pyenv: returns 1 when curl fails" {
-  export MOCK_CURL_EXIT=1
-  local _rc=0
-  _install_ubuntu_pyenv || _rc=$?
-  [ "${_rc}" -ne 0 ]
+@test "_install_ubuntu_brew_packages: installs pyenv-virtualenv via brew" {
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 0 ]
+  grep -q "brew install pyenv-virtualenv" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_brew_packages: does not call pyenv.run curl installer" {
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 0 ]
+  run grep "pyenv.run" "${MOCK_CALLS_FILE:-/dev/null}"
+  [ "$status" -ne 0 ]
 }
 
 # ── _install_ubuntu_powershell ───────────────────────────────────────────────
