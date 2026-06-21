@@ -91,20 +91,15 @@ _install_ubuntu_go() {
 
 _install_ubuntu_rust() {
   if [[ -n ${HAS_RUST} ]]; then
-    printf "Installing Rust Ubuntu\\n"
-    if [[ ! -x $(command -v rustc) ]] || [[ ! -x $(command -v cargo) ]]; then
-      curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-    fi
+    printf "Configuring Rust Ubuntu\\n"
     if [[ -f ${HOME}/.cargo/env ]]; then
       # shellcheck disable=SC1090
       . ${HOME}/.cargo/env
     fi
-    if [[ -x $(command -v rustc) ]] && [[ -x $(command -v cargo) ]]; then
-      printf "Rust is installed\\n"
-      if ! command -v cargo-nextest &>/dev/null; then
-        printf "Installing cargo-nextest\\n"
-        curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C "${HOME}/.cargo/bin"
-      fi
+    if command -v rustup &>/dev/null; then
+      rustup self update
+      rustup update
+      rustup component add rust-analyzer
     fi
   fi
 }
@@ -340,6 +335,7 @@ _install_ubuntu_brew_packages() {
     brew_update
     brew_install_formula argocd
     brew_install_formula bat
+    brew_install_formula cargo-nextest
     brew_install_formula git-lfs
     brew_install_formula fzf
     brew_install_formula gh
