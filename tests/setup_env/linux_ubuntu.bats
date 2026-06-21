@@ -393,9 +393,9 @@ teardown() {
   grep -q "snap install helm" "${MOCK_CALLS_FILE}"
 }
 
-@test "_install_ubuntu_k8s_tools: no HAS_SNAP installs helm via official script" {
-  # baltocdn APT repo returns unsigned/NOSPLIT data on some networks and has no
-  # resolute suite; the version-agnostic get-helm-3 script is used instead.
+@test "_install_ubuntu_k8s_tools: does not call get-helm-3 curl installer" {
+  # helm curl installer removed; brew handles the no-snap case via
+  # _install_ubuntu_brew_packages.
   unset HAS_SNAP
   export HAS_K8S=1
   export KIND_VER="0.22.0"
@@ -404,21 +404,34 @@ teardown() {
   export TELEPRESENCE_URL="https://app.getambassador.io/download/tel2/linux/amd64/latest/telepresence"
   run _install_ubuntu_k8s_tools
   [ "$status" -eq 0 ]
-  grep -q "curl.*get-helm-3" "${MOCK_CALLS_FILE}"
-  ! grep -q "baltocdn" "${MOCK_CALLS_FILE}"
+  run grep "get-helm-3" "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
 }
 
-@test "_install_ubuntu_k8s_tools: helm script curl failure returns non-zero" {
-  unset HAS_SNAP
+@test "_install_ubuntu_k8s_tools: does not call install_kustomize curl installer" {
+  # kustomize curl installer removed; brew handles it via
+  # _install_ubuntu_brew_packages.
   export HAS_K8S=1
   export KIND_VER="0.22.0"
   export KIND_URL="https://kind.sigs.k8s.io/dl/v0.22.0/kind-linux-amd64"
   export KUBERNETES_VER="v1.29"
   export TELEPRESENCE_URL="https://app.getambassador.io/download/tel2/linux/amd64/latest/telepresence"
-  export MOCK_CURL_EXIT=1
-  local _rc=0
-  _install_ubuntu_k8s_tools || _rc=$?
-  [ "${_rc}" -ne 0 ]
+  run _install_ubuntu_k8s_tools
+  [ "$status" -eq 0 ]
+  run grep "install_kustomize.sh" "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+}
+
+@test "_install_ubuntu_brew_packages: installs helm via brew" {
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 0 ]
+  grep -q "brew install helm" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_brew_packages: installs kustomize via brew" {
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 0 ]
+  grep -q "brew install kustomize" "${MOCK_CALLS_FILE}"
 }
 
 # ── _install_ubuntu_hashicorp ────────────────────────────────────────────────
