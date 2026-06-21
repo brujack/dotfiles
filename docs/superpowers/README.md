@@ -97,7 +97,7 @@ Master status index for all specs and implementation plans in this directory.
 | 2026-06-17 | [ubuntu-2604-pr5](plans/2026-06-17-ubuntu-2604-pr5.md)                             | [spec](specs/2026-06-17-ubuntu-2604-pr5-design.md)                  | Done    |
 | 2026-06-18 | ubuntu-2604-p3 cleanup (PR #149)                                                   | [spec](specs/2026-06-17-ubuntu-2604-support-design.md)              | Done    |
 | 2026-06-19 | [pip-venv-audit](plans/2026-06-19-pip-venv-audit.md)                               | [spec](specs/2026-06-19-pip-venv-audit-design.md)                   | Done    |
-| 2026-06-21 | —                                                                                  | [spec](specs/2026-06-21-secure-curl-installs-design.md)             | Pending |
+| 2026-06-21 | [secure-curl-installs](plans/2026-06-21-secure-curl-installs.md)                   | [spec](specs/2026-06-21-secure-curl-installs-design.md)             | Pending |
 
 ---
 
