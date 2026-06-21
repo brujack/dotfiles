@@ -51,3 +51,11 @@ readonly AI_CONFIG_DIR="${PERSONAL_GITREPOS}/${AI_CONFIG}"
 WSL_HOME="/mnt/c/Users/${USER}"
 
 HOSTNAME=$(hostname -s)
+
+# oh-my-zsh bootstrap branch — no tagged releases; master is the distribution branch
+# update check: ./setup_env.sh -t check-versions --update
+OH_MY_ZSH_VER="master"
+
+# Homebrew install script commit SHA — content-addressable; avoids HEAD which can change
+# update check: ./setup_env.sh -t check-versions --update
+HOMEBREW_INSTALL_SHA="5e78e698e405a17b63b5fe41ff747f9fccf39472"
