@@ -73,6 +73,25 @@ teardown() {
   grep -q "nala install" "${MOCK_CALLS_FILE}"
 }
 
+@test "_install_ubuntu_base_packages: nala install uses DEBIAN_FRONTEND=noninteractive" {
+  # Regression: without DEBIAN_FRONTEND=noninteractive, dpkg post-install scripts
+  # (e.g. iperf3 daemon prompt) pop up ncurses dialogs that freeze WSL2 sessions.
+  export NOBLE=1
+  unset RESOLUTE HAS_SNAP
+  run _install_ubuntu_base_packages
+  [ "$status" -eq 0 ]
+  grep -q "DEBIAN_FRONTEND=noninteractive.*nala install" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_base_packages: apt install uses DEBIAN_FRONTEND=noninteractive" {
+  # Same regression: hwe kernel install can also trigger debconf prompts.
+  export NOBLE=1
+  unset RESOLUTE HAS_SNAP
+  run _install_ubuntu_base_packages
+  [ "$status" -eq 0 ]
+  grep -q "DEBIAN_FRONTEND=noninteractive.*apt install" "${MOCK_CALLS_FILE}"
+}
+
 @test "_install_ubuntu_base_packages: comment lines are not passed to nala" {
   # Regression: xargs -a fed comment lines straight to nala, and a comment
   # containing '--user' produced 'No such option: --user', aborting the whole

@@ -20,18 +20,18 @@ _install_ubuntu_base_packages() {
   sudo -H apt update
   if [[ -n ${NOBLE} ]]; then
     printf "Installing hwe, common, and 24.04 packages\\n"
-    sudo -H apt install --install-recommends linux-generic-hwe-24.04 -y
+    sudo -H DEBIAN_FRONTEND=noninteractive apt install --install-recommends linux-generic-hwe-24.04 -y
     check_and_install_nala
     # Strip comments/blank lines: xargs -a feeds every line to nala, and a
     # comment token like '--user' aborts the whole install ("No such option").
-    grep -vE '^[[:space:]]*(#|$)' ./ubuntu_common_packages.txt | xargs -r sudo nala install -y
-    grep -vE '^[[:space:]]*(#|$)' ./ubuntu_2404_packages.txt | xargs -r sudo nala install -y
+    grep -vE '^[[:space:]]*(#|$)' ./ubuntu_common_packages.txt | xargs -r sudo DEBIAN_FRONTEND=noninteractive nala install -y
+    grep -vE '^[[:space:]]*(#|$)' ./ubuntu_2404_packages.txt | xargs -r sudo DEBIAN_FRONTEND=noninteractive nala install -y
   elif [[ -n ${RESOLUTE} ]]; then
     printf "Installing hwe, common, and 26.04 packages\\n"
-    sudo -H apt install --install-recommends linux-generic-hwe-26.04 -y
+    sudo -H DEBIAN_FRONTEND=noninteractive apt install --install-recommends linux-generic-hwe-26.04 -y
     check_and_install_nala
-    grep -vE '^[[:space:]]*(#|$)' ./ubuntu_common_packages.txt | xargs -r sudo nala install -y
-    grep -vE '^[[:space:]]*(#|$)' ./ubuntu_2604_packages.txt | xargs -r sudo nala install -y
+    grep -vE '^[[:space:]]*(#|$)' ./ubuntu_common_packages.txt | xargs -r sudo DEBIAN_FRONTEND=noninteractive nala install -y
+    grep -vE '^[[:space:]]*(#|$)' ./ubuntu_2604_packages.txt | xargs -r sudo DEBIAN_FRONTEND=noninteractive nala install -y
   else
     log_error "Unsupported Ubuntu version: ${UBUNTU_VERSION:-unknown}"
     return 1
@@ -39,7 +39,7 @@ _install_ubuntu_base_packages() {
 
   if [[ -n ${HAS_SNAP} ]]; then
     printf "Installing workstation packages\\n"
-    grep -vE '^[[:space:]]*(#|$)' ./ubuntu_workstation_packages.txt | xargs -r sudo nala install -y
+    grep -vE '^[[:space:]]*(#|$)' ./ubuntu_workstation_packages.txt | xargs -r sudo DEBIAN_FRONTEND=noninteractive nala install -y
 
     printf "Installing workstation snap packages\\n"
     grep -vE '^[[:space:]]*(#|$)' ./ubuntu_workstation_snap_packages.txt | xargs -r sudo snap install
@@ -67,7 +67,7 @@ _install_ubuntu_powershell() {
     sudo -H dpkg -i ${HOME}/software_downloads/packages-microsoft-prod.deb
     sudo apt update
     sudo -H add-apt-repository universe
-    sudo -H apt install powershell -y
+    sudo -H DEBIAN_FRONTEND=noninteractive apt install powershell -y
     if [[ -x $(command -v pwsh) ]]; then
       printf "pwsh is installed\\n"
     fi
@@ -136,11 +136,11 @@ _install_ubuntu_docker() {
     $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
     sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
     sudo -H apt update
-    sudo -H apt install docker-ce -y
-    sudo -H apt install docker-ce-cli -y
-    sudo -H apt install containerd.io -y
-    sudo -H apt install docker-buildx-plugin -y
-    sudo -H apt install docker-compose-plugin -y
+    sudo -H DEBIAN_FRONTEND=noninteractive apt install docker-ce -y
+    sudo -H DEBIAN_FRONTEND=noninteractive apt install docker-ce-cli -y
+    sudo -H DEBIAN_FRONTEND=noninteractive apt install containerd.io -y
+    sudo -H DEBIAN_FRONTEND=noninteractive apt install docker-buildx-plugin -y
+    sudo -H DEBIAN_FRONTEND=noninteractive apt install docker-compose-plugin -y
     local _daemon_json="${_DOCKER_DAEMON_JSON:-/etc/docker/daemon.json}"
     if [[ ! -f ${_daemon_json} ]]; then
       printf "Configuring Docker for cgroup v2\\n"
@@ -191,7 +191,7 @@ _install_ubuntu_k8s_tools() {
   printf 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/%s/deb/ /\n' "${KUBERNETES_VER}" \
     | sudo tee /etc/apt/sources.list.d/kubernetes.list
   sudo -H apt update
-  sudo -H apt install kubectl -y
+  sudo -H DEBIAN_FRONTEND=noninteractive apt install kubectl -y
 
   if [[ -n ${HAS_SNAP} ]]; then
     sudo snap install helm --classic
@@ -296,7 +296,7 @@ _install_ubuntu_cloud_tools() {
     sudo rm -f /etc/apt/sources.list.d/archive_uri-https_deb_releases_teleport_dev_-noble.list
     echo "deb [signed-by=/usr/share/keyrings/teleport-pubkey.gpg] https://deb.releases.teleport.dev/ stable main" | sudo tee /etc/apt/sources.list.d/teleport.list
     sudo -H apt update
-    sudo -H apt install teleport -y
+    sudo -H DEBIAN_FRONTEND=noninteractive apt install teleport -y
     if [[ -x $(command -v tsh) ]]; then
       printf "Teleport is installed\\n"
     fi
@@ -312,7 +312,7 @@ _install_ubuntu_cloud_tools() {
     curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
     echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ ${_cf_codename} main" | sudo tee "${_cf_sources}"
     sudo apt-get update
-    sudo apt-get install cloudflare-warp -y
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install cloudflare-warp -y
     if [[ -x $(command -v cloudflared) ]]; then
       printf "cloudflared is installed\\n"
     fi
@@ -334,7 +334,7 @@ _install_ubuntu_cloud_tools() {
   sudo -H add-apt-repository \
   "deb [arch=$(dpkg --print-architecture)] http://packages.microsoft.com/repos/azure-cli/ $AZ_REPO main"
   sudo -H apt update
-  sudo -H apt install azure-cli -y
+  sudo -H DEBIAN_FRONTEND=noninteractive apt install azure-cli -y
   if [[ -x $(command -v az) ]]; then
     printf "az is installed\\n"
   fi
@@ -345,9 +345,9 @@ _install_ubuntu_cloud_tools() {
     echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
   fi
   sudo apt update
-  sudo -H apt install google-cloud-sdk -y
-  sudo -H apt install google-cloud-sdk-app-engine-go -y
-  sudo -H apt install google-cloud-cli -y
+  sudo -H DEBIAN_FRONTEND=noninteractive apt install google-cloud-sdk -y
+  sudo -H DEBIAN_FRONTEND=noninteractive apt install google-cloud-sdk-app-engine-go -y
+  sudo -H DEBIAN_FRONTEND=noninteractive apt install google-cloud-cli -y
 
   printf "Installing cf-terraforming Ubuntu\\n"
   if [[ ! -f ${HOME}/software_downloads/cf-terraforming_${CF_TERRAFORMING_VER}_linux_${_LINUX_ARCH}.tar.gz ]]; then
@@ -425,7 +425,7 @@ _install_ubuntu_gui_tools() {
     # VirtualBox has no ARM64 Linux build — amd64 only
     echo "deb [arch=amd64 signed-by=/usr/share/keyrings/oracle-virtualbox-2016.gpg] http://download.virtualbox.org/virtualbox/debian $(. /etc/os-release && echo "$VERSION_CODENAME") contrib" | sudo tee /etc/apt/sources.list.d/virtualbox.list
     sudo -H apt update
-    sudo -H apt install ${VIRTUALBOX_VER} -y
+    sudo -H DEBIAN_FRONTEND=noninteractive apt install ${VIRTUALBOX_VER} -y
     if [[ -x $(command -v vboxmanage) ]]; then
       printf "Virtualbox is installed\\n"
     fi
@@ -438,7 +438,7 @@ _install_ubuntu_gui_tools() {
     # shellcheck disable=SC2046
     curl -fsSL https://download.opensuse.org/repositories/home:manuelschneid3r/xUbuntu_$(lsb_release -rs)/Release.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/home_manuelschneid3r.gpg > /dev/null
     sudo -H apt update
-    sudo -H apt install albert -y
+    sudo -H DEBIAN_FRONTEND=noninteractive apt install albert -y
     if [[ -x $(command -v albert) ]]; then
       printf "Albert is installed Ubuntu Noble\\n"
     fi
@@ -449,7 +449,7 @@ _install_ubuntu_gui_tools() {
     # Microsoft Edge has no ARM64 Linux build — amd64 only
     sudo sh -c 'echo "deb [arch=amd64] https://packages.microsoft.com/repos/edge stable main" > /etc/apt/sources.list.d/microsoft-edge.list'
     sudo -H apt update
-    sudo -H apt install microsoft-edge-stable -y
+    sudo -H DEBIAN_FRONTEND=noninteractive apt install microsoft-edge-stable -y
   fi
 
   if [[ -n ${HAS_SNAP} ]]; then
@@ -502,7 +502,7 @@ _install_ubuntu_misc() {
     printf "Installing .net8 sdk\\n"
     # dotnet-sdk-8.0 is absent from some Ubuntu releases (e.g. 26.04 resolute);
     # don't abort the rest of setup if the package can't be located.
-    sudo -H apt install dotnet-sdk-8.0 -y || log_warn "dotnet-sdk-8.0 not available on this Ubuntu release; skipping"
+    sudo -H DEBIAN_FRONTEND=noninteractive apt install dotnet-sdk-8.0 -y || log_warn "dotnet-sdk-8.0 not available on this Ubuntu release; skipping"
   fi
 
   check_and_install_nala
