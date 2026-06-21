@@ -100,6 +100,17 @@ teardown() {
   [ "$status" -eq 1 ]
 }
 
+@test "install_homebrew: fetches Homebrew installer at pinned commit SHA, not HEAD" {
+  export MOCK_UNAME_S=Darwin
+  export MOCK_XCODE_SELECT_PRINT_PATH_EXIT=0
+  export MOCK_CURL_STDOUT="true"
+  run install_homebrew
+  run grep "Homebrew/install/HEAD" "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+  run grep "Homebrew/install/${HOMEBREW_INSTALL_SHA}" "${MOCK_CALLS_FILE}"
+  [ "$status" -eq 0 ]
+}
+
 # ── install_git_macos ────────────────────────────────────────────────────────
 
 @test "install_git_macos: git already in brew list" {

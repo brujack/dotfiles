@@ -3,6 +3,9 @@
 # Run once on a fresh Ubuntu machine before setup_env.sh.
 # Installs Homebrew prerequisites and Homebrew.
 
+# shellcheck source=lib/constants.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../lib/constants.sh"
+
 _bootstrap_check_linux() {
   if [[ $(uname -s) != "Linux" ]]; then
     printf "[ERROR] This script is Linux only.\n" >&2
@@ -45,7 +48,7 @@ _bootstrap_linux_install_homebrew() {
   fi
   printf "[INFO]  Installing Homebrew...\n"
   local _install_script
-  _install_script=$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh) || return 1
+  _install_script=$(curl -fsSL "https://raw.githubusercontent.com/Homebrew/install/${HOMEBREW_INSTALL_SHA}/install.sh") || return 1
   /bin/bash -c "${_install_script}"
 }
 
