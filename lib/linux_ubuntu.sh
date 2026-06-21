@@ -469,7 +469,12 @@ _install_ubuntu_misc() {
   if [[ -n ${HAS_DEVTOOLS} ]]; then
     if ! command -v tofu &>/dev/null; then
       printf "Installing opentofu\\n"
-      curl -fsSL https://get.opentofu.org/install-opentofu.sh | sudo sh -s -- --install-method deb
+      curl -fsSL https://packages.opentofu.org/opentofu/tofu/gpgkey \
+        | sudo gpg --dearmor -o /etc/apt/keyrings/opentofu-archive-keyring.gpg
+      printf "deb [signed-by=/etc/apt/keyrings/opentofu-archive-keyring.gpg] https://packages.opentofu.org/opentofu/tofu/any/ any main\n" \
+        | sudo DEBIAN_FRONTEND=noninteractive tee /etc/apt/sources.list.d/opentofu.list > /dev/null
+      sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq
+      sudo DEBIAN_FRONTEND=noninteractive apt-get install -y opentofu
       if command -v tofu &>/dev/null; then
         printf "opentofu is installed\\n"
       fi

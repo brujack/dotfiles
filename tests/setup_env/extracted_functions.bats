@@ -432,7 +432,7 @@ _make_fake_dotfiles() {
   grep -q "rustup self update" "${MOCK_CALLS_FILE}"
 }
 
-@test "update_rust calls curl for nextest update when nextest is installed" {
+@test "update_rust does not call curl for nextest when nextest is installed (brew manages updates)" {
   export UBUNTU=1
   export HAS_RUST=1
   unset MACOS
@@ -442,7 +442,9 @@ _make_fake_dotfiles() {
   mkdir -p "${FAKE_HOME}/.cargo/bin"
   export PATH="${_bin_dir}:${PATH}"
   run update_rust
-  grep -q "curl.*nexte.st" "${MOCK_CALLS_FILE}"
+  [ "$status" -eq 0 ]
+  run grep "curl.*nexte.st" "${MOCK_CALLS_FILE:-/dev/null}"
+  [ "$status" -ne 0 ]
 }
 
 @test "update_rust does not call curl for nextest when nextest is absent" {

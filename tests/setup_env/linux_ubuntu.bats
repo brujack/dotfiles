@@ -718,3 +718,27 @@ teardown() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"dotnet-sdk-8.0 not available"* ]]
 }
+
+@test "_install_ubuntu_misc: opentofu absent installs via apt (not piped sh)" {
+  export DOCKER_COMPOSE_VER="2.24.0"
+  export DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64"
+  export YQ_VER="4.40.5"
+  export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
+  export HAS_DEVTOOLS=1
+  run _install_ubuntu_misc
+  [ "$status" -eq 0 ]
+  grep -q "DEBIAN_FRONTEND=noninteractive.*apt-get install.*opentofu" "${MOCK_CALLS_FILE}"
+  run grep "install-opentofu.sh" "${MOCK_CALLS_FILE:-/dev/null}"
+  [ "$status" -ne 0 ]
+}
+
+@test "_install_ubuntu_misc: opentofu apt setup adds GPG key" {
+  export DOCKER_COMPOSE_VER="2.24.0"
+  export DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64"
+  export YQ_VER="4.40.5"
+  export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
+  export HAS_DEVTOOLS=1
+  run _install_ubuntu_misc
+  [ "$status" -eq 0 ]
+  grep -q "opentofu-archive-keyring.gpg" "${MOCK_CALLS_FILE}"
+}
