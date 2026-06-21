@@ -8,9 +8,22 @@ for arg in "$@"; do
   [[ "$arg" == "-H" ]] && continue
   args+=("$arg")
 done
+# Skip leading VAR=value env assignments (e.g. DEBIAN_FRONTEND=noninteractive);
+# export them so the exec'd child inherits them.
+cmd_start=0
+for ((i=0; i<${#args[@]}; i++)); do
+  if [[ "${args[$i]}" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; then
+    # shellcheck disable=SC2163
+    export "${args[$i]}"
+    cmd_start=$((i+1))
+  else
+    break
+  fi
+done
+real_args=("${args[@]:$cmd_start}")
 # Only exec the target if it exists — absolute paths like /etc/init.d/FAHClient
 # are absent on dev machines and should not cause exec to fail
-if [[ "${#args[@]}" -gt 0 ]] && { [[ -x "${args[0]}" ]] || command -v "${args[0]}" &>/dev/null; }; then
-  exec "${args[@]}"
+if [[ "${#real_args[@]}" -gt 0 ]] && { [[ -x "${real_args[0]}" ]] || command -v "${real_args[0]}" &>/dev/null; }; then
+  exec "${real_args[@]}"
 fi
 exit "${MOCK_SUDO_EXIT:-0}"
