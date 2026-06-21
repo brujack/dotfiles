@@ -260,6 +260,15 @@ teardown() {
   [[ "$output" == *"Homebrew update process completed successfully"* ]]
 }
 
+@test "brew_update passes --yes to suppress Homebrew 6.0 confirmation prompt" {
+  # Regression: Homebrew 6.0 added a confirmation prompt before upgrading
+  # multiple packages; without --yes the update workflow hangs waiting for input.
+  export MOCK_ID_U=1000
+  run brew_update
+  [ "$status" -eq 0 ]
+  grep -q "brew upgrade --yes" "${MOCK_CALLS_FILE}"
+}
+
 @test "brew_update does not proceed past install_homebrew when install_homebrew fails" {
   # Subshell approach: remove brew from PATH so command -v brew fails, then stub
   # install_homebrew to return 1. With || return 1 in place the function stops before

@@ -86,13 +86,13 @@ brew_update() {
   brew trust cloudflare/cloudflare datawire/blackbird getagentseal/codeburn gitguardian/tap go-task/tap oven-sh/bun redpanda-data/tap snyk/tap teamookla/speedtest 2>/dev/null || true
 
   log_info "Upgrading installed formulae..."
-  if ! brew upgrade; then
+  if ! brew upgrade --yes; then
     log_error "Failed to upgrade formulae. Aborting."
     return 1
   fi
 
   log_info "Upgrading installed casks..."
-  if ! brew upgrade --cask --greedy; then
+  if ! brew upgrade --cask --greedy --yes; then
     log_warn "Some casks failed to upgrade; continuing."
   fi
 
