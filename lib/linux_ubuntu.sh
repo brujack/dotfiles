@@ -505,6 +505,18 @@ _install_ubuntu_misc() {
     sudo -H apt install dotnet-sdk-8.0 -y || log_warn "dotnet-sdk-8.0 not available on this Ubuntu release; skipping"
   fi
 
+  if [[ -n ${HAS_DEVTOOLS} ]]; then
+    if ! command -v tofu &>/dev/null; then
+      printf "Installing opentofu\\n"
+      curl -fsSL https://get.opentofu.org/install-opentofu.sh | sudo sh -s -- --install-method deb
+      if command -v tofu &>/dev/null; then
+        printf "opentofu is installed\\n"
+      fi
+    else
+      printf "opentofu already installed\\n"
+    fi
+  fi
+
   check_and_install_nala
   sudo -H nala autoremove -y
 }
