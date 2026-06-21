@@ -58,7 +58,6 @@ elif [[ -n ${LINUX} ]]; then
       _rbenv_bin="${_OVERRIDE_RBENV_BINARY:-/home/linuxbrew/.linuxbrew/bin/rbenv}"
       if [[ -f ${_rbenv_bin} ]]; then
         eval "$(${_rbenv_bin} init - --no-rehash zsh)"
-        "${_rbenv_bin}" local "${RUBY_VER}" 2>/dev/null || true
       fi
     fi
   fi

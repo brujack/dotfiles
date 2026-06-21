@@ -137,6 +137,8 @@ setup() {
 #!/usr/bin/env bash
 if [[ "$1" == "init" ]]; then
   printf '_RBENV_INIT_CALLED=1\n'
+elif [[ "$1" == "local" ]]; then
+  printf '_RBENV_LOCAL_CALLED=1\n'
 fi
 exit 0
 EOF
@@ -149,10 +151,12 @@ EOF
     export _OVERRIDE_RBENV_BINARY='${_tmp_dir}/mock_rbenv'
     source '${ZSHRC_D}/5_general.zsh' 2>/dev/null
     printf '%s\n' \"\${_RBENV_INIT_CALLED:-unset}\"
+    printf '%s\n' \"\${_RBENV_LOCAL_CALLED:-unset}\"
   "
   rm -rf "${_tmp_dir}"
   [ "$status" -eq 0 ]
-  [ "$output" = "1" ]
+  [ "$(printf '%s\n' "$output" | head -1)" = "1" ]
+  [ "$(printf '%s\n' "$output" | tail -1)" = "unset" ]
 }
 
 @test "5_general.zsh initializes rbenv on Linux Resolute CRUNCHER" {
@@ -162,6 +166,8 @@ EOF
 #!/usr/bin/env bash
 if [[ "$1" == "init" ]]; then
   printf '_RBENV_INIT_CALLED=1\n'
+elif [[ "$1" == "local" ]]; then
+  printf '_RBENV_LOCAL_CALLED=1\n'
 fi
 exit 0
 EOF
@@ -174,10 +180,12 @@ EOF
     export _OVERRIDE_RBENV_BINARY='${_tmp_dir}/mock_rbenv'
     source '${ZSHRC_D}/5_general.zsh' 2>/dev/null
     printf '%s\n' \"\${_RBENV_INIT_CALLED:-unset}\"
+    printf '%s\n' \"\${_RBENV_LOCAL_CALLED:-unset}\"
   "
   rm -rf "${_tmp_dir}"
   [ "$status" -eq 0 ]
-  [ "$output" = "1" ]
+  [ "$(printf '%s\n' "$output" | head -1)" = "1" ]
+  [ "$(printf '%s\n' "$output" | tail -1)" = "unset" ]
 }
 
 @test "5_general.zsh skips rbenv when rbenv binary absent" {
@@ -190,4 +198,36 @@ EOF
   "
   [ "$status" -eq 0 ]
   [ "$output" = "unset" ]
+}
+
+@test "5_general.zsh does not call rbenv local (would overwrite project .ruby-version)" {
+  local _tmp_dir _project_dir
+  _tmp_dir="$(mktemp -d)"
+  _project_dir="$(mktemp -d)"
+  printf '3.2.0\n' > "${_project_dir}/.ruby-version"
+  cat > "${_tmp_dir}/mock_rbenv" << 'EOF'
+#!/usr/bin/env bash
+if [[ "$1" == "init" ]]; then
+  printf '_RBENV_INIT_CALLED=1\n'
+elif [[ "$1" == "local" ]]; then
+  printf '_RBENV_LOCAL_CALLED=1\n'
+fi
+exit 0
+EOF
+  chmod +x "${_tmp_dir}/mock_rbenv"
+
+  run zsh -c "
+    unset MACOS
+    cd '${_project_dir}'
+    export PATH=\"${REPO_ROOT}/tests/mocks:\${PATH}\"
+    export LINUX=1; export UBUNTU=1; export NOBLE=1; export WORKSTATION=1
+    export _OVERRIDE_RBENV_BINARY='${_tmp_dir}/mock_rbenv'
+    source '${ZSHRC_D}/5_general.zsh' 2>/dev/null
+    printf '%s\n' \"\${_RBENV_LOCAL_CALLED:-unset}\"
+    cat '${_project_dir}/.ruby-version'
+  "
+  rm -rf "${_tmp_dir}" "${_project_dir}"
+  [ "$status" -eq 0 ]
+  [ "$(printf '%s\n' "$output" | head -1)" = "unset" ]
+  [ "$(printf '%s\n' "$output" | tail -1)" = "3.2.0" ]
 }
