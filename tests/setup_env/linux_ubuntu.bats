@@ -249,6 +249,15 @@ teardown() {
   [ "$status" -eq 0 ]
 }
 
+@test "_install_ubuntu_rust: HAS_RUST set calls rustup update and component add when rustup available" {
+  export HAS_RUST=1
+  run _install_ubuntu_rust
+  [ "$status" -eq 0 ]
+  grep -q "rustup self update" "${MOCK_CALLS_FILE}"
+  grep -q "rustup update" "${MOCK_CALLS_FILE}"
+  grep -q "rustup component add rust-analyzer" "${MOCK_CALLS_FILE}"
+}
+
 # ── _install_go_from_tarball ──────────────────────────────────────────────────
 
 @test "_install_go_from_tarball: moves software_downloads/go to /usr/local/go when present" {
@@ -741,4 +750,15 @@ teardown() {
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
   grep -q "opentofu-archive-keyring.gpg" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_misc: opentofu creates /etc/apt/keyrings before GPG import" {
+  export DOCKER_COMPOSE_VER="2.24.0"
+  export DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64"
+  export YQ_VER="4.40.5"
+  export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
+  export HAS_DEVTOOLS=1
+  run _install_ubuntu_misc
+  [ "$status" -eq 0 ]
+  grep -q "mkdir.*-p.*/etc/apt/keyrings" "${MOCK_CALLS_FILE}"
 }
