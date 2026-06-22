@@ -5,12 +5,12 @@ install_ubuntu_packages() {
   _install_ubuntu_base_packages  || return 1
   _install_ubuntu_powershell     || return 1
   _install_ubuntu_go             || return 1
-  _install_ubuntu_rust           || return 1
   _install_ubuntu_docker         || return 1
   _install_ubuntu_k8s_tools      || return 1
   _install_ubuntu_hashicorp      || return 1
   _install_ubuntu_cloud_tools    || return 1
   _install_ubuntu_brew_packages  || return 1
+  _install_ubuntu_rust           || return 1
   _install_ubuntu_gui_tools      || return 1
   _install_ubuntu_misc           || return 1
 }
@@ -469,6 +469,7 @@ _install_ubuntu_misc() {
   if [[ -n ${HAS_DEVTOOLS} ]]; then
     if ! command -v tofu &>/dev/null; then
       printf "Installing opentofu\\n"
+      sudo mkdir -p /etc/apt/keyrings
       curl -fsSL https://packages.opentofu.org/opentofu/tofu/gpgkey \
         | sudo gpg --dearmor -o /etc/apt/keyrings/opentofu-archive-keyring.gpg
       printf "deb [signed-by=/etc/apt/keyrings/opentofu-archive-keyring.gpg] https://packages.opentofu.org/opentofu/tofu/any/ any main\n" \
