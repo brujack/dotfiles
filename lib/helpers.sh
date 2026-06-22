@@ -613,7 +613,7 @@ setup_dotfile_symlinks() {
 
   log_info "Installing Oh My ZSH..."
   if [[ ! -d ${HOME}/.oh-my-zsh ]]; then
-    bash -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+    git clone --depth 1 --branch "${OH_MY_ZSH_VER}" https://github.com/ohmyzsh/ohmyzsh.git "${HOME}/.oh-my-zsh"
     if [[ -d ${HOME}/.oh-my-zsh ]]; then
       log_info "Installed Oh My ZSH"
     fi

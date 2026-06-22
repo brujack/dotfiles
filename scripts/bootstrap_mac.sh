@@ -3,6 +3,9 @@
 # Run once on a fresh Mac before setup_env.sh.
 # Installs Homebrew and bash 5 — the only two prerequisites for setup_env.sh.
 
+# shellcheck source=lib/constants.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../lib/constants.sh"
+
 _bootstrap_check_macos() {
   if [[ $(uname -s) != "Darwin" ]]; then
     printf "[ERROR] This script is macOS only.\n" >&2
@@ -17,7 +20,7 @@ _bootstrap_mac_install_homebrew() {
   fi
   printf "[INFO]  Installing Homebrew...\n"
   local _script
-  _script=$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh) || return 1
+  _script=$(curl -fsSL "https://raw.githubusercontent.com/Homebrew/install/${HOMEBREW_INSTALL_SHA}/install.sh") || return 1
   /bin/bash -c "${_script}"
 }
 

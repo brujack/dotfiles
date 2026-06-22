@@ -662,6 +662,19 @@ teardown() {
   grep -q "ohmyzsh" "${MOCK_CALLS_FILE}"
 }
 
+@test "setup_dotfile_symlinks: installs oh-my-zsh via git clone (not curl)" {
+  local _home="${BATS_TEST_TMPDIR}/home"
+  mkdir -p "${_home}"
+  export HOME="${_home}"
+  export PERSONAL_GITREPOS="${BATS_TEST_TMPDIR}/git-repos/personal"
+  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
+  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude" "${_OVERRIDE_AI_CONFIG_DIR}/.cursor"
+  run setup_dotfile_symlinks
+  grep -q "git clone.*ohmyzsh" "${MOCK_CALLS_FILE}"
+  run grep "curl.*ohmyzsh" "${MOCK_CALLS_FILE:-/dev/null}"
+  [ "$status" -ne 0 ]
+}
+
 # ── setup_dotfile_symlinks: TPM ───────────────────────────────────────────────
 
 @test "setup_dotfile_symlinks: skips TPM when already installed" {

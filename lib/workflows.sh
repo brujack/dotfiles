@@ -589,6 +589,49 @@ _prompt_version_update() {
   fi
 }
 
+_check_cv_oh_my_zsh() {
+  local _latest _pinned="${OH_MY_ZSH_VER}"
+  _latest=$(curl -fsSL "https://api.github.com/repos/ohmyzsh/ohmyzsh/releases/latest" \
+    2>/dev/null | grep '"tag_name"' | cut -d'"' -f4)
+  if [[ -z "${_latest}" ]]; then
+    printf "  [WARN]     %-14s could not fetch latest version\n" "oh-my-zsh"
+    _warned=$(( _warned + 1 ))
+    return 0
+  fi
+  if [[ "${_pinned}" == "${_latest}" ]]; then
+    printf "  [OK]       %-14s pinned=%-10s latest=%s\n" "oh-my-zsh" "${_pinned}" "${_latest}"
+    _ok=$(( _ok + 1 ))
+  else
+    printf "  [OUTDATED] %-14s pinned=%-10s latest=%s\n" "oh-my-zsh" "${_pinned}" "${_latest}"
+    _outdated=$(( _outdated + 1 ))
+    if [[ -n ${UPDATE_VERSIONS:-} ]]; then
+      _prompt_version_update "oh-my-zsh" "OH_MY_ZSH_VER" "${_pinned}" "${_latest}"
+    fi
+  fi
+}
+
+_check_cv_homebrew_install() {
+  local _latest _pinned="${HOMEBREW_INSTALL_SHA}"
+  _latest=$(curl -fsSL "https://api.github.com/repos/Homebrew/install/commits/master" \
+    2>/dev/null | grep '"sha"' | head -1 | cut -d'"' -f4)
+  if [[ -z "${_latest}" ]]; then
+    printf "  [WARN]     %-14s could not fetch latest SHA\n" "homebrew-install"
+    _warned=$(( _warned + 1 ))
+    return 0
+  fi
+  local _pin_short="${_pinned:0:12}" _latest_short="${_latest:0:12}"
+  if [[ "${_pinned}" == "${_latest}" ]]; then
+    printf "  [OK]       %-14s pinned=%s latest=%s\n" "homebrew-install" "${_pin_short}" "${_latest_short}"
+    _ok=$(( _ok + 1 ))
+  else
+    printf "  [OUTDATED] %-14s pinned=%s latest=%s\n" "homebrew-install" "${_pin_short}" "${_latest_short}"
+    _outdated=$(( _outdated + 1 ))
+    if [[ -n ${UPDATE_VERSIONS:-} ]]; then
+      _prompt_version_update "homebrew-install" "HOMEBREW_INSTALL_SHA" "${_pinned}" "${_latest}"
+    fi
+  fi
+}
+
 run_check_versions() {
   local _outdated=0 _skipped=0 _warned=0 _ok=0
 
@@ -619,6 +662,8 @@ run_check_versions() {
   _run_cv_check "shellcheck" "${SHELLCHECK_VER}"  "koalaman/shellcheck" "shellcheck --version" "[0-9]+\.[0-9]+\.[0-9]+"    "SHELLCHECK_VER"
   _run_cv_check "vagrant"    "${VAGRANT_VER}"     "hashicorp/vagrant"   "vagrant --version"    "[0-9]+\.[0-9]+\.[0-9]+"    "VAGRANT_VER"
   _run_cv_check "gitleaks"  "${GITLEAKS_VER}"    "gitleaks/gitleaks"   "gitleaks version"     "[0-9]+\.[0-9]+\.[0-9]+"    "GITLEAKS_VER"
+  _check_cv_oh_my_zsh
+  _check_cv_homebrew_install
 
   printf "\n%d outdated, %d skipped, %d warnings, %d OK\n" \
     "${_outdated}" "${_skipped}" "${_warned}" "${_ok}"

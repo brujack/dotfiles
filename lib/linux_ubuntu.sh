@@ -3,7 +3,6 @@
 
 install_ubuntu_packages() {
   _install_ubuntu_base_packages  || return 1
-  _install_ubuntu_pyenv          || return 1
   _install_ubuntu_powershell     || return 1
   _install_ubuntu_go             || return 1
   _install_ubuntu_rust           || return 1
@@ -44,18 +43,6 @@ _install_ubuntu_base_packages() {
     printf "Installing workstation snap packages\\n"
     grep -vE '^[[:space:]]*(#|$)' ./ubuntu_workstation_snap_packages.txt | xargs -r sudo snap install
 
-  fi
-}
-
-_install_ubuntu_pyenv() {
-  printf "Installing pyenv\\n"
-  local _pyenv_script
-  _pyenv_script="$(mktemp)"
-  curl -fsSL https://pyenv.run -o "${_pyenv_script}" || { rm -f "${_pyenv_script}"; return 1; }
-  bash "${_pyenv_script}"
-  rm -f "${_pyenv_script}"
-  if [[ -x $(command -v pyenv) ]]; then
-    printf "pyenv is installed\\n"
   fi
 }
 
@@ -104,20 +91,15 @@ _install_ubuntu_go() {
 
 _install_ubuntu_rust() {
   if [[ -n ${HAS_RUST} ]]; then
-    printf "Installing Rust Ubuntu\\n"
-    if [[ ! -x $(command -v rustc) ]] || [[ ! -x $(command -v cargo) ]]; then
-      curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-    fi
+    printf "Configuring Rust Ubuntu\\n"
     if [[ -f ${HOME}/.cargo/env ]]; then
       # shellcheck disable=SC1090
       . ${HOME}/.cargo/env
     fi
-    if [[ -x $(command -v rustc) ]] && [[ -x $(command -v cargo) ]]; then
-      printf "Rust is installed\\n"
-      if ! command -v cargo-nextest &>/dev/null; then
-        printf "Installing cargo-nextest\\n"
-        curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C "${HOME}/.cargo/bin"
-      fi
+    if command -v rustup &>/dev/null; then
+      rustup self update
+      rustup update
+      rustup component add rust-analyzer
     fi
   fi
 }
@@ -196,34 +178,8 @@ _install_ubuntu_k8s_tools() {
   if [[ -n ${HAS_SNAP} ]]; then
     sudo snap install helm --classic
   fi
-  # can't use snap on wsl2; the baltocdn APT repo serves unsigned/NOSPLIT data
-  # on some networks and has no resolute suite, so use the official installer.
-  if [[ -z ${HAS_SNAP} ]]; then
-    local _helm_script
-    _helm_script="$(mktemp)"
-    curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 -o "${_helm_script}" || { rm -f "${_helm_script}"; return 1; }
-    bash "${_helm_script}" || { rm -f "${_helm_script}"; return 1; }
-    rm -f "${_helm_script}"
-    if [[ -x $(command -v helm) ]]; then
-      printf "helm is installed\\n"
-    fi
-  fi
-
-  printf "Installing kustomize\\n"
-  cd ${HOME}/software_downloads || return 1
-  local _kustomize_script
-  _kustomize_script="$(mktemp)"
-  curl -fsSL "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" -o "${_kustomize_script}" || { rm -f "${_kustomize_script}"; return 1; }
-  bash "${_kustomize_script}"
-  rm -f "${_kustomize_script}"
-  if [[ -f ${HOME}/software_downloads/kustomize ]]; then
-    sudo -H mv ${HOME}/software_downloads/kustomize /usr/local/bin/kustomize
-    sudo chmod 755 /usr/local/bin/kustomize
-    sudo chown root:root /usr/local/bin/kustomize
-    if [[ -x $(command -v kustomize) ]]; then
-      printf "kustomize is installed\\n"
-    fi
-  fi
+  # helm and kustomize on non-snap systems are installed via brew in
+  # _install_ubuntu_brew_packages(); no curl installer needed here.
 }
 
 _install_ubuntu_hashicorp() {
@@ -379,16 +335,21 @@ _install_ubuntu_brew_packages() {
     brew_update
     brew_install_formula argocd
     brew_install_formula bat
+    brew_install_formula cargo-nextest
     brew_install_formula git-lfs
     brew_install_formula fzf
     brew_install_formula gh
     brew_install_formula hadolint
+    brew_install_formula helm
     brew_install_formula k9s
+    brew_install_formula kustomize
     brew_install_formula lazydocker
     brew_install_formula linkerd
     brew_install_formula mongosh
     brew_install_formula mongodb-atlas
     brew_install_formula neovim
+    brew_install_formula pyenv
+    brew_install_formula pyenv-virtualenv
     brew_install_formula rbenv
     brew_install_formula ripgrep
     brew_install_formula rustup
@@ -508,7 +469,12 @@ _install_ubuntu_misc() {
   if [[ -n ${HAS_DEVTOOLS} ]]; then
     if ! command -v tofu &>/dev/null; then
       printf "Installing opentofu\\n"
-      curl -fsSL https://get.opentofu.org/install-opentofu.sh | sudo sh -s -- --install-method deb
+      curl -fsSL https://packages.opentofu.org/opentofu/tofu/gpgkey \
+        | sudo gpg --dearmor -o /etc/apt/keyrings/opentofu-archive-keyring.gpg
+      printf "deb [signed-by=/etc/apt/keyrings/opentofu-archive-keyring.gpg] https://packages.opentofu.org/opentofu/tofu/any/ any main\n" \
+        | sudo DEBIAN_FRONTEND=noninteractive tee /etc/apt/sources.list.d/opentofu.list > /dev/null
+      sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq
+      sudo DEBIAN_FRONTEND=noninteractive apt-get install -y opentofu
       if command -v tofu &>/dev/null; then
         printf "opentofu is installed\\n"
       fi

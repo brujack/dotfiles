@@ -51,9 +51,6 @@ update_rust() {
     else
       log_warn "rustup not found; skipping Rust update"
     fi
-    if [[ ${_rustup_found} -eq 1 ]] && command -v cargo-nextest &>/dev/null; then
-      curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C "${HOME}/.cargo/bin"
-    fi
   fi
 }
 

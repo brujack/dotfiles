@@ -79,19 +79,19 @@ teardown() {
   [[ "$output" == *"rustup not found"* ]]
 }
 
-@test "update_rust: updates nextest when rustup found and cargo-nextest available" {
+@test "update_rust: does not call nextest curl when rustup found (brew manages updates)" {
   export UBUNTU=1
   export HAS_RUST=1
   mkdir -p "${HOME}/.cargo/bin"
   cp "${BATS_TEST_DIRNAME}/../../tests/mocks/rustup" "${HOME}/.cargo/bin/rustup"
   chmod +x "${HOME}/.cargo/bin/rustup"
-  # Create cargo-nextest stub in .cargo/bin so command -v finds it
   printf '#!/usr/bin/env bash\n' > "${HOME}/.cargo/bin/cargo-nextest"
   chmod +x "${HOME}/.cargo/bin/cargo-nextest"
   export PATH="${HOME}/.cargo/bin:${PATH}"
   run update_rust
   [ "$status" -eq 0 ]
-  grep -q "get.nexte.st" "${MOCK_CALLS_FILE}"
+  run grep "nexte.st" "${MOCK_CALLS_FILE:-/dev/null}"
+  [ "$status" -ne 0 ]
 }
 
 @test "update_rust: skips nextest update when rustup not found" {

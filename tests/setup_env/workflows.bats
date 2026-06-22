@@ -849,6 +849,48 @@ setup_constants_copy() {
   grep -q "gitleaks" "${_checked_tools}"
 }
 
+@test "run_check_versions checks oh-my-zsh tag" {
+  local _checked="${BATS_TEST_TMPDIR}/checked"
+  _check_cv_oh_my_zsh() { printf "oh-my-zsh\n" >> "${_checked}"; }
+  run_check_versions
+  grep -q "oh-my-zsh" "${_checked}"
+}
+
+@test "run_check_versions checks homebrew-install SHA" {
+  local _checked="${BATS_TEST_TMPDIR}/checked"
+  _check_cv_homebrew_install() { printf "homebrew-install\n" >> "${_checked}"; }
+  run_check_versions
+  grep -q "homebrew-install" "${_checked}"
+}
+
+@test "_check_cv_oh_my_zsh emits WARN when curl returns empty (no releases)" {
+  local _ok=0 _outdated=0 _warned=0
+  curl() { printf ""; }
+  export -f curl
+  local _out
+  _out=$(_check_cv_oh_my_zsh 2>&1)
+  [[ "${_out}" == *"[WARN]"* ]] || [[ "${_warned}" -eq 1 ]]
+}
+
+@test "_check_cv_homebrew_install emits OK when SHA matches" {
+  local _ok=0 _outdated=0 _warned=0
+  HOMEBREW_INSTALL_SHA="abc123abc123abc123abc123abc123abc123abc1"
+  curl() { printf '{"sha":"abc123abc123abc123abc123abc123abc123abc1","commit":{}}'; }
+  export -f curl
+  _check_cv_homebrew_install
+  [[ "${_ok}" -eq 1 ]]
+}
+
+@test "_check_cv_homebrew_install emits OUTDATED when SHA differs" {
+  local _ok=0 _outdated=0 _warned=0
+  HOMEBREW_INSTALL_SHA="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  curl() { printf '{"sha":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","commit":{}}'; }
+  export -f curl
+  local _out
+  _out=$(_check_cv_homebrew_install 2>&1)
+  [[ "${_out}" == *"[OUTDATED]"* ]]
+}
+
 # ── run_update summary integration ────────────────────────────────────────────
 
 @test "run_update calls _update_summary at end" {
@@ -1358,9 +1400,11 @@ setup_constants_copy() {
 }
 
 @test "run_check_versions counts warned tools in summary" {
+  # 8 tools via _run_cv_check emit [WARN] + 2 new functions (_check_cv_oh_my_zsh,
+  # _check_cv_homebrew_install) also emit [WARN] when curl fails in test env = 10 total
   _check_one_version() { printf "  [WARN]     %-12s could not fetch latest version\n" "$1"; }
   run run_check_versions
-  [[ "$output" == *"8 warnings"* ]]
+  [[ "$output" == *"10 warnings"* ]]
 }
 
 @test "run_check_versions counts OK tools in summary" {

@@ -119,19 +119,25 @@ teardown() {
   grep -q "xargs-stdin font-manager" "${MOCK_CALLS_FILE}"
 }
 
-# ── _install_ubuntu_pyenv ────────────────────────────────────────────────────
+# ── _install_ubuntu_brew_packages (pyenv via brew) ───────────────────────────
 
-@test "_install_ubuntu_pyenv: calls curl to download installer" {
-  run _install_ubuntu_pyenv
+@test "_install_ubuntu_brew_packages: installs pyenv via brew" {
+  run _install_ubuntu_brew_packages
   [ "$status" -eq 0 ]
-  grep -q "curl.*pyenv.run" "${MOCK_CALLS_FILE}"
+  grep -q "brew install pyenv" "${MOCK_CALLS_FILE}"
 }
 
-@test "_install_ubuntu_pyenv: returns 1 when curl fails" {
-  export MOCK_CURL_EXIT=1
-  local _rc=0
-  _install_ubuntu_pyenv || _rc=$?
-  [ "${_rc}" -ne 0 ]
+@test "_install_ubuntu_brew_packages: installs pyenv-virtualenv via brew" {
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 0 ]
+  grep -q "brew install pyenv-virtualenv" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_brew_packages: does not call pyenv.run curl installer" {
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 0 ]
+  run grep "pyenv.run" "${MOCK_CALLS_FILE:-/dev/null}"
+  [ "$status" -ne 0 ]
 }
 
 # ── _install_ubuntu_powershell ───────────────────────────────────────────────
@@ -213,68 +219,32 @@ teardown() {
   ! grep -q "rustup" "${MOCK_CALLS_FILE}"
 }
 
-@test "_install_ubuntu_rust: HAS_RUST set calls curl for rustup installer" {
+@test "_install_ubuntu_rust: HAS_RUST set skips rustup curl (brew provides rustup)" {
   export HAS_RUST=1
-  # Override PATH to a minimal set that excludes cargo bin dirs, so
-  # command -v rustc/cargo returns empty and the install guard runs curl.
-  local _orig_path="${PATH}"
-  # Build a PATH that only contains the mocks dir and essential system dirs,
-  # explicitly excluding any path component containing "cargo" or ".cargo".
-  local _clean_path=""
-  IFS=: read -ra _parts <<< "${PATH}"
-  for _p in "${_parts[@]}"; do
-    [[ "${_p}" == *cargo* ]] && continue
-    [[ -z "${_clean_path}" ]] && _clean_path="${_p}" || _clean_path="${_clean_path}:${_p}"
-  done
-  export PATH="${_clean_path}"
   run _install_ubuntu_rust
-  export PATH="${_orig_path}"
   [ "$status" -eq 0 ]
-  grep -q "curl.*rustup.rs" "${MOCK_CALLS_FILE}"
+  run grep "sh.rustup.rs" "${MOCK_CALLS_FILE:-/dev/null}"
+  [ "$status" -ne 0 ]
 }
 
-@test "_install_ubuntu_rust: installs cargo-nextest when rust installed but nextest absent" {
+@test "_install_ubuntu_rust: does not call nextest curl installer" {
   export HAS_RUST=1
-  local _bin_dir="${BATS_TEST_TMPDIR}/fakebin"
-  mkdir -p "${_bin_dir}"
-  printf '#!/usr/bin/env bash\n' > "${_bin_dir}/rustc" && chmod +x "${_bin_dir}/rustc"
-  printf '#!/usr/bin/env bash\n' > "${_bin_dir}/cargo" && chmod +x "${_bin_dir}/cargo"
-  mkdir -p "${HOME}/.cargo/bin"
-  # Strip any dir containing cargo-nextest from PATH so the absence guard runs
-  local _clean_path=""
-  IFS=: read -ra _parts <<< "${PATH}"
-  for _p in "${_parts[@]}"; do
-    [[ -x "${_p}/cargo-nextest" ]] && continue
-    [[ -z "${_clean_path}" ]] && _clean_path="${_p}" || _clean_path="${_clean_path}:${_p}"
-  done
-  export PATH="${_bin_dir}:${_clean_path}"
-  _install_ubuntu_rust
-  grep -q "curl.*nexte.st" "${MOCK_CALLS_FILE}"
+  run _install_ubuntu_rust
+  [ "$status" -eq 0 ]
+  run grep "nexte.st" "${MOCK_CALLS_FILE:-/dev/null}"
+  [ "$status" -ne 0 ]
 }
 
-@test "_install_ubuntu_rust: skips cargo-nextest install when already present" {
-  export HAS_RUST=1
-  local _bin_dir="${BATS_TEST_TMPDIR}/fakebin"
-  mkdir -p "${_bin_dir}"
-  printf '#!/usr/bin/env bash\n' > "${_bin_dir}/rustc"        && chmod +x "${_bin_dir}/rustc"
-  printf '#!/usr/bin/env bash\n' > "${_bin_dir}/cargo"        && chmod +x "${_bin_dir}/cargo"
-  printf '#!/usr/bin/env bash\n' > "${_bin_dir}/cargo-nextest" && chmod +x "${_bin_dir}/cargo-nextest"
-  mkdir -p "${HOME}/.cargo/bin"
-  export PATH="${_bin_dir}:${PATH}"
-  _install_ubuntu_rust
-  ! grep -q "curl.*nexte.st" "${MOCK_CALLS_FILE}"
+@test "_install_ubuntu_brew_packages: installs cargo-nextest via brew" {
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 0 ]
+  grep -q "brew install cargo-nextest" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_rust: sources .cargo/env when file exists" {
   export HAS_RUST=1
-  local _bin_dir="${BATS_TEST_TMPDIR}/fakebin"
-  mkdir -p "${_bin_dir}"
-  printf '#!/usr/bin/env bash\n' > "${_bin_dir}/rustc"         && chmod +x "${_bin_dir}/rustc"
-  printf '#!/usr/bin/env bash\n' > "${_bin_dir}/cargo"         && chmod +x "${_bin_dir}/cargo"
-  printf '#!/usr/bin/env bash\n' > "${_bin_dir}/cargo-nextest" && chmod +x "${_bin_dir}/cargo-nextest"
-  mkdir -p "${HOME}/.cargo/bin"
+  mkdir -p "${HOME}/.cargo"
   printf '# cargo env stub\n' > "${HOME}/.cargo/env"
-  export PATH="${_bin_dir}:${PATH}"
   run _install_ubuntu_rust
   [ "$status" -eq 0 ]
 }
@@ -387,9 +357,9 @@ teardown() {
   grep -q "snap install helm" "${MOCK_CALLS_FILE}"
 }
 
-@test "_install_ubuntu_k8s_tools: no HAS_SNAP installs helm via official script" {
-  # baltocdn APT repo returns unsigned/NOSPLIT data on some networks and has no
-  # resolute suite; the version-agnostic get-helm-3 script is used instead.
+@test "_install_ubuntu_k8s_tools: does not call get-helm-3 curl installer" {
+  # helm curl installer removed; brew handles the no-snap case via
+  # _install_ubuntu_brew_packages.
   unset HAS_SNAP
   export HAS_K8S=1
   export KIND_VER="0.22.0"
@@ -398,21 +368,34 @@ teardown() {
   export TELEPRESENCE_URL="https://app.getambassador.io/download/tel2/linux/amd64/latest/telepresence"
   run _install_ubuntu_k8s_tools
   [ "$status" -eq 0 ]
-  grep -q "curl.*get-helm-3" "${MOCK_CALLS_FILE}"
-  ! grep -q "baltocdn" "${MOCK_CALLS_FILE}"
+  run grep "get-helm-3" "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
 }
 
-@test "_install_ubuntu_k8s_tools: helm script curl failure returns non-zero" {
-  unset HAS_SNAP
+@test "_install_ubuntu_k8s_tools: does not call install_kustomize curl installer" {
+  # kustomize curl installer removed; brew handles it via
+  # _install_ubuntu_brew_packages.
   export HAS_K8S=1
   export KIND_VER="0.22.0"
   export KIND_URL="https://kind.sigs.k8s.io/dl/v0.22.0/kind-linux-amd64"
   export KUBERNETES_VER="v1.29"
   export TELEPRESENCE_URL="https://app.getambassador.io/download/tel2/linux/amd64/latest/telepresence"
-  export MOCK_CURL_EXIT=1
-  local _rc=0
-  _install_ubuntu_k8s_tools || _rc=$?
-  [ "${_rc}" -ne 0 ]
+  run _install_ubuntu_k8s_tools
+  [ "$status" -eq 0 ]
+  run grep "install_kustomize.sh" "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+}
+
+@test "_install_ubuntu_brew_packages: installs helm via brew" {
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 0 ]
+  grep -q "brew install helm" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_brew_packages: installs kustomize via brew" {
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 0 ]
+  grep -q "brew install kustomize" "${MOCK_CALLS_FILE}"
 }
 
 # ── _install_ubuntu_hashicorp ────────────────────────────────────────────────
@@ -734,4 +717,28 @@ teardown() {
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
   [[ "$output" == *"dotnet-sdk-8.0 not available"* ]]
+}
+
+@test "_install_ubuntu_misc: opentofu absent installs via apt (not piped sh)" {
+  export DOCKER_COMPOSE_VER="2.24.0"
+  export DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64"
+  export YQ_VER="4.40.5"
+  export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
+  export HAS_DEVTOOLS=1
+  run _install_ubuntu_misc
+  [ "$status" -eq 0 ]
+  grep -q "DEBIAN_FRONTEND=noninteractive.*apt-get install.*opentofu" "${MOCK_CALLS_FILE}"
+  run grep "install-opentofu.sh" "${MOCK_CALLS_FILE:-/dev/null}"
+  [ "$status" -ne 0 ]
+}
+
+@test "_install_ubuntu_misc: opentofu apt setup adds GPG key" {
+  export DOCKER_COMPOSE_VER="2.24.0"
+  export DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64"
+  export YQ_VER="4.40.5"
+  export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
+  export HAS_DEVTOOLS=1
+  run _install_ubuntu_misc
+  [ "$status" -eq 0 ]
+  grep -q "opentofu-archive-keyring.gpg" "${MOCK_CALLS_FILE}"
 }
