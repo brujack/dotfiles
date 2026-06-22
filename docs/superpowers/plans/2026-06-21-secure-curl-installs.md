@@ -1,5 +1,7 @@
 # Secure curl-based Software Installs Implementation Plan
 
+> **Status: DONE** — Merged as PR #162 (2026-06-22)
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Remove all `curl|bash` and unverified `curl|sh` install patterns from the dotfiles Linux path, replacing them with Homebrew formula installs, manual apt-source setups, and content-addressable commit-SHA-pinned URLs.
