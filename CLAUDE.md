@@ -102,7 +102,6 @@ Sessions in this repo follow the 10-80-10 execution cycle defined in `ai-config`
 - **Phase 2 (80%) — Execute.** `subagent-driven-development` runs iterate-until-green per task; FORBIDDEN list prevents gate cheating; wave-dispatch when `parallel_group` is declared. Sonnet/Haiku per task per the plan.
 - **Phase 3 (10%) — Review.** `finishing-a-development-branch` chains `pr-review` → `security-review` → `bug-scan` → `docs` → `learnings` → finish. Opus role.
 
-Bug Scan: required
 
 Validate a plan before dispatch:
 
