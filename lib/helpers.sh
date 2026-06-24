@@ -618,6 +618,11 @@ setup_dotfile_symlinks() {
       log_info "Installed Oh My ZSH"
     fi
   fi
+  # git clone does not create custom/themes/ (install.sh did); ensure it exists
+  # so the bruce.zsh-theme symlink below can be created successfully.
+  if [[ -d "${HOME}/.oh-my-zsh" ]]; then
+    mkdir -p "${HOME}/.oh-my-zsh/custom/themes"
+  fi
 
 
 

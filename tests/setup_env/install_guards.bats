@@ -675,6 +675,18 @@ teardown() {
   [ "$status" -ne 0 ]
 }
 
+@test "setup_dotfile_symlinks: creates custom/themes dir after oh-my-zsh clone" {
+  local _home="${BATS_TEST_TMPDIR}/home"
+  mkdir -p "${_home}"
+  export HOME="${_home}"
+  export PERSONAL_GITREPOS="${BATS_TEST_TMPDIR}/git-repos/personal"
+  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
+  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude" "${_OVERRIDE_AI_CONFIG_DIR}/.cursor"
+  run setup_dotfile_symlinks
+  [ "${status}" -eq 0 ]
+  [ -d "${_home}/.oh-my-zsh/custom/themes" ]
+}
+
 # ── setup_dotfile_symlinks: TPM ───────────────────────────────────────────────
 
 @test "setup_dotfile_symlinks: skips TPM when already installed" {
