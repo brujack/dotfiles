@@ -501,6 +501,19 @@ teardown() {
   grep -q "apt-get install.*zlib1g-dev" "${MOCK_CALLS_FILE}"
 }
 
+@test "setup_ansible on Linux creates ~/.pyenv/bin/pyenv symlink when pyenv installed via brew" {
+  export LINUX=1
+  unset MACOS UBUNTU
+  export HOME="${BATS_TEST_TMPDIR}"
+  export PYTHON_VER="3.14.6"
+  export HAS_DEVTOOLS=""
+  export PATH="${BATS_TEST_DIRNAME}/../mocks:${PATH}"
+  # Do NOT create ~/.pyenv/bin/pyenv — simulates brew install (binary not at expected path)
+  run setup_ansible
+  [ "$status" -eq 0 ]
+  [[ -L "${HOME}/.pyenv/bin/pyenv" ]]
+}
+
 @test "recreate_python_venv ansible on Linux excludes mlx from pip install" {
   unset MACOS
   export LINUX=1
