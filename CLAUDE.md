@@ -495,5 +495,3 @@ declare -A PROFILE_MAP=(
 No other files need changing.
 
 ---
-
-@~/.claude/standards/powershell.md
