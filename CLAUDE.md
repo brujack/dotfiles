@@ -276,6 +276,14 @@ at `~/.rbenv/plugins/ruby-build`, which shadows the brew-managed definitions) be
 bottle lags upstream — e.g. Ruby 4.0.5 on Ubuntu 26.04 was absent from the bottle but present in
 git. A failed `rbenv install` warns and returns 0 (non-fatal) rather than aborting setup.
 
+## Language Standards
+
+Language-specific standards for this repo. These supplement the universal standards loaded
+from `~/.claude/CLAUDE.md` (tdd, behavior, git-workflow, ci, code-standards, logic-review,
+repo-structure, shell).
+
+@~/.claude/standards/powershell.md
+
 ## Testing
 
 Uses **BATS** (Bash Automated Testing System), installed natively:
