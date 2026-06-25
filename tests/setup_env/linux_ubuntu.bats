@@ -734,6 +734,8 @@ teardown() {
   export YQ_VER="4.40.5"
   export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
   export HAS_DEVTOOLS=1
+  # Strip /opt/homebrew/bin so `command -v tofu` fails even when tofu is brew-installed on macOS
+  export PATH="${BATS_TEST_DIRNAME}/../mocks:/usr/bin:/bin:/usr/sbin:/sbin"
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
   grep -q "DEBIAN_FRONTEND=noninteractive.*apt-get install.*opentofu" "${MOCK_CALLS_FILE}"
@@ -747,6 +749,8 @@ teardown() {
   export YQ_VER="4.40.5"
   export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
   export HAS_DEVTOOLS=1
+  # Strip /opt/homebrew/bin so `command -v tofu` fails even when tofu is brew-installed on macOS
+  export PATH="${BATS_TEST_DIRNAME}/../mocks:/usr/bin:/bin:/usr/sbin:/sbin"
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
   grep -q "opentofu-archive-keyring.gpg" "${MOCK_CALLS_FILE}"
@@ -758,6 +762,8 @@ teardown() {
   export YQ_VER="4.40.5"
   export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
   export HAS_DEVTOOLS=1
+  # Strip /opt/homebrew/bin so `command -v tofu` fails even when tofu is brew-installed on macOS
+  export PATH="${BATS_TEST_DIRNAME}/../mocks:/usr/bin:/bin:/usr/sbin:/sbin"
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
   grep -q "mkdir.*-p.*/etc/apt/keyrings" "${MOCK_CALLS_FILE}"
