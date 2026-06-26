@@ -3,30 +3,6 @@
 
 ## Bug Fixes
 
-- add missing existence check for validate_memory.py fallback path (#132)
-
-- guard mlx pip install behind macOS check (#135)
-
-- brew trust, pip dep pins, Brewfile drift (#136)
-
-- remove docker formula and dotnet cask aliases (#137)
-
-- add docker formula, remove kitchen (#138)
-
-- remove docker formula and powershell cask duplicates (#139)
-
-- remove chef tap and trust reference (#140)
-
-- fix 6 Ubuntu Noble setup failures + move Steam to Flatpak (#141)
-
-- apt-get for base packages, sudo for flatpak Steam (#142)
-
-- remove libncurses5-dev/libncursesw5-dev from common packages
-
-- cgroup v2 daemon.json, glances via apt, passlib for Python 3.13 (#144)
-
-- nala, ruby, Go PPA cleanup for Ubuntu 26.04 (#145)
-
 - Ubuntu 26.04 housekeeping — HAS_FLATPAK, VirtualBox 7.1, dead OS vars (#147)
 
 - add gitguardian/tap to install_macos_casks brew trust (#148)
@@ -39,49 +15,31 @@
 
 - rbenv init on Linux never ran due to chruby guard (#153)
 
+- Ubuntu 26.04 compatibility — ruby-build, Python build deps, helm/cloudflare/azure-cli APT repos (#154)
+
+- Ubuntu 26.04 setup — nala comment filter, helm script, dotnet non-fatal (#155)
+
+- refresh ruby-build defs from git for Ubuntu 26.04 (#156)
+
+- purge stale helm/azure-cli sources.list.d on Ubuntu 26.04 (#157)
+
+- drop rbenv local — silently overwrites project .ruby-version on every shell start (#158)
+
+- add DEBIAN_FRONTEND=noninteractive to all nala/apt installs (#159)
+
+- pass --yes to brew upgrade to skip Homebrew 6.0 prompt (#160)
+
+- run _install_ubuntu_rust after brew so rustup is available to configure (#163)
+
+- mkdir custom/themes after oh-my-zsh git clone (#164)
+
+- symlink pyenv into PYENV_ROOT/bin when installed via brew
+
+- remove duplicate powershell.md @-include
+
 
 
 ## Documentation
-
-- pointer stub per ADR-0020 (#134)
-
-- add Claude Code weekly features digest 2026-06-15
-
-- add Anthropic weekly features digest 2026-06-15
-
-- sync CLAUDE.md with recent changes
-
-- sync CLAUDE.md and plan index after PR #138
-
-- document formula/cask dedup rule and fix docker example
-
-- add Ubuntu 26.04 Resolute Raccoon support spec
-
-- add PR1 Ubuntu 26.04 detection and package files spec
-
-- add Ubuntu 26.04 PR1 implementation plan
-
-- mark ubuntu-2604-pr1 Done after PR #143
-
-- sync CLAUDE.md and README for Ubuntu 26.04 support
-
-- add PR2 Ubuntu 26.04 Docker cgroup v2 and Python 3.13 spec
-
-- add Ubuntu 26.04 PR2 implementation plan
-
-- mark ubuntu-2604-pr2 Done after PR #144
-
-- update test count 749 → 753
-
-- document brew upgrade node plugin fix for Linux
-
-- mark ubuntu-2604-pr3 Done after PR #145
-
-- update test count 753 → 759
-
-- ubuntu-2604-pr4 — ARM64 support + version bumps
-
-- ubuntu-2604-pr4 ARM64 support + version bumps
 
 - mark ubuntu-2604-pr4 Done, update test count to 765
 
@@ -93,20 +51,50 @@
 
 - mark P3-6 resolved — restart_fah SysV init fixed in PR #150
 
+- add pip-venv-audit backlog item
+
+- add pip-venv-audit spec
+
+- add ansible venv pkg list and ruff venv note
+
+- move pip-venv-audit to All Plans (In Progress)
+
+- add pip-venv-audit implementation plan
+
+- mark pip-venv-audit Done
+
+- bump test count floor 729→779, update BATS count to 782
+
+- add env -i pyenv mock pattern and ubuntu26 noble fallback note
+
+- ADR-0013, plan status Done, 806 test count after PR #162
+
+- add Claude Code weekly features digest 2026-06-22
+
+- add Anthropic weekly features digest 2026-06-22
+
+- update Anthropic platform state 2026-06-22
+
+- add bug-scan to Phase 3 chain
+
+- bump test count floor to 806, note 810 tests as of 2026-06-25
+
 
 
 ## Features
 
-- Ubuntu 26.04 Resolute Raccoon detection and package files (#143)
+- add ruff, pytest, mypy, data science stack
 
-- track and symlink .gitignore_global via dotfiles
+- add OpenTofu install for macOS and Ubuntu (#161)
 
-- ARM64 support + version bumps (PR4) (#146)
+- replace curl|bash installs with brew/apt/SHA-pin (#162)
+
+- dotfiles adds powershell.md language standard
 
 
 
 ## Testing
 
-- tighten rbenv install assertion to match version-specific call
+- fix opentofu tests failing when tofu installed on macOS
 
 
