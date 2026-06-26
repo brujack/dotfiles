@@ -241,6 +241,12 @@ teardown() {
   grep -q "brew install cargo-nextest" "${MOCK_CALLS_FILE}"
 }
 
+@test "_install_ubuntu_brew_packages: installs cargo-cyclonedx via brew" {
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 0 ]
+  grep -q "brew install cargo-cyclonedx" "${MOCK_CALLS_FILE}"
+}
+
 @test "_install_ubuntu_rust: sources .cargo/env when file exists" {
   export HAS_RUST=1
   mkdir -p "${HOME}/.cargo"

@@ -336,6 +336,7 @@ _install_ubuntu_brew_packages() {
     brew_install_formula argocd
     brew_install_formula bat
     brew_install_formula cargo-nextest
+    brew_install_formula cargo-cyclonedx
     brew_install_formula git-lfs
     brew_install_formula fzf
     brew_install_formula gh
