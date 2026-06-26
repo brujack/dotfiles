@@ -101,6 +101,8 @@ brew "ripgrep"                               # [HAS_DEVTOOLS]
 brew "ruby"                                  # [HAS_DEVTOOLS]
 brew "ruby-install"                          # [HAS_DEVTOOLS]
 brew "cargo-nextest"                         # [HAS_RUST]
+brew "cargo-cyclonedx"                       # [HAS_RUST]
+brew "cyclonedx-python"
 brew "rust-analyzer"                         # [HAS_RUST]
 brew "rustup"                                # [HAS_RUST]
 brew "shellcheck"                            # [HAS_DEVTOOLS]
