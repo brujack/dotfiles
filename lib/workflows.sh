@@ -291,6 +291,22 @@ run_update() {
           > "${_UPDATE_TMPDIR}/fail_result_claude"
       fi
       _update_record_end "claude" "${_claude_rc}"
+      # Post-update skill security scan — supply chain guard.
+      # Advisory: never aborts the update. REVIEW/HOLD findings require human
+      # review before using the flagged skill. Re-running does not clear REVIEW.
+      if command -v python3 &>/dev/null && [[ -f "${HOME}/.claude/scripts/scan_skills.py" ]]; then
+        printf "\n[skill-scan] Scanning updated plugins for malicious content...\n"
+        local _scan_rc=0
+        python3 "${HOME}/.claude/scripts/scan_skills.py" \
+          --plugin-dir "${HOME}/.claude/plugins/cache/" || _scan_rc=$?
+        if [[ ${_scan_rc} -eq 2 ]]; then
+          printf "\n[skill-scan] HOLD: one or more plugins contain red-flag patterns.\n"
+          printf "             Do not use flagged skills until findings are resolved.\n"
+        elif [[ ${_scan_rc} -eq 1 ]]; then
+          printf "\n[skill-scan] REVIEW: one or more plugins could not be fully analyzed.\n"
+          printf "             Human review required — re-running the scanner does not clear this.\n"
+        fi
+      fi
     else
       _update_skip "claude" "claude not installed"
     fi
