@@ -3,7 +3,7 @@ SHELLCHECK := $(shell command -v shellcheck 2>/dev/null)
 KCOV := $(shell command -v kcov 2>/dev/null)
 SHELL_FILES := $(shell find . -name "*.sh" -not -path "*/node_modules/*" -not -path "*/coverage/*")
 
-.PHONY: test test-unit lint coverage bash-coverage push-bash-coverage install-hooks help changelog validate-plan
+.PHONY: test test-unit lint coverage bash-coverage push-bash-coverage install-hooks ledger-symlink help changelog validate-plan
 
 help:
 	@printf "Available targets:\n"
@@ -54,7 +54,17 @@ ifndef BATS
 endif
 	@bash scripts/push-bash-coverage.sh
 
-install-hooks:
+ledger-symlink:
+	@mkdir -p "${HOME}/.local/bin"
+	@if [ ! -L "${HOME}/.local/bin/ledger" ]; then \
+		ln -s "${HOME}/.local/share/state-ledger/scripts/ledger.py" "${HOME}/.local/bin/ledger"; \
+		chmod +x "${HOME}/.local/share/state-ledger/scripts/ledger.py" 2>/dev/null || true; \
+		printf "ledger symlink created\n"; \
+	else \
+		printf "ledger symlink already exists\n"; \
+	fi
+
+install-hooks: ledger-symlink
 	ln -sf "$(shell pwd)/scripts/pre-commit-hook.sh" .git/hooks/pre-commit
 	ln -sf "$(shell pwd)/scripts/pre-push" .git/hooks/pre-push
 	ln -sf "$(shell pwd)/scripts/commit-msg" .git/hooks/commit-msg
