@@ -298,7 +298,8 @@ run_update() {
         printf "\n[skill-scan] Scanning updated plugins for malicious content...\n"
         local _scan_rc=0
         python3 "${HOME}/.claude/scripts/scan_skills.py" \
-          --plugin-dir "${HOME}/.claude/plugins/cache/" || _scan_rc=$?
+          --plugin-dir "${HOME}/.claude/plugins/cache/" \
+          --write-ledger || _scan_rc=$?
         if [[ ${_scan_rc} -eq 2 ]]; then
           printf "\n[skill-scan] HOLD: one or more plugins contain red-flag patterns.\n"
           printf "             Do not use flagged skills until findings are resolved.\n"
@@ -306,6 +307,13 @@ run_update() {
           printf "\n[skill-scan] REVIEW: one or more plugins could not be fully analyzed.\n"
           printf "             Human review required — re-running the scanner does not clear this.\n"
         fi
+      fi
+      # Post-update staleness audit — advisory only; never aborts update.
+      # Detects attestations that pre-date the most recent plugin content hash.
+      if command -v python3 &>/dev/null && [[ -f "${HOME}/.claude/scripts/plugin_verdicts.py" ]]; then
+        python3 "${HOME}/.claude/scripts/plugin_verdicts.py" audit || {
+          printf "\n[skill-scan] Stale attestations detected. Re-scan flagged plugins.\n"
+        }
       fi
     else
       _update_skip "claude" "claude not installed"
