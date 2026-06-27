@@ -694,3 +694,42 @@ run_check_versions() {
 
   [[ ${_outdated} -eq 0 ]]
 }
+
+# ── Ledger integration ─────────────────────────────────────────────────────────
+
+ensure_machine_id() {
+  local _id_path="${HOME}/.config/dotfiles/machine-id"
+  if [[ -f "${_id_path}" ]]; then
+    return 0
+  fi
+  mkdir -p "$(dirname "${_id_path}")"
+  python3 -c "import uuid; print(str(uuid.uuid4()))" > "${_id_path}" || return 1
+  printf "machine-id created: %s\n" "${_id_path}"
+}
+
+ledger_write_entry() {
+  local _json="${1:?ledger_write_entry: json payload required}"
+  local _ledger_bin
+  _ledger_bin="$(command -v ledger 2>/dev/null)"
+  if [[ -z "${_ledger_bin}" ]]; then
+    printf "WARNING: ledger binary not found — skipping ledger write\n" >&2
+    return 0
+  fi
+  local _rc
+  printf '%s' "${_json}" | "${_ledger_bin}" write
+  _rc=$?
+  if [[ ${_rc} -eq 2 ]]; then
+    printf "WARNING: ledger write spooled (unreachable)\n" >&2
+    return 2
+  fi
+  return ${_rc}
+}
+
+ledger_flush_spool() {
+  local _ledger_bin
+  _ledger_bin="$(command -v ledger 2>/dev/null)"
+  if [[ -z "${_ledger_bin}" ]]; then
+    return 0
+  fi
+  "${_ledger_bin}" flush
+}
