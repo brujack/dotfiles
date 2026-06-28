@@ -17,3 +17,4 @@ Cross-cutting decisions that apply across personal repos. Repo-specific decision
 | [0011](0011-linux-sh-split-ubuntu-shared.md)                   | linux.sh split into linux_ubuntu.sh and linux_shared.sh | 2026-04-28 | Accepted |
 | [0012](0012-brewfile-drift-detection.md)                       | Brewfile drift detection in update summary              | 2026-04-29 | Accepted |
 | [0013](0013-no-curl-bash-installs.md)                          | Replace curl\|bash installers with verified installs    | 2026-06-22 | Accepted |
+| [0014](0014-state-ledger-cmdb-integration.md)                  | State-ledger CMDB integration for update run metadata   | 2026-06-28 | Accepted |
