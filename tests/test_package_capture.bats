@@ -39,8 +39,8 @@ EOF
 # ── _list_apt_packages ────────────────────────────────────────────────────────
 
 @test "_list_apt_packages: returns [] when dpkg-query absent" {
-    local _clean_path="/usr/bin:/bin"
-    PATH="${_clean_path}" run _list_apt_packages
+    # dpkg-query in /usr/bin on Ubuntu — use tmpdir (no dpkg-query there)
+    PATH="${BATS_TEST_TMPDIR}" run _list_apt_packages
     [ "$status" -eq 0 ]
     [ "$output" = "[]" ]
 }
