@@ -232,6 +232,14 @@ run_update() {
   export _UPDATE_TMPDIR
   trap 'rm -rf "${_UPDATE_TMPDIR}"; unset _UPDATE_TMPDIR' EXIT INT TERM
 
+  # Capture run start metadata for state-ledger
+  date -u +%Y-%m-%dT%H:%M:%SZ > "${_UPDATE_TMPDIR}/started_at"
+  date +%s > "${_UPDATE_TMPDIR}/start_epoch"
+  python3 -c "import uuid; print(str(uuid.uuid4()))" \
+    > "${_UPDATE_TMPDIR}/run_id" 2>/dev/null || true
+  git -C "${PERSONAL_GITREPOS}/${DOTFILES}" rev-parse HEAD \
+    > "${_UPDATE_TMPDIR}/git_sha" 2>/dev/null || true
+
   # ── brew + softwareupdate ─────────────────────────────────────────────────
   if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_BREW:-} ]]; then
     if [[ -n ${MACOS} ]] || [[ -n ${LINUX} ]]; then
@@ -711,6 +719,8 @@ ledger_write_entry() {
   local _json="${1:?ledger_write_entry: json payload required}"
   local _ledger_bin
   _ledger_bin="$(command -v ledger 2>/dev/null)"
+  [[ -z "${_ledger_bin}" && -x "${HOME}/.local/bin/ledger" ]] && \
+    _ledger_bin="${HOME}/.local/bin/ledger"
   if [[ -z "${_ledger_bin}" ]]; then
     printf "WARNING: ledger binary not found — skipping ledger write\n" >&2
     return 0
@@ -728,6 +738,8 @@ ledger_write_entry() {
 ledger_flush_spool() {
   local _ledger_bin
   _ledger_bin="$(command -v ledger 2>/dev/null)"
+  [[ -z "${_ledger_bin}" && -x "${HOME}/.local/bin/ledger" ]] && \
+    _ledger_bin="${HOME}/.local/bin/ledger"
   if [[ -z "${_ledger_bin}" ]]; then
     return 0
   fi
