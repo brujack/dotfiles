@@ -145,12 +145,12 @@ EOF
 # ── _ledger_write_dotfiles_entry ──────────────────────────────────────────────
 
 _setup_ledger_tmpdir() {
-    export _UPDATE_TMPDIR="${BATS_TEST_TMPDIR}/update"
-    mkdir -p "${_UPDATE_TMPDIR}"
-    printf '2026-06-28T12:00:00Z\n' > "${_UPDATE_TMPDIR}/started_at"
-    printf '1751116800\n'           > "${_UPDATE_TMPDIR}/start_epoch"
-    printf 'test-run-uuid\n'        > "${_UPDATE_TMPDIR}/run_id"
-    printf 'abc1234deadbeef\n'      > "${_UPDATE_TMPDIR}/git_sha"
+    export _DOTFILES_RUN_TMPDIR="${BATS_TEST_TMPDIR}/update"
+    mkdir -p "${_DOTFILES_RUN_TMPDIR}"
+    printf '2026-06-28T12:00:00Z\n' > "${_DOTFILES_RUN_TMPDIR}/started_at"
+    printf '1751116800\n'           > "${_DOTFILES_RUN_TMPDIR}/start_epoch"
+    printf 'test-run-uuid\n'        > "${_DOTFILES_RUN_TMPDIR}/run_id"
+    printf 'abc1234deadbeef\n'      > "${_DOTFILES_RUN_TMPDIR}/git_sha"
 }
 
 _make_mock_ledger_capture() {
@@ -167,8 +167,8 @@ EOF
 }
 
 @test "_ledger_write_dotfiles_entry: no-ops when started_at absent" {
-    export _UPDATE_TMPDIR="${BATS_TEST_TMPDIR}/update"
-    mkdir -p "${_UPDATE_TMPDIR}"
+    export _DOTFILES_RUN_TMPDIR="${BATS_TEST_TMPDIR}/update"
+    mkdir -p "${_DOTFILES_RUN_TMPDIR}"
     # No started_at file — simulates direct _update_summary call, not run_update
     local _mock_dir
     _mock_dir="$(_make_mock_ledger 0)"
@@ -208,8 +208,8 @@ EOF
     _setup_ledger_tmpdir
     mkdir -p "${HOME}/.config/dotfiles"
     printf 'test-machine-uuid\n' > "${HOME}/.config/dotfiles/machine-id"
-    printf 'FAIL\n' > "${_UPDATE_TMPDIR}/status_brew"
-    printf 'exit 1\n' > "${_UPDATE_TMPDIR}/result_brew"
+    printf 'FAIL\n' > "${_DOTFILES_RUN_TMPDIR}/status_brew"
+    printf 'exit 1\n' > "${_DOTFILES_RUN_TMPDIR}/result_brew"
 
     local _captured="${BATS_TEST_TMPDIR}/ledger_stdin"
     local _mock_dir
@@ -220,4 +220,103 @@ EOF
 
     grep -q '"success": false' "${_captured}"
     grep -q '"failure_stage": "brew"' "${_captured}"
+}
+
+# ── _ledger_write_run_entry (generalized) ─────────────────────────────────────
+
+@test "_ledger_write_run_entry: no-ops when started_at absent" {
+    export _DOTFILES_RUN_TMPDIR="${BATS_TEST_TMPDIR}/run"
+    mkdir -p "${_DOTFILES_RUN_TMPDIR}"
+    local _mock_dir
+    _mock_dir="$(_make_mock_ledger 0)"
+    PATH="${_mock_dir}:${PATH}" _ledger_write_run_entry "setup_user" 0
+    run grep "ledger write" "${MOCK_CALLS_FILE}"
+    [ "$status" -ne 0 ]
+}
+
+@test "_ledger_write_run_entry: no-ops when machine-id absent" {
+    _setup_ledger_tmpdir
+    local _mock_dir
+    _mock_dir="$(_make_mock_ledger 0)"
+    PATH="${_mock_dir}:${PATH}" _ledger_write_run_entry "setup_user" 0
+    run grep "ledger write" "${MOCK_CALLS_FILE}"
+    [ "$status" -ne 0 ]
+}
+
+@test "_ledger_write_run_entry setup_user: writes run_type=setup_user and success=true" {
+    _setup_ledger_tmpdir
+    mkdir -p "${HOME}/.config/dotfiles"
+    printf 'test-machine-uuid\n' > "${HOME}/.config/dotfiles/machine-id"
+
+    local _captured="${BATS_TEST_TMPDIR}/ledger_stdin"
+    local _mock_dir
+    _mock_dir="$(_make_mock_ledger_capture "${_captured}")"
+    PATH="${_mock_dir}:${PATH}" _ledger_write_run_entry "setup_user" 0
+
+    grep -q '"run_type": "setup_user"' "${_captured}"
+    grep -q '"success": true' "${_captured}"
+    grep -q '"tool": "dotfiles"' "${_captured}"
+    # setup_user must NOT include update-only fields
+    run grep '"failure_stage"' "${_captured}"
+    [ "$status" -ne 0 ]
+}
+
+@test "_ledger_write_run_entry setup_user: success=false when exit_code non-zero" {
+    _setup_ledger_tmpdir
+    mkdir -p "${HOME}/.config/dotfiles"
+    printf 'test-machine-uuid\n' > "${HOME}/.config/dotfiles/machine-id"
+
+    local _captured="${BATS_TEST_TMPDIR}/ledger_stdin"
+    local _mock_dir
+    _mock_dir="$(_make_mock_ledger_capture "${_captured}")"
+    PATH="${_mock_dir}:${PATH}" _ledger_write_run_entry "setup_user" 1
+
+    grep -q '"success": false' "${_captured}"
+}
+
+@test "_ledger_write_run_entry developer: writes run_type=developer" {
+    _setup_ledger_tmpdir
+    mkdir -p "${HOME}/.config/dotfiles"
+    printf 'test-machine-uuid\n' > "${HOME}/.config/dotfiles/machine-id"
+
+    local _captured="${BATS_TEST_TMPDIR}/ledger_stdin"
+    local _mock_dir
+    _mock_dir="$(_make_mock_ledger_capture "${_captured}")"
+    PATH="${_mock_dir}:${PATH}" _ledger_write_run_entry "developer" 0
+
+    grep -q '"run_type": "developer"' "${_captured}"
+}
+
+@test "_ledger_write_run_entry update: includes failure_stage and workflows_ran" {
+    _setup_ledger_tmpdir
+    mkdir -p "${HOME}/.config/dotfiles"
+    printf 'test-machine-uuid\n' > "${HOME}/.config/dotfiles/machine-id"
+    printf 'FAIL\n' > "${_DOTFILES_RUN_TMPDIR}/status_brew"
+
+    local _captured="${BATS_TEST_TMPDIR}/ledger_stdin"
+    local _mock_dir
+    _mock_dir="$(_make_mock_ledger_capture "${_captured}")"
+    PATH="${_mock_dir}:${PATH}" _ledger_write_run_entry "update" 1
+
+    grep -q '"run_type": "update"' "${_captured}"
+    grep -q '"failure_stage"' "${_captured}"
+    grep -q '"workflows_ran"' "${_captured}"
+}
+
+# ── _dotfiles_run_tmpdir_setup ────────────────────────────────────────────────
+
+@test "_dotfiles_run_tmpdir_setup: creates tmpdir and writes started_at" {
+    unset _DOTFILES_RUN_TMPDIR
+    _dotfiles_run_tmpdir_setup
+    [ -d "${_DOTFILES_RUN_TMPDIR}" ]
+    [ -f "${_DOTFILES_RUN_TMPDIR}/started_at" ]
+    grep -qE '^[0-9]{4}-[0-9]{2}-[0-9]{2}T' "${_DOTFILES_RUN_TMPDIR}/started_at"
+}
+
+@test "_dotfiles_run_tmpdir_setup: writes start_epoch run_id and git_sha" {
+    unset _DOTFILES_RUN_TMPDIR
+    _dotfiles_run_tmpdir_setup
+    [ -f "${_DOTFILES_RUN_TMPDIR}/start_epoch" ]
+    [ -f "${_DOTFILES_RUN_TMPDIR}/run_id" ]
+    [ -f "${_DOTFILES_RUN_TMPDIR}/git_sha" ]
 }

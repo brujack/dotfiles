@@ -15,11 +15,11 @@ _update_diff_lines() {
 }
 
 # _update_snapshot SECTION COMMAND...
-# Runs COMMAND and writes stdout to ${_UPDATE_TMPDIR}/pre_SECTION.
+# Runs COMMAND and writes stdout to ${_DOTFILES_RUN_TMPDIR}/pre_SECTION.
 _update_snapshot() {
   local _section="$1"
   shift
-  "$@" > "${_UPDATE_TMPDIR}/pre_${_section}" 2>/dev/null || true
+  "$@" > "${_DOTFILES_RUN_TMPDIR}/pre_${_section}" 2>/dev/null || true
 }
 
 # _update_git_diff DIR OLD_SHA
@@ -33,8 +33,8 @@ _update_git_diff() {
 # Records a section as skipped with the given reason.
 _update_skip() {
   local _section="$1" _reason="$2"
-  printf "SKIP\n" > "${_UPDATE_TMPDIR}/status_${_section}"
-  printf "%s\n" "${_reason}" > "${_UPDATE_TMPDIR}/result_${_section}"
+  printf "SKIP\n" > "${_DOTFILES_RUN_TMPDIR}/status_${_section}"
+  printf "%s\n" "${_reason}" > "${_DOTFILES_RUN_TMPDIR}/result_${_section}"
 }
 
 # _update_ok SECTION MESSAGE
@@ -43,8 +43,8 @@ _update_skip() {
 # that use _update_record_end — it would silently overwrite the timed result.
 _update_ok() {
   local _section="$1" _msg="$2"
-  printf "OK\n" > "${_UPDATE_TMPDIR}/status_${_section}"
-  printf "%s\n" "${_msg}" > "${_UPDATE_TMPDIR}/result_${_section}"
+  printf "OK\n" > "${_DOTFILES_RUN_TMPDIR}/status_${_section}"
+  printf "%s\n" "${_msg}" > "${_DOTFILES_RUN_TMPDIR}/result_${_section}"
 }
 
 # _update_warn SECTION MESSAGE
@@ -52,8 +52,8 @@ _update_ok() {
 # _update_ok: for advisory check sections only, not timed _update_record_end sections.
 _update_warn() {
   local _section="$1" _msg="$2"
-  printf "WARN\n" > "${_UPDATE_TMPDIR}/status_${_section}"
-  printf "%s\n" "${_msg}" > "${_UPDATE_TMPDIR}/result_${_section}"
+  printf "WARN\n" > "${_DOTFILES_RUN_TMPDIR}/status_${_section}"
+  printf "%s\n" "${_msg}" > "${_DOTFILES_RUN_TMPDIR}/result_${_section}"
 }
 
 # _update_record_start SECTION
@@ -62,39 +62,39 @@ _update_record_start() {
   local _section="$1"
   case "${_section}" in
     brew)
-      brew list --formula --versions > "${_UPDATE_TMPDIR}/pre_brew_formula" 2>/dev/null || true
-      brew list --cask --versions > "${_UPDATE_TMPDIR}/pre_brew_cask" 2>/dev/null || true
+      brew list --formula --versions > "${_DOTFILES_RUN_TMPDIR}/pre_brew_formula" 2>/dev/null || true
+      brew list --cask --versions > "${_DOTFILES_RUN_TMPDIR}/pre_brew_cask" 2>/dev/null || true
       ;;
     mas)
-      mas list > "${_UPDATE_TMPDIR}/pre_mas" 2>/dev/null || true
+      mas list > "${_DOTFILES_RUN_TMPDIR}/pre_mas" 2>/dev/null || true
       ;;
     gems)
-      gem list > "${_UPDATE_TMPDIR}/pre_gems" 2>/dev/null || true
+      gem list > "${_DOTFILES_RUN_TMPDIR}/pre_gems" 2>/dev/null || true
       ;;
     pip)
       # pip snapshot is captured inside the Python block; nothing to do here
       ;;
     oh-my-zsh)
-      git -C "${HOME}/.oh-my-zsh" rev-parse HEAD > "${_UPDATE_TMPDIR}/pre_oh-my-zsh" 2>/dev/null || true
+      git -C "${HOME}/.oh-my-zsh" rev-parse HEAD > "${_DOTFILES_RUN_TMPDIR}/pre_oh-my-zsh" 2>/dev/null || true
       ;;
     tpm)
-      git -C "${HOME}/.tmux/plugins/tpm" rev-parse HEAD > "${_UPDATE_TMPDIR}/pre_tpm" 2>/dev/null || true
+      git -C "${HOME}/.tmux/plugins/tpm" rev-parse HEAD > "${_DOTFILES_RUN_TMPDIR}/pre_tpm" 2>/dev/null || true
       ;;
     tfenv)
-      git -C "${HOME}/.tfenv" rev-parse HEAD > "${_UPDATE_TMPDIR}/pre_tfenv" 2>/dev/null || true
+      git -C "${HOME}/.tfenv" rev-parse HEAD > "${_DOTFILES_RUN_TMPDIR}/pre_tfenv" 2>/dev/null || true
       ;;
     zsh-autosuggestions)
-      git -C "${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions" rev-parse HEAD > "${_UPDATE_TMPDIR}/pre_zsh-autosuggestions" 2>/dev/null || true
+      git -C "${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions" rev-parse HEAD > "${_DOTFILES_RUN_TMPDIR}/pre_zsh-autosuggestions" 2>/dev/null || true
       ;;
     softwareupdate)
       softwareupdate -l 2>/dev/null \
         | grep '^\* Label:' \
         | sed 's/^\* Label: //' \
-        > "${_UPDATE_TMPDIR}/pre_softwareupdate" || true
+        > "${_DOTFILES_RUN_TMPDIR}/pre_softwareupdate" || true
       ;;
     apt)
       if [[ -n ${UBUNTU:-} ]]; then
-        dpkg-query -W -f='${Package} ${Version}\n' > "${_UPDATE_TMPDIR}/pre_apt" 2>/dev/null || true
+        dpkg-query -W -f='${Package} ${Version}\n' > "${_DOTFILES_RUN_TMPDIR}/pre_apt" 2>/dev/null || true
       else
         _update_skip "apt" "not applicable"
       fi
@@ -103,7 +103,7 @@ _update_record_start() {
       if [[ -n ${UBUNTU:-} ]]; then
         snap list --color=never 2>/dev/null \
           | awk 'NR>1 {print $1, $2}' \
-          > "${_UPDATE_TMPDIR}/pre_snap" || true
+          > "${_DOTFILES_RUN_TMPDIR}/pre_snap" || true
       else
         _update_skip "snap" "not applicable"
       fi
@@ -112,12 +112,12 @@ _update_record_start() {
       claude plugins list 2>/dev/null \
         | grep 'Version:' \
         | sed 's/^[[:space:]]*//' \
-        > "${_UPDATE_TMPDIR}/pre_claude" || true
+        > "${_DOTFILES_RUN_TMPDIR}/pre_claude" || true
       ;;
     npm)
       npm list -g --depth=0 2>/dev/null \
         | grep -v '^/' \
-        > "${_UPDATE_TMPDIR}/pre_npm" || true
+        > "${_DOTFILES_RUN_TMPDIR}/pre_npm" || true
       ;;
     # cheat.sh — no pre-snapshot needed
     *) ;;
@@ -131,29 +131,29 @@ _update_record_end() {
   local _result=""
 
   # If _update_record_start already wrote a SKIP (e.g. wrong distro), leave it untouched
-  if [[ -f "${_UPDATE_TMPDIR}/status_${_section}" ]]; then
+  if [[ -f "${_DOTFILES_RUN_TMPDIR}/status_${_section}" ]]; then
     local _existing_status
-    _existing_status=$(cat "${_UPDATE_TMPDIR}/status_${_section}")
+    _existing_status=$(cat "${_DOTFILES_RUN_TMPDIR}/status_${_section}")
     if [[ "${_existing_status}" == "SKIP" ]]; then
       return 0
     fi
   fi
 
   if [[ "${_exit}" -ne 0 ]]; then
-    printf "FAIL\n" > "${_UPDATE_TMPDIR}/status_${_section}"
-    local _fail_result_file="${_UPDATE_TMPDIR}/fail_result_${_section}"
-    local _err_file="${_UPDATE_TMPDIR}/err_${_section}"
+    printf "FAIL\n" > "${_DOTFILES_RUN_TMPDIR}/status_${_section}"
+    local _fail_result_file="${_DOTFILES_RUN_TMPDIR}/fail_result_${_section}"
+    local _err_file="${_DOTFILES_RUN_TMPDIR}/err_${_section}"
     if [[ -f "${_fail_result_file}" ]]; then
-      cat "${_fail_result_file}" > "${_UPDATE_TMPDIR}/result_${_section}"
+      cat "${_fail_result_file}" > "${_DOTFILES_RUN_TMPDIR}/result_${_section}"
     else
-      printf "exit %d\n" "${_exit}" > "${_UPDATE_TMPDIR}/result_${_section}"
+      printf "exit %d\n" "${_exit}" > "${_DOTFILES_RUN_TMPDIR}/result_${_section}"
     fi
     if [[ -f "${_err_file}" ]] && [[ -s "${_err_file}" ]]; then
       local _err_tail
       _err_tail=$(grep -v '^[[:space:]]*$' "${_err_file}" | tail -10 | sed 's/\x1b\[[0-9;]*m//g; s/\r//')
       if [[ -n "${_err_tail}" ]]; then
         printf "[%s error output]\n%s\n" "${_section}" "${_err_tail}" \
-          > "${_UPDATE_TMPDIR}/detail_${_section}"
+          > "${_DOTFILES_RUN_TMPDIR}/detail_${_section}"
       fi
     fi
     return
@@ -162,14 +162,14 @@ _update_record_end() {
   case "${_section}" in
     brew)
       local _formula_diff="" _cask_diff="" _formula_count=0 _cask_count=0
-      brew list --formula --versions > "${_UPDATE_TMPDIR}/post_brew_formula" 2>/dev/null || true
-      brew list --cask --versions > "${_UPDATE_TMPDIR}/post_brew_cask" 2>/dev/null || true
-      if [[ -f "${_UPDATE_TMPDIR}/pre_brew_formula" ]]; then
-        _formula_diff=$(_update_diff_lines "${_UPDATE_TMPDIR}/pre_brew_formula" "${_UPDATE_TMPDIR}/post_brew_formula")
+      brew list --formula --versions > "${_DOTFILES_RUN_TMPDIR}/post_brew_formula" 2>/dev/null || true
+      brew list --cask --versions > "${_DOTFILES_RUN_TMPDIR}/post_brew_cask" 2>/dev/null || true
+      if [[ -f "${_DOTFILES_RUN_TMPDIR}/pre_brew_formula" ]]; then
+        _formula_diff=$(_update_diff_lines "${_DOTFILES_RUN_TMPDIR}/pre_brew_formula" "${_DOTFILES_RUN_TMPDIR}/post_brew_formula")
         _formula_count=$(printf '%s' "${_formula_diff}" | grep -c . || true)
       fi
-      if [[ -f "${_UPDATE_TMPDIR}/pre_brew_cask" ]]; then
-        _cask_diff=$(_update_diff_lines "${_UPDATE_TMPDIR}/pre_brew_cask" "${_UPDATE_TMPDIR}/post_brew_cask")
+      if [[ -f "${_DOTFILES_RUN_TMPDIR}/pre_brew_cask" ]]; then
+        _cask_diff=$(_update_diff_lines "${_DOTFILES_RUN_TMPDIR}/pre_brew_cask" "${_DOTFILES_RUN_TMPDIR}/post_brew_cask")
         _cask_count=$(printf '%s' "${_cask_diff}" | grep -c . || true)
       fi
       if [[ ${_formula_count} -gt 0 ]] || [[ ${_cask_count} -gt 0 ]]; then
@@ -185,9 +185,9 @@ _update_record_end() {
       fi
       ;;
     mas)
-      if [[ -f "${_UPDATE_TMPDIR}/err_mas" ]]; then
+      if [[ -f "${_DOTFILES_RUN_TMPDIR}/err_mas" ]]; then
         local _mas_updated
-        _mas_updated=$(grep '^==> Updated ' "${_UPDATE_TMPDIR}/err_mas" || true)
+        _mas_updated=$(grep '^==> Updated ' "${_DOTFILES_RUN_TMPDIR}/err_mas" || true)
         local _mas_count
         _mas_count=$(printf '%s' "${_mas_updated}" | grep -c . || true)
         if [[ ${_mas_count} -gt 0 ]]; then
@@ -202,10 +202,10 @@ _update_record_end() {
       fi
       ;;
     gems)
-      if [[ -f "${_UPDATE_TMPDIR}/pre_gems" ]]; then
-        gem list > "${_UPDATE_TMPDIR}/post_gems" 2>/dev/null || true
+      if [[ -f "${_DOTFILES_RUN_TMPDIR}/pre_gems" ]]; then
+        gem list > "${_DOTFILES_RUN_TMPDIR}/post_gems" 2>/dev/null || true
         local _gem_diff
-        _gem_diff=$(_update_diff_lines "${_UPDATE_TMPDIR}/pre_gems" "${_UPDATE_TMPDIR}/post_gems")
+        _gem_diff=$(_update_diff_lines "${_DOTFILES_RUN_TMPDIR}/pre_gems" "${_DOTFILES_RUN_TMPDIR}/post_gems")
         local _gem_count
         _gem_count=$(printf '%s' "${_gem_diff}" | grep -c . || true)
         if [[ ${_gem_count} -gt 0 ]]; then
@@ -218,11 +218,11 @@ _update_record_end() {
       fi
       ;;
     pip)
-      if [[ -f "${_UPDATE_TMPDIR}/pip_outdated" ]]; then
+      if [[ -f "${_DOTFILES_RUN_TMPDIR}/pip_outdated" ]]; then
         local _pip_count
-        _pip_count=$(grep -c . "${_UPDATE_TMPDIR}/pip_outdated" || true)
+        _pip_count=$(grep -c . "${_DOTFILES_RUN_TMPDIR}/pip_outdated" || true)
         if [[ ${_pip_count} -gt 0 ]]; then
-          _result="${_pip_count} package(s) ($(paste -sd', ' - < "${_UPDATE_TMPDIR}/pip_outdated"))"
+          _result="${_pip_count} package(s) ($(paste -sd', ' - < "${_DOTFILES_RUN_TMPDIR}/pip_outdated"))"
         else
           _result="no changes"
         fi
@@ -231,9 +231,9 @@ _update_record_end() {
       fi
       ;;
     oh-my-zsh|tpm|tfenv|zsh-autosuggestions)
-      if [[ -f "${_UPDATE_TMPDIR}/pre_${_section}" ]]; then
+      if [[ -f "${_DOTFILES_RUN_TMPDIR}/pre_${_section}" ]]; then
         local _old_sha _git_dir
-        _old_sha=$(cat "${_UPDATE_TMPDIR}/pre_${_section}")
+        _old_sha=$(cat "${_DOTFILES_RUN_TMPDIR}/pre_${_section}")
         case "${_section}" in
           oh-my-zsh) _git_dir="${HOME}/.oh-my-zsh" ;;
           tpm) _git_dir="${HOME}/.tmux/plugins/tpm" ;;
@@ -254,11 +254,11 @@ _update_record_end() {
       fi
       ;;
     softwareupdate)
-      if [[ -f "${_UPDATE_TMPDIR}/pre_softwareupdate" ]]; then
+      if [[ -f "${_DOTFILES_RUN_TMPDIR}/pre_softwareupdate" ]]; then
         local _su_count
-        _su_count=$(wc -l < "${_UPDATE_TMPDIR}/pre_softwareupdate" | tr -d ' ')
+        _su_count=$(wc -l < "${_DOTFILES_RUN_TMPDIR}/pre_softwareupdate" | tr -d ' ')
         if [[ ${_su_count} -gt 0 ]]; then
-          _result="${_su_count} update(s) ($(paste -sd', ' - < "${_UPDATE_TMPDIR}/pre_softwareupdate"))"
+          _result="${_su_count} update(s) ($(paste -sd', ' - < "${_DOTFILES_RUN_TMPDIR}/pre_softwareupdate"))"
         else
           _result="no changes"
         fi
@@ -267,13 +267,13 @@ _update_record_end() {
       fi
       ;;
     claude)
-      if [[ -f "${_UPDATE_TMPDIR}/pre_claude" ]]; then
+      if [[ -f "${_DOTFILES_RUN_TMPDIR}/pre_claude" ]]; then
         claude plugins list 2>/dev/null \
           | grep 'Version:' \
           | sed 's/^[[:space:]]*//' \
-          > "${_UPDATE_TMPDIR}/post_claude" || true
+          > "${_DOTFILES_RUN_TMPDIR}/post_claude" || true
         local _claude_diff
-        _claude_diff=$(_update_diff_lines "${_UPDATE_TMPDIR}/pre_claude" "${_UPDATE_TMPDIR}/post_claude")
+        _claude_diff=$(_update_diff_lines "${_DOTFILES_RUN_TMPDIR}/pre_claude" "${_DOTFILES_RUN_TMPDIR}/post_claude")
         local _claude_count
         _claude_count=$(printf '%s' "${_claude_diff}" | grep -c . || true)
         if [[ ${_claude_count} -gt 0 ]]; then
@@ -288,10 +288,10 @@ _update_record_end() {
     npm)
       npm list -g --depth=0 2>/dev/null \
         | grep -v '^/' \
-        > "${_UPDATE_TMPDIR}/post_npm" || true
-      if [[ -f "${_UPDATE_TMPDIR}/pre_npm" ]]; then
+        > "${_DOTFILES_RUN_TMPDIR}/post_npm" || true
+      if [[ -f "${_DOTFILES_RUN_TMPDIR}/pre_npm" ]]; then
         local _npm_diff _npm_count
-        _npm_diff=$(_update_diff_lines "${_UPDATE_TMPDIR}/pre_npm" "${_UPDATE_TMPDIR}/post_npm")
+        _npm_diff=$(_update_diff_lines "${_DOTFILES_RUN_TMPDIR}/pre_npm" "${_DOTFILES_RUN_TMPDIR}/post_npm")
         _npm_count=$(printf '%s' "${_npm_diff}" | grep -c . || true)
         if [[ ${_npm_count} -gt 0 ]]; then
           _result="${_npm_count} package(s) ($(printf '%s' "${_npm_diff}" | sed 's/^[├└]── //' | paste -sd', ' -))"
@@ -303,10 +303,10 @@ _update_record_end() {
       fi
       ;;
     apt)
-      dpkg-query -W -f='${Package} ${Version}\n' > "${_UPDATE_TMPDIR}/post_apt" 2>/dev/null || true
-      if [[ -f "${_UPDATE_TMPDIR}/pre_apt" ]]; then
+      dpkg-query -W -f='${Package} ${Version}\n' > "${_DOTFILES_RUN_TMPDIR}/post_apt" 2>/dev/null || true
+      if [[ -f "${_DOTFILES_RUN_TMPDIR}/pre_apt" ]]; then
         local _apt_diff _apt_count
-        _apt_diff=$(_update_diff_lines "${_UPDATE_TMPDIR}/pre_apt" "${_UPDATE_TMPDIR}/post_apt")
+        _apt_diff=$(_update_diff_lines "${_DOTFILES_RUN_TMPDIR}/pre_apt" "${_DOTFILES_RUN_TMPDIR}/post_apt")
         _apt_count=$(printf '%s' "${_apt_diff}" | grep -c . || true)
         if [[ ${_apt_count} -gt 0 ]]; then
           _result="${_apt_count} package(s) ($(printf '%s' "${_apt_diff}" | paste -sd', ' -))"
@@ -332,10 +332,10 @@ _update_record_end() {
     snap)
       snap list --color=never 2>/dev/null \
         | awk 'NR>1 {print $1, $2}' \
-        > "${_UPDATE_TMPDIR}/post_snap" || true
-      if [[ -f "${_UPDATE_TMPDIR}/pre_snap" ]]; then
+        > "${_DOTFILES_RUN_TMPDIR}/post_snap" || true
+      if [[ -f "${_DOTFILES_RUN_TMPDIR}/pre_snap" ]]; then
         local _snap_diff _snap_count
-        _snap_diff=$(_update_diff_lines "${_UPDATE_TMPDIR}/pre_snap" "${_UPDATE_TMPDIR}/post_snap")
+        _snap_diff=$(_update_diff_lines "${_DOTFILES_RUN_TMPDIR}/pre_snap" "${_DOTFILES_RUN_TMPDIR}/post_snap")
         _snap_count=$(printf '%s' "${_snap_diff}" | grep -c . || true)
         if [[ ${_snap_count} -gt 0 ]]; then
           _result="${_snap_count} package(s) ($(printf '%s' "${_snap_diff}" | paste -sd', ' -))"
@@ -351,44 +351,36 @@ _update_record_end() {
       ;;
   esac
 
-  printf "OK\n" > "${_UPDATE_TMPDIR}/status_${_section}"
-  printf "%s\n" "${_result}" > "${_UPDATE_TMPDIR}/result_${_section}"
+  printf "OK\n" > "${_DOTFILES_RUN_TMPDIR}/status_${_section}"
+  printf "%s\n" "${_result}" > "${_DOTFILES_RUN_TMPDIR}/result_${_section}"
 }
 
-# _ledger_write_dotfiles_entry
-# Builds a dotfiles ledger entry from _UPDATE_TMPDIR metadata and calls
-# ledger_write_entry. No-ops if machine-id is absent (ledger not initialized).
-_ledger_write_dotfiles_entry() {
-  # Only run when called from run_update — started_at is set by that path.
-  # Absent in direct _update_summary test calls; skip to avoid invoking ledger.
-  [[ ! -f "${_UPDATE_TMPDIR}/started_at" ]] && return 0
+# _ledger_write_run_entry RUN_TYPE EXIT_CODE
+# Writes a state-ledger CMDB entry for any dotfiles run function.
+# RUN_TYPE: update | setup_user | setup | developer | recreate_venv
+# EXIT_CODE: return code of the run function (0=success).
+# No-ops when _DOTFILES_RUN_TMPDIR/started_at absent (not called from a
+# run_* function) or when machine-id is absent (ledger not initialized).
+_ledger_write_run_entry() {
+  local _run_type="${1:?_ledger_write_run_entry: run_type required}"
+  local _exit_code="${2:-0}"
+
+  [[ ! -f "${_DOTFILES_RUN_TMPDIR}/started_at" ]] && return 0
   local _machine_id_path="${HOME}/.config/dotfiles/machine-id"
   [[ ! -f "${_machine_id_path}" ]] && return 0
 
   local _machine_id _started_at _start_epoch _now_epoch _duration _run_id _git_sha
   _machine_id=$(tr -d '[:space:]' < "${_machine_id_path}" 2>/dev/null)
-  _started_at=$(cat "${_UPDATE_TMPDIR}/started_at" 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)
-  _start_epoch=$(cat "${_UPDATE_TMPDIR}/start_epoch" 2>/dev/null || printf '0')
+  _started_at=$(cat "${_DOTFILES_RUN_TMPDIR}/started_at" 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)
+  _start_epoch=$(cat "${_DOTFILES_RUN_TMPDIR}/start_epoch" 2>/dev/null || printf '0')
   _now_epoch=$(date +%s)
   _duration=$(( _now_epoch - _start_epoch ))
-  _run_id=$(cat "${_UPDATE_TMPDIR}/run_id" 2>/dev/null || \
+  _run_id=$(cat "${_DOTFILES_RUN_TMPDIR}/run_id" 2>/dev/null || \
     python3 -c "import uuid; print(str(uuid.uuid4()))" 2>/dev/null || printf 'unknown')
-  _git_sha=$(cat "${_UPDATE_TMPDIR}/git_sha" 2>/dev/null || printf 'unknown')
+  _git_sha=$(cat "${_DOTFILES_RUN_TMPDIR}/git_sha" 2>/dev/null || printf 'unknown')
 
   local _success="true"
-  [[ ${_fail:-0} -gt 0 ]] && _success="false"
-
-  local _failure_stage="null"
-  if [[ ${_fail:-0} -gt 0 ]]; then
-    local _s
-    for _s in "${_UPDATE_SECTION_ORDER[@]}"; do
-      if [[ -f "${_UPDATE_TMPDIR}/status_${_s}" ]] && \
-         [[ "$(cat "${_UPDATE_TMPDIR}/status_${_s}")" == "FAIL" ]]; then
-        _failure_stage="\"${_s}\""
-        break
-      fi
-    done
-  fi
+  [[ "${_exit_code}" -ne 0 ]] && _success="false"
 
   local _hostname _os _distro_version
   _hostname=$(hostname -s 2>/dev/null || printf 'unknown')
@@ -403,36 +395,10 @@ _ledger_write_dotfiles_entry() {
     _distro_version="unknown"
   fi
 
-  local _packages_updated=0
-  local _s _result_str _count
-  for _s in brew pip gems mas apt snap npm; do
-    if [[ -f "${_UPDATE_TMPDIR}/result_${_s}" ]]; then
-      _result_str=$(cat "${_UPDATE_TMPDIR}/result_${_s}")
-      if [[ "${_result_str}" != "no changes" && "${_result_str}" != "updated" && \
-            "${_result_str}" != *"skipped"* ]]; then
-        _count=$(printf '%s' "${_result_str}" | grep -oE '^[0-9]+' || printf '0')
-        _packages_updated=$(( _packages_updated + ${_count:-0} ))
-      fi
-    fi
-  done
-
-  local _workflows_json="["
-  local _first=1 _s _st
-  for _s in "${_UPDATE_SECTION_ORDER[@]}"; do
-    if [[ -f "${_UPDATE_TMPDIR}/status_${_s}" ]]; then
-      _st=$(cat "${_UPDATE_TMPDIR}/status_${_s}")
-      if [[ "${_st}" != "SKIP" ]]; then
-        [[ ${_first} -eq 0 ]] && _workflows_json+=","
-        _workflows_json+="\"${_s}\""
-        _first=0
-      fi
-    fi
-  done
-  _workflows_json+="]"
-
-  local _json
+  # Base JSON — common to all run types (no trailing comma, no closing brace)
+  local _base_json
   # shellcheck disable=SC2059
-  printf -v _json '{
+  printf -v _base_json '{
   "schema_version": "1.0",
   "run_id": "%s",
   "tool": "dotfiles",
@@ -443,21 +409,74 @@ _ledger_write_dotfiles_entry() {
   "started_at": "%s",
   "duration_seconds": %d,
   "success": %s,
-  "failure_stage": %s,
   "machine_id": "%s",
   "hostname": "%s",
   "os": "%s",
   "distro_version": "%s",
-  "run_type": "update",
+  "run_type": "%s"' \
+    "${_run_id}" "${_machine_id}" "${_git_sha}" "${_started_at}" \
+    "${_duration}" "${_success}" \
+    "${_machine_id}" "${_hostname}" "${_os}" "${_distro_version}" \
+    "${_run_type}"
+
+  if [[ "${_run_type}" == "update" ]]; then
+    # update-specific fields: failure_stage, workflows_ran, packages_updated_count
+    local _failure_stage="null"
+    if [[ "${_exit_code}" -ne 0 ]]; then
+      local _s
+      for _s in "${_UPDATE_SECTION_ORDER[@]}"; do
+        if [[ -f "${_DOTFILES_RUN_TMPDIR}/status_${_s}" ]] && \
+           [[ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_${_s}")" == "FAIL" ]]; then
+          _failure_stage="\"${_s}\""
+          break
+        fi
+      done
+    fi
+
+    local _packages_updated=0
+    local _s _result_str _count
+    for _s in brew pip gems mas apt snap npm; do
+      if [[ -f "${_DOTFILES_RUN_TMPDIR}/result_${_s}" ]]; then
+        _result_str=$(cat "${_DOTFILES_RUN_TMPDIR}/result_${_s}")
+        if [[ "${_result_str}" != "no changes" && "${_result_str}" != "updated" && \
+              "${_result_str}" != *"skipped"* ]]; then
+          _count=$(printf '%s' "${_result_str}" | grep -oE '^[0-9]+' || printf '0')
+          _packages_updated=$(( _packages_updated + ${_count:-0} ))
+        fi
+      fi
+    done
+
+    local _workflows_json="["
+    local _first=1 _s _st
+    for _s in "${_UPDATE_SECTION_ORDER[@]}"; do
+      if [[ -f "${_DOTFILES_RUN_TMPDIR}/status_${_s}" ]]; then
+        _st=$(cat "${_DOTFILES_RUN_TMPDIR}/status_${_s}")
+        if [[ "${_st}" != "SKIP" ]]; then
+          [[ ${_first} -eq 0 ]] && _workflows_json+=","
+          _workflows_json+="\"${_s}\""
+          _first=0
+        fi
+      fi
+    done
+    _workflows_json+="]"
+
+    local _ext_json
+    printf -v _ext_json ',
+  "failure_stage": %s,
   "workflows_ran": %s,
   "packages_updated_count": %d
-}' \
-    "${_run_id}" "${_machine_id}" "${_git_sha}" "${_started_at}" \
-    "${_duration}" "${_success}" "${_failure_stage}" \
-    "${_machine_id}" "${_hostname}" "${_os}" "${_distro_version}" \
-    "${_workflows_json}" "${_packages_updated}"
+}' "${_failure_stage}" "${_workflows_json}" "${_packages_updated}"
+    ledger_write_entry "${_base_json}${_ext_json}"
+  else
+    ledger_write_entry "${_base_json}
+}"
+  fi
+}
 
-  ledger_write_entry "${_json}"
+# _ledger_write_dotfiles_entry — backward-compat shim for update runs.
+# Reads _fail from dynamic scoping (set in _update_summary).
+_ledger_write_dotfiles_entry() {
+  _ledger_write_run_entry "update" "${_fail:-0}"
 }
 
 # _update_summary
@@ -472,11 +491,11 @@ _update_summary() {
 
   local _section _status _result
   for _section in "${_UPDATE_SECTION_ORDER[@]}"; do
-    if [[ ! -f "${_UPDATE_TMPDIR}/status_${_section}" ]]; then
+    if [[ ! -f "${_DOTFILES_RUN_TMPDIR}/status_${_section}" ]]; then
       continue
     fi
-    _status=$(cat "${_UPDATE_TMPDIR}/status_${_section}")
-    _result=$(cat "${_UPDATE_TMPDIR}/result_${_section}")
+    _status=$(cat "${_DOTFILES_RUN_TMPDIR}/status_${_section}")
+    _result=$(cat "${_DOTFILES_RUN_TMPDIR}/result_${_section}")
 
     case "${_status}" in
       OK)
@@ -504,8 +523,8 @@ _update_summary() {
   # Build detail output (in section order for deterministic output)
   local _detail_output=""
   for _section in "${_UPDATE_SECTION_ORDER[@]}"; do
-    if [[ -f "${_UPDATE_TMPDIR}/detail_${_section}" ]]; then
-      _detail_output+="\n$(cat "${_UPDATE_TMPDIR}/detail_${_section}")\n"
+    if [[ -f "${_DOTFILES_RUN_TMPDIR}/detail_${_section}" ]]; then
+      _detail_output+="\n$(cat "${_DOTFILES_RUN_TMPDIR}/detail_${_section}")\n"
     fi
   done
 
@@ -596,52 +615,52 @@ _update_check_brewfile_drift() {
   fi
 
   # Parse Brewfile: active = expected on this machine; inactive = invisible to drift
-  _brewfile_parse_section  brew "${_brewfile}" | sort > "${_UPDATE_TMPDIR}/drift_bf_formulae"
-  _brewfile_parse_inactive brew "${_brewfile}" | sort > "${_UPDATE_TMPDIR}/drift_ignore_formulae"
-  _brewfile_parse_section  tap  "${_brewfile}" | sort > "${_UPDATE_TMPDIR}/drift_bf_taps"
-  _brewfile_parse_inactive tap  "${_brewfile}" | sort > "${_UPDATE_TMPDIR}/drift_ignore_taps"
+  _brewfile_parse_section  brew "${_brewfile}" | sort > "${_DOTFILES_RUN_TMPDIR}/drift_bf_formulae"
+  _brewfile_parse_inactive brew "${_brewfile}" | sort > "${_DOTFILES_RUN_TMPDIR}/drift_ignore_formulae"
+  _brewfile_parse_section  tap  "${_brewfile}" | sort > "${_DOTFILES_RUN_TMPDIR}/drift_bf_taps"
+  _brewfile_parse_inactive tap  "${_brewfile}" | sort > "${_DOTFILES_RUN_TMPDIR}/drift_ignore_taps"
 
   # Get actual installed state, stripping packages that belong to an inactive profile
   # so they are invisible to drift detection on this machine.
   # leaves: top-level installs only (for untracked detection, filters transitive deps)
   # all: every installed formula (for missing detection, avoids false positives)
   brew leaves 2>/dev/null | sort \
-    | comm -23 - "${_UPDATE_TMPDIR}/drift_ignore_formulae" \
-    > "${_UPDATE_TMPDIR}/drift_inst_formulae_leaves"
+    | comm -23 - "${_DOTFILES_RUN_TMPDIR}/drift_ignore_formulae" \
+    > "${_DOTFILES_RUN_TMPDIR}/drift_inst_formulae_leaves"
   brew list --formula --full-name 2>/dev/null | sort \
-    | comm -23 - "${_UPDATE_TMPDIR}/drift_ignore_formulae" \
-    > "${_UPDATE_TMPDIR}/drift_inst_formulae_all"
+    | comm -23 - "${_DOTFILES_RUN_TMPDIR}/drift_ignore_formulae" \
+    > "${_DOTFILES_RUN_TMPDIR}/drift_inst_formulae_all"
   brew tap 2>/dev/null \
     | grep -v -E '^homebrew/(bundle|cask|core|services)$' \
     | sort \
-    | comm -23 - "${_UPDATE_TMPDIR}/drift_ignore_taps" \
-    > "${_UPDATE_TMPDIR}/drift_inst_taps"
+    | comm -23 - "${_DOTFILES_RUN_TMPDIR}/drift_ignore_taps" \
+    > "${_DOTFILES_RUN_TMPDIR}/drift_inst_taps"
 
   # Compute formula and tap drift
   # comm -13: lines only in file2 = installed but not in Brewfile (untracked)
   # comm -23: lines only in file1 = in Brewfile but not installed (missing)
   local _untracked_formulae _missing_formulae _untracked_taps _missing_taps
-  _untracked_formulae=$(comm -13 "${_UPDATE_TMPDIR}/drift_bf_formulae" \
-    "${_UPDATE_TMPDIR}/drift_inst_formulae_leaves")
-  _missing_formulae=$(comm -23 "${_UPDATE_TMPDIR}/drift_bf_formulae" \
-    "${_UPDATE_TMPDIR}/drift_inst_formulae_all")
-  _untracked_taps=$(comm -13 "${_UPDATE_TMPDIR}/drift_bf_taps" \
-    "${_UPDATE_TMPDIR}/drift_inst_taps")
-  _missing_taps=$(comm -23 "${_UPDATE_TMPDIR}/drift_bf_taps" \
-    "${_UPDATE_TMPDIR}/drift_inst_taps")
+  _untracked_formulae=$(comm -13 "${_DOTFILES_RUN_TMPDIR}/drift_bf_formulae" \
+    "${_DOTFILES_RUN_TMPDIR}/drift_inst_formulae_leaves")
+  _missing_formulae=$(comm -23 "${_DOTFILES_RUN_TMPDIR}/drift_bf_formulae" \
+    "${_DOTFILES_RUN_TMPDIR}/drift_inst_formulae_all")
+  _untracked_taps=$(comm -13 "${_DOTFILES_RUN_TMPDIR}/drift_bf_taps" \
+    "${_DOTFILES_RUN_TMPDIR}/drift_inst_taps")
+  _missing_taps=$(comm -23 "${_DOTFILES_RUN_TMPDIR}/drift_bf_taps" \
+    "${_DOTFILES_RUN_TMPDIR}/drift_inst_taps")
 
   # Cask drift: macOS only (Linux Homebrew does not support casks)
   local _untracked_casks="" _missing_casks=""
   if [[ -n ${MACOS:-} ]]; then
-    _brewfile_parse_section  cask "${_brewfile}" | sort > "${_UPDATE_TMPDIR}/drift_bf_casks"
-    _brewfile_parse_inactive cask "${_brewfile}" | sort > "${_UPDATE_TMPDIR}/drift_ignore_casks"
+    _brewfile_parse_section  cask "${_brewfile}" | sort > "${_DOTFILES_RUN_TMPDIR}/drift_bf_casks"
+    _brewfile_parse_inactive cask "${_brewfile}" | sort > "${_DOTFILES_RUN_TMPDIR}/drift_ignore_casks"
     brew list --cask 2>/dev/null | sort \
-      | comm -23 - "${_UPDATE_TMPDIR}/drift_ignore_casks" \
-      > "${_UPDATE_TMPDIR}/drift_inst_casks"
-    _untracked_casks=$(comm -13 "${_UPDATE_TMPDIR}/drift_bf_casks" \
-      "${_UPDATE_TMPDIR}/drift_inst_casks")
-    _missing_casks=$(comm -23 "${_UPDATE_TMPDIR}/drift_bf_casks" \
-      "${_UPDATE_TMPDIR}/drift_inst_casks")
+      | comm -23 - "${_DOTFILES_RUN_TMPDIR}/drift_ignore_casks" \
+      > "${_DOTFILES_RUN_TMPDIR}/drift_inst_casks"
+    _untracked_casks=$(comm -13 "${_DOTFILES_RUN_TMPDIR}/drift_bf_casks" \
+      "${_DOTFILES_RUN_TMPDIR}/drift_inst_casks")
+    _missing_casks=$(comm -23 "${_DOTFILES_RUN_TMPDIR}/drift_bf_casks" \
+      "${_DOTFILES_RUN_TMPDIR}/drift_inst_casks")
   fi
 
   # Check for any drift
@@ -717,5 +736,5 @@ _update_check_brewfile_drift() {
     done <<< "${_missing_taps}"
   fi
 
-  printf '%b' "${_detail}" > "${_UPDATE_TMPDIR}/detail_brew-drift"
+  printf '%b' "${_detail}" > "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift"
 }
