@@ -355,6 +355,111 @@ _update_record_end() {
   printf "%s\n" "${_result}" > "${_UPDATE_TMPDIR}/result_${_section}"
 }
 
+# _ledger_write_dotfiles_entry
+# Builds a dotfiles ledger entry from _UPDATE_TMPDIR metadata and calls
+# ledger_write_entry. No-ops if machine-id is absent (ledger not initialized).
+_ledger_write_dotfiles_entry() {
+  # Only run when called from run_update — started_at is set by that path.
+  # Absent in direct _update_summary test calls; skip to avoid invoking ledger.
+  [[ ! -f "${_UPDATE_TMPDIR}/started_at" ]] && return 0
+  local _machine_id_path="${HOME}/.config/dotfiles/machine-id"
+  [[ ! -f "${_machine_id_path}" ]] && return 0
+
+  local _machine_id _started_at _start_epoch _now_epoch _duration _run_id _git_sha
+  _machine_id=$(tr -d '[:space:]' < "${_machine_id_path}" 2>/dev/null)
+  _started_at=$(cat "${_UPDATE_TMPDIR}/started_at" 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)
+  _start_epoch=$(cat "${_UPDATE_TMPDIR}/start_epoch" 2>/dev/null || printf '0')
+  _now_epoch=$(date +%s)
+  _duration=$(( _now_epoch - _start_epoch ))
+  _run_id=$(cat "${_UPDATE_TMPDIR}/run_id" 2>/dev/null || \
+    python3 -c "import uuid; print(str(uuid.uuid4()))" 2>/dev/null || printf 'unknown')
+  _git_sha=$(cat "${_UPDATE_TMPDIR}/git_sha" 2>/dev/null || printf 'unknown')
+
+  local _success="true"
+  [[ ${_fail:-0} -gt 0 ]] && _success="false"
+
+  local _failure_stage="null"
+  if [[ ${_fail:-0} -gt 0 ]]; then
+    local _s
+    for _s in "${_UPDATE_SECTION_ORDER[@]}"; do
+      if [[ -f "${_UPDATE_TMPDIR}/status_${_s}" ]] && \
+         [[ "$(cat "${_UPDATE_TMPDIR}/status_${_s}")" == "FAIL" ]]; then
+        _failure_stage="\"${_s}\""
+        break
+      fi
+    done
+  fi
+
+  local _hostname _os _distro_version
+  _hostname=$(hostname -s 2>/dev/null || printf 'unknown')
+  if [[ -n "${MACOS:-}" ]]; then
+    _os="macos"
+    _distro_version=$(sw_vers -productVersion 2>/dev/null || printf 'unknown')
+  elif [[ -n "${UBUNTU:-}" ]]; then
+    _os="linux"
+    _distro_version=$(lsb_release -rs 2>/dev/null || printf 'unknown')
+  else
+    _os="unknown"
+    _distro_version="unknown"
+  fi
+
+  local _packages_updated=0
+  local _s _result_str _count
+  for _s in brew pip gems mas apt snap npm; do
+    if [[ -f "${_UPDATE_TMPDIR}/result_${_s}" ]]; then
+      _result_str=$(cat "${_UPDATE_TMPDIR}/result_${_s}")
+      if [[ "${_result_str}" != "no changes" && "${_result_str}" != "updated" && \
+            "${_result_str}" != *"skipped"* ]]; then
+        _count=$(printf '%s' "${_result_str}" | grep -oE '^[0-9]+' || printf '0')
+        _packages_updated=$(( _packages_updated + ${_count:-0} ))
+      fi
+    fi
+  done
+
+  local _workflows_json="["
+  local _first=1 _s _st
+  for _s in "${_UPDATE_SECTION_ORDER[@]}"; do
+    if [[ -f "${_UPDATE_TMPDIR}/status_${_s}" ]]; then
+      _st=$(cat "${_UPDATE_TMPDIR}/status_${_s}")
+      if [[ "${_st}" != "SKIP" ]]; then
+        [[ ${_first} -eq 0 ]] && _workflows_json+=","
+        _workflows_json+="\"${_s}\""
+        _first=0
+      fi
+    fi
+  done
+  _workflows_json+="]"
+
+  local _json
+  # shellcheck disable=SC2059
+  printf -v _json '{
+  "schema_version": "1.0",
+  "run_id": "%s",
+  "tool": "dotfiles",
+  "entity_id": "%s",
+  "triggered_by": "manual",
+  "git_sha": "%s",
+  "git_repo": "dotfiles",
+  "started_at": "%s",
+  "duration_seconds": %d,
+  "success": %s,
+  "failure_stage": %s,
+  "machine_id": "%s",
+  "hostname": "%s",
+  "os": "%s",
+  "distro_version": "%s",
+  "run_type": "update",
+  "workflows_ran": %s,
+  "packages_updated_count": %d
+}' \
+    "${_run_id}" "${_machine_id}" "${_git_sha}" "${_started_at}" \
+    "${_duration}" "${_success}" "${_failure_stage}" \
+    "${_machine_id}" "${_hostname}" "${_os}" "${_distro_version}" \
+    "${_workflows_json}" "${_packages_updated}"
+
+  ledger_write_entry "${_json}"
+}
+
 # _update_summary
 # Reads status/result files, prints formatted table, appends to log file.
 _update_summary() {
@@ -418,6 +523,8 @@ _update_summary() {
   } >> "${_log}" 2>/dev/null || log_warn "Could not write to ${_log}"
 
   printf "Log appended: %s\n" "${_log}"
+
+  _ledger_write_dotfiles_entry || true
 }
 
 # _brewfile_extract_cap LINE
