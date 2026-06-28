@@ -298,7 +298,8 @@ run_update() {
         printf "\n[skill-scan] Scanning updated plugins for malicious content...\n"
         local _scan_rc=0
         python3 "${HOME}/.claude/scripts/scan_skills.py" \
-          --plugin-dir "${HOME}/.claude/plugins/cache/" || _scan_rc=$?
+          --plugin-dir "${HOME}/.claude/plugins/cache/" \
+          --write-ledger || _scan_rc=$?
         if [[ ${_scan_rc} -eq 2 ]]; then
           printf "\n[skill-scan] HOLD: one or more plugins contain red-flag patterns.\n"
           printf "             Do not use flagged skills until findings are resolved.\n"
@@ -306,6 +307,13 @@ run_update() {
           printf "\n[skill-scan] REVIEW: one or more plugins could not be fully analyzed.\n"
           printf "             Human review required — re-running the scanner does not clear this.\n"
         fi
+      fi
+      # Post-update staleness audit — advisory only; never aborts update.
+      # Detects attestations that pre-date the most recent plugin content hash.
+      if command -v python3 &>/dev/null && [[ -f "${HOME}/.claude/scripts/plugin_verdicts.py" ]]; then
+        python3 "${HOME}/.claude/scripts/plugin_verdicts.py" audit || {
+          printf "\n[skill-scan] Stale attestations detected. Re-scan flagged plugins.\n"
+        }
       fi
     else
       _update_skip "claude" "claude not installed"
@@ -685,4 +693,43 @@ run_check_versions() {
     "${_outdated}" "${_skipped}" "${_warned}" "${_ok}"
 
   [[ ${_outdated} -eq 0 ]]
+}
+
+# ── Ledger integration ─────────────────────────────────────────────────────────
+
+ensure_machine_id() {
+  local _id_path="${HOME}/.config/dotfiles/machine-id"
+  if [[ -f "${_id_path}" ]]; then
+    return 0
+  fi
+  mkdir -p "$(dirname "${_id_path}")"
+  python3 -c "import uuid; print(str(uuid.uuid4()))" > "${_id_path}" || return 1
+  printf "machine-id created: %s\n" "${_id_path}"
+}
+
+ledger_write_entry() {
+  local _json="${1:?ledger_write_entry: json payload required}"
+  local _ledger_bin
+  _ledger_bin="$(command -v ledger 2>/dev/null)"
+  if [[ -z "${_ledger_bin}" ]]; then
+    printf "WARNING: ledger binary not found — skipping ledger write\n" >&2
+    return 0
+  fi
+  local _rc
+  printf '%s' "${_json}" | "${_ledger_bin}" write
+  _rc=$?
+  if [[ ${_rc} -eq 2 ]]; then
+    printf "WARNING: ledger write spooled (unreachable)\n" >&2
+    return 2
+  fi
+  return ${_rc}
+}
+
+ledger_flush_spool() {
+  local _ledger_bin
+  _ledger_bin="$(command -v ledger 2>/dev/null)"
+  if [[ -z "${_ledger_bin}" ]]; then
+    return 0
+  fi
+  "${_ledger_bin}" flush
 }
