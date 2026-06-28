@@ -359,6 +359,9 @@ _update_record_end() {
 # Builds a dotfiles ledger entry from _UPDATE_TMPDIR metadata and calls
 # ledger_write_entry. No-ops if machine-id is absent (ledger not initialized).
 _ledger_write_dotfiles_entry() {
+  # Only run when called from run_update — started_at is set by that path.
+  # Absent in direct _update_summary test calls; skip to avoid invoking ledger.
+  [[ ! -f "${_UPDATE_TMPDIR}/started_at" ]] && return 0
   local _machine_id_path="${HOME}/.config/dotfiles/machine-id"
   [[ ! -f "${_machine_id_path}" ]] && return 0
 
@@ -521,7 +524,7 @@ _update_summary() {
 
   printf "Log appended: %s\n" "${_log}"
 
-  _ledger_write_dotfiles_entry
+  _ledger_write_dotfiles_entry || true
 }
 
 # _brewfile_extract_cap LINE

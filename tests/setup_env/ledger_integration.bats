@@ -166,6 +166,17 @@ EOF
     printf '%s' "${_dir}"
 }
 
+@test "_ledger_write_dotfiles_entry: no-ops when started_at absent" {
+    export _UPDATE_TMPDIR="${BATS_TEST_TMPDIR}/update"
+    mkdir -p "${_UPDATE_TMPDIR}"
+    # No started_at file — simulates direct _update_summary call, not run_update
+    local _mock_dir
+    _mock_dir="$(_make_mock_ledger 0)"
+    PATH="${_mock_dir}:${PATH}" _ledger_write_dotfiles_entry
+    run grep "ledger write" "${MOCK_CALLS_FILE}"
+    [ "$status" -ne 0 ]
+}
+
 @test "_ledger_write_dotfiles_entry: no-ops when machine-id absent" {
     _setup_ledger_tmpdir
     local _mock_dir
