@@ -948,8 +948,8 @@ setup_constants_copy() {
   export UPDATE_BREW=1
   export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
   run_update
-  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_brew"
-  grep -q "not macOS or Linux" "${_UPDATE_TMPDIR}/result_brew"
+  grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_brew"
+  grep -q "not macOS or Linux" "${_DOTFILES_RUN_TMPDIR}/result_brew"
 }
 
 # ── return-code propagation: run_setup_user ───────────────────────────────────
@@ -975,8 +975,8 @@ setup_constants_copy() {
   export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
   run_update
-  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_apt"
-  grep -q "not applicable" "${_UPDATE_TMPDIR}/result_apt"
+  grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_apt"
+  grep -q "not applicable" "${_DOTFILES_RUN_TMPDIR}/result_apt"
 }
 
 @test "run_update Linux packages block skips apt and snap when UPDATE_PKGS not set and not run_all" {
@@ -986,9 +986,9 @@ setup_constants_copy() {
   unset UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
   export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
   run_update
-  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_apt"
-  grep -q "flag not set" "${_UPDATE_TMPDIR}/result_apt"
-  grep -q "flag not set" "${_UPDATE_TMPDIR}/result_snap"
+  grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_apt"
+  grep -q "flag not set" "${_DOTFILES_RUN_TMPDIR}/result_apt"
+  grep -q "flag not set" "${_DOTFILES_RUN_TMPDIR}/result_snap"
 }
 
 @test "run_update Linux packages block runs when UPDATE_PKGS is set on Ubuntu" {
@@ -1168,7 +1168,7 @@ setup_constants_copy() {
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
   run_update
-  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_tfenv"
+  grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_tfenv"
 }
 
 @test "run_update updates oh-my-zsh when ~/.oh-my-zsh exists" {
@@ -1185,7 +1185,7 @@ setup_constants_copy() {
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
   run_update
-  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_oh-my-zsh"
+  grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_oh-my-zsh"
 }
 
 @test "run_update updates tpm when ~/.tmux/plugins/tpm exists" {
@@ -1202,7 +1202,7 @@ setup_constants_copy() {
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
   run_update
-  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_tpm"
+  grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_tpm"
 }
 
 @test "run_update updates cheat.sh when ~/bin/cht.sh exists" {
@@ -1220,7 +1220,7 @@ setup_constants_copy() {
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
   run_update
-  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_cheat.sh"
+  grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh"
 }
 
 @test "run_update updates cheat.sh tab completion when ~/.zsh.d/_cht exists" {
@@ -1271,7 +1271,7 @@ setup_constants_copy() {
   done | tr '\n' ':' | sed 's/:$//')"
   export PATH="${tmp_mocks}:${clean_path}"
   run_update
-  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_claude"
+  grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_claude"
 }
 
 @test "run_update skips claude when UPDATE_CLAUDE flag not set" {
@@ -1280,7 +1280,7 @@ setup_constants_copy() {
   export UPDATE_BREW=1
   unset UPDATE_CLAUDE UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
   run_update
-  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_claude"
+  grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_claude"
 }
 
 @test "run_update calls npm install when UPDATE_CLAUDE is set" {
@@ -1298,7 +1298,7 @@ setup_constants_copy() {
   export UPDATE_BREW=1
   unset UPDATE_CLAUDE UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
   run_update
-  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_npm"
+  grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_npm"
 }
 
 @test "run_update skips pip when HAS_DEVTOOLS not set" {
@@ -1307,7 +1307,7 @@ setup_constants_copy() {
   export UPDATE_PIP=1
   unset HAS_DEVTOOLS UPDATE_BREW UPDATE_CLAUDE UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
   run_update
-  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_pip"
+  grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_pip"
 }
 
 @test "run_update skips pip when UPDATE_PIP flag not set" {
@@ -1316,7 +1316,7 @@ setup_constants_copy() {
   export UPDATE_BREW=1
   unset UPDATE_PIP UPDATE_CLAUDE UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
   run_update
-  grep -q "SKIP" "${_UPDATE_TMPDIR}/status_pip"
+  grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_pip"
 }
 
 @test "run_update runs pip update when UPDATE_PIP and HAS_DEVTOOLS are set" {
@@ -1327,7 +1327,7 @@ setup_constants_copy() {
   # pyenv which python must return the mock python so $PYTHON stays in mock PATH
   export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
   run_update
-  grep -q "OK" "${_UPDATE_TMPDIR}/status_pip"
+  grep -q "OK" "${_DOTFILES_RUN_TMPDIR}/status_pip"
   grep -q "pyenv which python" "${MOCK_CALLS_FILE}"
 }
 
@@ -1339,8 +1339,8 @@ setup_constants_copy() {
   export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
   export MOCK_PYTHON_HEREDOC_PKGS="requests"
   run_update
-  grep -q "requests" "${_UPDATE_TMPDIR}/pip_outdated"
-  grep -q "OK" "${_UPDATE_TMPDIR}/status_pip"
+  grep -q "requests" "${_DOTFILES_RUN_TMPDIR}/pip_outdated"
+  grep -q "OK" "${_DOTFILES_RUN_TMPDIR}/status_pip"
 }
 
 # ── _check_one_version ────────────────────────────────────────────────────────

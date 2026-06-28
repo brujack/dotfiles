@@ -14,11 +14,11 @@ if [[ "$*" == *"pip check"* ]]; then
   exit 0
 fi
 # For 'python -' (heredoc execution): simulate the pip update Python script.
-# Consumes stdin (the Python source), then writes pip_outdated to _UPDATE_TMPDIR.
+# Consumes stdin (the Python source), then writes pip_outdated to _DOTFILES_RUN_TMPDIR.
 # Set MOCK_PYTHON_HEREDOC_PKGS to simulate outdated packages (newline-separated).
 if [[ "$1" == "-" ]]; then
   cat >/dev/null
-  printf "%s" "${MOCK_PYTHON_HEREDOC_PKGS:-}" > "${_UPDATE_TMPDIR:-/tmp}/pip_outdated"
+  printf "%s" "${MOCK_PYTHON_HEREDOC_PKGS:-}" > "${_DOTFILES_RUN_TMPDIR:-/tmp}/pip_outdated"
   exit 0
 fi
 exit "${MOCK_PYTHON_EXIT:-0}"

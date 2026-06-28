@@ -92,7 +92,20 @@ setup_ai_config() {
   fi
 }
 
+_dotfiles_run_tmpdir_setup() {
+  _DOTFILES_RUN_TMPDIR=$(mktemp -d)
+  export _DOTFILES_RUN_TMPDIR
+  trap 'rm -rf "${_DOTFILES_RUN_TMPDIR}"; unset _DOTFILES_RUN_TMPDIR' EXIT INT TERM
+  date -u +%Y-%m-%dT%H:%M:%SZ > "${_DOTFILES_RUN_TMPDIR}/started_at"
+  date +%s > "${_DOTFILES_RUN_TMPDIR}/start_epoch"
+  python3 -c "import uuid; print(str(uuid.uuid4()))" \
+    > "${_DOTFILES_RUN_TMPDIR}/run_id" 2>/dev/null || true
+  git -C "${PERSONAL_GITREPOS}/${DOTFILES}" rev-parse HEAD \
+    > "${_DOTFILES_RUN_TMPDIR}/git_sha" 2>/dev/null || true
+}
+
 run_setup_user() {
+  _dotfiles_run_tmpdir_setup
   if [[ -n ${MACOS} ]]; then
     printf "Installing Rosetta if necessary\\n"
     install_rosetta || return 1
@@ -154,9 +167,11 @@ run_setup_user() {
 
   setup_claude_mcp || return 1
   setup_claude_plugins || return 1
+  _ledger_write_run_entry "setup_user" 0 || true
 }
 
 run_setup_or_developer() {
+  _dotfiles_run_tmpdir_setup
   setup_credential_directories || return 1
 
   if [[ -n ${MACOS} ]]; then
@@ -169,9 +184,11 @@ run_setup_or_developer() {
 
   install_aws_tools || return 1
   setup_vim_plugins
+  _ledger_write_run_entry "setup" 0 || true
 }
 
 run_developer_or_ansible() {
+  _dotfiles_run_tmpdir_setup
   printf "Installing json2yaml via npm\n"
   npm install json2yaml || return 1
 
@@ -188,11 +205,14 @@ run_developer_or_ansible() {
   fi
   setup_ansible || return 1
   clone_personal_repos
+  _ledger_write_run_entry "developer" 0 || true
 }
 
 run_recreate_venv() {
+  _dotfiles_run_tmpdir_setup
   local _venv_name="${VENV_NAME:-ansible}"
   recreate_python_venv "${_venv_name}" || return 1
+  _ledger_write_run_entry "recreate_venv" 0 || true
 }
 
 run_brew_install() {
@@ -228,29 +248,19 @@ run_update() {
   local _run_all=0
   _any_update_flag || _run_all=1
 
-  _UPDATE_TMPDIR=$(mktemp -d)
-  export _UPDATE_TMPDIR
-  trap 'rm -rf "${_UPDATE_TMPDIR}"; unset _UPDATE_TMPDIR' EXIT INT TERM
-
-  # Capture run start metadata for state-ledger
-  date -u +%Y-%m-%dT%H:%M:%SZ > "${_UPDATE_TMPDIR}/started_at"
-  date +%s > "${_UPDATE_TMPDIR}/start_epoch"
-  python3 -c "import uuid; print(str(uuid.uuid4()))" \
-    > "${_UPDATE_TMPDIR}/run_id" 2>/dev/null || true
-  git -C "${PERSONAL_GITREPOS}/${DOTFILES}" rev-parse HEAD \
-    > "${_UPDATE_TMPDIR}/git_sha" 2>/dev/null || true
+  _dotfiles_run_tmpdir_setup
 
   # ── brew + softwareupdate ─────────────────────────────────────────────────
   if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_BREW:-} ]]; then
     if [[ -n ${MACOS} ]] || [[ -n ${LINUX} ]]; then
       _update_record_start "brew"
-      brew_update 2>&1 | tee "${_UPDATE_TMPDIR}/err_brew"
+      brew_update 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_brew"
       _update_record_end "brew" "${PIPESTATUS[0]}"
 
       if [[ -n ${MACOS} ]]; then
         _update_record_start "softwareupdate"
         printf "Updating app store apps softwareupdate\\n"
-        sudo -H softwareupdate --install --all --verbose 2>&1 | tee "${_UPDATE_TMPDIR}/err_softwareupdate"
+        sudo -H softwareupdate --install --all --verbose 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_softwareupdate"
         _update_record_end "softwareupdate" "${PIPESTATUS[0]}"
       else
         _update_skip "softwareupdate" "not macOS"
@@ -288,7 +298,7 @@ run_update() {
         ansible-good-practices@claude-ansible-skills \
         terraform-skill@antonbabenko \
         warp@claude-code-warp; do
-        claude plugins update "${_plugin}" 2>&1 | tee -a "${_UPDATE_TMPDIR}/err_claude"
+        claude plugins update "${_plugin}" 2>&1 | tee -a "${_DOTFILES_RUN_TMPDIR}/err_claude"
         _plugin_rc="${PIPESTATUS[0]}"
         [[ ${_plugin_rc} -ne 0 ]] && _claude_failed+=("${_plugin%%@*}")
       done
@@ -296,7 +306,7 @@ run_update() {
       if [[ ${#_claude_failed[@]} -gt 0 ]]; then
         _claude_rc=1
         printf "%d plugin(s) failed (%s)\n" "${#_claude_failed[@]}" "${_claude_failed[*]}" \
-          > "${_UPDATE_TMPDIR}/fail_result_claude"
+          > "${_DOTFILES_RUN_TMPDIR}/fail_result_claude"
       fi
       _update_record_end "claude" "${_claude_rc}"
       # Post-update skill security scan — supply chain guard.
@@ -334,7 +344,7 @@ run_update() {
   # Same trigger as Claude plugins: full update or --claude-only (no claude CLI required).
   if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_CLAUDE:-} ]]; then
     _update_record_start "terraform-skill"
-    install_terraform_skill 2>&1 | tee "${_UPDATE_TMPDIR}/err_terraform-skill"
+    install_terraform_skill 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_terraform-skill"
     _update_record_end "terraform-skill" "${PIPESTATUS[0]}"
   else
     _update_skip "terraform-skill" "flag not set"
@@ -345,7 +355,7 @@ run_update() {
   if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_CLAUDE:-} ]]; then
     _update_record_start "npm"
     printf "Updating npm global packages\\n"
-    npm install -g firecrawl-cli exa-mcp-server 2>&1 | tee "${_UPDATE_TMPDIR}/err_npm"
+    npm install -g firecrawl-cli exa-mcp-server 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_npm"
     _update_record_end "npm" "${PIPESTATUS[0]}"
   else
     _update_skip "npm" "flag not set"
@@ -356,9 +366,9 @@ run_update() {
     if [[ -n ${LINUX} ]]; then
       _update_record_start "apt"
       _update_record_start "snap"
-      update_system_packages 2>&1 | tee "${_UPDATE_TMPDIR}/err_apt"
+      update_system_packages 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_apt"
       local _pkg_ec="${PIPESTATUS[0]}"
-      cp "${_UPDATE_TMPDIR}/err_apt" "${_UPDATE_TMPDIR}/err_snap" 2>/dev/null || true
+      cp "${_DOTFILES_RUN_TMPDIR}/err_apt" "${_DOTFILES_RUN_TMPDIR}/err_snap" 2>/dev/null || true
       _update_record_end "apt"  "${_pkg_ec}"
       _update_record_end "snap" "${_pkg_ec}"
     else
@@ -376,7 +386,7 @@ run_update() {
     local _mas_ec=0
     if [[ -n ${MACOS} ]]; then
       log_info "Updating mas packages"
-      mas upgrade 2>&1 | tee "${_UPDATE_TMPDIR}/err_mas"
+      mas upgrade 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_mas"
       _mas_ec="${PIPESTATUS[0]}"
     fi
     _update_record_end "mas" "${_mas_ec}"
@@ -403,7 +413,7 @@ run_update() {
       {
         "$PYTHON" -m pip install -U pip setuptools
 
-        # _UPDATE_TMPDIR is read by the Python block via os.environ to write pip_outdated
+        # _DOTFILES_RUN_TMPDIR is read by the Python block via os.environ to write pip_outdated
         "$PYTHON" - <<PY
 import json, subprocess, sys, os
 
@@ -417,14 +427,14 @@ out = subprocess.check_output(cmd, text=True)
 pkgs = [p["name"] for p in json.loads(out) if p["name"].lower() not in SKIP_UPGRADE]
 
 # Write outdated package names for the update summary
-tmpdir = os.environ.get("_UPDATE_TMPDIR", "/tmp")
+tmpdir = os.environ.get("_DOTFILES_RUN_TMPDIR", "/tmp")
 with open(os.path.join(tmpdir, "pip_outdated"), "w") as f:
     f.write("\\n".join(pkgs))
 
 if pkgs:
     subprocess.check_call([sys.executable, "-m", "pip", "install", "-U", *pkgs])
 PY
-      } 2>&1 | tee "${_UPDATE_TMPDIR}/err_pip"
+      } 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_pip"
       local _pip_rc="${PIPESTATUS[0]}"
 
       "$PYTHON" -m pip check || true
@@ -440,14 +450,14 @@ PY
   # ── git-based tools + misc (run_all only) ─────────────────────────────────
   if [[ ${_run_all} -eq 1 ]]; then
     _update_record_start "ai-config"
-    setup_ai_config 2>&1 | tee "${_UPDATE_TMPDIR}/err_ai-config"
+    setup_ai_config 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_ai-config"
     _update_record_end "ai-config" "${PIPESTATUS[0]}"
     update_aws_cli
     update_rust
     if [[ -d ${HOME}/.tfenv ]]; then
       _update_record_start "tfenv"
       printf "Updating tfenv\\n"
-      { cd "${HOME}/.tfenv" && git pull; } 2>&1 | tee "${_UPDATE_TMPDIR}/err_tfenv"
+      { cd "${HOME}/.tfenv" && git pull; } 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_tfenv"
       local _tfenv_rc="${PIPESTATUS[0]}"
       cd "${PERSONAL_GITREPOS}/${DOTFILES}" || return 1
       _update_record_end "tfenv" "${_tfenv_rc}"
@@ -457,7 +467,7 @@ PY
     if [[ -d ${HOME}/.oh-my-zsh ]]; then
       _update_record_start "oh-my-zsh"
       printf "Updating oh-my-zsh\\n"
-      { cd "${HOME}/.oh-my-zsh" && git pull; } 2>&1 | tee "${_UPDATE_TMPDIR}/err_oh-my-zsh"
+      { cd "${HOME}/.oh-my-zsh" && git pull; } 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_oh-my-zsh"
       local _omz_rc="${PIPESTATUS[0]}"
       cd "${PERSONAL_GITREPOS}/${DOTFILES}" || return 1
       _update_record_end "oh-my-zsh" "${_omz_rc}"
@@ -467,7 +477,7 @@ PY
     if [[ -d ${HOME}/.tmux/plugins/tpm ]]; then
       _update_record_start "tpm"
       printf "Updating tpm\\n"
-      { cd "${HOME}/.tmux/plugins/tpm" && git pull; } 2>&1 | tee "${_UPDATE_TMPDIR}/err_tpm"
+      { cd "${HOME}/.tmux/plugins/tpm" && git pull; } 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_tpm"
       local _tpm_rc="${PIPESTATUS[0]}"
       cd "${PERSONAL_GITREPOS}/${DOTFILES}" || return 1
       _update_record_end "tpm" "${_tpm_rc}"
@@ -478,7 +488,7 @@ PY
       _update_record_start "cheat.sh"
       printf "Updating cheat.sh\\n"
       { curl https://cht.sh/:cht.sh > ~/bin/cht.sh && chmod 754 "${HOME}/bin/cht.sh"; } \
-        2>&1 | tee "${_UPDATE_TMPDIR}/err_cheat.sh"
+        2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_cheat.sh"
       _update_record_end "cheat.sh" "${PIPESTATUS[0]}"
     else
       _update_skip "cheat.sh" "not installed"
@@ -507,7 +517,7 @@ PY
     local _ruby_gem_dir="${HOME}/.rubies/ruby-${RUBY_VER}/bin"
     local _extra_gem_path=""
     [[ -d "${_ruby_gem_dir}" ]] && _extra_gem_path="${_ruby_gem_dir}:"
-    PATH="${_extra_gem_path}${PATH}" gem update 2>&1 | tee "${_UPDATE_TMPDIR}/err_gems"
+    PATH="${_extra_gem_path}${PATH}" gem update 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_gems"
     _update_record_end "gems" "${PIPESTATUS[0]}"
   else
     _update_skip "gems" "flag not set"

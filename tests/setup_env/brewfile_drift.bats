@@ -7,7 +7,7 @@ setup() {
   load_setup_env
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
   touch "${MOCK_CALLS_FILE}"
-  export _UPDATE_TMPDIR="${BATS_TEST_TMPDIR}"
+  export _DOTFILES_RUN_TMPDIR="${BATS_TEST_TMPDIR}"
   export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
   unset MACOS
   unset MOCK_WHICH_MISSING
@@ -34,9 +34,9 @@ teardown() {
   export MOCK_WHICH_MISSING=brew
   run _update_check_brewfile_drift
   [ "$status" -eq 0 ]
-  [ "$(cat "${_UPDATE_TMPDIR}/status_brew-drift")" = "SKIP" ]
-  grep -q "brew not available" "${_UPDATE_TMPDIR}/result_brew-drift"
-  [ ! -f "${_UPDATE_TMPDIR}/detail_brew-drift" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew-drift")" = "SKIP" ]
+  grep -q "brew not available" "${_DOTFILES_RUN_TMPDIR}/result_brew-drift"
+  [ ! -f "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift" ]
 }
 
 @test "_update_check_brewfile_drift: Linux OK when formulae and taps match (no cask check)" {
@@ -48,10 +48,10 @@ teardown() {
   export MOCK_BREW_TAPS=""
   run _update_check_brewfile_drift
   [ "$status" -eq 0 ]
-  [ "$(cat "${_UPDATE_TMPDIR}/status_brew-drift")" = "OK" ]
-  grep -q "formulae clean" "${_UPDATE_TMPDIR}/result_brew-drift"
-  ! grep -q "casks clean" "${_UPDATE_TMPDIR}/result_brew-drift"
-  [ ! -f "${_UPDATE_TMPDIR}/detail_brew-drift" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew-drift")" = "OK" ]
+  grep -q "formulae clean" "${_DOTFILES_RUN_TMPDIR}/result_brew-drift"
+  ! grep -q "casks clean" "${_DOTFILES_RUN_TMPDIR}/result_brew-drift"
+  [ ! -f "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift" ]
 }
 
 @test "_update_check_brewfile_drift: SKIP when brew not available" {
@@ -59,8 +59,8 @@ teardown() {
   export MOCK_WHICH_MISSING=brew
   run _update_check_brewfile_drift
   [ "$status" -eq 0 ]
-  [ "$(cat "${_UPDATE_TMPDIR}/status_brew-drift")" = "SKIP" ]
-  grep -q "brew not available" "${_UPDATE_TMPDIR}/result_brew-drift"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew-drift")" = "SKIP" ]
+  grep -q "brew not available" "${_DOTFILES_RUN_TMPDIR}/result_brew-drift"
 }
 
 @test "_update_check_brewfile_drift: SKIP when Brewfile not found" {
@@ -68,8 +68,8 @@ teardown() {
   export _OVERRIDE_BREWFILE_PATH="${BATS_TEST_TMPDIR}/nonexistent_brewfile"
   run _update_check_brewfile_drift
   [ "$status" -eq 0 ]
-  [ "$(cat "${_UPDATE_TMPDIR}/status_brew-drift")" = "SKIP" ]
-  grep -q "Brewfile not found" "${_UPDATE_TMPDIR}/result_brew-drift"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew-drift")" = "SKIP" ]
+  grep -q "Brewfile not found" "${_DOTFILES_RUN_TMPDIR}/result_brew-drift"
 }
 
 # ── formula drift ─────────────────────────────────────────────────────────────
@@ -83,9 +83,9 @@ teardown() {
   export MOCK_BREW_TAPS=""
   run _update_check_brewfile_drift
   [ "$status" -eq 0 ]
-  [ "$(cat "${_UPDATE_TMPDIR}/status_brew-drift")" = "OK" ]
-  grep -q "formulae clean" "${_UPDATE_TMPDIR}/result_brew-drift"
-  [ ! -f "${_UPDATE_TMPDIR}/detail_brew-drift" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew-drift")" = "OK" ]
+  grep -q "formulae clean" "${_DOTFILES_RUN_TMPDIR}/result_brew-drift"
+  [ ! -f "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift" ]
 }
 
 @test "_update_check_brewfile_drift: OK when tap formula in Brewfile matches full-name from brew list" {
@@ -99,8 +99,8 @@ teardown() {
   export MOCK_BREW_TAPS="teamookla/speedtest"
   run _update_check_brewfile_drift
   [ "$status" -eq 0 ]
-  [ "$(cat "${_UPDATE_TMPDIR}/status_brew-drift")" = "OK" ]
-  [ ! -f "${_UPDATE_TMPDIR}/detail_brew-drift" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew-drift")" = "OK" ]
+  [ ! -f "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift" ]
 }
 
 @test "_update_check_brewfile_drift: OK when formula is dep of another — not flagged untracked" {
@@ -113,8 +113,8 @@ teardown() {
   export MOCK_BREW_TAPS=""
   run _update_check_brewfile_drift
   [ "$status" -eq 0 ]
-  [ "$(cat "${_UPDATE_TMPDIR}/status_brew-drift")" = "OK" ]
-  [ ! -f "${_UPDATE_TMPDIR}/detail_brew-drift" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew-drift")" = "OK" ]
+  [ ! -f "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift" ]
 }
 
 @test "_update_check_brewfile_drift: OK when Brewfile has no brew/tap/cask lines" {
@@ -126,7 +126,7 @@ teardown() {
   export MOCK_BREW_TAPS=""
   run _update_check_brewfile_drift
   [ "$status" -eq 0 ]
-  [ "$(cat "${_UPDATE_TMPDIR}/status_brew-drift")" = "OK" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew-drift")" = "OK" ]
 }
 
 @test "_update_check_brewfile_drift: WARN when formula installed but not in Brewfile" {
@@ -138,9 +138,9 @@ teardown() {
   export MOCK_BREW_TAPS=""
   run _update_check_brewfile_drift
   [ "$status" -eq 0 ]
-  [ "$(cat "${_UPDATE_TMPDIR}/status_brew-drift")" = "WARN" ]
-  grep -q "untracked formulae" "${_UPDATE_TMPDIR}/result_brew-drift"
-  grep -q "jq" "${_UPDATE_TMPDIR}/detail_brew-drift"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew-drift")" = "WARN" ]
+  grep -q "untracked formulae" "${_DOTFILES_RUN_TMPDIR}/result_brew-drift"
+  grep -q "jq" "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift"
 }
 
 @test "_update_check_brewfile_drift: WARN when formula in Brewfile but not installed" {
@@ -152,9 +152,9 @@ teardown() {
   export MOCK_BREW_TAPS=""
   run _update_check_brewfile_drift
   [ "$status" -eq 0 ]
-  [ "$(cat "${_UPDATE_TMPDIR}/status_brew-drift")" = "WARN" ]
-  grep -q "missing formulae" "${_UPDATE_TMPDIR}/result_brew-drift"
-  grep -q "missing-tool" "${_UPDATE_TMPDIR}/detail_brew-drift"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew-drift")" = "WARN" ]
+  grep -q "missing formulae" "${_DOTFILES_RUN_TMPDIR}/result_brew-drift"
+  grep -q "missing-tool" "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift"
 }
 
 # ── tap drift ─────────────────────────────────────────────────────────────────
@@ -170,8 +170,8 @@ teardown() {
   export MOCK_BREW_TAPS="homebrew/bundle homebrew/cask homebrew/core homebrew/services"
   run _update_check_brewfile_drift
   [ "$status" -eq 0 ]
-  [ "$(cat "${_UPDATE_TMPDIR}/status_brew-drift")" = "OK" ]
-  [ ! -f "${_UPDATE_TMPDIR}/detail_brew-drift" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew-drift")" = "OK" ]
+  [ ! -f "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift" ]
 }
 
 @test "_update_check_brewfile_drift: WARN when tap installed but not in Brewfile" {
@@ -183,9 +183,9 @@ teardown() {
   export MOCK_BREW_TAPS="homebrew/cask-fonts"
   run _update_check_brewfile_drift
   [ "$status" -eq 0 ]
-  [ "$(cat "${_UPDATE_TMPDIR}/status_brew-drift")" = "WARN" ]
-  grep -q "untracked taps" "${_UPDATE_TMPDIR}/result_brew-drift"
-  grep -q "tap: homebrew/cask-fonts" "${_UPDATE_TMPDIR}/detail_brew-drift"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew-drift")" = "WARN" ]
+  grep -q "untracked taps" "${_DOTFILES_RUN_TMPDIR}/result_brew-drift"
+  grep -q "tap: homebrew/cask-fonts" "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift"
 }
 
 @test "_update_check_brewfile_drift: WARN when tap in Brewfile but not installed" {
@@ -197,9 +197,9 @@ teardown() {
   export MOCK_BREW_TAPS=""
   run _update_check_brewfile_drift
   [ "$status" -eq 0 ]
-  [ "$(cat "${_UPDATE_TMPDIR}/status_brew-drift")" = "WARN" ]
-  grep -q "missing taps" "${_UPDATE_TMPDIR}/result_brew-drift"
-  grep -q "tap: teamookla/speedtest" "${_UPDATE_TMPDIR}/detail_brew-drift"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew-drift")" = "WARN" ]
+  grep -q "missing taps" "${_DOTFILES_RUN_TMPDIR}/result_brew-drift"
+  grep -q "tap: teamookla/speedtest" "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift"
 }
 
 # ── cask drift (macOS only) ───────────────────────────────────────────────────
@@ -214,9 +214,9 @@ teardown() {
   export MOCK_BREW_TAPS=""
   run _update_check_brewfile_drift
   [ "$status" -eq 0 ]
-  [ "$(cat "${_UPDATE_TMPDIR}/status_brew-drift")" = "WARN" ]
-  grep -q "untracked casks" "${_UPDATE_TMPDIR}/result_brew-drift"
-  grep -q "cask: warp" "${_UPDATE_TMPDIR}/detail_brew-drift"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew-drift")" = "WARN" ]
+  grep -q "untracked casks" "${_DOTFILES_RUN_TMPDIR}/result_brew-drift"
+  grep -q "cask: warp" "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift"
 }
 
 @test "_update_check_brewfile_drift: WARN when cask in Brewfile but not installed (macOS)" {
@@ -229,9 +229,9 @@ teardown() {
   export MOCK_BREW_TAPS=""
   run _update_check_brewfile_drift
   [ "$status" -eq 0 ]
-  [ "$(cat "${_UPDATE_TMPDIR}/status_brew-drift")" = "WARN" ]
-  grep -q "missing casks" "${_UPDATE_TMPDIR}/result_brew-drift"
-  grep -q "cask: missing-app" "${_UPDATE_TMPDIR}/detail_brew-drift"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew-drift")" = "WARN" ]
+  grep -q "missing casks" "${_DOTFILES_RUN_TMPDIR}/result_brew-drift"
+  grep -q "cask: missing-app" "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift"
 }
 
 # ── Linux: casks not checked ──────────────────────────────────────────────────
@@ -246,10 +246,10 @@ teardown() {
   export MOCK_BREW_TAPS=""
   run _update_check_brewfile_drift
   [ "$status" -eq 0 ]
-  [ "$(cat "${_UPDATE_TMPDIR}/status_brew-drift")" = "WARN" ]
-  grep -q "untracked formulae" "${_UPDATE_TMPDIR}/result_brew-drift"
-  grep -q "jq" "${_UPDATE_TMPDIR}/detail_brew-drift"
-  ! grep -q "cask" "${_UPDATE_TMPDIR}/detail_brew-drift"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew-drift")" = "WARN" ]
+  grep -q "untracked formulae" "${_DOTFILES_RUN_TMPDIR}/result_brew-drift"
+  grep -q "jq" "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift"
+  ! grep -q "cask" "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift"
 }
 
 # ── mixed drift ───────────────────────────────────────────────────────────────
@@ -268,12 +268,12 @@ teardown() {
   export MOCK_BREW_TAPS="homebrew/cask-fonts"
   run _update_check_brewfile_drift
   [ "$status" -eq 0 ]
-  [ "$(cat "${_UPDATE_TMPDIR}/status_brew-drift")" = "WARN" ]
-  grep -q "jq" "${_UPDATE_TMPDIR}/detail_brew-drift"
-  grep -q "cask: warp" "${_UPDATE_TMPDIR}/detail_brew-drift"
-  grep -q "tap: homebrew/cask-fonts" "${_UPDATE_TMPDIR}/detail_brew-drift"
-  grep -q "cask: visual-studio-code" "${_UPDATE_TMPDIR}/detail_brew-drift"
-  grep -q "tap: teamookla/speedtest" "${_UPDATE_TMPDIR}/detail_brew-drift"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew-drift")" = "WARN" ]
+  grep -q "jq" "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift"
+  grep -q "cask: warp" "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift"
+  grep -q "tap: homebrew/cask-fonts" "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift"
+  grep -q "cask: visual-studio-code" "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift"
+  grep -q "tap: teamookla/speedtest" "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift"
 }
 
 # ── capability-filtered drift ─────────────────────────────────────────────────
@@ -289,8 +289,8 @@ teardown() {
   export MOCK_BREW_TAPS=""
   run _update_check_brewfile_drift
   [ "$status" -eq 0 ]
-  [ "$(cat "${_UPDATE_TMPDIR}/status_brew-drift")" = "OK" ]
-  [ ! -f "${_UPDATE_TMPDIR}/detail_brew-drift" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew-drift")" = "OK" ]
+  [ ! -f "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift" ]
 }
 
 @test "_update_check_brewfile_drift: OK when tagged formula installed but capability unset — not untracked" {
@@ -304,8 +304,8 @@ teardown() {
   export MOCK_BREW_TAPS=""
   run _update_check_brewfile_drift
   [ "$status" -eq 0 ]
-  [ "$(cat "${_UPDATE_TMPDIR}/status_brew-drift")" = "OK" ]
-  [ ! -f "${_UPDATE_TMPDIR}/detail_brew-drift" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew-drift")" = "OK" ]
+  [ ! -f "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift" ]
 }
 
 @test "_update_check_brewfile_drift: WARN when tagged formula included because capability set" {
@@ -318,8 +318,8 @@ teardown() {
   export MOCK_BREW_TAPS=""
   run _update_check_brewfile_drift
   [ "$status" -eq 0 ]
-  [ "$(cat "${_UPDATE_TMPDIR}/status_brew-drift")" = "WARN" ]
-  grep -q "postgresql@14" "${_UPDATE_TMPDIR}/detail_brew-drift"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew-drift")" = "WARN" ]
+  grep -q "postgresql@14" "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift"
 }
 
 @test "_update_check_brewfile_drift: OK when tagged cask excluded because capability unset" {
@@ -333,8 +333,8 @@ teardown() {
   export MOCK_BREW_TAPS=""
   run _update_check_brewfile_drift
   [ "$status" -eq 0 ]
-  [ "$(cat "${_UPDATE_TMPDIR}/status_brew-drift")" = "OK" ]
-  [ ! -f "${_UPDATE_TMPDIR}/detail_brew-drift" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew-drift")" = "OK" ]
+  [ ! -f "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift" ]
 }
 
 @test "_update_check_brewfile_drift: OK when tagged cask installed but capability unset — not untracked" {
@@ -348,8 +348,8 @@ teardown() {
   export MOCK_BREW_TAPS=""
   run _update_check_brewfile_drift
   [ "$status" -eq 0 ]
-  [ "$(cat "${_UPDATE_TMPDIR}/status_brew-drift")" = "OK" ]
-  [ ! -f "${_UPDATE_TMPDIR}/detail_brew-drift" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew-drift")" = "OK" ]
+  [ ! -f "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift" ]
 }
 
 @test "_update_check_brewfile_drift: WARN when tagged cask included because capability set" {
@@ -363,8 +363,8 @@ teardown() {
   export MOCK_BREW_TAPS=""
   run _update_check_brewfile_drift
   [ "$status" -eq 0 ]
-  [ "$(cat "${_UPDATE_TMPDIR}/status_brew-drift")" = "WARN" ]
-  grep -q "cask: docker" "${_UPDATE_TMPDIR}/detail_brew-drift"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew-drift")" = "WARN" ]
+  grep -q "cask: docker" "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift"
 }
 
 @test "_update_check_brewfile_drift: OK when tagged tap excluded because capability unset" {
@@ -377,8 +377,8 @@ teardown() {
   export MOCK_BREW_TAPS=""
   run _update_check_brewfile_drift
   [ "$status" -eq 0 ]
-  [ "$(cat "${_UPDATE_TMPDIR}/status_brew-drift")" = "OK" ]
-  [ ! -f "${_UPDATE_TMPDIR}/detail_brew-drift" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew-drift")" = "OK" ]
+  [ ! -f "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift" ]
 }
 
 @test "_update_check_brewfile_drift: OK when tagged tap installed but capability unset — not untracked" {
@@ -391,8 +391,8 @@ teardown() {
   export MOCK_BREW_TAPS="datawire/blackbird"
   run _update_check_brewfile_drift
   [ "$status" -eq 0 ]
-  [ "$(cat "${_UPDATE_TMPDIR}/status_brew-drift")" = "OK" ]
-  [ ! -f "${_UPDATE_TMPDIR}/detail_brew-drift" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew-drift")" = "OK" ]
+  [ ! -f "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift" ]
 }
 
 @test "_update_check_brewfile_drift: OK untagged entries still checked regardless of capabilities" {
@@ -406,10 +406,10 @@ teardown() {
   export MOCK_BREW_TAPS=""
   run _update_check_brewfile_drift
   [ "$status" -eq 0 ]
-  [ "$(cat "${_UPDATE_TMPDIR}/status_brew-drift")" = "WARN" ]
-  grep -q "git" "${_UPDATE_TMPDIR}/detail_brew-drift"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew-drift")" = "WARN" ]
+  grep -q "git" "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift"
   # postgresql excluded by tag — must NOT appear in missing list
-  ! grep -q "postgresql" "${_UPDATE_TMPDIR}/detail_brew-drift"
+  ! grep -q "postgresql" "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift"
 }
 
 # ── _brewfile_extract_cap ─────────────────────────────────────────────────────
