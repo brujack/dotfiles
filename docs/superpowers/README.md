@@ -99,6 +99,7 @@ Master status index for all specs and implementation plans in this directory.
 | 2026-06-19 | [pip-venv-audit](plans/2026-06-19-pip-venv-audit.md)                               | [spec](specs/2026-06-19-pip-venv-audit-design.md)                   | Done   |
 | 2026-06-21 | [secure-curl-installs](plans/2026-06-21-secure-curl-installs.md)                   | [spec](specs/2026-06-21-secure-curl-installs-design.md)             | Done   |
 | 2026-06-28 | state-ledger-integration (PR dotfiles#166, #167)                                   | [spec](specs/2026-06-27-state-ledger-design.md)                     | Done   |
+| 2026-06-28 | state-ledger all run_* wiring, _DOTFILES_RUN_TMPDIR rename (PR dotfiles#168)       | —                                                                   | Done   |
 
 ---
 
