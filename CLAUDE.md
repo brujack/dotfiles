@@ -8,90 +8,19 @@ Personal development environment bootstrapping system for macOS and Linux (Ubunt
 
 ```
 dotfiles/
-├── setup_env.sh              # Main entry point — sources lib/, dispatches workflows
-├── Brewfile                  # Homebrew bundle manifest (100+ formulae/casks); entries tagged # [HAS_*] are capability-gated
-├── config/
-│   └── profiles.sh           # hostname → profile map; edit here to add a new machine
-├── docs/
-│   ├── adr/                  # Architectural Decision Records (cross-cutting decisions)
-│   │   ├── README.md         # ADR index table
-│   │   └── NNNN-title.md     # Individual ADRs (0001, 0002, …)
-│   ├── claude-code-new-features/  # Weekly Claude Code feature digests
-│   │   ├── README.md         # Usage and schedule docs
-│   │   ├── .changelog-state.md   # Last-fetched CHANGELOG snapshot (do not edit)
-│   │   └── features-YYYY-MM-DD.md  # Weekly digest committed each Monday
-│   ├── anthropic-new-features/  # Weekly Anthropic & Claude API feature digests
-│   │   ├── README.md                # Usage and schedule docs
-│   │   ├── .platform-state.txt      # Last-fetched platform notes (HTML-stripped; do not edit)
-│   │   ├── .sdk-state.md            # Last-fetched Python SDK CHANGELOG (do not edit)
-│   │   └── features-YYYY-MM-DD.md   # Weekly digest committed each Monday
-│   ├── knowledge/            # Reference material (architecture, domain docs, curated research)
-│   └── superpowers/          # Design specs and implementation plans
-│       ├── specs/            # Design documents (YYYY-MM-DD-*-design.md)
-│       └── plans/            # Implementation plans (YYYY-MM-DD-*.md)
-├── lib/
-│   ├── constants.sh          # Version pins, download URLs, directory vars
-│   ├── helpers.sh            # Logging (log_info/warn/error), safe_link, install guards, brew helpers
-│   ├── detect_env.sh         # OS/version detection + profile/capability resolution
-│   ├── macos.sh              # macOS install functions (install_macos_packages)
-│   ├── linux_shared.sh       # Ubuntu: install_git_linux, install_zsh_linux, install_bats, update_system_packages
-│   ├── linux_ubuntu.sh       # Ubuntu orchestrator (install_ubuntu_packages) + 12 private _install_ubuntu_* helpers
-│   ├── developer.sh          # Cross-platform dev tools (install_ruby_tools, install_ruby, setup_ansible, clone_personal_repos, etc.)
-│   ├── update_summary.sh     # Update run tracking and summary reporting
-│   └── workflows.sh          # Top-level workflow functions dispatched by setup_env.sh
-├── scripts/
-│   ├── bootstrap_mac.sh      # One-time macOS prerequisite installer (Homebrew + bash 5)
-│   ├── .osx.sh               # macOS system defaults (run during setup)
-│   ├── whats-new-claude-code.sh  # Weekly Claude Code features digest (fetch, summarize, commit)
-│   ├── whats-new-anthropic.sh    # Weekly Anthropic & Claude API digest (fetch, summarize, commit)
-│   └── ...                   # utility scripts
-├── powershell/
-│   ├── setup_windows.ps1     # Windows/PowerShell bootstrap
-│   ├── Makefile              # lint + test targets for PowerShell
-│   ├── PSScriptAnalyzerSettings.psd1  # PSScriptAnalyzer rule config
-│   ├── run-lint.ps1          # lint script with module path restoration (called by make lint)
-│   ├── run-tests.ps1         # combined lint+test script (called by make test)
-│   └── tests/
-│       └── setup_windows.Tests.ps1   # Pester v5 unit tests (65 tests)
-├── .zshrc                    # Main zsh config (sources .zshrc.d modules)
-├── .zprofile                 # Zsh login shell config
-├── .vimrc                    # Vim config with 50+ plugins
-├── .tmux.conf                # Tmux config (Dracula theme, tpm, C-a prefix)
-├── .gitconfig_mac            # Git config for macOS
-├── .gitconfig_mac_gitlab     # Git config for macOS (GitLab)
-├── .gitconfig_linux          # Git config for Linux
-├── .gitconfig_linux_gitlab   # Git config for Linux (GitLab)
-├── .config/
-│   ├── .zshrc.d/             # Modular zsh config (7 numbered files)
-│   │   ├── 1_init.zsh        # OS detection, initial setup
-│   │   ├── 2_functions.zsh   # Shell functions
-│   │   ├── 3_oh-my-zsh.zsh   # Oh-My-Zsh config
-│   │   ├── 4_aliases.zsh     # Aliases
-│   │   ├── 5_general.zsh     # General settings
-│   │   ├── 6_path.zsh        # PATH configuration
-│   │   └── 7_final.zsh       # Final setup, completions
-│   └── ccstatusline/         # Claude Code status line config
-├── bruce.omp.json            # Oh My Posh prompt theme
-├── profile.ps1               # PowerShell profile
-├── starship.toml             # Starship prompt config
-├── tests/
-│   ├── setup_env/
-│   │   ├── unit.bats
-│   │   ├── profiles.bats     # Profile + capability resolution tests
-│   │   ├── install_guards.bats
-│   │   ├── install_functions.bats
-│   │   └── extracted_functions.bats
-│   ├── zshrc.d/
-│   │   └── unit.bats
-│   ├── mocks/                # PATH-injected mock executables
-│   └── helpers/
-│       └── common.bash
-├── .github/
-│   └── workflows/
-│       └── ci.yml            # lint + test + auto-merge on non-master branches
-├── kubernetes_stuff/         # Kubernetes installation/init scripts
-├── .ssh/                     # SSH config
-└── ubuntu_*_packages.txt     # Package lists per Ubuntu version
+├── setup_env.sh       # Main entry — sources lib/, dispatches workflows
+├── Brewfile           # Homebrew bundle (100+ formulae/casks; [HAS_*] tags are capability-gated)
+├── lib/               # Shell libraries: constants, helpers, detect_env, macos, linux_shared,
+│                      #   linux_ubuntu, developer, update_summary, workflows
+├── config/            # profiles.sh (hostname→profile map); local.sh (machine overrides, git-ignored)
+├── scripts/           # bootstrap_mac.sh, whats-new-*.sh, run-bash-coverage.sh
+├── powershell/        # Windows bootstrap: setup_windows.ps1, Pester tests, Makefile
+├── tests/             # BATS tests: setup_env/, zshrc.d/, mocks/, helpers/
+├── docs/              # ADRs, knowledge/, superpowers/, claude-code-new-features/,
+│                      #   anthropic-new-features/
+├── .github/workflows/ # CI: test, lint-macos, bash-coverage, powershell, secret-scan, auto-merge
+├── .zshrc, .vimrc, .tmux.conf, .gitconfig_*, starship.toml, bruce.omp.json, profile.ps1
+└── ubuntu_*_packages.txt, kubernetes_stuff/, .ssh/
 ```
 
 ## 10-80-10 Execution Cycle
@@ -122,19 +51,16 @@ When web research (web-research skill) or context-mode fetches produce findings 
 ./setup_env.sh -t <type>
 ```
 
-| Type                | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `setup_user`        | Configs, shells, directory structure, symlinks, GitHub MCP (`setup_claude_mcp`), Claude plugins (`setup_claude_plugins`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `setup`             | Full machine setup (setup_user + all apps). Flags: `--brew-install`, `--mas-install`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| `developer`         | Dev packages + Python/Ansible virtualenv                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `ansible`           | Ansible venv setup only (after Python updates)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `recreate-venv`     | Force-delete and recreate a named pyenv virtualenv. Flags: `--venv-name` (default: `ansible`). Runs full pip install when name is `ansible`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `update`            | Update all packages (brew, apt/snap, pip, gems, tools). Supports `--brew-only`, `--pip-only`, `--gems-only`, `--mas-only`, `--claude-only` flags. Prints a structured summary at the end; each run is appended to `~/.dotfiles-update.log`. Also writes a schema v1.0 JSON entry to state-ledger (`~/.local/share/state-ledger`) when `~/.config/dotfiles/machine-id` is present — advisory, never fails the run. Pip update excludes `packaging`, `pathspec`, `rich`, `psutil`, `wheel` from the "upgrade all outdated" sweep — these have upper-bound conflicts with other installed packages; let the resolver manage them. State-ledger run_type: `update`. |
-| `setup_user`        | (updated) Also writes a state-ledger entry (run_type: `setup_user`) at the end — advisory, `                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |     | true`. |
-| `setup`/`developer` | Also write state-ledger entries (run_type: `setup` / `developer`) at the end — advisory.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `recreate-venv`     | Also writes a state-ledger entry (run_type: `recreate_venv`) at the end — advisory.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| `doctor`            | Active health checks: symlinks, tool presence, credential dir permissions, version drift. Exits non-zero on any failure                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| `check-versions`    | Compare pinned versions in `lib/constants.sh` against GitHub latest; exits 1 if outdated. `--update` prompts per-tool to apply updates in-place                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Type             | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `setup_user`     | Configs, shells, directory structure, symlinks, GitHub MCP (`setup_claude_mcp`), Claude plugins (`setup_claude_plugins`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `setup`          | Full machine setup (setup_user + all apps). Flags: `--brew-install`, `--mas-install`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `developer`      | Dev packages + Python/Ansible virtualenv                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `ansible`        | Ansible venv setup only (after Python updates)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `recreate-venv`  | Force-delete and recreate a named pyenv virtualenv. Flags: `--venv-name` (default: `ansible`). Runs full pip install when name is `ansible`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `update`         | Update all packages (brew, apt/snap, pip, gems, tools). Supports `--brew-only`, `--pip-only`, `--gems-only`, `--mas-only`, `--claude-only` flags. Prints a structured summary at the end; each run is appended to `~/.dotfiles-update.log`. Also writes a schema v1.0 JSON entry to state-ledger (`~/.local/share/state-ledger`) when `~/.config/dotfiles/machine-id` is present — advisory, never fails the run. Pip update excludes `packaging`, `pathspec`, `rich`, `psutil`, `wheel` from the "upgrade all outdated" sweep — these have upper-bound conflicts with other installed packages; let the resolver manage them. State-ledger run_type: `update`. |
+| `doctor`         | Active health checks: symlinks, tool presence, credential dir permissions, version drift. Exits non-zero on any failure                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `check-versions` | Compare pinned versions in `lib/constants.sh` against GitHub latest; exits 1 if outdated. `--update` prompts per-tool to apply updates in-place                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 
 **Options:**
 
