@@ -113,16 +113,6 @@ See `~/.claude/standards/shell.md` for the full shell coding standards. Dotfiles
 - **No `set -euo pipefail`** at top-level — conditional installs require non-zero exits to continue.
 - **Sourcing guard on every lib file:** All files under `lib/` that are tested must include `[[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0` near the top. When extracting functions into new lib files, add this guard explicitly — plan specs may omit it but the test harness requires it.
 
-### Installation Guards
-
-Always check before installing to keep the script idempotent:
-
-```bash
-if ! command -v <tool> &>/dev/null; then
-    install_<tool>
-fi
-```
-
 ### Platform Detection Pattern
 
 Replicated consistently across `setup_env.sh` and `.zshrc.d` modules:
