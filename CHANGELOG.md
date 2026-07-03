@@ -3,18 +3,6 @@
 
 ## Bug Fixes
 
-- Ubuntu 26.04 housekeeping — HAS_FLATPAK, VirtualBox 7.1, dead OS vars (#147)
-
-- add gitguardian/tap to install_macos_casks brew trust (#148)
-
-- migrate restart_fah from init.d to systemctl (#150)
-
-- suppress dependency prompt with NONINTERACTIVE=1 (#151)
-
-- add molecule and molecule-plugins[docker] to ansible venv (#152)
-
-- rbenv init on Linux never ran due to chruby guard (#153)
-
 - Ubuntu 26.04 compatibility — ruby-build, Python build deps, helm/cloudflare/azure-cli APT repos (#154)
 
 - Ubuntu 26.04 setup — nala comment filter, helm script, dotnet non-fatal (#155)
@@ -40,18 +28,6 @@
 
 
 ## Documentation
-
-- mark ubuntu-2604-pr4 Done, update test count to 765
-
-- mark ubuntu-2604-pr5 Done after PR #147
-
-- add HAS_FLATPAK to capability table
-
-- update test count 769 → 772, mark ubuntu-2604-p3 Done after PR #149
-
-- mark P3-6 resolved — restart_fah SysV init fixed in PR #150
-
-- add pip-venv-audit backlog item
 
 - add pip-venv-audit spec
 
@@ -79,6 +55,22 @@
 
 - bump test count floor to 806, note 810 tests as of 2026-06-25
 
+- update test count to 834 after state-ledger-integration PR #166
+
+- state-ledger integration — ADR-0014, test count 840, plan index
+
+- update CLAUDE.md — ledger wiring for all run_* functions, 848 tests
+
+- add PR #168 to superpowers plan index
+
+- add Claude Code weekly features digest 2026-06-29
+
+- add Anthropic weekly features digest 2026-06-29 (#169)
+
+- compact CLAUDE.md layout tree, drop 3 redundant rows
+
+- remove Installation Guards duplicate of shell.md
+
 
 
 ## Features
@@ -90,6 +82,16 @@
 - replace curl|bash installs with brew/apt/SHA-pin (#162)
 
 - dotfiles adds powershell.md language standard
+
+- add cargo-cyclonedx and cyclonedx-python (#165)
+
+- add advisory skill scan after claude plugin update
+
+- state-ledger CMDB integration (T5/T6/T7) (#166)
+
+- wire state-ledger writes into dotfiles update (#167)
+
+- wire state-ledger into setup/developer/recreate_venv runs (#168)
 
 
 
