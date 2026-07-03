@@ -28,8 +28,9 @@ This file is the Cursor-friendly secondary index and should be kept in sync for 
 
 Ideas approved for future cursor-specific specs/plans, in no particular order:
 
-| Feature | Notes |
-| ------- | ----- |
+| Feature                                                         | Notes                                                          |
+| --------------------------------------------------------------- | -------------------------------------------------------------- |
+| Verify state-ledger writes idempotent for setup + recreate_venv | Wired in #166–#168; no idempotency tests exist for these paths |
 
 ---
 
