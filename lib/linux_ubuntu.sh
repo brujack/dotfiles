@@ -469,7 +469,10 @@ _install_ubuntu_misc() {
   fi
 
   if [[ -n ${HAS_DEVTOOLS} ]]; then
-    if ! command -v tofu &>/dev/null; then
+    # _FORCE_OPENTOFU_INSTALL is a test seam: forces the install path even when
+    # tofu is already on PATH, so tests don't depend on host tofu presence.
+    # Unset in normal operation — identical to `! command -v tofu`.
+    if [[ -n ${_FORCE_OPENTOFU_INSTALL:-} ]] || ! command -v tofu &>/dev/null; then
       printf "Installing opentofu\\n"
       sudo mkdir -p /etc/apt/keyrings
       curl -fsSL https://packages.opentofu.org/opentofu/tofu/gpgkey \

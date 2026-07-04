@@ -105,4 +105,6 @@
 
 - default MOCK_PYENV_WHICH_STDOUT in load_mocks so run_update tests never hit real pip
 
+- make opentofu install tests independent of host tofu presence (_FORCE_OPENTOFU_INSTALL seam)
+
 
