@@ -20,12 +20,12 @@ jobs:
       - name: Run tests
         run: make test
 
-      - name: Verify test count floor (≥ 779)
+      - name: Verify test count floor (≥ 840)
         run: |
           COUNT=$(grep -r "^@test" tests/ | wc -l | tr -d ' ')
           printf "Test count: %d\n" "${COUNT}"
-          if [ "${COUNT}" -lt 779 ]; then
-            printf "FAIL: test count %d is below the floor of 779\n" "${COUNT}" >&2
+          if [ "${COUNT}" -lt 840 ]; then
+            printf "FAIL: test count %d is below the floor of 840\n" "${COUNT}" >&2
             exit 1
           fi
 
