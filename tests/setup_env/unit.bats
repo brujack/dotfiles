@@ -81,6 +81,16 @@ teardown() {
   [ "$output" = "1" ]
 }
 
+@test "process_args sets RECREATE_RUBY for -t recreate-ruby" {
+  run bash -c "
+    source '${BATS_TEST_DIRNAME}/../../setup_env.sh'
+    process_args -t recreate-ruby
+    printf '%s' \"\${RECREATE_RUBY}\"
+  "
+  [ "$status" -eq 0 ]
+  [ "$output" = "1" ]
+}
+
 @test "process_args sets VENV_NAME from --venv-name flag" {
   run bash -c "
     source '${BATS_TEST_DIRNAME}/../../setup_env.sh'
@@ -229,6 +239,7 @@ teardown() {
   [[ "$output" == *"--mas-install"* ]]
   [[ "$output" == *"recreate-venv"* ]]
   [[ "$output" == *"--venv-name"* ]]
+  [[ "$output" == *"recreate-ruby"* ]]
 }
 
 # ── prerequisite check ────────────────────────────────────────────────────────
