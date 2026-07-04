@@ -194,6 +194,13 @@ at `~/.rbenv/plugins/ruby-build`, which shadows the brew-managed definitions) be
 `rbenv install --skip-existing ${RUBY_VER}`. This is required because the Homebrew ruby-build
 bottle lags upstream — e.g. Ruby 4.0.5 on Ubuntu 26.04 was absent from the bottle but present in
 git. A failed `rbenv install` warns and returns 0 (non-fatal) rather than aborting setup.
+The build passes `RUBY_CONFIGURE_OPTS="--with-openssl-dir=/usr"` so Ruby's `openssl` extension links
+against the **system** OpenSSL — the libcrypto the rbenv ruby loads at runtime. It must not derive the
+dir from `pkg-config`: on machines with linuxbrew on `PATH`, `brew shellenv` puts the keg-only
+`openssl@3` on `PKG_CONFIG_PATH`, so the extension would link against a newer Homebrew OpenSSL whose
+versioned symbols (e.g. `OPENSSL_3.4.0`) are absent from the older system libcrypto (Ubuntu 24.04 ships
+3.0.13) — breaking every `gem` HTTPS operation with "OpenSSL is not available". Passing
+`--with-openssl-dir` makes the openssl gem's extconf skip `pkg-config` entirely.
 
 ## Language Standards
 

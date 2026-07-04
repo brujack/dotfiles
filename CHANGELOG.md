@@ -25,6 +25,8 @@
 
 - remove duplicate powershell.md @-include
 
+- build Ruby against system OpenSSL, not linuxbrew's pkg-config openssl@3 (fixes gem HTTPS "OpenSSL is not available")
+
 
 
 ## Documentation
@@ -98,5 +100,11 @@
 ## Testing
 
 - fix opentofu tests failing when tofu installed on macOS
+
+- add systemctl mock so restart_fah.sh tests don't exec real systemctl on Linux
+
+- default MOCK_PYENV_WHICH_STDOUT in load_mocks so run_update tests never hit real pip
+
+- make opentofu install tests independent of host tofu presence (_FORCE_OPENTOFU_INSTALL seam)
 
 

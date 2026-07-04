@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 printf "rbenv %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+# Record build-time env so tests can assert the OpenSSL dir the ruby build uses
+if [[ "$1" == "install" && -n "${RUBY_CONFIGURE_OPTS:-}" ]]; then
+  printf "RUBY_CONFIGURE_OPTS=%s\n" "${RUBY_CONFIGURE_OPTS}" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+fi
 if [[ "$1" == "install" && "$2" == "--list" ]]; then
   printf "%s\n" "${MOCK_RBENV_LIST_STDOUT:-}"
   exit 0

@@ -133,12 +133,23 @@ install_ruby() {
         if command -v brew &>/dev/null; then
           brew upgrade ruby-build 2>/dev/null || true
         fi
-        OPENSSL_DIR="$(pkg-config --variable=libdir openssl 2>/dev/null | sed 's#/lib$##')"
+        # Build Ruby's openssl extension against the SYSTEM OpenSSL — the
+        # libcrypto the rbenv-managed ruby loads at runtime. Do NOT derive the
+        # dir from `pkg-config`: on machines with Homebrew (linuxbrew) on PATH,
+        # `brew shellenv` puts the keg-only openssl@3 on PKG_CONFIG_PATH, so the
+        # build would link the extension against Homebrew OpenSSL (e.g. 3.6.3)
+        # whose versioned symbols (OPENSSL_3.4.0) are absent from the older
+        # system libcrypto (Ubuntu 24.04 ships 3.0.13) — producing a runtime
+        # LoadError, "OpenSSL is not available", on every gem HTTPS operation.
+        # Passing --with-openssl-dir makes the openssl gem's extconf skip
+        # pkg-config entirely (it consults pkg-config only when no dir is
+        # given), mirroring the "keep Homebrew out of the build" approach used
+        # for pyenv in setup_ansible().
         # Attempt the install directly: ruby-build fails fast if the definition
         # is genuinely missing, so a fragile pre-flight --list grep (which is
         # curated and false-negatives on point releases) is not needed.
         # --skip-existing keeps it idempotent.
-        if ! RUBY_CONFIGURE_OPTS="--with-openssl-dir=${OPENSSL_DIR:-/usr}" rbenv install --skip-existing ${RUBY_VER}; then
+        if ! RUBY_CONFIGURE_OPTS="--with-openssl-dir=/usr" rbenv install --skip-existing ${RUBY_VER}; then
           log_warn "rbenv install ${RUBY_VER} failed — ruby-build may lack the definition"
           log_warn "Run 'rbenv install ${RUBY_VER}' manually once ruby-build is updated"
           return 0

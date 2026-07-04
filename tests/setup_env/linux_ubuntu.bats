@@ -746,8 +746,9 @@ teardown() {
   export YQ_VER="4.40.5"
   export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
   export HAS_DEVTOOLS=1
-  # Strip /opt/homebrew/bin so `command -v tofu` fails even when tofu is brew-installed on macOS
-  export PATH="${BATS_TEST_DIRNAME}/../mocks:/usr/bin:/bin:/usr/sbin:/sbin"
+  # tofu may already be installed on the host (/usr/bin/tofu on Linux, brew on
+  # macOS); force the install branch so the test is independent of host state.
+  export _FORCE_OPENTOFU_INSTALL=1
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
   grep -q "DEBIAN_FRONTEND=noninteractive.*apt-get install.*opentofu" "${MOCK_CALLS_FILE}"
@@ -761,8 +762,9 @@ teardown() {
   export YQ_VER="4.40.5"
   export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
   export HAS_DEVTOOLS=1
-  # Strip /opt/homebrew/bin so `command -v tofu` fails even when tofu is brew-installed on macOS
-  export PATH="${BATS_TEST_DIRNAME}/../mocks:/usr/bin:/bin:/usr/sbin:/sbin"
+  # tofu may already be installed on the host (/usr/bin/tofu on Linux, brew on
+  # macOS); force the install branch so the test is independent of host state.
+  export _FORCE_OPENTOFU_INSTALL=1
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
   grep -q "opentofu-archive-keyring.gpg" "${MOCK_CALLS_FILE}"
@@ -774,9 +776,28 @@ teardown() {
   export YQ_VER="4.40.5"
   export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
   export HAS_DEVTOOLS=1
-  # Strip /opt/homebrew/bin so `command -v tofu` fails even when tofu is brew-installed on macOS
-  export PATH="${BATS_TEST_DIRNAME}/../mocks:/usr/bin:/bin:/usr/sbin:/sbin"
+  # tofu may already be installed on the host (/usr/bin/tofu on Linux, brew on
+  # macOS); force the install branch so the test is independent of host state.
+  export _FORCE_OPENTOFU_INSTALL=1
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
   grep -q "mkdir.*-p.*/etc/apt/keyrings" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_misc: opentofu already present skips install" {
+  export DOCKER_COMPOSE_VER="2.24.0"
+  export DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64"
+  export YQ_VER="4.40.5"
+  export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
+  export HAS_DEVTOOLS=1
+  # Mock tofu present on PATH and no force flag — install branch must be skipped
+  # regardless of whether the host actually has tofu.
+  local _tofudir="${BATS_TEST_TMPDIR}/tofubin"
+  mkdir -p "${_tofudir}"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "${_tofudir}/tofu"
+  chmod +x "${_tofudir}/tofu"
+  PATH="${_tofudir}:${PATH}" run _install_ubuntu_misc
+  [ "$status" -eq 0 ]
+  run grep "apt-get install -y opentofu" "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
 }

@@ -295,6 +295,25 @@ teardown() {
   [ "$status" -eq 0 ]
 }
 
+@test "install_ruby on Linux builds against system OpenSSL not Homebrew" {
+  export LINUX=1
+  unset MACOS UBUNTU
+  export HOME="${BATS_TEST_TMPDIR}"
+  mkdir -p "${BATS_TEST_TMPDIR}/.rbenv"
+  export RUBY_VER="4.0.5"
+  run install_ruby
+  [ "$status" -eq 0 ]
+  # The openssl extension must link against the system libcrypto the runtime
+  # ruby loads. Deriving the dir from linuxbrew's pkg-config links against a
+  # newer Homebrew OpenSSL whose symbols the system libcrypto lacks, breaking
+  # every gem HTTPS operation with "OpenSSL is not available".
+  run grep -q "RUBY_CONFIGURE_OPTS=--with-openssl-dir=/usr" "${MOCK_CALLS_FILE}"
+  [ "$status" -eq 0 ]
+  # And it must no longer consult pkg-config for the openssl dir.
+  run grep -q "pkg-config" "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+}
+
 @test "install_ruby on Linux sets rbenv global and rehash on success" {
   export LINUX=1
   unset MACOS UBUNTU
@@ -424,6 +443,11 @@ teardown() {
   export MACOS=1
   unset LINUX
   export HAS_DEVTOOLS=1
+  # Isolate HOME: recreate_python_venv prepends "$HOME/.pyenv/bin" to PATH. On
+  # Linux ~/.pyenv/bin/pyenv exists and would shadow the mock (and mutate the
+  # real ansible venv); a temp HOME keeps that dir empty so the mock is used.
+  # (Passes on macOS regardless because pyenv there lives in the brew prefix.)
+  export HOME="${BATS_TEST_TMPDIR}"
   # Point MOCK_PYENV_WHICH_STDOUT to mock python so `pyenv which python` returns
   # the mock binary — this intercepts the `"${_python}" -m pip install` call.
   export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
@@ -440,6 +464,7 @@ teardown() {
   export MACOS=1
   unset LINUX
   export HAS_DEVTOOLS=1
+  export HOME="${BATS_TEST_TMPDIR}"
   export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
   export PATH="${BATS_TEST_DIRNAME}/../mocks:${PATH}"
   recreate_python_venv "myenv"
@@ -466,6 +491,7 @@ teardown() {
   export MACOS=1
   unset LINUX
   export HAS_DEVTOOLS=1
+  export HOME="${BATS_TEST_TMPDIR}"
   export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
   export MOCK_PYENV_VIRTUALENV_DELETE_EXIT=1
   export PATH="${BATS_TEST_DIRNAME}/../mocks:${PATH}"
@@ -480,6 +506,7 @@ teardown() {
   export MACOS=1
   unset LINUX
   export HAS_DEVTOOLS=1
+  export HOME="${BATS_TEST_TMPDIR}"
   export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
   export PATH="${BATS_TEST_DIRNAME}/../mocks:${PATH}"
   recreate_python_venv "ansible"
@@ -519,6 +546,7 @@ teardown() {
   export LINUX=1
   export UBUNTU=1
   export HAS_DEVTOOLS=1
+  export HOME="${BATS_TEST_TMPDIR}"
   export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
   export PATH="${BATS_TEST_DIRNAME}/../mocks:${PATH}"
   local _rc=0
