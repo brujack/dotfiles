@@ -103,4 +103,6 @@
 
 - add systemctl mock so restart_fah.sh tests don't exec real systemctl on Linux
 
+- default MOCK_PYENV_WHICH_STDOUT in load_mocks so run_update tests never hit real pip
+
 
