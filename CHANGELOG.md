@@ -25,6 +25,8 @@
 
 - remove duplicate powershell.md @-include
 
+- build Ruby against system OpenSSL, not linuxbrew's pkg-config openssl@3 (fixes gem HTTPS "OpenSSL is not available")
+
 
 
 ## Documentation
