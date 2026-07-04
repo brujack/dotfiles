@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+printf "systemctl %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+exit "${MOCK_SYSTEMCTL_EXIT:-0}"

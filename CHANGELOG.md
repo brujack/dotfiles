@@ -101,4 +101,6 @@
 
 - fix opentofu tests failing when tofu installed on macOS
 
+- add systemctl mock so restart_fah.sh tests don't exec real systemctl on Linux
+
 
