@@ -1,3 +1,7 @@
 #!/usr/bin/env bash
 printf "ruby-install %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
-exit "${MOCK_RUBY_INSTALL_EXIT:-0}"
+_exit="${MOCK_RUBY_INSTALL_EXIT:-0}"
+if [[ "${_exit}" -eq 0 && -n "${RUBY_VER:-}" ]]; then
+  mkdir -p "${HOME}/.rubies/ruby-${RUBY_VER}/bin"
+fi
+exit "${_exit}"
