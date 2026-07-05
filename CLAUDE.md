@@ -255,7 +255,7 @@ Inline disables (`# shellcheck disable=SCxxxx # reason`) are used for remaining 
 
 `.github/workflows/ci.yml` runs on PRs to master only (the pre-push hook gates branch pushes locally):
 
-- `test` job: installs bats + shellcheck, runs `make test`, then verifies test count ≥ 840 (regression proxy; 861 tests as of 2026-07-05)
+- `test` job: installs bats + shellcheck, runs `make test`, then verifies test count ≥ 840 (regression proxy; 865 tests as of 2026-07-05)
 - `lint-macos` job: runs `bash -n` and `zsh -n` on all `.sh` files on `macos-latest` (advisory, not blocking auto-merge)
 - `bash-coverage` job: measures bash line coverage via PS4 xtrace on `ubuntu-latest`; **gates at 90%** — blocks auto-merge if coverage drops below floor
 - `secret-scan` job: runs gitleaks against recent commits (advisory, not blocking auto-merge)

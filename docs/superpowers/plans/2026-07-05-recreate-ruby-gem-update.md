@@ -1,5 +1,7 @@
 # recreate-ruby gem update Implementation Plan
 
+> **Status: DONE** — merged via dotfiles#174
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Extract a shared `update_gems()` function that fixes the Linux rbenv-shims PATH gap in gem updates, then wire it into `recreate_ruby()` (fail-fast) and into `run_update`'s existing gems section (unchanged soft-fail behavior).
