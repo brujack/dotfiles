@@ -196,6 +196,19 @@ recreate_ruby() {
     log_error "Ruby ${RUBY_VER} not found after install — ruby-install may have failed (see output above)"
     return 1
   fi
+  update_gems || { log_error "gem update failed after ruby recreate"; return 1; }
+}
+
+update_gems() {
+  local _ruby_gem_dir=""
+  if [[ -n ${MACOS} ]]; then
+    _ruby_gem_dir="${HOME}/.rubies/ruby-${RUBY_VER}/bin"
+  elif [[ -n ${LINUX} ]]; then
+    _ruby_gem_dir="${HOME}/.rbenv/shims"
+  fi
+  local _extra_gem_path=""
+  [[ -d "${_ruby_gem_dir}" ]] && _extra_gem_path="${_ruby_gem_dir}:"
+  PATH="${_extra_gem_path}${PATH}" gem update
 }
 
 install_github_cli_linux() {
