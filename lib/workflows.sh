@@ -215,6 +215,11 @@ run_recreate_venv() {
   _ledger_write_run_entry "recreate_venv" 0 || true
 }
 
+run_recreate_ruby() {
+  recreate_ruby || return 1
+  _ledger_write_run_entry "recreate_ruby" 0 || true
+}
+
 run_brew_install() {
   mkdir -p "${BREWFILE_LOC}"
   rm -f "${BREWFILE_LOC}/Brewfile"

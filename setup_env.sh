@@ -82,5 +82,6 @@ _run_or_exit() {
 [[ -n ${DEVELOPER:-} || -n ${ANSIBLE:-} ]] && _run_or_exit run_developer_or_ansible
 [[ -n ${UPDATE:-} ]] && _run_or_exit run_update
 [[ -n ${RECREATE_VENV:-} ]] && _run_or_exit run_recreate_venv
+[[ -n ${RECREATE_RUBY:-} ]] && _run_or_exit run_recreate_ruby
 
 exit 0

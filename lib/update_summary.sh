@@ -357,7 +357,7 @@ _update_record_end() {
 
 # _ledger_write_run_entry RUN_TYPE EXIT_CODE
 # Writes a state-ledger CMDB entry for any dotfiles run function.
-# RUN_TYPE: update | setup_user | setup | developer | recreate_venv
+# RUN_TYPE: update | setup_user | setup | developer | recreate_venv | recreate_ruby
 # EXIT_CODE: return code of the run function (0=success).
 # No-ops when _DOTFILES_RUN_TMPDIR/started_at absent (not called from a
 # run_* function) or when machine-id is absent (ledger not initialized).
