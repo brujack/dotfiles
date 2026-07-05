@@ -556,3 +556,62 @@ teardown() {
   run grep "mlx" "${MOCK_CALLS_FILE}"
   [ "$status" -ne 0 ]
 }
+
+# ── recreate_ruby ──────────────────────────────────────────────────────────
+
+@test "recreate_ruby macOS: deletes .rubies dir then calls install_ruby" {
+  export MACOS=1
+  unset LINUX
+  export HOME="${BATS_TEST_TMPDIR}"
+  export RUBY_VER="4.0.5"
+  export PATH="${BATS_TEST_DIRNAME}/../mocks:${PATH}"
+  mkdir -p "${HOME}/.rubies/ruby-${RUBY_VER}/bin"
+  recreate_ruby
+  [ ! -d "${HOME}/.rubies/ruby-${RUBY_VER}" ]
+  grep -q "ruby-install" "${MOCK_CALLS_FILE}"
+}
+
+@test "recreate_ruby macOS: returns 1 and skips delete when ruby-install absent" {
+  export MACOS=1
+  unset LINUX
+  export HOME="${BATS_TEST_TMPDIR}"
+  export RUBY_VER="4.0.5"
+  local _saved_path="$PATH"
+  export PATH="/usr/bin:/bin"
+  mkdir -p "${HOME}/.rubies/ruby-${RUBY_VER}/bin"
+  local _rc=0
+  recreate_ruby || _rc=$?
+  export PATH="${_saved_path}"
+  [ "${_rc}" -ne 0 ]
+  [ -d "${HOME}/.rubies/ruby-${RUBY_VER}" ]
+}
+
+@test "recreate_ruby Linux: uninstalls via rbenv then reinstalls with RUBY_CONFIGURE_OPTS" {
+  export LINUX=1
+  unset MACOS UBUNTU
+  export UBUNTU=1
+  export HOME="${BATS_TEST_TMPDIR}"
+  export RUBY_VER="4.0.5"
+  export PATH="${BATS_TEST_DIRNAME}/../mocks:${PATH}"
+  mkdir -p "${HOME}/.rbenv/plugins/ruby-build/.git"
+  recreate_ruby
+  grep -q "rbenv init -" "${MOCK_CALLS_FILE}"
+  grep -q "uninstall -f ${RUBY_VER}" "${MOCK_CALLS_FILE}"
+  grep -q "RUBY_CONFIGURE_OPTS=--with-openssl-dir=/usr" "${MOCK_CALLS_FILE}"
+  [[ "${PATH}" == "${HOME}/.rbenv/bin:"* ]]
+}
+
+@test "recreate_ruby Linux: returns 1 and skips uninstall when rbenv absent" {
+  export LINUX=1
+  unset MACOS UBUNTU
+  export HOME="${BATS_TEST_TMPDIR}"
+  export RUBY_VER="4.0.5"
+  local _saved_path="$PATH"
+  export PATH="/usr/bin:/bin"
+  local _rc=0
+  recreate_ruby || _rc=$?
+  export PATH="${_saved_path}"
+  [ "${_rc}" -ne 0 ]
+  run grep "uninstall" "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+}

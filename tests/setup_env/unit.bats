@@ -81,6 +81,16 @@ teardown() {
   [ "$output" = "1" ]
 }
 
+@test "process_args sets RECREATE_RUBY for -t recreate-ruby" {
+  run bash -c "
+    source '${BATS_TEST_DIRNAME}/../../setup_env.sh'
+    process_args -t recreate-ruby
+    printf '%s' \"\${RECREATE_RUBY}\"
+  "
+  [ "$status" -eq 0 ]
+  [ "$output" = "1" ]
+}
+
 @test "process_args sets VENV_NAME from --venv-name flag" {
   run bash -c "
     source '${BATS_TEST_DIRNAME}/../../setup_env.sh'
@@ -229,6 +239,7 @@ teardown() {
   [[ "$output" == *"--mas-install"* ]]
   [[ "$output" == *"recreate-venv"* ]]
   [[ "$output" == *"--venv-name"* ]]
+  [[ "$output" == *"recreate-ruby"* ]]
 }
 
 # ── prerequisite check ────────────────────────────────────────────────────────
@@ -413,6 +424,23 @@ teardown() {
   VENV_NAME="myenv"
   run run_recreate_venv
   [[ "$output" == *"recreate_python_venv myenv"* ]]
+}
+
+@test "run_recreate_ruby is defined after sourcing setup_env" {
+  declare -f run_recreate_ruby &>/dev/null
+  [ "$?" -eq 0 ]
+}
+
+@test "run_recreate_ruby calls recreate_ruby" {
+  recreate_ruby() { printf "recreate_ruby called\n"; }
+  run run_recreate_ruby
+  [[ "$output" == *"recreate_ruby called"* ]]
+}
+
+@test "run_recreate_ruby returns non-zero when recreate_ruby fails" {
+  recreate_ruby() { return 1; }
+  run run_recreate_ruby
+  [ "$status" -ne 0 ]
 }
 
 @test "run_update is defined after sourcing setup_env" {

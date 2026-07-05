@@ -165,6 +165,28 @@ install_ruby() {
   fi
 }
 
+recreate_ruby() {
+  if [[ -n ${MACOS} ]]; then
+    if ! quiet_which ruby-install; then
+      log_error "ruby-install not found — cannot recreate ruby"
+      return 1
+    fi
+    printf "Deleting ruby %s\\n" "${RUBY_VER}"
+    rm -rf "${HOME}/.rubies/ruby-${RUBY_VER}"
+  fi
+  if [[ -n ${LINUX} ]]; then
+    if ! quiet_which rbenv; then
+      log_error "rbenv not found — cannot recreate ruby"
+      return 1
+    fi
+    export PATH="${HOME}/.rbenv/bin:${PATH}"
+    eval "$(rbenv init -)"
+    printf "Deleting ruby %s\\n" "${RUBY_VER}"
+    rbenv uninstall -f "${RUBY_VER}" 2>/dev/null || true
+  fi
+  install_ruby || return 1
+}
+
 install_github_cli_linux() {
   if [[ -n ${UBUNTU} ]]; then
     printf "installing github cli on Ubuntu\\n"
