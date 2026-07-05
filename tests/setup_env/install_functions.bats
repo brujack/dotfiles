@@ -595,8 +595,10 @@ teardown() {
   export PATH="${BATS_TEST_DIRNAME}/../mocks:${PATH}"
   mkdir -p "${HOME}/.rbenv/plugins/ruby-build/.git"
   recreate_ruby
+  grep -q "rbenv init -" "${MOCK_CALLS_FILE}"
   grep -q "uninstall -f ${RUBY_VER}" "${MOCK_CALLS_FILE}"
   grep -q "RUBY_CONFIGURE_OPTS=--with-openssl-dir=/usr" "${MOCK_CALLS_FILE}"
+  [[ "${PATH}" == "${HOME}/.rbenv/bin:"* ]]
 }
 
 @test "recreate_ruby Linux: returns 1 and skips uninstall when rbenv absent" {

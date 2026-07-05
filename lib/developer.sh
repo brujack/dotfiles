@@ -179,6 +179,8 @@ recreate_ruby() {
       log_error "rbenv not found — cannot recreate ruby"
       return 1
     fi
+    export PATH="${HOME}/.rbenv/bin:${PATH}"
+    eval "$(rbenv init -)"
     printf "Deleting ruby %s\\n" "${RUBY_VER}"
     rbenv uninstall -f "${RUBY_VER}" 2>/dev/null || true
   fi
