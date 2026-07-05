@@ -566,9 +566,14 @@ teardown() {
   export RUBY_VER="4.0.5"
   export PATH="${BATS_TEST_DIRNAME}/../mocks:${PATH}"
   mkdir -p "${HOME}/.rubies/ruby-${RUBY_VER}/bin"
-  recreate_ruby
-  [ ! -d "${HOME}/.rubies/ruby-${RUBY_VER}" ]
+  touch "${HOME}/.rubies/ruby-${RUBY_VER}/bin/old-ruby-marker"
+  local _rc=0
+  recreate_ruby || _rc=$?
+  [ "${_rc}" -eq 0 ]
   grep -q "ruby-install" "${MOCK_CALLS_FILE}"
+  # old install was removed before reinstall, not left in place
+  [ ! -f "${HOME}/.rubies/ruby-${RUBY_VER}/bin/old-ruby-marker" ]
+  [ -d "${HOME}/.rubies/ruby-${RUBY_VER}/bin" ]
 }
 
 @test "recreate_ruby macOS: returns 1 and skips delete when ruby-install absent" {
