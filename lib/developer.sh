@@ -185,6 +185,17 @@ recreate_ruby() {
     rbenv uninstall -f "${RUBY_VER}" 2>/dev/null || true
   fi
   install_ruby || return 1
+  # install_ruby soft-fails on rbenv/ruby-install errors (returns 0 with a warning) so
+  # that initial setup continues. recreate_ruby has already deleted the old installation,
+  # so a silent failure here leaves the machine with no Ruby at all — verify explicitly.
+  if [[ -n ${LINUX} ]] && [[ ! -d ${HOME}/.rbenv/versions/${RUBY_VER} ]]; then
+    log_error "Ruby ${RUBY_VER} not found after install — rbenv install may have failed (see warnings above)"
+    return 1
+  fi
+  if [[ -n ${MACOS} ]] && [[ ! -d ${HOME}/.rubies/ruby-${RUBY_VER}/bin ]]; then
+    log_error "Ruby ${RUBY_VER} not found after install — ruby-install may have failed (see output above)"
+    return 1
+  fi
 }
 
 install_github_cli_linux() {

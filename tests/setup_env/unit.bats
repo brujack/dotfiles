@@ -443,6 +443,40 @@ teardown() {
   [ "$status" -ne 0 ]
 }
 
+@test "recreate_ruby on Linux returns non-zero when install_ruby soft-fails" {
+  export LINUX=1; unset MACOS
+  export HOME="${BATS_TEST_TMPDIR}/recreate_ruby_fail_home"
+  mkdir -p "${HOME}"
+  # install_ruby returns 0 without creating the rbenv version dir — simulates rbenv soft-fail
+  install_ruby() { return 0; }
+  local _mock_bin="${BATS_TEST_TMPDIR}/mock_rbenv_softfail"
+  mkdir -p "${_mock_bin}"
+  # rbenv init - must emit a valid shell snippet; uninstall/other cmds succeed silently
+  printf '#!/usr/bin/env bash\n[[ "$1" == "init" ]] && printf ": \n" || true\n' \
+    > "${_mock_bin}/rbenv"
+  chmod +x "${_mock_bin}/rbenv"
+  export PATH="${_mock_bin}:${PATH}"
+  run recreate_ruby
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"not found after install"* ]]
+}
+
+@test "recreate_ruby on Linux returns zero when install_ruby succeeds" {
+  export LINUX=1; unset MACOS
+  export HOME="${BATS_TEST_TMPDIR}/recreate_ruby_pass_home"
+  mkdir -p "${HOME}/.rbenv/versions/${RUBY_VER}"
+  # install_ruby returns 0 and the version dir already exists (mock rbenv doesn't uninstall)
+  install_ruby() { return 0; }
+  local _mock_bin="${BATS_TEST_TMPDIR}/mock_rbenv_pass"
+  mkdir -p "${_mock_bin}"
+  printf '#!/usr/bin/env bash\n[[ "$1" == "init" ]] && printf ": \n" || true\n' \
+    > "${_mock_bin}/rbenv"
+  chmod +x "${_mock_bin}/rbenv"
+  export PATH="${_mock_bin}:${PATH}"
+  run recreate_ruby
+  [ "$status" -eq 0 ]
+}
+
 @test "run_update is defined after sourcing setup_env" {
   declare -f run_update &>/dev/null
   [ "$?" -eq 0 ]
