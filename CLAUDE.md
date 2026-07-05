@@ -203,6 +203,10 @@ versioned symbols (e.g. `OPENSSL_3.4.0`) are absent from the older system libcry
 3.0.13) — breaking every `gem` HTTPS operation with "OpenSSL is not available". Passing
 `--with-openssl-dir` makes the openssl gem's extconf skip `pkg-config` entirely.
 
+`update_gems()` in `lib/developer.sh` handles the platform difference for `gem update`'s `PATH`
+prepend — the chruby `bin` dir on macOS, the rbenv `shims` dir on Linux — used by both
+`recreate_ruby()` and `run_update`'s gems step.
+
 ## Language Standards
 
 Language-specific standards for this repo. These supplement the universal standards loaded
