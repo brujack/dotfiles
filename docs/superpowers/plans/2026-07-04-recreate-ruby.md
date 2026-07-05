@@ -1,5 +1,7 @@
 # recreate-ruby Implementation Plan
 
+> **Status: DONE** — merged via PR dotfiles#172 (feature) and #173 (silent-failure fix).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add `setup_env.sh -t recreate-ruby` that force-deletes and reinstalls the pinned Ruby version (`RUBY_VER`), reusing existing `install_ruby()` logic on both platforms.
