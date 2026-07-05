@@ -198,6 +198,18 @@ recreate_ruby() {
   fi
 }
 
+update_gems() {
+  local _ruby_gem_dir=""
+  if [[ -n ${MACOS} ]]; then
+    _ruby_gem_dir="${HOME}/.rubies/ruby-${RUBY_VER}/bin"
+  elif [[ -n ${LINUX} ]]; then
+    _ruby_gem_dir="${HOME}/.rbenv/shims"
+  fi
+  local _extra_gem_path=""
+  [[ -d "${_ruby_gem_dir}" ]] && _extra_gem_path="${_ruby_gem_dir}:"
+  PATH="${_extra_gem_path}${PATH}" gem update
+}
+
 install_github_cli_linux() {
   if [[ -n ${UBUNTU} ]]; then
     printf "installing github cli on Ubuntu\\n"
