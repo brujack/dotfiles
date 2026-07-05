@@ -572,6 +572,25 @@ EOF
   grep -q "rubies-gem update" "${MOCK_CALLS_FILE}"
 }
 
+@test "run_update gem section on Linux prepends rbenv shims so it takes precedence over PATH gem" {
+  export LINUX=1
+  unset MACOS UBUNTU
+  export UBUNTU=1
+  export HOME="${BATS_TEST_TMPDIR}"
+  export RUBY_VER="4.0.5"
+  export UPDATE_GEMS=1
+  unset UPDATE_BREW UPDATE_PIP UPDATE_MAS UPDATE_CLAUDE
+  local _shims="${HOME}/.rbenv/shims"
+  mkdir -p "${_shims}"
+  cat > "${_shims}/gem" << 'EOF'
+#!/usr/bin/env bash
+printf "shims-gem %s\n" "$*" >> "${MOCK_CALLS_FILE}"
+EOF
+  chmod +x "${_shims}/gem"
+  run run_update
+  grep -q "shims-gem update" "${MOCK_CALLS_FILE}"
+}
+
 @test "run_update calls apt on Ubuntu" {
   unset MACOS
   export LINUX=1
