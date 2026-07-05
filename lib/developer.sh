@@ -196,6 +196,7 @@ recreate_ruby() {
     log_error "Ruby ${RUBY_VER} not found after install — ruby-install may have failed (see output above)"
     return 1
   fi
+  update_gems || { log_error "gem update failed after ruby recreate"; return 1; }
 }
 
 update_gems() {
