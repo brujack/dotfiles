@@ -219,6 +219,7 @@ Types:
   ansible    : Just runs the ansible setup using a python virtual environment. Typically used after a python update
   recreate-venv : Force-delete and recreate a pyenv virtualenv
                Flags: --venv-name (default: ansible)
+  recreate-ruby  : Force-delete and reinstall the pinned Ruby version
   update     : Does a system update of packages including brew packages
                Flags: --brew-only, --pip-only, --gems-only, --mas-only, --claude-only
   doctor     : Active health checks: symlinks, tools, credential dir permissions, version drift. Exits non-zero on failure
@@ -552,6 +553,7 @@ process_args() {
           doctor)         readonly DOCTOR=1 ;;
           check-versions) readonly CHECK_VERSIONS=1 ;;
           recreate-venv)  readonly RECREATE_VENV=1 ;;
+          recreate-ruby)  readonly RECREATE_RUBY=1 ;;
           *) printf "Invalid option for -t\n"; usage; exit 1 ;;
         esac
         ;;
