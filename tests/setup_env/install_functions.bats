@@ -620,3 +620,49 @@ teardown() {
   run grep "uninstall" "${MOCK_CALLS_FILE}"
   [ "$status" -ne 0 ]
 }
+
+# ── update_gems ──────────────────────────────────────────────────────────────
+
+@test "update_gems on macOS prepends chruby gem dir so it takes precedence over PATH gem" {
+  export MACOS=1
+  unset LINUX
+  export HOME="${BATS_TEST_TMPDIR}"
+  export RUBY_VER="4.0.5"
+  export PATH="${BATS_TEST_DIRNAME}/../mocks:${PATH}"
+  local _chruby_bin="${HOME}/.rubies/ruby-${RUBY_VER}/bin"
+  mkdir -p "${_chruby_bin}"
+  cat > "${_chruby_bin}/gem" << 'EOF'
+#!/usr/bin/env bash
+printf "chruby-gem %s\n" "$*" >> "${MOCK_CALLS_FILE}"
+EOF
+  chmod +x "${_chruby_bin}/gem"
+  update_gems
+  grep -q "chruby-gem update" "${MOCK_CALLS_FILE}"
+}
+
+@test "update_gems on Linux prepends rbenv shims so it takes precedence over PATH gem" {
+  export LINUX=1
+  unset MACOS
+  export HOME="${BATS_TEST_TMPDIR}"
+  export RUBY_VER="4.0.5"
+  export PATH="${BATS_TEST_DIRNAME}/../mocks:${PATH}"
+  local _shims="${HOME}/.rbenv/shims"
+  mkdir -p "${_shims}"
+  cat > "${_shims}/gem" << 'EOF'
+#!/usr/bin/env bash
+printf "shims-gem %s\n" "$*" >> "${MOCK_CALLS_FILE}"
+EOF
+  chmod +x "${_shims}/gem"
+  update_gems
+  grep -q "shims-gem update" "${MOCK_CALLS_FILE}"
+}
+
+@test "update_gems calls gem update via PATH when platform gem dir absent" {
+  export LINUX=1
+  unset MACOS
+  export HOME="${BATS_TEST_TMPDIR}"
+  export RUBY_VER="4.0.5"
+  export PATH="${BATS_TEST_DIRNAME}/../mocks:${PATH}"
+  update_gems
+  grep -q "gem update" "${MOCK_CALLS_FILE}"
+}
