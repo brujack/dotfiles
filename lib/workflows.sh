@@ -216,6 +216,7 @@ run_recreate_venv() {
 }
 
 run_recreate_ruby() {
+  _dotfiles_run_tmpdir_setup
   recreate_ruby || return 1
   _ledger_write_run_entry "recreate_ruby" 0 || true
 }
