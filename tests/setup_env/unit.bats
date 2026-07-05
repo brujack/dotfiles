@@ -426,6 +426,23 @@ teardown() {
   [[ "$output" == *"recreate_python_venv myenv"* ]]
 }
 
+@test "run_recreate_ruby is defined after sourcing setup_env" {
+  declare -f run_recreate_ruby &>/dev/null
+  [ "$?" -eq 0 ]
+}
+
+@test "run_recreate_ruby calls recreate_ruby" {
+  recreate_ruby() { printf "recreate_ruby called\n"; }
+  run run_recreate_ruby
+  [[ "$output" == *"recreate_ruby called"* ]]
+}
+
+@test "run_recreate_ruby returns non-zero when recreate_ruby fails" {
+  recreate_ruby() { return 1; }
+  run run_recreate_ruby
+  [ "$status" -ne 0 ]
+}
+
 @test "run_update is defined after sourcing setup_env" {
   declare -f run_update &>/dev/null
   [ "$?" -eq 0 ]
