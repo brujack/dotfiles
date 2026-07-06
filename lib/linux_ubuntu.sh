@@ -365,7 +365,7 @@ _install_ubuntu_brew_packages() {
     if [[ -n ${HAS_DEVTOOLS} ]]; then
       brew_tap_if_missing gitguardian/tap
       brew_install_formula ggshield
-      brew_install_formula claude-code
+      brew_install_formula claude-code@latest
       if command -v claude &>/dev/null; then
         claude plugins install superpowers
         claude plugins install code-simplifier

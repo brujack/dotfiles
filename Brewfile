@@ -145,7 +145,7 @@ cask "blender"                               # [HAS_DEVTOOLS]
 cask "carbon-copy-cloner"                    # [HAS_DEVTOOLS]
 cask "chatgpt"
 cask "claude"
-cask "claude-code"                           # [HAS_DEVTOOLS]
+cask "claude-code@latest"                    # [HAS_DEVTOOLS]
 cask "cursor"                                # [HAS_DEVTOOLS]
 cask "cursor-cli"                            # [HAS_DEVTOOLS]
 cask "daisydisk"
