@@ -522,6 +522,35 @@ teardown() {
   [[ "${output}" == *"state-ledger pull failed"* ]]
 }
 
+@test "ensure_state_ledger invokes ledger.py init when script is executable" {
+  export _OVERRIDE_STATE_LEDGER_DIR="${BATS_TEST_TMPDIR}/state-ledger"
+  mkdir -p "${_OVERRIDE_STATE_LEDGER_DIR}/scripts"
+  printf '#!/usr/bin/env bash\nprintf "ledger-init-called\\n" >> "%s"\n' \
+    "${MOCK_CALLS_FILE}" > "${_OVERRIDE_STATE_LEDGER_DIR}/scripts/ledger.py"
+  chmod +x "${_OVERRIDE_STATE_LEDGER_DIR}/scripts/ledger.py"
+
+  run ensure_state_ledger
+  [ "${status}" -eq 0 ]
+  grep -q "ledger-init-called" "${MOCK_CALLS_FILE}"
+}
+
+@test "ensure_state_ledger skips ledger.py init when script absent" {
+  export _OVERRIDE_STATE_LEDGER_DIR="${BATS_TEST_TMPDIR}/state-ledger"
+  mkdir -p "${_OVERRIDE_STATE_LEDGER_DIR}"
+
+  run ensure_state_ledger
+  [ "${status}" -eq 0 ]
+  ! grep -q "ledger-init-called" "${MOCK_CALLS_FILE}"
+}
+
+@test "_dotfiles_run_tmpdir_setup calls ensure_state_ledger" {
+  ensure_state_ledger() { printf "stub-ensure-state-ledger-called\n" >> "${MOCK_CALLS_FILE}"; }
+
+  run _dotfiles_run_tmpdir_setup
+  [ "${status}" -eq 0 ]
+  grep -q "stub-ensure-state-ledger-called" "${MOCK_CALLS_FILE}"
+}
+
 # ── setup_claude_mcp (AI_CONFIG_DIR seam) ────────────────────────────────────
 
 @test "setup_claude_mcp uses template from AI_CONFIG_DIR" {
