@@ -491,7 +491,8 @@ teardown() {
 
   run ensure_state_ledger
   [ "${status}" -eq 0 ]
-  ! grep -q "git clone" "${MOCK_CALLS_FILE}"
+  run grep -q "git clone" "${MOCK_CALLS_FILE}"
+  [ "${status}" -ne 0 ]
 }
 
 @test "ensure_state_ledger pulls (--ff-only) when state-ledger dir exists" {
