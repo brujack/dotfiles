@@ -729,6 +729,8 @@ ensure_state_ledger() {
     git clone "${_url}" "${_dir}" >/dev/null 2>&1 \
       || { log_warn "state-ledger clone failed — continuing without ledger"; return 0; }
   fi
+
+  return 0
 }
 
 ledger_write_entry() {
