@@ -1,5 +1,7 @@
 # state-ledger bootstrap Implementation Plan
 
+> **Status: DONE** — merged via PR dotfiles#176 (2026-07-07)
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace dead `ensure_machine_id()` with `ensure_state_ledger()` — a non-fatal clone/pull

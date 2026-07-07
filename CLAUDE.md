@@ -255,7 +255,7 @@ Inline disables (`# shellcheck disable=SCxxxx # reason`) are used for remaining 
 
 `.github/workflows/ci.yml` runs on PRs to master only (the pre-push hook gates branch pushes locally):
 
-- `test` job: installs bats + shellcheck, runs `make test`, then verifies test count ≥ 840 (regression proxy; 865 tests as of 2026-07-05)
+- `test` job: installs bats + shellcheck, runs `make test`, then verifies test count ≥ 840 (regression proxy; 869 tests as of 2026-07-07)
 - `lint-macos` job: runs `bash -n` and `zsh -n` on all `.sh` files on `macos-latest` (advisory, not blocking auto-merge)
 - `bash-coverage` job: measures bash line coverage via PS4 xtrace on `ubuntu-latest`; **gates at 90%** — blocks auto-merge if coverage drops below floor
 - `secret-scan` job: runs gitleaks against recent commits (advisory, not blocking auto-merge)
@@ -307,7 +307,7 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 #### Bash
 
-- **Overall: 92%** (measured 2026-06-01 across 782 BATS tests; 861 tests as of 2026-07-05 after recreate-ruby feature + silent-failure fix PRs #172-173; per-file: `setup_env.sh` 89%, `helpers.sh` 90%, `workflows.sh` 91%, `update_summary.sh` 97%, `developer.sh` 91%, `linux_ubuntu.sh` 91%, `macos.sh` 97%, `constants.sh`/`detect_env.sh`/`linux_shared.sh` 96-100%)
+- **Overall: 92%** (measured 2026-06-01 across 782 BATS tests; 869 tests as of 2026-07-07 after state-ledger bootstrap PR #176; per-file: `setup_env.sh` 89%, `helpers.sh` 90%, `workflows.sh` 91%, `update_summary.sh` 97%, `developer.sh` 91%, `linux_ubuntu.sh` 91%, `macos.sh` 97%, `constants.sh`/`detect_env.sh`/`linux_shared.sh` 96-100%)
 - **`make bash-coverage`** measures coverage via `BASH_ENV` + PS4 xtrace tracer (`scripts/run-bash-coverage.sh`). Runs all bats tests with xtrace active; filters trace output through a named pipe to keep disk usage small (~200K lines vs ~33M raw).
 - **`make push-bash-coverage`** runs `bash-coverage`, generates `coverage/bash.json` in shields.io format, and pushes it to the `coverage-data` branch. The README badge pulls from that branch.
 - **Cron job (manual install)**: `(crontab -l 2>/dev/null; echo "0 2 * * * cd ~/git-repos/personal/dotfiles && make push-bash-coverage >> ~/.dotfiles-coverage.log 2>&1") | crontab -`
