@@ -475,6 +475,26 @@ teardown() {
   [ "${_rc}" -eq 1 ]
 }
 
+@test "setup_ai_config clones (self-heals) when dir exists but is not a valid git repo" {
+  export MOCK_GIT_REVPARSE_EXIT=1
+  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
+  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}"
+  touch "${_OVERRIDE_AI_CONFIG_DIR}/corrupt-marker"
+
+  run setup_ai_config
+  [ "${status}" -eq 0 ]
+  grep -q "git clone git@github.com:brujack/ai-config ${_OVERRIDE_AI_CONFIG_DIR}" "${MOCK_CALLS_FILE}"
+  [ ! -e "${_OVERRIDE_AI_CONFIG_DIR}/corrupt-marker" ]
+}
+
+@test "setup_ai_config uses SSH BatchMode to avoid hanging on host-key prompt" {
+  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/nonexistent-ai-config"
+
+  run setup_ai_config
+  [ "${status}" -eq 0 ]
+  grep -q "GIT_SSH_COMMAND=ssh -o BatchMode=yes" "${MOCK_CALLS_FILE}"
+}
+
 # ── ensure_state_ledger ──────────────────────────────────────────────────────
 
 @test "ensure_state_ledger clones repo when state-ledger dir absent" {
@@ -543,6 +563,27 @@ teardown() {
   [ "${status}" -eq 0 ]
   run grep -q "ledger-init-called" "${MOCK_CALLS_FILE}"
   [ "${status}" -ne 0 ]
+}
+
+@test "ensure_state_ledger clones (self-heals) when dir exists but is not a valid git repo" {
+  export MOCK_GIT_REVPARSE_EXIT=1
+  export _OVERRIDE_STATE_LEDGER_DIR="${BATS_TEST_TMPDIR}/state-ledger"
+  mkdir -p "${_OVERRIDE_STATE_LEDGER_DIR}"
+  touch "${_OVERRIDE_STATE_LEDGER_DIR}/corrupt-marker"
+
+  run ensure_state_ledger
+  [ "${status}" -eq 0 ]
+  grep -q "git clone git@github.com:brujack/state-ledger.git ${_OVERRIDE_STATE_LEDGER_DIR}" "${MOCK_CALLS_FILE}"
+  [ ! -e "${_OVERRIDE_STATE_LEDGER_DIR}/corrupt-marker" ]
+}
+
+@test "ensure_state_ledger uses SSH BatchMode to avoid hanging on host-key prompt" {
+  export _OVERRIDE_STATE_LEDGER_DIR="${BATS_TEST_TMPDIR}/state-ledger"
+  mkdir -p "${_OVERRIDE_STATE_LEDGER_DIR}"
+
+  run ensure_state_ledger
+  [ "${status}" -eq 0 ]
+  grep -q "GIT_SSH_COMMAND=ssh -o BatchMode=yes" "${MOCK_CALLS_FILE}"
 }
 
 @test "_dotfiles_run_tmpdir_setup calls ensure_state_ledger" {

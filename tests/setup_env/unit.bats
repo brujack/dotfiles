@@ -6,6 +6,7 @@ setup() {
   load_mocks
   load_setup_env
   TMPDIR_TEST="$(mktemp -d)"
+  export HOME="${TMPDIR_TEST}"
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
 }
 
@@ -14,6 +15,10 @@ teardown() {
 }
 
 # ── quiet_which ─────────────────────────────────────────────────────────────
+
+@test "setup isolates HOME from the real developer home" {
+  [ "${HOME}" = "${TMPDIR_TEST}" ]
+}
 
 @test "quiet_which returns 0 for a command that exists" {
   run quiet_which bash
