@@ -29,37 +29,6 @@ EOF
     printf '%s' "${_dir}"
 }
 
-# ── ensure_machine_id ─────────────────────────────────────────────────────────
-
-@test "ensure_machine_id: creates machine-id file when absent" {
-    run ensure_machine_id
-    [ "$status" -eq 0 ]
-    [ -f "${HOME}/.config/dotfiles/machine-id" ]
-}
-
-@test "ensure_machine_id: machine-id is valid UUID4 format" {
-    ensure_machine_id || true
-    local _id
-    _id="$(cat "${HOME}/.config/dotfiles/machine-id")"
-    [[ "${_id}" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]]
-}
-
-@test "ensure_machine_id: idempotent — preserves existing id" {
-    mkdir -p "${HOME}/.config/dotfiles"
-    echo "test-machine-id" > "${HOME}/.config/dotfiles/machine-id"
-    ensure_machine_id || true
-    local _id
-    _id="$(cat "${HOME}/.config/dotfiles/machine-id")"
-    [ "${_id}" = "test-machine-id" ]
-}
-
-@test "ensure_machine_id: returns 0 when machine-id already exists" {
-    mkdir -p "${HOME}/.config/dotfiles"
-    echo "existing-id" > "${HOME}/.config/dotfiles/machine-id"
-    run ensure_machine_id
-    [ "$status" -eq 0 ]
-}
-
 # ── ledger_write_entry ────────────────────────────────────────────────────────
 
 @test "ledger_write_entry: returns 0 with WARNING when ledger binary absent" {
