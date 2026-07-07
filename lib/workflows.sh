@@ -81,14 +81,24 @@ setup_claude_plugins() {
   done
 }
 
+_git_is_valid_repo() {
+  local _dir="$1"
+  [[ -d "${_dir}" ]] && git -C "${_dir}" rev-parse --git-dir >/dev/null 2>&1
+}
+
+_git_ssh_opts() {
+  printf '%s' "ssh -o BatchMode=yes -o ConnectTimeout=10"
+}
+
 setup_ai_config() {
   local _dir="${_OVERRIDE_AI_CONFIG_DIR:-${AI_CONFIG_DIR}}"
-  if [[ ! -d "${_dir}" ]]; then
-    log_info "ai-config not found — cloning..."
-    git clone git@github.com:brujack/ai-config "${_dir}" || return 1
-  else
+  if _git_is_valid_repo "${_dir}"; then
     log_info "Updating ai-config..."
-    git -C "${_dir}" pull --rebase --autostash || return 1
+    GIT_SSH_COMMAND="$(_git_ssh_opts)" git -C "${_dir}" pull --rebase --autostash || return 1
+  else
+    [[ -d "${_dir}" ]] && rm -rf "${_dir}"
+    log_info "ai-config not found — cloning..."
+    GIT_SSH_COMMAND="$(_git_ssh_opts)" git clone git@github.com:brujack/ai-config "${_dir}" || return 1
   fi
 }
 
@@ -723,11 +733,12 @@ ensure_state_ledger() {
   local _dir="${_OVERRIDE_STATE_LEDGER_DIR:-${HOME}/.local/share/state-ledger}"
   local _url="git@github.com:brujack/state-ledger.git"
 
-  if [[ -d "${_dir}" ]]; then
-    git -C "${_dir}" pull --ff-only >/dev/null 2>&1 \
+  if _git_is_valid_repo "${_dir}"; then
+    GIT_SSH_COMMAND="$(_git_ssh_opts)" git -C "${_dir}" pull --ff-only >/dev/null 2>&1 \
       || log_warn "state-ledger pull failed — continuing without ledger sync"
   else
-    git clone "${_url}" "${_dir}" >/dev/null 2>&1 \
+    [[ -d "${_dir}" ]] && rm -rf "${_dir}"
+    GIT_SSH_COMMAND="$(_git_ssh_opts)" git clone "${_url}" "${_dir}" >/dev/null 2>&1 \
       || { log_warn "state-ledger clone failed — continuing without ledger"; return 0; }
   fi
 
