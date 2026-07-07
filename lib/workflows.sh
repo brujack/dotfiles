@@ -102,6 +102,7 @@ _dotfiles_run_tmpdir_setup() {
     > "${_DOTFILES_RUN_TMPDIR}/run_id" 2>/dev/null || true
   git -C "${PERSONAL_GITREPOS}/${DOTFILES}" rev-parse HEAD \
     > "${_DOTFILES_RUN_TMPDIR}/git_sha" 2>/dev/null || true
+  ensure_state_ledger || true
 }
 
 run_setup_user() {
@@ -729,6 +730,10 @@ ensure_state_ledger() {
     git clone "${_url}" "${_dir}" >/dev/null 2>&1 \
       || { log_warn "state-ledger clone failed — continuing without ledger"; return 0; }
   fi
+
+  [[ -x "${_dir}/scripts/ledger.py" ]] && \
+    { "${_dir}/scripts/ledger.py" init >/dev/null 2>&1 \
+      || log_warn "ledger init failed — continuing"; }
 
   return 0
 }
