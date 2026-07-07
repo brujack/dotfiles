@@ -540,7 +540,8 @@ teardown() {
 
   run ensure_state_ledger
   [ "${status}" -eq 0 ]
-  ! grep -q "ledger-init-called" "${MOCK_CALLS_FILE}"
+  run grep -q "ledger-init-called" "${MOCK_CALLS_FILE}"
+  [ "${status}" -ne 0 ]
 }
 
 @test "_dotfiles_run_tmpdir_setup calls ensure_state_ledger" {
