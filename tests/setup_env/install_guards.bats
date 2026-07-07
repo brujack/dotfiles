@@ -475,6 +475,53 @@ teardown() {
   [ "${_rc}" -eq 1 ]
 }
 
+# ── ensure_state_ledger ──────────────────────────────────────────────────────
+
+@test "ensure_state_ledger clones repo when state-ledger dir absent" {
+  export _OVERRIDE_STATE_LEDGER_DIR="${BATS_TEST_TMPDIR}/nonexistent-state-ledger"
+
+  run ensure_state_ledger
+  [ "${status}" -eq 0 ]
+  grep -q "git clone git@github.com:brujack/state-ledger.git ${BATS_TEST_TMPDIR}/nonexistent-state-ledger" "${MOCK_CALLS_FILE}"
+}
+
+@test "ensure_state_ledger does not clone when state-ledger dir exists" {
+  export _OVERRIDE_STATE_LEDGER_DIR="${BATS_TEST_TMPDIR}/state-ledger"
+  mkdir -p "${_OVERRIDE_STATE_LEDGER_DIR}"
+
+  run ensure_state_ledger
+  [ "${status}" -eq 0 ]
+  ! grep -q "git clone" "${MOCK_CALLS_FILE}"
+}
+
+@test "ensure_state_ledger pulls (--ff-only) when state-ledger dir exists" {
+  export _OVERRIDE_STATE_LEDGER_DIR="${BATS_TEST_TMPDIR}/state-ledger"
+  mkdir -p "${_OVERRIDE_STATE_LEDGER_DIR}"
+
+  run ensure_state_ledger
+  [ "${status}" -eq 0 ]
+  grep -q "git -C ${_OVERRIDE_STATE_LEDGER_DIR} pull --ff-only" "${MOCK_CALLS_FILE}"
+}
+
+@test "ensure_state_ledger warns and returns 0 when clone fails" {
+  export MOCK_GIT_CLONE_EXIT=1
+  export _OVERRIDE_STATE_LEDGER_DIR="${BATS_TEST_TMPDIR}/nonexistent-state-ledger"
+
+  run ensure_state_ledger
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"state-ledger clone failed"* ]]
+}
+
+@test "ensure_state_ledger warns and returns 0 when pull fails" {
+  export MOCK_GIT_EXIT=1
+  export _OVERRIDE_STATE_LEDGER_DIR="${BATS_TEST_TMPDIR}/state-ledger"
+  mkdir -p "${_OVERRIDE_STATE_LEDGER_DIR}"
+
+  run ensure_state_ledger
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"state-ledger pull failed"* ]]
+}
+
 # ── setup_claude_mcp (AI_CONFIG_DIR seam) ────────────────────────────────────
 
 @test "setup_claude_mcp uses template from AI_CONFIG_DIR" {
