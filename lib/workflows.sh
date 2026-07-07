@@ -718,14 +718,17 @@ run_check_versions() {
 
 # ── Ledger integration ─────────────────────────────────────────────────────────
 
-ensure_machine_id() {
-  local _id_path="${HOME}/.config/dotfiles/machine-id"
-  if [[ -f "${_id_path}" ]]; then
-    return 0
+ensure_state_ledger() {
+  local _dir="${_OVERRIDE_STATE_LEDGER_DIR:-${HOME}/.local/share/state-ledger}"
+  local _url="git@github.com:brujack/state-ledger.git"
+
+  if [[ -d "${_dir}" ]]; then
+    git -C "${_dir}" pull --ff-only >/dev/null 2>&1 \
+      || log_warn "state-ledger pull failed — continuing without ledger sync"
+  else
+    git clone "${_url}" "${_dir}" >/dev/null 2>&1 \
+      || { log_warn "state-ledger clone failed — continuing without ledger"; return 0; }
   fi
-  mkdir -p "$(dirname "${_id_path}")"
-  python3 -c "import uuid; print(str(uuid.uuid4()))" > "${_id_path}" || return 1
-  printf "machine-id created: %s\n" "${_id_path}"
 }
 
 ledger_write_entry() {
