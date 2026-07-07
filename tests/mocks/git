@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-printf "git %s (GIT_SSH_COMMAND=%s)\n" "$*" "${GIT_SSH_COMMAND:-}" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+printf "git %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+printf "GIT_SSH_COMMAND=%s\n" "${GIT_SSH_COMMAND:-}" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
 if [[ "$1" == "clone" ]]; then
   mkdir -p "${@: -1}"
   exit "${MOCK_GIT_CLONE_EXIT:-0}"
