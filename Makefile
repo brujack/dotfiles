@@ -3,7 +3,7 @@ SHELLCHECK := $(shell command -v shellcheck 2>/dev/null)
 KCOV := $(shell command -v kcov 2>/dev/null)
 SHELL_FILES := $(shell find . -name "*.sh" -not -path "*/node_modules/*" -not -path "*/coverage/*")
 
-.PHONY: test test-unit lint coverage bash-coverage push-bash-coverage install-hooks ledger-symlink help changelog validate-plan
+.PHONY: test test-unit lint coverage bash-coverage push-bash-coverage install-hooks ledger-symlink help changelog validate-plan sync-agent-guidance check-agent-guidance
 
 help:
 	@printf "Available targets:\n"
@@ -14,6 +14,8 @@ help:
 	@printf "  make bash-coverage     Measure bash line coverage via PS4 xtrace tracer\n"
 	@printf "  make push-bash-coverage  Run bash-coverage and push badge JSON to coverage-data branch\n"
 	@printf "  make install-hooks     Install pre-commit and pre-push hooks (run once per checkout)\n"
+	@printf "  make sync-agent-guidance  Regenerate .cursor/rules/global-claude-standards.mdc from CLAUDE.md\n"
+	@printf "  make check-agent-guidance Fail if the generated Cursor rule has drifted from CLAUDE.md\n"
 	@printf "  make help              Show this help\n"
 
 lint:
@@ -78,6 +80,12 @@ endif
 
 changelog:
 	git-cliff -o CHANGELOG.md
+
+sync-agent-guidance:
+	./scripts/sync-agent-guidance.sh sync
+
+check-agent-guidance:
+	./scripts/sync-agent-guidance.sh check
 
 # 10-80-10 cycle (ai-config ADR-0009/0010) — validate a plan file
 validate-plan:
