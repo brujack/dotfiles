@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 usage() {
-  printf "Usage: %s <sync|check>\n" "$0"
+  printf "Usage: %s <sync|check>\n" "${0}"
 }
 
 repo_root() {
@@ -12,9 +12,9 @@ repo_root() {
 
 generate_global_rule() {
   local _claude_md _standards_dir _out
-  _claude_md="$1"
-  _standards_dir="$2"
-  _out="$3"
+  _claude_md="${1}"
+  _standards_dir="${2}"
+  _out="${3}"
 
   python3 - "${_claude_md}" "${_standards_dir}" "${_out}" <<'PY'
 import pathlib
