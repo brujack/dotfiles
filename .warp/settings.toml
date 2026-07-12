@@ -60,6 +60,7 @@ cloud_conversation_storage_enabled = true
 
 [agents.warp_agent.input]
 nld_in_terminal_enabled = true
+ai_auto_detection_enabled = true
 
 [agents.profiles]
 agent_mode_execute_readonly_commands = true
