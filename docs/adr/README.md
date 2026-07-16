@@ -18,3 +18,4 @@ Cross-cutting decisions that apply across personal repos. Repo-specific decision
 | [0012](0012-brewfile-drift-detection.md)                       | Brewfile drift detection in update summary              | 2026-04-29 | Accepted |
 | [0013](0013-no-curl-bash-installs.md)                          | Replace curl\|bash installers with verified installs    | 2026-06-22 | Accepted |
 | [0014](0014-state-ledger-cmdb-integration.md)                  | State-ledger CMDB integration for update run metadata   | 2026-06-28 | Accepted |
+| [0015](0015-release-sbom-vulnerability-monitoring.md)          | Continuous vulnerability monitoring of release SBOMs    | 2026-07-16 | Accepted |
