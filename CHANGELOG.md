@@ -1,768 +1,102 @@
 # Changelog
 
-## [unreleased]
-
-## Features
-- implement sync-agent-guidance / check-agent-guidance targets (#178)
-- auto clone/pull state-ledger on setup/update runs (#176)
-- add recreate-ruby entry point to setup_env.sh (#172)
-- wire state-ledger into setup/developer/recreate_venv runs (#168)
-- wire state-ledger writes into dotfiles update (#167)
-- state-ledger CMDB integration (T5/T6/T7) (#166)
-- add advisory skill scan after claude plugin update
-- add cargo-cyclonedx and cyclonedx-python (#165)
-- dotfiles adds powershell.md language standard
-- replace curl|bash installs with brew/apt/SHA-pin (#162)
-- add OpenTofu install for macOS and Ubuntu (#161)
-- add ruff, pytest, mypy, data science stack
-- ARM64 support + version bumps (PR4) (#146)
-- track and symlink .gitignore_global via dotfiles
-- Ubuntu 26.04 Resolute Raccoon detection and package files (#143)
-- cosmic-ray in ansible venv; fix CoP plugin rename (#129)
-- adopt 10-80-10 execution cycle (ai-config ADR-0009/0010) (#128)
-- add mlx to ansible virtualenv pip install
-- add terraform-skill to plugin install and update lists
-- add -t recreate-venv to force-recreate a pyenv virtualenv (#124)
-- capture stderr per-section for richer failure output (#119)
-- add bash coverage measurement via PS4 xtrace tracer
-- add memory and CPU to right prompt
-- enable brew-drift check on Linux
-- add git-cliff config and make target (#91)
-- add Renovate dependency updates
-- AI-native dev environment setup (#85)
-- pull ai-config on full update run
-- add hypothesis to pip install list
-- add mutmut to pip install list
-- install and update cargo-nextest on dev machines
-- add setup_claude_plugins to ensure plugins install on setup
-- add warp to Claude plugin update chain
-- add PR template and conventional commits hook
-- add ansible-cop-review to Claude plugins update chain
-- auto-shellcheck on .sh writes, ruff --fix on .py writes
-- add npm global packages section to update summary
-- install and update firecrawl-cli npm package
-- add codeburn to Brewfile for macOS and Linux
-- add security-guidance plugin to Claude update chain
-- add frontend-design plugin to Claude update chain
-- add skill-creator plugin to Claude update chain
-- add firecrawl to Claude plugin update chain
-- add caveman plugin to Claude update chain
-- use skip_if_exists for oh-my-zsh install
-- use tilde path in etch.yaml — shellexpand fix merged
-- replace command.run chmod with file.chmod action
-- add etch manifests for dotfiles symlink migration (Phase 2) (#83)
-- add tools manifest — oh-my-zsh, p10k, TPM
-- migrate .claude/ and .cursor/ to ai-config repo (#80)
-- install rust-analyzer and pyright for terminal development
-- add rust-analyzer-lsp and pyright-lsp to Claude plugin update chain
-- expand ansible.md and terraform.md with standards from terraform_ansible repo
-- add /whats-new-anthropic slash command
-- add main() orchestration with tests
-- add write_output, commit_and_push, send_ntfy with tests
-- add generate_summary with combined prompt and tests
-- add extract_new_content with state-file param and tests
-- add whats-new-anthropic fetch functions with tests
-- add Claude Code weekly features digest system (#78)
-- manage ~/.warp/settings.toml via dotfiles symlink (#76)
-- register terraform-skill plugin for Claude Code
-- mandate code-review plugin after every gh pr create
-- add code-review Claude plugin to setup and update flows (#71)
-- install and update terraform skill for Claude and Cursor (#70)
-- filter Brewfile drift by machine capabilities (#64)
-- Brewfile drift detection in update summary (#56)
-- bash/BATS coverage gate (kcov per-file floors) (#46)
-- PowerShell coverage gate (>=90% line coverage) (#45)
-- add 5s delay to ntfy notifications in SSH sessions
-- add claude-ntfy hook and update settings to use ~/.claude/hooks path
-- add ntfy auth credentials to notify.sh hook
-- update notify.sh to post to ntfy for SSH sessions
-- add claude-code notification hook for tmux + Warp
-- dual-mode CI — permanent pre-push hook + PR-only GitHub Actions (#43)
-- install ggshield on Linux dev workstations (#42)
-- append reboot-required warning to apt update summary (#41)
-- track Linux package updates (apt/snap/dnf/yum) in update summary (#40)
-- add refactor skill with design spec (#38)
-- add mattpocock/skills/tdd skill (#36)
-- GitHub MCP server integration (#35)
-- wire pr-review as mandatory gate in finishing-a-development-branch (#34)
-- show update details for pip, gems, mas, softwareupdate, claude (#26)
-- refactor bootstrap scripts with testable functions per ADR 0006 (#25)
-- structured update summary with per-section diffs and log history (#24)
-- add ggshield pre-commit hook and Brewfile entry
-- add gitleaks to check-versions tool list (#22)
-- add --update flag to check-versions for interactive pin updates (#20)
-- add --brew-install and --mas-install flags to setup_env.sh (#18)
-- add run_mas_install workflow function
-- add run_brew_install workflow function
-- add cursor plugins and skills-cursor to dotfiles for cross-machine sync
-- add ~/.cursor loop symlinks in setup_dotfile_symlinks
-- add linux bootstrap helper for setup prerequisites (#17)
-- enhanced doctor mode with active health checks (#14)
-- add granular update flags (--brew-only, --pip-only, --gems-only, --mas-only, --claude-only) (#13)
-- source config/local.sh after lib sources for machine-local overrides
-- add config/local.sh.example template
-- dispatch -t check-versions to run_check_versions
-- add run_check_versions for GitHub-based version drift detection
-- add check-versions to process_args
-- add -t doctor mode and --dry-run flag (#9)
-- share personal repo Claude memories via dotfiles
-- macOS and Linux capability migration (#4)
-- move inline brew installs to Brewfiles
-- add devtools mas entries to Brewfile.devtools
-- add Evernote mas entry to Brewfile.gui
-- add universal mas app entries to Brewfile
-- add Brewfile.devtools for HAS_DEVTOOLS machine casks
-- add Brewfile.gui for HAS_GUI desktop Mac casks
-- add 25 universal macOS casks to Brewfile
-- add install_macos_casks() with HAS_* capability-based brew bundle
-- add profile abstraction with HAS_* capability vars
-- add log_info/log_warn/log_error and safe_link to lib/helpers.sh
-- add scripts/bootstrap_mac.sh for fresh Mac prerequisites
-- add bash 5 + Homebrew prerequisite check to setup_env.sh
-- sync Cursor user settings via dotfiles
-- install superpowers, code-simplifier, context7 plugins after claude-code install
-- restore -NoProfile for fast pwsh startup with explicit module path fix
-- extract Copy-GitConfig with tests; fix gitconfig copy to check source not destination
-- extract New-DirectoryStructure with tests; fix -ItemType File to -ItemType Directory
-- extract Install-WSL with tests
-- extract Set-WindowsOptions with tests
-- add powershell/Makefile with lint and test targets
-- add lint target to Makefile for bash/zsh syntax checking
-- add Makefile with test targets
-- add sourcing guard to setup_env.sh for unit testing
-- add install_bats function and BATS_VER constant
-- add ccstatusline config to dotfiles and symlink setup
-- enable context7 plugin in Claude Code settings
-- add sequential thinking MCP server config
-- add .claude dotfiles management and Claude plugins update
 
 ## Bug Fixes
-- brace $0/$1/$2/$3 in sync-agent-guidance.sh (#179)
-- harden ensure_state_ledger against SSH hangs and corrupt clones (#177)
-- run gem update after ruby recreate (#174)
-- detect silent install failure in recreate_ruby (#173)
-- system OpenSSL for gem HTTPS + Linux test hermeticity (#171)
+
 - remove duplicate powershell.md @-include
-- symlink pyenv into PYENV_ROOT/bin when installed via brew
-- mkdir custom/themes after oh-my-zsh git clone (#164)
-- run _install_ubuntu_rust after brew so rustup is available to configure (#163)
-- pass --yes to brew upgrade to skip Homebrew 6.0 prompt (#160)
-- add DEBIAN_FRONTEND=noninteractive to all nala/apt installs (#159)
-- drop rbenv local — silently overwrites project .ruby-version on every shell start (#158)
-- purge stale helm/azure-cli sources.list.d on Ubuntu 26.04 (#157)
-- refresh ruby-build defs from git for Ubuntu 26.04 (#156)
-- Ubuntu 26.04 setup — nala comment filter, helm script, dotnet non-fatal (#155)
-- Ubuntu 26.04 compatibility — ruby-build, Python build deps, helm/cloudflare/azure-cli APT repos (#154)
-- rbenv init on Linux never ran due to chruby guard (#153)
-- add molecule and molecule-plugins[docker] to ansible venv (#152)
-- suppress dependency prompt with NONINTERACTIVE=1 (#151)
-- migrate restart_fah from init.d to systemctl (#150)
-- add gitguardian/tap to install_macos_casks brew trust (#148)
-- Ubuntu 26.04 housekeeping — HAS_FLATPAK, VirtualBox 7.1, dead OS vars (#147)
-- nala, ruby, Go PPA cleanup for Ubuntu 26.04 (#145)
-- cgroup v2 daemon.json, glances via apt, passlib for Python 3.13 (#144)
-- remove libncurses5-dev/libncursesw5-dev from common packages
-- apt-get for base packages, sudo for flatpak Steam (#142)
-- fix 6 Ubuntu Noble setup failures + move Steam to Flatpak (#141)
-- remove chef tap and trust reference (#140)
-- remove docker formula and powershell cask duplicates (#139)
-- add docker formula, remove kitchen (#138)
-- remove docker formula and dotnet cask aliases (#137)
-- brew trust, pip dep pins, Brewfile drift (#136)
-- guard mlx pip install behind macOS check (#135)
-- add missing existence check for validate_memory.py fallback path (#132)
-- rehash pyenv shims after pip install (#130)
-- tolerate missing virtualenv in delete step (#127)
-- exa-mcp install, npm update, and GIT_DIR test isolation (#125)
-- prepend ruby-install bin to PATH so it takes precedence over system gem (#123)
-- symlink ~/.claude/projects to ai-config instead of leaving unset (#122)
-- guard setup_claude_mcp against symlinked mcp.json
-- trust remaining third-party taps for Homebrew 6.0 (#121)
-- use ruby-install gem path; trust Homebrew taps on Linux
-- export -f install_homebrew stub for subshell visibility (#111)
-- fix RUBY_VER, guard pyenv ansible, drop redundant plugin clone
-- guard readonly vars against re-source crash
-- wire gitlab includeIf, drop stale commit template and needrestart
-- remove stCommitMsg commit template reference
-- truncate current content before diff to match 20KB state window (#93)
-- store 20KB state snapshots and cap claude -p prompt
-- tag mas as HAS_PRINTING to suppress Linux brew-drift false positive (#92)
-- skip nextest update when rustup not found
-- fix choco prefix-match bug; clean early-learning patterns (#86)
-- use --autostash on ai-config pull to survive uncommitted changes (#84)
-- post-ai-config-split bug fixes (#81)
-- update pr-review skill Step 2 to use ~/.claude/standards/ instead of stale references/
-- stop tests from deleting config/local.sh
-- prevent circular symlinks in .claude/projects/ setup (#75)
-- remove terraform-skill gitlink; ignore via .gitignore
-- refresh terraform-skill on full update and --claude-only (#72)
-- suppress untracked drift noise for inactive-capability packages (#65)
-- filter homebrew auto-taps; sync Brewfile to installed state (#62)
-- suppress false 'Could not write' warning when log write succeeds (#61)
-- brew drift --full-name fix and Brewfile formula name updates (#60)
-- resolve .claude/CLAUDE.md path for Linux (#59)
-- use brew leaves for untracked formula drift detection (#58)
-- make pre-push hook worktree aware
-- skip brew-drift check on Linux — Brewfile is macOS-only (#57)
-- update coverage floors for linux.sh split (#55)
-- restore Stop/Notification hooks dropped in merge conflict resolution (#53)
-- avoid reinstalling Rosetta when already installed (#51)
-- find kcov index.json regardless of merged vs single-run output path (#48)
-- include hostname in ntfy notification title
-- fixed spacing
-- repair two pre-existing test failures (nala detection, tfenv rm mock) (#44)
-- detect mas updates from upgrade output instead of mas list diff (#33)
-- repair prettier hook JSON in settings.json
-- add return code propagation to brew and macos install functions (#32)
-- replace exit with return in functions; add propagation tests (#31)
-- replace exit with return 1 in functions; fix curl|bash pipelines (#30)
-- resolve 16 logic bugs across helpers, linux, macos, workflows, developer, detect_env (#29)
-- make setup_env fail fast and allow bootstrap without brew (#28)
-- three logic bugs in run_update / update summary (#27)
-- update plugin update commands in workflows.sh to use full identifiers
-- allowlist old Snyk token commit in gitleaks
-- remove Snyk API token from Cursor settings
-- document glob dotfile exclusion, fix test name, add Linux cursor symlink tests
-- quote basename arg and add existence guard to .claude/projects loop
-- quote basename args and add existence guard to .claude and .cursor loops
-- strip leading alpha prefix from GitHub tag (golang uses go1.x.y), clean up dead _rc var
-- rename logi-options-plus cask to logi-options+
-- skip projects/ in .claude/* symlink loop to prevent circular symlinks
-- update renamed casks docker-desktop and gcloud-cli
-- revert Slack to cask, remove mas entry
-- remove duplicate cask slack (now managed via mas)
-- support Cursor v2 and v3 settings path on macOS
-- warn instead of abort when brew upgrade --cask --greedy fails
-- use GetFolderPath('MyDocuments') to find modules on Windows
-- replace multi-line pwsh command with run-tests.ps1 helper script
-- use -ErrorAction Stop on Copy-Item in Copy-GitConfig so failures propagate to catch
-- use -match instead of -contains for wsl --status check in Install-WSL
-- rename Set-WindowsOptions to Set-WindowsOption; suppress ShouldProcess lint rule
-- initialize Result to null before conditional assignment in Install-WindowsUpdate
-- enable only disabled features in Enable-RequiredWindowsOptionalFeature
-- rename Enable-WindowsOptionalFeature to avoid shadowing built-in cmdlet
-- replace pipe with process substitution in count_lines scripts
-- correct install_zsh conditional syntax
-- add -n to JAMMY and NOBLE conditionals in update_system_packages
-- use safe PATH filtering for rustup-absent test; add -n to FOCAL check
-- use [[ -x ]] for zsh path check; fix negated grep assertion in test
-- correct install_git uname condition (was != Darwin, should be ==)
-- fixed alias for make so that it works correctly on linux
-- fixed for a bashism
-- fixed python install on linux with a PYTHON_VER
-- fix python install on ubuntu
-- fixed laptop keychain eval
-- fixed .net version number
-- fixed missing ;;
-- fixed missing fi
-- fixed github client install linux
-- fixed helm install for cruncher
-- fixed gcloud install on ubuntu
-- fixed albert install on ubuntu
-- fixed virtualbox apt-key issue
-- fixed awscli install on linux
-- fixed whitespace in 7_final.zsh
-- fixed pyenv ansible activation in zshrc
-- fixed ubuntu cloudflared install
-- fixes for k8s on 24.04
-- fixed volian package ver
-- fixed typo
-- fixed install_homebrew function to work correctly on linux
-- fixed missing fi
-- fixed nala install
-- fixed go path on linux
-- fixed tar location for go
-- fixing go download url
-- fixed telepresence install on ratna
-- fix for libssl1.1 on ubuntu 22.04
-- fixed weird character
-- fixed quotes
-- fixed logic for removal of old go versions
-- fixed typo on ./
-- fixed google-cloud-sdk zsh completions on macos silicon
-- fixed location of z
-- fix some missing brackets
-- fixed typo
-- fixed typo
-- fixed keychain location on m1 mac
-- fix missing v
-- fixed path typo
-- fixed gmake alias for m1
-- fixed docker-compose URL
-- fixed .zshrc to be a link again
-- fixed path
-- fixed git alias long line issue
-- fixed hostnames
-- fixed alias
-- fixing location of p10k
-- fixed typo
-- fixed update awscli
-- fixed typo
-- fixed terraform_ver
-- fixed some workstation configuration
-- fixed wrong path for keychain
-- fixed whitespace
-- fixed double quotes
-- fixed trailing *
-- fixed quotes
-- fixed some typos
-- fixed missing ,
-- fixed typo
-- fixed awscli path
-- fixed eval of variable
-- fixed typo
-- fixed whitespace
-- fixed spacing
-- fixed typos
-- fixed typo
-- fixed typos
-- fixed typo
-- fixed typo
-- fixed typo
-- fixed typo, added in some echo's
-- fixed typo
-- fixed path to vscode on wsl used ${HOME} for setting path
-- fixed to ensure that we were using python3 for linux
-- fixed docker installer
-- fixed typo
-- fixed test
-- fixed typo
-- fixing quotes
-- fixed spacing
-- fixed docker-ce version to install
-- fixed typo
-- fixed logic
-- fixed missing then
-- fixed typo
-- fixed typo
-- fixed virtualenv to use pip3 and not install globally
-- fixed issue with virtualenv virtualenvwrapper installing via pip
-- fixed bracket typo
-- fixed missing grep
-- fixed workbench.startupEditor setting so that there is only 1
-- fixed typo
-- fixed issue with marking docker-ce for holding
-- fixed missing quotes
-- fixed missing sudo
-- fixed zsh-completions from cask to regular brew
-- fixed daisydisk install and added in carbon copy cloner
-- fixed a logic error
-- fixed typo
-- fixed some aliases
-- fixed spacing
-- fixed logic
-- fixed path and pythonpath
-- fixed typo
 
-## Performance
-- skip tests for non-shell file changes
-- add -NoProfile to pwsh; merge lint+test into one session
+- system OpenSSL for gem HTTPS + Linux test hermeticity (#171)
 
-## Refactoring
-- adopt canonical .claude/memory + .claude/retrospectives layout (#131)
-- remove powerlevel10k support (#99)
-- remove Elementary OS support
-- drop Ubuntu 18.04/20.04/22.04 support (#90)
-- remove RHEL, CentOS, and Fedora support (#89)
-- move linting rules from code-standards.md into per-language files
-- split code-standards.md into per-language standards files
-- deduplicate linux_ubuntu.sh install functions (#69)
-- split lib/linux.sh into linux_shared.sh, linux_ubuntu.sh, linux_rhel.sh (#54)
-- split global CLAUDE.md into topical standards files
-- split run_setup_or_developer and run_developer_or_ansible into named helpers (#19)
-- split platform-specific install functions into macos.sh and linux.sh (#16)
-- extract workflow functions into lib/workflows.sh (#7)
-- replace ansible/pip hostname gates with HAS_DEVTOOLS
-- remove manual mas install block from setup_env.sh
-- replace if/then cask blocks with install_macos_casks call
-- replace rm -f + ln -s with safe_link in setup_dotfile_symlinks
-- migrate printf calls to log_info/log_warn/log_error in lib/*.sh
-- split setup_env.sh into lib/*.sh modules
-- replace setup block inline code with function calls; update test count to 22
-- move functions outside IsWindows guard for testability
-- extract update_system_packages(), update_aws_cli(), update_rust()
-- extract setup_credential_directories() and setup_zsh_as_default_shell()
-- extract clone_or_update_dotfiles() and setup_dotfile_symlinks()
-- refactored and split up install_kubernetes_ubuntu.sh into 2 files.
+- detect silent install failure in recreate_ruby (#173)
 
-## Documentation
-- fix stale sync-agent-guidance description in README
-- sync test count to 874 after PR #177
-- add state-ledger bootstrap plan
-- add state-ledger bootstrap design spec
-- add Claude Code weekly features digest 2026-07-06
-- add Anthropic weekly features digest 2026-07-06
-- sync test count and plan index for dotfiles#174
-- mark recreate-ruby plan done, bump test count to 861
-- add recreate-ruby implementation plan
-- add recreate-ruby design spec
-- note load_mocks pyenv default; bump test count to 850
-- add July 2026 retro action items
-- remove Installation Guards duplicate of shell.md
-- compact CLAUDE.md layout tree, drop 3 redundant rows
-- add Anthropic weekly features digest 2026-06-29 (#169)
-- add Claude Code weekly features digest 2026-06-29
-- add PR #168 to superpowers plan index
-- update CLAUDE.md — ledger wiring for all run_* functions, 848 tests
-- state-ledger integration — ADR-0014, test count 840, plan index
-- update test count to 834 after state-ledger-integration PR #166
-- bump test count floor to 806, note 810 tests as of 2026-06-25
-- add bug-scan to Phase 3 chain
-- update Anthropic platform state 2026-06-22
-- add Anthropic weekly features digest 2026-06-22
-- add Claude Code weekly features digest 2026-06-22
-- ADR-0013, plan status Done, 806 test count after PR #162
-- add env -i pyenv mock pattern and ubuntu26 noble fallback note
-- bump test count floor 729→779, update BATS count to 782
-- mark pip-venv-audit Done
-- add pip-venv-audit implementation plan
-- move pip-venv-audit to All Plans (In Progress)
-- add ansible venv pkg list and ruff venv note
-- add pip-venv-audit spec
-- add pip-venv-audit backlog item
-- mark P3-6 resolved — restart_fah SysV init fixed in PR #150
-- update test count 769 → 772, mark ubuntu-2604-p3 Done after PR #149
-- add HAS_FLATPAK to capability table
-- mark ubuntu-2604-pr5 Done after PR #147
-- mark ubuntu-2604-pr4 Done, update test count to 765
-- ubuntu-2604-pr4 ARM64 support + version bumps
-- ubuntu-2604-pr4 — ARM64 support + version bumps
-- update test count 753 → 759
-- mark ubuntu-2604-pr3 Done after PR #145
-- document brew upgrade node plugin fix for Linux
-- update test count 749 → 753
-- mark ubuntu-2604-pr2 Done after PR #144
-- add Ubuntu 26.04 PR2 implementation plan
-- add PR2 Ubuntu 26.04 Docker cgroup v2 and Python 3.13 spec
-- sync CLAUDE.md and README for Ubuntu 26.04 support
-- mark ubuntu-2604-pr1 Done after PR #143
-- add Ubuntu 26.04 PR1 implementation plan
-- add PR1 Ubuntu 26.04 detection and package files spec
-- add Ubuntu 26.04 Resolute Raccoon support spec
-- document formula/cask dedup rule and fix docker example
-- sync CLAUDE.md and plan index after PR #138
-- sync CLAUDE.md with recent changes
-- add Anthropic weekly features digest 2026-06-15
-- add Claude Code weekly features digest 2026-06-15
-- pointer stub per ADR-0020 (#134)
-- add Claude Code weekly features digest 2026-06-08
-- note brew trust coupling when adding new taps
-- update BATS test count 729 → 731 in CLAUDE.md
-- add 5 backlog items from 2026-06-05 retro
-- remove DoD section (all items covered by global behavior.md)
-- document run_update pip hang pattern in Testing Rules
-- update BATS test count to 729 after PR #119
-- replace Powerlevel10k with Starship in README
-- add ADR-0011 and ADR-0012 for April decisions
-- add ADR-0009 and ADR-0010 for recent decisions
-- add ADR-0008 for PS4 xtrace bash coverage approach
-- mark coverage-gap-tests Done, 726 tests
-- mark coverage-more-tests Done, 723 tests
-- update BATS test count to 723 after PR #117
-- mark coverage-workflows-minor-paths Done, 720 tests
-- add Anthropic weekly features digest 2026-06-01
-- add Claude Code weekly features digest 2026-06-01
-- mark coverage-workflows-pip-update Done, 718 tests
-- mark coverage-helpers-setup-functions Done, 716 tests
-- update test count to 714, mark coverage-helpers-doctor-error-paths Done
-- update test count to 709, mark coverage-macos-install-errors Done
-- add per-file gap backlog and ceiling notes
-- add doctor test conventions section
-- mark coverage-per-file-gaps Done, 705 tests
-- add coverage-per-file-gaps plan (In Progress)
-- clear stale backlog entry (coverage-helpers-gaps-2 done)
-- update bash coverage to 90% (2026-05-30, 693 tests)
-- document load_setup_env OS detection side effect
-- update test count to 693, mark coverage-helpers-gaps-2 Done
-- add plan for coverage-helpers-gaps-2
-- add spec for helpers.sh gaps-2 coverage
-- mark coverage-update-summary-casks Done
-- update test count to 674, mark coverage-workflows-gaps Done
-- update bash coverage to 85% (2026-05-28, 662 tests)
-- mark coverage-update-summary-gaps Done
-- mark coverage-workflows-setup-chains Done
-- note count assertion caveat for section removal
-- document setup_env prereq bypass test assertion pattern
-- update test count to 616, mark coverage-setup-env-direct-run Done, clear backlog
-- update test count to 614 and mark coverage-install-terraform-skill Done
-- update test count to 609 and mark coverage-run-update-sections Done
-- update test count to 602 and mark coverage-run-update-optional-tools Done
-- update BATS test count to 590
-- move coverage-brewfile-helpers to Done, add backlog items
-- add getting started guide and fix Windows setup section
-- add missing Brewfile variants, docs/ subdirs, gitconfig_windows
-- remove RHEL/dnf/yum references after distro cleanup
-- add Claude Code weekly features digest 2026-05-25
-- add Anthropic weekly features digest 2026-05-25
-- update ADR-0007 — required_signatures removed
-- ADR-0007 — Codify branch protection via script
-- document _UPDATE_SECTION_ORDER coupling in update workflow
-- mark windows-ai-native-setup plan Done; update test count
-- document setup_claude_plugins in setup_user entry point
-- document pre-push selective test triggering
-- add Claude Code weekly features digest 2026-05-18
-- add Committing Work section with caveman-commit reference
-- 2026-05-17 retrospective — dotfiles drift + ai-config split
-- add Definition of Done
-- add architecture docs and web research categories
-- add knowledge directory for reference material
-- add test-path grep rule to CLAUDE.md Testing Rules
-- add .devcontainer removal implementation plan
-- add .devcontainer removal spec
-- add ai-config split implementation plan
-- add Migration section to ai-config split spec
-- add ai-config split spec
-- document local skill modification policy in CLAUDE.md
-- route language learnings to per-language standards files in learning analysis
-- add Rust clippy lints and shell pitfalls from dotfiles/etch-cli learnings
-- add standards pointer to PowerShell Testing section in dotfiles CLAUDE.md
-- trim Shell Scripts section in dotfiles CLAUDE.md
-- trim PowerShell section in dotfiles CLAUDE.md
-- add Python standards — __main__ guard, TDD stubs, ProcessPoolExecutor fallback
-- add Rust standards — injectable I/O, tarpaulin patterns, io::Error::other
-- add Claude Code weekly features digest 2026-05-11
-- document pre-push stdin redirect requirement
-- mark whats-new-anthropic plan done in superpowers README
-- update CLAUDE.md for whats-new-anthropic script
-- add anthropic-new-features directory and README
-- add whats-new-anthropic implementation plan
-- add whats-new-anthropic design spec
-- add Claude Code weekly features digest 2026-05-08
-- document MOCK_CLAUDE_STDOUT and whats-new test seams in CLAUDE.md
-- save PR #45 learnings to memory
-- add cursor sdk skill guidance
-- add cargo fmt / tarpaulin compatibility memory for math repo
-- move etch-cli phase1 plan to etch-cli repo
-- add etch-cli Phase 1 implementation plan
-- cloud-init overwrites baked SSH keys; worktree tfvars schema mismatch
-- require full post-merge cleanup (worktree + branches + pull) (#74)
-- move cursor plan docs into dedicated plans directory
-- document worktree-safe pre-push root resolution
-- align cursor docs index structure
-- require docs/cursor specs, plans, and index
-- add standards source mapping to Cursor rule
-- add exhaustive Cursor agent guidance
-- add brewfile-drift-leaves implementation plan
-- add brewfile-drift-leaves spec
-- require docs/superpowers and docs/cursor in every repo
-- require common macOS/Linux .gitignore entries in every repo
-- add learning analysis as durable backup rule in git-workflow.md
-- clarify _update_ok/_update_warn lifecycle constraint; add conditional file write test memory
-- add brewfile-drift plan and move backlog item to In Progress
-- add brewfile-drift design spec
-- add linux-sh-split implementation plan
-- add linux.sh split design spec
-- mark powershell and bash coverage gate plans as done
-- add behavior standards file
-- document bash coverage tooling failures and current state
-- ask learn+document questions after every PR or master commit
-- require >=90% line coverage as the project standard
-- update proxmox memory — remove stale TestProxmoxApply refs, add LVM sizing gotcha
-- require pr-review skill before every feature branch push
-- document stale pre-push hook gotcha in global CLAUDE.md
-- session memory updates — packer gotchas, molecule Docker contention
-- update packer proxmox gotchas with session learnings
-- add memory — use package-manager queries not command -v for mock-friendly detection
-- broaden set -e exception to cover all git hooks
-- resolve merge conflict in CLAUDE.md
-- update remaining cleanups memory — batch 3 complete
-- add full stale branch cleanup procedure to global CLAUDE.md
-- add PR monitoring rule to CLAUDE.md
-- add Idempotency section to CLAUDE.md — cornerstone of shell, Ansible, Terraform work
-- document pre-commit hook and ggshield as required in README and CLAUDE.md files
-- add external limitations to comments guidance — link to upstream bugs and decisions
-- add Comments section to CLAUDE.md — document why not what
-- add subagent worktree path guidance to CLAUDE.md and memory
-- mark linux-package-update-tracking Done after PR #40 merged
-- add MOCK_DPKG_QUERY_EXIT, MOCK_DPKG_OUTPUT, MOCK_SNAP_LIST_OUTPUT, MOCK_RPM_OUTPUT to mock table
-- add linux-package-update-tracking implementation plan
-- add refactor-skill plan file and link from index
-- link adr and superpowers indexes from README.md directory tree
-- fix refactor-skill entry and add linux-package-update-tracking to superpowers index
-- fix date in linux package update tracking spec (2026-04-16)
-- add linux package update tracking design spec
-- update refactor skill output format to use superpowers spec template (#39)
-- add full path to cli-config.json in cursor skill description
-- align TDD rules with mattpocock tdd skill (#37)
-- add GitHub MCP server design spec
-- mark pr-review-gate plan as Done
-- add pr-review gate design spec
-- add BATS direct-call error-capture pattern to global CLAUDE.md
-- add BATS direct-call error-capture pattern to memory
-- add return code propagation rules to global CLAUDE.md
-- generalize testing pitfalls and pre-commit checklist for all languages
-- add exit code propagation / fail-fast guidance and bash 3.2 note
-- add shell script testing pitfalls section to CLAUDE.md
-- update README, CLAUDE.md, and memory for session work
-- add linux.sh split and Brewfile drift to backlog
-- mark bootstrap-tests Done in superpowers index
-- add Backlog section to superpowers README; add format spec to CLAUDE.md
-- use ?event=pull_request for CI badges in personal repos
-- add bootstrap-tests implementation plan
-- add bootstrap-tests design spec
-- ADR 0006 — shell script testability conventions
-- mark update-summary Done in superpowers index
-- verify PR/branch exists before pushing to an open PR branch
-- require pre-commit hook with lint + ggshield in all repos
-- restrict Snyk CI guidance to supported language repos
-- add update-summary implementation plan
-- add update-summary design spec
-- require docs/superpowers/README.md index in repos using superpowers workflow
-- add Cursor parity note and env which explanation to CLAUDE.md
-- add branch cleanup instructions to CLAUDE.md
-- update CLAUDE.md with mock pass-through vars and test seams
-- add PATH-based mock pass-through pattern to CLAUDE.md
-- mark interactive-version-update Done in superpowers index
-- add workflows-refactor and interactive-version-update implementation plans
-- add workflows-refactor and interactive-version-update design specs
-- update CLAUDE.md symlink strategy and layout for .claude/ and .cursor/
-- add feature branches, auto-merge, and secrets scan requirements to global CLAUDE.md
-- add cursor-sync implementation plan
-- add cursor config sync design spec
-- add brew-mas-install-flags and logic-review-process to superpowers index
-- add pre-commit logic review reference to Committing Work section
-- add Logic Review section to global CLAUDE.md
-- add mandatory test categories to TDD section in global CLAUDE.md
-- add implementation plan for logic review process
-- add design spec for logic review process
-- add implementation plan for brew-mas-install-flags
-- update brew-mas-install spec to match setup_env.sh dispatch syntax
-- add design spec for brew-mas-install-flags
-- mark doctor-enhanced and workflow-test-coverage Done in superpowers index
-- add adr-implementation plan file
-- mark local-overrides and granular-update-flags Done in superpowers index
-- document config/local.sh machine-local overrides
-- document config/local.sh machine-local overrides
-- update superpowers index — check-versions Done, add ADR plan
-- add docs/ to README layout, fix stale auto-merge text
-- add docs/ subtree to CLAUDE.md layout
-- clarify ADR-0003 legacy hostname alias carve-out in Decision
-- add docs/adr/ with five seed ADRs
-- add ADR requirement to global CLAUDE.md
-- add ADR design spec
-- add check-versions to usage, CLAUDE.md, README
-- require secrets guarding in all repos
-- write implementation plans for all 5 April round 2 features
-- add 5 new feature specs for next improvement round
-- update auto-merge policy — dependabot only, all CI jobs required
-- update README and CLAUDE.md for April PRs
-- plan hygiene and superpowers status index (#6)
-- add next-steps spec and mark prior plan partial
-- add memory commit rule to global CLAUDE.md
-- document personal repo memory sharing policy in CLAUDE.md
-- update Key Conventions to reflect removed WORKSTATION/CRUNCHER aliases
-- document wsl2_workstation profile and HAS_SNAP capability
-- add Linux setup_env.sh capability migration design spec
-- add macOS setup_env.sh capability migration design spec
-- add mas brewfile integration implementation plan
-- add mas brewfile integration design spec
-- add Brewfile profile split implementation plan
-- add Brewfile profile split design spec
-- update CLAUDE.md for post-modularization architecture
-- update README.md for post-modularization architecture
-- add implementation plans for dotfiles modularization phases 0-5
-- add bootstrap_mac.sh + bash5 prereq check to modularization spec
-- add dotfiles modularization design spec
-- add implementation plan for setup_env.sh function extraction
-- add spec for setup_env.sh function extraction
-- add zshrc.d test coverage implementation plan
-- add zshrc.d test coverage design spec
-- add powershell setup improvements implementation plan
-- add powershell setup improvements design spec
-- require TDD as mandatory practice in global CLAUDE.md
-- update CLAUDE.md for powershell/ directory, all scripts, and PowerShell standards
-- add PowerShell testing instructions to README
-- add powershell test coverage implementation plan
-- add powershell test coverage design spec
-- fix setup_windows.ps1 path reference in Windows setup steps
-- move setup_windows.ps1 into powershell/ directory in README
-- update README with full scripts/ listing and make lint target
-- update CLAUDE.md mock table with 13 new mock env vars
-- add remaining test coverage implementation plan
-- clarify brew_update absent test and sudo mock behavior in spec
-- add remaining test coverage design spec
-- add Makefile lint target implementation plan
-- add Makefile lint target design spec
-- update CLAUDE.md mock table with 23 new mock env vars
-- expand testing section in CLAUDE.md and README with mock pattern and rules
-- add BATS testing infrastructure implementation plan
-- add BATS testing infrastructure design spec
-- rewrite README with current layout, options, and .claude info
+- run gem update after ruby recreate (#174)
 
-## Testing
-- fix opentofu tests failing when tofu installed on macOS
-- tighten rbenv install assertion to match version-specific call
-- isolate run_update --claude-only from real HOME (#126)
-- cover 3 behavioral gaps in helpers/linux_ubuntu (#118)
-- add 3 tests targeting uncovered branches in linux_ubuntu/developer (#117)
-- cover _check_one_version and _run_cv_check arg behavior, 720 tests (#115)
-- cover run_update pip block, 718 tests (#114)
-- cover OMZ-installed and Cursor-not-installed paths (#113)
-- cover doctor/process_args error paths (#112)
-- cover xcodebuild-fail, no-brew error paths (#110)
-- per-file coverage gaps — helpers.sh and workflows.sh (#109)
-- raise helpers.sh coverage from 83% to ≥90% (#108)
-- raise update_summary.sh coverage from 82% to 97% (#107)
-- coverage for _check_one_version and run_check_versions (#106)
-- cover npm, tpm/tfenv/zsh-autosuggestions, default case (#105)
-- cover setup_claude_plugins branches and run_setup_user chain (#104)
-- cover run_update single-flag isolation (#103)
-- cover setup_dotfile_symlinks and credential dirs (#102)
-- cover update_rust branches and clone_personal_repos (#101)
-- cover preamble bash-version and brew error paths (#100)
-- add setup_env.sh -t doctor/-t check-versions bypass tests (#98)
-- add install_terraform_skill tests (#97)
-- add run_update claude/npm/pip section tests (#96)
-- add run_update optional-tools installed-path tests (#95)
-- add brewfile helper function tests (#94)
-- add error-path tests for whats-new-anthropic main()
-- add URL-pattern dispatch to curl mock for multi-source scripts
-- add workflow behavioral tests for run_setup_user, run_setup_or_developer, run_update (#15)
-- fix macOS Cursor test by creating fake app settings dir
-- fix cross-platform stat and add cursor mock for CI
-- add Enable-RequiredWindowsOptionalFeature tests (2 tests)
-- add Install-WindowsUpdate tests (3 tests)
-- add Install-ChocolateyPackage tests (4 tests)
-- add tests/scripts/unit.bats for all 8 scripts in scripts/
-- add kill, tmux, rsync, hostname, sleep mocks for scripts/unit.bats
-- add brew_update tests for root check, absent brew, step failure, success
-- add install_homebrew tests for xcode and brew install paths
-- add usage and update_system_packages macOS tests
-- extend brew, curl, pgrep mocks with new env vars
-- add xcode-select and xcodebuild mocks; update sudo mock to log invocations
-- fix _make_fake_dotfiles helper and add .config symlink coverage
-- clean up check_and_install_nala test PATH manipulation
-- add install_rosetta and check_and_install_nala tests
-- tighten install_zsh Ubuntu assertion and document macOS dual-var dependency
-- fix ensure_not_root assertion and clean up install_guards test quality
-- add quick-win tests for ensure_not_root, brew_tap_installed, brew_install_cask, rhel_installed_package
-- fix sysctl mock absolute path and apt mock variable isolation
-- add mock executables for id, yum, awk, sw_vers, sysctl, pgrep, softwareupdate, wget, dpkg, chsh, apt, add-apt-repository, dnf, installer, unzip, git, mas, snap, nala
-- add zshrc.d syntax and platform detection tests
-- add install_guards tests for brew helpers and install_bats
-- add setup_env unit tests for quiet_which, app_dir_exists, process_args, constants
-- add common.bash test helpers with load_mocks and load_setup_env
-- add PATH-based mock stubs for brew, apt-get, sudo, which, curl, tar, uname
+- harden ensure_state_ledger against SSH hangs and corrupt clones (#177)
+
+- brace $0/$1/$2/$3 in sync-agent-guidance.sh (#179)
+
+
 
 ## CI
+
 - raise test count floor from 779 to 840 (#170)
-- replace kcov gate with macOS xtrace gate at 90% (#116)
-- add bash and PowerShell coverage badges (#88)
-- remove bash-coverage from auto-merge gate (#87)
-- add PR title lint workflow
-- enforce Cursor guidance sync from Claude sources
-- enable ptrace for kcov and gate auto-merge on bash-coverage (#49)
-- build kcov from source on Ubuntu 24.04 (not in apt repos) (#47)
-- fix gitleaks allowlist syntax and remove snyk-scan (#23)
-- add Snyk code scan to CI pipeline
-- hygiene improvements — master CI, plugin cache exclusions, GITLEAKS_VER pin, pre-commit hook, doctor symlink roots (#21)
-- fix auto-merge branch ref for pull_request events
-- fix auto-merge — remove --auto flag that required branch protection
-- restore auto-merge for all PRs (not just dependabot)
-- fix auto-merge condition and add lint-macos job (#8)
-- add gitleaks secret scanning and document local-only state (#5)
-- Phase 4 — ShellCheck + GitHub Actions CI
-- add ShellCheck to lint and GitHub Actions CI workflow (#2)
-- install zsh on ubuntu runner for lint step
-- add ShellCheck to lint, create GitHub Actions CI workflow
+
+
+
+## Documentation
+
+- bump test count floor to 806, note 810 tests as of 2026-06-25
+
+- update test count to 834 after state-ledger-integration PR #166
+
+- state-ledger integration — ADR-0014, test count 840, plan index
+
+- update CLAUDE.md — ledger wiring for all run_* functions, 848 tests
+
+- add PR #168 to superpowers plan index
+
+- add Claude Code weekly features digest 2026-06-29
+
+- add Anthropic weekly features digest 2026-06-29 (#169)
+
+- compact CLAUDE.md layout tree, drop 3 redundant rows
+
+- remove Installation Guards duplicate of shell.md
+
+- add July 2026 retro action items
+
+- note load_mocks pyenv default; bump test count to 850
+
+- add recreate-ruby design spec
+
+- add recreate-ruby implementation plan
+
+- mark recreate-ruby plan done, bump test count to 861
+
+- sync test count and plan index for dotfiles#174
+
+- add Anthropic weekly features digest 2026-07-06
+
+- add Claude Code weekly features digest 2026-07-06
+
+- add state-ledger bootstrap design spec
+
+- add state-ledger bootstrap plan
+
+- sync test count to 874 after PR #177
+
+- fix stale sync-agent-guidance description in README
+
+- add Claude Code weekly features digest 2026-07-13
+
+- add Anthropic weekly features digest 2026-07-13
+
+
+
+## Features
+
+- dotfiles adds powershell.md language standard
+
+- add cargo-cyclonedx and cyclonedx-python (#165)
+
+- add advisory skill scan after claude plugin update
+
+- state-ledger CMDB integration (T5/T6/T7) (#166)
+
+- wire state-ledger writes into dotfiles update (#167)
+
+- wire state-ledger into setup/developer/recreate_venv runs (#168)
+
+- add recreate-ruby entry point to setup_env.sh (#172)
+
+- auto clone/pull state-ledger on setup/update runs (#176)
+
+- implement sync-agent-guidance / check-agent-guidance targets (#178)
+
+
+
+## Testing
+
+- fix opentofu tests failing when tofu installed on macOS
+
 
