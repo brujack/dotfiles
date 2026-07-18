@@ -83,6 +83,16 @@ setup() {
   [ "$(git -C "${CLONE}" rev-parse HEAD)" = "$(git -C "${CLONE}" rev-parse '@{u}')" ]
 }
 
+@test "_git_sync_one_repo no-ops (returns 0, no push/pull) when dirty but nothing to sync" {
+  echo "scratch" > "${CLONE}/scratch.txt"
+  local _before
+  _before="$(git -C "${CLONE}" rev-parse HEAD)"
+  run _git_sync_one_repo "${CLONE}"
+  [ "$status" -eq 0 ]
+  [ "$(git -C "${CLONE}" rev-parse HEAD)" = "${_before}" ]
+  [ -f "${CLONE}/scratch.txt" ]
+}
+
 @test "_git_sync_one_repo pushes when ahead and not dirty" {
   git -C "${CLONE}" commit -q --allow-empty -m "local work"
   run _git_sync_one_repo "${CLONE}"
