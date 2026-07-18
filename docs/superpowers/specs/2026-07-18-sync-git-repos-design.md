@@ -100,10 +100,16 @@ fullscript,leonovus,multiview,securekey,warpdotdev}`) are copies of
     "aborted."
 
 - `lib/legacy_rsync.sh` — rsync logic, sourcing-guarded, unit-testable.
-  - `sync_legacy_dirs()` (studio-only; the host gate lives in `run_update`'s
-    `_update_record_start` case — see Modified files — not inside this
-    function, so non-studio machines report `SKIP` via the existing
-    `_update_skip` idiom instead of a misleading `OK`):
+  - `sync_legacy_dirs()` keeps its own internal
+    `[[ $(hostname -s) == "studio" ]]` gate (prints a skip message, returns 0,
+    runs no rsync on non-studio hosts) — this is the safety net that makes
+    the function correct to call unconditionally, including standalone via
+    `scripts/sync_git_repos.sh` on any machine. Separately, `run_update`'s
+    `_update_record_start` gets its own `legacy-rsync)` case calling
+    `_update_skip` (see Modified files) — this is a second, independent
+    check whose only purpose is accurate summary _reporting_ (`SKIP` instead
+    of a misleading `OK`), not safety; the function-level gate is what
+    actually prevents the rsync calls from running.
     - `rsync -ar --delete --exclude=personal "${HOME}/git-repos/" "bruce@workstation:~/git-repos/"`
     - `rsync -ar --delete --exclude=personal "${HOME}/git-repos/" "bruce@laptop-1:~/git-repos/"`
     - `rsync -ar --delete "${HOME}/git-repos/" "bruce@ratna:~/git-repos/"` (no exclude — full backup)
@@ -152,11 +158,11 @@ fullscript,leonovus,multiview,securekey,warpdotdev}`) are copies of
     [[ "$(hostname -s)" != "studio" ]] && _update_skip "legacy-rsync" "not studio"
     ;;
   ```
-  This moves the studio-only gate out of `sync_legacy_dirs()` itself and
-  into the existing `_update_skip` idiom, so non-studio machines show `SKIP`
-  in the summary instead of a misleading `OK`/"updated". `sync_legacy_dirs()`
-  is still safe to call unconditionally (idempotent no-op check via the same
-  hostname test) when invoked standalone outside `run_update`.
+  This is a reporting-only duplicate of the safety gate already inside
+  `sync_legacy_dirs()` itself (see New files) — it exists so non-studio
+  machines show `SKIP` in the summary instead of a misleading `OK`/"updated"
+  (the function would already safely no-op without it; this only fixes what
+  the summary _displays_).
 - `lib/update_summary.sh` — add `git-repos legacy-rsync` to
   `_UPDATE_SECTION_ORDER`.
 - Delete `scripts/synch_git-repos.sh` (replaced in place, per user decision).
