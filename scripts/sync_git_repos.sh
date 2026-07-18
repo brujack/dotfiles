@@ -44,6 +44,14 @@ sync_git_repos_main() {
     --legacy-only)
       _mode="legacy"
       ;;
+    "")
+      _mode="both"
+      ;;
+    *)
+      printf "Unrecognized option: %s\n\n" "${1}" >&2
+      _sync_git_repos_usage >&2
+      return 1
+      ;;
   esac
 
   local _rc=0

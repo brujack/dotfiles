@@ -1269,7 +1269,9 @@ setup_constants_copy() {
   export -f sync_git_repos sync_legacy_dirs
   export MACOS=1
   unset LINUX UBUNTU
-  export UPDATE=1
+  # No UPDATE_* flag set — relies on run_update's default "no flags = run
+  # everything" (_run_all) path, not a bare UPDATE var (_any_update_flag
+  # only checks UPDATE_BREW/PIP/GEMS/MAS/PKGS/CLAUDE, never bare UPDATE).
   run run_update
   [ "$status" -eq 0 ]
   [[ "$output" == *"fake git sync"* ]]
@@ -1281,7 +1283,9 @@ setup_constants_copy() {
   export -f sync_git_repos sync_legacy_dirs
   export MACOS=1
   unset LINUX UBUNTU
-  export UPDATE=1
+  # No UPDATE_* flag set — relies on run_update's default "no flags = run
+  # everything" (_run_all) path, not a bare UPDATE var (_any_update_flag
+  # only checks UPDATE_BREW/PIP/GEMS/MAS/PKGS/CLAUDE, never bare UPDATE).
   # Plain call (not `run run_update`) — `run` captures output via a command
   # substitution subshell, so _DOTFILES_RUN_TMPDIR (exported inside run_update)
   # would not survive back into this test body. See tfenv/oh-my-zsh tests above
@@ -1289,6 +1293,10 @@ setup_constants_copy() {
   run_update
   [ -f "${_DOTFILES_RUN_TMPDIR}/status_git-repos" ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_git-repos")" = "WARN" ]
+  # The WARN message references "see detail" — the detail file must actually
+  # exist and carry the real captured warning, not just the status flip.
+  [ -f "${_DOTFILES_RUN_TMPDIR}/detail_git-repos" ]
+  [[ "$(cat "${_DOTFILES_RUN_TMPDIR}/detail_git-repos")" == *"one repo skipped"* ]]
 }
 
 @test "run_update records legacy-rsync as WARN (not OK) when sync_legacy_dirs returns 2" {
@@ -1297,10 +1305,14 @@ setup_constants_copy() {
   export -f sync_git_repos sync_legacy_dirs
   export MACOS=1
   unset LINUX UBUNTU
-  export UPDATE=1
+  # No UPDATE_* flag set — relies on run_update's default "no flags = run
+  # everything" (_run_all) path, not a bare UPDATE var (_any_update_flag
+  # only checks UPDATE_BREW/PIP/GEMS/MAS/PKGS/CLAUDE, never bare UPDATE).
   run_update
   [ -f "${_DOTFILES_RUN_TMPDIR}/status_legacy-rsync" ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_legacy-rsync")" = "WARN" ]
+  [ -f "${_DOTFILES_RUN_TMPDIR}/detail_legacy-rsync" ]
+  [[ "$(cat "${_DOTFILES_RUN_TMPDIR}/detail_legacy-rsync")" == *"one target unreachable"* ]]
 }
 
 @test "run_update records git-repos as OK when sync_git_repos returns 0" {
@@ -1309,7 +1321,9 @@ setup_constants_copy() {
   export -f sync_git_repos sync_legacy_dirs
   export MACOS=1
   unset LINUX UBUNTU
-  export UPDATE=1
+  # No UPDATE_* flag set — relies on run_update's default "no flags = run
+  # everything" (_run_all) path, not a bare UPDATE var (_any_update_flag
+  # only checks UPDATE_BREW/PIP/GEMS/MAS/PKGS/CLAUDE, never bare UPDATE).
   run_update
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_git-repos")" = "OK" ]
 }

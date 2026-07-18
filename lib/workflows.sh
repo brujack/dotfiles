@@ -474,13 +474,19 @@ PY
     sync_git_repos 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_git-repos"
     local _git_repos_rc="${PIPESTATUS[0]}"
     _update_record_end "git-repos" "$(( _git_repos_rc == 2 ? 0 : _git_repos_rc ))"
-    [[ ${_git_repos_rc} -eq 2 ]] && _update_warn "git-repos" "one or more repos skipped — see detail"
+    if [[ ${_git_repos_rc} -eq 2 ]]; then
+      _update_warn "git-repos" "one or more repos skipped — see detail"
+      _update_write_detail_from_err "git-repos" "warning output"
+    fi
 
     _update_record_start "legacy-rsync"
     sync_legacy_dirs 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_legacy-rsync"
     local _legacy_rsync_rc="${PIPESTATUS[0]}"
     _update_record_end "legacy-rsync" "$(( _legacy_rsync_rc == 2 ? 0 : _legacy_rsync_rc ))"
-    [[ ${_legacy_rsync_rc} -eq 2 ]] && _update_warn "legacy-rsync" "one or more rsync targets unreachable"
+    if [[ ${_legacy_rsync_rc} -eq 2 ]]; then
+      _update_warn "legacy-rsync" "one or more rsync targets unreachable"
+      _update_write_detail_from_err "legacy-rsync" "warning output"
+    fi
 
     update_aws_cli
     update_rust

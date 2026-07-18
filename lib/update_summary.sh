@@ -56,6 +56,24 @@ _update_warn() {
   printf "%s\n" "${_msg}" > "${_DOTFILES_RUN_TMPDIR}/result_${_section}"
 }
 
+# _update_write_detail_from_err SECTION LABEL
+# Extracts a trimmed tail of err_${SECTION} into detail_${SECTION}. Shared by
+# _update_record_end's FAIL path and run_update's WARN call sites (git-repos,
+# legacy-rsync) so partial-failure detail captured via `tee` isn't silently
+# dropped just because the section didn't hard-fail.
+_update_write_detail_from_err() {
+  local _section="$1" _label="$2"
+  local _err_file="${_DOTFILES_RUN_TMPDIR}/err_${_section}"
+  if [[ -f "${_err_file}" ]] && [[ -s "${_err_file}" ]]; then
+    local _err_tail
+    _err_tail=$(grep -v '^[[:space:]]*$' "${_err_file}" | tail -10 | sed 's/\x1b\[[0-9;]*m//g; s/\r//')
+    if [[ -n "${_err_tail}" ]]; then
+      printf "[%s %s]\n%s\n" "${_section}" "${_label}" "${_err_tail}" \
+        > "${_DOTFILES_RUN_TMPDIR}/detail_${_section}"
+    fi
+  fi
+}
+
 # _update_record_start SECTION
 # Takes pre-snapshot appropriate for the section type.
 _update_record_start() {
@@ -145,20 +163,12 @@ _update_record_end() {
   if [[ "${_exit}" -ne 0 ]]; then
     printf "FAIL\n" > "${_DOTFILES_RUN_TMPDIR}/status_${_section}"
     local _fail_result_file="${_DOTFILES_RUN_TMPDIR}/fail_result_${_section}"
-    local _err_file="${_DOTFILES_RUN_TMPDIR}/err_${_section}"
     if [[ -f "${_fail_result_file}" ]]; then
       cat "${_fail_result_file}" > "${_DOTFILES_RUN_TMPDIR}/result_${_section}"
     else
       printf "exit %d\n" "${_exit}" > "${_DOTFILES_RUN_TMPDIR}/result_${_section}"
     fi
-    if [[ -f "${_err_file}" ]] && [[ -s "${_err_file}" ]]; then
-      local _err_tail
-      _err_tail=$(grep -v '^[[:space:]]*$' "${_err_file}" | tail -10 | sed 's/\x1b\[[0-9;]*m//g; s/\r//')
-      if [[ -n "${_err_tail}" ]]; then
-        printf "[%s error output]\n%s\n" "${_section}" "${_err_tail}" \
-          > "${_DOTFILES_RUN_TMPDIR}/detail_${_section}"
-      fi
-    fi
+    _update_write_detail_from_err "${_section}" "error output"
     return
   fi
 

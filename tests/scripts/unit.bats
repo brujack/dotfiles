@@ -188,13 +188,32 @@ teardown() {
   [[ "$output" == *"--legacy-only"* ]]
 }
 
-@test "sync_git_repos.sh --git-only skips the legacy rsync leg" {
+@test "sync_git_repos.sh --git-only runs the git leg and skips the legacy rsync leg" {
   export MOCK_HOSTNAME_OUTPUT=studio
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
   export HOME="${BATS_TEST_TMPDIR}"
-  mkdir -p "${HOME}/git-repos/personal"
+  # Seed a fake repo so the git-sync leg has something to act on — an empty
+  # personal/ tree would make "git leg ran and did nothing" and "script
+  # crashed before mode dispatch" indistinguishable to this test.
+  mkdir -p "${HOME}/git-repos/personal/fake-repo/.git"
   run bash "${REPO_ROOT}/scripts/sync_git_repos.sh" --git-only
+  [ "$status" -eq 0 ]
+  grep -q "^git " "${MOCK_CALLS_FILE}"
   run grep -q rsync "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+}
+
+@test "sync_git_repos.sh rejects an unrecognized flag without running either leg" {
+  export MOCK_HOSTNAME_OUTPUT=studio
+  export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
+  export HOME="${BATS_TEST_TMPDIR}"
+  mkdir -p "${HOME}/git-repos/personal/fake-repo/.git"
+  run bash "${REPO_ROOT}/scripts/sync_git_repos.sh" --bogus
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Unrecognized option"* ]]
+  run grep -q rsync "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+  run grep -q "^git " "${MOCK_CALLS_FILE}"
   [ "$status" -ne 0 ]
 }
 
