@@ -778,3 +778,25 @@ firefox  124.0"
   grep -q "OK" "${_DOTFILES_RUN_TMPDIR}/status_snap"
   grep -q "updated" "${_DOTFILES_RUN_TMPDIR}/result_snap"
 }
+
+# ── _UPDATE_SECTION_ORDER ─────────────────────────────────────────────────────
+
+@test "_UPDATE_SECTION_ORDER includes git-repos and legacy-rsync after ai-config" {
+  local _joined
+  _joined="${_UPDATE_SECTION_ORDER[*]}"
+  [[ "${_joined}" == *"ai-config git-repos legacy-rsync"* ]]
+}
+
+# ── _update_record_start legacy-rsync ─────────────────────────────────────────
+
+@test "_update_record_start legacy-rsync case skips via _update_skip when not studio" {
+  _is_legacy_sync_host() { return 1; }
+  _update_record_start "legacy-rsync"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_legacy-rsync")" = "SKIP" ]
+}
+
+@test "_update_record_start legacy-rsync case does not skip on studio" {
+  _is_legacy_sync_host() { return 0; }
+  _update_record_start "legacy-rsync"
+  [ ! -f "${_DOTFILES_RUN_TMPDIR}/status_legacy-rsync" ]
+}

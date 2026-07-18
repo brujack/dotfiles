@@ -1261,6 +1261,59 @@ setup_constants_copy() {
   grep -q "^git pull$" "${MOCK_CALLS_FILE}"
 }
 
+# ── run_update — git-repos / legacy-rsync ─────────────────────────────────────
+
+@test "run_update calls sync_git_repos and records git-repos section" {
+  sync_git_repos() { echo "fake git sync"; return 0; }
+  sync_legacy_dirs() { echo "fake legacy sync"; return 0; }
+  export -f sync_git_repos sync_legacy_dirs
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE=1
+  run run_update
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"fake git sync"* ]]
+}
+
+@test "run_update records git-repos as WARN (not OK) when sync_git_repos returns 2" {
+  sync_git_repos() { echo "one repo skipped"; return 2; }
+  sync_legacy_dirs() { return 0; }
+  export -f sync_git_repos sync_legacy_dirs
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE=1
+  # Plain call (not `run run_update`) — `run` captures output via a command
+  # substitution subshell, so _DOTFILES_RUN_TMPDIR (exported inside run_update)
+  # would not survive back into this test body. See tfenv/oh-my-zsh tests above
+  # for the same established pattern.
+  run_update
+  [ -f "${_DOTFILES_RUN_TMPDIR}/status_git-repos" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_git-repos")" = "WARN" ]
+}
+
+@test "run_update records legacy-rsync as WARN (not OK) when sync_legacy_dirs returns 2" {
+  sync_git_repos() { return 0; }
+  sync_legacy_dirs() { echo "one target unreachable"; return 2; }
+  export -f sync_git_repos sync_legacy_dirs
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE=1
+  run_update
+  [ -f "${_DOTFILES_RUN_TMPDIR}/status_legacy-rsync" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_legacy-rsync")" = "WARN" ]
+}
+
+@test "run_update records git-repos as OK when sync_git_repos returns 0" {
+  sync_git_repos() { return 0; }
+  sync_legacy_dirs() { return 0; }
+  export -f sync_git_repos sync_legacy_dirs
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE=1
+  run_update
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_git-repos")" = "OK" ]
+}
+
 # ── run_update — claude/npm/pip section flags ─────────────────────────────────
 
 @test "run_update calls claude plugins update when UPDATE_CLAUDE is set" {
