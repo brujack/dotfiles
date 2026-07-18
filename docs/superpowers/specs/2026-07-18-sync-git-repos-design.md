@@ -60,31 +60,55 @@ fullscript,leonovus,multiview,securekey,warpdotdev}`) are copies of
 ### New files
 
 - `lib/git_sync.sh` — git-native sync logic, sourcing-guarded, unit-testable.
-  - `_git_repo_status <path>` → echoes one of `clean`, `dirty`, `ahead`,
-    `behind`, `diverged`, `missing` based on `git status --porcelain` and
-    `git rev-list --left-right --count HEAD...@{u}`.
-  - `_git_sync_one_repo <path>` → calls `_git_repo_status`, then:
-    - `clean` → no-op
-    - `dirty` → `log_warn "<repo>: uncommitted changes, skipping"`
-    - `behind` → `git pull --ff-only`
-    - `ahead` → `git push`
-    - `diverged` → `log_warn "<repo>: diverged, skipping (manual rebase/merge required)"`
-    - `missing` (path doesn't exist / not a git repo) → skip silently
+  - `_git_repo_status <path>` → runs `git fetch` first (required — `@{u}` is
+    a local remote-tracking ref and is stale without an explicit fetch; a
+    machine that hasn't fetched since another machine pushed would otherwise
+    read 0/0 ahead-behind and misclassify a genuinely `behind` repo as
+    `clean`). A fetch failure (unreachable remote) is its own outcome, not a
+    fallthrough to whatever the stale ref says.
+    Echoes a compound result: `dirty=<0|1> ahead=<n> behind=<n>` (or
+    `unreachable` if fetch failed, `missing` if path doesn't exist / not a
+    git repo). Dirty and ahead/behind are independent dimensions, not a
+    single enum — see decision table below.
+  - `_git_sync_one_repo <path>` → calls `_git_repo_status`, then decides
+    per this explicit precedence (dirty does **not** block a safe push —
+    only pull, since `push` never touches the working tree):
+
+    | dirty | ahead | behind | action                                             |
+    | ----- | ----- | ------ | -------------------------------------------------- |
+    | any   | 0     | 0      | no-op (clean or dirty-with-no-commits-to-move)     |
+    | any   | >0    | 0      | `git push` (safe regardless of dirty working tree) |
+    | 0     | 0     | >0     | `git pull --ff-only`                               |
+    | 1     | 0     | >0     | warn + skip (dirty tree, unsafe to pull)           |
+    | any   | >0    | >0     | warn + skip, "diverged" (never auto-merge)         |
+    | —     | —     | —      | `unreachable`/`missing` → warn + skip              |
+
+    This resolves the ai-config motivating case in Context: locally
+    committed-but-unpushed skills now push even when an unrelated scratch
+    file is dirty elsewhere in the tree.
+
   - `sync_git_repos()` → discovers repos via
     `find "${PERSONAL_GITREPOS}" -maxdepth 2 -name .git -type d` (dedup to
-    parent dirs) plus the explicit `${HOME}/.local/share/state-ledger` path,
-    calls `_git_sync_one_repo` per repo, prints a one-line status summary per
-    repo, returns 0 always (non-fatal, matches `run_update` resilience
-    pattern) — individual repo failures are warnings, not aborts.
+    parent dirs; `-type d` intentionally excludes git worktrees, whose
+    `.git` is a file containing a gitdir pointer — worktrees are ephemeral
+    branch checkouts and should not be synced) plus the explicit
+    `${HOME}/.local/share/state-ledger` path. Calls `_git_sync_one_repo` per
+    repo, prints a one-line status per repo, and returns **2** if any repo
+    was skipped (dirty+behind, diverged, unreachable, or missing), **0** if
+    every repo synced cleanly. Never returns a hard-failure code — no
+    `set -e`, no `exit` — this is "completed, possibly with warnings," not
+    "aborted."
 
 - `lib/legacy_rsync.sh` — rsync logic, sourcing-guarded, unit-testable.
-  - `sync_legacy_dirs()`:
-    - Gate: `[[ $(hostname -s) == "studio" ]]` — non-studio hosts print a
-      skip message and return 0.
+  - `sync_legacy_dirs()` (studio-only; the host gate lives in `run_update`'s
+    `_update_record_start` case — see Modified files — not inside this
+    function, so non-studio machines report `SKIP` via the existing
+    `_update_skip` idiom instead of a misleading `OK`):
     - `rsync -ar --delete --exclude=personal "${HOME}/git-repos/" "bruce@workstation:~/git-repos/"`
     - `rsync -ar --delete --exclude=personal "${HOME}/git-repos/" "bruce@laptop-1:~/git-repos/"`
     - `rsync -ar --delete "${HOME}/git-repos/" "bruce@ratna:~/git-repos/"` (no exclude — full backup)
     - Each rsync call's failure is warned and does not block the others.
+      Returns 2 if any of the three legs failed, 0 if all three succeeded.
 
 - `scripts/sync_git_repos.sh` — thin executable entrypoint, sourcing-guarded
   (testable + runnable). Sources `lib/git_sync.sh` and `lib/legacy_rsync.sh`
@@ -102,12 +126,37 @@ fullscript,leonovus,multiview,securekey,warpdotdev}`) are copies of
   ```bash
   _update_record_start "git-repos"
   sync_git_repos 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_git-repos"
-  _update_record_end "git-repos" "${PIPESTATUS[0]}"
+  _git_repos_rc="${PIPESTATUS[0]}"
+  _update_record_end "git-repos" "$(( _git_repos_rc == 2 ? 0 : _git_repos_rc ))"
+  [[ ${_git_repos_rc} -eq 2 ]] && _update_warn "git-repos" "one or more repos skipped — see detail"
 
   _update_record_start "legacy-rsync"
   sync_legacy_dirs 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_legacy-rsync"
-  _update_record_end "legacy-rsync" "${PIPESTATUS[0]}"
+  _legacy_rsync_rc="${PIPESTATUS[0]}"
+  _update_record_end "legacy-rsync" "$(( _legacy_rsync_rc == 2 ? 0 : _legacy_rsync_rc ))"
+  [[ ${_legacy_rsync_rc} -eq 2 ]] && _update_warn "legacy-rsync" "one or more rsync targets unreachable"
   ```
+  Exit code 2 ("completed with warnings," defined in New files above) is
+  translated to `_update_record_end`'s success path (0) so it isn't
+  mis-recorded as `FAIL`, then immediately overridden to `WARN` via
+  `_update_warn` — matching the existing `brew-drift` precedent
+  (`_update_warn` called standalone, not through `_update_record_end`) and
+  giving the summary a status distinct from both `OK` and `FAIL`. A real
+  exit 1 (hard failure — should not occur given no `set -e`/`exit` in either
+  function, but the wiring stays defensive) still records `FAIL`.
+- `lib/workflows.sh` — add a `legacy-rsync)` branch inside
+  `_update_record_start()`'s case statement (same pattern as the existing
+  `apt`/`snap` "not applicable" branches):
+  ```bash
+  legacy-rsync)
+    [[ "$(hostname -s)" != "studio" ]] && _update_skip "legacy-rsync" "not studio"
+    ;;
+  ```
+  This moves the studio-only gate out of `sync_legacy_dirs()` itself and
+  into the existing `_update_skip` idiom, so non-studio machines show `SKIP`
+  in the summary instead of a misleading `OK`/"updated". `sync_legacy_dirs()`
+  is still safe to call unconditionally (idempotent no-op check via the same
+  hostname test) when invoked standalone outside `run_update`.
 - `lib/update_summary.sh` — add `git-repos legacy-rsync` to
   `_UPDATE_SECTION_ORDER`.
 - Delete `scripts/synch_git-repos.sh` (replaced in place, per user decision).
@@ -119,10 +168,11 @@ fullscript,leonovus,multiview,securekey,warpdotdev}`) are copies of
 setup_env.sh -t update
   └─ run_update()
        └─ [_run_all git-tools block]
-            ├─ sync_git_repos()        (every machine)
+            ├─ sync_git_repos()        (every machine; exit 2 = warnings present)
             │    ├─ discover repos (personal/* + state-ledger)
-            │    └─ per repo: fetch → classify → pull|push|warn
-            └─ sync_legacy_dirs()      (studio only; no-op elsewhere)
+            │    └─ per repo: fetch → classify (dirty × ahead × behind) → pull|push|warn
+            └─ sync_legacy_dirs()      (skipped via _update_skip on non-studio;
+                                         exit 2 = a target was unreachable)
                  ├─ rsync → workstation (exclude personal/)
                  ├─ rsync → laptop-1   (exclude personal/)
                  └─ rsync → ratna      (full tree)
@@ -140,25 +190,51 @@ setup_env.sh -t update
 - Dirty repos are never stashed, force-pushed, or force-pulled — untouched,
   always.
 - Diverged repos are never auto-merged or auto-rebased — reported only.
+- `git fetch` failure is classified as `unreachable`, not silently treated
+  as "no change since last fetch" — this is the difference between an
+  honest "can't tell" and a false `clean`.
+- Both sync functions use a 3-way return contract: `0` = fully synced/no
+  action needed, `2` = completed with one or more repos/targets skipped
+  (surfaced in the summary as `WARN` via `_update_warn`, called _after_
+  `_update_record_end` so its write isn't the one getting overwritten — the
+  reverse order is what `update_summary.sh`'s existing comment warns
+  against), anything else = genuine bug (not expected in normal operation,
+  since no path in either function calls `exit`).
 
 ## Testing
 
 - `tests/setup_env/git_sync.bats` (new): `_git_repo_status` classification
   exercised against **real** temp git repos (bare "origin" + working clone),
-  covering clean/dirty/ahead/behind/diverged/missing — per repo's existing
-  pitfall-F rule (no hand-typed git plumbing fixtures for parser-style logic).
-  Idempotency check: running `sync_git_repos` twice on an already-clean repo
-  produces identical no-op output both times.
-- `tests/setup_env/legacy_rsync.bats` (new): hostname gate tested both
-  branches (studio → rsync invoked; non-studio → skip message, rsync never
-  invoked) via mocked `hostname` and pass-through-asserting mocked `rsync`
-  (verifies `--exclude=personal` present for workstation/laptop-1 targets,
-  absent for ratna).
+  covering clean/dirty/ahead/behind/diverged/missing/unreachable — per
+  repo's existing pitfall-F rule (no hand-typed git plumbing fixtures for
+  parser-style logic). Explicit case: push new commits to the bare "origin"
+  from a second clone _without_ fetching in the first clone, then call
+  `_git_repo_status` — must report `behind`, not `clean` (this is the exact
+  bug the fetch-first ordering fixes; a regression here would silently
+  reintroduce it). Explicit case: `git fetch` against an unreachable/removed
+  remote path reports `unreachable`, not a stale-ref-derived state.
+  All 6 rows of the `_git_sync_one_repo` decision table get one test each,
+  including dirty+ahead (must still push) and dirty+behind (must skip, not
+  pull). Idempotency check: running `sync_git_repos` twice on an
+  already-clean repo produces identical no-op output and exit 0 both times.
+  Exit-code contract: a run with at least one skipped repo returns 2; a run
+  with all repos clean/synced returns 0.
+- `tests/setup_env/legacy_rsync.bats` (new): rsync invocation tested via
+  mocked `hostname` and pass-through-asserting mocked `rsync` (verifies
+  `--exclude=personal` present for workstation/laptop-1 targets, absent for
+  ratna). Exit-code contract: one failed leg (mocked rsync non-zero) → 2;
+  all three succeed → 0.
   `-h`/`--help` output tested for both flag spellings, exits 0, mentions both
   sync modes.
+- `tests/setup_env/unit.bats`: extend `_update_record_start` coverage with
+  the new `legacy-rsync)` case — both branches (studio → no skip write;
+  non-studio → `_update_skip` called with "not studio").
 - `run_update` integration: existing `tests/setup_env/*.bats` patterns
-  extended to assert the two new `_update_record_start/end` sections appear
-  and respect `_run_all` gating.
+  extended to assert the two new sections appear, respect `_run_all` gating,
+  and that an exit-2 return from either sync function ends up as `WARN` (not
+  `OK` or `FAIL`) in `status_git-repos`/`status_legacy-rsync` — this is the
+  regression test for finding 2 (false green): assert the file content
+  directly, not just that the function returned non-fatally.
 - All new BATS files added to `make test-unit` coverage; `make lint`
   (shellcheck + bash -n + zsh -n) must pass on both new lib files and the
   entrypoint script.
