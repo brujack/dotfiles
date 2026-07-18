@@ -94,4 +94,25 @@ _git_sync_one_repo() {
   esac
 }
 
+sync_git_repos() {
+  local _had_warning=0
+  local _repo
+  local _base="${_OVERRIDE_PERSONAL_GITREPOS:-${PERSONAL_GITREPOS}}"
+
+  while IFS= read -r _repo; do
+    [[ -z "${_repo}" ]] && continue
+    log_info "git-repos: syncing ${_repo}"
+    _git_sync_one_repo "${_repo}" || _had_warning=1
+  done < <(find "${_base}" -maxdepth 2 -name .git -type d 2>/dev/null | sed 's#/\.git$##' | sort)
+
+  local _ledger_dir="${_OVERRIDE_STATE_LEDGER_DIR:-${HOME}/.local/share/state-ledger}"
+  if [[ -d "${_ledger_dir}" ]]; then
+    log_info "git-repos: syncing ${_ledger_dir}"
+    _git_sync_one_repo "${_ledger_dir}" || _had_warning=1
+  fi
+
+  [[ ${_had_warning} -eq 1 ]] && return 2
+  return 0
+}
+
 [[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0
