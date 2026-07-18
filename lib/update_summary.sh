@@ -4,7 +4,7 @@
 # Fixed section order for summary display
 readonly _UPDATE_SECTION_ORDER=(
   brew softwareupdate apt snap mas claude terraform-skill npm pip gems
-  ai-config oh-my-zsh tpm tfenv cheat.sh brew-drift
+  ai-config git-repos legacy-rsync oh-my-zsh tpm tfenv cheat.sh brew-drift
 )
 
 # _update_diff_lines PRE_FILE POST_FILE
@@ -118,6 +118,9 @@ _update_record_start() {
       npm list -g --depth=0 2>/dev/null \
         | grep -v '^/' \
         > "${_DOTFILES_RUN_TMPDIR}/pre_npm" || true
+      ;;
+    legacy-rsync)
+      _is_legacy_sync_host || _update_skip "legacy-rsync" "not studio"
       ;;
     # cheat.sh — no pre-snapshot needed
     *) ;;
