@@ -158,3 +158,79 @@ setup() {
   [ "$status" -eq 1 ]
   [[ "$output" == *"unreachable"* ]]
 }
+
+@test "sync_git_repos discovers repos via find -maxdepth 2 -name .git -type d" {
+  local base="${TESTDIR}/fake-personal"
+  mkdir -p "${base}/repo-a"
+  git init -q --bare "${TESTDIR}/repo-a-origin.git"
+  git clone -q "${TESTDIR}/repo-a-origin.git" "${base}/repo-a"
+  git -C "${base}/repo-a" commit -q --allow-empty -m init
+  git -C "${base}/repo-a" push -q -u origin HEAD:master
+  export _OVERRIDE_PERSONAL_GITREPOS="${base}"
+  export _OVERRIDE_STATE_LEDGER_DIR="${TESTDIR}/no-ledger"
+  run sync_git_repos
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"repo-a"* ]]
+}
+
+@test "sync_git_repos excludes git worktrees (gitdir-file .git, not a directory)" {
+  local base="${TESTDIR}/fake-personal-wt"
+  mkdir -p "${base}"
+  git init -q --bare "${TESTDIR}/wt-origin.git"
+  git clone -q "${TESTDIR}/wt-origin.git" "${base}/main-repo"
+  git -C "${base}/main-repo" commit -q --allow-empty -m init
+  git -C "${base}/main-repo" push -q -u origin HEAD:master
+  git -C "${base}/main-repo" worktree add -q "${base}/main-repo-wt" -b wt-branch
+  export _OVERRIDE_PERSONAL_GITREPOS="${base}"
+  export _OVERRIDE_STATE_LEDGER_DIR="${TESTDIR}/no-ledger"
+  run sync_git_repos
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"main-repo"* ]]
+  [[ "$output" != *"main-repo-wt"* ]]
+}
+
+@test "sync_git_repos returns 2 when a repo is skipped" {
+  local base="${TESTDIR}/fake-personal-dirty"
+  mkdir -p "${base}"
+  git init -q --bare "${TESTDIR}/dirty-origin.git"
+  git clone -q "${TESTDIR}/dirty-origin.git" "${base}/dirty-repo"
+  git -C "${base}/dirty-repo" commit -q --allow-empty -m init
+  git -C "${base}/dirty-repo" push -q -u origin HEAD:master
+  local second="${TESTDIR}/dirty-second"
+  git clone -q "${TESTDIR}/dirty-origin.git" "${second}"
+  git -C "${second}" commit -q --allow-empty -m "from second machine"
+  git -C "${second}" push -q
+  echo scratch > "${base}/dirty-repo/scratch.txt"
+  export _OVERRIDE_PERSONAL_GITREPOS="${base}"
+  export _OVERRIDE_STATE_LEDGER_DIR="${TESTDIR}/no-ledger"
+  run sync_git_repos
+  [ "$status" -eq 2 ]
+}
+
+@test "sync_git_repos returns 0 when everything is already clean" {
+  local base="${TESTDIR}/fake-personal-clean"
+  mkdir -p "${base}"
+  git init -q --bare "${TESTDIR}/clean-origin.git"
+  git clone -q "${TESTDIR}/clean-origin.git" "${base}/clean-repo"
+  git -C "${base}/clean-repo" commit -q --allow-empty -m init
+  git -C "${base}/clean-repo" push -q -u origin HEAD:master
+  export _OVERRIDE_PERSONAL_GITREPOS="${base}"
+  export _OVERRIDE_STATE_LEDGER_DIR="${TESTDIR}/no-ledger"
+  run sync_git_repos
+  [ "$status" -eq 0 ]
+}
+
+@test "sync_git_repos is idempotent: running twice on a clean tree gives identical exit 0 both times" {
+  local base="${TESTDIR}/fake-personal-idempotent"
+  mkdir -p "${base}"
+  git init -q --bare "${TESTDIR}/idem-origin.git"
+  git clone -q "${TESTDIR}/idem-origin.git" "${base}/idem-repo"
+  git -C "${base}/idem-repo" commit -q --allow-empty -m init
+  git -C "${base}/idem-repo" push -q -u origin HEAD:master
+  export _OVERRIDE_PERSONAL_GITREPOS="${base}"
+  export _OVERRIDE_STATE_LEDGER_DIR="${TESTDIR}/no-ledger"
+  run sync_git_repos
+  [ "$status" -eq 0 ]
+  run sync_git_repos
+  [ "$status" -eq 0 ]
+}
