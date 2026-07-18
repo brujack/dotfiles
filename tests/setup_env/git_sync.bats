@@ -76,3 +76,75 @@ setup() {
   run _git_repo_status "${noup}"
   [ "$output" = "no-upstream" ]
 }
+
+@test "_git_sync_one_repo no-ops on a clean repo" {
+  run _git_sync_one_repo "${CLONE}"
+  [ "$status" -eq 0 ]
+  [ "$(git -C "${CLONE}" rev-parse HEAD)" = "$(git -C "${CLONE}" rev-parse '@{u}')" ]
+}
+
+@test "_git_sync_one_repo pushes when ahead and not dirty" {
+  git -C "${CLONE}" commit -q --allow-empty -m "local work"
+  run _git_sync_one_repo "${CLONE}"
+  [ "$status" -eq 0 ]
+  [ "$(git -C "${ORIGIN}" rev-parse master)" = "$(git -C "${CLONE}" rev-parse HEAD)" ]
+}
+
+@test "_git_sync_one_repo pushes when ahead EVEN IF dirty (push never touches working tree)" {
+  git -C "${CLONE}" commit -q --allow-empty -m "local work"
+  echo "scratch" > "${CLONE}/scratch.txt"
+  run _git_sync_one_repo "${CLONE}"
+  [ "$status" -eq 0 ]
+  [ "$(git -C "${ORIGIN}" rev-parse master)" = "$(git -C "${CLONE}" rev-parse HEAD)" ]
+  [ -f "${CLONE}/scratch.txt" ]
+}
+
+@test "_git_sync_one_repo pulls --ff-only when behind and clean" {
+  local second="${TESTDIR}/second-clone"
+  git clone -q "${ORIGIN}" "${second}"
+  git -C "${second}" commit -q --allow-empty -m "from second machine"
+  git -C "${second}" push -q
+  run _git_sync_one_repo "${CLONE}"
+  [ "$status" -eq 0 ]
+  [ "$(git -C "${CLONE}" rev-parse HEAD)" = "$(git -C "${ORIGIN}" rev-parse master)" ]
+}
+
+@test "_git_sync_one_repo skips (does not pull) when behind and dirty" {
+  local second="${TESTDIR}/second-clone"
+  git clone -q "${ORIGIN}" "${second}"
+  git -C "${second}" commit -q --allow-empty -m "from second machine"
+  git -C "${second}" push -q
+  echo "scratch" > "${CLONE}/scratch.txt"
+  local _before
+  _before="$(git -C "${CLONE}" rev-parse HEAD)"
+  run _git_sync_one_repo "${CLONE}"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"skipping pull"* ]]
+  [ "$(git -C "${CLONE}" rev-parse HEAD)" = "${_before}" ]
+}
+
+@test "_git_sync_one_repo skips diverged repos without merging" {
+  local second="${TESTDIR}/second-clone"
+  git clone -q "${ORIGIN}" "${second}"
+  git -C "${second}" commit -q --allow-empty -m "from second machine"
+  git -C "${second}" push -q
+  git -C "${CLONE}" commit -q --allow-empty -m "local unpushed work"
+  local _before
+  _before="$(git -C "${CLONE}" rev-parse HEAD)"
+  run _git_sync_one_repo "${CLONE}"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"diverged"* ]]
+  [ "$(git -C "${CLONE}" rev-parse HEAD)" = "${_before}" ]
+}
+
+@test "_git_sync_one_repo returns 0 and no-ops on missing path" {
+  run _git_sync_one_repo "${TESTDIR}/does-not-exist"
+  [ "$status" -eq 0 ]
+}
+
+@test "_git_sync_one_repo returns 1 and warns on unreachable remote" {
+  rm -rf "${ORIGIN}"
+  run _git_sync_one_repo "${CLONE}"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"unreachable"* ]]
+}
