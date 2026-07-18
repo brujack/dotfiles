@@ -8,6 +8,13 @@ setup() {
   # later task — source it explicitly so this file is self-contained.
   # shellcheck disable=SC1091
   source "${REPO_ROOT}/lib/git_sync.sh"
+  # CI runners have no global git identity configured (unlike a dev machine
+  # with ~/.gitconfig) — every `git commit` in this file and in individual
+  # @test bodies (e.g. "second-clone" fixtures) would otherwise fail with
+  # "fatal: empty ident name ... not allowed". Env vars apply to every git
+  # invocation in this process, so this covers all of them in one place.
+  export GIT_AUTHOR_NAME="bats" GIT_AUTHOR_EMAIL="bats@example.com"
+  export GIT_COMMITTER_NAME="bats" GIT_COMMITTER_EMAIL="bats@example.com"
   export TESTDIR="${BATS_TEST_TMPDIR}"
   export ORIGIN="${TESTDIR}/origin.git"
   export CLONE="${TESTDIR}/clone"
