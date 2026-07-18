@@ -43,11 +43,16 @@ setup() {
   [ "$status" -ne 0 ]
 }
 
-@test "sync_legacy_dirs returns 2 when one rsync leg fails" {
+@test "sync_legacy_dirs returns 2 when one rsync leg fails, but still attempts all three legs" {
   export MOCK_HOSTNAME_OUTPUT=studio
   export MOCK_RSYNC_EXIT=1
   run sync_legacy_dirs
   [ "$status" -eq 2 ]
+  # A failing leg must not short-circuit the remaining legs — assert all
+  # three targets were actually attempted, not just that the exit code
+  # matches (an early-return-on-first-failure bug would also produce 2).
+  run grep -c "bruce@" "${MOCK_CALLS_FILE}"
+  [ "$output" -eq 3 ]
 }
 
 @test "sync_legacy_dirs returns 0 when all three legs succeed" {
