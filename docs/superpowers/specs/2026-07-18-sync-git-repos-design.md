@@ -66,22 +66,34 @@ fullscript,leonovus,multiview,securekey,warpdotdev}`) are copies of
     read 0/0 ahead-behind and misclassify a genuinely `behind` repo as
     `clean`). A fetch failure (unreachable remote) is its own outcome, not a
     fallthrough to whatever the stale ref says.
+    Before the ahead/behind `rev-list`, a cheap upstream-presence check
+    (`git rev-parse --abbrev-ref --symbolic-full-name @{u}`) guards against
+    a repo with no upstream configured — `git rev-list --left-right --count
+HEAD...@{u}` hard-fails (`fatal: no upstream configured for branch`,
+    exit 128) rather than returning 0/0 when there's no tracking branch, so
+    this must be caught explicitly rather than left to fall into a bare
+    stderr line. Verified directly: a fresh `git init` + commit with no
+    `push -u` reproduces this exit 128 on both the presence-check and the
+    rev-list itself.
     Echoes a compound result: `dirty=<0|1> ahead=<n> behind=<n>` (or
-    `unreachable` if fetch failed, `missing` if path doesn't exist / not a
-    git repo). Dirty and ahead/behind are independent dimensions, not a
-    single enum — see decision table below.
+    `unreachable` if fetch failed, `no-upstream` if no tracking branch,
+    `missing` if path doesn't exist / not a git repo). Dirty and
+    ahead/behind are independent dimensions, not a single enum — see
+    decision table below. `unreachable`, `no-upstream`, and `missing` all
+    fall into the same catch-all row of that table (warn + skip, distinct
+    reason string per outcome).
   - `_git_sync_one_repo <path>` → calls `_git_repo_status`, then decides
     per this explicit precedence (dirty does **not** block a safe push —
     only pull, since `push` never touches the working tree):
 
-    | dirty | ahead | behind | action                                             |
-    | ----- | ----- | ------ | -------------------------------------------------- |
-    | any   | 0     | 0      | no-op (clean or dirty-with-no-commits-to-move)     |
-    | any   | >0    | 0      | `git push` (safe regardless of dirty working tree) |
-    | 0     | 0     | >0     | `git pull --ff-only`                               |
-    | 1     | 0     | >0     | warn + skip (dirty tree, unsafe to pull)           |
-    | any   | >0    | >0     | warn + skip, "diverged" (never auto-merge)         |
-    | —     | —     | —      | `unreachable`/`missing` → warn + skip              |
+    | dirty | ahead | behind | action                                              |
+    | ----- | ----- | ------ | --------------------------------------------------- |
+    | any   | 0     | 0      | no-op (clean or dirty-with-no-commits-to-move)      |
+    | any   | >0    | 0      | `git push` (safe regardless of dirty working tree)  |
+    | 0     | 0     | >0     | `git pull --ff-only`                                |
+    | 1     | 0     | >0     | warn + skip (dirty tree, unsafe to pull)            |
+    | any   | >0    | >0     | warn + skip, "diverged" (never auto-merge)          |
+    | —     | —     | —      | `unreachable`/`no-upstream`/`missing` → warn + skip |
 
     This resolves the ai-config motivating case in Context: locally
     committed-but-unpushed skills now push even when an unrelated scratch
@@ -94,22 +106,37 @@ fullscript,leonovus,multiview,securekey,warpdotdev}`) are copies of
     branch checkouts and should not be synced) plus the explicit
     `${HOME}/.local/share/state-ledger` path. Calls `_git_sync_one_repo` per
     repo, prints a one-line status per repo, and returns **2** if any repo
-    was skipped (dirty+behind, diverged, unreachable, or missing), **0** if
-    every repo synced cleanly. Never returns a hard-failure code — no
-    `set -e`, no `exit` — this is "completed, possibly with warnings," not
-    "aborted."
+    was skipped (dirty+behind, diverged, unreachable, no-upstream, or
+    missing), **0** if every repo synced cleanly. Never returns a
+    hard-failure code — no `set -e`, no `exit` — this is "completed,
+    possibly with warnings," not "aborted."
+
+    Runtime note: `git fetch` is a network round trip per repo. With a
+    dozen-plus `personal/` repos plus `state-ledger`, this becomes the
+    dominant cost of `sync_git_repos()` and therefore of `setup_env.sh -t
+update`'s wall-clock time. Not a correctness concern and not optimized
+    preemptively — if it becomes annoying in practice, `git fetch --no-tags`
+    plus a short `GIT_SSH_COMMAND` connect-timeout (the repo already has
+    `_git_ssh_opts()` for this) are the cheap knobs, deferred until needed.
 
 - `lib/legacy_rsync.sh` — rsync logic, sourcing-guarded, unit-testable.
-  - `sync_legacy_dirs()` keeps its own internal
-    `[[ $(hostname -s) == "studio" ]]` gate (prints a skip message, returns 0,
-    runs no rsync on non-studio hosts) — this is the safety net that makes
-    the function correct to call unconditionally, including standalone via
-    `scripts/sync_git_repos.sh` on any machine. Separately, `run_update`'s
-    `_update_record_start` gets its own `legacy-rsync)` case calling
-    `_update_skip` (see Modified files) — this is a second, independent
-    check whose only purpose is accurate summary _reporting_ (`SKIP` instead
-    of a misleading `OK`), not safety; the function-level gate is what
-    actually prevents the rsync calls from running.
+  - `_is_legacy_sync_host()` → single-source predicate,
+    `[[ "$(hostname -s)" == "studio" ]]`. Both call sites below use this
+    function rather than each inlining their own `hostname -s` comparison,
+    so the studio-only rule can't drift between the two places it's
+    enforced.
+  - `sync_legacy_dirs()` calls `_is_legacy_sync_host()` as its own internal
+    gate (prints a skip message, returns 0, runs no rsync when false) — this
+    is the safety net that makes the function correct to call
+    unconditionally, including standalone via `scripts/sync_git_repos.sh` on
+    any machine. Separately, `run_update`'s `_update_record_start` gets its
+    own `legacy-rsync)` case that also calls `_is_legacy_sync_host()` (see
+    Modified files) — a second, independent check whose only purpose is
+    accurate summary _reporting_ (`SKIP` instead of a misleading `OK`), not
+    safety; the function-level gate is what actually prevents the rsync
+    calls from running. Both checks reduce to the same predicate, so there
+    is exactly one place that defines "studio," even though it's evaluated
+    twice.
     - `rsync -ar --delete --exclude=personal "${HOME}/git-repos/" "bruce@workstation:~/git-repos/"`
     - `rsync -ar --delete --exclude=personal "${HOME}/git-repos/" "bruce@laptop-1:~/git-repos/"`
     - `rsync -ar --delete "${HOME}/git-repos/" "bruce@ratna:~/git-repos/"` (no exclude — full backup)
@@ -155,7 +182,7 @@ fullscript,leonovus,multiview,securekey,warpdotdev}`) are copies of
   `apt`/`snap` "not applicable" branches):
   ```bash
   legacy-rsync)
-    [[ "$(hostname -s)" != "studio" ]] && _update_skip "legacy-rsync" "not studio"
+    _is_legacy_sync_host || _update_skip "legacy-rsync" "not studio"
     ;;
   ```
   This is a reporting-only duplicate of the safety gate already inside
@@ -211,30 +238,42 @@ setup_env.sh -t update
 
 - `tests/setup_env/git_sync.bats` (new): `_git_repo_status` classification
   exercised against **real** temp git repos (bare "origin" + working clone),
-  covering clean/dirty/ahead/behind/diverged/missing/unreachable — per
-  repo's existing pitfall-F rule (no hand-typed git plumbing fixtures for
-  parser-style logic). Explicit case: push new commits to the bare "origin"
-  from a second clone _without_ fetching in the first clone, then call
-  `_git_repo_status` — must report `behind`, not `clean` (this is the exact
-  bug the fetch-first ordering fixes; a regression here would silently
+  covering clean/dirty/ahead/behind/diverged/missing/unreachable/no-upstream
+  — per repo's existing pitfall-F rule (no hand-typed git plumbing fixtures
+  for parser-style logic). Explicit case: push new commits to the bare
+  "origin" from a second clone _without_ fetching in the first clone, then
+  call `_git_repo_status` — must report `behind`, not `clean` (this is the
+  exact bug the fetch-first ordering fixes; a regression here would silently
   reintroduce it). Explicit case: `git fetch` against an unreachable/removed
-  remote path reports `unreachable`, not a stale-ref-derived state.
+  remote path reports `unreachable`, not a stale-ref-derived state. Explicit
+  case: a repo with a commit but no `push -u`/no upstream configured reports
+  `no-upstream` (verified manually during spec review: `rev-list
+--left-right --count HEAD...@{u}` and the presence-check both exit 128
+  with "fatal: no upstream configured" — this must not surface as a raw
+  stderr line or get miscategorized as `unreachable`).
   All 6 rows of the `_git_sync_one_repo` decision table get one test each,
   including dirty+ahead (must still push) and dirty+behind (must skip, not
   pull). Idempotency check: running `sync_git_repos` twice on an
   already-clean repo produces identical no-op output and exit 0 both times.
   Exit-code contract: a run with at least one skipped repo returns 2; a run
   with all repos clean/synced returns 0.
+  This bats file must NOT call `load_mocks` (or must exclude `git` from the
+  mocked PATH) — `tests/mocks/git` is a scripted stub used elsewhere for
+  clone/pull exit-code simulation, not real plumbing, and would make every
+  classification test pass against fake behavior instead of the real `git`
+  commands being tested.
 - `tests/setup_env/legacy_rsync.bats` (new): rsync invocation tested via
   mocked `hostname` and pass-through-asserting mocked `rsync` (verifies
   `--exclude=personal` present for workstation/laptop-1 targets, absent for
   ratna). Exit-code contract: one failed leg (mocked rsync non-zero) → 2;
-  all three succeed → 0.
+  all three succeed → 0. `_is_legacy_sync_host()` tested directly, both
+  branches, independent of `sync_legacy_dirs()`.
   `-h`/`--help` output tested for both flag spellings, exits 0, mentions both
   sync modes.
 - `tests/setup_env/unit.bats`: extend `_update_record_start` coverage with
   the new `legacy-rsync)` case — both branches (studio → no skip write;
-  non-studio → `_update_skip` called with "not studio").
+  non-studio → `_update_skip` called with "not studio"), asserting it goes
+  through `_is_legacy_sync_host()` rather than its own inline hostname check.
 - `run_update` integration: existing `tests/setup_env/*.bats` patterns
   extended to assert the two new sections appear, respect `_run_all` gating,
   and that an exit-2 return from either sync function ends up as `WARN` (not
