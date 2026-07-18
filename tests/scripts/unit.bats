@@ -174,6 +174,17 @@ teardown() {
 
 # ── sync_git_repos.sh ─────────────────────────────────────────────────────────
 
+@test "sync_git_repos.sh with no arguments runs both legs (default mode)" {
+  export MOCK_HOSTNAME_OUTPUT=studio
+  export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
+  export HOME="${BATS_TEST_TMPDIR}"
+  mkdir -p "${HOME}/git-repos/personal/fake-repo/.git"
+  run bash "${REPO_ROOT}/scripts/sync_git_repos.sh"
+  [ "$status" -eq 0 ]
+  grep -q "^git " "${MOCK_CALLS_FILE}"
+  grep -q rsync "${MOCK_CALLS_FILE}"
+}
+
 @test "sync_git_repos.sh -h prints usage mentioning both sync modes" {
   run bash "${REPO_ROOT}/scripts/sync_git_repos.sh" -h
   [ "$status" -eq 0 ]

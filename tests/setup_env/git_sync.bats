@@ -159,6 +159,32 @@ setup() {
   [[ "$output" == *"unreachable"* ]]
 }
 
+@test "_git_sync_one_repo returns 1 and warns when push fails" {
+  git -C "${CLONE}" commit -q --allow-empty -m "local work"
+  # Fetch (read) still works against a read-only bare origin; push (write)
+  # does not — this exercises the push-failure branch without the fetch
+  # step itself reporting unreachable first.
+  chmod -R -w "${ORIGIN}"
+  run _git_sync_one_repo "${CLONE}"
+  chmod -R +w "${ORIGIN}"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"push failed"* ]]
+}
+
+@test "_git_sync_one_repo returns 1 and warns when pull fails" {
+  local second="${TESTDIR}/second-clone"
+  git clone -q "${ORIGIN}" "${second}"
+  git -C "${second}" commit -q --allow-empty -m "from second machine"
+  git -C "${second}" push -q
+  # A stale index.lock forces git pull's merge/checkout step to fail after
+  # fetch has already succeeded (fetch doesn't touch the index).
+  touch "${CLONE}/.git/index.lock"
+  run _git_sync_one_repo "${CLONE}"
+  rm -f "${CLONE}/.git/index.lock"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"pull failed"* ]]
+}
+
 @test "sync_git_repos discovers repos via find -maxdepth 2 -name .git -type d" {
   local base="${TESTDIR}/fake-personal"
   mkdir -p "${base}/repo-a"
