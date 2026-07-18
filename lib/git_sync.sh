@@ -40,4 +40,58 @@ _git_repo_status() {
   printf "dirty=%d ahead=%d behind=%d\n" "${_dirty}" "${_ahead:-0}" "${_behind:-0}"
 }
 
+_git_sync_one_repo() {
+  local _path="$1"
+  local _status
+  _status="$(_git_repo_status "${_path}")"
+
+  case "${_status}" in
+    missing)
+      return 0
+      ;;
+    unreachable)
+      log_warn "${_path}: remote unreachable, skipping"
+      return 1
+      ;;
+    no-upstream)
+      log_warn "${_path}: no upstream configured, skipping"
+      return 1
+      ;;
+    dirty=*)
+      local _dirty _ahead _behind
+      _dirty="$(printf '%s' "${_status}" | grep -oE 'dirty=[0-9]+' | cut -d= -f2)"
+      _ahead="$(printf '%s' "${_status}" | grep -oE 'ahead=[0-9]+' | cut -d= -f2)"
+      _behind="$(printf '%s' "${_status}" | grep -oE 'behind=[0-9]+' | cut -d= -f2)"
+
+      if [[ ${_ahead} -gt 0 && ${_behind} -gt 0 ]]; then
+        log_warn "${_path}: diverged (ahead ${_ahead}, behind ${_behind}), skipping — manual rebase/merge required"
+        return 1
+      fi
+      if [[ ${_ahead} -gt 0 ]]; then
+        if GIT_SSH_COMMAND="$(_git_ssh_opts)" git -C "${_path}" push --quiet; then
+          return 0
+        fi
+        log_warn "${_path}: push failed"
+        return 1
+      fi
+      if [[ ${_behind} -gt 0 ]]; then
+        if [[ ${_dirty} -eq 1 ]]; then
+          log_warn "${_path}: dirty tree, behind — skipping pull (unsafe)"
+          return 1
+        fi
+        if GIT_SSH_COMMAND="$(_git_ssh_opts)" git -C "${_path}" pull --ff-only --quiet; then
+          return 0
+        fi
+        log_warn "${_path}: pull failed"
+        return 1
+      fi
+      return 0
+      ;;
+    *)
+      log_warn "${_path}: unexpected status '${_status}'"
+      return 1
+      ;;
+  esac
+}
+
 [[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0
