@@ -1,5 +1,7 @@
 # sync_git_repos Implementation Plan
 
+> **Status: DONE** — merged via [PR dotfiles#182](https://github.com/brujack/dotfiles/pull/182)
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace `scripts/synch_git-repos.sh` (stale hostnames, blind `rsync --delete` push that would clobber multi-machine `personal/` work) with a two-mode sync: git-native fetch/pull/push for `personal/` repos + `state-ledger`, and studio-only rsync for legacy no-git-access directories + ratna backup.
