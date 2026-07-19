@@ -6,6 +6,18 @@
 # Usage: bash scripts/run-bash-coverage.sh [--json /path/out.json]
 #   --json  Also write shields.io badge JSON to given path
 
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  cat <<'USAGE'
+Usage: run-bash-coverage.sh [--json /path/out.json]
+
+Measures bash line coverage using BASH_ENV + PS4 xtrace tracing of the
+full bats suite. Prints a per-file coverage table and overall percentage.
+
+  --json /path/out.json  Also write a shields.io badge JSON to given path
+USAGE
+  exit 0
+fi
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TRACER="${REPO_ROOT}/scripts/bash-tracer.sh"
 OUTPUT_DIR="${REPO_ROOT}/coverage"
