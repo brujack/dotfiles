@@ -1,5 +1,17 @@
 #!/usr/bin/env bash
 
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  cat <<'USAGE'
+Usage: .osx.sh [-h|--help]
+
+One-shot macOS preference dump. Writes Finder/screenshot/dock/Activity
+Monitor defaults, restarts SystemUIServer, and enables Remote Desktop
++ Remote Login via sudo. Run once on a fresh Mac. No confirmation
+prompt — review the script before running.
+USAGE
+  exit 0
+fi
+
 # Expand save panel by default
 defaults write NSGlobalDomain NSNavPanelExpandedStateForSaveMode -bool true
 
