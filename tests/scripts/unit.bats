@@ -167,6 +167,20 @@ teardown() {
   [ "$(grep -c '^kill -9' "${MOCK_CALLS_FILE}")" -eq 2 ]
 }
 
+@test "kill_zombie.sh -h prints usage and exits 0 without calling pgrep" {
+  run bash "${REPO_ROOT}/scripts/kill_zombie.sh" -h
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+  run grep -q pgrep "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+}
+
+@test "kill_zombie.sh --help prints the same usage as -h" {
+  run bash "${REPO_ROOT}/scripts/kill_zombie.sh" --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+}
+
 # ── mkill.sh ──────────────────────────────────────────────────────────────────
 
 @test "mkill.sh calls pgrep with the provided pattern" {
