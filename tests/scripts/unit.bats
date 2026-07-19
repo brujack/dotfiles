@@ -496,6 +496,27 @@ teardown() {
   [ "$status" -eq 1 ]
 }
 
+@test "bootstrap_mac_main -h prints usage and exits 0 without checking macOS" {
+  source "${REPO_ROOT}/scripts/bootstrap_mac.sh"
+  export MOCK_UNAME_S=Linux
+  run bootstrap_mac_main -h
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+}
+
+@test "bootstrap_mac_main --help prints the same usage as -h" {
+  source "${REPO_ROOT}/scripts/bootstrap_mac.sh"
+  run bootstrap_mac_main --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+}
+
+@test "bootstrap_mac.sh forwards -h to bootstrap_mac_main when run directly" {
+  run bash "${REPO_ROOT}/scripts/bootstrap_mac.sh" -h
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+}
+
 # ── bootstrap_linux.sh ────────────────────────────────────────────────────────
 
 @test "_bootstrap_check_linux passes on Linux" {
@@ -594,6 +615,27 @@ teardown() {
   export MOCK_UNAME_S=Darwin
   run bootstrap_linux_main
   [ "$status" -eq 1 ]
+}
+
+@test "bootstrap_linux_main -h prints usage and exits 0 without checking Linux" {
+  source "${REPO_ROOT}/scripts/bootstrap_linux.sh"
+  export MOCK_UNAME_S=Darwin
+  run bootstrap_linux_main -h
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+}
+
+@test "bootstrap_linux_main --help prints the same usage as -h" {
+  source "${REPO_ROOT}/scripts/bootstrap_linux.sh"
+  run bootstrap_linux_main --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+}
+
+@test "bootstrap_linux.sh forwards -h to bootstrap_linux_main when run directly" {
+  run bash "${REPO_ROOT}/scripts/bootstrap_linux.sh" -h
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
 }
 
 @test "push-bash-coverage.sh -h prints usage and exits 0 without running coverage" {
