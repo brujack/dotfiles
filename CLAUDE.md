@@ -233,7 +233,7 @@ Inline disables (`# shellcheck disable=SCxxxx # reason`) are used for remaining 
 
 `.github/workflows/ci.yml` runs on PRs to master only (the pre-push hook gates branch pushes locally):
 
-- `test` job: installs bats + shellcheck, runs `make test`, then verifies test count ≥ 840 (regression proxy; 884 tests as of 2026-07-09)
+- `test` job: installs bats + shellcheck, runs `make test`, then verifies test count ≥ 840 (regression proxy; 927 tests as of 2026-07-18)
 - `lint-macos` job: runs `bash -n` and `zsh -n` on all `.sh` files on `macos-latest` (advisory, not blocking auto-merge)
 - `bash-coverage` job: measures bash line coverage via PS4 xtrace on `ubuntu-latest`; **gates at 90%** — blocks auto-merge if coverage drops below floor
 - `secret-scan` job: runs gitleaks against recent commits (advisory, not blocking auto-merge)
@@ -285,7 +285,7 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 #### Bash
 
-- **Overall: 92%** (884 tests as of 2026-07-09); gated in CI at 90% (`bash-coverage` job, blocks auto-merge on drop).
+- **Overall: 90%** (927 tests as of 2026-07-18); gated in CI at 90% (`bash-coverage` job, blocks auto-merge on drop).
 - `make bash-coverage` measures via PS4 xtrace (`scripts/run-bash-coverage.sh`); `make push-bash-coverage` pushes `coverage/bash.json` to the `coverage-data` branch for the README badge.
 - Method detail, per-file floors/ceilings, and why kcov/bashcov are ruled out: [`dotfiles-bash-coverage`](https://github.com/brujack/ai-config/blob/master/docs/knowledge/dotfiles-bash-coverage.md).
 
@@ -322,6 +322,7 @@ Invoke `caveman:caveman-commit` skill to generate the commit message before runn
 - For shell syntax-only fixes in `setup_env.sh`, validate with both `bash -n setup_env.sh` and `zsh -n setup_env.sh` before commit
 - After any change to `.zshrc` or `.zshrc.d/` files, run `zsh -i -c 'exit'` before committing to catch re-source crashes before they reach prod
 - **`_UPDATE_SECTION_ORDER` coupling:** `lib/update_summary.sh` has a `readonly _UPDATE_SECTION_ORDER=(...)` array that controls which sections appear in the printed update summary. Adding `_update_record_start/end "new-section"` in `run_update()` without also adding `"new-section"` to this array means the section is tracked internally but never printed. Both must be updated together. When **removing** a section, a `sed` pass on test fixture loops won't catch hardcoded count assertions like `[[ "$output" == *"9 OK"* ]]` — these must be audited and decremented manually.
+- **`scripts/sync_git_repos.sh`** replaces the old rsync-only sync script (`scripts/synch_git-repos.sh`, deleted). Two independent modes: git-native fetch/pull/push for `personal/` repos + `state-ledger` (safe on any of the three dev machines — never force-pushes, never auto-merges a diverged repo; dirty does not block a safe push, only a pull), and studio-only rsync push for legacy/no-git-access directories + a full-tree ratna backup. Runs automatically as part of `-t update` (`git-repos`/`legacy-rsync` sections in `_UPDATE_SECTION_ORDER`); `--git-only`/`--legacy-only`/`-h` for standalone use. See `docs/superpowers/specs/2026-07-18-sync-git-repos-design.md` for the full design and the dirty/ahead/behind decision table. **Never invoke this script (or `sync_legacy_dirs`/`sync_git_repos` directly) unmocked outside the BATS test harness** — it performs real `git push`/`rsync --delete` over SSH against real hosts, and `_is_legacy_sync_host` triggers on the real `hostname -s` of whichever machine runs it.
 
 ## Local-Only State
 

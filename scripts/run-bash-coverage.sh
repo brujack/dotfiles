@@ -23,6 +23,8 @@ INCLUDE_FILES=(
     "${REPO_ROOT}/lib/linux_shared.sh"
     "${REPO_ROOT}/lib/linux_ubuntu.sh"
     "${REPO_ROOT}/lib/macos.sh"
+    "${REPO_ROOT}/lib/git_sync.sh"
+    "${REPO_ROOT}/lib/legacy_rsync.sh"
 )
 
 mkdir -p "${OUTPUT_DIR}"

@@ -1410,3 +1410,21 @@ teardown() {
   _doctor_check_github_mcp
   [ "${_DOCTOR_FAILED}" -ge 1 ]
 }
+
+# ── _update_record_start legacy-rsync ─────────────────────────────────────────
+
+@test "_update_record_start legacy-rsync case skips via _update_skip when not studio" {
+  export _DOTFILES_RUN_TMPDIR="${BATS_TEST_TMPDIR}"
+  _is_legacy_sync_host() { return 1; }
+  export -f _is_legacy_sync_host
+  _update_record_start "legacy-rsync"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_legacy-rsync")" = "SKIP" ]
+}
+
+@test "_update_record_start legacy-rsync case does not skip on studio" {
+  export _DOTFILES_RUN_TMPDIR="${BATS_TEST_TMPDIR}"
+  _is_legacy_sync_host() { return 0; }
+  export -f _is_legacy_sync_host
+  _update_record_start "legacy-rsync"
+  [ ! -f "${_DOTFILES_RUN_TMPDIR}/status_legacy-rsync" ]
+}

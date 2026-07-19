@@ -172,27 +172,70 @@ teardown() {
   grep -q "sudo kill -9 4321" "${MOCK_CALLS_FILE}"
 }
 
-# ── synch_git-repos.sh ────────────────────────────────────────────────────────
+# ── sync_git_repos.sh ─────────────────────────────────────────────────────────
 
-@test "synch_git-repos.sh prints error message when not on studio" {
-  export MOCK_HOSTNAME_OUTPUT=testhost
-  unset STUDIO
-  run bash "${REPO_ROOT}/scripts/synch_git-repos.sh"
+@test "sync_git_repos.sh with no arguments runs both legs (default mode)" {
+  export MOCK_HOSTNAME_OUTPUT=studio
+  export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
+  export HOME="${BATS_TEST_TMPDIR}"
+  mkdir -p "${HOME}/git-repos/personal/fake-repo/.git"
+  run bash "${REPO_ROOT}/scripts/sync_git_repos.sh"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"needs to be run on studio"* ]]
-  run grep -q "rsync" "${MOCK_CALLS_FILE}"
+  grep -q "^git " "${MOCK_CALLS_FILE}"
+  grep -q rsync "${MOCK_CALLS_FILE}"
+}
+
+@test "sync_git_repos.sh -h prints usage mentioning both sync modes" {
+  run bash "${REPO_ROOT}/scripts/sync_git_repos.sh" -h
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"git sync"* ]]
+  [[ "$output" == *"legacy sync"* ]]
+}
+
+@test "sync_git_repos.sh --help prints the same usage as -h" {
+  run bash "${REPO_ROOT}/scripts/sync_git_repos.sh" --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"--git-only"* ]]
+  [[ "$output" == *"--legacy-only"* ]]
+}
+
+@test "sync_git_repos.sh --git-only runs the git leg and skips the legacy rsync leg" {
+  export MOCK_HOSTNAME_OUTPUT=studio
+  export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
+  export HOME="${BATS_TEST_TMPDIR}"
+  # Seed a fake repo so the git-sync leg has something to act on — an empty
+  # personal/ tree would make "git leg ran and did nothing" and "script
+  # crashed before mode dispatch" indistinguishable to this test.
+  mkdir -p "${HOME}/git-repos/personal/fake-repo/.git"
+  run bash "${REPO_ROOT}/scripts/sync_git_repos.sh" --git-only
+  [ "$status" -eq 0 ]
+  grep -q "^git " "${MOCK_CALLS_FILE}"
+  run grep -q rsync "${MOCK_CALLS_FILE}"
   [ "$status" -ne 0 ]
 }
 
-@test "synch_git-repos.sh calls rsync for all three hosts when on studio" {
+@test "sync_git_repos.sh rejects an unrecognized flag without running either leg" {
   export MOCK_HOSTNAME_OUTPUT=studio
+  export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
   export HOME="${BATS_TEST_TMPDIR}"
-  mkdir -p "${BATS_TEST_TMPDIR}/git-repos"
-  run bash "${REPO_ROOT}/scripts/synch_git-repos.sh"
+  mkdir -p "${HOME}/git-repos/personal/fake-repo/.git"
+  run bash "${REPO_ROOT}/scripts/sync_git_repos.sh" --bogus
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Unrecognized option"* ]]
+  run grep -q rsync "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+  run grep -q "^git " "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+}
+
+@test "sync_git_repos.sh --legacy-only skips the git sync leg" {
+  export MOCK_HOSTNAME_OUTPUT=studio
+  export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
+  export HOME="${BATS_TEST_TMPDIR}"
+  mkdir -p "${HOME}/git-repos/personal"
+  run bash "${REPO_ROOT}/scripts/sync_git_repos.sh" --legacy-only
   [ "$status" -eq 0 ]
-  grep -q "rsync.*laptop-1" "${MOCK_CALLS_FILE}"
-  grep -q "rsync.*workstation" "${MOCK_CALLS_FILE}"
-  grep -q "rsync.*ratna" "${MOCK_CALLS_FILE}"
+  grep -q rsync "${MOCK_CALLS_FILE}"
 }
 
 # ── tmux-workstation.sh ───────────────────────────────────────────────────────
