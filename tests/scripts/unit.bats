@@ -128,12 +128,43 @@ teardown() {
   grep -q "pgrep <defunct>" "${MOCK_CALLS_FILE}"
 }
 
-@test "kill_zombie.sh passes pgrep output to kill -9" {
-  # kill is a bash builtin so the PATH mock is not invoked; verify the script
-  # proceeds past pgrep without error when pgrep returns no PIDs
+@test "kill_zombie.sh proceeds without error when pgrep returns no PIDs" {
   export MOCK_PGREP_EXIT=1
   run bash "${REPO_ROOT}/scripts/kill_zombie.sh"
+  [ "$status" -eq 0 ]
   grep -q "pgrep <defunct>" "${MOCK_CALLS_FILE}"
+}
+
+@test "kill_zombie.sh kills a single matching PID" {
+  # kill is a bash builtin, invisible to PATH mocks — shadow it with an
+  # exported shell function instead (bash functions take precedence over
+  # regular, non-special builtins, and export -f propagates into the child
+  # `bash script.sh` subprocess this test spawns via `run`).
+  kill() { printf "kill %s\n" "$*" >> "${MOCK_CALLS_FILE}"; }
+  export -f kill
+  export MOCK_PGREP_EXIT=0
+  export MOCK_PGREP_OUTPUT="1234"
+  run bash "${REPO_ROOT}/scripts/kill_zombie.sh"
+  [ "$status" -eq 0 ]
+  grep -q "kill -9 1234" "${MOCK_CALLS_FILE}"
+}
+
+@test "kill_zombie.sh kills each PID individually when multiple defunct processes exist" {
+  # Regression test: the original implementation quoted the whole multi-line
+  # pgrep output as a single argument to kill (`kill -9 "${processes}"`),
+  # which silently failed to kill any of them once there was more than one
+  # match. This must invoke kill once per PID.
+  kill() { printf "kill %s\n" "$*" >> "${MOCK_CALLS_FILE}"; }
+  export -f kill
+  export MOCK_PGREP_EXIT=0
+  export MOCK_PGREP_OUTPUT="1234
+5678"
+  run bash "${REPO_ROOT}/scripts/kill_zombie.sh"
+  [ "$status" -eq 0 ]
+  grep -q "kill -9 1234" "${MOCK_CALLS_FILE}"
+  grep -q "kill -9 5678" "${MOCK_CALLS_FILE}"
+  # exactly 2 kill invocations, not 1 combined bad call
+  [ "$(grep -c '^kill -9' "${MOCK_CALLS_FILE}")" -eq 2 ]
 }
 
 # ── mkill.sh ──────────────────────────────────────────────────────────────────

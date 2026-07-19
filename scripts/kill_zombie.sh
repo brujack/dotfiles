@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 pattern="<defunct>"
-processes=$(pgrep "${pattern}")
 
-kill -9 "${processes}"
+for pid in $(pgrep "${pattern}"); do
+  kill -9 "${pid}"
+done
