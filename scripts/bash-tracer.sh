@@ -4,7 +4,7 @@
 
 _cov_file="${_COV_TRACE_FILE:-}"
 [[ -z "${_cov_file}" ]] && return 0
-eval "exec 9>>'${_cov_file}'" 2>/dev/null || return 0
+exec 9>>"${_cov_file}" 2>/dev/null || return 0
 export BASH_XTRACEFD=9
 export PS4='COVTRACE:${BASH_SOURCE}:${LINENO}: '
 set -x
