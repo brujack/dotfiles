@@ -675,3 +675,17 @@ teardown() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"Usage:"* ]]
 }
+
+@test "run-bash-coverage.sh -h prints usage and exits 0 without running bats" {
+  run bash "${REPO_ROOT}/scripts/run-bash-coverage.sh" -h
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+  run grep -q "bats" "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+}
+
+@test "run-bash-coverage.sh --help prints the same usage as -h" {
+  run bash "${REPO_ROOT}/scripts/run-bash-coverage.sh" --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+}
