@@ -121,6 +121,25 @@ teardown() {
   [ "$status" -eq 0 ]
 }
 
+@test "html2ascii.sh -h prints usage and exits 0 without reading stdin" {
+  run bash "${REPO_ROOT}/scripts/html2ascii.sh" -h
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+}
+
+@test "html2ascii.sh --help prints the same usage as -h" {
+  run bash "${REPO_ROOT}/scripts/html2ascii.sh" --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+}
+
+@test "html2ascii.sh replaces html entities with correct UTF-8 characters" {
+  run bash -c "printf 'a&auml;A&Auml;o&ouml;O&Ouml;a&aring;A&Aring;\n' | bash '${REPO_ROOT}/scripts/html2ascii.sh'"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"aäAÄoöOÖaåAÅ"* ]]
+  [[ "$output" != *$'\xef\xbf\xbd'* ]]
+}
+
 # ── kill_zombie.sh ─────────────────────────────────────────────────────────────
 
 @test "kill_zombie.sh calls pgrep with defunct pattern" {
