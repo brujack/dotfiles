@@ -59,6 +59,15 @@ _bootstrap_linux_setup_brew_path() {
 }
 
 bootstrap_linux_main() {
+  if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+    cat <<'USAGE'
+Usage: bootstrap_linux.sh [-h|--help]
+
+Run once on a fresh Ubuntu machine before setup_env.sh. Installs
+Homebrew prerequisites and Homebrew.
+USAGE
+    return 0
+  fi
   _bootstrap_check_linux || return 1
   _bootstrap_linux_detect_distro
   _bootstrap_linux_install_prereqs || { printf "[ERROR] Prerequisite installation failed.\n" >&2; return 1; }
@@ -70,5 +79,5 @@ bootstrap_linux_main() {
 # Allow sourcing for unit testing without executing
 [[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0
 
-bootstrap_linux_main
+bootstrap_linux_main "$@"
 exit $?

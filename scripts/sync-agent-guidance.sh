@@ -4,6 +4,19 @@ usage() {
   printf "Usage: %s <sync|check>\n" "${0}"
 }
 
+_sync_agent_guidance_help() {
+  cat <<'USAGE'
+Usage: sync-agent-guidance.sh <sync|check>
+       sync-agent-guidance.sh [-h|--help]
+
+Regenerates .cursor/rules/global-claude-standards.mdc from CLAUDE.md's
+@~/.claude/standards/*.md imports.
+
+  sync   Write the generated file.
+  check  Exit 1 (with a "drift" message) if the generated file is stale.
+USAGE
+}
+
 repo_root() {
   local _script_dir
   _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || return 1
@@ -79,6 +92,10 @@ main() {
   _mode="${1:-}"
 
   case "${_mode}" in
+    -h | --help)
+      _sync_agent_guidance_help
+      return 0
+      ;;
     sync | check) ;;
     *)
       usage

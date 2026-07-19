@@ -39,6 +39,18 @@ teardown() {
   [[ "$output" == *"Total lines: 2"* ]]
 }
 
+@test "count_lines.sh -h prints usage and exits 0" {
+  run bash "${REPO_ROOT}/scripts/count_lines.sh" -h
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+}
+
+@test "count_lines.sh --help prints the same usage as -h" {
+  run bash "${REPO_ROOT}/scripts/count_lines.sh" --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+}
+
 # ── count_lines_git.sh ───────────────────────────────────────────────────────
 
 @test "count_lines_git.sh exits 1 and prints usage when no argument given" {
@@ -88,6 +100,18 @@ teardown() {
   run bash -c "unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; export PATH='${clean_path}'; bash '${REPO_ROOT}/scripts/count_lines_git.sh' '${tmpdir}' 'vendor'"
   [ "$status" -eq 0 ]
   [[ "$output" == *"Total lines: 2"* ]]
+}
+
+@test "count_lines_git.sh -h prints usage and exits 0" {
+  run bash "${REPO_ROOT}/scripts/count_lines_git.sh" -h
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+}
+
+@test "count_lines_git.sh --help prints the same usage as -h" {
+  run bash "${REPO_ROOT}/scripts/count_lines_git.sh" --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
 }
 
 # ── html2ascii.sh ─────────────────────────────────────────────────────────────
@@ -271,6 +295,20 @@ teardown() {
   run bash "${REPO_ROOT}/scripts/restart_fah.sh"
   grep -q "pgrep fah" "${MOCK_CALLS_FILE}"
   grep -q "sudo kill -9 4321" "${MOCK_CALLS_FILE}"
+}
+
+@test "restart_fah.sh -h prints usage and exits 0 without touching FAHClient" {
+  run bash "${REPO_ROOT}/scripts/restart_fah.sh" -h
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+  run grep -q FAHClient "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+}
+
+@test "restart_fah.sh --help prints the same usage as -h" {
+  run bash "${REPO_ROOT}/scripts/restart_fah.sh" --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
 }
 
 # ── sync_git_repos.sh ─────────────────────────────────────────────────────────
@@ -482,6 +520,27 @@ teardown() {
   [ "$status" -eq 1 ]
 }
 
+@test "bootstrap_mac_main -h prints usage and exits 0 without checking macOS" {
+  source "${REPO_ROOT}/scripts/bootstrap_mac.sh"
+  export MOCK_UNAME_S=Linux
+  run bootstrap_mac_main -h
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+}
+
+@test "bootstrap_mac_main --help prints the same usage as -h" {
+  source "${REPO_ROOT}/scripts/bootstrap_mac.sh"
+  run bootstrap_mac_main --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+}
+
+@test "bootstrap_mac.sh forwards -h to bootstrap_mac_main when run directly" {
+  run bash "${REPO_ROOT}/scripts/bootstrap_mac.sh" -h
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+}
+
 # ── bootstrap_linux.sh ────────────────────────────────────────────────────────
 
 @test "_bootstrap_check_linux passes on Linux" {
@@ -580,4 +639,39 @@ teardown() {
   export MOCK_UNAME_S=Darwin
   run bootstrap_linux_main
   [ "$status" -eq 1 ]
+}
+
+@test "bootstrap_linux_main -h prints usage and exits 0 without checking Linux" {
+  source "${REPO_ROOT}/scripts/bootstrap_linux.sh"
+  export MOCK_UNAME_S=Darwin
+  run bootstrap_linux_main -h
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+}
+
+@test "bootstrap_linux_main --help prints the same usage as -h" {
+  source "${REPO_ROOT}/scripts/bootstrap_linux.sh"
+  run bootstrap_linux_main --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+}
+
+@test "bootstrap_linux.sh forwards -h to bootstrap_linux_main when run directly" {
+  run bash "${REPO_ROOT}/scripts/bootstrap_linux.sh" -h
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+}
+
+@test "push-bash-coverage.sh -h prints usage and exits 0 without running coverage" {
+  run bash "${REPO_ROOT}/scripts/push-bash-coverage.sh" -h
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+  run grep -q "run-bash-coverage" "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+}
+
+@test "push-bash-coverage.sh --help prints the same usage as -h" {
+  run bash "${REPO_ROOT}/scripts/push-bash-coverage.sh" --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
 }

@@ -1,16 +1,14 @@
 BATS := $(shell command -v bats 2>/dev/null)
 SHELLCHECK := $(shell command -v shellcheck 2>/dev/null)
-KCOV := $(shell command -v kcov 2>/dev/null)
 SHELL_FILES := $(shell find . -name "*.sh" -not -path "*/node_modules/*" -not -path "*/coverage/*")
 
-.PHONY: test test-unit lint coverage bash-coverage push-bash-coverage install-hooks ledger-symlink help changelog validate-plan sync-agent-guidance check-agent-guidance
+.PHONY: test test-unit lint bash-coverage push-bash-coverage install-hooks ledger-symlink help changelog validate-plan sync-agent-guidance check-agent-guidance
 
 help:
 	@printf "Available targets:\n"
 	@printf "  make test              Run all BATS tests\n"
 	@printf "  make test-unit         Run unit tests only\n"
 	@printf "  make lint              Check bash/zsh syntax + ShellCheck all .sh files\n"
-	@printf "  make coverage          Run kcov coverage gate (requires kcov; CI-enforced)\n"
 	@printf "  make bash-coverage     Measure bash line coverage via PS4 xtrace tracer\n"
 	@printf "  make push-bash-coverage  Run bash-coverage and push badge JSON to coverage-data branch\n"
 	@printf "  make install-hooks     Install pre-commit and pre-push hooks (run once per checkout)\n"
@@ -36,13 +34,6 @@ ifndef BATS
 	$(error bats not found. Install: brew install bats-core (macOS) or sudo apt-get install bats (Linux))
 endif
 	bats --recursive tests/
-
-coverage:
-ifeq ($(KCOV),)
-	@printf "kcov not found — skipping coverage (CI enforces the gate). Install: brew install kcov\n"
-else
-	@bash scripts/run-coverage.sh
-endif
 
 bash-coverage:
 ifndef BATS

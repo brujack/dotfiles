@@ -86,3 +86,15 @@ teardown() {
   run bash "${REPO_ROOT}/scripts/sync-agent-guidance.sh" sync
   [ "$status" -eq 1 ]
 }
+
+@test "sync-agent-guidance.sh -h prints usage and exits 0" {
+  run bash "${REPO_ROOT}/scripts/sync-agent-guidance.sh" -h
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+}
+
+@test "sync-agent-guidance.sh --help prints the same usage as -h" {
+  run bash "${REPO_ROOT}/scripts/sync-agent-guidance.sh" --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+}

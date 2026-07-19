@@ -43,6 +43,15 @@ _bootstrap_mac_install_bash5() {
 }
 
 bootstrap_mac_main() {
+  if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+    cat <<'USAGE'
+Usage: bootstrap_mac.sh [-h|--help]
+
+Run once on a fresh Mac before setup_env.sh. Installs Homebrew and
+bash 5 — the only two prerequisites for setup_env.sh.
+USAGE
+    return 0
+  fi
   _bootstrap_check_macos || return 1
   _bootstrap_mac_install_homebrew || { printf "[ERROR] Homebrew installation failed.\n" >&2; return 1; }
   _bootstrap_mac_setup_brew_path
@@ -53,5 +62,5 @@ bootstrap_mac_main() {
 # Allow sourcing for unit testing without executing
 [[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0
 
-bootstrap_mac_main
+bootstrap_mac_main "$@"
 exit $?
