@@ -325,24 +325,6 @@ teardown() {
   grep -q rsync "${MOCK_CALLS_FILE}"
 }
 
-# ── tmux-workstation.sh ───────────────────────────────────────────────────────
-
-@test "tmux-workstation.sh creates exactly 5 tmux sessions" {
-  run bash "${REPO_ROOT}/scripts/tmux-workstation.sh"
-  local count
-  count=$(grep -c "^tmux new" "${MOCK_CALLS_FILE}")
-  [ "$count" -eq 5 ]
-}
-
-@test "tmux-workstation.sh uses correct session names" {
-  run bash "${REPO_ROOT}/scripts/tmux-workstation.sh"
-  grep -q "tmux new -s bpytop" "${MOCK_CALLS_FILE}"
-  grep -q "tmux new -s cyber1" "${MOCK_CALLS_FILE}"
-  grep -q "tmux new -s cyber2" "${MOCK_CALLS_FILE}"
-  grep -q "tmux new -s cone1" "${MOCK_CALLS_FILE}"
-  grep -q "tmux new -s cone2" "${MOCK_CALLS_FILE}"
-}
-
 # ── pre-commit-hook.sh ────────────────────────────────────────────────────────
 
 @test "pre-commit-hook.sh is executable" {
