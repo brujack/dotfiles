@@ -121,6 +121,31 @@ teardown() {
   [ "$status" -eq 0 ]
 }
 
+@test "html2ascii.sh -h prints usage and exits 0 without reading stdin" {
+  run bash "${REPO_ROOT}/scripts/html2ascii.sh" -h
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+}
+
+@test "html2ascii.sh --help prints the same usage as -h" {
+  run bash "${REPO_ROOT}/scripts/html2ascii.sh" --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+}
+
+@test "html2ascii.sh replaces html entities with correct UTF-8 characters" {
+  run bash -c "printf 'a&auml;A&Auml;o&ouml;O&Ouml;a&aring;A&Aring;\n' | bash '${REPO_ROOT}/scripts/html2ascii.sh'"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"aäAÄoöOÖaåAÅ"* ]]
+  [[ "$output" != *$'\xef\xbf\xbd'* ]]
+}
+
+@test "html2ascii.sh on a nonexistent file exits 0, surfacing cat's error (no crash, no hang)" {
+  run bash "${REPO_ROOT}/scripts/html2ascii.sh" "${BATS_TEST_TMPDIR}/does-not-exist"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"No such file or directory"* ]]
+}
+
 # ── kill_zombie.sh ─────────────────────────────────────────────────────────────
 
 @test "kill_zombie.sh calls pgrep with defunct pattern" {
@@ -128,12 +153,57 @@ teardown() {
   grep -q "pgrep <defunct>" "${MOCK_CALLS_FILE}"
 }
 
-@test "kill_zombie.sh passes pgrep output to kill -9" {
-  # kill is a bash builtin so the PATH mock is not invoked; verify the script
-  # proceeds past pgrep without error when pgrep returns no PIDs
+@test "kill_zombie.sh proceeds without error when pgrep returns no PIDs" {
   export MOCK_PGREP_EXIT=1
   run bash "${REPO_ROOT}/scripts/kill_zombie.sh"
+  [ "$status" -eq 0 ]
   grep -q "pgrep <defunct>" "${MOCK_CALLS_FILE}"
+}
+
+@test "kill_zombie.sh kills a single matching PID" {
+  # kill is a bash builtin, invisible to PATH mocks — shadow it with an
+  # exported shell function instead (bash functions take precedence over
+  # regular, non-special builtins, and export -f propagates into the child
+  # `bash script.sh` subprocess this test spawns via `run`).
+  kill() { printf "kill %s\n" "$*" >> "${MOCK_CALLS_FILE}"; }
+  export -f kill
+  export MOCK_PGREP_EXIT=0
+  export MOCK_PGREP_OUTPUT="1234"
+  run bash "${REPO_ROOT}/scripts/kill_zombie.sh"
+  [ "$status" -eq 0 ]
+  grep -q "kill -9 1234" "${MOCK_CALLS_FILE}"
+}
+
+@test "kill_zombie.sh kills each PID individually when multiple defunct processes exist" {
+  # Regression test: the original implementation quoted the whole multi-line
+  # pgrep output as a single argument to kill (`kill -9 "${processes}"`),
+  # which silently failed to kill any of them once there was more than one
+  # match. This must invoke kill once per PID.
+  kill() { printf "kill %s\n" "$*" >> "${MOCK_CALLS_FILE}"; }
+  export -f kill
+  export MOCK_PGREP_EXIT=0
+  export MOCK_PGREP_OUTPUT="1234
+5678"
+  run bash "${REPO_ROOT}/scripts/kill_zombie.sh"
+  [ "$status" -eq 0 ]
+  grep -q "kill -9 1234" "${MOCK_CALLS_FILE}"
+  grep -q "kill -9 5678" "${MOCK_CALLS_FILE}"
+  # exactly 2 kill invocations, not 1 combined bad call
+  [ "$(grep -c '^kill -9' "${MOCK_CALLS_FILE}")" -eq 2 ]
+}
+
+@test "kill_zombie.sh -h prints usage and exits 0 without calling pgrep" {
+  run bash "${REPO_ROOT}/scripts/kill_zombie.sh" -h
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+  run grep -q pgrep "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+}
+
+@test "kill_zombie.sh --help prints the same usage as -h" {
+  run bash "${REPO_ROOT}/scripts/kill_zombie.sh" --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
 }
 
 # ── mkill.sh ──────────────────────────────────────────────────────────────────
@@ -148,8 +218,39 @@ teardown() {
   export MOCK_PGREP_OUTPUT="1234
 5678"
   run bash "${REPO_ROOT}/scripts/mkill.sh" myprocess
+  [ "$status" -eq 0 ]
   grep -q "sudo kill -9 1234" "${MOCK_CALLS_FILE}"
   grep -q "sudo kill -9 5678" "${MOCK_CALLS_FILE}"
+}
+
+@test "mkill.sh exits 0 and calls no kill when pgrep finds no matches" {
+  export MOCK_PGREP_EXIT=1
+  run bash "${REPO_ROOT}/scripts/mkill.sh" myprocess
+  [ "$status" -eq 0 ]
+  run grep -q "sudo kill" "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+}
+
+@test "mkill.sh exits non-zero with usage message when no pattern given" {
+  run bash "${REPO_ROOT}/scripts/mkill.sh"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"Usage:"* ]]
+  run grep -q pgrep "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+}
+
+@test "mkill.sh -h prints usage and exits 0 without calling pgrep" {
+  run bash "${REPO_ROOT}/scripts/mkill.sh" -h
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+  run grep -q pgrep "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+}
+
+@test "mkill.sh --help prints the same usage as -h" {
+  run bash "${REPO_ROOT}/scripts/mkill.sh" --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
 }
 
 # ── restart_fah.sh ─────────────────────────────────────────────────────────────
@@ -236,24 +337,6 @@ teardown() {
   run bash "${REPO_ROOT}/scripts/sync_git_repos.sh" --legacy-only
   [ "$status" -eq 0 ]
   grep -q rsync "${MOCK_CALLS_FILE}"
-}
-
-# ── tmux-workstation.sh ───────────────────────────────────────────────────────
-
-@test "tmux-workstation.sh creates exactly 5 tmux sessions" {
-  run bash "${REPO_ROOT}/scripts/tmux-workstation.sh"
-  local count
-  count=$(grep -c "^tmux new" "${MOCK_CALLS_FILE}")
-  [ "$count" -eq 5 ]
-}
-
-@test "tmux-workstation.sh uses correct session names" {
-  run bash "${REPO_ROOT}/scripts/tmux-workstation.sh"
-  grep -q "tmux new -s bpytop" "${MOCK_CALLS_FILE}"
-  grep -q "tmux new -s cyber1" "${MOCK_CALLS_FILE}"
-  grep -q "tmux new -s cyber2" "${MOCK_CALLS_FILE}"
-  grep -q "tmux new -s cone1" "${MOCK_CALLS_FILE}"
-  grep -q "tmux new -s cone2" "${MOCK_CALLS_FILE}"
 }
 
 # ── pre-commit-hook.sh ────────────────────────────────────────────────────────

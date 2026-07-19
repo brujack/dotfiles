@@ -1,6 +1,17 @@
 #!/usr/bin/env bash
 
-pattern="<defunct>"
-processes=$(pgrep "${pattern}")
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  cat <<'USAGE'
+Usage: kill_zombie.sh [-h|--help]
 
-kill -9 "${processes}"
+Finds every process matching "<defunct>" (zombie processes, via pgrep)
+and sends SIGKILL to each one individually.
+USAGE
+  exit 0
+fi
+
+pattern="<defunct>"
+
+for pid in $(pgrep "${pattern}"); do
+  kill -9 "${pid}"
+done
