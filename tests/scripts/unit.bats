@@ -39,6 +39,18 @@ teardown() {
   [[ "$output" == *"Total lines: 2"* ]]
 }
 
+@test "count_lines.sh -h prints usage and exits 0" {
+  run bash "${REPO_ROOT}/scripts/count_lines.sh" -h
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+}
+
+@test "count_lines.sh --help prints the same usage as -h" {
+  run bash "${REPO_ROOT}/scripts/count_lines.sh" --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+}
+
 # ── count_lines_git.sh ───────────────────────────────────────────────────────
 
 @test "count_lines_git.sh exits 1 and prints usage when no argument given" {
@@ -88,6 +100,18 @@ teardown() {
   run bash -c "unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; export PATH='${clean_path}'; bash '${REPO_ROOT}/scripts/count_lines_git.sh' '${tmpdir}' 'vendor'"
   [ "$status" -eq 0 ]
   [[ "$output" == *"Total lines: 2"* ]]
+}
+
+@test "count_lines_git.sh -h prints usage and exits 0" {
+  run bash "${REPO_ROOT}/scripts/count_lines_git.sh" -h
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+}
+
+@test "count_lines_git.sh --help prints the same usage as -h" {
+  run bash "${REPO_ROOT}/scripts/count_lines_git.sh" --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
 }
 
 # ── html2ascii.sh ─────────────────────────────────────────────────────────────
