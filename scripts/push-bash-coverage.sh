@@ -4,6 +4,17 @@
 #
 # Usage: bash scripts/push-bash-coverage.sh
 
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  cat <<'USAGE'
+Usage: push-bash-coverage.sh [-h|--help]
+
+Runs bash coverage measurement (scripts/run-bash-coverage.sh) and pushes
+the resulting coverage/bash.json badge to the coverage-data branch if it
+changed. Intended for scheduled use (e.g. cron at 2am).
+USAGE
+  exit 0
+fi
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BADGE_JSON="${REPO_ROOT}/coverage/bash.json"
 COVERAGE_WORKTREE="${REPO_ROOT}/.coverage-data-worktree"

@@ -595,3 +595,17 @@ teardown() {
   run bootstrap_linux_main
   [ "$status" -eq 1 ]
 }
+
+@test "push-bash-coverage.sh -h prints usage and exits 0 without running coverage" {
+  run bash "${REPO_ROOT}/scripts/push-bash-coverage.sh" -h
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+  run grep -q "run-bash-coverage" "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+}
+
+@test "push-bash-coverage.sh --help prints the same usage as -h" {
+  run bash "${REPO_ROOT}/scripts/push-bash-coverage.sh" --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+}
