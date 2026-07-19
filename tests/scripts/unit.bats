@@ -140,6 +140,12 @@ teardown() {
   [[ "$output" != *$'\xef\xbf\xbd'* ]]
 }
 
+@test "html2ascii.sh on a nonexistent file exits 0, surfacing cat's error (no crash, no hang)" {
+  run bash "${REPO_ROOT}/scripts/html2ascii.sh" "${BATS_TEST_TMPDIR}/does-not-exist"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"No such file or directory"* ]]
+}
+
 # ── kill_zombie.sh ─────────────────────────────────────────────────────────────
 
 @test "kill_zombie.sh calls pgrep with defunct pattern" {
@@ -215,6 +221,14 @@ teardown() {
   [ "$status" -eq 0 ]
   grep -q "sudo kill -9 1234" "${MOCK_CALLS_FILE}"
   grep -q "sudo kill -9 5678" "${MOCK_CALLS_FILE}"
+}
+
+@test "mkill.sh exits 0 and calls no kill when pgrep finds no matches" {
+  export MOCK_PGREP_EXIT=1
+  run bash "${REPO_ROOT}/scripts/mkill.sh" myprocess
+  [ "$status" -eq 0 ]
+  run grep -q "sudo kill" "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
 }
 
 @test "mkill.sh exits non-zero with usage message when no pattern given" {
