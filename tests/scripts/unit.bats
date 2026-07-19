@@ -273,6 +273,20 @@ teardown() {
   grep -q "sudo kill -9 4321" "${MOCK_CALLS_FILE}"
 }
 
+@test "restart_fah.sh -h prints usage and exits 0 without touching FAHClient" {
+  run bash "${REPO_ROOT}/scripts/restart_fah.sh" -h
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+  run grep -q FAHClient "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+}
+
+@test "restart_fah.sh --help prints the same usage as -h" {
+  run bash "${REPO_ROOT}/scripts/restart_fah.sh" --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+}
+
 # ── sync_git_repos.sh ─────────────────────────────────────────────────────────
 
 @test "sync_git_repos.sh with no arguments runs both legs (default mode)" {
