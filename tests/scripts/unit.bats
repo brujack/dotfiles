@@ -193,8 +193,31 @@ teardown() {
   export MOCK_PGREP_OUTPUT="1234
 5678"
   run bash "${REPO_ROOT}/scripts/mkill.sh" myprocess
+  [ "$status" -eq 0 ]
   grep -q "sudo kill -9 1234" "${MOCK_CALLS_FILE}"
   grep -q "sudo kill -9 5678" "${MOCK_CALLS_FILE}"
+}
+
+@test "mkill.sh exits non-zero with usage message when no pattern given" {
+  run bash "${REPO_ROOT}/scripts/mkill.sh"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"Usage:"* ]]
+  run grep -q pgrep "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+}
+
+@test "mkill.sh -h prints usage and exits 0 without calling pgrep" {
+  run bash "${REPO_ROOT}/scripts/mkill.sh" -h
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+  run grep -q pgrep "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+}
+
+@test "mkill.sh --help prints the same usage as -h" {
+  run bash "${REPO_ROOT}/scripts/mkill.sh" --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
 }
 
 # ── restart_fah.sh ─────────────────────────────────────────────────────────────
