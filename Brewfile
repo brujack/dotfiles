@@ -146,6 +146,7 @@ cask "carbon-copy-cloner"                    # [HAS_DEVTOOLS]
 cask "chatgpt"
 cask "claude"
 cask "claude-code@latest"                    # [HAS_DEVTOOLS]
+cask "codex"                                 # [HAS_DEVTOOLS]
 cask "cursor"                                # [HAS_DEVTOOLS]
 cask "cursor-cli"                            # [HAS_DEVTOOLS]
 cask "daisydisk"
