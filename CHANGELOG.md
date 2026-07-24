@@ -3,8 +3,6 @@
 
 ## Bug Fixes
 
-- remove duplicate powershell.md @-include
-
 - system OpenSSL for gem HTTPS + Linux test hermeticity (#171)
 
 - detect silent install failure in recreate_ruby (#173)
@@ -15,6 +13,10 @@
 
 - brace $0/$1/$2/$3 in sync-agent-guidance.sh (#179)
 
+- scripts/ cleanup — kill_zombie multi-PID bug, mkill/html2ascii modernize (#183)
+
+- remove dangling tw alias for deleted tmux-workstation.sh (#184)
+
 
 
 ## CI
@@ -24,24 +26,6 @@
 
 
 ## Documentation
-
-- bump test count floor to 806, note 810 tests as of 2026-06-25
-
-- update test count to 834 after state-ledger-integration PR #166
-
-- state-ledger integration — ADR-0014, test count 840, plan index
-
-- update CLAUDE.md — ledger wiring for all run_* functions, 848 tests
-
-- add PR #168 to superpowers plan index
-
-- add Claude Code weekly features digest 2026-06-29
-
-- add Anthropic weekly features digest 2026-06-29 (#169)
-
-- compact CLAUDE.md layout tree, drop 3 redundant rows
-
-- remove Installation Guards duplicate of shell.md
 
 - add July 2026 retro action items
 
@@ -71,21 +55,37 @@
 
 - add Anthropic weekly features digest 2026-07-13
 
+- ADR-0015 — continuous vulnerability monitoring of release SBOMs
+
+- add sync-git-repos design spec
+
+- fix sync-git-repos spec per review
+
+- fix contradictory legacy-rsync gate wording
+
+- fix sync-git-repos no-upstream + DRY hostname gate
+
+- add sync-git-repos implementation plan
+
+- mark sync-git-repos plan Done (PR dotfiles#182)
+
+- add scripts-dir-cleanup design spec
+
+- mark scripts-dir-cleanup Done (PR dotfiles#183)
+
+- update stale test count 927 -> 937
+
+- add scripts-world-class design spec
+
+- mark scripts-world-class Done (PR dotfiles#185)
+
+- add Anthropic weekly features digest 2026-07-20
+
+- add Claude Code weekly features digest 2026-07-20
+
 
 
 ## Features
-
-- dotfiles adds powershell.md language standard
-
-- add cargo-cyclonedx and cyclonedx-python (#165)
-
-- add advisory skill scan after claude plugin update
-
-- state-ledger CMDB integration (T5/T6/T7) (#166)
-
-- wire state-ledger writes into dotfiles update (#167)
-
-- wire state-ledger into setup/developer/recreate_venv runs (#168)
 
 - add recreate-ruby entry point to setup_env.sh (#172)
 
@@ -93,10 +93,18 @@
 
 - implement sync-agent-guidance / check-agent-guidance targets (#178)
 
+- replace rsync-only sync_git_repos.sh with git-native + legacy split (#182)
+
+- scripts/ world-class pass — -h/--help sweep, modernize, delete dead coverage tool (#185)
+
+- add -h/--help to run-bash-coverage.sh and .osx.sh (#186)
+
+- add codex cask to Brewfile (#188)
+
 
 
 ## Testing
 
-- fix opentofu tests failing when tofu installed on macOS
+- add BATS coverage for git hooks, fix pre-push [ ] and bash-tracer.sh eval (#187)
 
 
