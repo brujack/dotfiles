@@ -113,8 +113,9 @@ Master status index for all specs and implementation plans in this directory.
 
 Ideas approved for future specs, in no particular order:
 
-| Feature | Notes |
-| ------- | ----- |
+| Feature              | Notes                                                                                                                                           |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Maintainability pass | Once the ai-config maintainability gate (2026-07-24 spec) ships, run a worldclass pass in this repo against its thresholds — not scheduled yet. |
 
 ---
 
