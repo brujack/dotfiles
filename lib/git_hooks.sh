@@ -13,4 +13,12 @@ else
   readonly HOOK_EXPECTED_REPOS=()
 fi
 
+_git_hooks_discover() {
+  local _dir
+  for _dir in "${PERSONAL_GITREPOS}"/*/; do
+    [[ -d "${_dir}.git" ]] || continue
+    printf '%s\n' "${_dir}"
+  done
+}
+
 [[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0
