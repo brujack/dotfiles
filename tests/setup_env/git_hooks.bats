@@ -386,3 +386,103 @@ setup() {
   [ "$status" -eq 0 ]
   [[ "$output" != *"partial-clone"* ]]
 }
+
+@test "_git_hooks_digest changes when a single hook file is renamed with identical content (filename folding)" {
+  local _repo="${PERSONAL_GITREPOS}/repo-with-target"
+  local _hooks_dir="${_repo}/.git/hooks"
+  # Deliberately a single file: with two or more files a rename also
+  # perturbs sort order, so the digest would change for that reason alone
+  # and the test would pass without the filename actually being folded
+  # into the hashed material.
+  printf '#!/usr/bin/env bash\necho same\n' > "${_hooks_dir}/pre-commit"
+  chmod +x "${_hooks_dir}/pre-commit"
+
+  run _git_hooks_digest "${_repo}/"
+  local _before="$output"
+
+  mv "${_hooks_dir}/pre-commit" "${_hooks_dir}/pre-push"
+  run _git_hooks_digest "${_repo}/"
+  local _after="$output"
+
+  [ "${_before}" != "${_after}" ]
+}
+
+@test "_git_hooks_digest ignores a broken symlink and a subdirectory in the hooks directory" {
+  local _repo="${PERSONAL_GITREPOS}/repo-with-target"
+  local _hooks_dir="${_repo}/.git/hooks"
+  printf '#!/usr/bin/env bash\necho normal\n' > "${_hooks_dir}/pre-commit"
+  chmod +x "${_hooks_dir}/pre-commit"
+
+  run _git_hooks_digest "${_repo}/"
+  local _clean_digest="$output"
+
+  ln -s /nonexistent "${_hooks_dir}/broken"
+  mkdir -p "${_hooks_dir}/subdir"
+  printf 'noise' > "${_hooks_dir}/subdir/noise.txt"
+
+  run _git_hooks_digest "${_repo}/"
+  local _with_noise_digest="$output"
+
+  [ "${_clean_digest}" = "${_with_noise_digest}" ]
+}
+
+@test "_git_hooks_digest returns the missing-hooks marker for a plain non-git directory (via the non-repo guard)" {
+  local _plain="${TESTDIR}/plain-non-git-dir"
+  mkdir -p "${_plain}"
+
+  # Guard the guard: if an ancestor git repo exists above this fixture,
+  # rev-parse would succeed and this test would exercise the wrong guard
+  # (the "! -d hooks dir" guard, already covered by test 11) instead of
+  # the "-z hooks path" (not-a-repo-at-all) guard this test targets.
+  run git -C "${_plain}" rev-parse --git-dir
+  [ "$status" -ne 0 ]
+
+  run _git_hooks_digest "${_plain}/"
+  [ "$status" -eq 0 ]
+  [ "$output" = "no-hooks-dir" ]
+}
+
+@test "_git_hooks_digest follows an absolute --git-path (the worktree shape) via the absolute-path case arm" {
+  local _wt_source="${TESTDIR}/abs-path-source"
+  mkdir -p "${_wt_source}"
+  git init -q "${_wt_source}"
+  git -C "${_wt_source}" commit -q --allow-empty -m init
+  local _wt="${TESTDIR}/abs-path-worktree"
+  git -C "${_wt_source}" worktree add -q -b abs-path-branch "${_wt}"
+
+  # Confirm the premise this test relies on: a worktree's --git-path is
+  # absolute (hooks live in the shared common dir, unreachable via a
+  # relative join) — this is now the only route to the `/*)` arm, since
+  # Major 2's GIT_DIR fix neutralizes the leaked-GIT_DIR route to an
+  # absolute path.
+  run git -C "${_wt}" rev-parse --git-path hooks
+  [[ "$output" == /* ]]
+
+  printf '#!/usr/bin/env bash\necho wt\n' > "${_wt_source}/.git/hooks/pre-commit"
+  chmod +x "${_wt_source}/.git/hooks/pre-commit"
+
+  run _git_hooks_digest "${_wt}/"
+  [ "$status" -eq 0 ]
+  local _wt_digest="$output"
+  [[ "${_wt_digest}" =~ ^[0-9a-f]{64}$ ]]
+
+  # Same digest as reading the shared hooks dir directly through the
+  # source repo — proving the absolute path was followed correctly
+  # rather than mis-joined into a nonexistent relative path (which would
+  # have produced "no-hooks-dir", not a matching real digest).
+  run _git_hooks_digest "${_wt_source}/"
+  [ "$output" = "${_wt_digest}" ]
+}
+
+@test "_git_hooks_digest returns a valid non-marker digest for an existing but empty hooks directory" {
+  local _repo="${PERSONAL_GITREPOS}/repo-with-target"
+  # This is exactly the state after someone clears sample hooks
+  # (rm .git/hooks/*.sample) — precisely when auto-install most needs to
+  # fire, so it must not be confused with "no hooks directory at all".
+  rm -f "${_repo}/.git/hooks"/*
+
+  run _git_hooks_digest "${_repo}/"
+  [ "$status" -eq 0 ]
+  [[ "$output" =~ ^[0-9a-f]{64}$ ]]
+  [ "$output" != "no-hooks-dir" ]
+}
