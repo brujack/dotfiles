@@ -143,10 +143,52 @@ whole script on any non-zero return, so propagating there would let a broken Mak
 unrelated repo abort a full machine bootstrap. Fail-closed applies to `run_update`, where
 the rc feeds the summary and is proportionate.
 
-A repo with a Makefile but no `^install-hooks:` target is a **gap**, not a failure: it
-emits `log_warn` and is counted separately. It does not affect the return code. Gaps are
-reported rather than silently skipped so that a repo missing hook infrastructure stays
-visible.
+**What "fail-closed" actually buys, stated plainly:** `run_update`'s final statement is
+`_update_summary`, so `run_update` returns that function's rc, not the sections'. The
+sweep's 1 therefore does not reach the shell's exit status at either call site. What it
+does produce is a `[FAIL]` row in the printed summary and a `_failure_stage` entry in the
+state-ledger record — the same treatment every other update section gets. That consistency
+is the reason to leave it there. Giving the rc teeth would mean changing `run_update` for
+all 17 existing sections, which is its own spec.
+
+### Gaps
+
+A repo is a **gap** when it should carry hooks and does not — reported, never fatal, never
+affecting the return code. Two distinct conditions produce one:
+
+1. **Target missing or incomplete** — the repo has no `^install-hooks:` target, or the
+   target ran cleanly but the repo's hooks directory still lacks a mandated hook.
+2. **Infrastructure missing** — the repo is on the expected-repos list (below) but has no
+   Makefile at all.
+
+Condition 1's second half is the important one and is a **post-condition, not an exit
+code**. `make install-hooks` exiting 0 means the target ran, not that the repo's hooks are
+correct, and those two already diverge: `state-ledger`'s target installs only `pre-push`
+(its `pre-commit` comes from `ledger init`, and the repo has no `scripts/commit-msg` at
+all), so an exit-code-only check reports it green forever while the conventional-commits
+gate stays absent on every box. After each `make`, the sweep asserts the mandated set
+`{pre-commit, pre-push, commit-msg}` exists and is executable in the repo's hooks
+directory, and counts a repo that ran cleanly but is still incomplete as a gap. The
+before/after digest already reads that directory twice, so this costs one comparison.
+
+#### The expected-repos list
+
+Condition 2 needs a list, because no filesystem signal distinguishes a repo that _should_
+have hooks from one that legitimately has none. Measured on the Mac Studio 2026-07-28 —
+`ai-devops` and `etch-config` (both real gaps) are byte-for-byte indistinguishable from
+`homepage`, `kubernetes`, `pfsense_config`, `python-learning`, `truenas-config`, and `ai`
+on every candidate signal: no Makefile, no `.github/workflows/`, no hook sources in
+`scripts/`. CI presence was the strongest candidate discriminator and it fails.
+
+So a short explicit list of repos expected to carry hooks lives in `config/`, alongside
+`profiles.sh`. Its scope is **reporting only**:
+
+- It decides what counts as a gap.
+- It does **not** decide what gets installed. Installation stays pure discovery, so a new
+  repo with an `install-hooks` target gets hooks on the next sweep with no list edit.
+
+That split confines the list's drift risk to the report. A stale list means a gap goes
+unreported — the status quo today — not that a repo goes uninstalled.
 
 ### Reporting
 
@@ -158,15 +200,33 @@ Both edits are mandatory and coupled — `CLAUDE.md` records that adding a
 `_update_record_start/end` pair without the matching `_UPDATE_SECTION_ORDER` entry means
 the section is tracked internally but never printed.
 
-The summary line reports **checked**, **updated**, gap, and failure counts, naming the
-repos that were actually updated — e.g. `6 checked, 2 updated (ai-config, etch-cli),
-1 gap`.
+The summary line reports **checked**, **updated**, gap, and failure counts, naming both the
+repos that were actually updated and the repos counted as gaps — e.g.
+`6 checked, 2 updated (ai-config, etch-cli), 3 gaps (state-ledger: commit-msg; ai-devops,
+etch-config: no Makefile)`. Naming the gaps matters more than counting them: a bare
+`3 gaps` is the same unactionable line in a different costume.
 
 "Updated" is computed from a digest of the repo's hooks directory taken immediately before
 and after its `make` call. A count of what was _installed_ is signal-free by construction:
 because the sweep installs unconditionally, `installed: 6` reads identically whether all
 six were already current or all six were 11 days stale. A weekly status line nobody can act
 on is the failure mode this work exists to end.
+
+**The digest must be over file contents, with symlinks resolved — never metadata.** This
+is not a stylistic preference. Four of the six recipes are `cp`, which rewrites the
+destination unconditionally; the other two are `ln -sf`, which unlinks and recreates,
+giving a fresh inode. Measured on this machine by running `make install-hooks` twice in
+`ai-config`:
+
+```
+content-hash (shasum -a 256):   IDENTICAL across runs
+stat metadata (%N %m %z):       DIFFERS
+```
+
+A `stat`-based digest — the natural implementation, and what "digest of the directory"
+would otherwise be read as — therefore reports every `cp` repo as updated every single
+week on a perfectly current box. That is precisely the signal-free line this section
+exists to replace, with more machinery behind it.
 
 This does not reopen the diff-first question below. Diff-first asks whether the sweep can
 _decide what to run_ without per-repo install-style knowledge — it cannot. Digesting the
@@ -260,11 +320,14 @@ Fixture: a temp `PERSONAL_GITREPOS` tree containing
 4. a plain directory with no `.git` at all,
 5. a repo whose `make install-hooks` exits 1,
 6. a directory containing an empty `.git/` directory but which is not a valid repo — a
-   partial or interrupted clone.
+   partial or interrupted clone,
+7. a repo whose target exits 0 but installs only `pre-push` — the `state-ledger` shape,
+8. a repo with `.git/` and no Makefile, **on** the expected-repos list,
+9. a repo with `.git/` and no Makefile, **off** the expected-repos list.
 
 Required assertions:
 
-- **State** — exactly repos 1 and 5 are invoked; 2, 3, 4, 6 are not.
+- **State** — exactly repos 1, 5, and 7 are invoked; 2, 3, 4, 6, 8, 9 are not.
 - **Partial-clone guard** — repo 6 passes `[[ -d .git ]]` and must still be rejected by
   the `rev-parse --git-dir` filter. This is the test for the measured
   `HOOKS_DIR`-expands-empty hazard and cannot be covered by fixture 4.
@@ -283,6 +346,23 @@ Required assertions:
   as checked-not-updated; a repo whose hooks change is named in the updated list. Both
   branches required — a digest that never fires reports `0 updated` forever and looks
   identical to a working one.
+- **Digest is content-only** — a fixture repo installing via a real `cp`-style recipe,
+  run twice with unchanged sources, must report checked-not-updated. This test must run
+  against a real recipe, not the `make` mock: a mock that never touches the filesystem
+  passes the assertion for the wrong reason, which is exactly the mock-fidelity failure
+  `tdd.md` section E describes. The `cp` rewrites mtime, so a metadata digest fails this
+  test and a content digest passes it — that is the whole point of the test.
+- **`ln -sf` unchanged branch** — for a symlink-style repo, re-running `make` can never
+  produce a delta, so that branch must be driven by **mutating the source file** and
+  asserting the digest then reports updated. Testing it by re-running `make` asserts
+  nothing; it is unfalsifiable by construction.
+- **Post-condition** — a fixture repo whose `install-hooks` target exits 0 but installs
+  only a subset of `{pre-commit, pre-push, commit-msg}` is counted as a **gap**, not an
+  OK. This is the `state-ledger` shape and is the test that separates "the target ran"
+  from "the hooks are correct".
+- **Expected-repos list** — a repo on the list with no Makefile is reported as a gap; a
+  repo off the list with no Makefile is silent. Both branches required, or the list is
+  untested in the direction that motivated it.
 - **Dry run** — with `DRY_RUN=1`, no `make` invocation is recorded, the reported repo list
   is unchanged, and the updated count is `n/a` rather than `0`.
 
@@ -304,9 +384,16 @@ were checked and neither holds:
    `state-ledger`, and `ai-config` matters when `make install-hooks` is invoked _inside a
    linked worktree_, where the literal `.git/hooks` path does not exist. This sweep never
    invokes it inside a worktree, by design. The port remains correct work — `--git-path`
-   is the only primitive that honors `core.hooksPath`, which this repo itself sets at
-   `scripts/push-bash-coverage.sh:55`, and `--git-common-dir` does not — but it does not
-   gate this design.
+   is the only primitive that honors `core.hooksPath`, and `--git-common-dir` does not —
+   but it does not gate this design.
+
+   The backlog row cited `scripts/push-bash-coverage.sh:55` as evidence this repo sets
+   `core.hooksPath`. That citation is wrong: line 55 is a transient
+   `git -c core.hooksPath=/dev/null` flag scoped to a single push into the coverage
+   worktree, and it never affects `make install-hooks`. The claim survives on better
+   evidence — `git -C ~/git-repos/personal/dotfiles config --get core.hooksPath` returns
+   a real persistent value.
+
 2. **ai-config PR B is not merged.** It is uncommitted work on the
    `feat/hook-installation-integrity` branch in the `ai-config-hook-integrity` worktree.
    No PR is open and no remote branch exists. `ai-config/Makefile:20` still uses the
@@ -325,9 +412,26 @@ were checked and neither holds:
   `rev-parse --git-dir`") — belongs to each repo's own SDLC.
 - **Normalizing the four `cp` repos to `ln -sf`** — see the Goal-Fit lens below. This is
   the correct root-cause fix for the _stale_ class and reduces its drift window to zero,
-  but it is four repos × their own SDLC and it fixes none of the _never-installed_ class,
-  which is 3 of the 4 live problems measured on the Mac Studio. Filed as its own backlog
-  item; the two mechanisms are complementary, not alternatives.
+  but it is four repos × their own SDLC and it fixes none of the _never-installed_ class.
+  Filed as its own backlog item; the two mechanisms are complementary, not alternatives.
+- **Authoring a `scripts/commit-msg` for `state-ledger`** — the sweep can only install
+  hooks a repo has sources for, and `state-ledger` has none for `commit-msg`. Its own
+  repo's work; the sweep reports it as a gap until then.
+
+### Corrected live tally
+
+Round 2 of the review found the round-1 count wrong. Of the four live hook problems on the
+Mac Studio, the sweep uniquely fixes **two**:
+
+| Problem                                            | Sweep | Symlink normalization |
+| -------------------------------------------------- | ----- | --------------------- |
+| `state-ledger` `pre-push` missing                  | yes   | no                    |
+| `brucejacksonconsulting-site` `pre-commit` missing | yes   | no                    |
+| `etch-cli` `pre-commit` stale                      | yes   | yes                   |
+| `state-ledger` `commit-msg` missing                | no    | no — no source exists |
+
+Plus every future fresh clone and new box, which is the case neither normalization nor a
+one-time backfill covers.
 
 ## Multi-Lens Review
 
@@ -446,3 +550,85 @@ Idempotency as a condition to re-run once those targets land.
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+## Multi-Lens Review — Round 2
+
+All three round-1 dispositions were **Addressed**, so all three lenses re-ran against the
+revised text at commit `2ea0e59`. Two lenses independently found the same two defects,
+both of which were then settled empirically rather than by argument.
+
+### Goal-Fit (round 2)
+
+Finding: Gap detection is target-_presence_-based, not hook-_presence_-based, so a repo
+whose target covers fewer hooks than `repo-structure.md` mandates reports clean forever.
+`state-ledger` is a live instance: `scripts/` holds only `pre-push`, there is no
+`commit-msg` source, and the target copies one file — so the sweep would report it updated
+while the conventional-commits gate stays absent on every box. This also corrects round
+1's own arithmetic: the Goal-Fit disposition counted `state-ledger commit-msg` among the
+three never-installed problems justifying the sweep. The sweep cannot fix it. The real
+count is 2 of 4, and one of those two (`etch-cli pre-commit`, stale) is fixed by symlink
+normalization as well.
+
+Verified: `ls state-ledger/scripts/` → `check_vcs_urls.py ledger.py pre-push`. The target
+at `state-ledger/Makefile:13-16` copies `pre-push` only.
+
+Assumption: That the local hooks contain gates with no CI equivalent — i.e. that a stale
+hook lets a defect escape rather than merely deferring the same check to the PR gate.
+Every measured instance is a stale _hook_, not a shipped _defect_. Settle by diffing each
+repo's `scripts/pre-push` + `scripts/commit-msg` check list against its CI job list,
+starting with `ai-config`'s `_dod_gate` block and the PR #118 role-model guard. **Open** —
+not checked this session.
+
+Disposition: **Addressed.** Gap detection is now a post-condition asserting the mandated
+`{pre-commit, pre-push, commit-msg}` set exists and is executable after each `make`, with
+"ran cleanly but incomplete" counted as a gap. The corrected 2-of-4 count is recorded in
+Out of scope. The CI-equivalence assumption is carried forward unresolved.
+
+### Ergonomics (round 2)
+
+Finding: (1) The digest is unspecified as to content-vs-metadata, and a metadata digest
+reports every `cp` repo as updated weekly — reintroducing the exact signal-free line it
+was added to fix. (2) The discovery filter drops no-Makefile repos _before_ the gap check,
+so `ai-devops` and `etch-config` — the two repos the spec names as gaps — are silently
+skipped and can never be reported. The claim "a repo missing hook infrastructure stays
+visible" was false as designed.
+
+Verified: two `make install-hooks` runs in `ai-config` gave identical content hashes and
+differing `stat` metadata. And no filesystem signal separates the two real gap repos from
+the six legitimate no-hook repos — Makefile, `.github/workflows/`, and hook sources in
+`scripts/` are all absent in every one of the eight.
+
+Assumption: That the weekly `-t update` on other boxes is a bare `_run_all` invocation and
+not a flag-scoped one (`--brew-only`, `--pip-only`). The sweep lives inside the `_run_all`
+block, so on a box whose habit is scoped updates the trigger never fires. Settle with
+`grep -c 'git-repos' ~/.dotfiles-update.log` plus the dates of those lines per box — the
+`git-repos` section only prints under `_run_all`. Checked on the Mac Studio: present in
+the most recent run, 7 occurrences total in the log. **Open** for the other boxes.
+
+Disposition: **Addressed.** The digest is now specified as content-only with symlinks
+resolved, with the measurement quoted inline and two dedicated tests (one against a real
+`cp` recipe rather than the mock; one driving the `ln -sf` branch by mutating the source).
+The gap definition is restructured around an expected-repos list scoped to reporting only.
+Both `_run_all` assumptions are carried forward unresolved and are the same underlying
+question as round 1's cadence assumption.
+
+### Risk (round 2)
+
+Finding: Converged with Goal-Fit — the success criterion is "the target exited 0", not
+"this repo's hooks are correct", and a weekly green line on an incomplete repo is worse
+than today's silence because it terminates the search. Two lesser points: `run_update`
+returns `_update_summary`'s rc, so fail-closed reaches no exit status at either call site;
+and the `core.hooksPath` citation overstated a transient `git -c` flag.
+
+Verified: `run_update`'s final statement is `_update_summary`. And
+`git config --get core.hooksPath` in `dotfiles` does return a persistent value — so the
+claim holds, but `push-bash-coverage.sh:55` was the wrong evidence for it.
+
+Assumption: That the digest can distinguish current from stale at all — settled by the
+two-run experiment above, which is why the digest is now specified as content-only.
+
+Disposition: **Addressed.** Post-condition folded into the Gaps section (same fix as
+Goal-Fit). The rc-has-no-teeth point is now stated plainly in Fail-closed, with the
+decision to leave it: the `[FAIL]` row and the ledger `_failure_stage` entry are the real
+signal, and giving the rc teeth would mean changing `run_update` for all 17 existing
+sections — its own spec. The `core.hooksPath` citation is corrected in place.
