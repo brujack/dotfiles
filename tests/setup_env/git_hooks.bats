@@ -96,7 +96,7 @@ setup() {
   [[ "$output" != *"repo-no-target"* ]]
 }
 
-@test "_git_hooks_discover excludes repo-listed-no-makefile and repo-unlisted-no-makefile" {
+@test "_git_hooks_discover excludes ai-devops (listed, no Makefile) and repo-unlisted-no-makefile" {
   run _git_hooks_discover
   [ "$status" -eq 0 ]
   [[ "$output" != *"ai-devops"* ]]

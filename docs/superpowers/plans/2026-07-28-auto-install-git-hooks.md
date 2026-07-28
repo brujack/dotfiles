@@ -288,7 +288,7 @@ role: executor
 model: sonnet
 tdd: required
 acceptance:
-  - cmd: bats tests/setup_env/workflows.bats
+  - cmd: bats tests/setup_env/workflows.bats tests/setup_env/git_hooks.bats
     exit_code: 0
   - cmd: make test
     exit_code: 0
@@ -296,11 +296,13 @@ max_retries: 3
 files_touched:
   - setup_env.sh
   - lib/workflows.sh
+  - lib/git_hooks.sh
   - tests/setup_env/workflows.bats
+  - tests/setup_env/git_hooks.bats
 depends_on: [4]
 ```
 
-**Files:** `setup_env.sh`, `lib/workflows.sh`, `tests/setup_env/workflows.bats`.
+**Files:** `setup_env.sh`, `lib/workflows.sh`, `lib/git_hooks.sh`, `tests/setup_env/workflows.bats`, `tests/setup_env/git_hooks.bats`.
 
 Add `source "$(dirname "${BASH_SOURCE[0]}")/lib/git_hooks.sh"` to `setup_env.sh` after the `lib/legacy_rsync.sh` line (currently line 52).
 
@@ -312,8 +314,21 @@ In `run_setup_user()`, insert after `setup_claude_plugins` and before `_ledger_w
 
 **Do NOT use `|| return 1`.** `setup_env.sh:82` dispatches via `_run_or_exit run_setup_user`, whose body is `[[ ${_ec} -eq 0 ]] || exit "${_ec}"` — a non-zero return here aborts the entire script before `run_setup_or_developer` and `run_developer_or_ansible` ever run, letting a broken Makefile in an unrelated repo kill a full machine bootstrap. Propagating would also skip `_ledger_write_run_entry`, on exactly the runs worth recording.
 
+**Fix the double-sourcing collision this task creates** (raised by Task 1's spec review; latent until now, live from this task on). `config/hook_repos.sh` declares `readonly HOOK_EXPECTED_REPOS`. Once `setup_env.sh` sources `lib/git_hooks.sh`, the existing `tests/setup_env/git_hooks.bats` `setup()` — which calls `load_setup_env` and _then_ sources `lib/git_hooks.sh` explicitly — sources it twice, and every one of its 9 tests starts emitting `HOOK_EXPECTED_REPOS: readonly variable` on stderr. Exit codes stay 0, so this will not fail a gate; it just spews. Verified reproduction: `source lib/git_hooks.sh; source lib/git_hooks.sh`.
+
+Fix by guarding the source block in `lib/git_hooks.sh` so a second source is a no-op:
+
+```bash
+if [[ -z "${HOOK_EXPECTED_REPOS+x}" ]]; then
+  # ... existing if -f / source / else readonly fallback ...
+fi
+```
+
+Add `lib/git_hooks.sh` and `tests/setup_env/git_hooks.bats` to this task's `files_touched` when making that change. Do **not** instead delete the explicit source from the bats `setup()` — keeping it is what makes the bats file runnable standalone.
+
 **Tests:**
 
+- **sourcing `lib/git_hooks.sh` twice produces no stderr output and leaves `HOOK_EXPECTED_REPOS` intact** — assert on captured stderr being empty, not just on exit code, since the exit code is 0 either way and the test would pass vacuously
 - `run_setup_user` invokes `install_git_hooks_all_repos` (stub the function, assert a marker file)
 - **`run_setup_user` returns 0 when the sweep returns 1** — the dispatcher-hazard test
 - **`_ledger_write_run_entry` still runs when the sweep returns 1**
