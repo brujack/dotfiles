@@ -166,3 +166,130 @@ setup() {
   [ "$status" -eq 0 ]
   [ "$output" = "no-hooks-dir" ]
 }
+
+@test "_git_hooks_digest returns identical, non-marker digests across two calls with no change" {
+  local _repo="${PERSONAL_GITREPOS}/repo-with-target"
+  local _hooks_dir="${_repo}/.git/hooks"
+  printf '#!/usr/bin/env bash\necho one\n' > "${_hooks_dir}/pre-commit"
+  chmod +x "${_hooks_dir}/pre-commit"
+
+  run _git_hooks_digest "${_repo}/"
+  [ "$status" -eq 0 ]
+  local _first="$output"
+  [ "${_first}" != "no-hooks-dir" ]
+  [[ "${_first}" =~ ^[0-9a-f]{64}$ ]]
+
+  run _git_hooks_digest "${_repo}/"
+  [ "$status" -eq 0 ]
+  [ "$output" = "${_first}" ]
+}
+
+@test "_git_hooks_digest changes when a hook's content is mutated (load-bearing)" {
+  local _repo="${PERSONAL_GITREPOS}/repo-with-target"
+  local _hooks_dir="${_repo}/.git/hooks"
+  printf '#!/usr/bin/env bash\necho one\n' > "${_hooks_dir}/pre-commit"
+  chmod +x "${_hooks_dir}/pre-commit"
+
+  run _git_hooks_digest "${_repo}/"
+  local _before="$output"
+
+  printf '#!/usr/bin/env bash\necho two\n' > "${_hooks_dir}/pre-commit"
+  run _git_hooks_digest "${_repo}/"
+  local _after="$output"
+
+  [ "${_before}" != "${_after}" ]
+}
+
+@test "_git_hooks_digest changes when a hook file is added" {
+  local _repo="${PERSONAL_GITREPOS}/repo-with-target"
+  local _hooks_dir="${_repo}/.git/hooks"
+  printf '#!/usr/bin/env bash\necho one\n' > "${_hooks_dir}/pre-commit"
+  chmod +x "${_hooks_dir}/pre-commit"
+
+  run _git_hooks_digest "${_repo}/"
+  local _before="$output"
+
+  printf '#!/usr/bin/env bash\necho commit-msg\n' > "${_hooks_dir}/commit-msg"
+  chmod +x "${_hooks_dir}/commit-msg"
+  run _git_hooks_digest "${_repo}/"
+  local _after="$output"
+
+  [ "${_before}" != "${_after}" ]
+}
+
+@test "_git_hooks_digest changes when a hook file is removed" {
+  local _repo="${PERSONAL_GITREPOS}/repo-with-target"
+  local _hooks_dir="${_repo}/.git/hooks"
+  printf '#!/usr/bin/env bash\necho one\n' > "${_hooks_dir}/pre-commit"
+  chmod +x "${_hooks_dir}/pre-commit"
+  printf '#!/usr/bin/env bash\necho push\n' > "${_hooks_dir}/pre-push"
+  chmod +x "${_hooks_dir}/pre-push"
+
+  run _git_hooks_digest "${_repo}/"
+  local _before="$output"
+
+  rm -f "${_hooks_dir}/pre-push"
+  run _git_hooks_digest "${_repo}/"
+  local _after="$output"
+
+  [ "${_before}" != "${_after}" ]
+}
+
+@test "_git_hooks_digest of a symlinked hook reflects its target's content, not the link path" {
+  local _repo="${PERSONAL_GITREPOS}/repo-with-target"
+  local _hooks_dir="${_repo}/.git/hooks"
+  local _source="${TESTDIR}/hook-source.sh"
+  printf '#!/usr/bin/env bash\necho symlinked\n' > "${_source}"
+  ln -sf "${_source}" "${_hooks_dir}/pre-commit"
+
+  run _git_hooks_digest "${_repo}/"
+  local _linked_digest="$output"
+
+  # Mutate the symlink TARGET (never the link itself). A content-based
+  # digest must change; a path/metadata-based digest would not.
+  printf '#!/usr/bin/env bash\necho mutated\n' > "${_source}"
+  run _git_hooks_digest "${_repo}/"
+  local _after_target_mutate="$output"
+  [ "${_linked_digest}" != "${_after_target_mutate}" ]
+
+  # Restore the target, then replace the symlink with a REGULAR file
+  # holding the ORIGINAL bytes. The digest must equal the original
+  # symlinked digest, proving the hash is over the target's bytes, not
+  # over "is this a symlink" or the link's own path string.
+  printf '#!/usr/bin/env bash\necho symlinked\n' > "${_source}"
+  rm -f "${_hooks_dir}/pre-commit"
+  printf '#!/usr/bin/env bash\necho symlinked\n' > "${_hooks_dir}/pre-commit"
+  chmod +x "${_hooks_dir}/pre-commit"
+  run _git_hooks_digest "${_repo}/"
+  local _regular_digest="$output"
+
+  [ "${_linked_digest}" = "${_regular_digest}" ]
+}
+
+@test "_git_hooks_digest is unchanged when a real cp rewrites a hook with identical content" {
+  local _repo="${PERSONAL_GITREPOS}/repo-with-target"
+  local _hooks_dir="${_repo}/.git/hooks"
+  local _source="${TESTDIR}/identical-hook.sh"
+  printf '#!/usr/bin/env bash\necho identical\n' > "${_source}"
+  cp "${_source}" "${_hooks_dir}/pre-commit"
+  chmod +x "${_hooks_dir}/pre-commit"
+
+  run _git_hooks_digest "${_repo}/"
+  local _before="$output"
+
+  local _mtime_before
+  _mtime_before=$(stat -f '%m' "${_hooks_dir}/pre-commit" 2>/dev/null || stat -c '%Y' "${_hooks_dir}/pre-commit")
+  sleep 1
+  cp "${_source}" "${_hooks_dir}/pre-commit"
+  local _mtime_after
+  _mtime_after=$(stat -f '%m' "${_hooks_dir}/pre-commit" 2>/dev/null || stat -c '%Y' "${_hooks_dir}/pre-commit")
+
+  # Guard the guard: prove cp genuinely rewrote mtime, so a pass below isn't
+  # vacuous because nothing actually changed on disk.
+  [ "${_mtime_before}" != "${_mtime_after}" ]
+
+  run _git_hooks_digest "${_repo}/"
+  local _after="$output"
+
+  [ "${_before}" = "${_after}" ]
+}
