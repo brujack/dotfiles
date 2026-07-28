@@ -33,6 +33,19 @@ setup() {
   # 3. worktree-dir — .git is a regular file (gitdir pointer), not a directory
   mkdir -p "${PERSONAL_GITREPOS}/worktree-dir"
   printf 'gitdir: /somewhere\n' > "${PERSONAL_GITREPOS}/worktree-dir/.git"
+
+  # 2. repo-no-target — real repo, Makefile present but no install-hooks target
+  mkdir -p "${PERSONAL_GITREPOS}/repo-no-target"
+  git init -q "${PERSONAL_GITREPOS}/repo-no-target"
+  printf 'lint:\n\t@true\n' > "${PERSONAL_GITREPOS}/repo-no-target/Makefile"
+
+  # 8. ai-devops — real repo, no Makefile, name IS on HOOK_EXPECTED_REPOS
+  mkdir -p "${PERSONAL_GITREPOS}/ai-devops"
+  git init -q "${PERSONAL_GITREPOS}/ai-devops"
+
+  # 9. repo-unlisted-no-makefile — real repo, no Makefile, name NOT on the list
+  mkdir -p "${PERSONAL_GITREPOS}/repo-unlisted-no-makefile"
+  git init -q "${PERSONAL_GITREPOS}/repo-unlisted-no-makefile"
 }
 
 @test "HOOK_EXPECTED_REPOS is populated after sourcing lib/git_hooks.sh" {
@@ -60,4 +73,17 @@ setup() {
   run _git_hooks_discover
   [ "$status" -eq 0 ]
   [[ "$output" != *"worktree-dir"* ]]
+}
+
+@test "_git_hooks_discover excludes repo-no-target (Makefile present, no install-hooks target)" {
+  run _git_hooks_discover
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"repo-no-target"* ]]
+}
+
+@test "_git_hooks_discover excludes repo-listed-no-makefile and repo-unlisted-no-makefile" {
+  run _git_hooks_discover
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"ai-devops"* ]]
+  [[ "$output" != *"repo-unlisted-no-makefile"* ]]
 }
