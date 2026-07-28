@@ -27,6 +27,13 @@ _git_hooks_discover() {
   done
 }
 
+# _git_hooks_digest prints a content-based digest of a repo's installed
+# hooks directory. Contract: exit 0 with a 64-hex sha256 digest on stdout,
+# exit 0 with the literal marker "no-hooks-dir" when the repo has no hooks
+# directory, or exit 1 with the literal marker "digest-error" when a hook
+# file's content could not be read. Callers (Task 4's sweep) must treat
+# exit 1 as "cannot determine" and never compare its output as if it were
+# a real digest.
 _git_hooks_digest() {
   local _repo_dir="$1"
   local _hooks_dir
@@ -64,10 +71,20 @@ _git_hooks_digest() {
   # Sort explicitly rather than relying on glob order, and fold the
   # filename into the hashed material so a rename (same bytes, different
   # name) still changes the digest.
-  local _name _combined=""
+  local _name _hash _combined=""
   while IFS= read -r _name; do
     [[ -n "${_name}" ]] || continue
-    _combined+="${_name}:$(shasum -a 256 "${_hooks_dir}/${_name}" | awk '{print $1}')"$'\n'
+    # An unreadable file (e.g. mode 000) makes shasum fail and print
+    # nothing on stdout; awk then hands back an empty string, which used
+    # to fold into the digest as a bare "name:" and silently succeed —
+    # two directories with completely different, both-unreadable content
+    # then hashed identically. Validate the shape and fail closed instead.
+    _hash="$(shasum -a 256 "${_hooks_dir}/${_name}" 2>/dev/null | awk '{print $1}')"
+    if [[ ! ${_hash} =~ ^[0-9a-f]{64}$ ]]; then
+      printf 'digest-error\n'
+      return 1
+    fi
+    _combined+="${_name}:${_hash}"$'\n'
   done < <(printf '%s\n' "${_names[@]}" | sort)
 
   printf '%s' "${_combined}" | shasum -a 256 | awk '{print $1}'
