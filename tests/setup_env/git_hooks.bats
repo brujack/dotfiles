@@ -151,3 +151,18 @@ setup() {
   [[ "$output" == *"only-repo"* ]]
   [ "$(printf '%s\n' "$output" | wc -l | tr -d ' ')" -eq 1 ]
 }
+
+@test "_git_hooks_digest returns 0 and prints a stable marker for a repo with no hooks directory" {
+  local _repo="${TESTDIR}/no-hooks-repo"
+  mkdir -p "${_repo}"
+  git init -q "${_repo}"
+  rm -rf "${_repo}/.git/hooks"
+
+  run _git_hooks_digest "${_repo}/"
+  [ "$status" -eq 0 ]
+  [ "$output" = "no-hooks-dir" ]
+
+  run _git_hooks_digest "${_repo}/"
+  [ "$status" -eq 0 ]
+  [ "$output" = "no-hooks-dir" ]
+}
