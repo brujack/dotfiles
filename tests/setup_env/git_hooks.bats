@@ -29,6 +29,10 @@ setup() {
   # rev-parse would walk upward and find one — asserted explicitly below.
   mkdir -p "${PERSONAL_GITREPOS}/partial-clone/.git"
   printf 'install-hooks:\n\t@true\n' > "${PERSONAL_GITREPOS}/partial-clone/Makefile"
+
+  # 3. worktree-dir — .git is a regular file (gitdir pointer), not a directory
+  mkdir -p "${PERSONAL_GITREPOS}/worktree-dir"
+  printf 'gitdir: /somewhere\n' > "${PERSONAL_GITREPOS}/worktree-dir/.git"
 }
 
 @test "HOOK_EXPECTED_REPOS is populated after sourcing lib/git_hooks.sh" {
@@ -50,4 +54,10 @@ setup() {
   run _git_hooks_discover
   [ "$status" -eq 0 ]
   [[ "$output" != *"partial-clone"* ]]
+}
+
+@test "_git_hooks_discover excludes worktree-dir (.git is a file, not a directory)" {
+  run _git_hooks_discover
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"worktree-dir"* ]]
 }
