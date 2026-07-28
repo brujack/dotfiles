@@ -20,7 +20,15 @@ _git_hooks_discover() {
     # live in the common dir), and stop rev-parse walking up into an
     # ancestor repo.
     [[ -d "${_dir}.git" ]] || continue
-    git -C "${_dir}" rev-parse --git-dir >/dev/null 2>&1 || continue
+    # An inherited GIT_DIR (or GIT_WORK_TREE/GIT_COMMON_DIR/GIT_INDEX_FILE)
+    # overrides -C entirely, so rev-parse would report success for ANY
+    # _dir as long as the leaked var happens to point at a real repo
+    # elsewhere — silently defeating the partial-clone exclusion this
+    # guard exists for. git-workflow.md documents that git exports GIT_DIR
+    # into the pre-push hook environment when pushed from a worktree, and
+    # this repo's pre-push hook runs `make test`, which sources this file.
+    env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+      git -C "${_dir}" rev-parse --git-dir >/dev/null 2>&1 || continue
     [[ -f "${_dir}Makefile" ]] || continue
     grep -q '^install-hooks:' "${_dir}Makefile" || continue
     printf '%s\n' "${_dir}"
@@ -39,8 +47,11 @@ _git_hooks_digest() {
   local _hooks_dir
 
   # rev-parse --git-path hooks is empty when _repo_dir is not a git repo at
-  # all (defensive; _git_hooks_discover output is always a real repo).
-  _hooks_dir="$(git -C "${_repo_dir}" rev-parse --git-path hooks 2>/dev/null)"
+  # all (defensive; _git_hooks_discover output is always a real repo). See
+  # the GIT_DIR comment in _git_hooks_discover above — the same leak would
+  # silently redirect this function at a different repo's hooks dir.
+  _hooks_dir="$(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+    git -C "${_repo_dir}" rev-parse --git-path hooks 2>/dev/null)"
   if [[ -z "${_hooks_dir}" ]]; then
     printf 'no-hooks-dir\n'
     return 0
