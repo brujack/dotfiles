@@ -69,34 +69,33 @@ _git_hooks_digest() {
     return 0
   fi
 
-  # -f follows symlinks (stat-based test), so a symlinked hook is included
-  # and hashed via its target's content below — a broken symlink is
-  # correctly excluded since -f is false for it.
-  local _file
-  local -a _names=()
+  # Hash inside the single glob loop rather than collecting names into an
+  # array and re-sorting: bash pathname expansion already returns entries
+  # in the same LC_COLLATE order `sort` would apply (verified identical
+  # for the mandated hook names, so the extra pass was a no-op), and the
+  # array/printf/sort/while-read round trip re-split any filename
+  # containing a newline into bogus names whose shasum call then failed
+  # silently. Fold the filename into the hashed material so a rename
+  # (same bytes, different name) still changes the digest. -f follows
+  # symlinks (stat-based test), so a symlinked hook is included and
+  # hashed via its target's content — a broken symlink or a subdirectory
+  # is excluded since -f is false for both.
+  local _file _name _hash _combined=""
   for _file in "${_hooks_dir}"/*; do
     [[ -f "${_file}" ]] || continue
-    _names+=("$(basename "${_file}")")
-  done
-
-  # Sort explicitly rather than relying on glob order, and fold the
-  # filename into the hashed material so a rename (same bytes, different
-  # name) still changes the digest.
-  local _name _hash _combined=""
-  while IFS= read -r _name; do
-    [[ -n "${_name}" ]] || continue
+    _name="$(basename "${_file}")"
     # An unreadable file (e.g. mode 000) makes shasum fail and print
     # nothing on stdout; awk then hands back an empty string, which used
     # to fold into the digest as a bare "name:" and silently succeed —
     # two directories with completely different, both-unreadable content
     # then hashed identically. Validate the shape and fail closed instead.
-    _hash="$(shasum -a 256 "${_hooks_dir}/${_name}" 2>/dev/null | awk '{print $1}')"
+    _hash="$(shasum -a 256 "${_file}" 2>/dev/null | awk '{print $1}')"
     if [[ ! ${_hash} =~ ^[0-9a-f]{64}$ ]]; then
       printf 'digest-error\n'
       return 1
     fi
     _combined+="${_name}:${_hash}"$'\n'
-  done < <(printf '%s\n' "${_names[@]}" | sort)
+  done
 
   printf '%s' "${_combined}" | shasum -a 256 | awk '{print $1}'
   return 0
