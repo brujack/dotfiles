@@ -10,4 +10,10 @@
 # repo-structure.md is not conditional on a repo containing code. A docs commit
 # still needs the Conventional Commits check (commit-msg) and can still leak a
 # credential into a markdown file (pre-commit / ggshield). It may gain code later.
-readonly HOOK_EXPECTED_REPOS=(ai-config dotfiles etch-cli state-ledger brucejacksonconsulting-site math ai-devops etch-config terraform_ansible)
+# Not readonly: lib/git_hooks.sh may be sourced more than once in the same
+# shell (e.g. re-run tooling, repeated bats sourcing). A readonly array here
+# would make the second source's readonly re-declaration fail, and — worse —
+# if the empty fallback in lib/git_hooks.sh ever locks in first, this file's
+# real list could never load at all, silently. config/profiles.sh made the
+# same call for the same reason.
+HOOK_EXPECTED_REPOS=(ai-config dotfiles etch-cli state-ledger brucejacksonconsulting-site math ai-devops etch-config terraform_ansible)

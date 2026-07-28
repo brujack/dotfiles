@@ -10,7 +10,7 @@ if [[ -f "$(dirname "${BASH_SOURCE[0]}")/../config/hook_repos.sh" ]]; then
   # shellcheck disable=SC1091
   source "$(dirname "${BASH_SOURCE[0]}")/../config/hook_repos.sh"
 else
-  readonly HOOK_EXPECTED_REPOS=()
+  HOOK_EXPECTED_REPOS=()
 fi
 
 _git_hooks_discover() {
