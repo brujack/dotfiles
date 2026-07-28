@@ -18,6 +18,8 @@ _git_hooks_discover() {
   for _dir in "${PERSONAL_GITREPOS}"/*/; do
     [[ -d "${_dir}.git" ]] || continue
     git -C "${_dir}" rev-parse --git-dir >/dev/null 2>&1 || continue
+    [[ -f "${_dir}Makefile" ]] || continue
+    grep -q '^install-hooks:' "${_dir}Makefile" || continue
     printf '%s\n' "${_dir}"
   done
 }
