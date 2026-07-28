@@ -99,7 +99,7 @@ Both the `-d .git` and `rev-parse` tests are required and neither subsumes the o
 
 1. `repo-with-target/` — real `git init`, `Makefile` containing `install-hooks:`
 2. `repo-no-target/` — real `git init`, `Makefile` without the target
-3. `worktree-dir/` — `.git` written as a regular file containing `gitdir: /somewhere`
+3. `worktree-dir/` — a **real linked worktree** made with `git worktree add` off a source repo that has a committed `install-hooks` Makefile. **Not** a synthetic `.git` file containing `gitdir: /somewhere`: that shape fails `rev-parse` because the path is bogus, not because it is a worktree, so the fixture stays over-determined and deleting the `-d .git` guard still leaves the suite green. `rev-parse` must genuinely _succeed_ inside this fixture — that is the real `ai-config-hook-integrity` hazard, and it is the only thing that makes `-d .git` mutation-visible. A `tdd.md` section F instance: the hand-built fixture encoded a wrong belief about what makes git reject a path.
 4. `plain-dir/` — no `.git`
 5. `repo-failing/` — real `git init`, `Makefile` whose `install-hooks` recipe exits 1
 6. `partial-clone/` — `mkdir -p partial-clone/.git` only, plus a `Makefile` with the target
