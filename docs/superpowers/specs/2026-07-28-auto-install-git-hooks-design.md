@@ -130,7 +130,7 @@ skip a stale hook — the failure this work exists to eliminate.
 
 ## Code layout
 
-New file `lib/git_hooks.sh`, sourced from `setup_env.sh` alongside the existing 12 lib
+New file `lib/git_hooks.sh`, sourced from `setup_env.sh` alongside the existing lib
 files, following the `lib/git_sync.sh` / `lib/legacy_rsync.sh` precedent. It must carry
 the standard sourcing guard:
 
@@ -140,6 +140,22 @@ the standard sourcing guard:
 
 Public function: `install_git_hooks_all_repos()`. Returns 0 when every discovered repo
 installed cleanly (gaps do not affect this), 1 when any `make install-hooks` failed.
+
+### Return-code handling at the two call sites
+
+The sweep's non-zero return must not suppress bookkeeping that follows it. Neither call
+site uses the repo's usual `|| return 1` shorthand:
+
+- `run_setup_user()` — capture the sweep's rc, run `_ledger_write_run_entry` as it does
+  today, then return the captured rc. Using `|| return 1` inline would skip the ledger
+  write on exactly the runs worth recording.
+- `run_update()` — the rc is passed to `_update_record_end "git-hooks"`, and the
+  existing end-of-function summary and ledger write proceed unchanged. `run_update`
+  reports section failures through the summary; the sweep behaves like every other
+  section.
+
+Under `--dry-run` the sweep always returns 0, because `run_cmd` prints instead of
+executing and no `make` can fail. Gap warnings are still emitted.
 
 ## Testing
 
