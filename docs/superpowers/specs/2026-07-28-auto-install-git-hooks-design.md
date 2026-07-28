@@ -609,12 +609,16 @@ Reviewed at commit `e7d148e`. Three findings; resolved by measurement rather tha
    an accepted, bounded cost rather than designed away. **Addressed.**
 
 3. **"The cadence assumption is load-bearing twice and still unmeasured."** Correct, and
-   still unmeasured — all three non-Mac boxes were unreachable when attempted. Promoted
-   out of the lens sections into its own Open Question above, with the command, the
-   contingency, and an explicit note that the fix would be a trigger change the plan can
-   absorb. **Accepted, open** — not settleable from this machine this session.
+   the push to measure it before planning was the right call. Promoted out of the lens
+   sections into its own section above and then **settled** for the box that carries the
+   evidence: the Linux 7950X shows 59 `_run_all` runs with the most recent on 2026-07-28.
+   Both halves — cadence and flag-scoping — hold there. The measurement also turned the
+   assumption into the design's strongest evidence: that box ran `-t update` the same day
+   its hooks were 11 days stale, which is precisely the gap the sweep closes. **Addressed.**
+   `cruncher` and `laptop` remain unmeasured and unreachable; neither carries evidence this
+   design rests on.
 
-## Open Question — `-t update` cadence on the non-Mac boxes
+## Resolved Question — `-t update` cadence on the non-Mac boxes
 
 Three separate lens assumptions across both rounds reduce to one question: **does
 `-t update` run often enough, in bare `_run_all` form, on the boxes that are not the Mac
@@ -634,15 +638,31 @@ ls -l --time-style=+%Y-%m-%d ~/.dotfiles-update.log
 grep -c 'git-repos' ~/.dotfiles-update.log
 ```
 
-**Status: unresolved.** Attempted from the Mac Studio 2026-07-28 — `workstation`,
-`cruncher`, and `laptop` were all unreachable (`No route to host`). Only the Mac Studio is
-measured: log last written 2026-07-26 (2 days), `git-repos` present in the most recent run,
-7 occurrences in the log.
+**Status: settled for the box that matters.** Measured 2026-07-28:
 
-**If the answer is bad, the fix is a trigger change, not a reporting change** — an
-additional call site, a `--hooks-only` flag matching the existing `--brew-only` /
-`--pip-only` pattern, or moving the sweep outside the `_run_all` guard. Nothing else in
-this design depends on the answer, so the plan can proceed and absorb it.
+| Box                         | log last written | `git-repos` occurrences |
+| --------------------------- | ---------------- | ----------------------- |
+| Mac Studio (`studio`)       | 2026-07-26       | 7                       |
+| Linux 7950X (`workstation`) | 2026-07-28       | 59                      |
+
+The 7950X runs bare `_run_all` updates frequently and ran one the same day this spec was
+written. Both halves of the assumption hold there: the cadence is well inside any
+reasonable window, and the habit is not flag-scoped. `cruncher` (WSL2) and `laptop` were
+unreachable from the Mac Studio (`No route to host`) and remain unmeasured; neither carries
+evidence this design rests on.
+
+**This is the design's strongest single piece of evidence, not merely a cleared
+assumption.** The 7950X ran `-t update` on 2026-07-28 while its `ai-config` hooks were
+still the 11-day-stale 2026-07-17 snapshot. There is no contradiction — `-t update` does
+not install hooks today. The trigger already fires at the right cadence on the box carrying
+the headline drift; it simply does not yet do the thing. That is exactly the gap this sweep
+closes, and it is why `run_update` is the correct call site rather than `setup_user` alone.
+
+Had the answer gone the other way, the fix would have been a trigger change rather than a
+reporting change — an additional call site, a `--hooks-only` flag matching the existing
+`--brew-only` / `--pip-only` pattern, or moving the sweep outside the `_run_all` guard.
+Recorded because it remains the correct response if `cruncher` or `laptop` later measure
+badly.
 
 ## Multi-Lens Review — Round 2
 
