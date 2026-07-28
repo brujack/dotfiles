@@ -265,6 +265,29 @@ would otherwise be read as — therefore reports every `cp` repo as updated ever
 week on a perfectly current box. That is precisely the signal-free line this section
 exists to replace, with more machinery behind it.
 
+#### The updated count can only ever name `cp` repos
+
+For a symlink-install repo the installed hook is a symlink into the working tree, so its
+content tracks the source continuously — the moment `sync_git_repos` pulls a new source,
+the "installed" hook is already current, with no `make` involved. The before-digest and
+after-digest across the `make` call are therefore always identical for those repos, and
+they report checked-not-updated forever. That is correct, and uninformative by
+construction: a repo that cannot drift has no update event to report.
+
+The consequence worth stating up front: **the digest's informativeness is inversely
+coupled to the symlink-normalization backlog item.** Today four of six repos install with
+`cp`, so the updated count carries real signal. If that backlog item lands and all six
+normalize to `ln -sf`, the count goes permanently to zero — not because nothing is being
+maintained, but because nothing can drift any more. Whoever picks up normalization should
+know it **retires** this reporting mechanism rather than complementing it, and that the
+right follow-up is deleting the digest, not debugging a count stuck at zero.
+
+Note also what the `ln -sf` test in the Testing section does and does not prove. Mutating
+the source between the two digests demonstrates the digest is _capable_ of detecting a
+symlink-target change. It does not demonstrate the sweep will ever observe one, because in
+production nothing mutates the source between the two reads. The test guards the
+implementation, not the scenario.
+
 This does not reopen the diff-first question below. Diff-first asks whether the sweep can
 _decide what to run_ without per-repo install-style knowledge — it cannot. Digesting the
 hooks directory reports _what changed after the fact_, which needs no such knowledge: the
@@ -392,7 +415,10 @@ Required assertions:
 - **`ln -sf` unchanged branch** — for a symlink-style repo, re-running `make` can never
   produce a delta, so that branch must be driven by **mutating the source file** and
   asserting the digest then reports updated. Testing it by re-running `make` asserts
-  nothing; it is unfalsifiable by construction.
+  nothing; it is unfalsifiable by construction. This test proves the digest is _capable_
+  of seeing a symlink-target change — not that the sweep ever will, since in production
+  nothing mutates the source between the two reads. See "The updated count can only ever
+  name `cp` repos" above.
 - **Post-condition** — a fixture repo whose `install-hooks` target exits 0 but installs
   only a subset of `{pre-commit, pre-push, commit-msg}` is counted as a **gap**, not an
   OK. This is the `state-ledger` shape and is the test that separates "the target ran"
@@ -451,6 +477,9 @@ were checked and neither holds:
   the correct root-cause fix for the _stale_ class and reduces its drift window to zero,
   but it is four repos × their own SDLC and it fixes none of the _never-installed_ class.
   Filed as its own backlog item; the two mechanisms are complementary, not alternatives.
+  **If it lands, it retires the updated-count reporting** — see "The updated count can only
+  ever name `cp` repos". That is a reason to delete the digest at that point, not a reason
+  to defer the normalization.
 - **Authoring a `scripts/commit-msg` for `state-ledger`** — the sweep can only install
   hooks a repo has sources for, and `state-ledger` has none for `commit-msg`. Its own
   repo's work; the sweep reports it as a gap until then.
@@ -588,82 +617,6 @@ Idempotency as a condition to re-run once those targets land.
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
 
-## External Review — Independent Architect
-
-Reviewed at commit `e7d148e`. Three findings; resolved by measurement rather than argument.
-
-1. **"The post-condition applies a uniform mandate to a non-uniform set."** Does not hold,
-   but the reading was available from the text, which was a real defect. The assertion is
-   on the _installed hooks directory_, not on `scripts/`, so `state-ledger`'s
-   `ledger init`-installed `pre-commit` passes rather than firing a false gap. Measured
-   across all six repos: three fires, all true gaps, zero false positives. Separately,
-   `repo-structure.md` mandates the same three hooks of every personal repo with no
-   variation by repo type, so the mandate genuinely is uniform. **Addressed** — both facts
-   now stated explicitly in the Gaps section with the measurement table inline.
-
-2. **"Merge the expected-repos list and the hook mandate into one repo→hook-set map."**
-   Falls with (1): a uniform mandate makes every row's value identical, so the map would
-   add structure to express a constant. The list stays flat. The finding's independent
-   half — that a declaration in `dotfiles/config/` about nine other repos is
-   `roleModels`-shaped, with nothing forcing agreement — is correct and is now recorded as
-   an accepted, bounded cost rather than designed away. **Addressed.**
-
-3. **"The cadence assumption is load-bearing twice and still unmeasured."** Correct, and
-   the push to measure it before planning was the right call. Promoted out of the lens
-   sections into its own section above and then **settled** for the box that carries the
-   evidence: the Linux 7950X shows 59 `_run_all` runs with the most recent on 2026-07-28.
-   Both halves — cadence and flag-scoping — hold there. The measurement also turned the
-   assumption into the design's strongest evidence: that box ran `-t update` the same day
-   its hooks were 11 days stale, which is precisely the gap the sweep closes. **Addressed.**
-   `cruncher` and `laptop` remain unmeasured and unreachable; neither carries evidence this
-   design rests on.
-
-## Resolved Question — `-t update` cadence on the non-Mac boxes
-
-Three separate lens assumptions across both rounds reduce to one question: **does
-`-t update` run often enough, in bare `_run_all` form, on the boxes that are not the Mac
-Studio?** Round 1 raised the cadence; round 2 raised flag-scoping (`--brew-only`,
-`--pip-only` skip the `_run_all` block entirely, so the sweep never fires under them).
-
-This is load-bearing, because `run_setup_user` alone covers only fresh machines. If the
-Linux 7950X's median inter-run gap exceeds ~14 days, or its habit is a scoped update, then
-on the very box where the headline 11-day drift was measured this design does not close
-it — and that box is the spec's own primary evidence.
-
-One command per box answers both halves, since the `git-repos` section only prints under
-`_run_all`:
-
-```bash
-ls -l --time-style=+%Y-%m-%d ~/.dotfiles-update.log
-grep -c 'git-repos' ~/.dotfiles-update.log
-```
-
-**Status: settled for the box that matters.** Measured 2026-07-28:
-
-| Box                         | log last written | `git-repos` occurrences |
-| --------------------------- | ---------------- | ----------------------- |
-| Mac Studio (`studio`)       | 2026-07-26       | 7                       |
-| Linux 7950X (`workstation`) | 2026-07-28       | 59                      |
-
-The 7950X runs bare `_run_all` updates frequently and ran one the same day this spec was
-written. Both halves of the assumption hold there: the cadence is well inside any
-reasonable window, and the habit is not flag-scoped. `cruncher` (WSL2) and `laptop` were
-unreachable from the Mac Studio (`No route to host`) and remain unmeasured; neither carries
-evidence this design rests on.
-
-**This is the design's strongest single piece of evidence, not merely a cleared
-assumption.** The 7950X ran `-t update` on 2026-07-28 while its `ai-config` hooks were
-still the 11-day-stale 2026-07-17 snapshot. There is no contradiction — `-t update` does
-not install hooks today. The trigger already fires at the right cadence on the box carrying
-the headline drift; it simply does not yet do the thing. That is exactly the gap this sweep
-closes, and it is why `run_update` is the correct call site rather than `setup_user` alone.
-
-Had the answer gone the other way, the fix would have been a trigger change rather than a
-reporting change — an additional call site, a `--hooks-only` flag matching the existing
-`--brew-only` / `--pip-only` pattern, or moving the sweep outside the `_run_all` guard.
-Recorded because it remains the correct response if `cruncher` or `laptop` later measure
-badly.
-
 ## Multi-Lens Review — Round 2
 
 All three round-1 dispositions were **Addressed**, so all three lenses re-ran against the
@@ -745,3 +698,79 @@ Goal-Fit). The rc-has-no-teeth point is now stated plainly in Fail-closed, with 
 decision to leave it: the `[FAIL]` row and the ledger `_failure_stage` entry are the real
 signal, and giving the rc teeth would mean changing `run_update` for all 17 existing
 sections — its own spec. The `core.hooksPath` citation is corrected in place.
+
+## External Review — Independent Architect
+
+Reviewed at commit `e7d148e`. Three findings; resolved by measurement rather than argument.
+
+1. **"The post-condition applies a uniform mandate to a non-uniform set."** Does not hold,
+   but the reading was available from the text, which was a real defect. The assertion is
+   on the _installed hooks directory_, not on `scripts/`, so `state-ledger`'s
+   `ledger init`-installed `pre-commit` passes rather than firing a false gap. Measured
+   across all six repos: three fires, all true gaps, zero false positives. Separately,
+   `repo-structure.md` mandates the same three hooks of every personal repo with no
+   variation by repo type, so the mandate genuinely is uniform. **Addressed** — both facts
+   now stated explicitly in the Gaps section with the measurement table inline.
+
+2. **"Merge the expected-repos list and the hook mandate into one repo→hook-set map."**
+   Falls with (1): a uniform mandate makes every row's value identical, so the map would
+   add structure to express a constant. The list stays flat. The finding's independent
+   half — that a declaration in `dotfiles/config/` about nine other repos is
+   `roleModels`-shaped, with nothing forcing agreement — is correct and is now recorded as
+   an accepted, bounded cost rather than designed away. **Addressed.**
+
+3. **"The cadence assumption is load-bearing twice and still unmeasured."** Correct, and
+   the push to measure it before planning was the right call. Promoted out of the lens
+   sections into its own section above and then **settled** for the box that carries the
+   evidence: the Linux 7950X shows 59 `_run_all` runs with the most recent on 2026-07-28.
+   Both halves — cadence and flag-scoping — hold there. The measurement also turned the
+   assumption into the design's strongest evidence: that box ran `-t update` the same day
+   its hooks were 11 days stale, which is precisely the gap the sweep closes. **Addressed.**
+   `cruncher` and `laptop` remain unmeasured and unreachable; neither carries evidence this
+   design rests on.
+
+## Resolved Question — `-t update` cadence on the non-Mac boxes
+
+Three separate lens assumptions across both rounds reduce to one question: **does
+`-t update` run often enough, in bare `_run_all` form, on the boxes that are not the Mac
+Studio?** Round 1 raised the cadence; round 2 raised flag-scoping (`--brew-only`,
+`--pip-only` skip the `_run_all` block entirely, so the sweep never fires under them).
+
+This is load-bearing, because `run_setup_user` alone covers only fresh machines. If the
+Linux 7950X's median inter-run gap exceeds ~14 days, or its habit is a scoped update, then
+on the very box where the headline 11-day drift was measured this design does not close
+it — and that box is the spec's own primary evidence.
+
+One command per box answers both halves, since the `git-repos` section only prints under
+`_run_all`:
+
+```bash
+ls -l --time-style=+%Y-%m-%d ~/.dotfiles-update.log
+grep -c 'git-repos' ~/.dotfiles-update.log
+```
+
+**Status: settled for the box that matters.** Measured 2026-07-28:
+
+| Box                         | log last written | `git-repos` occurrences |
+| --------------------------- | ---------------- | ----------------------- |
+| Mac Studio (`studio`)       | 2026-07-26       | 7                       |
+| Linux 7950X (`workstation`) | 2026-07-28       | 59                      |
+
+The 7950X runs bare `_run_all` updates frequently and ran one the same day this spec was
+written. Both halves of the assumption hold there: the cadence is well inside any
+reasonable window, and the habit is not flag-scoped. `cruncher` (WSL2) and `laptop` were
+unreachable from the Mac Studio (`No route to host`) and remain unmeasured; neither carries
+evidence this design rests on.
+
+**This is the design's strongest single piece of evidence, not merely a cleared
+assumption.** The 7950X ran `-t update` on 2026-07-28 while its `ai-config` hooks were
+still the 11-day-stale 2026-07-17 snapshot. There is no contradiction — `-t update` does
+not install hooks today. The trigger already fires at the right cadence on the box carrying
+the headline drift; it simply does not yet do the thing. That is exactly the gap this sweep
+closes, and it is why `run_update` is the correct call site rather than `setup_user` alone.
+
+Had the answer gone the other way, the fix would have been a trigger change rather than a
+reporting change — an additional call site, a `--hooks-only` flag matching the existing
+`--brew-only` / `--pip-only` pattern, or moving the sweep outside the `_run_all` guard.
+Recorded because it remains the correct response if `cruncher` or `laptop` later measure
+badly.
