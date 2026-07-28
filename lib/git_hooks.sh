@@ -16,6 +16,9 @@ fi
 _git_hooks_discover() {
   local _dir
   for _dir in "${PERSONAL_GITREPOS}"/*/; do
+    # -d not -e: a worktree/submodule .git is a FILE — skip those (hooks
+    # live in the common dir), and stop rev-parse walking up into an
+    # ancestor repo.
     [[ -d "${_dir}.git" ]] || continue
     git -C "${_dir}" rev-parse --git-dir >/dev/null 2>&1 || continue
     [[ -f "${_dir}Makefile" ]] || continue
