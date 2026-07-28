@@ -21,8 +21,11 @@ setup() {
   git init -q "${PERSONAL_GITREPOS}/repo-with-target"
   printf 'install-hooks:\n\t@true\n' > "${PERSONAL_GITREPOS}/repo-with-target/Makefile"
 
-  # 4. plain-dir — no .git at all
+  # 4. plain-dir — no .git at all. Carries a qualifying Makefile so only the
+  # -d .git guard (not the later Makefile-target guard) can exclude it —
+  # otherwise its exclusion is over-determined and mutation-invisible.
   mkdir -p "${PERSONAL_GITREPOS}/plain-dir"
+  printf 'install-hooks:\n\t@true\n' > "${PERSONAL_GITREPOS}/plain-dir/Makefile"
 
   # 6. partial-clone — .git is a real but empty/invalid directory (interrupted
   # clone). No ancestor git repository must exist above this fixture, or
@@ -30,9 +33,20 @@ setup() {
   mkdir -p "${PERSONAL_GITREPOS}/partial-clone/.git"
   printf 'install-hooks:\n\t@true\n' > "${PERSONAL_GITREPOS}/partial-clone/Makefile"
 
-  # 3. worktree-dir — .git is a regular file (gitdir pointer), not a directory
-  mkdir -p "${PERSONAL_GITREPOS}/worktree-dir"
-  printf 'gitdir: /somewhere\n' > "${PERSONAL_GITREPOS}/worktree-dir/.git"
+  # 3. worktree-dir — a REAL linked git worktree, not a synthetic gitdir-file
+  # stand-in. A synthetic ".git file pointing nowhere" fails rev-parse for
+  # the wrong reason (bad path) rather than the reason production cares
+  # about — rev-parse --git-dir genuinely SUCCEEDS inside a real worktree
+  # (this is the ai-config-hook-integrity hazard), so only -d .git can
+  # exclude it. The worktree inherits its Makefile from the source repo it
+  # was created from, giving it a qualifying install-hooks: target too.
+  local _wt_source="${TESTDIR}/wt-source"
+  mkdir -p "${_wt_source}"
+  git init -q "${_wt_source}"
+  printf 'install-hooks:\n\t@true\n' > "${_wt_source}/Makefile"
+  git -C "${_wt_source}" add Makefile
+  git -C "${_wt_source}" commit -q -m init
+  git -C "${_wt_source}" worktree add -q "${PERSONAL_GITREPOS}/worktree-dir" -b wt-branch
 
   # 2. repo-no-target — real repo, Makefile present but no install-hooks target
   mkdir -p "${PERSONAL_GITREPOS}/repo-no-target"
