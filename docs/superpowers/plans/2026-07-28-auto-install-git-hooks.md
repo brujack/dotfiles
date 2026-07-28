@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - No `set -euo pipefail` at top level — conditional installs require non-zero exits to continue.
-- Every `lib/` file carries the sourcing guard `[[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0` immediately after its header comment.
+- Every `lib/` file carries the sourcing guard `[[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0` **as its last line, after all function definitions** — not near the top. The guard's condition is _true_ when the file is sourced, so placing it above the definitions returns before any function exists and breaks standalone sourcing entirely. Verified precedent: `lib/git_sync.sh:118` and `lib/legacy_rsync.sh:28` are each the final line of their file. (`CLAUDE.md`'s "near the top" wording is inaccurate; Task 8 corrects it.)
 - Shebang `#!/usr/bin/env bash`; `[[ ]]` not `[ ]`; `${VAR}` with braces; `printf` not `echo`; `snake_case()` functions; `readonly SCREAMING_SNAKE_CASE` constants.
 - Error handling in function bodies uses `|| return 1`, never `|| exit`.
 - Tests never mutate real system state — PATH-based mocks from `tests/mocks/` only. `tests/mocks/make` already exists.
@@ -451,6 +451,7 @@ parallel_group: docs
 
 - Add `git_hooks.sh` to the `lib/` line in the Layout tree, and `hook_repos.sh` to the `config/` line.
 - Add a Key Conventions bullet mirroring the existing `_UPDATE_SECTION_ORDER` coupling warning: the `git-hooks` section requires matching entries in both `run_update` and `_UPDATE_SECTION_ORDER`, and the hook sweep's post-condition reads the installed hooks directory, never `scripts/`.
+- **Correct the sourcing-guard wording.** The Code Standards section currently says lib files must include the guard "near the top". That is wrong and actively harmful — the guard's condition is true when sourced, so at the top it returns before defining anything. Change it to state the guard belongs on the **last line, after all function definitions**, citing `lib/git_sync.sh:118` and `lib/legacy_rsync.sh:28` as the precedent. Caught during Task 1 when the implementer refused the instruction and verified the correct placement empirically.
 - Update the Testing section's test count and the Coverage section's bash figure to the values measured after Task 6 — read them from the actual run, do not estimate.
 
 `docs/superpowers/README.md` — set the `auto-install-git-hooks` row's Status to `Done` and link the plan file (the row currently reads "plan not yet written").
