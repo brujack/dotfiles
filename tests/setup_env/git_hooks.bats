@@ -343,3 +343,46 @@ setup() {
   [[ ! "${_output_a}" =~ ^[0-9a-f]{64}$ ]]
   [[ ! "${_output_b}" =~ ^[0-9a-f]{64}$ ]]
 }
+
+@test "_git_hooks_digest ignores a leaked GIT_DIR and always reads the repo named by its own argument" {
+  local _repo_a="${TESTDIR}/git-dir-leak-a"
+  local _repo_b="${TESTDIR}/git-dir-leak-b"
+  mkdir -p "${_repo_a}" "${_repo_b}"
+  git init -q "${_repo_a}"
+  git init -q "${_repo_b}"
+  printf '#!/usr/bin/env bash\necho a\n' > "${_repo_a}/.git/hooks/pre-commit"
+  chmod +x "${_repo_a}/.git/hooks/pre-commit"
+  printf '#!/usr/bin/env bash\necho b\n' > "${_repo_b}/.git/hooks/pre-commit"
+  chmod +x "${_repo_b}/.git/hooks/pre-commit"
+
+  run _git_hooks_digest "${_repo_a}/"
+  local _expected_a="$output"
+  run _git_hooks_digest "${_repo_b}/"
+  local _expected_b="$output"
+
+  # Guard the guard: if A and B happen to collide, the assertions below
+  # would pass even with the bug present.
+  [ "${_expected_a}" != "${_expected_b}" ]
+
+  # This simulates the documented pre-push/worktree GIT_DIR leak
+  # (git-workflow.md): a caller in this process has GIT_DIR exported
+  # pointing at repo B's .git while asking to digest repo A. Without the
+  # fix, -C is silently overridden and this returns repo B's digest.
+  GIT_DIR="${_repo_b}/.git" run _git_hooks_digest "${_repo_a}/"
+  [ "$status" -eq 0 ]
+  [ "$output" = "${_expected_a}" ]
+}
+
+@test "_git_hooks_discover ignores a leaked GIT_DIR and still excludes partial-clone" {
+  local _leak_source="${TESTDIR}/leak-source"
+  mkdir -p "${_leak_source}"
+  git init -q "${_leak_source}"
+
+  # Without the fix, an exported GIT_DIR pointing at a real repo makes
+  # `git -C partial-clone rev-parse --git-dir` succeed regardless of
+  # partial-clone's own (broken) .git — silently defeating the exclusion
+  # this guard exists for (measured: exit 128 normally, exit 0 leaked).
+  GIT_DIR="${_leak_source}/.git" run _git_hooks_discover
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"partial-clone"* ]]
+}
