@@ -219,3 +219,100 @@ were checked and neither holds:
 - `~/git-repos/work/`.
 - Adding hook infrastructure to `ai-devops` — reported as a gap, fixed in its own repo.
 - Correcting `USER.md`'s machine list.
+
+## Multi-Lens Review
+
+Reviewed at commit: `542b374` (Step 7 self-review commit, before Step 8 dispatch)
+
+### Goal-Fit
+
+Finding: The sweep routes around the root cause instead of deleting it. Four repos
+(`ai-config`, `etch-cli`, `state-ledger`, `brucejacksonconsulting-site`) install hooks
+with `cp`, so they drift by construction; `dotfiles` and `math` install with `ln -sf` and
+cannot drift at all. Every drift instance the Problem section measures is a `cp` repo.
+Normalizing those four Makefiles to `ln -sf` closes the drift window to zero on the box
+where the hook was edited — versus the ≤7 days a weekly sweep can deliver — with no new
+lib file, no new bats file, no `_UPDATE_SECTION_ORDER` coupling, and no coverage burden.
+The Idempotency section names the heterogeneity as an obstacle to route around rather
+than as the root cause to remove. What survives after a symlink normalization is only the
+never-installed case, which the `run_setup_user` call site alone covers.
+
+Verified against this machine: of the four live hook problems found on the Mac Studio
+right now, three are never-installed (`state-ledger` `pre-push` + `commit-msg`,
+`brucejacksonconsulting-site` `pre-commit`) and one is stale (`etch-cli` `pre-commit`).
+Symlink normalization fixes the stale one and none of the missing ones. Both mechanisms
+are therefore addressing real, disjoint failure classes.
+
+Assumption: That `-t update` actually runs weekly-ish on all ~6 boxes — the entire
+justification for the `run_update` trigger. Settle with
+`stat -c '%y %n' ~/.dotfiles-update.log` on the Linux 7950X, the laptop, and the WSL2
+side of the 7900X, or by querying state-ledger `-t update` run entries per hostname over
+90 days. Partial check done: last write on the Mac Studio is 2026-07-26 (2 days), so this
+box is fine; the other boxes are unverified from here. If any box's median inter-run gap
+exceeds ~14 days, the `run_update` trigger is not a drift-closing mechanism there.
+
+Disposition:
+
+### Ergonomics
+
+Finding: Two issues, both in the reporting path. (1) None of the six `install-hooks`
+recipes are `@`-prefixed, so a weekly `-t update` gains ~30–40 lines of unsuppressed
+`cp`/`ln`/`chmod` echo — invoke with `make -s`. (2) Because the sweep installs
+unconditionally, "installed: 6, gaps: 1, failures: 0" reads identically whether all six
+were current or all six were 11 days stale — a status line nobody can act on, printed
+weekly, gets tuned out. The rejection of diff-first in the Idempotency section answers a
+different question: it correctly argues you cannot _decide whether to run_ without
+per-repo install-style knowledge, but reporting _what changed after the fact_ needs no
+such knowledge — digest the hooks dir before and after each `make` call and report only
+repos whose hooks actually changed, giving "6 checked, 2 updated (ai-config, etch-cli)".
+
+Assumption: That at the moment the sweep runs, each discovered repo's main checkout is
+already at the latest committed hook source. The spec orders the sweep only "late in
+`run_update`", never against the `git-repos` section that does the pull, and
+`sync_git_repos` skips the pull on a dirty checkout and never merges a diverged one — so
+a mis-ordered or dirty checkout installs the previous cycle's hooks forever while
+reporting clean success. Settle by pinning placement after `lib/workflows.sh:482` and
+checking `git status --porcelain` + `git rev-list --count HEAD..@{u}` across the six
+repos. Checked on the Mac Studio: all six clean, `state-ledger` is 1 commit behind — so
+the ordering constraint is load-bearing today, not hypothetical.
+
+Disposition:
+
+### Risk
+
+Finding: The fail-closed property inverts at the `run_setup_user` boundary.
+`setup_env.sh:82` dispatches via `_run_or_exit run_setup_user`, and `_run_or_exit` is
+`[[ ${_ec} -eq 0 ]] || exit "${_ec}"`. Returning the sweep's accumulated rc from
+`run_setup_user` — exactly what the Return-code handling section prescribes — therefore
+aborts `-t setup` before `run_setup_or_developer` and `run_developer_or_ansible` ever
+run. A hooks-hygiene sweep gains the power to kill a full machine bootstrap over a broken
+Makefile in an unrelated repo. `run_update` has no equivalent problem, since the section
+rc feeds the summary. Verified: both the dispatch line and the `_run_or_exit` body read
+as quoted.
+
+Secondary: the Idempotency section's safety argument ("each repo's target is already `cp`
+or `ln -sf`") depends on per-repo knowledge the design claims not to need, and two table
+rows were self-labeled unverified. Also: "late in `run_update`, after the package-update
+sections" does not pin the sweep after the `git-repos` section at `lib/workflows.sh:473`.
+
+Verified by running `make -n install-hooks` across all six repos: every recipe is
+`cp`/`ln -sf`/`chmod`; nothing builds, tests, network-fetches, or prompts. But
+`dotfiles`' own target carries a `ledger-symlink` prerequisite that `mkdir -p`s
+`~/.local/bin`, symlinks `ledger`, and `chmod +x`es a file inside the `state-ledger`
+checkout — a side effect outside hook installation, which this design would run weekly on
+every box.
+
+Assumption: That `make install-hooks` in every repo the glob discovers is cheap,
+non-interactive, and confined to hook installation. Now verified for the six existing
+targets (see above). Remains genuinely open for `etch-config` and `terraform_ansible`,
+whose targets are being authored concurrently in another session and have not been read
+by anyone here. Re-run
+`for r in ~/git-repos/personal/*/; do [ -d "$r.git" ] && make -C "$r" -n install-hooks; done`
+once those land; if any target builds, tests, fetches, or prompts, the
+unconditional-every-update choice stops being free.
+
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
