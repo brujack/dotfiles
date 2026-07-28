@@ -27,4 +27,32 @@ _git_hooks_discover() {
   done
 }
 
+_git_hooks_digest() {
+  local _repo_dir="$1"
+  local _hooks_dir
+
+  # rev-parse --git-path hooks is empty when _repo_dir is not a git repo at
+  # all (defensive; _git_hooks_discover output is always a real repo).
+  _hooks_dir="$(git -C "${_repo_dir}" rev-parse --git-path hooks 2>/dev/null)"
+  if [[ -z "${_hooks_dir}" ]]; then
+    printf 'no-hooks-dir\n'
+    return 0
+  fi
+
+  # git-path can return a path relative to the repo dir (the common case) —
+  # resolve it before testing/reading it.
+  case "${_hooks_dir}" in
+    /*) : ;;
+    *) _hooks_dir="${_repo_dir%/}/${_hooks_dir}" ;;
+  esac
+
+  if [[ ! -d "${_hooks_dir}" ]]; then
+    printf 'no-hooks-dir\n'
+    return 0
+  fi
+
+  printf 'no-hooks-dir\n'
+  return 0
+}
+
 [[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0
