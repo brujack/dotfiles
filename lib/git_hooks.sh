@@ -51,7 +51,26 @@ _git_hooks_digest() {
     return 0
   fi
 
-  printf 'no-hooks-dir\n'
+  # -f follows symlinks (stat-based test), so a symlinked hook is included
+  # and hashed via its target's content below — a broken symlink is
+  # correctly excluded since -f is false for it.
+  local _file
+  local -a _names=()
+  for _file in "${_hooks_dir}"/*; do
+    [[ -f "${_file}" ]] || continue
+    _names+=("$(basename "${_file}")")
+  done
+
+  # Sort explicitly rather than relying on glob order, and fold the
+  # filename into the hashed material so a rename (same bytes, different
+  # name) still changes the digest.
+  local _name _combined=""
+  while IFS= read -r _name; do
+    [[ -n "${_name}" ]] || continue
+    _combined+="${_name}:$(shasum -a 256 "${_hooks_dir}/${_name}" | awk '{print $1}')"$'\n'
+  done < <(printf '%s\n' "${_names[@]}" | sort)
+
+  printf '%s' "${_combined}" | shasum -a 256 | awk '{print $1}'
   return 0
 }
 
