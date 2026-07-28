@@ -23,6 +23,12 @@ setup() {
 
   # 4. plain-dir — no .git at all
   mkdir -p "${PERSONAL_GITREPOS}/plain-dir"
+
+  # 6. partial-clone — .git is a real but empty/invalid directory (interrupted
+  # clone). No ancestor git repository must exist above this fixture, or
+  # rev-parse would walk upward and find one — asserted explicitly below.
+  mkdir -p "${PERSONAL_GITREPOS}/partial-clone/.git"
+  printf 'install-hooks:\n\t@true\n' > "${PERSONAL_GITREPOS}/partial-clone/Makefile"
 }
 
 @test "HOOK_EXPECTED_REPOS is populated after sourcing lib/git_hooks.sh" {
@@ -33,4 +39,15 @@ setup() {
   run _git_hooks_discover
   [ "$status" -eq 0 ]
   [[ "$output" != *"plain-dir"* ]]
+}
+
+@test "_git_hooks_discover excludes partial-clone (passes -d .git, fails rev-parse)" {
+  # Guard the guard: if this fails, the fixture has an ancestor git repo and
+  # the exclusion assertion below would be vacuous.
+  run git -C "${PERSONAL_GITREPOS}/partial-clone" rev-parse --git-dir
+  [ "$status" -ne 0 ]
+
+  run _git_hooks_discover
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"partial-clone"* ]]
 }
