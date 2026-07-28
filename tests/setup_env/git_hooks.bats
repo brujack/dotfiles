@@ -81,6 +81,13 @@ setup() {
   [ "${#HOOK_EXPECTED_REPOS[@]}" -gt 0 ]
 }
 
+@test "sourcing lib/git_hooks.sh twice produces empty stderr and leaves HOOK_EXPECTED_REPOS non-empty" {
+  local _stderr
+  _stderr="$(source "${REPO_ROOT}/lib/git_hooks.sh" 2>&1 1>/dev/null)"
+  [ -z "${_stderr}" ]
+  [ "${#HOOK_EXPECTED_REPOS[@]}" -gt 0 ]
+}
+
 @test "_git_hooks_discover excludes plain-dir (no .git at all)" {
   run _git_hooks_discover
   [ "$status" -eq 0 ]
