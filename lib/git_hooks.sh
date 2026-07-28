@@ -29,6 +29,10 @@ _git_hooks_discover() {
     # this repo's pre-push hook runs `make test`, which sources this file.
     env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
       git -C "${_dir}" rev-parse --git-dir >/dev/null 2>&1 || continue
+    # Not a correctness guard: grep already exits 2 on a missing file, so
+    # `|| continue` would exclude the repo without it. It exists to suppress
+    # grep's "No such file or directory" on stderr, which would otherwise
+    # print once per Makefile-less repo on every weekly `-t update`.
     [[ -f "${_dir}Makefile" ]] || continue
     grep -q '^install-hooks:' "${_dir}Makefile" || continue
     printf '%s\n' "${_dir}"

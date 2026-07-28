@@ -486,3 +486,14 @@ setup() {
   [[ "$output" =~ ^[0-9a-f]{64}$ ]]
   [ "$output" != "no-hooks-dir" ]
 }
+
+@test "_git_hooks_discover emits nothing on stderr for a repo with no Makefile" {
+  # The `[[ -f Makefile ]]` guard is not a correctness guard — grep exits 2
+  # on a missing file, so the repo is excluded either way. Its actual job is
+  # keeping grep's "No such file or directory" off stderr during the weekly
+  # sweep. Assert that directly, or the guard is only "mutation-visible"
+  # because grep's stderr leaks into bats' combined $output.
+  local _stderr
+  _stderr="$(_git_hooks_discover 2>&1 1>/dev/null)"
+  [ -z "${_stderr}" ]
+}
