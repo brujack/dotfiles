@@ -171,6 +171,34 @@ gate stays absent on every box. After each `make`, the sweep asserts the mandate
 directory, and counts a repo that ran cleanly but is still incomplete as a gap. The
 before/after digest already reads that directory twice, so this costs one comparison.
 
+**The assertion is on the installed hooks directory, never on `scripts/`.** A hook that
+arrives by a route other than the Makefile satisfies it. This distinction is load-bearing
+and easy to misread the other way, so state it plainly: `state-ledger` has no
+`scripts/pre-commit`, but `ledger init` installs an executable `.git/hooks/pre-commit`, and
+the post-condition therefore **passes** on it. A source-based check would report a false
+gap there, weekly, forever — the exact tune-out failure the Reporting section exists to
+prevent.
+
+Measured on the Mac Studio 2026-07-28, across all six repos with a target:
+
+| Repo                          | `pre-commit` | `pre-push` | `commit-msg` |
+| ----------------------------- | ------------ | ---------- | ------------ |
+| `ai-config`                   | ok           | ok         | ok           |
+| `dotfiles`                    | ok           | ok         | ok           |
+| `etch-cli`                    | ok           | ok         | ok           |
+| `math`                        | ok           | ok         | ok           |
+| `state-ledger`                | ok           | **absent** | **absent**   |
+| `brucejacksonconsulting-site` | **absent**   | ok         | ok           |
+
+Three fires, all true gaps, no false positives.
+
+**The mandate is one uniform set, not per-repo.** `repo-structure.md` requires the same
+three hooks of every personal repo with no variation by repo type — a `pre-commit` running
+`ggshield` (line 10), `scripts/commit-msg` with "same content across all repos" (line 15),
+and a permanent `pre-push` (`ci.md`). A static site and a Rust CLI get the same set. That
+is why the expected-repos list below stays a flat list rather than a repo→hook-set map:
+the value would be identical in every row.
+
 #### The expected-repos list
 
 Condition 2 needs a list, because no filesystem signal distinguishes a repo that _should_
@@ -189,6 +217,15 @@ So a short explicit list of repos expected to carry hooks lives in `config/`, al
 
 That split confines the list's drift risk to the report. A stale list means a gap goes
 unreported — the status quo today — not that a repo goes uninstalled.
+
+**Known cost, stated rather than designed away.** The list lives in `dotfiles/config/` but
+describes a property of the other nine repos, with nothing forcing the two to agree. That
+is the same shape as `roleModels` — a declaration in one place about behaviour elsewhere —
+and its failure mode is this work's own failure mode reintroduced one level up: a repo
+gains hooks, nobody updates the list, the gap goes unreported forever. It is accepted here
+because the scope split above bounds it to reporting, and because the alternative
+(no list) makes the gap claim false for `ai-devops` and `etch-config` today. Worth
+revisiting if the list ever starts deciding what gets installed.
 
 ### Reporting
 
@@ -550,6 +587,62 @@ Idempotency as a condition to re-run once those targets land.
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+## External Review — Independent Architect
+
+Reviewed at commit `e7d148e`. Three findings; resolved by measurement rather than argument.
+
+1. **"The post-condition applies a uniform mandate to a non-uniform set."** Does not hold,
+   but the reading was available from the text, which was a real defect. The assertion is
+   on the _installed hooks directory_, not on `scripts/`, so `state-ledger`'s
+   `ledger init`-installed `pre-commit` passes rather than firing a false gap. Measured
+   across all six repos: three fires, all true gaps, zero false positives. Separately,
+   `repo-structure.md` mandates the same three hooks of every personal repo with no
+   variation by repo type, so the mandate genuinely is uniform. **Addressed** — both facts
+   now stated explicitly in the Gaps section with the measurement table inline.
+
+2. **"Merge the expected-repos list and the hook mandate into one repo→hook-set map."**
+   Falls with (1): a uniform mandate makes every row's value identical, so the map would
+   add structure to express a constant. The list stays flat. The finding's independent
+   half — that a declaration in `dotfiles/config/` about nine other repos is
+   `roleModels`-shaped, with nothing forcing agreement — is correct and is now recorded as
+   an accepted, bounded cost rather than designed away. **Addressed.**
+
+3. **"The cadence assumption is load-bearing twice and still unmeasured."** Correct, and
+   still unmeasured — all three non-Mac boxes were unreachable when attempted. Promoted
+   out of the lens sections into its own Open Question above, with the command, the
+   contingency, and an explicit note that the fix would be a trigger change the plan can
+   absorb. **Accepted, open** — not settleable from this machine this session.
+
+## Open Question — `-t update` cadence on the non-Mac boxes
+
+Three separate lens assumptions across both rounds reduce to one question: **does
+`-t update` run often enough, in bare `_run_all` form, on the boxes that are not the Mac
+Studio?** Round 1 raised the cadence; round 2 raised flag-scoping (`--brew-only`,
+`--pip-only` skip the `_run_all` block entirely, so the sweep never fires under them).
+
+This is load-bearing, because `run_setup_user` alone covers only fresh machines. If the
+Linux 7950X's median inter-run gap exceeds ~14 days, or its habit is a scoped update, then
+on the very box where the headline 11-day drift was measured this design does not close
+it — and that box is the spec's own primary evidence.
+
+One command per box answers both halves, since the `git-repos` section only prints under
+`_run_all`:
+
+```bash
+ls -l --time-style=+%Y-%m-%d ~/.dotfiles-update.log
+grep -c 'git-repos' ~/.dotfiles-update.log
+```
+
+**Status: unresolved.** Attempted from the Mac Studio 2026-07-28 — `workstation`,
+`cruncher`, and `laptop` were all unreachable (`No route to host`). Only the Mac Studio is
+measured: log last written 2026-07-26 (2 days), `git-repos` present in the most recent run,
+7 occurrences in the log.
+
+**If the answer is bad, the fix is a trigger change, not a reporting change** — an
+additional call site, a `--hooks-only` flag matching the existing `--brew-only` /
+`--pip-only` pattern, or moving the sweep outside the `_run_all` guard. Nothing else in
+this design depends on the answer, so the plan can proceed and absorb it.
 
 ## Multi-Lens Review — Round 2
 
