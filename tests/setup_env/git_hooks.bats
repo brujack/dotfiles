@@ -46,6 +46,21 @@ setup() {
   # 9. repo-unlisted-no-makefile — real repo, no Makefile, name NOT on the list
   mkdir -p "${PERSONAL_GITREPOS}/repo-unlisted-no-makefile"
   git init -q "${PERSONAL_GITREPOS}/repo-unlisted-no-makefile"
+
+  # 5. repo-failing — real repo, install-hooks target present but exits 1.
+  # Discovery only checks for the target's presence, not its exit behaviour
+  # (running it is Task 4's job), so this fixture is discovered like any
+  # other qualifying repo.
+  mkdir -p "${PERSONAL_GITREPOS}/repo-failing"
+  git init -q "${PERSONAL_GITREPOS}/repo-failing"
+  printf 'install-hooks:\n\t@exit 1\n' > "${PERSONAL_GITREPOS}/repo-failing/Makefile"
+
+  # 7. repo-partial-hooks — real repo, target present, installs pre-push only
+  # (the state-ledger shape). Content of the recipe is irrelevant to
+  # discovery; only the target's presence is checked here.
+  mkdir -p "${PERSONAL_GITREPOS}/repo-partial-hooks"
+  git init -q "${PERSONAL_GITREPOS}/repo-partial-hooks"
+  printf 'install-hooks:\n\t@true\n' > "${PERSONAL_GITREPOS}/repo-partial-hooks/Makefile"
 }
 
 @test "HOOK_EXPECTED_REPOS is populated after sourcing lib/git_hooks.sh" {
@@ -86,4 +101,32 @@ setup() {
   [ "$status" -eq 0 ]
   [[ "$output" != *"ai-devops"* ]]
   [[ "$output" != *"repo-unlisted-no-makefile"* ]]
+}
+
+@test "_git_hooks_discover discovers repo-with-target, repo-failing, and repo-partial-hooks" {
+  run _git_hooks_discover
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"repo-with-target"* ]]
+  [[ "$output" == *"repo-failing"* ]]
+  [[ "$output" == *"repo-partial-hooks"* ]]
+}
+
+@test "_git_hooks_discover prints nothing and returns 0 for an empty PERSONAL_GITREPOS" {
+  local _empty="${TESTDIR}/empty-personal"
+  mkdir -p "${_empty}"
+  PERSONAL_GITREPOS="${_empty}" run _git_hooks_discover
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "_git_hooks_discover behaves the same for a single-qualifying-repo tree as a multi-repo tree" {
+  local _solo="${TESTDIR}/solo-personal"
+  mkdir -p "${_solo}/only-repo"
+  git init -q "${_solo}/only-repo"
+  printf 'install-hooks:\n\t@true\n' > "${_solo}/only-repo/Makefile"
+
+  PERSONAL_GITREPOS="${_solo}" run _git_hooks_discover
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"only-repo"* ]]
+  [ "$(printf '%s\n' "$output" | wc -l | tr -d ' ')" -eq 1 ]
 }
