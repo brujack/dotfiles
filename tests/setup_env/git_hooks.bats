@@ -293,3 +293,53 @@ setup() {
 
   [ "${_before}" = "${_after}" ]
 }
+
+@test "_git_hooks_digest fails closed with a non-hex marker when a hook file is unreadable" {
+  local _repo="${PERSONAL_GITREPOS}/repo-with-target"
+  local _hooks_dir="${_repo}/.git/hooks"
+  printf 'AAA' > "${_hooks_dir}/pre-commit"
+  chmod 000 "${_hooks_dir}/pre-commit"
+
+  run _git_hooks_digest "${_repo}/"
+  local _status_a="$status"
+  local _output_a="$output"
+  chmod 755 "${_hooks_dir}/pre-commit"
+
+  [ "${_status_a}" -eq 1 ]
+  [[ ! "${_output_a}" =~ ^[0-9a-f]{64}$ ]]
+}
+
+@test "_git_hooks_digest never fabricates a valid-looking digest collision across two different unreadable hook sets" {
+  local _repo="${PERSONAL_GITREPOS}/repo-with-target"
+  local _hooks_dir="${_repo}/.git/hooks"
+
+  printf 'AAA' > "${_hooks_dir}/pre-commit"
+  printf 'BBB' > "${_hooks_dir}/pre-push"
+  chmod 000 "${_hooks_dir}/pre-commit" "${_hooks_dir}/pre-push"
+  run _git_hooks_digest "${_repo}/"
+  local _status_a="$status"
+  local _output_a="$output"
+  chmod 755 "${_hooks_dir}/pre-commit" "${_hooks_dir}/pre-push"
+
+  printf 'ZZZ' > "${_hooks_dir}/pre-commit"
+  printf 'QQQ' > "${_hooks_dir}/pre-push"
+  chmod 000 "${_hooks_dir}/pre-commit" "${_hooks_dir}/pre-push"
+  run _git_hooks_digest "${_repo}/"
+  local _status_b="$status"
+  local _output_b="$output"
+  chmod 755 "${_hooks_dir}/pre-commit" "${_hooks_dir}/pre-push"
+
+  # The bug this guards: unreadable content used to hash to an empty
+  # string for both sets, producing a genuine, identical, valid-looking
+  # sha256 digest for completely different content (measured: both
+  # digested to 7d67336...). Post-fix, neither call may succeed with a
+  # real digest at all — fail-closed status 1 plus a non-hex marker means
+  # no caller can ever mistake these two calls as "content equal", which
+  # is the property that actually matters. A shared literal error marker
+  # across two independent failures is fine; a shared VALID digest across
+  # two different real contents is the bug.
+  [ "${_status_a}" -eq 1 ]
+  [ "${_status_b}" -eq 1 ]
+  [[ ! "${_output_a}" =~ ^[0-9a-f]{64}$ ]]
+  [[ ! "${_output_b}" =~ ^[0-9a-f]{64}$ ]]
+}
