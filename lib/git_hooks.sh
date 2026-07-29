@@ -242,6 +242,9 @@ _git_hooks_gap_repos() {
 # run — a single broken Makefile must not cost the repos discovered after
 # it. Digest/gap logic lands in later commits on this same function.
 install_git_hooks_all_repos() {
+  local _dry=0
+  [[ -n "${DRY_RUN:-}" ]] && _dry=1
+
   local _checked=0
   local _failures=0
   local _updated=0
@@ -257,8 +260,12 @@ install_git_hooks_all_repos() {
     local _name
     _name="$(basename "${_dir%/}")"
 
-    local _pre
-    _pre="$(_git_hooks_digest "${_dir}")"
+    # Under DRY_RUN, run_cmd only prints the make invocation, so a
+    # before/after digest pair would always be trivially identical --
+    # skip the read entirely rather than report a comparison that means
+    # nothing.
+    local _pre=""
+    [[ ${_dry} -eq 0 ]] && _pre="$(_git_hooks_digest "${_dir}")"
 
     local _rc
     run_cmd make -s -C "${_dir}" install-hooks
@@ -274,11 +281,13 @@ install_git_hooks_all_repos() {
     # whose pre- or post-digest errored is unknown, not "unchanged", and
     # counting it "updated" or leaving it silently counted as current is
     # the false-PASS this whole mechanism exists to prevent.
-    local _post
-    _post="$(_git_hooks_digest "${_dir}")"
-    if [[ "${_pre}" != "digest-error" && "${_post}" != "digest-error" && "${_pre}" != "${_post}" ]]; then
-      _updated=$((_updated + 1))
-      _updated_repos+=("${_name}")
+    if [[ ${_dry} -eq 0 ]]; then
+      local _post
+      _post="$(_git_hooks_digest "${_dir}")"
+      if [[ "${_pre}" != "digest-error" && "${_post}" != "digest-error" && "${_pre}" != "${_post}" ]]; then
+        _updated=$((_updated + 1))
+        _updated_repos+=("${_name}")
+      fi
     fi
 
     # Tri-state, not binary (rc 0/1/2): a repo that ran `make` cleanly can
@@ -322,7 +331,12 @@ install_git_hooks_all_repos() {
     esac
   done < <(_git_hooks_gap_repos)
 
-  local _summary="${_checked} checked, ${_updated} updated"
+  local _updated_str="${_updated}"
+  # "0" under DRY_RUN would falsely assert every repo was already current --
+  # nothing ran, so nothing is known. "n/a" says so instead.
+  [[ ${_dry} -eq 1 ]] && _updated_str="n/a"
+
+  local _summary="${_checked} checked, ${_updated_str} updated"
   if [[ ${#_updated_repos[@]} -gt 0 ]]; then
     _summary+=" ($(IFS=', '; printf '%s' "${_updated_repos[*]}"))"
   fi
