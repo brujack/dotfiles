@@ -991,3 +991,32 @@ _sweep_build_partial_repo() {
   [[ "$output" == *"pre-commit"* ]]
   [[ "$output" == *"commit-msg"* ]]
 }
+
+@test "install_git_hooks_all_repos labels a no-hooks-directory gap (rc=2) distinctly from a missing-hooks gap (rc=1)" {
+  # Collapsing rc=1 and rc=2 into one label is the exact failure the
+  # tri-state check_complete contract exists to prevent: rc=1 is a gap
+  # `make install-hooks` can plausibly fix (there's a directory to install
+  # into); rc=2 means there is nowhere to install into at all, so telling
+  # the operator to re-run the same command is unactionable advice printed
+  # weekly forever.
+  local _base="${TESTDIR}/sweep-rc-distinct"
+  local _markers="${TESTDIR}/sweep-rc-distinct-markers"
+  mkdir -p "${_base}" "${_markers}"
+
+  _sweep_build_partial_repo "${_base}" "partial-hooks-repo" "${_markers}"
+
+  local _no_dir_repo="${_base}/no-hooks-dir-repo"
+  mkdir -p "${_no_dir_repo}"
+  git init -q "${_no_dir_repo}"
+  rm -rf "${_no_dir_repo}/.git/hooks"
+  printf 'install-hooks:\n\ttouch "%s/no-hooks-dir-repo.ran"\n' "${_markers}" > "${_no_dir_repo}/Makefile"
+
+  HOOK_EXPECTED_REPOS=()
+  PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  [ "$status" -eq 0 ]
+  [ -f "${_markers}/partial-hooks-repo.ran" ]
+  [ -f "${_markers}/no-hooks-dir-repo.ran" ]
+  [[ "$output" == *"2 gaps"* ]]
+  [[ "$output" == *"partial-hooks-repo: missing pre-commit commit-msg"* ]]
+  [[ "$output" == *"no-hooks-dir-repo: no hooks directory"* ]]
+}
