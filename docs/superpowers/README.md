@@ -107,7 +107,8 @@ Master status index for all specs and implementation plans in this directory.
 | 2026-07-19 | scripts-dir-cleanup (PR dotfiles#183)                                                      | [spec](specs/2026-07-19-scripts-dir-cleanup-design.md)              | Done    |
 | 2026-07-19 | scripts-world-class (PR dotfiles#185)                                                      | [spec](specs/2026-07-19-scripts-world-class-design.md)              | Done    |
 | 2026-07-28 | [auto-install-git-hooks](plans/2026-07-28-auto-install-git-hooks.md)                       | [spec](specs/2026-07-28-auto-install-git-hooks-design.md)           | Done    |
-| 2026-07-29 | hooksPath global/system check + sweep GIT_DIR strip                                                                     | [spec](specs/2026-07-29-doctor-hookspath-check-design.md)           | Pending |
+| 2026-07-29 | [hooks-sweep-gitdir-strip](plans/2026-07-29-hooks-sweep-gitdir-strip.md) | [spec](specs/2026-07-29-doctor-hookspath-check-design.md) | Pending |
+| 2026-07-29 | [hookspath-global-system-detector](plans/2026-07-29-hookspath-global-system-detector.md) | [spec](specs/2026-07-29-doctor-hookspath-check-design.md) | Pending |
 
 ---
 
