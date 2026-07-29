@@ -586,6 +586,42 @@ setup() {
   [ -z "$output" ]
 }
 
+@test "_git_hooks_check_complete honors _git_hooks_dir's return code even when it prints a real, populated path" {
+  # Stub _git_hooks_dir to FAIL (return 1) while still printing a path to
+  # a real directory that genuinely has all three mandated hooks,
+  # executable. This is deliberate: it makes the two possible guard
+  # implementations diverge instead of coincidentally agreeing.
+  #   - Branch on the return code (correct): the guard fires regardless
+  #     of what was printed — status 1, all three names reported missing.
+  #   - Branch on `[[ -z "$_hooks_dir" ]]` (the old, wrong proxy): the
+  #     printed path is non-empty, so the guard does NOT fire, the
+  #     per-hook loop runs against the real populated directory, finds
+  #     every hook executable, and returns 0 with empty output — the
+  #     opposite result.
+  # A stub that prints nothing (or a nonexistent path) cannot distinguish
+  # these two implementations: both the guard and the per-hook loop's
+  # fallback report "all missing" either way, which is exactly why the
+  # original coincidental-equivalence problem existed in the first place.
+  local _fake_hooks_dir="${TESTDIR}/fake-hooks-dir"
+  mkdir -p "${_fake_hooks_dir}"
+  local _hook
+  for _hook in pre-commit pre-push commit-msg; do
+    printf '#!/usr/bin/env bash\ntrue\n' > "${_fake_hooks_dir}/${_hook}"
+    chmod +x "${_fake_hooks_dir}/${_hook}"
+  done
+
+  _git_hooks_dir() {
+    printf '%s\n' "${_fake_hooks_dir}"
+    return 1
+  }
+
+  run _git_hooks_check_complete "${TESTDIR}/irrelevant-repo/"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"pre-commit"* ]]
+  [[ "$output" == *"pre-push"* ]]
+  [[ "$output" == *"commit-msg"* ]]
+}
+
 @test "_git_hooks_gap_repos includes ai-devops (listed, real repo, no Makefile)" {
   run _git_hooks_gap_repos
   [ "$status" -eq 0 ]
