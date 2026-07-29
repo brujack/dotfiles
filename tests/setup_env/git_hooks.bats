@@ -1121,18 +1121,17 @@ _sweep_build_partial_repo() {
   [[ "$output" != *"0 updated"* ]]
   # check_complete still runs for real under DRY_RUN (it reads the live
   # filesystem, not run_cmd) -- both fixture repos are pre-install, so
-  # this fixture silently produces 2 real gaps. Reviewer finding: those
-  # gaps were previously reported with no provenance, identical to a
-  # post-install gap that will persist after a real run -- an operator
-  # can't tell "will still be a gap after I run this for real" from
-  # "is a gap only because nothing has installed yet". The SUMMARY line's
-  # gap parenthetical must name the provenance instead of the per-repo
-  # missing-hook detail, so it can never be mistaken for a post-install
-  # finding -- the per-repo log_warn line may still name the specific
-  # missing hooks (that detail is still real and useful), but it too must
-  # carry the same provenance note so it isn't mistaken for one either.
-  [[ "$output" == *"2 gaps (pre-run state; make was not executed)"* ]]
-  [[ "$output" != *"gaps (repo-one: missing"* ]]
+  # this fixture silently produces 2 real gaps. Reviewer finding (round
+  # 1): those gaps were previously reported with no provenance, identical
+  # to a post-install gap that will persist after a real run. Reviewer
+  # correction (round 2): the first fix REPLACED the per-repo gap list
+  # with the provenance note instead of suffixing it, which makes a
+  # dry-run preview on a new box -- exactly when an operator most wants
+  # to know WHICH repos are gapped -- strictly less informative than a
+  # real run. The summary must show BOTH: the same per-repo detail list a
+  # real run would show, with the provenance note appended so it can
+  # never be mistaken for a post-install finding.
+  [[ "$output" == *"2 gaps (repo-one: missing pre-commit pre-push commit-msg; repo-two: missing pre-commit pre-push commit-msg) (pre-run state; make was not executed)"* ]]
   [[ "$output" == *"repo-one: missing pre-commit pre-push commit-msg (pre-run state; make was not executed)"* ]]
 }
 

@@ -372,11 +372,7 @@ install_git_hooks_all_repos() {
   fi
   _summary+=", ${_gaps} gaps"
   if [[ ${#_gap_lines[@]} -gt 0 ]]; then
-    if [[ ${_dry} -eq 1 ]]; then
-      _summary+="${_dry_note}"
-    else
-      _summary+=" ($(_git_hooks_join '; ' "${_gap_lines[@]}"))"
-    fi
+    _summary+=" ($(_git_hooks_join '; ' "${_gap_lines[@]}"))${_dry_note}"
   fi
   if [[ ${_unknown} -gt 0 ]]; then
     _summary+=", ${_unknown} unknown ($(_git_hooks_join '; ' "${_unknown_repos[@]}"))"
