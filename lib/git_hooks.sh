@@ -235,4 +235,21 @@ _git_hooks_gap_repos() {
   return 0
 }
 
+# install_git_hooks_all_repos sweeps every repo _git_hooks_discover() finds,
+# running `make -s -C <repo> install-hooks` in each. Minimal skeleton: counts
+# repos attempted and reports the count. Digest/gap logic lands in later
+# commits on this same function.
+install_git_hooks_all_repos() {
+  local _checked=0
+
+  local _dir
+  while IFS= read -r _dir; do
+    [[ -z "${_dir}" ]] && continue
+    _checked=$((_checked + 1))
+  done < <(_git_hooks_discover)
+
+  log_info "${_checked} checked"
+  return 0
+}
+
 [[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0
