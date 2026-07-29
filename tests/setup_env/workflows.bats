@@ -262,6 +262,16 @@ teardown() {
   [ "$(sed -n '2p' "${_log}")" = "sweep" ]
 }
 
+@test "setup_env.sh passes bash -n with the git_hooks.sh source line" {
+  run bash -n "${REPO_ROOT}/setup_env.sh"
+  [ "$status" -eq 0 ]
+}
+
+@test "setup_env.sh passes zsh -n with the git_hooks.sh source line" {
+  run zsh -n "${REPO_ROOT}/setup_env.sh"
+  [ "$status" -eq 0 ]
+}
+
 # ── run_setup_or_developer ────────────────────────────────────────────────────
 
 @test "run_setup_or_developer creates credential directories" {
