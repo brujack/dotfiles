@@ -245,7 +245,9 @@ install_git_hooks_all_repos() {
   local _checked=0
   local _failures=0
   local _updated=0
+  local _gaps=0
   local -a _updated_repos=()
+  local -a _gap_lines=()
 
   local _dir
   while IFS= read -r _dir; do
@@ -278,11 +280,35 @@ install_git_hooks_all_repos() {
       _updated=$((_updated + 1))
       _updated_repos+=("${_name}")
     fi
+
+    # Tri-state, not binary (rc 0/1/2): a repo that ran `make` cleanly can
+    # still be an incomplete-hooks gap (rc=1) or have no hooks directory
+    # at all (rc=2, e.g. broken git infra) -- gaps never affect the sweep's
+    # return code, only failed `make` calls do.
+    local _missing _cc_rc
+    _missing="$(_git_hooks_check_complete "${_dir}")"
+    _cc_rc=$?
+    case ${_cc_rc} in
+      1)
+        _gaps=$((_gaps + 1))
+        _gap_lines+=("${_name}: missing ${_missing}")
+        log_warn "${_name}: missing ${_missing}"
+        ;;
+      2)
+        _gaps=$((_gaps + 1))
+        _gap_lines+=("${_name}: no hooks directory (install-hooks cannot fix this)")
+        log_warn "${_name}: no hooks directory at all"
+        ;;
+    esac
   done < <(_git_hooks_discover)
 
   local _summary="${_checked} checked, ${_updated} updated"
   if [[ ${#_updated_repos[@]} -gt 0 ]]; then
     _summary+=" ($(IFS=', '; printf '%s' "${_updated_repos[*]}"))"
+  fi
+  _summary+=", ${_gaps} gaps"
+  if [[ ${#_gap_lines[@]} -gt 0 ]]; then
+    _summary+=" ($(IFS='; '; printf '%s' "${_gap_lines[*]}"))"
   fi
   log_info "${_summary}"
 
