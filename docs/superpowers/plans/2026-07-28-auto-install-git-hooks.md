@@ -1,5 +1,7 @@
 # Auto-install Git Hooks Implementation Plan
 
+> **Status: DONE**
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Install every personal repo's git hooks automatically during `-t setup_user` and `-t update`, so a hook edited on one box is live on all of them without a manual `make install-hooks` per checkout.

@@ -11,8 +11,9 @@ dotfiles/
 ├── setup_env.sh       # Main entry — sources lib/, dispatches workflows
 ├── Brewfile           # Homebrew bundle (100+ formulae/casks; [HAS_*] tags are capability-gated)
 ├── lib/               # Shell libraries: constants, helpers, detect_env, macos, linux_shared,
-│                      #   linux_ubuntu, developer, update_summary, workflows
-├── config/            # profiles.sh (hostname→profile map); local.sh (machine overrides, git-ignored)
+│                      #   linux_ubuntu, developer, update_summary, workflows, git_hooks
+├── config/            # profiles.sh (hostname→profile map); local.sh (machine overrides, git-ignored);
+│                      #   hook_repos.sh (expected-repos list for the git-hooks sweep)
 ├── scripts/           # bootstrap_mac.sh, whats-new-*.sh, run-bash-coverage.sh
 ├── powershell/        # Windows bootstrap: setup_windows.ps1, Pester tests, Makefile
 ├── tests/             # BATS tests: setup_env/, zshrc.d/, mocks/, helpers/
@@ -112,7 +113,7 @@ See `~/.claude/standards/shell.md` for the full shell coding standards. Dotfiles
 - **`env which` vs `command -v`:** `setup_env.sh` uses `which` (via `env which`) for the brew prerequisite check instead of `command -v` so that BATS tests can mock `which` through PATH injection. `command -v` is a shell builtin and ignores PATH mocks. Use `command -v` everywhere else.
 - **`setup_env.sh` prereq bypass tests — assert absence, not `status -eq 0`:** Tests for `-t doctor` and `-t check-versions` bypass paths (in `tests/setup_env/unit.bats`) assert `[[ "$output" != *"Homebrew not found"* ]]` without asserting `[ "$status" -eq 0 ]`. Reason: `--brew-install` terminates cleanly at line 78 (`exit 0`), but `-t doctor` / `-t check-versions` call `run_doctor` / `run_check_versions` whose exit varies with mock environment. Adding `status -eq 0` to the doctor/check-versions tests causes flaky failures.
 - **No `set -euo pipefail`** at top-level — conditional installs require non-zero exits to continue.
-- **Sourcing guard on every lib file:** All files under `lib/` that are tested must include `[[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0` near the top. When extracting functions into new lib files, add this guard explicitly — plan specs may omit it but the test harness requires it.
+- **Sourcing guard on every lib file:** All files under `lib/` that are tested must include `[[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0` as the **last line, after all function definitions** — not near the top. The guard's condition is true when the file is sourced, so placing it above the function definitions returns before any function exists and breaks standalone sourcing entirely. Precedent: `lib/git_sync.sh:118` and `lib/legacy_rsync.sh:28` are each the final line of their file. When extracting functions into new lib files, add this guard explicitly at the end — plan specs may omit it but the test harness requires it.
 
 ### Platform Detection Pattern
 
@@ -233,7 +234,7 @@ Inline disables (`# shellcheck disable=SCxxxx # reason`) are used for remaining 
 
 `.github/workflows/ci.yml` runs on PRs to master only (the pre-push hook gates branch pushes locally):
 
-- `test` job: installs bats + shellcheck, runs `make test`, then verifies test count ≥ 840 (regression proxy; 979 tests as of 2026-07-19)
+- `test` job: installs bats + shellcheck, runs `make test`, then verifies test count ≥ 840 (regression proxy; 1054 tests as of 2026-07-29)
 - `lint-macos` job: runs `bash -n` and `zsh -n` on all `.sh` files on `macos-latest` (advisory, not blocking auto-merge)
 - `bash-coverage` job: measures bash line coverage via PS4 xtrace on `ubuntu-latest`; **gates at 90%** — blocks auto-merge if coverage drops below floor
 - `secret-scan` job: runs gitleaks against recent commits (advisory, not blocking auto-merge)
@@ -285,7 +286,7 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 #### Bash
 
-- **Overall: 90%** (979 tests as of 2026-07-19); gated in CI at 90% (`bash-coverage` job, blocks auto-merge on drop).
+- **Overall: 90%** (1054 tests as of 2026-07-29); gated in CI at 90% (`bash-coverage` job, blocks auto-merge on drop).
 - `make bash-coverage` measures via PS4 xtrace (`scripts/run-bash-coverage.sh`); `make push-bash-coverage` pushes `coverage/bash.json` to the `coverage-data` branch for the README badge.
 - Method detail, per-file floors/ceilings, and why kcov/bashcov are ruled out: [`dotfiles-bash-coverage`](https://github.com/brujack/ai-config/blob/master/docs/knowledge/dotfiles-bash-coverage.md).
 
@@ -323,6 +324,7 @@ Invoke `caveman:caveman-commit` skill to generate the commit message before runn
 - After any change to `.zshrc` or `.zshrc.d/` files, run `zsh -i -c 'exit'` before committing to catch re-source crashes before they reach prod
 - **`_UPDATE_SECTION_ORDER` coupling:** `lib/update_summary.sh` has a `readonly _UPDATE_SECTION_ORDER=(...)` array that controls which sections appear in the printed update summary. Adding `_update_record_start/end "new-section"` in `run_update()` without also adding `"new-section"` to this array means the section is tracked internally but never printed. Both must be updated together. When **removing** a section, a `sed` pass on test fixture loops won't catch hardcoded count assertions like `[[ "$output" == *"9 OK"* ]]` — these must be audited and decremented manually.
 - **`scripts/sync_git_repos.sh`** replaces the old rsync-only sync script (`scripts/synch_git-repos.sh`, deleted). Two independent modes: git-native fetch/pull/push for `personal/` repos + `state-ledger` (safe on any of the three dev machines — never force-pushes, never auto-merges a diverged repo; dirty does not block a safe push, only a pull), and studio-only rsync push for legacy/no-git-access directories + a full-tree ratna backup. Runs automatically as part of `-t update` (`git-repos`/`legacy-rsync` sections in `_UPDATE_SECTION_ORDER`); `--git-only`/`--legacy-only`/`-h` for standalone use. See `docs/superpowers/specs/2026-07-18-sync-git-repos-design.md` for the full design and the dirty/ahead/behind decision table. **Never invoke this script (or `sync_legacy_dirs`/`sync_git_repos` directly) unmocked outside the BATS test harness** — it performs real `git push`/`rsync --delete` over SSH against real hosts, and `_is_legacy_sync_host` triggers on the real `hostname -s` of whichever machine runs it.
+- **`git-hooks` section coupling:** same `_UPDATE_SECTION_ORDER` trap applies to the hook-install sweep (`lib/git_hooks.sh`) — adding `_update_record_start/end "git-hooks"` in `run_update()` without also adding `"git-hooks"` to `_UPDATE_SECTION_ORDER` means the section is tracked internally but never printed, with no error. Separately: the sweep's post-condition check reads the **installed hooks directory** (`.git/hooks/` or the repo's actual hook path), never `scripts/` — a repo whose hooks were installed by a route other than the Makefile (e.g. `ledger init`) must still read as satisfied.
 
 ## Local-Only State
 
