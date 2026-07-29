@@ -493,6 +493,13 @@ PY
       _update_write_detail_from_err "legacy-rsync" "warning output"
     fi
 
+    # Must run after git-repos/legacy-rsync: sync_git_repos is what pulls
+    # each repo's hook sources, so a sweep placed before it installs the
+    # previous cycle's hooks and reports success.
+    _update_record_start "git-hooks"
+    install_git_hooks_all_repos 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_git-hooks"
+    _update_record_end "git-hooks" "${PIPESTATUS[0]}"
+
     update_aws_cli
     update_rust
     if [[ -d ${HOME}/.tfenv ]]; then
