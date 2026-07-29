@@ -961,3 +961,33 @@ _sweep_build_symlink_repo() {
   [[ "$output" == *"0 updated"* ]]
   [[ "$output" != *"broken-repo"* ]]
 }
+
+# _sweep_build_partial_repo installs only ONE of the three mandated hooks —
+# the state-ledger shape: `make install-hooks` exits 0 (the target ran
+# cleanly), but the repo's hooks directory is still incomplete. This is a
+# post-condition gap (_git_hooks_check_complete rc=1), not a make failure.
+_sweep_build_partial_repo() {
+  local _repo_base="$1" _name="$2" _marker_dir="$3"
+  local _repo="${_repo_base}/${_name}"
+  mkdir -p "${_repo}"
+  git init -q "${_repo}"
+  printf 'install-hooks:\n\tmkdir -p .git/hooks\n\techo pushonly > .git/hooks/pre-push\n\tchmod +x .git/hooks/pre-push\n\ttouch "%s/%s.ran"\n' \
+    "${_marker_dir}" "${_name}" > "${_repo}/Makefile"
+}
+
+@test "install_git_hooks_all_repos counts an incomplete-hook-set repo as a gap, not a failure, and warns" {
+  local _base="${TESTDIR}/sweep-partial"
+  local _markers="${TESTDIR}/sweep-partial-markers"
+  mkdir -p "${_base}" "${_markers}"
+  _sweep_build_partial_repo "${_base}" "partial-repo" "${_markers}"
+
+  HOOK_EXPECTED_REPOS=()
+  PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  [ "$status" -eq 0 ]
+  [ -f "${_markers}/partial-repo.ran" ]
+  [[ "$output" == *"1 gaps"* ]]
+  [[ "$output" == *"[WARN]"* ]]
+  [[ "$output" == *"partial-repo"* ]]
+  [[ "$output" == *"pre-commit"* ]]
+  [[ "$output" == *"commit-msg"* ]]
+}
