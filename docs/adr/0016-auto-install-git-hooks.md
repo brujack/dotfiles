@@ -159,6 +159,34 @@ commit-msg`), rather than a bare count nobody can act on.
   repo installs hooks via `cp`. Normalizing all repos to `ln -sf` (a separate backlog item)
   retires this reporting path rather than complementing it.
 
+### Accepted risk: discovery is not gated on the expected-repos list
+
+Raised by `security-review` on this branch (2026-07-29) and **accepted by the repo owner**,
+recorded here rather than left in a session transcript.
+
+Installation selects on `.git` + `Makefile` + `^install-hooks:` alone. There is no
+allowlist on the execute path — `HOOK_EXPECTED_REPOS` deliberately governs gap _reporting_
+only. Two consequences follow, both understood and accepted:
+
+1. **Any directory under `~/git-repos/personal/` that matches those three conditions gets
+   its Makefile recipe executed**, unattended, weekly, on every machine. The realistic
+   trigger is not a compromised repo but cloning a third-party project into that directory
+   to read it; if it ships an `install-hooks:` target, the next `-t update` runs it.
+2. **The sweep runs immediately after `sync_git_repos` in the same pass**, by design — hooks
+   must install from freshly-pulled sources, or the sweep installs the previous cycle's
+   hooks and reports success. The security consequence of that correctness requirement is
+   that upstream content is fetched and executed in the same run, with no interval in which
+   anything could inspect it. The `make -n` verification recorded above is a point-in-time
+   check of current recipe content, not a control on future content.
+
+Gating installation on `HOOK_EXPECTED_REPOS` would close both, at the cost of the zero-touch
+property: a new repo would need a list edit before its hooks install. That trade was
+considered and declined — the zero-touch property is the reason the discovery design was
+chosen over a hardcoded list in the first place, and re-introducing a mandatory list edit on
+the execute path would reinstate exactly the drift this ADR's first decision exists to avoid.
+
+Revisit if `~/git-repos/personal/` ever holds repositories the owner does not control.
+
 ## Related
 
 - `docs/superpowers/specs/2026-07-28-auto-install-git-hooks-design.md` — full design,
