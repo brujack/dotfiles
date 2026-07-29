@@ -520,7 +520,7 @@ setup() {
   [[ "$output" != *"pre-push"* ]]
 }
 
-@test "_git_hooks_check_complete returns 1 and prints both names when two hooks are missing" {
+@test "_git_hooks_check_complete returns 1 and prints both names on exactly one space-separated line when two hooks are missing" {
   local _repo="${TESTDIR}/missing-two-repo"
   mkdir -p "${_repo}"
   git init -q "${_repo}"
@@ -530,8 +530,13 @@ setup() {
 
   run _git_hooks_check_complete "${_repo}/"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"pre-push"* ]]
-  [[ "$output" == *"commit-msg"* ]]
+  # Exact-shape assertions, not substring matching: printf '%s\n' "${arr[*]}"
+  # (one line, space-joined) and printf '%s\n' "${arr[@]}" (one line PER
+  # element) both satisfy every *"name"* substring check used elsewhere in
+  # this file, so mutating [*] to [@] here survives the whole suite unless
+  # something checks the exact line count and exact joined string.
+  [ "${#lines[@]}" -eq 1 ]
+  [ "$output" = "pre-push commit-msg" ]
 }
 
 @test "_git_hooks_check_complete counts a present-but-non-executable hook as missing (the -x guard's false-condition branch)" {
