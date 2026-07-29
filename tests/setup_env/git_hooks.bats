@@ -672,6 +672,25 @@ setup() {
   [[ "$output" != *"etch-config"* ]]
 }
 
+@test "_git_hooks_gap_repos excludes an expected-repo name that is a linked worktree (mutation guard for the -d vs -e polarity)" {
+  # Mirrors _git_hooks_discover's own worktree fixture: a REAL linked
+  # worktree, not a synthetic .git-file stand-in. Measured: against a
+  # real `git worktree add` under a listed name, `-d .git` correctly
+  # excludes it, while `-e .git` (also true for a worktree's .git FILE)
+  # would incorrectly admit it -- a genuine behavior difference the
+  # rev-parse check does NOT catch, since rev-parse --git-dir genuinely
+  # succeeds inside a real worktree.
+  local _wt_source="${TESTDIR}/math-source"
+  mkdir -p "${_wt_source}"
+  git init -q "${_wt_source}"
+  git -C "${_wt_source}" commit -q --allow-empty -m init
+  git -C "${_wt_source}" worktree add -q -b math-wt-branch "${PERSONAL_GITREPOS}/math"
+
+  run _git_hooks_gap_repos
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"math"* ]]
+}
+
 @test "_git_hooks_gap_repos excludes an expected-repo name that is a partial clone (mutation guard for the rev-parse check)" {
   # .git is a real directory (passes -d .git) but an interrupted/invalid
   # clone — the same shape _git_hooks_discover's partial-clone fixture

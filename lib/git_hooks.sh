@@ -63,7 +63,9 @@ _git_hooks_dir() {
   local _hooks_dir
 
   # rev-parse --git-path hooks is empty when _repo_dir is not a git repo at
-  # all (defensive; callers only ever pass a real repo path). An inherited
+  # all (reachable: callers may pass a listed repo path that is not a git
+  # repo at all -- see the plain-non-git-directory test -- this is not a
+  # defensive-only branch). An inherited
   # GIT_DIR (or GIT_WORK_TREE/GIT_COMMON_DIR/GIT_INDEX_FILE) overrides -C
   # entirely, silently redirecting this at a different repo's hooks dir —
   # git-workflow.md documents that git exports GIT_DIR into the pre-push
@@ -196,14 +198,22 @@ _git_hooks_gap_repos() {
 
   for _name in "${HOOK_EXPECTED_REPOS[@]}"; do
     _dir="${PERSONAL_GITREPOS}/${_name}"
-    # -d not -e, then rev-parse: same pair _git_hooks_discover uses, and
-    # for the same reason -- -d .git alone admits a partial/interrupted
-    # clone. A partial clone sitting on the expected-repos list is not
-    # itself evidence of a real repo missing a Makefile, so it must not
-    # be reported as a gap on the strength of a .git directory alone.
+    # -d not -e: a worktree/submodule .git is a FILE, not a directory --
+    # same reason _git_hooks_discover excludes them. A listed name that
+    # is only a linked worktree must not be reported as a gap.
     [[ -d "${_dir}/.git" ]] || continue
+    # rev-parse, separately: -d .git alone still admits a partial or
+    # interrupted clone (a real but empty/invalid .git directory). A
+    # partial clone sitting on the expected-repos list is not evidence
+    # of a real repo missing a Makefile, so it must not be reported as
+    # a gap on the strength of a .git directory alone -- this is the
+    # spec's own argument for why _git_hooks_discover needs both checks,
+    # applied here too.
     env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
       git -C "${_dir}" rev-parse --git-dir >/dev/null 2>&1 || continue
+    # Makefile present => discovery already handles this repo; not a gap.
+    # (The only &&-guard in this file; the other five all use || continue
+    # because their conditions are inverted -- this one isn't.)
     [[ -f "${_dir}/Makefile" ]] && continue
     printf '%s\n' "${_name}"
   done
