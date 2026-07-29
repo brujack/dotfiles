@@ -1314,3 +1314,37 @@ _sweep_build_stray_unreadable_repo() {
   [ "$status" -eq 0 ]
   [[ "$output" != *"failures"* ]]
 }
+
+@test "install_git_hooks_all_repos counts no-hooks-dir to real-digest as updated (the install direction)" {
+  # Reviewer decision: "no-hooks-dir" IS comparable as a sentinel, unlike
+  # "digest-error" -- it's a stable literal, and a repo whose hooks
+  # directory did not exist before the sweep and does after is genuinely
+  # reporting a real, true change (it just gained its hooks directory).
+  # The exclusion guard therefore only ever names "digest-error"; this
+  # test pins that "no-hooks-dir" -> real digest is counted updated, not
+  # silently swallowed the way digest-error is. The reverse direction
+  # (hooks directory removed) is already independently caught as an rc=2
+  # gap via _git_hooks_check_complete, not by this digest comparison.
+  local _base="${TESTDIR}/sweep-no-hooks-dir-sentinel"
+  local _markers="${TESTDIR}/sweep-no-hooks-dir-sentinel-markers"
+  mkdir -p "${_base}" "${_markers}"
+  local _repo="${_base}/fresh-repo"
+  mkdir -p "${_repo}"
+  git init -q "${_repo}"
+  rm -rf "${_repo}/.git/hooks"
+  printf 'install-hooks:\n\tmkdir -p .git/hooks\n\tprintf "#!/usr/bin/env bash\\ntrue\\n" > .git/hooks/pre-commit\n\tchmod +x .git/hooks/pre-commit\n\ttouch "%s/fresh-repo.ran"\n' \
+    "${_markers}" > "${_repo}/Makefile"
+
+  # Guard the guard: prove the repo genuinely starts with no hooks
+  # directory at all, so the "updated" result below is proof of the
+  # no-hooks-dir -> real transition, not a coincidence.
+  run _git_hooks_digest "${_repo}/"
+  [ "$status" -eq 0 ]
+  [ "$output" = "no-hooks-dir" ]
+
+  HOOK_EXPECTED_REPOS=()
+  PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  [ "$status" -eq 0 ]
+  [ -f "${_markers}/fresh-repo.ran" ]
+  [[ "$output" == *"1 updated (fresh-repo)"* ]]
+}
