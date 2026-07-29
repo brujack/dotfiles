@@ -1,5 +1,7 @@
 # Auto-install Git Hooks Implementation Plan
 
+> **Status: DONE**
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Install every personal repo's git hooks automatically during `-t setup_user` and `-t update`, so a hook edited on one box is live on all of them without a manual `make install-hooks` per checkout.
@@ -13,7 +15,7 @@
 ## Global Constraints
 
 - No `set -euo pipefail` at top level — conditional installs require non-zero exits to continue.
-- Every `lib/` file carries the sourcing guard `[[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0` immediately after its header comment.
+- Every `lib/` file carries the sourcing guard `[[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0` **as its last line, after all function definitions** — not near the top. The guard's condition is _true_ when the file is sourced, so placing it above the definitions returns before any function exists and breaks standalone sourcing entirely. Verified precedent: `lib/git_sync.sh:118` and `lib/legacy_rsync.sh:28` are each the final line of their file. (`CLAUDE.md`'s "near the top" wording is inaccurate; Task 8 corrects it.)
 - Shebang `#!/usr/bin/env bash`; `[[ ]]` not `[ ]`; `${VAR}` with braces; `printf` not `echo`; `snake_case()` functions; `readonly SCREAMING_SNAKE_CASE` constants.
 - Error handling in function bodies uses `|| return 1`, never `|| exit`.
 - Tests never mutate real system state — PATH-based mocks from `tests/mocks/` only. `tests/mocks/make` already exists.
@@ -28,8 +30,24 @@
 **Command that proves the whole change works:**
 
 ```bash
-./setup_env.sh -t update --dry-run 2>&1 | grep -A3 'git-hooks'
+bash -c 'DRY_RUN=1; source lib/git_hooks.sh; install_git_hooks_all_repos'
 ```
+
+> **DO NOT use `./setup_env.sh -t update --dry-run` for this.** That command was written
+> into this plan and is **not safe** — corrected 2026-07-29 after `pr-review` refused to run
+> it. Measured: `lib/workflows.sh` contains **zero** `run_cmd` call sites and **zero**
+> `DRY_RUN` reads, so `--dry-run` is entirely inert for the `-t update` workflow. Running it
+> performs real `brew upgrade`, real `pip install -U`, real `sync_git_repos` (`git push` over
+> SSH), and real `sync_legacy_dirs` (`rsync --delete`) — the last of which this repo's own
+> `CLAUDE.md` explicitly forbids invoking unmocked. `--dry-run` is documented at
+> `lib/helpers.sh:229` as covering installs; that documentation is wrong for `-t update`, and
+> the git-hooks sweep added by this plan is currently the only `-t update` code path that
+> honours `DRY_RUN` at all. Logged as a verified lead in
+> `ai-config/docs/knowledge/dotfiles-bug-hunt-leads.md`.
+
+The substituted command sources the library directly and calls the sweep with `DRY_RUN` set,
+so `run_cmd` prints instead of executing and the digest is skipped. It reads the real
+`~/git-repos/personal` tree and mutates nothing.
 
 **Expected observable output:** a `git-hooks` section appears in the update summary, listing `[DRY RUN] make -s -C <dir> install-hooks` for each of the six repos that currently carry an `install-hooks` target (`ai-config`, `dotfiles`, `etch-cli`, `state-ledger`, `brucejacksonconsulting-site`, `math`), and no line for `ai-config-hook-integrity` (a live worktree), for any `*-worktrees` container, or for any repo without the target.
 
@@ -99,7 +117,7 @@ Both the `-d .git` and `rev-parse` tests are required and neither subsumes the o
 
 1. `repo-with-target/` — real `git init`, `Makefile` containing `install-hooks:`
 2. `repo-no-target/` — real `git init`, `Makefile` without the target
-3. `worktree-dir/` — `.git` written as a regular file containing `gitdir: /somewhere`
+3. `worktree-dir/` — a **real linked worktree** made with `git worktree add` off a source repo that has a committed `install-hooks` Makefile. **Not** a synthetic `.git` file containing `gitdir: /somewhere`: that shape fails `rev-parse` because the path is bogus, not because it is a worktree, so the fixture stays over-determined and deleting the `-d .git` guard still leaves the suite green. `rev-parse` must genuinely _succeed_ inside this fixture — that is the real `ai-config-hook-integrity` hazard, and it is the only thing that makes `-d .git` mutation-visible. A `tdd.md` section F instance: the hand-built fixture encoded a wrong belief about what makes git reject a path.
 4. `plain-dir/` — no `.git`
 5. `repo-failing/` — real `git init`, `Makefile` whose `install-hooks` recipe exits 1
 6. `partial-clone/` — `mkdir -p partial-clone/.git` only, plus a `Makefile` with the target
@@ -245,6 +263,23 @@ depends_on: [3]
 
 For each path from `_git_hooks_discover()`: take a pre-digest, `run_cmd make -s -C "${_dir}" install-hooks`, capture the rc immediately into a local, take a post-digest, then run `_git_hooks_check_complete`. Accumulate four counters — checked, updated, failures, gaps — and two name lists (updated repos, gap descriptions).
 
+#### Contracts this task consumes — branch on all three
+
+Tasks 2 and 3 landed richer contracts than the original sketch. **Branch on the exit codes, not on truthiness**, and handle both gap shapes:
+
+| Callee                      | Exit | Stdout                                                | Meaning for the sweep                                            |
+| --------------------------- | ---- | ----------------------------------------------------- | ---------------------------------------------------------------- |
+| `_git_hooks_check_complete` | 0    | empty                                                 | complete — not a gap                                             |
+|                             | 1    | `pre-push commit-msg` (space-separated, **one line**) | hooks missing — a gap `make install-hooks` can fix               |
+|                             | 2    | `no-hooks-dir`                                        | **no hooks directory at all** — a gap `install-hooks` CANNOT fix |
+| `_git_hooks_gap_repos`      | 0    | `etch-config`                                         | on the list, real repo, no Makefile                              |
+|                             | 0    | `terraform_ansible:absent`                            | on the list, **no directory on disk** (never cloned)             |
+| `_git_hooks_digest`         | 0    | 64-hex                                                | a real digest                                                    |
+|                             | 0    | `no-hooks-dir`                                        | no hooks dir — do not compare as a digest                        |
+|                             | 1    | `digest-error`                                        | a hook was unreadable — **never** compare this as a digest       |
+
+Treating rc 2 as "just another gap" is the failure the tri-state exists to prevent: the operator is told to run `install-hooks`, it cannot succeed because there is no hooks directory to install into, and the next weekly sweep prints the identical line forever. Report rc 2 and `:absent` under a label distinct from the ordinary missing-hooks gap.
+
 Rules, each of which has a test below:
 
 - **Fail-closed, not fail-fast.** A non-zero `make` rc increments failures and the loop continues to the next repo. The function returns 1 only after every discovered repo has been attempted.
@@ -288,7 +323,7 @@ role: executor
 model: sonnet
 tdd: required
 acceptance:
-  - cmd: bats tests/setup_env/workflows.bats
+  - cmd: bats tests/setup_env/workflows.bats tests/setup_env/git_hooks.bats
     exit_code: 0
   - cmd: make test
     exit_code: 0
@@ -296,11 +331,13 @@ max_retries: 3
 files_touched:
   - setup_env.sh
   - lib/workflows.sh
+  - lib/git_hooks.sh
   - tests/setup_env/workflows.bats
+  - tests/setup_env/git_hooks.bats
 depends_on: [4]
 ```
 
-**Files:** `setup_env.sh`, `lib/workflows.sh`, `tests/setup_env/workflows.bats`.
+**Files:** `setup_env.sh`, `lib/workflows.sh`, `lib/git_hooks.sh`, `tests/setup_env/workflows.bats`, `tests/setup_env/git_hooks.bats`.
 
 Add `source "$(dirname "${BASH_SOURCE[0]}")/lib/git_hooks.sh"` to `setup_env.sh` after the `lib/legacy_rsync.sh` line (currently line 52).
 
@@ -312,8 +349,21 @@ In `run_setup_user()`, insert after `setup_claude_plugins` and before `_ledger_w
 
 **Do NOT use `|| return 1`.** `setup_env.sh:82` dispatches via `_run_or_exit run_setup_user`, whose body is `[[ ${_ec} -eq 0 ]] || exit "${_ec}"` — a non-zero return here aborts the entire script before `run_setup_or_developer` and `run_developer_or_ansible` ever run, letting a broken Makefile in an unrelated repo kill a full machine bootstrap. Propagating would also skip `_ledger_write_run_entry`, on exactly the runs worth recording.
 
+**Fix the double-sourcing collision this task creates** (raised by Task 1's spec review; latent until now, live from this task on). `config/hook_repos.sh` declares `readonly HOOK_EXPECTED_REPOS`. Once `setup_env.sh` sources `lib/git_hooks.sh`, the existing `tests/setup_env/git_hooks.bats` `setup()` — which calls `load_setup_env` and _then_ sources `lib/git_hooks.sh` explicitly — sources it twice, and every one of its 9 tests starts emitting `HOOK_EXPECTED_REPOS: readonly variable` on stderr. Exit codes stay 0, so this will not fail a gate; it just spews. Verified reproduction: `source lib/git_hooks.sh; source lib/git_hooks.sh`.
+
+Fix by guarding the source block in `lib/git_hooks.sh` so a second source is a no-op:
+
+```bash
+if [[ -z "${HOOK_EXPECTED_REPOS+x}" ]]; then
+  # ... existing if -f / source / else readonly fallback ...
+fi
+```
+
+Add `lib/git_hooks.sh` and `tests/setup_env/git_hooks.bats` to this task's `files_touched` when making that change. Do **not** instead delete the explicit source from the bats `setup()` — keeping it is what makes the bats file runnable standalone.
+
 **Tests:**
 
+- **sourcing `lib/git_hooks.sh` twice produces no stderr output and leaves `HOOK_EXPECTED_REPOS` intact** — assert on captured stderr being empty, not just on exit code, since the exit code is 0 either way and the test would pass vacuously
 - `run_setup_user` invokes `install_git_hooks_all_repos` (stub the function, assert a marker file)
 - **`run_setup_user` returns 0 when the sweep returns 1** — the dispatcher-hazard test
 - **`_ledger_write_run_entry` still runs when the sweep returns 1**
@@ -451,6 +501,7 @@ parallel_group: docs
 
 - Add `git_hooks.sh` to the `lib/` line in the Layout tree, and `hook_repos.sh` to the `config/` line.
 - Add a Key Conventions bullet mirroring the existing `_UPDATE_SECTION_ORDER` coupling warning: the `git-hooks` section requires matching entries in both `run_update` and `_UPDATE_SECTION_ORDER`, and the hook sweep's post-condition reads the installed hooks directory, never `scripts/`.
+- **Correct the sourcing-guard wording.** The Code Standards section currently says lib files must include the guard "near the top". That is wrong and actively harmful — the guard's condition is true when sourced, so at the top it returns before defining anything. Change it to state the guard belongs on the **last line, after all function definitions**, citing `lib/git_sync.sh:118` and `lib/legacy_rsync.sh:28` as the precedent. Caught during Task 1 when the implementer refused the instruction and verified the correct placement empirically.
 - Update the Testing section's test count and the Coverage section's bash figure to the values measured after Task 6 — read them from the actual run, do not estimate.
 
 `docs/superpowers/README.md` — set the `auto-install-git-hooks` row's Status to `Done` and link the plan file (the row currently reads "plan not yet written").

@@ -216,6 +216,62 @@ teardown() {
   [ "$status" -ne 0 ]
 }
 
+# ── run_setup_user: install_git_hooks_all_repos wiring ────────────────────────
+
+@test "run_setup_user calls install_git_hooks_all_repos" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  local _marker="${BATS_TEST_TMPDIR}/git_hooks_sweep.ran"
+  install_git_hooks_all_repos() { touch "${_marker}"; return 0; }
+  # run-wrapped (not a bare call): _dotfiles_run_tmpdir_setup installs an
+  # EXIT trap inside run_setup_user, and a bare call whose surrounding test
+  # later fails clobbers bats' own EXIT trap, silently dropping the test's
+  # TAP output entirely (reproduced: "Executed N-1 instead of expected N").
+  # `run` isolates the trap inside its subshell.
+  run run_setup_user
+  [ -f "${_marker}" ]
+}
+
+@test "run_setup_user returns 0 when install_git_hooks_all_repos returns 1" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  install_git_hooks_all_repos() { return 1; }
+  run run_setup_user
+  [ "$status" -eq 0 ]
+}
+
+@test "run_setup_user still calls _ledger_write_run_entry when install_git_hooks_all_repos returns 1" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  local _marker="${BATS_TEST_TMPDIR}/ledger_write.ran"
+  install_git_hooks_all_repos() { return 1; }
+  _ledger_write_run_entry() { touch "${_marker}"; }
+  run run_setup_user
+  [ -f "${_marker}" ]
+}
+
+@test "run_setup_user calls install_git_hooks_all_repos after setup_claude_plugins" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  local _log="${BATS_TEST_TMPDIR}/order.log"
+  : > "${_log}"
+  setup_claude_plugins() { printf 'plugins\n' >> "${_log}"; return 0; }
+  install_git_hooks_all_repos() { printf 'sweep\n' >> "${_log}"; return 0; }
+  run run_setup_user
+  [ "$(sed -n '1p' "${_log}")" = "plugins" ]
+  [ "$(sed -n '2p' "${_log}")" = "sweep" ]
+}
+
+@test "setup_env.sh passes bash -n with the git_hooks.sh source line" {
+  run bash -n "${REPO_ROOT}/setup_env.sh"
+  [ "$status" -eq 0 ]
+}
+
+@test "setup_env.sh passes zsh -n with the git_hooks.sh source line" {
+  run zsh -n "${REPO_ROOT}/setup_env.sh"
+  [ "$status" -eq 0 ]
+}
+
 # ── run_setup_or_developer ────────────────────────────────────────────────────
 
 @test "run_setup_or_developer creates credential directories" {
@@ -1326,6 +1382,67 @@ setup_constants_copy() {
   # only checks UPDATE_BREW/PIP/GEMS/MAS/PKGS/CLAUDE, never bare UPDATE).
   run_update
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_git-repos")" = "OK" ]
+}
+
+# ── run_update — install_git_hooks_all_repos wiring ───────────────────────────
+
+@test "run_update with _run_all=1 invokes install_git_hooks_all_repos" {
+  sync_git_repos() { return 0; }
+  sync_legacy_dirs() { return 0; }
+  export -f sync_git_repos sync_legacy_dirs
+  export MACOS=1
+  unset LINUX UBUNTU
+  local _marker="${BATS_TEST_TMPDIR}/git_hooks_sweep.ran"
+  install_git_hooks_all_repos() { touch "${_marker}"; return 0; }
+  # No UPDATE_* flag set — relies on run_update's default "no flags = run
+  # everything" (_run_all) path, not a bare UPDATE var (_any_update_flag
+  # only checks UPDATE_BREW/PIP/GEMS/MAS/PKGS/CLAUDE, never bare UPDATE).
+  run run_update
+  [ -f "${_marker}" ]
+}
+
+@test "run_update runs install_git_hooks_all_repos after sync_git_repos" {
+  local _log="${BATS_TEST_TMPDIR}/order.log"
+  : > "${_log}"
+  sync_git_repos() { printf 'git-repos\n' >> "${_log}"; return 0; }
+  sync_legacy_dirs() { return 0; }
+  export -f sync_git_repos sync_legacy_dirs
+  export MACOS=1
+  unset LINUX UBUNTU
+  install_git_hooks_all_repos() { printf 'git-hooks\n' >> "${_log}"; return 0; }
+  run run_update
+  [ "$(sed -n '1p' "${_log}")" = "git-repos" ]
+  [ "$(sed -n '2p' "${_log}")" = "git-hooks" ]
+}
+
+@test "run_update does not invoke install_git_hooks_all_repos under --brew-only" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE_BREW=1
+  unset UPDATE_CLAUDE UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  local _marker="${BATS_TEST_TMPDIR}/git_hooks_sweep.ran"
+  install_git_hooks_all_repos() { touch "${_marker}"; return 0; }
+  run run_update
+  [ ! -f "${_marker}" ]
+}
+
+@test "run_update records FAIL for git-hooks section when install_git_hooks_all_repos fails" {
+  sync_git_repos() { return 0; }
+  sync_legacy_dirs() { return 0; }
+  export -f sync_git_repos sync_legacy_dirs
+  export MACOS=1
+  unset LINUX UBUNTU
+  install_git_hooks_all_repos() { return 1; }
+  # `run run_update` (not a bare call): run_update's _dotfiles_run_tmpdir_setup
+  # installs an EXIT trap, and a bare call whose assertion then fails
+  # clobbers bats' own EXIT trap, silently dropping the test's TAP output
+  # entirely (reproduced here: "Executed N-1 instead of expected N" before
+  # this test was switched to `run`). Assert on the printed summary row
+  # instead of reading _DOTFILES_RUN_TMPDIR/status_git-hooks — `run` forks
+  # a subshell, so exports made inside run_update do not survive back into
+  # this test body.
+  run run_update
+  [[ "$output" == *"[FAIL] git-hooks"* ]]
 }
 
 # ── run_update — claude/npm/pip section flags ─────────────────────────────────

@@ -178,6 +178,11 @@ run_setup_user() {
 
   setup_claude_mcp || return 1
   setup_claude_plugins || return 1
+  # Not `|| return 1`: setup_env.sh's _run_or_exit wrapper would abort the
+  # entire script (run_setup_or_developer, run_developer_or_ansible never
+  # run) on a single broken repo's Makefile, and would also skip
+  # _ledger_write_run_entry on exactly the runs worth recording.
+  install_git_hooks_all_repos || log_warn "git hooks sweep reported failures — see above"
   _ledger_write_run_entry "setup_user" 0 || true
 }
 
@@ -487,6 +492,13 @@ PY
       _update_warn "legacy-rsync" "one or more rsync targets unreachable"
       _update_write_detail_from_err "legacy-rsync" "warning output"
     fi
+
+    # Must run after git-repos/legacy-rsync: sync_git_repos is what pulls
+    # each repo's hook sources, so a sweep placed before it installs the
+    # previous cycle's hooks and reports success.
+    _update_record_start "git-hooks"
+    install_git_hooks_all_repos 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_git-hooks"
+    _update_record_end "git-hooks" "${PIPESTATUS[0]}"
 
     update_aws_cli
     update_rust

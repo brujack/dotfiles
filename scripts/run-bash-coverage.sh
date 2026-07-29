@@ -24,6 +24,12 @@ OUTPUT_DIR="${REPO_ROOT}/coverage"
 TRACE_FILE="${OUTPUT_DIR}/bash_trace.txt"
 TRACE_FIFO="${OUTPUT_DIR}/bash_trace.fifo"
 
+# Hand-maintained, and nothing enforces that it matches lib/*.sh — a new lib
+# file is silently excluded, so the reported percentage stays comfortable while
+# covering none of it. lib/git_hooks.sh was missed exactly this way and only
+# surfaced because its absence from the report was noticed by eye. Add every
+# new lib file here in the same commit that creates it.
+# Known still-missing: lib/package_capture.sh (pre-existing, see PR notes).
 INCLUDE_FILES=(
     "${REPO_ROOT}/setup_env.sh"
     "${REPO_ROOT}/lib/constants.sh"
@@ -37,6 +43,7 @@ INCLUDE_FILES=(
     "${REPO_ROOT}/lib/macos.sh"
     "${REPO_ROOT}/lib/git_sync.sh"
     "${REPO_ROOT}/lib/legacy_rsync.sh"
+    "${REPO_ROOT}/lib/git_hooks.sh"
 )
 
 mkdir -p "${OUTPUT_DIR}"

@@ -787,6 +787,32 @@ firefox  124.0"
   [[ "${_joined}" == *"ai-config git-repos legacy-rsync"* ]]
 }
 
+@test "_UPDATE_SECTION_ORDER includes git-hooks after legacy-rsync" {
+  local _joined
+  _joined="${_UPDATE_SECTION_ORDER[*]}"
+  [[ "${_joined}" == *"ai-config git-repos legacy-rsync git-hooks"* ]]
+}
+
+@test "_update_summary prints a git-hooks row with the literal result production writes, not a fabricated counts string" {
+  # _update_record_end has no git-hooks) case arm -- git-hooks falls
+  # through to the generic `*) _result="updated"` branch like every other
+  # section without special-cased diffing. The sweep's own "N checked, M
+  # updated, G gaps" line goes to log_info (~/.dotfiles-update.log), never
+  # into this table -- do NOT restore a counts-string fixture here; that
+  # only round-trips a fabricated literal through pre-existing generic
+  # rendering code and proves nothing about the git-hooks wiring. Seed
+  # "updated" (what production actually writes) and assert on the
+  # git-hooks row specifically: a bare `[[ "$output" == *"updated"* ]]`
+  # would pass against nearly any other OK section's row too.
+  printf "OK\n" > "${_DOTFILES_RUN_TMPDIR}/status_git-hooks"
+  printf "updated\n" > "${_DOTFILES_RUN_TMPDIR}/result_git-hooks"
+  run _update_summary
+  [ "$status" -eq 0 ]
+  local _row
+  _row=$(grep 'git-hooks' <<< "$output")
+  [[ "${_row}" == "[OK]"*"git-hooks"*"updated" ]]
+}
+
 # ── _update_record_start legacy-rsync ─────────────────────────────────────────
 
 @test "_update_record_start legacy-rsync case skips via _update_skip when not studio" {
