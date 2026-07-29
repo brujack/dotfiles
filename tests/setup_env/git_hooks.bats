@@ -840,3 +840,32 @@ _sweep_build_failing_repo() {
   [ -f "${_markers}/bbb-ok.ran" ]
   [ -f "${_markers}/ccc-ok.ran" ]
 }
+
+# _sweep_build_loud_repo's recipe line is NOT @-prefixed. Without `-s`, make
+# prints the recipe line's own command text ("echo LOUD-RECIPE-MARKER")
+# before running it; with `-s` only the command's real stdout
+# ("LOUD-RECIPE-MARKER") appears. Only the command-text line distinguishes
+# the two — the echoed word itself would appear in the sweep's output
+# either way.
+_sweep_build_loud_repo() {
+  local _repo_base="$1" _name="$2" _marker_dir="$3"
+  local _repo="${_repo_base}/${_name}"
+  mkdir -p "${_repo}"
+  git init -q "${_repo}"
+  printf 'install-hooks:\n\techo LOUD-RECIPE-MARKER\n\ttouch "%s/%s.ran"\n' \
+    "${_marker_dir}" "${_name}" > "${_repo}/Makefile"
+}
+
+@test "install_git_hooks_all_repos invokes make with -s, suppressing the recipe's own command transcript" {
+  local _base="${TESTDIR}/sweep-loud"
+  local _markers="${TESTDIR}/sweep-loud-markers"
+  mkdir -p "${_base}" "${_markers}"
+  _sweep_build_loud_repo "${_base}" "loud-repo" "${_markers}"
+
+  HOOK_EXPECTED_REPOS=()
+  PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  [ "$status" -eq 0 ]
+  [ -f "${_markers}/loud-repo.ran" ]
+  [[ "$output" == *"LOUD-RECIPE-MARKER"* ]]
+  [[ "$output" != *"echo LOUD-RECIPE-MARKER"* ]]
+}
