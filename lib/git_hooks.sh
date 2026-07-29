@@ -244,6 +244,8 @@ _git_hooks_gap_repos() {
 install_git_hooks_all_repos() {
   local _checked=0
   local _failures=0
+  local _updated=0
+  local -a _updated_repos=()
 
   local _dir
   while IFS= read -r _dir; do
@@ -253,6 +255,9 @@ install_git_hooks_all_repos() {
     local _name
     _name="$(basename "${_dir%/}")"
 
+    local _pre
+    _pre="$(_git_hooks_digest "${_dir}")"
+
     local _rc
     run_cmd make -s -C "${_dir}" install-hooks
     _rc=$?
@@ -261,9 +266,25 @@ install_git_hooks_all_repos() {
       _failures=$((_failures + 1))
       log_warn "${_name}: make install-hooks failed (exit ${_rc})"
     fi
+
+    # "digest-error" (Task 2's fail-closed marker for an unreadable hook
+    # file) must never be compared as if it were a real digest -- a repo
+    # whose pre- or post-digest errored is unknown, not "unchanged", and
+    # counting it "updated" or leaving it silently counted as current is
+    # the false-PASS this whole mechanism exists to prevent.
+    local _post
+    _post="$(_git_hooks_digest "${_dir}")"
+    if [[ "${_pre}" != "digest-error" && "${_post}" != "digest-error" && "${_pre}" != "${_post}" ]]; then
+      _updated=$((_updated + 1))
+      _updated_repos+=("${_name}")
+    fi
   done < <(_git_hooks_discover)
 
-  log_info "${_checked} checked"
+  local _summary="${_checked} checked, ${_updated} updated"
+  if [[ ${#_updated_repos[@]} -gt 0 ]]; then
+    _summary+=" ($(IFS=', '; printf '%s' "${_updated_repos[*]}"))"
+  fi
+  log_info "${_summary}"
 
   [[ ${_failures} -gt 0 ]] && return 1
   return 0
