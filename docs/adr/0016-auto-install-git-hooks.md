@@ -166,26 +166,40 @@ recorded here rather than left in a session transcript.
 
 Installation selects on `.git` + `Makefile` + `^install-hooks:` alone. There is no
 allowlist on the execute path — `HOOK_EXPECTED_REPOS` deliberately governs gap _reporting_
-only. Two consequences follow, both understood and accepted:
+only, so any repo matching those three conditions has its Makefile recipe executed
+unattended, weekly, on every machine.
 
-1. **Any directory under `~/git-repos/personal/` that matches those three conditions gets
-   its Makefile recipe executed**, unattended, weekly, on every machine. The realistic
-   trigger is not a compromised repo but cloning a third-party project into that directory
-   to read it; if it ships an `install-hooks:` target, the next `-t update` runs it.
-2. **The sweep runs immediately after `sync_git_repos` in the same pass**, by design — hooks
-   must install from freshly-pulled sources, or the sweep installs the previous cycle's
-   hooks and reports success. The security consequence of that correctness requirement is
-   that upstream content is fetched and executed in the same run, with no interval in which
-   anything could inspect it. The `make -n` verification recorded above is a point-in-time
-   check of current recipe content, not a control on future content.
+**The load-bearing invariant is a directory convention:** `~/git-repos/personal/` holds
+only repositories the owner controls. Third-party clones live elsewhere. Given that, the
+scenario security-review first reached for — cloning someone else's project into that
+directory to read it, and having its `install-hooks:` target run on the next `-t update` —
+is not reachable, and the finding was overstated on that point. It is recorded here because
+the invariant is a _convention_, enforced by habit rather than by the code: nothing in
+`_git_hooks_discover` checks provenance, so the safety of the execute path rests entirely
+on that habit holding.
 
-Gating installation on `HOOK_EXPECTED_REPOS` would close both, at the cost of the zero-touch
+What remains after the correction:
+
+- **Compromise of any one of the owner's own repos, or of the GitHub account, yields code
+  execution on every machine within a week**, unattended. This is the same class of exposure
+  that already existed — `setup_env.sh` sources and runs code pulled from `dotfiles` and
+  `ai-config` — widened from two repos to nine, and from owner-invoked to self-executing.
+- **The sweep runs immediately after `sync_git_repos` in the same pass**, by design: hooks
+  must install from freshly-pulled sources or the sweep installs the previous cycle's hooks
+  and reports success. The security consequence of that correctness requirement is that
+  upstream content is fetched and executed in one run, with no interval in which anything
+  could inspect it. The `make -n` verification recorded above is a point-in-time check of
+  current recipe content, not a control on future content — notably, `etch-config` and
+  `terraform_ansible` are gaining targets authored elsewhere that nobody here has read.
+
+Gating installation on `HOOK_EXPECTED_REPOS` would narrow both, at the cost of the zero-touch
 property: a new repo would need a list edit before its hooks install. That trade was
 considered and declined — the zero-touch property is the reason the discovery design was
 chosen over a hardcoded list in the first place, and re-introducing a mandatory list edit on
 the execute path would reinstate exactly the drift this ADR's first decision exists to avoid.
 
-Revisit if `~/git-repos/personal/` ever holds repositories the owner does not control.
+Revisit if the directory convention ever changes — i.e. if `~/git-repos/personal/` starts
+holding repositories the owner does not control, the execute path needs an allowlist.
 
 ## Related
 
