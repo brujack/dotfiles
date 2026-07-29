@@ -1056,3 +1056,28 @@ _sweep_build_partial_repo() {
   [[ "$output" == *"n/a updated"* ]]
   [[ "$output" != *"0 updated"* ]]
 }
+
+@test "install_git_hooks_all_repos called twice on an already-current tree produces identical summary counters both times" {
+  # Each real install-hooks target is already idempotent (cp/ln -sf per
+  # repo-structure.md and the design's Idempotency section) -- re-running
+  # against an up-to-date box is a no-op both times, so the two summary
+  # lines must be identical, not just "both green".
+  local _base="${TESTDIR}/sweep-idempotent"
+  local _markers="${TESTDIR}/sweep-idempotent-markers"
+  mkdir -p "${_base}" "${_markers}"
+  _sweep_build_cp_repo "${_base}" "steady-repo" "${_markers}"
+  _sweep_seed_installed "${_base}/steady-repo"
+
+  HOOK_EXPECTED_REPOS=()
+  PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  [ "$status" -eq 0 ]
+  local _first_output="$output"
+
+  HOOK_EXPECTED_REPOS=()
+  PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  [ "$status" -eq 0 ]
+  local _second_output="$output"
+
+  [ "${_first_output}" = "${_second_output}" ]
+  [[ "${_first_output}" == *"1 checked, 0 updated, 0 gaps"* ]]
+}
