@@ -250,6 +250,18 @@ teardown() {
   [ -f "${_marker}" ]
 }
 
+@test "run_setup_user calls install_git_hooks_all_repos after setup_claude_plugins" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  local _log="${BATS_TEST_TMPDIR}/order.log"
+  : > "${_log}"
+  setup_claude_plugins() { printf 'plugins\n' >> "${_log}"; return 0; }
+  install_git_hooks_all_repos() { printf 'sweep\n' >> "${_log}"; return 0; }
+  run run_setup_user
+  [ "$(sed -n '1p' "${_log}")" = "plugins" ]
+  [ "$(sed -n '2p' "${_log}")" = "sweep" ]
+}
+
 # ── run_setup_or_developer ────────────────────────────────────────────────────
 
 @test "run_setup_or_developer creates credential directories" {
