@@ -286,7 +286,7 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 #### Bash
 
-- **Overall: 90%** (1054 tests as of 2026-07-29); gated in CI at 90% (`bash-coverage` job, blocks auto-merge on drop).
+- **Overall: 91%** (1054 tests as of 2026-07-29); gated in CI at 90% (`bash-coverage` job, blocks auto-merge on drop).
 - `make bash-coverage` measures via PS4 xtrace (`scripts/run-bash-coverage.sh`); `make push-bash-coverage` pushes `coverage/bash.json` to the `coverage-data` branch for the README badge.
 - Method detail, per-file floors/ceilings, and why kcov/bashcov are ruled out: [`dotfiles-bash-coverage`](https://github.com/brujack/ai-config/blob/master/docs/knowledge/dotfiles-bash-coverage.md).
 
