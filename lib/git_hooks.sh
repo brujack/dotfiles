@@ -16,11 +16,15 @@ fi
 # _GIT_HOOKS_MANDATED is the uniform hook set every personal repo must
 # carry per repo-structure.md: pre-commit (ggshield secret scan),
 # pre-push (the permanent local test gate), and commit-msg (Conventional
-# Commits). Deliberately not readonly, same reasoning as HOOK_EXPECTED_REPOS
-# above: lib/git_hooks.sh can be sourced more than once in the same shell
-# (see the "sourcing lib/git_hooks.sh twice" test), and a readonly
-# re-declaration would abort the second source with a stderr error.
-_GIT_HOOKS_MANDATED=(pre-commit pre-push commit-msg)
+# Commits). Immutable AND re-source-safe: readonly guards against
+# accidental mutation, and the emptiness check guards against the
+# readonly declaration itself aborting a second source of this file in
+# the same shell (see the "sourcing lib/git_hooks.sh twice" test) — the
+# same pattern the HOOK_EXPECTED_REPOS source block above would need if
+# it were readonly.
+if [[ -z "${_GIT_HOOKS_MANDATED+x}" ]]; then
+  readonly _GIT_HOOKS_MANDATED=(pre-commit pre-push commit-msg)
+fi
 
 _git_hooks_discover() {
   local _dir
