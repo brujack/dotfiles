@@ -1037,3 +1037,22 @@ _sweep_build_partial_repo() {
   [[ "$output" == *"no-makefile-repo: no Makefile"* ]]
   [[ "$output" == *"never-cloned-repo: never cloned"* ]]
 }
+
+@test "install_git_hooks_all_repos under DRY_RUN never invokes make and reports the updated count as n/a" {
+  local _base="${TESTDIR}/sweep-dry-run"
+  local _markers="${TESTDIR}/sweep-dry-run-markers"
+  mkdir -p "${_base}" "${_markers}"
+  _sweep_build_cp_repo "${_base}" "repo-one" "${_markers}"
+  _sweep_build_cp_repo "${_base}" "repo-two" "${_markers}"
+
+  HOOK_EXPECTED_REPOS=()
+  DRY_RUN=1 PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  [ "$status" -eq 0 ]
+  # run_cmd only prints under DRY_RUN -- neither recipe's own marker touch
+  # ever executes, proving make itself was never really invoked.
+  [ ! -f "${_markers}/repo-one.ran" ]
+  [ ! -f "${_markers}/repo-two.ran" ]
+  [[ "$output" == *"2 checked"* ]]
+  [[ "$output" == *"n/a updated"* ]]
+  [[ "$output" != *"0 updated"* ]]
+}
