@@ -278,6 +278,15 @@ install_git_hooks_all_repos() {
   local -a _gap_lines=()
   local -a _unknown_repos=()
 
+  # check_complete reads the live filesystem directly (not through
+  # run_cmd), so it runs for real under DRY_RUN too -- unlike the digest,
+  # which genuinely has nothing to compare. That gap information is real
+  # (those hooks ARE missing right now) and is exactly what a --dry-run
+  # preview on a new box exists to show; it must not be discarded, only
+  # labeled so it can't be mistaken for a post-install finding.
+  local _dry_note=""
+  [[ ${_dry} -eq 1 ]] && _dry_note=" (pre-run state; make was not executed)"
+
   local _dir
   while IFS= read -r _dir; do
     [[ -z "${_dir}" ]] && continue
@@ -334,12 +343,12 @@ install_git_hooks_all_repos() {
       1)
         _gaps=$((_gaps + 1))
         _gap_lines+=("${_name}: missing ${_missing}")
-        log_warn "${_name}: missing ${_missing}"
+        log_warn "${_name}: missing ${_missing}${_dry_note}"
         ;;
       2)
         _gaps=$((_gaps + 1))
         _gap_lines+=("${_name}: no hooks directory (install-hooks cannot fix this)")
-        log_warn "${_name}: no hooks directory at all"
+        log_warn "${_name}: no hooks directory at all${_dry_note}"
         ;;
     esac
   done < <(_git_hooks_discover)
@@ -375,7 +384,11 @@ install_git_hooks_all_repos() {
   fi
   _summary+=", ${_gaps} gaps"
   if [[ ${#_gap_lines[@]} -gt 0 ]]; then
-    _summary+=" ($(_git_hooks_join '; ' "${_gap_lines[@]}"))"
+    if [[ ${_dry} -eq 1 ]]; then
+      _summary+="${_dry_note}"
+    else
+      _summary+=" ($(_git_hooks_join '; ' "${_gap_lines[@]}"))"
+    fi
   fi
   if [[ ${_unknown} -gt 0 ]]; then
     _summary+=", ${_unknown} unknown ($(_git_hooks_join '; ' "${_unknown_repos[@]}"))"

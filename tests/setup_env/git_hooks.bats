@@ -1100,7 +1100,7 @@ _sweep_build_partial_repo() {
   [[ "$output" == *"never-cloned-repo: never cloned"* ]]
 }
 
-@test "install_git_hooks_all_repos under DRY_RUN never invokes make and reports the updated count as n/a" {
+@test "install_git_hooks_all_repos under DRY_RUN never invokes make, reports n/a updated, and labels gaps as pre-run state" {
   local _base="${TESTDIR}/sweep-dry-run"
   local _markers="${TESTDIR}/sweep-dry-run-markers"
   mkdir -p "${_base}" "${_markers}"
@@ -1117,6 +1117,21 @@ _sweep_build_partial_repo() {
   [[ "$output" == *"2 checked"* ]]
   [[ "$output" == *"n/a updated"* ]]
   [[ "$output" != *"0 updated"* ]]
+  # check_complete still runs for real under DRY_RUN (it reads the live
+  # filesystem, not run_cmd) -- both fixture repos are pre-install, so
+  # this fixture silently produces 2 real gaps. Reviewer finding: those
+  # gaps were previously reported with no provenance, identical to a
+  # post-install gap that will persist after a real run -- an operator
+  # can't tell "will still be a gap after I run this for real" from
+  # "is a gap only because nothing has installed yet". The SUMMARY line's
+  # gap parenthetical must name the provenance instead of the per-repo
+  # missing-hook detail, so it can never be mistaken for a post-install
+  # finding -- the per-repo log_warn line may still name the specific
+  # missing hooks (that detail is still real and useful), but it too must
+  # carry the same provenance note so it isn't mistaken for one either.
+  [[ "$output" == *"2 gaps (pre-run state; make was not executed)"* ]]
+  [[ "$output" != *"gaps (repo-one: missing"* ]]
+  [[ "$output" == *"repo-one: missing pre-commit pre-push commit-msg (pre-run state; make was not executed)"* ]]
 }
 
 @test "install_git_hooks_all_repos called twice on an already-current tree produces identical summary counters both times" {
