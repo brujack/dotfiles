@@ -1183,6 +1183,34 @@ setup_constants_copy() {
   ! grep -q "install_ruby" "${MOCK_CALLS_FILE}"
 }
 
+@test "run_developer_or_ansible returns non-zero when jscpd npm install fails" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  npm() {
+    if [[ "$*" == *"jscpd@"* ]]; then
+      return 1
+    fi
+    printf "npm %s\n" "$*" >> "${MOCK_CALLS_FILE}"
+    return 0
+  }
+  run run_developer_or_ansible
+  [ "$status" -ne 0 ]
+}
+
+@test "run_developer_or_ansible does not install firecrawl-cli when jscpd npm install fails" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  npm() {
+    if [[ "$*" == *"jscpd@"* ]]; then
+      return 1
+    fi
+    printf "npm %s\n" "$*" >> "${MOCK_CALLS_FILE}"
+    return 0
+  }
+  run run_developer_or_ansible
+  ! grep -q "firecrawl-cli" "${MOCK_CALLS_FILE}"
+}
+
 @test "run_developer_or_ansible succeeds on Linux calling setup_ansible and clone_personal_repos" {
   export LINUX=1
   unset MACOS UBUNTU
@@ -1198,10 +1226,35 @@ setup_constants_copy() {
   grep -q "clone_repos" "${MOCK_CALLS_FILE}"
 }
 
+# Every whitespace-separated token after '-g' on an npm global install line must be
+# pkg@<version>. Catches three regressions one regex cannot: an unpinned package, an
+# empty constant expanding to 'pkg@' (npm resolves that to latest), and a package
+# added later that no enumerated pattern knows about. Does not handle @scope/pkg
+# specs; none are used here.
+assert_all_npm_globals_pinned() {
+  local _line
+  local -a _toks
+  while IFS= read -r _line; do
+    case "${_line}" in
+      "npm install -g "*)
+        read -ra _toks <<< "${_line#npm install -g }"
+        local _tok
+        for _tok in "${_toks[@]}"; do
+          if [[ "${_tok}" != *@?* ]]; then
+            printf "unpinned npm global: %s (in: %s)\n" "${_tok}" "${_line}" >&2
+            return 1
+          fi
+        done
+        ;;
+    esac
+  done < "${1}"
+  return 0
+}
+
 @test "run_developer_or_ansible pins every npm global package" {
   export MACOS=1
   unset LINUX UBUNTU
-  run run_developer_or_ansible
+  run_developer_or_ansible
   grep -q "npm install -g jscpd@5.0.14" "${MOCK_CALLS_FILE}"
   grep -q "npm install -g firecrawl-cli@1.19.27" "${MOCK_CALLS_FILE}"
   grep -q "npm install -g exa-mcp-server@3.2.1" "${MOCK_CALLS_FILE}"
@@ -1210,12 +1263,11 @@ setup_constants_copy() {
 @test "run_developer_or_ansible leaves no unpinned npm global install" {
   export MACOS=1
   unset LINUX UBUNTU
-  run run_developer_or_ansible
-  # A global package name not followed by '@' is an unpinned invocation. The
-  # pre-existing substring test could not make this assertion: grep -q "npm
-  # install -g firecrawl-cli" matches pinned and unpinned forms identically.
-  ! grep -qE 'npm install -g (jscpd|firecrawl-cli|exa-mcp-server)($|[^@])' \
-    "${MOCK_CALLS_FILE}"
+  run_developer_or_ansible
+  # Positive control: without this, an empty MOCK_CALLS_FILE would let the
+  # guard below pass vacuously (nothing to find is unpinned).
+  grep -q "npm install -g jscpd@" "${MOCK_CALLS_FILE}"
+  assert_all_npm_globals_pinned "${MOCK_CALLS_FILE}"
 }
 
 # ── process_args --pkgs-only ──────────────────────────────────────────────
