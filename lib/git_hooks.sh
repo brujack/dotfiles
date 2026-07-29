@@ -328,10 +328,10 @@ install_git_hooks_all_repos() {
     # overrides -C for any git call the recipe itself makes -- and ai-config
     # and math both resolve their install destination via `git rev-parse
     # --git-path hooks`, so a leak sends this repo's hooks into whichever
-    # repo the leaked var names. git exports GIT_DIR into the pre-push hook
-    # environment when pushing from a worktree, and this repo's pre-push
-    # runs `make test`, which sources this file. Same four vars, and the
-    # same reason, as the read paths above.
+    # repo the leaked var names. Same four vars as the read paths above,
+    # but not all for the same reason: GIT_DIR and GIT_COMMON_DIR are
+    # measured to redirect this call; GIT_WORK_TREE and GIT_INDEX_FILE are
+    # stripped for symmetry with those read paths, not because they do.
     run_cmd env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
       make -s -C "${_dir}" install-hooks
     _rc=$?
