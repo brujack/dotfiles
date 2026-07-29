@@ -380,6 +380,13 @@ install_git_hooks_all_repos() {
   if [[ ${_unknown} -gt 0 ]]; then
     _summary+=", ${_unknown} unknown ($(_git_hooks_join '; ' "${_unknown_repos[@]}"))"
   fi
+  # design.md's Reporting section names checked/updated/gap/failure counts
+  # as what the line reports. A make failure otherwise surfaces only as an
+  # earlier log_warn, separated from the summary by every other -t update
+  # section's own output.
+  if [[ ${_failures} -gt 0 ]]; then
+    _summary+=", ${_failures} failures"
+  fi
   log_info "${_summary}"
 
   [[ ${_failures} -gt 0 ]] && return 1

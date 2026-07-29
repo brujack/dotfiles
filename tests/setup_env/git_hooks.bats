@@ -1283,3 +1283,34 @@ _sweep_build_stray_unreadable_repo() {
   [[ "$output" == *"2 updated (aaa-up-one, aaa-up-two)"* ]]
   [[ "$output" == *"2 gaps (zzz-gap-one: missing pre-commit commit-msg; zzz-gap-two: missing pre-commit commit-msg)"* ]]
 }
+
+@test "install_git_hooks_all_repos surfaces the failure count in the summary line" {
+  # design.md's Reporting section states the line reports checked,
+  # updated, gap, AND failure counts -- the earlier worked example
+  # omitted failures, so the implementation matched the example instead
+  # of the spec. A make failure otherwise only ever appears as an
+  # earlier log_warn, which in a live -t update is separated from the
+  # summary by every other section's own output.
+  local _base="${TESTDIR}/sweep-failures-term"
+  local _markers="${TESTDIR}/sweep-failures-term-markers"
+  mkdir -p "${_base}" "${_markers}"
+  _sweep_build_failing_repo "${_base}" "aaa-failing" "${_markers}"
+  _sweep_build_cp_repo "${_base}" "bbb-ok" "${_markers}"
+
+  HOOK_EXPECTED_REPOS=()
+  PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"1 failures"* ]]
+}
+
+@test "install_git_hooks_all_repos omits the failures term entirely when there are none" {
+  local _base="${TESTDIR}/sweep-no-failures-term"
+  local _markers="${TESTDIR}/sweep-no-failures-term-markers"
+  mkdir -p "${_base}" "${_markers}"
+  _sweep_build_cp_repo "${_base}" "clean-repo" "${_markers}"
+
+  HOOK_EXPECTED_REPOS=()
+  PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"failures"* ]]
+}
