@@ -869,3 +869,22 @@ _sweep_build_loud_repo() {
   [[ "$output" == *"LOUD-RECIPE-MARKER"* ]]
   [[ "$output" != *"echo LOUD-RECIPE-MARKER"* ]]
 }
+
+@test "install_git_hooks_all_repos reports checked-not-updated for a repo whose real cp recipe changes nothing" {
+  local _base="${TESTDIR}/sweep-unchanged"
+  local _markers="${TESTDIR}/sweep-unchanged-markers"
+  mkdir -p "${_base}" "${_markers}"
+  _sweep_build_cp_repo "${_base}" "current-repo" "${_markers}"
+  # Pre-seed .git/hooks with the SAME bytes the recipe's own cp will write —
+  # the "already current" state a perfectly up-to-date box is in. The
+  # recipe still genuinely runs (proven by the marker); the point is that
+  # its cp is a content no-op.
+  _sweep_seed_installed "${_base}/current-repo"
+
+  HOOK_EXPECTED_REPOS=()
+  PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  [ "$status" -eq 0 ]
+  [ -f "${_markers}/current-repo.ran" ]
+  [[ "$output" == *"0 updated"* ]]
+  [[ "$output" != *"current-repo"* ]]
+}
