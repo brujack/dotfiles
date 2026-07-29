@@ -245,6 +245,23 @@ depends_on: [3]
 
 For each path from `_git_hooks_discover()`: take a pre-digest, `run_cmd make -s -C "${_dir}" install-hooks`, capture the rc immediately into a local, take a post-digest, then run `_git_hooks_check_complete`. Accumulate four counters — checked, updated, failures, gaps — and two name lists (updated repos, gap descriptions).
 
+#### Contracts this task consumes — branch on all three
+
+Tasks 2 and 3 landed richer contracts than the original sketch. **Branch on the exit codes, not on truthiness**, and handle both gap shapes:
+
+| Callee                      | Exit | Stdout                                                | Meaning for the sweep                                            |
+| --------------------------- | ---- | ----------------------------------------------------- | ---------------------------------------------------------------- |
+| `_git_hooks_check_complete` | 0    | empty                                                 | complete — not a gap                                             |
+|                             | 1    | `pre-push commit-msg` (space-separated, **one line**) | hooks missing — a gap `make install-hooks` can fix               |
+|                             | 2    | `no-hooks-dir`                                        | **no hooks directory at all** — a gap `install-hooks` CANNOT fix |
+| `_git_hooks_gap_repos`      | 0    | `etch-config`                                         | on the list, real repo, no Makefile                              |
+|                             | 0    | `terraform_ansible:absent`                            | on the list, **no directory on disk** (never cloned)             |
+| `_git_hooks_digest`         | 0    | 64-hex                                                | a real digest                                                    |
+|                             | 0    | `no-hooks-dir`                                        | no hooks dir — do not compare as a digest                        |
+|                             | 1    | `digest-error`                                        | a hook was unreadable — **never** compare this as a digest       |
+
+Treating rc 2 as "just another gap" is the failure the tri-state exists to prevent: the operator is told to run `install-hooks`, it cannot succeed because there is no hooks directory to install into, and the next weekly sweep prints the identical line forever. Report rc 2 and `:absent` under a label distinct from the ordinary missing-hooks gap.
+
 Rules, each of which has a test below:
 
 - **Fail-closed, not fail-fast.** A non-zero `make` rc increments failures and the loop continues to the next repo. The function returns 1 only after every discovered repo has been attempted.
