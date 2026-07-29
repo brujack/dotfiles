@@ -1020,3 +1020,20 @@ _sweep_build_partial_repo() {
   [[ "$output" == *"partial-hooks-repo: missing pre-commit commit-msg"* ]]
   [[ "$output" == *"no-hooks-dir-repo: no hooks directory"* ]]
 }
+
+@test "install_git_hooks_all_repos names gap repos from _git_hooks_gap_repos in the summary line, without affecting the return code" {
+  local _base="${TESTDIR}/sweep-gap-repos"
+  mkdir -p "${_base}"
+  # real repo, no Makefile at all — the bare-name gap shape.
+  mkdir -p "${_base}/no-makefile-repo"
+  git init -q "${_base}/no-makefile-repo"
+  # never-cloned — no directory on disk at all for this listed name.
+
+  HOOK_EXPECTED_REPOS=(no-makefile-repo never-cloned-repo)
+  PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"0 checked"* ]]
+  [[ "$output" == *"2 gaps"* ]]
+  [[ "$output" == *"no-makefile-repo: no Makefile"* ]]
+  [[ "$output" == *"never-cloned-repo: never cloned"* ]]
+}
