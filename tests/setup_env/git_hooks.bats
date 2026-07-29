@@ -1232,6 +1232,11 @@ _sweep_build_stray_unreadable_repo() {
   [[ "$output" != *"updated (mode111-repo"* ]]
   [[ "$output" == *"1 unknown"* ]]
   [[ "$output" == *"mode111-repo: hooks unreadable"* ]]
+  # Reviewer finding: "<repo>: hooks unreadable" alone is satisfied by the
+  # summary's unknown clause even with the per-repo log_warn deleted
+  # entirely -- pin a phrase the log_warn line alone contributes, so
+  # deleting it is mutation-visible.
+  [[ "$output" == *"cannot determine update state"* ]]
 
   # Guard the guard: prove check_complete genuinely sees this repo as
   # complete (rc 0, no output) -- if it didn't, the "0 gaps" assertion
