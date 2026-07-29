@@ -13,6 +13,15 @@ else
   HOOK_EXPECTED_REPOS=()
 fi
 
+# _GIT_HOOKS_MANDATED is the uniform hook set every personal repo must
+# carry per repo-structure.md: pre-commit (ggshield secret scan),
+# pre-push (the permanent local test gate), and commit-msg (Conventional
+# Commits). Deliberately not readonly, same reasoning as HOOK_EXPECTED_REPOS
+# above: lib/git_hooks.sh can be sourced more than once in the same shell
+# (see the "sourcing lib/git_hooks.sh twice" test), and a readonly
+# re-declaration would abort the second source with a stderr error.
+_GIT_HOOKS_MANDATED=(pre-commit pre-push commit-msg)
+
 _git_hooks_discover() {
   local _dir
   for _dir in "${PERSONAL_GITREPOS}"/*/; do
@@ -124,6 +133,40 @@ _git_hooks_digest() {
 
   printf '%s' "${_combined}" | shasum -a 256 | awk '{print $1}'
   return 0
+}
+
+# _git_hooks_check_complete asserts each mandated hook exists and is
+# executable in REPO_DIR's installed hooks directory — it never looks at
+# scripts/. A hook that arrives by a route other than the Makefile (e.g.
+# `ledger init` installing an executable .git/hooks/pre-commit with no
+# scripts/pre-commit counterpart) must satisfy this check; a source-based
+# check would report a false gap on state-ledger every week forever.
+# Contract: prints the names of any missing hooks, space-separated, on
+# stdout; returns 0 when complete, 1 when any are missing (including when
+# the hooks directory itself does not exist, in which case every mandated
+# hook is reported missing).
+_git_hooks_check_complete() {
+  local _repo_dir="$1"
+  local _hooks_dir
+  local _hook
+  local -a _missing=()
+
+  _hooks_dir="$(_git_hooks_dir "${_repo_dir}")"
+  if [[ -z "${_hooks_dir}" ]]; then
+    printf '%s\n' "${_GIT_HOOKS_MANDATED[*]}"
+    return 1
+  fi
+
+  for _hook in "${_GIT_HOOKS_MANDATED[@]}"; do
+    [[ -x "${_hooks_dir}/${_hook}" ]] || _missing+=("${_hook}")
+  done
+
+  if [[ ${#_missing[@]} -eq 0 ]]; then
+    return 0
+  fi
+
+  printf '%s\n' "${_missing[*]}"
+  return 1
 }
 
 [[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0
