@@ -586,6 +586,44 @@ setup() {
   [ -z "$output" ]
 }
 
+@test "_git_hooks_gap_repos includes ai-devops (listed, real repo, no Makefile)" {
+  run _git_hooks_gap_repos
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"ai-devops"* ]]
+}
+
+@test "_git_hooks_gap_repos excludes repo-unlisted-no-makefile" {
+  run _git_hooks_gap_repos
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"repo-unlisted-no-makefile"* ]]
+}
+
+@test "_git_hooks_gap_repos excludes an expected repo that has a Makefile (mutation guard for the Makefile check)" {
+  mkdir -p "${PERSONAL_GITREPOS}/math"
+  git init -q "${PERSONAL_GITREPOS}/math"
+  printf 'install-hooks:\n\t@true\n' > "${PERSONAL_GITREPOS}/math/Makefile"
+
+  run _git_hooks_gap_repos
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"math"* ]]
+  [[ "$output" == *"ai-devops"* ]]
+}
+
+@test "_git_hooks_gap_repos excludes an expected-repo name that is a non-git directory (mutation guard for the -d .git check)" {
+  mkdir -p "${PERSONAL_GITREPOS}/etch-config"
+
+  run _git_hooks_gap_repos
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"etch-config"* ]]
+}
+
+@test "_git_hooks_gap_repos prints nothing and returns 0 when HOOK_EXPECTED_REPOS is empty" {
+  HOOK_EXPECTED_REPOS=()
+  run _git_hooks_gap_repos
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
 @test "_git_hooks_discover emits nothing on stderr for a repo with no Makefile" {
   # The `[[ -f Makefile ]]` guard is not a correctness guard — grep exits 2
   # on a missing file, so the repo is excluded either way. Its actual job is
