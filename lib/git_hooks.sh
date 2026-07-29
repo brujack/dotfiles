@@ -227,8 +227,6 @@ _git_hooks_gap_repos() {
     env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
       git -C "${_dir}" rev-parse --git-dir >/dev/null 2>&1 || continue
     # Makefile present => discovery already handles this repo; not a gap.
-    # (The only &&-guard in this file; the other five all use || continue
-    # because their conditions are inverted -- this one isn't.)
     [[ -f "${_dir}/Makefile" ]] && continue
     printf '%s\n' "${_name}"
   done
@@ -311,14 +309,7 @@ install_git_hooks_all_repos() {
       log_warn "${_name}: make install-hooks failed (exit ${_rc})"
     fi
 
-    # "digest-error" (Task 2's fail-closed marker for an unreadable hook
-    # file) must never be compared as if it were a real digest -- a repo
-    # whose pre- or post-digest errored is unknown, not "unchanged" and
-    # not "updated". Without a dedicated outcome for it, an unreadable
-    # hook (or an unreadable stray file the mandated-name-only
-    # check_complete can never see) falls out of every counter and the
-    # summary reads identically to a fully healthy repo -- the false PASS
-    # the digest exists to prevent, reappearing at the reporting layer.
+    # digest-error is a marker, not a digest -- never compare it.
     if [[ ${_dry} -eq 0 ]]; then
       local _post
       _post="$(_git_hooks_digest "${_dir}")"
@@ -332,10 +323,7 @@ install_git_hooks_all_repos() {
       fi
     fi
 
-    # Tri-state, not binary (rc 0/1/2): a repo that ran `make` cleanly can
-    # still be an incomplete-hooks gap (rc=1) or have no hooks directory
-    # at all (rc=2, e.g. broken git infra) -- gaps never affect the sweep's
-    # return code, only failed `make` calls do.
+    # gaps never affect the return code.
     local _missing _cc_rc
     _missing="$(_git_hooks_check_complete "${_dir}")"
     _cc_rc=$?
