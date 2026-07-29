@@ -235,6 +235,28 @@ _git_hooks_gap_repos() {
   return 0
 }
 
+# _git_hooks_join prints its remaining args separated by SEP. Not a
+# stylistic preference: `"${arr[*]}"` under `IFS='; '` (or any multi-char
+# IFS) joins on the FIRST CHARACTER of IFS only -- bash array-to-scalar
+# expansion never treats a multi-char IFS as a multi-char separator.
+# Measured: `IFS='; '; printf '%s' "${arr[*]}"` produces "a;b", not
+# "a; b". A single-entry list can never expose this (nothing to join),
+# which is why it survived unnoticed until a two-entry test existed.
+_git_hooks_join() {
+  local _sep="$1"
+  shift
+  local _out="" _item _first=1
+  for _item in "$@"; do
+    if [[ ${_first} -eq 1 ]]; then
+      _out="${_item}"
+      _first=0
+    else
+      _out+="${_sep}${_item}"
+    fi
+  done
+  printf '%s' "${_out}"
+}
+
 # install_git_hooks_all_repos sweeps every repo _git_hooks_discover() finds,
 # running `make -s -C <repo> install-hooks` in each and reporting what
 # changed. Fail-closed, not fail-fast: every discovered repo is attempted
@@ -349,14 +371,14 @@ install_git_hooks_all_repos() {
 
   local _summary="${_checked} checked, ${_updated_str} updated"
   if [[ ${#_updated_repos[@]} -gt 0 ]]; then
-    _summary+=" ($(IFS=', '; printf '%s' "${_updated_repos[*]}"))"
+    _summary+=" ($(_git_hooks_join ', ' "${_updated_repos[@]}"))"
   fi
   _summary+=", ${_gaps} gaps"
   if [[ ${#_gap_lines[@]} -gt 0 ]]; then
-    _summary+=" ($(IFS='; '; printf '%s' "${_gap_lines[*]}"))"
+    _summary+=" ($(_git_hooks_join '; ' "${_gap_lines[@]}"))"
   fi
   if [[ ${_unknown} -gt 0 ]]; then
-    _summary+=", ${_unknown} unknown ($(IFS='; '; printf '%s' "${_unknown_repos[*]}"))"
+    _summary+=", ${_unknown} unknown ($(_git_hooks_join '; ' "${_unknown_repos[@]}"))"
   fi
   log_info "${_summary}"
 

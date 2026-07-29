@@ -1251,3 +1251,35 @@ _sweep_build_stray_unreadable_repo() {
 
   chmod 644 "${_base}/stray-repo/.git/hooks/pre-commit.sample"
 }
+
+@test "install_git_hooks_all_repos joins multi-entry updated and gap lists with a real comma-space and semicolon-space separator" {
+  # `"${arr[*]}"` under `IFS=', '` (or `IFS='; '`) joins on the FIRST
+  # CHARACTER of IFS only -- bash does not treat a multi-char IFS as a
+  # multi-char separator for array-to-scalar expansion. A single-entry
+  # list can never see this (there is nothing to join), which is why it
+  # survived every earlier test in this file; two entries in each list is
+  # required to make the run-on visible.
+  local _base="${TESTDIR}/sweep-join-separator"
+  local _markers="${TESTDIR}/sweep-join-separator-markers"
+  mkdir -p "${_base}" "${_markers}"
+  _sweep_build_cp_repo "${_base}" "aaa-up-one" "${_markers}"
+  _sweep_build_cp_repo "${_base}" "aaa-up-two" "${_markers}"
+  _sweep_build_partial_repo "${_base}" "zzz-gap-one" "${_markers}"
+  _sweep_build_partial_repo "${_base}" "zzz-gap-two" "${_markers}"
+  # Pre-seed the exact bytes each partial repo's own recipe writes, so its
+  # digest doesn't change and it isn't ALSO counted "updated" -- a repo
+  # can legitimately be both (content changed AND still incomplete), but
+  # that's a different property than the one this test targets, so keep
+  # it out of the way here.
+  for _n in zzz-gap-one zzz-gap-two; do
+    mkdir -p "${_base}/${_n}/.git/hooks"
+    printf 'pushonly\n' > "${_base}/${_n}/.git/hooks/pre-push"
+    chmod +x "${_base}/${_n}/.git/hooks/pre-push"
+  done
+
+  HOOK_EXPECTED_REPOS=()
+  PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"2 updated (aaa-up-one, aaa-up-two)"* ]]
+  [[ "$output" == *"2 gaps (zzz-gap-one: missing pre-commit commit-msg; zzz-gap-two: missing pre-commit commit-msg)"* ]]
+}
