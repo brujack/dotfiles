@@ -183,7 +183,14 @@ _git_hooks_gap_repos() {
 
   for _name in "${HOOK_EXPECTED_REPOS[@]}"; do
     _dir="${PERSONAL_GITREPOS}/${_name}"
+    # -d not -e, then rev-parse: same pair _git_hooks_discover uses, and
+    # for the same reason -- -d .git alone admits a partial/interrupted
+    # clone. A partial clone sitting on the expected-repos list is not
+    # itself evidence of a real repo missing a Makefile, so it must not
+    # be reported as a gap on the strength of a .git directory alone.
     [[ -d "${_dir}/.git" ]] || continue
+    env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+      git -C "${_dir}" rev-parse --git-dir >/dev/null 2>&1 || continue
     [[ -f "${_dir}/Makefile" ]] && continue
     printf '%s\n' "${_name}"
   done

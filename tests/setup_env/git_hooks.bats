@@ -653,6 +653,24 @@ setup() {
   [[ "$output" != *"etch-config"* ]]
 }
 
+@test "_git_hooks_gap_repos excludes an expected-repo name that is a partial clone (mutation guard for the rev-parse check)" {
+  # .git is a real directory (passes -d .git) but an interrupted/invalid
+  # clone — the same shape _git_hooks_discover's partial-clone fixture
+  # guards against. -d .git alone is not sufficient evidence of a real
+  # repo; this is the spec's own argument, applied to gap_repos too.
+  mkdir -p "${PERSONAL_GITREPOS}/terraform_ansible/.git"
+
+  # Guard the guard: if an ancestor git repo exists above this fixture,
+  # rev-parse would walk up and succeed, making the exclusion below
+  # vacuous.
+  run git -C "${PERSONAL_GITREPOS}/terraform_ansible" rev-parse --git-dir
+  [ "$status" -ne 0 ]
+
+  run _git_hooks_gap_repos
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"terraform_ansible"* ]]
+}
+
 @test "_git_hooks_gap_repos prints nothing and returns 0 when HOOK_EXPECTED_REPOS is empty" {
   HOOK_EXPECTED_REPOS=()
   run _git_hooks_gap_repos
