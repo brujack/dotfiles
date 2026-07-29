@@ -39,6 +39,44 @@ _git_hooks_discover() {
   done
 }
 
+# _git_hooks_dir resolves REPO_DIR's installed hooks directory. Contract:
+# prints the resolved absolute path and returns 0 when the directory
+# exists; prints nothing and returns 1 when REPO_DIR is not a git repo at
+# all, or its hooks directory does not exist. Shared by _git_hooks_digest
+# and _git_hooks_check_complete so the GIT_DIR-leak guard and the
+# relative-vs-absolute path handling exist in exactly one place.
+_git_hooks_dir() {
+  local _repo_dir="$1"
+  local _hooks_dir
+
+  # rev-parse --git-path hooks is empty when _repo_dir is not a git repo at
+  # all (defensive; callers only ever pass a real repo path). An inherited
+  # GIT_DIR (or GIT_WORK_TREE/GIT_COMMON_DIR/GIT_INDEX_FILE) overrides -C
+  # entirely, silently redirecting this at a different repo's hooks dir —
+  # git-workflow.md documents that git exports GIT_DIR into the pre-push
+  # hook environment when pushed from a worktree, and this repo's pre-push
+  # hook runs `make test`, which sources this file.
+  _hooks_dir="$(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+    git -C "${_repo_dir}" rev-parse --git-path hooks 2>/dev/null)"
+  if [[ -z "${_hooks_dir}" ]]; then
+    return 1
+  fi
+
+  # git-path can return a path relative to the repo dir (the common case) —
+  # resolve it before testing/reading it.
+  case "${_hooks_dir}" in
+    /*) : ;;
+    *) _hooks_dir="${_repo_dir%/}/${_hooks_dir}" ;;
+  esac
+
+  if [[ ! -d "${_hooks_dir}" ]]; then
+    return 1
+  fi
+
+  printf '%s\n' "${_hooks_dir}"
+  return 0
+}
+
 # _git_hooks_digest prints a content-based digest of a repo's installed
 # hooks directory. Contract: exit 0 with a 64-hex sha256 digest on stdout,
 # exit 0 with the literal marker "no-hooks-dir" when the repo has no hooks
@@ -50,25 +88,8 @@ _git_hooks_digest() {
   local _repo_dir="$1"
   local _hooks_dir
 
-  # rev-parse --git-path hooks is empty when _repo_dir is not a git repo at
-  # all (defensive; _git_hooks_discover output is always a real repo). See
-  # the GIT_DIR comment in _git_hooks_discover above — the same leak would
-  # silently redirect this function at a different repo's hooks dir.
-  _hooks_dir="$(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
-    git -C "${_repo_dir}" rev-parse --git-path hooks 2>/dev/null)"
+  _hooks_dir="$(_git_hooks_dir "${_repo_dir}")"
   if [[ -z "${_hooks_dir}" ]]; then
-    printf 'no-hooks-dir\n'
-    return 0
-  fi
-
-  # git-path can return a path relative to the repo dir (the common case) —
-  # resolve it before testing/reading it.
-  case "${_hooks_dir}" in
-    /*) : ;;
-    *) _hooks_dir="${_repo_dir%/}/${_hooks_dir}" ;;
-  esac
-
-  if [[ ! -d "${_hooks_dir}" ]]; then
     printf 'no-hooks-dir\n'
     return 0
   fi
