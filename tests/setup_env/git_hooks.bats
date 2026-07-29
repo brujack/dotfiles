@@ -808,3 +808,35 @@ _sweep_seed_installed() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"2 checked"* ]]
 }
+
+# _sweep_build_failing_repo creates a repo whose install-hooks target writes
+# its own marker (proving it ran) and then exits 1 — the failure the
+# fail-closed loop must survive without stopping the repos discovered
+# after it.
+_sweep_build_failing_repo() {
+  local _repo_base="$1" _name="$2" _marker_dir="$3"
+  local _repo="${_repo_base}/${_name}"
+  mkdir -p "${_repo}"
+  git init -q "${_repo}"
+  printf 'install-hooks:\n\ttouch "%s/%s.ran"\n\texit 1\n' \
+    "${_marker_dir}" "${_name}" > "${_repo}/Makefile"
+}
+
+@test "install_git_hooks_all_repos returns 1 when a repo's make fails, AND every repo discovered after it still ran" {
+  # Names are prefixed aaa-/bbb-/ccc- to fix discovery order regardless of
+  # locale/glob collation: aaa-failing must be attempted before the other
+  # two for this test to prove anything about "after it".
+  local _base="${TESTDIR}/sweep-fail"
+  local _markers="${TESTDIR}/sweep-fail-markers"
+  mkdir -p "${_base}" "${_markers}"
+  _sweep_build_failing_repo "${_base}" "aaa-failing" "${_markers}"
+  _sweep_build_cp_repo "${_base}" "bbb-ok" "${_markers}"
+  _sweep_build_cp_repo "${_base}" "ccc-ok" "${_markers}"
+
+  HOOK_EXPECTED_REPOS=()
+  PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  [ "$status" -eq 1 ]
+  [ -f "${_markers}/aaa-failing.ran" ]
+  [ -f "${_markers}/bbb-ok.ran" ]
+  [ -f "${_markers}/ccc-ok.ran" ]
+}
