@@ -934,11 +934,17 @@ _sweep_build_symlink_repo() {
 
 @test "install_git_hooks_all_repos never counts a repo as updated when either digest is digest-error" {
   # commit-msg starts unreadable (mode 000), so the pre-digest is the
-  # literal "digest-error" marker. The recipe's own chmod +x repairs it, so
-  # the post-digest is a real, DIFFERENT hex digest. Without the explicit
-  # "never compare digest-error" guard, a naive "${_pre} != ${_post}"
-  # comparison would see two different strings and wrongly count this as
-  # updated -- exactly the false-PASS the guard exists to prevent.
+  # literal "digest-error" marker. The recipe's own chmod 755 repairs it,
+  # so the post-digest is a real, DIFFERENT hex digest -- chmod +x alone
+  # only adds the execute bit and leaves the file unreadable, which would
+  # make the post-digest ALSO "digest-error" and leave this test unable to
+  # distinguish "the guard works" from "the guard was never exercised"
+  # (tdd.md section F: a hand-built fixture that quietly encodes a wrong
+  # belief, here about what "repairs" a permission problem). Without the
+  # explicit "never compare digest-error" guard, a naive
+  # "${_pre} != ${_post}" comparison would see two different strings and
+  # wrongly count this as updated -- exactly the false-PASS the guard
+  # exists to prevent.
   local _base="${TESTDIR}/sweep-digest-error"
   local _markers="${TESTDIR}/sweep-digest-error-markers"
   mkdir -p "${_base}" "${_markers}"
@@ -951,7 +957,7 @@ _sweep_build_symlink_repo() {
   chmod +x "${_repo}/.git/hooks/pre-push"
   printf 'AAA' > "${_repo}/.git/hooks/commit-msg"
   chmod 000 "${_repo}/.git/hooks/commit-msg"
-  printf 'install-hooks:\n\tchmod +x .git/hooks/commit-msg\n\ttouch "%s/broken-repo.ran"\n' \
+  printf 'install-hooks:\n\tchmod 755 .git/hooks/commit-msg\n\ttouch "%s/broken-repo.ran"\n' \
     "${_markers}" > "${_repo}/Makefile"
 
   HOOK_EXPECTED_REPOS=()
@@ -960,6 +966,13 @@ _sweep_build_symlink_repo() {
   [ -f "${_markers}/broken-repo.ran" ]
   [[ "$output" == *"0 updated"* ]]
   [[ "$output" != *"broken-repo"* ]]
+
+  # Guard the guard: prove the recipe genuinely left the repo in a real,
+  # non-error digest state, so the "0 updated" assertion above is proof
+  # the digest-error guard fired, not a coincidence of both reads erroring.
+  run _git_hooks_digest "${_repo}/"
+  [ "$status" -eq 0 ]
+  [[ "$output" =~ ^[0-9a-f]{64}$ ]]
 }
 
 # _sweep_build_partial_repo installs only ONE of the three mandated hooks —
