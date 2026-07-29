@@ -302,6 +302,26 @@ install_git_hooks_all_repos() {
     esac
   done < <(_git_hooks_discover)
 
+  # _git_hooks_gap_repos catches the gap _git_hooks_discover cannot see at
+  # all: a listed repo with no Makefile has nothing for discover to glob a
+  # decision from. Its two shapes stay distinct labels here too -- a bare
+  # name (real repo, no Makefile) is a different problem than ":absent"
+  # (never cloned), and collapsing them would lose that distinction the
+  # same way collapsing check_complete's rc 1/2 would.
+  local _gap_name
+  while IFS= read -r _gap_name; do
+    [[ -z "${_gap_name}" ]] && continue
+    _gaps=$((_gaps + 1))
+    case "${_gap_name}" in
+      *:absent)
+        _gap_lines+=("${_gap_name%:absent}: never cloned")
+        ;;
+      *)
+        _gap_lines+=("${_gap_name}: no Makefile")
+        ;;
+    esac
+  done < <(_git_hooks_gap_repos)
+
   local _summary="${_checked} checked, ${_updated} updated"
   if [[ ${#_updated_repos[@]} -gt 0 ]]; then
     _summary+=" ($(IFS=', '; printf '%s' "${_updated_repos[*]}"))"
