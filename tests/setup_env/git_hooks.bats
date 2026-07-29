@@ -1137,3 +1137,111 @@ _sweep_build_partial_repo() {
   [ "${_first_output}" = "${_second_output}" ]
   [[ "${_first_output}" == *"1 checked, 0 updated, 0 gaps"* ]]
 }
+
+# ── digest-error as its own "unknown" outcome ────────────────────────────────
+#
+# Reviewer finding (spec review round on Task 4): a repo whose digest is
+# "digest-error" on both reads currently falls out of every counter --
+# not updated (correctly excluded), but also not a gap, because
+# _git_hooks_check_complete only inspects the three MANDATED hook names
+# via `-x`, which an unreadable-but-executable file (mode 111) or an
+# unreadable STRAY file (not one of the three names) both satisfy without
+# tripping. The summary is then byte-identical to a fully healthy repo --
+# the false PASS the digest exists to prevent, reappearing at the
+# reporting layer. Both fixtures below are built so digest-error is the
+# ONLY signal: check_complete must return 0 (no gap) for both, proven by
+# an explicit gaps=0 assertion, or the test would pass for the wrong
+# reason (a gap masking the missing "unknown" report).
+
+# _sweep_build_mode111_repo pre-installs all three mandated hooks, but
+# pre-commit is mode 111 (execute-only, no read bit) -- present AND
+# executable, so check_complete's `-x` guard passes it; unreadable, so
+# _git_hooks_digest's shasum read fails on it (digest-error). The
+# install-hooks target is a genuine no-op recipe (touches only the
+# marker) so neither digest read nor check_complete's state changes
+# between pre- and post-call.
+_sweep_build_mode111_repo() {
+  local _repo_base="$1" _name="$2" _marker_dir="$3"
+  local _repo="${_repo_base}/${_name}"
+  mkdir -p "${_repo}/.git/hooks"
+  git init -q "${_repo}"
+  printf 'AAA' > "${_repo}/.git/hooks/pre-commit"
+  chmod 111 "${_repo}/.git/hooks/pre-commit"
+  printf '#!/usr/bin/env bash\ntrue\n' > "${_repo}/.git/hooks/pre-push"
+  chmod +x "${_repo}/.git/hooks/pre-push"
+  printf '#!/usr/bin/env bash\ntrue\n' > "${_repo}/.git/hooks/commit-msg"
+  chmod +x "${_repo}/.git/hooks/commit-msg"
+  printf 'install-hooks:\n\ttouch "%s/%s.ran"\n' "${_marker_dir}" "${_name}" > "${_repo}/Makefile"
+}
+
+# _sweep_build_stray_unreadable_repo installs all three mandated hooks
+# cleanly (readable, executable), plus a non-mandated stray file --
+# git's own default sample-hook shape (repo-structure.md notes git ships
+# *.sample files in .git/hooks by default) -- made unreadable.
+# check_complete never looks past the three mandated names, so it cannot
+# see this file at all; _git_hooks_digest globs every regular file in the
+# directory, so it does.
+_sweep_build_stray_unreadable_repo() {
+  local _repo_base="$1" _name="$2" _marker_dir="$3"
+  local _repo="${_repo_base}/${_name}"
+  mkdir -p "${_repo}/.git/hooks"
+  git init -q "${_repo}"
+  local _hook
+  for _hook in pre-commit pre-push commit-msg; do
+    printf '#!/usr/bin/env bash\ntrue\n' > "${_repo}/.git/hooks/${_hook}"
+    chmod +x "${_repo}/.git/hooks/${_hook}"
+  done
+  printf 'BBB' > "${_repo}/.git/hooks/pre-commit.sample"
+  chmod 000 "${_repo}/.git/hooks/pre-commit.sample"
+  printf 'install-hooks:\n\ttouch "%s/%s.ran"\n' "${_marker_dir}" "${_name}" > "${_repo}/Makefile"
+}
+
+@test "install_git_hooks_all_repos reports an unreadable-but-executable mandated hook as unknown, not updated, not a gap" {
+  local _base="${TESTDIR}/sweep-unknown-mode111"
+  local _markers="${TESTDIR}/sweep-unknown-mode111-markers"
+  mkdir -p "${_base}" "${_markers}"
+  _sweep_build_mode111_repo "${_base}" "mode111-repo" "${_markers}"
+
+  HOOK_EXPECTED_REPOS=()
+  PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  [ "$status" -eq 0 ]
+  [ -f "${_markers}/mode111-repo.ran" ]
+  [[ "$output" == *"0 gaps"* ]]
+  [[ "$output" != *"updated (mode111-repo"* ]]
+  [[ "$output" == *"1 unknown"* ]]
+  [[ "$output" == *"mode111-repo: hooks unreadable"* ]]
+
+  # Guard the guard: prove check_complete genuinely sees this repo as
+  # complete (rc 0, no output) -- if it didn't, the "0 gaps" assertion
+  # above would be passing because the gap path masked the missing
+  # unknown report, not because check_complete is blind to this shape.
+  run _git_hooks_check_complete "${_base}/mode111-repo/"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+
+  chmod 755 "${_base}/mode111-repo/.git/hooks/pre-commit"
+}
+
+@test "install_git_hooks_all_repos reports an unreadable non-mandated stray hook file as unknown, not a gap" {
+  local _base="${TESTDIR}/sweep-unknown-stray"
+  local _markers="${TESTDIR}/sweep-unknown-stray-markers"
+  mkdir -p "${_base}" "${_markers}"
+  _sweep_build_stray_unreadable_repo "${_base}" "stray-repo" "${_markers}"
+
+  HOOK_EXPECTED_REPOS=()
+  PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  [ "$status" -eq 0 ]
+  [ -f "${_markers}/stray-repo.ran" ]
+  [[ "$output" == *"0 gaps"* ]]
+  [[ "$output" != *"updated (stray-repo"* ]]
+  [[ "$output" == *"1 unknown"* ]]
+  [[ "$output" == *"stray-repo: hooks unreadable"* ]]
+
+  # Guard the guard: check_complete only inspects the three mandated
+  # names, so it must be blind to the stray file entirely.
+  run _git_hooks_check_complete "${_base}/stray-repo/"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+
+  chmod 644 "${_base}/stray-repo/.git/hooks/pre-commit.sample"
+}
