@@ -931,3 +931,33 @@ _sweep_build_symlink_repo() {
   [[ "$output" == *"1 updated"* ]]
   [[ "$output" == *"symlinked-repo"* ]]
 }
+
+@test "install_git_hooks_all_repos never counts a repo as updated when either digest is digest-error" {
+  # commit-msg starts unreadable (mode 000), so the pre-digest is the
+  # literal "digest-error" marker. The recipe's own chmod +x repairs it, so
+  # the post-digest is a real, DIFFERENT hex digest. Without the explicit
+  # "never compare digest-error" guard, a naive "${_pre} != ${_post}"
+  # comparison would see two different strings and wrongly count this as
+  # updated -- exactly the false-PASS the guard exists to prevent.
+  local _base="${TESTDIR}/sweep-digest-error"
+  local _markers="${TESTDIR}/sweep-digest-error-markers"
+  mkdir -p "${_base}" "${_markers}"
+  local _repo="${_base}/broken-repo"
+  mkdir -p "${_repo}/.git/hooks"
+  git init -q "${_repo}"
+  printf '#!/usr/bin/env bash\ntrue\n' > "${_repo}/.git/hooks/pre-commit"
+  chmod +x "${_repo}/.git/hooks/pre-commit"
+  printf '#!/usr/bin/env bash\ntrue\n' > "${_repo}/.git/hooks/pre-push"
+  chmod +x "${_repo}/.git/hooks/pre-push"
+  printf 'AAA' > "${_repo}/.git/hooks/commit-msg"
+  chmod 000 "${_repo}/.git/hooks/commit-msg"
+  printf 'install-hooks:\n\tchmod +x .git/hooks/commit-msg\n\ttouch "%s/broken-repo.ran"\n' \
+    "${_markers}" > "${_repo}/Makefile"
+
+  HOOK_EXPECTED_REPOS=()
+  PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  [ "$status" -eq 0 ]
+  [ -f "${_markers}/broken-repo.ran" ]
+  [[ "$output" == *"0 updated"* ]]
+  [[ "$output" != *"broken-repo"* ]]
+}
