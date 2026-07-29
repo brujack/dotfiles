@@ -30,8 +30,24 @@
 **Command that proves the whole change works:**
 
 ```bash
-./setup_env.sh -t update --dry-run 2>&1 | grep -A3 'git-hooks'
+bash -c 'DRY_RUN=1; source lib/git_hooks.sh; install_git_hooks_all_repos'
 ```
+
+> **DO NOT use `./setup_env.sh -t update --dry-run` for this.** That command was written
+> into this plan and is **not safe** — corrected 2026-07-29 after `pr-review` refused to run
+> it. Measured: `lib/workflows.sh` contains **zero** `run_cmd` call sites and **zero**
+> `DRY_RUN` reads, so `--dry-run` is entirely inert for the `-t update` workflow. Running it
+> performs real `brew upgrade`, real `pip install -U`, real `sync_git_repos` (`git push` over
+> SSH), and real `sync_legacy_dirs` (`rsync --delete`) — the last of which this repo's own
+> `CLAUDE.md` explicitly forbids invoking unmocked. `--dry-run` is documented at
+> `lib/helpers.sh:229` as covering installs; that documentation is wrong for `-t update`, and
+> the git-hooks sweep added by this plan is currently the only `-t update` code path that
+> honours `DRY_RUN` at all. Logged as a verified lead in
+> `ai-config/docs/knowledge/dotfiles-bug-hunt-leads.md`.
+
+The substituted command sources the library directly and calls the sweep with `DRY_RUN` set,
+so `run_cmd` prints instead of executing and the digest is skipped. It reads the real
+`~/git-repos/personal` tree and mutates nothing.
 
 **Expected observable output:** a `git-hooks` section appears in the update summary, listing `[DRY RUN] make -s -C <dir> install-hooks` for each of the six repos that currently carry an `install-hooks` target (`ai-config`, `dotfiles`, `etch-cli`, `state-ledger`, `brucejacksonconsulting-site`, `math`), and no line for `ai-config-hook-integrity` (a live worktree), for any `*-worktrees` container, or for any repo without the target.
 
