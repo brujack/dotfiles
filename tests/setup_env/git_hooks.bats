@@ -1363,3 +1363,43 @@ _sweep_build_stray_unreadable_repo() {
   [ -f "${_markers}/fresh-repo.ran" ]
   [[ "$output" == *"1 updated (fresh-repo)"* ]]
 }
+
+@test "install_git_hooks_all_repos never reports a phantom gap for an empty HOOK_EXPECTED_REPOS entry" {
+  # Reviewer finding: an empty-string element on HOOK_EXPECTED_REPOS,
+  # combined with PERSONAL_GITREPOS itself being a Makefile-less git
+  # repo, makes "${PERSONAL_GITREPOS}/${_name}" resolve to
+  # "${PERSONAL_GITREPOS}/" -- which passes -d, passes -d .git, passes
+  # rev-parse, fails -f Makefile, and reaches
+  # `printf '%s\n' "${_name}"` with _name empty, i.e. a bare newline.
+  # Verified via `od -c`: the raw output IS exactly "\n". Without the
+  # sweep's `[[ -z "${_gap_name}" ]] && continue` guard on that line, a
+  # malformed config/hook_repos.sh entry would produce a phantom
+  # ": no Makefile" gap line naming no repo, plus an inflated count,
+  # printed on every weekly -t update. This is the guard my earlier
+  # mutation sweep wrongly called unreachable for want of a fixture, not
+  # for want of a reachable path -- this test converts that mutant to
+  # KILLED. (The discover loop's OWN "[[ -z ]] && continue" guard, by
+  # contrast, genuinely is unreachable: _git_hooks_discover only ever
+  # prints glob-derived, never-empty paths.)
+  local _base="${TESTDIR}/sweep-empty-gap-name"
+  mkdir -p "${_base}"
+  git init -q "${_base}"
+  mkdir -p "${_base}/real-repo"
+  git init -q "${_base}/real-repo"
+
+  # Guard the guard: prove the empty-name path genuinely reaches the
+  # bare-newline branch in _git_hooks_gap_repos directly, before relying
+  # on the sweep's guard to hide it.
+  HOOK_EXPECTED_REPOS=("")
+  PERSONAL_GITREPOS="${_base}" run _git_hooks_gap_repos
+  [ "$status" -eq 0 ]
+  [ "$output" = "" ]
+
+  HOOK_EXPECTED_REPOS=("" "real-repo")
+  PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"1 gaps (real-repo: no Makefile)"* ]]
+  [[ "$output" != *"2 gaps"* ]]
+  [[ "$output" != *": no Makefile; "* ]]
+  [[ "$output" != *"( : no Makefile"* ]]
+}
