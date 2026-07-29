@@ -236,19 +236,36 @@ _git_hooks_gap_repos() {
 }
 
 # install_git_hooks_all_repos sweeps every repo _git_hooks_discover() finds,
-# running `make -s -C <repo> install-hooks` in each. Minimal skeleton: counts
-# repos attempted and reports the count. Digest/gap logic lands in later
-# commits on this same function.
+# running `make -s -C <repo> install-hooks` in each. Fail-closed, not
+# fail-fast: every discovered repo is attempted regardless of an earlier
+# one's outcome, and the function returns 1 only once the whole sweep has
+# run — a single broken Makefile must not cost the repos discovered after
+# it. Digest/gap logic lands in later commits on this same function.
 install_git_hooks_all_repos() {
   local _checked=0
+  local _failures=0
 
   local _dir
   while IFS= read -r _dir; do
     [[ -z "${_dir}" ]] && continue
     _checked=$((_checked + 1))
+
+    local _name
+    _name="$(basename "${_dir%/}")"
+
+    local _rc
+    run_cmd make -s -C "${_dir}" install-hooks
+    _rc=$?
+
+    if [[ ${_rc} -ne 0 ]]; then
+      _failures=$((_failures + 1))
+      log_warn "${_name}: make install-hooks failed (exit ${_rc})"
+    fi
   done < <(_git_hooks_discover)
 
   log_info "${_checked} checked"
+
+  [[ ${_failures} -gt 0 ]] && return 1
   return 0
 }
 
