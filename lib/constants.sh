@@ -8,6 +8,13 @@ CF_TERRAFORMING_VER="0.27.0"
 CHRUBY_VER="0.3.9"
 CONSUL_VER="2.0.0"
 DOCKER_COMPOSE_VER="v5.1.4"
+# npm global packages — pinned by exact version at both lib/workflows.sh call sites.
+# Unlike the GitHub-release pins above, these are NOT covered by
+# `./setup_env.sh -t check-versions`: only jscpd publishes GitHub releases matching
+# its npm version. See docs/superpowers/plans/2026-07-29-npm-global-pinning.md.
+EXA_MCP_SERVER_VER="3.2.1"
+FIRECRAWL_CLI_VER="1.19.27"
+JSCPD_VER="5.0.14"
 GIT_VER="2.54.0"
 GO_VER="1.26"
 # Linux architecture: kernel names (x86_64/aarch64) → Debian/GitHub names (amd64/arm64)
