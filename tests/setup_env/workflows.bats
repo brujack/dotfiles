@@ -1384,6 +1384,23 @@ setup_constants_copy() {
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_git-repos")" = "OK" ]
 }
 
+# ── run_update — install_git_hooks_all_repos wiring ───────────────────────────
+
+@test "run_update with _run_all=1 invokes install_git_hooks_all_repos" {
+  sync_git_repos() { return 0; }
+  sync_legacy_dirs() { return 0; }
+  export -f sync_git_repos sync_legacy_dirs
+  export MACOS=1
+  unset LINUX UBUNTU
+  local _marker="${BATS_TEST_TMPDIR}/git_hooks_sweep.ran"
+  install_git_hooks_all_repos() { touch "${_marker}"; return 0; }
+  # No UPDATE_* flag set — relies on run_update's default "no flags = run
+  # everything" (_run_all) path, not a bare UPDATE var (_any_update_flag
+  # only checks UPDATE_BREW/PIP/GEMS/MAS/PKGS/CLAUDE, never bare UPDATE).
+  run run_update
+  [ -f "${_marker}" ]
+}
+
 # ── run_update — claude/npm/pip section flags ─────────────────────────────────
 
 @test "run_update calls claude plugins update when UPDATE_CLAUDE is set" {
