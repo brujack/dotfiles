@@ -232,6 +232,14 @@ teardown() {
   [ -f "${_marker}" ]
 }
 
+@test "run_setup_user returns 0 when install_git_hooks_all_repos returns 1" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  install_git_hooks_all_repos() { return 1; }
+  run run_setup_user
+  [ "$status" -eq 0 ]
+}
+
 # ── run_setup_or_developer ────────────────────────────────────────────────────
 
 @test "run_setup_or_developer creates credential directories" {
