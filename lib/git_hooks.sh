@@ -169,4 +169,23 @@ _git_hooks_check_complete() {
   return 1
 }
 
+# _git_hooks_gap_repos prints bare names of repos on HOOK_EXPECTED_REPOS
+# that exist under PERSONAL_GITREPOS as real git repos but carry no
+# Makefile at all — the "infrastructure missing" gap condition described
+# in the spec's Gaps section. Repos absent from the list are silent
+# regardless of their filesystem shape. Always returns 0 (reporting only;
+# never affects the sweep's return code).
+_git_hooks_gap_repos() {
+  local _name
+  local _dir
+
+  for _name in "${HOOK_EXPECTED_REPOS[@]}"; do
+    _dir="${PERSONAL_GITREPOS}/${_name}"
+    [[ -d "${_dir}/.git" ]] || continue
+    [[ -f "${_dir}/Makefile" ]] && continue
+    printf '%s\n' "${_name}"
+  done
+  return 0
+}
+
 [[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0
