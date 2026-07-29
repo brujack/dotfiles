@@ -751,3 +751,60 @@ setup() {
   _stderr="$(_git_hooks_discover 2>&1 1>/dev/null)"
   [ -z "${_stderr}" ]
 }
+
+# ── Task 4: install_git_hooks_all_repos sweep fixtures ──────────────────────
+#
+# Deliberately isolated from the shared 9-fixture tree built in setup()
+# above: the sweep genuinely invokes `make` (real, not mocked — this file's
+# setup() never calls load_mocks) and asserts on real filesystem state
+# before/after, so each test below builds its own small PERSONAL_GITREPOS
+# tree rather than reusing the Task 1-3 tree's Makefiles, which were never
+# written to be run.
+
+# _sweep_build_cp_repo creates REPO_BASE/NAME as a real git repo whose
+# install-hooks target really `cp`s three hook files from scripts/ into
+# .git/hooks — the real four-of-six-repo shape (repo-structure.md) — and
+# writes MARKER_DIR/NAME.ran as its last step. The marker proves the
+# recipe genuinely executed; a `make` mock never touches the filesystem
+# and would pass an "unchanged ⇒ not updated" assertion for the wrong
+# reason (tdd.md section E, mock fidelity).
+_sweep_build_cp_repo() {
+  local _repo_base="$1" _name="$2" _marker_dir="$3"
+  local _repo="${_repo_base}/${_name}"
+  mkdir -p "${_repo}/scripts"
+  git init -q "${_repo}"
+  local _hook
+  for _hook in pre-commit pre-push commit-msg; do
+    printf '#!/usr/bin/env bash\ntrue\n' > "${_repo}/scripts/${_hook}"
+    chmod +x "${_repo}/scripts/${_hook}"
+  done
+  printf 'install-hooks:\n\tmkdir -p .git/hooks\n\tcp scripts/pre-commit scripts/pre-push scripts/commit-msg .git/hooks/\n\tchmod +x .git/hooks/pre-commit .git/hooks/pre-push .git/hooks/commit-msg\n\ttouch "%s/%s.ran"\n' \
+    "${_marker_dir}" "${_name}" > "${_repo}/Makefile"
+}
+
+# _sweep_seed_installed pre-installs REPO's hooks by directly cp-ing its own
+# scripts/ content into .git/hooks — the "already current" state a
+# perfectly up-to-date box is in before the sweep ever runs `make`. Used to
+# prove the sweep reports checked-not-updated for a repo whose content
+# genuinely does not change across the make call.
+_sweep_seed_installed() {
+  local _repo="$1"
+  mkdir -p "${_repo}/.git/hooks"
+  cp "${_repo}/scripts/pre-commit" "${_repo}/scripts/pre-push" "${_repo}/scripts/commit-msg" "${_repo}/.git/hooks/"
+  chmod +x "${_repo}/.git/hooks/pre-commit" "${_repo}/.git/hooks/pre-push" "${_repo}/.git/hooks/commit-msg"
+}
+
+@test "install_git_hooks_all_repos on a clean tree returns 0 and reports checked equal to the discovered count" {
+  local _base="${TESTDIR}/sweep-clean"
+  local _markers="${TESTDIR}/sweep-clean-markers"
+  mkdir -p "${_base}" "${_markers}"
+  _sweep_build_cp_repo "${_base}" "repo-one" "${_markers}"
+  _sweep_build_cp_repo "${_base}" "repo-two" "${_markers}"
+  _sweep_seed_installed "${_base}/repo-one"
+  _sweep_seed_installed "${_base}/repo-two"
+
+  HOOK_EXPECTED_REPOS=()
+  PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"2 checked"* ]]
+}
