@@ -209,3 +209,143 @@ a pin set there.
   and original write-up
 - PR #189 — the git-hooks sweep whose first real run found this
 - PR #182 — closed the rsync delivery vector
+
+## Multi-Lens Review
+
+Reviewed at commit: `0a1636a` (Step 7 self-review commit, before Step 8 dispatch)
+
+Every finding below was re-verified in this session with the command shown, not accepted
+on the lens's word. The three lenses converging on "wrong surface" is not treated as
+confirmation — the confirmation is the `grep` and the `git rev-parse` output.
+
+### Goal-Fit
+
+Finding: Two points.
+
+(a) **The check is placed where it will not run on the machines it exists for.**
+`run_doctor` has exactly one call site — `setup_env.sh:69`, behind `-t doctor`, human
+invoked. It is not in `run_update`, not in `setup`, not in CI. Verified:
+
+```
+$ grep -rn run_doctor lib/ setup_env.sh scripts/
+lib/helpers.sh:277:run_doctor() {
+setup_env.sh:69:[[ -n ${DOCTOR:-} ]] && { run_doctor; exit $?; }
+$ grep -rn doctor .github/workflows/     # (no output)
+```
+
+So the mechanism fires only when a human on that box already went looking — the runbook
+posture `USER.md`'s own fleet note rejects. `-t update` is what runs unattended on all
+seven machines, and it already owns a `git-hooks` section in `_UPDATE_SECTION_ORDER`.
+
+(b) **"Nothing else surfaced it" is stale after PR #189, which narrows what this buys.**
+`_git_hooks_dir` resolves through `rev-parse --git-path hooks`, which honours
+`core.hooksPath`. On the Linux box a pinned macOS path fails `[[ -d ]]`, so
+`_git_hooks_dir` returns 1, `_git_hooks_check_complete` returns 2, and the sweep already
+emits `"<repo>: no hooks directory (install-hooks cannot fix this)"` on every `-t update`
+(`lib/git_hooks.sh:361`). All four affected repos are mandated and carry `install-hooks:`
+targets, so the exact production silent-kill is already detected today. The genuinely new
+coverage is narrower than the Problem section claims: values that *resolve* (the Mac
+case), `--global`/`--system` scope, repos with no `install-hooks:` target, and a non-zero
+exit code. That residual is real — Decision 3's argument against "only fail when broken"
+still holds — but it is reachable more cheaply than a three-arm detector plus nine test
+cases: add the global/system read, and escalate the sweep's existing rc=2 gap, which
+today is `log_warn`-only and deliberately never affects the return code.
+
+Assumption: That nothing in the toolchain *persists* `core.hooksPath` — the claim
+Decision 3's no-allowlist hard FAIL rests on entirely. Genuinely uncertain because the
+spec explains the delivery vector for *destination* machines (pre-#182 rsync) but never
+explains what set it on the Mac Studio, which was the rsync **source**. `ai-config`
+ADR-0055:72, written 2026-07-28, asserts the setting was present (`git config
+--show-origin` → `file:.git/config`); the scan one day later found zero, meaning it was
+hand-removed, not never-present. An unidentified writer may still be live. Settles it:
+run `for d in ~/git-repos/personal/*/; do printf '%s ' "$d"; git -C "$d" config --local
+--get core.hooksPath; done` on the Linux workstation and the WSL box **before**
+committing to FAIL semantics. Reappearance on a machine not rsync'd since #182 means the
+writer exists and `doctor` goes permanently red there.
+
+Disposition:
+
+### Ergonomics
+
+Finding: Two points.
+
+(a) **Same wrong-surface finding, reached independently, plus its consequence for
+Decision 3.** Decision 3 rejects `doctor_warn` because "nothing automated would ever
+notice" a warning. Nothing automated notices the *failure* either, at this trigger. The
+exit-code choice buys nothing where it is attached while carrying its full accepted cost.
+This machine's own update log corroborates: `grep -c doctor ~/.dotfiles-update.log` → `0`.
+The Windows/WSL box `USER.md` names as the emergency-only machine — where stale hooks
+matter most, because you would be on it under time pressure — is the box least likely to
+have anyone type `-t doctor` on it.
+
+(b) **No escape hatch, against a scope deliberately widened past the mandate.** Decision 1
+covers all 17 git repos under `personal/`; 8 of them (`ai`, `homepage`, `kubernetes`,
+`python-learning`, `pfsense_config`, `truenas-config`, both `docker_container_*`) have no
+hook mandate and no `install-hooks:` target. All read empty today, so there is no live
+friction — but husky sets `core.hooksPath` as its *normal* install step, so the first
+tooling-managed repo that lands there turns `doctor` permanently red with no `git config`
+you are willing to run and no suppression path. Every other gate in this fleet has one
+(`Perf: skip`, `Bug Scan: skip`, `Maintainability: skip(...)`). Cheap now, annoying to
+retrofit after a week of red.
+
+Assumption: That someone actually runs `./setup_env.sh -t doctor` on the six uninspected
+machines, on some cadence, unprompted. If false, the check detects nothing it was built to
+detect regardless of how correct its internals are. Not observable from this repo —
+nothing schedules it. Settles it: ask directly — on the WSL box and the three work Macs,
+when was `-t doctor` last run, and what makes you run it? Corroborating check on those
+boxes: `grep -c doctor ~/.dotfiles-update.log` or `history | grep 'setup_env.*doctor'`.
+
+Disposition:
+
+### Risk
+
+Finding: Two points.
+
+(a) **The `Makefile` change introduces the exact failure mode the literal path was immune
+to.** The spec argues at length that an inherited `GIT_DIR` must be stripped on the read
+path, then specifies the write path as a bare `HOOKS_DIR := $(shell git rev-parse
+--git-path hooks)` with no strip. Verified in this repo:
+
+```
+$ git rev-parse --git-path hooks
+.git/hooks
+$ GIT_DIR=/Users/bruce/git-repos/personal/ai-config/.git git rev-parse --git-path hooks
+/Users/bruce/git-repos/personal/ai-config/.git/hooks
+```
+
+A leaked `GIT_DIR` does not merely redirect within a repo — it sends this repo's hooks
+into *another repo's* hooks directory. The current literal `.git/hooks` target is immune
+(plain relative path); the proposed fix would end that immunity. Also `:=` is immediate
+expansion, so the `rev-parse` fires on every `make` invocation, not just `install-hooks`.
+
+Escalation found while verifying: `lib/git_hooks.sh:326` invokes `run_cmd make -s -C
+"${_dir}" install-hooks` with **no `env -u` strip**, so the sweep already carries this
+hole today for `ai-config` and `math` — both resolve via `--git-path hooks`. The proposed
+change would add `dotfiles` to the exposed set rather than being its origin. That
+relocates the correct fix to the sweep's `make` invocation, where one strip covers every
+repo regardless of Makefile shape. Note also that `_git_hooks_dir` already encapsulates
+this guard plus relative→absolute resolution: Decision 5 forbids hand-copying the idiom
+into a second *file*, and the design then hand-copies a degraded version into a second
+*language*.
+
+(b) **Decision 3's evidence base does not cover the scope it justifies, and there is no
+override.** "No such case exists across the nine mandated repos" is per-clone evidence;
+Decision 1 extends hard FAIL to `--system` and `--global`, scopes never surveyed on six of
+seven machines — three of which are work Macs where MDM-managed git config is plausible
+and would be unfixable by the user. `run_doctor` collapses to a single boolean
+(`[[ ${_DOCTOR_FAILED} -eq 0 ]]`), so one permanently-red unclearable check destroys the
+exit-code signal for the symlink, credential-directory, tool, and version checks on that
+machine.
+
+Assumption: That no machine in the fleet carries a `core.hooksPath` at `--system` or
+`--global` scope that the user cannot or should not unset. Genuinely uncertain: six of
+seven machines uninspected, three employer-managed. Settles it, per machine:
+`git config --system --get core.hooksPath; git config --global --get core.hooksPath;
+ls -l /etc/gitconfig` — a non-empty system value on a root-owned MDM-managed
+`/etc/gitconfig` refutes it and forces an allowlist or scope narrowing before this ships.
+
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
