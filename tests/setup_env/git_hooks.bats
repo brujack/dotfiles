@@ -709,6 +709,31 @@ setup() {
   [[ "$output" != *"terraform_ansible"* ]]
 }
 
+@test "_git_hooks_gap_repos reports a listed repo entirely absent from disk with a distinct :absent label" {
+  # etch-cli is on HOOK_EXPECTED_REPOS but this test's PERSONAL_GITREPOS
+  # (built in setup()) never creates a directory for it at all -- the
+  # "never cloned" shape. This was previously invisible: [[ -d
+  # "${_dir}/.git" ]] fails silently on a directory that doesn't exist,
+  # identically to how it fails on a repo that legitimately has no
+  # Makefile, with nothing distinguishing "repo missing entirely" from
+  # "repo present and fully compliant". It is also invisible to
+  # _git_hooks_discover, which has nothing to glob -- this expected-
+  # repos list is the only mechanism that can ever catch it.
+  run _git_hooks_gap_repos
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"etch-cli:absent"* ]]
+}
+
+@test "_git_hooks_gap_repos distinguishes an absent repo from a no-Makefile repo by label, not just by presence in output" {
+  run _git_hooks_gap_repos
+  [ "$status" -eq 0 ]
+  # ai-devops: real repo, no Makefile -- bare name, unchanged shape.
+  [[ "$output" == *"ai-devops"* ]]
+  [[ "$output" != *"ai-devops:absent"* ]]
+  # etch-cli: no directory at all -- the new distinct label.
+  [[ "$output" == *"etch-cli:absent"* ]]
+}
+
 @test "_git_hooks_gap_repos prints nothing and returns 0 when HOOK_EXPECTED_REPOS is empty" {
   HOOK_EXPECTED_REPOS=()
   run _git_hooks_gap_repos

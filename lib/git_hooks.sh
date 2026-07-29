@@ -186,18 +186,33 @@ _git_hooks_check_complete() {
   return 1
 }
 
-# _git_hooks_gap_repos prints bare names of repos on HOOK_EXPECTED_REPOS
-# that exist under PERSONAL_GITREPOS as real git repos but carry no
-# Makefile at all — the "infrastructure missing" gap condition described
-# in the spec's Gaps section. Repos absent from the list are silent
-# regardless of their filesystem shape. Always returns 0 (reporting only;
-# never affects the sweep's return code).
+# _git_hooks_gap_repos prints two distinct gap shapes for repos on
+# HOOK_EXPECTED_REPOS, one name per line:
+#   "${name}"          -- exists under PERSONAL_GITREPOS as a real git
+#                          repo but carries no Makefile at all.
+#   "${name}:absent"    -- no directory for this name exists under
+#                          PERSONAL_GITREPOS at all (never cloned, or
+#                          clone failed). This is the largest possible
+#                          gap the expected-repos list exists to catch:
+#                          it is invisible to _git_hooks_discover (there
+#                          is nothing to glob), so without this label a
+#                          machine that never cloned the repo would be
+#                          silently indistinguishable from one with full
+#                          coverage.
+# Repos absent from HOOK_EXPECTED_REPOS itself are silent regardless of
+# their filesystem shape -- that list is the sole source of truth for
+# what counts as a gap. Always returns 0 (reporting only; never affects
+# the sweep's return code).
 _git_hooks_gap_repos() {
   local _name
   local _dir
 
   for _name in "${HOOK_EXPECTED_REPOS[@]}"; do
     _dir="${PERSONAL_GITREPOS}/${_name}"
+    if [[ ! -d "${_dir}" ]]; then
+      printf '%s:absent\n' "${_name}"
+      continue
+    fi
     # -d not -e: a worktree/submodule .git is a FILE, not a directory --
     # same reason _git_hooks_discover excludes them. A listed name that
     # is only a linked worktree must not be reported as a gap.
