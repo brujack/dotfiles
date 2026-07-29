@@ -251,8 +251,10 @@ install_git_hooks_all_repos() {
   local _failures=0
   local _updated=0
   local _gaps=0
+  local _unknown=0
   local -a _updated_repos=()
   local -a _gap_lines=()
+  local -a _unknown_repos=()
 
   local _dir
   while IFS= read -r _dir; do
@@ -280,13 +282,20 @@ install_git_hooks_all_repos() {
 
     # "digest-error" (Task 2's fail-closed marker for an unreadable hook
     # file) must never be compared as if it were a real digest -- a repo
-    # whose pre- or post-digest errored is unknown, not "unchanged", and
-    # counting it "updated" or leaving it silently counted as current is
-    # the false-PASS this whole mechanism exists to prevent.
+    # whose pre- or post-digest errored is unknown, not "unchanged" and
+    # not "updated". Without a dedicated outcome for it, an unreadable
+    # hook (or an unreadable stray file the mandated-name-only
+    # check_complete can never see) falls out of every counter and the
+    # summary reads identically to a fully healthy repo -- the false PASS
+    # the digest exists to prevent, reappearing at the reporting layer.
     if [[ ${_dry} -eq 0 ]]; then
       local _post
       _post="$(_git_hooks_digest "${_dir}")"
-      if [[ "${_pre}" != "digest-error" && "${_post}" != "digest-error" && "${_pre}" != "${_post}" ]]; then
+      if [[ "${_pre}" == "digest-error" || "${_post}" == "digest-error" ]]; then
+        _unknown=$((_unknown + 1))
+        _unknown_repos+=("${_name}: hooks unreadable")
+        log_warn "${_name}: hooks unreadable, cannot determine update state"
+      elif [[ "${_pre}" != "${_post}" ]]; then
         _updated=$((_updated + 1))
         _updated_repos+=("${_name}")
       fi
@@ -345,6 +354,9 @@ install_git_hooks_all_repos() {
   _summary+=", ${_gaps} gaps"
   if [[ ${#_gap_lines[@]} -gt 0 ]]; then
     _summary+=" ($(IFS='; '; printf '%s' "${_gap_lines[*]}"))"
+  fi
+  if [[ ${_unknown} -gt 0 ]]; then
+    _summary+=", ${_unknown} unknown ($(IFS='; '; printf '%s' "${_unknown_repos[*]}"))"
   fi
   log_info "${_summary}"
 

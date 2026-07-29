@@ -965,7 +965,13 @@ _sweep_build_symlink_repo() {
   [ "$status" -eq 0 ]
   [ -f "${_markers}/broken-repo.ran" ]
   [[ "$output" == *"0 updated"* ]]
-  [[ "$output" != *"broken-repo"* ]]
+  # broken-repo legitimately appears in the "unknown" clause now (a
+  # digest-error pre-read is exactly the shape that outcome exists to
+  # report) -- the assertion that matters is that it's never inside
+  # "updated", not that its name never appears anywhere in the output.
+  [[ "$output" != *"updated (broken-repo"* ]]
+  [[ "$output" == *"1 unknown"* ]]
+  [[ "$output" == *"broken-repo: hooks unreadable"* ]]
 
   # Guard the guard: prove the recipe genuinely left the repo in a real,
   # non-error digest state, so the "0 updated" assertion above is proof
