@@ -186,10 +186,23 @@ _git_hooks_check_complete() {
   return 1
 }
 
-# _git_hooks_gap_repos prints two distinct gap shapes for repos on
+# _git_hooks_gap_repos prints three distinct gap shapes for repos on
 # HOOK_EXPECTED_REPOS, one name per line:
-#   "${name}"          -- exists under PERSONAL_GITREPOS as a real git
+#   "${name}"           -- exists under PERSONAL_GITREPOS as a real git
 #                          repo but carries no Makefile at all.
+#   "${name}:no-target" -- exists as a real git repo, has a Makefile, but
+#                          that Makefile has no ^install-hooks: target.
+#                          This shape mirrors _git_hooks_discover's own
+#                          two checks exactly (its complement, not merely
+#                          "no Makefile") -- collapsing it into "Makefile
+#                          present => not a gap" let a repo shaped exactly
+#                          like this fall through BOTH discovery (no
+#                          target => not discovered) and this function
+#                          (Makefile present => not a gap), so it was
+#                          never installed into, never checked, and never
+#                          reported. Real example on the fleet:
+#                          terraform_ansible (.git yes, Makefile yes, no
+#                          install-hooks: target).
 #   "${name}:absent"    -- no directory for this name exists under
 #                          PERSONAL_GITREPOS at all (never cloned, or
 #                          clone failed). This is the largest possible
@@ -226,9 +239,19 @@ _git_hooks_gap_repos() {
     # applied here too.
     env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
       git -C "${_dir}" rev-parse --git-dir >/dev/null 2>&1 || continue
-    # Makefile present => discovery already handles this repo; not a gap.
-    [[ -f "${_dir}/Makefile" ]] && continue
-    printf '%s\n' "${_name}"
+    # No Makefile at all is one gap shape (bare name); a Makefile that
+    # exists but has no install-hooks: target is a second, distinct shape
+    # ("${_name}:no-target") -- see the contract comment above. Testing
+    # `-f Makefile` alone and treating its presence as "not a gap" (the
+    # previous logic) is not the complement of _git_hooks_discover's own
+    # two checks, and silently reintroduces the hole this function exists
+    # to close.
+    if [[ ! -f "${_dir}/Makefile" ]]; then
+      printf '%s\n' "${_name}"
+      continue
+    fi
+    grep -q '^install-hooks:' "${_dir}/Makefile" && continue
+    printf '%s:no-target\n' "${_name}"
   done
   return 0
 }
@@ -341,12 +364,16 @@ install_git_hooks_all_repos() {
     esac
   done < <(_git_hooks_discover)
 
-  # _git_hooks_gap_repos catches the gap _git_hooks_discover cannot see at
-  # all: a listed repo with no Makefile has nothing for discover to glob a
-  # decision from. Its two shapes stay distinct labels here too -- a bare
-  # name (real repo, no Makefile) is a different problem than ":absent"
-  # (never cloned), and collapsing them would lose that distinction the
-  # same way collapsing check_complete's rc 1/2 would.
+  # _git_hooks_gap_repos catches gaps _git_hooks_discover cannot see at
+  # all: a listed repo with no Makefile, or a Makefile with no
+  # install-hooks: target, has nothing (or nothing matching) for discover
+  # to glob a decision from. Its three shapes stay distinct labels here
+  # too -- a bare name (real repo, no Makefile at all) needs hook scripts
+  # AND a target added; ":no-target" (real repo, Makefile present, target
+  # missing) needs only the target added; ":absent" (never cloned) needs
+  # the clone itself. Collapsing any of these would state a false cause
+  # in an operator-facing report, the same way collapsing check_complete's
+  # rc 1/2 would.
   local _gap_name
   while IFS= read -r _gap_name; do
     [[ -z "${_gap_name}" ]] && continue
@@ -354,6 +381,9 @@ install_git_hooks_all_repos() {
     case "${_gap_name}" in
       *:absent)
         _gap_lines+=("${_gap_name%:absent}: never cloned")
+        ;;
+      *:no-target)
+        _gap_lines+=("${_gap_name%:no-target}: Makefile has no install-hooks target")
         ;;
       *)
         _gap_lines+=("${_gap_name}: no Makefile")

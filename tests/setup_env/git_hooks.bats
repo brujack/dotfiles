@@ -666,6 +666,28 @@ setup() {
   [[ "$output" == *"ai-devops"* ]]
 }
 
+@test "_git_hooks_gap_repos reports a listed repo whose Makefile has no install-hooks target with a distinct :no-target label" {
+  # Real shape on the fleet today: terraform_ansible has .git, has a
+  # Makefile, but no ^install-hooks: target (lint/test/changelog/help/
+  # validate-plan only). Before this fix, the old predicate here was
+  # `[[ -f Makefile ]] && continue` -- Makefile-present alone suppressed
+  # the gap, so this exact shape fell through both _git_hooks_discover
+  # (no target => not discovered) and this function (Makefile present =>
+  # not a gap) and was never installed into, never reported, permanently
+  # invisible. The label must be distinct from a repo with no Makefile at
+  # all ("state-ledger: no Makefile" needs hook scripts AND a target added;
+  # "state-ledger:no-target" needs only the target added) -- collapsing
+  # them would make an operator-facing report state a false cause.
+  mkdir -p "${PERSONAL_GITREPOS}/state-ledger"
+  git init -q "${PERSONAL_GITREPOS}/state-ledger"
+  printf 'lint:\n\t@true\ntest:\n\t@true\n' > "${PERSONAL_GITREPOS}/state-ledger/Makefile"
+
+  run _git_hooks_gap_repos
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"state-ledger:no-target"* ]]
+  [[ "$output" != *"state-ledger:absent"* ]]
+}
+
 @test "_git_hooks_gap_repos excludes an expected-repo name that is a non-git directory (mutation guard for the -d .git check)" {
   mkdir -p "${PERSONAL_GITREPOS}/etch-config"
 
@@ -1100,6 +1122,23 @@ _sweep_build_partial_repo() {
   [[ "$output" == *"2 gaps"* ]]
   [[ "$output" == *"no-makefile-repo: no Makefile"* ]]
   [[ "$output" == *"never-cloned-repo: never cloned"* ]]
+}
+
+@test "install_git_hooks_all_repos labels a Makefile-without-target gap distinctly from a no-Makefile gap" {
+  local _base="${TESTDIR}/sweep-no-target-repo"
+  mkdir -p "${_base}"
+  # real repo, Makefile present, no install-hooks: target -- the shape
+  # _git_hooks_gap_repos's old predicate collapsed into "not a gap".
+  mkdir -p "${_base}/has-makefile-no-target"
+  git init -q "${_base}/has-makefile-no-target"
+  printf 'lint:\n\t@true\n' > "${_base}/has-makefile-no-target/Makefile"
+
+  HOOK_EXPECTED_REPOS=(has-makefile-no-target)
+  PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"1 gaps"* ]]
+  [[ "$output" == *"has-makefile-no-target: Makefile has no install-hooks target"* ]]
+  [[ "$output" != *"has-makefile-no-target: no Makefile"* ]]
 }
 
 @test "install_git_hooks_all_repos under DRY_RUN never invokes make, reports n/a updated, and labels gaps as pre-run state" {
