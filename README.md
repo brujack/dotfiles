@@ -97,12 +97,14 @@ At minimum, set `GITHUB_PAT` if you want the GitHub MCP server configured automa
 ### 5. Post-setup
 
 ```bash
-# Install git hooks (required once per checkout)
-make install-hooks
-
 # Restart your shell to pick up the new config
 exec zsh
 ```
+
+Git hooks install themselves. `-t setup_user` and `-t update` both sweep every repo under
+`~/git-repos/personal/` that carries an `install-hooks` Makefile target and run it, so a hook
+edited on one machine goes live on the rest at the next update. `make install-hooks` still
+works if you want them immediately in a fresh clone.
 
 ### Subsequent machines
 
@@ -118,7 +120,7 @@ On a machine where the repo is already cloned (e.g. synced from another workstat
 ./setup_env.sh -t update
 ```
 
-This updates Homebrew, apt/snap packages, pip, Ruby gems, Mac App Store apps, and Claude plugins in one pass. See [Update Log](#update-log-dotfiles-updatelog) for the output format.
+This updates Homebrew, apt/snap packages, pip, Ruby gems, Mac App Store apps, and Claude plugins in one pass, and sweeps git hooks across every personal repo carrying an `install-hooks` target — reporting which repos were updated and which are missing hooks entirely. See [Update Log](#update-log-dotfiles-updatelog) for the output format.
 
 ## Quick Start (Fresh Mac)
 
@@ -148,7 +150,7 @@ This updates Homebrew, apt/snap packages, pip, Ruby gems, Mac App Store apps, an
 
 | Type             | Description                                                                                                                                                      |
 | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `setup_user`     | Sets up user environment: configs, symlinks, shell, directory structure                                                                                          |
+| `setup_user`     | Sets up user environment: configs, symlinks, shell, directory structure, and installs git hooks across personal repos                                            |
 | `setup`          | Full machine setup (`setup_user` + all apps and tools). Flags: `--brew-install`, `--mas-install`                                                                 |
 | `developer`      | Dev packages + Python/Ansible virtualenv                                                                                                                         |
 | `ansible`        | Ansible venv only — typically used after a Python update                                                                                                         |
@@ -158,7 +160,7 @@ This updates Homebrew, apt/snap packages, pip, Ruby gems, Mac App Store apps, an
 
 **Options:**
 
-- `--dry-run` — log mutating operations (symlinks, installs, mkdir) without executing
+- `--dry-run` — log mutating operations without executing. **Honoured by symlinking (`lib/helpers.sh`) and the git-hooks sweep only** — `run_update` contains no `run_cmd` call sites, so `-t update --dry-run` still performs real package upgrades, `git push`, and `rsync --delete`. Do not rely on it to preview an update.
 - `--brew-install` — (setup only) Ensure Homebrew is installed, update, and run brew bundle installs
 - `--mas-install` — (setup only) Install/update Mac App Store apps via mas (macOS only)
 - `--brew-only` — update Homebrew formulae and casks only (with `-t update`)
