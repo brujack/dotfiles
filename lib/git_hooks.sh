@@ -101,8 +101,7 @@ _git_hooks_digest() {
   local _repo_dir="$1"
   local _hooks_dir
 
-  _hooks_dir="$(_git_hooks_dir "${_repo_dir}")"
-  if [[ -z "${_hooks_dir}" ]]; then
+  if ! _hooks_dir="$(_git_hooks_dir "${_repo_dir}")"; then
     printf 'no-hooks-dir\n'
     return 0
   fi
@@ -155,8 +154,7 @@ _git_hooks_check_complete() {
   local _hook
   local -a _missing=()
 
-  _hooks_dir="$(_git_hooks_dir "${_repo_dir}")"
-  if [[ -z "${_hooks_dir}" ]]; then
+  if ! _hooks_dir="$(_git_hooks_dir "${_repo_dir}")"; then
     printf '%s\n' "${_GIT_HOOKS_MANDATED[*]}"
     return 1
   fi
