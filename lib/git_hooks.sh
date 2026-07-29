@@ -236,11 +236,13 @@ _git_hooks_gap_repos() {
 }
 
 # install_git_hooks_all_repos sweeps every repo _git_hooks_discover() finds,
-# running `make -s -C <repo> install-hooks` in each. Fail-closed, not
-# fail-fast: every discovered repo is attempted regardless of an earlier
-# one's outcome, and the function returns 1 only once the whole sweep has
-# run — a single broken Makefile must not cost the repos discovered after
-# it. Digest/gap logic lands in later commits on this same function.
+# running `make -s -C <repo> install-hooks` in each and reporting what
+# changed. Fail-closed, not fail-fast: every discovered repo is attempted
+# regardless of an earlier one's outcome, and the function returns 1 only
+# once the whole sweep has run — a single broken Makefile must not cost the
+# repos discovered after it. Gaps (missing hooks, or no hooks directory at
+# all) are counted and named in the summary but never affect the return
+# code — only a failed `make` call does.
 install_git_hooks_all_repos() {
   local _dry=0
   [[ -n "${DRY_RUN:-}" ]] && _dry=1
