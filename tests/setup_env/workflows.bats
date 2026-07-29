@@ -1401,6 +1401,50 @@ setup_constants_copy() {
   [ -f "${_marker}" ]
 }
 
+@test "run_update runs install_git_hooks_all_repos after sync_git_repos" {
+  local _log="${BATS_TEST_TMPDIR}/order.log"
+  : > "${_log}"
+  sync_git_repos() { printf 'git-repos\n' >> "${_log}"; return 0; }
+  sync_legacy_dirs() { return 0; }
+  export -f sync_git_repos sync_legacy_dirs
+  export MACOS=1
+  unset LINUX UBUNTU
+  install_git_hooks_all_repos() { printf 'git-hooks\n' >> "${_log}"; return 0; }
+  run run_update
+  [ "$(sed -n '1p' "${_log}")" = "git-repos" ]
+  [ "$(sed -n '2p' "${_log}")" = "git-hooks" ]
+}
+
+@test "run_update does not invoke install_git_hooks_all_repos under --brew-only" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE_BREW=1
+  unset UPDATE_CLAUDE UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  local _marker="${BATS_TEST_TMPDIR}/git_hooks_sweep.ran"
+  install_git_hooks_all_repos() { touch "${_marker}"; return 0; }
+  run run_update
+  [ ! -f "${_marker}" ]
+}
+
+@test "run_update records FAIL for git-hooks section when install_git_hooks_all_repos fails" {
+  sync_git_repos() { return 0; }
+  sync_legacy_dirs() { return 0; }
+  export -f sync_git_repos sync_legacy_dirs
+  export MACOS=1
+  unset LINUX UBUNTU
+  install_git_hooks_all_repos() { return 1; }
+  # `run run_update` (not a bare call): run_update's _dotfiles_run_tmpdir_setup
+  # installs an EXIT trap, and a bare call whose assertion then fails
+  # clobbers bats' own EXIT trap, silently dropping the test's TAP output
+  # entirely (reproduced here: "Executed N-1 instead of expected N" before
+  # this test was switched to `run`). Assert on the printed summary row
+  # instead of reading _DOTFILES_RUN_TMPDIR/status_git-hooks — `run` forks
+  # a subshell, so exports made inside run_update do not survive back into
+  # this test body.
+  run run_update
+  [[ "$output" == *"[FAIL] git-hooks"* ]]
+}
+
 # ── run_update — claude/npm/pip section flags ─────────────────────────────────
 
 @test "run_update calls claude plugins update when UPDATE_CLAUDE is set" {
