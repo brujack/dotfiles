@@ -1254,7 +1254,10 @@ assert_all_npm_globals_pinned() {
 @test "run_developer_or_ansible pins every npm global package" {
   export MACOS=1
   unset LINUX UBUNTU
-  run_developer_or_ansible
+  run run_developer_or_ansible
+  # Explicit status assertion rather than a bare call: a bare call trips errexit and
+  # bats then emits no `not ok` line at all, so the failing assertion is invisible.
+  [ "$status" -eq 0 ]
   grep -q "npm install -g jscpd@5.0.14" "${MOCK_CALLS_FILE}"
   grep -q "npm install -g firecrawl-cli@1.19.27" "${MOCK_CALLS_FILE}"
   grep -q "npm install -g exa-mcp-server@3.2.1" "${MOCK_CALLS_FILE}"
@@ -1263,7 +1266,10 @@ assert_all_npm_globals_pinned() {
 @test "run_developer_or_ansible leaves no unpinned npm global install" {
   export MACOS=1
   unset LINUX UBUNTU
-  run_developer_or_ansible
+  run run_developer_or_ansible
+  # Explicit status assertion rather than a bare call: a bare call trips errexit and
+  # bats then emits no `not ok` line at all, so the failing assertion is invisible.
+  [ "$status" -eq 0 ]
   # Positive control: without this, an empty MOCK_CALLS_FILE would let the
   # guard below pass vacuously (nothing to find is unpinned).
   grep -q "npm install -g jscpd@" "${MOCK_CALLS_FILE}"
