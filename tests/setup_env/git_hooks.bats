@@ -975,6 +975,49 @@ _sweep_build_symlink_repo() {
   [[ "$output" =~ ^[0-9a-f]{64}$ ]]
 }
 
+@test "install_git_hooks_all_repos never counts a repo as updated when the recipe itself leaves a hook unreadable" {
+  # The mirror image of the previous test: pre-digest is REAL (all three
+  # hooks readable), and the recipe's own chmod 000 makes commit-msg
+  # unreadable, so the post-digest becomes "digest-error". This isolates
+  # the "${_post} != digest-error" clause specifically -- the previous
+  # test's pre=error/post=real shape cannot catch a mutation that drops
+  # this clause, since removing it there still leaves the correct result
+  # for an unrelated reason (pre-digest already excludes the repo).
+  local _base="${TESTDIR}/sweep-digest-error-post"
+  local _markers="${TESTDIR}/sweep-digest-error-post-markers"
+  mkdir -p "${_base}" "${_markers}"
+  local _repo="${_base}/regressing-repo"
+  mkdir -p "${_repo}/.git/hooks"
+  git init -q "${_repo}"
+  local _hook
+  for _hook in pre-commit pre-push commit-msg; do
+    printf '#!/usr/bin/env bash\ntrue\n' > "${_repo}/.git/hooks/${_hook}"
+    chmod +x "${_repo}/.git/hooks/${_hook}"
+  done
+  printf 'install-hooks:\n\tchmod 000 .git/hooks/commit-msg\n\ttouch "%s/regressing-repo.ran"\n' \
+    "${_markers}" > "${_repo}/Makefile"
+
+  HOOK_EXPECTED_REPOS=()
+  PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  [ "$status" -eq 0 ]
+  [ -f "${_markers}/regressing-repo.ran" ]
+  # An unreadable commit-msg is correctly a GAP (check_complete's -x guard
+  # can't see it as executable either), so the repo legitimately appears
+  # in the gaps clause -- the assertion that matters is that it never
+  # appears inside the "updated" reporting, which "0 updated" with no
+  # trailing parenthetical (only added when the updated list is
+  # non-empty) already proves.
+  [[ "$output" == *"0 updated"* ]]
+  [[ "$output" != *"updated (regressing-repo"* ]]
+
+  # Guard the guard: prove the recipe genuinely left the repo unreadable,
+  # so the "0 updated" assertion above is proof the guard fired.
+  run _git_hooks_digest "${_repo}/"
+  [ "$status" -eq 1 ]
+  [ "$output" = "digest-error" ]
+  chmod 755 "${_repo}/.git/hooks/commit-msg"
+}
+
 # _sweep_build_partial_repo installs only ONE of the three mandated hooks —
 # the state-ledger shape: `make install-hooks` exits 0 (the target ran
 # cleanly), but the repo's hooks directory is still incomplete. This is a
