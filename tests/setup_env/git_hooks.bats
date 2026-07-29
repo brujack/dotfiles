@@ -487,6 +487,105 @@ setup() {
   [ "$output" != "no-hooks-dir" ]
 }
 
+@test "_git_hooks_check_complete returns 0 and prints nothing for a repo with all three mandated hooks" {
+  local _repo="${TESTDIR}/complete-repo"
+  mkdir -p "${_repo}"
+  git init -q "${_repo}"
+  local _hooks_dir="${_repo}/.git/hooks"
+  local _hook
+  for _hook in pre-commit pre-push commit-msg; do
+    printf '#!/usr/bin/env bash\ntrue\n' > "${_hooks_dir}/${_hook}"
+    chmod +x "${_hooks_dir}/${_hook}"
+  done
+
+  run _git_hooks_check_complete "${_repo}/"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "_git_hooks_check_complete returns 1 and prints commit-msg when only commit-msg is missing" {
+  local _repo="${TESTDIR}/missing-commit-msg-repo"
+  mkdir -p "${_repo}"
+  git init -q "${_repo}"
+  local _hooks_dir="${_repo}/.git/hooks"
+  printf '#!/usr/bin/env bash\ntrue\n' > "${_hooks_dir}/pre-commit"
+  chmod +x "${_hooks_dir}/pre-commit"
+  printf '#!/usr/bin/env bash\ntrue\n' > "${_hooks_dir}/pre-push"
+  chmod +x "${_hooks_dir}/pre-push"
+
+  run _git_hooks_check_complete "${_repo}/"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"commit-msg"* ]]
+  [[ "$output" != *"pre-commit"* ]]
+  [[ "$output" != *"pre-push"* ]]
+}
+
+@test "_git_hooks_check_complete returns 1 and prints both names when two hooks are missing" {
+  local _repo="${TESTDIR}/missing-two-repo"
+  mkdir -p "${_repo}"
+  git init -q "${_repo}"
+  local _hooks_dir="${_repo}/.git/hooks"
+  printf '#!/usr/bin/env bash\ntrue\n' > "${_hooks_dir}/pre-commit"
+  chmod +x "${_hooks_dir}/pre-commit"
+
+  run _git_hooks_check_complete "${_repo}/"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"pre-push"* ]]
+  [[ "$output" == *"commit-msg"* ]]
+}
+
+@test "_git_hooks_check_complete counts a present-but-non-executable hook as missing (the -x guard's false-condition branch)" {
+  local _repo="${TESTDIR}/non-exec-repo"
+  mkdir -p "${_repo}"
+  git init -q "${_repo}"
+  local _hooks_dir="${_repo}/.git/hooks"
+  printf '#!/usr/bin/env bash\ntrue\n' > "${_hooks_dir}/pre-commit"
+  chmod +x "${_hooks_dir}/pre-commit"
+  printf '#!/usr/bin/env bash\ntrue\n' > "${_hooks_dir}/pre-push"
+  chmod +x "${_hooks_dir}/pre-push"
+  printf '#!/usr/bin/env bash\ntrue\n' > "${_hooks_dir}/commit-msg"
+  chmod 644 "${_hooks_dir}/commit-msg"
+
+  run _git_hooks_check_complete "${_repo}/"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"commit-msg"* ]]
+}
+
+@test "_git_hooks_check_complete reports all three mandated hooks missing when the hooks directory itself is absent" {
+  local _repo="${TESTDIR}/no-hooks-dir-repo"
+  mkdir -p "${_repo}"
+  git init -q "${_repo}"
+  rm -rf "${_repo}/.git/hooks"
+
+  run _git_hooks_check_complete "${_repo}/"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"pre-commit"* ]]
+  [[ "$output" == *"pre-push"* ]]
+  [[ "$output" == *"commit-msg"* ]]
+}
+
+@test "_git_hooks_check_complete passes when hooks are installed with no scripts/ counterpart at all (the ledger init shape)" {
+  local _repo="${TESTDIR}/ledger-shape-repo"
+  mkdir -p "${_repo}"
+  git init -q "${_repo}"
+  local _hooks_dir="${_repo}/.git/hooks"
+  local _hook
+  for _hook in pre-commit pre-push commit-msg; do
+    printf '#!/usr/bin/env bash\ntrue\n' > "${_hooks_dir}/${_hook}"
+    chmod +x "${_hooks_dir}/${_hook}"
+  done
+
+  # Guard the guard: prove scripts/ genuinely does not exist, so a pass
+  # below isn't vacuous — this is exactly the state-ledger shape, where
+  # pre-commit arrives via `ledger init` and there is no scripts/pre-commit
+  # at all. A source-based check would report a false gap here forever.
+  [[ ! -d "${_repo}/scripts" ]]
+
+  run _git_hooks_check_complete "${_repo}/"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
 @test "_git_hooks_discover emits nothing on stderr for a repo with no Makefile" {
   # The `[[ -f Makefile ]]` guard is not a correctness guard — grep exits 2
   # on a missing file, so the repo is excluded either way. Its actual job is
