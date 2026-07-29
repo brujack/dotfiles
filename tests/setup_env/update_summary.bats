@@ -787,6 +787,21 @@ firefox  124.0"
   [[ "${_joined}" == *"ai-config git-repos legacy-rsync"* ]]
 }
 
+@test "_UPDATE_SECTION_ORDER includes git-hooks after legacy-rsync" {
+  local _joined
+  _joined="${_UPDATE_SECTION_ORDER[*]}"
+  [[ "${_joined}" == *"ai-config git-repos legacy-rsync git-hooks"* ]]
+}
+
+@test "_update_summary prints a git-hooks row when a status file exists for it" {
+  printf "OK\n" > "${_DOTFILES_RUN_TMPDIR}/status_git-hooks"
+  printf "6 checked, 0 updated, 0 gaps\n" > "${_DOTFILES_RUN_TMPDIR}/result_git-hooks"
+  run _update_summary
+  [[ "$output" == *"[OK]"* ]]
+  [[ "$output" == *"git-hooks"* ]]
+  [[ "$output" == *"6 checked, 0 updated, 0 gaps"* ]]
+}
+
 # ── _update_record_start legacy-rsync ─────────────────────────────────────────
 
 @test "_update_record_start legacy-rsync case skips via _update_skip when not studio" {
