@@ -1198,6 +1198,26 @@ setup_constants_copy() {
   grep -q "clone_repos" "${MOCK_CALLS_FILE}"
 }
 
+@test "run_developer_or_ansible pins every npm global package" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  run run_developer_or_ansible
+  grep -q "npm install -g jscpd@5.0.14" "${MOCK_CALLS_FILE}"
+  grep -q "npm install -g firecrawl-cli@1.19.27" "${MOCK_CALLS_FILE}"
+  grep -q "npm install -g exa-mcp-server@3.2.1" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_developer_or_ansible leaves no unpinned npm global install" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  run run_developer_or_ansible
+  # A global package name not followed by '@' is an unpinned invocation. The
+  # pre-existing substring test could not make this assertion: grep -q "npm
+  # install -g firecrawl-cli" matches pinned and unpinned forms identically.
+  ! grep -qE 'npm install -g (jscpd|firecrawl-cli|exa-mcp-server)($|[^@])' \
+    "${MOCK_CALLS_FILE}"
+}
+
 # ── process_args --pkgs-only ──────────────────────────────────────────────
 
 @test "process_args --pkgs-only sets UPDATE_PKGS" {
