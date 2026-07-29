@@ -216,6 +216,22 @@ teardown() {
   [ "$status" -ne 0 ]
 }
 
+# ── run_setup_user: install_git_hooks_all_repos wiring ────────────────────────
+
+@test "run_setup_user calls install_git_hooks_all_repos" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  local _marker="${BATS_TEST_TMPDIR}/git_hooks_sweep.ran"
+  install_git_hooks_all_repos() { touch "${_marker}"; return 0; }
+  # run-wrapped (not a bare call): _dotfiles_run_tmpdir_setup installs an
+  # EXIT trap inside run_setup_user, and a bare call whose surrounding test
+  # later fails clobbers bats' own EXIT trap, silently dropping the test's
+  # TAP output entirely (reproduced: "Executed N-1 instead of expected N").
+  # `run` isolates the trap inside its subshell.
+  run run_setup_user
+  [ -f "${_marker}" ]
+}
+
 # ── run_setup_or_developer ────────────────────────────────────────────────────
 
 @test "run_setup_or_developer creates credential directories" {
