@@ -81,11 +81,13 @@ setup() {
   [ "${#HOOK_EXPECTED_REPOS[@]}" -gt 0 ]
 }
 
-@test "sourcing lib/git_hooks.sh twice produces empty stderr and leaves HOOK_EXPECTED_REPOS non-empty" {
+@test "sourcing lib/git_hooks.sh twice produces empty stderr and leaves HOOK_EXPECTED_REPOS and _GIT_HOOKS_MANDATED intact" {
   local _stderr
   _stderr="$(source "${REPO_ROOT}/lib/git_hooks.sh" 2>&1 1>/dev/null)"
   [ -z "${_stderr}" ]
   [ "${#HOOK_EXPECTED_REPOS[@]}" -gt 0 ]
+  [ "${#_GIT_HOOKS_MANDATED[@]}" -eq 3 ]
+  [ "${_GIT_HOOKS_MANDATED[*]}" = "pre-commit pre-push commit-msg" ]
 }
 
 @test "_git_hooks_discover excludes plain-dir (no .git at all)" {
