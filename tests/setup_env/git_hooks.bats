@@ -551,17 +551,33 @@ setup() {
   [[ "$output" == *"commit-msg"* ]]
 }
 
-@test "_git_hooks_check_complete reports all three mandated hooks missing when the hooks directory itself is absent" {
+@test "_git_hooks_check_complete returns 2 and prints the no-hooks-dir marker when the hooks directory itself is absent" {
   local _repo="${TESTDIR}/no-hooks-dir-repo"
   mkdir -p "${_repo}"
   git init -q "${_repo}"
   rm -rf "${_repo}/.git/hooks"
 
   run _git_hooks_check_complete "${_repo}/"
+  [ "$status" -eq 2 ]
+  [ "$output" = "no-hooks-dir" ]
+}
+
+@test "_git_hooks_check_complete returns 1 (not 2) and lists all three hooks when the hooks directory exists but is empty" {
+  # Distinguishes "hooks directory absent entirely" (rc=2, MAJOR 1's fix)
+  # from "hooks directory exists but every hook is missing" (rc=1) --
+  # both list the identical hook set, so only the exit code tells them
+  # apart. This is precisely the case Task 4 needs to branch on:
+  # `make install-hooks` can plausibly fix rc=1 (there's a directory to
+  # install into) but cannot fix rc=2 (there is nowhere to install into
+  # at all).
+  local _repo="${TESTDIR}/empty-hooks-dir-repo"
+  mkdir -p "${_repo}"
+  git init -q "${_repo}"
+  rm -f "${_repo}/.git/hooks"/*
+
+  run _git_hooks_check_complete "${_repo}/"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"pre-commit"* ]]
-  [[ "$output" == *"pre-push"* ]]
-  [[ "$output" == *"commit-msg"* ]]
+  [ "$output" = "pre-commit pre-push commit-msg" ]
 }
 
 @test "_git_hooks_check_complete passes when hooks are installed with no scripts/ counterpart at all (the ledger init shape)" {
@@ -592,7 +608,7 @@ setup() {
   # executable. This is deliberate: it makes the two possible guard
   # implementations diverge instead of coincidentally agreeing.
   #   - Branch on the return code (correct): the guard fires regardless
-  #     of what was printed — status 1, all three names reported missing.
+  #     of what was printed — status 2, the no-hooks-dir marker.
   #   - Branch on `[[ -z "$_hooks_dir" ]]` (the old, wrong proxy): the
   #     printed path is non-empty, so the guard does NOT fire, the
   #     per-hook loop runs against the real populated directory, finds
@@ -616,10 +632,8 @@ setup() {
   }
 
   run _git_hooks_check_complete "${TESTDIR}/irrelevant-repo/"
-  [ "$status" -eq 1 ]
-  [[ "$output" == *"pre-commit"* ]]
-  [[ "$output" == *"pre-push"* ]]
-  [[ "$output" == *"commit-msg"* ]]
+  [ "$status" -eq 2 ]
+  [ "$output" = "no-hooks-dir" ]
 }
 
 @test "_git_hooks_gap_repos includes ai-devops (listed, real repo, no Makefile)" {

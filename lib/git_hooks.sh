@@ -144,10 +144,23 @@ _git_hooks_digest() {
 # `ledger init` installing an executable .git/hooks/pre-commit with no
 # scripts/pre-commit counterpart) must satisfy this check; a source-based
 # check would report a false gap on state-ledger every week forever.
-# Contract: prints the names of any missing hooks, space-separated, on
-# stdout; returns 0 when complete, 1 when any are missing (including when
-# the hooks directory itself does not exist, in which case every mandated
-# hook is reported missing).
+#
+# Contract is tri-state, not binary:
+#   exit 0 -- complete. No stdout output.
+#   exit 1 -- incomplete, but the hooks directory exists. Prints the
+#             missing hook names, space-separated, on ONE line of
+#             stdout. `make install-hooks` can plausibly fix this.
+#   exit 2 -- no hooks directory at all (mirrors _git_hooks_digest's
+#             own no-hooks-dir marker). Prints the literal string
+#             "no-hooks-dir" on stdout -- never a hook-name list.
+#             `make install-hooks` cannot fix this: there is nowhere to
+#             install into, and this repo's git infrastructure itself
+#             is broken, not just its hook set.
+# Callers (Task 4's sweep) must branch on the exit code, not merely
+# check non-zero -- collapsing 1 and 2 into "incomplete" is exactly the
+# bug this tri-state exists to prevent: a repair loop that only knows
+# how to re-run install-hooks would retry forever against a repo whose
+# hooks directory doesn't exist, and never escalate.
 _git_hooks_check_complete() {
   local _repo_dir="$1"
   local _hooks_dir
@@ -155,8 +168,8 @@ _git_hooks_check_complete() {
   local -a _missing=()
 
   if ! _hooks_dir="$(_git_hooks_dir "${_repo_dir}")"; then
-    printf '%s\n' "${_GIT_HOOKS_MANDATED[*]}"
-    return 1
+    printf 'no-hooks-dir\n'
+    return 2
   fi
 
   for _hook in "${_GIT_HOOKS_MANDATED[@]}"; do
