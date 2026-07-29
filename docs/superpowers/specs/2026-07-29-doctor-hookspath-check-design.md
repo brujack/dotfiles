@@ -25,6 +25,28 @@ hook files were present and executable, and `make install-hooks` reported succes
 repo. Each of those answers a different question than the one that matters: *does git
 actually find a hook here.*
 
+### The unexplained writer
+
+The strongest argument for reading any scope at all is not a hypothetical. It is an
+unresolved fact about how the observed instance came to exist.
+
+`ai-config` ADR-0055:72, written 2026-07-28, asserts the setting was present in that repo
+(`git config --show-origin` → `file:.git/config`). The scan on 2026-07-29 found zero. So it
+was hand-removed, not never-present — and **nothing has identified what set it on the Mac
+Studio**, which was the rsync *source*, not a destination. The rsync vector explains how
+four destination machines got a copy; it does not explain the original write.
+
+The only `core.hooksPath` write found anywhere in `~/git-repos/personal`,
+`~/.claude/plugins`, or state-ledger is `dotfiles/scripts/push-bash-coverage.sh:55`, a
+transient `git -c` flag that never persists. The writer, if one exists, is not in the tree
+that was searched — which leaves a GUI client, an IDE, a plugin, or an `npx` invocation as
+live candidates, none of them inspected.
+
+This is what the detector guards: not an unobserved condition, but **recurrence of an
+observed event whose cause is unknown**. If that writer still exists and fires again
+somewhere outside the searched tree, `--global` is exactly the shape it could take — and
+that is the one scope nothing in this repo reads.
+
 ### What is already covered, and what is not
 
 PR #189 changed this. Its sweep resolves each repo's hooks directory through `rev-parse
@@ -85,7 +107,7 @@ or redirects hooks in **every repo on that box**, immediately. Two shapes matter
 | 1 | Read `--global` and `--system` scope only. No per-repo scan. | Per the propagation analysis above: the per-repo residual has no failure mode, and every shape that does is already caught by #189. Global/system is the only scope nothing reads, and the only one whose blast radius is immediate rather than propagated. |
 | 2 | Read each scope explicitly (`--global`, `--system`), never bare `--get`. | Bare `--get` returns the *effective* value after system→global→local precedence, so it cannot tell you which scope to unset. Scoped reads attach the correct `git config --global --unset` / `--system --unset` remedy. |
 | 3 | A pin at either scope is a **failure**, not a warning. | The blast radius is every repo on the box, and the resolving case reads green everywhere else. There is no legitimate use: the fleet has no machine that wants hooks somewhere other than where `install-hooks` puts them. With the per-repo scan gone, the unmandated-repo/husky case that motivated a warn tier no longer arises, so no allowlist or suppression path is introduced. |
-| 4 | Reported from **both** the `-t update` sweep and `-t doctor`. | `run_doctor` has exactly one call site — `setup_env.sh:69`, human-invoked; it appears in no `run_update` path and no CI job (`grep -rn run_doctor lib/ setup_env.sh scripts/`; `grep -rn doctor .github/workflows/`). A check reachable only by typing `-t doctor` fires only where someone already went looking, which is the runbook posture `USER.md` rejects for this class of fleet drift. `-t update` is what actually runs on all seven machines. `doctor` is kept as the on-demand surface. |
+| 4 | Reported from **both** the `-t update` sweep and `-t doctor`. | `run_doctor` has exactly one call site — `setup_env.sh:69`, human-invoked; it appears in no `run_update` path and no CI job (`grep -rn run_doctor lib/ setup_env.sh scripts/`; `grep -rn doctor .github/workflows/`). A check reachable only by typing `-t doctor` fires only where someone already went looking, which is the runbook posture `USER.md` rejects for this class of fleet drift. `-t update` is what demonstrably runs: the sweep spec measured `grep -c 'git-repos' ~/.dotfiles-update.log` at 59 on the 7950X and 7 on the Studio. `doctor` has no comparable figure and cannot acquire one — it writes no state-ledger entry and is absent from `_ledger_write_run_entry`'s RUN_TYPE enum (`lib/update_summary.sh:373`), which records six run types and deliberately omits it (`lib/workflows.sh:184`). So doctor cadence is unmeasurable **by construction**, not merely unmeasured, and this decision does not rest on it: the sweep is the surface that carries the fleet value, and `doctor` is kept because it is nearly free and useful when someone is already looking. |
 | 5 | The `git-hooks)` case arm in `_update_record_end` lands in this PR. | Without it the sweep surface is not a signal. `_update_record_end` has no `git-hooks)` arm, so it falls to `*)` → `_result="updated"` and then writes `OK` unconditionally (`lib/update_summary.sh:362-368`); gaps and unknowns are documented as never affecting the sweep's return code. The summary table would print `git-hooks — OK — updated` over its own findings — the same "reports success while git reads elsewhere" shape this change exists to catch. This is the existing backlog item "Surface git-hooks gap counts in the `-t update` summary block"; it stops being separable the moment the sweep becomes a reporting surface. |
 | 6 | The sweep's `make install-hooks` invocation gets the `env -u` strip. | `lib/git_hooks.sh:327` runs `run_cmd make -s -C "${_dir}" install-hooks` with no strip. A leaked `GIT_DIR` does not merely redirect within a repo — it sends the target repo's hooks into *another repo's* hooks directory. Live today for `ai-config` and `math`, both of which resolve their hooks dir via `--git-path hooks`. Git exports `GIT_DIR` into the pre-push hook environment when pushing from a worktree, and this repo's pre-push hook runs `make test`. One strip at the invocation covers all nine repos regardless of Makefile shape. |
 | 7 | The dotfiles `Makefile` `install-hooks` target is **not** changed. | The proposed change (`--git-path hooks` + `mkdir -p`) is actively harmful, verified against real git: `--git-path hooks` returns the pin verbatim, `mkdir -p` then creates it, `_git_hooks_dir`'s `[[ -d ]]` succeeds, and `check_complete` returns 0 instead of 2 — **deleting the #189 detection this spec's Problem section relies on.** Ordering makes it worse: `make` runs at line 327, `check_complete` at line 351, so the sweep would repair into the anomaly and then evaluate. Under a global pin it is the clobber engine described above. The target's real defects — literal `.git/hooks`, breaks in a worktree — are real but belong in their own change, gated on their own reasoning, not smuggled into a detection PR. |
@@ -174,6 +196,25 @@ run_cmd env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
   make -s -C "${_dir}" install-hooks
 ```
 
+## Delivery — two PRs, strip first
+
+Decision 6's strip is a fix for something happening now. The detector guards against
+recurrence. Sharing one review surface means the live exposure waits on the speculative
+guard's semantics, which is backwards.
+
+**PR 1 — the strip.** `lib/git_hooks.sh:327` plus its isolation test. One line of
+production change. `ai-config` and `math` are exposed today via a real trigger chain
+(worktree push → git exports `GIT_DIR` → pre-push runs `make test` → sweep runs
+`install-hooks`), and a leaked `GIT_DIR` sends the target repo's hooks into another repo's
+hooks directory. Ships on its own, first.
+
+**PR 2 — the detector and the case arm.** `_git_hooks_hookspath_offenders`, both reporting
+surfaces, the `git-hooks)` case arm, and the summary regression test. This is the actual
+review surface: new semantics, a new failure verdict, and a change to what the update
+summary reports.
+
+The test table below marks which PR each row belongs to.
+
 ## Testing
 
 The global and system arms use `GIT_CONFIG_GLOBAL` / `GIT_CONFIG_SYSTEM` pointed at temp
@@ -190,9 +231,9 @@ files — real git, no mock, and no possibility of touching the developer's own
 | Error | value points at a nonexistent directory | still FAIL, same as a resolvable value — Decision 3 |
 | Error | `git config` exits 1 (key unset) | treated as clean, not propagated as failure |
 | Idempotency | detector called twice in one shell | identical output both times |
-| State | sweep run with a global pin set | offender count reaches the summary via the `git-hooks)` arm, and the section does **not** render as a bare `[OK] git-hooks updated` — this is the Decision 5 regression test |
-| Isolation | `GIT_DIR` exported, sweep runs `make install-hooks` | make is invoked with the var stripped; hooks land in the target repo, not the leaked one |
-| State | two repos, `--global` pin resolving to one shared directory | sweep does not let repo B's hooks land as repo A's; the condition is reported rather than silently "completed". This case has no coverage today and is the clobber shape that motivated Decision 7 |
+| State | **(PR 2)** sweep run with a global pin set | offender count reaches the summary via the `git-hooks)` arm, and the section does **not** render as a bare `[OK] git-hooks updated` — this is the Decision 5 regression test |
+| Isolation | **(PR 1)** `GIT_DIR` exported, sweep runs `make install-hooks` | make is invoked with the var stripped; hooks land in the target repo, not the leaked one |
+| State | **(PR 2)** two repos, `--global` pin resolving to one shared directory | sweep does not let repo B's hooks land as repo A's; the condition is reported rather than silently "completed". This case has no coverage today and is the clobber shape that motivated Decision 7 |
 
 Coverage: `lib/git_hooks.sh`, `lib/helpers.sh`, and `lib/update_summary.sh` are all
 already in `scripts/run-bash-coverage.sh`'s `INCLUDE_FILES`, so the new lines are
@@ -214,14 +255,9 @@ is clean and has stayed clean — the strongest available evidence that no live 
 still setting `core.hooksPath`. The three work Macs remain the only plausible home for an
 MDM-managed `--system` pin, which is precisely the case Decision 1 keeps.
 
-Note on provenance, unresolved: `ai-config` ADR-0055:72, written 2026-07-28, asserts the
-setting was present in that repo (`git config --show-origin` → `file:.git/config`); the
-2026-07-29 scan found zero. It was hand-removed, not never-present, and nothing has
-identified what set it on the Mac Studio — which was the rsync *source*, not a
-destination. The only `core.hooksPath` write found anywhere in `~/git-repos/personal`,
-`~/.claude/plugins`, or state-ledger is `dotfiles/scripts/push-bash-coverage.sh:55`, a
-transient `git -c` flag that never persists. The writer, if one exists, is not in the tree
-that was searched.
+The unexplained writer described in the Problem section is the other half of this
+picture: three machines scanned clean is evidence the residue is gone, not evidence the
+writer is.
 
 ## Out of scope
 
@@ -399,3 +435,51 @@ test row.
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+### Peer architectural review — commit `545bc1e`
+
+Independent review of the post-Round-2 spec (separate `claude.ai` session, no Claude Code
+context). Three findings, all accepted; verified here before applying, as with the lenses.
+
+**1. Decision 6's strip is a live fix gated behind a speculative feature.** Round 2's
+Goal-Fit raised the bundling and the disposition kept it ("survives as one of the three
+things this PR does") rather than resolving it. The spec's own evidence argues for the
+opposite ordering: `lib/git_hooks.sh:327` is exposed today with a present-tense trigger
+chain, while the detector guards a condition with zero observed instances on three machines
+and the vector closed. If the detector's semantics need another round, the strip waits with
+it for no reason.
+
+Disposition: **Addressed.** Split into two PRs — see the new "Delivery" section. PR 1 is
+the strip and its isolation test; PR 2 is the detector, both surfaces, the case arm, and
+the summary regression test. Test rows are tagged by PR. Costs nothing and closes the live
+exposure first.
+
+**2. The `-t doctor` surface's justification does not hold as written.** Round 2's
+Ergonomics assumption was recorded as "accepted unresolved — both surfaces are hand-typed,
+so Decision 4 buys reach on whichever the operator actually runs." That treats the two
+cadences as comparable when one is measured: the sweep spec recorded `grep -c 'git-repos'
+~/.dotfiles-update.log` at 59 on the 7950X and 7 on the Studio.
+
+Verified further while applying, and it is stronger than the finding claims: `doctor` is
+absent from `_ledger_write_run_entry`'s RUN_TYPE enum (`lib/update_summary.sh:373`), which
+records six run types, and `run_doctor` makes no ledger call — `lib/workflows.sh:184`
+states the omission is deliberate ("on exactly the runs worth recording"). So the settling
+command the finding proposes cannot work on any machine, ever: doctor cadence is
+unmeasurable **by construction**. The "reach on whichever the operator runs" justification
+is not merely unresolved, it is unfalsifiable and had to go.
+
+Disposition: **Addressed.** Decision 4's rationale rewritten: the sweep carries the fleet
+value on measured cadence; `doctor` is kept because it is nearly free and useful when
+someone is already looking. The decision no longer rests on doctor cadence at all.
+
+**3. The unresolved provenance is the strongest remaining argument for the detector, and it
+was buried.** The ADR-0055-asserted-present / scan-found-zero / hand-removed sequence, with
+no identified writer on the *source* machine, is a demonstrated event rather than the
+hypothesised MDM case — and a better justification than the one the Problem section led
+with.
+
+Disposition: **Addressed.** Promoted to its own Problem subsection, "The unexplained
+writer," ahead of the coverage table; the Fleet-evidence section now points at it rather
+than repeating it. Reframes the detector from guarding an unobserved condition to guarding
+recurrence of an observed one whose cause is unknown — materially stronger and the honest
+framing.
