@@ -232,8 +232,8 @@ files — real git, no mock, and no possibility of touching the developer's own
 | Error | `git config` exits 1 (key unset) | treated as clean, not propagated as failure |
 | Idempotency | detector called twice in one shell | identical output both times |
 | State | **(PR 2)** sweep run with a global pin set | offender count reaches the summary via the `git-hooks)` arm, and the section does **not** render as a bare `[OK] git-hooks updated` — this is the Decision 5 regression test |
-| Isolation | **(PR 1)** `GIT_DIR` exported, sweep runs `make install-hooks` | make is invoked with the var stripped; hooks land in the target repo, not the leaked one |
-| State | **(PR 2)** two repos, `--global` pin resolving to one shared directory | sweep does not let repo B's hooks land as repo A's; the condition is reported rather than silently "completed". This case has no coverage today and is the clobber shape that motivated Decision 7 |
+| Isolation | **(PR 1)** `GIT_DIR` exported, sweep runs `make install-hooks` | make is invoked with the var stripped, **and** the hooks land in the target repo rather than the leaked one. The second clause requires a fixture whose `install-hooks` resolves via `$(git rev-parse --git-path hooks)`, matching `ai-config` and `math`. The existing real-recipe fixture (`tests/setup_env/git_hooks.bats:805`) uses a literal `.git/hooks`, and `make -C` sets cwd, so a leaked `GIT_DIR` cannot redirect it — built on that fixture the test passes whether or not the strip is present. See `tdd.md` section E. |
+| State | **(PR 2)** two repos, `--global` pin resolving to one shared directory | the pin is **reported**, so the state stops being silent. The clobber itself is **not** prevented and must not be asserted as prevented: nothing in either PR stops the sweep `ln -sf`-ing both repos into the shared directory. Decision 7's argument is that the dropped `Makefile` change would have *created* this state; with it dropped, the state arises only from a pre-existing global pin, which PR 2 names. Asserting prevention here would be asserting behaviour the design deliberately does not implement — the shape of test that gets written, fails, and is weakened until it passes. |
 
 Coverage: `lib/git_hooks.sh`, `lib/helpers.sh`, and `lib/update_summary.sh` are all
 already in `scripts/run-bash-coverage.sh`'s `INCLUDE_FILES`, so the new lines are
@@ -483,3 +483,30 @@ writer," ahead of the coverage table; the Fleet-evidence section now points at i
 than repeating it. Reframes the detector from guarding an unobserved condition to guarding
 recurrence of an observed one whose cause is unknown — materially stronger and the honest
 framing.
+
+### Peer architectural review, round 2 — commit `3dab7b8`
+
+Two findings, both test-specification defects, both accepted.
+
+**1. PR 1's isolation test cannot observe what it asserts.** The row's second clause —
+hooks land in the target repo, not the leaked one — needs a fixture where a leaked
+`GIT_DIR` would actually redirect, i.e. one whose `install-hooks` resolves via `--git-path
+hooks`. Verified: the only existing fixture with a real recipe
+(`tests/setup_env/git_hooks.bats:805`) uses a literal `.git/hooks`, and `make -C` sets cwd,
+so the hooks land in the target repo whether or not the strip is present. Built on that
+fixture the test passes for the wrong reason and leaves the strip untested in the one
+direction that motivated it — `tdd.md` section E, the same trap the digest test avoided by
+requiring a real `cp` recipe.
+
+Disposition: **Addressed.** The test row now specifies the fixture shape and states why the
+literal-path fixture cannot serve, with the line reference.
+
+**2. The clobber test asserts a prevention neither PR implements.** The row's first clause —
+the sweep does not let repo B's hooks land as repo A's — is not PR 2 behaviour. PR 2 reports
+the pin; nothing prevents the clobber. Decision 7's argument is that the dropped `Makefile`
+change would have *created* that state, not that anything now prevents it. As written the
+row would be written, fail, and be weakened until it passed.
+
+Disposition: **Addressed.** The row now asserts the reporting half only, and states
+explicitly that the clobber is expected-and-reported rather than prevented, so a future
+implementer does not read it as a missing guard.
