@@ -888,3 +888,46 @@ _sweep_build_loud_repo() {
   [[ "$output" == *"0 updated"* ]]
   [[ "$output" != *"current-repo"* ]]
 }
+
+# _sweep_build_symlink_repo installs hooks as symlinks into SOURCE_FILE —
+# the other two of six real repos' install-hooks shape (`ln -sf`). The
+# recipe rewrites SOURCE_FILE's own content as one of its steps, which is a
+# deliberate test artifice (plan Task 4: "the ln -sf unchanged branch is
+# unfalsifiable by re-running make"): a symlinked hook tracks its source
+# continuously, so nothing about re-running `make` alone can ever change
+# its digest. This proves the digest mechanism is CAPABLE of seeing a
+# symlink-target change; it does not prove the sweep ever observes one in
+# production, where nothing mutates the source between the two digest
+# reads the sweep takes.
+_sweep_build_symlink_repo() {
+  local _repo_base="$1" _name="$2" _marker_dir="$3" _source_file="$4"
+  local _repo="${_repo_base}/${_name}"
+  mkdir -p "${_repo}"
+  git init -q "${_repo}"
+  printf 'install-hooks:\n\techo mutated > "%s"\n\tmkdir -p .git/hooks\n\tln -sf "%s" .git/hooks/pre-commit\n\tln -sf "%s" .git/hooks/pre-push\n\tln -sf "%s" .git/hooks/commit-msg\n\ttouch "%s/%s.ran"\n' \
+    "${_source_file}" "${_source_file}" "${_source_file}" "${_source_file}" "${_marker_dir}" "${_name}" \
+    > "${_repo}/Makefile"
+}
+
+@test "install_git_hooks_all_repos reports updated for a symlink-install repo when its source is mutated between digests" {
+  local _base="${TESTDIR}/sweep-symlink"
+  local _markers="${TESTDIR}/sweep-symlink-markers"
+  local _source="${TESTDIR}/symlink-hook-source.sh"
+  mkdir -p "${_base}" "${_markers}"
+  printf '#!/usr/bin/env bash\necho original\n' > "${_source}"
+  chmod +x "${_source}"
+  _sweep_build_symlink_repo "${_base}" "symlinked-repo" "${_markers}" "${_source}"
+  # Pre-install: the symlinks already exist and point at the (as yet
+  # unmutated) source, mirroring a box that already ran install-hooks once.
+  mkdir -p "${_base}/symlinked-repo/.git/hooks"
+  ln -sf "${_source}" "${_base}/symlinked-repo/.git/hooks/pre-commit"
+  ln -sf "${_source}" "${_base}/symlinked-repo/.git/hooks/pre-push"
+  ln -sf "${_source}" "${_base}/symlinked-repo/.git/hooks/commit-msg"
+
+  HOOK_EXPECTED_REPOS=()
+  PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  [ "$status" -eq 0 ]
+  [ -f "${_markers}/symlinked-repo.ran" ]
+  [[ "$output" == *"1 updated"* ]]
+  [[ "$output" == *"symlinked-repo"* ]]
+}
