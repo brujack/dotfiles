@@ -208,11 +208,14 @@ run_developer_or_ansible() {
   printf "Installing json2yaml via npm\n"
   npm install json2yaml || return 1
 
+  printf "Installing jscpd via npm\n"
+  npm install -g "jscpd@${JSCPD_VER}" || return 1
+
   printf "Installing firecrawl-cli via npm\n"
-  npm install -g firecrawl-cli || return 1
+  npm install -g "firecrawl-cli@${FIRECRAWL_CLI_VER}" || return 1
 
   printf "Installing exa-mcp-server via npm\n"
-  npm install -g exa-mcp-server || return 1
+  npm install -g "exa-mcp-server@${EXA_MCP_SERVER_VER}" || return 1
 
   install_ruby_tools || return 1
   install_ruby || return 1
