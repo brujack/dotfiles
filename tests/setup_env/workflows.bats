@@ -240,6 +240,16 @@ teardown() {
   [ "$status" -eq 0 ]
 }
 
+@test "run_setup_user still calls _ledger_write_run_entry when install_git_hooks_all_repos returns 1" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  local _marker="${BATS_TEST_TMPDIR}/ledger_write.ran"
+  install_git_hooks_all_repos() { return 1; }
+  _ledger_write_run_entry() { touch "${_marker}"; }
+  run run_setup_user
+  [ -f "${_marker}" ]
+}
+
 # ── run_setup_or_developer ────────────────────────────────────────────────────
 
 @test "run_setup_or_developer creates credential directories" {
