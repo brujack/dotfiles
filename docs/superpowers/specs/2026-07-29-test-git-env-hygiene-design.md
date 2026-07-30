@@ -61,7 +61,13 @@ the measuring environment. Resolving it is a prerequisite for the implementation
 an optional follow-up — the fix is the same either way, but the spec should not carry an
 argument it cannot reproduce.
 
-## The real defect: fifteen hand-copied unsets, all missing the same variable
+## Adjacent drift: fifteen hand-copied unsets, all missing the same variable
+
+> **Scope note.** Two review rounds established that this section describes _drift_, not the
+> defect. It causes no failure today; the fix in Decisions 1-2 does not depend on it, and
+> cleaning it up changes no verdict. It stays here because it is the reason the leak went 11
+> days undiagnosed and because it is the content of the follow-up hygiene spec — not because
+> it is in scope. Read what follows as background.
 
 Six BATS files create git repositories. Their `GIT_*` hygiene, counted:
 
@@ -125,52 +131,16 @@ their contents.
 
 ## Decisions
 
-| #   | Decision                                                                                                                                                                                        | Rationale                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | A single top-level `unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE` in `tests/helpers/common.bash`, executed on `source` — not inside `load_mocks()` or `load_setup_env()`           | Top-level means it runs whenever the helper is sourced, in the shell that then runs `setup()` and the `@test` body — so every fixture subshell and every `run bash -c` child inherits a clean environment without needing its own unset. A function-scoped version would only help files calling that specific function (`load_setup_env`: 16 of 26 files; `load_mocks`: 20). The repo already uses two sourcing idioms — `load '../helpers/common.bash'` at file scope and `source "${REPO_ROOT}/tests/helpers/common.bash"` inside `setup()`. Both work here; do not normalise them as part of this change. **Verified 2026-07-30**, since the whole design rests on it: a probe `.bats` with a top-level `unset` and a polluted parent env passes 3/3 (test body, `setup()`, and `run bash -c` child all see the vars gone) and fails 3/3 with the unset removed — on **both** bats 1.10.0 (CI, ubuntu apt, `--platform linux/amd64`) and 1.14.0 (macOS brew). No discovery-pass/execution-pass split exists on either version. |
-| 2   | All four variables, not just `GIT_DIR`                                                                                                                                                          | `GIT_COMMON_DIR` was measured during PR #190 to redirect `--git-path hooks` identically to `GIT_DIR`. `GIT_INDEX_FILE` is exported **relative** by `pre-commit` (`git-workflow.md`), so it follows a subprocess by cwd — the nastiest of the four, and the one every existing hand-copy omitted. Matches the idiom already used four times in `lib/git_hooks.sh`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| 3   | Delete all 15 hand-rolled unsets; make `pre_commit_hook.bats` and `pre_push.bats` source `common.bash`                                                                                          | Leaving them is what allowed the drift. Sourcing is safe for both: `common.bash`'s top level only assigns `REPO_ROOT` (to the identical value both files already compute) and defines two functions. Neither file calls `load_mocks`, so the deliberate "exclude the git mock from PATH" behaviour in both is preserved — that exclusion is their own `CLEAN_PATH` logic, untouched.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| 4   | A **leak-injected** guard: a test that exports the four vars into a child, sources `common.bash` there, and asserts they are gone — plus one CI step running the suite under a leaked `GIT_DIR` | An earlier draft specified a guard that simply asserted `[ -z "${GIT_DIR:-}" ]` during a normal run. That is vacuous: those vars are already empty in a clean shell, so it passes identically whether or not the fix exists, in every environment that actually runs it — local `make test`, the CI `test` job, and a normal-checkout pre-push. It could only fail under a worktree pre-push, which no automated consumer runs, so no verdict anywhere could differ because it existed. Injecting the leak is what makes the guard fail when the fix is removed, and the CI step is what makes it run somewhere that reports a verdict. Both were confirmed workable by the bats probe in Decision 1, which is exactly this shape.                                                                                                                                                                                                                                                                                                 |
-| 5   | **Also** strip the four vars in `scripts/pre-push` before `make test`                                                                                                                           | Reversed from an earlier draft that left the hook alone on the grounds that "once the tests are robust, the hook passes". That reasoning is circular: the failure mode it dismisses is the one Decision 4 exists to catch — a future git-fixture suite that never sources `common.bash`. `scripts/pre-push` is the single point where the leak enters this repo's test suite, so one `unset` there immunises all 1058 current tests **and** every future test file, including files that skip the helper. It is a boundary fix, not a redundant one: Decision 1 protects files that opt in, Decision 5 protects the ones that forget. Keep both — they fail independently.                                                                                                                                                                                                                                                                                                                                                         |
-| 6   | No change to anything under `lib/`                                                                                                                                                              | The production functions already strip correctly (`lib/git_hooks.sh` does it four times). Only fixture and test-body code was ever exposed.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| #   | Decision                                                                                                                                                         | Rationale                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **The whole fix is one `unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE` in `scripts/pre-push`, before `make test`.** Nothing else ships in this spec. | `scripts/pre-push:32` is the only place in this repo that runs the suite under an environment git populates — verified: `.github/workflows/ci.yml:21` runs bare `make test`, `scripts/pre-commit` never runs tests, and `git-workflow.md`'s measured table records that bisect and `rebase --exec` export nothing. One line at that boundary immunises all 1058 current tests **and** every future test file, including files that never source a helper. Two earlier drafts of this spec built a per-file mechanism instead (a shared `unset` in `tests/helpers/common.bash`, 15 hand-copy deletions, a guard test, a CI step); a second review round established that none of them can fire in an environment this decision does not already cover, so they are hygiene, not the fix, and are priced as hygiene in Out of scope. |
+| 2   | All four variables, not just `GIT_DIR`                                                                                                                           | `GIT_COMMON_DIR` was measured during PR #190 to redirect `--git-path hooks` identically to `GIT_DIR`. `GIT_INDEX_FILE` is exported **relative** by `pre-commit` (`git-workflow.md`), so it follows a subprocess by cwd — the nastiest of the four, and the one every existing hand-copy omitted. Matches the idiom already used four times in `lib/git_hooks.sh`. Only `GIT_DIR` is measured to cause failures today; the other three cost nothing and close the drift the 15 hand-copies demonstrate.                                                                                                                                                                                                                                                                                                                             |
+| 3   | No change to `tests/helpers/common.bash`, no deletion of the 15 hand-rolled unsets, no guard test, no CI step                                                    | Each was proposed and then withdrawn. The 15 copies are real drift and the `GIT_COMMON_DIR` omission is real, but the spec concedes that omission causes no failure today — so removing them changes no verdict anywhere. The guard and the CI step existed only to detect a regression in the per-file mechanism, which is no longer being built. Keeping them would mean shipping a detector for a mechanism that is not in the change, plus a second full-suite CI run (measured: `test` 3m52s today, ~7m45s with it, on the `auto-merge` critical path) to verify a condition Decision 1 makes unreachable.                                                                                                                                                                                                                    |
+| 4   | No change to anything under `lib/`                                                                                                                               | The production functions already strip correctly (`lib/git_hooks.sh` does it four times). Only fixture and test-body code was ever exposed.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 
 ## Design
 
-### `tests/helpers/common.bash`
-
-Add at top level, after the `REPO_ROOT` assignment and before the function definitions:
-
-```bash
-# Git exports repo-location vars into hook environments -- GIT_DIR when pushing
-# from a worktree, and a RELATIVE GIT_INDEX_FILE from pre-commit (see
-# git-workflow.md's measured table). The pre-push hook runs `make test`, so any
-# suite that builds a git fixture inherits them and every `git -C <fixture>`
-# call silently operates on the leaked repo instead.
-#
-# Unset at TOP LEVEL, deliberately, not inside load_mocks/load_setup_env: it
-# then runs in the same shell that runs setup() and the @test body, so every
-# fixture subshell and every `run bash -c` child inherits a clean environment
-# without needing its own unset. A `bash -c` block inside setup() cannot do
-# this -- it only cleans itself, while each @test body is a separate child.
-#
-# All four vars, matching lib/git_hooks.sh: GIT_COMMON_DIR redirects
-# `rev-parse --git-path hooks` exactly as GIT_DIR does (measured, PR #190),
-# and it is the var every previous hand-rolled copy in tests/ omitted.
-unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
-```
-
-### Removals
-
-Delete all 15 now-redundant inline unsets: `pre_commit_hook.bats` 1, `pre_push.bats` 3,
-`unit.bats` 4, `update_summary.bats` 7.
-
-Several are embedded mid-string in `run bash -c "unset GIT_DIR …; export PATH=…; …"`
-one-liners rather than on their own lines — delete only the `unset …;` clause there and
-leave the rest of the command intact.
-
-Add `load "${BATS_TEST_DIRNAME}/../helpers/common.bash"` (path adjusted per directory
-depth) to `pre_commit_hook.bats` and `pre_push.bats`, which currently do not source it.
-The other four already do.
+The entire change is one line in one file.
 
 ### `scripts/pre-push`
 
@@ -185,92 +155,75 @@ they enter this repo's test suite:
 unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
 ```
 
-This overlaps Decision 1 deliberately. The helper protects files that opt in; this protects
-the ones that forget. Neither subsumes the other, and both are one line.
+Placement: after the hook's own `REPO_ROOT` / `merge-base` / `diff` resolution, so it does not
+disturb the hook's git calls or its worktree-compat requirement — but before `make test`.
 
-### Guard test
-
-New file `tests/helpers/env_hygiene.bats` (or appended to an existing `tests/scripts/`
-suite — implementer's call, one location). The guard must **inject the leak itself** rather
-than assert on the ambient environment:
-
-```bash
-@test "sourcing common.bash strips inherited git repo-location vars" {
-  run env GIT_DIR=/tmp/leak GIT_WORK_TREE=/tmp/leak \
-          GIT_COMMON_DIR=/tmp/leak GIT_INDEX_FILE=leak-index \
-      bash -c "source '${BATS_TEST_DIRNAME}/../helpers/common.bash'
-               printf '%s|%s|%s|%s' \
-                 \"\${GIT_DIR:-}\" \"\${GIT_WORK_TREE:-}\" \
-                 \"\${GIT_COMMON_DIR:-}\" \"\${GIT_INDEX_FILE:-}\""
-  [ "$status" -eq 0 ]
-  [ "$output" = "|||" ]
-}
-```
-
-Why injected rather than ambient: `[ -z "${GIT_DIR:-}" ]` is already true in a clean shell,
-so an ambient assertion passes identically with or without the fix in every environment that
-runs it — verified, `.github/workflows/ci.yml`'s `test` job runs bare `make test` with
-nothing exported, and a developer's terminal is the same. The injected form fails when the
-`unset` line is removed, which is the whole point; the bats probe recorded in Decision 1 is
-this exact shape and does fail 3/3 without the fix.
-
-The guard alone is still not sufficient, because it lives in a file that **does** source
-`common.bash` — a future suite that skips the helper leaves it green by construction. Two
-things close that, and the spec requires both:
-
-- **Decision 5's `scripts/pre-push` strip** — covers files that never source the helper.
-- **A CI step** running the suite once with the leak exported:
-  ```yaml
-  - name: Test under leaked git env
-    run: GIT_DIR="$(git rev-parse --absolute-git-dir)" make test
-  ```
-  This is what gives the property a verdict somewhere automated. Without it, the check
-  exists only as a command in a merged spec document, which nobody re-runs.
+`make install-hooks` uses `ln -sf`, so this takes effect without a reinstall, and linked
+worktrees share `.git/hooks` with the main checkout. That is worth stating because the global
+standards warn that installed hooks are copies; for this repo they are symlinks, verified.
 
 ## Testing
 
-The before-state is measurable today, and the after-state has now been measured too rather
-than predicted — in a fresh clone at `b9f8bf4` with the single `unset` line applied:
+One behaviour, one test, plus the measurement that proves the fix is sufficient.
 
-| Check                                                     | Before (measured)   | After (measured)          |
-| --------------------------------------------------------- | ------------------- | ------------------------- |
-| `GIT_DIR="$(git rev-parse --absolute-git-dir)" make test` | 90 `not ok`, exit 2 | **0 `not ok`, exit 0**    |
-| `make test` (clean env)                                   | 1058 pass           | 1058 pass + guard test    |
-| Guard test with the `unset` line removed                  | n/a                 | must FAIL (injected form) |
-| Real worktree push, hook enabled, no `--no-verify`        | fails               | succeeds                  |
+**The test:** `tests/scripts/pre_push.bats` gains a case asserting the hook clears all four
+variables before invoking `make test` — not merely that `make test` is invoked. It must fail
+with the `unset` line removed.
 
-The After row is the one that mattered: it confirms there is no second cause hiding behind
-the leak, so the one-line fix fully restores the gate rather than merely reducing the noise.
-Residual failure list after the fix: empty.
+**The measurement**, already taken in a fresh clone at `b9f8bf4`:
 
-Also verify per `tdd.md`:
+| Check                                                     | Before (measured)   | After (measured)       |
+| --------------------------------------------------------- | ------------------- | ---------------------- |
+| `GIT_DIR="$(git rev-parse --absolute-git-dir)" make test` | 90 `not ok`, exit 2 | **0 `not ok`, exit 0** |
+| `make test` (clean env)                                   | 1058 pass           | 1058 pass              |
+| Real worktree push, hook enabled, no `--no-verify`        | fails               | succeeds               |
 
-- **Both branches of the guard** — passes with the unset present, fails with it removed.
-  Confirmed workable on bats 1.10.0 and 1.14.0 (Decision 1).
-- **`pre_commit_hook.bats` and `pre_push.bats` still pass** after sourcing `common.bash` —
-  specifically that their `CLEAN_PATH` git-mock exclusion still works, since that is the
-  behaviour most at risk from adding a shared source line.
-- **Resolve the `pre_commit_hook.bats` 2 → 0 discrepancy** before implementing. The two
-  tests named in the original measurement (`exits 0 when lint passes and ggshield is
-absent`, `runs ggshield with pre-commit args when present and lint passes`) did not fail
-  at `b9f8bf4` under an injected `GIT_DIR`, with hooks installed or not, standalone or in
-  the full suite. Identify the environmental difference, then assert the intended property:
-  that they pass under a leaked `GIT_COMMON_DIR` specifically, not only under a leaked
-  `GIT_DIR`.
-- **`scripts/pre-push` strip is exercised** — a test that the hook clears the four vars
-  before invoking `make test`, not only that `make test` is invoked.
+The After row is the load-bearing one: it confirms no second cause hides behind the leak, so
+the fix restores the gate rather than reducing noise. Residual failure list: empty. Note the
+measurement applied the `unset` in `common.bash` rather than in `scripts/pre-push` — the
+boundary strip is a strict superset of what was measured, since every suite that inherits from
+the hook also inherits from the helper, so the result transfers.
 
-Coverage: `tests/helpers/common.bash` is test infrastructure, not measured by
-`scripts/run-bash-coverage.sh`'s `INCLUDE_FILES`. The 90% floor is unaffected.
-`scripts/pre-push` is already covered by `tests/scripts/pre_push.bats`.
+**Two open items the implementer must settle first** — both cheap, and both about whether the
+measurement above used a faithful leak:
+
+1. **The leak shape.** `--absolute-git-dir` yields a _plain_ gitdir; the real leak is
+   `GIT_DIR=<main>/.git/worktrees/<name>`, which resolves `--git-common-dir`,
+   `--show-toplevel` and index location differently. Re-run the Before/After with a real
+   worktree gitdir (`git worktree add /tmp/wt-probe -b probe-env`, then point `GIT_DIR` at
+   `<main>/.git/worktrees/wt-probe`) and confirm the counts hold.
+2. **The `pre_commit_hook.bats` 2 → 0 discrepancy.** Its two failures did not reproduce at
+   `b9f8bf4` under an injected plain `GIT_DIR`, with hooks installed or not, standalone or in
+   the full suite, and the file is byte-identical since `f77a862`. Item 1 is the most plausible
+   explanation — run it first and check whether those two return under the worktree gitdir. If
+   they do, the mystery is closed and the per-subshell argument in the body is restored; if not,
+   delete that argument rather than shipping an unreproducible claim.
+
+Run any manual leak reproduction against a scratch repo or the probe worktree, **not** against
+the live checkout: `git_hooks.bats:846-900` documents by name that under a leaked
+`GIT_DIR`/`GIT_COMMON_DIR`, `install_git_hooks_all_repos` writes hooks into the leaked repo.
+
+Coverage: `scripts/pre-push` is already covered by `tests/scripts/pre_push.bats`. The 90% floor
+is unaffected.
 
 ## Out of scope
 
-- **The `--no-verify` push on PR #190** — already merged; this spec prevents recurrence
-  rather than revisiting it.
-- **A shared `git_env`-style helper for shell**, mirroring ai-config's `git_env.py`. With
-  the four copies deleted and one authority left, there is nothing to share yet. Worth
-  reconsidering only if a second non-`common.bash` consumer appears.
+- **The `--no-verify` push on PR #190** — already merged; this spec prevents recurrence rather
+  than revisiting it.
+- **The 15 hand-copied unsets and their missing `GIT_COMMON_DIR`.** Real drift, and the
+  `git_env.py` story repeating — but it causes no failure today, so removing it changes no
+  verdict. It is a hygiene change and belongs in its own spec, priced as hygiene, alongside the
+  `pre_commit_hook.bats`/`pre_push.bats` sourcing question and any shared `unset` in
+  `tests/helpers/common.bash`. Do not bundle it here: two review rounds established that
+  bundling it is what made this spec look like a fix when most of it was cleanup.
+- **A guard test and a leaked-env CI step.** Both existed to detect regressions in the per-file
+  mechanism above. With that mechanism out of scope, they have nothing to guard. If the hygiene
+  spec ships the shared helper `unset`, it should carry a leak-injected guard — and if it adds
+  a CI pass, scope it to the four affected suites (~70s) rather than a second full `make test`
+  (~3m52s, on the `auto-merge` critical path), and name the job so it lands inside
+  `auto-merge`'s `needs:` list.
+- **A shared `git_env`-style helper for shell**, mirroring ai-config's `git_env.py`. Nothing to
+  share until the hygiene spec consolidates the copies.
 
 ## Related
 
@@ -489,7 +442,19 @@ environment-specific reason, every PR in this repo is blocked. CI uses `actions/
 obviously identical. Settle with the Docker recipe from `shell.md`, on a detached HEAD, with
 the `unset` applied — it must exit 0.
 
-Disposition:
+Disposition: **Addressed — the finding is accepted in full and the spec cut to match.** The
+`scripts/pre-push` strip is now the whole fix (Decision 1). The `common.bash` unset, the 15
+deletions, the guard test and the CI step are all out of scope, moved to a follow-up hygiene
+spec and explicitly priced as hygiene. The claims "Keep both — they fail independently" and
+"Neither subsumes the other" are deleted; they were unsupported, and no environment was ever
+produced where the helper fires and the hook does not. The `pre_commit_hook.bats` prerequisite
+is demoted from a plan gate to one of two implementer items, tied to a specific hypothesis
+(the leak shape) rather than left as an open mystery.
+
+The assumption is **moot as stated** — with the CI step withdrawn, there is nothing whose
+redness could block every PR. Its underlying question survives in a smaller form and is
+recorded as implementer item 1: the measurement used a plain gitdir, and a worktree gitdir may
+behave differently.
 
 ### Ergonomics (round 2, `dafff0c`)
 
@@ -514,7 +479,15 @@ spec is silent and both readings are plausible. Settled by naming the job before
 confirmed post-merge by `grep -n -A2 'auto-merge:' .github/workflows/ci.yml` showing the
 containing job in `needs:`.
 
-Disposition:
+Disposition: **Addressed by removal.** The CI step is withdrawn entirely, so neither the
+doubled runtime nor the unnamed-job hazard can occur. Both measurements are carried forward
+into Out of scope as constraints on the follow-up hygiene spec should it want a leaked-env
+pass: scope it to the four affected suites (~70s measured) rather than a second full
+`make test` (`test` 3m52s in CI run 30505166422, on the `auto-merge` critical path), and name
+the job so it lands inside `auto-merge`'s `needs:` list. Recording those there rather than
+discarding them is the point — the next spec should not have to re-derive them.
+
+The assumption is moot for this spec and preserved as a requirement on the next one.
 
 ### Risk (round 2, `dafff0c`)
 
@@ -557,7 +530,28 @@ in a scratch checkout at `b9f8bf4` run `make test` under
 `GIT_DIR=<main>/.git/worktrees/wt-probe` with and without the `unset`, and compare the
 per-suite split — specifically whether `pre_commit_hook.bats` contributes 2.
 
-Disposition:
+Disposition: **Addressed.** Defects 1 and 3 are moot — the CI step is withdrawn, so there is
+no detector injecting one of four variables and no command in this spec aimed at the live
+checkout. Defect 3's underlying warning is kept as an explicit instruction in Testing: run any
+manual leak reproduction against a scratch repo or a probe worktree, citing
+`git_hooks.bats:846-900` by name.
+
+Defect 2 is the valuable one and is **promoted into the spec** as implementer item 1, together
+with the hypothesis it implies: the plain-vs-worktree gitdir difference is the most plausible
+explanation for the `pre_commit_hook.bats` 2 → 0 discrepancy, and item 2 now says so and tells
+the implementer to run item 1 first. If the two failures return under the worktree gitdir the
+mystery closes; if not, the per-subshell argument gets deleted rather than shipped
+unreproducible.
+
+This lens's disagreement with round 2's Goal-Fit — "Decision 5 is the cheapest part of the
+design", against Goal-Fit's "Decision 5 makes the rest unnecessary" — is resolved in the same
+direction by both: keep the boundary strip, drop the rest. The two lenses were arguing about
+what to cut, not about what to keep.
+
+Assumption **accepted as unresolved and made a blocking implementer item** rather than
+dispositioned away. The After column was measured with a plain gitdir; until item 1 runs, it is
+evidence about a proxy. The spec now says that in Testing rather than presenting the number as
+final.
 
 ### Adversarial Spec Review (round 2)
 
