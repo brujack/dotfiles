@@ -1573,9 +1573,13 @@ assert_all_npm_globals_pinned() {
   # Explicit status assertion rather than a bare call: a bare call trips errexit and
   # bats then emits no `not ok` line at all, so the failing assertion is invisible.
   [ "$status" -eq 0 ]
-  grep -q "jscpd@5.0.14" "${MOCK_CALLS_FILE}"
-  grep -q "firecrawl-cli@1.19.27" "${MOCK_CALLS_FILE}"
-  grep -q "exa-mcp-server@3.2.1" "${MOCK_CALLS_FILE}"
+  grep -q "npm install -g jscpd@5.0.14" "${MOCK_CALLS_FILE}"
+  # The update chain installs all three packages in ONE invocation, so only the
+  # first package literally follows "npm install -g " — the other two sit
+  # further along the same line. Anchor at line start instead so dropping -g
+  # (which would still leave the version pins intact) is still caught.
+  grep -qE '^npm install -g .*firecrawl-cli@1\.19\.27' "${MOCK_CALLS_FILE}"
+  grep -qE '^npm install -g .*exa-mcp-server@3\.2\.1' "${MOCK_CALLS_FILE}"
   assert_all_npm_globals_pinned "${MOCK_CALLS_FILE}"
 }
 
@@ -1590,9 +1594,24 @@ assert_all_npm_globals_pinned() {
   # would not survive back into this test body, and the assertion below would
   # read an empty path and pass vacuously regardless of pipeline correctness.
   # See the git-repos WARN tests above for the same established pattern.
+  #
+  # run_update's _dotfiles_run_tmpdir_setup installs its own EXIT/INT/TERM
+  # trap (lib/workflows.sh), which clobbers bats' own EXIT trap for the
+  # remainder of this test. Without saving and restoring it, a failure inside
+  # run_update surfaces only as "bats warning: Executed 0 instead of expected
+  # 1 tests" — no test name, no line number. Save/restore bats' trap around
+  # the call so a real failure here still attributes to this test.
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
   run_update
-  # tee always exits 0. If the pipeline shape is broken, this records OK.
-  ! grep -q "OK" "${_DOTFILES_RUN_TMPDIR}/status_npm"
+  eval "${_bats_exit_trap}"
+  # Positive assertion, not negated: `! grep -q "OK" status_npm` is also
+  # satisfied by SKIP, a missing file, or an empty variable — none of which
+  # mean "npm failed." FAIL is the one value _update_record_end can only
+  # write on a genuine non-zero exit (lib/update_summary.sh), so asserting it
+  # directly is the only way to distinguish "npm failed" from "npm never ran."
+  [ -f "${_DOTFILES_RUN_TMPDIR}/status_npm" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_npm")" = "FAIL" ]
 }
 
 @test "run_update skips npm when UPDATE_CLAUDE flag not set" {
