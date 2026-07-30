@@ -1614,6 +1614,63 @@ assert_all_npm_globals_pinned() {
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_npm")" = "FAIL" ]
 }
 
+@test "_require_npm_pins returns 0 when every pin is set" {
+  run _require_npm_pins
+  [ "$status" -eq 0 ]
+}
+
+@test "_require_npm_pins returns non-zero and names an EMPTY pin" {
+  JSCPD_VER=""
+  run _require_npm_pins
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"JSCPD_VER"* ]]
+  [[ "$output" == *"refusing to install unpinned"* ]]
+}
+
+@test "_require_npm_pins returns non-zero for an UNSET pin, not just an empty one" {
+  unset FIRECRAWL_CLI_VER
+  run _require_npm_pins
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"FIRECRAWL_CLI_VER"* ]]
+}
+
+@test "_require_npm_pins names every missing pin, not only the first" {
+  JSCPD_VER=""
+  EXA_MCP_SERVER_VER=""
+  run _require_npm_pins
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"JSCPD_VER"* ]]
+  [[ "$output" == *"EXA_MCP_SERVER_VER"* ]]
+}
+
+@test "run_developer_or_ansible refuses to install when a pin is empty" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  JSCPD_VER=""
+  run run_developer_or_ansible
+  [ "$status" -ne 0 ]
+  # Fail closed: no global install may be attempted at all.
+  ! grep -q "npm install -g" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_update records FAIL rather than installing latest when a pin is empty" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE_CLAUDE=1
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  JSCPD_VER=""
+  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
+  # because run_update installs its own, which otherwise swallows attribution.
+  _bats_exit_trap="$(trap -p EXIT)"
+  run_update
+  eval "${_bats_exit_trap}"
+  [ -f "${_DOTFILES_RUN_TMPDIR}/status_npm" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_npm")" = "FAIL" ]
+  # An empty pin expands to "jscpd@", which npm resolves to LATEST — the whole
+  # point is that this invocation never happens.
+  ! grep -q "npm install -g" "${MOCK_CALLS_FILE}"
+}
+
 @test "run_update skips npm when UPDATE_CLAUDE flag not set" {
   export MACOS=1
   unset LINUX UBUNTU
