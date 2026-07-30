@@ -818,6 +818,91 @@ _sweep_seed_installed() {
   chmod +x "${_repo}/.git/hooks/pre-commit" "${_repo}/.git/hooks/pre-push" "${_repo}/.git/hooks/commit-msg"
 }
 
+# _sweep_build_gitpath_repo REPO_BASE NAME
+# Builds REPO_BASE/NAME as a repo whose install-hooks recipe resolves its
+# destination via `git rev-parse --git-path hooks` -- the shape ai-config
+# and math use, and the ONLY shape that can observe a leaked GIT_DIR
+# redirecting the install. A literal `.git/hooks` recipe (see
+# _sweep_build_cp_repo above) lands in the swept repo either way, because
+# make -C sets cwd, so it cannot fail when the strip is absent. Isolated
+# via REPO_BASE like every other sweep fixture in this section, rather
+# than reusing setup()'s shared PERSONAL_GITREPOS tree (which already
+# carries other discoverable install-hooks targets that would otherwise
+# also get swept and muddy this test's provenance).
+_sweep_build_gitpath_repo() {
+  local _repo_base="$1" _name="$2"
+  local _repo="${_repo_base}/${_name}"
+  git init -q "${_repo}"
+  mkdir -p "${_repo}/scripts"
+  local _h
+  for _h in pre-commit pre-push commit-msg; do
+    printf '#!/usr/bin/env bash\nexit 0\n' > "${_repo}/scripts/${_h}"
+    chmod +x "${_repo}/scripts/${_h}"
+  done
+  printf 'install-hooks:\n\t@d="$$(git rev-parse --git-path hooks)"; mkdir -p "$$d"; cp scripts/pre-commit scripts/pre-push scripts/commit-msg "$$d/"; chmod +x "$$d/pre-commit" "$$d/pre-push" "$$d/commit-msg"\n' \
+    > "${_repo}/Makefile"
+}
+
+@test "install_git_hooks_all_repos strips GIT_DIR so hooks land in the swept repo, not the leaked one" {
+  local _base="${TESTDIR}/sweep-gitdir-leak"
+  mkdir -p "${_base}"
+  _sweep_build_gitpath_repo "${_base}" "target-repo"
+
+  # A second real repo that a leaked GIT_DIR will point at. It is outside
+  # _base, so the sweep never discovers it directly -- the only way it
+  # could be touched is via a leaked GIT_DIR redirecting target-repo's own
+  # install-hooks call into it.
+  local _leaked="${TESTDIR}/leaked-repo"
+  git init -q "${_leaked}"
+
+  # env GIT_DIR=... must wrap the whole sweep (a real bash -c subshell,
+  # sourcing the library fresh), not just one internal call -- a bats
+  # `run` of an already-sourced function would not carry the var into
+  # make's environment the way a real leaked push does. Both lib/helpers.sh
+  # (run_cmd, log_info, log_warn) and lib/git_hooks.sh must be sourced,
+  # in that order, matching setup_env.sh's own sourcing order -- git_hooks.sh
+  # does not source helpers.sh itself.
+  run env GIT_DIR="${_leaked}/.git" bash -c "
+    source '${BATS_TEST_DIRNAME}/../../lib/helpers.sh'
+    source '${BATS_TEST_DIRNAME}/../../lib/git_hooks.sh'
+    HOOK_EXPECTED_REPOS=()
+    PERSONAL_GITREPOS='${_base}' install_git_hooks_all_repos
+  "
+
+  # The load-bearing assertion: destination is the swept repo.
+  [ -x "${_base}/target-repo/.git/hooks/pre-commit" ]
+  # And NOT the leaked one.
+  [ ! -e "${_leaked}/.git/hooks/pre-commit" ]
+}
+
+@test "install_git_hooks_all_repos strips GIT_COMMON_DIR so hooks land in the swept repo, not the leaked one" {
+  local _base="${TESTDIR}/sweep-gitcommondir-leak"
+  mkdir -p "${_base}"
+  _sweep_build_gitpath_repo "${_base}" "target-repo"
+
+  # A second real repo that a leaked GIT_COMMON_DIR will point at. It is
+  # outside _base, so the sweep never discovers it directly -- the only way
+  # it could be touched is via a leaked GIT_COMMON_DIR redirecting
+  # target-repo's own install-hooks call into it. Measured: GIT_COMMON_DIR
+  # redirects `git rev-parse --git-path hooks` exactly like GIT_DIR does --
+  # it is not mere symmetry with the read-path strip, it is a second real
+  # redirect vector this production line must also close.
+  local _leaked="${TESTDIR}/leaked-repo"
+  git init -q "${_leaked}"
+
+  run env GIT_COMMON_DIR="${_leaked}/.git" bash -c "
+    source '${BATS_TEST_DIRNAME}/../../lib/helpers.sh'
+    source '${BATS_TEST_DIRNAME}/../../lib/git_hooks.sh'
+    HOOK_EXPECTED_REPOS=()
+    PERSONAL_GITREPOS='${_base}' install_git_hooks_all_repos
+  "
+
+  # The load-bearing assertion: destination is the swept repo.
+  [ -x "${_base}/target-repo/.git/hooks/pre-commit" ]
+  # And NOT the leaked one.
+  [ ! -e "${_leaked}/.git/hooks/pre-commit" ]
+}
+
 @test "install_git_hooks_all_repos on a clean tree returns 0 and reports checked equal to the discovered count" {
   local _base="${TESTDIR}/sweep-clean"
   local _markers="${TESTDIR}/sweep-clean-markers"

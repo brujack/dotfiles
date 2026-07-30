@@ -324,7 +324,16 @@ install_git_hooks_all_repos() {
     [[ ${_dry} -eq 0 ]] && _pre="$(_git_hooks_digest "${_dir}")"
 
     local _rc
-    run_cmd make -s -C "${_dir}" install-hooks
+    # An inherited GIT_DIR (or GIT_WORK_TREE/GIT_COMMON_DIR/GIT_INDEX_FILE)
+    # overrides -C for any git call the recipe itself makes -- and ai-config
+    # and math both resolve their install destination via `git rev-parse
+    # --git-path hooks`, so a leak sends this repo's hooks into whichever
+    # repo the leaked var names. Same four vars as the read paths above,
+    # but not all for the same reason: GIT_DIR and GIT_COMMON_DIR are
+    # measured to redirect this call; GIT_WORK_TREE and GIT_INDEX_FILE are
+    # stripped for symmetry with those read paths, not because they do.
+    run_cmd env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+      make -s -C "${_dir}" install-hooks
     _rc=$?
 
     if [[ ${_rc} -ne 0 ]]; then
