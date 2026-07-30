@@ -49,17 +49,19 @@ Discovered 2026-07-29 while pushing PR #190, which had to ship with `--no-verify
 
 `git_hooks.bats` 65 → 66 is explained: `4bb160b` (PR #190) touched that suite in between.
 
-**`pre_commit_hook.bats` 2 → 0 is not explained, and it is load-bearing.** That file is
-byte-identical since `f77a862` and still carries its fixture-only unset at line 12, yet its
-two failures did not reproduce in a fresh clone — with git hooks installed or not, run
-standalone or inside the full suite. Those two failures are the sole evidence for the
-"coverage is per-subshell" half of the analysis below and for one named Testing bullet.
-Until the discrepancy is resolved, treat that half as **unverified**: the environmental
-difference between the original measurement and the reproduction has not been identified,
-so it is unknown whether the original 2 were a genuine per-subshell leak or an artifact of
-the measuring environment. Resolving it is a prerequisite for the implementation plan, not
-an optional follow-up — the fix is the same either way, but the spec should not carry an
-argument it cannot reproduce.
+**`pre_commit_hook.bats` 2 → 0 was investigated and remains unexplained.** That file is
+byte-identical since `f77a862` and still carries its fixture-only unset at line 12, yet its two
+failures reproduce **nowhere**: not under a plain gitdir, not under a linked-worktree gitdir,
+with git hooks installed or not, standalone or in the full suite. Nothing it depends on changed
+either — `scripts/pre-commit-hook.sh`, `tests/helpers/common.bash`, `tests/mocks/git` and the
+`Makefile` are unmodified since `f77a862`.
+
+Those two failures were the sole evidence for the "coverage is per-subshell" half of the
+analysis below, so **that argument is deleted rather than carried** — see the next section. The
+untested hypothesis that survives is environmental (original run in the live checkout with real
+hooks and a real `ggshield` on `PATH`; every reproduction since in a clone), and both tests are
+about ggshield presence, so a mock leak is plausible. It is recorded in Testing as a residual,
+not as pending work: the fix is identical either way, and the argument it supported is gone.
 
 ## Adjacent drift: fifteen hand-copied unsets, all missing the same variable
 
@@ -86,16 +88,21 @@ one of them omits `GIT_COMMON_DIR`.**
 Two independent defects. The first explains the bulk of the failures; the second is latent
 across the whole suite.
 
-**1. Coverage is per-subshell and incomplete.** The 89–90 failures in `git_hooks.bats` and
-`git_sync.bats` are files with no unset anywhere — this part reproduces exactly and is not
-in question. The per-subshell claim rests on the other 2: `pre_commit_hook.bats` unsets in
-its fixture subshell but **not in its test bodies**, so the hook under test inherits the
-leak. **Those 2 did not reproduce at `b9f8bf4`** (see the distribution table), so this
-mechanism is currently asserted rather than measured, even though the code shape it
-describes is plainly present in the file. The three files that do unset in their test
-bodies (`pre_push.bats`, `unit.bats`, `update_summary.bats`) pass today for exactly that
-reason — they are not correct, they are lucky in the right places. That last point stands
-independently of the discrepancy: it is a claim about why they pass, not about a failure.
+**1. Coverage is absent where it matters.** All 90 failures are in `git_hooks.bats` and
+`git_sync.bats` — files with no unset anywhere. This reproduces exactly, under both leak
+shapes, and is not in question.
+
+A "coverage is per-subshell" argument stood here in earlier drafts: `pre_commit_hook.bats`
+unsets in its fixture subshell but not in its test bodies, so the hook under test inherits the
+leak, and its 2 failures were the evidence. **That argument is deleted, because those 2 failures
+reproduce nowhere** — see the distribution table. The code shape it described is plainly present
+in the file, but a shape without an observable consequence is not a defect this spec can claim,
+and the fix does not depend on it.
+
+What does survive independently: the three files that unset in their test bodies
+(`pre_push.bats`, `unit.bats`, `update_summary.bats`) pass today for exactly that reason — they
+are not correct, they are lucky in the right places. That is a claim about why they pass, not
+about a failure, so no measurement was ever needed to support it.
 
 **2. All 15 copies omit `GIT_COMMON_DIR`.** The `git_env.py` story repeating: five
 hand-rolled copies in ai-config had already drifted to two different variable sets, none
@@ -104,7 +111,8 @@ one var that — measured during PR #190 — redirects `git rev-parse --git-path
 as `GIT_DIR` does. No test fails from this omission alone today, which is precisely why it
 survived 15 copies.
 
-The per-subshell shape makes this a placement question, not a var-list question. In
+For the follow-up hygiene spec, this is a placement question rather than a var-list question —
+an observation about code shape, not a claim backed by any failure (see above). In
 `tests/scripts/pre_commit_hook.bats`, the unset sits _inside_ `setup()`'s fixture-building
 `bash -c` string:
 
@@ -180,44 +188,47 @@ One behaviour, one test, plus the measurement that proves the fix is sufficient.
 variables before invoking `make test` — not merely that `make test` is invoked. It must fail
 with the `unset` line removed.
 
-**The measurement**, already taken in a fresh clone at `b9f8bf4`:
+**The measurement.** Both open items that gated this section have now been run, so the table
+below is the _boundary strip under a real linked-worktree gitdir_ — not the earlier
+`common.bash`-proxy-under-a-plain-gitdir approximation.
 
-| Check                                                     | Before (measured)   | After (measured)       |
-| --------------------------------------------------------- | ------------------- | ---------------------- |
-| `GIT_DIR="$(git rev-parse --absolute-git-dir)" make test` | 90 `not ok`, exit 2 | **0 `not ok`, exit 0** |
-| `make test` (clean env)                                   | 1058 pass           | 1058 pass              |
-| Real worktree push, hook enabled, no `--no-verify`        | fails               | succeeds               |
+Setup, stated because isolation mattered: a clone of the repo, plus a worktree **of the clone**,
+so `GIT_DIR` never points into the live checkout. `git_hooks.bats:846-900` documents that under
+a leaked `GIT_DIR`/`GIT_COMMON_DIR`, `install_git_hooks_all_repos` writes hooks into the leaked
+repo — so a probe worktree of the _live_ repo would have aimed ~90 failing tests at real
+`.git/worktrees/` state. "After" applies the four `unset`s in a wrapping shell, which emulates
+`scripts/pre-push` exactly rather than the helper.
 
-The After row is the load-bearing one: it confirms no second cause hides behind the leak, so
-the fix restores the gate rather than reducing noise. Residual failure list: empty. Note the
-measurement applied the `unset` in `common.bash` rather than in `scripts/pre-push` — the
-boundary strip is a strict superset of what was measured, since every suite that inherits from
-the hook also inherits from the helper, so the result transfers.
+| Check                                                                    | Before (measured)   | After (measured)       |
+| ------------------------------------------------------------------------ | ------------------- | ---------------------- |
+| `GIT_DIR=<clone>/.git/worktrees/<wt> make test` — **worktree gitdir**    | 90 `not ok`, exit 2 | **0 `not ok`, exit 0** |
+| `GIT_DIR="$(git rev-parse --absolute-git-dir)" make test` — plain gitdir | 90 `not ok`, exit 2 | 0 `not ok`, exit 0     |
+| `make test` (clean env)                                                  | 1058 pass           | 1058 pass              |
+| Real worktree push, hook enabled, no `--no-verify`                       | fails               | succeeds               |
 
-**Two open items the implementer must settle first** — both cheap, and both about whether the
-measurement above used a faithful leak:
+The After row is the load-bearing one: no second cause hides behind the leak, so the fix
+restores the gate rather than reducing noise. Residual failure list: **empty**, 1058 pass.
 
-1. **The leak shape.** `--absolute-git-dir` yields a _plain_ gitdir; the real leak is
-   `GIT_DIR=<main>/.git/worktrees/<name>`, which resolves `--git-common-dir`,
-   `--show-toplevel` and index location differently. Re-run the Before/After with a real
-   worktree gitdir (`git worktree add /tmp/wt-probe -b probe-env`, then point `GIT_DIR` at
-   `<main>/.git/worktrees/wt-probe`).
+**Both leak shapes produce a byte-identical failure set** — 66 `git_hooks.bats` + 24
+`git_sync.bats`, 90 total, under each. The linked-worktree gitdir does resolve
+`--git-common-dir`, `--show-toplevel` and index location differently, as the review that
+demanded this check observed; none of those differences reach the failing fixtures. So the
+earlier plain-gitdir figure was a faithful proxy after all — established by measurement rather
+than by the superset argument that previously stood in for it.
 
-   **This is not a confirmation step, and its failure mode is not "the check didn't pass."** If
-   the worktree gitdir leaves a non-empty residual after the `unset`, then the After column is
-   **wrong**, not merely unconfirmed — the load-bearing claim it carries is "no second cause
-   hides behind the leak", which is exactly the condition round 1's Ergonomics lens said would
-   mean the one-line change does not restore the gate. In that case: **retract the After row
-   rather than annotating it**, treat the residual list as the real scope, and re-scope this
-   spec before a plan is written. That is the same standard round 1 applied to the assumption
-   originally, and it is why this item runs before the plan rather than during implementation.
-
-2. **The `pre_commit_hook.bats` 2 → 0 discrepancy.** Its two failures did not reproduce at
-   `b9f8bf4` under an injected plain `GIT_DIR`, with hooks installed or not, standalone or in
-   the full suite, and the file is byte-identical since `f77a862`. Item 1 is the most plausible
-   explanation — run it first and check whether those two return under the worktree gitdir. If
-   they do, the mystery is closed and the per-subshell argument in the body is restored; if not,
-   delete that argument rather than shipping an unreproducible claim.
+**One unexplained residual, recorded rather than left as a pending investigation.** The original
+`f77a862` measurement attributed 2 failures to `pre_commit_hook.bats` and totalled 91. Every
+reproduction since totals 90 with that suite at **0** — under both leak shapes, with git hooks
+installed and not, standalone and in-suite. Nothing it depends on changed in between:
+`scripts/pre-commit-hook.sh`, `tests/helpers/common.bash`, `tests/mocks/git` and the `Makefile`
+are all unmodified since `f77a862`, and both named tests still exist verbatim. The leading
+hypothesis — that the plain-vs-worktree gitdir was the missing variable — is now **refuted**.
+The remaining untested one is that the original run was taken in the live checkout, where
+`GIT_DIR` pointed at a repo with real hooks installed and a real `ggshield` on `PATH`, while
+every reproduction since has used a clone; both tests are specifically about ggshield
+presence/absence, so an environment-dependent mock leak is plausible. Not chased further: it is
+a 2-test discrepancy inside an argument this spec now deletes (see "Adjacent drift"), and
+root-causing it would buy better documentation of something being removed.
 
 Run any manual leak reproduction against a scratch repo or the probe worktree, **not** against
 the live checkout: `git_hooks.bats:846-900` documents by name that under a leaked
@@ -423,8 +434,6 @@ Decision 1. One correction to the lens's premise: the local bats is 1.14.0, not 
 `shell.md` documents — that file is stale, which is worth fixing separately but changes
 nothing here.
 
-Disposition:
-
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
@@ -602,3 +611,20 @@ items survive the cut and are recorded in Testing rather than dispositioned away
 
 If either item's investigation changes the design — rather than merely confirming the numbers —
 that is new design, and a lens round becomes due again before a plan is written.
+
+**Both were run on 2026-07-30, after an independent review pressed on item 1. Neither changed
+the design, so no further lens round is due.**
+
+- **Item 1 confirmed the design.** Under a linked-worktree gitdir the Before/After is
+  90 → 0 with an identical per-suite split (66 `git_hooks.bats` + 24 `git_sync.bats`) — the
+  plain gitdir was a faithful proxy. The After was additionally re-measured against the
+  _boundary_ strip rather than the `common.bash` proxy, so the shipped fix is now what the
+  number describes.
+- **Item 2 was refuted and its argument deleted.** The leak shape was the leading hypothesis and
+  it is wrong; those 2 failures reproduce under neither shape. Deleting an unreproducible
+  argument is a _reduction_ in what the spec claims, which does not re-arm the gate — the
+  condition above is about investigations that change the design, and this one removed a claim
+  the design never rested on.
+
+The residual — why `f77a862` measured 91/2 at all — is recorded in Testing as unexplained rather
+than pending, with the one untested hypothesis named.
