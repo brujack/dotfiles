@@ -455,3 +455,111 @@ Disposition:
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+## Multi-Lens Review — Round 2
+
+Re-run after the Round 1 dispositions were Addressed. Reviewed at commit: `dafff0c`. Fresh
+subagents, told the section above is history rather than findings, and asked specifically for
+defects the revision itself introduced. All three found one.
+
+### Goal-Fit (round 2, `dafff0c`)
+
+Finding: Reversing Decision 5 to add the `scripts/pre-push` strip made most of the rest of the
+spec unnecessary, and the spec was not re-sized to match. Verified: `scripts/pre-push:32` is
+the only place in this repo that runs the suite under an environment git populates —
+`.github/workflows/ci.yml:21` runs bare `make test`, `scripts/pre-commit` never runs tests,
+and `git-workflow.md`'s table says bisect/rebase-exec export nothing. Decision 5 alone
+restores the gate for every current and future test. Reads-it test on the remainder: Decision
+1's only remaining consumer is the CI step this spec itself invents (self-referential);
+Decision 3 (15 deletions plus a shared source line into the two files most at risk from one)
+changes no verdict anywhere and the spec concedes the `GIT_COMMON_DIR` omission causes no
+failure today; Decision 4 guards Decision 1, which Decision 5 already covers. The claims
+"Keep both — they fail independently" and "Neither subsumes the other" are unsupported: no
+named environment has Decision 1 firing where Decision 5 does not. The proportionate spec is
+Decision 5 plus its Testing bullet — everything else is hygiene and should be priced as
+hygiene. Secondary: making the `pre_commit_hook.bats` discrepancy a plan prerequisite while
+stating "the fix is the same either way" blocks on an investigation that cannot change design,
+scope, or acceptance.
+
+Assumption: That `GIT_DIR=… make test` returns 0 failures **inside CI's environment**, not
+just a local fresh clone. The CI step is now the only thing making Decisions 1 and 4
+non-decorative, and `auto-merge` depends on `test` — so if it is red for any
+environment-specific reason, every PR in this repo is blocked. CI uses `actions/checkout`
+(detached HEAD, possibly shallow), where `--absolute-git-dir` and fixture behaviour are not
+obviously identical. Settle with the Docker recipe from `shell.md`, on a detached HEAD, with
+the `unset` applied — it must exit 0.
+
+Disposition:
+
+### Ergonomics (round 2, `dafff0c`)
+
+Finding: The new CI step re-runs the **entire** 1058-test suite plus its `lint` prerequisite a
+second time on every PR, in a repo whose local-hook design exists "to conserve GitHub Actions
+minutes." Measured, not estimated: the full suite is 7m24s locally; in CI run 30505166422 the
+`test` job took 3m52s and `bash-coverage` 5m37s, and `auto-merge` gates on both. Doubling
+`test` to ~7m45s makes it the new critical path — every PR waits ~2 min longer to auto-merge,
+forever, and burns ~4 extra Actions minutes, to re-verify a condition Decision 5 already makes
+unreachable on the developer's actual path. The spec's own failure table says all 90 leaked-env
+failures live in three files; a scoped second pass —
+`GIT_DIR=… bats tests/setup_env/git_hooks.bats tests/setup_env/git_sync.bats tests/scripts/pre_commit_hook.bats tests/scripts/pre_push.bats`
+— took **70s** locally for all four and detects the identical regression class, while skipping
+the pointless second `lint` sweep. Round 1 correctly demanded the property get an automated
+verdict; the correction reached for the biggest available hammer rather than the cheapest.
+Second: the YAML snippet is a bare step naming no job. Read as a new job rather than a step
+appended to `test`, it lands outside `auto-merge`'s `needs:` list and becomes an advisory red X
+that never blocks a merge — the vacuous-guard failure in a new shape.
+
+Assumption: That the leaked-env pass gets wired somewhere `auto-merge` actually waits on. The
+spec is silent and both readings are plausible. Settled by naming the job before dispatch, and
+confirmed post-merge by `grep -n -A2 'auto-merge:' .github/workflows/ci.yml` showing the
+containing job in `needs:`.
+
+Disposition:
+
+### Risk (round 2, `dafff0c`)
+
+Finding: The one automated detector the revision adds injects a leak narrower and structurally
+different from the real one, so the fix's blast-radius-bearing parts stay untested. Three
+defects in that single YAML step, which after Decision 5 is the only place any real consumer
+runs the suite under a leak:
+
+1. **It injects one of four variables.** Strip `GIT_COMMON_DIR` from `common.bash` and the step
+   stays green — yet Decision 2's whole case is that `GIT_COMMON_DIR` and the relative
+   `GIT_INDEX_FILE` are the dangerous, universally-omitted ones. The spec's own Testing bullet
+   demands asserting under a leaked `GIT_COMMON_DIR` specifically; the design does not deliver
+   it.
+2. **Wrong leak shape.** `git rev-parse --absolute-git-dir` yields a _plain_ gitdir. The real
+   leak is `GIT_DIR=<main>/.git/worktrees/<name>` — a linked-worktree gitdir, which resolves
+   `--git-common-dir`, `--show-toplevel` and index location differently. The reproduction that
+   produced the After column used the plain shape in a fresh clone; the original 91-failure
+   measurement came from a real worktree push. **That is the most plausible unexamined
+   explanation for the `pre_commit_hook.bats` 2 → 0 discrepancy** the spec flags as an
+   unresolved mystery.
+3. **It aims a live leak at the working repo.** `git_hooks.bats:846-900` documents by name that
+   under a leaked `GIT_DIR`/`GIT_COMMON_DIR`, `install_git_hooks_all_repos` writes hooks into
+   the leaked repo. Contained on a runner, but the same command appears twice in the spec as a
+   thing to run, and locally the target is the developer's real `dotfiles/.git`. A scratch repo
+   or a linked worktree's gitdir gives better fidelity at zero blast radius.
+
+This lens explicitly disagrees with round 2's Goal-Fit: it calls Decision 5 "not redundant
+machinery — the cheapest part of the design." Checked and dismissed: `make install-hooks` uses
+`ln -sf`, so Decision 5's edit takes effect without reinstall and linked worktrees share
+`.git/hooks`; the 15-copy count, the 6-file table, both sourcing idioms and the identical
+`REPO_ROOT` in `pre_push.bats`/`pre_commit_hook.bats` all verify; the blanket unset does not
+disarm the leak-simulation tests at `git_hooks.bats:373/387/865/893`.
+
+Assumption: That `GIT_DIR=<plain .git>` is a faithful proxy for `GIT_DIR=<main>/.git/worktrees/<name>`.
+Every measurement in the current body — the 90 Before, the 0 After, "residual failure list:
+empty" — used the plain shape, and the CI step perpetuates it as the permanent gate. If the
+shapes are not equivalent, the After column proves nothing about the condition the hook
+actually faces. Settle before implementing: `git worktree add /tmp/wt-probe -b probe-env`, then
+in a scratch checkout at `b9f8bf4` run `make test` under
+`GIT_DIR=<main>/.git/worktrees/wt-probe` with and without the `unset`, and compare the
+per-suite split — specifically whether `pre_commit_hook.bats` contributes 2.
+
+Disposition:
+
+### Adversarial Spec Review (round 2)
+
+N/A — unchanged; the revision introduced no comparison, evaluator, or ambiguous-criteria
+component.
