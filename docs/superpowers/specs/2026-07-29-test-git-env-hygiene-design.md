@@ -557,3 +557,28 @@ final.
 
 N/A — unchanged; the revision introduced no comparison, evaluator, or ambiguous-criteria
 component.
+
+## Multi-Lens Review — Round 3: deliberately skipped
+
+All three round-2 dispositions were "Addressed", which normally triggers a third round. It was
+**not run for this spec**, by explicit decision, and the reasoning is recorded here rather than
+left as a silent omission.
+
+The round-3 revision was a **cut**, not a redesign. It removed the `common.bash` unset, the 15
+hand-copy deletions, the guard test and the CI step, leaving one `unset` in `scripts/pre-push`,
+one test in `tests/scripts/pre_push.bats`, and two implementer items. Nothing was added. The
+two rounds already run reviewed a strictly larger design that contained this one, and their
+findings are what produced the cut — round 2's Goal-Fit lens argued for precisely this scope.
+
+What that reasoning does **not** establish, stated plainly so a later reader can weigh it: round
+2 demonstrated that corrections introduce defects, and a removal is still a change. The argument
+here is that removals have less surface than additions, not that they are free. Two known-open
+items survive the cut and are recorded in Testing rather than dispositioned away:
+
+1. The Before/After measurement used a plain gitdir, not the linked-worktree gitdir the real
+   leak carries.
+2. The `pre_commit_hook.bats` 2 → 0 discrepancy is unexplained, and item 1 is the leading
+   hypothesis for it.
+
+If either item's investigation changes the design — rather than merely confirming the numbers —
+that is new design, and a lens round becomes due again before a plan is written.
