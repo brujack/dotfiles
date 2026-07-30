@@ -1,5 +1,7 @@
 # Hooks Sweep `GIT_DIR` Strip Implementation Plan
 
+> **Status: DONE** — merged as PR dotfiles#190 (squash `4bb160b`).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Stop a leaked `GIT_DIR` from redirecting the git-hooks sweep's `make install-hooks` into another repo's hooks directory.
