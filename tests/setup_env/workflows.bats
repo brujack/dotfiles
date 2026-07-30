@@ -1564,13 +1564,35 @@ assert_all_npm_globals_pinned() {
   grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_claude"
 }
 
-@test "run_update calls npm install when UPDATE_CLAUDE is set" {
+@test "run_update installs pinned npm globals when UPDATE_CLAUDE is set" {
   export MACOS=1
   unset LINUX UBUNTU
   export UPDATE_CLAUDE=1
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  run run_update
+  # Explicit status assertion rather than a bare call: a bare call trips errexit and
+  # bats then emits no `not ok` line at all, so the failing assertion is invisible.
+  [ "$status" -eq 0 ]
+  grep -q "jscpd@5.0.14" "${MOCK_CALLS_FILE}"
+  grep -q "firecrawl-cli@1.19.27" "${MOCK_CALLS_FILE}"
+  grep -q "exa-mcp-server@3.2.1" "${MOCK_CALLS_FILE}"
+  assert_all_npm_globals_pinned "${MOCK_CALLS_FILE}"
+}
+
+@test "run_update records npm failure — PIPESTATUS carries npm's exit, not tee's" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE_CLAUDE=1
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  export MOCK_NPM_EXIT=1
+  # Plain call (not `run run_update`) — `run` captures output via a command
+  # substitution subshell, so _DOTFILES_RUN_TMPDIR (set inside run_update)
+  # would not survive back into this test body, and the assertion below would
+  # read an empty path and pass vacuously regardless of pipeline correctness.
+  # See the git-repos WARN tests above for the same established pattern.
   run_update
-  grep -q "npm install -g firecrawl-cli" "${MOCK_CALLS_FILE}"
+  # tee always exits 0. If the pipeline shape is broken, this records OK.
+  ! grep -q "OK" "${_DOTFILES_RUN_TMPDIR}/status_npm"
 }
 
 @test "run_update skips npm when UPDATE_CLAUDE flag not set" {
