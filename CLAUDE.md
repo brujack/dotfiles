@@ -217,6 +217,8 @@ The pre-push hook is **permanent**. It runs `make test` (lint + bats) on every p
 
 **Worktree compatibility requirement:** `scripts/pre-push` must resolve repo root with `git rev-parse --show-toplevel` first, and use `git rev-parse --git-common-dir` parent only as a fallback. Direct `git-common-dir` resolution can run tests against the shared checkout instead of the active worktree branch.
 
+**Git env strip requirement:** `scripts/pre-push` must `unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE` before invoking `make test`, and that line must stay **below** the range-resolution loop, which legitimately needs the git environment. Git exports `GIT_DIR` into the hook only when the push originates from a worktree; without the strip, every suite that builds a git fixture inherits it and `git -C <fixture>` silently operates on the leaked repo instead — measured at 90 failures, with the local test gate effectively absent for the standard worktree workflow. Covered by `tests/scripts/pre_push.bats` ("clears inherited git repo-location vars"), which fails if the line is removed.
+
 The CI `secret-scan` job (gitleaks) is a backstop, not a substitute for local scanning. Install ggshield: `brew install gitguardian/tap/ggshield && ggshield auth login`.
 
 ### ShellCheck
