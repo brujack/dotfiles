@@ -380,7 +380,9 @@ run_update() {
   if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_CLAUDE:-} ]]; then
     _update_record_start "npm"
     printf "Updating npm global packages\\n"
-    npm install -g firecrawl-cli exa-mcp-server 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_npm"
+    npm install -g "jscpd@${JSCPD_VER}" "firecrawl-cli@${FIRECRAWL_CLI_VER}" \
+      "exa-mcp-server@${EXA_MCP_SERVER_VER}" 2>&1 \
+      | tee "${_DOTFILES_RUN_TMPDIR}/err_npm"
     _update_record_end "npm" "${PIPESTATUS[0]}"
   else
     _update_skip "npm" "flag not set"
