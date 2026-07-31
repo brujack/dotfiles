@@ -336,6 +336,7 @@ install_git_hooks_all_repos() {
   local _gaps=0
   local _unknown=0
   local _hookspath=0
+  local _hookspath_gaps=0
   local -a _updated_repos=()
   local -a _gap_lines=()
   local -a _unknown_repos=()
@@ -349,6 +350,32 @@ install_git_hooks_all_repos() {
   # labeled so it can't be mistaken for a post-install finding.
   local _dry_note=""
   [[ ${_dry} -eq 1 ]] && _dry_note=" (pre-run state; make was not executed)"
+
+  # A global/system pin is a cause, not a symptom: it redirects or disables
+  # hooks in every repo on this box at once. Detected here, before the
+  # per-repo sweep below, so _hookspath is already known when each repo's
+  # _git_hooks_check_complete verdict is classified: a pin manufactures an
+  # rc=2 "no hooks directory" verdict for every discovered repo (all of
+  # them now resolve --git-path hooks to the same pinned, typically-broken
+  # path), and that per-repo rc=2 is folded into _hookspath_gaps below
+  # instead of _gaps -- none of those repos are actually broken, and
+  # `make install-hooks` cannot fix a pinned scope regardless of which repo
+  # it's run in. The remedy is unsetting the pin, not touching any of the
+  # affected repos.
+  local _hp_scope _hp_value
+  while IFS=$'\t' read -r _hp_scope _hp_value; do
+    [[ -z "${_hp_scope}" ]] && continue
+    _hookspath=$((_hookspath + 1))
+    # Empty value is a real pin that disables hooks -- see Task 1's Contract.
+    # Whitespace-only is the same hazard under a different disguise -- git
+    # strips unquoted trailing whitespace from a config value, but a quoted
+    # " " survives and is just as unusable as a hooks directory. Mirrors the
+    # doctor surface's whitespace-aware check (lib/helpers.sh) so the two
+    # surfaces render the same pin identically instead of diverging.
+    [[ -z "${_hp_value//[[:space:]]/}" ]] && _hp_value="(empty)"
+    _hookspath_lines+=("${_hp_scope}: ${_hp_value}")
+    log_warn "core.hooksPath pinned at ${_hp_scope} scope: ${_hp_value} (remedy: git config --${_hp_scope} --unset core.hooksPath)"
+  done <<< "$(_git_hooks_hookspath_offenders)"
 
   local _dir
   while IFS= read -r _dir; do
@@ -409,9 +436,18 @@ install_git_hooks_all_repos() {
         log_warn "${_name}: missing ${_missing}${_dry_note}"
         ;;
       2)
-        _gaps=$((_gaps + 1))
-        _gap_lines+=("${_name}: no hooks directory (install-hooks cannot fix this)")
-        log_warn "${_name}: no hooks directory at all${_dry_note}"
+        if [[ ${_hookspath} -gt 0 ]]; then
+          # This repo's own hooks directory may be fine -- the pin is what
+          # redirected --git-path hooks away from it. Reporting it as a
+          # per-repo gap would manufacture a false finding for every
+          # discovered repo on a pinned box; fold it into the pin's own
+          # aggregate instead (see the detection block above).
+          _hookspath_gaps=$((_hookspath_gaps + 1))
+        else
+          _gaps=$((_gaps + 1))
+          _gap_lines+=("${_name}: no hooks directory (install-hooks cannot fix this)")
+          log_warn "${_name}: no hooks directory at all${_dry_note}"
+        fi
         ;;
     esac
   done < <(_git_hooks_discover)
@@ -443,30 +479,6 @@ install_git_hooks_all_repos() {
     esac
   done < <(_git_hooks_gap_repos)
 
-  # A global/system pin is a cause, not a symptom: it redirects or disables
-  # hooks in every repo on this box at once. Reported here rather than
-  # per-repo -- though a pin also manufactures one bogus "no hooks
-  # directory" gap per discovered repo via _git_hooks_check_complete's rc 2
-  # (every repo's --git-path hooks now resolves to the same pinned,
-  # typically-broken path). That duplication is real, known, and tracked as
-  # a follow-up rather than fixed here. The remedy still differs from a
-  # per-repo gap either way -- `make install-hooks` cannot fix a pinned
-  # scope.
-  local _hp_scope _hp_value
-  while IFS=$'\t' read -r _hp_scope _hp_value; do
-    [[ -z "${_hp_scope}" ]] && continue
-    _hookspath=$((_hookspath + 1))
-    # Empty value is a real pin that disables hooks -- see Task 1's Contract.
-    # Whitespace-only is the same hazard under a different disguise -- git
-    # strips unquoted trailing whitespace from a config value, but a quoted
-    # " " survives and is just as unusable as a hooks directory. Mirrors the
-    # doctor surface's whitespace-aware check (lib/helpers.sh) so the two
-    # surfaces render the same pin identically instead of diverging.
-    [[ -z "${_hp_value//[[:space:]]/}" ]] && _hp_value="(empty)"
-    _hookspath_lines+=("${_hp_scope}: ${_hp_value}")
-    log_warn "core.hooksPath pinned at ${_hp_scope} scope: ${_hp_value} (remedy: git config --${_hp_scope} --unset core.hooksPath)"
-  done <<< "$(_git_hooks_hookspath_offenders)"
-
   local _updated_str="${_updated}"
   # "0" under DRY_RUN would falsely assert every repo was already current --
   # nothing ran, so nothing is known. "n/a" says so instead.
@@ -485,6 +497,13 @@ install_git_hooks_all_repos() {
   fi
   if [[ ${_hookspath} -gt 0 ]]; then
     _summary+=", ${_hookspath} core.hooksPath pinned ($(_git_hooks_join '; ' "${_hookspath_lines[@]}"))"
+  fi
+  # Repos whose rc=2 verdict was folded above (not counted in _gaps at
+  # all) are named here as one aggregate instead of individually: none of
+  # them are actually broken, and the fix is unsetting the pin, not
+  # touching any of the affected repos.
+  if [[ ${_hookspath_gaps} -gt 0 ]]; then
+    _summary+=", ${_hookspath_gaps} repos report no hooks directory as a consequence of the pin"
   fi
   # design.md's Reporting section names checked/updated/gap/failure counts
   # as what the line reports. A make failure otherwise surfaces only as an

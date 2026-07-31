@@ -1786,3 +1786,110 @@ _sweep_build_stray_unreadable_repo() {
   [[ "$output" == *"0 gaps"* ]]
   [[ "$output" != *"unknown"* ]]
 }
+
+# ── Task 4 (follow-on): fold pin-manufactured rc=2 gaps out of _gaps ────────
+#
+# The tests above all deliberately point the pin at a directory holding the
+# three mandated hooks, so check_complete never sees rc=2 for them at all --
+# that isolation was needed to test the pin-detection/reporting mechanism in
+# isolation from the per-repo gap-classification bug this follow-on fixes.
+# The tests below deliberately point the pin at a directory that does NOT
+# satisfy check_complete, so the rc=2 branch fires for real and the folding
+# behavior is genuinely exercised.
+
+@test "install_git_hooks_all_repos folds a pin-manufactured no-hooks-dir gap into one aggregate across multiple repos, with no per-repo gap line or warning" {
+  local _base="${TESTDIR}/sweep-hookspath-fold"
+  local _markers="${TESTDIR}/sweep-hookspath-fold-markers"
+  local _g="${TESTDIR}/gc-fold" _s="${TESTDIR}/sc-fold"
+  mkdir -p "${_base}" "${_markers}"
+  _sweep_build_cp_repo "${_base}" "aaa-repo" "${_markers}"
+  _sweep_build_cp_repo "${_base}" "bbb-repo" "${_markers}"
+
+  # A pin to a directory that never exists: EVERY discovered repo's
+  # --git-path hooks resolves here now, so check_complete returns rc=2 for
+  # both -- the exact shape this fold exists to collapse into one line.
+  printf '[core]\n\thooksPath = %s\n' "${TESTDIR}/nonexistent-fold-pin" > "${_g}"; : > "${_s}"
+
+  HOOK_EXPECTED_REPOS=()
+  GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"0 gaps"* ]]
+  [[ "$output" == *"core.hooksPath pinned"* ]]
+  [[ "$output" == *"2 repos report no hooks directory as a consequence of the pin"* ]]
+  [[ "$output" != *"no hooks directory (install-hooks cannot fix this)"* ]]
+  [[ "$output" != *"no hooks directory at all"* ]]
+}
+
+@test "install_git_hooks_all_repos still reports a genuine no-hooks-dir gap per-repo when no pin is present (regression guard)" {
+  local _base="${TESTDIR}/sweep-nopin-realgap"
+  local _markers="${TESTDIR}/sweep-nopin-realgap-markers"
+  mkdir -p "${_base}" "${_markers}"
+  local _repo="${_base}/no-hooks-dir-repo"
+  mkdir -p "${_repo}"
+  git init -q "${_repo}"
+  rm -rf "${_repo}/.git/hooks"
+  printf 'install-hooks:\n\ttouch "%s/no-hooks-dir-repo.ran"\n' "${_markers}" > "${_repo}/Makefile"
+
+  # setup()'s default GIT_CONFIG_GLOBAL/GIT_CONFIG_SYSTEM (empty files, no
+  # pin) apply here unmodified -- this proves the _hookspath -eq 0 path is
+  # unchanged by the fold.
+  HOOK_EXPECTED_REPOS=()
+  PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"1 gaps"* ]]
+  [[ "$output" == *"no-hooks-dir-repo: no hooks directory (install-hooks cannot fix this)"* ]]
+  [[ "$output" == *"[WARN]"* ]]
+  [[ "$output" == *"no-hooks-dir-repo: no hooks directory at all"* ]]
+  [[ "$output" != *"core.hooksPath pinned"* ]]
+  [[ "$output" != *"consequence of the pin"* ]]
+}
+
+@test "install_git_hooks_all_repos still reports a genuine missing-hook gap under a pin, distinct from the folded no-hooks-dir class" {
+  local _base="${TESTDIR}/sweep-hookspath-missing"
+  local _markers="${TESTDIR}/sweep-hookspath-missing-markers"
+  local _g="${TESTDIR}/gc-missing" _s="${TESTDIR}/sc-missing"
+  mkdir -p "${_base}" "${_markers}"
+  _sweep_build_cp_repo "${_base}" "clean-repo" "${_markers}"
+  _sweep_seed_installed "${_base}/clean-repo"
+
+  # Pinned directory is real but incomplete -- missing commit-msg -- so
+  # check_complete's rc=1 branch fires (a real, unfolded gap), not rc=2.
+  # This proves only the rc=2 class is folded: rc=1 stays exactly as it was.
+  local _pinned_hooks="${TESTDIR}/pinned-hooks-missing"
+  mkdir -p "${_pinned_hooks}"
+  local _hook
+  for _hook in pre-commit pre-push; do
+    printf '#!/usr/bin/env bash\nexit 0\n' > "${_pinned_hooks}/${_hook}"
+    chmod +x "${_pinned_hooks}/${_hook}"
+  done
+  printf '[core]\n\thooksPath = %s\n' "${_pinned_hooks}" > "${_g}"; : > "${_s}"
+
+  HOOK_EXPECTED_REPOS=()
+  GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"1 gaps"* ]]
+  [[ "$output" == *"clean-repo: missing commit-msg"* ]]
+  [[ "$output" == *"core.hooksPath pinned"* ]]
+  [[ "$output" != *"consequence of the pin"* ]]
+}
+
+@test "install_git_hooks_all_repos returns 2 when every gap is folded and _gaps itself is 0 (return-code guard)" {
+  # Load-bearing: proves the return block's `${_hookspath} -gt 0 ||` term is
+  # still what drives rc=2 here, now that folding can legitimately drive
+  # _gaps to 0 even though real gaps exist (just reclassified). Mutation-
+  # checked by hand: deleting that term from the return block's condition
+  # makes this test fail (status becomes 0); reverting makes it pass again.
+  local _base="${TESTDIR}/sweep-hookspath-rcguard"
+  local _markers="${TESTDIR}/sweep-hookspath-rcguard-markers"
+  local _g="${TESTDIR}/gc-rcguard" _s="${TESTDIR}/sc-rcguard"
+  mkdir -p "${_base}" "${_markers}"
+  _sweep_build_cp_repo "${_base}" "solo-repo" "${_markers}"
+
+  printf '[core]\n\thooksPath = %s\n' "${TESTDIR}/nonexistent-rcguard-pin" > "${_g}"; : > "${_s}"
+
+  HOOK_EXPECTED_REPOS=()
+  GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"0 gaps"* ]]
+  [[ "$output" == *"1 repos report no hooks directory as a consequence of the pin"* ]]
+}
