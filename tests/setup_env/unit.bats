@@ -1181,17 +1181,27 @@ teardown() {
 # That flattens the exact unset/empty distinction these tests exist to check,
 # so every test in this section resolves a mock-free PATH first.
 _unmocked_path() {
-  printf '%s' "${PATH}" | tr ':' '\n' | grep -v "tests/mocks" | tr '\n' ':' | sed 's/:$//'
+  printf '%s' "${PATH}" | tr ':' '\n' | grep -vxF "${REPO_ROOT}/tests/mocks" | tr '\n' ':' | sed 's/:$//'
 }
 
 @test "_doctor_check_hooks_path passes both scopes when neither pins core.hooksPath" {
-  local _g="${TMPDIR_TEST}/gc" _s="${TMPDIR_TEST}/sc"
+  local _g="${TMPDIR_TEST}/gc" _s="${TMPDIR_TEST}/sc" _out="${TMPDIR_TEST}/hp_out"
   : > "${_g}"; : > "${_s}"
   _DOCTOR_PASS=0; _DOCTOR_FAIL=0; _DOCTOR_FAILED=0
-  PATH="$(_unmocked_path)" GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" run _doctor_check_hooks_path
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"Git hooksPath:"* ]]
-  [[ "$output" == *"[PASS]"* ]]
+  # Deliberately NOT `run` here: `run` forks a subshell, so mutations
+  # _doctor_check_hooks_path makes to _DOCTOR_PASS would never reach this
+  # test's scope. Redirect output to a file instead so both the text and
+  # the counter can be asserted on the same invocation.
+  PATH="$(_unmocked_path)" GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" _doctor_check_hooks_path > "${_out}"
+  local _rc=$?
+  [ "${_rc}" -eq 0 ]
+  grep -q "Git hooksPath:" "${_out}"
+  grep -q "\[PASS\]" "${_out}"
+  # Both scopes (system AND global) must report PASS on the clean path --
+  # a mutation that drops one scope from the report loop (e.g. `for _scope
+  # in system` instead of `for _scope in system global`) leaves every
+  # other assertion in this test passing while silently under-reporting.
+  [ "${_DOCTOR_PASS}" -eq 2 ]
 }
 
 @test "_doctor_check_hooks_path fails on a global pin and names the --global remedy" {
