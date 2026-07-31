@@ -587,6 +587,7 @@ teardown() {
   _doctor_check_symlink_roots() { :; }
   _doctor_check_tools()         { :; }
   _doctor_check_cred_dirs()     { :; }
+  _doctor_check_hooks_path()    { :; }
   _doctor_check_versions()      { :; }
   run_doctor
   [ "${_called}" -eq 1 ]
@@ -597,6 +598,7 @@ teardown() {
   _doctor_check_symlink_roots() { :; }
   _doctor_check_tools()         { :; }
   _doctor_check_cred_dirs()     { :; }
+  _doctor_check_hooks_path()    { :; }
   _doctor_check_versions()      { :; }
   _doctor_check_github_mcp()    { doctor_warn "test" "a warning"; }
   run run_doctor
@@ -1190,6 +1192,68 @@ _unmocked_path() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"Git hooksPath:"* ]]
   [[ "$output" == *"[PASS]"* ]]
+}
+
+@test "_doctor_check_hooks_path fails on a global pin and names the --global remedy" {
+  local _g="${TMPDIR_TEST}/gc" _s="${TMPDIR_TEST}/sc"
+  printf '[core]\n\thooksPath = /tmp/mine\n' > "${_g}"; : > "${_s}"
+  _DOCTOR_PASS=0; _DOCTOR_FAIL=0; _DOCTOR_FAILED=0
+  PATH="$(_unmocked_path)" GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" run _doctor_check_hooks_path
+  # doctor_fail's own ANSI reset sits between "[FAIL]" and the label, so a
+  # combined "[FAIL] global" pattern never matches -- assert the marker and
+  # the label as separate fragments, per the existing convention at
+  # "doctor_fail prints [FAIL] with label and detail" above.
+  [[ "$output" == *"[FAIL]"* ]]
+  [[ "$output" == *"global: pinned to /tmp/mine"* ]]
+  [[ "$output" == *"git config --global --unset core.hooksPath"* ]]
+  # the other scope still reports
+  [[ "$output" == *"[PASS]"* ]]
+  [[ "$output" == *"system: unset"* ]]
+}
+
+@test "_doctor_check_hooks_path sets _DOCTOR_FAILED on a pin" {
+  local _g="${TMPDIR_TEST}/gc" _s="${TMPDIR_TEST}/sc"
+  printf '[core]\n\thooksPath = /tmp/mine\n' > "${_g}"; : > "${_s}"
+  _DOCTOR_PASS=0; _DOCTOR_FAIL=0; _DOCTOR_FAILED=0
+  PATH="$(_unmocked_path)" GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" _doctor_check_hooks_path > /dev/null
+  [ "${_DOCTOR_FAILED}" -eq 1 ]
+  [ "${_DOCTOR_FAIL}" -eq 1 ]
+}
+
+@test "_doctor_check_hooks_path reports both pins without either masking the other" {
+  local _g="${TMPDIR_TEST}/gc" _s="${TMPDIR_TEST}/sc"
+  printf '[core]\n\thooksPath = /tmp/mine\n' > "${_g}"
+  printf '[core]\n\thooksPath = /etc/hooks\n' > "${_s}"
+  _DOCTOR_PASS=0; _DOCTOR_FAIL=0; _DOCTOR_FAILED=0
+  PATH="$(_unmocked_path)" GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" run _doctor_check_hooks_path
+  [[ "$output" == *"global: pinned to /tmp/mine"* ]]
+  [[ "$output" == *"system: pinned to /etc/hooks"* ]]
+  [[ "$output" != *"[PASS]"* ]]
+}
+
+@test "_doctor_check_hooks_path fails on a pin whose directory does not exist" {
+  local _g="${TMPDIR_TEST}/gc" _s="${TMPDIR_TEST}/sc"
+  printf '[core]\n\thooksPath = /nonexistent/nope\n' > "${_g}"; : > "${_s}"
+  _DOCTOR_PASS=0; _DOCTOR_FAIL=0; _DOCTOR_FAILED=0
+  PATH="$(_unmocked_path)" GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" run _doctor_check_hooks_path
+  [[ "$output" == *"global: pinned to /nonexistent/nope"* ]]
+}
+
+@test "_doctor_check_hooks_path fails on a scope pinned to an empty value and renders it (empty)" {
+  local _g="${TMPDIR_TEST}/gc" _s="${TMPDIR_TEST}/sc"
+  printf '[core]\n\thooksPath =\n' > "${_g}"; : > "${_s}"
+  _DOCTOR_PASS=0; _DOCTOR_FAIL=0; _DOCTOR_FAILED=0
+  PATH="$(_unmocked_path)" GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" run _doctor_check_hooks_path
+  [[ "$output" == *"global: pinned to (empty)"* ]]
+  [[ "$output" == *"[PASS]"* ]]
+  [[ "$output" == *"system: unset"* ]]
+}
+
+@test "run_doctor invokes the hooksPath check" {
+  local _g="${TMPDIR_TEST}/gc" _s="${TMPDIR_TEST}/sc"
+  : > "${_g}"; : > "${_s}"
+  PATH="$(_unmocked_path)" GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" run run_doctor
+  [[ "$output" == *"Git hooksPath:"* ]]
 }
 
 # ── _doctor_check_versions ────────────────────────────────────────────────────

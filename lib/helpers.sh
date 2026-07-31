@@ -438,6 +438,15 @@ _doctor_check_hooks_path() {
     done
     [[ ${_found} -eq 0 ]] && doctor_pass "${_scope}: unset"
   done
+
+  # Explicit, unconditional return: the loop above ends on a `[[ ]] && cmd`
+  # whose own exit status is the last thing bash sees. When the final scope
+  # (global) IS pinned, that conditional is false and the function would
+  # otherwise implicitly exit 1 -- read as a real failure by any caller that
+  # invokes it directly rather than via `run`. This check's contract is
+  # side-effect-only (doctor_fail/doctor_pass counters); a bare bash
+  # expression is not a suitable proxy for that contract.
+  return 0
 }
 _doctor_check_versions() {
   printf "\nVersions:\n"
