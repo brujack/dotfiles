@@ -1259,6 +1259,16 @@ _unmocked_path() {
   [[ "$output" == *"system: unset"* ]]
 }
 
+@test "_doctor_check_hooks_path renders a whitespace-only hooksPath pin as (empty)" {
+  local _g="${TMPDIR_TEST}/gc" _s="${TMPDIR_TEST}/sc"
+  printf '[core]\n\thooksPath = " "\n' > "${_g}"; : > "${_s}"
+  _DOCTOR_PASS=0; _DOCTOR_FAIL=0; _DOCTOR_FAILED=0
+  PATH="$(_unmocked_path)" GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" run _doctor_check_hooks_path
+  [[ "$output" == *"global: pinned to (empty)"* ]]
+  [[ "$output" == *"[PASS]"* ]]
+  [[ "$output" == *"system: unset"* ]]
+}
+
 @test "run_doctor invokes the hooksPath check" {
   local _g="${TMPDIR_TEST}/gc" _s="${TMPDIR_TEST}/sc"
   : > "${_g}"; : > "${_s}"

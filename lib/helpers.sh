@@ -421,9 +421,13 @@ _doctor_check_hooks_path() {
   while IFS=$'\t' read -r _scope _value; do
     [[ -z "${_scope}" ]] && continue
     _hp_pinned+=("${_scope}")
-    # An empty value is a real pin that disables hooks, not an absent one --
-    # render it so the FAIL line does not read "pinned to  --".
-    [[ -z "${_value}" ]] && _value="(empty)"
+    # An empty OR whitespace-only value is a real pin that disables hooks,
+    # not an absent one -- render it so the FAIL line does not read "pinned
+    # to  --" or "pinned to   --" with an invisible run of spaces. Both are
+    # grouped under the same "(empty)" label because git cannot use either
+    # as a usable hooks directory, and the operator's remedy (unset the key)
+    # is identical for both.
+    [[ -z "${_value//[[:space:]]/}" ]] && _value="(empty)"
     doctor_fail "${_scope}" \
       "pinned to ${_value} — remedy: git config --${_scope} --unset core.hooksPath"
   done <<< "${_offenders}"
