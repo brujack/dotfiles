@@ -3,79 +3,13 @@
 
 ## Bug Fixes
 
-- system OpenSSL for gem HTTPS + Linux test hermeticity (#171)
+- strip GIT_DIR from the sweep's make invocation (#190)
 
-- detect silent install failure in recreate_ruby (#173)
-
-- run gem update after ruby recreate (#174)
-
-- harden ensure_state_ledger against SSH hangs and corrupt clones (#177)
-
-- brace $0/$1/$2/$3 in sync-agent-guidance.sh (#179)
-
-- scripts/ cleanup — kill_zombie multi-PID bug, mkill/html2ascii modernize (#183)
-
-- remove dangling tw alias for deleted tmux-workstation.sh (#184)
-
-
-
-## CI
-
-- raise test count floor from 779 to 840 (#170)
+- strip inherited git repo-location vars before make test (#191)
 
 
 
 ## Documentation
-
-- add July 2026 retro action items
-
-- note load_mocks pyenv default; bump test count to 850
-
-- add recreate-ruby design spec
-
-- add recreate-ruby implementation plan
-
-- mark recreate-ruby plan done, bump test count to 861
-
-- sync test count and plan index for dotfiles#174
-
-- add Anthropic weekly features digest 2026-07-06
-
-- add Claude Code weekly features digest 2026-07-06
-
-- add state-ledger bootstrap design spec
-
-- add state-ledger bootstrap plan
-
-- sync test count to 874 after PR #177
-
-- fix stale sync-agent-guidance description in README
-
-- add Claude Code weekly features digest 2026-07-13
-
-- add Anthropic weekly features digest 2026-07-13
-
-- ADR-0015 — continuous vulnerability monitoring of release SBOMs
-
-- add sync-git-repos design spec
-
-- fix sync-git-repos spec per review
-
-- fix contradictory legacy-rsync gate wording
-
-- fix sync-git-repos no-upstream + DRY hostname gate
-
-- add sync-git-repos implementation plan
-
-- mark sync-git-repos plan Done (PR dotfiles#182)
-
-- add scripts-dir-cleanup design spec
-
-- mark scripts-dir-cleanup Done (PR dotfiles#183)
-
-- update stale test count 927 -> 937
-
-- add scripts-world-class design spec
 
 - mark scripts-world-class Done (PR dotfiles#185)
 
@@ -83,23 +17,95 @@
 
 - add Claude Code weekly features digest 2026-07-20
 
+- add maintainability-pass backlog row
+
+- add Claude Code weekly features digest 2026-07-27
+
+- add Anthropic weekly features digest 2026-07-27
+
+- backlog auto-install of git hooks in setup_user
+
+- spec auto-install of git hooks across repos
+
+- pin sweep return-code handling at both call sites
+
+- add multi-lens review to git-hooks spec
+
+- apply lens dispositions and empty-HOOKS_DIR guard
+
+- round-2 lens fixes -- content digest, hook post-condition
+
+- move git-hooks item from backlog to plan index
+
+- external review -- post-condition scope, cadence open question
+
+- settle update cadence on the 7950X
+
+- note digest is inversely coupled to symlink normalization
+
+- plan for auto-install git hooks sweep
+
+- backlog a fleet-critical bug hunt
+
+- point the bug-hunt row at the dossier
+
+- README reflects self-installing hooks and dry-run's real scope
+
+- backlog the two items left open by #189
+
+- backlog a doctor check for pinned core.hooksPath
+
+- spec a doctor check for pinned core.hooksPath
+
+- record multi-lens review on the hooksPath spec
+
+- revise hooksPath spec against the multi-lens findings
+
+- cut the hooksPath spec down to what survived review
+
+- fold the git-hooks summary row into the hooksPath spec
+
+- split the strip from the detector, promote the unexplained writer
+
+- fix two test specifications that could not fail
+
+- plan the hooksPath work as two PRs
+
+- mark hooks-gitdir-strip plan done (dotfiles#190)
+
+- spec stripping inherited git vars in BATS setup
+
+- record Step 8 multi-lens review on git-env spec
+
+- revise git-env spec per Step 8 dispositions
+
+- record Step 8 round-2 lens findings on git-env spec
+
+- cut git-env spec to the boundary fix
+
+- record the round-3 lens skip and its reasoning
+
+- close two gaps from the independent spec review
+
+- settle both implementer items with real measurements
+
+- add the plan DONE banner, correct the CI job list
+
+- backlog the git-hook self-coverage gap
+
+- close out npm global pinning, file its two follow-on rows
+
 
 
 ## Features
 
-- add recreate-ruby entry point to setup_env.sh (#172)
-
-- auto clone/pull state-ledger on setup/update runs (#176)
-
-- implement sync-agent-guidance / check-agent-guidance targets (#178)
-
-- replace rsync-only sync_git_repos.sh with git-native + legacy split (#182)
-
-- scripts/ world-class pass — -h/--help sweep, modernize, delete dead coverage tool (#185)
-
 - add -h/--help to run-bash-coverage.sh and .osx.sh (#186)
 
 - add codex cask to Brewfile (#188)
+
+- auto-install git hooks across personal repos (#189)
+
+- pin npm global packages, add jscpd (#192)
 
 
 
