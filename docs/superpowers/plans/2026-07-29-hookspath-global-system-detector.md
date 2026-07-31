@@ -1,5 +1,7 @@
 # Global/System `core.hooksPath` Detector Implementation Plan
 
+> **Status: DONE**
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Detect a `core.hooksPath` pin at `--global` or `--system` scope — the only scope nothing in this repo reads, and the only one where a single value redirects or disables hooks in every repo on the box — and report it from both `-t update` and `-t doctor`.
