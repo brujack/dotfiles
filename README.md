@@ -155,7 +155,7 @@ This updates Homebrew, apt/snap packages, pip, Ruby gems, Mac App Store apps, an
 | `developer`      | Dev packages + Python/Ansible virtualenv                                                                                                                         |
 | `ansible`        | Ansible venv only — typically used after a Python update                                                                                                         |
 | `update`         | Update all packages (brew, apt/snap, pip, mas, Claude plugins, etc.). Prints a structured summary at the end; each run is appended to `~/.dotfiles-update.log`   |
-| `doctor`         | Active health checks: symlinks, tool presence, credential dir permissions, version drift. Exits non-zero on any failure                                          |
+| `doctor`         | Active health checks: symlinks, tool presence, credential dir permissions, version drift, global/system `core.hooksPath` pins. Exits non-zero on any failure     |
 | `check-versions` | Compare pinned tool versions in `lib/constants.sh` against latest GitHub releases. Exits 1 if any are outdated; `--update` prompts to apply each update in-place |
 
 **Options:**
