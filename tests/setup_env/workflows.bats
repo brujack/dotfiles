@@ -1183,6 +1183,34 @@ setup_constants_copy() {
   ! grep -q "install_ruby" "${MOCK_CALLS_FILE}"
 }
 
+@test "run_developer_or_ansible returns non-zero when jscpd npm install fails" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  npm() {
+    if [[ "$*" == *"jscpd@"* ]]; then
+      return 1
+    fi
+    printf "npm %s\n" "$*" >> "${MOCK_CALLS_FILE}"
+    return 0
+  }
+  run run_developer_or_ansible
+  [ "$status" -ne 0 ]
+}
+
+@test "run_developer_or_ansible does not install firecrawl-cli when jscpd npm install fails" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  npm() {
+    if [[ "$*" == *"jscpd@"* ]]; then
+      return 1
+    fi
+    printf "npm %s\n" "$*" >> "${MOCK_CALLS_FILE}"
+    return 0
+  }
+  run run_developer_or_ansible
+  ! grep -q "firecrawl-cli" "${MOCK_CALLS_FILE}"
+}
+
 @test "run_developer_or_ansible succeeds on Linux calling setup_ansible and clone_personal_repos" {
   export LINUX=1
   unset MACOS UBUNTU
@@ -1196,6 +1224,56 @@ setup_constants_copy() {
   grep -q "github_cli_linux" "${MOCK_CALLS_FILE}"
   grep -q "setup_ansible" "${MOCK_CALLS_FILE}"
   grep -q "clone_repos" "${MOCK_CALLS_FILE}"
+}
+
+# Every whitespace-separated token after '-g' on an npm global install line must be
+# pkg@<version>. Catches three regressions one regex cannot: an unpinned package, an
+# empty constant expanding to 'pkg@' (npm resolves that to latest), and a package
+# added later that no enumerated pattern knows about. Does not handle @scope/pkg
+# specs; none are used here.
+assert_all_npm_globals_pinned() {
+  local _line
+  local -a _toks
+  while IFS= read -r _line; do
+    case "${_line}" in
+      "npm install -g "*)
+        read -ra _toks <<< "${_line#npm install -g }"
+        local _tok
+        for _tok in "${_toks[@]}"; do
+          if [[ "${_tok}" != *@?* ]]; then
+            printf "unpinned npm global: %s (in: %s)\n" "${_tok}" "${_line}" >&2
+            return 1
+          fi
+        done
+        ;;
+    esac
+  done < "${1}"
+  return 0
+}
+
+@test "run_developer_or_ansible pins every npm global package" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  run run_developer_or_ansible
+  # Explicit status assertion rather than a bare call: a bare call trips errexit and
+  # bats then emits no `not ok` line at all, so the failing assertion is invisible.
+  [ "$status" -eq 0 ]
+  grep -q "npm install -g jscpd@5.0.14" "${MOCK_CALLS_FILE}"
+  grep -q "npm install -g firecrawl-cli@1.19.27" "${MOCK_CALLS_FILE}"
+  grep -q "npm install -g exa-mcp-server@3.2.1" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_developer_or_ansible leaves no unpinned npm global install" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  run run_developer_or_ansible
+  # Explicit status assertion rather than a bare call: a bare call trips errexit and
+  # bats then emits no `not ok` line at all, so the failing assertion is invisible.
+  [ "$status" -eq 0 ]
+  # Positive control: without this, an empty MOCK_CALLS_FILE would let the
+  # guard below pass vacuously (nothing to find is unpinned).
+  grep -q "npm install -g jscpd@" "${MOCK_CALLS_FILE}"
+  assert_all_npm_globals_pinned "${MOCK_CALLS_FILE}"
 }
 
 # ── process_args --pkgs-only ──────────────────────────────────────────────
@@ -1486,13 +1564,111 @@ setup_constants_copy() {
   grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_claude"
 }
 
-@test "run_update calls npm install when UPDATE_CLAUDE is set" {
+@test "run_update installs pinned npm globals when UPDATE_CLAUDE is set" {
   export MACOS=1
   unset LINUX UBUNTU
   export UPDATE_CLAUDE=1
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  run run_update
+  # Explicit status assertion rather than a bare call: a bare call trips errexit and
+  # bats then emits no `not ok` line at all, so the failing assertion is invisible.
+  [ "$status" -eq 0 ]
+  grep -q "npm install -g jscpd@5.0.14" "${MOCK_CALLS_FILE}"
+  # The update chain installs all three packages in ONE invocation, so only the
+  # first package literally follows "npm install -g " — the other two sit
+  # further along the same line. Anchor at line start instead so dropping -g
+  # (which would still leave the version pins intact) is still caught.
+  grep -qE '^npm install -g .*firecrawl-cli@1\.19\.27' "${MOCK_CALLS_FILE}"
+  grep -qE '^npm install -g .*exa-mcp-server@3\.2\.1' "${MOCK_CALLS_FILE}"
+  assert_all_npm_globals_pinned "${MOCK_CALLS_FILE}"
+}
+
+@test "run_update records npm failure — PIPESTATUS carries npm's exit, not tee's" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE_CLAUDE=1
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  export MOCK_NPM_EXIT=1
+  # Plain call (not `run run_update`) — `run` captures output via a command
+  # substitution subshell, so _DOTFILES_RUN_TMPDIR (set inside run_update)
+  # would not survive back into this test body, and the assertion below would
+  # read an empty path and pass vacuously regardless of pipeline correctness.
+  # See the git-repos WARN tests above for the same established pattern.
+  #
+  # run_update's _dotfiles_run_tmpdir_setup installs its own EXIT/INT/TERM
+  # trap (lib/workflows.sh), which clobbers bats' own EXIT trap for the
+  # remainder of this test. Without saving and restoring it, a failure inside
+  # run_update surfaces only as "bats warning: Executed 0 instead of expected
+  # 1 tests" — no test name, no line number. Save/restore bats' trap around
+  # the call so a real failure here still attributes to this test.
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
   run_update
-  grep -q "npm install -g firecrawl-cli" "${MOCK_CALLS_FILE}"
+  eval "${_bats_exit_trap}"
+  # Positive assertion, not negated: `! grep -q "OK" status_npm` is also
+  # satisfied by SKIP, a missing file, or an empty variable — none of which
+  # mean "npm failed." FAIL is the one value _update_record_end can only
+  # write on a genuine non-zero exit (lib/update_summary.sh), so asserting it
+  # directly is the only way to distinguish "npm failed" from "npm never ran."
+  [ -f "${_DOTFILES_RUN_TMPDIR}/status_npm" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_npm")" = "FAIL" ]
+}
+
+@test "_require_npm_pins returns 0 when every pin is set" {
+  run _require_npm_pins
+  [ "$status" -eq 0 ]
+}
+
+@test "_require_npm_pins returns non-zero and names an EMPTY pin" {
+  JSCPD_VER=""
+  run _require_npm_pins
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"JSCPD_VER"* ]]
+  [[ "$output" == *"refusing to install unpinned"* ]]
+}
+
+@test "_require_npm_pins returns non-zero for an UNSET pin, not just an empty one" {
+  unset FIRECRAWL_CLI_VER
+  run _require_npm_pins
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"FIRECRAWL_CLI_VER"* ]]
+}
+
+@test "_require_npm_pins names every missing pin, not only the first" {
+  JSCPD_VER=""
+  EXA_MCP_SERVER_VER=""
+  run _require_npm_pins
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"JSCPD_VER"* ]]
+  [[ "$output" == *"EXA_MCP_SERVER_VER"* ]]
+}
+
+@test "run_developer_or_ansible refuses to install when a pin is empty" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  JSCPD_VER=""
+  run run_developer_or_ansible
+  [ "$status" -ne 0 ]
+  # Fail closed: no global install may be attempted at all.
+  ! grep -q "npm install -g" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_update records FAIL rather than installing latest when a pin is empty" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE_CLAUDE=1
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  JSCPD_VER=""
+  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
+  # because run_update installs its own, which otherwise swallows attribution.
+  _bats_exit_trap="$(trap -p EXIT)"
+  run_update
+  eval "${_bats_exit_trap}"
+  [ -f "${_DOTFILES_RUN_TMPDIR}/status_npm" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_npm")" = "FAIL" ]
+  # An empty pin expands to "jscpd@", which npm resolves to LATEST — the whole
+  # point is that this invocation never happens.
+  ! grep -q "npm install -g" "${MOCK_CALLS_FILE}"
 }
 
 @test "run_update skips npm when UPDATE_CLAUDE flag not set" {

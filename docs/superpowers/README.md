@@ -109,6 +109,7 @@ Master status index for all specs and implementation plans in this directory.
 | 2026-07-28 | [auto-install-git-hooks](plans/2026-07-28-auto-install-git-hooks.md)                       | [spec](specs/2026-07-28-auto-install-git-hooks-design.md)           | Done    |
 | 2026-07-29 | [hooks-sweep-gitdir-strip](plans/2026-07-29-hooks-sweep-gitdir-strip.md) (PR dotfiles#190) | [spec](specs/2026-07-29-doctor-hookspath-check-design.md) | Done |
 | 2026-07-29 | [hookspath-global-system-detector](plans/2026-07-29-hookspath-global-system-detector.md) | [spec](specs/2026-07-29-doctor-hookspath-check-design.md) | Pending |
+| 2026-07-29 | [npm-global-pinning](plans/2026-07-29-npm-global-pinning.md) | [spec §C](https://github.com/brujack/ai-config/blob/master/docs/superpowers/specs/2026-07-29-maintainability-coverage-manifest-design.md) | In Progress |
 | 2026-07-30 | [test-git-env-hygiene](plans/2026-07-30-test-git-env-hygiene.md) | [spec](specs/2026-07-29-test-git-env-hygiene-design.md) | Done |
 
 ---

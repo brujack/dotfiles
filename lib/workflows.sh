@@ -203,16 +203,38 @@ run_setup_or_developer() {
   _ledger_write_run_entry "setup" 0 || true
 }
 
+# Refuse to install npm globals when a version pin is unset or empty. Unlike this
+# repo's URL-based pins — where an empty version yields a malformed download URL and
+# a loud 404 — an empty npm pin expands to "pkg@", which npm resolves to LATEST and
+# installs silently. That makes the pin a fail-open control: it stops working without
+# telling anyone. Measured: `npm view "jscpd@" version` → 5.0.14.
+_require_npm_pins() {
+  local _missing=""
+  [[ -z "${JSCPD_VER}" ]] && _missing="${_missing} JSCPD_VER"
+  [[ -z "${FIRECRAWL_CLI_VER}" ]] && _missing="${_missing} FIRECRAWL_CLI_VER"
+  [[ -z "${EXA_MCP_SERVER_VER}" ]] && _missing="${_missing} EXA_MCP_SERVER_VER"
+  if [[ -n "${_missing}" ]]; then
+    printf "ERROR: unset npm version pin(s):%s — refusing to install unpinned globals\n" \
+      "${_missing}" >&2
+    return 1
+  fi
+  return 0
+}
+
 run_developer_or_ansible() {
   _dotfiles_run_tmpdir_setup
+  _require_npm_pins || return 1
   printf "Installing json2yaml via npm\n"
   npm install json2yaml || return 1
 
+  printf "Installing jscpd via npm\n"
+  npm install -g "jscpd@${JSCPD_VER}" || return 1
+
   printf "Installing firecrawl-cli via npm\n"
-  npm install -g firecrawl-cli || return 1
+  npm install -g "firecrawl-cli@${FIRECRAWL_CLI_VER}" || return 1
 
   printf "Installing exa-mcp-server via npm\n"
-  npm install -g exa-mcp-server || return 1
+  npm install -g "exa-mcp-server@${EXA_MCP_SERVER_VER}" || return 1
 
   install_ruby_tools || return 1
   install_ruby || return 1
@@ -377,8 +399,16 @@ run_update() {
   if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_CLAUDE:-} ]]; then
     _update_record_start "npm"
     printf "Updating npm global packages\\n"
-    npm install -g firecrawl-cli exa-mcp-server 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_npm"
-    _update_record_end "npm" "${PIPESTATUS[0]}"
+    # Record FAIL rather than returning: run_update reports per-section status and
+    # continues. Silently installing latest would defeat the pins entirely.
+    if _require_npm_pins; then
+      npm install -g "jscpd@${JSCPD_VER}" "firecrawl-cli@${FIRECRAWL_CLI_VER}" \
+        "exa-mcp-server@${EXA_MCP_SERVER_VER}" 2>&1 \
+        | tee "${_DOTFILES_RUN_TMPDIR}/err_npm"
+      _update_record_end "npm" "${PIPESTATUS[0]}"
+    else
+      _update_record_end "npm" 1
+    fi
   else
     _update_skip "npm" "flag not set"
   fi
