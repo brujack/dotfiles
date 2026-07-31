@@ -1537,3 +1537,11 @@ _sweep_build_stray_unreadable_repo() {
   [[ "$output" != *": no Makefile; "* ]]
   [[ "$output" != *"( : no Makefile"* ]]
 }
+
+@test "_git_hooks_hookspath_offenders prints nothing and returns 0 when neither scope is set" {
+  local _g="${TESTDIR}/gitconfig-global" _s="${TESTDIR}/gitconfig-system"
+  : > "${_g}"; : > "${_s}"
+  GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" run _git_hooks_hookspath_offenders
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
