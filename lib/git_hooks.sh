@@ -278,6 +278,38 @@ _git_hooks_join() {
   printf '%s' "${_out}"
 }
 
+# _git_hooks_hookspath_offenders prints one "scope<TAB>value" line per git
+# scope that pins core.hooksPath, where scope is literally "system" or
+# "global". Prints nothing when neither is set. Contract: ALWAYS returns 0 --
+# an empty result means "checked, clean", and callers count lines rather than
+# reading the exit code as a verdict.
+#
+# Scopes are read explicitly rather than via a bare `git config --get`,
+# which returns the EFFECTIVE value after system->global->local precedence
+# and so cannot say which scope to unset -- the one thing the operator needs.
+#
+# No `env -u GIT_DIR ...` strip here, unlike every other git call in this
+# file: neither read takes repo context, so an inherited GIT_DIR cannot
+# redirect them. The strip is still required on the `make install-hooks`
+# invocation, which does.
+#
+# There is deliberately NO per-repo arm. A per-clone pin that resolves has no
+# route to a machine where it breaks (git never transfers .git/config; the
+# two rsync destinations carry --exclude=personal since #182; the ratna push
+# is archive-only), and every per-clone shape that CAN hurt is already caught
+# by _git_hooks_check_complete's rc 1/2.
+_git_hooks_hookspath_offenders() {
+  local _scope _value
+  for _scope in system global; do
+    # --get exits 1 when unset. That is the normal clean path, not an error,
+    # and must not leak out of this function as a failure.
+    _value="$(git config "--${_scope}" --get core.hooksPath 2>/dev/null)" || continue
+    [[ -z "${_value}" ]] && continue
+    printf '%s\t%s\n' "${_scope}" "${_value}"
+  done
+  return 0
+}
+
 # install_git_hooks_all_repos sweeps every repo _git_hooks_discover() finds,
 # running `make -s -C <repo> install-hooks` in each and reporting what
 # changed. Fail-closed, not fail-fast: every discovered repo is attempted
