@@ -1,5 +1,7 @@
 # Strip Inherited Git Repo-Location Vars — Implementation Plan
 
+> **Status: DONE** — merged as dotfiles#191 (`f13f43d`), 2026-07-31.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Restore the pre-push test gate for worktree pushes by stripping the four git repo-location vars at the one point where they enter this repo's test suite.

@@ -394,7 +394,7 @@ Then restart Claude Code. Run this after every `brew upgrade node` on Linux.
 
 ## Branch Workflow
 
-All changes go on feature branches. The pre-push hook runs `make test` locally before the push reaches GitHub. GitHub Actions CI runs `make test`, `lint-macos`, and `secret-scan` on PRs only, and auto-merges when all three pass.
+All changes go on feature branches. The pre-push hook runs `make test` locally before the push reaches GitHub. GitHub Actions CI runs `test`, `lint-macos`, `powershell`, `bash-coverage`, and `secret-scan` on PRs only, and auto-merges when all five pass.
 
 ```bash
 git checkout -b my-feature
