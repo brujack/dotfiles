@@ -238,6 +238,18 @@ teardown() {
   install_git_hooks_all_repos() { return 1; }
   run run_setup_user
   [ "$status" -eq 0 ]
+  [[ "$output" == *"git hooks sweep reported failures"* ]]
+  [[ "$output" != *"gaps or a pinned core.hooksPath"* ]]
+}
+
+@test "run_setup_user warns partial success (not failure) when install_git_hooks_all_repos returns 2" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  install_git_hooks_all_repos() { return 2; }
+  run run_setup_user
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"git hooks sweep reported gaps or a pinned core.hooksPath"* ]]
+  [[ "$output" != *"git hooks sweep reported failures"* ]]
 }
 
 @test "run_setup_user still calls _ledger_write_run_entry when install_git_hooks_all_repos returns 1" {
