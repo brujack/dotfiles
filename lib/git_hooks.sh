@@ -323,9 +323,9 @@ _git_hooks_hookspath_offenders() {
 # changed. Fail-closed, not fail-fast: every discovered repo is attempted
 # regardless of an earlier one's outcome, and the function returns 1 only
 # once the whole sweep has run — a single broken Makefile must not cost the
-# repos discovered after it. Gaps (missing hooks, or no hooks directory at
-# all) are counted and named in the summary but never affect the return
-# code — only a failed `make` call does.
+# repos discovered after it. Return code contract: 0 clean, 1 a failed
+# `make` call, 2 partial success (gaps, unknowns, or a pinned hooksPath,
+# none of which a failed make explains) -- see the return block below.
 install_git_hooks_all_repos() {
   local _dry=0
   [[ -n "${DRY_RUN:-}" ]] && _dry=1
@@ -397,7 +397,8 @@ install_git_hooks_all_repos() {
       fi
     fi
 
-    # gaps never affect the return code.
+    # gaps do not make this a failure (rc 1); they contribute to partial
+    # success (rc 2) -- see the return block.
     local _missing _cc_rc
     _missing="$(_git_hooks_check_complete "${_dir}")"
     _cc_rc=$?
@@ -444,15 +445,24 @@ install_git_hooks_all_repos() {
 
   # A global/system pin is a cause, not a symptom: it redirects or disables
   # hooks in every repo on this box at once. Reported here rather than
-  # per-repo because the per-repo shapes that can hurt are already covered
-  # by _git_hooks_check_complete's rc 1/2 above, and because the remedy
-  # differs -- `make install-hooks` cannot fix a pinned scope.
+  # per-repo -- though a pin also manufactures one bogus "no hooks
+  # directory" gap per discovered repo via _git_hooks_check_complete's rc 2
+  # (every repo's --git-path hooks now resolves to the same pinned,
+  # typically-broken path). That duplication is real, known, and tracked as
+  # a follow-up rather than fixed here. The remedy still differs from a
+  # per-repo gap either way -- `make install-hooks` cannot fix a pinned
+  # scope.
   local _hp_scope _hp_value
   while IFS=$'\t' read -r _hp_scope _hp_value; do
     [[ -z "${_hp_scope}" ]] && continue
     _hookspath=$((_hookspath + 1))
     # Empty value is a real pin that disables hooks -- see Task 1's Contract.
-    [[ -z "${_hp_value}" ]] && _hp_value="(empty)"
+    # Whitespace-only is the same hazard under a different disguise -- git
+    # strips unquoted trailing whitespace from a config value, but a quoted
+    # " " survives and is just as unusable as a hooks directory. Mirrors the
+    # doctor surface's whitespace-aware check (lib/helpers.sh) so the two
+    # surfaces render the same pin identically instead of diverging.
+    [[ -z "${_hp_value//[[:space:]]/}" ]] && _hp_value="(empty)"
     _hookspath_lines+=("${_hp_scope}: ${_hp_value}")
     log_warn "core.hooksPath pinned at ${_hp_scope} scope: ${_hp_value} (remedy: git config --${_hp_scope} --unset core.hooksPath)"
   done <<< "$(_git_hooks_hookspath_offenders)"
