@@ -67,6 +67,10 @@ depends_on: []
 
 **Contract.** Prints zero, one, or two lines of `scope<TAB>value`, where `scope` is literally `system` or `global`. Prints nothing when both are unset. Returns 0 in every case. Callers count lines; the exit code is never a verdict.
 
+**A scope pinned to an EMPTY value is an offender and must be reported.** `git config --global core.hooksPath ""` writes `hooksPath =` — key present, value empty — and `git config --get` then exits **0 with empty stdout**, not 1. Git honors that pin: measured on git 2.55.0, a repo with an executable `.git/hooks/pre-commit` ran the hook 0 times under an empty global pin and 1 time with the pin removed. An empty pin therefore disables every hook on the machine, and skipping it would report "clean" on precisely the state this detector exists to name. Its record is `scope<TAB>` with an empty second field — a well-formed TSV line that `IFS=$'\t' read -r _scope _value` parses to scope set, value empty. Consumers render an empty value as `(empty)`.
+
+> **Amended 2026-07-31 during Phase 2 execution.** The Task 1 code-quality review found the original implementation snippet's `[[ -z "${_value}" ]] && continue` produced a false clean on this input; the main agent reproduced it end-to-end before amending. Tasks 2 and 3 below carry matching `(empty)` rendering. A separate minor finding — that `|| continue` also swallows a scope git could not read at all (rc 128, e.g. a malformed config) — was **deliberately deferred to the backlog**, on the grounds that a corrupt gitconfig makes essentially every other git call fail loudly at the same moment. What that deferral does **not** establish: a _scope-specific_ read failure (e.g. `/etc/gitconfig` unreadable while `--global` reads fine) would still be reported as clean.
+
 **Step 1 — write the first failing test** (unset case, the clean path — this is the one that catches treating `git config`'s exit 1 as an error):
 
 ```bash
@@ -85,10 +89,15 @@ Run it: `bats tests/setup_env/git_hooks.bats -f "hookspath_offenders"`. It must 
 
 ```bash
 # _git_hooks_hookspath_offenders prints one "scope<TAB>value" line per git
-# scope that pins core.hooksPath, where scope is literally "system" or
+# scope that has core.hooksPath SET, where scope is literally "system" or
 # "global". Prints nothing when neither is set. Contract: ALWAYS returns 0 --
 # an empty result means "checked, clean", and callers count lines rather than
 # reading the exit code as a verdict.
+#
+# A scope set to an EMPTY value is reported, not skipped: git treats an empty
+# core.hooksPath as a real pin that disables hooks everywhere, while
+# `git config --get` reports it as rc 0 with empty stdout. Skipping it would
+# report "clean" on a machine with every hook silently off.
 #
 # Scopes are read explicitly rather than via a bare `git config --get`,
 # which returns the EFFECTIVE value after system->global->local precedence
@@ -110,7 +119,6 @@ _git_hooks_hookspath_offenders() {
     # --get exits 1 when unset. That is the normal clean path, not an error,
     # and must not leak out of this function as a failure.
     _value="$(git config "--${_scope}" --get core.hooksPath 2>/dev/null)" || continue
-    [[ -z "${_value}" ]] && continue
     printf '%s\t%s\n' "${_scope}" "${_value}"
   done
   return 0
@@ -226,6 +234,9 @@ _doctor_check_hooks_path() {
   while IFS=$'\t' read -r _scope _value; do
     [[ -z "${_scope}" ]] && continue
     _pinned+=("${_scope}")
+    # An empty value is a real pin that disables hooks, not an absent one --
+    # render it so the FAIL line does not read "pinned to  --".
+    [[ -z "${_value}" ]] && _value="(empty)"
     doctor_fail "${_scope}" \
       "pinned to ${_value} — remedy: git config --${_scope} --unset core.hooksPath"
   done <<< "${_offenders}"
@@ -295,6 +306,16 @@ The `<<< "${_offenders}"` here-string yields one empty line when `_offenders` is
   _DOCTOR_PASS=0; _DOCTOR_FAIL=0; _DOCTOR_FAILED=0
   GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" run _doctor_check_hooks_path
   [[ "$output" == *"[FAIL] global"* ]]
+}
+
+@test "_doctor_check_hooks_path fails on a scope pinned to an empty value and renders it (empty)" {
+  local _g="${TESTDIR}/gc" _s="${TESTDIR}/sc"
+  printf '[core]\n\thooksPath =\n' > "${_g}"; : > "${_s}"
+  _DOCTOR_PASS=0; _DOCTOR_FAIL=0; _DOCTOR_FAILED=0
+  GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" run _doctor_check_hooks_path
+  [[ "$output" == *"[FAIL] global"* ]]
+  [[ "$output" == *"pinned to (empty)"* ]]
+  [[ "$output" == *"[PASS] system: unset"* ]]
 }
 
 @test "run_doctor invokes the hooksPath check" {
@@ -374,6 +395,8 @@ After the `_git_hooks_gap_repos` loop and before `_updated_str` is computed (i.e
   while IFS=$'\t' read -r _hp_scope _hp_value; do
     [[ -z "${_hp_scope}" ]] && continue
     _hookspath=$((_hookspath + 1))
+    # Empty value is a real pin that disables hooks -- see Task 1's Contract.
+    [[ -z "${_hp_value}" ]] && _hp_value="(empty)"
     _hookspath_lines+=("${_hp_scope}: ${_hp_value}")
     log_warn "core.hooksPath pinned at ${_hp_scope} scope: ${_hp_value} (remedy: git config --${_hp_scope} --unset core.hooksPath)"
   done <<< "$(_git_hooks_hookspath_offenders)"
@@ -416,6 +439,18 @@ Replace the return block (lines 419-420):
   GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" run install_git_hooks_all_repos
   [ "$status" -eq 2 ]
   [[ "$output" == *"system: /tmp/two; global: /tmp/one"* ]]
+}
+```
+
+**Step 4b — the empty-pin test.** An empty value is a real pin (Task 1 Contract) and must reach the summary as `(empty)`, never as a bare trailing space:
+
+```bash
+@test "install_git_hooks_all_repos renders a hooksPath pinned to an empty value as (empty)" {
+  local _g="${TESTDIR}/gc" _s="${TESTDIR}/sc"
+  printf '[core]\n\thooksPath =\n' > "${_g}"; : > "${_s}"
+  GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" run install_git_hooks_all_repos
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"global: (empty)"* ]]
 }
 ```
 
