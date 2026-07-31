@@ -973,7 +973,9 @@ _sweep_build_loud_repo() {
 
   HOOK_EXPECTED_REPOS=()
   PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
-  [ "$status" -eq 0 ]
+  # loud-repo installs no hooks at all, so check_complete counts a gap --
+  # rc=2 (partial success), not rc=0 -- under the widened contract.
+  [ "$status" -eq 2 ]
   [ -f "${_markers}/loud-repo.ran" ]
   [[ "$output" == *"LOUD-RECIPE-MARKER"* ]]
   [[ "$output" != *"echo LOUD-RECIPE-MARKER"* ]]
@@ -1071,7 +1073,9 @@ _sweep_build_symlink_repo() {
 
   HOOK_EXPECTED_REPOS=()
   PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
-  [ "$status" -eq 0 ]
+  # broken-repo lands in the "unknown" clause, so rc=2 (partial success)
+  # under the widened contract, not rc=0.
+  [ "$status" -eq 2 ]
   [ -f "${_markers}/broken-repo.ran" ]
   [[ "$output" == *"0 updated"* ]]
   # broken-repo legitimately appears in the "unknown" clause now (a
@@ -1114,7 +1118,9 @@ _sweep_build_symlink_repo() {
 
   HOOK_EXPECTED_REPOS=()
   PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
-  [ "$status" -eq 0 ]
+  # regressing-repo lands in the "gaps" clause, so rc=2 (partial success)
+  # under the widened contract, not rc=0.
+  [ "$status" -eq 2 ]
   [ -f "${_markers}/regressing-repo.ran" ]
   # An unreadable commit-msg is correctly a GAP (check_complete's -x guard
   # can't see it as executable either), so the repo legitimately appears
@@ -1154,7 +1160,9 @@ _sweep_build_partial_repo() {
 
   HOOK_EXPECTED_REPOS=()
   PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
-  [ "$status" -eq 0 ]
+  # partial-repo is a gap, so rc=2 (partial success) under the widened
+  # contract, not rc=0.
+  [ "$status" -eq 2 ]
   [ -f "${_markers}/partial-repo.ran" ]
   [[ "$output" == *"1 gaps"* ]]
   [[ "$output" == *"[WARN]"* ]]
@@ -1184,7 +1192,8 @@ _sweep_build_partial_repo() {
 
   HOOK_EXPECTED_REPOS=()
   PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
-  [ "$status" -eq 0 ]
+  # Two gaps, so rc=2 (partial success) under the widened contract, not rc=0.
+  [ "$status" -eq 2 ]
   [ -f "${_markers}/partial-hooks-repo.ran" ]
   [ -f "${_markers}/no-hooks-dir-repo.ran" ]
   [[ "$output" == *"2 gaps"* ]]
@@ -1202,7 +1211,8 @@ _sweep_build_partial_repo() {
 
   HOOK_EXPECTED_REPOS=(no-makefile-repo never-cloned-repo)
   PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
-  [ "$status" -eq 0 ]
+  # Two gaps, so rc=2 (partial success) under the widened contract, not rc=0.
+  [ "$status" -eq 2 ]
   [[ "$output" == *"0 checked"* ]]
   [[ "$output" == *"2 gaps"* ]]
   [[ "$output" == *"no-makefile-repo: no Makefile"* ]]
@@ -1220,7 +1230,8 @@ _sweep_build_partial_repo() {
 
   HOOK_EXPECTED_REPOS=(has-makefile-no-target)
   PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
-  [ "$status" -eq 0 ]
+  # One gap, so rc=2 (partial success) under the widened contract, not rc=0.
+  [ "$status" -eq 2 ]
   [[ "$output" == *"1 gaps"* ]]
   [[ "$output" == *"has-makefile-no-target: Makefile has no install-hooks target"* ]]
   [[ "$output" != *"has-makefile-no-target: no Makefile"* ]]
@@ -1235,7 +1246,10 @@ _sweep_build_partial_repo() {
 
   HOOK_EXPECTED_REPOS=()
   DRY_RUN=1 PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
-  [ "$status" -eq 0 ]
+  # Both fixture repos are pre-install (2 real gaps), so rc=2 (partial
+  # success) under the widened contract, not rc=0 -- DRY_RUN does not
+  # change which counters drive the return code.
+  [ "$status" -eq 2 ]
   # run_cmd only prints under DRY_RUN -- neither recipe's own marker touch
   # ever executes, proving make itself was never really invoked.
   [ ! -f "${_markers}/repo-one.ran" ]
@@ -1350,7 +1364,9 @@ _sweep_build_stray_unreadable_repo() {
 
   HOOK_EXPECTED_REPOS=()
   PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
-  [ "$status" -eq 0 ]
+  # mode111-repo lands in the "unknown" clause, so rc=2 (partial success)
+  # under the widened contract, not rc=0.
+  [ "$status" -eq 2 ]
   [ -f "${_markers}/mode111-repo.ran" ]
   [[ "$output" == *"0 gaps"* ]]
   [[ "$output" != *"updated (mode111-repo"* ]]
@@ -1381,7 +1397,9 @@ _sweep_build_stray_unreadable_repo() {
 
   HOOK_EXPECTED_REPOS=()
   PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
-  [ "$status" -eq 0 ]
+  # stray-repo lands in the "unknown" clause, so rc=2 (partial success)
+  # under the widened contract, not rc=0.
+  [ "$status" -eq 2 ]
   [ -f "${_markers}/stray-repo.ran" ]
   [[ "$output" == *"0 gaps"* ]]
   [[ "$output" != *"updated (stray-repo"* ]]
@@ -1424,7 +1442,9 @@ _sweep_build_stray_unreadable_repo() {
 
   HOOK_EXPECTED_REPOS=()
   PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
-  [ "$status" -eq 0 ]
+  # Two gaps (zzz-gap-one/two), so rc=2 (partial success) under the widened
+  # contract, not rc=0.
+  [ "$status" -eq 2 ]
   [[ "$output" == *"2 updated (aaa-up-one, aaa-up-two)"* ]]
   [[ "$output" == *"2 gaps (zzz-gap-one: missing pre-commit commit-msg; zzz-gap-two: missing pre-commit commit-msg)"* ]]
 }
@@ -1489,7 +1509,10 @@ _sweep_build_stray_unreadable_repo() {
 
   HOOK_EXPECTED_REPOS=()
   PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
-  [ "$status" -eq 0 ]
+  # fresh-repo's recipe only installs pre-commit, leaving pre-push and
+  # commit-msg missing -- a gap, so rc=2 (partial success) under the
+  # widened contract, not rc=0.
+  [ "$status" -eq 2 ]
   [ -f "${_markers}/fresh-repo.ran" ]
   [[ "$output" == *"1 updated (fresh-repo)"* ]]
 }
@@ -1531,7 +1554,9 @@ _sweep_build_stray_unreadable_repo() {
 
   HOOK_EXPECTED_REPOS=("" "real-repo")
   PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
-  [ "$status" -eq 0 ]
+  # real-repo is a gap, so rc=2 (partial success) under the widened
+  # contract, not rc=0.
+  [ "$status" -eq 2 ]
   [[ "$output" == *"1 gaps (real-repo: no Makefile)"* ]]
   [[ "$output" != *"2 gaps"* ]]
   [[ "$output" != *": no Makefile; "* ]]
@@ -1597,4 +1622,61 @@ _sweep_build_stray_unreadable_repo() {
   _second="$(GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" _git_hooks_hookspath_offenders)"
   [ "${_first}" = "${_second}" ]
   [ "${_first}" = "$(printf 'global\t/tmp/mine')" ]
+}
+
+# ── Task 3: install_git_hooks_all_repos hooksPath reporting ─────────────────
+#
+# Isolated like the Task 4 sweep fixtures above (own PERSONAL_GITREPOS tree,
+# HOOK_EXPECTED_REPOS=() override) rather than the shared 9-fixture tree
+# setup() builds -- that tree includes repo-failing (`make` exits 1), which
+# would force rc=1 and mask the rc=2 contract these tests exist to check.
+# A single already-installed repo (_sweep_seed_installed) keeps gaps/unknown
+# at 0 so the only source of rc=2 is the hooksPath pin itself.
+
+@test "install_git_hooks_all_repos reports a global hooksPath pin and returns 2" {
+  local _base="${TESTDIR}/sweep-hookspath-global"
+  local _markers="${TESTDIR}/sweep-hookspath-global-markers"
+  local _g="${TESTDIR}/gc-hp1" _s="${TESTDIR}/sc-hp1"
+  mkdir -p "${_base}" "${_markers}"
+  _sweep_build_cp_repo "${_base}" "clean-repo" "${_markers}"
+  _sweep_seed_installed "${_base}/clean-repo"
+  printf '[core]\n\thooksPath = /tmp/pinned\n' > "${_g}"; : > "${_s}"
+
+  HOOK_EXPECTED_REPOS=()
+  GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"core.hooksPath pinned"* ]]
+  [[ "$output" == *"global"* ]]
+  [[ "$output" == *"/tmp/pinned"* ]]
+}
+
+@test "install_git_hooks_all_repos joins two hooksPath offenders with '; ' not ';'" {
+  local _base="${TESTDIR}/sweep-hookspath-both"
+  local _markers="${TESTDIR}/sweep-hookspath-both-markers"
+  local _g="${TESTDIR}/gc-hp2" _s="${TESTDIR}/sc-hp2"
+  mkdir -p "${_base}" "${_markers}"
+  _sweep_build_cp_repo "${_base}" "clean-repo" "${_markers}"
+  _sweep_seed_installed "${_base}/clean-repo"
+  printf '[core]\n\thooksPath = /tmp/one\n' > "${_g}"
+  printf '[core]\n\thooksPath = /tmp/two\n' > "${_s}"
+
+  HOOK_EXPECTED_REPOS=()
+  GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"system: /tmp/two; global: /tmp/one"* ]]
+}
+
+@test "install_git_hooks_all_repos renders a hooksPath pinned to an empty value as (empty)" {
+  local _base="${TESTDIR}/sweep-hookspath-empty"
+  local _markers="${TESTDIR}/sweep-hookspath-empty-markers"
+  local _g="${TESTDIR}/gc-hp3" _s="${TESTDIR}/sc-hp3"
+  mkdir -p "${_base}" "${_markers}"
+  _sweep_build_cp_repo "${_base}" "clean-repo" "${_markers}"
+  _sweep_seed_installed "${_base}/clean-repo"
+  printf '[core]\n\thooksPath =\n' > "${_g}"; : > "${_s}"
+
+  HOOK_EXPECTED_REPOS=()
+  GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"global: (empty)"* ]]
 }

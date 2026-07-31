@@ -530,7 +530,12 @@ PY
     # previous cycle's hooks and reports success.
     _update_record_start "git-hooks"
     install_git_hooks_all_repos 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_git-hooks"
-    _update_record_end "git-hooks" "${PIPESTATUS[0]}"
+    local _git_hooks_rc="${PIPESTATUS[0]}"
+    _update_record_end "git-hooks" "$(( _git_hooks_rc == 2 ? 0 : _git_hooks_rc ))"
+    if [[ ${_git_hooks_rc} -eq 2 ]]; then
+      _update_warn "git-hooks" "gaps or a pinned core.hooksPath — see detail"
+      _update_write_detail_from_err "git-hooks" "warning output"
+    fi
 
     update_aws_cli
     update_rust

@@ -335,9 +335,11 @@ install_git_hooks_all_repos() {
   local _updated=0
   local _gaps=0
   local _unknown=0
+  local _hookspath=0
   local -a _updated_repos=()
   local -a _gap_lines=()
   local -a _unknown_repos=()
+  local -a _hookspath_lines=()
 
   # check_complete reads the live filesystem directly (not through
   # run_cmd), so it runs for real under DRY_RUN too -- unlike the digest,
@@ -440,6 +442,21 @@ install_git_hooks_all_repos() {
     esac
   done < <(_git_hooks_gap_repos)
 
+  # A global/system pin is a cause, not a symptom: it redirects or disables
+  # hooks in every repo on this box at once. Reported here rather than
+  # per-repo because the per-repo shapes that can hurt are already covered
+  # by _git_hooks_check_complete's rc 1/2 above, and because the remedy
+  # differs -- `make install-hooks` cannot fix a pinned scope.
+  local _hp_scope _hp_value
+  while IFS=$'\t' read -r _hp_scope _hp_value; do
+    [[ -z "${_hp_scope}" ]] && continue
+    _hookspath=$((_hookspath + 1))
+    # Empty value is a real pin that disables hooks -- see Task 1's Contract.
+    [[ -z "${_hp_value}" ]] && _hp_value="(empty)"
+    _hookspath_lines+=("${_hp_scope}: ${_hp_value}")
+    log_warn "core.hooksPath pinned at ${_hp_scope} scope: ${_hp_value} (remedy: git config --${_hp_scope} --unset core.hooksPath)"
+  done <<< "$(_git_hooks_hookspath_offenders)"
+
   local _updated_str="${_updated}"
   # "0" under DRY_RUN would falsely assert every repo was already current --
   # nothing ran, so nothing is known. "n/a" says so instead.
@@ -456,6 +473,9 @@ install_git_hooks_all_repos() {
   if [[ ${_unknown} -gt 0 ]]; then
     _summary+=", ${_unknown} unknown ($(_git_hooks_join '; ' "${_unknown_repos[@]}"))"
   fi
+  if [[ ${_hookspath} -gt 0 ]]; then
+    _summary+=", ${_hookspath} core.hooksPath pinned ($(_git_hooks_join '; ' "${_hookspath_lines[@]}"))"
+  fi
   # design.md's Reporting section names checked/updated/gap/failure counts
   # as what the line reports. A make failure otherwise surfaces only as an
   # earlier log_warn, separated from the summary by every other -t update
@@ -465,7 +485,14 @@ install_git_hooks_all_repos() {
   fi
   log_info "${_summary}"
 
+  # Contract: 0 clean, 1 a make call failed, 2 partial success -- gaps,
+  # unknowns, or a pinned hooksPath, none of which a failed make explains.
+  # 2 mirrors sync_git_repos/sync_legacy_dirs so run_update's existing
+  # rc==2 warn mapping applies unchanged.
   [[ ${_failures} -gt 0 ]] && return 1
+  if [[ ${_hookspath} -gt 0 || ${_gaps} -gt 0 || ${_unknown} -gt 0 ]]; then
+    return 2
+  fi
   return 0
 }
 
