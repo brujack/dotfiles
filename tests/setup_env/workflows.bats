@@ -1276,6 +1276,35 @@ assert_all_npm_globals_pinned() {
   assert_all_npm_globals_pinned "${MOCK_CALLS_FILE}"
 }
 
+@test "_require_npm_pins rejects an empty JSON2YAML_VER" {
+  JSON2YAML_VER=""
+  run _require_npm_pins
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"JSON2YAML_VER"* ]]
+}
+
+@test "run_developer_or_ansible installs nothing when JSON2YAML_VER is empty" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  JSON2YAML_VER=""
+  run run_developer_or_ansible
+  [ "$status" -ne 0 ]
+  # Fail closed: an empty pin expands to "json2yaml@", which npm resolves to latest.
+  ! grep -q "npm install" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_developer_or_ansible installs json2yaml globally, not into the cwd" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  run run_developer_or_ansible
+  [ "$status" -eq 0 ]
+  # Without -g, npm installs into whatever directory setup happened to run from,
+  # leaving the tool off PATH. Anchor on the flag, not just the package name.
+  grep -q "npm install -g json2yaml@1.1.0" "${MOCK_CALLS_FILE}"
+  # The bare form must not survive alongside the fixed one.
+  ! grep -qE '^npm install json2yaml' "${MOCK_CALLS_FILE}"
+}
+
 # ── process_args --pkgs-only ──────────────────────────────────────────────
 
 @test "process_args --pkgs-only sets UPDATE_PKGS" {
@@ -1562,6 +1591,18 @@ assert_all_npm_globals_pinned() {
   unset UPDATE_CLAUDE UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
   run_update
   grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_claude"
+}
+
+@test "run_update converges json2yaml to its pin" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE_CLAUDE=1
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  run run_update
+  [ "$status" -eq 0 ]
+  # Machines set up before the -g fix hold a cwd-local, unpinned copy. The update
+  # chain is what converges them, so json2yaml has to be in it like the other three.
+  grep -qE '^npm install -g .*json2yaml@1\.1\.0' "${MOCK_CALLS_FILE}"
 }
 
 @test "run_update installs pinned npm globals when UPDATE_CLAUDE is set" {
