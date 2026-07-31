@@ -15,6 +15,7 @@ DOCKER_COMPOSE_VER="v5.1.4"
 EXA_MCP_SERVER_VER="3.2.1"
 FIRECRAWL_CLI_VER="1.19.27"
 JSCPD_VER="5.0.14"
+JSON2YAML_VER="1.1.0"
 GIT_VER="2.54.0"
 GO_VER="1.26"
 # Linux architecture: kernel names (x86_64/aarch64) → Debian/GitHub names (amd64/arm64)
