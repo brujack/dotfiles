@@ -1170,6 +1170,28 @@ teardown() {
   [ "${_DOCTOR_PASS}" -ge 3 ]
 }
 
+# ── _doctor_check_hooks_path ──────────────────────────────────────────────────
+
+# _doctor_check_hooks_path shells out to real `git config --get`, relying on
+# its genuine unset (rc 1) vs set-including-empty (rc 0) semantics. This
+# file's setup() calls load_mocks, which prepends tests/mocks/git — a mock
+# that always exits 0 regardless of args — ahead of the real binary on PATH.
+# That flattens the exact unset/empty distinction these tests exist to check,
+# so every test in this section resolves a mock-free PATH first.
+_unmocked_path() {
+  printf '%s' "${PATH}" | tr ':' '\n' | grep -v "tests/mocks" | tr '\n' ':' | sed 's/:$//'
+}
+
+@test "_doctor_check_hooks_path passes both scopes when neither pins core.hooksPath" {
+  local _g="${TMPDIR_TEST}/gc" _s="${TMPDIR_TEST}/sc"
+  : > "${_g}"; : > "${_s}"
+  _DOCTOR_PASS=0; _DOCTOR_FAIL=0; _DOCTOR_FAILED=0
+  PATH="$(_unmocked_path)" GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" run _doctor_check_hooks_path
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Git hooksPath:"* ]]
+  [[ "$output" == *"[PASS]"* ]]
+}
+
 # ── _doctor_check_versions ────────────────────────────────────────────────────
 
 @test "_doctor_check_versions passes when installed version matches pinned" {
