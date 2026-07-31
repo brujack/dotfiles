@@ -1580,6 +1580,15 @@ _sweep_build_stray_unreadable_repo() {
   [ "$output" = "$(printf 'global\t/nonexistent/nope')" ]
 }
 
+@test "_git_hooks_hookspath_offenders reports a scope pinned to an empty value" {
+  local _g="${TESTDIR}/gc" _s="${TESTDIR}/sc"
+  printf '[core]\n\thooksPath =\n' > "${_g}"; : > "${_s}"
+  GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" run _git_hooks_hookspath_offenders
+  [ "$status" -eq 0 ]
+  [ "${#lines[@]}" -eq 1 ]
+  [ "${lines[0]}" = "$(printf 'global\t')" ]
+}
+
 @test "_git_hooks_hookspath_offenders is idempotent across two calls in one shell" {
   local _g="${TESTDIR}/gc" _s="${TESTDIR}/sc"
   printf '[core]\n\thooksPath = /tmp/mine\n' > "${_g}"; : > "${_s}"
@@ -1587,4 +1596,5 @@ _sweep_build_stray_unreadable_repo() {
   _first="$(GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" _git_hooks_hookspath_offenders)"
   _second="$(GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" _git_hooks_hookspath_offenders)"
   [ "${_first}" = "${_second}" ]
+  [ "${_first}" = "$(printf 'global\t/tmp/mine')" ]
 }
