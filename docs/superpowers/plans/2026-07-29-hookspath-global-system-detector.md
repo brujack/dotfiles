@@ -376,14 +376,23 @@ parallel_group: wave-2
 }
 ```
 
-**Step 2 — implement in `install_git_hooks_all_repos`.** Add a counter alongside the existing ones (near line 296):
+**Step 2 — implement in `install_git_hooks_all_repos`.** **All line numbers this task cites for `lib/git_hooks.sh` are stale** — Task 1 added ~40 lines above this function. Locate every site by the named anchor, not the number. Verified 2026-07-31 on this branch:
+
+| Anchor                                                                 | Plan said | Actually |
+| ---------------------------------------------------------------------- | --------- | -------- |
+| `_failures` / `_gaps` / `_unknown` declarations                        | ~296      | 334-337  |
+| end of the `_git_hooks_gap_repos` loop (`done < <(...)`)               | 392       | 441      |
+| `_unknown` clause in the summary                                       | 409       | 456-458  |
+| the return block (`[[ ${_failures} -gt 0 ]] && return 1` / `return 0`) | 419-420   | 468-469  |
+
+Add a counter alongside the existing ones (at the `_failures`/`_gaps`/`_unknown` declarations):
 
 ```bash
   local _hookspath=0
   local -a _hookspath_lines=()
 ```
 
-After the `_git_hooks_gap_repos` loop and before `_updated_str` is computed (i.e. after line 392), add:
+After the `_git_hooks_gap_repos` loop (`done < <(_git_hooks_gap_repos)`) and before `_updated_str` is computed, add:
 
 ```bash
   # A global/system pin is a cause, not a symptom: it redirects or disables
@@ -402,7 +411,7 @@ After the `_git_hooks_gap_repos` loop and before `_updated_str` is computed (i.e
   done <<< "$(_git_hooks_hookspath_offenders)"
 ```
 
-Extend the summary line, after the `_unknown` clause (line 409):
+Extend the summary line, after the `if [[ ${_unknown} -gt 0 ]]` clause:
 
 ```bash
   if [[ ${_hookspath} -gt 0 ]]; then
@@ -412,7 +421,7 @@ Extend the summary line, after the `_unknown` clause (line 409):
 
 `_git_hooks_join` takes the separator as its first argument; note that its multi-character separator behaviour is why it exists rather than `IFS='; '` with `${arr[*]}` — `${arr[*]}` joins on the _first character_ of `IFS` only, so a two-element list would render `a;b` not `a; b`. Assert the separator with a **two**-element fixture in the test below; a one-element list cannot see this class of bug.
 
-Replace the return block (lines 419-420):
+Replace the return block (the two lines `[[ ${_failures} -gt 0 ]] && return 1` and `return 0`, immediately after `log_info "${_summary}"`):
 
 ```bash
   # Contract: 0 clean, 1 a make call failed, 2 partial success -- gaps,
@@ -454,7 +463,7 @@ Replace the return block (lines 419-420):
 }
 ```
 
-**Step 5 — the call site.** `lib/workflows.sh`, replace lines 499-501:
+**Step 5 — the call site.** `lib/workflows.sh`. **Locate the block by name, not by line number** — dotfiles#193 shifted this file and the plan's original coordinates (499-501) are stale. `grep -n 'git-hooks' lib/workflows.sh` finds it; as of 2026-07-31 it sits at 530-533, immediately after the `legacy-rsync` block, under the comment explaining it must run after `git-repos`/`legacy-rsync`. The `git-repos` rc==2 pattern this change mirrors is at 510-517 (originally cited as 481-485, also stale). Replace:
 
 ```bash
     _update_record_start "git-hooks"
@@ -477,7 +486,7 @@ with:
 
 This is the Decision 5 fix: without it the section renders as a bare `[OK] git-hooks updated` over its own findings, because `_update_record_end` writes `OK` unconditionally on the non-zero-exit-free path (`lib/update_summary.sh:367`).
 
-**Step 6 — the summary regression test** in `tests/setup_env/workflows.bats`. Model it on the existing `git-repos` warn test at `tests/setup_env/workflows.bats:1336` (`run_update records git-repos as WARN (not OK) when sync_git_repos returns 2`):
+**Step 6 — the summary regression test** in `tests/setup_env/workflows.bats`. Model it on the existing `git-repos` warn test at `tests/setup_env/workflows.bats:1443` (`run_update records git-repos as WARN (not OK) when sync_git_repos returns 2`):
 
 ```bash
 @test "run_update marks git-hooks WARN, not OK, when the sweep returns 2" {
@@ -492,7 +501,7 @@ This is the Decision 5 fix: without it the section renders as a bare `[OK] git-h
 }
 ```
 
-Copy the harness setup verbatim from `workflows.bats:1336-1351` rather than inventing one — `run_update` needs `_DOTFILES_RUN_TMPDIR`, the section mocks, and the flag vars already wired there.
+Copy the harness setup verbatim from that same test's body (`workflows.bats:1443` onward) rather than inventing one — `run_update` needs `_DOTFILES_RUN_TMPDIR`, the section mocks, and the flag vars already wired there.
 
 **Step 7 — verify `_UPDATE_SECTION_ORDER` still contains `git-hooks`.** Per the coupling documented in `CLAUDE.md`, a section tracked but absent from that array is never printed. It is already present; confirm rather than assume:
 
