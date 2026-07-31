@@ -1,8 +1,10 @@
 # Strip inherited git repo-location vars in BATS test setup
 
+> **Status: DONE**
+
 Date: 2026-07-29
 Repo: dotfiles
-Status: Spec
+Status: Done
 
 ## Problem
 

@@ -28,5 +28,11 @@ done
 
 [[ "${needs_test}" -eq 0 ]] && exit 0
 
+# Git exports GIT_DIR into this hook's environment when the push originates
+# from a worktree (git-workflow.md's measured table); every suite below that
+# builds a git fixture would inherit it. Must stay below the range resolution
+# above, which legitimately wants the git environment.
+unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
+
 printf "Running tests locally (pre-push)...\n"
 make -C "${REPO_ROOT}" test

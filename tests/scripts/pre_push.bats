@@ -102,3 +102,36 @@ _run_pre_push() {
   [ "$status" -eq 0 ]
   grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
 }
+
+_write_make_env_mock() {
+  cat > "${MAKE_MOCK_DIR}/make" <<EOF
+#!/usr/bin/env bash
+printf "make %s\n" "\$*" >> "${MOCK_CALLS_FILE}"
+env | grep '^GIT_' >> "${MOCK_CALLS_FILE}" || true
+exit 0
+EOF
+  chmod +x "${MAKE_MOCK_DIR}/make"
+}
+
+_run_pre_push_leaked() {
+  local _stdin="${1}"
+  local _path_with_make="${MAKE_MOCK_DIR}:${CLEAN_PATH}"
+  printf "%b" "${_stdin}" | bash -c "
+    export PATH='${_path_with_make}'
+    export GIT_DIR='${REPO_DIR}/.git'
+    export GIT_WORK_TREE='${REPO_DIR}'
+    export GIT_COMMON_DIR='${REPO_DIR}/.git'
+    export GIT_INDEX_FILE='${REPO_DIR}/.git/index'
+    cd '${REPO_DIR}' && bash '${REPO_ROOT}/scripts/pre-push'
+  "
+}
+
+@test "pre-push clears inherited git repo-location vars before running make test" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "deploy.sh" "echo hi" "feat: add deploy script")
+  _write_make_env_mock
+  run _run_pre_push_leaked "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  ! grep -qE "^GIT_(DIR|WORK_TREE|COMMON_DIR|INDEX_FILE)=" "${MOCK_CALLS_FILE}"
+}
