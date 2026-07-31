@@ -279,10 +279,18 @@ _git_hooks_join() {
 }
 
 # _git_hooks_hookspath_offenders prints one "scope<TAB>value" line per git
-# scope that pins core.hooksPath, where scope is literally "system" or
-# "global". Prints nothing when neither is set. Contract: ALWAYS returns 0 --
-# an empty result means "checked, clean", and callers count lines rather than
-# reading the exit code as a verdict.
+# scope that has core.hooksPath set, where scope is literally "system" or
+# "global" and value may be empty. Prints nothing when neither scope has the
+# key set at all. Contract: ALWAYS returns 0 -- an empty result means
+# "checked, clean", and callers count lines rather than reading the exit
+# code as a verdict.
+#
+# An empty value is reported, not skipped: `git config --global
+# core.hooksPath ""` leaves the key present with an empty value (rc 0 on
+# --get, not rc 1), and git honors that as a real pin -- it disables every
+# hook on the machine just as effectively as a pin to a bogus path. Treating
+# "key present, value empty" the same as "key absent" would report clean on
+# exactly the machine state this function exists to catch.
 #
 # Scopes are read explicitly rather than via a bare `git config --get`,
 # which returns the EFFECTIVE value after system->global->local precedence
@@ -302,9 +310,9 @@ _git_hooks_hookspath_offenders() {
   local _scope _value
   for _scope in system global; do
     # --get exits 1 when unset. That is the normal clean path, not an error,
-    # and must not leak out of this function as a failure.
+    # and must not leak out of this function as a failure. rc 0 with an
+    # empty value means the key IS set (to empty) -- fall through to print.
     _value="$(git config "--${_scope}" --get core.hooksPath 2>/dev/null)" || continue
-    [[ -z "${_value}" ]] && continue
     printf '%s\t%s\n' "${_scope}" "${_value}"
   done
   return 0
