@@ -8,4 +8,15 @@ fi
 if [[ "$*" == *"rev-parse --git-dir"* ]]; then
   exit "${MOCK_GIT_REVPARSE_EXIT:-0}"
 fi
+# Real `git config --get <key>` exits 1 when the key is unset, which is the
+# state every mock-based test means to represent. Falling through to the
+# catch-all below would instead report rc 0 with empty stdout -- and a caller
+# reading scoped config correctly interprets that as "key set to an empty
+# value", a real state that disables all hooks. Defaulting to 0 here made
+# _git_hooks_hookspath_offenders report two phantom offenders in any test
+# that did not pin GIT_CONFIG_GLOBAL/GIT_CONFIG_SYSTEM itself. Set
+# MOCK_GIT_CONFIG_EXIT=0 to simulate a key that IS set.
+if [[ "$1" == "config" && "$*" == *"--get"* ]]; then
+  exit "${MOCK_GIT_CONFIG_EXIT:-1}"
+fi
 exit "${MOCK_GIT_EXIT:-0}"

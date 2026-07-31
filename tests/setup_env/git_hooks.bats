@@ -16,6 +16,20 @@ setup() {
   export PERSONAL_GITREPOS="${TESTDIR}/personal"
   mkdir -p "${PERSONAL_GITREPOS}"
 
+  # Neutralize any real global/system core.hooksPath pin on the machine
+  # running this suite. Without this, _git_hooks_hookspath_offenders (and
+  # the sweep tests that call it transitively) read the box's REAL ambient
+  # git config -- a developer machine with a genuine pin set (exactly the
+  # condition this feature exists to detect) would see six or more
+  # pre-existing rc=0 assertions in this file fail, blocking `make test`
+  # and the pre-push hook on the machines this feature serves. Per-test
+  # overrides below already set both vars explicitly on their own `run`
+  # line, so this default is only ever seen by tests that don't.
+  : > "${TESTDIR}/gitconfig-global-default"
+  : > "${TESTDIR}/gitconfig-system-default"
+  export GIT_CONFIG_GLOBAL="${TESTDIR}/gitconfig-global-default"
+  export GIT_CONFIG_SYSTEM="${TESTDIR}/gitconfig-system-default"
+
   # 1. repo-with-target — real repo, Makefile carries install-hooks:
   mkdir -p "${PERSONAL_GITREPOS}/repo-with-target"
   git init -q "${PERSONAL_GITREPOS}/repo-with-target"
@@ -973,7 +987,9 @@ _sweep_build_loud_repo() {
 
   HOOK_EXPECTED_REPOS=()
   PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
-  [ "$status" -eq 0 ]
+  # loud-repo installs no hooks at all, so check_complete counts a gap --
+  # rc=2 (partial success), not rc=0 -- under the widened contract.
+  [ "$status" -eq 2 ]
   [ -f "${_markers}/loud-repo.ran" ]
   [[ "$output" == *"LOUD-RECIPE-MARKER"* ]]
   [[ "$output" != *"echo LOUD-RECIPE-MARKER"* ]]
@@ -1071,7 +1087,9 @@ _sweep_build_symlink_repo() {
 
   HOOK_EXPECTED_REPOS=()
   PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
-  [ "$status" -eq 0 ]
+  # broken-repo lands in the "unknown" clause, so rc=2 (partial success)
+  # under the widened contract, not rc=0.
+  [ "$status" -eq 2 ]
   [ -f "${_markers}/broken-repo.ran" ]
   [[ "$output" == *"0 updated"* ]]
   # broken-repo legitimately appears in the "unknown" clause now (a
@@ -1114,7 +1132,9 @@ _sweep_build_symlink_repo() {
 
   HOOK_EXPECTED_REPOS=()
   PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
-  [ "$status" -eq 0 ]
+  # regressing-repo lands in the "gaps" clause, so rc=2 (partial success)
+  # under the widened contract, not rc=0.
+  [ "$status" -eq 2 ]
   [ -f "${_markers}/regressing-repo.ran" ]
   # An unreadable commit-msg is correctly a GAP (check_complete's -x guard
   # can't see it as executable either), so the repo legitimately appears
@@ -1154,7 +1174,9 @@ _sweep_build_partial_repo() {
 
   HOOK_EXPECTED_REPOS=()
   PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
-  [ "$status" -eq 0 ]
+  # partial-repo is a gap, so rc=2 (partial success) under the widened
+  # contract, not rc=0.
+  [ "$status" -eq 2 ]
   [ -f "${_markers}/partial-repo.ran" ]
   [[ "$output" == *"1 gaps"* ]]
   [[ "$output" == *"[WARN]"* ]]
@@ -1184,7 +1206,8 @@ _sweep_build_partial_repo() {
 
   HOOK_EXPECTED_REPOS=()
   PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
-  [ "$status" -eq 0 ]
+  # Two gaps, so rc=2 (partial success) under the widened contract, not rc=0.
+  [ "$status" -eq 2 ]
   [ -f "${_markers}/partial-hooks-repo.ran" ]
   [ -f "${_markers}/no-hooks-dir-repo.ran" ]
   [[ "$output" == *"2 gaps"* ]]
@@ -1202,7 +1225,8 @@ _sweep_build_partial_repo() {
 
   HOOK_EXPECTED_REPOS=(no-makefile-repo never-cloned-repo)
   PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
-  [ "$status" -eq 0 ]
+  # Two gaps, so rc=2 (partial success) under the widened contract, not rc=0.
+  [ "$status" -eq 2 ]
   [[ "$output" == *"0 checked"* ]]
   [[ "$output" == *"2 gaps"* ]]
   [[ "$output" == *"no-makefile-repo: no Makefile"* ]]
@@ -1220,7 +1244,8 @@ _sweep_build_partial_repo() {
 
   HOOK_EXPECTED_REPOS=(has-makefile-no-target)
   PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
-  [ "$status" -eq 0 ]
+  # One gap, so rc=2 (partial success) under the widened contract, not rc=0.
+  [ "$status" -eq 2 ]
   [[ "$output" == *"1 gaps"* ]]
   [[ "$output" == *"has-makefile-no-target: Makefile has no install-hooks target"* ]]
   [[ "$output" != *"has-makefile-no-target: no Makefile"* ]]
@@ -1235,7 +1260,10 @@ _sweep_build_partial_repo() {
 
   HOOK_EXPECTED_REPOS=()
   DRY_RUN=1 PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
-  [ "$status" -eq 0 ]
+  # Both fixture repos are pre-install (2 real gaps), so rc=2 (partial
+  # success) under the widened contract, not rc=0 -- DRY_RUN does not
+  # change which counters drive the return code.
+  [ "$status" -eq 2 ]
   # run_cmd only prints under DRY_RUN -- neither recipe's own marker touch
   # ever executes, proving make itself was never really invoked.
   [ ! -f "${_markers}/repo-one.ran" ]
@@ -1350,7 +1378,9 @@ _sweep_build_stray_unreadable_repo() {
 
   HOOK_EXPECTED_REPOS=()
   PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
-  [ "$status" -eq 0 ]
+  # mode111-repo lands in the "unknown" clause, so rc=2 (partial success)
+  # under the widened contract, not rc=0.
+  [ "$status" -eq 2 ]
   [ -f "${_markers}/mode111-repo.ran" ]
   [[ "$output" == *"0 gaps"* ]]
   [[ "$output" != *"updated (mode111-repo"* ]]
@@ -1381,7 +1411,9 @@ _sweep_build_stray_unreadable_repo() {
 
   HOOK_EXPECTED_REPOS=()
   PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
-  [ "$status" -eq 0 ]
+  # stray-repo lands in the "unknown" clause, so rc=2 (partial success)
+  # under the widened contract, not rc=0.
+  [ "$status" -eq 2 ]
   [ -f "${_markers}/stray-repo.ran" ]
   [[ "$output" == *"0 gaps"* ]]
   [[ "$output" != *"updated (stray-repo"* ]]
@@ -1424,7 +1456,9 @@ _sweep_build_stray_unreadable_repo() {
 
   HOOK_EXPECTED_REPOS=()
   PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
-  [ "$status" -eq 0 ]
+  # Two gaps (zzz-gap-one/two), so rc=2 (partial success) under the widened
+  # contract, not rc=0.
+  [ "$status" -eq 2 ]
   [[ "$output" == *"2 updated (aaa-up-one, aaa-up-two)"* ]]
   [[ "$output" == *"2 gaps (zzz-gap-one: missing pre-commit commit-msg; zzz-gap-two: missing pre-commit commit-msg)"* ]]
 }
@@ -1489,7 +1523,10 @@ _sweep_build_stray_unreadable_repo() {
 
   HOOK_EXPECTED_REPOS=()
   PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
-  [ "$status" -eq 0 ]
+  # fresh-repo's recipe only installs pre-commit, leaving pre-push and
+  # commit-msg missing -- a gap, so rc=2 (partial success) under the
+  # widened contract, not rc=0.
+  [ "$status" -eq 2 ]
   [ -f "${_markers}/fresh-repo.ran" ]
   [[ "$output" == *"1 updated (fresh-repo)"* ]]
 }
@@ -1531,9 +1568,328 @@ _sweep_build_stray_unreadable_repo() {
 
   HOOK_EXPECTED_REPOS=("" "real-repo")
   PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
-  [ "$status" -eq 0 ]
+  # real-repo is a gap, so rc=2 (partial success) under the widened
+  # contract, not rc=0.
+  [ "$status" -eq 2 ]
   [[ "$output" == *"1 gaps (real-repo: no Makefile)"* ]]
   [[ "$output" != *"2 gaps"* ]]
   [[ "$output" != *": no Makefile; "* ]]
   [[ "$output" != *"( : no Makefile"* ]]
+}
+
+@test "_git_hooks_hookspath_offenders prints nothing and returns 0 when neither scope is set" {
+  local _g="${TESTDIR}/gitconfig-global" _s="${TESTDIR}/gitconfig-system"
+  : > "${_g}"; : > "${_s}"
+  GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" run _git_hooks_hookspath_offenders
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "_git_hooks_hookspath_offenders reports a global pin with its scope label" {
+  local _g="${TESTDIR}/gc" _s="${TESTDIR}/sc"
+  printf '[core]\n\thooksPath = /tmp/mine\n' > "${_g}"; : > "${_s}"
+  GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" run _git_hooks_hookspath_offenders
+  [ "$status" -eq 0 ]
+  [ "$output" = "$(printf 'global\t/tmp/mine')" ]
+}
+
+@test "_git_hooks_hookspath_offenders reports a system pin with its scope label" {
+  local _g="${TESTDIR}/gc" _s="${TESTDIR}/sc"
+  : > "${_g}"; printf '[core]\n\thooksPath = /etc/hooks\n' > "${_s}"
+  GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" run _git_hooks_hookspath_offenders
+  [ "$status" -eq 0 ]
+  [ "$output" = "$(printf 'system\t/etc/hooks')" ]
+}
+
+@test "_git_hooks_hookspath_offenders reports both scopes as separate lines, system first" {
+  local _g="${TESTDIR}/gc" _s="${TESTDIR}/sc"
+  printf '[core]\n\thooksPath = /tmp/mine\n' > "${_g}"
+  printf '[core]\n\thooksPath = /etc/hooks\n' > "${_s}"
+  GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" run _git_hooks_hookspath_offenders
+  [ "${#lines[@]}" -eq 2 ]
+  [ "${lines[0]}" = "$(printf 'system\t/etc/hooks')" ]
+  [ "${lines[1]}" = "$(printf 'global\t/tmp/mine')" ]
+}
+
+@test "_git_hooks_hookspath_offenders reports a pin whose path does not exist" {
+  local _g="${TESTDIR}/gc" _s="${TESTDIR}/sc"
+  printf '[core]\n\thooksPath = /nonexistent/nope\n' > "${_g}"; : > "${_s}"
+  GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" run _git_hooks_hookspath_offenders
+  [ "$status" -eq 0 ]
+  [ "$output" = "$(printf 'global\t/nonexistent/nope')" ]
+}
+
+@test "_git_hooks_hookspath_offenders reports a scope pinned to an empty value" {
+  local _g="${TESTDIR}/gc" _s="${TESTDIR}/sc"
+  printf '[core]\n\thooksPath =\n' > "${_g}"; : > "${_s}"
+  GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" run _git_hooks_hookspath_offenders
+  [ "$status" -eq 0 ]
+  [ "${#lines[@]}" -eq 1 ]
+  [ "${lines[0]}" = "$(printf 'global\t')" ]
+}
+
+@test "_git_hooks_hookspath_offenders is idempotent across two calls in one shell" {
+  local _g="${TESTDIR}/gc" _s="${TESTDIR}/sc"
+  printf '[core]\n\thooksPath = /tmp/mine\n' > "${_g}"; : > "${_s}"
+  local _first _second
+  _first="$(GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" _git_hooks_hookspath_offenders)"
+  _second="$(GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" _git_hooks_hookspath_offenders)"
+  [ "${_first}" = "${_second}" ]
+  [ "${_first}" = "$(printf 'global\t/tmp/mine')" ]
+}
+
+# ── Task 3: install_git_hooks_all_repos hooksPath reporting ─────────────────
+#
+# Isolated like the Task 4 sweep fixtures above (own PERSONAL_GITREPOS tree,
+# HOOK_EXPECTED_REPOS=() override) rather than the shared 9-fixture tree
+# setup() builds -- that tree includes repo-failing (`make` exits 1), which
+# would force rc=1 and mask the rc=2 contract these tests exist to check.
+# A single already-installed repo (_sweep_seed_installed) keeps the
+# non-hookspath gap sources (missing hooks, no hooks directory, unreadable
+# hooks) at 0 -- but a hooksPath pin overrides EVERY repo's --git-path hooks
+# resolution, including this one's, so the pin itself must ALSO point at a
+# real directory holding the three mandated hooks. Point it anywhere else
+# (a nonexistent path, as this block used to) and _git_hooks_check_complete
+# reports its OWN "no hooks directory" gap, which forces rc=2 on its own --
+# masking the hookspath contribution entirely and making these tests
+# mutation-blind to the very code path they exist to check. Each test below
+# asserts "0 gaps" for exactly this reason: it is what proves rc=2 here is
+# attributable to the pin alone.
+
+@test "install_git_hooks_all_repos reports a global hooksPath pin and returns 2" {
+  local _base="${TESTDIR}/sweep-hookspath-global"
+  local _markers="${TESTDIR}/sweep-hookspath-global-markers"
+  local _g="${TESTDIR}/gc-hp1" _s="${TESTDIR}/sc-hp1"
+  mkdir -p "${_base}" "${_markers}"
+  _sweep_build_cp_repo "${_base}" "clean-repo" "${_markers}"
+  _sweep_seed_installed "${_base}/clean-repo"
+
+  # The pin redirects EVERY repo's --git-path hooks to this directory
+  # instead of .git/hooks -- it must hold the three mandated hooks itself,
+  # or _git_hooks_check_complete reports its own gap and rc=2 stops being
+  # attributable to the pin (see the block comment above).
+  local _pinned_hooks="${TESTDIR}/pinned-hooks-1"
+  mkdir -p "${_pinned_hooks}"
+  local _hook
+  for _hook in pre-commit pre-push commit-msg; do
+    printf '#!/usr/bin/env bash\nexit 0\n' > "${_pinned_hooks}/${_hook}"
+    chmod +x "${_pinned_hooks}/${_hook}"
+  done
+  printf '[core]\n\thooksPath = %s\n' "${_pinned_hooks}" > "${_g}"; : > "${_s}"
+
+  HOOK_EXPECTED_REPOS=()
+  GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"core.hooksPath pinned"* ]]
+  [[ "$output" == *"global"* ]]
+  [[ "$output" == *"${_pinned_hooks}"* ]]
+  [[ "$output" == *"0 gaps"* ]]
+  [[ "$output" != *"unknown"* ]]
+}
+
+@test "install_git_hooks_all_repos joins two hooksPath offenders with '; ' not ';'" {
+  local _base="${TESTDIR}/sweep-hookspath-both"
+  local _markers="${TESTDIR}/sweep-hookspath-both-markers"
+  local _g="${TESTDIR}/gc-hp2" _s="${TESTDIR}/sc-hp2"
+  mkdir -p "${_base}" "${_markers}"
+  _sweep_build_cp_repo "${_base}" "clean-repo" "${_markers}"
+  _sweep_seed_installed "${_base}/clean-repo"
+
+  # global overrides system for the EFFECTIVE hooksPath git resolves when
+  # both scopes are pinned (verified against real git: rev-parse
+  # --git-path hooks returns the global value) -- only the global directory
+  # needs real hooks for gaps to stay 0. The system value is still read and
+  # reported by _git_hooks_hookspath_offenders (it reads each scope
+  # explicitly, not the merged/effective value), so it can stay a bare
+  # path -- this test's own subject is the join separator, not resolution.
+  local _pinned_hooks="${TESTDIR}/pinned-hooks-2"
+  mkdir -p "${_pinned_hooks}"
+  local _hook
+  for _hook in pre-commit pre-push commit-msg; do
+    printf '#!/usr/bin/env bash\nexit 0\n' > "${_pinned_hooks}/${_hook}"
+    chmod +x "${_pinned_hooks}/${_hook}"
+  done
+  printf '[core]\n\thooksPath = %s\n' "${_pinned_hooks}" > "${_g}"
+  printf '[core]\n\thooksPath = /tmp/two\n' > "${_s}"
+
+  HOOK_EXPECTED_REPOS=()
+  GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"system: /tmp/two; global: ${_pinned_hooks}"* ]]
+  [[ "$output" == *"0 gaps"* ]]
+  [[ "$output" != *"unknown"* ]]
+}
+
+@test "install_git_hooks_all_repos renders a hooksPath pinned to an empty value as (empty)" {
+  local _base="${TESTDIR}/sweep-hookspath-empty"
+  local _markers="${TESTDIR}/sweep-hookspath-empty-markers"
+  local _g="${TESTDIR}/gc-hp3" _s="${TESTDIR}/sc-hp3"
+  mkdir -p "${_base}" "${_markers}"
+  _sweep_build_cp_repo "${_base}" "clean-repo" "${_markers}"
+  _sweep_seed_installed "${_base}/clean-repo"
+
+  # An EMPTY hooksPath value resolves --git-path hooks to the repo root
+  # itself (git returns "./"), not to .git/hooks or any other directory --
+  # verified against real git. Seed the mandated hooks directly at the
+  # repo's root (in addition to _sweep_seed_installed's .git/hooks copy,
+  # which this pin bypasses) so gaps stay 0 under the pin.
+  local _hook
+  for _hook in pre-commit pre-push commit-msg; do
+    cp "${_base}/clean-repo/scripts/${_hook}" "${_base}/clean-repo/${_hook}"
+    chmod +x "${_base}/clean-repo/${_hook}"
+  done
+  printf '[core]\n\thooksPath =\n' > "${_g}"; : > "${_s}"
+
+  HOOK_EXPECTED_REPOS=()
+  GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"global: (empty)"* ]]
+  [[ "$output" == *"0 gaps"* ]]
+  [[ "$output" != *"unknown"* ]]
+}
+
+@test "install_git_hooks_all_repos renders a whitespace-only hooksPath pin as (empty)" {
+  local _base="${TESTDIR}/sweep-hookspath-whitespace"
+  local _markers="${TESTDIR}/sweep-hookspath-whitespace-markers"
+  local _g="${TESTDIR}/gc-hp4" _s="${TESTDIR}/sc-hp4"
+  mkdir -p "${_base}" "${_markers}"
+  _sweep_build_cp_repo "${_base}" "clean-repo" "${_markers}"
+  _sweep_seed_installed "${_base}/clean-repo"
+
+  # git strips UNQUOTED trailing whitespace from a config value -- a quoted
+  # " " survives as a literal single space, which is exactly as unusable a
+  # hooks directory as a fully empty value and must render identically.
+  printf '[core]\n\thooksPath = " "\n' > "${_g}"; : > "${_s}"
+  # Guard the guard: confirm the fixture really yields a single-space
+  # value before trusting the (empty) assertion below.
+  local _actual
+  _actual="$(GIT_CONFIG_GLOBAL="${_g}" git config --global --get core.hooksPath)"
+  [ "${_actual}" = " " ]
+
+  # A whitespace-only value does NOT resolve like an empty one: git
+  # returns the literal " " path unchanged (no "./" prefix, unlike the
+  # truly-empty case above), so _git_hooks_dir joins it onto the repo dir
+  # as "<repo>/ " -- a subdirectory literally named a single space, not the
+  # repo root. Verified against real git and against _git_hooks_dir
+  # directly. Seed the mandated hooks there so gaps stay 0 under the pin.
+  mkdir -p "${_base}/clean-repo/ "
+  local _hook
+  for _hook in pre-commit pre-push commit-msg; do
+    cp "${_base}/clean-repo/scripts/${_hook}" "${_base}/clean-repo/ /${_hook}"
+    chmod +x "${_base}/clean-repo/ /${_hook}"
+  done
+
+  HOOK_EXPECTED_REPOS=()
+  GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"global: (empty)"* ]]
+  [[ "$output" == *"0 gaps"* ]]
+  [[ "$output" != *"unknown"* ]]
+}
+
+# ── Task 4 (follow-on): fold pin-manufactured rc=2 gaps out of _gaps ────────
+#
+# The tests above all deliberately point the pin at a directory holding the
+# three mandated hooks, so check_complete never sees rc=2 for them at all --
+# that isolation was needed to test the pin-detection/reporting mechanism in
+# isolation from the per-repo gap-classification bug this follow-on fixes.
+# The tests below deliberately point the pin at a directory that does NOT
+# satisfy check_complete, so the rc=2 branch fires for real and the folding
+# behavior is genuinely exercised.
+
+@test "install_git_hooks_all_repos folds a pin-manufactured no-hooks-dir gap into one aggregate across multiple repos, with no per-repo gap line or warning" {
+  local _base="${TESTDIR}/sweep-hookspath-fold"
+  local _markers="${TESTDIR}/sweep-hookspath-fold-markers"
+  local _g="${TESTDIR}/gc-fold" _s="${TESTDIR}/sc-fold"
+  mkdir -p "${_base}" "${_markers}"
+  _sweep_build_cp_repo "${_base}" "aaa-repo" "${_markers}"
+  _sweep_build_cp_repo "${_base}" "bbb-repo" "${_markers}"
+
+  # A pin to a directory that never exists: EVERY discovered repo's
+  # --git-path hooks resolves here now, so check_complete returns rc=2 for
+  # both -- the exact shape this fold exists to collapse into one line.
+  printf '[core]\n\thooksPath = %s\n' "${TESTDIR}/nonexistent-fold-pin" > "${_g}"; : > "${_s}"
+
+  HOOK_EXPECTED_REPOS=()
+  GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"0 gaps"* ]]
+  [[ "$output" == *"core.hooksPath pinned"* ]]
+  [[ "$output" == *"2 repos report no hooks directory as a consequence of the pin"* ]]
+  [[ "$output" != *"no hooks directory (install-hooks cannot fix this)"* ]]
+  [[ "$output" != *"no hooks directory at all"* ]]
+}
+
+@test "install_git_hooks_all_repos still reports a genuine no-hooks-dir gap per-repo when no pin is present (regression guard)" {
+  local _base="${TESTDIR}/sweep-nopin-realgap"
+  local _markers="${TESTDIR}/sweep-nopin-realgap-markers"
+  mkdir -p "${_base}" "${_markers}"
+  local _repo="${_base}/no-hooks-dir-repo"
+  mkdir -p "${_repo}"
+  git init -q "${_repo}"
+  rm -rf "${_repo}/.git/hooks"
+  printf 'install-hooks:\n\ttouch "%s/no-hooks-dir-repo.ran"\n' "${_markers}" > "${_repo}/Makefile"
+
+  # setup()'s default GIT_CONFIG_GLOBAL/GIT_CONFIG_SYSTEM (empty files, no
+  # pin) apply here unmodified -- this proves the _hookspath -eq 0 path is
+  # unchanged by the fold.
+  HOOK_EXPECTED_REPOS=()
+  PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"1 gaps"* ]]
+  [[ "$output" == *"no-hooks-dir-repo: no hooks directory (install-hooks cannot fix this)"* ]]
+  [[ "$output" == *"[WARN]"* ]]
+  [[ "$output" == *"no-hooks-dir-repo: no hooks directory at all"* ]]
+  [[ "$output" != *"core.hooksPath pinned"* ]]
+  [[ "$output" != *"consequence of the pin"* ]]
+}
+
+@test "install_git_hooks_all_repos still reports a genuine missing-hook gap under a pin, distinct from the folded no-hooks-dir class" {
+  local _base="${TESTDIR}/sweep-hookspath-missing"
+  local _markers="${TESTDIR}/sweep-hookspath-missing-markers"
+  local _g="${TESTDIR}/gc-missing" _s="${TESTDIR}/sc-missing"
+  mkdir -p "${_base}" "${_markers}"
+  _sweep_build_cp_repo "${_base}" "clean-repo" "${_markers}"
+  _sweep_seed_installed "${_base}/clean-repo"
+
+  # Pinned directory is real but incomplete -- missing commit-msg -- so
+  # check_complete's rc=1 branch fires (a real, unfolded gap), not rc=2.
+  # This proves only the rc=2 class is folded: rc=1 stays exactly as it was.
+  local _pinned_hooks="${TESTDIR}/pinned-hooks-missing"
+  mkdir -p "${_pinned_hooks}"
+  local _hook
+  for _hook in pre-commit pre-push; do
+    printf '#!/usr/bin/env bash\nexit 0\n' > "${_pinned_hooks}/${_hook}"
+    chmod +x "${_pinned_hooks}/${_hook}"
+  done
+  printf '[core]\n\thooksPath = %s\n' "${_pinned_hooks}" > "${_g}"; : > "${_s}"
+
+  HOOK_EXPECTED_REPOS=()
+  GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"1 gaps"* ]]
+  [[ "$output" == *"clean-repo: missing commit-msg"* ]]
+  [[ "$output" == *"core.hooksPath pinned"* ]]
+  [[ "$output" != *"consequence of the pin"* ]]
+}
+
+@test "install_git_hooks_all_repos returns 2 when every gap is folded and _gaps itself is 0 (return-code guard)" {
+  # Load-bearing: proves the return block's `${_hookspath} -gt 0 ||` term is
+  # still what drives rc=2 here, now that folding can legitimately drive
+  # _gaps to 0 even though real gaps exist (just reclassified). Mutation-
+  # checked by hand: deleting that term from the return block's condition
+  # makes this test fail (status becomes 0); reverting makes it pass again.
+  local _base="${TESTDIR}/sweep-hookspath-rcguard"
+  local _markers="${TESTDIR}/sweep-hookspath-rcguard-markers"
+  local _g="${TESTDIR}/gc-rcguard" _s="${TESTDIR}/sc-rcguard"
+  mkdir -p "${_base}" "${_markers}"
+  _sweep_build_cp_repo "${_base}" "solo-repo" "${_markers}"
+
+  printf '[core]\n\thooksPath = %s\n' "${TESTDIR}/nonexistent-rcguard-pin" > "${_g}"; : > "${_s}"
+
+  HOOK_EXPECTED_REPOS=()
+  GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"0 gaps"* ]]
+  [[ "$output" == *"1 repos report no hooks directory as a consequence of the pin"* ]]
 }

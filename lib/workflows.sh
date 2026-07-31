@@ -182,7 +182,33 @@ run_setup_user() {
   # entire script (run_setup_or_developer, run_developer_or_ansible never
   # run) on a single broken repo's Makefile, and would also skip
   # _ledger_write_run_entry on exactly the runs worth recording.
-  install_git_hooks_all_repos || log_warn "git hooks sweep reported failures — see above"
+  #
+  # rc is captured and branched on rather than treated as a bare pass/fail:
+  # install_git_hooks_all_repos returns 2 for gaps/unknowns/a pinned
+  # hooksPath, none of which is a "failure" in the rc-1 sense. Collapsing
+  # both non-zero codes into the same "reported failures" message would
+  # tell an operator with a clean sweep and only a gap (e.g. a machine that
+  # doesn't clone every repo on HOOK_EXPECTED_REPOS) that something failed
+  # when nothing did.
+  #
+  # `|| _hooks_rc=$?`, not a bare call followed by `local _hooks_rc=$?`:
+  # bats runs every test body under errexit, and a bare non-zero statement
+  # that isn't the left side of an AND/OR list aborts the test immediately
+  # -- silently, because _dotfiles_run_tmpdir_setup's own EXIT trap (set
+  # just above, in this same function) clobbers bats' trap-based "not ok"
+  # reporting on the way out. Reproduced: every bare (non-`run`-wrapped)
+  # caller of run_setup_user in workflows.bats vanished from the TAP
+  # stream with no ok/not-ok line at all when this was a bare statement.
+  # The `||` form never triggers errexit regardless of the command's exit
+  # status, matching the pre-existing `setup_claude_mcp || return 1` style
+  # used everywhere else in this function.
+  local _hooks_rc=0
+  install_git_hooks_all_repos || _hooks_rc=$?
+  if [[ ${_hooks_rc} -eq 1 ]]; then
+    log_warn "git hooks sweep reported failures — see above"
+  elif [[ ${_hooks_rc} -eq 2 ]]; then
+    log_warn "git hooks sweep reported gaps or a pinned core.hooksPath — see above"
+  fi
   _ledger_write_run_entry "setup_user" 0 || true
 }
 
@@ -530,7 +556,12 @@ PY
     # previous cycle's hooks and reports success.
     _update_record_start "git-hooks"
     install_git_hooks_all_repos 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_git-hooks"
-    _update_record_end "git-hooks" "${PIPESTATUS[0]}"
+    local _git_hooks_rc="${PIPESTATUS[0]}"
+    _update_record_end "git-hooks" "$(( _git_hooks_rc == 2 ? 0 : _git_hooks_rc ))"
+    if [[ ${_git_hooks_rc} -eq 2 ]]; then
+      _update_warn "git-hooks" "gaps or a pinned core.hooksPath — see detail"
+      _update_write_detail_from_err "git-hooks" "warning output"
+    fi
 
     update_aws_cli
     update_rust

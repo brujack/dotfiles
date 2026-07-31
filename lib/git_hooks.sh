@@ -278,14 +278,54 @@ _git_hooks_join() {
   printf '%s' "${_out}"
 }
 
+# _git_hooks_hookspath_offenders prints one "scope<TAB>value" line per git
+# scope that has core.hooksPath set, where scope is literally "system" or
+# "global" and value may be empty. Prints nothing when neither scope has the
+# key set at all. Contract: ALWAYS returns 0 -- an empty result means
+# "checked, clean", and callers count lines rather than reading the exit
+# code as a verdict.
+#
+# An empty value is reported, not skipped: `git config --global
+# core.hooksPath ""` leaves the key present with an empty value (rc 0 on
+# --get, not rc 1), and git honors that as a real pin -- it disables every
+# hook on the machine just as effectively as a pin to a bogus path. Treating
+# "key present, value empty" the same as "key absent" would report clean on
+# exactly the machine state this function exists to catch.
+#
+# Scopes are read explicitly rather than via a bare `git config --get`,
+# which returns the EFFECTIVE value after system->global->local precedence
+# and so cannot say which scope to unset -- the one thing the operator needs.
+#
+# No `env -u GIT_DIR ...` strip here, unlike every other git call in this
+# file: neither read takes repo context, so an inherited GIT_DIR cannot
+# redirect them. The strip is still required on the `make install-hooks`
+# invocation, which does.
+#
+# There is deliberately NO per-repo arm. A per-clone pin that resolves has no
+# route to a machine where it breaks (git never transfers .git/config; the
+# two rsync destinations carry --exclude=personal since #182; the ratna push
+# is archive-only), and every per-clone shape that CAN hurt is already caught
+# by _git_hooks_check_complete's rc 1/2.
+_git_hooks_hookspath_offenders() {
+  local _scope _value
+  for _scope in system global; do
+    # --get exits 1 when unset. That is the normal clean path, not an error,
+    # and must not leak out of this function as a failure. rc 0 with an
+    # empty value means the key IS set (to empty) -- fall through to print.
+    _value="$(git config "--${_scope}" --get core.hooksPath 2>/dev/null)" || continue
+    printf '%s\t%s\n' "${_scope}" "${_value}"
+  done
+  return 0
+}
+
 # install_git_hooks_all_repos sweeps every repo _git_hooks_discover() finds,
 # running `make -s -C <repo> install-hooks` in each and reporting what
 # changed. Fail-closed, not fail-fast: every discovered repo is attempted
 # regardless of an earlier one's outcome, and the function returns 1 only
 # once the whole sweep has run — a single broken Makefile must not cost the
-# repos discovered after it. Gaps (missing hooks, or no hooks directory at
-# all) are counted and named in the summary but never affect the return
-# code — only a failed `make` call does.
+# repos discovered after it. Return code contract: 0 clean, 1 a failed
+# `make` call, 2 partial success (gaps, unknowns, or a pinned hooksPath,
+# none of which a failed make explains) -- see the return block below.
 install_git_hooks_all_repos() {
   local _dry=0
   [[ -n "${DRY_RUN:-}" ]] && _dry=1
@@ -295,9 +335,12 @@ install_git_hooks_all_repos() {
   local _updated=0
   local _gaps=0
   local _unknown=0
+  local _hookspath=0
+  local _hookspath_gaps=0
   local -a _updated_repos=()
   local -a _gap_lines=()
   local -a _unknown_repos=()
+  local -a _hookspath_lines=()
 
   # check_complete reads the live filesystem directly (not through
   # run_cmd), so it runs for real under DRY_RUN too -- unlike the digest,
@@ -307,6 +350,32 @@ install_git_hooks_all_repos() {
   # labeled so it can't be mistaken for a post-install finding.
   local _dry_note=""
   [[ ${_dry} -eq 1 ]] && _dry_note=" (pre-run state; make was not executed)"
+
+  # A global/system pin is a cause, not a symptom: it redirects or disables
+  # hooks in every repo on this box at once. Detected here, before the
+  # per-repo sweep below, so _hookspath is already known when each repo's
+  # _git_hooks_check_complete verdict is classified: a pin manufactures an
+  # rc=2 "no hooks directory" verdict for every discovered repo (all of
+  # them now resolve --git-path hooks to the same pinned, typically-broken
+  # path), and that per-repo rc=2 is folded into _hookspath_gaps below
+  # instead of _gaps -- none of those repos are actually broken, and
+  # `make install-hooks` cannot fix a pinned scope regardless of which repo
+  # it's run in. The remedy is unsetting the pin, not touching any of the
+  # affected repos.
+  local _hp_scope _hp_value
+  while IFS=$'\t' read -r _hp_scope _hp_value; do
+    [[ -z "${_hp_scope}" ]] && continue
+    _hookspath=$((_hookspath + 1))
+    # Empty value is a real pin that disables hooks -- see Task 1's Contract.
+    # Whitespace-only is the same hazard under a different disguise -- git
+    # strips unquoted trailing whitespace from a config value, but a quoted
+    # " " survives and is just as unusable as a hooks directory. Mirrors the
+    # doctor surface's whitespace-aware check (lib/helpers.sh) so the two
+    # surfaces render the same pin identically instead of diverging.
+    [[ -z "${_hp_value//[[:space:]]/}" ]] && _hp_value="(empty)"
+    _hookspath_lines+=("${_hp_scope}: ${_hp_value}")
+    log_warn "core.hooksPath pinned at ${_hp_scope} scope: ${_hp_value} (remedy: git config --${_hp_scope} --unset core.hooksPath)"
+  done <<< "$(_git_hooks_hookspath_offenders)"
 
   local _dir
   while IFS= read -r _dir; do
@@ -355,7 +424,8 @@ install_git_hooks_all_repos() {
       fi
     fi
 
-    # gaps never affect the return code.
+    # gaps do not make this a failure (rc 1); they contribute to partial
+    # success (rc 2) -- see the return block.
     local _missing _cc_rc
     _missing="$(_git_hooks_check_complete "${_dir}")"
     _cc_rc=$?
@@ -366,9 +436,18 @@ install_git_hooks_all_repos() {
         log_warn "${_name}: missing ${_missing}${_dry_note}"
         ;;
       2)
-        _gaps=$((_gaps + 1))
-        _gap_lines+=("${_name}: no hooks directory (install-hooks cannot fix this)")
-        log_warn "${_name}: no hooks directory at all${_dry_note}"
+        if [[ ${_hookspath} -gt 0 ]]; then
+          # This repo's own hooks directory may be fine -- the pin is what
+          # redirected --git-path hooks away from it. Reporting it as a
+          # per-repo gap would manufacture a false finding for every
+          # discovered repo on a pinned box; fold it into the pin's own
+          # aggregate instead (see the detection block above).
+          _hookspath_gaps=$((_hookspath_gaps + 1))
+        else
+          _gaps=$((_gaps + 1))
+          _gap_lines+=("${_name}: no hooks directory (install-hooks cannot fix this)")
+          log_warn "${_name}: no hooks directory at all${_dry_note}"
+        fi
         ;;
     esac
   done < <(_git_hooks_discover)
@@ -416,6 +495,16 @@ install_git_hooks_all_repos() {
   if [[ ${_unknown} -gt 0 ]]; then
     _summary+=", ${_unknown} unknown ($(_git_hooks_join '; ' "${_unknown_repos[@]}"))"
   fi
+  if [[ ${_hookspath} -gt 0 ]]; then
+    _summary+=", ${_hookspath} core.hooksPath pinned ($(_git_hooks_join '; ' "${_hookspath_lines[@]}"))"
+  fi
+  # Repos whose rc=2 verdict was folded above (not counted in _gaps at
+  # all) are named here as one aggregate instead of individually: none of
+  # them are actually broken, and the fix is unsetting the pin, not
+  # touching any of the affected repos.
+  if [[ ${_hookspath_gaps} -gt 0 ]]; then
+    _summary+=", ${_hookspath_gaps} repos report no hooks directory as a consequence of the pin"
+  fi
   # design.md's Reporting section names checked/updated/gap/failure counts
   # as what the line reports. A make failure otherwise surfaces only as an
   # earlier log_warn, separated from the summary by every other -t update
@@ -425,7 +514,14 @@ install_git_hooks_all_repos() {
   fi
   log_info "${_summary}"
 
+  # Contract: 0 clean, 1 a make call failed, 2 partial success -- gaps,
+  # unknowns, or a pinned hooksPath, none of which a failed make explains.
+  # 2 mirrors sync_git_repos/sync_legacy_dirs so run_update's existing
+  # rc==2 warn mapping applies unchanged.
   [[ ${_failures} -gt 0 ]] && return 1
+  if [[ ${_hookspath} -gt 0 || ${_gaps} -gt 0 || ${_unknown} -gt 0 ]]; then
+    return 2
+  fi
   return 0
 }
 

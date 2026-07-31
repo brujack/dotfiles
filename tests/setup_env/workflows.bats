@@ -238,6 +238,18 @@ teardown() {
   install_git_hooks_all_repos() { return 1; }
   run run_setup_user
   [ "$status" -eq 0 ]
+  [[ "$output" == *"git hooks sweep reported failures"* ]]
+  [[ "$output" != *"gaps or a pinned core.hooksPath"* ]]
+}
+
+@test "run_setup_user warns partial success (not failure) when install_git_hooks_all_repos returns 2" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  install_git_hooks_all_repos() { return 2; }
+  run run_setup_user
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"git hooks sweep reported gaps or a pinned core.hooksPath"* ]]
+  [[ "$output" != *"git hooks sweep reported failures"* ]]
 }
 
 @test "run_setup_user still calls _ledger_write_run_entry when install_git_hooks_all_repos returns 1" {
@@ -1550,6 +1562,29 @@ assert_all_npm_globals_pinned() {
   # this test body.
   run run_update
   [[ "$output" == *"[FAIL] git-hooks"* ]]
+}
+
+@test "run_update marks git-hooks WARN, not OK, when the sweep returns 2" {
+  sync_git_repos() { return 0; }
+  sync_legacy_dirs() { return 0; }
+  export -f sync_git_repos sync_legacy_dirs
+  export MACOS=1
+  unset LINUX UBUNTU
+  install_git_hooks_all_repos() { printf 'core.hooksPath pinned at global scope\n'; return 2; }
+  # No UPDATE_* flag set — relies on run_update's default "no flags = run
+  # everything" (_run_all) path, not a bare UPDATE var (_any_update_flag
+  # only checks UPDATE_BREW/PIP/GEMS/MAS/PKGS/CLAUDE, never bare UPDATE).
+  # Plain call (not `run run_update`) — `run` captures output via a command
+  # substitution subshell, so _DOTFILES_RUN_TMPDIR (exported inside run_update)
+  # would not survive back into this test body. See the git-repos WARN test
+  # above for the same established pattern.
+  run_update
+  [ -f "${_DOTFILES_RUN_TMPDIR}/status_git-hooks" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_git-hooks")" = "WARN" ]
+  [ -f "${_DOTFILES_RUN_TMPDIR}/detail_git-hooks" ]
+  [[ "$(cat "${_DOTFILES_RUN_TMPDIR}/detail_git-hooks")" == *"core.hooksPath"* ]]
+  # the regression this test exists for
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_git-hooks")" != "OK" ]
 }
 
 # ── run_update — claude/npm/pip section flags ─────────────────────────────────

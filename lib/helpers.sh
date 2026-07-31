@@ -308,6 +308,7 @@ run_doctor() {
   _doctor_check_symlink_roots
   _doctor_check_tools
   _doctor_check_cred_dirs
+  _doctor_check_hooks_path
   _doctor_check_versions
   _doctor_check_github_mcp
 
@@ -410,6 +411,46 @@ _doctor_check_cred_dirs() {
       doctor_fail "${_label}" "expected 700, got ${_perms}"
     fi
   done
+}
+_doctor_check_hooks_path() {
+  printf "\nGit hooksPath:\n"
+  local _offenders _scope _value
+  _offenders="$(_git_hooks_hookspath_offenders)"
+
+  local -a _hp_pinned=()
+  while IFS=$'\t' read -r _scope _value; do
+    [[ -z "${_scope}" ]] && continue
+    _hp_pinned+=("${_scope}")
+    # An empty OR whitespace-only value is a real pin that disables hooks,
+    # not an absent one -- render it so the FAIL line does not read "pinned
+    # to  --" or "pinned to   --" with an invisible run of spaces. Both are
+    # grouped under the same "(empty)" label because git cannot use either
+    # as a usable hooks directory, and the operator's remedy (unset the key)
+    # is identical for both.
+    [[ -z "${_value//[[:space:]]/}" ]] && _value="(empty)"
+    doctor_fail "${_scope}" \
+      "pinned to ${_value} — remedy: git config --${_scope} --unset core.hooksPath"
+  done <<< "${_offenders}"
+
+  # Each scope reports independently: a pin at one must not suppress the
+  # other's PASS, or an operator fixing the loud one has no signal that the
+  # quiet one was ever checked.
+  for _scope in system global; do
+    local _found=0 _p
+    for _p in "${_hp_pinned[@]+"${_hp_pinned[@]}"}"; do
+      [[ "${_p}" == "${_scope}" ]] && _found=1
+    done
+    [[ ${_found} -eq 0 ]] && doctor_pass "${_scope}: unset"
+  done
+
+  # Explicit, unconditional return: the loop above ends on a `[[ ]] && cmd`
+  # whose own exit status is the last thing bash sees. When the final scope
+  # (global) IS pinned, that conditional is false and the function would
+  # otherwise implicitly exit 1 -- read as a real failure by any caller that
+  # invokes it directly rather than via `run`. This check's contract is
+  # side-effect-only (doctor_fail/doctor_pass counters); a bare bash
+  # expression is not a suitable proxy for that contract.
+  return 0
 }
 _doctor_check_versions() {
   printf "\nVersions:\n"

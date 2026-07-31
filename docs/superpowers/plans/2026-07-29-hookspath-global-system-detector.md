@@ -1,5 +1,7 @@
 # Global/System `core.hooksPath` Detector Implementation Plan
 
+> **Status: DONE**
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Detect a `core.hooksPath` pin at `--global` or `--system` scope — the only scope nothing in this repo reads, and the only one where a single value redirects or disables hooks in every repo on the box — and report it from both `-t update` and `-t doctor`.
@@ -67,6 +69,10 @@ depends_on: []
 
 **Contract.** Prints zero, one, or two lines of `scope<TAB>value`, where `scope` is literally `system` or `global`. Prints nothing when both are unset. Returns 0 in every case. Callers count lines; the exit code is never a verdict.
 
+**A scope pinned to an EMPTY value is an offender and must be reported.** `git config --global core.hooksPath ""` writes `hooksPath =` — key present, value empty — and `git config --get` then exits **0 with empty stdout**, not 1. Git honors that pin: measured on git 2.55.0, a repo with an executable `.git/hooks/pre-commit` ran the hook 0 times under an empty global pin and 1 time with the pin removed. An empty pin therefore disables every hook on the machine, and skipping it would report "clean" on precisely the state this detector exists to name. Its record is `scope<TAB>` with an empty second field — a well-formed TSV line that `IFS=$'\t' read -r _scope _value` parses to scope set, value empty. Consumers render an empty value as `(empty)`.
+
+> **Amended 2026-07-31 during Phase 2 execution.** The Task 1 code-quality review found the original implementation snippet's `[[ -z "${_value}" ]] && continue` produced a false clean on this input; the main agent reproduced it end-to-end before amending. Tasks 2 and 3 below carry matching `(empty)` rendering. A separate minor finding — that `|| continue` also swallows a scope git could not read at all (rc 128, e.g. a malformed config) — was **deliberately deferred to the backlog**, on the grounds that a corrupt gitconfig makes essentially every other git call fail loudly at the same moment. What that deferral does **not** establish: a _scope-specific_ read failure (e.g. `/etc/gitconfig` unreadable while `--global` reads fine) would still be reported as clean.
+
 **Step 1 — write the first failing test** (unset case, the clean path — this is the one that catches treating `git config`'s exit 1 as an error):
 
 ```bash
@@ -85,10 +91,15 @@ Run it: `bats tests/setup_env/git_hooks.bats -f "hookspath_offenders"`. It must 
 
 ```bash
 # _git_hooks_hookspath_offenders prints one "scope<TAB>value" line per git
-# scope that pins core.hooksPath, where scope is literally "system" or
+# scope that has core.hooksPath SET, where scope is literally "system" or
 # "global". Prints nothing when neither is set. Contract: ALWAYS returns 0 --
 # an empty result means "checked, clean", and callers count lines rather than
 # reading the exit code as a verdict.
+#
+# A scope set to an EMPTY value is reported, not skipped: git treats an empty
+# core.hooksPath as a real pin that disables hooks everywhere, while
+# `git config --get` reports it as rc 0 with empty stdout. Skipping it would
+# report "clean" on a machine with every hook silently off.
 #
 # Scopes are read explicitly rather than via a bare `git config --get`,
 # which returns the EFFECTIVE value after system->global->local precedence
@@ -110,7 +121,6 @@ _git_hooks_hookspath_offenders() {
     # --get exits 1 when unset. That is the normal clean path, not an error,
     # and must not leak out of this function as a failure.
     _value="$(git config "--${_scope}" --get core.hooksPath 2>/dev/null)" || continue
-    [[ -z "${_value}" ]] && continue
     printf '%s\t%s\n' "${_scope}" "${_value}"
   done
   return 0
@@ -226,6 +236,9 @@ _doctor_check_hooks_path() {
   while IFS=$'\t' read -r _scope _value; do
     [[ -z "${_scope}" ]] && continue
     _pinned+=("${_scope}")
+    # An empty value is a real pin that disables hooks, not an absent one --
+    # render it so the FAIL line does not read "pinned to  --".
+    [[ -z "${_value}" ]] && _value="(empty)"
     doctor_fail "${_scope}" \
       "pinned to ${_value} — remedy: git config --${_scope} --unset core.hooksPath"
   done <<< "${_offenders}"
@@ -297,6 +310,16 @@ The `<<< "${_offenders}"` here-string yields one empty line when `_offenders` is
   [[ "$output" == *"[FAIL] global"* ]]
 }
 
+@test "_doctor_check_hooks_path fails on a scope pinned to an empty value and renders it (empty)" {
+  local _g="${TESTDIR}/gc" _s="${TESTDIR}/sc"
+  printf '[core]\n\thooksPath =\n' > "${_g}"; : > "${_s}"
+  _DOCTOR_PASS=0; _DOCTOR_FAIL=0; _DOCTOR_FAILED=0
+  GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" run _doctor_check_hooks_path
+  [[ "$output" == *"[FAIL] global"* ]]
+  [[ "$output" == *"pinned to (empty)"* ]]
+  [[ "$output" == *"[PASS] system: unset"* ]]
+}
+
 @test "run_doctor invokes the hooksPath check" {
   local _g="${TESTDIR}/gc" _s="${TESTDIR}/sc"
   : > "${_g}"; : > "${_s}"
@@ -355,14 +378,23 @@ parallel_group: wave-2
 }
 ```
 
-**Step 2 — implement in `install_git_hooks_all_repos`.** Add a counter alongside the existing ones (near line 296):
+**Step 2 — implement in `install_git_hooks_all_repos`.** **All line numbers this task cites for `lib/git_hooks.sh` are stale** — Task 1 added ~40 lines above this function. Locate every site by the named anchor, not the number. Verified 2026-07-31 on this branch:
+
+| Anchor                                                                 | Plan said | Actually |
+| ---------------------------------------------------------------------- | --------- | -------- |
+| `_failures` / `_gaps` / `_unknown` declarations                        | ~296      | 334-337  |
+| end of the `_git_hooks_gap_repos` loop (`done < <(...)`)               | 392       | 441      |
+| `_unknown` clause in the summary                                       | 409       | 456-458  |
+| the return block (`[[ ${_failures} -gt 0 ]] && return 1` / `return 0`) | 419-420   | 468-469  |
+
+Add a counter alongside the existing ones (at the `_failures`/`_gaps`/`_unknown` declarations):
 
 ```bash
   local _hookspath=0
   local -a _hookspath_lines=()
 ```
 
-After the `_git_hooks_gap_repos` loop and before `_updated_str` is computed (i.e. after line 392), add:
+After the `_git_hooks_gap_repos` loop (`done < <(_git_hooks_gap_repos)`) and before `_updated_str` is computed, add:
 
 ```bash
   # A global/system pin is a cause, not a symptom: it redirects or disables
@@ -374,12 +406,14 @@ After the `_git_hooks_gap_repos` loop and before `_updated_str` is computed (i.e
   while IFS=$'\t' read -r _hp_scope _hp_value; do
     [[ -z "${_hp_scope}" ]] && continue
     _hookspath=$((_hookspath + 1))
+    # Empty value is a real pin that disables hooks -- see Task 1's Contract.
+    [[ -z "${_hp_value}" ]] && _hp_value="(empty)"
     _hookspath_lines+=("${_hp_scope}: ${_hp_value}")
     log_warn "core.hooksPath pinned at ${_hp_scope} scope: ${_hp_value} (remedy: git config --${_hp_scope} --unset core.hooksPath)"
   done <<< "$(_git_hooks_hookspath_offenders)"
 ```
 
-Extend the summary line, after the `_unknown` clause (line 409):
+Extend the summary line, after the `if [[ ${_unknown} -gt 0 ]]` clause:
 
 ```bash
   if [[ ${_hookspath} -gt 0 ]]; then
@@ -389,7 +423,7 @@ Extend the summary line, after the `_unknown` clause (line 409):
 
 `_git_hooks_join` takes the separator as its first argument; note that its multi-character separator behaviour is why it exists rather than `IFS='; '` with `${arr[*]}` — `${arr[*]}` joins on the _first character_ of `IFS` only, so a two-element list would render `a;b` not `a; b`. Assert the separator with a **two**-element fixture in the test below; a one-element list cannot see this class of bug.
 
-Replace the return block (lines 419-420):
+Replace the return block (the two lines `[[ ${_failures} -gt 0 ]] && return 1` and `return 0`, immediately after `log_info "${_summary}"`):
 
 ```bash
   # Contract: 0 clean, 1 a make call failed, 2 partial success -- gaps,
@@ -419,7 +453,19 @@ Replace the return block (lines 419-420):
 }
 ```
 
-**Step 5 — the call site.** `lib/workflows.sh`, replace lines 499-501:
+**Step 4b — the empty-pin test.** An empty value is a real pin (Task 1 Contract) and must reach the summary as `(empty)`, never as a bare trailing space:
+
+```bash
+@test "install_git_hooks_all_repos renders a hooksPath pinned to an empty value as (empty)" {
+  local _g="${TESTDIR}/gc" _s="${TESTDIR}/sc"
+  printf '[core]\n\thooksPath =\n' > "${_g}"; : > "${_s}"
+  GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" run install_git_hooks_all_repos
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"global: (empty)"* ]]
+}
+```
+
+**Step 5 — the call site.** `lib/workflows.sh`. **Locate the block by name, not by line number** — dotfiles#193 shifted this file and the plan's original coordinates (499-501) are stale. `grep -n 'git-hooks' lib/workflows.sh` finds it; as of 2026-07-31 it sits at 530-533, immediately after the `legacy-rsync` block, under the comment explaining it must run after `git-repos`/`legacy-rsync`. The `git-repos` rc==2 pattern this change mirrors is at 510-517 (originally cited as 481-485, also stale). Replace:
 
 ```bash
     _update_record_start "git-hooks"
@@ -442,7 +488,7 @@ with:
 
 This is the Decision 5 fix: without it the section renders as a bare `[OK] git-hooks updated` over its own findings, because `_update_record_end` writes `OK` unconditionally on the non-zero-exit-free path (`lib/update_summary.sh:367`).
 
-**Step 6 — the summary regression test** in `tests/setup_env/workflows.bats`. Model it on the existing `git-repos` warn test at `tests/setup_env/workflows.bats:1336` (`run_update records git-repos as WARN (not OK) when sync_git_repos returns 2`):
+**Step 6 — the summary regression test** in `tests/setup_env/workflows.bats`. Model it on the existing `git-repos` warn test at `tests/setup_env/workflows.bats:1443` (`run_update records git-repos as WARN (not OK) when sync_git_repos returns 2`):
 
 ```bash
 @test "run_update marks git-hooks WARN, not OK, when the sweep returns 2" {
@@ -457,7 +503,7 @@ This is the Decision 5 fix: without it the section renders as a bare `[OK] git-h
 }
 ```
 
-Copy the harness setup verbatim from `workflows.bats:1336-1351` rather than inventing one — `run_update` needs `_DOTFILES_RUN_TMPDIR`, the section mocks, and the flag vars already wired there.
+Copy the harness setup verbatim from that same test's body (`workflows.bats:1443` onward) rather than inventing one — `run_update` needs `_DOTFILES_RUN_TMPDIR`, the section mocks, and the flag vars already wired there.
 
 **Step 7 — verify `_UPDATE_SECTION_ORDER` still contains `git-hooks`.** Per the coupling documented in `CLAUDE.md`, a section tracked but absent from that array is never printed. It is already present; confirm rather than assume:
 
