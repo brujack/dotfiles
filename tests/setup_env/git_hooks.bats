@@ -1545,3 +1545,46 @@ _sweep_build_stray_unreadable_repo() {
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
+
+@test "_git_hooks_hookspath_offenders reports a global pin with its scope label" {
+  local _g="${TESTDIR}/gc" _s="${TESTDIR}/sc"
+  printf '[core]\n\thooksPath = /tmp/mine\n' > "${_g}"; : > "${_s}"
+  GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" run _git_hooks_hookspath_offenders
+  [ "$status" -eq 0 ]
+  [ "$output" = "$(printf 'global\t/tmp/mine')" ]
+}
+
+@test "_git_hooks_hookspath_offenders reports a system pin with its scope label" {
+  local _g="${TESTDIR}/gc" _s="${TESTDIR}/sc"
+  : > "${_g}"; printf '[core]\n\thooksPath = /etc/hooks\n' > "${_s}"
+  GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" run _git_hooks_hookspath_offenders
+  [ "$status" -eq 0 ]
+  [ "$output" = "$(printf 'system\t/etc/hooks')" ]
+}
+
+@test "_git_hooks_hookspath_offenders reports both scopes as separate lines, system first" {
+  local _g="${TESTDIR}/gc" _s="${TESTDIR}/sc"
+  printf '[core]\n\thooksPath = /tmp/mine\n' > "${_g}"
+  printf '[core]\n\thooksPath = /etc/hooks\n' > "${_s}"
+  GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" run _git_hooks_hookspath_offenders
+  [ "${#lines[@]}" -eq 2 ]
+  [ "${lines[0]}" = "$(printf 'system\t/etc/hooks')" ]
+  [ "${lines[1]}" = "$(printf 'global\t/tmp/mine')" ]
+}
+
+@test "_git_hooks_hookspath_offenders reports a pin whose path does not exist" {
+  local _g="${TESTDIR}/gc" _s="${TESTDIR}/sc"
+  printf '[core]\n\thooksPath = /nonexistent/nope\n' > "${_g}"; : > "${_s}"
+  GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" run _git_hooks_hookspath_offenders
+  [ "$status" -eq 0 ]
+  [ "$output" = "$(printf 'global\t/nonexistent/nope')" ]
+}
+
+@test "_git_hooks_hookspath_offenders is idempotent across two calls in one shell" {
+  local _g="${TESTDIR}/gc" _s="${TESTDIR}/sc"
+  printf '[core]\n\thooksPath = /tmp/mine\n' > "${_g}"; : > "${_s}"
+  local _first _second
+  _first="$(GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" _git_hooks_hookspath_offenders)"
+  _second="$(GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" _git_hooks_hookspath_offenders)"
+  [ "${_first}" = "${_second}" ]
+}
