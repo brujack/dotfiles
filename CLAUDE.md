@@ -213,7 +213,7 @@ The pre-commit hook is **required**. It runs on every `git commit`:
 1. `make lint` — blocks the commit on any syntax or shellcheck failure
 2. `ggshield secret scan pre-commit` — scans staged changes for secrets before they reach the remote; skipped gracefully if ggshield is not installed
 
-The pre-push hook is **permanent**. It runs `make test` (lint + bats) on every push before the push reaches GitHub, and it **fails closed** (ADR-0017, `docs/adr/0017-pre-push-trigger-fail-closed.md`): the suite runs unless every changed path is provably inert. The inert set is deliberately small — `.md` files, anything under `docs/` or `.github/`, `LICENSE`, `CHANGELOG` — and is matched with `grep -qv`, so a single changed path outside that set is enough to trigger the run. This means `starship.toml`, `.zshrc`, `.gitignore_global`, and `ubuntu_common_packages.txt` all trigger the suite even though none is a `.sh`/`.bats`/`.zsh` file, because none is in the inert set. Skips branch deletions. This conserves GitHub Actions minutes — CI runs only on PRs.
+The pre-push hook is **permanent**. It runs `make test` (lint + bats) on every push before the push reaches GitHub, and it **fails closed** (ADR-0017, `docs/adr/0017-pre-push-trigger-fail-closed.md`): the suite runs unless every changed path is provably inert, and it also fails closed if `git diff` itself cannot resolve the push's revision range (e.g. `remote_sha` names an object the local checkout lacks) rather than silently reading that as "nothing changed". The inert set is deliberately small — `.md` files, `.yml`/`.yaml` files under `.github/`, and `LICENSE` — and is matched with `grep -qv`, so a single changed path outside that set is enough to trigger the run. `docs/` and `.github/` are **not** wholesale-inert: `make lint`'s `SHELL_FILES` walk is recursive, so a `.sh` file anywhere in the repo — including `docs/gen.sh` or `.github/scripts/foo.sh` — is linted by `make test` and must still trigger the suite. This means `starship.toml`, `.zshrc`, `.gitignore_global`, and `ubuntu_common_packages.txt` all trigger the suite even though none is a `.sh`/`.bats`/`.zsh` file, because none is in the inert set. Skips branch deletions. This conserves GitHub Actions minutes — CI runs only on PRs.
 
 **Worktree compatibility requirement:** `scripts/pre-push` must resolve repo root with `git rev-parse --show-toplevel` first, and use `git rev-parse --git-common-dir` parent only as a fallback. Direct `git-common-dir` resolution can run tests against the shared checkout instead of the active worktree branch.
 
@@ -236,7 +236,7 @@ Inline disables (`# shellcheck disable=SCxxxx # reason`) are used for remaining 
 
 `.github/workflows/ci.yml` runs on PRs to master only (the pre-push hook gates branch pushes locally):
 
-- `test` job: installs bats + shellcheck, runs `make test`, then verifies test count ≥ 840 (regression proxy; 1116 tests as of 2026-08-01)
+- `test` job: installs bats + shellcheck, runs `make test`, then verifies test count ≥ 840 (regression proxy; 1123 tests as of 2026-08-01)
 - `lint-macos` job: runs `bash -n` and `zsh -n` on all `.sh` files on `macos-latest` (advisory, not blocking auto-merge)
 - `bash-coverage` job: measures bash line coverage via PS4 xtrace on `ubuntu-latest`; **gates at 90%** — blocks auto-merge if coverage drops below floor
 - `secret-scan` job: runs gitleaks against recent commits (advisory, not blocking auto-merge)
@@ -288,7 +288,7 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 #### Bash
 
-- **Overall: 91%** (1116 tests as of 2026-08-01); gated in CI at 90% (`bash-coverage` job, blocks auto-merge on drop).
+- **Overall: 91%** (1123 tests as of 2026-08-01); gated in CI at 90% (`bash-coverage` job, blocks auto-merge on drop).
 - `make bash-coverage` measures via PS4 xtrace (`scripts/run-bash-coverage.sh`); `make push-bash-coverage` pushes `coverage/bash.json` to the `coverage-data` branch for the README badge.
 - Method detail, per-file floors/ceilings, and why kcov/bashcov are ruled out: [`dotfiles-bash-coverage`](https://github.com/brujack/ai-config/blob/master/docs/knowledge/dotfiles-bash-coverage.md).
 
