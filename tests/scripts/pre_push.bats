@@ -35,6 +35,7 @@ _commit_file() {
   bash -c "
     export PATH='${CLEAN_PATH}'
     unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+    mkdir -p \"\$(dirname '${REPO_DIR}/${_path}')\"
     printf '%s\n' '${_content}' > '${REPO_DIR}/${_path}'
     git -C '${REPO_DIR}' add '${_path}'
     git -C '${REPO_DIR}' commit --quiet -m '${_msg}'
@@ -68,6 +69,33 @@ _run_pre_push() {
   run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
   [ "$status" -eq 0 ]
   grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+}
+
+@test "pre-push runs make test when only scripts/pre-push changed" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "scripts/pre-push" "# hook" "chore: touch hook")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+}
+
+@test "pre-push runs make test when only scripts/commit-msg changed" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "scripts/commit-msg" "# hook" "chore: touch hook")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+}
+
+@test "pre-push skips when scripts/ appears mid-path, not at the start" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "docs/scripts/notes.md" "notes" "docs: notes")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
 }
 
 @test "pre-push propagates a make test failure as a non-zero exit" {
