@@ -21,7 +21,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
         range="${remote_sha}..${local_sha}"
     fi
 
-    if git diff --name-only "${range}" | grep -qE '\.(sh|bats)$|^Makefile$|^scripts/|^tests/'; then
+    if git diff --name-only "${range}" | grep -qE '\.(sh|bats|zsh)$|^Makefile$|^scripts/|^tests/'; then
         needs_test=1
     fi
 done
