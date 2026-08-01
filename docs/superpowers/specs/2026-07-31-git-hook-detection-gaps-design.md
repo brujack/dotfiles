@@ -23,6 +23,27 @@ behavioral change to either hook also touches `tests/scripts/pre_push.bats` or
 comment-only, docs-only, or trivially-mechanical edits to the two hooks. Still a real
 hole in a gate, and the fix is one alternation.
 
+### Scope widened during Phase 3: the same hole exists for `.zsh`
+
+`bug-scan` (Phase 3, Step 7) found a second instance of this exact defect class in the
+same regex, and the user approved folding it into this branch rather than deferring it.
+`tests/zshrc.d/unit.bats` runs `zsh -n` against all 7 `.config/.zshrc.d/*.zsh` files,
+so `make test` genuinely covers them — but none of them matched any alternative, so a
+push touching only those files skipped the local gate entirely. Verified end-to-end
+before fixing.
+
+**The governing rule this settles:** the gate should trigger when `make test` actually
+covers the changed file. That rule decides the boundary case too — `.zshrc` is
+deliberately **not** covered, because it is never syntax-checked by `make test` (it
+appears in the suite only as a symlink-target fixture name in `tests/setup_env/`).
+Triggering on it would run ~1100 tests for a file the suite does not check. A negative
+test pins that exclusion, so a future edit that widens to `.zshrc` fails loudly rather
+than silently.
+
+Implemented by extending the existing extension group — `\.(sh|bats)$` →
+`\.(sh|bats|zsh)$` — rather than adding a fifth alternation, keeping the regex at four
+alternatives.
+
 ## Decision
 
 **The regex adds `^scripts/`, not the two filenames.** Rejected naming
@@ -48,6 +69,12 @@ One alternation. No other change to the hook.
 - a diff containing only `scripts/pre-push` sets `needs_test=1` — the self-coverage
   case, and one of only two tests here that fail against the current regex
 - a diff containing only `scripts/commit-msg` sets `needs_test=1`
+- a diff containing only `.config/.zshrc.d/*.zsh` sets `needs_test=1` — the widened
+  `.zsh` case
+- a diff containing only `.zshrc` still exits 0 — pins the deliberate exclusion above
+- a diff containing only `scripts-old/notes.md` still exits 0 — the component-boundary
+  guard, added after review found that dropping the trailing `/` from `^scripts/`
+  passed every other test
 - a diff containing only `docs/scripts/notes.md` still exits 0 without running the
   suite — the `^` anchor guard. This replaces an earlier `.gitignore` case: the
   existing test at `pre_push.bats:55` already proves a plain non-triggering file
@@ -64,7 +91,7 @@ verified against `git ls-files` rather than asserted.
 
 ## Acceptance
 
-- `make test` passes; test count increases by 3.
+- `make test` passes; test count increases by 6 (1099 -> 1105).
 - `make lint` exits 0.
 - Bash coverage unaffected — `scripts/pre-push` is not instrumented (nothing under
   `scripts/` is; that absence is the separate "coverage include-list" backlog row).

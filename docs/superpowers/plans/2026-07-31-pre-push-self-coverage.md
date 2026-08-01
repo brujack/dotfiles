@@ -2,6 +2,14 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Scope note (Phase 3):** `bug-scan` found the same defect class for `.zsh` files —
+> `tests/zshrc.d/unit.bats` covers all 7 `.config/.zshrc.d/*.zsh` files with `zsh -n`,
+> but none of them triggered the hook. The user approved folding it in, so the shipped
+> change also extends the extension group to `\.(sh|bats|zsh)$` and adds two more BATS
+> cases (a `.zsh` positive and a `.zshrc` negative pinning the deliberate exclusion).
+> Final count is 1105, not the 1102 this plan predicted. See the spec's "Scope widened
+> during Phase 3" section.
+
 **Goal:** Make `scripts/pre-push` trigger `make test` when the only changed files are the extensionless hook scripts, so the local gate covers the files that implement it.
 
 **Architecture:** One alternation added to the hook's trigger regex, plus three BATS cases that pin the new behavior and the `^` anchor. No new files, no new functions, no consumer changes.
