@@ -125,13 +125,13 @@ _run_pre_push() {
   [ ! -f "${MOCK_CALLS_FILE}" ]
 }
 
-@test "pre-push skips a root file merely prefixed with .gitignore" {
+@test "pre-push triggers on a root file merely prefixed with .gitignore" {
   base_sha=$(_commit_file "README.md" "v1" "docs: v1")
   local_sha=$(_commit_file ".gitignore_global" "*.log" "chore: global ignore")
   _write_make_mock 0
   run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
   [ "$status" -eq 0 ]
-  [ ! -f "${MOCK_CALLS_FILE}" ]
+  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
 }
 
 @test "pre-push runs make test when only Makefile changed" {
@@ -152,13 +152,13 @@ _run_pre_push() {
   grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
 }
 
-@test "pre-push skips when only .zshrc changed" {
+@test "pre-push triggers when only .zshrc changed" {
   base_sha=$(_commit_file "README.md" "v1" "docs: v1")
   local_sha=$(_commit_file ".zshrc" "echo hi" "chore: touch zshrc")
   _write_make_mock 0
   run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
   [ "$status" -eq 0 ]
-  [ ! -f "${MOCK_CALLS_FILE}" ]
+  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
 }
 
 @test "pre-push skips when scripts/ appears mid-path, not at the start" {
@@ -243,4 +243,50 @@ _run_pre_push_leaked() {
   [ "$status" -eq 0 ]
   grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
   ! grep -qE "^GIT_(DIR|WORK_TREE|COMMON_DIR|INDEX_FILE)=" "${MOCK_CALLS_FILE}"
+}
+
+@test "pre-push runs make test when only ubuntu_common_packages.txt changed" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "ubuntu_common_packages.txt" "curl" "chore: touch ubuntu packages")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+}
+
+@test "pre-push runs make test when only starship.toml changed" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "starship.toml" "format = x" "chore: touch starship config")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+}
+
+@test "pre-push skips when only a docs/adr file changed" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "docs/adr/0017-x.md" "# ADR" "docs: touch adr")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
+@test "pre-push skips when only a .github/workflows file changed" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file ".github/workflows/ci.yml" "name: CI" "chore: touch ci workflow")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
+@test "pre-push triggers on a mixed diff with one inert and one non-inert path" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  _commit_file "README.md" "v2" "docs: v2" > /dev/null
+  local_sha=$(_commit_file "setup_env.sh" "echo hi" "feat: touch setup_env")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
 }
