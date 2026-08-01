@@ -57,10 +57,12 @@ would be silently uncovered again, which is the exact failure being fixed.
 `scripts/pre-push:24` becomes:
 
 ```bash
-if git diff --name-only "${range}" | grep -qE '\.(sh|bats)$|^Makefile$|^scripts/|^tests/'; then
+if git diff --name-only "${range}" | grep -qE '\.(sh|bats|zsh)$|^Makefile$|^scripts/|^tests/'; then
 ```
 
-One alternation. No other change to the hook.
+Two changes, both to the same line, and nothing else in the hook: `^scripts/` added as
+a fourth alternative (the original scope), and `zsh` added to the existing extension
+group (the Phase 3 widening above). The regex stays at four alternatives.
 
 ## Testing
 
