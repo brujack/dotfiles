@@ -284,6 +284,42 @@ _run_pre_push_leaked() {
   grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
 }
 
+@test "pre-push triggers on a LICENSE outside the repo root" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "docs/LICENSE" "text" "chore: nested license")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+}
+
+@test "pre-push triggers on a .github directory outside the repo root" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "docs/.github/x.yml" "on: push" "chore: nested github dir")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+}
+
+@test "pre-push triggers on a .github file merely suffixed after .yml" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file ".github/workflows/ci.yml.bak" "backup" "chore: yml backup")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+}
+
+@test "pre-push skips a .github workflow using the .yaml spelling" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file ".github/workflows/x.yaml" "on: push" "ci: yaml spelling")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
 @test "pre-push skips when only LICENSE changed" {
   base_sha=$(_commit_file "README.md" "v1" "docs: v1")
   local_sha=$(_commit_file "LICENSE" "MIT" "chore: touch license")
