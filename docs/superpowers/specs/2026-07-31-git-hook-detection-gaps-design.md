@@ -44,6 +44,24 @@ Implemented by extending the existing extension group — `\.(sh|bats)$` →
 `\.(sh|bats|zsh)$` — rather than adding a fifth alternation, keeping the regex at four
 alternatives.
 
+## Superseded by ADR-0017 — the trigger now fails closed
+
+Everything below this line describes the **allowlist** design and its incremental
+widening. That approach was abandoned at the end of Phase 3, after `pr-review` found a
+fourth missed file class (`ubuntu_*_packages.txt`, mutation-proved to break `make test`)
+*following* a `bug-scan` pass that had enumerated all 392 tracked files and declared the
+set closed. Four instances, four gates, one line — the shape was the defect, not the
+care taken.
+
+The shipped trigger runs `make test` unless every changed path is provably inert. See
+[`docs/adr/0017-pre-push-trigger-fail-closed.md`](../../adr/0017-pre-push-trigger-fail-closed.md)
+for the decision, the asymmetry argument, and the cost accepted.
+
+The material below is retained because it is the evidence trail: each allowlist
+alternative documents a real dependency that the inert set must never absorb, and the
+Multi-Lens Review sections record how the underlying `core.hooksPath` finding was
+reached.
+
 ## Decision
 
 **The regex adds `^scripts/`, not the two filenames.** Rejected naming

@@ -20,3 +20,4 @@ Cross-cutting decisions that apply across personal repos. Repo-specific decision
 | [0014](0014-state-ledger-cmdb-integration.md)                  | State-ledger CMDB integration for update run metadata   | 2026-06-28 | Accepted |
 | [0015](0015-release-sbom-vulnerability-monitoring.md)          | Continuous vulnerability monitoring of release SBOMs    | 2026-07-16 | Accepted |
 | [0016](0016-auto-install-git-hooks.md)                         | Auto-install git hooks across personal repos            | 2026-07-28 | Accepted |
+| [0017](0017-pre-push-trigger-fail-closed.md)                   | The pre-push trigger fails closed                       | 2026-08-01 | Accepted |
