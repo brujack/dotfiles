@@ -7,8 +7,18 @@
 > but none of them triggered the hook. The user approved folding it in, so the shipped
 > change also extends the extension group to `\.(sh|bats|zsh)$` and adds two more BATS
 > cases (a `.zsh` positive and a `.zshrc` negative pinning the deliberate exclusion).
-> Final count is 1105, not the 1102 this plan predicted. See the spec's "Scope widened
-> during Phase 3" section.
+> **Superseded during Phase 3.** The allowlist this plan implements was abandoned
+> before merge. Four missed `make test` dependency classes — each found by a different
+> gate, the fourth *after* an exhaustive 392-file enumeration declared the set closed —
+> established that the shape was the defect. The shipped hook fails closed instead: the
+> suite runs unless every changed path is provably inert. See
+> [ADR-0017](../../adr/0017-pre-push-trigger-fail-closed.md) and the spec's
+> supersession note.
+>
+> Consequently this plan's Task 1 acceptance gate (`grep -c ^@test ... -eq 10`) and its
+> "three BATS cases" scope no longer describe the merged result: 36 cases in that file,
+> 1128 repo-wide. Retained as the record of what was planned, not as a description of
+> what shipped.
 
 **Goal:** Make `scripts/pre-push` trigger `make test` when the only changed files are the extensionless hook scripts, so the local gate covers the files that implement it.
 
