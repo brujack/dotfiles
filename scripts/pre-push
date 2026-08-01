@@ -21,7 +21,37 @@ while read -r local_ref local_sha remote_ref remote_sha; do
         range="${remote_sha}..${local_sha}"
     fi
 
-    if git diff --name-only "${range}" | grep -qE '\.(sh|bats)$|^Makefile$|^tests/'; then
+    # Fail closed (ADR-0017): trigger unless EVERY changed path is provably
+    # inert. grep -qv succeeds when any path does NOT match the inert set, so
+    # one unrecognized path is enough to run the suite. Do not "fix" this back
+    # to an allowlist (-qE of trigger patterns) — that shape missed four real
+    # file classes in one session; see the ADR for the full history.
+    #
+    # `make lint`'s SHELL_FILES walks the whole repo recursively, so a .sh
+    # file under docs/ or .github/ is still linted by `make test` even though
+    # those directories are otherwise mostly inert — the inert set below only
+    # excuses .md files and .yml/.yaml files under .github/, not every path
+    # under those directories.
+    #
+    # git diff itself can fail (e.g. remote_sha names an object this checkout
+    # doesn't have) — that must also fail closed, not silently read as "no
+    # changes". The assignment is wrapped in an if-condition so a non-zero
+    # exit doesn't trip this script's own `set -e`.
+    if changed="$(git diff --name-only "${range}" 2>/dev/null)"; then
+        diff_rc=0
+    else
+        diff_rc=$?
+    fi
+
+    if [[ ${diff_rc} -ne 0 ]]; then
+        needs_test=1
+    elif [[ -n "${changed}" ]] && printf '%s\n' "${changed}" | grep -qE '^tests/'; then
+        # Anything under tests/ always triggers, ahead of the inert check.
+        # `\.md$` below is unanchored on the left, so without this a future
+        # .md fixture under tests/ would be read by the suite and skipped by
+        # the gate — the same shape as the bug this whole hook exists to fix.
+        needs_test=1
+    elif [[ -n "${changed}" ]] && printf '%s\n' "${changed}" | grep -qvE '\.md$|^\.github/.*\.ya?ml$|^LICENSE$'; then
         needs_test=1
     fi
 done
