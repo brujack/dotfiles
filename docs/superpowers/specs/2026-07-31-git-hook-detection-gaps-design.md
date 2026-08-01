@@ -1,115 +1,37 @@
-# Git-Hook Detection Gaps — Design
+# pre-push Self-Coverage — Design
 
 **Date:** 2026-07-31
 **Status:** Approved, pending plan
+**Scope note:** This spec originally covered two items. Gap 2 (the `core.hooksPath`
+detector) was **split out** after two rounds of multi-lens review found the real
+defect was neither thing the backlog described — see "Gap 2, and why it left this
+spec" below. Both review rounds are preserved verbatim at the bottom; they are the
+record of how that was established.
 
 ## Problem
 
-Two independent detection gaps in this repo's git-hook machinery. Both were found
-during earlier work and deferred to the backlog; neither is a regression.
+`scripts/pre-push` does not test itself. Its trigger regex (`scripts/pre-push:24`) is
+`'\.(sh|bats)$|^Makefile$|^tests/'`. Both `scripts/pre-push` and `scripts/commit-msg`
+are extensionless, so a push whose only change is to one of those two hooks matches
+nothing and skips `make test` entirely. The local gate is absent for exactly the files
+that implement the local gate. CI backstops it, but only after the push has left the
+machine. Found during dotfiles#191 bug-scan.
 
-**Gap 1 — `scripts/pre-push` does not test itself.** Its trigger regex
-(`scripts/pre-push:24`) is `'\.(sh|bats)$|^Makefile$|^tests/'`. Both
-`scripts/pre-push` and `scripts/commit-msg` are extensionless, so a push whose only
-change is to one of those two hooks matches nothing and skips `make test` entirely.
-The local gate is absent for exactly the files that implement the local gate. CI
-backstops it, but only after the push has left the machine. Found during dotfiles#191
-bug-scan.
+The window is narrower than it first looks: under this repo's TDD standard, any
+behavioral change to either hook also touches `tests/scripts/pre_push.bats` or
+`tests/scripts/commit_msg.bats`, which already match via `^tests/`. The gap bites on
+comment-only, docs-only, or trivially-mechanical edits to the two hooks. Still a real
+hole in a gate, and the fix is one alternation.
 
-**Gap 2 — an unreadable git config scope is indistinguishable from an unset one.**
-`_git_hooks_hookspath_offenders` (`lib/git_hooks.sh:309`) reads `core.hooksPath` at
-system and global scope with `git config "--${_scope}" --get core.hooksPath
-2>/dev/null || continue`. The `|| continue` collapses every non-zero exit into "key
-unset, scope clean," so both consumers — the doctor check and the update sweep —
-render `[PASS] <scope>: unset` for a scope git could not read at all.
+## Decision
 
-**What this is NOT.** The backlog row, and the first draft of this spec, framed it as
-a concealed hazard: a pin hiding behind an unreadable file, silently redirecting
-hooks. That is false, and the measurement is below. Git _skips_ a config scope it
-cannot read and carries on without applying it, so an unreadable scope cannot carry
-an **effective** pin. The detector, the sweep's `make install-hooks`, and the git
-process that actually runs the hooks are the same binary, the same uid, and the same
-files — "unreadable to the detector" is perfectly correlated with "inert in
-practice." The existing `|| continue` is therefore correct _in effect_: no pin is in
-force and hooks resolve normally.
-
-**What remains, honestly stated.** What an unreadable scope actually withholds is the
-**operator's stated intent**. Someone may have written a pin they believe is active;
-the machine is one `chmod 644` away from that pin becoming real, and nothing today
-would report the change. That is a fact worth surfacing on a seven-machine fleet and
-it is worth exactly what it costs to surface — no more. It is advisory-grade, not
-gate-grade, and this spec treats it as such (Decision 2).
-
-### Measured: an unreadable scope cannot carry an effective pin
-
-Probed live on git 2.55 / macOS 2026-07-31, with a config that **does** contain
-`hooksPath = /tmp/PINNED`:
-
-| fixture             | `rev-parse --git-path hooks` | `git status` |
-| ------------------- | ---------------------------- | ------------ |
-| readable (control)  | `/tmp/PINNED` — redirects    | rc 0         |
-| `chmod 000`         | `.git/hooks` — **pin inert** | rc 0         |
-| directory-as-config | rc 128                       | rc 128       |
-
-The quiet state is harmless. The states that do hurt are loud everywhere: under
-directory-as-config and malformed-config, every git call returns 128, so
-`_git_hooks_discover`'s `git -C "${_dir}" rev-parse --git-dir || continue` skips
-**every** repo and the sweep reports 0 checked instead of 9. Such a machine is
-visibly broken, not quietly passing.
-
-### Measured: rc and stderr per scope state
-
-The backlog row proposed "capture rc and branch: rc 1 = clean, rc > 1 = a
-distinguishable cannot-determine record." Probed live on the same git:
-
-| scope state                         | rc  | stderr                                               |
-| ----------------------------------- | --- | ---------------------------------------------------- |
-| key unset                           | 1   | silent                                               |
-| config malformed (`[core` unclosed) | 128 | `fatal: bad config line 1 in file ...`               |
-| config unreadable (`chmod 000`)     | 1   | `warning: unable to access '...': Permission denied` |
-| config path is a directory          | 1   | `warning: unable to access '...': Is a directory`    |
-
-**An unreadable scope exits 1, not 128** — identical to the clean path. The only
-signal distinguishing the two is stderr, which the current code discards via
-`2>/dev/null`. This is why detecting the residual at all requires stderr, and why
-Decision 1 keys on it; it is also why Decision 2 refuses to let that signal gate
-anything.
-
-## Decisions
-
-1. **Detection uses rc and stderr together.** rc alone cannot see the residual at all
-   — an unreadable scope exits 1, same as clean. Rejected a readability precheck that
-   stats the scope's config file directly (duplicates git's own scope-file resolution
-   — `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM`, XDG paths, `$HOME` quirks — creating a
-   second source of truth that can drift from git's).
-2. **Cannot-determine is advisory, not a gate.** `doctor_warn` (which increments
-   `_DOCTOR_WARN` and leaves `_DOCTOR_FAILED` untouched, so `-t doctor` still exits 0) plus sweep rc 2, which `run_update` already maps to `_update_warn` rather than
-   a failed section.
-
-   This reverses the first draft, which chose `doctor_fail` on the strength of
-   USER.md's "fail closed on unknown — unknown ≠ safe." That principle governs a
-   state whose **safety** is unknown. Here safety is known — measured above, hooks
-   resolve correctly — and what is unknown is only the operator's intent. Failing
-   closed on a machine whose hooks demonstrably work buys nothing and costs a red
-   health gate; on a fleet where `-t doctor` is read by a human and by nothing
-   automated (`setup_env.sh:69`), a permanently-red line on a box with an
-   MDM-owned `/etc/gitconfig` trains the operator to stop reading the summary. An
-   advisory line is what an advisory-grade fact earns.
-
-3. **The advisory line carries a remedy, like every sibling line.** Every other FAIL
-   in `_doctor_check_hooks_path` renders its fix inline; a diagnostic that names the
-   fault and stops is worth less, especially where the action needs `sudo`. The
-   `unknown` line states what to run to see the underlying config for oneself.
-
-4. **Trigger regex adds `^scripts/`, not the two filenames.** Rejected naming
-   `scripts/(pre-push|commit-msg)` explicitly — a third extensionless script added
-   later would be silently uncovered again, which is the exact failure being fixed.
-   `git ls-files scripts/` is 19 files, all executable shell; 17 already match via
-   `\.sh$`, so this adds exactly the two hooks today.
+**The regex adds `^scripts/`, not the two filenames.** Rejected naming
+`scripts/(pre-push|commit-msg)` explicitly — a third extensionless script added later
+would be silently uncovered again, which is the exact failure being fixed.
+`git ls-files scripts/` is 19 files, all executable shell; 17 already match via
+`\.sh$`, so this adds exactly the two hooks today and over-triggers on nothing.
 
 ## Design
-
-### Item 1 — pre-push self-coverage
 
 `scripts/pre-push:24` becomes:
 
@@ -119,190 +41,77 @@ if git diff --name-only "${range}" | grep -qE '\.(sh|bats)$|^Makefile$|^scripts/
 
 One alternation. No other change to the hook.
 
-### Item 2 — hooksPath cannot-determine
-
-`_git_hooks_hookspath_offenders` changes its output from 2-field
-`scope<TAB>value` to 3-field `status<TAB>scope<TAB>detail`, where `status` is
-literally `pinned` or `unknown`:
-
-```
-rc 0                      ->  pinned <scope> <value>
-rc 1, stderr empty        ->  (prints nothing; scope is clean)
-rc 1, stderr non-empty    ->  unknown <scope> <first stderr line>
-rc >1                     ->  unknown <scope> rc=<n>
-```
-
-**stdout and stderr must be captured separately** — the obvious one-liner
-`_out="$(git config … 2>&1)"` would fold a warning into the pinned _value_. Use a
-temp file, or `{ _err="$(git config … 2>&1 1>&3)"; } 3>&1`. This is named here rather
-than left to the plan because it is the difference between a correct value and a
-corrupted one on the fleet's own health check.
-
-Only the first stderr line is carried. Git emits its access warning twice (measured),
-and on all four probed fixtures the first line is the whole diagnostic — but that is
-a property of those fixtures, not of git: an `[include] path = <directory>` inside an
-otherwise-valid config yields `warning: unable to access …` on line 1 and `fatal: bad
-config line 2 …` on line 2. That shape lands in the `rc >1` branch, which discards
-stderr entirely, so it does not bite today. Carrying one line is a deliberate
-truncation of a diagnostic that may have more, not a claim that it never does.
-
-The function's exit contract is unchanged — it still ALWAYS returns 0, and callers
-still count lines rather than reading the exit code as a verdict. The empty-value
-pin behavior is unchanged: `rc 0` with an empty value is still reported as `pinned`,
-because git honors an empty `core.hooksPath` as a real pin.
-
-**Consumer: `_doctor_check_hooks_path` (`lib/helpers.sh:415`).** The `read -r` at
-`helpers.sh:421` widens to three variables. A `pinned` row keeps its existing FAIL
-line and remedy verbatim. An `unknown` row emits:
-
-```
-doctor_warn "<scope>" "cannot determine — <detail>; inspect with: git config --<scope> --list"
-```
-
-`doctor_warn` leaves `_DOCTOR_FAILED` untouched, so this line never changes `-t
-doctor`'s exit status. A scope that is neither pinned nor unknown still gets its
-independent `doctor_pass`, preserving the existing property that a finding at one
-scope never suppresses the other's PASS.
-
-**Consumer: `install_git_hooks_all_repos` (`lib/git_hooks.sh:329`).** An `unknown`
-row increments a new counter, appends a line to the summary, and folds into rc 2 via
-the existing condition at `git_hooks.sh:522`. `run_update` already maps rc 2 to
-`_update_warn` with the section recorded OK (`workflows.sh:558-562`), so an
-`unknown` scope surfaces as a warning in the update summary and in
-`~/.dotfiles-update.log` — a durable channel — without marking the section failed.
-
-Two specifics:
-
-- **Counter name is `_hookspath_unknown`.** The bare name `_unknown` already exists in
-  this function for digest-error repos. Reusing it would silently merge two unrelated
-  concepts into one count and one summary phrase.
-- **No gap attribution under `unknown`.** The existing logic at `git_hooks.sh:439`
-  re-labels a repo's missing hooks directory as "a consequence of the pin" when
-  `_hookspath > 0`. Under `unknown` no pin has been confirmed, so per-repo gaps stay
-  ordinary gaps carrying the normal `install-hooks` remedy. Attributing them to an
-  unconfirmed pin would print a remedy the operator cannot act on.
-
-**No call-site enumeration needed.** `install_git_hooks_all_repos`'s return contract
-stays `{0,1,2}` — `unknown` folds into the existing rc 2. Both call sites already
-branch on rc 2 explicitly: `lib/workflows.sh:206` (`install_git_hooks_all_repos ||
-_hooks_rc=$?`, then an `elif` on 2) and `:558` (`PIPESTATUS[0]`, then an `if` on 2).
-This is deliberately unlike dotfiles#194, where the contract genuinely widened and a
-missed call site resulted.
-
 ## Testing
 
-**Item 1** — `tests/scripts/pre_push.bats` gains:
+`tests/scripts/pre_push.bats` gains:
 
-- a diff containing only `scripts/pre-push` sets `needs_test=1` (the self-coverage
-  case; fails against the current regex)
-- a diff containing only `.gitignore` still exits 0 without running the suite
-  (regression guard against over-triggering)
-
-**Item 2** — `tests/setup_env/git_hooks.bats` (function level and sweep consumer) and
-`tests/setup_env/unit.bats` (doctor consumer, where `_doctor_check_hooks_path`'s
-existing cases live) gain cases for each row of the fixture table below:
-
-| state               | fixture                              | asserts                                              |
-| ------------------- | ------------------------------------ | ---------------------------------------------------- |
-| clean, empty config | `GIT_CONFIG_GLOBAL=/dev/null`        | no output; rc 0                                      |
-| clean, real content | this repo's tracked `.gitconfig_mac` | no output; rc 0                                      |
-| pinned              | `[core]\n\thooksPath = /tmp/x`       | `pinned<TAB>global<TAB>/tmp/x`                       |
-| unknown, rc 1       | config path is a **directory**       | `unknown<TAB>global<TAB>warning: unable to access …` |
-| unknown, rc >1      | `[core` unclosed                     | `unknown<TAB>global<TAB>rc=128`                      |
-
-**The real-content clean fixture is the load-bearing one, not the `/dev/null` one.**
-An empty config cannot trigger a content-dependent warning, so a `/dev/null` fixture
-alone would stay green through exactly the git upgrade that matters — one that starts
-warning about a deprecated key or an `[include]` in a populated `~/.gitconfig`. This
-repo already tracks the real thing (`~/.gitconfig` is a symlink to
-`dotfiles/.gitconfig_mac`), so asserting empty stderr against it costs one fixture
-and closes the case the `/dev/null` fixture structurally cannot reach. Add the
-`.gitconfig_linux` variant on the same assertion.
-
-Consumer-level assertions: `unknown` produces a doctor **WARN** and leaves
-`_DOCTOR_FAILED` unset (an explicit assertion, since the whole point of Decision 2 is
-that this line does not move the exit status); `unknown` produces sweep rc 2 and a
-summary line; `run_update` renders the section OK with a warning rather than failed;
-and — for the attribution rule — a repo with no hooks directory under an `unknown`
-scope reports as an ordinary gap, not as a consequence of a pin.
-
-**Why the directory fixture and not `chmod 000`.** A `chmod 000` fixture passes as a
-normal user and vacuously passes as root, where the file stays readable and the
-branch under test never executes. A directory is unreadable-as-a-file for every uid,
-so the test is root-safe with no `EUID` guard and cannot silently stop testing
-anything in a container that runs as root.
-
-Every rc, stderr, and hook-resolution value in this spec is recorded output from a
-live probe, not a prediction.
-
-`tests/setup_env/git_hooks.bats`'s existing `setup()` already neutralizes
-`GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM`; the new cases set them per-test on top of
-that, so a real pin on the developer's machine cannot affect them.
+- a diff containing only `scripts/pre-push` sets `needs_test=1` — the self-coverage
+  case, and the only test here that fails against the current regex
+- a diff containing only `scripts/commit-msg` sets `needs_test=1`
+- a diff containing only `.gitignore` still exits 0 without running the suite —
+  regression guard against over-triggering
 
 ## Risks
 
-**Item 2's rc-1 branch keys on "stderr non-empty," which is looser than an exit
-code.** If a future git version emits a benign warning on the otherwise-clean path,
-every machine reports a spurious `[WARN]` simultaneously after a routine `brew
-upgrade git`. Two things bound this. First, Decision 2: because the line is advisory,
-the blast radius is a noisy line, not a red gate or a failed update section — this is
-the single largest reason the advisory framing is worth more than its lost strictness.
-Second, the real-content clean fixture: a git upgrade that starts warning about a
-populated gitconfig fails `make test` on the first machine to run the suite. The
-`/dev/null` fixture alone would not have caught it, which is why it is no longer the
-only clean case.
-
-**Item 2's residual value is small, and that is now stated rather than hidden.** It
-detects an unreadable scope whose pin, if any, is inert — worth surfacing because the
-machine is one `chmod` from that changing, not because anything is broken today. If
-implementation reveals the 3-field protocol change is more invasive than sketched,
-dropping Item 2 entirely and recording the measurement in
-`dotfiles-bug-hunt-leads.md` remains a legitimate outcome, not a failure.
-
-**Item 1 has no meaningful failure mode.** Worst case is running the suite on a push
-that did not strictly need it. `scripts/` contains no generated or high-churn files.
+No meaningful failure mode. Worst case is running the suite on a push that did not
+strictly need it; `scripts/` contains no generated or high-churn files. This item was
+reviewed clean by all three lenses across both rounds, with the regex behavior
+verified against `git ls-files` rather than asserted.
 
 ## Acceptance
 
-- `make test` passes; test count increases.
+- `make test` passes; test count increases by 3.
 - `make lint` exits 0.
-- Bash coverage stays ≥ 90%. Only Item 2 can move the figure — `lib/git_hooks.sh`
-  and `lib/helpers.sh` are both in `scripts/run-bash-coverage.sh`'s `INCLUDE_FILES`.
-  `scripts/pre-push` is not instrumented (nothing under `scripts/` is), so Item 1
-  cannot affect coverage in either direction. That absence is itself the separate
-  "coverage include-list" backlog row; adding `scripts/` here would risk dropping the
-  total below the CI floor and is deliberately out of scope.
-- `./setup_env.sh -t doctor` on a clean machine still reports
-  `[PASS] system: unset` and `[PASS] global: unset`, and exits with its
-  pre-change status.
-- Before implementation, run on each of the seven machines (stderr NOT suppressed):
-
-  ```bash
-  git --version
-  git config --system --get core.hooksPath; echo "system rc=$?"
-  git config --global --get core.hooksPath; echo "global rc=$?"
-  ```
-
-  Any machine that prints a `warning:` today would carry a standing `[WARN]` line
-  from day one. Under Decision 2 that is noise rather than a broken gate, but it is
-  worth knowing before shipping rather than discovering per-machine afterwards. This
-  machine is already measured: both scopes rc 1, silent.
-
+- Bash coverage unaffected — `scripts/pre-push` is not instrumented (nothing under
+  `scripts/` is; that absence is the separate "coverage include-list" backlog row).
 - An edit to `scripts/pre-push` alone triggers `make test` on push. **Verified by a
   scratch commit touching only that file, pushed to a throwaway branch** — not by the
-  push of this change, which also touches `lib/*.sh` and `tests/**` and therefore
-  runs the suite under the old regex regardless. The first draft of this criterion
-  claimed exactly that, and it could not have failed; see memory
+  push of this change, which also touches `tests/**` and would therefore run the suite
+  under the old regex regardless. The first draft of this criterion claimed exactly
+  that and could not have failed; see memory
   `does-the-fix-make-its-own-verification-vacuous`.
+
+## Gap 2, and why it left this spec
+
+The original second item was: `_git_hooks_hookspath_offenders`'s `|| continue` treats
+a git config scope it could not read as unset. Two rounds of review established that
+both the backlog's framing and this spec's replacement framing were aimed at the wrong
+shape, and that a third, real defect sits underneath both.
+
+1. **Draft one — "an unreadable scope hides an active pin."** False. Git skips a
+   config scope it cannot read and carries on without applying it. A `chmod 000`
+   config containing `hooksPath = /tmp/PINNED` leaves `rev-parse --git-path hooks` at
+   `.git/hooks` and `git status` at rc 0. The pin is inert.
+2. **Draft two — "the residual is unknown operator intent."** True but near-worthless,
+   and the advisory reframe routed it into a WARN lane measured at 3292 standing
+   `brew-drift` warnings across 3916 runs, while `doctor_warn` cannot move
+   `_DOCTOR_FAILED` and `_DOCTOR_WARN` persists to no file — failing both reads-it
+   questions.
+3. **The actual defect.** `git config --<scope> --get` defaults to `--no-includes`;
+   effective hook resolution traverses includes. An `[include]` that sets
+   `core.hooksPath` reads as **rc 1 with empty stderr** — byte-identical to
+   clean-unset — while `rev-parse --git-path hooks` returns the pin and `git status`
+   stays rc 0. A readable, well-formed, fully effective machine-wide hook redirect
+   renders as `[PASS] <scope>: unset`. This is live in shipped code since dotfiles#194.
+   It is not hypothetical for this fleet: `.gitconfig_linux:30` and
+   `.gitconfig_mac_gitlab:38` both carry `[includeIf "gitdir:~/git-repos/gitlab/"]`.
+   The scope-level remedy is also wrong for that shape — `git config --global --unset
+   core.hooksPath` against an include-borne pin returns rc 5 and the pin survives.
+
+Carried forward to the successor spec, so they are not rediscovered: read with
+`--includes --show-origin` and key the remedy on the origin file, not the scope; the
+WARN-lane saturation constrains any channel choice; the sweep does **not** fail loudly
+when every git call returns 128 (`_git_hooks_discover`'s `|| continue` skips all
+repos, all counters stay 0, sweep returns rc 0 and `run_update` renders `[OK]
+git-hooks`); and both consumer strings at `workflows.sh:210`/`:562` hardcode "gaps or
+a pinned core.hooksPath". Full reproduction in
+`ai-config/docs/knowledge/dotfiles-bug-hunt-leads.md`.
 
 ## Related
 
-- dotfiles#191 — bug-scan that found Gap 1
-- dotfiles#194 — added the hooksPath detector; deferred Gap 2
+- dotfiles#191 — bug-scan that found this gap
+- dotfiles#194 — added the hooksPath detector; introduced the include blind spot
 - `ai-config/docs/knowledge/dotfiles-bug-hunt-leads.md` — running dossier
-- USER.md — "Fail closed on unknown. Unknown ≠ safe." Deliberately **not** applied to
-  Item 2: see Decision 2 for why a known-safe/unknown-intent state is outside that
-  principle's scope.
 
 ## Multi-Lens Review
 
@@ -427,7 +236,7 @@ now decoration. The sweep consumer keeps one "yes" (`~/.dotfiles-update.log`), a
 that channel is saturated. Also flags the consumer-string drift below.
 Assumption: that the clean read emits nothing on stderr on the six non-probed
 machines; the work Macs are the plausible counterexample.
-Disposition:
+Disposition: Addressed (user, 2026-07-31) — split accepted. The reads-it failure is real and is not patched in place: Item 2 leaves this spec entirely rather than being re-argued a third time. Item 1 ships on its own merits.
 
 ### Ergonomics (round 2)
 
@@ -444,7 +253,7 @@ on its result, which is the same vacuous shape round 1 flagged on Item 1,
 reintroduced elsewhere. Item 1 itself verified clean.
 Assumption: that a `[WARN]` in the update summary is still a channel this operator
 reads. Settle with the same `awk` count on the other six machines.
-Disposition:
+Disposition: Addressed (user, 2026-07-31) — all three points are moot for this spec once Item 2 splits out: no WARN routing, no Decision 3 remedy, no seven-machine probe remain in scope. The measured WARN-lane saturation (3292/3916) carries forward to the successor spec as a constraint on any channel it picks, and is recorded in the bug-hunt dossier so it is not rediscovered.
 
 ### Risk (round 2)
 
@@ -481,7 +290,7 @@ real branch.
 Assumption: that no machine in the fleet currently resolves `core.hooksPath` through
 an include chain. Settle per machine with `git config --global --includes
 --show-origin --get core.hooksPath` compared against the non-`--includes` form.
-Disposition:
+Disposition: Addressed (user, 2026-07-31) — this is the finding that decided the split. The include blind spot is a live false-negative in shipped code, not a defect in this spec's proposal, so it earns its own spec rather than a third revision of a section already on its second premise. Reproduction recorded in ai-config/docs/knowledge/dotfiles-bug-hunt-leads.md; backlog row opened. The 'visibly broken' correction and the rc-1 fixture gap carry forward with it.
 
 ### Main-session verification of round 2
 
