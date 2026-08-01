@@ -46,10 +46,14 @@ One alternation. No other change to the hook.
 `tests/scripts/pre_push.bats` gains:
 
 - a diff containing only `scripts/pre-push` sets `needs_test=1` — the self-coverage
-  case, and the only test here that fails against the current regex
+  case, and one of only two tests here that fail against the current regex
 - a diff containing only `scripts/commit-msg` sets `needs_test=1`
-- a diff containing only `.gitignore` still exits 0 without running the suite —
-  regression guard against over-triggering
+- a diff containing only `docs/scripts/notes.md` still exits 0 without running the
+  suite — the `^` anchor guard. This replaces an earlier `.gitignore` case: the
+  existing test at `pre_push.bats:55` already proves a plain non-triggering file
+  skips, so a `.gitignore` case would add no discrimination, whereas a path
+  containing `scripts/` **not** at the start fails if the alternation is written
+  without its anchor.
 
 ## Risks
 
@@ -96,7 +100,7 @@ shape, and that a third, real defect sits underneath both.
    It is not hypothetical for this fleet: `.gitconfig_linux:30` and
    `.gitconfig_mac_gitlab:38` both carry `[includeIf "gitdir:~/git-repos/gitlab/"]`.
    The scope-level remedy is also wrong for that shape — `git config --global --unset
-   core.hooksPath` against an include-borne pin returns rc 5 and the pin survives.
+core.hooksPath` against an include-borne pin returns rc 5 and the pin survives.
 
 Carried forward to the successor spec, so they are not rediscovered: read with
 `--includes --show-origin` and key the remedy on the origin file, not the scope; the
@@ -262,9 +266,9 @@ the gap as a reasoned all-clear.** `git config --<scope> --get` defaults to
 `--no-includes` (documented in `git-config(1)`); effective hook resolution traverses
 includes. Reproduced in the main session:
 
-| fixture                             | detector's `--get` form   | `rev-parse --git-path hooks` | `git status` |
-| ----------------------------------- | ------------------------- | ---------------------------- | ------------ |
-| `[include]` sets `core.hooksPath`   | **rc 1, 0 bytes stderr**  | `/tmp/PINNED_VIA_INCLUDE`    | rc 0         |
+| fixture                           | detector's `--get` form  | `rev-parse --git-path hooks` | `git status` |
+| --------------------------------- | ------------------------ | ---------------------------- | ------------ |
+| `[include]` sets `core.hooksPath` | **rc 1, 0 bytes stderr** | `/tmp/PINNED_VIA_INCLUDE`    | rc 0         |
 
 `rc 1 + silent stderr` is byte-identical to clean-unset, which this spec's own
 protocol table assigns to "prints nothing; scope is clean." So a readable,
@@ -297,7 +301,7 @@ Disposition: Addressed (user, 2026-07-31) — this is the finding that decided t
 Re-run directly rather than accepted on report:
 
 - Include-borne pin: detector's form rc 1 / 0 bytes stderr; `rev-parse --git-path
-  hooks` = `/tmp/PINNED_VIA_INCLUDE`; `git status` rc 0. **Pin active and invisible.**
+hooks` = `/tmp/PINNED_VIA_INCLUDE`; `git status` rc 0. **Pin active and invisible.**
 - `--includes --show-origin` finds it and names the origin file. rc 0.
 - `git config --global --unset core.hooksPath` on that pin: **rc 5, pin survives.**
 - `git config --global --list` on an unreadable config: rc 128, re-prints the denial.
