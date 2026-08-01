@@ -45,6 +45,12 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 
     if [[ ${diff_rc} -ne 0 ]]; then
         needs_test=1
+    elif [[ -n "${changed}" ]] && printf '%s\n' "${changed}" | grep -qE '^tests/'; then
+        # Anything under tests/ always triggers, ahead of the inert check.
+        # `\.md$` below is unanchored on the left, so without this a future
+        # .md fixture under tests/ would be read by the suite and skipped by
+        # the gate — the same shape as the bug this whole hook exists to fix.
+        needs_test=1
     elif [[ -n "${changed}" ]] && printf '%s\n' "${changed}" | grep -qvE '\.md$|^\.github/.*\.ya?ml$|^LICENSE$'; then
         needs_test=1
     fi
