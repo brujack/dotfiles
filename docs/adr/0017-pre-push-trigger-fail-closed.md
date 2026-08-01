@@ -40,10 +40,23 @@ The allowlist inverted that default.
 inert:
 
 ```bash
-if git diff --name-only "${range}" | grep -qvE '\.md$|^docs/|^\.github/|^LICENSE$|^CHANGELOG'; then
+changed="$(git diff --name-only "${range}" 2>/dev/null)"
+diff_rc=$?
+if [[ ${diff_rc} -ne 0 ]]; then
+    # Cannot determine what changed — fail closed.
+    needs_test=1
+elif printf '%s' "${changed}" | grep -qvE '\.md$|^\.github/.*\.ya?ml$|^LICENSE$'; then
     needs_test=1
 fi
 ```
+
+The `diff_rc` branch matters and was added after review. Piping `git diff` straight
+into `grep` discards git's own exit status — the pipeline reports grep's. A `remote_sha`
+naming an object the local repo lacks makes `git diff` fail with empty stdout, `grep -qv`
+returns 1, and the gate is skipped with no claim of irrelevance at all. `set -e` cannot
+catch it either: the status is grep's, and the pipeline sits inside an `if`, where
+`set -e` is disabled. On a seven-machine fleet where branches move between boxes, that
+is reachable.
 
 `grep -qv` succeeds when any changed path does **not** match the inert set, so a single
 unrecognized path is enough to run the suite. Skipping now requires an affirmative
@@ -55,13 +68,42 @@ The inert set is deliberately small and each member is justified:
   (`CLAUDE.md`, the Cursor `.mdc` mirror) are reached only through
   `_OVERRIDE_CLAUDE_MD_PATH` / `_OVERRIDE_TARGET_PATH` fixture seams, and
   `make check-agent-guidance` is not part of `make test`.
-- `^docs/` — ADRs, specs, plans, knowledge. Nothing under `make test` reads them.
-- `^\.github/` — CI workflow definitions. They configure the _remote_ gate; `make test`
-  never reads them.
-- `^LICENSE$`, `^CHANGELOG` — inert by construction.
+- `^docs/.*\.md$` — ADRs, specs, plans, knowledge. Scoped to `.md` deliberately; see
+  the correction below.
+- `^\.github/.*\.ya?ml$` — CI workflow definitions. They configure the _remote_ gate.
+  Also scoped by file type, same reason.
+- `^LICENSE$` — inert by construction, anchored at both ends.
 
 Anything else — including any file class introduced in future — runs the suite until
 someone makes a deliberate, reviewed decision to add it to the inert set.
+
+### Correction: the first draft of this inert set reproduced the very bug it fixes
+
+This ADR originally listed `^docs/` and `^\.github/` unscoped, justified as "nothing
+under `make test` reads them," plus a `^CHANGELOG` member. The Phase 3 gate chain
+found all three wrong before merge:
+
+- **`^docs/` and `^\.github/` were false.** `make test` depends on `lint`, and
+  `SHELL_FILES := $(shell find . -name "*.sh" ...)` globs **recursively** with only
+  `node_modules`/`coverage` excluded. A `docs/gen.sh` or `.github/scripts/foo.sh` is
+  therefore shellchecked by `make test` while being invisible to the trigger —
+  confirmed empirically. That is instance-class #3 from the table above
+  (`.shellcheckrc` → `make lint` → `test: lint`) reproduced inside the fix for it.
+- **`^CHANGELOG` was unanchored and redundant.** It absorbed `CHANGELOG_gen.sh` and
+  `CHANGELOGS/build.sh`, while the only tracked file it was meant to cover
+  (`CHANGELOG.md`) was already inert via `\.md$`. Deleted rather than anchored.
+
+The fix scopes the two directory members to their real file types rather than
+narrowing `SHELL_FILES` — shrinking what gets linted to make this ADR's excuse true
+would trade a real gate for bookkeeping.
+
+**The lesson is the one this ADR is about.** Inverting to fail-closed does not
+eliminate the failure mode; it relocates it from "forgot a trigger" to "wrongly
+declared something inert," which is what the Consequences section predicted. The
+relocation is still worth it — the new failure mode requires an explicit edit to a
+short list, every member is now pinned by a test, and the mistake was caught by a
+gate before merge rather than by a silently-skipped push afterwards. But "fail-closed"
+is not self-enforcing, and this correction is the evidence.
 
 ## Consequences
 
