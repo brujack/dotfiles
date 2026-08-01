@@ -406,3 +406,102 @@ Also confirmed in the main session: `git ls-files scripts/` = 19 with exactly 2
 non-`.sh` files (`ls -1` had hidden `scripts/.osx.sh`); call sites are
 `workflows.sh:206`/`:558`; `install_git_hooks_all_repos` starts at `git_hooks.sh:329`;
 and both scopes on this machine read rc 1 with silent stderr.
+
+---
+
+## Multi-Lens Review — Round 2
+
+Reviewed at commit: `1bf5644` (the advisory-reframe revision). All three lenses
+re-run, per the rule that a revision changing design substance carries its own new
+defects. It did.
+
+### Goal-Fit (round 2)
+
+Finding: the `doctor_fail` → `doctor_warn` flip deleted the only thing that made Item
+2 pass the reads-it test in round 1, and nothing re-ran the test. Verified in the main
+session: `run_doctor` returns `[[ ${_DOCTOR_FAILED} -eq 0 ]]` (`helpers.sh:319`) and
+`doctor_warn` (`helpers.sh:40`) touches only `_DOCTOR_WARN` — so no doctor verdict can
+differ, by construction (Q1: no) — and `_DOCTOR_WARN` is printed in a summary line and
+persisted nowhere (Q2: no). Two "no"s: by the spec's own test, the doctor consumer is
+now decoration. The sweep consumer keeps one "yes" (`~/.dotfiles-update.log`), and
+that channel is saturated. Also flags the consumer-string drift below.
+Assumption: that the clean read emits nothing on stderr on the six non-probed
+machines; the work Macs are the plausible counterexample.
+Disposition:
+
+### Ergonomics (round 2)
+
+Finding: (1) Decision 2 routes the signal into an already-saturated lane. Measured in
+the main session on this box: **3292 of 3916** update runs carry a standing `[WARN]
+brew-drift`. The argument Decision 2 makes against a permanent red line — that it
+trains the operator to stop reading — has already completed in the yellow lane it
+selects as the replacement, and no acknowledge/suppress mechanism is proposed. (2)
+Decision 3's remedy is null: `git config --<scope> --list` against an unreadable
+config re-prints the same denial and exits 128 (measured). It cannot show contents;
+unreadable is the condition being reported. (3) The seven-machine probe is filed under
+Acceptance, labelled pre-implementation, and has no decision rule — nothing branches
+on its result, which is the same vacuous shape round 1 flagged on Item 1,
+reintroduced elsewhere. Item 1 itself verified clean.
+Assumption: that a `[WARN]` in the update summary is still a channel this operator
+reads. Settle with the same `awk` count on the other six machines.
+Disposition:
+
+### Risk (round 2)
+
+Finding: **the central premise still does not generalize, and the revision codified
+the gap as a reasoned all-clear.** `git config --<scope> --get` defaults to
+`--no-includes` (documented in `git-config(1)`); effective hook resolution traverses
+includes. Reproduced in the main session:
+
+| fixture                             | detector's `--get` form   | `rev-parse --git-path hooks` | `git status` |
+| ----------------------------------- | ------------------------- | ---------------------------- | ------------ |
+| `[include]` sets `core.hooksPath`   | **rc 1, 0 bytes stderr**  | `/tmp/PINNED_VIA_INCLUDE`    | rc 0         |
+
+`rc 1 + silent stderr` is byte-identical to clean-unset, which this spec's own
+protocol table assigns to "prints nothing; scope is clean." So a readable,
+well-formed, **fully effective** machine-wide hook redirect renders as `[PASS] global:
+unset` — before this change and after it. That is the hazard the revised Problem
+section deleted as "false": the shape was wrong (it is not unreadability), the hazard
+is real. Not hypothetical for this fleet — `.gitconfig_linux:30` and
+`.gitconfig_mac_gitlab:38` both carry `[includeIf "gitdir:~/git-repos/gitlab/"]`, so
+include-based config is this fleet's established style. Fix is in the same function:
+read with `--includes --show-origin`. That also exposes a second defect — measured,
+`git config --global --unset core.hooksPath` against an include-borne pin returns
+**rc 5 and the pin survives**, so the existing remedy string is wrong; a remedy must
+name the origin file, not the scope.
+
+Secondary: the spec's "visibly broken, not quietly passing" claim is false for the
+sweep. Verified — `_git_hooks_discover`'s `git -C … rev-parse --git-dir || continue`
+skips every repo when all git calls return 128, leaving all counters at 0, so the
+sweep returns rc 0 and `run_update` renders `[OK] git-hooks`. It quietly passes.
+Also: the rc-1-plus-stderr branch is never tested against the state it exists for —
+the only such fixture is directory-as-config, which the spec itself classifies as the
+loud state. `GIT_CONFIG_GLOBAL=/nonexistent-dir/config` is root-safe and reaches the
+real branch.
+Assumption: that no machine in the fleet currently resolves `core.hooksPath` through
+an include chain. Settle per machine with `git config --global --includes
+--show-origin --get core.hooksPath` compared against the non-`--includes` form.
+Disposition:
+
+### Main-session verification of round 2
+
+Re-run directly rather than accepted on report:
+
+- Include-borne pin: detector's form rc 1 / 0 bytes stderr; `rev-parse --git-path
+  hooks` = `/tmp/PINNED_VIA_INCLUDE`; `git status` rc 0. **Pin active and invisible.**
+- `--includes --show-origin` finds it and names the origin file. rc 0.
+- `git config --global --unset core.hooksPath` on that pin: **rc 5, pin survives.**
+- `git config --global --list` on an unreadable config: rc 128, re-prints the denial.
+- `awk` over `~/.dotfiles-update.log`: 3916 runs, 3292 `[WARN] brew-drift`.
+- `run_doctor` = `[[ ${_DOCTOR_FAILED} -eq 0 ]]`; `_DOCTOR_WARN` written to no file.
+- `.gitconfig_linux:30`, `.gitconfig_mac_gitlab:38` carry `[includeIf …]`.
+- `workflows.sh:210` and `:562` both render "gaps or a pinned core.hooksPath", which
+  is false under `unknown`.
+- Real-content clean fixtures (`.gitconfig_mac`, `.gitconfig_linux`): 0 bytes stderr.
+
+**Consequence: this spec's Gap 2 is aimed at the wrong shape in both drafts.** Draft
+one claimed unreadable scopes hide pins (false — inert). Draft two claimed the
+residual is unknown operator intent (true but near-worthless, and routed to a
+saturated channel). The actual defect, live in shipped code since dotfiles#194, is
+that the detector reads without `--includes` and therefore cannot see an effective
+include-borne pin at all.
