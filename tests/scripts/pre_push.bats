@@ -98,6 +98,42 @@ _run_pre_push() {
   grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
 }
 
+@test "pre-push runs make test when only .shellcheckrc changed" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file ".shellcheckrc" "disable=SC2086" "chore: touch shellcheckrc")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+}
+
+@test "pre-push runs make test when only .gitignore changed" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file ".gitignore" "*.log" "chore: touch gitignore")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+}
+
+@test "pre-push runs make test when only Makefile changed" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "Makefile" "test:" "chore: touch Makefile")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+}
+
+@test "pre-push runs make test when only a non-source file under tests/ changed" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "tests/fixtures/sample.txt" "fixture" "chore: touch tests fixture")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+}
+
 @test "pre-push skips when only .zshrc changed" {
   base_sha=$(_commit_file "README.md" "v1" "docs: v1")
   local_sha=$(_commit_file ".zshrc" "echo hi" "chore: touch zshrc")
