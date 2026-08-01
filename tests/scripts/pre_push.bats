@@ -1,5 +1,7 @@
 #!/usr/bin/env bats
 
+bats_require_minimum_version 1.5.0
+
 setup() {
   REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
   CLEAN_PATH="$(printf "%s" "${PATH}" | tr ':' '\n' | grep -v "tests/mocks" | tr '\n' ':' | sed 's/:$//')"
@@ -116,13 +118,13 @@ _run_pre_push() {
   grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
 }
 
-@test "pre-push skips when .gitignore is not at the repo root" {
+@test "pre-push triggers on a non-markdown file under docs/, not just .gitignore" {
   base_sha=$(_commit_file "README.md" "v1" "docs: v1")
   local_sha=$(_commit_file "docs/.gitignore" "*.log" "chore: nested gitignore")
   _write_make_mock 0
   run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
   [ "$status" -eq 0 ]
-  [ ! -f "${MOCK_CALLS_FILE}" ]
+  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
 }
 
 @test "pre-push triggers on a root file merely prefixed with .gitignore" {
@@ -161,16 +163,7 @@ _run_pre_push() {
   grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
 }
 
-@test "pre-push skips when scripts/ appears mid-path, not at the start" {
-  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
-  local_sha=$(_commit_file "docs/scripts/notes.md" "notes" "docs: notes")
-  _write_make_mock 0
-  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
-  [ "$status" -eq 0 ]
-  [ ! -f "${MOCK_CALLS_FILE}" ]
-}
-
-@test "pre-push skips a top-level path merely prefixed with scripts" {
+@test "pre-push skips a top-level path merely prefixed with scripts because it is a markdown file" {
   base_sha=$(_commit_file "README.md" "v1" "docs: v1")
   local_sha=$(_commit_file "scripts-old/notes.md" "notes" "docs: notes")
   _write_make_mock 0
@@ -242,7 +235,7 @@ _run_pre_push_leaked() {
   run _run_pre_push_leaked "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
   [ "$status" -eq 0 ]
   grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
-  ! grep -qE "^GIT_(DIR|WORK_TREE|COMMON_DIR|INDEX_FILE)=" "${MOCK_CALLS_FILE}"
+  run ! grep -qE "^GIT_(DIR|WORK_TREE|COMMON_DIR|INDEX_FILE)=" "${MOCK_CALLS_FILE}"
 }
 
 @test "pre-push runs make test when only ubuntu_common_packages.txt changed" {
@@ -287,6 +280,77 @@ _run_pre_push_leaked() {
   local_sha=$(_commit_file "setup_env.sh" "echo hi" "feat: touch setup_env")
   _write_make_mock 0
   run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+}
+
+@test "pre-push skips when only LICENSE changed" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "LICENSE" "MIT" "chore: touch license")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
+@test "pre-push triggers on a file merely prefixed with LICENSE" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "LICENSE.txt" "MIT" "chore: add license txt")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+}
+
+@test "pre-push triggers on a .mdx file, not just .md" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "foo.mdx" "content" "chore: add mdx file")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+}
+
+@test "pre-push triggers when a shell script exists under docs/" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "docs/gen.sh" "echo hi" "chore: add docs gen script")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+}
+
+@test "pre-push triggers when a shell script exists under .github/" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file ".github/scripts/foo.sh" "echo hi" "chore: add github script")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+}
+
+@test "pre-push triggers on CHANGELOG_gen.sh" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "CHANGELOG_gen.sh" "echo hi" "chore: add changelog gen script")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+}
+
+@test "pre-push skips when the diff range contains no changes" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${base_sha} refs/heads/master ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
+@test "pre-push fails closed and triggers when the diff range cannot be resolved" {
+  local_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  bogus_sha="deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${bogus_sha}\n"
   [ "$status" -eq 0 ]
   grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
 }
