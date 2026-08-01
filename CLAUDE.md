@@ -213,7 +213,7 @@ The pre-commit hook is **required**. It runs on every `git commit`:
 1. `make lint` — blocks the commit on any syntax or shellcheck failure
 2. `ggshield secret scan pre-commit` — scans staged changes for secrets before they reach the remote; skipped gracefully if ggshield is not installed
 
-The pre-push hook is **permanent**. It runs `make test` (lint + bats) on every push before the push reaches GitHub, but only when the push includes changes to `.sh` files, `.bats` files, `.zsh` files, the root `Makefile`, `.gitignore`, `.shellcheckrc`, or anything under `scripts/` or `tests/`. Pushes touching only config files (`.toml`, `.json`, `.md`, etc.) outside `scripts/` and `tests/` skip the test run entirely. Skips branch deletions. This conserves GitHub Actions minutes — CI runs only on PRs.
+The pre-push hook is **permanent**. It runs `make test` (lint + bats) on every push before the push reaches GitHub, but only when the push includes changes to `.sh` files, `.bats` files, `.zsh` files, the root `Makefile`, the root `.gitignore`, the root `.shellcheckrc`, or anything under `scripts/` or `tests/`. Those three root files are matched root-anchored, so `docs/.gitignore` and `.gitignore_global` deliberately do not trigger. Pushes touching only config files (`.toml`, `.json`, `.md`, etc.) outside `scripts/` and `tests/` skip the test run entirely. Skips branch deletions. This conserves GitHub Actions minutes — CI runs only on PRs.
 
 **Worktree compatibility requirement:** `scripts/pre-push` must resolve repo root with `git rev-parse --show-toplevel` first, and use `git rev-parse --git-common-dir` parent only as a fallback. Direct `git-common-dir` resolution can run tests against the shared checkout instead of the active worktree branch.
 
@@ -236,7 +236,7 @@ Inline disables (`# shellcheck disable=SCxxxx # reason`) are used for remaining 
 
 `.github/workflows/ci.yml` runs on PRs to master only (the pre-push hook gates branch pushes locally):
 
-- `test` job: installs bats + shellcheck, runs `make test`, then verifies test count ≥ 840 (regression proxy; 1109 tests as of 2026-07-31)
+- `test` job: installs bats + shellcheck, runs `make test`, then verifies test count ≥ 840 (regression proxy; 1111 tests as of 2026-08-01)
 - `lint-macos` job: runs `bash -n` and `zsh -n` on all `.sh` files on `macos-latest` (advisory, not blocking auto-merge)
 - `bash-coverage` job: measures bash line coverage via PS4 xtrace on `ubuntu-latest`; **gates at 90%** — blocks auto-merge if coverage drops below floor
 - `secret-scan` job: runs gitleaks against recent commits (advisory, not blocking auto-merge)
@@ -288,7 +288,7 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 #### Bash
 
-- **Overall: 91%** (1109 tests as of 2026-07-31); gated in CI at 90% (`bash-coverage` job, blocks auto-merge on drop).
+- **Overall: 91%** (1111 tests as of 2026-08-01); gated in CI at 90% (`bash-coverage` job, blocks auto-merge on drop).
 - `make bash-coverage` measures via PS4 xtrace (`scripts/run-bash-coverage.sh`); `make push-bash-coverage` pushes `coverage/bash.json` to the `coverage-data` branch for the README badge.
 - Method detail, per-file floors/ceilings, and why kcov/bashcov are ruled out: [`dotfiles-bash-coverage`](https://github.com/brujack/ai-config/blob/master/docs/knowledge/dotfiles-bash-coverage.md).
 

@@ -116,6 +116,24 @@ _run_pre_push() {
   grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
 }
 
+@test "pre-push skips when .gitignore is not at the repo root" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "docs/.gitignore" "*.log" "chore: nested gitignore")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
+@test "pre-push skips a root file merely prefixed with .gitignore" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file ".gitignore_global" "*.log" "chore: global ignore")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
 @test "pre-push runs make test when only Makefile changed" {
   base_sha=$(_commit_file "README.md" "v1" "docs: v1")
   local_sha=$(_commit_file "Makefile" "test:" "chore: touch Makefile")
