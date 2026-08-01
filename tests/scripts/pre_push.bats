@@ -98,6 +98,15 @@ _run_pre_push() {
   [ ! -f "${MOCK_CALLS_FILE}" ]
 }
 
+@test "pre-push skips a top-level path merely prefixed with scripts" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "scripts-old/notes.md" "notes" "docs: notes")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
 @test "pre-push propagates a make test failure as a non-zero exit" {
   base_sha=$(_commit_file "README.md" "v1" "docs: v1")
   local_sha=$(_commit_file "deploy.sh" "echo hi" "feat: add deploy script")
