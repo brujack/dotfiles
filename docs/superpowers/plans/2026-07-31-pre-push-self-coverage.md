@@ -1,5 +1,7 @@
 # pre-push Self-Coverage Implementation Plan
 
+> **Status: DONE** — merged as PR dotfiles#195 (2026-08-01), though not as planned; see the supersession banner below.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 > **Scope note (Phase 3):** `bug-scan` found the same defect class for `.zsh` files —

@@ -111,7 +111,7 @@ Master status index for all specs and implementation plans in this directory.
 | 2026-07-29 | [hookspath-global-system-detector](plans/2026-07-29-hookspath-global-system-detector.md) | [spec](specs/2026-07-29-doctor-hookspath-check-design.md) | Done |
 | 2026-07-29 | [npm-global-pinning](plans/2026-07-29-npm-global-pinning.md) (PR dotfiles#192) | [spec §C](https://github.com/brujack/ai-config/blob/master/docs/superpowers/specs/2026-07-29-maintainability-coverage-manifest-design.md) | Done |
 | 2026-07-30 | [test-git-env-hygiene](plans/2026-07-30-test-git-env-hygiene.md) | [spec](specs/2026-07-29-test-git-env-hygiene-design.md) | Done |
-| 2026-07-31 | [pre-push-self-coverage](plans/2026-07-31-pre-push-self-coverage.md) (PR dotfiles#195) | [spec](specs/2026-07-31-git-hook-detection-gaps-design.md) + [ADR-0017](../adr/0017-pre-push-trigger-fail-closed.md) | In Progress |
+| 2026-07-31 | [pre-push-self-coverage](plans/2026-07-31-pre-push-self-coverage.md) (PR dotfiles#195) | [spec](specs/2026-07-31-git-hook-detection-gaps-design.md) + [ADR-0017](../adr/0017-pre-push-trigger-fail-closed.md) | Done |
 
 ---
 
