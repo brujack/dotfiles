@@ -62,6 +62,14 @@ cloud_conversation_storage_enabled = true
 nld_in_terminal_enabled = true
 ai_auto_detection_enabled = true
 
+[agents.warp_agent.other]
+# Warp defaults this to true, which voids the execution_profiles
+# command_denylist below whenever auto-approve is on: permissions.rs then
+# consults only the ORG denylist, and a personal machine has no org, so the
+# effective denylist is empty in exactly the unattended case the denylist
+# exists for. Pinned false so the denylist holds in every mode.
+auto_approve_bypasses_command_denylist = false
+
 [agents.profiles]
 agent_mode_execute_readonly_commands = true
 
