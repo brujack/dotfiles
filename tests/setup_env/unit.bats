@@ -1225,6 +1225,33 @@ _unmocked_path() {
   [[ "$output" == *"system: unset"* ]]
 }
 
+@test "_doctor_check_hooks_path fails on an include-borne pin and names the --file remedy" {
+  # Before the --includes read, this shape rendered "[PASS] global: unset"
+  # while the pin was live -- doctor's whole job here, inverted.
+  local _g="${TMPDIR_TEST}/gc" _s="${TMPDIR_TEST}/sc" _inc="${TMPDIR_TEST}/inc.cfg"
+  printf '[core]\n\thooksPath = /tmp/via-include\n' > "${_inc}"
+  printf '[include]\n\tpath = %s\n' "${_inc}" > "${_g}"; : > "${_s}"
+  _DOCTOR_PASS=0; _DOCTOR_FAIL=0; _DOCTOR_FAILED=0
+  PATH="$(_unmocked_path)" GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" run _doctor_check_hooks_path
+  [[ "$output" == *"[FAIL]"* ]]
+  [[ "$output" == *"global: pinned to /tmp/via-include"* ]]
+  [[ "$output" == *"git config --file ${_inc} --unset core.hooksPath"* ]]
+  [[ "$output" != *"global: unset"* ]]
+  # the unpinned scope still reports independently
+  [[ "$output" == *"system: unset"* ]]
+}
+
+@test "_doctor_check_hooks_path sets _DOCTOR_FAILED on an include-borne pin" {
+  local _g="${TMPDIR_TEST}/gc" _s="${TMPDIR_TEST}/sc" _inc="${TMPDIR_TEST}/inc.cfg"
+  printf '[core]\n\thooksPath = /tmp/via-include\n' > "${_inc}"
+  printf '[include]\n\tpath = %s\n' "${_inc}" > "${_g}"; : > "${_s}"
+  _DOCTOR_PASS=0; _DOCTOR_FAIL=0; _DOCTOR_FAILED=0
+  PATH="$(_unmocked_path)" GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" _doctor_check_hooks_path > /dev/null
+  [ "${_DOCTOR_FAILED}" -eq 1 ]
+  [ "${_DOCTOR_FAIL}" -eq 1 ]
+  [ "${_DOCTOR_PASS}" -eq 1 ]
+}
+
 @test "_doctor_check_hooks_path sets _DOCTOR_FAILED on a pin" {
   local _g="${TMPDIR_TEST}/gc" _s="${TMPDIR_TEST}/sc"
   printf '[core]\n\thooksPath = /tmp/mine\n' > "${_g}"; : > "${_s}"

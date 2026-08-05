@@ -414,11 +414,11 @@ _doctor_check_cred_dirs() {
 }
 _doctor_check_hooks_path() {
   printf "\nGit hooksPath:\n"
-  local _offenders _scope _value
+  local _offenders _scope _value _remedy
   _offenders="$(_git_hooks_hookspath_offenders)"
 
   local -a _hp_pinned=()
-  while IFS=$'\t' read -r _scope _value; do
+  while IFS=$'\t' read -r _scope _remedy _value; do
     [[ -z "${_scope}" ]] && continue
     _hp_pinned+=("${_scope}")
     # An empty OR whitespace-only value is a real pin that disables hooks,
@@ -428,8 +428,7 @@ _doctor_check_hooks_path() {
     # as a usable hooks directory, and the operator's remedy (unset the key)
     # is identical for both.
     [[ -z "${_value//[[:space:]]/}" ]] && _value="(empty)"
-    doctor_fail "${_scope}" \
-      "pinned to ${_value} — remedy: git config --${_scope} --unset core.hooksPath"
+    doctor_fail "${_scope}" "pinned to ${_value} — remedy: ${_remedy}"
   done <<< "${_offenders}"
 
   # Each scope reports independently: a pin at one must not suppress the
