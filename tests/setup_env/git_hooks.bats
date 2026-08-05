@@ -1667,6 +1667,23 @@ _sweep_build_stray_unreadable_repo() {
   [ "${lines[0]}" = "$(printf 'system\tgit config --file %s --unset core.hooksPath\t/etc/via-include' "${_inc}")" ]
 }
 
+@test "_git_hooks_hookspath_offenders emits a per-scope remedy when one scope is include-borne and the other is direct" {
+  # Two scopes, two different remedy shapes, one run. This is the only state
+  # in which the per-iteration remedy reset is load-bearing -- every
+  # single-scope test passes whether or not it survives to the next
+  # iteration, so without this case the reset is protected by inference only.
+  local _g="${TESTDIR}/gc" _s="${TESTDIR}/sc" _inc="${TESTDIR}/inc.cfg"
+  printf '[core]\n\thooksPath = /etc/via-include\n' > "${_inc}"
+  printf '[include]\n\tpath = %s\n' "${_inc}" > "${_s}"
+  printf '[core]\n\thooksPath = /tmp/direct\n' > "${_g}"
+  GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" run _git_hooks_hookspath_offenders
+  [ "$status" -eq 0 ]
+  [ "${#lines[@]}" -eq 2 ]
+  [ "${lines[0]}" = "$(printf 'system\tgit config --file %s --unset core.hooksPath\t/etc/via-include' "${_inc}")" ]
+  # The direct scope must NOT inherit the include-borne scope's --file remedy.
+  [ "${lines[1]}" = "$(printf 'global\tgit config --global --unset core.hooksPath\t/tmp/direct')" ]
+}
+
 @test "_git_hooks_hookspath_offenders detects an include-borne pin with an empty value" {
   local _g="${TESTDIR}/gc" _s="${TESTDIR}/sc" _inc="${TESTDIR}/inc.cfg"
   printf '[core]\n\thooksPath =\n' > "${_inc}"
