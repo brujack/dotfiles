@@ -288,7 +288,7 @@ _git_hooks_join() {
 # Value is deliberately LAST. Callers split on tab with a three-variable
 # `read`, which folds every trailing field into the final variable; putting
 # the operator-facing remedy there instead would let a tab inside a pinned
-# path truncate the one string the operator is meant to run.
+# path cut short the one string the operator is meant to run.
 #
 # The remedy is produced here rather than by each caller because deriving it
 # requires knowing WHICH file holds the key -- state this function already
