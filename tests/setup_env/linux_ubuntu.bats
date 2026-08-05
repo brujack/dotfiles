@@ -627,8 +627,8 @@ teardown() {
   unset HAS_SNAP HAS_DEVTOOLS
   run _install_ubuntu_gui_tools
   [ "$status" -eq 0 ]
-  ! grep -q "apt install albert" "${MOCK_CALLS_FILE}"
-  ! grep -q "apt install microsoft-edge-stable" "${MOCK_CALLS_FILE}"
+  refute_grep "apt install albert" "${MOCK_CALLS_FILE}"
+  refute_grep "apt install microsoft-edge-stable" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_gui_tools: HAS_FLATPAK installs steam via flatpak" {
