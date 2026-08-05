@@ -342,7 +342,7 @@ The following paths are machine-local and must **never** be committed to this re
 - `~/.azure_creds/` — Azure credentials
 - `~/.gcloud_creds/` — GCloud credentials
 - `~/.tsh/` — Teleport session tokens
-- `~/.claude/projects/<path>/` conversation history jsonl files — only `memory/` subdirs are tracked
+- `~/.claude/projects/<path>/` — conversation history **and** per-project memory. Nothing here is committed. Per ai-config ADR-0014 the `memory/` subdirectory is a session-local draft location; canonical memory lives at `ai-config/.claude/memory/<repo>-<topic>.md`, and ai-config's `validate_memory.py` fails `make test` on any draft left behind. The one tracked exception is ai-config's own `<encoded>/memory` symlink to the canonical corpus. An earlier version of this line claimed the memory subdirectories were tracked; that was wrong, and it had produced 27 committed drafts before ai-config#138 asserted the invariant
 - `config/local.sh` — machine-local overrides; copy from `config/local.sh.example`, git-ignored
 
 The `secret-scan` CI job (`gitleaks`) scans recent commits for credential patterns. If it fires on a legitimate file, add an allowlist entry to `.gitleaks.toml`.
