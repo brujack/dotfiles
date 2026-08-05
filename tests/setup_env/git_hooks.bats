@@ -1832,7 +1832,12 @@ _sweep_build_stray_unreadable_repo() {
   # The scope-level form is what this shape used to print, and it exits 5
   # against an included file -- it must not appear.
   [[ "$output" != *"git config --global --unset core.hooksPath"* ]]
+  # rc 2 has three independent producers -- gaps, unknowns, and the pin. Both
+  # of the other two are asserted absent, so rc 2 above is attributable to the
+  # pin alone. Without these the test passes whether or not the include-borne
+  # detection works at all.
   [[ "$output" == *"0 gaps"* ]]
+  [[ "$output" != *"unknown"* ]]
 }
 
 @test "install_git_hooks_all_repos joins two hooksPath offenders with '; ' not ';'" {
