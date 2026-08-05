@@ -116,6 +116,15 @@ or redirects hooks in **every repo on that box**, immediately. Two shapes matter
 
 ### `_git_hooks_hookspath_offenders` (lib/git_hooks.sh)
 
+> **Superseded in part by dotfiles#198 (2026-08-05).** The contract below is the
+> as-designed 2026-07-29 version and is retained as the design record. Two things have
+> since changed in shipped code: the output is now `scope<TAB>remedy<TAB>value` (three
+> fields, value last), and the two `--get` reads below are a first probe only — a scope
+> that reads unset is re-read with `--includes -z --show-origin`, because `--get`
+> defaults to `--no-includes` while git's own hook resolution traverses includes, so a
+> pin reached through an `[include]` read as byte-identical to clean-unset. See
+> `CLAUDE.md`'s "The pin probe must read `--includes`" entry for the current contract.
+
 Contract: prints zero, one, or two tab-separated `scope<TAB>value` lines on stdout, one
 per pinned scope; prints nothing when both scopes are unset; returns 0 in every case. An
 empty result means "checked, clean" — callers count lines and do not read the exit code as
