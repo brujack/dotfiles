@@ -1713,6 +1713,29 @@ _sweep_build_stray_unreadable_repo() {
   [ "${_first}" = "$(printf 'global\tgit config --file %s --unset core.hooksPath\t/tmp/via-include' "${_inc}")" ]
 }
 
+@test "_git_hooks_hookspath_offenders shell-quotes an origin path containing spaces" {
+  # The remedy is written to be pasted into a shell. An unquoted
+  # "~/Library/Application Support/git/config" splits on its spaces and git
+  # acts on the wrong argument list without complaining.
+  local _g="${TESTDIR}/gc" _s="${TESTDIR}/sc"
+  local _dir="${TESTDIR}/Application Support"
+  mkdir -p "${_dir}"
+  local _inc="${_dir}/inc.cfg"
+  printf '[core]\n\thooksPath = /tmp/spaced\n' > "${_inc}"
+  printf '[include]\n\tpath = %s\n' "${_inc}" > "${_g}"; : > "${_s}"
+
+  local _remedy
+  _remedy="$(GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" \
+    _git_hooks_hookspath_offenders | cut -f2)"
+  [[ "${_remedy}" != *"Application Support"* ]]
+  [[ "${_remedy}" == *"Application\\ Support"* ]]
+
+  # Round-trip: the quoted form must survive a shell and clear the pin.
+  export GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}"
+  eval "${_remedy}"
+  [ -z "$(_git_hooks_hookspath_offenders)" ]
+}
+
 @test "_git_hooks_hookspath_offenders remedy actually clears an include-borne pin" {
   # The remedy string is the whole point of the third field -- assert it
   # works rather than only that it was printed. The scope-level form this

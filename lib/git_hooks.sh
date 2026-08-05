@@ -361,7 +361,13 @@ _git_hooks_hookspath_offenders() {
       # 90% coverage floor. The strip degrades safely if git ever changes its
       # mind -- the remedy would name the raw token, visibly wrong rather
       # than quietly wrong.
-      _remedy="git config --file ${_origin#file:} --unset core.hooksPath"
+      #
+      # printf %q, not bare interpolation: this string exists to be pasted
+      # into a shell. An ordinary macOS include path -- "~/Library/Application
+      # Support/git/config" -- splits on its spaces and git silently acts on
+      # the wrong argument list. Any shell metacharacter in the path rides
+      # along the same route.
+      _remedy="git config --file $(printf '%q' "${_origin#file:}") --unset core.hooksPath"
     fi
     printf '%s\t%s\t%s\n' "${_scope}" "${_remedy}" "${_value}"
   done
