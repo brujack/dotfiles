@@ -278,12 +278,22 @@ _git_hooks_join() {
   printf '%s' "${_out}"
 }
 
-# _git_hooks_hookspath_offenders prints one "scope<TAB>value" line per git
-# scope that has core.hooksPath set, where scope is literally "system" or
-# "global" and value may be empty. Prints nothing when neither scope has the
-# key set at all. Contract: ALWAYS returns 0 -- an empty result means
-# "checked, clean", and callers count lines rather than reading the exit
-# code as a verdict.
+# _git_hooks_hookspath_offenders prints one "scope<TAB>remedy<TAB>value" line
+# per git scope that has core.hooksPath set, where scope is literally "system"
+# or "global", remedy is the exact command that clears that particular pin,
+# and value may be empty. Prints nothing when neither scope has the key set at
+# all. Contract: ALWAYS returns 0 -- an empty result means "checked, clean",
+# and callers count lines rather than reading the exit code as a verdict.
+#
+# Value is deliberately LAST. Callers split on tab with a three-variable
+# `read`, which folds every trailing field into the final variable; putting
+# the operator-facing remedy there instead would let a tab inside a pinned
+# path cut short the one string the operator is meant to run.
+#
+# The remedy is produced here rather than by each caller because deriving it
+# requires knowing WHICH file holds the key -- state this function already
+# established and would otherwise have to be re-derived, identically, at two
+# call sites free to drift apart.
 #
 # An empty value is reported, not skipped: `git config --global
 # core.hooksPath ""` leaves the key present with an empty value (rc 0 on
@@ -296,6 +306,22 @@ _git_hooks_join() {
 # which returns the EFFECTIVE value after system->global->local precedence
 # and so cannot say which scope to unset -- the one thing the operator needs.
 #
+# Each scope is read twice, and the second read is the point of the function.
+# `git config --<scope> --get` defaults to --no-includes, but git's own hook
+# resolution traverses includes: a pin reached through an [include] answers
+# rc 1 with empty stderr -- byte-for-byte what a genuinely unset key returns
+# -- while `rev-parse --git-path hooks` hands back the pinned path and every
+# repo on the box is silently redirected. So a scope that looks clean is
+# re-read with --includes before it is believed.
+#
+# A conditional `includeIf "gitdir:..."` is still only visible when git
+# evaluates it from a matching directory, and this function is called once
+# per sweep rather than once per discovered repo -- so a gitdir-scoped pin is
+# caught only when the caller's cwd already satisfies the condition. That is
+# strictly more than --no-includes could ever see (which is nothing), not a
+# new gap; closing it means giving the pin probe repo context, which is a
+# structural change to the sweep rather than a change to this read.
+#
 # No `env -u GIT_DIR ...` strip here, unlike every other git call in this
 # file: neither read takes repo context, so an inherited GIT_DIR cannot
 # redirect them. The strip is still required on the `make install-hooks`
@@ -307,13 +333,43 @@ _git_hooks_join() {
 # is archive-only), and every per-clone shape that CAN hurt is already caught
 # by _git_hooks_check_complete's rc 1/2.
 _git_hooks_hookspath_offenders() {
-  local _scope _value
+  local _scope _value _origin _remedy
   for _scope in system global; do
+    _remedy="git config --${_scope} --unset core.hooksPath"
     # --get exits 1 when unset. That is the normal clean path, not an error,
     # and must not leak out of this function as a failure. rc 0 with an
     # empty value means the key IS set (to empty) -- fall through to print.
-    _value="$(git config "--${_scope}" --get core.hooksPath 2>/dev/null)" || continue
-    printf '%s\t%s\n' "${_scope}" "${_value}"
+    if ! _value="$(git config "--${_scope}" --get core.hooksPath 2>/dev/null)"; then
+      # Not in the scope's own file. Re-read through includes before calling
+      # it clean. -z is required rather than the default tab-separated
+      # --show-origin format: the value may be empty or whitespace-only, and
+      # NUL is the only delimiter git will not also emit inside a value.
+      # Command substitution silently drops NUL bytes, so the pair has to be
+      # consumed with `read -d ''` off a process substitution instead.
+      _origin=""
+      _value=""
+      { IFS= read -r -d '' _origin && IFS= read -r -d '' _value; } \
+        < <(git config "--${_scope}" --includes -z --show-origin \
+              --get core.hooksPath 2>/dev/null) || continue
+      # A scope-level --unset cannot reach a key held in an included file: it
+      # exits 5 and the pin survives. The remedy has to name the origin file.
+      # --show-origin can also emit blob:/command line:/standard input:, but
+      # not for an explicitly-scoped read -- --system and --global resolve to
+      # files, and so does anything they include. No else branch guards that,
+      # deliberately: it could never execute, and an unreachable branch is a
+      # permanent hole in "both branches tested" plus a permanent hit to the
+      # 90% coverage floor. The strip degrades safely if git ever changes its
+      # mind -- the remedy would name the raw token, visibly wrong rather
+      # than quietly wrong.
+      #
+      # printf %q, not bare interpolation: this string exists to be pasted
+      # into a shell. An ordinary macOS include path -- "~/Library/Application
+      # Support/git/config" -- splits on its spaces and git silently acts on
+      # the wrong argument list. Any shell metacharacter in the path rides
+      # along the same route.
+      _remedy="git config --file $(printf '%q' "${_origin#file:}") --unset core.hooksPath"
+    fi
+    printf '%s\t%s\t%s\n' "${_scope}" "${_remedy}" "${_value}"
   done
   return 0
 }
@@ -362,8 +418,8 @@ install_git_hooks_all_repos() {
   # `make install-hooks` cannot fix a pinned scope regardless of which repo
   # it's run in. The remedy is unsetting the pin, not touching any of the
   # affected repos.
-  local _hp_scope _hp_value
-  while IFS=$'\t' read -r _hp_scope _hp_value; do
+  local _hp_scope _hp_value _hp_remedy
+  while IFS=$'\t' read -r _hp_scope _hp_remedy _hp_value; do
     [[ -z "${_hp_scope}" ]] && continue
     _hookspath=$((_hookspath + 1))
     # Empty value is a real pin that disables hooks -- see Task 1's Contract.
@@ -374,7 +430,7 @@ install_git_hooks_all_repos() {
     # surfaces render the same pin identically instead of diverging.
     [[ -z "${_hp_value//[[:space:]]/}" ]] && _hp_value="(empty)"
     _hookspath_lines+=("${_hp_scope}: ${_hp_value}")
-    log_warn "core.hooksPath pinned at ${_hp_scope} scope: ${_hp_value} (remedy: git config --${_hp_scope} --unset core.hooksPath)"
+    log_warn "core.hooksPath pinned at ${_hp_scope} scope: ${_hp_value} (remedy: ${_hp_remedy})"
   done <<< "$(_git_hooks_hookspath_offenders)"
 
   local _dir

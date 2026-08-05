@@ -1590,7 +1590,7 @@ _sweep_build_stray_unreadable_repo() {
   printf '[core]\n\thooksPath = /tmp/mine\n' > "${_g}"; : > "${_s}"
   GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" run _git_hooks_hookspath_offenders
   [ "$status" -eq 0 ]
-  [ "$output" = "$(printf 'global\t/tmp/mine')" ]
+  [ "$output" = "$(printf 'global\tgit config --global --unset core.hooksPath\t/tmp/mine')" ]
 }
 
 @test "_git_hooks_hookspath_offenders reports a system pin with its scope label" {
@@ -1598,7 +1598,7 @@ _sweep_build_stray_unreadable_repo() {
   : > "${_g}"; printf '[core]\n\thooksPath = /etc/hooks\n' > "${_s}"
   GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" run _git_hooks_hookspath_offenders
   [ "$status" -eq 0 ]
-  [ "$output" = "$(printf 'system\t/etc/hooks')" ]
+  [ "$output" = "$(printf 'system\tgit config --system --unset core.hooksPath\t/etc/hooks')" ]
 }
 
 @test "_git_hooks_hookspath_offenders reports both scopes as separate lines, system first" {
@@ -1607,8 +1607,8 @@ _sweep_build_stray_unreadable_repo() {
   printf '[core]\n\thooksPath = /etc/hooks\n' > "${_s}"
   GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" run _git_hooks_hookspath_offenders
   [ "${#lines[@]}" -eq 2 ]
-  [ "${lines[0]}" = "$(printf 'system\t/etc/hooks')" ]
-  [ "${lines[1]}" = "$(printf 'global\t/tmp/mine')" ]
+  [ "${lines[0]}" = "$(printf 'system\tgit config --system --unset core.hooksPath\t/etc/hooks')" ]
+  [ "${lines[1]}" = "$(printf 'global\tgit config --global --unset core.hooksPath\t/tmp/mine')" ]
 }
 
 @test "_git_hooks_hookspath_offenders reports a pin whose path does not exist" {
@@ -1616,7 +1616,7 @@ _sweep_build_stray_unreadable_repo() {
   printf '[core]\n\thooksPath = /nonexistent/nope\n' > "${_g}"; : > "${_s}"
   GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" run _git_hooks_hookspath_offenders
   [ "$status" -eq 0 ]
-  [ "$output" = "$(printf 'global\t/nonexistent/nope')" ]
+  [ "$output" = "$(printf 'global\tgit config --global --unset core.hooksPath\t/nonexistent/nope')" ]
 }
 
 @test "_git_hooks_hookspath_offenders reports a scope pinned to an empty value" {
@@ -1625,7 +1625,7 @@ _sweep_build_stray_unreadable_repo() {
   GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" run _git_hooks_hookspath_offenders
   [ "$status" -eq 0 ]
   [ "${#lines[@]}" -eq 1 ]
-  [ "${lines[0]}" = "$(printf 'global\t')" ]
+  [ "${lines[0]}" = "$(printf 'global\tgit config --global --unset core.hooksPath\t')" ]
 }
 
 @test "_git_hooks_hookspath_offenders is idempotent across two calls in one shell" {
@@ -1635,7 +1635,143 @@ _sweep_build_stray_unreadable_repo() {
   _first="$(GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" _git_hooks_hookspath_offenders)"
   _second="$(GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" _git_hooks_hookspath_offenders)"
   [ "${_first}" = "${_second}" ]
-  [ "${_first}" = "$(printf 'global\t/tmp/mine')" ]
+  [ "${_first}" = "$(printf 'global\tgit config --global --unset core.hooksPath\t/tmp/mine')" ]
+}
+
+# ── include-borne pins ──────────────────────────────────────────────────────
+#
+# `git config --<scope> --get` defaults to --no-includes, but effective hook
+# resolution traverses includes. A pin reached through an [include] therefore
+# read rc 1 with empty stderr -- byte-identical to clean-unset -- while
+# `rev-parse --git-path hooks` returned it and every repo on the box was
+# silently redirected. The scope-level `--unset` remedy is wrong for this
+# shape too: it exits 5 and the pin survives, because the key is not in the
+# scope's own file. Both are covered here.
+
+@test "_git_hooks_hookspath_offenders detects a global pin arriving through an [include]" {
+  local _g="${TESTDIR}/gc" _s="${TESTDIR}/sc" _inc="${TESTDIR}/inc.cfg"
+  printf '[core]\n\thooksPath = /tmp/via-include\n' > "${_inc}"
+  printf '[include]\n\tpath = %s\n' "${_inc}" > "${_g}"; : > "${_s}"
+  GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" run _git_hooks_hookspath_offenders
+  [ "$status" -eq 0 ]
+  [ "${#lines[@]}" -eq 1 ]
+  [ "${lines[0]}" = "$(printf 'global\tgit config --file %s --unset core.hooksPath\t/tmp/via-include' "${_inc}")" ]
+}
+
+@test "_git_hooks_hookspath_offenders detects a system pin arriving through an [include]" {
+  local _g="${TESTDIR}/gc" _s="${TESTDIR}/sc" _inc="${TESTDIR}/inc.cfg"
+  printf '[core]\n\thooksPath = /etc/via-include\n' > "${_inc}"
+  : > "${_g}"; printf '[include]\n\tpath = %s\n' "${_inc}" > "${_s}"
+  GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" run _git_hooks_hookspath_offenders
+  [ "$status" -eq 0 ]
+  [ "${lines[0]}" = "$(printf 'system\tgit config --file %s --unset core.hooksPath\t/etc/via-include' "${_inc}")" ]
+}
+
+@test "_git_hooks_hookspath_offenders emits a per-scope remedy when one scope is include-borne and the other is direct" {
+  # Two scopes, two different remedy shapes, one run. This is the only state
+  # in which the per-iteration remedy reset is load-bearing -- every
+  # single-scope test passes whether or not it survives to the next
+  # iteration, so without this case the reset is protected by inference only.
+  local _g="${TESTDIR}/gc" _s="${TESTDIR}/sc" _inc="${TESTDIR}/inc.cfg"
+  printf '[core]\n\thooksPath = /etc/via-include\n' > "${_inc}"
+  printf '[include]\n\tpath = %s\n' "${_inc}" > "${_s}"
+  printf '[core]\n\thooksPath = /tmp/direct\n' > "${_g}"
+  GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" run _git_hooks_hookspath_offenders
+  [ "$status" -eq 0 ]
+  [ "${#lines[@]}" -eq 2 ]
+  [ "${lines[0]}" = "$(printf 'system\tgit config --file %s --unset core.hooksPath\t/etc/via-include' "${_inc}")" ]
+  # The direct scope must NOT inherit the include-borne scope's --file remedy.
+  [ "${lines[1]}" = "$(printf 'global\tgit config --global --unset core.hooksPath\t/tmp/direct')" ]
+}
+
+@test "_git_hooks_hookspath_offenders detects an include-borne pin with an empty value" {
+  local _g="${TESTDIR}/gc" _s="${TESTDIR}/sc" _inc="${TESTDIR}/inc.cfg"
+  printf '[core]\n\thooksPath =\n' > "${_inc}"
+  printf '[include]\n\tpath = %s\n' "${_inc}" > "${_g}"; : > "${_s}"
+  GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" run _git_hooks_hookspath_offenders
+  [ "$status" -eq 0 ]
+  [ "${#lines[@]}" -eq 1 ]
+  [ "${lines[0]}" = "$(printf 'global\tgit config --file %s --unset core.hooksPath\t' "${_inc}")" ]
+}
+
+@test "_git_hooks_hookspath_offenders preserves a whitespace-only include-borne value" {
+  local _g="${TESTDIR}/gc" _s="${TESTDIR}/sc" _inc="${TESTDIR}/inc.cfg"
+  printf '[core]\n\thooksPath = " "\n' > "${_inc}"
+  printf '[include]\n\tpath = %s\n' "${_inc}" > "${_g}"; : > "${_s}"
+  GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" run _git_hooks_hookspath_offenders
+  [ "$status" -eq 0 ]
+  # The quoted single space must survive to the caller intact -- both render
+  # surfaces collapse it to "(empty)" themselves, and cannot do so if the
+  # producer has already trimmed it into a genuinely absent value.
+  [ "${lines[0]}" = "$(printf 'global\tgit config --file %s --unset core.hooksPath\t ' "${_inc}")" ]
+}
+
+@test "_git_hooks_hookspath_offenders follows a nested include chain to the innermost file" {
+  local _g="${TESTDIR}/gc" _s="${TESTDIR}/sc"
+  local _mid="${TESTDIR}/mid.cfg" _leaf="${TESTDIR}/leaf.cfg"
+  printf '[core]\n\thooksPath = /tmp/deep\n' > "${_leaf}"
+  printf '[include]\n\tpath = %s\n' "${_leaf}" > "${_mid}"
+  printf '[include]\n\tpath = %s\n' "${_mid}" > "${_g}"; : > "${_s}"
+  GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" run _git_hooks_hookspath_offenders
+  [ "$status" -eq 0 ]
+  # The remedy must name the file that actually holds the key, not the
+  # intermediate that merely points at it -- unsetting in mid.cfg is a no-op.
+  [ "${lines[0]}" = "$(printf 'global\tgit config --file %s --unset core.hooksPath\t/tmp/deep' "${_leaf}")" ]
+}
+
+@test "_git_hooks_hookspath_offenders is idempotent across two calls on an include-borne pin" {
+  local _g="${TESTDIR}/gc" _s="${TESTDIR}/sc" _inc="${TESTDIR}/inc.cfg"
+  printf '[core]\n\thooksPath = /tmp/via-include\n' > "${_inc}"
+  printf '[include]\n\tpath = %s\n' "${_inc}" > "${_g}"; : > "${_s}"
+  local _first _second
+  _first="$(GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" _git_hooks_hookspath_offenders)"
+  _second="$(GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" _git_hooks_hookspath_offenders)"
+  [ "${_first}" = "${_second}" ]
+  [ "${_first}" = "$(printf 'global\tgit config --file %s --unset core.hooksPath\t/tmp/via-include' "${_inc}")" ]
+}
+
+@test "_git_hooks_hookspath_offenders shell-quotes an origin path containing spaces" {
+  # The remedy is written to be pasted into a shell. An unquoted
+  # "~/Library/Application Support/git/config" splits on its spaces and git
+  # acts on the wrong argument list without complaining.
+  local _g="${TESTDIR}/gc" _s="${TESTDIR}/sc"
+  local _dir="${TESTDIR}/Application Support"
+  mkdir -p "${_dir}"
+  local _inc="${_dir}/inc.cfg"
+  printf '[core]\n\thooksPath = /tmp/spaced\n' > "${_inc}"
+  printf '[include]\n\tpath = %s\n' "${_inc}" > "${_g}"; : > "${_s}"
+
+  local _remedy
+  _remedy="$(GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" \
+    _git_hooks_hookspath_offenders | cut -f2)"
+  [[ "${_remedy}" != *"Application Support"* ]]
+  [[ "${_remedy}" == *"Application\\ Support"* ]]
+
+  # Round-trip: the quoted form must survive a shell and clear the pin.
+  export GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}"
+  eval "${_remedy}"
+  [ -z "$(_git_hooks_hookspath_offenders)" ]
+}
+
+@test "_git_hooks_hookspath_offenders remedy actually clears an include-borne pin" {
+  # The remedy string is the whole point of the third field -- assert it
+  # works rather than only that it was printed. The scope-level form this
+  # replaced exits 5 here and leaves the pin in place.
+  local _g="${TESTDIR}/gc" _s="${TESTDIR}/sc" _inc="${TESTDIR}/inc.cfg"
+  local _repo="${TESTDIR}/remedy-repo"
+  printf '[core]\n\thooksPath = /tmp/via-include\n' > "${_inc}"
+  printf '[include]\n\tpath = %s\n' "${_inc}" > "${_g}"; : > "${_s}"
+  git init -q "${_repo}"
+
+  export GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}"
+  [ "$(git -C "${_repo}" rev-parse --git-path hooks)" = "/tmp/via-include" ]
+
+  local _remedy
+  _remedy="$(_git_hooks_hookspath_offenders | cut -f2)"
+  eval "${_remedy}"
+
+  [ "$(git -C "${_repo}" rev-parse --git-path hooks)" != "/tmp/via-include" ]
+  [ -z "$(_git_hooks_hookspath_offenders)" ]
 }
 
 # ── Task 3: install_git_hooks_all_repos hooksPath reporting ─────────────────
@@ -1683,6 +1819,40 @@ _sweep_build_stray_unreadable_repo() {
   [[ "$output" == *"core.hooksPath pinned"* ]]
   [[ "$output" == *"global"* ]]
   [[ "$output" == *"${_pinned_hooks}"* ]]
+  [[ "$output" == *"0 gaps"* ]]
+  [[ "$output" != *"unknown"* ]]
+}
+
+@test "install_git_hooks_all_repos reports an include-borne pin and names the --file remedy" {
+  local _base="${TESTDIR}/sweep-hookspath-include"
+  local _markers="${TESTDIR}/sweep-hookspath-include-markers"
+  local _g="${TESTDIR}/gc-hpi" _s="${TESTDIR}/sc-hpi" _inc="${TESTDIR}/inc-hpi.cfg"
+  mkdir -p "${_base}" "${_markers}"
+  _sweep_build_cp_repo "${_base}" "clean-repo" "${_markers}"
+  _sweep_seed_installed "${_base}/clean-repo"
+
+  local _pinned_hooks="${TESTDIR}/pinned-hooks-inc"
+  mkdir -p "${_pinned_hooks}"
+  local _hook
+  for _hook in pre-commit pre-push commit-msg; do
+    printf '#!/usr/bin/env bash\nexit 0\n' > "${_pinned_hooks}/${_hook}"
+    chmod +x "${_pinned_hooks}/${_hook}"
+  done
+  printf '[core]\n\thooksPath = %s\n' "${_pinned_hooks}" > "${_inc}"
+  printf '[include]\n\tpath = %s\n' "${_inc}" > "${_g}"; : > "${_s}"
+
+  HOOK_EXPECTED_REPOS=()
+  GIT_CONFIG_GLOBAL="${_g}" GIT_CONFIG_SYSTEM="${_s}" PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"core.hooksPath pinned"* ]]
+  [[ "$output" == *"git config --file ${_inc} --unset core.hooksPath"* ]]
+  # The scope-level form is what this shape used to print, and it exits 5
+  # against an included file -- it must not appear.
+  [[ "$output" != *"git config --global --unset core.hooksPath"* ]]
+  # rc 2 has three independent producers -- gaps, unknowns, and the pin. Both
+  # of the other two are asserted absent, so rc 2 above is attributable to the
+  # pin alone. Without these the test passes whether or not the include-borne
+  # detection works at all.
   [[ "$output" == *"0 gaps"* ]]
   [[ "$output" != *"unknown"* ]]
 }
