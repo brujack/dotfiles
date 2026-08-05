@@ -1,6 +1,13 @@
 BATS := $(shell command -v bats 2>/dev/null)
 SHELLCHECK := $(shell command -v shellcheck 2>/dev/null)
 SHELL_FILES := $(shell find . -name "*.sh" -not -path "*/node_modules/*" -not -path "*/coverage/*")
+# Bats suites are shell too, and were never shellchecked — the glob above only
+# matches *.sh. They are linted separately rather than folded into SHELL_FILES
+# because they need --severity=warning: bats' run/@test model emits SC2030 and
+# SC2031 subshell notices structurally (over 2200 of them here) which say
+# nothing about correctness, while the .sh files above run at the default
+# severity and should stay there.
+BATS_FILES := $(shell find tests -name "*.bats")
 
 .PHONY: test test-unit lint bash-coverage push-bash-coverage install-hooks ledger-symlink help changelog validate-plan sync-agent-guidance check-agent-guidance
 
@@ -24,6 +31,7 @@ lint:
 	done; \
 	if [ -n "$(SHELLCHECK)" ]; then \
 	  shellcheck $(SHELL_FILES) && printf "shellcheck OK\n" || { printf "shellcheck FAIL\n"; failed=1; }; \
+	  shellcheck --severity=warning $(BATS_FILES) && printf "shellcheck bats OK\n" || { printf "shellcheck bats FAIL\n"; failed=1; }; \
 	else \
 	  printf "shellcheck not found, skipping (install: brew install shellcheck)\n"; \
 	fi; \

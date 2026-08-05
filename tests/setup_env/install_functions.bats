@@ -167,8 +167,8 @@ teardown() {
   export MOCK_DPKG_L_NALA="ii  nala  0.15.0  amd64  Commandline Package Manager"
   run check_and_install_nala
   [ "$status" -eq 0 ]
-  ! grep -q "dpkg --install" "${MOCK_CALLS_FILE}"
-  ! grep -q "apt install nala" "${MOCK_CALLS_FILE}"
+  refute_grep "dpkg --install" "${MOCK_CALLS_FILE}"
+  refute_grep "apt install nala" "${MOCK_CALLS_FILE}"
 }
 
 @test "check_and_install_nala on RESOLUTE uses apt install, skips volian wget" {
@@ -415,8 +415,8 @@ teardown() {
   run install_terraform_skill
   [ "$status" -eq 0 ]
   [[ "$output" == *"not a git checkout"* ]]
-  ! grep -q "git clone" "${MOCK_CALLS_FILE}"
-  ! grep -qE "git -C .* pull" "${MOCK_CALLS_FILE}"
+  refute_grep "git clone" "${MOCK_CALLS_FILE}"
+  refute_grep "git -C .* pull" "${MOCK_CALLS_FILE}" -E
 }
 
 @test "install_terraform_skill returns non-zero when git pull fails" {

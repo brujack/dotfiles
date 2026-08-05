@@ -50,7 +50,7 @@ teardown() {
   [ "$status" -eq 0 ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew-drift")" = "OK" ]
   grep -q "formulae clean" "${_DOTFILES_RUN_TMPDIR}/result_brew-drift"
-  ! grep -q "casks clean" "${_DOTFILES_RUN_TMPDIR}/result_brew-drift"
+  refute_grep "casks clean" "${_DOTFILES_RUN_TMPDIR}/result_brew-drift"
   [ ! -f "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift" ]
 }
 

@@ -872,8 +872,8 @@ teardown() {
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
   run_update
   grep -q "nala" "${MOCK_CALLS_FILE}"
-  ! grep -q "brew update" "${MOCK_CALLS_FILE}"
-  ! grep -q "gem update" "${MOCK_CALLS_FILE}"
+  refute_grep "brew update" "${MOCK_CALLS_FILE}"
+  refute_grep "gem update" "${MOCK_CALLS_FILE}"
 }
 
 # ── doctor_pass / doctor_fail ─────────────────────────────────────────────────
@@ -1105,6 +1105,7 @@ teardown() {
     local _dir="${HOME}/.aws"
     local _perms
     if [[ ! -d "${_dir}" ]]; then
+      # shellcheck disable=SC2088  # display label for the operator, not a path
       doctor_fail "~/.aws" "missing"
       return
     fi
@@ -1114,8 +1115,10 @@ teardown() {
       _perms=$(stat -c '%a' "${_dir}")
     fi
     if [[ "${_perms}" == "700" ]]; then
+      # shellcheck disable=SC2088  # display label, see above
       doctor_pass "~/.aws (700)"
     else
+      # shellcheck disable=SC2088  # display label, see above
       doctor_fail "~/.aws" "expected 700, got ${_perms}"
     fi
   }
@@ -1134,6 +1137,7 @@ teardown() {
     printf "\nCredential directories:\n"
     local _dir="${HOME}/.aws"
     if [[ ! -d "${_dir}" ]]; then
+      # shellcheck disable=SC2088  # display label for the operator, not a path
       doctor_fail "~/.aws" "missing"
       return
     fi
@@ -1459,9 +1463,11 @@ _unmocked_path() {
   export MOCK_CURL_EXIT=0
   # Set expiry to 5 days from now (within 30-day warning window)
   if [[ -n "${MACOS:-}" ]]; then
-    export GITHUB_PAT_EXPIRY=$(date -v+5d +%Y-%m-%d)
+    GITHUB_PAT_EXPIRY=$(date -v+5d +%Y-%m-%d)
+    export GITHUB_PAT_EXPIRY
   else
-    export GITHUB_PAT_EXPIRY=$(date -d "+5 days" +%Y-%m-%d)
+    GITHUB_PAT_EXPIRY=$(date -d "+5 days" +%Y-%m-%d)
+    export GITHUB_PAT_EXPIRY
   fi
   _doctor_check_github_mcp
   [ "${_DOCTOR_WARN}" -ge 1 ]
@@ -1486,9 +1492,11 @@ _unmocked_path() {
   export MOCK_CURL_EXIT=0
   # Set expiry 90 days out (outside warning window)
   if [[ -n "${MACOS:-}" ]]; then
-    export GITHUB_PAT_EXPIRY=$(date -v+90d +%Y-%m-%d)
+    GITHUB_PAT_EXPIRY=$(date -v+90d +%Y-%m-%d)
+    export GITHUB_PAT_EXPIRY
   else
-    export GITHUB_PAT_EXPIRY=$(date -d "+90 days" +%Y-%m-%d)
+    GITHUB_PAT_EXPIRY=$(date -d "+90 days" +%Y-%m-%d)
+    export GITHUB_PAT_EXPIRY
   fi
   _doctor_check_github_mcp
   [ "${_DOCTOR_FAIL}" -eq 0 ]

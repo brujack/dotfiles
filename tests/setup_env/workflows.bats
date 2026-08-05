@@ -121,7 +121,7 @@ teardown() {
 @test "run_setup_user clones dotfiles repo on macOS when missing" {
   export MACOS=1
   unset LINUX UBUNTU
-  rm -rf "${PERSONAL_GITREPOS}/${DOTFILES}"
+  rm -rf "${PERSONAL_GITREPOS:?}/${DOTFILES:?}"
   run_setup_user
   grep -q "git clone" "${MOCK_CALLS_FILE}"
 }
@@ -695,7 +695,8 @@ EOF
   export UPDATE_MAS=1
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_CLAUDE
   export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
-  export MOCK_MAS_UPGRADE_OUTPUT="$(printf '==> Updated App One (1.0)\n==> Updated App Two (2.0)')"
+  MOCK_MAS_UPGRADE_OUTPUT="$(printf '==> Updated App One (1.0)\n==> Updated App Two (2.0)')"
+  export MOCK_MAS_UPGRADE_OUTPUT
   run run_update
   [[ "$output" == *"2 app(s)"* ]]
 }
@@ -842,7 +843,7 @@ setup_constants_copy() {
   sed -i.bak 's|^GO_DOWNLOAD_FILENAME=.*|GO_DOWNLOAD_FILENAME="go1.26.1.linux-amd64.tar.gz"|' "${_TEST_CONSTANTS_PATH}"
   rm -f "${_TEST_CONSTANTS_PATH}.bak"
   _update_url_pins "go" "1.26" "1.27" "${_TEST_CONSTANTS_PATH}"
-  ! grep -q 'go1.26.1' "${_TEST_CONSTANTS_PATH}"
+  refute_grep 'go1.26.1' "${_TEST_CONSTANTS_PATH}"
   grep -q 'go1.27' "${_TEST_CONSTANTS_PATH}"
 }
 
