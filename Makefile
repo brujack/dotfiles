@@ -10,7 +10,7 @@ SHELL_FILES := $(shell find . -name "*.sh" -not -path "*/node_modules/*" -not -p
 # severity and should stay there.
 BATS_FILES := $(shell find tests -name "*.bats")
 
-.PHONY: test test-unit lint bash-coverage push-bash-coverage install-hooks ledger-symlink help changelog validate-plan sync-agent-guidance check-agent-guidance
+.PHONY: test test-python test-unit lint bash-coverage push-bash-coverage install-hooks ledger-symlink help changelog validate-plan sync-agent-guidance check-agent-guidance
 
 help:
 	@printf "Available targets:\n"

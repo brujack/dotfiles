@@ -8,11 +8,21 @@
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   cat <<'USAGE'
 Usage: run-bash-coverage.sh [--json /path/out.json]
+       run-bash-coverage.sh --list-sources
+       run-bash-coverage.sh --count-coverable <file>
 
 Measures bash line coverage using BASH_ENV + PS4 xtrace tracing of the
 full bats suite. Prints a per-file coverage table and overall percentage.
 
-  --json /path/out.json  Also write a shields.io badge JSON to given path
+  --json /path/out.json   Also write a shields.io badge JSON to given path
+
+Inspecting the figure without a full run (both exit immediately):
+
+  --list-sources          Print the instrumented set — setup_env.sh plus
+                          lib/*.sh, derived at run time, not a literal list
+  --count-coverable FILE  Print one file's coverable-line count, the
+                          denominator of its percentage. Exits 2 on a missing,
+                          unreadable, or absent argument rather than printing 0
 USAGE
   exit 0
 fi
@@ -35,10 +45,22 @@ TRACE_FIFO="${OUTPUT_DIR}/bash_trace.fifo"
 # Standalone operational scripts (kubernetes_stuff/, scripts/) are deliberately
 # out of scope — no bats suite sources them, so including them would add pure
 # zeros to the denominator and measure nothing.
-INCLUDE_FILES=()
+# Tracked files, via git — not a filesystem glob. A glob also picks up a
+# developer's untracked scratch file under lib/, which silently joins the
+# denominator locally and makes `make bash-coverage` disagree with CI on the
+# same commit. It is also what the regression test asserts against, so a glob
+# would let the two drift apart without either complaining.
+INCLUDE_FILES=("${REPO_ROOT}/setup_env.sh")
 while IFS= read -r _src; do
-    INCLUDE_FILES+=("${_src}")
-done < <(printf '%s\n' "${REPO_ROOT}/setup_env.sh" "${REPO_ROOT}"/lib/*.sh)
+    [[ -n "${_src}" ]] && INCLUDE_FILES+=("${REPO_ROOT}/${_src}")
+done < <(git -C "${REPO_ROOT}" ls-files 'lib/*.sh' 2>/dev/null)
+
+# Falling back to the glob would reintroduce the local-vs-CI drift above, and a
+# silently short instrumented set is exactly this script's original defect.
+if [[ "${#INCLUDE_FILES[@]}" -le 1 ]]; then
+    printf "ERROR: no tracked lib/*.sh found — is this a git checkout?\n" >&2
+    exit 1
+fi
 
 # Lets the set be asserted without running the full suite under the tracer,
 # which takes minutes. Also answers "what is actually measured?" for an operator
@@ -88,12 +110,21 @@ _count_coverable_lines() {
             [[ "${_trimmed}" == '"'* ]] && _in_embedded=0
             continue
         fi
+        # Blank and comment skips MUST come before the opener detection below.
+        # The opener is matched against the raw line, so a comment that merely
+        # mentions `python3 -c "` would set the skip state, and since no later
+        # line starts with a quote, every remaining line in the file gets
+        # swallowed to EOF. That inflates the percentage rather than lowering it
+        # — the one direction a gate at exactly 90% with no headroom fails green
+        # instead of red. Writing such a comment above one of
+        # lib/package_capture.sh's blocks is now the natural thing to do, since
+        # this change is what made those blocks special.
+        [[ -z "${_trimmed}" ]] && continue
+        [[ "${_trimmed}" == "#"* ]] && continue
         if [[ "${_line}" == *'python3 -c "'* ]]; then
             _after="${_line#*python3 -c \"}"
             [[ "${_after}" != *'"'* ]] && _in_embedded=1
         fi
-        [[ -z "${_trimmed}" ]] && continue
-        [[ "${_trimmed}" == "#"* ]] && continue
         case "${_trimmed}" in
             "}" | "fi" | "done" | "esac" | ";;" | "then" | "do" | "else") continue ;;
         esac
@@ -114,7 +145,26 @@ _count_coverable_lines() {
 
 # Same purpose as --list-sources: make an input to the reported percentage
 # checkable without running the suite under the tracer.
-if [[ "${1:-}" == "--count-coverable" && -n "${2:-}" ]]; then
+#
+# Both error paths matter more than they look. A missing file used to print 0
+# and exit 0 — a confident wrong answer from the one flag whose job is auditing
+# the denominator, which is the same failure this script was just fixed for. And
+# a bare --count-coverable with no argument used to fall through to a full
+# multi-minute tracer run, so a typo cost several minutes and then reported a
+# coverage number the operator never asked for.
+if [[ "${1:-}" == "--count-coverable" ]]; then
+    if [[ -z "${2:-}" ]]; then
+        printf "ERROR: --count-coverable requires a file argument\n" >&2
+        exit 2
+    fi
+    if [[ ! -f "${2}" ]]; then
+        printf "ERROR: --count-coverable: no such file: %s\n" "${2}" >&2
+        exit 2
+    fi
+    if [[ ! -r "${2}" ]]; then
+        printf "ERROR: --count-coverable: not readable: %s\n" "${2}" >&2
+        exit 2
+    fi
     _count_coverable_lines "${2}"
     exit 0
 fi
