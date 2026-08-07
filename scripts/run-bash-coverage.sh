@@ -130,6 +130,13 @@ _count_coverable_lines() {
         # this change is what made those blocks special.
         [[ -z "${_trimmed}" ]] && continue
         [[ "${_trimmed}" == "#"* ]] && continue
+        # Known limit, measured with PS4='+LINE:${LINENO}': a PREFIXED opener
+        # (declare/readonly/local) is traced at the opener line, which is what
+        # this counts. A BARE `PLAIN=(` is traced at the CLOSING paren instead,
+        # so for that form the counted opener is never traced and the traced
+        # paren is excluded — ±1 line, self-cancelling in aggregate. There are
+        # no bare multi-line arrays in the instrumented set; all 5 are prefixed.
+        #
         # Element lines of a multi-line array literal are not separate commands.
         # bash xtrace emits the whole assignment as one line — verified:
         #   declare -A M=(\n [a]="one"\n [b]="two"\n)  ->  + M=([a]=one [b]=two)
@@ -169,7 +176,20 @@ _count_coverable_lines() {
         # Closing group command with redirect (} >> file, } | cmd)
         [[ "${_trimmed}" =~ ^\}[[:space:]] ]] && continue
         ((_coverable++))
-    done < "${_file}" || [[ -n "${_line}" ]]
+    done < "${_file}"
+    # An unterminated region means every line after it was skipped, which
+    # inflates the percentage — the fail-green direction against a gate with one
+    # point of headroom. Nothing else would report it: the count still looks
+    # like a plausible number. Both remaining ways to reach this are documented
+    # limits of the heuristic (a Python line starting with a double quote closes
+    # a region early; a `#` inside a quoted string truncates the opener match),
+    # so this converts a silent wrong answer into a loud refusal.
+    if [[ "${_in_embedded}" -eq 1 || "${_in_array}" -eq 1 ]]; then
+        printf "ERROR: %s: unterminated %s — lines after it were not counted\n" \
+            "${_file}" \
+            "$([[ "${_in_embedded}" -eq 1 ]] && printf 'python3 -c block' || printf 'array literal')" >&2
+        return 1
+    fi
     printf '%s\n' "${_coverable}"
 }
 
@@ -195,7 +215,7 @@ if [[ "${1:-}" == "--count-coverable" ]]; then
         printf "ERROR: --count-coverable: not readable: %s\n" "${2}" >&2
         exit 2
     fi
-    _count_coverable_lines "${2}"
+    _count_coverable_lines "${2}" || exit 1
     exit 0
 fi
 
@@ -257,7 +277,10 @@ total_coverable=0
 for src_file in "${INCLUDE_FILES[@]}"; do
     [[ ! -f "${src_file}" ]] && continue
 
-    coverable="$(_count_coverable_lines "${src_file}")"
+    if ! coverable="$(_count_coverable_lines "${src_file}")"; then
+        printf "ERROR: cannot compute a trustworthy denominator for %s\n" "${src_file}" >&2
+        exit 1
+    fi
 
     # Count unique line numbers hit in this file from the filtered trace.
     # Use end-of-line anchor to avoid matching :51 inside :516, etc.

@@ -84,10 +84,10 @@ each verified against real `bash -x` output rather than assumed:
 
 Single-line forms of both are ordinary commands and still count. `usage()` heredoc
 content and multi-line curl continuations are the same class and remain **unaddressed** —
-one heredoc opener exists in the instrumented set today, so the residual inflation is
-small but real.
+two heredoc openers exist in the instrumented set today (`lib/workflows.sh` and
+`lib/helpers.sh`), so the residual inflation is small but real.
 
-Post-amendment: 2449/2688 = 91% at 1159 tests. The gate stays at 90%. That the figure
+Post-amendment: 2449/2688 = 91% at 1161 tests. The gate stays at 90%. That the figure
 matches the original 91% is a coincidence of two different denominators, not evidence the
 old number was right.
 

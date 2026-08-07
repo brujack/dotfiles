@@ -940,6 +940,25 @@ FIXTURE
   [ "$output" -eq 2 ]
 }
 
+# An unterminated region silently swallowed every line after it, RAISING the
+# percentage — the fail-green direction against a gate with one point of
+# headroom, and nothing would have reported it because the count still looked
+# plausible. The two ways to reach it are documented limits of the heuristic.
+@test "run-bash-coverage.sh fails loudly on an unterminated python3 -c block" {
+  printf '#!/usr/bin/env bash\n_x=$(python3 -c "\nimport json\n' > "${BATS_TEST_TMPDIR}/unterm.sh"
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/unterm.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"unterminated python3 -c block"* ]]
+  ! [[ "$output" =~ ^[0-9]+$ ]]
+}
+
+@test "run-bash-coverage.sh fails loudly on an unterminated array literal" {
+  printf '#!/usr/bin/env bash\ndeclare -A M=(\n  [a]="one"\n' > "${BATS_TEST_TMPDIR}/untermarr.sh"
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/untermarr.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"unterminated array literal"* ]]
+}
+
 @test "run-bash-coverage.sh --list-sources includes the setup_env.sh entry point" {
   run _run_coverage --list-sources
   [ "$status" -eq 0 ]
