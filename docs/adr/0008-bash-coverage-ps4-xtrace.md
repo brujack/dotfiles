@@ -1,7 +1,7 @@
 # ADR-0008: Use PS4 Xtrace for Bash Coverage Measurement
 
 - **Date:** 2026-06-01
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-08-07 — see Amendment below)
 
 ## Context
 
@@ -39,7 +39,7 @@ Do not attempt kcov, bashcov, or BASH_ENV+DEBUG trap in this repo. All three wer
 
 **Positive:**
 
-- Coverage measurement works and is accurate — 92% measured at 726 tests as of 2026-06-01
+- Coverage measurement works — 92% measured at 726 tests as of 2026-06-01. **The word "accurate" in the original text was wrong and is retracted; see the Amendment below.** That figure was computed over a hand-maintained 13-file subset of 36 tracked shell sources
 - CI gate blocks merges when coverage drops below 90%
 - Named-pipe filtering keeps trace output manageable without sacrificing accuracy
 - `ubuntu-latest` runners avoid the 30–60 min macOS queue delay
@@ -48,10 +48,48 @@ Do not attempt kcov, bashcov, or BASH_ENV+DEBUG trap in this repo. All three wer
 
 - Some lines are structurally non-traceable by PS4 xtrace:
   - Lines inside `[[ "${BASH_SOURCE[0]}" == "${0}" ]]` blocks are not traced by subprocess bats invocations (fd 9 not inherited)
-  - Multi-line array literals, `usage()` heredoc content, and multi-line curl continuation lines are not emitted by bash xtrace
+  - Multi-line array literals, `usage()` heredoc content, and multi-line curl continuation lines are not emitted by bash xtrace. **The array-literal case is no longer treated as a per-file ceiling — it is excluded from the denominator as of 2026-08-07; see the Amendment.** The heredoc and curl-continuation cases remain unaddressed
   - Function declaration lines (`funcname() {`) are not consistently traced across bash versions
-  - These ceilings are documented per-file in `CLAUDE.md` — do not waste time writing tests to exceed them
+  - The remaining ceilings are documented per-file in `CLAUDE.md` — do not waste time writing tests to exceed them
 - Coverage measurement runs the full BATS suite; no sub-suite option currently
+
+## Amendment (2026-08-07)
+
+The PS4-xtrace decision stands. Two things this ADR asserted did not.
+
+**The accuracy claim was false when written.** `INCLUDE_FILES` was a hand-maintained
+array naming 13 files against 36 tracked `.sh` sources, so "92% accurate" described 36%
+of the repo. A literal list cannot fail loudly here: an omitted file is absent from the
+numerator *and* the denominator, so leaving one out does not lower the percentage — it
+leaves it unchanged. `lib/git_hooks.sh` was missed exactly that way and only surfaced
+because someone noticed its absence from the report by eye; `lib/package_capture.sh`
+stayed missing afterwards. The set is now derived at run time from `git ls-files` over
+`setup_env.sh`, `config/*.sh`, and `lib/*.sh`, and the script exits non-zero rather than
+measuring a short set. The predicate is *reached by the suite* — `config/` qualifies
+because `lib/detect_env.sh` sources `config/profiles.sh` and `lib/git_hooks.sh` sources
+`config/hook_repos.sh`.
+
+**The ceiling policy is reversed for two construct classes.** This ADR listed multi-line
+array literals among lines "not emitted by bash xtrace" and directed readers not to waste
+time testing them. That guidance was correct about the mechanism and wrong about the
+remedy: a line no instrument can ever reach does not belong in the denominator at all.
+Counting it reports a permanent shortfall as though it were a testing gap, and every
+reader who checks the file concludes it is under-tested. Two classes are now excluded,
+each verified against real `bash -x` output rather than assumed:
+
+- multi-line `python3 -c "..."` bodies — 54 of `lib/package_capture.sh`'s 107 counted
+  lines, which is why that file read 22% against a ceiling it could not reach
+- multi-line array literals — `declare -A M=(` … `)` traces as one `M=([a]=1 [b]=2)`
+  line; 13 of `config/profiles.sh`'s 15 counted lines and 8 of `lib/helpers.sh`'s
+
+Single-line forms of both are ordinary commands and still count. `usage()` heredoc
+content and multi-line curl continuations are the same class and remain **unaddressed** —
+one heredoc opener exists in the instrumented set today, so the residual inflation is
+small but real.
+
+Post-amendment: 2449/2688 = 91% at 1159 tests. The gate stays at 90%. That the figure
+matches the original 91% is a coincidence of two different denominators, not evidence the
+old number was right.
 
 ## Related
 

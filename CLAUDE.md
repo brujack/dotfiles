@@ -236,7 +236,7 @@ Inline disables (`# shellcheck disable=SCxxxx # reason`) are used for remaining 
 
 `.github/workflows/ci.yml` runs on PRs to master only (the pre-push hook gates branch pushes locally):
 
-- `test` job: installs bats + shellcheck, runs `make test`, then verifies test count ≥ 840 (regression proxy; 1140 tests as of 2026-08-05)
+- `test` job: installs bats + shellcheck, runs `make test`, then verifies test count ≥ 840 (regression proxy; 1159 tests as of 2026-08-07)
 - `lint-macos` job: runs `bash -n` and `zsh -n` on all `.sh` files on `macos-latest` (advisory, not blocking auto-merge)
 - `bash-coverage` job: measures bash line coverage via PS4 xtrace on `ubuntu-latest`; **gates at 90%** — blocks auto-merge if coverage drops below floor
 - `secret-scan` job: runs gitleaks against recent commits (advisory, not blocking auto-merge)
@@ -288,13 +288,17 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 #### Bash
 
-- **Overall: 90%** (1145 tests as of 2026-08-07); gated in CI at 90% (`bash-coverage` job, blocks auto-merge on drop). **There is no headroom** — the measured figure equals the floor, so any change adding an uncovered line turns CI red until it is tested.
-- **The instrumented set is `setup_env.sh` + `lib/*.sh`, derived at run time — not a list.** It was a 13-entry literal array until 2026-08-07, covering 13 of 36 tracked `.sh` files, so the previously published 91% was computed over 36% of the repo. An omitted file left the percentage unchanged rather than lowering it, which is why nothing surfaced it. Check what is measured with `make bash-coverage`'s `--list-sources`:
+- **Overall: 91%** (2449/2688 coverable lines, 1159 tests as of 2026-08-07); gated in CI at 90% (`bash-coverage` job, blocks auto-merge on drop).
+- **The instrumented set is `setup_env.sh` plus tracked `config/*.sh` and `lib/*.sh`, derived from `git ls-files` at run time — not a list.** It was a 13-entry literal array until 2026-08-07, covering 13 of 36 tracked `.sh` files, so the previously published 91% was computed over 36% of the repo. An omitted file left the percentage unchanged rather than lowering it, which is why nothing surfaced it. The predicate is *reached by the suite*, not *lives in `lib/`* — `lib/detect_env.sh` sources `config/profiles.sh` and `lib/git_hooks.sh` sources `config/hook_repos.sh`. Check what is measured:
   ```bash
   bash scripts/run-bash-coverage.sh --list-sources
   ```
-- **Standalone scripts under `scripts/` and `kubernetes_stuff/` are deliberately outside the set.** No bats suite sources them, so instrumenting them would add only zeros to the denominator.
-- **Lines inside a multi-line `python3 -c "..."` are not counted as bash.** xtrace emits one line for the whole invocation, so counting the body inflates the denominator with lines no test can cover — that was 54 of `lib/package_capture.sh`'s 107 counted lines, reporting it at 22% against an unreachable ceiling. It now reads 45% of 53 real bash lines. A single-line `python3 -c "..."` still counts. Inspect one file's denominator without a full run:
+- **Standalone scripts under `scripts/` and `kubernetes_stuff/` are deliberately outside the set.** Nothing under test sources them, so instrumenting them would add only zeros to the denominator.
+- **The denominator counts commands, not source lines.** bash xtrace emits one line per *command*, so any construct where one command spans several lines inflates the count with lines no test can ever reach. Two classes are excluded, both verified against `bash -x` output rather than assumed:
+  - **Multi-line `python3 -c "..."` bodies** — 54 of `lib/package_capture.sh`'s 107 counted lines. It reported 22% against a ceiling it could not reach; it now reads 45% of 53 real bash lines.
+  - **Multi-line array literals** — `declare -A M=(\n [a]=1\n)` traces as a single `M=([a]=1)`. That was 13 of `config/profiles.sh`'s 15 lines and 8 of `lib/helpers.sh`'s.
+
+  Single-line forms of both still count. Known remaining inflation of the same class, not yet excluded: heredoc bodies (one opener in `lib/workflows.sh`), `usage()` heredoc content, and multi-line curl continuations — see ADR-0008. Inspect one file's denominator without a full run:
   ```bash
   bash scripts/run-bash-coverage.sh --count-coverable lib/package_capture.sh
   ```
