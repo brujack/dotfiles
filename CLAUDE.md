@@ -288,7 +288,16 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 #### Bash
 
-- **Overall: 91%** (1140 tests as of 2026-08-05); gated in CI at 90% (`bash-coverage` job, blocks auto-merge on drop).
+- **Overall: 90%** (1145 tests as of 2026-08-07); gated in CI at 90% (`bash-coverage` job, blocks auto-merge on drop). **There is no headroom** — the measured figure equals the floor, so any change adding an uncovered line turns CI red until it is tested.
+- **The instrumented set is `setup_env.sh` + `lib/*.sh`, derived at run time — not a list.** It was a 13-entry literal array until 2026-08-07, covering 13 of 36 tracked `.sh` files, so the previously published 91% was computed over 36% of the repo. An omitted file left the percentage unchanged rather than lowering it, which is why nothing surfaced it. Check what is measured with `make bash-coverage`'s `--list-sources`:
+  ```bash
+  bash scripts/run-bash-coverage.sh --list-sources
+  ```
+- **Standalone scripts under `scripts/` and `kubernetes_stuff/` are deliberately outside the set.** No bats suite sources them, so instrumenting them would add only zeros to the denominator.
+- **Lines inside a multi-line `python3 -c "..."` are not counted as bash.** xtrace emits one line for the whole invocation, so counting the body inflates the denominator with lines no test can cover — that was 54 of `lib/package_capture.sh`'s 107 counted lines, reporting it at 22% against an unreachable ceiling. It now reads 45% of 53 real bash lines. A single-line `python3 -c "..."` still counts. Inspect one file's denominator without a full run:
+  ```bash
+  bash scripts/run-bash-coverage.sh --count-coverable lib/package_capture.sh
+  ```
 - `make bash-coverage` measures via PS4 xtrace (`scripts/run-bash-coverage.sh`); `make push-bash-coverage` pushes `coverage/bash.json` to the `coverage-data` branch for the README badge.
 - Method detail, per-file floors/ceilings, and why kcov/bashcov are ruled out: [`dotfiles-bash-coverage`](https://github.com/brujack/ai-config/blob/master/docs/knowledge/dotfiles-bash-coverage.md).
 

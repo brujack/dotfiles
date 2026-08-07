@@ -690,6 +690,78 @@ teardown() {
   [[ "$output" == *"Usage:"* ]]
 }
 
+# Regression: the instrumented set was a literal array holding 13 of 36 tracked
+# .sh files, so the reported 91% and the blocking 90% CI floor were computed over
+# a third of the repo. An omitted file left the percentage unchanged instead of
+# lowering it, which is why nothing surfaced it. Asserting against git ls-files
+# means the denominator cannot silently shrink again.
+@test "run-bash-coverage.sh instruments every tracked lib/*.sh" {
+  run bash "${REPO_ROOT}/scripts/run-bash-coverage.sh" --list-sources
+  [ "$status" -eq 0 ]
+
+  # load_mocks prepends tests/mocks to PATH, and tests/mocks/git logs its args
+  # and prints nothing. Calling git here through the mocked PATH returns an
+  # empty list, the loop below never runs, and the test passes no matter what
+  # the script instruments — verified: with lib/package_capture.sh deliberately
+  # absent, the mocked form still reported ok. Strip the mock dir for this one
+  # command so the expectation comes from the real index.
+  local _real_path="${PATH#"${REPO_ROOT}/tests/mocks:"}"
+  local _tracked
+  _tracked="$(cd "${REPO_ROOT}" && PATH="${_real_path}" git ls-files 'lib/*.sh')"
+  [ -n "${_tracked}" ] || { printf 'git ls-files returned nothing — mock still shadowing\n' >&2; false; }
+
+  local _missing=0 _lib
+  while IFS= read -r _lib; do
+    if ! printf '%s\n' "${output}" | grep -qx "${REPO_ROOT}/${_lib}"; then
+      printf 'not instrumented: %s\n' "${_lib}" >&2
+      _missing=1
+    fi
+  done <<< "${_tracked}"
+  [ "${_missing}" -eq 0 ]
+}
+
+# Regression: the coverable-line count included the body of multi-line
+# `python3 -c "..."` blocks. Those are Python — xtrace emits one line for the
+# whole invocation — so they inflated the denominator with lines no test could
+# ever cover. lib/package_capture.sh counted 107 lines of which 54 were Python,
+# reporting 22% against a ceiling it could not reach.
+@test "run-bash-coverage.sh does not count multi-line python3 -c bodies as bash" {
+  cat > "${BATS_TEST_TMPDIR}/embedded.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+real_bash_one=1
+_out=$(python3 -c "
+import json
+x = 1
+print(json.dumps(x))
+")
+real_bash_two=2
+FIXTURE
+  run bash "${REPO_ROOT}/scripts/run-bash-coverage.sh" --count-coverable "${BATS_TEST_TMPDIR}/embedded.sh"
+  [ "$status" -eq 0 ]
+  # Counted: real_bash_one, the _out=$(python3 -c " opening line, real_bash_two.
+  # Not counted: the shebang (a comment), the three Python lines, and the ")
+  # closing delimiter.
+  [ "$output" -eq 3 ]
+}
+
+@test "run-bash-coverage.sh still counts a single-line python3 -c as bash" {
+  cat > "${BATS_TEST_TMPDIR}/inline.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+id=$(python3 -c "import uuid; print(str(uuid.uuid4()))")
+after=1
+FIXTURE
+  run bash "${REPO_ROOT}/scripts/run-bash-coverage.sh" --count-coverable "${BATS_TEST_TMPDIR}/inline.sh"
+  [ "$status" -eq 0 ]
+  # The shebang is a comment; the two remaining lines are both real bash.
+  [ "$output" -eq 2 ]
+}
+
+@test "run-bash-coverage.sh --list-sources includes the setup_env.sh entry point" {
+  run bash "${REPO_ROOT}/scripts/run-bash-coverage.sh" --list-sources
+  [ "$status" -eq 0 ]
+  printf '%s\n' "${output}" | grep -qx "${REPO_ROOT}/setup_env.sh"
+}
+
 @test ".osx.sh -h prints usage and exits 0 without writing any defaults" {
   run bash "${REPO_ROOT}/scripts/.osx.sh" -h
   [ "$status" -eq 0 ]

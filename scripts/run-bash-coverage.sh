@@ -5,7 +5,6 @@
 #
 # Usage: bash scripts/run-bash-coverage.sh [--json /path/out.json]
 #   --json  Also write shields.io badge JSON to given path
-
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   cat <<'USAGE'
 Usage: run-bash-coverage.sh [--json /path/out.json]
@@ -24,27 +23,101 @@ OUTPUT_DIR="${REPO_ROOT}/coverage"
 TRACE_FILE="${OUTPUT_DIR}/bash_trace.txt"
 TRACE_FIFO="${OUTPUT_DIR}/bash_trace.fifo"
 
-# Hand-maintained, and nothing enforces that it matches lib/*.sh — a new lib
-# file is silently excluded, so the reported percentage stays comfortable while
-# covering none of it. lib/git_hooks.sh was missed exactly this way and only
-# surfaced because its absence from the report was noticed by eye. Add every
-# new lib file here in the same commit that creates it.
-# Known still-missing: lib/package_capture.sh (pre-existing, see PR notes).
-INCLUDE_FILES=(
-    "${REPO_ROOT}/setup_env.sh"
-    "${REPO_ROOT}/lib/constants.sh"
-    "${REPO_ROOT}/lib/detect_env.sh"
-    "${REPO_ROOT}/lib/helpers.sh"
-    "${REPO_ROOT}/lib/workflows.sh"
-    "${REPO_ROOT}/lib/update_summary.sh"
-    "${REPO_ROOT}/lib/developer.sh"
-    "${REPO_ROOT}/lib/linux_shared.sh"
-    "${REPO_ROOT}/lib/linux_ubuntu.sh"
-    "${REPO_ROOT}/lib/macos.sh"
-    "${REPO_ROOT}/lib/git_sync.sh"
-    "${REPO_ROOT}/lib/legacy_rsync.sh"
-    "${REPO_ROOT}/lib/git_hooks.sh"
-)
+# The instrumented set is derived, not listed. A literal array cannot fail
+# loudly: an omitted file is absent from the numerator AND the denominator, so
+# the reported percentage is unchanged by its absence rather than lowered by it.
+# That is how lib/git_hooks.sh went missing, and how lib/package_capture.sh
+# stayed missing afterwards — 13 of 36 tracked .sh files were measured while the
+# report read 91%.
+#
+# The predicate is stated rather than enumerated so it keeps holding as files
+# are added: every library under lib/, plus the entry point that sources them.
+# Standalone operational scripts (kubernetes_stuff/, scripts/) are deliberately
+# out of scope — no bats suite sources them, so including them would add pure
+# zeros to the denominator and measure nothing.
+INCLUDE_FILES=()
+while IFS= read -r _src; do
+    INCLUDE_FILES+=("${_src}")
+done < <(printf '%s\n' "${REPO_ROOT}/setup_env.sh" "${REPO_ROOT}"/lib/*.sh)
+
+# Lets the set be asserted without running the full suite under the tracer,
+# which takes minutes. Also answers "what is actually measured?" for an operator
+# reading a coverage number.
+if [[ "${1:-}" == "--list-sources" ]]; then
+    printf '%s\n' "${INCLUDE_FILES[@]}"
+    exit 0
+fi
+
+# Regex for case branch labels — stored in variable to avoid zsh parse error on | inside inline character class
+# Matches: brew), mas), OK), *), oh-my-zsh|tpm|tfenv|zsh-autosuggestions), etc.
+_case_label_re="^[a-zA-Z_*][a-zA-Z0-9_.*-]*([|][a-zA-Z0-9_.*-]+)*[)]$"
+
+
+# Counts executable bash lines in one file — the denominator for its percentage.
+# Extracted from the loop below so it can be asserted directly; the whole tracer
+# run takes minutes, which is too slow to be a unit test of the arithmetic.
+#
+# Excludes blank lines, comments, and structural keywords (fi, done, }, else,
+# then, do, esac, ;;) — bash xtrace never emits those, so counting them would
+# report them as permanently uncovered.
+#
+# Also excludes the body of a multi-line `python3 -c "..."`. Those lines are
+# Python: xtrace emits one line for the whole invocation, so counting the body
+# inflates the denominator with lines no test can ever cover. In
+# lib/package_capture.sh that was 50 of 107 counted lines — the file read 22%
+# against a ceiling it could not reach. Bash line coverage does not measure
+# embedded Python, and excluding it says so rather than scoring it as missing.
+# A single-line `python3 -c "..."` closes its quote on the same line and is
+# ordinary bash, so it still counts.
+_count_coverable_lines() {
+    local _file="${1}" _line _trimmed _after
+    local _coverable=0 _in_embedded=0
+    while IFS= read -r _line; do
+        _trimmed="${_line#"${_line%%[![:space:]]*}"}"
+        if [[ "${_in_embedded}" -eq 1 ]]; then
+            # The closing delimiter is a line whose first non-space character is
+            # the double quote that ends the -c argument. It carries whatever
+            # bash follows on the same line: bare ", or ") , or " \ , or
+            # " >> file &. Matching only the bare forms leaves the counter stuck
+            # inside the string to end of file, silently swallowing every
+            # remaining line — which is how the first version of this fix read a
+            # 8-line fixture as 2 coverable lines.
+            # Limitation: a Python line starting with a double quote would end
+            # the region early. None exists in the instrumented set, and the
+            # convention in these blocks is single-quoted Python strings.
+            [[ "${_trimmed}" == '"'* ]] && _in_embedded=0
+            continue
+        fi
+        if [[ "${_line}" == *'python3 -c "'* ]]; then
+            _after="${_line#*python3 -c \"}"
+            [[ "${_after}" != *'"'* ]] && _in_embedded=1
+        fi
+        [[ -z "${_trimmed}" ]] && continue
+        [[ "${_trimmed}" == "#"* ]] && continue
+        case "${_trimmed}" in
+            "}" | "fi" | "done" | "esac" | ";;" | "then" | "do" | "else") continue ;;
+        esac
+        [[ "${_trimmed}" =~ ^[[:space:]]*\)$ ]] && continue
+        # Case branch labels (brew), mas), OK), *), oh-my-zsh|tpm|...) — xtrace never emits them
+        # Regex in variable avoids zsh parse error on | inside inline character class
+        [[ "${_trimmed}" =~ ${_case_label_re} ]] && continue
+        # done with any redirect (done <<< ..., done < <(...), done < file)
+        [[ "${_trimmed}" =~ ^done[[:space:]] ]] && continue
+        # Continuation lines of multi-line pipelines (> outfile, > /dev/null)
+        [[ "${_trimmed}" =~ ^\> ]] && continue
+        # Closing group command with redirect (} >> file, } | cmd)
+        [[ "${_trimmed}" =~ ^\}[[:space:]] ]] && continue
+        ((_coverable++))
+    done < "${_file}"
+    printf '%s\n' "${_coverable}"
+}
+
+# Same purpose as --list-sources: make an input to the reported percentage
+# checkable without running the suite under the tracer.
+if [[ "${1:-}" == "--count-coverable" && -n "${2:-}" ]]; then
+    _count_coverable_lines "${2}"
+    exit 0
+fi
 
 mkdir -p "${OUTPUT_DIR}"
 rm -f "${TRACE_FILE}" "${TRACE_FIFO}"
@@ -99,36 +172,12 @@ printf "%-30s  %8s  %8s  %8s\n" "----" "-------" "-----" "---"
 total_covered=0
 total_coverable=0
 
-# Regex for case branch labels — stored in variable to avoid zsh parse error on | inside inline character class
-# Matches: brew), mas), OK), *), oh-my-zsh|tpm|tfenv|zsh-autosuggestions), etc.
-_case_label_re="^[a-zA-Z_*][a-zA-Z0-9_.*-]*([|][a-zA-Z0-9_.*-]+)*[)]$"
+
 
 for src_file in "${INCLUDE_FILES[@]}"; do
     [[ ! -f "${src_file}" ]] && continue
 
-    # Count executable lines — exclude blank, comment, and structural keywords.
-    # Structural keywords (fi, done, }, else, then, do, esac, ;;) are not
-    # emitted by bash xtrace, so counting them as coverable would skew results.
-    coverable=0
-    while IFS= read -r line; do
-        trimmed="${line#"${line%%[![:space:]]*}"}"
-        [[ -z "${trimmed}" ]] && continue
-        [[ "${trimmed}" == "#"* ]] && continue
-        case "${trimmed}" in
-            "}"|"fi"|"done"|"esac"|";;"|"then"|"do"|"else") continue ;;
-        esac
-        [[ "${trimmed}" =~ ^[[:space:]]*\)$ ]] && continue
-        # Case branch labels (brew), mas), OK), *), oh-my-zsh|tpm|...) — xtrace never emits them
-        # Regex in variable avoids zsh parse error on | inside inline character class
-        [[ "${trimmed}" =~ ${_case_label_re} ]] && continue
-        # done with any redirect (done <<< ..., done < <(...), done < file)
-        [[ "${trimmed}" =~ ^done[[:space:]] ]] && continue
-        # Continuation lines of multi-line pipelines (> outfile, > /dev/null)
-        [[ "${trimmed}" =~ ^\> ]] && continue
-        # Closing group command with redirect (} >> file, } | cmd)
-        [[ "${trimmed}" =~ ^\}[[:space:]] ]] && continue
-        ((coverable++))
-    done < "${src_file}"
+    coverable="$(_count_coverable_lines "${src_file}")"
 
     # Count unique line numbers hit in this file from the filtered trace.
     # Use end-of-line anchor to avoid matching :51 inside :516, etc.
