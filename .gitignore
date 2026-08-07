@@ -29,7 +29,15 @@ coverage/
 # triage_log.py is vendored per-repo by bug-fix-cycle, not symlinked from
 # ai-config like the rest of ~/.claude — so it has to be tracked here despite
 # the rule above. Its output (.claude/triage-log/) stays ignored.
+#
+# All three lines are load-bearing and the order matters. git cannot re-include
+# a file inside an excluded directory, so the directory must be un-excluded
+# first — but un-excluding it alone re-admits every file under it at any depth,
+# which makes the third line inert and leaves a stray .env or a future synced
+# script eligible for `git add -A`. The middle line re-excludes the contents so
+# the allow-path is exactly one file wide, matching the deny-path it carves.
 !.claude/scripts/
+.claude/scripts/*
 !.claude/scripts/triage_log.py
 # ADR-0014: canonical memory + retrospective layout (unignore tracked dirs)
 !.claude/memory/
