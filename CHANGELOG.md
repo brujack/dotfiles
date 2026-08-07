@@ -7,59 +7,17 @@
 
 - strip inherited git repo-location vars before make test (#191)
 
+- install json2yaml globally, and pin it (#193)
+
+- fail closed on unrecognized paths (#195)
+
+- shellcheck the bats suites, revive six inert assertions (#197)
+
+- read core.hooksPath through git config includes (#198)
+
 
 
 ## Documentation
-
-- mark scripts-world-class Done (PR dotfiles#185)
-
-- add Anthropic weekly features digest 2026-07-20
-
-- add Claude Code weekly features digest 2026-07-20
-
-- add maintainability-pass backlog row
-
-- add Claude Code weekly features digest 2026-07-27
-
-- add Anthropic weekly features digest 2026-07-27
-
-- backlog auto-install of git hooks in setup_user
-
-- spec auto-install of git hooks across repos
-
-- pin sweep return-code handling at both call sites
-
-- add multi-lens review to git-hooks spec
-
-- apply lens dispositions and empty-HOOKS_DIR guard
-
-- round-2 lens fixes -- content digest, hook post-condition
-
-- move git-hooks item from backlog to plan index
-
-- external review -- post-condition scope, cadence open question
-
-- settle update cadence on the 7950X
-
-- note digest is inversely coupled to symlink normalization
-
-- plan for auto-install git hooks sweep
-
-- backlog a fleet-critical bug hunt
-
-- point the bug-hunt row at the dossier
-
-- README reflects self-installing hooks and dry-run's real scope
-
-- backlog the two items left open by #189
-
-- backlog a doctor check for pinned core.hooksPath
-
-- spec a doctor check for pinned core.hooksPath
-
-- record multi-lens review on the hooksPath spec
-
-- revise hooksPath spec against the multi-lens findings
 
 - cut the hooksPath spec down to what survived review
 
@@ -95,22 +53,54 @@
 
 - close out npm global pinning, file its two follow-on rows
 
+- retire the json2yaml backlog row, fixed in dotfiles#193
+
+- document hooksPath doctor check in README, backlog two deferrals
+
+- spec the two git-hook detection gaps
+
+- record multi-lens review — Gap 2 premise refuted
+
+- reframe Gap 2 as advisory, apply lens corrections
+
+- round 2 lenses — detector is blind to include-borne pins
+
+- split the hooksPath item out of the pre-push spec
+
+- plan the pre-push self-coverage fix
+
+- record the .zsh scope widening on the pre-push spec
+
+- sync spec Design section with the widened regex
+
+- ADR-0017 — the pre-push trigger fails closed
+
+- correct ADR-0017's inert set and fail-open gap
+
+- reconcile the pre-push plan with what shipped
+
+- mark the pre-push plan Done (dotfiles#195)
+
+- sync README and backlog after the fail-closed pre-push change
+
+- backlog the core.quotePath path-anchor gap
+
+- re-scope the maintainability backlog row, premise falsified
+
+- add Claude Code weekly features digest 2026-08-03
+
+- add Anthropic weekly features digest 2026-08-03
+
+- mark the 2026-07-29 hooksPath spec contract superseded
+
+- correct the projects/ memory tracking claim
+
 
 
 ## Features
 
-- add -h/--help to run-bash-coverage.sh and .osx.sh (#186)
-
-- add codex cask to Brewfile (#188)
-
-- auto-install git hooks across personal repos (#189)
-
 - pin npm global packages, add jscpd (#192)
 
-
-
-## Testing
-
-- add BATS coverage for git hooks, fix pre-push [ ] and bash-tracer.sh eval (#187)
+- detect global/system core.hooksPath pins (#194)
 
 
