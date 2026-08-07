@@ -796,6 +796,10 @@ FIXTURE
 # which has no such file, measured a different one from the same commit.
 @test "run-bash-coverage.sh excludes untracked lib/*.sh from the instrumented set" {
   local _probe="${REPO_ROOT}/lib/zz_bats_probe.sh"
+  # Same pre-existence guard as the test-python collision test below: this
+  # writes into the real tracked tree, and make lint's recursive SHELL_FILES
+  # walk would pick up a leaked probe.
+  [ -e "${_probe}" ] && skip "lib/zz_bats_probe.sh already exists; refusing to clobber"
   printf '#!/usr/bin/env bash\nzz=1\n' > "${_probe}"
   run _run_coverage --list-sources
   rm -f "${_probe}"
@@ -852,6 +856,88 @@ FIXTURE
   [ "$status" -eq 0 ]
   [[ "$output" == *"--list-sources"* ]]
   [[ "$output" == *"--count-coverable"* ]]
+}
+
+# The empty-set guard is the fail-loud mechanism for this script's headline
+# defect and shipped unpinned — deleting it produced zero test failures.
+# Invoked WITHOUT the mock strip, git is the stub that prints nothing, so the
+# tracked set comes back empty: exactly the condition the guard exists for.
+@test "run-bash-coverage.sh exits 1 rather than measuring an empty tracked set" {
+  run bash "${REPO_ROOT}/scripts/run-bash-coverage.sh" --list-sources
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"is this a git checkout?"* ]]
+}
+
+# git -C only chdirs; an exported GIT_DIR still wins and would make ls-files
+# read another repo's index while paths get prefixed with this repo's root — a
+# new lib file absent from numerator and denominator, exit 0, plausible count.
+@test "run-bash-coverage.sh ignores a leaked GIT_DIR when deriving the set" {
+  local _decoy="${BATS_TEST_TMPDIR}/decoy"
+  local _clean_path
+  _clean_path="$(printf "%s" "${PATH}" | tr ':' '\n' | grep -v "tests/mocks" | tr '\n' ':' | sed 's/:$//')"
+  PATH="${_clean_path}" bash -c "
+    unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+    mkdir -p '${_decoy}/lib' && cd '${_decoy}'
+    git init -q .
+    printf 'x=1\n' > lib/only_one.sh
+    git add -A && git -c user.email=t@t -c user.name=T commit -qm init
+  "
+  local _expected _leaked
+  _expected="$(_run_coverage --list-sources | wc -l | tr -d ' ')"
+  _leaked="$(GIT_DIR="${_decoy}/.git" _run_coverage --list-sources | wc -l | tr -d ' ')"
+  [ "${_leaked}" -eq "${_expected}" ]
+  ! GIT_DIR="${_decoy}/.git" _run_coverage --list-sources | grep -q 'only_one'
+}
+
+@test "run-bash-coverage.sh counts a final line with no trailing newline" {
+  printf 'a=1\nb=2\nc=3' > "${BATS_TEST_TMPDIR}/nonewline.sh"
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/nonewline.sh"
+  [ "$status" -eq 0 ]
+  [ "$output" -eq 3 ]
+}
+
+@test "run-bash-coverage.sh ignores python3 -c in a TRAILING comment" {
+  printf 'a=1\nb=2  # see python3 -c "import json\nc=3\nd=4\n' > "${BATS_TEST_TMPDIR}/trailing.sh"
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/trailing.sh"
+  [ "$status" -eq 0 ]
+  [ "$output" -eq 4 ]
+}
+
+@test "run-bash-coverage.sh instruments the config files that lib sources" {
+  run _run_coverage --list-sources
+  [ "$status" -eq 0 ]
+  # lib/detect_env.sh sources config/profiles.sh; lib/git_hooks.sh sources
+  # config/hook_repos.sh. Both are reached by the suite, so both belong in the
+  # denominator — the predicate is "reached by the suite", not "lives in lib/".
+  printf '%s\n' "${output}" | grep -qx "${REPO_ROOT}/config/profiles.sh"
+  printf '%s\n' "${output}" | grep -qx "${REPO_ROOT}/config/hook_repos.sh"
+}
+
+# bash xtrace emits a multi-line array assignment as ONE line, so its element
+# lines can never be covered individually. Counting them inflates the
+# denominator the same way the embedded-Python bodies did — 13 of
+# config/profiles.sh's 15 counted lines were array elements.
+@test "run-bash-coverage.sh does not count multi-line array elements as bash" {
+  cat > "${BATS_TEST_TMPDIR}/arr.sh" <<'FIXTURE'
+declare -A M=(
+  [a]="one"
+  [b]="two"
+  [c]="three"
+)
+x=1
+FIXTURE
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/arr.sh"
+  [ "$status" -eq 0 ]
+  # The opening declare line is a real command; the three elements and the
+  # closing paren are not.
+  [ "$output" -eq 2 ]
+}
+
+@test "run-bash-coverage.sh still counts an array that closes on one line" {
+  printf 'A=()\nb=1\n' > "${BATS_TEST_TMPDIR}/inline_arr.sh"
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/inline_arr.sh"
+  [ "$status" -eq 0 ]
+  [ "$output" -eq 2 ]
 }
 
 @test "run-bash-coverage.sh --list-sources includes the setup_env.sh entry point" {

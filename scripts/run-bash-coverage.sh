@@ -19,7 +19,8 @@ full bats suite. Prints a per-file coverage table and overall percentage.
 Inspecting the figure without a full run (both exit immediately):
 
   --list-sources          Print the instrumented set — setup_env.sh plus
-                          lib/*.sh, derived at run time, not a literal list
+                          tracked config/*.sh and lib/*.sh, derived at run
+                          time from git, not a literal list
   --count-coverable FILE  Print one file's coverable-line count, the
                           denominator of its percentage. Exits 2 on a missing,
                           unreadable, or absent argument rather than printing 0
@@ -41,10 +42,13 @@ TRACE_FIFO="${OUTPUT_DIR}/bash_trace.fifo"
 # report read 91%.
 #
 # The predicate is stated rather than enumerated so it keeps holding as files
-# are added: every library under lib/, plus the entry point that sources them.
-# Standalone operational scripts (kubernetes_stuff/, scripts/) are deliberately
-# out of scope — no bats suite sources them, so including them would add pure
-# zeros to the denominator and measure nothing.
+# are added: every library under lib/, the config/ files those libraries source
+# (lib/detect_env.sh sources config/profiles.sh, lib/git_hooks.sh sources
+# config/hook_repos.sh, and the bats suites exercise both paths), plus the entry
+# point. Standalone operational scripts under kubernetes_stuff/ and scripts/ are
+# deliberately out of scope — nothing under test sources them, so they would add
+# pure zeros to the denominator and measure nothing. That is the test the
+# predicate applies: is this file reached by the suite, not where does it live.
 # Tracked files, via git — not a filesystem glob. A glob also picks up a
 # developer's untracked scratch file under lib/, which silently joins the
 # denominator locally and makes `make bash-coverage` disagree with CI on the
@@ -53,12 +57,13 @@ TRACE_FIFO="${OUTPUT_DIR}/bash_trace.fifo"
 INCLUDE_FILES=("${REPO_ROOT}/setup_env.sh")
 while IFS= read -r _src; do
     [[ -n "${_src}" ]] && INCLUDE_FILES+=("${REPO_ROOT}/${_src}")
-done < <(git -C "${REPO_ROOT}" ls-files 'lib/*.sh' 2>/dev/null)
+done < <(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+    git -C "${REPO_ROOT}" ls-files 'config/*.sh' 'lib/*.sh' 2>/dev/null)
 
 # Falling back to the glob would reintroduce the local-vs-CI drift above, and a
 # silently short instrumented set is exactly this script's original defect.
 if [[ "${#INCLUDE_FILES[@]}" -le 1 ]]; then
-    printf "ERROR: no tracked lib/*.sh found — is this a git checkout?\n" >&2
+    printf "ERROR: no tracked config/*.sh or lib/*.sh found — is this a git checkout?\n" >&2
     exit 1
 fi
 
@@ -92,9 +97,13 @@ _case_label_re="^[a-zA-Z_*][a-zA-Z0-9_.*-]*([|][a-zA-Z0-9_.*-]+)*[)]$"
 # A single-line `python3 -c "..."` closes its quote on the same line and is
 # ordinary bash, so it still counts.
 _count_coverable_lines() {
-    local _file="${1}" _line _trimmed _after
-    local _coverable=0 _in_embedded=0
-    while IFS= read -r _line; do
+    local _file="${1}" _line _trimmed _after _code
+    local _coverable=0 _in_embedded=0 _in_array=0
+    # `|| [[ -n "${_line}" ]]` belongs on the read, not after done: read returns
+    # non-zero on a final line with no trailing newline, having still populated
+    # _line. Without it that last line is dropped, undercounting the denominator
+    # and inflating the percentage.
+    while IFS= read -r _line || [[ -n "${_line}" ]]; do
         _trimmed="${_line#"${_line%%[![:space:]]*}"}"
         if [[ "${_in_embedded}" -eq 1 ]]; then
             # The closing delimiter is a line whose first non-space character is
@@ -121,8 +130,29 @@ _count_coverable_lines() {
         # this change is what made those blocks special.
         [[ -z "${_trimmed}" ]] && continue
         [[ "${_trimmed}" == "#"* ]] && continue
-        if [[ "${_line}" == *'python3 -c "'* ]]; then
-            _after="${_line#*python3 -c \"}"
+        # Element lines of a multi-line array literal are not separate commands.
+        # bash xtrace emits the whole assignment as one line — verified:
+        #   declare -A M=(\n [a]="one"\n [b]="two"\n)  ->  + M=([a]=one [b]=two)
+        # so counting each element inflates the denominator with lines no test
+        # can reach, exactly as the embedded-Python case above does. In
+        # config/profiles.sh that is 13 of 15 counted lines, which is why adding
+        # config/ to the instrumented set moved the figure almost entirely by
+        # adding uncoverable denominator. The opening line is a real command and
+        # still counts; the closing ")" is already skipped as structural.
+        if [[ "${_in_array}" -eq 1 ]]; then
+            [[ "${_trimmed}" == ")"* ]] && _in_array=0
+            continue
+        fi
+        [[ "${_trimmed%%#*}" =~ =\($ ]] && _in_array=1
+
+        # Match the opener against the line with any trailing comment removed.
+        # Testing the raw line meant `b=2  # see python3 -c "import json` opened
+        # a skip region and swallowed the rest of the file — inflating the
+        # percentage, the fail-green direction. Moving the leading-comment skip
+        # above this check only fixed the case where the comment starts the line.
+        _code="${_trimmed%%#*}"
+        if [[ "${_code}" == *'python3 -c "'* ]]; then
+            _after="${_code#*python3 -c \"}"
             [[ "${_after}" != *'"'* ]] && _in_embedded=1
         fi
         case "${_trimmed}" in
@@ -139,7 +169,7 @@ _count_coverable_lines() {
         # Closing group command with redirect (} >> file, } | cmd)
         [[ "${_trimmed}" =~ ^\}[[:space:]] ]] && continue
         ((_coverable++))
-    done < "${_file}"
+    done < "${_file}" || [[ -n "${_line}" ]]
     printf '%s\n' "${_coverable}"
 }
 
