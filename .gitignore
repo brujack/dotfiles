@@ -26,6 +26,11 @@ coverage/
 # These entries prevent leftover on-disk directories from being tracked
 .claude/*
 !.claude/settings.json
+# triage_log.py is vendored per-repo by bug-fix-cycle, not symlinked from
+# ai-config like the rest of ~/.claude — so it has to be tracked here despite
+# the rule above. Its output (.claude/triage-log/) stays ignored.
+!.claude/scripts/
+!.claude/scripts/triage_log.py
 # ADR-0014: canonical memory + retrospective layout (unignore tracked dirs)
 !.claude/memory/
 !.claude/retrospectives/
@@ -33,3 +38,4 @@ coverage/
 .claude/memory/.lock
 .cursor/
 .claude/loop-log/*.jsonl
+.claude/triage-log/*.jsonl

@@ -1,5 +1,6 @@
 BATS := $(shell command -v bats 2>/dev/null)
 SHELLCHECK := $(shell command -v shellcheck 2>/dev/null)
+PYTHON3 := $(shell command -v python3 2>/dev/null)
 SHELL_FILES := $(shell find . -name "*.sh" -not -path "*/node_modules/*" -not -path "*/coverage/*")
 # Bats suites are shell too, and were never shellchecked — the glob above only
 # matches *.sh. They are linted separately rather than folded into SHELL_FILES
@@ -37,11 +38,22 @@ lint:
 	fi; \
 	exit $$failed
 
-test: lint
+test: lint test-python
 ifndef BATS
 	$(error bats not found. Install: brew install bats-core (macOS) or sudo apt-get install bats (Linux))
 endif
 	bats --recursive tests/
+
+# The only Python in this repo is .claude/scripts/triage_log.py, vendored from
+# ai-config so bug-fix-cycle can emit telemetry here. It ships with its suite
+# rather than untested: a repo gating at 90% coverage does not take unverified
+# code to unblock a gate.
+test-python:
+ifndef PYTHON3
+	@printf "python3 not found, skipping Python tests (install: brew install python@3 / apt-get install python3)\n"
+else
+	python3 -m unittest discover -s tests -p 'test_*.py'
+endif
 
 bash-coverage:
 ifndef BATS
