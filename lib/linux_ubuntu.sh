@@ -355,6 +355,10 @@ _install_ubuntu_brew_packages() {
     brew_install_formula rbenv
     brew_install_formula ripgrep
     brew_install_formula rustup
+    # Homebrew rather than apt deliberately: apt ships shfmt 3.8.0 on noble and
+    # 3.12.0 on resolute, against 3.13.1 from brew. A formatter's output is the
+    # gate, so version skew across machines would flag files nobody touched.
+    brew_install_formula shfmt
     brew_install_formula starship
     brew_install_formula tgenv
     brew_install_formula zoxide
