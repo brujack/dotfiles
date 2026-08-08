@@ -203,7 +203,7 @@ Uses **BATS** (Bash Automated Testing System), installed natively:
 
 **Run tests:** `make test` (runs lint then all BATS tests)
 **Run unit tests only:** `make test-unit` (runs `unit.bats`, `profiles.bats`, and `zshrc.d/unit.bats`)
-**Run lint only:** `make lint` (bash -n + zsh -n + shellcheck on all .sh files)
+**Run lint only:** `make lint` (bash -n + zsh -n on every tracked shell file, then shellcheck at default severity for `.sh`/`.bash`/hooks and `--severity=warning` for `.bats`; scope derived from `git ls-files`)
 **Install hooks:** `make install-hooks` (installs pre-commit and pre-push hooks; run once per checkout)
 **Sync agent guidance:** `make sync-agent-guidance` (regenerates `.cursor/rules/global-claude-standards.mdc` from root `CLAUDE.md`'s `@~/.claude/standards/*.md` imports, resolved against the global symlinked standards dir)
 **Check agent guidance drift:** `make check-agent-guidance` (fails when generated Cursor guidance is stale)
@@ -223,20 +223,27 @@ The CI `secret-scan` job (gitleaks) is a backstop, not a substitute for local sc
 
 ### ShellCheck
 
-`.shellcheckrc` at the repo root suppresses pervasive intentional patterns:
+`.shellcheckrc` at the repo root carries **one** suppression, `SC1091`, and the file is byte-identical across all five shell-carrying repos. `SC1091` is structurally unavoidable rather than a preference: the lib architecture resolves source paths at runtime through `$(dirname "${BASH_SOURCE[0]}")`, which does not exist at lint time. Everything else is suppressed at its site with a reason on the same line, or fixed.
 
-- `SC2086`: unquoted variables — intentional style throughout
-- `SC2034`: unused variables — many used externally via source
-- `SC1091`: not following source — expected for sourced lib architecture
-- `SC2181`: checking `$?` directly — intentional pattern
+**This reverses the previous convention, deliberately.** Until 2026-08-08 the file blanket-disabled `SC2086`, `SC2034`, `SC1091` and `SC2181`, and this section described unquoted variables as "intentional style throughout." All 271 findings behind that blanket were cleared at their sites — 206 `SC2086` quoted, 60 `SC2034` resolved (nine of them by deleting a dead constant), 4 `SC2181` rewritten, 1 `SC2317`. A reader who remembers the old rule should know it was reversed on purpose, not eroded.
 
-Inline disables (`# shellcheck disable=SCxxxx # reason`) are used for remaining site-specific suppressions.
+The blanket was not free. One of the four `SC2181` sites it covered was a real defect: `install_homebrew` ran `xcodebuild -license accept` and `xcodebuild -runFirstLaunch` back to back and then tested `$?`, so a license failure followed by a successful second command was reported as success. The suppression's own comment called that pattern intentional.
+
+Rules for any new suppression:
+
+- **Every `# shellcheck disable=` carries a reason on the same line**, and the reason names the mechanism — for `SC2034`, the file and function that consume the variable, not "used elsewhere."
+- **Prefer deleting to suppressing.** A variable nothing reads is dead code; annotating it makes it permanent.
+- **Verify the directive is live before writing its reason.** Delete it, re-run shellcheck, and confirm its finding returns. A reason attached to a directive that cannot fire is worse than a bare one, because it stops the next reader checking. Two such shipped on this branch before the check became routine.
+- **A bare directive before the first non-comment command in a file is file-wide**, not scoped to the next command — verified against shellcheck 0.11.0. `lib/constants.sh` and `config/profiles.sh` use that deliberately and say so; anywhere else it is a footgun, because a directive added at the top of a file to silence one line silences the rule everywhere.
+- **shellcheck rejects a directive on a `case`-arm line** (`SC1124`). It must precede the whole `case`, which means it covers every arm — state the blast radius when you write one.
+
+`make lint`'s scope comes from `git ls-files`, not a literal list and not `find`. That covers all 36 tracked shell files including the two extensionless hooks (`scripts/pre-push`, `scripts/commit-msg`) and excludes both untracked scratch files and the copies inside any linked worktree.
 
 ### CI / GitHub Actions
 
 `.github/workflows/ci.yml` runs on PRs to master only (the pre-push hook gates branch pushes locally):
 
-- `test` job: installs bats + shellcheck, runs `make test`, then verifies test count ≥ 840 (regression proxy; 1161 tests as of 2026-08-07)
+- `test` job: installs a pinned, checksum-verified shellcheck plus bats, runs `make test`, then verifies test count ≥ 840 (regression proxy; 1163 tests as of 2026-08-08)
 - `lint-macos` job: runs `bash -n` and `zsh -n` on all `.sh` files on `macos-latest` (advisory, not blocking auto-merge)
 - `bash-coverage` job: measures bash line coverage via PS4 xtrace on `ubuntu-latest`; **gates at 90%** — blocks auto-merge if coverage drops below floor
 - `secret-scan` job: runs gitleaks against recent commits (advisory, not blocking auto-merge)
@@ -288,7 +295,7 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 #### Bash
 
-- **Overall: 91%** (2449/2688 coverable lines, 1161 tests as of 2026-08-07); gated in CI at 90% (`bash-coverage` job, blocks auto-merge on drop).
+- **Overall: 91%** (2449/2688 coverable lines, 1163 tests as of 2026-08-08); gated in CI at 90% (`bash-coverage` job, blocks auto-merge on drop).
 - **The instrumented set is `setup_env.sh` plus tracked `config/*.sh` and `lib/*.sh`, derived from `git ls-files` at run time — not a list.** It was a 13-entry literal array until 2026-08-07, covering 13 of 36 tracked `.sh` files, so the previously published 91% was computed over 36% of the repo. An omitted file left the percentage unchanged rather than lowering it, which is why nothing surfaced it. The predicate is _reached by the suite_, not _lives in `lib/`_ — `lib/detect_env.sh` sources `config/profiles.sh` and `lib/git_hooks.sh` sources `config/hook_repos.sh`. Check what is measured:
   ```bash
   bash scripts/run-bash-coverage.sh --list-sources
