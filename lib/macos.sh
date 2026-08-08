@@ -28,9 +28,7 @@ install_rosetta() {
       elif pgrep oahd >/dev/null 2>&1; then
         log_info "Rosetta is already installed and running. Nothing to do."
       else
-        softwareupdate --install-rosetta --agree-to-license
-
-        if [[ $? -eq 0 ]]; then
+        if softwareupdate --install-rosetta --agree-to-license; then
           log_info "Rosetta has been successfully installed."
         else
           log_error "Rosetta installation failed!"
@@ -53,21 +51,26 @@ install_homebrew() {
     log_info "Installing Xcode Command Line Tools..."
     if ! xcode-select --print-path &>/dev/null; then
       log_info "Installing Xcode Command Line Tools..."
-      xcode-select --install
-
       # Check if the installation was successful
-      if [[ $? -ne 0 ]]; then
+      if ! xcode-select --install; then
         log_error "Failed to install Xcode Command Line Tools. Aborting."
         return 1
       fi
 
       # Accept Xcode license
       log_info "Accepting Xcode license..."
+      # Two commands, checked together: previously only -runFirstLaunch's exit
+      # status reached the check below (it overwrites $? from -license accept),
+      # so a license-accept failure followed by a successful -runFirstLaunch was
+      # silently treated as success. Capture each immediately so both are seen.
+      local _license_rc _run_first_launch_rc
       sudo xcodebuild -license accept
+      _license_rc=$?
       sudo xcodebuild -runFirstLaunch
+      _run_first_launch_rc=$?
 
       # Check if the license acceptance was successful
-      if [[ $? -ne 0 ]]; then
+      if [[ ${_license_rc} -ne 0 || ${_run_first_launch_rc} -ne 0 ]]; then
         log_error "Failed to accept Xcode license. Aborting."
         return 1
       fi
@@ -80,10 +83,8 @@ install_homebrew() {
     log_error "Failed to download Homebrew installer. Aborting."
     return 1
   }
-  /bin/bash -c "${_brew_script}"
-
   # Check if the installation was successful
-  if [[ $? -ne 0 ]]; then
+  if ! /bin/bash -c "${_brew_script}"; then
     log_error "Failed to install Homebrew. Aborting."
     return 1
   fi
@@ -145,10 +146,10 @@ install_macos_casks() {
 
 install_macos_packages() {
   printf "Creating %s\n" "${BREWFILE_LOC}"
-  mkdir -p ${BREWFILE_LOC}
+  mkdir -p "${BREWFILE_LOC}"
 
-  rm -f ${BREWFILE_LOC}/Brewfile
-  ln -s ${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile ${BREWFILE_LOC}/Brewfile
+  rm -f "${BREWFILE_LOC}"/Brewfile
+  ln -s "${PERSONAL_GITREPOS}"/"${DOTFILES}"/Brewfile "${BREWFILE_LOC}"/Brewfile
   if [[ -L ${BREWFILE_LOC}/Brewfile ]]; then
     printf "Brewfile is linked\n"
   fi
@@ -169,5 +170,5 @@ install_macos_packages() {
   sudo -H softwareupdate --install --all --verbose
 
   printf "Setting up macOS defaults\n"
-  ${HOME}/scripts/.osx.sh
+  "${HOME}"/scripts/.osx.sh
 }
