@@ -253,6 +253,15 @@ teardown() {
   grep -q "brew install cyclonedx-python" "${MOCK_CALLS_FILE}"
 }
 
+# shfmt comes from Homebrew on Linux, not apt: apt ships 3.8.0 on noble and
+# 3.12.0 on resolute against brew's 3.13.1, and a formatter's output is the
+# gate, so skew would flag files nobody edited.
+@test "_install_ubuntu_brew_packages: installs shfmt via brew" {
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 0 ]
+  grep -q "brew install shfmt" "${MOCK_CALLS_FILE}"
+}
+
 @test "_install_ubuntu_rust: sources .cargo/env when file exists" {
   export HAS_RUST=1
   mkdir -p "${HOME}/.cargo"

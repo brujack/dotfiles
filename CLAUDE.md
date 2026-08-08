@@ -236,7 +236,7 @@ Inline disables (`# shellcheck disable=SCxxxx # reason`) are used for remaining 
 
 `.github/workflows/ci.yml` runs on PRs to master only (the pre-push hook gates branch pushes locally):
 
-- `test` job: installs bats + shellcheck, runs `make test`, then verifies test count ≥ 840 (regression proxy; 1140 tests as of 2026-08-05)
+- `test` job: installs bats + shellcheck, runs `make test`, then verifies test count ≥ 840 (regression proxy; 1161 tests as of 2026-08-07)
 - `lint-macos` job: runs `bash -n` and `zsh -n` on all `.sh` files on `macos-latest` (advisory, not blocking auto-merge)
 - `bash-coverage` job: measures bash line coverage via PS4 xtrace on `ubuntu-latest`; **gates at 90%** — blocks auto-merge if coverage drops below floor
 - `secret-scan` job: runs gitleaks against recent commits (advisory, not blocking auto-merge)
@@ -288,7 +288,20 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 #### Bash
 
-- **Overall: 91%** (1140 tests as of 2026-08-05); gated in CI at 90% (`bash-coverage` job, blocks auto-merge on drop).
+- **Overall: 91%** (2449/2688 coverable lines, 1161 tests as of 2026-08-07); gated in CI at 90% (`bash-coverage` job, blocks auto-merge on drop).
+- **The instrumented set is `setup_env.sh` plus tracked `config/*.sh` and `lib/*.sh`, derived from `git ls-files` at run time — not a list.** It was a 13-entry literal array until 2026-08-07, covering 13 of 36 tracked `.sh` files, so the previously published 91% was computed over 36% of the repo. An omitted file left the percentage unchanged rather than lowering it, which is why nothing surfaced it. The predicate is *reached by the suite*, not *lives in `lib/`* — `lib/detect_env.sh` sources `config/profiles.sh` and `lib/git_hooks.sh` sources `config/hook_repos.sh`. Check what is measured:
+  ```bash
+  bash scripts/run-bash-coverage.sh --list-sources
+  ```
+- **Standalone scripts under `scripts/` and `kubernetes_stuff/` are deliberately outside the set.** Nothing under test sources them, so instrumenting them would add only zeros to the denominator.
+- **The denominator counts commands, not source lines.** bash xtrace emits one line per *command*, so any construct where one command spans several lines inflates the count with lines no test can ever reach. Two classes are excluded, both verified against `bash -x` output rather than assumed:
+  - **Multi-line `python3 -c "..."` bodies** — 54 of `lib/package_capture.sh`'s 107 counted lines. It reported 22% against a ceiling it could not reach; it now reads 45% of 53 real bash lines.
+  - **Multi-line array literals** — `declare -A M=(\n [a]=1\n)` traces as a single `M=([a]=1)`. That was 13 of `config/profiles.sh`'s 15 lines and 8 of `lib/helpers.sh`'s.
+
+  Single-line forms of both still count. Known remaining inflation of the same class, not yet excluded: heredoc bodies (openers in `lib/workflows.sh` and `lib/helpers.sh`), `usage()` heredoc content, and multi-line curl continuations — see ADR-0008. Inspect one file's denominator without a full run:
+  ```bash
+  bash scripts/run-bash-coverage.sh --count-coverable lib/package_capture.sh
+  ```
 - `make bash-coverage` measures via PS4 xtrace (`scripts/run-bash-coverage.sh`); `make push-bash-coverage` pushes `coverage/bash.json` to the `coverage-data` branch for the README badge.
 - Method detail, per-file floors/ceilings, and why kcov/bashcov are ruled out: [`dotfiles-bash-coverage`](https://github.com/brujack/ai-config/blob/master/docs/knowledge/dotfiles-bash-coverage.md).
 

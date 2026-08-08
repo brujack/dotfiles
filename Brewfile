@@ -106,6 +106,7 @@ brew "cyclonedx-python"
 brew "rust-analyzer"                         # [HAS_RUST]
 brew "rustup"                                # [HAS_RUST]
 brew "shellcheck"                            # [HAS_DEVTOOLS]
+brew "shfmt"                                 # [HAS_DEVTOOLS]
 brew "snyk/tap/snyk"                         # [HAS_DEVTOOLS]
 brew "sops"                                  # [HAS_DEVTOOLS]
 brew "sqlite"

@@ -677,7 +677,7 @@ teardown() {
 }
 
 @test "run-bash-coverage.sh -h prints usage and exits 0 without running bats" {
-  run bash "${REPO_ROOT}/scripts/run-bash-coverage.sh" -h
+  run _run_coverage -h
   [ "$status" -eq 0 ]
   [[ "$output" == *"Usage:"* ]]
   run grep -q "bats" "${MOCK_CALLS_FILE}"
@@ -685,9 +685,284 @@ teardown() {
 }
 
 @test "run-bash-coverage.sh --help prints the same usage as -h" {
-  run bash "${REPO_ROOT}/scripts/run-bash-coverage.sh" --help
+  run _run_coverage --help
   [ "$status" -eq 0 ]
   [[ "$output" == *"Usage:"* ]]
+}
+
+# Regression: the instrumented set was a literal array holding 13 of 36 tracked
+# .sh files, so the reported 91% and the blocking 90% CI floor were computed over
+# a third of the repo. An omitted file left the percentage unchanged instead of
+# lowering it, which is why nothing surfaced it. Asserting against git ls-files
+# means the denominator cannot silently shrink again.
+@test "run-bash-coverage.sh instruments every tracked lib/*.sh" {
+  run _run_coverage --list-sources
+  [ "$status" -eq 0 ]
+
+  # load_mocks prepends tests/mocks to PATH, and tests/mocks/git logs its args
+  # and prints nothing. Calling git here through the mocked PATH returns an
+  # empty list, the loop below never runs, and the test passes no matter what
+  # the script instruments — verified: with lib/package_capture.sh deliberately
+  # absent, the mocked form still reported ok. Strip the mock dir for this one
+  # command so the expectation comes from the real index.
+  local _real_path="${PATH#"${REPO_ROOT}/tests/mocks:"}"
+  local _tracked
+  _tracked="$(cd "${REPO_ROOT}" && PATH="${_real_path}" git ls-files 'lib/*.sh')"
+  [ -n "${_tracked}" ] || { printf 'git ls-files returned nothing — mock still shadowing\n' >&2; false; }
+
+  local _missing=0 _lib
+  while IFS= read -r _lib; do
+    if ! printf '%s\n' "${output}" | grep -qx "${REPO_ROOT}/${_lib}"; then
+      printf 'not instrumented: %s\n' "${_lib}" >&2
+      _missing=1
+    fi
+  done <<< "${_tracked}"
+  [ "${_missing}" -eq 0 ]
+}
+
+# Regression: the coverable-line count included the body of multi-line
+# `python3 -c "..."` blocks. Those are Python — xtrace emits one line for the
+# whole invocation — so they inflated the denominator with lines no test could
+# ever cover. lib/package_capture.sh counted 107 lines of which 54 were Python,
+# reporting 22% against a ceiling it could not reach.
+@test "run-bash-coverage.sh does not count multi-line python3 -c bodies as bash" {
+  cat > "${BATS_TEST_TMPDIR}/embedded.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+real_bash_one=1
+_out=$(python3 -c "
+import json
+x = 1
+print(json.dumps(x))
+")
+real_bash_two=2
+FIXTURE
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/embedded.sh"
+  [ "$status" -eq 0 ]
+  # Counted: real_bash_one, the _out=$(python3 -c " opening line, real_bash_two.
+  # Not counted: the shebang (a comment), the three Python lines, and the ")
+  # closing delimiter.
+  [ "$output" -eq 3 ]
+}
+
+@test "run-bash-coverage.sh still counts a single-line python3 -c as bash" {
+  cat > "${BATS_TEST_TMPDIR}/inline.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+id=$(python3 -c "import uuid; print(str(uuid.uuid4()))")
+after=1
+FIXTURE
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/inline.sh"
+  [ "$status" -eq 0 ]
+  # The shebang is a comment; the two remaining lines are both real bash.
+  [ "$output" -eq 2 ]
+}
+
+# Error paths, not decoration: --count-coverable used to print 0 and exit 0 for
+# a missing file — a confident wrong answer from the flag whose whole job is
+# auditing the coverage denominator — and a bare --count-coverable fell through
+# to a multi-minute tracer run.
+# run-bash-coverage.sh derives its instrumented set with `git ls-files`, and
+# load_mocks shadows git with a stub that prints nothing. Invoked through the
+# mocked PATH the script sees an empty tracked set and exits 1 by design (a
+# silently short set is the exact defect it was fixed for). Every test that
+# executes the script therefore needs the real git, using the same PATH-strip
+# idiom the count_lines_git.sh tests above already use.
+_run_coverage() {
+  local _clean_path
+  _clean_path="$(printf "%s" "${PATH}" | tr ':' '\n' | grep -v "tests/mocks" | tr '\n' ':' | sed 's/:$//')"
+  PATH="${_clean_path}" bash "${REPO_ROOT}/scripts/run-bash-coverage.sh" "$@"
+}
+
+# Regression: the opener was matched against the raw line BEFORE the comment
+# skip, so a comment merely mentioning python3 -c " set the skip state and
+# swallowed every following line to EOF. That inflates the percentage rather
+# than lowering it — against a gate sitting at exactly 90% with no headroom,
+# that is the direction which fails green instead of red.
+@test "run-bash-coverage.sh ignores python3 -c mentioned inside a comment" {
+  cat > "${BATS_TEST_TMPDIR}/commented.sh" <<'FIXTURE'
+a=1
+# example: python3 -c "import json
+b=2
+c=3
+d=4
+FIXTURE
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/commented.sh"
+  [ "$status" -eq 0 ]
+  # Four assignments. The comment is skipped and must not open a skip region.
+  [ "$output" -eq 4 ]
+}
+
+# Regression: the instrumented set was a filesystem glob, so an untracked
+# scratch file under lib/ silently joined the denominator locally while CI,
+# which has no such file, measured a different one from the same commit.
+@test "run-bash-coverage.sh excludes untracked lib/*.sh from the instrumented set" {
+  local _probe="${REPO_ROOT}/lib/zz_bats_probe.sh"
+  # Same pre-existence guard as the test-python collision test below: this
+  # writes into the real tracked tree, and make lint's recursive SHELL_FILES
+  # walk would pick up a leaked probe.
+  [ -e "${_probe}" ] && skip "lib/zz_bats_probe.sh already exists; refusing to clobber"
+  printf '#!/usr/bin/env bash\nzz=1\n' > "${_probe}"
+  run _run_coverage --list-sources
+  rm -f "${_probe}"
+  [ "$status" -eq 0 ]
+  ! printf '%s\n' "${output}" | grep -q 'zz_bats_probe'
+}
+
+@test "make test-python runs even when a file named test-python exists" {
+  # Regression: test-python was added to the Makefile without being declared in
+  # .PHONY, so a colliding filename made make treat it as satisfied and skip the
+  # Python suite while `make test` still exited 0.
+  local _collide="${REPO_ROOT}/test-python"
+  [ -e "${_collide}" ] && skip "a real test-python path exists; refusing to clobber"
+  touch "${_collide}"
+  local _clean_path
+  _clean_path="$(printf "%s" "${PATH}" | tr ':' '\n' | grep -v "tests/mocks" | tr '\n' ':' | sed 's/:$//')"
+  run env PATH="${_clean_path}" make -C "${REPO_ROOT}" -n test-python
+  rm -f "${_collide}"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"unittest"* ]]
+}
+
+@test "run-bash-coverage.sh --count-coverable exits 2 on a nonexistent file" {
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/does-not-exist.sh"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"no such file"* ]]
+  # Must not report a count for a file it never read. Assert the output is not a
+  # bare integer rather than `!= *"0"` — that glob only means "does not end with
+  # 0", which a message like "count: 0 lines" would satisfy.
+  ! [[ "$output" =~ ^[0-9]+$ ]]
+}
+
+@test "run-bash-coverage.sh --count-coverable exits 2 with no file argument" {
+  run _run_coverage --count-coverable
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"requires a file argument"* ]]
+  # Must not fall through into the tracer run.
+  [[ "$output" != *"Running"* ]]
+  [[ "$output" != *"Overall bash coverage"* ]]
+}
+
+@test "run-bash-coverage.sh --count-coverable exits 2 on an unreadable file" {
+  local _f="${BATS_TEST_TMPDIR}/unreadable.sh"
+  printf '#!/usr/bin/env bash\nx=1\n' > "${_f}"
+  chmod 000 "${_f}"
+  run _run_coverage --count-coverable "${_f}"
+  chmod 644 "${_f}"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"not readable"* ]]
+}
+
+@test "run-bash-coverage.sh -h documents both inspection flags" {
+  run _run_coverage -h
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"--list-sources"* ]]
+  [[ "$output" == *"--count-coverable"* ]]
+}
+
+# The empty-set guard is the fail-loud mechanism for this script's headline
+# defect and shipped unpinned — deleting it produced zero test failures.
+# Invoked WITHOUT the mock strip, git is the stub that prints nothing, so the
+# tracked set comes back empty: exactly the condition the guard exists for.
+@test "run-bash-coverage.sh exits 1 rather than measuring an empty tracked set" {
+  run bash "${REPO_ROOT}/scripts/run-bash-coverage.sh" --list-sources
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"is this a git checkout?"* ]]
+}
+
+# git -C only chdirs; an exported GIT_DIR still wins and would make ls-files
+# read another repo's index while paths get prefixed with this repo's root — a
+# new lib file absent from numerator and denominator, exit 0, plausible count.
+@test "run-bash-coverage.sh ignores a leaked GIT_DIR when deriving the set" {
+  local _decoy="${BATS_TEST_TMPDIR}/decoy"
+  local _clean_path
+  _clean_path="$(printf "%s" "${PATH}" | tr ':' '\n' | grep -v "tests/mocks" | tr '\n' ':' | sed 's/:$//')"
+  PATH="${_clean_path}" bash -c "
+    unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+    mkdir -p '${_decoy}/lib' && cd '${_decoy}'
+    git init -q .
+    printf 'x=1\n' > lib/only_one.sh
+    git add -A && git -c user.email=t@t -c user.name=T commit -qm init
+  "
+  local _expected _leaked
+  _expected="$(_run_coverage --list-sources | wc -l | tr -d ' ')"
+  _leaked="$(GIT_DIR="${_decoy}/.git" _run_coverage --list-sources | wc -l | tr -d ' ')"
+  [ "${_leaked}" -eq "${_expected}" ]
+  ! GIT_DIR="${_decoy}/.git" _run_coverage --list-sources | grep -q 'only_one'
+}
+
+@test "run-bash-coverage.sh counts a final line with no trailing newline" {
+  printf 'a=1\nb=2\nc=3' > "${BATS_TEST_TMPDIR}/nonewline.sh"
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/nonewline.sh"
+  [ "$status" -eq 0 ]
+  [ "$output" -eq 3 ]
+}
+
+@test "run-bash-coverage.sh ignores python3 -c in a TRAILING comment" {
+  printf 'a=1\nb=2  # see python3 -c "import json\nc=3\nd=4\n' > "${BATS_TEST_TMPDIR}/trailing.sh"
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/trailing.sh"
+  [ "$status" -eq 0 ]
+  [ "$output" -eq 4 ]
+}
+
+@test "run-bash-coverage.sh instruments the config files that lib sources" {
+  run _run_coverage --list-sources
+  [ "$status" -eq 0 ]
+  # lib/detect_env.sh sources config/profiles.sh; lib/git_hooks.sh sources
+  # config/hook_repos.sh. Both are reached by the suite, so both belong in the
+  # denominator — the predicate is "reached by the suite", not "lives in lib/".
+  printf '%s\n' "${output}" | grep -qx "${REPO_ROOT}/config/profiles.sh"
+  printf '%s\n' "${output}" | grep -qx "${REPO_ROOT}/config/hook_repos.sh"
+}
+
+# bash xtrace emits a multi-line array assignment as ONE line, so its element
+# lines can never be covered individually. Counting them inflates the
+# denominator the same way the embedded-Python bodies did — 13 of
+# config/profiles.sh's 15 counted lines were array elements.
+@test "run-bash-coverage.sh does not count multi-line array elements as bash" {
+  cat > "${BATS_TEST_TMPDIR}/arr.sh" <<'FIXTURE'
+declare -A M=(
+  [a]="one"
+  [b]="two"
+  [c]="three"
+)
+x=1
+FIXTURE
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/arr.sh"
+  [ "$status" -eq 0 ]
+  # The opening declare line is a real command; the three elements and the
+  # closing paren are not.
+  [ "$output" -eq 2 ]
+}
+
+@test "run-bash-coverage.sh still counts an array that closes on one line" {
+  printf 'A=()\nb=1\n' > "${BATS_TEST_TMPDIR}/inline_arr.sh"
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/inline_arr.sh"
+  [ "$status" -eq 0 ]
+  [ "$output" -eq 2 ]
+}
+
+# An unterminated region silently swallowed every line after it, RAISING the
+# percentage — the fail-green direction against a gate with one point of
+# headroom, and nothing would have reported it because the count still looked
+# plausible. The two ways to reach it are documented limits of the heuristic.
+@test "run-bash-coverage.sh fails loudly on an unterminated python3 -c block" {
+  printf '#!/usr/bin/env bash\n_x=$(python3 -c "\nimport json\n' > "${BATS_TEST_TMPDIR}/unterm.sh"
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/unterm.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"unterminated python3 -c block"* ]]
+  ! [[ "$output" =~ ^[0-9]+$ ]]
+}
+
+@test "run-bash-coverage.sh fails loudly on an unterminated array literal" {
+  printf '#!/usr/bin/env bash\ndeclare -A M=(\n  [a]="one"\n' > "${BATS_TEST_TMPDIR}/untermarr.sh"
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/untermarr.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"unterminated array literal"* ]]
+}
+
+@test "run-bash-coverage.sh --list-sources includes the setup_env.sh entry point" {
+  run _run_coverage --list-sources
+  [ "$status" -eq 0 ]
+  printf '%s\n' "${output}" | grep -qx "${REPO_ROOT}/setup_env.sh"
 }
 
 @test ".osx.sh -h prints usage and exits 0 without writing any defaults" {
