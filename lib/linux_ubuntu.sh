@@ -93,7 +93,6 @@ _install_ubuntu_rust() {
   if [[ -n ${HAS_RUST} ]]; then
     printf "Configuring Rust Ubuntu\\n"
     if [[ -f ${HOME}/.cargo/env ]]; then
-      # shellcheck disable=SC1090 # sourced path is runtime-resolved and only exists after rustup has run, so it cannot be followed at lint time
       . "${HOME}"/.cargo/env
     fi
     if command -v rustup &>/dev/null; then
@@ -401,7 +400,6 @@ _install_ubuntu_gui_tools() {
 
   if [[ -n ${HAS_SNAP} ]]; then
     printf "Installing Albert Ubuntu Noble\\n"
-    # shellcheck disable=SC2046 # `lsb_release -rs` emits one token (e.g. 24.04) inside a URL path; there is nothing to split
     echo "deb http://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_$(lsb_release -rs)/ /" | sudo tee /etc/apt/sources.list.d/home:manuelschneid3r.list
     # shellcheck disable=SC2046 # `lsb_release -rs` emits one token (e.g. 24.04) inside a URL path; there is nothing to split
     curl -fsSL https://download.opensuse.org/repositories/home:manuelschneid3r/xUbuntu_$(lsb_release -rs)/Release.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/home_manuelschneid3r.gpg > /dev/null
