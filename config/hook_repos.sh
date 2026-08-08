@@ -16,4 +16,5 @@
 # if the empty fallback in lib/git_hooks.sh ever locks in first, this file's
 # real list could never load at all, silently. config/profiles.sh made the
 # same call for the same reason.
+# shellcheck disable=SC2034 # read by lib/git_hooks.sh's sweep (e.g. _git_hooks_gap_repos)
 HOOK_EXPECTED_REPOS=(ai-config dotfiles etch-cli state-ledger brucejacksonconsulting-site math ai-devops etch-config terraform_ansible)

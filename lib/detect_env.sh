@@ -13,11 +13,11 @@ detect_env() {
 
   if [[ -n ${UBUNTU} ]]; then
     UBUNTU_VERSION=$(lsb_release -rs)
+    # shellcheck disable=SC2034 # read by lib/linux_ubuntu.sh:_install_ubuntu_base_packages, lib/helpers.sh:_doctor_check_versions
     [[ ${UBUNTU_VERSION} = "24.04" ]] && readonly NOBLE=1
+    # shellcheck disable=SC2034 # read by lib/linux_ubuntu.sh:_install_ubuntu_base_packages/_install_ubuntu_cloud_tools, lib/helpers.sh:run_doctor
     [[ ${UBUNTU_VERSION} = "26.04" ]] && readonly RESOLUTE=1
   fi
-
-  [[ $(uname -r) =~ microsoft ]] && readonly WINDOWS=1
 
   # Profile resolution
   source "$(dirname "${BASH_SOURCE[0]}")/../config/profiles.sh"
@@ -29,12 +29,18 @@ detect_env() {
   done
 
   # Legacy hostname var aliases (kept until all call sites updated to use HAS_* vars)
+  # shellcheck disable=SC2034 # read by .config/.zshrc.d/2_functions.zsh, 5_general.zsh, 7_final.zsh, .zprofile
   [[ "${hn}" == "laptop" ]]      && readonly LAPTOP=1
+  # shellcheck disable=SC2034 # read by .config/.zshrc.d/2_functions.zsh, 5_general.zsh, 7_final.zsh, .zprofile
   [[ "${hn}" == "studio" ]]      && readonly STUDIO=1
+  # shellcheck disable=SC2034 # read by .config/.zshrc.d/2_functions.zsh, 5_general.zsh, 7_final.zsh, .zprofile
   [[ "${hn}" == "reception" ]]   && readonly RECEPTION=1
+  # shellcheck disable=SC2034 # read by .config/.zshrc.d/2_functions.zsh, 5_general.zsh, 7_final.zsh, .zprofile
   [[ "${hn}" == "office" ]]      && readonly OFFICE=1
+  # shellcheck disable=SC2034 # read by .config/.zshrc.d/2_functions.zsh, 5_general.zsh, 7_final.zsh, .zprofile
   [[ "${hn}" == "home-1" ]]      && readonly HOMES=1
   # setup variables based off of environment
+  # shellcheck disable=SC2034 # read by .config/.zshrc.d/5_general.zsh (chruby sourcing) and lib/helpers.sh:run_doctor
   if [[ -n ${MACOS} ]]; then
     CHRUBY_LOC="/opt/homebrew/opt/chruby/share"
   elif [[ -n ${LINUX} ]]; then
