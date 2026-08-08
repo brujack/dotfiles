@@ -294,6 +294,7 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
   bash scripts/run-bash-coverage.sh --list-sources
   ```
 - **Standalone scripts under `scripts/` and `kubernetes_stuff/` are deliberately outside the set.** Nothing under test sources them, so instrumenting them would add only zeros to the denominator.
+- **`git ls-files` rather than a filesystem glob is load-bearing, not stylistic.** `config/local.sh` is machine-local and git-ignored, but it exists on developer machines and not on a CI runner — a glob would put it in the denominator locally and leave it out in CI, so the same commit would measure two different sets. Deriving from the tracked set makes local and CI agree by construction rather than by coincidence.
 - **The denominator counts commands, not source lines.** bash xtrace emits one line per *command*, so any construct where one command spans several lines inflates the count with lines no test can ever reach. Two classes are excluded, both verified against `bash -x` output rather than assumed:
   - **Multi-line `python3 -c "..."` bodies** — 54 of `lib/package_capture.sh`'s 107 counted lines. It reported 22% against a ceiling it could not reach; it now reads 45% of 53 real bash lines.
   - **Multi-line array literals** — `declare -A M=(\n [a]=1\n)` traces as a single `M=([a]=1)`. That was 13 of `config/profiles.sh`'s 15 lines and 8 of `lib/helpers.sh`'s.
