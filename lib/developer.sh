@@ -4,8 +4,8 @@
 clone_or_update_dotfiles() {
   log_info "Copying ${DOTFILES} from Github"
   if [[ ! -d ${PERSONAL_GITREPOS}/${DOTFILES} ]]; then
-    cd ${HOME} || return 1
-    git clone --recursive git@github.com:brujack/${DOTFILES}.git ${PERSONAL_GITREPOS}/${DOTFILES}
+    cd "${HOME}" || return 1
+    git clone --recursive git@github.com:brujack/"${DOTFILES}".git "${PERSONAL_GITREPOS}"/"${DOTFILES}"
     # for regular https github used on machines that will not push changes
     # git clone --recursive https://github.com/brujack/${DOTFILES}.git ${PERSONAL_GITREPOS}/${DOTFILES}
   else
@@ -25,11 +25,11 @@ update_aws_cli() {
   fi
   if [[ -n ${HAS_AWS} ]] && [[ -n ${LINUX} ]]; then
     log_info "Updating Linux awscli"
-    mkdir -p ${HOME}/software_downloads/awscli
+    mkdir -p "${HOME}"/software_downloads/awscli
     cd "${HOME}/software_downloads/awscli" || return 1
     curl "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o "awscliv2.zip"
     unzip -u -o awscliv2.zip
-    sudo -H ${HOME}/software_downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin --update
+    sudo -H "${HOME}"/software_downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin --update
     cd "${PERSONAL_GITREPOS}/${DOTFILES}" || return 1
   fi
 }
@@ -39,9 +39,9 @@ update_rust() {
     log_info "Updating Rust Ubuntu"
     local _rustup_found=0
     if [[ -x ${HOME}/.cargo/bin/rustup ]]; then
-      ${HOME}/.cargo/bin/rustup self update
-      ${HOME}/.cargo/bin/rustup update
-      ${HOME}/.cargo/bin/rustup component add rust-analyzer
+      "${HOME}"/.cargo/bin/rustup self update
+      "${HOME}"/.cargo/bin/rustup update
+      "${HOME}"/.cargo/bin/rustup component add rust-analyzer
       _rustup_found=1
     elif command -v rustup >/dev/null 2>&1; then
       rustup self update
@@ -56,26 +56,26 @@ update_rust() {
 
 install_aws_tools() {
   if [[ -n ${HAS_AWS} ]] && [[ -n ${MACOS} ]]; then
-    mkdir -p ${HOME}/software_downloads/awscli
+    mkdir -p "${HOME}"/software_downloads/awscli
     printf "Installing aws-cli on MacOS\\n"
     if [[ ! -f ${HOME}/software_downloads/awscli/AWSCLIV2.pkg ]]; then
-      wget -O ${HOME}/software_downloads/awscli/AWSCLIV2.pkg "https://awscli.amazonaws.com/AWSCLIV2.pkg"
-      sudo installer -pkg ${HOME}/software_downloads/awscli/AWSCLIV2.pkg -target /
-      rm -f ${HOME}/software_downloads/awscli/AWSCLIV2.pkg
+      wget -O "${HOME}"/software_downloads/awscli/AWSCLIV2.pkg "https://awscli.amazonaws.com/AWSCLIV2.pkg"
+      sudo installer -pkg "${HOME}"/software_downloads/awscli/AWSCLIV2.pkg -target /
+      rm -f "${HOME}"/software_downloads/awscli/AWSCLIV2.pkg
       if [[ -x $(command -v aws) ]]; then
         printf "aws-cli is installed MacOS\\n"
       fi
     fi
   fi
   if [[ -n ${HAS_AWS} ]] && [[ -n ${LINUX} ]]; then
-    mkdir -p ${HOME}/software_downloads/awscli
+    mkdir -p "${HOME}"/software_downloads/awscli
     printf "Installing aws-cli on Linux\\n"
     if [[ ! -f ${HOME}/software_downloads/awscli/awscliv2.zip ]]; then
-      wget -O ${HOME}/software_downloads/awscli/awscliv2.zip "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip"
-      unzip ${HOME}/software_downloads/awscli/awscliv2.zip -d ${HOME}/software_downloads/awscli
-      sudo -H ${HOME}/software_downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin
-      rm -f ${HOME}/software_downloads/awscli/awscliv2.zip
-      rm -rf ${HOME}/software_downloads/awscli
+      wget -O "${HOME}"/software_downloads/awscli/awscliv2.zip "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip"
+      unzip "${HOME}"/software_downloads/awscli/awscliv2.zip -d "${HOME}"/software_downloads/awscli
+      sudo -H "${HOME}"/software_downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin
+      rm -f "${HOME}"/software_downloads/awscli/awscliv2.zip
+      rm -rf "${HOME}"/software_downloads/awscli
       if [[ -x $(command -v aws) ]]; then
         printf "aws-cli is installed Linux\\n"
       fi
@@ -85,16 +85,16 @@ install_aws_tools() {
 
 setup_vim_plugins() {
   printf "vim plugins setup\\n"
-  mkdir -p ${HOME}/.vim/plugged
+  mkdir -p "${HOME}"/.vim/plugged
   if [[ -d ${HOME}/.vim/plugged ]]; then
-    chmod 770 ${HOME}/.vim/plugged
+    chmod 770 "${HOME}"/.vim/plugged
   fi
-  mkdir -p ${HOME}/.vim/autoload
+  mkdir -p "${HOME}"/.vim/autoload
   if [[ -d ${HOME}/.vim/autoload ]]; then
-    chmod 770 ${HOME}/.vim/autoload
+    chmod 770 "${HOME}"/.vim/autoload
   fi
   if [[ ! -f ${HOME}/.vim/autoload/plug.vim ]]; then
-    curl -fLo ${HOME}/.vim/autoload/plug.vim --create-dirs https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
+    curl -fLo "${HOME}"/.vim/autoload/plug.vim --create-dirs https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
   fi
 }
 
@@ -102,9 +102,9 @@ install_ruby_tools() {
   printf "Installing ruby-install on linux\\n"
   if [[ -n ${LINUX} ]]; then
     if [[ ! -d ${HOME}/software_downloads/ruby-install-${RUBY_INSTALL_VER} ]]; then
-      wget -O ${HOME}/software_downloads/ruby-install-${RUBY_INSTALL_VER}.tar.gz https://github.com/postmodern/ruby-install/archive/v${RUBY_INSTALL_VER}.tar.gz
-      tar -xzvf ${HOME}/software_downloads/ruby-install-${RUBY_INSTALL_VER}.tar.gz -C ${HOME}/software_downloads/
-      cd ${HOME}/software_downloads/ruby-install-${RUBY_INSTALL_VER}/ || return 1
+      wget -O "${HOME}"/software_downloads/ruby-install-"${RUBY_INSTALL_VER}".tar.gz https://github.com/postmodern/ruby-install/archive/v"${RUBY_INSTALL_VER}".tar.gz
+      tar -xzvf "${HOME}"/software_downloads/ruby-install-"${RUBY_INSTALL_VER}".tar.gz -C "${HOME}"/software_downloads/
+      cd "${HOME}"/software_downloads/ruby-install-"${RUBY_INSTALL_VER}"/ || return 1
       sudo make install
     fi
   fi
@@ -115,8 +115,8 @@ install_ruby() {
   if [[ ! -d ${HOME}/.rubies/ruby-${RUBY_VER}/bin ]]; then
     printf "Install ruby %s\\n" "${RUBY_VER}"
     if [[ -n ${MACOS} ]]; then
-      # shellcheck disable=SC2046
-      ruby-install ${RUBY_VER} -- --with-openssl-dir=$(brew --prefix openssl@3)
+      # shellcheck disable=SC2046 # brew --prefix emits exactly one path with no whitespace/globs; word-splitting is inert here, so quoting the substitution would not change behavior
+      ruby-install "${RUBY_VER}" -- --with-openssl-dir=$(brew --prefix openssl@3)
     fi
     if [[ -n ${LINUX} ]]; then
       if ! [[ -d ${HOME}/.rbenv/versions/${RUBY_VER} ]]; then
@@ -149,12 +149,12 @@ install_ruby() {
         # is genuinely missing, so a fragile pre-flight --list grep (which is
         # curated and false-negatives on point releases) is not needed.
         # --skip-existing keeps it idempotent.
-        if ! RUBY_CONFIGURE_OPTS="--with-openssl-dir=/usr" rbenv install --skip-existing ${RUBY_VER}; then
+        if ! RUBY_CONFIGURE_OPTS="--with-openssl-dir=/usr" rbenv install --skip-existing "${RUBY_VER}"; then
           log_warn "rbenv install ${RUBY_VER} failed — ruby-build may lack the definition"
           log_warn "Run 'rbenv install ${RUBY_VER}' manually once ruby-build is updated"
           return 0
         fi
-        rbenv global ${RUBY_VER}
+        rbenv global "${RUBY_VER}"
         rbenv rehash
       fi
     fi
@@ -327,27 +327,27 @@ recreate_python_venv() {
 clone_personal_repos() {
   printf "personal git repos cloning\\n"
   if ! [[ -d ${PERSONAL_GITREPOS}/dotfiles ]]; then
-    git clone git@github.com:brujack/dotfiles.git ${PERSONAL_GITREPOS}/dotfiles
+    git clone git@github.com:brujack/dotfiles.git "${PERSONAL_GITREPOS}"/dotfiles
   fi
   if ! [[ -d ${PERSONAL_GITREPOS}/docker_container_terraform ]]; then
-    git clone git@github.com:brujack/docker_container_terraform.git ${PERSONAL_GITREPOS}/docker_container_terraform
+    git clone git@github.com:brujack/docker_container_terraform.git "${PERSONAL_GITREPOS}"/docker_container_terraform
   fi
   if ! [[ -d ${PERSONAL_GITREPOS}/docker_container_terraform_packer_ansible ]]; then
-    git clone git@github.com:brujack/docker_container_terraform_packer_ansible.git ${PERSONAL_GITREPOS}/docker_container_terraform_packer_ansible
+    git clone git@github.com:brujack/docker_container_terraform_packer_ansible.git "${PERSONAL_GITREPOS}"/docker_container_terraform_packer_ansible
   fi
   if ! [[ -d ${PERSONAL_GITREPOS}/kubernetes ]]; then
-    git clone git@github.com:brujack/kubernetes.git ${PERSONAL_GITREPOS}/kubernetes
+    git clone git@github.com:brujack/kubernetes.git "${PERSONAL_GITREPOS}"/kubernetes
   fi
   if ! [[ -d ${PERSONAL_GITREPOS}/pfsense_config ]]; then
-    git clone git@github.com:brujack/pfsense_config.git ${PERSONAL_GITREPOS}/pfsense_config
+    git clone git@github.com:brujack/pfsense_config.git "${PERSONAL_GITREPOS}"/pfsense_config
   fi
   if ! [[ -d ${PERSONAL_GITREPOS}/python-learning ]]; then
-    git clone git@github.com:brujack/python-learning.git ${PERSONAL_GITREPOS}/python-learning
+    git clone git@github.com:brujack/python-learning.git "${PERSONAL_GITREPOS}"/python-learning
   fi
   if ! [[ -d ${PERSONAL_GITREPOS}/terraform_ansible ]]; then
-    git clone git@github.com:brujack/terraform_ansible.git ${PERSONAL_GITREPOS}/terraform_ansible
+    git clone git@github.com:brujack/terraform_ansible.git "${PERSONAL_GITREPOS}"/terraform_ansible
   fi
   if ! [[ -d ${PERSONAL_GITREPOS}/terraspace_env ]]; then
-    git clone git@github.com:brujack/terraspace_env.git ${PERSONAL_GITREPOS}/terraspace_env
+    git clone git@github.com:brujack/terraspace_env.git "${PERSONAL_GITREPOS}"/terraspace_env
   fi
 }
