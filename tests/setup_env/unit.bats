@@ -426,6 +426,7 @@ teardown() {
 
 @test "run_recreate_venv calls recreate_python_venv with VENV_NAME when set" {
   recreate_python_venv() { printf "recreate_python_venv %s\n" "$1"; }
+  # shellcheck disable=SC2034 # read by run_recreate_venv after source; shellcheck cannot see the consumer
   VENV_NAME="myenv"
   run run_recreate_venv
   [[ "$output" == *"recreate_python_venv myenv"* ]]
