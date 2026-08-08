@@ -33,7 +33,7 @@ Ideas approved for future cursor-specific specs/plans, in no particular order:
 | Verify state-ledger writes idempotent for setup + recreate_venv | Wired in #166–#168; no idempotency tests exist for these paths                                              |
 | Brewfile dedup lint                                             | `scripts/check-brewfile-dedup.sh`, wire into `make lint` (2026-06 retro)                                    |
 | Ubuntu upgrade runbook                                          | Pre-flight checklist doc at `docs/knowledge/dotfiles-ubuntu-upgrade.md` (2026-06 retro)                     |
-| Per-file coverage floors enforcement                            | Extend `scripts/run-bash-coverage.sh` to emit per-file % and fail on known-floor violations (2026-06 retro) |
+| Per-file coverage floors enforcement                            | Half shipped: `scripts/run-bash-coverage.sh` already emits per-file %, and as of dotfiles#199 those percentages are trustworthy (the denominator was previously computed over 13 of 36 tracked files). What remains is failing the build on a per-file floor violation rather than only the 90% overall gate (2026-06 retro) |
 | Default pyenv mock in test setup()                              | Set `MOCK_PYENV_WHICH_STDOUT` in `tests/helpers/common.bash` so tests don't run real pip (2026-06 retro)    |
 
 ---

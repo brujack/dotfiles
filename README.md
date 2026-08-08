@@ -409,9 +409,11 @@ gh pr create
 Uses [BATS](https://github.com/bats-core/bats-core) (Bash Automated Testing System), installed natively.
 
 ```bash
-make test          # lint (bash -n, zsh -n, shellcheck) + all BATS tests
+make test          # lint + Python tests + all BATS tests
 make test-unit     # unit + profiles tests only (faster)
+make test-python   # the vendored .claude/scripts/triage_log.py suite only
 make lint          # syntax + shellcheck only
+make bash-coverage # measure bash line coverage (PS4 xtrace); CI gates at 90%
 make install-hooks # install pre-commit hook (runs lint + ggshield before each commit)
 make sync-agent-guidance  # regenerate .cursor guidance from CLAUDE.md's ~/.claude/standards imports
 make check-agent-guidance # fail if generated guidance is out of sync
