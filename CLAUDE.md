@@ -21,7 +21,7 @@ dotfiles/
 │                      #   anthropic-new-features/
 ├── .github/workflows/ # CI: test, lint-macos, bash-coverage, powershell, secret-scan, auto-merge
 ├── .zshrc, .vimrc, .tmux.conf, .gitconfig_*, starship.toml, bruce.omp.json, profile.ps1
-└── ubuntu_*_packages.txt, kubernetes_stuff/, .ssh/
+└── ubuntu_*_packages.txt, .ssh/
 ```
 
 ## 10-80-10 Execution Cycle
@@ -289,20 +289,22 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 #### Bash
 
 - **Overall: 91%** (2449/2688 coverable lines, 1161 tests as of 2026-08-07); gated in CI at 90% (`bash-coverage` job, blocks auto-merge on drop).
-- **The instrumented set is `setup_env.sh` plus tracked `config/*.sh` and `lib/*.sh`, derived from `git ls-files` at run time — not a list.** It was a 13-entry literal array until 2026-08-07, covering 13 of 36 tracked `.sh` files, so the previously published 91% was computed over 36% of the repo. An omitted file left the percentage unchanged rather than lowering it, which is why nothing surfaced it. The predicate is *reached by the suite*, not *lives in `lib/`* — `lib/detect_env.sh` sources `config/profiles.sh` and `lib/git_hooks.sh` sources `config/hook_repos.sh`. Check what is measured:
+- **The instrumented set is `setup_env.sh` plus tracked `config/*.sh` and `lib/*.sh`, derived from `git ls-files` at run time — not a list.** It was a 13-entry literal array until 2026-08-07, covering 13 of 36 tracked `.sh` files, so the previously published 91% was computed over 36% of the repo. An omitted file left the percentage unchanged rather than lowering it, which is why nothing surfaced it. The predicate is _reached by the suite_, not _lives in `lib/`_ — `lib/detect_env.sh` sources `config/profiles.sh` and `lib/git_hooks.sh` sources `config/hook_repos.sh`. Check what is measured:
   ```bash
   bash scripts/run-bash-coverage.sh --list-sources
   ```
-- **Standalone scripts under `scripts/` and `kubernetes_stuff/` are deliberately outside the set.** Nothing under test sources them, so instrumenting them would add only zeros to the denominator.
+- **`scripts/` is outside the set today, and the stated reason for that is wrong.** This bullet used to read "nothing under test sources them, so instrumenting them would add only zeros to the denominator." Measured 2026-08-08: all 19 tracked files under `scripts/` are executed by the bats suite, between 2 and 29 times each — `whats-new-anthropic.sh` 29, `bootstrap_linux.sh` and `sync-agent-guidance.sh` 15 apiece. The tracer enables tracing through `BASH_ENV`, which non-interactive bash subprocesses inherit, so their trace lines are already collected and then discarded by a predicate that globs only `config/` and `lib/`. The exclusion was asserted, never measured. Widening the predicate is Phase 2 of the shell fleet-consistency spec; until it lands, the published figure covers 16 of the repo's tracked shell files rather than all of them.
 - **`git ls-files` rather than a filesystem glob is load-bearing, not stylistic.** `config/local.sh` is machine-local and git-ignored, but it exists on developer machines and not on a CI runner — a glob would put it in the denominator locally and leave it out in CI, so the same commit would measure two different sets. Deriving from the tracked set makes local and CI agree by construction rather than by coincidence.
-- **The denominator counts commands, not source lines.** bash xtrace emits one line per *command*, so any construct where one command spans several lines inflates the count with lines no test can ever reach. Two classes are excluded, both verified against `bash -x` output rather than assumed:
+- **The denominator counts commands, not source lines.** bash xtrace emits one line per _command_, so any construct where one command spans several lines inflates the count with lines no test can ever reach. Two classes are excluded, both verified against `bash -x` output rather than assumed:
   - **Multi-line `python3 -c "..."` bodies** — 54 of `lib/package_capture.sh`'s 107 counted lines. It reported 22% against a ceiling it could not reach; it now reads 45% of 53 real bash lines.
   - **Multi-line array literals** — `declare -A M=(\n [a]=1\n)` traces as a single `M=([a]=1)`. That was 13 of `config/profiles.sh`'s 15 lines and 8 of `lib/helpers.sh`'s.
 
   Single-line forms of both still count. Known remaining inflation of the same class, not yet excluded: heredoc bodies (openers in `lib/workflows.sh` and `lib/helpers.sh`), `usage()` heredoc content, and multi-line curl continuations — see ADR-0008. Inspect one file's denominator without a full run:
+
   ```bash
   bash scripts/run-bash-coverage.sh --count-coverable lib/package_capture.sh
   ```
+
 - `make bash-coverage` measures via PS4 xtrace (`scripts/run-bash-coverage.sh`); `make push-bash-coverage` pushes `coverage/bash.json` to the `coverage-data` branch for the README badge.
 - Method detail, per-file floors/ceilings, and why kcov/bashcov are ruled out: [`dotfiles-bash-coverage`](https://github.com/brujack/ai-config/blob/master/docs/knowledge/dotfiles-bash-coverage.md).
 

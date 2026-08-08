@@ -284,7 +284,6 @@ dotfiles/
 ├── .github/
 │   └── workflows/
 │       └── ci.yml            # lint + test + lint-macos + secret-scan + auto-merge
-├── kubernetes_stuff/         # Kubernetes install/init scripts
 └── ubuntu_*_packages.txt     # Package lists per Ubuntu version
 ```
 
