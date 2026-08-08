@@ -19,7 +19,6 @@ _bootstrap_linux_detect_distro() {
 
   if [[ -f "${_osrel}" ]]; then
     local ID="" ID_LIKE=""
-    # shellcheck disable=SC1090 # path is variable — os-release or test fixture
     . "${_osrel}"
   fi
 

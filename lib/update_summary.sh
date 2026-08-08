@@ -410,7 +410,6 @@ _ledger_write_run_entry() {
 
   # Base JSON — common to all run types (no trailing comma, no closing brace)
   local _base_json
-  # shellcheck disable=SC2059
   printf -v _base_json '{
   "schema_version": "1.0",
   "run_id": "%s",
