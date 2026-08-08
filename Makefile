@@ -35,14 +35,23 @@ help:
 	@printf "  make help              Show this help\n"
 
 lint:
+	@if [ -z "$(SHELL_FILES)" ]; then \
+	  printf 'lint: derived shell file list is EMPTY — refusing to report a pass having linted nothing.\n' >&2; \
+	  printf '      (git absent from PATH, or this tree was exported without .git?)\n' >&2; \
+	  exit 1; \
+	fi
 	@failed=0; \
 	for f in $(SHELL_FILES); do \
 	  bash -n "$$f" && printf "bash  OK  %s\n" "$$f" || { printf "bash FAIL %s\n" "$$f"; failed=1; }; \
 	  zsh  -n "$$f" && printf "zsh   OK  %s\n" "$$f" || { printf "zsh  FAIL %s\n" "$$f"; failed=1; }; \
 	done; \
 	if [ -n "$(SHELLCHECK)" ]; then \
-	  shellcheck $(SHELL_FILES) && printf "shellcheck OK\n" || { printf "shellcheck FAIL\n"; failed=1; }; \
-	  shellcheck --severity=warning $(BATS_FILES) && printf "shellcheck bats OK\n" || { printf "shellcheck bats FAIL\n"; failed=1; }; \
+	  if [ -n "$(SHELL_FILES)" ]; then \
+	    shellcheck $(SHELL_FILES) && printf "shellcheck OK\n" || { printf "shellcheck FAIL\n"; failed=1; }; \
+	  fi; \
+	  if [ -n "$(BATS_FILES)" ]; then \
+	    shellcheck --severity=warning $(BATS_FILES) && printf "shellcheck bats OK\n" || { printf "shellcheck bats FAIL\n"; failed=1; }; \
+	  fi; \
 	else \
 	  printf "shellcheck not found, skipping (install: brew install shellcheck)\n"; \
 	fi; \
