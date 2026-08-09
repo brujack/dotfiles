@@ -1336,6 +1336,113 @@ FIXTURE
   [ "$output" -eq 2 ]
 }
 
+# ── --file-coverage: union the trace into the denominator ──────────────────
+#
+# The static heuristic in _count_coverable_lines can be wrong in the
+# under-inclusive direction: a real tracer run over the bats suite found
+# lib/detect_env.sh:4 (`detect_env() {`) traced TWICE even though the
+# function-declaration exclusion drops that line from the heuristic's
+# coverable set — reproducing bash -x directly against the same construct
+# does not show it, so whatever traces it lives in the bats harness, not in
+# the heuristic's own reasoning. Regardless of the mechanism, a line the
+# tracer actually emitted is coverable by definition. These tests reproduce
+# the same shape — a hand-built trace file naming a function-declaration
+# line — without running the real multi-minute tracer.
+@test "run-bash-coverage.sh --file-coverage unions a traced line the heuristic excluded, and reports it as a disagreement" {
+  cat > "${BATS_TEST_TMPDIR}/funcbug.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+f() {
+  echo "hi"
+}
+f
+FIXTURE
+  # Heuristic-coverable for this fixture is lines 3 and 5 (echo body, call
+  # site) — line 2 (`f() {`) and line 4 (`}`) are excluded, verified by the
+  # existing --count-coverable function-declaration test above. Hand-write a
+  # trace that (wrongly, from the heuristic's view) also names line 2.
+  {
+    printf '%s:2\n' "${BATS_TEST_TMPDIR}/funcbug.sh"
+    printf '%s:3\n' "${BATS_TEST_TMPDIR}/funcbug.sh"
+    printf '%s:5\n' "${BATS_TEST_TMPDIR}/funcbug.sh"
+  } > "${BATS_TEST_TMPDIR}/funcbug_trace.txt"
+
+  run _run_coverage --file-coverage "${BATS_TEST_TMPDIR}/funcbug.sh" "${BATS_TEST_TMPDIR}/funcbug_trace.txt"
+  [ "$status" -eq 0 ]
+  [ "${#lines[@]}" -eq 3 ]
+  # covered: 3 distinct traced lines (2, 3, 5).
+  [ "${lines[0]}" = "3" ]
+  # coverable: union of heuristic [3, 5] and traced [2, 3, 5] is [2, 3, 5] = 3
+  # — NOT the heuristic's own 2, which is what would still fail the
+  # covered-can-never-exceed-coverable invariant.
+  [ "${lines[1]}" = "3" ]
+  # disagreement: the only line the heuristic excluded but the trace emitted.
+  [ "${lines[2]}" = "2" ]
+}
+
+# Sibling boundary case: when the trace agrees with the heuristic exactly,
+# the union adds nothing and there are zero disagreements — without this
+# counter-test, a union that always pads the denominator (e.g. adding the
+# traced count unconditionally) would pass the test above just as well.
+@test "run-bash-coverage.sh --file-coverage reports no disagreement when the trace matches the heuristic" {
+  cat > "${BATS_TEST_TMPDIR}/clean.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+a=1
+b=2
+FIXTURE
+  {
+    printf '%s:2\n' "${BATS_TEST_TMPDIR}/clean.sh"
+    printf '%s:3\n' "${BATS_TEST_TMPDIR}/clean.sh"
+  } > "${BATS_TEST_TMPDIR}/clean_trace.txt"
+
+  run _run_coverage --file-coverage "${BATS_TEST_TMPDIR}/clean.sh" "${BATS_TEST_TMPDIR}/clean_trace.txt"
+  [ "$status" -eq 0 ]
+  # Exactly covered + coverable — no third (disagreement) line at all.
+  [ "${#lines[@]}" -eq 2 ]
+  [ "${lines[0]}" = "2" ]
+  [ "${lines[1]}" = "2" ]
+}
+
+# Boundary: a trace file with zero lines for this source (e.g. an
+# instrumented file no test happens to exercise). covered must be 0, not
+# blow up on an empty traced-lines set, and coverable must fall back to
+# exactly the heuristic's own count — the union of a set and the empty set
+# is the set itself.
+@test "run-bash-coverage.sh --file-coverage handles a trace file with no lines for this source" {
+  cat > "${BATS_TEST_TMPDIR}/untraced.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+a=1
+b=2
+FIXTURE
+  printf '%s/other.sh:1\n' "${BATS_TEST_TMPDIR}" > "${BATS_TEST_TMPDIR}/other_trace.txt"
+
+  run _run_coverage --file-coverage "${BATS_TEST_TMPDIR}/untraced.sh" "${BATS_TEST_TMPDIR}/other_trace.txt"
+  [ "$status" -eq 0 ]
+  [ "${#lines[@]}" -eq 2 ]
+  [ "${lines[0]}" = "0" ]
+  [ "${lines[1]}" = "2" ]
+}
+
+@test "run-bash-coverage.sh --file-coverage exits 2 with fewer than two arguments" {
+  run _run_coverage --file-coverage "${BATS_TEST_TMPDIR}/clean.sh"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"--file-coverage"* ]]
+}
+
+@test "run-bash-coverage.sh --file-coverage exits 2 on a nonexistent source file" {
+  printf '%s:1\n' "${BATS_TEST_TMPDIR}/nope.sh" > "${BATS_TEST_TMPDIR}/some_trace.txt"
+  run _run_coverage --file-coverage "${BATS_TEST_TMPDIR}/nope.sh" "${BATS_TEST_TMPDIR}/some_trace.txt"
+  [ "$status" -eq 2 ]
+}
+
+@test "run-bash-coverage.sh --file-coverage exits 2 on a nonexistent trace file" {
+  cat > "${BATS_TEST_TMPDIR}/onlysrc.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+a=1
+FIXTURE
+  run _run_coverage --file-coverage "${BATS_TEST_TMPDIR}/onlysrc.sh" "${BATS_TEST_TMPDIR}/no_such_trace.txt"
+  [ "$status" -eq 2 ]
+}
+
 @test ".osx.sh -h prints usage and exits 0 without writing any defaults" {
   run bash "${REPO_ROOT}/scripts/.osx.sh" -h
   [ "$status" -eq 0 ]

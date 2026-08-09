@@ -10,20 +10,28 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
 Usage: run-bash-coverage.sh [--json /path/out.json]
        run-bash-coverage.sh --list-sources
        run-bash-coverage.sh --count-coverable <file>
+       run-bash-coverage.sh --file-coverage <file> <trace_file>
 
 Measures bash line coverage using BASH_ENV + PS4 xtrace tracing of the
 full bats suite. Prints a per-file coverage table and overall percentage.
 
   --json /path/out.json   Also write a shields.io badge JSON to given path
 
-Inspecting the figure without a full run (both exit immediately):
+Inspecting the figure without a full run (all three exit immediately):
 
   --list-sources          Print the instrumented set — setup_env.sh plus
                           tracked config/*.sh and lib/*.sh, derived at run
                           time from git, not a literal list
-  --count-coverable FILE  Print one file's coverable-line count, the
-                          denominator of its percentage. Exits 2 on a missing,
-                          unreadable, or absent argument rather than printing 0
+  --count-coverable FILE  Print one file's static coverable-line count, the
+                          heuristic half of its denominator. Exits 2 on a
+                          missing, unreadable, or absent argument rather than
+                          printing 0
+  --file-coverage FILE TRACE_FILE
+                          Print FILE's covered count, union-corrected
+                          coverable count (heuristic ∪ what TRACE_FILE
+                          actually contains for FILE), and any heuristic
+                          disagreements — the same computation the full run
+                          does per file, against a trace file you supply
 USAGE
   exit 0
 fi
@@ -155,16 +163,24 @@ _cmd_sep_re='(\|\||&&|\||;)'
 # cases above. And excludes bare function-declaration header lines (`name() {`,
 # `name ()  {`, or a bare `name()` with `{` on the next line) plus a bare `{` —
 # xtrace never emits either, verified likewise.
+#
+# `_mode` selects the output shape: "count" (default) prints the final total
+# only, exactly the original contract every existing caller relies on.
+# "lines" instead prints each coverable line's 1-indexed line number as it is
+# found, and prints no total — used by _file_coverage_report below to union
+# this static prediction against what a trace file actually contains. Static
+# behavior (mode=count) is byte-for-byte unchanged by this parameter existing.
 _count_coverable_lines() {
-    local _file="${1}" _line _trimmed _after _code
+    local _file="${1}" _mode="${2:-count}" _line _trimmed _after _code
     local _coverable=0 _in_embedded=0 _in_array=0 _in_heredoc=0 _heredoc_delim=""
-    local _in_continuation=0 _bs_run
+    local _in_continuation=0 _bs_run _lineno=0
     local _hd_scan _hd_match _hd_delim _hd_prefix _hd_sq _hd_dq
     # `|| [[ -n "${_line}" ]]` belongs on the read, not after done: read returns
     # non-zero on a final line with no trailing newline, having still populated
     # _line. Without it that last line is dropped, undercounting the denominator
     # and inflating the percentage.
     while IFS= read -r _line || [[ -n "${_line}" ]]; do
+        ((_lineno++))
         _trimmed="${_line#"${_line%%[![:space:]]*}"}"
         if [[ "${_in_embedded}" -eq 1 ]]; then
             # The closing delimiter is a line whose first non-space character is
@@ -333,6 +349,7 @@ _count_coverable_lines() {
             (( ${#_bs_run} % 2 == 1 )) && _in_continuation=1
         fi
         ((_coverable++))
+        [[ "${_mode}" == "lines" ]] && printf '%s\n' "${_lineno}"
     done < "${_file}"
     # An unterminated region means every line after it was skipped, which
     # inflates the percentage — the fail-green direction against a gate with one
@@ -361,7 +378,10 @@ _count_coverable_lines() {
             "${_file}" "${_unterminated_kind}" >&2
         return 1
     fi
-    printf '%s\n' "${_coverable}"
+    if [[ "${_mode}" == "count" ]]; then
+        printf '%s\n' "${_coverable}"
+    fi
+    return 0
 }
 
 # Same purpose as --list-sources: make an input to the reported percentage
@@ -387,6 +407,104 @@ if [[ "${1:-}" == "--count-coverable" ]]; then
         exit 2
     fi
     _count_coverable_lines "${2}" || exit 1
+    exit 0
+fi
+
+# Distinct traced line numbers for one file, extracted from a trace file —
+# shared between the full-run loop and the --file-coverage debug entry point
+# below, so both compute "what did the tracer actually emit" the same way.
+# Uses end-of-line anchor to avoid matching :51 inside :516, etc.
+_traced_lines_for_file() {
+    local _src_file="${1}" _trace_file="${2}"
+    grep -F "${_src_file}:" "${_trace_file}" 2>/dev/null \
+        | grep -oE ':[0-9]+$' \
+        | tr -d ':' \
+        | sort -un
+}
+
+# One file's covered count, coverable count, and heuristic disagreements.
+#
+# `_count_coverable_lines` is a static heuristic — it can be wrong, and it
+# has been: lib/detect_env.sh line 4 is `detect_env() {`, which the
+# function-declaration exclusion drops from the coverable set, but a real
+# tracer run over the bats suite emitted that exact line twice. Reproducing
+# that from a plain `bash -x` invocation does not show it — something in the
+# bats harness traces it that a standalone invocation does not — but if the
+# tracer emitted a line, that line IS coverable, by definition, regardless of
+# what the static heuristic predicted.
+#
+# So the coverable denominator here is the UNION of the heuristic's static
+# count and whatever the trace file actually contains for this file.
+# `covered` is untouched — still exactly the count of distinct traced lines
+# — which is what makes `covered <= coverable` hold by construction rather
+# than by luck: every traced line is a member of the union, so it can never
+# exceed it.
+#
+# This does make the denominator depend on what THIS run traced: a file whose
+# covering tests are later deleted loses the union-added lines and its
+# denominator can shrink back down. That is an acceptable, honest trade —
+# coverage would have dropped anyway — and it does not excuse a bad
+# heuristic: every union-added line is a disagreement (the heuristic excluded
+# it, the trace didn't), and the caller prints every one of them, so a
+# systematically wrong exclusion rule stays visible instead of being quietly
+# absorbed into a higher denominator.
+#
+# Prints two lines (covered, coverable) followed by zero or more bare line
+# numbers — the disagreements for this file, one per line. Returns 1,
+# printing nothing, if the heuristic itself hit an unterminated region
+# (propagated from _count_coverable_lines — same failure the caller already
+# handles for the plain heuristic count).
+_file_coverage_report() {
+    local _src_file="${1}" _trace_file="${2}"
+    local _coverable_lines _traced_lines _union_lines _disagreement_lines
+    local _covered=0 _coverable=0
+
+    _coverable_lines="$(_count_coverable_lines "${_src_file}" lines)" || return 1
+    _traced_lines="$(_traced_lines_for_file "${_src_file}" "${_trace_file}")"
+
+    if [[ -n "${_traced_lines}" ]]; then
+        _covered=$(printf '%s\n' "${_traced_lines}" | wc -l | tr -d '[:space:]')
+    fi
+
+    _union_lines="$(printf '%s\n%s\n' "${_coverable_lines}" "${_traced_lines}" | grep -v '^$' | sort -un)"
+    if [[ -n "${_union_lines}" ]]; then
+        _coverable=$(printf '%s\n' "${_union_lines}" | wc -l | tr -d '[:space:]')
+    fi
+
+    _disagreement_lines=""
+    if [[ -n "${_traced_lines}" ]]; then
+        _disagreement_lines="$(comm -23 \
+            <(printf '%s\n' "${_traced_lines}" | grep -v '^$' | sort -un) \
+            <(printf '%s\n' "${_coverable_lines}" | grep -v '^$' | sort -un))"
+    fi
+
+    printf '%s\n' "${_covered}"
+    printf '%s\n' "${_coverable}"
+    [[ -n "${_disagreement_lines}" ]] && printf '%s\n' "${_disagreement_lines}"
+    return 0
+}
+
+# Debug/inspection entry point, same spirit as --count-coverable and
+# --list-sources: lets the union-corrected coverable count and the
+# disagreement list for ONE file be checked against a hand-built trace file,
+# without running the multi-minute full suite under the tracer.
+if [[ "${1:-}" == "--file-coverage" ]]; then
+    if [[ -z "${2:-}" || -z "${3:-}" ]]; then
+        printf "ERROR: --file-coverage requires a source file and a trace file\n" >&2
+        exit 2
+    fi
+    if [[ ! -f "${2}" || ! -r "${2}" ]]; then
+        printf "ERROR: --file-coverage: no such readable file: %s\n" "${2}" >&2
+        exit 2
+    fi
+    if [[ ! -f "${3}" || ! -r "${3}" ]]; then
+        printf "ERROR: --file-coverage: no such readable trace file: %s\n" "${3}" >&2
+        exit 2
+    fi
+    _file_coverage_report "${2}" "${3}" || {
+        printf "ERROR: cannot compute a trustworthy denominator for %s\n" "${2}" >&2
+        exit 1
+    }
     exit 0
 fi
 
@@ -442,33 +560,27 @@ printf "%-30s  %8s  %8s  %8s\n" "----" "-------" "-----" "---"
 
 total_covered=0
 total_coverable=0
-
-
+all_disagreements=()
 
 for src_file in "${INCLUDE_FILES[@]}"; do
     [[ ! -f "${src_file}" ]] && continue
 
-    if ! coverable="$(_count_coverable_lines "${src_file}")"; then
+    if ! _report="$(_file_coverage_report "${src_file}" "${TRACE_FILE}")"; then
         printf "ERROR: cannot compute a trustworthy denominator for %s\n" "${src_file}" >&2
         exit 1
     fi
 
-    # Count unique line numbers hit in this file from the filtered trace.
-    # Use end-of-line anchor to avoid matching :51 inside :516, etc.
-    covered=$(grep -F "${src_file}:" "${TRACE_FILE}" \
-        | grep -oE ':[0-9]+$' \
-        | tr -d ':' \
-        | sort -un \
-        | wc -l | tr -d '[:space:]')
+    covered=$(printf '%s\n' "${_report}" | sed -n '1p')
+    coverable=$(printf '%s\n' "${_report}" | sed -n '2p')
+    disagreement_lines=$(printf '%s\n' "${_report}" | sed -n '3,$p')
 
-    # Invariant: covered can never legitimately exceed coverable — coverable is
-    # the count of lines xtrace CAN ever emit for this file, so more distinct
-    # trace hits than that means an exclusion heuristic over-matched and shrank
-    # the denominator below what the suite actually ran. Silently clamping this
-    # (the previous behavior) hides exactly the failure mode this script exists
-    # to catch — a plausible-looking percentage computed over a wrong count. A
-    # loud failure here is the whole point of the per-file recount; see
-    # tdd.md's Coverage Denominators section.
+    # Invariant: covered can never legitimately exceed coverable — coverable
+    # is now the UNION of the static heuristic count and whatever the trace
+    # file actually contains for this file, so a traced line is always a
+    # member of its own denominator by construction. This stays as a
+    # structural guard rather than being removed: if it fires now, the union
+    # computation itself has a bug, not an exclusion heuristic. See tdd.md's
+    # Coverage Denominators section.
     if [[ "${covered}" -gt "${coverable}" ]]; then
         printf "ERROR: %s: covered (%d) exceeds coverable (%d) — an exclusion heuristic over-matched\n" \
             "${src_file}" "${covered}" "${coverable}" >&2
@@ -486,6 +598,13 @@ for src_file in "${INCLUDE_FILES[@]}"; do
 
     total_covered=$((total_covered + covered))
     total_coverable=$((total_coverable + coverable))
+
+    if [[ -n "${disagreement_lines}" ]]; then
+        relpath="${src_file#"${REPO_ROOT}/"}"
+        while IFS= read -r _dline; do
+            [[ -n "${_dline}" ]] && all_disagreements+=("${relpath}:${_dline}")
+        done <<< "${disagreement_lines}"
+    fi
 done
 
 if [[ "${total_coverable}" -gt 0 ]]; then
@@ -496,6 +615,23 @@ fi
 
 printf "\n%-30s  %8d  %8d  %7d%%\n" "TOTAL" "${total_covered}" "${total_coverable}" "${overall}"
 printf "\nOverall bash coverage: %d%%\n" "${overall}"
+
+# The union above means a wrongly-excluded line raises the denominator
+# instead of silently vanishing from it — but a heuristic that is
+# systematically wrong should still be fixed, not just neutralized forever.
+# This is the list that makes that possible: every line an exclusion rule
+# dropped that the trace actually emitted, so the specific rule can be
+# tightened later. Printed unconditionally, with an explicit "none" and
+# "total: 0" when clean, so the absence is visible rather than inferred.
+printf "\nHeuristic disagreements (excluded but traced) — these indicate an over-matching rule:\n"
+if [[ "${#all_disagreements[@]}" -eq 0 ]]; then
+    printf "  none\n"
+else
+    for _d in "${all_disagreements[@]}"; do
+        printf "  %s\n" "${_d}"
+    done
+fi
+printf "  total: %d\n" "${#all_disagreements[@]}"
 
 # Optionally write shields.io badge JSON
 if [[ "${1:-}" == "--json" && -n "${2:-}" ]]; then
