@@ -179,7 +179,7 @@ table.
 
 **The gate moves to 91%, one point below the measurement, and that gap is deliberate.** The
 obvious move is to ratchet to the measured 92% — do not, and here is the mechanism rather than
-the preference. The union makes `coverable` depend on what a given run actually traced, and 19
+the preference. The union makes `coverable` depend on what a given run actually traced, and 18
 of the 34 instrumented files are now `scripts/` executed as _subprocesses_, whose taken paths
 are more environment-sensitive than sourced library code. The figure is already observed to
 move: covered read 3060 at `b4236e4` and 3062 at `1c1e98f`, three commits later, from test-file
