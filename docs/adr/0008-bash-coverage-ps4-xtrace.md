@@ -188,9 +188,12 @@ the branch landed — so a single line lost to ordinary variance turns CI red on
 broke nothing. At 91% the boundary is 3027, leaving ~35 lines of slack: a genuine regression
 still trips it, ordinary jitter does not.
 
-Ratchet to 92 once the figure has been observed twice on `ubuntu-latest` at the same commit.
-It has been measured once, locally, on macOS. A floor is a claim about reproducibility, and
-one local measurement does not support it.
+**This was immediately vindicated.** PR #201's own CI run measured **3051/3328 = 91%** on
+`ubuntu-latest` against 3062/3326 = 92% on macOS at the identical commit — 11 covered lines
+apart, and 17 heuristic disagreements against 15. A 92% floor would have failed the very PR
+that introduced it. Do not ratchet to 92 on the strength of a local run; ratchet only after
+the figure has been observed twice on `ubuntu-latest` at the same commit, and expect the
+platform delta to persist while the instrumented set is subprocess-heavy.
 
 ## Related
 
