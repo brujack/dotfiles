@@ -517,11 +517,21 @@ _file_coverage_report() {
         _coverable=$(printf '%s\n' "${_union_lines}" | wc -l | tr -d '[:space:]')
     fi
 
+    # comm requires its two inputs sorted in the shell's collating order —
+    # what plain `sort -u` produces — not numeric order (`sort -un`). For
+    # multi-digit line numbers the two diverge (e.g. "9" sorts before "10"
+    # numerically but after it lexicographically: '9' > '1'), and comm does
+    # not error on the mismatch — it silently desyncs partway through and
+    # emits spurious "unique to A" lines for values that are actually present
+    # in both streams, just not where comm's merge walk expected them. Sort
+    # lexicographically for comm's own requirement, then re-sort the true
+    # result numerically so the printed disagreement list still reads in
+    # line-number order.
     _disagreement_lines=""
     if [[ -n "${_traced_lines}" ]]; then
         _disagreement_lines="$(comm -23 \
-            <(printf '%s\n' "${_traced_lines}" | grep -v '^$' | sort -un) \
-            <(printf '%s\n' "${_coverable_lines}" | grep -v '^$' | sort -un))"
+            <(printf '%s\n' "${_traced_lines}" | grep -v '^$' | sort -u) \
+            <(printf '%s\n' "${_coverable_lines}" | grep -v '^$' | sort -u) | sort -n)"
     fi
 
     printf '%s\n' "${_covered}"

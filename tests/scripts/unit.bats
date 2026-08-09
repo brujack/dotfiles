@@ -1515,6 +1515,72 @@ FIXTURE
   [ "$status" -eq 2 ]
 }
 
+# Regression: the disagreement computation fed comm -23 two `sort -un`
+# (numeric-sorted) streams, but comm requires its inputs sorted in the
+# shell's own collating order — what plain `sort -u` produces — not numeric
+# order. For multi-digit line numbers the two diverge: "9" sorts before "10"
+# numerically but after it lexicographically ('9' > '1'). comm does not
+# error on the mismatch; it silently desyncs partway through its merge walk
+# and reports a line as "excluded but traced" even when that line is present
+# in both streams. A fixture confined to single-digit line numbers can never
+# expose this — the traced set here deliberately spans the 9/10 boundary.
+@test "run-bash-coverage.sh --file-coverage does not report a false disagreement across a digit-length boundary" {
+  cat > "${BATS_TEST_TMPDIR}/digitcross.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+a=1
+b=2
+c=3
+d=4
+e=5
+f=6
+g=7
+h=8
+i=9
+j=10
+k=11
+FIXTURE
+  # Lines 2-12 are all heuristic-coverable (every assignment counts). The
+  # traced subset (2, 3, 10, 11) is entirely within that set, so a correct
+  # disagreement report is empty.
+  {
+    printf '%s:2\n' "${BATS_TEST_TMPDIR}/digitcross.sh"
+    printf '%s:3\n' "${BATS_TEST_TMPDIR}/digitcross.sh"
+    printf '%s:10\n' "${BATS_TEST_TMPDIR}/digitcross.sh"
+    printf '%s:11\n' "${BATS_TEST_TMPDIR}/digitcross.sh"
+  } > "${BATS_TEST_TMPDIR}/digitcross_trace.txt"
+
+  run _run_coverage --file-coverage "${BATS_TEST_TMPDIR}/digitcross.sh" "${BATS_TEST_TMPDIR}/digitcross_trace.txt"
+  [ "$status" -eq 0 ]
+  # covered=4, coverable=11 (union adds nothing — traced is a subset of the
+  # heuristic) — and no third (disagreement) line at all.
+  [ "${#lines[@]}" -eq 2 ]
+  [ "${lines[0]}" = "4" ]
+  [ "${lines[1]}" = "11" ]
+}
+
+# The reconciliation invariant `_count_coverable_lines`'s two modes must
+# hold: "lines" mode emits exactly the set "count" mode counts. There is no
+# direct CLI hook onto lines-mode's raw output, so this derives the emission
+# count indirectly via --file-coverage against a trace with zero lines for
+# the source: the union of the heuristic and an empty traced set is the
+# heuristic itself, so --file-coverage's reported "coverable" (its 2nd
+# output line) is then exactly the count "lines" mode emitted — which must
+# equal --count-coverable's own total for the same file.
+@test "run-bash-coverage.sh lines-mode emission count reconciles with count-mode's total, per file" {
+  : > "${BATS_TEST_TMPDIR}/empty_trace.txt"
+  for _f in lib/git_sync.sh lib/package_capture.sh scripts/bootstrap_mac.sh scripts/pre-push lib/helpers.sh; do
+    run _run_coverage --count-coverable "${REPO_ROOT}/${_f}"
+    [ "$status" -eq 0 ]
+    _count_total="$output"
+
+    run _run_coverage --file-coverage "${REPO_ROOT}/${_f}" "${BATS_TEST_TMPDIR}/empty_trace.txt"
+    [ "$status" -eq 0 ]
+    _coverable_via_lines="${lines[1]}"
+
+    [ "${_count_total}" = "${_coverable_via_lines}" ]
+  done
+}
+
 @test ".osx.sh -h prints usage and exits 0 without writing any defaults" {
   run bash "${REPO_ROOT}/scripts/.osx.sh" -h
   [ "$status" -eq 0 ]
