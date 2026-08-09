@@ -1,5 +1,7 @@
 #!/usr/bin/env bats
 
+load '../helpers/common.bash'
+
 setup() {
   REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
   WORKDIR="${BATS_TEST_TMPDIR}/sync-agent-guidance"
@@ -97,4 +99,63 @@ teardown() {
   run bash "${REPO_ROOT}/scripts/sync-agent-guidance.sh" --help
   [ "$status" -eq 0 ]
   [[ "$output" == *"Usage:"* ]]
+}
+
+@test "sync-agent-guidance.sh check exits 1 when CLAUDE.md is missing" {
+  rm -f "${_OVERRIDE_CLAUDE_MD_PATH}"
+  run bash "${REPO_ROOT}/scripts/sync-agent-guidance.sh" check
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Missing required file"* ]]
+  [[ "$output" != *"drift"* ]]
+}
+
+@test "sync-agent-guidance.sh check exits 1 when an imported standard file is missing" {
+  rm -f "${_OVERRIDE_STANDARDS_DIR}/shell.md"
+  run bash "${REPO_ROOT}/scripts/sync-agent-guidance.sh" check
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Missing imported standard"* ]]
+}
+
+@test "sync-agent-guidance.sh sync overwrites previous content rather than appending" {
+  bash "${REPO_ROOT}/scripts/sync-agent-guidance.sh" sync
+  grep -q "Use shellcheck\." "${_OVERRIDE_TARGET_PATH}"
+
+  printf '## Shell Scripts\n\nUse shfmt instead.\n' > "${_OVERRIDE_STANDARDS_DIR}/shell.md"
+  run bash "${REPO_ROOT}/scripts/sync-agent-guidance.sh" sync
+  [ "$status" -eq 0 ]
+
+  grep -q "Use shfmt instead\." "${_OVERRIDE_TARGET_PATH}"
+  refute_grep "Use shellcheck\." "${_OVERRIDE_TARGET_PATH}"
+}
+
+@test "sync-agent-guidance.sh sync writes multiple imported standards in order" {
+  printf '## PowerShell\n\nUse PSScriptAnalyzer.\n' > "${_OVERRIDE_STANDARDS_DIR}/powershell.md"
+  printf '# CLAUDE.md\n\n@~/.claude/standards/shell.md\n@~/.claude/standards/powershell.md\n' \
+    > "${_OVERRIDE_CLAUDE_MD_PATH}"
+
+  run bash "${REPO_ROOT}/scripts/sync-agent-guidance.sh" sync
+  [ "$status" -eq 0 ]
+
+  grep -q "Use shellcheck\." "${_OVERRIDE_TARGET_PATH}"
+  grep -q "Use PSScriptAnalyzer\." "${_OVERRIDE_TARGET_PATH}"
+
+  local shell_line powershell_line
+  shell_line="$(grep -n "standards/shell.md\`" "${_OVERRIDE_TARGET_PATH}" | tail -1 | cut -d: -f1)"
+  powershell_line="$(grep -n "standards/powershell.md\`" "${_OVERRIDE_TARGET_PATH}" | tail -1 | cut -d: -f1)"
+  [ "${shell_line}" -lt "${powershell_line}" ]
+}
+
+@test "sync-agent-guidance.sh check is idempotent and does not mutate the target" {
+  bash "${REPO_ROOT}/scripts/sync-agent-guidance.sh" sync
+  local first_sum
+  first_sum="$(shasum "${_OVERRIDE_TARGET_PATH}")"
+
+  run bash "${REPO_ROOT}/scripts/sync-agent-guidance.sh" check
+  [ "$status" -eq 0 ]
+  run bash "${REPO_ROOT}/scripts/sync-agent-guidance.sh" check
+  [ "$status" -eq 0 ]
+
+  local second_sum
+  second_sum="$(shasum "${_OVERRIDE_TARGET_PATH}")"
+  [ "${first_sum}" = "${second_sum}" ]
 }
