@@ -45,9 +45,12 @@ TRACE_FIFO="${OUTPUT_DIR}/bash_trace.fifo"
 # are added: every library under lib/, the config/ files those libraries source
 # (lib/detect_env.sh sources config/profiles.sh, lib/git_hooks.sh sources
 # config/hook_repos.sh, and the bats suites exercise both paths), plus the entry
-# point. Standalone operational scripts under kubernetes_stuff/ and scripts/ are
-# deliberately out of scope — nothing under test sources them, so they would add
-# pure zeros to the denominator and measure nothing. That is the test the
+# point, plus the operational scripts under scripts/ — every one of which the
+# bats suite executes as a subprocess, so BASH_ENV reaches them and their trace
+# lines were already being collected and then discarded by a predicate that
+# globbed only config/ and lib/. An earlier version of this comment called them
+# deliberately out of scope on the grounds that nothing under test sources them;
+# that was asserted, never measured, and it was wrong. That is the test the
 # predicate applies: is this file reached by the suite, not where does it live.
 # Tracked files, via git — not a filesystem glob. A glob also picks up a
 # developer's untracked scratch file under lib/, which silently joins the
@@ -58,7 +61,8 @@ INCLUDE_FILES=("${REPO_ROOT}/setup_env.sh")
 while IFS= read -r _src; do
     [[ -n "${_src}" ]] && INCLUDE_FILES+=("${REPO_ROOT}/${_src}")
 done < <(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
-    git -C "${REPO_ROOT}" ls-files 'config/*.sh' 'lib/*.sh' 2>/dev/null)
+    git -C "${REPO_ROOT}" ls-files 'config/*.sh' 'lib/*.sh' 'scripts/*.sh' \
+    'scripts/pre-push' 'scripts/commit-msg' 2>/dev/null)
 
 # Falling back to the glob would reintroduce the local-vs-CI drift above, and a
 # silently short instrumented set is exactly this script's original defect.
@@ -76,8 +80,26 @@ if [[ "${1:-}" == "--list-sources" ]]; then
 fi
 
 # Regex for case branch labels — stored in variable to avoid zsh parse error on | inside inline character class
-# Matches: brew), mas), OK), *), oh-my-zsh|tpm|tfenv|zsh-autosuggestions), etc.
-_case_label_re="^[a-zA-Z_*][a-zA-Z0-9_.*-]*([|][a-zA-Z0-9_.*-]+)*[)]$"
+# Matches: brew), mas), OK), *), oh-my-zsh|tpm|tfenv|zsh-autosuggestions), -h | --help),
+# sync | check) ;; (an empty-body arm — the trailing ;; is part of the label line and
+# carries no command, so xtrace never emits it either; a label followed by a REAL
+# command before the ;; is deliberately excluded from this pattern and still counts).
+_case_label_re="^-{0,2}[a-zA-Z_*][a-zA-Z0-9_.*-]*([[:space:]]*[|][[:space:]]*-{0,2}[a-zA-Z0-9_.*-]+)*[)][[:space:]]*(;;)?[[:space:]]*$"
+
+# Regex for a heredoc opener: `<<` or `<<-`, optional whitespace, optional quote,
+# then the delimiter identifier. Deliberately does not require the closing quote to
+# match (POSIX ERE has no backreferences) — the delimiter word alone is enough to
+# find the terminator line later. Stored in variable for the same zsh-parse reason
+# as _case_label_re, even though this one has no `|`.
+_heredoc_open_re='<<-?[[:space:]]*["'"'"']?([A-Za-z_][A-Za-z0-9_]*)'
+
+# Regex for a bare function-declaration header: `name() {`, `name ()  {`, or a bare
+# `name()` when the `{` is on its own following line. xtrace never emits any of
+# these — verified with PS4='T:${LINENO}: ': only the body lines and the call site
+# are traced, never the header. A single-line function (`f() { cmd; }`) is NOT
+# matched here (there is real content after `{` before end of line) because that
+# line DOES get traced, attributed to the body, when the function runs.
+_func_decl_re='^[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(\)[[:space:]]*\{?[[:space:]]*$'
 
 
 # Counts executable bash lines in one file — the denominator for its percentage.
@@ -96,9 +118,17 @@ _case_label_re="^[a-zA-Z_*][a-zA-Z0-9_.*-]*([|][a-zA-Z0-9_.*-]+)*[)]$"
 # embedded Python, and excluding it says so rather than scoring it as missing.
 # A single-line `python3 -c "..."` closes its quote on the same line and is
 # ordinary bash, so it still counts.
+#
+# Also excludes heredoc bodies and their terminator line (any interpreter, any
+# quoting: `<<'EOF'`, `<<EOF`, `<<-EOF`) — xtrace only ever emits the opener line,
+# never the body or the terminator, verified the same way as the python3/array
+# cases above. And excludes bare function-declaration header lines (`name() {`,
+# `name ()  {`, or a bare `name()` with `{` on the next line) plus a bare `{` —
+# xtrace never emits either, verified likewise.
 _count_coverable_lines() {
     local _file="${1}" _line _trimmed _after _code
-    local _coverable=0 _in_embedded=0 _in_array=0
+    local _coverable=0 _in_embedded=0 _in_array=0 _in_heredoc=0 _heredoc_delim=""
+    local _hd_scan _hd_match _hd_delim _hd_prefix _hd_sq _hd_dq
     # `|| [[ -n "${_line}" ]]` belongs on the read, not after done: read returns
     # non-zero on a final line with no trailing newline, having still populated
     # _line. Without it that last line is dropped, undercounting the denominator
@@ -117,6 +147,20 @@ _count_coverable_lines() {
             # the region early. None exists in the instrumented set, and the
             # convention in these blocks is single-quoted Python strings.
             [[ "${_trimmed}" == '"'* ]] && _in_embedded=0
+            continue
+        fi
+        # Heredoc body/terminator: checked early, like the python3-c region above,
+        # because a heredoc body can contain arbitrary text — including lines that
+        # look like bash comments or blank lines — none of which should be run
+        # through bash-specific logic while still inside the body. The terminator
+        # line itself is excluded too (bash never traces it); _trimmed already has
+        # leading whitespace stripped, which is sufficient to match both the plain
+        # and `<<-` (leading-tab-stripped) forms without tracking which was used.
+        if [[ "${_in_heredoc}" -eq 1 ]]; then
+            if [[ "${_trimmed}" == "${_heredoc_delim}" ]]; then
+                _in_heredoc=0
+                _heredoc_delim=""
+            fi
             continue
         fi
         # Blank and comment skips MUST come before the opener detection below.
@@ -162,13 +206,37 @@ _count_coverable_lines() {
             _after="${_code#*python3 -c \"}"
             [[ "${_after}" != *'"'* ]] && _in_embedded=1
         fi
+        # Heredoc opener. `<<<` (here-string, single-line, no body/terminator) is
+        # blanked out first — without that, its trailing `<` reads as the tail of
+        # a truncated `<<` match (e.g. `read -r x <<< foo` would otherwise be
+        # misread as opening a heredoc with delimiter "foo", consuming every line
+        # after it as an unterminated body). The quote-parity check on the prefix
+        # rejects a `<<` that is itself inside an already-open string, e.g.
+        # `msg='See <<EOF for docs'` — not a real heredoc, ordinary bash line.
+        # Known limitation: does not track escaped quotes (\") inside the prefix.
+        _hd_scan="${_code//"<<<"/  }"
+        if [[ "${_hd_scan}" =~ ${_heredoc_open_re} ]]; then
+            _hd_match="${BASH_REMATCH[0]}"
+            _hd_delim="${BASH_REMATCH[1]}"
+            _hd_prefix="${_hd_scan%%"${_hd_match}"*}"
+            _hd_sq="${_hd_prefix//\'/}"
+            _hd_dq="${_hd_prefix//\"/}"
+            if (( (${#_hd_prefix} - ${#_hd_sq}) % 2 == 0 && (${#_hd_prefix} - ${#_hd_dq}) % 2 == 0 )); then
+                _in_heredoc=1
+                _heredoc_delim="${_hd_delim}"
+            fi
+        fi
         case "${_trimmed}" in
-            "}" | "fi" | "done" | "esac" | ";;" | "then" | "do" | "else") continue ;;
+            "{" | "}" | "fi" | "done" | "esac" | ";;" | "then" | "do" | "else") continue ;;
         esac
         [[ "${_trimmed}" =~ ^[[:space:]]*\)$ ]] && continue
-        # Case branch labels (brew), mas), OK), *), oh-my-zsh|tpm|...) — xtrace never emits them
+        # Case branch labels (brew), mas), OK), *), oh-my-zsh|tpm|..., -h | --help),
+        # sync | check) ;;) — xtrace never emits them.
         # Regex in variable avoids zsh parse error on | inside inline character class
         [[ "${_trimmed}" =~ ${_case_label_re} ]] && continue
+        # Function-declaration header (name() {, name ()  {, or bare name() with
+        # the { on the next line) — xtrace never emits it, only the body/call site.
+        [[ "${_code}" =~ ${_func_decl_re} ]] && continue
         # done with any redirect (done <<< ..., done < <(...), done < file)
         [[ "${_trimmed}" =~ ^done[[:space:]] ]] && continue
         # Continuation lines of multi-line pipelines (> outfile, > /dev/null)
@@ -184,10 +252,17 @@ _count_coverable_lines() {
     # limits of the heuristic (a Python line starting with a double quote closes
     # a region early; a `#` inside a quoted string truncates the opener match),
     # so this converts a silent wrong answer into a loud refusal.
-    if [[ "${_in_embedded}" -eq 1 || "${_in_array}" -eq 1 ]]; then
+    if [[ "${_in_embedded}" -eq 1 || "${_in_array}" -eq 1 || "${_in_heredoc}" -eq 1 ]]; then
+        local _unterminated_kind
+        if [[ "${_in_embedded}" -eq 1 ]]; then
+            _unterminated_kind="python3 -c block"
+        elif [[ "${_in_array}" -eq 1 ]]; then
+            _unterminated_kind="array literal"
+        else
+            _unterminated_kind="heredoc"
+        fi
         printf "ERROR: %s: unterminated %s — lines after it were not counted\n" \
-            "${_file}" \
-            "$([[ "${_in_embedded}" -eq 1 ]] && printf 'python3 -c block' || printf 'array literal')" >&2
+            "${_file}" "${_unterminated_kind}" >&2
         return 1
     fi
     printf '%s\n' "${_coverable}"

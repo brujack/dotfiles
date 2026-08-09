@@ -965,6 +965,203 @@ FIXTURE
   printf '%s\n' "${output}" | grep -qx "${REPO_ROOT}/setup_env.sh"
 }
 
+# Regression: heredoc bodies and their terminator line were counted as coverable,
+# but xtrace never emits either — only the opener line, verified with
+# PS4='T:${LINENO}: '. scripts/sync-agent-guidance.sh has 64 of its 99 "coverable"
+# lines inside a single heredoc, capping its true coverage at 38%.
+@test "run-bash-coverage.sh does not count a heredoc body or its terminator" {
+  cat > "${BATS_TEST_TMPDIR}/heredoc.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+a=1
+cat <<'EOF2'
+body line one
+body line two
+EOF2
+b=2
+FIXTURE
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/heredoc.sh"
+  [ "$status" -eq 0 ]
+  # Counted: a=1, the cat <<'EOF2' opener, b=2. Not counted: the shebang comment,
+  # the two body lines, and the EOF2 terminator.
+  [ "$output" -eq 3 ]
+}
+
+@test "run-bash-coverage.sh still counts an unquoted <<DELIM heredoc opener" {
+  cat > "${BATS_TEST_TMPDIR}/unquoted.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+cat <<DELIM
+body
+DELIM
+x=1
+FIXTURE
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/unquoted.sh"
+  [ "$status" -eq 0 ]
+  [ "$output" -eq 2 ]
+}
+
+# Boundary: a here-string (<<<) is a single-line redirect with no body or
+# terminator — not a heredoc. Its trailing < would otherwise be misread as the
+# tail of a truncated << match (delimiter "foo"), which would treat every
+# following line as an unterminated heredoc body.
+@test "run-bash-coverage.sh does not treat a here-string (<<<) as a heredoc opener" {
+  cat > "${BATS_TEST_TMPDIR}/herestring.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+read -r x <<< foo
+after=1
+FIXTURE
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/herestring.sh"
+  [ "$status" -eq 0 ]
+  [ "$output" -eq 2 ]
+}
+
+# Boundary: a << appearing inside an already-open quoted string is not a real
+# heredoc operator — bash parses it as literal text, so the line traces normally
+# and no body/terminator search should ever start.
+@test "run-bash-coverage.sh does not treat << inside a quoted string as a heredoc opener" {
+  cat > "${BATS_TEST_TMPDIR}/quotedstring.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+msg='See <<EOF for docs'
+after=1
+FIXTURE
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/quotedstring.sh"
+  [ "$status" -eq 0 ]
+  [ "$output" -eq 2 ]
+}
+
+# Boundary: zero body lines between opener and terminator.
+@test "run-bash-coverage.sh handles an empty heredoc body" {
+  cat > "${BATS_TEST_TMPDIR}/empty.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+cat <<'EMPTY'
+EMPTY
+after=1
+FIXTURE
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/empty.sh"
+  [ "$status" -eq 0 ]
+  [ "$output" -eq 2 ]
+}
+
+# Boundary: heredoc opened as the last real content of the file, no terminator
+# ever appears. Silently swallowing the rest (there is no rest) must still be
+# reported as a loud failure, matching the python3-c/array-literal error paths.
+@test "run-bash-coverage.sh fails loudly on an unterminated heredoc" {
+  printf '#!/usr/bin/env bash\ncat <<'"'"'EOF'"'"'\nfoo\n' > "${BATS_TEST_TMPDIR}/untermhd.sh"
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/untermhd.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"unterminated heredoc"* ]]
+  ! [[ "$output" =~ ^[0-9]+$ ]]
+}
+
+# Regression: bash never traces a function-declaration header line — verified
+# with PS4='T:${LINENO}: ': only the body and the call site are traced. Covers
+# same-line brace (f() {), spaced same-line brace (g ()  {), and the brace on
+# its own following line (f()\n{).
+@test "run-bash-coverage.sh does not count function-declaration header lines" {
+  cat > "${BATS_TEST_TMPDIR}/funcdecl.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+f()
+{
+  x=1
+}
+g ()  {
+  y=2
+}
+f
+g
+FIXTURE
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/funcdecl.sh"
+  [ "$status" -eq 0 ]
+  # Counted: x=1, y=2, the call to f, the call to g. Not counted: the shebang,
+  # f()'s own header line, the bare { line, g ()  {'s header line, both }.
+  [ "$output" -eq 4 ]
+}
+
+# A single-line function (body on the same physical line as the header) DOES get
+# traced when called, attributed to that line — must still count.
+@test "run-bash-coverage.sh still counts a single-line function body" {
+  cat > "${BATS_TEST_TMPDIR}/singleline.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+greet() { echo "hi"; }
+greet
+FIXTURE
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/singleline.sh"
+  [ "$status" -eq 0 ]
+  [ "$output" -eq 2 ]
+}
+
+# Regression: the existing _case_label_re only matched a single token with no
+# spaces and no leading hyphen, so a hyphen-leading or multi-token-with-spaces
+# label like `-h | --help)` fell through and was counted, even though xtrace
+# never emits a case-arm label line.
+@test "run-bash-coverage.sh does not count a hyphen-leading multi-token case label" {
+  cat > "${BATS_TEST_TMPDIR}/hyphenlabel.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+case "$1" in
+  -h | --help)
+    echo "help"
+    ;;
+esac
+FIXTURE
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/hyphenlabel.sh"
+  [ "$status" -eq 0 ]
+  [ "$output" -eq 2 ]
+}
+
+# An empty-body case arm (label immediately followed by ;; on the SAME line, no
+# real command) is never traced either — verified with PS4='T:${LINENO}: '.
+@test "run-bash-coverage.sh does not count an empty-body case arm with trailing ;;" {
+  cat > "${BATS_TEST_TMPDIR}/emptyarm.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+case "$1" in
+  sync | check) ;;
+  *)
+    run_default
+    ;;
+esac
+FIXTURE
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/emptyarm.sh"
+  [ "$status" -eq 0 ]
+  [ "$output" -eq 2 ]
+}
+
+# Regression guard: a case-arm label followed by a REAL command before the
+# trailing ;;, all on one line, DOES get traced (attributed to that line) — the
+# empty-body exclusion above must not swallow this shape.
+@test "run-bash-coverage.sh still counts a case arm with a same-line command" {
+  cat > "${BATS_TEST_TMPDIR}/samelinecmd.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+case "$1" in
+  -h | --help) echo "help" ;;
+  *) echo "default" ;;
+esac
+FIXTURE
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/samelinecmd.sh"
+  [ "$status" -eq 0 ]
+  [ "$output" -eq 3 ]
+}
+
+# The motivating regression, combining a function declaration with a heredoc
+# body inside it — the exact shape that made scripts/sync-agent-guidance.sh's
+# true coverage unreachable at its published percentage.
+@test "run-bash-coverage.sh correctly counts a heredoc nested inside a function" {
+  cat > "${BATS_TEST_TMPDIR}/nested.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+f() {
+  cat <<'USAGE'
+a
+b
+c
+USAGE
+}
+f
+x=1
+FIXTURE
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/nested.sh"
+  [ "$status" -eq 0 ]
+  # Counted: the cat <<'USAGE' opener, the call to f, x=1.
+  [ "$output" -eq 3 ]
+}
+
 @test ".osx.sh -h prints usage and exits 0 without writing any defaults" {
   run bash "${REPO_ROOT}/scripts/.osx.sh" -h
   [ "$status" -eq 0 ]
