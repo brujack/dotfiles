@@ -20,8 +20,10 @@ full bats suite. Prints a per-file coverage table and overall percentage.
 Inspecting the figure without a full run (all three exit immediately):
 
   --list-sources          Print the instrumented set — setup_env.sh plus
-                          tracked config/*.sh and lib/*.sh, derived at run
-                          time from git, not a literal list
+                          tracked config/*.sh, lib/*.sh, and scripts/*.sh
+                          (plus the extensionless hooks scripts/pre-push and
+                          scripts/commit-msg), less scripts/bash-tracer.sh,
+                          derived at run time from git, not a literal list
   --count-coverable FILE  Print one file's static coverable-line count, the
                           heuristic half of its denominator. Exits 2 on a
                           missing, unreadable, or absent argument rather than
@@ -56,9 +58,11 @@ TRACE_FIFO="${OUTPUT_DIR}/bash_trace.fifo"
 # point, plus the operational scripts under scripts/ — every one of which the
 # bats suite executes as a subprocess, so BASH_ENV reaches them and their trace
 # lines were already being collected and then discarded by a predicate that
-# globbed only config/ and lib/. An earlier version of this comment called them
-# deliberately out of scope on the grounds that nothing under test sources them;
-# that was asserted, never measured, and it was wrong. That is the test the
+# globbed only config/ and lib/. This retracts an earlier version of this
+# comment, which called scripts/ deliberately out of scope on the grounds that
+# nothing under test sources them; that was asserted, never measured, and it
+# was wrong — measured 2026-08-08, every tracked file under scripts/ is
+# executed by the bats suite, between 2 and 29 times each. That is the test the
 # predicate applies: is this file reached by the suite, not where does it live.
 # Tracked files, via git — not a filesystem glob. A glob also picks up a
 # developer's untracked scratch file under lib/, which silently joins the
@@ -71,6 +75,28 @@ while IFS= read -r _src; do
 done < <(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
     git -C "${REPO_ROOT}" ls-files 'config/*.sh' 'lib/*.sh' 'scripts/*.sh' \
     'scripts/pre-push' 'scripts/commit-msg' 2>/dev/null)
+
+# scripts/bash-tracer.sh is excluded AFTER the git ls-files derivation above,
+# not by narrowing the scripts/*.sh predicate itself — the predicate must keep
+# matching scripts/*.sh generally; only this one file is structurally
+# uncoverable. It is the file BASH_ENV points every traced subprocess at, and
+# `set -x` is its own LAST command: its five preceding lines run before
+# tracing turns on, and nothing follows it, so zero trace lines are ever
+# attributed to it. Verified:
+#   _COV_TRACE_FILE=$PWD/tr.txt BASH_ENV=scripts/bash-tracer.sh bash -c 'x=1; y=2'
+#   grep -c 'bash-tracer.sh' tr.txt   -> 0
+#   wc -l < tr.txt                    -> 2   (the traced subprocess's own
+#                                              commands DO appear)
+# It measures 0/6 and would sit there permanently dragging the denominator
+# down — that is uncoverable by construction, not untested, so it is excluded
+# with the measurement rather than left to look like a testing gap.
+_filtered_include_files=()
+for _f in "${INCLUDE_FILES[@]}"; do
+    [[ "${_f}" == "${TRACER}" ]] && continue
+    _filtered_include_files+=("${_f}")
+done
+INCLUDE_FILES=("${_filtered_include_files[@]}")
+unset _filtered_include_files
 
 # Falling back to the glob would reintroduce the local-vs-CI drift above, and a
 # silently short instrumented set is exactly this script's original defect.
@@ -609,6 +635,14 @@ fi
 
 trace_lines=$(wc -l < "${TRACE_FILE}")
 printf "\nTrace: %d filtered lines\n\n" "${trace_lines}"
+
+# States what the run below actually measures, so an operator reading a
+# percentage does not have to reverse-engineer the predicate from the source.
+# Deliberately separate from the "Overall bash coverage: %d%%" line further
+# down — CI's `.github/workflows/ci.yml` greps that exact line for every
+# integer on it, so a denominator appended there would make the parsed
+# percentage multi-line and break the `-lt` comparison.
+printf "Instrumented set: setup_env.sh + tracked config/*.sh lib/*.sh scripts/*.sh + hooks, less bash-tracer.sh (%d files)\n" "${#INCLUDE_FILES[@]}"
 
 # Compute per-file coverage
 printf "%-30s  %8s  %8s  %8s\n" "File" "Covered" "Total" "Pct"

@@ -913,6 +913,59 @@ FIXTURE
   printf '%s\n' "${output}" | grep -qx "${REPO_ROOT}/config/hook_repos.sh"
 }
 
+# Regression guard for the predicate widening to scripts/*.sh: every tracked
+# script except bash-tracer.sh (excluded below — see the next test) must stay
+# instrumented, so a future narrowing of the scripts/*.sh glob is caught here
+# rather than silently shrinking the denominator again.
+@test "run-bash-coverage.sh instruments every tracked scripts/*.sh except bash-tracer.sh" {
+  run _run_coverage --list-sources
+  [ "$status" -eq 0 ]
+
+  # Same PATH-strip rationale as the lib/*.sh instrumentation test above: the
+  # mocked git prints nothing, which would make this loop vacuously pass.
+  local _real_path="${PATH#"${REPO_ROOT}/tests/mocks:"}"
+  local _tracked
+  _tracked="$(cd "${REPO_ROOT}" && PATH="${_real_path}" git ls-files 'scripts/*.sh')"
+  [ -n "${_tracked}" ] || { printf 'git ls-files returned nothing — mock still shadowing\n' >&2; false; }
+
+  local _missing=0 _s
+  while IFS= read -r _s; do
+    [[ "${_s}" == "scripts/bash-tracer.sh" ]] && continue
+    if ! printf '%s\n' "${output}" | grep -qx "${REPO_ROOT}/${_s}"; then
+      printf 'not instrumented: %s\n' "${_s}" >&2
+      _missing=1
+    fi
+  done <<< "${_tracked}"
+  [ "${_missing}" -eq 0 ]
+}
+
+# An extension-keyed pathspec ('scripts/*.sh') cannot match either hook — both
+# are extensionless. Widening the predicate to scripts/*.sh must not silently
+# drop the two files that gate every commit and push in the repo; they are
+# named explicitly in the git ls-files call, not reached by the glob.
+@test "run-bash-coverage.sh --list-sources includes both extensionless hooks" {
+  run _run_coverage --list-sources
+  [ "$status" -eq 0 ]
+  printf '%s\n' "${output}" | grep -qx "${REPO_ROOT}/scripts/pre-push"
+  printf '%s\n' "${output}" | grep -qx "${REPO_ROOT}/scripts/commit-msg"
+}
+
+# bash-tracer.sh is the file BASH_ENV points every traced subprocess at, and
+# `set -x` is its own LAST command — its five preceding lines run before
+# tracing turns on, and nothing follows it, so zero trace lines are ever
+# attributed to it. Verified:
+#   _COV_TRACE_FILE=$PWD/tr.txt BASH_ENV=scripts/bash-tracer.sh bash -c 'x=1; y=2'
+#   grep -c 'bash-tracer.sh' tr.txt   -> 0
+#   wc -l < tr.txt                    -> 2   (the traced subprocess's own
+#                                              commands DO appear)
+# It is uncoverable by construction, not untested. A future reader must not
+# "fix" this back into the instrumented set without re-deriving that.
+@test "run-bash-coverage.sh excludes bash-tracer.sh from the instrumented set" {
+  run _run_coverage --list-sources
+  [ "$status" -eq 0 ]
+  ! printf '%s\n' "${output}" | grep -qx "${REPO_ROOT}/scripts/bash-tracer.sh"
+}
+
 # bash xtrace emits a multi-line array assignment as ONE line, so its element
 # lines can never be covered individually. Counting them inflates the
 # denominator the same way the embedded-Python bodies did — 13 of
