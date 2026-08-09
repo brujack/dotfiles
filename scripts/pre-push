@@ -10,6 +10,9 @@ if [[ -z "${REPO_ROOT}" ]]; then
 fi
 
 needs_test=0
+# shellcheck disable=SC2034 # git's pre-push protocol supplies 4 whitespace-separated
+# fields per stdin line; local_ref/remote_ref must be named to consume the
+# line positionally even though only local_sha/remote_sha are read below.
 while read -r local_ref local_sha remote_ref remote_sha; do
     [[ "${local_sha}" == "0000000000000000000000000000000000000000" ]] && continue
 

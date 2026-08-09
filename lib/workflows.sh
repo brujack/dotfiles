@@ -9,7 +9,7 @@ setup_claude_mcp() {
 
   # Source config/local.sh to pick up GITHUB_PAT if not already in environment
   if [[ -f "${_local_config}" ]]; then
-    # shellcheck disable=SC1090
+    # shellcheck disable=SC1090 # path is built from PERSONAL_GITREPOS/DOTFILES constants, not a literal — shellcheck cannot resolve it statically
     source "${_local_config}" || true
   fi
 
@@ -126,7 +126,7 @@ run_setup_user() {
     install_git || return 1
   fi
 
-  mkdir -p ${HOME}/software_downloads
+  mkdir -p "${HOME}"/software_downloads
 
   if [[ ${MACOS} || ${UBUNTU} ]]; then
     install_zsh || return 1
@@ -137,10 +137,10 @@ run_setup_user() {
   fi
 
   printf "Creating %s/bin\\n" "${HOME}"
-  mkdir -p ${HOME}/bin
+  mkdir -p "${HOME}"/bin
 
   printf "Creating %s\\n" "${PERSONAL_GITREPOS}"
-  mkdir -p ${PERSONAL_GITREPOS}
+  mkdir -p "${PERSONAL_GITREPOS}"
 
   clone_or_update_dotfiles || return 1
   setup_ai_config || return 1
@@ -158,20 +158,20 @@ run_setup_user() {
       sudo -H apt install curl -y
     fi
     curl https://cht.sh/:cht.sh > ~/bin/cht.sh
-    chmod 750 ${HOME}/bin/cht.sh
+    chmod 750 "${HOME}"/bin/cht.sh
   fi
   if [[ -x $(command -v cht.sh) ]]; then
     printf "cht.sh is installed\\n"
   fi
 
   printf "Creating %s/.zsh.d\\n" "${HOME}"
-  mkdir -p ${HOME}/.zsh.d
+  mkdir -p "${HOME}"/.zsh.d
   if [[ ! -f ${HOME}/.zsh.d/_cht ]]; then
-    curl https://cheat.sh/:zsh > ${HOME}/.zsh.d/_cht
+    curl https://cheat.sh/:zsh > "${HOME}"/.zsh.d/_cht
   fi
 
   printf "Creating %s/go-work\\n" "${HOME}"
-  mkdir -p ${HOME}/go-work
+  mkdir -p "${HOME}"/go-work
   if [[ -d ${HOME}/go-work ]]; then
     printf "Created %s/go-work\\n" "${HOME}"
   fi
@@ -519,7 +519,7 @@ PY
 
       "$PYTHON" -m pip check || true
       printf "Updated pip packages\n"
-      _update_record_end "pip" ${_pip_rc}
+      _update_record_end "pip" "${_pip_rc}"
     else
       _update_skip "pip" "HAS_DEVTOOLS not set"
     fi
@@ -606,7 +606,7 @@ PY
     fi
     if [[ -f ${HOME}/.zsh.d/_cht ]]; then
       printf "Updating cheat.sh tab completion\\n"
-      curl https://cheat.sh/:zsh > ${HOME}/.zsh.d/_cht
+      curl https://cheat.sh/:zsh > "${HOME}"/.zsh.d/_cht
     fi
     if [[ -d ${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions ]]; then
       printf "Updating zsh-autosuggestions\\n"

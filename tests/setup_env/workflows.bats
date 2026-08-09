@@ -971,6 +971,7 @@ setup_constants_copy() {
 
 @test "_check_cv_homebrew_install emits OUTDATED when SHA differs" {
   local _ok=0 _outdated=0 _warned=0
+  # shellcheck disable=SC2034 # read by _check_cv_homebrew_install after source; shellcheck cannot see the consumer
   HOMEBREW_INSTALL_SHA="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
   curl() { printf '{"sha":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","commit":{}}'; }
   export -f curl
@@ -1299,6 +1300,7 @@ assert_all_npm_globals_pinned() {
 @test "run_developer_or_ansible installs nothing when JSON2YAML_VER is empty" {
   export MACOS=1
   unset LINUX UBUNTU
+  # shellcheck disable=SC2034 # read by run_developer_or_ansible after source; shellcheck cannot see the consumer
   JSON2YAML_VER=""
   run run_developer_or_ansible
   [ "$status" -ne 0 ]
@@ -1713,6 +1715,7 @@ assert_all_npm_globals_pinned() {
 
 @test "_require_npm_pins names every missing pin, not only the first" {
   JSCPD_VER=""
+  # shellcheck disable=SC2034 # read by _require_npm_pins after source; shellcheck cannot see the consumer
   EXA_MCP_SERVER_VER=""
   run _require_npm_pins
   [ "$status" -ne 0 ]
@@ -1735,6 +1738,7 @@ assert_all_npm_globals_pinned() {
   unset LINUX UBUNTU
   export UPDATE_CLAUDE=1
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  # shellcheck disable=SC2034 # read by run_update via _require_npm_pins after source; shellcheck cannot see the consumer
   JSCPD_VER=""
   # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
   # because run_update installs its own, which otherwise swallows attribution.

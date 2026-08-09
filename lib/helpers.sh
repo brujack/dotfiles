@@ -196,10 +196,10 @@ check_and_install_nala() {
         log_info "Installing nala via apt"
         if [[ -z ${RESOLUTE} ]]; then
           # Noble and earlier: bootstrap via volian archive .deb
-          wget -O ${HOME}/software_downloads/volian-archive-keyring_0.2.0_all.deb https://gitlab.com/-/project/39215670/uploads/d9473098bc12525687dc9aca43d50159/volian-archive-keyring_0.2.0_all.deb
-          sudo -H dpkg --install ${HOME}/software_downloads/volian-archive-keyring_0.2.0_all.deb
-          wget -O ${HOME}/software_downloads/volian-archive-nala_0.2.0_all.deb https://gitlab.com/-/project/39215670/uploads/d00e44faaf2cc8aad526ca520165a0af/volian-archive-nala_0.2.0_all.deb
-          sudo -H dpkg --install ${HOME}/software_downloads/volian-archive-nala_0.2.0_all.deb
+          wget -O "${HOME}"/software_downloads/volian-archive-keyring_0.2.0_all.deb https://gitlab.com/-/project/39215670/uploads/d9473098bc12525687dc9aca43d50159/volian-archive-keyring_0.2.0_all.deb
+          sudo -H dpkg --install "${HOME}"/software_downloads/volian-archive-keyring_0.2.0_all.deb
+          wget -O "${HOME}"/software_downloads/volian-archive-nala_0.2.0_all.deb https://gitlab.com/-/project/39215670/uploads/d00e44faaf2cc8aad526ca520165a0af/volian-archive-nala_0.2.0_all.deb
+          sudo -H dpkg --install "${HOME}"/software_downloads/volian-archive-nala_0.2.0_all.deb
           sudo -H apt update
         fi
         sudo -H apt install nala -y
@@ -581,9 +581,9 @@ process_args() {
   local arg OPTARG
   while getopts ":ht:w" arg; do
     # shellcheck disable=SC2317 # exit after usage() is intentional redundancy
+    # shellcheck disable=SC2034 # readonly globals set here and read by setup_env.sh's top-level dispatch after process_args returns: SETUP_USER (:83), SETUP (:83-84), DEVELOPER (:84-85), ANSIBLE (:85), UPDATE (:86), DOCTOR (:69), CHECK_VERSIONS (:70), RECREATE_VENV (:87), RECREATE_RUBY (:88). WORK has no production consumer at all — only tests/setup_env/unit.bats asserts it. SC1124 forbids a directive on a case-arm line, so this one necessarily covers all 13 arms of the enclosing case, including the nested case ${OPTARG}; a future SC2034 anywhere inside is hidden by it.
     case ${arg} in
       t)
-        # shellcheck disable=SC2317 # exit after usage() is intentional redundancy
         case ${OPTARG} in
           setup_user)     readonly SETUP_USER=1 ;;
           setup)          readonly SETUP=1 ;;
@@ -630,21 +630,21 @@ setup_dotfile_symlinks() {
 
   if [[ -n ${MACOS} ]] || [[ -n ${LINUX} ]]; then
     log_info "Creating ${HOME}/.config"
-    mkdir -p ${HOME}/.config
+    mkdir -p "${HOME}"/.config
     log_info "Created ${HOME}/.config"
   fi
 
   if [[ -n ${MACOS} ]] || [[ -n ${LINUX} ]]; then
     log_info "Creating ${HOME}/.tf_creds"
-    if mkdir -p ${HOME}/.tf_creds; then
-      chmod 700 ${HOME}/.tf_creds
+    if mkdir -p "${HOME}"/.tf_creds; then
+      chmod 700 "${HOME}"/.tf_creds
       log_info "Created ${HOME}/.tf_creds"
     fi
   fi
 
   if [[ -n ${MACOS} ]] || [[ -n ${LINUX} ]]; then
     log_info "powershell profile and custom oh-my-posh theme"
-    mkdir -p ${HOME}/.config/powershell
+    mkdir -p "${HOME}"/.config/powershell
     safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/profile.ps1" "${HOME}/.config/powershell/profile.ps1"
     safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/bruce.omp.json" "${HOME}/.config/powershell/bruce.omp.json"
   fi
@@ -671,14 +671,14 @@ setup_dotfile_symlinks() {
   safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.zshrc" "${HOME}/.zshrc"
   safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.config/.zshrc.d" "${HOME}/.config/.zshrc.d"
 
-  mkdir -p ${HOME}/.config
+  mkdir -p "${HOME}"/.config
   safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.config/ccstatusline" "${HOME}/.config/ccstatusline"
 
   safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.zprofile" "${HOME}/.zprofile"
   safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/bruce.zsh-theme" "${HOME}/.oh-my-zsh/custom/themes/bruce.zsh-theme"
 
   log_info "Creating ${HOME}/.tmux"
-  if mkdir -p ${HOME}/.tmux; then
+  if mkdir -p "${HOME}"/.tmux; then
     log_info "Created ${HOME}/.tmux"
   fi
 
@@ -691,8 +691,8 @@ setup_dotfile_symlinks() {
   fi
 
   log_info "Creating ${HOME}/.warp"
-  if mkdir -p ${HOME}/.warp; then
-    chmod 700 ${HOME}/.warp
+  if mkdir -p "${HOME}"/.warp; then
+    chmod 700 "${HOME}"/.warp
     log_info "Created ${HOME}/.warp"
   fi
   safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.warp/themes" "${HOME}/.warp/themes"
@@ -700,13 +700,13 @@ setup_dotfile_symlinks() {
   safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.warp/settings.toml" "${HOME}/.warp/settings.toml"
 
   log_info "Creating ${HOME}/.ssh"
-  if mkdir -p ${HOME}/.ssh; then
-    chmod 700 ${HOME}/.ssh
+  if mkdir -p "${HOME}"/.ssh; then
+    chmod 700 "${HOME}"/.ssh
     log_info "Created ${HOME}/.ssh"
   fi
 
   log_info "Creating ${HOME}/.claude"
-  if mkdir -p ${HOME}/.claude; then
+  if mkdir -p "${HOME}"/.claude; then
     log_info "Created ${HOME}/.claude"
   fi
   for _claude_item in "${_ai_config_dir}/.claude/"*; do
@@ -783,8 +783,8 @@ setup_dotfile_symlinks() {
   safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.ssh/teleport.cfg" "${HOME}/.ssh/teleport.cfg"
 
   log_info "Creating ${HOME}/.tsh"
-  if mkdir -p ${HOME}/.tsh; then
-    chmod 700 ${HOME}/.tsh
+  if mkdir -p "${HOME}"/.tsh; then
+    chmod 700 "${HOME}"/.tsh
     log_info "Created ${HOME}/.tsh"
   fi
 }
@@ -809,20 +809,20 @@ install_terraform_skill() {
 
 setup_credential_directories() {
   log_info "Creating ${HOME}/.aws"
-  if mkdir -p ${HOME}/.aws; then
-    chmod 700 ${HOME}/.aws
+  if mkdir -p "${HOME}"/.aws; then
+    chmod 700 "${HOME}"/.aws
     log_info "Created ${HOME}/.aws"
   fi
 
   log_info "Creating ${HOME}/.gcloud_creds"
-  if mkdir -p ${HOME}/.gcloud_creds; then
-    chmod 700 ${HOME}/.gcloud_creds
+  if mkdir -p "${HOME}"/.gcloud_creds; then
+    chmod 700 "${HOME}"/.gcloud_creds
     log_info "Created ${HOME}/.gcloud_creds"
   fi
 
   log_info "Creating ${HOME}/.azure_creds"
-  if mkdir -p ${HOME}/.azure_creds; then
-    chmod 700 ${HOME}/.azure_creds
+  if mkdir -p "${HOME}"/.azure_creds; then
+    chmod 700 "${HOME}"/.azure_creds
     log_info "Created ${HOME}/.azure_creds"
   fi
 }

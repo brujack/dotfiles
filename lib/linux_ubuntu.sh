@@ -49,9 +49,9 @@ _install_ubuntu_base_packages() {
 _install_ubuntu_powershell() {
   printf "Installing powershell Ubuntu\\n"
   if [[ ! -f ${HOME}/software_downloads/packages-microsoft-prod.deb ]]; then
-    # shellcheck disable=SC2046
-    wget -O ${HOME}/software_downloads/packages-microsoft-prod.deb https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb
-    sudo -H dpkg -i ${HOME}/software_downloads/packages-microsoft-prod.deb
+    # shellcheck disable=SC2046 # `lsb_release -rs` emits one token (e.g. 24.04) inside a URL path; there is nothing to split
+    wget -O "${HOME}"/software_downloads/packages-microsoft-prod.deb https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb
+    sudo -H dpkg -i "${HOME}"/software_downloads/packages-microsoft-prod.deb
     sudo apt update
     sudo -H add-apt-repository universe
     sudo -H DEBIAN_FRONTEND=noninteractive apt install powershell -y
@@ -63,18 +63,18 @@ _install_ubuntu_powershell() {
 
 _install_go_from_tarball() {
   if [[ ! -f ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} ]]; then
-    wget -O ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} ${GO_DOWNLOAD_URL}
-    tar xvf ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} -C ${HOME}/software_downloads/
+    wget -O "${HOME}"/software_downloads/"${GO_DOWNLOAD_FILENAME}" "${GO_DOWNLOAD_URL}"
+    tar xvf "${HOME}"/software_downloads/"${GO_DOWNLOAD_FILENAME}" -C "${HOME}"/software_downloads/
     if [[ -d /usr/local/go ]]; then
       sudo rm -rf /usr/local/go
     fi
     if [[ -d ${HOME}/software_downloads/go ]]; then
-      sudo mv ${HOME}/software_downloads/go /usr/local/go
+      sudo mv "${HOME}"/software_downloads/go /usr/local/go
       sudo chmod 755 /usr/local/go
       sudo chown -R root:root /usr/local/go
     fi
     if [[ -d ${HOME}/software_downloads/go ]]; then
-      rm -rf ${HOME}/software_downloads/go
+      rm -rf "${HOME}"/software_downloads/go
     fi
   fi
 }
@@ -93,8 +93,7 @@ _install_ubuntu_rust() {
   if [[ -n ${HAS_RUST} ]]; then
     printf "Configuring Rust Ubuntu\\n"
     if [[ -f ${HOME}/.cargo/env ]]; then
-      # shellcheck disable=SC1090
-      . ${HOME}/.cargo/env
+      . "${HOME}"/.cargo/env
     fi
     if command -v rustup &>/dev/null; then
       rustup self update
@@ -140,9 +139,9 @@ _install_ubuntu_k8s_tools() {
   if [[ -n ${HAS_K8S} ]]; then
     if [[ ! -f ${HOME}/software_downloads/kind_${KIND_VER} ]]; then
       printf "Installing kind\\n"
-      wget -O ${HOME}/software_downloads/kind_${KIND_VER} ${KIND_URL}
-      sudo cp -a ${HOME}/software_downloads/kind_${KIND_VER} /usr/local/bin/
-      sudo mv /usr/local/bin/kind_${KIND_VER} /usr/local/bin/kind
+      wget -O "${HOME}"/software_downloads/kind_"${KIND_VER}" "${KIND_URL}"
+      sudo cp -a "${HOME}"/software_downloads/kind_"${KIND_VER}" /usr/local/bin/
+      sudo mv /usr/local/bin/kind_"${KIND_VER}" /usr/local/bin/kind
       sudo chmod 755 /usr/local/bin/kind
       sudo chown root:root /usr/local/bin/kind
       if [[ -x $(command -v kind) ]]; then
@@ -153,8 +152,8 @@ _install_ubuntu_k8s_tools() {
 
   if [[ -n ${HAS_K8S} ]]; then
     printf "Installing telepresence\\n"
-    wget -O ${HOME}/software_downloads/telepresence ${TELEPRESENCE_URL}
-    sudo cp -a ${HOME}/software_downloads/telepresence /usr/local/bin/
+    wget -O "${HOME}"/software_downloads/telepresence "${TELEPRESENCE_URL}"
+    sudo cp -a "${HOME}"/software_downloads/telepresence /usr/local/bin/
     sudo chmod 755 /usr/local/bin/telepresence
     sudo chown root:root /usr/local/bin/telepresence
     if [[ -x $(command -v telepresence) ]]; then
@@ -185,9 +184,9 @@ _install_ubuntu_k8s_tools() {
 _install_ubuntu_hashicorp() {
   printf "Installing Hashicorp Consul Ubuntu\\n"
   if [[ ! -d ${HOME}/software_downloads/consul_${CONSUL_VER} ]]; then
-    wget -O ${HOME}/software_downloads/consul_${CONSUL_VER}_linux_${_LINUX_ARCH}.zip ${HASHICORP_URL}/consul/${CONSUL_VER}/consul_${CONSUL_VER}_linux_${_LINUX_ARCH}.zip
-    unzip ${HOME}/software_downloads/consul_${CONSUL_VER}_linux_${_LINUX_ARCH}.zip -d ${HOME}/software_downloads/consul_${CONSUL_VER}
-    sudo cp -a ${HOME}/software_downloads/consul_${CONSUL_VER}/consul /usr/local/bin/
+    wget -O "${HOME}"/software_downloads/consul_"${CONSUL_VER}"_linux_"${_LINUX_ARCH}".zip "${HASHICORP_URL}"/consul/"${CONSUL_VER}"/consul_"${CONSUL_VER}"_linux_"${_LINUX_ARCH}".zip
+    unzip "${HOME}"/software_downloads/consul_"${CONSUL_VER}"_linux_"${_LINUX_ARCH}".zip -d "${HOME}"/software_downloads/consul_"${CONSUL_VER}"
+    sudo cp -a "${HOME}"/software_downloads/consul_"${CONSUL_VER}"/consul /usr/local/bin/
     sudo chmod 755 /usr/local/bin/consul
     sudo chown root:root /usr/local/bin/consul
     if [[ -x $(command -v consul) ]]; then
@@ -197,9 +196,9 @@ _install_ubuntu_hashicorp() {
 
   printf "Installing Hashicorp Vault Ubuntu\\n"
   if [[ ! -d ${HOME}/software_downloads/vault_${VAULT_VER} ]]; then
-    wget -O ${HOME}/software_downloads/vault_${VAULT_VER}_linux_${_LINUX_ARCH}.zip ${HASHICORP_URL}/vault/${VAULT_VER}/vault_${VAULT_VER}_linux_${_LINUX_ARCH}.zip
-    unzip ${HOME}/software_downloads/vault_${VAULT_VER}_linux_${_LINUX_ARCH}.zip -d ${HOME}/software_downloads/vault_${VAULT_VER}
-    sudo cp -a ${HOME}/software_downloads/vault_${VAULT_VER}/vault /usr/local/bin/
+    wget -O "${HOME}"/software_downloads/vault_"${VAULT_VER}"_linux_"${_LINUX_ARCH}".zip "${HASHICORP_URL}"/vault/"${VAULT_VER}"/vault_"${VAULT_VER}"_linux_"${_LINUX_ARCH}".zip
+    unzip "${HOME}"/software_downloads/vault_"${VAULT_VER}"_linux_"${_LINUX_ARCH}".zip -d "${HOME}"/software_downloads/vault_"${VAULT_VER}"
+    sudo cp -a "${HOME}"/software_downloads/vault_"${VAULT_VER}"/vault /usr/local/bin/
     sudo chmod 755 /usr/local/bin/vault
     sudo chown root:root /usr/local/bin/vault
     if [[ -x $(command -v vault) ]]; then
@@ -209,9 +208,9 @@ _install_ubuntu_hashicorp() {
 
   printf "Installing Hashicorp Nomad Ubuntu\\n"
   if [[ ! -d ${HOME}/software_downloads/nomad_${NOMAD_VER} ]]; then
-    wget -O ${HOME}/software_downloads/nomad_${NOMAD_VER}_linux_${_LINUX_ARCH}.zip ${HASHICORP_URL}/nomad/${NOMAD_VER}/nomad_${NOMAD_VER}_linux_${_LINUX_ARCH}.zip
-    unzip ${HOME}/software_downloads/nomad_${NOMAD_VER}_linux_${_LINUX_ARCH}.zip -d ${HOME}/software_downloads/nomad_${NOMAD_VER}
-    sudo cp -a ${HOME}/software_downloads/nomad_${NOMAD_VER}/nomad /usr/local/bin/
+    wget -O "${HOME}"/software_downloads/nomad_"${NOMAD_VER}"_linux_"${_LINUX_ARCH}".zip "${HASHICORP_URL}"/nomad/"${NOMAD_VER}"/nomad_"${NOMAD_VER}"_linux_"${_LINUX_ARCH}".zip
+    unzip "${HOME}"/software_downloads/nomad_"${NOMAD_VER}"_linux_"${_LINUX_ARCH}".zip -d "${HOME}"/software_downloads/nomad_"${NOMAD_VER}"
+    sudo cp -a "${HOME}"/software_downloads/nomad_"${NOMAD_VER}"/nomad /usr/local/bin/
     sudo chmod 755 /usr/local/bin/nomad
     sudo chown root:root /usr/local/bin/nomad
     if [[ -x $(command -v nomad) ]]; then
@@ -221,9 +220,9 @@ _install_ubuntu_hashicorp() {
 
   printf "Installing Hashicorp Packer Ubuntu\\n"
   if [[ ! -d ${HOME}/software_downloads/packer_${PACKER_VER} ]]; then
-    wget -O ${HOME}/software_downloads/packer_${PACKER_VER}_linux_${_LINUX_ARCH}.zip ${HASHICORP_URL}/packer/${PACKER_VER}/packer_${PACKER_VER}_linux_${_LINUX_ARCH}.zip
-    unzip ${HOME}/software_downloads/packer_${PACKER_VER}_linux_${_LINUX_ARCH}.zip -d ${HOME}/software_downloads/packer_${PACKER_VER}
-    sudo cp -a ${HOME}/software_downloads/packer_${PACKER_VER}/packer /usr/local/bin/
+    wget -O "${HOME}"/software_downloads/packer_"${PACKER_VER}"_linux_"${_LINUX_ARCH}".zip "${HASHICORP_URL}"/packer/"${PACKER_VER}"/packer_"${PACKER_VER}"_linux_"${_LINUX_ARCH}".zip
+    unzip "${HOME}"/software_downloads/packer_"${PACKER_VER}"_linux_"${_LINUX_ARCH}".zip -d "${HOME}"/software_downloads/packer_"${PACKER_VER}"
+    sudo cp -a "${HOME}"/software_downloads/packer_"${PACKER_VER}"/packer /usr/local/bin/
     sudo chmod 755 /usr/local/bin/packer
     sudo chown root:root /usr/local/bin/packer
     if [[ -x $(command -v packer) ]]; then
@@ -234,9 +233,9 @@ _install_ubuntu_hashicorp() {
   printf "Installing Hashicorp Vagrant Ubuntu\\n"
   if [[ ! -d ${HOME}/software_downloads/vagrant_${VAGRANT_VER} ]]; then
     # vagrant has no ARM64 Linux build — amd64 only
-    wget -O ${HOME}/software_downloads/vagrant_${VAGRANT_VER}_linux_amd64.zip ${HASHICORP_URL}/vagrant/${VAGRANT_VER}/vagrant_${VAGRANT_VER}_linux_amd64.zip
-    unzip ${HOME}/software_downloads/vagrant_${VAGRANT_VER}_linux_amd64.zip -d ${HOME}/software_downloads/vagrant_${VAGRANT_VER}
-    sudo cp -a ${HOME}/software_downloads/vagrant_${VAGRANT_VER}/vagrant /usr/local/bin/
+    wget -O "${HOME}"/software_downloads/vagrant_"${VAGRANT_VER}"_linux_amd64.zip "${HASHICORP_URL}"/vagrant/"${VAGRANT_VER}"/vagrant_"${VAGRANT_VER}"_linux_amd64.zip
+    unzip "${HOME}"/software_downloads/vagrant_"${VAGRANT_VER}"_linux_amd64.zip -d "${HOME}"/software_downloads/vagrant_"${VAGRANT_VER}"
+    sudo cp -a "${HOME}"/software_downloads/vagrant_"${VAGRANT_VER}"/vagrant /usr/local/bin/
     sudo chmod 755 /usr/local/bin/vagrant
     sudo chown root:root /usr/local/bin/vagrant
     if [[ -x $(command -v vagrant) ]]; then
@@ -307,18 +306,18 @@ _install_ubuntu_cloud_tools() {
 
   printf "Installing cf-terraforming Ubuntu\\n"
   if [[ ! -f ${HOME}/software_downloads/cf-terraforming_${CF_TERRAFORMING_VER}_linux_${_LINUX_ARCH}.tar.gz ]]; then
-    wget -O ${HOME}/software_downloads/cf-terraforming_${CF_TERRAFORMING_VER}_linux_${_LINUX_ARCH}.tar.gz ${CF_TERRAFORMING_URL}
-    tar xvf ${HOME}/software_downloads/cf-terraforming_${CF_TERRAFORMING_VER}_linux_${_LINUX_ARCH}.tar.gz -C ${HOME}/software_downloads
+    wget -O "${HOME}"/software_downloads/cf-terraforming_"${CF_TERRAFORMING_VER}"_linux_"${_LINUX_ARCH}".tar.gz "${CF_TERRAFORMING_URL}"
+    tar xvf "${HOME}"/software_downloads/cf-terraforming_"${CF_TERRAFORMING_VER}"_linux_"${_LINUX_ARCH}".tar.gz -C "${HOME}"/software_downloads
     if [[ -f ${HOME}/software_downloads/CHANGELOG.md ]]; then
-      rm ${HOME}/software_downloads/CHANGELOG.md
+      rm "${HOME}"/software_downloads/CHANGELOG.md
     fi
     if [[ -f ${HOME}/software_downloads/LICENSE ]]; then
-      rm ${HOME}/software_downloads/LICENSE
+      rm "${HOME}"/software_downloads/LICENSE
     fi
     if [[ -f ${HOME}/software_downloads/README.md ]]; then
-      rm ${HOME}/software_downloads/README.md
+      rm "${HOME}"/software_downloads/README.md
     fi
-    sudo cp -a ${HOME}/software_downloads/cf-terraforming /usr/local/bin/
+    sudo cp -a "${HOME}"/software_downloads/cf-terraforming /usr/local/bin/
     sudo chmod 755 /usr/local/bin/cf-terraforming
     sudo chown root:root /usr/local/bin/cf-terraforming
     if [[ -x $(command -v cf-terraforming) ]]; then
@@ -392,6 +391,7 @@ _install_ubuntu_gui_tools() {
     # VirtualBox has no ARM64 Linux build — amd64 only
     echo "deb [arch=amd64 signed-by=/usr/share/keyrings/oracle-virtualbox-2016.gpg] http://download.virtualbox.org/virtualbox/debian $(. /etc/os-release && echo "$VERSION_CODENAME") contrib" | sudo tee /etc/apt/sources.list.d/virtualbox.list
     sudo -H apt update
+    # shellcheck disable=SC2086 # package-name slot: apt install takes a list, and VIRTUALBOX_VER may hold more than one package
     sudo -H DEBIAN_FRONTEND=noninteractive apt install ${VIRTUALBOX_VER} -y
     if [[ -x $(command -v vboxmanage) ]]; then
       printf "Virtualbox is installed\\n"
@@ -400,9 +400,8 @@ _install_ubuntu_gui_tools() {
 
   if [[ -n ${HAS_SNAP} ]]; then
     printf "Installing Albert Ubuntu Noble\\n"
-    # shellcheck disable=SC2046
     echo "deb http://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_$(lsb_release -rs)/ /" | sudo tee /etc/apt/sources.list.d/home:manuelschneid3r.list
-    # shellcheck disable=SC2046
+    # shellcheck disable=SC2046 # `lsb_release -rs` emits one token (e.g. 24.04) inside a URL path; there is nothing to split
     curl -fsSL https://download.opensuse.org/repositories/home:manuelschneid3r/xUbuntu_$(lsb_release -rs)/Release.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/home_manuelschneid3r.gpg > /dev/null
     sudo -H apt update
     sudo -H DEBIAN_FRONTEND=noninteractive apt install albert -y
@@ -441,9 +440,9 @@ _install_ubuntu_gui_tools() {
 _install_ubuntu_misc() {
   printf "Installing docker-compose Ubuntu\\n"
   if [[ ! -f ${HOME}/software_downloads/docker-compose_${DOCKER_COMPOSE_VER} ]]; then
-    wget -O ${HOME}/software_downloads/docker-compose_${DOCKER_COMPOSE_VER} ${DOCKER_COMPOSE_URL}
-    sudo cp -a ${HOME}/software_downloads/docker-compose_${DOCKER_COMPOSE_VER} /usr/local/bin/
-    sudo mv /usr/local/bin/docker-compose_${DOCKER_COMPOSE_VER} /usr/local/bin/docker-compose
+    wget -O "${HOME}"/software_downloads/docker-compose_"${DOCKER_COMPOSE_VER}" "${DOCKER_COMPOSE_URL}"
+    sudo cp -a "${HOME}"/software_downloads/docker-compose_"${DOCKER_COMPOSE_VER}" /usr/local/bin/
+    sudo mv /usr/local/bin/docker-compose_"${DOCKER_COMPOSE_VER}" /usr/local/bin/docker-compose
     sudo chmod 755 /usr/local/bin/docker-compose
     sudo chown root:root /usr/local/bin/docker-compose
     if [[ -x $(command -v docker-compose) ]]; then
@@ -454,9 +453,9 @@ _install_ubuntu_misc() {
   if [[ -n ${HAS_DEVTOOLS} ]]; then
     if [[ ! -f ${HOME}/software_downloads/yq_${YQ_VER} ]]; then
       printf "Installing yq\\n"
-      wget -O ${HOME}/software_downloads/yq_${YQ_VER} ${YQ_URL}
-      sudo cp -a ${HOME}/software_downloads/yq_${YQ_VER} /usr/local/bin/
-      sudo mv /usr/local/bin/yq_${YQ_VER} /usr/local/bin/yq
+      wget -O "${HOME}"/software_downloads/yq_"${YQ_VER}" "${YQ_URL}"
+      sudo cp -a "${HOME}"/software_downloads/yq_"${YQ_VER}" /usr/local/bin/
+      sudo mv /usr/local/bin/yq_"${YQ_VER}" /usr/local/bin/yq
       sudo chmod 755 /usr/local/bin/yq
       sudo chown root:root /usr/local/bin/yq
       if [[ -x $(command -v yq) ]]; then

@@ -1,3 +1,18 @@
 #!/usr/bin/env bash
 printf "xcodebuild %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+
+# Per-subcommand exit codes. install_homebrew runs `-license accept` and
+# `-runFirstLaunch` back to back and must surface a failure of EITHER; a mock
+# that answers the same for both cannot tell a correct implementation from one
+# that only ever sees the second command's status. MOCK_XCODEBUILD_EXIT stays
+# the default for both so existing callers are unaffected.
+case "$*" in
+  *-license*)
+    exit "${MOCK_XCODEBUILD_LICENSE_EXIT:-${MOCK_XCODEBUILD_EXIT:-0}}"
+    ;;
+  *-runFirstLaunch*)
+    exit "${MOCK_XCODEBUILD_RUNFIRSTLAUNCH_EXIT:-${MOCK_XCODEBUILD_EXIT:-0}}"
+    ;;
+esac
+
 exit "${MOCK_XCODEBUILD_EXIT:-0}"

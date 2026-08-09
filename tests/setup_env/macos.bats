@@ -197,6 +197,36 @@ teardown() {
   [[ "$output" == *"Failed to accept Xcode license"* ]]
 }
 
+# The test above cannot distinguish a correct implementation from the one this
+# replaced: it fails BOTH xcodebuild calls, so the second command's status is 1
+# whether or not the first is ever examined. install_homebrew used to run
+# `-license accept` and `-runFirstLaunch` back to back and then test $?, which
+# by then held only the second command's status — a license failure followed by
+# a successful -runFirstLaunch was reported as success. These two tests fail the
+# commands independently, which is the only way to observe that.
+
+@test "install_homebrew: license accept fails but runFirstLaunch succeeds - returns 1" {
+  export MOCK_UNAME_S=Darwin
+  export MOCK_XCODE_SELECT_PRINT_PATH_EXIT=1
+  export MOCK_XCODE_SELECT_EXIT=0
+  export MOCK_XCODEBUILD_LICENSE_EXIT=1
+  export MOCK_XCODEBUILD_RUNFIRSTLAUNCH_EXIT=0
+  run install_homebrew
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Failed to accept Xcode license"* ]]
+}
+
+@test "install_homebrew: license accept succeeds but runFirstLaunch fails - returns 1" {
+  export MOCK_UNAME_S=Darwin
+  export MOCK_XCODE_SELECT_PRINT_PATH_EXIT=1
+  export MOCK_XCODE_SELECT_EXIT=0
+  export MOCK_XCODEBUILD_LICENSE_EXIT=0
+  export MOCK_XCODEBUILD_RUNFIRSTLAUNCH_EXIT=1
+  run install_homebrew
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Failed to accept Xcode license"* ]]
+}
+
 # ── install_git_macos / install_zsh_macos (no-brew error paths) ──────────────
 
 @test "install_git_macos: brew absent after install_homebrew stub - returns error" {

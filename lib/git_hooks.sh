@@ -7,7 +7,6 @@
 # self-contained when sourced standalone (e.g. by tests/setup_env/git_hooks.bats),
 # following the same technique lib/git_sync.sh uses for _git_ssh_opts.
 if [[ -f "$(dirname "${BASH_SOURCE[0]}")/../config/hook_repos.sh" ]]; then
-  # shellcheck disable=SC1091
   source "$(dirname "${BASH_SOURCE[0]}")/../config/hook_repos.sh"
 else
   HOOK_EXPECTED_REPOS=()

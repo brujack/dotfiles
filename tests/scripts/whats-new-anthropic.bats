@@ -3,7 +3,6 @@
 # Tests for scripts/whats-new-anthropic.sh
 
 FAKE_PLATFORM_HTML="<html><body><h1>Release notes</h1><p>May 2026 Claude Opus 4.7 launched.</p></body></html>"
-FAKE_PLATFORM_TEXT="Release notes May 2026 Claude Opus 4.7 launched."
 
 FAKE_SDK_CHANGELOG="## 0.100.0 (2026-05-06)
 ### Features

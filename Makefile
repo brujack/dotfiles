@@ -1,14 +1,24 @@
 BATS := $(shell command -v bats 2>/dev/null)
 SHELLCHECK := $(shell command -v shellcheck 2>/dev/null)
 PYTHON3 := $(shell command -v python3 2>/dev/null)
-SHELL_FILES := $(shell find . -name "*.sh" -not -path "*/node_modules/*" -not -path "*/coverage/*")
-# Bats suites are shell too, and were never shellchecked — the glob above only
-# matches *.sh. They are linted separately rather than folded into SHELL_FILES
-# because they need --severity=warning: bats' run/@test model emits SC2030 and
-# SC2031 subshell notices structurally (over 2200 of them here) which say
-# nothing about correctness, while the .sh files above run at the default
-# severity and should stay there.
-BATS_FILES := $(shell find tests -name "*.bats")
+SHELL_FILES := $(shell env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+                 git ls-files '*.sh' '*.bash' 'scripts/pre-push' 'scripts/commit-msg')
+# Bats suites are shell too, and were never shellchecked — the globs above
+# only match *.sh/*.bash/the two extensionless hooks. They are linted
+# separately rather than folded into SHELL_FILES because they need
+# --severity=warning: bats' run/@test model emits SC2030 and SC2031 subshell
+# notices structurally (over 2200 of them here) which say nothing about
+# correctness, while the files above run at the default severity and should
+# stay there.
+#
+# Both lists are derived from `git ls-files`, not a filesystem walk: a walk
+# also matches an untracked parked worktree under .claude/worktrees/ and the
+# git-ignored, machine-local config/local.sh — neither should be linted here.
+# The env -u prefix strips a GIT_DIR that git exports into this hook's
+# environment when a push originates from a worktree (ci.md); without it this
+# parse-time assignment can silently resolve against the wrong repository.
+BATS_FILES := $(shell env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+                 git ls-files '*.bats')
 
 .PHONY: test test-python test-unit lint bash-coverage push-bash-coverage install-hooks ledger-symlink help changelog validate-plan sync-agent-guidance check-agent-guidance
 
@@ -25,14 +35,23 @@ help:
 	@printf "  make help              Show this help\n"
 
 lint:
+	@if [ -z "$(SHELL_FILES)" ]; then \
+	  printf 'lint: derived shell file list is EMPTY — refusing to report a pass having linted nothing.\n' >&2; \
+	  printf '      (git absent from PATH, or this tree was exported without .git?)\n' >&2; \
+	  exit 1; \
+	fi
 	@failed=0; \
 	for f in $(SHELL_FILES); do \
 	  bash -n "$$f" && printf "bash  OK  %s\n" "$$f" || { printf "bash FAIL %s\n" "$$f"; failed=1; }; \
 	  zsh  -n "$$f" && printf "zsh   OK  %s\n" "$$f" || { printf "zsh  FAIL %s\n" "$$f"; failed=1; }; \
 	done; \
 	if [ -n "$(SHELLCHECK)" ]; then \
-	  shellcheck $(SHELL_FILES) && printf "shellcheck OK\n" || { printf "shellcheck FAIL\n"; failed=1; }; \
-	  shellcheck --severity=warning $(BATS_FILES) && printf "shellcheck bats OK\n" || { printf "shellcheck bats FAIL\n"; failed=1; }; \
+	  if [ -n "$(SHELL_FILES)" ]; then \
+	    shellcheck $(SHELL_FILES) && printf "shellcheck OK\n" || { printf "shellcheck FAIL\n"; failed=1; }; \
+	  fi; \
+	  if [ -n "$(BATS_FILES)" ]; then \
+	    shellcheck --severity=warning $(BATS_FILES) && printf "shellcheck bats OK\n" || { printf "shellcheck bats FAIL\n"; failed=1; }; \
+	  fi; \
 	else \
 	  printf "shellcheck not found, skipping (install: brew install shellcheck)\n"; \
 	fi; \

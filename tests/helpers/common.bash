@@ -37,5 +37,13 @@ refute_grep() {
 # Source setup_env.sh — the sourcing guard prevents main body execution
 load_setup_env() {
   source "${REPO_ROOT}/setup_env.sh"
+  # shellcheck disable=SC2317 # NOT dead: setup_env.sh's own
+  # `[[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0` guard always returns
+  # true here (this call is always a `source`), so control returns to this
+  # point every time. shellcheck only reports this when it follows
+  # setup_env.sh's body (e.g. `shellcheck -x`, or when setup_env.sh is also
+  # passed on the command line) — it can't resolve the guard's BASH_SOURCE
+  # condition statically, so it treats setup_env.sh's own unconditional
+  # trailing `exit 0` as making everything after this `source` unreachable.
   export BATS_VER  # export so mock scripts can reference it
 }
