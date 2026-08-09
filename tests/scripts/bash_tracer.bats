@@ -25,3 +25,27 @@ setup() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"GUARD_HELD"* ]]
 }
+
+# Regression: `exec 9>>f 2>/dev/null` — exec with redirections and NO command
+# applies ALL of them to the current shell permanently, so the `2>/dev/null`
+# meant to hide the exec's own failure silenced the traced shell's stderr for
+# its whole lifetime. Every bash subprocess the tracer touched lost fd 2.
+# Found when ai-config ported this file and a stderr-asserting bats test
+# passed standalone but failed under the tracer.
+#
+# This DOES take the positive path the header warns about, but safely:
+# `env -i` drops the ambient BASH_ENV so the running coverage tracer is not
+# re-entered, and `set +x` stops tracing on the next line so nothing streams
+# into the live FIFO. That is the combination the 17-minute hang lacked.
+@test "bash-tracer.sh leaves the traced shell's stderr intact" {
+  local _trace="${BATS_TEST_TMPDIR}/trace.txt"
+  run env -i PATH="${PATH}" HOME="${HOME}" _COV_TRACE_FILE="${_trace}" bash -c \
+    "source '${REPO_ROOT}/scripts/bash-tracer.sh'; set +x; printf 'STDERR_ALIVE\n' >&2"
+  [ "$status" -eq 0 ]
+  # bats merges the subshell's stderr into $output; with the defect this line
+  # is swallowed by /dev/null and the assertion fails.
+  [[ "$output" == *"STDERR_ALIVE"* ]]
+  # fd 9 must still have been opened — the fix must not cost the tracing it
+  # exists to do. A passing stderr assertion over a dead tracer is no fix.
+  [ -s "${_trace}" ]
+}
