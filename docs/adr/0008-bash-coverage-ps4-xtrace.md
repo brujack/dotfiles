@@ -31,7 +31,7 @@ Implementation:
 - `make push-bash-coverage` — measurement + badge push to `coverage-data` branch
 - CI `bash-coverage` job on `ubuntu-latest` — runs `make bash-coverage`, fails if overall coverage < 90%, publishes badge JSON
 
-The gate is **90% overall** (not per-file). Per-file floors are defined in `CLAUDE.md` but not yet enforced individually in CI.
+The gate is **90% overall** (not per-file) — raised to 92% by Amendment 2 (2026-08-09). Per-file floors are defined in `CLAUDE.md` but not yet enforced individually in CI.
 
 Do not attempt kcov, bashcov, or BASH_ENV+DEBUG trap in this repo. All three were confirmed broken with bats-core (see Context above). These dead ends are documented in `CLAUDE.md` to prevent future agents from re-trying them.
 

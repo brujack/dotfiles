@@ -136,7 +136,7 @@ jobs:
           sudo install -m755 "/tmp/shellcheck-v${SC_VER}/shellcheck" /usr/local/bin/shellcheck
           shellcheck --version | grep -q "version: ${SC_VER}"
 
-      - name: Run bash coverage (gate at 90%)
+      - name: Run bash coverage (gate at 92%)
         run: |
           make bash-coverage > /tmp/bash-cov-out.txt 2>&1 || { cat /tmp/bash-cov-out.txt; exit 1; }
           cat /tmp/bash-cov-out.txt

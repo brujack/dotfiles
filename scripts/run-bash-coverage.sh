@@ -320,7 +320,7 @@ _count_coverable_lines() {
         # mentions `python3 -c "` would set the skip state, and since no later
         # line starts with a quote, every remaining line in the file gets
         # swallowed to EOF. That inflates the percentage rather than lowering it
-        # — the one direction a gate at exactly 90% with no headroom fails green
+        # — the one direction a gate at exactly its floor with no headroom fails green
         # instead of red. Writing such a comment above one of
         # lib/package_capture.sh's blocks is now the natural thing to do, since
         # this change is what made those blocks special.
