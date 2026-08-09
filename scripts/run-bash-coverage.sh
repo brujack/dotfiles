@@ -101,13 +101,17 @@ _case_label_re="^-{0,2}[a-zA-Z_*][a-zA-Z0-9_.*-]*([[:space:]]*[|][[:space:]]*-{0
 # as _case_label_re, even though this one has no `|`.
 _heredoc_open_re='<<-?[[:space:]]*["'"'"']?([A-Za-z_][A-Za-z0-9_]*)'
 
-# Regex for a bare function-declaration header: `name() {`, `name ()  {`, or a bare
-# `name()` when the `{` is on its own following line. xtrace never emits any of
-# these — verified with PS4='T:${LINENO}: ': only the body lines and the call site
-# are traced, never the header. A single-line function (`f() { cmd; }`) is NOT
-# matched here (there is real content after `{` before end of line) because that
-# line DOES get traced, attributed to the body, when the function runs.
-_func_decl_re='^[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(\)[[:space:]]*\{?[[:space:]]*$'
+# There is deliberately no function-declaration exclusion here. A synthetic
+# single-process fixture (bash -x -c 'source f; f') suggested a bare
+# `name() {` header line is never traced, but a real tracer pass over the
+# bats suite contradicted that at scale — 150 of 189 measured heuristic
+# disagreements were function-declaration lines the trace actually emitted
+# (e.g. lib/detect_env.sh:4 `detect_env() {`, traced twice). Under BASH_ENV
+# with xtrace already active — how the real tracer runs, not how the
+# synthetic fixture ran it — defining a function IS a traced command.
+# Removing the exclusion (rather than narrowing it) trusts the measured
+# fleet data over the one fixture; header lines now count like any other
+# code, which can only lower the reported percentage, never inflate it.
 
 # Regex for a line ending in a run of trailing backslashes — a candidate line
 # continuation. Whether it actually IS one depends on the run's parity, not
@@ -139,6 +143,28 @@ _continuation_re='\\+$'
 # an over-excluded one is the failure this whole class of fix exists for.
 _cmd_sep_re='(\|\||&&|\||;)'
 
+# Regex for a continuation-swallowed line that closes a command substitution
+# with a bare `)` at end of line — e.g. the second physical line of
+# `var=$(cmd "a" \` / `  "b")`. Verified with
+# BASH_ENV=scripts/bash-tracer.sh against exactly that shape: for a
+# `var=$(...)` assignment whose command substitution spans a backslash
+# continuation, bash attributes the WHOLE assignment's xtrace line to
+# wherever the substitution's closing `)` lands — the LAST physical line —
+# not the opener, unlike every other continuation shape here. Applied to a
+# comment-stripped line, same as `_cmd_sep_re`. Deliberately over-inclusive
+# for a plain (non-assignment) command whose continuation also closes with
+# `$(...)` on the last line — verified that real xtrace still attributes
+# those to the opener, so treating the closer as coverable too only ever
+# lowers the reported percentage, never inflates it.
+_cont_close_paren_re='\)[[:space:]]*$'
+
+# The python3 -c opener pattern, held in a variable rather than inlined as a
+# literal in the `%%` prefix-extraction below — zsh's parser (unlike bash's)
+# rejects a raw `"` inside a single-quoted literal nested inside a
+# double-quoted parameter expansion (`"${_code%%'python3 -c "'*}"`), the same
+# class of nesting problem `_case_label_re`/`_heredoc_open_re` already avoid
+# by living in variables. Verified with `zsh -n` directly.
+_pyc_pattern='python3 -c "'
 
 # Counts executable bash lines in one file — the denominator for its percentage.
 # Extracted from the loop below so it can be asserted directly; the whole tracer
@@ -160,9 +186,10 @@ _cmd_sep_re='(\|\||&&|\||;)'
 # Also excludes heredoc bodies and their terminator line (any interpreter, any
 # quoting: `<<'EOF'`, `<<EOF`, `<<-EOF`) — xtrace only ever emits the opener line,
 # never the body or the terminator, verified the same way as the python3/array
-# cases above. And excludes bare function-declaration header lines (`name() {`,
-# `name ()  {`, or a bare `name()` with `{` on the next line) plus a bare `{` —
-# xtrace never emits either, verified likewise.
+# cases above. A bare `{` on its own line is excluded too, as purely
+# structural. Function-declaration header lines are NOT excluded — see the
+# "deliberately no function-declaration exclusion" comment near the top of
+# this file for why.
 #
 # `_mode` selects the output shape: "count" (default) prints the final total
 # only, exactly the original contract every existing caller relies on.
@@ -175,6 +202,7 @@ _count_coverable_lines() {
     local _coverable=0 _in_embedded=0 _in_array=0 _in_heredoc=0 _heredoc_delim=""
     local _in_continuation=0 _bs_run _lineno=0
     local _hd_scan _hd_match _hd_delim _hd_prefix _hd_sq _hd_dq
+    local _pyc_prefix _pyc_sq _pyc_dq
     # `|| [[ -n "${_line}" ]]` belongs on the read, not after done: read returns
     # non-zero on a final line with no trailing newline, having still populated
     # _line. Without it that last line is dropped, undercounting the denominator
@@ -230,12 +258,16 @@ _count_coverable_lines() {
         # is inert either way. Verified against real bash: `a=1 \` followed
         # by a blank line, or by a `# comment` line, both trace only the
         # opener — the statement after either is a fresh one, not spliced in.
+        #
+        # A line ending in a bare `)` also falls through — see
+        # `_cont_close_paren_re`'s definition for the command-substitution
+        # attribution this covers.
         if [[ "${_in_continuation}" -eq 1 ]]; then
             if [[ "${_trimmed}" == "#"* ]]; then
                 _in_continuation=0
                 continue
             fi
-            if [[ "${_trimmed%%#*}" =~ ${_cmd_sep_re} ]]; then
+            if [[ "${_trimmed%%#*}" =~ ${_cmd_sep_re} || "${_trimmed%%#*}" =~ ${_cont_close_paren_re} ]]; then
                 # A real command lives on this line — fall through to normal
                 # processing (do NOT `continue`) so it gets counted. Reset
                 # continuation state now; the "opens a continuation" check
@@ -295,10 +327,25 @@ _count_coverable_lines() {
         # a skip region and swallowed the rest of the file — inflating the
         # percentage, the fail-green direction. Moving the leading-comment skip
         # above this check only fixed the case where the comment starts the line.
+        #
+        # The quote-parity check on the prefix (same idea as the heredoc
+        # opener's `_hd_prefix` check below) rejects a match that is itself
+        # inside an already-open quoted string — e.g. this detector's own
+        # source, `if [[ "${_code}" == *'python3 -c "'* ]]; then`, mentions
+        # the pattern as a single-quoted literal for comparison, not as a
+        # real invocation. Without the check, that line opened a false
+        # region that swallowed every real line after it until one happened
+        # to start with a bare `"`; found by running this heuristic against
+        # its own source file, not by reasoning about it.
         _code="${_trimmed%%#*}"
-        if [[ "${_code}" == *'python3 -c "'* ]]; then
-            _after="${_code#*python3 -c \"}"
-            [[ "${_after}" != *'"'* ]] && _in_embedded=1
+        if [[ "${_code}" == *"${_pyc_pattern}"* ]]; then
+            _pyc_prefix="${_code%%"${_pyc_pattern}"*}"
+            _pyc_sq="${_pyc_prefix//\'/}"
+            _pyc_dq="${_pyc_prefix//\"/}"
+            if (( (${#_pyc_prefix} - ${#_pyc_sq}) % 2 == 0 && (${#_pyc_prefix} - ${#_pyc_dq}) % 2 == 0 )); then
+                _after="${_code#*python3 -c \"}"
+                [[ "${_after}" != *'"'* ]] && _in_embedded=1
+            fi
         fi
         # Heredoc opener. `<<<` (here-string, single-line, no body/terminator) is
         # blanked out first — without that, its trailing `<` reads as the tail of
@@ -328,9 +375,6 @@ _count_coverable_lines() {
         # sync | check) ;;) — xtrace never emits them.
         # Regex in variable avoids zsh parse error on | inside inline character class
         [[ "${_trimmed}" =~ ${_case_label_re} ]] && continue
-        # Function-declaration header (name() {, name ()  {, or bare name() with
-        # the { on the next line) — xtrace never emits it, only the body/call site.
-        [[ "${_code}" =~ ${_func_decl_re} ]] && continue
         # done with any redirect (done <<< ..., done < <(...), done < file)
         [[ "${_trimmed}" =~ ^done[[:space:]] ]] && continue
         # Continuation lines of multi-line pipelines (> outfile, > /dev/null)
@@ -425,13 +469,15 @@ _traced_lines_for_file() {
 # One file's covered count, coverable count, and heuristic disagreements.
 #
 # `_count_coverable_lines` is a static heuristic — it can be wrong, and it
-# has been: lib/detect_env.sh line 4 is `detect_env() {`, which the
-# function-declaration exclusion drops from the coverable set, but a real
-# tracer run over the bats suite emitted that exact line twice. Reproducing
-# that from a plain `bash -x` invocation does not show it — something in the
-# bats harness traces it that a standalone invocation does not — but if the
-# tracer emitted a line, that line IS coverable, by definition, regardless of
-# what the static heuristic predicted.
+# has been: lib/detect_env.sh line 4, `detect_env() {`, used to be dropped
+# from the coverable set by a function-declaration exclusion rule, but a real
+# tracer run over the bats suite emitted that exact line twice. That specific
+# rule is gone now (removed entirely rather than patched — see the
+# "deliberately no function-declaration exclusion" comment near the top of
+# this file), but the union below stays: a static
+# heuristic over shell text can always be wrong about some other construct,
+# and if the tracer emitted a line, that line IS coverable, by definition,
+# regardless of what the static heuristic predicted.
 #
 # So the coverable denominator here is the UNION of the heuristic's static
 # count and whatever the trace file actually contains for this file.
