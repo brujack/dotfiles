@@ -146,8 +146,8 @@ jobs:
             exit 1
           fi
           printf "Coverage: %d%%\n" "${PCT}"
-          if [ "${PCT}" -lt 90 ]; then
-            printf "FAIL: bash coverage %d%% is below the 90%% gate\n" "${PCT}" >&2
+          if [ "${PCT}" -lt 92 ]; then
+            printf "FAIL: bash coverage %d%% is below the 92%% gate\n" "${PCT}" >&2
             exit 1
           fi
 
