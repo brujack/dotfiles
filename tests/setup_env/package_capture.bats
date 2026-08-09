@@ -282,8 +282,42 @@ EOF
 
 # ── direct execution (not sourced) ──────────────────────────────────────────
 
-@test "package_capture.sh: running the file directly invokes capture_all_packages" {
-  PACKAGE_CAPTURE_ENABLED=false run bash "${REPO_ROOT}/lib/package_capture.sh" "run-direct"
+@test "package_capture.sh: running the file directly invokes capture_all_packages, forwarding its argv" {
+  local _pip_dir _py_dir _coreutils_dir _ledger_bin _bash_bin _fake_home
+  _bash_bin="$(command -v bash)"
+  _pip_dir="$(_make_mock_tool "pip3" '[{"name": "requests", "version": "2.31.0"}]')"
+  _py_dir="$(_make_python3_only_dir)"
+  _coreutils_dir="$(_make_coreutils_dir)"
+  _ledger_bin="$(_make_mock_ledger)"
+  export MOCK_LEDGER_PAYLOAD_FILE="${BATS_TEST_TMPDIR}/ledger_payloads.txt"
+  touch "${MOCK_LEDGER_PAYLOAD_FILE}"
+
+  # LEDGER_BIN and MACHINE_ID_PATH (lib/package_capture.sh:6-7) are plain
+  # top-level assignments, not `${VAR:-default}` — so unlike
+  # PACKAGE_CAPTURE_ENABLED, exporting them has no effect on a fresh
+  # direct-execution subprocess: the script's own top level unconditionally
+  # overwrites whatever the environment supplied the moment it runs. Since
+  # both defaults are built from ${HOME}, pointing HOME at a fixture
+  # directory is the only way to control either from outside the (untouched)
+  # production file.
+  _fake_home="${BATS_TEST_TMPDIR}/fake_home"
+  mkdir -p "${_fake_home}/.local/bin" "${_fake_home}/.config/dotfiles"
+  cp "${_ledger_bin}" "${_fake_home}/.local/bin/ledger"
+  chmod +x "${_fake_home}/.local/bin/ledger"
+  printf 'test-machine\n' > "${_fake_home}/.config/dotfiles/machine-id"
+
+  # brew/dpkg-query absent from this curated PATH (same shape as the "skips
+  # brew and apt" sourced-function test above), so only the pip source can
+  # confirm the direct-execution entry point actually ran capture_all_packages
+  # with "run-direct" as $1 — as opposed to doing nothing (PACKAGE_CAPTURE_ENABLED
+  # neutered every observable effect in the previous version of this test) or
+  # calling capture_all_packages with no arguments (dropping "$@"). The
+  # invoked-through-bash step itself uses an absolute path rather than relying
+  # on PATH lookup, since the curated PATH below deliberately has no real bash.
+  PACKAGE_CAPTURE_ENABLED=true HOME="${_fake_home}" \
+    PATH="${_pip_dir}:${_py_dir}:${_coreutils_dir}" \
+    run "${_bash_bin}" "${REPO_ROOT}/lib/package_capture.sh" "run-direct"
   [ "$status" -eq 0 ]
   [ -z "$output" ]
+  grep -q '"run_id": "run-direct"' "${MOCK_LEDGER_PAYLOAD_FILE}"
 }

@@ -1568,6 +1568,20 @@ FIXTURE
   [ "$status" -eq 2 ]
 }
 
+# _file_coverage_report calls _count_coverable_lines first and returns 1
+# without ever reading the trace file when the heuristic itself can't compute
+# a denominator (same unterminated python3 -c fixture --count-coverable is
+# tested against above). --file-coverage's own error path for that failure
+# had no test even though its --count-coverable twin does.
+@test "run-bash-coverage.sh --file-coverage exits 1 when the heuristic cannot compute a denominator" {
+  printf '#!/usr/bin/env bash\n_x=$(python3 -c "\nimport json\n' > "${BATS_TEST_TMPDIR}/unterm.sh"
+  : > "${BATS_TEST_TMPDIR}/empty_trace.txt"
+
+  run _run_coverage --file-coverage "${BATS_TEST_TMPDIR}/unterm.sh" "${BATS_TEST_TMPDIR}/empty_trace.txt"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"cannot compute a trustworthy denominator"* ]]
+}
+
 # Regression: the disagreement computation fed comm -23 two `sort -un`
 # (numeric-sorted) streams, but comm requires its inputs sorted in the
 # shell's own collating order — what plain `sort -u` produces — not numeric

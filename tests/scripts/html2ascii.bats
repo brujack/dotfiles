@@ -91,5 +91,6 @@ setup() {
   local _first _second
   _first="$(printf '<p>a&auml;b</p>\n' | bash "${REPO_ROOT}/scripts/html2ascii.sh")"
   _second="$(printf '%s' "${_first}" | bash "${REPO_ROOT}/scripts/html2ascii.sh")"
+  [ -n "${_first}" ]
   [ "${_first}" = "${_second}" ]
 }
