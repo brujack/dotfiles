@@ -89,6 +89,18 @@ EOF
   cat > "${SHIM_DIR}/git" <<EOF
 #!${REAL_BASH}
 printf 'git %s\n' "\$*" >> "\${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+
+# The worktree arms below run a real \`rm -rf\` on a path taken from argv. The
+# shim exists to exercise the script misbehaving, so the path it is handed is
+# exactly the thing under test and cannot be assumed sane. Refuse any path that
+# is not the one worktree this suite is allowed to touch — a test that drives
+# the script somewhere unexpected should fail loudly, not delete it.
+_shim_guard_path() {
+  [[ "\$1" == "${COVERAGE_WORKTREE}" ]] && return 0
+  printf 'SHIM REFUSED destructive op on unexpected path: %s\n' "\$1" >&2
+  return 1
+}
+
 case "\$*" in
   "fetch origin coverage-data"*)
     exit "\${MOCK_GIT_FETCH_EXIT:-0}" ;;
@@ -96,13 +108,13 @@ case "\$*" in
     if [[ "\${MOCK_GIT_WORKTREE_ADD_EXIT:-0}" -ne 0 ]]; then
       exit "\${MOCK_GIT_WORKTREE_ADD_EXIT}"
     fi
-    mkdir -p "\$3"
+    _shim_guard_path "\$3" && mkdir -p "\$3"
     exit 0 ;;
   "worktree remove --force "*)
-    rm -rf "\$4" 2>/dev/null
+    _shim_guard_path "\$4" && rm -rf "\$4" 2>/dev/null
     exit "\${MOCK_GIT_WORKTREE_REMOVE_FORCE_EXIT:-0}" ;;
   "worktree remove "*)
-    rm -rf "\$3" 2>/dev/null
+    _shim_guard_path "\$3" && rm -rf "\$3" 2>/dev/null
     exit "\${MOCK_GIT_WORKTREE_REMOVE_EXIT:-0}" ;;
   *"diff --quiet bash.json"*)
     exit "\${MOCK_GIT_DIFF_EXIT:-0}" ;;
