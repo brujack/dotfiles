@@ -243,9 +243,9 @@ Rules for any new suppression:
 
 `.github/workflows/ci.yml` runs on PRs to master only (the pre-push hook gates branch pushes locally):
 
-- `test` job: installs a pinned, checksum-verified shellcheck plus bats, runs `make test`, then verifies test count ≥ 840 (regression proxy; 1257 tests as of 2026-08-09)
+- `test` job: installs a pinned, checksum-verified shellcheck plus bats, runs `make test`, then verifies test count ≥ 840 (regression proxy; 1260 tests as of 2026-08-09)
 - `lint-macos` job: runs `bash -n` and `zsh -n` on all `.sh` files on `macos-latest` (advisory, not blocking auto-merge)
-- `bash-coverage` job: measures bash line coverage via PS4 xtrace on `ubuntu-latest`; **gates at 92%** — blocks auto-merge if coverage drops below floor
+- `bash-coverage` job: measures bash line coverage via PS4 xtrace on `ubuntu-latest`; **gates at 91%** — blocks auto-merge if coverage drops below floor
 - `secret-scan` job: runs gitleaks against recent commits (advisory, not blocking auto-merge)
 - `auto-merge` job: auto-merges any PR when all CI jobs pass (depends on `test`, `lint-macos`, `powershell`, `bash-coverage`, `secret-scan`)
 
@@ -295,12 +295,12 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 #### Bash
 
-- **Overall: 92%** (3060/3326 commands, 34 of 35 tracked shell files instrumented, 1257 tests as of 2026-08-09); gated in CI at 92% (`bash-coverage` job, blocks auto-merge on drop). A percentage without its denominator is not a coverage figure — report both.
+- **Overall: 92%** (3062/3326 commands, 1260 tests as of 2026-08-09) over **34 of the 35 files the predicate matches**; the 36th tracked shell file, `tests/helpers/common.bash`, is a test helper and outside the predicate. Gated in CI at **91%**, one point below the measurement (`bash-coverage` job, blocks auto-merge on drop). A percentage without its denominator is not a coverage figure — report both.
 - **The instrumented set is `setup_env.sh` plus tracked `config/*.sh`, `lib/*.sh`, `scripts/*.sh` and the two extensionless hooks (`scripts/pre-push`, `scripts/commit-msg`), derived from `git ls-files` at run time, less `scripts/bash-tracer.sh`.** It was a 13-entry literal array until 2026-08-07, covering 13 of 36 tracked `.sh` files, so the previously published 91% was computed over 36% of the repo. An omitted file left the percentage unchanged rather than lowering it, which is why nothing surfaced it. The predicate is _reached by the suite_, not _lives in a particular directory_ — `lib/detect_env.sh` sources `config/profiles.sh` and `lib/git_hooks.sh` sources `config/hook_repos.sh`. Check what is measured:
   ```bash
   bash scripts/run-bash-coverage.sh --list-sources
   ```
-- **`scripts/` was outside the set until 2026-08-09, and the stated reason for that was wrong.** This bullet used to read "nothing under test sources them, so instrumenting them would add only zeros to the denominator." Measured 2026-08-08: all 19 tracked files under `scripts/` are executed by the bats suite, between 2 and 29 times each — `whats-new-anthropic.sh` 29, `bootstrap_linux.sh` and `sync-agent-guidance.sh` 15 apiece. The tracer enables tracing through `BASH_ENV`, which non-interactive bash subprocesses inherit, so their trace lines were already being collected and then discarded by a predicate that globbed only `config/` and `lib/`. The exclusion was asserted, never measured. The predicate has since widened to include `scripts/`, which is why the instrumented set now reads 34 of 35 rather than 16 of 36 — this history is kept here as the record of what the wrong claim cost, not as a live caveat.
+- **`scripts/` was outside the set until 2026-08-09, and the stated reason for that was wrong.** This bullet used to read "nothing under test sources them, so instrumenting them would add only zeros to the denominator." Measured 2026-08-08: all 19 tracked files under `scripts/` are executed by the bats suite, between 2 and 29 times each — `whats-new-anthropic.sh` 29, `bootstrap_linux.sh` and `sync-agent-guidance.sh` 15 apiece. The tracer enables tracing through `BASH_ENV`, which non-interactive bash subprocesses inherit, so their trace lines were already being collected and then discarded by a predicate that globbed only `config/` and `lib/`. The exclusion was asserted, never measured. The predicate has since widened to include `scripts/`, which is why the instrumented set now reads 34 of the 35 files the predicate matches, rather than 16 — this history is kept here as the record of what the wrong claim cost, not as a live caveat.
 - **`scripts/bash-tracer.sh` is the sole remaining exclusion, and it is measured rather than asserted.** `set -x` is its last command, so nothing before it can be traced and nothing follows it to trace. A real run against it attributes zero trace lines to the file — verified directly:
   ```bash
   _COV_TRACE_FILE=$PWD/tr.txt BASH_ENV=scripts/bash-tracer.sh bash -c 'x=1; y=2'

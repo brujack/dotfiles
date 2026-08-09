@@ -136,7 +136,7 @@ jobs:
           sudo install -m755 "/tmp/shellcheck-v${SC_VER}/shellcheck" /usr/local/bin/shellcheck
           shellcheck --version | grep -q "version: ${SC_VER}"
 
-      - name: Run bash coverage (gate at 92%)
+      - name: Run bash coverage (gate at 91%)
         run: |
           make bash-coverage > /tmp/bash-cov-out.txt 2>&1 || { cat /tmp/bash-cov-out.txt; exit 1; }
           cat /tmp/bash-cov-out.txt
@@ -146,7 +146,7 @@ jobs:
             exit 1
           fi
           printf "Coverage: %d%%\n" "${PCT}"
-          if [ "${PCT}" -lt 92 ]; then
+          if [ "${PCT}" -lt 91 ]; then
             printf "FAIL: bash coverage %d%% is below the 92%% gate\n" "${PCT}" >&2
             exit 1
           fi

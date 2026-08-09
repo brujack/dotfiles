@@ -29,9 +29,9 @@ Implementation:
 - `scripts/run-bash-coverage.sh` — sets up the named pipe, runs `bats --recursive tests/`, drains and parses the trace, reports per-file and overall coverage
 - `make bash-coverage` — local measurement target
 - `make push-bash-coverage` — measurement + badge push to `coverage-data` branch
-- CI `bash-coverage` job on `ubuntu-latest` — runs `make bash-coverage`, fails if overall coverage < 90%, publishes badge JSON
+- CI `bash-coverage` job on `ubuntu-latest` — runs `make bash-coverage`, fails if overall coverage < 90%, publishes badge JSON (floor raised to 91% by Amendment 2)
 
-The gate is **90% overall** (not per-file) — raised to 92% by Amendment 2 (2026-08-09). Per-file floors are defined in `CLAUDE.md` but not yet enforced individually in CI.
+The gate is **90% overall** (not per-file) — raised to 91% by Amendment 2 (2026-08-09). Per-file floors are defined in `CLAUDE.md` but not yet enforced individually in CI.
 
 Do not attempt kcov, bashcov, or BASH_ENV+DEBUG trap in this repo. All three were confirmed broken with bats-core (see Context above). These dead ends are documented in `CLAUDE.md` to prevent future agents from re-trying them.
 
@@ -40,7 +40,7 @@ Do not attempt kcov, bashcov, or BASH_ENV+DEBUG trap in this repo. All three wer
 **Positive:**
 
 - Coverage measurement works — 92% measured at 726 tests as of 2026-06-01. **The word "accurate" in the original text was wrong and is retracted; see the Amendment below.** That figure was computed over a hand-maintained 13-file subset of 36 tracked shell sources
-- CI gate blocks merges when coverage drops below 90%
+- CI gate blocks merges when coverage drops below 90% (91% from Amendment 2)
 - Named-pipe filtering keeps trace output manageable without sacrificing accuracy
 - `ubuntu-latest` runners avoid the 30–60 min macOS queue delay
 
@@ -171,9 +171,26 @@ constructs the static heuristic has not yet been taught to recognize, surfaced e
 rather than hidden, and guaranteed by the union not to distort the published figure either
 direction in the meantime.
 
-Post-amendment: 3060/3326 = 92% at 1257 tests, 34 of 35 tracked shell files (by the widened
-predicate) instrumented. The gate moves to 92% in the same change — see `CLAUDE.md`
-§Testing > Coverage > Bash for the full current-state table.
+Post-amendment: 3062/3326 = 92% at 1260 tests, over 34 of the 35 files the widened predicate
+matches. (36 shell files are tracked; the 36th, `tests/helpers/common.bash`, is a test helper
+and outside the predicate. Three counts, three different sets — state which one a figure is
+over, or it is not a figure.) See `CLAUDE.md` §Testing > Coverage > Bash for the current-state
+table.
+
+**The gate moves to 91%, one point below the measurement, and that gap is deliberate.** The
+obvious move is to ratchet to the measured 92% — do not, and here is the mechanism rather than
+the preference. The union makes `coverable` depend on what a given run actually traced, and 19
+of the 34 instrumented files are now `scripts/` executed as _subprocesses_, whose taken paths
+are more environment-sensitive than sourced library code. The figure is already observed to
+move: covered read 3060 at `b4236e4` and 3062 at `1c1e98f`, three commits later, from test-file
+edits alone. At a 92% floor the pass/fail boundary sits at 3060 covered lines — two below where
+the branch landed — so a single line lost to ordinary variance turns CI red on a diff that
+broke nothing. At 91% the boundary is 3027, leaving ~35 lines of slack: a genuine regression
+still trips it, ordinary jitter does not.
+
+Ratchet to 92 once the figure has been observed twice on `ubuntu-latest` at the same commit.
+It has been measured once, locally, on macOS. A floor is a claim about reproducibility, and
+one local measurement does not support it.
 
 ## Related
 

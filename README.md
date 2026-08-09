@@ -412,7 +412,7 @@ make test          # lint + Python tests + all BATS tests
 make test-unit     # unit + profiles tests only (faster)
 make test-python   # the vendored .claude/scripts/triage_log.py suite only
 make lint          # syntax + shellcheck only
-make bash-coverage # measure bash line coverage (PS4 xtrace); CI gates at 92%
+make bash-coverage # measure bash line coverage (PS4 xtrace); CI gates at 91%
 make install-hooks # install pre-commit hook (runs lint + ggshield before each commit)
 make sync-agent-guidance  # regenerate .cursor guidance from CLAUDE.md's ~/.claude/standards imports
 make check-agent-guidance # fail if generated guidance is out of sync
