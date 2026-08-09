@@ -15,6 +15,14 @@
 # one is broken.
 
 setup() {
+  # `git -C <dir>` does not override an exported GIT_DIR — shell.md is explicit
+  # about this, and the decoy below is built with git init/add/commit. Without
+  # the strip, a direct `bats tests/makefile_scope.bats` from a shell holding a
+  # leaked GIT_DIR would write those commits into that repository instead of the
+  # decoy. The tests that need a leak set it per-invocation on `run env ...`, so
+  # stripping here does not weaken them.
+  unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
+
   REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/.." && pwd)"
   DECOY="${BATS_TEST_TMPDIR}/decoy"
   mkdir -p "${DECOY}"
@@ -75,4 +83,12 @@ setup() {
   # the scope moved — an untracked scratch file present locally and absent on
   # CI makes the same commit lint two different sets.
   [[ "$output" != *"zz_untracked_scratch.sh"* ]]
+}
+
+teardown() {
+  # The untracked-exclusion test writes this into the real repo root. Its own
+  # rm runs before the assertions so a failed assertion still cleans up, but a
+  # SIGINT or bats timeout between the write and the rm would leave an
+  # untracked .sh behind for a later `git add -A` to sweep in.
+  rm -f "${REPO_ROOT:-.}/zz_untracked_scratch.sh"
 }
