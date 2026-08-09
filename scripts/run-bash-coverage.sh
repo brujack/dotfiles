@@ -101,6 +101,36 @@ _heredoc_open_re='<<-?[[:space:]]*["'"'"']?([A-Za-z_][A-Za-z0-9_]*)'
 # line DOES get traced, attributed to the body, when the function runs.
 _func_decl_re='^[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(\)[[:space:]]*\{?[[:space:]]*$'
 
+# Regex for a line ending in a run of trailing backslashes — a candidate line
+# continuation. Whether it actually IS one depends on the run's parity, not
+# just its presence: outside quotes, a lone trailing backslash escapes the
+# newline and splices the next physical line onto the same logical command,
+# so xtrace only ever emits the FIRST physical line. A run of TWO trailing
+# backslashes is an escaped (literal) backslash character — the pair cancels
+# out and the real newline terminates the statement normally. Verified with
+# PS4='T:${LINENO}: ': `printf '%s\n' \` + a continued arg traces once, on
+# the opener; `echo "foo" \\` traces on its own line and the next line traces
+# separately too. Captured via BASH_REMATCH and length-checked for parity
+# rather than counted by hand, the same idiom the heredoc quote-parity check
+# above already uses.
+_continuation_re='\\+$'
+
+# Regex for a top-level compound-list operator (||, &&, |, ;) appearing
+# anywhere on a continuation-swallowed line. A PURE-argument continuation
+# line (e.g. a lone `-H "..."` flag, or a bare string in a multi-line
+# `printf` arg list) is never separately traced — it's just more words in
+# the same command. But a continuation line that itself BEGINS OR CONTAINS a
+# new command is traced on its own line number, verified with
+# PS4='T:${LINENO}: ': `curl ... \` + `-H ... || true` traces both physical
+# lines, because `|| true` starts a fresh command on the second one. Applied
+# to a comment-stripped line so a separator character inside a trailing
+# comment cannot trigger it. Deliberately over-inclusive where genuinely
+# ambiguous (e.g. a `|`/`;` inside an unstripped quoted argument would still
+# match) — an under-excluded line only lowers the reported percentage, which
+# is the conservative direction per tdd.md's Coverage Denominators section;
+# an over-excluded one is the failure this whole class of fix exists for.
+_cmd_sep_re='(\|\||&&|\||;)'
+
 
 # Counts executable bash lines in one file — the denominator for its percentage.
 # Extracted from the loop below so it can be asserted directly; the whole tracer
@@ -128,6 +158,7 @@ _func_decl_re='^[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(\)[[:space:]]*\{?[[:space:]]
 _count_coverable_lines() {
     local _file="${1}" _line _trimmed _after _code
     local _coverable=0 _in_embedded=0 _in_array=0 _in_heredoc=0 _heredoc_delim=""
+    local _in_continuation=0 _bs_run
     local _hd_scan _hd_match _hd_delim _hd_prefix _hd_sq _hd_dq
     # `|| [[ -n "${_line}" ]]` belongs on the read, not after done: read returns
     # non-zero on a final line with no trailing newline, having still populated
@@ -162,6 +193,53 @@ _count_coverable_lines() {
                 _heredoc_delim=""
             fi
             continue
+        fi
+        # Continuation-swallowed line: the previous physical line ended in a
+        # real trailing backslash, so THIS line is spliced onto it as the same
+        # logical command. Checked before the blank/comment skips below, and
+        # unconditionally, because a swallowed line must never be evaluated by
+        # ITS own blank/comment logic — it isn't a line in its own right.
+        #
+        # But "spliced onto the same logical command" does not mean "never
+        # traced": a swallowed line that itself begins or contains a new
+        # top-level command (a `||`/`&&`/`|`/`;` compound-list operator) IS
+        # traced, on its own line number — only a PURE-argument continuation
+        # (more words in the same one command, e.g. a lone `-H "..."` flag)
+        # is truly inert. Verified: `curl ... \` + `-H ... || true` traces
+        # BOTH physical lines, because `|| true` starts a fresh command on
+        # the second one, while `curl ... \` + `-H "Authorization: ..." \`
+        # traces only the opener. A comment ends the continuation outright: a
+        # `#` starts a real comment consuming the rest of the (still single)
+        # logical line, so its trailing content — separator or backslash —
+        # is inert either way. Verified against real bash: `a=1 \` followed
+        # by a blank line, or by a `# comment` line, both trace only the
+        # opener — the statement after either is a fresh one, not spliced in.
+        if [[ "${_in_continuation}" -eq 1 ]]; then
+            if [[ "${_trimmed}" == "#"* ]]; then
+                _in_continuation=0
+                continue
+            fi
+            if [[ "${_trimmed%%#*}" =~ ${_cmd_sep_re} ]]; then
+                # A real command lives on this line — fall through to normal
+                # processing (do NOT `continue`) so it gets counted. Reset
+                # continuation state now; the "opens a continuation" check
+                # further down re-derives whether THIS line also chains
+                # further, from its own trailing backslash (e.g. a run of
+                # `&&  \` lines all fall through this way in turn).
+                _in_continuation=0
+            else
+                if [[ "${_line}" =~ ${_continuation_re} ]]; then
+                    _bs_run="${BASH_REMATCH[0]}"
+                    if (( ${#_bs_run} % 2 == 1 )); then
+                        _in_continuation=1
+                    else
+                        _in_continuation=0
+                    fi
+                else
+                    _in_continuation=0
+                fi
+                continue
+            fi
         fi
         # Blank and comment skips MUST come before the opener detection below.
         # The opener is matched against the raw line, so a comment that merely
@@ -243,6 +321,17 @@ _count_coverable_lines() {
         [[ "${_trimmed}" =~ ^\> ]] && continue
         # Closing group command with redirect (} >> file, } | cmd)
         [[ "${_trimmed}" =~ ^\}[[:space:]] ]] && continue
+        # This line survived every exclusion above and is real code — it still
+        # counts here as the continuation's opener/anchor, same as a heredoc or
+        # array opener does. Checked against the RAW line, not the
+        # comment-stripped `_code`: a trailing comment means the backslash is
+        # not actually the line's last character, so it cannot be a real
+        # continuation either — matches real bash, which only treats a
+        # backslash immediately before the newline as line continuation.
+        if [[ "${_line}" =~ ${_continuation_re} ]]; then
+            _bs_run="${BASH_REMATCH[0]}"
+            (( ${#_bs_run} % 2 == 1 )) && _in_continuation=1
+        fi
         ((_coverable++))
     done < "${_file}"
     # An unterminated region means every line after it was skipped, which
@@ -252,6 +341,13 @@ _count_coverable_lines() {
     # limits of the heuristic (a Python line starting with a double quote closes
     # a region early; a `#` inside a quoted string truncates the opener match),
     # so this converts a silent wrong answer into a loud refusal.
+    #
+    # `_in_continuation` is deliberately NOT part of this check. Unlike the
+    # three regions above, a continuation can only ever swallow ONE further
+    # physical line at a time, freshly re-evaluated on each; it never swallows
+    # silently "to EOF". If the file's last line ends in a real continuation
+    # backslash, there is simply no next line to splice onto it — nothing was
+    # mis-attributed, so nothing needs to be reported.
     if [[ "${_in_embedded}" -eq 1 || "${_in_array}" -eq 1 || "${_in_heredoc}" -eq 1 ]]; then
         local _unterminated_kind
         if [[ "${_in_embedded}" -eq 1 ]]; then
@@ -365,7 +461,19 @@ for src_file in "${INCLUDE_FILES[@]}"; do
         | sort -un \
         | wc -l | tr -d '[:space:]')
 
-    [[ "${covered}" -gt "${coverable}" ]] && covered="${coverable}"
+    # Invariant: covered can never legitimately exceed coverable — coverable is
+    # the count of lines xtrace CAN ever emit for this file, so more distinct
+    # trace hits than that means an exclusion heuristic over-matched and shrank
+    # the denominator below what the suite actually ran. Silently clamping this
+    # (the previous behavior) hides exactly the failure mode this script exists
+    # to catch — a plausible-looking percentage computed over a wrong count. A
+    # loud failure here is the whole point of the per-file recount; see
+    # tdd.md's Coverage Denominators section.
+    if [[ "${covered}" -gt "${coverable}" ]]; then
+        printf "ERROR: %s: covered (%d) exceeds coverable (%d) — an exclusion heuristic over-matched\n" \
+            "${src_file}" "${covered}" "${coverable}" >&2
+        exit 1
+    fi
 
     if [[ "${coverable}" -gt 0 ]]; then
         pct=$(( covered * 100 / coverable ))

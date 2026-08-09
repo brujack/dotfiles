@@ -1162,6 +1162,180 @@ FIXTURE
   [ "$output" -eq 3 ]
 }
 
+# ── line continuation ────────────────────────────────────────────────────────
+# Regression: a backslash-newline splices the next physical line onto the same
+# logical command — xtrace only ever emits the FIRST physical line, verified
+# with PS4='T:${LINENO}: '. Counting the continuation lines as separate
+# coverable bash inflates the denominator the same way multi-line arrays and
+# python3 -c bodies do. This exact fixture counted 11 before the fix; real
+# xtrace over it emits only 8 distinct line numbers (2 3 4 8 9 11 14 15) — 9
+# coverable lines once you count the untaken `else` branch (line 6, genuinely
+# coverable, just not hit by this one run).
+@test "run-bash-coverage.sh does not count backslash line-continuation lines as bash" {
+  cat > "${BATS_TEST_TMPDIR}/cont.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+x=1
+if [[ -n "${x}" ]]; then
+  y=2
+else
+  y=3
+fi
+for i in 1 2; do
+  z="${i}"
+done
+printf '%s\n' \
+  "a" \
+  "b"
+case "${x}" in
+  1) w=1 ;;
+esac
+FIXTURE
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/cont.sh"
+  [ "$status" -eq 0 ]
+  [ "$output" -eq 9 ]
+}
+
+# Boundary: the continuation opener itself is real code and must still count;
+# only the SWALLOWED lines ("a" and "b") are excluded.
+@test "run-bash-coverage.sh still counts the opener line of a continuation" {
+  cat > "${BATS_TEST_TMPDIR}/opener.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+printf '%s\n' \
+  "a" \
+  "b"
+FIXTURE
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/opener.sh"
+  [ "$status" -eq 0 ]
+  # Only the printf opener is real bash; "a" and "b" are spliced onto it.
+  [ "$output" -eq 1 ]
+}
+
+# Boundary: a backslash as the true last character of the FILE, with no
+# following physical line to splice onto. Nothing is silently swallowed (there
+# is nothing left to swallow) so this must not crash, hang, or report an
+# unterminated-region error — unlike heredoc/array/python3, a continuation can
+# only ever consume ONE further line at a time, never "to EOF".
+@test "run-bash-coverage.sh handles a trailing backslash at end of file with no following line" {
+  printf '#!/usr/bin/env bash\na=1\nb=2 \\\n' > "${BATS_TEST_TMPDIR}/eofcont.sh"
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/eofcont.sh"
+  [ "$status" -eq 0 ]
+  # a=1 and the b=2 \ line itself (the opener, nothing follows to swallow).
+  [ "$output" -eq 2 ]
+}
+
+# Boundary: a continuation inside an ALREADY-excluded heredoc body must not be
+# double-processed by the continuation logic — the heredoc-body skip runs
+# first and swallows the whole body regardless of what it contains, verified
+# against real bash (the body line's trailing backslash has no effect at all;
+# the heredoc terminator ends the region normally).
+@test "run-bash-coverage.sh does not apply continuation logic inside a heredoc body" {
+  cat > "${BATS_TEST_TMPDIR}/hdcont.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+a=1
+cat <<'EOF2'
+some text \
+more text
+EOF2
+b=2
+FIXTURE
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/hdcont.sh"
+  [ "$status" -eq 0 ]
+  # a=1, the cat <<'EOF2' opener, b=2. The heredoc body's embedded backslash
+  # must not exclude anything past the real EOF2 terminator.
+  [ "$output" -eq 3 ]
+}
+
+# Boundary: a line ending in TWO backslashes is an escaped (literal) backslash
+# character, not a continuation — the pair cancels out and the real newline
+# terminates the statement normally. Verified against real bash: `echo "foo" \\`
+# traces on its own line, and the following line traces separately too.
+@test "run-bash-coverage.sh does not treat a trailing escaped backslash (\\\\\\\\) as a continuation" {
+  cat > "${BATS_TEST_TMPDIR}/twobs.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+a=1
+echo "foo" \\
+b=2
+FIXTURE
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/twobs.sh"
+  [ "$status" -eq 0 ]
+  # All three are real, independent bash lines — nothing is spliced.
+  [ "$output" -eq 3 ]
+}
+
+# Boundary: a continuation whose next physical line is blank ends the
+# continuation there (nothing left to splice) rather than chaining further —
+# verified against real bash, which traces the statement AFTER the blank line
+# separately, not as part of the continued one.
+@test "run-bash-coverage.sh ends a continuation at a blank next line" {
+  printf '#!/usr/bin/env bash\na=1 \\\n\nb=2\n' > "${BATS_TEST_TMPDIR}/blankcont.sh"
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/blankcont.sh"
+  [ "$status" -eq 0 ]
+  # a=1 (the opener) and b=2 (a fresh statement after the blank line).
+  [ "$output" -eq 2 ]
+}
+
+# Boundary: a continuation whose next physical line is a comment. Real bash
+# splices the comment onto the same logical line, where the `#` starts a
+# comment that consumes the rest of that (still single) statement — so the
+# comment's own trailing content is inert and does NOT chain the continuation
+# further, verified against real bash tracing only the opener.
+@test "run-bash-coverage.sh ends a continuation at a comment next line" {
+  printf '#!/usr/bin/env bash\na=1 \\\n# comment\nb=2\n' > "${BATS_TEST_TMPDIR}/commentcont.sh"
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/commentcont.sh"
+  [ "$status" -eq 0 ]
+  # a=1 (the opener) and b=2 (a fresh statement after the comment).
+  [ "$output" -eq 2 ]
+}
+
+# Regression: a continuation-swallowed line is not always inert. A line that
+# merely continues an ARGUMENT LIST (more words in the same one command) is
+# never separately traced — but a swallowed line that itself begins or
+# contains a new top-level command (a `||`/`&&`/`|`/`;` compound-list
+# operator) IS traced, on its own line number. The original fix excluded
+# every swallowed line unconditionally, which silently dropped this case
+# below what the tracer actually emits — the exact failure mode the
+# covered-vs-coverable invariant exists to catch, verified here directly
+# since --count-coverable never runs the real tracer to trigger it. Real
+# xtrace over this fixture emits 5 distinct line numbers (2 3 5 8 9), verified
+# with PS4='T:${LINENO}: '.
+@test "run-bash-coverage.sh still counts a continuation line that starts a new command with ||" {
+  cat > "${BATS_TEST_TMPDIR}/cmdcont.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+x=1
+[[ -n "${x}" ]] || \
+  [[ -z "${x}" ]]
+printf '%s\n' \
+  "a" \
+  "b"
+curl -s "http://example" \
+  -H "X: y" || true
+FIXTURE
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/cmdcont.sh"
+  [ "$status" -eq 0 ]
+  # x=1, the [[ ... ]] || \ opener, the swallowed [[ -z ]] line (has ||, kept),
+  # the printf opener ("a"/"b" are pure arguments, excluded), the curl opener
+  # ("-H ... || true" has ||, kept).
+  [ "$output" -eq 5 ]
+}
+
+# Sibling boundary case: a swallowed line with NO command separator at all —
+# purely more words in the same one command — must still be excluded. Without
+# this counter-test, a fix for the case above that over-corrects into keeping
+# every swallowed line would pass silently.
+@test "run-bash-coverage.sh still excludes a pure-argument continuation line with no separator" {
+  cat > "${BATS_TEST_TMPDIR}/pureargcont.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+curl --max-time 5 --silent --fail \
+  -H "Authorization: Bearer ${TOKEN}" \
+  https://api.example.com/user > /dev/null 2>&1 || rc=$?
+FIXTURE
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/pureargcont.sh"
+  [ "$status" -eq 0 ]
+  # The curl opener, and the final line (has ||, kept). The -H flag line is a
+  # pure argument continuation with no separator — excluded.
+  [ "$output" -eq 2 ]
+}
+
 @test ".osx.sh -h prints usage and exits 0 without writing any defaults" {
   run bash "${REPO_ROOT}/scripts/.osx.sh" -h
   [ "$status" -eq 0 ]
