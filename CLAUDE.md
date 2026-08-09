@@ -225,7 +225,7 @@ The CI `secret-scan` job (gitleaks) is a backstop, not a substitute for local sc
 
 `.shellcheckrc` at the repo root carries **one** suppression, `SC1091`, and the file is byte-identical across the four repos that use the shared minimal config. `etch-cli` layers it beneath its own stricter baseline (`enable=all`, `source-path=SCRIPTDIR`, `disable=SC2154`) — a deliberate per-repo choice, not drift. `SC1091` is structurally unavoidable rather than a preference: the lib architecture resolves source paths at runtime through `$(dirname "${BASH_SOURCE[0]}")`, which does not exist at lint time. Everything else is suppressed at its site with a reason on the same line, or fixed.
 
-**This reverses the previous convention, deliberately.** Until 2026-08-08 the file blanket-disabled `SC2086`, `SC2034`, `SC1091` and `SC2181`, and this section described unquoted variables as "intentional style throughout." All 271 findings behind that blanket were cleared — 206 `SC2086` resolved (194 quoted, 12 retired by deleting `kubernetes_stuff/`), 60 `SC2034` resolved (nine of them by deleting a dead constant), 4 `SC2181` rewritten, 1 `SC2317`. A reader who remembers the old rule should know it was reversed on purpose, not eroded.
+**This reverses the previous convention, deliberately.** Until 2026-08-08 the file blanket-disabled `SC2086`, `SC2034`, `SC1091` and `SC2181`, and this section described unquoted variables as "intentional style throughout." All 271 findings behind that blanket were cleared — 206 `SC2086` resolved (194 quoted, 12 retired by deleting `kubernetes_stuff/`), 60 `SC2034` resolved (nine of them by deleting a dead constant — eight in `lib/constants.sh` plus `WINDOWS` in `lib/detect_env.sh`), 4 `SC2181` rewritten, 1 `SC2317`. A reader who remembers the old rule should know it was reversed on purpose, not eroded.
 
 The blanket was not free. One of the four `SC2181` sites it covered was a real defect: `install_homebrew` ran `xcodebuild -license accept` and `xcodebuild -runFirstLaunch` back to back and then tested `$?`, so a license failure followed by a successful second command was reported as success. The suppression's own comment called that pattern intentional.
 
@@ -243,7 +243,7 @@ Rules for any new suppression:
 
 `.github/workflows/ci.yml` runs on PRs to master only (the pre-push hook gates branch pushes locally):
 
-- `test` job: installs a pinned, checksum-verified shellcheck plus bats, runs `make test`, then verifies test count ≥ 840 (regression proxy; 1163 tests as of 2026-08-08)
+- `test` job: installs a pinned, checksum-verified shellcheck plus bats, runs `make test`, then verifies test count ≥ 840 (regression proxy; 1167 tests as of 2026-08-08)
 - `lint-macos` job: runs `bash -n` and `zsh -n` on all `.sh` files on `macos-latest` (advisory, not blocking auto-merge)
 - `bash-coverage` job: measures bash line coverage via PS4 xtrace on `ubuntu-latest`; **gates at 90%** — blocks auto-merge if coverage drops below floor
 - `secret-scan` job: runs gitleaks against recent commits (advisory, not blocking auto-merge)
@@ -295,7 +295,7 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 #### Bash
 
-- **Overall: 91%** (2449/2688 coverable lines, 1163 tests as of 2026-08-08); gated in CI at 90% (`bash-coverage` job, blocks auto-merge on drop).
+- **Overall: 91%** (2449/2688 coverable lines, 1167 tests as of 2026-08-08); gated in CI at 90% (`bash-coverage` job, blocks auto-merge on drop).
 - **The instrumented set is `setup_env.sh` plus tracked `config/*.sh` and `lib/*.sh`, derived from `git ls-files` at run time — not a list.** It was a 13-entry literal array until 2026-08-07, covering 13 of 36 tracked `.sh` files, so the previously published 91% was computed over 36% of the repo. An omitted file left the percentage unchanged rather than lowering it, which is why nothing surfaced it. The predicate is _reached by the suite_, not _lives in `lib/`_ — `lib/detect_env.sh` sources `config/profiles.sh` and `lib/git_hooks.sh` sources `config/hook_repos.sh`. Check what is measured:
   ```bash
   bash scripts/run-bash-coverage.sh --list-sources

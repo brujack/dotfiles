@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# shellcheck disable=SC2034 # file-wide: every constant here is read by other lib/*.sh files via `source`
+# shellcheck disable=SC2034 # file-wide: these constants are consumed after `source`, and by three different classes of consumer — lib/*.sh, .config/.zshrc.d/*.zsh, and tests/. Each one's actual consumer is named on its own line below; where that line says a constant is read only by a test, that is the whole truth about it and not an oversight. An earlier version of this line claimed every constant was read by another lib/*.sh file, which the TERRAFORM_VER annotation 54 lines down directly contradicts.
 # This is a version-pin/URL/directory-location file, so the linter cannot
 # see the cross-file `source` usage above (a directive placed before the
 # first real command in a file applies file-wide, per the linter's own
