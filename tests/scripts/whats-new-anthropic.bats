@@ -218,6 +218,32 @@ ${_full_current}"
   ! grep -q "ntfy" "${MOCK_CALLS_FILE}"
 }
 
+@test "send_ntfy: warns but continues when curl fails" {
+  source "${REPO_ROOT}/scripts/whats-new-anthropic.sh"
+  printf "digest content\n" > "${OUTPUT_FILE}"
+  export NTFY_URL="http://ntfy.example.com/test"
+  export MOCK_CURL_EXIT=1
+  run send_ntfy
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Warning: ntfy notification failed"* ]]
+}
+
+# ── usage / arg parsing ──────────────────────────────────────────────────────
+
+@test "main -h: prints usage and returns 0" {
+  run bash "${REPO_ROOT}/scripts/whats-new-anthropic.sh" -h
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+  [[ "$output" == *"--dry-run"* ]]
+}
+
+@test "main: unknown option prints error and usage, returns 1" {
+  run bash "${REPO_ROOT}/scripts/whats-new-anthropic.sh" --bogus
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Unknown option: --bogus"* ]]
+  [[ "$output" == *"Usage:"* ]]
+}
+
 # ── main (happy path + boundary) ─────────────────────────────────────────────
 
 @test "main: creates output file and updates both state files on happy path" {

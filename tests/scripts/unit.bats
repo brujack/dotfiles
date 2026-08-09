@@ -913,6 +913,59 @@ FIXTURE
   printf '%s\n' "${output}" | grep -qx "${REPO_ROOT}/config/hook_repos.sh"
 }
 
+# Regression guard for the predicate widening to scripts/*.sh: every tracked
+# script except bash-tracer.sh (excluded below — see the next test) must stay
+# instrumented, so a future narrowing of the scripts/*.sh glob is caught here
+# rather than silently shrinking the denominator again.
+@test "run-bash-coverage.sh instruments every tracked scripts/*.sh except bash-tracer.sh" {
+  run _run_coverage --list-sources
+  [ "$status" -eq 0 ]
+
+  # Same PATH-strip rationale as the lib/*.sh instrumentation test above: the
+  # mocked git prints nothing, which would make this loop vacuously pass.
+  local _real_path="${PATH#"${REPO_ROOT}/tests/mocks:"}"
+  local _tracked
+  _tracked="$(cd "${REPO_ROOT}" && PATH="${_real_path}" git ls-files 'scripts/*.sh')"
+  [ -n "${_tracked}" ] || { printf 'git ls-files returned nothing — mock still shadowing\n' >&2; false; }
+
+  local _missing=0 _s
+  while IFS= read -r _s; do
+    [[ "${_s}" == "scripts/bash-tracer.sh" ]] && continue
+    if ! printf '%s\n' "${output}" | grep -qx "${REPO_ROOT}/${_s}"; then
+      printf 'not instrumented: %s\n' "${_s}" >&2
+      _missing=1
+    fi
+  done <<< "${_tracked}"
+  [ "${_missing}" -eq 0 ]
+}
+
+# An extension-keyed pathspec ('scripts/*.sh') cannot match either hook — both
+# are extensionless. Widening the predicate to scripts/*.sh must not silently
+# drop the two files that gate every commit and push in the repo; they are
+# named explicitly in the git ls-files call, not reached by the glob.
+@test "run-bash-coverage.sh --list-sources includes both extensionless hooks" {
+  run _run_coverage --list-sources
+  [ "$status" -eq 0 ]
+  printf '%s\n' "${output}" | grep -qx "${REPO_ROOT}/scripts/pre-push"
+  printf '%s\n' "${output}" | grep -qx "${REPO_ROOT}/scripts/commit-msg"
+}
+
+# bash-tracer.sh is the file BASH_ENV points every traced subprocess at, and
+# `set -x` is its own LAST command — its five preceding lines run before
+# tracing turns on, and nothing follows it, so zero trace lines are ever
+# attributed to it. Verified:
+#   _COV_TRACE_FILE=$PWD/tr.txt BASH_ENV=scripts/bash-tracer.sh bash -c 'x=1; y=2'
+#   grep -c 'bash-tracer.sh' tr.txt   -> 0
+#   wc -l < tr.txt                    -> 2   (the traced subprocess's own
+#                                              commands DO appear)
+# It is uncoverable by construction, not untested. A future reader must not
+# "fix" this back into the instrumented set without re-deriving that.
+@test "run-bash-coverage.sh excludes bash-tracer.sh from the instrumented set" {
+  run _run_coverage --list-sources
+  [ "$status" -eq 0 ]
+  ! printf '%s\n' "${output}" | grep -qx "${REPO_ROOT}/scripts/bash-tracer.sh"
+}
+
 # bash xtrace emits a multi-line array assignment as ONE line, so its element
 # lines can never be covered individually. Counting them inflates the
 # denominator the same way the embedded-Python bodies did — 13 of
@@ -952,6 +1005,36 @@ FIXTURE
   ! [[ "$output" =~ ^[0-9]+$ ]]
 }
 
+# Regression: the python3 -c detector had no quote-parity check, unlike the
+# heredoc opener detector right above it in the source, which already rejects
+# a match whose prefix leaves it inside an odd (still-open) quote. A line
+# that merely MENTIONS the pattern `python3 -c "` as a quoted string literal
+# — not an actual invocation — matched anyway, opening a false embedded
+# region that swallowed every line after it until a line coincidentally
+# starting with a bare `"` closed it again. Found by real reproduction, not
+# reasoning: this is the exact shape of scripts/run-bash-coverage.sh's own
+# `if [[ "${_code}" == *'python3 -c "'* ]]; then` line scanning itself,
+# which swallowed 24 of its own real, traced source lines (300-323) as a
+# false "unterminated python3 -c block" region — verified with a hand-built
+# fixture using the identical construct, isolated from the real file.
+@test "run-bash-coverage.sh does not open an embedded python3-c region for a quoted pattern-match string" {
+  cat > "${BATS_TEST_TMPDIR}/selfref.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+a=1
+if [[ "${a}" == *'python3 -c "'* ]]; then
+  b=2
+fi
+c=3
+FIXTURE
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/selfref.sh"
+  [ "$status" -eq 0 ]
+  # Counted: a=1, the if line itself, b=2, c=3. Not counted: the shebang and
+  # the structural fi. Before the fix, the false-open at the if line swallowed
+  # b=2, fi, and c=3 to end of file (well past the real closing `"` of the
+  # pattern), reporting only 2.
+  [ "$output" -eq 4 ]
+}
+
 @test "run-bash-coverage.sh fails loudly on an unterminated array literal" {
   printf '#!/usr/bin/env bash\ndeclare -A M=(\n  [a]="one"\n' > "${BATS_TEST_TMPDIR}/untermarr.sh"
   run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/untermarr.sh"
@@ -963,6 +1046,606 @@ FIXTURE
   run _run_coverage --list-sources
   [ "$status" -eq 0 ]
   printf '%s\n' "${output}" | grep -qx "${REPO_ROOT}/setup_env.sh"
+}
+
+# Regression: heredoc bodies and their terminator line were counted as coverable,
+# but xtrace never emits either — only the opener line, verified with
+# PS4='T:${LINENO}: '. scripts/sync-agent-guidance.sh has 64 of its 99 "coverable"
+# lines inside a single heredoc, capping its true coverage at 38%.
+@test "run-bash-coverage.sh does not count a heredoc body or its terminator" {
+  cat > "${BATS_TEST_TMPDIR}/heredoc.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+a=1
+cat <<'EOF2'
+body line one
+body line two
+EOF2
+b=2
+FIXTURE
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/heredoc.sh"
+  [ "$status" -eq 0 ]
+  # Counted: a=1, the cat <<'EOF2' opener, b=2. Not counted: the shebang comment,
+  # the two body lines, and the EOF2 terminator.
+  [ "$output" -eq 3 ]
+}
+
+@test "run-bash-coverage.sh still counts an unquoted <<DELIM heredoc opener" {
+  cat > "${BATS_TEST_TMPDIR}/unquoted.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+cat <<DELIM
+body
+DELIM
+x=1
+FIXTURE
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/unquoted.sh"
+  [ "$status" -eq 0 ]
+  [ "$output" -eq 2 ]
+}
+
+# Boundary: a here-string (<<<) is a single-line redirect with no body or
+# terminator — not a heredoc. Its trailing < would otherwise be misread as the
+# tail of a truncated << match (delimiter "foo"), which would treat every
+# following line as an unterminated heredoc body.
+@test "run-bash-coverage.sh does not treat a here-string (<<<) as a heredoc opener" {
+  cat > "${BATS_TEST_TMPDIR}/herestring.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+read -r x <<< foo
+after=1
+FIXTURE
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/herestring.sh"
+  [ "$status" -eq 0 ]
+  [ "$output" -eq 2 ]
+}
+
+# Boundary: a << appearing inside an already-open quoted string is not a real
+# heredoc operator — bash parses it as literal text, so the line traces normally
+# and no body/terminator search should ever start.
+@test "run-bash-coverage.sh does not treat << inside a quoted string as a heredoc opener" {
+  cat > "${BATS_TEST_TMPDIR}/quotedstring.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+msg='See <<EOF for docs'
+after=1
+FIXTURE
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/quotedstring.sh"
+  [ "$status" -eq 0 ]
+  [ "$output" -eq 2 ]
+}
+
+# Boundary: zero body lines between opener and terminator.
+@test "run-bash-coverage.sh handles an empty heredoc body" {
+  cat > "${BATS_TEST_TMPDIR}/empty.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+cat <<'EMPTY'
+EMPTY
+after=1
+FIXTURE
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/empty.sh"
+  [ "$status" -eq 0 ]
+  [ "$output" -eq 2 ]
+}
+
+# Boundary: heredoc opened as the last real content of the file, no terminator
+# ever appears. Silently swallowing the rest (there is no rest) must still be
+# reported as a loud failure, matching the python3-c/array-literal error paths.
+@test "run-bash-coverage.sh fails loudly on an unterminated heredoc" {
+  printf '#!/usr/bin/env bash\ncat <<'"'"'EOF'"'"'\nfoo\n' > "${BATS_TEST_TMPDIR}/untermhd.sh"
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/untermhd.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"unterminated heredoc"* ]]
+  ! [[ "$output" =~ ^[0-9]+$ ]]
+}
+
+# Regression: a synthetic single-process fixture (bash -x -c 'source f; f')
+# suggested a function-declaration header line is never traced, and the
+# heuristic excluded it on that basis. A real tracer pass over the bats
+# suite contradicted that at scale — 150 of 189 measured heuristic
+# disagreements were function-declaration lines the trace actually emitted
+# (e.g. lib/detect_env.sh:4 `detect_env() {`, traced twice). Under BASH_ENV
+# with xtrace already active — how the real tracer runs, not how the
+# synthetic fixture ran it — defining a function IS a traced command. The
+# exclusion is removed entirely rather than narrowed: trust the measured
+# fleet data over one fixture. Header lines now count same as any other code.
+@test "run-bash-coverage.sh counts function-declaration header lines" {
+  cat > "${BATS_TEST_TMPDIR}/funcdecl.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+f()
+{
+  x=1
+}
+g ()  {
+  y=2
+}
+f
+g
+FIXTURE
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/funcdecl.sh"
+  [ "$status" -eq 0 ]
+  # Counted: f()'s own header line, x=1, g ()  {'s header line, y=2, the call
+  # to f, the call to g. Not counted: the shebang and the bare structural
+  # lines ({ on its own line, both closing }).
+  [ "$output" -eq 6 ]
+}
+
+# A single-line function (body on the same physical line as the header) DOES get
+# traced when called, attributed to that line — must still count.
+@test "run-bash-coverage.sh still counts a single-line function body" {
+  cat > "${BATS_TEST_TMPDIR}/singleline.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+greet() { echo "hi"; }
+greet
+FIXTURE
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/singleline.sh"
+  [ "$status" -eq 0 ]
+  [ "$output" -eq 2 ]
+}
+
+# Regression: the existing _case_label_re only matched a single token with no
+# spaces and no leading hyphen, so a hyphen-leading or multi-token-with-spaces
+# label like `-h | --help)` fell through and was counted, even though xtrace
+# never emits a case-arm label line.
+@test "run-bash-coverage.sh does not count a hyphen-leading multi-token case label" {
+  cat > "${BATS_TEST_TMPDIR}/hyphenlabel.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+case "$1" in
+  -h | --help)
+    echo "help"
+    ;;
+esac
+FIXTURE
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/hyphenlabel.sh"
+  [ "$status" -eq 0 ]
+  [ "$output" -eq 2 ]
+}
+
+# An empty-body case arm (label immediately followed by ;; on the SAME line, no
+# real command) is never traced either — verified with PS4='T:${LINENO}: '.
+@test "run-bash-coverage.sh does not count an empty-body case arm with trailing ;;" {
+  cat > "${BATS_TEST_TMPDIR}/emptyarm.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+case "$1" in
+  sync | check) ;;
+  *)
+    run_default
+    ;;
+esac
+FIXTURE
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/emptyarm.sh"
+  [ "$status" -eq 0 ]
+  [ "$output" -eq 2 ]
+}
+
+# Regression guard: a case-arm label followed by a REAL command before the
+# trailing ;;, all on one line, DOES get traced (attributed to that line) — the
+# empty-body exclusion above must not swallow this shape.
+@test "run-bash-coverage.sh still counts a case arm with a same-line command" {
+  cat > "${BATS_TEST_TMPDIR}/samelinecmd.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+case "$1" in
+  -h | --help) echo "help" ;;
+  *) echo "default" ;;
+esac
+FIXTURE
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/samelinecmd.sh"
+  [ "$status" -eq 0 ]
+  [ "$output" -eq 3 ]
+}
+
+# The motivating regression, combining a function declaration with a heredoc
+# body inside it — the exact shape that made scripts/sync-agent-guidance.sh's
+# true coverage unreachable at its published percentage.
+@test "run-bash-coverage.sh correctly counts a heredoc nested inside a function" {
+  cat > "${BATS_TEST_TMPDIR}/nested.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+f() {
+  cat <<'USAGE'
+a
+b
+c
+USAGE
+}
+f
+x=1
+FIXTURE
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/nested.sh"
+  [ "$status" -eq 0 ]
+  # Counted: f() {'s own header line (function declarations count — see the
+  # test above), the cat <<'USAGE' opener, the call to f, x=1.
+  [ "$output" -eq 4 ]
+}
+
+# ── line continuation ────────────────────────────────────────────────────────
+# Regression: a backslash-newline splices the next physical line onto the same
+# logical command — xtrace only ever emits the FIRST physical line, verified
+# with PS4='T:${LINENO}: '. Counting the continuation lines as separate
+# coverable bash inflates the denominator the same way multi-line arrays and
+# python3 -c bodies do. This exact fixture counted 11 before the fix; real
+# xtrace over it emits only 8 distinct line numbers (2 3 4 8 9 11 14 15) — 9
+# coverable lines once you count the untaken `else` branch (line 6, genuinely
+# coverable, just not hit by this one run).
+@test "run-bash-coverage.sh does not count backslash line-continuation lines as bash" {
+  cat > "${BATS_TEST_TMPDIR}/cont.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+x=1
+if [[ -n "${x}" ]]; then
+  y=2
+else
+  y=3
+fi
+for i in 1 2; do
+  z="${i}"
+done
+printf '%s\n' \
+  "a" \
+  "b"
+case "${x}" in
+  1) w=1 ;;
+esac
+FIXTURE
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/cont.sh"
+  [ "$status" -eq 0 ]
+  [ "$output" -eq 9 ]
+}
+
+# Boundary: the continuation opener itself is real code and must still count;
+# only the SWALLOWED lines ("a" and "b") are excluded.
+@test "run-bash-coverage.sh still counts the opener line of a continuation" {
+  cat > "${BATS_TEST_TMPDIR}/opener.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+printf '%s\n' \
+  "a" \
+  "b"
+FIXTURE
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/opener.sh"
+  [ "$status" -eq 0 ]
+  # Only the printf opener is real bash; "a" and "b" are spliced onto it.
+  [ "$output" -eq 1 ]
+}
+
+# Boundary: a backslash as the true last character of the FILE, with no
+# following physical line to splice onto. Nothing is silently swallowed (there
+# is nothing left to swallow) so this must not crash, hang, or report an
+# unterminated-region error — unlike heredoc/array/python3, a continuation can
+# only ever consume ONE further line at a time, never "to EOF".
+@test "run-bash-coverage.sh handles a trailing backslash at end of file with no following line" {
+  printf '#!/usr/bin/env bash\na=1\nb=2 \\\n' > "${BATS_TEST_TMPDIR}/eofcont.sh"
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/eofcont.sh"
+  [ "$status" -eq 0 ]
+  # a=1 and the b=2 \ line itself (the opener, nothing follows to swallow).
+  [ "$output" -eq 2 ]
+}
+
+# Boundary: a continuation inside an ALREADY-excluded heredoc body must not be
+# double-processed by the continuation logic — the heredoc-body skip runs
+# first and swallows the whole body regardless of what it contains, verified
+# against real bash (the body line's trailing backslash has no effect at all;
+# the heredoc terminator ends the region normally).
+@test "run-bash-coverage.sh does not apply continuation logic inside a heredoc body" {
+  cat > "${BATS_TEST_TMPDIR}/hdcont.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+a=1
+cat <<'EOF2'
+some text \
+more text
+EOF2
+b=2
+FIXTURE
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/hdcont.sh"
+  [ "$status" -eq 0 ]
+  # a=1, the cat <<'EOF2' opener, b=2. The heredoc body's embedded backslash
+  # must not exclude anything past the real EOF2 terminator.
+  [ "$output" -eq 3 ]
+}
+
+# Boundary: a line ending in TWO backslashes is an escaped (literal) backslash
+# character, not a continuation — the pair cancels out and the real newline
+# terminates the statement normally. Verified against real bash: `echo "foo" \\`
+# traces on its own line, and the following line traces separately too.
+@test "run-bash-coverage.sh does not treat a trailing escaped backslash (\\\\\\\\) as a continuation" {
+  cat > "${BATS_TEST_TMPDIR}/twobs.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+a=1
+echo "foo" \\
+b=2
+FIXTURE
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/twobs.sh"
+  [ "$status" -eq 0 ]
+  # All three are real, independent bash lines — nothing is spliced.
+  [ "$output" -eq 3 ]
+}
+
+# Boundary: a continuation whose next physical line is blank ends the
+# continuation there (nothing left to splice) rather than chaining further —
+# verified against real bash, which traces the statement AFTER the blank line
+# separately, not as part of the continued one.
+@test "run-bash-coverage.sh ends a continuation at a blank next line" {
+  printf '#!/usr/bin/env bash\na=1 \\\n\nb=2\n' > "${BATS_TEST_TMPDIR}/blankcont.sh"
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/blankcont.sh"
+  [ "$status" -eq 0 ]
+  # a=1 (the opener) and b=2 (a fresh statement after the blank line).
+  [ "$output" -eq 2 ]
+}
+
+# Boundary: a continuation whose next physical line is a comment. Real bash
+# splices the comment onto the same logical line, where the `#` starts a
+# comment that consumes the rest of that (still single) statement — so the
+# comment's own trailing content is inert and does NOT chain the continuation
+# further, verified against real bash tracing only the opener.
+@test "run-bash-coverage.sh ends a continuation at a comment next line" {
+  printf '#!/usr/bin/env bash\na=1 \\\n# comment\nb=2\n' > "${BATS_TEST_TMPDIR}/commentcont.sh"
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/commentcont.sh"
+  [ "$status" -eq 0 ]
+  # a=1 (the opener) and b=2 (a fresh statement after the comment).
+  [ "$output" -eq 2 ]
+}
+
+# Regression: a continuation-swallowed line is not always inert. A line that
+# merely continues an ARGUMENT LIST (more words in the same one command) is
+# never separately traced — but a swallowed line that itself begins or
+# contains a new top-level command (a `||`/`&&`/`|`/`;` compound-list
+# operator) IS traced, on its own line number. The original fix excluded
+# every swallowed line unconditionally, which silently dropped this case
+# below what the tracer actually emits — the exact failure mode the
+# covered-vs-coverable invariant exists to catch, verified here directly
+# since --count-coverable never runs the real tracer to trigger it. Real
+# xtrace over this fixture emits 5 distinct line numbers (2 3 5 8 9), verified
+# with PS4='T:${LINENO}: '.
+@test "run-bash-coverage.sh still counts a continuation line that starts a new command with ||" {
+  cat > "${BATS_TEST_TMPDIR}/cmdcont.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+x=1
+[[ -n "${x}" ]] || \
+  [[ -z "${x}" ]]
+printf '%s\n' \
+  "a" \
+  "b"
+curl -s "http://example" \
+  -H "X: y" || true
+FIXTURE
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/cmdcont.sh"
+  [ "$status" -eq 0 ]
+  # x=1, the [[ ... ]] || \ opener, the swallowed [[ -z ]] line (has ||, kept),
+  # the printf opener ("a"/"b" are pure arguments, excluded), the curl opener
+  # ("-H ... || true" has ||, kept).
+  [ "$output" -eq 5 ]
+}
+
+# Sibling boundary case: a swallowed line with NO command separator at all —
+# purely more words in the same one command — must still be excluded. Without
+# this counter-test, a fix for the case above that over-corrects into keeping
+# every swallowed line would pass silently.
+@test "run-bash-coverage.sh still excludes a pure-argument continuation line with no separator" {
+  cat > "${BATS_TEST_TMPDIR}/pureargcont.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+curl --max-time 5 --silent --fail \
+  -H "Authorization: Bearer ${TOKEN}" \
+  https://api.example.com/user > /dev/null 2>&1 || rc=$?
+FIXTURE
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/pureargcont.sh"
+  [ "$status" -eq 0 ]
+  # The curl opener, and the final line (has ||, kept). The -H flag line is a
+  # pure argument continuation with no separator — excluded.
+  [ "$output" -eq 2 ]
+}
+
+# Regression, found by real reproduction against the production tracer (not
+# reasoning): for a `var=$(cmd ...)` assignment whose command substitution
+# spans a backslash continuation, bash attributes the WHOLE assignment's
+# xtrace line to wherever the substitution's closing `)` lands — the LAST
+# physical line — not the opener. Verified with
+# BASH_ENV=scripts/bash-tracer.sh against `_x=$(comm -13 "a" \` + `  "b")`:
+# the trace names only the closing line, never the opener. The exact shape
+# was lib/update_summary.sh:655-656 (`_untracked_formulae=$(comm -13 ... \` /
+# `    "...")`) — misdiagnosed as a case-label over-match in the original
+# report; the real mechanism is this continuation-closing-paren attribution,
+# and _case_label_re does not even match a line starting with `"`. A
+# continuation line with no `||`/`&&`/`|`/`;` that ends in a bare `)` now
+# falls through and counts, same as a `_cmd_sep_re` match does. This is
+# deliberately over-inclusive for a plain (non-assignment) command whose
+# continuation closes with `$(...)` — real xtrace still attributes those to
+# the opener, so the closing line is counted despite no test ever reaching
+# it — the same accepted, conservative direction as every other heuristic
+# edge case here: it only ever lowers the reported percentage.
+@test "run-bash-coverage.sh still counts a continuation line that closes a command substitution" {
+  cat > "${BATS_TEST_TMPDIR}/assigncont.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+a=1
+result=$(comm -13 "a" \
+    "b")
+echo "${result}"
+FIXTURE
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/assigncont.sh"
+  [ "$status" -eq 0 ]
+  # a=1, the result=$(comm -13 "a" \ opener, the "b") closing line (real
+  # xtrace attributes the whole assignment here), the echo call.
+  [ "$output" -eq 4 ]
+}
+
+# ── --file-coverage: union the trace into the denominator ──────────────────
+#
+# The static heuristic in _count_coverable_lines can be wrong in the
+# under-inclusive direction: a body line of a multi-line array literal is
+# excluded because xtrace emits the whole array assignment as one line at
+# the opener — but a hand-built trace naming that body line anyway must
+# still be unioned into the denominator rather than silently dropped, and
+# reported as a disagreement so a systematically wrong exclusion stays
+# visible instead of being quietly absorbed into a higher denominator. This
+# used a function-declaration header line as the excluded-but-traced example
+# until that exclusion rule was removed (see the function-declaration tests
+# above) — an array-literal body line demonstrates the same union mechanism
+# and remains genuinely excluded.
+@test "run-bash-coverage.sh --file-coverage unions a traced line the heuristic excluded, and reports it as a disagreement" {
+  cat > "${BATS_TEST_TMPDIR}/arrbug.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+arr=(
+  a
+)
+echo "${arr[@]}"
+FIXTURE
+  # Heuristic-coverable for this fixture is lines 2 and 5 (the arr=( opener,
+  # the echo call) — line 3 ("  a") and line 4 (")") are excluded as array
+  # body/close. Hand-write a trace that (wrongly, from the heuristic's view)
+  # also names line 3.
+  {
+    printf '%s:2\n' "${BATS_TEST_TMPDIR}/arrbug.sh"
+    printf '%s:3\n' "${BATS_TEST_TMPDIR}/arrbug.sh"
+    printf '%s:5\n' "${BATS_TEST_TMPDIR}/arrbug.sh"
+  } > "${BATS_TEST_TMPDIR}/arrbug_trace.txt"
+
+  run _run_coverage --file-coverage "${BATS_TEST_TMPDIR}/arrbug.sh" "${BATS_TEST_TMPDIR}/arrbug_trace.txt"
+  [ "$status" -eq 0 ]
+  [ "${#lines[@]}" -eq 3 ]
+  # covered: 3 distinct traced lines (2, 3, 5).
+  [ "${lines[0]}" = "3" ]
+  # coverable: union of heuristic [2, 5] and traced [2, 3, 5] is [2, 3, 5] = 3
+  # — NOT the heuristic's own 2, which is what would still fail the
+  # covered-can-never-exceed-coverable invariant.
+  [ "${lines[1]}" = "3" ]
+  # disagreement: the only line the heuristic excluded but the trace emitted.
+  [ "${lines[2]}" = "3" ]
+}
+
+# Sibling boundary case: when the trace agrees with the heuristic exactly,
+# the union adds nothing and there are zero disagreements — without this
+# counter-test, a union that always pads the denominator (e.g. adding the
+# traced count unconditionally) would pass the test above just as well.
+@test "run-bash-coverage.sh --file-coverage reports no disagreement when the trace matches the heuristic" {
+  cat > "${BATS_TEST_TMPDIR}/clean.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+a=1
+b=2
+FIXTURE
+  {
+    printf '%s:2\n' "${BATS_TEST_TMPDIR}/clean.sh"
+    printf '%s:3\n' "${BATS_TEST_TMPDIR}/clean.sh"
+  } > "${BATS_TEST_TMPDIR}/clean_trace.txt"
+
+  run _run_coverage --file-coverage "${BATS_TEST_TMPDIR}/clean.sh" "${BATS_TEST_TMPDIR}/clean_trace.txt"
+  [ "$status" -eq 0 ]
+  # Exactly covered + coverable — no third (disagreement) line at all.
+  [ "${#lines[@]}" -eq 2 ]
+  [ "${lines[0]}" = "2" ]
+  [ "${lines[1]}" = "2" ]
+}
+
+# Boundary: a trace file with zero lines for this source (e.g. an
+# instrumented file no test happens to exercise). covered must be 0, not
+# blow up on an empty traced-lines set, and coverable must fall back to
+# exactly the heuristic's own count — the union of a set and the empty set
+# is the set itself.
+@test "run-bash-coverage.sh --file-coverage handles a trace file with no lines for this source" {
+  cat > "${BATS_TEST_TMPDIR}/untraced.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+a=1
+b=2
+FIXTURE
+  printf '%s/other.sh:1\n' "${BATS_TEST_TMPDIR}" > "${BATS_TEST_TMPDIR}/other_trace.txt"
+
+  run _run_coverage --file-coverage "${BATS_TEST_TMPDIR}/untraced.sh" "${BATS_TEST_TMPDIR}/other_trace.txt"
+  [ "$status" -eq 0 ]
+  [ "${#lines[@]}" -eq 2 ]
+  [ "${lines[0]}" = "0" ]
+  [ "${lines[1]}" = "2" ]
+}
+
+@test "run-bash-coverage.sh --file-coverage exits 2 with fewer than two arguments" {
+  run _run_coverage --file-coverage "${BATS_TEST_TMPDIR}/clean.sh"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"--file-coverage"* ]]
+}
+
+@test "run-bash-coverage.sh --file-coverage exits 2 on a nonexistent source file" {
+  printf '%s:1\n' "${BATS_TEST_TMPDIR}/nope.sh" > "${BATS_TEST_TMPDIR}/some_trace.txt"
+  run _run_coverage --file-coverage "${BATS_TEST_TMPDIR}/nope.sh" "${BATS_TEST_TMPDIR}/some_trace.txt"
+  [ "$status" -eq 2 ]
+}
+
+@test "run-bash-coverage.sh --file-coverage exits 2 on a nonexistent trace file" {
+  cat > "${BATS_TEST_TMPDIR}/onlysrc.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+a=1
+FIXTURE
+  run _run_coverage --file-coverage "${BATS_TEST_TMPDIR}/onlysrc.sh" "${BATS_TEST_TMPDIR}/no_such_trace.txt"
+  [ "$status" -eq 2 ]
+}
+
+# _file_coverage_report calls _count_coverable_lines first and returns 1
+# without ever reading the trace file when the heuristic itself can't compute
+# a denominator (same unterminated python3 -c fixture --count-coverable is
+# tested against above). --file-coverage's own error path for that failure
+# had no test even though its --count-coverable twin does.
+@test "run-bash-coverage.sh --file-coverage exits 1 when the heuristic cannot compute a denominator" {
+  printf '#!/usr/bin/env bash\n_x=$(python3 -c "\nimport json\n' > "${BATS_TEST_TMPDIR}/unterm.sh"
+  : > "${BATS_TEST_TMPDIR}/empty_trace.txt"
+
+  run _run_coverage --file-coverage "${BATS_TEST_TMPDIR}/unterm.sh" "${BATS_TEST_TMPDIR}/empty_trace.txt"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"cannot compute a trustworthy denominator"* ]]
+}
+
+# Regression: the disagreement computation fed comm -23 two `sort -un`
+# (numeric-sorted) streams, but comm requires its inputs sorted in the
+# shell's own collating order — what plain `sort -u` produces — not numeric
+# order. For multi-digit line numbers the two diverge: "9" sorts before "10"
+# numerically but after it lexicographically ('9' > '1'). comm does not
+# error on the mismatch; it silently desyncs partway through its merge walk
+# and reports a line as "excluded but traced" even when that line is present
+# in both streams. A fixture confined to single-digit line numbers can never
+# expose this — the traced set here deliberately spans the 9/10 boundary.
+@test "run-bash-coverage.sh --file-coverage does not report a false disagreement across a digit-length boundary" {
+  cat > "${BATS_TEST_TMPDIR}/digitcross.sh" <<'FIXTURE'
+#!/usr/bin/env bash
+a=1
+b=2
+c=3
+d=4
+e=5
+f=6
+g=7
+h=8
+i=9
+j=10
+k=11
+FIXTURE
+  # Lines 2-12 are all heuristic-coverable (every assignment counts). The
+  # traced subset (2, 3, 10, 11) is entirely within that set, so a correct
+  # disagreement report is empty.
+  {
+    printf '%s:2\n' "${BATS_TEST_TMPDIR}/digitcross.sh"
+    printf '%s:3\n' "${BATS_TEST_TMPDIR}/digitcross.sh"
+    printf '%s:10\n' "${BATS_TEST_TMPDIR}/digitcross.sh"
+    printf '%s:11\n' "${BATS_TEST_TMPDIR}/digitcross.sh"
+  } > "${BATS_TEST_TMPDIR}/digitcross_trace.txt"
+
+  run _run_coverage --file-coverage "${BATS_TEST_TMPDIR}/digitcross.sh" "${BATS_TEST_TMPDIR}/digitcross_trace.txt"
+  [ "$status" -eq 0 ]
+  # covered=4, coverable=11 (union adds nothing — traced is a subset of the
+  # heuristic) — and no third (disagreement) line at all.
+  [ "${#lines[@]}" -eq 2 ]
+  [ "${lines[0]}" = "4" ]
+  [ "${lines[1]}" = "11" ]
+}
+
+# The reconciliation invariant `_count_coverable_lines`'s two modes must
+# hold: "lines" mode emits exactly the set "count" mode counts. There is no
+# direct CLI hook onto lines-mode's raw output, so this derives the emission
+# count indirectly via --file-coverage against a trace with zero lines for
+# the source: the union of the heuristic and an empty traced set is the
+# heuristic itself, so --file-coverage's reported "coverable" (its 2nd
+# output line) is then exactly the count "lines" mode emitted — which must
+# equal --count-coverable's own total for the same file.
+@test "run-bash-coverage.sh lines-mode emission count reconciles with count-mode's total, per file" {
+  : > "${BATS_TEST_TMPDIR}/empty_trace.txt"
+  for _f in lib/git_sync.sh lib/package_capture.sh scripts/bootstrap_mac.sh scripts/pre-push lib/helpers.sh; do
+    run _run_coverage --count-coverable "${REPO_ROOT}/${_f}"
+    [ "$status" -eq 0 ]
+    _count_total="$output"
+
+    run _run_coverage --file-coverage "${REPO_ROOT}/${_f}" "${BATS_TEST_TMPDIR}/empty_trace.txt"
+    [ "$status" -eq 0 ]
+    _coverable_via_lines="${lines[1]}"
+
+    [ "${_count_total}" = "${_coverable_via_lines}" ]
+  done
 }
 
 @test ".osx.sh -h prints usage and exits 0 without writing any defaults" {

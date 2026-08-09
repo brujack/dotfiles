@@ -1,7 +1,7 @@
 # ADR-0008: Use PS4 Xtrace for Bash Coverage Measurement
 
 - **Date:** 2026-06-01
-- **Status:** Accepted (amended 2026-08-07 — see Amendment below)
+- **Status:** Accepted (amended 2026-08-07, 2026-08-09 — see Amendments below)
 
 ## Context
 
@@ -29,9 +29,9 @@ Implementation:
 - `scripts/run-bash-coverage.sh` — sets up the named pipe, runs `bats --recursive tests/`, drains and parses the trace, reports per-file and overall coverage
 - `make bash-coverage` — local measurement target
 - `make push-bash-coverage` — measurement + badge push to `coverage-data` branch
-- CI `bash-coverage` job on `ubuntu-latest` — runs `make bash-coverage`, fails if overall coverage < 90%, publishes badge JSON
+- CI `bash-coverage` job on `ubuntu-latest` — runs `make bash-coverage`, fails if overall coverage < 90%, publishes badge JSON (floor raised to 91% by Amendment 2)
 
-The gate is **90% overall** (not per-file). Per-file floors are defined in `CLAUDE.md` but not yet enforced individually in CI.
+The gate is **90% overall** (not per-file) — raised to 91% by Amendment 2 (2026-08-09). Per-file floors are defined in `CLAUDE.md` but not yet enforced individually in CI.
 
 Do not attempt kcov, bashcov, or BASH_ENV+DEBUG trap in this repo. All three were confirmed broken with bats-core (see Context above). These dead ends are documented in `CLAUDE.md` to prevent future agents from re-trying them.
 
@@ -40,7 +40,7 @@ Do not attempt kcov, bashcov, or BASH_ENV+DEBUG trap in this repo. All three wer
 **Positive:**
 
 - Coverage measurement works — 92% measured at 726 tests as of 2026-06-01. **The word "accurate" in the original text was wrong and is retracted; see the Amendment below.** That figure was computed over a hand-maintained 13-file subset of 36 tracked shell sources
-- CI gate blocks merges when coverage drops below 90%
+- CI gate blocks merges when coverage drops below 90% (91% from Amendment 2)
 - Named-pipe filtering keeps trace output manageable without sacrificing accuracy
 - `ubuntu-latest` runners avoid the 30–60 min macOS queue delay
 
@@ -53,19 +53,19 @@ Do not attempt kcov, bashcov, or BASH_ENV+DEBUG trap in this repo. All three wer
   - The remaining ceilings are documented per-file in `CLAUDE.md` — do not waste time writing tests to exceed them
 - Coverage measurement runs the full BATS suite; no sub-suite option currently
 
-## Amendment (2026-08-07)
+## Amendment 1 (2026-08-07)
 
 The PS4-xtrace decision stands. Two things this ADR asserted did not.
 
 **The accuracy claim was false when written.** `INCLUDE_FILES` was a hand-maintained
 array naming 13 files against 36 tracked `.sh` sources, so "92% accurate" described 36%
 of the repo. A literal list cannot fail loudly here: an omitted file is absent from the
-numerator *and* the denominator, so leaving one out does not lower the percentage — it
+numerator _and_ the denominator, so leaving one out does not lower the percentage — it
 leaves it unchanged. `lib/git_hooks.sh` was missed exactly that way and only surfaced
 because someone noticed its absence from the report by eye; `lib/package_capture.sh`
 stayed missing afterwards. The set is now derived at run time from `git ls-files` over
 `setup_env.sh`, `config/*.sh`, and `lib/*.sh`, and the script exits non-zero rather than
-measuring a short set. The predicate is *reached by the suite* — `config/` qualifies
+measuring a short set. The predicate is _reached by the suite_ — `config/` qualifies
 because `lib/detect_env.sh` sources `config/profiles.sh` and `lib/git_hooks.sh` sources
 `config/hook_repos.sh`.
 
@@ -90,6 +90,107 @@ two heredoc openers exist in the instrumented set today (`lib/workflows.sh` and
 Post-amendment: 2449/2688 = 91% at 1161 tests. The gate stays at 90%. That the figure
 matches the original 91% is a coincidence of two different denominators, not evidence the
 old number was right.
+
+## Amendment 2 (2026-08-09)
+
+The PS4-xtrace decision still stands. This amendment closes the two gaps Amendment 1 left
+open — `scripts/` outside the instrumented set, and heredoc/curl-continuation inflation —
+and corrects two more heuristic mistakes found while closing them.
+
+**The predicate now covers `scripts/`, and the reason it didn't was never measured.**
+Amendment 1's set was `setup_env.sh`, `config/*.sh`, `lib/*.sh` — everything reached by the
+test suite's own sourcing chain, on the theory that nothing under test sourced `scripts/`
+directly. That theory was asserted, not checked. A real run showed all 19 tracked files
+under `scripts/` executed by the bats suite between 2 and 29 times each, because the tracer
+installs via `BASH_ENV`, which every non-interactive bash subprocess inherits — including
+the ones bats forks to run `scripts/*.sh` directly. Those trace lines were being collected
+the whole time and then discarded by a predicate that never looked. The predicate is now
+`setup_env.sh` plus tracked `config/*.sh`, `lib/*.sh`, `scripts/*.sh`, and the two
+extensionless hooks (`scripts/pre-push`, `scripts/commit-msg`) — 35 files by that
+predicate, of which `scripts/bash-tracer.sh` is excluded (below), leaving 34 instrumented.
+
+**`scripts/bash-tracer.sh` is excluded, on the same measured-not-asserted standard.**
+`set -x` is its last command, so nothing before it can be traced and nothing follows it to
+trace. Verified directly rather than reasoned about:
+
+```bash
+_COV_TRACE_FILE=$PWD/tr.txt BASH_ENV=scripts/bash-tracer.sh bash -c 'x=1; y=2'
+grep -c 'bash-tracer.sh' tr.txt   # -> 0
+```
+
+**The heredoc/curl-continuation gap this ADR called unaddressed is now closed, and the
+underlying rule is broader than "curl continuations."** Any pure-argument backslash
+continuation — a continuation line whose only content is more arguments to the command the
+backslash opened — is excluded, matching how bash actually traces it: one xtrace line for
+the whole logical command, attributed to the opening line, never to the continuation lines.
+The rule does **not** exclude a continuation that itself begins or contains `||`, `&&`,
+`|`, or `;` — bash starts tracing a new command at that boundary regardless of the trailing
+backslash, so that class is counted like any other command. Heredoc bodies and their
+terminator lines are excluded in any form (`<<` or `<<-`, any interpreter, not just bash's
+own `usage()` blocks) — a heredoc body can contain arbitrary text, including lines that
+would otherwise parse as commands, comments, or continuations in their own right, so a
+line-by-line heuristic cannot safely look inside one at all.
+
+**A function-declaration exclusion was tried while implementing the above, and withdrawn on
+evidence rather than kept as a hedge.** This ADR's own Consequences section listed
+`funcname() {` lines as "not consistently traced across bash versions," and Amendment 1
+repeated that framing implicitly by not touching it. A real tracer run over the bats suite
+showed roughly 150 counterexamples: `lib/detect_env.sh` line 4, `detect_env() {`, was
+traced **twice** in one run — once when the file is sourced directly, once when a caller
+re-sources it under an already-active `set -x`. The rule was deleted outright, not
+narrowed, because the premise it was built on was false, not merely imprecise.
+
+**The denominator is now the union of the static heuristic's coverable-line count and
+whatever the trace file actually contains for that file — not the heuristic's count alone.**
+This is the structural fix that makes the invariant `covered <= coverable` hold by
+construction instead of by the heuristic happening to be right: every line the trace hits
+is, by definition, coverable, so folding traced lines into the denominator means no
+possible heuristic mistake can push `covered` past it. The previous approach — clamp
+`covered` down to `coverable` if it ever exceeded it — didn't fix the heuristic error, it
+hid it: `lib/detect_env.sh` read 24/24 = 100% while the trace emitted 25 distinct lines for
+it, and the clamp silently absorbed the missing line rather than reporting the mismatch.
+`covered > coverable` is now a hard, loud non-zero exit instead of a clamp, and under the
+union rule it can only fire when an exclusion heuristic has genuinely double-counted or
+otherwise over-matched — a real bug in the tool, not a normal run.
+
+A side effect worth stating plainly: because the union folds in whatever a given run
+traced, the denominator is now run-dependent — a file whose covering tests are later
+deleted loses those union-added lines and its denominator can shrink back down. That is an
+accepted trade, not an oversight: coverage would have genuinely dropped either way, and the
+alternative (a denominator that only the heuristic controls) is what let the clamp hide a
+real bug for as long as it did. Every union-added line is printed as a **heuristic
+disagreement** for exactly this reason — so a systematically wrong exclusion rule stays
+visible run over run instead of being quietly absorbed into a bigger denominator. The
+current run reports 15 disagreements, down from 192 before the heredoc and continuation
+rules landed. Fifteen is a to-do against the heuristic, not a failure of the gate — the
+union means none of them can be inflating the published percentage.
+
+**What genuinely remains unaddressed:** nothing in the four excluded classes above is
+still open. The heuristic disagreement count (15) is the honest remainder — real
+constructs the static heuristic has not yet been taught to recognize, surfaced every run
+rather than hidden, and guaranteed by the union not to distort the published figure either
+direction in the meantime.
+
+Post-amendment: 3062/3326 = 92% at 1260 tests, over 34 of the 35 files the widened predicate
+matches. (36 shell files are tracked; the 36th, `tests/helpers/common.bash`, is a test helper
+and outside the predicate. Three counts, three different sets — state which one a figure is
+over, or it is not a figure.) See `CLAUDE.md` §Testing > Coverage > Bash for the current-state
+table.
+
+**The gate moves to 91%, one point below the measurement, and that gap is deliberate.** The
+obvious move is to ratchet to the measured 92% — do not, and here is the mechanism rather than
+the preference. The union makes `coverable` depend on what a given run actually traced, and 18
+of the 34 instrumented files are now `scripts/` executed as _subprocesses_, whose taken paths
+are more environment-sensitive than sourced library code. The figure is already observed to
+move: covered read 3060 at `b4236e4` and 3062 at `1c1e98f`, three commits later, from test-file
+edits alone. At a 92% floor the pass/fail boundary sits at 3060 covered lines — two below where
+the branch landed — so a single line lost to ordinary variance turns CI red on a diff that
+broke nothing. At 91% the boundary is 3027, leaving ~35 lines of slack: a genuine regression
+still trips it, ordinary jitter does not.
+
+Ratchet to 92 once the figure has been observed twice on `ubuntu-latest` at the same commit.
+It has been measured once, locally, on macOS. A floor is a claim about reproducibility, and
+one local measurement does not support it.
 
 ## Related
 
