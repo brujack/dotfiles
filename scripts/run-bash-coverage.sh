@@ -683,6 +683,19 @@ fi
 # like a hang and produces a coverage figure nobody asked for. That happened
 # during this file's own development. `--json` is the one flag that legally
 # reaches the main run, so it is the only one allowed past.
+#
+# That exemption is deliberately UNTESTED, which is a departure from
+# logic-review item 6 (both branches of every guard) and is recorded here so
+# nobody re-derives it. Every cheap way to assert it is worse than the gap:
+# `--json` by definition continues into a full tracer run, so a behavioural
+# test either needs a production seam on OUTPUT_DIR added purely to make the
+# run fail fast, or a timeout plus reaping of a nested `bats-exec-*` tree —
+# which is how an agent porting this file produced runaway processes. A test
+# whose failure mode is worse than the bug is the exact defect review caught
+# in #205. The positive branch (every other `-*` flag) IS tested, twice.
+# If this ever needs real coverage, the fix is structural: make the main run
+# an explicit subcommand so no flag falls through, rather than bolting a
+# fragile test onto the exception.
 if [[ "${1:-}" == -* && "${1:-}" != "--json" ]]; then
     printf "ERROR: unknown option '%s'\n\n" "${1}" >&2
     printf "Run with -h for the list of inspection flags. Only --json continues\n" >&2
