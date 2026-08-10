@@ -851,6 +851,26 @@ FIXTURE
   [[ "$output" == *"not readable"* ]]
 }
 
+# Regression: every inspection flag exits, so an unrecognised one used to fall
+# straight through to the full `bats --recursive` tracer run — minutes of work
+# that reads as a hang, triggered by a single mistyped character. It happened
+# during this file's own development. The guard must reject the typo and must
+# NOT reject --json, which legitimately continues to the main run.
+@test "run-bash-coverage.sh rejects an unknown flag instead of running the suite" {
+  run _run_coverage --definitely-not-a-flag
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"unknown option"* ]]
+  [[ "$output" == *"--definitely-not-a-flag"* ]]
+  # It must not have started a run: the tracer announces itself first.
+  [[ "$output" != *"Running"*"tests with coverage tracer"* ]]
+}
+
+@test "run-bash-coverage.sh rejects a near-miss typo of a real flag" {
+  run _run_coverage --list-source
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"unknown option"* ]]
+}
+
 @test "run-bash-coverage.sh -h documents both inspection flags" {
   run _run_coverage -h
   [ "$status" -eq 0 ]
@@ -1646,6 +1666,104 @@ FIXTURE
 
     [ "${_count_total}" = "${_coverable_via_lines}" ]
   done
+}
+
+# ── --check-missing: the tracked-but-absent warning, deferral 1 ────────────
+# The original `[[ ! -f "${src_file}" ]] && continue` in the per-file loop
+# dropped a tracked-but-absent file from the run with no output at all — the
+# file vanishes from both numerator and denominator, so the percentage is
+# unchanged rather than lowered. That is the exact invisible-shrinkage class
+# this whole script exists to eliminate, surviving inside its own fix.
+# Testable via --check-missing rather than a full tracer pass, which the loop
+# this guards takes minutes to reach.
+@test "run-bash-coverage.sh --check-missing warns on stderr and exits 1 for an absent file" {
+  run _run_coverage --check-missing "${BATS_TEST_TMPDIR}/nonexistent-tracked.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"nonexistent-tracked.sh"* ]]
+  [[ "$output" == *"tracked but absent"* ]]
+}
+
+@test "run-bash-coverage.sh --check-missing is silent and exits 0 for a present file" {
+  printf 'a=1\n' > "${BATS_TEST_TMPDIR}/present.sh"
+  run _run_coverage --check-missing "${BATS_TEST_TMPDIR}/present.sh"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "run-bash-coverage.sh --check-missing exits 2 with no file argument" {
+  run _run_coverage --check-missing
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"--check-missing"* ]]
+}
+
+# The warning must be non-fatal — the per-file loop calls the same function
+# with `|| continue`, never `|| exit`, so one absent file shrinks the
+# denominator but does not end the run. --check-missing's own exit code IS
+# the function's return code (the flag block is just `_warn_if_source_missing
+# "${2}"; exit $?`), so a plain 1 here — not a crash, not a hard process
+# exit — proves the function returns rather than terminates the script.
+# Confirmed structurally too: the real loop line is grepped directly, so a
+# future edit that turns the skip into a hard `exit` fails this test.
+@test "run-bash-coverage.sh's per-file loop treats a missing source as a non-fatal skip" {
+  run _run_coverage --check-missing "${BATS_TEST_TMPDIR}/missing-for-loop-check.sh"
+  [ "$status" -eq 1 ]
+  grep -qF '_warn_if_source_missing "${src_file}" || continue' "${REPO_ROOT}/scripts/run-bash-coverage.sh"
+}
+
+# ── unterminated-region errors name the opening line and delimiter, deferral 2 ──
+# The error used to identify neither the opening line nor the delimiter, so a
+# reader had to re-scan the whole file by hand to find the unterminated
+# region — and it aborts the whole run (and therefore CI) when it fires.
+@test "run-bash-coverage.sh names the opening line and delimiter for an unterminated heredoc" {
+  printf '#!/usr/bin/env bash\na=1\ncat <<'"'"'PAYLOAD'"'"'\nfoo\n' > "${BATS_TEST_TMPDIR}/untermhd2.sh"
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/untermhd2.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"unterminated heredoc"* ]]
+  [[ "$output" == *"opened at line 3"* ]]
+  [[ "$output" == *"delimiter 'PAYLOAD'"* ]]
+}
+
+@test "run-bash-coverage.sh names the opening line for an unterminated python3 -c block" {
+  printf '#!/usr/bin/env bash\na=1\n_x=$(python3 -c "\nimport json\n' > "${BATS_TEST_TMPDIR}/untermpyc2.sh"
+  run _run_coverage --count-coverable "${BATS_TEST_TMPDIR}/untermpyc2.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"unterminated python3 -c block"* ]]
+  [[ "$output" == *"opened at line 3"* ]]
+}
+
+# ── --check-red-suite: the red-suite guard, deferral 3 ─────────────────────
+# c27cc4e added this guard — refusing to report a coverage figure computed
+# over a suite that did not pass — verified only against a throwaway fixture,
+# with no committed test protecting it afterward. That is the same
+# "mechanism nothing exercises" gap this phase kept finding elsewhere.
+# --check-red-suite exercises it directly, without running the full suite
+# under the tracer to reach it.
+@test "run-bash-coverage.sh --check-red-suite proceeds silently for a green status" {
+  printf '1..2\nok 1 a\nok 2 b\n' > "${BATS_TEST_TMPDIR}/green.log"
+  run _run_coverage --check-red-suite 0 "${BATS_TEST_TMPDIR}/green.log"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "run-bash-coverage.sh --check-red-suite refuses a red status, naming the count and the failing tests" {
+  printf '1..3\nok 1 a\nnot ok 2 b\nnot ok 3 c\n' > "${BATS_TEST_TMPDIR}/red.log"
+  run _run_coverage --check-red-suite 1 "${BATS_TEST_TMPDIR}/red.log"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"2 test(s) not ok"* ]]
+  [[ "$output" == *"not ok 2 b"* ]]
+  [[ "$output" == *"not ok 3 c"* ]]
+}
+
+@test "run-bash-coverage.sh --check-red-suite exits 2 with fewer than two arguments" {
+  run _run_coverage --check-red-suite 1
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"--check-red-suite"* ]]
+}
+
+@test "run-bash-coverage.sh --check-red-suite exits 2 on a nonexistent log file" {
+  run _run_coverage --check-red-suite 1 "${BATS_TEST_TMPDIR}/no-such-log.txt"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"no such readable log file"* ]]
 }
 
 @test ".osx.sh -h prints usage and exits 0 without writing any defaults" {
