@@ -851,6 +851,26 @@ FIXTURE
   [[ "$output" == *"not readable"* ]]
 }
 
+# Regression: every inspection flag exits, so an unrecognised one used to fall
+# straight through to the full `bats --recursive` tracer run — minutes of work
+# that reads as a hang, triggered by a single mistyped character. It happened
+# during this file's own development. The guard must reject the typo and must
+# NOT reject --json, which legitimately continues to the main run.
+@test "run-bash-coverage.sh rejects an unknown flag instead of running the suite" {
+  run _run_coverage --definitely-not-a-flag
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"unknown option"* ]]
+  [[ "$output" == *"--definitely-not-a-flag"* ]]
+  # It must not have started a run: the tracer announces itself first.
+  [[ "$output" != *"Running"*"tests with coverage tracer"* ]]
+}
+
+@test "run-bash-coverage.sh rejects a near-miss typo of a real flag" {
+  run _run_coverage --list-source
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"unknown option"* ]]
+}
+
 @test "run-bash-coverage.sh -h documents both inspection flags" {
   run _run_coverage -h
   [ "$status" -eq 0 ]

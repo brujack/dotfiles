@@ -672,6 +672,24 @@ if [[ "${1:-}" == "--check-red-suite" ]]; then
     exit $?
 fi
 
+# Reject an unrecognised flag rather than falling through to the full run.
+# THIS MUST STAY BELOW EVERY FLAG HANDLER ABOVE. Placed higher, it rejects
+# the very flags it sits in front of — which is exactly what happened when
+# it was first added between --file-coverage and --check-missing, and what
+# the full suite caught after a filtered run had reported green.
+# Every inspection flag above exits, so anything still here starting with `-`
+# is a typo — and without this guard a mistyped `--list-source` silently
+# launched the entire bats suite under the tracer, minutes of work that looks
+# like a hang and produces a coverage figure nobody asked for. That happened
+# during this file's own development. `--json` is the one flag that legally
+# reaches the main run, so it is the only one allowed past.
+if [[ "${1:-}" == -* && "${1:-}" != "--json" ]]; then
+    printf "ERROR: unknown option '%s'\n\n" "${1}" >&2
+    printf "Run with -h for the list of inspection flags. Only --json continues\n" >&2
+    printf "to a full tracer run; every other flag exits immediately.\n" >&2
+    exit 2
+fi
+
 mkdir -p "${OUTPUT_DIR}"
 rm -f "${TRACE_FILE}" "${TRACE_FIFO}"
 mkfifo "${TRACE_FIFO}"
