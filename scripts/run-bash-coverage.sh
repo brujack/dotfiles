@@ -621,12 +621,33 @@ printf "Running %d tests with coverage tracer...\n" "${test_count}"
 # Run bats with tracer — fd 9 goes to the FIFO
 export BASH_ENV="${TRACER}"
 export _COV_TRACE_FILE="${TRACE_FIFO}"
-bats --recursive "${REPO_ROOT}/tests/" 2>&1 | tail -3
+bats_log="${OUTPUT_DIR}/bats_run.log"
+bats --recursive "${REPO_ROOT}/tests/" > "${bats_log}" 2>&1
+bats_status=$?
 unset BASH_ENV _COV_TRACE_FILE
 
-# Allow bg filter to drain and exit
+tail -3 "${bats_log}"
+
+# Allow bg filter to drain and exit. Runs BEFORE the red-suite check below so
+# the FIFO is torn down either way.
 rm -f "${TRACE_FIFO}"
 wait "${grep_pid}" 2>/dev/null || true
+
+# Piping bats through `tail` (as this line used to) reports `tail`'s exit
+# status, not bats's — a pipeline's status is always its LAST command's, so a
+# fully red suite still exited 0 and a coverage figure got computed and
+# published over a run that never finished green. See shell.md's "| tail -N
+# discards the failure" pitfall, which this file was violating while being the
+# instrument that measures the repo. Capture bats's own status directly, and
+# refuse to report coverage measured over a suite that did not pass.
+if [[ "${bats_status}" -ne 0 ]]; then
+    not_ok_count=$(grep -c '^not ok' "${bats_log}")
+    printf "\nERROR: bats suite failed (exit %d, %d test(s) not ok) — refusing to compute coverage over a red run\n" \
+        "${bats_status}" "${not_ok_count}" >&2
+    printf "Failing tests:\n" >&2
+    grep '^not ok' "${bats_log}" >&2
+    exit 1
+fi
 
 if [[ ! -f "${TRACE_FILE}" || ! -s "${TRACE_FILE}" ]]; then
     printf "ERROR: no trace data produced — check bash-tracer.sh\n" >&2
