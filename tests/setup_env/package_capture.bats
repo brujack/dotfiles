@@ -14,6 +14,15 @@ setup() {
   ORIGINAL_PATH="${PATH}"
   load_mocks
   load_setup_env
+  # Hermetic HOME, matching tests/test_package_capture.bats. Load-bearing, not
+  # tidiness: LEDGER_BIN and MACHINE_ID_PATH default to ${HOME}-derived paths,
+  # and ~/.local/bin/ledger is a real CLI that commits and pushes to a separate
+  # state-ledger repo. Without this, any test here that reaches the default
+  # path — or reaches it again because the `${VAR:-default}` seam regressed —
+  # writes to the operator's live ledger before failing. scripts/pre-push runs
+  # `make test`, so that would fire on every push from a dev machine; CI never
+  # sees it, because no runner has a ledger installed.
+  export HOME="${BATS_TEST_TMPDIR}"
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
   touch "${MOCK_CALLS_FILE}"
   # shellcheck disable=SC1091
@@ -296,6 +305,12 @@ EOF
   # neither LEDGER_BIN nor MACHINE_ID_PATH and instead points HOME at a
   # fixture directory, so it proves the `${HOME}`-derived defaults still
   # resolve correctly. The companion test below covers the override seam.
+  # The unset is what makes that first sentence true of the environment and
+  # not merely of the test body. Before the seam existed this test was immune
+  # by construction — the script overwrote any inherited value — so an ambient
+  # LEDGER_BIN would now silently convert it into a second override test with
+  # no visible change.
+  unset LEDGER_BIN MACHINE_ID_PATH
   _fake_home="${BATS_TEST_TMPDIR}/fake_home"
   mkdir -p "${_fake_home}/.local/bin" "${_fake_home}/.config/dotfiles"
   cp "${_ledger_bin}" "${_fake_home}/.local/bin/ledger"

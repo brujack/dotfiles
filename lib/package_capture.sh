@@ -3,18 +3,11 @@
 # Produces JSON diffs (added/removed/upgraded) per package source.
 
 PACKAGE_CAPTURE_ENABLED="${PACKAGE_CAPTURE_ENABLED:-true}"
-# Both carry the `${VAR:-default}` seam for the same reason the line above
-# does, and the reason is not test ergonomics. Written as plain assignments,
-# they silently overwrite whatever the caller exported, so a debugging run of
-# `LEDGER_BIN=/tmp/fake bash lib/package_capture.sh <run-id>` reaches the real
-# ~/.local/bin/ledger and writes a live entry to the operator's own ledger —
-# no error, no hint the override was discarded. That is not hypothetical: it
-# happened twice while this file was being worked on, once pushing a spurious
-# commit to the state-ledger repo. Sourced callers were always fine (the
-# functions read these at call time, so a later export wins), which is exactly
-# why the gap survived — every committed test either sources the file or
-# redirects HOME, and the footgun was reserved for whoever runs the script by
-# hand.
+# Seams, not plain assignments: on direct execution this top level runs before
+# any caller can intervene, so a plain assignment silently discards an exported
+# override and reaches the real ledger, which commits to another repo. Sourced
+# callers were never affected — the functions read these at call time — which
+# is why no test caught it.
 LEDGER_BIN="${LEDGER_BIN:-${HOME}/.local/bin/ledger}"
 MACHINE_ID_PATH="${MACHINE_ID_PATH:-${HOME}/.config/dotfiles/machine-id}"
 
