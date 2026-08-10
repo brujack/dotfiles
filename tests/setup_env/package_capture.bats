@@ -14,6 +14,15 @@ setup() {
   ORIGINAL_PATH="${PATH}"
   load_mocks
   load_setup_env
+  # Hermetic HOME, matching tests/test_package_capture.bats. Load-bearing, not
+  # tidiness: LEDGER_BIN and MACHINE_ID_PATH default to ${HOME}-derived paths,
+  # and ~/.local/bin/ledger is a real CLI that commits and pushes to a separate
+  # state-ledger repo. Without this, any test here that reaches the default
+  # path — or reaches it again because the `${VAR:-default}` seam regressed —
+  # writes to the operator's live ledger before failing. scripts/pre-push runs
+  # `make test`, so that would fire on every push from a dev machine; CI never
+  # sees it, because no runner has a ledger installed.
+  export HOME="${BATS_TEST_TMPDIR}"
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
   touch "${MOCK_CALLS_FILE}"
   # shellcheck disable=SC1091
@@ -292,14 +301,16 @@ EOF
   export MOCK_LEDGER_PAYLOAD_FILE="${BATS_TEST_TMPDIR}/ledger_payloads.txt"
   touch "${MOCK_LEDGER_PAYLOAD_FILE}"
 
-  # LEDGER_BIN and MACHINE_ID_PATH (lib/package_capture.sh:6-7) are plain
-  # top-level assignments, not `${VAR:-default}` — so unlike
-  # PACKAGE_CAPTURE_ENABLED, exporting them has no effect on a fresh
-  # direct-execution subprocess: the script's own top level unconditionally
-  # overwrites whatever the environment supplied the moment it runs. Since
-  # both defaults are built from ${HOME}, pointing HOME at a fixture
-  # directory is the only way to control either from outside the (untouched)
-  # production file.
+  # This test drives the DEFAULT resolution path deliberately: it supplies
+  # neither LEDGER_BIN nor MACHINE_ID_PATH and instead points HOME at a
+  # fixture directory, so it proves the `${HOME}`-derived defaults still
+  # resolve correctly. The companion test below covers the override seam.
+  # The unset is what makes that first sentence true of the environment and
+  # not merely of the test body. Before the seam existed this test was immune
+  # by construction — the script overwrote any inherited value — so an ambient
+  # LEDGER_BIN would now silently convert it into a second override test with
+  # no visible change.
+  unset LEDGER_BIN MACHINE_ID_PATH
   _fake_home="${BATS_TEST_TMPDIR}/fake_home"
   mkdir -p "${_fake_home}/.local/bin" "${_fake_home}/.config/dotfiles"
   cp "${_ledger_bin}" "${_fake_home}/.local/bin/ledger"
@@ -320,4 +331,36 @@ EOF
   [ "$status" -eq 0 ]
   [ -z "$output" ]
   grep -q '"run_id": "run-direct"' "${MOCK_LEDGER_PAYLOAD_FILE}"
+}
+
+@test "package_capture.sh: direct execution honors an exported LEDGER_BIN and MACHINE_ID_PATH" {
+  local _pip_dir _py_dir _coreutils_dir _ledger_bin _bash_bin
+  _bash_bin="$(command -v bash)"
+  _pip_dir="$(_make_mock_tool "pip3" '[{"name": "requests", "version": "2.31.0"}]')"
+  _py_dir="$(_make_python3_only_dir)"
+  _coreutils_dir="$(_make_coreutils_dir)"
+  _ledger_bin="$(_make_mock_ledger)"
+  export MOCK_LEDGER_PAYLOAD_FILE="${BATS_TEST_TMPDIR}/ledger_payloads.txt"
+  touch "${MOCK_LEDGER_PAYLOAD_FILE}"
+
+  # HOME is deliberately left alone. Without the `${VAR:-default}` seam on
+  # lines 6-7, the script's own top level overwrites both variables the
+  # moment it runs, so this invocation silently resolves LEDGER_BIN to the
+  # real ~/.local/bin/ledger and writes a live entry to the operator's own
+  # state ledger. That is not hypothetical: an ad-hoc debugging invocation
+  # did exactly that during this file's development and pushed a spurious
+  # commit to the state-ledger repo. Committed tests never hit it because
+  # every one of them either exports HOME or predates the direct-execution
+  # entry point — the footgun is reserved for whoever runs the script by
+  # hand, which is the worst audience to reserve it for.
+  printf 'seam-machine\n' > "${BATS_TEST_TMPDIR}/machine-id"
+  PACKAGE_CAPTURE_ENABLED=true \
+    LEDGER_BIN="${_ledger_bin}" \
+    MACHINE_ID_PATH="${BATS_TEST_TMPDIR}/machine-id" \
+    PATH="${_pip_dir}:${_py_dir}:${_coreutils_dir}" \
+    run "${_bash_bin}" "${REPO_ROOT}/lib/package_capture.sh" "run-seam"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  grep -q '"run_id": "run-seam"' "${MOCK_LEDGER_PAYLOAD_FILE}"
+  grep -q '"machine_id": "seam-machine"' "${MOCK_LEDGER_PAYLOAD_FILE}"
 }

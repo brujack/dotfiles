@@ -3,8 +3,13 @@
 # Produces JSON diffs (added/removed/upgraded) per package source.
 
 PACKAGE_CAPTURE_ENABLED="${PACKAGE_CAPTURE_ENABLED:-true}"
-LEDGER_BIN="${HOME}/.local/bin/ledger"
-MACHINE_ID_PATH="${HOME}/.config/dotfiles/machine-id"
+# Seams, not plain assignments: on direct execution this top level runs before
+# any caller can intervene, so a plain assignment silently discards an exported
+# override and reaches the real ledger, which commits to another repo. Sourced
+# callers were never affected — the functions read these at call time — which
+# is why no test caught it.
+LEDGER_BIN="${LEDGER_BIN:-${HOME}/.local/bin/ledger}"
+MACHINE_ID_PATH="${MACHINE_ID_PATH:-${HOME}/.config/dotfiles/machine-id}"
 
 _list_brew_packages() {
     command -v brew &>/dev/null || { printf '[]'; return 0; }
