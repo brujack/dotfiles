@@ -226,6 +226,7 @@ _pyc_pattern='python3 -c "'
 _count_coverable_lines() {
     local _file="${1}" _mode="${2:-count}" _line _trimmed _after _code
     local _coverable=0 _in_embedded=0 _in_array=0 _in_heredoc=0 _heredoc_delim=""
+    local _heredoc_open_line=0 _pyc_open_line=0
     local _in_continuation=0 _bs_run _lineno=0
     local _hd_scan _hd_match _hd_delim _hd_prefix _hd_sq _hd_dq
     local _pyc_prefix _pyc_sq _pyc_dq
@@ -370,7 +371,10 @@ _count_coverable_lines() {
             _pyc_dq="${_pyc_prefix//\"/}"
             if (( (${#_pyc_prefix} - ${#_pyc_sq}) % 2 == 0 && (${#_pyc_prefix} - ${#_pyc_dq}) % 2 == 0 )); then
                 _after="${_code#*python3 -c \"}"
-                [[ "${_after}" != *'"'* ]] && _in_embedded=1
+                if [[ "${_after}" != *'"'* ]]; then
+                    _in_embedded=1
+                    _pyc_open_line="${_lineno}"
+                fi
             fi
         fi
         # Heredoc opener. `<<<` (here-string, single-line, no body/terminator) is
@@ -391,6 +395,7 @@ _count_coverable_lines() {
             if (( (${#_hd_prefix} - ${#_hd_sq}) % 2 == 0 && (${#_hd_prefix} - ${#_hd_dq}) % 2 == 0 )); then
                 _in_heredoc=1
                 _heredoc_delim="${_hd_delim}"
+                _heredoc_open_line="${_lineno}"
             fi
         fi
         case "${_trimmed}" in
@@ -436,16 +441,25 @@ _count_coverable_lines() {
     # backslash, there is simply no next line to splice onto it — nothing was
     # mis-attributed, so nothing needs to be reported.
     if [[ "${_in_embedded}" -eq 1 || "${_in_array}" -eq 1 || "${_in_heredoc}" -eq 1 ]]; then
-        local _unterminated_kind
+        # The kind alone used to send a reader back to re-scan the whole file
+        # by hand. The opener's line number (and, for a heredoc, its
+        # delimiter) is captured at the point the region opens, above, so the
+        # error can point straight at it instead. Array literals are not
+        # named here — the instrumented set has none that are unterminated in
+        # practice, and this is scoped to the two regions that were reported
+        # with no location at all.
+        local _unterminated_kind _unterminated_detail=""
         if [[ "${_in_embedded}" -eq 1 ]]; then
             _unterminated_kind="python3 -c block"
+            _unterminated_detail=" opened at line ${_pyc_open_line}"
         elif [[ "${_in_array}" -eq 1 ]]; then
             _unterminated_kind="array literal"
         else
             _unterminated_kind="heredoc"
+            _unterminated_detail=" opened at line ${_heredoc_open_line} (delimiter '${_heredoc_delim}')"
         fi
-        printf "ERROR: %s: unterminated %s — lines after it were not counted\n" \
-            "${_file}" "${_unterminated_kind}" >&2
+        printf "ERROR: %s: unterminated %s%s — lines after it were not counted\n" \
+            "${_file}" "${_unterminated_kind}" "${_unterminated_detail}" >&2
         return 1
     fi
     if [[ "${_mode}" == "count" ]]; then
@@ -590,6 +604,74 @@ if [[ "${1:-}" == "--file-coverage" ]]; then
     exit 0
 fi
 
+# Extracted so the tracked-but-absent warning is testable without waiting for
+# the per-file loop below, which a full tracer pass takes minutes to reach.
+# Non-fatal by design: a tracked file missing from the working tree (mid-
+# rename, deleted without a commit) shrinks this run's denominator rather
+# than aborting it — a developer still gets a figure, just an honest, shorter
+# one, with a loud warning naming exactly what was dropped. The original
+# `[[ ! -f "${src_file}" ]] && continue` dropped the file from BOTH numerator
+# and denominator with no output at all, which is the invisible-shrinkage
+# class tdd.md's Coverage Denominators section describes — a missing entry
+# leaves the percentage unchanged instead of lowering it, so nothing ever
+# surfaced it.
+_warn_if_source_missing() {
+    local _src_file="${1}"
+    if [[ ! -f "${_src_file}" ]]; then
+        printf "WARNING: %s is tracked but absent from the working tree — dropped from this run, coverage denominator is short by this file\n" \
+            "${_src_file}" >&2
+        return 1
+    fi
+    return 0
+}
+
+# Same spirit as --count-coverable/--file-coverage above: lets the warning be
+# checked directly, without waiting on a full tracer pass to reach the loop
+# that calls it for real.
+if [[ "${1:-}" == "--check-missing" ]]; then
+    if [[ -z "${2:-}" ]]; then
+        printf "ERROR: --check-missing requires a file argument\n" >&2
+        exit 2
+    fi
+    _warn_if_source_missing "${2}"
+    exit $?
+fi
+
+# One suite result's pass/fail gate, extracted so it is testable without
+# running the full suite under the tracer. Piping bats through `tail` (as the
+# call site used to) reports `tail`'s exit status, not bats's own — a fully
+# red suite could still exit 0 and a coverage figure got published over a run
+# that never finished green. See shell.md's "| tail -N discards the failure"
+# pitfall. c27cc4e fixed the call site but shipped this guard verified only
+# against a throwaway fixture, with no committed test protecting it
+# afterward — the same "mechanism nothing exercises" gap this phase kept
+# finding elsewhere. This function and the --check-red-suite flag below close
+# that gap without needing a full (multi-minute) suite run to exercise it.
+_check_red_suite() {
+    local _status="${1}" _log="${2}"
+    [[ "${_status}" -eq 0 ]] && return 0
+    local _not_ok_count
+    _not_ok_count=$(grep -c '^not ok' "${_log}")
+    printf "\nERROR: bats suite failed (exit %d, %d test(s) not ok) — refusing to compute coverage over a red run\n" \
+        "${_status}" "${_not_ok_count}" >&2
+    printf "Failing tests:\n" >&2
+    grep '^not ok' "${_log}" >&2
+    return 1
+}
+
+if [[ "${1:-}" == "--check-red-suite" ]]; then
+    if [[ -z "${2:-}" || -z "${3:-}" ]]; then
+        printf "ERROR: --check-red-suite requires a status and a log file\n" >&2
+        exit 2
+    fi
+    if [[ ! -f "${3}" || ! -r "${3}" ]]; then
+        printf "ERROR: --check-red-suite: no such readable log file: %s\n" "${3}" >&2
+        exit 2
+    fi
+    _check_red_suite "${2}" "${3}"
+    exit $?
+fi
+
 mkdir -p "${OUTPUT_DIR}"
 rm -f "${TRACE_FILE}" "${TRACE_FIFO}"
 mkfifo "${TRACE_FIFO}"
@@ -639,15 +721,9 @@ wait "${grep_pid}" 2>/dev/null || true
 # published over a run that never finished green. See shell.md's "| tail -N
 # discards the failure" pitfall, which this file was violating while being the
 # instrument that measures the repo. Capture bats's own status directly, and
-# refuse to report coverage measured over a suite that did not pass.
-if [[ "${bats_status}" -ne 0 ]]; then
-    not_ok_count=$(grep -c '^not ok' "${bats_log}")
-    printf "\nERROR: bats suite failed (exit %d, %d test(s) not ok) — refusing to compute coverage over a red run\n" \
-        "${bats_status}" "${not_ok_count}" >&2
-    printf "Failing tests:\n" >&2
-    grep '^not ok' "${bats_log}" >&2
-    exit 1
-fi
+# refuse to report coverage measured over a suite that did not pass —
+# _check_red_suite (defined above, alongside --check-red-suite) is what does it.
+_check_red_suite "${bats_status}" "${bats_log}" || exit 1
 
 if [[ ! -f "${TRACE_FILE}" || ! -s "${TRACE_FILE}" ]]; then
     printf "ERROR: no trace data produced — check bash-tracer.sh\n" >&2
@@ -674,7 +750,7 @@ total_coverable=0
 all_disagreements=()
 
 for src_file in "${INCLUDE_FILES[@]}"; do
-    [[ ! -f "${src_file}" ]] && continue
+    _warn_if_source_missing "${src_file}" || continue
 
     if ! _report="$(_file_coverage_report "${src_file}" "${TRACE_FILE}")"; then
         printf "ERROR: cannot compute a trustworthy denominator for %s\n" "${src_file}" >&2
