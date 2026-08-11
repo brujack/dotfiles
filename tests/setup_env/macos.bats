@@ -7,6 +7,12 @@ setup() {
   load_mocks
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
   export MOCK_ID_U=1000
+  # tdd.md E2: redirect HOME so any test whose failure mode reaches a real
+  # install_homebrew (curl | bash, sudo xcodebuild) cannot touch the operator's
+  # real $HOME. Covers install_bats_macos's brew-absent test and the two
+  # pre-existing install_homebrew tests that exercised curl/xcode-select mocks
+  # against the real HOME until now.
+  export HOME="${BATS_TEST_TMPDIR}"
 }
 
 teardown() {
@@ -145,9 +151,25 @@ teardown() {
 
 # ── install_bats_macos ───────────────────────────────────────────────────────
 
+# Creates a directory containing a stub `bats` executable that exits 0, and
+# prints the directory's path. quiet_which's "already installed" precondition
+# must be asserted, not delegated to whatever real bats the host running the
+# suite happens to have on PATH (tdd.md pitfall A) — this makes it explicit.
+_stub_bats_present() {
+  local _dir
+  _dir="$(mktemp -d -p "${BATS_TEST_TMPDIR}")"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "${_dir}/bats"
+  chmod +x "${_dir}/bats"
+  printf '%s' "${_dir}"
+}
+
 @test "install_bats_macos: bats already installed - skips brew" {
-  unset MOCK_WHICH_MISSING # which finds bats normally
+  local _stub_dir _saved_path
+  _stub_dir="$(_stub_bats_present)"
+  _saved_path="${PATH}"
+  export PATH="${_stub_dir}:${PATH}"
   run install_bats_macos
+  export PATH="${_saved_path}"
   [ "$status" -eq 0 ]
   [[ "$output" == *"already installed"* ]]
   refute_grep "brew install bats-core" "${MOCK_CALLS_FILE}"
@@ -160,6 +182,13 @@ teardown() {
   grep -q "brew install bats-core" "${MOCK_CALLS_FILE}"
 }
 
+@test "install_bats_macos: brew install failure returns 1 (does not swallow the error)" {
+  export MOCK_WHICH_MISSING=bats
+  export MOCK_BREW_INSTALL_EXIT=1
+  run install_bats_macos
+  [ "$status" -eq 1 ]
+}
+
 @test "install_bats_macos: brew absent after install_homebrew stub - returns error" {
   local _mocks="${BATS_TEST_DIRNAME}/../mocks"
   local _no_brew="${BATS_TEST_TMPDIR}/no-brew-bin"
@@ -169,9 +198,7 @@ teardown() {
     cp "${_f}" "${_no_brew}/$(basename "${_f}")"
   done
   local _saved_path="${PATH}"
-  local _saved_home="${HOME}"
   export PATH="${_no_brew}:/usr/bin:/bin"
-  export HOME="${BATS_TEST_TMPDIR}"
   export MOCK_WHICH_MISSING=bats
   install_homebrew() { return 0; }
   export -f install_homebrew
@@ -179,18 +206,23 @@ teardown() {
   local _out
   _out="$(install_bats_macos 2>&1)" || _rc=$?
   export PATH="${_saved_path}"
-  export HOME="${_saved_home}"
   [ "${_rc}" -eq 1 ]
   [[ "${_out}" == *"Failed to install Homebrew. Cannot install bats."* ]]
 }
 
-@test "install_bats_macos: idempotent - calling twice after success returns 0 both times" {
-  unset MOCK_WHICH_MISSING # bats reads as already installed both times
+@test "install_bats_macos: idempotent - installs once, second call finds it already present" {
+  export MOCK_WHICH_MISSING=bats # first call: bats missing, installs
   run install_bats_macos
   [ "$status" -eq 0 ]
+  unset MOCK_WHICH_MISSING
+  local _stub_dir _saved_path
+  _stub_dir="$(_stub_bats_present)" # second call: bats now present, skips
+  _saved_path="${PATH}"
+  export PATH="${_stub_dir}:${PATH}"
   run install_bats_macos
+  export PATH="${_saved_path}"
   [ "$status" -eq 0 ]
-  refute_grep "brew install bats-core" "${MOCK_CALLS_FILE}"
+  [ "$(grep -c 'brew install bats-core' "${MOCK_CALLS_FILE}")" -eq 1 ]
 }
 
 # ── install_macos_casks ──────────────────────────────────────────────────────
