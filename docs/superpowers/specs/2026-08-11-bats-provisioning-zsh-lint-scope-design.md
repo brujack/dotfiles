@@ -544,6 +544,31 @@ compares the `Makefile`'s real `ZSH_FILES` against the tracked zsh set as a **se
 zsh file with an unmatched extension shows up as a diff line rather than as a number that
 still looks plausible.
 
+## Open field measurements — run on `office` before closing the PR
+
+Two facts this spec relies on cannot be measured from the machine it was written on. Both are
+a single read-only command on `office` (or `home-1`). **Neither blocks implementation** — §A
+and §B are independent of both — but §E's entire value rests on the first, and the second can
+falsify the stated cause outright.
+
+They are collected here deliberately. Until now one lived in a round-2 disposition and the
+other in a round-3 review section, which is precisely how a "before closing the PR" step gets
+skipped. Both were named by lens assumption-lines that were never executed.
+
+| Command                                                    | Result                            | What it means                                                                                                                                                                                                                                     |
+| ---------------------------------------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ls -l ~/.dotfiles-update.log`                             | mtime within weeks                | **§E works as designed.** The next `-t update` names the gap under `Missing (in Brewfile, not installed)`.                                                                                                                                        |
+|                                                            | absent, or months stale           | **§E is inert on the machine it was written for.** §A alone becomes a reprovision-time fix, and the reach mechanism has to change — realistically §C's error text plus running `-t setup_user` on those two Macs by hand as part of landing this. |
+| `brew list --formula \| wc -l`, then `brew list bats-core` | few formulae, `bats-core` absent  | Consistent with the stated cause: `brew bundle` never ran there.                                                                                                                                                                                  |
+|                                                            | 100+ formulae, `bats-core` absent | **Refutes the stated cause.** `brew bundle` did run and `bats-core` went missing some other way. §A still closes a real hole, but not the one that bit — and the real one is unidentified.                                                        |
+
+**Status: unmeasured, not measured-and-fine.** The cadence question was answered by the
+operator verbally ("those Macs do run `-t update` regularly"), which is what the round-3
+disposition records; it is weaker than an mtime, and "runs it regularly" and "ran it within
+the last month" are different facts. An attempt to reach the machine through a peer session
+on 2026-08-11 returned success without a reply — and that return does not distinguish a live
+session from a closed one, so it is not evidence of anything.
+
 ## Non-goals
 
 - **No `command -v` guards** for `bats` or `zsh`. Both gates stay fail-closed.
@@ -682,12 +707,10 @@ Disposition: **Addressed.** §C's remedy order inverted — one-shot first, `-t 
 second. The Context section's "commits and pushes blocked" corrected to pushes only, and a
 sixth verification row added pinning a bash-invalid injection to a non-zero result.
 
-The assumption itself is **not settled** and is carried forward as an open item: the
-`brew list --formula | wc -l` check has to run on the affected work Mac, which is not this
-machine. It does not block implementation — the `-t setup_user`-only hole is confirmed to
-exist by code inspection regardless of which machine hit it — but if that Mac turns out to
-carry a full Brewfile with `bats-core` missing, the stated cause is wrong and this spec
-fixes a real hole that is not the one that bit. Run it before closing the PR.
+The assumption itself is **not settled** and is carried forward — see
+**Open field measurements**, which now collects it alongside the cadence check rather than
+leaving it in a disposition where it would be missed. It does not block implementation: the
+`-t setup_user`-only hole is confirmed by code inspection regardless of which machine hit it.
 
 ### Risk
 
@@ -902,9 +925,11 @@ Assumption: that `-t update` actually runs on `office`/`home-1`. Round 2 made §
 mechanism reaching an already-broken machine, so if those Macs are not on the cadence, §E
 delivers nothing.
 
-Disposition: **Addressed, and the assumption settled.** The operator confirmed `office` and
-`home-1` do run `-t update` regularly, which is what makes §E a real reach mechanism — this
-is the fourth lens assumption-line pointing at that fact and the first time it was resolved.
+Disposition: **Addressed. The assumption is answered but not measured.** The operator
+confirmed `office` and `home-1` do run `-t update` regularly, which is what makes §E a real
+reach mechanism — the fourth lens assumption-line pointing at that fact, and the first time
+it got any answer at all. It remains a verbal confirmation rather than an mtime, so it is
+carried in **Open field measurements** with the command that would settle it.
 
 §E's guard now asserts against the **real** repository `Brewfile`, not a fixture, with the
 contradiction removed and the pre-existing duplicate named. The warn-and-return-0 branch is

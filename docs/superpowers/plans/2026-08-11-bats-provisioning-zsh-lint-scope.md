@@ -59,6 +59,16 @@ Run after Task 8, above and beyond the per-task gates:
 
 5. `./setup_env.sh -t doctor` — rc 0 on this machine, confirming no symlink or tool regression.
 
+**Before closing the PR, on `office` (or `home-1`) — not on this machine.** Two read-only
+commands settling facts §E depends on entirely; see the spec's **Open field measurements**
+section for what each result means. Neither blocks implementation, and neither is measured yet.
+
+```bash
+ls -l ~/.dotfiles-update.log          # recent mtime => §E reaches the machine; stale => §E is inert
+brew list --formula | wc -l           # 100+ formulae with bats-core absent refutes the stated cause
+brew list bats-core
+```
+
 ---
 
 ## Task 1: Add `install_bats_macos`
