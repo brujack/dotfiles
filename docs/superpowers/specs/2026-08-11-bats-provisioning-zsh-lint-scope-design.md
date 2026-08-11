@@ -69,9 +69,9 @@ in `config/profiles.sh`, capabilities `gui printing`) running `--brew-install` s
 git ls-files '*.sh' '*.bash' 'scripts/pre-push' 'scripts/commit-msg'
 ```
 
-That is 36 files, none of which is zsh. The eight files zsh actually interprets — `.zshrc`
-and `.config/.zshrc.d/*.zsh` — match none of those globs and are therefore not covered by
-`make lint` at all.
+That is 36 files, none of which is zsh. The **nine** files zsh actually interprets —
+`.zshrc`, the seven `.config/.zshrc.d/*.zsh`, and `bruce.zsh-theme` — match none of those
+globs and are therefore not covered by `make lint` at all.
 
 Measured on this commit: `bash -n` and `zsh -n` were run over all 36 files. Both exit 0 on
 every file; there is no divergence. The check contributes no findings today, and
@@ -79,16 +79,21 @@ structurally it can only ever fire on a construct that bash accepts and zsh reje
 file carrying `#!/usr/bin/env bash` that zsh never executes — a false positive by
 construction, not a defect discovered.
 
-Seven of the eight real zsh files are zsh-syntax-checked, by `tests/zshrc.d/unit.bats:15-45`
-(**seven** `zsh -n` tests, covering `1_init` through `7_final`). That check lives behind
-`bats`, not behind `make lint`.
+Seven of the nine are zsh-syntax-checked, by `tests/zshrc.d/unit.bats:15-45` (**seven**
+`zsh -n` tests, covering `1_init` through `7_final`). That check lives behind `bats`, not
+behind `make lint`.
 
-The eighth — the root `.zshrc` — is checked by **nothing**. `grep -rn 'zsh -n' tests/
-.github/ Makefile` returns no hit against it: it matches no `*.sh`/`*.bash` glob, has no
-bats test, and the CI `find` selector misses it too. An earlier draft of this section said
-"eight tests"; the real count is seven, and the discrepancy is not cosmetic — it means
-change B is not the near-duplication it first appeared to be. For `.zshrc`, `make lint`
-becomes the only zsh syntax coverage that exists.
+**The other two — the root `.zshrc` and `bruce.zsh-theme` — are checked by nothing.**
+`grep -rn 'zsh -n' tests/ .github/ Makefile` returns no hit against either: neither matches
+a `*.sh`/`*.bash` glob, neither has a bats test, and the CI `find` selector misses both.
+`bruce.zsh-theme` is symlinked live into `~/.oh-my-zsh/custom/themes/` by
+`lib/helpers.sh:678`.
+
+Two earlier drafts got this count wrong in two different ways — first claiming eight
+existing `zsh -n` tests when there are seven, then claiming eight zsh files when there are
+nine. Neither error is cosmetic. Together they mean change B is not the near-duplication it
+first appeared to be: for two of the nine files, this is the first zsh syntax coverage that
+has ever existed.
 
 One thing pulls the other way and must be handled in the same change:
 `tests/setup_env/workflows.bats:283` asserts `zsh -n "${REPO_ROOT}/setup_env.sh"` — the
@@ -116,7 +121,7 @@ Two changes, neither of which weakens a gate.
 
 1. **Give macOS the same unconditional bats provisioning Linux already has.** The path that
    installs the gate becomes the path that installs what the gate needs.
-2. **Point `zsh -n` at the files zsh interprets** — the eight zsh files — and remove it from
+2. **Point `zsh -n` at the files zsh interprets** — the nine zsh files — and remove it from
    the 36 bash files.
 
 No `command -v` guards are added. `make lint` and `make test` stay fail-closed. Guarding
@@ -134,13 +139,13 @@ nothing measurable: macOS ships `/bin/zsh`, and Ubuntu machines get zsh from bot
 `lib/helpers.sh:254` delegating to `install_zsh_macos` / `install_zsh_linux`. The bats
 change mirrors it exactly rather than inventing a second pattern.
 
-| File                     | Change                                                                                                                                                                                                                                          |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `lib/linux_shared.sh:23` | Rename `install_bats` → `install_bats_linux`, for naming parity with `install_zsh_linux`. Body unchanged.                                                                                                                                       |
-| `lib/macos.sh`           | New `install_bats_macos`, modelled on `install_zsh_macos` (`:115`): early return when `quiet_which bats` succeeds; install Homebrew if absent; `brew_install_formula bats-core`; `log_error` and `return 1` when Homebrew is still unavailable. |
-| `lib/helpers.sh`         | New `install_bats()` dispatcher placed immediately after `install_zsh()` (ends `:260`), with the same `MACOS` / `LINUX` branch structure.                                                                                                       |
-| `lib/workflows.sh`       | Delete the `if [[ -n ${LINUX} ]]` block at `:139-141`. Add `install_bats \|\| return 1` inside the existing `if [[ ${MACOS} \|\| ${LINUX} ]]` block at `:136`, beside `install_zsh`.                                                            |
-| `lib/workflows.sh`       | New `install_bats` step in `run_update`, with a matching `"bats"` entry in `_UPDATE_SECTION_ORDER` (`lib/update_summary.sh`). See below — this is what makes the fix reach machines that are already broken.                                    |
+| File                       | Change                                                                                                                                                                                                                                          |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lib/linux_shared.sh:23`   | Rename `install_bats` → `install_bats_linux`, for naming parity with `install_zsh_linux`. Body unchanged.                                                                                                                                       |
+| `lib/macos.sh`             | New `install_bats_macos`, modelled on `install_zsh_macos` (`:115`): early return when `quiet_which bats` succeeds; install Homebrew if absent; `brew_install_formula bats-core`; `log_error` and `return 1` when Homebrew is still unavailable. |
+| `lib/helpers.sh`           | New `install_bats()` dispatcher placed immediately after `install_zsh()` (ends `:260`), with the same `MACOS` / `LINUX` branch structure.                                                                                                       |
+| `lib/workflows.sh:135-137` | Change that block's guard **in place**, from `if [[ -n ${LINUX} ]]` to `if [[ ${MACOS} \|\| ${LINUX} ]]`. It keeps its own block. Do **not** fold `install_bats` into the `install_zsh` block above it.                                         |
+| `Brewfile:15`              | Remove the `# [HAS_DEVTOOLS]` tag from `brew "bats-core"`. See §E — this is what makes the gap visible on machines already in the broken state.                                                                                                 |
 
 The rename is a contract change for existing tests, not only for production code. `install_bats`
 survives as a name but now means "dispatch by platform" rather than "apt-get install bats",
@@ -150,40 +155,94 @@ so any existing test invoking `install_bats` and asserting apt behavior must be 
 dispatcher or the Linux arm. This is the same discipline `shell.md`'s contract-widening entry
 requires, applied to a rename rather than a return value.
 
-**The call-site guard stays `MACOS || LINUX` — it is deliberately not narrowed to `UBUNTU`.**
-An earlier draft narrowed it, on the reasoning that `install_bats_linux` invokes `apt-get`
-and so cannot deliver on non-Ubuntu Linux anyway. The risk lens established that this is the
-wrong direction: `readonly UBUNTU=1` is set only when `/etc/os-release` `NAME` is exactly
-`"Ubuntu"` (`lib/detect_env.sh:10-11`), so on any other Linux the narrowed guard **skips the
-call silently** — hooks still install at `lib/workflows.sh:206`, bats is absent, and nothing
-reports it. That is precisely the failure this spec exists to fix, reproduced on the other
-platform. The unnarrowed `LINUX` guard instead lets `apt-get` fail loudly and `|| return 1`
-abort the run, which is the correct direction under `USER.md`'s "fail closed on unknown".
+#### `install_bats` keeps its own block, and the guard question has a third answer
 
-The fleet is entirely Ubuntu 24.04, so neither choice changes observable behavior today. The
-argument is about which way the latent case fails, not about which is currently exercised.
+Two earlier drafts got this wrong in opposite directions, so the reasoning is recorded in
+full.
 
-#### The `run_update` step, and why it is not optional
+The first narrowed the guard to `UBUNTU` on the grounds that `install_bats_linux` shells out
+to `apt-get`. The risk lens objected: `readonly UBUNTU=1` is set only when `/etc/os-release`
+`NAME` is exactly `"Ubuntu"` (`lib/detect_env.sh:10-11`), so on any other Linux a narrowed
+guard **skips the call silently** while hooks still install at `lib/workflows.sh:206` — the
+same failure this spec exists to fix, reproduced on the other platform.
 
-`install_bats` is reachable only from `run_setup_user`. `-t update` — the command the fleet
-actually runs on cadence — never calls it. Without a second call site, change A is inert on
-every machine already in the broken state: the work Mac that motivated this spec stays broken
-after the PR merges, and change C's one-shot fallback unblocks the operator without ever
-closing the hole. `-t setup_user` is a provisioning-time command here, not a cadence one.
+The second draft therefore un-narrowed it and claimed the `LINUX` guard "lets `apt-get` fail
+loudly and `|| return 1` abort the run, which is the correct direction." **That is wrong
+too**, and the round-2 risk lens showed why: the call site sits at `:135-137`, _ahead of_
+`clone_or_update_dotfiles`, `setup_dotfile_symlinks`, and `install_git_hooks_all_repos`
+(`:206`). Aborting there does not leave a provisioned machine with a loud bats error — it
+leaves an **unprovisioned** machine with no symlinks and no hooks. The narrowed form's
+failure (hooks present, bats absent, pushes blocked) is recoverable in thirty seconds; the
+un-narrowed form's is not. The real trade is which half of the machine you lose, not
+fail-open versus fail-closed, and the second draft presented a weak argument as settled.
 
-So `run_update` gains an `install_bats` step. Two couplings from `CLAUDE.md` apply and are
-easy to get wrong:
+Neither is exercised: every Linux machine in the fleet is Ubuntu 24.04.
 
-- The step must be recorded with `_update_record_start`/`_update_record_end` **and** have a
-  matching entry added to `readonly _UPDATE_SECTION_ORDER` in `lib/update_summary.sh`.
-  Adding the former without the latter means the section is tracked internally and never
-  printed, with no error — the same trap the `git-hooks` and `git-repos` sections document.
-- `install_bats` returns 0 or 1, not a tri-state, so the `run_update` call site needs no
-  rc-mapping of the kind `install_git_hooks_all_repos` requires. Stated explicitly because
-  the adjacent sections in that function do map, and copying their shape would be wrong here.
+The resolution takes neither horn. The **call site** keeps `MACOS || LINUX`, matching the
+dispatcher's own branch structure, and `install_bats_linux` gains a distro check at its top:
+when `UBUNTU` is unset it emits `log_warn` naming the manual remedy and returns **0**. That
+is a _loud skip_ — no silent gap, no unprovisioned machine, no abort. The fleet-wide silence
+that motivated this whole spec came from a missing call, not from a call that warned.
 
-The `quiet_which bats` early return makes the update-path call a no-op on every machine that
-already has bats, which is all of them except the affected class.
+Returning 0 for "did not install" is a deliberate, bounded exception to `USER.md`'s
+fail-closed default: the condition is not unknown, it is precisely identified and reported,
+and the alternative costs an unprovisioned machine on a path no fleet member takes.
+
+#### Why there is no `run_update` step
+
+An earlier draft added `install_bats` to `run_update`, reasoning that `-t setup_user` is
+provisioning-time and so change A would never reach a machine already broken. All three
+round-2 lenses opposed it, and the objections hold:
+
+- **It inverts the contract every comparable section keeps.** `lib/workflows.sh:565-590` —
+  tfenv, oh-my-zsh, tpm — all _skip_ what is absent (`_update_skip "<name>" "not installed"`).
+  A bats section would be the only one that installs something absent, deviating exactly in
+  the case where it does anything at all.
+- **No `UPDATE_*` flag group fits.** Every section at `:323-480` is gated
+  `[[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_X:-} ]]`. `UPDATE_BREW` is wrong on Linux and
+  `UPDATE_PKGS` is wrong on macOS, so an unguarded step means `-t update --claude-only` — a
+  deliberately narrow, fast flag — shells out to Homebrew or `sudo apt-get`.
+- **The failure disposition is hazardous.** `setup_env.sh:86` runs `run_update` under
+  `_run_or_exit`. A copied `|| return 1` aborts the whole update before pip, gems, git-repos
+  and the hooks sweep; on macOS `install_bats_macos` can reach `install_homebrew`, which runs
+  `xcode-select --install` and `sudo xcodebuild -license accept` on the cadence path.
+- **It may not reach the target anyway.** A machine provisioned with `-t setup_user` only is
+  by construction one nobody ran the fuller commands on; assuming it is on the update cadence
+  is the same optimism that produced the hole.
+
+§E does the reaching instead, at a fraction of the risk.
+
+### E. Untag `bats-core` in the Brewfile
+
+`run_update` already calls `_update_check_brewfile_drift` (`lib/workflows.sh:635`), which
+reports `Missing (in Brewfile, not installed)` into the printed summary and
+`~/.dotfiles-update.log`. It is a real consumer, already wired to the cadence command, and it
+is silent about `bats-core` for exactly one reason:
+
+```
+lib/update_summary.sh   _brewfile_parse_section:
+  _cap=$(_brewfile_extract_cap "${_line}")
+  if [[ -n "${_cap}" ]] && [[ -z "${!_cap:-}" ]]; then continue; fi
+```
+
+`Brewfile:15` carries `# [HAS_DEVTOOLS]`, and `office`/`home-1` are `mac_mini`
+(`config/profiles.sh`), whose capabilities are `gui printing`. So the entry is dropped from
+the drift comparison entirely on precisely the machines that lack bats, and can never appear
+under "Missing".
+
+Removing the tag is one line, uses a consumer that already exists, and respects the
+report-don't-install contract §A's rejected `run_update` step violated.
+
+**The tag is also simply wrong on its own terms.** `run_setup_user` installs git hooks
+unconditionally (`lib/workflows.sh:206`), so a `mac_mini` machine is expected to run
+`make test` on every push — which means it needs bats, which means `bats-core` is not a
+devtools-optional formula. An earlier draft of this spec declared the tag "not implicated"
+because `brew bundle` ignores it. That is true for _installing_ and irrelevant for
+_detecting_, and detection is the half that reaches an already-broken machine.
+
+This does not install anything. It makes the next `-t update` on every Mac name the gap, with
+change C's error text naming the fix. Provisioning is §A's job; §E's job is that the gap
+stops being invisible.
 
 ### B. `zsh -n` scope
 
@@ -194,8 +253,22 @@ parse-time assignment):
 
 ```make
 ZSH_FILES := $(shell env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
-                 git ls-files '*.zsh' '.zshrc')
+                 git ls-files '*.zsh' '*.zsh-theme' '.zshrc')
 ```
+
+**`'*.zsh-theme'` is in that pathspec because leaving it out reproduced this spec's own
+subject.** Two drafts used `'*.zsh' '.zshrc'` and reported "8 files" as a measured fact.
+There are **nine** tracked zsh files: `bruce.zsh-theme` matches neither pattern, and
+`lib/helpers.sh:678` symlinks it live into `~/.oh-my-zsh/custom/themes/`, where zsh
+interprets it. A spec whose Context section is about a syntax check aimed at the wrong files
+aimed its own replacement pathspec at the wrong files, and the verification row written to
+catch that measured the pathspec against its own output — so it returned 8 and read as
+confirmation. This is verbatim `shell.md`'s pathspec pitfall ("assert the derived count
+equals the tracked count"), which is cited elsewhere in this very document.
+
+Severity is low in itself — the theme passes `zsh -n` today and `ZSH_THEME="bruce"` is
+commented out at `.config/.zshrc.d/3_oh_my_zsh.zsh:7` — but the omission is the same defect
+class the change exists to remove.
 
 `zsh -n` moves out of the `SHELL_FILES` loop (`Makefile:46`) into its own loop over
 `ZSH_FILES`. The empty-list refusal at `:38-42` becomes a refusal when _either_ list is
@@ -204,14 +277,21 @@ empty, checked independently so the message names which one: both lists are
 or a tree exported without `.git`), and a lint target that reports a pass having inspected
 nothing is the failure that guard exists to prevent.
 
+The `Makefile` also gains a one-line introspection target so tests can read the real
+variables rather than re-deriving them:
+
+```make
+print-%: ; @printf '%s\n' "$($*)"
+```
+
 In `.github/workflows/ci.yml`, the zsh step at `:56-61` changes its selector from
-`find . -name '*.sh'` to `git ls-files '*.zsh' '.zshrc'` — the same derivation the
-`Makefile` uses, not a literal list of the eight paths, so CI and `make lint` cannot drift
-apart as zsh files are added or removed. The `env -u` prefix is unnecessary there: the CI
-job is a fresh checkout, not a hook invocation, so no `GIT_DIR` is inherited. The bash step
-at `:49-54` is left alone: its `find`-versus-`git ls-files` inconsistency with the
-`Makefile` is pre-existing and out of scope here, recorded so the omission reads as a
-decision rather than an oversight.
+`find . -name '*.sh'` to `git ls-files '*.zsh' '*.zsh-theme' '.zshrc'` — the same derivation
+the `Makefile` uses, not a literal list of paths, so CI and `make lint` cannot drift apart as
+zsh files are added or removed. The `env -u` prefix is unnecessary there: the CI job is a
+fresh checkout, not a hook invocation, so no `GIT_DIR` is inherited. The bash step at
+`:49-54` is left alone: its `find`-versus-`git ls-files` inconsistency with the `Makefile` is
+pre-existing and out of scope here, recorded so the omission reads as a decision rather than
+an oversight.
 
 ### C. Error text
 
@@ -277,32 +357,43 @@ New coverage, in the existing suites (`tests/setup_env/install_functions.bats`,
 - `run_setup_user`: calls `install_bats` on macOS, and aborts when it fails. This is the
   assertion whose absence let the hole ship — the Linux path was covered, the macOS path
   did not exist to cover.
-- `run_update`: calls `install_bats`, records the section, and the section appears in the
-  printed summary. The last clause is the one that matters — a `_update_record_*` pair
-  without its `_UPDATE_SECTION_ORDER` entry tracks silently and prints nothing, so asserting
-  only that the call happened would pass over exactly that bug.
+- `_update_check_brewfile_drift`: with `HAS_DEVTOOLS` unset, `bats-core` **appears** in the
+  parsed Brewfile formula set. This is §E's whole mechanism, and it is the assertion that
+  fails if anyone re-adds the tag. Drive it through the existing `_OVERRIDE_BREWFILE_PATH`
+  seam (`lib/update_summary.sh:617`) with a fixture Brewfile, so the test does not depend on
+  the real file's contents.
 - Scope, in a new `tests/scripts/makefile_lint_scope.bats` beside the existing
-  `tests/scripts/pre_push.bats`: **run `make lint` and assert on its output** — a `zsh` line
-  for `.zshrc`, and **zero** `zsh` lines whose path matches `*.sh`, `*.bash`, or a hook.
+  `tests/scripts/pre_push.bats`, asserting against `make print-ZSH_FILES` and
+  `make print-SHELL_FILES` — the `Makefile`'s **own** variables:
+  - `ZSH_FILES` equals the tracked zsh set, compared as a set against
+    `git ls-files '*.zsh' '*.zsh-theme' '.zshrc'` — nine paths today, named individually
+    rather than counted, so adding a zsh file with an unmatched extension turns it red
+    instead of silently passing at a new cardinality.
+  - `SHELL_FILES` contains no path from `ZSH_FILES`, and `ZSH_FILES` no path from
+    `SHELL_FILES`.
+  - Both non-empty.
 
-  An earlier draft specified this test as "`ZSH_FILES` non-empty, `SHELL_FILES` non-empty,
-  and the two disjoint," with both lists re-derived from the same `git ls-files` pathspecs
-  the `Makefile` uses. Goal-fit and Risk independently established that such a test cannot
-  fail. Disjointness is a tautology of the pathspec sets — no filename matches both `'*.sh'`
-  and `'*.zsh'`, so `comm -12` over them returns nothing regardless of what the `Makefile`
-  says. Non-emptiness is preempted by `test: lint`, which exits at the `Makefile`'s own
-  empty-list refusal before bats ever runs. And because the test re-derived the pathspecs
-  itself rather than reading `ZSH_FILES`, the single drift it could plausibly have caught —
-  someone editing the `Makefile` pathspec — was invisible to it.
+  Two earlier designs for this test were rejected, both for being unfailable:
 
-  Asserting on `make lint`'s output fixes all three: it reads the `Makefile`'s real
-  variables, it pins the specific file `.zshrc` rather than a cardinality, and it goes red
-  if the scope is ever narrowed back. Run it with the mocks directory stripped from `PATH`
-  (per `shell.md`), since a `tests/mocks/git` stub would otherwise empty both lists and make
-  every assertion vacuously true.
+  1. _Re-derive both pathspecs in the test and assert disjointness._ Disjointness is a
+     tautology of the pathspec sets — no filename matches both `'*.sh'` and `'*.zsh'` — so
+     `comm -12` returns nothing regardless of what the `Makefile` says. And re-deriving meant
+     the one drift it could catch, a `Makefile` pathspec edit, was invisible to it.
+  2. _Shell out to `make lint` and assert on its output._ Measured: `make lint` takes
+     **14.7s**, and `test: lint` already runs it, so every `make test` — every pre-push, on
+     seven machines — would pay it twice. It also goes red for any lint finding anywhere in
+     the repo, so a scope test would fail for scope-unrelated reasons. And a loose grep for
+     `zsh` near `.zshrc` is satisfied by a `zsh  FAIL .zshrc` line, so the test would pass on
+     a machine where zsh is broken.
 
-  The behavioral half for the seven `.zshrc.d` files already exists at
-  `tests/zshrc.d/unit.bats:15-45` and is retained.
+  `make print-%` reads the real variables, costs milliseconds, is immune to unrelated lint
+  findings, and cannot be satisfied by a FAIL line. Run it with the mocks directory stripped
+  from `PATH` (per `shell.md`), since a `tests/mocks/git` stub would otherwise empty both
+  lists and make every assertion vacuously true.
+
+- Behavioral zsh coverage for the two files no suite currently reaches: `zsh -n` on `.zshrc`
+  and on `bruce.zsh-theme`, added to `tests/zshrc.d/unit.bats` beside the seven existing
+  `.zshrc.d` tests at `:15-45`. Cheap, direct, and independent of `make lint`.
 
 Mocks follow the existing `MOCK_*` conventions; no test may install a real package or reach
 a real Homebrew. Per `tdd.md` E2, each test's _failing_ branch must be inert — a test for
@@ -317,21 +408,44 @@ change and was therefore run now, per `behavior.md`'s rule that a verification c
 can be executed at spec time must be executed rather than predicted — its result is
 recorded, not guessed.
 
-| Check                                                                               | Expectation                                                                                       |
-| ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `make lint`                                                                         | Exit 0. Output carries eight `zsh   OK` lines, none of them a `.sh`, `.bash`, or hook path.       |
-| Inject a zsh-invalid construct into `.config/.zshrc.d/7_final.zsh`, run `make lint` | Non-zero exit naming that file. Revert after.                                                     |
-| Inject a bash construct zsh rejects into a tracked `.sh` file, run `make lint`      | Exit 0 — the false-positive surface is gone. Revert after.                                        |
-| **Inject a bash-INVALID construct into a tracked `.sh` file, run `make lint`**      | **Non-zero exit naming that file. Proves the surviving `bash -n` loop still inspects something.** |
-| `make test`                                                                         | Green. Test count above the CI floor of 840 (1274 at 2026-08-10, expected to rise).               |
-| `git ls-files '*.zsh' '.zshrc' \| wc -l`                                            | **8 — measured 2026-08-11, not predicted.**                                                       |
+**Injection procedure, for rows 2-4.** Inject into **`bruce.zsh-theme`** for the zsh rows,
+not into `.config/.zshrc.d/*.zsh`. Those files are symlinked live into `$HOME`
+(`~/.config/.zshrc.d` → the repo), so a deliberate syntax error there breaks every new
+interactive shell on the machine the instant it is written. `bruce.zsh-theme` is symlinked
+too, but is **not sourced** — `ZSH_THEME="bruce"` is commented out at
+`.config/.zshrc.d/3_oh_my_zsh.zsh:7` — so a broken copy is inert. Restore with an explicit
+`git checkout -- <path>` after each row; "revert after" as a bare instruction is how a
+half-finished verification leaves a broken shell config behind. Verify the tree is clean
+(`git status --short`) before moving to the next row.
 
-Rows 2-4 are the ones that distinguish this change from a no-op, and row 4 exists because
-rows 2-3 alone cannot. Row 3 passes identically whether `zsh -n` was correctly removed from
-the `SHELL_FILES` loop **or** the whole loop was broken and `bash -n` now inspects zero
-files — an all-PASS suite cannot tell a correct measurement from an absent one. Row 4 pins
-the surviving half of `Makefile:44-48` to a specific non-zero result. Added after the lens
-review counted the verdicts and found five of five rows unable to fail in that direction.
+| Check                                                                                                        | Expectation                                                                                                     |
+| ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `make lint`                                                                                                  | Exit 0. Output carries nine `zsh   OK` lines, none of them a `.sh`, `.bash`, or hook path.                      |
+| Inject a zsh-invalid construct into `bruce.zsh-theme`, run `make lint`                                       | Non-zero exit, and a `zsh  FAIL bruce.zsh-theme` line in the output. `git checkout -- bruce.zsh-theme`.         |
+| Inject a bash construct zsh rejects into a tracked `.sh` file                                                | `make lint` exit 0 — the false-positive surface is gone. `git checkout -- <path>`.                              |
+| **Inject a bash-INVALID construct into a tracked `.sh` file**                                                | **A `bash FAIL <path>` line in `make lint`'s output.** Not the exit code — see below. `git checkout -- <path>`. |
+| `make test`                                                                                                  | Green. Test count above the CI floor of 840 (1274 at 2026-08-10, expected to rise).                             |
+| `diff <(make print-ZSH_FILES \| tr ' ' '\n' \| sort) <(git ls-files '*.zsh' '*.zsh-theme' '.zshrc' \| sort)` | Empty. **Replaces a row that counted `git ls-files '*.zsh' '.zshrc'` and asserted 8 — see below.**              |
+
+Rows 2-4 distinguish this change from a no-op; row 4 exists because rows 2-3 alone cannot.
+Row 3 passes identically whether `zsh -n` was correctly removed from the `SHELL_FILES` loop
+**or** the whole loop was broken and `bash -n` now inspects zero files — an all-PASS suite
+cannot tell a correct measurement from an absent one.
+
+**Row 4 asserts on the output line, not on the exit code, and that distinction is the second
+defect a correction introduced in this review.** Round 1 counted the verdicts, found every
+row unable to fail in that direction, and added row 4 pinning "non-zero exit". Round 2
+showed that version was equally unfailable: a bash-syntax-invalid `.sh` file also fails
+`shellcheck`, and `Makefile:44-48` sets `failed=1` and continues, so `make lint` exits
+non-zero whether or not the `bash -n` loop still runs. Only the `bash FAIL <path>` token
+proves that specific loop inspected that specific file.
+
+The last row replaces one that read `git ls-files '*.zsh' '.zshrc' | wc -l` → 8 and was
+labelled _measured, not predicted_. It measured a pathspec against its own output, so it
+could not detect the pathspec being wrong — which it was, by one file. The replacement
+compares the `Makefile`'s real `ZSH_FILES` against the tracked zsh set as a **set**, so a
+zsh file with an unmatched extension shows up as a diff line rather than as a number that
+still looks plausible.
 
 ## Non-goals
 
@@ -340,10 +454,12 @@ review counted the verdicts and found five of five rows unable to fail in that d
   separate, pre-existing inconsistency.
 - **The partial overlap** between `make lint`'s zsh check and `tests/zshrc.d/unit.bats` is
   retained deliberately: they fire at different gates (pre-commit versus the suite), and the
-  cost of running seven `zsh -n` invocations twice is negligible. An earlier draft called
-  this "duplication" outright, which was wrong for the eighth file — `.zshrc` has no `zsh -n`
-  anywhere today, so `make lint` becomes its only coverage rather than a second copy of
-  existing coverage.
+  cost of running nine `zsh -n` invocations twice is negligible. An earlier draft called this
+  "duplication" outright, which was wrong for two of the nine — `.zshrc` and
+  `bruce.zsh-theme` have no `zsh -n` anywhere today, so this change is their first coverage
+  rather than a second copy of existing coverage.
+- **No `run_update` step.** Provisioning is §A's job and visibility is §E's; installing on
+  the cadence path was considered, specified, and removed. Reasoning in §A.
 - **`shellcheck` coverage of the zsh files** is not added. ShellCheck cannot lint zsh; per
   `shell.md`, zsh gets `zsh -n` and human review, and nothing else.
 
@@ -353,6 +469,15 @@ review counted the verdicts and found five of five rows unable to fail in that d
   `install_zsh_macos` handles it — attempt `install_homebrew`, and fail explicitly with
   `log_error` plus `return 1` if it is still unavailable. The `|| return 1` at the call site
   then aborts `run_setup_user` rather than continuing with a half-configured machine.
+
+  Note what that abort costs, since the call sits at `:135-137`, ahead of
+  `clone_or_update_dotfiles`, `setup_dotfile_symlinks` and `install_git_hooks_all_repos`
+  (`:206`): the machine is left unprovisioned, not merely bats-less. That is acceptable
+  **only** because `install_homebrew` failing means the machine cannot be provisioned anyway
+  — `install_git` (`:126`) and `install_zsh` (`:132`) already abort on the same condition,
+  ahead of this one. It would not be acceptable for a condition the machine could recover
+  from, which is exactly why the non-Ubuntu Linux case warns and returns 0 instead.
+
 - **A machine already carrying bats from `brew bundle`.** The `quiet_which bats` early
   return makes the new call a no-op there, matching `install_bats_linux`'s existing guard.
 - **`make lint` still hard-requires zsh** after this change, now for a justified reason. If
@@ -424,13 +549,14 @@ fallback unblocks the operator without ever closing the hole. Settled by one que
 time? If the latter, `install_bats` needs a `run_update` section with its
 `_UPDATE_SECTION_ORDER` entry.
 
-Disposition: **Addressed.** The assumption was put to the operator and settled against it:
-`-t setup_user` is a provisioning-time command on this fleet, not a cadence one. §A gains an
-`install_bats` step in `run_update` with its `_UPDATE_SECTION_ORDER` entry, so the fix
-reaches machines already in the broken state. The unfailable
-`tests/scripts/makefile_lint_scope.bats` was replaced with a `make lint`-output assertion,
-the 7-vs-8 test count corrected, and the Non-goals "duplication" framing rewritten — `.zshrc`
-has no `zsh -n` anywhere today, so change B closes a gap rather than duplicating.
+Disposition: **Addressed — then superseded in round 2. See Round 2 › Goal-Fit.** The
+assumption was put to the operator and settled against it: `-t setup_user` is a
+provisioning-time command on this fleet, not a cadence one. §A therefore gained an
+`install_bats` step in `run_update`. All three round-2 lenses opposed that step, the operator
+chose §E's `Brewfile` untag instead, and the step was removed. The remaining round-1 fixes
+stand: the unfailable `tests/scripts/makefile_lint_scope.bats` was replaced (twice — the
+round-1 replacement was itself rejected in round 2), the 7-vs-8 test count corrected, and the
+Non-goals "duplication" framing rewritten.
 
 ### Ergonomics
 
@@ -507,3 +633,126 @@ verification is not a lens to discount.
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger. No arm-versus-arm design,
 no judge component, and the acceptance criteria are exit codes and file counts rather than
 ambiguous ones.
+
+---
+
+## Multi-Lens Review — Round 2
+
+Reviewed at commit: `929694d` (the round-1 disposition commit)
+
+All three lenses re-run, not just the ones whose findings prompted revision, because round 1
+changed design substance: a guard was un-narrowed, a `run_update` step was added, a test was
+replaced, and an existing test was scheduled for retirement. Each of those is new design.
+Each lens was told the round-1 review section is history rather than settled findings.
+
+That was the right call. **Round 2 found defects in round 1's corrections — twice — and each
+was caught by a lens other than the one whose finding prompted the correction.**
+
+### Goal-Fit
+
+Finding: The spec built a new provisioning path for a formula the repo already tracks, while
+dismissing the one thing that silences the existing cadence-time consumer. `run_update`
+already calls `_update_check_brewfile_drift` (`lib/workflows.sh:635`), which reports
+`Missing (in Brewfile, not installed)` into the summary and `~/.dotfiles-update.log`; it is
+silent about `bats-core` only because `Brewfile:15`'s `# [HAS_DEVTOOLS]` tag makes
+`_brewfile_parse_section` skip the entry on `mac_mini` machines. The spec declared the tag
+"not implicated" because `brew bundle` ignores it — true for installing, irrelevant for
+detecting.
+
+Also found a defect the round-1 revision introduced: the Implementation table instructed
+adding `install_bats` to "the existing `if [[ ${MACOS} || ${LINUX} ]]` block at `:136`". No
+such block exists — `lib/workflows.sh:131` is `if [[ ${MACOS} || ${UBUNTU} ]]`. Followed
+literally it reinstates the exact `UBUNTU` narrowing the same revision was written to forbid.
+Line numbers were off by four throughout the table.
+
+Assumption: that `-t update` actually runs on the machine class that lacks bats. A machine
+provisioned with `-t setup_user` only is by construction one nobody ran the fuller commands
+on. Settled on that Mac with `ls -l ~/.dotfiles-update.log`.
+
+Disposition: **Addressed.** The `run_update` step is removed entirely and replaced by §E,
+which untags `Brewfile:15`. The Implementation table now specifies that `install_bats` keeps
+its **own** block with the guard changed in place at `:135-137`, and states explicitly that
+it must not be folded into the `install_zsh` block — the underlying error was not the guard
+expression but the assumption that two functions with different platform coverage could share
+one block.
+
+### Ergonomics
+
+Finding: The `run_update` step inverts the contract every comparable section keeps —
+`lib/workflows.sh:565-590` shows tfenv, oh-my-zsh and tpm all `_update_skip` what is absent,
+so a bats section would be the only one installing something absent. It also left two
+operator-facing parameters unspecified: no `UPDATE_*` flag group fits (`UPDATE_BREW` is wrong
+on Linux, `UPDATE_PKGS` wrong on macOS, so unguarded it fires under `--claude-only`), and no
+failure disposition, where the obvious copied `|| return 1` aborts the whole cadence run
+because `setup_env.sh:86` wraps `run_update` in `_run_or_exit`.
+
+Second finding, and the sharper one: **verification row 4 — added in round 1 specifically so
+the suite could fail if the measurement vanished — cannot fail in that direction either.** A
+bash-syntax-invalid `.sh` file also fails `shellcheck`, and `Makefile:44-48` sets `failed=1`
+and continues, so `make lint` exits non-zero whether or not the `bash -n` loop survived.
+
+Third: verification rows 2-4 instruct injecting syntax errors into `.config/.zshrc.d/*.zsh`,
+which are live symlinks into `$HOME`, with "Revert after" as the entire restore procedure.
+
+Assumption: same as goal-fit — whether `-t update` reaches the affected Mac.
+
+Disposition: **Addressed.** `run_update` step removed, so the contract, flag-group and
+failure-disposition objections are moot. Row 4 now asserts on the `bash FAIL <path>` output
+token rather than the exit code. The injection procedure now targets `bruce.zsh-theme` — the
+one zsh file that is symlinked but not sourced, since `ZSH_THEME="bruce"` is commented at
+`3_oh_my_zsh.zsh:7` — and names an explicit `git checkout -- <path>` per row with a
+`git status --short` check between rows.
+
+### Risk
+
+Finding: Three items, all upheld.
+
+**Row 6 was a tautology.** `git ls-files '*.zsh' '.zshrc' | wc -l` → 8 measures the pathspec
+against its own output. `git ls-files | grep -i zsh` returns **nine** shell files:
+`bruce.zsh-theme` matches neither pattern and is symlinked live into
+`~/.oh-my-zsh/custom/themes/` by `lib/helpers.sh:678`. This is `shell.md`'s own pathspec
+pitfall, reproduced inside the only row the spec labelled _measured, not predicted_, in a
+document whose subject is a check aimed at the wrong files.
+
+**The round-1 `LINUX`-not-`UBUNTU` justification does not survive.** The claim was that the
+un-narrowed guard "lets `apt-get` fail loudly and abort, which is the correct direction." But
+the call site precedes `setup_dotfile_symlinks` and `install_git_hooks_all_repos` (`:206`),
+so aborting yields an **unprovisioned** machine, not a provisioned one with a loud error. The
+narrowed form's failure is recoverable in thirty seconds. The real trade is which half of the
+machine you lose.
+
+**The replaced scope test is unstable.** Measured `make lint` at 14.7s; `test: lint` already
+runs it, so a bats test shelling out to it pays that twice on every pre-push across seven
+machines, and goes red for any lint finding anywhere in the repo. A loose grep for `zsh` near
+`.zshrc` is also satisfied by a `zsh  FAIL .zshrc` line.
+
+Confirmed as safe: retiring `tests/setup_env/workflows.bats:282-284` loses no real coverage —
+`setup_env.sh` carries a bash shebang, nothing in `.zshrc`/`.zshrc.d` sources it, and both
+`bash -n` at `:278` and `make lint` survive.
+
+Assumption: whether `-t update` reaches the affected machine class — the third independent
+statement of the same question.
+
+Disposition: **Addressed.** `ZSH_FILES` now includes `'*.zsh-theme'` (nine files), and the
+verification row compares the `Makefile`'s real `ZSH_FILES` against the tracked zsh set as a
+**set** rather than asserting a count. The guard rationale is rewritten to take neither horn:
+the call site keeps `MACOS || LINUX` and `install_bats_linux` gains a distro check that
+warns and returns 0 on non-Ubuntu Linux — a loud skip, so neither a silent gap nor an
+unprovisioned machine. The scope test now reads a new `make print-%` target instead of
+shelling out to `make lint`, and behavioral `zsh -n` coverage for `.zshrc` and
+`bruce.zsh-theme` is added directly to `tests/zshrc.d/unit.bats`.
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — unchanged from round 1. No comparison, evaluator, or ambiguous-criteria trigger.
+
+### What this round cost and what it bought
+
+Six lens dispatches across two rounds, ~890k subagent tokens. Round 2 was not a formality:
+it caught a self-inflicted guard defect that would have reinstated the narrowing round 1
+removed, a verification row that round 1 added to close an unfailability hole and which was
+itself unfailable, and a pathspec error that reproduced the spec's own subject matter inside
+its only "measured" claim. Two of the three were introduced **by** round 1's corrections.
+
+The generalisable lesson is not "run more rounds" — it is that a correction is new design and
+inherits none of the scrutiny the thing it corrects received.
