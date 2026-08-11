@@ -469,6 +469,8 @@ acceptance:
     exit_code: 0
   - cmd: 'grep -q "2026-08-11-bats-provisioning-zsh-lint-scope" docs/superpowers/README.md'
     exit_code: 0
+  - cmd: 'bash -c ''! grep -qE "install_bats\(\).*setup_env\.sh" CLAUDE.md'''
+    exit_code: 0
   - cmd: make check-agent-guidance
     exit_code: 0
   - cmd: make test
@@ -487,7 +489,8 @@ parallel_group: null
 
 1. **Key Conventions:** retire "For shell syntax-only fixes in `setup_env.sh`, validate with both `bash -n setup_env.sh` and `zsh -n setup_env.sh` before commit." That line prescribes exactly the check this plan removes. Replace with the split: `bash -n` for `.sh`/`.bash`/hooks, `zsh -n` for the ten zsh files.
 2. **Testing:** the `make lint` description currently reads "bash -n + zsh -n on every tracked shell file". Correct it — `bash -n` and shellcheck over `SHELL_FILES`, `zsh -n` over `ZSH_FILES`.
-3. **`docs/superpowers/README.md`:** delete the "Fail-closed widened the fleet's bats/zsh dependency" backlog row and add an All Plans row dated 2026-08-11 linking this plan and its spec, status **Done**. Add the `> **Status: DONE**` banner to the top of this plan file.
+3. **`CLAUDE.md:202`** — the Testing section reads "Ubuntu: `sudo apt-get install -y bats` (via `install_bats()` in `setup_env.sh`)". After Task 3 that names a function which no longer exists under that name, and the macOS line above it no longer reflects that `run_setup_user` installs bats there too. Rewrite both to describe the dispatcher. *(Found by Task 3's spec reviewer, which correctly declined to fix it as outside its `files_touched`.)*
+4. **`docs/superpowers/README.md`:** delete the "Fail-closed widened the fleet's bats/zsh dependency" backlog row and add an All Plans row dated 2026-08-11 linking this plan and its spec, status **Done**. Add the `> **Status: DONE**` banner to the top of this plan file.
 
 `make check-agent-guidance` is in the gate because `CLAUDE.md` feeds the generated Cursor mirror; if it fails, run `make sync-agent-guidance` rather than hand-editing the mirror.
 
