@@ -165,10 +165,29 @@ change mirrors it exactly rather than inventing a second pattern.
 The rename is a contract change for existing tests, not only for production code. `install_bats`
 survives as a name but now means "dispatch by platform" rather than "apt-get install bats",
 so any existing test invoking `install_bats` and asserting apt behavior must be repointed at
-`install_bats_linux`. Enumerate the call sites before editing any of them —
-`grep -rn 'install_bats' lib/ tests/ setup_env.sh` — and check each for whether it wants the
-dispatcher or the Linux arm. This is the same discipline `shell.md`'s contract-widening entry
+`install_bats_linux`. This is the same discipline `shell.md`'s contract-widening entry
 requires, applied to a rename rather than a return value.
+
+**Enumerated 2026-08-11 rather than left as an instruction — 9 sites across 4 files:**
+
+| Site                                                                                | Post-rename                                                                        |
+| ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `lib/linux_shared.sh:23` — `install_bats() {`                                       | → `install_bats_linux()`. The definition.                                          |
+| `lib/workflows.sh:136` — `install_bats \|\| return 1`                               | **Keeps the name.** It now resolves to the dispatcher.                             |
+| `tests/setup_env/install_guards.bats:125` — section comment                         | Retitle to `install_bats_linux`.                                                   |
+| `install_guards.bats:127,130` — "skips install when bats is already present"        | → `install_bats_linux`; asserts apt behaviour. Add `unset MACOS`.                  |
+| `install_guards.bats:136,139` — "on Ubuntu calls apt-get install"                   | → `install_bats_linux`; asserts apt behaviour. Add `unset MACOS`.                  |
+| `install_guards.bats:973` — `install_bats() { return 0; }`                          | **Keeps the name.** It stubs what `run_setup_user` calls, which is the dispatcher. |
+| `tests/setup_env/workflows.bats:161` — "run_setup_user calls install_bats on Linux" | **Keeps the name**, and gains a macOS counterpart.                                 |
+
+Two of the nine keep the old name and one is a comment, so the rename is small — but note that
+**a blanket find-and-replace breaks it**: `install_guards.bats:973` and `workflows.sh:136` both
+have to stay `install_bats` precisely because the dispatcher is what they exercise. That is the
+distinction the enumeration exists to draw, and it is not visible from the count alone.
+
+The set of files is also smaller than an implementer might assume:
+`tests/setup_env/install_functions.bats` contains **no** `install_bats` reference despite being
+the natural place to look for one.
 
 #### `install_bats` keeps its own block, and the guard question has a third answer
 
@@ -501,6 +520,22 @@ showed that version was equally unfailable: a bash-syntax-invalid `.sh` file als
 `shellcheck`, and `Makefile:44-48` sets `failed=1` and continues, so `make lint` exits
 non-zero whether or not the `bash -n` loop still runs. Only the `bash FAIL <path>` token
 proves that specific loop inspected that specific file.
+
+**That fix creates a dependency on `make lint`'s output format, so the format is pinned here.**
+Verified at `Makefile:45-46`, and note the differing internal spacing — it is not cosmetic,
+the assertions must match it byte for byte:
+
+```
+printf "bash  OK  %s\n"   printf "bash FAIL %s\n"
+printf "zsh   OK  %s\n"   printf "zsh  FAIL %s\n"
+```
+
+If those `printf` strings change — a column added, `FAIL` becoming `ERROR` — rows 2 and 4 go
+green while proving nothing, and row 4 is the one that exists specifically to prove the
+`bash -n` loop still inspects files. This is the same class as the round-2 observation that a
+loose grep for `zsh` near `.zshrc` is satisfied by a `zsh  FAIL .zshrc` line. Anyone editing
+those `printf`s must update this table in the same commit; the coupling is recorded so it
+breaks visibly rather than silently passing.
 
 The last row replaces one that read `git ls-files '*.zsh' '.zshrc' | wc -l` → 8 and was
 labelled _measured, not predicted_. It measured a pathspec against its own output, so it

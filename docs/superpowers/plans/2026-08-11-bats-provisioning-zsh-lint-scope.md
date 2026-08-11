@@ -28,8 +28,9 @@
 | Tracked zsh files                       | 10                                                        | `git ls-files '*.zsh' '*.zsh-theme' '.zshrc' '.zprofile' \| wc -l`                          |
 | `zsh -n` over all 10                    | all pass                                                  | `for f in $(git ls-files '*.zsh' '*.zsh-theme' '.zshrc' '.zprofile'); do zsh -n "$f"; done` |
 | Existing `zsh -n` bats tests            | 7 (`.zshrc.d/1_init`..`7_final`)                          | `grep -c 'run zsh -n' tests/zshrc.d/unit.bats`                                              |
-| `install_bats` definitions / call sites | 1 / 1                                                     | `grep -rn 'install_bats' lib/ setup_env.sh`                                                 |
 | Bash coverage (CI, authoritative)       | 91%                                                       | `bash-coverage` CI job                                                                      |
+| `make test` | **rc 0, 1274 ok, 0 not ok** | `make test` |
+| `install_bats` references | 9 sites, 4 files | `grep -rn 'install_bats' lib/ tests/ setup_env.sh` |
 
 **These figures were measured under the configuration this plan changes, and that is stated deliberately.** The 36/36 lint line counts and the 7-test count are _before_ numbers used to size the work; they are not acceptance targets. Every acceptance gate below states its own post-change expectation.
 
@@ -44,6 +45,15 @@ Run after Task 8, above and beyond the per-task gates:
    - zsh-invalid construct into `bruce.zsh-theme` → `make lint` emits `zsh  FAIL bruce.zsh-theme`.
    - bash construct zsh rejects into a tracked `.sh` → `make lint` rc 0.
    - bash-**invalid** construct into a tracked `.sh` → `make lint` emits `bash FAIL <path>`. Assert the line, not the exit code: shellcheck also rejects that file, so rc alone cannot tell whether the `bash -n` loop still runs.
+
+   **Output format, pinned from `Makefile:45-46` — note the differing internal spacing:**
+
+   ```
+   printf "bash  OK  %s\n"   printf "bash FAIL %s\n"
+   printf "zsh   OK  %s\n"   printf "zsh  FAIL %s\n"
+   ```
+
+   Task 4 changes these lines' surroundings. If a `printf` string itself changes, these checks and Task 4's gates go green while proving nothing — update both in the same commit.
 
    Inject into `bruce.zsh-theme`, never `.config/.zshrc.d/*.zsh` — those are symlinked live into `$HOME` and a broken one breaks every new interactive shell. `bruce.zsh-theme` is symlinked but not sourced (`ZSH_THEME="bruce"` is commented at `.config/.zshrc.d/3_oh_my_zsh.zsh:7`).
 
@@ -180,7 +190,6 @@ files_touched:
   - lib/linux_shared.sh
   - lib/helpers.sh
   - lib/workflows.sh
-  - tests/setup_env/install_functions.bats
   - tests/setup_env/install_guards.bats
   - tests/setup_env/workflows.bats
 depends_on: [1]
@@ -208,7 +217,19 @@ install_bats() {
 
 **Do not narrow to `UBUNTU`.** `readonly UBUNTU=1` requires `/etc/os-release` `NAME` to be exactly `"Ubuntu"` (`lib/detect_env.sh:10-11`); narrowing would skip the call silently on other Linux while hooks still install at `:206`.
 
-**Rename is a contract change for tests.** Before editing, enumerate: `grep -rn 'install_bats' lib/ tests/ setup_env.sh`. For each hit decide whether it wants the dispatcher or the Linux arm; a test asserting `apt-get` behaviour must be repointed to `install_bats_linux`.
+**Rename is a contract change for tests, and the enumeration is already done** — 9 sites, 4 files, measured 2026-08-11. `tests/setup_env/install_functions.bats` contains none despite being the natural place to look.
+
+| Site | Action |
+| --- | --- |
+| `lib/linux_shared.sh:23` | rename the definition |
+| `lib/workflows.sh:136` | **keep the name** — now resolves to the dispatcher |
+| `install_guards.bats:125` | retitle the section comment |
+| `install_guards.bats:127,130` | → `install_bats_linux`, and `unset MACOS` |
+| `install_guards.bats:136,139` | → `install_bats_linux`, and `unset MACOS` |
+| `install_guards.bats:973` | **keep the name** — stubs what `run_setup_user` calls |
+| `workflows.bats:161` | **keep the name**, add a macOS counterpart |
+
+**A blanket find-and-replace breaks this.** Three of the nine sites must stay `install_bats` because the dispatcher is exactly what they exercise.
 
 **`tests/setup_env/install_guards.bats:127,136` export `UBUNTU=1` without unsetting `MACOS`.** Once the dispatcher branches on `MACOS` first, those tests take the macOS arm on every Mac while still passing on Linux and on `ubuntu-latest` CI — a failure invisible to CI and visible only locally, which blocks pushes from every Mac since `scripts/pre-push` runs `make test`. Add `unset MACOS` per `tdd.md`'s test-isolation rule.
 
