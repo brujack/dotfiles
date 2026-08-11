@@ -497,6 +497,32 @@ parallel_group: null
 
 ---
 
+## Carry to the Phase 3 `learnings` pass
+
+Not a task in this plan, and deliberately not done mid-cycle — recorded here so the
+post-merge `docs` → `learnings` step finds it rather than relying on the session transcript.
+
+**"A set derived by one rule cannot validate itself" now has three independent instances
+across three languages, and lives in no standards file.**
+
+| Instance | Where | Cost of having no second derivation |
+| --- | --- | --- |
+| Coverage denominator | `shell.md`, dotfiles#199 | A tracer instrumented 13 of 36 tracked files and published 91% for two months |
+| `[lints]` regex | Rust spec (ai-config) | — |
+| `ZSH_FILES` pathspec | this spec | Three wrong counts across two full lens rounds; a differently-derived set found `.zprofile` on first execution |
+
+`shell.md` and `tdd.md` each state the rule for their own domain — denominators and coverage
+instruments — but nothing states it generally, so it is being rediscovered per language. The
+third instance is the threshold where that stops being reasonable.
+
+The dotfiles instance is the only one where the cost was measured *across multiple review
+rounds*, which is what makes it the useful citation: reviewing the rule harder demonstrably
+did not work, twice, and the fix was one command.
+
+Candidate home is a general entry in `~/.claude/standards/` rather than a per-language one.
+That is a fleet-wide edit affecting every repo and session, so it wants its own decision at
+`learnings` time — not a unilateral edit here.
+
 ## Self-Review
 
 1. **Spec coverage.** §A → Tasks 1, 3. §B → Tasks 4, 5, 6. §C → Task 7. §D → Tasks 4 (test retirement), 8. §E → Task 2. No gaps.
