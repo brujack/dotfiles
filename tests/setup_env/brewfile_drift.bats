@@ -508,10 +508,11 @@ teardown() {
 }
 
 @test "_brewfile_parse_section: real Brewfile yields bats-core without HAS_DEVTOOLS" {
-  unset HAS_DEVTOOLS
+  unset "${!HAS_@}"
   run _brewfile_parse_section brew "${REPO_ROOT}/Brewfile"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"bats-core"* ]]
+  grep -qx 'bats-core' <<<"$output"
+  [[ "$output" != *"azure-cli"* ]]
 }
 
 # ── _brewfile_parse_inactive ──────────────────────────────────────────────────
