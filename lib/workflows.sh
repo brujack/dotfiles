@@ -132,7 +132,7 @@ run_setup_user() {
     install_zsh || return 1
   fi
 
-  if [[ -n ${LINUX} ]]; then
+  if [[ ${MACOS} || ${LINUX} ]]; then
     install_bats || return 1
   fi
 
