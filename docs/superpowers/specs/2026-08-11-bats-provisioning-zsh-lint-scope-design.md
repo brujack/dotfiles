@@ -249,3 +249,121 @@ bash files. A suite that only asserts `make lint` passes cannot tell either.
 - **`make lint` still hard-requires zsh** after this change, now for a justified reason. If
   a machine is ever found without zsh, that is a provisioning bug of the same class as the
   bats hole and gets the same treatment — not a guard.
+
+## Multi-Lens Review
+
+Reviewed at commit: `4cbccc4` (Step 7 self-review commit, before Step 8 dispatch)
+
+Three lenses dispatched as independent subagents with no access to the brainstorming
+conversation. Two returned findings that falsify claims in the body above; those claims are
+left standing in the text so the disposition record shows what was corrected and why.
+
+### Resolved contradiction between lenses
+
+Goal-fit and Risk returned **opposite** verdicts on the spec's Context claim that
+`brew bundle` on a Mac runs only under `--brew-install`. Risk called the premise confirmed;
+Goal-fit called the second half false. Resolved by direct measurement rather than by
+preferring a lens:
+
+```
+lib/macos.sh:147     install_macos_packages()
+lib/macos.sh:163       install_macos_casks || return 1      # in the brew-present else-branch
+lib/workflows.sh:220   install_macos_packages || return 1   # in run_setup_or_developer
+setup_env.sh:84        [[ -n ${SETUP:-} || -n ${DEVELOPER:-} ]] && _run_or_exit run_setup_or_developer
+```
+
+**Goal-fit is correct; Risk is wrong.** `-t setup` and `-t developer` both reach
+`install_macos_casks` with no flag. The hole is real but narrower than the Context section
+states: it is specific to a Mac provisioned with `-t setup_user` **only**. The Context
+sentence at `:29-32` is wrong as written and must be corrected before implementation.
+
+Recorded because it is the load-bearing lesson: three same-model lenses over shared framing
+can disagree on a checkable fact, and lens agreement is not confirmation. Only the command
+settles it.
+
+### Goal-Fit
+
+Finding: Change A is worth building, but the persistent test the spec adds cannot fail, so
+nothing outside this document holds the change in place. `tests/scripts/makefile_lint_scope.bats`
+(`:195-201`) asserts non-empty plus disjointness; disjointness is a tautology of the two
+pathspec sets — no filename matches both `'*.sh'` and `'*.zsh'` — and because the test
+re-derives the pathspecs itself rather than reading `ZSH_FILES`, the one drift it could
+plausibly catch (someone editing the Makefile pathspec) is invisible to it. Non-empty is
+additionally preempted by `test: lint`, which exits at the Makefile's own empty-list refusal
+before bats runs. Replacement: invoke `make lint` and assert its output contains a `zsh`
+line for `.zshrc` and **zero** `zsh` lines matching `*.sh`. Separately, `:63-64` claims eight
+existing `zsh -n` tests; there are seven, and the root `.zshrc` has none anywhere — so change
+B closes a real gap rather than duplicating the suite, and the Non-goals framing at `:235-237`
+is wrong for that file. Also, `tests/setup_env/workflows.bats:283` still asserts `zsh -n` on
+`setup_env.sh`, so the "false-positive surface is gone" framing at `:222` does not hold unless
+that test is retired in the same change.
+
+Assumption: that change A reaches the machines already broken. `install_bats` is called only
+from `run_setup_user`; `-t update` never touches it, so the fix is inert on the motivating
+work Mac until someone re-runs `-t setup_user` there — and change C's retained one-shot
+fallback unblocks the operator without ever closing the hole. Settled by one question: is
+`-t setup_user` re-run on existing machines as a matter of practice, or only at provisioning
+time? If the latter, `install_bats` needs a `run_update` section with its
+`_UPDATE_SECTION_ORDER` entry.
+
+Disposition:
+
+### Ergonomics
+
+Finding: §C's remedy ordering (`:156-159`) is disproportionate and can fail in exactly the
+state that produces the error. `run_setup_user` is a ~20-step provisioning run that, after
+`install_bats`, performs an unconditional `git pull` in the operator's own checkout and
+touches `setup_claude_mcp` (which the global `CLAUDE.md` warns overwrites tracked
+`~/.claude/mcp.json` when `GITHUB_PAT` is set). An operator sees this message _because a push
+was blocked_ — unpushed commits, possibly a dirty tree. Invert §C: lead with the one-shot
+(`brew install bats-core` / `sudo apt-get install bats`, both correct on every fleet
+platform), name `./setup_env.sh -t setup_user` second as the durable fix. Also corrects a
+scope claim: `make lint` has no `BATS` guard and the four `$(error)` sites are under
+`test`/`bash-coverage` only, so missing bats blocks **pushes but not commits** — the Context
+section's framing of the observed failure overstates it. Verification table needs a sixth
+row: inject a _bash_-invalid construct into a `.sh` and demand non-zero, because row 3 passes
+identically whether `zsh -n` was correctly removed or the whole `SHELL_FILES` loop broke and
+`bash -n` now inspects nothing.
+
+Assumption: that the work Mac was provisioned via `-t setup_user` and never via a path that
+runs `brew bundle` — i.e. bats was absent because the Brewfile never ran, not because it ran
+and `bats-core` later disappeared. Settled on that machine with `brew list --formula | wc -l`
+and `brew list bats-core`: 100+ formulae present with `bats-core` missing refutes the stated
+cause.
+
+Disposition:
+
+### Risk
+
+Finding: two items, one refuted and one upheld.
+
+**Refuted by evidence the lens itself named.** Risk argued `tests/setup_env/workflows.bats:282`
+is a committed regression guard proving a bash file _did_ once fail `zsh -n`, which would make
+the "false positive by construction" claim false. Checked `git show 5142258`: the commit adds
+exactly one line to `setup_env.sh` — `source "$(dirname "${BASH_SOURCE[0]}")/lib/git_hooks.sh"` —
+and its own log line reads "test: setup_env.sh passes bash -n **and** zsh -n with the
+git_hooks.sh source line", paired with the `bash -n` test immediately above at `:278`. No
+zsh-driven change to `setup_env.sh`, no incident. Convention-compliance, not a regression
+guard. The structural claim survives — but Risk's downstream point stands independently and
+matches Goal-fit: leaving that test in place while removing the Makefile line leaves the repo
+asserting a rule in the suite that it deleted from the gate and from `CLAUDE.md`.
+
+**Upheld, and it reverses a decision in §A.** Narrowing the call-site guard from `LINUX` to
+`UBUNTU` converts a loud failure into a silent skip on any non-Ubuntu Linux: `readonly UBUNTU=1`
+is set only when `/etc/os-release` `NAME` is exactly `"Ubuntu"` (`lib/detect_env.sh:10-11`), so
+elsewhere the call is skipped, hooks still install at `lib/workflows.sh:206`, and bats is absent
+with no error. That is precisely the failure this spec exists to fix, newly reproduced on Linux.
+Low probability given the fleet; wrong direction regardless. Also flags
+`tests/setup_env/install_guards.bats:127,136`, which export `UBUNTU=1` without unsetting
+`MACOS` — post-rename the dispatcher takes the macOS arm first, so those tests fail on all
+three Macs while passing on the Linux box and on `ubuntu-latest` CI.
+
+Assumption: refuted above by `git show 5142258`. No further uncertain assumption named.
+
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger. No arm-versus-arm design,
+no judge component, and the acceptance criteria are exit codes and file counts rather than
+ambiguous ones.
