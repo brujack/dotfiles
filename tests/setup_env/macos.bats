@@ -143,6 +143,56 @@ teardown() {
   grep -q "brew install zsh" "${MOCK_CALLS_FILE}"
 }
 
+# ── install_bats_macos ───────────────────────────────────────────────────────
+
+@test "install_bats_macos: bats already installed - skips brew" {
+  unset MOCK_WHICH_MISSING # which finds bats normally
+  run install_bats_macos
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"already installed"* ]]
+  refute_grep "brew install bats-core" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_bats_macos: brew present, bats absent - installs via brew" {
+  export MOCK_WHICH_MISSING=bats
+  run install_bats_macos
+  [ "$status" -eq 0 ]
+  grep -q "brew install bats-core" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_bats_macos: brew absent after install_homebrew stub - returns error" {
+  local _mocks="${BATS_TEST_DIRNAME}/../mocks"
+  local _no_brew="${BATS_TEST_TMPDIR}/no-brew-bin"
+  mkdir -p "${_no_brew}"
+  for _f in "${_mocks}/"*; do
+    [[ "$(basename "${_f}")" == "brew" ]] && continue
+    cp "${_f}" "${_no_brew}/$(basename "${_f}")"
+  done
+  local _saved_path="${PATH}"
+  local _saved_home="${HOME}"
+  export PATH="${_no_brew}:/usr/bin:/bin"
+  export HOME="${BATS_TEST_TMPDIR}"
+  export MOCK_WHICH_MISSING=bats
+  install_homebrew() { return 0; }
+  export -f install_homebrew
+  local _rc=0
+  local _out
+  _out="$(install_bats_macos 2>&1)" || _rc=$?
+  export PATH="${_saved_path}"
+  export HOME="${_saved_home}"
+  [ "${_rc}" -eq 1 ]
+  [[ "${_out}" == *"Failed to install Homebrew. Cannot install bats."* ]]
+}
+
+@test "install_bats_macos: idempotent - calling twice after success returns 0 both times" {
+  unset MOCK_WHICH_MISSING # bats reads as already installed both times
+  run install_bats_macos
+  [ "$status" -eq 0 ]
+  run install_bats_macos
+  [ "$status" -eq 0 ]
+  refute_grep "brew install bats-core" "${MOCK_CALLS_FILE}"
+}
+
 # ── install_macos_casks ──────────────────────────────────────────────────────
 
 @test "install_macos_casks: no GUI, no devtools - runs base Brewfile only" {

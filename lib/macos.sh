@@ -131,6 +131,24 @@ install_zsh_macos() {
   log_info "Installed zsh"
 }
 
+install_bats_macos() {
+  if quiet_which bats; then
+    log_info "bats already installed"
+    return 0
+  fi
+
+  log_info "Installing bats via Homebrew"
+  if ! command -v brew &> /dev/null; then
+    install_homebrew
+  fi
+  if command -v brew &> /dev/null; then
+    brew_install_formula bats-core || return 1
+  else
+    log_error "Failed to install Homebrew. Cannot install bats."
+    return 1
+  fi
+  log_info "Installed bats"
+}
 
 install_macos_casks() {
   brew bundle --file "${BREWFILE_LOC}/Brewfile" || return 1
