@@ -104,6 +104,14 @@ change mirrors it exactly rather than inventing a second pattern.
 | `lib/helpers.sh`         | New `install_bats()` dispatcher placed immediately after `install_zsh()` (ends `:260`), with the same `MACOS` / `LINUX` branch structure.                                                                                                       |
 | `lib/workflows.sh`       | Delete the `if [[ -n ${LINUX} ]]` block at `:139-141`. Add `install_bats \|\| return 1` inside the existing `if [[ ${MACOS} \|\| ${UBUNTU} ]]` block at `:136`, beside `install_zsh`.                                                           |
 
+The rename is a contract change for existing tests, not only for production code. `install_bats`
+survives as a name but now means "dispatch by platform" rather than "apt-get install bats",
+so any existing test invoking `install_bats` and asserting apt behavior must be repointed at
+`install_bats_linux`. Enumerate the call sites before editing any of them —
+`grep -rn 'install_bats' lib/ tests/ setup_env.sh` — and check each for whether it wants the
+dispatcher or the Linux arm. This is the same discipline `shell.md`'s contract-widening entry
+requires, applied to a rename rather than a return value.
+
 The guard on the call site narrows from `LINUX` to `MACOS || UBUNTU`. `install_bats_linux`
 invokes `apt-get`, so the existing `LINUX` guard promises coverage on non-Ubuntu Linux that
 it cannot deliver — and on such a machine `apt-get` fails, `|| return 1` fires, and the
@@ -123,15 +131,20 @@ ZSH_FILES := $(shell env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_IN
 ```
 
 `zsh -n` moves out of the `SHELL_FILES` loop (`Makefile:46`) into its own loop over
-`ZSH_FILES`. The empty-list refusal at `:38-42` extends to cover `ZSH_FILES`: both lists
-are `git ls-files`-derived and both go empty under the same conditions (git absent from
-`PATH`, or a tree exported without `.git`), and a lint target that reports a pass having
-inspected nothing is the failure that guard exists to prevent.
+`ZSH_FILES`. The empty-list refusal at `:38-42` becomes a refusal when _either_ list is
+empty, checked independently so the message names which one: both lists are
+`git ls-files`-derived and both go empty under the same conditions (git absent from `PATH`,
+or a tree exported without `.git`), and a lint target that reports a pass having inspected
+nothing is the failure that guard exists to prevent.
 
 In `.github/workflows/ci.yml`, the zsh step at `:56-61` changes its selector from
-`find . -name '*.sh'` to the same eight zsh files. The bash step at `:49-54` is left alone:
-its `find`-versus-`git ls-files` inconsistency with the `Makefile` is pre-existing and out
-of scope here, recorded so the omission reads as a decision rather than an oversight.
+`find . -name '*.sh'` to `git ls-files '*.zsh' '.zshrc'` — the same derivation the
+`Makefile` uses, not a literal list of the eight paths, so CI and `make lint` cannot drift
+apart as zsh files are added or removed. The `env -u` prefix is unnecessary there: the CI
+job is a fresh checkout, not a hook invocation, so no `GIT_DIR` is inherited. The bash step
+at `:49-54` is left alone: its `find`-versus-`git ls-files` inconsistency with the
+`Makefile` is pre-existing and out of scope here, recorded so the omission reads as a
+decision rather than an oversight.
 
 ### C. Error text
 
@@ -142,9 +155,19 @@ drift back into the same state.
 
 The text changes to lead with `./setup_env.sh -t setup_user` — the repo's own remedy, which
 after change A also prevents recurrence — retaining the raw package-manager commands as a
-fallback. The four duplicates collapse into a single variable while they are being touched.
-This follows `USER.md`'s "under pressure, surface more, not less": the operator hitting this
-is blocked and wants the fix that holds, not only the one that unblocks.
+fallback. This follows `USER.md`'s "under pressure, surface more, not less": the operator
+hitting this is blocked and wants the fix that holds, not only the one that unblocks.
+
+The four duplicates collapse into one variable holding **the message text only**,
+referenced as `$(error $(BATS_MISSING))` at each of the four sites. `BATS_MISSING` is a
+literal string with no function calls in it, so `:=` is used, matching the rest of the file.
+
+The `$(error ...)` call itself is deliberately not moved into the variable. `$(error)`
+fires wherever it is expanded, so a `:=` assignment containing it would abort every `make`
+invocation at parse time regardless of target. A recursively-expanded `=` assignment would
+technically work, deferring the call to each reference — but it produces a variable whose
+mere expansion halts the build, which is a trap for the next reader for no gain over
+sharing the string.
 
 ### D. Documentation
 
@@ -169,9 +192,14 @@ New coverage, in the existing suites (`tests/setup_env/install_functions.bats`,
 - `run_setup_user`: calls `install_bats` on macOS, and aborts when it fails. This is the
   assertion whose absence let the hole ship — the Linux path was covered, the macOS path
   did not exist to cover.
-- Scope invariant: `ZSH_FILES` is non-empty, and `ZSH_FILES` and `SHELL_FILES` are disjoint.
-  Disjointness is the property that matters — it is what guarantees no file is handed to a
-  parser that does not interpret it. The behavioral half of the zsh check already exists at
+- Scope invariant, in a new `tests/scripts/makefile_lint_scope.bats` beside the existing
+  `tests/scripts/pre_push.bats`: `ZSH_FILES` is non-empty, `SHELL_FILES` is non-empty, and
+  the two are disjoint. The test re-derives both lists with the same `git ls-files`
+  pathspecs the `Makefile` uses, run against the real repository with the mocks directory
+  stripped from `PATH` (per `shell.md` — a `tests/mocks/git` stub would otherwise return an
+  empty list and make every assertion vacuously true). Disjointness is the property that
+  matters: it is what guarantees no file is handed to a parser that does not interpret it.
+  The behavioral half of the zsh check already exists at
   `tests/zshrc.d/unit.bats:14-47` and is retained.
 
 Mocks follow the existing `MOCK_*` conventions; no test may install a real package or reach
@@ -181,8 +209,11 @@ a real Homebrew. Per `tdd.md` E2, each test's _failing_ branch must be inert —
 
 ## Verification
 
-Run before implementation is considered complete. These depend on code not yet written, so
-the expected outputs below are predictions, not recorded results.
+Run before implementation is considered complete. The first four depend on code not yet
+written, so those expectations are predictions, not recorded results. The last row does not
+depend on the change and was therefore run now, per `behavior.md`'s rule that a
+verification command which can be executed at spec time must be executed rather than
+predicted — its result is recorded, not guessed.
 
 | Check                                                                               | Expectation                                                                                 |
 | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
@@ -190,7 +221,7 @@ the expected outputs below are predictions, not recorded results.
 | Inject a zsh-invalid construct into `.config/.zshrc.d/7_final.zsh`, run `make lint` | Non-zero exit naming that file. Revert after.                                               |
 | Inject a bash construct zsh rejects into a tracked `.sh` file, run `make lint`      | Exit 0 — demonstrates the false-positive surface is gone. Revert after.                     |
 | `make test`                                                                         | Green. Test count above the CI floor of 840 (1274 at 2026-08-10, expected to rise).         |
-| `git ls-files '*.zsh' '.zshrc' \| wc -l`                                            | 8                                                                                           |
+| `git ls-files '*.zsh' '.zshrc' \| wc -l`                                            | **8 — measured 2026-08-11, not predicted.**                                                 |
 
 The two injection checks are the ones that distinguish this change from a no-op: the first
 proves the zsh check now reaches the zsh files, the second proves it no longer reaches the
