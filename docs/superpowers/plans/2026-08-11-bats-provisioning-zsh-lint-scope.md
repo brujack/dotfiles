@@ -358,6 +358,14 @@ Replace the step's `find . -name '*.sh' ...` selector with the same derivation t
 
 Rename the step, since it no longer checks "shell scripts". No `env -u` prefix is needed: the CI job is a fresh checkout, not a hook invocation, so no `GIT_DIR` is inherited.
 
+**Empty-list refusal, added after review.** The step must not pass having parsed zero files.
+Measured: `printf '' | xargs -I{} zsh -n {}` exits 0, and GitHub's default `run` shell is
+`bash -e {0}` with **no `pipefail`**, so `git ls-files`'s own status is discarded and the
+step's status is `xargs`'s alone. A missing `.git`, a future `sparse-checkout`, a pathspec
+typo, or the globs ceasing to match after a rename would all pass green. `make lint` guards
+this at `Makefile:51-55`; the CI step now does too. Verified: in a git repo containing no zsh
+files, the guarded step exits 1 and the unguarded form exits 0.
+
 **Gate note, added after Task 5 returned a blocker.** Two earlier versions of this task's
 second gate were both vacuous, in opposite ways. The plan's original anchored the `sed` range
 on `"Syntax check all shell scripts (zsh)"` — the step name the rename *deletes* — so after a
@@ -504,7 +512,11 @@ parallel_group: null
 1. **Key Conventions:** retire "For shell syntax-only fixes in `setup_env.sh`, validate with both `bash -n setup_env.sh` and `zsh -n setup_env.sh` before commit." That line prescribes exactly the check this plan removes. Replace with the split: `bash -n` for `.sh`/`.bash`/hooks, `zsh -n` for the ten zsh files.
 2. **Testing:** the `make lint` description currently reads "bash -n + zsh -n on every tracked shell file". Correct it — `bash -n` and shellcheck over `SHELL_FILES`, `zsh -n` over `ZSH_FILES`.
 3. **`CLAUDE.md:202`** — the Testing section reads "Ubuntu: `sudo apt-get install -y bats` (via `install_bats()` in `setup_env.sh`)". After Task 3 that names a function which no longer exists under that name, and the macOS line above it no longer reflects that `run_setup_user` installs bats there too. Rewrite both to describe the dispatcher. *(Found by Task 3's spec reviewer, which correctly declined to fix it as outside its `files_touched`.)*
-4. **`docs/superpowers/README.md`:** delete the "Fail-closed widened the fleet's bats/zsh dependency" backlog row and add an All Plans row dated 2026-08-11 linking this plan and its spec, status **Done**. Add the `> **Status: DONE**` banner to the top of this plan file.
+4. **`CLAUDE.md` test counts** — the CI section records "1260 tests as of 2026-08-09" and the
+   Coverage section "1274 tests as of 2026-08-10". This branch adds tests in T1, T2, T3, T4 and
+   T6; update both figures to the count `make test` reports at that point, and re-read the
+   coverage percentage rather than carrying the old one forward. The 840 CI floor is unaffected.
+5. **`docs/superpowers/README.md`:** delete the "Fail-closed widened the fleet's bats/zsh dependency" backlog row and add an All Plans row dated 2026-08-11 linking this plan and its spec, status **Done**. Add the `> **Status: DONE**` banner to the top of this plan file.
 
 `make check-agent-guidance` is in the gate because `CLAUDE.md` feeds the generated Cursor mirror; if it fails, run `make sync-agent-guidance` rather than hand-editing the mirror.
 
