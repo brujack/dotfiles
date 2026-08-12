@@ -383,3 +383,97 @@ carries it first.
 - `tdd.md` pitfall G — version skew in a shelled-out tool
 - `behavior.md` — "a check derived from the same decision as the thing it checks cannot falsify it"
 - `shell.md` — semver string comparison pitfall (§4)
+
+## Multi-Lens Review
+
+Reviewed at commit: `0d070ae` (Step 7 self-review commit, before Step 8 dispatch)
+
+Three lenses ran independently, with no access to the brainstorming conversation. All three
+independently found the same defect in §3's snippet (the dropped `test-python`
+prerequisite), and two independently found the pre-push lockout. Three further findings
+were reproduced directly by the author afterwards rather than accepted on report — those
+reproductions are recorded inline below.
+
+### Goal-Fit
+
+Finding: **The one measured defect this spec exists for is closed by a single line, in the
+file that produces the output, and the spec never puts that option on the table.**
+`MAKEFLAGS += --no-print-directory` in the `Makefile` covers every call site — including
+ones not yet written, which is exactly the failure mode `tdd.md` pitfall G records. Author
+reproduction: with that line present, `print-VAR` emits **1 line under 3.81 and 1 line
+under 4.4.1**, and 3.81 accepts the directive with rc=0. `tdd.md`'s own preference order
+puts *remove the variance at the call site* first and *verify under CI's version* third;
+this spec skips first and builds third as permanent fleet infrastructure. A `Makefile` grep
+for 4.x-only constructs (`$(file`, `!=`, `::=`, `.ONESHELL`, `.RECIPEPREFIX`,
+`--output-sync`, `.EXTRA_PREREQS`) found none, so print-directory is the entire measured
+version surface today.
+
+Also: cases 2 and 3 `skip` on `ubuntu-latest`, which has no `gmake` — so the guard's
+positive arm runs only on an already-provisioned mac. And "Verification before merge" fails
+the reads-it test in both directions: the mutation re-run changes no verdict and its only
+output is PR-body prose.
+
+Assumption: that the full 1294-test suite — not just the make-scope files — passes under
+GNU Make 4.x on macOS. §2 flips the version running `make test` on every mac before §1 or
+§3 matter. Verified for the two make-aware files only (rc=0, 10 ok). Settle with
+`PATH="$shim:$PATH" make test` over the whole suite; a non-zero rc changes the rollout
+risk from "six machines need provisioning" to "the suite is red on every mac the instant
+this merges".
+
+Disposition:
+
+### Ergonomics
+
+Finding: **The guard blocks `git push`, not just `make test`, and the stated mitigation
+misreads that.** `scripts/pre-push:71` is `make -C "${REPO_ROOT}" test`, so on an
+unprovisioned mac the guard fires there. "lint is unguarded, so a machine can always commit
+its way out" is true and useless — unpushable commits are not a recovery path, and the only
+escape is `git push --no-verify`, which `git-workflow.md` documents as all-or-nothing.
+
+Also: the printed remedies (`brew install make`, `setup_env.sh -t setup_user`) install
+`gmake` but do not change `PATH` in the shell you are standing in, so the documented
+sequence is hit-guard → run-remedy → hit-guard-again. `test-unit` and `test-python` invoke
+bats and are unguarded, so the fast iteration loop keeps the exact blind behaviour this
+spec exists to end. And case 1 is vacuous: `make nonexistent-target` already returns rc=2,
+so "exits non-zero under 3.81" passes with `require-gnu-make` deleted entirely.
+
+Assumption: that every routine `git push` route on all seven machines runs from a shell
+that sourced `.zshrc`. Verified only for zsh and one agent tool on the Studio. If false for
+any route (an editor's source-control panel, a `sh -c` harness), the guard converts that
+route into a *permanent* failure that `install_make_macos` cannot fix.
+
+Disposition:
+
+### Risk
+
+Finding: **"No escape hatch" is false, and the hatch is undocumented and traceless.**
+`MAKE_VERSION` is an ordinary make variable, so a command-line assignment overrides it.
+Author reproduction: `/usr/bin/make guard MAKE_VERSION=4.9` prints
+`PASSED under real GNU Make 3.81`, **rc=0**. That is an allow-path looser than the
+deny-path, and worse than a named `ALLOW_OLD_MAKE=1` would be.
+
+**And the guard's own printed remedy is itself a false green.** Make does not propagate
+itself to a bare `make` in a recipe or subprocess. Author reproduction: an outer `gmake`
+whose recipe runs `make --version` reports **`GNU Make 3.81`**. So `gmake test` runs the
+outer make at 4.4.1 while every make-invoking bats test resolves bare `make` through `PATH`
+to 3.81 — the suite goes green having exercised precisely the version the spec exists to
+stop trusting. §3's verification row "`gmake test` under 4.4.1 → rc=0" is evidence of the
+bug, not the fix. Only §2 changes what the tests actually measure.
+
+Also: `/opt/homebrew` is hardcoded with no Intel arm, though the repo already carries an
+Intel-prefix branch at `.config/.zshrc.d/5_general.zsh:7`. On an Intel mac §2's dir-guard
+silently no-ops while §3 still fires — a machine that cannot run `make test` or push, whose
+printed remedy does not fix it. Silent-then-permanent, which is the lockout the design
+claims to avoid.
+
+Assumption: that every mac in the fleet is Apple Silicon. Settle with `uname -m` on each
+of the seven machines. One Intel hit means §2 must resolve via `brew --prefix make` rather
+than a literal path, and §3 must not fire where §2 could not apply.
+
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger. Acceptance criteria are
+concrete return codes and named structural assertions.
+Disposition: N/A
