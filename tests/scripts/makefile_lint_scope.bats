@@ -391,3 +391,116 @@ FIXTURE_EOF
   _lines_count="${#lines[@]}"
   [ "${_lines_count}" -eq 3 ]
 }
+
+# Case 3: the Makefile directive itself. Cases 1/2/5 above all reason about
+# what happens once this line exists; nothing until now asserted the line is
+# actually there. A `+=` (not `=`) is required verbatim -- `=` would still
+# read as a plausible diff to someone editing the file, but Makefile.md's own
+# comment at line 2 documents this as an append ("MAKEFLAGS is an exported
+# environment variable... it removes print-directory variance at the source
+# rather than repeating --no-print-directory at every -C call site"), and an
+# unconditional `=` would discard whatever MAKEFLAGS the invoking shell
+# already carried instead of adding to it.
+@test "Makefile carries the MAKEFLAGS no-print-directory directive" {
+  grep -qE '^MAKEFLAGS[[:space:]]*\+=[[:space:]]*--no-print-directory[[:space:]]*$' \
+    "${REPO_ROOT}/Makefile"
+}
+
+# Case 4: the structural partition scanner. Every stdout-capturing `make -C`
+# invocation in a test file must be either guarded (a per-call
+# --no-print-directory) or measuring (env -u MAKEFLAGS, or the equivalent
+# env MAKEFLAGS= that Case 5 above establishes as behaviourally identical) --
+# never neither. A candidate line must carry BOTH "-C" (the one condition
+# under which GNU Make can print Entering/Leaving at all) AND the substring
+# "make" -- verified this session that "-C" alone is not a safe filter: an
+# earlier draft of this scanner, keyed on "-C" only, matched every
+# `git -C ...` fixture-setup call in both domain files as an unclassified
+# "neither" (git has its own unrelated -C flag; it prints no directory
+# messages and needs no guard at all). Requiring "make" too correctly keeps
+# Case 1/Case 2's resolved-binary invocations in scope
+# ("${_make_lt4}"/"${_make_ge4}" both contain the substring "make") while
+# dropping every git -C line, none of which contain it. Two further
+# exclusions, both verified live this session by running the scanner without
+# them and reading what it wrongly caught: comment lines (a line whose only
+# content after the line number is leading whitespace then '#'), and @test
+# description lines (this Case's own @test line above literally contains the
+# English phrase "make -C invocation", which the "make"+"-C" filter alone
+# would misread as a third kind of match).
+#
+# Domain is the two files this feature's guarded/measuring discipline
+# actually governs: tests/makefile_scope.bats and this file -- the complete
+# files_touched surface of both Task 1 (Makefile, this file) and Task 2
+# (makefile_scope.bats, this file). This is not a global-fact shortcut: each
+# candidate line is inspected for its own guard text, not for whether the
+# repo Makefile happens to carry the directive -- a scanner that accepted
+# "the Makefile has the directive" as blanket proof would (wrongly) treat
+# every make invocation as covered regardless of which Makefile it targets.
+# That the domain is scoped rather than tests/**/*.bats in full is itself
+# verified, not assumed: running this Case's own filter
+# (`grep -nE ' -C ' <file> | grep -vE '^[0-9]+:[[:space:]]*#' |
+# grep -vE '^[0-9]+:@test' | grep 'make'`) against every tracked *.bats file
+# this session found two classes outside this domain. 27 lines in
+# tests/scripts/pre_push.bats are all `grep -qE "^make -C .* test$"
+# "${MOCK_CALLS_FILE}"` -- a grep pattern checked against a log of calls to a
+# *mocked* make binary, not an invocation of the real one; this scanner's own
+# filter already leaves them out because their line, read as a whole, is a
+# `grep` invocation, and "grep" is what precedes the make-shaped text, not
+# "run" or a real make/gmake binary -- they simply never needed a separate
+# exclusion. One further site is a real invocation of the real binary:
+# tests/scripts/unit.bats:819
+# (`run env PATH="${_clean_path}" make -C "${REPO_ROOT}" -n test-python`),
+# which carries neither guard. It is outside both Task 1's and Task 2's
+# files_touched, so this scanner does not claim to cover it -- flagging it
+# here rather than silently narrowing the domain around it. Its own
+# assertion (`[[ "$output" == *"unittest"* ]]`) is a substring match, so
+# Entering/Leaving noise cannot break it the way an exact line-count or
+# set-equality assertion would; that is a fact about that one test's
+# assertion shape, not a reason this scanner's own domain could safely
+# include or exclude it either way.
+@test "every stdout-capturing make -C invocation in-domain is guarded or measuring, both sets nonempty" {
+  local -a _domain_files=(
+    "${REPO_ROOT}/tests/makefile_scope.bats"
+    "${REPO_ROOT}/tests/scripts/makefile_lint_scope.bats"
+  )
+
+  local -a _candidates=()
+  local _f _hit
+  for _f in "${_domain_files[@]}"; do
+    while IFS= read -r _hit; do
+      [ -z "${_hit}" ] && continue
+      _candidates+=("${_f}:${_hit}")
+    done < <(grep -nE ' -C ' "${_f}" \
+      | grep -vE '^[0-9]+:[[:space:]]*#' \
+      | grep -vE '^[0-9]+:@test' \
+      | grep 'make')
+  done
+  [ "${#_candidates[@]}" -gt 0 ]
+
+  local _guarded=0 _measuring=0 _neither=0 _c
+  for _c in "${_candidates[@]}"; do
+    if [[ "${_c}" == *"--no-print-directory"* ]]; then
+      _guarded=$((_guarded + 1))
+    elif [[ "${_c}" == *"env -u MAKEFLAGS"* || "${_c}" == *"MAKEFLAGS="* ]]; then
+      _measuring=$((_measuring + 1))
+    else
+      _neither=$((_neither + 1))
+      printf 'neither guarded nor measuring: %s\n' "${_c}" >&2
+    fi
+  done
+  printf 'guarded=%s measuring=%s neither=%s\n' "${_guarded}" "${_measuring}" "${_neither}" >&2
+
+  [ "${_neither}" -eq 0 ]
+  [ "${_guarded}" -gt 0 ]
+  [ "${_measuring}" -gt 0 ]
+}
+
+# Case 6: Makefile:81 in the plan's own numbering (Makefile:91 in the current
+# file -- the plan was written against an earlier line count) is
+# `test: lint test-python`. A plan or a later edit that trims the
+# prerequisite list to just `lint` would silently drop the Python suite from
+# `make test` while `make test` itself kept exiting 0 -- this guards that the
+# dependency survives, independent of which line number it lives on.
+@test "test still depends on both lint and test-python" {
+  grep -qE '^test:[[:space:]]+.*\blint\b' "${REPO_ROOT}/Makefile"
+  grep -qE '^test:[[:space:]]+.*\btest-python\b' "${REPO_ROOT}/Makefile"
+}
