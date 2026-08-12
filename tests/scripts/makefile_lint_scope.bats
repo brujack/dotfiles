@@ -139,16 +139,23 @@ _sorted_lines_from_space_list() {
   # deleted from the ZSH_FILES assignment, `git ls-files` here resolves
   # against the decoy repo's single a.zsh instead of the real repo's ten --
   # shell.md: `-C` does not override an exported GIT_DIR.
-  run env GIT_DIR="${decoy}/.git" PATH="${CLEAN_PATH}" make -C "${REPO_ROOT}" print-ZSH_FILES
+  # --no-print-directory for the same reason _make_print carries it: this
+  # call cannot use that helper (it needs the GIT_DIR prefix), so the flag
+  # has to be repeated here rather than inherited.
+  run env GIT_DIR="${decoy}/.git" PATH="${CLEAN_PATH}" \
+    make --no-print-directory -C "${REPO_ROOT}" print-ZSH_FILES
   [ "${status}" -eq 0 ]
   resolved="$(_sorted_lines_from_space_list "${output}")"
   expected="$(_git_ls_clean '*.zsh' '*.zsh-theme' '.zshrc' '.zprofile' | sort -u)"
+  if [[ "${resolved}" != "${expected}" ]]; then
+    printf 'resolved:\n%s\nexpected:\n%s\n' "${resolved}" "${expected}" >&2
+  fi
   [ "${resolved}" = "${expected}" ]
 }
 
 @test "make -n lint dry-run wires zsh -n to ZSH_FILES, not SHELL_FILES" {
   run env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
-    bash -c "PATH='${CLEAN_PATH}' make -C '${REPO_ROOT}' -n lint"
+    bash -c "PATH='${CLEAN_PATH}' make --no-print-directory -C '${REPO_ROOT}' -n lint"
   [ "${status}" -eq 0 ]
 
   count="$(printf '%s\n' "${output}" | grep -c 'zsh  -n')"
