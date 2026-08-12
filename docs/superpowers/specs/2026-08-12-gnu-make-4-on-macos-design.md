@@ -167,8 +167,31 @@ suite could ever observe directory-line pollution again, on any platform. That i
 `behavior.md`'s "a check derived from the same decision as the thing it checks" in a fresh
 instance, created by the fix itself.
 
-**Binding harness rule: any test that measures print-directory behaviour must invoke make
-through `env -u MAKEFLAGS`.** Case 5 below pins it.
+**Binding harness rule, stated as a partition so it can be checked mechanically.** Every
+stdout-capturing `make` invocation in a test file falls in exactly one of two sets:
+
+| set | carries | why |
+| --- | ------- | --- |
+| **guarded** | a per-call `--no-print-directory` | correct regardless of §1 and regardless of what the environment leaks in |
+| **measuring** | `env -u MAKEFLAGS`, and nothing else | these are the only tests permitted to observe directory lines, because observing them is the point |
+
+An earlier draft stated this as "any test that measures print-directory behaviour must use
+`env -u MAKEFLAGS`" and pinned it with case 5 alone. That was prose, not enforcement: case 5
+proves the environment still leaks, which is a fact about make, not about whether future
+tests follow the rule. Someone adding a sixth case that measures directory output and forgets
+`env -u` would pass for the wrong reason — the same defect shape §1 introduced, one layer
+out.
+
+The partition is checkable without any semantic judgment about what a test "measures", which
+is what made the original rule unenforceable. Case 4 asserts it: every capturing invocation
+is in exactly one set, and **both sets are non-empty**. An invocation in neither set fails.
+
+Residual gap, stated rather than papered over: a test that captures make stdout for reasons
+unrelated to directory lines is pushed into the guarded set and carries a flag it does not
+strictly need. That is a small tax and arguably correct anyway. What the partition does not
+do is verify that a test placed in the *measuring* set genuinely needs to be there — a test
+could carry `env -u MAKEFLAGS` without measuring anything. Nothing catches that, and nothing
+cheaply could.
 
 It also means the fan-out is real and already happening — see Non-goals.
 
@@ -310,7 +333,7 @@ was absent from round 1 and round 2's design entirely.
 | 1   | Under `env -u MAKEFLAGS`, `print-ZSH_FILES` line count is equal across 3.81 and a 4.x make     | equal, and **>0**          |
 | 2   | Under `env -u MAKEFLAGS`, a `print-` probe returns a specific derived value                    | exact value                |
 | 3   | `MAKEFLAGS += --no-print-directory` is present in the `Makefile`                               | match                      |
-| 4   | Every make invocation under `tests/` that targets a **fixture** Makefile carries a per-call flag | per-file count, set **>0** |
+| 4   | Every stdout-capturing make invocation in a test file is in exactly one of the guarded/measuring sets | partition holds, both sets **>0** |
 | 5   | With `MAKEFLAGS` inherited (no `env -u`), a directive-free fixture emits directory lines under 4.x | leak is observable     |
 | 6   | `test` still has `test-python` as a prerequisite                                               | present                    |
 
@@ -331,9 +354,18 @@ invocation in the repo the instant §1 existed. It gave zero protection to the p
 reach **fixture** Makefiles at all — `tests/setup_env/git_hooks.bats` writes 24 of them,
 invoked via `make -C <repo> install-hooks`, plus one at `tests/scripts/pre_commit_hook.bats:25`.
 So the old case passed precisely for the call sites §1 cannot protect. The replacement
-discriminates repo-Makefile from fixture-Makefile invocations, requires the per-call flag for
-the latter, asserts flag counts per file rather than existence, and **asserts the scanned set
-is non-empty** so a scanner matching nothing cannot read as a pass.
+asserts the guarded/measuring partition above over **every** stdout-capturing invocation —
+fixture-Makefile and repo-Makefile alike — and **asserts both sets are non-empty**, so a
+scanner matching nothing cannot read as a pass.
+
+Widening it from fixtures-only to every capturing invocation is deliberate and closes a hole
+an earlier draft left. Fixture Makefiles are the ones §1's directive cannot reach, so they
+were the obvious case; but the four repo-Makefile parses in `tests/makefile_scope.bats` are
+green today *because of the environment leak*, not because they are correct. Run them outside
+a `make test` context, or in a future where §1's line moves, and they parse directory lines
+again. §1's own text argues that per-call flags "protect any invocation that does not go
+through this `Makefile`" — leaving those four dependent on a global fact contradicts that in
+the same document.
 
 **Case 5 is the falsifiability guard.** It is the only case that would fail if the
 `env -u MAKEFLAGS` discipline were dropped — it asserts the leak is still observable, which
@@ -473,7 +505,7 @@ that does not exist.
 | `lib/update_summary.sh`                  | make-version field on the ledger entry       |
 | `.config/.zshrc.d/6_path.zsh`            | dual-prefix gnubin prepend                   |
 | `tests/scripts/makefile_lint_scope.bats` | cases 1–6                                    |
-| `tests/makefile_scope.bats`              | 4 unflagged parses — flag or cover by case 4 |
+| `tests/makefile_scope.bats`              | add `--no-print-directory` to lines 36/45/68/79 |
 | `tests/zshrc.d/unit.bats`                | cases 7–12                                   |
 | `tests/setup_env/install_guards.bats`    | cases 13–16                                  |
 | `tests/setup_env/update_summary.bats`    | cases 17–21                                  |
@@ -593,6 +625,29 @@ already exists there, so the round-1 path would have no-opped on a machine that 
 the fix installed. `brew --prefix make` was the obvious repair and is also wrong: `6_path.zsh`
 is itself what puts Homebrew on `PATH`, and `brew` measured absent over non-interactive ssh.
 
+### Round 3 — external architectural review (no lens dispatch)
+
+Two findings, both accepted and applied above. Raised against the merged `9c7c8a3` text by an
+independent reviewer outside the lens harness, so there is no assumption line to record.
+
+**1. The `env -u MAKEFLAGS` rule was unenforced, and case 5 did not enforce it.** Case 5
+asserts the leak is observable — a fact about make's behaviour, not about whether future tests
+follow the discipline. A sixth case measuring directory output and forgetting `env -u` would
+pass for the wrong reason: the defect shape §1 introduced, one layer out. Fixed by restating
+the rule as a **guarded/measuring partition** and having case 4 assert it, which needs no
+semantic judgment about what a test "measures" — the property that made the original rule
+unenforceable. The residual gap (nothing verifies a test in the *measuring* set needs to be
+there) is now stated in §1 rather than left implied.
+
+**2. `tests/makefile_scope.bats`'s four parses had no stated outcome.** The Files-touched row
+said "flag or cover by case 4" — two different outcomes. Case 4 as written covered fixture
+Makefiles only, so those four repo-Makefile invocations fell outside it and "cover by case 4"
+resolved to "leave alone". They are green today because of the environment leak, not because
+they are correct. Fixed by widening case 4 to every stdout-capturing invocation and naming the
+concrete edit: `--no-print-directory` on lines 36, 45, 68 and 79.
+
+Neither finding changes the four components. Both change what the suite can catch.
+
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger. Acceptance criteria are
@@ -676,6 +731,29 @@ Disposition: **Addressed.** The export is documented in §1 as the most importan
 spec, with a binding harness rule (`env -u MAKEFLAGS`) and case 5 pinning it. Case 1's skip
 rule names CI. §4 rewired to `-t update`. New case 18 records an unparseable version as
 `unknown` rather than as a version.
+
+### Round 3 — external architectural review (no lens dispatch)
+
+Two findings, both accepted and applied above. Raised against the merged `9c7c8a3` text by an
+independent reviewer outside the lens harness, so there is no assumption line to record.
+
+**1. The `env -u MAKEFLAGS` rule was unenforced, and case 5 did not enforce it.** Case 5
+asserts the leak is observable — a fact about make's behaviour, not about whether future tests
+follow the discipline. A sixth case measuring directory output and forgetting `env -u` would
+pass for the wrong reason: the defect shape §1 introduced, one layer out. Fixed by restating
+the rule as a **guarded/measuring partition** and having case 4 assert it, which needs no
+semantic judgment about what a test "measures" — the property that made the original rule
+unenforceable. The residual gap (nothing verifies a test in the *measuring* set needs to be
+there) is now stated in §1 rather than left implied.
+
+**2. `tests/makefile_scope.bats`'s four parses had no stated outcome.** The Files-touched row
+said "flag or cover by case 4" — two different outcomes. Case 4 as written covered fixture
+Makefiles only, so those four repo-Makefile invocations fell outside it and "cover by case 4"
+resolved to "leave alone". They are green today because of the environment leak, not because
+they are correct. Fixed by widening case 4 to every stdout-capturing invocation and naming the
+concrete edit: `--no-print-directory` on lines 36, 45, 68 and 79.
+
+Neither finding changes the four components. Both change what the suite can catch.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
