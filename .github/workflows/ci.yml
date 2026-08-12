@@ -53,11 +53,9 @@ jobs:
             -not -path './tests/mocks/*' \
             | xargs -I{} bash -n {}
 
-      - name: Syntax check all shell scripts (zsh)
+      - name: Syntax check all zsh files
         run: |
-          find . -name '*.sh' \
-            -not -path './.worktrees/*' \
-            -not -path './tests/mocks/*' \
+          git ls-files '*.zsh' '*.zsh-theme' '.zshrc' '.zprofile' \
             | xargs -I{} zsh -n {}
 
   powershell:
