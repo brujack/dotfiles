@@ -1,3 +1,13 @@
+MAKEFLAGS += --no-print-directory
+# MAKEFLAGS is an exported environment variable, not a file-local setting --
+# it removes print-directory variance at the source rather than repeating
+# --no-print-directory at every -C call site, including ones not yet
+# written. GNU Make >= 4.0 prints "Entering directory"/"Leaving directory" on
+# stdout whenever -C changes directory; 3.81 (still shipped by macOS) does
+# not. Any test that measures this must invoke make through
+# `env -u MAKEFLAGS`, or it measures this exported variable rather than the
+# Makefile (tests/scripts/makefile_lint_scope.bats; ci.md pitfall G).
+
 BATS := $(shell command -v bats 2>/dev/null)
 SHELLCHECK := $(shell command -v shellcheck 2>/dev/null)
 PYTHON3 := $(shell command -v python3 2>/dev/null)
