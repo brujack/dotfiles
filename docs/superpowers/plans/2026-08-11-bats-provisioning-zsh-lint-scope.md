@@ -296,7 +296,7 @@ Add the introspection target so tests read the real variables:
 print-%: ; @printf '%s\n' "$($*)"
 ```
 
-The quoting is load-bearing, not style — unquoted, an empty variable emits nothing and two empty sets compare equal. Verified on GNU Make 3.81.
+Keep the quoting — it stops the shell glob-expanding a value containing `*`. An earlier draft called it load-bearing because "unquoted, an empty variable emits nothing"; measured with `od -c` on GNU Make 3.81, both forms emit a single `\n`, so that reason was false. Anti-vacuity comes from the scope test's non-empty assertions.
 
 Remove the `zsh -n` line from the `SHELL_FILES` loop at `:46` and add a second loop over `ZSH_FILES`. Extend the empty-list refusal at `:38-42` to fail when **either** list is empty, checked independently so the message names which one.
 
@@ -470,6 +470,8 @@ acceptance:
   - cmd: 'grep -q "2026-08-11-bats-provisioning-zsh-lint-scope" docs/superpowers/README.md'
     exit_code: 0
   - cmd: 'bash -c ''! grep -qE "install_bats\(\).*setup_env\.sh" CLAUDE.md'''
+    exit_code: 0
+  - cmd: 'bash -c ''! grep -q "bash -n + zsh -n on every tracked shell file" CLAUDE.md'''
     exit_code: 0
   - cmd: make check-agent-guidance
     exit_code: 0

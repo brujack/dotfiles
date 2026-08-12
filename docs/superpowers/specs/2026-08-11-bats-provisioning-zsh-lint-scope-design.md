@@ -463,10 +463,13 @@ New coverage, in the existing suites (`tests/setup_env/install_functions.bats`,
   from `PATH` (per `shell.md`), since a `tests/mocks/git` stub would otherwise empty both
   lists and make every assertion vacuously true.
 
-  **The quoting in `print-%: ; @printf '%s\n' "$($*)"` is load-bearing, not style.** With the
-  argument unquoted, an empty variable makes `printf` emit nothing, and a comparison of two
-  empty sets passes. Quoted, an empty variable still emits a blank line, so the comparison
-  goes red. Verified on GNU Make 3.81, the macOS default. Two further notes from that
+  **Keep the quoting in `print-%: ; @printf '%s\n' "$($*)"` — but not for the reason two
+  earlier drafts gave.** They claimed that unquoted, an empty variable emits nothing, so two
+  empty sets would compare equal. Measured with `od -c` on GNU Make 3.81: **both forms emit a
+  single `\n`**, so that mechanism is false — and it was asserted three times, in this spec,
+  the plan, and a dispatch prompt, before anyone checked it. The quotes are still correct, for
+  a different reason: they stop the shell glob-expanding a value containing `*`. Anti-vacuity
+  comes from the scope test's non-empty assertions, not from the quoting.
   verification: `print-<name-of-a-real-target>` resolves to the _variable_ of that name (empty),
   not the target, so there is no collision with `.PHONY` entries; and `.PHONY` accepts no
   patterns, so a file literally named `print-ZSH_FILES` in the working directory would make
@@ -916,7 +919,7 @@ Finding: three items, all upheld and all verified independently before acceptanc
    coverage floor.
 
    Also noted, and folded in: the `printf '%s\n' "$($*)"` quoting in `print-%` is
-   load-bearing — unquoted, two empty sets compare equal and row 6 passes.
+   load-bearing. **That reason was later measured false** — both forms emit a single `\n`; the quotes matter only for glob expansion. Corrected in §B.
 
    Explicitly cleared: untagging `Brewfile:15` has exactly two readers, both inside the drift
    report; `brew bundle` treats it as a comment. No side effects.
