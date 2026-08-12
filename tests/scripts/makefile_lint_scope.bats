@@ -14,15 +14,23 @@ setup() {
   # binaries this suite needs to invoke for real (shell.md PATH-mock
   # shadowing pitfall) -- strip the mocks dir from PATH for every call below.
   CLEAN_PATH="$(printf "%s" "${PATH}" | tr ':' '\n' | grep -v "tests/mocks" | tr '\n' ':' | sed 's/:$//')"
+  # Test isolation (tdd.md pitfall A): _make_print deliberately does NOT
+  # strip these (see below) so the leaked-GIT_DIR test can prove the
+  # Makefile's own env -u matters. Start every test from a known-clean
+  # ambient state so an unrelated leak from whatever invoked bats can't
+  # change what a "no GIT_DIR set" test observes.
+  unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
 }
 
 # Reads a Makefile-derived variable through the Makefile's own `print-%`
-# target, with the git-repo-location env vars stripped (ci.md: a worktree
-# push leaks GIT_DIR into hooks, which would otherwise make git resolve
-# against the wrong repo for this parse-time assignment).
+# target. Deliberately does NOT strip GIT_DIR/GIT_WORK_TREE/GIT_COMMON_DIR/
+# GIT_INDEX_FILE -- doing so would test the harness's own stripping instead
+# of the Makefile's. The Makefile's `ZSH_FILES :=`/`SHELL_FILES :=`
+# assignments carry their own `env -u ...` prefix (ci.md: GIT_DIR leaks into
+# the pre-push hook from a worktree push) and that prefix is what must be
+# proven to work -- see the "survives a leaked GIT_DIR" test below.
 _make_print() {
-  env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
-    PATH="${CLEAN_PATH}" make -C "${REPO_ROOT}" "print-${1}"
+  PATH="${CLEAN_PATH}" make -C "${REPO_ROOT}" "print-${1}"
 }
 
 _git_ls_clean() {
@@ -42,16 +50,29 @@ _sorted_lines_from_space_list() {
   [ "${resolved}" = "${expected}" ]
 }
 
-@test "every tracked zsh-shaped file, independently derived, is present in ZSH_FILES" {
+@test "every tracked zsh file, independently derived by name OR shebang, is present in ZSH_FILES" {
   run _make_print ZSH_FILES
   [ "${status}" -eq 0 ]
   resolved="$(_sorted_lines_from_space_list "${output}")"
 
-  # Deliberately NOT the Makefile's own pathspec -- a broad-net regex over
-  # the full tracked set, so a wrong/narrow Makefile pathspec (as happened
-  # twice already: bruce.zsh-theme, then .zprofile) is caught rather than
-  # rubber-stamped by a second copy of the same glob.
-  broad="$(_git_ls_clean | grep -E '\.zsh(-theme)?$|(^|/)\.z[a-z]+$')"
+  # Filename arm: broad regex, deliberately NOT the Makefile's own pathspec
+  # -- so a wrong/narrow Makefile pathspec (as happened twice already:
+  # bruce.zsh-theme, then .zprofile) is caught rather than rubber-stamped by
+  # a second copy of the same glob.
+  by_name="$(_git_ls_clean | grep -E '\.zsh(-theme)?$|(^|/)\.z[a-z]+$' || true)"
+
+  # Shebang arm: content-derived, orthogonal to any filename rule -- catches
+  # a zsh script whose name is not zsh-shaped at all (this repo already
+  # carries extensionless hook scripts for bash: scripts/pre-push,
+  # scripts/commit-msg). Piped straight from `ls-files -z` into `xargs -0`,
+  # never through `$(...)`, because command substitution silently drops the
+  # NUL delimiters (shell.md).
+  by_shebang="$(_git_ls_clean -z | xargs -0 grep -l '^#!.*[/ ]zsh' 2>/dev/null || true)"
+
+  # Union, not either arm alone: .zshrc has no shebang, so the shebang arm
+  # by itself would miss it -- the same lesson in the other direction from
+  # the filename arm missing an extensionless script.
+  broad="$(printf '%s\n%s\n' "${by_name}" "${by_shebang}" | grep -v '^$' | sort -u)"
   [ -n "${broad}" ]
 
   missing=""
@@ -87,4 +108,45 @@ _sorted_lines_from_space_list() {
   run _make_print ZSH_FILES
   [ "${status}" -eq 0 ]
   [ -n "${output}" ]
+}
+
+@test "make print-ZSH_FILES survives a leaked GIT_DIR pointed at a decoy repo" {
+  decoy="${BATS_TEST_TMPDIR}/decoy"
+  mkdir -p "${decoy}"
+  PATH="${CLEAN_PATH}" git -C "${decoy}" init --quiet
+  PATH="${CLEAN_PATH}" git -C "${decoy}" config user.email "test@test.com"
+  PATH="${CLEAN_PATH}" git -C "${decoy}" config user.name "Test"
+  printf 'echo hi\n' > "${decoy}/a.zsh"
+  PATH="${CLEAN_PATH}" git -C "${decoy}" add a.zsh
+  PATH="${CLEAN_PATH}" git -C "${decoy}" commit --quiet -m "decoy"
+
+  # A leaked GIT_DIR is exactly what the Makefile's `env -u GIT_DIR ...`
+  # prefix exists to survive (ci.md: git exports GIT_DIR into the pre-push
+  # hook when the push originates from a worktree). If that prefix is
+  # deleted from the ZSH_FILES assignment, `git ls-files` here resolves
+  # against the decoy repo's single a.zsh instead of the real repo's ten --
+  # shell.md: `-C` does not override an exported GIT_DIR.
+  run env GIT_DIR="${decoy}/.git" PATH="${CLEAN_PATH}" make -C "${REPO_ROOT}" print-ZSH_FILES
+  [ "${status}" -eq 0 ]
+  resolved="$(_sorted_lines_from_space_list "${output}")"
+  expected="$(_git_ls_clean '*.zsh' '*.zsh-theme' '.zshrc' '.zprofile' | sort -u)"
+  [ "${resolved}" = "${expected}" ]
+}
+
+@test "make -n lint dry-run wires zsh -n to ZSH_FILES, not SHELL_FILES" {
+  run env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+    bash -c "PATH='${CLEAN_PATH}' make -C '${REPO_ROOT}' -n lint"
+  [ "${status}" -eq 0 ]
+
+  count="$(printf '%s\n' "${output}" | grep -c 'zsh  -n')"
+  [ "${count}" -eq 1 ]
+
+  # The line immediately before `zsh  -n ...` is the `for` loop it lives
+  # inside. It must be fed by ZSH_FILES -- bruce.zsh-theme is a name
+  # SHELL_FILES's *.sh/*.bash/hook pathspec can never match -- and must NOT
+  # be fed by SHELL_FILES -- lib/constants.sh is a bash file that must not
+  # appear in a zsh -n loop.
+  for_line="$(printf '%s\n' "${output}" | grep -B1 'zsh  -n' | head -1)"
+  [[ "${for_line}" == *"bruce.zsh-theme"* ]]
+  [[ "${for_line}" != *"lib/constants.sh"* ]]
 }
