@@ -816,7 +816,7 @@ FIXTURE
   touch "${_collide}"
   local _clean_path
   _clean_path="$(printf "%s" "${PATH}" | tr ':' '\n' | grep -v "tests/mocks" | tr '\n' ':' | sed 's/:$//')"
-  run env PATH="${_clean_path}" make -C "${REPO_ROOT}" -n test-python
+  run env PATH="${_clean_path}" make --no-print-directory -C "${REPO_ROOT}" -n test-python
   rm -f "${_collide}"
   [ "$status" -eq 0 ]
   [[ "$output" == *"unittest"* ]]

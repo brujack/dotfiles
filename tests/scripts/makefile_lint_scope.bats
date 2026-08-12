@@ -414,54 +414,61 @@ FIXTURE_EOF
 # under which GNU Make can print Entering/Leaving at all) AND the substring
 # "make" -- verified this session that "-C" alone is not a safe filter: an
 # earlier draft of this scanner, keyed on "-C" only, matched every
-# `git -C ...` fixture-setup call in both domain files as an unclassified
-# "neither" (git has its own unrelated -C flag; it prints no directory
-# messages and needs no guard at all). Requiring "make" too correctly keeps
-# Case 1/Case 2's resolved-binary invocations in scope
-# ("${_make_lt4}"/"${_make_ge4}" both contain the substring "make") while
-# dropping every git -C line, none of which contain it. Two further
-# exclusions, both verified live this session by running the scanner without
-# them and reading what it wrongly caught: comment lines (a line whose only
-# content after the line number is leading whitespace then '#'), and @test
-# description lines (this Case's own @test line above literally contains the
-# English phrase "make -C invocation", which the "make"+"-C" filter alone
-# would misread as a third kind of match).
+# `git -C ...` fixture-setup call as an unclassified "neither" (git has its
+# own unrelated -C flag; it prints no directory messages and needs no guard
+# at all). Requiring "make" too correctly keeps Case 1/Case 2's
+# resolved-binary invocations in scope ("${_make_lt4}"/"${_make_ge4}" both
+# contain the substring "make") while dropping every git -C line, none of
+# which contain it.
 #
-# Domain is the two files this feature's guarded/measuring discipline
-# actually governs: tests/makefile_scope.bats and this file -- the complete
-# files_touched surface of both Task 1 (Makefile, this file) and Task 2
-# (makefile_scope.bats, this file). This is not a global-fact shortcut: each
-# candidate line is inspected for its own guard text, not for whether the
-# repo Makefile happens to carry the directive -- a scanner that accepted
-# "the Makefile has the directive" as blanket proof would (wrongly) treat
-# every make invocation as covered regardless of which Makefile it targets.
-# That the domain is scoped rather than tests/**/*.bats in full is itself
-# verified, not assumed: running this Case's own filter
-# (`grep -nE ' -C ' <file> | grep -vE '^[0-9]+:[[:space:]]*#' |
-# grep -vE '^[0-9]+:@test' | grep 'make'`) against every tracked *.bats file
-# this session found two classes outside this domain. 27 lines in
-# tests/scripts/pre_push.bats are all `grep -qE "^make -C .* test$"
-# "${MOCK_CALLS_FILE}"` -- a grep pattern checked against a log of calls to a
-# *mocked* make binary, not an invocation of the real one; this scanner's own
-# filter already leaves them out because their line, read as a whole, is a
-# `grep` invocation, and "grep" is what precedes the make-shaped text, not
-# "run" or a real make/gmake binary -- they simply never needed a separate
-# exclusion. One further site is a real invocation of the real binary:
-# tests/scripts/unit.bats:819
-# (`run env PATH="${_clean_path}" make -C "${REPO_ROOT}" -n test-python`),
-# which carries neither guard. It is outside both Task 1's and Task 2's
-# files_touched, so this scanner does not claim to cover it -- flagging it
-# here rather than silently narrowing the domain around it. Its own
-# assertion (`[[ "$output" == *"unittest"* ]]`) is a substring match, so
-# Entering/Leaving noise cannot break it the way an exact line-count or
-# set-equality assertion would; that is a fact about that one test's
-# assertion shape, not a reason this scanner's own domain could safely
-# include or exclude it either way.
+# Domain used to be a hardcoded two-file array (this file and
+# tests/makefile_scope.bats) -- exactly tdd.md's Coverage Denominators
+# failure shape: a hand-maintained list whose omissions are invisible
+# because an excluded file is absent from numerator and denominator alike.
+# It is now every tracked *.bats file, derived through `_git_ls_clean
+# 'tests/*.bats'` (the same env -u GIT_DIR/GIT_WORK_TREE/GIT_COMMON_DIR/
+# GIT_INDEX_FILE strip the ZSH_FILES tests above use, and for the identical
+# reason -- shell.md: `git -C` does not override an exported GIT_DIR).
+# Measured this session: `'tests/*.bats'` alone returns the same 32 files as
+# `'tests/*.bats' 'tests/**/*.bats'` deduplicated -- git pathspec `*` already
+# crosses `/`, so the recursive-looking second pattern added nothing and is
+# not used.
+#
+# Three exclusions on the candidate filter, each verified live this session
+# by running the scanner without it and reading what it wrongly caught, not
+# assumed:
+#   - comment lines (a line whose only content after the line number is
+#     leading whitespace then '#')
+#   - @test description lines (this Case's own @test line literally contains
+#     the English phrase "make -C invocation", which the "make"+"-C" filter
+#     alone would misread as a third kind of match)
+#   - lines whose invoked command is `grep`, not `make` -- added when the
+#     domain widened past the original two files. tests/scripts/pre_push.bats
+#     carries 27 lines of the shape
+#     `grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"`: a string match
+#     against a log of calls already made to a *mocked* make binary, not an
+#     invocation of a real one. Confirmed this session: without this
+#     exclusion, the full-domain sweep reports all 27 as "neither guarded nor
+#     measuring"; with it, they drop out of the candidate list entirely and
+#     the sweep's real candidate count is 12, not 39.
+#
+# Full-domain sweep, measured this session (32 tracked *.bats files, 12
+# candidates): guarded=8 (tests/makefile_scope.bats:36,45,68,79 and
+# tests/scripts/makefile_lint_scope.bats:123,229,241, plus
+# tests/scripts/unit.bats:819 once this same commit adds
+# --no-print-directory to it), measuring=4 (tests/scripts/makefile_lint_scope.bats:
+# 286,300,340,386), neither=0. Before that same-commit fix,
+# tests/scripts/unit.bats:819 (`run env PATH="${_clean_path}" make -C
+# "${REPO_ROOT}" -n test-python`) was the sole "neither" -- the one violation
+# this domain widening was built to expose, not a hypothetical.
 @test "every stdout-capturing make -C invocation in-domain is guarded or measuring, both sets nonempty" {
-  local -a _domain_files=(
-    "${REPO_ROOT}/tests/makefile_scope.bats"
-    "${REPO_ROOT}/tests/scripts/makefile_lint_scope.bats"
-  )
+  local -a _domain_files=()
+  local _rel
+  while IFS= read -r _rel; do
+    [ -z "${_rel}" ] && continue
+    _domain_files+=("${REPO_ROOT}/${_rel}")
+  done < <(_git_ls_clean 'tests/*.bats')
+  [ "${#_domain_files[@]}" -gt 0 ]
 
   local -a _candidates=()
   local _f _hit
@@ -472,6 +479,7 @@ FIXTURE_EOF
     done < <(grep -nE ' -C ' "${_f}" \
       | grep -vE '^[0-9]+:[[:space:]]*#' \
       | grep -vE '^[0-9]+:@test' \
+      | grep -vE '^[0-9]+:[[:space:]]*grep[[:space:]]' \
       | grep 'make')
   done
   [ "${#_candidates[@]}" -gt 0 ]
@@ -487,7 +495,8 @@ FIXTURE_EOF
       printf 'neither guarded nor measuring: %s\n' "${_c}" >&2
     fi
   done
-  printf 'guarded=%s measuring=%s neither=%s\n' "${_guarded}" "${_measuring}" "${_neither}" >&2
+  printf 'domain_files=%s candidates=%s guarded=%s measuring=%s neither=%s\n' \
+    "${#_domain_files[@]}" "${#_candidates[@]}" "${_guarded}" "${_measuring}" "${_neither}" >&2
 
   [ "${_neither}" -eq 0 ]
   [ "${_guarded}" -gt 0 ]
