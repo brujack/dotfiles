@@ -32,7 +32,7 @@ ZSH_FILES := $(shell env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_IN
 # it is expanded, so folding it into a := assignment would abort every make
 # invocation (including `make help`) at parse time regardless of target.
 # One-shot fix leads; the durable fix (full provisioning re-run) follows.
-BATS_MISSING := bats not found. Install: brew install bats-core (macOS) or sudo apt-get install bats (Linux). Durable fix: ./setup_env.sh -t setup_user
+BATS_MISSING := bats not found. Install: brew install bats-core (macOS) or sudo apt-get install bats (Linux). Durable fix: ./setup_env.sh -t setup_user (full provisioning re-run)
 
 .PHONY: test test-python test-unit lint bash-coverage push-bash-coverage install-hooks ledger-symlink help changelog validate-plan sync-agent-guidance check-agent-guidance
 
