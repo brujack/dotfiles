@@ -20,20 +20,24 @@ setup() {
   # ambient state so an unrelated leak from whatever invoked bats can't
   # change what a "no GIT_DIR set" test observes.
   unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
-  # MAKEFLAGS is different from the GIT_* vars above: make exports it into
-  # every recipe subshell automatically, including this file's own
-  # `bats --recursive tests/` recipe under `make test` -- so once the
-  # Makefile declares `MAKEFLAGS += --no-print-directory`, every bats test
-  # in this process inherits that flag from the OS environment regardless of
-  # what any one test does. Cases 1 and 2 below strip it per-invocation with
-  # an explicit `env -u MAKEFLAGS` anyway (ci.md: "a check derived from the
-  # same decision as the thing it checks cannot falsify it" -- they must not
-  # rely solely on this global unset). The "MAKEFLAGS inherited" case does
-  # rely on it: unsetting it here, once, is what makes that test's baseline
-  # deterministic across both `bats tests/...` (no parent MAKEFLAGS) and
-  # `make test` (parent MAKEFLAGS carries --no-print-directory) invocation
-  # routes -- confirmed empirically both ways before writing the test.
-  unset MAKEFLAGS
+  # MAKEFLAGS is deliberately left untouched here, unlike the GIT_* vars
+  # above. make exports it into every recipe subshell automatically,
+  # including this file's own `bats --recursive tests/` recipe under
+  # `make test` -- so once the Makefile declares
+  # `MAKEFLAGS += --no-print-directory`, that flag is genuinely live in this
+  # process's environment under that invocation route. A blanket unset here
+  # was tried first and rejected: it would have scrubbed MAKEFLAGS before any
+  # test body ran, making every per-call `env -u MAKEFLAGS` below redundant
+  # (nothing left to strip) rather than wrong -- Case 1 and Case 2 would
+  # still have correctly reflected the Makefile's own state either way, but
+  # their `env -u MAKEFLAGS` would never once have been exercised against a
+  # real leak, so its necessity would go permanently unverified under the one
+  # invocation route (`make test`) where the leak is real (ci.md: "a check
+  # derived from the same decision as the thing it checks cannot falsify
+  # it"). Leaving MAKEFLAGS alone here is what keeps each measuring case's
+  # own `env -u MAKEFLAGS` load-bearing rather than decorative. Case 5
+  # normalizes its own MAKEFLAGS explicitly instead, per-call -- see its
+  # comment for why it needs a different mechanism.
 }
 
 # GNU Make's `--version` first line is "GNU Make X.Y[.Z]"; every make this
@@ -238,13 +242,26 @@ _sorted_lines_from_space_list() {
 
 # Case 1: MAKEFLAGS += --no-print-directory (Makefile:1) is what makes
 # print-ZSH_FILES's line count identical whether the invoking make is < 4.0
-# or >= 4.0. `env -u MAKEFLAGS` is mandatory here, not decoration: without
-# it, `make test`'s own recipe subshell (which inherits MAKEFLAGS from the
-# top-of-file directive once it exists) would already suppress the directory
-# lines for both arms regardless of the fix under test, and the assertion
-# would pass for the wrong reason -- measuring the environment, not the
-# Makefile (ci.md: "a check derived from the same decision as the thing it
-# checks cannot falsify it").
+# or >= 4.0. `env -u MAKEFLAGS` is mandatory here, not decoration -- but it
+# guards this case alone, and only in one direction. This is a *symmetric*
+# two-arm comparison: if `env -u MAKEFLAGS` is ever dropped and MAKEFLAGS
+# leaks in with --no-print-directory (e.g. from `make test`'s own recipe
+# subshell, which inherits it from the top-of-file directive), BOTH arms are
+# masked identically -- the <4 arm was already unaffected (3.81 never prints
+# these lines) and the >=4 arm now gets suppressed by the leak instead of by
+# the Makefile. Line counts stay equal either way, so this case does not
+# fail on the missing guard: it goes *blind*, quietly passing regardless of
+# whether the Makefile's own directive is present. It cannot detect an
+# environment leak; what it detects, given its own `env -u` intact, is the
+# Makefile directive's absence (1 vs 3 -- measured directly, mutation-
+# checked). Measuring the environment instead of the Makefile is exactly the
+# failure mode ci.md warns about ("a check derived from the same decision as
+# the thing it checks cannot falsify it") -- this case's own guard is what
+# keeps it out of that trap, and nothing else in this file substitutes for
+# it. The <4 arm cannot exist on ubuntu-latest -- its /usr/bin/make is
+# already >=4 -- so this case skips there by design; a green CI run is not
+# evidence for this specific case, only local runs on a mac (or any host
+# still carrying a genuine <4 make) are.
 @test "print-ZSH_FILES line count is equal and nonzero across a <4 make and a >=4 make" {
   local _make_lt4 _make_ge4 _lt4_count _ge4_count
   _make_lt4="$(_find_make_lt4)" \
@@ -254,14 +271,22 @@ _sorted_lines_from_space_list() {
 
   run env -u MAKEFLAGS PATH="${CLEAN_PATH}" "${_make_lt4}" -C "${REPO_ROOT}" print-ZSH_FILES
   [ "${status}" -eq 0 ]
-  _lt4_count="$(printf '%s\n' "${output}" | wc -l | tr -d ' ')"
+  [ -n "${output}" ]
+  # bats strips $output's trailing newline, so `printf '%s\n' "$output" | wc -l`
+  # floors at 1 even for genuinely empty output -- `wc -l` cannot see the
+  # difference between "one line" and "no output at all". The `lines` array
+  # bats also populates has no such floor: it is length 0 for empty output.
+  _lt4_count="${#lines[@]}"
 
   run env -u MAKEFLAGS PATH="${CLEAN_PATH}" "${_make_ge4}" -C "${REPO_ROOT}" print-ZSH_FILES
   [ "${status}" -eq 0 ]
-  _ge4_count="$(printf '%s\n' "${output}" | wc -l | tr -d ' ')"
+  [ -n "${output}" ]
+  _ge4_count="${#lines[@]}"
 
   # Equality alone would also pass if both arms emitted nothing -- assert
-  # nonzero first so a vacuous pass can't hide behind the equality check.
+  # nonzero (via lines[], which is genuinely 0 for empty output, unlike
+  # wc -l above) first so a vacuous pass can't hide behind the equality
+  # check.
   [ "${_lt4_count}" -gt 0 ]
   if [ "${_lt4_count}" -ne "${_ge4_count}" ]; then
     printf '<4 (%s) line count %s != >=4 (%s) line count %s\n' \
@@ -277,7 +302,20 @@ _sorted_lines_from_space_list() {
 # changes where it emits that text. Run through the >=4 arm specifically: on
 # this repo's own default `make` (3.81 on every mac), the directory lines
 # never appeared at all, so that arm alone would not exercise the case the
-# MAKEFLAGS directive exists to fix.
+# MAKEFLAGS directive exists to fix. This case's own `env -u MAKEFLAGS` is
+# load-bearing too, but by a different, complementary mechanism to Case 1's:
+# this is a single *asymmetric* check, not a two-arm comparison, so a leaked
+# MAKEFLAGS that this guard fails to strip would pollute its one arm
+# directly -- the >=4 make's directory lines would end up inside `$output`
+# and the exact string match would fail (red), not pass unnoticed (blind),
+# which is the opposite failure mode from Case 1's symmetric masking.
+# Mutation-checked directly, though only from the Makefile side: with the
+# Makefile directive removed, Case 1's `env -u` also removed, and an ambient
+# leaked MAKEFLAGS present, this case (its own `env -u` left intact) still
+# caught the missing directive and went red while Case 1 stayed green blind
+# -- proving this guard is doing real, case-specific work. Each case's own
+# `env -u MAKEFLAGS` protects that case alone; neither is a canary for the
+# other, and no case's guard substitutes for another's.
 @test "print-BATS_MISSING returns the exact configured message under a >=4 make" {
   local _make_ge4 _expected
   _make_ge4="$(_find_make_ge4)" \
@@ -289,21 +327,32 @@ _sorted_lines_from_space_list() {
   [ "${output}" = "${_expected}" ]
 }
 
-# Case 5 (numbered per the plan -- 3/4/6 belong to a later task): the
-# falsifiability canary. Unlike Case 1/2, this deliberately does NOT prefix
-# its make invocation with `env -u MAKEFLAGS` -- it relies entirely on
-# setup()'s single `unset MAKEFLAGS` for a clean baseline. A directive-free
-# FIXTURE Makefile (never touched by the repo's own MAKEFLAGS directive) run
-# under a >=4 make must show the raw, unsuppressed "Entering directory" /
-# "Leaving directory" behaviour. If a future edit ever drops setup()'s
-# `unset MAKEFLAGS` -- the only thing protecting this test from a leaked
-# MAKEFLAGS inherited from `make test`'s own recipe subshell -- this is the
-# one test in the file that goes red, because it has no independent
-# `env -u MAKEFLAGS` of its own to fall back on. That is what proves Case 1
-# and Case 2 are measuring the Makefile's own directive rather than an
-# accident of how the suite happens to be invoked.
+# Case 5 (numbered per the plan -- 3/4/6 belong to a later task): a control,
+# not a canary for the other cases. It establishes the baseline Case 1 and
+# Case 2 depend on -- that a directive-free Makefile run under a >=4 make,
+# with nothing suppressing the output, genuinely shows "Entering directory" /
+# "Leaving directory". Unlike Case 1/2, this deliberately does NOT prefix its
+# make invocation with `env -u MAKEFLAGS`. It instead sets `MAKEFLAGS=` to an
+# explicit empty value -- "inherited", per the plan, meaning the parent's
+# MAKEFLAGS is left alone rather than stripped, while THIS invocation is
+# normalized to the value a genuinely clean environment would have. That
+# normalization guards this case's own baseline only; it says nothing about,
+# and cannot substitute for, Case 1's or Case 2's own `env -u MAKEFLAGS` --
+# each measuring case's guard is load-bearing for that case alone (see their
+# comments), and this one is no exception in the other direction: dropping
+# it would only make Case 5 itself vulnerable to a leaked ambient MAKEFLAGS,
+# not any other case. A blanket `unset MAKEFLAGS` in setup() was tried first
+# and rejected: it would have made Case 1's and Case 2's own
+# `env -u MAKEFLAGS` redundant (nothing left to strip), silently proving
+# nothing regardless of whether their per-call guards were present. Left
+# alone, setup() leaves MAKEFLAGS live under `make test` (which exports it
+# once the Makefile carries the directive), which is what keeps Case 1's and
+# Case 2's own guards meaningful; this case's `MAKEFLAGS=` is what keeps ITS
+# baseline deterministic across both `bats tests/...` (no parent MAKEFLAGS to
+# begin with) and `make test` (parent MAKEFLAGS carries --no-print-directory)
+# invocation routes.
 @test "a directive-free fixture Makefile emits directory lines under a >=4 make, MAKEFLAGS inherited" {
-  local _make_ge4 _fixture_dir _lines
+  local _make_ge4 _fixture_dir _lines_count
   _make_ge4="$(_find_make_ge4)" \
     || skip "no >=4 arm: no make/gmake >=4 found on PATH"
 
@@ -315,10 +364,11 @@ print-%:
 	@printf '%s\n' "$($*)"
 FIXTURE_EOF
 
-  run "${_make_ge4}" -C "${_fixture_dir}" print-FOO
+  run env MAKEFLAGS= PATH="${CLEAN_PATH}" "${_make_ge4}" -C "${_fixture_dir}" print-FOO
   [ "${status}" -eq 0 ]
+  [ -n "${output}" ]
   [[ "${output}" == *"Entering directory"* ]]
   [[ "${output}" == *"Leaving directory"* ]]
-  _lines="$(printf '%s\n' "${output}" | wc -l | tr -d ' ')"
-  [ "${_lines}" -eq 3 ]
+  _lines_count="${#lines[@]}"
+  [ "${_lines_count}" -eq 3 ]
 }
