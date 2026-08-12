@@ -198,12 +198,14 @@ repo-structure, shell).
 
 Uses **BATS** (Bash Automated Testing System), installed natively:
 
-- macOS: `brew install bats-core` (in `Brewfile`)
-- Ubuntu: `sudo apt-get install -y bats` (via `install_bats()` in `setup_env.sh`)
+`install_bats()` in `lib/helpers.sh` is a platform dispatcher (mirrors `install_zsh()`'s shape): `run_setup_user` calls it unconditionally on both macOS and Linux, so bats provisioning is no longer Linux-only.
+
+- macOS: `install_bats_macos()` in `lib/macos.sh` — `brew install bats-core` (also listed in `Brewfile` for `brew bundle` parity)
+- Ubuntu: `install_bats_linux()` in `lib/linux_shared.sh` — `sudo apt-get install -y bats`
 
 **Run tests:** `make test` (runs lint then all BATS tests)
 **Run unit tests only:** `make test-unit` (runs `unit.bats`, `profiles.bats`, and `zshrc.d/unit.bats`)
-**Run lint only:** `make lint` (bash -n + zsh -n on every tracked shell file, then shellcheck at default severity for `.sh`/`.bash`/hooks and `--severity=warning` for `.bats`; scope derived from `git ls-files`)
+**Run lint only:** `make lint` — `bash -n` over `SHELL_FILES` (36 tracked `.sh`/`.bash` files plus the two extensionless hooks `scripts/pre-push` and `scripts/commit-msg`), `zsh -n` over `ZSH_FILES` (the 10 tracked `.zsh`/`.zsh-theme`/`.zshrc`/`.zprofile` files), then shellcheck at default severity for `SHELL_FILES` and `--severity=warning` for `.bats`. Both `SHELL_FILES` and `ZSH_FILES` are derived from `git ls-files` and each refuses to report a pass on an empty list.
 **Install hooks:** `make install-hooks` (installs pre-commit and pre-push hooks; run once per checkout)
 **Sync agent guidance:** `make sync-agent-guidance` (regenerates `.cursor/rules/global-claude-standards.mdc` from root `CLAUDE.md`'s `@~/.claude/standards/*.md` imports, resolved against the global symlinked standards dir)
 **Check agent guidance drift:** `make check-agent-guidance` (fails when generated Cursor guidance is stale)
@@ -243,8 +245,8 @@ Rules for any new suppression:
 
 `.github/workflows/ci.yml` runs on PRs to master only (the pre-push hook gates branch pushes locally):
 
-- `test` job: installs a pinned, checksum-verified shellcheck plus bats, runs `make test`, then verifies test count ≥ 840 (regression proxy; 1260 tests as of 2026-08-09)
-- `lint-macos` job: runs `bash -n` and `zsh -n` on all `.sh` files on `macos-latest` (advisory, not blocking auto-merge)
+- `test` job: installs a pinned, checksum-verified shellcheck plus bats, runs `make test`, then verifies test count ≥ 840 (regression proxy; 1294 tests as of 2026-08-11)
+- `lint-macos` job: runs on `macos-latest` (advisory, not blocking auto-merge), two independent steps: `bash -n` over every `*.sh` file found via `find` (unchanged), and `zsh -n` over the 10 tracked zsh files selected via `git ls-files '*.zsh' '*.zsh-theme' '.zshrc' '.zprofile'` — this second step refuses to pass on an empty file list
 - `bash-coverage` job: measures bash line coverage via PS4 xtrace on `ubuntu-latest`; **gates at 91%** — blocks auto-merge if coverage drops below floor
 - `secret-scan` job: runs gitleaks against recent commits (advisory, not blocking auto-merge)
 - `auto-merge` job: auto-merges any PR when all CI jobs pass (depends on `test`, `lint-macos`, `powershell`, `bash-coverage`, `secret-scan`)
@@ -295,7 +297,7 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 #### Bash
 
-- **Overall: 91%** (3090/3373 commands, 1274 tests as of 2026-08-10) as measured by CI on `ubuntu-latest` — the figure the gate actually reads. The same commit measures **92% (3105/3371)** on macOS: 15 covered lines more and 2 coverable fewer, because the union makes `coverable` depend on what a run traced and 18 of the 34 instrumented files are `scripts/` run as subprocesses. The platform gap has held at one percentage point across every commit measured both ways, but its size in _lines_ moves (11/2 on 2026-08-09, 15/2 on 2026-08-10) — so treat the point as the stable part and re-read the ratio, never carry it forward. Publish the CI figure; treat a local number as a preview. Coverage is over **34 of the 35 files the predicate matches**; the 36th tracked shell file, `tests/helpers/common.bash`, is a test helper and outside the predicate. Gated in CI at **91%**, one point below the measurement (`bash-coverage` job, blocks auto-merge on drop). A percentage without its denominator is not a coverage figure — report both.
+- **Overall: 91%** (3090/3373 commands, test count 1274 measured 2026-08-10) as measured by CI on `ubuntu-latest` — the figure the gate actually reads. That CI measurement pre-dates this branch (`feat/bats-provisioning-zsh-lint-scope`); this branch's local macOS preview reads **92% (3122/3388 commands, 1294 tests)**, matching the documented one-point macOS/CI gap, but has not yet been reconciled against a CI run — do not publish this local preview as the new headline until CI measures it. The platform gap has held at one percentage point across every commit measured both ways, but its size in _lines_ moves (11/2 on 2026-08-09, 15/2 on 2026-08-10) — so treat the point as the stable part and re-read the ratio, never carry it forward. Publish the CI figure; treat a local number as a preview. Coverage is over **34 of the 35 files the predicate matches**; the 36th tracked shell file, `tests/helpers/common.bash`, is a test helper and outside the predicate. Gated in CI at **91%**, one point below the measurement (`bash-coverage` job, blocks auto-merge on drop). A percentage without its denominator is not a coverage figure — report both.
 - **The instrumented set is `setup_env.sh` plus tracked `config/*.sh`, `lib/*.sh`, `scripts/*.sh` and the two extensionless hooks (`scripts/pre-push`, `scripts/commit-msg`), derived from `git ls-files` at run time, less `scripts/bash-tracer.sh`.** It was a 13-entry literal array until 2026-08-07, covering 13 of 36 tracked `.sh` files, so the previously published 91% was computed over 36% of the repo. An omitted file left the percentage unchanged rather than lowering it, which is why nothing surfaced it. The predicate is _reached by the suite_, not _lives in a particular directory_ — `lib/detect_env.sh` sources `config/profiles.sh` and `lib/git_hooks.sh` sources `config/hook_repos.sh`. Check what is measured:
   ```bash
   bash scripts/run-bash-coverage.sh --list-sources
@@ -360,7 +362,7 @@ Invoke `caveman:caveman-commit` skill to generate the commit message before runn
 - **ruff is venv-managed** (not brew); run `brew uninstall ruff` once after venv recreate to remove the legacy brew install
 - **Test runner:** `pytest` — runs `unittest.TestCase` tests natively; test file contents do not change
 - Application installs are kept in alphabetical order
-- For shell syntax-only fixes in `setup_env.sh`, validate with both `bash -n setup_env.sh` and `zsh -n setup_env.sh` before commit
+- For shell syntax-only fixes, validate with `bash -n <file>` for `.sh`/`.bash` files and the two extensionless hooks, or `zsh -n <file>` for `.zsh`/`.zsh-theme`/`.zshrc`/`.zprofile` files — `make lint` runs both checks over their respective `SHELL_FILES`/`ZSH_FILES` sets before commit
 - After any change to `.zshrc` or `.zshrc.d/` files, run `zsh -i -c 'exit'` before committing to catch re-source crashes before they reach prod
 - **`_UPDATE_SECTION_ORDER` coupling:** `lib/update_summary.sh` has a `readonly _UPDATE_SECTION_ORDER=(...)` array that controls which sections appear in the printed update summary. Adding `_update_record_start/end "new-section"` in `run_update()` without also adding `"new-section"` to this array means the section is tracked internally but never printed. Both must be updated together. When **removing** a section, a `sed` pass on test fixture loops won't catch hardcoded count assertions like `[[ "$output" == *"9 OK"* ]]` — these must be audited and decremented manually.
 - **`scripts/sync_git_repos.sh`** replaces the old rsync-only sync script (`scripts/synch_git-repos.sh`, deleted). Two independent modes: git-native fetch/pull/push for `personal/` repos + `state-ledger` (safe on any of the three dev machines — never force-pushes, never auto-merges a diverged repo; dirty does not block a safe push, only a pull), and studio-only rsync push for legacy/no-git-access directories + a full-tree ratna backup. Runs automatically as part of `-t update` (`git-repos`/`legacy-rsync` sections in `_UPDATE_SECTION_ORDER`); `--git-only`/`--legacy-only`/`-h` for standalone use. See `docs/superpowers/specs/2026-07-18-sync-git-repos-design.md` for the full design and the dirty/ahead/behind decision table. **Never invoke this script (or `sync_legacy_dirs`/`sync_git_repos` directly) unmocked outside the BATS test harness** — it performs real `git push`/`rsync --delete` over SSH against real hosts, and `_is_legacy_sync_host` triggers on the real `hostname -s` of whichever machine runs it.

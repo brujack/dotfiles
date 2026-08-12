@@ -1,5 +1,7 @@
 # bats Provisioning Parity and `zsh -n` Lint Scope Implementation Plan
 
+> **Status: DONE**
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Give macOS the same unconditional bats provisioning Linux already has, point `zsh -n` at the ten files zsh actually interprets, and make a missing `bats-core` visible to `-t update`.
@@ -22,15 +24,15 @@
 
 ## Baseline (measured 2026-08-11, at `93a6d4f`)
 
-| Quantity                                | Value                                                     | Command                                                                                     |
-| --------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `make lint`                             | rc 0, 36 `bash OK` + 36 `zsh OK` lines, all on bash files | `make lint`                                                                                 |
-| Tracked zsh files                       | 10                                                        | `git ls-files '*.zsh' '*.zsh-theme' '.zshrc' '.zprofile' \| wc -l`                          |
-| `zsh -n` over all 10                    | all pass                                                  | `for f in $(git ls-files '*.zsh' '*.zsh-theme' '.zshrc' '.zprofile'); do zsh -n "$f"; done` |
-| Existing `zsh -n` bats tests            | 7 (`.zshrc.d/1_init`..`7_final`)                          | `grep -c 'run zsh -n' tests/zshrc.d/unit.bats`                                              |
-| Bash coverage (CI, authoritative)       | 91%                                                       | `bash-coverage` CI job                                                                      |
-| `make test` | **rc 0, 1274 ok, 0 not ok** | `make test` |
-| `install_bats` references | 9 sites, 4 files | `grep -rn 'install_bats' lib/ tests/ setup_env.sh` |
+| Quantity                          | Value                                                     | Command                                                                                     |
+| --------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `make lint`                       | rc 0, 36 `bash OK` + 36 `zsh OK` lines, all on bash files | `make lint`                                                                                 |
+| Tracked zsh files                 | 10                                                        | `git ls-files '*.zsh' '*.zsh-theme' '.zshrc' '.zprofile' \| wc -l`                          |
+| `zsh -n` over all 10              | all pass                                                  | `for f in $(git ls-files '*.zsh' '*.zsh-theme' '.zshrc' '.zprofile'); do zsh -n "$f"; done` |
+| Existing `zsh -n` bats tests      | 7 (`.zshrc.d/1_init`..`7_final`)                          | `grep -c 'run zsh -n' tests/zshrc.d/unit.bats`                                              |
+| Bash coverage (CI, authoritative) | 91%                                                       | `bash-coverage` CI job                                                                      |
+| `make test`                       | **rc 0, 1274 ok, 0 not ok**                               | `make test`                                                                                 |
+| `install_bats` references         | 9 sites, 4 files                                          | `grep -rn 'install_bats' lib/ tests/ setup_env.sh`                                          |
 
 **These figures were measured under the configuration this plan changes, and that is stated deliberately.** The 36/36 lint line counts and the 7-test count are _before_ numbers used to size the work; they are not acceptance targets. Every acceptance gate below states its own post-change expectation.
 
@@ -229,15 +231,15 @@ install_bats() {
 
 **Rename is a contract change for tests, and the enumeration is already done** — 9 sites, 4 files, measured 2026-08-11. `tests/setup_env/install_functions.bats` contains none despite being the natural place to look.
 
-| Site | Action |
-| --- | --- |
-| `lib/linux_shared.sh:23` | rename the definition |
-| `lib/workflows.sh:136` | **keep the name** — now resolves to the dispatcher |
-| `install_guards.bats:125` | retitle the section comment |
-| `install_guards.bats:127,130` | → `install_bats_linux`, and `unset MACOS` |
-| `install_guards.bats:136,139` | → `install_bats_linux`, and `unset MACOS` |
-| `install_guards.bats:973` | **keep the name** — stubs what `run_setup_user` calls |
-| `workflows.bats:161` | **keep the name**, add a macOS counterpart |
+| Site                          | Action                                                |
+| ----------------------------- | ----------------------------------------------------- |
+| `lib/linux_shared.sh:23`      | rename the definition                                 |
+| `lib/workflows.sh:136`        | **keep the name** — now resolves to the dispatcher    |
+| `install_guards.bats:125`     | retitle the section comment                           |
+| `install_guards.bats:127,130` | → `install_bats_linux`, and `unset MACOS`             |
+| `install_guards.bats:136,139` | → `install_bats_linux`, and `unset MACOS`             |
+| `install_guards.bats:973`     | **keep the name** — stubs what `run_setup_user` calls |
+| `workflows.bats:161`          | **keep the name**, add a macOS counterpart            |
 
 **A blanket find-and-replace breaks this.** Three of the nine sites must stay `install_bats` because the dispatcher is exactly what they exercise.
 
@@ -368,10 +370,10 @@ files, the guarded step exits 1 and the unguarded form exits 0.
 
 **Gate note, added after Task 5 returned a blocker.** Two earlier versions of this task's
 second gate were both vacuous, in opposite ways. The plan's original anchored the `sed` range
-on `"Syntax check all shell scripts (zsh)"` — the step name the rename *deletes* — so after a
+on `"Syntax check all shell scripts (zsh)"` — the step name the rename _deletes_ — so after a
 correct implementation the range is empty and the gate passes having inspected nothing. The
 dispatch prompt paraphrased it to `/Syntax check all/`, which both step names share, so `sed`
-anchored on the bash step and the gate failed against a *correct* implementation. The gate now
+anchored on the bash step and the gate failed against a _correct_ implementation. The gate now
 anchors on the `zsh -n` terminator, which exists in both the old and new file, and asserts the
 selector both negatively (no `find .`) and positively (uses `git ls-files`). Verified: passes
 on the changed tree, fails both ways on `HEAD`'s version.
@@ -517,7 +519,7 @@ parallel_group: null
 
 1. **Key Conventions:** retire "For shell syntax-only fixes in `setup_env.sh`, validate with both `bash -n setup_env.sh` and `zsh -n setup_env.sh` before commit." That line prescribes exactly the check this plan removes. Replace with the split: `bash -n` for `.sh`/`.bash`/hooks, `zsh -n` for the ten zsh files.
 2. **Testing:** the `make lint` description currently reads "bash -n + zsh -n on every tracked shell file". Correct it — `bash -n` and shellcheck over `SHELL_FILES`, `zsh -n` over `ZSH_FILES`.
-3. **`CLAUDE.md:202`** — the Testing section reads "Ubuntu: `sudo apt-get install -y bats` (via `install_bats()` in `setup_env.sh`)". After Task 3 that names a function which no longer exists under that name, and the macOS line above it no longer reflects that `run_setup_user` installs bats there too. Rewrite both to describe the dispatcher. *(Found by Task 3's spec reviewer, which correctly declined to fix it as outside its `files_touched`.)*
+3. **`CLAUDE.md:202`** — the Testing section reads "Ubuntu: `sudo apt-get install -y bats` (via `install_bats()` in `setup_env.sh`)". After Task 3 that names a function which no longer exists under that name, and the macOS line above it no longer reflects that `run_setup_user` installs bats there too. Rewrite both to describe the dispatcher. _(Found by Task 3's spec reviewer, which correctly declined to fix it as outside its `files_touched`.)_
 4. **`CLAUDE.md` test counts** — the CI section records "1260 tests as of 2026-08-09" and the
    Coverage section "1274 tests as of 2026-08-10". This branch adds tests in T1, T2, T3, T4 and
    T6; update both figures to the count `make test` reports at that point, and re-read the
@@ -525,8 +527,8 @@ parallel_group: null
 5. **`CLAUDE.md:247`** — the `lint-macos` job is described as running "`bash -n` and `zsh -n`
    on all `.sh` files". After Task 5 the zsh step selects the ten tracked zsh files via
    `git ls-files`, not `.sh` via `find`. The bash step is unchanged, so describe the two
-   separately. *(Found by the orchestrator enumerating CLAUDE.md before dispatch; not in the
-   original T8 scope.)*
+   separately. _(Found by the orchestrator enumerating CLAUDE.md before dispatch; not in the
+   original T8 scope.)_
 6. **Coverage figure at `CLAUDE.md:298`** — T1 and T3 add functions to `lib/macos.sh` and
    `lib/helpers.sh`, both in the instrumented set, so the percentage has moved. Run
    `make bash-coverage` and confirm it is **≥ 91%**, the CI gate that blocks auto-merge. Do
@@ -552,18 +554,18 @@ post-merge `docs` → `learnings` step finds it rather than relying on the sessi
 **"A set derived by one rule cannot validate itself" now has three independent instances
 across three languages, and lives in no standards file.**
 
-| Instance | Where | Cost of having no second derivation |
-| --- | --- | --- |
-| Coverage denominator | `shell.md`, dotfiles#199 | A tracer instrumented 13 of 36 tracked files and published 91% for two months |
-| `[lints]` regex | Rust spec (ai-config) | — |
-| `ZSH_FILES` pathspec | this spec | Three wrong counts across two full lens rounds; a differently-derived set found `.zprofile` on first execution |
+| Instance             | Where                    | Cost of having no second derivation                                                                            |
+| -------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| Coverage denominator | `shell.md`, dotfiles#199 | A tracer instrumented 13 of 36 tracked files and published 91% for two months                                  |
+| `[lints]` regex      | Rust spec (ai-config)    | —                                                                                                              |
+| `ZSH_FILES` pathspec | this spec                | Three wrong counts across two full lens rounds; a differently-derived set found `.zprofile` on first execution |
 
 `shell.md` and `tdd.md` each state the rule for their own domain — denominators and coverage
 instruments — but nothing states it generally, so it is being rediscovered per language. The
 third instance is the threshold where that stops being reasonable.
 
-The dotfiles instance is the only one where the cost was measured *across multiple review
-rounds*, which is what makes it the useful citation: reviewing the rule harder demonstrably
+The dotfiles instance is the only one where the cost was measured _across multiple review
+rounds_, which is what makes it the useful citation: reviewing the rule harder demonstrably
 did not work, twice, and the fix was one command.
 
 Candidate home is a general entry in `~/.claude/standards/` rather than a per-language one.
