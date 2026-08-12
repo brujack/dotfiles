@@ -29,8 +29,15 @@ setup() {
 # assignments carry their own `env -u ...` prefix (ci.md: GIT_DIR leaks into
 # the pre-push hook from a worktree push) and that prefix is what must be
 # proven to work -- see the "survives a leaked GIT_DIR" test below.
+# --no-print-directory is load-bearing, not tidiness. GNU Make >= 4.0 emits
+# "Entering directory"/"Leaving directory" on stdout whenever -C changes the
+# working directory; 3.81 (which Apple still ships) does not. Without the flag
+# those two lines are parsed as filenames, so the resolved set gains the same
+# junk tokens for EVERY variable -- which makes the disjointness assertion below
+# fail while the superset assertion still passes. Measured: 1 line of output
+# under make 3.81, 3 lines under gmake 4.4.1, for the identical command.
 _make_print() {
-  PATH="${CLEAN_PATH}" make -C "${REPO_ROOT}" "print-${1}"
+  PATH="${CLEAN_PATH}" make --no-print-directory -C "${REPO_ROOT}" "print-${1}"
 }
 
 _git_ls_clean() {
@@ -47,6 +54,9 @@ _sorted_lines_from_space_list() {
   [ "${status}" -eq 0 ]
   resolved="$(_sorted_lines_from_space_list "${output}")"
   expected="$(_git_ls_clean '*.zsh' '*.zsh-theme' '.zshrc' '.zprofile' | sort -u)"
+  if [ "${resolved}" != "${expected}" ]; then
+    printf 'ZSH_FILES resolved:\n%s\n--- expected:\n%s\n' "${resolved}" "${expected}" >&2
+  fi
   [ "${resolved}" = "${expected}" ]
 }
 
@@ -97,6 +107,9 @@ _sorted_lines_from_space_list() {
   zsh_files="$(_sorted_lines_from_space_list "${output}")"
 
   overlap="$(comm -12 <(printf '%s\n' "${shell_files}") <(printf '%s\n' "${zsh_files}"))"
+  if [ -n "${overlap}" ]; then
+    printf 'SHELL_FILES/ZSH_FILES overlap:\n%s\n' "${overlap}" >&2
+  fi
   [ -z "${overlap}" ]
 }
 
