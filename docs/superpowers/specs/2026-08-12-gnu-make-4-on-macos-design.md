@@ -1,8 +1,16 @@
 # GNU Make 4.x on macOS — design
 
 **Date:** 2026-08-12
-**Status:** Spec — awaiting review
+**Status:** Spec — revised after round-1 Multi-Lens Review
 **Backlog origin:** dotfiles#210
+
+> **Revision note.** The round-1 design carried a fifth component: a `require-gnu-make`
+> Makefile target that hard-failed `test` and `bash-coverage` under GNU Make < 4.0. It was
+> **dropped**, not repaired — the review reproduced an undocumented bypass, a false-green
+> remedy, a `git push` lockout, an Intel lockout, and an inability to run in CI. The full
+> reasoning and both reproductions are preserved under "Rejected alternatives" and in the
+> Multi-Lens Review section at the end. The primary fix is now a one-line `MAKEFLAGS`
+> directive that the round-1 spec never considered.
 
 ## Problem
 
@@ -13,8 +21,8 @@ GNU Make 4.0 or later.
 
 That is the `tdd.md` pitfall **G** class — "a test that shells out to a versioned tool
 inherits that tool's version skew, and the local version may be unable to fail" — and it
-is not hypothetical here. `scripts/pre-push` runs `make test`, so the local gate on every
-mac blesses defects that `ubuntu-latest` rejects.
+is not hypothetical here. `scripts/pre-push:71` runs `make -C "${REPO_ROOT}" test`, so the
+local gate on every mac blesses defects that `ubuntu-latest` rejects.
 
 ### The measurement
 
@@ -45,50 +53,91 @@ FIXED   under gmake 4.4.1: rc=0  not-ok=0
 The second line is the finding. The fix is correct and the local gate cannot see whether
 it is present.
 
+### The version surface is exactly one behaviour, today
+
+The `Makefile` was grepped for constructs that exist only in GNU Make 4.x — `$(file`, `!=`,
+`::=`, `.ONESHELL`, `.RECIPEPREFIX`, `--output-sync`, `.EXTRA_PREREQS`. **None are
+present.** Print-directory is therefore the entire measured version surface at this commit.
+That bounds the problem and is why §1 below can close it in one line — but it is a
+statement about today, not a guarantee, which is why §2–§4 still align the versions rather
+than relying on the surface staying this small.
+
 ### A premise from the backlog row that did not survive checking
 
 dotfiles#210's row asserted that a `6_path.zsh` change reaches interactive shells only,
 and would therefore miss agent-driven and hook-driven invocations. **That is wrong**, and
 it was the load-bearing claim in the row.
 
-Measured: an agent tool's shell on this machine carries `~/bin`, `~/scripts`, and
+Measured: an agent tool's shell on the Studio carries `~/bin`, `~/scripts`, and
 `~/.cargo/bin` on `PATH`. All three are added by `.config/.zshrc.d/6_path.zsh` and by no
 other file in the tree (`grep -rn 'HOME}/bin' ~/.config/.zshrc.d/ ~/.zprofile ~/.zshrc`
 returns exactly one hit, at `6_path.zsh:11`). So those shells do source `.zshrc`, and a
 `PATH` change there reaches them — and reaches any git hook they invoke, since a hook
-inherits its invoker's environment.
+inherits its invoker's environment. Confirmed by the operator: all machines run the same
+`.zshrc`, so any command-line push is covered.
 
-What a `PATH`-only fix genuinely does not reach on macOS is narrower: `cron`/`launchd`,
-and any non-zsh shell. Both are real; neither is the dominant path. The correction matters
-because it changes which component is load-bearing — see "Rejected alternatives".
+**What a `PATH`-only fix does not reach was then measured rather than reasoned about.** A
+`BatchMode` ssh to ratna reports `brew` and `gmake` both absent, because a non-interactive
+ssh session does not source `.zshrc` — while `/usr/local/opt/make/libexec/gnubin` exists on
+that same box. That is the reach gap demonstrated on a real machine: the tool is installed,
+and the shell cannot see it. `cron`/`launchd` and non-zsh shells have the same shape.
+
+This is why §1 is the primary fix and the `PATH` layer is support, not the reverse.
 
 ## Goals
 
-1. `make` resolves to GNU Make 4.x on every mac in the fleet, for interactive shells,
-   agent-driven shells, and the git hooks they invoke.
-2. A machine where that provisioning has not happened **fails loudly** rather than
-   reporting a false green.
-3. The failure is recoverable without a chicken-and-egg lockout.
+1. The measured defect class cannot recur, at every call site including ones not yet
+   written.
+2. `make` resolves to GNU Make 4.x on every mac in the fleet, so the local gate and CI run
+   the same program.
+3. A machine where goal 2 has not been achieved is **visible**, not silently divergent.
+4. No mechanism introduced here can prevent a machine from running its tests or pushing.
+
+Goal 4 is new in this revision and is what retired the guard.
 
 ## Non-goals
 
-- **Linux is untouched.** Ubuntu's `make` is already GNU 4.x. No Linux branch changes.
-- **CI is untouched.** `ubuntu-latest` already runs 4.x; that is the version the gate is
-  being aligned _to_.
-- **`coreutils` / `findutils` stay as they are.** Both are installed and neither is on
-  `PATH` under its GNU name. That is the same shape of gap, but only `make` has a measured
-  defect behind it, and a GNU-first policy is a materially larger blast radius. Named here
-  so the omission reads as a decision rather than an oversight.
-- **No fan-out to other repos in this change.** The `PATH` half is inherently fleet-wide
-  (it is the machine's `PATH`, so all nine repos get GNU Make 4.x for free). Only the
-  Makefile guard is per-repo, and it stays in dotfiles until it has run long enough to show
-  it does not misfire.
+- **Linux is untouched.** Ubuntu's `make` is already GNU 4.x.
+- **CI is untouched.** `ubuntu-latest` already runs 4.x; that is the version being aligned
+  _to_.
+- **`coreutils` / `findutils` stay as they are.** Both installed, neither on `PATH` under
+  its GNU name. Same shape of gap, but only `make` has a measured defect behind it, and a
+  GNU-first policy is a materially larger blast radius. Named so the omission reads as a
+  decision.
+- **No fan-out to other repos.** The `PATH` half is inherently fleet-wide — it is the
+  machine's `PATH`, so all nine repos get GNU Make 4.x once a mac is provisioned. §1 is
+  per-repo and stays in dotfiles for now. Two other repos were spot-checked and are already
+  safe: `terraform_ansible/ansible/scripts/ci_matrix.py:20` shells `["make", …]` with `cwd=`
+  and no `-C` (so no directory lines), and `math/tests/scripts/makefile.bats` already passes
+  `--no-print-directory`.
 
 ## Design
 
-Four components.
+Four components. §1 closes the defect; §2–§3 align the versions; §4 makes divergence
+visible.
 
-### 1. Provisioning — `lib/macos.sh`, `lib/workflows.sh`
+### 1. Remove the variance at the source — `Makefile`
+
+```make
+MAKEFLAGS += --no-print-directory
+```
+
+One line. Verified on this machine with a fixture Makefile carrying that directive:
+`print-VAR` emits **1 line under 3.81 and 1 line under 4.4.1**, and 3.81 accepts the
+directive with **rc=0** — it is not a 4.x-only construct.
+
+This is `tdd.md` pitfall G's own **first** preference ("remove the variance at the call
+site"), and it is strictly better than fixing call sites individually, because it covers
+invocations that do not exist yet. That matters specifically here: #208's fix landed on the
+`_make_print` helper and two hand-built invocations stayed broken, which is pitfall G's
+step 2 verbatim. A file-level directive has no step 2.
+
+Existing per-call-site `--no-print-directory` flags in
+`tests/scripts/makefile_lint_scope.bats` (lines 40, 146, 158) **stay**. They are correct,
+they document the hazard at the point a reader meets it, and they protect any invocation
+that does not go through this `Makefile`.
+
+### 2. Provisioning — `lib/macos.sh`, `lib/workflows.sh`
 
 Add `install_make_macos()`, mirroring the existing `install_git_macos` /
 `install_zsh_macos` / `install_bats_macos` shape exactly:
@@ -119,270 +168,234 @@ Called from `run_setup_user` in `lib/workflows.sh`, inside the existing
 
 **Called directly, with no `install_make()` dispatcher.** `install_zsh` and `install_bats`
 are dispatchers because both platforms need work; here Linux needs none, so a dispatcher
-would exist only to have an empty arm. This also sidesteps a known contract hazard already
-on the backlog: `install_bats`'s `if`/`elif` has no `else`, so it returns **0** when
-neither `MACOS` nor `LINUX` is set, and `install_make || return 1` could not distinguish
-"installed" from "no arm ran".
+would exist only to have an empty arm. This also sidesteps a contract hazard already on the
+backlog: `install_bats`'s `if`/`elif` has no `else`, so it returns **0** when neither
+`MACOS` nor `LINUX` is set.
 
 The probe is `quiet_which gmake`, not `make` — `make` is always present on macOS at 3.81,
 so probing it would report success on precisely the machine that needs the install.
 
-`brew "make"` already exists at `Brewfile:70`, so `brew bundle` parity is unchanged. The
-new function exists because `setup_user` does not run `brew bundle`, and §3's guard is
-absolute — provisioning has to be guaranteed by the workflow every machine runs, or the
-guard becomes a lockout.
+`brew "make"` already exists at `Brewfile:70`, so `brew bundle` parity is unchanged. This
+function exists because `setup_user` does not run `brew bundle`.
 
-### 2. `PATH` — `.config/.zshrc.d/6_path.zsh`
+### 3. `PATH` — `.config/.zshrc.d/6_path.zsh`
 
 Inside the existing `if [[ ${MACOS} ]]` block:
 
 ```zsh
-if [[ -d /opt/homebrew/opt/make/libexec/gnubin ]]; then
-  path=('/opt/homebrew/opt/make/libexec/gnubin' $path)
-fi
+for _gnubin in /opt/homebrew/opt/make/libexec/gnubin \
+               /usr/local/opt/make/libexec/gnubin; do
+  [[ -d ${_gnubin} ]] && { path=(${_gnubin} $path); break }
+done
+unset _gnubin
 ```
 
-**Prepend, not `path+=`, and this is the whole point of the component.** Measured: the
-file's existing idiom is append (`path+=(...)`), which leaves `/usr/bin` ahead of anything
-it adds — verified directly, `path+=` yields `first=/usr/bin` while `path=(dir $path)`
-yields `first=/opt/homebrew/opt/make/libexec/gnubin`. An append here would be completely
-inert and would look correct.
+Three properties, each load-bearing and each measured.
 
-Homebrew deliberately installs GNU make as `gmake` and does not link it as `make`;
-overriding that is a considered deviation, not an accident. The blast radius is exactly one
-binary: `ls /opt/homebrew/opt/make/libexec/gnubin/` returns a single entry, `make`. This is
-not a coreutils-style shadowing sweep.
+**Prepend, not `path+=`.** The file's existing idiom is append, which leaves `/usr/bin`
+ahead of anything it adds — verified directly: `path+=` yields `first=/usr/bin` while
+`path=(dir $path)` yields `first=…/gnubin`. An append here would be completely inert and
+would look correct.
 
-Idempotency is free: `typeset -U path` at the top of the file dedupes, so re-sourcing
-`.zshrc` any number of times yields one entry — verified with three consecutive prepends
-producing three total path entries and no duplicates.
+**Both Homebrew prefixes, tested for existence — not `brew --prefix`, and not a hostname
+branch.** ratna is `x86_64` (macOS 13.7.8) with Homebrew at `/usr/local`, and
+`/usr/local/opt/make/libexec/gnubin` **already exists there**. A hardcoded `/opt/homebrew`
+would silently no-op on a machine that already has the fix on disk. `brew --prefix make`
+was considered and rejected: this same file is what puts `/opt/homebrew/bin` on `PATH`
+(lines 18–25), so `brew` is not guaranteed resolvable at this point — measured absent over
+non-interactive ssh to ratna — and it would spend a subprocess on every shell start. A
+`${RATNA}` branch was also available (`1_init.zsh:17` sets it, before this file runs) and
+was rejected as weaker: testing the directory stays correct when the next Intel machine
+appears, while testing the hostname does not.
 
-The directory-existence guard means a mac that has not yet run §1 simply does not get the
-prepend, rather than acquiring a broken `PATH` entry.
+**Idempotent for free.** `typeset -U path` at the top of the file dedupes — verified with
+three consecutive prepends producing three total entries and no duplicates. Re-sourcing
+`.zshrc` is safe.
 
-### 3. Version guard — `Makefile`
-
-```make
-MAKE_MAJOR := $(firstword $(subst ., ,$(MAKE_VERSION)))
-
-.PHONY: require-gnu-make
-require-gnu-make:
-	@[ "$(MAKE_MAJOR)" -ge 4 ] || { \
-	  printf 'GNU Make >= 4.0 required (have %s).\n' "$(MAKE_VERSION)"; \
-	  printf '  brew install make            # already in Brewfile\n'; \
-	  printf '  ./setup_env.sh -t setup_user # durable fix\n'; \
-	  printf 'Or run this suite directly: gmake test\n'; \
-	  exit 1; }
-
-test: require-gnu-make lint
-bash-coverage: require-gnu-make
-```
-
-Verified on this machine against both versions:
-
-| invocation                     | result                                |
-| ------------------------------ | ------------------------------------- |
-| `make test` under 3.81         | guard message, `rc=2`                 |
-| `gmake test` under 4.4.1       | suite runs, `rc=0`                    |
-| `make help` under 3.81         | works, `rc=0`                         |
-| `MAKE_VERSION` read under 3.81 | populated — reports `3.81`, major `3` |
-
-That last row is what makes the guard viable at all: the variable the guard reads is
-present in the version being guarded against, so the check is not itself blind.
-
-**Recipe-level, never parse-time.** The Makefile already carries a comment recording
-exactly this constraint for `BATS_MISSING`: "`$(error)` fires wherever it is expanded, so
-folding it into a `:=` assignment would abort every make invocation (including
-`make help`) at parse time regardless of target." A `require-gnu-make` prerequisite target
-keeps the check DRY and explicit without inheriting that hazard.
-
-**Guards `test` and `bash-coverage`, deliberately not `lint`.** `lint` runs `bash -n`,
-`zsh -n` and `shellcheck` — none of which care what version of make invoked them — and
-`lint` is the pre-commit hook. Guarding it would lock an unprovisioned machine out of
-committing the very change that provisions it. The targets guarded are the ones that
-actually depend on make's own behaviour.
-
-**No escape hatch.** No environment variable, no commit trailer, no bypass. Three things
-make that safe rather than brittle: `lint` stays unguarded so committing always works;
-`gmake` is already declared in `Brewfile` and now installed by `setup_user`, so the remedy
-is available on any machine with brew; and the failure message names the remedy inline. An
-`ALLOW_OLD_MAKE=1`-style hatch would be an allow-path looser than the deny-path, and a
-banner that scrolls past while `rc=0` is what gets believed.
-
-Prerequisite ordering note: `test: require-gnu-make lint` relies on left-to-right
-prerequisite evaluation, which GNU Make guarantees only for non-parallel builds. This repo
-never invokes `make -j`, and the consequence of reordering under `-j` would be that `lint`
-runs before the guard fires — wasted work, not a wrong verdict.
+`break` after the first hit means an (impossible today) machine with both prefixes gets one
+entry, deterministically the ARM one.
 
 ### 4. Detection — new `_doctor_check_make_version` in `lib/helpers.sh`
 
 A **new** check function, called from `run_doctor` alongside the existing
-`_doctor_check_tools` / `_doctor_check_versions` / `_doctor_check_hooks_path` list, using
-the established `_DOCTOR_PASS` / `_DOCTOR_FAIL` / `_DOCTOR_FAILED` convention so
-`-t doctor` exits non-zero on failure. The failure text names the same remedy as §3.
+`_doctor_check_tools` / `_doctor_check_versions` / `_doctor_check_hooks_path` list.
 macOS-only; returns without counting a check on Linux.
 
-**It must not reuse `_doctor_check_one_version`, and this is the trap.** That helper asserts
-a **pin** — its comparison is `[[ "${_installed}" == "${_pinned}"* ]]` against a constant
-from `lib/constants.sh`. What is wanted here is a **floor**: any GNU Make ≥ 4.0 is correct,
-so a machine on 4.3 must pass. Reaching for the existing helper, or adding a `MAKE_VER`
-constant to feed it, would encode the wrong relation while looking like it followed the
-established pattern. There is deliberately no `MAKE_VER` constant in this design.
+**Report-only — `doctor_warn`, never `doctor_fail`.** It must not touch `_DOCTOR_FAILED`
+and must not change `-t doctor`'s exit code. A mac on 3.81 is _divergent from CI_, which is
+worth surfacing, but §1 already closes the defect, so failing the machine's health check
+over it would be a verdict out of proportion to the condition — and `-t doctor` exiting
+non-zero on six machines the day this merges is the same rollout problem the guard had,
+wearing a smaller hat.
 
-This is the component that surfaces a mis-provisioned machine _before_ someone hits §3 the
-hard way, and it is the only one that reports across the fleet rather than at the moment of
-use.
+**It must not reuse `_doctor_check_one_version`, and this is the trap.** That helper
+asserts a **pin** — its comparison is `[[ "${_installed}" == "${_pinned}"* ]]` against a
+constant from `lib/constants.sh`. What is wanted here is a **floor**: any GNU Make ≥ 4.0 is
+correct, so a machine on 4.3 must pass. Reaching for the existing helper, or adding a
+`MAKE_VER` constant to feed it, would encode the wrong relation while looking like it
+followed the established pattern. There is deliberately no `MAKE_VER` constant.
 
 Version parsing must not use string comparison — `shell.md`'s semver pitfall applies
 (`[[ "4.4.1" < "3.81" ]]` is true under lexicographic `[[`). Extract the major component
-and compare with `-ge`, the same way §3 does.
+and compare with `-ge`.
 
 ## Testing
 
 Every component gets tests in the same commit as its code, per `tdd.md`.
 
-### The guard's own test has the defect it guards against
+A note the round-1 spec got wrong: `Makefile:81` is `test: lint test-python`. Any change to
+that line must preserve `test-python`, and case 5 below exists so nothing can drop it
+silently again.
 
-A test asserting "the guard fires under 3.81 and passes under 4.4.1" cannot be validated by
-a toolchain that only has one of them. This is `behavior.md`'s "a check derived from the
-same decision as the thing it checks cannot falsify it", in its most literal form.
+### `MAKEFLAGS` — `tests/scripts/makefile_lint_scope.bats`
 
-So the shim is a first-class part of the test, not a manual verification step:
+| #   | Case                                                                                                         | Expect            |
+| --- | ------------------------------------------------------------------------------------------------------------ | ----------------- |
+| 1   | `print-ZSH_FILES` emits the same line count under 3.81 and under a 4.x shim                                  | equal, and **>0** |
+| 2   | A `print-`-style probe returns a specific derived value, not a verdict                                       | exact value       |
+| 3   | `MAKEFLAGS += --no-print-directory` is present in the `Makefile`                                             | match             |
+| 4   | No `make` invocation under `tests/` parses stdout without either the file-level directive or a per-call flag | structural        |
+| 5   | `test` still has `test-python` as a prerequisite                                                             | present           |
 
-```bash
-shim="$(mktemp -d)"
-ln -s "$(command -v gmake)" "${shim}/make"
-PATH="${shim}:${PATH}" make -C "${REPO_ROOT}" test   # must succeed
-```
+Case 1 asserts **equality plus non-emptiness**. Equality alone passes if both sides emit
+zero lines, which is exactly the "measurement produced nothing" state the review flagged as
+indistinguishable from a pass. Case 2 pins a derived value rather than a branch outcome,
+for the same reason.
 
-Cases, in `tests/scripts/makefile_lint_scope.bats` (which already owns the make-invocation
-tests and already carries the `--no-print-directory` rationale comment):
+Case 4 is the durable channel for what round 1 left as PR-body prose. It replaces a
+"verification before merge" step that changed no verdict and left no record.
 
-| #   | Case                                                              | Expect |
-| --- | ----------------------------------------------------------------- | ------ |
-| 1   | `require-gnu-make` exits non-zero under a 3.81 `make`             | rc≠0   |
-| 2   | `require-gnu-make` exits 0 under a 4.x `make` (shimmed `gmake`)   | rc=0   |
-| 3   | Failure message names both `brew install make` and `setup_env.sh` | match  |
-| 4   | `make help` succeeds under 3.81 (guard is not parse-time)         | rc=0   |
-| 5   | `lint` has no `require-gnu-make` prerequisite (lockout guard)     | absent |
+The 4.x shim resolves to **any make ≥ 4**, not to `gmake` by name — `ubuntu-latest` has no
+`gmake`, and a shim keyed on that name would make these cases skip in the one environment
+that is the merge gate. On a machine where no make ≥ 4 can be found, cases 1 and 2 `skip`
+with a stated reason rather than passing vacuously.
 
-Case 5 is a **negative structural assertion** and is the one that keeps the design's safety
-property from silently eroding — someone adding the guard to `lint` later would restore the
-lockout, and nothing else would catch it.
+### `PATH` — `tests/zshrc.d/unit.bats`
 
-On a machine with no `gmake`, cases 2 and 3 `skip` with a stated reason rather than passing
-vacuously.
+| #   | Case                                                                 | Expect                            |
+| --- | -------------------------------------------------------------------- | --------------------------------- |
+| 6   | With an ARM-prefix gnubin dir present, it is `path[1]`               | first element, not merely present |
+| 7   | With only a `/usr/local` gnubin dir present, it is `path[1]`         | first element                     |
+| 8   | Sourcing three times yields one entry                                | count unchanged                   |
+| 9   | With neither dir present, no entry added and `PATH` otherwise intact | absent, rest unchanged            |
+| 10  | Under `LINUX`, no gnubin entry is added                              | absent                            |
+| 11  | `_gnubin` does not leak into the environment after sourcing          | unset                             |
 
-### `PATH` tests — `tests/zshrc.d/unit.bats`
+Case 6 asserts **position**, not membership: a membership check (`grep -q gnubin`) would
+pass for the append idiom, which is inert. Case 7 is the ratna case and is the one that
+would have failed the round-1 design.
 
-| #   | Case                                                                         | Expect                            |
-| --- | ---------------------------------------------------------------------------- | --------------------------------- |
-| 6   | With the gnubin dir present, it is `path[1]` after sourcing `6_path.zsh`     | first element, not merely present |
-| 7   | Sourcing three times yields one entry (idempotency via `typeset -U`)         | count unchanged                   |
-| 8   | With the gnubin dir absent, no entry is added and `PATH` is otherwise intact | absent, rest unchanged            |
-| 9   | Under `LINUX`, no gnubin entry is added                                      | absent                            |
-
-Case 6 asserts **position**, not membership. A membership assertion (`grep -q gnubin`)
-would pass for the append idiom, which is inert — the test has to be able to fail for the
-bug that would actually be written.
-
-### Provisioning tests — `tests/setup_env/install_guards.bats`
+### Provisioning — `tests/setup_env/install_guards.bats`
 
 | #   | Case                                                                     | Expect             |
 | --- | ------------------------------------------------------------------------ | ------------------ |
-| 10  | `gmake` present → no `brew install` call                                 | idempotent skip    |
-| 11  | `gmake` absent, brew present → `brew_install_formula make` called        | called once        |
-| 12  | `gmake` absent, brew absent and uninstallable → returns 1, logs error    | rc=1               |
-| 13  | Probe is `gmake`, not `make` (a stubbed 3.81 `make` must not satisfy it) | install still runs |
+| 12  | `gmake` present → no `brew install` call                                 | idempotent skip    |
+| 13  | `gmake` absent, brew present → `brew_install_formula make` called        | called once        |
+| 14  | `gmake` absent, brew absent and uninstallable → returns 1, logs error    | rc=1               |
+| 15  | Probe is `gmake`, not `make` (a stubbed 3.81 `make` must not satisfy it) | install still runs |
 
-Case 13 is the mirror of case 6: it pins the one substitution that would make the whole
-component inert on exactly the machines it targets.
+Case 15 is the mirror of case 6: it pins the one substitution that would make the component
+inert on exactly the machines it targets.
 
-### Doctor tests — `tests/setup_env/unit.bats`
+### Doctor — `tests/setup_env/unit.bats`
 
-| #   | Case                                       | Expect             |
-| --- | ------------------------------------------ | ------------------ |
-| 14  | macOS, `make` reports 3.81 → check fails   | `_DOCTOR_FAILED`≠0 |
-| 15  | macOS, `make` reports 4.4.1 → check passes | pass counted       |
-| 16  | Linux → check does not run                 | not counted        |
-| 17  | Comparison is numeric, not lexicographic   | 4.4.1 ≥ 3.81       |
+| #   | Case                                     | Expect                     |
+| --- | ---------------------------------------- | -------------------------- |
+| 16  | macOS, `make` reports 3.81 → warns       | warn counted               |
+| 17  | macOS, 3.81 → does **not** fail the run  | `_DOCTOR_FAILED` unchanged |
+| 18  | macOS, `make` reports 4.4.1 → passes     | pass counted               |
+| 19  | Linux → check does not run               | not counted                |
+| 20  | Comparison is numeric, not lexicographic | 4.4.1 ≥ 3.81               |
 
-## Verification before merge
-
-Beyond `make test`, the PR must show the mutation check re-run under **both** make
-versions, exactly as this spec's Problem section did — reverting `--no-print-directory` and
-confirming red under 4.4.1 and green under 3.81. That is the evidence that the class this
-whole change exists for is still reachable by the suite.
-
-Also required: `zsh -i -c 'exit'` after the `6_path.zsh` change, per the repo convention
-for any `.zshrc.d` edit.
+Case 17 is the negative structural assertion that keeps this check report-only. Without it,
+someone promoting `doctor_warn` to `doctor_fail` later would reintroduce a fleet-wide
+failure and nothing would catch it.
 
 ## Rollout risk
 
-Between this merging and `setup_env.sh -t setup_user` running on a given mac, `make test`
-on that machine fails. That is up to six other machines: the laptop, three work macs, and
-the mac mini.
+**No lockout path exists in this design.** §1 is inert on both versions. §3 no-ops when the
+directory is absent. §4 warns. §2 runs only under `setup_user`. Nothing can prevent a
+machine from running `make test`, committing, or pushing — which is the difference between
+this revision and round 1, where the guard blocked `scripts/pre-push:71` on six
+unprovisioned macs.
 
-Mitigations, in order of what actually carries the weight:
+**The full suite passes under GNU Make 4.x.** Measured on the Studio with a 4.4.1 shim
+ahead of `PATH`: `rc=0`, **1294 ok, 0 not ok, 2 skipped** — matching the CI-measured test
+count exactly. So §3 flipping the version that runs `make test` breaks nothing. This
+settles the round-1 Goal-fit assumption, which asked whether the rollout risk was "six
+machines need provisioning" or "the suite is red on every mac at merge". It is the former,
+and mild.
 
-1. `lint` is unguarded, so committing and the pre-commit hook keep working. A machine can
-   always commit its way out.
-2. The guard message names both the one-shot fix and the durable one, matching the existing
-   `BATS_MISSING` convention.
-3. `gmake` is already installed on any mac that has run `brew bundle`, so on most machines
-   the recovery is the `PATH` half alone.
-
-This is a real interruption and the PR body must say so rather than describing it as
-seamless.
+**ratna is Intel and is managed by this repo.** `x86_64`, macOS 13.7.8, Homebrew at
+`/usr/local`, `gnubin` already present, `PROFILE` resolves to `unknown` because the
+hostname is absent from `PROFILE_MAP` — but `6_path.zsh`'s branch is gated on `MACOS`, not
+on `PROFILE`, so §3 executes there. It is a server-room terminal and does no development,
+so it never runs the gate; §3 is correct there for tidiness rather than for lockout
+avoidance, and §4 will report it.
 
 ## Rejected alternatives
 
-**`PATH` prepend alone.** This was the original shape, and the correction in "A premise
-that did not survive checking" makes it much stronger than first assessed — it reaches
-agent shells and hooks, not just interactive terminals. It is still rejected, because
-nothing detects a machine where it has not run. Silence is exactly the failure mode being
-fixed; a fix whose absence is undetectable reproduces the original defect one level up.
+**A `require-gnu-make` Makefile target that hard-fails `test` and `bash-coverage` under
+< 4.0.** This was round 1's §3. Dropped on five independent grounds, four of them
+reproduced:
 
-**Guard alone, no `PATH` change.** Correct and loud, but every mac would fail `make test`
-until fingers, hooks, and docs were retrained to `gmake test`. It optimises for purity of
-mechanism over the ergonomics of the thing being used many times a day.
+- **The bypass.** `MAKE_VERSION` is an ordinary make variable, so a command-line assignment
+  overrides it. Reproduced: `/usr/bin/make guard MAKE_VERSION=4.9` prints
+  `PASSED under real GNU Make 3.81`, **rc=0**. The spec claimed "no escape hatch"; the hatch
+  was undocumented and traceless — strictly worse than the named `ALLOW_OLD_MAKE=1` it had
+  rejected on allow-path grounds.
+- **The remedy was a false green.** Make does not propagate itself to a bare `make` in a
+  recipe or subprocess. Reproduced: an outer `gmake` whose recipe runs `make --version`
+  reports **`GNU Make 3.81`**. So the printed escape `gmake test` would run the outer make
+  at 4.4.1 while every make-invoking bats test resolved bare `make` through `PATH` to 3.81
+  — green, having exercised precisely the version the guard existed to distrust.
+- **It blocked `git push`.** `scripts/pre-push:71` calls `make -C "${REPO_ROOT}" test`. The
+  mitigation "lint is unguarded, so a machine can always commit its way out" was true and
+  useless; unpushable commits are not a recovery path, and the only escape was
+  `git push --no-verify` — the all-or-nothing bypass `git-workflow.md` records as having
+  already cost this fleet a repo-wide breakage.
+- **It could not run in CI.** `ubuntu-latest` has neither a 3.81 `make` nor a `gmake`, so
+  the guard's core cases would skip in the environment that is the merge gate. CI would go
+  green over a deleted `require-gnu-make`.
+- **Intel lockout.** With `/opt/homebrew` hardcoded, round 1's `PATH` component would
+  silently no-op on ratna while the guard still fired — unrunnable and unpushable, with a
+  printed remedy that did not fix it. Silent-then-permanent.
+
+**`PATH` prepend alone, with no `MAKEFLAGS` line.** Reaches more than round 1 credited
+(agent shells and hooks included), but the ratna ssh measurement shows the gap is real, and
+it leaves future call sites exposed on any shell that did not source `.zshrc`.
 
 **Makefile re-execs itself under `gmake` when it detects 3.81.** Rejected on
-`code-standards.md` grounds — clever is not a compliment. It would make the version that
-actually ran a target invisible in the output, which is a strictly worse property for a
-change whose entire purpose is making the running version legible.
+`code-standards.md` grounds — clever is not a compliment, and it would make the version that
+actually ran a target invisible in the output.
 
-**Warn-only now, fatal later.** Rejected: nothing schedules "later". A warn-only gate is a
-gate that does not exist, and this repo already carries report-only checks that nobody
-reads.
+**Warn-only guard now, fatal later.** Nothing schedules "later". A warn-only gate is a gate
+that does not exist.
 
-**Fan out the guard to all nine repos immediately.** Rejected on blast radius. `make lint`
-is the pre-commit hook and `test: lint` makes it pre-push; a guard that misfires would lock
-the whole fleet out of committing at once, including the commit that would fix it. dotfiles
-carries it first.
+**Fan out to all nine repos immediately.** Deferred until §1 has run here for a while.
 
 ## Files touched
 
-| File                                     | Change                                        |
-| ---------------------------------------- | --------------------------------------------- |
-| `lib/macos.sh`                           | `install_make_macos()`                        |
-| `lib/workflows.sh`                       | call it from `run_setup_user`'s macOS branch  |
-| `lib/helpers.sh`                         | new `_doctor_check_make_version`               |
-| `.config/.zshrc.d/6_path.zsh`            | gnubin prepend, macOS, dir-guarded            |
-| `Makefile`                               | `MAKE_MAJOR`, `require-gnu-make`, two prereqs |
-| `tests/scripts/makefile_lint_scope.bats` | cases 1–5                                     |
-| `tests/zshrc.d/unit.bats`                | cases 6–9                                     |
-| `tests/setup_env/install_guards.bats`    | cases 10–13                                   |
-| `tests/setup_env/unit.bats` | cases 14–17                                   |
-| `CLAUDE.md`                              | Testing + Key Conventions notes               |
+| File                                     | Change                                       |
+| ---------------------------------------- | -------------------------------------------- |
+| `Makefile`                               | `MAKEFLAGS += --no-print-directory`          |
+| `lib/macos.sh`                           | `install_make_macos()`                       |
+| `lib/workflows.sh`                       | call it from `run_setup_user`'s macOS branch |
+| `lib/helpers.sh`                         | new `_doctor_check_make_version` (warn-only) |
+| `.config/.zshrc.d/6_path.zsh`            | dual-prefix gnubin prepend                   |
+| `tests/scripts/makefile_lint_scope.bats` | cases 1–5                                    |
+| `tests/zshrc.d/unit.bats`                | cases 6–11                                   |
+| `tests/setup_env/install_guards.bats`    | cases 12–15                                  |
+| `tests/setup_env/unit.bats`              | cases 16–20                                  |
+| `CLAUDE.md`                              | Testing + Key Conventions notes              |
 
 ## Related
 
 - dotfiles#208 — the incident that measured the defect
 - dotfiles#210 — the backlog row this spec supersedes
-- `tdd.md` pitfall G — version skew in a shelled-out tool
+- `tdd.md` pitfall G — version skew in a shelled-out tool, and its preference order
 - `behavior.md` — "a check derived from the same decision as the thing it checks cannot falsify it"
-- `shell.md` — semver string comparison pitfall (§4)
+- `shell.md` — semver string comparison pitfall
 
 ## Multi-Lens Review
 
@@ -413,14 +426,19 @@ positive arm runs only on an already-provisioned mac. And "Verification before m
 the reads-it test in both directions: the mutation re-run changes no verdict and its only
 output is PR-body prose.
 
-Assumption: that the full 1294-test suite — not just the make-scope files — passes under
+Assumption (SETTLED — CONFIRMED): that the full 1294-test suite — not just the make-scope files — passes under
 GNU Make 4.x on macOS. §2 flips the version running `make test` on every mac before §1 or
 §3 matter. Verified for the two make-aware files only (rc=0, 10 ok). Settle with
 `PATH="$shim:$PATH" make test` over the whole suite; a non-zero rc changes the rollout
 risk from "six machines need provisioning" to "the suite is red on every mac the instant
 this merges".
 
-Disposition:
+Disposition: **Addressed.** The `MAKEFLAGS += --no-print-directory` line is now §1 and the
+primary fix; the guard was dropped rather than repaired. The reads-it failure on
+"Verification before merge" is closed by test case 4, a structural assertion in the suite
+rather than PR-body prose. The shim now resolves to any make ≥ 4 rather than to `gmake` by
+name, so the cases run on `ubuntu-latest`. Assumption settled by measurement: full suite
+under a 4.4.1 shim returned `rc=0`, 1294 ok, 0 not ok, 2 skipped.
 
 ### Ergonomics
 
@@ -437,12 +455,18 @@ bats and are unguarded, so the fast iteration loop keeps the exact blind behavio
 spec exists to end. And case 1 is vacuous: `make nonexistent-target` already returns rc=2,
 so "exits non-zero under 3.81" passes with `require-gnu-make` deleted entirely.
 
-Assumption: that every routine `git push` route on all seven machines runs from a shell
+Assumption (SETTLED by the operator — confirmed): that every routine `git push` route on all seven machines runs from a shell
 that sourced `.zshrc`. Verified only for zsh and one agent tool on the Studio. If false for
 any route (an editor's source-control panel, a `sh -c` harness), the guard converts that
 route into a *permanent* failure that `install_make_macos` cannot fix.
 
-Disposition:
+Disposition: **Addressed.** The guard is gone, so the push lockout, the ineffective printed
+remedies, and the unguarded-`test-unit` gap all cease to exist — nothing in the revised
+design can block a push. The dropped `test-python` prerequisite is fixed and pinned by test
+case 5. Case 1 no longer relies on a bare non-zero exit (which `make nonexistent-target`
+satisfies anyway); it asserts equality **and** non-emptiness, and case 2 pins a derived
+value. Assumption confirmed by the operator: all machines run the same `.zshrc`, so every
+command-line push route is covered.
 
 ### Risk
 
@@ -466,14 +490,26 @@ silently no-ops while §3 still fires — a machine that cannot run `make test` 
 printed remedy does not fix it. Silent-then-permanent, which is the lockout the design
 claims to avoid.
 
-Assumption: that every mac in the fleet is Apple Silicon. Settle with `uname -m` on each
+Assumption (SETTLED — REFUTED): that every mac in the fleet is Apple Silicon. Settle with `uname -m` on each
 of the seven machines. One Intel hit means §2 must resolve via `brew --prefix make` rather
 than a literal path, and §3 must not fire where §2 could not apply.
 
-Disposition:
+Disposition: **Addressed.** Both reproductions stand and both are recorded under "Rejected
+alternatives" as the reason the guard was dropped rather than fixed — the `MAKE_VERSION`
+override and the `gmake test` false green. The hardcoded prefix is replaced by a
+dual-prefix existence test. Assumption **refuted**: ratna is `x86_64`, macOS 13.7.8,
+Homebrew at `/usr/local`, measured over ssh — and `/usr/local/opt/make/libexec/gnubin`
+already exists there, so the round-1 path would have no-opped on a machine that already had
+the fix installed. `brew --prefix make` was the obvious repair and is also wrong: `6_path.zsh`
+is itself what puts Homebrew on `PATH`, and `brew` measured absent over non-interactive ssh.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger. Acceptance criteria are
 concrete return codes and named structural assertions.
 Disposition: N/A
+
+### Round 2
+
+The revision above changed design substance — a component was removed, not reworded — so all
+three lenses re-run against it rather than only the lens that raised each finding.
