@@ -28,6 +28,12 @@ BATS_FILES := $(shell env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_I
 ZSH_FILES := $(shell env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
                  git ls-files '*.zsh' '*.zsh-theme' '.zshrc' '.zprofile')
 
+# Message text only, never the $(error ...) call itself: $(error) fires wherever
+# it is expanded, so folding it into a := assignment would abort every make
+# invocation (including `make help`) at parse time regardless of target.
+# One-shot fix leads; the durable fix (full provisioning re-run) follows.
+BATS_MISSING := bats not found. Install: brew install bats-core (macOS) or sudo apt-get install bats (Linux). Durable fix: ./setup_env.sh -t setup_user
+
 .PHONY: test test-python test-unit lint bash-coverage push-bash-coverage install-hooks ledger-symlink help changelog validate-plan sync-agent-guidance check-agent-guidance
 
 help:
@@ -74,7 +80,7 @@ lint:
 
 test: lint test-python
 ifndef BATS
-	$(error bats not found. Install: brew install bats-core (macOS) or sudo apt-get install bats (Linux))
+	$(error $(BATS_MISSING))
 endif
 	bats --recursive tests/
 
@@ -91,13 +97,13 @@ endif
 
 bash-coverage:
 ifndef BATS
-	$(error bats not found. Install: brew install bats-core (macOS) or sudo apt-get install bats (Linux))
+	$(error $(BATS_MISSING))
 endif
 	@bash scripts/run-bash-coverage.sh
 
 push-bash-coverage:
 ifndef BATS
-	$(error bats not found. Install: brew install bats-core (macOS) or sudo apt-get install bats (Linux))
+	$(error $(BATS_MISSING))
 endif
 	@bash scripts/push-bash-coverage.sh
 
@@ -119,7 +125,7 @@ install-hooks: ledger-symlink
 
 test-unit:
 ifndef BATS
-	$(error bats not found. Install: brew install bats-core (macOS) or sudo apt-get install bats (Linux))
+	$(error $(BATS_MISSING))
 endif
 	bats tests/setup_env/unit.bats tests/setup_env/profiles.bats tests/zshrc.d/unit.bats
 
