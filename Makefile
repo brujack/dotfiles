@@ -20,6 +20,14 @@ SHELL_FILES := $(shell env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_
 BATS_FILES := $(shell env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
                  git ls-files '*.bats')
 
+# zsh -n needs its own file list: none of the globs above name a file zsh
+# actually interprets. This is every tracked zsh source — the interactive
+# init modules, the theme file, and the two dotfiles that are symlinked live
+# into $HOME and sourced by an interactive zsh — derived from git ls-files
+# for the same reason SHELL_FILES/BATS_FILES are.
+ZSH_FILES := $(shell env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+                 git ls-files '*.zsh' '*.zsh-theme' '.zshrc' '.zprofile')
+
 .PHONY: test test-python test-unit lint bash-coverage push-bash-coverage install-hooks ledger-symlink help changelog validate-plan sync-agent-guidance check-agent-guidance
 
 help:
@@ -40,9 +48,16 @@ lint:
 	  printf '      (git absent from PATH, or this tree was exported without .git?)\n' >&2; \
 	  exit 1; \
 	fi
+	@if [ -z "$(ZSH_FILES)" ]; then \
+	  printf 'lint: derived zsh file list is EMPTY — refusing to report a pass having linted nothing.\n' >&2; \
+	  printf '      (git absent from PATH, or this tree was exported without .git?)\n' >&2; \
+	  exit 1; \
+	fi
 	@failed=0; \
 	for f in $(SHELL_FILES); do \
 	  bash -n "$$f" && printf "bash  OK  %s\n" "$$f" || { printf "bash FAIL %s\n" "$$f"; failed=1; }; \
+	done; \
+	for f in $(ZSH_FILES); do \
 	  zsh  -n "$$f" && printf "zsh   OK  %s\n" "$$f" || { printf "zsh  FAIL %s\n" "$$f"; failed=1; }; \
 	done; \
 	if [ -n "$(SHELLCHECK)" ]; then \
@@ -116,6 +131,12 @@ sync-agent-guidance:
 
 check-agent-guidance:
 	./scripts/sync-agent-guidance.sh check
+
+# Introspection: `make print-VARNAME` prints a Makefile variable's resolved
+# value, for tests that need to assert against the Makefile's own derivation
+# rather than re-deriving it themselves.
+print-%:
+	@printf '%s\n' "$($*)"
 
 # 10-80-10 cycle (ai-config ADR-0009/0010) — validate a plan file
 validate-plan:
