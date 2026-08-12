@@ -214,12 +214,20 @@ prerequisite evaluation, which GNU Make guarantees only for non-parallel builds.
 never invokes `make -j`, and the consequence of reordering under `-j` would be that `lint`
 runs before the guard fires — wasted work, not a wrong verdict.
 
-### 4. Detection — `_doctor_check_versions` in `lib/helpers.sh`
+### 4. Detection — new `_doctor_check_make_version` in `lib/helpers.sh`
 
-Extend the existing version-drift check with a macOS-only assertion that `make --version`
-reports major ≥ 4, using the established `_DOCTOR_PASS` / `_DOCTOR_FAIL` / `_DOCTOR_FAILED`
-convention so `-t doctor` exits non-zero on failure. The failure text names the same remedy
-as §3.
+A **new** check function, called from `run_doctor` alongside the existing
+`_doctor_check_tools` / `_doctor_check_versions` / `_doctor_check_hooks_path` list, using
+the established `_DOCTOR_PASS` / `_DOCTOR_FAIL` / `_DOCTOR_FAILED` convention so
+`-t doctor` exits non-zero on failure. The failure text names the same remedy as §3.
+macOS-only; returns without counting a check on Linux.
+
+**It must not reuse `_doctor_check_one_version`, and this is the trap.** That helper asserts
+a **pin** — its comparison is `[[ "${_installed}" == "${_pinned}"* ]]` against a constant
+from `lib/constants.sh`. What is wanted here is a **floor**: any GNU Make ≥ 4.0 is correct,
+so a machine on 4.3 must pass. Reaching for the existing helper, or adding a `MAKE_VER`
+constant to feed it, would encode the wrong relation while looking like it followed the
+established pattern. There is deliberately no `MAKE_VER` constant in this design.
 
 This is the component that surfaces a mis-provisioned machine _before_ someone hits §3 the
 hard way, and it is the only one that reports across the fleet rather than at the moment of
@@ -290,7 +298,7 @@ bug that would actually be written.
 Case 13 is the mirror of case 6: it pins the one substitution that would make the whole
 component inert on exactly the machines it targets.
 
-### Doctor tests — `tests/setup_env/`
+### Doctor tests — `tests/setup_env/unit.bats`
 
 | #   | Case                                       | Expect             |
 | --- | ------------------------------------------ | ------------------ |
@@ -359,13 +367,13 @@ carries it first.
 | ---------------------------------------- | --------------------------------------------- |
 | `lib/macos.sh`                           | `install_make_macos()`                        |
 | `lib/workflows.sh`                       | call it from `run_setup_user`'s macOS branch  |
-| `lib/helpers.sh`                         | extend `_doctor_check_versions`               |
+| `lib/helpers.sh`                         | new `_doctor_check_make_version`               |
 | `.config/.zshrc.d/6_path.zsh`            | gnubin prepend, macOS, dir-guarded            |
 | `Makefile`                               | `MAKE_MAJOR`, `require-gnu-make`, two prereqs |
 | `tests/scripts/makefile_lint_scope.bats` | cases 1–5                                     |
 | `tests/zshrc.d/unit.bats`                | cases 6–9                                     |
 | `tests/setup_env/install_guards.bats`    | cases 10–13                                   |
-| `tests/setup_env/`                       | cases 14–17                                   |
+| `tests/setup_env/unit.bats` | cases 14–17                                   |
 | `CLAUDE.md`                              | Testing + Key Conventions notes               |
 
 ## Related
