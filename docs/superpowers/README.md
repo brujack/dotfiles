@@ -113,7 +113,7 @@ Master status index for all specs and implementation plans in this directory.
 | 2026-07-30 | [test-git-env-hygiene](plans/2026-07-30-test-git-env-hygiene.md)                           | [spec](specs/2026-07-29-test-git-env-hygiene-design.md)                                                                                   | Done    |
 | 2026-07-31 | [pre-push-self-coverage](plans/2026-07-31-pre-push-self-coverage.md) (PR dotfiles#195)     | [spec](specs/2026-07-31-git-hook-detection-gaps-design.md) + [ADR-0017](../adr/0017-pre-push-trigger-fail-closed.md)                      | Done    |
 | 2026-08-11 | [bats-provisioning-zsh-lint-scope](plans/2026-08-11-bats-provisioning-zsh-lint-scope.md)   | [spec](specs/2026-08-11-bats-provisioning-zsh-lint-scope-design.md)                                                                       | Done    |
-| 2026-08-12 | —                                                                                          | [spec](specs/2026-08-12-gnu-make-4-on-macos-design.md)                                                                                    | Pending |
+| 2026-08-12 | [gnu-make-4-on-macos](plans/2026-08-12-gnu-make-4-on-macos.md)                              | [spec](specs/2026-08-12-gnu-make-4-on-macos-design.md)                                                                                   | In Progress |
 
 ---
 
