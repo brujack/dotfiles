@@ -419,6 +419,10 @@ make check-agent-guidance # fail if generated guidance is out of sync
 ```
 
 Install bats-core first: `brew install bats-core` (macOS) or `sudo apt-get install bats` (Ubuntu).
+The durable fix is `./setup_env.sh -t setup_user`, which provisions bats on both platforms —
+a machine that needs the one-liner above is a machine whose provisioning has not been re-run.
+`make lint`/`make test` print both remedies when bats is missing rather than only the one-liner,
+for that reason.
 
 - `brew install git-cliff` — CHANGELOG generation (`make changelog`)
 
