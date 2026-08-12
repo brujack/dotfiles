@@ -330,7 +330,9 @@ tdd: not-applicable
 acceptance:
   - cmd: 'grep -q "zsh-theme" .github/workflows/ci.yml'
     exit_code: 0
-  - cmd: 'bash -c ''! sed -n "/Syntax check all shell scripts (zsh)/,/^$/p" .github/workflows/ci.yml | grep -q "name .\*\.sh"'''
+  - cmd: 'bash -c ''! grep -B5 "xargs -I{} zsh -n" .github/workflows/ci.yml | grep -q "find \."'''
+    exit_code: 0
+  - cmd: 'bash -c ''grep -B5 "xargs -I{} zsh -n" .github/workflows/ci.yml | grep -q "git ls-files"'''
     exit_code: 0
   - cmd: make test
     exit_code: 0
@@ -355,6 +357,16 @@ Replace the step's `find . -name '*.sh' ...` selector with the same derivation t
 ```
 
 Rename the step, since it no longer checks "shell scripts". No `env -u` prefix is needed: the CI job is a fresh checkout, not a hook invocation, so no `GIT_DIR` is inherited.
+
+**Gate note, added after Task 5 returned a blocker.** Two earlier versions of this task's
+second gate were both vacuous, in opposite ways. The plan's original anchored the `sed` range
+on `"Syntax check all shell scripts (zsh)"` — the step name the rename *deletes* — so after a
+correct implementation the range is empty and the gate passes having inspected nothing. The
+dispatch prompt paraphrased it to `/Syntax check all/`, which both step names share, so `sed`
+anchored on the bash step and the gate failed against a *correct* implementation. The gate now
+anchors on the `zsh -n` terminator, which exists in both the old and new file, and asserts the
+selector both negatively (no `find .`) and positively (uses `git ls-files`). Verified: passes
+on the changed tree, fails both ways on `HEAD`'s version.
 
 **Leave the bash step at `:49-54` alone.** Its `find`-versus-`git ls-files` inconsistency is pre-existing and out of scope; touching it here would widen the diff without a decision behind it.
 
