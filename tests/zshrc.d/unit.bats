@@ -46,6 +46,21 @@ setup() {
   [ "$status" -eq 0 ]
 }
 
+@test ".zshrc has valid zsh syntax" {
+  run zsh -n "${REPO_ROOT}/.zshrc"
+  [ "$status" -eq 0 ]
+}
+
+@test ".zprofile has valid zsh syntax" {
+  run zsh -n "${REPO_ROOT}/.zprofile"
+  [ "$status" -eq 0 ]
+}
+
+@test "bruce.zsh-theme has valid zsh syntax" {
+  run zsh -n "${REPO_ROOT}/bruce.zsh-theme"
+  [ "$status" -eq 0 ]
+}
+
 # ── 1_init.zsh functional tests ──────────────────────────────────────────────
 # PATH uses double quotes so ${PATH} is expanded by zsh (not single quotes).
 # MACOS/LINUX are unset before sourcing to prevent inherited env from leaking in.

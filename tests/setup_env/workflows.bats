@@ -168,6 +168,17 @@ teardown() {
   grep -q "apt-get install -y bats" "${MOCK_CALLS_FILE}"
 }
 
+@test "run_setup_user calls install_bats on macOS, and aborts when it returns non-zero" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  install_bats() { printf 'BATS_STUB\n'; return 1; }
+  setup_claude_mcp() { printf 'MCP_CALLED\n'; return 0; }
+  run run_setup_user
+  [ "$status" -ne 0 ]
+  [[ "$output" == *BATS_STUB* ]]
+  [[ "$output" != *MCP_CALLED* ]]
+}
+
 @test "run_setup_user calls setup_claude_mcp" {
   export MACOS=1
   unset LINUX UBUNTU
@@ -276,11 +287,6 @@ teardown() {
 
 @test "setup_env.sh passes bash -n with the git_hooks.sh source line" {
   run bash -n "${REPO_ROOT}/setup_env.sh"
-  [ "$status" -eq 0 ]
-}
-
-@test "setup_env.sh passes zsh -n with the git_hooks.sh source line" {
-  run zsh -n "${REPO_ROOT}/setup_env.sh"
   [ "$status" -eq 0 ]
 }
 

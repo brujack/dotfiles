@@ -463,10 +463,13 @@ New coverage, in the existing suites (`tests/setup_env/install_functions.bats`,
   from `PATH` (per `shell.md`), since a `tests/mocks/git` stub would otherwise empty both
   lists and make every assertion vacuously true.
 
-  **The quoting in `print-%: ; @printf '%s\n' "$($*)"` is load-bearing, not style.** With the
-  argument unquoted, an empty variable makes `printf` emit nothing, and a comparison of two
-  empty sets passes. Quoted, an empty variable still emits a blank line, so the comparison
-  goes red. Verified on GNU Make 3.81, the macOS default. Two further notes from that
+  **Keep the quoting in `print-%: ; @printf '%s\n' "$($*)"` — but not for the reason two
+  earlier drafts gave.** They claimed that unquoted, an empty variable emits nothing, so two
+  empty sets would compare equal. Measured with `od -c` on GNU Make 3.81: **both forms emit a
+  single `\n`**, so that mechanism is false — and it was asserted three times, in this spec,
+  the plan, and a dispatch prompt, before anyone checked it. The quotes are still correct, for
+  a different reason: they stop the shell glob-expanding a value containing `*`. Anti-vacuity
+  comes from the scope test's non-empty assertions, not from the quoting.
   verification: `print-<name-of-a-real-target>` resolves to the _variable_ of that name (empty),
   not the target, so there is no collision with `.PHONY` entries; and `.PHONY` accepts no
   patterns, so a file literally named `print-ZSH_FILES` in the working directory would make
@@ -594,7 +597,31 @@ session from a closed one, so it is not evidence of anything.
 
   Note what that abort costs, since the call sits at `:135-137`, ahead of
   `clone_or_update_dotfiles`, `setup_dotfile_symlinks` and `install_git_hooks_all_repos`
-  (`:206`): the machine is left unprovisioned, not merely bats-less. That is acceptable
+  (`:206`): the machine is left unprovisioned, not merely bats-less.
+
+  **The reachable instance is macOS, and an earlier draft of this section analysed only the
+  unreachable one.** It reasoned entirely about a hypothetical non-Ubuntu Linux box — a
+  machine class the fleet does not have — while the same abort is live on all six Macs the
+  moment `brew install bats-core` fails transiently (network, tap fetch, full disk). Found by
+  `bug-scan`, which correctly declined to call it a blocker and asked for the trade to be
+  re-priced instead.
+
+  Re-priced, the trade still favours propagating, but for a reason the earlier draft never
+  stated. The comparison is **not** "abort versus continue" — it is "abort versus a log line
+  that lies." `install_bats_macos`'s template, `install_zsh_macos` (`lib/macos.sh:115`),
+  propagates only the *brew-absent* case: a **failing** `brew_install_formula zsh` is swallowed
+  by the trailing `log_info "Installed zsh"`, which is `shell.md`'s documented
+  trailing-statement trap verbatim. So on a broken brew the pre-existing behaviour is a
+  machine that finishes provisioning without zsh while its own log claims otherwise.
+
+  Propagating from the new function makes a broken brew visible for the first time on that
+  path. The cost is a heavier failure for the least essential tool on it; the benefit is that
+  the failure is honest. Every step before the abort (`install_rosetta`, `install_git`,
+  `mkdir -p`, `install_zsh`) is idempotent, so re-running after brew recovers costs nothing.
+
+  The asymmetry with `install_zsh_macos` is therefore **deliberate, not an oversight** — and
+  that function's swallowed failure is recorded as a separate backlog item rather than fixed
+  here, being pre-existing and outside this change's scope. That is acceptable
   **only** because `install_homebrew` failing means the machine cannot be provisioned anyway
   — `install_git` (`:126`) and `install_zsh` (`:132`) already abort on the same condition,
   ahead of this one. It would not be acceptable for a condition the machine could recover
@@ -916,7 +943,7 @@ Finding: three items, all upheld and all verified independently before acceptanc
    coverage floor.
 
    Also noted, and folded in: the `printf '%s\n' "$($*)"` quoting in `print-%` is
-   load-bearing — unquoted, two empty sets compare equal and row 6 passes.
+   load-bearing. **That reason was later measured false** — both forms emit a single `\n`; the quotes matter only for glob expansion. Corrected in §B.
 
    Explicitly cleared: untagging `Brewfile:15` has exactly two readers, both inside the drift
    report; `brew bundle` treats it as a comment. No side effects.

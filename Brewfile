@@ -12,7 +12,7 @@ brew "automake"                              # [HAS_DEVTOOLS]
 brew "azure-cli"                             # [HAS_DEVTOOLS]
 brew "bash"
 brew "bat"
-brew "bats-core"                             # [HAS_DEVTOOLS]
+brew "bats-core"
 brew "bison"                                 # [HAS_DEVTOOLS]
 brew "oven-sh/bun/bun"                       # [HAS_DEVTOOLS]
 brew "bzip2"

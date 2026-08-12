@@ -122,23 +122,77 @@ teardown() {
   [ "$status" -eq 1 ]
 }
 
-# ── install_bats ─────────────────────────────────────────────────────────────
+# ── install_bats_linux ───────────────────────────────────────────────────────
 
-@test "install_bats skips install when bats is already present" {
+@test "install_bats_linux skips install when bats is already present" {
   unset MOCK_WHICH_MISSING  # which finds bats normally
+  unset MACOS
   export UBUNTU=1
-  run install_bats
+  run install_bats_linux
   [ "$status" -eq 0 ]
   [[ "$output" == *"already installed"* ]]
   ! grep -q "apt-get" "${MOCK_CALLS_FILE}"
 }
 
-@test "install_bats on Ubuntu calls apt-get install when bats is absent" {
+@test "install_bats_linux on Ubuntu calls apt-get install when bats is absent" {
   export MOCK_WHICH_MISSING=bats
+  unset MACOS
   export UBUNTU=1
-  run install_bats
+  run install_bats_linux
   [ "$status" -eq 0 ]
   grep -q "apt-get install -y bats" "${MOCK_CALLS_FILE}"
+}
+
+# ── install_bats (dispatcher) ────────────────────────────────────────────────
+
+@test "install_bats dispatches to install_bats_macos on macOS" {
+  unset LINUX UBUNTU
+  export MACOS=1
+  install_bats_macos() { printf 'MACOS_ARM_CALLED\n'; return 0; }
+  install_bats_linux() { printf 'LINUX_ARM_CALLED\n'; return 0; }
+  run install_bats
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"MACOS_ARM_CALLED"* ]]
+  [[ "$output" != *"LINUX_ARM_CALLED"* ]]
+}
+
+@test "install_bats dispatches to install_bats_linux on Linux" {
+  unset MACOS
+  export LINUX=1
+  export UBUNTU=1
+  install_bats_macos() { printf 'MACOS_ARM_CALLED\n'; return 0; }
+  install_bats_linux() { printf 'LINUX_ARM_CALLED\n'; return 0; }
+  run install_bats
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"LINUX_ARM_CALLED"* ]]
+  [[ "$output" != *"MACOS_ARM_CALLED"* ]]
+}
+
+@test "install_bats calls neither arm when neither MACOS nor LINUX is set" {
+  unset MACOS LINUX UBUNTU
+  install_bats_macos() { printf 'MACOS_ARM_CALLED\n'; return 0; }
+  install_bats_linux() { printf 'LINUX_ARM_CALLED\n'; return 0; }
+  run install_bats
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"MACOS_ARM_CALLED"* ]]
+  [[ "$output" != *"LINUX_ARM_CALLED"* ]]
+}
+
+@test "install_bats propagates install_bats_macos's exact non-zero exit code" {
+  unset LINUX UBUNTU
+  export MACOS=1
+  install_bats_macos() { return 3; }
+  run install_bats
+  [ "$status" -eq 3 ]
+}
+
+@test "install_bats propagates install_bats_linux's exact non-zero exit code" {
+  unset MACOS
+  export LINUX=1
+  export UBUNTU=1
+  install_bats_linux() { return 3; }
+  run install_bats
+  [ "$status" -eq 3 ]
 }
 
 # ── ensure_not_root ──────────────────────────────────────────────────────────

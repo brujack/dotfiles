@@ -259,6 +259,14 @@ install_zsh() {
   fi
 }
 
+install_bats() {
+  if [[ -n ${MACOS} ]]; then
+    install_bats_macos
+  elif [[ -n ${LINUX} ]]; then
+    install_bats_linux
+  fi
+}
+
 setup_zsh_as_default_shell() {
   log_info "Setting ZSH as shell..."
 

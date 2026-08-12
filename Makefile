@@ -20,13 +20,27 @@ SHELL_FILES := $(shell env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_
 BATS_FILES := $(shell env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
                  git ls-files '*.bats')
 
+# zsh -n needs its own file list: none of the globs above name a file zsh
+# actually interprets. This is every tracked zsh source — the interactive
+# init modules, the theme file, and the two dotfiles that are symlinked live
+# into $HOME and sourced by an interactive zsh — derived from git ls-files
+# for the same reason SHELL_FILES/BATS_FILES are.
+ZSH_FILES := $(shell env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+                 git ls-files '*.zsh' '*.zsh-theme' '.zshrc' '.zprofile')
+
+# Message text only, never the $(error ...) call itself: $(error) fires wherever
+# it is expanded, so folding it into a := assignment would abort every make
+# invocation (including `make help`) at parse time regardless of target.
+# One-shot fix leads; the durable fix (full provisioning re-run) follows.
+BATS_MISSING := bats not found. Install: brew install bats-core (macOS) or sudo apt-get install bats (Linux). Durable fix: ./setup_env.sh -t setup_user (full provisioning re-run)
+
 .PHONY: test test-python test-unit lint bash-coverage push-bash-coverage install-hooks ledger-symlink help changelog validate-plan sync-agent-guidance check-agent-guidance
 
 help:
 	@printf "Available targets:\n"
 	@printf "  make test              Run all BATS tests\n"
 	@printf "  make test-unit         Run unit tests only\n"
-	@printf "  make lint              Check bash/zsh syntax + ShellCheck all .sh files\n"
+	@printf "  make lint              bash -n + ShellCheck over SHELL_FILES, zsh -n over ZSH_FILES\n"
 	@printf "  make bash-coverage     Measure bash line coverage via PS4 xtrace tracer\n"
 	@printf "  make push-bash-coverage  Run bash-coverage and push badge JSON to coverage-data branch\n"
 	@printf "  make install-hooks     Install pre-commit and pre-push hooks (run once per checkout)\n"
@@ -40,9 +54,16 @@ lint:
 	  printf '      (git absent from PATH, or this tree was exported without .git?)\n' >&2; \
 	  exit 1; \
 	fi
+	@if [ -z "$(ZSH_FILES)" ]; then \
+	  printf 'lint: derived zsh file list is EMPTY — refusing to report a pass having linted nothing.\n' >&2; \
+	  printf '      (git absent from PATH, or this tree was exported without .git?)\n' >&2; \
+	  exit 1; \
+	fi
 	@failed=0; \
 	for f in $(SHELL_FILES); do \
 	  bash -n "$$f" && printf "bash  OK  %s\n" "$$f" || { printf "bash FAIL %s\n" "$$f"; failed=1; }; \
+	done; \
+	for f in $(ZSH_FILES); do \
 	  zsh  -n "$$f" && printf "zsh   OK  %s\n" "$$f" || { printf "zsh  FAIL %s\n" "$$f"; failed=1; }; \
 	done; \
 	if [ -n "$(SHELLCHECK)" ]; then \
@@ -59,7 +80,7 @@ lint:
 
 test: lint test-python
 ifndef BATS
-	$(error bats not found. Install: brew install bats-core (macOS) or sudo apt-get install bats (Linux))
+	$(error $(BATS_MISSING))
 endif
 	bats --recursive tests/
 
@@ -76,13 +97,13 @@ endif
 
 bash-coverage:
 ifndef BATS
-	$(error bats not found. Install: brew install bats-core (macOS) or sudo apt-get install bats (Linux))
+	$(error $(BATS_MISSING))
 endif
 	@bash scripts/run-bash-coverage.sh
 
 push-bash-coverage:
 ifndef BATS
-	$(error bats not found. Install: brew install bats-core (macOS) or sudo apt-get install bats (Linux))
+	$(error $(BATS_MISSING))
 endif
 	@bash scripts/push-bash-coverage.sh
 
@@ -104,7 +125,7 @@ install-hooks: ledger-symlink
 
 test-unit:
 ifndef BATS
-	$(error bats not found. Install: brew install bats-core (macOS) or sudo apt-get install bats (Linux))
+	$(error $(BATS_MISSING))
 endif
 	bats tests/setup_env/unit.bats tests/setup_env/profiles.bats tests/zshrc.d/unit.bats
 
@@ -116,6 +137,12 @@ sync-agent-guidance:
 
 check-agent-guidance:
 	./scripts/sync-agent-guidance.sh check
+
+# Introspection: `make print-VARNAME` prints a Makefile variable's resolved
+# value, for tests that need to assert against the Makefile's own derivation
+# rather than re-deriving it themselves.
+print-%:
+	@printf '%s\n' "$($*)"
 
 # 10-80-10 cycle (ai-config ADR-0009/0010) — validate a plan file
 validate-plan:

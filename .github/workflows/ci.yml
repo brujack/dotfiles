@@ -53,12 +53,14 @@ jobs:
             -not -path './tests/mocks/*' \
             | xargs -I{} bash -n {}
 
-      - name: Syntax check all shell scripts (zsh)
+      - name: Syntax check all zsh files
         run: |
-          find . -name '*.sh' \
-            -not -path './.worktrees/*' \
-            -not -path './tests/mocks/*' \
-            | xargs -I{} zsh -n {}
+          files=$(git ls-files '*.zsh' '*.zsh-theme' '.zshrc' '.zprofile')
+          if [ -z "${files}" ]; then
+            printf 'zsh file list is EMPTY - refusing to pass having checked nothing\n' >&2
+            exit 1
+          fi
+          printf '%s\n' "${files}" | xargs -I{} zsh -n {}
 
   powershell:
     runs-on: ubuntu-latest

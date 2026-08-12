@@ -20,7 +20,7 @@ install_zsh_linux() {
   log_info "Installed zsh"
 }
 
-install_bats() {
+install_bats_linux() {
   if quiet_which bats; then
     log_info "bats already installed"
     return 0
