@@ -35,9 +35,23 @@ setup() {
   # invocation route (`make test`) where the leak is real (ci.md: "a check
   # derived from the same decision as the thing it checks cannot falsify
   # it"). Leaving MAKEFLAGS alone here is what keeps each measuring case's
-  # own `env -u MAKEFLAGS` load-bearing rather than decorative. Case 5
-  # normalizes its own MAKEFLAGS explicitly instead, per-call -- see its
-  # comment for why it needs a different mechanism.
+  # own `env -u MAKEFLAGS` load-bearing rather than decorative.
+  #
+  # Known, unreached tradeoff: this also removes defence-in-depth against
+  # MAKEFLAGS content OTHER than --no-print-directory, for any case that
+  # forgets its own guard. Reproduced this session against the real
+  # print-ZSH_FILES target, no env -u:
+  #   $ MAKEFLAGS='--no-print-directory -j4 --jobserver-auth=fifo:/nonexistent' \
+  #       gmake -C <repo> print-ZSH_FILES
+  #   gmake: cannot open jobserver /nonexistent: No such file or directory
+  #   gmake: warning: jobserver unavailable: using -j1.  Add '+' to parent make rule.
+  #   <the real file list>
+  # Both warnings land on stderr, and bats' `run` merges stderr into
+  # `$output`/`$lines` by default (confirmed this session) -- so under bats
+  # this hostile value produces lines=3 instead of lines=1, which would break
+  # a set-equality assertion built on `_sorted_lines_from_space_list`.
+  # Nothing in this file's suite runs `make -j`, so this is not reachable
+  # today; it is recorded here as a known decision, not fixed with code.
 }
 
 # GNU Make's `--version` first line is "GNU Make X.Y[.Z]"; every make this
@@ -271,11 +285,16 @@ _sorted_lines_from_space_list() {
 
   run env -u MAKEFLAGS PATH="${CLEAN_PATH}" "${_make_lt4}" -C "${REPO_ROOT}" print-ZSH_FILES
   [ "${status}" -eq 0 ]
-  [ -n "${output}" ]
   # bats strips $output's trailing newline, so `printf '%s\n' "$output" | wc -l`
   # floors at 1 even for genuinely empty output -- `wc -l` cannot see the
   # difference between "one line" and "no output at all". The `lines` array
-  # bats also populates has no such floor: it is length 0 for empty output.
+  # bats also populates has no such floor -- confirmed this session with
+  # `run printf ''`: output=[], -n output=no, lines=0. `lines` and `wc -l`
+  # are also not interchangeable on non-empty output: confirmed this session
+  # with `run printf 'a\n\nc\n'`, lines=2 but wc -l=3 -- bats' `lines` is a
+  # non-blank-line count. This payload has no blank lines, so that gap does
+  # not matter here, but the two counters are not substitutable in general.
+  [ -n "${output}" ]
   _lt4_count="${#lines[@]}"
 
   run env -u MAKEFLAGS PATH="${CLEAN_PATH}" "${_make_ge4}" -C "${REPO_ROOT}" print-ZSH_FILES
@@ -283,11 +302,12 @@ _sorted_lines_from_space_list() {
   [ -n "${output}" ]
   _ge4_count="${#lines[@]}"
 
-  # Equality alone would also pass if both arms emitted nothing -- assert
-  # nonzero (via lines[], which is genuinely 0 for empty output, unlike
-  # wc -l above) first so a vacuous pass can't hide behind the equality
-  # check.
-  [ "${_lt4_count}" -gt 0 ]
+  # No separate nonzero assertion here: `[ -n "${output}" ]` above already
+  # guarantees `${#lines[@]} >= 1` -- confirmed this session across three
+  # cases (`run printf ''`, `run printf '\n\n\n'`, `run printf ' '`): every
+  # case where `-n "${output}"` was true also had lines >= 1, and every case
+  # where it was false had lines=0. A bare `-gt 0` on _lt4_count here would
+  # be dead code duplicating that guarantee.
   if [ "${_lt4_count}" -ne "${_ge4_count}" ]; then
     printf '<4 (%s) line count %s != >=4 (%s) line count %s\n' \
       "${_make_lt4}" "${_lt4_count}" "${_make_ge4}" "${_ge4_count}" >&2
@@ -302,20 +322,16 @@ _sorted_lines_from_space_list() {
 # changes where it emits that text. Run through the >=4 arm specifically: on
 # this repo's own default `make` (3.81 on every mac), the directory lines
 # never appeared at all, so that arm alone would not exercise the case the
-# MAKEFLAGS directive exists to fix. This case's own `env -u MAKEFLAGS` is
-# load-bearing too, but by a different, complementary mechanism to Case 1's:
-# this is a single *asymmetric* check, not a two-arm comparison, so a leaked
-# MAKEFLAGS that this guard fails to strip would pollute its one arm
-# directly -- the >=4 make's directory lines would end up inside `$output`
-# and the exact string match would fail (red), not pass unnoticed (blind),
-# which is the opposite failure mode from Case 1's symmetric masking.
-# Mutation-checked directly, though only from the Makefile side: with the
-# Makefile directive removed, Case 1's `env -u` also removed, and an ambient
-# leaked MAKEFLAGS present, this case (its own `env -u` left intact) still
-# caught the missing directive and went red while Case 1 stayed green blind
-# -- proving this guard is doing real, case-specific work. Each case's own
-# `env -u MAKEFLAGS` protects that case alone; neither is a canary for the
-# other, and no case's guard substitutes for another's.
+# MAKEFLAGS directive exists to fix. `env -u MAKEFLAGS` on this test's `run`
+# line matters here too: with it present and the Makefile directive absent,
+# confirmed this session that print-BATS_MISSING's raw output no longer
+# equals the expected string (the directory lines land in `$output`) -- this
+# case correctly goes red in that state. With this guard dropped AND an
+# ambient leaked MAKEFLAGS containing --no-print-directory present, also
+# confirmed this session: the leak itself suppresses the directory lines,
+# output is clean, and the case goes blind (a false match) exactly like
+# Case 1 does under the same condition -- there is no asymmetry between the
+# two cases here.
 @test "print-BATS_MISSING returns the exact configured message under a >=4 make" {
   local _make_ge4 _expected
   _make_ge4="$(_find_make_ge4)" \
@@ -331,12 +347,15 @@ _sorted_lines_from_space_list() {
 # not a canary for the other cases. It establishes the baseline Case 1 and
 # Case 2 depend on -- that a directive-free Makefile run under a >=4 make,
 # with nothing suppressing the output, genuinely shows "Entering directory" /
-# "Leaving directory". Unlike Case 1/2, this deliberately does NOT prefix its
-# make invocation with `env -u MAKEFLAGS`. It instead sets `MAKEFLAGS=` to an
-# explicit empty value -- "inherited", per the plan, meaning the parent's
-# MAKEFLAGS is left alone rather than stripped, while THIS invocation is
-# normalized to the value a genuinely clean environment would have. That
-# normalization guards this case's own baseline only; it says nothing about,
+# "Leaving directory". This uses `env MAKEFLAGS=` (an explicit empty value)
+# rather than `env -u MAKEFLAGS`. Confirmed this session that the two forms
+# are equivalent on both /usr/bin/make 3.81 and gmake 4.4.1, including
+# against a hostile ambient MAKEFLAGS
+# (`--no-print-directory -j4 --jobserver-auth=fifo:/nonexistent`) and with
+# MAKELEVEL=1 inherited -- both forms gave identical line counts in every
+# case tested. `MAKEFLAGS=` was chosen only to match the plan's own wording
+# ("MAKEFLAGS inherited"), not because `env -u` would behave differently
+# here. That normalization guards this case's own baseline only; it says nothing about,
 # and cannot substitute for, Case 1's or Case 2's own `env -u MAKEFLAGS` --
 # each measuring case's guard is load-bearing for that case alone (see their
 # comments), and this one is no exception in the other direction: dropping
