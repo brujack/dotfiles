@@ -625,29 +625,6 @@ already exists there, so the round-1 path would have no-opped on a machine that 
 the fix installed. `brew --prefix make` was the obvious repair and is also wrong: `6_path.zsh`
 is itself what puts Homebrew on `PATH`, and `brew` measured absent over non-interactive ssh.
 
-### Round 3 — external architectural review (no lens dispatch)
-
-Two findings, both accepted and applied above. Raised against the merged `9c7c8a3` text by an
-independent reviewer outside the lens harness, so there is no assumption line to record.
-
-**1. The `env -u MAKEFLAGS` rule was unenforced, and case 5 did not enforce it.** Case 5
-asserts the leak is observable — a fact about make's behaviour, not about whether future tests
-follow the discipline. A sixth case measuring directory output and forgetting `env -u` would
-pass for the wrong reason: the defect shape §1 introduced, one layer out. Fixed by restating
-the rule as a **guarded/measuring partition** and having case 4 assert it, which needs no
-semantic judgment about what a test "measures" — the property that made the original rule
-unenforceable. The residual gap (nothing verifies a test in the *measuring* set needs to be
-there) is now stated in §1 rather than left implied.
-
-**2. `tests/makefile_scope.bats`'s four parses had no stated outcome.** The Files-touched row
-said "flag or cover by case 4" — two different outcomes. Case 4 as written covered fixture
-Makefiles only, so those four repo-Makefile invocations fell outside it and "cover by case 4"
-resolved to "leave alone". They are green today because of the environment leak, not because
-they are correct. Fixed by widening case 4 to every stdout-capturing invocation and naming the
-concrete edit: `--no-print-directory` on lines 36, 45, 68 and 79.
-
-Neither finding changes the four components. Both change what the suite can catch.
-
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger. Acceptance criteria are
