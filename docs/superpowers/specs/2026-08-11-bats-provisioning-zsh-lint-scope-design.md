@@ -597,7 +597,31 @@ session from a closed one, so it is not evidence of anything.
 
   Note what that abort costs, since the call sits at `:135-137`, ahead of
   `clone_or_update_dotfiles`, `setup_dotfile_symlinks` and `install_git_hooks_all_repos`
-  (`:206`): the machine is left unprovisioned, not merely bats-less. That is acceptable
+  (`:206`): the machine is left unprovisioned, not merely bats-less.
+
+  **The reachable instance is macOS, and an earlier draft of this section analysed only the
+  unreachable one.** It reasoned entirely about a hypothetical non-Ubuntu Linux box — a
+  machine class the fleet does not have — while the same abort is live on all six Macs the
+  moment `brew install bats-core` fails transiently (network, tap fetch, full disk). Found by
+  `bug-scan`, which correctly declined to call it a blocker and asked for the trade to be
+  re-priced instead.
+
+  Re-priced, the trade still favours propagating, but for a reason the earlier draft never
+  stated. The comparison is **not** "abort versus continue" — it is "abort versus a log line
+  that lies." `install_bats_macos`'s template, `install_zsh_macos` (`lib/macos.sh:115`),
+  propagates only the *brew-absent* case: a **failing** `brew_install_formula zsh` is swallowed
+  by the trailing `log_info "Installed zsh"`, which is `shell.md`'s documented
+  trailing-statement trap verbatim. So on a broken brew the pre-existing behaviour is a
+  machine that finishes provisioning without zsh while its own log claims otherwise.
+
+  Propagating from the new function makes a broken brew visible for the first time on that
+  path. The cost is a heavier failure for the least essential tool on it; the benefit is that
+  the failure is honest. Every step before the abort (`install_rosetta`, `install_git`,
+  `mkdir -p`, `install_zsh`) is idempotent, so re-running after brew recovers costs nothing.
+
+  The asymmetry with `install_zsh_macos` is therefore **deliberate, not an oversight** — and
+  that function's swallowed failure is recorded as a separate backlog item rather than fixed
+  here, being pre-existing and outside this change's scope. That is acceptable
   **only** because `install_homebrew` failing means the machine cannot be provisioned anyway
   — `install_git` (`:126`) and `install_zsh` (`:132`) already abort on the same condition,
   ahead of this one. It would not be acceptable for a condition the machine could recover

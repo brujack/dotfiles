@@ -40,7 +40,7 @@ help:
 	@printf "Available targets:\n"
 	@printf "  make test              Run all BATS tests\n"
 	@printf "  make test-unit         Run unit tests only\n"
-	@printf "  make lint              Check bash/zsh syntax + ShellCheck all .sh files\n"
+	@printf "  make lint              bash -n + ShellCheck over SHELL_FILES, zsh -n over ZSH_FILES\n"
 	@printf "  make bash-coverage     Measure bash line coverage via PS4 xtrace tracer\n"
 	@printf "  make push-bash-coverage  Run bash-coverage and push badge JSON to coverage-data branch\n"
 	@printf "  make install-hooks     Install pre-commit and pre-push hooks (run once per checkout)\n"
