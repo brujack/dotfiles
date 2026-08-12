@@ -493,6 +493,12 @@ acceptance:
     exit_code: 0
   - cmd: 'bash -c ''! grep -q "bash -n + zsh -n on every tracked shell file" CLAUDE.md'''
     exit_code: 0
+  - cmd: 'bash -c ''! grep -q "1260 tests as of 2026-08-09" CLAUDE.md'''
+    exit_code: 0
+  - cmd: 'bash -c ''! grep -q "1274 tests as of 2026-08-10" CLAUDE.md'''
+    exit_code: 0
+  - cmd: 'bash -c ''! grep -q "zsh -n\` on all \`.sh\` files" CLAUDE.md'''
+    exit_code: 0
   - cmd: make check-agent-guidance
     exit_code: 0
   - cmd: make test
@@ -516,7 +522,19 @@ parallel_group: null
    Coverage section "1274 tests as of 2026-08-10". This branch adds tests in T1, T2, T3, T4 and
    T6; update both figures to the count `make test` reports at that point, and re-read the
    coverage percentage rather than carrying the old one forward. The 840 CI floor is unaffected.
-5. **`docs/superpowers/README.md`:** delete the "Fail-closed widened the fleet's bats/zsh dependency" backlog row and add an All Plans row dated 2026-08-11 linking this plan and its spec, status **Done**. Add the `> **Status: DONE**` banner to the top of this plan file.
+5. **`CLAUDE.md:247`** — the `lint-macos` job is described as running "`bash -n` and `zsh -n`
+   on all `.sh` files". After Task 5 the zsh step selects the ten tracked zsh files via
+   `git ls-files`, not `.sh` via `find`. The bash step is unchanged, so describe the two
+   separately. *(Found by the orchestrator enumerating CLAUDE.md before dispatch; not in the
+   original T8 scope.)*
+6. **Coverage figure at `CLAUDE.md:298`** — T1 and T3 add functions to `lib/macos.sh` and
+   `lib/helpers.sh`, both in the instrumented set, so the percentage has moved. Run
+   `make bash-coverage` and confirm it is **≥ 91%**, the CI gate that blocks auto-merge. Do
+   **not** publish the local number as the headline figure: `CLAUDE.md` itself states "publish
+   the CI figure; treat a local number as a preview," and macOS reads about one point above
+   ubuntu-latest. Report the local figure and flag that the published one needs reconciling
+   against CI's run on the PR.
+7. **`docs/superpowers/README.md`:** delete the "Fail-closed widened the fleet's bats/zsh dependency" backlog row and add an All Plans row dated 2026-08-11 linking this plan and its spec, status **Done**. Add the `> **Status: DONE**` banner to the top of this plan file.
 
 `make check-agent-guidance` is in the gate because `CLAUDE.md` feeds the generated Cursor mirror; if it fails, run `make sync-agent-guidance` rather than hand-editing the mirror.
 
