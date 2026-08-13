@@ -54,7 +54,7 @@ inherited MAKEFLAGS in env        -> suppressed on both
 `-C` prints `Entering directory` **before** the Makefile is parsed, so a directive set
 inside that Makefile arrives too late; 4.4.1 evidently changed this. The practical
 consequence is bounded: under `make test` the exported variable does the work on every
-version, so the repo's own invocations are covered. What is *not* covered is a direct
+version, so the repo's own invocations are covered. What is _not_ covered is a direct
 `make -C … ` run outside an outer make on 4.3 — there the file directive does nothing.
 
 So the load-bearing protection is the **per-call flag** and the partition that enforces
@@ -82,6 +82,35 @@ Prepending it ahead of everything else on `PATH` makes plain `make` resolve to G
 loop takes the first that exists — a single Homebrew prefix assumption would have
 silently no-op'd on ratna (`x86_64`, Homebrew at `/usr/local`).
 
+**Its scope is narrower than "every mac resolves GNU make", and this is the second
+scope correction in this ADR.** `6_path.zsh` is sourced by **interactive** zsh only, so
+the prepend reaches a human at a terminal and nothing else. Measured on the Studio,
+2026-08-13, on a fully provisioned machine:
+
+```
+interactive zsh      /opt/homebrew/opt/make/libexec/gnubin/make   GNU Make 4.4.1
+non-interactive zsh  /usr/bin/make                                GNU Make 3.81
+agent session shell  /usr/bin/make                                GNU Make 3.81
+```
+
+So every agent-invoked `make test`, every script, and the `pre-push` hook still resolve
+3.81 — the actor that runs the gate most often is the one the fix does not reach. Both
+numbers are correct; they describe different actors, and "the Studio's make version" has
+no single answer.
+
+The failure this creates is worse than the uniform blindness it replaced. Previously
+every route on a mac returned 3.81, so nothing could confirm a ≥4.0 behaviour was
+covered. Now a developer verifying by hand at a prompt gets 4.4.1 and concludes the class
+is handled, while the run that actually gates gets 3.81 — the check answers for an actor
+other than the one being checked. `tdd.md`'s privilege-fidelity rule (E3) is the same
+shape one attribute over: a test running as root cannot validate an unprivileged guard,
+and an interactive shell cannot validate what a hook resolves.
+
+Whether to widen the prepend is deliberately **not** decided here. Putting gnubin on a
+non-interactive `PATH` changes the toolchain underneath every hook and script on the
+machine, which is its own hazard and a larger change than this ADR's; it is filed as a
+backlog row instead. What is decided is that the claim now matches the measurement.
+
 **4. A `make_version` field in the state-ledger base JSON (`lib/update_summary.sh`).**
 macOS-only, populated from `make --version` (not `gmake --version`) specifically
 because the field exists to catch the case where GNU make 4.x is installed but the
@@ -101,9 +130,12 @@ cannot pass vacuously by having zero of either kind.
 
 ## Consequences
 
-**Positive.** Every mac in the fleet now resolves `make` to 4.x through the same
-mechanism CI uses to provision `ubuntu-latest`'s runner, closing the version-skew class
-rather than patching the three tests that had already tripped on it. A future `-C` call
+**Positive.** Every mac in the fleet now resolves `make` to 4.x **at an interactive
+prompt** through the same mechanism CI uses to provision `ubuntu-latest`'s runner,
+closing the version-skew class for the human rather than patching the three tests that
+had already tripped on it. Agent shells, scripts, and git hooks still get 3.81 — see the
+scope note under decision 3; this sentence originally omitted the qualifier and claimed
+the fleet outright. A future `-C` call
 site is covered **when it runs under an outer make** — `MAKEFLAGS` is exported and an
 inherited value suppresses on both 4.3 and 4.4.1 — but not when it runs standalone on
 4.3, which is why the partition scanner rather than the directive is what makes the
