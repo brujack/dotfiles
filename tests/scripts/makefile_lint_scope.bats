@@ -395,7 +395,7 @@ FIXTURE_EOF
 # Case 3: the Makefile directive itself. Cases 1/2/5 above all reason about
 # what happens once this line exists; nothing until now asserted the line is
 # actually there. A `+=` (not `=`) is required verbatim -- `=` would still
-# read as a plausible diff to someone editing the file, but Makefile.md's own
+# read as a plausible diff to someone editing the file, but Makefile's own
 # comment at line 2 documents this as an append ("MAKEFLAGS is an exported
 # environment variable... it removes print-directory variance at the source
 # rather than repeating --no-print-directory at every -C call site"), and an
@@ -408,92 +408,246 @@ FIXTURE_EOF
 
 # Case 4: the structural partition scanner. Every stdout-capturing `make -C`
 # invocation in a test file must be either guarded (a per-call
-# --no-print-directory) or measuring (env -u MAKEFLAGS, or the equivalent
-# env MAKEFLAGS= that Case 5 above establishes as behaviourally identical) --
-# never neither. A candidate line must carry BOTH "-C" (the one condition
-# under which GNU Make can print Entering/Leaving at all) AND the substring
-# "make" -- verified this session that "-C" alone is not a safe filter: an
-# earlier draft of this scanner, keyed on "-C" only, matched every
-# `git -C ...` fixture-setup call as an unclassified "neither" (git has its
-# own unrelated -C flag; it prints no directory messages and needs no guard
-# at all). Requiring "make" too correctly keeps Case 1/Case 2's
-# resolved-binary invocations in scope ("${_make_lt4}"/"${_make_ge4}" both
-# contain the substring "make") while dropping every git -C line, none of
-# which contain it.
+# --no-print-directory) or measuring (env -u MAKEFLAGS, or the explicit
+# empty MAKEFLAGS= assignment that Case 5 above establishes as
+# behaviourally identical) -- never neither.
 #
-# Domain used to be a hardcoded two-file array (this file and
-# tests/makefile_scope.bats) -- exactly tdd.md's Coverage Denominators
-# failure shape: a hand-maintained list whose omissions are invisible
-# because an excluded file is absent from numerator and denominator alike.
-# It is now every tracked *.bats file, derived through `_git_ls_clean
-# 'tests/*.bats'` (the same env -u GIT_DIR/GIT_WORK_TREE/GIT_COMMON_DIR/
-# GIT_INDEX_FILE strip the ZSH_FILES tests above use, and for the identical
-# reason -- shell.md: `git -C` does not override an exported GIT_DIR).
-# Measured this session: `'tests/*.bats'` alone returns the same 32 files as
-# `'tests/*.bats' 'tests/**/*.bats'` deduplicated -- git pathspec `*` already
-# crosses `/`, so the recursive-looking second pattern added nothing and is
-# not used.
+# What makes a line able to print Entering/Leaving at all is NOT simply
+# "-C". Measured this session against a scratch fixture (FOO := bar;
+# print-%: @printf '%s\n' "$($*)"), gmake 4.4.1:
+#   $ gmake sub                # sub: recipe is "$(MAKE) print-FOO", no -C anywhere
+#   gmake print-FOO
+#   gmake[1]: Entering directory '/path/to/fixture2'
+#   bar
+#   gmake[1]: Leaving directory '/path/to/fixture2'
+#   $ gmake -w print-FOO       # -w/--print-directory, no -C
+#   gmake: Entering directory '/path/to/fixture2'
+#   bar
+#   gmake: Leaving directory '/path/to/fixture2'
+# A recursive sub-make (via $(MAKE)) and an explicit -w/--print-directory
+# both print the directory lines with no "-C" anywhere on the invoking
+# line. This scanner's real boundary is therefore -C / -w / --print-directory
+# at the call site -- a recursive sub-make cannot be seen by a line scanner
+# at all, because whether a target recurses is a property of its recipe, not
+# of the line that invokes make. Not reachable today: the root Makefile has
+# zero $(MAKE) recipes and `make -n test` emits no sub-make (verified this
+# session), but powershell/Makefile exists and is untouched by this
+# scanner. Recorded as an accepted gap, not fixed here -- a line scanner
+# cannot see recursion.
 #
-# Three exclusions on the candidate filter, each verified live this session
-# by running the scanner without it and reading what it wrongly caught, not
-# assumed:
-#   - comment lines (a line whose only content after the line number is
-#     leading whitespace then '#')
-#   - @test description lines (this Case's own @test line literally contains
-#     the English phrase "make -C invocation", which the "make"+"-C" filter
-#     alone would misread as a third kind of match)
-#   - lines whose invoked command is `grep`, not `make` -- added when the
-#     domain widened past the original two files. tests/scripts/pre_push.bats
-#     carries 27 lines of the shape
-#     `grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"`: a string match
-#     against a log of calls already made to a *mocked* make binary, not an
-#     invocation of a real one. Confirmed this session: without this
-#     exclusion, the full-domain sweep reports all 27 as "neither guarded nor
-#     measuring"; with it, they drop out of the candidate list entirely and
-#     the sweep's real candidate count is 12, not 39.
+# Domain used to be a hardcoded two-file array, then every tracked *.bats
+# file -- exactly tdd.md's Coverage Denominators failure shape each time: a
+# hand-maintained/narrowly-typed list whose omissions are invisible because
+# an excluded file is absent from numerator and denominator alike. It is now
+# every tracked *.bats file AND *.bash file, derived through `_git_ls_clean
+# 'tests/*.bats' 'tests/*.bash'` (the same env -u GIT_DIR/GIT_WORK_TREE/
+# GIT_COMMON_DIR/GIT_INDEX_FILE strip the ZSH_FILES tests above use, and for
+# the identical reason -- shell.md: `git -C` does not override an exported
+# GIT_DIR). tests/helpers/common.bash is tracked and sourced by the suite,
+# and was invisible to this scanner purely because of its extension.
+# Measured this session it contributes zero candidates (`grep -n
+# 'make\|-C ' tests/helpers/common.bash` -> no matches), so widening the
+# domain moves domain_files but not candidates/guarded/measuring/neither.
 #
-# Full-domain sweep, measured this session (32 tracked *.bats files, 12
-# candidates): guarded=8 (tests/makefile_scope.bats:36,45,68,79 and
-# tests/scripts/makefile_lint_scope.bats:123,229,241, plus
-# tests/scripts/unit.bats:819 once this same commit adds
-# --no-print-directory to it), measuring=4 (tests/scripts/makefile_lint_scope.bats:
-# 286,300,340,386), neither=0. Before that same-commit fix,
-# tests/scripts/unit.bats:819 (`run env PATH="${_clean_path}" make -C
-# "${REPO_ROOT}" -n test-python`) was the sole "neither" -- the one violation
-# this domain widening was built to expose, not a hypothetical.
+# An independent review constructed five bypasses against the previous
+# version of this scanner. Each was reproduced this session before being
+# closed, and closing bypass 1 opened a sixth problem that needed its own
+# fix (see below):
+#
+#   1. Case sensitivity. The final filter was a case-sensitive `grep 'make'`,
+#      so a line whose invoked binary is held in a variable like
+#      `${MAKE_BIN}` was invisible to it -- confirmed this session: piping a
+#      synthetic `"${MAKE_BIN}" -C "$d" print-FOO` line through the old
+#      three-grep chain produced zero output, purely because the suite's own
+#      helper vars happen to be spelled lowercase ("${_make_lt4}"/
+#      "${_make_ge4}"). Fixed by matching "make" case-insensitively.
+#      Case-insensitivity alone creates a new false positive: `git -C
+#      "${_wt_source}" add Makefile` (a real line in
+#      tests/setup_env/git_hooks.bats) case-insensitively contains
+#      "makefile", whose first four characters are "make" -- confirmed this
+#      session this exact line was the sole "neither" hit produced by a
+#      naive case-insensitive substring match, raising the real domain's
+#      candidate count from 12 to 13. Closed by stripping literal
+#      "makefile" occurrences before testing for "make": `git -C ... add
+#      Makefile` has none left afterward; `"${_make_lt4}"`/`"${_make_ge4}"`/
+#      `"${MAKE_BIN}"` still do.
+#
+#   2. Line continuations. A make/-C pair split across a shell continuation
+#      (`run "${_make_ge4}" \` on one physical line, `-C "${d}" print-FOO`
+#      on the next) was invisible: confirmed this session that run through
+#      the old ' -C ' grep one raw line at a time, the continuation line has
+#      no -C and the -C line has no make, so neither line matched and the
+#      pair produced zero candidates. Fixed by joining any line ending in a
+#      lone trailing backslash with the line(s) that follow before candidate
+#      detection, tagged with its starting line number so reported
+#      locations stay resolvable.
+#
+#   3. -C forms the pattern missed. Measured this session against the same
+#      scratch fixture as above, gmake 4.4.1: `gmake -C"$d" print-FOO`
+#      (packed, no space) and `gmake --directory="$d" print-FOO` (long form)
+#      both print Entering/Leaving exactly like the space-separated form the
+#      old ' -C ' pattern required. Fixed by widening the pattern to accept
+#      -C followed by whitespace, a quote, or $-interpolation, or the
+#      literal --directory.
+#
+#   4. First-match-wins. `run bash -c "make --no-print-directory -C a
+#      print-X; make -C b print-Y"` classified as guarded outright under the
+#      old check ("does --no-print-directory appear anywhere in the line") --
+#      true for the FIRST invocation only; the second has no guard and was
+#      never separately considered. Fixed by splitting each candidate line
+#      on `;`, `&&`, and `|` and reclassifying each resulting segment that is
+#      itself a make/-C candidate -- confirmed this session the sample line
+#      above now yields one guarded segment and one neither segment, not one
+#      guarded line. Known limitation: the split is a plain delimiter split,
+#      not a shell parse, so a `;`/`&&`/`|` inside a quoted argument would be
+#      mis-split -- not reachable in this domain today, no real candidate
+#      line contains one.
+#
+#   5. The grep exclusion was over-broad. The old rule dropped any line
+#      whose invoked command was `grep`, to exclude
+#      tests/scripts/pre_push.bats's 27 lines of the shape `grep -qE "^make
+#      -C .* test$" "${MOCK_CALLS_FILE}"` (string-matching a log of calls
+#      already made to a *mocked* make, not invoking a real one). That same
+#      blanket rule also dropped a grep line that performs a real invocation
+#      through command or process substitution, e.g. `grep -q "^bar$"
+#      <(make -C "${d}" print-FOO)`. Fixed by keeping the exclusion only
+#      when the grep-led line contains none of `$(`, `<(`, or a backtick --
+#      confirmed this session the mock-log-check shape (no substitution)
+#      still excludes, and the process-substitution shape (a real
+#      invocation) no longer does.
+#
+#   6. `env MAKEFLAGS=-w make -C "$d" ...` still prints the directory lines
+#      (MAKEFLAGS=-w carries no --no-print-directory) but the old check --
+#      "does the literal substring MAKEFLAGS= appear anywhere" -- classified
+#      it as measuring regardless of the value. Fixed by requiring the value
+#      after MAKEFLAGS= to be empty (immediately followed by whitespace, a
+#      quote, or end of string) -- confirmed this session MAKEFLAGS=-w no
+#      longer matches while MAKEFLAGS= and MAKEFLAGS="" still do.
+#
+# A seventh item, not itself a bypass but folded in for the same reason
+# _git_ls_clean strips PATH: the candidate-extraction pipeline had no PATH
+# scrubbing. Inert today -- tests/mocks/ has neither a `grep` nor an `awk`
+# nor a `sed` -- but a live bug the day one is added (shell.md's PATH-mock-
+# shadowing pitfall). Every external call this Case makes now runs under
+# `PATH="${CLEAN_PATH}"`.
+#
+# Fixing bypass 2 (continuation joining) surfaced a self-inflicted eighth
+# problem: joining the OLD five-line, backslash-continued grep pipeline that
+# implemented this very scanner reunited its own literal ' -C ' pattern
+# argument and its own literal 'make' pattern argument onto one logical
+# line -- the scanner's former source became a candidate for itself.
+# Confirmed this session by running the join step against the pre-fix
+# source and observing the pipeline's own `done < <(grep -nE ' -C ' ...)`
+# line appear in the candidate list. Rewriting the pipeline in bash, with
+# the patterns held in `_MAKE_C_FORM_RE`/`_EMPTY_MAKEFLAGS_RE` and referenced
+# by variable name rather than re-typed as a literal quoted pattern beside
+# the word "make", removes the literal substrings that caused the
+# collision -- confirmed this session the current source, scanned by
+# itself, adds no extra candidate over the count reported below.
+#
+# Full-domain sweep of the finished implementation below, measured this
+# session with `bats --show-output-of-passing-tests`: 33 tracked files (32
+# *.bats + tests/helpers/common.bash, which contributes zero candidates),
+# 12 candidates -- unchanged from the pre-fix baseline, because the
+# makefile-collision false positive the case-insensitive match introduces
+# (bypass 1, above) is closed by the same commit's stripping fix, and
+# because this rewrite's own source contains no literal "-C"/"make" text
+# for the continuation-join step to reunite into a spurious self-match
+# (also bypass 1's collision fix, above -- the domain widening to *.bash
+# separately adds zero). guarded=8 (tests/makefile_scope.bats:36,45,68,79,
+# tests/scripts/makefile_lint_scope.bats:123,228,240, and
+# tests/scripts/unit.bats:819), measuring=4
+# (tests/scripts/makefile_lint_scope.bats:286,300,340,386), neither=0.
+_join_continuations() {
+  PATH="${CLEAN_PATH}" awk '
+    {
+      startline = NR
+      line = $0
+      while (line ~ /\\[[:space:]]*$/) {
+        sub(/\\[[:space:]]*$/, " ", line)
+        if ((getline nextline) <= 0) { break }
+        line = line nextline
+      }
+      print startline ":" line
+    }
+  ' "$1"
+}
+
+# Bypass 3: -C followed by whitespace/quote/$-interpolation, or the literal
+# --directory. Verified live above against gmake 4.4.1.
+readonly _MAKE_C_FORM_RE='(^|[[:space:]])(-C[[:space:]"'"'"'$]|--directory)'
+# Bypass 6: MAKEFLAGS= only counts as measuring when the value is empty --
+# immediately followed by whitespace, a quote, or end of string.
+readonly _EMPTY_MAKEFLAGS_RE='MAKEFLAGS=([[:space:]"'"'"'$]|$)'
+
+# A make/-C candidate: the widened -C form above AND "make" case-
+# insensitively, with literal "makefile" occurrences stripped first so a
+# line whose only "make"-shaped text is the filename Makefile is not
+# mistaken for an invocation (bypass 1's own collision, see above).
+_is_make_c_candidate() {
+  local _text="$1" _lc _lc_stripped
+  [[ "${_text}" =~ ${_MAKE_C_FORM_RE} ]] || return 1
+  _lc="${_text,,}"
+  _lc_stripped="${_lc//makefile/}"
+  [[ "${_lc_stripped}" == *make* ]] || return 1
+  return 0
+}
+
 @test "every stdout-capturing make -C invocation in-domain is guarded or measuring, both sets nonempty" {
   local -a _domain_files=()
   local _rel
   while IFS= read -r _rel; do
     [ -z "${_rel}" ] && continue
     _domain_files+=("${REPO_ROOT}/${_rel}")
-  done < <(_git_ls_clean 'tests/*.bats')
+  done < <(_git_ls_clean 'tests/*.bats' 'tests/*.bash')
   [ "${#_domain_files[@]}" -gt 0 ]
 
   local -a _candidates=()
-  local _f _hit
+  local _f _lineno _content
   for _f in "${_domain_files[@]}"; do
-    while IFS= read -r _hit; do
-      [ -z "${_hit}" ] && continue
-      _candidates+=("${_f}:${_hit}")
-    done < <(grep -nE ' -C ' "${_f}" \
-      | grep -vE '^[0-9]+:[[:space:]]*#' \
-      | grep -vE '^[0-9]+:@test' \
-      | grep -vE '^[0-9]+:[[:space:]]*grep[[:space:]]' \
-      | grep 'make')
+    while IFS=: read -r _lineno _content; do
+      [ -z "${_lineno}" ] && continue
+      _is_make_c_candidate "${_content}" || continue
+      # comment line: only whitespace then '#' after the line number
+      [[ "${_content}" =~ ^[[:space:]]*# ]] && continue
+      # @test description line -- this Case's own @test line literally
+      # contains the phrase "make -C invocation"
+      [[ "${_content}" =~ ^@test ]] && continue
+      # bypass 5: a grep-led line checking a mock call log, not performing
+      # a real invocation -- UNLESS it does so via command or process
+      # substitution
+      if [[ "${_content}" =~ ^[[:space:]]*grep[[:space:]] ]] \
+        && [[ "${_content}" != *'$('* ]] \
+        && [[ "${_content}" != *'<('* ]] \
+        && [[ "${_content}" != *'`'* ]]; then
+        continue
+      fi
+      _candidates+=("${_f}:${_lineno}:${_content}")
+    done < <(_join_continuations "${_f}")
   done
   [ "${#_candidates[@]}" -gt 0 ]
 
-  local _guarded=0 _measuring=0 _neither=0 _c
+  local _guarded=0 _measuring=0 _neither=0 _c _rest _content _seg
   for _c in "${_candidates[@]}"; do
-    if [[ "${_c}" == *"--no-print-directory"* ]]; then
-      _guarded=$((_guarded + 1))
-    elif [[ "${_c}" == *"env -u MAKEFLAGS"* || "${_c}" == *"MAKEFLAGS="* ]]; then
-      _measuring=$((_measuring + 1))
-    else
-      _neither=$((_neither + 1))
-      printf 'neither guarded nor measuring: %s\n' "${_c}" >&2
-    fi
+    # "file:lineno:content" -- content itself may contain colons, so only
+    # the first two fields (file, lineno) are stripped off, not split on
+    # every colon.
+    _rest="${_c#*:}"
+    _content="${_rest#*:}"
+    # bypass 4: reclassify per `;`/`&&`/`|`-delimited segment, not per whole
+    # line, so a second invocation sharing a line with a guarded first one
+    # cannot hide behind the first one's guard.
+    while IFS= read -r _seg; do
+      _is_make_c_candidate "${_seg}" || continue
+      if [[ "${_seg}" == *"--no-print-directory"* ]]; then
+        _guarded=$((_guarded + 1))
+      elif [[ "${_seg}" == *"env -u MAKEFLAGS"* || "${_seg}" =~ ${_EMPTY_MAKEFLAGS_RE} ]]; then
+        _measuring=$((_measuring + 1))
+      else
+        _neither=$((_neither + 1))
+        printf 'neither guarded nor measuring: %s -- segment: %s\n' "${_c}" "${_seg}" >&2
+      fi
+    done < <(PATH="${CLEAN_PATH}" sed -E 's/(&&|\|\||;|\|)/\n/g' <<< "${_content}")
   done
   printf 'domain_files=%s candidates=%s guarded=%s measuring=%s neither=%s\n' \
     "${#_domain_files[@]}" "${#_candidates[@]}" "${_guarded}" "${_measuring}" "${_neither}" >&2
