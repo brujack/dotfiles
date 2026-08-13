@@ -338,6 +338,20 @@ See [`ai-config/docs/knowledge/dotfiles-bats-test-infrastructure.md`](https://gi
 
 Pattern: `local _file="${_OVERRIDE_VAR:-$(dirname "${BASH_SOURCE[0]}")/real/path}"`. Tests set the var and pass a writable temp copy; production code leaves it unset.
 
+**`_OVERRIDE_GNUBIN_ARM` / `_OVERRIDE_GNUBIN_INTEL` are read by two files in two
+languages** — `lib/macos.sh`'s `install_make_macos` (bash) and
+`.config/.zshrc.d/6_path.zsh` (zsh, sourced by every interactive shell). Both default to
+`/opt/homebrew/opt/make/libexec/gnubin` and `/usr/local/opt/make/libexec/gnubin`
+respectively; keep the pairs in step, since a drift makes the install guard and the `PATH`
+consumer disagree.
+
+The seam is not optional in tests: the real ARM gnubin dir exists on any provisioned mac,
+so a test that forgets to point these at a nonexistent path short-circuits the guard and
+silently asserts nothing. `tests/setup_env/install_guards.bats` calls `_gnubin_absent` /
+`_gnubin_present` for exactly that reason. Unlike most seams here these are read
+unconditionally rather than only under test — a stray export changes real shell `PATH`,
+which grants no capability beyond setting `PATH` directly but is worth knowing.
+
 ### Mock Pattern
 
 See [`ai-config/docs/knowledge/dotfiles-bats-test-infrastructure.md`](https://github.com/brujack/ai-config/blob/master/docs/knowledge/dotfiles-bats-test-infrastructure.md) for the full `MOCK_*` env var reference table and the usage pattern.
