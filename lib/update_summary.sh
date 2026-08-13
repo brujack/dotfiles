@@ -408,6 +408,33 @@ _ledger_write_run_entry() {
     _distro_version="unknown"
   fi
 
+  # macOS-only: the machine's `make` major version. `make` (not `gmake`) is
+  # deliberate -- this measures what `make` actually resolves to for this
+  # process, which is the divergence signal the field exists to catch: a
+  # machine can have GNU make 4.x installed via Homebrew while `make` still
+  # resolves to Apple's bundled 3.81 if the gnubin PATH prepend isn't in
+  # effect. Verified in this session: on a machine with both installed,
+  # `make --version | head -1` printed "GNU Make 3.81" while
+  # `gmake --version | head -1` printed "GNU Make 4.4.1" -- probing `gmake`
+  # would have hidden exactly the drift this field is meant to surface.
+  local _make_version_fragment=""
+  if [[ -n "${MACOS:-}" ]]; then
+    local _make_version_raw _make_version_major
+    _make_version_raw=$(make --version 2>/dev/null | head -1)
+    _make_version_major=$(printf '%s' "${_make_version_raw}" | grep -oE '[0-9]+' | head -1)
+    # Validate with a regex before any numeric comparison. Verified in this
+    # session: `x="abc"; [[ "$x" -ge 0 ]]` exits 0 (true) rather than
+    # erroring -- bash arithmetic treats a non-numeric, identifier-shaped
+    # operand as an unset variable name, which reads as 0. An unvalidated
+    # `-ge`/`-lt` on a raw grep match would silently accept garbage as a
+    # valid major instead of falling through to "unknown".
+    if [[ "${_make_version_major}" =~ ^[0-9]+$ ]] && [[ "${_make_version_major}" -ge 0 ]]; then
+      printf -v _make_version_fragment ',\n  "make_version": "%s"' "${_make_version_major}"
+    else
+      printf -v _make_version_fragment ',\n  "make_version": "unknown"'
+    fi
+  fi
+
   # Base JSON — common to all run types (no trailing comma, no closing brace)
   local _base_json
   printf -v _base_json '{
@@ -430,6 +457,7 @@ _ledger_write_run_entry() {
     "${_duration}" "${_success}" \
     "${_machine_id}" "${_hostname}" "${_os}" "${_distro_version}" \
     "${_run_type}"
+  _base_json+="${_make_version_fragment}"
 
   if [[ "${_run_type}" == "update" ]]; then
     # update-specific fields: failure_stage, workflows_ran, packages_updated_count
