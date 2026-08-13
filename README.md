@@ -150,7 +150,7 @@ This updates Homebrew, apt/snap packages, pip, Ruby gems, Mac App Store apps, an
 
 | Type             | Description                                                                                                                                                      |
 | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `setup_user`     | Sets up user environment: configs, symlinks, shell, directory structure, and installs git hooks across personal repos                                            |
+| `setup_user`     | Sets up user environment: configs, symlinks, shell, directory structure, installs git hooks across personal repos, and installs GNU make on macOS                |
 | `setup`          | Full machine setup (`setup_user` + all apps and tools). Flags: `--brew-install`, `--mas-install`                                                                 |
 | `developer`      | Dev packages + Python/Ansible virtualenv                                                                                                                         |
 | `ansible`        | Ansible venv only — typically used after a Python update                                                                                                         |
