@@ -357,6 +357,12 @@ See [`ai-config/docs/knowledge/dotfiles-bats-test-infrastructure.md`](https://gi
 
 Both categories must exist in the test suite. A test capturing `make` output without guarding or measuring it gets the environment's `MAKEFLAGS`, so it is measuring the environment rather than the Makefile.
 
+**The partition is enforced, not aspirational.** `tests/scripts/makefile_lint_scope.bats:596` ("every stdout-capturing make -C invocation in-domain is guarded or measuring, both sets nonempty") scans every stdout-capturing `make` invocation across the scanner's domain and requires each to land in exactly one of guarded/measuring, with both sets non-empty.
+
+**The domain is derived from `git ls-files`, not listed.** The scanner pulls its file set through `_git_ls_clean 'tests/*.bats' 'tests/*.bash'` — the same four-variable `env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE` strip `ZSH_FILES`/`SHELL_FILES` use, and for the identical reason: `git -C` does not override an exported `GIT_DIR`, and `scripts/pre-push` runs `make test`. An earlier version hardcoded a two-file array (`tests/makefile_scope.bats` and this file) that held exactly the two files already in compliance and excluded the one real violation, `tests/scripts/unit.bats:819` (`make -C "${REPO_ROOT}" -n test-python`, carrying neither guard). That is the same invisible-omission shape `tdd.md`'s Coverage Denominators section describes — an excluded file is absent from both numerator and denominator, so the check reports clean either way — and the third time that shape has shown up in this repo, after the bash coverage tracer's 13-entry `INCLUDE_FILES` array and `make lint`'s original literal file list (both above, under Coverage and ShellCheck).
+
+**Known gap: recursive sub-make and `-w` are invisible to it.** A line scanner can only see what is on the invoking line. `$(MAKE)` recursion and `-w`/`--print-directory` both print `Entering`/`Leaving` with no `-C` anywhere on the line that triggers them, so neither is reachable by this scanner's `-C`/`--directory` pattern. Not exploitable today — the root `Makefile` has zero `$(MAKE)` recipes and `make -n test` emits no sub-make — but `powershell/Makefile` exists and sits outside this scanner's domain entirely. Recorded as an accepted boundary a line scanner cannot close, not a defect to fix.
+
 ## Committing Work
 
 Invoke `caveman:caveman-commit` skill to generate the commit message before running `git commit`. Full format and rules in `~/.claude/CLAUDE.md`.
