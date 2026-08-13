@@ -59,8 +59,8 @@ nothing about `brew_install_formula` itself changes.
 `lib/macos.sh`. In `install_git_macos` (line 96) and `install_zsh_macos` (line 115),
 the `brew_install_formula` call gains `|| return 1`.
 
-This is the pattern already present twice in the same file — `install_bats_macos:134`
-and `install_make_macos:184` both guard their brew call this way. The trailing
+This is the pattern already present twice in the same file — `install_bats_macos`
+guards at line 145 and `install_make_macos` at line 184. The trailing
 `log_info "Installed <pkg>"` is retained, because once every failable operation is
 guarded, a trailing log is the file's established idiom and carries no risk.
 
@@ -347,8 +347,8 @@ Acceptance:
 
 Production:
 
-- `lib/macos.sh` — items 1
-- `lib/linux_shared.sh` — items 2, 3
+- `lib/macos.sh` — item 1
+- `lib/linux_shared.sh` — items 2 and 3
 - `lib/helpers.sh` — item 4
 - `lib/workflows.sh` — item 3 caller
 - `scripts/run-bash-coverage.sh` — item 5
