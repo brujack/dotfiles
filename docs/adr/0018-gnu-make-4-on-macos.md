@@ -143,6 +143,34 @@ are safe for any consumer that ignores unknown keys, but it is a change to a sha
 schema and is recorded here as a decision rather than left as an implementation detail
 a future reader has to reconstruct from the diff.
 
+### A system binary is now shadowed by a user-writable one
+
+Prepending `gnubin` changes which `make` a shell resolves, and with it who owns that
+file. Measured on the Mac Studio:
+
+```
+/usr/bin/make                           root wheel    (root-owned)
+/opt/homebrew/opt/make/libexec/gnubin   bruce admin   (user-writable)
+```
+
+This is the first place in `6_path.zsh` where a root-owned system binary is
+deliberately shadowed by a user-writable one, and it is unavoidable given the goal —
+Homebrew installs under a user-owned prefix on Apple Silicon, so there is no way to
+put GNU Make 4.x ahead of `/usr/bin/make` without it.
+
+It grants no capability an attacker did not already have. `~/bin`, `~/scripts` and
+`~/.cargo/bin` are already on `PATH` from this same file, `/opt/homebrew/bin` was
+already appended before this change, and `.zshrc` itself is user-writable — anyone who
+can write to `gnubin` can write to all of those. What changed is narrower: previously
+`/usr/bin` won for any name present in both, so `make` specifically resolved
+root-owned; now it does not.
+
+Recorded because the reasoning that makes it acceptable is worth writing down once
+rather than re-deriving. A future change that widens the prepend beyond this single
+directory — `coreutils`' `gnubin` holds ~100 binaries against this one's single
+`make` — is a materially different trade and should be argued on its own terms, not
+inherited from this decision.
+
 ### A named, accepted gap
 
 The scanner is a line-level pattern match, not a make-semantics parser. It cannot see a
