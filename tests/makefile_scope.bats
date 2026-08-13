@@ -33,7 +33,7 @@ setup() {
 }
 
 @test "SHELL_FILES resolves against this repo even with GIT_DIR leaked" {
-  run env GIT_DIR="${DECOY}/.git" make -C "${REPO_ROOT}" -n lint
+  run env GIT_DIR="${DECOY}/.git" make --no-print-directory -C "${REPO_ROOT}" -n lint
   [ "$status" -eq 0 ]
   # A file that exists only here — proves the real repo was read.
   [[ "$output" == *"setup_env.sh"* ]]
@@ -42,7 +42,7 @@ setup() {
 }
 
 @test "SHELL_FILES resolves against this repo even with GIT_INDEX_FILE leaked" {
-  run env GIT_INDEX_FILE="${DECOY}/.git/index" make -C "${REPO_ROOT}" -n lint
+  run env GIT_INDEX_FILE="${DECOY}/.git/index" make --no-print-directory -C "${REPO_ROOT}" -n lint
   [ "$status" -eq 0 ]
   [[ "$output" == *"setup_env.sh"* ]]
   [[ "$output" != *"only_in_decoy.sh"* ]]
@@ -65,7 +65,7 @@ setup() {
 # The two variables that can break this Makefile are the two git actually sets.
 
 @test "SHELL_FILES covers the extensionless hooks that gate every commit" {
-  run make -C "${REPO_ROOT}" -n lint
+  run make --no-print-directory -C "${REPO_ROOT}" -n lint
   [ "$status" -eq 0 ]
   # These have no extension, so the previous find -name '*.sh' scope missed
   # them entirely — the two scripts that gate every commit and push.
@@ -76,7 +76,7 @@ setup() {
 @test "SHELL_FILES excludes untracked files" {
   local _scratch="${REPO_ROOT}/zz_untracked_scratch.sh"
   printf '#!/usr/bin/env bash\ntrue\n' > "${_scratch}"
-  run make -C "${REPO_ROOT}" -n lint
+  run make --no-print-directory -C "${REPO_ROOT}" -n lint
   rm -f "${_scratch}"
   [ "$status" -eq 0 ]
   # find would have linted this; git ls-files does not. That difference is why

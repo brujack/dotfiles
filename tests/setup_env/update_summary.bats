@@ -826,3 +826,209 @@ firefox  124.0"
   _update_record_start "legacy-rsync"
   [ ! -f "${_DOTFILES_RUN_TMPDIR}/status_legacy-rsync" ]
 }
+
+# ── _ledger_write_run_entry: make_version field (macOS-only) ─────────────────
+#
+# _ledger_write_run_entry no-ops until both started_at (in _DOTFILES_RUN_TMPDIR,
+# already aliased to BATS_TEST_TMPDIR by this file's setup()) and a machine-id
+# (under HOME/.config/dotfiles) exist -- see lib/update_summary.sh:381,383.
+# Each test seeds both explicitly and exports HOME per-test, matching this
+# file's existing convention (see _update_record_start tpm/tfenv above) of not
+# putting HOME in the shared setup().
+
+_seed_ledger_run_files() {
+  printf '2026-08-12T00:00:00Z\n'  > "${_DOTFILES_RUN_TMPDIR}/started_at"
+  printf '1755000000\n'            > "${_DOTFILES_RUN_TMPDIR}/start_epoch"
+  printf 'make-version-run-uuid\n' > "${_DOTFILES_RUN_TMPDIR}/run_id"
+  printf 'deadbeef1234\n'          > "${_DOTFILES_RUN_TMPDIR}/git_sha"
+}
+
+_seed_machine_id() {
+  mkdir -p "${HOME}/.config/dotfiles"
+  printf 'test-machine-uuid\n' > "${HOME}/.config/dotfiles/machine-id"
+}
+
+# A directory holding only a `make` that prints ${1} as `make --version`'s
+# first line and exits 0. Prepended ahead of tests/mocks/ (already on PATH via
+# load_mocks in setup()) so it shadows the shared make mock, which only logs
+# the call and emits no version text -- see tests/mocks/make.
+_mk_versioned_make() {
+  local _version_line="${1:?_mk_versioned_make: version line required}"
+  local _dir
+  _dir="$(mktemp -d)"
+  cat > "${_dir}/make" << EOF
+#!/usr/bin/env bash
+printf '%s\n' "${_version_line}"
+exit 0
+EOF
+  chmod +x "${_dir}/make"
+  printf '%s' "${_dir}"
+}
+
+# A `make` that fails outright (no stdout, exit 1) -- simulates make missing
+# or erroring on --version.
+_mk_broken_make() {
+  local _dir
+  _dir="$(mktemp -d)"
+  cat > "${_dir}/make" << 'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+  chmod +x "${_dir}/make"
+  printf '%s' "${_dir}"
+}
+
+# Ledger mock that captures the JSON payload it received on stdin.
+_mk_ledger_capture() {
+  local _capture_file="${1:?_mk_ledger_capture: capture path required}"
+  local _dir
+  _dir="$(mktemp -d)"
+  cat > "${_dir}/ledger" << EOF
+#!/usr/bin/env bash
+cat > "${_capture_file}"
+exit 0
+EOF
+  chmod +x "${_dir}/ledger"
+  printf '%s' "${_dir}"
+}
+
+@test "_ledger_write_run_entry (case 17): macOS with GNU make 4.x records make_version 4" {
+  export HOME="${BATS_TEST_TMPDIR}"
+  unset LINUX UBUNTU
+  export MACOS=1
+  _seed_ledger_run_files
+  _seed_machine_id
+
+  local _captured="${BATS_TEST_TMPDIR}/captured_17.json"
+  local _make_dir _ledger_dir
+  _make_dir="$(_mk_versioned_make "GNU Make 4.4.1")"
+  _ledger_dir="$(_mk_ledger_capture "${_captured}")"
+
+  PATH="${_ledger_dir}:${_make_dir}:${PATH}" run _ledger_write_run_entry "update" 0
+  [ "$status" -eq 0 ]
+  grep -q '"make_version": "4"' "${_captured}"
+}
+
+@test "_ledger_write_run_entry (case 18): unparseable make --version records unknown, not 3 and not empty" {
+  export HOME="${BATS_TEST_TMPDIR}"
+  unset LINUX UBUNTU
+  export MACOS=1
+  _seed_ledger_run_files
+  _seed_machine_id
+
+  local _captured="${BATS_TEST_TMPDIR}/captured_18.json"
+  local _make_dir _ledger_dir
+  _make_dir="$(_mk_broken_make)"
+  _ledger_dir="$(_mk_ledger_capture "${_captured}")"
+
+  PATH="${_ledger_dir}:${_make_dir}:${PATH}" run _ledger_write_run_entry "update" 0
+  [ "$status" -eq 0 ]
+  grep -q '"make_version": "unknown"' "${_captured}"
+  run grep '"make_version": "3"' "${_captured}"
+  [ "$status" -ne 0 ]
+  run grep '"make_version": ""' "${_captured}"
+  [ "$status" -ne 0 ]
+}
+
+# Proves case 18 can actually fail: run the identical harness against a make
+# that DOES report a real version, and confirm the "unknown" assertion no
+# longer holds. If make_version detection ever regresses to writing "unknown"
+# unconditionally (or writing a real value unconditionally), one of case 18
+# or this test goes red -- neither alone would catch a regression toward the
+# other constant.
+@test "_ledger_write_run_entry (case 18 mutation guard): a version-bearing probe does not also read as unknown" {
+  export HOME="${BATS_TEST_TMPDIR}"
+  unset LINUX UBUNTU
+  export MACOS=1
+  _seed_ledger_run_files
+  _seed_machine_id
+
+  local _captured="${BATS_TEST_TMPDIR}/captured_18b.json"
+  local _make_dir _ledger_dir
+  _make_dir="$(_mk_versioned_make "GNU Make 4.4.1")"
+  _ledger_dir="$(_mk_ledger_capture "${_captured}")"
+
+  PATH="${_ledger_dir}:${_make_dir}:${PATH}" run _ledger_write_run_entry "update" 0
+  [ "$status" -eq 0 ]
+  grep -q '"make_version": "4"' "${_captured}"
+  run grep '"make_version": "unknown"' "${_captured}"
+  [ "$status" -ne 0 ]
+}
+
+@test "_ledger_write_run_entry (case 19): Linux writes no make_version field, and the entry is still written" {
+  export HOME="${BATS_TEST_TMPDIR}"
+  unset MACOS
+  export LINUX=1 UBUNTU=1
+  _seed_ledger_run_files
+  _seed_machine_id
+
+  local _captured="${BATS_TEST_TMPDIR}/captured_19.json"
+  local _ledger_dir
+  _ledger_dir="$(_mk_ledger_capture "${_captured}")"
+
+  PATH="${_ledger_dir}:${PATH}" run _ledger_write_run_entry "update" 0
+  [ "$status" -eq 0 ]
+  grep -q '"run_type": "update"' "${_captured}"
+  run grep 'make_version' "${_captured}"
+  [ "$status" -ne 0 ]
+}
+
+@test "_ledger_write_run_entry (case 20): major extraction is numeric, not a lexicographic comparison of full version strings" {
+  export HOME="${BATS_TEST_TMPDIR}"
+  unset LINUX UBUNTU
+  export MACOS=1
+
+  _seed_ledger_run_files
+  _seed_machine_id
+  local _captured_a="${BATS_TEST_TMPDIR}/captured_20a.json"
+  local _make_dir _ledger_dir
+  _make_dir="$(_mk_versioned_make "GNU Make 4.4.1")"
+  _ledger_dir="$(_mk_ledger_capture "${_captured_a}")"
+  PATH="${_ledger_dir}:${_make_dir}:${PATH}" run _ledger_write_run_entry "update" 0
+  [ "$status" -eq 0 ]
+  grep -q '"make_version": "4"' "${_captured_a}"
+
+  _seed_ledger_run_files
+  local _captured_b="${BATS_TEST_TMPDIR}/captured_20b.json"
+  _make_dir="$(_mk_versioned_make "GNU Make 3.81")"
+  _ledger_dir="$(_mk_ledger_capture "${_captured_b}")"
+  PATH="${_ledger_dir}:${_make_dir}:${PATH}" run _ledger_write_run_entry "update" 0
+  [ "$status" -eq 0 ]
+  grep -q '"make_version": "3"' "${_captured_b}"
+
+  # Both extracted values must be clean integers usable in an arithmetic
+  # comparison. If the field ever held a full version string ("4.4.1")
+  # instead of just the major, this `-ge`/`-lt` pair would throw a bash
+  # arithmetic syntax error rather than silently ordering strings -- which is
+  # exactly the failure a lexicographic comparison on full version strings
+  # would paper over instead of surfacing.
+  local _major_a _major_b
+  _major_a=$(grep -oE '"make_version": "[0-9]+"' "${_captured_a}" | grep -oE '[0-9]+')
+  _major_b=$(grep -oE '"make_version": "[0-9]+"' "${_captured_b}" | grep -oE '[0-9]+')
+  [[ "${_major_a}" -ge "${_major_b}" ]]
+  [[ "${_major_b}" -lt "${_major_a}" ]]
+}
+
+@test "_ledger_write_run_entry (case 21): make_version detection never changes the run's own exit code or success field" {
+  export HOME="${BATS_TEST_TMPDIR}"
+  unset LINUX UBUNTU
+  export MACOS=1
+  _seed_ledger_run_files
+  _seed_machine_id
+
+  local _captured_ok="${BATS_TEST_TMPDIR}/captured_21_ok.json"
+  local _make_dir _ledger_dir
+  _make_dir="$(_mk_versioned_make "GNU Make 4.4.1")"
+  _ledger_dir="$(_mk_ledger_capture "${_captured_ok}")"
+  PATH="${_ledger_dir}:${_make_dir}:${PATH}" run _ledger_write_run_entry "setup_user" 0
+  [ "$status" -eq 0 ]
+  grep -q '"success": true' "${_captured_ok}"
+
+  _seed_ledger_run_files
+  local _captured_broken="${BATS_TEST_TMPDIR}/captured_21_broken.json"
+  _make_dir="$(_mk_broken_make)"
+  _ledger_dir="$(_mk_ledger_capture "${_captured_broken}")"
+  PATH="${_ledger_dir}:${_make_dir}:${PATH}" run _ledger_write_run_entry "setup_user" 1
+  [ "$status" -eq 0 ]
+  grep -q '"success": false' "${_captured_broken}"
+}

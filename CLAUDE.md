@@ -338,6 +338,20 @@ See [`ai-config/docs/knowledge/dotfiles-bats-test-infrastructure.md`](https://gi
 
 Pattern: `local _file="${_OVERRIDE_VAR:-$(dirname "${BASH_SOURCE[0]}")/real/path}"`. Tests set the var and pass a writable temp copy; production code leaves it unset.
 
+**`_OVERRIDE_GNUBIN_ARM` / `_OVERRIDE_GNUBIN_INTEL` are read by two files in two
+languages** — `lib/macos.sh`'s `install_make_macos` (bash) and
+`.config/.zshrc.d/6_path.zsh` (zsh, sourced by every interactive shell). Both default to
+`/opt/homebrew/opt/make/libexec/gnubin` and `/usr/local/opt/make/libexec/gnubin`
+respectively; keep the pairs in step, since a drift makes the install guard and the `PATH`
+consumer disagree.
+
+The seam is not optional in tests: the real ARM gnubin dir exists on any provisioned mac,
+so a test that forgets to point these at a nonexistent path short-circuits the guard and
+silently asserts nothing. `tests/setup_env/install_guards.bats` calls `_gnubin_absent` /
+`_gnubin_present` for exactly that reason. Unlike most seams here these are read
+unconditionally rather than only under test — a stray export changes real shell `PATH`,
+which grants no capability beyond setting `PATH` directly but is worth knowing.
+
 ### Mock Pattern
 
 See [`ai-config/docs/knowledge/dotfiles-bats-test-infrastructure.md`](https://github.com/brujack/ai-config/blob/master/docs/knowledge/dotfiles-bats-test-infrastructure.md) for the full `MOCK_*` env var reference table and the usage pattern.
@@ -345,6 +359,27 @@ See [`ai-config/docs/knowledge/dotfiles-bats-test-infrastructure.md`](https://gi
 **Pass-through mocks:** `ln`, `chmod`, `mv`, `cp`, and `tee` call the real binary (`/bin/cmd "$@" 2>/dev/null || true`) so tests that assert actual filesystem state work correctly. Set the corresponding exit var to a non-zero value to simulate failure instead.
 
 **`env -i` subprocess strips PATH** — `setup_ansible()`'s pyenv calls need the mock placed at `${HOME}/.pyenv/bin/pyenv`, not PATH-injected. Detail and doctor-test conventions (`_DOCTOR_FAIL` vs `_DOCTOR_FAILED`, `log_warn` vs `doctor_warn`, PATH isolation): [`dotfiles-bats-test-infrastructure`](https://github.com/brujack/ai-config/blob/master/docs/knowledge/dotfiles-bats-test-infrastructure.md).
+
+### MAKEFLAGS and Stdout Partition
+
+`Makefile:1` carries `MAKEFLAGS += --no-print-directory`. GNU Make 4.0+ prints `Entering directory` / `Leaving directory` on stdout when `-C` changes directory; macOS's `/usr/bin/make` is 3.81 and does not.
+
+**The directive does not cover a direct `make -C` on GNU Make 4.3 — which is what `ubuntu-latest` runs.** Measured on Ubuntu 24.04: with the directive 3 lines, without it 3 lines, byte-identical — `-C` prints the message before the Makefile is parsed, so a directive inside it is too late. 4.4.1 (Homebrew, macOS) does suppress. A per-call `--no-print-directory` and an inherited `MAKEFLAGS` both suppress on **both** versions.
+
+What the directive actually buys is the export: under `make test` every child `make` inherits it, and that works on every version. A direct `make -C …` outside an outer make on 4.3 is uncovered. **The load-bearing protection is the per-call flag and the partition below, not this line** — which is what `tdd.md` pitfall G prescribes first.
+
+**`MAKEFLAGS` is an exported environment variable, not a file-local Makefile directive.** Every `make` a test spawns inherits it. So any test that captures and measures `make` output must explicitly account for it — tests fall into two categories:
+
+- **Guarded:** Per-call `--no-print-directory` flag (overrides the exported `MAKEFLAGS`), for tests that care about exact output shape
+- **Measuring:** `env -u MAKEFLAGS` prefix (strips the inherited directive), for tests that genuinely need to observe directory lines. Use it only for that — on 4.3 it strips the one mechanism that works and leaves the inert file directive, so a case that merely wants an exact value must be **guarded**, not measuring. That mistake shipped once and was caught by CI, green on macOS and red on `ubuntu-latest`.
+
+Both categories must exist in the test suite. A test capturing `make` output without guarding or measuring it gets the environment's `MAKEFLAGS`, so it is measuring the environment rather than the Makefile.
+
+**The partition is enforced, not aspirational.** `tests/scripts/makefile_lint_scope.bats:596` ("every stdout-capturing make -C invocation in-domain is guarded or measuring, both sets nonempty") scans every stdout-capturing `make` invocation across the scanner's domain and requires each to land in exactly one of guarded/measuring, with both sets non-empty.
+
+**The domain is derived from `git ls-files`, not listed.** The scanner pulls its file set through `_git_ls_clean 'tests/*.bats' 'tests/*.bash'` — the same four-variable `env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE` strip `ZSH_FILES`/`SHELL_FILES` use, and for the identical reason: `git -C` does not override an exported `GIT_DIR`, and `scripts/pre-push` runs `make test`. An earlier version hardcoded a two-file array (`tests/makefile_scope.bats` and this file) that held exactly the two files already in compliance and excluded the one real violation, `tests/scripts/unit.bats:819` (`make -C "${REPO_ROOT}" -n test-python`, carrying neither guard). That is the same invisible-omission shape `tdd.md`'s Coverage Denominators section describes — an excluded file is absent from both numerator and denominator, so the check reports clean either way — and the third time that shape has shown up in this repo, after the bash coverage tracer's 13-entry `INCLUDE_FILES` array and `make lint`'s original literal file list (both above, under Coverage and ShellCheck).
+
+**Known gap: recursive sub-make and `-w` are invisible to it.** A line scanner can only see what is on the invoking line. `$(MAKE)` recursion and `-w`/`--print-directory` both print `Entering`/`Leaving` with no `-C` anywhere on the line that triggers them, so neither is reachable by this scanner's `-C`/`--directory` pattern. Not exploitable today — the root `Makefile` has zero `$(MAKE)` recipes and `make -n test` emits no sub-make — but `powershell/Makefile` exists and sits outside this scanner's domain entirely. Recorded as an accepted boundary a line scanner cannot close, not a defect to fix.
 
 ## Committing Work
 
@@ -371,6 +406,8 @@ Invoke `caveman:caveman-commit` skill to generate the commit message before runn
 - **A global/system `core.hooksPath` pin redirects every repo's hooks at once:** `git rev-parse --git-path hooks` honors `core.hooksPath`, so a single global/system pin redirects **every** repo's hooks directory, not just one. The sweep therefore folds the resulting per-repo "no hooks directory" gaps into one aggregated line attributed to the pin, rather than reporting each repo as individually broken with an `install-hooks` remedy that cannot fix it. An **empty or whitespace-only** value is a real pin, not an absent one: `git config --get` reports it as rc 0 with empty stdout, and git honors it — it disables every hook on the machine. Both the doctor check and the sweep summary render it as `(empty)`. `tests/setup_env/git_hooks.bats`'s `setup()` must neutralize `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM`, because the sweep now reads them — without it the suite fails on any machine that actually has a pin, and since `scripts/pre-push` runs `make test`, that developer cannot push.
 
 - **The pin probe must read `--includes`, and the remedy must name the origin file:** `git config --<scope> --get` defaults to `--no-includes`, but git's own hook resolution traverses includes. A pin reached through an `[include]` therefore answered rc 1 with **empty stderr** — byte-identical to a genuinely unset key — while `rev-parse --git-path hooks` returned the pinned path and every repo on the box was silently redirected; both surfaces rendered `[PASS] <scope>: unset` over a live machine-wide redirect. `_git_hooks_hookspath_offenders` now re-reads any apparently-clean scope with `git config --<scope> --includes -z --show-origin --get`. `-z` is required rather than the default tab-separated `--show-origin` format (the value may be empty or whitespace-only, and NUL is the only delimiter git will not also emit inside a value), and because command substitution silently drops NUL bytes the pair must be consumed with `read -d ''` off a process substitution, never `$(...)`. The remedy differs by origin: a scope-level `--unset` **cannot** clear a key held in an included file — it exits 5 and the pin survives — so the function emits `git config --file <origin> --unset core.hooksPath` for that case and keeps the scope form only for a key in the scope's own file. Output contract is `scope<TAB>remedy<TAB>value`, with value last so a tab inside a pinned path cannot truncate the command the operator is told to run. Remaining limit: a conditional `includeIf "gitdir:…"` is visible only when git evaluates it from a matching directory, and the probe runs once per sweep rather than once per discovered repo.
+
+- **Homebrew `make` gnubin prepend:** `.config/.zshrc.d/6_path.zsh` prepends the Homebrew `make` formula's `gnubin` directory on macOS, so plain `make` resolves to GNU 4.x instead of `/usr/bin/make` 3.81. **It must be a prepend, not `path+=`.** This file's existing idiom is append-via-`+=`, which leaves `/usr/bin` ahead of anything it adds — an append here would be completely inert and would still look correct to a reader. Both Homebrew prefixes are tested for existence (ARM at `/opt/homebrew/opt/make/libexec/gnubin` and Intel at `/usr/local/opt/make/libexec/gnubin`); the invocation never calls `brew --prefix` because this same file is what puts `/opt/homebrew/bin` on `PATH`, so `brew` is not guaranteed resolvable at that point.
 
 ## Local-Only State
 

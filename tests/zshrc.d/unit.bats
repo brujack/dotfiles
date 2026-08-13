@@ -215,6 +215,127 @@ EOF
   [ "$output" = "unset" ]
 }
 
+# ── 6_path.zsh GNU make gnubin tests ─────────────────────────────────────────
+# _OVERRIDE_GNUBIN_ARM / _OVERRIDE_GNUBIN_INTEL are test seams, same convention
+# as _OVERRIDE_RBENV_BINARY above -- default to the real Homebrew paths in
+# production, redirected to a fixture dir here.
+
+@test "6_path.zsh prepends ARM gnubin dir to PATH when present" {
+  local _tmp_dir
+  _tmp_dir="$(mktemp -d)"
+  mkdir -p "${_tmp_dir}/gnubin"
+
+  run zsh -c "
+    export MACOS=1
+    export _OVERRIDE_GNUBIN_ARM='${_tmp_dir}/gnubin'
+    export _OVERRIDE_GNUBIN_INTEL='/nonexistent/gnubin-intel'
+    source '${ZSHRC_D}/6_path.zsh' 2>/dev/null
+    printf '%s\n' \"\${path[1]}\"
+  "
+  rm -rf "${_tmp_dir}"
+  [ "$status" -eq 0 ]
+  [ "$output" = "${_tmp_dir}/gnubin" ]
+}
+
+@test "6_path.zsh prepends Intel gnubin dir to PATH when only /usr/local prefix present" {
+  local _tmp_dir
+  _tmp_dir="$(mktemp -d)"
+  mkdir -p "${_tmp_dir}/gnubin"
+
+  run zsh -c "
+    export MACOS=1
+    export _OVERRIDE_GNUBIN_ARM='/nonexistent/gnubin-arm'
+    export _OVERRIDE_GNUBIN_INTEL='${_tmp_dir}/gnubin'
+    source '${ZSHRC_D}/6_path.zsh' 2>/dev/null
+    printf '%s\n' \"\${path[1]}\"
+  "
+  rm -rf "${_tmp_dir}"
+  [ "$status" -eq 0 ]
+  [ "$output" = "${_tmp_dir}/gnubin" ]
+}
+
+@test "6_path.zsh gnubin entry is deduped across repeated sourcing" {
+  local _tmp_dir
+  _tmp_dir="$(mktemp -d)"
+  mkdir -p "${_tmp_dir}/gnubin"
+
+  run zsh -c "
+    export MACOS=1
+    export _OVERRIDE_GNUBIN_ARM='${_tmp_dir}/gnubin'
+    export _OVERRIDE_GNUBIN_INTEL='/nonexistent/gnubin-intel'
+    source '${ZSHRC_D}/6_path.zsh' 2>/dev/null
+    source '${ZSHRC_D}/6_path.zsh' 2>/dev/null
+    source '${ZSHRC_D}/6_path.zsh' 2>/dev/null
+    printf '%s\n' \$path | grep -c '^${_tmp_dir}/gnubin\$'
+  "
+  rm -rf "${_tmp_dir}"
+  [ "$output" = "1" ]
+}
+
+@test "6_path.zsh adds no gnubin entry when neither Homebrew prefix has it" {
+  run zsh -c "
+    export MACOS=1
+    export _OVERRIDE_GNUBIN_ARM='/nonexistent/gnubin-arm'
+    export _OVERRIDE_GNUBIN_INTEL='/nonexistent/gnubin-intel'
+    source '${ZSHRC_D}/6_path.zsh' 2>/dev/null
+    if [[ \${path[(r)*gnubin*]} ]]; then
+      printf 'HAS_GNUBIN\n'
+    else
+      printf 'NO_GNUBIN\n'
+    fi
+    printf '%s\n' \"\${#path}\"
+  "
+  [ "$status" -eq 0 ]
+  [ "$(printf '%s\n' "$output" | head -1)" = "NO_GNUBIN" ]
+  [ "$(printf '%s\n' "$output" | tail -1)" -gt 0 ]
+}
+
+@test "6_path.zsh adds no gnubin entry under LINUX, but still adds a known Linux path" {
+  local _fake_home
+  _fake_home="$(mktemp -d)"
+  mkdir -p "${_fake_home}/.local/bin"
+
+  run zsh -c "
+    unset MACOS
+    export HOME='${_fake_home}'
+    export LINUX=1
+    export _OVERRIDE_GNUBIN_ARM='/nonexistent/gnubin-arm'
+    export _OVERRIDE_GNUBIN_INTEL='/nonexistent/gnubin-intel'
+    source '${ZSHRC_D}/6_path.zsh' 2>/dev/null
+    if [[ \${path[(r)*gnubin*]} ]]; then
+      printf 'HAS_GNUBIN\n'
+    else
+      printf 'NO_GNUBIN\n'
+    fi
+    if [[ \${path[(r)${_fake_home}/.local/bin]} ]]; then
+      printf 'HAS_LOCAL_BIN\n'
+    else
+      printf 'NO_LOCAL_BIN\n'
+    fi
+  "
+  rm -rf "${_fake_home}"
+  [ "$status" -eq 0 ]
+  [ "$(printf '%s\n' "$output" | head -1)" = "NO_GNUBIN" ]
+  [ "$(printf '%s\n' "$output" | tail -1)" = "HAS_LOCAL_BIN" ]
+}
+
+@test "6_path.zsh unsets _gnubin after sourcing, does not leak" {
+  local _tmp_dir
+  _tmp_dir="$(mktemp -d)"
+  mkdir -p "${_tmp_dir}/gnubin"
+
+  run zsh -c "
+    export MACOS=1
+    export _OVERRIDE_GNUBIN_ARM='${_tmp_dir}/gnubin'
+    export _OVERRIDE_GNUBIN_INTEL='/nonexistent/gnubin-intel'
+    source '${ZSHRC_D}/6_path.zsh' 2>/dev/null
+    printf '%s\n' \"\${_gnubin:-unset}\"
+  "
+  rm -rf "${_tmp_dir}"
+  [ "$status" -eq 0 ]
+  [ "$output" = "unset" ]
+}
+
 @test "5_general.zsh does not call rbenv local (would overwrite project .ruby-version)" {
   local _tmp_dir _project_dir
   _tmp_dir="$(mktemp -d)"

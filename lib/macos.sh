@@ -150,6 +150,45 @@ install_bats_macos() {
   log_info "Installed bats"
 }
 
+install_make_macos() {
+  # Probe the gnubin directory, not `gmake` on PATH, and never `make`.
+  #
+  # `make` is wrong because macOS always ships /usr/bin/make at 3.81, so it
+  # reports success on exactly the machines needing the install.
+  #
+  # `gmake` on PATH is wrong for a subtler reason, found by bug-scan: it is a
+  # proxy for the outcome rather than the outcome. What the feature needs is
+  # the Homebrew keg's gnubin dir, because that is the only thing
+  # .config/.zshrc.d/6_path.zsh can prepend. A gmake from MacPorts, a custom
+  # HOMEBREW_PREFIX, or a hand-built install satisfies a PATH probe, skips the
+  # install, and leaves plain `make` at 3.81 -- the exact drift this exists to
+  # remove. Reproduced: with a non-Homebrew gmake on PATH the old guard
+  # returned 0 without calling brew, 6_path.zsh matched neither prefix, and
+  # `make --version` still reported 3.81.
+  #
+  # These two prefixes are the same pair 6_path.zsh scans; keep them in step.
+  local _gnubin
+  for _gnubin in "${_OVERRIDE_GNUBIN_ARM:-/opt/homebrew/opt/make/libexec/gnubin}" \
+                 "${_OVERRIDE_GNUBIN_INTEL:-/usr/local/opt/make/libexec/gnubin}"; do
+    if [[ -d ${_gnubin} ]]; then
+      log_info "GNU make already installed"
+      return 0
+    fi
+  done
+
+  log_info "Installing GNU make via Homebrew"
+  if ! command -v brew &> /dev/null; then
+    install_homebrew
+  fi
+  if command -v brew &> /dev/null; then
+    brew_install_formula make || return 1
+  else
+    log_error "Failed to install Homebrew. Cannot install GNU make."
+    return 1
+  fi
+  log_info "Installed GNU make"
+}
+
 install_macos_casks() {
   brew bundle --file "${BREWFILE_LOC}/Brewfile" || return 1
   if [[ -n ${HAS_GUI} ]]; then

@@ -195,6 +195,107 @@ teardown() {
   [ "$status" -eq 3 ]
 }
 
+# ── install_make_macos ───────────────────────────────────────────────────────
+
+# Points both gnubin prefixes at a temp dir that does NOT exist, so the probe
+# takes the install path. Every test below must call this: the real
+# /opt/homebrew/opt/make/libexec/gnubin exists on any provisioned mac, so
+# without the override the probe short-circuits and the suite silently tests
+# nothing (tdd.md pitfall A — never delegate a precondition to the host).
+_gnubin_absent() {
+  export _OVERRIDE_GNUBIN_ARM="${BATS_TEST_TMPDIR}/no-arm-gnubin"
+  export _OVERRIDE_GNUBIN_INTEL="${BATS_TEST_TMPDIR}/no-intel-gnubin"
+}
+
+# Creates a gnubin directory at the ARM override and returns its path — the
+# real "already installed" precondition, since that dir is the only thing
+# .config/.zshrc.d/6_path.zsh can prepend.
+_gnubin_present() {
+  _gnubin_absent
+  mkdir -p "${_OVERRIDE_GNUBIN_ARM}"
+  printf '%s' "${_OVERRIDE_GNUBIN_ARM}"
+}
+
+@test "install_make_macos: gnubin present - skips brew" {
+  _gnubin_present > /dev/null
+  run install_make_macos
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"already installed"* ]]
+  refute_grep "brew install make" "${MOCK_CALLS_FILE}"
+}
+
+# The regression bug-scan found: a gmake from a NON-Homebrew prefix (MacPorts,
+# a custom HOMEBREW_PREFIX, a hand-built install) satisfies a PATH probe while
+# leaving the gnubin dir absent -- so 6_path.zsh prepends nothing and plain
+# `make` stays at 3.81. The guard must track the gnubin dir, not gmake's
+# presence. Mutating the probe back to `quiet_which gmake` must turn this red.
+@test "install_make_macos: gmake on PATH but no gnubin dir - install still runs" {
+  local _stub_dir _saved_path
+  _gnubin_absent
+  _stub_dir="$(mktemp -d -p "${BATS_TEST_TMPDIR}")"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "${_stub_dir}/gmake"
+  chmod +x "${_stub_dir}/gmake"
+  _saved_path="${PATH}"
+  export PATH="${_stub_dir}:${PATH}"
+  run install_make_macos
+  export PATH="${_saved_path}"
+  [ "$status" -eq 0 ]
+  grep -q "brew install make" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_make_macos: gnubin absent, brew present - installs via brew" {
+  _gnubin_absent
+  run install_make_macos
+  [ "$status" -eq 0 ]
+  grep -q "brew install make" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_make_macos: gnubin absent, brew absent and uninstallable - returns 1 and logs error" {
+  local _mocks="${BATS_TEST_DIRNAME}/../mocks"
+  local _no_brew="${BATS_TEST_TMPDIR}/no-brew-bin"
+  mkdir -p "${_no_brew}"
+  local _f
+  for _f in "${_mocks}/"*; do
+    [[ "$(basename "${_f}")" == "brew" ]] && continue
+    cp "${_f}" "${_no_brew}/$(basename "${_f}")"
+  done
+  # tdd.md E2: redirect HOME too, so a regressed probe that reaches the real
+  # install_homebrew (curl | bash, sudo xcodebuild) cannot touch the
+  # operator's real $HOME even though install_homebrew is stubbed below.
+  local _saved_path="${PATH}" _saved_home="${HOME}"
+  export PATH="${_no_brew}:/usr/bin:/bin"
+  export HOME="${BATS_TEST_TMPDIR}"
+  _gnubin_absent
+  install_homebrew() { return 0; }
+  export -f install_homebrew
+  local _rc=0
+  local _out
+  _out="$(install_make_macos 2>&1)" || _rc=$?
+  export PATH="${_saved_path}"
+  export HOME="${_saved_home}"
+  [ "${_rc}" -eq 1 ]
+  [[ "${_out}" == *"Failed to install Homebrew. Cannot install GNU make."* ]]
+}
+
+# This is the load-bearing case: it is the mirror of the probe design (probe
+# must be gmake, never make, because macOS always ships /usr/bin/make at
+# 3.81). If the probe is ever "simplified" to quiet_which make, this case
+# must go red — verified by temporarily mutating the probe (see task
+# measurements), not assumed.
+@test "install_make_macos: stubbed 3.81 make on PATH, gnubin absent - install still runs" {
+  local _stub_dir _saved_path
+  _gnubin_absent
+  _stub_dir="$(mktemp -d -p "${BATS_TEST_TMPDIR}")"
+  printf '#!/usr/bin/env bash\nprintf "GNU Make 3.81\\n"\nexit 0\n' > "${_stub_dir}/make"
+  chmod +x "${_stub_dir}/make"
+  _saved_path="${PATH}"
+  export PATH="${_stub_dir}:${PATH}"
+  run install_make_macos
+  export PATH="${_saved_path}"
+  [ "$status" -eq 0 ]
+  grep -q "brew install make" "${MOCK_CALLS_FILE}"
+}
+
 # ── ensure_not_root ──────────────────────────────────────────────────────────
 
 @test "ensure_not_root returns 0 when not root" {
