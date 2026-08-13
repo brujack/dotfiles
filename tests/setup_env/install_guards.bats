@@ -197,39 +197,60 @@ teardown() {
 
 # ── install_make_macos ───────────────────────────────────────────────────────
 
-# Creates a directory containing a stub `gmake` executable that exits 0, and
-# prints the directory's path. Mirrors macos.bats' _stub_bats_present — the
-# "already installed" precondition must be asserted via a real stub on PATH,
-# not delegated to whatever gmake the host running the suite happens to have
-# (tdd.md pitfall A).
-_stub_gmake_present() {
-  local _dir
-  _dir="$(mktemp -d -p "${BATS_TEST_TMPDIR}")"
-  printf '#!/usr/bin/env bash\nexit 0\n' > "${_dir}/gmake"
-  chmod +x "${_dir}/gmake"
-  printf '%s' "${_dir}"
+# Points both gnubin prefixes at a temp dir that does NOT exist, so the probe
+# takes the install path. Every test below must call this: the real
+# /opt/homebrew/opt/make/libexec/gnubin exists on any provisioned mac, so
+# without the override the probe short-circuits and the suite silently tests
+# nothing (tdd.md pitfall A — never delegate a precondition to the host).
+_gnubin_absent() {
+  export _OVERRIDE_GNUBIN_ARM="${BATS_TEST_TMPDIR}/no-arm-gnubin"
+  export _OVERRIDE_GNUBIN_INTEL="${BATS_TEST_TMPDIR}/no-intel-gnubin"
 }
 
-@test "install_make_macos: gmake already installed - skips brew" {
-  local _stub_dir _saved_path
-  _stub_dir="$(_stub_gmake_present)"
-  _saved_path="${PATH}"
-  export PATH="${_stub_dir}:${PATH}"
+# Creates a gnubin directory at the ARM override and returns its path — the
+# real "already installed" precondition, since that dir is the only thing
+# .config/.zshrc.d/6_path.zsh can prepend.
+_gnubin_present() {
+  _gnubin_absent
+  mkdir -p "${_OVERRIDE_GNUBIN_ARM}"
+  printf '%s' "${_OVERRIDE_GNUBIN_ARM}"
+}
+
+@test "install_make_macos: gnubin present - skips brew" {
+  _gnubin_present > /dev/null
   run install_make_macos
-  export PATH="${_saved_path}"
   [ "$status" -eq 0 ]
   [[ "$output" == *"already installed"* ]]
   refute_grep "brew install make" "${MOCK_CALLS_FILE}"
 }
 
-@test "install_make_macos: gmake absent, brew present - installs via brew" {
-  export MOCK_WHICH_MISSING=gmake
+# The regression bug-scan found: a gmake from a NON-Homebrew prefix (MacPorts,
+# a custom HOMEBREW_PREFIX, a hand-built install) satisfies a PATH probe while
+# leaving the gnubin dir absent -- so 6_path.zsh prepends nothing and plain
+# `make` stays at 3.81. The guard must track the gnubin dir, not gmake's
+# presence. Mutating the probe back to `quiet_which gmake` must turn this red.
+@test "install_make_macos: gmake on PATH but no gnubin dir - install still runs" {
+  local _stub_dir _saved_path
+  _gnubin_absent
+  _stub_dir="$(mktemp -d -p "${BATS_TEST_TMPDIR}")"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "${_stub_dir}/gmake"
+  chmod +x "${_stub_dir}/gmake"
+  _saved_path="${PATH}"
+  export PATH="${_stub_dir}:${PATH}"
+  run install_make_macos
+  export PATH="${_saved_path}"
+  [ "$status" -eq 0 ]
+  grep -q "brew install make" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_make_macos: gnubin absent, brew present - installs via brew" {
+  _gnubin_absent
   run install_make_macos
   [ "$status" -eq 0 ]
   grep -q "brew install make" "${MOCK_CALLS_FILE}"
 }
 
-@test "install_make_macos: gmake absent, brew absent and uninstallable - returns 1 and logs error" {
+@test "install_make_macos: gnubin absent, brew absent and uninstallable - returns 1 and logs error" {
   local _mocks="${BATS_TEST_DIRNAME}/../mocks"
   local _no_brew="${BATS_TEST_TMPDIR}/no-brew-bin"
   mkdir -p "${_no_brew}"
@@ -244,7 +265,7 @@ _stub_gmake_present() {
   local _saved_path="${PATH}" _saved_home="${HOME}"
   export PATH="${_no_brew}:/usr/bin:/bin"
   export HOME="${BATS_TEST_TMPDIR}"
-  export MOCK_WHICH_MISSING=gmake
+  _gnubin_absent
   install_homebrew() { return 0; }
   export -f install_homebrew
   local _rc=0
@@ -261,14 +282,14 @@ _stub_gmake_present() {
 # 3.81). If the probe is ever "simplified" to quiet_which make, this case
 # must go red — verified by temporarily mutating the probe (see task
 # measurements), not assumed.
-@test "install_make_macos: stubbed 3.81 make on PATH, gmake absent - install still runs" {
+@test "install_make_macos: stubbed 3.81 make on PATH, gnubin absent - install still runs" {
   local _stub_dir _saved_path
+  _gnubin_absent
   _stub_dir="$(mktemp -d -p "${BATS_TEST_TMPDIR}")"
   printf '#!/usr/bin/env bash\nprintf "GNU Make 3.81\\n"\nexit 0\n' > "${_stub_dir}/make"
   chmod +x "${_stub_dir}/make"
   _saved_path="${PATH}"
   export PATH="${_stub_dir}:${PATH}"
-  export MOCK_WHICH_MISSING=gmake
   run install_make_macos
   export PATH="${_saved_path}"
   [ "$status" -eq 0 ]
