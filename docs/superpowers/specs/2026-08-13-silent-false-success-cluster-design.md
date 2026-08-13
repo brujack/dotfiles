@@ -86,7 +86,7 @@ function, and preparatory steps warn and continue.
 
 ```bash
 install_git_linux() {
-  if quiet_which git; then
+  if dpkg-query -W git > /dev/null 2>&1; then
     log_info "git already installed"
     return 0
   fi
@@ -101,26 +101,53 @@ install_git_linux() {
 }
 ```
 
-`install_zsh_linux` takes the same shape, without the PPA step, installing
+`install_zsh_linux` takes the same shape, without the PPA step, and its guard must name
+**both** packages: `dpkg-query -W zsh zsh-doc`, because the function installs
 `zsh zsh-doc`.
 
 Three decisions are embedded here.
 
 **Why the already-installed guard is not optional once the install step is fatal.**
-`install_bats_linux:24` already opens with `quiet_which bats && return 0`;
-`install_git_linux` and `install_zsh_linux` do not, so today they re-run `apt install`
-on every provisioning run and swallow whatever happens. Making the install step fatal
-without adding the guard converts that from harmless to breaking: `run_setup_user`
-calls `install_zsh || return 1` at `lib/workflows.sh:133`, ahead of
-`clone_or_update_dotfiles`, `setup_ai_config`, and `setup_dotfile_symlinks`. A dpkg
-lock held by `unattended-upgrades` — the ordinary state of a freshly-booted Ubuntu box,
-which is exactly what gets provisioned — would then abort the entire run having done
-nothing, over a package that was already present. With the guard, the fatal path fires
-only when zsh is genuinely absent, which is when it should be fatal.
+`install_bats_linux:24` already opens with a guard; `install_git_linux` and
+`install_zsh_linux` do not, so today they re-run `apt install` on every provisioning run
+and swallow whatever happens. Making the install step fatal without adding a guard
+converts that from harmless to breaking: `run_setup_user` calls `install_zsh || return 1`
+at `lib/workflows.sh:133`, ahead of `clone_or_update_dotfiles`, `setup_ai_config`, and
+`setup_dotfile_symlinks`. A dpkg lock held by `unattended-upgrades` — the ordinary state
+of a freshly-booted Ubuntu box, which is exactly what gets provisioned — would then abort
+the entire run having done nothing, over a package that was already present. With the
+guard, the fatal path fires only when the package is genuinely absent.
 
-This is the same idiom `install_bats_linux` and `install_bats_macos` already use, and
-the macOS git and zsh functions have their own equivalent (`brew list | grep` at
-`lib/macos.sh:98,117`). The Linux pair is the only place in the family without one.
+**Why the guard queries the package database and not `PATH`.** A round-2 draft of this
+spec used `quiet_which zsh` and justified it as "the same idiom `install_bats_linux` and
+`install_bats_macos` already use." That justification was wrong in three ways, and the
+correction is the reason this paragraph exists rather than a one-word substitution.
+
+- **It probes the wrong number of things.** `install_bats_linux` probes `bats` and
+  installs `bats` — one binary, one package, a faithful proxy. `install_zsh_linux`
+  installs `zsh` **and** `zsh-doc`. `zsh-doc` ships no binary, so a `PATH` probe cannot
+  observe it at all. Since `install_zsh` runs on every Ubuntu `setup_user`, the first
+  machine with zsh from any source would never receive `zsh-doc` again, while the
+  function logged "zsh already installed" — the precise silent-false-success shape this
+  spec exists to remove, reintroduced by its own fix.
+- **The macOS functions are not the precedent claimed.** `install_git_macos:98` and
+  `install_zsh_macos:117` guard on `brew list | grep '^git$'` / `'^zsh$'` — that is
+  package-manager state, not `PATH`. `dpkg-query -W` is their actual analogue.
+- **This repo has already paid for the `PATH`-probe mistake once, in a function this
+  spec cites twice as a model.** `install_make_macos:158-167` carries a comment
+  explaining at length why probing `gmake` on `PATH` was wrong there: a MacPorts or
+  hand-built binary satisfies the probe, skips the install, and leaves the real
+  requirement unmet — "Reproduced." Proposing a `PATH` probe while citing that function
+  as precedent was a self-contradiction inside one document.
+
+The same defect applies on the git side and is worth stating even though the function is
+unreachable: `quiet_which git` is true for the distro git, so the `ppa:git-core/ppa`
+step — which exists specifically to obtain a _newer_ git than the distro ships — would
+never run. `dpkg-query -W git` has the same limitation in principle, since it cannot see
+_which_ git is installed; that residual is accepted here because the function is dead
+code and item 4's dispatcher fix only makes it callable, not called. If a Linux caller is
+ever added, the guard needs to become a version comparison, and this paragraph is the
+note saying so.
 
 **Why the install step alone fails the function.** `apt install <pkg>` is what the
 function promises. A failed PPA add means the distro package is used instead, which is
@@ -205,43 +232,56 @@ _update_record_start "apt"
 update_apt_packages 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_apt"
 _update_record_end "apt" "${PIPESTATUS[0]}"
 
-if [[ -n ${HAS_SNAP} ]]; then
+if command -v snap > /dev/null 2>&1; then
   _update_record_start "snap"
   update_snap_packages 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_snap"
   _update_record_end "snap" "${PIPESTATUS[0]}"
 else
-  _update_skip "snap" "not applicable"
+  _update_skip "snap" "snap not installed on this host"
 fi
 ```
 
-**The `HAS_SNAP` gate is load-bearing, not defensive.** `sudo snap refresh` at
-`lib/linux_shared.sh:38` is the only ungated snap call in the repo — the six others, all
-in `lib/linux_ubuntu.sh` (lines 39, 177, 379, 401, 413, 421), test `HAS_SNAP`.
-`PROFILE_CAPS` in `config/profiles.sh` omits snap from two profiles:
+**Some gate is required, and it must probe snap itself rather than the profile
+declaration.** `sudo snap refresh` at `lib/linux_shared.sh:38` is the only ungated snap
+call in the repo — the six others, all in `lib/linux_ubuntu.sh` (lines 39, 177, 379, 401,
+413, 421), test `HAS_SNAP`. Today that omission is harmless _precisely because of the bug
+this item fixes_: the trailing `log_info` swallows a failing `snap refresh`. Propagating
+the exit code with no gate at all would introduce the very defect this item's rationale
+argues against one paragraph above — a row going red on every run on a machine where snap
+is not installed, blaming a subsystem the operator has no action for. A permanently-red
+row stops carrying information the first time it is correctly ignored, which is worse
+than the always-green row it replaces.
 
+**Why not `HAS_SNAP`, which a round-2 draft of this spec used.** That gate reads the
+manifest rather than the machine, and the manifest does not say what it appears to say:
+
+```bash
+PROFILE="${PROFILE_MAP[${hn}]:-unknown}"                     # lib/detect_env.sh:26
+for cap in ${PROFILE_CAPS[${PROFILE}]:-}; do ... done        # lib/detect_env.sh:27
 ```
-[wsl2_workstation]="gui devtools aws k8s docker rust"
-[server]="devtools aws"
-```
 
-Today that omission is harmless _precisely because of the bug this item fixes_: the
-trailing `log_info` swallows a failing `snap refresh`. Propagating the exit code without
-adding the gate would therefore introduce the very defect this item's rationale argues
-against one paragraph above — a row that goes red on every run on a machine where snap
-is not installed and cannot be, blaming a subsystem the operator has no action for. A
-permanently-red row stops carrying information the first time it is correctly ignored,
-which is strictly worse than the always-green row it replaces.
+`PROFILE_CAPS[unknown]` is undefined, so **an unmapped hostname yields zero `HAS_*`
+variables**. `PROFILE_MAP` holds seven entries — `laptop studio reception office home-1
+workstation cruncher` — so any Ubuntu host not among them gets `HAS_SNAP` unset. Such a
+host refreshes snaps today; under a `HAS_SNAP` gate it would silently stop and report
+"not applicable", which is a claim the mechanism never measured. `USER.md`'s rule that a
+trust signal must carry the confidence its mechanism earned, inverted.
 
-`_update_skip "snap" "not applicable"` reuses the string the non-Linux arm already emits
-eleven lines below, so the two skip paths read identically in the summary.
+The round-2 draft also justified the gate with "`server` still requires it regardless."
+That is false: **no hostname maps to `server`**. It is a profile with no machines, which
+is what a profile looks like after its hosts were added and never enrolled.
 
-One open question the gate does not depend on: `wsl2_workstation` was declared snap-less
-on the reasoning that snap is unavailable under WSL2, which predates WSL2's systemd
-support — Ubuntu 24.04 under systemd-enabled WSL2 runs snapd. If the cruncher does have
-a working snapd, the gate costs nothing there and `server` still requires it. The gate is
-correct whichever way that measurement lands, so it is not blocked on running
-`command -v snap && sudo snap refresh; echo rc=$?` on that machine. If the answer turns
-out to be "snapd works," the follow-up is a `PROFILE_CAPS` correction, not a change here.
+`command -v snap` measures the mechanism. It is correct on an unmapped host, correct on
+`server` if one ever appears, and it settles the open question about `wsl2_workstation`
+without needing to answer it — that profile was declared snap-less on reasoning
+predating WSL2's systemd support, and if the cruncher does run snapd, this gate simply
+lets it refresh. No `PROFILE_CAPS` edit is required either way.
+
+**The skip reason must differ from the non-Linux arm's.** `_update_skip "snap" "not
+applicable"` is already emitted for non-Linux hosts eleven lines below. Reusing that
+string would collapse two distinct causes — _not a Linux box_ and _Linux without snapd_ —
+into one indistinguishable summary line. At 2am on a fresh box over SSH, those need
+different answers, so this arm says `"snap not installed on this host"`.
 
 `PIPESTATUS[0]` read as the next command after the pipeline is the idiom already used
 at `lib/workflows.sh:330`.
@@ -307,48 +347,43 @@ pushes it on every PR. The cron entry is dead _and_ redundant. Deleting it is an
 action on a machine-local crontab, outside this repo's scope, and is recorded in the
 follow-ups section rather than fixed here.
 
-**What this item fixes instead.** `scripts/push-bash-coverage.sh:25` invokes the coverage
-script **unchecked**, and line 26 then reads `coverage/bash.json`:
+**A round-2 draft then proposed hardening that publisher — `rm -f` on the badge plus
+`|| exit 1` on the unchecked child. Round-3 review retired that too, on the ground the
+evidence above already establishes: the publisher has no live consumer, so a correct
+guard inside it changes no outcome.** That draft's diagnosis was accurate —
+`scripts/push-bash-coverage.sh:25` does invoke the coverage script unchecked, the cleanup
+at lines 707 and 746 clears only `TRACE_FILE`/`TRACE_FIFO`, and a stale
+`coverage/bash.json` does survive to be read, committed and pushed at exit 0 while the
+child's seven `exit 1` sites (105, 493, 602, 757, 761, 788, 805) are all discarded. The
+error was keeping the item's slot and swapping its contents: a correction inherits the
+original item's justification, and that justification no longer held once the consumer
+was gone.
 
-```bash
-bash "${REPO_ROOT}/scripts/run-bash-coverage.sh" --json "${BADGE_JSON}"
-overall_pct=$(python3 -c "...json.load(open('${BADGE_JSON}'))...")
-```
+**What this item does instead: delete the publisher.**
 
-`run-bash-coverage.sh` cleans up at lines 707 and 746, clearing `TRACE_FILE` and
-`TRACE_FIFO` only — never the badge JSON. So a stale badge survives every failed
-measurement: the child prints its error and exits non-zero, and the parent proceeds to
-read, commit and push the _previous_ run's figure, exiting 0. Seven `exit 1` sites
-already exist in the child (lines 105, 493, 602, 757, 761, 788, 805), including the
-red-suite check and two untrustworthy-denominator paths. The caller discards all seven.
+- `scripts/push-bash-coverage.sh` (62 lines)
+- `tests/scripts/push_bash_coverage.bats` (256 lines, 11 tests)
+- the `push-bash-coverage` Makefile target and its `.PHONY` and `help` entries
+- the `CLAUDE.md:332` reference and the ADR-0008 bullet naming it
 
-Adding an eighth would be `behavior.md`'s guard-whose-verdict-arrives-too-late: the
-verdict would be real and correct, and nothing would read it. Worse, it would make the
-cron entry look repairable — fixing that entry's PATH without this change would not
-restore the badge job, it would publish a badge that lies, on a schedule.
+Measured against the alternative: deletion removes roughly 320 lines and one make target;
+hardening adds four lines plus a new bats case to guard a script nothing runs.
 
-The fix is in the caller:
+The evidence is fleet-wide rather than one-box, because the round-2 disposition wrongly
+recorded this assumption as "answered" on a single machine's crontab. Both development
+machines have now been checked. The Studio has the entry above and 78 failed runs;
+`ssh workstation` reports no coverage cron and no `~/.dotfiles-coverage.log` at all. The
+work Macs and the laptop are not development machines and run no provisioning cron. Every
+commit on `origin/coverage-data` is `github-actions[bot]`.
 
-```bash
-rm -f "${BADGE_JSON}"
-if ! bash "${REPO_ROOT}/scripts/run-bash-coverage.sh" --json "${BADGE_JSON}"; then
-    printf "ERROR: coverage measurement failed — not publishing a badge\n" >&2
-    exit 1
-fi
-```
+Two properties make deletion the safer option rather than merely the smaller one. It
+cannot publish a stale badge because it cannot publish. And it removes an existing wart
+the current suite already documents — `push_bash_coverage.bats:249`, "does not fail when
+the remote push itself fails" — rather than leaving it beside a newly-added guard, which
+would read as though the failure modes had been reviewed and that one accepted.
 
-Both lines are needed and they fail closed independently. `|| exit 1` stops a failed
-measurement from reaching the publish step. `rm -f` ahead of the run means that even if
-some future path exits 0 without writing a badge, line 28's existing
-`if [[ -z "${overall_pct}" ]]` check catches the absent file rather than reading a
-month-old one. Removing the file before the run is what makes "no badge" and "stale
-badge" distinguishable at all — without it, the freshness of `coverage/bash.json` is
-unobservable from the caller.
-
-The original pre-flight is dropped. The only invocation it would have improved is a human
-hand-typing `bash scripts/run-bash-coverage.sh` with bats absent, where the existing
-`_check_red_suite` message already halts the run, and where the Makefile's message is
-strictly better because it names the durable fix (`./setup_env.sh -t setup_user`).
+`scripts/run-bash-coverage.sh` is untouched by all of this. `make bash-coverage` still
+measures, CI still publishes on every PR, and the README badge is unaffected.
 
 ### 6. gnubin prefix parity test
 
@@ -419,10 +454,22 @@ Per `tdd.md`'s mandatory categories:
 - **Boundary** — the dispatchers with neither `MACOS` nor `LINUX` set. Also
   `install_zsh_linux`/`install_git_linux` with the package already present: rc 0, the
   "already installed" log emitted, and `apt install` **not** invoked.
-- **Capability gate** — `-t update` on Linux with `HAS_SNAP` unset produces a skipped
-  snap row, not a failed one, and does not invoke `snap refresh` at all. With `HAS_SNAP`
-  set, the row is recorded normally. Without both cases the gate is a one-branch guard
-  of exactly the kind `logic-review.md` item 6 names.
+- **Partial-package boundary** — `install_zsh_linux` with `zsh` present but `zsh-doc`
+  absent must **still install**. This is the case a `PATH` probe passes wrongly, so it is
+  the case that discriminates `dpkg-query -W zsh zsh-doc` from the guard this spec
+  rejected. Mock `dpkg-query` to report `zsh` found and `zsh-doc` not found, and assert
+  `apt install` is invoked. Without this case, substituting `quiet_which zsh` back in
+  leaves the suite green.
+- **Snap-presence gate** — `-t update` on Linux with `snap` absent from `PATH` produces a
+  skipped snap row reading `snap not installed on this host`, does not invoke
+  `snap refresh`, and does not record a failure. With `snap` present, the row is recorded
+  normally. Both branches are required or the gate is the one-branch guard
+  `logic-review.md` item 6 names.
+
+  **The mock must remove `snap` from `PATH` rather than unsetting a variable.** The gate
+  probes the machine, so a test that sets a variable is testing a different gate than the
+  one shipping — and would pass identically against the `HAS_SNAP` version this spec
+  rejected, which is the whole distinction being made.
 
 **One case must pin a derived value, not a verdict.** Item 3 claims that deleting
 `cp err_apt err_snap` gives the snap section its own captured output. Every acceptance
@@ -447,6 +494,11 @@ Existing test files needing new cases: `tests/setup_env/macos.bats`,
 `tests/setup_env/install_guards.bats`. The gnubin case is new and belongs with the
 existing make-install cases in `install_guards.bats`.
 
+`tests/scripts/push_bash_coverage.bats` is **deleted** with the script it covers. Its 11
+cases go with it; none tests behaviour that survives. This is the one place the test
+count moves down, which is why the acceptance criterion below is stated as a net figure
+rather than "strictly greater."
+
 ## Verification
 
 Baselines, runnable before any implementation:
@@ -458,12 +510,24 @@ make bash-coverage   # 91% against the CI floor
 
 Acceptance:
 
-- `make test` green, test count strictly greater than the baseline.
+- `make test` green. Test count is **not** required to exceed the baseline: item 5
+  deletes 11 cases along with the script they cover, so the net figure could legitimately
+  fall. State the arithmetic in the PR — cases added, 11 removed, net — rather than
+  asserting a direction. A bare "count went up" would be satisfied by adding twelve
+  trivial cases, and a bare "count went down" is not by itself evidence of anything.
 - `make lint` exit 0.
-- `make bash-coverage` at or above 91 percent. All five production files touched are in
-  the instrumented set, and the new error branches add coverable lines, so the tests
-  must cover them or the gate drops.
+- `make bash-coverage` at or above 91 percent. Note the denominator moves in two
+  directions here and the net is not predictable from the diff: new error branches add
+  coverable lines, while deleting `scripts/push-bash-coverage.sh` removes a file from the
+  `git ls-files`-derived instrumented set entirely. Re-derive the figure from a real run
+  rather than reasoning about it, and publish it with its denominator per
+  `tdd.md`'s Coverage Denominators rule. If the percentage rises, confirm it rose because
+  the new branches are covered and not merely because a low-coverage file left the set.
 - Each guard's mutation check goes red when the guard is reverted.
+- Substituting `quiet_which zsh` for `dpkg-query -W zsh zsh-doc` turns the
+  partial-package case red. This is the mutation check for the round-2 defect
+  specifically, and it is listed separately because that defect survived a full review
+  round.
 
 ## Files
 
@@ -472,11 +536,19 @@ Production:
 - `lib/macos.sh` — item 1
 - `lib/linux_shared.sh` — items 2 and 3
 - `lib/helpers.sh` — item 4
-- `lib/workflows.sh` — item 3 caller and its `HAS_SNAP` gate
-- `scripts/push-bash-coverage.sh` — item 5
+- `lib/workflows.sh` — item 3 caller and its `command -v snap` gate
 
-`scripts/run-bash-coverage.sh` is **not** touched. It was in the original file list for
-the pre-flight check that round-1 review retired; the fix landed in its caller instead.
+Deleted by item 5:
+
+- `scripts/push-bash-coverage.sh`
+- `Makefile` — the `push-bash-coverage` target, its `.PHONY` entry (line 47), and its
+  `help` line (line 55)
+- `CLAUDE.md:332` — the sentence naming `make push-bash-coverage`
+- `docs/adr/0008-bash-coverage-ps4-xtrace.md:31` — the bullet naming the target
+
+`scripts/run-bash-coverage.sh` is **not** touched. It appeared in two earlier drafts of
+this file list — first for a pre-flight check, then not at all — and neither belongs. It
+keeps working exactly as it does today.
 
 Tests:
 
@@ -484,12 +556,13 @@ Tests:
 - `tests/setup_env/linux_shared.bats`
 - `tests/setup_env/workflows.bats`
 - `tests/setup_env/install_guards.bats`
-- `tests/scripts/` — a case for `push-bash-coverage.sh` refusing to publish after a
-  failed measurement. The mock must not reach the real script: assert that with the
-  child mocked to exit non-zero, the parent exits non-zero and performs no `git push`.
-  Per `tdd.md` pitfall E2, the failing branch of this test must not be able to touch the
-  real `coverage-data` branch — redirect `HOME` and the repo root to fixtures at
-  `setup()` scope so a regressed parent dies at an earlier guard rather than pushing.
+- `tests/scripts/push_bash_coverage.bats` — **deleted** along with the script it covers.
+
+Deleting a script that performs real `git push` also removes the `tdd.md` pitfall E2
+hazard an earlier draft had to design around: a test for the hardened publisher would
+have needed `HOME` and the repo root redirected at `setup()` scope so its own failing
+branch could not push to the live `coverage-data` branch. That hazard disappears with the
+script rather than being mitigated.
 
 ## Backlog rows closed by this spec
 
@@ -498,21 +571,31 @@ Four rows move out of `docs/superpowers/README.md`'s backlog when this lands:
 - `install_zsh_macos` reports a brew failure as success
 - `install_bats` dispatcher returns 0 when no platform matches
 - `push-bash-coverage.sh` misreports a missing bats as a red suite — closed by item 5,
-  though not as the row describes it. The misreport is real but sits on a path the
-  Makefile already guards; the live defect on that path is the discarded child exit code.
-  The replacement row's reasoning is recorded in item 5 so the correction is not lost.
+  but by deleting the script rather than by fixing the misreport. The row's diagnosis was
+  correct and its implied remedy was not: the misreport is real, sits on a path the
+  Makefile already guards, and belongs to a publisher with no live consumer. Item 5
+  records both retired remedies so the reasoning is not lost when someone later asks why
+  the script is gone.
 - gnubin prefix pair is duplicated across two languages with only a comment binding them
 
 ## Follow-ups this spec does not fix
 
-- **The `push-bash-coverage` cron entry is dead and redundant.** 78 runs, zero successes,
-  all blocked by the Makefile's bats guard under a PATH lacking `/opt/homebrew/bin`. CI
-  has been publishing the badge on every PR throughout. Deleting the crontab line is an
-  operator action on a machine-local file; no repo change makes it correct.
+- **The `push-bash-coverage` crontab entry must be removed by the operator.** Item 5
+  deletes the Makefile target the entry invokes, so after this lands the nightly job
+  fails with `No rule to make target` instead of the bats guard message — a different
+  error, equally ignored, in the same unread log. The crontab is machine-local and no
+  repo change reaches it. This is the one follow-up with an ordering constraint: it is
+  harmless to do at any time, and leaving it undone leaves a nightly job producing noise.
 - **`wsl2_workstation` may be wrongly declared snap-less** in `config/profiles.sh`. The
-  declaration predates WSL2's systemd support. Item 3's `HAS_SNAP` gate is correct either
-  way; if `command -v snap && sudo snap refresh` succeeds on the cruncher, the follow-up
-  is a `PROFILE_CAPS` correction.
+  declaration predates WSL2's systemd support. This no longer affects anything in this
+  spec — item 3 gates on `command -v snap`, not on the capability — but the declaration
+  is still consulted by six sites in `lib/linux_ubuntu.sh`, so if the cruncher does run
+  snapd those are all skipping work they should do.
+- **`PROFILE_CAPS[server]` has no hostname mapping.** `PROFILE_MAP` holds seven entries
+  and none resolves to `server`. Either hosts using it were never enrolled, or the profile
+  is dead. Worth deciding which, because an unmapped host silently receives _zero_
+  `HAS_*` capabilities rather than a sensible default — a failure mode that surfaced only
+  because a draft of this spec tried to build a gate on top of it.
 
 Two further rows are stale and were already fixed by earlier work; they should be
 deleted from the backlog in the same commit:
@@ -675,3 +758,126 @@ check, which is a genuine falsifier. The gnubin case's two non-empty assertions 
 correctly load-bearing. Two lenses judged the suite not PASS-dominated in the
 pathological sense; the Risk lens identified the one real gap, recorded above as its
 second finding — the `err_snap` content claim that no criterion pins.
+
+---
+
+## Multi-Lens Review — Round 2
+
+Reviewed at commit: `5bb88a0f842b611838126d4ee36129fb356e138e` (the round-1 revision)
+
+All three lenses re-run, not only the ones whose findings prompted the revision, because
+the round-1 corrections changed design substance rather than wording. That was the right
+call: **every round-2 finding is a defect the round-1 corrections introduced.** Both new
+guards were wrong, and each was wrong in a way the original text was not.
+
+As in round 1, the main session independently re-ran every load-bearing command before
+recording a finding.
+
+### Goal-Fit
+
+Finding: Item 5 hardened a script whose own evidence says it should be deleted, and it is
+the only item claiming live value it does not have.
+
+The reads-it test on the round-1 `rm -f` + `|| exit 1`: can any outcome differ because
+this exists? Only if the dead cron is repaired — which the same document places in
+follow-ups-it-does-not-do while calling the entry "dead and redundant." Where is its
+output after the session ends? Nowhere. Two no's.
+
+The revision adopted the round-1 patch without re-asking whether the item should exist
+once its consumer was shown to be absent. A correction that keeps an item's slot and
+swaps its contents inherits the item's original justification, and that justification had
+just been invalidated.
+
+Of six items, three change no production outcome. The spec was explicit about two of them
+(2-git, 4) and asserting live value for the third.
+
+Assumption: that the Mac Studio's crontab is the only place on the fleet invoking
+`push-bash-coverage`. The round-1 disposition recorded this as "answered" on one
+machine's evidence while the conclusion covered the fleet.
+
+Disposition: **Addressed.** Item 5 is now a deletion — the script, its 256-line bats
+suite, the Makefile target, and two doc references. The boundary error is corrected in
+the item itself: `ssh workstation` returns no coverage cron and no log, so both
+development machines are now covered rather than one, and the item says which machines
+were checked rather than generalising from the Studio.
+
+### Ergonomics
+
+Finding: The round-1 `HAS_SNAP` gate silently disables snap updates on every Ubuntu host
+except one, and labels the skip with a string that already means something else.
+
+Simulating `lib/detect_env.sh:26-28` against the real `config/profiles.sh`: `workstation`
+is the only hostname resolving to a snap-carrying profile. An unmapped hostname yields
+`PROFILE=unknown`, `PROFILE_CAPS[unknown]` is undefined, so it receives **zero**
+capabilities — such a host refreshes snaps today and would print `[SKIP] snap not
+applicable` after the change. No hostname maps to `server`, so the fallback justification
+defended a profile no machine uses. And reusing `"not applicable"` collapses three
+distinct causes into one summary line: not Linux, profile declares no snap, host not
+enrolled.
+
+Second finding: `quiet_which zsh` is not the predicate for `apt install zsh zsh-doc`. The
+guard probes one binary; the contract is two packages, one of which ships no binary.
+`zsh-doc` becomes unreachable forever on any box where zsh already exists.
+
+Assumption: that every Ubuntu host which ever runs `-t update` is present in
+`PROFILE_MAP`. `USER.md` describes four Raspberry Pi on Ubuntu 24.04 and a Proxmox fleet,
+none of them enrolled.
+
+Disposition: **Addressed.** The gate is now `command -v snap`, which probes the machine
+instead of the manifest and makes the enrolment assumption moot rather than load-bearing.
+The skip reason is distinct: `"snap not installed on this host"`. The guard is now
+`dpkg-query -W zsh zsh-doc`, naming both packages.
+
+### Risk
+
+Finding: The `quiet_which` guard silently drops `zsh-doc`, and the precedent cited for it
+was wrong in a way the repo has already paid for.
+
+`install_bats_linux` probes one binary and installs one package — a faithful proxy.
+`install_zsh_linux` installs two. The macOS guards the spec called equivalent probe
+package-manager state (`brew list | grep '^zsh$'` at `lib/macos.sh:98,117`), not `PATH`.
+And `install_make_macos:158-167`, cited twice in the same document as a model, carries a
+comment explaining precisely why a `PATH` probe was the wrong guard there — "Reproduced."
+The spec proposed the shape that function's own comment documents as a defect.
+
+Second finding: the `HAS_SNAP` gate conflates "profile declares snap" with "snap exists",
+and the accompanying test case blesses the conflation — it passes identically whether a
+host is genuinely snapless or merely unenrolled.
+
+Explicitly not raised, having checked: `rm -f "${BADGE_JSON}"` is recoverable, since
+`coverage/` is gitignored and `origin/coverage-data` holds the authoritative badge. The
+`dist-upgrade` deletion is sound. The retained `update_system_packages` wrapper keeps an
+ungated `update_snap_packages` call alive for tests only.
+
+Assumption: that every Linux host running `-t update` is enrolled in `PROFILE_MAP` **and**
+its declared caps match its real snapd state.
+
+Disposition: **Addressed.** Both findings, and the assumption is dissolved rather than
+answered — `command -v snap` does not consult `PROFILE_MAP` at all. The guard is
+`dpkg-query -W`, and the item now states why the three cited precedents did not support a
+`PATH` probe, including the self-contradiction with `install_make_macos`. The Testing
+section gains a partial-package case (`zsh` present, `zsh-doc` absent, must still install)
+specifically so substituting `quiet_which zsh` back in turns the suite red, and a
+snap-presence case whose mock must remove `snap` from `PATH` rather than unset a variable
+— a variable-based mock would pass against the rejected gate too.
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — unchanged from round 1.
+
+### Verdict-count check
+
+All three lenses ran it and reached the same conclusion as round 1: three PASS-shaped
+comparisons plus per-guard mutation reverts, which are genuine falsifiers. Two lenses
+independently noted that the round-1 `err_snap` case correctly closed one
+measurement-versus-comparison gap while the new capability-gate case opened another —
+nothing in the suite tied `HAS_SNAP` to `PROFILE_CAPS`, so the one machine that needs a
+snap refresh could stop getting one with everything green. Closed by switching the gate to
+a machine probe and requiring the test to mock `PATH`.
+
+The acceptance criteria also changed shape here. Item 5's deletion removes 11 cases, so
+"test count strictly greater than baseline" is no longer the right assertion and has been
+replaced with stated arithmetic. The coverage denominator now moves in both directions —
+new branches add coverable lines, a deleted file leaves the instrumented set — so the
+criterion requires re-deriving the figure from a real run and confirming any rise is not
+merely a low-coverage file exiting the denominator.
