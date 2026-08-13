@@ -337,9 +337,38 @@ _sorted_lines_from_space_list() {
   _make_ge4="$(_find_make_ge4)" \
     || skip "no >=4 arm: no make/gmake >=4 found on PATH"
 
-  run env -u MAKEFLAGS PATH="${CLEAN_PATH}" "${_make_ge4}" -C "${REPO_ROOT}" print-BATS_MISSING
+  # GUARDED, not measuring -- and the reason is measured, not assumed.
+  #
+  # This case pins an exact derived value; it has no interest in directory
+  # lines, so it takes the per-call flag like any other guarded invocation.
+  # It previously used `env -u MAKEFLAGS` and passed on macOS while failing on
+  # ubuntu-latest (dotfiles#214 CI). Measured on GNU Make 4.3 (Ubuntu 24.04,
+  # the ubuntu-latest image) by a session on the Linux workstation:
+  #
+  #   in-Makefile `MAKEFLAGS += --no-print-directory`, invoked with -C
+  #     4.3   -> 3 lines WITH the directive, 3 lines WITHOUT -- byte-identical,
+  #              the directive is INERT because -C prints "Entering directory"
+  #              before the Makefile is parsed
+  #     4.4.1 -> 1 line with, 3 without -- suppressed
+  #   per-call --no-print-directory  -> suppressed on BOTH
+  #   inherited MAKEFLAGS in env     -> suppressed on BOTH
+  #
+  # So `env -u MAKEFLAGS` strips the one mechanism that works on 4.3 and
+  # leaves the one that does not. The call-site flag works everywhere, which
+  # is what tdd.md pitfall G prescribes in the first place.
+  run env PATH="${CLEAN_PATH}" "${_make_ge4}" --no-print-directory \
+    -C "${REPO_ROOT}" print-BATS_MISSING
   [ "${status}" -eq 0 ]
-  _expected="bats not found. Install: brew install bats-core (macOS) or sudo apt-get install bats (Linux). Durable fix: ./setup_env.sh -t setup_user (full provisioning re-run)"
+  # Derived from the Makefile rather than hand-typed: a literal here asserts
+  # the transcription, not the file. Content-derived vs execution-derived are
+  # different mechanisms, so this is not circular.
+  _expected="$(sed -n 's/^BATS_MISSING := //p' "${REPO_ROOT}/Makefile")"
+  [ -n "${_expected}" ]
+  if [ "${output}" != "${_expected}" ]; then
+    printf 'make: %s\n' "$("${_make_ge4}" --version | head -1)" >&2
+    printf 'expected: [%s]\n' "${_expected}" >&2
+    printf 'actual:   [%s]\n' "${output}" >&2
+  fi
   [ "${output}" = "${_expected}" ]
 }
 

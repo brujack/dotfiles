@@ -362,12 +362,16 @@ See [`ai-config/docs/knowledge/dotfiles-bats-test-infrastructure.md`](https://gi
 
 ### MAKEFLAGS and Stdout Partition
 
-`Makefile:1` carries `MAKEFLAGS += --no-print-directory`. GNU Make 4.0+ prints `Entering directory` / `Leaving directory` on stdout when `-C` changes directory; macOS's `/usr/bin/make` is 3.81 and does not. The directive removes that variance at the source, covering all `make` invocations in the repo without explicit per-call flags.
+`Makefile:1` carries `MAKEFLAGS += --no-print-directory`. GNU Make 4.0+ prints `Entering directory` / `Leaving directory` on stdout when `-C` changes directory; macOS's `/usr/bin/make` is 3.81 and does not.
+
+**The directive does not cover a direct `make -C` on GNU Make 4.3 — which is what `ubuntu-latest` runs.** Measured on Ubuntu 24.04: with the directive 3 lines, without it 3 lines, byte-identical — `-C` prints the message before the Makefile is parsed, so a directive inside it is too late. 4.4.1 (Homebrew, macOS) does suppress. A per-call `--no-print-directory` and an inherited `MAKEFLAGS` both suppress on **both** versions.
+
+What the directive actually buys is the export: under `make test` every child `make` inherits it, and that works on every version. A direct `make -C …` outside an outer make on 4.3 is uncovered. **The load-bearing protection is the per-call flag and the partition below, not this line** — which is what `tdd.md` pitfall G prescribes first.
 
 **`MAKEFLAGS` is an exported environment variable, not a file-local Makefile directive.** Every `make` a test spawns inherits it. So any test that captures and measures `make` output must explicitly account for it — tests fall into two categories:
 
 - **Guarded:** Per-call `--no-print-directory` flag (overrides the exported `MAKEFLAGS`), for tests that care about exact output shape
-- **Measuring:** `env -u MAKEFLAGS` prefix (strips the inherited directive), for tests that measure baseline behavior or verify the directive works
+- **Measuring:** `env -u MAKEFLAGS` prefix (strips the inherited directive), for tests that genuinely need to observe directory lines. Use it only for that — on 4.3 it strips the one mechanism that works and leaves the inert file directive, so a case that merely wants an exact value must be **guarded**, not measuring. That mistake shipped once and was caught by CI, green on macOS and red on `ubuntu-latest`.
 
 Both categories must exist in the test suite. A test capturing `make` output without guarding or measuring it gets the environment's `MAKEFLAGS`, so it is measuring the environment rather than the Makefile.
 

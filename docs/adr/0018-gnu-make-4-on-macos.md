@@ -32,11 +32,40 @@ is fail-locked.
 Align every mac's `make` with the version CI runs, and close the defect class at its
 source, without any mechanism that can block a machine from testing or pushing.
 
-**1. `MAKEFLAGS += --no-print-directory` at `Makefile:1`.** This removes the only
-measured version-variant behavior at every call site in the repo, including ones not
-yet written. `MAKEFLAGS` is an exported environment variable, so this is force-applied
-to every recipe subshell under `make test`, `make lint`, and every other target,
-without repeating the flag at each `-C` call.
+**1. `MAKEFLAGS += --no-print-directory` at `Makefile:1`.** `MAKEFLAGS` is an exported
+environment variable, so the directive is force-applied to every recipe subshell under
+`make test`, `make lint`, and every other target — and an inherited `MAKEFLAGS`
+suppresses the directory lines on **both** 4.3 and 4.4.1.
+
+**Its scope is narrower than this ADR first claimed, and the correction is measured.**
+The original text said it removed the variance "at every call site in the repo,
+including ones not yet written." That is false on GNU Make 4.3, which is what
+`ubuntu-24.04` — the `ubuntu-latest` image — ships. Measured on the Linux workstation
+(Ubuntu 24.04, `/usr/bin/make` 4.3) against a fixture carrying the directive and a
+control without it:
+
+```
+4.3    with directive: 3 lines    without: 3 lines    -> byte-identical, INERT
+4.4.1  with directive: 1 line     without: 3 lines    -> suppressed
+per-call --no-print-directory     -> suppressed on both
+inherited MAKEFLAGS in env        -> suppressed on both
+```
+
+`-C` prints `Entering directory` **before** the Makefile is parsed, so a directive set
+inside that Makefile arrives too late; 4.4.1 evidently changed this. The practical
+consequence is bounded: under `make test` the exported variable does the work on every
+version, so the repo's own invocations are covered. What is *not* covered is a direct
+`make -C … ` run outside an outer make on 4.3 — there the file directive does nothing.
+
+So the load-bearing protection is the **per-call flag** and the partition that enforces
+it, not this line. That is what `tdd.md` pitfall G prescribes first ("remove the
+variance at the call site"), and reaching for a single-line file-level answer instead is
+the shortcut this ADR is now the record of. The directive stays because it is correct
+where it applies and costs nothing; it is no longer described as the fix.
+
+This was found by CI, not locally: with only 3.81 and 4.4.1 on the authoring machine,
+the 4.3 behaviour was structurally unobservable — pitfall G landing on the change that
+exists to close pitfall G.
 
 **2. `install_make_macos()` in `lib/macos.sh`, called from `run_setup_user`'s macOS
 branch (`lib/workflows.sh:127`).** Probes `gmake`, never `make` — macOS always has
@@ -74,16 +103,19 @@ cannot pass vacuously by having zero of either kind.
 
 **Positive.** Every mac in the fleet now resolves `make` to 4.x through the same
 mechanism CI uses to provision `ubuntu-latest`'s runner, closing the version-skew class
-rather than patching the three tests that had already tripped on it. The
-`--no-print-directory` flag removes the behavior difference at its source, so a test
-written against a future `-C` call site inherits the fix without anyone having to
-remember to add a per-call flag. The `make_version` ledger field makes a machine whose
+rather than patching the three tests that had already tripped on it. A future `-C` call
+site is covered **when it runs under an outer make** — `MAKEFLAGS` is exported and an
+inherited value suppresses on both 4.3 and 4.4.1 — but not when it runs standalone on
+4.3, which is why the partition scanner rather than the directive is what makes the
+invariant hold. The `make_version` ledger field makes a machine whose
 gnubin prepend silently isn't in effect queryable across the fleet, rather than visible
 only at that machine's own terminal the next time someone happens to run `make -n`
 there.
 
 **Negative.** The scanner is a structural, not semantic, check — see the accepted gap
-below. The ledger schema addition is a shared-schema change (see below), and the
+below. The `Makefile` directive is version-dependent for `-C` (inert on 4.3, effective
+on 4.4.1), so it must not be cited as the reason a call site is safe; only the per-call
+flag and the exported-variable path hold on every version. The ledger schema addition is a shared-schema change (see below), and the
 gnubin dual-prefix path list is now something that has to be kept in sync if Homebrew
 ever changes its keg-only layout.
 
