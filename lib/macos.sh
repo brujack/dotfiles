@@ -150,6 +150,28 @@ install_bats_macos() {
   log_info "Installed bats"
 }
 
+install_make_macos() {
+  # Probe gmake, never make: macOS always has /usr/bin/make at 3.81, so
+  # probing make would report success on exactly the machines needing the
+  # install.
+  if quiet_which gmake; then
+    log_info "GNU make already installed"
+    return 0
+  fi
+
+  log_info "Installing GNU make via Homebrew"
+  if ! command -v brew &> /dev/null; then
+    install_homebrew
+  fi
+  if command -v brew &> /dev/null; then
+    brew_install_formula make || return 1
+  else
+    log_error "Failed to install Homebrew. Cannot install GNU make."
+    return 1
+  fi
+  log_info "Installed GNU make"
+}
+
 install_macos_casks() {
   brew bundle --file "${BREWFILE_LOC}/Brewfile" || return 1
   if [[ -n ${HAS_GUI} ]]; then

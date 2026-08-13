@@ -124,6 +124,7 @@ run_setup_user() {
 
   if [[ -n ${MACOS} ]]; then
     install_git || return 1
+    install_make_macos || return 1
   fi
 
   mkdir -p "${HOME}"/software_downloads

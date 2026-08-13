@@ -195,6 +195,86 @@ teardown() {
   [ "$status" -eq 3 ]
 }
 
+# ── install_make_macos ───────────────────────────────────────────────────────
+
+# Creates a directory containing a stub `gmake` executable that exits 0, and
+# prints the directory's path. Mirrors macos.bats' _stub_bats_present — the
+# "already installed" precondition must be asserted via a real stub on PATH,
+# not delegated to whatever gmake the host running the suite happens to have
+# (tdd.md pitfall A).
+_stub_gmake_present() {
+  local _dir
+  _dir="$(mktemp -d -p "${BATS_TEST_TMPDIR}")"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "${_dir}/gmake"
+  chmod +x "${_dir}/gmake"
+  printf '%s' "${_dir}"
+}
+
+@test "install_make_macos: gmake already installed - skips brew" {
+  local _stub_dir _saved_path
+  _stub_dir="$(_stub_gmake_present)"
+  _saved_path="${PATH}"
+  export PATH="${_stub_dir}:${PATH}"
+  run install_make_macos
+  export PATH="${_saved_path}"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"already installed"* ]]
+  refute_grep "brew install make" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_make_macos: gmake absent, brew present - installs via brew" {
+  export MOCK_WHICH_MISSING=gmake
+  run install_make_macos
+  [ "$status" -eq 0 ]
+  grep -q "brew install make" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_make_macos: gmake absent, brew absent and uninstallable - returns 1 and logs error" {
+  local _mocks="${BATS_TEST_DIRNAME}/../mocks"
+  local _no_brew="${BATS_TEST_TMPDIR}/no-brew-bin"
+  mkdir -p "${_no_brew}"
+  local _f
+  for _f in "${_mocks}/"*; do
+    [[ "$(basename "${_f}")" == "brew" ]] && continue
+    cp "${_f}" "${_no_brew}/$(basename "${_f}")"
+  done
+  # tdd.md E2: redirect HOME too, so a regressed probe that reaches the real
+  # install_homebrew (curl | bash, sudo xcodebuild) cannot touch the
+  # operator's real $HOME even though install_homebrew is stubbed below.
+  local _saved_path="${PATH}" _saved_home="${HOME}"
+  export PATH="${_no_brew}:/usr/bin:/bin"
+  export HOME="${BATS_TEST_TMPDIR}"
+  export MOCK_WHICH_MISSING=gmake
+  install_homebrew() { return 0; }
+  export -f install_homebrew
+  local _rc=0
+  local _out
+  _out="$(install_make_macos 2>&1)" || _rc=$?
+  export PATH="${_saved_path}"
+  export HOME="${_saved_home}"
+  [ "${_rc}" -eq 1 ]
+  [[ "${_out}" == *"Failed to install Homebrew. Cannot install GNU make."* ]]
+}
+
+# This is the load-bearing case: it is the mirror of the probe design (probe
+# must be gmake, never make, because macOS always ships /usr/bin/make at
+# 3.81). If the probe is ever "simplified" to quiet_which make, this case
+# must go red — verified by temporarily mutating the probe (see task
+# measurements), not assumed.
+@test "install_make_macos: stubbed 3.81 make on PATH, gmake absent - install still runs" {
+  local _stub_dir _saved_path
+  _stub_dir="$(mktemp -d -p "${BATS_TEST_TMPDIR}")"
+  printf '#!/usr/bin/env bash\nprintf "GNU Make 3.81\\n"\nexit 0\n' > "${_stub_dir}/make"
+  chmod +x "${_stub_dir}/make"
+  _saved_path="${PATH}"
+  export PATH="${_stub_dir}:${PATH}"
+  export MOCK_WHICH_MISSING=gmake
+  run install_make_macos
+  export PATH="${_saved_path}"
+  [ "$status" -eq 0 ]
+  grep -q "brew install make" "${MOCK_CALLS_FILE}"
+}
+
 # ── ensure_not_root ──────────────────────────────────────────────────────────
 
 @test "ensure_not_root returns 0 when not root" {
