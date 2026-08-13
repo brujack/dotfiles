@@ -19,9 +19,23 @@ this spec changed the scope in two directions, and both corrections are load-bea
 `install_git_linux` runs four unchecked `sudo -H apt` commands before its trailing
 `log_info`, and `install_zsh_linux` runs three. macOS swallows one
 `brew_install_formula` call; Linux swallows the repository add, the index update, a
-full-system `dist-upgrade`, and the install itself. The consequence is that
-`lib/workflows.sh:126`'s `install_git || return 1` cannot fire on Linux under any
-circumstance.
+full-system `dist-upgrade`, and the install itself.
+
+**Only one of those two is reachable, and the spec says so rather than trading on the
+stronger-sounding claim.** `install_git || return 1` at `lib/workflows.sh:126` sits
+inside `if [[ -n ${MACOS} ]]`, and `install_git_linux` has no other production caller —
+so it never runs at all, and neither its swallowed exit code nor its `dist-upgrade`
+has any live consequence. `install_zsh || return 1` at `lib/workflows.sh:133` is gated
+`[[ ${MACOS} || ${UBUNTU} ]]`, so `install_zsh_linux` **is** live on every Ubuntu
+provisioning run, and its unrequested non-interactive `apt dist-upgrade -y` is the
+single highest-value change in this document. An earlier draft framed this as
+"`install_git || return 1` cannot fire on Linux", which is true and misleading: the
+call never happens there, so the guard's inability to fire is not the defect.
+
+`install_git_linux` is still brought onto the same shape, as dead-code hygiene with no
+claimed production benefit. It costs three lines, it keeps the two Linux install
+functions readable as a pair, and item 4's dispatcher fix makes `install_git` callable
+from a future Linux caller that does not exist today.
 
 **One backlog row was already substantially fixed.** `install_bats_macos` carries
 `brew_install_formula bats-core || return 1`, and `install_bats_linux` propagates
@@ -72,6 +86,10 @@ function, and preparatory steps warn and continue.
 
 ```bash
 install_git_linux() {
+  if quiet_which git; then
+    log_info "git already installed"
+    return 0
+  fi
   log_info "Installing git via apt"
   sudo -H add-apt-repository ppa:git-core/ppa -y \
     || log_warn "PPA add failed — continuing with distro git"
@@ -86,7 +104,23 @@ install_git_linux() {
 `install_zsh_linux` takes the same shape, without the PPA step, installing
 `zsh zsh-doc`.
 
-Two decisions are embedded here.
+Three decisions are embedded here.
+
+**Why the already-installed guard is not optional once the install step is fatal.**
+`install_bats_linux:24` already opens with `quiet_which bats && return 0`;
+`install_git_linux` and `install_zsh_linux` do not, so today they re-run `apt install`
+on every provisioning run and swallow whatever happens. Making the install step fatal
+without adding the guard converts that from harmless to breaking: `run_setup_user`
+calls `install_zsh || return 1` at `lib/workflows.sh:133`, ahead of
+`clone_or_update_dotfiles`, `setup_ai_config`, and `setup_dotfile_symlinks`. A dpkg
+lock held by `unattended-upgrades` — the ordinary state of a freshly-booted Ubuntu box,
+which is exactly what gets provisioned — would then abort the entire run having done
+nothing, over a package that was already present. With the guard, the fatal path fires
+only when zsh is genuinely absent, which is when it should be fatal.
+
+This is the same idiom `install_bats_linux` and `install_bats_macos` already use, and
+the macOS git and zsh functions have their own equivalent (`brew list | grep` at
+`lib/macos.sh:98,117`). The Linux pair is the only place in the family without one.
 
 **Why the install step alone fails the function.** `apt install <pkg>` is what the
 function promises. A failed PPA add means the distro package is used instead, which is
@@ -171,10 +205,43 @@ _update_record_start "apt"
 update_apt_packages 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_apt"
 _update_record_end "apt" "${PIPESTATUS[0]}"
 
-_update_record_start "snap"
-update_snap_packages 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_snap"
-_update_record_end "snap" "${PIPESTATUS[0]}"
+if [[ -n ${HAS_SNAP} ]]; then
+  _update_record_start "snap"
+  update_snap_packages 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_snap"
+  _update_record_end "snap" "${PIPESTATUS[0]}"
+else
+  _update_skip "snap" "not applicable"
+fi
 ```
+
+**The `HAS_SNAP` gate is load-bearing, not defensive.** `sudo snap refresh` at
+`lib/linux_shared.sh:38` is the only ungated snap call in the repo — the six others, all
+in `lib/linux_ubuntu.sh` (lines 39, 177, 379, 401, 413, 421), test `HAS_SNAP`.
+`PROFILE_CAPS` in `config/profiles.sh` omits snap from two profiles:
+
+```
+[wsl2_workstation]="gui devtools aws k8s docker rust"
+[server]="devtools aws"
+```
+
+Today that omission is harmless _precisely because of the bug this item fixes_: the
+trailing `log_info` swallows a failing `snap refresh`. Propagating the exit code without
+adding the gate would therefore introduce the very defect this item's rationale argues
+against one paragraph above — a row that goes red on every run on a machine where snap
+is not installed and cannot be, blaming a subsystem the operator has no action for. A
+permanently-red row stops carrying information the first time it is correctly ignored,
+which is strictly worse than the always-green row it replaces.
+
+`_update_skip "snap" "not applicable"` reuses the string the non-Linux arm already emits
+eleven lines below, so the two skip paths read identically in the summary.
+
+One open question the gate does not depend on: `wsl2_workstation` was declared snap-less
+on the reasoning that snap is unavailable under WSL2, which predates WSL2's systemd
+support — Ubuntu 24.04 under systemd-enabled WSL2 runs snapd. If the cruncher does have
+a working snapd, the gate costs nothing there and `server` still requires it. The gate is
+correct whichever way that measurement lands, so it is not blocked on running
+`command -v snap && sudo snap refresh; echo rc=$?` on that machine. If the answer turns
+out to be "snapd works," the follow-up is a `PROFILE_CAPS` correction, not a change here.
 
 `PIPESTATUS[0]` read as the next command after the pipeline is the idiom already used
 at `lib/workflows.sh:330`.
@@ -212,39 +279,76 @@ own conditions. It is included because the two callees below `install_git` and
 returning a false zero would mean the propagation added in items 1 and 2 stops one level
 short of the caller.
 
-### 5. bats pre-flight in the coverage runner
+### 5. The coverage publisher discards its measurement's exit code
 
-`scripts/run-bash-coverage.sh`. Line 738 invokes `bats` and line 739 captures its
-status; `_check_red_suite` at line 757 then prints, for any non-zero status:
+**This item was rescoped after round-1 review. The original version proposed a `bats`
+pre-flight check inside `scripts/run-bash-coverage.sh`, on the stated premise that the
+Makefile's `$(error $(BATS_MISSING))` guards "do not cover this path, because
+`scripts/push-bash-coverage.sh` — documented for cron use — invokes the coverage script
+directly." That premise is false, and the real defect is one level up.**
+
+The cron entry does not invoke the script directly:
 
 ```
-ERROR: bats suite failed (exit 127, 0 test(s) not ok) — refusing to compute coverage over a red run
+0 2 * * * cd ~/git-repos/personal/dotfiles && make push-bash-coverage >> ~/.dotfiles-coverage.log 2>&1
 ```
 
-With bats absent, exit 127 is "command not found" and no suite ran at all. The message
-asserts a suite failure that never happened. The Makefile's four `$(error $(BATS_MISSING))`
-guards do not cover this path, because `scripts/push-bash-coverage.sh` — documented for
-cron use — invokes the coverage script directly. The `127` is the only clue, on the one
-path nobody is watching.
+`Makefile:114-118` carries `ifndef BATS / $(error $(BATS_MISSING))`, so that path is
+already guarded — and that guard is the only thing that has ever run on it.
+`~/.dotfiles-coverage.log` holds 78 lines, every one of them the guard firing, and zero
+lines matching `Coverage:`, `Pushed`, or `unchanged`. The job has never succeeded.
+`BATS := $(shell command -v bats)` is evaluated in make's own process under cron's PATH,
+which lacks `/opt/homebrew/bin`. A pre-flight check inside the script would use the
+identical probe and fail identically, on a path cron never reaches.
 
-A pre-flight check is added before the bats invocation:
+The badge itself is unaffected: every commit on `origin/coverage-data` since the branch
+was created is authored by `github-actions[bot]`, and `.github/workflows/ci.yml:167-178`
+pushes it on every PR. The cron entry is dead _and_ redundant. Deleting it is an operator
+action on a machine-local crontab, outside this repo's scope, and is recorded in the
+follow-ups section rather than fixed here.
+
+**What this item fixes instead.** `scripts/push-bash-coverage.sh:25` invokes the coverage
+script **unchecked**, and line 26 then reads `coverage/bash.json`:
 
 ```bash
-if ! command -v bats > /dev/null 2>&1; then
-    printf "ERROR: bats not installed — cannot measure coverage (install: brew install bats-core, or apt-get install bats)\n" >&2
+bash "${REPO_ROOT}/scripts/run-bash-coverage.sh" --json "${BADGE_JSON}"
+overall_pct=$(python3 -c "...json.load(open('${BADGE_JSON}'))...")
+```
+
+`run-bash-coverage.sh` cleans up at lines 707 and 746, clearing `TRACE_FILE` and
+`TRACE_FIFO` only — never the badge JSON. So a stale badge survives every failed
+measurement: the child prints its error and exits non-zero, and the parent proceeds to
+read, commit and push the _previous_ run's figure, exiting 0. Seven `exit 1` sites
+already exist in the child (lines 105, 493, 602, 757, 761, 788, 805), including the
+red-suite check and two untrustworthy-denominator paths. The caller discards all seven.
+
+Adding an eighth would be `behavior.md`'s guard-whose-verdict-arrives-too-late: the
+verdict would be real and correct, and nothing would read it. Worse, it would make the
+cron entry look repairable — fixing that entry's PATH without this change would not
+restore the badge job, it would publish a badge that lies, on a schedule.
+
+The fix is in the caller:
+
+```bash
+rm -f "${BADGE_JSON}"
+if ! bash "${REPO_ROOT}/scripts/run-bash-coverage.sh" --json "${BADGE_JSON}"; then
+    printf "ERROR: coverage measurement failed — not publishing a badge\n" >&2
     exit 1
 fi
 ```
 
-The guard goes in `run-bash-coverage.sh` rather than `push-bash-coverage.sh` because
-that is the script that actually invokes bats, so one guard covers both the Makefile
-path and the cron path. It exits non-zero so a scheduled run alerts rather than
-silently doing nothing, with a message distinct from the red-suite message so the cause
-is unambiguous.
+Both lines are needed and they fail closed independently. `|| exit 1` stops a failed
+measurement from reaching the publish step. `rm -f` ahead of the run means that even if
+some future path exits 0 without writing a badge, line 28's existing
+`if [[ -z "${overall_pct}" ]]` check catches the absent file rather than reading a
+month-old one. Removing the file before the run is what makes "no badge" and "stale
+badge" distinguishable at all — without it, the freshness of `coverage/bash.json` is
+unobservable from the caller.
 
-Pre-flight is chosen over special-casing 127 inside `_check_red_suite`, because 127 can
-also arise from bats itself invoking something missing — the two cases warrant different
-messages and only a pre-flight check can tell them apart.
+The original pre-flight is dropped. The only invocation it would have improved is a human
+hand-typing `bash scripts/run-bash-coverage.sh` with bats absent, where the existing
+`_check_red_suite` message already halts the run, and where the Makefile's message is
+strictly better because it names the durable fix (`./setup_env.sh -t setup_user`).
 
 ### 6. gnubin prefix parity test
 
@@ -312,7 +416,25 @@ Per `tdd.md`'s mandatory categories:
 - **State transition** — for the update split, the summary rows must be asserted
   independently: apt failing with snap succeeding produces one red row and one green
   row, and the reverse.
-- **Boundary** — the dispatchers with neither `MACOS` nor `LINUX` set.
+- **Boundary** — the dispatchers with neither `MACOS` nor `LINUX` set. Also
+  `install_zsh_linux`/`install_git_linux` with the package already present: rc 0, the
+  "already installed" log emitted, and `apt install` **not** invoked.
+- **Capability gate** — `-t update` on Linux with `HAS_SNAP` unset produces a skipped
+  snap row, not a failed one, and does not invoke `snap refresh` at all. With `HAS_SNAP`
+  set, the row is recorded normally. Without both cases the gate is a one-branch guard
+  of exactly the kind `logic-review.md` item 6 names.
+
+**One case must pin a derived value, not a verdict.** Item 3 claims that deleting
+`cp err_apt err_snap` gives the snap section its own captured output. Every acceptance
+criterion above still passes if `err_snap` is written empty — the rows go red and green
+correctly, the tests are green, the coverage figure holds. Add a case asserting
+`err_snap` contains snap output and does **not** contain apt's, so the suite tests the
+measurement and not only the comparison built on it.
+
+The same reasoning does not extend to the per-section timing claim, which is left
+unpinned deliberately: asserting on wall-clock durations in a mocked suite buys a flaky
+test rather than a real check, and the timing improvement follows structurally from
+moving `_update_record_start` next to its own call.
 
 **Mutation check on every guard.** Revert each `|| return 1` and confirm the
 corresponding test goes red. This is not optional here: all six items are checks that
@@ -350,8 +472,11 @@ Production:
 - `lib/macos.sh` — item 1
 - `lib/linux_shared.sh` — items 2 and 3
 - `lib/helpers.sh` — item 4
-- `lib/workflows.sh` — item 3 caller
-- `scripts/run-bash-coverage.sh` — item 5
+- `lib/workflows.sh` — item 3 caller and its `HAS_SNAP` gate
+- `scripts/push-bash-coverage.sh` — item 5
+
+`scripts/run-bash-coverage.sh` is **not** touched. It was in the original file list for
+the pre-flight check that round-1 review retired; the fix landed in its caller instead.
 
 Tests:
 
@@ -359,6 +484,12 @@ Tests:
 - `tests/setup_env/linux_shared.bats`
 - `tests/setup_env/workflows.bats`
 - `tests/setup_env/install_guards.bats`
+- `tests/scripts/` — a case for `push-bash-coverage.sh` refusing to publish after a
+  failed measurement. The mock must not reach the real script: assert that with the
+  child mocked to exit non-zero, the parent exits non-zero and performs no `git push`.
+  Per `tdd.md` pitfall E2, the failing branch of this test must not be able to touch the
+  real `coverage-data` branch — redirect `HOME` and the repo root to fixtures at
+  `setup()` scope so a regressed parent dies at an earlier guard rather than pushing.
 
 ## Backlog rows closed by this spec
 
@@ -366,8 +497,22 @@ Four rows move out of `docs/superpowers/README.md`'s backlog when this lands:
 
 - `install_zsh_macos` reports a brew failure as success
 - `install_bats` dispatcher returns 0 when no platform matches
-- `push-bash-coverage.sh` misreports a missing bats as a red suite
+- `push-bash-coverage.sh` misreports a missing bats as a red suite — closed by item 5,
+  though not as the row describes it. The misreport is real but sits on a path the
+  Makefile already guards; the live defect on that path is the discarded child exit code.
+  The replacement row's reasoning is recorded in item 5 so the correction is not lost.
 - gnubin prefix pair is duplicated across two languages with only a comment binding them
+
+## Follow-ups this spec does not fix
+
+- **The `push-bash-coverage` cron entry is dead and redundant.** 78 runs, zero successes,
+  all blocked by the Makefile's bats guard under a PATH lacking `/opt/homebrew/bin`. CI
+  has been publishing the badge on every PR throughout. Deleting the crontab line is an
+  operator action on a machine-local file; no repo change makes it correct.
+- **`wsl2_workstation` may be wrongly declared snap-less** in `config/profiles.sh`. The
+  declaration predates WSL2's systemd support. Item 3's `HAS_SNAP` gate is correct either
+  way; if `command -v snap && sudo snap refresh` succeeds on the cruncher, the follow-up
+  is a `PROFILE_CAPS` correction.
 
 Two further rows are stale and were already fixed by earlier work; they should be
 deleted from the backlog in the same commit:
@@ -422,7 +567,11 @@ the caller gates on `[[ -n ${LINUX} ]]` only, so the split plausibly makes the s
 permanently red on the WSL2 box. Settles with `command -v snap && sudo snap refresh;
 echo rc=$?` run on the cruncher.
 
-Disposition:
+Disposition: **Addressed.** The Problem section no longer trades on "cannot fire on
+Linux" — it states that `install_git_linux` is unreachable and that `install_zsh_linux`
+is the live one, and keeps the git changes as declared dead-code hygiene with no claimed
+benefit. Item 5 was rescoped wholesale; see the Risk disposition. The snap assumption was
+addressed under Ergonomics.
 
 ### Ergonomics
 
@@ -458,7 +607,13 @@ WSL2, which was true before WSL2 supported systemd; Ubuntu 24.04 under systemd-e
 WSL2 runs snapd. Settles with `command -v snap && sudo snap refresh; echo rc=$?` on the
 cruncher. `server` stands regardless.
 
-Disposition:
+Disposition: **Addressed.** Both findings. Item 3's caller now gates on `[[ -n ${HAS_SNAP} ]]`
+with `_update_skip "snap" "not applicable"` on the else arm, and the Testing section gains
+a capability-gate case covering both branches. Item 2 gains the `quiet_which` guard on
+both Linux install functions, with the rationale stated as a precondition of making the
+install step fatal rather than as a separate improvement. The gate does not wait on the
+cruncher measurement: it is correct for `server` regardless, and the possible
+`PROFILE_CAPS` staleness is recorded as a follow-up.
 
 ### Risk
 
@@ -499,7 +654,13 @@ invocation path that actually runs somewhere on the fleet. Item 5 exists only to
 it. Settles with `crontab -l` on the Linux 7950X and the three work Macs, plus
 `grep -rn 'push-bash-coverage' .github/`.
 
-Disposition:
+Disposition: **Addressed.** Both findings, and the assumption is answered rather than
+carried: no bare invocation path exists that the pre-flight would have served, so item 5
+is rescoped away from `run-bash-coverage.sh` entirely. The fix is now `rm -f` on the badge
+plus `|| exit 1` on the child in `push-bash-coverage.sh`, and the false premise is
+recorded in the item rather than quietly deleted. The testing gap is closed by the
+`err_snap` content case; the sibling timing claim is explicitly left unpinned with its
+reason, rather than pinned by a flaky wall-clock assertion.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
