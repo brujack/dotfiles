@@ -346,6 +346,17 @@ See [`ai-config/docs/knowledge/dotfiles-bats-test-infrastructure.md`](https://gi
 
 **`env -i` subprocess strips PATH** — `setup_ansible()`'s pyenv calls need the mock placed at `${HOME}/.pyenv/bin/pyenv`, not PATH-injected. Detail and doctor-test conventions (`_DOCTOR_FAIL` vs `_DOCTOR_FAILED`, `log_warn` vs `doctor_warn`, PATH isolation): [`dotfiles-bats-test-infrastructure`](https://github.com/brujack/ai-config/blob/master/docs/knowledge/dotfiles-bats-test-infrastructure.md).
 
+### MAKEFLAGS and Stdout Partition
+
+`Makefile:1` carries `MAKEFLAGS += --no-print-directory`. GNU Make 4.0+ prints `Entering directory` / `Leaving directory` on stdout when `-C` changes directory; macOS's `/usr/bin/make` is 3.81 and does not. The directive removes that variance at the source, covering all `make` invocations in the repo without explicit per-call flags.
+
+**`MAKEFLAGS` is an exported environment variable, not a file-local Makefile directive.** Every `make` a test spawns inherits it. So any test that captures and measures `make` output must explicitly account for it — tests fall into two categories:
+
+- **Guarded:** Per-call `--no-print-directory` flag (overrides the exported `MAKEFLAGS`), for tests that care about exact output shape
+- **Measuring:** `env -u MAKEFLAGS` prefix (strips the inherited directive), for tests that measure baseline behavior or verify the directive works
+
+Both categories must exist in the test suite. A test capturing `make` output without guarding or measuring it gets the environment's `MAKEFLAGS`, so it is measuring the environment rather than the Makefile.
+
 ## Committing Work
 
 Invoke `caveman:caveman-commit` skill to generate the commit message before running `git commit`. Full format and rules in `~/.claude/CLAUDE.md`.
@@ -371,6 +382,8 @@ Invoke `caveman:caveman-commit` skill to generate the commit message before runn
 - **A global/system `core.hooksPath` pin redirects every repo's hooks at once:** `git rev-parse --git-path hooks` honors `core.hooksPath`, so a single global/system pin redirects **every** repo's hooks directory, not just one. The sweep therefore folds the resulting per-repo "no hooks directory" gaps into one aggregated line attributed to the pin, rather than reporting each repo as individually broken with an `install-hooks` remedy that cannot fix it. An **empty or whitespace-only** value is a real pin, not an absent one: `git config --get` reports it as rc 0 with empty stdout, and git honors it — it disables every hook on the machine. Both the doctor check and the sweep summary render it as `(empty)`. `tests/setup_env/git_hooks.bats`'s `setup()` must neutralize `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM`, because the sweep now reads them — without it the suite fails on any machine that actually has a pin, and since `scripts/pre-push` runs `make test`, that developer cannot push.
 
 - **The pin probe must read `--includes`, and the remedy must name the origin file:** `git config --<scope> --get` defaults to `--no-includes`, but git's own hook resolution traverses includes. A pin reached through an `[include]` therefore answered rc 1 with **empty stderr** — byte-identical to a genuinely unset key — while `rev-parse --git-path hooks` returned the pinned path and every repo on the box was silently redirected; both surfaces rendered `[PASS] <scope>: unset` over a live machine-wide redirect. `_git_hooks_hookspath_offenders` now re-reads any apparently-clean scope with `git config --<scope> --includes -z --show-origin --get`. `-z` is required rather than the default tab-separated `--show-origin` format (the value may be empty or whitespace-only, and NUL is the only delimiter git will not also emit inside a value), and because command substitution silently drops NUL bytes the pair must be consumed with `read -d ''` off a process substitution, never `$(...)`. The remedy differs by origin: a scope-level `--unset` **cannot** clear a key held in an included file — it exits 5 and the pin survives — so the function emits `git config --file <origin> --unset core.hooksPath` for that case and keeps the scope form only for a key in the scope's own file. Output contract is `scope<TAB>remedy<TAB>value`, with value last so a tab inside a pinned path cannot truncate the command the operator is told to run. Remaining limit: a conditional `includeIf "gitdir:…"` is visible only when git evaluates it from a matching directory, and the probe runs once per sweep rather than once per discovered repo.
+
+- **Homebrew `make` gnubin prepend:** `.config/.zshrc.d/6_path.zsh` prepends the Homebrew `make` formula's `gnubin` directory on macOS, so plain `make` resolves to GNU 4.x instead of `/usr/bin/make` 3.81. **It must be a prepend, not `path+=`.** This file's existing idiom is append-via-`+=`, which leaves `/usr/bin` ahead of anything it adds — an append here would be completely inert and would still look correct to a reader. Both Homebrew prefixes are tested for existence (ARM at `/opt/homebrew/opt/make/libexec/gnubin` and Intel at `/usr/local/opt/make/libexec/gnubin`); the invocation never calls `brew --prefix` because this same file is what puts `/opt/homebrew/bin` on `PATH`, so `brew` is not guaranteed resolvable at that point.
 
 ## Local-Only State
 
