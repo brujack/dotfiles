@@ -378,3 +378,139 @@ deleted from the backlog in the same commit:
 - Coverage denominator: heredoc bodies still inflate it — closed by the heredoc
   exclusion at `scripts/run-bash-coverage.sh:212`, which handles `<<` and `<<-` in any
   quoting for any interpreter.
+
+## Multi-Lens Review
+
+Reviewed at commit: `5ff3cdbc328915d275fa5b114b6e50dde869880e` (Step 7 self-review commit,
+before Step 8 dispatch)
+
+Round 1. Every command cited by a lens below was independently re-run by the main
+session before the finding was recorded; where the main session's re-run went further
+than the lens claimed, that extension is marked.
+
+### Goal-Fit
+
+Finding: Two of the six items change no production outcome, and the strongest item is
+buried under them.
+
+Item 2's git half is unreachable. `install_git || return 1` sits inside
+`if [[ -n ${MACOS} ]]` at `lib/workflows.sh:125`, and `install_git_linux` has no other
+production caller. The spec's framing — "cannot fire on Linux" — is true but understates
+it: the call never happens on Linux at all, so neither the added guard nor the
+`dist-upgrade` deletion changes any decision there. `install_zsh_linux` by contrast is
+live (`workflows.sh:133`, gated `[[ ${MACOS} || ${UBUNTU} ]]`), and its unrequested
+non-interactive `apt dist-upgrade -y` on every `setup_user` is the highest-value change
+in the document — presented as a footnote to an error-handling cluster rather than as
+the scope defect it is.
+
+Item 5 targets a path that is already guarded. The spec asserts the Makefile's
+`$(error $(BATS_MISSING))` guards do not cover the cron path because
+`push-bash-coverage.sh` invokes the coverage script directly. The crontab entry is
+`make push-bash-coverage`, and `Makefile:114-118` carries the guard. Verified: 78 lines
+in `~/.dotfiles-coverage.log`, all of them that guard firing, zero successful runs ever;
+`BATS := $(shell command -v bats)` evaluates under cron's PATH, which lacks
+`/opt/homebrew/bin`. The proposed pre-flight uses the identical probe inside the script
+and would fail identically, on a path cron never reaches.
+
+Main-session extension: every commit on `origin/coverage-data` since inception is
+`github-actions[bot]`, and `ci.yml:167-178` pushes the badge on every PR. The badge is
+current. The cron entry is therefore both dead and redundant with CI.
+
+Assumption: that `update_snap_packages` returning non-zero on a snap-less host is
+acceptable. `sudo snap refresh` at `lib/linux_shared.sh:38` has no `HAS_SNAP` guard and
+the caller gates on `[[ -n ${LINUX} ]]` only, so the split plausibly makes the snap row
+permanently red on the WSL2 box. Settles with `command -v snap && sudo snap refresh;
+echo rc=$?` run on the cruncher.
+
+Disposition:
+
+### Ergonomics
+
+Finding: The update split turns the snap row permanently red on every Linux machine
+whose profile lacks `snap`, and the repo's own capability model says two profiles do.
+
+`sudo snap refresh` at `lib/linux_shared.sh:38` is the only ungated snap call in the
+repo — the six others in `lib/linux_ubuntu.sh` (39, 177, 379, 401, 413, 421) all test
+`HAS_SNAP`. `PROFILE_CAPS` omits snap from both `wsl2_workstation` and `server`. Today
+the omission is harmless precisely because of the bug this spec fixes: the trailing
+`log_info` swallows the failure. After the split, `-t update` on the cruncher prints
+`[FAIL] snap` on every run, forever, over a subsystem that does not exist there — the
+same anti-pattern item 3's own rationale argues against, reintroduced through the gate
+rather than the exit code. The fix is one conditional using machinery already present:
+`_update_skip "snap" "not applicable"` under `[[ -n ${HAS_SNAP} ]]`, matching the
+non-Linux arm two lines below.
+
+Second finding: `install_zsh_linux` has no already-installed guard, so the newly-fatal
+`apt install` runs on every `setup_user`. `install_bats_linux:24` opens with
+`quiet_which bats && return 0`; `install_zsh_linux:14` and `install_git_linux:4` do not.
+`run_setup_user` calls `install_zsh || return 1` at `workflows.sh:133`, before
+`clone_or_update_dotfiles`, `setup_ai_config`, and `setup_dotfile_symlinks`. A transient
+`apt install zsh zsh-doc` failure — a dpkg lock held by `unattended-upgrades`, the normal
+state of a freshly-booted Ubuntu box — now aborts the entire run having done nothing,
+over a package that was already installed. The spec's tiering weighs this trade for
+`apt update` and `add-apt-repository` and gets it right; it never asks whether the
+install step needs to run at all.
+
+Assumption: that `sudo snap refresh` actually exits non-zero on the snap-less profiles —
+i.e. that `PROFILE_CAPS` reflects a live fact rather than a stale declaration.
+`wsl2_workstation` was declared snap-less on the reasoning that snap is unavailable in
+WSL2, which was true before WSL2 supported systemd; Ubuntu 24.04 under systemd-enabled
+WSL2 runs snapd. Settles with `command -v snap && sudo snap refresh; echo rc=$?` on the
+cruncher. `server` stands regardless.
+
+Disposition:
+
+### Risk
+
+Finding: Item 5 adds a fifth `exit 1` into a caller that discards all of them, while the
+real defect on that path — a stale badge republished after a failed measurement — goes
+unaddressed.
+
+`scripts/push-bash-coverage.sh:25` invokes the coverage script **unchecked**, then line
+26 reads `coverage/bash.json`. `run-bash-coverage.sh`'s cleanup at lines 707 and 746
+clears `TRACE_FILE` and `TRACE_FIFO` only, never the badge JSON. So a stale badge
+survives every failed run: the script prints its error, exits non-zero, and the caller
+proceeds to read, commit and push the previous run's figure at exit 0. Seven `exit 1`
+sites already exist in `run-bash-coverage.sh` (105, 493, 602, 757, 761, 788, 805),
+including the red-suite check and two untrustworthy-denominator paths; the caller
+discards every one. The spec adds an eighth under the claim that it "exits non-zero so a
+scheduled run alerts rather than silently doing nothing." That is `behavior.md`'s
+guard-whose-verdict-arrives-too-late: the verdict is real, and nothing reads it.
+
+This also inverts the cron finding above. Fixing the cron PATH without fixing the
+unchecked child would not restore the badge job — it would ship a badge that lies, on a
+schedule. The one-line fix is `|| exit 1` on the child in `push-bash-coverage.sh`, plus
+removing the badge before the run so a stale file cannot be mistaken for a fresh one.
+
+Second finding, testing gap: item 3 claims two improvements from deleting
+`cp err_apt err_snap` — snap gets its own captured output, and per-section timing
+becomes accurate — and the Testing section pins neither. Implement the split with
+`err_snap` written empty and every listed acceptance criterion still passes. One case
+should assert `err_snap` contains snap output and not apt's.
+
+Explicitly not raised: the `dist-upgrade` deletion (the spec names its own risk, `apt
+install` resolves its own deps, and the operation remains available via `-t update` —
+recoverable, not one-way); `check_and_install_nala` under `|| return 1`, which returns 0
+on the non-Ubuntu fall-through and so introduces no new abort; the dispatcher `else`
+arms, unreachable as stated.
+
+Assumption: that a bare `bash scripts/push-bash-coverage.sh` bypassing `make` is an
+invocation path that actually runs somewhere on the fleet. Item 5 exists only to cover
+it. Settles with `crontab -l` on the Linux 7950X and the three work Macs, plus
+`grep -rn 'push-bash-coverage' .github/`.
+
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison design, no judge or evaluator component, and its acceptance
+criteria are concrete commands with numeric thresholds.
+
+### Verdict-count check
+
+All three lenses ran it. Acceptance is three PASS-shaped comparisons (`make test` green,
+`make lint` exit 0, coverage at or above 91 percent) plus the per-guard mutation-revert
+check, which is a genuine falsifier. The gnubin case's two non-empty assertions are
+correctly load-bearing. Two lenses judged the suite not PASS-dominated in the
+pathological sense; the Risk lens identified the one real gap, recorded above as its
+second finding — the `err_snap` content claim that no criterion pins.
