@@ -139,6 +139,9 @@ Ideas approved for future specs, in no particular order:
 
 ---
 
+| gnubin prefix pair is duplicated across two languages with only a comment binding them | `lib/macos.sh:171-172` (bash) and `.config/.zshrc.d/6_path.zsh:41-42` (zsh) both hardcode `/opt/homebrew/opt/make/libexec/gnubin` and `/usr/local/opt/make/libexec/gnubin`. A shared constant is unavailable — one is a bash lib, the other a zsh file sourced at interactive shell start — so the only thing keeping them in step is a comment saying so. If they drift, the install guard and the PATH consumer disagree, which is exactly the defect fixed in `91769f3` one level up: the guard reports "already installed" while `make` stays 3.81. Fix is a ~6-line bats test asserting both files carry the same two literals. Found by `maintainability-review` during dotfiles#214; not fixed there because adding it would have voided the gate chain a second time. |
+| `_ledger_write_run_entry` is 131 lines, past the Google guide's 100-line rewrite signal | Was already over at 103 lines before dotfiles#214, which grew it to 131 (+27%) by adding the `make_version` fragment. Nothing mechanical blocks it — `shell.md` records that the function-length scanner was deleted under ADR-0056 and `jscpd` was never installed, so `maintainability-review` on a shell-only diff examines nothing. Extraction candidate: the base-JSON assembly, the run-type-specific block, and the OS/version probing are three separable concerns. Deliberately not fixed in #214 — refactoring an already-oversized function inside a PR about something else is the scope creep `behavior.md` names. |
+
 ## Adding a new entry
 
 When a new spec or plan is created, add a row to the All Plans table. Set status to **In Progress** when implementation starts, **Done** when the PR merges. Also add a `> **Status: DONE**` banner at the top of the plan file once complete. Move backlog items to the All Plans table when their spec is written (remove the backlog row).
