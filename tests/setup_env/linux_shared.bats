@@ -186,6 +186,10 @@ EOF
   unset MOCK_DPKG_STATUS_zsh MOCK_DPKG_STATUS_zsh_doc
   run install_zsh_linux
   [ "$status" -eq 0 ]
+  # Pin the install path as the reason dist-upgrade is absent. Without this,
+  # the guard short-circuiting produces the same absence and the assertion
+  # passes while proving nothing -- confirmed by mutation.
+  grep -q "apt install zsh zsh-doc" "${MOCK_CALLS_FILE}"
   refute_grep "dist-upgrade" "${MOCK_CALLS_FILE}"
 }
 
@@ -246,5 +250,8 @@ EOF
   unset MOCK_DPKG_STATUS_git
   run install_git_linux
   [ "$status" -eq 0 ]
+  # See the zsh sibling: the install path must be pinned, or a short-circuiting
+  # guard satisfies the absence assertion on its own.
+  grep -q "apt install git" "${MOCK_CALLS_FILE}"
   refute_grep "dist-upgrade" "${MOCK_CALLS_FILE}"
 }
