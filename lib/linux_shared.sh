@@ -50,13 +50,27 @@ install_bats_linux() {
   sudo -H apt-get install -y bats
 }
 
-update_system_packages() {
-  sudo -H apt update
-  check_and_install_nala
-  sudo -H nala full-upgrade -y
-  sudo -H nala autoremove -y
-  sudo snap refresh
+update_apt_packages() {
+  sudo -H apt update || { log_error "apt update failed"; return 1; }
+  check_and_install_nala || { log_error "nala install failed"; return 1; }
+  sudo -H nala full-upgrade -y || { log_error "nala full-upgrade failed"; return 1; }
+  sudo -H nala autoremove -y || { log_error "nala autoremove failed"; return 1; }
+  log_info "Updated apt packages"
+}
+
+update_snap_packages() {
+  sudo snap refresh || { log_error "snap refresh failed"; return 1; }
   log_info "Updated snap packages"
+}
+
+# Wrapper retained so existing callers/tests that invoke the combined
+# operation keep working. Runs both halves unconditionally — snap should
+# still refresh even when apt fails — and reports failure if either did.
+update_system_packages() {
+  local _rc=0
+  update_apt_packages || _rc=1
+  update_snap_packages || _rc=1
+  return "${_rc}"
 }
 
 [[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0

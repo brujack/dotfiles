@@ -446,12 +446,16 @@ run_update() {
   if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_PKGS:-} ]]; then
     if [[ -n ${LINUX} ]]; then
       _update_record_start "apt"
-      _update_record_start "snap"
-      update_system_packages 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_apt"
-      local _pkg_ec="${PIPESTATUS[0]}"
-      cp "${_DOTFILES_RUN_TMPDIR}/err_apt" "${_DOTFILES_RUN_TMPDIR}/err_snap" 2>/dev/null || true
-      _update_record_end "apt"  "${_pkg_ec}"
-      _update_record_end "snap" "${_pkg_ec}"
+      update_apt_packages 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_apt"
+      _update_record_end "apt" "${PIPESTATUS[0]}"
+
+      if command -v snap > /dev/null 2>&1; then
+        _update_record_start "snap"
+        update_snap_packages 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_snap"
+        _update_record_end "snap" "${PIPESTATUS[0]}"
+      else
+        _update_skip "snap" "snap not installed on this host"
+      fi
     else
       _update_skip "apt"  "not applicable"
       _update_skip "snap" "not applicable"

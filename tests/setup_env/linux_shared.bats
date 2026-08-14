@@ -48,6 +48,58 @@ EOF
   grep -q "nala full-upgrade" "${MOCK_CALLS_FILE}"
 }
 
+@test "update_system_packages: runs snap even when apt fails" {
+  export UBUNTU=1
+  export MOCK_APT_EXIT=1
+  run update_system_packages
+  [ "$status" -eq 1 ]
+  grep -q "snap refresh" "${MOCK_CALLS_FILE}"
+}
+
+# ── update_apt_packages ──────────────────────────────────────────────────────
+
+@test "update_apt_packages: propagates a failing apt update" {
+  export UBUNTU=1
+  export MOCK_APT_EXIT=1
+  run update_apt_packages
+  [ "$status" -eq 1 ]
+  [[ "$output" != *"Updated apt packages"* ]]
+}
+
+@test "update_apt_packages: propagates a failing nala full-upgrade" {
+  export UBUNTU=1
+  export MOCK_NALA_EXIT=1
+  run update_apt_packages
+  [ "$status" -eq 1 ]
+  [[ "$output" != *"Updated apt packages"* ]]
+}
+
+@test "update_apt_packages: succeeds and does not call snap" {
+  export UBUNTU=1
+  run update_apt_packages
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Updated apt packages"* ]]
+  refute_grep "snap" "${MOCK_CALLS_FILE}"
+}
+
+# ── update_snap_packages ─────────────────────────────────────────────────────
+
+@test "update_snap_packages: propagates a failing snap refresh" {
+  export UBUNTU=1
+  export MOCK_SNAP_EXIT=1
+  run update_snap_packages
+  [ "$status" -eq 1 ]
+  [[ "$output" != *"Updated snap packages"* ]]
+}
+
+@test "update_snap_packages: succeeds and does not call apt" {
+  export UBUNTU=1
+  run update_snap_packages
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Updated snap packages"* ]]
+  refute_grep "apt " "${MOCK_CALLS_FILE}"
+}
+
 # ── shared dpkg-query mock — legacy list form ───────────────────────────────
 # lib/package_capture.sh's _list_apt_packages calls `dpkg-query -W -f
 # '${Package}\t${Version}\n'` with -f and its format string as SEPARATE

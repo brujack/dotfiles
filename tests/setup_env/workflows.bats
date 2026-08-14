@@ -1099,6 +1099,99 @@ setup_constants_copy() {
   grep -q "dpkg-query" "${MOCK_CALLS_FILE}"
 }
 
+@test "update_apt_packages: apt row fails independently of snap" {
+  unset MACOS
+  export LINUX=1
+  export UBUNTU=1
+  export NOBLE=1
+  export UPDATE_PKGS=1
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
+  export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
+  export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
+  export MOCK_APT_EXIT=1
+  run_update
+  grep -q "FAIL" "${_DOTFILES_RUN_TMPDIR}/status_apt"
+  grep -q "OK" "${_DOTFILES_RUN_TMPDIR}/status_snap"
+}
+
+@test "update_snap_packages: snap row fails independently of apt" {
+  unset MACOS
+  export LINUX=1
+  export UBUNTU=1
+  export NOBLE=1
+  export UPDATE_PKGS=1
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
+  export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
+  export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
+  export MOCK_SNAP_EXIT=1
+  run_update
+  grep -q "OK" "${_DOTFILES_RUN_TMPDIR}/status_apt"
+  grep -q "FAIL" "${_DOTFILES_RUN_TMPDIR}/status_snap"
+}
+
+@test "update_snap_packages: skipped when snap is absent from PATH" {
+  unset MACOS
+  export LINUX=1
+  export UBUNTU=1
+  export NOBLE=1
+  export UPDATE_PKGS=1
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
+  export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
+  export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
+
+  # Remove only the `snap` binary from PATH, not the mocks directory it
+  # lives in. load_mocks prepends tests/mocks, and every OTHER mock (git,
+  # dpkg-query, apt, ledger, ...) must stay reachable — stripping the
+  # whole directory falls production code through to the REAL binaries.
+  # Shadow tests/mocks with a copy missing only `snap`, and separately
+  # strip any other PATH entry that resolves a real `snap` (present on
+  # some CI runner images), so the absence is genuine rather than an
+  # artifact of mock ordering.
+  local _mockdir _clean_path _old_path _dir
+  _mockdir="$(mktemp -d "${BATS_TEST_TMPDIR}/mocks.XXXXXX")"
+  cp -R "${REPO_ROOT}/tests/mocks/." "${_mockdir}/"
+  rm -f "${_mockdir}/snap"
+  _clean_path="${_mockdir}"
+  while IFS= read -r _dir; do
+    [[ -z "${_dir}" ]] && continue
+    case "${_dir}" in */tests/mocks) continue ;; esac
+    [[ -x "${_dir}/snap" ]] && continue
+    _clean_path="${_clean_path}:${_dir}"
+  done < <(printf '%s' "${PATH}" | tr ':' '\n')
+  _old_path="${PATH}"
+  export PATH="${_clean_path}"
+
+  # Confirm the substitution actually isolates before trusting it — the
+  # mock copy's git must be what resolves, and snap must be gone.
+  [[ "$(command -v git)" == "${_mockdir}/git" ]]
+  run command -v snap
+  [ "${status}" -ne 0 ]
+
+  run_update
+
+  export PATH="${_old_path}"
+  grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_snap"
+  grep -q "snap not installed on this host" "${_DOTFILES_RUN_TMPDIR}/result_snap"
+  refute_grep "snap refresh" "${MOCK_CALLS_FILE}"
+  [ ! -d "${HOME}/.local/share/state-ledger/.git" ]
+}
+
+@test "update path: err_snap captures only snap output" {
+  unset MACOS
+  export LINUX=1
+  export UBUNTU=1
+  export NOBLE=1
+  export UPDATE_PKGS=1
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
+  export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
+  export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
+  run_update
+  grep -q "Updated apt packages" "${_DOTFILES_RUN_TMPDIR}/err_apt"
+  grep -q "Updated snap packages" "${_DOTFILES_RUN_TMPDIR}/err_snap"
+  refute_grep "Updated apt packages" "${_DOTFILES_RUN_TMPDIR}/err_snap"
+  refute_grep "Updated snap packages" "${_DOTFILES_RUN_TMPDIR}/err_apt"
+}
+
 @test "run_update does not call update_system_packages from mas block on Linux" {
   unset MACOS
   export LINUX=1
