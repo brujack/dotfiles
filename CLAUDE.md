@@ -205,7 +205,7 @@ Uses **BATS** (Bash Automated Testing System), installed natively:
 
 **Run tests:** `make test` (runs lint then all BATS tests)
 **Run unit tests only:** `make test-unit` (runs `unit.bats`, `profiles.bats`, and `zshrc.d/unit.bats`)
-**Run lint only:** `make lint` — `bash -n` over `SHELL_FILES` (36 tracked `.sh`/`.bash` files plus the two extensionless hooks `scripts/pre-push` and `scripts/commit-msg`), `zsh -n` over `ZSH_FILES` (the 10 tracked `.zsh`/`.zsh-theme`/`.zshrc`/`.zprofile` files), then shellcheck at default severity for `SHELL_FILES` and `--severity=warning` for `.bats`. Both `SHELL_FILES` and `ZSH_FILES` are derived from `git ls-files` and each refuses to report a pass on an empty list.
+**Run lint only:** `make lint` — `bash -n` over `SHELL_FILES` (35 tracked shell files: 33 `.sh`/`.bash` plus the two extensionless hooks `scripts/pre-push` and `scripts/commit-msg`), `zsh -n` over `ZSH_FILES` (the 10 tracked `.zsh`/`.zsh-theme`/`.zshrc`/`.zprofile` files), then shellcheck at default severity for `SHELL_FILES` and `--severity=warning` for `.bats`. Both `SHELL_FILES` and `ZSH_FILES` are derived from `git ls-files` and each refuses to report a pass on an empty list.
 **Install hooks:** `make install-hooks` (installs pre-commit and pre-push hooks; run once per checkout)
 **Sync agent guidance:** `make sync-agent-guidance` (regenerates `.cursor/rules/global-claude-standards.mdc` from root `CLAUDE.md`'s `@~/.claude/standards/*.md` imports, resolved against the global symlinked standards dir)
 **Check agent guidance drift:** `make check-agent-guidance` (fails when generated Cursor guidance is stale)
@@ -239,7 +239,9 @@ Rules for any new suppression:
 - **A bare directive before the first non-comment command in a file is file-wide**, not scoped to the next command — verified against shellcheck 0.11.0. `lib/constants.sh` and `config/profiles.sh` use that deliberately and say so; anywhere else it is a footgun, because a directive added at the top of a file to silence one line silences the rule everywhere.
 - **shellcheck rejects a directive on a `case`-arm line** (`SC1124`). It must precede the whole `case`, which means it covers every arm — state the blast radius when you write one.
 
-`make lint`'s scope comes from `git ls-files`, not a literal list and not `find`. That covers all 36 tracked shell files including the two extensionless hooks (`scripts/pre-push`, `scripts/commit-msg`) and excludes both untracked scratch files and the copies inside any linked worktree.
+`make lint`'s scope comes from `git ls-files`, not a literal list and not `find`. That covers all 35 tracked shell files including the two extensionless hooks (`scripts/pre-push`, `scripts/commit-msg`) and excludes both untracked scratch files and the copies inside any linked worktree. It was 36 until this branch deleted `scripts/push-bash-coverage.sh`.
+
+**It does not cover `tests/mocks/`.** The pathspec is `'*.sh' '*.bash'` plus two named hooks, and all 64 mocks are extensionless — so a shell file modified there is linted by nothing. Pre-existing and sized rather than guessed: `shellcheck` over all 64 finds 2 with findings. Recorded as a backlog row rather than fixed here.
 
 ### CI / GitHub Actions
 
