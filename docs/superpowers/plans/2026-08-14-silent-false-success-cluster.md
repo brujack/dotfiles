@@ -309,6 +309,19 @@ parallel_group: wave-1
 
 **The grep assertion returns 38 matches now and must return none.** Its scope excludes `docs/superpowers/specs/` and `docs/superpowers/plans/` deliberately — five historical documents reference the script and _should_ keep doing so; they record what existed when written.
 
+**Scope corrected during Phase 3: `docs/adr/` comes out too.** The gate tests for a literal
+string as a proxy for "no dangling reference to a deleted target", and those are not the same
+property. ADR-0008 records the retirement by amendment, which necessarily names the thing
+retired — a record that cannot say what it retired is not a record. The gate as first written
+would have forced the amendment to omit its own subject.
+
+Caught by breaking it: a `CLAUDE.md` coverage-denominator note written in Phase 3 named the
+deleted script and re-broke a gate that had already passed twice, which is precisely the
+cross-task collision Task 7's prompt was written to prevent. That note was reworded (it reads
+better naming the ADR anyway); the ADR mention stands. Final scope is `tests/ .github/
+Makefile CLAUDE.md docs/superpowers/README.md` — the files that would *instruct* a reader,
+not the files that *record*.
+
 **ADR-0008 loses a bullet, not its status.** The PS4-xtrace decision stands; one delivery mechanism goes away.
 
 **Interfaces:** none.
