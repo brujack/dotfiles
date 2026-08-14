@@ -28,7 +28,6 @@ Implementation:
 - `scripts/bash-tracer.sh` — installed via `BASH_ENV`; sets `PS4` to emit `BASH_SOURCE:LINENO` and redirects trace to fd 9
 - `scripts/run-bash-coverage.sh` — sets up the named pipe, runs `bats --recursive tests/`, drains and parses the trace, reports per-file and overall coverage
 - `make bash-coverage` — local measurement target
-- `make push-bash-coverage` — measurement + badge push to `coverage-data` branch
 - CI `bash-coverage` job on `ubuntu-latest` — runs `make bash-coverage`, fails if overall coverage < 90%, publishes badge JSON (floor raised to 91% by Amendment 2)
 
 The gate is **90% overall** (not per-file) — raised to 91% by Amendment 2 (2026-08-09). Per-file floors are defined in `CLAUDE.md` but not yet enforced individually in CI.

@@ -44,7 +44,7 @@ ZSH_FILES := $(shell env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_IN
 # One-shot fix leads; the durable fix (full provisioning re-run) follows.
 BATS_MISSING := bats not found. Install: brew install bats-core (macOS) or sudo apt-get install bats (Linux). Durable fix: ./setup_env.sh -t setup_user (full provisioning re-run)
 
-.PHONY: test test-python test-unit lint bash-coverage push-bash-coverage install-hooks ledger-symlink help changelog validate-plan sync-agent-guidance check-agent-guidance
+.PHONY: test test-python test-unit lint bash-coverage install-hooks ledger-symlink help changelog validate-plan sync-agent-guidance check-agent-guidance
 
 help:
 	@printf "Available targets:\n"
@@ -52,7 +52,6 @@ help:
 	@printf "  make test-unit         Run unit tests only\n"
 	@printf "  make lint              bash -n + ShellCheck over SHELL_FILES, zsh -n over ZSH_FILES\n"
 	@printf "  make bash-coverage     Measure bash line coverage via PS4 xtrace tracer\n"
-	@printf "  make push-bash-coverage  Run bash-coverage and push badge JSON to coverage-data branch\n"
 	@printf "  make install-hooks     Install pre-commit and pre-push hooks (run once per checkout)\n"
 	@printf "  make sync-agent-guidance  Regenerate .cursor/rules/global-claude-standards.mdc from CLAUDE.md\n"
 	@printf "  make check-agent-guidance Fail if the generated Cursor rule has drifted from CLAUDE.md\n"
@@ -110,12 +109,6 @@ ifndef BATS
 	$(error $(BATS_MISSING))
 endif
 	@bash scripts/run-bash-coverage.sh
-
-push-bash-coverage:
-ifndef BATS
-	$(error $(BATS_MISSING))
-endif
-	@bash scripts/push-bash-coverage.sh
 
 ledger-symlink:
 	@mkdir -p "${HOME}/.local/bin"
