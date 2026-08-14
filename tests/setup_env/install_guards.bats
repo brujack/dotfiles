@@ -320,6 +320,18 @@ _gnubin_present() {
   grep -q "brew install make" "${MOCK_CALLS_FILE}"
 }
 
+@test "gnubin prefixes match between lib/macos.sh and 6_path.zsh" {
+  local _bash_prefixes _zsh_prefixes
+  _bash_prefixes="$(grep -oE '/(opt/homebrew|usr/local)/opt/make/libexec/gnubin' \
+    "${REPO_ROOT}/lib/macos.sh" | sort -u)"
+  _zsh_prefixes="$(grep -oE '/(opt/homebrew|usr/local)/opt/make/libexec/gnubin' \
+    "${REPO_ROOT}/.config/.zshrc.d/6_path.zsh" | sort -u)"
+
+  [ -n "${_bash_prefixes}" ]
+  [ -n "${_zsh_prefixes}" ]
+  [ "${_bash_prefixes}" = "${_zsh_prefixes}" ]
+}
+
 # ── ensure_not_root ──────────────────────────────────────────────────────────
 
 @test "ensure_not_root returns 0 when not root" {
