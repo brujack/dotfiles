@@ -183,14 +183,39 @@ way.** A round-2 draft used `quiet_which zsh`, justified as "the same idiom
   requirement unmet — "Reproduced." Proposing a `PATH` probe while citing that function
   as precedent was a self-contradiction inside one document.
 
-The same defect applies on the git side and is worth stating even though the function is
-unreachable: `quiet_which git` is true for the distro git, so the `ppa:git-core/ppa`
-step — which exists specifically to obtain a _newer_ git than the distro ships — would
-never run. `_apt_pkg_installed git` has the same limitation, since it reports whether
-git is installed and not _which_ git; that residual is accepted here because the function is dead
-code and item 4's dispatcher fix only makes it callable, not called. If a Linux caller is
-ever added, the guard needs to become a version comparison, and this paragraph is the
-note saying so.
+**The git side keeps a known-wrong guard, and the warning must ship in the code rather
+than here.** `_apt_pkg_installed git` reports whether git is installed, not _which_ git,
+so it returns true for the distro package and the `ppa:git-core/ppa` step — which exists
+specifically to obtain a version _newer_ than the distro ships — would never run. The
+residual is accepted because the function is unreachable today.
+
+But item 4 removes the barrier to reaching it: the dispatcher fix makes `install_git`
+callable from a Linux caller. So this spec accepts a known-wrong guard and, in the same
+change, makes the thing that would expose it possible. An earlier draft closed that with
+"this paragraph is the note saying so," which is a note in a spec — it reaches nobody who
+later adds that caller, since the person adding it will be reading `lib/linux_shared.sh`,
+not this file.
+
+**The implementation must therefore carry the warning at the guard site**, in the same
+commit:
+
+```bash
+install_git_linux() {
+  # This guard answers "is git installed", not "is the PPA's newer git installed" —
+  # it returns true for the distro package and skips the ppa:git-core/ppa step below.
+  # Harmless while this function is unreachable (run_setup_user calls install_git only
+  # under [[ -n ${MACOS} ]]). Adding a production Linux caller requires replacing this
+  # with a version comparison first.
+  if _apt_pkg_installed git; then
+```
+
+That is the same reasoning this item applies to `_apt_pkg_installed`'s own three-attempt
+history: the warning has to live where the edit will happen. A spec is read once, by the
+person implementing it; a comment is read by whoever touches the line next.
+
+The same limitation exists on the zsh side and does not matter there: `zsh` and `zsh-doc`
+come from the distro, with no PPA in play, so "installed" and "the right one installed"
+are the same question.
 
 **Why the install step alone fails the function.** `apt install <pkg>` is what the
 function promises. A failed PPA add means the distro package is used instead, which is
@@ -607,6 +632,23 @@ Acceptance:
   separately from the general one because each shipped in a draft of this document:
   substituting `quiet_which zsh` for `_apt_pkg_installed` must turn the partial-package
   case red, and substituting `dpkg-query -W` must turn the `rc`-state case red.
+- **Zero residual references to the deleted script:**
+
+  ```bash
+  grep -rn 'push-bash-coverage' tests/ .github/ Makefile CLAUDE.md docs/ ; test $? -eq 1
+  ```
+
+  This is an assertion, not the enumeration the Files section describes. The distinction
+  matters: `make test` going green after the deletion confirms the two `unit.bats` cases
+  were found, but it cannot confirm that a _third_ reference elsewhere was not missed —
+  a stale doc line, a scanner, a workflow. Enumeration found two references the first
+  pass missed; there is no reason to believe the second pass is exhaustive where the
+  first was not. A grep returning nothing fails on exactly what enumeration can overlook.
+
+  The `docs/` arm will match this spec's own item 5 discussion, which is expected — scope
+  the grep to exclude `docs/superpowers/specs/` or read the hits rather than trusting the
+  exit code blindly. Stated because an assertion that always fires is one a reader learns
+  to skip.
 
 ## Files
 
@@ -1044,11 +1086,45 @@ does, and says so.
 
 Round 3's findings sat entirely in text rounds 1 and 2 had not read, so the skill's
 stopping signal has still not strictly fired. Stopping anyway, for a reason the signal
-does not capture: **the three defect classes this review found are now each pinned by a
-named mutation check** rather than by prose. A fourth round would review the round-3
-corrections, which are (a) a helper whose failure mode is now covered by two tests that go
-red on the exact substitutions that failed before, (b) two lines added to a deletion list
-that was verified by enumeration, and (c) a deleted sentence. The residual risk has moved
-from the design into the implementation, which is where Phase 2's iterate-until-green loop
-and Phase 3's gate chain are the right instruments — not a fourth lens round over the same
-883 lines.
+does not capture: **two of the three defect classes this review found are pinned by a named
+mutation check, and the third by an assertion added at operator review** rather than by
+prose. A fourth round would review the round-3 corrections, which are (a) a helper whose
+failure mode is covered by two tests that go red on the exact substitutions that failed
+before, (b) two lines added to a deletion list, and (c) a deleted sentence. The residual
+risk has moved from the design into the implementation, which is where Phase 2's
+iterate-until-green loop and Phase 3's gate chain are the right instruments — not a fourth
+lens round over the same document.
+
+An earlier version of this paragraph said all three classes were pinned by mutation checks.
+That was wrong about item 5, whose deletion arithmetic was pinned by enumeration, and the
+correction is recorded in the operator-review section below rather than silently applied —
+a stopping argument that overstates its own coverage is the same defect class as everything
+else in this document.
+
+---
+
+## Operator review (Step 9)
+
+Two findings, both accepted, both closing the same gap in different places: a warning
+recorded only in this document reaches nobody at the moment it matters.
+
+**1. Item 2's accepted residual had no trigger.** The spec knowingly accepts a guard that
+cannot distinguish distro git from PPA git, on the grounds that the function is dead —
+while item 4, in the same change, removes the barrier to it being called. The mitigation
+was a sentence in this file. It is now a required comment at the guard site in
+`lib/linux_shared.sh`, because whoever later adds a Linux caller will be reading that file
+and not this one. Same reasoning the spec already applies to `_apt_pkg_installed`'s own
+three-attempt history: the warning has to live where the edit happens.
+
+**2. The stopping argument overclaimed on one of three classes.** "Each pinned by a named
+mutation check" was true for the `quiet_which` and `dpkg-query -W` substitutions and false
+for item 5's deletion arithmetic, which was pinned by enumeration. `make test` going green
+after the deletion proves the two `unit.bats` cases were found; it proves nothing about a
+third reference elsewhere — and enumeration had already missed two on its first pass, so
+there is no basis for trusting the second pass to be exhaustive. Verification now carries a
+`grep`-returns-nothing assertion, which fails on exactly what enumeration can overlook.
+
+Both changes are additive hardening rather than design corrections — a required code
+comment and a new assertion — so no lens re-run was triggered. Recorded here rather than
+decided silently, because the standing rule is that "Addressed" prompts a re-review and
+this is a judged exception to it.
