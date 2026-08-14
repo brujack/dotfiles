@@ -48,6 +48,45 @@ EOF
   grep -q "nala full-upgrade" "${MOCK_CALLS_FILE}"
 }
 
+@test "update_system_packages: skips snap when snap is absent from PATH" {
+  export UBUNTU=1
+
+  # The wrapper has no production caller — run_update invokes the two halves
+  # directly. It gates on `command -v snap` anyway so both paths agree; an
+  # ungated refresh here would be the permanently-red row the split removed.
+  #
+  # Shadow tests/mocks with a copy missing only `snap`. Stripping the whole
+  # mocks directory would drop git/dpkg-query/apt too and fall production
+  # code through to the real binaries.
+  local _mockdir _clean_path _old_path _dir
+  _mockdir="$(mktemp -d "${BATS_TEST_TMPDIR}/mocks.XXXXXX")"
+  cp -R "${REPO_ROOT}/tests/mocks/." "${_mockdir}/"
+  rm -f "${_mockdir}/snap"
+  _clean_path="${_mockdir}"
+  while IFS= read -r _dir; do
+    [[ -z "${_dir}" ]] && continue
+    case "${_dir}" in */tests/mocks) continue ;; esac
+    [[ -x "${_dir}/snap" ]] && continue
+    _clean_path="${_clean_path}:${_dir}"
+  done < <(printf '%s' "${PATH}" | tr ':' '\n')
+  _old_path="${PATH}"
+  export PATH="${_clean_path}"
+
+  # Prove the isolation before trusting the result.
+  [[ "$(command -v apt)" == "${_mockdir}/apt" ]]
+  run command -v snap
+  [ "${status}" -ne 0 ]
+
+  run update_system_packages
+  export PATH="${_old_path}"
+
+  [ "$status" -eq 0 ]
+  # Pin the apt half as having run, so the snap absence is the gate firing
+  # and not the whole function short-circuiting.
+  grep -q "nala full-upgrade" "${MOCK_CALLS_FILE}"
+  refute_grep "snap refresh" "${MOCK_CALLS_FILE}"
+}
+
 @test "update_system_packages: runs snap even when apt fails" {
   export UBUNTU=1
   export MOCK_APT_EXIT=1

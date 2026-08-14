@@ -66,10 +66,21 @@ update_snap_packages() {
 # Wrapper retained so existing callers/tests that invoke the combined
 # operation keep working. Runs both halves unconditionally — snap should
 # still refresh even when apt fails — and reports failure if either did.
+#
+# It has NO production caller: run_update calls update_apt_packages and
+# update_snap_packages directly so each gets its own summary row. The snap
+# gate is duplicated here rather than left to the caller because this
+# function's name makes it the obvious entry point for a future caller, and
+# an ungated snap refresh on a host without snapd is the permanently-red
+# summary row the split was written to remove. Both paths must agree.
 update_system_packages() {
   local _rc=0
   update_apt_packages || _rc=1
-  update_snap_packages || _rc=1
+  if command -v snap > /dev/null 2>&1; then
+    update_snap_packages || _rc=1
+  else
+    log_info "snap not installed on this host — skipping snap refresh"
+  fi
   return "${_rc}"
 }
 
