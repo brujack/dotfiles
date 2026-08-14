@@ -27,13 +27,13 @@ Each row states where its number came from, because two are this repo's publishe
 and two were measured against this tree while writing the plan. Conflating those is the
 boundary error `behavior.md` names, and it happened twice while producing the spec.
 
-| quantity                               | value                   | provenance                                                                                                         |
-| -------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| quantity                               | value                | provenance                                                                                                         |
+| -------------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | `make test`                            | green, **1317 `ok`** | measured, this tree, full uncontended local run                                                                    |
-| `make test` runtime                    | ~9m34s                  | `CLAUDE.md`; consistent with the run above                                                                         |
-| bash coverage                          | 91% (3135/3415)         | **CI's figure**, from `CLAUDE.md` — not measured here. Local reads 92%; publish CI's per that file's standing rule |
-| `grep -rn push-bash-coverage <scoped>` | **38 matches**          | measured, this tree; must reach 0 (T6)                                                                             |
-| `tests/setup_env/linux_shared.bats`    | 1 test, 720 bytes       | measured, this tree — `install_git_linux`/`install_zsh_linux` have **no** coverage today                           |
+| `make test` runtime                    | ~9m34s               | `CLAUDE.md`; consistent with the run above                                                                         |
+| bash coverage                          | 91% (3135/3415)      | **CI's figure**, from `CLAUDE.md` — not measured here. Local reads 92%; publish CI's per that file's standing rule |
+| `grep -rn push-bash-coverage <scoped>` | **38 matches**       | measured, this tree; must reach 0 (T6)                                                                             |
+| `tests/setup_env/linux_shared.bats`    | 1 test, 720 bytes    | measured, this tree — `install_git_linux`/`install_zsh_linux` have **no** coverage today                           |
 
 ## Verification Planning
 
@@ -326,7 +326,9 @@ tdd: not-applicable
 acceptance:
   - cmd: 'grep -q "2026-08-14-silent-false-success-cluster" docs/superpowers/README.md'
     exit_code: 0
-  - cmd: 'grep -c "push-bash-coverage" docs/superpowers/README.md; test $? -eq 1'
+  - cmd: 'test "$(grep -cE "reports a brew failure as success|dispatcher returns 0 when no platform matches|gnubin prefix pair is duplicated|cannot see the extensionless hooks|heredoc bodies and c.rl continuations" docs/superpowers/README.md)" -eq 0'
+    exit_code: 0
+  - cmd: 'test "$(grep -cE "Dead coverage-badge crontab entry|wrongly declared snap-less|has no hostname mapping" docs/superpowers/README.md)" -eq 3'
     exit_code: 0
 max_retries: 3
 files_touched:
@@ -336,13 +338,42 @@ depends_on: [1, 2, 3, 4, 5, 6]
 
 **`tdd: not-applicable`** — index and prose only, no executable logic.
 
+**Gate revision, recorded because the original was defective.** T7's first draft gated on
+`grep -q <plan-name>` plus a `push-bash-coverage`-absent check. That is a presence gate over
+a nine-item deliverable: the first is satisfied by writing the plan row alone, and the second
+was **already satisfied by Task 6** before T7 ran. A task delivering one of nine items would
+have reported green truthfully. The gates now count: five removals must reach 0, three
+additions must reach exactly 3.
+
 **Add** a row to All Plans: date `2026-08-14`, plan link, spec link, status `Done`.
 
-**Remove these four backlog rows** (closed by this plan): `install_zsh_macos` reports a brew failure as success; `install_bats` dispatcher returns 0 when no platform matches; `push-bash-coverage.sh` misreports a missing bats as a red suite; gnubin prefix pair is duplicated across two languages.
+**Remove these five backlog rows.** Four are closed by this plan, two of those already
+partly handled — the `push-bash-coverage` row was removed by Task 6, so it is **not** in this
+list:
 
-**Remove these two stale rows** (already fixed by earlier work, verified this session): `make lint` cannot see the extensionless hooks — closed by the `git ls-files`-derived `SHELL_FILES` at `Makefile:14`; Coverage denominator heredoc bodies — closed by the exclusion at `scripts/run-bash-coverage.sh:212`.
+- `install_zsh_macos` reports a brew failure as success
+- `install_bats` dispatcher returns 0 when no platform matches
+- gnubin prefix pair is duplicated across two languages
 
-**Add three follow-up rows** from the spec: the dead `push-bash-coverage` crontab entry (operator action, machine-local); `wsl2_workstation` possibly wrongly declared snap-less, affecting six `HAS_SNAP` sites in `lib/linux_ubuntu.sh`; `PROFILE_CAPS[server]` has no hostname mapping and an unmapped host silently receives zero capabilities.
+And two are stale, already fixed by earlier work and verified this session:
+
+- `make lint` cannot see the extensionless hooks — closed by the `git ls-files`-derived `SHELL_FILES` at `Makefile:14`
+- Coverage denominator: heredoc bodies and curl continuations — closed by the exclusion at `scripts/run-bash-coverage.sh:212`
+
+**Add exactly three follow-up rows**, whose first-column titles must contain these strings
+verbatim so gate 3 can count them:
+
+| required title substring            | content                                                                                                                                                                                                                                                               |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Dead coverage-badge crontab entry` | The nightly job invokes a make target Task 6 deleted; 78 runs, zero successes, blocked by the bats guard under a cron PATH lacking `/opt/homebrew/bin`. CI has published the badge throughout. Operator action on a machine-local crontab; no repo change reaches it. |
+| `wrongly declared snap-less`        | `wsl2_workstation` in `config/profiles.sh`, declared before WSL2 supported systemd. Item 3 no longer depends on it, but six `HAS_SNAP` sites in `lib/linux_ubuntu.sh` still do. Unmeasurable remotely — that host takes no inbound SSH.                               |
+| `has no hostname mapping`           | `PROFILE_CAPS[server]` — `PROFILE_MAP` holds seven entries and none resolves to it. An unmapped host silently receives **zero** `HAS_*` capabilities rather than a default.                                                                                           |
+
+**Do not write the literal string `push-bash-coverage` anywhere in this file.** Task 6's own
+acceptance gate asserts zero occurrences of it in `README.md`, so naming the deleted script in
+the crontab follow-up row would retroactively break a gate that has already passed. Describe
+the crontab entry by what it does, not by the script's name. This is a second gate/scope
+collision in the same plan and it is called out here rather than left to be discovered.
 
 **Interfaces:** none.
 
