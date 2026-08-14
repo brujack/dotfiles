@@ -449,7 +449,7 @@ run_update() {
       update_apt_packages 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_apt"
       _update_record_end "apt" "${PIPESTATUS[0]}"
 
-      if command -v snap > /dev/null 2>&1; then
+      if _snap_available; then
         _update_record_start "snap"
         update_snap_packages 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_snap"
         _update_record_end "snap" "${PIPESTATUS[0]}"

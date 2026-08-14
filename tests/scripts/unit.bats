@@ -1777,21 +1777,32 @@ FIXTURE
   _timeout_bin="$(command -v timeout || command -v gtimeout)"
   [ -n "${_timeout_bin}" ] || skip "no timeout/gtimeout binary available on this machine"
 
-  local _clean_path="" _dir
-  while IFS= read -r _dir; do
-    [ -z "${_dir}" ] && continue
-    case "${_dir}" in
-      */tests/mocks) continue ;;
-    esac
-    [ -x "${_dir}/bats" ] && continue
-    _clean_path="${_clean_path:+${_clean_path}:}${_dir}"
-  done < <(printf "%s\n" "${PATH}" | tr ':' '\n')
+  # Two separate problems, two separate mechanisms — do not collapse them.
+  #
+  # 1. bats must be unresolvable. Use the _OVERRIDE_BATS_BIN seam, NOT a PATH
+  #    strip: on Ubuntu 24.04 (ubuntu-latest) bats is /usr/bin/bats, so removing
+  #    "the directory containing bats" removes bash, grep, sed, awk and mktemp
+  #    with it. That passed on macOS and failed in CI.
+  #
+  # 2. tests/mocks MUST come off PATH. The script derives its instrumented set
+  #    from `git ls-files`, and the mock git returns nothing — so the script
+  #    exits at an earlier "no tracked config/*.sh or lib/*.sh" guard and never
+  #    reaches the bats check. shell.md's PATH-mock pitfall: a mock shadowing a
+  #    binary production code genuinely needs.
+  local _clean_path
+  _clean_path="$(printf '%s' "${PATH}" | tr ':' '\n' | grep -v 'tests/mocks' | tr '\n' ':' | sed 's/:$//')"
 
-  run "${_timeout_bin}" 60 env PATH="${_clean_path}" bash "${REPO_ROOT}/scripts/run-bash-coverage.sh"
+  run "${_timeout_bin}" 60 env PATH="${_clean_path}" _OVERRIDE_BATS_BIN=definitely-not-a-real-binary \
+    bash "${REPO_ROOT}/scripts/run-bash-coverage.sh"
+
   [ "$status" -ne 0 ]
+  # Not 124: 124 is the timeout firing, i.e. the hang surviving. A non-zero
+  # assertion alone passes on the bug this guard exists to fix.
   [ "$status" -ne 124 ]
   [[ "$output" == *"bats not installed"* ]]
   [[ "$output" != *"refusing to compute coverage"* ]]
+  # And prove it failed at the bats guard, not at the earlier git-checkout one.
+  [[ "$output" != *"is this a git checkout"* ]]
 }
 
 @test ".osx.sh -h prints usage and exits 0 without writing any defaults" {
