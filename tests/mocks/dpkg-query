@@ -1,8 +1,29 @@
 #!/usr/bin/env bash
+# Mock dpkg-query. Supports two invocation shapes:
+#
+#   1. Legacy list form: `dpkg-query -W -f='${Package} ${Version}\n'` (no
+#      package name) — answers from the single static MOCK_DPKG_OUTPUT, as
+#      before this mock was extended.
+#   2. Per-package status form: `dpkg-query -f '${db:Status-Abbrev}' -W <pkg>`
+#      — answers per package via MOCK_DPKG_STATUS_<pkg>, e.g.
+#      MOCK_DPKG_STATUS_zsh_doc=rc. A hyphen in the package name maps to an
+#      underscore in the variable name (bash identifiers can't hold '-').
+#      An unset variable means the package is absent (prints nothing).
 printf "dpkg-query %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+
 if [[ "${MOCK_DPKG_QUERY_EXIT:-0}" -ne 0 ]]; then
   exit "${MOCK_DPKG_QUERY_EXIT}"
 fi
+
+# The per-package form always ends in a bare package name (no leading '-');
+# the legacy list form never does — its last token is a -f=... flag.
+_last="${*: -1}"
+if [[ "${_last}" != -* ]]; then
+  _var="MOCK_DPKG_STATUS_${_last//-/_}"
+  printf '%s' "${!_var}"
+  exit 0
+fi
+
 case "$1" in
   -W) printf "%s\n" "${MOCK_DPKG_OUTPUT:-}" ;;
 esac
