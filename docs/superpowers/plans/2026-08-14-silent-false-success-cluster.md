@@ -379,6 +379,82 @@ collision in the same plan and it is called out here rather than left to be disc
 
 ---
 
+### Task 9: Guard the coverage runner against an absent bats
+
+```yaml-task
+id: 9
+description: scripts/run-bash-coverage.sh hangs forever when bats is absent; add a command -v bats pre-flight so a direct invocation fails fast with a distinct message
+role: executor
+model: sonnet
+tdd: required
+acceptance:
+  - cmd: 'test "$(bats --count -f "run-bash-coverage.sh: exits non-zero when bats is absent" tests/scripts/unit.bats)" -ge 1'
+    exit_code: 0
+  - cmd: bats tests/scripts/unit.bats
+    exit_code: 0
+max_retries: 3
+files_touched:
+  - scripts/run-bash-coverage.sh
+  - tests/scripts/unit.bats
+depends_on: [6]
+```
+
+**Spliced in after Task 6's review, not present in the original plan.** Task 6's rationale
+asserted the bats misreport "sits on a path the Makefile already guards." Half of that is
+true — `make bash-coverage` guards at `Makefile:108` — and the other half is false: a direct
+`bash scripts/run-bash-coverage.sh` is unguarded, and Task 6 deleted the backlog row that
+recorded it on the reasoning that it belonged to the deleted publisher. It did not; the
+defect lives in the survivor.
+
+**The real behaviour is worse than the misreport the row described. Reproduced:**
+
+```
+$ PATH=<no-homebrew> bash scripts/run-bash-coverage.sh
+Running 1320 tests with coverage tracer...
+scripts/run-bash-coverage.sh: line 738: bats: command not found
+exit=124        # gtimeout 45s — never returns
+```
+
+It never reaches `_check_red_suite`. The background FIFO reader at `:713` blocks in `open()`
+because bats never opened the write end, so `wait "${grep_pid}"` at `:746` never returns, and
+the `rm -f` of the FIFO at `:745` does not unblock it.
+
+**Note the history before choosing a different fix.** A `command -v bats` pre-flight in this
+exact file was the original spec's item 5. Round-1 review retired it as unnecessary because
+the cron path was guarded — correct about cron, wrong about direct invocation. Round 3 then
+deleted the caller instead. The first proposal was closer to right than either correction;
+it was aimed at the wrong justification, not the wrong place.
+
+**Change:** a pre-flight before the bats invocation at `:738`.
+
+```bash
+if ! command -v bats > /dev/null 2>&1; then
+    printf "ERROR: bats not installed — cannot measure coverage (install: brew install bats-core, or apt-get install bats)\n" >&2
+    exit 1
+fi
+```
+
+Message must be distinct from `_check_red_suite`'s, so absent-tool and red-suite are
+distinguishable. Place it above the FIFO setup, not merely above line 738 — the point is to
+exit before anything opens a pipe nothing will write to.
+
+**Test — one case in `tests/scripts/unit.bats`**, named
+`run-bash-coverage.sh: exits non-zero when bats is absent`:
+
+- Invoke the script with `bats` removed from `PATH`, under a timeout.
+- Assert exit is non-zero **and not 124** — 124 is the timeout itself and would mean the hang
+  survived. This is the assertion that makes the test discriminate; an exit-non-zero check
+  alone passes on the hang.
+- Assert stderr carries the new message, not `refusing to compute coverage`.
+
+**Do not write a positive-branch test.** The bats-present path runs the entire suite under
+the tracer — minutes of work — and `unit.bats` is itself part of that suite. The negative
+branch is the whole behaviour under change.
+
+**Interfaces:** none.
+
+---
+
 ### Task 8: Aggregate verification and the three mutation checks
 
 ```yaml-task
@@ -397,7 +473,7 @@ acceptance:
 max_retries: 3
 files_touched:
   - CLAUDE.md
-depends_on: [1, 2, 3, 4, 5, 6, 7]
+depends_on: [1, 2, 3, 4, 5, 6, 7, 9]
 ```
 
 **`tdd: not-applicable`** — this task runs checks and records a measured figure; it writes no behaviour.
