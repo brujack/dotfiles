@@ -85,8 +85,13 @@ adopt tiered error handling: the step that defines the function's contract fails
 function, and preparatory steps warn and continue.
 
 ```bash
+# New helper in lib/linux_shared.sh. Per-package by construction — see below.
+_apt_pkg_installed() {
+  dpkg-query -f '${db:Status-Abbrev}' -W "${1}" 2>/dev/null | grep -q '^ii'
+}
+
 install_git_linux() {
-  if dpkg-query -W git > /dev/null 2>&1; then
+  if _apt_pkg_installed git; then
     log_info "git already installed"
     return 0
   fi
@@ -101,9 +106,12 @@ install_git_linux() {
 }
 ```
 
-`install_zsh_linux` takes the same shape, without the PPA step, and its guard must name
-**both** packages: `dpkg-query -W zsh zsh-doc`, because the function installs
-`zsh zsh-doc`.
+`install_zsh_linux` takes the same shape, without the PPA step, and its guard must cover
+**both** packages, one call each:
+
+```bash
+if _apt_pkg_installed zsh && _apt_pkg_installed zsh-doc; then
+```
 
 Three decisions are embedded here.
 
@@ -118,10 +126,43 @@ of a freshly-booted Ubuntu box, which is exactly what gets provisioned — would
 the entire run having done nothing, over a package that was already present. With the
 guard, the fatal path fires only when the package is genuinely absent.
 
-**Why the guard queries the package database and not `PATH`.** A round-2 draft of this
-spec used `quiet_which zsh` and justified it as "the same idiom `install_bats_linux` and
-`install_bats_macos` already use." That justification was wrong in three ways, and the
-correction is the reason this paragraph exists rather than a one-word substitution.
+**Why the guard queries install state, and why it took three attempts to get there.**
+This guard has now been wrong twice, each time as a narrower probe of the wrong thing:
+`PATH` presence, then package-database presence, and only now install _state_. The
+sequence is recorded because the third answer is not obviously different from the second
+by inspection, and a future reader who "simplifies" it back to `dpkg-query -W` will
+reintroduce a live defect.
+
+Measured on Ubuntu 24.04, dpkg 1.22.6, against a real `rc`-state package:
+
+```
+dpkg-query -W libnvidia-compute-560                          rc=0   <- reports INSTALLED
+dpkg-query -f '${db:Status-Abbrev}' -W ... | grep -q '^ii'   rc=1   <- correct
+command -v libnvidia-compute-560                             rc=1   <- also correct
+dpkg-query -f '${db:Status-Abbrev}\n' -W zsh <rc-pkg> | grep -q '^ii'   rc=0   <- passes wrongly
+```
+
+`-W` queries database _presence_, not install state, and both `apt remove` and
+`apt autoremove` leave `rc` (config-retained) entries behind by default. So on any box
+where `zsh` or `zsh-doc` was ever removed without `--purge`, a `-W` guard logs
+"zsh already installed" and returns 0 for a package that is not on the machine — the
+exact silent-false-success this spec exists to remove, in the one function it identifies
+as live. Note the third line above: that case is one where the rejected `PATH` probe was
+_right_ and the replacement was wrong.
+
+The fourth line is why `_apt_pkg_installed` takes one package and is called twice.
+`dpkg-query -f ... -W pkg1 pkg2` emits one record per package, so a single `grep -q '^ii'`
+succeeds when _either_ is installed — reintroducing the partial-package hole from the
+opposite direction. Two calls joined by `&&` is the only form that requires both.
+
+The idiom is not new to this repo: `lib/helpers.sh:195` already uses
+`dpkg -l nala 2>/dev/null | grep -q '^ii'` for the same purpose. It was not cited in
+either earlier draft, which is the more useful lesson than the dpkg trivia — the correct
+form was already in the file being edited.
+
+**The rejected `PATH` probe, kept because its justification was wrong in an instructive
+way.** A round-2 draft used `quiet_which zsh`, justified as "the same idiom
+`install_bats_linux` and `install_bats_macos` already use." That was wrong in three ways.
 
 - **It probes the wrong number of things.** `install_bats_linux` probes `bats` and
   installs `bats` — one binary, one package, a faithful proxy. `install_zsh_linux`
@@ -132,7 +173,9 @@ correction is the reason this paragraph exists rather than a one-word substituti
   spec exists to remove, reintroduced by its own fix.
 - **The macOS functions are not the precedent claimed.** `install_git_macos:98` and
   `install_zsh_macos:117` guard on `brew list | grep '^git$'` / `'^zsh$'` — that is
-  package-manager state, not `PATH`. `dpkg-query -W` is their actual analogue.
+  package-manager state, not `PATH`. `_apt_pkg_installed` is their actual analogue;
+  `brew list` has no `rc`-state equivalent to trip over, which is why the macOS side
+  needed no correction.
 - **This repo has already paid for the `PATH`-probe mistake once, in a function this
   spec cites twice as a model.** `install_make_macos:158-167` carries a comment
   explaining at length why probing `gmake` on `PATH` was wrong there: a MacPorts or
@@ -143,8 +186,8 @@ correction is the reason this paragraph exists rather than a one-word substituti
 The same defect applies on the git side and is worth stating even though the function is
 unreachable: `quiet_which git` is true for the distro git, so the `ppa:git-core/ppa`
 step — which exists specifically to obtain a _newer_ git than the distro ships — would
-never run. `dpkg-query -W git` has the same limitation in principle, since it cannot see
-_which_ git is installed; that residual is accepted here because the function is dead
+never run. `_apt_pkg_installed git` has the same limitation, since it reports whether
+git is installed and not _which_ git; that residual is accepted here because the function is dead
 code and item 4's dispatcher fix only makes it callable, not called. If a Linux caller is
 ever added, the guard needs to become a version comparison, and this paragraph is the
 note saying so.
@@ -271,11 +314,26 @@ The round-2 draft also justified the gate with "`server` still requires it regar
 That is false: **no hostname maps to `server`**. It is a profile with no machines, which
 is what a profile looks like after its hosts were added and never enrolled.
 
-`command -v snap` measures the mechanism. It is correct on an unmapped host, correct on
-`server` if one ever appears, and it settles the open question about `wsl2_workstation`
-without needing to answer it — that profile was declared snap-less on reasoning
-predating WSL2's systemd support, and if the cruncher does run snapd, this gate simply
-lets it refresh. No `PROFILE_CAPS` edit is required either way.
+`command -v snap` measures the machine rather than the manifest. It is correct on an
+unmapped host and correct on `server` if one ever appears.
+
+**It does not, however, "settle the `wsl2_workstation` question" — an earlier draft
+claimed that and the claim was too strong.** `command -v snap` observes the binary, which
+ships with the `snapd` package and can be present while snapd itself is inoperative. On
+such a host the gate takes the _present_ branch and the row goes red.
+
+That is accepted rather than fixed, and the distinction is worth stating because it is
+the whole basis of the gate: **snap absent is a configuration fact, snap installed but
+broken is a fault.** The first should skip silently; the second should be loud. A red row
+for a dead snapd is the gate working, not a regression — which is why the probe stays
+`command -v snap` rather than becoming a functional check like `snap version`.
+
+The cruncher's actual state remains unmeasured across three review rounds, and is now
+recorded as structurally unmeasurable from here rather than as pending: that host is
+Windows with WSL2 and accepts no inbound SSH by design. Nothing in this item depends on
+the answer. What does depend on it is the follow-up below, since six sites in
+`lib/linux_ubuntu.sh` still read `HAS_SNAP` and would be skipping real work if the
+profile declaration is stale.
 
 **The skip reason must differ from the non-Linux arm's.** `_update_skip "snap" "not
 applicable"` is already emitted for non-Linux hosts eleven lines below. Reusing that
@@ -454,12 +512,22 @@ Per `tdd.md`'s mandatory categories:
 - **Boundary** — the dispatchers with neither `MACOS` nor `LINUX` set. Also
   `install_zsh_linux`/`install_git_linux` with the package already present: rc 0, the
   "already installed" log emitted, and `apt install` **not** invoked.
-- **Partial-package boundary** — `install_zsh_linux` with `zsh` present but `zsh-doc`
-  absent must **still install**. This is the case a `PATH` probe passes wrongly, so it is
-  the case that discriminates `dpkg-query -W zsh zsh-doc` from the guard this spec
-  rejected. Mock `dpkg-query` to report `zsh` found and `zsh-doc` not found, and assert
-  `apt install` is invoked. Without this case, substituting `quiet_which zsh` back in
-  leaves the suite green.
+- **Partial-package boundary** — `install_zsh_linux` with `zsh` installed but `zsh-doc`
+  absent must **still install**. Mock `dpkg-query` to report `ii` for `zsh` and nothing
+  for `zsh-doc`; assert `apt install` is invoked.
+- **`rc`-state boundary** — `install_zsh_linux` with `zsh` in `rc` (removed, config
+  retained) must **still install**. Mock `dpkg-query` to emit `rc` for `zsh`. This is the
+  case that discriminates `_apt_pkg_installed` from `dpkg-query -W`, and it is the defect
+  that shipped in the round-2 draft, so it needs its own case rather than being folded
+  into the one above.
+
+  **`tests/mocks/dpkg-query` cannot express either case as written.** It ignores its
+  package arguments entirely and keys off a single global `MOCK_DPKG_QUERY_EXIT`, with
+  `-W` printing one static `MOCK_DPKG_OUTPUT`. Both cases require per-package answers, so
+  the mock must be extended to dispatch on `${!#}` (the package name) against a
+  per-package status map. That extension is part of this work, not a prerequisite
+  assumed to exist — no other section lists it.
+
 - **Snap-presence gate** — `-t update` on Linux with `snap` absent from `PATH` produces a
   skipped snap row reading `snap not installed on this host`, does not invoke
   `snap refresh`, and does not record a failure. With `snap` present, the row is recorded
@@ -470,6 +538,11 @@ Per `tdd.md`'s mandatory categories:
   probes the machine, so a test that sets a variable is testing a different gate than the
   one shipping — and would pass identically against the `HAS_SNAP` version this spec
   rejected, which is the whole distinction being made.
+
+  Concretely: `tests/mocks/snap` already exists and `load_mocks` prepends `tests/mocks`
+  to `PATH`, so `command -v snap` is **true by default** under the harness. The absent
+  branch must strip that specific file from `PATH` — the `_clean_path` idiom `shell.md`
+  documents for exactly this shadowing problem — not merely decline to set something.
 
 **One case must pin a derived value, not a verdict.** Item 3 claims that deleting
 `cp err_apt err_snap` gives the snap section its own captured output. Every acceptance
@@ -494,10 +567,16 @@ Existing test files needing new cases: `tests/setup_env/macos.bats`,
 `tests/setup_env/install_guards.bats`. The gnubin case is new and belongs with the
 existing make-install cases in `install_guards.bats`.
 
-`tests/scripts/push_bash_coverage.bats` is **deleted** with the script it covers. Its 11
-cases go with it; none tests behaviour that survives. This is the one place the test
-count moves down, which is why the acceptance criterion below is stated as a net figure
-rather than "strictly greater."
+`tests/scripts/push_bash_coverage.bats` is **deleted** with the script it covers — 11
+cases, none testing behaviour that survives.
+
+**Two further cases live outside that file and must be deleted with it.**
+`tests/scripts/unit.bats:665` and `:673` invoke
+`bash "${REPO_ROOT}/scripts/push-bash-coverage.sh"` directly to assert its `-h`/`--help`
+output. After the deletion they return 127 with no `Usage:` in output — **hard failures,
+not a count change**. An earlier draft of this section listed only the dedicated file and
+put the arithmetic at 11; it is 13, across two files. Grep for the script name across
+`tests/` before deleting, rather than trusting either figure.
 
 ## Verification
 
@@ -512,7 +591,7 @@ Acceptance:
 
 - `make test` green. Test count is **not** required to exceed the baseline: item 5
   deletes 11 cases along with the script they cover, so the net figure could legitimately
-  fall. State the arithmetic in the PR — cases added, 11 removed, net — rather than
+  fall. State the arithmetic in the PR — cases added, 13 removed, net — rather than
   asserting a direction. A bare "count went up" would be satisfied by adding twelve
   trivial cases, and a bare "count went down" is not by itself evidence of anything.
 - `make lint` exit 0.
@@ -524,10 +603,10 @@ Acceptance:
   `tdd.md`'s Coverage Denominators rule. If the percentage rises, confirm it rose because
   the new branches are covered and not merely because a low-coverage file left the set.
 - Each guard's mutation check goes red when the guard is reverted.
-- Substituting `quiet_which zsh` for `dpkg-query -W zsh zsh-doc` turns the
-  partial-package case red. This is the mutation check for the round-2 defect
-  specifically, and it is listed separately because that defect survived a full review
-  round.
+- Two named mutation checks for defects that each survived a full review round, listed
+  separately from the general one because each shipped in a draft of this document:
+  substituting `quiet_which zsh` for `_apt_pkg_installed` must turn the partial-package
+  case red, and substituting `dpkg-query -W` must turn the `rc`-state case red.
 
 ## Files
 
@@ -557,6 +636,9 @@ Tests:
 - `tests/setup_env/workflows.bats`
 - `tests/setup_env/install_guards.bats`
 - `tests/scripts/push_bash_coverage.bats` — **deleted** along with the script it covers.
+- `tests/scripts/unit.bats` — two `push-bash-coverage.sh` cases removed (lines 665, 673).
+- `tests/mocks/dpkg-query` — extended to answer per-package rather than from one global
+  exit variable, so the partial-package and `rc`-state cases can be written at all.
 
 Deleting a script that performs real `git push` also removes the `tdd.md` pitfall E2
 hazard an earlier draft had to design around: a test for the hardened publisher would
@@ -881,3 +963,92 @@ replaced with stated arithmetic. The coverage denominator now moves in both dire
 new branches add coverable lines, a deleted file leaves the instrumented set — so the
 criterion requires re-deriving the figure from a real run and confirming any rise is not
 merely a low-coverage file exiting the denominator.
+
+---
+
+## Multi-Lens Review — Round 3 (scoped)
+
+Reviewed at commit: `58a5131` (the round-2 revision)
+
+**Scoped deliberately: one lens (Risk), pointed only at the three items the round-2
+revision changed** — the install guard, the snap gate, and item 5's conversion to a
+deletion. Everything else was independently verified in two prior full rounds and is
+unchanged. The lens was told which sections were new and confirmed it re-read the
+unchanged items and found nothing further.
+
+Round 3 was run at all because rounds 1 and 2 both found that the previous round's
+_corrections_ carried worse defects than the text they replaced. That held a third time.
+
+### Risk (scoped)
+
+Finding 1: `dpkg-query -W` returns 0 for a removed-but-not-purged package, so the round-2
+guard was **worse than the `PATH` probe it replaced** on the one live function in the
+spec. Measured by the lens on Ubuntu 24.04 / dpkg 1.22.6 and independently re-run by the
+main session against a real `rc`-state package (`libnvidia-compute-560`): `dpkg-query -W`
+returns 0, `${db:Status-Abbrev}` + `^ii` returns 1, and `command -v` also returns 1 — the
+rejected probe was correct for this case. The combined two-package form
+`-W pkg1 pkg2 | grep -q '^ii'` also returns 0 with one `ii` and one `rc`, so the guard has
+to be per-package.
+
+Finding 2: item 5's deletion breaks `make test` via two cases the Files section did not
+list — `tests/scripts/unit.bats:665` and `:673` invoke the script directly. Deletion
+arithmetic is 13 across two files, not 11 in one, and those two are hard 127 failures
+rather than a count change. The lens enumerated the rest of the blast radius and confirmed
+it: `Makefile:47,55,114-118`, `CLAUDE.md:332`, `docs/adr/0008:31`, zero `.github/`
+references, and both `SHELL_FILES` and the coverage instrumented set are `git ls-files`-
+derived so they self-adjust.
+
+Finding 3: `command -v snap` observes the binary, not snapd, so the item's claim that the
+gate "settles the open question about `wsl2_workstation` without needing to answer it" is
+stronger than the probe earns.
+
+Two implementation notes: `tests/mocks/dpkg-query` ignores its arguments and keys off one
+global exit variable, so neither discriminating case is writable without extending it;
+and `tests/mocks/snap` already exists with `tests/mocks` prepended to `PATH`, so
+`command -v snap` is true by default under the harness.
+
+Not raised, having checked: the coverage-denominator movement is real but immaterial —
+`scripts/push-bash-coverage.sh` is 27 coverable lines of 3415, so full-coverage deletion
+moves the overall figure by roughly 0.07 points, well clear of the 91 floor.
+
+Assumption: that no Linux host running `-t update` has the `snap` binary present with
+snapd inoperative. Three rounds have now written "settles with `command -v snap && sudo
+snap refresh` on the cruncher" and none has run it.
+
+Disposition: **Addressed, findings 1 and 2 as stated; finding 3 narrowly.**
+
+Findings 1 and 2 are accepted in full. The guard becomes a per-package
+`_apt_pkg_installed` helper using `${db:Status-Abbrev}` + `^ii`, the three-attempt history
+is recorded in item 2 so nobody simplifies it back, the two `unit.bats` cases are added to
+the deletion list, the arithmetic is corrected to 13, and both mock limitations are now
+listed as work rather than assumed away. Two named mutation checks were added to
+Verification, one per shipped-draft defect.
+
+Finding 3 is addressed by **deleting the overreaching claim, not by changing the gate.**
+The observation is correct and the implied remedy is not. `command -v snap` distinguishes
+the case that should be silent — snap legitimately absent — from the case that should be
+loud: snapd installed but broken, which is a genuine fault. A red row there is the gate
+working. Switching to a functional probe such as `snap version` would suppress a real
+fault to avoid a cosmetic complaint, so the probe stands and the sentence claiming it
+settles the WSL2 question is gone.
+
+The assumption is **carried, not answered, and reclassified as unmeasurable from here.**
+The cruncher is powered on but runs Windows with WSL2 and accepts no inbound SSH by
+design, so `ssh cruncher` is refused as a matter of configuration rather than
+availability. Recording it as "pending measurement" a fourth time would be dishonest —
+nothing in this session or a future one can reach it without a human at that keyboard.
+Nothing in this spec depends on the answer; the follow-up on `PROFILE_CAPS` staleness
+does, and says so.
+
+### Stopping here
+
+Round 3's findings sat entirely in text rounds 1 and 2 had not read, so the skill's
+stopping signal has still not strictly fired. Stopping anyway, for a reason the signal
+does not capture: **the three defect classes this review found are now each pinned by a
+named mutation check** rather than by prose. A fourth round would review the round-3
+corrections, which are (a) a helper whose failure mode is now covered by two tests that go
+red on the exact substitutions that failed before, (b) two lines added to a deletion list
+that was verified by enumeration, and (c) a deleted sentence. The residual risk has moved
+from the design into the implementation, which is where Phase 2's iterate-until-green loop
+and Phase 3's gate chain are the right instruments — not a fourth lens round over the same
+883 lines.
