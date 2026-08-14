@@ -1752,6 +1752,48 @@ FIXTURE
   [[ "$output" == *"no such readable log file"* ]]
 }
 
+# Regression: with bats absent from PATH, the script used to hang forever
+# instead of failing. The FIFO reader started before the bats invocation
+# blocks in open() waiting for a write end that bats (absent) never opens, so
+# `wait "${grep_pid}"` never returns and `rm -f` of the FIFO does not unblock
+# it. A bare "exit is non-zero" assertion passes on this hang too, because a
+# timeout-killed process also reports non-zero (124) — the assertion that
+# actually discriminates is "non-zero AND NOT 124". `timeout`/`gtimeout` must
+# be resolved to a full path BEFORE PATH is stripped: it lives in the same
+# Homebrew bin as bats here, so stripping first would report "timeout: not
+# found" (127) and look like a false disproof of the hang.
+#
+# A single `command -v bats` is not enough to find every directory to strip:
+# bats-core prepends its own libexec dir (which itself ships a `bats`
+# executable, distinct from the `bin/bats` wrapper at the front of the
+# regular PATH) while it runs a suite, so a bats test's own PATH carries TWO
+# working `bats` binaries in two different directories. Stripping only the
+# first `command -v` match still leaves the script able to find bats via the
+# other one, which does not exit fast — it hangs, because that "bats" is bats
+# itself trying to run this file's own enclosing suite recursively. Strip
+# every PATH entry that contains an executable named `bats`, not just one.
+@test "run-bash-coverage.sh: exits non-zero when bats is absent" {
+  local _timeout_bin
+  _timeout_bin="$(command -v timeout || command -v gtimeout)"
+  [ -n "${_timeout_bin}" ] || skip "no timeout/gtimeout binary available on this machine"
+
+  local _clean_path="" _dir
+  while IFS= read -r _dir; do
+    [ -z "${_dir}" ] && continue
+    case "${_dir}" in
+      */tests/mocks) continue ;;
+    esac
+    [ -x "${_dir}/bats" ] && continue
+    _clean_path="${_clean_path:+${_clean_path}:}${_dir}"
+  done < <(printf "%s\n" "${PATH}" | tr ':' '\n')
+
+  run "${_timeout_bin}" 60 env PATH="${_clean_path}" bash "${REPO_ROOT}/scripts/run-bash-coverage.sh"
+  [ "$status" -ne 0 ]
+  [ "$status" -ne 124 ]
+  [[ "$output" == *"bats not installed"* ]]
+  [[ "$output" != *"refusing to compute coverage"* ]]
+}
+
 @test ".osx.sh -h prints usage and exits 0 without writing any defaults" {
   run bash "${REPO_ROOT}/scripts/.osx.sh" -h
   [ "$status" -eq 0 ]

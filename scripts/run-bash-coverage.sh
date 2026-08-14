@@ -703,6 +703,18 @@ if [[ "${1:-}" == -* && "${1:-}" != "--json" ]]; then
     exit 2
 fi
 
+# Without bats, the background FIFO reader started below blocks forever in
+# open() waiting for a write end nothing ever opens — bats never runs to open
+# it, and wait(1) on that reader below never returns, so the script hangs
+# rather than failing. Check before the FIFO exists at all so the hang can
+# never be reached. Message is deliberately distinct from _check_red_suite's
+# "refusing to compute coverage" so a reader can tell an absent tool apart
+# from a run that started and failed.
+if ! command -v bats > /dev/null 2>&1; then
+    printf "ERROR: bats not installed — cannot measure coverage (install: brew install bats-core, or apt-get install bats)\n" >&2
+    exit 1
+fi
+
 mkdir -p "${OUTPUT_DIR}"
 rm -f "${TRACE_FILE}" "${TRACE_FIFO}"
 mkfifo "${TRACE_FIFO}"
