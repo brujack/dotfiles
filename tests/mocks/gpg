@@ -2,7 +2,7 @@
 # Mock gpg for testing
 printf "gpg %s\n" "$*" >> "${MOCK_CALLS_FILE}"
 # Handle stdin
-while IFS= read -r line; do
+while IFS= read -r _; do
   :
 done
 exit 0
