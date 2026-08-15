@@ -247,7 +247,7 @@ Rules for any new suppression:
 
 `.github/workflows/ci.yml` runs on PRs to master only (the pre-push hook gates branch pushes locally):
 
-- `test` job: installs a pinned, checksum-verified shellcheck plus bats, runs `make test`, then verifies test count ≥ 840 (regression proxy; 1294 tests, CI-measured 2026-08-12)
+- `test` job: installs a pinned, checksum-verified shellcheck plus bats, runs `make test`, then verifies test count ≥ 840 (regression proxy; 1334 tests, CI-measured 2026-08-15 on `b4ced0d`)
 - `lint-macos` job: runs on `macos-latest` (advisory, not blocking auto-merge), two independent steps: `bash -n` over every `*.sh` file found via `find` (unchanged), and `zsh -n` over the 10 tracked zsh files selected via `git ls-files '*.zsh' '*.zsh-theme' '.zshrc' '.zprofile'` — this second step refuses to pass on an empty file list
 - `bash-coverage` job: measures bash line coverage via PS4 xtrace on `ubuntu-latest`; **gates at 91%** — blocks auto-merge if coverage drops below floor
 - `secret-scan` job: runs gitleaks against recent commits (advisory, not blocking auto-merge)
@@ -299,8 +299,8 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 #### Bash
 
-- **Overall: 91%** (3135/3415 commands, 1317 tests) as measured by CI on `ubuntu-latest` for `1056491` — the figure the gate actually reads. The same commit measures **92% (3148/3415)** on macOS. **The one-point gap is the stable part; the split behind it is not.** At `f2b10cd` it was 15 covered lines more and 2 coverable fewer on macOS; at `1056491` it is 13 covered more and the denominators are _identical_ (3415 both). Re-read the split every time — never carry the previous one forward. The local 92% here was written down first as an explicitly-labelled preview with "do not publish until CI measures it" attached, and CI returned 91%, exactly as the caveat predicted; that is the second time the preview discipline has paid. Publish the CI figure; treat a local number as a preview. Gated in CI at **91%** (`bash-coverage` job, blocks auto-merge on drop). A percentage without its denominator is not a coverage figure — report both.
-- **Preview for the silent-false-success cluster branch, not yet CI-confirmed: 92% (3140/3412 commands, 1333 tests) on macOS.** Do not publish it until CI measures this branch — both previous times a local number was recorded as a preview, CI came back a point lower. **The denominator moved in both directions and the net is the part worth reading:** deleting the retired coverage publisher (ADR-0008 Amendment 3) removed roughly 27 coverable lines from the `git ls-files`-derived set while the branch's new error branches added roughly 24, netting **3415 → 3412**. So the figure is flat because those two movements nearly cancelled, not because a low-coverage file left the denominator — which is the specific confusion `tdd.md`'s Coverage Denominators section warns about whenever a change both adds and removes instrumented code, and the reason the raw counts are recorded here rather than the ratio alone. Heuristic disagreements fell 17 → 15.
+- **Overall: 91%** (3138/3419 commands, 1334 tests) as measured by CI on `ubuntu-latest` for `b4ced0d` — the figure the gate actually reads. Gated in CI at **91%** (`bash-coverage` job, blocks auto-merge on drop). A percentage without its denominator is not a coverage figure — report both.
+- **The preview discipline paid a third time, and this entry is the receipt.** The prior bullet here recorded a macOS preview of **92% (3140/3412, 1333 tests)** with "do not publish it until CI measures this branch" attached. CI returned **91% (3138/3419)** — a point lower, as on both previous occasions. Publish the CI figure; treat any local number as a preview and label it as one. **The denominator is the part to re-read rather than carry forward:** the macOS preview said 3412 and CI says 3419, against a previous CI denominator of 3415. So the set moved **+4** while the branch both deleted instrumented code (the retired coverage publisher, ADR-0008 Amendment 3) and added error branches — the two nearly cancelled, which is exactly the case `tdd.md`'s Coverage Denominators section warns reads as "flat because nothing changed." Never infer the split from the ratio; the raw counts are recorded here for that reason.
 - **The instrumented set is `setup_env.sh` plus tracked `config/*.sh`, `lib/*.sh`, `scripts/*.sh` and the two extensionless hooks (`scripts/pre-push`, `scripts/commit-msg`), derived from `git ls-files` at run time, less `scripts/bash-tracer.sh`.** It was a 13-entry literal array until 2026-08-07, covering 13 of 36 tracked `.sh` files, so the previously published 91% was computed over 36% of the repo. An omitted file left the percentage unchanged rather than lowering it, which is why nothing surfaced it. The predicate is _reached by the suite_, not _lives in a particular directory_ — `lib/detect_env.sh` sources `config/profiles.sh` and `lib/git_hooks.sh` sources `config/hook_repos.sh`. Check what is measured:
   ```bash
   bash scripts/run-bash-coverage.sh --list-sources
@@ -354,6 +354,26 @@ silently asserts nothing. `tests/setup_env/install_guards.bats` calls `_gnubin_a
 `_gnubin_present` for exactly that reason. Unlike most seams here these are read
 unconditionally rather than only under test — a stray export changes real shell `PATH`,
 which grants no capability beyond setting `PATH` directly but is worth knowing.
+
+**`_OVERRIDE_BATS_BIN` (`scripts/run-bash-coverage.sh`) exists because a `PATH` strip
+cannot remove bats on the platform that matters.** The pre-flight guard resolves
+`${_OVERRIDE_BATS_BIN:-bats}` and exits 1 when it is unresolvable, deliberately **above**
+the `mkfifo`, so the FIFO-reader deadlock it prevents is unreachable rather than merely
+unlikely. Tests must drive absence through this variable, never by editing `PATH`: on
+`ubuntu-latest` bats lives in `/usr/bin` alongside bash, grep, sed and mktemp, so removing
+the directory that contains it removes the toolchain — the same "delete a directory to
+delete one binary" defect that broke three tests on this branch and is documented for
+`tests/mocks` in `shell.md`.
+
+Both halves of a seam must land in the same commit. This one shipped with the test half
+committed and the production half left uncommitted in a worktree: the override was inert
+on CI, `command -v bats` resolved the real `/usr/bin/bats`, the guard did not fire, and the
+script launched the whole suite under the tracer until the test's `timeout 60` killed it —
+a 60-second red on every run. It read as unreproducible for two hours because the local
+reproductions were shipped with `git stash create`, which snapshots the **working tree**,
+so the workstation ran with the seam and CI ran the commit without it. When reproducing a
+CI failure elsewhere, ship `git archive <the sha CI ran>`; if the tree is dirty, that is
+the finding. Fixed in `b4ced0d`.
 
 ### Mock Pattern
 
@@ -411,6 +431,31 @@ Invoke `caveman:caveman-commit` skill to generate the commit message before runn
 - **The pin probe must read `--includes`, and the remedy must name the origin file:** `git config --<scope> --get` defaults to `--no-includes`, but git's own hook resolution traverses includes. A pin reached through an `[include]` therefore answered rc 1 with **empty stderr** — byte-identical to a genuinely unset key — while `rev-parse --git-path hooks` returned the pinned path and every repo on the box was silently redirected; both surfaces rendered `[PASS] <scope>: unset` over a live machine-wide redirect. `_git_hooks_hookspath_offenders` now re-reads any apparently-clean scope with `git config --<scope> --includes -z --show-origin --get`. `-z` is required rather than the default tab-separated `--show-origin` format (the value may be empty or whitespace-only, and NUL is the only delimiter git will not also emit inside a value), and because command substitution silently drops NUL bytes the pair must be consumed with `read -d ''` off a process substitution, never `$(...)`. The remedy differs by origin: a scope-level `--unset` **cannot** clear a key held in an included file — it exits 5 and the pin survives — so the function emits `git config --file <origin> --unset core.hooksPath` for that case and keeps the scope form only for a key in the scope's own file. Output contract is `scope<TAB>remedy<TAB>value`, with value last so a tab inside a pinned path cannot truncate the command the operator is told to run. Remaining limit: a conditional `includeIf "gitdir:…"` is visible only when git evaluates it from a matching directory, and the probe runs once per sweep rather than once per discovered repo.
 
 - **Homebrew `make` gnubin prepend:** `.config/.zshrc.d/6_path.zsh` prepends the Homebrew `make` formula's `gnubin` directory on macOS, so plain `make` resolves to GNU 4.x instead of `/usr/bin/make` 3.81. **It must be a prepend, not `path+=`.** This file's existing idiom is append-via-`+=`, which leaves `/usr/bin` ahead of anything it adds — an append here would be completely inert and would still look correct to a reader. Both Homebrew prefixes are tested for existence (ARM at `/opt/homebrew/opt/make/libexec/gnubin` and Intel at `/usr/local/opt/make/libexec/gnubin`); the invocation never calls `brew --prefix` because this same file is what puts `/opt/homebrew/bin` on `PATH`, so `brew` is not guaranteed resolvable at that point.
+
+- **`setup_env.sh` cannot run non-interactively on the Linux workstation, and the cause is
+  the bullet above generalised.** `6_path.zsh` also appends `/home/linuxbrew/.linuxbrew/bin`
+  on Linux, and that file is sourced by **interactive zsh only**. `setup_env.sh` gates every
+  workflow on `env which brew` (`setup_env.sh:30`), so the entry point resolves `brew` for a
+  human at a prompt and not for anything else. Measured 2026-08-14 on the 7950X, which has
+  had Homebrew 6.0.17 installed since 2024-12-27:
+
+  ```
+  non-interactive bash : ABSENT
+  interactive zsh      : /home/linuxbrew/.linuxbrew/bin/brew
+  ```
+
+  A non-interactive invocation dies in seconds with `[ERROR] Homebrew not found. On Linux,
+run first: ./scripts/bootstrap_linux.sh` — advice that is wrong, because bootstrap already
+  ran nineteen months ago. **No cron job, git hook, CI runner, or agent session can run this
+  script on that machine**, which bounds anything that would automate through it. Workaround
+  for a non-interactive caller is to prepend the prefix explicitly rather than to re-bootstrap:
+  `PATH="/home/linuxbrew/.linuxbrew/bin:${PATH}" ./setup_env.sh -t developer`.
+
+  The macOS bullet above and this one are the same defect at two severities — there it
+  answers wrong for one tool's version, here it refuses the entry point outright — so treat a
+  tool path placed in an interactive-only rc file as gating whichever actor sources that file,
+  not as a machine-wide fact. `behavior.md`'s actor-boundary rule states the general form:
+  **who runs this in production, and did I run it as them?**
 
 ## Local-Only State
 
