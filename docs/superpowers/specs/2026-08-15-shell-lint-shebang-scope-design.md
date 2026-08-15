@@ -804,6 +804,60 @@ Assumption: that an operator blocked from `git push` by a gate whose message say
 deliberate decision point" will treat it as one rather than edit past the assertion. Now
 largely moot — F3's disposition removes the gate that would have posed it.
 
+### The base-rate sweep — run, not deferred
+
+The round-4 note handed the operator a proportionality decision and left the deciding number
+unmeasured, while this spec's own standard says a verification command executable at spec time
+must be executed rather than predicted. That was the one place the document did not follow its
+own rule. Corrected: the sweep is below.
+
+**The question was scoped to the wrong directory.** The hazard is not "a non-shell file lands
+in `tests/mocks/`" — it is "a non-shell file lands in **any directory a pathspec would have to
+glob**", i.e. any directory holding extensionless shell files. Counting non-shell arrivals into
+those directories, over full history, with each file classified by its content **at the time it
+was added**:
+
+| repo | glob-target dir | arrivals | non-shell |
+| --- | --- | ---: | ---: |
+| dotfiles | `tests/mocks/` | 64 | **0** |
+| dotfiles | `scripts/` | 25 | **1** |
+| math | `tests/mocks/` | 4 | **0** |
+| math | `scripts/` | 12 | **4** |
+| ai-config | `scripts/` | 10 | **2** |
+| terraform_ansible | `ansible/scripts/` | 15 | **11** |
+| etch-cli | `scripts/` | 6 | **2** |
+| | | **136** | **20** |
+
+**So the base rate is zero for `tests/mocks/` and 20 fleet-wide for the class.** Both numbers
+are real and they answer different questions. The round-3 assumption line asked the narrow one
+and got zero; the design protects against the wide one.
+
+`terraform_ansible` is the sharpest row: **11 of 15** arrivals into `ansible/scripts/` were
+non-shell. A pathspec globbing that directory would have been broken almost immediately, and
+repeatedly.
+
+**Why dotfiles has never felt this, and why that is the argument rather than a counter to it.**
+The current pathspec reaches its two extensionless hooks by *naming them individually* rather
+than globbing `scripts/*` — and it must, because `scripts/` mixes shell and non-shell. That
+hand-naming is precisely the defect class this spec exists to remove. The repo is not immune
+to the hazard; it has been paying for immunity in the currency the spec objects to.
+
+One honest subtraction: dotfiles' single instance, `scripts/dropbox.py`, lived 2020-04-06 to
+2023-11-24, while `scripts/pre-push` and `scripts/commit-msg` arrived 2026-04 and 2026-05. They
+never coexisted, so dotfiles has not actually had the collision — only the conditions for it.
+The fleet-wide 20 is what carries the argument; the dotfiles row does not, and is reported at
+its real strength rather than at the strength the conclusion would prefer.
+
+**This also dissolves a tension rather than resolving it.** The recorded-not-fixed item — no
+case pins that the set is *derived* rather than *enumerated*, so a hardcoded list of the correct
+100 passes every case — is tolerable only because additions are frequent enough that such a list
+reddens soon. That is the same arrival rate the base-rate question turns on, and the two look
+like they pull opposite ways: frequent arrivals make an enumerated list fail loudly (good) but
+also make a non-shell arrival plausible (bad for the pathspec). Measured, there is no tension:
+**136 arrivals and 20 non-shell ones**. Additions are frequent, so an enumerated list fails
+loudly; and non-shell arrivals into mixed directories demonstrably happen, so the property the
+script buys is exercised. Both arguments point the same way once the number exists.
+
 ### Round 5 — not scheduled; see the convergence note
 
 **Four rounds, four sets of introduced defects.** The honest read is that the fix rate is not
@@ -817,11 +871,15 @@ named no target. Second, three of round 4's four fixes **removed** machinery rat
 adding it — the floor count is gone entirely — which is the direction that ends this kind of
 loop, since each round's defect has lived in the machinery the previous round added.
 
-The remaining decision is the operator's, and it is the same one round 3 surfaced: this
-design costs a script, a parse tax, and eleven test cases to buy one property — that a
-non-shell file added to `tests/mocks/` does not redden the gate — whose base rate across five
-repos is **zero over the only observation window that exists**. A fifth review round is not
-what settles that; the operator's judgement about whether the property is worth owning is.
+The proportionality question the round-4 note left open is now **measured and answered** — see
+the base-rate sweep above. The property is exercised **20 times across five repos**; the zero
+that made it look like insurance against nothing was an artifact of scoping the question to
+`tests/mocks/` rather than to the class of directories a pathspec must glob. dotfiles avoids the
+hazard today only by hand-naming its two hooks, which is the defect the spec targets.
+
+What remains for the operator is narrower and no longer turns on an unmeasured number: whether
++43ms per `make` invocation and eleven test cases are worth removing a two-entry hand-maintained
+list, given the fleet has hit the underlying hazard 20 times and this repo has not yet.
 
 Round 3's disposition is **Addressed**, and the loop has still not converged: each of three
 rounds found a defect introduced by the previous round's own correction, and round 3's was
