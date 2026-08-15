@@ -95,9 +95,14 @@ env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
     first=
     # `read` returns 1 at EOF-without-delimiter while STILL populating the
     # variable, so a bare `|| continue` discards a single-line file whose only
-    # line is an unterminated shebang. It clears the variable on a truly empty
-    # file, so the -n test is safe against a stale value from the prior iteration.
-    IFS= read -r first < "${f}" 2>/dev/null || [[ -n "${first}" ]] || continue
+    # line is an unterminated shebang.
+    #
+    # 2>/dev/null MUST precede the input redirect: bash applies redirections
+    # left to right, so a failing `< "${f}"` on an unreadable file reports to
+    # the not-yet-redirected stderr. Verified -- with the order reversed, an
+    # unreadable tracked file prints `Permission denied` at every make parse,
+    # i.e. on every git commit.
+    IFS= read -r first 2>/dev/null < "${f}" || [[ -n "${first}" ]] || continue
     case "${first}" in
       '#!'*/bash|'#!'*/bash\ *|'#!'*env\ bash|'#!'*env\ bash\ *|\
       '#!'*/sh|'#!'*/sh\ *|'#!'*env\ sh|'#!'*env\ sh\ *) printf '%s\n' "${f}" ;;
@@ -386,6 +391,12 @@ Cases to add, in `tests/scripts/makefile_lint_scope.bats`:
 5. A fixture with each of the four rejected shebangs (`zsh` ×3, `fish`) is **excluded**; one
    with each of the five accepted forms is **included**. Note this is the insurance case: 7 of
    the 8 pattern arms match zero tracked files today.
+
+   **Plus one fixture that is a shebang and nothing else, with no final newline** — the shape
+   the `read` guard exists for. Without it the guard's mutation row (below) has no assertion
+   to turn red: no tracked file in the repo has that shape, so reverting the guard is
+   invisible to every other case.
+
 6. `SHELL_FILES` survives a leaked `GIT_DIR` pointed at a decoy repo.
 7. **`tests/mocks/brew` and `config/local.sh.example` are both members** of
    `make print-SHELL_FILES`. Two pins, not one: the mock catches a collapse to names, the
@@ -397,18 +408,30 @@ Cases to add, in `tests/scripts/makefile_lint_scope.bats`:
    arms at once while `make test` gates `git push`. Round 2 fixed the addition direction and
    left its mirror.
 
-   Derive it instead, by a **non-circular** mechanism — presence of `#!` on line 1, which is
-   strictly weaker than the production predicate (that additionally requires `bash`/`sh` after
-   a `/` or `env `):
+   **Round 3's replacement was also wrong, in the mirror direction, and is retired too.** It
+   proposed a weaker oracle — "every tracked file under `tests/mocks/` whose first line begins
+   with `#!` is a member of `SHELL_FILES`" — on the reasoning that a weaker predicate is
+   non-circular. It is non-circular, and it is also **wrong on any mock that is not bash**.
+   Verified: a `tests/mocks/python-helper` carrying `#!/usr/bin/env python3` is listed by that
+   oracle and correctly excluded by production, so case 8 reddens and `git push` is blocked by
+   an ordinary, legitimate addition — `tests/mocks/python` and `tests/mocks/pyenv` already
+   exist, so a python-implemented mock is unremarkable. Round 2 broke on deletion; round 3
+   broke on addition. Both were hand-built numbers or hand-built predicates wearing different
+   clothes.
 
-   > every tracked file under `tests/mocks/` whose first line begins with `#!`
-   > is a member of `SHELL_FILES`
+   **Drop the count entirely.** The floor's only job was to catch a truncated `$(shell)`
+   result, and a count is the wrong instrument for that — every count needs a reference value,
+   and every reference value is either hardcoded or derived by a predicate that can disagree
+   with production. Assert the two things that actually characterise a truncation, neither of
+   which needs a number:
 
-   Stable under both addition and deletion, since both sides move together. It still catches a
-   truncated `$(shell)` result, because a truncation drops members the oracle still lists. And
-   it fails loudly rather than silently if a `zsh` mock is ever added — the weaker oracle would
-   include it while the production predicate would not — which is the correct outcome: that
-   case wants an explicit decision, not a silent drop.
+   > `scripts/list-shell-files.sh` **exits 0**, and `SHELL_FILES` ⊇ the name oracle
+
+   The script must therefore be written to fail loudly — `set -o pipefail`, an explicit check
+   on the `git ls-files` call — so that a partial walk is a non-zero exit rather than a short
+   list. That converts the untestable `$(shell)`-swallows-status hole into something the suite
+   can see, at the one place it is observable: invoking the script directly, outside make.
+   Case 2 already carries the ⊇ half; case 8 adds the exit status.
 
 9. The count is identical under a `<4` make and a `>=4` make. **The rationale in the round-1
    spec was wrong and is retired**: this does not detect reintroduction of the inline form,
@@ -418,15 +441,28 @@ Cases to add, in `tests/scripts/makefile_lint_scope.bats`:
    rather than pass silently, or it becomes another vacuous green.
 10. **The CI step's empty-list guard has its own case.** It is new machinery in `ci.yml` that
     nothing in the bats suite currently reaches.
-11. **A tracked non-shell file under `tests/mocks/` is absent from `SHELL_FILES`.** Build it in
-    a fixture repo — `git add tests/mocks/README.md` — and assert the derivation excludes it.
+11. **A tracked non-shell file under `tests/mocks/` is absent from `SHELL_FILES`.**
+
+    **The fixture must be extensionless, and that is the whole point of the case.** Round 3
+    specified `tests/mocks/README.md`, inherited from the round-2 differential where it was
+    fine as a _measurement_. As a _test fixture_ it is worthless: verified, the pathspec
+    `git ls-files '*.sh' '*.bash' <hooks> 'tests/mocks/*' ':(exclude)*.md'` passes this case
+    while still shipping `tests/mocks/fixture-data` and `tests/mocks/python-helper` — both
+    non-shell — into shellcheck's argv. A `.md` file is excludable **by name**, which is
+    precisely the thing a pathspec can do. Use two fixtures with no discriminating extension:
+
+    - `tests/mocks/fixture-data` — plain data, no shebang at all
+    - `tests/mocks/python-helper` — `#!/usr/bin/env python3`, i.e. a shebang the production
+      predicate must reject on interpreter rather than on name
+
+    Only an extensionless non-shell file separates the two mechanisms, because it is the one
+    shape no pathspec can exclude without enumerating it.
 
     **This is the only case that pins the property the script is bought for**, and it was
     missing through three review rounds while the spec's entire justification rested on it.
     Every other case asserts the set is not too _small_; this one asserts it is not too
     _large_, which is the half a pathspec cannot deliver. Without it the suite passes
-    identically for the script and for the equivalent pathspec — verified — so the ten cases
-    above would have been buying nothing that a one-line pathspec did not already give.
+    identically for the script and for the equivalent pathspec — verified.
 
 ## Verification
 
@@ -463,22 +499,29 @@ yet, and are labelled as such per `behavior.md` rather than presented as measure
 
 Pending implementation:
 
-| check                                                            | expected                                          |
-| ---------------------------------------------------------------- | ------------------------------------------------- |
-| `make lint`                                                      | exit 0 after the two mock fixes                   |
-| **mutation: `gpg` fix reverted**                                 | `make lint` goes **red**                          |
-| **mutation: `SHELL_FILES` forced back to the pathspec**          | cases 7 and 8 go **red**, the rest stay green     |
-| **mutation: `SHELL_FILES` forced to pathspec + `tests/mocks/*`** | case 7 goes **red** on the `.example` pin         |
-| **mutation: `SHELL_FILES` forced to the _equivalent_ pathspec**  | case 11 goes **red**; 1–10 stay green             |
-| **mutation: `read` guard reverted to bare `\|\| continue`**      | a single-line unterminated fixture drops out      |
-| `make test`                                                      | exit 0, no regression against the 1334-test floor |
-| `make bash-coverage`                                             | unchanged figure (denominator untouched)          |
+| check                                                            | expected                                            |
+| ---------------------------------------------------------------- | --------------------------------------------------- |
+| `make lint`                                                      | exit 0 after the two mock fixes                     |
+| **mutation: `gpg` fix reverted**                                 | `make lint` goes **red**                            |
+| **mutation: `SHELL_FILES` forced back to the pathspec**          | cases 7 and 8 go **red**, the rest stay green       |
+| **mutation: `SHELL_FILES` forced to pathspec + `tests/mocks/*`** | cases 7 **and 11** go red                           |
+| **mutation: script body replaced by the _equivalent_ pathspec**  | cases 5 **and** 11 go red; 1–4, 6–10 stay green     |
+| **mutation: `read` guard reverted to bare `\|\| continue`**      | case 5's shebang-only unterminated fixture goes red |
+| `make test`                                                      | exit 0, no regression against the 1334-test floor   |
+| `make bash-coverage`                                             | unchanged figure (denominator untouched)            |
 
-The five mutation rows are load-bearing, and the equivalent-pathspec one most of all: it is
-the only check that distinguishes this design from the one-line alternative it costs a
-script, +43ms, and eleven test cases more than. If that mutation does not turn case 11 red,
-the whole package reduces to a more expensive way of producing the same set. Without the
-others a green suite is equally consistent
+**Every mutation row names its target explicitly, because the previous version did not and
+was unsatisfiable as a result.** Cases 7 and 8 read `make print-SHELL_FILES`, so a Makefile
+mutation reaches them; cases 5 and 11 build a fixture repo and invoke the script, so only a
+mutation of the **script body** reaches those. The round-3 row said "`SHELL_FILES` forced to
+the equivalent pathspec → case 11 red, 1–10 green", which is false under either reading — a
+Makefile mutation leaves case 11 green, and a script mutation also reddens case 5, since a
+pathspec ignores shebangs entirely. Stating the target and both expected reds is the fix.
+
+The equivalent-pathspec row is the load-bearing one: it is the only check that distinguishes
+this design from the one-line alternative it costs a script, +43ms, and eleven test cases
+more than. If it does not turn case 11 red, the whole package reduces to a more expensive way
+of producing the same set. Without the others a green suite is equally consistent
 with "the scope is correct" and "the scope silently narrowed again", and a test believed to
 guard something it does not is worse than no test.
 
@@ -693,7 +736,85 @@ single-line-unterminated, multi-line-unterminated, empty, blank-line, and non-sh
 including confirming `read` clears the variable on a truly empty file so no stale value can
 leak. A fifth mutation row covers reverting that guard.
 
-### Round 4 — scoped re-review pending
+### Round 4 — scoped Risk lens, reviewed at commit `446564f`
+
+Five findings, **four of them introduced by round 3's own three fixes** — one per fix, plus
+one pre-existing. The loop has not converged; this is the fourth consecutive round in which
+the previous round's correction carried the next round's defect.
+
+**F1 — the equivalent-pathspec mutation row was unsatisfiable as written.** Its siblings
+mutate the Makefile's `SHELL_FILES :=` assignment, which is what cases 7 and 8 read. But
+case 11 builds a fixture repo and invokes the **script**, so a Makefile mutation leaves it
+green and the row's central claim is false; mutating the script instead reddens case 5 too,
+contradicting "1–10 stay green". **Addressed** — every row now names its target, and the
+script-mutation row states both expected reds.
+
+**F2 — case 11 pinned a filename, not the property.** Verified: the pathspec
+`'*.sh' '*.bash' <hooks> 'tests/mocks/*' ':(exclude)*.md'` passes case 11 while still
+shipping `tests/mocks/fixture-data` and `tests/mocks/python-helper` into shellcheck's argv.
+`README.md` was inherited from the round-2 differential, where it was sound as a
+_measurement_; as a _fixture_ it is excludable by name, which is exactly what a pathspec can
+do. **Addressed** — the fixtures are now extensionless (`fixture-data`, and `python-helper`
+carrying a `python3` shebang so the predicate must reject on interpreter rather than name),
+because an extensionless non-shell file is the only shape no pathspec can exclude without
+enumerating it.
+
+**F3 — case 8's rederived floor broke on a legitimate _addition_, the mirror of the defect it
+fixed.** Verified: a mock carrying `#!/usr/bin/env python3` is listed by the weaker `#!`
+oracle and correctly excluded by production, so case 8 reddens and `git push` is blocked —
+and `tests/mocks/python` and `tests/mocks/pyenv` already exist, so a python-implemented mock
+is unremarkable rather than exotic. Round 2 broke on deletion, round 3 on addition.
+**Addressed by deleting the count, not by a third number.** A count needs a reference value;
+every reference value is hardcoded or derived by a predicate that can disagree with
+production. Case 8 now asserts the script **exits 0** plus the ⊇ already in case 2, and the
+script must fail loudly (`set -o pipefail`, explicit check on `git ls-files`) so a partial
+walk is a non-zero exit rather than a short list. That also converts the previously
+untestable `$(shell)`-swallows-status hole into something the suite can observe, by invoking
+the script outside make.
+
+**F4 — the `read` guard shipped with a mutation row but no assertion.** No tracked file has
+the shape it protects (a shebang-only file with no final newline), so reverting the guard was
+invisible to every case. **Addressed** — case 5 gains that fixture.
+
+**F5 — `2>/dev/null` was inert where it sat.** Bash applies redirections left to right, so a
+failing `< "${f}"` reports to the not-yet-redirected stderr. Verified both orders: after the
+redirect it leaks `Permission denied`, before it is silent. Behaviour was still correct (the
+file is skipped) but an unreadable tracked file would print a bash diagnostic at every make
+parse — i.e. every `git commit`. **Addressed** — moved ahead of the input redirect.
+
+**Held on inspection, not raised:** the guard is correct on empty, blank-line,
+whitespace-only, broken symlink, symlink-to-directory, and unreadable inputs; case 8's
+round-3 floor was genuinely stable under deletion as claimed; a NUL-prefixed first line
+requires a tracked binary, already bounded.
+
+**One item recorded and not fixed:** no case pins that the set is _derived_ rather than
+_enumerated_ — a hardcoded literal list of the correct 100 files passes every case today.
+Cases 2 and 8 would redden on the next addition, so it fails loudly rather than silently,
+which is why it is recorded rather than closed. It is also this repo's exact `INCLUDE_FILES`
+precedent, so it is worth knowing the suite does not currently distinguish the two.
+
+Assumption: that an operator blocked from `git push` by a gate whose message says "this is a
+deliberate decision point" will treat it as one rather than edit past the assertion. Now
+largely moot — F3's disposition removes the gate that would have posed it.
+
+### Round 5 — not scheduled; see the convergence note
+
+**Four rounds, four sets of introduced defects.** The honest read is that the fix rate is not
+outrunning the defect rate, and a fifth round should be expected to find a fifth set rather
+than to come back clean.
+
+Two things argue against simply continuing. First, the findings are narrowing sharply in
+consequence: round 1 cut the scope by two thirds, round 3 invalidated the entire
+justification, round 4's are a fixture filename, a redirect order, and two mutation rows that
+named no target. Second, three of round 4's four fixes **removed** machinery rather than
+adding it — the floor count is gone entirely — which is the direction that ends this kind of
+loop, since each round's defect has lived in the machinery the previous round added.
+
+The remaining decision is the operator's, and it is the same one round 3 surfaced: this
+design costs a script, a parse tax, and eleven test cases to buy one property — that a
+non-shell file added to `tests/mocks/` does not redden the gate — whose base rate across five
+repos is **zero over the only observation window that exists**. A fifth review round is not
+what settles that; the operator's judgement about whether the property is worth owning is.
 
 Round 3's disposition is **Addressed**, and the loop has still not converged: each of three
 rounds found a defect introduced by the previous round's own correction, and round 3's was
