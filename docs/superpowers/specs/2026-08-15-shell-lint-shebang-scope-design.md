@@ -327,6 +327,16 @@ at default severity by design** (`SC2168`, `SC2155`, `SC2072`); the other 7 pass
 are excluded as a class rather than by current verdict, since a shellcheck upgrade that
 starts flagging one would redden `make lint` for a file working as designed.
 
+**The reference class is the open question, and it is not settled by the 20.** Eighteen of the
+twenty non-shell arrivals are Python files landing beside hooks in repos that carry Python test
+suites in that directory by design. dotfiles has had exactly **one** Python file in `scripts/`
+in its entire history and deleted it in 2023. This spec ships to dotfiles only. If dotfiles'
+composition — shell-only, Python structurally absent from that directory — makes it unlike the
+other four, the 20 does not transfer and the property remains insurance against nothing *for
+the one repo affected*. The rebuttal above ("paying for immunity in the currency the spec
+objects to") is an argument, not a measurement, and it is the same shape of claim this document
+has already had inverted three times. Recorded as open rather than answered.
+
 **The forward-looking half is settleable.** Run
 `git log --diff-filter=A --name-only --format=%ad --date=format:%Y-%m` over the
 shebang-minus-pathspec set in the deferred repos. A single hit outside `tests/mocks/` or a
@@ -840,6 +850,14 @@ and got zero; the design protects against the wide one.
 non-shell. A pathspec globbing that directory would have been broken almost immediately, and
 repeatedly.
 
+**State the counting rule, because this is the only row it changes.** That 11 of 15 includes
+**5 files under `ansible/scripts/tests/`** — a nested subdirectory. Direct children only, it is
+**6 of 10**. Counting nested paths is defensible and is the rule applied throughout (a git
+pathspec `*` crosses `/`, so a glob genuinely would sweep them) — but terraform_ansible is the
+only row with nested paths at all, so the choice is invisible everywhere except in the evidence
+the argument leans hardest on. Both figures support the claim; the row should not be quoted
+without the rule.
+
 **Why dotfiles has never felt this, and why that is the argument rather than a counter to it.**
 The current pathspec reaches its two extensionless hooks by _naming them individually_ rather
 than globbing `scripts/*` — and it must, because `scripts/` mixes shell and non-shell. That
@@ -852,28 +870,80 @@ never coexisted, so dotfiles has not actually had the collision — only the con
 The fleet-wide 20 is what carries the argument; the dotfiles row does not, and is reported at
 its real strength rather than at the strength the conclusion would prefer.
 
-**This also dissolves a tension rather than resolving it.** The recorded-not-fixed item — no
-case pins that the set is _derived_ rather than _enumerated_, so a hardcoded list of the correct
-100 passes every case — is tolerable only because additions are frequent enough that such a list
-reddens soon. That is the same arrival rate the base-rate question turns on, and the two look
-like they pull opposite ways: frequent arrivals make an enumerated list fail loudly (good) but
-also make a non-shell arrival plausible (bad for the pathspec). Measured, there is no tension:
-**136 arrivals and 20 non-shell ones**. Additions are frequent, so an enumerated list fails
-loudly; and non-shell arrivals into mixed directories demonstrably happen, so the property the
-script buys is exercised. Both arguments point the same way once the number exists.
+**A tension I claimed to dissolve was never there, and the figure used was the wrong one.**
+The recorded-not-fixed item — no case pins that the set is _derived_ rather than _enumerated_,
+so a hardcoded list of the correct 100 passes every case — is tolerable only because additions
+are frequent enough that such a list reddens soon. An earlier version argued this "pulled
+opposite ways" against the base-rate question, and cited **136 arrivals / 20 non-shell** as
+settling both.
 
-### Convergence — round 5 not scheduled
+That equivocates two independent quantities. The enumerated-list arm needs the rate at which
+**shell** files are added to **dotfiles** — that is what reddens a hardcoded `SHELL_FILES`.
+The base-rate arm needs **non-shell** arrivals into glob-target directories **fleet-wide**.
+The 136 is neither, and its 20 non-shell members are exactly the files that would _not_ redden
+an enumerated list, since the predicate excludes them either way.
+
+The conclusion stands, on the arm's own number: **91 shell files were added to dotfiles
+repo-wide in the last 12 months**, so an enumerated list reddens quickly. But the two
+quantities are independent and never could have pulled against each other — there was no
+tension to dissolve, and saying there was made a measurement sound load-bearing where an
+observation would have done.
+
+### Round 5 — scoped Risk lens over the post-round-4 additions, reviewed at `842ee7f`
+
+Run specifically to test a peer session's objection that a clean result here would prove nothing.
+It was not clean. Three findings, all in the added material, all verified:
+
+- **The subtraction tally was false on the record** — retracted in full below.
+- **The "dissolves a tension" paragraph equivocated two rates** — retracted below; the
+  conclusion survives on a different figure.
+- **The sharpest row's counting rule was unstated** — 11 of 15 includes 5 nested paths; 6 of 10
+  without. Stated below.
+
+It also raised the reference-class question recorded above, which is the strongest open item
+in the document.
+
+**What this round does and does not settle.** The peer's caution was that this section is the
+one that rescued the design, so it is the most-scrutinised text in the document and a clean
+result would measure attention rather than additivity. That caution was right and it cuts the
+other way too: the section was *not* clean, and it was the material added under maximum
+attention. Whatever else that shows, it is not evidence that careful additions are safe.
+
+### Convergence — round 6 not scheduled
 
 **Four rounds, four sets of introduced defects.** The honest read is that the fix rate is not
 outrunning the defect rate, and a fifth round should be expected to find a fifth set rather
 than to come back clean.
 
-Two things argue against simply continuing. First, the findings are narrowing sharply in
-consequence: round 1 cut the scope by two thirds, round 3 invalidated the entire
-justification, round 4's are a fixture filename, a redirect order, and two mutation rows that
-named no target. Second, three of round 4's four fixes **removed** machinery rather than
-adding it — the floor count is gone entirely — which is the direction that ends this kind of
-loop, since each round's defect has lived in the machinery the previous round added.
+Two things were argued against simply continuing. **The first holds; the second was false and
+is retracted.**
+
+**Holds:** the findings narrow sharply in consequence — round 1 cut the scope by two thirds,
+round 3 invalidated the entire justification, round 4's were a fixture filename, a redirect
+order, and two mutation rows that named no target.
+
+**Retracted:** an earlier version claimed "three of round 4's four fixes removed machinery
+rather than adding it… which is the direction that ends this kind of loop." Round 5 checked
+that against this document's own round-4 record and it does not survive:
+
+| fix | what the disposition actually did | net |
+| --- | --- | --- |
+| F1 | every mutation row now names its target and states both expected reds | **adds** specification |
+| F2 | one named fixture → two extensionless fixtures | substitution, **+1** |
+| F3 | deletes the count — **and adds** `set -o pipefail`, an explicit `git ls-files` check, and an exits-0 assertion | mixed |
+| F4 | "case 5 gains that fixture" | **adds** |
+| F5 | `2>/dev/null` moved ahead of the redirect | move |
+
+One removal, one addition, two substitutions, one move. The inference then points the other
+way: round 4 left two new fixtures, two new production guards, and a re-specified mutation
+table — by the stated mechanism, precisely where a sixth round would look.
+
+**Two independent errors, and the second is the instructive one.** No round 5 existed when
+this was written, so "the loop broke" was inferred from having stopped looking — the claim
+presupposed what it needed to prove, and a peer session caught that by asking for the number.
+But the premise underneath was *also* false on the record, and no amount of running more
+rounds would have surfaced that; it needed someone to count. A claim can be unfalsifiable as
+stated **and** false as stated, and neither failure implies the other.
 
 The proportionality question the round-4 note left open is now **measured and answered** — see
 the base-rate sweep above. The property is exercised **20 times across five repos**; the zero
