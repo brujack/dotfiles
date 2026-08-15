@@ -11,17 +11,25 @@ MAKEFLAGS += --no-print-directory
 BATS := $(shell command -v bats 2>/dev/null)
 SHELLCHECK := $(shell command -v shellcheck 2>/dev/null)
 PYTHON3 := $(shell command -v python3 2>/dev/null)
-SHELL_FILES := $(shell env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
-                 git ls-files '*.sh' '*.bash' 'scripts/pre-push' 'scripts/commit-msg')
-# Bats suites are shell too, and were never shellchecked — the globs above
-# only match *.sh/*.bash/the two extensionless hooks. They are linted
-# separately rather than folded into SHELL_FILES because they need
-# --severity=warning: bats' run/@test model emits SC2030 and SC2031 subshell
-# notices structurally (over 2200 of them here) which say nothing about
-# correctness, while the files above run at the default severity and should
-# stay there.
+
+# SHELL_FILES is content-derived (every tracked file whose first line is a
+# bash/sh shebang), not pathspec-derived: a pathspec cannot express "every
+# tracked shell script" (shell.md), which is why the previous
+# '*.sh' '*.bash' plus two named hooks left every extensionless mock under
+# tests/mocks/ (64 of them) and config/local.sh.example out of scope, with
+# the omission invisible in the gate's own output (tdd.md Coverage
+# Denominators). The env -u strip for a leaked GIT_DIR (ci.md) now lives
+# inside scripts/list-shell-files.sh rather than around this assignment,
+# since the script's own git calls are what need it.
+SHELL_FILES := $(shell ./scripts/list-shell-files.sh)
+# Bats suites are shell too, and were never shellchecked — SHELL_FILES's
+# shebang-derived set does not include them (a bats file carries no bash/sh
+# shebang). They are linted separately because they need --severity=warning:
+# bats' run/@test model emits SC2030 and SC2031 subshell notices structurally
+# (over 2200 of them here) which say nothing about correctness, while
+# SHELL_FILES runs at the default severity and should stay there.
 #
-# Both lists are derived from `git ls-files`, not a filesystem walk: a walk
+# BATS_FILES is derived from `git ls-files`, not a filesystem walk: a walk
 # also matches an untracked parked worktree under .claude/worktrees/ and the
 # git-ignored, machine-local config/local.sh — neither should be linted here.
 # The env -u prefix strips a GIT_DIR that git exports into this hook's
@@ -60,7 +68,8 @@ help:
 lint:
 	@if [ -z "$(SHELL_FILES)" ]; then \
 	  printf 'lint: derived shell file list is EMPTY — refusing to report a pass having linted nothing.\n' >&2; \
-	  printf '      (git absent from PATH, or this tree was exported without .git?)\n' >&2; \
+	  printf '      scripts/list-shell-files.sh is missing, broken, or not executable — try:\n' >&2; \
+	  printf '      chmod +x scripts/list-shell-files.sh\n' >&2; \
 	  exit 1; \
 	fi
 	@if [ -z "$(ZSH_FILES)" ]; then \
@@ -68,10 +77,13 @@ lint:
 	  printf '      (git absent from PATH, or this tree was exported without .git?)\n' >&2; \
 	  exit 1; \
 	fi
-	@failed=0; \
+	@failed=0; bash_ok=0; \
 	for f in $(SHELL_FILES); do \
-	  bash -n "$$f" && printf "bash  OK  %s\n" "$$f" || { printf "bash FAIL %s\n" "$$f"; failed=1; }; \
+	  bash -n "$$f" && bash_ok=$$((bash_ok + 1)) || failed=1; \
 	done; \
+	if [ "$$failed" -eq 0 ]; then \
+	  printf "bash -n OK (%s files)\n" "$$bash_ok"; \
+	fi; \
 	for f in $(ZSH_FILES); do \
 	  zsh  -n "$$f" && printf "zsh   OK  %s\n" "$$f" || { printf "zsh  FAIL %s\n" "$$f"; failed=1; }; \
 	done; \
