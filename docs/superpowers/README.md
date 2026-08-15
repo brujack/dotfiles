@@ -1,4 +1,4 @@
-1# Superpowers Specs and Plans
+# Superpowers Specs and Plans
 
 Master status index for all specs and implementation plans in this directory.
 
