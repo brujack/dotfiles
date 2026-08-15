@@ -248,6 +248,9 @@ install_git() {
     install_git_macos
   elif [[ -n ${LINUX} ]]; then
     install_git_linux
+  else
+    log_error "Unsupported platform — cannot install git"
+    return 1
   fi
 }
 
@@ -256,6 +259,9 @@ install_zsh() {
     install_zsh_macos
   elif [[ -n ${LINUX} ]]; then
     install_zsh_linux
+  else
+    log_error "Unsupported platform — cannot install zsh"
+    return 1
   fi
 }
 
@@ -264,6 +270,9 @@ install_bats() {
     install_bats_macos
   elif [[ -n ${LINUX} ]]; then
     install_bats_linux
+  else
+    log_error "Unsupported platform — cannot install bats"
+    return 1
   fi
 }
 

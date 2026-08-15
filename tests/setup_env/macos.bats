@@ -133,6 +133,14 @@ teardown() {
   grep -q "brew install git" "${MOCK_CALLS_FILE}"
 }
 
+@test "install_git_macos: propagates a failing brew install" {
+  export MOCK_BREW_LIST_FORMULA=""
+  export MOCK_BREW_INSTALL_EXIT=1
+  run install_git_macos
+  [ "$status" -eq 1 ]
+  [[ "$output" != *"Installed git"* ]]
+}
+
 # ── install_zsh_macos ────────────────────────────────────────────────────────
 
 @test "install_zsh_macos: zsh already in brew list" {
@@ -147,6 +155,14 @@ teardown() {
   run install_zsh_macos
   [ "$status" -eq 0 ]
   grep -q "brew install zsh" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_zsh_macos: propagates a failing brew install" {
+  export MOCK_BREW_LIST_FORMULA=""
+  export MOCK_BREW_INSTALL_EXIT=1
+  run install_zsh_macos
+  [ "$status" -eq 1 ]
+  [[ "$output" != *"Installed zsh"* ]]
 }
 
 # ── install_bats_macos ───────────────────────────────────────────────────────

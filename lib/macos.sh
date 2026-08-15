@@ -104,7 +104,7 @@ install_git_macos() {
     install_homebrew
   fi
   if command -v brew &> /dev/null; then
-    brew_install_formula git
+    brew_install_formula git || return 1
   else
     log_error "Failed to install Homebrew. Cannot install Git."
     return 1
@@ -123,7 +123,7 @@ install_zsh_macos() {
     install_homebrew
   fi
   if command -v brew &> /dev/null; then
-    brew_install_formula zsh
+    brew_install_formula zsh || return 1
   else
     log_error "Failed to install Homebrew. Cannot install zsh."
     return 1

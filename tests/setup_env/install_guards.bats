@@ -168,12 +168,12 @@ teardown() {
   [[ "$output" != *"MACOS_ARM_CALLED"* ]]
 }
 
-@test "install_bats calls neither arm when neither MACOS nor LINUX is set" {
+@test "install_bats: returns 1 when no platform matches" {
   unset MACOS LINUX UBUNTU
   install_bats_macos() { printf 'MACOS_ARM_CALLED\n'; return 0; }
   install_bats_linux() { printf 'LINUX_ARM_CALLED\n'; return 0; }
   run install_bats
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ]
   [[ "$output" != *"MACOS_ARM_CALLED"* ]]
   [[ "$output" != *"LINUX_ARM_CALLED"* ]]
 }
@@ -193,6 +193,30 @@ teardown() {
   install_bats_linux() { return 3; }
   run install_bats
   [ "$status" -eq 3 ]
+}
+
+# ── install_git (dispatcher) ─────────────────────────────────────────────────
+
+@test "install_git: returns 1 when no platform matches" {
+  unset MACOS LINUX UBUNTU
+  install_git_macos() { printf 'MACOS_ARM_CALLED\n'; return 0; }
+  install_git_linux() { printf 'LINUX_ARM_CALLED\n'; return 0; }
+  run install_git
+  [ "$status" -eq 1 ]
+  [[ "$output" != *"MACOS_ARM_CALLED"* ]]
+  [[ "$output" != *"LINUX_ARM_CALLED"* ]]
+}
+
+# ── install_zsh (dispatcher) ─────────────────────────────────────────────────
+
+@test "install_zsh: returns 1 when no platform matches" {
+  unset MACOS LINUX UBUNTU
+  install_zsh_macos() { printf 'MACOS_ARM_CALLED\n'; return 0; }
+  install_zsh_linux() { printf 'LINUX_ARM_CALLED\n'; return 0; }
+  run install_zsh
+  [ "$status" -eq 1 ]
+  [[ "$output" != *"MACOS_ARM_CALLED"* ]]
+  [[ "$output" != *"LINUX_ARM_CALLED"* ]]
 }
 
 # ── install_make_macos ───────────────────────────────────────────────────────
@@ -294,6 +318,18 @@ _gnubin_present() {
   export PATH="${_saved_path}"
   [ "$status" -eq 0 ]
   grep -q "brew install make" "${MOCK_CALLS_FILE}"
+}
+
+@test "gnubin prefixes match between lib/macos.sh and 6_path.zsh" {
+  local _bash_prefixes _zsh_prefixes
+  _bash_prefixes="$(grep -oE '/(opt/homebrew|usr/local)/opt/make/libexec/gnubin' \
+    "${REPO_ROOT}/lib/macos.sh" | sort -u)"
+  _zsh_prefixes="$(grep -oE '/(opt/homebrew|usr/local)/opt/make/libexec/gnubin' \
+    "${REPO_ROOT}/.config/.zshrc.d/6_path.zsh" | sort -u)"
+
+  [ -n "${_bash_prefixes}" ]
+  [ -n "${_zsh_prefixes}" ]
+  [ "${_bash_prefixes}" = "${_zsh_prefixes}" ]
 }
 
 # ── ensure_not_root ──────────────────────────────────────────────────────────

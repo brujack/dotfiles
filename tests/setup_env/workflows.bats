@@ -1099,6 +1099,76 @@ setup_constants_copy() {
   grep -q "dpkg-query" "${MOCK_CALLS_FILE}"
 }
 
+@test "update_apt_packages: apt row fails independently of snap" {
+  unset MACOS
+  export LINUX=1
+  export UBUNTU=1
+  export NOBLE=1
+  export UPDATE_PKGS=1
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
+  export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
+  export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
+  export MOCK_APT_EXIT=1
+  run_update
+  grep -q "FAIL" "${_DOTFILES_RUN_TMPDIR}/status_apt"
+  grep -q "OK" "${_DOTFILES_RUN_TMPDIR}/status_snap"
+}
+
+@test "update_snap_packages: snap row fails independently of apt" {
+  unset MACOS
+  export LINUX=1
+  export UBUNTU=1
+  export NOBLE=1
+  export UPDATE_PKGS=1
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
+  export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
+  export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
+  export MOCK_SNAP_EXIT=1
+  run_update
+  grep -q "OK" "${_DOTFILES_RUN_TMPDIR}/status_apt"
+  grep -q "FAIL" "${_DOTFILES_RUN_TMPDIR}/status_snap"
+}
+
+@test "update_snap_packages: skipped when snap is unavailable" {
+  unset MACOS
+  export LINUX=1
+  export UBUNTU=1
+  export NOBLE=1
+  export UPDATE_PKGS=1
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
+  export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
+  export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
+
+  # Override the seam, never PATH. An earlier version stripped every PATH
+  # entry holding a snap executable; on Ubuntu that is /usr/bin, which also
+  # holds bash, grep, sed, awk and mktemp — so the test destroyed its own
+  # environment. Green on macOS, red in CI.
+  _snap_available() { return 1; }
+
+  run_update
+
+  grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_snap"
+  grep -q "snap not installed on this host" "${_DOTFILES_RUN_TMPDIR}/result_snap"
+  refute_grep "snap refresh" "${MOCK_CALLS_FILE}"
+  [ ! -d "${HOME}/.local/share/state-ledger/.git" ]
+}
+
+@test "update path: err_snap captures only snap output" {
+  unset MACOS
+  export LINUX=1
+  export UBUNTU=1
+  export NOBLE=1
+  export UPDATE_PKGS=1
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
+  export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
+  export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
+  run_update
+  grep -q "Updated apt packages" "${_DOTFILES_RUN_TMPDIR}/err_apt"
+  grep -q "Updated snap packages" "${_DOTFILES_RUN_TMPDIR}/err_snap"
+  refute_grep "Updated apt packages" "${_DOTFILES_RUN_TMPDIR}/err_snap"
+  refute_grep "Updated snap packages" "${_DOTFILES_RUN_TMPDIR}/err_apt"
+}
+
 @test "run_update does not call update_system_packages from mas block on Linux" {
   unset MACOS
   export LINUX=1

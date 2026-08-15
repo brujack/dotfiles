@@ -1,7 +1,7 @@
 # ADR-0008: Use PS4 Xtrace for Bash Coverage Measurement
 
 - **Date:** 2026-06-01
-- **Status:** Accepted (amended 2026-08-07, 2026-08-09 — see Amendments below)
+- **Status:** Accepted (amended 2026-08-07, 2026-08-09, 2026-08-14 — see Amendments below)
 
 ## Context
 
@@ -28,7 +28,7 @@ Implementation:
 - `scripts/bash-tracer.sh` — installed via `BASH_ENV`; sets `PS4` to emit `BASH_SOURCE:LINENO` and redirects trace to fd 9
 - `scripts/run-bash-coverage.sh` — sets up the named pipe, runs `bats --recursive tests/`, drains and parses the trace, reports per-file and overall coverage
 - `make bash-coverage` — local measurement target
-- `make push-bash-coverage` — measurement + badge push to `coverage-data` branch
+- `make push-bash-coverage` — measurement + badge push to `coverage-data` branch. **Retired 2026-08-14; see Amendment 3.** The target and its script are deleted; CI publishes the badge
 - CI `bash-coverage` job on `ubuntu-latest` — runs `make bash-coverage`, fails if overall coverage < 90%, publishes badge JSON (floor raised to 91% by Amendment 2)
 
 The gate is **90% overall** (not per-file) — raised to 91% by Amendment 2 (2026-08-09). Per-file floors are defined in `CLAUDE.md` but not yet enforced individually in CI.
@@ -194,6 +194,48 @@ apart, and 17 heuristic disagreements against 15. A 92% floor would have failed 
 that introduced it. Do not ratchet to 92 on the strength of a local run; ratchet only after
 the figure has been observed twice on `ubuntu-latest` at the same commit, and expect the
 platform delta to persist while the instrumented set is subprocess-heavy.
+
+## Amendment 3 (2026-08-14)
+
+The PS4-xtrace decision still stands, and so does every measurement mechanism in it. This
+amendment retires exactly one **delivery** mechanism: `make push-bash-coverage` and its
+script, `scripts/push-bash-coverage.sh`, are deleted.
+
+**It never worked, and CI had been doing its job the whole time.** The target existed to
+push `coverage/bash.json` to the `coverage-data` branch from a 2am cron entry. That entry
+invoked `make push-bash-coverage`, whose `ifndef BATS` guard fires under cron's `PATH` —
+which lacks `/opt/homebrew/bin`. Measured 2026-08-14: `~/.dotfiles-coverage.log` held 78
+lines, every one that guard, and zero matching `Coverage:`, `Pushed`, or `unchanged`. Zero
+successful runs since it was configured. Meanwhile 5 of the 6 commits on `coverage-data` are
+`github-actions[bot]` from the CI job described above; the sixth is the orphan-branch
+creation. Both development machines were checked — the workstation had no coverage cron at
+all.
+
+**Hardening it was considered twice and rejected on the second look.** The script invoked
+`run-bash-coverage.sh` unchecked and its cleanup never removed `coverage/bash.json`, so a
+failed measurement left the previous run's badge in place to be read, committed and pushed
+at exit 0 — with seven `exit 1` paths in the child already being discarded. Adding an eighth
+guard would have been a verdict nothing reads. Deleting the publisher removes the failure
+mode instead of instrumenting it.
+
+**What this amendment does not touch.** `scripts/run-bash-coverage.sh`, `make
+bash-coverage`, the CI `bash-coverage` job, the 91% gate, and the README badge are all
+unchanged. The badge's supply chain never routed through the deleted script.
+
+**A separate defect surfaced while establishing the above, and is fixed in the same change.**
+`scripts/run-bash-coverage.sh` had no `command -v bats` pre-flight, so a direct `bash
+scripts/run-bash-coverage.sh` with bats off `PATH` did not misreport — it **hung**. Line 738
+failed 127, but the background FIFO reader opened earlier blocked in `open()` because nothing
+ever opened the write end, and the `wait` never returned. Reproduced at exit 124. A
+pre-flight now sits above the FIFO setup, with a message distinct from `_check_red_suite`'s
+so absent-tool and failing-suite are distinguishable in a log. Note the history: a guard in
+exactly that file was the first fix proposed for this whole area, retired during review on
+the reasoning that the cron path was already guarded — true of cron, false of direct
+invocation — and only re-derived after the publisher was gone.
+
+**Follow-up, outside this repo's reach:** the machine-local crontab entry still exists and
+will now fail with `No rule to make target` instead of the bats-guard message. Removing it
+is an operator action; no repo change reaches it.
 
 ## Related
 

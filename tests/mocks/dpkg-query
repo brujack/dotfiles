@@ -1,9 +1,58 @@
 #!/usr/bin/env bash
+# Mock dpkg-query. Supports two invocation shapes actually used in this repo:
+#
+#   1. Legacy list form -- no package name argument:
+#        dpkg-query -W -f='${Package} ${Version}\n'   (lib/update_summary.sh)
+#        dpkg-query -W -f '${Package}\t${Version}\n'   (lib/package_capture.sh)
+#      Answers from the single static MOCK_DPKG_OUTPUT.
+#   2. Per-package status form -- exactly one package name argument:
+#        dpkg-query -f '${db:Status-Abbrev}' -W <pkg>   (lib/linux_shared.sh)
+#      Answers per package via MOCK_DPKG_STATUS_<pkg>, e.g.
+#      MOCK_DPKG_STATUS_zsh_doc=rc. A hyphen in the package name maps to an
+#      underscore in the variable name (bash identifiers can't hold '-').
+#      An unset variable means the package is absent (prints nothing).
+#
+# The two forms can only be told apart by a real (if minimal) argument
+# parse, not by "does the last token start with '-'": -f's format-string
+# value can arrive as its own SEPARATE token (lib/package_capture.sh's
+# caller), and that token doesn't start with '-' either -- indistinguishable
+# from a package name by position alone. -f's argument must be consumed
+# explicitly, whichever form it arrives in.
 printf "dpkg-query %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+
 if [[ "${MOCK_DPKG_QUERY_EXIT:-0}" -ne 0 ]]; then
   exit "${MOCK_DPKG_QUERY_EXIT}"
 fi
-case "$1" in
-  -W) printf "%s\n" "${MOCK_DPKG_OUTPUT:-}" ;;
-esac
+
+_pkgs=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -f)
+      # Bare -f takes its format string as a separate following token.
+      if [[ $# -ge 2 ]]; then
+        shift 2
+      else
+        shift
+      fi
+      ;;
+    -f=* | --format=*)
+      shift
+      ;;
+    -*)
+      shift
+      ;;
+    *)
+      _pkgs+=("$1")
+      shift
+      ;;
+  esac
+done
+
+if [[ "${#_pkgs[@]}" -eq 0 ]]; then
+  printf "%s\n" "${MOCK_DPKG_OUTPUT:-}"
+  exit 0
+fi
+
+_var="MOCK_DPKG_STATUS_${_pkgs[0]//-/_}"
+printf '%s' "${!_var}"
 exit 0
