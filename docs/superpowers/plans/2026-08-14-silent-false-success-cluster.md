@@ -1,5 +1,7 @@
 # Silent-False-Success Cluster Implementation Plan
 
+> **Status: DONE** — merged 2026-08-15 as PR #218 (`4bd5dd3`).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make six functions stop reporting success for work that did not happen, and delete a publisher whose exit codes nothing reads.
@@ -319,8 +321,8 @@ Caught by breaking it: a `CLAUDE.md` coverage-denominator note written in Phase 
 deleted script and re-broke a gate that had already passed twice, which is precisely the
 cross-task collision Task 7's prompt was written to prevent. That note was reworded (it reads
 better naming the ADR anyway); the ADR mention stands. Final scope is `tests/ .github/
-Makefile CLAUDE.md docs/superpowers/README.md` — the files that would *instruct* a reader,
-not the files that *record*.
+Makefile CLAUDE.md docs/superpowers/README.md` — the files that would _instruct_ a reader,
+not the files that _record_.
 
 **ADR-0008 loses a bullet, not its status.** The PS4-xtrace decision stands; one delivery mechanism goes away.
 
