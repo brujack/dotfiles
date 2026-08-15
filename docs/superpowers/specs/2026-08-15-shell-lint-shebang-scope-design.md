@@ -271,3 +271,149 @@ technique; here it is the only check that distinguishes the fix from its absence
   is a genuine inversion of the failure mode. Test 1 pins it: if a `.sh` file ever lacks a
   shebang, the name-oracle test fails loudly rather than the file being dropped silently.
 - **Parse-time I/O on every `make` invocation**, including `make help`. Measured at +20ms.
+
+## Multi-Lens Review
+
+Reviewed at commit: `e05feef` (Step 7 self-review commit, before Step 8 dispatch)
+
+**All three lenses independently reached the same primary finding**: the proposed oracle
+cannot detect the failure it exists to prevent. That convergence is not three confirmations
+of one insight — it is three same-model passes over shared framing — but the finding was
+verified directly and holds: simulating the collapse shows Test 1 reduces to `name ⊆ name`
+and passes.
+
+### Goal-Fit
+
+Finding: **PR 1 is sound and worth building; PR 2 and PR 3 are carried by an argument the
+corpus does not instantiate.** Two errors found.
+
+1. **math's baseline is misstated in the gap table.** The table used `SHELL_TRACKED` (25),
+   but math's lint scope is `SHELL_SOURCES` = `SHELL_TRACKED` + 3 named hooks = **28**
+   (`math/Makefile:19,21,65`). Verified. The genuinely-newly-linted set is therefore **4
+   files, not 7** — `tests/mocks/{ggshield,gh,git,make}`; the other three are the hooks,
+   already linted. PR 2 buys 4 test mocks and 0 findings in exchange for a script, a new
+   bats suite, and a CLAUDE.md edit.
+2. **Drift-immunity has no measured instance outside `tests/mocks/`.** Arrival history of
+   every extensionless shell file in dotfiles: 34 in 2026-03, 29 in 2026-04, 1 in 2026-05,
+   1 in 2026-07 — **65 of 65 under `tests/mocks/`**. Same in math (4 of 4). Across all five
+   repos there is not one extensionless shell file outside `tests/mocks/` or an
+   already-named hook path. The one-line pathspec widening captures 100% of today's gap and
+   100% of every historical arrival.
+
+   The lens explicitly does not recommend the pathspec — the derived form is genuinely
+   better and retires a list-shaped defect this repo has hit three times — but states that
+   the measured value is concentrated entirely in PR 1.
+
+3. **Oracle Test 6 cannot fail for the reason it was written.** The `\#` version divergence
+   is a property of the *rejected* inline `$(shell ...)` form; routing the shebang literal
+   through a script make never parses makes the class structurally unreachable in the chosen
+   design. Keep it as a guard against reintroducing the inline form, but it is not evidence
+   about this derivation.
+
+Premise verified: re-derived the dotfiles row from scratch — 35 / 100 / 65 delta / 0 lost /
+5 findings in 2 files / `find . -path './tests/mocks/*' -name '*.sh'` returns 0 confirming
+the dead CI exclusion. All held exactly. Also confirmed the PR 3 exclusion predicate is
+complete today (delta minus `*.j2|*.tpl|*.fixture` leaves only already-named hooks in both
+deferred repos), and refuted the objection that mocks are a structurally noisy class like
+`.bats`: 64 mocks yield 5 findings at default severity versus `.bats`' 2,698.
+
+Assumption: that extensionless shell files will keep arriving **outside `tests/mocks/`**.
+Partially settled already, and it went against the spec — zero such files exist across five
+repos, and both 2026 arrivals were `tests/mocks/*`. Settled forward by running
+`git log --diff-filter=A --name-only` over the shebang-minus-pathspec set in the three
+deferred repos: one hit outside `tests/mocks/` or a named hook makes drift real and carries
+PR 3; a fourth empty result means the fleet-wide arm guards a class this fleet has never
+produced.
+
+Disposition:
+
+### Ergonomics
+
+Finding: **the pre-commit output nearly triples and the spec priced only the parse cost.**
+`Makefile:lint` prints one line per file for `bash -n` but one line total for `shellcheck`.
+Measured on `e05feef`: `make lint` emits **47** lines (35 bash + 10 zsh + 2 shellcheck).
+After the widening it emits **112**, 64 of them `bash  OK  tests/mocks/<stub>`. Since
+`scripts/pre-commit-hook.sh:5` runs `make lint`, that is 112 lines on every `git commit`,
+and a single `bash FAIL` or the ggshield verdict is pushed off a standard terminal by mock
+chatter. The recipe already contains the right shape in its shellcheck arm; the `bash -n`
+arm should adopt it in the PR that triples N.
+
+Secondary: PR 1 replaces CI's `find`-based step with `make print-SHELL_FILES`, but `print-%`
+(`Makefile:147-148`) has **no empty-list guard**, so an empty derivation yields a vacuous
+green. The sibling zsh step in `ci.yml` already carries exactly that guard. Not a regression
+— the current `find | xargs` is equally fail-open — but the spec is touching that step.
+
+Also corrects the spec's parse-time figure: **0.072s vs 0.014s**, not 0.03/0.01 —
+understated ~2.4×, still irrelevant at +58ms. And measured that no latent noise hides at a
+stricter tier: `shellcheck -S style` over the mocks returns the same 5 findings, so the
+4-of-5 suppression cost is one-time, not recurring.
+
+Premise verified: ran the spec's script verbatim — 35 → 100, 65 delta, 0 lost, and the 5
+findings by exact file:line. No tracked `*.sh`/`*.bash` lacks a shebang, so the inversion
+risk is genuinely zero today.
+
+Assumption: that `scripts/list-shell-files.sh` is resolvable and executable at Makefile
+**parse time** for every actor and checkout in the fleet. Two uncertain failure routes: a
+checkout with `core.fileMode=false` (the Windows/WSL backup-of-last-resort box) can carry
+the file at mode 644, and a `make -f` from another cwd breaks the relative path. Either
+yields an empty `$(shell ...)` and a guard message naming the wrong cause. Settled by
+`git config core.fileMode; git ls-files -s scripts/list-shell-files.sh` on each machine.
+**Partially settled here:** this machine reports `core.fileMode=true` and every tracked
+script at `100755`. The Windows/WSL box is unverifiable remotely — it accepts no inbound SSH.
+
+Disposition:
+
+### Risk
+
+Finding: **the permanent suite cannot detect the failure it exists to prevent.** All six
+oracle cases are *relational* — subset, non-empty, disjoint, decoy-survival, cross-make
+equality — and every one stays green if `SHELL_FILES` silently collapses back to the 35-file
+pathspec. Test 1 (`name ⊆ derived`) is satisfied by `derived == name`; Test 2 catches only
+total emptiness; Test 4 exercises the script against fixtures, so it passes even if the
+Makefile stops calling it; Test 6 compares the derivation to itself. **Nothing pins the 65
+files that are the entire point of the change.** The only discriminating check — the
+`tests/mocks/gpg` mutation — sits in the one-shot "Pending implementation" table, not in the
+suite. After merge the scope can silently narrow and every gate reports clean: verbatim the
+failure this spec cites three prior instances of, rebuilt one level up.
+
+Verified directly: simulating the collapse, Test 1 passes.
+
+Fix is one assertion: a specific extensionless non-hook member (`tests/mocks/brew`) is in
+`make print-SHELL_FILES`, or a pinned floor count. Name-derivation cannot produce it.
+
+Secondary: the empty-list guard (`Makefile:60-64`) does fail **closed**, which is right, but
+its message names only *"git absent from PATH, or this tree was exported without .git"*.
+Under this design the dominant cause becomes a broken, renamed, or non-executable script,
+and the operator hitting it is locked out of `git commit` while being pointed at the wrong
+cause.
+
+Judged adequate: the `GIT_DIR` / `git archive` / chmod surfaces (`env -u` on both git calls,
+`rev-parse` failure → `exit 1` → empty → guard fires); the alternative rejections; and the
+coverage-denominator non-goal.
+
+Premise verified: re-implemented the derivation independently and ran `comm -23` in all five
+repos — `dotfiles 33/100`, `math 25/32`, `ai-config 30/42`, `terraform_ansible 17/28`,
+`etch-cli 1/4`, **LOST=0 everywhere**. Findings re-derived: 5 in 2 files for dotfiles, 0 for
+math. Recorded honestly: its first count returned a vacuous 0 because macOS `xargs` has no
+`-a`, so the pipeline errored and `grep` matched nothing — a false refutation that looked
+like a real one.
+
+Assumption: that `tests/mocks/` is production-shaped source rather than a
+defective-by-intent class. The spec skips the exclusion predicate for dotfiles on that basis,
+while PR 1's own remedy is a site suppression for *deliberate* word-splitting a mock needs to
+function — the same argument used to exclude ai-config's fixtures as a class. Measured:
+`shellcheck --enable=all` over the 64 mocks returns **28 findings across 11 of 64 files**.
+
+**Checked, and the exposure is narrower than that number reads.** At the default severity
+the gate actually runs, only **5** fire — the same `SC2086`×4 and `SC2034`×1 already planned.
+The other 23 are opt-in checks (`SC2250`, `SC2249`, `SC2292`, `SC2154`) that cannot fire
+under the current invocation. So mocks are *not* the same case as ai-config's fixtures, where
+3 of 10 fail at default severity. Realising the risk requires a future shellcheck release
+promoting an optional check to default.
+
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger. It proposes a scope
+derivation with concrete, measured acceptance criteria and no judge component.
