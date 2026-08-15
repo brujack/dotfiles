@@ -696,3 +696,328 @@ _is_make_c_candidate() {
   grep -qE '^test:[[:space:]]+.*\blint\b' "${REPO_ROOT}/Makefile"
   grep -qE '^test:[[:space:]]+.*\btest-python\b' "${REPO_ROOT}/Makefile"
 }
+
+# ---------------------------------------------------------------------------
+# Oracle cases: pin the derived SHELL_FILES set from BOTH directions.
+#
+# SHELL_FILES is content-derived (scripts/list-shell-files.sh: every tracked
+# file whose first line is a bash/sh shebang), replacing a pathspec
+# ('*.sh' '*.bash' plus two named hooks) that could not express "every
+# tracked shell script" -- shell.md. Oracle cases 1-10 below assert the new
+# set is not too SMALL (still a superset of everything the old pathspec
+# found, plus the specific extensionless files the old approach missed).
+# Oracle case 11 asserts the set is not too LARGE -- the property a pathspec
+# cannot deliver at all, because a directory glob wide enough to catch
+# extensionless mocks also catches every non-shell file living beside them.
+# Measured this session: cases 1-10 all stay green even if SHELL_FILES were
+# re-implemented as a pathspec that happens to produce the identical 101
+# files this repo has today. Case 11 is the one case that distinguishes the
+# two mechanisms.
+# ---------------------------------------------------------------------------
+
+# Oracle case 1: the name oracle -- the exact pathspec SHELL_FILES replaced
+# -- must itself be non-empty, or case 2's subset assertion below would be
+# vacuously true (behavior.md: an empty-set oracle can only agree).
+@test "oracle case 1: the old SHELL_FILES pathspec is itself non-empty" {
+  run _git_ls_clean '*.sh' '*.bash' 'scripts/pre-push' 'scripts/commit-msg'
+  [ "${status}" -eq 0 ]
+  [ -n "${output}" ]
+}
+
+# Oracle case 2: every file the old pathspec matched must still be a member
+# of the new, content-derived SHELL_FILES. This is a different-mechanism
+# oracle -- name-derived, checking a content-derived production value -- per
+# behavior.md's "a check derived from the same decision as the thing it
+# checks cannot falsify it".
+@test "oracle case 2: every file matched by the old SHELL_FILES pathspec is present in SHELL_FILES" {
+  name_oracle="$(_git_ls_clean '*.sh' '*.bash' 'scripts/pre-push' 'scripts/commit-msg' | sort -u)"
+  [ -n "${name_oracle}" ]
+
+  run _make_print SHELL_FILES
+  [ "${status}" -eq 0 ]
+  resolved="$(_sorted_lines_from_space_list "${output}")"
+
+  missing=""
+  while IFS= read -r f; do
+    [ -z "${f}" ] && continue
+    printf '%s\n' "${resolved}" | grep -qxF "${f}" || missing="${missing}${f}\n"
+  done <<< "${name_oracle}"
+
+  if [ -n "${missing}" ]; then
+    printf 'missing from SHELL_FILES:\n%b' "${missing}" >&2
+  fi
+  [ -z "${missing}" ]
+}
+
+# Oracle case 3: SHELL_FILES is non-empty on the real repo, and `make lint`
+# fails closed -- rather than silently passing having linted nothing -- when
+# it is forced empty. `SHELL_FILES=` on the command line overrides the `:=`
+# assignment in the Makefile (GNU make command-line variables win over any
+# in-file assignment unless the Makefile uses `override`); confirmed this
+# session the recipe's own empty-list guard (Makefile:69) fires and make
+# exits non-zero.
+@test "oracle case 3: SHELL_FILES is non-empty, and make lint refuses to pass when it is forced empty" {
+  run _make_print SHELL_FILES
+  [ "${status}" -eq 0 ]
+  [ -n "${output}" ]
+
+  run env PATH="${CLEAN_PATH}" make --no-print-directory -C "${REPO_ROOT}" lint SHELL_FILES=
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"EMPTY"* ]]
+}
+
+# Oracle case 4: SHELL_FILES and ZSH_FILES stay disjoint, with non-emptiness
+# of BOTH asserted before the disjointness check in the same test -- an
+# empty set is trivially disjoint from anything, so a self-contained case
+# must rule that out first rather than relying on a separate test elsewhere
+# in this file to have already done so.
+@test "oracle case 4: SHELL_FILES and ZSH_FILES are both non-empty, and only then checked disjoint" {
+  run _make_print SHELL_FILES
+  [ "${status}" -eq 0 ]
+  shell_files="$(_sorted_lines_from_space_list "${output}")"
+  [ -n "${shell_files}" ]
+
+  run _make_print ZSH_FILES
+  [ "${status}" -eq 0 ]
+  zsh_files="$(_sorted_lines_from_space_list "${output}")"
+  [ -n "${zsh_files}" ]
+
+  overlap="$(comm -12 <(printf '%s\n' "${shell_files}") <(printf '%s\n' "${zsh_files}"))"
+  if [ -n "${overlap}" ]; then
+    printf 'SHELL_FILES/ZSH_FILES overlap:\n%s\n' "${overlap}" >&2
+  fi
+  [ -z "${overlap}" ]
+}
+
+# Oracle case 5: the shebang-form matrix, built in a fixture repo rather than
+# asserted against this repo's own tracked files -- the matrix needs
+# rejected forms (zsh, fish) this repo does not carry. Includes a shebang-
+# and-nothing-else fixture with NO trailing newline: `read` returns 1 at
+# EOF-without-delimiter while still populating the variable
+# (scripts/list-shell-files.sh's own comment), and no tracked file in this
+# repo has that shape, so nothing else would catch a regression in that
+# guard.
+@test "oracle case 5: the shebang-form matrix is classified correctly, in a fixture repo" {
+  fixture="${BATS_TEST_TMPDIR}/shebang-fixture"
+  mkdir -p "${fixture}"
+  PATH="${CLEAN_PATH}" git -C "${fixture}" init --quiet
+  PATH="${CLEAN_PATH}" git -C "${fixture}" config user.email "test@test.com"
+  PATH="${CLEAN_PATH}" git -C "${fixture}" config user.name "Test"
+
+  printf '#!/usr/bin/env bash\necho a\n' > "${fixture}/accept-env-bash"
+  printf '#!/bin/bash\necho a\n' > "${fixture}/accept-bin-bash"
+  printf '#!/bin/bash -e\necho a\n' > "${fixture}/accept-bin-bash-flag"
+  printf '#!/bin/sh\necho a\n' > "${fixture}/accept-bin-sh"
+  printf '#!/usr/bin/env sh\necho a\n' > "${fixture}/accept-env-sh"
+  printf '#!/usr/bin/env bash' > "${fixture}/accept-no-trailing-newline"
+  printf '#!/usr/bin/env zsh\necho a\n' > "${fixture}/reject-env-zsh"
+  printf '#!/bin/zsh\necho a\n' > "${fixture}/reject-bin-zsh"
+  printf '#!/usr/bin/zsh -f\necho a\n' > "${fixture}/reject-bin-zsh-flag"
+  printf '#!/usr/bin/env fish\necho a\n' > "${fixture}/reject-env-fish"
+
+  for f in accept-env-bash accept-bin-bash accept-bin-bash-flag accept-bin-sh \
+           accept-env-sh accept-no-trailing-newline reject-env-zsh reject-bin-zsh \
+           reject-bin-zsh-flag reject-env-fish; do
+    PATH="${CLEAN_PATH}" git -C "${fixture}" add "${f}"
+  done
+  PATH="${CLEAN_PATH}" git -C "${fixture}" commit --quiet -m "shebang matrix fixture"
+
+  run bash -c "cd '${fixture}' && PATH='${CLEAN_PATH}' '${REPO_ROOT}/scripts/list-shell-files.sh'"
+  [ "${status}" -eq 0 ]
+  resolved="$(printf '%s\n' "${output}" | sort -u)"
+
+  missing_accepted=""
+  for f in accept-env-bash accept-bin-bash accept-bin-bash-flag accept-bin-sh \
+           accept-env-sh accept-no-trailing-newline; do
+    printf '%s\n' "${resolved}" | grep -qxF "${f}" || missing_accepted="${missing_accepted}${f} "
+  done
+  if [ -n "${missing_accepted}" ]; then
+    printf 'expected accepted, missing: %s\n' "${missing_accepted}" >&2
+  fi
+  [ -z "${missing_accepted}" ]
+
+  present_rejected=""
+  for f in reject-env-zsh reject-bin-zsh reject-bin-zsh-flag reject-env-fish; do
+    printf '%s\n' "${resolved}" | grep -qxF "${f}" && present_rejected="${present_rejected}${f} "
+  done
+  if [ -n "${present_rejected}" ]; then
+    printf 'expected rejected, present: %s\n' "${present_rejected}" >&2
+  fi
+  [ -z "${present_rejected}" ]
+}
+
+# Oracle case 6: SHELL_FILES survives a leaked GIT_DIR pointed at a decoy
+# repo -- the same hazard the existing "print-ZSH_FILES survives a leaked
+# GIT_DIR" test above guards (ci.md: git exports GIT_DIR into the pre-push
+# hook when the push originates from a worktree). scripts/list-shell-files.sh
+# does its own env -u strip internally rather than relying on a Makefile-
+# level prefix (see the script's own header), so this proves that strip
+# holds under `make print-SHELL_FILES` specifically.
+@test "oracle case 6: make print-SHELL_FILES survives a leaked GIT_DIR pointed at a decoy repo" {
+  decoy="${BATS_TEST_TMPDIR}/decoy-shell"
+  mkdir -p "${decoy}"
+  PATH="${CLEAN_PATH}" git -C "${decoy}" init --quiet
+  PATH="${CLEAN_PATH}" git -C "${decoy}" config user.email "test@test.com"
+  PATH="${CLEAN_PATH}" git -C "${decoy}" config user.name "Test"
+  printf '#!/usr/bin/env bash\necho hi\n' > "${decoy}/a.sh"
+  PATH="${CLEAN_PATH}" git -C "${decoy}" add a.sh
+  PATH="${CLEAN_PATH}" git -C "${decoy}" commit --quiet -m "decoy"
+
+  run env GIT_DIR="${decoy}/.git" PATH="${CLEAN_PATH}" \
+    make --no-print-directory -C "${REPO_ROOT}" print-SHELL_FILES
+  [ "${status}" -eq 0 ]
+  resolved="$(_sorted_lines_from_space_list "${output}")"
+
+  run _make_print SHELL_FILES
+  [ "${status}" -eq 0 ]
+  expected="$(_sorted_lines_from_space_list "${output}")"
+
+  if [ "${resolved}" != "${expected}" ]; then
+    printf 'resolved (leaked GIT_DIR):\n%s\nexpected (clean):\n%s\n' "${resolved}" "${expected}" >&2
+  fi
+  [ "${resolved}" = "${expected}" ]
+}
+
+# Oracle case 7: two named, real, previously-out-of-scope files must both be
+# members of SHELL_FILES today -- tests/mocks/brew (one of the 64
+# extensionless mocks a pathspec left invisible) and config/local.sh.example
+# (a *.sh.example file no '*.sh'/'*.bash' pathspec matches, since the
+# extension is ".example", not ".sh"). Neither is producible by re-deriving
+# a name from a filename pattern -- both require reading the file's actual
+# first line.
+@test "oracle case 7: tests/mocks/brew and config/local.sh.example are both members of SHELL_FILES" {
+  run _make_print SHELL_FILES
+  [ "${status}" -eq 0 ]
+  resolved="$(_sorted_lines_from_space_list "${output}")"
+
+  printf '%s\n' "${resolved}" | grep -qxF "tests/mocks/brew"
+  printf '%s\n' "${resolved}" | grep -qxF "config/local.sh.example"
+}
+
+# Oracle case 8: the script itself exits 0 on the real repo. Deliberately NOT
+# a count assertion -- tdd.md's Coverage Denominators and this file's own
+# Case 4 commentary both record that a hardcoded or predicate-derived count
+# reference breaks on a legitimate file addition/deletion (measured twice:
+# once on a legitimate deletion, once on a python-shebang mock). Exit status
+# plus oracle case 2's superset check above is the whole floor.
+@test "oracle case 8: scripts/list-shell-files.sh exits 0 against the real repo" {
+  run bash -c "cd '${REPO_ROOT}' && PATH='${CLEAN_PATH}' \
+    env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+    bash scripts/list-shell-files.sh"
+  [ "${status}" -eq 0 ]
+}
+
+# Oracle case 9: print-SHELL_FILES's line count is equal and nonzero across a
+# <4 make and a >=4 make -- the SHELL_FILES analogue of this file's existing
+# Case 1 (which covers print-ZSH_FILES). Requires both arms; skips with a
+# stated reason rather than passing vacuously when only one is available
+# (shell.md pitfall G).
+@test "oracle case 9: print-SHELL_FILES line count is equal and nonzero across a <4 make and a >=4 make" {
+  local _make_lt4 _make_ge4 _lt4_count _ge4_count
+  _make_lt4="$(_find_make_lt4)" \
+    || skip "no <4 arm: /usr/bin/make is missing or already >=4 on this host"
+  _make_ge4="$(_find_make_ge4)" \
+    || skip "no >=4 arm: no make/gmake >=4 found on PATH"
+
+  run env -u MAKEFLAGS PATH="${CLEAN_PATH}" "${_make_lt4}" -C "${REPO_ROOT}" print-SHELL_FILES
+  [ "${status}" -eq 0 ]
+  [ -n "${output}" ]
+  _lt4_count="${#lines[@]}"
+
+  run env -u MAKEFLAGS PATH="${CLEAN_PATH}" "${_make_ge4}" -C "${REPO_ROOT}" print-SHELL_FILES
+  [ "${status}" -eq 0 ]
+  [ -n "${output}" ]
+  _ge4_count="${#lines[@]}"
+
+  if [ "${_lt4_count}" -ne "${_ge4_count}" ]; then
+    printf '<4 (%s) line count %s != >=4 (%s) line count %s\n' \
+      "${_make_lt4}" "${_lt4_count}" "${_make_ge4}" "${_ge4_count}" >&2
+  fi
+  [ "${_lt4_count}" -eq "${_ge4_count}" ]
+}
+
+# Oracle case 10: the CI empty-list guard's shell logic. `make
+# print-SHELL_FILES` emits one space-separated line; `tr ' ' '\n' | grep -c .`
+# turns that into a real per-file count. Without the `tr` step, a bare
+# `xargs -I{}` reads the single line as ONE replacement unit and invokes its
+# command exactly once, not once per file -- demonstrated here directly
+# rather than asserted, so a change to either step is caught.
+@test "oracle case 10: the CI empty-list guard needs tr -- xargs -I{} alone treats the space-list as one unit" {
+  run _make_print SHELL_FILES
+  [ "${status}" -eq 0 ]
+  raw="${output}"
+  [ -n "${raw}" ]
+
+  file_count="$(printf '%s' "${raw}" | tr ' ' '\n' | grep -c .)"
+  [ "${file_count}" -gt 0 ]
+  word_count="$(printf '%s' "${raw}" | wc -w | tr -d ' ')"
+  [ "${file_count}" -eq "${word_count}" ]
+
+  arg_invocations="$(printf '%s\n' "${raw}" | PATH="${CLEAN_PATH}" xargs -I{} printf 'X\n' | wc -l | tr -d ' ')"
+  if [ "${arg_invocations}" -ne 1 ] || [ "${file_count}" -le 1 ]; then
+    printf 'xargs -I{} invocations=%s file_count(tr)=%s\n' "${arg_invocations}" "${file_count}" >&2
+  fi
+  [ "${arg_invocations}" -eq 1 ]
+  [ "${file_count}" -gt 1 ]
+}
+
+# Oracle case 11: the property a pathspec cannot deliver, because it is the
+# only case that asserts the set is not too LARGE rather than not too small.
+# Built in a fixture repo with two extensionless files under tests/mocks/ --
+# fixture-data (plain data, no shebang) and python-helper (a real shebang,
+# but python3, not bash/sh) -- plus bash-helper as a positive control, so an
+# empty-result bug in the derivation cannot masquerade as correct exclusion.
+# Deliberately extensionless: shell.md's own rationale for this design is
+# that a directory glob wide enough to reach extensionless mocks (the shape
+# 'tests/mocks/*' would need, to catch tests/mocks/brew per oracle case 7)
+# cannot also express "only the shell ones" -- a `.md` fixture would be
+# excludable by name (':(exclude)*.md') and would prove nothing.
+#
+# RED verified this session: pointing the derivation at that wide pathspec
+# instead of the script incorrectly includes BOTH tests/mocks/fixture-data
+# and tests/mocks/python-helper, while the real script (scripts/list-shell-
+# files.sh) correctly excludes both. See task report for the literal output.
+@test "oracle case 11: a non-shell and a non-bash/sh-shebang file under tests/mocks/ are absent from SHELL_FILES, though a directory-glob pathspec would include them" {
+  fixture="${BATS_TEST_TMPDIR}/mocks-fixture"
+  mkdir -p "${fixture}/tests/mocks"
+  PATH="${CLEAN_PATH}" git -C "${fixture}" init --quiet
+  PATH="${CLEAN_PATH}" git -C "${fixture}" config user.email "test@test.com"
+  PATH="${CLEAN_PATH}" git -C "${fixture}" config user.name "Test"
+
+  printf 'not a script, just fixture data\n' > "${fixture}/tests/mocks/fixture-data"
+  printf '#!/usr/bin/env python3\nprint("hi")\n' > "${fixture}/tests/mocks/python-helper"
+  printf '#!/usr/bin/env bash\necho hi\n' > "${fixture}/tests/mocks/bash-helper"
+
+  PATH="${CLEAN_PATH}" git -C "${fixture}" add tests/mocks/fixture-data
+  PATH="${CLEAN_PATH}" git -C "${fixture}" add tests/mocks/python-helper
+  PATH="${CLEAN_PATH}" git -C "${fixture}" add tests/mocks/bash-helper
+  PATH="${CLEAN_PATH}" git -C "${fixture}" commit --quiet -m "mocks fixture"
+
+  run bash -c "cd '${fixture}' && PATH='${CLEAN_PATH}' '${REPO_ROOT}/scripts/list-shell-files.sh'"
+  [ "${status}" -eq 0 ]
+  content_derived="$(printf '%s\n' "${output}" | sort -u)"
+
+  # Positive control: the real bash mock must still be found, so an empty
+  # or broken derivation cannot masquerade as correct exclusion below.
+  printf '%s\n' "${content_derived}" | grep -qxF "tests/mocks/bash-helper"
+
+  if printf '%s\n' "${content_derived}" | grep -qxF "tests/mocks/fixture-data"; then
+    printf 'content-derived set wrongly includes tests/mocks/fixture-data\n' >&2
+    false
+  fi
+  if printf '%s\n' "${content_derived}" | grep -qxF "tests/mocks/python-helper"; then
+    printf 'content-derived set wrongly includes tests/mocks/python-helper\n' >&2
+    false
+  fi
+
+  # The pathspec this design replaced, widened with a directory glob to
+  # compensate for extensionless mocks (shell.md: "a directory glob added to
+  # compensate cannot express 'only the shell ones'"). It incorrectly sweeps
+  # BOTH non-shell fixtures in -- this is the property oracle cases 1-10
+  # cannot distinguish, because all of them stay green under this same wide
+  # pathspec on the real repo.
+  wide_pathspec="$(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+    PATH="${CLEAN_PATH}" git -C "${fixture}" ls-files '*.sh' '*.bash' 'tests/mocks/*' | sort -u)"
+  printf '%s\n' "${wide_pathspec}" | grep -qxF "tests/mocks/fixture-data"
+  printf '%s\n' "${wide_pathspec}" | grep -qxF "tests/mocks/python-helper"
+}
