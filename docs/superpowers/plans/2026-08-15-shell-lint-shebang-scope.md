@@ -341,7 +341,7 @@ Nygard format, short — the spec carries the detail. Context: a pathspec cannot
 id: 7
 description: Sync the documented lint scope figures and the now-false tests/mocks coverage note (docs-only, no behavior change)
 role: executor
-model: haiku
+model: sonnet
 tdd: not-applicable
 acceptance:
   - cmd: 'grep -q "list-shell-files" CLAUDE.md'
@@ -357,6 +357,8 @@ depends_on: [3, 4, 5]
 ```
 
 `tdd: not-applicable` — documentation only.
+
+**Escalated from `haiku` to `sonnet` after Task 5.** The plan assumed a single figure update. Enumerating the file found **four** stale locations (lines 208, 242, 244, 423) plus **one that must not be touched** (line 304, the bash-coverage instrumented set — a stated non-goal). A single-file task with an explicit in-file exclusion is not the mechanical shape the haiku scope guard is calibrated for.
 
 **Both gates are discriminators and both fail on base** — `CLAUDE.md` currently contains `35 tracked shell files` and does not contain `list-shell-files`. Verified.
 
