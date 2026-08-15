@@ -92,7 +92,12 @@ cd "${_root}" || exit 1
 env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
   git ls-files -z | while IFS= read -r -d '' f; do
     [[ -f "${f}" ]] || continue
-    IFS= read -r first < "${f}" 2>/dev/null || continue
+    first=
+    # `read` returns 1 at EOF-without-delimiter while STILL populating the
+    # variable, so a bare `|| continue` discards a single-line file whose only
+    # line is an unterminated shebang. It clears the variable on a truly empty
+    # file, so the -n test is safe against a stale value from the prior iteration.
+    IFS= read -r first < "${f}" 2>/dev/null || [[ -n "${first}" ]] || continue
     case "${first}" in
       '#!'*/bash|'#!'*/bash\ *|'#!'*env\ bash|'#!'*env\ bash\ *|\
       '#!'*/sh|'#!'*/sh\ *|'#!'*env\ sh|'#!'*env\ sh\ *) printf '%s\n' "${f}" ;;
@@ -359,6 +364,15 @@ alone is not enough, and that was this spec's own worst defect across both revie
   `config/local.sh.example`. Verified. And `∅ ⊆ anything` is true, so the subset case is
   vacuous if the _oracle itself_ returns empty — which a leaked `GIT_DIR` or an absent git
   produces, and the oracle has no strip of its own.
+- **Round 3** — the cases added in round 2 close the _too-small_ collapses and none of the
+  _right-sized_ one. The **equivalent** pathspec —
+  `'*.sh' '*.bash' <hooks> 'tests/mocks/*' 'config/local.sh.example'` — produces the same 100
+  files and passes **all ten** cases. Verified: `total=100 mocks=64`, name-subset misses 0,
+  both case-7 pins present, floor satisfied at `100 >= 35+65`. So the property the script is
+  bought for — bidirectional correctness — had no case and no mutation row at all, and the
+  suite could not tell the two mechanisms apart. That is the round-1 defect two levels out:
+  each round closed a narrower collapse and left the wider one. Case 11 and the fourth
+  mutation row exist for exactly this.
 
 Cases to add, in `tests/scripts/makefile_lint_scope.bats`:
 
@@ -376,11 +390,26 @@ Cases to add, in `tests/scripts/makefile_lint_scope.bats`:
 7. **`tests/mocks/brew` and `config/local.sh.example` are both members** of
    `make print-SHELL_FILES`. Two pins, not one: the mock catches a collapse to names, the
    `.example` catches the partial regression above. Neither is producible by name-derivation.
-8. **A structural floor, expressed as derivation rules rather than a scalar.** A bare
-   `>= 100` goes red the next time someone legitimately adds a shell file, and `make test`
-   gates `git push`. Assert instead: members under `tests/mocks/` `>= 64`; `SHELL_FILES` ⊇ the
-   name oracle; total `>=` the name-oracle count `+ 65`. These grow correctly and still catch
-   a truncated `$(shell)` result.
+8. **A structural floor, derived at HEAD on every run — not a hardcoded constant.** Round 2
+   proposed `mocks >= 64` and `total >= name-oracle + 65`. Both are hand-maintained numbers,
+   which is this spec's own target defect one level up, and both break on a legitimate
+   **deletion**: dropping one obsolete mock gives `mocks=63` and `total=99`, reddening both
+   arms at once while `make test` gates `git push`. Round 2 fixed the addition direction and
+   left its mirror.
+
+   Derive it instead, by a **non-circular** mechanism — presence of `#!` on line 1, which is
+   strictly weaker than the production predicate (that additionally requires `bash`/`sh` after
+   a `/` or `env `):
+
+   > every tracked file under `tests/mocks/` whose first line begins with `#!`
+   > is a member of `SHELL_FILES`
+
+   Stable under both addition and deletion, since both sides move together. It still catches a
+   truncated `$(shell)` result, because a truncation drops members the oracle still lists. And
+   it fails loudly rather than silently if a `zsh` mock is ever added — the weaker oracle would
+   include it while the production predicate would not — which is the correct outcome: that
+   case wants an explicit decision, not a silent drop.
+
 9. The count is identical under a `<4` make and a `>=4` make. **The rationale in the round-1
    spec was wrong and is retired**: this does not detect reintroduction of the inline form,
    since two make versions agree on that form's correct branch too. It is kept only as a
@@ -389,6 +418,15 @@ Cases to add, in `tests/scripts/makefile_lint_scope.bats`:
    rather than pass silently, or it becomes another vacuous green.
 10. **The CI step's empty-list guard has its own case.** It is new machinery in `ci.yml` that
     nothing in the bats suite currently reaches.
+11. **A tracked non-shell file under `tests/mocks/` is absent from `SHELL_FILES`.** Build it in
+    a fixture repo — `git add tests/mocks/README.md` — and assert the derivation excludes it.
+
+    **This is the only case that pins the property the script is bought for**, and it was
+    missing through three review rounds while the spec's entire justification rested on it.
+    Every other case asserts the set is not too _small_; this one asserts it is not too
+    _large_, which is the half a pathspec cannot deliver. Without it the suite passes
+    identically for the script and for the equivalent pathspec — verified — so the ten cases
+    above would have been buying nothing that a one-line pathspec did not already give.
 
 ## Verification
 
@@ -396,28 +434,32 @@ Commands already run, with real output. Every row was independently re-derived b
 one Step 8 lens; rows marked _predicted_ are arithmetic about a state that does not exist
 yet, and are labelled as such per `behavior.md` rather than presented as measurement.
 
-| check                                       | result                                                             | status        |
-| ------------------------------------------- | ------------------------------------------------------------------ | ------------- |
-| `scripts/list-shell-files.sh \| wc -l`      | 100                                                                | measured      |
-| strict superset, no file lost               | 0 lost across all 5 repos                                          | measured ×3   |
-| pathspec alternative produces identical set | `diff` → 0                                                         | measured      |
-| **bidirectional differential**              | `+ tests/mocks/README.md` → pathspec rc=1 (`SC2148`), shebang rc=0 | measured      |
-| rejected shebangs                           | zsh ×3, fish, python3 excluded                                     | measured      |
-| new findings                                | 5, in 2 files                                                      | measured ×3   |
-| script form under make 3.81 and 4.x         | identical output                                                   | measured      |
-| inline `$(shell)` form                      | fails on both, two distinct causes                                 | measured      |
-| `$(shell)` swallows exit status             | script exiting 1 → `got [a b]`                                     | measured      |
-| parse-time cost                             | 0.072s vs 0.014s (re-measured 52ms vs 9ms)                         | measured      |
-| CI's `-not -path './tests/mocks/*'` is dead | `find` returns 0                                                   | measured      |
-| CI form as first specified                  | `xargs: command line cannot be assembled, too long`                | measured      |
-| CI form with `tr ' ' '\n'`                  | works, 35 files today                                              | measured      |
-| `make lint` output volume                   | 47 lines                                                           | measured      |
-| `make lint` after widening                  | 112 lines (100+10+2)                                               | **predicted** |
-| `--enable=all` over mocks                   | 28 findings / 11 files; 5 at default                               | measured      |
-| oracle cases under a simulated collapse     | all green — the round-1 defect                                     | measured      |
-| partial regression (pathspec + mocks glob)  | 99 files, `brew` present, `.example` dropped                       | measured      |
-| shebang uniformity                          | 100/100 `#!/usr/bin/env bash`                                      | measured      |
-| mock edit rate                              | 24 commits since 2026-04-15 (vs 5 arrivals)                        | measured      |
+| check                                       | result                                                                       | status        |
+| ------------------------------------------- | ---------------------------------------------------------------------------- | ------------- |
+| `scripts/list-shell-files.sh \| wc -l`      | 100                                                                          | measured      |
+| strict superset, no file lost               | 0 lost across all 5 repos                                                    | measured ×3   |
+| pathspec alternative produces identical set | `diff` → 0                                                                   | measured      |
+| **bidirectional differential**              | `+ tests/mocks/README.md` → pathspec rc=1 (`SC2148`), shebang rc=0           | measured      |
+| rejected shebangs                           | zsh ×3, fish, python3 excluded                                               | measured      |
+| new findings                                | 5, in 2 files                                                                | measured ×3   |
+| script form under make 3.81 and 4.x         | identical output                                                             | measured      |
+| inline `$(shell)` form                      | fails on both, two distinct causes                                           | measured      |
+| `$(shell)` swallows exit status             | script exiting 1 → `got [a b]`                                               | measured      |
+| parse-time cost                             | 0.072s vs 0.014s (re-measured 52ms vs 9ms)                                   | measured      |
+| CI's `-not -path './tests/mocks/*'` is dead | `find` returns 0                                                             | measured      |
+| CI form as first specified                  | `xargs: command line cannot be assembled, too long`                          | measured      |
+| CI form with `tr ' ' '\n'`                  | works, 35 files today                                                        | measured      |
+| `make lint` output volume                   | 47 lines                                                                     | measured      |
+| `make lint` after widening                  | 112 lines (100+10+2)                                                         | **predicted** |
+| `--enable=all` over mocks                   | 28 findings / 11 files; 5 at default                                         | measured      |
+| oracle cases under a simulated collapse     | all green — the round-1 defect                                               | measured      |
+| partial regression (pathspec + mocks glob)  | 99 files, `brew` present, `.example` dropped                                 | measured      |
+| **equivalent pathspec vs all 10 cases**     | 100 files, `mocks=64`, 0 subset misses, both pins, floor met — **all green** | measured      |
+| **`read` on an unterminated line 1**        | rc=1 with the variable populated → old form drops the file                   | measured      |
+| unterminated line 1, real exposure          | 1 of 9 no-final-newline tracked files is single-line, and is not shell       | measured      |
+| floor stability on a mock deletion          | `mocks=63`, `total=99` — both round-2 arms red at once                       | measured      |
+| shebang uniformity                          | 100/100 `#!/usr/bin/env bash`                                                | measured      |
+| mock edit rate                              | 24 commits since 2026-04-15 (vs 5 arrivals)                                  | measured      |
 
 Pending implementation:
 
@@ -427,10 +469,16 @@ Pending implementation:
 | **mutation: `gpg` fix reverted**                                 | `make lint` goes **red**                          |
 | **mutation: `SHELL_FILES` forced back to the pathspec**          | cases 7 and 8 go **red**, the rest stay green     |
 | **mutation: `SHELL_FILES` forced to pathspec + `tests/mocks/*`** | case 7 goes **red** on the `.example` pin         |
+| **mutation: `SHELL_FILES` forced to the _equivalent_ pathspec**  | case 11 goes **red**; 1–10 stay green             |
+| **mutation: `read` guard reverted to bare `\|\| continue`**      | a single-line unterminated fixture drops out      |
 | `make test`                                                      | exit 0, no regression against the 1334-test floor |
 | `make bash-coverage`                                             | unchanged figure (denominator untouched)          |
 
-The three mutation rows are load-bearing. Without them a green suite is equally consistent
+The five mutation rows are load-bearing, and the equivalent-pathspec one most of all: it is
+the only check that distinguishes this design from the one-line alternative it costs a
+script, +43ms, and eleven test cases more than. If that mutation does not turn case 11 red,
+the whole package reduces to a more expensive way of producing the same set. Without the
+others a green suite is equally consistent
 with "the scope is correct" and "the scope silently narrowed again", and a test believed to
 guard something it does not is worse than no test.
 
@@ -593,14 +641,66 @@ only.
 **Adversarial Spec Review:** N/A — unchanged, no comparison/evaluator/ambiguous-criteria
 trigger.
 
-### Round 3 — scoped re-review pending
+### Round 3 — scoped Risk lens, reviewed at commit `58611ec`
 
-Round 2's dispositions are all **Addressed**, and one is a substantive design change: the
-justification now rests on a measured bidirectional differential rather than on scope size.
-Per the stopping rule, round 2's findings did **not** all sit in text round 1 had already
-read — several were introduced by the round-1 revision — so the loop has not converged and a
-third pass is warranted. Because the revision rewrote specific sections rather than the whole
-document, a **scoped re-review** is proportionate: one lens (Risk) over the changed sections
-only — the bidirectional argument, oracle cases 1–10, the corrected CI transport, and the
-`$(shell)` exit-status entry — stamped to the new commit. The measurements reproduced
-independently in rounds 1 and 2 do not need a third derivation.
+Finding: **the oracle could not detect removal of the thing the spec exists to add.** The
+_equivalent_ pathspec produces the same 100 files and passes **all ten** cases — verified:
+`total=100 mocks=64`, 0 subset misses, both case-7 pins present, floor met at `100 >= 35+65`.
+So bidirectional correctness, the sole justification after round 2, had no case and no
+mutation row. The mutation table stopped one short: it mutated to the 99-file _partial_
+pathspec but never to the _equivalent_ one. Each round closed a narrower collapse and left
+the wider one.
+
+The lens's own summary is worth keeping verbatim in substance: the package as it stood was
+"strictly worse than the pathspec: same set, same findings, more machinery, and a test suite
+that cannot tell the two apart."
+
+Revision-introduced: case 8's round-2 floor (`mocks >= 64`, `total >= oracle + 65`) is two
+hand-maintained constants — the spec's own target defect one level up — and breaks on a
+legitimate **deletion**: removing one obsolete mock reddens both arms at once while
+`make test` gates `git push`. Round 2 fixed the addition direction and left its mirror.
+Verified: `mocks=63`, `total=99`.
+
+Second: `IFS= read -r first < "${f}" || continue` returns rc=1 at EOF-without-delimiter
+**while populating the variable**, so it silently discards a file whose only line is an
+unterminated shebang.
+
+**One correction to the lens.** It reported the precondition as "nine tracked files already
+lack a final newline," implying nine exposures. Measured: the bug fires only when **line 1
+itself** is unterminated, i.e. a single-line file. Eight of those nine have terminated first
+lines and would be unaffected even if they were shell; exactly one is single-line
+(`docs/anthropic-new-features/.platform-state.txt`), and it is not shell. Real exposure today
+is **zero**, and the realistic future case is a shebang-only script. The bug is real and the
+fix is free; its stated precondition was 9× too broad.
+
+Not raised after checking: case 7's two filename pins are not a reintroduction of the
+hand-maintained-list defect — a pin is an assertion about known-discriminating members, with
+no denominator role, so it cannot go silently short. CRLF on the Windows/WSL box is a
+non-issue: `.gitattributes` carries `* text=auto eol=lf`.
+
+Assumption: _a non-shell file will eventually be committed under `tests/mocks/`._ Base rate
+is **zero across five repos over the only window that exists** — 65 of 65 arrivals were
+shell. If it never happens, the script buys nothing over one line of pathspec. Settled by
+retargeting the sweep already proposed above: `git log --diff-filter=A --name-only --
+'tests/mocks/*'` across all five repos, counting _non-shell_ arrivals.
+
+**Disposition: Addressed.** Case 11 added — a tracked non-shell file under `tests/mocks/`
+must be absent from `SHELL_FILES` — with a fourth mutation row forcing the equivalent
+pathspec and requiring case 11 red while 1–10 stay green. Case 8's floor rederived at HEAD
+by a non-circular weaker predicate (`#!` on line 1) that moves with additions and deletions
+alike. The `read` guard fixed to `|| [[ -n "${first}" ]] || continue`, verified against
+single-line-unterminated, multi-line-unterminated, empty, blank-line, and non-shell inputs,
+including confirming `read` clears the variable on a truly empty file so no stale value can
+leak. A fifth mutation row covers reverting that guard.
+
+### Round 4 — scoped re-review pending
+
+Round 3's disposition is **Addressed**, and the loop has still not converged: each of three
+rounds found a defect introduced by the previous round's own correction, and round 3's was
+the sharpest of the three. That is the stated reason to run a fourth rather than stop on
+round count.
+
+Scope is deliberately narrow — the delta is three fixes, not a rewrite. One lens over case
+11, the two new mutation rows, case 8's rederived floor, and the `read` guard. Everything
+else in the document has now been independently re-derived across three rounds and does not
+need a fourth.
