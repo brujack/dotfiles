@@ -41,6 +41,60 @@ Mutation 2 is the load-bearing one: it is the only check that distinguishes this
 
 ---
 
+### Task 9 (prerequisite, spliced in after Task 1 blocked): Isolate PATH in the gnubin tests
+
+```yaml-task
+id: 9
+description: Scrub PATH inside the two gnubin zsh -c invocations so they measure what 6_path.zsh adds rather than what the outer shell inherited
+role: executor
+model: sonnet
+tdd: required
+acceptance:
+  - cmd: bats tests/zshrc.d/unit.bats
+    exit_code: 0
+  - cmd: make test
+    exit_code: 0
+max_retries: 3
+files_touched:
+  - tests/zshrc.d/unit.bats
+depends_on: []
+```
+
+**Why this exists.** Task 1 returned `blocker` on `make test`. Independent re-run showed the
+failure is **pre-existing on master** — `bats tests/zshrc.d/unit.bats` fails tests 23 and 24 at
+`a1cb22d`, with none of Task 1's changes. So `make test → exit 0`, which this plan put in all
+eight tasks, **was never reachable**. That is a plan defect, not an implementation failure:
+`writing-plans` requires running a gate's measuring command against the target while writing
+the plan, and I did not run `make test` on base.
+
+**The bug** is `tdd.md` pitfall A, test isolation. Both tests set
+`_OVERRIDE_GNUBIN_ARM`/`_OVERRIDE_GNUBIN_INTEL` to nonexistent paths and then assert
+`NO_GNUBIN`, but the `zsh -c` inherits the outer `PATH`; `6_path.zsh` runs `typeset -U path`,
+which **unions** the already-present gnubin entry rather than dropping it. The test therefore
+measures the contents of `path` rather than what the file under test *added*. It passes only
+on a machine whose shell has no gnubin — which is every CI runner, and not this one.
+
+`setup()` deliberately does not call `load_mocks()` because prepending to the outer `PATH`
+corrupts it for zsh subprocesses; that comment is correct and must stay. The fix belongs
+inside the two `zsh -c` bodies, not in `setup()`.
+
+Add as the first line of each of the two `zsh -c` bodies (currently near lines 275 and 300):
+
+```sh
+export PATH=/usr/bin:/bin:/usr/sbin:/sbin
+```
+
+Verify RED first: without the line, both tests fail on this machine; with it, both pass. Do
+not weaken either assertion — `NO_GNUBIN` and the `${#path} -gt 0` check both stay.
+
+**Leave It Better applies:** this blocks `make test`, which `scripts/pre-push` runs, so it
+blocks pushing. Fixed in this PR and called out in the PR body rather than deferred.
+
+**Interfaces:** Produces — a green `bats tests/zshrc.d/unit.bats`, making every other task's
+`make test` gate reachable for the first time.
+
+---
+
 ### Task 1: Fix the five shellcheck findings in tests/mocks
 
 ```yaml-task
@@ -58,7 +112,7 @@ max_retries: 3
 files_touched:
   - tests/mocks/brew
   - tests/mocks/gpg
-depends_on: []
+depends_on: [9]
 ```
 
 **Why first:** these files are not linted today, so this is a no-op for the gate — but doing it before Task 3 means `make lint` is never red between tasks. `tdd: not-applicable` — no behaviour change; the existing `tests/setup_env/brewfile_drift.bats` is the regression test and must stay green.
@@ -308,7 +362,7 @@ depends_on: [3, 4, 5]
 
 **`CLAUDE.md` edits.** Three places state the old scope and must move together:
 
-- The `make lint` bullet under Testing: "35 tracked shell files: 33 `.sh`/`.bash` plus the two extensionless hooks" → the shebang-derived set, naming `scripts/list-shell-files.sh` and the 100 figure with its date.
+- The `make lint` bullet under Testing: "35 tracked shell files: 33 `.sh`/`.bash` plus the two extensionless hooks" → the shebang-derived set, naming `scripts/list-shell-files.sh` and the **101** figure with its date. Not 100: the script carries a bash shebang and is tracked, so it appears in its own output. The spec calls this self-consistency — the tool deciding the scope cannot exempt itself from it.
 - The ShellCheck section's closing paragraph, which says scope comes from `git ls-files` "plus two named hooks".
 - The paragraph beginning "**It does not cover `tests/mocks/`.**" — now false; replace with a note that the derivation covers them and that the 2 files with findings were fixed.
 
