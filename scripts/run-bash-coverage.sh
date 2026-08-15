@@ -710,7 +710,8 @@ fi
 # never be reached. Message is deliberately distinct from _check_red_suite's
 # "refusing to compute coverage" so a reader can tell an absent tool apart
 # from a run that started and failed.
-if ! command -v bats > /dev/null 2>&1; then
+_bats_bin="${_OVERRIDE_BATS_BIN:-bats}"
+if ! command -v "${_bats_bin}" > /dev/null 2>&1; then
     printf "ERROR: bats not installed — cannot measure coverage (install: brew install bats-core, or apt-get install bats)\n" >&2
     exit 1
 fi
