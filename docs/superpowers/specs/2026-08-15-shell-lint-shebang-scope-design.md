@@ -4,12 +4,19 @@
 **Status:** Proposed
 **Repos affected:** dotfiles only
 
-> **Revised twice after Step 8.** Round 1 cut the scope from three PRs to one, on a
+> **Revised four times under Step 8, and every round found a defect introduced by the
+> previous round's own correction.** Round 1 cut the scope from three PRs to one, on a
 > measurement that drift-immunity has zero instances outside `tests/mocks/` fleet-wide.
-> Round 2 found that a filename pathspec produces a byte-identical set today, so the
-> justification was rewritten around the one property that actually separates the two
-> mechanisms — and that property is now measured rather than asserted. Full findings and
-> dispositions at the bottom.
+> Round 2 found that a filename pathspec produces a byte-identical set, so the justification
+> was rebuilt around the one property that separates the two mechanisms — now measured rather
+> than asserted. Round 3 found that property had no test at all: the equivalent pathspec
+> passed all ten oracle cases. Round 4 found the test written for it pinned a filename a
+> pathspec can exclude, and that the floor guarding it broke on an ordinary python-shebang
+> mock.
+>
+> **Read the convergence note at the end before the body.** The remaining question is not
+> whether the design is correct — it is whether the single property it buys is worth its cost,
+> given a base rate of zero. Full findings and dispositions at the bottom.
 
 ## Problem
 
