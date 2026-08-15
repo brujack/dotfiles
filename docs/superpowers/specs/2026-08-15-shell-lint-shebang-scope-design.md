@@ -14,9 +14,13 @@
 > pathspec can exclude, and that the floor guarding it broke on an ordinary python-shebang
 > mock.
 >
-> **Read the convergence note at the end before the body.** The remaining question is not
-> whether the design is correct — it is whether the single property it buys is worth its cost,
-> given a base rate of zero. Full findings and dispositions at the bottom.
+> Then the base-rate sweep the round-4 note had deferred was actually run, and it **inverted
+> that note's premise**: the property looked like insurance against nothing only because the
+> question had been scoped to `tests/mocks/` (0 of 68). Scoped to the real hazard — any
+> directory a pathspec must glob — it is **20 of 136 across five repos**.
+>
+> **Read the base-rate sweep and the convergence note at the end before the body.** The design
+> is correct; what remains is a narrow cost question, no longer resting on an unmeasured number.
 
 ## Problem
 
@@ -817,16 +821,16 @@ glob**", i.e. any directory holding extensionless shell files. Counting non-shel
 those directories, over full history, with each file classified by its content **at the time it
 was added**:
 
-| repo | glob-target dir | arrivals | non-shell |
-| --- | --- | ---: | ---: |
-| dotfiles | `tests/mocks/` | 64 | **0** |
-| dotfiles | `scripts/` | 25 | **1** |
-| math | `tests/mocks/` | 4 | **0** |
-| math | `scripts/` | 12 | **4** |
-| ai-config | `scripts/` | 10 | **2** |
-| terraform_ansible | `ansible/scripts/` | 15 | **11** |
-| etch-cli | `scripts/` | 6 | **2** |
-| | | **136** | **20** |
+| repo              | glob-target dir    | arrivals | non-shell |
+| ----------------- | ------------------ | -------: | --------: |
+| dotfiles          | `tests/mocks/`     |       64 |     **0** |
+| dotfiles          | `scripts/`         |       25 |     **1** |
+| math              | `tests/mocks/`     |        4 |     **0** |
+| math              | `scripts/`         |       12 |     **4** |
+| ai-config         | `scripts/`         |       10 |     **2** |
+| terraform_ansible | `ansible/scripts/` |       15 |    **11** |
+| etch-cli          | `scripts/`         |        6 |     **2** |
+|                   |                    |  **136** |    **20** |
 
 **So the base rate is zero for `tests/mocks/` and 20 fleet-wide for the class.** Both numbers
 are real and they answer different questions. The round-3 assumption line asked the narrow one
@@ -837,7 +841,7 @@ non-shell. A pathspec globbing that directory would have been broken almost imme
 repeatedly.
 
 **Why dotfiles has never felt this, and why that is the argument rather than a counter to it.**
-The current pathspec reaches its two extensionless hooks by *naming them individually* rather
+The current pathspec reaches its two extensionless hooks by _naming them individually_ rather
 than globbing `scripts/*` — and it must, because `scripts/` mixes shell and non-shell. That
 hand-naming is precisely the defect class this spec exists to remove. The repo is not immune
 to the hazard; it has been paying for immunity in the currency the spec objects to.
@@ -849,7 +853,7 @@ The fleet-wide 20 is what carries the argument; the dotfiles row does not, and i
 its real strength rather than at the strength the conclusion would prefer.
 
 **This also dissolves a tension rather than resolving it.** The recorded-not-fixed item — no
-case pins that the set is *derived* rather than *enumerated*, so a hardcoded list of the correct
+case pins that the set is _derived_ rather than _enumerated_, so a hardcoded list of the correct
 100 passes every case — is tolerable only because additions are frequent enough that such a list
 reddens soon. That is the same arrival rate the base-rate question turns on, and the two look
 like they pull opposite ways: frequent arrivals make an enumerated list fail loudly (good) but
