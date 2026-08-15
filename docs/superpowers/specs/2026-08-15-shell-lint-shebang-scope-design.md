@@ -862,7 +862,7 @@ also make a non-shell arrival plausible (bad for the pathspec). Measured, there 
 loudly; and non-shell arrivals into mixed directories demonstrably happen, so the property the
 script buys is exercised. Both arguments point the same way once the number exists.
 
-### Round 5 — not scheduled; see the convergence note
+### Convergence — round 5 not scheduled
 
 **Four rounds, four sets of introduced defects.** The honest read is that the fix rate is not
 outrunning the defect rate, and a fifth round should be expected to find a fifth set rather
@@ -885,12 +885,10 @@ What remains for the operator is narrower and no longer turns on an unmeasured n
 +43ms per `make` invocation and eleven test cases are worth removing a two-entry hand-maintained
 list, given the fleet has hit the underlying hazard 20 times and this repo has not yet.
 
-Round 3's disposition is **Addressed**, and the loop has still not converged: each of three
-rounds found a defect introduced by the previous round's own correction, and round 3's was
-the sharpest of the three. That is the stated reason to run a fourth rather than stop on
-round count.
-
-Scope is deliberately narrow — the delta is three fixes, not a rewrite. One lens over case
-11, the two new mutation rows, case 8's rederived floor, and the `read` guard. Everything
-else in the document has now been independently re-derived across three rounds and does not
-need a fourth.
+**The most transferable finding is not about shell at all.** For four rounds the base-rate
+question was asked about `tests/mocks/` and returned 0 of 68, which read as "insurance against
+nothing" and nearly retired the design. The hazard's real domain was the class of directories a
+pathspec must glob, where it returns 20 of 136. Three independent lenses, four rounds, and every
+one of them attacked the _answer_ rather than the _scope of the question_ — which is
+`behavior.md`'s "a claim is only as wide as the boundary its measurement covered", encountered
+from the inside: the boundary was wrong in the direction that made the evidence look conclusive.
