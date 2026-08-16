@@ -30,6 +30,12 @@ cosmetic:
 | editor-spawned (`PATH` above) | `/usr/bin/make`   | GNU Make 3.81  | **0 lines**                        |
 | terminal / session            | `.../gnubin/make` | GNU Make 4.4.1 | **2 lines** (`Entering`/`Leaving`) |
 
+> **The `2 lines` cell above is wrong for this repo and is left in place as the record of
+> what was believed.** It was measured against a bare Makefile in a temp directory. This
+> repo's `Makefile:1` carries `MAKEFLAGS += --no-print-directory`, so both versions emit
+> **0** lines here — see Decisive Measurement at the foot of this file. Everything from here
+> to that section is the argument as it stood before that was checked.
+
 The operator commits from an editor UI sometimes. So `scripts/pre-commit-hook.sh` →
 `make lint` and `scripts/pre-push` → `make test` genuinely run under 3.81 for those commits,
 while every other route runs 4.4.1 — and nothing reports which one ran.
@@ -322,12 +328,12 @@ both runs, so the timing-budget sensitivity noted in `USER.md` did not arise.
 
 ### Scope of that result
 
-| repo | `--no-print-directory` in Makefile | hook consumes make how | measured? |
-| --- | --- | --- | --- |
-| `dotfiles` | yes | exit code only | **yes — identical** |
-| `math` | no | exit code only | no |
-| `etch-cli` | no | exit code only | no |
-| `state-ledger` | no | exit code only | no |
+| repo           | `--no-print-directory` in Makefile | hook consumes make how | measured?           |
+| -------------- | ---------------------------------- | ---------------------- | ------------------- |
+| `dotfiles`     | yes                                | exit code only         | **yes — identical** |
+| `math`         | no                                 | exit code only         | no                  |
+| `etch-cli`     | no                                 | exit code only         | no                  |
+| `state-ledger` | no                                 | exit code only         | no                  |
 
 The other three lack the suppression, so print-directory output would appear there under 4.x.
 Their hooks branch on exit codes rather than parsing output, so the hook itself is unaffected;
