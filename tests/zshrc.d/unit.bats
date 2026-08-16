@@ -385,23 +385,41 @@ _keychain_mock() { # <dir>  — writes a recording mock, one line per invocation
 printf '%s\n' "\$*" >> "${1}/calls"
 EOF
   chmod +x "${1}/mock_keychain"
+  : > "${1}/calls" # pre-create so a count is always readable, never a missing file
 }
 
 @test "5_general.zsh does not invoke keychain when sourced non-interactively" {
-  local _tmp_dir _calls
+  local _tmp_dir _after_source _after_probe
   _tmp_dir="$(mktemp -d)"
   _keychain_mock "${_tmp_dir}"
 
+  # A count of zero has several producers, so this test cannot stand alone.
+  # The probe below rules out two of them within this harness: it invokes the
+  # mock directly and asserts the count moves 0 -> 1, so a zero after sourcing
+  # cannot be explained by a non-executable mock or a mistyped calls path.
+  #
+  # It does NOT rule out the third: production ignoring _OVERRIDE_KEYCHAIN_BIN
+  # entirely. Mutation-confirmed 2026-08-16 — reading the seam under a typo'd
+  # name leaves THIS test green and fails only its interactive sibling. That is
+  # inherent, not a gap to close here: production makes no call at all in the
+  # non-interactive case, so this test has no signal that could observe the
+  # seam being consumed. The sibling test below is that control, and the two
+  # are a pair by design — deleting either one makes the other vacuous.
   run zsh -c "
     unset MACOS
     export LINUX=1; export UBUNTU=1; export NOBLE=1; export WORKSTATION=1
     export _OVERRIDE_KEYCHAIN_BIN='${_tmp_dir}/mock_keychain'
     source '${ZSHRC_D}/5_general.zsh' 2>/dev/null
+    wc -l < '${_tmp_dir}/calls'
+    \"\${_OVERRIDE_KEYCHAIN_BIN}\" --eval probe
+    wc -l < '${_tmp_dir}/calls'
   "
-  _calls="$(wc -l < "${_tmp_dir}/calls" 2>/dev/null || printf '0')"
   rm -rf "${_tmp_dir}"
   [ "$status" -eq 0 ]
-  [ "$(printf '%s' "${_calls}" | tr -d ' ')" = "0" ]
+  _after_source="$(printf '%s\n' "$output" | head -1 | tr -d ' ')"
+  _after_probe="$(printf '%s\n' "$output" | tail -1 | tr -d ' ')"
+  [ "${_after_source}" = "0" ]
+  [ "${_after_probe}" = "1" ]
 }
 
 @test "5_general.zsh does invoke keychain from an interactive shell" {
