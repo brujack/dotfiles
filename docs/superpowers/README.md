@@ -115,7 +115,7 @@ Master status index for all specs and implementation plans in this directory.
 | 2026-08-11 | [bats-provisioning-zsh-lint-scope](plans/2026-08-11-bats-provisioning-zsh-lint-scope.md)   | [spec](specs/2026-08-11-bats-provisioning-zsh-lint-scope-design.md)                                                                       | Done        |
 | 2026-08-12 | [gnu-make-4-on-macos](plans/2026-08-12-gnu-make-4-on-macos.md)                             | [spec](specs/2026-08-12-gnu-make-4-on-macos-design.md)                                                                                    | Done        |
 | 2026-08-14 | [silent-false-success-cluster](plans/2026-08-14-silent-false-success-cluster.md)           | [spec](specs/2026-08-13-silent-false-success-cluster-design.md)                                                                           | Done        |
-| 2026-08-15 | [shell-lint-shebang-scope](plans/2026-08-15-shell-lint-shebang-scope.md)                                                                                          | [spec](specs/2026-08-15-shell-lint-shebang-scope-design.md)                                                                               | In Progress |
+| 2026-08-15 | [shell-lint-shebang-scope](plans/2026-08-15-shell-lint-shebang-scope.md)                                                                                          | [spec](specs/2026-08-15-shell-lint-shebang-scope-design.md)                                                                               | Done        |
 
 ---
 

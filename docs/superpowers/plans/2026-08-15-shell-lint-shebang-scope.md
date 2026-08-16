@@ -1,5 +1,7 @@
 # Shebang-Derived Shell Lint Scope Implementation Plan
 
+> **Status: DONE** — merged as dotfiles#219 (`096e837`). CI: 1363 tests, coverage 91% (3148/3431).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Derive `make lint`'s `SHELL_FILES` from first-line shebang instead of a filename pathspec, widening the gate from 35 to 100 tracked files.
