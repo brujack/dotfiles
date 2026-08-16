@@ -163,10 +163,37 @@ must branch on the value rather than testing truthiness — the bare-`||` trap r
 `shell.md` under "Widening a function's return contract silently breaks every `cmd || handler`
 caller". `run_setup_user` distinguishes 1 ("failed") from 2 ("refused"); nothing else calls it.
 
+Concretely, `run_setup_user` treats rc 1 as a failure and propagates it, and treats rc 2 as a
+gap: it emits a warning naming the path and the remedy, and continues to the next step
+without failing the workflow. This mirrors how it already handles
+`install_git_hooks_all_repos`' rc 2, where a gap is something the operator must see but not
+something that should abort provisioning.
+
 **`_OVERRIDE_SYSTEM_MAKE_LINK` is a test seam** so no test ever writes to `/usr/local/bin`.
 `tests/mocks/sudo` execs its target when resolvable and `tests/mocks/ln` passes through to
 `/bin/ln`, so a fixture link is really created and tests assert on real filesystem state
 rather than on a mock's return code.
+
+### The single-prefix probe is the architecture check, deliberately
+
+`install_make_macos` and `6_path.zsh` both scan **two** prefixes — the arm64
+`/opt/homebrew/opt/make/libexec/gnubin` and the x86_64 `/usr/local/opt/make/libexec/gnubin` —
+and `CLAUDE.md` records that the pairs must be kept in step. This function deliberately
+breaks that pairing: it probes the arm64 prefix only, and that single probe _is_ how the
+arm64-only decision is enforced.
+
+This must be stated rather than left implicit, because it is a trap for the next reader. The
+two neighbouring call sites establish a two-prefix idiom; someone maintaining consistency
+would naturally add the x86_64 prefix to this loop, and doing so would silently begin
+creating a symlink inside Homebrew's own prefix on the one machine this design excludes. The
+implementation therefore carries a comment naming the exclusion and pointing at this section,
+and the "gnubin absent (Intel path)" test asserts the no-op — so re-adding the second prefix
+turns a test red rather than shipping quietly.
+
+The alternative — an explicit `[[ "$(uname -m)" == arm64 ]]` guard — was considered and
+rejected as redundant: the x86_64 prefix's absence on an arm64 machine and the arm64 prefix's
+absence on an x86_64 machine are the same fact the probe already reads, and a second guard
+saying it again can drift out of agreement with the first.
 
 ### Why not `.zshenv`
 
@@ -192,6 +219,19 @@ Two assertions:
    executable.
 2. **The invariant, against a clean actor** — `env -i bash -c 'command -v make'` resolves to
    `/usr/local/bin/make`.
+
+Assertion 2 rests on bash's compiled-in default `PATH`, which is what a process with no
+inherited environment receives. Measured on this machine:
+
+```
+$ env -i bash -c 'echo "$PATH"'
+/usr/gnu/bin:/usr/local/bin:/bin:/usr/bin:.
+```
+
+`/usr/local/bin` precedes `/usr/bin`, so the assertion is meaningful rather than
+tautological. Recording the measured value here matters because the assertion silently
+becomes untrue if a future bash is built with a different default, and nothing else in the
+check would say so.
 
 The second assertion is the point of the check, and its form is deliberate. Testing
 `make --version` on the ambient `PATH` would report 4.4.1 on this machine **today, with no
@@ -282,7 +322,9 @@ removing it is not being tested.
 deliberately: the operator chose the widest radius over narrower options. GNU Make 4.4.1 is a
 superset of 3.81 for practical purposes and the fleet's own Makefiles already target 4.x in
 CI. Reversal is `sudo rm /usr/local/bin/make`, and the `doctor` check reports the state
-either way.
+either way — but note that reversal is not durable: the next `setup_user` run recreates the
+link, and `doctor` reports the removed state as FAIL in the meantime. A permanent opt-out
+means removing the call site, which is the correct friction for a machine-wide decision.
 
 **`sudo` inside `setup_user`.** Not new — `lib/macos.sh` already calls `sudo` in
 `install_homebrew` and `run_macos_update`. The idempotency guard means the prompt appears
