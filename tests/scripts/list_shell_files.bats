@@ -210,6 +210,16 @@ echo real
   _commit_file "a.sh" "#!/usr/bin/env bash
 echo hi
 "
+  # Positive control, and it is load-bearing: the same invocation must SUCCEED
+  # before the index is made unreadable. Without it, the `status -ne 0` below is
+  # satisfied just as well by a missing or unrunnable script (exit 127) as by
+  # the git ls-files failure it exists to pin. Mutation-confirmed -- pointing
+  # SCRIPT at a nonexistent path left this test green while 17 of the other 18
+  # went red.
+  run bash -c "cd '${FIXTURE}' && PATH='${CLEAN_PATH}' bash '${SCRIPT}'"
+  [ "${status}" -eq 0 ]
+  printf '%s\n' "${output}" | grep -qxF "a.sh"
+
   chmod 000 "${FIXTURE}/.git/index"
   run bash -c "cd '${FIXTURE}' && PATH='${CLEAN_PATH}' bash '${SCRIPT}'"
   chmod 644 "${FIXTURE}/.git/index"
