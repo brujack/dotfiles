@@ -341,6 +341,30 @@ See [`ai-config/docs/knowledge/dotfiles-bats-test-infrastructure.md`](https://gi
 
 Pattern: `local _file="${_OVERRIDE_VAR:-$(dirname "${BASH_SOURCE[0]}")/real/path}"`. Tests set the var and pass a writable temp copy; production code leaves it unset.
 
+**`_OVERRIDE_KEYCHAIN_BIN` (`.config/.zshrc.d/5_general.zsh`) selects the `keychain`
+binary, defaulting to `/usr/local/bin/keychain` (RATNA), `/opt/homebrew/bin/keychain`
+(other macOS) or `/usr/bin/keychain` (Linux).** The seam exists because those paths are
+absolute, so a `PATH` mock cannot shadow them — `shell.md`'s "an absolute-path default
+silently defeats the stub". Without it a regression test could only fail on a machine that
+has keychain installed, which is neither CI nor macOS, so the test would pass vacuously
+exactly where it runs most often.
+
+The block it guards is wrapped in `[[ -o interactive ]]`, and that guard is load-bearing
+rather than tidy: `keychain` starts an `ssh-agent` that daemonizes, reparents to init, and
+keeps every fd it inherited. `tests/zshrc.d/unit.bats` sources this file non-interactively
+to reach the rbenv branch, so before the guard each source leaked an agent still holding
+the `bats-exec-suite` output pipe — `make test` ran every test and then hung forever
+waiting on an EOF that could not arrive. Measured 2026-08-16 on the Linux workstation: 16
+agents pinning the suite's pipe (4 tests × 4 keychain calls) and 161 accumulated since
+2026-07-28, one of which the operator's own keychain pidfile had adopted as the login
+agent. macOS and CI were never affected only because the Linux branch names an absolute
+`/usr/bin/keychain` that neither has — not because the defect was absent there.
+
+The two tests covering it are a **pair**, and neither works alone. The non-interactive test
+asserts zero calls, which is a composite outcome; the interactive test is the control that
+proves production actually reads the seam. Mutation-confirmed: reading the seam under a
+typo'd name leaves the negative test green and fails only the positive one.
+
 **`_OVERRIDE_GNUBIN_ARM` / `_OVERRIDE_GNUBIN_INTEL` are read by two files in two
 languages** — `lib/macos.sh`'s `install_make_macos` (bash) and
 `.config/.zshrc.d/6_path.zsh` (zsh, sourced by every interactive shell). Both default to
