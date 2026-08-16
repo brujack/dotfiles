@@ -1,7 +1,7 @@
 # GNU make resolution inside git hooks
 
 **Date:** 2026-08-16
-**Status:** Draft — awaiting review
+**Status:** RETIRED — premise falsified by measurement; see Multi-Lens Review and Decisive Measurement at the foot of this file. No code was written. Kept because the measurements are the deliverable that closes both backlog rows.
 **Closes:** `docs/superpowers/README.md` backlog rows "Decide whether GNU make should resolve for non-interactive shells, or only interactively" and "An agent tool shell is not the 3.81 actor `CLAUDE.md` describes"
 **Supersedes:** `2026-08-16-system-wide-gnu-make-design.md` (retired — see below)
 **Related:** ADR-0018 (GNU Make 4.x on macOS), dotfiles#214
@@ -227,3 +227,114 @@ would have caught the predecessor design before it was written.
 - The dead `push-bash-coverage` crontab entry, which has its own backlog row and two
   independent failures unrelated to make's version.
 - `/usr/local/bin` in any form — measured to reach nothing here.
+
+---
+
+## Multi-Lens Review
+
+Reviewed at commit: `8dc0fdd`
+
+Round 2 of Step 8, against a replacement design. All three lenses were told the predecessor's
+review was history and to hunt for defects this correction introduced. They found three, and
+converged on the same unmeasured assumption.
+
+### Goal-Fit
+
+Finding: **The spec's headline premise does not hold in this repo.** The Problem table claims
+`make -C <dir> <target>` emits 0 lines under 3.81 and 2 under 4.4.1, and calls the consequence
+"behavioural, not cosmetic". Re-measured with this repo's own Makefile, both emit **0** —
+`Makefile:1` carries `MAKEFLAGS += --no-print-directory`, machinery that exists so this does
+not matter. The 2-line figure came from a bare Makefile in a temp directory and was imported
+as though it described these gates. `pre-commit-hook.sh` is weaker still: it runs bare
+`make lint` with no `-C` at all, so print-directory cannot fire under any version, and the
+output is byte-identical. `pre-push` uses `make -C` for its exit code only and parses nothing.
+Also: by the reads-it test, nothing records which make ran — the spec's own complaint is
+"nothing reports which one ran", and after the change nothing still does.
+
+Assumption: That 3.81 and 4.4.1 produce a different pass/fail outcome for `make test` in this
+repo. Settled by running the suite under each and diffing the `not ok` lines.
+
+Disposition: **Addressed — design retired.** The assumption was measured (below) and is false.
+
+### Ergonomics
+
+Finding: **The snippet defeats the suite that guards the file it edits.**
+`tests/scripts/pre_push.bats` writes a `make` mock and builds
+`PATH="${MAKE_MOCK_DIR}:${CLEAN_PATH}"`; the snippet re-prepends gnubin from inside the hook,
+ahead of the mock, so the hook invokes real `make -C <fixture> test` against a fixture with no
+Makefile. Measured 8 ok / 28 not ok against a 36 ok baseline. This is `shell.md`'s PATH-mock
+pitfall inverted — production shadowing the stub — and the spec does not mention it. Second
+finding: the Tests table requires an override seam ("both prefixes seamed to nonexistent
+paths") that the Decision snippet does not have, making 4 of 7 rows unconstructible;
+`CLAUDE.md` already mandates `_OVERRIDE_GNUBIN_ARM`/`_OVERRIDE_GNUBIN_INTEL` for exactly this
+and warns that without it a test "silently asserts nothing". Third: the macOS-only skip reads
+as `ok N ... # skip` and still increments the CI test-count assertion, so the design's only
+attestation is indistinguishable from a pass on the merge gate.
+
+Assumption: That the two hardcoded gnubin paths cover every mac in the fleet. A mac without
+the Homebrew `make` formula gets a silent no-op — the design reports success while fixing
+nothing on exactly the machines that still have the problem.
+
+Disposition: **Addressed — design retired.** Both defects are moot with no code shipping; the
+mock-shadowing finding is recorded in `CLAUDE.md` because it applies to any future change that
+manipulates `PATH` inside a hook.
+
+### Risk
+
+Finding: Same mock-shadowing breakage, independently measured (~34 of 36). Identified the
+spec's most dangerous sentence: "a new failure there is a finding to investigate, not a
+regression this change introduced" — precisely backwards for this failure, and it licenses the
+implementer to walk past the one thing the change breaks. Further: the `[[ -d "${_d}" ]]`
+guard tests the directory, not the binary, so a dangling `gnubin/make` symlink falls through to
+3.81 silently — the exact failure mode the design exists to remove. `PATH=""` yields a trailing
+empty element, i.e. cwd on `PATH` inside the repo being committed. And the "prepend, not
+append" test — the row the spec calls most important — does not state its environment, so run
+from a terminal it passes even with the mutation applied, reproducing the actor-boundary defect
+it was written to catch.
+
+Assumption: That `make test` produces a different verdict under the two versions. Noted that
+`make lint` is already byte-identical, so for the pre-commit hook the divergence is zero.
+
+Disposition: **Addressed — design retired.**
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+---
+
+## Decisive measurement
+
+All three lenses named the same assumption. It was run: the full suite, sequentially, under
+each make, on the machine that has the problem.
+
+```
+                  rc    ok     not ok
+GNU Make 3.81      0   1363         0
+GNU Make 4.4.1     0   1363         0
+not-ok diff:   EMPTY
+```
+
+**The gates are verdict-identical under both versions.** No flake confound — zero failures in
+both runs, so the timing-budget sensitivity noted in `USER.md` did not arise.
+
+`make lint` was measured separately and is byte-identical, rc 0 under both.
+
+### Scope of that result
+
+| repo | `--no-print-directory` in Makefile | hook consumes make how | measured? |
+| --- | --- | --- | --- |
+| `dotfiles` | yes | exit code only | **yes — identical** |
+| `math` | no | exit code only | no |
+| `etch-cli` | no | exit code only | no |
+| `state-ledger` | no | exit code only | no |
+
+The other three lack the suppression, so print-directory output would appear there under 4.x.
+Their hooks branch on exit codes rather than parsing output, so the hook itself is unaffected;
+whether their **suites** are version-sensitive is unmeasured and belongs to their own sessions.
+Stating that boundary rather than generalising from one repo is the specific discipline both
+retired designs failed at.
+
+**Status: retired. No code was written.** The actor split is real and measured; its consequence
+to this repo's gates is nil. Both backlog rows are closed by the measurements rather than by a
+mechanism.
