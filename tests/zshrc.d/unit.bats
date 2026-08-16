@@ -274,6 +274,7 @@ EOF
 
 @test "6_path.zsh adds no gnubin entry when neither Homebrew prefix has it" {
   run zsh -c "
+    export PATH=/usr/bin:/bin:/usr/sbin:/sbin
     export MACOS=1
     export _OVERRIDE_GNUBIN_ARM='/nonexistent/gnubin-arm'
     export _OVERRIDE_GNUBIN_INTEL='/nonexistent/gnubin-intel'
@@ -296,6 +297,7 @@ EOF
   mkdir -p "${_fake_home}/.local/bin"
 
   run zsh -c "
+    export PATH=/usr/bin:/bin:/usr/sbin:/sbin
     unset MACOS
     export HOME='${_fake_home}'
     export LINUX=1

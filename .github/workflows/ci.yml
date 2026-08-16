@@ -48,10 +48,12 @@ jobs:
 
       - name: Syntax check all shell scripts (bash)
         run: |
-          find . -name '*.sh' \
-            -not -path './.worktrees/*' \
-            -not -path './tests/mocks/*' \
-            | xargs -I{} bash -n {}
+          files=$(make print-SHELL_FILES | tr ' ' '\n' | grep -c .)
+          if [ "${files}" -eq 0 ]; then
+            printf 'shell file list is EMPTY - refusing to pass having checked nothing\n' >&2
+            exit 1
+          fi
+          make print-SHELL_FILES | tr ' ' '\n' | xargs -I{} bash -n {}
 
       - name: Syntax check all zsh files
         run: |
