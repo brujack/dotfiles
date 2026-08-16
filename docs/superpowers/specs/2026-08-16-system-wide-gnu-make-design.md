@@ -349,3 +349,111 @@ new failure there is a finding rather than a regression introduced by this chang
 - The x86_64 mac, deliberately, per the arm64-only decision above.
 - The dead `push-bash-coverage` crontab entry, which is a separate backlog row with its own
   two independent failures.
+
+---
+
+## Multi-Lens Review
+
+Reviewed at commit: `71b119d` (Step 7 self-review commit, before Step 8 dispatch)
+
+All three lenses independently reached the same conclusion: **the proposed mechanism cannot
+reach any of the actors this design exists for.** The finding is recorded per lens below, but
+it is one finding, found three times.
+
+### Goal-Fit
+
+Finding: The yield table's four beneficiaries — cron, launchd agents, IDE-spawned git,
+`ssh host 'git push'` — are all unreachable from a symlink at `/usr/local/bin/make`, because
+none of their `PATH`s contains `/usr/local/bin` ahead of `/usr/bin` and most do not contain
+it at all. `/usr/local/bin` leads `/usr/bin` in `/etc/paths`, which governs **login shells**
+via `path_helper`; cron and launchd never consult it and use compiled-in constants instead
+(`_PATH_DEFPATH` = `/usr/bin:/bin`, `_PATH_STDPATH` = `/usr/bin:/bin:/usr/sbin:/sbin`). By
+the reads-it test the symlink is decoration: it changes no decision, because every actor that
+can see it already resolves gnubin by another route. The doctor check is a real gate but
+asserts the wrong invariant — a probe derived from the mechanism (a link at
+`/usr/local/bin`) rather than from the goal (real non-interactive actors running 4.x).
+
+Assumption: That every routine gate on this machine already runs at 4.4.1 — i.e. that no
+editor-spawned `git` invokes `scripts/pre-commit` through a launchd-inherited `PATH`.
+Settled by adding `make --version >> /tmp/hookmake.log` to the hook and committing once from
+an editor UI and once from a terminal.
+
+Disposition:
+
+### Ergonomics
+
+Finding: Same central kill, plus two defects in the test design that would have shipped.
+(1) The `MOCK_SUDO_EXIT=1` case is structurally inert — `tests/mocks/sudo` execs its target
+when resolvable, the very property the spec cites approvingly, so it never reaches its own
+`exit` statement; measured `MOCK_SUDO_EXIT=1 sudo ln -sfn ... → rc=0`. It was the only
+error-path test for the `|| return 1` branch. The working lever is `MOCK_LN_EXIT=1`.
+(2) The doctor PASS case has no honest construction: `env -i` clears the environment by
+definition, so `_OVERRIDE_SYSTEM_MAKE_LINK` cannot reach assertion 2's probe, and any seam
+added to make it reachable makes the test measure the seam. Also raised: the `sudo` prompt
+fires bare on 100% of first runs with no `log_info` naming its purpose; no doctor FAIL names
+a remedy, below the bar the `core.hooksPath` check already sets; and doctor emits nothing on
+the x86_64 mac, the one machine the design knowingly leaves unattested.
+
+Assumption: That `/usr/local/bin` appears on the `PATH` of the non-interactive actors this
+change exists for. Settled by `sudo launchctl config user path` and a throwaway one-minute
+crontab entry capturing `$PATH`.
+
+Disposition:
+
+### Risk
+
+Finding: Same central kill, measured by submitting a real launchd job rather than inferring
+(`PATH=/usr/bin:/bin:/usr/sbin:/sbin`, `command -v make` → `/usr/bin/make`). Two further
+defects. (1) The `[[ -d ${_gnubin} ]] || return 0` guard fires **before** the link is
+inspected, so `[[ -x ]]` makes the dangling-link state unreachable at creation and entirely
+unguarded afterwards — which is where it actually arises. On `brew uninstall make`, every
+clean actor's `make` becomes `ENOENT` rather than 3.81, `setup_user` returns 0 and repairs
+nothing, and no test row covers "gnubin absent and stale link present". (2) No `mkdir -p` on
+the link's parent; `/usr/local/bin` exists on this machine only because Docker Desktop, AWS
+CLI and VirtualBox created it, and its absence would turn an attestation feature into a
+provisioning abort. Proportionality: `/usr/local/bin` is the one directory in this design
+dotfiles does not own — 27 entries from unrelated vendors.
+
+Assumption: That at least one real, non-synthetic actor resolves through `/usr/local/bin`
+ahead of `/usr/bin`. Settled by `ssh <host> 'echo "$PATH"; command -v make'`.
+
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+---
+
+## Post-review measurement
+
+The assumption named by the Risk lens was measured immediately, and it is negative:
+
+```
+$ ssh -o BatchMode=yes localhost 'echo "PATH=$PATH"; command -v make; make --version | head -1'
+PATH=/usr/bin:/bin:/usr/sbin:/sbin
+/usr/bin/make
+GNU Make 3.81
+```
+
+Four independent measurements now agree that no real actor on this machine resolves through
+`/usr/local/bin` ahead of `/usr/bin`:
+
+| actor | PATH | source of that PATH |
+| --- | --- | --- |
+| cron | `/usr/bin:/bin` | compiled `_PATH_DEFPATH`, stamped into every child |
+| launchd job | `/usr/bin:/bin:/usr/sbin:/sbin` | compiled `_PATH_STDPATH`; `launchctl getenv PATH` unset |
+| `ssh host '<cmd>'` | `/usr/bin:/bin:/usr/sbin:/sbin` | sshd; non-login zsh never calls `path_helper` |
+| `env -i bash -c` | `/usr/gnu/bin:/usr/local/bin:/bin:/usr/bin:.` | bash 3.2.57 compiled default — **synthetic** |
+
+The problem the spec set out to solve is real and is confirmed by these same measurements:
+every one of those actors resolves GNU Make **3.81** today. What is falsified is the
+mechanism, not the problem.
+
+**Status: this design is retired.** `/usr/local/bin` governs login shells, which already
+resolve gnubin through `.zprofile`/`6_path.zsh`, so the symlink's entire observable effect
+would have been to change the answer of a probe the same design introduced. A replacement
+design must target the compiled-in constants directly — `launchctl config user path` for the
+launchd tree (which sshd, IDEs and their child `git` processes inherit), and a `PATH=` line
+in the crontab for cron — or abandon the environment approach and prepend gnubin inside each
+repo's hooks.
