@@ -349,6 +349,28 @@ silently defeats the stub". Without it a regression test could only fail on a ma
 has keychain installed, which is neither CI nor macOS, so the test would pass vacuously
 exactly where it runs most often.
 
+**The expansion is quoted — `` `"${_keychain}" --eval …` `` — and the reason is not the one
+first given for it.** That was a threat-model argument: anyone able to set
+`_OVERRIDE_KEYCHAIN_BIN` in your interactive environment already has code execution as you, so
+word-splitting buys an attacker nothing. True, but language-agnostic, and it would license the
+same unquoted form in a `.sh` file where it genuinely splits. The real reason the unquoted form
+was safe here is narrower: **zsh does not word-split unquoted parameter expansions** —
+`SH_WORD_SPLIT` is off by default, unlike bash and sh — so a path containing a space ran
+correctly either way. Measured 2026-08-16: `v="/a b/c"; printf "[%s]\n" ${v}` yields one field
+in zsh and two in bash.
+
+It is quoted anyway because that safety is a default, not a guarantee. `emulate sh` and
+`emulate ksh` both set `SH_WORD_SPLIT`, so any future code path that emulates another shell
+before sourcing this file gets splitting back, and `shellcheck` cannot parse zsh at all, so
+nothing in `make lint` would ever flag the regression. `tests/zshrc.d/unit.bats` covers it by
+setting `setopt shwordsplit` explicitly — without that option the quoted and unquoted forms are
+indistinguishable and the test would be vacuous.
+
+The `[[ ${VAR} ]]` tests throughout this file are deliberately **not** quoted: `[[ ]]`
+suppresses word splitting regardless of `SH_WORD_SPLIT`, so there is nothing to protect against
+and quoting them would be churn. The distinction is command position versus test position, not
+a blanket style rule.
+
 The block it guards is wrapped in `[[ -o interactive ]]`, and that guard is load-bearing
 rather than tidy: `keychain` starts an `ssh-agent` that daemonizes, reparents to init, and
 keeps every fd it inherited. `tests/zshrc.d/unit.bats` sources this file non-interactively

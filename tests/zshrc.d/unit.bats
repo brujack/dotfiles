@@ -440,6 +440,35 @@ EOF
   [ "$(printf '%s' "${_calls}" | tr -d ' ')" = "4" ]
 }
 
+@test "5_general.zsh keychain path survives word splitting and a spaced path" {
+  local _base _dir _calls
+  _base="$(mktemp -d)"
+  _dir="${_base}/dir with space"
+  mkdir -p "${_dir}"
+  _keychain_mock "${_dir}"
+
+  # `setopt shwordsplit` is what makes this test able to fail. zsh does not
+  # word-split unquoted parameter expansions by default, so with the option off
+  # the quoted and unquoted forms are indistinguishable and this assertion would
+  # pass either way — vacuous. Under shwordsplit an unquoted ${_keychain} splits
+  # on the space and zsh reports `no such file or directory: .../dir`, while the
+  # quoted form runs. Verified in both directions before this test was written.
+  #
+  # The option is not hypothetical: it is what `emulate sh`/`emulate ksh` set,
+  # so any future code path that emulates another shell before sourcing this
+  # file gets the split behaviour. Quoting makes the line correct under both.
+  run zsh -f -i -c "
+    setopt shwordsplit
+    unset MACOS
+    export LINUX=1; export UBUNTU=1; export NOBLE=1; export WORKSTATION=1
+    export _OVERRIDE_KEYCHAIN_BIN='${_dir}/mock_keychain'
+    source '${ZSHRC_D}/5_general.zsh' 2>/dev/null
+  " < /dev/null
+  _calls="$(wc -l < "${_dir}/calls" 2>/dev/null || printf '0')"
+  rm -rf "${_base}"
+  [ "$(printf '%s' "${_calls}" | tr -d ' ')" = "4" ]
+}
+
 @test "5_general.zsh unsets _keychain after sourcing, does not leak" {
   local _tmp_dir
   _tmp_dir="$(mktemp -d)"
