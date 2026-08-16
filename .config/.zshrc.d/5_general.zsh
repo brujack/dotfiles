@@ -170,55 +170,84 @@ fi
 fpath=(${HOME}/.zsh.d/ $fpath)
 
 # for keychain ssh key management
-if [[ ${MACOS} ]]; then
-  if [[ ${RATNA} ]]; then
-    eval `/usr/local/bin/keychain --eval id_rsa`
-    # eval `/usr/local/bin/keychain --eval id_ed25519`
-    eval `/usr/local/bin/keychain --eval home`
-    eval `/usr/local/bin/keychain --eval github`
-    eval `/usr/local/bin/keychain --eval gitlab`
-    # eval `/usr/local/bin/keychain --eval B6DCFA4E5AFEA3AF35CE0A189A997C02283A9062`
-  elif [[ ${LAPTOP} ]]; then
-    # eval `/opt/homebrew/bin/keychain --eval yubikey1`
-    eval `/opt/homebrew/bin/keychain --eval id_rsa`
-    # eval `/opt/homebrew/bin/keychain --eval id_ed25519`
-    eval `/opt/homebrew/bin/keychain --eval home`
-    eval `/opt/homebrew/bin/keychain --eval github`
-    eval `/opt/homebrew/bin/keychain --eval gitlab`
-    # eval `/opt/homebrew/bin/keychain --eval B6DCFA4E5AFEA3AF35CE0A189A997C02283A9062`
-  elif [[ ${STUDIO} ]]; then
-    # eval `/opt/homebrew/bin/keychain --eval yubikey1`
-    eval `/opt/homebrew/bin/keychain --eval id_rsa`
-    # eval `/opt/homebrew/bin/keychain --eval id_ed25519`
-    eval `/opt/homebrew/bin/keychain --eval home`
-    eval `/opt/homebrew/bin/keychain --eval github`
-    eval `/opt/homebrew/bin/keychain --eval gitlab`
-    # eval `/opt/homebrew/bin/keychain --eval B6DCFA4E5AFEA3AF35CE0A189A997C02283A9062`
-  elif [[ ${RECEPTION} ]]; then
-    eval `/opt/homebrew/bin/keychain --eval id_rsa`
-    eval `/opt/homebrew/bin/keychain --eval home`
-    eval `/opt/homebrew/bin/keychain --eval github`
-    eval `/opt/homebrew/bin/keychain --eval gitlab`
-  elif [[ ${OFFICE} ]]; then
-    eval `/opt/homebrew/bin/keychain --eval id_rsa`
-    eval `/opt/homebrew/bin/keychain --eval home`
-    eval `/opt/homebrew/bin/keychain --eval github`
-    eval `/opt/homebrew/bin/keychain --eval gitlab`
-  elif [[ ${HOMES} ]]; then
-    eval `/opt/homebrew/bin/keychain --eval id_rsa`
-    eval `/opt/homebrew/bin/keychain --eval any home`
-    eval `/opt/homebrew/bin/keychain --eval github`
-    eval `/opt/homebrew/bin/keychain --eval gitlab`
+#
+# Guarded on an interactive shell. keychain starts an ssh-agent that daemonizes,
+# reparents to init, and keeps every fd it inherited — including the caller's
+# stdout. Sourcing this file non-interactively therefore leaks an agent holding
+# whatever pipe the caller was writing to. tests/zshrc.d/unit.bats sources it
+# exactly that way to reach the rbenv branch, so on any machine with keychain
+# installed the leaked agents pinned the bats output pipe open and `make test`
+# ran every test and then hung forever waiting on an EOF that could not arrive.
+# Measured 2026-08-16 on the Linux workstation: 16 agents on the suite's pipe,
+# 161 accumulated since 2026-07-28. The guard costs nothing in production —
+# .zshrc.d is only sourced by interactive shells to begin with.
+#
+# _OVERRIDE_KEYCHAIN_BIN is a test seam. The keychain paths are absolute, so a
+# PATH mock cannot shadow them (shell.md, "an absolute-path default silently
+# defeats the stub") — without the seam a regression test here could only fail
+# on a machine that has keychain installed, which is neither CI nor macOS.
+if [[ -o interactive ]]; then
+  if [[ ${MACOS} ]]; then
+    if [[ ${RATNA} ]]; then
+      _keychain="${_OVERRIDE_KEYCHAIN_BIN:-/usr/local/bin/keychain}"
+    else
+      _keychain="${_OVERRIDE_KEYCHAIN_BIN:-/opt/homebrew/bin/keychain}"
+    fi
+  elif [[ ${LINUX} ]]; then
+    _keychain="${_OVERRIDE_KEYCHAIN_BIN:-/usr/bin/keychain}"
   fi
-elif [[ ${LINUX} ]]; then
-  if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]]; then
-    eval `/usr/bin/keychain --eval id_rsa`
-    # eval `/usr/bin/keychain --eval id_ed25519`
-    eval `/usr/bin/keychain --eval home`
-    eval `/usr/bin/keychain --eval github`
-    eval `/usr/bin/keychain --eval gitlab`
-    # eval `/usr/bin/keychain --eval B6DCFA4E5AFEA3AF35CE0A189A997C02283A9062`
-  else
-    eval `/usr/bin/keychain --eval id_rsa`
+
+  if [[ ${MACOS} ]]; then
+    if [[ ${RATNA} ]]; then
+      eval `${_keychain} --eval id_rsa`
+      # eval `${_keychain} --eval id_ed25519`
+      eval `${_keychain} --eval home`
+      eval `${_keychain} --eval github`
+      eval `${_keychain} --eval gitlab`
+      # eval `${_keychain} --eval B6DCFA4E5AFEA3AF35CE0A189A997C02283A9062`
+    elif [[ ${LAPTOP} ]]; then
+      # eval `${_keychain} --eval yubikey1`
+      eval `${_keychain} --eval id_rsa`
+      # eval `${_keychain} --eval id_ed25519`
+      eval `${_keychain} --eval home`
+      eval `${_keychain} --eval github`
+      eval `${_keychain} --eval gitlab`
+      # eval `${_keychain} --eval B6DCFA4E5AFEA3AF35CE0A189A997C02283A9062`
+    elif [[ ${STUDIO} ]]; then
+      # eval `${_keychain} --eval yubikey1`
+      eval `${_keychain} --eval id_rsa`
+      # eval `${_keychain} --eval id_ed25519`
+      eval `${_keychain} --eval home`
+      eval `${_keychain} --eval github`
+      eval `${_keychain} --eval gitlab`
+      # eval `${_keychain} --eval B6DCFA4E5AFEA3AF35CE0A189A997C02283A9062`
+    elif [[ ${RECEPTION} ]]; then
+      eval `${_keychain} --eval id_rsa`
+      eval `${_keychain} --eval home`
+      eval `${_keychain} --eval github`
+      eval `${_keychain} --eval gitlab`
+    elif [[ ${OFFICE} ]]; then
+      eval `${_keychain} --eval id_rsa`
+      eval `${_keychain} --eval home`
+      eval `${_keychain} --eval github`
+      eval `${_keychain} --eval gitlab`
+    elif [[ ${HOMES} ]]; then
+      eval `${_keychain} --eval id_rsa`
+      eval `${_keychain} --eval any home`
+      eval `${_keychain} --eval github`
+      eval `${_keychain} --eval gitlab`
+    fi
+  elif [[ ${LINUX} ]]; then
+    if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]]; then
+      eval `${_keychain} --eval id_rsa`
+      # eval `${_keychain} --eval id_ed25519`
+      eval `${_keychain} --eval home`
+      eval `${_keychain} --eval github`
+      eval `${_keychain} --eval gitlab`
+      # eval `${_keychain} --eval B6DCFA4E5AFEA3AF35CE0A189A997C02283A9062`
+    else
+      eval `${_keychain} --eval id_rsa`
+    fi
   fi
+  unset _keychain
 fi

@@ -369,3 +369,71 @@ EOF
   [ "$(printf '%s\n' "$output" | head -1)" = "unset" ]
   [ "$(printf '%s\n' "$output" | tail -1)" = "3.2.0" ]
 }
+
+# ── 5_general.zsh keychain tests ──────────────────────────────────────────────
+#
+# keychain starts an ssh-agent that daemonizes, reparents to init, and keeps
+# every fd it inherited. Sourcing this file non-interactively — which these
+# very tests do, to reach the rbenv branch — leaked an agent still holding the
+# bats-exec-suite output pipe, so bats never saw EOF and `make test` ran to
+# completion and then hung forever on any machine with keychain installed.
+# Measured 2026-08-16 on the Linux workstation: 16 agents pinning the pipe.
+
+_keychain_mock() { # <dir>  — writes a recording mock, one line per invocation
+  cat > "${1}/mock_keychain" << EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "${1}/calls"
+EOF
+  chmod +x "${1}/mock_keychain"
+}
+
+@test "5_general.zsh does not invoke keychain when sourced non-interactively" {
+  local _tmp_dir _calls
+  _tmp_dir="$(mktemp -d)"
+  _keychain_mock "${_tmp_dir}"
+
+  run zsh -c "
+    unset MACOS
+    export LINUX=1; export UBUNTU=1; export NOBLE=1; export WORKSTATION=1
+    export _OVERRIDE_KEYCHAIN_BIN='${_tmp_dir}/mock_keychain'
+    source '${ZSHRC_D}/5_general.zsh' 2>/dev/null
+  "
+  _calls="$(wc -l < "${_tmp_dir}/calls" 2>/dev/null || printf '0')"
+  rm -rf "${_tmp_dir}"
+  [ "$status" -eq 0 ]
+  [ "$(printf '%s' "${_calls}" | tr -d ' ')" = "0" ]
+}
+
+@test "5_general.zsh does invoke keychain from an interactive shell" {
+  local _tmp_dir _calls
+  _tmp_dir="$(mktemp -d)"
+  _keychain_mock "${_tmp_dir}"
+
+  # -f skips rc files so only the file under test runs; -i is the only way to
+  # set the interactive option (zsh refuses `setopt interactive` at runtime).
+  run zsh -f -i -c "
+    unset MACOS
+    export LINUX=1; export UBUNTU=1; export NOBLE=1; export WORKSTATION=1
+    export _OVERRIDE_KEYCHAIN_BIN='${_tmp_dir}/mock_keychain'
+    source '${ZSHRC_D}/5_general.zsh' 2>/dev/null
+  " < /dev/null
+  _calls="$(wc -l < "${_tmp_dir}/calls" 2>/dev/null || printf '0')"
+  rm -rf "${_tmp_dir}"
+  [ "$(printf '%s' "${_calls}" | tr -d ' ')" = "4" ]
+}
+
+@test "5_general.zsh unsets _keychain after sourcing, does not leak" {
+  local _tmp_dir
+  _tmp_dir="$(mktemp -d)"
+  _keychain_mock "${_tmp_dir}"
+
+  run zsh -f -i -c "
+    unset MACOS
+    export LINUX=1; export UBUNTU=1; export NOBLE=1; export WORKSTATION=1
+    export _OVERRIDE_KEYCHAIN_BIN='${_tmp_dir}/mock_keychain'
+    source '${ZSHRC_D}/5_general.zsh' 2>/dev/null
+    printf '%s\n' \"\${_keychain:-unset}\"
+  " < /dev/null
+  rm -rf "${_tmp_dir}"
+  [ "$(printf '%s\n' "$output" | tail -1)" = "unset" ]
+}
