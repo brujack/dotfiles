@@ -199,54 +199,54 @@ if [[ -o interactive ]]; then
 
   if [[ ${MACOS} ]]; then
     if [[ ${RATNA} ]]; then
-      eval `${_keychain} --eval id_rsa`
-      # eval `${_keychain} --eval id_ed25519`
-      eval `${_keychain} --eval home`
-      eval `${_keychain} --eval github`
-      eval `${_keychain} --eval gitlab`
-      # eval `${_keychain} --eval B6DCFA4E5AFEA3AF35CE0A189A997C02283A9062`
+      eval `"${_keychain}" --eval id_rsa`
+      # eval `"${_keychain}" --eval id_ed25519`
+      eval `"${_keychain}" --eval home`
+      eval `"${_keychain}" --eval github`
+      eval `"${_keychain}" --eval gitlab`
+      # eval `"${_keychain}" --eval B6DCFA4E5AFEA3AF35CE0A189A997C02283A9062`
     elif [[ ${LAPTOP} ]]; then
-      # eval `${_keychain} --eval yubikey1`
-      eval `${_keychain} --eval id_rsa`
-      # eval `${_keychain} --eval id_ed25519`
-      eval `${_keychain} --eval home`
-      eval `${_keychain} --eval github`
-      eval `${_keychain} --eval gitlab`
-      # eval `${_keychain} --eval B6DCFA4E5AFEA3AF35CE0A189A997C02283A9062`
+      # eval `"${_keychain}" --eval yubikey1`
+      eval `"${_keychain}" --eval id_rsa`
+      # eval `"${_keychain}" --eval id_ed25519`
+      eval `"${_keychain}" --eval home`
+      eval `"${_keychain}" --eval github`
+      eval `"${_keychain}" --eval gitlab`
+      # eval `"${_keychain}" --eval B6DCFA4E5AFEA3AF35CE0A189A997C02283A9062`
     elif [[ ${STUDIO} ]]; then
-      # eval `${_keychain} --eval yubikey1`
-      eval `${_keychain} --eval id_rsa`
-      # eval `${_keychain} --eval id_ed25519`
-      eval `${_keychain} --eval home`
-      eval `${_keychain} --eval github`
-      eval `${_keychain} --eval gitlab`
-      # eval `${_keychain} --eval B6DCFA4E5AFEA3AF35CE0A189A997C02283A9062`
+      # eval `"${_keychain}" --eval yubikey1`
+      eval `"${_keychain}" --eval id_rsa`
+      # eval `"${_keychain}" --eval id_ed25519`
+      eval `"${_keychain}" --eval home`
+      eval `"${_keychain}" --eval github`
+      eval `"${_keychain}" --eval gitlab`
+      # eval `"${_keychain}" --eval B6DCFA4E5AFEA3AF35CE0A189A997C02283A9062`
     elif [[ ${RECEPTION} ]]; then
-      eval `${_keychain} --eval id_rsa`
-      eval `${_keychain} --eval home`
-      eval `${_keychain} --eval github`
-      eval `${_keychain} --eval gitlab`
+      eval `"${_keychain}" --eval id_rsa`
+      eval `"${_keychain}" --eval home`
+      eval `"${_keychain}" --eval github`
+      eval `"${_keychain}" --eval gitlab`
     elif [[ ${OFFICE} ]]; then
-      eval `${_keychain} --eval id_rsa`
-      eval `${_keychain} --eval home`
-      eval `${_keychain} --eval github`
-      eval `${_keychain} --eval gitlab`
+      eval `"${_keychain}" --eval id_rsa`
+      eval `"${_keychain}" --eval home`
+      eval `"${_keychain}" --eval github`
+      eval `"${_keychain}" --eval gitlab`
     elif [[ ${HOMES} ]]; then
-      eval `${_keychain} --eval id_rsa`
-      eval `${_keychain} --eval any home`
-      eval `${_keychain} --eval github`
-      eval `${_keychain} --eval gitlab`
+      eval `"${_keychain}" --eval id_rsa`
+      eval `"${_keychain}" --eval any home`
+      eval `"${_keychain}" --eval github`
+      eval `"${_keychain}" --eval gitlab`
     fi
   elif [[ ${LINUX} ]]; then
     if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]]; then
-      eval `${_keychain} --eval id_rsa`
-      # eval `${_keychain} --eval id_ed25519`
-      eval `${_keychain} --eval home`
-      eval `${_keychain} --eval github`
-      eval `${_keychain} --eval gitlab`
-      # eval `${_keychain} --eval B6DCFA4E5AFEA3AF35CE0A189A997C02283A9062`
+      eval `"${_keychain}" --eval id_rsa`
+      # eval `"${_keychain}" --eval id_ed25519`
+      eval `"${_keychain}" --eval home`
+      eval `"${_keychain}" --eval github`
+      eval `"${_keychain}" --eval gitlab`
+      # eval `"${_keychain}" --eval B6DCFA4E5AFEA3AF35CE0A189A997C02283A9062`
     else
-      eval `${_keychain} --eval id_rsa`
+      eval `"${_keychain}" --eval id_rsa`
     fi
   fi
   unset _keychain
