@@ -4,11 +4,12 @@ Master status index for all specs and implementation plans in this directory.
 
 ## Status Key
 
-| Status      | Meaning                          |
-| ----------- | -------------------------------- |
-| Done        | Implemented and merged to master |
-| In Progress | Currently being implemented      |
-| Pending     | Not yet started                  |
+| Status      | Meaning                                                                 |
+| ----------- | ----------------------------------------------------------------------- |
+| Done        | Implemented and merged to master                                        |
+| In Progress | Currently being implemented                                             |
+| Pending     | Not yet started                                                         |
+| Retired     | Design falsified before implementation; kept for the record, superseded |
 
 ---
 
@@ -116,7 +117,8 @@ Master status index for all specs and implementation plans in this directory.
 | 2026-08-12 | [gnu-make-4-on-macos](plans/2026-08-12-gnu-make-4-on-macos.md)                             | [spec](specs/2026-08-12-gnu-make-4-on-macos-design.md)                                                                                    | Done    |
 | 2026-08-14 | [silent-false-success-cluster](plans/2026-08-14-silent-false-success-cluster.md)           | [spec](specs/2026-08-13-silent-false-success-cluster-design.md)                                                                           | Done    |
 | 2026-08-15 | [shell-lint-shebang-scope](plans/2026-08-15-shell-lint-shebang-scope.md)                   | [spec](specs/2026-08-15-shell-lint-shebang-scope-design.md)                                                                               | Done    |
-| 2026-08-16 | system-wide-gnu-make                                                                       | [spec](specs/2026-08-16-system-wide-gnu-make-design.md)                                                                                   | Pending |
+| 2026-08-16 | system-wide-gnu-make                                                                       | [spec](specs/2026-08-16-system-wide-gnu-make-design.md)                                                                                   | Retired |
+| 2026-08-16 | hook-make-resolution                                                                       | [spec](specs/2026-08-16-hook-make-resolution-design.md)                                                                                   | Pending |
 
 ---
 

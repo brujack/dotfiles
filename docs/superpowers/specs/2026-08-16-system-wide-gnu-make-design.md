@@ -1,7 +1,7 @@
 # System-wide GNU make on macOS
 
 **Date:** 2026-08-16
-**Status:** Draft — awaiting review
+**Status:** RETIRED — mechanism falsified by Step 8 review; see the Multi-Lens Review and Post-review measurement sections at the foot of this file. Superseded by `2026-08-16-hook-make-resolution-design.md`. Kept rather than deleted: it documents a real dead end, and the four measurements that closed it are the reason the replacement targets hooks rather than the environment.
 **Closes:** `docs/superpowers/README.md` backlog rows "Decide whether GNU make should resolve for non-interactive shells, or only interactively" and "An agent tool shell is not the 3.81 actor `CLAUDE.md` describes"
 **Related:** ADR-0018 (GNU Make 4.x on macOS), dotfiles#214
 
@@ -439,12 +439,12 @@ GNU Make 3.81
 Four independent measurements now agree that no real actor on this machine resolves through
 `/usr/local/bin` ahead of `/usr/bin`:
 
-| actor | PATH | source of that PATH |
-| --- | --- | --- |
-| cron | `/usr/bin:/bin` | compiled `_PATH_DEFPATH`, stamped into every child |
-| launchd job | `/usr/bin:/bin:/usr/sbin:/sbin` | compiled `_PATH_STDPATH`; `launchctl getenv PATH` unset |
-| `ssh host '<cmd>'` | `/usr/bin:/bin:/usr/sbin:/sbin` | sshd; non-login zsh never calls `path_helper` |
-| `env -i bash -c` | `/usr/gnu/bin:/usr/local/bin:/bin:/usr/bin:.` | bash 3.2.57 compiled default — **synthetic** |
+| actor              | PATH                                          | source of that PATH                                     |
+| ------------------ | --------------------------------------------- | ------------------------------------------------------- |
+| cron               | `/usr/bin:/bin`                               | compiled `_PATH_DEFPATH`, stamped into every child      |
+| launchd job        | `/usr/bin:/bin:/usr/sbin:/sbin`               | compiled `_PATH_STDPATH`; `launchctl getenv PATH` unset |
+| `ssh host '<cmd>'` | `/usr/bin:/bin:/usr/sbin:/sbin`               | sshd; non-login zsh never calls `path_helper`           |
+| `env -i bash -c`   | `/usr/gnu/bin:/usr/local/bin:/bin:/usr/bin:.` | bash 3.2.57 compiled default — **synthetic**            |
 
 The problem the spec set out to solve is real and is confirmed by these same measurements:
 every one of those actors resolves GNU Make **3.81** today. What is falsified is the
