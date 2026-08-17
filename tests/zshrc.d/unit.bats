@@ -533,9 +533,17 @@ EOF
   [ "$output" = "1" ]
 }
 
+# CRUNCHER isn't in .zprofile's LAPTOP/STUDIO/RECEPTION/OFFICE/HOMES branch,
+# so this host never shadows the mock pyenv with a real one the way HOMES
+# and STUDIO do below -- MOCK_CALLS_FILE isn't load-bearing here. Set
+# explicitly anyway, to a fixture path rather than the mocks' shared
+# ${MOCK_CALLS_FILE:-/tmp/mock_calls} fallback: leaving it to the fallback
+# would write to a cross-user /tmp file for no reason and make this test
+# gratuitously inconsistent with its three siblings.
 @test ".zprofile alone sets CRUNCHER for hostname cruncher" {
   run zsh -c "
     export PATH=\"${REPO_ROOT}/tests/mocks:/usr/bin:/bin:/usr/sbin:/sbin\"
+    export MOCK_CALLS_FILE=\"${BATS_TEST_TMPDIR}/mock_calls_cruncher\"
     export MOCK_HOSTNAME_OUTPUT=cruncher
     unset LAPTOP STUDIO RECEPTION OFFICE HOMES WORKSTATION CRUNCHER RATNA PROFILE
     unset -m 'HAS_*'
@@ -548,18 +556,25 @@ EOF
 
 # The real login+interactive sequence: .zprofile runs first, then 1_init.zsh,
 # in one process. This is the export-not-readonly property config/profiles.zsh
-# documents at its own top -- a readonly reassignment on the second pass would
-# abort the shell rather than merely producing a wrong value, so this is
-# checked for absence-of-error as well as consistency.
+# documents at its own top -- a readonly reassignment on the second pass makes
+# that second `source` return 126 (caught here by `|| exit 1`) rather than
+# merely producing a wrong value, so this is checked for absence-of-error as
+# well as consistency. The first-pass values are asserted explicitly, not just
+# compared for consistency across the two sources: an unset first pass and a
+# genuinely-consistent-but-wrong pass would otherwise look identical to this
+# test, and only the explicit check fails on its own terms.
 #
 # PATH is a hermetic minimal set, not the mocks-prepended-to-inherited-PATH
-# pattern used elsewhere in this file: .zprofile's `command -v pyenv` and
-# `eval "$(pyenv init --path)"` would otherwise resolve the operator's REAL
-# pyenv shim (already on this session's PATH ahead of tests/mocks), which in
-# turn shells out to the real `pyenv rehash` -- picking up tests/mocks/xargs
-# unintentionally along the way and failing on its unset MOCK_CALLS_FILE. See
-# the HOMES test above for the same hazard; STUDIO triggers the identical
-# /opt/homebrew/bin prepend branch, so MOCK_CALLS_FILE is set here too.
+# pattern used elsewhere in this file -- but that alone does NOT keep
+# .zprofile off the real pyenv. STUDIO triggers .zprofile's own
+# `[[ -n ${STUDIO} ]] ... export PATH="/opt/homebrew/bin:$PATH"` branch,
+# which on a machine with a real Homebrew pyenv installed puts it ahead of
+# the mock regardless of what PATH this test sets -- measured, `command -v
+# pyenv` resolves /opt/homebrew/bin/pyenv here, same as the HOMES test
+# above. The real `pyenv rehash` that follows then reaches
+# tests/mocks/xargs (still on PATH) for a real xargs call, and that mock
+# hard-codes "${MOCK_CALLS_FILE}" with no ':-' fallback -- MOCK_CALLS_FILE
+# below is what actually keeps this test from crashing, not the PATH.
 @test ".zprofile then 1_init.zsh in one process does not error and stays consistent" {
   run zsh -c "
     export PATH=\"${REPO_ROOT}/tests/mocks:/usr/bin:/bin:/usr/sbin:/sbin\"
@@ -571,6 +586,14 @@ EOF
     source '${REPO_ROOT}/.zprofile' 2>/dev/null || exit 1
     first_studio=\"\${STUDIO:-unset}\"
     first_profile=\"\${PROFILE:-unset}\"
+    if [[ \"\${first_profile}\" != \"mac_workstation\" ]]; then
+      printf 'first-pass PROFILE wrong: got %s want mac_workstation\n' \"\${first_profile}\" >&2
+      exit 1
+    fi
+    if [[ \"\${first_studio}\" != \"1\" ]]; then
+      printf 'first-pass STUDIO wrong: got %s want 1\n' \"\${first_studio}\" >&2
+      exit 1
+    fi
     source '${ZSHRC_D}/1_init.zsh' 2>/dev/null || exit 1
     if [[ \"\${STUDIO:-unset}\" != \"\${first_studio}\" ]]; then
       printf 'STUDIO changed across sequence\n' >&2
@@ -584,4 +607,36 @@ EOF
   "
   [ "$status" -eq 0 ]
   [ "$output" = "1" ]
+}
+
+# ── production actor: a real login shell, not the source builtin ────────────
+# All four tests above use `source '${REPO_ROOT}/.zprofile'` -- the one actor
+# where zsh sets $0 (FUNCTION_ARGZERO covers the source builtin and
+# functions; zsh's own startup reader does not). This test drives .zprofile
+# the way setup_env.sh actually installs it and a real terminal actually
+# invokes it: symlinked into $HOME, read by zsh's internal startup reader via
+# a real login shell (`-l`), with cwd deliberately NOT the repo root -- the
+# one condition a `${0:A:h}`-based resolution needs in order to fail, and the
+# one condition none of the tests above can ever produce.
+#
+# PATH is real /usr/bin:/bin, not tests/mocks -- `hostname -s` resolves the
+# actual machine hostname, which is why the assertion is "PROFILE got set to
+# something" rather than a specific profile name: an unmapped hostname
+# (PROFILE=unknown) is a correct, non-empty result and must not read as a
+# failure here. What this test can tell apart is "the resolution ran at all"
+# versus "it silently produced nothing", which is exactly what the ${0:A:h}
+# bug did from any cwd but the repo root.
+@test "a real login shell resolves PROFILE with cwd outside the repo" {
+  local _fixture
+  _fixture="$(mktemp -d)"
+  ln -s "${REPO_ROOT}/.zprofile" "${_fixture}/.zprofile"
+
+  run bash -c "
+    cd / &&
+    env -i HOME='${_fixture}' ZDOTDIR='${_fixture}' TERM=dumb PATH=/usr/bin:/bin \
+      zsh -l -c 'printf \"%s\n\" \"\${PROFILE:-unset}\"'
+  "
+  rm -rf "${_fixture}"
+  [ "$status" -eq 0 ]
+  [ "$output" != "unset" ]
 }

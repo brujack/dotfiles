@@ -13,7 +13,7 @@
 # because none of these values differ between the two passes, so a plain
 # re-export is harmless.
 
-# ${0:A:h} resolves the file's own path — through symlinks — to its
+# ${${(%):-%x}:A:h} resolves the file's own path — through symlinks — to its
 # directory, which is how this works whether this file is reached via the
 # repo directly or via the ~/.zprofile / ~/.config/.zshrc.d symlinks the
 # setup script creates into $HOME.
@@ -29,8 +29,8 @@
 # `return`/`exit` is deliberately not used — this file is sourced by
 # .zprofile at login, and aborting a login shell over a degraded (not
 # broken) profile lookup is worse than the problem.
-if ! source "${0:A:h}/profiles.sh"; then
-  print -u2 "config/profiles.zsh: failed to source ${0:A:h}/profiles.sh -- PROFILE will default to 'unknown' and no HAS_* identity variables will be set this session."
+if ! source "${${(%):-%x}:A:h}/profiles.sh"; then
+  print -u2 "config/profiles.zsh: failed to source ${${(%):-%x}:A:h}/profiles.sh -- PROFILE will default to 'unknown' and no HAS_* identity variables will be set this session."
 fi
 
 _profiles_hostname="$(hostname -s)"

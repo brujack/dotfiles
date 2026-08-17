@@ -14,4 +14,4 @@ if [[ -n ${UBUNTU} ]]; then
 fi
 
 [[ $(uname -r) =~ microsoft ]] && export WINDOWS=1
-source "${0:A:h}/../../config/profiles.zsh"
+source "${${(%):-%x}:A:h}/../../config/profiles.zsh"
