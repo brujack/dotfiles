@@ -185,7 +185,7 @@ tdd: required
 acceptance:
   - cmd: bats tests/zshrc.d/unit.bats
     exit_code: 0
-  - cmd: zsh -i -c exit
+  - cmd: 'zsh -c ''unset -m "HAS_*"; source .zprofile; source .config/.zshrc.d/1_init.zsh; [[ -n ${PROFILE} ]]'''
     exit_code: 0
   - cmd: make lint
     exit_code: 0
@@ -211,7 +211,11 @@ Three regressions to pin, each of which is live on the pre-change tree:
 2. Hostname `home-1` sets `HOMES` from `.zprofile`. Today `.zprofile` matches `homes`/`homes-1` and cannot.
 3. Hostname `cruncher` sets `CRUNCHER` from `.zprofile`. Today `.zprofile` reads it at line 21 without ever setting it.
 
-`zsh -i -c exit` is in the gate because `.zshrc.d` changes can crash a re-source in a way `zsh -n` cannot see — a standing rule in `CLAUDE.md`.
+`CLAUDE.md` makes `zsh -i -c exit` a standing rule after any `.zshrc.d` change, because a re-source can crash in a way `zsh -n` cannot see. **In a worktree that command is vacuous and must not be used as the gate.** `~/.zshrc` and `~/.config/.zshrc.d` symlink to the **main checkout**, so an interactive shell launched from anywhere sources the unmodified files and passes for a reason unrelated to the branch.
+
+Measured on T3: the worktree's `1_init.zsh` contained the new `source` line and the main checkout's contained zero occurrences of it, while `zsh -i -c exit` returned 0 throughout. The gate ran, reported success, and never touched the code under test.
+
+The gate above therefore sources the worktree's own files explicitly and asserts `PROFILE` came out set. Run `zsh -i -c exit` as well if you like — it is a cheap check that the _installed_ configuration is not broken — but it is not evidence about this branch until the branch is merged and the symlinks point at it.
 
 **Interfaces:**
 
@@ -310,7 +314,7 @@ tdd: required
 acceptance:
   - cmd: bats tests/zshrc.d/unit.bats
     exit_code: 0
-  - cmd: zsh -i -c exit
+  - cmd: 'zsh -c ''unset -m "HAS_*"; source .zprofile; source .config/.zshrc.d/1_init.zsh; [[ -n ${PROFILE} ]]'''
     exit_code: 0
   - cmd: make lint
     exit_code: 0
@@ -349,7 +353,7 @@ tdd: required
 acceptance:
   - cmd: bats tests/zshrc.d/unit.bats
     exit_code: 0
-  - cmd: zsh -i -c exit
+  - cmd: 'zsh -c ''unset -m "HAS_*"; source .zprofile; source .config/.zshrc.d/1_init.zsh; [[ -n ${PROFILE} ]]'''
     exit_code: 0
   - cmd: make lint
     exit_code: 0
