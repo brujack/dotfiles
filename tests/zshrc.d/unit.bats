@@ -145,10 +145,8 @@ setup() {
 
 # ── 5_general.zsh rbenv tests ─────────────────────────────────────────────────
 
-@test "5_general.zsh initializes rbenv on a Linux Noble dev profile" {
-  local _tmp_dir
-  _tmp_dir="$(mktemp -d)"
-  cat > "${_tmp_dir}/mock_rbenv" << 'EOF'
+_rbenv_mock() { # <dir> — writes a recording mock answering `init`/`local`
+  cat > "${1}/mock_rbenv" << 'EOF'
 #!/usr/bin/env bash
 if [[ "$1" == "init" ]]; then
   printf '_RBENV_INIT_CALLED=1\n'
@@ -157,7 +155,13 @@ elif [[ "$1" == "local" ]]; then
 fi
 exit 0
 EOF
-  chmod +x "${_tmp_dir}/mock_rbenv"
+  chmod +x "${1}/mock_rbenv"
+}
+
+@test "5_general.zsh initializes rbenv on a Linux Noble dev profile" {
+  local _tmp_dir
+  _tmp_dir="$(mktemp -d)"
+  _rbenv_mock "${_tmp_dir}"
 
   run zsh -c "
     unset MACOS
@@ -177,16 +181,7 @@ EOF
 @test "5_general.zsh initializes rbenv on a Linux Resolute dev profile" {
   local _tmp_dir
   _tmp_dir="$(mktemp -d)"
-  cat > "${_tmp_dir}/mock_rbenv" << 'EOF'
-#!/usr/bin/env bash
-if [[ "$1" == "init" ]]; then
-  printf '_RBENV_INIT_CALLED=1\n'
-elif [[ "$1" == "local" ]]; then
-  printf '_RBENV_LOCAL_CALLED=1\n'
-fi
-exit 0
-EOF
-  chmod +x "${_tmp_dir}/mock_rbenv"
+  _rbenv_mock "${_tmp_dir}"
 
   run zsh -c "
     unset MACOS
@@ -205,6 +200,7 @@ EOF
 
 @test "5_general.zsh skips rbenv when rbenv binary absent" {
   run zsh -c "
+    unset MACOS
     export PATH=\"${REPO_ROOT}/tests/mocks:\${PATH}\"
     export LINUX=1; export UBUNTU=1; export NOBLE=1; export HAS_DEVTOOLS=1
     export _OVERRIDE_RBENV_BINARY='/nonexistent/rbenv'
@@ -218,28 +214,30 @@ EOF
 @test "5_general.zsh skips rbenv on a Linux host without devtools" {
   local _tmp_dir
   _tmp_dir="$(mktemp -d)"
-  cat > "${_tmp_dir}/mock_rbenv" << 'EOF'
-#!/usr/bin/env bash
-if [[ "$1" == "init" ]]; then
-  printf '_RBENV_INIT_CALLED=1\n'
-elif [[ "$1" == "local" ]]; then
-  printf '_RBENV_LOCAL_CALLED=1\n'
-fi
-exit 0
-EOF
-  chmod +x "${_tmp_dir}/mock_rbenv"
+  _rbenv_mock "${_tmp_dir}"
 
-  run zsh -c "
+  # Paired control: the same mock, PATH, and profile vars are used for both
+  # runs, differing only in HAS_DEVTOOLS. This makes the mock's reachability
+  # itself an assertion (_with = "1") -- without it, repointing
+  # _OVERRIDE_RBENV_BINARY at a nonexistent path would make this test
+  # indistinguishable from "skips rbenv when rbenv binary absent" above, and
+  # a future dedupe pass could delete the guard this test exists to catch
+  # while the suite stayed green.
+  local _snippet="
     unset MACOS
     export PATH=\"${REPO_ROOT}/tests/mocks:\${PATH}\"
-    export LINUX=1; export UBUNTU=1; export NOBLE=1; unset HAS_DEVTOOLS
+    export LINUX=1; export UBUNTU=1; export NOBLE=1
     export _OVERRIDE_RBENV_BINARY='${_tmp_dir}/mock_rbenv'
     source '${ZSHRC_D}/5_general.zsh' 2>/dev/null
     printf '%s\n' \"\${_RBENV_INIT_CALLED:-unset}\"
   "
+  run zsh -c "export HAS_DEVTOOLS=1; ${_snippet}"
+  local _with="${output}" _with_status="${status}"
+  run zsh -c "unset HAS_DEVTOOLS; ${_snippet}"
   rm -rf "${_tmp_dir}"
-  [ "$status" -eq 0 ]
-  [ "$output" = "unset" ]
+  [ "${_with_status}" -eq 0 ] && [ "$status" -eq 0 ]
+  [ "${_with}" = "1" ]      # the mock IS reachable — this is what blocks the dedupe
+  [ "$output" = "unset" ]   # the guard assertion
 }
 
 # ── 5_general.zsh Homebrew prefix tests (CHRUBY_LOC / FZF_BASE) ─────────────
@@ -460,16 +458,7 @@ EOF
   _tmp_dir="$(mktemp -d)"
   _project_dir="$(mktemp -d)"
   printf '3.2.0\n' > "${_project_dir}/.ruby-version"
-  cat > "${_tmp_dir}/mock_rbenv" << 'EOF'
-#!/usr/bin/env bash
-if [[ "$1" == "init" ]]; then
-  printf '_RBENV_INIT_CALLED=1\n'
-elif [[ "$1" == "local" ]]; then
-  printf '_RBENV_LOCAL_CALLED=1\n'
-fi
-exit 0
-EOF
-  chmod +x "${_tmp_dir}/mock_rbenv"
+  _rbenv_mock "${_tmp_dir}"
 
   run zsh -c "
     unset MACOS
