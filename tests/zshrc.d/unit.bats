@@ -215,6 +215,91 @@ EOF
   [ "$output" = "unset" ]
 }
 
+# ── 5_general.zsh Homebrew prefix tests (CHRUBY_LOC / FZF_BASE) ─────────────
+# _OVERRIDE_HOMEBREW_PREFIX_ARM / _OVERRIDE_HOMEBREW_PREFIX_INTEL are test
+# seams, same convention as _OVERRIDE_GNUBIN_ARM/_OVERRIDE_GNUBIN_INTEL below
+# -- the real /opt/homebrew exists on every provisioned mac including this
+# one, so a test against the real path would pass whether or not the code
+# under test reads the seam at all. Every case below unsets MACOS, LINUX,
+# every legacy hostname var, and CHRUBY_LOC/FZF_BASE themselves before
+# sourcing: the operator's own login shell exports STUDIO=1 and a full HAS_*
+# set, which would otherwise leak into the zsh -c subprocess and mask the
+# very branch under test.
+
+@test "5_general.zsh sets CHRUBY_LOC and FZF_BASE for the ARM homebrew prefix" {
+  local _tmp_dir
+  _tmp_dir="$(mktemp -d)"
+
+  run zsh -c "
+    unset MACOS LINUX LAPTOP STUDIO RECEPTION OFFICE HOMES WORKSTATION CRUNCHER RATNA
+    unset CHRUBY_LOC FZF_BASE
+    export MACOS=1
+    export _OVERRIDE_HOMEBREW_PREFIX_ARM='${_tmp_dir}'
+    export _OVERRIDE_HOMEBREW_PREFIX_INTEL='/nonexistent/homebrew-intel'
+    source '${ZSHRC_D}/5_general.zsh' 2>/dev/null
+    printf '%s\n' \"\${CHRUBY_LOC:-unset}\"
+    printf '%s\n' \"\${FZF_BASE:-unset}\"
+  "
+  rm -rf "${_tmp_dir}"
+  [ "$status" -eq 0 ]
+  [ "$(printf '%s\n' "$output" | sed -n '1p')" = "/opt/homebrew/opt/chruby/share/" ]
+  [ "$(printf '%s\n' "$output" | sed -n '2p')" = "/opt/homebrew/bin/fzf" ]
+}
+
+@test "5_general.zsh sets CHRUBY_LOC for the Intel-only homebrew prefix, leaves FZF_BASE unset" {
+  local _tmp_dir
+  _tmp_dir="$(mktemp -d)"
+
+  run zsh -c "
+    unset MACOS LINUX LAPTOP STUDIO RECEPTION OFFICE HOMES WORKSTATION CRUNCHER RATNA
+    unset CHRUBY_LOC FZF_BASE
+    export MACOS=1
+    export _OVERRIDE_HOMEBREW_PREFIX_ARM='/nonexistent/homebrew-arm'
+    export _OVERRIDE_HOMEBREW_PREFIX_INTEL='${_tmp_dir}'
+    source '${ZSHRC_D}/5_general.zsh' 2>/dev/null
+    printf '%s\n' \"\${CHRUBY_LOC:-unset}\"
+    printf '%s\n' \"\${FZF_BASE:-unset}\"
+  "
+  rm -rf "${_tmp_dir}"
+  [ "$status" -eq 0 ]
+  [ "$(printf '%s\n' "$output" | sed -n '1p')" = "/usr/local/opt/chruby/share" ]
+  [ "$(printf '%s\n' "$output" | sed -n '2p')" = "unset" ]
+}
+
+@test "5_general.zsh leaves CHRUBY_LOC and FZF_BASE unset when neither homebrew prefix is present" {
+  run zsh -c "
+    unset MACOS LINUX LAPTOP STUDIO RECEPTION OFFICE HOMES WORKSTATION CRUNCHER RATNA
+    unset CHRUBY_LOC FZF_BASE
+    export _OVERRIDE_HOMEBREW_PREFIX_ARM='/nonexistent/homebrew-arm'
+    export _OVERRIDE_HOMEBREW_PREFIX_INTEL='/nonexistent/homebrew-intel'
+    source '${ZSHRC_D}/5_general.zsh' 2>/dev/null
+    printf '%s\n' \"\${CHRUBY_LOC:-unset}\"
+    printf '%s\n' \"\${FZF_BASE:-unset}\"
+  "
+  [ "$status" -eq 0 ]
+  [ "$(printf '%s\n' "$output" | sed -n '1p')" = "unset" ]
+  [ "$(printf '%s\n' "$output" | sed -n '2p')" = "unset" ]
+}
+
+# Regression pin for the `[[ -n {OFFICE} ]]` typo (missing $): zsh evaluated
+# the braces as a literal non-empty string, so the branch was always taken
+# regardless of platform or hostname, and FZF_BASE was exported to a path
+# that does not exist on ratna or on either Linux box. Isolated from the
+# case above so the regression has its own named, independently-runnable
+# assertion.
+@test "5_general.zsh no longer forces FZF_BASE on via the {OFFICE} typo when neither homebrew prefix is present" {
+  run zsh -c "
+    unset MACOS LINUX LAPTOP STUDIO RECEPTION OFFICE HOMES WORKSTATION CRUNCHER RATNA
+    unset CHRUBY_LOC FZF_BASE
+    export _OVERRIDE_HOMEBREW_PREFIX_ARM='/nonexistent/homebrew-arm'
+    export _OVERRIDE_HOMEBREW_PREFIX_INTEL='/nonexistent/homebrew-intel'
+    source '${ZSHRC_D}/5_general.zsh' 2>/dev/null
+    printf '%s\n' \"\${FZF_BASE:-unset}\"
+  "
+  [ "$status" -eq 0 ]
+  [ "$output" = "unset" ]
+}
+
 # ── 6_path.zsh GNU make gnubin tests ─────────────────────────────────────────
 # _OVERRIDE_GNUBIN_ARM / _OVERRIDE_GNUBIN_INTEL are test seams, same convention
 # as _OVERRIDE_RBENV_BINARY above -- default to the real Homebrew paths in
