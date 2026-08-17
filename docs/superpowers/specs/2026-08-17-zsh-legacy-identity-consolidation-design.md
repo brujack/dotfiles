@@ -2,8 +2,16 @@
 
 Date: 2026-08-17
 Repo: dotfiles
-Backlog rows closed: "five hostname reads survive in `5_general.zsh` — rbenv and gcloud",
-"gcloud completion absent on three work macs", "hostname→legacy-variable lives in four tables"
+Backlog rows closed: "hostname→legacy-variable lives in four tables" (fully); "five hostname
+reads survive in `5_general.zsh` — rbenv and gcloud" (**partially** — 1 of its 3 sites).
+Backlog rows _re-opened and rewritten_ by this spec: "gcloud completion absent on three work
+macs", superseded by the `.zshrc` ownership finding in round 3.
+
+> **Scope was cut twice by review.** Round 1 and 2 reshaped the gcloud work; round 3 removed it
+> entirely. What ships is A1 (one rbenv guard), Part B (four mapping tables → two) and Part C
+> (four documentation corrections). Decisions 2 and 3 and task A2 are retained below as records
+> of why they were cut, not as work to do.
+
 
 ---
 
@@ -15,31 +23,54 @@ Two independent residues of the 2026-08-16 zsh-identity work (#222).
 sites.** That PR converted this file's `CHRUBY_LOC`, `FZF_BASE` and keychain blocks from
 hostname tests to capability or Homebrew-prefix tests, and left three:
 
-| site   | current test                                        | the question it is really asking |
-| ------ | --------------------------------------------------- | -------------------------------- |
-| `:77`  | `[[ -n ${WORKSTATION} ]] \|\| [[ -n ${CRUNCHER} ]]` | is this a Linux dev box?         |
-| `:131` | `[[ ${RATNA} ]]`                                    | is this an Intel mac?            |
-| `:135` | `[[ ${LAPTOP} ]] \|\| [[ ${STUDIO} ]]`              | is this an ARM mac?              |
+| site   | current test                                        | the question it is really asking | in scope |
+| ------ | --------------------------------------------------- | -------------------------------- | -------- |
+| `:77`  | `[[ -n ${WORKSTATION} ]] \|\| [[ -n ${CRUNCHER} ]]` | is this a Linux dev box?         | **yes** — A1 |
+| `:131` | `[[ ${RATNA} ]]`                                    | is this an Intel mac?            | no — cut in round 3 |
+| `:135` | `[[ ${LAPTOP} ]] \|\| [[ ${STUDIO} ]]`              | is this an ARM mac?              | no — cut in round 3 |
 
-The `:131`/`:135` pair is also a live defect: `reception`, `office` and `home-1` share
-`studio`'s and `laptop`'s Homebrew prefix but are absent from the `:135` list, so they source
-neither `.inc` file and get no gcloud completion. It was held out of #222 because fixing it
-newly enables completion on machines that never had it, which wanted its own decision.
-**The operator approved that on 2026-08-17.**
+**Only `:77` is in scope, and the reason the other two are not is the most useful thing this
+spec measured.** The `:131`/`:135` pair looked like a live defect — `reception`, `office` and
+`home-1` share `studio`'s Homebrew prefix, are absent from the `:135` list, and get no gcloud
+completion from this file. All of that is true. What no round of review caught until the third
+is that **`.zshrc` already sources both `.inc` files, from the same declared root, with no
+hostname guard, on every mac** — five lines below the `.zshrc.d` loop that runs
+`5_general.zsh`:
 
-**The size of that benefit is bounded, not known** — see A2 for the measurement. The fix
-reaches every ARM mac *that has the SDK installed*, which is at most those three and is not
-measurable from this session: none of the three resolves by `ssh` from the Studio, and the
-repo's own metadata is self-contradictory about whether a `mac_mini` should carry gcloud at
-all. Two of the three are `mac_mini`. This spec therefore claims "every ARM mac with the SDK
-installed" throughout and does not assert a machine count; the backlog row's own title
-("three work macs") predates that correction.
+```
+.zshrc:3   for FILE in ~/.config/.zshrc.d/*.zsh; do source $FILE; done
+.zshrc:8   if [ -f '/opt/homebrew/share/google-cloud-sdk/path.zsh.inc' ];       then . '...'; fi
+.zshrc:11  if [ -f '/opt/homebrew/share/google-cloud-sdk/completion.zsh.inc' ]; then . '...'; fi
+```
 
-Decision 2 also went through two rounds of review and reversed: the change is now
-**completion-only**, so no machine's `PATH` is mutated, and the behaviour change requiring
-approval is subtractive — `laptop` and `studio` stop sourcing `path.zsh.inc`. The original
-approval was obtained against a false description of what that file does and is recorded as
-void.
+Measured on a shell with `hostname` mocked to `reception`, tracked files only:
+
+| stage                            | gcloud completion | SDK `bin` on `PATH` |
+| -------------------------------- | ----------------- | ------------------- |
+| after the `.zshrc.d` loop        | **ABSENT**        | no                  |
+| after `.zshrc:8,11`              | **LOADED**        | YES                 |
+
+So fixing `:131`/`:135` would have delivered nothing to any ARM mac, and the "three work macs"
+framing is refuted. `.zshrc` hardcodes `/opt/homebrew`, so its two lines no-op on Intel, which
+leaves `ratna` served only by the `5_general.zsh` copy — meaning a "fix" there would have been a
+path change on the single host unreachable by `ssh`, carrying a regression risk and no
+measurable gain. The gcloud work is therefore **out of scope and rewritten as a backlog row**:
+the real finding is that two files source the same pair of includes, one of them unguarded and
+ARM-hardcoded, and that wants one owner rather than a better guard in the duplicate.
+
+**Why three rounds of review missed it, which is the transferable part.** This spec declared its
+own population as `grep -rn` over `--include='*.zsh' --include='*.sh' --include='*.bats'` plus
+`.zprofile`. `--include='*.zsh'` does not match `.zshrc`:
+
+```
+$ grep -c 'google-cloud-sdk' .zshrc                                   # 2
+$ grep -rln 'google-cloud-sdk' --include='*.zsh' . | grep -c '\.zshrc$'  # 0
+```
+
+That is `shell.md`'s "a pathspec cannot express *every tracked shell script*" — the same defect
+as the extensionless-hooks omission — occurring **inside the paragraph that states the
+methodology**, and it is the third premise failure this spec has had in the same position. The
+census below is corrected to derive from `ZSH_FILES`, which does include `.zshrc`.
 
 **2. The hostname→legacy-variable mapping exists in four byte-identical places.** #222
 collapsed hostname→**profile** to one table (`config/profiles.sh`'s `PROFILE_MAP`) but
@@ -75,20 +106,29 @@ about this repo only, not about the fleet.
 
 ---
 
-## Read-site census (measured 2026-08-17)
+## Read-site census (measured 2026-08-17, corrected in round 3)
 
-Every site outside the four tables that reads one of the eight legacy identity variables:
+Every site that reads one of the eight legacy identity variables, outside the four mapping
+tables. **The population is `ZSH_FILES` plus `lib/*.sh`, not a `--include='*.zsh'` pathspec** —
+that pathspec is what hid `.zshrc` for three rounds (see Problem, item 1). `ZSH_FILES` is the
+`Makefile`'s own set and does include `.zshrc` and `.zprofile`.
 
-| file                               | sites                     | in scope here             |
-| ---------------------------------- | ------------------------- | ------------------------- |
-| `.config/.zshrc.d/5_general.zsh`   | 3 (`:77`, `:131`, `:135`) | **yes**                   |
-| `.config/.zshrc.d/2_functions.zsh` | 2 (`:8`, `:12`)           | no — separate backlog row |
-| `.config/.zshrc.d/7_final.zsh`     | 1 (`:60`)                 | no — see Out of scope     |
-| `.zprofile`                        | 2 (`:6`, `:10`)           | no — see Out of scope     |
+| file                               | sites                     | in scope here                  |
+| ---------------------------------- | ------------------------- | ------------------------------ |
+| `.config/.zshrc.d/5_general.zsh`   | 3 (`:77`, `:131`, `:135`) | **1 of 3** — `:77` only (A1)   |
+| `.config/.zshrc.d/2_functions.zsh` | 2 (`:8`, `:12`)           | no — `Make()` gmake backlog row |
+| `.config/.zshrc.d/7_final.zsh`     | 1 (`:60`)                 | no — see Out of scope          |
+| `.zprofile`                        | 2 (`:6`, `:10`)           | no — see Out of scope          |
+| `.zshrc`                           | 0                         | reads no identity variable — but see Problem item 1: it sources gcloud unguarded, which is why it belongs in the census at all |
 
-After this work `5_general.zsh` reads **zero** legacy identity variables and five sites
-remain across three files. The variables themselves are therefore still required; this
-spec does not remove them and does not claim to.
+**After this work `5_general.zsh` still reads two legacy identity variables** (`:131`, `:135`),
+and 7 sites remain across 4 files. An earlier draft said zero and five-across-three; that was
+true only under the dropped A2. This matters beyond bookkeeping — it is what keeps A3 alive and
+changes its direction, since the `SC2034` reason strings must go on naming this file.
+
+The variables themselves are not removed and this spec does not claim to reduce the number of
+places the mapping is *read* — only the number of places it is *written*.
+
 
 ---
 
@@ -122,70 +162,30 @@ values). It catches a variable gained or lost but not a swapped mapping
 (`[laptop]=STUDIO` leaves both names present), so it does not replace what the oracle
 does.
 
-### Decision 2 — completion only, on one canonical path (revised twice)
+### Decision 2 — cut entirely in round 3 (record only)
 
-Two rounds of review rewrote this decision completely. The record of both is kept because each
-correction was itself corrected, which is the useful part.
+**This decision was reversed once and then removed. It is kept as the record of a three-round
+failure, because each correction was itself wrong and the pattern is the lesson.**
 
-**Round 0 (original).** The two arms differ: ARM sources `path.zsh.inc` **and**
-`completion.zsh.inc`, the Intel (`RATNA`) arm sources `completion.zsh.inc` only. Chosen then:
-symmetric, both files on both arms, justified to the operator as "`ratna` newly sources
-`path.zsh.inc`, putting the gcloud CLI on its `PATH`".
+- **Round 0:** symmetric — source `path.zsh.inc` and `completion.zsh.inc` on both arms.
+  Justified to the operator as "`ratna` newly sources `path.zsh.inc`, putting the gcloud CLI on
+  its `PATH`". **False**: the cask links `gcloud`/`gsutil`/`bq` into `${prefix}/bin` as `binary`
+  artifacts, and `path.zsh.inc` is 31 bytes adding only four unlinked auxiliaries.
+- **Round 1:** kept symmetric, replaced a stale cask token with a two-token resolver over
+  `Caskroom/<token>/latest/`. **Wrong path**: that is a symlink to a symlink onto the cask's
+  declared root, labelled `# HACK` at `gcloud-cli.rb:64` and trashed on uninstall at `:98`.
+- **Round 2:** completion-only on the declared root `${prefix}/share/google-cloud-sdk`.
+  Correct as code — verified under real zsh on both fleet builds — and justified with a second
+  false claim: that `laptop` and `studio` would lose four auxiliaries. **Also false**, because
+  `.zshrc:8` puts SDK `bin` on `PATH` unconditionally on ARM.
+- **Round 3:** cut. `.zshrc:8,11` already sources both files from that same root on every mac,
+  so nothing in this decision changed any ARM machine's behaviour, and its only live effect was
+  a path change on `ratna` — the one host no evidence covers.
 
-**That justification was false, and the approval it obtained is void.** The cask links
-`gcloud`, `gsutil`, `bq` and `docker-credential-gcloud` into `${prefix}/bin` as `binary`
-artifacts, so the CLI is on `PATH` with or without `path.zsh.inc` — which is 31 bytes:
-
-```
-$ ls -l /opt/homebrew/bin/gcloud
-/opt/homebrew/bin/gcloud -> /opt/homebrew/Caskroom/gcloud-cli/580.0.0/google-cloud-sdk/bin/gcloud
-$ cat /opt/homebrew/share/google-cloud-sdk/path.zsh.inc
-export PATH=${0:A:h}/bin:$PATH
-```
-
-Its only real delta is four auxiliaries the cask does not link — `anthoscli`,
-`dev_appserver.py`, `gcloud-crc32c`, `java_dev_appserver.sh`.
-
-**Chosen: `completion.zsh.inc` only, on both arms.** The backlog row this closes says
-*completion* absent, and completion is what the manual `source` is genuinely required for —
-Homebrew does symlink `completion.zsh.inc` into `share/zsh/site-functions/_google_cloud_sdk`,
-but its first line is `autoload -U +X bashcompinit` with no `#compdef` tag, so `compinit`
-never autoloads it. Verified.
-
-Dropping `path.zsh.inc` means **`laptop` and `studio` lose those four auxiliaries from
-`PATH`** — a real behaviour change on two machines, in the subtractive direction, accepted
-knowingly (operator, 2026-08-17) rather than inherited. `ratna` is unaffected: it sources
-`completion.zsh.inc` today and still will. The three ARM macs gain it. No machine's `PATH`
-changes, so unlike round 0 this needs no `PATH`-mutation approval at all.
-
-**And the path itself is the cask's declared root, not a `Caskroom` probe.** Round 1 replaced
-a stale cask token with a two-token resolver over `Caskroom/<token>/latest/google-cloud-sdk`.
-Round 2 found that path is a symlink to a symlink, maintained by upstream for exactly this
-class of file:
-
-```
-$ grep -n 'google_cloud_sdk_root =\|copy "google-cloud-sdk\|HACK\|uninstall trash' \
-    $(brew --prefix)/Library/Taps/homebrew/homebrew-cask/Casks/g/gcloud-cli.rb
-11:  google_cloud_sdk_root = "#{HOMEBREW_PREFIX}/share/google-cloud-sdk"
-58:    copy "google-cloud-sdk/.", "share/google-cloud-sdk", target_base: :homebrew_prefix, recursive: true
-64:    # HACK: Allow existing shell profiles to work by linking the current version to the `latest` directory.
-98:  uninstall trash: staged_path.dirname/"latest"
-$ readlink -f /opt/homebrew/Caskroom/gcloud-cli/latest/google-cloud-sdk
-/opt/homebrew/share/google-cloud-sdk
-```
-
-Line 11 declares the root, line 58 copies the SDK there, line 64 is the upstream author
-saying in a comment that `latest` exists only so shell profiles like this one keep working,
-line 98 deletes it on uninstall, and the cask's own caveat text points users at
-`google_cloud_sdk_root`. `${prefix}/share/google-cloud-sdk` is therefore **token-independent
-and version-independent** — immune both to the 2026-04-30 rename the round-1 resolver was
-built for and to the `latest` shim it depended on, which is created `unless_path_exists` and
-so is not even refreshed if stale. On this machine 2 of 61 installed casks carry a `latest`
-symlink at all, and both are this one cask under its two tokens.
-
-So the round-1 correction hardened against one Homebrew shim while depending on another one
-level below it — the same defect shape it was written to fix, one path segment along, and
-found only because a lens read the cask instead of the spec.
+**Two operator approvals were obtained for this decision and both were obtained against a false
+description of `path.zsh.inc`.** That is recorded here rather than quietly dropped: the failure
+was not a wrong option chosen, it was the same line of a third-party file described wrongly
+twice in a row, by the same author, after the first correction.
 
 
 ### Decision 3 — derived test isolation is cut from this spec (revised after review)
@@ -249,74 +249,29 @@ two Linux profiles, `linux_workstation` and `wsl2_workstation`, both carry `devt
 `PROFILE_MAP` maps exactly `workstation` and `cruncher` to them. The `_OVERRIDE_RBENV_BINARY`
 seam at `:78` and the enclosing `NOBLE`/`RESOLUTE` guard are unchanged.
 
-**A2. gcloud block, `:129-143`.** Replace the two hostname arms with one prefix-derived
-source of `completion.zsh.inc` from the cask's declared root (Decision 2):
+**A2 — cut in round 3. See Decision 2 for the full record.** The gcloud block at `:129-143` is
+left exactly as it is, hostname guard and stale cask token included, and becomes a backlog row
+naming `.zshrc:8,11` as the real owner. No line of `5_general.zsh`'s gcloud handling is touched
+by this spec.
 
-```zsh
-if [[ ${MACOS} ]]; then
-  _gcloud_prefix=
-  [[ -d ${_homebrew_prefix_arm} ]] && _gcloud_prefix="${_homebrew_prefix_arm}"
-  [[ -z ${_gcloud_prefix} && -d ${_homebrew_prefix_intel} ]] && _gcloud_prefix="${_homebrew_prefix_intel}"
+**A3. `SC2034` reason strings — smaller than the earlier draft, and pointing the other way.**
+Under the dropped A2 this file would have read no legacy identity variable, and A3 was "remove
+`5_general.zsh` from every reader list". With only A1 shipping, `:131` and `:135` still read
+`RATNA`, `LAPTOP` and `STUDIO`, so the reason strings in `lib/detect_env.sh:51` and
+`config/profiles.zsh:6-10` must **keep** naming this file. What changes is the clause inside
+them: both currently say the keychain block reads none of these "but its rbenv guard
+(`WORKSTATION`/`CRUNCHER`) and gcloud completion arms (`RATNA`/`LAPTOP`/`STUDIO`) still do". A1
+retires the rbenv half, so the clause narrows to the gcloud arms alone.
 
-  # share/google-cloud-sdk is the cask's declared install root (gcloud-cli.rb:11,
-  # copied there at :58). Caskroom/<token>/latest/google-cloud-sdk reaches the same
-  # directory through two symlinks that upstream labels a HACK for shell profiles
-  # (:64), creates unless_path_exists, and trashes on uninstall (:98) -- so it is
-  # both token- and version-fragile. This path is neither.
-  if [[ -n ${_gcloud_prefix} \
-        && -f ${_gcloud_prefix}/share/google-cloud-sdk/completion.zsh.inc ]]; then
-    source "${_gcloud_prefix}/share/google-cloud-sdk/completion.zsh.inc"
-  fi
-  unset _gcloud_prefix
-fi
-```
+That is a two-word edit rather than a deletion, and getting it backwards would be the exact
+defect A3 exists to prevent — a reason naming a file that no longer reads the variable stops the
+next reader checking, and so does a reason that *stops* naming a file which still does. The
+second direction is worse: it reads as "nothing here uses this", which is how a variable gets
+deleted.
 
-One variable, one guard, one source. The round-1 two-token resolver — a `for` loop, a `break`,
-`_gcloud_token`, a fallback and a separate `_gcloud_root` — is deleted in full; so is
-`path.zsh.inc`, per Decision 2. `_gcloud_prefix` is reset explicitly and `unset` on the way
-out, which is the whole of what the previous draft argued for at paragraph length about an
-ambient value of a variable this same diff invents.
+`config/profiles.zsh`'s header comment (`:4-10`) carries the same clause and needs the same
+narrowing.
 
-`_homebrew_prefix_arm` / `_homebrew_prefix_intel` are assigned at `:23-24` and unset at
-`:270`, so both are in scope at `:131`. Reusing them rather than introducing a third prefix
-literal is required by that pair's own contract comment (`:12-22`): the seam **is** the
-Homebrew prefix, and every consumer derives its path from it. The `_OVERRIDE_HOMEBREW_PREFIX_ARM`
-/ `_INTEL` test seams therefore cover this block for free.
-
-The ARM-first `if`/`elif` ordering is not a new assumption — `CHRUBY_LOC` at `:26-31`,
-`FZF_BASE` at `:38-40` and the keychain binary at `:240-244` all already resolve that way from
-#222. If an Intel mac carrying a stray `/opt/homebrew` takes the ARM branch, that is a live
-defect in three existing consumers rather than something A2 introduces, and it belongs to
-whatever change fixes the ordering for all four. A2's guard fails closed there: the `-f` test
-misses and nothing is sourced.
-
-**What A2 delivers, stated at the boundary the evidence covers.** Every ARM mac that has the
-SDK installed gains gcloud completion. That set is *at most* `reception`, `office` and
-`home-1`, and it is not measurable from here: none of the three resolves by `ssh` from the
-Studio, `state-ledger/packages/` holds no capture for any of them, and `gcloud-cli` appears
-twice in the Brewfiles with contradictory intent — `Brewfile:163` tagged `# [HAS_DEVTOOLS]`
-but installed unconditionally by `brew bundle --file Brewfile` (`lib/macos.sh:193`), and
-`Brewfile.devtools:19` gated on `HAS_DEVTOOLS`, which never runs on a `mac_mini`. `office` and
-`home-1` are both `mac_mini` (`gui printing`, no devtools), so the repo's metadata says
-developer-only twice while one code path installs it everywhere. Whether those two carry the
-SDK depends on whether `install_macos_casks` has ever run there.
-
-So the honest claim is **"every ARM mac with the SDK installed", not "three machines"** — and
-the closed backlog row is worded accordingly. A2's guards make the difference inert either
-way: a machine without the SDK sources nothing rather than erroring.
-
-The `UBUNTU` arm at `:144-148` reads no hostname and is untouched.
-
-
-**A3. `SC2034` reason strings.** After A1 and A2, `5_general.zsh` reads no legacy identity
-variable, so the reader lists in `lib/detect_env.sh:51` and `config/profiles.zsh:6-10`
-(and `config/profiles.zsh`'s header at `:4-10`) must drop it in the same commit. This
-repo's shellcheck convention requires a suppression's reason to name the mechanism; a
-reason naming a file that no longer reads the variable is worse than a bare directive,
-because it stops the next reader checking. `2_functions.zsh`, `7_final.zsh` and
-`.zprofile` remain correct entries in those lists.
-
-### Part B — `PROFILE_LEGACY`
 
 **B1. `config/profiles.sh`.** Add a third map beside `PROFILE_MAP` and `PROFILE_CAPS`:
 
@@ -479,47 +434,12 @@ swept only by luck. Documentation Currency puts all four in the same change.
 
 ### The falsifiable form for A2
 
-The new gcloud code reads no hostname, so there is no hostname to fake. The test asserts
-the absence of the hostname dependency instead: with `_OVERRIDE_HOMEBREW_PREFIX_ARM`
-pointed at a fixture directory containing both `.inc` files and **every legacy identity
-variable unset** — the state a `reception` shell is in — both files are sourced.
-
-- Under the new code: 2 sources.
-- Under the current code: 0 sources, because `:135` requires `LAPTOP` or `STUDIO`.
-
-Mutation-provable in both directions. A second case with `_OVERRIDE_HOMEBREW_PREFIX_ARM`
-absent and `_OVERRIDE_HOMEBREW_PREFIX_INTEL` pointed at a fixture asserts the Intel arm
-reaches both files too, which is the assertion that pins Decision 2 rather than the
-comparison.
-
-**Two cases, not four.** Adopting the cask's declared root deleted the token dimension, so
-the fixture matrix collapses. What remains discriminates the only thing left that can vary:
-
-| fixture layout under the overridden prefix        | old code  | new code  | represents            |
-| ------------------------------------------------- | --------- | --------- | --------------------- |
-| `share/google-cloud-sdk/completion.zsh.inc` exists | 0 sourced | 1 sourced | SDK installed         |
-| that path absent                                  | 0 sourced | 0 sourced | SDK not installed     |
-
-Row 1 is mutation-provable against the actual defect: under the current code it is 0 because
-`:135` requires `LAPTOP` or `STUDIO`, and every legacy identity variable is unset in the
-fixture — the state a `reception` shell is in. Row 2 pins the empty measurement, which is the
-case that otherwise reads as success. Both run twice, once through
-`_OVERRIDE_HOMEBREW_PREFIX_ARM` and once through `_OVERRIDE_HOMEBREW_PREFIX_INTEL` with the
-ARM path absent, so Decision 2's "both arms" is asserted rather than assumed.
-
-A third case asserts `path.zsh.inc` is **not** sourced even when present — that is Decision 2's
-subtractive half, and without it nothing distinguishes "deliberately dropped" from "forgot to
-port".
-
-The fixture must be a temp directory, never a real Homebrew prefix. Measured 2026-08-17 on the
-Mac Studio (`studio`, ARM, one machine — not a fleet claim):
-`/opt/homebrew/share/google-cloud-sdk/completion.zsh.inc` exists, and `/usr/local/share/` has
-no such tree. So a test that forgets to override the ARM seam short-circuits the guard and
-asserts nothing on every ARM mac, while the same omission on the Intel seam fails for a
-different wrong reason. This is the mechanism by which round 1's defect stayed invisible: the
-one machine the fixtures could accidentally read is the one machine where the wrong path
-worked. Both prefixes get fixtures; no test reads a real one.
-
+None — A2 is cut. Every fixture case, the token matrix and the `path.zsh.inc`-not-sourced case
+are removed with it. Two of them had already gone stale against each other before the cut: the
+round-1 prose still said "both files are sourced" and "2 sources" while the round-2 table below
+it said `1 sourced` and required `path.zsh.inc` **not** sourced. An implementer reading top-down
+would have written the wrong assertion — worth recording, because that contradiction survived a
+full lens round in text nobody flagged.
 
 ### The falsifiable form for A1
 
@@ -635,6 +555,62 @@ check passes on a shell that never sourced the file under test, which is precise
 draft's version passed. Mutation-provable — point the loop at a directory with no
 `5_general.zsh` and it goes red.
 
+### Cross-machine verification (required, not optional)
+
+`tdd.md` pitfall G: a suite that shells out to a versioned tool inherits that tool's version
+skew, and a local pass is not evidence for the class. This fleet's two development machines
+differ on every tool this spec touches, and `ubuntu-latest` matches the **workstation**, not the
+Studio:
+
+| tool | workstation (matches CI) | Mac Studio |
+| ---- | ------------------------ | ---------- |
+| bash | 5.2.21                   | 5.3.15     |
+| zsh  | 5.9                      | 5.9.2      |
+| bats | 1.10.0                   | 1.14.0     |
+
+Every semantic this spec depends on was measured on **both**, 2026-08-17, and all are identical:
+
+| claim                                                    | both machines           |
+| -------------------------------------------------------- | ----------------------- |
+| `readonly` inside a bash function is global              | `FOO=1` after return    |
+| indirect `readonly` with an empty name                   | errors, rc 1            |
+| `[[ -n ${v} ]] && readonly "${v}=1"` on an unmapped host | function rc 1           |
+| `declare -A` sourced inside a function                   | function-local          |
+| a 2nd `source` of a file doing `readonly X=1`            | **rc 126**              |
+| a 2nd `source` of a file doing `export X=1`              | rc 0                    |
+| `${(U)x}`, `${=arr}`, `unset -m 'HAS_*'`                 | identical               |
+
+The `126` row settles B2's `export`-not-`readonly` choice empirically rather than by citation to
+`profiles.zsh:15`, on both zsh builds.
+
+**Phase 2 and Phase 3 must re-run `make test` on the workstation, and must ship the tree rather
+than trust the checkout.** `git archive <sha> | ssh workstation` — never a `git pull` there,
+never `git stash create`, never the workstation's own working tree. Measured why:
+
+```
+$ ssh workstation 'cd ~/git-repos/personal/dotfiles; git rev-parse --short HEAD; \
+    git rev-list --count HEAD..origin/master'
+b3b59b3
+0                 # <-- FALSE. Its origin/master tracking ref is stale.
+$ git rev-list --count b3b59b3..origin/master     # asked from the Studio
+25
+```
+
+That checkout is 25 commits behind and predates `3387160` (#220), so its `5_general.zsh` has no
+`[[ -o interactive ]]` guard on the keychain block. Running the Part A check against it emitted
+490 bytes of keychain output and would have produced a **false finding** — that requiring empty
+stderr is unrealistic on Linux. Against the shipped tree at `f577e1c` the same check returned
+`rc=0`, **stderr empty**, and leaked no `ssh-agent` (2 before, 2 after). This is `CLAUDE.md`'s own
+`_OVERRIDE_BATS_BIN` lesson: ship the SHA, because a stale or dirty tree *is* the finding.
+
+**Two measured limits on the Part A check, neither a reason to drop it.** It passes on the
+current tree, so as the cited mitigation for a leak the fix has not yet introduced, it cannot
+discriminate until A1 lands — its value is regression, not proof. And on an unprovisioned `HOME`
+it emits ~398 bytes including a real network `git clone`, from `5_general.zsh:44-46`'s
+zsh-autosuggestions self-healing branch: fine on the two development machines, permanently red
+anywhere else. Scope it to those two explicitly rather than presenting it as portable.
+
+
 ## Out of scope
 
 **`Make()`'s gmake hardcode** (`2_functions.zsh:8,12`) stays on the backlog. Its note is
@@ -656,6 +632,15 @@ row, added in the same change. Converting them wants a single derived helper sou
 four files with a non-emptiness and count-pinned guard in front of the derivation — the guard
 is the load-bearing part, since without it an empty derivation is green in CI.
 
+**All gcloud sourcing.** `.zshrc:8,11` is the real owner and `5_general.zsh:129-143` duplicates
+it behind a hostname guard with a stale cask token. On ARM the `.zshrc` copy already delivers
+both includes unguarded (measured), so the duplicate's guard buys nothing there; on Intel
+`.zshrc` no-ops because it hardcodes `/opt/homebrew`, leaving `ratna` served only by the
+duplicate. One backlog row, added in the same change. The coherent fix is one owner,
+prefix-aware — but `.zshrc` runs *after* the `.zshrc.d` loop, so it cannot reuse
+`_homebrew_prefix_arm`/`_intel` (unset at `5_general.zsh:270`), and it has no `_OVERRIDE_*` seam
+and no bats coverage today. Its own cycle, not a rider.
+
 **The legacy variables themselves** are not removed. Five read sites survive this work
 across three files, so the variables stay. This spec reduces the number of places the
 mapping is written, not the number of places it is read.
@@ -666,10 +651,8 @@ mapping is written, not the number of places it is read.
 
 | risk                                                                                     | mitigation                                                                                                                                                                                                                                          |
 | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A2's path depends on a Homebrew shim being maintained | it does not, any more: `share/google-cloud-sdk` is the cask's declared root (`:11`, copied at `:58`). The `latest` symlink the round-1 resolver used is the shim — labelled `# HACK` at `:64`, created `unless_path_exists` so a stale one is never refreshed, and trashed on uninstall at `:98` |
-| `laptop` and `studio` lose 4 auxiliary binaries from `PATH` | real, subtractive, and operator-approved on a correct description this time. `gcloud`/`gsutil`/`bq`/`docker-credential-gcloud` are cask `binary` artifacts in `${prefix}/bin` and are unaffected; only `anthoscli`, `dev_appserver.py`, `gcloud-crc32c`, `java_dev_appserver.sh` are reachable solely via `path.zsh.inc` |
-| `_gcloud_prefix` leaks into the user's shell | it is `unset` on the last line of the block, and the Part A branch check asserts `${_gcloud_prefix+x}` is empty after sourcing every `.zshrc.d` file — the previous draft cited a check that never sourced `5_general.zsh` at all |
-| A2 reports success on a mac with no SDK | it sources nothing, which is correct, but is indistinguishable from a broken guard by inspection — which is why fixture row 2 pins 0 sourced rather than leaving the empty measurement unasserted |
+| A1 changes a guard in a file every interactive shell sources | `HAS_DEVTOOLS` is set by both `config/profiles.zsh` (zsh) and `lib/detect_env.sh` (bash) for exactly the two Linux profiles `PROFILE_MAP` maps `workstation`/`cruncher` to, so the substitution is behaviour-preserving for every mapped host — confirmed independently by four lenses and re-measured on both fleet bash builds |
+| A3's reason string is edited in the wrong direction | it must **keep** naming `5_general.zsh`, because `:131`/`:135` still read `RATNA`/`LAPTOP`/`STUDIO` after A1. A reason that stops naming a live reader reads as "nothing uses this", which is how the variable gets deleted next |
 | B2's lookup loses the warning on a drifted table                                         | the warning arm is preserved with an unchanged trigger; B4 adds a negative test for it                                                                                                                                                              |
 | B3's `readonly "${legacy}=1"` is an indirect assignment                                  | `legacy` is a lookup from a table whose values are eight fixed identifiers; a hostname cannot inject into it, since the hostname is the _key_, not the value                                                                                        |
 | `PROFILE_LEGACY` unset too early in `profiles.zsh`                                       | it joins the existing `unset` at `:85`, after the lookup                                                                                                                                                                                            |
@@ -1053,3 +1036,88 @@ new text. Round 3 is scoped rather than full — the body is materially the same
 and the Out-of-scope reasoning, all of which have now been independently confirmed three times
 each, while Decision 2, A2, Part C and the two verification checks are new since any lens read
 them.
+
+
+---
+
+## Multi-Lens Review — round 3 (scoped)
+
+Reviewed at commit: `f577e1c` (round-2 revision commit)
+
+**Scoped, not full**, per the skill's stopping guidance: one Risk lens pointed at the eight
+things rewritten since any lens had read them — Decision 2, A2, Part C's four items, both
+verification checks, B4a/B4b, the Risk table and the re-scoped Problem statement. A1, Decision 1,
+B1–B4's core and the Out-of-scope reasoning were excluded as independently confirmed three times
+each, with the lens told explicitly to say so if it believed a prior confirmation was wrong.
+
+### Risk (scoped)
+
+Finding: **`.zshrc:8,11` already sources both gcloud `.inc` files from the same declared root A2
+adopts, with no hostname guard, on every mac.** `.zshrc` is 12 lines; round 2 cited `:3` as the
+`.zshrc.d` loop and stopped five lines short. Verified from the main session on a shell with
+`hostname` mocked to `reception`: completion **ABSENT** after the `.zshrc.d` loop, **LOADED**
+after `.zshrc:8,11`; SDK `bin` absent from `PATH` then present.
+
+Three consequences: A2's benefit reaches **zero** ARM machines, so the "three work macs" framing
+is refuted and re-scoping the claim twice had narrowed the machine count while naming the wrong
+*file* boundary. The Risk row asserting `laptop`/`studio` would lose four auxiliaries is
+**false** — `.zshrc:8` puts SDK `bin` on `PATH` unconditionally on ARM — meaning the operator's
+*second* approval was obtained against a second false description of the same line. And A2's only
+live effect was on `ratna`, an Intel host unreachable by `ssh`, to which none of Decision 2's
+evidence applied since every measurement behind it was taken under ARM `/opt/homebrew`.
+
+Mechanism: this spec's own declared population, `grep -rn` over
+`--include='*.zsh' --include='*.sh' --include='*.bats'` plus `.zprofile`. `--include='*.zsh'`
+does not match `.zshrc` — 0 hits against that file's 2 real lines. `shell.md`'s pathspec pitfall,
+inside the methodology paragraph, third premise failure in the same position.
+
+Second finding: the round-2 reversal left A2's verification prose contradicting its own table —
+unedited round-1 text still said "both files are sourced" and "2 sources" ten lines above a table
+saying `1 sourced` plus a case requiring `path.zsh.inc` **not** sourced. An implementer reading
+top-down writes the wrong assertion. That contradiction survived a full lens round unflagged.
+
+Verdict count: ~22 cases, 22 PASS, 0 red; fail-on-empty coverage genuinely present in five
+places, and Part C's two `0` expectations both measured as returning `1` today, so they
+discriminate correctly. Structural gap one level up: every case measured whether *`5_general.zsh`*
+sources the file, while nothing measured whether an interactive shell ends up with completion —
+so the suite drew the same subject boundary the problem statement drew and could only confirm it.
+
+Checked and not raised: the A2 snippet is correct across six fixture layouts under real zsh
+(right file every time, ambient value discarded, nothing leaked, `\` inside `[[ ]]` parses, rc 0,
+`zsh -n` clean); the Part A check runs rc 0 with empty stderr and leaks no `ssh-agent`; B4a/B4b
+are sound and sit outside `_profiles_snapshot`'s `zsh -c`; the cask-root claim survives a
+staleness check (`google_cloud_sdk_root` predates the 2026-07-20 `copy` refactor); the compinit
+claim measures `_comps[gcloud]=NONE`.
+
+Assumption: that `/usr/local/share/google-cloud-sdk/completion.zsh.inc` exists on `ratna` — the
+only machine A2 changed, and the whole of what A2 did. If absent, A2 **removes** completion that
+works there today.
+
+Disposition: **Addressed** (operator, 2026-08-17) — by cutting the gcloud work entirely. A2 and
+Decision 2 are removed; A1, Part B and Part C ship. The `ratna` assumption is deleted rather than
+answered, since nothing changes on that host. `.zshrc:8,11` versus `5_general.zsh:129-143` becomes
+one backlog row naming `.zshrc` as the real owner, with the two constraints a future cycle needs:
+`.zshrc` runs after the `.zshrc.d` loop so `_homebrew_prefix_*` is already unset, and it has no
+test seam. A3 is rewritten in the opposite direction — the `SC2034` reason strings must **keep**
+naming `5_general.zsh`, because `:131`/`:135` still read three legacy variables after A1.
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — unchanged across all three rounds. No comparison arms, no judge or evaluator component,
+concrete acceptance criteria.
+
+### Stopping assessment
+
+**Stopping here.** The remaining scope — A1, Part B, Part C — has been read by four independent
+lenses across three rounds with no finding against A1 or Decision 1 in any of them, and B1–B4's
+only findings (B4a's stale strings, B4b's unexercised arm) are addressed. What round 3 found lived
+entirely in the gcloud work, and that work is now out of the spec rather than corrected again.
+
+Three rounds were not excessive and the yield did not decay: round 1 found a stale cask token,
+round 2 found the resolver built to fix it was aimed at a symlink, round 3 found the whole
+mechanism was redundant with a file five lines away. Each round's finding was in text the previous
+round's *correction* created — which is the shape the skill warns about, observed three times in
+one spec.
+
+The honest summary is that the surviving spec is the half review never had a problem with, and
+the half it kept rejecting is gone. That is the correct outcome, not a diminished one.
