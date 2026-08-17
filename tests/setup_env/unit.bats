@@ -584,6 +584,7 @@ teardown() {
   local _called=0
   _doctor_check_github_mcp() { _called=1; }
   # Stub all other sub-checks to avoid side effects
+  _doctor_check_profile()       { :; }
   _doctor_check_symlinks()      { :; }
   _doctor_check_symlink_roots() { :; }
   _doctor_check_tools()         { :; }
@@ -595,6 +596,7 @@ teardown() {
 }
 
 @test "run_doctor summary includes warnings count" {
+  _doctor_check_profile()       { :; }
   _doctor_check_symlinks()      { :; }
   _doctor_check_symlink_roots() { :; }
   _doctor_check_tools()         { :; }
@@ -952,6 +954,39 @@ teardown() {
     _DOCTOR_FAILED=1
     [[ ${_DOCTOR_FAILED} -eq 0 ]]
   }
+  run run_doctor
+  [ "$status" -eq 1 ]
+}
+
+# ── _doctor_check_profile ─────────────────────────────────────────────────────
+
+@test "_doctor_check_profile passes for a mapped profile" {
+  _DOCTOR_PASS=0
+  _DOCTOR_FAIL=0
+  _DOCTOR_FAILED=0
+  export PROFILE="mac_workstation"
+  _doctor_check_profile
+  [ "${_DOCTOR_FAILED}" -eq 0 ]
+}
+
+@test "_doctor_check_profile fails for an unmapped profile and names the hostname" {
+  export PROFILE="unknown"
+  export MOCK_HOSTNAME_OUTPUT="totally-unmapped-host"
+  run _doctor_check_profile
+  [[ "$output" == *"[FAIL]"* ]]
+  [[ "$output" == *"totally-unmapped-host"* ]]
+  [[ "$output" == *"config/profiles.sh"* ]]
+}
+
+@test "run_doctor exit code reflects an unmapped profile" {
+  _doctor_check_symlinks()      { :; }
+  _doctor_check_symlink_roots() { :; }
+  _doctor_check_tools()         { :; }
+  _doctor_check_cred_dirs()     { :; }
+  _doctor_check_hooks_path()    { :; }
+  _doctor_check_versions()      { :; }
+  _doctor_check_github_mcp()    { :; }
+  export PROFILE="unknown"
   run run_doctor
   [ "$status" -eq 1 ]
 }
