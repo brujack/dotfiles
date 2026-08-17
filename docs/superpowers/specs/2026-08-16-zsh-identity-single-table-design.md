@@ -331,7 +331,12 @@ while remaining in `SHELL_FILES` for `bash -n` and shellcheck. One file, both pa
 
 ## Assumptions
 
-1. **`keychain --eval any home` on `home-1` is a typo.** If `any` is a real key on that
+1. ~~**`keychain --eval any home` on `home-1` is a typo.**~~ **RESOLVED 2026-08-17 —
+   confirmed.** The operator ran `ls ~/.ssh/any*` on `home-1`; zsh returned
+   `no matches found`. No such key exists, so dropping it lost nothing. Kept here rather
+   than deleted: one command settled the only assumption this design shipped on, and a
+   reader should be able to see that it was actually run. Original wording follows.
+   If `any` is a real key on that
    machine, dropping it stops that key being loaded. Refuted by `ls ~/.ssh/any*` on
    `home-1` returning a key; confirmed by it returning nothing. One-line revert if wrong.
    Retaining it would force a per-host carve-out back into a design whose purpose is

@@ -103,8 +103,10 @@ test:
   evaluates as a literal non-empty string. Those machines have no `/opt/homebrew/bin/fzf`;
   `~/.fzf.zsh` is the fallback.
 - `home-1` no longer loads a key named `any`. `keychain` has no `any` flag, so the old arm
-  was reading it as a nonexistent key name. Recorded as an assumption: if `~/.ssh/any*`
-  turns out to be real, the fix is a three-line per-host addition to the key list.
+  was reading it as a nonexistent key name. Shipped as a recorded assumption and
+  **confirmed 2026-08-17 by the operator on the machine itself** — `ls ~/.ssh/any*` returns
+  `no matches found`. Nothing was lost: that arm had been asking keychain for a key that has
+  never existed.
 - An unmapped mac now loads the four standard keychain keys where the old chain, having no
   final `else`, loaded none.
 
