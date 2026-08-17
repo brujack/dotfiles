@@ -14,10 +14,21 @@ teardown() {
 }
 
 # Resolves detect_env for one hostname in an isolated subshell and prints
-# PROFILE plus the sorted set of HAS_* vars it declared. Isolated because
-# detect_env sets several `readonly` vars (MACOS, LAPTOP, ...) — sourcing it
-# twice in the same process errors on the second `readonly` assignment, so a
-# wired/wireless comparison needs two separate processes, not two sourcings.
+# PROFILE, which (if any) legacy identity variable got set, and the sorted
+# set of HAS_* vars it declared. Isolated because detect_env sets several
+# `readonly` vars (MACOS, LAPTOP, ...) — sourcing it twice in the same
+# process errors on the second `readonly` assignment, so a wired/wireless
+# comparison needs two separate processes, not two sourcings.
+#
+# The legacy vars and PROFILE are explicitly unset, and every ambient HAS_*
+# is stripped, before sourcing. This process may itself have been launched
+# from an interactive login shell whose .zprofile already exported STUDIO=1
+# and a full HAS_* set (config/profiles.zsh uses `export`, not `readonly`,
+# precisely so login shells can re-source it) -- both groups would otherwise
+# leak into this bash -c subprocess and make every assertion on either pass
+# regardless of what lib/detect_env.sh actually does. `${!HAS_@}` is bash's
+# name-matching expansion; unsetting it when nothing matches is a no-op, not
+# an error.
 #
 # Deliberately NOT `set -euo pipefail`: a genuinely zero-capability host
 # (unmapped hostname, empty hostname) makes `grep '^HAS_'` legitimately
@@ -34,6 +45,8 @@ teardown() {
 _profile_snapshot() {
   local hn="$1"
   bash -c "
+    unset LAPTOP STUDIO RECEPTION OFFICE HOMES WORKSTATION CRUNCHER RATNA PROFILE
+    unset \${!HAS_@}
     export MOCK_HOSTNAME_OUTPUT='${hn}'
     export MOCK_UNAME_S='Darwin'
     export PATH='${REPO_ROOT}/tests/mocks:${PATH}'
@@ -50,6 +63,11 @@ _profile_snapshot() {
       exit 1
     fi
     printf 'PROFILE=%s\n' \"\${PROFILE}\"
+    for v in LAPTOP STUDIO RECEPTION OFFICE HOMES WORKSTATION CRUNCHER RATNA; do
+      if [[ -n \${!v} ]]; then
+        printf 'LEGACY=%s\n' \"\${v}\"
+      fi
+    done
     compgen -v | grep '^HAS_' | sort
     exit 0
   "
@@ -279,6 +297,64 @@ _profile_snapshot() {
   wired=$(_profile_snapshot studio)
   wireless=$(_profile_snapshot studio-1)
   [ "${wired}" = "${wireless}" ]
+}
+
+# ── legacy identity variables ─────────────────────────────────────────────────
+# lib/detect_env.sh derives LAPTOP/STUDIO/RECEPTION/RATNA/OFFICE/HOMES/
+# WORKSTATION/CRUNCHER from the same PROFILE_MAP table config/profiles.zsh
+# uses -- see that file's case statement for the canonical mapping this
+# mirrors. The KEY SET under test comes from PROFILE_MAP itself (as with the
+# wireless-twin test above), not a hand-typed host list, so a machine added
+# tomorrow without a case arm here is caught rather than silently untested.
+
+# Maps a PROFILE_MAP hostname key to the legacy variable lib/detect_env.sh is
+# expected to set for it -- mirrors config/profiles.zsh's own case statement
+# exactly (see tests/zshrc.d/profiles.bats's _profiles_expected_legacy for
+# the zsh-side twin of this function). The *) arm returns non-zero rather
+# than printing empty, so a PROFILE_MAP key missing from this mapping fails
+# loudly instead of the assertion below silently comparing "" to "".
+_expected_legacy_var() { # <hostname>
+  case "$1" in
+  laptop | laptop-1) printf 'LAPTOP' ;;
+  studio | studio-1) printf 'STUDIO' ;;
+  reception | reception-1) printf 'RECEPTION' ;;
+  ratna | ratna-1) printf 'RATNA' ;;
+  office | office-1) printf 'OFFICE' ;;
+  home-1) printf 'HOMES' ;;
+  workstation) printf 'WORKSTATION' ;;
+  cruncher) printf 'CRUNCHER' ;;
+  *) return 1 ;;
+  esac
+}
+
+@test "every PROFILE_MAP hostname sets the right legacy identity variable in bash" {
+  source "${REPO_ROOT}/config/profiles.sh"
+  local -a keys
+  keys=("${!PROFILE_MAP[@]}")
+  [ "${#keys[@]}" -gt 0 ]
+
+  local hn expected_legacy snapshot
+  for hn in "${keys[@]}"; do
+    expected_legacy="$(_expected_legacy_var "${hn}")" || {
+      printf 'PROFILE_MAP host "%s" has no legacy-variable mapping in _expected_legacy_var (tests/setup_env/profiles.bats). Add a case arm for it.\n' "${hn}" >&2
+      return 1
+    }
+    snapshot="$(_profile_snapshot "${hn}")"
+    printf '%s\n' "${snapshot}" | grep -qx "LEGACY=${expected_legacy}" || {
+      printf 'expected legacy var %s not set for %s\nsnapshot:\n%s\n' "${expected_legacy}" "${hn}" "${snapshot}" >&2
+      return 1
+    }
+  done
+}
+
+@test "unmapped hostname sets no legacy identity variable" {
+  local snapshot
+  snapshot="$(_profile_snapshot unknownhost)"
+  printf '%s\n' "${snapshot}" | grep -q '^LEGACY=' && {
+    printf 'unexpected legacy var set for unmapped hostname:\n%s\n' "${snapshot}" >&2
+    return 1
+  }
+  [ "${snapshot}" = "PROFILE=unknown" ]
 }
 
 # ── ratna ──────────────────────────────────────────────────────────────────────
