@@ -21,14 +21,16 @@
 # A missing/broken profiles.sh degrades safely without this check —
 # PROFILE_MAP and PROFILE_CAPS are simply undefined, every lookup below
 # falls back to its `:-` default, and the shell keeps starting. But
-# "degrades safely" here means "silently loses PROFILE/HAS_*/legacy vars at
-# login", which is exactly the failure mode this whole plan exists to make
-# visible instead of silent (behavior.md: fail closed on unknown, surface
-# more under pressure). A hard `return`/`exit` is deliberately not used —
-# this file is sourced by .zprofile at login, and aborting a login shell
-# over a degraded (not broken) profile lookup is worse than the problem.
+# "degrades safely" here means "silently loses PROFILE/HAS_* at login"
+# (the legacy vars below are derived from the hostname directly, not from
+# this table, so they are unaffected) — which is exactly the failure mode
+# this whole plan exists to make visible instead of silent (behavior.md:
+# fail closed on unknown, surface more under pressure). A hard
+# `return`/`exit` is deliberately not used — this file is sourced by
+# .zprofile at login, and aborting a login shell over a degraded (not
+# broken) profile lookup is worse than the problem.
 if ! source "${0:A:h}/profiles.sh"; then
-  print -u2 "config/profiles.zsh: failed to source ${0:A:h}/profiles.sh -- PROFILE will default to 'unknown' and no HAS_*/legacy identity variables will be set this session."
+  print -u2 "config/profiles.zsh: failed to source ${0:A:h}/profiles.sh -- PROFILE will default to 'unknown' and no HAS_* identity variables will be set this session."
 fi
 
 _profiles_hostname="$(hostname -s)"
@@ -72,4 +74,4 @@ cruncher) export CRUNCHER=1 ;;
   ;;
 esac
 
-unset _profiles_hostname
+unset _profiles_hostname PROFILE_MAP PROFILE_CAPS

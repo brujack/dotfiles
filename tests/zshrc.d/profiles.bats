@@ -12,27 +12,40 @@ setup() {
 }
 
 # Resolves config/profiles.zsh for one hostname in an isolated zsh process
-# and prints PROFILE, the sorted HAS_* set, and which (if any) legacy
-# identity variable got set. The ambient environment is stripped of every
-# legacy variable name before the subprocess runs: this session's own login
-# shell exports STUDIO=1 on the machine these tests are written on, and
-# without the strip every assertion on a legacy variable would pass
-# regardless of what config/profiles.zsh does, because the ambient value
-# would already satisfy it.
+# and prints PROFILE, the sorted HAS_* set, which (if any) legacy identity
+# variable got set, and any stderr the sourced file produced (as STDERR=
+# lines, so a caller can assert on absence of spurious warnings).
+#
+# The isolation happens INSIDE the zsh -c body, in one place, rather than
+# split between an `env -u` prefix and something else: this session's own
+# login shell exports STUDIO=1 on the machine these tests are written on
+# (the legacy vars), and once .zprofile sources config/profiles.zsh, every
+# login shell also exports its own HAS_* set -- which bats itself then
+# inherits, since HAS_* is exported, unlike PROFILE_MAP/PROFILE_CAPS.
+# Without unsetting both groups before sourcing, every assertion on either
+# would pass regardless of what config/profiles.zsh does, because the
+# ambient value would already satisfy it. `unset -m` is zsh-only (glob-style
+# unset), which is why this can't be folded into the portable `env -u`
+# prefix the way the eight legacy names could be -- but folding all nine
+# into the same mechanism, in the same place, is exactly what keeps this
+# complete: two isolation mechanisms is how the HAS_* gap happened in the
+# first place.
 #
 # Deliberately not `set -e`/pipefail inside the zsh -c body: a genuinely
 # zero-capability profile (e.g. mac_mini, or an unmapped hostname) makes the
 # HAS_* listing legitimately empty, which is a correct outcome, not a
 # failure to propagate.
 _profiles_snapshot() { # <hostname>
-  local hn="$1"
-  env -u STUDIO -u LAPTOP -u RECEPTION -u OFFICE -u HOMES -u WORKSTATION -u CRUNCHER -u RATNA \
-    zsh -c "
+  local hn="$1" _err_file _line
+  _err_file="${BATS_TEST_TMPDIR}/profiles_snapshot_err"
+  zsh -c "
+    unset LAPTOP STUDIO RECEPTION OFFICE HOMES WORKSTATION CRUNCHER RATNA PROFILE
+    unset -m 'HAS_*'
     export PATH=\"${REPO_ROOT}/tests/mocks:\${PATH}\"
     export MOCK_HOSTNAME_OUTPUT='${hn}'
-    if ! source '${REPO_ROOT}/config/profiles.zsh' 2>/tmp/profiles_snapshot_err; then
+    if ! source '${REPO_ROOT}/config/profiles.zsh' 2>'${_err_file}'; then
       printf 'ERROR: could not source config/profiles.zsh\n' >&2
-      cat /tmp/profiles_snapshot_err >&2
+      cat '${_err_file}' >&2
       exit 1
     fi
     if [[ -z \${PROFILE:-} ]]; then
@@ -48,6 +61,18 @@ _profiles_snapshot() { # <hostname>
     print -l \${(k)parameters[(I)HAS_*]} | sort
     exit 0
   "
+  local _rc=$?
+  # A warning config/profiles.zsh prints to stderr (e.g. the drift-arm
+  # warning) doesn't make `source` return non-zero, so the check above
+  # can't see it -- fold it into the snapshot under a distinct prefix so a
+  # caller can assert on its absence instead of it being silently dropped.
+  if [[ -s "${_err_file}" ]]; then
+    while IFS= read -r _line; do
+      printf 'STDERR=%s\n' "${_line}"
+    done <"${_err_file}"
+  fi
+  rm -f "${_err_file}"
+  return "${_rc}"
 }
 
 # Maps a PROFILE_MAP hostname key to the legacy variable config/profiles.zsh
@@ -84,15 +109,19 @@ _profiles_expected_legacy() { # <hostname>
 # "${!PROFILE_MAP[@]}") rather than a typed-out host list -- a hand-typed
 # list would re-drift the moment a machine is added, which is the exact
 # failure this task exists to remove. Guarded: assert the derived list is
-# non-empty and matches the table's own size before looping, so a broken
-# source path can't silently turn this into a loop that asserts nothing.
+# non-empty before looping, so a broken source path (PROFILE_MAP sourced as
+# empty or undefined) can't silently turn this into a loop that asserts
+# nothing. (A count comparison against `${#PROFILE_MAP[@]}` was tried here
+# and removed -- `keys` is built FROM that same expression one line above,
+# so the two counts are equal by construction and no input could ever make
+# them differ. Non-empty is the only real assertion available at this
+# point.)
 
 @test "every PROFILE_MAP hostname resolves the right PROFILE, HAS_* set, and legacy var in zsh" {
   source "${REPO_ROOT}/config/profiles.sh"
   local -a keys
   keys=("${!PROFILE_MAP[@]}")
   [ "${#keys[@]}" -gt 0 ]
-  [ "${#keys[@]}" -eq "${#PROFILE_MAP[@]}" ]
 
   # Hosts intentionally without a legacy identity variable. Empty today --
   # all 13 PROFILE_MAP keys map to one -- kept as an explicit, reviewable
@@ -115,9 +144,24 @@ _profiles_expected_legacy() { # <hostname>
       }
     fi
 
-    expected_has="$(printf '%s\n' ${PROFILE_CAPS[${expected_profile}]} | tr ' ' '\n' | tr '[:lower:]' '[:upper:]' | sed 's/^/HAS_/' | sort)"
+    # Guarded rather than piped straight through: `printf '%s\n' ${empty}`
+    # (unquoted, word-split) still emits ONE blank line, which `sed
+    # 's/^/HAS_/'` then turns into the bare prefix "HAS_" -- a value that
+    # matches nothing real but isn't empty either. Unreachable via today's
+    # 13 hosts (every PROFILE_CAPS entry is non-empty) but reachable the
+    # moment a host lands in no_legacy with a zero-capability profile.
+    if [[ -z "${PROFILE_CAPS[${expected_profile}]:-}" ]]; then
+      expected_has=""
+    else
+      expected_has="$(printf '%s\n' ${PROFILE_CAPS[${expected_profile}]} | tr ' ' '\n' | tr '[:lower:]' '[:upper:]' | sed 's/^/HAS_/' | sort)"
+    fi
 
     snapshot="$(_profiles_snapshot "${hn}")"
+
+    printf '%s\n' "${snapshot}" | grep -q '^STDERR=' && {
+      printf 'unexpected stderr from config/profiles.zsh for %s:\n%s\n' "${hn}" "${snapshot}" >&2
+      return 1
+    }
 
     got_profile="$(printf '%s\n' "${snapshot}" | grep '^PROFILE=' | cut -d= -f2)"
     [ "${got_profile}" = "${expected_profile}" ] || {
@@ -133,7 +177,7 @@ _profiles_expected_legacy() { # <hostname>
     fi
 
     local got_has
-    got_has="$(printf '%s\n' "${snapshot}" | grep '^HAS_')"
+    got_has="$(printf '%s\n' "${snapshot}" | grep '^HAS_' || true)"
     [ "${got_has}" = "${expected_has}" ] || {
       printf 'HAS_* mismatch for %s:\n got: %s\nwant: %s\n' "${hn}" "${got_has}" "${expected_has}" >&2
       return 1
@@ -146,6 +190,9 @@ _profiles_expected_legacy() { # <hostname>
 @test "unmapped hostname yields PROFILE=unknown, zero HAS_*, and no legacy var" {
   local snapshot
   snapshot="$(_profiles_snapshot unknownhost)"
+  # Exact equality also pins "no stderr": any STDERR= line _profiles_snapshot
+  # folds in would break this match, same as an unexpected LEGACY= or HAS_*
+  # line would.
   [ "${snapshot}" = "PROFILE=unknown" ]
 }
 
@@ -156,8 +203,14 @@ _profiles_expected_legacy() { # <hostname>
 # later task, but the file must already tolerate it).
 
 @test "sourcing config/profiles.zsh twice in one process does not error and is idempotent" {
-  run env -u STUDIO -u LAPTOP -u RECEPTION -u OFFICE -u HOMES -u WORKSTATION -u CRUNCHER -u RATNA \
-    zsh -c "
+  # Same isolation as _profiles_snapshot, and for the same reason: HAS_* is
+  # exported by config/profiles.zsh itself, so an ambient set (e.g. this
+  # login shell's own, once .zprofile sources it) would otherwise leak into
+  # both sourcings identically and mask a regression rather than exercising
+  # a real first-source.
+  run zsh -c "
+    unset LAPTOP STUDIO RECEPTION OFFICE HOMES WORKSTATION CRUNCHER RATNA PROFILE
+    unset -m 'HAS_*'
     export PATH=\"${REPO_ROOT}/tests/mocks:\${PATH}\"
     export MOCK_HOSTNAME_OUTPUT='studio'
     source '${REPO_ROOT}/config/profiles.zsh' || exit 1
