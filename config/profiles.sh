@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
 # config/profiles.sh — requires bash 5+
-# Maps hostnames to profiles and profiles to capabilities.
-# Edit PROFILE_MAP to add a new machine — no other file needs changing.
+# Maps hostnames to profiles, profiles to capabilities, and hostnames to
+# their legacy identity variable name. Adding a new machine means editing
+# PROFILE_MAP and PROFILE_LEGACY below (both in this file), plus adding a
+# case arm to tests/helpers/legacy_oracle.bash -- 3 edits across 2 files,
+# not the single-file edit this comment used to claim.
 
-# shellcheck disable=SC2034 # file-wide: both maps below are read by lib/detect_env.sh:detect_env
-# PROFILE_MAP and PROFILE_CAPS are both read via `source`, which the linter
-# cannot see across files. A directive placed before the first real command
-# in a file applies file-wide (verified empirically), so this one line
-# covers both declarations below — a second directive on PROFILE_CAPS would
-# be redundant.
+# shellcheck disable=SC2034 # file-wide: all three maps below are read by lib/detect_env.sh:detect_env and config/profiles.zsh
+# PROFILE_MAP, PROFILE_CAPS, and PROFILE_LEGACY are all read via `source`,
+# which the linter cannot see across files. A directive placed before the
+# first real command in a file applies file-wide (verified empirically), so
+# this one line covers all three declarations below — a second directive on
+# PROFILE_CAPS or PROFILE_LEGACY would be redundant.
 # A `-1` suffix is the machine's wireless-interface hostname -- hostname -s
 # returns it whenever the machine is on wifi -- and every wired key below
 # must carry a wireless twin mapped to the same profile, or that machine
@@ -42,4 +45,20 @@ declare -A PROFILE_CAPS=(
   [mac_mini]="gui printing"
   [linux_workstation]="gui devtools aws k8s docker rust snap flatpak"
   [wsl2_workstation]="gui devtools aws k8s docker rust"
+)
+
+# PROFILE_LEGACY maps every PROFILE_MAP hostname key to its legacy identity
+# variable name (LAPTOP, STUDIO, ...). Written out explicitly rather than
+# derived from the PROFILE_MAP keys (strip "-1", uppercase) because that
+# derivation breaks on home-1 -> HOMES: the mechanical result would be HOME,
+# and `export HOME=1` in a login shell repoints the user's home directory.
+declare -A PROFILE_LEGACY=(
+  [laptop]="LAPTOP"          [laptop-1]="LAPTOP"
+  [studio]="STUDIO"          [studio-1]="STUDIO"
+  [reception]="RECEPTION"    [reception-1]="RECEPTION"
+  [ratna]="RATNA"            [ratna-1]="RATNA"
+  [office]="OFFICE"          [office-1]="OFFICE"
+  [home-1]="HOMES"
+  [workstation]="WORKSTATION"
+  [cruncher]="CRUNCHER"
 )
