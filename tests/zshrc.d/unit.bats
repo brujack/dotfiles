@@ -517,6 +517,7 @@ EOF
   run zsh -f -i -c "
     unset MACOS
     export LINUX=1; export UBUNTU=1; export NOBLE=1; export WORKSTATION=1
+    export HAS_DEVTOOLS=1
     export _OVERRIDE_KEYCHAIN_BIN='${_tmp_dir}/mock_keychain'
     source '${ZSHRC_D}/5_general.zsh' 2>/dev/null
   " < /dev/null
@@ -546,6 +547,7 @@ EOF
     setopt shwordsplit
     unset MACOS
     export LINUX=1; export UBUNTU=1; export NOBLE=1; export WORKSTATION=1
+    export HAS_DEVTOOLS=1
     export _OVERRIDE_KEYCHAIN_BIN='${_dir}/mock_keychain'
     source '${ZSHRC_D}/5_general.zsh' 2>/dev/null
   " < /dev/null
@@ -568,6 +570,183 @@ EOF
   " < /dev/null
   rm -rf "${_tmp_dir}"
   [ "$(printf '%s\n' "$output" | tail -1)" = "unset" ]
+}
+
+# ── 5_general.zsh collapsed keychain key list ────────────────────────────────
+#
+# Seven per-host arms (RATNA/LAPTOP/STUDIO/RECEPTION/OFFICE/HOMES on macOS,
+# WORKSTATION||CRUNCHER vs. everything else on Linux) collapsed to a
+# capability test plus one shared key list. All six mac arms loaded the same
+# four keys (id_rsa, home, github, gitlab); the Linux split was just "a known
+# dev profile or not", which HAS_DEVTOOLS now expresses directly against
+# config/profiles.sh's table (today: only linux_workstation/wsl2_workstation
+# -- i.e. WORKSTATION/CRUNCHER -- carry it). These tests assert on the calls
+# file's actual content (the recorded `--eval <key>` lines), not just a
+# count, because "keychain wasn't invoked" and "keychain was invoked with the
+# right keys" are different claims.
+
+@test "5_general.zsh keychain loads the four standard keys on a mac profile" {
+  local _tmp_dir
+  _tmp_dir="$(mktemp -d)"
+  _keychain_mock "${_tmp_dir}"
+
+  run zsh -f -i -c "
+    unset MACOS LINUX LAPTOP STUDIO RECEPTION OFFICE HOMES WORKSTATION CRUNCHER RATNA
+    unset -m 'HAS_*'
+    export MACOS=1
+    export _OVERRIDE_KEYCHAIN_BIN='${_tmp_dir}/mock_keychain'
+    source '${ZSHRC_D}/5_general.zsh' 2>/dev/null
+  " < /dev/null
+  local _calls
+  _calls="$(cat "${_tmp_dir}/calls" 2>/dev/null)"
+  rm -rf "${_tmp_dir}"
+  [ "${_calls}" = "$(printf -- '--eval id_rsa\n--eval home\n--eval github\n--eval gitlab')" ]
+}
+
+@test "5_general.zsh keychain loads the four standard keys on a Linux dev profile" {
+  local _tmp_dir
+  _tmp_dir="$(mktemp -d)"
+  _keychain_mock "${_tmp_dir}"
+
+  # HAS_DEVTOOLS is what a real workstation/cruncher host has already had set
+  # by config/profiles.zsh before this file sources -- set directly here,
+  # matching how the pre-existing rbenv tests above set WORKSTATION=1
+  # directly rather than driving the full profile-resolution boot sequence.
+  run zsh -f -i -c "
+    unset MACOS LINUX LAPTOP STUDIO RECEPTION OFFICE HOMES WORKSTATION CRUNCHER RATNA
+    unset -m 'HAS_*'
+    export LINUX=1; export UBUNTU=1; export NOBLE=1
+    export HAS_DEVTOOLS=1
+    export _OVERRIDE_KEYCHAIN_BIN='${_tmp_dir}/mock_keychain'
+    export _OVERRIDE_RBENV_BINARY='/nonexistent/rbenv'
+    source '${ZSHRC_D}/5_general.zsh' 2>/dev/null
+  " < /dev/null
+  local _calls
+  _calls="$(cat "${_tmp_dir}/calls" 2>/dev/null)"
+  rm -rf "${_tmp_dir}"
+  [ "${_calls}" = "$(printf -- '--eval id_rsa\n--eval home\n--eval github\n--eval gitlab')" ]
+}
+
+@test "5_general.zsh keychain loads only id_rsa on a Linux non-dev host" {
+  local _tmp_dir
+  _tmp_dir="$(mktemp -d)"
+  _keychain_mock "${_tmp_dir}"
+
+  run zsh -f -i -c "
+    unset MACOS LINUX LAPTOP STUDIO RECEPTION OFFICE HOMES WORKSTATION CRUNCHER RATNA
+    unset -m 'HAS_*'
+    export LINUX=1; export UBUNTU=1; export NOBLE=1
+    export _OVERRIDE_KEYCHAIN_BIN='${_tmp_dir}/mock_keychain'
+    export _OVERRIDE_RBENV_BINARY='/nonexistent/rbenv'
+    source '${ZSHRC_D}/5_general.zsh' 2>/dev/null
+  " < /dev/null
+  local _calls
+  _calls="$(cat "${_tmp_dir}/calls" 2>/dev/null)"
+  rm -rf "${_tmp_dir}"
+  [ "${_calls}" = "--eval id_rsa" ]
+}
+
+# Regression pin for the home-1 (mac_mini) arm's `--eval any home` typo:
+# keychain has no `any` flag, so it was reading "any" as a key name, and no
+# such key exists. Dropped so every mac profile -- home-1 included -- loads
+# the identical four-key list. HOMES is exported even though production no
+# longer branches on it, to document which host this pins.
+@test "5_general.zsh keychain loads the same four keys on home-1, not 'any'" {
+  local _tmp_dir
+  _tmp_dir="$(mktemp -d)"
+  _keychain_mock "${_tmp_dir}"
+
+  run zsh -f -i -c "
+    unset MACOS LINUX LAPTOP STUDIO RECEPTION OFFICE HOMES WORKSTATION CRUNCHER RATNA
+    unset -m 'HAS_*'
+    export MACOS=1
+    export HOMES=1
+    export _OVERRIDE_KEYCHAIN_BIN='${_tmp_dir}/mock_keychain'
+    source '${ZSHRC_D}/5_general.zsh' 2>/dev/null
+  " < /dev/null
+  local _calls
+  _calls="$(cat "${_tmp_dir}/calls" 2>/dev/null)"
+  rm -rf "${_tmp_dir}"
+  [ "${_calls}" = "$(printf -- '--eval id_rsa\n--eval home\n--eval github\n--eval gitlab')" ]
+}
+
+# ── 5_general.zsh keychain binary path resolution ────────────────────────────
+# The binary-path selection used to test RATNA (Intel) vs. everything else
+# (ARM) by hostname. Collapsed to the same _OVERRIDE_HOMEBREW_PREFIX_ARM /
+# _OVERRIDE_HOMEBREW_PREFIX_INTEL seams 6_path.zsh's gnubin resolution and
+# this file's own CHRUBY_LOC/FZF_BASE section already use -- reused rather
+# than a third seam. The real /opt/homebrew exists on this dev machine (with
+# a real keychain binary at /opt/homebrew/bin/keychain), so these tests never
+# let production fall through to the hardcoded default -- _OVERRIDE_KEYCHAIN_BIN
+# is left unset and the prefix seams are pointed at fixture directories that
+# themselves contain the mock at bin/keychain, so the constructed path is
+# provably inside the fixture rather than the real Homebrew prefix.
+
+@test "5_general.zsh keychain binary resolves via the ARM prefix by default" {
+  local _tmp_dir
+  _tmp_dir="$(mktemp -d)"
+  mkdir -p "${_tmp_dir}/arm/bin"
+  _keychain_mock "${_tmp_dir}"
+  cp "${_tmp_dir}/mock_keychain" "${_tmp_dir}/arm/bin/keychain"
+
+  run zsh -f -i -c "
+    unset MACOS LINUX LAPTOP STUDIO RECEPTION OFFICE HOMES WORKSTATION CRUNCHER RATNA
+    unset -m 'HAS_*'
+    unset _OVERRIDE_KEYCHAIN_BIN
+    export MACOS=1
+    export _OVERRIDE_HOMEBREW_PREFIX_ARM='${_tmp_dir}/arm'
+    export _OVERRIDE_HOMEBREW_PREFIX_INTEL='/nonexistent/homebrew-intel'
+    source '${ZSHRC_D}/5_general.zsh' 2>/dev/null
+  " < /dev/null
+  local _calls
+  _calls="$(cat "${_tmp_dir}/calls" 2>/dev/null)"
+  rm -rf "${_tmp_dir}"
+  [ "${_calls}" = "$(printf -- '--eval id_rsa\n--eval home\n--eval github\n--eval gitlab')" ]
+}
+
+@test "5_general.zsh keychain binary resolves via the Intel prefix when only that exists" {
+  local _tmp_dir
+  _tmp_dir="$(mktemp -d)"
+  mkdir -p "${_tmp_dir}/intel/bin"
+  _keychain_mock "${_tmp_dir}"
+  cp "${_tmp_dir}/mock_keychain" "${_tmp_dir}/intel/bin/keychain"
+
+  run zsh -f -i -c "
+    unset MACOS LINUX LAPTOP STUDIO RECEPTION OFFICE HOMES WORKSTATION CRUNCHER RATNA
+    unset -m 'HAS_*'
+    unset _OVERRIDE_KEYCHAIN_BIN
+    export MACOS=1
+    export _OVERRIDE_HOMEBREW_PREFIX_ARM='/nonexistent/homebrew-arm'
+    export _OVERRIDE_HOMEBREW_PREFIX_INTEL='${_tmp_dir}/intel'
+    source '${ZSHRC_D}/5_general.zsh' 2>/dev/null
+  " < /dev/null
+  local _calls
+  _calls="$(cat "${_tmp_dir}/calls" 2>/dev/null)"
+  rm -rf "${_tmp_dir}"
+  [ "${_calls}" = "$(printf -- '--eval id_rsa\n--eval home\n--eval github\n--eval gitlab')" ]
+}
+
+@test "5_general.zsh keychain makes no call when neither homebrew prefix is present" {
+  local _tmp_dir
+  _tmp_dir="$(mktemp -d)"
+  _keychain_mock "${_tmp_dir}"
+
+  run zsh -f -i -c "
+    unset MACOS LINUX LAPTOP STUDIO RECEPTION OFFICE HOMES WORKSTATION CRUNCHER RATNA
+    unset -m 'HAS_*'
+    unset _OVERRIDE_KEYCHAIN_BIN
+    export MACOS=1
+    export _OVERRIDE_HOMEBREW_PREFIX_ARM='/nonexistent/homebrew-arm'
+    export _OVERRIDE_HOMEBREW_PREFIX_INTEL='/nonexistent/homebrew-intel'
+    source '${ZSHRC_D}/5_general.zsh' 2>/dev/null
+    printf '%s\n' \"\${_keychain:-unset}\"
+  " < /dev/null
+  local _calls _keychain_var
+  _calls="$(wc -l < "${_tmp_dir}/calls" 2>/dev/null | tr -d ' ')"
+  _keychain_var="$(printf '%s\n' "$output" | tail -1)"
+  rm -rf "${_tmp_dir}"
+  [ "${_calls}" = "0" ]
+  [ "${_keychain_var}" = "unset" ]
 }
 
 # ── shared identity table (config/profiles.zsh) ──────────────────────────────
