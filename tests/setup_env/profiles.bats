@@ -357,6 +357,40 @@ _expected_legacy_var() { # <hostname>
   [ "${snapshot}" = "PROFILE=unknown" ]
 }
 
+# ── PROFILE_LEGACY map ────────────────────────────────────────────────────────
+# PROFILE_LEGACY maps every PROFILE_MAP hostname key directly to its legacy
+# identity variable name. It is hand-written rather than derived from
+# PROFILE_MAP's keys (e.g. strip "-1", uppercase) because home-1 -> HOMES
+# breaks that derivation -- the mechanical result would be HOME, and
+# `export HOME=1` in a login shell repoints the user's home directory.
+
+@test "every PROFILE_MAP key has a PROFILE_LEGACY entry" {
+  source "${REPO_ROOT}/config/profiles.sh"
+  local -a keys
+  keys=("${!PROFILE_MAP[@]}")
+  [ "${#keys[@]}" -gt 0 ]
+
+  local k
+  for k in "${keys[@]}"; do
+    [ -n "${PROFILE_LEGACY[${k}]:-}" ] || {
+      printf 'PROFILE_MAP host "%s" has no PROFILE_LEGACY entry\n' "${k}" >&2
+      return 1
+    }
+  done
+}
+
+@test "PROFILE_LEGACY values are exactly the eight legacy identity variable names" {
+  source "${REPO_ROOT}/config/profiles.sh"
+  local -a values
+  values=("${PROFILE_LEGACY[@]}")
+  [ "${#values[@]}" -gt 0 ]
+
+  local got want
+  got="$(printf '%s\n' "${values[@]}" | sort -u | tr '\n' ' ')"
+  want="$(printf '%s\n' CRUNCHER HOMES LAPTOP OFFICE RATNA RECEPTION STUDIO WORKSTATION | sort -u | tr '\n' ' ')"
+  [ "${got}" = "${want}" ]
+}
+
 # ── ratna ──────────────────────────────────────────────────────────────────────
 
 @test "detect_env sets PROFILE=mac_workstation for hostname ratna" {
