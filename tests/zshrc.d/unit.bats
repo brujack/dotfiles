@@ -274,6 +274,7 @@ EOF
   run zsh -c "
     unset MACOS LINUX LAPTOP STUDIO RECEPTION OFFICE HOMES WORKSTATION CRUNCHER RATNA
     unset CHRUBY_LOC FZF_BASE
+    export MACOS=1
     export _OVERRIDE_HOMEBREW_PREFIX_ARM='/nonexistent/homebrew-arm'
     export _OVERRIDE_HOMEBREW_PREFIX_INTEL='/nonexistent/homebrew-intel'
     source '${ZSHRC_D}/5_general.zsh' 2>/dev/null
@@ -594,10 +595,19 @@ EOF
   _tmp_dir="$(mktemp -d)"
   _keychain_mock "${_tmp_dir}"
 
+  # _OVERRIDE_HOMEBREW_PREFIX_ARM is pointed at this same fixture dir (which
+  # trivially exists) rather than left at its real /opt/homebrew default --
+  # this test is about the KEY LIST, not the binary path, but the -d branch
+  # still has to succeed for `_keychain` to be assigned at all. Relying on
+  # the real prefix would make this test pass here and on any ubuntu-latest
+  # runner (which has real /usr/local) for the wrong reason -- see the
+  # header comment above the binary-path tests further down.
   run zsh -f -i -c "
     unset MACOS LINUX LAPTOP STUDIO RECEPTION OFFICE HOMES WORKSTATION CRUNCHER RATNA
     unset -m 'HAS_*'
     export MACOS=1
+    export _OVERRIDE_HOMEBREW_PREFIX_ARM='${_tmp_dir}'
+    export _OVERRIDE_HOMEBREW_PREFIX_INTEL='/nonexistent/homebrew-intel'
     export _OVERRIDE_KEYCHAIN_BIN='${_tmp_dir}/mock_keychain'
     source '${ZSHRC_D}/5_general.zsh' 2>/dev/null
   " < /dev/null
@@ -665,6 +675,8 @@ EOF
     unset -m 'HAS_*'
     export MACOS=1
     export HOMES=1
+    export _OVERRIDE_HOMEBREW_PREFIX_ARM='${_tmp_dir}'
+    export _OVERRIDE_HOMEBREW_PREFIX_INTEL='/nonexistent/homebrew-intel'
     export _OVERRIDE_KEYCHAIN_BIN='${_tmp_dir}/mock_keychain'
     source '${ZSHRC_D}/5_general.zsh' 2>/dev/null
   " < /dev/null
@@ -672,6 +684,39 @@ EOF
   _calls="$(cat "${_tmp_dir}/calls" 2>/dev/null)"
   rm -rf "${_tmp_dir}"
   [ "${_calls}" = "$(printf -- '--eval id_rsa\n--eval home\n--eval github\n--eval gitlab')" ]
+}
+
+# Third behaviour change, beyond the collapse and the home-1 typo drop: the
+# old MACOS chain had no final `else`, so a mac whose hostname misses every
+# legacy var (RATNA/LAPTOP/STUDIO/RECEPTION/OFFICE/HOMES -- i.e. a guest or a
+# freshly-built mac not yet in config/profiles.sh's PROFILE_MAP) invoked
+# keychain zero times. The collapsed MACOS arm has no per-host branch left to
+# be absent from, so `_keychain_keys` is now assigned unconditionally and
+# every such mac loads the four standard keys instead. Recorded rather than
+# gated: gating would mean re-adding a "is this a known profile" branch,
+# which is exactly the per-host testing this task collapsed away, and the
+# direction (a new mac gets its keys instead of silently none) is the same
+# one HAS_DEVTOOLS already takes on the Linux side. The test above ("on a
+# mac profile") already exercises this exact case -- MACOS=1 with no legacy
+# var set -- this one exists to name it as the change it is.
+@test "5_general.zsh keychain now loads keys on an unmapped mac too (was zero before the collapse)" {
+  local _tmp_dir
+  _tmp_dir="$(mktemp -d)"
+  _keychain_mock "${_tmp_dir}"
+
+  run zsh -f -i -c "
+    unset MACOS LINUX LAPTOP STUDIO RECEPTION OFFICE HOMES WORKSTATION CRUNCHER RATNA
+    unset -m 'HAS_*'
+    export MACOS=1
+    export _OVERRIDE_HOMEBREW_PREFIX_ARM='${_tmp_dir}'
+    export _OVERRIDE_HOMEBREW_PREFIX_INTEL='/nonexistent/homebrew-intel'
+    export _OVERRIDE_KEYCHAIN_BIN='${_tmp_dir}/mock_keychain'
+    source '${ZSHRC_D}/5_general.zsh' 2>/dev/null
+  " < /dev/null
+  local _calls
+  _calls="$(wc -l < "${_tmp_dir}/calls" 2>/dev/null | tr -d ' ')"
+  rm -rf "${_tmp_dir}"
+  [ "${_calls}" = "4" ]
 }
 
 # ── 5_general.zsh keychain binary path resolution ────────────────────────────

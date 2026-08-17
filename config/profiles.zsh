@@ -2,10 +2,12 @@
 # config/profiles.zsh — zsh-side derivation of machine identity from the
 # single shared table in config/profiles.sh. Resolves PROFILE, the HAS_*
 # capability set, and the legacy per-host identity variables that every
-# existing zsh read site (2_functions.zsh, 7_final.zsh, .zprofile) still
-# expects. 5_general.zsh used to be a reader too, but its keychain block
-# collapsed the seven per-host arms to a MACOS/LINUX/HAS_DEVTOOLS test, so
-# it no longer reads any of the legacy vars this file sets.
+# existing zsh read site (2_functions.zsh, 5_general.zsh, 7_final.zsh,
+# .zprofile) still expects. In 5_general.zsh this is now partial: its
+# keychain block collapsed the seven per-host arms to a
+# MACOS/LINUX/HAS_DEVTOOLS test and reads none of these, but the rbenv guard
+# (`WORKSTATION`/`CRUNCHER`) and the gcloud completion arms
+# (`RATNA`/`LAPTOP`/`STUDIO`) elsewhere in that same file still do.
 #
 # Both .zprofile (login) and 1_init.zsh (interactive) source this file, so a
 # login+interactive shell runs it twice in one process. Every assignment

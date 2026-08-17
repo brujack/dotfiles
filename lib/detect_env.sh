@@ -48,7 +48,7 @@ detect_env() {
   # would make the second source return 126. See profiles.zsh's header
   # comment for the full rationale before "fixing" either side to match the
   # other.
-  # shellcheck disable=SC2034 # read by .config/.zshrc.d/2_functions.zsh, 7_final.zsh, .zprofile -- one directive covers the whole case (SC1124: a directive cannot sit on a case-arm line). Not 5_general.zsh: its keychain block collapsed to a MACOS/LINUX/HAS_DEVTOOLS test and reads none of these.
+  # shellcheck disable=SC2034 # read by .config/.zshrc.d/2_functions.zsh, 5_general.zsh, 7_final.zsh, .zprofile -- one directive covers the whole case (SC1124: a directive cannot sit on a case-arm line). 5_general.zsh's keychain block collapsed to a MACOS/LINUX/HAS_DEVTOOLS test and reads none of these, but its rbenv guard (WORKSTATION/CRUNCHER) and gcloud completion arms (RATNA/LAPTOP/STUDIO) still do.
   case "${hn}" in
   laptop | laptop-1) readonly LAPTOP=1 ;;
   studio | studio-1) readonly STUDIO=1 ;;

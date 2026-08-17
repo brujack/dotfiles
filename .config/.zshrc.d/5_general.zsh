@@ -218,6 +218,17 @@ fpath=(${HOME}/.zsh.d/ $fpath)
 # (i.e. WORKSTATION/CRUNCHER) carry it, so this is behaviour-preserving for
 # every currently-mapped host.
 #
+# Third, recorded rather than gated: the old MACOS chain had no final
+# `else`, so a mac whose hostname misses every legacy var (a guest, or one
+# not yet added to config/profiles.sh's PROFILE_MAP) invoked keychain zero
+# times. The collapsed arm has no per-host branch left to be absent from, so
+# such a mac now loads the four standard keys too. Gating this back off
+# would mean re-adding an "is this a known profile" branch -- exactly the
+# per-host testing this collapse removed -- for a direction (a new mac gets
+# its keys instead of silently none) that is arguably the more correct
+# behaviour anyway. See tests/zshrc.d/unit.bats, "keychain now loads keys on
+# an unmapped mac too".
+#
 # The binary-path selection used to test RATNA (Intel) vs. everything else
 # (ARM) by hostname. It now derives from the same _homebrew_prefix_arm /
 # _homebrew_prefix_intel pair the CHRUBY_LOC/FZF_BASE section above already
