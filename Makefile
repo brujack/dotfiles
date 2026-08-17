@@ -42,9 +42,13 @@ BATS_FILES := $(shell env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_I
 # actually interprets. This is every tracked zsh source — the interactive
 # init modules, the theme file, and the two dotfiles that are symlinked live
 # into $HOME and sourced by an interactive zsh — derived from git ls-files
-# for the same reason SHELL_FILES/BATS_FILES are.
+# for the same reason SHELL_FILES/BATS_FILES are. config/profiles.sh is
+# named explicitly rather than picked up by a glob: it is a bash file (and
+# stays in SHELL_FILES), but config/profiles.zsh sources it from
+# .zprofile/1_init.zsh on every login and interactive shell, so zsh -n must
+# parse it too.
 ZSH_FILES := $(shell env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
-                 git ls-files '*.zsh' '*.zsh-theme' '.zshrc' '.zprofile')
+                 git ls-files '*.zsh' '*.zsh-theme' '.zshrc' '.zprofile' 'config/profiles.sh')
 
 # Message text only, never the $(error ...) call itself: $(error) fires wherever
 # it is expanded, so folding it into a := assignment would abort every make
