@@ -56,6 +56,15 @@ _profiles_snapshot() { # <hostname>
 # piece of this suite that names hosts explicitly rather than deriving them.
 # The KEY SET under test still comes from PROFILE_MAP itself, in the loop
 # below, which is what actually prevents drift.
+#
+# The *) arm returns non-zero rather than printing empty. An empty "expected"
+# string is indistinguishable from "this host legitimately has no legacy
+# var" -- the caller must be able to tell "no mapping was written" (a defect
+# to fail on) apart from "no mapping applies" (the no_legacy exception set
+# below). A silent-empty default is exactly the gap this fix closes: it let
+# a PROFILE_MAP key with no case arm here -- and none in
+# config/profiles.zsh's own case -- pass this suite with its legacy-variable
+# assertion silently skipped instead of failed.
 _profiles_expected_legacy() { # <hostname>
   case "$1" in
   laptop | laptop-1) printf 'LAPTOP' ;;
@@ -66,7 +75,7 @@ _profiles_expected_legacy() { # <hostname>
   home-1) printf 'HOMES' ;;
   workstation) printf 'WORKSTATION' ;;
   cruncher) printf 'CRUNCHER' ;;
-  *) printf '' ;;
+  *) return 1 ;;
   esac
 }
 
@@ -85,10 +94,27 @@ _profiles_expected_legacy() { # <hostname>
   [ "${#keys[@]}" -gt 0 ]
   [ "${#keys[@]}" -eq "${#PROFILE_MAP[@]}" ]
 
+  # Hosts intentionally without a legacy identity variable. Empty today --
+  # all 13 PROFILE_MAP keys map to one -- kept as an explicit, reviewable
+  # exception set (mirroring config/profiles.sh's own `wired_only` pattern
+  # for the wireless-twin check) so a future host that genuinely shouldn't
+  # get one is a deliberate addition here, not a silent gap in the case
+  # statement below.
+  local -A no_legacy=()
+
   local hn expected_profile expected_legacy expected_has snapshot got_profile
   for hn in "${keys[@]}"; do
     expected_profile="${PROFILE_MAP[${hn}]}"
-    expected_legacy="$(_profiles_expected_legacy "${hn}")"
+
+    if [[ -n "${no_legacy[${hn}]:-}" ]]; then
+      expected_legacy=""
+    else
+      expected_legacy="$(_profiles_expected_legacy "${hn}")" || {
+        printf 'PROFILE_MAP host "%s" has no legacy-variable mapping in _profiles_expected_legacy (tests/zshrc.d/profiles.bats) or, presumably, in config/profiles.zsh'"'"'s own case statement. Add a case arm mapping it to the legacy variable it should set, or add "%s" to the no_legacy exception set above if it should intentionally have none.\n' "${hn}" "${hn}" >&2
+        return 1
+      }
+    fi
+
     expected_has="$(printf '%s\n' ${PROFILE_CAPS[${expected_profile}]} | tr ' ' '\n' | tr '[:lower:]' '[:upper:]' | sed 's/^/HAS_/' | sort)"
 
     snapshot="$(_profiles_snapshot "${hn}")"

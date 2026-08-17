@@ -17,7 +17,19 @@
 # directory, which is how this works whether this file is reached via the
 # repo directly or via the ~/.zprofile / ~/.config/.zshrc.d symlinks the
 # setup script creates into $HOME.
-source "${0:A:h}/profiles.sh"
+#
+# A missing/broken profiles.sh degrades safely without this check —
+# PROFILE_MAP and PROFILE_CAPS are simply undefined, every lookup below
+# falls back to its `:-` default, and the shell keeps starting. But
+# "degrades safely" here means "silently loses PROFILE/HAS_*/legacy vars at
+# login", which is exactly the failure mode this whole plan exists to make
+# visible instead of silent (behavior.md: fail closed on unknown, surface
+# more under pressure). A hard `return`/`exit` is deliberately not used —
+# this file is sourced by .zprofile at login, and aborting a login shell
+# over a degraded (not broken) profile lookup is worse than the problem.
+if ! source "${0:A:h}/profiles.sh"; then
+  print -u2 "config/profiles.zsh: failed to source ${0:A:h}/profiles.sh -- PROFILE will default to 'unknown' and no HAS_*/legacy identity variables will be set this session."
+fi
 
 _profiles_hostname="$(hostname -s)"
 export PROFILE="${PROFILE_MAP[${_profiles_hostname}]:-unknown}"
@@ -47,6 +59,17 @@ office | office-1) export OFFICE=1 ;;
 home-1) export HOMES=1 ;;
 workstation) export WORKSTATION=1 ;;
 cruncher) export CRUNCHER=1 ;;
+*)
+  # A hostname PROFILE_MAP recognises (PROFILE/HAS_* resolved above) but
+  # this case has no arm for is a drifted table, not an unmapped guest
+  # machine -- warn rather than fail silently, since the ~19 zsh read sites
+  # that branch on LAPTOP/STUDIO/OFFICE/etc. would otherwise skip with no
+  # visible symptom. A genuinely unmapped hostname (PROFILE=unknown) is the
+  # expected, silent case and does not warn.
+  if [[ -n "${PROFILE_MAP[${_profiles_hostname}]:-}" ]]; then
+    print -u2 "config/profiles.zsh: host '${_profiles_hostname}' resolved PROFILE=${PROFILE} but has no legacy-identity case arm -- add one for '${_profiles_hostname}'."
+  fi
+  ;;
 esac
 
 unset _profiles_hostname
