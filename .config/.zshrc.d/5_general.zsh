@@ -2,12 +2,20 @@ GO_VER="1.26"
 RUBY_VER="4.0.5"
 GITREPOS="${HOME}/git-repos"
 
+# Homebrew prefix, not hostname, answers "is this an ARM mac": the blocks
+# below used to enumerate five hostnames (RATNA carried a separate arm for
+# Intel), so a new Intel mac meant editing every site that asked the
+# question. _OVERRIDE_HOMEBREW_PREFIX_ARM / _OVERRIDE_HOMEBREW_PREFIX_INTEL
+# are test seams, same convention as _OVERRIDE_GNUBIN_ARM/_OVERRIDE_GNUBIN_INTEL
+# in 6_path.zsh -- production leaves them unset and reads the real prefixes.
+_homebrew_prefix_arm="${_OVERRIDE_HOMEBREW_PREFIX_ARM:-/opt/homebrew}"
+_homebrew_prefix_intel="${_OVERRIDE_HOMEBREW_PREFIX_INTEL:-/usr/local/opt}"
+
 if [[ ${MACOS} ]]; then
-  if [[ ${RATNA} ]]; then
-    CHRUBY_LOC="/usr/local/opt/chruby/share"
-  fi
-  if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]]; then
+  if [[ -d ${_homebrew_prefix_arm} ]]; then
     CHRUBY_LOC="/opt/homebrew/opt/chruby/share/"
+  elif [[ -d ${_homebrew_prefix_intel} ]]; then
+    CHRUBY_LOC="/usr/local/opt/chruby/share"
   fi
 fi
 if [[ ${LINUX} ]]; then
@@ -15,10 +23,12 @@ if [[ ${LINUX} ]]; then
 fi
 
 # for fzf
-if [[ -n ${LAPTOP} ]] || [[ -n ${STUDIO} ]] || [[ -n ${RECEPTION} ]] || [[ -n {OFFICE} ]] || [[ -n ${HOMES} ]]; then
+if [[ -d ${_homebrew_prefix_arm} ]]; then
   export FZF_BASE=/opt/homebrew/bin/fzf
 fi
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+
+unset _homebrew_prefix_arm _homebrew_prefix_intel
 
 # zsh-autosuggestions — self-healing fallback if plugin dir missing
 if [[ ! -d ${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions ]]; then
