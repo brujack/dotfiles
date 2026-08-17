@@ -356,3 +356,52 @@ while remaining in `SHELL_FILES` for `bash -n` and shellcheck. One file, both pa
   falsify it" (the `profiles.bats` finding).
 - `shell.md` — absolute-path defaults defeating `PATH` mocks (the `_OVERRIDE_KEYCHAIN_BIN`
   seam this work must preserve).
+
+## Multi-Lens Review
+
+Reviewed at commit: `ecb811f` (Step 7 self-review commit)
+
+### Goal-Fit
+
+Finding: lens skipped — the session carries a standing instruction not to dispatch the
+Agent tool unless the operator asks, and the operator elected to proceed without the
+dispatch after being shown the cost and the three open decisions.
+Assumption: not produced (lens did not run).
+Disposition: Accepted — operator proceeded to `writing-plans` with the skip recorded. The
+lenses remain runnable against this SHA if the plan or the implementation turns up
+something that makes the design worth re-opening.
+
+### Ergonomics
+
+Finding: lens skipped — same reason.
+Assumption: not produced (lens did not run).
+Disposition: Accepted — as above.
+
+### Risk
+
+Finding: lens skipped — same reason.
+Assumption: not produced (lens did not run).
+Disposition: Accepted — as above.
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger. There are no arms being
+compared, no judge component, and the acceptance criteria are concrete commands (the three
+test groups, and cross-shell equivalence over every table key).
+
+### What the skip actually costs here
+
+Recorded so the disposition is legible rather than merely permitted. Step 8's documented
+strength is attacking a design; its documented weakness is that it does not question the
+population a measurement was drawn from. This spec's design surface is small — one data
+file, one new derivation file, three consumers — and all five load-bearing premises (M1–M5)
+were measured on both development machines rather than reasoned about.
+
+The two corrections this spec actually needed both came from the Step 7 population check,
+not from design critique: an alias block described as five lines that is ten, and a
+read-site count that was accurate while concealing that nine of nineteen sites are Homebrew
+prefix tests rather than identity tests. Both are the class Step 8 is documented as missing.
+
+The residual risk is therefore concentrated in Assumption 1 (`keychain --eval any home`),
+which no lens could settle either — it is answered by `ls ~/.ssh/any*` on `home-1`, a
+command, not a review.
