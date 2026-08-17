@@ -74,7 +74,7 @@ if [[ -n ${MACOS} ]]; then
   fi
 elif [[ -n ${LINUX} ]]; then
   if [[ -n ${NOBLE} ]] || [[ -n ${RESOLUTE} ]]; then
-    if [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]]; then
+    if [[ ${HAS_DEVTOOLS} ]]; then
       _rbenv_bin="${_OVERRIDE_RBENV_BINARY:-/home/linuxbrew/.linuxbrew/bin/rbenv}"
       if [[ -f ${_rbenv_bin} ]]; then
         eval "$(${_rbenv_bin} init - --no-rehash zsh)"
