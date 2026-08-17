@@ -475,7 +475,7 @@ EOF
     unset MACOS
     cd '${_project_dir}'
     export PATH=\"${REPO_ROOT}/tests/mocks:\${PATH}\"
-    export LINUX=1; export UBUNTU=1; export NOBLE=1; export WORKSTATION=1
+    export LINUX=1; export UBUNTU=1; export NOBLE=1; export HAS_DEVTOOLS=1
     export _OVERRIDE_RBENV_BINARY='${_tmp_dir}/mock_rbenv'
     source '${ZSHRC_D}/5_general.zsh' 2>/dev/null
     printf '%s\n' \"\${_RBENV_LOCAL_CALLED:-unset}\"
@@ -651,8 +651,8 @@ EOF
 
   # HAS_DEVTOOLS is what a real workstation/cruncher host has already had set
   # by config/profiles.zsh before this file sources -- set directly here,
-  # matching how the pre-existing rbenv tests above set WORKSTATION=1
-  # directly rather than driving the full profile-resolution boot sequence.
+  # matching how the rbenv tests above set HAS_DEVTOOLS=1 directly rather
+  # than driving the full profile-resolution boot sequence.
   run zsh -f -i -c "
     unset MACOS LINUX LAPTOP STUDIO RECEPTION OFFICE HOMES WORKSTATION CRUNCHER RATNA
     unset -m 'HAS_*'
