@@ -18,16 +18,40 @@ teardown() {
 # detect_env sets several `readonly` vars (MACOS, LAPTOP, ...) — sourcing it
 # twice in the same process errors on the second `readonly` assignment, so a
 # wired/wireless comparison needs two separate processes, not two sourcings.
+#
+# Deliberately NOT `set -euo pipefail`: a genuinely zero-capability host
+# (unmapped hostname, empty hostname) makes `grep '^HAS_'` legitimately
+# match nothing and exit 1, and pipefail would turn that correct outcome
+# into a false failure. Instead the two steps that must not silently no-op
+# -- sourcing the library and running detect_env -- are checked explicitly,
+# plus a postcondition that PROFILE actually got set. Real detect_env always
+# assigns PROFILE (falling back to "unknown", never leaving it empty), so an
+# empty PROFILE here can only mean source/detect_env didn't run at all --
+# e.g. lib/detect_env.sh moved, or the PATH/mock wiring drifted. Without
+# this, a broken subshell prints "PROFILE=" with exit 0 (grep-then-sort
+# swallows everything upstream), and a caller comparing two equally-broken
+# snapshots for equality gets a false pass instead of a red test.
 _profile_snapshot() {
   local hn="$1"
   bash -c "
     export MOCK_HOSTNAME_OUTPUT='${hn}'
     export MOCK_UNAME_S='Darwin'
     export PATH='${REPO_ROOT}/tests/mocks:${PATH}'
-    source '${REPO_ROOT}/lib/detect_env.sh'
-    detect_env
+    if ! source '${REPO_ROOT}/lib/detect_env.sh'; then
+      printf 'ERROR: could not source lib/detect_env.sh\n' >&2
+      exit 1
+    fi
+    if ! detect_env; then
+      printf 'ERROR: detect_env failed\n' >&2
+      exit 1
+    fi
+    if [[ -z \${PROFILE:-} ]]; then
+      printf 'ERROR: detect_env did not set PROFILE\n' >&2
+      exit 1
+    fi
     printf 'PROFILE=%s\n' \"\${PROFILE}\"
     compgen -v | grep '^HAS_' | sort
+    exit 0
   "
 }
 
@@ -221,39 +245,39 @@ _profile_snapshot() {
 # identically to its wired twin -- the PROFILE string AND the full HAS_* set,
 # not just the former. A matching profile with a divergent capability set is
 # exactly the class of bug this coverage exists to catch.
-
-@test "wired and wireless laptop resolve to the same PROFILE and HAS_* set" {
-  local wired wireless
-  wired=$(_profile_snapshot laptop)
-  wireless=$(_profile_snapshot laptop-1)
-  [ "${wired}" = "${wireless}" ]
+#
+# The invariant is derived from PROFILE_MAP itself rather than enumerated by
+# hostname: five hand-picked pairwise tests only re-confirm today's five
+# hosts, so adding a machine tomorrow without its -1 twin -- the exact
+# defect this task exists to prevent -- would pass all of them. Iterating
+# "${!PROFILE_MAP[@]}" means a future addition is covered automatically.
+@test "every wired PROFILE_MAP key has a wireless -1 twin on the same profile" {
+  source "${REPO_ROOT}/config/profiles.sh"
+  # Deliberately wired-only (see config/profiles.sh's own comment) -- not a
+  # gap, so excluded rather than expected to fail.
+  local -A wired_only=([workstation]=1 [cruncher]=1)
+  local k found=0
+  for k in "${!PROFILE_MAP[@]}"; do
+    # Every existing "-1" key IS a wireless twin (home-1 included -- its
+    # suffix is part of the machine's actual name, not a twin marker, but it
+    # has no bare "home" counterpart to require one of, so skipping it here
+    # is a correct no-op rather than an evasion).
+    [[ ${k} == *-1 ]] && continue
+    [[ -n ${wired_only[${k}]:-} ]] && continue
+    found=1
+    [ "${PROFILE_MAP[${k}-1]:-MISSING}" = "${PROFILE_MAP[${k}]}" ]
+  done
+  [ "${found}" -eq 1 ]
 }
 
+# Data-level coverage above proves PROFILE_MAP itself is symmetric; this
+# keeps one snapshot-based case exercising the real detect_env resolution
+# path end-to-end, so a future change that branches on hostname directly
+# (bypassing PROFILE_MAP/PROFILE_CAPS) would still be caught.
 @test "wired and wireless studio resolve to the same PROFILE and HAS_* set" {
   local wired wireless
   wired=$(_profile_snapshot studio)
   wireless=$(_profile_snapshot studio-1)
-  [ "${wired}" = "${wireless}" ]
-}
-
-@test "wired and wireless reception resolve to the same PROFILE and HAS_* set" {
-  local wired wireless
-  wired=$(_profile_snapshot reception)
-  wireless=$(_profile_snapshot reception-1)
-  [ "${wired}" = "${wireless}" ]
-}
-
-@test "wired and wireless ratna resolve to the same PROFILE and HAS_* set" {
-  local wired wireless
-  wired=$(_profile_snapshot ratna)
-  wireless=$(_profile_snapshot ratna-1)
-  [ "${wired}" = "${wireless}" ]
-}
-
-@test "wired and wireless office resolve to the same PROFILE and HAS_* set" {
-  local wired wireless
-  wired=$(_profile_snapshot office)
-  wireless=$(_profile_snapshot office-1)
   [ "${wired}" = "${wireless}" ]
 }
 
@@ -284,6 +308,14 @@ _profile_snapshot() {
   # transient nonzero status as a hard failure and aborts before the
   # assertion. The snapshot's own subshell has no such `set -e`, so the
   # default (`unknown`) is observed the same way production sees it.
+  #
+  # The argument must be $'\n', not "". tests/mocks/hostname resolves
+  # ${MOCK_HOSTNAME_OUTPUT:-testhost}, so an empty string falls through to
+  # the `testhost` default and this test silently degrades into a duplicate
+  # of the unmapped-hostname case above -- still green, having stopped
+  # testing an empty hostname at all. A trailing newline survives the
+  # :- fallback and is stripped by command substitution, so `hostname -s`
+  # really does return zero bytes.
   local snapshot
   snapshot=$(_profile_snapshot $'\n')
   [ "${snapshot}" = "PROFILE=unknown" ]
