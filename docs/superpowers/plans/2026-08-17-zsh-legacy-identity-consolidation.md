@@ -206,7 +206,7 @@ acceptance:
     exit_code: 0
   - cmd: 'bats tests/setup_env/profiles.bats'
     exit_code: 0
-  - cmd: '! grep -q "PROFILE_LEGACY" tests/helpers/legacy_oracle.bash'
+  - cmd: '! grep -qE "PROFILE_LEGACY|profiles\.sh" tests/helpers/legacy_oracle.bash'
     exit_code: 0
   - cmd: 'shellcheck --severity=warning tests/helpers/legacy_oracle.bash'
     exit_code: 0
@@ -322,7 +322,9 @@ acceptance:
     exit_code: 0
   - cmd: 'grep -q "PROFILE_LEGACY" lib/detect_env.sh'
     exit_code: 0
-  - cmd: 'grep -q "5_general.zsh" lib/detect_env.sh'
+  - cmd: 'grep -E SC1124 lib/detect_env.sh | grep -q 5_general.zsh'
+    exit_code: 0
+  - cmd: '! grep -E SC1124 lib/detect_env.sh | grep -q "rbenv guard"'
     exit_code: 0
   - cmd: 'bash -n lib/detect_env.sh && shellcheck lib/detect_env.sh'
     exit_code: 0
@@ -387,6 +389,8 @@ acceptance:
     exit_code: 0
   - cmd: 'grep -q "No other file needs changing" CLAUDE.md'
     exit_code: 0
+  - cmd: 'grep -B3 -A3 "No other file needs changing" CLAUDE.md | grep -q legacy_oracle'
+    exit_code: 0
 max_retries: 3
 files_touched:
   - CLAUDE.md
@@ -422,6 +426,10 @@ acceptance:
     exit_code: 0
   - cmd: '[ "$(git grep -lE "laptop \| laptop-1" -- "*.sh" "*.zsh" "*.bats" | wc -l | tr -d " ")" -eq 1 ]'
     exit_code: 0
+  - cmd: '[ "$(grep -vE "^\s*#" .config/.zshrc.d/5_general.zsh | grep -cE "WORKSTATION|CRUNCHER")" -eq 0 ]'
+    exit_code: 0
+  - cmd: '[ "$(grep -vE "^\s*#" .config/.zshrc.d/5_general.zsh | grep -cE "RATNA|LAPTOP|STUDIO")" -eq 2 ]'
+    exit_code: 0
   - cmd: 'grep -q "2026-08-17-zsh-legacy-identity-consolidation" docs/superpowers/README.md'
     exit_code: 0
 max_retries: 3
@@ -448,6 +456,26 @@ depends_on: [1, 4, 5, 6]
 - [ ] Commit via `caveman:caveman-commit`
 
 **Interfaces:** none.
+
+---
+
+## Gate hardening (applied after Task 1, from peer review)
+
+The question "does this check fire?" is weaker than "**what edit would a careful person make
+that silently retires it?**" Applying the second to this plan's own gates found one already
+vacuous and two retirable. All four fixes measured on the base tree.
+
+| gate | defect | fix |
+| ---- | ------ | --- |
+| T5 `grep -q "5_general.zsh" lib/detect_env.sh` | **Already vacuous.** That string appears twice — `:51` (the legacy-variable reason A3 edits) and `:63` (an unrelated `CHRUBY_LOC` reason). The gate passes on `:63` whatever happens to `:51`. | Scope to the `SC1124` line, and add a discriminator that the `rbenv guard` clause is **gone** from it (exit 1 on base, so it moves) |
+| T3 `! grep -q "PROFILE_LEGACY" <oracle>` | An oracle that sources `config/profiles.sh` and indexes it via a runtime-built name or `eval` never contains the literal, so the Decision-1 guard is bypassable by a change that reads as DRY | Widen to `! grep -qE "PROFILE_LEGACY\|profiles\.sh"` — the oracle must not reach the table by any route |
+| T6 `grep -q "No other file needs changing"` | Passes if C1 adds a paragraph elsewhere and never qualifies `:623` — satisfied remotely from the thing it checks | Add a windowed gate requiring `legacy_oracle` within 3 lines of the sentence, so the qualification must land *there* |
+| T1's two count gates | Checked in T1 only; nothing re-asserted the A2-cut constraint at plan end, so a later task could touch the gcloud block unobserved | Repeated in T7 |
+
+Task 1's own new negative test was checked the same way and **is** load-bearing: replacing the
+guard with `if true` on line 77 alone turns it red, while the keychain test at `:248` stays
+green (the two guards are byte-identical lines, so the mutation had to be line-scoped — a
+string-scoped one silently matched both and mutated neither).
 
 ---
 
