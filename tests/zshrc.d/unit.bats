@@ -484,3 +484,104 @@ EOF
   rm -rf "${_tmp_dir}"
   [ "$(printf '%s\n' "$output" | tail -1)" = "unset" ]
 }
+
+# ── shared identity table (config/profiles.zsh) ──────────────────────────────
+# .zprofile and 1_init.zsh each used to carry their own hand-maintained
+# hostname list, and both had drifted from config/profiles.sh and from each
+# other. These three regressions were live on master and are pinned here
+# rather than left to profiles.bats, because profiles.bats only exercises
+# config/profiles.zsh directly -- it can't see whether .zprofile / 1_init.zsh
+# actually wire it in. Isolation mirrors tests/zshrc.d/profiles.bats'
+# _profiles_snapshot: both the eight legacy vars and the HAS_* set must be
+# unset before sourcing, because this session's own login shell exports
+# STUDIO=1 (and, once wired, its own HAS_* set) which would otherwise mask a
+# regression by supplying the expected value ambiently.
+
+@test "1_init.zsh alone sets OFFICE for hostname office" {
+  run zsh -c "
+    export PATH=\"${REPO_ROOT}/tests/mocks:\${PATH}\"
+    export MOCK_UNAME_S=Darwin
+    export MOCK_HOSTNAME_OUTPUT=office
+    unset MACOS LINUX LAPTOP STUDIO RECEPTION OFFICE HOMES WORKSTATION CRUNCHER RATNA PROFILE
+    unset -m 'HAS_*'
+    source '${ZSHRC_D}/1_init.zsh' 2>/dev/null
+    printf '%s\n' \"\${OFFICE:-unset}\"
+  "
+  [ "$status" -eq 0 ]
+  [ "$output" = "1" ]
+}
+
+# MOCK_CALLS_FILE is set explicitly (not left to the mocks' own
+# ${MOCK_CALLS_FILE:-/tmp/mock_calls} fallback): HOMES triggers .zprofile's
+# own `[[ -n ${HOMES} ]] ... export PATH="/opt/homebrew/bin:$PATH"` branch,
+# which on a machine with a real Homebrew pyenv installed shadows the mock
+# pyenv for `eval "$(pyenv init --path)"` -- the real `pyenv rehash` that
+# follows then resolves tests/mocks/xargs (still on PATH, after
+# /opt/homebrew/bin) for a real xargs call, and that mock hard-codes
+# "${MOCK_CALLS_FILE}" with no ':-' fallback.
+@test ".zprofile alone sets HOMES for hostname home-1" {
+  run zsh -c "
+    export PATH=\"${REPO_ROOT}/tests/mocks:/usr/bin:/bin:/usr/sbin:/sbin\"
+    export MOCK_CALLS_FILE=\"${BATS_TEST_TMPDIR}/mock_calls_homes\"
+    export MOCK_HOSTNAME_OUTPUT=home-1
+    unset LAPTOP STUDIO RECEPTION OFFICE HOMES WORKSTATION CRUNCHER RATNA PROFILE
+    unset -m 'HAS_*'
+    source '${REPO_ROOT}/.zprofile' 2>/dev/null
+    printf '%s\n' \"\${HOMES:-unset}\"
+  "
+  [ "$status" -eq 0 ]
+  [ "$output" = "1" ]
+}
+
+@test ".zprofile alone sets CRUNCHER for hostname cruncher" {
+  run zsh -c "
+    export PATH=\"${REPO_ROOT}/tests/mocks:/usr/bin:/bin:/usr/sbin:/sbin\"
+    export MOCK_HOSTNAME_OUTPUT=cruncher
+    unset LAPTOP STUDIO RECEPTION OFFICE HOMES WORKSTATION CRUNCHER RATNA PROFILE
+    unset -m 'HAS_*'
+    source '${REPO_ROOT}/.zprofile' 2>/dev/null
+    printf '%s\n' \"\${CRUNCHER:-unset}\"
+  "
+  [ "$status" -eq 0 ]
+  [ "$output" = "1" ]
+}
+
+# The real login+interactive sequence: .zprofile runs first, then 1_init.zsh,
+# in one process. This is the export-not-readonly property config/profiles.zsh
+# documents at its own top -- a readonly reassignment on the second pass would
+# abort the shell rather than merely producing a wrong value, so this is
+# checked for absence-of-error as well as consistency.
+#
+# PATH is a hermetic minimal set, not the mocks-prepended-to-inherited-PATH
+# pattern used elsewhere in this file: .zprofile's `command -v pyenv` and
+# `eval "$(pyenv init --path)"` would otherwise resolve the operator's REAL
+# pyenv shim (already on this session's PATH ahead of tests/mocks), which in
+# turn shells out to the real `pyenv rehash` -- picking up tests/mocks/xargs
+# unintentionally along the way and failing on its unset MOCK_CALLS_FILE. See
+# the HOMES test above for the same hazard; STUDIO triggers the identical
+# /opt/homebrew/bin prepend branch, so MOCK_CALLS_FILE is set here too.
+@test ".zprofile then 1_init.zsh in one process does not error and stays consistent" {
+  run zsh -c "
+    export PATH=\"${REPO_ROOT}/tests/mocks:/usr/bin:/bin:/usr/sbin:/sbin\"
+    export MOCK_CALLS_FILE=\"${BATS_TEST_TMPDIR}/mock_calls_sequence\"
+    export MOCK_UNAME_S=Darwin
+    export MOCK_HOSTNAME_OUTPUT=studio
+    unset MACOS LINUX LAPTOP STUDIO RECEPTION OFFICE HOMES WORKSTATION CRUNCHER RATNA PROFILE
+    unset -m 'HAS_*'
+    source '${REPO_ROOT}/.zprofile' 2>/dev/null || exit 1
+    first_studio=\"\${STUDIO:-unset}\"
+    first_profile=\"\${PROFILE:-unset}\"
+    source '${ZSHRC_D}/1_init.zsh' 2>/dev/null || exit 1
+    if [[ \"\${STUDIO:-unset}\" != \"\${first_studio}\" ]]; then
+      printf 'STUDIO changed across sequence\n' >&2
+      exit 1
+    fi
+    if [[ \"\${PROFILE:-unset}\" != \"\${first_profile}\" ]]; then
+      printf 'PROFILE changed across sequence\n' >&2
+      exit 1
+    fi
+    printf '%s\n' \"\${STUDIO:-unset}\"
+  "
+  [ "$status" -eq 0 ]
+  [ "$output" = "1" ]
+}
