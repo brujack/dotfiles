@@ -272,6 +272,26 @@ deleted.
 `config/profiles.zsh`'s header comment (`:4-10`) carries the same clause and needs the same
 narrowing.
 
+**The reason string must carry the invariant, not only today's fact.** A3's own argument is that a
+reason naming a dead reader stops the next reader checking, and a reason that stops naming a live
+one reads as "nothing uses this". But the person making the *next* edit is reading the reason
+string, not this spec — and if the gcloud arms are ever converted (the backlog row), that clause
+needs narrowing again with the identical failure mode available in both directions. So state the
+rule where the editor will be standing:
+
+```bash
+# shellcheck disable=SC2034 # Read cross-file, which the linter cannot see. This list names
+# EVERY read site -- add one when a site is added, remove one when a site is removed, and treat
+# an omission as seriously as a stale entry: a list that stops naming a live reader reads as
+# "nothing uses these" and is how the variables get deleted. Sites: 2_functions.zsh,
+# 5_general.zsh (gcloud completion arms at :131/:135 only -- its keychain and rbenv blocks read
+# none of these), 7_final.zsh, .zprofile. One directive covers the whole case (SC1124: a
+# directive cannot sit on a case-arm line).
+```
+
+This is the one place A3's reasoning applies to A3's own output, which is why it is worth the
+extra two lines rather than left to the next author to re-derive.
+
 
 **B1. `config/profiles.sh`.** Add a third map beside `PROFILE_MAP` and `PROFILE_CAPS`:
 
@@ -605,10 +625,34 @@ stderr is unrealistic on Linux. Against the shipped tree at `f577e1c` the same c
 
 **Two measured limits on the Part A check, neither a reason to drop it.** It passes on the
 current tree, so as the cited mitigation for a leak the fix has not yet introduced, it cannot
-discriminate until A1 lands — its value is regression, not proof. And on an unprovisioned `HOME`
-it emits ~398 bytes including a real network `git clone`, from `5_general.zsh:44-46`'s
-zsh-autosuggestions self-healing branch: fine on the two development machines, permanently red
-anywhere else. Scope it to those two explicitly rather than presenting it as portable.
+discriminate until A1 lands — its value is regression, not proof.
+
+And on an unprovisioned `HOME` it emits ~398 bytes including a **real network `git clone`**, from
+`5_general.zsh:44-46`'s zsh-autosuggestions self-healing branch, which fires whenever
+`~/.oh-my-zsh/custom/plugins/zsh-autosuggestions` is absent. The empty-stderr assertion is what
+goes red, and the cause named in the output is a clone rather than anything this change touched.
+
+**That scope belongs in the check, not in this paragraph.** A check whose applicability lives only
+in prose is one someone runs on a fresh box, reads as a failure, and debugs the wrong thing —
+`shell.md`'s own rule that a gate must name its remedy, one level out. Guard on the precondition
+rather than on the machine, so the guard stays true if the fleet changes:
+
+```bash
+if [[ ! -d ${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions ]]; then
+  printf 'SKIPPED: Part A branch check needs a provisioned HOME.\n'
+  printf '  5_general.zsh:44-46 clones zsh-autosuggestions when that dir is absent, which\n'
+  printf '  writes to stderr and would fail the empty-stderr assertion for an unrelated reason.\n'
+  printf '  Remedy: run setup_env.sh -t setup_user, or run this check on studio/workstation.\n'
+  exit 0
+fi
+# ... the check as written above
+```
+
+**The skip is bounded by an acceptance criterion, or it is an escape hatch.** On the two
+development machines this check must **PASS and never SKIP** — a SKIP there means the box is
+unprovisioned, which is itself the finding. The plan carries that as the acceptance wording rather
+than accepting either outcome, since a silently-skippable check is one that can be absent
+(`behavior.md`: a guard whose output cannot alter what runs after it is not a guard).
 
 
 ## Out of scope
