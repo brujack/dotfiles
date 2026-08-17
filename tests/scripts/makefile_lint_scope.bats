@@ -206,6 +206,44 @@ _sorted_lines_from_space_list() {
   [ -n "${output}" ]
 }
 
+# config/profiles.sh joins ZSH_FILES in two independently-derived call sites
+# at once -- the Makefile assignment above and ci.yml's lint-macos job.
+# Fixing only one leaves the other checking a stale set, the same
+# fix-one-call-site shape ci.md warns about (a make-version defect survived
+# a full CI round in this repo for exactly this reason). This test pins the
+# pathspec ARGUMENTS each site passes to `git ls-files`, not the resolved
+# file set: a resolved-set comparison would still pass with a narrower
+# pathspec on one side, so long as no *currently tracked* file happens to
+# fall in the gap -- which was true right up until config/profiles.sh became
+# the first file to exercise the difference. Comparing arguments catches a
+# future divergence by construction, independent of which files exist.
+_extract_makefile_zsh_pathspec() {
+  PATH="${CLEAN_PATH}" awk '
+    /^ZSH_FILES[[:space:]]*:=/ { flag = 1 }
+    flag { print; if ($0 !~ /\\[[:space:]]*$/) exit }
+  ' "${REPO_ROOT}/Makefile" | grep -oE "'[^']*'" | tr -d "'"
+}
+
+_extract_ci_zsh_pathspec() {
+  PATH="${CLEAN_PATH}" grep 'git ls-files' "${REPO_ROOT}/.github/workflows/ci.yml" \
+    | grep -oE "'[^']*'" | tr -d "'"
+}
+
+@test "config/profiles.sh is in the zsh pathspec, and the pathspec agrees between the Makefile and ci.yml" {
+  makefile_pathspec="$(_extract_makefile_zsh_pathspec | sort -u)"
+  ci_pathspec="$(_extract_ci_zsh_pathspec | sort -u)"
+  [ -n "${makefile_pathspec}" ]
+  [ -n "${ci_pathspec}" ]
+
+  if [ "${makefile_pathspec}" != "${ci_pathspec}" ]; then
+    printf 'Makefile ZSH_FILES pathspec:\n%s\n--- ci.yml pathspec:\n%s\n' \
+      "${makefile_pathspec}" "${ci_pathspec}" >&2
+  fi
+  [ "${makefile_pathspec}" = "${ci_pathspec}" ]
+
+  printf '%s\n' "${makefile_pathspec}" | grep -qxF "config/profiles.sh"
+}
+
 @test "make print-ZSH_FILES survives a leaked GIT_DIR pointed at a decoy repo" {
   decoy="${BATS_TEST_TMPDIR}/decoy"
   mkdir -p "${decoy}"
