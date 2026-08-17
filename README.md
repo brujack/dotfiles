@@ -45,10 +45,19 @@ This is a personal dotfiles repo. Before using it on your own machine:
 
 ```bash
 declare -A PROFILE_MAP=(
-  [my-macbook]="personal_laptop"   # ← add your hostname
+  [my-macbook]="personal_laptop"      [my-macbook-1]="personal_laptop"
   ...
 )
 ```
+
+**Add both names.** `hostname -s` returns a different value depending on which
+interface is active — many machines report `<name>` on wired and `<name>-1` on
+wireless. A machine mapped under only one of them resolves `PROFILE=unknown` with
+**zero** capabilities whenever it is on the other, and nothing reports it: `unknown`
+is a well-formed answer, so the Brewfile drift check silently skips every
+capability-gated entry and the snap/flatpak branches go dark. Run
+`./setup_env.sh -t doctor` after adding a machine — it fails on an unmapped hostname
+and names it.
 
 See [Machine Profiles](#machine-profiles) for available profiles and their capabilities.
 
@@ -294,25 +303,34 @@ Machines are mapped to profiles in `config/profiles.sh`:
 | Profile             | Machines          | Capabilities                                    |
 | ------------------- | ----------------- | ----------------------------------------------- |
 | `personal_laptop`   | laptop            | GUI, devtools, AWS, k8s, Docker, Rust, printing |
-| `mac_workstation`   | studio, reception | GUI, devtools, AWS, k8s, Docker, Rust, printing |
+| `mac_workstation`   | studio, reception, ratna | GUI, devtools, AWS, k8s, Docker, Rust, printing |
 | `mac_mini`          | office, home-1    | GUI, printing                                   |
-| `linux_workstation` | workstation       | GUI, devtools, AWS, k8s, Docker, Rust, snap     |
+| `linux_workstation` | workstation       | GUI, devtools, AWS, k8s, Docker, Rust, snap, flatpak |
 | `wsl2_workstation`  | cruncher          | GUI, devtools, AWS, k8s, Docker, Rust           |
-| `server`            | (future)          | devtools, AWS                                   |
 
 **linux_workstation vs wsl2_workstation:** `linux_workstation` (hostname: `workstation`) is a desktop Ubuntu machine with full snap support. `wsl2_workstation` (hostname: `cruncher`) is WSL2 Ubuntu where snap is unavailable — snap-gated installs (Albert, Microsoft Edge, ollama, snap classic packages) are skipped, and Helm is installed via apt instead of snap.
 
 ### Adding a New Machine
 
-Edit one line in `config/profiles.sh`:
+Edit `config/profiles.sh`, adding the machine under **both** its wired and its
+wireless hostname:
 
 ```bash
 declare -A PROFILE_MAP=(
-  [laptop]="personal_laptop"
-  [my-new-mac]="mac_workstation"   # ← add this
+  [laptop]="personal_laptop"       [laptop-1]="personal_laptop"
+  [my-new-mac]="mac_workstation"   [my-new-mac-1]="mac_workstation"   # ← add both
   ...
 )
 ```
+
+`hostname -s` returns `<name>` on the wired interface and `<name>-1` on wireless, so a
+machine mapped under only one loses every capability whenever it is on the other —
+silently, since `PROFILE=unknown` is a well-formed answer with no capabilities. Machines
+with no wireless interface (`workstation`, `cruncher`) take a single key. `home-1` is the
+one exception where `-1` is part of the machine's name rather than an interface suffix.
+
+Then run `./setup_env.sh -t doctor`: it fails on an unmapped hostname and names it, so a
+missed row surfaces immediately rather than as a capability that quietly stopped applying.
 
 Push a feature branch — CI validates and auto-merges to master.
 
