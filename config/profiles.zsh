@@ -8,7 +8,11 @@
 # Both .zprofile (login) and 1_init.zsh (interactive) source this file, so a
 # login+interactive shell runs it twice in one process. Every assignment
 # below uses `export`, never `readonly` — a `readonly` reassignment on the
-# second pass would abort the shell. 1_init.zsh solves the same problem for
+# second pass makes that `source` return 126. Measured: the shell itself
+# stays alive, so the damage is a half-initialised identity rather than a
+# dead login; the test catches it via `|| exit 1`, not via an abort. An
+# earlier version of this comment claimed the shell aborts, which would have
+# sent the next reader looking for the wrong symptom. 1_init.zsh solves the same problem for
 # NOBLE/RESOLUTE with a `${VAR+x}` guard; that guard isn't needed here
 # because none of these values differ between the two passes, so a plain
 # re-export is harmless.
