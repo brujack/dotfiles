@@ -120,7 +120,7 @@ Master status index for all specs and implementation plans in this directory.
 | 2026-08-16 | system-wide-gnu-make                                                                       | [spec](specs/2026-08-16-system-wide-gnu-make-design.md)                                                                                   | Retired     |
 | 2026-08-16 | hook-make-resolution                                                                       | [spec](specs/2026-08-16-hook-make-resolution-design.md)                                                                                   | Retired     |
 | 2026-08-16 | [zsh-identity-single-table](plans/2026-08-16-zsh-identity-single-table.md)                 | [spec](specs/2026-08-16-zsh-identity-single-table-design.md)                                                                              | Done        |
-| 2026-08-17 | zsh-legacy-identity-consolidation                                                          | [spec](specs/2026-08-17-zsh-legacy-identity-consolidation-design.md)                                                                      | In Progress |
+| 2026-08-17 | [zsh-legacy-identity-consolidation](plans/2026-08-17-zsh-legacy-identity-consolidation.md)                                                          | [spec](specs/2026-08-17-zsh-legacy-identity-consolidation-design.md)                                                                      | In Progress |
 
 ---
 
