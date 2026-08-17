@@ -132,11 +132,20 @@ _sorted_lines_from_space_list() {
   printf '%s\n' "${1}" | tr ' ' '\n' | sort -u
 }
 
+# config/profiles.sh is a deliberate, single exception to the SHELL_FILES/
+# ZSH_FILES disjointness invariant below: it is a bash file (stays in
+# SHELL_FILES for bash -n + shellcheck) that config/profiles.zsh also
+# sources at every login and interactive shell (so it joins ZSH_FILES for
+# zsh -n too) -- one file, both parsers, by design. Any OTHER overlap would
+# still be a real bug, so the disjoint tests below subtract exactly this one
+# known name rather than disabling the check.
+readonly _KNOWN_SHELL_ZSH_OVERLAP="config/profiles.sh"
+
 @test "ZSH_FILES equals git ls-files over the zsh pathspecs, as a set" {
   run _make_print ZSH_FILES
   [ "${status}" -eq 0 ]
   resolved="$(_sorted_lines_from_space_list "${output}")"
-  expected="$(_git_ls_clean '*.zsh' '*.zsh-theme' '.zshrc' '.zprofile' | sort -u)"
+  expected="$(_git_ls_clean '*.zsh' '*.zsh-theme' '.zshrc' '.zprofile' 'config/profiles.sh' | sort -u)"
   if [ "${resolved}" != "${expected}" ]; then
     printf 'ZSH_FILES resolved:\n%s\n--- expected:\n%s\n' "${resolved}" "${expected}" >&2
   fi
@@ -180,7 +189,7 @@ _sorted_lines_from_space_list() {
   [ -z "${missing}" ]
 }
 
-@test "SHELL_FILES and ZSH_FILES are disjoint" {
+@test "SHELL_FILES and ZSH_FILES are disjoint except the one known overlap" {
   run _make_print SHELL_FILES
   [ "${status}" -eq 0 ]
   shell_files="$(_sorted_lines_from_space_list "${output}")"
@@ -190,10 +199,16 @@ _sorted_lines_from_space_list() {
   zsh_files="$(_sorted_lines_from_space_list "${output}")"
 
   overlap="$(comm -12 <(printf '%s\n' "${shell_files}") <(printf '%s\n' "${zsh_files}"))"
-  if [ -n "${overlap}" ]; then
-    printf 'SHELL_FILES/ZSH_FILES overlap:\n%s\n' "${overlap}" >&2
+  unexpected_overlap="$(comm -23 <(printf '%s\n' "${overlap}") <(printf '%s\n' "${_KNOWN_SHELL_ZSH_OVERLAP}"))"
+  if [ -n "${unexpected_overlap}" ]; then
+    printf 'unexpected SHELL_FILES/ZSH_FILES overlap:\n%s\n' "${unexpected_overlap}" >&2
   fi
-  [ -z "${overlap}" ]
+  [ -z "${unexpected_overlap}" ]
+
+  # The known overlap must actually be present, or a future regression that
+  # drops config/profiles.sh from one side would slip through unnoticed --
+  # the check above alone would still pass with zero overlap at all.
+  printf '%s\n' "${overlap}" | grep -qxF "${_KNOWN_SHELL_ZSH_OVERLAP}"
 }
 
 @test "SHELL_FILES and ZSH_FILES are both non-empty" {
@@ -204,6 +219,44 @@ _sorted_lines_from_space_list() {
   run _make_print ZSH_FILES
   [ "${status}" -eq 0 ]
   [ -n "${output}" ]
+}
+
+# config/profiles.sh joins ZSH_FILES in two independently-derived call sites
+# at once -- the Makefile assignment above and ci.yml's lint-macos job.
+# Fixing only one leaves the other checking a stale set, the same
+# fix-one-call-site shape ci.md warns about (a make-version defect survived
+# a full CI round in this repo for exactly this reason). This test pins the
+# pathspec ARGUMENTS each site passes to `git ls-files`, not the resolved
+# file set: a resolved-set comparison would still pass with a narrower
+# pathspec on one side, so long as no *currently tracked* file happens to
+# fall in the gap -- which was true right up until config/profiles.sh became
+# the first file to exercise the difference. Comparing arguments catches a
+# future divergence by construction, independent of which files exist.
+_extract_makefile_zsh_pathspec() {
+  PATH="${CLEAN_PATH}" awk '
+    /^ZSH_FILES[[:space:]]*:=/ { flag = 1 }
+    flag { print; if ($0 !~ /\\[[:space:]]*$/) exit }
+  ' "${REPO_ROOT}/Makefile" | grep -oE "'[^']*'" | tr -d "'"
+}
+
+_extract_ci_zsh_pathspec() {
+  PATH="${CLEAN_PATH}" grep 'git ls-files' "${REPO_ROOT}/.github/workflows/ci.yml" \
+    | grep -oE "'[^']*'" | tr -d "'"
+}
+
+@test "config/profiles.sh is in the zsh pathspec, and the pathspec agrees between the Makefile and ci.yml" {
+  makefile_pathspec="$(_extract_makefile_zsh_pathspec | sort -u)"
+  ci_pathspec="$(_extract_ci_zsh_pathspec | sort -u)"
+  [ -n "${makefile_pathspec}" ]
+  [ -n "${ci_pathspec}" ]
+
+  if [ "${makefile_pathspec}" != "${ci_pathspec}" ]; then
+    printf 'Makefile ZSH_FILES pathspec:\n%s\n--- ci.yml pathspec:\n%s\n' \
+      "${makefile_pathspec}" "${ci_pathspec}" >&2
+  fi
+  [ "${makefile_pathspec}" = "${ci_pathspec}" ]
+
+  printf '%s\n' "${makefile_pathspec}" | grep -qxF "config/profiles.sh"
 }
 
 @test "make print-ZSH_FILES survives a leaked GIT_DIR pointed at a decoy repo" {
@@ -229,7 +282,7 @@ _sorted_lines_from_space_list() {
     make --no-print-directory -C "${REPO_ROOT}" print-ZSH_FILES
   [ "${status}" -eq 0 ]
   resolved="$(_sorted_lines_from_space_list "${output}")"
-  expected="$(_git_ls_clean '*.zsh' '*.zsh-theme' '.zshrc' '.zprofile' | sort -u)"
+  expected="$(_git_ls_clean '*.zsh' '*.zsh-theme' '.zshrc' '.zprofile' 'config/profiles.sh' | sort -u)"
   if [[ "${resolved}" != "${expected}" ]]; then
     printf 'resolved:\n%s\nexpected:\n%s\n' "${resolved}" "${expected}" >&2
   fi
@@ -771,7 +824,7 @@ _is_make_c_candidate() {
 # empty set is trivially disjoint from anything, so a self-contained case
 # must rule that out first rather than relying on a separate test elsewhere
 # in this file to have already done so.
-@test "oracle case 4: SHELL_FILES and ZSH_FILES are both non-empty, and only then checked disjoint" {
+@test "oracle case 4: SHELL_FILES and ZSH_FILES are both non-empty, and only then checked disjoint except the known overlap" {
   run _make_print SHELL_FILES
   [ "${status}" -eq 0 ]
   shell_files="$(_sorted_lines_from_space_list "${output}")"
@@ -783,10 +836,11 @@ _is_make_c_candidate() {
   [ -n "${zsh_files}" ]
 
   overlap="$(comm -12 <(printf '%s\n' "${shell_files}") <(printf '%s\n' "${zsh_files}"))"
-  if [ -n "${overlap}" ]; then
-    printf 'SHELL_FILES/ZSH_FILES overlap:\n%s\n' "${overlap}" >&2
+  unexpected_overlap="$(comm -23 <(printf '%s\n' "${overlap}") <(printf '%s\n' "${_KNOWN_SHELL_ZSH_OVERLAP}"))"
+  if [ -n "${unexpected_overlap}" ]; then
+    printf 'unexpected SHELL_FILES/ZSH_FILES overlap:\n%s\n' "${unexpected_overlap}" >&2
   fi
-  [ -z "${overlap}" ]
+  [ -z "${unexpected_overlap}" ]
 }
 
 # Oracle case 5: the shebang-form matrix, built in a fixture repo rather than

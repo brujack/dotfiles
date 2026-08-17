@@ -321,6 +321,7 @@ run_doctor() {
 
   printf "\n=== Checks ===\n"
 
+  _doctor_check_profile
   _doctor_check_symlinks
   _doctor_check_symlink_roots
   _doctor_check_tools
@@ -333,6 +334,21 @@ run_doctor() {
   printf "%d checks passed, %d failed, %d warnings\n" "${_DOCTOR_PASS}" "${_DOCTOR_FAIL}" "${_DOCTOR_WARN}"
 
   [[ ${_DOCTOR_FAILED} -eq 0 ]]
+}
+
+_doctor_check_profile() {
+  printf "\nMachine profile:\n"
+  # PROFILE="unknown" is a well-formed answer with no HAS_* capabilities --
+  # it degrades every capability-gated check downstream (Brewfile drift,
+  # snap/flatpak branches) silently, with nothing to say so. Fail loudly
+  # rather than warn: a genuinely new machine's first `doctor` run should
+  # name the gap and point at the one-line remedy, not blend into the rest
+  # of the report.
+  if [[ "${PROFILE:-unknown}" == "unknown" ]]; then
+    doctor_fail "PROFILE" "unmapped hostname '$(hostname -s)' — add a row to config/profiles.sh"
+  else
+    doctor_pass "PROFILE (${PROFILE})"
+  fi
 }
 
 _doctor_check_symlinks() {

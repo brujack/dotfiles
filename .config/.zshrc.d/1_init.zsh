@@ -14,12 +14,4 @@ if [[ -n ${UBUNTU} ]]; then
 fi
 
 [[ $(uname -r) =~ microsoft ]] && export WINDOWS=1
-[[ $(hostname -s) = "ratna" ]] && export RATNA=1
-[[ $(hostname -s) = "laptop" ]] && export LAPTOP=1
-[[ $(hostname -s) = "laptop-1" ]] && export LAPTOP=1
-[[ $(hostname -s) = "studio" ]] && export STUDIO=1
-[[ $(hostname -s) = "studio-1" ]] && export STUDIO=1
-[[ $(hostname -s) = "workstation" ]] && export WORKSTATION=1
-[[ $(hostname -s) = "cruncher" ]] && export CRUNCHER=1
-[[ $(hostname -s) = "reception" ]] && export RECEPTION=1
-[[ $(hostname -s) = "home-1" ]] && export HOMES=1
+source "${${(%):-%x}:A:h}/../../config/profiles.zsh"

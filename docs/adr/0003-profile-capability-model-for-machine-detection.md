@@ -27,3 +27,9 @@ New capability-gated code checks `HAS_*` vars, not raw hostnames. Legacy hostnam
 
 - [Spec: dotfiles-modularization](../superpowers/specs/2026-03-31-dotfiles-modularization-design.md)
 - [ADR-0004: Modular lib/ structure](0004-lib-modular-structure-for-setup-env.md)
+- [ADR-0020: Single identity table across bash and zsh](0020-single-identity-table-across-bash-and-zsh.md)
+  — **amends this ADR.** The Decision section above lists `server` as a profile; it was
+  removed on 2026-08-17 with the retired mac mini it described. ADR-0020 also extends this
+  model to zsh, which it never covered — `.zprofile` and `.zshrc.d/1_init.zsh` kept their own
+  hostname lists until then — and adds wireless-interface hostnames, without which a machine
+  on wifi resolved `PROFILE=unknown` with zero capabilities.

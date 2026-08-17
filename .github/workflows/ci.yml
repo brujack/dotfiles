@@ -57,7 +57,7 @@ jobs:
 
       - name: Syntax check all zsh files
         run: |
-          files=$(git ls-files '*.zsh' '*.zsh-theme' '.zshrc' '.zprofile')
+          files=$(git ls-files '*.zsh' '*.zsh-theme' '.zshrc' '.zprofile' 'config/profiles.sh')
           if [ -z "${files}" ]; then
             printf 'zsh file list is EMPTY - refusing to pass having checked nothing\n' >&2
             exit 1
