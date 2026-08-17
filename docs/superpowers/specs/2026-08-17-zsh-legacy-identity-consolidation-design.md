@@ -473,8 +473,50 @@ second. Both arms asserted, per `logic-review.md` item 6.
   `tests/setup_env/profiles.bats`) keep passing against the shared oracle, which now
   genuinely falsifies `PROFILE_LEGACY` rather than a co-located `case`.
 - A negative case for B2's warning arm: a `PROFILE_MAP` key with no `PROFILE_LEGACY` entry
-  produces the stderr line. Constructed by sourcing a fixture `profiles.sh`, not by
-  editing the real one.
+  produces the stderr line.
+
+**How both negative cases are constructed, because "a fixture `profiles.sh`" is not a method
+and there is no seam.** Added after peer review supplied the rule that a fixture demonstrates a
+mechanism only if it could have produced the opposite result — applying it here showed B2's and
+B4b's cases were unrunnable as originally worded, which three lens rounds had not caught.
+
+Neither production reader takes an override:
+
+```
+config/profiles.zsh:40   source "${${(%):-%x}:A:h}/profiles.sh"
+lib/detect_env.sh:23     source "$(dirname "${BASH_SOURCE[0]}")/../config/profiles.sh"
+```
+
+and no existing test injects a table — every one sources the real `config/profiles.sh` and mocks
+only `hostname`. So an implementer reading "a fixture `profiles.sh`" either stalls, adds a
+production seam that is not needed, or silently points the case at the real table where the arm
+can never fire. That last one is the dangerous reading: it passes.
+
+**No seam is required. Copy the pair into a temp tree and source the copy** — both readers
+resolve the table relative to their *own* file, so relocating the file relocates the lookup.
+`${${(%):-%x}:A:h}` was chosen for symlink resolution (`CLAUDE.md` records why `$0` cannot be
+used in a startup file) and this is a second property of that choice. Verified 2026-08-17 on both
+sides, against the **current** code:
+
+```bash
+fx=$(mktemp -d); mkdir -p "$fx/config" "$fx/lib"
+cp config/profiles.zsh "$fx/config/"
+cp lib/detect_env.sh   "$fx/lib/"          # ../config/ layout preserved
+sed '<insert [newhost]="mac_mini" into PROFILE_MAP>' config/profiles.sh > "$fx/config/profiles.sh"
+# hostname mocked to newhost:
+#   zsh  -> PROFILE=mac_mini  + stderr "host 'newhost' ... has no legacy-identity case arm"
+#   bash -> PROFILE=mac_mini
+```
+
+`PROFILE=mac_mini` is the discriminator: the real table would yield `unknown`, so it proves the
+fixture was read rather than bypassed. And the warning fires against today's `case` statement —
+with a legacy arm present it does not — so the case could have produced the opposite result
+before B2 exists, which is the property that makes it evidence rather than decoration.
+
+B4b's oracle-arm case is constructed the same way: the fixture table carries a `PROFILE_MAP` key
+absent from `tests/helpers/legacy_oracle.bash`, and the assertion is the oracle's `*) return 1`
+message naming the helper. Same discriminator applies — a key present in both must **not** fire
+it.
 - No B5 case — B5 is cut (Decision 3). Test isolation is untouched by this spec.
 
 ### The falsifiable form for C
