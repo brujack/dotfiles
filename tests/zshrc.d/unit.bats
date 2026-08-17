@@ -152,6 +152,7 @@ if [[ "$1" == "init" ]]; then
   printf '_RBENV_INIT_CALLED=1\n'
 elif [[ "$1" == "local" ]]; then
   printf '_RBENV_LOCAL_CALLED=1\n'
+  printf '%s\n' "$2" > .ruby-version
 fi
 exit 0
 EOF
@@ -199,16 +200,32 @@ EOF
 }
 
 @test "5_general.zsh skips rbenv when rbenv binary absent" {
-  run zsh -c "
+  local _tmp_dir
+  _tmp_dir="$(mktemp -d)"
+  _rbenv_mock "${_tmp_dir}"
+
+  # Paired control, same shape as the devtools test below: a single-run
+  # assertion of "unset" can't tell "binary genuinely absent, guard worked"
+  # apart from "shell never reached the Linux branch at all" -- deleting
+  # `unset MACOS` left the suite green precisely because the macOS chruby
+  # branch also leaves _RBENV_INIT_CALLED unset. Pairing a run against a
+  # REAL mock binary (asserting "1") with a run against a nonexistent path
+  # (asserting "unset") forces the Linux branch to actually execute for
+  # either assertion to mean anything.
+  local _snippet="
     unset MACOS
     export PATH=\"${REPO_ROOT}/tests/mocks:\${PATH}\"
     export LINUX=1; export UBUNTU=1; export NOBLE=1; export HAS_DEVTOOLS=1
-    export _OVERRIDE_RBENV_BINARY='/nonexistent/rbenv'
     source '${ZSHRC_D}/5_general.zsh' 2>/dev/null
     printf '%s\n' \"\${_RBENV_INIT_CALLED:-unset}\"
   "
-  [ "$status" -eq 0 ]
-  [ "$output" = "unset" ]
+  run zsh -c "export _OVERRIDE_RBENV_BINARY='${_tmp_dir}/mock_rbenv'; ${_snippet}"
+  local _with="${output}" _with_status="${status}"
+  run zsh -c "export _OVERRIDE_RBENV_BINARY='/nonexistent/rbenv'; ${_snippet}"
+  rm -rf "${_tmp_dir}"
+  [ "${_with_status}" -eq 0 ] && [ "$status" -eq 0 ]
+  [ "${_with}" = "1" ]      # the binary IS reachable when present — proves the branch runs
+  [ "$output" = "unset" ]   # the guard assertion: absent binary -> no init call
 }
 
 @test "5_general.zsh skips rbenv on a Linux host without devtools" {
@@ -460,6 +477,15 @@ EOF
   printf '3.2.0\n' > "${_project_dir}/.ruby-version"
   _rbenv_mock "${_tmp_dir}"
 
+  # The probe (eval-ing the mock's own `local` output directly) is the
+  # control for the guard assertion above it: it proves the mock CAN report
+  # _RBENV_LOCAL_CALLED and CAN overwrite .ruby-version, so "unset" /
+  # "3.2.0" from production mean production genuinely never called `local`
+  # rather than the mock being unable to signal it either way. The
+  # .ruby-version check runs BEFORE the probe, not after -- the probe's own
+  # mock invocation writes .ruby-version too (that's what makes it a control
+  # for the mock's file-write fidelity), so checking it after would assert
+  # on the probe's write instead of production's.
   run zsh -c "
     unset MACOS
     cd '${_project_dir}'
@@ -469,11 +495,14 @@ EOF
     source '${ZSHRC_D}/5_general.zsh' 2>/dev/null
     printf '%s\n' \"\${_RBENV_LOCAL_CALLED:-unset}\"
     cat '${_project_dir}/.ruby-version'
+    eval \"\$('${_tmp_dir}/mock_rbenv' local 3.9.9)\"
+    printf '%s\n' \"\${_RBENV_LOCAL_CALLED:-unset}\"
   "
   rm -rf "${_tmp_dir}" "${_project_dir}"
   [ "$status" -eq 0 ]
-  [ "$(printf '%s\n' "$output" | head -1)" = "unset" ]
-  [ "$(printf '%s\n' "$output" | tail -1)" = "3.2.0" ]
+  [ "$(printf '%s\n' "$output" | sed -n '1p')" = "unset" ]  # guard: production never called local
+  [ "$(printf '%s\n' "$output" | sed -n '2p')" = "3.2.0" ]  # guard: fixture untouched by production
+  [ "$(printf '%s\n' "$output" | sed -n '3p')" = "1" ]      # control: the mock IS capable of reporting local
 }
 
 # ── 5_general.zsh keychain tests ──────────────────────────────────────────────
