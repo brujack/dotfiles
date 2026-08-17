@@ -117,7 +117,13 @@ Behaviour-preserving for every mapped host: `PROFILE_CAPS` has exactly two Linux
 - `:177` `"...initializes rbenv on Linux Resolute CRUNCHER"` — same, exports `CRUNCHER=1`. Rename to `"...on a Linux Resolute dev profile"`.
 - `:206` `"...skips rbenv when rbenv binary absent"` — exports `WORKSTATION=1`; swap to `HAS_DEVTOOLS=1`. Name stays correct.
 
-**RED first:** add `"5_general.zsh skips rbenv on a Linux host without devtools"` — `LINUX=1 UBUNTU=1 NOBLE=1`, `HAS_DEVTOOLS` **unset**, `_OVERRIDE_RBENV_BINARY` pointed at the mock. Assert `_RBENV_INIT_CALLED` is `unset`. This fails before the change (the guard reads `WORKSTATION`, which is also unset, so the mock is not called — run it and confirm it fails for the _right_ reason by first adding the positive case). Both arms per `logic-review.md` item 6.
+**RED first:** add `"5_general.zsh skips rbenv on a Linux host without devtools"` — `LINUX=1 UBUNTU=1 NOBLE=1`, `HAS_DEVTOOLS` **unset**, `_OVERRIDE_RBENV_BINARY` pointed at the mock. Assert `_RBENV_INIT_CALLED` is `unset`.
+
+**This test does NOT fail before the change** — corrected after review caught the original wording asserting it did. On the base tree the guard reads `WORKSTATION`, which is also unset, so the mock is not called and the assertion holds for the wrong reason. The sentence it replaced said "this fails before the change" and then explained in the same breath why it does not.
+
+So it is a **regression guard, not a RED-first discriminator**, and its entire value is catching a future deletion of the guard — which is why the paired control added in review round 2 matters: without it, deleting the guard *and* repointing the seam at `/nonexistent/rbenv` (a plausible dedupe against `:206`) leaves 49/49 green with the guard gone. Measured.
+
+What genuinely goes RED on the base tree is the two **positive** tests, once their exports change to `HAS_DEVTOOLS=1` — that is the RED to verify first. Both arms per `logic-review.md` item 6.
 
 **Interfaces:**
 
