@@ -205,7 +205,9 @@ Uses **BATS** (Bash Automated Testing System), installed natively:
 
 **Run tests:** `make test` (runs lint then all BATS tests)
 **Run unit tests only:** `make test-unit` (runs `unit.bats`, `profiles.bats`, and `zshrc.d/unit.bats`)
-**Run lint only:** `make lint` — `bash -n` over `SHELL_FILES` (derived by `scripts/list-shell-files.sh`, which emits every tracked file whose first line is a bash/sh shebang — 101 files, measured 2026-08-15, including the `tests/mocks/` fixtures and the two extensionless hooks), `zsh -n` over `ZSH_FILES` (the 10 tracked `.zsh`/`.zsh-theme`/`.zshrc`/`.zprofile` files), then shellcheck at default severity for `SHELL_FILES` and `--severity=warning` for `.bats`. `ZSH_FILES` is derived from `git ls-files`; `SHELL_FILES` is content-derived rather than pathspec-derived, for the reason in the ShellCheck section below. Both refuse to report a pass on an empty list.
+**Run lint only:** `make lint` — `bash -n` over `SHELL_FILES` (derived by `scripts/list-shell-files.sh`, which emits every tracked file whose first line is a bash/sh shebang — 101 files, measured 2026-08-15, including the `tests/mocks/` fixtures and the two extensionless hooks), `zsh -n` over `ZSH_FILES` (12 tracked files: `.zsh`/`.zsh-theme`/`.zshrc`/`.zprofile` plus `config/profiles.sh`, named explicitly), then shellcheck at default severity for `SHELL_FILES` and `--severity=warning` for `.bats`. `ZSH_FILES` is derived from `git ls-files`; `SHELL_FILES` is content-derived rather than pathspec-derived, for the reason in the ShellCheck section below. Both refuse to report a pass on an empty list.
+
+`config/profiles.sh` is a bash file — it stays in `SHELL_FILES` for `bash -n` and shellcheck — and is also the one deliberate entry in `ZSH_FILES`: `config/profiles.zsh` sources it from both `.zprofile` and `1_init.zsh`, so `zsh -n` must parse it too. One file, both parsers, by design; `tests/scripts/makefile_lint_scope.bats` asserts this is the _only_ `SHELL_FILES`/`ZSH_FILES` overlap and that it is actually present in both, so a future accidental overlap is caught and this deliberate one can't silently disappear. The pathspec is duplicated at two independent call sites — `Makefile`'s `ZSH_FILES` and `.github/workflows/ci.yml`'s `lint-macos` job — and both must carry `config/profiles.sh` together; a fix to one alone leaves the other checking a stale set.
 **Install hooks:** `make install-hooks` (installs pre-commit and pre-push hooks; run once per checkout)
 **Sync agent guidance:** `make sync-agent-guidance` (regenerates `.cursor/rules/global-claude-standards.mdc` from root `CLAUDE.md`'s `@~/.claude/standards/*.md` imports, resolved against the global symlinked standards dir)
 **Check agent guidance drift:** `make check-agent-guidance` (fails when generated Cursor guidance is stale)
@@ -340,6 +342,35 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 See [`ai-config/docs/knowledge/dotfiles-bats-test-infrastructure.md`](https://github.com/brujack/ai-config/blob/master/docs/knowledge/dotfiles-bats-test-infrastructure.md) for the full override env var table (moved to ai-config per ADR-0020).
 
 Pattern: `local _file="${_OVERRIDE_VAR:-$(dirname "${BASH_SOURCE[0]}")/real/path}"`. Tests set the var and pass a writable temp copy; production code leaves it unset.
+
+**`config/profiles.zsh` is the single zsh-side derivation of `PROFILE`, `HAS_*`, and the
+eight legacy identity variables (`LAPTOP`, `STUDIO`, `RECEPTION`, `RATNA`, `OFFICE`, `HOMES`,
+`WORKSTATION`, `CRUNCHER`) from `config/profiles.sh`'s table.** Both `.zprofile` (login) and
+`.config/.zshrc.d/1_init.zsh` (interactive) source it, so a login+interactive shell runs it
+twice in one process — the same pattern `1_init.zsh`'s own `${NOBLE+x}` guard exists for.
+`lib/detect_env.sh` derives the identical eight variables on the bash side; `tests/zshrc.d/
+cross_shell.bats` asserts both shells produce the same `PROFILE`/`HAS_*` set for every table
+key, which is the property the pre-existing test suite could not check because its own
+oracle was derived from the same wired-only table it was testing.
+
+**`config/profiles.zsh` uses `export`; `lib/detect_env.sh` uses `readonly` — this is
+deliberate, not drift, and a future reader will otherwise "fix" one to match the other.**
+The zsh file is sourced twice per login+interactive shell, and a `readonly` reassignment on
+the second pass makes that `source` return 126 — silently degrading the shell's identity
+rather than crashing it outright, since nothing else in the chain checks that exit code.
+`lib/detect_env.sh`'s `detect_env()` runs exactly once per bash process, so `readonly` there
+is safe and keeps the guarantee that nothing later in the process can mutate identity.
+Neither scope modifier is a stray choice; each is correct for how often its file re-runs.
+
+**`_OVERRIDE_HOMEBREW_PREFIX_ARM` / `_OVERRIDE_HOMEBREW_PREFIX_INTEL`** replace the
+hostname-keyed branches that used to stand in for "which Homebrew prefix does this machine
+have" in `.config/.zshrc.d/5_general.zsh` (`CHRUBY_LOC`, `FZF_BASE`, the keychain binary
+path) — the actual question those sites were asking, answered directly instead of by proxy
+through a hostname list that needed a new arm for every Intel mac. As with the gnubin
+override pair, the real prefix directories (`/opt/homebrew`, `/usr/local/opt`) exist on any
+provisioned mac, so a test that forgets to point these at a nonexistent path short-circuits
+the guard and silently asserts nothing — drive both "present" and "absent" through the
+override, never through the real filesystem.
 
 **`_OVERRIDE_KEYCHAIN_BIN` (`.config/.zshrc.d/5_general.zsh`) selects the `keychain`
 binary, defaulting to `/usr/local/bin/keychain` (RATNA), `/opt/homebrew/bin/keychain`
@@ -536,37 +567,63 @@ The `secret-scan` CI job (`gitleaks`) scans recent commits for credential patter
 
 ## Profile Model
 
-After `detect_env()` runs, the following vars are set:
+`config/profiles.sh` is the single hostname→identity table, sourced by both bash
+(`lib/detect_env.sh`) and zsh (`config/profiles.zsh`, itself sourced by `.zprofile` and
+`.config/.zshrc.d/1_init.zsh`). After `detect_env()` (bash) or `config/profiles.zsh` (zsh)
+runs, the following vars are set:
 
-| Var            | Values                                                                                                                    |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `PROFILE`      | String: `personal_laptop`, `mac_workstation`, `mac_mini`, `linux_workstation`, `wsl2_workstation`, `server`, or `unknown` |
-| `HAS_GUI`      | Set for: personal_laptop, mac_workstation, mac_mini, linux_workstation, wsl2_workstation                                  |
-| `HAS_DEVTOOLS` | Set for: personal_laptop, mac_workstation, linux_workstation, wsl2_workstation, server                                    |
-| `HAS_AWS`      | Set for: personal_laptop, mac_workstation, linux_workstation, wsl2_workstation, server                                    |
-| `HAS_K8S`      | Set for: personal_laptop, mac_workstation, linux_workstation, wsl2_workstation                                            |
-| `HAS_DOCKER`   | Set for: personal_laptop, mac_workstation, linux_workstation, wsl2_workstation                                            |
-| `HAS_RUST`     | Set for: personal_laptop, mac_workstation, linux_workstation, wsl2_workstation                                            |
-| `HAS_SNAP`     | Set for: linux_workstation only (not wsl2_workstation — snap unavailable in WSL2)                                         |
-| `HAS_FLATPAK`  | Set for: linux_workstation only (gates Steam flatpak install in `_install_ubuntu_gui_tools`)                              |
-| `HAS_PRINTING` | Set for: personal_laptop, mac_workstation, mac_mini                                                                       |
+| Var            | Values                                                                                                          |
+| -------------- | --------------------------------------------------------------------------------------------------------------- |
+| `PROFILE`      | String: `personal_laptop`, `mac_workstation`, `mac_mini`, `linux_workstation`, `wsl2_workstation`, or `unknown` |
+| `HAS_GUI`      | Set for: personal_laptop, mac_workstation, mac_mini, linux_workstation, wsl2_workstation                        |
+| `HAS_DEVTOOLS` | Set for: personal_laptop, mac_workstation, linux_workstation, wsl2_workstation                                  |
+| `HAS_AWS`      | Set for: personal_laptop, mac_workstation, linux_workstation, wsl2_workstation                                  |
+| `HAS_K8S`      | Set for: personal_laptop, mac_workstation, linux_workstation, wsl2_workstation                                  |
+| `HAS_DOCKER`   | Set for: personal_laptop, mac_workstation, linux_workstation, wsl2_workstation                                  |
+| `HAS_RUST`     | Set for: personal_laptop, mac_workstation, linux_workstation, wsl2_workstation                                  |
+| `HAS_SNAP`     | Set for: linux_workstation only (not wsl2_workstation — snap unavailable in WSL2)                               |
+| `HAS_FLATPAK`  | Set for: linux_workstation only (gates Steam flatpak install in `_install_ubuntu_gui_tools`)                    |
+| `HAS_PRINTING` | Set for: personal_laptop, mac_workstation, mac_mini                                                             |
+
+`server` is gone — it belonged to a retired mac mini that no hostname has mapped to since,
+and `PROFILE_CAPS[server]` was deleted with it.
+
+**A `-1` suffix on a hostname is that machine's wireless-interface name** — `hostname -s`
+returns it whenever the machine is off ethernet — and both spellings resolve to the same
+`PROFILE`/`HAS_*` set. `workstation` and `cruncher` are wired-only by design and correctly
+have no wireless twin. `home-1` is the one exception to the suffix meaning "wireless": there
+the `-1` is part of the machine's actual name (a naming mistake kept in case a `home-2`
+follows), and it has no separate `home` entry.
+
+An unmapped hostname resolves to `PROFILE=unknown` with zero `HAS_*` — that is a silent,
+well-formed answer, not an error, which is why `run_doctor` now checks for it explicitly
+(see Adding a New Machine).
 
 ## Adding a New Machine
 
-1. Edit `config/profiles.sh` — add the hostname to `PROFILE_MAP`:
+1. Edit `config/profiles.sh` — add **both** the wired and the wireless-interface hostname to
+   `PROFILE_MAP`, mapped to the same profile. A machine added under only its wired name
+   silently loses every capability the moment it's on wifi — `PROFILE` resolves to `unknown`
+   and no `HAS_*` var is set — which is the defect this table's design exists to prevent:
 
 ```bash
 declare -A PROFILE_MAP=(
-  [laptop]="personal_laptop"
-  [my-new-host]="mac_workstation"   # ← new line
+  [laptop]="personal_laptop"        [laptop-1]="personal_laptop"
+  [my-new-host]="mac_workstation"   [my-new-host-1]="mac_workstation"   # ← new pair
   ...
 )
 ```
 
-2. If the machine needs a new profile, add it to both `PROFILE_MAP` and `PROFILE_CAPS` in `config/profiles.sh`.
+2. If the machine needs a new profile, add it to both `PROFILE_MAP` and `PROFILE_CAPS` in
+   `config/profiles.sh`.
 
 3. Push a feature branch — CI validates → auto-merges to master.
 
-No other files need changing.
+No other file needs changing — `lib/detect_env.sh` and `config/profiles.zsh` both derive
+`PROFILE`/`HAS_*`/the legacy identity variables from this one table.
+
+If a hostname is missing from the table, `run_doctor` fails and names the hostname and
+`config/profiles.sh` in its message — that is the check that catches the omission in step 1
+rather than letting the machine silently run with no capabilities.
 
 ---

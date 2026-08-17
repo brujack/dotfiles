@@ -1,5 +1,7 @@
 # Single Identity Table Implementation Plan
 
+> **Status: DONE**
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Collapse four drifted hostname→identity tables into one, so bash, zsh, and `.zprofile` answer "which machine is this" from a single source.
