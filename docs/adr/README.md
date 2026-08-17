@@ -23,3 +23,4 @@ Cross-cutting decisions that apply across personal repos. Repo-specific decision
 | [0017](0017-pre-push-trigger-fail-closed.md)                   | The pre-push trigger fails closed                       | 2026-08-01 | Accepted                                              |
 | [0018](0018-gnu-make-4-on-macos.md)                            | GNU Make 4.x on macOS                                   | 2026-08-13 | Accepted                                              |
 | [0019](0019-shebang-derived-lint-scope.md)                     | Shebang-derived shell lint scope                        | 2026-08-15 | Accepted                                              |
+| [0020](0020-single-identity-table-across-bash-and-zsh.md)      | Single identity table across bash and zsh               | 2026-08-17 | Accepted (amends 0003)                                |
