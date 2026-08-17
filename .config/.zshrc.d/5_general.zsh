@@ -196,68 +196,51 @@ fpath=(${HOME}/.zsh.d/ $fpath)
 # PATH mock cannot shadow them (shell.md, "an absolute-path default silently
 # defeats the stub") — without the seam a regression test here could only fail
 # on a machine that has keychain installed, which is neither CI nor macOS.
+#
+# Seven per-host arms collapsed to a capability test plus one shared key
+# list. All six mac arms loaded the same four keys (id_rsa, home, github,
+# gitlab) -- home-1's arm read `--eval any home` instead of `--eval home`,
+# but keychain has no `any` flag, so that was reading "any" as a (nonexistent)
+# key name rather than a deliberate fifth key; dropped as a typo. The Linux
+# split (WORKSTATION||CRUNCHER vs. everything else) was just "a known dev
+# profile or not", which HAS_DEVTOOLS now expresses directly against
+# config/profiles.sh's table -- today only linux_workstation/wsl2_workstation
+# (i.e. WORKSTATION/CRUNCHER) carry it, so this is behaviour-preserving for
+# every currently-mapped host.
+#
+# The binary-path selection used to test RATNA (Intel) vs. everything else
+# (ARM) by hostname. It now reuses _OVERRIDE_HOMEBREW_PREFIX_ARM /
+# _OVERRIDE_HOMEBREW_PREFIX_INTEL -- the same seams the CHRUBY_LOC/FZF_BASE
+# section above and 6_path.zsh's gnubin resolution already use -- rather than
+# inventing a third. The defaults here (/opt/homebrew, /usr/local) differ
+# from the CHRUBY_LOC section's (/opt/homebrew, /usr/local/opt): that section
+# tests for the *opt* subdirectory it needs for chruby specifically, while
+# this one needs an actual invokable `<prefix>/bin/keychain`, so the prefix
+# is the real Homebrew prefix, not the opt dir nested under it.
 if [[ -o interactive ]]; then
   if [[ ${MACOS} ]]; then
-    if [[ ${RATNA} ]]; then
-      _keychain="${_OVERRIDE_KEYCHAIN_BIN:-/usr/local/bin/keychain}"
-    else
-      _keychain="${_OVERRIDE_KEYCHAIN_BIN:-/opt/homebrew/bin/keychain}"
+    _keychain_prefix_arm="${_OVERRIDE_HOMEBREW_PREFIX_ARM:-/opt/homebrew}"
+    _keychain_prefix_intel="${_OVERRIDE_HOMEBREW_PREFIX_INTEL:-/usr/local}"
+    if [[ -d ${_keychain_prefix_arm} ]]; then
+      _keychain="${_OVERRIDE_KEYCHAIN_BIN:-${_keychain_prefix_arm}/bin/keychain}"
+    elif [[ -d ${_keychain_prefix_intel} ]]; then
+      _keychain="${_OVERRIDE_KEYCHAIN_BIN:-${_keychain_prefix_intel}/bin/keychain}"
     fi
+    unset _keychain_prefix_arm _keychain_prefix_intel
+    _keychain_keys=(id_rsa home github gitlab)
   elif [[ ${LINUX} ]]; then
     _keychain="${_OVERRIDE_KEYCHAIN_BIN:-/usr/bin/keychain}"
+    if [[ ${HAS_DEVTOOLS} ]]; then
+      _keychain_keys=(id_rsa home github gitlab)
+    else
+      _keychain_keys=(id_rsa)
+    fi
   fi
 
-  if [[ ${MACOS} ]]; then
-    if [[ ${RATNA} ]]; then
-      eval `"${_keychain}" --eval id_rsa`
-      # eval `"${_keychain}" --eval id_ed25519`
-      eval `"${_keychain}" --eval home`
-      eval `"${_keychain}" --eval github`
-      eval `"${_keychain}" --eval gitlab`
-      # eval `"${_keychain}" --eval B6DCFA4E5AFEA3AF35CE0A189A997C02283A9062`
-    elif [[ ${LAPTOP} ]]; then
-      # eval `"${_keychain}" --eval yubikey1`
-      eval `"${_keychain}" --eval id_rsa`
-      # eval `"${_keychain}" --eval id_ed25519`
-      eval `"${_keychain}" --eval home`
-      eval `"${_keychain}" --eval github`
-      eval `"${_keychain}" --eval gitlab`
-      # eval `"${_keychain}" --eval B6DCFA4E5AFEA3AF35CE0A189A997C02283A9062`
-    elif [[ ${STUDIO} ]]; then
-      # eval `"${_keychain}" --eval yubikey1`
-      eval `"${_keychain}" --eval id_rsa`
-      # eval `"${_keychain}" --eval id_ed25519`
-      eval `"${_keychain}" --eval home`
-      eval `"${_keychain}" --eval github`
-      eval `"${_keychain}" --eval gitlab`
-      # eval `"${_keychain}" --eval B6DCFA4E5AFEA3AF35CE0A189A997C02283A9062`
-    elif [[ ${RECEPTION} ]]; then
-      eval `"${_keychain}" --eval id_rsa`
-      eval `"${_keychain}" --eval home`
-      eval `"${_keychain}" --eval github`
-      eval `"${_keychain}" --eval gitlab`
-    elif [[ ${OFFICE} ]]; then
-      eval `"${_keychain}" --eval id_rsa`
-      eval `"${_keychain}" --eval home`
-      eval `"${_keychain}" --eval github`
-      eval `"${_keychain}" --eval gitlab`
-    elif [[ ${HOMES} ]]; then
-      eval `"${_keychain}" --eval id_rsa`
-      eval `"${_keychain}" --eval any home`
-      eval `"${_keychain}" --eval github`
-      eval `"${_keychain}" --eval gitlab`
-    fi
-  elif [[ ${LINUX} ]]; then
-    if [[ ${WORKSTATION} ]] || [[ ${CRUNCHER} ]]; then
-      eval `"${_keychain}" --eval id_rsa`
-      # eval `"${_keychain}" --eval id_ed25519`
-      eval `"${_keychain}" --eval home`
-      eval `"${_keychain}" --eval github`
-      eval `"${_keychain}" --eval gitlab`
-      # eval `"${_keychain}" --eval B6DCFA4E5AFEA3AF35CE0A189A997C02283A9062`
-    else
-      eval `"${_keychain}" --eval id_rsa`
-    fi
+  if [[ -n ${_keychain} ]]; then
+    for _keychain_key in "${_keychain_keys[@]}"; do
+      eval `"${_keychain}" --eval ${_keychain_key}`
+    done
   fi
-  unset _keychain
+  unset _keychain _keychain_keys _keychain_key
 fi
