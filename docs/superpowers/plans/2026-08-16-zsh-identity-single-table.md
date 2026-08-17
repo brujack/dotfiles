@@ -125,7 +125,7 @@ Required test cases beyond the pairs: unmapped hostname → `PROFILE=unknown` wi
 **Interfaces:**
 
 - Consumes: nothing.
-- Produces: `PROFILE_MAP` with 14 keys and `PROFILE_CAPS` with 5 profiles (`personal_laptop`, `mac_workstation`, `mac_mini`, `linux_workstation`, `wsl2_workstation`). Tasks 2 and 4 read both by sourcing this file.
+- Produces: `PROFILE_MAP` with 13 keys and `PROFILE_CAPS` with 5 profiles (`personal_laptop`, `mac_workstation`, `mac_mini`, `linux_workstation`, `wsl2_workstation`). Tasks 2 and 4 read both by sourcing this file.
 
 ---
 
@@ -165,7 +165,7 @@ Derivation notes that are not optional:
 - Use `export`, never `readonly`. `.zprofile` and `1_init.zsh` both source this file, so a login+interactive shell runs it twice; `readonly` makes the second run fail. `1_init.zsh` already carries a `${NOBLE+x}` guard for the same reason.
 - Set the legacy variables (`LAPTOP`, `STUDIO`, `RECEPTION`, `OFFICE`, `HOMES`, `WORKSTATION`, `CRUNCHER`, `RATNA`) from the resolved hostname, so every existing read site keeps working unchanged.
 
-Tests must cover: each of the 14 keys sets the right legacy variable and `HAS_*` set; an unmapped hostname sets none; sourcing twice in one shell is idempotent and does not error. Follow `tests/zshrc.d/unit.bats`'s existing pattern — do **not** call `load_mocks()` at setup scope, because prepending `tests/mocks/` to the outer `PATH` corrupts `PATH` for zsh subprocesses; inject the `hostname` stub inside each `zsh -c` invocation instead.
+Tests must cover: each of the 13 keys sets the right legacy variable and `HAS_*` set; an unmapped hostname sets none; sourcing twice in one shell is idempotent and does not error. Follow `tests/zshrc.d/unit.bats`'s existing pattern — do **not** call `load_mocks()` at setup scope, because prepending `tests/mocks/` to the outer `PATH` corrupts `PATH` for zsh subprocesses; inject the `hostname` stub inside each `zsh -c` invocation instead.
 
 **Interfaces:**
 
@@ -281,10 +281,12 @@ This is the task that matters. The existing suite's oracle is derived from the s
 Enumerate the keys **from the table itself**, not from a list typed into the test — a hand-typed list reintroduces exactly the drift this plan removes, and a key added to `PROFILE_MAP` without a test would go unnoticed:
 
 ```bash
-mapfile -t KEYS < <(sed -n 's/^ *\[\([a-z0-9-]*\)\]=.*/\1/p' "${REPO_ROOT}/config/profiles.sh" | head -14)
+mapfile -t KEYS < <(bash -c 'source "$1"; printf "%s\n" "${!PROFILE_MAP[@]}"' _ "${REPO_ROOT}/config/profiles.sh" | sort)
 ```
 
-Guard the derived list: assert it is non-empty and that its length equals the `PROFILE_MAP` entry count before looping. An empty list makes every assertion in the loop vacuously true, which is indistinguishable from a pass.
+Source the file and read `${!PROFILE_MAP[@]}` — do **not** scrape it with `sed`. A regex over `^ *\[\(...\)\]=` also matches `PROFILE_CAPS`'s entries, so it needs a `head -N` to stop at the boundary, and that N is a magic number that silently truncates or over-reads the moment either array changes size. The first draft of this plan carried exactly that (`head -14`) with the wrong N, because the key count had been reasoned about rather than run. Sourcing has no boundary to guess.
+
+Guard the derived list: assert it is non-empty and that its length equals `${#PROFILE_MAP[@]}` before looping. An empty list makes every assertion in the loop vacuously true, which is indistinguishable from a pass.
 
 For each key, capture `PROFILE` and the sorted `HAS_*` names from bash (`source lib/detect_env.sh; detect_env`) and from zsh (`source config/profiles.zsh`), with the `env -u` strip applied to both, and assert the two strings are equal.
 
@@ -503,7 +505,9 @@ depends_on: [3, 4, 5, 6, 7, 8, 9]
 
 **Gate blindness.** Asked of each task: name a wrong implementation that still passes. For T1–T4 the answer is a derivation correct in one shell and wrong in the other, which is precisely what T5 exists to catch — so T5 is load-bearing rather than decorative, and the plan is weaker than it looks if T5 is skipped or weakened. For T6 the answer is a test run against the real `/opt/homebrew`, which exists on every provisioned mac and makes the guard short-circuit; the task therefore mandates the override seams. For T7 it is the negative-only keychain assertion, which is why the task requires both halves of the existing pair to keep passing.
 
-**Baselines measured under a configuration this plan changes.** None. Every figure cited — 0 wireless tests, 14 table keys, `zsh -n` exit 0, the two zsh-list call sites, CI's zsh availability — was measured against the current tree, and none of them is altered by an earlier task in a way that invalidates a later one.
+**Baselines measured under a configuration this plan changes.** None. Every figure cited — 0 wireless tests, 13 table keys, `zsh -n` exit 0, the two zsh-list call sites, CI's zsh availability — was measured against the current tree, and none of them is altered by an earlier task in a way that invalidates a later one.
+
+**Correction, recorded rather than quietly fixed.** That sentence originally read "14 table keys", and the key count was the one figure in the list that had been _counted in reasoning_ rather than run. It is 13. The error reached four places in this plan, including a `head -14` in Task 5's key extraction — a magic number that would have silently over-read into `PROFILE_CAPS` had the arrays been a different size. It was caught by Task 1's spec reviewer counting the table key-by-key, not by any of this plan's own checks, and specifically not by the sentence above claiming everything was measured. A self-review section asserting that every figure was measured is worth exactly as much as the least-measured figure in it, and prose cannot tell you which one that is.
 
 **ADR significance.** No new Phase 3 gate, HOLD-capable check, storage choice, or security guardrail. T8 adds a `run_doctor` check, which is a health probe rather than a merge gate. No ADR required.
 
