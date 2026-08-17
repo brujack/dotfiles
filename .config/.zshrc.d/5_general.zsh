@@ -8,14 +8,26 @@ GITREPOS="${HOME}/git-repos"
 # question. _OVERRIDE_HOMEBREW_PREFIX_ARM / _OVERRIDE_HOMEBREW_PREFIX_INTEL
 # are test seams, same convention as _OVERRIDE_GNUBIN_ARM/_OVERRIDE_GNUBIN_INTEL
 # in 6_path.zsh -- production leaves them unset and reads the real prefixes.
+#
+# One pair for the whole file, one meaning: the seam IS the Homebrew prefix
+# (/opt/homebrew, /usr/local), and every consumer below -- CHRUBY_LOC,
+# FZF_BASE, and the keychain binary path further down -- derives its path
+# from it rather than treating it as a bare existence probe with its own
+# hardcoded literal. Two different meanings for the same override variable
+# used to coexist here (an "/usr/local/opt" existence probe with a literal
+# output vs. a "/usr/local" path prefix an output was built from); a test
+# that set the seam once would have exercised two different contracts and
+# looked consistent doing it. Unset once, at the very end of the file after
+# the interactive keychain block -- not here -- since that block also reads
+# these two vars and runs later.
 _homebrew_prefix_arm="${_OVERRIDE_HOMEBREW_PREFIX_ARM:-/opt/homebrew}"
-_homebrew_prefix_intel="${_OVERRIDE_HOMEBREW_PREFIX_INTEL:-/usr/local/opt}"
+_homebrew_prefix_intel="${_OVERRIDE_HOMEBREW_PREFIX_INTEL:-/usr/local}"
 
 if [[ ${MACOS} ]]; then
   if [[ -d ${_homebrew_prefix_arm} ]]; then
-    CHRUBY_LOC="/opt/homebrew/opt/chruby/share/"
+    CHRUBY_LOC="${_homebrew_prefix_arm}/opt/chruby/share/"
   elif [[ -d ${_homebrew_prefix_intel} ]]; then
-    CHRUBY_LOC="/usr/local/opt/chruby/share"
+    CHRUBY_LOC="${_homebrew_prefix_intel}/opt/chruby/share"
   fi
 fi
 if [[ ${LINUX} ]]; then
@@ -24,11 +36,9 @@ fi
 
 # for fzf
 if [[ -d ${_homebrew_prefix_arm} ]]; then
-  export FZF_BASE=/opt/homebrew/bin/fzf
+  export FZF_BASE="${_homebrew_prefix_arm}/bin/fzf"
 fi
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
-
-unset _homebrew_prefix_arm _homebrew_prefix_intel
 
 # zsh-autosuggestions — self-healing fallback if plugin dir missing
 if [[ ! -d ${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions ]]; then
@@ -209,24 +219,18 @@ fpath=(${HOME}/.zsh.d/ $fpath)
 # every currently-mapped host.
 #
 # The binary-path selection used to test RATNA (Intel) vs. everything else
-# (ARM) by hostname. It now reuses _OVERRIDE_HOMEBREW_PREFIX_ARM /
-# _OVERRIDE_HOMEBREW_PREFIX_INTEL -- the same seams the CHRUBY_LOC/FZF_BASE
-# section above and 6_path.zsh's gnubin resolution already use -- rather than
-# inventing a third. The defaults here (/opt/homebrew, /usr/local) differ
-# from the CHRUBY_LOC section's (/opt/homebrew, /usr/local/opt): that section
-# tests for the *opt* subdirectory it needs for chruby specifically, while
-# this one needs an actual invokable `<prefix>/bin/keychain`, so the prefix
-# is the real Homebrew prefix, not the opt dir nested under it.
+# (ARM) by hostname. It now derives from the same _homebrew_prefix_arm /
+# _homebrew_prefix_intel pair the CHRUBY_LOC/FZF_BASE section above already
+# computed -- one prefix pair for the whole file, reused here rather than
+# recomputed with a second default, so there is exactly one meaning for the
+# override seam, not two.
 if [[ -o interactive ]]; then
   if [[ ${MACOS} ]]; then
-    _keychain_prefix_arm="${_OVERRIDE_HOMEBREW_PREFIX_ARM:-/opt/homebrew}"
-    _keychain_prefix_intel="${_OVERRIDE_HOMEBREW_PREFIX_INTEL:-/usr/local}"
-    if [[ -d ${_keychain_prefix_arm} ]]; then
-      _keychain="${_OVERRIDE_KEYCHAIN_BIN:-${_keychain_prefix_arm}/bin/keychain}"
-    elif [[ -d ${_keychain_prefix_intel} ]]; then
-      _keychain="${_OVERRIDE_KEYCHAIN_BIN:-${_keychain_prefix_intel}/bin/keychain}"
+    if [[ -d ${_homebrew_prefix_arm} ]]; then
+      _keychain="${_OVERRIDE_KEYCHAIN_BIN:-${_homebrew_prefix_arm}/bin/keychain}"
+    elif [[ -d ${_homebrew_prefix_intel} ]]; then
+      _keychain="${_OVERRIDE_KEYCHAIN_BIN:-${_homebrew_prefix_intel}/bin/keychain}"
     fi
-    unset _keychain_prefix_arm _keychain_prefix_intel
     _keychain_keys=(id_rsa home github gitlab)
   elif [[ ${LINUX} ]]; then
     _keychain="${_OVERRIDE_KEYCHAIN_BIN:-/usr/bin/keychain}"
@@ -244,3 +248,12 @@ if [[ -o interactive ]]; then
   fi
   unset _keychain _keychain_keys _keychain_key
 fi
+
+# _homebrew_prefix_arm/_homebrew_prefix_intel are read by both the
+# CHRUBY_LOC/FZF_BASE block near the top of this file and the keychain block
+# just above -- unset once, here, after both have run, rather than
+# immediately after the first use. The interactive guard around the keychain
+# block does not gate this: on a non-interactive source the keychain `if`
+# body never runs, but this line is not inside it, so the vars are still
+# reclaimed on every source, interactive or not.
+unset _homebrew_prefix_arm _homebrew_prefix_intel

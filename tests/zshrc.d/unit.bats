@@ -242,8 +242,12 @@ EOF
   "
   rm -rf "${_tmp_dir}"
   [ "$status" -eq 0 ]
-  [ "$(printf '%s\n' "$output" | sed -n '1p')" = "/opt/homebrew/opt/chruby/share/" ]
-  [ "$(printf '%s\n' "$output" | sed -n '2p')" = "/opt/homebrew/bin/fzf" ]
+  # Both expected values are built from ${_tmp_dir}, not a hardcoded literal
+  # that merely happens to start with "/opt/homebrew" -- this is what pins
+  # derivation rather than a bare existence check (a hardcoded-literal
+  # assertion would still pass if the code ignored the seam's actual value).
+  [ "$(printf '%s\n' "$output" | sed -n '1p')" = "${_tmp_dir}/opt/chruby/share/" ]
+  [ "$(printf '%s\n' "$output" | sed -n '2p')" = "${_tmp_dir}/bin/fzf" ]
 }
 
 @test "5_general.zsh sets CHRUBY_LOC for the Intel-only homebrew prefix, leaves FZF_BASE unset" {
@@ -262,7 +266,7 @@ EOF
   "
   rm -rf "${_tmp_dir}"
   [ "$status" -eq 0 ]
-  [ "$(printf '%s\n' "$output" | sed -n '1p')" = "/usr/local/opt/chruby/share" ]
+  [ "$(printf '%s\n' "$output" | sed -n '1p')" = "${_tmp_dir}/opt/chruby/share" ]
   [ "$(printf '%s\n' "$output" | sed -n '2p')" = "unset" ]
 }
 
@@ -747,6 +751,44 @@ EOF
   rm -rf "${_tmp_dir}"
   [ "${_calls}" = "0" ]
   [ "${_keychain_var}" = "unset" ]
+}
+
+# _OVERRIDE_HOMEBREW_PREFIX_ARM/_INTEL used to have two meanings in this
+# file: an existence probe with a hardcoded-literal output (CHRUBY_LOC,
+# FZF_BASE) and a path prefix an output was actually built from (the
+# keychain binary). A test setting the seam once could not have told those
+# apart -- it would pass for the keychain path (genuinely derived) and ALSO
+# pass for CHRUBY_LOC/FZF_BASE (hardcoded, but the hardcoded literal happened
+# to start with the real default prefix), because none of them asserted that
+# the *fixture's own path* showed up in the result. This test points one
+# seam at one fixture and checks all three consumers embed it, which is the
+# check that discriminates a derived path from a coincidentally-matching
+# hardcoded one.
+@test "5_general.zsh derives CHRUBY_LOC, FZF_BASE, and the keychain binary from the same prefix seam" {
+  local _tmp_dir
+  _tmp_dir="$(mktemp -d)"
+  mkdir -p "${_tmp_dir}/bin"
+  _keychain_mock "${_tmp_dir}"
+  cp "${_tmp_dir}/mock_keychain" "${_tmp_dir}/bin/keychain"
+
+  run zsh -f -i -c "
+    unset MACOS LINUX LAPTOP STUDIO RECEPTION OFFICE HOMES WORKSTATION CRUNCHER RATNA
+    unset -m 'HAS_*'
+    unset CHRUBY_LOC FZF_BASE _OVERRIDE_KEYCHAIN_BIN
+    export MACOS=1
+    export _OVERRIDE_HOMEBREW_PREFIX_ARM='${_tmp_dir}'
+    export _OVERRIDE_HOMEBREW_PREFIX_INTEL='/nonexistent/homebrew-intel'
+    source '${ZSHRC_D}/5_general.zsh' 2>/dev/null
+    printf '%s\n' \"\${CHRUBY_LOC:-unset}\"
+    printf '%s\n' \"\${FZF_BASE:-unset}\"
+  " < /dev/null
+  local _calls
+  _calls="$(wc -l < "${_tmp_dir}/calls" 2>/dev/null | tr -d ' ')"
+  rm -rf "${_tmp_dir}"
+  [ "$status" -eq 0 ]
+  [ "$(printf '%s\n' "$output" | sed -n '1p')" = "${_tmp_dir}/opt/chruby/share/" ]
+  [ "$(printf '%s\n' "$output" | sed -n '2p')" = "${_tmp_dir}/bin/fzf" ]
+  [ "${_calls}" = "4" ]
 }
 
 # ── shared identity table (config/profiles.zsh) ──────────────────────────────
