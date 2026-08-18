@@ -301,6 +301,30 @@ sed 's|^  \[cruncher\]=.*|&\n  [newhost]="mac_mini"|' \
 
 ---
 
+### The Decision-1 chain, measured end to end (2026-08-18, after Task 3)
+
+The oracle's independence is now verified as a working mechanism rather than a principle. Applying
+the swap `[laptop]="STUDIO"` / `[studio]="LAPTOP"` to `config/profiles.sh`:
+
+| tree state                                              | `setup_env/profiles.bats` | `zshrc.d/profiles.bats` | `cross_shell.bats` |
+| ------------------------------------------------------- | ------------------------- | ----------------------- | ------------------ |
+| HEAD after Task 3 — nothing reads the table yet          | 0                         | 0                       | 0                  |
+| Task 4 simulated — `profiles.zsh` reads `PROFILE_LEGACY` | —                         | **1**                   | **1**              |
+
+Both failures are the per-host assertions that compare production's output against the hand-typed
+oracle. So the chain is: Task 2 adds the table (inert), Task 3 gives it an independent oracle
+(still inert), Task 4 makes production read it — **and at that moment a swapped pair becomes a test
+failure in two suites at once**. Had the oracle been derived from the table, as the backlog row
+originally proposed, the bottom row would read 0 / 0 and no point in the plan would ever catch it.
+
+This also confirms Task 4's declared gates are discriminating for this property: `bats
+tests/zshrc.d/profiles.bats` and `bats tests/zshrc.d/cross_shell.bats` are both in its acceptance
+list, and both fire. And it confirms the helper's own rationale comment is accurate *at its commit* —
+the "0 failures across all three profile suites" figure was re-measured after Task 3 landed, not
+inherited from the pre-Task-3 measurement.
+
+---
+
 ## Task 4: B2 + A3 (zsh half) — `config/profiles.zsh` lookup
 
 ```yaml-task
@@ -318,7 +342,7 @@ acceptance:
     exit_code: 0
   - cmd: 'grep -q "PROFILE_LEGACY" config/profiles.zsh'
     exit_code: 0
-  - cmd: '! grep -q "readonly" config/profiles.zsh'
+  - cmd: '! sed "s/#.*//" config/profiles.zsh | grep -qE "(^|[[:space:]])readonly[[:space:]]"'
     exit_code: 0
   - cmd: 'zsh -n config/profiles.zsh'
     exit_code: 0
@@ -330,6 +354,22 @@ depends_on: [2, 3]
 ```
 
 **Files:** `config/profiles.zsh:4-10` (header), `:6` region reason, `:63-83` (the `case`), `:85` (`unset`)
+
+**A third vocabulary gate, found before it ran.** `! grep -q "readonly" config/profiles.zsh` was
+labelled here as a regression guard that "passes today and must keep passing". It does not pass
+today: `readonly` appears once in that file, in the comment explaining why `export` is used instead.
+The gate would have failed on an untouched file, and an implementer would have had to either delete
+a load-bearing comment or report a blocker on a plan defect.
+
+Same defect as Task 3's gate 5, third instance: **the gate banned a word where the intent was to ban
+an assignment.** Corrected to strip comments first, then match `readonly` in command position.
+Verified three ways: exit 0 on the real file, exit 1 with `readonly LAPTOP=1` appended, exit 1 with
+an indented `  readonly STUDIO=1`.
+
+The pattern is now established enough to state as a rule for the rest of this plan: **any gate whose
+form is `grep <identifier>` over a file that discusses that identifier is measuring vocabulary.**
+Strip comments, anchor to command position, and test the gate against a correct file — not only
+against the base tree.
 
 **Gate provenance (base tree):** `! grep "laptop | laptop-1"` exits 1 (the case arm is at `:64`). The `! grep readonly` gate is a **regression guard, not a discriminator** — it passes today and must keep passing; a `readonly` here makes the second `source` of this file return 126 (measured on both zsh builds), degrading identity at login rather than crashing.
 
