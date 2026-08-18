@@ -36,7 +36,7 @@ Expected: `make test` ≥ 1402 tests with 0 `not ok` and rc 0; `make lint` rc 0;
 
 **Edge cases that must be exercised:**
 
-1. A `PROFILE_MAP` key with **no** `PROFILE_LEGACY` entry → `config/profiles.zsh` warns to stderr; the oracle's `*) return 1` arm fires naming the helper.
+1. A `PROFILE_MAP` key with **no** `PROFILE_LEGACY` entry → **4 test failures** across both profile suites (measured), plus `config/profiles.zsh` warning to stderr if such a host ever reaches a real shell. The oracle's `*) return 1` arm fires naming the helper.
 2. An unmapped hostname → `PROFILE=unknown`, no legacy variable, **no** warning.
 3. A wireless twin (`studio-1`) resolves identically to its wired name.
 4. `HAS_DEVTOOLS` set and unset, on the rbenv guard — both arms.
@@ -557,7 +557,19 @@ depends_on: [2, 3]
 
 **C1.** The section ends "No other file needs changing — `lib/detect_env.sh` and `config/profiles.zsh` both derive … from this one table." That has been wrong since #222, not newly wrong: following it literally today costs **5 edits across 5 files** (`PROFILE_MAP`, two production `case` arms, two test oracles) against a document promising one — reproduced by doing exactly that in a `git archive` copy and watching both suites fail. After this plan it is **3 edits across 2 files**. Write it as correcting a document that has been understating the work, not as documenting friction this change introduces; the opposite framing tells the next reader this change added steps when it removed 40% of them.
 
-Name both maps in the step list with the wired/wireless twin rule applying to `PROFILE_LEGACY` exactly as to `PROFILE_MAP`, name `tests/helpers/legacy_oracle.bash` as the one other file, and state the two failure modes because they differ: a missing oracle arm **fails the suite**; a missing `PROFILE_LEGACY` entry only **warns to stderr at login**.
+Name both maps in the step list with the wired/wireless twin rule applying to `PROFILE_LEGACY` exactly as to `PROFILE_MAP`, name `tests/helpers/legacy_oracle.bash` as the one other file, and state the two failure modes.
+
+**This instruction was false as first written, and the implementer refuted it by measurement rather
+than following it.** It said a missing oracle arm "fails the suite" while a missing `PROFILE_LEGACY`
+entry "only warns to stderr at login". Both fail the suite. Measured by adding a synthetic host to
+`PROFILE_MAP` only: **4 failures across two suites** — Task 2's own `every PROFILE_MAP key has a
+PROFILE_LEGACY entry`, the per-host assertions on the bash and zsh sides, and the wireless-twin
+check. A missing oracle arm gives 5. The stderr warning is what happens only if a mistake reaches a
+real shell *anyway*, via a bypassed hook — which is the distinction the shipped `CLAUDE.md` text
+draws instead.
+
+Sixth false claim this plan has carried, and the first caught by an **implementer** rather than a
+reviewer. The FORBIDDEN list's rule about fixing a wrong plan-prescribed test, applied to prose.
 
 **C4.** In Testing / Test Seams, name the helper and state that it is deliberately hand-typed rather than derived from `PROFILE_LEGACY` — otherwise the next reader "fixes" it into the circular form Decision 1 rejected, and `behavior.md` is the only thing standing between them and a green `[home-1]=HOME`.
 
