@@ -565,6 +565,26 @@ Name both maps in the step list with the wired/wireless twin rule applying to `P
 
 ---
 
+### Concurrency note — the index is the shared resource, not the files
+
+Tasks 4 and 5 were run overlapping (T4's fix round alongside T5's implementation) on the reasoning
+that their `files_touched` are disjoint. **That reasoning is wrong**, and `git-workflow.md` says so
+directly: two agents in one worktree share the git *index*, and disjoint paths do not protect
+against it.
+
+It surfaced for real. Mid-fix, T4's implementer found `lib/detect_env.sh` already **staged** by T5,
+and a bare `git commit` after its own `git add` would have swept T5's in-progress work into T4's
+commit. It used a pathspec-scoped commit — `git commit -m "..." -- <its two files>` — and reported
+the near miss. Verified afterwards: T4's commit contains exactly two files and T5's staged change is
+undisturbed.
+
+Nothing was lost, because the implementer was careful rather than because the plan was safe. The
+lesson for any future overlap in this repo: **exact-path `git add` is necessary but not sufficient**
+— a pathspec-scoped `git commit` is what actually bounds a commit when another agent may have staged
+something. Or run them sequentially, which is what the skill says and what I should have done.
+
+---
+
 ## Task 7: Full verification, cross-machine run, and index
 
 ```yaml-task
