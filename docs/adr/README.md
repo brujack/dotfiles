@@ -24,3 +24,4 @@ Cross-cutting decisions that apply across personal repos. Repo-specific decision
 | [0018](0018-gnu-make-4-on-macos.md)                            | GNU Make 4.x on macOS                                   | 2026-08-13 | Accepted                                              |
 | [0019](0019-shebang-derived-lint-scope.md)                     | Shebang-derived shell lint scope                        | 2026-08-15 | Accepted                                              |
 | [0020](0020-single-identity-table-across-bash-and-zsh.md)      | Single identity table across bash and zsh               | 2026-08-17 | Accepted (amends 0003)                                |
+| [0021](0021-hand-typed-test-oracle-for-the-identity-table.md)  | Hand-typed test oracle for the identity table           | 2026-08-18 | Accepted                                              |

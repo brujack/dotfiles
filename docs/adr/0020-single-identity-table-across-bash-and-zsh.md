@@ -54,6 +54,16 @@ catching it.
 3. `lib/detect_env.sh` derives the same eight variables from the table rather than testing
    hostname literals.
 
+   **Amended 2026-08-18 (dotfiles#223): this point was aspirational as written.** At the time
+   of this ADR both readers still resolved the legacy variables through hardcoded eight-arm
+   `case` statements — the table supplied `PROFILE` and `HAS_*`, not the legacy names. #223 is
+   what made it a genuine derivation, by adding a third map, `PROFILE_LEGACY`, to
+   `config/profiles.sh` and replacing both `case` statements with a lookup. It also collapsed
+   the two per-suite test copies into one shared oracle, which is **deliberately hand-typed
+   rather than derived** — see [ADR-0021](0021-hand-typed-test-oracle-for-the-identity-table.md)
+   for the 2x2 measurement showing a derived oracle cannot detect a self-consistent swap in the
+   table it reads.
+
 4. Read sites that were never identity questions become capability or Homebrew-prefix tests.
    Nine of nineteen hostname reads in `5_general.zsh` were really asking "which Homebrew
    prefix does this machine have"; four were converted, and the rest carry backlog rows.
