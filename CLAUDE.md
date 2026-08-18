@@ -376,12 +376,19 @@ carries the 2x2 that measures this, and **two** caveats on re-verifying it -- bo
 each one was learned by getting it wrong. First, the mutation must be a **self-consistent** swap
 (both members of each wired/wireless pair), because swapping only the non-suffixed keys leaves the
 table internally inconsistent and the wireless-twin assertions then catch it without reference to
-the oracle at all -- proving twin-consistency instead. Second, the pair must be one **no other
-assertion names host-specifically**: `laptop` and `studio` are pinned elsewhere (a hardcoded
+the oracle at all -- proving twin-consistency instead. Second, the pair must be one whose
+**legacy variable is not pinned host-specifically by any other assertion**: `laptop` and `studio`
+are pinned that way elsewhere (a hardcoded
 `"STUDIO"` literal in `tests/zshrc.d/profiles.bats` and a studio-specific assertion in
 `tests/zshrc.d/unit.bats`), so a self-consistent swap of *that* pair is caught even when the
 oracle is derived, and the suite going red proves nothing about this file. `reception<->ratna` is
-the documented pair because neither is named that way anywhere. It carries a `#!/usr/bin/env bash` shebang, which is
+the documented pair because neither has its legacy variable pinned that way. Both hostnames
+*are* named host-specifically elsewhere -- `tests/setup_env/profiles.bats:94` and `:485` assert
+`PROFILE=mac_workstation` for each -- but `PROFILE` comes from `PROFILE_MAP`, which the swap does
+not touch, which is why those two stay green. The qualifier is the whole criterion: drop it and a
+two-second grep appears to refute the rule.
+
+`tests/helpers/legacy_oracle.bash` carries a `#!/usr/bin/env bash` shebang, which is
 what puts it in `make lint`'s scope — `scripts/list-shell-files.sh` derives scope from
 first-line shebangs, not filenames, so this file is linted by the same mechanism as the
 extensionless hooks, not because its `.bash` extension happens to match a pathspec.
