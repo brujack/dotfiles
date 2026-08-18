@@ -53,6 +53,7 @@ if [[ ! -d ${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions ]]; then
 fi
 _err=$(mktemp)
 zsh -c '
+  unset AWS_HOME PROFILE          # see below -- without this the check is vacuous
   source .zprofile
   for f in .config/.zshrc.d/*.zsh; do source "$f"; done
   [[ -n ${AWS_HOME} ]] || { print -u2 "5_general.zsh not reached"; exit 1 }
@@ -60,13 +61,48 @@ zsh -c '
 [ "${rc}" -eq 0 ] && [ ! -s "${_err}" ] || { cat "${_err}"; false; }
 ```
 
+**The `unset AWS_HOME` is what makes the `AWS_HOME` assertion mean anything, and the first version
+of this check omitted it.** Measured on the Studio: `AWS_HOME=/Users/bruce/.aws` is exported by the
+operator's own login shell, so it is inherited by any `zsh -c` the harness spawns. Without the
+`unset`, the assertion is satisfied by inheritance whether or not `5_general.zsh` ran — and it
+reported PASS in exactly that state before this was noticed. With the `unset`: rc 0 on the real tree,
+**rc 1** when the loop is pointed at a directory without `5_general.zsh`.
+
+This is `tdd.md`'s environment-leakage pitfall (A) and the same defect as Task 1's missing
+`unset MACOS`, committed here in the check written specifically to be falsifiable, and whose
+falsifiability was claimed on the strength of a mutation run that also inherited the variable. The
+lesson is narrower than "unset things": **a check that asserts a variable is SET must clear it
+first, or it is asserting about the parent shell.**
+
 `AWS_HOME` is what makes it falsifiable — it is set only by `5_general.zsh`, so without that assertion the check passes on a shell that never sourced the file under test. **On `studio` and `workstation` this must PASS and never SKIP**; a SKIP there means the box is unprovisioned, which is itself the finding.
 
 **Cross-machine run.** `ubuntu-latest` matches the workstation (bash 5.2.21, bats 1.10.0), not the Studio (5.3.15, 1.14.0). Ship the tree, never trust the checkout:
 
 ```bash
-git archive --format=tar <sha> | ssh workstation 'd=$(mktemp -d); tar -x -C "$d"; cd "$d" && make test'
+git archive --format=tar <sha> | ssh workstation '
+  d=$(mktemp -d); tar -x -C "$d"; cd "$d"
+  git init -q . && git add -A          # REQUIRED -- see below
+  make test'
 ```
+
+**The `git init` is not optional, and omitting it produces a refusal rather than a wrong answer.**
+`scripts/list-shell-files.sh` derives `make lint`'s scope from `git ls-files`, and a `git archive`
+extraction is not a git repository — so the derived list comes back **empty** and the Makefile's own
+guard refuses:
+
+```
+lint: derived shell file list is EMPTY — refusing to report a pass having linted nothing.
+```
+
+That guard is the reason this is a footnote and not an incident. An empty file list that reported a
+pass would have been a green cross-machine verification that examined **nothing** — precisely the
+coverage-denominator failure `tdd.md` documents, where an omission cannot lower a percentage because
+it is absent from numerator and denominator alike. It failed closed instead.
+
+Measured at `b52a90c` with the `git init` in place: 424 tracked files, 102 shell files,
+`make test` rc 0, **1410 ok / 0 not ok** on bash 5.2.21 / zsh 5.9 / bats 1.10.0 / make 4.3 — the
+`ubuntu-latest` toolchain. Identical to the Studio's 1410/0 on bash 5.3.15 / zsh 5.9.2 / bats 1.14.0.
+Verdict-identical across both fleet toolchains.
 
 That box is **25 commits behind** and its stale `origin/master` ref makes it self-report `0` behind. Running against its checkout produced a false finding once already this session.
 
