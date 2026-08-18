@@ -622,7 +622,7 @@ acceptance:
     exit_code: 0
   - cmd: 'make test'
     exit_code: 0
-  - cmd: '[ "$(git grep -lE "laptop \| laptop-1" -- "*.sh" "*.zsh" "*.bats" | wc -l | tr -d " ")" -eq 1 ]'
+  - cmd: 'bash -c ''n=$({ bash scripts/list-shell-files.sh | tr " " "\n"; git ls-files "*.bats"; } | sort -u | xargs grep -lE "laptop \| laptop-1" 2>/dev/null | wc -l | tr -d " "); test "$n" -eq 1'''
     exit_code: 0
   - cmd: '[ "$(grep -vE "^\s*#" .config/.zshrc.d/5_general.zsh | grep -cE "WORKSTATION|CRUNCHER")" -eq 0 ]'
     exit_code: 0
@@ -651,6 +651,21 @@ plan revisits `profiles.sh`, and truncation is not hypothetical here: A2, Decisi
 Decision 3 were all cut by review. So the reader-list claim is asserted mechanically at plan end
 rather than hedged in prose — if a later task is cut, this gate fails instead of the comment
 quietly lying. Same for the oracle file's existence.
+
+**This gate's first form could not see the survivor, and it is the third instance of the same class
+in this plan.** It was `git grep -lE "laptop \| laptop-1" -- "*.sh" "*.zsh" "*.bats"`, expecting
+exactly 1 — the surviving independent oracle. But that oracle is `tests/helpers/legacy_oracle.bash`,
+and `.bash` matches none of those three extensions, so the gate returns **0** and fails at plan end
+on correct work. Measured after Task 5.
+
+The class: a pathspec is extension-keyed and cannot express "every shell file". Prior instances here
+were the read-site census using `--include='*.zsh'` (which does not match `.zshrc`, and hid the file
+that eventually cut the whole gcloud half of this spec), and `shell.md`'s own documented
+extensionless-hooks omission. Three times, in one plan, by the same author.
+
+Corrected to derive the file set from `scripts/list-shell-files.sh` — the repo's own content-derived
+shell scope, which finds files by shebang rather than by name — unioned with `git ls-files '*.bats'`.
+Verified after Task 5: exactly 1 file carries a `laptop | laptop-1` arm, and it is the oracle.
 
 **Gate provenance:** the eight-name `case` currently lives in 4 files; after Tasks 3–5 exactly **1** should remain — `tests/helpers/legacy_oracle.bash`, the deliberately independent oracle. Base tree returns 4, so the gate discriminates. That single survivor is Decision 1 made mechanically visible.
 
