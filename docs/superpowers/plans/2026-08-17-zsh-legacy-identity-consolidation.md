@@ -386,6 +386,8 @@ acceptance:
     exit_code: 0
   - cmd: 'zsh -n config/profiles.zsh'
     exit_code: 0
+  - cmd: 'bash -c ''d=$(mktemp -d); git archive HEAD | tar -x -C "$d"; sed -i.bak "s/\[laptop\]=\"LAPTOP\"/[laptop]=\"STUDIO\"/" "$d/config/profiles.sh"; cd "$d" && bats tests/zshrc.d/profiles.bats 2>&1 | grep -qE "^not ok"'''
+    exit_code: 0
 max_retries: 3
 files_touched:
   - config/profiles.zsh
@@ -483,6 +485,13 @@ legacy="${PROFILE_LEGACY[${hn}]:-}"
 `readonly`, not `export` — `detect_env` runs once per bash process. Measured on bash 5.2.21 **and** 5.3.15: `readonly` inside a function is global, an empty name errors loudly (`not a valid identifier`, rc 1), and the name position is a table value, never hostname-derived. Update the `:44-50` comment to point at the lookup; its export-vs-readonly reasoning is unchanged.
 
 No warning arm here — `detect_env.sh` has none today, adding one is new bash-side behaviour, and the zsh warning plus Task 3's oracle already cover drift.
+
+**The swap gate is the point of the whole chain, and it is a clean discriminator.** Measured on the
+tree as it stands before this task: a swapped `PROFILE_LEGACY` pair is caught by nothing, so the gate
+exits 1. With this task applied, `tests/zshrc.d/profiles.bats` reddens and the gate exits 0. Nothing
+about the gate can pass before the work is done, and nothing else in the plan asserts the property
+the design exists for — Decision 1's independent oracle is only worth having if a wrong table
+actually fails a test, and this is the line that says so.
 
 **RED first — added at the same time as Task 3's, and for a worse reason.** Task 5 also declared
 `tdd: required` with no RED-first instruction. The spec review named Task 3 as "the only" such task
