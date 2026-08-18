@@ -212,7 +212,7 @@ acceptance:
     exit_code: 0
   - cmd: 'bats tests/setup_env/profiles.bats'
     exit_code: 0
-  - cmd: '! sed "s/#.*//" tests/helpers/legacy_oracle.bash | grep -qE "(^|[[:space:]])((source|\.)[[:space:]]+[^[:space:]]*profiles\.sh|eval([[:space:]]|$))|\$\{?PROFILE_LEGACY"'
+  - cmd: 'bash -c ''d=$(mktemp -d); git archive HEAD | tar -x -C "$d"; sed -i.bak "s/\[laptop\]=\"LAPTOP\"/[laptop]=\"STUDIO\"/" "$d/config/profiles.sh"; r=$(bash -c "source \"$d/tests/helpers/legacy_oracle.bash\"; _legacy_oracle_expected_var laptop"); rm -rf "$d"; test "$r" = LAPTOP'''
     exit_code: 0
   - cmd: 'shellcheck --severity=warning tests/helpers/legacy_oracle.bash'
     exit_code: 0
@@ -253,7 +253,37 @@ it is the second false claim this plan has carried, after the RED-first error ab
 
 **Files:** new `tests/helpers/legacy_oracle.bash`; `tests/zshrc.d/profiles.bats:93-105,141-146`; `tests/setup_env/profiles.bats:316-328,338-341`
 
-**Gate 5 was wrong twice, and the second version is the instructive one.** It began as
+**Gate 5 was wrong FOUR times, and the fourth correction changes the instrument rather than the
+pattern.** The history is kept in full because the escalation is the lesson.
+
+| version | form | why it failed |
+| ------- | ---- | ------------- |
+| 1 | `! grep -qE "PROFILE_LEGACY\|profiles\.sh"` | banned a **substring** where the intent was a behaviour; rejects a correct file, and forced the helper to avoid naming the table it exists to guard |
+| 2 | three greps: `source`, `${PROFILE_LEGACY`, `eval` | the helper's own rationale comment contains the word "eval" while warning against it — matched a mention again |
+| 3 | as 2, comments stripped first | **evaded by the repo's own house idiom.** `[^[:space:]]*profiles\.sh` needs a whitespace-free path token, so `source "$(dirname "${BASH_SOURCE[0]}")/../../config/profiles.sh"` passes — and `tests/helpers/common.bash:5`, the sibling file in the same directory, resolves its root exactly that way |
+| 4 | swap the table in a temp tree, ask the oracle | correct: tests the property directly |
+
+Version 3's failure is the one worth keeping. My six verification cases all used whitespace-free
+paths, so the sample never contained the shape that breaks it — a fixture that could not have
+produced the opposite result, which is the defect this plan has already recorded twice elsewhere.
+
+**The root cause is the instrument, not the regex.** "Does this file read the production table" is a
+behavioural property over an *unbounded* route set; a line-oriented grep can only enumerate
+spellings. Demonstrated with a working derived oracle that evades every check in version 3 — house
+idiom for the path, table name assembled at runtime (`local _n="PROFILE_LEG"; _n+="ACY"`) so the
+literal never appears, `local -n` nameref for the lookup. Valid under `bash -n`, follows a swapped
+table, and version 3 allows it.
+
+Version 4 asks the question directly: swap `[laptop]="LAPTOP"` to `"STUDIO"` in a throwaway copy and
+assert the oracle still answers `LAPTOP`. A hand-typed oracle does; anything reading the table
+answers `STUDIO` by any route, named or not. Verified both directions.
+
+**This does not generalise to Task 4's `readonly` gate.** "A `readonly` assignment in command
+position" *is* a lexical property, so grep is the right instrument there. Gate 5 is the only gate in
+this plan whose target property is behavioural — which is exactly why it was the only one that kept
+failing.
+
+**The earlier framing, kept for the record:** It began as
 `! grep -qE "PROFILE_LEGACY|profiles\.sh"` — a **substring** ban where the intent was a **behaviour**
 ban. Measured: that rejects a correct file. It forced the implementer to write "the production table"
 everywhere it wanted to name `PROFILE_LEGACY in config/profiles.sh`, weakening the one artifact whose
