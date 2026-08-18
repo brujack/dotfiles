@@ -120,9 +120,22 @@ Note also what the criterion does **not** mean: both hostnames *are* named host-
 elsewhere (`tests/setup_env/profiles.bats:94` and `:485` assert `PROFILE=mac_workstation` for
 each). `PROFILE` comes from `PROFILE_MAP`, which the swap does not touch, so those stay green.
 The qualifier is "legacy variable", and dropping it makes the rule appear refutable by a
-two-second grep — which is exactly how it was dropped once already. **Any future re-verification must keep the table self-consistent AND
-pick a host pair no other assertion names**, or it is measuring something else — and the
-failure will look like a working measurement, because the count will be plausible.
+two-second grep — which is exactly how it was dropped once already. **Any future re-verification must keep the table
+self-consistent AND pick a host pair whose _legacy variable_ no other assertion pins
+host-specifically**, or it is measuring something else — and the failure will look like a working
+measurement.
+
+The qualifier in that sentence is not decoration, and it has now been dropped **twice** — once
+into `CLAUDE.md`'s restatement, and once into this ADR's own closing rule, two lines below the
+paragraph explaining that dropping it is the failure. Unqualified, the rule is **unsatisfiable**:
+every host that has a wireless twin is named host-specifically somewhere (`laptop` 3, `studio` 13,
+`reception` 2, `ratna` 2, `office` 7, `home` 1 — measured), and only twinned hosts can take a
+self-consistent swap, so no pair passes, including `reception<->ratna`. A rule that rejects its own
+documented example reads as a rule nobody checked.
+
+Note also what the correct criterion does **not** say: `reception<->ratna` is not the *only* valid
+pair — `laptop<->reception` and `laptop<->ratna` also qualify. It is the documented one, not the
+unique one.
 
 **This closes the mirror of a gap ADR-0019 records as open.** There, nothing pins that
 `SHELL_FILES` is *derived* rather than *enumerated* — a hardcoded list of today's correct
