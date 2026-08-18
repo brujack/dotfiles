@@ -36,7 +36,7 @@ Expected: `make test` ≥ 1402 tests with 0 `not ok` and rc 0; `make lint` rc 0;
 
 **Edge cases that must be exercised:**
 
-1. A `PROFILE_MAP` key with **no** `PROFILE_LEGACY` entry → `config/profiles.zsh` warns to stderr; the oracle's `*) return 1` arm fires naming the helper.
+1. A `PROFILE_MAP` key with **no** `PROFILE_LEGACY` entry → **4 test failures** across both profile suites (measured), plus `config/profiles.zsh` warning to stderr if such a host ever reaches a real shell. The oracle's `*) return 1` arm fires naming the helper.
 2. An unmapped hostname → `PROFILE=unknown`, no legacy variable, **no** warning.
 3. A wireless twin (`studio-1`) resolves identically to its wired name.
 4. `HAS_DEVTOOLS` set and unset, on the rbenv guard — both arms.
@@ -53,6 +53,7 @@ if [[ ! -d ${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions ]]; then
 fi
 _err=$(mktemp)
 zsh -c '
+  unset AWS_HOME PROFILE          # see below -- without this the check is vacuous
   source .zprofile
   for f in .config/.zshrc.d/*.zsh; do source "$f"; done
   [[ -n ${AWS_HOME} ]] || { print -u2 "5_general.zsh not reached"; exit 1 }
@@ -60,13 +61,48 @@ zsh -c '
 [ "${rc}" -eq 0 ] && [ ! -s "${_err}" ] || { cat "${_err}"; false; }
 ```
 
+**The `unset AWS_HOME` is what makes the `AWS_HOME` assertion mean anything, and the first version
+of this check omitted it.** Measured on the Studio: `AWS_HOME=/Users/bruce/.aws` is exported by the
+operator's own login shell, so it is inherited by any `zsh -c` the harness spawns. Without the
+`unset`, the assertion is satisfied by inheritance whether or not `5_general.zsh` ran — and it
+reported PASS in exactly that state before this was noticed. With the `unset`: rc 0 on the real tree,
+**rc 1** when the loop is pointed at a directory without `5_general.zsh`.
+
+This is `tdd.md`'s environment-leakage pitfall (A) and the same defect as Task 1's missing
+`unset MACOS`, committed here in the check written specifically to be falsifiable, and whose
+falsifiability was claimed on the strength of a mutation run that also inherited the variable. The
+lesson is narrower than "unset things": **a check that asserts a variable is SET must clear it
+first, or it is asserting about the parent shell.**
+
 `AWS_HOME` is what makes it falsifiable — it is set only by `5_general.zsh`, so without that assertion the check passes on a shell that never sourced the file under test. **On `studio` and `workstation` this must PASS and never SKIP**; a SKIP there means the box is unprovisioned, which is itself the finding.
 
 **Cross-machine run.** `ubuntu-latest` matches the workstation (bash 5.2.21, bats 1.10.0), not the Studio (5.3.15, 1.14.0). Ship the tree, never trust the checkout:
 
 ```bash
-git archive --format=tar <sha> | ssh workstation 'd=$(mktemp -d); tar -x -C "$d"; cd "$d" && make test'
+git archive --format=tar <sha> | ssh workstation '
+  d=$(mktemp -d); tar -x -C "$d"; cd "$d"
+  git init -q . && git add -A          # REQUIRED -- see below
+  make test'
 ```
+
+**The `git init` is not optional, and omitting it produces a refusal rather than a wrong answer.**
+`scripts/list-shell-files.sh` derives `make lint`'s scope from `git ls-files`, and a `git archive`
+extraction is not a git repository — so the derived list comes back **empty** and the Makefile's own
+guard refuses:
+
+```
+lint: derived shell file list is EMPTY — refusing to report a pass having linted nothing.
+```
+
+That guard is the reason this is a footnote and not an incident. An empty file list that reported a
+pass would have been a green cross-machine verification that examined **nothing** — precisely the
+coverage-denominator failure `tdd.md` documents, where an omission cannot lower a percentage because
+it is absent from numerator and denominator alike. It failed closed instead.
+
+Measured at `b52a90c` with the `git init` in place: 424 tracked files, 102 shell files,
+`make test` rc 0, **1410 ok / 0 not ok** on bash 5.2.21 / zsh 5.9 / bats 1.10.0 / make 4.3 — the
+`ubuntu-latest` toolchain. Identical to the Studio's 1410/0 on bash 5.3.15 / zsh 5.9.2 / bats 1.14.0.
+Verdict-identical across both fleet toolchains.
 
 That box is **25 commits behind** and its stale `origin/master` ref makes it self-report `0` behind. Running against its checkout produced a false finding once already this session.
 
@@ -117,7 +153,13 @@ Behaviour-preserving for every mapped host: `PROFILE_CAPS` has exactly two Linux
 - `:177` `"...initializes rbenv on Linux Resolute CRUNCHER"` — same, exports `CRUNCHER=1`. Rename to `"...on a Linux Resolute dev profile"`.
 - `:206` `"...skips rbenv when rbenv binary absent"` — exports `WORKSTATION=1`; swap to `HAS_DEVTOOLS=1`. Name stays correct.
 
-**RED first:** add `"5_general.zsh skips rbenv on a Linux host without devtools"` — `LINUX=1 UBUNTU=1 NOBLE=1`, `HAS_DEVTOOLS` **unset**, `_OVERRIDE_RBENV_BINARY` pointed at the mock. Assert `_RBENV_INIT_CALLED` is `unset`. This fails before the change (the guard reads `WORKSTATION`, which is also unset, so the mock is not called — run it and confirm it fails for the _right_ reason by first adding the positive case). Both arms per `logic-review.md` item 6.
+**RED first:** add `"5_general.zsh skips rbenv on a Linux host without devtools"` — `LINUX=1 UBUNTU=1 NOBLE=1`, `HAS_DEVTOOLS` **unset**, `_OVERRIDE_RBENV_BINARY` pointed at the mock. Assert `_RBENV_INIT_CALLED` is `unset`.
+
+**This test does NOT fail before the change** — corrected after review caught the original wording asserting it did. On the base tree the guard reads `WORKSTATION`, which is also unset, so the mock is not called and the assertion holds for the wrong reason. The sentence it replaced said "this fails before the change" and then explained in the same breath why it does not.
+
+So it is a **regression guard, not a RED-first discriminator**, and its entire value is catching a future deletion of the guard — which is why the paired control added in review round 2 matters: without it, deleting the guard *and* repointing the seam at `/nonexistent/rbenv` (a plausible dedupe against `:206`) leaves 49/49 green with the guard gone. Measured.
+
+What genuinely goes RED on the base tree is the two **positive** tests, once their exports change to `HAS_DEVTOOLS=1` — that is the RED to verify first. Both arms per `logic-review.md` item 6.
 
 **Interfaces:**
 
@@ -206,7 +248,7 @@ acceptance:
     exit_code: 0
   - cmd: 'bats tests/setup_env/profiles.bats'
     exit_code: 0
-  - cmd: '! grep -q "PROFILE_LEGACY" tests/helpers/legacy_oracle.bash'
+  - cmd: 'bash -c ''d=$(mktemp -d); git archive HEAD | tar -x -C "$d"; sed -i.bak "s/\[laptop\]=\"LAPTOP\"/[laptop]=\"STUDIO\"/" "$d/config/profiles.sh"; r=$(bash -c "source \"$d/tests/helpers/legacy_oracle.bash\"; _legacy_oracle_expected_var laptop"); rm -rf "$d"; test "$r" = LAPTOP'''
     exit_code: 0
   - cmd: 'shellcheck --severity=warning tests/helpers/legacy_oracle.bash'
     exit_code: 0
@@ -218,7 +260,84 @@ files_touched:
 depends_on: [2]
 ```
 
+**Decision 1 is load-bearing, measured 2026-08-17 — not merely principled.** A swapped pair in
+`PROFILE_LEGACY` (`[laptop]="STUDIO"`, `[studio]="LAPTOP"`) leaves both names present and the
+count unchanged, so no set-equality or coverage assertion can see it. Measured against HEAD after
+Task 2: **0 failures across all three profile suites**, because production still reads its own
+`case` statements and nothing consumes the table yet.
+
+Once Tasks 4 and 5 point the readers at the table, the swap becomes observable — and the only
+thing that will observe it is a **hand-typed** oracle asserting `laptop → LAPTOP` independently.
+So if this task had followed the backlog row's original proposal and derived the oracle from
+`PROFILE_LEGACY`, a swapped pair would be caught by nothing at any point in the plan. That is the
+concrete failure Decision 1 avoids, and it is why the acceptance gate mechanically forbids the
+oracle from reading the table or sourcing `profiles.sh`.
+
+Corollary for Task 2's own scope — **and the first version of this paragraph was wrong.** It said
+the mapping "is not checkable until a reader consumes it". That is false, and Task 2's code-quality
+review refuted it with a working probe: `_expected_legacy_var`, a hand-typed oracle independent of
+the table, already sits ~30 lines above in the same file, and a 12-line loop comparing the two
+kills both a swapped pair and a lone diverged twin **with no production consumer involved**.
+Re-measured here: exit 1 on a swapped table.
+
+So the swap gap at Task 2 is **temporal, not structural**, and the deferral stands on a different
+reason than the one first given: Task 5 points production at the table, after which the
+pre-existing snapshot test catches a swap through a strictly stronger end-to-end path, and Task 3
+rewrites the oracle those 12 lines would have consumed. Adding the loop at Task 2 would be
+correct-but-superseded work. Do not reuse the retracted "not checkable" reasoning as precedent —
+it is the second false claim this plan has carried, after the RED-first error above.
+
 **Files:** new `tests/helpers/legacy_oracle.bash`; `tests/zshrc.d/profiles.bats:93-105,141-146`; `tests/setup_env/profiles.bats:316-328,338-341`
+
+**Gate 5 was wrong FOUR times, and the fourth correction changes the instrument rather than the
+pattern.** The history is kept in full because the escalation is the lesson.
+
+| version | form | why it failed |
+| ------- | ---- | ------------- |
+| 1 | `! grep -qE "PROFILE_LEGACY\|profiles\.sh"` | banned a **substring** where the intent was a behaviour; rejects a correct file, and forced the helper to avoid naming the table it exists to guard |
+| 2 | three greps: `source`, `${PROFILE_LEGACY`, `eval` | the helper's own rationale comment contains the word "eval" while warning against it — matched a mention again |
+| 3 | as 2, comments stripped first | **evaded by the repo's own house idiom.** `[^[:space:]]*profiles\.sh` needs a whitespace-free path token, so `source "$(dirname "${BASH_SOURCE[0]}")/../../config/profiles.sh"` passes — and `tests/helpers/common.bash:5`, the sibling file in the same directory, resolves its root exactly that way |
+| 4 | swap the table in a temp tree, ask the oracle | correct: tests the property directly |
+
+Version 3's failure is the one worth keeping. My six verification cases all used whitespace-free
+paths, so the sample never contained the shape that breaks it — a fixture that could not have
+produced the opposite result, which is the defect this plan has already recorded twice elsewhere.
+
+**The root cause is the instrument, not the regex.** "Does this file read the production table" is a
+behavioural property over an *unbounded* route set; a line-oriented grep can only enumerate
+spellings. Demonstrated with a working derived oracle that evades every check in version 3 — house
+idiom for the path, table name assembled at runtime (`local _n="PROFILE_LEG"; _n+="ACY"`) so the
+literal never appears, `local -n` nameref for the lookup. Valid under `bash -n`, follows a swapped
+table, and version 3 allows it.
+
+Version 4 asks the question directly: swap `[laptop]="LAPTOP"` to `"STUDIO"` in a throwaway copy and
+assert the oracle still answers `LAPTOP`. A hand-typed oracle does; anything reading the table
+answers `STUDIO` by any route, named or not. Verified both directions.
+
+**This does not generalise to Task 4's `readonly` gate.** "A `readonly` assignment in command
+position" *is* a lexical property, so grep is the right instrument there. Gate 5 is the only gate in
+this plan whose target property is behavioural — which is exactly why it was the only one that kept
+failing.
+
+**The earlier framing, kept for the record:** It began as
+`! grep -qE "PROFILE_LEGACY|profiles\.sh"` — a **substring** ban where the intent was a **behaviour**
+ban. Measured: that rejects a correct file. It forced the implementer to write "the production table"
+everywhere it wanted to name `PROFILE_LEGACY in config/profiles.sh`, weakening the one artifact whose
+entire job is explaining why it must not read that table. The implementer flagged the contradiction
+instead of silently molding to it, which is the only reason it surfaced.
+
+The first replacement was no better — three checks for `source`, `${PROFILE_LEGACY` and `eval`, where
+the helper's own rationale comment contains the word "eval" while warning against it. The gate matched
+a mention again, one layer down, same defect class as the gate it replaced.
+
+The working form strips comments first, then greps for uses. Verified in six cases: passes the helper
+as committed, passes it with the table named in both comment and message, and rejects
+`source .../profiles.sh`, `. ./config/profiles.sh`, `${PROFILE_LEGACY[...]}`, and `eval`.
+
+Two general lessons, both earned here: **a gate that greps for a word measures vocabulary, not
+behaviour**; and the correct-file-rejected direction is the one nobody tests, because a gate that
+fails closed feels safe. Every gate in this plan was checked against the base tree for "does it
+fail?" — none was checked for "does it pass a correct implementation?"
 
 **Gate provenance (base tree):** `test -f` exits 1 (file absent — confirmed), and `! grep _profiles_expected_legacy` exits 1 (present at `:93`). The fifth gate is the one that matters most: it enforces Decision 1 mechanically, so a future author cannot "simplify" the oracle into reading the table it exists to check.
 
@@ -239,12 +358,46 @@ sed 's|^  \[cruncher\]=.*|&\n  [newhost]="mac_mini"|' \
 
 `PROFILE=mac_mini` is the discriminator that the fixture table was read rather than bypassed — the real table yields `unknown`. Measured: the arm fires on a key absent from the oracle and does **not** fire on a key present in both, so the case can produce either outcome.
 
+**RED first — added after review; its absence was a plan defect.** Task 3 was the only
+`tdd: required` task in this plan whose body carried no RED-first instruction, while Tasks 1, 2, 4 and
+5 all did. The implementer landed the helper and its test in one commit, so no red tree ever existed,
+and it followed the plan exactly in doing so. A RED was available two ways: rewire the callers to the
+shared name before the helper exists (both suites then fail on a missing `source`), or land the B4b
+fixture and its assertion before the `*)` arm carries a message.
+
+Prefer the first — it is the change whose absence the suites can actually observe, and it fails with
+`No such file or directory` on the `source` line rather than on an assertion, which is unambiguous.
+
 **Rewiring:** `tests/setup_env/profiles.bats` already sources `tests/helpers/common.bash` in `setup()` — add one more `source`. `tests/zshrc.d/profiles.bats` sources no helper; add one in `setup()`. That runs at bats level, outside `_profiles_snapshot`'s `zsh -c`, so its isolation reasoning at `:14-37` is untouched. Keep the `no_legacy` exception set at `:132`. **Do not touch `_profiles_snapshot`'s `unset` line — B5 is cut.**
 
 **Interfaces:**
 
 - Consumes: `PROFILE_LEGACY` (Task 2) — only for the message's wording, never as the oracle's source.
 - Produces: `_expected_legacy_var <hostname>` → prints an uppercase legacy variable name on stdout, returns 1 with a diagnostic on stderr for an unmapped key. Sourced by both `profiles.bats` suites.
+
+---
+
+### The Decision-1 chain, measured end to end (2026-08-18, after Task 3)
+
+The oracle's independence is now verified as a working mechanism rather than a principle. Applying
+the swap `[laptop]="STUDIO"` / `[studio]="LAPTOP"` to `config/profiles.sh`:
+
+| tree state                                              | `setup_env/profiles.bats` | `zshrc.d/profiles.bats` | `cross_shell.bats` |
+| ------------------------------------------------------- | ------------------------- | ----------------------- | ------------------ |
+| HEAD after Task 3 — nothing reads the table yet          | 0                         | 0                       | 0                  |
+| Task 4 simulated — `profiles.zsh` reads `PROFILE_LEGACY` | —                         | **1**                   | **1**              |
+
+Both failures are the per-host assertions that compare production's output against the hand-typed
+oracle. So the chain is: Task 2 adds the table (inert), Task 3 gives it an independent oracle
+(still inert), Task 4 makes production read it — **and at that moment a swapped pair becomes a test
+failure in two suites at once**. Had the oracle been derived from the table, as the backlog row
+originally proposed, the bottom row would read 0 / 0 and no point in the plan would ever catch it.
+
+This also confirms Task 4's declared gates are discriminating for this property: `bats
+tests/zshrc.d/profiles.bats` and `bats tests/zshrc.d/cross_shell.bats` are both in its acceptance
+list, and both fire. And it confirms the helper's own rationale comment is accurate *at its commit* —
+the "0 failures across all three profile suites" figure was re-measured after Task 3 landed, not
+inherited from the pre-Task-3 measurement.
 
 ---
 
@@ -265,9 +418,11 @@ acceptance:
     exit_code: 0
   - cmd: 'grep -q "PROFILE_LEGACY" config/profiles.zsh'
     exit_code: 0
-  - cmd: '! grep -q "readonly" config/profiles.zsh'
+  - cmd: '! sed "s/#.*//" config/profiles.zsh | grep -qE "(^|[[:space:]])readonly[[:space:]]"'
     exit_code: 0
   - cmd: 'zsh -n config/profiles.zsh'
+    exit_code: 0
+  - cmd: 'bash -c ''d=$(mktemp -d); git archive HEAD | tar -x -C "$d"; sed -i.bak "s/\[laptop\]=\"LAPTOP\"/[laptop]=\"STUDIO\"/" "$d/config/profiles.sh"; cd "$d" && bats tests/zshrc.d/profiles.bats 2>&1 | grep -qE "^not ok"'''
     exit_code: 0
 max_retries: 3
 files_touched:
@@ -277,6 +432,22 @@ depends_on: [2, 3]
 ```
 
 **Files:** `config/profiles.zsh:4-10` (header), `:6` region reason, `:63-83` (the `case`), `:85` (`unset`)
+
+**A third vocabulary gate, found before it ran.** `! grep -q "readonly" config/profiles.zsh` was
+labelled here as a regression guard that "passes today and must keep passing". It does not pass
+today: `readonly` appears once in that file, in the comment explaining why `export` is used instead.
+The gate would have failed on an untouched file, and an implementer would have had to either delete
+a load-bearing comment or report a blocker on a plan defect.
+
+Same defect as Task 3's gate 5, third instance: **the gate banned a word where the intent was to ban
+an assignment.** Corrected to strip comments first, then match `readonly` in command position.
+Verified three ways: exit 0 on the real file, exit 1 with `readonly LAPTOP=1` appended, exit 1 with
+an indented `  readonly STUDIO=1`.
+
+The pattern is now established enough to state as a rule for the rest of this plan: **any gate whose
+form is `grep <identifier>` over a file that discusses that identifier is measuring vocabulary.**
+Strip comments, anchor to command position, and test the gate against a correct file — not only
+against the base tree.
 
 **Gate provenance (base tree):** `! grep "laptop | laptop-1"` exits 1 (the case arm is at `:64`). The `! grep readonly` gate is a **regression guard, not a discriminator** — it passes today and must keep passing; a `readonly` here makes the second `source` of this file return 126 (measured on both zsh builds), degrading identity at login rather than crashing.
 
@@ -322,7 +493,9 @@ acceptance:
     exit_code: 0
   - cmd: 'grep -q "PROFILE_LEGACY" lib/detect_env.sh'
     exit_code: 0
-  - cmd: 'grep -q "5_general.zsh" lib/detect_env.sh'
+  - cmd: 'grep -E SC1124 lib/detect_env.sh | grep -q 5_general.zsh'
+    exit_code: 0
+  - cmd: '! grep -E SC1124 lib/detect_env.sh | grep -q "rbenv guard"'
     exit_code: 0
   - cmd: 'bash -n lib/detect_env.sh && shellcheck lib/detect_env.sh'
     exit_code: 0
@@ -348,6 +521,25 @@ legacy="${PROFILE_LEGACY[${hn}]:-}"
 `readonly`, not `export` — `detect_env` runs once per bash process. Measured on bash 5.2.21 **and** 5.3.15: `readonly` inside a function is global, an empty name errors loudly (`not a valid identifier`, rc 1), and the name position is a table value, never hostname-derived. Update the `:44-50` comment to point at the lookup; its export-vs-readonly reasoning is unchanged.
 
 No warning arm here — `detect_env.sh` has none today, adding one is new bash-side behaviour, and the zsh warning plus Task 3's oracle already cover drift.
+
+**The swap gate is the point of the whole chain, and it is a clean discriminator.** Measured on the
+tree as it stands before this task: a swapped `PROFILE_LEGACY` pair is caught by nothing, so the gate
+exits 1. With this task applied, `tests/zshrc.d/profiles.bats` reddens and the gate exits 0. Nothing
+about the gate can pass before the work is done, and nothing else in the plan asserts the property
+the design exists for — Decision 1's independent oracle is only worth having if a wrong table
+actually fails a test, and this is the line that says so.
+
+**RED first — added at the same time as Task 3's, and for a worse reason.** Task 5 also declared
+`tdd: required` with no RED-first instruction. The spec review named Task 3 as "the only" such task
+and listed Task 5 among those that had one; a mechanical enumeration of all seven task bodies found
+both. So the reviewer's finding was right and its scope was wrong, and the first fix — applied to
+Task 3 alone because that is what the review named — would have left the identical gap one task
+later. Verify one level wider than you fixed.
+
+The RED here: change `tests/setup_env/profiles.bats`'s per-host assertion to expect the value from
+`PROFILE_LEGACY` **before** `detect_env` reads it, so the bash-side suite fails while production is
+still running its `case`. That is the change whose absence the suite can observe. Confirm it fails
+on the lookup, not on a syntax error, before touching `lib/detect_env.sh`.
 
 **Known, accepted:** `[[ -n ${legacy} ]] && readonly ...` returns rc 1 for an unmapped host where the current `case` returns 0. Safe because the `CHRUBY_LOC` block at `:63-69` follows and masks it — but note the safety is _accidental_: `tests/setup_env/profiles.bats:57` and `tests/zshrc.d/cross_shell.bats:68` both do `if ! detect_env`, so if that trailing block ever moves, two suites go red. Do not restructure the function.
 
@@ -387,6 +579,8 @@ acceptance:
     exit_code: 0
   - cmd: 'grep -q "No other file needs changing" CLAUDE.md'
     exit_code: 0
+  - cmd: 'grep -B3 -A3 "No other file needs changing" CLAUDE.md | grep -q legacy_oracle'
+    exit_code: 0
 max_retries: 3
 files_touched:
   - CLAUDE.md
@@ -399,11 +593,67 @@ depends_on: [2, 3]
 
 **C1.** The section ends "No other file needs changing — `lib/detect_env.sh` and `config/profiles.zsh` both derive … from this one table." That has been wrong since #222, not newly wrong: following it literally today costs **5 edits across 5 files** (`PROFILE_MAP`, two production `case` arms, two test oracles) against a document promising one — reproduced by doing exactly that in a `git archive` copy and watching both suites fail. After this plan it is **3 edits across 2 files**. Write it as correcting a document that has been understating the work, not as documenting friction this change introduces; the opposite framing tells the next reader this change added steps when it removed 40% of them.
 
-Name both maps in the step list with the wired/wireless twin rule applying to `PROFILE_LEGACY` exactly as to `PROFILE_MAP`, name `tests/helpers/legacy_oracle.bash` as the one other file, and state the two failure modes because they differ: a missing oracle arm **fails the suite**; a missing `PROFILE_LEGACY` entry only **warns to stderr at login**.
+Name both maps in the step list with the wired/wireless twin rule applying to `PROFILE_LEGACY` exactly as to `PROFILE_MAP`, name `tests/helpers/legacy_oracle.bash` as the one other file, and state the two failure modes.
+
+**This instruction was false as first written, and the implementer refuted it by measurement rather
+than following it.** It said a missing oracle arm "fails the suite" while a missing `PROFILE_LEGACY`
+entry "only warns to stderr at login". Both fail the suite. Measured by adding a synthetic host to
+`PROFILE_MAP` only: **4 failures across two suites** — Task 2's own `every PROFILE_MAP key has a
+PROFILE_LEGACY entry`, the per-host assertions on the bash and zsh sides, and the wireless-twin
+check. A missing oracle arm gives 5. The stderr warning is what happens only if a mistake reaches a
+real shell *anyway*, via a bypassed hook — which is the distinction the shipped `CLAUDE.md` text
+draws instead.
+
+Sixth false claim this plan has carried, and the first caught by an **implementer** rather than a
+reviewer. The FORBIDDEN list's rule about fixing a wrong plan-prescribed test, applied to prose.
 
 **C4.** In Testing / Test Seams, name the helper and state that it is deliberately hand-typed rather than derived from `PROFILE_LEGACY` — otherwise the next reader "fixes" it into the circular form Decision 1 rejected, and `behavior.md` is the only thing standing between them and a green `[home-1]=HOME`.
 
 **Interfaces:** none — documentation only.
+
+---
+
+### Concurrency note — the index is the shared resource, not the files
+
+Tasks 4 and 5 were run overlapping (T4's fix round alongside T5's implementation) on the reasoning
+that their `files_touched` are disjoint. **That reasoning is wrong**, and `git-workflow.md` says so
+directly: two agents in one worktree share the git *index*, and disjoint paths do not protect
+against it.
+
+It surfaced for real. Mid-fix, T4's implementer found `lib/detect_env.sh` already **staged** by T5,
+and a bare `git commit` after its own `git add` would have swept T5's in-progress work into T4's
+commit. It used a pathspec-scoped commit — `git commit -m "..." -- <its two files>` — and reported
+the near miss. Verified afterwards: T4's commit contains exactly two files and T5's staged change is
+undisturbed.
+
+Nothing was lost, because the implementer was careful rather than because the plan was safe.
+
+**The same overlap cost a 22-minute stall, by a second and worse mechanism.** The index race is
+visible if you look for it; this one is not. The pre-commit hook runs `make lint` over the **whole
+repo**, so Task 5 — forbidden from touching `tests/zshrc.d/profiles.bats` — could not commit at all
+while Task 4 had that file half-written. A repo-wide gate on a shared tree means one agent's
+in-progress edit blocks every other agent's commit, whatever their `files_touched` say. Disjoint
+paths buy nothing against it.
+
+Task 5 then compounded it twice, and both are worth recording because neither is obvious:
+
+- It polled `until bash -n tests/zshrc.d/profiles.bats`. **That condition can never succeed** — a
+  `.bats` file is not valid bash (`@test "name" {` is a bats construct), so `bash -n` reports a
+  syntax error on any version of that file including a pristine one. The watcher would have spun
+  forever.
+- `make lint` checks `.bats` files with `shellcheck --severity=warning`, **not** `bash -n`. So the
+  condition it waited on was not even the gate that blocked it.
+
+And a subagent that ends its turn waiting for a notification is never woken, so the stall was
+terminal regardless of the condition. The correct move for a blocked agent is `status: blocker` with
+the diagnosis; the orchestrator clears it, which is what eventually happened.
+
+**Rule for this repo, stronger than the skill's:** do not overlap two tasks in one worktree when the
+pre-commit hook is repo-wide, even with disjoint `files_touched`. The hook, not the file set, is the
+shared resource — and unlike the index, its failure mode is a silent wait rather than a bad commit. The
+lesson for any future overlap in this repo: **exact-path `git add` is necessary but not sufficient**
+— a pathspec-scoped `git commit` is what actually bounds a commit when another agent may have staged
+something. Or run them sequentially, which is what the skill says and what I should have done.
 
 ---
 
@@ -420,7 +670,15 @@ acceptance:
     exit_code: 0
   - cmd: 'make test'
     exit_code: 0
-  - cmd: '[ "$(git grep -lE "laptop \| laptop-1" -- "*.sh" "*.zsh" "*.bats" | wc -l | tr -d " ")" -eq 1 ]'
+  - cmd: 'bash -c ''n=$({ bash scripts/list-shell-files.sh | tr " " "\n"; git ls-files "*.bats"; } | sort -u | xargs grep -lE "laptop \| laptop-1" 2>/dev/null | wc -l | tr -d " "); test "$n" -eq 1'''
+    exit_code: 0
+  - cmd: '[ "$(grep -vE "^\s*#" .config/.zshrc.d/5_general.zsh | grep -cE "WORKSTATION|CRUNCHER")" -eq 0 ]'
+    exit_code: 0
+  - cmd: '[ "$(grep -vE "^\s*#" .config/.zshrc.d/5_general.zsh | grep -cE "RATNA|LAPTOP|STUDIO")" -eq 2 ]'
+    exit_code: 0
+  - cmd: 'bash -c ''test "$(git grep -l PROFILE_LEGACY -- lib config | sort | tr "\n" " ")" = "config/profiles.sh config/profiles.zsh lib/detect_env.sh "'''
+    exit_code: 0
+  - cmd: 'test -f tests/helpers/legacy_oracle.bash'
     exit_code: 0
   - cmd: 'grep -q "2026-08-17-zsh-legacy-identity-consolidation" docs/superpowers/README.md'
     exit_code: 0
@@ -433,6 +691,30 @@ depends_on: [1, 4, 5, 6]
 
 **Files:** `docs/superpowers/README.md`, this plan file
 
+**Two gates added after Task 2's review, both pinning forward-dated prose.** `config/profiles.sh`'s
+corrected comments are true of this branch's *end state* and false at Task 2's own commit — they
+name `tests/helpers/legacy_oracle.bash`, which Task 3 creates, and claim all three maps are read by
+`lib/detect_env.sh` and `config/profiles.zsh`, which Tasks 4 and 5 make true. Nothing else in the
+plan revisits `profiles.sh`, and truncation is not hypothetical here: A2, Decision 2, B5 and
+Decision 3 were all cut by review. So the reader-list claim is asserted mechanically at plan end
+rather than hedged in prose — if a later task is cut, this gate fails instead of the comment
+quietly lying. Same for the oracle file's existence.
+
+**This gate's first form could not see the survivor, and it is the third instance of the same class
+in this plan.** It was `git grep -lE "laptop \| laptop-1" -- "*.sh" "*.zsh" "*.bats"`, expecting
+exactly 1 — the surviving independent oracle. But that oracle is `tests/helpers/legacy_oracle.bash`,
+and `.bash` matches none of those three extensions, so the gate returns **0** and fails at plan end
+on correct work. Measured after Task 5.
+
+The class: a pathspec is extension-keyed and cannot express "every shell file". Prior instances here
+were the read-site census using `--include='*.zsh'` (which does not match `.zshrc`, and hid the file
+that eventually cut the whole gcloud half of this spec), and `shell.md`'s own documented
+extensionless-hooks omission. Three times, in one plan, by the same author.
+
+Corrected to derive the file set from `scripts/list-shell-files.sh` — the repo's own content-derived
+shell scope, which finds files by shebang rather than by name — unioned with `git ls-files '*.bats'`.
+Verified after Task 5: exactly 1 file carries a `laptop | laptop-1` arm, and it is the oracle.
+
 **Gate provenance:** the eight-name `case` currently lives in 4 files; after Tasks 3–5 exactly **1** should remain — `tests/helpers/legacy_oracle.bash`, the deliberately independent oracle. Base tree returns 4, so the gate discriminates. That single survivor is Decision 1 made mechanically visible.
 
 **This task is the only one that runs `make test`.** ~9m34s, above the Bash tool's 120s auto-background threshold, so it must run here in the orchestrator's own turn and not inside any earlier task.
@@ -444,10 +726,40 @@ depends_on: [1, 4, 5, 6]
 - [ ] `make bash-coverage` — ≥ 91%. This is a **local preview**, ~1 point high; CI's figure on `ubuntu-latest` is the gate
 - [ ] Part A branch check from Verification Planning above. On this machine it must PASS, never SKIP
 - [ ] Cross-machine: `git archive --format=tar HEAD | ssh workstation '<extract to mktemp -d>; make test'`. Never against its checkout — 25 commits behind, self-reports `0` behind, and produced a false finding once already
-- [ ] Set this plan's row in `docs/superpowers/README.md` to **Done** and add the `> **Status: DONE**` banner at the top of this file
+- [ ] Record the coverage figure **from CI**, not from this machine. Local measured **92%
+      (3168/3435, 1410 tests, 16 heuristic disagreements)** at `b52a90c` — up from CI's 91%
+      (3159/3442, 1402 tests, 18 disagreements) at `5e1f934`. `CLAUDE.md` records that this repo
+      reads ~1 point higher on macOS than CI, so the expected CI figure is ~91%, i.e. **at the
+      floor**, exactly as happened on the shebang-scope branch. Do not write a local number into
+      `CLAUDE.md`; wait for CI and update `CLAUDE.md`'s coverage and test-count figures in Phase 3
+      `docs`.
+- [ ] **Do NOT set the plan row to Done here.** This instruction was wrong as originally written.
+      `repo-structure.md` says status goes to `Done` and the `> **Status: DONE**` banner is added
+      **once the PR merges** — not at the end of implementation. The row stays `In Progress` through
+      Phase 3 and flips on merge.
 - [ ] Commit via `caveman:caveman-commit`
 
 **Interfaces:** none.
+
+---
+
+## Gate hardening (applied after Task 1, from peer review)
+
+The question "does this check fire?" is weaker than "**what edit would a careful person make
+that silently retires it?**" Applying the second to this plan's own gates found one already
+vacuous and two retirable. All four fixes measured on the base tree.
+
+| gate | defect | fix |
+| ---- | ------ | --- |
+| T5 `grep -q "5_general.zsh" lib/detect_env.sh` | **Already vacuous.** That string appears twice — `:51` (the legacy-variable reason A3 edits) and `:63` (an unrelated `CHRUBY_LOC` reason). The gate passes on `:63` whatever happens to `:51`. | Scope to the `SC1124` line, and add a discriminator that the `rbenv guard` clause is **gone** from it (exit 1 on base, so it moves) |
+| T3 `! grep -q "PROFILE_LEGACY" <oracle>` | An oracle that sources `config/profiles.sh` and indexes it via a runtime-built name or `eval` never contains the literal, so the Decision-1 guard is bypassable by a change that reads as DRY | Widen to `! grep -qE "PROFILE_LEGACY\|profiles\.sh"` — the oracle must not reach the table by any route |
+| T6 `grep -q "No other file needs changing"` | Passes if C1 adds a paragraph elsewhere and never qualifies `:623` — satisfied remotely from the thing it checks | Add a windowed gate requiring `legacy_oracle` within 3 lines of the sentence, so the qualification must land *there* |
+| T1's two count gates | Checked in T1 only; nothing re-asserted the A2-cut constraint at plan end, so a later task could touch the gcloud block unobserved | Repeated in T7 |
+
+Task 1's own new negative test was checked the same way and **is** load-bearing: replacing the
+guard with `if true` on line 77 alone turns it red, while the keychain test at `:248` stays
+green (the two guards are byte-identical lines, so the mutation had to be line-scoped — a
+string-scoped one silently matched both and mutated neither).
 
 ---
 

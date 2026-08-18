@@ -145,24 +145,29 @@ setup() {
 
 # ── 5_general.zsh rbenv tests ─────────────────────────────────────────────────
 
-@test "5_general.zsh initializes rbenv on Linux Noble WORKSTATION" {
-  local _tmp_dir
-  _tmp_dir="$(mktemp -d)"
-  cat > "${_tmp_dir}/mock_rbenv" << 'EOF'
+_rbenv_mock() { # <dir> — writes a recording mock answering `init`/`local`
+  cat > "${1}/mock_rbenv" << 'EOF'
 #!/usr/bin/env bash
 if [[ "$1" == "init" ]]; then
   printf '_RBENV_INIT_CALLED=1\n'
 elif [[ "$1" == "local" ]]; then
   printf '_RBENV_LOCAL_CALLED=1\n'
+  printf '%s\n' "$2" > .ruby-version
 fi
 exit 0
 EOF
-  chmod +x "${_tmp_dir}/mock_rbenv"
+  chmod +x "${1}/mock_rbenv"
+}
+
+@test "5_general.zsh initializes rbenv on a Linux Noble dev profile" {
+  local _tmp_dir
+  _tmp_dir="$(mktemp -d)"
+  _rbenv_mock "${_tmp_dir}"
 
   run zsh -c "
     unset MACOS
     export PATH=\"${REPO_ROOT}/tests/mocks:\${PATH}\"
-    export LINUX=1; export UBUNTU=1; export NOBLE=1; export WORKSTATION=1
+    export LINUX=1; export UBUNTU=1; export NOBLE=1; export HAS_DEVTOOLS=1
     export _OVERRIDE_RBENV_BINARY='${_tmp_dir}/mock_rbenv'
     source '${ZSHRC_D}/5_general.zsh' 2>/dev/null
     printf '%s\n' \"\${_RBENV_INIT_CALLED:-unset}\"
@@ -174,24 +179,15 @@ EOF
   [ "$(printf '%s\n' "$output" | tail -1)" = "unset" ]
 }
 
-@test "5_general.zsh initializes rbenv on Linux Resolute CRUNCHER" {
+@test "5_general.zsh initializes rbenv on a Linux Resolute dev profile" {
   local _tmp_dir
   _tmp_dir="$(mktemp -d)"
-  cat > "${_tmp_dir}/mock_rbenv" << 'EOF'
-#!/usr/bin/env bash
-if [[ "$1" == "init" ]]; then
-  printf '_RBENV_INIT_CALLED=1\n'
-elif [[ "$1" == "local" ]]; then
-  printf '_RBENV_LOCAL_CALLED=1\n'
-fi
-exit 0
-EOF
-  chmod +x "${_tmp_dir}/mock_rbenv"
+  _rbenv_mock "${_tmp_dir}"
 
   run zsh -c "
     unset MACOS
     export PATH=\"${REPO_ROOT}/tests/mocks:\${PATH}\"
-    export LINUX=1; export UBUNTU=1; export RESOLUTE=1; export CRUNCHER=1
+    export LINUX=1; export UBUNTU=1; export RESOLUTE=1; export HAS_DEVTOOLS=1
     export _OVERRIDE_RBENV_BINARY='${_tmp_dir}/mock_rbenv'
     source '${ZSHRC_D}/5_general.zsh' 2>/dev/null
     printf '%s\n' \"\${_RBENV_INIT_CALLED:-unset}\"
@@ -204,15 +200,61 @@ EOF
 }
 
 @test "5_general.zsh skips rbenv when rbenv binary absent" {
-  run zsh -c "
+  local _tmp_dir
+  _tmp_dir="$(mktemp -d)"
+  _rbenv_mock "${_tmp_dir}"
+
+  # Paired control, same shape as the devtools test below: a single-run
+  # assertion of "unset" can't tell "binary genuinely absent, guard worked"
+  # apart from "shell never reached the Linux branch at all" -- deleting
+  # `unset MACOS` left the suite green precisely because the macOS chruby
+  # branch also leaves _RBENV_INIT_CALLED unset. Pairing a run against a
+  # REAL mock binary (asserting "1") with a run against a nonexistent path
+  # (asserting "unset") forces the Linux branch to actually execute for
+  # either assertion to mean anything.
+  local _snippet="
+    unset MACOS
     export PATH=\"${REPO_ROOT}/tests/mocks:\${PATH}\"
-    export LINUX=1; export UBUNTU=1; export NOBLE=1; export WORKSTATION=1
-    export _OVERRIDE_RBENV_BINARY='/nonexistent/rbenv'
+    export LINUX=1; export UBUNTU=1; export NOBLE=1; export HAS_DEVTOOLS=1
     source '${ZSHRC_D}/5_general.zsh' 2>/dev/null
     printf '%s\n' \"\${_RBENV_INIT_CALLED:-unset}\"
   "
-  [ "$status" -eq 0 ]
-  [ "$output" = "unset" ]
+  run zsh -c "export _OVERRIDE_RBENV_BINARY='${_tmp_dir}/mock_rbenv'; ${_snippet}"
+  local _with="${output}" _with_status="${status}"
+  run zsh -c "export _OVERRIDE_RBENV_BINARY='/nonexistent/rbenv'; ${_snippet}"
+  rm -rf "${_tmp_dir}"
+  [ "${_with_status}" -eq 0 ] && [ "$status" -eq 0 ]
+  [ "${_with}" = "1" ]      # the binary IS reachable when present — proves the branch runs
+  [ "$output" = "unset" ]   # the guard assertion: absent binary -> no init call
+}
+
+@test "5_general.zsh skips rbenv on a Linux host without devtools" {
+  local _tmp_dir
+  _tmp_dir="$(mktemp -d)"
+  _rbenv_mock "${_tmp_dir}"
+
+  # Paired control: the same mock, PATH, and profile vars are used for both
+  # runs, differing only in HAS_DEVTOOLS. This makes the mock's reachability
+  # itself an assertion (_with = "1") -- without it, repointing
+  # _OVERRIDE_RBENV_BINARY at a nonexistent path would make this test
+  # indistinguishable from "skips rbenv when rbenv binary absent" above, and
+  # a future dedupe pass could delete the guard this test exists to catch
+  # while the suite stayed green.
+  local _snippet="
+    unset MACOS
+    export PATH=\"${REPO_ROOT}/tests/mocks:\${PATH}\"
+    export LINUX=1; export UBUNTU=1; export NOBLE=1
+    export _OVERRIDE_RBENV_BINARY='${_tmp_dir}/mock_rbenv'
+    source '${ZSHRC_D}/5_general.zsh' 2>/dev/null
+    printf '%s\n' \"\${_RBENV_INIT_CALLED:-unset}\"
+  "
+  run zsh -c "export HAS_DEVTOOLS=1; ${_snippet}"
+  local _with="${output}" _with_status="${status}"
+  run zsh -c "unset HAS_DEVTOOLS; ${_snippet}"
+  rm -rf "${_tmp_dir}"
+  [ "${_with_status}" -eq 0 ] && [ "$status" -eq 0 ]
+  [ "${_with}" = "1" ]      # the mock IS reachable — this is what blocks the dedupe
+  [ "$output" = "unset" ]   # the guard assertion
 }
 
 # ── 5_general.zsh Homebrew prefix tests (CHRUBY_LOC / FZF_BASE) ─────────────
@@ -433,31 +475,34 @@ EOF
   _tmp_dir="$(mktemp -d)"
   _project_dir="$(mktemp -d)"
   printf '3.2.0\n' > "${_project_dir}/.ruby-version"
-  cat > "${_tmp_dir}/mock_rbenv" << 'EOF'
-#!/usr/bin/env bash
-if [[ "$1" == "init" ]]; then
-  printf '_RBENV_INIT_CALLED=1\n'
-elif [[ "$1" == "local" ]]; then
-  printf '_RBENV_LOCAL_CALLED=1\n'
-fi
-exit 0
-EOF
-  chmod +x "${_tmp_dir}/mock_rbenv"
+  _rbenv_mock "${_tmp_dir}"
 
+  # The probe (eval-ing the mock's own `local` output directly) is the
+  # control for the guard assertion above it: it proves the mock CAN report
+  # _RBENV_LOCAL_CALLED and CAN overwrite .ruby-version, so "unset" /
+  # "3.2.0" from production mean production genuinely never called `local`
+  # rather than the mock being unable to signal it either way. The
+  # .ruby-version check runs BEFORE the probe, not after -- the probe's own
+  # mock invocation writes .ruby-version too (that's what makes it a control
+  # for the mock's file-write fidelity), so checking it after would assert
+  # on the probe's write instead of production's.
   run zsh -c "
     unset MACOS
     cd '${_project_dir}'
     export PATH=\"${REPO_ROOT}/tests/mocks:\${PATH}\"
-    export LINUX=1; export UBUNTU=1; export NOBLE=1; export WORKSTATION=1
+    export LINUX=1; export UBUNTU=1; export NOBLE=1; export HAS_DEVTOOLS=1
     export _OVERRIDE_RBENV_BINARY='${_tmp_dir}/mock_rbenv'
     source '${ZSHRC_D}/5_general.zsh' 2>/dev/null
     printf '%s\n' \"\${_RBENV_LOCAL_CALLED:-unset}\"
     cat '${_project_dir}/.ruby-version'
+    eval \"\$('${_tmp_dir}/mock_rbenv' local 3.9.9)\"
+    printf '%s\n' \"\${_RBENV_LOCAL_CALLED:-unset}\"
   "
   rm -rf "${_tmp_dir}" "${_project_dir}"
   [ "$status" -eq 0 ]
-  [ "$(printf '%s\n' "$output" | head -1)" = "unset" ]
-  [ "$(printf '%s\n' "$output" | tail -1)" = "3.2.0" ]
+  [ "$(printf '%s\n' "$output" | sed -n '1p')" = "unset" ]  # guard: production never called local
+  [ "$(printf '%s\n' "$output" | sed -n '2p')" = "3.2.0" ]  # guard: fixture untouched by production
+  [ "$(printf '%s\n' "$output" | sed -n '3p')" = "1" ]      # control: the mock IS capable of reporting local
 }
 
 # ── 5_general.zsh keychain tests ──────────────────────────────────────────────
@@ -624,8 +669,8 @@ EOF
 
   # HAS_DEVTOOLS is what a real workstation/cruncher host has already had set
   # by config/profiles.zsh before this file sources -- set directly here,
-  # matching how the pre-existing rbenv tests above set WORKSTATION=1
-  # directly rather than driving the full profile-resolution boot sequence.
+  # matching how the rbenv tests above set HAS_DEVTOOLS=1 directly rather
+  # than driving the full profile-resolution boot sequence.
   run zsh -f -i -c "
     unset MACOS LINUX LAPTOP STUDIO RECEPTION OFFICE HOMES WORKSTATION CRUNCHER RATNA
     unset -m 'HAS_*'
