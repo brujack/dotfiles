@@ -34,9 +34,9 @@ detect_env() {
   done
 
   # Legacy hostname var aliases (kept until all call sites updated to use
-  # HAS_* vars). Mirrors config/profiles.zsh's own case statement exactly --
-  # same table, same eight variables, same wired/wireless mapping -- so a
-  # wireless twin (`<name>-1`) sets the same legacy variable as its wired
+  # HAS_* vars). Resolves via the same PROFILE_LEGACY lookup config/profiles.zsh
+  # uses -- same table, same eight variables, same wired/wireless mapping --
+  # so a wireless twin (`<name>-1`) sets the same legacy variable as its wired
   # counterpart instead of losing its identity the moment it's off ethernet
   # (see config/profiles.sh's comment for the wireless-suffix convention and
   # its two named exceptions).
@@ -48,17 +48,10 @@ detect_env() {
   # would make the second source return 126. See profiles.zsh's header
   # comment for the full rationale before "fixing" either side to match the
   # other.
-  # shellcheck disable=SC2034 # read by .config/.zshrc.d/2_functions.zsh, 5_general.zsh, 7_final.zsh, .zprofile -- one directive covers the whole case (SC1124: a directive cannot sit on a case-arm line). 5_general.zsh's keychain block collapsed to a MACOS/LINUX/HAS_DEVTOOLS test and reads none of these, but its rbenv guard (WORKSTATION/CRUNCHER) and gcloud completion arms (RATNA/LAPTOP/STUDIO) still do.
-  case "${hn}" in
-  laptop | laptop-1) readonly LAPTOP=1 ;;
-  studio | studio-1) readonly STUDIO=1 ;;
-  reception | reception-1) readonly RECEPTION=1 ;;
-  ratna | ratna-1) readonly RATNA=1 ;;
-  office | office-1) readonly OFFICE=1 ;;
-  home-1) readonly HOMES=1 ;;
-  workstation) readonly WORKSTATION=1 ;;
-  cruncher) readonly CRUNCHER=1 ;;
-  esac
+  # shellcheck disable=SC2034 # Read cross-file, which the linter cannot see. This list names EVERY read site -- add one when a site is added, remove one when removed, and treat an omission as seriously as a stale entry: a list that stops naming a live reader reads as "nothing uses these" and is how the variables get deleted. Sites: .config/.zshrc.d/2_functions.zsh, 5_general.zsh (gcloud completion arms at :131/:135 only -- its keychain block reads none of these), 7_final.zsh, .zprofile. One directive covers the whole lookup below (SC1124: a directive cannot sit on a case-arm line -- kept as the reason a single directive sits above the block, now that the case that made it load-bearing is gone).
+  local legacy
+  legacy="${PROFILE_LEGACY[${hn}]:-}"
+  [[ -n ${legacy} ]] && readonly "${legacy}=1"
   # setup variables based off of environment
   # shellcheck disable=SC2034 # read by .config/.zshrc.d/5_general.zsh (chruby sourcing) and lib/helpers.sh:run_doctor
   if [[ -n ${MACOS} ]]; then
