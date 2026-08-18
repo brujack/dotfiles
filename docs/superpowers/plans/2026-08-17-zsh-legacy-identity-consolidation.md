@@ -237,9 +237,19 @@ So if this task had followed the backlog row's original proposal and derived the
 concrete failure Decision 1 avoids, and it is why the acceptance gate mechanically forbids the
 oracle from reading the table or sourcing `profiles.sh`.
 
-Corollary for Task 2's own scope: its test can only check key coverage and the value set, which is
-correct — the *mapping* is not checkable until a reader consumes it. A reviewer asking why Task 2
-does not catch a swap has the right question and the answer is "Task 3 plus Task 4/5", not "gap".
+Corollary for Task 2's own scope — **and the first version of this paragraph was wrong.** It said
+the mapping "is not checkable until a reader consumes it". That is false, and Task 2's code-quality
+review refuted it with a working probe: `_expected_legacy_var`, a hand-typed oracle independent of
+the table, already sits ~30 lines above in the same file, and a 12-line loop comparing the two
+kills both a swapped pair and a lone diverged twin **with no production consumer involved**.
+Re-measured here: exit 1 on a swapped table.
+
+So the swap gap at Task 2 is **temporal, not structural**, and the deferral stands on a different
+reason than the one first given: Task 5 points production at the table, after which the
+pre-existing snapshot test catches a swap through a strictly stronger end-to-end path, and Task 3
+rewrites the oracle those 12 lines would have consumed. Adding the loop at Task 2 would be
+correct-but-superseded work. Do not reuse the retracted "not checkable" reasoning as precedent —
+it is the second false claim this plan has carried, after the RED-first error above.
 
 **Files:** new `tests/helpers/legacy_oracle.bash`; `tests/zshrc.d/profiles.bats:93-105,141-146`; `tests/setup_env/profiles.bats:316-328,338-341`
 
@@ -453,6 +463,10 @@ acceptance:
     exit_code: 0
   - cmd: '[ "$(grep -vE "^\s*#" .config/.zshrc.d/5_general.zsh | grep -cE "RATNA|LAPTOP|STUDIO")" -eq 2 ]'
     exit_code: 0
+  - cmd: 'bash -c ''test "$(git grep -l PROFILE_LEGACY -- lib config | sort | tr "\n" " ")" = "config/profiles.sh config/profiles.zsh lib/detect_env.sh "'''
+    exit_code: 0
+  - cmd: 'test -f tests/helpers/legacy_oracle.bash'
+    exit_code: 0
   - cmd: 'grep -q "2026-08-17-zsh-legacy-identity-consolidation" docs/superpowers/README.md'
     exit_code: 0
 max_retries: 3
@@ -463,6 +477,15 @@ depends_on: [1, 4, 5, 6]
 ```
 
 **Files:** `docs/superpowers/README.md`, this plan file
+
+**Two gates added after Task 2's review, both pinning forward-dated prose.** `config/profiles.sh`'s
+corrected comments are true of this branch's *end state* and false at Task 2's own commit — they
+name `tests/helpers/legacy_oracle.bash`, which Task 3 creates, and claim all three maps are read by
+`lib/detect_env.sh` and `config/profiles.zsh`, which Tasks 4 and 5 make true. Nothing else in the
+plan revisits `profiles.sh`, and truncation is not hypothetical here: A2, Decision 2, B5 and
+Decision 3 were all cut by review. So the reader-list claim is asserted mechanically at plan end
+rather than hedged in prose — if a later task is cut, this gate fails instead of the comment
+quietly lying. Same for the oracle file's existence.
 
 **Gate provenance:** the eight-name `case` currently lives in 4 files; after Tasks 3–5 exactly **1** should remain — `tests/helpers/legacy_oracle.bash`, the deliberately independent oracle. Base tree returns 4, so the gate discriminates. That single survivor is Decision 1 made mechanically visible.
 
