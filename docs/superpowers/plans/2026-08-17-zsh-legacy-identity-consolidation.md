@@ -578,7 +578,31 @@ commit. It used a pathspec-scoped commit — `git commit -m "..." -- <its two fi
 the near miss. Verified afterwards: T4's commit contains exactly two files and T5's staged change is
 undisturbed.
 
-Nothing was lost, because the implementer was careful rather than because the plan was safe. The
+Nothing was lost, because the implementer was careful rather than because the plan was safe.
+
+**The same overlap cost a 22-minute stall, by a second and worse mechanism.** The index race is
+visible if you look for it; this one is not. The pre-commit hook runs `make lint` over the **whole
+repo**, so Task 5 — forbidden from touching `tests/zshrc.d/profiles.bats` — could not commit at all
+while Task 4 had that file half-written. A repo-wide gate on a shared tree means one agent's
+in-progress edit blocks every other agent's commit, whatever their `files_touched` say. Disjoint
+paths buy nothing against it.
+
+Task 5 then compounded it twice, and both are worth recording because neither is obvious:
+
+- It polled `until bash -n tests/zshrc.d/profiles.bats`. **That condition can never succeed** — a
+  `.bats` file is not valid bash (`@test "name" {` is a bats construct), so `bash -n` reports a
+  syntax error on any version of that file including a pristine one. The watcher would have spun
+  forever.
+- `make lint` checks `.bats` files with `shellcheck --severity=warning`, **not** `bash -n`. So the
+  condition it waited on was not even the gate that blocked it.
+
+And a subagent that ends its turn waiting for a notification is never woken, so the stall was
+terminal regardless of the condition. The correct move for a blocked agent is `status: blocker` with
+the diagnosis; the orchestrator clears it, which is what eventually happened.
+
+**Rule for this repo, stronger than the skill's:** do not overlap two tasks in one worktree when the
+pre-commit hook is repo-wide, even with disjoint `files_touched`. The hook, not the file set, is the
+shared resource — and unlike the index, its failure mode is a silent wait rather than a bad commit. The
 lesson for any future overlap in this repo: **exact-path `git add` is necessary but not sufficient**
 — a pathspec-scoped `git commit` is what actually bounds a commit when another agent may have staged
 something. Or run them sequentially, which is what the skill says and what I should have done.
