@@ -1,5 +1,7 @@
 # zsh Legacy-Identity Consolidation Implementation Plan
 
+> **Status: DONE** — merged as dotfiles#223 on 2026-08-18, squashed to `21671b8`. CI on `ubuntu-latest`: 1411 tests, bash coverage **91% (3154/3437, 18 heuristic disagreements)** — at the floor, exactly as this plan predicted.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Retire the last `WORKSTATION`/`CRUNCHER` read in `5_general.zsh`, and collapse the hostname→legacy-variable mapping from four hand-typed copies to one production table plus one deliberately independent test oracle.

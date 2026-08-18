@@ -249,7 +249,7 @@ Rules for any new suppression:
 
 `.github/workflows/ci.yml` runs on PRs to master only (the pre-push hook gates branch pushes locally):
 
-- `test` job: installs a pinned, checksum-verified shellcheck plus bats, runs `make test`, then verifies test count ≥ 840 (regression proxy; 1402 tests, CI-measured 2026-08-17 on `5e1f934`)
+- `test` job: installs a pinned, checksum-verified shellcheck plus bats, runs `make test`, then verifies test count ≥ 840 (regression proxy; 1411 tests, CI-measured 2026-08-18 on `21671b8`)
 - `lint-macos` job: runs on `macos-latest` (advisory, not blocking auto-merge), two independent steps: `bash -n` over the derived `SHELL_FILES` list via `make print-SHELL_FILES | tr ' ' '\n' | xargs`, guarded by its own empty-list check — the `tr` is load-bearing, since `print-%` emits one space-separated line and `xargs -I` implies `-L1` and does not split on blanks, and `zsh -n` over the 10 tracked zsh files selected via `git ls-files '*.zsh' '*.zsh-theme' '.zshrc' '.zprofile'` — this second step refuses to pass on an empty file list
 - `bash-coverage` job: measures bash line coverage via PS4 xtrace on `ubuntu-latest`; **gates at 91%** — blocks auto-merge if coverage drops below floor
 - `secret-scan` job: runs gitleaks against recent commits (advisory, not blocking auto-merge)
@@ -301,8 +301,18 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 #### Bash
 
-- **Overall: 91%** (3159/3442 commands, 1402 tests, 18 heuristic disagreements) as measured by CI on `ubuntu-latest` for `5e1f934` — the figure the gate actually reads. All four numbers come from that single run; earlier revisions of this file carried a ratio and a disagreement count taken from different runs, which is why the two disagreed by one with no change in between. Gated in CI at **91%** (`bash-coverage` job, blocks auto-merge on drop). A percentage without its denominator is not a coverage figure — report both.
+- **Overall: 91%** (3154/3437 commands, 1411 tests, 18 heuristic disagreements) as measured by CI on `ubuntu-latest` for `21671b8` — the figure the gate actually reads. All four numbers come from that single run; earlier revisions of this file carried a ratio and a disagreement count taken from different runs, which is why the two disagreed by one with no change in between. Gated in CI at **91%** (`bash-coverage` job, blocks auto-merge on drop). A percentage without its denominator is not a coverage figure — report both.
 - **The preview discipline paid a fourth time, and the margin is now the story.** Local macOS measured **92% (3158/3429)** on the shebang-scope branch; CI returned **91% (3148/3431)** — one point lower, as on all three previous occasions, and this time _exactly at the floor_ rather than above it. Publish the CI figure; treat any local number as a preview and label it as one. The denominator moved 3419 → 3431 (+12) because `scripts/list-shell-files.sh` is a tracked `scripts/*.sh` file and so joins the instrumented set by the existing predicate — not because the coverage derivation changed, which it did not. 10 of its 12 lines are covered; the uncovered one is the `/sh` shebang arm, unreachable because all 101 tracked shell files carry `#!/usr/bin/env bash`.
+- **And a fifth time, on #223, with the gap holding at exactly one point again.** Local macOS
+  measured **92% (3168/3435, 16 disagreements)**; CI returned **91% (3154/3437, 18
+  disagreements)** — the published pair above. Both the ratio and the disagreement count differ
+  between the two runs, which is the reason this file insists they be read from the same run: a
+  reader who took 16 from a local preview and 3154/3437 from CI would be quoting a pair that
+  never existed. Coverage was also recorded in that PR's Definition of Done **by derivation**
+  rather than re-measurement for its final commit (the only file changed was a `.bats` file, and
+  0 of the 34 instrumented files are `.bats`), which was acceptable precisely because this CI
+  job independently checks it and gates at the floor — a derivation CI can falsify is not the
+  same as an assertion.
 - **The instrumented set is `setup_env.sh` plus tracked `config/*.sh`, `lib/*.sh`, `scripts/*.sh` and the two extensionless hooks (`scripts/pre-push`, `scripts/commit-msg`), derived from `git ls-files` at run time, less `scripts/bash-tracer.sh`.** It was a 13-entry literal array until 2026-08-07, covering 13 of 36 tracked `.sh` files, so the previously published 91% was computed over 36% of the repo. An omitted file left the percentage unchanged rather than lowering it, which is why nothing surfaced it. The predicate is _reached by the suite_, not _lives in a particular directory_ — `lib/detect_env.sh` sources `config/profiles.sh` and `lib/git_hooks.sh` sources `config/hook_repos.sh`. Check what is measured:
   ```bash
   bash scripts/run-bash-coverage.sh --list-sources
