@@ -224,6 +224,23 @@ files_touched:
 depends_on: [2]
 ```
 
+**Decision 1 is load-bearing, measured 2026-08-17 — not merely principled.** A swapped pair in
+`PROFILE_LEGACY` (`[laptop]="STUDIO"`, `[studio]="LAPTOP"`) leaves both names present and the
+count unchanged, so no set-equality or coverage assertion can see it. Measured against HEAD after
+Task 2: **0 failures across all three profile suites**, because production still reads its own
+`case` statements and nothing consumes the table yet.
+
+Once Tasks 4 and 5 point the readers at the table, the swap becomes observable — and the only
+thing that will observe it is a **hand-typed** oracle asserting `laptop → LAPTOP` independently.
+So if this task had followed the backlog row's original proposal and derived the oracle from
+`PROFILE_LEGACY`, a swapped pair would be caught by nothing at any point in the plan. That is the
+concrete failure Decision 1 avoids, and it is why the acceptance gate mechanically forbids the
+oracle from reading the table or sourcing `profiles.sh`.
+
+Corollary for Task 2's own scope: its test can only check key coverage and the value set, which is
+correct — the *mapping* is not checkable until a reader consumes it. A reviewer asking why Task 2
+does not catch a swap has the right question and the answer is "Task 3 plus Task 4/5", not "gap".
+
 **Files:** new `tests/helpers/legacy_oracle.bash`; `tests/zshrc.d/profiles.bats:93-105,141-146`; `tests/setup_env/profiles.bats:316-328,338-341`
 
 **Gate provenance (base tree):** `test -f` exits 1 (file absent — confirmed), and `! grep _profiles_expected_legacy` exits 1 (present at `:93`). The fifth gate is the one that matters most: it enforces Decision 1 mechanically, so a future author cannot "simplify" the oracle into reading the table it exists to check.
