@@ -97,7 +97,30 @@ leaving the *question* unexamined:
 
 Revisions 1–3 were each caught by someone re-running the command rather than reading the
 reasoning; revision 3 was caught by an independent `pr-review`, and revision 2's own
-correction introduced it. **Any future re-verification must keep the table self-consistent AND
+correction introduced it. Revision 4's own correction then introduced a fifth defect (a
+compressed restatement in `CLAUDE.md` that dropped the qualifier making its criterion true),
+which is worth recording because it is the same shape one level down: **compressing this
+material loses load-bearing precision**, and that is now measured rather than feared.
+
+**This receipt has an expiry condition, and it is not mechanically guarded.** The pair choice is
+true of the suite as it stands. Nothing prevents a future test from pinning `reception`'s or
+`ratna`'s legacy variable host-specifically, and that would silently un-isolate the documented
+mutation — a fifth revision arriving with nobody having edited the receipt, and per the paragraph
+above, the failure would look like a working measurement. If any test later pins either host's
+legacy variable that way, the pair stops isolating and the 2×2 must be re-measured against a
+different pair.
+
+No guard is proposed for this, deliberately. A mechanical check over a 13-row table is
+over-engineering, and this ADR already concedes that nothing mechanical can distinguish the
+duplication it defends from drift. This is `USER.md`'s "known-good is a point-in-time attestation,
+not a durable truth" applied to a receipt rather than to a revert target — the attestation names
+its own staleness condition instead of pretending not to have one.
+
+Note also what the criterion does **not** mean: both hostnames *are* named host-specifically
+elsewhere (`tests/setup_env/profiles.bats:94` and `:485` assert `PROFILE=mac_workstation` for
+each). `PROFILE` comes from `PROFILE_MAP`, which the swap does not touch, so those stay green.
+The qualifier is "legacy variable", and dropping it makes the rule appear refutable by a
+two-second grep — which is exactly how it was dropped once already. **Any future re-verification must keep the table self-consistent AND
 pick a host pair no other assertion names**, or it is measuring something else — and the
 failure will look like a working measurement, because the count will be plausible.
 
