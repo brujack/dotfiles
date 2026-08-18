@@ -322,6 +322,16 @@ sed 's|^  \[cruncher\]=.*|&\n  [newhost]="mac_mini"|' \
 
 `PROFILE=mac_mini` is the discriminator that the fixture table was read rather than bypassed — the real table yields `unknown`. Measured: the arm fires on a key absent from the oracle and does **not** fire on a key present in both, so the case can produce either outcome.
 
+**RED first — added after review; its absence was a plan defect.** Task 3 was the only
+`tdd: required` task in this plan whose body carried no RED-first instruction, while Tasks 1, 2, 4 and
+5 all did. The implementer landed the helper and its test in one commit, so no red tree ever existed,
+and it followed the plan exactly in doing so. A RED was available two ways: rewire the callers to the
+shared name before the helper exists (both suites then fail on a missing `source`), or land the B4b
+fixture and its assertion before the `*)` arm carries a message.
+
+Prefer the first — it is the change whose absence the suites can actually observe, and it fails with
+`No such file or directory` on the `source` line rather than on an assertion, which is unambiguous.
+
 **Rewiring:** `tests/setup_env/profiles.bats` already sources `tests/helpers/common.bash` in `setup()` — add one more `source`. `tests/zshrc.d/profiles.bats` sources no helper; add one in `setup()`. That runs at bats level, outside `_profiles_snapshot`'s `zsh -c`, so its isolation reasoning at `:14-37` is untouched. Keep the `no_legacy` exception set at `:132`. **Do not touch `_profiles_snapshot`'s `unset` line — B5 is cut.**
 
 **Interfaces:**
