@@ -68,8 +68,9 @@ if [[ -n ${_profiles_legacy} ]]; then
 elif [[ -n "${PROFILE_MAP[${_profiles_hostname}]:-}" ]]; then
   # A hostname PROFILE_MAP recognises (PROFILE/HAS_* resolved above) but
   # PROFILE_LEGACY has no entry for is a drifted table, not an unmapped
-  # guest machine -- warn rather than fail silently, since the ~19 zsh read
-  # sites that branch on LAPTOP/STUDIO/OFFICE/etc. would otherwise skip with
+  # guest machine -- warn rather than fail silently, since the zsh read
+  # sites that branch on LAPTOP/STUDIO/OFFICE/etc. (.zprofile,
+  # 2_functions.zsh, 5_general.zsh, 7_final.zsh) would otherwise skip with
   # no visible symptom. A genuinely unmapped hostname (PROFILE=unknown) is
   # the expected, silent case and does not warn.
   print -u2 "config/profiles.zsh: host '${_profiles_hostname}' resolved PROFILE=${PROFILE} but has no PROFILE_LEGACY entry -- add one in config/profiles.sh."

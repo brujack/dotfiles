@@ -248,7 +248,7 @@ _profiles_snapshot() { # <hostname>
     rm -f "${_err_file}"
     return 1
   }
-  grep -qF "host 'newhost' resolved PROFILE=mac_mini but has no PROFILE_LEGACY entry" "${_err_file}" || {
+  grep -qF "host 'newhost' resolved PROFILE=${got%% *} but has no PROFILE_LEGACY entry" "${_err_file}" || {
     printf 'expected drift warning not found on stderr:\n%s\n' "$(cat "${_err_file}")" >&2
     rm -f "${_err_file}"
     return 1
@@ -290,6 +290,20 @@ _profiles_snapshot() { # <hostname>
       printf 'HAS_GUI changed across re-source\n' >&2
       exit 1
     fi
+    # The final unset in config/profiles.zsh is the one constraint in this
+    # file with no detector elsewhere in this suite: dropping PROFILE_LEGACY
+    # from it (or dropping the unset of _profiles_legacy two lines above it)
+    # leaves every other test in this file green, and the leak is real --
+    # after sourcing, the shell carries PROFILE_LEGACY as a live 13-key
+    # associative array. This is the one place in the suite that already
+    # runs a real zsh process past a second source, so the check for a
+    # leaked map or scratch var lands here rather than in a new process. The
+    # trailing exit 1 matters: a bare condition as the final command would
+    # make the exit status of the whole script follow the condition, which
+    # is the same last-command-exit-status trap the swap-fixture tests in
+    # this file hit and fixed with an explicit exit 0.
+    [[ -z \${PROFILE_LEGACY+x} && -z \${PROFILE_MAP+x} && -z \${PROFILE_CAPS+x} \\
+       && -z \${_profiles_legacy+x} && -z \${_profiles_cap+x} && -z \${_profiles_hostname+x} ]] || exit 1
     exit 0
   "
   [ "$status" -eq 0 ]
