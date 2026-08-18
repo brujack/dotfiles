@@ -212,7 +212,7 @@ acceptance:
     exit_code: 0
   - cmd: 'bats tests/setup_env/profiles.bats'
     exit_code: 0
-  - cmd: '! grep -qE "PROFILE_LEGACY|profiles\.sh" tests/helpers/legacy_oracle.bash'
+  - cmd: '! sed "s/#.*//" tests/helpers/legacy_oracle.bash | grep -qE "(^|[[:space:]])((source|\.)[[:space:]]+[^[:space:]]*profiles\.sh|eval([[:space:]]|$))|\$\{?PROFILE_LEGACY"'
     exit_code: 0
   - cmd: 'shellcheck --severity=warning tests/helpers/legacy_oracle.bash'
     exit_code: 0
@@ -252,6 +252,26 @@ correct-but-superseded work. Do not reuse the retracted "not checkable" reasonin
 it is the second false claim this plan has carried, after the RED-first error above.
 
 **Files:** new `tests/helpers/legacy_oracle.bash`; `tests/zshrc.d/profiles.bats:93-105,141-146`; `tests/setup_env/profiles.bats:316-328,338-341`
+
+**Gate 5 was wrong twice, and the second version is the instructive one.** It began as
+`! grep -qE "PROFILE_LEGACY|profiles\.sh"` — a **substring** ban where the intent was a **behaviour**
+ban. Measured: that rejects a correct file. It forced the implementer to write "the production table"
+everywhere it wanted to name `PROFILE_LEGACY in config/profiles.sh`, weakening the one artifact whose
+entire job is explaining why it must not read that table. The implementer flagged the contradiction
+instead of silently molding to it, which is the only reason it surfaced.
+
+The first replacement was no better — three checks for `source`, `${PROFILE_LEGACY` and `eval`, where
+the helper's own rationale comment contains the word "eval" while warning against it. The gate matched
+a mention again, one layer down, same defect class as the gate it replaced.
+
+The working form strips comments first, then greps for uses. Verified in six cases: passes the helper
+as committed, passes it with the table named in both comment and message, and rejects
+`source .../profiles.sh`, `. ./config/profiles.sh`, `${PROFILE_LEGACY[...]}`, and `eval`.
+
+Two general lessons, both earned here: **a gate that greps for a word measures vocabulary, not
+behaviour**; and the correct-file-rejected direction is the one nobody tests, because a gate that
+fails closed feels safe. Every gate in this plan was checked against the base tree for "does it
+fail?" — none was checked for "does it pass a correct implementation?"
 
 **Gate provenance (base tree):** `test -f` exits 1 (file absent — confirmed), and `! grep _profiles_expected_legacy` exits 1 (present at `:93`). The fifth gate is the one that matters most: it enforces Decision 1 mechanically, so a future author cannot "simplify" the oracle into reading the table it exists to check.
 
