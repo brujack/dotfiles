@@ -371,7 +371,24 @@ case statement from it indirectly (`eval`, a runtime-built variable name, or sou
 something that itself sources it) — a derived oracle follows the same table it is meant to
 check, so a hostname swapped onto the wrong legacy variable in `PROFILE_LEGACY` would agree
 with itself and pass silently (`behavior.md`: a check derived from the same decision as the
-thing it checks cannot falsify it). It carries a `#!/usr/bin/env bash` shebang, which is
+thing it checks cannot falsify it). [ADR-0021](docs/adr/0021-hand-typed-test-oracle-for-the-identity-table.md)
+carries the 2x2 that measures this, and **two** caveats on re-verifying it -- both required, and
+each one was learned by getting it wrong. First, the mutation must be a **self-consistent** swap
+(both members of each wired/wireless pair), because swapping only the non-suffixed keys leaves the
+table internally inconsistent and the wireless-twin assertions then catch it without reference to
+the oracle at all -- proving twin-consistency instead. Second, the pair must be one whose
+**legacy variable is not pinned host-specifically by any other assertion**: `laptop` and `studio`
+are pinned that way elsewhere (a hardcoded
+`"STUDIO"` literal in `tests/zshrc.d/profiles.bats` and a studio-specific assertion in
+`tests/zshrc.d/unit.bats`), so a self-consistent swap of *that* pair is caught even when the
+oracle is derived, and the suite going red proves nothing about this file. `reception<->ratna` is
+the documented pair because neither has its legacy variable pinned that way. Both hostnames
+*are* named host-specifically elsewhere -- `tests/setup_env/profiles.bats:94` and `:485` assert
+`PROFILE=mac_workstation` for each -- but `PROFILE` comes from `PROFILE_MAP`, which the swap does
+not touch, which is why those two stay green. The qualifier is the whole criterion: drop it and a
+two-second grep appears to refute the rule.
+
+`tests/helpers/legacy_oracle.bash` carries a `#!/usr/bin/env bash` shebang, which is
 what puts it in `make lint`'s scope — `scripts/list-shell-files.sh` derives scope from
 first-line shebangs, not filenames, so this file is linted by the same mechanism as the
 extensionless hooks, not because its `.bash` extension happens to match a pathspec.

@@ -8,57 +8,71 @@
 # Deliberately hand-typed rather than derived from PROFILE_LEGACY in
 # config/profiles.sh, and the reason is measured rather than stylistic.
 #
-# Swap two values in that table -- [laptop]="STUDIO", [studio]="LAPTOP" -- and
-# both names are still present and the key count is unchanged, so every
-# permutation-invariant assertion built from the table still passes. Measured
-# against a clean archive of HEAD, once both production readers consume the
-# table: that swap fails 3 tests --
+# The mutation that tests this is a SELF-CONSISTENT swap of two values, both
+# members of each wired/wireless pair: [reception] and [reception-1] to "RATNA",
+# [ratna] and [ratna-1] to "RECEPTION". All 13 keys remain, all eight names
+# remain, and the value multiset is unchanged -- so the table is still
+# internally consistent and every permutation-invariant assertion built from it
+# still passes.
 #
-#     tests/setup_env/profiles.bats   not ok 25   (bash, via lib/detect_env.sh)
-#     tests/zshrc.d/profiles.bats     not ok  1   (zsh, via config/profiles.zsh)
-#     tests/setup_env/profiles.bats   not ok 24   (wired/wireless twin equality)
-#     tests/zshrc.d/cross_shell.bats  0 failures
+# Measured as a 2x2 against a clean archive per cell, baseline verified green
+# first, isolating the two oracle-based per-host assertions (zsh profiles.bats
+# "not ok 1", bash profiles.bats "not ok 25"):
 #
-# That last line is the point, and it is the load-bearing half: cross_shell
-# compares the two productions to each other, so when both read the same wrong
-# table they still agree and it stays GREEN. Two implementations that agree can
-# be wrong together -- the comparison of two productions does not notice this
-# class at all, whatever else does.
+#     oracle       table                  zsh not ok 1   bash not ok 25
+#     hand-typed   intact                 green          green
+#     hand-typed   reception<->ratna      FIRES          FIRES
+#     derived      reception<->ratna      green          green     <- the point
+#     derived      intact                 green          green
 #
-# What it is NOT: "only an oracle notices". An earlier version of this comment
-# said that, and said 2 tests, and both were wrong -- not ok 24 is a third
-# detector and it is not this oracle. It is one hardcoded end-to-end snapshot
-# case comparing studio against studio-1, and the whole snapshot includes the
-# LEGACY= line, so a swap landing on exactly one side of THAT pair breaks it.
+# Row 3 is why this file is not derived. A derived oracle follows the table it
+# checks, so production and oracle agree on the swapped values and both
+# assertions pass. Under that swap the hand-typed oracle produces exactly those
+# two reds and nothing else across all four affected suites; a derived one
+# produces none.
 #
-# Its reach is one host, measured both directions rather than reasoned about:
+# tests/zshrc.d/cross_shell.bats cannot help either, one level out for the same
+# reason: it compares the two PRODUCTIONS to each other, so when both read the
+# same wrong table they agree. Two implementations that agree can be wrong
+# together.
 #
-#     swap involving studio     ([laptop]/[studio])        3 red
-#     swap not involving studio ([office]/[reception])     2 red
-#     swap where neither has a twin ([workstation]/[cruncher])  2 red
+# TWO MUTATIONS THAT LOOK EQUIVALENT AND ARE NOT. Both were documented here
+# before this one, each correcting the previous one's count while neither asked
+# whether the mutation isolated the property being claimed:
 #
-# So the third detector is incidental to the documented mutation rather than a
-# general second line of defence -- it is not a loop over the wired/wireless
-# pairs, and 11 of the 13 keys are outside its reach. The two per-host
-# assertions above compare production output against THIS file and are what
-# catches the class.
+#   - Swapping only the non-suffixed keys ([laptop] without [laptop-1]) leaves
+#     the table internally INCONSISTENT, so the wireless-twin assertions catch
+#     it with no reference to this file. It proves twin-consistency.
+#   - Swapping [laptop]<->[studio] consistently is caught by two further
+#     detectors that are not this oracle and fire even when the oracle IS
+#     derived: a hardcoded "STUDIO" literal in tests/zshrc.d/profiles.bats and a
+#     studio-specific assertion in tests/zshrc.d/unit.bats. So "the defect
+#     ships" is false for that pair -- the suite still goes red.
 #
-# The receipt was corrected rather than the mutation. Re-wording the documented
-# swap to a pair that avoids studio would have made "exactly 2" true as written
-# and kept the stronger claim intact -- which is fitting the evidence to the
-# conclusion, the exact failure four commits on this branch already exist to
-# undo.
+# reception<->ratna is used precisely because no other assertion pins a
+# host-specific expectation for either one. Both names DO appear across the
+# suites -- in `unset` isolation lists, in `for v in <all eight>` loops, and in
+# the set-equality want-list -- but only ever as members of the eight-name set,
+# never as "host X must resolve to Y". Measured over tests/**.bats and **.bash
+# excluding this file: STUDIO on 66 lines (68 occurrences), LAPTOP on 43 lines
+# (45) -- line counts, not occurrence counts, because grep -c counts lines; the
+# distinction is stated because this receipt's earlier revisions were wrong about
+# numbers. Those counts include real per-host assertions,
+# which is exactly why the laptop<->studio pair cannot isolate the variable. The
+# set-equality test stays green because the swap preserves the value multiset. Choosing a mutation that isolates
+# the variable under test is not the same as re-wording a mutation to preserve a
+# false count -- an earlier revision of this comment warned against the latter,
+# correctly, and that warning does not apply here.
+#
+# So: do not source config/profiles.sh here, and do not derive this case
+# statement from it by any indirect route (eval, a runtime-built variable name,
+# or sourcing something that itself sources it). ADR-0021 carries the full
+# chain, including the four successive revisions this receipt needed.
 #
 # (Before 12e302c nothing read the table, so the same swap was invisible -- 0
 # failures across all three suites -- and what this oracle caught instead was a
 # swap in the two readers' own hand-written case arms. Those arms are gone now;
 # the mechanism is identical and the target moved.)
-#
-# So: do not source config/profiles.sh here, and do not derive this case
-# statement from it by any indirect route (eval, a runtime-built variable name,
-# or sourcing something that itself sources it). A derived oracle follows the
-# table it is checking and both rows above become 0. The plan's Decision 1
-# carries the full chain.
 _legacy_oracle_expected_var() { # <hostname>
   case "$1" in
   laptop | laptop-1) printf 'LAPTOP' ;;
