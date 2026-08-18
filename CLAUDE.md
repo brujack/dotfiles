@@ -353,6 +353,19 @@ cross_shell.bats` asserts both shells produce the same `PROFILE`/`HAS_*` set for
 key, which is the property the pre-existing test suite could not check because its own
 oracle was derived from the same wired-only table it was testing.
 
+**`tests/helpers/legacy_oracle.bash` is that shared oracle, sourced by both
+`tests/setup_env/profiles.bats` and `tests/zshrc.d/profiles.bats`, and it is deliberately
+hand-typed rather than derived from `PROFILE_LEGACY` in `config/profiles.sh`.** Do not
+"fix" the apparent duplication by sourcing `config/profiles.sh` here, or by building the
+case statement from it indirectly (`eval`, a runtime-built variable name, or sourcing
+something that itself sources it) — a derived oracle follows the same table it is meant to
+check, so a hostname swapped onto the wrong legacy variable in `PROFILE_LEGACY` would agree
+with itself and pass silently (`behavior.md`: a check derived from the same decision as the
+thing it checks cannot falsify it). It carries a `#!/usr/bin/env bash` shebang, which is
+what puts it in `make lint`'s scope — `scripts/list-shell-files.sh` derives scope from
+first-line shebangs, not filenames, so this file is linted by the same mechanism as the
+extensionless hooks, not because its `.bash` extension happens to match a pathspec.
+
 **`config/profiles.zsh` uses `export`; `lib/detect_env.sh` uses `readonly` — this is
 deliberate, not drift, and a future reader will otherwise "fix" one to match the other.**
 The zsh file is sourced twice per login+interactive shell, and a `readonly` reassignment on
@@ -602,6 +615,18 @@ well-formed answer, not an error, which is why `run_doctor` now checks for it ex
 
 ## Adding a New Machine
 
+**This section has claimed a single-file edit since it was written, and that was already
+wrong before this branch — it is being corrected here, not made true for the first time.**
+Measured directly against `origin/master` (this branch's merge-base): before the
+`PROFILE_LEGACY` consolidation, a new machine's legacy identity variable needed a
+hardcoded case arm in **five** separate files — `config/profiles.sh` (`PROFILE_MAP`),
+`config/profiles.zsh`'s own case statement, `lib/detect_env.sh`'s own case statement, and
+two independently hand-typed oracles duplicated across `tests/setup_env/profiles.bats`
+and `tests/zshrc.d/profiles.bats`. `tests/helpers/legacy_oracle.bash` did not exist at
+that commit. This branch's `PROFILE_LEGACY` table plus one shared test oracle brought that
+down to **3 edits across 2 files** — a 40% reduction, not an addition. Read what follows as
+the sentence going from wrong-by-omission to correct, not as new steps this branch created.
+
 1. Edit `config/profiles.sh` — add **both** the wired and the wireless-interface hostname to
    `PROFILE_MAP`, mapped to the same profile. A machine added under only its wired name
    silently loses every capability the moment it's on wifi — `PROFILE` resolves to `unknown`
@@ -615,13 +640,36 @@ declare -A PROFILE_MAP=(
 )
 ```
 
-2. If the machine needs a new profile, add it to both `PROFILE_MAP` and `PROFILE_CAPS` in
-   `config/profiles.sh`.
+2. In the same file, add the identical wired/wireless pair to `PROFILE_LEGACY`, mapping
+   both hostnames to the same legacy identity variable name (`LAPTOP`, `STUDIO`, ...) — the
+   same twin rule `PROFILE_MAP` follows, for the same reason: an entry only under the wired
+   name loses its legacy variable the moment the machine is on wifi. If the machine needs a
+   new profile, also add it to `PROFILE_CAPS`.
 
-3. Push a feature branch — CI validates → auto-merges to master.
+3. Add a case arm to `tests/helpers/legacy_oracle.bash` for the new hostname(s), naming the
+   same legacy variable. This oracle is deliberately hand-typed rather than derived from
+   `PROFILE_LEGACY` — a derived oracle would follow whatever the production table says, so a
+   hostname swapped onto the wrong legacy variable in `PROFILE_LEGACY` itself would agree
+   with the very table it exists to check, and pass silently.
 
-No other file needs changing — `lib/detect_env.sh` and `config/profiles.zsh` both derive
-`PROFILE`/`HAS_*`/the legacy identity variables from this one table.
+   Measured directly: skipping either step **fails the suite** — a dedicated test
+   (`every PROFILE_MAP key has a PROFILE_LEGACY entry`) catches a missing `PROFILE_LEGACY`
+   entry, and the per-host oracle comparison catches a missing `legacy_oracle.bash` arm — so
+   the normal push → CI → auto-merge path blocks either mistake before it ships. They differ
+   only in what happens if a mistake reaches a real shell anyway (a bypassed hook, a
+   disabled test): a missing `PROFILE_LEGACY` entry
+   degrades gracefully — `config/profiles.zsh` prints a warning to stderr at login and the
+   shell keeps going, never crashing — while a missing oracle arm has no production
+   consequence at all, because `tests/helpers/legacy_oracle.bash` is read only by the test
+   suite and no login shell ever sources it.
+
+4. Push a feature branch — CI validates → auto-merges to master.
+
+**No other file needs changing** — true for production, since `lib/detect_env.sh` and
+`config/profiles.zsh` both derive `PROFILE`/`HAS_*`/the legacy identity variables from
+`PROFILE_MAP`/`PROFILE_LEGACY` in this one file — but not for tests: `tests/helpers/legacy_oracle.bash`
+(step 3) is a second, deliberately independent copy of the same mapping and needs its own
+edit too.
 
 If a hostname is missing from the table, `run_doctor` fails and names the hostname and
 `config/profiles.sh` in its message — that is the check that catches the omission in step 1
