@@ -340,6 +340,57 @@ _profile_snapshot() {
   [ "${snapshot}" = "PROFILE=unknown" ]
 }
 
+# ── legacy var is table-driven, not a hardcoded case arm ───────────────────
+# Mirrors tests/zshrc.d/profiles.bats's "resolves ... not a hardcoded case
+# arm" test (commit 1007ab1). The oracle test above proves lib/detect_env.sh
+# agrees with the shared table's CONTENT -- it cannot discriminate a
+# table-driven reader from a hardcoded-case reader, since PROFILE_LEGACY and
+# the case arms were hand-typed to encode the same mapping and so agree
+# regardless of which one production actually reads (behavior.md: a check
+# derived from the same decision as the thing it checks cannot falsify it).
+# This test breaks that symmetry by mutating a COPY of the table and
+# asserting the resolved legacy var follows the mutation.
+#
+# The fixture copies lib/detect_env.sh alongside a sed-modified
+# config/profiles.sh, preserving the real lib/ + ../config relative layout --
+# detect_env.sh resolves its own directory via ${BASH_SOURCE[0]} and sources
+# "../config/profiles.sh" from there, so sourcing the fixture's copy of
+# detect_env.sh makes it read the fixture's table, not the real one. The
+# assertion is driven from the fixture's own mutated value (STUDIO), not a
+# literal describing the real table, so deleting the fixture's sed line
+# would make this test fail loudly rather than pass vacuously.
+@test "lib/detect_env.sh resolves the legacy var from PROFILE_LEGACY, not a hardcoded case arm" {
+  local fx="${BATS_TEST_TMPDIR}/fx-legacy-swap-bash"
+  mkdir -p "${fx}/lib" "${fx}/config"
+  cp "${REPO_ROOT}/lib/detect_env.sh" "${fx}/lib/"
+  sed 's/\[laptop\]="LAPTOP"/[laptop]="STUDIO"/' \
+    "${REPO_ROOT}/config/profiles.sh" >"${fx}/config/profiles.sh"
+
+  local got
+  got="$(bash -c "
+    unset LAPTOP STUDIO RECEPTION OFFICE HOMES WORKSTATION CRUNCHER RATNA PROFILE
+    unset \${!HAS_@}
+    export MOCK_HOSTNAME_OUTPUT='laptop'
+    export MOCK_UNAME_S='Darwin'
+    export PATH='${REPO_ROOT}/tests/mocks:${PATH}'
+    if ! source '${fx}/lib/detect_env.sh'; then
+      printf 'ERROR: could not source fixture detect_env.sh\n' >&2
+      exit 1
+    fi
+    if ! detect_env; then
+      printf 'ERROR: detect_env failed\n' >&2
+      exit 1
+    fi
+    [[ -n \${STUDIO:-} ]] && printf 'STUDIO'
+    [[ -n \${LAPTOP:-} ]] && printf 'LAPTOP'
+    exit 0
+  ")"
+  [ "${got}" = "STUDIO" ] || {
+    printf 'expected the legacy var to follow the mutated PROFILE_LEGACY table (STUDIO), got %s\n' "${got}" >&2
+    return 1
+  }
+}
+
 # ── PROFILE_LEGACY map ────────────────────────────────────────────────────────
 # PROFILE_LEGACY maps every PROFILE_MAP hostname key directly to its legacy
 # identity variable name. It is hand-written rather than derived from
