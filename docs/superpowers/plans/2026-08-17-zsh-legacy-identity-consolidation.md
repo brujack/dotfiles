@@ -484,6 +484,18 @@ legacy="${PROFILE_LEGACY[${hn}]:-}"
 
 No warning arm here — `detect_env.sh` has none today, adding one is new bash-side behaviour, and the zsh warning plus Task 3's oracle already cover drift.
 
+**RED first — added at the same time as Task 3's, and for a worse reason.** Task 5 also declared
+`tdd: required` with no RED-first instruction. The spec review named Task 3 as "the only" such task
+and listed Task 5 among those that had one; a mechanical enumeration of all seven task bodies found
+both. So the reviewer's finding was right and its scope was wrong, and the first fix — applied to
+Task 3 alone because that is what the review named — would have left the identical gap one task
+later. Verify one level wider than you fixed.
+
+The RED here: change `tests/setup_env/profiles.bats`'s per-host assertion to expect the value from
+`PROFILE_LEGACY` **before** `detect_env` reads it, so the bash-side suite fails while production is
+still running its `case`. That is the change whose absence the suite can observe. Confirm it fails
+on the lookup, not on a syntax error, before touching `lib/detect_env.sh`.
+
 **Known, accepted:** `[[ -n ${legacy} ]] && readonly ...` returns rc 1 for an unmapped host where the current `case` returns 0. Safe because the `CHRUBY_LOC` block at `:63-69` follows and masks it — but note the safety is _accidental_: `tests/setup_env/profiles.bats:57` and `tests/zshrc.d/cross_shell.bats:68` both do `if ! detect_env`, so if that trailing block ever moves, two suites go red. Do not restructure the function.
 
 **A3, bash half.** `:51`'s reason must **keep** naming `5_general.zsh`, narrowed to the gcloud arms, and must carry its own maintenance rule so the next editor knows both directions are wrong:
