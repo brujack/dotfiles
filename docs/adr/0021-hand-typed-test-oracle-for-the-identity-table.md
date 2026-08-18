@@ -53,8 +53,11 @@ version's Row 3 was wider than its measurement: two further detectors catch a
 `laptop<->studio` swap and fire *even when the oracle is derived* — a hardcoded `"STUDIO"`
 literal in `tests/zshrc.d/profiles.bats` and a studio-specific assertion in
 `tests/zshrc.d/unit.bats`. So "the defect ships" was false for that pair; the suite still
-went red, just not via the oracle. `STUDIO` appears 66 times across the suites outside the
-oracle and `LAPTOP` 43, and those counts include real per-host assertions. `reception` and
+went red, just not via the oracle. Measured over `tests/**` `.bats`/`.bash` excluding the
+oracle: `STUDIO` on **66 lines** (68 occurrences), `LAPTOP` on **43 lines** (45) — line counts,
+since `grep -c` counts lines rather than matches, and a receipt on its fourth revision because
+its numbers were wrong should say which it means. Those counts include real per-host
+assertions. `reception` and
 `ratna` appear only as members of the eight-name set — in `unset` isolation lists, in
 `for v in <all eight>` loops, and in the set-equality want-list — never as "host X must
 resolve to Y", which is what makes them the pair that isolates the variable under test.
