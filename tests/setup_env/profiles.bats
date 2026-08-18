@@ -368,6 +368,8 @@ _expected_legacy_var() { # <hostname>
   source "${REPO_ROOT}/config/profiles.sh"
   local -a keys
   keys=("${!PROFILE_MAP[@]}")
+  # Load-bearing: an empty key expansion makes the loop below vacuous, so the
+  # test would report ok having asserted nothing.
   [ "${#keys[@]}" -gt 0 ]
 
   local k
@@ -385,6 +387,10 @@ _expected_legacy_var() { # <hostname>
   values=("${PROFILE_LEGACY[@]}")
   [ "${#values[@]}" -gt 0 ]
 
+  # This set-equality is the guard against deriving PROFILE_LEGACY from
+  # PROFILE_MAP's keys: the mechanical result is home-1 -> HOME, which fails
+  # here and PASSES the key-coverage test above. Do not simplify it to a
+  # count or drop it as redundant.
   local got want
   got="$(printf '%s\n' "${values[@]}" | sort -u | tr '\n' ' ')"
   want="$(printf '%s\n' CRUNCHER HOMES LAPTOP OFFICE RATNA RECEPTION STUDIO WORKSTATION | sort -u | tr '\n' ' ')"
