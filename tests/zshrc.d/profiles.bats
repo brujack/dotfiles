@@ -220,18 +220,23 @@ _profiles_snapshot() { # <hostname>
 # All 13 PROFILE_MAP keys have a case arm today, so nothing exercises the
 # oracle's `*) return 1` diagnostic -- three stale file references shipped
 # in that exact position before this fix, undetected, for precisely that
-# reason. This fixture adds a host to a COPY of the table so the diagnostic
-# arm is actually reached by something real, not just called directly with
-# an arbitrary made-up string.
+# reason. This fixture adds a host to a COPY of the table and then drives
+# the oracle from THAT COPY'S OWN key set, not a hostname typed into this
+# test: a hostname typed here would make the fixture provably unrelated to
+# the assertion below it (measured -- deleting the fixture block left this
+# suite green), and the whole point of a fixture is that it, not the test
+# author, decides what reaches the diagnostic arm.
 #
 # The fixture copies config/profiles.zsh UNCHANGED and only edits the
 # sibling config/profiles.sh it sources -- config/profiles.zsh resolves that
 # source path relative to its own directory
 # (${${(%):-%x}:A:h}), so pointing the pair at a temp tree needs no override
 # seam in production code. PROFILE resolving to mac_mini for "newhost" is
-# the discriminator that the FIXTURE table was actually read: the real
-# table has no such key and would resolve PROFILE=unknown instead, which
-# would make this test pass for the wrong reason (an inert fixture).
+# the discriminator that the FIXTURE table was actually read by the zsh
+# reader: the real table has no such key and would resolve PROFILE=unknown
+# instead, which would make that half of the test pass for the wrong reason
+# (an inert fixture). It only proves the zsh reader consumed the fixture,
+# though -- the loop below is what proves the oracle did.
 @test "an unmapped PROFILE_MAP host reaches the shared oracle's diagnostic arm" {
   local fx="${BATS_TEST_TMPDIR}/fx"
   mkdir -p "${fx}/config"
@@ -253,9 +258,26 @@ _profiles_snapshot() { # <hostname>
     return 1
   }
 
-  run _legacy_oracle_expected_var newhost
-  [ "$status" -eq 1 ]
-  [[ "${output}" == *'PROFILE_MAP host "newhost" has no legacy-variable mapping in tests/helpers/legacy_oracle.bash'* ]]
+  # Drive the oracle from the fixture's OWN key set rather than a literal
+  # "newhost" -- this is what makes the fixture load-bearing instead of
+  # decorative. "newhost" is the one key the real table lacks, so this loop
+  # reaches the diagnostic arm exactly once, for that key, and only because
+  # the fixture put it there.
+  local -a fx_keys
+  local hn out rc=0
+  mapfile -t fx_keys < <(bash -c "source '${fx}/config/profiles.sh'; printf '%s\n' \"\${!PROFILE_MAP[@]}\"")
+  # Load-bearing: without this, a mapfile that yields nothing makes the
+  # loop below vacuous, rc stays 0, and the test fails on the wrong
+  # assertion instead of naming the real defect (an unreadable fixture).
+  [ "${#fx_keys[@]}" -gt 0 ]
+  for hn in "${fx_keys[@]}"; do
+    out="$(_legacy_oracle_expected_var "${hn}" 2>&1)" || {
+      rc=1
+      break
+    }
+  done
+  [ "${rc}" -eq 1 ]
+  [[ "${out}" == *'PROFILE_MAP host "newhost" has no legacy-variable mapping in tests/helpers/legacy_oracle.bash'* ]]
 }
 
 # Negative control for the test above: a host present in BOTH the table and
