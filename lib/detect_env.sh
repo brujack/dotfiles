@@ -48,7 +48,7 @@ detect_env() {
   # would make the second source return 126. See profiles.zsh's header
   # comment for the full rationale before "fixing" either side to match the
   # other.
-  # shellcheck disable=SC2034 # Read cross-file, which the linter cannot see. This list names EVERY read site -- add one when a site is added, remove one when removed, and treat an omission as seriously as a stale entry: a list that stops naming a live reader reads as "nothing uses these" and is how the variables get deleted. Sites: .config/.zshrc.d/2_functions.zsh, 5_general.zsh (gcloud completion arms at :131/:135 only -- its keychain block reads none of these), 7_final.zsh, .zprofile. One directive covers the whole lookup below (SC1124: a directive cannot sit on a case-arm line -- kept as the reason a single directive sits above the block, now that the case that made it load-bearing is gone).
+  # Read cross-file, which the linter cannot see. This list names EVERY read site -- add one when a site is added, remove one when removed, and treat an omission as seriously as a stale entry: a list that stops naming a live reader reads as "nothing uses these" and is how the variables get deleted. Sites: .config/.zshrc.d/2_functions.zsh, 5_general.zsh (gcloud completion arms at :131/:135 only -- its keychain block reads none of these), 7_final.zsh, .zprofile.
   local legacy
   legacy="${PROFILE_LEGACY[${hn}]:-}"
   [[ -n ${legacy} ]] && readonly "${legacy}=1"

@@ -67,6 +67,7 @@ _profile_snapshot() {
     for v in LAPTOP STUDIO RECEPTION OFFICE HOMES WORKSTATION CRUNCHER RATNA; do
       if [[ -n \${!v} ]]; then
         printf 'LEGACY=%s\n' \"\${v}\"
+        [[ \$(declare -p \"\${v}\") == declare\ -*r* ]] || printf 'LEGACY_NOT_READONLY=%s\n' \"\${v}\"
       fi
     done
     compgen -v | grep '^HAS_' | sort
@@ -327,7 +328,19 @@ _profile_snapshot() {
       printf 'expected legacy var %s not set for %s\nsnapshot:\n%s\n' "${expected_legacy}" "${hn}" "${snapshot}" >&2
       return 1
     }
+    printf '%s\n' "${snapshot}" | grep -q '^LEGACY_NOT_READONLY=' && {
+      printf 'legacy var for %s is not readonly:\nsnapshot:\n%s\n' "${hn}" "${snapshot}" >&2
+      return 1
+    }
   done
+  # Explicit success: without this, the function's implicit return status is
+  # whatever the last statement in the final loop iteration produced -- and
+  # that statement is the `grep -q ... && { ... }` guard above, whose exit
+  # code is 1 (grep's "not found") in exactly the case this test wants to
+  # PASS. A bare `&&`/`||` guard as the final command of a loop body is the
+  # same last-command-exit-status trap documented in
+  # tests/zshrc.d/profiles.bats's idempotent re-source test.
+  return 0
 }
 
 @test "unmapped hostname sets no legacy identity variable" {
