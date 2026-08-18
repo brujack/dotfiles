@@ -53,8 +53,11 @@
 # host-specific expectation for either one. Both names DO appear across the
 # suites -- in `unset` isolation lists, in `for v in <all eight>` loops, and in
 # the set-equality want-list -- but only ever as members of the eight-name set,
-# never as "host X must resolve to Y". Measured: STUDIO appears 66 times outside
-# this file and LAPTOP 43, and those counts include real per-host assertions,
+# never as "host X must resolve to Y". Measured over tests/**.bats and **.bash
+# excluding this file: STUDIO on 66 lines (68 occurrences), LAPTOP on 43 lines
+# (45) -- line counts, not occurrence counts, because grep -c counts lines; the
+# distinction is stated because this receipt's earlier revisions were wrong about
+# numbers. Those counts include real per-host assertions,
 # which is exactly why the laptop<->studio pair cannot isolate the variable. The
 # set-equality test stays green because the swap preserves the value multiset. Choosing a mutation that isolates
 # the variable under test is not the same as re-wording a mutation to preserve a

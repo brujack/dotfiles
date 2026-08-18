@@ -372,10 +372,16 @@ something that itself sources it) — a derived oracle follows the same table it
 check, so a hostname swapped onto the wrong legacy variable in `PROFILE_LEGACY` would agree
 with itself and pass silently (`behavior.md`: a check derived from the same decision as the
 thing it checks cannot falsify it). [ADR-0021](docs/adr/0021-hand-typed-test-oracle-for-the-identity-table.md)
-carries the 2x2 that measures this, and the one caveat on re-verifying it: the mutation must be
-a **self-consistent** swap (both members of each wired/wireless pair), because swapping only the
-non-suffixed keys leaves the table internally inconsistent and the wireless-twin assertions then
-catch it without reference to the oracle at all -- proving twin-consistency instead. It carries a `#!/usr/bin/env bash` shebang, which is
+carries the 2x2 that measures this, and **two** caveats on re-verifying it -- both required, and
+each one was learned by getting it wrong. First, the mutation must be a **self-consistent** swap
+(both members of each wired/wireless pair), because swapping only the non-suffixed keys leaves the
+table internally inconsistent and the wireless-twin assertions then catch it without reference to
+the oracle at all -- proving twin-consistency instead. Second, the pair must be one **no other
+assertion names host-specifically**: `laptop` and `studio` are pinned elsewhere (a hardcoded
+`"STUDIO"` literal in `tests/zshrc.d/profiles.bats` and a studio-specific assertion in
+`tests/zshrc.d/unit.bats`), so a self-consistent swap of *that* pair is caught even when the
+oracle is derived, and the suite going red proves nothing about this file. `reception<->ratna` is
+the documented pair because neither is named that way anywhere. It carries a `#!/usr/bin/env bash` shebang, which is
 what puts it in `make lint`'s scope — `scripts/list-shell-files.sh` derives scope from
 first-line shebangs, not filenames, so this file is linted by the same mechanism as the
 extensionless hooks, not because its `.bash` extension happens to match a pathspec.
