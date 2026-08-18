@@ -29,21 +29,39 @@ of defect the rest of the suite is blind to.
 `PROFILE_LEGACY`, and must not reach either by any indirect route** — `eval`, a
 runtime-constructed variable name, or sourcing something that itself sources the table.
 
-The reasoning is measured, not stylistic. Consider a swap of two entries — `[laptop]` and
-`[laptop-1]` both to `STUDIO`, `[studio]` and `[studio-1]` both to `LAPTOP`. Every name is
-still present, the key count is unchanged, and the table remains internally self-consistent,
-so every permutation-invariant assertion in the suite still passes. Measured against a clean
-archive of `21671b8`, isolating the two oracle-based per-host assertions:
+The reasoning is measured, not stylistic. Consider a swap of two entries — `[reception]` and
+`[reception-1]` both to `RATNA`, `[ratna]` and `[ratna-1]` both to `RECEPTION`. All 13 keys
+remain, all eight names remain, the value multiset is unchanged, and the table stays
+internally self-consistent, so every permutation-invariant assertion in the suite still
+passes. Measured with one fresh `git archive` per cell and the baseline verified green before
+any mutation was believed, isolating the two oracle-based per-host assertions:
 
-| oracle      | table            | zsh per-host | bash per-host |
-| ----------- | ---------------- | ------------ | ------------- |
-| hand-typed  | intact           | green        | green         |
-| hand-typed  | consistent swap  | **FIRES**    | **FIRES**     |
-| derived     | consistent swap  | green        | green         |
-| derived     | intact           | green        | green         |
+| oracle      | table               | zsh per-host | bash per-host |
+| ----------- | ------------------- | ------------ | ------------- |
+| hand-typed  | intact              | green        | green         |
+| hand-typed  | `reception<->ratna` | **FIRES**    | **FIRES**     |
+| derived     | `reception<->ratna` | green        | green         |
+| derived     | intact              | green        | green         |
 
 Row 3 is the decision. A derived oracle follows the table it is checking, so production and
-oracle agree on the swapped values and both assertions pass — the defect ships.
+oracle agree on the swapped values and both assertions pass — the defect ships. Under this
+swap the hand-typed oracle produces exactly those two reds and nothing else across all four
+affected suites; a derived one produces none.
+
+**Why this pair and not `laptop<->studio`, which the first version of this ADR used.** That
+version's Row 3 was wider than its measurement: two further detectors catch a
+`laptop<->studio` swap and fire *even when the oracle is derived* — a hardcoded `"STUDIO"`
+literal in `tests/zshrc.d/profiles.bats` and a studio-specific assertion in
+`tests/zshrc.d/unit.bats`. So "the defect ships" was false for that pair; the suite still
+went red, just not via the oracle. `STUDIO` appears 66 times across the suites outside the
+oracle and `LAPTOP` 43, and those counts include real per-host assertions. `reception` and
+`ratna` appear only as members of the eight-name set — in `unset` isolation lists, in
+`for v in <all eight>` loops, and in the set-equality want-list — never as "host X must
+resolve to Y", which is what makes them the pair that isolates the variable under test.
+
+Choosing a mutation that isolates the variable is not the same as re-wording a mutation to
+preserve a false count. An earlier revision of the oracle's own comment warned against the
+latter, correctly, and that warning does not apply here.
 
 `tests/zshrc.d/cross_shell.bats` cannot help here either, and for the same underlying reason
 one level out: it compares the two *productions* to each other, so when both read the same
@@ -60,13 +78,25 @@ single-file edit `config/profiles.sh`'s header comment claimed before #223 corre
 can distinguish it from drift. `CLAUDE.md` carries a do-not-"fix" warning and the oracle file
 carries the measurement. Both are part of the decision, not commentary on it.
 
-**A malformed mutation will over-report, and did.** Swapping only the non-suffixed keys
-(`[laptop]` without `[laptop-1]`) leaves the table internally *inconsistent*, which the
-wireless-twin tests catch without reference to the oracle at all. That mutation reddens 3
-tests rather than 2 and therefore demonstrates twin-consistency, not oracle independence. The
-oracle's own comment documented that malformed variant through three successive revisions
-before the 2×2 above was measured. Any future re-verification must keep the table
-self-consistent, or it is testing something else.
+**Choosing the mutation is the hard part, and it took four attempts.** The receipt for this
+decision was wrong four times, and each revision fixed the previous one's *number* while
+leaving the *question* unexamined:
+
+1. "Exactly 2 tests fail, and only an oracle notices." Wrong count.
+2. "3 tests fail; the third is a `studio`/`studio-1` snapshot comparison." Right count, but the
+   mutation swapped only the non-suffixed keys, leaving the table internally *inconsistent* —
+   so the wireless-twin assertions caught it with no reference to the oracle. It measured
+   twin-consistency.
+3. A self-consistent `laptop<->studio` swap. Right mutation shape, wrong population: two
+   detectors outside the two counted assertions fire even under a derived oracle, so the
+   central "the defect ships" claim was false.
+4. `reception<->ratna`, above. Every cell true as written.
+
+Revisions 1–3 were each caught by someone re-running the command rather than reading the
+reasoning; revision 3 was caught by an independent `pr-review`, and revision 2's own
+correction introduced it. **Any future re-verification must keep the table self-consistent AND
+pick a host pair no other assertion names**, or it is measuring something else — and the
+failure will look like a working measurement, because the count will be plausible.
 
 **This closes the mirror of a gap ADR-0019 records as open.** There, nothing pins that
 `SHELL_FILES` is *derived* rather than *enumerated* — a hardcoded list of today's correct
