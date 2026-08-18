@@ -6,20 +6,28 @@
 # its diagnostic message.
 #
 # Deliberately hand-typed rather than derived from PROFILE_LEGACY in
-# config/profiles.sh. Two measurements, and they describe different commits --
-# stating only the first is what made an earlier version of this comment wrong:
+# config/profiles.sh, and the reason is measured rather than stylistic.
 #
-#   * Today, this oracle's value is catching a swap in the two production
-#     readers' own case arms. Swap laptop<->studio in BOTH lib/detect_env.sh
-#     and config/profiles.zsh and it fails 2 tests -- while
-#     tests/zshrc.d/cross_shell.bats stays GREEN, because that suite compares
-#     the two productions to each other and both moved together. That mutual
-#     blind spot is precisely what an independent oracle closes.
+# Swap two values in that table -- [laptop]="STUDIO", [studio]="LAPTOP" -- and
+# both names are still present and the key count is unchanged, so every
+# permutation-invariant assertion built from the table still passes. Measured at
+# 12e302c, once both production readers consume the table: that swap fails
+# exactly 2 tests, one per language side --
 #
-#   * A swap in PROFILE_LEGACY itself is invisible right now -- 0 failures
-#     across all three profile suites -- because no production code reads that
-#     table yet. Once it does, the same swap fails the same 2 tests, from the
-#     table instead of the case arms.
+#     tests/setup_env/profiles.bats   not ok 25   (bash, via lib/detect_env.sh)
+#     tests/zshrc.d/profiles.bats     not ok  1   (zsh, via config/profiles.zsh)
+#     tests/zshrc.d/cross_shell.bats  0 failures
+#
+# That last line is the point. cross_shell compares the two productions to each
+# other, so when both read the same wrong table they still agree and it stays
+# GREEN. Two implementations that agree can be wrong together; only an oracle
+# derived by a different mechanism notices. Both failures above are per-host
+# assertions comparing production output against THIS file.
+#
+# (Before 12e302c nothing read the table, so the same swap was invisible -- 0
+# failures across all three suites -- and what this oracle caught instead was a
+# swap in the two readers' own hand-written case arms. Those arms are gone now;
+# the mechanism is identical and the target moved.)
 #
 # So: do not source config/profiles.sh here, and do not derive this case
 # statement from it by any indirect route (eval, a runtime-built variable name,
