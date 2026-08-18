@@ -9,6 +9,7 @@
 
 setup() {
   REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
+  source "${REPO_ROOT}/tests/helpers/legacy_oracle.bash"
 }
 
 # Resolves config/profiles.zsh for one hostname in an isolated zsh process
@@ -240,4 +241,57 @@ _profiles_expected_legacy() { # <hostname>
 @test "config/profiles.zsh has valid zsh syntax" {
   run zsh -n "${REPO_ROOT}/config/profiles.zsh"
   [ "$status" -eq 0 ]
+}
+
+# ── shared legacy oracle: unmapped-host diagnostic ──────────────────────────
+# All 13 PROFILE_MAP keys have a case arm today, so nothing exercises the
+# oracle's `*) return 1` diagnostic -- three stale file references shipped
+# in that exact position before this fix, undetected, for precisely that
+# reason. This fixture adds a host to a COPY of the table so the diagnostic
+# arm is actually reached by something real, not just called directly with
+# an arbitrary made-up string.
+#
+# The fixture copies config/profiles.zsh UNCHANGED and only edits the
+# sibling config/profiles.sh it sources -- config/profiles.zsh resolves that
+# source path relative to its own directory
+# (${${(%):-%x}:A:h}), so pointing the pair at a temp tree needs no override
+# seam in production code. PROFILE resolving to mac_mini for "newhost" is
+# the discriminator that the FIXTURE table was actually read: the real
+# table has no such key and would resolve PROFILE=unknown instead, which
+# would make this test pass for the wrong reason (an inert fixture).
+@test "an unmapped PROFILE_MAP host reaches the shared oracle's diagnostic arm" {
+  local fx="${BATS_TEST_TMPDIR}/fx"
+  mkdir -p "${fx}/config"
+  cp "${REPO_ROOT}/config/profiles.zsh" "${fx}/config/"
+  sed 's|^  \[cruncher\]="wsl2_workstation"|&\n  [newhost]="mac_mini"|' \
+    "${REPO_ROOT}/config/profiles.sh" >"${fx}/config/profiles.sh"
+
+  local got_profile
+  got_profile="$(zsh -c "
+    unset LAPTOP STUDIO RECEPTION OFFICE HOMES WORKSTATION CRUNCHER RATNA PROFILE
+    unset -m 'HAS_*'
+    export PATH=\"${REPO_ROOT}/tests/mocks:\${PATH}\"
+    export MOCK_HOSTNAME_OUTPUT='newhost'
+    source '${fx}/config/profiles.zsh' || exit 1
+    printf '%s' \"\${PROFILE}\"
+  ")"
+  [ "${got_profile}" = "mac_mini" ] || {
+    printf 'fixture table was not actually read: got PROFILE=%s (want mac_mini)\n' "${got_profile}" >&2
+    return 1
+  }
+
+  run _legacy_oracle_expected_var newhost
+  [ "$status" -eq 1 ]
+  [[ "${output}" == *'PROFILE_MAP host "newhost" has no legacy-variable mapping in tests/helpers/legacy_oracle.bash'* ]]
+}
+
+# Negative control for the test above: a host present in BOTH the table and
+# the oracle must NOT reach the diagnostic arm. Without this, nothing
+# distinguishes "the arm fires correctly for an unmapped host" from "the arm
+# always fires" -- a case statement collapsed to a single `*)` would pass
+# the positive test above and only this one would catch it.
+@test "a mapped PROFILE_MAP host does not reach the shared oracle's diagnostic arm" {
+  run _legacy_oracle_expected_var studio
+  [ "$status" -eq 0 ]
+  [ "${output}" = "STUDIO" ]
 }
