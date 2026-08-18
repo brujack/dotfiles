@@ -428,6 +428,42 @@ _profile_snapshot() {
   done
 }
 
+# The mirror of the key-coverage test above, and it needs its own test rather
+# than falling out of that one: the two tables are now adjacent in one file, so
+# a hand-edit can add a key to either side alone. The forward direction
+# (PROFILE_MAP key with no PROFILE_LEGACY entry) is caught both here and by a
+# production warning in config/profiles.zsh. The reverse direction had neither
+# -- measured, adding [ghosthost]="STUDIO" to PROFILE_LEGACY alone reddened 0
+# tests across all four suites while both readers resolved PROFILE=unknown with
+# zero HAS_* AND STUDIO=1 set, rc 0, stderr silent.
+#
+# That state is worse than it looks: .config/.zshrc.d/7_final.zsh:60 reads the
+# eight legacy vars as a proxy for "is this host mapped", so it would answer
+# mapped while every HAS_* gate answers unmapped -- a half-initialised login
+# identity with nothing reporting it.
+#
+# Deliberately test-only, with no matching production warning. The forward
+# warning earns its place because a machine legitimately gets added to
+# PROFILE_MAP by an operator following CLAUDE.md's Adding a New Machine steps,
+# so that drift reaches a real shell. Reverse drift can only come from editing
+# PROFILE_LEGACY directly, which this test gates before merge -- so a loop over
+# the table on every login shell would buy nothing and cost every shell start.
+@test "every PROFILE_LEGACY key exists in PROFILE_MAP" {
+  source "${REPO_ROOT}/config/profiles.sh"
+  local -a keys
+  keys=("${!PROFILE_LEGACY[@]}")
+  # Same non-vacuity guard as the sibling test above, for the same reason.
+  [ "${#keys[@]}" -gt 0 ]
+
+  local k
+  for k in "${keys[@]}"; do
+    [ -n "${PROFILE_MAP[${k}]:-}" ] || {
+      printf 'PROFILE_LEGACY key "%s" is not in PROFILE_MAP -- it would set a legacy identity variable on a host that resolves PROFILE=unknown with zero HAS_* capabilities. Add "%s" to PROFILE_MAP, or remove it from PROFILE_LEGACY.\n' "${k}" "${k}" >&2
+      return 1
+    }
+  done
+}
+
 @test "PROFILE_LEGACY values are exactly the eight legacy identity variable names" {
   source "${REPO_ROOT}/config/profiles.sh"
   local -a values

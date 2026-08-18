@@ -57,6 +57,16 @@ _profiles_snapshot() { # <hostname>
     for v in LAPTOP STUDIO RECEPTION OFFICE HOMES WORKSTATION CRUNCHER RATNA; do
       if [[ -n \${(P)v:-} ]]; then
         printf 'LEGACY=%s\n' \"\${v}\"
+        # Mirror of the bash side's LEGACY_NOT_READONLY probe, and pinning the
+        # opposite scope modifier on purpose: config/profiles.zsh must export
+        # (never readonly -- the file is sourced twice per login+interactive
+        # shell and a readonly reassignment makes the second source return
+        # 126), while lib/detect_env.sh must be readonly. CLAUDE.md calls that
+        # asymmetry deliberate; without this line only the bash half was
+        # pinned, so export -> typeset -g passed all four suites while
+        # reading as a tidy-up. \${(Pt)v} is zsh's type string: scalar-export
+        # when exported, bare scalar when not.
+        [[ \${(Pt)v} == *export* ]] || printf 'LEGACY_NOT_EXPORTED=%s\n' \"\${v}\"
       fi
     done
     print -l \${(k)parameters[(I)HAS_*]} | sort
@@ -146,6 +156,10 @@ _profiles_snapshot() { # <hostname>
     if [ -n "${expected_legacy}" ]; then
       printf '%s\n' "${snapshot}" | grep -qx "LEGACY=${expected_legacy}" || {
         printf 'expected legacy var %s not set for %s\nsnapshot:\n%s\n' "${expected_legacy}" "${hn}" "${snapshot}" >&2
+        return 1
+      }
+      printf '%s\n' "${snapshot}" | grep -q '^LEGACY_NOT_EXPORTED=' && {
+        printf 'legacy var for %s is set but not exported:\nsnapshot:\n%s\n' "${hn}" "${snapshot}" >&2
         return 1
       }
     fi
@@ -383,13 +397,21 @@ _profiles_snapshot() { # <hostname>
 # Negative control for the test above: a host present in BOTH the table and
 # the oracle must NOT reach the diagnostic arm. Without this, nothing
 # distinguishes "the arm fires correctly for an unmapped host" from "the arm
-  # Redundant by design: this asserts the success contract (a mapped host
-  # returns 0 with its name on stdout) and no mutation is known that only
-  # this test catches -- collapsing the case to a single *) arm reddens 4
-  # tests including the fixture test above. Kept because it costs nothing
-  # and states the contract explicitly. An earlier version of this comment
-  # claimed it was the sole detector of that collapse; measured false.
-# the positive test above and only this one would catch it.
+# fires for every host, mapped or not" -- the positive test alone cannot tell
+# a working guard from an unconditional one.
+#
+# Redundant by design: this asserts the success contract (a mapped host
+# returns 0 with its name on stdout) and no mutation is known that only this
+# test catches -- collapsing the case to a single *) arm reddens 4 tests
+# including the fixture test above. Kept because it costs nothing and states
+# the contract explicitly. An earlier version of this comment claimed it was
+# the sole detector of that collapse; measured false.
+#
+# (The two paragraphs above were spliced into each other by an earlier edit --
+# the first one's closing clause was replaced by the second, leaving its tail
+# orphaned below. The orphaned tail read "only this one would catch it", which
+# is the very claim the second paragraph retracts, so it was dropped rather
+# than reattached.)
 @test "a mapped PROFILE_MAP host does not reach the shared oracle's diagnostic arm" {
   run _legacy_oracle_expected_var studio
   [ "$status" -eq 0 ]

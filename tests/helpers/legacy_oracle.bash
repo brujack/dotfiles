@@ -10,19 +10,44 @@
 #
 # Swap two values in that table -- [laptop]="STUDIO", [studio]="LAPTOP" -- and
 # both names are still present and the key count is unchanged, so every
-# permutation-invariant assertion built from the table still passes. Measured at
-# 12e302c, once both production readers consume the table: that swap fails
-# exactly 2 tests, one per language side --
+# permutation-invariant assertion built from the table still passes. Measured
+# against a clean archive of HEAD, once both production readers consume the
+# table: that swap fails 3 tests --
 #
 #     tests/setup_env/profiles.bats   not ok 25   (bash, via lib/detect_env.sh)
 #     tests/zshrc.d/profiles.bats     not ok  1   (zsh, via config/profiles.zsh)
+#     tests/setup_env/profiles.bats   not ok 24   (wired/wireless twin equality)
 #     tests/zshrc.d/cross_shell.bats  0 failures
 #
-# That last line is the point. cross_shell compares the two productions to each
-# other, so when both read the same wrong table they still agree and it stays
-# GREEN. Two implementations that agree can be wrong together; only an oracle
-# derived by a different mechanism notices. Both failures above are per-host
-# assertions comparing production output against THIS file.
+# That last line is the point, and it is the load-bearing half: cross_shell
+# compares the two productions to each other, so when both read the same wrong
+# table they still agree and it stays GREEN. Two implementations that agree can
+# be wrong together -- the comparison of two productions does not notice this
+# class at all, whatever else does.
+#
+# What it is NOT: "only an oracle notices". An earlier version of this comment
+# said that, and said 2 tests, and both were wrong -- not ok 24 is a third
+# detector and it is not this oracle. It is one hardcoded end-to-end snapshot
+# case comparing studio against studio-1, and the whole snapshot includes the
+# LEGACY= line, so a swap landing on exactly one side of THAT pair breaks it.
+#
+# Its reach is one host, measured both directions rather than reasoned about:
+#
+#     swap involving studio     ([laptop]/[studio])        3 red
+#     swap not involving studio ([office]/[reception])     2 red
+#     swap where neither has a twin ([workstation]/[cruncher])  2 red
+#
+# So the third detector is incidental to the documented mutation rather than a
+# general second line of defence -- it is not a loop over the wired/wireless
+# pairs, and 11 of the 13 keys are outside its reach. The two per-host
+# assertions above compare production output against THIS file and are what
+# catches the class.
+#
+# The receipt was corrected rather than the mutation. Re-wording the documented
+# swap to a pair that avoids studio would have made "exactly 2" true as written
+# and kept the stronger claim intact -- which is fitting the evidence to the
+# conclusion, the exact failure four commits on this branch already exist to
+# undo.
 #
 # (Before 12e302c nothing read the table, so the same swap was invisible -- 0
 # failures across all three suites -- and what this oracle caught instead was a
