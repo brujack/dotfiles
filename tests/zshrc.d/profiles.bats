@@ -159,6 +159,43 @@ _profiles_snapshot() { # <hostname>
   done
 }
 
+# ── legacy var is table-driven, not a hardcoded case arm ───────────────────
+# The test above cannot discriminate a table-driven reader from a
+# hardcoded-case reader: PROFILE_LEGACY in config/profiles.sh and the case
+# arms in config/profiles.zsh were both hand-typed to encode the same
+# mapping, so they agree today regardless of which one production actually
+# reads (behavior.md: a check derived from the same decision as the thing it
+# checks cannot falsify it). This test breaks that symmetry by mutating a
+# COPY of the table and asserting the resolved legacy var follows the
+# mutation. Measured against a pre-lookup config/profiles.zsh: this fails
+# with "got LAPTOP" (want STUDIO) -- the hardcoded case arm ignores the
+# swapped table entirely. Same sed pattern as the plan's own swap-detection
+# acceptance gate, so this test and that gate agree on what "table-driven"
+# means.
+@test "config/profiles.zsh resolves the legacy var from PROFILE_LEGACY, not a hardcoded case arm" {
+  local fx="${BATS_TEST_TMPDIR}/fx-legacy-swap"
+  mkdir -p "${fx}/config"
+  cp "${REPO_ROOT}/config/profiles.zsh" "${fx}/config/"
+  sed 's/\[laptop\]="LAPTOP"/[laptop]="STUDIO"/' \
+    "${REPO_ROOT}/config/profiles.sh" >"${fx}/config/profiles.sh"
+
+  local got
+  got="$(zsh -c "
+    unset LAPTOP STUDIO RECEPTION OFFICE HOMES WORKSTATION CRUNCHER RATNA PROFILE
+    unset -m 'HAS_*'
+    export PATH=\"${REPO_ROOT}/tests/mocks:\${PATH}\"
+    export MOCK_HOSTNAME_OUTPUT='laptop'
+    source '${fx}/config/profiles.zsh' 2>/dev/null || exit 1
+    [[ -n \${STUDIO:-} ]] && printf 'STUDIO'
+    [[ -n \${LAPTOP:-} ]] && printf 'LAPTOP'
+    exit 0
+  ")"
+  [ "${got}" = "STUDIO" ] || {
+    printf 'expected the legacy var to follow the mutated PROFILE_LEGACY table (STUDIO), got %s\n' "${got}" >&2
+    return 1
+  }
+}
+
 # ── unmapped hostname ───────────────────────────────────────────────────────
 
 @test "unmapped hostname yields PROFILE=unknown, zero HAS_*, and no legacy var" {
@@ -168,6 +205,55 @@ _profiles_snapshot() { # <hostname>
   # folds in would break this match, same as an unexpected LEGACY= or HAS_*
   # line would.
   [ "${snapshot}" = "PROFILE=unknown" ]
+}
+
+# ── drifted-table warning ───────────────────────────────────────────────────
+# Mirrors the fixture pattern the shared-oracle test below uses: a
+# PROFILE_MAP key with no PROFILE_LEGACY entry is exactly the drifted-table
+# case the `elif` branch in config/profiles.zsh exists to surface. The
+# fixture adds "newhost" to a COPY of PROFILE_MAP only -- PROFILE_LEGACY is
+# left untouched, so the absence is real, not simulated by deleting an
+# existing entry. Driving PROFILE from the fixture's own resolution (rather
+# than asserting a literal "mac_mini") is what proves the warning names the
+# host and PROFILE the fixture actually produced.
+
+@test "a PROFILE_MAP host with no PROFILE_LEGACY entry warns on stderr and sets no legacy var" {
+  local fx="${BATS_TEST_TMPDIR}/fx-drift"
+  mkdir -p "${fx}/config"
+  cp "${REPO_ROOT}/config/profiles.zsh" "${fx}/config/"
+  sed 's|^  \[cruncher\]="wsl2_workstation"|&\n  [newhost]="mac_mini"|' \
+    "${REPO_ROOT}/config/profiles.sh" >"${fx}/config/profiles.sh"
+
+  local _err_file="${BATS_TEST_TMPDIR}/drift_err" got
+  got="$(zsh -c "
+    unset LAPTOP STUDIO RECEPTION OFFICE HOMES WORKSTATION CRUNCHER RATNA PROFILE
+    unset -m 'HAS_*'
+    export PATH=\"${REPO_ROOT}/tests/mocks:\${PATH}\"
+    export MOCK_HOSTNAME_OUTPUT='newhost'
+    source '${fx}/config/profiles.zsh' 2>'${_err_file}' || exit 1
+    printf '%s' \"\${PROFILE}\"
+    for v in LAPTOP STUDIO RECEPTION OFFICE HOMES WORKSTATION CRUNCHER RATNA; do
+      [[ -n \${(P)v:-} ]] && printf ' LEGACY=%s' \"\${v}\"
+    done
+    exit 0
+  ")"
+
+  [[ "${got}" == mac_mini* ]] || {
+    printf 'fixture table was not read: got "%s" (want PROFILE=mac_mini)\n' "${got}" >&2
+    rm -f "${_err_file}"
+    return 1
+  }
+  [[ "${got}" != *LEGACY=* ]] || {
+    printf 'a drifted-table host must not get a legacy var: %s\n' "${got}" >&2
+    rm -f "${_err_file}"
+    return 1
+  }
+  grep -qF "host 'newhost' resolved PROFILE=mac_mini but has no PROFILE_LEGACY entry" "${_err_file}" || {
+    printf 'expected drift warning not found on stderr:\n%s\n' "$(cat "${_err_file}")" >&2
+    rm -f "${_err_file}"
+    return 1
+  }
+  rm -f "${_err_file}"
 }
 
 # ── idempotent re-source ────────────────────────────────────────────────────
