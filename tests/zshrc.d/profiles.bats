@@ -283,7 +283,12 @@ _profiles_snapshot() { # <hostname>
 # Negative control for the test above: a host present in BOTH the table and
 # the oracle must NOT reach the diagnostic arm. Without this, nothing
 # distinguishes "the arm fires correctly for an unmapped host" from "the arm
-# always fires" -- a case statement collapsed to a single `*)` would pass
+  # Redundant by design: this asserts the success contract (a mapped host
+  # returns 0 with its name on stdout) and no mutation is known that only
+  # this test catches -- collapsing the case to a single *) arm reddens 4
+  # tests including the fixture test above. Kept because it costs nothing
+  # and states the contract explicitly. An earlier version of this comment
+  # claimed it was the sole detector of that collapse; measured false.
 # the positive test above and only this one would catch it.
 @test "a mapped PROFILE_MAP host does not reach the shared oracle's diagnostic arm" {
   run _legacy_oracle_expected_var studio
