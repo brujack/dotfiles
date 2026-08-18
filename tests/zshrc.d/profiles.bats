@@ -158,11 +158,23 @@ _profiles_snapshot() { # <hostname>
         printf 'expected legacy var %s not set for %s\nsnapshot:\n%s\n' "${expected_legacy}" "${hn}" "${snapshot}" >&2
         return 1
       }
-      printf '%s\n' "${snapshot}" | grep -q '^LEGACY_NOT_EXPORTED=' && {
-        printf 'legacy var for %s is set but not exported:\nsnapshot:\n%s\n' "${hn}" "${snapshot}" >&2
-        return 1
-      }
     fi
+
+    # Deliberately OUTSIDE the expected_legacy branch above. Nested inside it,
+    # this only validated export-ness for hosts the oracle says SHOULD have a
+    # legacy var -- a host in the no_legacy exception set that nonetheless got
+    # one set-but-unexported would pass unchecked. Unreachable today (no_legacy
+    # is empty) but the set exists precisely so a future host lands in it, and
+    # the probe's output is already in the snapshot either way, so the
+    # unconditional form costs nothing.
+    #
+    # It does NOT close the wider gap it revealed: the no_legacy path asserts
+    # nothing else either -- not even that such a host has no legacy var at all.
+    # That needs a fixture host rather than a moved line and is backlogged.
+    printf '%s\n' "${snapshot}" | grep -q '^LEGACY_NOT_EXPORTED=' && {
+      printf 'legacy var for %s is set but not exported:\nsnapshot:\n%s\n' "${hn}" "${snapshot}" >&2
+      return 1
+    }
 
     local got_has
     got_has="$(printf '%s\n' "${snapshot}" | grep '^HAS_' || true)"
