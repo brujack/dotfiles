@@ -726,7 +726,17 @@ Verified after Task 5: exactly 1 file carries a `laptop | laptop-1` arm, and it 
 - [ ] `make bash-coverage` — ≥ 91%. This is a **local preview**, ~1 point high; CI's figure on `ubuntu-latest` is the gate
 - [ ] Part A branch check from Verification Planning above. On this machine it must PASS, never SKIP
 - [ ] Cross-machine: `git archive --format=tar HEAD | ssh workstation '<extract to mktemp -d>; make test'`. Never against its checkout — 25 commits behind, self-reports `0` behind, and produced a false finding once already
-- [ ] Set this plan's row in `docs/superpowers/README.md` to **Done** and add the `> **Status: DONE**` banner at the top of this file
+- [ ] Record the coverage figure **from CI**, not from this machine. Local measured **92%
+      (3168/3435, 1410 tests, 16 heuristic disagreements)** at `b52a90c` — up from CI's 91%
+      (3159/3442, 1402 tests, 18 disagreements) at `5e1f934`. `CLAUDE.md` records that this repo
+      reads ~1 point higher on macOS than CI, so the expected CI figure is ~91%, i.e. **at the
+      floor**, exactly as happened on the shebang-scope branch. Do not write a local number into
+      `CLAUDE.md`; wait for CI and update `CLAUDE.md`'s coverage and test-count figures in Phase 3
+      `docs`.
+- [ ] **Do NOT set the plan row to Done here.** This instruction was wrong as originally written.
+      `repo-structure.md` says status goes to `Done` and the `> **Status: DONE**` banner is added
+      **once the PR merges** — not at the end of implementation. The row stays `In Progress` through
+      Phase 3 and flips on merge.
 - [ ] Commit via `caveman:caveman-commit`
 
 **Interfaces:** none.
