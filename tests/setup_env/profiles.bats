@@ -4,6 +4,7 @@
 setup() {
   REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
   source "${REPO_ROOT}/tests/helpers/common.bash"
+  source "${REPO_ROOT}/tests/helpers/legacy_oracle.bash"
   load_mocks
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
   export MOCK_UNAME_S="Darwin"
@@ -302,30 +303,15 @@ _profile_snapshot() {
 # ── legacy identity variables ─────────────────────────────────────────────────
 # lib/detect_env.sh derives LAPTOP/STUDIO/RECEPTION/RATNA/OFFICE/HOMES/
 # WORKSTATION/CRUNCHER from the same PROFILE_MAP table config/profiles.zsh
-# uses -- see that file's case statement for the canonical mapping this
-# mirrors. The KEY SET under test comes from PROFILE_MAP itself (as with the
+# uses. The KEY SET under test comes from PROFILE_MAP itself (as with the
 # wireless-twin test above), not a hand-typed host list, so a machine added
 # tomorrow without a case arm here is caught rather than silently untested.
-
-# Maps a PROFILE_MAP hostname key to the legacy variable lib/detect_env.sh is
-# expected to set for it -- mirrors config/profiles.zsh's own case statement
-# exactly (see tests/zshrc.d/profiles.bats's _profiles_expected_legacy for
-# the zsh-side twin of this function). The *) arm returns non-zero rather
-# than printing empty, so a PROFILE_MAP key missing from this mapping fails
-# loudly instead of the assertion below silently comparing "" to "".
-_expected_legacy_var() { # <hostname>
-  case "$1" in
-  laptop | laptop-1) printf 'LAPTOP' ;;
-  studio | studio-1) printf 'STUDIO' ;;
-  reception | reception-1) printf 'RECEPTION' ;;
-  ratna | ratna-1) printf 'RATNA' ;;
-  office | office-1) printf 'OFFICE' ;;
-  home-1) printf 'HOMES' ;;
-  workstation) printf 'WORKSTATION' ;;
-  cruncher) printf 'CRUNCHER' ;;
-  *) return 1 ;;
-  esac
-}
+#
+# The expected legacy variable for each hostname comes from the shared
+# oracle (tests/helpers/legacy_oracle.bash, sourced in setup()) rather than
+# a function local to this file -- see that file for why it is hand-typed
+# rather than derived from the production table, and
+# tests/zshrc.d/profiles.bats for the zsh-side suite that shares it.
 
 @test "every PROFILE_MAP hostname sets the right legacy identity variable in bash" {
   source "${REPO_ROOT}/config/profiles.sh"
@@ -335,10 +321,7 @@ _expected_legacy_var() { # <hostname>
 
   local hn expected_legacy snapshot
   for hn in "${keys[@]}"; do
-    expected_legacy="$(_expected_legacy_var "${hn}")" || {
-      printf 'PROFILE_MAP host "%s" has no legacy-variable mapping in _expected_legacy_var (tests/setup_env/profiles.bats). Add a case arm for it.\n' "${hn}" >&2
-      return 1
-    }
+    expected_legacy="$(_legacy_oracle_expected_var "${hn}")" || return 1
     snapshot="$(_profile_snapshot "${hn}")"
     printf '%s\n' "${snapshot}" | grep -qx "LEGACY=${expected_legacy}" || {
       printf 'expected legacy var %s not set for %s\nsnapshot:\n%s\n' "${expected_legacy}" "${hn}" "${snapshot}" >&2
