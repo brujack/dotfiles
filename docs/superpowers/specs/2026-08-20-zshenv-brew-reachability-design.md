@@ -1,8 +1,53 @@
 # `.zshenv` — brew reachable from every zsh actor
 
 **Date:** 2026-08-20
-**Status:** Proposed
+**Status:** BLOCKED — core assumption refuted, see Lens Review
 **Supersedes:** `2026-08-20-linuxbrew-login-path-design.md` (RETIRED unbuilt)
+
+## Lens review 2026-08-20 — three lenses, core assumption REFUTED
+
+**The design's mechanism causes a measured regression, and the mechanism is not separable
+from the value.** Prepending linuxbrew is how `ssh workstation '<cmd>'` gains `uv`; it is
+also how that actor loses the system Python:
+
+```
+python3 today  /usr/bin/python3                        3.12.3   import apt_pkg -> OK
+python3 after  /home/linuxbrew/.linuxbrew/bin/python3  3.14.7   import apt_pkg -> ModuleNotFoundError
+```
+
+208 of 396 linuxbrew binaries shadow something on that actor's PATH. `curl` 8.5.0->8.21.0,
+`node` v18->v26, `npm` 9->11, `perl`, `openssl` all flip. **Not** shadowed, verified: `make`,
+`git`, `bash`, `bats`, `shellcheck`, `sed`, `awk`, `grep` — so `CLAUDE.md`'s make-version
+class and git-hook resolution are untouched, which is the one piece of good news.
+
+### Errors in this spec found by the lenses, all confirmed independently
+
+| spec claimed | measured |
+| --- | --- |
+| `typeset -U path` is "the load-bearing piece", retires the non-idempotency class | **inert.** `-U` binds the *array*; every producer (`brew shellenv`, `pyenv init`, `rbenv init`, `~/.cargo/env`) scalar-exports. Live proof: the workstation's shell has `-U` active *and* a `pyenv-virtualenv/shims` duplicate simultaneously. Fix is `typeset -TU PATH path` |
+| `/opt/homebrew/bin` at position 2 | actor-dependent and unnamed: **2** under `zsh -lc`, **11** under `zsh -lic`. Case 7 goes falsely red against a terminal-equivalent shell |
+| `safe_link` destroys the existing `.zshenv` | it **backs up** to `.bak`; recovery is one `mv`. Risk grade was overstated |
+| plugin skip means "must replace everything it would have done" | the guard wraps **only** `eval "$(brew shellenv)"`. sbin prepend, `fpath+=`, ~50 aliases and `brews()` run regardless |
+| `brew shellenv` emits 4 items | **6** — `export FPATH` and the conditional `MANPATH` line omitted |
+| "every negative assertion is paired with a positive control" | **false.** Case 6 passes on an empty result set — the exact defect that killed the predecessor, reproduced in the spec written against it |
+| case 6: duplicates appear at 3 nested login shells | present at **depth 1** under the interactive actor; vacuous under the non-interactive one |
+| 23 ms for `eval "$(brew shellenv)"` | **confirmed** at 21.6 ms over 100 runs. One lens's 6 ms figure was the outlier |
+
+Also: case 5 cannot fail either way (removing the prepend makes `brew` unresolvable, so the
+plugin runs `shellenv` and sets `HOMEBREW_CELLAR` anyway); case 9 is the sole discriminator
+for five independent mechanisms; and `run_doctor`'s `_doctor_check_symlinks`
+(`lib/helpers.sh:358`) is a flat unconditional array, so a Linux-only `.zshenv` is either
+absent from doctor entirely or fails on all 6 macs.
+
+### Cheaper alternative this spec never weighed
+
+Fix `setup_env.sh:30`'s `env which brew` gate to probe the two known prefixes directly. One
+file, zero fleet blast radius, **zero shadowing**, and it closes the only consumer this repo
+actually documents as broken. It does not make arbitrary `ssh workstation 'uv ...'` work —
+but ai-config's step 5 was measured to run under the interactive `update` alias, so no known
+consumer needs that.
+
+---
 
 ## Problem
 
