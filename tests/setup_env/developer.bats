@@ -136,3 +136,32 @@ teardown() {
   run setup_ansible
   grep -q "pip install.*passlib" "${MOCK_CALLS_FILE}"
 }
+
+# ── declared pip package set ──────────────────────────────────────────────────
+#
+# Both assertions below are ABSENCE assertions, so each carries a positive
+# control naming a package that must still be there. Without it a run where
+# setup_ansible never reached the pip line would pass vacuously — the mock call
+# log would simply be empty of "wheel" along with everything else.
+
+@test "setup_ansible: pip install does not include wheel" {
+  export LINUX=1; unset MACOS
+  export HAS_DEVTOOLS=1
+  run setup_ansible
+  grep -q "pip install.*ansible-lint" "${MOCK_CALLS_FILE}"
+  if grep -qE "pip install.* wheel( |$)" "${MOCK_CALLS_FILE}"; then
+    printf "wheel still declared in setup_ansible's pip set\n" >&2
+    return 1
+  fi
+}
+
+@test "recreate_python_venv: pip install does not include wheel" {
+  export LINUX=1; unset MACOS
+  export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
+  run recreate_python_venv ansible
+  grep -q "pip install.*ansible-lint" "${MOCK_CALLS_FILE}"
+  if grep -qE "pip install.* wheel( |$)" "${MOCK_CALLS_FILE}"; then
+    printf "wheel still declared in recreate_python_venv's pip set\n" >&2
+    return 1
+  fi
+}

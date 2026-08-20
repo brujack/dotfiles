@@ -3,7 +3,7 @@
 
 # Fixed section order for summary display
 readonly _UPDATE_SECTION_ORDER=(
-  brew softwareupdate apt snap mas claude terraform-skill npm pip gems
+  brew softwareupdate apt snap mas claude terraform-skill npm pip pip-check gems
   ai-config git-repos legacy-rsync git-hooks oh-my-zsh tpm tfenv cheat.sh brew-drift
 )
 

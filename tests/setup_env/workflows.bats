@@ -2010,3 +2010,62 @@ assert_all_npm_globals_pinned() {
   run run_setup_user
   [ "$status" -ne 0 ]
 }
+
+# ── pip check verdict ─────────────────────────────────────────────────────────
+#
+# Step 2 of the python-dependency design: a pip check conflict becomes visible
+# instead of being swallowed by `|| true`. It is a WARNING here, not a failure —
+# the `status` assertions pin that deliberately, so step 5's ratchet to a failing
+# verdict shows up as an intended flip rather than as drift.
+#
+# Both use `run` rather than calling run_update directly. A direct call leaves an
+# inherited EXIT trap in the test process, and a test that fails after one loses
+# its TAP line entirely — bats still exits non-zero, so the suite can go red, but
+# the failing test name and its message vanish. 50 tests across this file and
+# unit.bats call run_update directly and share that property.
+
+@test "run_update warns when pip check reports conflicts" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE_PIP=1 HAS_DEVTOOLS=1
+  unset UPDATE_BREW UPDATE_CLAUDE UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
+  export MOCK_PYTHON_PIP_CHECK_EXIT=1
+  run run_update
+  # positive control: without it the warning assertion could pass on a run that
+  # never reached the pip section at all
+  if [[ "${output}" != *"Updated pip packages"* ]]; then
+    printf "pip section never ran; the assertion below would be vacuous\n" >&2
+    return 1
+  fi
+  # assert the DURABLE channel, not a stderr string: the verdict has to reach
+  # the run summary, which is the only place it survives past the scrollback
+  if [[ "${output}" != *"[WARN]"*"pip-check"* ]]; then
+    printf "conflict did not reach the run summary as a WARN\n" >&2
+    return 1
+  fi
+  [ "${status}" -eq 0 ]
+}
+
+@test "run_update does not warn when pip check is clean" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE_PIP=1 HAS_DEVTOOLS=1
+  unset UPDATE_BREW UPDATE_CLAUDE UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
+  export MOCK_PYTHON_PIP_CHECK_EXIT=0
+  run run_update
+  if [[ "${output}" != *"Updated pip packages"* ]]; then
+    printf "pip section never ran; the assertion below would be vacuous\n" >&2
+    return 1
+  fi
+  if [[ "${output}" == *"[WARN]"*"pip-check"* ]]; then
+    printf "warned on a clean pip check\n" >&2
+    return 1
+  fi
+  if [[ "${output}" != *"[OK]"*"pip-check"* ]]; then
+    printf "clean pip check did not record an OK verdict\n" >&2
+    return 1
+  fi
+  [ "${status}" -eq 0 ]
+}

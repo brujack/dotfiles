@@ -505,7 +505,7 @@ import json, subprocess, sys, os
 # Packages with hard upper bounds from other installed tools — upgrading them
 # independently breaks checkov, ansible-lint, shell-gpt, or bpytop. Let pip's
 # dependency resolver manage these via top-level package installs only.
-SKIP_UPGRADE = {"packaging", "pathspec", "rich", "psutil", "wheel"}
+SKIP_UPGRADE = {"packaging", "pathspec", "rich", "psutil"}
 
 cmd = [sys.executable, "-m", "pip", "list", "--outdated", "--format=json"]
 out = subprocess.check_output(cmd, text=True)
@@ -522,7 +522,21 @@ PY
       } 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_pip"
       local _pip_rc="${PIPESTATUS[0]}"
 
-      "$PYTHON" -m pip check || true
+      # Step 2 of the python-dependency design: surface conflicts instead of
+      # discarding them. Warning, not a failure — the venv carries known
+      # conflicts today and a failing verdict here would block every update
+      # run until the lock lands (step 5), which is what actually fixes them.
+      #
+      # Its own advisory section rather than "pip": _update_warn and the timed
+      # _update_record_end below both write status_${section}, so warning on
+      # "pip" would be overwritten two lines later. Same split as brew-drift
+      # beside brew.
+      if "$PYTHON" -m pip check > "${_DOTFILES_RUN_TMPDIR}/err_pip-check" 2>&1; then
+        _update_ok "pip-check" "no dependency conflicts"
+      else
+        _update_warn "pip-check" "dependency conflicts reported — see detail"
+        _update_write_detail_from_err "pip-check" "WARN"
+      fi
       printf "Updated pip packages\n"
       _update_record_end "pip" "${_pip_rc}"
     else
