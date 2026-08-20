@@ -78,19 +78,38 @@ shells accumulate duplicates — measured, `~/.rbenv/shims` appears twice at dep
 `tmux default-command` is empty so `ssh -> tmux -> pane` reaches that depth in normal use.
 Declaring it in `.zshenv` fixes that backlog item as a side effect.
 
-## Scope and blast radius — stated plainly
+## Scope and blast radius — Linux only, by operator constraint
 
-This adds a file to **all 7 machines**, read by **every** zsh process on them, including
-scripts and git hooks. That is a materially larger blast radius than the retired spec's, and
-it is the reason this is worth doing: it is also the only file that reaches the broken actor.
+**The `.zshenv` is linked on Linux and nowhere else.** Measured census from `PROFILE_MAP`:
+6 macs (`laptop`, `ratna`, `reception`, `studio`, `home-1`, `office`), **1 Linux**
+(`workstation`), 1 WSL2 (`cruncher`). The macs are the overwhelming majority and gain
+nothing from this change, so they must not carry its risk.
 
-The Studio currently has **no** `.zshenv` at all, so linking creates one there. Its
-observable macOS effects: `HOMEBREW_*` and brew's `fpath` entry become set where they are
-empty today, and `path` becomes deduped. `/opt/homebrew/bin` keeps position 2 because
-`.zprofile:7` prepends the same directory and `typeset -U` keeps the first occurrence.
+That is not merely a risk trade — it follows from where the defect lives. `USER.md:233`:
+"`ssh workstation` is the only cross-machine hop that matters." The workstation is the
+**target** of that hop; nothing `ssh`es into a mac to run a command. macOS has the same
+structural gap (no `.zshenv`, so `ssh studio '<cmd>'` sees no brew) and **no consumer for
+it** — which is exactly the "fixes an actor nothing runs" error that retired the predecessor,
+and repeating it on 6 machines instead of 1 would be worse, not better.
 
-Explicitly **not** in scope: `sh`/`bash` login actors. `.zshenv` is a zsh file; git hooks and
-cron invoking `sh` remain unfixed on both machines. That gap keeps its backlog row.
+So:
+
+- `setup_dotfile_symlinks` links `.zshenv` **only under the `LINUX` branch**. On macOS no
+  `~/.zshenv` is created, no existing file is touched, and nothing about a mac's shell
+  startup changes. This is a testable claim, not an intention — see verification case 7.
+- The file's own body is additionally guarded on the linuxbrew prefix existing, so it is
+  inert even if some future change links it more widely. Belt and braces, deliberately:
+  the linking guard states the intent, the directory guard survives someone editing it.
+- `cruncher` (WSL2) takes the Linux branch and is covered if it carries linuxbrew, no-ops if
+  not. It is a backup-of-last-resort box, so it inherits the fix without needing its own case.
+
+Within the workstation the blast radius is still total — every zsh process there, scripts and
+git hooks included. That is the cost of reaching the one actor that is broken, and it is
+bounded to the single machine that has the problem.
+
+Explicitly **not** in scope: `sh`/`bash` login actors on either platform, and the macOS
+`ssh '<cmd>'` gap. Both keep their backlog rows. Anyone tempted to widen this to macOS must
+first name a consumer, because the predecessor died for want of one.
 
 ## Verification
 
@@ -106,8 +125,8 @@ This suite is built against those failures.
 | 4 | workstation interactive `command -v curl` | linuxbrew | same, second binary |
 | 5 | workstation interactive `$HOMEBREW_CELLAR` | non-empty | proves the plugin skip was compensated |
 | 6 | `path` at 3 nested login shells | no duplicates | idempotency, at the depth tmux actually produces |
-| 7 | Studio `command -v uv` + position of `/opt/homebrew/bin` | resolves, still 2 | no macOS regression |
-| 8 | bats, both guard branches via `_OVERRIDE_BREW_PREFIX` | pass | the guard is untestable on a machine lacking the other platform's prefix |
+| 7 | Studio: `~/.zshenv` still ABSENT, `command -v uv` resolves, `/opt/homebrew/bin` still position 2 | unchanged | proves macOS was not touched at all, not merely 'not broken' |
+| 8 | bats: both body-guard branches via `_OVERRIDE_BREW_PREFIX`, **and** that the link step is skipped when `LINUX` is unset | pass | the guard is untestable on a machine lacking the other platform's prefix; the link-skip is the operator constraint and must be pinned by a test, not by intent |
 | 9 | mutation: delete the prepend | case 1 and 3 go red | proves the suite discriminates |
 
 Cases 3–5 are the ones the predecessor lacked. Every negative assertion is paired with a
