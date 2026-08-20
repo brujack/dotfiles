@@ -124,7 +124,7 @@ depends_on: [1]
 
 **The test must execute the function, not grep the file.** A `grep 'brew_install_formula uv' lib/linux_ubuntu.sh` gate would pass if the line landed outside `_install_ubuntu_brew_packages()` — in a comment or a neighbouring function. Running the function and asserting against `MOCK_CALLS_FILE` closes that.
 
-Then add to `_install_ubuntu_brew_packages()` in alphabetical position within the existing list (after `rustup`, before the `shfmt` comment block):
+Then add to `_install_ubuntu_brew_packages()` in alphabetical position within the existing list — after `brew_install_formula tgenv` (`lib/linux_ubuntu.sh:362`), before `brew_install_formula zoxide` (`:363`). **Corrected 2026-08-20:** this line previously read "after `rustup`, before the `shfmt` comment block", which is the `r`->`s` boundary and is not where `u` sorts; measured, the list runs `ripgrep` `rustup` `shfmt` `starship` `tgenv` `zoxide`, so `uv` belongs between the last two. The trailing tap-qualified entries (`go-task`, `redpanda`) are already out of order and are not the anchor.
 
 ```bash
 brew_install_formula uv
@@ -136,11 +136,11 @@ brew_install_formula uv
 
 ---
 
-### Task 3: Install on both machines and verify drift clean
+### Task 3: Install on both machines and verify uv leaves the drift Missing list
 
 ```yaml-task
 id: 3
-description: Install uv via each platform's own install path on Studio and workstation, then assert brew-drift reports clean (verification task, no code change so TDD does not apply)
+description: Install uv via each platform's own install path on Studio and workstation, then assert uv is absent from brew-drift's Missing list (verification task, no code change so TDD does not apply)
 role: executor
 model: sonnet
 tdd: not-applicable
@@ -154,7 +154,9 @@ files_touched: []
 depends_on: [1, 2]
 ```
 
-**Neither edit self-delivers, which is why this is a task and not a footnote.** `run_update()` contains exactly one brew call — `brew_update` (`brew update` / `brew upgrade --yes` / `brew cleanup`) — and every install path sits outside it: `install_macos_packages` (`lib/workflows.sh:221`), `install_ubuntu_packages` (`:225`), `install_macos_casks` (`:301`), all behind `-t setup` / `-t developer` / `--brew-install`. So from merge until someone runs an install workflow, **both** machines carry the exact WARN Task 2 exists to prevent.
+> **Sequencing corrected 2026-08-20 — Tasks 3 and 4 run AFTER the PR merges, not before.** `run_brew_install` (`lib/workflows.sh:290-293`) does `rm -f` then `ln -s` on `${BREWFILE_LOC}/Brewfile` pointing at `${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile` — the **main checkout**, resolved as `/Users/bruce/git-repos/personal/dotfiles/Brewfile`. Measured: that file carries **0** `uv` lines while the feature worktree carries 1, so `brew bundle` cannot see this branch's entry no matter which directory the command is invoked from. The Linux side has the same shape — the workstation has its own clone on master, which is why this task already says `git pull` first. Running either machine pre-merge would therefore install nothing and the only way to make `command -v uv` succeed would be the bare `brew install uv` fallback, which this task explicitly forbids reporting as equivalent. Order is: T1, T2 -> Phase 3 -> PR -> merge -> T3 -> T4. The acceptance gates are unchanged; only their position moves.
+
+**Neither edit self-delivers, which is why this is a task and not a footnote.** `run_update()` contains exactly one brew call — `brew_update` (`brew update` / `brew upgrade --yes` / `brew cleanup`) — and every install path sits outside it: `install_macos_packages` (`lib/workflows.sh:221`), `install_ubuntu_packages` (`:225`), `install_macos_casks` (`:301`), all behind `-t setup` / `-t developer` / `--brew-install`. So from merge until someone runs an install workflow, the machines carry the exact WARN Task 2 exists to prevent. **Corrected 2026-08-20 — that is 6 machines, not the 2 this task installs on.** Measured against `PROFILE_MAP`/`PROFILE_CAPS`: every profile carrying `devtools` sees `uv` in the active expected set, which is `laptop`, `ratna`, `reception`, `studio`, `workstation` and `cruncher` (plus their `-1` wireless twins). Task 3 installs on 2 of those; the other 4 carry one advisory `Missing (in Brewfile, not installed): uv` line in `-t update`'s summary until someone runs an install workflow there. That is the designed self-announcing reminder rather than a defect — but the original sentence stated a boundary narrower than the effect, which is the error class this plan has now made three times.
 
 **Mac Studio:**
 
@@ -189,6 +191,17 @@ and 16 set `_REQUIRES_BREW_PREREQ=0` for `doctor`, `check-versions` and `--brew-
 passes with or without brew and tells you nothing about the gate.
 
 **If the prepend is not sufficient** — i.e. `setup_env.sh` still refuses for a reason other than the brew gate — fall back to `PATH=/home/linuxbrew/.linuxbrew/bin:$PATH brew install uv` and **say so explicitly in the report**: that installs `uv` and clears the drift WARN, but it does not exercise the repo's own install path on that machine, so the Task 2 edit remains unverified end-to-end there. Do not report the fallback as equivalent.
+
+**Corrected 2026-08-20 — "drift clean" was unreachable on both machines and is not what this task asserts.** Measured before dispatch, against the real installed state:
+
+| machine | active Brewfile formulae | installed | missing (pre-existing) |
+| --- | --- | --- | --- |
+| Studio | 128 | 230 | **3** — `codeburn`, `go-task/tap/go-task`, `uv` |
+| workstation | 127 | 112 | **77** — including `uv` |
+
+So installing `uv` leaves Studio at 2 missing and the workstation at 76. The reachable assertion — and the one the bash comment above already states — is that **`uv` disappears from the Missing list**, not that the list empties. The `acceptance:` block is unaffected: it gates on `command -v uv` on both machines, which was always correct.
+
+The workstation's 77 is not this branch's problem and must not be read as a regression: `_update_check_brewfile_drift` carries no platform guard (`lib/update_summary.sh:644` checks only `quiet_which brew` and the Brewfile's existence), so Linux is measured against a macOS Brewfile it never installs from — Linux installs from `_install_ubuntu_brew_packages()`. Backlogged separately.
 
 **Record for each machine:** `uv --version`, and the `brew-drift` line from `-t update`'s summary. Both versions go in the PR body — they are the baseline the parent design's step-3 rehearsal will be compared against, and the spec requires the version recorded beside each result.
 

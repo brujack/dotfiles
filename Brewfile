@@ -122,6 +122,7 @@ brew "tgenv"                                 # [HAS_DEVTOOLS]
 brew "the_silver_searcher"                   # [HAS_DEVTOOLS]
 brew "tmux"
 brew "tree"
+brew "uv"                                    # [HAS_DEVTOOLS]
 #brew "vault", args: ["--with-ui"]
 brew "vault"                                 # [HAS_DEVTOOLS]
 brew "vim"

@@ -360,6 +360,7 @@ _install_ubuntu_brew_packages() {
     brew_install_formula shfmt
     brew_install_formula starship
     brew_install_formula tgenv
+    brew_install_formula uv
     brew_install_formula zoxide
     brew_install_formula go-task/tap/go-task
     brew_install_formula redpanda-data/tap/redpanda
