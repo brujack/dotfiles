@@ -249,7 +249,7 @@ Rules for any new suppression:
 
 `.github/workflows/ci.yml` runs on PRs to master only (the pre-push hook gates branch pushes locally):
 
-- `test` job: installs a pinned, checksum-verified shellcheck plus bats, runs `make test`, then verifies test count ≥ 840 (regression proxy; 1411 tests, CI-measured 2026-08-18 on `21671b8`)
+- `test` job: installs a pinned, checksum-verified shellcheck plus bats, runs `make test`, then verifies test count ≥ 840 (regression proxy; 1414 tests, CI-measured 2026-08-20 on `346d25f`)
 - `lint-macos` job: runs on `macos-latest` (advisory, not blocking auto-merge), two independent steps: `bash -n` over the derived `SHELL_FILES` list via `make print-SHELL_FILES | tr ' ' '\n' | xargs`, guarded by its own empty-list check — the `tr` is load-bearing, since `print-%` emits one space-separated line and `xargs -I` implies `-L1` and does not split on blanks, and `zsh -n` over the 10 tracked zsh files selected via `git ls-files '*.zsh' '*.zsh-theme' '.zshrc' '.zprofile'` — this second step refuses to pass on an empty file list
 - `bash-coverage` job: measures bash line coverage via PS4 xtrace on `ubuntu-latest`; **gates at 91%** — blocks auto-merge if coverage drops below floor
 - `secret-scan` job: runs gitleaks against recent commits (advisory, not blocking auto-merge)
@@ -301,7 +301,7 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 #### Bash
 
-- **Overall: 91%** (3154/3437 commands, 1411 tests, 18 heuristic disagreements) as measured by CI on `ubuntu-latest` for `21671b8` — the figure the gate actually reads. All four numbers come from that single run; earlier revisions of this file carried a ratio and a disagreement count taken from different runs, which is why the two disagreed by one with no change in between. Gated in CI at **91%** (`bash-coverage` job, blocks auto-merge on drop). A percentage without its denominator is not a coverage figure — report both.
+- **Overall: 91%** (3155/3438 commands, 1414 tests, 18 heuristic disagreements) as measured by CI on `ubuntu-latest` for `346d25f` — the figure the gate actually reads. All four numbers come from that single run; earlier revisions of this file carried a ratio and a disagreement count taken from different runs, which is why the two disagreed by one with no change in between. Gated in CI at **91%** (`bash-coverage` job, blocks auto-merge on drop). A percentage without its denominator is not a coverage figure — report both.
 - **The preview discipline paid a fourth time, and the margin is now the story.** Local macOS measured **92% (3158/3429)** on the shebang-scope branch; CI returned **91% (3148/3431)** — one point lower, as on all three previous occasions, and this time _exactly at the floor_ rather than above it. Publish the CI figure; treat any local number as a preview and label it as one. The denominator moved 3419 → 3431 (+12) because `scripts/list-shell-files.sh` is a tracked `scripts/*.sh` file and so joins the instrumented set by the existing predicate — not because the coverage derivation changed, which it did not. 10 of its 12 lines are covered; the uncovered one is the `/sh` shebang arm, unreachable because all 101 tracked shell files carry `#!/usr/bin/env bash`.
 - **And a fifth time, on #223, with the gap holding at exactly one point again.** Local macOS
   measured **92% (3168/3435, 16 disagreements)**; CI returned **91% (3154/3437, 18
