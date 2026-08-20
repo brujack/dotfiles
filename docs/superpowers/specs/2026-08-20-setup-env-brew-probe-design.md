@@ -51,6 +51,32 @@ invocations in `lib/*.sh` — the count included comment prose. And "`ratna` is 
 not in `~/.ssh/config`, and no reachable machine has `/usr/local/bin/brew`. Keep the arm; drop
 the word "measured".
 
+**Second lens, independently: the design is SALVAGEABLE if a consumer appears.** The guard
+flips measured **benign**, because `6_path.zsh` appends the same directories, so a
+non-interactive run *converges* on interactive behaviour rather than diverging. `pyenv` flips
+to linuxbrew's, then `developer.sh:282` prepends `$PYENV_ROOT/bin` and the real pyenv wins;
+the `rbenv` flip is already today's interactive behaviour, so not a regression. Recovery is
+genuinely good — one process, one explicit invocation, revert or simply do not run it. No
+shell lockout, no `ssh`/`scp` loss.
+
+So the honest claim is **"blast radius is one process, and it converges to interactive
+behaviour"** — bounded consequence, defensible — never "structurally immune". Anyone
+resurrecting this must rewrite legs (a) and (b) to that, and fix four suite holes: case 1 must
+name a **gated** workflow (`-t update --brew-only` is the shortest that fails today); the
+`_OVERRIDE_BREW_PREFIX` seam cannot express "no prefix found" because an empty string is
+indistinguishable from unset, so that arm is reachable only on CI; no case exercises the
+`/usr/local` (Intel) arm; and case 8's mutation reds are not anchored to named bats tests, so
+nothing enforces them mechanically.
+
+**One unverified risk, and it is on the machine nobody can reach.** `/usr/local` is probed
+**before** `/home/linuxbrew/.linuxbrew` and first match wins. On a Linux box carrying a stale
+or non-brew `/usr/local/bin/brew`, the probe selects the wrong prefix, the gate passes with a
+broken brew, and today's clean *"Homebrew not found -> run bootstrap_linux.sh"* becomes
+confusing downstream failures. The workstation is verified clean. **cruncher cannot be
+`ssh`'d**, so it is unverified, and it is a Linux box where both prefixes are plausible.
+Settled by one command typed at that terminal:
+`ls -l /usr/local/bin/brew /home/linuxbrew/.linuxbrew/bin/brew 2>&1`
+
 **Recommendation: zero lines, one backlog row, and one question for the operator** — *over
 the next six months, will anything other than a human at a prompt invoke `setup_env.sh` on the
 workstation?* If no, the 34-character prefix is the correct answer and all four designs close.
