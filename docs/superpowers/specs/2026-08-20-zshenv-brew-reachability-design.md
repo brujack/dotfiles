@@ -80,7 +80,9 @@ Declaring it in `.zshenv` fixes that backlog item as a side effect.
 
 ## Scope and blast radius — Linux only, by operator constraint
 
-**The `.zshenv` is linked on Linux and nowhere else.** Measured census from `PROFILE_MAP`:
+**The `.zshenv` is linked on Linux and nowhere else.** Measured census from `PROFILE_MAP` —
+8 hostname entries, which is not the "seven machines" `USER.md` states; the discrepancy is
+unresolved and the table is used here because it is what the code reads:
 6 macs (`laptop`, `ratna`, `reception`, `studio`, `home-1`, `office`), **1 Linux**
 (`workstation`), 1 WSL2 (`cruncher`, unreachable by `ssh`). So this change lands on
 **exactly one machine of eight**. The macs are the overwhelming majority and gain
@@ -101,7 +103,8 @@ So:
 - The file's own body is additionally guarded on the linuxbrew prefix existing, so it is
   inert even if some future change links it more widely. Belt and braces, deliberately:
   the linking guard states the intent, the directory guard survives someone editing it.
-- **`cruncher` is included, by operator decision 2026-08-20, and will be dormant.** It is
+- **`cruncher` is included, by operator decision 2026-08-20, dormant today and pre-positioned
+  for later.** It is
   WSL2 and cannot be reached by `ssh`, so the defect this fixes — a non-login zsh spawned by
   `ssh host '<cmd>'` — cannot occur there and the file buys it nothing. It is harmless: the
   body guard is a directory test, so with no linuxbrew prefix the file is a no-op beyond
@@ -109,6 +112,13 @@ So:
   right shape and needs no WSL carve-out — worth noting that one is not available regardless:
   `lib/detect_env.sh:7` sets `LINUX=1` from `uname -s`, true inside WSL2, and `PROFILE_CAPS`
   separates the two profiles only by `snap`/`flatpak`.
+
+  **It may not stay dormant, and that is the point.** The operator notes `cruncher` might
+  become native Linux rather than WSL2. If it does, it becomes `ssh`-reachable and acquires a
+  linuxbrew prefix — at which moment this file activates on its own, with no edit and no
+  second cycle. That is a stronger argument for the plain `LINUX` gate than harmlessness:
+  a `PROFILE == linux_workstation` gate would have to be found and widened by whoever does
+  that conversion, and would be missed.
 
   **The residual is epistemic, not operational, and must not be papered over: `cruncher` is
   unreachable, so nothing in the verification suite can run against it.** Whatever this file
@@ -175,7 +185,7 @@ positive control in the same harness.
 ## Risks
 
 **Highest of any change in this repo's recent history, and the mitigation is the suite
-above.** A syntax error in `.zshenv` breaks *every* zsh on 7 machines — worse than
+above.** A syntax error in `.zshenv` breaks *every* zsh on the machines it is linked to — worse than
 `.zprofile`, which breaks only login shells. `zsh -n` covers it in `make lint`, and the file
 must be added to `ZSH_FILES` at both call sites (`Makefile:51`, `ci.yml:60`) in the same
 change, or the gate that would catch this does not see the file.
