@@ -95,27 +95,29 @@ and repeating it on 6 machines instead of 1 would be worse, not better.
 
 So:
 
-- `setup_dotfile_symlinks` links `.zshenv` **only when `PROFILE` is `linux_workstation`** — not
-  on a bare `LINUX` test, see the `cruncher` note below. On macOS no
+- `setup_dotfile_symlinks` links `.zshenv` **only under the `LINUX` branch**. On macOS no
   `~/.zshenv` is created, no existing file is touched, and nothing about a mac's shell
   startup changes. This is a testable claim, not an intention — see verification case 7.
 - The file's own body is additionally guarded on the linuxbrew prefix existing, so it is
   inert even if some future change links it more widely. Belt and braces, deliberately:
   the linking guard states the intent, the directory guard survives someone editing it.
-- **`cruncher` is excluded, and this is why the gate is `PROFILE`-based rather than `LINUX`.**
-  It is WSL2 and **cannot be reached by `ssh`**, so the defect this spec fixes — a non-login
-  zsh spawned by `ssh host '<cmd>'` — has no way to occur there. There is no consumer, which
-  is the same test that excludes the macs. Two further reasons it must not be swept in: it is
-  unreachable, so no verification case can be run against it and any claim about it would be
-  asserted rather than measured; and `USER.md` describes it as the backup-of-last-resort used
-  when both development machines are down — precisely the moment an unverifiable change to a
-  file every zsh reads is least affordable, and the moment judgment is most degraded.
-  Measured: there is **no WSL detector** in this repo. `lib/detect_env.sh:7` sets `LINUX=1`
-  from `uname -s`, which is true inside WSL2, so a `LINUX` gate would include `cruncher`
-  silently. `PROFILE_CAPS` separates the two only by `snap`/`flatpak`, and gating on
-  `HAS_SNAP` would be a proxy — snap availability has nothing to do with ssh reachability.
-  `PROFILE == linux_workstation` names the machine class directly and is a table lookup, not
-  a hostname test.
+- **`cruncher` is included, by operator decision 2026-08-20, and will be dormant.** It is
+  WSL2 and cannot be reached by `ssh`, so the defect this fixes — a non-login zsh spawned by
+  `ssh host '<cmd>'` — cannot occur there and the file buys it nothing. It is harmless: the
+  body guard is a directory test, so with no linuxbrew prefix the file is a no-op beyond
+  `typeset -U path`, which is a strict improvement anywhere. A `LINUX` gate is therefore the
+  right shape and needs no WSL carve-out — worth noting that one is not available regardless:
+  `lib/detect_env.sh:7` sets `LINUX=1` from `uname -s`, true inside WSL2, and `PROFILE_CAPS`
+  separates the two profiles only by `snap`/`flatpak`.
+
+  **The residual is epistemic, not operational, and must not be papered over: `cruncher` is
+  unreachable, so nothing in the verification suite can run against it.** Whatever this file
+  does there is asserted from the design, never measured — the same class of claim this spec's
+  own predecessor died for. Two consequences worth carrying: `USER.md` describes `cruncher` as
+  the backup-of-last-resort, reached when both development machines are down, so the first
+  real execution of this file there may happen under time pressure with degraded judgment; and
+  the honest statement of coverage after this ships is **verified on 1 machine, dormant-by-
+  design on 1, untouched on 6** — not "works on Linux".
 
 Within the workstation the blast radius is still total — every zsh process there, scripts and
 git hooks included. That is the cost of reaching the one actor that is broken, and it is
