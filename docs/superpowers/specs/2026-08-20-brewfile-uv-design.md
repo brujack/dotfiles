@@ -36,11 +36,39 @@ gone, the PATH work it required goes with it.
 
 ## Decision
 
-Add one line to `Brewfile`, beside the existing Python tooling:
+**Two edits, not one — the Brewfile alone installs on macOS only.**
+
+The scope as originally relayed was a single `Brewfile` line. That is insufficient: **Linux does
+not consume the Brewfile.** `brew bundle --file .../Brewfile` is called from `lib/macos.sh:193`
+only, while Ubuntu installs from a hardcoded list of `brew_install_formula` calls in
+`_install_ubuntu_brew_packages()` (`lib/linux_ubuntu.sh:329`). A Brewfile-only change would
+install `uv` on the Studio and silently not on the Linux 7950X — the second of the two
+load-bearing machines, and the one the parent design's `uv sync` rehearsal will eventually run
+against.
+
+1. `Brewfile`, beside the existing Python tooling:
 
 ```ruby
 brew "uv"                                    # [HAS_DEVTOOLS]
 ```
+
+2. `lib/linux_ubuntu.sh`, in `_install_ubuntu_brew_packages()`, alphabetically:
+
+```bash
+brew_install_formula uv
+```
+
+**This is the established both-platforms pattern, not a new one.** Measured: `pyenv`,
+`pyenv-virtualenv`, `fzf`, `gh`, `neovim` and `ripgrep` each appear in *both* the `Brewfile`
+and the Linux list. `uv` is the same shape as `pyenv` — a Python-toolchain binary needed on
+every development machine — and follows it exactly.
+
+**A pre-existing asymmetry this change inherits and does not fix.**
+`_install_ubuntu_brew_packages` carries no `HAS_*` gating (the guards in that file sit at
+`:248`, `:260` and `:368`, around other functions), so the Linux side installs its whole list
+unconditionally for any machine running the developer workflow, while the macOS side is
+capability-tagged. `uv` inherits that asymmetry exactly as `pyenv` already does. Normalising it
+is out of scope here — it would touch every formula in that list, not just this one.
 
 ### Why `[HAS_DEVTOOLS]`, and why that is correct rather than merely conventional
 
@@ -89,10 +117,21 @@ the entry carries a capability tag, so it proves presence but not gating. Case 2
 the entry is *both* present *and* tagged. Together they pin that `uv` ships on developer
 machines and is withheld elsewhere.
 
+And a third case in `tests/setup_env/linux_ubuntu.bats`, following the existing
+`_install_ubuntu_brew_packages: installs pyenv via brew` precedent at `:124`:
+
+3. `_install_ubuntu_brew_packages` calls `brew_install_formula uv`
+
+**Without case 3 the macOS pair passes on a change that ships to one machine.** That is the
+defect this spec's own first draft contained, and the test that would have caught it.
+
 ## Verification
 
 - `make test` green, `make lint` rc 0.
-- `uv` installed and resolvable on **both load-bearing machines** (Mac Studio, Linux 7950X).
+- `uv` installed and resolvable on **both load-bearing machines** (Mac Studio, Linux 7950X), by
+  the path each platform actually uses: `brew bundle` from the Brewfile on macOS,
+  `_install_ubuntu_brew_packages` on Linux. Verifying only the machine you are sitting at would
+  pass on the one-edit version of this change, which installs on macOS alone.
 - Reachable by the actor that runs `-t update`.
 
 **The actor question is already resolved and introduces no new hazard.** Measured per machine,
