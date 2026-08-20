@@ -26,6 +26,51 @@ found so far (`3_oh_my_zsh.zsh`'s plugin, `.zprofile:5`'s pyenv); nothing has en
 rest. v1 died on the first, v2 on the second, and each fix was written by someone who
 believed they had addressed the class.
 
+**Worse, and independently fatal: the exported append propagates into descended interactive
+shells.** "Untouched by construction" holds only for a *directly launched* interactive shell.
+The block exports `PATH`, so a child interactive zsh inherits `brew`, the plugin guard goes
+false, and the prepend is skipped. Measured, identical actor chain, only the parent's
+`.zshenv` varying:
+
+```
+zsh -c -> exec zsh -lic   baseline: node,curl = linuxbrew, linuxbrew/bin at 5
+                          after   : node,curl = /usr/bin,  linuxbrew/bin at 15
+```
+
+**All 208 binaries flip — the same set as v1, in the opposite direction.** And the actor is
+not exotic: `USER.md` calls the 7950X the tmux session host, `tmux default-command` is empty
+so every pane is a login shell, and a session is live now. `ssh workstation -t 'tmux attach'`
+degrades every pane. `HOMEBREW_CELLAR`/`PREFIX`/`FPATH` are lost outright there — and v2
+deleted v1's static-export section, which is exactly what would have covered it, on the
+strength of the claim this refutes.
+
+The decision that shape forces, if anyone revisits it: **export, or set for the current shell
+only?** An unexported append would serve `ssh '<cmd>'` without reaching a descendant. Nobody
+has designed that, and it is not obviously sound either.
+
+Further defects, each verified:
+
+- **Case 7 is vacuous — demonstrated, not argued.** Its control is `$#path` non-zero, true in
+  every shell. Against a no-op `.zshenv` it still passes: block never executed, "no
+  duplicates" holds trivially. This is the third consecutive spec in which the vacuity
+  defect recurs, in the one written to indict its predecessor for it. Fix is to assert
+  `linuxbrew/bin` present **exactly once**, not "no duplicates".
+- **The escape hatch does not work against the class the spec calls fatal.** sshd runs
+  `$SHELL -c '<string>'`, so the outer zsh reads `.zshenv` before parsing the command:
+  `zsh -f -c` never starts. A fatal `.zshenv` locks out `ssh <cmd>`, `ssh` login, `scp` and
+  `sftp` at once; recovery is physical console or a second account. The spec states the
+  opposite.
+- **"No top-level `exit`" is incomplete: a hang is equally fatal and nothing gates it.**
+  `zsh -n` catches syntax, not liveness. The body's own `[[ -d ... ]]` probe runs
+  unconditionally above the interactive guard and would hang interactive login on a stale
+  autofs mount.
+- **`export PATH="${PATH}:..."` puts cwd on PATH when `PATH` is empty** — leading empty
+  element, which zsh resolves as `.`. Measured. `${PATH:+${PATH}:}` fixes it.
+- **Two "measured, therefore true" claims are inverted.** The body does *not* resolve
+  `/opt/homebrew` first — the linuxbrew line overwrites it, last writer wins. And mac
+  reversal is not one line: `ratna` is Intel at `/usr/local`, for which the body has no arm.
+  Case 8's position figures are also transposed (`-lc` 21, `-lic` 9 on the Studio today).
+
 Two further v2 findings, both real:
 
 - **"Interactive untouched by construction" is untouched by coincidence.** `. ~/.cargo/env`
