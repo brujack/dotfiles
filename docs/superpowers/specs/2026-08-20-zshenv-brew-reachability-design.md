@@ -1,8 +1,60 @@
 # `.zshenv` — brew reachable from the ssh actor
 
 **Date:** 2026-08-20
-**Status:** Proposed (v2 — v1 was BLOCKED by lens review; see History)
+**Status:** BLOCKED (v2) — same defect class as v1, one file over. Recommend the narrow alternative.
 **Supersedes:** `2026-08-20-linuxbrew-login-path-design.md` (RETIRED unbuilt)
+
+## v2 blocked 2026-08-20 — "zero flips" is false, and the mechanism is v1's
+
+**`.zprofile:5` is `command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"` — a
+presence-guarded conditional, exactly like the oh-my-zsh plugin guard that killed v1.**
+Appending linuxbrew makes `pyenv` resolvable at `.zshenv` time, so that guard skips,
+`~/.pyenv/bin` is never added, and the version manager flips:
+
+```
+zsh -lc  today  ~/.pyenv/bin/pyenv  2.7.2      ~/.pyenv/bin on PATH: 1
+zsh -lc  after  linuxbrew/bin/pyenv 2.8.4      ~/.pyenv/bin on PATH: 0
+```
+
+v2's "zero flips" was measured for `zsh -c` and stated unqualified. `zsh -lc` is
+non-interactive, so the guard fires there too — and it is the actor this spec's own Problem
+section prints as today's workaround.
+
+**The class, stated once so it is not walked into a fourth time: any design that makes
+`brew` resolvable earlier changes every presence-guarded conditional downstream of it.** Two
+found so far (`3_oh_my_zsh.zsh`'s plugin, `.zprofile:5`'s pyenv); nothing has enumerated the
+rest. v1 died on the first, v2 on the second, and each fix was written by someone who
+believed they had addressed the class.
+
+Two further v2 findings, both real:
+
+- **"Interactive untouched by construction" is untouched by coincidence.** `. ~/.cargo/env`
+  sits outside the guard. It is a no-op on the workstation only because `~/.zshenv` already
+  *is* that line. On a machine with no `.zshenv` — the Studio measured as a live proxy, and
+  cruncher by assertion — it prepends `~/.cargo/bin`, which the interactive `-U` then pins
+  ahead of `6_path.zsh:73`'s deliberate append position. Harmless today (zero name
+  collisions), which is compensation, which is the framing v2 claimed to have retired.
+- **`.zshenv` would be the only file linked to a real machine while absent from BOTH
+  `make lint`'s `ZSH_FILES` and `run_doctor`'s symlink array.** Each gap is flagged
+  separately in this spec and never together.
+
+Measured non-issues, recorded so they are not re-litigated: hot-path cost is +0.04 ms per
+shell; `_brew_prefix` does not leak; neither arm writes to stdout; `typeset -TU` is correctly
+diagnosed and produces a byte-identical `$path` when isolated.
+
+## Recommendation — the narrow fix, and not merely because it is cheaper
+
+Fix `setup_env.sh:30`'s `env which brew` gate to probe the two prefixes directly. It is
+immune to this entire class **by construction**: it never puts brew on `PATH`, so no
+downstream presence-guard can observe it. That is a structural argument, not an economy one.
+
+`ai-config` confirms no consumer needs the broader win: their step 3 is the only one crossing
+the hop and it uses an absolute `uv` path *by design*, because `--python 3.14` is a family
+selector (Homebrew 3.14.7 vs the venv's 3.14.6) and PATH resolution would convert a loud
+failure into a silent one. Their caveat is honest and stands: they know only their own
+consumers.
+
+---
 
 ## Problem
 
