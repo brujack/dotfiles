@@ -133,6 +133,12 @@ teardown() {
   grep -q "brew install pyenv-virtualenv" "${MOCK_CALLS_FILE}"
 }
 
+@test "_install_ubuntu_brew_packages: installs uv via brew" {
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 0 ]
+  grep -qx "brew install uv" "${MOCK_CALLS_FILE}"
+}
+
 @test "_install_ubuntu_brew_packages: does not call pyenv.run curl installer" {
   run _install_ubuntu_brew_packages
   [ "$status" -eq 0 ]
