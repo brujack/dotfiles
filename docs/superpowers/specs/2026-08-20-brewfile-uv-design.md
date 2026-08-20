@@ -119,7 +119,7 @@ Three options were considered and two rejected on measurement:
 | --- | --- |
 | **Unpinned `brew "uv"`** | **Chosen.** |
 | Pinned binary via the GitHub-release pattern (`UV_VER` in `lib/constants.sh`, checksum-verified, as for `gitleaks`/`cf-terraforming`) | Rejected *for now* — real machinery, and it guarantees convergence, but it is disproportionate before the artifact it protects exists. |
-| `brew install` + `brew pin uv` | **Rejected**, but not for the reason an earlier draft gave. That draft argued pinning "preserves divergence" — refuted by this spec's own table, which puts both machines at 0.12.5 *today*, so pinning both now would converge. The correct reason is stronger: **a `Brewfile` cannot express a pin** (`brew bundle` has no pin directive), and pin state lives in `$(brew --prefix)/var/homebrew/pinned` — machine-local, untracked, invisible to the repo. Verified: that directory does not exist on the Studio, so there are zero pins fleet-wide. It is precisely the undeclared per-machine state the profile model exists to eliminate. |
+| `brew install` + `brew pin uv` | **Rejected**, but not for the reason an earlier draft gave. That draft argued pinning "preserves divergence" — refuted by this spec's own table, which puts both machines at 0.12.5 *today*, so pinning both now would converge. The correct reason is stronger: **a `Brewfile` cannot express a pin** (`brew bundle` has no pin directive), and pin state lives in `$(brew --prefix)/var/homebrew/pinned` — machine-local, untracked, invisible to the repo. Verified **on the Studio**: that directory does not exist there, so that machine carries zero pins. Seven machines were not measured, and the fleet-wide claim an earlier draft made is withdrawn — nothing downstream depends on it, since neither load-bearing machine has `uv` installed at all, so no `uv` pin can exist either way. It is precisely the undeclared per-machine state the profile model exists to eliminate. |
 
 Brew's own version-pinning mechanism — the `python@3.13` / `postgresql@15` pattern — is
 **unavailable**: `brew search /^uv/` returns bare `uv` only, with no `uv@x.y` formula.
@@ -152,10 +152,30 @@ That draft said the risk is "not live until step 4, because `uv.lock` does not e
    on two different schedules — the rehearsals are not comparable and step 4 gets built on a
    comparison that was never valid.
 
+**Only harm 2 bears on the pin decision. Harm 1 does not, and an earlier draft routed it there
+incorrectly.** Pinning `uv` does not reduce prune risk by a single package: exact-sync is stable,
+documented, default behaviour at every release, so pinning both machines to one version makes
+them *identical*, not *safe*. Harm 2 — that two rehearsals under different `uv` versions are not
+comparable — genuinely does support moving the pin decision earlier. Harm 1 needs its own
+mitigation, and pinning is not it.
+
+**Harm 1's actual mitigations, none of which are a pin:** rehearse against a **disposable clone**
+of the venv rather than the real one; or snapshot it first; or pass `--no-build-isolation`, which
+suppresses pruning outright ("uv will not remove extraneous packages to avoid removing possible
+build dependencies") and, unlike `--inexact`, carries no conflicting-package exception. These are
+step 3's to choose and are recorded as a backlog row rather than left inside a version-policy
+table they do not belong to.
+
+**One qualifier that bounds the blast radius:** uv does **not** read `VIRTUAL_ENV` during project
+operations by default — it warns and ignores unless `--active` or an absolute
+`UV_PROJECT_ENVIRONMENT` is set. So the prune harm requires a deliberate opt-in. Step 3 as the
+parent design writes it ("rehearse against the real `~/.pyenv/versions/ansible`") **is** that
+opt-in, so the risk stands — but naming it as an opt-in is what makes the mitigation obvious.
+
 **The deferral still stands, on the reason that survives:** reversing it costs one line plus an
 install function, and the pinned-binary machinery is disproportionate before anything consumes
-`uv`. But the pin decision belongs **before step 3's rehearsal**, not after it, and the cheapest
-adequate form is pinning both machines to the same `uv` for the rehearsal's duration and
+`uv`. The pin decision belongs **before step 3's rehearsal** on harm 2's account, and the
+cheapest adequate form is pinning both machines to the same `uv` for the rehearsal's duration and
 recording the version beside each result.
 
 **The deferral has no mechanism, so it needs a destination rather than a sentence.** Nothing in
@@ -209,10 +229,30 @@ Another walked the mutation table and found the pair already covers every degene
 | indirection always reads UNSET (drop all tagged) | **fail** | pass |
 
 The mutation table is evidence and the tag-identity objection is a reading, so the pair stands.
-The objection is not worthless though: it is correct that neither case pins the tag's *identity*,
-only that *a* tag is present and honoured. That is acceptable here because the tag does not gate
-installation anyway — it selects drift expectations — so a wrong-but-present tag is a
-drift-reporting bug, not a delivery bug.
+
+**And the concession an earlier draft made to that objection — "neither case pins the tag's
+identity, only that *a* tag is present" — is false.** Measured by running the real
+`_brewfile_parse_section` / `_brewfile_parse_inactive` from `lib/update_summary.sh` against four
+single-line fixtures, under bash, with the mandated prefix:
+
+| Brewfile entry | case 1 | case 2 |
+| --- | --- | --- |
+| `brew "uv"  # [HAS_DEVTOOLS]` | PASS | PASS |
+| `brew "uv"  # [HAS_GUI]` | **FAIL** | PASS |
+| `brew "uv"` (untagged) | PASS | **FAIL** |
+| `brew "uv"  # [HAS_DEVTOOL]` (typo) | **FAIL** | PASS |
+
+Only the correct tag passes both. Case 1 exports **only** `HAS_DEVTOOLS`, and
+`_brewfile_parse_section` skips any line whose extracted capability resolves empty — so a
+substituted or misspelled tag drops `uv` from the active set and fails.
+
+**The `unset "${!HAS_@}"` prefix is what creates that discrimination, not merely hygiene.** The
+draft filed it under "stops an ambient capability leaking in from the developer's shell" and then
+two paragraphs later told the reader identity was not pinned at all — so an implementer who
+believed the concession had no reason to preserve the prefix, and dropping it silently converts
+case 1 from identity-pinning to presence-only on any machine whose shell already exports
+`HAS_GUI`. The correction that settled the disagreement removed the reason to keep the thing
+that settles it.
 
 ## Verification
 
@@ -226,9 +266,21 @@ drift-reporting bug, not a delivery bug.
 resolvable on both machines" is satisfiable *by hand* — which is exactly how it would be
 satisfied on the workstation — so it cannot falsify the proposition it appears to gate, namely
 *that the repo's own install path delivers `uv`*. That is `behavior.md`'s "a check derived from
-the same decision as the thing it checks." The falsifying form costs one command: **on a machine
-where `uv` is not yet installed, run `-t update` and assert `brew-drift` reports clean.** A
-hand-installed `uv` passes the old bullet and fails this one if the repo path is broken.
+the same decision as the thing it checks." The falsifying form must name the **install** workflow, and an earlier
+draft of this paragraph got that wrong in a way worth recording: it said *"on a machine where
+`uv` is not yet installed, run `-t update` and assert `brew-drift` reports clean."* **That is
+unsatisfiable by construction.** `run_update()` contains exactly one brew call — `brew_update`,
+i.e. `brew update` / `brew upgrade --yes` / `brew cleanup` — and every install path
+(`install_macos_packages` `:221`, `install_ubuntu_packages` `:225`, `install_macos_casks`
+`:301`) sits outside it, behind `-t setup` / `-t developer` / `--brew-install`. So `-t update`
+can never make a missing formula present, and "clean" is unreachable. The spec had already
+stated the reason twice — "`brew upgrade --yes` upgrades installed formulae and installs nothing
+new" — and then wrote a check that depends on the opposite.
+
+The correct form: **on a machine where `uv` is not installed, run the platform's install path
+(`-t setup --brew-install` on macOS, `-t setup`/`-t developer` on Linux), then run `-t update`
+and assert `brew-drift` reports clean.** A hand-installed `uv` still fails this if the repo's own
+path is broken, which was the point of replacing the original bullet.
 - Reachable by the actor that runs `-t update`.
 
 **The actor question is already resolved and introduces no new hazard.** Measured per machine,
