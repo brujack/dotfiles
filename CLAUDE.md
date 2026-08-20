@@ -148,6 +148,10 @@ brew "rustup"         # [HAS_RUST]
 
 Untagged entries are expected on all macs. When adding a new Brewfile entry that is developer-, K8s-, Docker-, or Rust-specific, add the appropriate tag.
 
+**A `# [HAS_*]` tag selects drift expectations only — it does NOT gate installation, and reading it as a gate is the natural mistake.** `install_macos_casks` (`lib/macos.sh:193`) runs `brew bundle --file "${BREWFILE_LOC}/Brewfile"` with no enclosing `HAS_*` conditional; the guards at `:194` and `:197` wrap only `Brewfile.gui` and `Brewfile.devtools`. So **every mac installs every entry in the main Brewfile regardless of its tag** — a `mac_mini` with no `HAS_DEVTOOLS` still receives `pyenv`, `python@3.13` and `uv`. The tag's only readers are `_brewfile_parse_section` and `_brewfile_parse_inactive` (`lib/update_summary.sh:600`/`:620`), reached solely from the drift check, which uses it to decide whether a missing formula counts as drift *on this machine*.
+
+Two consequences worth holding: tagging an entry does not keep it off a machine, so a tag is never a way to avoid installing something; and an entry present in the Brewfile but not installed produces one advisory `Missing (in Brewfile, not installed): <name>` line per machine whose profile carries the named capability — 6 of the 8 hostname entries carry `devtools`, so that is the blast radius of adding a `[HAS_DEVTOOLS]` entry, not the 2 machines an author usually has in mind. Verified during dotfiles#225 by two independent reviewers reading `lib/macos.sh` rather than trusting the tag's name.
+
 **Formula/cask dedup rule:** never add both a formula and a cask for the same tool (breaks `brew bundle` symlinking). **Tap trust (Homebrew 6.0):** new third-party taps must also be added to the `brew trust` call in `install_macos_casks`/`_install_ubuntu_brew_packages`. Rationale and detail: [`dotfiles-brewfile-conventions`](https://github.com/brujack/ai-config/blob/master/docs/knowledge/dotfiles-brewfile-conventions.md).
 
 ### PowerShell Scripts
