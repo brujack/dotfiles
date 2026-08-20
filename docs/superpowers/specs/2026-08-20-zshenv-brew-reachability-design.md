@@ -107,6 +107,30 @@ Within the workstation the blast radius is still total — every zsh process the
 git hooks included. That is the cost of reaching the one actor that is broken, and it is
 bounded to the single machine that has the problem.
 
+### If the direction reverses
+
+Confirmed with the operator 2026-08-20: Claude Code sessions flow **macOS -> Linux**, and it
+is possible that reverses in future. The Linux-only scope is therefore correct *for the
+current direction* rather than permanently — the macs lack a consumer today, not
+structurally.
+
+**The design is built so reversing costs one line, not a redesign.** The file body resolves
+its prefix by directory test (`/opt/homebrew` first, then `/home/linuxbrew/.linuxbrew`), so
+it is already correct on macOS; only the link guard in `setup_dotfile_symlinks` confines it.
+Extending is: drop the `LINUX` condition, and re-run the verification suite with case 7
+inverted from "macOS untouched" to the macOS equivalents of cases 1-6.
+
+**The trigger to watch for is a consumer, not a preference:** anything that starts running
+`ssh <mac> '<cmd>'` for real work — a session hosted on the Linux box reaching back, a cron
+job, a CI runner, a peer session delegating a measurement. The moment one exists, the macs
+have the same defect *with* a consumer and this scope should widen. Until then, widening it
+repeats the predecessor's error at 6x the blast radius.
+
+**Do not read the one-line extension as license to do it pre-emptively.** The risk profile is
+not symmetric: 6 machines against 1, and `.zshenv` is read by every zsh process on each of
+them. The cheapness of the change is a property of the design; the decision to make it is the
+operator's, and it needs a named consumer first.
+
 Explicitly **not** in scope: `sh`/`bash` login actors on either platform, and the macOS
 `ssh '<cmd>'` gap. Both keep their backlog rows. Anyone tempted to widen this to macOS must
 first name a consumer, because the predecessor died for want of one.
