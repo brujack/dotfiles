@@ -1,5 +1,7 @@
 # Add `uv` to the Brewfile Implementation Plan
 
+> **Status: DONE** — merged as dotfiles#225 (`346d25f`). All four tasks complete. `uv 0.12.5` installed on both development machines: Mac Studio (aarch64-apple-darwin, via `brew bundle --no-upgrade` against `~/brew/Brewfile`) and Linux workstation (x86_64-unknown-linux-gnu, via the repo's own `brew_install_formula` helper). `uv` left the drift Missing list on both — Studio 3 -> 2, workstation 77 -> 76. ai-config notified, delivery confirmed by session state change.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Install `uv` on both load-bearing development machines through the repo's own install paths, as step 1 of ai-config's Python dependency management design.
