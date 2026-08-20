@@ -92,6 +92,7 @@ brew "pyenv"                                 # [HAS_DEVTOOLS]
 brew "pyright"                               # [HAS_DEVTOOLS]
 brew "pyenv-virtualenv"                      # [HAS_DEVTOOLS]
 brew "python@3.13"                           # [HAS_DEVTOOLS]
+brew "uv"                                    # [HAS_DEVTOOLS]
 brew "rancher-cli"                           # [HAS_K8S]
 brew "ranger"                                # [HAS_DEVTOOLS]
 brew "readline"
