@@ -136,11 +136,11 @@ brew_install_formula uv
 
 ---
 
-### Task 3: Install on both machines and verify drift clean
+### Task 3: Install on both machines and verify uv leaves the drift Missing list
 
 ```yaml-task
 id: 3
-description: Install uv via each platform's own install path on Studio and workstation, then assert brew-drift reports clean (verification task, no code change so TDD does not apply)
+description: Install uv via each platform's own install path on Studio and workstation, then assert uv is absent from brew-drift's Missing list (verification task, no code change so TDD does not apply)
 role: executor
 model: sonnet
 tdd: not-applicable
@@ -174,6 +174,17 @@ ssh workstation 'cd ~/git-repos/personal/dotfiles && \
 ```
 
 **If the prepend is not sufficient** — i.e. `setup_env.sh` still refuses for a reason other than the brew gate — fall back to `PATH=/home/linuxbrew/.linuxbrew/bin:$PATH brew install uv` and **say so explicitly in the report**: that installs `uv` and clears the drift WARN, but it does not exercise the repo's own install path on that machine, so the Task 2 edit remains unverified end-to-end there. Do not report the fallback as equivalent.
+
+**Corrected 2026-08-20 — "drift clean" was unreachable on both machines and is not what this task asserts.** Measured before dispatch, against the real installed state:
+
+| machine | active Brewfile formulae | installed | missing (pre-existing) |
+| --- | --- | --- | --- |
+| Studio | 128 | 230 | **3** — `codeburn`, `go-task/tap/go-task`, `uv` |
+| workstation | 127 | 112 | **77** — including `uv` |
+
+So installing `uv` leaves Studio at 2 missing and the workstation at 76. The reachable assertion — and the one the bash comment above already states — is that **`uv` disappears from the Missing list**, not that the list empties. The `acceptance:` block is unaffected: it gates on `command -v uv` on both machines, which was always correct.
+
+The workstation's 77 is not this branch's problem and must not be read as a regression: `_update_check_brewfile_drift` carries no platform guard (`lib/update_summary.sh:644` checks only `quiet_which brew` and the Brewfile's existence), so Linux is measured against a macOS Brewfile it never installs from — Linux installs from `_install_ubuntu_brew_packages()`. Backlogged separately.
 
 **Record for each machine:** `uv --version`, and the `brew-drift` line from `-t update`'s summary. Both versions go in the PR body — they are the baseline the parent design's step-3 rehearsal will be compared against, and the spec requires the version recorded beside each result.
 
