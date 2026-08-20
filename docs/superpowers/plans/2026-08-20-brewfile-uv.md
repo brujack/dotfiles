@@ -166,12 +166,27 @@ command -v uv && uv --version
 
 **Linux 7950X — the PATH prepend is mandatory.** `brew` is absent from that machine's non-interactive PATH, and `setup_env.sh:30` gates every workflow on `env which brew`, so a bare `ssh workstation './setup_env.sh …'` exits with `[ERROR] Homebrew not found`. Prepend the prefix:
 
+**`ssh -A` is required, not optional.** Measured before dispatch: the workstation cannot reach
+GitHub over a non-interactive `ssh` session — `git fetch` fails with
+`git@github.com: Permission denied (publickey)`, because no key is available there. Its
+`origin/master` was consequently stale at `23d8e0e` while the real ref was `9b7587f`, and
+`git rev-list --count HEAD..origin/master` reported **0 behind** by comparing against the stale
+ref. A bare `ssh workstation 'git pull'` would have failed mid-task. Agent forwarding fixes it,
+verified: with `-A` the fetch succeeded and advanced `23d8e0e..9b7587f`.
+
 ```bash
-ssh workstation 'cd ~/git-repos/personal/dotfiles && git pull && \
+ssh -A workstation 'cd ~/git-repos/personal/dotfiles && git pull && \
   PATH=/home/linuxbrew/.linuxbrew/bin:$PATH ./setup_env.sh -t developer'
-ssh workstation 'cd ~/git-repos/personal/dotfiles && \
+ssh -A workstation 'cd ~/git-repos/personal/dotfiles && \
   PATH=/home/linuxbrew/.linuxbrew/bin:$PATH ./setup_env.sh -t update'
 ```
+
+**The PATH prepend is confirmed sufficient for the gate.** `setup_env.sh:30` gates on
+`env which brew`; measured on the workstation, bare `ssh` → not found (gate fails), with the
+prepend → found (gate passes). So `-t developer` runs the repo's own install path there and the
+fallback below should not be needed. Note `-t doctor` is a **useless probe** for this — lines 13
+and 16 set `_REQUIRES_BREW_PREREQ=0` for `doctor`, `check-versions` and `--brew-install`, so it
+passes with or without brew and tells you nothing about the gate.
 
 **If the prepend is not sufficient** — i.e. `setup_env.sh` still refuses for a reason other than the brew gate — fall back to `PATH=/home/linuxbrew/.linuxbrew/bin:$PATH brew install uv` and **say so explicitly in the report**: that installs `uv` and clears the drift WARN, but it does not exercise the repo's own install path on that machine, so the Task 2 edit remains unverified end-to-end there. Do not report the fallback as equivalent.
 
