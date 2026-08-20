@@ -1,7 +1,7 @@
 # `setup_env.sh` — resolve brew by prefix, not by inherited PATH
 
 **Date:** 2026-08-20
-**Status:** BLOCKED — no consumer, and the immunity claim is false
+**Status:** CLOSED — operator confirmed 2026-08-20 that `setup_env.sh` is only ever run by a human at a prompt. No automated consumer exists or is expected. Do not implement.
 **Context:** third attempt at this problem; the two `.zshenv`/`.zprofile` designs are
 RETIRED and BLOCKED respectively. See Why This Shape.
 
