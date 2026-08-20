@@ -319,3 +319,61 @@ which fails with command-not-found.
 
 No CI change. No `pipx`. No PATH work. No `pyproject.toml`, no `uv.lock`, no `-t update`
 integration — those are steps 3–5 of the parent design and each needs its own cycle.
+
+## Multi-Lens Review
+
+Round 1 reviewed at commit: `703a353` (Step 7 self-review commit, before Step 8 dispatch)
+Round 2 (scoped) reviewed at commit: `55a933c`
+
+### Goal-Fit
+
+Finding: The load-bearing claim was false — `[HAS_DEVTOOLS]` in the main `Brewfile` does not
+withhold anything from `mac_mini`. The tag is a trailing Ruby comment that `brew bundle` never
+sees; `lib/macos.sh:193` bundles the main file unconditionally. Three things collapsed with it:
+the "stronger reason" paragraph, the claim that the test pair shows `uv` "is withheld elsewhere",
+and step 4's inherited model of the fleet. Also: the Linux 7950X is never bundled at all, and the
+spec framed the manual-install requirement as a PATH consequence rather than as "Linux is never
+bundled". Also raised: the `124 of 194` denominator.
+Assumption: That a `mac_mini` receiving `uv` is acceptable. Settled by whether the mini already
+carries `azure-cli`/`bun` — it does, by the same unconditional bundle.
+Disposition: **Addressed** — tag rationale rewritten to convention-plus-drift-tracking with the
+ruby-eval proof; `mac_mini` receiving `uv` stated explicitly and justified against `pyenv`;
+denominator now stated as 127 brew + 59 cask + 8 tap.
+
+### Ergonomics
+
+Finding: The Brewfile is not the workstation's install mechanism, and a Brewfile-only entry
+manufactures a **permanent** `brew-drift` WARN on both non-mac devtools profiles, with no
+self-heal path. Separately, "revisit at step 4" has no mechanism behind it: `brew-drift` compares
+formula *names*, so a version delta is structurally invisible, and `-t check-versions` reads
+`lib/constants.sh`, which this decision deliberately leaves without a `UV_VER`. Also: placement
+silently overrides `CLAUDE.md`'s stated alphabetical convention.
+Assumption: That version drift is inert until step 4 — refuted, since step 3 rehearses `uv sync`
+against the real venv and its *output* is step 4's input.
+Disposition: **Addressed** — drift-WARN consequence recorded as the argument for the Linux edit;
+deferral given a backlog row with its revisit trigger moved from step 4 to before step 3.
+
+### Risk
+
+Finding (round 1): `brew pin` was rejected using a hypothetical the spec's own table refutes —
+both machines sit at 0.12.5, so pinning now would converge. The correct reason is that a
+`Brewfile` cannot express a pin and pin state lives in an untracked machine-local directory.
+"Not live until step 4" mis-identifies the protected artifact. The "exactly coextensive" actor
+claim conflates *brew is on PATH* with *`uv` is installed*. One verification bullet was
+satisfiable by hand and so could not falsify what it gated.
+Finding (round 2, scoped): **Two of the round-1 corrections were themselves defective.** The
+replaced verification bullet is unsatisfiable — `run_update` cannot install anything. And the
+residual-gap concession is false: measured, `[HAS_GUI]` and a `[HAS_DEVTOOL]` typo both fail
+case 1, so the pair pins tag identity; worse, the concession removes the reader's reason to keep
+the `unset "${!HAS_@}"` prefix that creates the discrimination. Also: pinning does not reduce
+prune risk at all, so harm 1 was routed into the pin decision incorrectly.
+Assumption: That someone actually runs `-t setup`/`-t developer` on both machines after merge —
+neither edit self-delivers, and until then both machines carry the very WARN edit 2 exists to
+prevent.
+Disposition: **Addressed** — all six corrected in-place, each labelled as a correction so the
+superseded reasoning stays visible; the assumption is why installation on both machines is an
+explicit step of this work rather than a consequence of merging.
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
