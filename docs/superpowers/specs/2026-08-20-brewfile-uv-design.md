@@ -135,6 +135,17 @@ That draft said the risk is "not live until step 4, because `uv.lock` does not e
 1. **`uv sync` prunes by default**, removing packages present in the environment but absent from
    the project. Rehearsing that against the operator's live 41-package working venv, with a tool
    whose sync semantics have moved across releases, is a live risk now rather than at step 4.
+
+   Verified from uv's own documentation rather than taken from review: *"`uv sync` performs
+   'exact' syncing by default, which means it will remove any packages that are not present in
+   the lockfile"* (`docs.astral.sh/uv/concepts/projects/sync/`). **And the obvious mitigation is
+   incomplete** — the CLI reference states: *"Use the `--inexact` flag to keep extraneous
+   packages. Note that if an extraneous package conflicts with a project dependency, it will
+   still be removed."* The ansible venv's defining problem is conflicting constraints, so
+   conflicting extraneous packages are exactly the population at risk, and `--inexact` does not
+   protect them. Step 3 needs a disposable copy of the venv, not the real one, or it needs to
+   accept that a conflicting package can be removed from the operator's daily working
+   environment.
 2. **The artifact under protection at step 3 is the _measurement_, not the lock.** The
    rehearsal's output is what decides step 4's design. If the Studio rehearses under one `uv`
    and the workstation under another — which follows directly from `brew upgrade --yes` running
