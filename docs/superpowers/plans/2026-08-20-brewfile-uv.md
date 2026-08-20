@@ -124,7 +124,7 @@ depends_on: [1]
 
 **The test must execute the function, not grep the file.** A `grep 'brew_install_formula uv' lib/linux_ubuntu.sh` gate would pass if the line landed outside `_install_ubuntu_brew_packages()` — in a comment or a neighbouring function. Running the function and asserting against `MOCK_CALLS_FILE` closes that.
 
-Then add to `_install_ubuntu_brew_packages()` in alphabetical position within the existing list (after `rustup`, before the `shfmt` comment block):
+Then add to `_install_ubuntu_brew_packages()` in alphabetical position within the existing list — after `brew_install_formula tgenv` (`lib/linux_ubuntu.sh:362`), before `brew_install_formula zoxide` (`:363`). **Corrected 2026-08-20:** this line previously read "after `rustup`, before the `shfmt` comment block", which is the `r`->`s` boundary and is not where `u` sorts; measured, the list runs `ripgrep` `rustup` `shfmt` `starship` `tgenv` `zoxide`, so `uv` belongs between the last two. The trailing tap-qualified entries (`go-task`, `redpanda`) are already out of order and are not the anchor.
 
 ```bash
 brew_install_formula uv
