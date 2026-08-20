@@ -523,14 +523,14 @@ teardown() {
   grep -qx 'uv' <<<"$output"
 }
 
+# ── _brewfile_parse_inactive ──────────────────────────────────────────────────
+
 @test "_brewfile_parse_inactive brew: real Brewfile withholds uv without HAS_DEVTOOLS" {
   unset "${!HAS_@}"
   run _brewfile_parse_inactive brew "${REPO_ROOT}/Brewfile"
   [ "$status" -eq 0 ]
   grep -qx 'uv' <<<"$output"
 }
-
-# ── _brewfile_parse_inactive ──────────────────────────────────────────────────
 
 @test "_brewfile_parse_inactive brew: returns formula when capability is inactive" {
   printf 'brew "postgresql@14"  # [HAS_DEVTOOLS]\n' > "${BATS_TEST_TMPDIR}/Brewfile"
