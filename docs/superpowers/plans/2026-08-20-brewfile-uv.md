@@ -154,6 +154,8 @@ files_touched: []
 depends_on: [1, 2]
 ```
 
+> **Sequencing corrected 2026-08-20 — Tasks 3 and 4 run AFTER the PR merges, not before.** `run_brew_install` (`lib/workflows.sh:290-293`) does `rm -f` then `ln -s` on `${BREWFILE_LOC}/Brewfile` pointing at `${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile` — the **main checkout**, resolved as `/Users/bruce/git-repos/personal/dotfiles/Brewfile`. Measured: that file carries **0** `uv` lines while the feature worktree carries 1, so `brew bundle` cannot see this branch's entry no matter which directory the command is invoked from. The Linux side has the same shape — the workstation has its own clone on master, which is why this task already says `git pull` first. Running either machine pre-merge would therefore install nothing and the only way to make `command -v uv` succeed would be the bare `brew install uv` fallback, which this task explicitly forbids reporting as equivalent. Order is: T1, T2 -> Phase 3 -> PR -> merge -> T3 -> T4. The acceptance gates are unchanged; only their position moves.
+
 **Neither edit self-delivers, which is why this is a task and not a footnote.** `run_update()` contains exactly one brew call — `brew_update` (`brew update` / `brew upgrade --yes` / `brew cleanup`) — and every install path sits outside it: `install_macos_packages` (`lib/workflows.sh:221`), `install_ubuntu_packages` (`:225`), `install_macos_casks` (`:301`), all behind `-t setup` / `-t developer` / `--brew-install`. So from merge until someone runs an install workflow, **both** machines carry the exact WARN Task 2 exists to prevent.
 
 **Mac Studio:**
