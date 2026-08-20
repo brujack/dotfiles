@@ -1,7 +1,60 @@
 # linuxbrew on the login-shell PATH — Design
 
 **Date:** 2026-08-20
-**Status:** Proposed
+**Status:** RETIRED — do not implement
+
+## Retired 2026-08-20, before any implementation
+
+Three independent Step 8 lenses converged from different angles; all three findings were
+re-verified directly before this retirement. The design is not merely unnecessary — it is
+actively harmful, and its central claim is false.
+
+**1. It targets an actor nothing produces.** `.zprofile` is read by login zsh only.
+*Interactive* login zsh already resolves `uv` via `6_path.zsh`, so tmux panes and `ssh -t`
+gain nothing. The only beneficiary is *non-interactive* login zsh, and no producer exists:
+`crontab -l` empty, no graphical session process for the user, and `ssh workstation '<cmd>'`
+does not read `.zprofile` at all (`PYENV_ROOT=[]` versus `/home/bruce/.pyenv` under
+`zsh -lc`). That actor reads `.zshenv`, which this repo neither tracks nor links —
+`setup_dotfile_symlinks` covers `.zshrc`, `.zshrc.d` and `.zprofile` only.
+
+**2. The proposed block is not idempotent, and the dedup it relied on does not cover its
+own target actor.** Measured at three nested login shells on the workstation: the spec's
+`export PATH="${PATH}:..."` form yields `linuxbrew/bin` x3, while `typeset -U path` plus
+`path+=` yields x1. `typeset -U path` lives in `6_path.zsh`, sourced by **interactive**
+zsh only — so the login-only actor this spec exists for is precisely the one with no dedup
+behind it. `.zprofile` already demonstrates the defect: rbenv shims appear twice at depth 3
+today. And nesting is the daily workflow, not a contrived depth — `tmux default-command` is
+empty, so every pane is a login shell, and ssh -> tmux -> pane is three levels.
+
+**3. The load-bearing claim "appending changes no existing resolution" is FALSE, and
+inverted.** `3_oh_my_zsh.zsh` loads the oh-my-zsh `brew` plugin, whose guard is
+`if (( ! $+commands[brew] ))` — conditioned on **presence, not position**. Today `brew` is
+unresolvable when `.zshrc` runs, so the plugin executes `brew shellenv`, which *prepends*
+linuxbrew. Measured on the workstation: `linuxbrew/bin` is at position **5**, ahead of
+`/bin` (10), `/usr/bin` (11) and `/usr/local/bin` (13). Making `brew` resolvable in
+`.zprofile` skips that block, demoting linuxbrew below all three. 206 of 396 binaries in
+`linuxbrew/bin` collide, and `node` goes **v26.7.0 -> v18.19.1** in the operator's daily
+shell, on a fleet whose CI standard is Node 24.
+
+So the design is inert where it is safe and unsafe where it is inert.
+
+**The append-vs-prepend decision was taken against an inverted premise and does not carry
+forward.** It was posed as "prepend would move linuxbrew ahead of `/usr/bin`" when linuxbrew
+is already ahead of it. Whoever respecs this must re-take that decision against the measured
+position-5 fact, where the real question is whether linuxbrew leading `/usr/bin` is intended
+or an accident of the plugin that nobody chose.
+
+**None of the six proposed verification cases would have caught any of this.** All six
+expected PASS; only the deletion-mutation arm was falsifiable. Two asserted an *absence*
+with no positive control, so they pass on an ssh failure or an empty PATH. And not one
+exercised an interactive shell — the regression in point 3 was structurally invisible to
+the entire suite.
+
+Successor work is backlogged in `docs/superpowers/README.md`: `.zshenv` as the only zsh
+startup file every actor reads, the `sh`/`bash` login gap the real consumer needs, and the
+pre-existing rbenv duplication measured here.
+
+---
 
 ## Problem
 
