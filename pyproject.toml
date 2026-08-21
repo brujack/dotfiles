@@ -16,6 +16,15 @@ requires-python = "==3.14.*"
 [tool.uv]
 package = false
 
+# LICENSE POSTURE, reviewed 2026-08-20. Three direct deps are GPL:
+# ansible and ansible-lint (GPL-3.0-or-later), pylint (GPL-2.0-or-later).
+# Accepted. All three predate this file — they are in origin/master's
+# _pip_pkgs at both sites and installed on both machines today, so this
+# manifest makes an existing posture visible rather than creating it.
+# GPL obligations attach to DISTRIBUTION; this repo sets package = false,
+# declares no build-system, and is not published. All three are invoked as
+# CLI tools, not linked as libraries. ansible is the reason the venv exists.
+
 [dependency-groups]
 # Used only by the venv itself: ansible/terraform execution and the interactive
 # tooling that lives alongside it.
@@ -66,8 +75,16 @@ runtime = [
   "passlib",                       # ansible password_hash filter
   "psutil",
   "bpytop",                        # interactive; pins psutil < 6
-  "HttpPy",
-  "j2cli",
+  "HttpPy",                        # FLAGGED FOR REMOVAL: v0.0.9, last release
+                                   # 2019-10-21, no repo push in 39 months, PyPI
+                                   # download stats unavailable, and zero measured
+                                   # consumers fleet-wide. Not a typosquat — it
+                                   # predates httpx — just unjustifiable. Operator
+                                   # decision; kept for now to avoid a silent
+                                   # behaviour change.
+  "j2cli",                         # FLAGGED FOR REMOVAL: last release 2019-06-07,
+                                   # no repo push in 26 months, zero measured
+                                   # consumers fleet-wide. Same call as HttpPy.
   "shell-gpt",                     # interactive; pins openai < 3
   "cosmic-ray",                    # mutation testing (make mutants)
   "scikit-learn",
