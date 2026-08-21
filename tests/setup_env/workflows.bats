@@ -2106,3 +2106,28 @@ assert_all_npm_globals_pinned() {
     return 1
   fi
 }
+
+@test "run_update skips pip and still summarises when uv is unresolvable" {
+  # A missing uv must not abort the run: _update_summary is what writes the
+  # state-ledger entry, so returning early loses the whole run record along
+  # with every later section.
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE_PIP=1 HAS_DEVTOOLS=1
+  unset UPDATE_BREW UPDATE_CLAUDE UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
+  export UV_BIN="${BATS_TEST_TMPDIR}/no-such-uv"
+  run run_update
+  if [[ "${output}" != *"Update Summary"* ]]; then
+    printf "run aborted before the summary; the run record is lost\n" >&2
+    return 1
+  fi
+  if [[ "${output}" != *"[SKIP]"*"pip"* ]]; then
+    printf "pip section not recorded as skipped\n" >&2
+    return 1
+  fi
+  if grep -q "uv sync" "${MOCK_CALLS_FILE}"; then
+    printf "attempted a sync despite uv being unresolvable\n" >&2
+    return 1
+  fi
+}

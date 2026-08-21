@@ -495,8 +495,15 @@ run_update() {
       pyenv shell ansible 2>/dev/null || true
       PYTHON="$(pyenv which python 2>/dev/null || command -v python3)"
 
+      # Skip the section rather than returning: a `return 1` here aborts the
+      # whole of run_update, which means no brewfile drift check, no summary,
+      # and no state-ledger entry — _update_summary is what writes it. A tool
+      # this section needs being absent is a skip, exactly as it is for claude
+      # and npm; it is not a reason to lose the run record.
       local _uv
-      _uv="$(resolve_uv)" || return 1
+      if ! _uv="$(resolve_uv)"; then
+        _update_skip "pip" "uv not installed — run 'setup_env.sh -t brew_install'"
+      else
       local _sync_args=(sync --frozen --project "${PERSONAL_GITREPOS}/${DOTFILES}" --python "${PYTHON}" --group runtime --group test-lint)
       {
         UV_PROJECT_ENVIRONMENT="${PYENV_ROOT}/versions/ansible" "${_uv}" "${_sync_args[@]}"
@@ -528,6 +535,7 @@ run_update() {
       fi
       printf "Updated pip packages\n"
       _update_record_end "pip" "${_pip_rc}"
+      fi
     else
       _update_skip "pip" "HAS_DEVTOOLS not set"
     fi
