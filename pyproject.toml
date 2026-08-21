@@ -81,11 +81,31 @@ runtime = [
                                    #     CVE-2024-23342 = PYSEC-2026-1325.
                                    #     Minerva timing attack on P-256 via
                                    #     sign_digest(). No upstream fix.
-                                   # None is reachable here: all three
-                                   # need an attacker-controlled expression
-                                   # or a signing operation, and checkov
-                                   # signs nothing and evaluates only the
-                                   # operator's own policies. Enumerated
+                                   # None is reachable UNDER CURRENT
+                                   # USAGE: all three need an attacker-
+                                   # controlled expression or a signing
+                                   # operation, and checkov signs nothing
+                                   # and evaluates only the operator's own
+                                   # policies.
+                                   #
+                                   # Read that as a property of how checkov
+                                   # is deployed, NOT of these packages.
+                                   # Nothing in asteval or ecdsa mitigates
+                                   # anything; asteval's own sandbox is what
+                                   # GHSA-89v8-rhwq-hf77 escapes. The
+                                   # condition holding the risk down is
+                                   # "every policy evaluated here was
+                                   # written by the operator" -- and that
+                                   # expires the moment checkov is pointed
+                                   # at a repository carrying third-party
+                                   # custom policies. It expires SILENTLY:
+                                   # no gate re-reads this comment, and
+                                   # widening checkov's scope is a plausible
+                                   # near-term change (wiring it into
+                                   # terraform_ansible's aws/azure/gcp
+                                   # directories is an open backlog item).
+                                   # Re-affirm this block, do not inherit
+                                   # it, if that scope changes. Enumerated
                                    # from OSV 2026-08-21, not from the
                                    # previous comment — which stated two
                                    # IDs as one advisory and named the
