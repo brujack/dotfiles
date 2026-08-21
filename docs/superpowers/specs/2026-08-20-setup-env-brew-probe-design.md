@@ -1,9 +1,89 @@
 # `setup_env.sh` — resolve brew by prefix, not by inherited PATH
 
 **Date:** 2026-08-20
-**Status:** Proposed
+**Status:** CLOSED — operator confirmed 2026-08-20 that `setup_env.sh` is only ever run by a human at a prompt. No automated consumer exists or is expected. Do not implement.
 **Context:** third attempt at this problem; the two `.zshenv`/`.zprofile` designs are
 RETIRED and BLOCKED respectively. See Why This Shape.
+
+## Blocked 2026-08-20 — recommend building nothing
+
+**No non-human consumer exists.** Measured on the workstation: no crontab, 2 user timers
+(snap firmware-updater, launchpadlib-cache-clean — neither invokes this), no system timer, no
+git hook, no CI job, no Makefile target. Fleet-wide grep for `setup_env.sh` returns docs and
+memory prose only. The single real caller is `plans/2026-08-20-brewfile-uv.md` Task 4 — a
+line a human types a few times a year — and its cost today is **34 characters** of `PATH=`
+prefix. Nothing reads the output afterwards: no file, no ledger, no gate.
+
+So the trade is: delete 34 characters from an occasional operator-typed line, in exchange for
+a permanent edit to the entry point on 8 machines. The spec argued from a **capability** gap
+("no cron job *can* run it") and never converted it into a consumer that **wants** to.
+
+**The immunity claim is false in two of three clauses.** Clause 1 named the wrong class. The
+class that killed the predecessors is *a presence-guarded conditional downstream of a
+newly-resolvable binary* — not a property of zsh. `setup_env.sh` sources 13 lib files and
+**184** binaries become newly reachable under the append (the spec quoted 212, the number that
+does *not* change, and omitted 184, the number that does). Live guards inside its own chain:
+
+| site | today | after append |
+| --- | --- | --- |
+| `lib/developer.sh:178` `if ! quiet_which rbenv` | runs the rbenv install | **skips** it |
+| `lib/workflows.sh:49` `if ! command -v claude` | guard fires | skipped |
+| `lib/developer.sh:302` `if ! quiet_which pyenv` -> `log_error; return 1` | loud failure | proceeds silently |
+
+Bounded exposure — one process, not every zsh — but bounded is not immune, and the spec
+claimed immune. Clause 2 (append shadows nothing) is correct and reproduced: zero flips among
+the 212, `python3`/`curl`/`git`/`make` all `/usr/bin`, `apt_pkg` OK.
+
+**Case 1, the self-declared discriminator, is vacuous.** `setup_env.sh:12-13` sets
+`_REQUIRES_BREW_PREREQ=0` for `-t doctor` *and* `-t check-versions`, so
+`ssh workstation './setup_env.sh -t doctor'` runs to completion today and prints
+"Homebrew not found" **zero** times. It passes before the change, after it, and with the
+block deleted. This session had already measured that bypass and described it as "a useless
+probe" — and then built the case on it anyway. Fourth suite in a row with a vacuous case, in
+the one whose opening sentence claims it fixed that.
+
+Not repairable by rewording: every still-gated workflow mutates the machine, so **this design
+has no non-destructive end-to-end verification available at all.**
+
+**Two figures that do not reproduce.** "66 bare `brew` call sites" is **55** executable
+invocations in `lib/*.sh` — the count included comment prose. And "`ratna` is Intel at
+`/usr/local`, measured" is not measured: `5_general.zsh:24` is a generic constant, `ratna` is
+not in `~/.ssh/config`, and no reachable machine has `/usr/local/bin/brew`. Keep the arm; drop
+the word "measured".
+
+**Second lens, independently: the design is SALVAGEABLE if a consumer appears.** The guard
+flips measured **benign**, because `6_path.zsh` appends the same directories, so a
+non-interactive run *converges* on interactive behaviour rather than diverging. `pyenv` flips
+to linuxbrew's, then `developer.sh:282` prepends `$PYENV_ROOT/bin` and the real pyenv wins;
+the `rbenv` flip is already today's interactive behaviour, so not a regression. Recovery is
+genuinely good — one process, one explicit invocation, revert or simply do not run it. No
+shell lockout, no `ssh`/`scp` loss.
+
+So the honest claim is **"blast radius is one process, and it converges to interactive
+behaviour"** — bounded consequence, defensible — never "structurally immune". Anyone
+resurrecting this must rewrite legs (a) and (b) to that, and fix four suite holes: case 1 must
+name a **gated** workflow (`-t update --brew-only` is the shortest that fails today); the
+`_OVERRIDE_BREW_PREFIX` seam cannot express "no prefix found" because an empty string is
+indistinguishable from unset, so that arm is reachable only on CI; no case exercises the
+`/usr/local` (Intel) arm; and case 8's mutation reds are not anchored to named bats tests, so
+nothing enforces them mechanically.
+
+**One unverified risk, and it is on the machine nobody can reach.** `/usr/local` is probed
+**before** `/home/linuxbrew/.linuxbrew` and first match wins. On a Linux box carrying a stale
+or non-brew `/usr/local/bin/brew`, the probe selects the wrong prefix, the gate passes with a
+broken brew, and today's clean *"Homebrew not found -> run bootstrap_linux.sh"* becomes
+confusing downstream failures. The workstation is verified clean. **cruncher cannot be
+`ssh`'d**, so it is unverified, and it is a Linux box where both prefixes are plausible.
+Settled by one command typed at that terminal:
+`ls -l /usr/local/bin/brew /home/linuxbrew/.linuxbrew/bin/brew 2>&1`
+
+**Recommendation: zero lines, one backlog row, and one question for the operator** — *over
+the next six months, will anything other than a human at a prompt invoke `setup_env.sh` on the
+workstation?* If no, the 34-character prefix is the correct answer and all four designs close.
+If it names an automation, the design is warranted and case 1 must re-point at *that*
+workflow with a `--dry-run` arm, which makes it non-destructive and non-vacuous together.
+
+---
 
 ## Problem
 

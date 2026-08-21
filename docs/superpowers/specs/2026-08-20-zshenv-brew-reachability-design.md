@@ -1,7 +1,7 @@
 # `.zshenv` — brew reachable from the ssh actor
 
 **Date:** 2026-08-20
-**Status:** BLOCKED (v2) — same defect class as v1, one file over. Recommend the narrow alternative.
+**Status:** CLOSED (v2) — same defect class as v1, one file over, AND no consumer. Superseded by ADR-0069 (ai-config). Do not implement.
 **Supersedes:** `2026-08-20-linuxbrew-login-path-design.md` (RETIRED unbuilt)
 
 ## v2 blocked 2026-08-20 — "zero flips" is false, and the mechanism is v1's
@@ -88,6 +88,25 @@ shell; `_brew_prefix` does not leak; neither arm writes to stdout; `typeset -TU`
 diagnosed and produces a byte-identical `$path` when isolated.
 
 ## Recommendation — the narrow fix, and not merely because it is cheaper
+
+> **Stale when written, corrected 2026-08-20: the narrow fix recommended below was itself CLOSED four
+> minutes later** — `specs/2026-08-20-setup-env-brew-probe-design.md`, no consumer. Its *structural*
+> argument stands (it never puts brew on `PATH`, so no presence guard can observe it) and is the right
+> reason to prefer it **if** anyone ever builds either. Neither should be built today. The governing
+> decision is ADR-0069.
+
+> **A third finding, from the final lens and not recorded elsewhere: this suite's central safety case is
+> unrunnable from the fleet.** Case 6 specifies `workstation zsh -lic`. From the Studio the only route is
+> `ssh workstation 'zsh -lic "..."'`, whose parent is the ssh actor that just exported the appended
+> `PATH` — so case 6 goes red *because the design works*, and passes only at a physically-local terminal.
+> Case 10's discriminating arm is defined in terms of case 6 and inherits that. A suite whose safety case
+> cannot be executed over the fleet's only hop is not one you can gate on.
+
+> **And the hop's documented purpose does not need brew at all.** `shell.md:306` and `USER.md:233` send
+> you over it to reproduce CI version skew; measured, every tool that needs is a system binary at the
+> CI-matching version — bash 5.2.21, bats 1.10.0, make 4.3, shellcheck 0.9.0, git 2.43.0, python3 3.12.3.
+> Not one is a brew binary.
+
 
 Fix `setup_env.sh:30`'s `env which brew` gate to probe the two prefixes directly. It is
 immune to this entire class **by construction**: it never puts brew on `PATH`, so no
