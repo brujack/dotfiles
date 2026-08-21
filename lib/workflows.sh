@@ -495,37 +495,26 @@ run_update() {
       pyenv shell ansible 2>/dev/null || true
       PYTHON="$(pyenv which python 2>/dev/null || command -v python3)"
 
+      local _uv
+      _uv="$(resolve_uv)" || return 1
+      local _sync_args=(sync --frozen --project "${PERSONAL_GITREPOS}/${DOTFILES}" --python "${PYTHON}" --group runtime --group test-lint)
       {
-        "$PYTHON" -m pip install -U pip setuptools
-
-        # _DOTFILES_RUN_TMPDIR is read by the Python block via os.environ to write pip_outdated
-        "$PYTHON" - <<PY
-import json, subprocess, sys, os
-
-# Packages with hard upper bounds from other installed tools — upgrading them
-# independently breaks checkov, ansible-lint, shell-gpt, or bpytop. Let pip's
-# dependency resolver manage these via top-level package installs only.
-SKIP_UPGRADE = {"packaging", "pathspec", "rich", "psutil"}
-
-cmd = [sys.executable, "-m", "pip", "list", "--outdated", "--format=json"]
-out = subprocess.check_output(cmd, text=True)
-pkgs = [p["name"] for p in json.loads(out) if p["name"].lower() not in SKIP_UPGRADE]
-
-# Write outdated package names for the update summary
-tmpdir = os.environ.get("_DOTFILES_RUN_TMPDIR", "/tmp")
-with open(os.path.join(tmpdir, "pip_outdated"), "w") as f:
-    f.write("\\n".join(pkgs))
-
-if pkgs:
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "-U", *pkgs])
-PY
+        UV_PROJECT_ENVIRONMENT="${PYENV_ROOT}/versions/ansible" "${_uv}" "${_sync_args[@]}"
       } 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_pip"
       local _pip_rc="${PIPESTATUS[0]}"
 
-      # Step 2 of the python-dependency design: surface conflicts instead of
-      # discarding them. Warning, not a failure — the venv carries known
-      # conflicts today and a failing verdict here would block every update
-      # run until the lock lands (step 5), which is what actually fixes them.
+      # The summary's pip line reads pip_outdated. Under the lock there is no
+      # "outdated" set — the honest equivalent is what the sync actually moved,
+      # which uv reports as leading +/- lines. An unchanged run writes an empty
+      # file, which the summary already renders as "no changes".
+      sed -nE 's/^[[:space:]]*[+-][[:space:]]+([^=[:space:]]+).*/\1/p' \
+        "${_DOTFILES_RUN_TMPDIR}/err_pip" 2>/dev/null | sort -u \
+        > "${_DOTFILES_RUN_TMPDIR}/pip_outdated" || true
+
+      # Step 5: the verdict ratchets from warning to failure, in the same change
+      # that makes the sync above apply the lock. The two are coupled — the venv
+      # carried five known conflicts, so failing before the lock landed would
+      # have blocked every update run; after it, a conflict is a real defect.
       #
       # Its own advisory section rather than "pip": _update_warn and the timed
       # _update_record_end below both write status_${section}, so warning on
@@ -534,8 +523,8 @@ PY
       if "$PYTHON" -m pip check > "${_DOTFILES_RUN_TMPDIR}/err_pip-check" 2>&1; then
         _update_ok "pip-check" "no dependency conflicts"
       else
-        _update_warn "pip-check" "dependency conflicts reported — see detail"
-        _update_write_detail_from_err "pip-check" "WARN"
+        _update_fail "pip-check" "dependency conflicts reported — see detail"
+        _update_write_detail_from_err "pip-check" "FAIL"
       fi
       printf "Updated pip packages\n"
       _update_record_end "pip" "${_pip_rc}"

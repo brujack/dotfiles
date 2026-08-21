@@ -585,6 +585,12 @@ firefox  124.0"
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_brew-drift")" = "3 untracked formulae" ]
 }
 
+@test "_update_fail writes FAIL status and result files" {
+  _update_fail "brew-drift" "3 untracked formulae"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew-drift")" = "FAIL" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_brew-drift")" = "3 untracked formulae" ]
+}
+
 # ── _update_summary WARN support ─────────────────────────────────────────────
 
 @test "_update_summary: WARN section printed with [WARN] prefix" {

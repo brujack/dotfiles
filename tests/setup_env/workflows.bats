@@ -1871,19 +1871,27 @@ assert_all_npm_globals_pinned() {
   grep -q "pyenv which python" "${MOCK_CALLS_FILE}"
 }
 
-@test "run_update pip writes pip_outdated when packages are outdated" {
+@test "run_update pip writes pip_outdated from what the sync moved" {
+  # Asserts the FILE rather than the rendered summary, because
+  # update_summary.sh reads pip_outdated directly. Calls run_update directly
+  # rather than via `run` because _DOTFILES_RUN_TMPDIR is exported into the
+  # caller — which means a failure here loses its TAP line, a property this
+  # shares with the other direct callers in this file.
   export MACOS=1
   unset LINUX UBUNTU
   export UPDATE_PIP=1 HAS_DEVTOOLS=1
   unset UPDATE_BREW UPDATE_CLAUDE UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
   export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
-  export MOCK_PYTHON_HEREDOC_PKGS="requests"
+  export MOCK_UV_SYNC_OUTPUT=" + requests==2.34.2
+ - urllib3==1.26.20
+ + urllib3==2.7.0
+"
   run_update
-  grep -q "requests" "${_DOTFILES_RUN_TMPDIR}/pip_outdated"
-  grep -q "OK" "${_DOTFILES_RUN_TMPDIR}/status_pip"
+  grep -q "^requests$" "${_DOTFILES_RUN_TMPDIR}/pip_outdated"
+  grep -q "^urllib3$" "${_DOTFILES_RUN_TMPDIR}/pip_outdated"
+  # deduplicated: urllib3 appears on both a - and a + line
+  [ "$(grep -c . "${_DOTFILES_RUN_TMPDIR}/pip_outdated")" -eq 2 ]
 }
-
-# ── _check_one_version ────────────────────────────────────────────────────────
 
 @test "_check_one_version prints SKIP when tool is not installed" {
   local _out
@@ -2017,39 +2025,15 @@ assert_all_npm_globals_pinned() {
 
 # ── pip check verdict ─────────────────────────────────────────────────────────
 #
-# Step 2 of the python-dependency design: a pip check conflict becomes visible
-# instead of being swallowed by `|| true`. It is a WARNING here, not a failure —
-# the `status` assertions pin that deliberately, so step 5's ratchet to a failing
-# verdict shows up as an intended flip rather than as drift.
+# A pip check conflict is a verdict rather than something swallowed by `|| true`.
+# The conflict case FAILS (see "run_update FAILS the pip-check section" below);
+# this pair pins the clean case, which must stay OK and must not warn.
 #
 # Both use `run` rather than calling run_update directly. A direct call leaves an
 # inherited EXIT trap in the test process, and a test that fails after one loses
 # its TAP line entirely — bats still exits non-zero, so the suite can go red, but
 # the failing test name and its message vanish. 50 tests across this file and
 # unit.bats call run_update directly and share that property.
-
-@test "run_update warns when pip check reports conflicts" {
-  export MACOS=1
-  unset LINUX UBUNTU
-  export UPDATE_PIP=1 HAS_DEVTOOLS=1
-  unset UPDATE_BREW UPDATE_CLAUDE UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
-  export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
-  export MOCK_PYTHON_PIP_CHECK_EXIT=1
-  run run_update
-  # positive control: without it the warning assertion could pass on a run that
-  # never reached the pip section at all
-  if [[ "${output}" != *"Updated pip packages"* ]]; then
-    printf "pip section never ran; the assertion below would be vacuous\n" >&2
-    return 1
-  fi
-  # assert the DURABLE channel, not a stderr string: the verdict has to reach
-  # the run summary, which is the only place it survives past the scrollback
-  if [[ "${output}" != *"[WARN]"*"pip-check"* ]]; then
-    printf "conflict did not reach the run summary as a WARN\n" >&2
-    return 1
-  fi
-  [ "${status}" -eq 0 ]
-}
 
 @test "run_update does not warn when pip check is clean" {
   export MACOS=1
@@ -2072,4 +2056,53 @@ assert_all_npm_globals_pinned() {
     return 1
   fi
   [ "${status}" -eq 0 ]
+}
+
+# ── run_update applies the lock (step 5) ─────────────────────────────────────
+
+@test "run_update installs from the lock instead of upgrading whatever is outdated" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE_PIP=1 HAS_DEVTOOLS=1
+  unset UPDATE_BREW UPDATE_CLAUDE UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
+  run run_update
+  grep -q "uv sync" "${MOCK_CALLS_FILE}"
+  if grep -qE 'pip install -U' "${MOCK_CALLS_FILE}"; then
+    printf "still resolving with pip install -U\n" >&2
+    return 1
+  fi
+}
+
+@test "run_update records what the sync changed, not what was outdated" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE_PIP=1 HAS_DEVTOOLS=1
+  unset UPDATE_BREW UPDATE_CLAUDE UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
+  export MOCK_UV_SYNC_OUTPUT=" + requests==2.34.2
+ - urllib3==1.26.20
+ + urllib3==2.7.0
+"
+  run run_update
+  [[ "${output}" == *"requests"* ]]
+  [[ "${output}" == *"urllib3"* ]]
+}
+
+@test "run_update FAILS the pip-check section when conflicts remain" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE_PIP=1 HAS_DEVTOOLS=1
+  unset UPDATE_BREW UPDATE_CLAUDE UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
+  export MOCK_PYTHON_PIP_CHECK_EXIT=1
+  run run_update
+  if [[ "${output}" != *"[FAIL]"*"pip-check"* ]]; then
+    printf "conflicts no longer warn but do not fail either\n" >&2
+    return 1
+  fi
+  if [[ "${output}" == *"[WARN]"*"pip-check"* ]]; then
+    printf "still only warning after the ratchet\n" >&2
+    return 1
+  fi
 }

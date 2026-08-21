@@ -56,6 +56,18 @@ _update_warn() {
   printf "%s\n" "${_msg}" > "${_DOTFILES_RUN_TMPDIR}/result_${_section}"
 }
 
+# _update_fail SECTION MESSAGE
+# Records a section as a blocking failure. Same lifecycle constraint as
+# _update_ok: for advisory check sections only, not timed _update_record_end
+# sections. The FAIL status is counted into _fail, which _update_summary passes
+# to _ledger_write_run_entry as the run's status — so this is durable, not just
+# a line on the terminal.
+_update_fail() {
+  local _section="$1" _msg="$2"
+  printf "FAIL\n" > "${_DOTFILES_RUN_TMPDIR}/status_${_section}"
+  printf "%s\n" "${_msg}" > "${_DOTFILES_RUN_TMPDIR}/result_${_section}"
+}
+
 # _update_write_detail_from_err SECTION LABEL
 # Extracts a trimmed tail of err_${SECTION} into detail_${SECTION}. Shared by
 # _update_record_end's FAIL path and run_update's WARN call sites (git-repos,
