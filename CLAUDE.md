@@ -216,6 +216,13 @@ Uses **BATS** (Bash Automated Testing System), installed natively:
 **Sync agent guidance:** `make sync-agent-guidance` (regenerates `.cursor/rules/global-claude-standards.mdc` from root `CLAUDE.md`'s `@~/.claude/standards/*.md` imports, resolved against the global symlinked standards dir)
 **Check agent guidance drift:** `make check-agent-guidance` (fails when generated Cursor guidance is stale)
 
+**Sync CI requirements:** `make sync-requirements-ci` (renders `requirements-ci.txt` from `uv.lock`'s `test-lint` group)
+**Check CI requirements drift:** `make check-requirements-ci` (fails when the rendering is stale; a prerequisite of `make test`)
+
+`requirements-ci.txt` is a **rendering, not a declaration** — `pyproject.toml` plus `uv.lock` are the source. It exists so the other repos' CI can `pip install -r` it with stock pip and no `uv` on the runner; verified on macOS and Linux, 65 packages and 428 enforced hashes. Never hand-edit it.
+
+Two properties are load-bearing and were measured rather than assumed. **`uv export` is not byte-deterministic** — its header echoes the argv it was given, including an absolute `--project` path, so `scripts/sync-requirements-ci.sh` strips that header and writes a fixed one; without this the drift gate would fire on every PR forever. And **the Makefile guard skips when `uv` is absent**, matching lint's `shellcheck` idiom, so CI installs a pinned checksum-verified `uv` to keep the check from being inert exactly where it is the real gate.
+
 The pre-commit hook is **required**. It runs on every `git commit`:
 
 1. `make lint` — blocks the commit on any syntax or shellcheck failure
