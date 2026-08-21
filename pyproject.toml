@@ -160,7 +160,6 @@ test-lint = [
   "hypothesis",
   "mypy",
   "pip-audit",
-  "pylint",
   "pyright",
   "pytest",
   "pytest-cov",
