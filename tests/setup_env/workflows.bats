@@ -557,45 +557,49 @@ teardown() {
   grep -q "pyenv" "${MOCK_CALLS_FILE}"
 }
 
-@test "setup_ansible calls pip install ansible" {
+@test "setup_ansible syncs the venv from the committed lock" {
   export MACOS=1
   unset LINUX
   export HAS_DEVTOOLS=1
   setup_ansible
-  grep -q "pip install ansible" "${MOCK_CALLS_FILE}"
+  grep -q "uv sync" "${MOCK_CALLS_FILE}"
   grep -q "pyenv rehash" "${MOCK_CALLS_FILE}"
 }
 
-@test "setup_ansible skips pip when HAS_DEVTOOLS is unset" {
+@test "setup_ansible skips the sync when HAS_DEVTOOLS is unset" {
   export MACOS=1
   unset LINUX HAS_DEVTOOLS
   setup_ansible
-  ! grep -q "pip install ansible" "${MOCK_CALLS_FILE}"
+  if grep -q "uv sync" "${MOCK_CALLS_FILE}"; then
+    printf "synced despite HAS_DEVTOOLS being unset\n" >&2
+    return 1
+  fi
 }
 
-@test "setup_ansible on macOS includes mlx in pip install" {
-  export MACOS=1
-  unset LINUX
-  export HAS_DEVTOOLS=1
-  setup_ansible
-  grep -q "pip install" "${MOCK_CALLS_FILE}"
-  grep -q "mlx" "${MOCK_CALLS_FILE}"
+# mlx's platform gate moved out of the shell and into the manifest, so these two
+# assert the lock rather than the invocation: setup_ansible now issues the SAME
+# command on both platforms and uv applies the marker. Testing the shell for a
+# platform branch that no longer exists there would pass while pinning nothing.
+
+@test "the lock gates mlx to darwin" {
+  local _lock="${BATS_TEST_DIRNAME}/../../uv.lock"
+  [ -f "${_lock}" ]
+  grep -q 'name = "mlx", marker = "sys_platform == .darwin."' "${_lock}"
 }
 
-@test "setup_ansible on Linux excludes mlx from pip install" {
+@test "setup_ansible issues no platform-conditional package on Linux" {
   unset MACOS
   export LINUX=1
   export UBUNTU=1
   export HAS_DEVTOOLS=1
-  # Pre-create the Python version dir so the env-i subshell build branch is skipped
   mkdir -p "${HOME}/.pyenv/versions/${PYTHON_VER}"
   setup_ansible
-  grep -q "pip install ansible" "${MOCK_CALLS_FILE}"
-  run grep "mlx" "${MOCK_CALLS_FILE}"
-  [ "$status" -ne 0 ]
+  grep -q "uv sync" "${MOCK_CALLS_FILE}"
+  if grep -q "mlx" "${MOCK_CALLS_FILE}"; then
+    printf "shell still names mlx; the marker should be doing this\n" >&2
+    return 1
+  fi
 }
-
-# ── clone_personal_repos ──────────────────────────────────────────────────────
 
 @test "clone_personal_repos calls git clone for each absent repo" {
   export MACOS=1

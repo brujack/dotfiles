@@ -67,6 +67,38 @@ quiet_which() {
   which "$1" &>/dev/null
 }
 
+# resolve_uv
+# Prints uv's absolute path, or fails with a remedy. Absolute rather than a bare
+# `uv` because uv resolves to different builds per actor: an interactive shell
+# gets the brew prefix, a git hook or cron does not. A bare name would install
+# the venv from whichever uv happened to be on PATH, or silently from none.
+resolve_uv() {
+  local _uv
+  # UV_BIN is an explicit override, checked first: it is the operator escape
+  # hatch and the only seam a test can use to drive the not-found path, since
+  # PATH mocking cannot remove the absolute-path candidates below.
+  if [[ -n "${UV_BIN:-}" ]]; then
+    if [[ -x "${UV_BIN}" ]]; then
+      printf "%s\n" "${UV_BIN}"
+      return 0
+    fi
+    log_error "UV_BIN is set to '${UV_BIN}' but that is not executable"
+    return 1
+  fi
+  _uv="$(command -v uv 2>/dev/null)"
+  if [[ -z "${_uv}" ]]; then
+    for _uv in /opt/homebrew/bin/uv /home/linuxbrew/.linuxbrew/bin/uv /usr/local/bin/uv; do
+      [[ -x "${_uv}" ]] && break
+      _uv=""
+    done
+  fi
+  if [[ -z "${_uv}" ]]; then
+    log_error "uv not found — run 'setup_env.sh -t brew_install' first"
+    return 1
+  fi
+  printf "%s\n" "${_uv}"
+}
+
 brew_update() {
   if ! ensure_not_root; then
     return 1

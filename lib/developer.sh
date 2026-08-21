@@ -287,9 +287,10 @@ setup_ansible() {
       pyenv virtualenv "${PYTHON_VER}" ansible
       pyenv activate ansible
       printf "Installing Ansible dependencies...\\n"
-      local _pip_pkgs=(ansible ansible-lint molecule "molecule-plugins[docker]" certbot certbot-dns-cloudflare checkov boto3 docker gmpy2 jmespath mpmath netaddr pylint psutil bpytop HttpPy j2cli shell-gpt pyright cosmic-ray hypothesis passlib scikit-learn scipy bandit pip-audit ruff pytest pytest-cov pytest-xdist mypy pandas matplotlib seaborn ipython jupyterlab pre-commit radon vulture)
-      [[ -n ${MACOS:-} ]] && _pip_pkgs+=(mlx)
-      python -m pip install "${_pip_pkgs[@]}"
+      local _uv
+      _uv="$(resolve_uv)" || return 1
+      local _sync_args=(sync --frozen --project "${PERSONAL_GITREPOS}/${DOTFILES}" --python "${PYENV_ROOT}/versions/ansible/bin/python" --group runtime --group test-lint)
+      UV_PROJECT_ENVIRONMENT="${PYENV_ROOT}/versions/ansible" "${_uv}" "${_sync_args[@]}" || return 1
       pyenv rehash
     fi
   fi
@@ -317,9 +318,10 @@ recreate_python_venv() {
     local _python
     _python="$(pyenv which python 2>/dev/null || command -v python3)"
     printf "Installing Ansible dependencies...\\n"
-    local _pip_pkgs=(ansible ansible-lint molecule "molecule-plugins[docker]" certbot certbot-dns-cloudflare checkov boto3 docker gmpy2 jmespath mpmath netaddr pylint psutil bpytop HttpPy j2cli shell-gpt pyright cosmic-ray hypothesis passlib scikit-learn scipy bandit pip-audit ruff pytest pytest-cov pytest-xdist mypy pandas matplotlib seaborn ipython jupyterlab pre-commit radon vulture)
-    [[ -n ${MACOS:-} ]] && _pip_pkgs+=(mlx)
-    "${_python}" -m pip install "${_pip_pkgs[@]}" || return 1
+    local _uv
+    _uv="$(resolve_uv)" || return 1
+    local _sync_args=(sync --frozen --project "${PERSONAL_GITREPOS}/${DOTFILES}" --python "${_python}" --group runtime --group test-lint)
+    UV_PROJECT_ENVIRONMENT="${PYENV_ROOT}/versions/${_venv_name}" "${_uv}" "${_sync_args[@]}" || return 1
     pyenv rehash
   fi
 }

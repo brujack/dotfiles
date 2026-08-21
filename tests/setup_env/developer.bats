@@ -130,38 +130,109 @@ teardown() {
   grep -q "pyenv update" "${MOCK_CALLS_FILE}"
 }
 
-@test "setup_ansible: pip install includes passlib" {
-  export LINUX=1; unset MACOS
-  export HAS_DEVTOOLS=1
-  run setup_ansible
-  grep -q "pip install.*passlib" "${MOCK_CALLS_FILE}"
+@test "the manifest still declares passlib" {
+  # passlib backs ansible's password_hash filter; it has no other consumer and
+  # is the package most likely to look droppable to someone pruning the list
+  grep -q '"passlib"' "${BATS_TEST_DIRNAME}/../../pyproject.toml"
 }
 
-# ── declared pip package set ──────────────────────────────────────────────────
+# ── declared package set ──────────────────────────────────────────────────────
 #
-# Both assertions below are ABSENCE assertions, so each carries a positive
-# control naming a package that must still be there. Without it a run where
-# setup_ansible never reached the pip line would pass vacuously — the mock call
-# log would simply be empty of "wheel" along with everything else.
+# The package set now lives in one place. wheel's deletion is asserted against
+# that declaration rather than against a pip invocation, because there is no
+# longer a pip invocation to inspect. The positive control is a package that
+# must still be declared, so a renamed or moved manifest fails loudly instead
+# of making the absence assertion vacuous.
 
-@test "setup_ansible: pip install does not include wheel" {
-  export LINUX=1; unset MACOS
-  export HAS_DEVTOOLS=1
-  run setup_ansible
-  grep -q "pip install.*ansible-lint" "${MOCK_CALLS_FILE}"
-  if grep -qE "pip install.* wheel( |$)" "${MOCK_CALLS_FILE}"; then
-    printf "wheel still declared in setup_ansible's pip set\n" >&2
+@test "pyproject.toml declares the package set and no longer carries wheel" {
+  local _manifest="${BATS_TEST_DIRNAME}/../../pyproject.toml"
+  [ -f "${_manifest}" ]
+  grep -q '"ansible-lint"' "${_manifest}"
+  if grep -qE '^\s*"wheel"' "${_manifest}"; then
+    printf "wheel is still declared in pyproject.toml\n" >&2
     return 1
   fi
 }
 
-@test "recreate_python_venv: pip install does not include wheel" {
+@test "the package set is declared once — not in lib/developer.sh" {
+  if grep -q '_pip_pkgs' "${BATS_TEST_DIRNAME}/../../lib/developer.sh"; then
+    printf "lib/developer.sh still carries a hardcoded package array\n" >&2
+    return 1
+  fi
+}
+
+# ── uv-managed dependency install (step 4) ───────────────────────────────────
+#
+# Both venv-creating sites install from the committed lock rather than from a
+# hardcoded array. Each absence assertion carries a positive control, and the
+# missing-uv cases assert the function FAILS rather than silently installing
+# nothing — a new hard dependency with no guard is worse than the duplication
+# it replaces.
+
+@test "setup_ansible: installs from the lock, not a package array" {
+  export LINUX=1; unset MACOS
+  export HAS_DEVTOOLS=1
+  run setup_ansible
+  grep -q "uv sync" "${MOCK_CALLS_FILE}"
+  if grep -q "pip install" "${MOCK_CALLS_FILE}"; then
+    printf "still installing from a hardcoded package list\n" >&2
+    return 1
+  fi
+}
+
+@test "setup_ansible: uv sync targets the ansible venv" {
+  export LINUX=1; unset MACOS
+  export HAS_DEVTOOLS=1
+  run setup_ansible
+  grep -q "uv sync.*--group runtime" "${MOCK_CALLS_FILE}"
+  grep -q "uv sync.*--group test-lint" "${MOCK_CALLS_FILE}"
+  grep -q "uv sync.*--frozen" "${MOCK_CALLS_FILE}"
+}
+
+@test "recreate_python_venv: installs from the lock, not a package array" {
   export LINUX=1; unset MACOS
   export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
   run recreate_python_venv ansible
-  grep -q "pip install.*ansible-lint" "${MOCK_CALLS_FILE}"
-  if grep -qE "pip install.* wheel( |$)" "${MOCK_CALLS_FILE}"; then
-    printf "wheel still declared in recreate_python_venv's pip set\n" >&2
+  grep -q "uv sync" "${MOCK_CALLS_FILE}"
+  if grep -q "pip install" "${MOCK_CALLS_FILE}"; then
+    printf "still installing from a hardcoded package list\n" >&2
     return 1
   fi
+}
+
+@test "recreate_python_venv: fails loudly when uv is not installed" {
+  export LINUX=1; unset MACOS
+  export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
+  export UV_BIN="${BATS_TEST_TMPDIR}/no-such-uv"
+  run recreate_python_venv ansible
+  [ "${status}" -ne 0 ]
+  if [[ "${output}" != *"uv"* ]]; then
+    printf "failed without naming uv as the missing dependency\n" >&2
+    return 1
+  fi
+}
+
+@test "resolve_uv falls back to a brew prefix when uv is not on PATH" {
+  # This is the branch resolve_uv exists for: a git hook or cron job whose PATH
+  # never sourced a profile and so cannot see the brew prefix. Stripping the
+  # mocks dir is what makes the fallback reachable — with the mock present the
+  # `command -v` branch answers first and this path never runs.
+  unset UV_BIN
+  local _found
+  _found="$(PATH="/usr/bin:/bin" resolve_uv)" || _found=""
+  if [[ -z "${_found}" ]]; then
+    printf "resolve_uv found nothing with a bare PATH; the prefix fallback is dead\n" >&2
+    return 1
+  fi
+  [[ "${_found}" == /* ]]
+  [[ -x "${_found}" ]]
+}
+
+@test "resolve_uv prefers an explicit UV_BIN over PATH" {
+  local _fake="${BATS_TEST_TMPDIR}/my-uv"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "${_fake}"; chmod +x "${_fake}"
+  export UV_BIN="${_fake}"
+  local _got
+  _got="$(resolve_uv)"
+  [ "${_got}" = "${_fake}" ]
 }

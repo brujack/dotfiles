@@ -533,7 +533,7 @@ Invoke `caveman:caveman-commit` skill to generate the commit message before runn
 - Credential directories (`.aws`, `.tf_creds`, `.tsh`) are created with `chmod 700`
 - Git repos are cloned to `~/git-repos/personal/` and `~/git-repos/work/`
 - Python environments managed via **pyenv** + **pyenv-virtualenv**; the `ansible` venv is the primary one
-- **Ansible venv packages (explicit):** ansible, ansible-lint, molecule, molecule-plugins[docker], certbot, certbot-dns-cloudflare, checkov, boto3, docker, gmpy2, jmespath, mpmath, netaddr, pylint, psutil, bpytop, HttpPy, j2cli, shell-gpt, pyright, cosmic-ray, hypothesis, passlib, scikit-learn, scipy, bandit, pip-audit, ruff, pytest, pytest-cov, pytest-xdist, mypy, pandas, matplotlib, seaborn, ipython, jupyterlab, pre-commit, radon, vulture (+macOS: mlx)
+- **Ansible venv packages:** declared once in `pyproject.toml` under `[dependency-groups]` (`runtime` and `test-lint`), pinned transitively by `uv.lock`. Both venv-creating sites in `lib/developer.sh` install with `uv sync --frozen`; nothing installs from a name list. `mlx` is gated to macOS by a `sys_platform == 'darwin'` marker in the manifest, not by a shell branch. Change a version by editing `pyproject.toml` and re-running `uv lock`.
 - **ruff is venv-managed** (not brew); run `brew uninstall ruff` once after venv recreate to remove the legacy brew install
 - **Test runner:** `pytest` — runs `unittest.TestCase` tests natively; test file contents do not change
 - Application installs are kept in alphabetical order
