@@ -255,7 +255,7 @@ Two properties are load-bearing and were measured rather than assumed. **`uv exp
 The pre-commit hook is **required**. It runs on every `git commit`:
 
 1. `make lint` — blocks the commit on any syntax or shellcheck failure
-2. `ggshield secret scan pre-commit` — scans staged changes for secrets before they reach the remote; skipped gracefully if ggshield is not installed
+2. `ggshield secret scan pre-commit` — scans staged changes for secrets before they reach the remote. **Resolved by explicit override, then `PATH`, then absolute prefixes — not by `command -v` alone — and the skip is announced on stderr, never silent.** A git hook is not an actor of its own: it inherits whoever invoked `git`. Measured 2026-08-21 on the Linux workstation, where ggshield 1.53.0 is installed and authenticated at `/home/linuxbrew/.linuxbrew/bin/ggshield`: `zsh -i -c` resolves it, while `zsh -l -c`, `ssh host '<cmd>'`, cron and `env -i sh` all report NOT-ON-PATH, because that prefix reaches `PATH` only through `.config/.zshrc.d/6_path.zsh`, which interactive zsh alone sources. Under the previous bare `command -v` guard the scan ran from a terminal and silently did not run for any of the others — **the gate was not absent, it was invisible**, which is the worse of the two for a security arm because silence is indistinguishable from "scanned and found nothing". This is the same actor-boundary class as the `make` 3.81/4.4.1 split documented above, for a different tool on a different platform. The absent case still exits 0 — a machine lacking ggshield must be able to commit the change that installs it — but it now says so twice on stderr
 
 The pre-push hook is **permanent**. It runs `make test` (lint + bats) on every push before the push reaches GitHub, and it **fails closed** (ADR-0017, `docs/adr/0017-pre-push-trigger-fail-closed.md`): the suite runs unless every changed path is provably inert, and it also fails closed if `git diff` itself cannot resolve the push's revision range (e.g. `remote_sha` names an object the local checkout lacks) rather than silently reading that as "nothing changed". The inert set is deliberately small — `.md` files, `.yml`/`.yaml` files under `.github/`, and `LICENSE` — and is matched with `grep -qv`, so a single changed path outside that set is enough to trigger the run. `docs/` and `.github/` are **not** wholesale-inert: `make lint`'s `SHELL_FILES` walk is recursive, so a `.sh` file anywhere in the repo — including `docs/gen.sh` or `.github/scripts/foo.sh` — is linted by `make test` and must still trigger the suite. This means `starship.toml`, `.zshrc`, `.gitignore_global`, and `ubuntu_common_packages.txt` all trigger the suite even though none is a `.sh`/`.bats`/`.zsh` file, because none is in the inert set. Skips branch deletions. This conserves GitHub Actions minutes — CI runs only on PRs.
 
@@ -513,6 +513,24 @@ silently asserts nothing. `tests/setup_env/install_guards.bats` calls `_gnubin_a
 `_gnubin_present` for exactly that reason. Unlike most seams here these are read
 unconditionally rather than only under test — a stray export changes real shell `PATH`,
 which grants no capability beyond setting `PATH` directly but is worth knowing.
+
+**`GGSHIELD_BIN` / `GGSHIELD_FALLBACK_PATHS` (`scripts/pre-commit-hook.sh`) exist for the
+same reason, one tool over.** `GGSHIELD_BIN` is the operator escape hatch and is checked
+first; a non-executable value there is a hard error rather than a degrade, since an
+explicit override that silently falls back is worse than no override.
+`GGSHIELD_FALLBACK_PATHS` is a space-separated candidate list, consulted only when `PATH`
+resolution fails, and it is env-settable **solely** so a test can reach the genuinely
+not-found branch — on any machine that has ggshield the hardcoded prefixes always resolve,
+which makes that branch otherwise unreachable. It grants no capability `GGSHIELD_BIN` does
+not already grant.
+
+Tests must drive absence through these seams and never by editing `PATH`. Stripping the
+directory that contains ggshield takes the toolchain with it — `/opt/homebrew/bin` also
+holds `git` and `make` — which is the same "delete a directory to delete one binary"
+defect recorded for `tests/mocks` in `shell.md`. `tests/scripts/pre_commit_hook.bats` uses
+`MINIMAL_PATH=/usr/bin:/bin` instead: a real PATH that carries `git` and `make` and no
+ggshield. Before this seam existed, the case named "ggshield is absent" ran the **real**
+ggshield on every dev machine and asserted nothing about the branch it named.
 
 **`_OVERRIDE_BATS_BIN` (`scripts/run-bash-coverage.sh`) exists because a `PATH` strip
 cannot remove bats on the platform that matters.** The pre-flight guard resolves
