@@ -62,12 +62,40 @@ setup() {
   fi
 }
 
-@test "CI installs a checksum-verified uv, so the check is not skipped there" {
-  # The Makefile guard skips when uv is absent. That is correct locally and
-  # would make the gate inert in CI, where it is the real gate.
+@test "every CI job that runs the suite installs a checksum-verified uv" {
+  # Asserts PER JOB, not per file. The original grepped the whole workflow for
+  # UV_SHA256 and passed on presence anywhere — which it had, in the `test` job
+  # only, while `bash-coverage` ran the same suite without uv and 4 tests failed
+  # there. An assertion satisfied by a different job than the one under test is
+  # the same cause-isolation defect as an assertion satisfied by a different
+  # code path.
   local _wf="${REPO_ROOT}/.github/workflows/ci.yml"
-  grep -q 'UV_SHA256' "${_wf}"
-  grep -q 'sha256sum -c -' "${_wf}"
+  local _bad
+  # `working-directory:` is load-bearing, not defensive: the powershell job runs
+  # `make test` under working-directory: powershell, which is Pester against
+  # powershell/Makefile, not the root suite. Counting it would make this fire on
+  # correct state, and a check that fires on correct state gets ignored.
+  _bad="$(awk '
+    /^  [a-z-]+:$/       { job=$1; sub(/:$/,"",job); has_uv[job]=0; runs[job]=0 }
+    /^      - name:/     { wd=0 }
+    /working-directory:/ { wd=1 }
+    /Install uv \(pinned\)/            { has_uv[job]=1 }
+    /make test|make bash-coverage/     { if (!wd) runs[job]=1 }
+    END { for (j in runs) if (runs[j] && !has_uv[j]) print j }
+  ' "${_wf}")"
+  if [[ -n "${_bad}" ]]; then
+    printf "job(s) run the suite without installing uv: %s\n" "${_bad}" >&2
+    return 1
+  fi
+  # positive control: the scan must actually have found jobs that run the suite
+  local _n
+  _n="$(awk '
+    /^  [a-z-]+:$/       { job=$1 }
+    /^      - name:/     { wd=0 }
+    /working-directory:/ { wd=1 }
+    /make test|make bash-coverage/ { if (!wd) print job }
+  ' "${_wf}" | sort -u | wc -l | tr -d " ")"
+  [ "${_n}" -ge 2 ]
 }
 
 @test "check fails when uv cannot be resolved, distinctly from drift" {

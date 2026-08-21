@@ -152,6 +152,18 @@ jobs:
           sudo install -m755 "/tmp/shellcheck-v${SC_VER}/shellcheck" /usr/local/bin/shellcheck
           shellcheck --version | grep -q "version: ${SC_VER}"
 
+      - name: Install uv (pinned)
+        env:
+          UV_VER: "0.12.5"
+          UV_SHA256: "68a509da24b06b4223a1c0175fb5eb5bc79342b76cbeff0cfe51ac3f5b17b6b2"
+        run: |
+          curl -fsSL -o /tmp/uv.tar.gz \
+            "https://github.com/astral-sh/uv/releases/download/${UV_VER}/uv-x86_64-unknown-linux-gnu.tar.gz"
+          echo "${UV_SHA256}  /tmp/uv.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/uv.tar.gz -C /tmp
+          sudo install -m755 /tmp/uv-x86_64-unknown-linux-gnu/uv /usr/local/bin/uv
+          uv --version | grep -q "uv ${UV_VER}"
+
       - name: Run bash coverage (gate at 91%)
         run: |
           make bash-coverage > /tmp/bash-cov-out.txt 2>&1 || { cat /tmp/bash-cov-out.txt; exit 1; }
