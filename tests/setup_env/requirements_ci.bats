@@ -1,5 +1,10 @@
 #!/usr/bin/env bats
 
+# `run !` (negated run) is a 1.5.0 flag; without this declaration bats emits BW02
+# on every invocation. ubuntu-latest ships 1.10.0 via apt and the dev machines
+# 1.14.0, so the floor is satisfied everywhere this runs.
+bats_require_minimum_version 1.5.0
+
 setup() {
   REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
   SCRIPT="${REPO_ROOT}/scripts/sync-requirements-ci.sh"
@@ -8,6 +13,11 @@ setup() {
   TARGET="${BATS_TEST_TMPDIR}/requirements-ci.txt"
   export REQUIREMENTS_CI_TARGET="${TARGET}"
   cp "${REPO_ROOT}/requirements-ci.txt" "${TARGET}"
+  # Same reasoning for the second rendering. Both seams must be redirected, or a
+  # drift case leaves a tracked file modified.
+  RUNTIME_TARGET="${BATS_TEST_TMPDIR}/requirements-runtime-ci.txt"
+  export REQUIREMENTS_RUNTIME_CI_TARGET="${RUNTIME_TARGET}"
+  cp "${REPO_ROOT}/requirements-runtime-ci.txt" "${RUNTIME_TARGET}"
 }
 
 @test "check passes against the committed rendering" {
@@ -43,6 +53,68 @@ setup() {
 @test "the rendering is hash-pinned" {
   grep -q -- '--hash=sha256:' "${TARGET}"
   grep -q '^ruff==' "${TARGET}"
+}
+
+@test "check fails when the RUNTIME rendering has drifted" {
+  # The load-bearing case for the two-group loop. Without it the runtime arm
+  # could be dead -- never rendered, never compared -- and every other test in
+  # this file would still pass, because they all exercise only the test-lint
+  # rendering. A loop whose second iteration does nothing is indistinguishable
+  # from a correct one unless something drifts exactly there.
+  printf 'ansible==0.0.1\n' >> "${RUNTIME_TARGET}"
+  run "${SCRIPT}" check
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"DRIFT"* ]]
+  [[ "${output}" == *"requirements-runtime-ci.txt"* ]]
+}
+
+@test "check fails when the RUNTIME rendering is missing entirely" {
+  rm -f "${RUNTIME_TARGET}"
+  run "${SCRIPT}" check
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"MISSING"* ]]
+  [[ "${output}" == *"requirements-runtime-ci.txt"* ]]
+}
+
+@test "check reports BOTH renderings, not just the first to fail" {
+  # cmd_check continues past a failure rather than returning early, so a run
+  # with two broken renderings names both. Returning on the first would hide
+  # the second until someone fixed the first and re-ran.
+  printf 'ruff==0.0.1\n'    >> "${TARGET}"
+  printf 'ansible==0.0.1\n' >> "${RUNTIME_TARGET}"
+  run "${SCRIPT}" check
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"requirements-ci.txt"* ]]
+  [[ "${output}" == *"requirements-runtime-ci.txt"* ]]
+}
+
+@test "the runtime rendering is hash-pinned and carries no machine-specific path" {
+  grep -q -- '--hash=sha256:' "${REPO_ROOT}/requirements-runtime-ci.txt"
+  run grep -c -E '/Users/|/home/' "${REPO_ROOT}/requirements-runtime-ci.txt"
+  [ "${output}" -eq 0 ]
+}
+
+@test "the two renderings are different files with different content" {
+  # They are deliberately separate: terraform_ansible installs the runtime set
+  # and no test tooling, the other three the reverse. This guards against a
+  # later "harmonisation" into one file, which would serve terraform_ansible
+  # not at all.
+  run ! diff -q "${REPO_ROOT}/requirements-ci.txt" \
+                "${REPO_ROOT}/requirements-runtime-ci.txt"
+  grep -q '^ansible==' "${REPO_ROOT}/requirements-runtime-ci.txt"
+  run ! grep -q '^ansible==' "${REPO_ROOT}/requirements-ci.txt"
+}
+
+@test "the molecule-plugins[docker] extra is flattened into the runtime rendering" {
+  # An extra cannot appear as `pkg[extra]` in a hash-pinned requirements file.
+  # uv export resolves it away instead, emitting the extra's dependencies as
+  # top-level pins -- so a consumer needs no second, unhashed install line.
+  # Measured: [docker] requires docker, requests, selinux.
+  local _f="${REPO_ROOT}/requirements-runtime-ci.txt"
+  run ! grep -qE '^[A-Za-z0-9._-]+\[' "${_f}"
+  for _dep in docker requests selinux; do
+    grep -qE "^${_dep}==" "${_f}" || { printf 'missing %s\n' "${_dep}" >&2; return 1; }
+  done
 }
 
 @test "an unknown subcommand exits 2 with usage" {
