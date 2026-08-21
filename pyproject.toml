@@ -50,7 +50,7 @@ runtime = [
                                    # so forcing 1.0.9 made every checkov
                                    # >=3.2.459 unsatisfiable and the
                                    # resolver picked an older checkov that
-                                   # needs no asteval at all. Renovate
+                                   # needs no asteval at all. Dependabot
                                    # edited the LOCK, not this file, so
                                    # nothing here recorded it.
                                    #
