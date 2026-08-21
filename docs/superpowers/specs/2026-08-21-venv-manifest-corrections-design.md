@@ -66,7 +66,7 @@ over pinning `==3.2.414` for zero advisories at 15 months stale.
 walked checkov **3.3.13 -> 3.2.414** and removed `asteval` and `ecdsa` entirely — 20
 insertions, 85 deletions — and auto-merged. checkov pins `asteval` exactly, so forcing 1.0.9
 made every checkov >=3.2.459 unsatisfiable and the resolver chose an older checkov that does
-not need asteval at all. Renovate edited the **lock, not the manifest**: `asteval>=1.0.9`
+not need asteval at all. Dependabot edited the **lock, not the manifest** (corrected 2026-08-21 — this said *Renovate*, which manages only `github-actions` here and could not have raised it; #227's author is `app/dependabot`): `asteval>=1.0.9`
 appears nowhere in `pyproject.toml`, so the manifest never recorded the change.
 
 Measured by the ai-config session before proposing it:
