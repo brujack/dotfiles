@@ -200,14 +200,38 @@ teardown() {
   fi
 }
 
-@test "recreate_python_venv: fails loudly when uv is not installed" {
+# resolve_uv has TWO distinct failure branches and they must not be conflated:
+# a misconfigured UV_BIN, and uv genuinely absent. Both mention "uv", so an
+# assertion on that substring cannot tell them apart -- and most of the run's
+# output mentions uv anyway. Each test below pins its branch's own message.
+
+@test "recreate_python_venv: fails loudly when UV_BIN points at a non-executable" {
   export LINUX=1; unset MACOS
   export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
   export UV_BIN="${BATS_TEST_TMPDIR}/no-such-uv"
   run recreate_python_venv ansible
   [ "${status}" -ne 0 ]
-  if [[ "${output}" != *"uv"* ]]; then
-    printf "failed without naming uv as the missing dependency\n" >&2
+  if [[ "${output}" != *"UV_BIN is set to"* ]]; then
+    printf "took a different failure branch than the UV_BIN one\n" >&2
+    return 1
+  fi
+}
+
+@test "resolve_uv fails with an install remedy when uv is genuinely absent" {
+  unset UV_BIN
+  # Empty PATH plus an empty candidate list is the only way to reach this
+  # branch: on a machine that has uv the real prefixes always resolve.
+  # shellcheck disable=SC2034 # read by resolve_uv, which is sourced, not defined here
+  UV_FALLBACK_PATHS=("${BATS_TEST_TMPDIR}/nope")
+  local _out _rc=0
+  _out="$(PATH="${BATS_TEST_TMPDIR}" resolve_uv 2>&1)" || _rc=$?
+  [ "${_rc}" -ne 0 ]
+  if [[ "${_out}" != *"uv not found"* ]]; then
+    printf "wrong branch: %s\n" "${_out}" >&2
+    return 1
+  fi
+  if [[ "${_out}" == *"UV_BIN is set to"* ]]; then
+    printf "took the UV_BIN branch instead of the not-found branch\n" >&2
     return 1
   fi
 }

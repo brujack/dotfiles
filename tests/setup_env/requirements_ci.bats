@@ -69,3 +69,29 @@ setup() {
   grep -q 'UV_SHA256' "${_wf}"
   grep -q 'sha256sum -c -' "${_wf}"
 }
+
+@test "check fails when uv cannot be resolved, distinctly from drift" {
+  # cmd_check's third failure path: _render itself fails. Asserts the uv
+  # message rather than merely non-zero, because MISSING and DRIFT also
+  # exit non-zero and would satisfy a bare status check.
+  export UV_BIN="${BATS_TEST_TMPDIR}/no-such-uv"
+  run "${SCRIPT}" check
+  [ "${status}" -ne 0 ]
+  if [[ "${output}" != *"UV_BIN is set to"* ]]; then
+    printf "did not fail on uv resolution: %s\n" "${output}" >&2
+    return 1
+  fi
+  if [[ "${output}" == *"DRIFT"* || "${output}" == *"MISSING"* ]]; then
+    printf "reported drift/missing when the real cause was uv resolution\n" >&2
+    return 1
+  fi
+}
+
+@test "check treats an empty rendering as drift, not as a match" {
+  # Boundary: a zero-length target. An implementation comparing only when
+  # both sides are non-empty would call this a match.
+  : > "${TARGET}"
+  run "${SCRIPT}" check
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"DRIFT"* ]]
+}
