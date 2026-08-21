@@ -68,8 +68,8 @@ help:
 	@printf "  make install-hooks     Install pre-commit and pre-push hooks (run once per checkout)\n"
 	@printf "  make sync-agent-guidance  Regenerate .cursor/rules/global-claude-standards.mdc from CLAUDE.md\n"
 	@printf "  make check-agent-guidance Fail if the generated Cursor rule has drifted from CLAUDE.md\n"
-	@printf "  make sync-requirements-ci  Render requirements-ci.txt from uv.lock's test-lint group\n"
-	@printf "  make check-requirements-ci Fail if requirements-ci.txt has drifted from uv.lock\n"
+	@printf "  make sync-requirements-ci  Render both CI requirements files from uv.lock\n"
+	@printf "  make check-requirements-ci Fail if either rendering has drifted from uv.lock\n"
 	@printf "  make help              Show this help\n"
 
 lint:

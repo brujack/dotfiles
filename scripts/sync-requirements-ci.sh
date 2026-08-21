@@ -1,61 +1,102 @@
 #!/usr/bin/env bash
-# Renders requirements-ci.txt from uv.lock's test-lint group.
+# Renders the CI requirements files from uv.lock.
 #
-# The file is a RENDERING, not a declaration: pyproject.toml plus uv.lock are
-# the source, and this produces the plain, hash-carrying requirements file that
-# five repos' CI can install with stock pip and no uv on the runner.
+# Each file is a RENDERING, not a declaration: pyproject.toml plus uv.lock are
+# the source, and this produces the plain, hash-carrying requirements files that
+# other repos' CI can install with stock pip and no uv on the runner.
 #
-# `sync` writes it; `check` fails if the committed copy has drifted. Same shape
+# TWO renderings, deliberately separate files -- do not harmonise them into one:
+#   test-lint -> requirements-ci.txt          ai-config, math, state-ledger
+#   runtime   -> requirements-runtime-ci.txt  terraform_ansible
+# terraform_ansible installs ansible/molecule and no test tooling; the other
+# three install test tooling and none of the runtime set. A single file would
+# serve terraform_ansible not at all, which is why the split exists.
+#
+# `sync` writes them; `check` fails if a committed copy has drifted. Same shape
 # as sync-agent-guidance.sh.
 #
 # uv's own two-line header is stripped and replaced. It echoes the exact argv,
-# including `--project /abs/path` when passed — so a file rendered on a dev
+# including `--project /abs/path` when passed -- so a file rendered on a dev
 # machine would never match one checked in CI, and the gate would fire forever
 # on correct state. Measured, not assumed.
+#
+# Provenance (source repo, uv.lock SHA, date) deliberately does NOT go in these
+# headers. A runtime-group edit changes uv.lock without changing the test-lint
+# export, so a SHA in that header would demand a re-render whose only effect is
+# one header line -- a check firing on correct state, forever. Provenance belongs
+# on the CONSUMER's copy, written at copy time.
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly REPO_ROOT
-# REQUIREMENTS_CI_TARGET exists so tests can point at a fixture instead of the
-# tracked file. Without it a test that crashes between mutating and restoring
-# leaves a modified requirements-ci.txt that could be committed by accident.
-readonly TARGET="${REQUIREMENTS_CI_TARGET:-${REPO_ROOT}/requirements-ci.txt}"
+
+# REQUIREMENTS_CI_TARGET / REQUIREMENTS_RUNTIME_CI_TARGET exist so tests can
+# point at a fixture instead of the tracked file. Without them a test that
+# crashes between mutating and restoring leaves a modified tracked rendering
+# that could be committed by accident.
+_RENDERINGS=(
+  "test-lint:${REQUIREMENTS_CI_TARGET:-${REPO_ROOT}/requirements-ci.txt}"
+  "runtime:${REQUIREMENTS_RUNTIME_CI_TARGET:-${REPO_ROOT}/requirements-runtime-ci.txt}"
+)
+readonly _RENDERINGS
 
 # shellcheck source=lib/helpers.sh
 source "${REPO_ROOT}/lib/helpers.sh"
 readonly HEADER="# Generated from uv.lock — do not edit.
 # Regenerate with: make sync-requirements-ci"
 
+# _render GROUP -- emit the rendering for one dependency group on stdout.
 _render() {
-  local _uv
+  local _group="$1" _uv
   _uv="$(resolve_uv)" || return 1
   {
     printf "%s\n" "${HEADER}"
-    (cd "${REPO_ROOT}" && "${_uv}" export --frozen --only-group test-lint \
+    (cd "${REPO_ROOT}" && "${_uv}" export --frozen --only-group "${_group}" \
        --format requirements-txt 2>/dev/null | sed '/^#/d')
   } || return 1
 }
 
 cmd_sync() {
-  local _out
-  _out="$(_render)" || return 1
-  printf "%s\n" "${_out}" > "${TARGET}" || return 1
-  printf "wrote %s\n" "${TARGET#"${REPO_ROOT}/"}"
+  local _pair _group _target _out _rc=0
+  for _pair in "${_RENDERINGS[@]}"; do
+    _group="${_pair%%:*}"
+    _target="${_pair#*:}"
+    if ! _out="$(_render "${_group}")"; then
+      printf "FAILED to render group %s\n" "${_group}" >&2
+      _rc=1
+      continue
+    fi
+    printf "%s\n" "${_out}" > "${_target}" || { _rc=1; continue; }
+    printf "wrote %s\n" "${_target#"${REPO_ROOT}/"}"
+  done
+  return "${_rc}"
 }
 
 cmd_check() {
-  if [[ ! -f "${TARGET}" ]]; then
-    printf "MISSING: %s — run 'make sync-requirements-ci'\n" "${TARGET#"${REPO_ROOT}/"}" >&2
-    return 1
-  fi
-  local _out
-  _out="$(_render)" || return 1
-  if ! printf "%s\n" "${_out}" | diff -q - "${TARGET}" >/dev/null; then
-    printf "DRIFT: %s does not match uv.lock — run 'make sync-requirements-ci'\n" \
-      "${TARGET#"${REPO_ROOT}/"}" >&2
-    printf "%s\n" "${_out}" | diff - "${TARGET}" | head -20 >&2
-    return 1
-  fi
-  printf "OK: %s matches uv.lock\n" "${TARGET#"${REPO_ROOT}/"}"
+  local _pair _group _target _out _rc=0
+  for _pair in "${_RENDERINGS[@]}"; do
+    _group="${_pair%%:*}"
+    _target="${_pair#*:}"
+    if [[ ! -f "${_target}" ]]; then
+      printf "MISSING: %s — run 'make sync-requirements-ci'\n" \
+        "${_target#"${REPO_ROOT}/"}" >&2
+      _rc=1
+      continue
+    fi
+    if ! _out="$(_render "${_group}")"; then
+      printf "FAILED to render group %s\n" "${_group}" >&2
+      _rc=1
+      continue
+    fi
+    if ! printf "%s\n" "${_out}" | diff -q - "${_target}" >/dev/null; then
+      printf "DRIFT: %s does not match uv.lock — run 'make sync-requirements-ci'\n" \
+        "${_target#"${REPO_ROOT}/"}" >&2
+      printf "%s\n" "${_out}" | diff - "${_target}" | head -20 >&2
+      _rc=1
+      continue
+    fi
+    printf "OK: %s matches uv.lock\n" "${_target#"${REPO_ROOT}/"}"
+  done
+  return "${_rc}"
 }
 
 [[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0

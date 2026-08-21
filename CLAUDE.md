@@ -239,8 +239,14 @@ none grants a capability the operator did not already have:
 | `UV_FALLBACK_PATHS` | `resolve_uv` | array of prefix candidates. Exists so a test can reach the genuine not-found branch, which is otherwise unreachable on any machine that has `uv`. Env-settable as a scalar, deliberately; `UV_BIN` is checked first and already grants the same |
 | `REQUIREMENTS_CI_TARGET` | `scripts/sync-requirements-ci.sh` | points the drift check at a fixture, so a test that crashes between mutating and restoring cannot leave a modified tracked `requirements-ci.txt` to be committed by accident |
 
-**Sync CI requirements:** `make sync-requirements-ci` (renders `requirements-ci.txt` from `uv.lock`'s `test-lint` group)
-**Check CI requirements drift:** `make check-requirements-ci` (fails when the rendering is stale; a prerequisite of `make test`)
+**Sync CI requirements:** `make sync-requirements-ci` (renders **both** CI requirements files from `uv.lock`)
+**Check CI requirements drift:** `make check-requirements-ci` (fails when either rendering is stale; a prerequisite of `make test`)
+
+**There are two renderings, deliberately separate files.** `requirements-ci.txt` carries the `test-lint` group (ai-config, math, state-ledger); `requirements-runtime-ci.txt` carries `runtime` (terraform_ansible, which installs ansible/molecule and no test tooling). One file would serve terraform_ansible not at all. Do not harmonise them — `tests/setup_env/requirements_ci.bats` asserts they differ.
+
+**Provenance does not go in these headers, and that is load-bearing.** A `runtime`-group edit moves `uv.lock` without changing the `test-lint` export, so a `uv.lock` SHA in that header would demand a re-render whose only effect is one header line — a gate firing on correct state, forever. Provenance belongs on a *consumer's* copy, written at copy time.
+
+**The drift gate cannot see a wrong-group declaration.** It verifies each rendering is faithful to its group; a package in the wrong group renders faithfully and passes. `cosmic-ray` sat in `runtime` through every green run until 2026-08-21 (#231), and was found by enumerating five repos' CI by hand — which is not a mechanism. A green `check-requirements-ci` is not evidence about grouping.
 
 `requirements-ci.txt` is a **rendering, not a declaration** — `pyproject.toml` plus `uv.lock` are the source. It exists so the other repos' CI can `pip install -r` it with stock pip and no `uv` on the runner; verified on macOS and Linux, 65 packages and 428 enforced hashes. Never hand-edit it.
 
