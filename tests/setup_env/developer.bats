@@ -154,6 +154,53 @@ teardown() {
   fi
 }
 
+@test "pyproject.toml no longer declares boto3" {
+  # AWS CLI v1 was a Python package and needed botocore on the same interpreter,
+  # which is why boto3 was declared here in the first place. v2 ships a
+  # self-contained binary with its own vendored Python, so that reason lapsed.
+  # The package itself is still INSTALLED -- checkov and cloudsplaining both
+  # require it -- so this pins the declaration only. Without the assertion the
+  # lapsed reason is invisible in the file and a future prune or re-add is silent.
+  local _manifest="${BATS_TEST_DIRNAME}/../../pyproject.toml"
+  [ -f "${_manifest}" ]
+  # positive control: a declaration that must still be there, so a renamed or
+  # moved manifest fails loudly instead of making the absence vacuous
+  grep -q '"ansible"' "${_manifest}"
+  if grep -qE '^\s*"boto3' "${_manifest}"; then
+    printf "boto3 is declared again in pyproject.toml\n" >&2
+    return 1
+  fi
+}
+
+@test "checkov carries a floor at or above 3.3.13" {
+  # dotfiles#227, titled "bump asteval from 1.0.6 to 1.0.9", silently walked
+  # checkov 3.3.13 -> 3.2.414 and auto-merged. checkov pins asteval exactly, so
+  # forcing 1.0.9 made every checkov >=3.2.459 unsatisfiable and the resolver
+  # quietly chose an older one -- taking openai 0.28.1 with it, which held
+  # shell-gpt five minor versions back. The floor does not prevent that
+  # conflict; it makes it LOUD, because a forced bump now errors naming both
+  # packages instead of resolving backwards. A bare "checkov" restores the
+  # silence, so the floor's presence is the property under test.
+  local _manifest="${BATS_TEST_DIRNAME}/../../pyproject.toml"
+  local _decl _floor
+  _decl=$(grep -oE '"checkov[^"]*"' "${_manifest}" | head -1)
+  if [[ -z ${_decl} ]]; then
+    printf "checkov is not declared in pyproject.toml at all\n" >&2
+    return 1
+  fi
+  _floor=$(printf '%s' "${_decl}" | grep -oE '>=[0-9]+(\.[0-9]+)*' | tr -d '>=')
+  if [[ -z ${_floor} ]]; then
+    printf "checkov is declared as %s -- no >= floor, so it can walk backwards silently\n" \
+      "${_decl}" >&2
+    return 1
+  fi
+  # sort -V rather than a literal match, so raising the floor stays green
+  if [[ "$(printf '3.3.13\n%s\n' "${_floor}" | sort -V | head -1)" != "3.3.13" ]]; then
+    printf "checkov floor %s is below 3.3.13\n" "${_floor}" >&2
+    return 1
+  fi
+}
+
 @test "the package set is declared once — not in lib/developer.sh" {
   if grep -q '_pip_pkgs' "${BATS_TEST_DIRNAME}/../../lib/developer.sh"; then
     printf "lib/developer.sh still carries a hardcoded package array\n" >&2
