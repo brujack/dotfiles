@@ -1214,7 +1214,6 @@ runtime = [
     { name = "certbot" },
     { name = "certbot-dns-cloudflare" },
     { name = "checkov" },
-    { name = "cosmic-ray" },
     { name = "docker" },
     { name = "gmpy2" },
     { name = "httppy" },
@@ -1239,6 +1238,7 @@ runtime = [
 ]
 test-lint = [
     { name = "bandit" },
+    { name = "cosmic-ray" },
     { name = "coverage" },
     { name = "hypothesis" },
     { name = "mypy" },
@@ -1264,7 +1264,6 @@ runtime = [
     { name = "certbot" },
     { name = "certbot-dns-cloudflare" },
     { name = "checkov", specifier = ">=3.3.13" },
-    { name = "cosmic-ray" },
     { name = "docker" },
     { name = "gmpy2" },
     { name = "httppy" },
@@ -1289,6 +1288,7 @@ runtime = [
 ]
 test-lint = [
     { name = "bandit" },
+    { name = "cosmic-ray" },
     { name = "coverage" },
     { name = "hypothesis" },
     { name = "mypy" },

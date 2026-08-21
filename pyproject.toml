@@ -136,7 +136,6 @@ runtime = [
                                    # no repo push in 26 months, zero measured
                                    # consumers fleet-wide. Same call as HttpPy.
   "shell-gpt",                     # interactive; pins openai < 3
-  "cosmic-ray",                    # mutation testing (make mutants)
   "scikit-learn",
   "scipy",
   "pandas",
@@ -152,6 +151,11 @@ runtime = [
 # Must match what five repos' CI installs. Exported to requirements-ci.txt.
 test-lint = [
   "bandit",
+  "cosmic-ray",                    # mutation testing (make mutants); a TEST tool --
+                                   # it sat in runtime until 2026-08-21, so it was
+                                   # absent from requirements-ci.txt, which renders
+                                   # --only-group test-lint. ai-config, math and
+                                   # state-ledger CI all install it.
   "coverage",
   "hypothesis",
   "mypy",
