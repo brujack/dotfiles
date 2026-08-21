@@ -504,6 +504,26 @@ run_update() {
       if ! _uv="$(resolve_uv)"; then
         _update_skip "pip" "uv not installed — run 'setup_env.sh -t brew_install'"
       else
+      # Snapshot the venv BEFORE syncing. uv sync prunes and downgrades, and
+      # the pre-sync state is not reproducible from the lock — uv pip install
+      # -r of the venv's own freeze fails as unsatisfiable — so reverting this
+      # repo does NOT restore it. This file is the only rollback path:
+      #   "$PYTHON" -m pip install --no-deps -r <snapshot>
+      local _snap_dir _snap _snap_stamp
+      _snap_dir="${HOME}/.local/share/dotfiles/venv-snapshots"
+      _snap_stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+      _snap="${_snap_dir}/ansible-${_snap_stamp}.txt"
+      mkdir -p "${_snap_dir}"
+      if "$PYTHON" -m pip freeze > "${_snap}" 2>/dev/null && [[ -s "${_snap}" ]]; then
+        printf "venv snapshot: %s\n" "${_snap}"
+      else
+        rm -f "${_snap}"
+        printf "WARNING: could not snapshot the venv before syncing\n" >&2
+      fi
+      # Keep the newest 10; a daily run would otherwise grow without bound.
+      find "${_snap_dir}" -maxdepth 1 -name 'ansible-*.txt' -type f 2>/dev/null \
+        | sort -r | tail -n +11 | while IFS= read -r _old; do rm -f "${_old}"; done
+
       local _sync_args=(sync --frozen --project "${PERSONAL_GITREPOS}/${DOTFILES}" --python "${PYTHON}" --group runtime --group test-lint)
       {
         UV_PROJECT_ENVIRONMENT="${PYENV_ROOT}/versions/ansible" "${_uv}" "${_sync_args[@]}"

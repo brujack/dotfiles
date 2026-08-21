@@ -2131,3 +2131,43 @@ assert_all_npm_globals_pinned() {
     return 1
   fi
 }
+
+@test "run_update snapshots the venv before syncing" {
+  # The sync prunes and downgrades, and the pre-sync state is not reproducible
+  # from the lock. Without this file the change is irreversible.
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE_PIP=1 HAS_DEVTOOLS=1
+  unset UPDATE_BREW UPDATE_CLAUDE UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
+  export MOCK_PYTHON_FREEZE_OUTPUT="requests==2.34.2"
+  run run_update
+  local _dir="${HOME}/.local/share/dotfiles/venv-snapshots"
+  local _n
+  _n="$(find "${_dir}" -maxdepth 1 -name 'ansible-*.txt' -type f 2>/dev/null | wc -l | tr -d ' ')"
+  if [ "${_n}" -eq 0 ]; then
+    printf "no snapshot written; the sync would be irreversible\n" >&2
+    return 1
+  fi
+  grep -q "requests" "${_dir}"/ansible-*.txt
+  [[ "${output}" == *"venv snapshot:"* ]]
+}
+
+@test "run_update keeps only the newest 10 venv snapshots" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE_PIP=1 HAS_DEVTOOLS=1
+  unset UPDATE_BREW UPDATE_CLAUDE UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
+  export MOCK_PYTHON_FREEZE_OUTPUT="requests==2.34.2"
+  local _dir="${HOME}/.local/share/dotfiles/venv-snapshots"
+  mkdir -p "${_dir}"
+  local i
+  for i in 01 02 03 04 05 06 07 08 09 10 11 12; do
+    printf 'old\n' > "${_dir}/ansible-2020010${i:0:1}T0000${i}Z.txt"
+  done
+  run run_update
+  local _n
+  _n="$(find "${_dir}" -maxdepth 1 -name 'ansible-*.txt' -type f | wc -l | tr -d ' ')"
+  [ "${_n}" -eq 10 ]
+}

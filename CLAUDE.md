@@ -216,6 +216,20 @@ Uses **BATS** (Bash Automated Testing System), installed natively:
 **Sync agent guidance:** `make sync-agent-guidance` (regenerates `.cursor/rules/global-claude-standards.mdc` from root `CLAUDE.md`'s `@~/.claude/standards/*.md` imports, resolved against the global symlinked standards dir)
 **Check agent guidance drift:** `make check-agent-guidance` (fails when generated Cursor guidance is stale)
 
+**The venv is snapshotted before every sync, and that file is the only rollback path.**
+`run_update` writes `pip freeze` to `~/.local/share/dotfiles/venv-snapshots/ansible-<UTC>.txt`
+before applying the lock, keeping the newest 10. This is not belt-and-braces: `uv sync` prunes
+and downgrades, and the pre-sync state is **not reproducible from the lock** — `uv pip install
+-r` of the venv's own freeze fails as unsatisfiable, because pip reached that state
+incrementally and the cumulative set is unsolvable. Reverting this repo does not restore the
+venv. To roll back:
+
+```bash
+"$(pyenv which python)" -m pip install --no-deps -r ~/.local/share/dotfiles/venv-snapshots/ansible-<UTC>.txt
+```
+
+`--no-deps` is required — the state being restored is one the resolver refuses.
+
 **Environment overrides added by the uv work.** All three exist for a stated reason and
 none grants a capability the operator did not already have:
 
