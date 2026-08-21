@@ -35,38 +35,68 @@ runtime = [
   "molecule-plugins[docker]",
   "certbot",                       # cert renewal on the homelab
   "certbot-dns-cloudflare",
-  "checkov",                       # terraform static analysis. Deliberately
-                                   # unconstrained: the lock resolves 3.3.13
-                                   # (2026-08-20), a year newer than the 3.2.459
-                                   # previously installed.
+  "checkov>=3.3.13",               # terraform static analysis.
                                    #
-                                   # ACCEPTED RISK, reviewed 2026-08-20. checkov
-                                   # pins asteval EXACTLY at every version >=
-                                   # 3.2.459 (==1.0.5 up to 3.2.477, ==1.0.6
-                                   # from 3.2.482), so its two transitive
-                                   # advisories cannot be cleared while staying
-                                   # current:
-                                   #   asteval 1.0.6  GHSA-9w56-46f6-3qhx,
-                                   #     CVE-2026-55244 — sandbox escape via an
-                                   #     attacker-controlled expression. Fixed
-                                   #     in 1.0.9, which checkov forbids.
-                                   #   ecdsa 0.19.2   PYSEC-2026-1325 — Minerva
-                                   #     timing attack on sign_digest(). NO fix
-                                   #     published upstream.
-                                   # Neither is reachable here: checkov signs
-                                   # nothing and evaluates only the operator's
-                                   # own policies.
-                                   # The alternative was measured, not assumed:
-                                   # pinning asteval>=1.0.9 resolves and reaches
-                                   # 0 advisories (ecdsa disappears entirely),
-                                   # but drags checkov to 3.2.414 (2025-05-01) —
-                                   # 15 months of missed IaC rules, a larger
-                                   # security cost than two unreachable CVEs.
-                                   # Revisit when upstream unpins asteval.
+                                   # FLOORED, not unconstrained. Operator
+                                   # decision 2026-08-21. The floor exists
+                                   # because an unconstrained checkov was
+                                   # silently downgraded a year by an
+                                   # unrelated bump: dotfiles#227, titled
+                                   # "bump asteval from 1.0.6 to 1.0.9",
+                                   # walked checkov 3.3.13 -> 3.2.414 and
+                                   # dropped asteval and ecdsa entirely.
+                                   # checkov pins asteval EXACTLY (==1.0.5
+                                   # up to 3.2.477, ==1.0.6 from 3.2.482),
+                                   # so forcing 1.0.9 made every checkov
+                                   # >=3.2.459 unsatisfiable and the
+                                   # resolver picked an older checkov that
+                                   # needs no asteval at all. Renovate
+                                   # edited the LOCK, not this file, so
+                                   # nothing here recorded it.
                                    #
-                                   # Also drags boto3 back to 1.35.x via
-                                   # cloudsplaining. Accepted; boto3 is legacy.
-  "boto3",                         # legacy; no current in-repo consumer
+                                   # The floor does not prevent that
+                                   # conflict — it makes it LOUD. Measured:
+                                   # floor + a forced asteval>=1.0.9 now
+                                   # errors "No solution found", naming
+                                   # both packages, instead of downgrading.
+                                   #
+                                   # ACCEPTED RISK, re-affirmed 2026-08-21.
+                                   # Two transitive advisories return with
+                                   # the floor and cannot be cleared while
+                                   # staying current:
+                                   #   asteval 1.0.6 — TWO DISTINCT
+                                   #     advisories, not one with two IDs.
+                                   #     Both fixed in 1.0.9, which checkov
+                                   #     forbids:
+                                   #       GHSA-9w56-46f6-3qhx (no alias) —
+                                   #         arbitrary process-memory read
+                                   #         and write via numpy ctypes, in
+                                   #         the DEFAULT config. The more
+                                   #         severe of the two.
+                                   #       GHSA-89v8-rhwq-hf77 =
+                                   #         CVE-2026-55244 — sandbox escape
+                                   #         via BaseException subclasses.
+                                   #   ecdsa 0.19.2 — ONE advisory, three
+                                   #     IDs: GHSA-wj6h-64fc-37mp =
+                                   #     CVE-2024-23342 = PYSEC-2026-1325.
+                                   #     Minerva timing attack on P-256 via
+                                   #     sign_digest(). No upstream fix.
+                                   # None is reachable here: all three
+                                   # need an attacker-controlled expression
+                                   # or a signing operation, and checkov
+                                   # signs nothing and evaluates only the
+                                   # operator's own policies. Enumerated
+                                   # from OSV 2026-08-21, not from the
+                                   # previous comment — which stated two
+                                   # IDs as one advisory and named the
+                                   # milder mechanism.
+                                   #
+                                   # The rejected alternative is what #227
+                                   # produced by accident: asteval>=1.0.9
+                                   # reaches 0 advisories but pins checkov
+                                   # to 2025-05-01 — 15 months of missed
+                                   # IaC rules, judged the larger security
+                                   # cost. Revisit when upstream unpins.
   "docker",
   "gmpy2",                         # arbitrary precision, used by math repo work
   "jmespath",                      # ansible json_query filter
