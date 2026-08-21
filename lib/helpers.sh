@@ -90,6 +90,12 @@ resolve_uv() {
     # Array rather than a literal list so a test can reach the not-found
     # branch below. On any machine that HAS uv the hardcoded prefixes always
     # resolve, which makes that branch structurally untestable otherwise.
+    #
+    # This IS environment-settable, deliberately and with no new capability:
+    # a scalar UV_FALLBACK_PATHS=/x from the environment yields ${#...[@]}==1
+    # and iterates as one path. UV_BIN above already grants exactly that and
+    # is checked first, so the surface is unchanged — and anyone able to set
+    # either variable already executes as this user.
     if [[ ${#UV_FALLBACK_PATHS[@]} -eq 0 ]]; then
       UV_FALLBACK_PATHS=(/opt/homebrew/bin/uv /home/linuxbrew/.linuxbrew/bin/uv /usr/local/bin/uv)
     fi
