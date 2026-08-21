@@ -125,7 +125,7 @@ Every assertion pairs with a control in the same command; every case names its a
 | 4 | lock has **275** packages; `asteval`, `ecdsa`, `jiter`, `openai` **present** | 272 -> 275. With change 3 taken, `openai` returns at **2.54.0** via shell-gpt 1.5.1 rather than 0.28.1 via checkov — a different package at a different version, so assert the version, not just presence |
 | 5 | `shell-gpt --version` reports 1.5.1 | openai 0.28 -> 2.54 crosses a major boundary; a lock that resolves is not proof the tool runs. **Verified: `ShellGPT 1.5.1`** |
 | 6 | `make test` rc=0 | aggregate gate |
-| 7 | mutation: re-add `"boto3"` → case 1 red; drop the floor → case 4 red; revert shell-gpt to 1.0.1 → case 5 red | three arms, one per declared change |
+| 7 | mutation: re-add `"boto3"` → case 1 red; drop the floor → case 4 red; revert shell-gpt to 1.0.1 → case 5 red | three arms, one per declared change. **Two of the three are now standing tests rather than one-off runs** (`tests/setup_env/developer.bats`), because a mutation performed once proves the check worked that day and guards nothing afterwards — and the floor's whole purpose is to still be there in six months. Verified in six directions: boto3 re-added bare and with a version spec both red, the positive control renamed red, a bare `checkov` red, a floor lowered to 3.2.414 red, a floor raised to 3.4.0 **green**. shell-gpt's arm stays manual: it asserts a running binary's `--version`, which is a property of the installed venv, not of the repo. |
 
 Case 2 is the one that matters. Three of the four previous specs this session shipped a case
 that passed on empty output; case 2 is deliberately an assertion that something **remains**, so
