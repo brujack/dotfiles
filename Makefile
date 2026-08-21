@@ -10,6 +10,7 @@ MAKEFLAGS += --no-print-directory
 
 BATS := $(shell command -v bats 2>/dev/null)
 SHELLCHECK := $(shell command -v shellcheck 2>/dev/null)
+UV := $(shell command -v uv 2>/dev/null)
 PYTHON3 := $(shell command -v python3 2>/dev/null)
 
 # SHELL_FILES is content-derived (every tracked file whose first line is a
@@ -103,7 +104,7 @@ lint:
 	fi; \
 	exit $$failed
 
-test: lint test-python
+test: lint check-requirements-ci test-python
 ifndef BATS
 	$(error $(BATS_MISSING))
 endif
@@ -156,6 +157,19 @@ sync-agent-guidance:
 
 check-agent-guidance:
 	./scripts/sync-agent-guidance.sh check
+
+sync-requirements-ci:
+	./scripts/sync-requirements-ci.sh sync
+
+# Guarded like lint's shellcheck: a gate that hard-fails on a missing tool locks
+# the machine out of committing the very change that would install it. CI
+# installs a pinned uv, so the check genuinely runs there rather than skipping.
+check-requirements-ci:
+ifeq ($(UV),)
+	@printf "uv not found, skipping requirements-ci drift check (install: brew install uv)\n"
+else
+	@./scripts/sync-requirements-ci.sh check
+endif
 
 # Introspection: `make print-VARNAME` prints a Makefile variable's resolved
 # value, for tests that need to assert against the Makefile's own derivation
