@@ -627,6 +627,54 @@ run first: ./scripts/bootstrap_linux.sh` — advice that is wrong, because boots
   not as a machine-wide fact. `behavior.md`'s actor-boundary rule states the general form:
   **who runs this in production, and did I run it as them?**
 
+## Dependency Automation
+
+**Decided 2026-08-21, fleet-wide across all 18 non-archived repos: Dependabot
+security auto-PRs OFF, Dependabot vulnerability alerts ON.** Verified on this repo
+and spot-checked on `math` and `state-ledger` — `GET /vulnerability-alerts` returns
+`204`, `GET /automated-security-fixes` returns `enabled: false`.
+
+**This section exists because the decision lives nowhere in any repo.** It is a
+GitHub repo-*settings* toggle, which is the identical defect that produced #227 — a
+control governing the repository, declared outside it. A tracked
+`.github/dependabot.yml` would not capture it either: that file governs *version*
+updates, and these are *security* updates. Recording state and reasoning here is the
+minimum that makes it discoverable, and it is the reason a reader should not conclude
+from an absent config file that Dependabot is not running.
+
+**Rationale: alerts are the signal; auto-PRs are an unreviewed write path.** #227,
+titled "bump asteval from 1.0.6 to 1.0.9", edited `uv.lock` and nothing else, walked
+checkov back a year, and auto-merged because an internally consistent lock passes
+every CI check. Keeping alerts and closing auto-PRs gives visibility without letting
+a bot modify a lockfile unattended. Anyone re-enabling auto-PRs re-opens that path.
+
+**The fleet-wide measurement inverted the expectation and is the more useful half.**
+The premise all day was "an automated bot did something unreviewed." The actual
+condition was under-notification: **16 of 18 repos had vulnerability alerts switched
+off entirely**, including `math`, `state-ledger`, `etch-cli` and every homelab repo.
+One repo had an undeclared write path; sixteen had no signal at all. Net effect is
+strictly more visibility and strictly less automation.
+
+Two mechanical details, both non-obvious:
+
+- **`automated-security-fixes` is repo-wide — GitHub offers no per-ecosystem toggle.**
+  "Turn Dependabot off for Python" is not expressible; only the whole repo. That cost
+  nothing here because `renovate.json` already owns the other ecosystem via
+  `enabledManagers: ["github-actions"]`.
+- **The flag cannot be cleared while alerts are off.** `DELETE
+  .../automated-security-fixes` returns **422 "Vulnerability alerts must be enabled to
+  configure automated security fixes."** A repo in that state (`terraform_ansible` was)
+  is inert but *latently armed* — enabling alerts later lights auto-PRs instantly. Order
+  the calls: `PUT vulnerability-alerts`, then `DELETE automated-security-fixes`.
+
+**Consequence, stated so it is not found as a surprise: Python now has no automated
+update path at all.** Dependabot's write path is closed, and Renovate manages no Python
+in any repo (`pep621` is enabled nowhere), including this one — despite `pyproject.toml`
+and `uv.lock` living here. Alerts will fire with nothing proposing fixes. That is the
+right order — visibility before a reviewed write path — but it is a gap with a name and
+a duration, not a steady state.
+
+
 ## Local-Only State
 
 The following paths are machine-local and must **never** be committed to this repo:
