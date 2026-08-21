@@ -216,6 +216,15 @@ Uses **BATS** (Bash Automated Testing System), installed natively:
 **Sync agent guidance:** `make sync-agent-guidance` (regenerates `.cursor/rules/global-claude-standards.mdc` from root `CLAUDE.md`'s `@~/.claude/standards/*.md` imports, resolved against the global symlinked standards dir)
 **Check agent guidance drift:** `make check-agent-guidance` (fails when generated Cursor guidance is stale)
 
+**Environment overrides added by the uv work.** All three exist for a stated reason and
+none grants a capability the operator did not already have:
+
+| variable | read by | why it exists |
+| --- | --- | --- |
+| `UV_BIN` | `resolve_uv` (`lib/helpers.sh`) | operator escape hatch, and the only seam a test can use to drive the "not executable" branch — PATH mocking cannot remove the absolute fallback candidates |
+| `UV_FALLBACK_PATHS` | `resolve_uv` | array of prefix candidates. Exists so a test can reach the genuine not-found branch, which is otherwise unreachable on any machine that has `uv`. Env-settable as a scalar, deliberately; `UV_BIN` is checked first and already grants the same |
+| `REQUIREMENTS_CI_TARGET` | `scripts/sync-requirements-ci.sh` | points the drift check at a fixture, so a test that crashes between mutating and restoring cannot leave a modified tracked `requirements-ci.txt` to be committed by accident |
+
 **Sync CI requirements:** `make sync-requirements-ci` (renders `requirements-ci.txt` from `uv.lock`'s `test-lint` group)
 **Check CI requirements drift:** `make check-requirements-ci` (fails when the rendering is stale; a prerequisite of `make test`)
 
