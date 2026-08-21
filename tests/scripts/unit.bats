@@ -420,10 +420,19 @@ teardown() {
   mkdir -p "${tmpdir}"
   printf '#!/usr/bin/env bash\nprintf "%%s\n" "${MOCK_GIT_TOPLEVEL:-/tmp}"\n' > "${tmpdir}/git"
   printf '#!/usr/bin/env bash\nexit 0\n' > "${tmpdir}/make"
-  # No ggshield in PATH — hook should still pass
   chmod +x "${tmpdir}/git" "${tmpdir}/make"
-  run bash -c "MOCK_GIT_TOPLEVEL='${tmpdir}' PATH='${tmpdir}:/usr/bin:/bin' bash '${REPO_ROOT}/scripts/pre-commit-hook.sh'"
+  # Absence must be driven through the seams, not through PATH. The hook now
+  # falls back to absolute prefixes when PATH resolution fails -- that is the
+  # whole point of the change, since a hook inherits a non-interactive PATH
+  # that legitimately lacks Homebrew. So keeping ggshield off PATH no longer
+  # makes it absent: /opt/homebrew/bin/ggshield resolves anyway and the real
+  # binary runs against a directory that is not a git repo. Measured: this
+  # test failed for exactly that reason before the seams were added here.
+  run bash -c "MOCK_GIT_TOPLEVEL='${tmpdir}' PATH='${tmpdir}:/usr/bin:/bin' \
+    GGSHIELD_BIN='' GGSHIELD_FALLBACK_PATHS='${tmpdir}/nowhere' \
+    bash '${REPO_ROOT}/scripts/pre-commit-hook.sh'"
   [ "$status" -eq 0 ]
+  [[ "${output}" == *"SECRET SCAN DID NOT RUN"* ]]
 }
 
 # ── bootstrap_mac.sh ─────────────────────────────────────────────────────────
