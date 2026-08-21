@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+printf "uv %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+# MOCK_UV_SYNC_OUTPUT lets a test drive the +/- lines run_update parses into
+# pip_outdated. Default empty = a no-op sync, which is the common real case.
+if [[ "$1" == "sync" ]]; then
+  printf "%s" "${MOCK_UV_SYNC_OUTPUT:-}"
+fi
+exit "${MOCK_UV_EXIT:-0}"

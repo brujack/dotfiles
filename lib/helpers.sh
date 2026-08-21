@@ -67,6 +67,64 @@ quiet_which() {
   which "$1" &>/dev/null
 }
 
+# resolve_uv
+# Prints uv's absolute path, or fails with a remedy. Absolute rather than a bare
+# `uv` because uv resolves to different builds per actor: an interactive shell
+# gets the brew prefix, a git hook or cron does not. A bare name would install
+# the venv from whichever uv happened to be on PATH, or silently from none.
+resolve_uv() {
+  local _uv
+  # UV_BIN is an explicit override, checked first: it is the operator escape
+  # hatch and the only seam a test can use to drive the not-found path, since
+  # PATH mocking cannot remove the absolute-path candidates below.
+  if [[ -n "${UV_BIN:-}" ]]; then
+    if [[ -x "${UV_BIN}" ]]; then
+      printf "%s\n" "${UV_BIN}"
+      return 0
+    fi
+    log_error "UV_BIN is set to '${UV_BIN}' but that is not executable"
+    return 1
+  fi
+  _uv="$(command -v uv 2>/dev/null)"
+  if [[ -z "${_uv}" ]]; then
+    # Array rather than a literal list so a test can reach the not-found
+    # branch below. On any machine that HAS uv the hardcoded prefixes always
+    # resolve, which makes that branch structurally untestable otherwise.
+    #
+    # This IS environment-settable, deliberately and with no new capability:
+    # a scalar UV_FALLBACK_PATHS=/x from the environment yields ${#...[@]}==1
+    # and iterates as one path. UV_BIN above already grants exactly that and
+    # is checked first, so the surface is unchanged — and anyone able to set
+    # either variable already executes as this user.
+    if [[ ${#UV_FALLBACK_PATHS[@]} -eq 0 ]]; then
+      UV_FALLBACK_PATHS=(/opt/homebrew/bin/uv /home/linuxbrew/.linuxbrew/bin/uv /usr/local/bin/uv)
+    fi
+    for _uv in "${UV_FALLBACK_PATHS[@]}"; do
+      [[ -x "${_uv}" ]] && break
+      _uv=""
+    done
+  fi
+  if [[ -z "${_uv}" ]]; then
+    log_error "uv not found — run 'setup_env.sh -t brew_install' first"
+    return 1
+  fi
+  printf "%s\n" "${_uv}"
+}
+
+# uv_sync_venv UV_BIN PYTHON_BIN VENV_PATH
+# Installs VENV_PATH from the committed lock. One definition rather than three:
+# every call site needs the identical --frozen/--project/--group set and differs
+# only in which interpreter and which environment it targets.
+#
+# Callers resolve uv themselves rather than having this do it, because they
+# handle its absence differently: run_update skips its section so the run still
+# summarises, while the two bootstrap paths cannot proceed without it.
+uv_sync_venv() {
+  local _uv="$1" _python="$2" _venv="$3"
+  local _args=(sync --frozen --project "${PERSONAL_GITREPOS}/${DOTFILES}" --python "${_python}" --group runtime --group test-lint)
+  UV_PROJECT_ENVIRONMENT="${_venv}" "${_uv}" "${_args[@]}"
+}
+
 brew_update() {
   if ! ensure_not_root; then
     return 1

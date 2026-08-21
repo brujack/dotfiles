@@ -439,7 +439,7 @@ teardown() {
 
 # ── recreate_python_venv ──────────────────────────────────────────────────────
 
-@test "recreate_python_venv ansible: calls pyenv virtualenv-delete, create, activate, pip install" {
+@test "recreate_python_venv ansible: calls pyenv virtualenv-delete, create, activate, then syncs" {
   export MACOS=1
   unset LINUX
   export HAS_DEVTOOLS=1
@@ -456,7 +456,7 @@ teardown() {
   grep -q "virtualenv-delete -f ansible" "${MOCK_CALLS_FILE}"
   grep -q "virtualenv.*ansible" "${MOCK_CALLS_FILE}"
   grep -q "activate ansible" "${MOCK_CALLS_FILE}"
-  grep -q "pip install" "${MOCK_CALLS_FILE}"
+  grep -q "uv sync" "${MOCK_CALLS_FILE}"
   grep -q "pyenv rehash" "${MOCK_CALLS_FILE}"
 }
 
@@ -502,7 +502,10 @@ teardown() {
   grep -q "virtualenv.*ansible" "${MOCK_CALLS_FILE}"
 }
 
-@test "recreate_python_venv ansible on macOS includes mlx in pip install" {
+@test "recreate_python_venv issues no platform-conditional package on macOS" {
+  # mlx's darwin gate moved into uv.lock's marker; neither shell site names it
+  # any more. Asserting the invocation on BOTH platforms is what makes this a
+  # pair rather than a single-platform check that a marker regression survives.
   export MACOS=1
   unset LINUX
   export HAS_DEVTOOLS=1
@@ -510,9 +513,12 @@ teardown() {
   export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
   export PATH="${BATS_TEST_DIRNAME}/../mocks:${PATH}"
   recreate_python_venv "ansible"
-  grep -q "mlx" "${MOCK_CALLS_FILE}"
+  grep -q "uv sync" "${MOCK_CALLS_FILE}"
+  if grep -q "mlx" "${MOCK_CALLS_FILE}"; then
+    printf "shell still names mlx; the lock marker should be doing this\n" >&2
+    return 1
+  fi
 }
-
 @test "setup_ansible on Linux installs Python build deps before pyenv install" {
   export LINUX=1
   unset MACOS UBUNTU
@@ -541,7 +547,7 @@ teardown() {
   [[ -L "${HOME}/.pyenv/bin/pyenv" ]]
 }
 
-@test "recreate_python_venv ansible on Linux excludes mlx from pip install" {
+@test "recreate_python_venv issues no platform-conditional package on Linux" {
   unset MACOS
   export LINUX=1
   export UBUNTU=1
@@ -552,9 +558,11 @@ teardown() {
   local _rc=0
   recreate_python_venv "ansible" || _rc=$?
   [ "${_rc}" -eq 0 ]
-  grep -q "pip install" "${MOCK_CALLS_FILE}"
-  run grep "mlx" "${MOCK_CALLS_FILE}"
-  [ "$status" -ne 0 ]
+  grep -q "uv sync" "${MOCK_CALLS_FILE}"
+  if grep -q "mlx" "${MOCK_CALLS_FILE}"; then
+    printf "shell still names mlx; the lock marker should be doing this\n" >&2
+    return 1
+  fi
 }
 
 # ── recreate_ruby ──────────────────────────────────────────────────────────

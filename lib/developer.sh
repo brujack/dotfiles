@@ -287,9 +287,9 @@ setup_ansible() {
       pyenv virtualenv "${PYTHON_VER}" ansible
       pyenv activate ansible
       printf "Installing Ansible dependencies...\\n"
-      local _pip_pkgs=(ansible ansible-lint molecule "molecule-plugins[docker]" certbot certbot-dns-cloudflare checkov boto3 docker gmpy2 jmespath mpmath netaddr pylint psutil bpytop HttpPy j2cli wheel shell-gpt pyright cosmic-ray hypothesis passlib scikit-learn scipy bandit pip-audit ruff pytest pytest-cov pytest-xdist mypy pandas matplotlib seaborn ipython jupyterlab pre-commit radon vulture)
-      [[ -n ${MACOS:-} ]] && _pip_pkgs+=(mlx)
-      python -m pip install "${_pip_pkgs[@]}"
+      local _uv
+      _uv="$(resolve_uv)" || return 1
+      uv_sync_venv "${_uv}" "${PYENV_ROOT}/versions/ansible/bin/python" "${PYENV_ROOT}/versions/ansible" || return 1
       pyenv rehash
     fi
   fi
@@ -317,9 +317,9 @@ recreate_python_venv() {
     local _python
     _python="$(pyenv which python 2>/dev/null || command -v python3)"
     printf "Installing Ansible dependencies...\\n"
-    local _pip_pkgs=(ansible ansible-lint molecule "molecule-plugins[docker]" certbot certbot-dns-cloudflare checkov boto3 docker gmpy2 jmespath mpmath netaddr pylint psutil bpytop HttpPy j2cli wheel shell-gpt pyright cosmic-ray hypothesis passlib scikit-learn scipy bandit pip-audit ruff pytest pytest-cov pytest-xdist mypy pandas matplotlib seaborn ipython jupyterlab pre-commit radon vulture)
-    [[ -n ${MACOS:-} ]] && _pip_pkgs+=(mlx)
-    "${_python}" -m pip install "${_pip_pkgs[@]}" || return 1
+    local _uv
+    _uv="$(resolve_uv)" || return 1
+    uv_sync_venv "${_uv}" "${_python}" "${PYENV_ROOT}/versions/${_venv_name}" || return 1
     pyenv rehash
   fi
 }

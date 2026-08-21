@@ -495,36 +495,66 @@ run_update() {
       pyenv shell ansible 2>/dev/null || true
       PYTHON="$(pyenv which python 2>/dev/null || command -v python3)"
 
+      # Skip the section rather than returning: a `return 1` here aborts the
+      # whole of run_update, which means no brewfile drift check, no summary,
+      # and no state-ledger entry — _update_summary is what writes it. A tool
+      # this section needs being absent is a skip, exactly as it is for claude
+      # and npm; it is not a reason to lose the run record.
+      local _uv
+      if ! _uv="$(resolve_uv)"; then
+        _update_skip "pip" "uv not installed — run 'setup_env.sh -t brew_install'"
+      else
+      # Snapshot the venv BEFORE syncing. uv sync prunes and downgrades, and
+      # the pre-sync state is not reproducible from the lock — uv pip install
+      # -r of the venv's own freeze fails as unsatisfiable — so reverting this
+      # repo does NOT restore it. This file is the only rollback path:
+      #   "$PYTHON" -m pip install --no-deps -r <snapshot>
+      local _snap_dir _snap _snap_stamp
+      _snap_dir="${HOME}/.local/share/dotfiles/venv-snapshots"
+      _snap_stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+      _snap="${_snap_dir}/ansible-${_snap_stamp}.txt"
+      mkdir -p "${_snap_dir}"
+      if "$PYTHON" -m pip freeze > "${_snap}" 2>/dev/null && [[ -s "${_snap}" ]]; then
+        printf "venv snapshot: %s\n" "${_snap}"
+      else
+        rm -f "${_snap}"
+        printf "WARNING: could not snapshot the venv before syncing\n" >&2
+      fi
+      # Keep the newest 10; a daily run would otherwise grow without bound.
+      find "${_snap_dir}" -maxdepth 1 -name 'ansible-*.txt' -type f 2>/dev/null \
+        | sort -r | tail -n +11 | while IFS= read -r _old; do rm -f "${_old}"; done
+
       {
-        "$PYTHON" -m pip install -U pip setuptools
-
-        # _DOTFILES_RUN_TMPDIR is read by the Python block via os.environ to write pip_outdated
-        "$PYTHON" - <<PY
-import json, subprocess, sys, os
-
-# Packages with hard upper bounds from other installed tools — upgrading them
-# independently breaks checkov, ansible-lint, shell-gpt, or bpytop. Let pip's
-# dependency resolver manage these via top-level package installs only.
-SKIP_UPGRADE = {"packaging", "pathspec", "rich", "psutil", "wheel"}
-
-cmd = [sys.executable, "-m", "pip", "list", "--outdated", "--format=json"]
-out = subprocess.check_output(cmd, text=True)
-pkgs = [p["name"] for p in json.loads(out) if p["name"].lower() not in SKIP_UPGRADE]
-
-# Write outdated package names for the update summary
-tmpdir = os.environ.get("_DOTFILES_RUN_TMPDIR", "/tmp")
-with open(os.path.join(tmpdir, "pip_outdated"), "w") as f:
-    f.write("\\n".join(pkgs))
-
-if pkgs:
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "-U", *pkgs])
-PY
+        uv_sync_venv "${_uv}" "${PYTHON}" "${PYENV_ROOT}/versions/ansible"
       } 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_pip"
       local _pip_rc="${PIPESTATUS[0]}"
 
-      "$PYTHON" -m pip check || true
+      # The summary's pip line reads pip_outdated. Under the lock there is no
+      # "outdated" set — the honest equivalent is what the sync actually moved,
+      # which uv reports as leading +/- lines. An unchanged run writes an empty
+      # file, which the summary already renders as "no changes".
+      sed -nE 's/^[[:space:]]*[+-][[:space:]]+([^=[:space:]]+).*/\1/p' \
+        "${_DOTFILES_RUN_TMPDIR}/err_pip" 2>/dev/null | sort -u \
+        > "${_DOTFILES_RUN_TMPDIR}/pip_outdated" || true
+
+      # Step 5: the verdict ratchets from warning to failure, in the same change
+      # that makes the sync above apply the lock. The two are coupled — the venv
+      # carried five known conflicts, so failing before the lock landed would
+      # have blocked every update run; after it, a conflict is a real defect.
+      #
+      # Its own advisory section rather than "pip": _update_warn and the timed
+      # _update_record_end below both write status_${section}, so warning on
+      # "pip" would be overwritten two lines later. Same split as brew-drift
+      # beside brew.
+      if "$PYTHON" -m pip check > "${_DOTFILES_RUN_TMPDIR}/err_pip-check" 2>&1; then
+        _update_ok "pip-check" "no dependency conflicts"
+      else
+        _update_fail "pip-check" "dependency conflicts reported — see detail"
+        _update_write_detail_from_err "pip-check" "FAIL"
+      fi
       printf "Updated pip packages\n"
       _update_record_end "pip" "${_pip_rc}"
+      fi
     else
       _update_skip "pip" "HAS_DEVTOOLS not set"
     fi

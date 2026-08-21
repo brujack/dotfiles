@@ -557,45 +557,49 @@ teardown() {
   grep -q "pyenv" "${MOCK_CALLS_FILE}"
 }
 
-@test "setup_ansible calls pip install ansible" {
+@test "setup_ansible syncs the venv from the committed lock" {
   export MACOS=1
   unset LINUX
   export HAS_DEVTOOLS=1
   setup_ansible
-  grep -q "pip install ansible" "${MOCK_CALLS_FILE}"
+  grep -q "uv sync" "${MOCK_CALLS_FILE}"
   grep -q "pyenv rehash" "${MOCK_CALLS_FILE}"
 }
 
-@test "setup_ansible skips pip when HAS_DEVTOOLS is unset" {
+@test "setup_ansible skips the sync when HAS_DEVTOOLS is unset" {
   export MACOS=1
   unset LINUX HAS_DEVTOOLS
   setup_ansible
-  ! grep -q "pip install ansible" "${MOCK_CALLS_FILE}"
+  if grep -q "uv sync" "${MOCK_CALLS_FILE}"; then
+    printf "synced despite HAS_DEVTOOLS being unset\n" >&2
+    return 1
+  fi
 }
 
-@test "setup_ansible on macOS includes mlx in pip install" {
-  export MACOS=1
-  unset LINUX
-  export HAS_DEVTOOLS=1
-  setup_ansible
-  grep -q "pip install" "${MOCK_CALLS_FILE}"
-  grep -q "mlx" "${MOCK_CALLS_FILE}"
+# mlx's platform gate moved out of the shell and into the manifest, so these two
+# assert the lock rather than the invocation: setup_ansible now issues the SAME
+# command on both platforms and uv applies the marker. Testing the shell for a
+# platform branch that no longer exists there would pass while pinning nothing.
+
+@test "the lock gates mlx to darwin" {
+  local _lock="${BATS_TEST_DIRNAME}/../../uv.lock"
+  [ -f "${_lock}" ]
+  grep -q 'name = "mlx", marker = "sys_platform == .darwin."' "${_lock}"
 }
 
-@test "setup_ansible on Linux excludes mlx from pip install" {
+@test "setup_ansible issues no platform-conditional package on Linux" {
   unset MACOS
   export LINUX=1
   export UBUNTU=1
   export HAS_DEVTOOLS=1
-  # Pre-create the Python version dir so the env-i subshell build branch is skipped
   mkdir -p "${HOME}/.pyenv/versions/${PYTHON_VER}"
   setup_ansible
-  grep -q "pip install ansible" "${MOCK_CALLS_FILE}"
-  run grep "mlx" "${MOCK_CALLS_FILE}"
-  [ "$status" -ne 0 ]
+  grep -q "uv sync" "${MOCK_CALLS_FILE}"
+  if grep -q "mlx" "${MOCK_CALLS_FILE}"; then
+    printf "shell still names mlx; the marker should be doing this\n" >&2
+    return 1
+  fi
 }
-
-# ── clone_personal_repos ──────────────────────────────────────────────────────
 
 @test "clone_personal_repos calls git clone for each absent repo" {
   export MACOS=1
@@ -1867,19 +1871,27 @@ assert_all_npm_globals_pinned() {
   grep -q "pyenv which python" "${MOCK_CALLS_FILE}"
 }
 
-@test "run_update pip writes pip_outdated when packages are outdated" {
+@test "run_update pip writes pip_outdated from what the sync moved" {
+  # Asserts the FILE rather than the rendered summary, because
+  # update_summary.sh reads pip_outdated directly. Calls run_update directly
+  # rather than via `run` because _DOTFILES_RUN_TMPDIR is exported into the
+  # caller — which means a failure here loses its TAP line, a property this
+  # shares with the other direct callers in this file.
   export MACOS=1
   unset LINUX UBUNTU
   export UPDATE_PIP=1 HAS_DEVTOOLS=1
   unset UPDATE_BREW UPDATE_CLAUDE UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
   export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
-  export MOCK_PYTHON_HEREDOC_PKGS="requests"
+  export MOCK_UV_SYNC_OUTPUT=" + requests==2.34.2
+ - urllib3==1.26.20
+ + urllib3==2.7.0
+"
   run_update
-  grep -q "requests" "${_DOTFILES_RUN_TMPDIR}/pip_outdated"
-  grep -q "OK" "${_DOTFILES_RUN_TMPDIR}/status_pip"
+  grep -q "^requests$" "${_DOTFILES_RUN_TMPDIR}/pip_outdated"
+  grep -q "^urllib3$" "${_DOTFILES_RUN_TMPDIR}/pip_outdated"
+  # deduplicated: urllib3 appears on both a - and a + line
+  [ "$(grep -c . "${_DOTFILES_RUN_TMPDIR}/pip_outdated")" -eq 2 ]
 }
-
-# ── _check_one_version ────────────────────────────────────────────────────────
 
 @test "_check_one_version prints SKIP when tool is not installed" {
   local _out
@@ -2009,4 +2021,153 @@ assert_all_npm_globals_pinned() {
   install_zsh() { return 1; }
   run run_setup_user
   [ "$status" -ne 0 ]
+}
+
+# ── pip check verdict ─────────────────────────────────────────────────────────
+#
+# A pip check conflict is a verdict rather than something swallowed by `|| true`.
+# The conflict case FAILS (see "run_update FAILS the pip-check section" below);
+# this pair pins the clean case, which must stay OK and must not warn.
+#
+# Both use `run` rather than calling run_update directly. A direct call leaves an
+# inherited EXIT trap in the test process, and a test that fails after one loses
+# its TAP line entirely — bats still exits non-zero, so the suite can go red, but
+# the failing test name and its message vanish. 50 tests across this file and
+# unit.bats call run_update directly and share that property.
+
+@test "run_update does not warn when pip check is clean" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE_PIP=1 HAS_DEVTOOLS=1
+  unset UPDATE_BREW UPDATE_CLAUDE UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
+  export MOCK_PYTHON_PIP_CHECK_EXIT=0
+  run run_update
+  if [[ "${output}" != *"Updated pip packages"* ]]; then
+    printf "pip section never ran; the assertion below would be vacuous\n" >&2
+    return 1
+  fi
+  if [[ "${output}" == *"[WARN]"*"pip-check"* ]]; then
+    printf "warned on a clean pip check\n" >&2
+    return 1
+  fi
+  if [[ "${output}" != *"[OK]"*"pip-check"* ]]; then
+    printf "clean pip check did not record an OK verdict\n" >&2
+    return 1
+  fi
+  [ "${status}" -eq 0 ]
+}
+
+# ── run_update applies the lock (step 5) ─────────────────────────────────────
+
+@test "run_update installs from the lock instead of upgrading whatever is outdated" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE_PIP=1 HAS_DEVTOOLS=1
+  unset UPDATE_BREW UPDATE_CLAUDE UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
+  run run_update
+  grep -q "uv sync" "${MOCK_CALLS_FILE}"
+  if grep -qE 'pip install -U' "${MOCK_CALLS_FILE}"; then
+    printf "still resolving with pip install -U\n" >&2
+    return 1
+  fi
+}
+
+@test "run_update records what the sync changed, not what was outdated" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE_PIP=1 HAS_DEVTOOLS=1
+  unset UPDATE_BREW UPDATE_CLAUDE UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
+  export MOCK_UV_SYNC_OUTPUT=" + requests==2.34.2
+ - urllib3==1.26.20
+ + urllib3==2.7.0
+"
+  run run_update
+  [[ "${output}" == *"requests"* ]]
+  [[ "${output}" == *"urllib3"* ]]
+}
+
+@test "run_update FAILS the pip-check section when conflicts remain" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE_PIP=1 HAS_DEVTOOLS=1
+  unset UPDATE_BREW UPDATE_CLAUDE UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
+  export MOCK_PYTHON_PIP_CHECK_EXIT=1
+  run run_update
+  if [[ "${output}" != *"[FAIL]"*"pip-check"* ]]; then
+    printf "conflicts no longer warn but do not fail either\n" >&2
+    return 1
+  fi
+  if [[ "${output}" == *"[WARN]"*"pip-check"* ]]; then
+    printf "still only warning after the ratchet\n" >&2
+    return 1
+  fi
+}
+
+@test "run_update skips pip and still summarises when uv is unresolvable" {
+  # A missing uv must not abort the run: _update_summary is what writes the
+  # state-ledger entry, so returning early loses the whole run record along
+  # with every later section.
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE_PIP=1 HAS_DEVTOOLS=1
+  unset UPDATE_BREW UPDATE_CLAUDE UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
+  export UV_BIN="${BATS_TEST_TMPDIR}/no-such-uv"
+  run run_update
+  if [[ "${output}" != *"Update Summary"* ]]; then
+    printf "run aborted before the summary; the run record is lost\n" >&2
+    return 1
+  fi
+  if [[ "${output}" != *"[SKIP]"*"pip"* ]]; then
+    printf "pip section not recorded as skipped\n" >&2
+    return 1
+  fi
+  if grep -q "uv sync" "${MOCK_CALLS_FILE}"; then
+    printf "attempted a sync despite uv being unresolvable\n" >&2
+    return 1
+  fi
+}
+
+@test "run_update snapshots the venv before syncing" {
+  # The sync prunes and downgrades, and the pre-sync state is not reproducible
+  # from the lock. Without this file the change is irreversible.
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE_PIP=1 HAS_DEVTOOLS=1
+  unset UPDATE_BREW UPDATE_CLAUDE UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
+  export MOCK_PYTHON_FREEZE_OUTPUT="requests==2.34.2"
+  run run_update
+  local _dir="${HOME}/.local/share/dotfiles/venv-snapshots"
+  local _n
+  _n="$(find "${_dir}" -maxdepth 1 -name 'ansible-*.txt' -type f 2>/dev/null | wc -l | tr -d ' ')"
+  if [ "${_n}" -eq 0 ]; then
+    printf "no snapshot written; the sync would be irreversible\n" >&2
+    return 1
+  fi
+  grep -q "requests" "${_dir}"/ansible-*.txt
+  [[ "${output}" == *"venv snapshot:"* ]]
+}
+
+@test "run_update keeps only the newest 10 venv snapshots" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE_PIP=1 HAS_DEVTOOLS=1
+  unset UPDATE_BREW UPDATE_CLAUDE UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
+  export MOCK_PYTHON_FREEZE_OUTPUT="requests==2.34.2"
+  local _dir="${HOME}/.local/share/dotfiles/venv-snapshots"
+  mkdir -p "${_dir}"
+  local i
+  for i in 01 02 03 04 05 06 07 08 09 10 11 12; do
+    printf 'old\n' > "${_dir}/ansible-2020010${i:0:1}T0000${i}Z.txt"
+  done
+  run run_update
+  local _n
+  _n="$(find "${_dir}" -maxdepth 1 -name 'ansible-*.txt' -type f | wc -l | tr -d ' ')"
+  [ "${_n}" -eq 10 ]
 }

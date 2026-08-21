@@ -3,7 +3,7 @@
 
 # Fixed section order for summary display
 readonly _UPDATE_SECTION_ORDER=(
-  brew softwareupdate apt snap mas claude terraform-skill npm pip gems
+  brew softwareupdate apt snap mas claude terraform-skill npm pip pip-check gems
   ai-config git-repos legacy-rsync git-hooks oh-my-zsh tpm tfenv cheat.sh brew-drift
 )
 
@@ -53,6 +53,18 @@ _update_ok() {
 _update_warn() {
   local _section="$1" _msg="$2"
   printf "WARN\n" > "${_DOTFILES_RUN_TMPDIR}/status_${_section}"
+  printf "%s\n" "${_msg}" > "${_DOTFILES_RUN_TMPDIR}/result_${_section}"
+}
+
+# _update_fail SECTION MESSAGE
+# Records a section as a blocking failure. Same lifecycle constraint as
+# _update_ok: for advisory check sections only, not timed _update_record_end
+# sections. The FAIL status is counted into _fail, which _update_summary passes
+# to _ledger_write_run_entry as the run's status — so this is durable, not just
+# a line on the terminal.
+_update_fail() {
+  local _section="$1" _msg="$2"
+  printf "FAIL\n" > "${_DOTFILES_RUN_TMPDIR}/status_${_section}"
   printf "%s\n" "${_msg}" > "${_DOTFILES_RUN_TMPDIR}/result_${_section}"
 }
 

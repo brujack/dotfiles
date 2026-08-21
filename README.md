@@ -434,6 +434,8 @@ make bash-coverage # measure bash line coverage (PS4 xtrace); CI gates at 91%
 make install-hooks # install pre-commit hook (runs lint + ggshield before each commit)
 make sync-agent-guidance  # regenerate .cursor guidance from CLAUDE.md's ~/.claude/standards imports
 make check-agent-guidance # fail if generated guidance is out of sync
+make sync-requirements-ci  # render requirements-ci.txt from uv.lock's test-lint group
+make check-requirements-ci # fail if requirements-ci.txt has drifted from uv.lock
 ```
 
 Install bats-core first: `brew install bats-core` (macOS) or `sudo apt-get install bats` (Ubuntu).

@@ -9,9 +9,16 @@ fi
 if [[ "$*" == *"pip install"* ]]; then
   exit "${MOCK_PYTHON_PIP_INSTALL_EXIT:-0}"
 fi
-# For 'python -m pip check', just succeed
+# For 'python -m pip freeze', emit MOCK_PYTHON_FREEZE_OUTPUT so a test can
+# assert the pre-sync snapshot captured real content rather than an empty file.
+if [[ "$*" == *"pip freeze"* ]]; then
+  printf "%s\n" "${MOCK_PYTHON_FREEZE_OUTPUT:-}"
+  exit "${MOCK_PYTHON_FREEZE_EXIT:-0}"
+fi
+# For 'python -m pip check'. MOCK_PYTHON_PIP_CHECK_EXIT lets a test drive the
+# conflict branch; default 0 keeps every pre-existing test unchanged.
 if [[ "$*" == *"pip check"* ]]; then
-  exit 0
+  exit "${MOCK_PYTHON_PIP_CHECK_EXIT:-0}"
 fi
 # For 'python -' (heredoc execution): simulate the pip update Python script.
 # Consumes stdin (the Python source), then writes pip_outdated to _DOTFILES_RUN_TMPDIR.

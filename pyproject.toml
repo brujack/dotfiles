@@ -1,0 +1,118 @@
+# Single declaration of the ansible virtualenv's package set.
+#
+# Replaces the two hardcoded arrays that lived in lib/developer.sh and the
+# prose list in CLAUDE.md. uv.lock beside this file pins the full transitive
+# closure with hashes; nothing installs from these names directly.
+#
+# [project] exists only to carry requires-python — [tool.uv] cannot express it
+# (measured: uv still warns and defaults the floor). package = false keeps this
+# from being an installable distribution.
+
+[project]
+name = "dotfiles-venv"
+version = "0"
+requires-python = "==3.14.*"
+
+[tool.uv]
+package = false
+
+# LICENSE POSTURE, reviewed 2026-08-20. Three direct deps are GPL:
+# ansible and ansible-lint (GPL-3.0-or-later), pylint (GPL-2.0-or-later).
+# Accepted. All three predate this file — they are in origin/master's
+# _pip_pkgs at both sites and installed on both machines today, so this
+# manifest makes an existing posture visible rather than creating it.
+# GPL obligations attach to DISTRIBUTION; this repo sets package = false,
+# declares no build-system, and is not published. All three are invoked as
+# CLI tools, not linked as libraries. ansible is the reason the venv exists.
+
+[dependency-groups]
+# Used only by the venv itself: ansible/terraform execution and the interactive
+# tooling that lives alongside it.
+runtime = [
+  "ansible",                       # the reason this venv exists
+  "ansible-lint",
+  "molecule",
+  "molecule-plugins[docker]",
+  "certbot",                       # cert renewal on the homelab
+  "certbot-dns-cloudflare",
+  "checkov",                       # terraform static analysis. Deliberately
+                                   # unconstrained: the lock resolves 3.3.13
+                                   # (2026-08-20), a year newer than the 3.2.459
+                                   # previously installed.
+                                   #
+                                   # ACCEPTED RISK, reviewed 2026-08-20. checkov
+                                   # pins asteval EXACTLY at every version >=
+                                   # 3.2.459 (==1.0.5 up to 3.2.477, ==1.0.6
+                                   # from 3.2.482), so its two transitive
+                                   # advisories cannot be cleared while staying
+                                   # current:
+                                   #   asteval 1.0.6  GHSA-9w56-46f6-3qhx,
+                                   #     CVE-2026-55244 — sandbox escape via an
+                                   #     attacker-controlled expression. Fixed
+                                   #     in 1.0.9, which checkov forbids.
+                                   #   ecdsa 0.19.2   PYSEC-2026-1325 — Minerva
+                                   #     timing attack on sign_digest(). NO fix
+                                   #     published upstream.
+                                   # Neither is reachable here: checkov signs
+                                   # nothing and evaluates only the operator's
+                                   # own policies.
+                                   # The alternative was measured, not assumed:
+                                   # pinning asteval>=1.0.9 resolves and reaches
+                                   # 0 advisories (ecdsa disappears entirely),
+                                   # but drags checkov to 3.2.414 (2025-05-01) —
+                                   # 15 months of missed IaC rules, a larger
+                                   # security cost than two unreachable CVEs.
+                                   # Revisit when upstream unpins asteval.
+                                   #
+                                   # Also drags boto3 back to 1.35.x via
+                                   # cloudsplaining. Accepted; boto3 is legacy.
+  "boto3",                         # legacy; no current in-repo consumer
+  "docker",
+  "gmpy2",                         # arbitrary precision, used by math repo work
+  "jmespath",                      # ansible json_query filter
+  "mpmath",
+  "netaddr",                       # ansible ipaddr filter
+  "passlib",                       # ansible password_hash filter
+  "psutil",
+  "bpytop",                        # interactive; pins psutil < 6
+  "HttpPy",                        # FLAGGED FOR REMOVAL: v0.0.9, last release
+                                   # 2019-10-21, no repo push in 39 months, PyPI
+                                   # download stats unavailable, and zero measured
+                                   # consumers fleet-wide. Not a typosquat — it
+                                   # predates httpx — just unjustifiable. Operator
+                                   # decision; kept for now to avoid a silent
+                                   # behaviour change.
+  "j2cli",                         # FLAGGED FOR REMOVAL: last release 2019-06-07,
+                                   # no repo push in 26 months, zero measured
+                                   # consumers fleet-wide. Same call as HttpPy.
+  "shell-gpt",                     # interactive; pins openai < 3
+  "cosmic-ray",                    # mutation testing (make mutants)
+  "scikit-learn",
+  "scipy",
+  "pandas",
+  "matplotlib",
+  "seaborn",
+  "ipython",
+  "jupyterlab",
+  "setuptools",                    # vendors wheel; explicit since a setuptools
+                                   # bump silently changes the vendored copy
+  "mlx ; sys_platform == 'darwin'",
+]
+
+# Must match what five repos' CI installs. Exported to requirements-ci.txt.
+test-lint = [
+  "bandit",
+  "coverage",
+  "hypothesis",
+  "mypy",
+  "pip-audit",
+  "pylint",
+  "pyright",
+  "pytest",
+  "pytest-cov",
+  "pytest-xdist",
+  "pre-commit",
+  "radon",
+  "ruff",
+  "vulture",
+]

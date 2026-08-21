@@ -216,6 +216,36 @@ Uses **BATS** (Bash Automated Testing System), installed natively:
 **Sync agent guidance:** `make sync-agent-guidance` (regenerates `.cursor/rules/global-claude-standards.mdc` from root `CLAUDE.md`'s `@~/.claude/standards/*.md` imports, resolved against the global symlinked standards dir)
 **Check agent guidance drift:** `make check-agent-guidance` (fails when generated Cursor guidance is stale)
 
+**The venv is snapshotted before every sync, and that file is the only rollback path.**
+`run_update` writes `pip freeze` to `~/.local/share/dotfiles/venv-snapshots/ansible-<UTC>.txt`
+before applying the lock, keeping the newest 10. This is not belt-and-braces: `uv sync` prunes
+and downgrades, and the pre-sync state is **not reproducible from the lock** — `uv pip install
+-r` of the venv's own freeze fails as unsatisfiable, because pip reached that state
+incrementally and the cumulative set is unsolvable. Reverting this repo does not restore the
+venv. To roll back:
+
+```bash
+"$(pyenv which python)" -m pip install --no-deps -r ~/.local/share/dotfiles/venv-snapshots/ansible-<UTC>.txt
+```
+
+`--no-deps` is required — the state being restored is one the resolver refuses.
+
+**Environment overrides added by the uv work.** All three exist for a stated reason and
+none grants a capability the operator did not already have:
+
+| variable | read by | why it exists |
+| --- | --- | --- |
+| `UV_BIN` | `resolve_uv` (`lib/helpers.sh`) | operator escape hatch, and the only seam a test can use to drive the "not executable" branch — PATH mocking cannot remove the absolute fallback candidates |
+| `UV_FALLBACK_PATHS` | `resolve_uv` | array of prefix candidates. Exists so a test can reach the genuine not-found branch, which is otherwise unreachable on any machine that has `uv`. Env-settable as a scalar, deliberately; `UV_BIN` is checked first and already grants the same |
+| `REQUIREMENTS_CI_TARGET` | `scripts/sync-requirements-ci.sh` | points the drift check at a fixture, so a test that crashes between mutating and restoring cannot leave a modified tracked `requirements-ci.txt` to be committed by accident |
+
+**Sync CI requirements:** `make sync-requirements-ci` (renders `requirements-ci.txt` from `uv.lock`'s `test-lint` group)
+**Check CI requirements drift:** `make check-requirements-ci` (fails when the rendering is stale; a prerequisite of `make test`)
+
+`requirements-ci.txt` is a **rendering, not a declaration** — `pyproject.toml` plus `uv.lock` are the source. It exists so the other repos' CI can `pip install -r` it with stock pip and no `uv` on the runner; verified on macOS and Linux, 65 packages and 428 enforced hashes. Never hand-edit it.
+
+Two properties are load-bearing and were measured rather than assumed. **`uv export` is not byte-deterministic** — its header echoes the argv it was given, including an absolute `--project` path, so `scripts/sync-requirements-ci.sh` strips that header and writes a fixed one; without this the drift gate would fire on every PR forever. And **the Makefile guard skips when `uv` is absent**, matching lint's `shellcheck` idiom, so CI installs a pinned checksum-verified `uv` to keep the check from being inert exactly where it is the real gate.
+
 The pre-commit hook is **required**. It runs on every `git commit`:
 
 1. `make lint` — blocks the commit on any syntax or shellcheck failure
@@ -537,7 +567,7 @@ Invoke `caveman:caveman-commit` skill to generate the commit message before runn
 - Credential directories (`.aws`, `.tf_creds`, `.tsh`) are created with `chmod 700`
 - Git repos are cloned to `~/git-repos/personal/` and `~/git-repos/work/`
 - Python environments managed via **pyenv** + **pyenv-virtualenv**; the `ansible` venv is the primary one
-- **Ansible venv packages (explicit):** ansible, ansible-lint, molecule, molecule-plugins[docker], certbot, certbot-dns-cloudflare, checkov, boto3, docker, gmpy2, jmespath, mpmath, netaddr, pylint, psutil, bpytop, HttpPy, j2cli, wheel, shell-gpt, pyright, cosmic-ray, hypothesis, passlib, scikit-learn, scipy, bandit, pip-audit, ruff, pytest, pytest-cov, pytest-xdist, mypy, pandas, matplotlib, seaborn, ipython, jupyterlab, pre-commit, radon, vulture (+macOS: mlx)
+- **Ansible venv packages:** declared once in `pyproject.toml` under `[dependency-groups]` (`runtime` and `test-lint`), pinned transitively by `uv.lock`. Both venv-creating sites in `lib/developer.sh` install with `uv sync --frozen`; nothing installs from a name list. `mlx` is gated to macOS by a `sys_platform == 'darwin'` marker in the manifest, not by a shell branch. Change a version by editing `pyproject.toml` and re-running `uv lock`.
 - **ruff is venv-managed** (not brew); run `brew uninstall ruff` once after venv recreate to remove the legacy brew install
 - **Test runner:** `pytest` — runs `unittest.TestCase` tests natively; test file contents do not change
 - Application installs are kept in alphabetical order
