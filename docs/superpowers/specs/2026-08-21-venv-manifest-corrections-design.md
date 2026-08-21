@@ -12,6 +12,10 @@ two cycles re-locking the same file twice.
 1. **Remove `"boto3"`** — the fleet stops asking for a package nothing uses.
 2. **Floor `checkov>=3.3.13`** — operator decision 2026-08-21, so a bump cannot silently walk
    it backwards again.
+3. **Take the `shell-gpt` upgrade the floor unblocks** — 1.0.1 -> 1.5.1, openai 0.28.1 ->
+   2.54.0. **Added by operator instruction 2026-08-21**, after being found mid-implementation
+   and initially deferred. Recorded as a scope change rather than allowed to drift: the spec
+   originally declared two changes and this is a third.
 
 ## Change 1 — drop the `boto3` declaration, stated narrowly because the obvious framing is wrong
 
@@ -68,10 +72,15 @@ appears nowhere in `pyproject.toml`, so the manifest never recorded the change.
 Measured by the ai-config session before proposing it:
 
 ```
-floor alone         -> checkov 3.3.13, asteval 1.0.6, ecdsa 0.19.2, 275 packages
+floor alone         -> checkov 3.3.13, asteval 1.0.6, ecdsa 0.19.2, 275 packages   [ai-config's tree]
+boto3 drop + floor  -> same versions, **273** packages                          [this branch, derived]
 floor + forced bump -> "No solution found ... checkov>=3.3.13 depends on asteval==1.0.6 and
                         dotfiles-venv:runtime depends on asteval>=1.0.9 ... unsatisfiable"
 ```
+
+**Why 273 and not 275, settled.** `checkov 3.2.414` depends on `openai 0.28.1`, which blocks `shell-gpt 1.5.1` (needs `openai>=2.0`), so the resolver has been holding shell-gpt at **1.0.1**. This floor removes that blocker, but `uv lock` is conservative and does not lift an existing resolution unaided — so shell-gpt stays at 1.0.1 and openai leaves with checkov, giving 273. Adding `--upgrade-package shell-gpt` yields 1.5.1 + openai 2.54.0 and **275**, which is ai-config's number and is correct for a tree that already carries shell-gpt 1.5.1. Both are right for their conditions. **This cycle deliberately does not take the shell-gpt upgrade** — it is a third change, and it is backlogged with the measurement.
+
+**The two totals differ and the derived one governs.** ai-config measured 275 on their tree; this branch resolves to **273**, because flooring checkov also drops `openai` (3.2.414 requires it, 3.3.13 does not). Neither number is a contract — the package count is a consequence of the resolver, so case 4 asserts what this branch actually produces and must be re-derived if a new checkov ships, since `>=3.3.13` is a floor and not a pin.
 
 So the floor converts a silent year-long downgrade into a resolver error naming both packages
 and the incompatibility. That is the whole point: not preventing the conflict, but making it
@@ -113,10 +122,10 @@ Every assertion pairs with a control in the same command; every case names its a
 | 1 | `boto3` absent from `pyproject.toml`'s `runtime` group | `grep -c` on a package that must remain (`ansible`) in the same command |
 | 2 | `boto3` **still present** in `uv.lock` | pins the counter-intuitive half; goes red if someone "helpfully" purges it. Version will move with checkov's floor — assert presence, not a literal |
 | 3 | `uv lock --check` resolves | proves the manifest is still satisfiable |
-| 4 | lock has **275** packages, and `asteval` + `ecdsa` are **present** | not "unchanged" — the floor deliberately moves it 272 -> 275. Asserting a specific number and two named packages is stronger than asserting stasis |
-| 5 | `CLAUDE.md` venv list has no `boto3`, still has `ansible` | doc/manifest agreement, with a positive control |
+| 4 | lock has **275** packages; `asteval`, `ecdsa`, `jiter`, `openai` **present** | 272 -> 275. With change 3 taken, `openai` returns at **2.54.0** via shell-gpt 1.5.1 rather than 0.28.1 via checkov — a different package at a different version, so assert the version, not just presence |
+| 5 | `shell-gpt --version` reports 1.5.1 | openai 0.28 -> 2.54 crosses a major boundary; a lock that resolves is not proof the tool runs. **Verified: `ShellGPT 1.5.1`** |
 | 6 | `make test` rc=0 | aggregate gate |
-| 7 | mutation: re-add `"boto3"` → case 1 red; drop the floor → case 4 red (272, asteval absent) | two arms, each discriminating a different change rather than one arm covering both |
+| 7 | mutation: re-add `"boto3"` → case 1 red; drop the floor → case 4 red; revert shell-gpt to 1.0.1 → case 5 red | three arms, one per declared change |
 
 Case 2 is the one that matters. Three of the four previous specs this session shipped a case
 that passed on empty output; case 2 is deliberately an assertion that something **remains**, so
