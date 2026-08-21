@@ -1,108 +1,114 @@
 # Changelog
 
 
-## Bug Fixes
-
-- fail closed on unrecognized paths (#195)
-
-- shellcheck the bats suites, revive six inert assertions (#197)
-
-- read core.hooksPath through git config includes (#198)
-
-- measure the whole repo, and count commands not lines (#199)
-
-- clear 271 findings, derive lint scope from git ls-files (#200)
-
-- correct the denominator, widen the instrumented set (#201)
-
-- stop the tracer silencing every traced stderr (#202)
-
-- refuse to report a figure over a red suite (#203)
-
-- close three instrument deferrals and reject unknown flags (#204)
-
-- honor exported LEDGER_BIN and MACHINE_ID_PATH (#205)
-
-
-
 ## Documentation
 
-- mark the pre-push plan Done (dotfiles#195)
+- pip check is not sufficient, and results are discarded
 
-- sync README and backlog after the fail-closed pre-push change
+- backlog the untested no_legacy exception path
 
-- backlog the core.quotePath path-anchor gap
+- backlog the tolerated double detect_env call
 
-- re-scope the maintainability backlog row, premise falsified
+- backlog the missing CI job timeouts
 
-- add Claude Code weekly features digest 2026-08-03
+- record CI figures and close out #223
 
-- add Anthropic weekly features digest 2026-08-03
+- ADR-0021 — hand-typed test oracle for the identity table
 
-- mark the 2026-07-29 hooksPath spec contract superseded
+- ADR-0021's own receipt was wrong, fourth time
 
-- correct the projects/ memory tracking claim
+- say lines, not occurrences
 
-- sync the surfaces PR #199 left stale
+- backlog the oracle comment's comment-to-code ratio
 
-- say why the coverage set comes from git, not a glob
+- name the receipt's expiry condition
 
-- publish the CI figure, not the local one
+- the closing rule rejected its own example
 
-- refresh the bash coverage figure from CI
+- document the mutation that actually isolates the variable (#224)
 
-- record why the --json guard branch is untested (#206)
+- backlog pep621 for dotfiles' renovate config
 
-- add Anthropic weekly features digest 2026-08-10
+- spec adding uv to the Brewfile
 
-- add Claude Code weekly features digest 2026-08-10
+- uv needs two edits, not one — Linux ignores the Brewfile
 
-- spec bats provisioning parity and zsh lint scope
+- revise uv spec against three lens findings
 
-- self-review fixes on bats/zsh scope spec
+- backlog uv's unpinned drift, with its revisit trigger
 
-- append multi-lens review to bats/zsh scope spec
+- --inexact does not protect conflicting packages
 
-- address all three lens findings on bats/zsh scope spec
+- round 2 — two of my own corrections were defective
 
-- address round-2 lens findings on bats/zsh scope spec
+- record the Multi-Lens Review section
 
-- address scoped round-3 findings; ZSH_FILES was still short
+- plan adding uv to both platforms' install paths
 
-- plan for bats provisioning parity and zsh lint scope
+- index the brewfile-uv plan
 
-- enumerate rename blast radius, pin lint output format
+- Task 3 needs ssh -A, measured before dispatch
 
-- collect the two unmeasured field facts into one block
+- coverage figures from CI for #225
 
-- park the third-instance learning for the Phase 3 pass
+- mark brewfile-uv plan done
 
-- record why ratna alone has no --exclude=personal (#207)
+- uv is installed on Linux but not reachable
 
-- reconcile the coverage figure against CI, name the durable bats fix
+- the reachability table was measured wrong
 
-- CI's pinned download has no retry, so one 503 fails the job (#209)
+- linuxbrew on the login-shell PATH
 
-- macs are blind to the Make 4.x behaviour class (#210)
+- retire the linuxbrew login-PATH design
 
-- GNU Make 4.x on macOS (#211)
+- backlog names .zshenv, not .zprofile
 
-- make the MAKEFLAGS rule enforceable, flag the four parses (#212)
+- brew reachability via a tracked .zshenv
 
-- delete the duplicated round-3 review section (#213)
+- scope the .zshenv fix to Linux only
 
-- publish CI's coverage figure and close out the plan (#215)
+- name what would widen the .zshenv scope
 
-- setup_user now installs GNU make on macOS (#216)
+- exclude cruncher, gate on PROFILE not LINUX
 
-- the gnubin prepend reaches interactive shells only (#217)
+- include cruncher, dormant, per operator
+
+- cruncher may become native Linux
+
+- .zshenv design blocked, assumption refuted
+
+- v2 -- guard on non-interactive, append not prepend
+
+- v2 blocked -- same class as v1, one file over
+
+- v2's exported append degrades tmux panes
+
+- resolve brew by prefix inside setup_env.sh
+
+- block the setup_env probe -- no consumer
+
+- record the salvage path and the cruncher risk
+
+- close the brew-reachability thread, four designs
+
+- a capability tag does not gate installation
+
+- close v2, its recommendation was stale on arrival
+
+- bats' EXIT trap is what prints the TAP line
+
+- clearing the trap and never installing one are opposite
 
 
 
 ## Features
 
-- provision bats on macOS and point zsh -n at the zsh files (#208)
+- install uv on macOS and Linux (#225)
 
-- resolve macOS make to GNU 4.x and close the version-skew class (#214)
+
+
+## Refactoring
+
+- resolve legacy identity vars from one table (#223)
 
 
