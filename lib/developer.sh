@@ -289,8 +289,7 @@ setup_ansible() {
       printf "Installing Ansible dependencies...\\n"
       local _uv
       _uv="$(resolve_uv)" || return 1
-      local _sync_args=(sync --frozen --project "${PERSONAL_GITREPOS}/${DOTFILES}" --python "${PYENV_ROOT}/versions/ansible/bin/python" --group runtime --group test-lint)
-      UV_PROJECT_ENVIRONMENT="${PYENV_ROOT}/versions/ansible" "${_uv}" "${_sync_args[@]}" || return 1
+      uv_sync_venv "${_uv}" "${PYENV_ROOT}/versions/ansible/bin/python" "${PYENV_ROOT}/versions/ansible" || return 1
       pyenv rehash
     fi
   fi
@@ -320,8 +319,7 @@ recreate_python_venv() {
     printf "Installing Ansible dependencies...\\n"
     local _uv
     _uv="$(resolve_uv)" || return 1
-    local _sync_args=(sync --frozen --project "${PERSONAL_GITREPOS}/${DOTFILES}" --python "${_python}" --group runtime --group test-lint)
-    UV_PROJECT_ENVIRONMENT="${PYENV_ROOT}/versions/${_venv_name}" "${_uv}" "${_sync_args[@]}" || return 1
+    uv_sync_venv "${_uv}" "${_python}" "${PYENV_ROOT}/versions/${_venv_name}" || return 1
     pyenv rehash
   fi
 }

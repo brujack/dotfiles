@@ -524,9 +524,8 @@ run_update() {
       find "${_snap_dir}" -maxdepth 1 -name 'ansible-*.txt' -type f 2>/dev/null \
         | sort -r | tail -n +11 | while IFS= read -r _old; do rm -f "${_old}"; done
 
-      local _sync_args=(sync --frozen --project "${PERSONAL_GITREPOS}/${DOTFILES}" --python "${PYTHON}" --group runtime --group test-lint)
       {
-        UV_PROJECT_ENVIRONMENT="${PYENV_ROOT}/versions/ansible" "${_uv}" "${_sync_args[@]}"
+        uv_sync_venv "${_uv}" "${PYTHON}" "${PYENV_ROOT}/versions/ansible"
       } 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_pip"
       local _pip_rc="${PIPESTATUS[0]}"
 

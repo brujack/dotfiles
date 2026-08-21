@@ -111,6 +111,20 @@ resolve_uv() {
   printf "%s\n" "${_uv}"
 }
 
+# uv_sync_venv UV_BIN PYTHON_BIN VENV_PATH
+# Installs VENV_PATH from the committed lock. One definition rather than three:
+# every call site needs the identical --frozen/--project/--group set and differs
+# only in which interpreter and which environment it targets.
+#
+# Callers resolve uv themselves rather than having this do it, because they
+# handle its absence differently: run_update skips its section so the run still
+# summarises, while the two bootstrap paths cannot proceed without it.
+uv_sync_venv() {
+  local _uv="$1" _python="$2" _venv="$3"
+  local _args=(sync --frozen --project "${PERSONAL_GITREPOS}/${DOTFILES}" --python "${_python}" --group runtime --group test-lint)
+  UV_PROJECT_ENVIRONMENT="${_venv}" "${_uv}" "${_args[@]}"
+}
+
 brew_update() {
   if ! ensure_not_root; then
     return 1
