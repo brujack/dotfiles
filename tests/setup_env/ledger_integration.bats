@@ -1,6 +1,21 @@
 #!/usr/bin/env bats
 
 setup() {
+    # Close stdin for every test in this file. The ledger mock ends with
+    # `cat > /dev/null`, emulating the real binary draining its input -- and a
+    # mock inherits the test's stdin, which under bats is the live suite pipe.
+    # `cat` then blocks forever on an EOF bats never sends, hanging the whole
+    # run with no failing test and no timeout.
+    #
+    # Measured 2026-08-22, twice, both times stalling at the same test with the
+    # suite sitting at 720 ok / 0 not ok indefinitely. Diagnosed live rather
+    # than guessed: `lsof` on the stuck mock showed `fd 0u unix` -- stdin bound
+    # to the bats socket. Same class as ci.md's `make test < /dev/null` rule.
+    #
+    # Applied at setup() scope rather than per call site on purpose: there are
+    # 15+ invocations and a per-site redirect leaves the trap armed for the
+    # next test someone adds to this file.
+    exec < /dev/null
     REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
     source "${REPO_ROOT}/tests/helpers/common.bash"
     load_mocks

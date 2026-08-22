@@ -5,12 +5,15 @@
 # the source, and this produces the plain, hash-carrying requirements files that
 # other repos' CI can install with stock pip and no uv on the runner.
 #
-# TWO renderings, deliberately separate files -- do not harmonise them into one:
-#   test-lint -> requirements-ci.txt          ai-config, math, state-ledger
-#   runtime   -> requirements-runtime-ci.txt  terraform_ansible
-# terraform_ansible installs ansible/molecule and no test tooling; the other
-# three install test tooling and none of the runtime set. A single file would
-# serve terraform_ansible not at all, which is why the split exists.
+# FOUR renderings, deliberately separate files -- do not harmonise them:
+#   test-lint    -> requirements-ci.txt              the full local/dev test set
+#   runtime      -> requirements-runtime-ci.txt      terraform_ansible
+#   ci-test      -> requirements-ci-test.txt         per-PR test/lint jobs
+#   ci-mutation  -> requirements-ci-mutation.txt     mutation jobs
+# They exist because the consumers genuinely differ: terraform_ansible installs
+# ansible/molecule and no test tooling; etch-cli runs three tools and needs 9
+# packages, not the 80 the full test-lint set renders. See pyproject.toml for
+# the boundary rule governing what may enter ci-test.
 #
 # `sync` writes them; `check` fails if a committed copy has drifted. Same shape
 # as sync-agent-guidance.sh.
@@ -36,6 +39,8 @@ readonly REPO_ROOT
 _RENDERINGS=(
   "test-lint:${REQUIREMENTS_CI_TARGET:-${REPO_ROOT}/requirements-ci.txt}"
   "runtime:${REQUIREMENTS_RUNTIME_CI_TARGET:-${REPO_ROOT}/requirements-runtime-ci.txt}"
+  "ci-test:${REQUIREMENTS_CI_TEST_TARGET:-${REPO_ROOT}/requirements-ci-test.txt}"
+  "ci-mutation:${REQUIREMENTS_CI_MUTATION_TARGET:-${REPO_ROOT}/requirements-ci-mutation.txt}"
 )
 readonly _RENDERINGS
 
