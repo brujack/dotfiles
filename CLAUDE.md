@@ -242,7 +242,24 @@ none grants a capability the operator did not already have:
 **Sync CI requirements:** `make sync-requirements-ci` (renders **both** CI requirements files from `uv.lock`)
 **Check CI requirements drift:** `make check-requirements-ci` (fails when either rendering is stale; a prerequisite of `make test`)
 
-**There are two renderings, deliberately separate files.** `requirements-ci.txt` carries the `test-lint` group (ai-config, math, state-ledger); `requirements-runtime-ci.txt` carries `runtime` (terraform_ansible, which installs ansible/molecule and no test tooling). One file would serve terraform_ansible not at all. Do not harmonise them — `tests/setup_env/requirements_ci.bats` asserts they differ.
+**There are four renderings, deliberately separate files.**
+
+| file | group | pins | consumers |
+| --- | --- | --- | --- |
+| `requirements-ci.txt` | `test-lint` | 80 | the full local/dev test set |
+| `requirements-runtime-ci.txt` | `runtime` | 229 | terraform_ansible |
+| `requirements-ci-test.txt` | `ci-test` | 11 | per-PR test/lint jobs |
+| `requirements-ci-mutation.txt` | `ci-mutation` | 30 | mutation jobs |
+
+Do not harmonise them — `tests/setup_env/requirements_ci.bats` asserts all four differ.
+
+**The CI groups are not "test-lint minus the unused bits", and that shape was measured and rejected rather than skipped.** Dropping every genuinely-uninvoked tool takes the test-lint rendering 80 → 73, so a consumer running three tools still installs 70 it never runs. The useful boundary is **purpose**, not CI-versus-local: `ci-test` is exactly what a per-PR `test`/`lint` job runs, `ci-mutation` exactly what a mutation job runs. Measured: etch-cli runs `ruff`, `pytest` and `pytest-cov` and needs **11 pins instead of 80** — 67 fewer packages on every PR.
+
+**The framing that matters, because it was wrong for most of the design: this was never a deletion problem.** The packages are legitimately in the venv — a human might use any of them — and the defect was that CI inherited the venv's shape. Nothing needed removing from anywhere; a job just needed to stop installing what it does not run. The groups are purely additive: the lock is unchanged at 269 packages and no machine's venv moves.
+
+**`ci-test`'s boundary is stated in `pyproject.toml` and guarded by a test, not by review.** The predicted failure is erosion — a repo needs one more tool, it lands in `ci-test` because that is where tools go, and in a year `ci-test` is the union again. `ci-test carries none of the mutation whales` fails if `sqlalchemy`, `aiohttp`, `gitpython`, `yarl`, `frozenlist` or `multidict` ever appear there, and `ci-test is materially smaller than the full test-lint rendering` fails if the two converge. `hypothesis` is the first instance of that pressure and is admitted deliberately, on a measurement rather than a principle: it costs 2 packages against the cost of a third group.
+
+**`bandit`, `radon` and `vulture` stay in `test-lint` and are absent from every CI group, which is the point.** `bandit` is invoked by `security-review/SKILL.md:110` — a Phase 3 gate that runs on a developer machine, so `test-lint` is exactly its right home and `ci-test` exactly the wrong one. A repo-only sweep cannot see that call: **skills are a caller class living outside every repo**, and `pip-audit` and `hypothesis` are skill-invoked too. `radon` and `vulture` are named by `python.md:102-103` as advisory tooling; the operator's ruling is that they stay.
 
 **Provenance does not go in these headers, and that is load-bearing.** A `runtime`-group edit moves `uv.lock` without changing the `test-lint` export, so a `uv.lock` SHA in that header would demand a re-render whose only effect is one header line — a gate firing on correct state, forever. Provenance belongs on a *consumer's* copy, written at copy time.
 

@@ -1189,6 +1189,15 @@ version = "0"
 source = { virtual = "." }
 
 [package.dev-dependencies]
+ci-mutation = [
+    { name = "cosmic-ray" },
+]
+ci-test = [
+    { name = "hypothesis" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
+]
 runtime = [
     { name = "ansible" },
     { name = "ansible-lint" },
@@ -1238,6 +1247,13 @@ test-lint = [
 [package.metadata]
 
 [package.metadata.requires-dev]
+ci-mutation = [{ name = "cosmic-ray" }]
+ci-test = [
+    { name = "hypothesis" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
+]
 runtime = [
     { name = "ansible" },
     { name = "ansible-lint" },

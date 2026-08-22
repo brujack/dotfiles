@@ -18,6 +18,12 @@ setup() {
   RUNTIME_TARGET="${BATS_TEST_TMPDIR}/requirements-runtime-ci.txt"
   export REQUIREMENTS_RUNTIME_CI_TARGET="${RUNTIME_TARGET}"
   cp "${REPO_ROOT}/requirements-runtime-ci.txt" "${RUNTIME_TARGET}"
+  CI_TEST_TARGET="${BATS_TEST_TMPDIR}/requirements-ci-test.txt"
+  export REQUIREMENTS_CI_TEST_TARGET="${CI_TEST_TARGET}"
+  cp "${REPO_ROOT}/requirements-ci-test.txt" "${CI_TEST_TARGET}"
+  CI_MUTATION_TARGET="${BATS_TEST_TMPDIR}/requirements-ci-mutation.txt"
+  export REQUIREMENTS_CI_MUTATION_TARGET="${CI_MUTATION_TARGET}"
+  cp "${REPO_ROOT}/requirements-ci-mutation.txt" "${CI_MUTATION_TARGET}"
 }
 
 @test "check passes against the committed rendering" {
@@ -115,6 +121,63 @@ setup() {
   for _dep in docker requests selinux; do
     grep -qE "^${_dep}==" "${_f}" || { printf 'missing %s\n' "${_dep}" >&2; return 1; }
   done
+}
+
+@test "check fails when the ci-test rendering has drifted" {
+  # Third loop iteration. Without this the ci-test arm could be dead and every
+  # other case in this file would still pass.
+  printf 'ruff==0.0.1\n' >> "${CI_TEST_TARGET}"
+  run "${SCRIPT}" check
+  [ "$status" -ne 0 ]
+  [[ "${output}" == *"requirements-ci-test.txt"* ]]
+}
+
+@test "check fails when the ci-mutation rendering has drifted" {
+  printf 'cosmic-ray==0.0.1\n' >> "${CI_MUTATION_TARGET}"
+  run "${SCRIPT}" check
+  [ "$status" -ne 0 ]
+  [[ "${output}" == *"requirements-ci-mutation.txt"* ]]
+}
+
+@test "ci-test carries none of the mutation whales" {
+  # The BOUNDARY guard, and the reason these groups exist at all. ci-test is
+  # "what a per-PR test/lint job runs" -- not "where tools go". The predicted
+  # failure is that a tool lands in ci-test because that is the convenient
+  # group, and in a year ci-test is the union again.
+  #
+  # These six arrive only through cosmic-ray's closure. A per-PR job that runs
+  # a linter has no business installing an ORM, an HTTP client and a git
+  # library, so their appearance in ci-test means the boundary has eroded.
+  local _f="${REPO_ROOT}/requirements-ci-test.txt"
+  for _whale in sqlalchemy aiohttp gitpython yarl frozenlist multidict; do
+    if grep -qiE "^${_whale}==" "${_f}"; then
+      printf 'ci-test has absorbed %s — the boundary has eroded\n' "${_whale}" >&2
+      return 1
+    fi
+  done
+  # positive control: the packages ci-test is FOR must be present, so this
+  # cannot pass by the file having moved or emptied
+  grep -qE '^ruff==' "${_f}"
+  grep -qE '^pytest==' "${_f}"
+}
+
+@test "ci-test is materially smaller than the full test-lint rendering" {
+  # The whole justification. If these ever converge the split has stopped
+  # paying for itself and should be retired rather than maintained.
+  local _t _f
+  _t=$(grep -cE '^[a-zA-Z0-9._-]+==' "${REPO_ROOT}/requirements-ci-test.txt")
+  _f=$(grep -cE '^[a-zA-Z0-9._-]+==' "${REPO_ROOT}/requirements-ci.txt")
+  [ "${_t}" -lt "$(( _f / 2 ))" ]
+}
+
+@test "all four renderings are distinct files" {
+  local _a="${REPO_ROOT}/requirements-ci.txt"
+  local _b="${REPO_ROOT}/requirements-runtime-ci.txt"
+  local _c="${REPO_ROOT}/requirements-ci-test.txt"
+  local _d="${REPO_ROOT}/requirements-ci-mutation.txt"
+  run ! diff -q "${_a}" "${_c}"
+  run ! diff -q "${_c}" "${_d}"
+  run ! diff -q "${_b}" "${_d}"
 }
 
 @test "an unknown subcommand exits 2 with usage" {
