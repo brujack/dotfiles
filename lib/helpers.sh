@@ -402,7 +402,20 @@ _doctor_check_profile() {
   # rather than warn: a genuinely new machine's first `doctor` run should
   # name the gap and point at the one-line remedy, not blend into the rest
   # of the report.
-  if [[ "${PROFILE:-unknown}" == "unknown" ]]; then
+  #
+  # The sentinel is checked FIRST, and deliberately: detect_env.sh:23 now
+  # returns before assigning PROFILE when config/profiles.sh cannot be
+  # loaded, so a PROFILE value inherited from the parent shell (e.g. the
+  # export config/profiles.zsh performs at login) can survive into this
+  # process unchanged. Branching on PROFILE alone would report PASS for a
+  # machine whose identity table never loaded this run -- a regression
+  # introduced by that early return, not a pre-existing defect (see
+  # docs/superpowers/specs/2026-08-23-profiles-bash-version-guard-design.md
+  # section 3). [[ -z ${PROFILE+x} ]] does not fix it: PROFILE is set, just
+  # stale.
+  if [[ "${_PROFILES_LOADED:-0}" != 1 ]]; then
+    doctor_fail "PROFILE" "config/profiles.sh did not load this run — any PROFILE value shown above came from the parent shell, not from this process. Check the file exists and is readable: ls -l config/profiles.sh"
+  elif [[ "${PROFILE:-unknown}" == "unknown" ]]; then
     doctor_fail "PROFILE" "unmapped hostname '$(hostname -s)' — add a row to config/profiles.sh"
   else
     doctor_pass "PROFILE (${PROFILE})"

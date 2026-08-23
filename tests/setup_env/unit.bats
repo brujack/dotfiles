@@ -1106,12 +1106,21 @@ EOF
 }
 
 # ── _doctor_check_profile ─────────────────────────────────────────────────────
+#
+# load_setup_env() (tests/helpers/common.bash) sources setup_env.sh, whose own
+# sourcing guard returns before detect_env runs -- so _PROFILES_LOADED is unset
+# in every test in this file unless a test sets it. The three tests below set
+# it at function scope (never export it, never call detect_env) because
+# detect_env assigns PROFILE unconditionally and would clobber the PROFILE
+# fixture these tests control. T5 below is the one test in this file that
+# calls the real detect_env, deliberately, for the opposite reason.
 
 @test "_doctor_check_profile passes for a mapped profile" {
   _DOCTOR_PASS=0
   _DOCTOR_FAIL=0
   _DOCTOR_FAILED=0
   export PROFILE="mac_workstation"
+  _PROFILES_LOADED=1
   _doctor_check_profile
   [ "${_DOCTOR_FAILED}" -eq 0 ]
 }
@@ -1119,6 +1128,7 @@ EOF
 @test "_doctor_check_profile fails for an unmapped profile and names the hostname" {
   export PROFILE="unknown"
   export MOCK_HOSTNAME_OUTPUT="totally-unmapped-host"
+  _PROFILES_LOADED=1
   run _doctor_check_profile
   [[ "$output" == *"[FAIL]"* ]]
   [[ "$output" == *"totally-unmapped-host"* ]]
@@ -1134,8 +1144,84 @@ EOF
   _doctor_check_versions()      { :; }
   _doctor_check_github_mcp()    { :; }
   export PROFILE="unknown"
+  _PROFILES_LOADED=1
   run run_doctor
   [ "$status" -eq 1 ]
+}
+
+@test "run_doctor reports the identity table did not load rather than a stale inherited PROFILE" {
+  # T5 -- the regression pin. detect_env.sh:31 assigns PROFILE unconditionally
+  # on master, so an inherited value never survives a failed table load there.
+  # Task 1's early return skips that assignment, so a value config/profiles.zsh
+  # exported at login (simulated here by `export PROFILE` before the table
+  # ever loads) can survive into doctor's report. This is the one test in the
+  # file that drives the sentinel through a REAL detect_env call rather than
+  # injecting it -- an injected _PROFILES_LOADED exercises only
+  # _doctor_check_profile's branch and is invariant under a sentinel-ordering
+  # defect inside detect_env itself.
+  local fixture="${BATS_TEST_TMPDIR}/t5-fixture"
+  mkdir -p "${fixture}/lib" "${fixture}/config"
+  cp "${REPO_ROOT}/setup_env.sh" "${fixture}/"
+  cp "${REPO_ROOT}"/lib/*.sh "${fixture}/lib/"
+  cp "${REPO_ROOT}/config/profiles.sh" "${fixture}/config/"
+  chmod 000 "${fixture}/config/profiles.sh"
+
+  export PROFILE="mac_workstation"
+  run bash "${fixture}/setup_env.sh" -t doctor
+  chmod 644 "${fixture}/config/profiles.sh"
+
+  # doctor_pass/doctor_fail's printf template puts an ANSI reset escape
+  # between "[PASS]"/"[FAIL]" and the label that follows, so a plain
+  # substring spanning both never matches -- strip escapes before asserting.
+  local stripped
+  stripped="$(printf '%s' "$output" | sed -E $'s/\x1b\\[[0-9;]*m//g')"
+  [[ "${stripped}" != *"[PASS] PROFILE ("* ]]
+  [[ "${stripped}" == *"[FAIL] PROFILE: config/profiles.sh did not load this run"* ]]
+}
+
+@test "_doctor_check_profile produces three distinct verdict/message pairs across loaded+mapped, loaded+unmapped, and not-loaded" {
+  export PROFILE="mac_workstation"
+  _PROFILES_LOADED=1
+  run _doctor_check_profile
+  local loaded_mapped="$output"
+
+  export PROFILE="unknown"
+  export MOCK_HOSTNAME_OUTPUT="totally-unmapped-host"
+  _PROFILES_LOADED=1
+  run _doctor_check_profile
+  local loaded_unmapped="$output"
+
+  export PROFILE="mac_workstation"
+  _PROFILES_LOADED=0
+  run _doctor_check_profile
+  local not_loaded="$output"
+
+  [[ "${loaded_mapped}" != "${loaded_unmapped}" ]]
+  [[ "${loaded_mapped}" != "${not_loaded}" ]]
+  [[ "${loaded_unmapped}" != "${not_loaded}" ]]
+
+  [[ "${loaded_mapped}" == *"[PASS]"* ]]
+  [[ "${loaded_unmapped}" == *"[FAIL]"* ]]
+  [[ "${loaded_unmapped}" == *"unmapped hostname"* ]]
+  [[ "${not_loaded}" == *"[FAIL]"* ]]
+  [[ "${not_loaded}" == *"did not load"* ]]
+}
+
+@test "_doctor_check_profile PASSes when the environment supplies _PROFILES_LOADED=1 without detect_env running" {
+  # T7 -- negative control. Pins that an environment-supplied sentinel DOES
+  # defeat the read, so the reader knows protection comes from detect_env's
+  # unconditional _PROFILES_LOADED=0 on entry, not from the variable being
+  # non-exported. If this test ever starts failing, the mechanism changed and
+  # the comment in lib/detect_env.sh describing it is stale.
+  export PROFILE="mac_workstation"
+  export _PROFILES_LOADED=1
+  run _doctor_check_profile
+  # A non-empty [PASS] line, not merely "no FAIL" -- an empty result would
+  # satisfy the weaker check. "[PASS]" and "PROFILE (" are separated by an
+  # ANSI reset escape in doctor_pass's printf template, so they are asserted
+  # separately rather than as one spanning substring.
+  [[ "$output" == *"[PASS]"* ]]
+  [[ "$output" == *"PROFILE (mac_workstation)"* ]]
 }
 
 # ── _doctor_check_symlinks ────────────────────────────────────────────────────
