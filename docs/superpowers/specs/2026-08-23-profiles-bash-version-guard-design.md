@@ -342,34 +342,75 @@ output and is left alone.
 One group. It runs everywhere including CI, because nothing here is version-specific — that
 was the point of cutting the guard.
 
-**Environment discipline, and it is not uniform.** `config/profiles.zsh` exports `PROFILE`,
-`STUDIO` and seven `HAS_*` into every child of a login shell, including `bats` under the
-pre-push hook, so any value assertion must clear them. But `env -i` is the wrong instrument
-for cases that *execute* `setup_env.sh`: that script is `#!/usr/bin/env bash`, and under
-`env -i PATH=/usr/bin:/bin` a mac resolves bash 3.2, so the pre-existing guard at
-`setup_env.sh:20` exits 1 before anything this spec adds. A previous revision applied a
-blanket `env -i` rule and made one case pass against master and two unconstructible.
+### Harness: never `env -i`, and the reason is not the obvious one
 
-- Cases that **source** library functions directly: `env -i`.
-- Cases that **execute** `setup_env.sh`: `env -u PROFILE -u STUDIO -u HAS_*`, keeping a
-  `PATH` that resolves bash 5.
+`config/profiles.zsh` exports `PROFILE`, `STUDIO` and seven `HAS_*` into every child of a
+login shell, including `bats` under the pre-push hook, so a value assertion that does not
+clear them reads the parent's environment rather than the code's output. Two revisions of
+this section reached for `env -i` to do that, and both were wrong.
 
-| # | case | harness | fails when |
-| --- | --- | --- | --- |
-| T1 | `detect_env` with a fixture-dir `profiles.sh` that is unreadable | `env -i`, fixture dir | rc is not **1** specifically (a wrong fixture path makes `detect_env` an unknown command and yields 127), or stderr does not name `config/profiles.sh` |
-| T2 | `detect_env` normal | `env -i` | `PROFILE` is not `mac_workstation`, `STUDIO` is not `1`, or `_PROFILES_LOADED` is not `1` |
-| T3 | `setup_env.sh -t update` against a fixture tree with an unreadable `profiles.sh` | `env -u`, bash 5 | it does not exit 1, or it reaches a workflow function |
-| T4 | same, `-t doctor` | `env -u`, bash 5 | `run_doctor` is not reached |
-| T5 | **the regression pin** — `PROFILE=mac_workstation` **exported**, fixture `profiles.sh` unreadable, `run_doctor` | `env -u` all but `PROFILE`, bash 5 | doctor reports PASS for PROFILE. This is the case that fails with change 1 alone and passes only with §3 |
-| T6 | `_doctor_check_profile` across all three states — loaded + mapped, loaded + unmapped, not loaded | `env -i`, sentinel set per state | any two of the three produce the same verdict/message pair |
-| T7 | **negative control on the sentinel read** — `_PROFILES_LOADED` supplied in the environment, `detect_env` **not** called | `env -i` plus that one variable | it reports FAIL. It must report PASS — pinning that the environment *can* defeat the read, so the protection is `detect_env`'s unconditional `=0` and not non-export. If this ever starts failing, someone has changed the mechanism and §1's recorded reasoning is stale |
+**`env -i bash` resolves bash 3.2 on a mac.** `env -i` clears `PATH` too, and `env` execs
+through the *new* environment, so the lookup falls back to the confstr default. Measured on
+the Studio:
+
+```
+env -i bash -c 'echo $BASH $BASH_VERSION; echo $PATH'
+  /bin/bash 3.2.57(1)-release
+  /usr/gnu/bin:/usr/local/bin:/bin:/usr/bin:.
+
+command -v bash  ->  /opt/homebrew/bin/bash   5.3.15
+```
+
+That reintroduces, as the *test actor*, the exact bash-3.2 class this spec declared
+unreachable and moved to Out of scope. A previous revision split the rule by
+source-versus-execute on the theory that only the executing cases were exposed; the
+discriminator is **which bash binary runs**, and it applies to both.
+
+`env -i` also drops `tests/mocks` from `PATH`, which is where this repo's hostname control
+lives. `tests/setup_env/profiles.bats:50-53` is the established mechanism and every case
+below follows it:
+
+```bash
+unset "${!HAS_@}"
+export MOCK_HOSTNAME_OUTPUT='studio'
+export MOCK_UNAME_S='Darwin'
+export PATH="${REPO_ROOT}/tests/mocks:${PATH}"
+```
+
+**The rule for every case: clear the inherited identity names explicitly, keep a `PATH` that
+resolves bash 5 and reaches `tests/mocks`, and pin the hostname through
+`MOCK_HOSTNAME_OUTPUT`.** Without the mock, a value assertion on `PROFILE` is host-specific
+and `ubuntu-latest` resolves `unknown`.
+
+### Cases
+
+| # | case | fails when |
+| --- | --- | --- |
+| T1 | `detect_env` against a fixture-dir `profiles.sh` that is unreadable | rc is not **1** specifically, or stderr does not contain the exact string `Refusing to continue` — not merely "names `config/profiles.sh`", which a bash-3.2 run also satisfies with a *readable* fixture |
+| T2 | `detect_env` normal, `MOCK_HOSTNAME_OUTPUT=studio` | `PROFILE` is not `mac_workstation`, `STUDIO` is not `1`, or `_PROFILES_LOADED` is not `1` |
+| T3 | `setup_env.sh -t update` against a fixture tree whose `profiles.sh` is unreadable | it does not exit 1, **or** stderr lacks `Refusing to continue`, **or** a workflow marker file exists. All three arms are required — see the hazard note below |
+| T4 | same, `-t doctor` | `run_doctor` is not reached |
+| T5 | **the regression pin** — `PROFILE=mac_workstation` left set, fixture `profiles.sh` unreadable, `run_doctor` | doctor reports PASS for PROFILE. Fails with change 1 alone; passes only with §3 |
+| T6 | `_doctor_check_profile` across all three states — loaded + mapped, loaded + unmapped, not loaded | any two of the three produce the same verdict/message pair |
+| T7 | **negative control on the sentinel read** — `_PROFILES_LOADED=1` supplied in the environment, `detect_env` **not** called | the function is undefined or produces no output (assert a non-empty `[PASS]` line, not merely "no FAIL"), or it reports FAIL. It must report PASS, pinning that the environment *can* defeat the read — so the protection is `detect_env`'s unconditional `=0`, not non-export. If this starts failing, someone changed the mechanism and §1's recorded reasoning is stale |
 
 **T1's assertion on `_PROFILES_LOADED` is deliberately omitted.** Asserting it is `0` cannot
-discriminate "`detect_env` ran and failed" from "`detect_env` was never reached", because
-the `${_PROFILES_LOADED:-0}` read that production uses returns `0` for a never-assigned
-variable too. rc **1** and the stderr string carry that case.
+discriminate "`detect_env` ran and failed" from "`detect_env` was never reached", because the
+`${_PROFILES_LOADED:-0}` read production uses returns `0` for a never-assigned variable too.
+rc **1** and the stderr string carry that case.
 
-### Two existing tests break, and the repair is not the obvious one
+**T3 and T4 must not be able to run a real workflow, and T3's exit code alone proves
+nothing.** `run_update` calls `brew_update` and `sudo -H softwareupdate --install --all`
+(`lib/workflows.sh:325-334`) before the git-repos sync, so on the day change 2 regresses a
+naive T3 performs a machine-wide update — `tdd.md` E2, an armed destructive failing path.
+Two constraints follow. The `PATH` must carry `tests/mocks` (which supplies `brew`, `sudo`,
+`softwareupdate` and `git`) so the regressed path is inert rather than real. And `exit 1` is
+**not** a discriminating oracle on its own: `setup_env.sh:20` (bash < 5) and `:30` (no brew)
+both produce exit 1 too, so a mac resolving 3.2 or a `PATH` without `brew` makes T3 pass
+against unmodified master. Assert the stderr string and the absence of a workflow marker
+alongside the code.
+
+### Two existing tests break, and only one of the two repairs is safe
 
 Measured on a patched copy, `bats tests/setup_env/unit.bats`:
 
@@ -380,15 +421,19 @@ ok  120 run_doctor exit code reflects an unmapped profile
 ```
 
 `load_setup_env()` (`tests/helpers/common.bash:38`) sources `setup_env.sh`, whose sourcing
-guard at `:56` returns before `:61`, so `detect_env` never runs and all 22
-`run_doctor`/`_doctor_check_profile` call sites see `_PROFILES_LOADED` unset. Test 120 is
-worse than the two red ones: it still passes, via the sentinel branch rather than the branch
-its name describes.
+guard at `:56` returns before `:61`, so `detect_env` never runs and all `run_doctor` /
+`_doctor_check_profile` call sites read an unset sentinel. Test 120 is the worse case: it
+still passes, through the sentinel branch rather than the branch its name describes, and
+must be re-pointed.
 
-**The obvious repair is wrong.** Exporting `_PROFILES_LOADED=1` from `load_setup_env` would
-make the sentinel environment-supplied in precisely the suite meant to guard against an
-environment-supplied oracle — rebuilding the defect §3 exists to remove. Set it at function
-scope per test, or call `detect_env`, and re-point test 120 at the branch it names.
+Two repairs suggest themselves and **they are not interchangeable**:
+
+- **Set `_PROFILES_LOADED=1` at function scope in the affected tests.** Correct.
+- **Call `detect_env`.** Wrong. `detect_env.sh:31` assigns `PROFILE` unconditionally, and
+  `PROFILE` is the exact variable tests 118 and 119 control. Calling it clobbers the fixture.
+- **Export `_PROFILES_LOADED=1` from `load_setup_env`.** Also wrong, and worse: it makes the
+  sentinel environment-supplied in precisely the suite meant to guard against an
+  environment-supplied oracle, rebuilding the defect §3 exists to remove.
 
 ## Verification
 
@@ -711,6 +756,73 @@ is not a code property, and the answer is worse than either round assumed — `-
 run over `ssh` to a mac at all today, because `/usr/bin/env bash` resolves 3.2 under sshd's
 `_PATH_STDPATH` and `setup_env.sh:20` exits first. That is pre-existing and unrelated to this
 diff, so it is filed as a backlog row rather than widened into it.
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison, no evaluator/judge component, and its acceptance criteria are
+concrete commands with stated expected output.
+
+---
+
+## Multi-Lens Review — Round 4 (scoped, one lens)
+
+Reviewed at commit: `1824501`. One lens rather than three: the design had been unchanged
+and independently reproduced since round 3, and the only substantially new text was the
+Testing section and the Out-of-scope rationale for the cut guard.
+
+### Risk
+
+Finding: The narrowing left the Out-of-scope reasoning coherent — the rc=2 dependency only
+has to hold on a path `setup_env.sh:20` already blocks, verified. The incoherence is one
+section later: **the Testing harness resurrected bash 3.2 as the test actor, in exactly the
+class the spec had just declared unreachable.** `env -i` clears `PATH`, and `env` execs
+through the new environment, so bash resolves via the confstr default. Measured on the
+Studio: `env -i bash -c 'echo $BASH $BASH_VERSION'` → `/bin/bash 3.2.57(1)-release` with
+`PATH=/usr/gnu/bin:/usr/local/bin:/bin:/usr/bin:.`, against `command -v bash` =
+`/opt/homebrew/bin/bash` 5.3.15. The previous revision split the rule by
+source-versus-execute; the discriminator is which bash binary runs, and it applies to both.
+Consequences: T2 red on every mac, and red on CI for a second reason — `env -i` also drops
+`tests/mocks`, so a `PROFILE` assertion becomes host-specific and `ubuntu-latest` yields
+`unknown`. T1 non-discriminating on macs, since a *readable* fixture under 3.2 also gives
+rc=1 with the file named. T7 passes on nothing: its failure condition was "it reports FAIL",
+which an empty result satisfies. T3 executes `setup_env.sh -t update` for real, and
+`run_update` (`lib/workflows.sh:325-334`) runs `brew_update` then
+`sudo -H softwareupdate --install --all` — so on the day change 2 regresses the test
+performs a machine-wide update; and its expected `exit 1` is also what `setup_env.sh:20` and
+`:30` produce, so a mac-3.2 or brew-less `PATH` makes it pass against master. The
+existing-test diagnosis is correct, but the two prescribed repairs are not interchangeable:
+"call `detect_env`" clobbers `PROFILE` at `detect_env.sh:31`, the exact variable tests 118
+and 119 control, so only the function-scope assignment works. Verified and **not** raising:
+`_PROFILES_LOADED`'s double-call and no-`detect_env` behaviour are sound; `run_doctor` is
+reachable only from `setup_env.sh:69`, after `:61`; `CHRUBY_LOC` is read only by the dump at
+`helpers.sh:378`, so the "one message string" delta claim survives.
+
+Assumption: That the `PATH` each `env` invocation actually constructs resolves bash 5 and
+reaches `tests/mocks`, and that the executing cases' expected `exit 1` is not what
+`setup_env.sh:20`/`:30` produce. Settle by running the invocations verbatim on a mac and on
+`ubuntu-latest` and checking `$BASH_VERSION`, `command -v hostname`, `command -v brew`.
+
+Disposition: **Addressed.** Both headline claims were independently re-verified before
+acting — `env -i bash` → 3.2.57 with the confstr `PATH`, and `run_update`'s
+`brew_update`/`softwareupdate` calls. `env -i` is now prohibited outright and the section
+states why, since the reason is non-obvious and two revisions reached for it. Every case
+now clears the identity names explicitly, keeps a `PATH` resolving bash 5 and reaching
+`tests/mocks`, and pins the hostname through `MOCK_HOSTNAME_OUTPUT` per the existing
+mechanism at `tests/setup_env/profiles.bats:50-53`. T1 asserts the exact `Refusing to
+continue` string rather than the filename. T3 gained a three-arm oracle and an explicit
+hazard note. T7 asserts a non-empty `[PASS]`. The existing-test repair now names the one
+safe option and both wrong ones with their mechanisms. The assumption is the correct
+stopping point for spec review and is discharged in Phase 2 rather than in prose — see
+below.
+
+### Note on stopping
+
+Four rounds, ten lens passes. The **design** — three production changes — has been stable
+and independently reproduced since round 3; every round-4 finding was in the *test harness*.
+That is the signal to stop reviewing prose: a harness defect costs one red test in Phase 2's
+iterate-until-green loop, and reasoning about `PATH` construction in a document is a worse
+instrument than running it. The remaining assumption above is answered by writing the tests,
+not by another lens.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
