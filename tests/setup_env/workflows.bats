@@ -1491,10 +1491,11 @@ assert_all_npm_globals_pinned() {
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
   update_aws_cli() { return 1; }
-  export -f update_aws_cli
   # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
   # so a failure here still gets its TAP line instead of being swallowed by
-  # run_update's own trap.
+  # run_update's own trap. run_update also installs INT/TERM handlers this
+  # save/restore does not touch -- harmless here since bats owns and cleans
+  # its own tmpdir regardless of which trap runs.
   local _bats_exit_trap
   _bats_exit_trap="$(trap -p EXIT)"
   run_update
@@ -1508,7 +1509,6 @@ assert_all_npm_globals_pinned() {
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
   update_aws_cli() { return 0; }
-  export -f update_aws_cli
   local _bats_exit_trap
   _bats_exit_trap="$(trap -p EXIT)"
   run_update
@@ -1522,7 +1522,6 @@ assert_all_npm_globals_pinned() {
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
   update_rust() { return 1; }
-  export -f update_rust
   local _bats_exit_trap
   _bats_exit_trap="$(trap -p EXIT)"
   run_update
@@ -1536,7 +1535,6 @@ assert_all_npm_globals_pinned() {
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
   update_rust() { return 0; }
-  export -f update_rust
   local _bats_exit_trap
   _bats_exit_trap="$(trap -p EXIT)"
   run_update
