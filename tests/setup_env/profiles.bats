@@ -129,6 +129,10 @@ _profile_snapshot() {
 }
 
 @test "HAS_DEVTOOLS is unset for mac_mini" {
+  # .zprofile exports PROFILE/HAS_*/a legacy var into every child of a login
+  # shell, and detect_env only ever adds HAS_* -- it never clears an
+  # inherited one. Without this, an absence assertion below reads the login
+  # shell's value rather than detect_env's actual output.
   unset LAPTOP STUDIO RECEPTION OFFICE HOMES WORKSTATION CRUNCHER RATNA PROFILE
   unset "${!HAS_@}"
   export MOCK_HOSTNAME_OUTPUT="office"
@@ -155,6 +159,7 @@ _profile_snapshot() {
 }
 
 @test "HAS_DOCKER is unset for mac_mini" {
+  # See "HAS_DEVTOOLS is unset for mac_mini" above: same inherited-environment hazard.
   unset LAPTOP STUDIO RECEPTION OFFICE HOMES WORKSTATION CRUNCHER RATNA PROFILE
   unset "${!HAS_@}"
   export MOCK_HOSTNAME_OUTPUT="office"
@@ -221,10 +226,17 @@ _profile_snapshot() {
 }
 
 @test "HAS_SNAP is unset for wsl2_workstation" {
+  # See "HAS_DEVTOOLS is unset for mac_mini" above: same inherited-environment hazard.
   unset LAPTOP STUDIO RECEPTION OFFICE HOMES WORKSTATION CRUNCHER RATNA PROFILE
   unset "${!HAS_@}"
   export MOCK_HOSTNAME_OUTPUT="cruncher"
   export MOCK_UNAME_S="Linux"
+  # 1_init.zsh exports MACOS/LINUX/UBUNTU into every child of an interactive
+  # shell, and detect_env's CHRUBY_LOC branch tests [[ -n ${MACOS} ]]
+  # regardless of MOCK_UNAME_S. Without this, on a mac, the body below runs
+  # against MOCK_UNAME_S=Linux with an inherited MACOS=1 and takes the macOS
+  # branch anyway.
+  unset MACOS LINUX UBUNTU
   source "${REPO_ROOT}/lib/detect_env.sh"
   detect_env
   [ -z "${HAS_SNAP:-}" ]
