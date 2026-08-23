@@ -1,7 +1,11 @@
 # ADR-0010: Renovate Replacing Dependabot for Dependency Updates
 
 **Date:** 2026-05-18
-**Status:** Accepted
+**Status:** Accepted — amended 2026-08-23
+
+**Amendment 2026-08-23 (see ADR-0022 and CLAUDE.md's Dependency Automation section).** The Decision below says each repo gets a `renovate.json` that **extends a shared preset**. That half no longer holds. The preset lives in `ai-config`, which is **private**, and Renovate resolves `extends` at `initRepo` *before any dependency extraction* — so a **public** repo that cannot read it throws `config-validation` and abandons the whole repository: no PRs, no dependency dashboard, no visible error. Measured with config as the only variable: remote preset **8 errors, 0 extractions**; inlined **0 errors, 1 extraction**. Public repos now inline the preset's contents; `ai-config/renovate-presets/default.json` stays canonical and is hand-synced, with no drift detection — a stopgap, with a public-hosted preset as the intended end state.
+
+**Second amendment, same date:** this ADR's premise that Renovate replaces Dependabot is now explicit fleet policy rather than an implication. Dependabot **security auto-PRs are OFF and vulnerability alerts ON** across all 18 non-archived repos. Note the measurement that drove it: 16 of 18 repos had alerts switched off entirely, so the net effect was strictly more visibility and strictly less automation.
 
 ## Context
 

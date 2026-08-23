@@ -13,7 +13,7 @@ Cross-cutting decisions that apply across personal repos. Repo-specific decision
 | [0007](0007-branch-protection-automation.md)                   | Codify branch protection via script                     | 2026-05-19 | Accepted                                              |
 | [0008](0008-bash-coverage-ps4-xtrace.md)                       | Use PS4 xtrace for bash coverage measurement            | 2026-06-01 | Accepted (amended 2026-08-07, 2026-08-09, 2026-08-14) |
 | [0009](0009-powerlevel10k-removal-starship-sole-prompt.md)     | Powerlevel10k removal — Starship as sole prompt         | 2026-05-27 | Accepted                                              |
-| [0010](0010-renovate-replacing-dependabot.md)                  | Renovate replacing Dependabot for dependency updates    | 2026-05-18 | Accepted                                              |
+| [0010](0010-renovate-replacing-dependabot.md)                  | Renovate replacing Dependabot for dependency updates    | 2026-05-18 | Accepted (amended 2026-08-23)                                              |
 | [0011](0011-linux-sh-split-ubuntu-shared.md)                   | linux.sh split into linux_ubuntu.sh and linux_shared.sh | 2026-04-28 | Accepted                                              |
 | [0012](0012-brewfile-drift-detection.md)                       | Brewfile drift detection in update summary              | 2026-04-29 | Accepted                                              |
 | [0013](0013-no-curl-bash-installs.md)                          | Replace curl\|bash installers with verified installs    | 2026-06-22 | Accepted                                              |
@@ -25,3 +25,4 @@ Cross-cutting decisions that apply across personal repos. Repo-specific decision
 | [0019](0019-shebang-derived-lint-scope.md)                     | Shebang-derived shell lint scope                        | 2026-08-15 | Accepted                                              |
 | [0020](0020-single-identity-table-across-bash-and-zsh.md)      | Single identity table across bash and zsh               | 2026-08-17 | Accepted (amends 0003)                                |
 | [0021](0021-hand-typed-test-oracle-for-the-identity-table.md)  | Hand-typed test oracle for the identity table           | 2026-08-18 | Accepted                                              |
+| [0022](0022-ci-dependency-slices-by-purpose.md)                | CI dependency renderings sliced by purpose              | 2026-08-23 | Accepted                                              |

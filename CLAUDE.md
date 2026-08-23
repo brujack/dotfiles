@@ -242,7 +242,7 @@ none grants a capability the operator did not already have:
 **Sync CI requirements:** `make sync-requirements-ci` (renders **both** CI requirements files from `uv.lock`)
 **Check CI requirements drift:** `make check-requirements-ci` (fails when either rendering is stale; a prerequisite of `make test`)
 
-**There are four renderings, deliberately separate files.**
+**There are five renderings, deliberately separate files.**
 
 | file | group | pins | consumers |
 | --- | --- | --- | --- |
@@ -250,6 +250,7 @@ none grants a capability the operator did not already have:
 | `requirements-runtime-ci.txt` | `runtime` | 229 | terraform_ansible |
 | `requirements-ci-test.txt` | `ci-test` | 11 | per-PR test/lint jobs |
 | `requirements-ci-mutation.txt` | `ci-mutation` | 30 | mutation jobs |
+| `requirements-ci-audit.txt` | `ci-audit` | 28 | dependency-audit steps |
 
 Do not harmonise them — `tests/setup_env/requirements_ci.bats` asserts all four differ.
 
@@ -306,7 +307,7 @@ Rules for any new suppression:
 
 `.github/workflows/ci.yml` runs on PRs to master only (the pre-push hook gates branch pushes locally):
 
-- `test` job: installs a pinned, checksum-verified shellcheck plus bats, runs `make test`, then verifies test count ≥ 840 (regression proxy; 1443 tests, CI-measured 2026-08-21 on `ab830dc`)
+- `test` job: installs a pinned, checksum-verified shellcheck plus bats, runs `make test`, then verifies test count ≥ 840 (regression proxy; 1464 tests, CI-measured 2026-08-23 on `fdcd7cb`)
 - `lint-macos` job: runs on `macos-latest` (advisory, not blocking auto-merge), two independent steps: `bash -n` over the derived `SHELL_FILES` list via `make print-SHELL_FILES | tr ' ' '\n' | xargs`, guarded by its own empty-list check — the `tr` is load-bearing, since `print-%` emits one space-separated line and `xargs -I` implies `-L1` and does not split on blanks, and `zsh -n` over the 10 tracked zsh files selected via `git ls-files '*.zsh' '*.zsh-theme' '.zshrc' '.zprofile'` — this second step refuses to pass on an empty file list
 - `bash-coverage` job: measures bash line coverage via PS4 xtrace on `ubuntu-latest`; **gates at 91%** — blocks auto-merge if coverage drops below floor. **It runs the same suite as `test`, in a separate job, so every tool `make test` depends on must be installed in BOTH jobs.** Measured 2026-08-21 (#226): a pinned `uv` was added to `test` only, 4 tests that pass under `make test` failed here, and the red-suite guard correctly refused to compute coverage over a red run — so the symptom was a coverage job failing on something that is not coverage. Both jobs now install it (`ci.yml:35`, `:158`).
   **A workflow-wide grep cannot catch this.** The test written to prevent it searched the whole file for `UV_SHA256` and passed on presence anywhere — which it had, in the wrong job. An assertion satisfied by a different *job* than the one under test is the same cause-isolation defect as one satisfied by a different code path; the check must parse per job. It must also account for `working-directory:`, since the naive per-job version flags `powershell` as a false positive — that job runs `make test` under `working-directory: powershell`, i.e. Pester against a different Makefile, finishing in ~56s rather than five minutes.
@@ -359,7 +360,7 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 #### Bash
 
-- **Overall: 91%** (3222/3516 commands, 1443 tests, 19 heuristic disagreements) as measured by CI on `ubuntu-latest` for `ab830dc` (#228) — the figure the gate actually reads. All four verified from run 32495587966: `TOTAL 3222 3516 91%` and `total: 19` in job 96813086093, `Test count: 1441` in job 96813086283. The +78 coverable is `resolve_uv`/`uv_sync_venv` in `lib/helpers.sh` plus all of `scripts/sync-requirements-ci.sh`, which the predicate picks up as tracked `lib/*.sh` and `scripts/*.sh`; the +67 covered is their tests. All four numbers come from that single run; earlier revisions of this file carried a ratio and a disagreement count taken from different runs, which is why the two disagreed by one with no change in between. Gated in CI at **91%** (`bash-coverage` job, blocks auto-merge on drop). A percentage without its denominator is not a coverage figure — report both.
+- **Overall: 91%** (3246/3548 commands, 1464 tests, 20 heuristic disagreements) as measured by CI on `ubuntu-latest` for `fdcd7cb` (#238) — the figure the gate actually reads. All four verified from run 32495587966: `TOTAL 3222 3516 91%` and `total: 19` in job 96813086093, `Test count: 1441` in job 96813086283. The +78 coverable is `resolve_uv`/`uv_sync_venv` in `lib/helpers.sh` plus all of `scripts/sync-requirements-ci.sh`, which the predicate picks up as tracked `lib/*.sh` and `scripts/*.sh`; the +67 covered is their tests. All four numbers come from that single run; earlier revisions of this file carried a ratio and a disagreement count taken from different runs, which is why the two disagreed by one with no change in between. Gated in CI at **91%** (`bash-coverage` job, blocks auto-merge on drop). A percentage without its denominator is not a coverage figure — report both.
 - **91% has now landed exactly at the floor on the fourth consecutive CI measurement** — `21671b8`, `346d25f`, and now `4a04ea7`, each time with the local preview one point higher where one was taken. Four instances is enough to stop treating "local reads one point high" as a tendency and start treating it as the rule: **publish CI's number, never a local one, and expect the CI figure to sit on the floor rather than above it.** A change that adds instrumented lines without tests will therefore breach the gate immediately rather than eroding a margin, because there is no margin.
 - **The preview discipline paid a fourth time, and the margin is now the story.** Local macOS measured **92% (3158/3429)** on the shebang-scope branch; CI returned **91% (3148/3431)** — one point lower, as on all three previous occasions, and this time _exactly at the floor_ rather than above it. Publish the CI figure; treat any local number as a preview and label it as one. The denominator moved 3419 → 3431 (+12) because `scripts/list-shell-files.sh` is a tracked `scripts/*.sh` file and so joins the instrumented set by the existing predicate — not because the coverage derivation changed, which it did not. 10 of its 12 lines are covered; the uncovered one is the `/sh` shebang arm, unreachable because all 101 tracked shell files carry `#!/usr/bin/env bash`.
 - **And a fifth time, on #223, with the gap holding at exactly one point again.** Local macOS
@@ -669,6 +670,28 @@ run first: ./scripts/bootstrap_linux.sh` — advice that is wrong, because boots
   **who runs this in production, and did I run it as them?**
 
 ## Dependency Automation
+
+**`renovate.json` inlines the shared preset rather than extending it, and that is
+load-bearing.** `ai-config` is a **private** repo and dotfiles is **public**. Renovate
+resolves `extends` at `initRepo`, *before any dependency extraction*, so an unfetchable
+preset throws `config-validation` and abandons the whole repository — no PRs, no dependency
+dashboard, no visible error. Measured 2026-08-23 with config as the only variable: the
+remote-preset form produced **8 preset errors and 0 extractions**; inlined, **0 errors and
+1 extraction**. `ai-config/renovate-presets/default.json` stays canonical; keep the
+`extends`, `schedule`, `labels` and `packageRules` keys in sync with it by hand, because
+nothing detects drift between the copies. ADR-0010 predates this and says each repo
+*extends* the shared preset — that half no longer holds.
+
+**`pip_requirements` is deliberately absent from `enabledManagers`.** Renovate's pattern is
+`(^|/)[\w-]*requirements([-._]\w+)?\.(txt|pip)$`, which allows at most one `[-._]\w+`
+group after `requirements`, and `\w` excludes `-`. Measured against all five renderings:
+only `requirements-ci.txt` matches — the four narrow slices are two-segment names and cannot.
+**That is luck, not design**, so `tests/setup_env/requirements_ci.bats` pins it: renaming a
+slice to a single-segment name would silently bring it into scope. All five are generated
+from `uv.lock`, so Renovate would raise PRs against generated files that
+`check-requirements-ci` fails and the next `make sync-requirements-ci` reverts. The
+declaration is `pyproject.toml`; `pep621` is the manager that belongs.
+
 
 **Decided 2026-08-21, fleet-wide across all 18 non-archived repos: Dependabot
 security auto-PRs OFF, Dependabot vulnerability alerts ON.** Verified on this repo
