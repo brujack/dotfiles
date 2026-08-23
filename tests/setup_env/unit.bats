@@ -839,7 +839,8 @@ teardown() {
   unset LINUX
   export UPDATE_BREW=1
   unset UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
-  run_update
+  run run_update
+  [ "$status" -eq 0 ]
   grep -q "brew update" "${MOCK_CALLS_FILE}"
   ! grep -q "gem update" "${MOCK_CALLS_FILE}"
 }
@@ -857,7 +858,8 @@ teardown() {
   export MACOS=1
   unset LINUX
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
-  run_update
+  run run_update
+  [ "$status" -eq 0 ]
   grep -q "brew update" "${MOCK_CALLS_FILE}"
   grep -q "gem update" "${MOCK_CALLS_FILE}"
 }
@@ -870,7 +872,8 @@ teardown() {
   unset LINUX
   export UPDATE_GEMS=1
   unset UPDATE_BREW UPDATE_PIP UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
-  run_update
+  run run_update
+  [ "$status" -eq 0 ]
   grep -q "gem update" "${MOCK_CALLS_FILE}"
   ! grep -q "brew update" "${MOCK_CALLS_FILE}"
 }
@@ -882,7 +885,8 @@ teardown() {
   unset LINUX
   export UPDATE_MAS=1
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_CLAUDE UPDATE_PKGS
-  run_update
+  run run_update
+  [ "$status" -eq 0 ]
   grep -q "mas upgrade" "${MOCK_CALLS_FILE}"
   ! grep -q "brew update" "${MOCK_CALLS_FILE}"
 }
@@ -894,7 +898,8 @@ teardown() {
   unset MACOS
   export UPDATE_BREW=1
   unset UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
-  run_update
+  run run_update
+  [ "$status" -eq 0 ]
   grep -q "brew update" "${MOCK_CALLS_FILE}"
   ! grep -q "gem update" "${MOCK_CALLS_FILE}"
 }
@@ -907,7 +912,8 @@ teardown() {
   unset LINUX
   export UPDATE_CLAUDE=1
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
-  run_update
+  run run_update
+  [ "$status" -eq 0 ]
   grep -q "claude plugins update" "${MOCK_CALLS_FILE}"
   ! grep -q "brew update" "${MOCK_CALLS_FILE}"
 }
@@ -920,7 +926,8 @@ teardown() {
   unset MACOS
   export UPDATE_PKGS=1
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
-  run_update
+  run run_update
+  [ "$status" -eq 0 ]
   grep -q "nala" "${MOCK_CALLS_FILE}"
   refute_grep "brew update" "${MOCK_CALLS_FILE}"
   refute_grep "gem update" "${MOCK_CALLS_FILE}"

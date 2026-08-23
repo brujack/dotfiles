@@ -622,7 +622,8 @@ teardown() {
   export MACOS=1
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
-  run_update
+  run run_update
+  [ "$status" -eq 0 ]
   grep -q "brew update" "${MOCK_CALLS_FILE}"
 }
 
@@ -630,7 +631,8 @@ teardown() {
   export MACOS=1
   unset LINUX
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
-  run_update
+  run run_update
+  [ "$status" -eq 0 ]
   grep -q "gem update" "${MOCK_CALLS_FILE}"
 }
 
@@ -646,7 +648,8 @@ teardown() {
 printf "rubies-gem %s\n" "$*" >> "${MOCK_CALLS_FILE}"
 EOF
   chmod +x "${_rubies_bin}/gem"
-  run_update
+  run run_update
+  [ "$status" -eq 0 ]
   grep -q "rubies-gem update" "${MOCK_CALLS_FILE}"
 }
 
@@ -675,7 +678,8 @@ EOF
   export UBUNTU=1
   export NOBLE=1
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
-  run_update
+  run run_update
+  [ "$status" -eq 0 ]
   grep -q "apt" "${MOCK_CALLS_FILE}"
 }
 
@@ -684,7 +688,8 @@ EOF
   unset LINUX UBUNTU
   export UPDATE_MAS=1
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_CLAUDE
-  run_update
+  run run_update
+  [ "$status" -eq 0 ]
   grep -q "mas upgrade" "${MOCK_CALLS_FILE}"
 }
 
@@ -1024,7 +1029,8 @@ setup_constants_copy() {
   unset LINUX UBUNTU
   export UPDATE_BREW=1
   export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
-  run_update
+  run run_update
+  [ "$status" -eq 0 ]
   [ -f "${BATS_TEST_TMPDIR}/update.log" ]
   grep -q "Update Summary" "${BATS_TEST_TMPDIR}/update.log"
 }
@@ -1035,7 +1041,8 @@ setup_constants_copy() {
   unset MACOS
   export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
-  run_update
+  run run_update
+  [ "$status" -eq 0 ]
   # softwareupdate must not have been called
   if [[ -f "${MOCK_CALLS_FILE}" ]]; then
     ! grep -q "^softwareupdate" "${MOCK_CALLS_FILE}"
@@ -1046,7 +1053,13 @@ setup_constants_copy() {
   unset MACOS LINUX UBUNTU
   export UPDATE_BREW=1
   export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
+  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
+  # so a failure here still gets its TAP line instead of being swallowed by
+  # run_update's own trap.
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
   run_update
+  eval "${_bats_exit_trap}"
   grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_brew"
   grep -q "not macOS or Linux" "${_DOTFILES_RUN_TMPDIR}/result_brew"
 }
@@ -1063,7 +1076,8 @@ setup_constants_copy() {
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
   export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
-  run_update
+  run run_update
+  [ "$status" -eq 0 ]
   grep -q "dpkg-query" "${MOCK_CALLS_FILE}"
 }
 
@@ -1073,7 +1087,13 @@ setup_constants_copy() {
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
   export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
+  # so a failure here still gets its TAP line instead of being swallowed by
+  # run_update's own trap.
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
   run_update
+  eval "${_bats_exit_trap}"
   grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_apt"
   grep -q "not applicable" "${_DOTFILES_RUN_TMPDIR}/result_apt"
 }
@@ -1084,7 +1104,13 @@ setup_constants_copy() {
   export UPDATE_BREW=1
   unset UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
   export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
+  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
+  # so a failure here still gets its TAP line instead of being swallowed by
+  # run_update's own trap.
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
   run_update
+  eval "${_bats_exit_trap}"
   grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_apt"
   grep -q "flag not set" "${_DOTFILES_RUN_TMPDIR}/result_apt"
   grep -q "flag not set" "${_DOTFILES_RUN_TMPDIR}/result_snap"
@@ -1099,7 +1125,8 @@ setup_constants_copy() {
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
   export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
-  run_update
+  run run_update
+  [ "$status" -eq 0 ]
   grep -q "dpkg-query" "${MOCK_CALLS_FILE}"
 }
 
@@ -1113,7 +1140,13 @@ setup_constants_copy() {
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
   export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
   export MOCK_APT_EXIT=1
+  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
+  # so a failure here still gets its TAP line instead of being swallowed by
+  # run_update's own trap.
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
   run_update
+  eval "${_bats_exit_trap}"
   grep -q "FAIL" "${_DOTFILES_RUN_TMPDIR}/status_apt"
   grep -q "OK" "${_DOTFILES_RUN_TMPDIR}/status_snap"
 }
@@ -1128,7 +1161,13 @@ setup_constants_copy() {
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
   export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
   export MOCK_SNAP_EXIT=1
+  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
+  # so a failure here still gets its TAP line instead of being swallowed by
+  # run_update's own trap.
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
   run_update
+  eval "${_bats_exit_trap}"
   grep -q "OK" "${_DOTFILES_RUN_TMPDIR}/status_apt"
   grep -q "FAIL" "${_DOTFILES_RUN_TMPDIR}/status_snap"
 }
@@ -1149,7 +1188,13 @@ setup_constants_copy() {
   # environment. Green on macOS, red in CI.
   _snap_available() { return 1; }
 
+  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
+  # so a failure here still gets its TAP line instead of being swallowed by
+  # run_update's own trap.
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
   run_update
+  eval "${_bats_exit_trap}"
 
   grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_snap"
   grep -q "snap not installed on this host" "${_DOTFILES_RUN_TMPDIR}/result_snap"
@@ -1166,7 +1211,13 @@ setup_constants_copy() {
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
   export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
+  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
+  # so a failure here still gets its TAP line instead of being swallowed by
+  # run_update's own trap.
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
   run_update
+  eval "${_bats_exit_trap}"
   grep -q "Updated apt packages" "${_DOTFILES_RUN_TMPDIR}/err_apt"
   grep -q "Updated snap packages" "${_DOTFILES_RUN_TMPDIR}/err_snap"
   refute_grep "Updated apt packages" "${_DOTFILES_RUN_TMPDIR}/err_snap"
@@ -1182,7 +1233,8 @@ setup_constants_copy() {
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_CLAUDE UPDATE_PKGS
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
   export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
-  run_update
+  run run_update
+  [ "$status" -eq 0 ]
   # dpkg-query is called by update_system_packages on Ubuntu — must NOT appear
   ! grep -q "dpkg-query" "${MOCK_CALLS_FILE}"
 }
@@ -1436,7 +1488,8 @@ assert_all_npm_globals_pinned() {
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
   mkdir -p "${HOME}/.tfenv"
-  run_update
+  run run_update
+  [ "$status" -eq 0 ]
   grep -q "^git pull$" "${MOCK_CALLS_FILE}"
 }
 
@@ -1444,7 +1497,13 @@ assert_all_npm_globals_pinned() {
   export MACOS=1
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
+  # so a failure here still gets its TAP line instead of being swallowed by
+  # run_update's own trap.
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
   run_update
+  eval "${_bats_exit_trap}"
   grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_tfenv"
 }
 
@@ -1453,7 +1512,8 @@ assert_all_npm_globals_pinned() {
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
   mkdir -p "${HOME}/.oh-my-zsh"
-  run_update
+  run run_update
+  [ "$status" -eq 0 ]
   grep -q "^git pull$" "${MOCK_CALLS_FILE}"
 }
 
@@ -1461,7 +1521,13 @@ assert_all_npm_globals_pinned() {
   export MACOS=1
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
+  # so a failure here still gets its TAP line instead of being swallowed by
+  # run_update's own trap.
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
   run_update
+  eval "${_bats_exit_trap}"
   grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_oh-my-zsh"
 }
 
@@ -1470,7 +1536,8 @@ assert_all_npm_globals_pinned() {
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
   mkdir -p "${HOME}/.tmux/plugins/tpm"
-  run_update
+  run run_update
+  [ "$status" -eq 0 ]
   grep -q "^git pull$" "${MOCK_CALLS_FILE}"
 }
 
@@ -1478,7 +1545,13 @@ assert_all_npm_globals_pinned() {
   export MACOS=1
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
+  # so a failure here still gets its TAP line instead of being swallowed by
+  # run_update's own trap.
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
   run_update
+  eval "${_bats_exit_trap}"
   grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_tpm"
 }
 
@@ -1488,7 +1561,8 @@ assert_all_npm_globals_pinned() {
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
   mkdir -p "${HOME}/bin"
   touch "${HOME}/bin/cht.sh"
-  run_update
+  run run_update
+  [ "$status" -eq 0 ]
   grep -q "curl https://cht.sh/:cht.sh" "${MOCK_CALLS_FILE}"
 }
 
@@ -1496,7 +1570,13 @@ assert_all_npm_globals_pinned() {
   export MACOS=1
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
+  # so a failure here still gets its TAP line instead of being swallowed by
+  # run_update's own trap.
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
   run_update
+  eval "${_bats_exit_trap}"
   grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh"
 }
 
@@ -1506,7 +1586,8 @@ assert_all_npm_globals_pinned() {
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
   mkdir -p "${HOME}/.zsh.d"
   touch "${HOME}/.zsh.d/_cht"
-  run_update
+  run run_update
+  [ "$status" -eq 0 ]
   grep -q "curl https://cheat.sh/:zsh" "${MOCK_CALLS_FILE}"
 }
 
@@ -1515,7 +1596,8 @@ assert_all_npm_globals_pinned() {
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
   mkdir -p "${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
-  run_update
+  run run_update
+  [ "$status" -eq 0 ]
   grep -q "^git pull$" "${MOCK_CALLS_FILE}"
 }
 
@@ -1544,11 +1626,13 @@ assert_all_npm_globals_pinned() {
   # No UPDATE_* flag set — relies on run_update's default "no flags = run
   # everything" (_run_all) path, not a bare UPDATE var (_any_update_flag
   # only checks UPDATE_BREW/PIP/GEMS/MAS/PKGS/CLAUDE, never bare UPDATE).
-  # Plain call (not `run run_update`) — `run` captures output via a command
-  # substitution subshell, so _DOTFILES_RUN_TMPDIR (exported inside run_update)
-  # would not survive back into this test body. See tfenv/oh-my-zsh tests above
-  # for the same established pattern.
+  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
+  # so a failure here still gets its TAP line instead of being swallowed by
+  # run_update's own trap.
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
   run_update
+  eval "${_bats_exit_trap}"
   [ -f "${_DOTFILES_RUN_TMPDIR}/status_git-repos" ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_git-repos")" = "WARN" ]
   # The WARN message references "see detail" — the detail file must actually
@@ -1566,7 +1650,13 @@ assert_all_npm_globals_pinned() {
   # No UPDATE_* flag set — relies on run_update's default "no flags = run
   # everything" (_run_all) path, not a bare UPDATE var (_any_update_flag
   # only checks UPDATE_BREW/PIP/GEMS/MAS/PKGS/CLAUDE, never bare UPDATE).
+  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
+  # so a failure here still gets its TAP line instead of being swallowed by
+  # run_update's own trap.
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
   run_update
+  eval "${_bats_exit_trap}"
   [ -f "${_DOTFILES_RUN_TMPDIR}/status_legacy-rsync" ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_legacy-rsync")" = "WARN" ]
   [ -f "${_DOTFILES_RUN_TMPDIR}/detail_legacy-rsync" ]
@@ -1582,7 +1672,13 @@ assert_all_npm_globals_pinned() {
   # No UPDATE_* flag set — relies on run_update's default "no flags = run
   # everything" (_run_all) path, not a bare UPDATE var (_any_update_flag
   # only checks UPDATE_BREW/PIP/GEMS/MAS/PKGS/CLAUDE, never bare UPDATE).
+  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
+  # so a failure here still gets its TAP line instead of being swallowed by
+  # run_update's own trap.
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
   run_update
+  eval "${_bats_exit_trap}"
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_git-repos")" = "OK" ]
 }
 
@@ -1657,11 +1753,13 @@ assert_all_npm_globals_pinned() {
   # No UPDATE_* flag set — relies on run_update's default "no flags = run
   # everything" (_run_all) path, not a bare UPDATE var (_any_update_flag
   # only checks UPDATE_BREW/PIP/GEMS/MAS/PKGS/CLAUDE, never bare UPDATE).
-  # Plain call (not `run run_update`) — `run` captures output via a command
-  # substitution subshell, so _DOTFILES_RUN_TMPDIR (exported inside run_update)
-  # would not survive back into this test body. See the git-repos WARN test
-  # above for the same established pattern.
+  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
+  # so a failure here still gets its TAP line instead of being swallowed by
+  # run_update's own trap.
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
   run_update
+  eval "${_bats_exit_trap}"
   [ -f "${_DOTFILES_RUN_TMPDIR}/status_git-hooks" ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_git-hooks")" = "WARN" ]
   [ -f "${_DOTFILES_RUN_TMPDIR}/detail_git-hooks" ]
@@ -1677,7 +1775,8 @@ assert_all_npm_globals_pinned() {
   unset LINUX UBUNTU
   export UPDATE_CLAUDE=1
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
-  run_update
+  run run_update
+  [ "$status" -eq 0 ]
   grep -q "claude plugins update superpowers@claude-plugins-official" "${MOCK_CALLS_FILE}"
 }
 
@@ -1698,7 +1797,13 @@ assert_all_npm_globals_pinned() {
     [[ -x "${dir}/claude" ]] || printf "%s\n" "${dir}"
   done | tr '\n' ':' | sed 's/:$//')"
   export PATH="${tmp_mocks}:${clean_path}"
+  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
+  # so a failure here still gets its TAP line instead of being swallowed by
+  # run_update's own trap.
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
   run_update
+  eval "${_bats_exit_trap}"
   grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_claude"
 }
 
@@ -1707,7 +1812,13 @@ assert_all_npm_globals_pinned() {
   unset LINUX UBUNTU
   export UPDATE_BREW=1
   unset UPDATE_CLAUDE UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
+  # so a failure here still gets its TAP line instead of being swallowed by
+  # run_update's own trap.
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
   run_update
+  eval "${_bats_exit_trap}"
   grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_claude"
 }
 
@@ -1837,7 +1948,13 @@ assert_all_npm_globals_pinned() {
   unset LINUX UBUNTU
   export UPDATE_BREW=1
   unset UPDATE_CLAUDE UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
+  # so a failure here still gets its TAP line instead of being swallowed by
+  # run_update's own trap.
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
   run_update
+  eval "${_bats_exit_trap}"
   grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_npm"
 }
 
@@ -1846,7 +1963,13 @@ assert_all_npm_globals_pinned() {
   unset LINUX UBUNTU
   export UPDATE_PIP=1
   unset HAS_DEVTOOLS UPDATE_BREW UPDATE_CLAUDE UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
+  # so a failure here still gets its TAP line instead of being swallowed by
+  # run_update's own trap.
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
   run_update
+  eval "${_bats_exit_trap}"
   grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_pip"
 }
 
@@ -1855,7 +1978,13 @@ assert_all_npm_globals_pinned() {
   unset LINUX UBUNTU
   export UPDATE_BREW=1
   unset UPDATE_PIP UPDATE_CLAUDE UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
+  # so a failure here still gets its TAP line instead of being swallowed by
+  # run_update's own trap.
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
   run_update
+  eval "${_bats_exit_trap}"
   grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_pip"
 }
 
@@ -1866,7 +1995,13 @@ assert_all_npm_globals_pinned() {
   unset UPDATE_BREW UPDATE_CLAUDE UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
   # pyenv which python must return the mock python so $PYTHON stays in mock PATH
   export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
+  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
+  # so a failure here still gets its TAP line instead of being swallowed by
+  # run_update's own trap.
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
   run_update
+  eval "${_bats_exit_trap}"
   grep -q "OK" "${_DOTFILES_RUN_TMPDIR}/status_pip"
   grep -q "pyenv which python" "${MOCK_CALLS_FILE}"
 }
@@ -1874,9 +2009,10 @@ assert_all_npm_globals_pinned() {
 @test "run_update pip writes pip_outdated from what the sync moved" {
   # Asserts the FILE rather than the rendered summary, because
   # update_summary.sh reads pip_outdated directly. Calls run_update directly
-  # rather than via `run` because _DOTFILES_RUN_TMPDIR is exported into the
-  # caller — which means a failure here loses its TAP line, a property this
-  # shares with the other direct callers in this file.
+  # (not via `run`) so _DOTFILES_RUN_TMPDIR survives into this test body;
+  # bats' EXIT trap is saved and restored around the call (below) so a
+  # failure here still gets its TAP line instead of being swallowed by
+  # run_update's own trap.
   export MACOS=1
   unset LINUX UBUNTU
   export UPDATE_PIP=1 HAS_DEVTOOLS=1
@@ -1886,7 +2022,10 @@ assert_all_npm_globals_pinned() {
  - urllib3==1.26.20
  + urllib3==2.7.0
 "
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
   run_update
+  eval "${_bats_exit_trap}"
   grep -q "^requests$" "${_DOTFILES_RUN_TMPDIR}/pip_outdated"
   grep -q "^urllib3$" "${_DOTFILES_RUN_TMPDIR}/pip_outdated"
   # deduplicated: urllib3 appears on both a - and a + line
