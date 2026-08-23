@@ -355,6 +355,53 @@ teardown() {
   [ "$status" -eq 0 ]
 }
 
+# ── detect_env fail-closed on an unloadable identity table ────────────────────
+#
+# These two use a fixture copy of lib/detect_env.sh (never the tracked
+# config/profiles.sh) because T1 makes the fixture's profiles.sh unreadable to
+# reach the failing branch, and chmod 000 on the real tracked file would break
+# every subsequent login shell on this machine (.zprofile sources it via
+# config/profiles.zsh) -- see plan Global Constraints and spec section 1.
+
+@test "detect_env returns 1 and names the cause when config/profiles.sh cannot be sourced" {
+  local fixture="${BATS_TEST_TMPDIR}/fixture"
+  mkdir -p "${fixture}/lib" "${fixture}/config"
+  cp "${REPO_ROOT}/lib/detect_env.sh" "${fixture}/lib/"
+  cp "${REPO_ROOT}/config/profiles.sh" "${fixture}/config/"
+  chmod 000 "${fixture}/config/profiles.sh"
+
+  run bash -c "source '${fixture}/lib/detect_env.sh'; detect_env"
+  chmod 644 "${fixture}/config/profiles.sh"
+
+  # rc must be exactly 1, not merely non-zero: a wrong fixture path makes
+  # detect_env an unknown command and yields 127, which would falsely satisfy
+  # a bare non-zero check.
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Refusing to continue"* ]]
+}
+
+@test "detect_env sets PROFILE, the legacy variable, and _PROFILES_LOADED=1 on success" {
+  unset "${!HAS_@}" PROFILE STUDIO
+  export MOCK_HOSTNAME_OUTPUT="studio"
+  export MOCK_UNAME_S="Darwin"
+
+  run bash -c "
+    export PATH='${REPO_ROOT}/tests/mocks:${PATH}'
+    export MOCK_HOSTNAME_OUTPUT='studio'
+    export MOCK_UNAME_S='Darwin'
+    source '${REPO_ROOT}/lib/detect_env.sh'
+    detect_env
+    printf 'PROFILE=%s\n' \"\${PROFILE}\"
+    printf 'STUDIO=%s\n' \"\${STUDIO}\"
+    printf 'LOADED=%s\n' \"\${_PROFILES_LOADED}\"
+  "
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"PROFILE=mac_workstation"* ]]
+  [[ "$output" == *"STUDIO=1"* ]]
+  [[ "$output" == *"LOADED=1"* ]]
+}
+
 @test "lib/macos.sh sources without error" {
   run bash -c "source '${REPO_ROOT}/lib/constants.sh'; source '${REPO_ROOT}/lib/helpers.sh'; source '${REPO_ROOT}/lib/macos.sh'"
   [ "$status" -eq 0 ]
