@@ -112,6 +112,23 @@ depends_on: [0]
 
 Replace the bare `source` at `:23` with the block from spec §1: `_PROFILES_LOADED=0`, an `if ! source ...; then` that prints to stderr and `return 1`, then `_PROFILES_LOADED=1`. The stderr string must contain `Refusing to continue` — T1 asserts on it, because a bash-3.2 run also yields rc=1 while merely _naming_ the file.
 
+**Add a post-condition before `_PROFILES_LOADED=1`, not just the `source` guard.** A sourced file returns the status of its **last executed command**, and `config/profiles.sh` ends with `declare -A PROFILE_LEGACY=(...)`. A failure confined to an earlier statement therefore leaves `source` returning 0 with the table incomplete. Measured on a fixture whose `PROFILE_MAP` is never declared and whose last statement succeeds:
+
+```
+rc=0  LOADED=1  PROFILE=unknown  HAS_DEVTOOLS=[1]
+```
+
+`HAS_DEVTOOLS=1` there is **inherited from the login shell** — so `detect_env` reports success, the sentinel claims the table loaded, `PROFILE` is `unknown`, and the capabilities are the parent's. Exactly the state the guard's own message says it refuses to continue into.
+
+```bash
+if ! declare -p PROFILE_MAP PROFILE_CAPS PROFILE_LEGACY >/dev/null 2>&1; then
+  printf "lib/detect_env.sh: config/profiles.sh sourced but did not define PROFILE_MAP, PROFILE_CAPS and PROFILE_LEGACY -- the identity table is incomplete. Refusing to continue.\n" >&2
+  return 1
+fi
+```
+
+Verified both directions: fails on the incomplete fixture, passes on the real `config/profiles.sh`. This turns the check from *the last statement succeeded* into *the three arrays the caller depends on exist*, and closes the same positional-versus-structural weakness the cut bash-version guard was justified on — in the consumer rather than in `config/profiles.sh`.
+
 Add a comment beside the existing `readonly`-here / `export`-there note at `:44` recording that this is deliberately stricter than `config/profiles.zsh:41`'s warn-and-continue, and why: that file is sourced by `.zprofile` at login, this one is sourced only by a provisioning script.
 
 **T1** — `detect_env` against a fixture-tree `profiles.sh` that is unreadable: assert rc is **exactly 1** (a wrong fixture path makes `detect_env` an unknown command and yields 127), stderr contains `Refusing to continue`, **and `_PROFILES_LOADED` is `0`**.
