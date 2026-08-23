@@ -41,6 +41,90 @@ chmod 644 "$F/config/profiles.sh"; rm -rf "$F"
 
 ---
 
+## Task 5: Un-hide the failing `run_update` tests (prerequisite, discovered during execution)
+
+```yaml-task
+id: 5
+description: wrap direct run_update call sites in run so bats' EXIT trap survives and failing tests regain their names
+role: executor
+model: sonnet
+tdd: not-applicable
+acceptance:
+  - cmd: 'bats tests/setup_env/workflows.bats 2>&1 | grep -c "bats warning: Executed"'
+    exit_code: 1
+  - cmd: 'bats tests/setup_env/unit.bats 2>&1 | grep -c "bats warning: Executed"'
+    exit_code: 1
+  - cmd: 'make lint'
+    exit_code: 0
+max_retries: 3
+files_touched:
+  - tests/setup_env/workflows.bats
+  - tests/setup_env/unit.bats
+depends_on: []
+```
+
+`tdd: not-applicable` — this changes no behaviour and adds no test. It makes existing failures
+*visible*; the tests and the production code are untouched.
+
+**Why this exists.** `run_update` installs `trap '...' EXIT INT TERM` (`lib/workflows.sh:108`).
+bats emits each test's TAP line from **its own** `EXIT` trap (`bats_teardown_trap as-exit-trap`),
+so `run_update` clobbers it. Measured with a discriminating fixture:
+
+```
+not ok 1 A plain failure reports normally
+ok 3 C trap then PASS
+# bats warning: Executed 2 instead of expected 3 tests      <- B, trap-then-FAIL, vanished
+```
+
+A *passing* test with the trap still reports. A *failing* one emits nothing at all. So on this
+machine `make test` is red with **17 failures whose names do not appear** — 174 of 191 executed
+in `workflows.bats` alone, measured on unmodified `origin/master`, so this predates and is
+independent of every other task in this plan.
+
+**Do not "fix" it by clearing the trap.** `trap - EXIT` before returning removes bats' trap too
+and is exactly as fatal — backlog row 7 measured that as probe case D. Chaining onto
+`bats_teardown_trap` works but depends on bats internals and is version-fragile (1.14.0 local,
+1.10.0 in CI).
+
+**The conversion is NOT mechanical, and the obvious version hides the bug it exists to reveal.**
+These tests call `run_update` bare, so bats' `set -e` fails the test the instant it returns
+non-zero. `run run_update` captures the status instead and execution continues to the next line.
+Wrap without adding an assertion and 17 real failures become passes.
+
+For every site converted, decide which the original meant and make it explicit:
+
+- Relied on `set -e` for success (the common case) → add `[ "$status" -eq 0 ]` immediately after.
+- Deliberately exercises a failure path (e.g. *"records FAIL for git-hooks section when
+  install_git_hooks_all_repos fails"*) → assert the status the test actually intends, not `0`.
+- Already asserts on `$status` → leave the assertion, just wrap the call.
+
+`workflows.bats` already contains **21** sites in the wrapped form; match their local convention
+rather than inventing one.
+
+**Census, taken at the base ref rather than HEAD** — backlog row 7 records that the first count
+of this population was wrong because it was taken on a dirty tree and swept the counter's own
+in-flight edits in as pre-existing debt:
+
+```
+origin/master   tests/setup_env/workflows.bats   direct=41   already wrapped=21
+origin/master   tests/setup_env/unit.bats        direct=7    already wrapped=0
+```
+
+48 sites. Identical at HEAD, so this branch has not moved it.
+
+**The acceptance gate expects failures, and that is deliberate.** Success is that
+`bats warning: Executed N instead of expected M` **disappears** — i.e. every declared test now
+emits a TAP line. It is emphatically **not** that the suite turns green: the 17 are real
+failures and naming them is this task's entire product. Diagnosing them is separate work.
+`grep -c` exiting 1 is the "zero matches" case, which is why both gates declare `exit_code: 1`.
+
+**Interfaces:**
+
+- Produces: no symbols. Restores diagnosability of `make test` on any developer machine, and
+  unblocks the pre-push gate for every task in this plan.
+
+---
+
 ## Task 0: Isolate the profile tests from an inherited environment (prerequisite)
 
 ```yaml-task
