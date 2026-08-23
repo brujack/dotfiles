@@ -148,7 +148,7 @@ brew "rustup"         # [HAS_RUST]
 
 Untagged entries are expected on all macs. When adding a new Brewfile entry that is developer-, K8s-, Docker-, or Rust-specific, add the appropriate tag.
 
-**A `# [HAS_*]` tag selects drift expectations only — it does NOT gate installation, and reading it as a gate is the natural mistake.** `install_macos_casks` (`lib/macos.sh:193`) runs `brew bundle --file "${BREWFILE_LOC}/Brewfile"` with no enclosing `HAS_*` conditional; the guards at `:194` and `:197` wrap only `Brewfile.gui` and `Brewfile.devtools`. So **every mac installs every entry in the main Brewfile regardless of its tag** — a `mac_mini` with no `HAS_DEVTOOLS` still receives `pyenv`, `python@3.13` and `uv`. The tag's only readers are `_brewfile_parse_section` and `_brewfile_parse_inactive` (`lib/update_summary.sh:600`/`:620`), reached solely from the drift check, which uses it to decide whether a missing formula counts as drift *on this machine*.
+**A `# [HAS_*]` tag selects drift expectations only — it does NOT gate installation, and reading it as a gate is the natural mistake.** `install_macos_casks` (`lib/macos.sh:193`) runs `brew bundle --file "${BREWFILE_LOC}/Brewfile"` with no enclosing `HAS_*` conditional; the guards at `:194` and `:197` wrap only `Brewfile.gui` and `Brewfile.devtools`. So **every mac installs every entry in the main Brewfile regardless of its tag** — a `mac_mini` with no `HAS_DEVTOOLS` still receives `pyenv`, `python@3.13` and `uv`. The tag's only readers are `_brewfile_parse_section` and `_brewfile_parse_inactive` (`lib/update_summary.sh:600`/`:620`), reached solely from the drift check, which uses it to decide whether a missing formula counts as drift _on this machine_.
 
 Two consequences worth holding: tagging an entry does not keep it off a machine, so a tag is never a way to avoid installing something; and an entry present in the Brewfile but not installed produces one advisory `Missing (in Brewfile, not installed): <name>` line per machine whose profile carries the named capability — 6 of the 8 hostname entries carry `devtools`, so that is the blast radius of adding a `[HAS_DEVTOOLS]` entry, not the 2 machines an author usually has in mind. Verified during dotfiles#225 by two independent reviewers reading `lib/macos.sh` rather than trusting the tag's name.
 
@@ -233,24 +233,24 @@ venv. To roll back:
 **Environment overrides added by the uv work.** All three exist for a stated reason and
 none grants a capability the operator did not already have:
 
-| variable | read by | why it exists |
-| --- | --- | --- |
-| `UV_BIN` | `resolve_uv` (`lib/helpers.sh`) | operator escape hatch, and the only seam a test can use to drive the "not executable" branch — PATH mocking cannot remove the absolute fallback candidates |
-| `UV_FALLBACK_PATHS` | `resolve_uv` | array of prefix candidates. Exists so a test can reach the genuine not-found branch, which is otherwise unreachable on any machine that has `uv`. Env-settable as a scalar, deliberately; `UV_BIN` is checked first and already grants the same |
-| `REQUIREMENTS_CI_TARGET` | `scripts/sync-requirements-ci.sh` | points the drift check at a fixture, so a test that crashes between mutating and restoring cannot leave a modified tracked `requirements-ci.txt` to be committed by accident |
+| variable                 | read by                           | why it exists                                                                                                                                                                                                                                   |
+| ------------------------ | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `UV_BIN`                 | `resolve_uv` (`lib/helpers.sh`)   | operator escape hatch, and the only seam a test can use to drive the "not executable" branch — PATH mocking cannot remove the absolute fallback candidates                                                                                      |
+| `UV_FALLBACK_PATHS`      | `resolve_uv`                      | array of prefix candidates. Exists so a test can reach the genuine not-found branch, which is otherwise unreachable on any machine that has `uv`. Env-settable as a scalar, deliberately; `UV_BIN` is checked first and already grants the same |
+| `REQUIREMENTS_CI_TARGET` | `scripts/sync-requirements-ci.sh` | points the drift check at a fixture, so a test that crashes between mutating and restoring cannot leave a modified tracked `requirements-ci.txt` to be committed by accident                                                                    |
 
 **Sync CI requirements:** `make sync-requirements-ci` (renders **both** CI requirements files from `uv.lock`)
 **Check CI requirements drift:** `make check-requirements-ci` (fails when either rendering is stale; a prerequisite of `make test`)
 
 **There are five renderings, deliberately separate files.**
 
-| file | group | pins | consumers |
-| --- | --- | --- | --- |
-| `requirements-ci.txt` | `test-lint` | 80 | the full local/dev test set |
-| `requirements-runtime-ci.txt` | `runtime` | 229 | terraform_ansible |
-| `requirements-ci-test.txt` | `ci-test` | 11 | per-PR test/lint jobs |
-| `requirements-ci-mutation.txt` | `ci-mutation` | 30 | mutation jobs |
-| `requirements-ci-audit.txt` | `ci-audit` | 28 | dependency-audit steps |
+| file                           | group         | pins | consumers                   |
+| ------------------------------ | ------------- | ---- | --------------------------- |
+| `requirements-ci.txt`          | `test-lint`   | 80   | the full local/dev test set |
+| `requirements-runtime-ci.txt`  | `runtime`     | 229  | terraform_ansible           |
+| `requirements-ci-test.txt`     | `ci-test`     | 11   | per-PR test/lint jobs       |
+| `requirements-ci-mutation.txt` | `ci-mutation` | 30   | mutation jobs               |
+| `requirements-ci-audit.txt`    | `ci-audit`    | 28   | dependency-audit steps      |
 
 Do not harmonise them — `tests/setup_env/requirements_ci.bats` asserts all four differ.
 
@@ -262,7 +262,7 @@ Do not harmonise them — `tests/setup_env/requirements_ci.bats` asserts all fou
 
 **`bandit`, `radon` and `vulture` stay in `test-lint` and are absent from every CI group, which is the point.** `bandit` is invoked by `security-review/SKILL.md:110` — a Phase 3 gate that runs on a developer machine, so `test-lint` is exactly its right home and `ci-test` exactly the wrong one. A repo-only sweep cannot see that call: **skills are a caller class living outside every repo**, and `pip-audit` and `hypothesis` are skill-invoked too. `radon` and `vulture` are named by `python.md:102-103` as advisory tooling; the operator's ruling is that they stay.
 
-**Provenance does not go in these headers, and that is load-bearing.** A `runtime`-group edit moves `uv.lock` without changing the `test-lint` export, so a `uv.lock` SHA in that header would demand a re-render whose only effect is one header line — a gate firing on correct state, forever. Provenance belongs on a *consumer's* copy, written at copy time.
+**Provenance does not go in these headers, and that is load-bearing.** A `runtime`-group edit moves `uv.lock` without changing the `test-lint` export, so a `uv.lock` SHA in that header would demand a re-render whose only effect is one header line — a gate firing on correct state, forever. Provenance belongs on a _consumer's_ copy, written at copy time.
 
 **The drift gate cannot see a wrong-group declaration.** It verifies each rendering is faithful to its group; a package in the wrong group renders faithfully and passes. `cosmic-ray` sat in `runtime` through every green run until 2026-08-21 (#231), and was found by enumerating five repos' CI by hand — which is not a mechanism. A green `check-requirements-ci` is not evidence about grouping.
 
@@ -310,7 +310,7 @@ Rules for any new suppression:
 - `test` job: installs a pinned, checksum-verified shellcheck plus bats, runs `make test`, then verifies test count ≥ 840 (regression proxy; 1464 tests, CI-measured 2026-08-23 on `fdcd7cb`)
 - `lint-macos` job: runs on `macos-latest` (advisory, not blocking auto-merge), two independent steps: `bash -n` over the derived `SHELL_FILES` list via `make print-SHELL_FILES | tr ' ' '\n' | xargs`, guarded by its own empty-list check — the `tr` is load-bearing, since `print-%` emits one space-separated line and `xargs -I` implies `-L1` and does not split on blanks, and `zsh -n` over the 10 tracked zsh files selected via `git ls-files '*.zsh' '*.zsh-theme' '.zshrc' '.zprofile'` — this second step refuses to pass on an empty file list
 - `bash-coverage` job: measures bash line coverage via PS4 xtrace on `ubuntu-latest`; **gates at 91%** — blocks auto-merge if coverage drops below floor. **It runs the same suite as `test`, in a separate job, so every tool `make test` depends on must be installed in BOTH jobs.** Measured 2026-08-21 (#226): a pinned `uv` was added to `test` only, 4 tests that pass under `make test` failed here, and the red-suite guard correctly refused to compute coverage over a red run — so the symptom was a coverage job failing on something that is not coverage. Both jobs now install it (`ci.yml:35`, `:158`).
-  **A workflow-wide grep cannot catch this.** The test written to prevent it searched the whole file for `UV_SHA256` and passed on presence anywhere — which it had, in the wrong job. An assertion satisfied by a different *job* than the one under test is the same cause-isolation defect as one satisfied by a different code path; the check must parse per job. It must also account for `working-directory:`, since the naive per-job version flags `powershell` as a false positive — that job runs `make test` under `working-directory: powershell`, i.e. Pester against a different Makefile, finishing in ~56s rather than five minutes.
+  **A workflow-wide grep cannot catch this.** The test written to prevent it searched the whole file for `UV_SHA256` and passed on presence anywhere — which it had, in the wrong job. An assertion satisfied by a different _job_ than the one under test is the same cause-isolation defect as one satisfied by a different code path; the check must parse per job. It must also account for `working-directory:`, since the naive per-job version flags `powershell` as a false positive — that job runs `make test` under `working-directory: powershell`, i.e. Pester against a different Makefile, finishing in ~56s rather than five minutes.
 - `secret-scan` job: runs gitleaks against recent commits (advisory, not blocking auto-merge)
 - `auto-merge` job: auto-merges any PR when all CI jobs pass (depends on `test`, `lint-macos`, `powershell`, `bash-coverage`, `secret-scan`)
 
@@ -440,10 +440,10 @@ the oracle at all -- proving twin-consistency instead. Second, the pair must be 
 **legacy variable is not pinned host-specifically by any other assertion**: `laptop` and `studio`
 are pinned that way elsewhere (a hardcoded
 `"STUDIO"` literal in `tests/zshrc.d/profiles.bats` and a studio-specific assertion in
-`tests/zshrc.d/unit.bats`), so a self-consistent swap of *that* pair is caught even when the
+`tests/zshrc.d/unit.bats`), so a self-consistent swap of _that_ pair is caught even when the
 oracle is derived, and the suite going red proves nothing about this file. `reception<->ratna` is
 the documented pair because neither has its legacy variable pinned that way. Both hostnames
-*are* named host-specifically elsewhere -- `tests/setup_env/profiles.bats:94` and `:485` assert
+_are_ named host-specifically elsewhere -- `tests/setup_env/profiles.bats:94` and `:485` assert
 `PROFILE=mac_workstation` for each -- but `PROFILE` comes from `PROFILE_MAP`, which the swap does
 not touch, which is why those two stay green. The qualifier is the whole criterion: drop it and a
 two-second grep appears to refute the rule.
@@ -570,6 +570,8 @@ so the workstation ran with the seam and CI ran the commit without it. When repr
 CI failure elsewhere, ship `git archive <the sha CI ran>`; if the tree is dirty, that is
 the finding. Fixed in `b4ced0d`.
 
+**`_PROFILES_LOADED` (`lib/detect_env.sh` and `lib/helpers.sh`) is a sentinel that records whether the identity table loaded successfully.** `detect_env()` sets it to `0` unconditionally on entry, then to `1` only after `config/profiles.sh` sources cleanly _and_ `declare -p PROFILE_MAP PROFILE_CAPS PROFILE_LEGACY` confirms all three arrays exist. `_doctor_check_profile()` in `lib/helpers.sh` branches on it before looking at `PROFILE` at all. The seam is never `export`ed, and that non-export is **not** what makes it safe — an environment-supplied value defeats the check entirely (measured: `env _PROFILES_LOADED=1 PROFILE=mac_workstation <the branch>` reports PASS). What actually protects it is the unconditional `=0` on entry to `detect_env`, combined with `detect_env()` always running before `run_doctor` (`setup_env.sh:61`, then the dispatch at `:69`). Why a sentinel instead of checking `PROFILE`? Because `config/profiles.zsh:46` exports `PROFILE` into every child of a login shell, so after a failed load the stale inherited value survives and `[[ -z ${PROFILE+x} ]]` is false. Measured: with the table unreadable and `PROFILE=mac_workstation` inherited, a pre-sentinel check reported PASS over a machine whose identity table never loaded. A negative control in `tests/setup_env/unit.bats` supplies `_PROFILES_LOADED=1` from the environment _without_ calling `detect_env` and asserts the branch reports PASS — if that test ever starts failing, the mechanism changed and this paragraph is stale.
+
 ### Mock Pattern
 
 See [`ai-config/docs/knowledge/dotfiles-bats-test-infrastructure.md`](https://github.com/brujack/ai-config/blob/master/docs/knowledge/dotfiles-bats-test-infrastructure.md) for the full `MOCK_*` env var reference table and the usage pattern.
@@ -673,14 +675,14 @@ run first: ./scripts/bootstrap_linux.sh` — advice that is wrong, because boots
 
 **`renovate.json` inlines the shared preset rather than extending it, and that is
 load-bearing.** `ai-config` is a **private** repo and dotfiles is **public**. Renovate
-resolves `extends` at `initRepo`, *before any dependency extraction*, so an unfetchable
+resolves `extends` at `initRepo`, _before any dependency extraction_, so an unfetchable
 preset throws `config-validation` and abandons the whole repository — no PRs, no dependency
 dashboard, no visible error. Measured 2026-08-23 with config as the only variable: the
 remote-preset form produced **8 preset errors and 0 extractions**; inlined, **0 errors and
 1 extraction**. `ai-config/renovate-presets/default.json` stays canonical; keep the
 `extends`, `schedule`, `labels` and `packageRules` keys in sync with it by hand, because
 nothing detects drift between the copies. ADR-0010 predates this and says each repo
-*extends* the shared preset — that half no longer holds.
+_extends_ the shared preset — that half no longer holds.
 
 **`pip_requirements` is deliberately absent from `enabledManagers`.** Renovate's pattern is
 `(^|/)[\w-]*requirements([-._]\w+)?\.(txt|pip)$`, which allows at most one `[-._]\w+`
@@ -692,17 +694,16 @@ from `uv.lock`, so Renovate would raise PRs against generated files that
 `check-requirements-ci` fails and the next `make sync-requirements-ci` reverts. The
 declaration is `pyproject.toml`; `pep621` is the manager that belongs.
 
-
 **Decided 2026-08-21, fleet-wide across all 18 non-archived repos: Dependabot
 security auto-PRs OFF, Dependabot vulnerability alerts ON.** Verified on this repo
 and spot-checked on `math` and `state-ledger` — `GET /vulnerability-alerts` returns
 `204`, `GET /automated-security-fixes` returns `enabled: false`.
 
 **This section exists because the decision lives nowhere in any repo.** It is a
-GitHub repo-*settings* toggle, which is the identical defect that produced #227 — a
+GitHub repo-_settings_ toggle, which is the identical defect that produced #227 — a
 control governing the repository, declared outside it. A tracked
-`.github/dependabot.yml` would not capture it either: that file governs *version*
-updates, and these are *security* updates. Recording state and reasoning here is the
+`.github/dependabot.yml` would not capture it either: that file governs _version_
+updates, and these are _security_ updates. Recording state and reasoning here is the
 minimum that makes it discoverable, and it is the reason a reader should not conclude
 from an absent config file that Dependabot is not running.
 
@@ -726,9 +727,9 @@ Two mechanical details, both non-obvious:
   nothing here because `renovate.json` already owns the other ecosystem via
   `enabledManagers: ["github-actions"]`.
 - **The flag cannot be cleared while alerts are off.** `DELETE
-  .../automated-security-fixes` returns **422 "Vulnerability alerts must be enabled to
+.../automated-security-fixes` returns **422 "Vulnerability alerts must be enabled to
   configure automated security fixes."** A repo in that state (`terraform_ansible` was)
-  is inert but *latently armed* — enabling alerts later lights auto-PRs instantly. Order
+  is inert but _latently armed_ — enabling alerts later lights auto-PRs instantly. Order
   the calls: `PUT vulnerability-alerts`, then `DELETE automated-security-fixes`.
 
 **Consequence, stated so it is not found as a surprise: Python now has no automated
@@ -737,7 +738,6 @@ in any repo (`pep621` is enabled nowhere), including this one — despite `pypro
 and `uv.lock` living here. Alerts will fire with nothing proposing fixes. That is the
 right order — visibility before a reviewed write path — but it is a gap with a name and
 a duration, not a steady state.
-
 
 ## Local-Only State
 
