@@ -129,6 +129,8 @@ _profile_snapshot() {
 }
 
 @test "HAS_DEVTOOLS is unset for mac_mini" {
+  unset LAPTOP STUDIO RECEPTION OFFICE HOMES WORKSTATION CRUNCHER RATNA PROFILE
+  unset "${!HAS_@}"
   export MOCK_HOSTNAME_OUTPUT="office"
   source "${REPO_ROOT}/lib/detect_env.sh"
   detect_env
@@ -153,6 +155,8 @@ _profile_snapshot() {
 }
 
 @test "HAS_DOCKER is unset for mac_mini" {
+  unset LAPTOP STUDIO RECEPTION OFFICE HOMES WORKSTATION CRUNCHER RATNA PROFILE
+  unset "${!HAS_@}"
   export MOCK_HOSTNAME_OUTPUT="office"
   source "${REPO_ROOT}/lib/detect_env.sh"
   detect_env
@@ -217,6 +221,8 @@ _profile_snapshot() {
 }
 
 @test "HAS_SNAP is unset for wsl2_workstation" {
+  unset LAPTOP STUDIO RECEPTION OFFICE HOMES WORKSTATION CRUNCHER RATNA PROFILE
+  unset "${!HAS_@}"
   export MOCK_HOSTNAME_OUTPUT="cruncher"
   export MOCK_UNAME_S="Linux"
   source "${REPO_ROOT}/lib/detect_env.sh"
