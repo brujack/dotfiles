@@ -114,7 +114,23 @@ Replace the bare `source` at `:23` with the block from spec §1: `_PROFILES_LOAD
 
 Add a comment beside the existing `readonly`-here / `export`-there note at `:44` recording that this is deliberately stricter than `config/profiles.zsh:41`'s warn-and-continue, and why: that file is sourced by `.zprofile` at login, this one is sourced only by a provisioning script.
 
-**T1** — `detect_env` against a fixture-tree `profiles.sh` that is unreadable: assert rc is **exactly 1** (a wrong fixture path makes `detect_env` an unknown command and yields 127) and stderr contains `Refusing to continue`. Do not assert `_PROFILES_LOADED` is `0` here: the `${_PROFILES_LOADED:-0}` read production uses returns `0` for a never-assigned variable, so that arm cannot tell "ran and failed" from "never reached".
+**T1** — `detect_env` against a fixture-tree `profiles.sh` that is unreadable: assert rc is **exactly 1** (a wrong fixture path makes `detect_env` an unknown command and yields 127), stderr contains `Refusing to continue`, **and `_PROFILES_LOADED` is `0`**.
+
+Capture the sentinel in an rc-preserving form so `$status` still reports `detect_env`'s:
+
+```bash
+run bash -c "source '${fixture}/lib/detect_env.sh'
+             detect_env; rc=\$?
+             printf 'LOADED=%s\\n' \"\${_PROFILES_LOADED:-unset}\"
+             exit \$rc"
+```
+
+**An earlier revision of this plan forbade that third assertion, and was wrong.** Its reason —
+that `${_PROFILES_LOADED:-0}` returns `0` for a never-assigned variable, so the arm cannot tell
+"ran and failed" from "never reached" — is true of the arm **in isolation** and false of it in
+T1, where rc-exactly-1 and the stderr string already prove the branch executed. It carries no
+vacuity here, and it is the **only** thing in this plan that kills the sentinel-ordering mutant.
+See Self-Review.
 
 **T2** — `detect_env` normal with `MOCK_HOSTNAME_OUTPUT=studio`: assert `PROFILE` is `mac_workstation`, `STUDIO` is `1`, and `_PROFILES_LOADED` is `1`.
 
@@ -211,7 +227,17 @@ Replace the two-branch `if [[ "${PROFILE:-unknown}" == "unknown" ]]` with the th
 - **Do not call `detect_env`** — it assigns `PROFILE` unconditionally at `:31`, the exact variable 118 and 119 control.
 - **Do not export `_PROFILES_LOADED=1` from `load_setup_env`** — that makes the sentinel environment-supplied in the suite meant to guard against an environment-supplied oracle.
 
-**T5** — the regression pin: `PROFILE=mac_workstation` left set, fixture table unreadable, `run_doctor`; fails if doctor reports PASS for PROFILE. Fails with Task 1 alone, passes only with this change.
+**T5** — the regression pin: `PROFILE=mac_workstation` left set, fixture table unreadable, then a
+real **`detect_env`** call, then `run_doctor`; fails if doctor reports PASS for PROFILE. Fails
+with Task 1 alone, passes only with this change.
+
+**Drive the sentinel through `detect_env`; never inject it.** An injected `_PROFILES_LOADED`
+exercises `_doctor_check_profile`'s branch and is invariant under a sentinel-ordering defect in
+`detect_env` — which is exactly how the mutant in Self-Review survives everything else. T5 is
+this plan's only end-to-end path from a broken table to a doctor verdict. Note the contrast with
+the three *existing* tests repaired below, which must **not** call `detect_env` — there the
+reason is that `detect_env` assigns `PROFILE` unconditionally and would clobber the fixture those
+tests control. Different tests, opposite instructions, both deliberate.
 
 **T6** — `_doctor_check_profile` across all three states (loaded+mapped, loaded+unmapped, not loaded); fails if any two produce the same verdict/message pair.
 
