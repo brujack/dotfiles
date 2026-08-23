@@ -1,5 +1,41 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["github>brujack/ai-config//renovate-presets/default.json"],
-  "enabledManagers": ["github-actions", "pep621"]
+  "extends": [
+    "github>brujack/ai-config//renovate-presets/default.json"
+  ],
+  "description": [
+    "pip_requirements is DELIBERATELY absent, and the reason is narrower and sharper than",
+    "'it would manage the renderings'. Renovate's pattern for that manager is",
+    "(^|/)[\\w-]*requirements([-._]\\w+)?\\.(txt|pip)$, which allows AT MOST ONE [-._]\\w+",
+    "group after 'requirements' -- and \\w excludes '-'. Measured 2026-08-23 against all",
+    "five renderings: only requirements-ci.txt matches. The four narrow slices",
+    "(requirements-ci-test.txt, -ci-audit.txt, -ci-mutation.txt, requirements-runtime-ci.txt)",
+    "are two-segment names and cannot match.",
+    "",
+    "That is LUCK, not design, and it is the reason this note exists: renaming any narrow",
+    "slice to a single-segment name -- requirements-test.txt, say -- would silently bring it",
+    "into pip_requirements' scope. And the one file that DOES match is the 80-pin full",
+    "rendering, the most widely consumed of the five.",
+    "",
+    "All five are GENERATED from uv.lock by scripts/sync-requirements-ci.sh. Renovate would",
+    "raise PRs bumping pins inside generated files, each failing check-requirements-ci, and",
+    "any that landed would be reverted by the next `make sync-requirements-ci`. The",
+    "declaration is pyproject.toml; the renderings are output. pep621 is the manager that",
+    "belongs and pip_requirements is the one that looks like it does.",
+    "",
+    "pinDigests implements ADR-0006, which mandates SHA-pinning all GitHub Actions refs and",
+    "adding this key. Measured: this repo is 0 of 6 refs pinned, all actions/checkout@v6.",
+    "pinDigests makes Renovate pin currently-unpinned refs rather than only preventing new",
+    "drift, so it converges the gap instead of freezing it.",
+    "",
+    "npm manages one dependency, json2yaml, which no lib/, scripts/ or Makefile line",
+    "invokes -- see the backlog row. Enabled rather than skipped so the dead dependency",
+    "becomes visible as a PR instead of rotting silently."
+  ],
+  "enabledManagers": [
+    "github-actions",
+    "npm",
+    "pep621"
+  ],
+  "pinDigests": true
 }

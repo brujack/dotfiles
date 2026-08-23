@@ -211,6 +211,33 @@ setup() {
   run ! grep -qE '^cyclonedx' "${REPO_ROOT}/requirements-ci-test.txt"
 }
 
+@test "renovate.json does not enable pip_requirements" {
+  # It would manage GENERATED files. pep621 is the manager that belongs; this
+  # is the one that looks like it does.
+  run ! grep -q '"pip_requirements"' "${REPO_ROOT}/renovate.json"
+  grep -q '"pep621"' "${REPO_ROOT}/renovate.json"
+}
+
+@test "no rendering has a single-segment name pip_requirements would match" {
+  # The four narrow slices escape Renovate's pip_requirements pattern only
+  # because they are two-segment names -- the pattern allows at most one
+  # [-._]\w+ group after "requirements", and \w excludes "-". That is luck,
+  # not design: renaming requirements-ci-test.txt to requirements-test.txt
+  # would silently bring it into scope. This test makes the luck load-bearing.
+  #
+  # requirements-ci.txt is the known, accepted exception -- it matches, which
+  # is why pip_requirements must stay disabled rather than merely unused.
+  local _f _base
+  for _f in "${REPO_ROOT}"/requirements-*.txt; do
+    _base="$(basename "${_f}")"
+    [ "${_base}" = "requirements-ci.txt" ] && continue
+    if printf '%s' "${_base}" | grep -qE '^[a-z-]*requirements([-._][a-z0-9]+)?\.txt$'; then
+      printf '%s is now matchable by pip_requirements\n' "${_base}" >&2
+      return 1
+    fi
+  done
+}
+
 @test "an unknown subcommand exits 2 with usage" {
   run "${SCRIPT}" bogus
   [ "${status}" -eq 2 ]
