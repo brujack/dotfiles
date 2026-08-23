@@ -1,41 +1,66 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": [
-    "github>brujack/ai-config//renovate-presets/default.json"
-  ],
   "description": [
-    "pip_requirements is DELIBERATELY absent, and the reason is narrower and sharper than",
-    "'it would manage the renderings'. Renovate's pattern for that manager is",
-    "(^|/)[\\w-]*requirements([-._]\\w+)?\\.(txt|pip)$, which allows AT MOST ONE [-._]\\w+",
-    "group after 'requirements' -- and \\w excludes '-'. Measured 2026-08-23 against all",
-    "five renderings: only requirements-ci.txt matches. The four narrow slices",
-    "(requirements-ci-test.txt, -ci-audit.txt, -ci-mutation.txt, requirements-runtime-ci.txt)",
-    "are two-segment names and cannot match.",
+    "The shared preset's contents are INLINED rather than extended via",
+    "github>brujack/ai-config//renovate-presets/default.json. ai-config is a PRIVATE repo, and a",
+    "repo that cannot read it throws config-validation at initRepo -- BEFORE any dependency",
+    "extraction -- so Renovate abandons the whole repository. No PRs, no dependency dashboard, no",
+    "signal of any kind. dotfiles is public and has therefore never once been processed since its",
+    "renovate.json landed on 2026-05-18.",
     "",
-    "That is LUCK, not design, and it is the reason this note exists: renaming any narrow",
-    "slice to a single-segment name -- requirements-test.txt, say -- would silently bring it",
-    "into pip_requirements' scope. And the one file that DOES match is the 80-pin full",
-    "rendering, the most widely consumed of the five.",
+    "Measured 2026-08-22 across the five repos configured before Renovate's only run (2026-06-06):",
+    "the two PRIVATE repos got 1 and 5 PRs; the three PUBLIC ones got zero. Perfect separation.",
+    "terraform_ansible's PR was titled 'update all non-major dependencies' -- this preset's own",
+    "groupName -- so the private repos demonstrably resolved it.",
     "",
-    "All five are GENERATED from uv.lock by scripts/sync-requirements-ci.sh. Renovate would",
-    "raise PRs bumping pins inside generated files, each failing check-requirements-ci, and",
-    "any that landed would be reverted by the next `make sync-requirements-ci`. The",
-    "declaration is pyproject.toml; the renderings are output. pep621 is the manager that",
-    "belongs and pip_requirements is the one that looks like it does.",
+    "ai-config/renovate-presets/default.json remains the canonical text; keep the extends,",
+    "schedule, labels and packageRules keys below in sync with it. Nothing detects drift between",
+    "the copies -- see the backlog row.",
     "",
-    "pinDigests implements ADR-0006, which mandates SHA-pinning all GitHub Actions refs and",
-    "adding this key. Measured: this repo is 0 of 6 refs pinned, all actions/checkout@v6.",
-    "pinDigests makes Renovate pin currently-unpinned refs rather than only preventing new",
-    "drift, so it converges the gap instead of freezing it.",
+    "pip_requirements is DELIBERATELY absent. Renovate's pattern for that manager is",
+    "(^|/)[\\w-]*requirements([-._]\\w+)?\\.(txt|pip)$, which allows AT MOST ONE [-._]\\w+ group after",
+    "'requirements', and \\w excludes '-'. Measured against all five renderings: only",
+    "requirements-ci.txt matches. The four narrow slices are two-segment names and cannot -- which",
+    "is LUCK, not design, so a test pins it. All five are GENERATED from uv.lock; Renovate would",
+    "raise PRs against generated files that check-requirements-ci fails and the next",
+    "`make sync-requirements-ci` reverts. The declaration is pyproject.toml.",
     "",
-    "npm manages one dependency, json2yaml, which no lib/, scripts/ or Makefile line",
-    "invokes -- see the backlog row. Enabled rather than skipped so the dead dependency",
-    "becomes visible as a PR instead of rotting silently."
+    "pinDigests implements ADR-0006. Measured: this repo is 0 of 6 refs pinned, all",
+    "actions/checkout@v6. It pins currently-unpinned refs rather than only preventing new drift.",
+    "",
+    "npm manages one dependency, json2yaml, which no lib/, scripts/ or Makefile line invokes --",
+    "enabled so the dead dependency surfaces as a PR rather than rotting silently."
+  ],
+  "extends": [
+    "config:recommended"
   ],
   "enabledManagers": [
     "github-actions",
     "npm",
     "pep621"
   ],
-  "pinDigests": true
+  "pinDigests": true,
+  "schedule": [
+    "before 5am on monday"
+  ],
+  "labels": [
+    "renovate"
+  ],
+  "packageRules": [
+    {
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "groupName": "all non-major dependencies",
+      "automerge": true,
+      "automergeType": "pr"
+    },
+    {
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "automerge": false
+    }
+  ]
 }
