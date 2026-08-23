@@ -370,7 +370,13 @@ teardown() {
   cp "${REPO_ROOT}/config/profiles.sh" "${fixture}/config/"
   chmod 000 "${fixture}/config/profiles.sh"
 
-  run bash -c "source '${fixture}/lib/detect_env.sh'; detect_env"
+  # rc-preserving: $status must report detect_env's own exit code, not the
+  # trailing printf's -- so the sentinel is captured and printed, then the
+  # captured rc is what the subshell actually exits with.
+  run bash -c "source '${fixture}/lib/detect_env.sh'
+               detect_env; rc=\$?
+               printf 'LOADED=%s\n' \"\${_PROFILES_LOADED:-unset}\"
+               exit \$rc"
   chmod 644 "${fixture}/config/profiles.sh"
 
   # rc must be exactly 1, not merely non-zero: a wrong fixture path makes
@@ -378,12 +384,47 @@ teardown() {
   # a bare non-zero check.
   [ "$status" -eq 1 ]
   [[ "$output" == *"Refusing to continue"* ]]
+  # The sentinel must still read 0 after a failed source -- a mutant that
+  # hoists _PROFILES_LOADED=1 above the guard and drops the post-source
+  # assignment passes rc-exactly-1 and the stderr check above unchanged,
+  # because the mutation never touches the `return 1` path. Only this
+  # assertion catches the ordering defect.
+  [[ "$output" == *"LOADED=0"* ]]
+}
+
+@test "detect_env returns 1 when config/profiles.sh sources cleanly but leaves the identity table incomplete" {
+  local fixture="${BATS_TEST_TMPDIR}/incomplete-fixture"
+  mkdir -p "${fixture}/lib" "${fixture}/config"
+  cp "${REPO_ROOT}/lib/detect_env.sh" "${fixture}/lib/"
+
+  # A profiles.sh whose last statement succeeds but never declares PROFILE_MAP.
+  # `source` returns the status of its LAST command, so a bare guard on
+  # `source`'s own return value cannot see this: rc is 0, yet the table the
+  # caller depends on was never built.
+  cat > "${fixture}/config/profiles.sh" <<'EOF'
+#!/usr/bin/env bash
+declare -A PROFILE_CAPS=([mac_workstation]="devtools")
+declare -A PROFILE_LEGACY=([studio]="STUDIO")
+true
+EOF
+
+  run bash -c "source '${fixture}/lib/detect_env.sh'
+               detect_env; rc=\$?
+               printf 'LOADED=%s\n' \"\${_PROFILES_LOADED:-unset}\"
+               exit \$rc"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"identity table is incomplete"* ]]
+  [[ "$output" == *"LOADED=0"* ]]
 }
 
 @test "detect_env sets PROFILE, the legacy variable, and _PROFILES_LOADED=1 on success" {
+  # Load-bearing, not boilerplate: config/profiles.zsh exports PROFILE, every
+  # HAS_* and the legacy identity variable into every child of a login
+  # shell. Without this unset, PROFILE=mac_workstation and STUDIO=1 are
+  # inherited from the parent on any dev machine and two of the three
+  # assertions below pass vacuously regardless of what detect_env does.
   unset "${!HAS_@}" PROFILE STUDIO
-  export MOCK_HOSTNAME_OUTPUT="studio"
-  export MOCK_UNAME_S="Darwin"
 
   run bash -c "
     export PATH='${REPO_ROOT}/tests/mocks:${PATH}'

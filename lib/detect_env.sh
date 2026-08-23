@@ -25,6 +25,16 @@ detect_env() {
     printf "lib/detect_env.sh: failed to source config/profiles.sh -- PROFILE would be 'unknown', no HAS_* capability set, and no legacy identity variable set. Refusing to continue.\n" >&2
     return 1
   fi
+  # A sourced file returns the status of its LAST executed command, and
+  # config/profiles.sh ends with `declare -A PROFILE_LEGACY=(...)`. A failure
+  # confined to an earlier statement therefore leaves `source` returning 0
+  # with the table incomplete -- the guard above alone cannot see that. This
+  # turns the check from "the last statement succeeded" into "the three
+  # arrays the caller depends on actually exist".
+  if ! declare -p PROFILE_MAP PROFILE_CAPS PROFILE_LEGACY >/dev/null 2>&1; then
+    printf "lib/detect_env.sh: config/profiles.sh sourced but did not define PROFILE_MAP, PROFILE_CAPS and PROFILE_LEGACY -- the identity table is incomplete. Refusing to continue.\n" >&2
+    return 1
+  fi
   _PROFILES_LOADED=1
   local hn
   hn=$(hostname -s)
