@@ -1189,11 +1189,16 @@ version = "0"
 source = { virtual = "." }
 
 [package.dev-dependencies]
+ci-audit = [
+    { name = "pip-audit" },
+]
 ci-mutation = [
     { name = "cosmic-ray" },
 ]
 ci-test = [
     { name = "hypothesis" },
+    { name = "mypy" },
+    { name = "pyright" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
@@ -1247,9 +1252,12 @@ test-lint = [
 [package.metadata]
 
 [package.metadata.requires-dev]
+ci-audit = [{ name = "pip-audit" }]
 ci-mutation = [{ name = "cosmic-ray" }]
 ci-test = [
     { name = "hypothesis" },
+    { name = "mypy" },
+    { name = "pyright" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },

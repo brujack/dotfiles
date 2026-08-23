@@ -1075,3 +1075,17 @@ _is_make_c_candidate() {
   printf '%s\n' "${wide_pathspec}" | grep -qxF "tests/mocks/fixture-data"
   printf '%s\n' "${wide_pathspec}" | grep -qxF "tests/mocks/python-helper"
 }
+
+@test "make test depends on check-lock, which catches a manifest the lock cannot satisfy" {
+  # check-requirements-ci runs `uv export --frozen`, which reads the LOCK -- so
+  # an unchanged lock renders unchanged output and the drift gate passes even
+  # when pyproject.toml has moved. Measured 2026-08-22: bump a constraint,
+  # leave uv.lock alone, and the drift gate returns 0 while `uv lock --check`
+  # returns non-zero. Rendering-to-lock and lock-to-manifest are different
+  # relationships; only one of them had a gate before this.
+  grep -qE '^test:.*check-lock' "${REPO_ROOT}/Makefile"
+  grep -qE '^check-lock:' "${REPO_ROOT}/Makefile"
+  # and it must be guarded, like lint's shellcheck, or a machine without uv
+  # cannot commit the change that installs uv
+  grep -A2 '^check-lock:' "${REPO_ROOT}/Makefile" | grep -q 'ifeq ($(UV),)'
+}

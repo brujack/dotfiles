@@ -41,6 +41,7 @@ _RENDERINGS=(
   "runtime:${REQUIREMENTS_RUNTIME_CI_TARGET:-${REPO_ROOT}/requirements-runtime-ci.txt}"
   "ci-test:${REQUIREMENTS_CI_TEST_TARGET:-${REPO_ROOT}/requirements-ci-test.txt}"
   "ci-mutation:${REQUIREMENTS_CI_MUTATION_TARGET:-${REPO_ROOT}/requirements-ci-mutation.txt}"
+  "ci-audit:${REQUIREMENTS_CI_AUDIT_TARGET:-${REPO_ROOT}/requirements-ci-audit.txt}"
 )
 readonly _RENDERINGS
 

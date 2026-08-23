@@ -106,7 +106,7 @@ lint:
 	fi; \
 	exit $$failed
 
-test: lint check-requirements-ci test-python
+test: lint check-lock check-requirements-ci test-python
 ifndef BATS
 	$(error $(BATS_MISSING))
 endif
@@ -171,6 +171,25 @@ ifeq ($(UV),)
 	@printf "uv not found, skipping requirements-ci drift check (install: brew install uv)\n"
 else
 	@./scripts/sync-requirements-ci.sh check
+endif
+
+# check-requirements-ci compares each RENDERING against uv.lock -- it runs
+# `uv export --frozen`, which reads the lock, so an unchanged lock renders
+# unchanged output. It therefore cannot see a pyproject.toml that the lock no
+# longer satisfies: measured 2026-08-22, bumping a manifest constraint and
+# leaving uv.lock untouched gives `uv lock --check` rc=1 and the drift gate
+# rc=0. Rendering-to-lock and lock-to-manifest are different relationships and
+# only one of them had a gate.
+#
+# This matters ahead of enabling Renovate's pep621 manager: a bump whose
+# updateArtifacts step fails produces exactly that state, and without this
+# target it would go green through CI and land a manifest the lock cannot
+# satisfy. Same missing-tool guard as above, for the same reason.
+check-lock:
+ifeq ($(UV),)
+	@printf "uv not found, skipping uv.lock consistency check (install: brew install uv)\n"
+else
+	@$(UV) lock --check
 endif
 
 # Introspection: `make print-VARNAME` prints a Makefile variable's resolved
