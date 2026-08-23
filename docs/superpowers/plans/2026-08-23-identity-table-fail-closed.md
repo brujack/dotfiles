@@ -125,6 +125,98 @@ failures and naming them is this task's entire product. Diagnosing them is separ
 
 ---
 
+## Task 6: Record the aws and rust update sections (production fix, discovered during execution)
+
+```yaml-task
+id: 6
+description: wrap update_aws_cli and update_rust in the section-record idiom so their failures are reported instead of discarded
+role: executor
+model: sonnet
+tdd: required
+acceptance:
+  - cmd: 'bats tests/setup_env/workflows.bats 2>&1 | grep -c "bats warning: Executed"'
+    exit_code: 1
+  - cmd: 'bats tests/setup_env/update_summary.bats'
+    exit_code: 0
+  - cmd: 'make lint'
+    exit_code: 0
+max_retries: 3
+files_touched:
+  - lib/workflows.sh
+  - lib/update_summary.sh
+  - tests/setup_env/workflows.bats
+  - tests/setup_env/update_summary.bats
+depends_on: [5]
+```
+
+**The production defect.** `run_update` wraps every update step in
+`_update_record_start` / `_update_record_end` with a `PIPESTATUS` capture — every step except
+two. `lib/workflows.sh:601-602` calls `update_aws_cli` and `update_rust` **bare**, and neither
+`aws` nor `rust` appears in `_UPDATE_SECTION_ORDER` (`lib/update_summary.sh:5-8`, 20 sections).
+`setup_env.sh` has no `set -e`, so their return values are discarded. **If either fails on a
+real machine, `-t update` reports nothing at all** — no section line, no failure, no warning,
+and the summary reads clean. That is the same defect class as this whole plan: a return value
+dropped at the call site, so a failure becomes invisible.
+
+**How it was found, because the chain explains the nine tests Task 5 could not fix.** Four
+independent things line up:
+
+| layer | defect |
+| --- | --- |
+| production | `update_aws_cli` / `update_rust` unguarded and unrecorded |
+| test fixture | bats `HOME` has no `~/software_downloads/awscli`, so `cd … \|\| return 1` returns 1 every run |
+| bats | test bodies run under `set -e`, so that non-zero kills the test process |
+| trap | `run_update`'s EXIT trap has clobbered bats', so the death emits **no TAP line** |
+
+CI never sees it: `MACOS` is unset there, so the macOS branch never executes.
+
+Measured: with the trap neutralised at source the failure surfaces as
+`lib/developer.sh: line 20: cd: …/software_downloads/awscli: No such file or directory`; and
+creating that directory before the call turns the test green (`ok 1`). Under `run run_update`
+the same call returns 0, because bats disables `set -e` inside `run` — verified with a
+two-case fixture (`f() { return 1; }`: bare → `not ok`, under `run` → `ok`).
+
+**Fixing production fixes the tests.** Wrapping the call in the pipeline idiom makes the
+pipeline's exit status `tee`'s, so errexit no longer fires and the rc is captured and reported
+instead. Do **not** paper over it by creating the fixture directory in the tests — that hides
+the production bug this task exists to fix.
+
+**What to do.** Copy the idiom from the `legacy-rsync` section immediately above
+(`lib/workflows.sh:580-584`):
+
+```bash
+_update_record_start "aws"
+update_aws_cli 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_aws"
+_update_record_end "aws" "${PIPESTATUS[0]}"
+
+_update_record_start "rust"
+update_rust 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_rust"
+_update_record_end "rust" "${PIPESTATUS[0]}"
+```
+
+**Both halves are mandatory and the second is easy to forget.** `CLAUDE.md` records this
+coupling: adding `_update_record_start/end` without adding the name to
+`_UPDATE_SECTION_ORDER` means the section is tracked internally and **never printed**, with no
+error. Add `aws` and `rust` to that array in `lib/update_summary.sh`.
+
+**Then fix the count assertions, which a `sed` pass will not catch.** Three tests hardcode a
+section total and will break: `tests/setup_env/update_summary.bats:404` (`8 OK`), `:461`
+(`1 OK`), and `tests/setup_env/workflows.bats:2100` (`8 OK`). `CLAUDE.md` names this trap
+explicitly — audit and adjust each by hand against what the run actually produces, rather than
+incrementing blindly.
+
+**TDD.** Add a test that a failing `update_aws_cli` is *recorded* — it must fail before the
+change (today the failure is unreported) and pass after. That is the discriminating test; the
+gate below only proves the nine stopped vanishing.
+
+**Interfaces:**
+
+- Consumes: Task 5's converted call sites.
+- Produces: `aws` and `rust` sections in the update summary; `update_aws_cli`/`update_rust`
+  failures become reportable rather than silent.
+
+---
+
 ## Task 0: Isolate the profile tests from an inherited environment (prerequisite)
 
 ```yaml-task
