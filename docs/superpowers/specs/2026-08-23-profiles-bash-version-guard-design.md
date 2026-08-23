@@ -201,7 +201,7 @@ machine-local cases were checked too: the single hit outside dotfiles
 (`math/scripts/run-bash-coverage.sh:372`) is a comment, and `config/local.sh` on the
 Studio contains no reference. So that is insurance against an event with no observed
 rate, and it is not why this ships. The appended-statement fragility is, and unlike the
-entry-point argument it is falsifiable today — see Group A case 7.
+entry-point argument it is falsifiable today — see Group B case 4.
 
 ## Design
 
@@ -212,7 +212,8 @@ Files touched, so the scope is a statement rather than an inference:
 | `config/profiles.sh` | version guard, above the first `declare -A` |
 | `lib/detect_env.sh` | propagate the `source` failure at `:23` |
 | `setup_env.sh` | read `detect_env`'s status at `:61` |
-| `lib/helpers.sh` | `_doctor_check_profile` must distinguish unset from `unknown` |
+| `lib/helpers.sh` | `_doctor_check_profile` branches on the `_PROFILES_LOADED` sentinel |
+| `CLAUDE.md` | document the `_OVERRIDE_PROFILES_SH` seam in Test Seams |
 | `docs/superpowers/README.md` | rewrite backlog row [14] to record the falsification |
 | `tests/setup_env/*.bats`, `tests/zshrc.d/*.bats` | the three test groups below |
 
@@ -264,11 +265,30 @@ now trip both guards, which is coherent — both mean "pretend this bash is too 
 ### 2. `lib/detect_env.sh:23` — propagate the failure
 
 ```bash
-if ! source "$(dirname "${BASH_SOURCE[0]}")/../config/profiles.sh"; then
-  printf "lib/detect_env.sh: failed to source config/profiles.sh -- PROFILE would be 'unknown', no HAS_* capability set, and no legacy identity variable set. Refusing to continue.\n" >&2
+_PROFILES_LOADED=0
+_profiles_sh="${_OVERRIDE_PROFILES_SH:-$(dirname "${BASH_SOURCE[0]}")/../config/profiles.sh}"
+if ! source "${_profiles_sh}"; then
+  printf "lib/detect_env.sh: failed to source %s -- PROFILE would be 'unknown', no HAS_* capability set, and no legacy identity variable set. Refusing to continue.\n" \
+    "${_profiles_sh}" >&2
   return 1
 fi
+_PROFILES_LOADED=1
 ```
+
+Two additions beyond the bare `if !`, both forced by findings below.
+
+**`_PROFILES_LOADED` is a sentinel this process controls**, set to 0 before the attempt and
+1 only after it succeeds. Design §4 needs it, and the reason is in §4. Note it is a plain
+assignment, never `export`ed — the whole point is that it cannot arrive from a parent.
+
+**`_OVERRIDE_PROFILES_SH` is a test seam, and it is not optional.** The path is otherwise
+hardcoded, so the only way to test the unreadable-file branch is `chmod 000` on the tracked
+`config/profiles.sh` — whose failing path leaves that file unreadable and breaks every
+subsequent login shell on the machine, since `.zprofile` sources it through
+`config/profiles.zsh`. That is `tdd.md`'s E2 hazard exactly: a test whose failure mode
+mutates state outside the repo, armed for the day the code regresses. The seam follows the
+repo's documented Test Seams pattern (`_OVERRIDE_KEYCHAIN_BIN`, `_OVERRIDE_BATS_BIN`,
+`GGSHIELD_BIN`) and grants no capability a caller does not already have.
 
 **This is deliberately stricter than the zsh twin, and the asymmetry is justified by
 actor, not drift.** `config/profiles.zsh:29-40` documents its choice to warn and
@@ -311,51 +331,101 @@ pressure, surface more, not less.
 The repo has no `set -e`, per `shell.md`, so `! detect_env && …` runs `detect_env`
 exactly once and the compound condition is evaluated normally.
 
-### 4. `lib/helpers.sh` — let `doctor` name the right cause
+### 4. `lib/helpers.sh` — make `doctor` report on this process, not the parent shell
 
-Change 3 keeps `-t doctor` running so the operator can diagnose this class. Without this
-fourth change that decision backfires: `detect_env` now returns at `:23`, *before* `:31`
-assigns `PROFILE`, and `_doctor_check_profile` (`lib/helpers.sh:397-410`) tests
-`${PROFILE:-unknown}` — which collapses "the table never loaded" into "this hostname is
-not in the table" by construction. On the Studio it would print:
+Change 3 keeps `-t doctor` running so the operator can diagnose this class. Making that
+pay off needs a fourth change, and the obvious version of it does not work.
+
+**The obvious version, and why it is dead code.** `detect_env` now returns at `:23`
+*before* `:31` assigns `PROFILE`, so the natural fix is to distinguish unset from
+`"unknown"` in `_doctor_check_profile` (`lib/helpers.sh:397-410`) with `[[ -z ${PROFILE+x} ]]`.
+That branch can never be taken. `config/profiles.zsh:46` is `export PROFILE=…`, and `:56`
+and `:67` export every `HAS_*` and the legacy identity variable, so every child of a zsh
+login shell inherits them. Measured in an ordinary session shell:
 
 ```
-[FAIL] PROFILE: unmapped hostname 'studio' — add a row to config/profiles.sh
+$ env | grep -E '^(PROFILE|STUDIO|HAS_)' | sort
+HAS_AWS=1  HAS_DEVTOOLS=1  HAS_DOCKER=1  HAS_GUI=1
+HAS_K8S=1  HAS_PRINTING=1  HAS_RUST=1
+PROFILE=mac_workstation
+STUDIO=1
 ```
 
-for a hostname that is on line 32 of that file. `detect_env`'s accurate stderr line is
-printed first, but `doctor_fail` is what sets the exit code and the summary line, so the
-misdiagnosis is the durable artifact and the accurate line scrolls past.
+`doctor` is run from a terminal and nothing schedules it — no cron entry, no launchd job,
+no LaunchAgent invokes it, and every documented invocation in `README.md` and `CLAUDE.md`
+is interactive. So `PROFILE` is set on **every** real doctor run and the unset branch is
+unreachable in 100% of them.
 
-This is two `behavior.md` failures at once — a guard's failure branch absorbing the
-failure of the guard itself, and a two-valued field reporting a three-valued outcome —
-landing in the one workflow change 3 deliberately kept alive *so that it could report
-this*. The fix is a third branch, distinguishing unset from `"unknown"`:
+**The defect this actually exposes is pre-existing and larger than this spec.**
+`_doctor_check_profile` tests `${PROFILE:-unknown}`, which is environment-supplied state.
+It therefore reports the **login shell's** answer, not this process's, on every run today
+on master. Applying changes 1-3 and the `${PROFILE+x}` version of §4 to a scratch copy,
+making `config/profiles.sh` unreadable — the version-independent case change 2 exists for —
+and running `./setup_env.sh -t doctor` from a normal terminal-descended shell:
+
+```
+lib/detect_env.sh: failed to source config/profiles.sh -- Refusing to continue.
+Machine profile:
+  [PASS] PROFILE (mac_workstation)
+25 checks passed, 3 failed, 0 warnings
+```
+
+A PASS over a machine whose identity table never loaded. Re-running the same scenario
+against the **unmodified** `${PROFILE:-unknown}` check produces the same `[PASS]` — so this
+is not a regression introduced here, it is the current behaviour, and `${PROFILE+x}` does
+not change it.
+
+**The fix is to branch on the sentinel change 2 sets, not on `PROFILE`:**
 
 ```bash
-if [[ -z ${PROFILE+x} ]]; then
-  doctor_fail "PROFILE" "config/profiles.sh did not load — the identity table is unavailable, so no hostname can resolve. Check the file exists, is readable, and that this shell is bash 5+."
-elif [[ "${PROFILE}" == "unknown" ]]; then
+if [[ "${_PROFILES_LOADED:-0}" != 1 ]]; then
+  doctor_fail "PROFILE" "config/profiles.sh did not load this run — any PROFILE value shown above came from the parent shell, not from this process. Check the file exists and is readable: ls -l config/profiles.sh"
+elif [[ "${PROFILE:-unknown}" == "unknown" ]]; then
   doctor_fail "PROFILE" "unmapped hostname '$(hostname -s)' — add a row to config/profiles.sh"
 else
   doctor_pass "PROFILE (${PROFILE})"
 fi
 ```
 
-`${PROFILE+x}` rather than `${PROFILE:-}` is deliberate: it distinguishes *unset* from
-*set-but-empty*, and only the unset case means the table never loaded.
+Measured, not reasoned. The same scratch copy, the same unreadable `config/profiles.sh`,
+the same terminal-descended shell with `PROFILE=mac_workstation` inherited — only the
+branch changed:
 
-**Two related degradations, one of which was reported and is wrong.** A review lens
-claimed `lib/helpers.sh:710`'s `[[ -n ${HAS_DEVTOOLS} ]]` block would silently skip. It
-would not, for two reasons: that line is in `run_setup_user`'s symlink section, not in
-`run_doctor`, and it sits inside a `[[ -n ${LINUX} ]]` branch while this whole class is
-macOS-only. Recorded rather than silently dropped, because the claim is plausible on its
-face and the next reader will re-derive it.
+```
+lib/detect_env.sh: failed to source ./lib/../config/profiles.sh -- Refusing to continue.
+  PROFILE=mac_workstation
+  [FAIL] PROFILE: config/profiles.sh did not load this run -- any PROFILE shown above came from the parent shell
+```
 
-What is real and is being left alone: `run_doctor`'s environment dump prints
-`CHRUBY_LOC=<unset>` (`lib/helpers.sh:378`), because `CHRUBY_LOC` is assigned at the end
-of `detect_env` (`:57-61`), after the early return. That output is accurate — the
-variable genuinely is unset — so it needs no change.
+`[FAIL]`, with the right cause, in the actor where both the current code and the
+`${PROFILE+x}` version return `[PASS]`.
+
+A variable a login shell exports cannot be an oracle for whether *this* process loaded a
+table. `_PROFILES_LOADED` is assigned by `detect_env` and never exported, so it answers the
+question actually being asked, and it does so identically in every actor — terminal, `ssh`,
+cron — rather than only under `env -i`.
+
+The remedy string names a command (`ls -l`) rather than a checklist. An earlier draft said
+"check … that this shell is bash 5+", which is unreachable advice on this path:
+`setup_env.sh:20-28` exits before `-t doctor` dispatches, ungated by `_REQUIRES_BREW_PREREQ`.
+
+**Two prior review claims, both rejected on measurement, recorded rather than dropped.** A
+lens claimed `lib/helpers.sh:710`'s `[[ -n ${HAS_DEVTOOLS} ]]` block would silently skip —
+it would not: that line is in `run_setup_user`'s symlink section, not `run_doctor`, and
+sits inside a `[[ -n ${LINUX} ]]` branch while this class is macOS-only. A second claimed
+§4 "converts a loud misdiagnosis into a silent PASS"; its own measurement shows the
+unmodified check also passes silently in that actor, so the accurate statement is that
+`${PROFILE+x}` is *inert* there, not worse. Both are plausible on their face and will be
+re-derived by the next reader.
+
+What is real and left alone: `run_doctor`'s environment dump prints `CHRUBY_LOC=<unset>`
+(`lib/helpers.sh:378`) because `CHRUBY_LOC` is assigned at the end of `detect_env`
+(`:57-61`), after the early return. That output is accurate.
+
+Change 3's own premise was checked and holds: `MACOS`, `LINUX`, `UBUNTU`, `NOBLE` and
+`RESOLUTE` are all assigned at `lib/detect_env.sh:6-19`, above the `:23` return, so the
+surviving doctor checks (`helpers.sh:463,471,494,619`) still work. Only `PROFILE`, `HAS_*`,
+the legacy variable and `CHRUBY_LOC` are lost.
 
 ## Testing
 
@@ -363,14 +433,23 @@ Three groups. The split exists because **CI runs on `ubuntu-latest`, which has n
 3.2**, so a real-3.2 test is macOS-only and its green is not CI evidence — `tdd.md`
 pitfall G.
 
-**Every case below states what it would take to fail.** An earlier draft did not, and
-three independent review lenses found the same structural defect in it: several cases
-asserted an *absence* that is true before the test runs. "`CRUNCHER` is not set" cannot
-fail on any machine where the test can execute — `/bin/bash` 3.2 is macOS-only and
-`cruncher` is the WSL2 box, so `CRUNCHER` is unset by construction. "`PROFILE_MAP` is
-unset" is the same shape: bash arrays cannot be exported, so no parent can ever supply
-one. A wrong fixture path, a `source` that silently no-ops, or a guard that never
-executes would each have passed.
+**Every case states what it would take to fail**, and **every case in every group runs
+under `env -i`** (or explicitly clears the inherited names). That second rule is not
+belt-and-braces: `config/profiles.zsh` exports `PROFILE`, `STUDIO` and seven `HAS_*` into
+every child of a login shell, including `bats` under the pre-push hook. A value assertion
+without it reads the parent's environment rather than the code's output.
+
+Two review rounds each found the same defect class here and the first fix was applied to
+only one group. Round 1: several cases asserted an *absence* that was true before the test
+ran — "`CRUNCHER` is not set" cannot fail where the test can execute, since `/bin/bash` 3.2
+is macOS-only and `cruncher` is the WSL2 box. Round 2: the `env -i` rule added in response
+covered Group B only, while Group A's value assertions read exactly the two names the
+parent supplies. The rule is now stated once, above, for all three groups.
+
+**Test seam.** Cases that need a broken `config/profiles.sh` use `_OVERRIDE_PROFILES_SH`
+pointed at a fixture copy. Never `chmod 000` the tracked file: its failing path leaves the
+repo's `profiles.sh` unreadable, and `.zprofile` sources it through `config/profiles.zsh`,
+so a failed test breaks every subsequent login shell on the machine — `tdd.md` E2.
 
 ### Group A — seam-driven, runs everywhere including CI
 
@@ -378,37 +457,36 @@ executes would each have passed.
 | --- | --- | --- |
 | A1 | `profiles.sh` sourced with `_OVERRIDE_BASH_MAJOR=4` | rc is 0, or stderr lacks both "bash 5+" and `bootstrap_mac.sh` |
 | A2 | `profiles.sh` sourced normally under bash 5 | rc non-zero, or `PROFILE_MAP[studio]` is not `mac_workstation` |
-| A3 | `detect_env` with `config/profiles.sh` unreadable (`chmod 000` on a fixture copy) | rc is 0, or stderr does not name the file |
-| A4 | `detect_env` normal | `PROFILE` is not `mac_workstation` **or** `STUDIO` is not `1` — a value assertion, not `rc -eq 0`, because `PROFILE="${PROFILE_MAP[…]:-unknown}"` at `detect_env.sh:31` cannot fail and rc 0 survives an empty table |
-| A5 | `setup_env.sh -t update` with `detect_env` forced to fail | it does not exit 1, or it reaches a workflow function |
-| A6 | `setup_env.sh -t doctor` with `detect_env` forced to fail | `run_doctor` is not reached |
-| A8 | `doctor` with `PROFILE` unset vs `PROFILE=unknown` | both produce the same `doctor_fail` message — they must differ, and the unset one must not say "add a row" |
+| A3 | `detect_env` with `_OVERRIDE_PROFILES_SH` pointed at an unreadable fixture | rc is 0, or stderr does not name the fixture path, or `_PROFILES_LOADED` is not `0` |
+| A4 | `detect_env` normal, under `env -i` | `PROFILE` is not `mac_workstation`, `STUDIO` is not `1`, or `_PROFILES_LOADED` is not `1` |
+| A5 | `setup_env.sh -t update` with `_OVERRIDE_PROFILES_SH` pointed at a missing file | it does not exit 1, or it reaches a workflow function |
+| A6 | same, `-t doctor` | `run_doctor` is not reached |
+| A7 | **the operator actor** — `PROFILE=mac_workstation` **exported**, `_OVERRIDE_PROFILES_SH` unreadable, `run_doctor` | `doctor` reports PASS for PROFILE. This is the case that fails on master, fails under a `${PROFILE+x}` check, and passes only with the sentinel |
+| A8 | `doctor` across all three states — table loaded + host mapped, table loaded + host unmapped, table not loaded | any two of the three produce the same verdict/message pair |
 
 ### Group B — real bash 3.2, macOS only
 
-Skipped, not passed, when `/bin/bash` is not 3.x, so the skip is visible. **Every case
-runs under `env -i`**: a zsh login shell `export`s `PROFILE`, `STUDIO` and seven `HAS_*`
-into every child including bats, so a value assertion without `env -i` reads the parent's
-environment rather than the code's output.
+Skipped, not passed, when `/bin/bash` is not 3.x, so the skip is visible.
 
 | # | case | fails when |
 | --- | --- | --- |
-| B1 | **positive control** — real `/bin/bash`, `_OVERRIDE_BASH_MAJOR=9` to bypass the guard, `source lib/detect_env.sh; detect_env` | `PROFILE` is not `wsl2_workstation`, or `CRUNCHER` is not `1`. This case must reproduce the defect. If it ever goes green-by-passing, the harness is not reaching the code and every other case in this group is uninformative |
-| B2 | same, guard active | `PROFILE` is set at all, or `CRUNCHER` is set, or `detect_env` returns 0 |
+| B1 | **positive control** — real `/bin/bash`, `_OVERRIDE_BASH_MAJOR=9` to bypass the guard, `source lib/detect_env.sh; detect_env` | `PROFILE` is not `wsl2_workstation`, or `CRUNCHER` is not `1`. This case must reproduce the defect. If it ever passes by *not* reproducing, the harness is not reaching the code and every other case in this group is uninformative |
+| B2 | same, guard active | `detect_env` does not return **1** specifically (not merely non-zero — a wrong fixture path makes `detect_env` an unknown command and yields 127, which satisfies a `!= 0` assertion), or stderr lacks the guard's remedy string, or `_PROFILES_LOADED` is not `0` |
 | B3 | `/bin/bash -c 'source config/profiles.sh'` | stderr lacks the remedy string. **Not** asserted on rc alone — the un-guarded file already returns non-zero under 3.2, so an rc assertion here passes with the guard deleted |
 | B4 | **fragility pin** — two fixture copies of `profiles.sh`, both with a trailing `printf ''` appended, one with the guard and one without, each sourced by real `/bin/bash` | the guard-less fixture returns non-zero (it must return **0**, proving the un-guarded failure signal is positional and one appended line silences it), or the guarded fixture returns 0 |
 
 B4 lives here rather than in Group A because it cannot be driven by the
 `_OVERRIDE_BASH_MAJOR` seam: with the guard removed there is nothing for the seam to
-influence, and the fragility being pinned is a property of how real bash 3.2 fails on
-`declare -A`. That makes it macOS-only, like the rest of this group. An earlier revision
-of this section placed it in Group A under the seam, which would have tested nothing.
+influence, and the property being pinned is how real bash 3.2 fails on `declare -A`. An
+earlier revision placed it in Group A under the seam, where it would have tested nothing.
 
-B1 is the case the earlier draft lacked. Verified reachable during review:
+B1 and B4 both reproduced during review:
 
 ```
-env -i HOME=$HOME PATH=/usr/bin:/bin /bin/bash -c 'source lib/detect_env.sh; detect_env; …'
+env -i … /bin/bash -c 'source lib/detect_env.sh; detect_env; …'
 rc=0 PROFILE=[wsl2_workstation] CRUNCHER=[1] STUDIO=[] HAS_DEVTOOLS=[]
+
+plain rc=2    appended rc=0  MAP[studio]=[wsl2_workstation]
 ```
 
 ### Group C — zsh
@@ -416,9 +494,9 @@ rc=0 PROFILE=[wsl2_workstation] CRUNCHER=[1] STUDIO=[] HAS_DEVTOOLS=[]
 | # | case | fails when |
 | --- | --- | --- |
 | C1 | `zsh -c 'source config/profiles.sh'` | rc non-zero, or `PROFILE_MAP[studio]` is not `mac_workstation` — a value, not "the array is populated" |
-| C2 | **mutation check** — C1 re-run against a fixture copy with `-z ${ZSH_VERSION:-} &&` deleted from the guard | it stays green. It must go red |
+| C2 | **mutation check** — C1 re-run against a fixture copy with `-z ${ZSH_VERSION:-} &&` deleted from the guard | it stays green, **or** the edit did not change the fixture. The second arm matters: the mutation is applied by string substitution, so a reformatted guard would silently mutate nothing and C2 would pass while testing an unmodified file |
 
-C2 is the point of Group C. C1's assertion alone is largely already covered by
+C2 is the point of Group C. C1's assertion alone is largely covered by
 `tests/zshrc.d/cross_shell.bats:132`, which sources `config/profiles.sh` and derives every
 host from `PROFILE_MAP` through a zsh snapshot with a non-empty guard at `:145` — so a
 guard wrongly firing under zsh already turns that suite red. C1 is kept as a local,
@@ -546,6 +624,99 @@ today and is a separate change; it is filed as a backlog row rather than widened
 diff. The assumption was checked and refuted for the Studio — the one cross-repo hit is a
 comment, `config/local.sh` has no reference — with the honest caveat that `config/local.sh`
 is per-machine and only the Studio was measured.
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison, no evaluator/judge component, and its acceptance criteria
+are concrete commands with stated expected output.
+
+---
+
+## Multi-Lens Review — Round 2
+
+Reviewed at commit: `3149022`. Round 1 is above; its dispositions were all **Addressed**,
+and because the revision changed design substance — a fourth production file, a replaced
+justification, a rewritten test suite — all three lenses re-ran on the revised text rather
+than only the lens that raised each finding.
+
+All three converged on one defect, and it was introduced by round 1's own correction.
+
+### Goal-Fit
+
+Finding: §4 fails the reads-it test — both its branches call `doctor_fail`, so the verdict
+and exit code are identical and only the message differs, and `run_doctor` persists
+nothing. Worse, its discriminator is falsified in the real actor: `config/profiles.zsh:46`
+exports `PROFILE`, so `[[ -z ${PROFILE+x} ]]` is false wherever an operator types the
+command and §4 falls through to `doctor_pass`. Separately: change 1 defends change 2's
+signal in a state the spec itself established is unreachable, and generates 6 of 13 test
+cases — half the test surface, all macOS-only or mutation-only — for the least-reachable
+third of the value. And spec:204 rested change 1's whole justification on "Group A case 7",
+which commit `3149022` had moved to B4 without updating the reference.
+
+Assumption: That no machine-local `config/local.sh`, launchd job or cron entry on the four
+macs **other than the Studio** sources `config/profiles.sh` or `lib/detect_env.sh` outside
+`setup_env.sh` — only the Studio was measured.
+
+Disposition: **Addressed**, except the drop-change-1 recommendation which is **Accepted,
+reason: the operator confirmed the scope call after the fragility argument was reproduced
+independently by all three lenses.** §4 was rebuilt on a `_PROFILES_LOADED` sentinel that
+`detect_env` sets and never exports, which changes a real verdict, is falsifiable in every
+actor, and additionally fixes a pre-existing defect (see Risk). The dangling reference is
+fixed. The Studio-only caveat stands and is stated in the Boundaries section; the four
+remote macs were not measured and this spec does not claim they were.
+
+### Ergonomics
+
+Finding: Same defect, reached independently — §4's branch is unreachable in the operator's
+normal invocation path and the failure it exists to report renders as PASS there.
+Additionally: round 1's `env i` fix was **relocated, not applied** — Group B carried the
+rule and Group A did not, while A4 asserted `PROFILE` is `mac_workstation` and `STUDIO` is
+`1`, both exported into bats before the test runs, so A4 passed if `detect_env` did nothing
+at all. A3's `chmod 000` on the tracked file is a `tdd.md` E2 destructive failure branch —
+its failing path breaks every subsequent login shell on the machine — and there is no seam
+to avoid it. §4's remedy text named no command and one third of it ("check this shell is
+bash 5+") is unreachable, since `setup_env.sh:20-28` exits before `-t doctor` dispatches.
+C2's mutation is a string substitution that would silently stop mutating if the guard is
+reformatted.
+
+Assumption: That the operator only invokes `-t doctor` from a shell that has already
+exported `PROFILE`, making §4's unset branch dead code.
+
+Disposition: **Addressed**, and the assumption was **settled by the operator: terminal
+only.** That makes the unset branch dead in 100% of real runs rather than merely most,
+which is why §4 was rebuilt on a sentinel instead of patched. The `env -i` rule is now
+stated once for all three groups rather than per-group. `_OVERRIDE_PROFILES_SH` was added
+to change 2 so A3 never touches the tracked file. The remedy text now names `ls -l` and
+drops the unreachable bash-5 clause. C2 gained a second arm asserting the edit actually
+changed the fixture.
+
+### Risk
+
+Finding: Same defect, with the strongest evidence — applied all four changes to a scratch
+copy, made `config/profiles.sh` unreadable, and ran `./setup_env.sh -t doctor` from a
+terminal-descended shell, getting `[PASS] PROFILE (mac_workstation)` over a machine whose
+identity table never loaded, plus `_DOCTOR_FAILED=0`. Re-ran against the **unmodified**
+`${PROFILE:-unknown}` check and got the same `[PASS]` — establishing that this is
+pre-existing behaviour on master, not a regression, and that `${PROFILE+x}` does not change
+it. Also: B2's three conditions are satisfiable by a wrong fixture path (a failed source
+makes `detect_env` an unknown command, rc 127). Verified and **not** raising: change 3's
+premise holds (`MACOS`/`LINUX`/`UBUNTU`/`NOBLE`/`RESOLUTE` are all assigned above the `:23`
+return, so the surviving doctor checks still work); the guard's placement does not displace
+the file-wide `SC2034` directive; `_OVERRIDE_BASH_MAJOR` reuse is safe; and round 1's
+rejection of the `helpers.sh:710` claim is correct.
+
+Assumption: That `run_doctor` observes `detect_env`'s output rather than the ambient
+environment. It does not.
+
+Disposition: **Addressed.** The assumption was refuted by the lens's own measurement and is
+now the design's premise rather than an open question: §4 branches on `_PROFILES_LOADED`,
+which `detect_env` assigns and never exports. Verified to discriminate in the operator
+actor — same scratch copy, same unreadable file, same inherited `PROFILE=mac_workstation`,
+`[FAIL]` with the correct cause where both master and `${PROFILE+x}` return `[PASS]`. B2
+now asserts rc **1** specifically and checks the sentinel. One framing correction recorded
+in §4: "converts a loud misdiagnosis into a silent PASS" overstates it — the lens's own
+data shows the unmodified check also passes silently there, so `${PROFILE+x}` is *inert* in
+that actor, not worse.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
