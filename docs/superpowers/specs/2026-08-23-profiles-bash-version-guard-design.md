@@ -403,12 +403,43 @@ rc **1** and the stderr string carry that case.
 nothing.** `run_update` calls `brew_update` and `sudo -H softwareupdate --install --all`
 (`lib/workflows.sh:325-334`) before the git-repos sync, so on the day change 2 regresses a
 naive T3 performs a machine-wide update — `tdd.md` E2, an armed destructive failing path.
-Two constraints follow. The `PATH` must carry `tests/mocks` (which supplies `brew`, `sudo`,
-`softwareupdate` and `git`) so the regressed path is inert rather than real. And `exit 1` is
-**not** a discriminating oracle on its own: `setup_env.sh:20` (bash < 5) and `:30` (no brew)
-both produce exit 1 too, so a mac resolving 3.2 or a `PATH` without `brew` makes T3 pass
-against unmodified master. Assert the stderr string and the absence of a workflow marker
-alongside the code.
+
+Three constraints follow, and the third exists because the first is not self-verifying.
+
+**The `PATH` must carry `tests/mocks`**, which supplies `brew`, `sudo`, `softwareupdate` and
+`git`, so the regressed path is inert rather than real.
+
+**`exit 1` is not a discriminating oracle on its own.** `setup_env.sh:20` (bash < 5) and
+`:30` (no brew) both produce exit 1, so a mac resolving 3.2 or a `PATH` without `brew` makes
+T3 pass against unmodified master. Assert the stderr string and the absence of a workflow
+marker alongside the code.
+
+**T3 must assert its own mock is live before invoking anything.** The first constraint is
+the *safety* mechanism, and it depends on `PATH` construction — the exact instrument round 4
+showed can silently be wrong, across two revisions, without anyone noticing. If `PATH` is
+wrong in the direction that drops `tests/mocks`, T3 does not merely assert wrongly: it
+**runs a real `softwareupdate`**. A harness rule stated in prose one section above is not a
+mechanism. One line inside the test converts a `PATH`-dependent hazard into a test that
+refuses to run rather than one that runs destructively:
+
+```bash
+[[ "$(command -v brew)" == "${REPO_ROOT}/tests/mocks/brew" ]] \
+  || { echo "refusing to run: tests/mocks not on PATH" >&2; return 1; }
+```
+
+Verified: with `tests/mocks` prepended the assertion resolves
+`<repo>/tests/mocks/brew` and proceeds; without it, `command -v brew` is
+`/opt/homebrew/bin/brew` and the test refuses. All four binaries `run_update` reaches first
+— `brew`, `sudo`, `softwareupdate`, `git` — are present among the 66 mocks. **`ssh` is
+not**, and `sync_git_repos.sh` performs real `git push` and `rsync --delete` over SSH later
+in the same workflow, so the mock set covers the update path's opening stages and not its
+tail. The assertion is load-bearing rather than defensive.
+
+**The general form, since it is not specific to this test:** where a test's *safety* rather
+than its *assertion* depends on a mock being resolved, the test must verify the mock is live
+before the dangerous call. `tdd.md` E2 says to make the failing branch inert; this is the
+step after — proving the thing that makes it inert is actually in place at the moment it
+matters. An inertness that is one `PATH` mistake away from absent is not inertness.
 
 ### Two existing tests break, and only one of the two repairs is safe
 
@@ -815,7 +846,7 @@ safe option and both wrong ones with their mechanisms. The assumption is the cor
 stopping point for spec review and is discharged in Phase 2 rather than in prose — see
 below.
 
-### Note on stopping
+### Note on stopping — and the criterion is transferable
 
 Four rounds, ten lens passes. The **design** — three production changes — has been stable
 and independently reproduced since round 3; every round-4 finding was in the *test harness*.
@@ -823,6 +854,23 @@ That is the signal to stop reviewing prose: a harness defect costs one red test 
 iterate-until-green loop, and reasoning about `PATH` construction in a document is a worse
 instrument than running it. The remaining assumption above is answered by writing the tests,
 not by another lens.
+
+**State the criterion generally, because the obvious one is wrong and this document
+demonstrates why.** The `brainstorming` skill warns against budgeting review rounds on an
+assumption of decaying yield, and this spec is evidence for that warning: three consecutive
+rounds in which the fix carried its own defect, with round 3 finding a worse class than
+round 2. So round-count and yield are both bad stopping signals.
+
+The good one is **which artifact the findings live in**. While findings land in the *design*
+— the mechanism, its premises, what it changes — prose review is doing the only thing that
+can be done at that stage. Once they start landing in the *apparatus* — the harness, the
+fixtures, the `PATH` a case constructs — prose review has reached its floor, because the
+apparatus is cheap to run and expensive to reason about. Round 4 cost 233k tokens to find
+five harness defects that a first `bats` run would have surfaced in seconds.
+
+Note the asymmetry that makes this worth stating rather than assuming: the criterion does
+**not** say the apparatus findings were unimportant. T3's destructive path and T7's
+pass-on-nothing were both real. It says they were found by the wrong instrument.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
