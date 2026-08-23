@@ -58,7 +58,9 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/git_hooks.sh"
 [[ $# -eq 0 ]] && usage
 process_args "$@"
 
-detect_env
+if ! detect_env && [[ -z ${DOCTOR:-} && -z ${CHECK_VERSIONS:-} ]]; then
+  exit 1
+fi
 
 # Machine-local overrides (git-ignored, sourced if present)
 _LOCAL_CFG="$(dirname "${BASH_SOURCE[0]}")/config/local.sh"

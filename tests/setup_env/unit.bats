@@ -418,6 +418,58 @@ EOF
   [[ "$output" == *"LOADED=0"* ]]
 }
 
+# ── setup_env.sh full-invocation fail-closed on an unloadable identity table ──
+#
+# T3/T4 run a full COPY of setup_env.sh, never the tracked repo -- chmod 000
+# on the real config/profiles.sh would break every login shell on this
+# machine (.zprofile sources it via config/profiles.zsh). setup_env.sh
+# sources every lib/*.sh unconditionally at the top, so the fixture needs
+# the whole lib/ directory, not just detect_env.sh as the two tests above.
+
+@test "setup_env.sh -t update aborts before any workflow runs when the identity table did not load" {
+  # run_update reaches brew_update then a real 'sudo softwareupdate' before
+  # the git sync (lib/workflows.sh:325-334). If PATH ever resolved away from
+  # tests/mocks, this test would not merely assert wrongly -- it would
+  # perform a real machine update. Refuse rather than risk it.
+  [[ "$(command -v brew)" == "${REPO_ROOT}/tests/mocks/brew" ]] \
+    || { echo "refusing to run: tests/mocks not on PATH" >&2; return 1; }
+
+  local fixture="${BATS_TEST_TMPDIR}/update-fixture"
+  mkdir -p "${fixture}/lib" "${fixture}/config"
+  cp "${REPO_ROOT}/setup_env.sh" "${fixture}/"
+  cp "${REPO_ROOT}"/lib/*.sh "${fixture}/lib/"
+  cp "${REPO_ROOT}/config/profiles.sh" "${fixture}/config/"
+  chmod 000 "${fixture}/config/profiles.sh"
+
+  # run_update's only durable side effect reachable this early is its own
+  # log file (lib/update_summary.sh:588), appended once at the very end of
+  # the workflow. Its absence is evidence the workflow's body never started
+  # -- not merely that some later step inside it failed.
+  local marker="${TMPDIR_TEST}/.dotfiles-update.log"
+  rm -f "${marker}"
+
+  run bash "${fixture}/setup_env.sh" -t update
+  chmod 644 "${fixture}/config/profiles.sh"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Refusing to continue"* ]]
+  [ ! -f "${marker}" ]
+}
+
+@test "setup_env.sh -t doctor continues to run_doctor when the identity table did not load" {
+  local fixture="${BATS_TEST_TMPDIR}/doctor-fixture"
+  mkdir -p "${fixture}/lib" "${fixture}/config"
+  cp "${REPO_ROOT}/setup_env.sh" "${fixture}/"
+  cp "${REPO_ROOT}"/lib/*.sh "${fixture}/lib/"
+  cp "${REPO_ROOT}/config/profiles.sh" "${fixture}/config/"
+  chmod 000 "${fixture}/config/profiles.sh"
+
+  run bash "${fixture}/setup_env.sh" -t doctor
+  chmod 644 "${fixture}/config/profiles.sh"
+
+  [[ "$output" == *"=== Checks ==="* ]]
+}
+
 @test "detect_env sets PROFILE, the legacy variable, and _PROFILES_LOADED=1 on success" {
   # Load-bearing, not boilerplate: config/profiles.zsh exports PROFILE, every
   # HAS_* and the legacy identity variable into every child of a login
