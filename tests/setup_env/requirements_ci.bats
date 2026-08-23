@@ -24,6 +24,9 @@ setup() {
   CI_MUTATION_TARGET="${BATS_TEST_TMPDIR}/requirements-ci-mutation.txt"
   export REQUIREMENTS_CI_MUTATION_TARGET="${CI_MUTATION_TARGET}"
   cp "${REPO_ROOT}/requirements-ci-mutation.txt" "${CI_MUTATION_TARGET}"
+  CI_AUDIT_TARGET="${BATS_TEST_TMPDIR}/requirements-ci-audit.txt"
+  export REQUIREMENTS_CI_AUDIT_TARGET="${CI_AUDIT_TARGET}"
+  cp "${REPO_ROOT}/requirements-ci-audit.txt" "${CI_AUDIT_TARGET}"
 }
 
 @test "check passes against the committed rendering" {
@@ -178,6 +181,34 @@ setup() {
   run ! diff -q "${_a}" "${_c}"
   run ! diff -q "${_c}" "${_d}"
   run ! diff -q "${_b}" "${_d}"
+}
+
+@test "check fails when the ci-audit rendering has drifted" {
+  printf 'pip-audit==0.0.1\n' >> "${CI_AUDIT_TARGET}"
+  run "${SCRIPT}" check
+  [ "$status" -ne 0 ]
+  [[ "${output}" == *"requirements-ci-audit.txt"* ]]
+}
+
+@test "ci-test carries the tools the per-PR test job runs" {
+  # ci-test is defined as what a per-PR test/lint job runs. Measured across the
+  # fleet: ai-config's ci.yml `test` job and every math *-py.yml `test` job run
+  # ruff, pytest, pytest-cov, hypothesis, pyright and mypy together. All six
+  # must be present or the group has drifted from its own definition.
+  local _f="${REPO_ROOT}/requirements-ci-test.txt"
+  for _t in ruff pytest pytest-cov hypothesis pyright mypy; do
+    grep -qE "^${_t}==" "${_f}" || { printf 'ci-test lost %s\n' "${_t}" >&2; return 1; }
+  done
+}
+
+@test "pip-audit is NOT in ci-test — auditing is a separate purpose" {
+  # Separated on purpose rather than cost, matching rust.md's treatment of
+  # cargo audit. The cost is what makes it pay: pip-audit's closure is +24
+  # pins, more than doubling ci-test, and a repo running a linter and a test
+  # suite should not install an SBOM library to do it.
+  run ! grep -qE '^pip-audit==' "${REPO_ROOT}/requirements-ci-test.txt"
+  grep -qE '^pip-audit==' "${REPO_ROOT}/requirements-ci-audit.txt"
+  run ! grep -qE '^cyclonedx' "${REPO_ROOT}/requirements-ci-test.txt"
 }
 
 @test "an unknown subcommand exits 2 with usage" {

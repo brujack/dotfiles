@@ -198,6 +198,35 @@ ci-test = [
   "pytest",
   "pytest-cov",                    # pulls coverage transitively
   "hypothesis",
+  # pyright and mypy were added 2026-08-22 after measuring the fleet's actual
+  # CI job layout rather than one consumer's needs. In ai-config's ci.yml and
+  # every math *-py.yml they run in the SAME per-PR `test` job as ruff and
+  # pytest -- so by this group's own definition they belong here. The original
+  # slice was cut from etch-cli alone, which runs three tools, and served no
+  # repo completely as a result.
+  #
+  # Cost measured before folding, per the hypothesis precedent: +3 and +6 pins,
+  # 11 -> 19 total. pip-audit was measured at +24 and split out instead.
+  "pyright",
+  "mypy",
+]
+
+# pip-audit is dependency AUDITING, not test/lint, and it is separated on that
+# ground rather than on cost -- the same call rust.md records for `cargo audit`,
+# which lives in its own workflow in both Rust repos. It happens to be
+# co-located in one job in the Python repos; purpose is the boundary here, not
+# job layout.
+#
+# The cost is what makes the distinction pay: pip-audit's closure is +24 pins
+# (cyclonedx-python-lib, packageurl-python, license-expression, cachecontrol,
+# requests, urllib3 and friends), more than doubling ci-test. A repo that runs
+# a linter and a test suite should not install an SBOM library to do it.
+#
+# Consumers needing both install two hashed files as two `pip install -r` lines
+# -- required anyway, since --require-hashes forbids mixing a hashed file with
+# a loose extra on one line.
+ci-audit = [
+  "pip-audit",
 ]
 
 # cosmic-ray is split out because it is the whale: its closure is ~29 packages
