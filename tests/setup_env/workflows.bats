@@ -1481,6 +1481,70 @@ assert_all_npm_globals_pinned() {
   [ "${_rc}" -ne 0 ]
 }
 
+# ── run_update — aws and rust sections ────────────────────────────────────────
+# Regression: update_aws_cli/update_rust were called bare, appeared in no
+# section order, and with no `set -e` in setup_env.sh their return values
+# were discarded — a real failure on a real machine was reported nowhere.
+
+@test "run_update records aws FAIL when update_aws_cli fails" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  update_aws_cli() { return 1; }
+  export -f update_aws_cli
+  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
+  # so a failure here still gets its TAP line instead of being swallowed by
+  # run_update's own trap.
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
+  run_update
+  eval "${_bats_exit_trap}"
+  [ -f "${_DOTFILES_RUN_TMPDIR}/status_aws" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_aws")" = "FAIL" ]
+}
+
+@test "run_update records aws OK when update_aws_cli succeeds" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  update_aws_cli() { return 0; }
+  export -f update_aws_cli
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
+  run_update
+  eval "${_bats_exit_trap}"
+  [ -f "${_DOTFILES_RUN_TMPDIR}/status_aws" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_aws")" = "OK" ]
+}
+
+@test "run_update records rust FAIL when update_rust fails" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  update_rust() { return 1; }
+  export -f update_rust
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
+  run_update
+  eval "${_bats_exit_trap}"
+  [ -f "${_DOTFILES_RUN_TMPDIR}/status_rust" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_rust")" = "FAIL" ]
+}
+
+@test "run_update records rust OK when update_rust succeeds" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  update_rust() { return 0; }
+  export -f update_rust
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
+  run_update
+  eval "${_bats_exit_trap}"
+  [ -f "${_DOTFILES_RUN_TMPDIR}/status_rust" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_rust")" = "OK" ]
+}
+
 # ── run_update — optional git-based tools (installed paths) ──────────────────
 
 @test "run_update updates tfenv when ~/.tfenv exists" {

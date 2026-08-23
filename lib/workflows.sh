@@ -598,8 +598,14 @@ run_update() {
       _update_write_detail_from_err "git-hooks" "warning output"
     fi
 
-    update_aws_cli
-    update_rust
+    _update_record_start "aws"
+    update_aws_cli 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_aws"
+    _update_record_end "aws" "${PIPESTATUS[0]}"
+
+    _update_record_start "rust"
+    update_rust 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_rust"
+    _update_record_end "rust" "${PIPESTATUS[0]}"
+
     if [[ -d ${HOME}/.tfenv ]]; then
       _update_record_start "tfenv"
       printf "Updating tfenv\\n"

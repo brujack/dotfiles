@@ -4,7 +4,7 @@
 # Fixed section order for summary display
 readonly _UPDATE_SECTION_ORDER=(
   brew softwareupdate apt snap mas claude terraform-skill npm pip pip-check gems
-  ai-config git-repos legacy-rsync git-hooks oh-my-zsh tpm tfenv cheat.sh brew-drift
+  ai-config git-repos legacy-rsync git-hooks aws rust oh-my-zsh tpm tfenv cheat.sh brew-drift
 )
 
 # _update_diff_lines PRE_FILE POST_FILE
