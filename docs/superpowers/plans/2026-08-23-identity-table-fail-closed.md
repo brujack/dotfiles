@@ -1,0 +1,225 @@
+# Identity Table Fail-Closed Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Make `setup_env.sh` refuse to provision a machine when `config/profiles.sh` did not load, instead of continuing with `PROFILE=unknown` and zero `HAS_*`.
+
+**Architecture:** `lib/detect_env.sh:23` currently discards the exit status of the `source` that loads the identity table. Three changes: propagate that status and record a `_PROFILES_LOADED` sentinel; have `setup_env.sh:61` read it and abort every workflow except the two read-only reporters; and give `_doctor_check_profile` a third branch on the sentinel so `doctor` does not regress into reporting a stale inherited `PROFILE` as a PASS.
+
+**Tech Stack:** bash 5, bats-core, existing `tests/mocks/` PATH mocks.
+
+**Spec:** [`2026-08-23-profiles-bash-version-guard-design.md`](../specs/2026-08-23-profiles-bash-version-guard-design.md) — four Multi-Lens Review rounds; the bash-version guard it originally proposed was cut and is a backlog row.
+
+## Global Constraints
+
+- Never `env -i` in a test. `env -i` clears `PATH`, so bash resolves via the confstr default and a mac gets `/bin/bash` 3.2.57 — reintroducing the exact class this spec declared out of scope. Clear identity names explicitly instead: `unset "${!HAS_@}" PROFILE STUDIO`.
+- Every test keeps a `PATH` that resolves bash 5 **and** reaches `tests/mocks`, and pins the hostname with `MOCK_HOSTNAME_OUTPUT` + `MOCK_UNAME_S`, per `tests/setup_env/profiles.bats:50-53`. Without the mock a `PROFILE` assertion is host-specific and `ubuntu-latest` yields `unknown`.
+- Never `chmod 000` the tracked `config/profiles.sh`. Its failing path leaves the file unreadable and `.zprofile` sources it through `config/profiles.zsh`, breaking every subsequent login shell. Copy `lib/detect_env.sh` and `config/profiles.sh` into a fixture tree and break the copy — the relative path `$(dirname "${BASH_SOURCE[0]}")/../config/profiles.sh` resolves against the copy.
+- `_PROFILES_LOADED` is never `export`ed. Its safety comes from the unconditional `=0` on entry to `detect_env` plus `detect_env` always running before `run_doctor`, **not** from non-export — an environment-supplied value defeats the read, and T7 pins that.
+- Any test that executes `setup_env.sh -t update` must assert `command -v brew` resolves under `tests/mocks` **before** invoking it. `run_update` calls `brew_update` then `sudo -H softwareupdate --install --all` (`lib/workflows.sh:325-334`); a wrong `PATH` makes the test destructive rather than merely wrong. `ssh` is absent from the 66 mocks and `sync_git_repos.sh` does real `git push`/`rsync --delete` later in that workflow.
+- `bats -f <filter>` with no match is not uniformly a hard error across bats 1.10.0 (CI) and 1.14.0 (local), so every per-test gate pairs the run with `grep -q '^ok '`.
+
+## Verification Planning
+
+**Command that proves the whole change works**, from a normal terminal shell in the worktree (so `PROFILE=mac_workstation` is inherited, which is the operator actor):
+
+```bash
+F=$(mktemp -d); mkdir -p "$F/lib" "$F/config"
+cp lib/detect_env.sh "$F/lib/"; cp config/profiles.sh "$F/config/"; chmod 000 "$F/config/profiles.sh"
+bash -c "source '$F/lib/detect_env.sh'; detect_env; echo rc=\$?; echo LOADED=\${_PROFILES_LOADED}"
+chmod 644 "$F/config/profiles.sh"; rm -rf "$F"
+```
+
+**Expected:** `lib/detect_env.sh: failed to source ... Refusing to continue.` on stderr, `rc=1`, `LOADED=0`. On the pre-change tree this prints `rc=0` with `LOADED=` empty — measured.
+
+**Edge cases that must be exercised:** the operator actor with `PROFILE` inherited (the case where a naive `${PROFILE+x}` check is inert); a table that loads but whose hostname is unmapped (must stay distinguishable from a table that did not load); and `-t doctor` continuing while `-t update` aborts.
+
+**Full-suite gate:** `make test` green, and `make lint` exit 0.
+
+---
+
+## Task 1: Propagate the source failure and record the sentinel
+
+```yaml-task
+id: 1
+description: detect_env propagates the failed source of config/profiles.sh and records a _PROFILES_LOADED sentinel
+role: executor
+model: sonnet
+tdd: required
+acceptance:
+  - cmd: 'bash -c ''F=$(mktemp -d); mkdir -p "$F/lib" "$F/config"; cp lib/detect_env.sh "$F/lib/"; cp config/profiles.sh "$F/config/"; chmod 000 "$F/config/profiles.sh"; bash -c "source $F/lib/detect_env.sh; detect_env >/dev/null 2>&1; [ \$? -eq 1 ]"; r=$?; chmod 644 "$F/config/profiles.sh"; rm -rf "$F"; exit $r'''
+    exit_code: 0
+  - cmd: 'env PATH="$PWD/tests/mocks:$PATH" MOCK_HOSTNAME_OUTPUT=studio MOCK_UNAME_S=Darwin bash -c ''source lib/detect_env.sh; detect_env >/dev/null 2>&1; [ "${_PROFILES_LOADED:-unset}" = 1 ]'''
+    exit_code: 0
+  - cmd: make test
+    exit_code: 0
+max_retries: 3
+files_touched:
+  - lib/detect_env.sh
+  - tests/setup_env/unit.bats
+depends_on: []
+```
+
+**Files:** `lib/detect_env.sh` (edit `:23`), `tests/setup_env/unit.bats` (add spec cases T1, T2).
+
+Replace the bare `source` at `:23` with the block from spec §1: `_PROFILES_LOADED=0`, an `if ! source ...; then` that prints to stderr and `return 1`, then `_PROFILES_LOADED=1`. The stderr string must contain `Refusing to continue` — T1 asserts on it, because a bash-3.2 run also yields rc=1 while merely _naming_ the file.
+
+Add a comment beside the existing `readonly`-here / `export`-there note at `:44` recording that this is deliberately stricter than `config/profiles.zsh:41`'s warn-and-continue, and why: that file is sourced by `.zprofile` at login, this one is sourced only by a provisioning script.
+
+**T1** — `detect_env` against a fixture-tree `profiles.sh` that is unreadable: assert rc is **exactly 1** (a wrong fixture path makes `detect_env` an unknown command and yields 127) and stderr contains `Refusing to continue`. Do not assert `_PROFILES_LOADED` is `0` here: the `${_PROFILES_LOADED:-0}` read production uses returns `0` for a never-assigned variable, so that arm cannot tell "ran and failed" from "never reached".
+
+**T2** — `detect_env` normal with `MOCK_HOSTNAME_OUTPUT=studio`: assert `PROFILE` is `mac_workstation`, `STUDIO` is `1`, and `_PROFILES_LOADED` is `1`.
+
+**Both gates were run against this tree and exit 1** (real failure, not usage error): the sentinel is never assigned today, and `detect_env` returns 0 on an unreadable table. The second gate was also confirmed able to pass, by simulating the assignment.
+
+**Interfaces:**
+
+- Produces: `_PROFILES_LOADED` — a non-exported shell variable, `0` on entry to `detect_env`, `1` only after a successful source. Task 3 reads it.
+- Produces: `detect_env` returns `1` when the table cannot be loaded, `0` otherwise. Task 2 reads it.
+
+---
+
+## Task 2: setup_env.sh reads detect_env's status
+
+```yaml-task
+id: 2
+description: setup_env.sh aborts every workflow except doctor and check-versions when detect_env fails
+role: executor
+model: sonnet
+tdd: required
+acceptance:
+  - cmd: 'bats tests/setup_env/unit.bats -f "detect_env failure" 2>&1 | grep -q "^ok "'
+    exit_code: 0
+  - cmd: make test
+    exit_code: 0
+  - cmd: make lint
+    exit_code: 0
+max_retries: 3
+files_touched:
+  - setup_env.sh
+  - tests/setup_env/unit.bats
+depends_on: [1]
+```
+
+**Files:** `setup_env.sh` (edit `:61`), `tests/setup_env/unit.bats` (add spec cases T3, T4).
+
+Replace the bare `detect_env` at `:61` with:
+
+```bash
+if ! detect_env && [[ -z ${DOCTOR:-} && -z ${CHECK_VERSIONS:-} ]]; then
+  exit 1
+fi
+```
+
+`DOCTOR` and `CHECK_VERSIONS` are readonly globals set by `process_args` (`lib/helpers.sh:641`) at `:59`; their dispatch sites are `:69` and `:70`. `--brew-install` stays out of the carve-out deliberately — it is a flag on `-t setup`, which needs the table.
+
+**T3** — `setup_env.sh -t update` against a fixture tree whose `profiles.sh` is unreadable. Three arms, all required: exit 1, stderr contains `Refusing to continue`, and no workflow marker file exists. Exit 1 alone is **not** discriminating — `setup_env.sh:20` (bash < 5) and `:30` (no brew) both produce it, so a mac resolving 3.2 or a brew-less `PATH` would pass this against unmodified master.
+
+**Before invoking `setup_env.sh`, T3 must assert its mock is live:**
+
+```bash
+[[ "$(command -v brew)" == "${REPO_ROOT}/tests/mocks/brew" ]] \
+  || { echo "refusing to run: tests/mocks not on PATH" >&2; return 1; }
+```
+
+That converts a `PATH`-dependent hazard into a test that refuses to run rather than one that runs `softwareupdate` for real.
+
+**T4** — same fixture, `-t doctor`: assert `run_doctor` is reached (its `=== Checks ===` banner appears).
+
+**Interfaces:**
+
+- Consumes: `detect_env`'s `1`/`0` return from Task 1.
+- Produces: no new symbols. Task 3 depends on this only for ordering.
+
+---
+
+## Task 3: doctor branches on the sentinel, and the tests it breaks are repaired
+
+```yaml-task
+id: 3
+description: _doctor_check_profile distinguishes a table that did not load from an unmapped hostname, and the three existing tests this changes are repaired
+role: executor
+model: sonnet
+tdd: required
+acceptance:
+  - cmd: 'bash -c ''source lib/helpers.sh 2>/dev/null; PROFILE=mac_workstation _PROFILES_LOADED=0 _doctor_check_profile 2>&1 | grep -q "did not load"'''
+    exit_code: 0
+  - cmd: 'bash -c ''source lib/helpers.sh 2>/dev/null; PROFILE=mac_workstation _PROFILES_LOADED=1 _doctor_check_profile 2>&1 | grep -q "PASS"'''
+    exit_code: 0
+  - cmd: make test
+    exit_code: 0
+  - cmd: make lint
+    exit_code: 0
+max_retries: 3
+files_touched:
+  - lib/helpers.sh
+  - tests/setup_env/unit.bats
+depends_on: [1, 2]
+```
+
+**Files:** `lib/helpers.sh` (edit `_doctor_check_profile`, `:397-410`), `tests/setup_env/unit.bats` (add T5, T6, T7; repair tests 118, 119, 120).
+
+Replace the two-branch `if [[ "${PROFILE:-unknown}" == "unknown" ]]` with the three-branch form from spec §3, testing `[[ "${_PROFILES_LOADED:-0}" != 1 ]]` first. **This is mandatory repair of a regression Task 1 introduces, not a courtesy fix** — `detect_env.sh:31` assigns `PROFILE` unconditionally today, so master reports correctly; Task 1's early return skips that assignment and lets a stale inherited `PROFILE` survive.
+
+**Three existing tests change and only one repair is safe.** `load_setup_env()` (`tests/helpers/common.bash:38`) sources `setup_env.sh`, whose guard at `:56` returns before `:61`, so `detect_env` never runs and every doctor call site reads an unset sentinel. Measured on a patched copy: `not ok 118`, `not ok 119`, and `ok 120` passing through the sentinel branch rather than the branch its name describes — re-point 120.
+
+- **Set `_PROFILES_LOADED=1` at function scope in the affected tests.** Correct.
+- **Do not call `detect_env`** — it assigns `PROFILE` unconditionally at `:31`, the exact variable 118 and 119 control.
+- **Do not export `_PROFILES_LOADED=1` from `load_setup_env`** — that makes the sentinel environment-supplied in the suite meant to guard against an environment-supplied oracle.
+
+**T5** — the regression pin: `PROFILE=mac_workstation` left set, fixture table unreadable, `run_doctor`; fails if doctor reports PASS for PROFILE. Fails with Task 1 alone, passes only with this change.
+
+**T6** — `_doctor_check_profile` across all three states (loaded+mapped, loaded+unmapped, not loaded); fails if any two produce the same verdict/message pair.
+
+**T7** — negative control: `_PROFILES_LOADED=1` supplied in the environment with `detect_env` **not** called. Assert a non-empty `[PASS]` line — not merely "no FAIL", which an empty result satisfies. It must PASS, pinning that the environment _can_ defeat the read, so the protection is the unconditional `=0` and not non-export. If T7 ever starts failing, the mechanism changed and Task 1's comment is stale.
+
+**Both discriminating gates were run against this tree and exit 1** — there is no `did not load` branch today.
+
+**Interfaces:**
+
+- Consumes: `_PROFILES_LOADED` from Task 1.
+- Produces: no new symbols.
+
+---
+
+## Task 4: Update docs and close the plan
+
+```yaml-task
+id: 4
+description: Update CLAUDE.md Test Seams and the plan index (docs-only, no behavior change, so TDD does not apply)
+role: executor
+model: haiku
+tdd: not-applicable
+acceptance:
+  - cmd: 'grep -q "_PROFILES_LOADED" CLAUDE.md'
+    exit_code: 0
+  - cmd: make lint
+    exit_code: 0
+max_retries: 2
+files_touched:
+  - CLAUDE.md
+depends_on: [3]
+```
+
+**Files:** `CLAUDE.md` only.
+
+Add a paragraph to the **Test Seams** section recording `_PROFILES_LOADED`: what sets it, that it is never exported, and that its safety is the unconditional `=0` on entry to `detect_env` rather than non-export — with the one-line measurement showing an environment-supplied value defeats the read. Note T7 exists to keep that paragraph honest.
+
+The plan-index row and the backlog row [14] rewrite are handled in Phase 3 by the `docs` skill, not here.
+
+---
+
+## Self-Review
+
+1. **Spec coverage.** §1 → Task 1; §2 → Task 2; §3 + existing-test repair → Task 3; T1-T7 → Tasks 1-3. The cut guard, Groups B and C, and `_OVERRIDE_PROFILES_SH` are out of scope by design.
+2. **Placeholders.** None.
+3. **Type consistency.** `_PROFILES_LOADED`, `detect_env`, `_doctor_check_profile`, `DOCTOR`, `CHECK_VERSIONS` used identically across tasks.
+4. **yaml-task blocks.** Present on all four; `make validate-plan` run before commit.
+5. **TDD `files_touched` includes the test file.** Tasks 1-3 all list `tests/setup_env/unit.bats`.
+6. **Token budget.** Each block under 2KB.
+7. **ADR significance.** No new Phase 3 gate, storage choice, or security guardrail — this is a return-code propagation fix. No ADR task.
+8. **`files_touched` matches the prose.** Task 4 is `haiku` and touches exactly one file, satisfying the scope guard.
+
+**Gates proven capable of failing.** Every discriminating gate above was run against this pre-change tree and returned **exit 1**, not a usage error — recorded per task. Tasks 1-3 pair theirs with the aggregate `make test`; no task carries `parallel_group`, so the aggregate gate is correct rather than harmful.
+
+**One wrong implementation each gate would still accept.** Task 1's sentinel gate passes if `_PROFILES_LOADED=1` is set unconditionally rather than only after a successful source — which is why Task 1's _other_ gate (rc 1 on an unreadable table) and T7 both exist. Task 3's `did not load` gate passes if the branch fires unconditionally — which T6's three-state comparison is what catches.
