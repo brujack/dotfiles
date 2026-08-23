@@ -19,6 +19,9 @@
 - Any test that executes `setup_env.sh -t update` must assert `command -v brew` resolves under `tests/mocks` **before** invoking it. `run_update` calls `brew_update` then `sudo -H softwareupdate --install --all` (`lib/workflows.sh:325-334`); a wrong `PATH` makes the test destructive rather than merely wrong. `ssh` is absent from the 66 mocks and `sync_git_repos.sh` does real `git push`/`rsync --delete` later in that workflow.
 - `bats -f <filter>` with no match is not uniformly a hard error across bats 1.10.0 (CI) and 1.14.0 (local), so every per-test gate pairs the run with `grep -q '^ok '`.
 
+- **No task's `acceptance:` block runs `make test`.** Measured 2026-08-23 during execution: the Bash tool hard-caps at **600000 ms** and a clean, uncontended `make test` for this repo exceeds it (killed at exit 143 having reached ~1351 of 1466 tests). A subagent therefore *cannot* run the aggregate gate to completion, and an implementer told to do so either backgrounds it and strands itself or reports a timeout as a defect. Tasks carry scoped commands that answer only for their own files; **the orchestrator runs `make test` once after each task**, uncontended, and that single run is the gate. This is the rule `subagent-driven-development` already states for shared-worktree waves, applied here for a different reason — a tool ceiling rather than sibling interference. It does not weaken `writing-plans`' aggregate-gate rule, which exists because a narrow command can pass while the repo's gate fails; that risk is answered by the orchestrator's run.
+- **Only one `make test` may run in this worktree at a time.** Two concurrent runs corrupt each other's results — observed as `Executed 1449 instead of expected 1466 tests` and a bare `Terminated: 15`, neither of which is a real defect. Never pipe a gate through `head`/`tail`: the pipeline's exit status is the tail's, which discards the real one (`shell.md`).
+
 ## Verification Planning
 
 **Command that proves the whole change works**, from a normal terminal shell in the worktree (so `PROFILE=mac_workstation` is inherited, which is the operator actor):
@@ -38,6 +41,53 @@ chmod 644 "$F/config/profiles.sh"; rm -rf "$F"
 
 ---
 
+## Task 0: Isolate the profile tests from an inherited environment (prerequisite)
+
+```yaml-task
+id: 0
+description: clear inherited HAS_* and identity variables in the three profiles.bats tests that assert a capability is absent
+role: executor
+model: sonnet
+tdd: required
+acceptance:
+  - cmd: 'bats tests/setup_env/profiles.bats'
+    exit_code: 0
+  - cmd: 'env -u HAS_AWS -u HAS_DEVTOOLS -u HAS_DOCKER -u HAS_GUI -u HAS_K8S -u HAS_PRINTING -u HAS_RUST -u PROFILE -u STUDIO bats tests/setup_env/profiles.bats'
+    exit_code: 0
+  - cmd: 'make lint'
+    exit_code: 0
+max_retries: 3
+files_touched:
+  - tests/setup_env/profiles.bats
+depends_on: []
+```
+
+**Files:** `tests/setup_env/profiles.bats` only.
+
+**Why this exists.** Discovered during Task 1's execution, not at plan time. `config/profiles.zsh:46,56,67` `export`s `PROFILE`, seven `HAS_*` and the legacy identity variable into every child of a login shell. `detect_env` only ever *adds* `HAS_*` — it never clears inherited ones — so any test asserting a capability is **absent** reads the login shell's value instead of the code's output. Measured on unmodified `HEAD` in a scratch copy:
+
+```
+HAS_* inherited (a dev mac)   not ok 8 HAS_DEVTOOLS is unset for mac_mini
+                              not ok 10 HAS_DOCKER is unset for mac_mini
+HAS_* cleared (CI's state)    ok 8   ok 10
+```
+
+Green in CI because `ubuntu-latest` never sources `.zprofile`; red on every development machine. That is `tdd.md` pitfall A, and the actor-boundary class — a test that cannot fail where it runs, and cannot pass where the operator runs it.
+
+**Three tests carry the vulnerable shape** `[ -z "${HAS_*:-}" ]`: `HAS_DEVTOOLS`, `HAS_DOCKER`, `HAS_SNAP`. **Fix all three, including `HAS_SNAP`.** It currently passes, but only because `HAS_SNAP` is `linux_workstation`-only and nothing exports it on a mac — it is exactly as unisolated as the two that fail, and would fail on the Linux workstation. A test that passes by accident of the host's profile is not isolated.
+
+**The idiom already exists in this file** — `tests/setup_env/profiles.bats:50` and `:385` use `unset \${!HAS_@}` inside their `bash -c` bodies. Follow it; do not invent a new mechanism. Clear the legacy identity variables too (`PROFILE`, `STUDIO`, `LAPTOP`, `RECEPTION`, `RATNA`, `OFFICE`, `HOMES`, `WORKSTATION`, `CRUNCHER`), since the same export path sets one of them per host.
+
+**Verified safe:** `unset "${!HAS_@}" PROFILE STUDIO` under `set -e` with **no** `HAS_*` set — CI's state — exits 0. The quoted empty expansion yields zero words, not one empty word, so it does not trip bats' `set -e`.
+
+**Both acceptance gates are required and they measure opposite environments.** Gate 1 runs with this machine's real inherited environment and fails on master today. Gate 2 runs with it cleared and passes on master today — it is the control proving the fix did not simply make the tests vacuous. A fix that deletes the assertions passes gate 1 and fails nothing; that is why gate 2 exists alongside it.
+
+**Interfaces:**
+
+- Produces: no symbols. Unblocks every other task's aggregate gate.
+
+---
+
 ## Task 1: Propagate the source failure and record the sentinel
 
 ```yaml-task
@@ -51,13 +101,11 @@ acceptance:
     exit_code: 0
   - cmd: 'env PATH="$PWD/tests/mocks:$PATH" MOCK_HOSTNAME_OUTPUT=studio MOCK_UNAME_S=Darwin bash -c ''source lib/detect_env.sh; detect_env >/dev/null 2>&1; [ "${_PROFILES_LOADED:-unset}" = 1 ]'''
     exit_code: 0
-  - cmd: make test
-    exit_code: 0
 max_retries: 3
 files_touched:
   - lib/detect_env.sh
   - tests/setup_env/unit.bats
-depends_on: []
+depends_on: [0]
 ```
 
 **Files:** `lib/detect_env.sh` (edit `:23`), `tests/setup_env/unit.bats` (add spec cases T1, T2).
@@ -89,8 +137,6 @@ model: sonnet
 tdd: required
 acceptance:
   - cmd: 'bats tests/setup_env/unit.bats -f "detect_env failure" 2>&1 | grep -q "^ok "'
-    exit_code: 0
-  - cmd: make test
     exit_code: 0
   - cmd: make lint
     exit_code: 0
@@ -145,8 +191,6 @@ acceptance:
   - cmd: 'bash -c ''source lib/helpers.sh 2>/dev/null; PROFILE=mac_workstation _PROFILES_LOADED=0 _doctor_check_profile 2>&1 | grep -q "did not load"'''
     exit_code: 0
   - cmd: 'bash -c ''source lib/helpers.sh 2>/dev/null; PROFILE=mac_workstation _PROFILES_LOADED=1 _doctor_check_profile 2>&1 | grep -q "PASS"'''
-    exit_code: 0
-  - cmd: make test
     exit_code: 0
   - cmd: make lint
     exit_code: 0
