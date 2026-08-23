@@ -177,6 +177,17 @@ a `readonly`, an `export`, a `printf`, a helper function definition, a trailing
 lookup in it is still wrong. Change 2 then reports success and goes blind to the exact
 class it was added for, with nothing in either file to indicate it.
 
+Measured, rather than reasoned — two copies of the real file under real bash 3.2, the
+second differing only by a trailing `printf ''`:
+
+```
+plain     rc=2
+appended  rc=0        MAP[studio]=[wsl2_workstation]
+```
+
+The appended copy reports success while still answering `studio` with `cruncher`'s
+profile. That is the whole failure: change 2 would see rc 0 and continue.
+
 The guard makes the non-zero return **structural** rather than positional: it fires
 before any table is declared, so no later edit can move it.
 
@@ -371,7 +382,6 @@ executes would each have passed.
 | A4 | `detect_env` normal | `PROFILE` is not `mac_workstation` **or** `STUDIO` is not `1` — a value assertion, not `rc -eq 0`, because `PROFILE="${PROFILE_MAP[…]:-unknown}"` at `detect_env.sh:31` cannot fail and rc 0 survives an empty table |
 | A5 | `setup_env.sh -t update` with `detect_env` forced to fail | it does not exit 1, or it reaches a workflow function |
 | A6 | `setup_env.sh -t doctor` with `detect_env` forced to fail | `run_doctor` is not reached |
-| A7 | **fragility pin** — a fixture copy of `profiles.sh` with the guard removed and a trailing `printf ''` appended, sourced under `_OVERRIDE_BASH_MAJOR=4` semantics | `source` returns non-zero. It must return **0**, proving the un-guarded file's failure signal is positional. Then the same fixture *with* the guard must return non-zero. This is the test for the argument the guard actually ships on |
 | A8 | `doctor` with `PROFILE` unset vs `PROFILE=unknown` | both produce the same `doctor_fail` message — they must differ, and the unset one must not say "add a row" |
 
 ### Group B — real bash 3.2, macOS only
@@ -386,6 +396,13 @@ environment rather than the code's output.
 | B1 | **positive control** — real `/bin/bash`, `_OVERRIDE_BASH_MAJOR=9` to bypass the guard, `source lib/detect_env.sh; detect_env` | `PROFILE` is not `wsl2_workstation`, or `CRUNCHER` is not `1`. This case must reproduce the defect. If it ever goes green-by-passing, the harness is not reaching the code and every other case in this group is uninformative |
 | B2 | same, guard active | `PROFILE` is set at all, or `CRUNCHER` is set, or `detect_env` returns 0 |
 | B3 | `/bin/bash -c 'source config/profiles.sh'` | stderr lacks the remedy string. **Not** asserted on rc alone — the un-guarded file already returns non-zero under 3.2, so an rc assertion here passes with the guard deleted |
+| B4 | **fragility pin** — two fixture copies of `profiles.sh`, both with a trailing `printf ''` appended, one with the guard and one without, each sourced by real `/bin/bash` | the guard-less fixture returns non-zero (it must return **0**, proving the un-guarded failure signal is positional and one appended line silences it), or the guarded fixture returns 0 |
+
+B4 lives here rather than in Group A because it cannot be driven by the
+`_OVERRIDE_BASH_MAJOR` seam: with the guard removed there is nothing for the seam to
+influence, and the fragility being pinned is a property of how real bash 3.2 fails on
+`declare -A`. That makes it macOS-only, like the rest of this group. An earlier revision
+of this section placed it in Group A under the seam, which would have tested nothing.
 
 B1 is the case the earlier draft lacked. Verified reachable during review:
 
@@ -469,7 +486,7 @@ production sourcer ever (`setup_env.sh`, from the `5dc1efd` lib split), no new s
 ever added; the single cross-repo hit (`math/scripts/run-bash-coverage.sh:372`) is a
 comment and `config/local.sh` on the Studio has no reference. The entry-point argument
 was therefore deleted from the spec and replaced with the appended-statement fragility,
-which is falsifiable today and is pinned by Group A case 7. Change 1 still ships, on the
+which is falsifiable today and is pinned by Group B case 4. Change 1 still ships, on the
 rewritten argument. The doctor defect became Design §4; the test-case defect was fixed in
 the Testing rewrite.
 
