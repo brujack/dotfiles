@@ -66,6 +66,18 @@
         "major"
       ],
       "automerge": false
+    },
+    {
+      "matchUpdateTypes": [
+        "pin",
+        "pinDigest",
+        "digest"
+      ],
+      "automerge": true,
+      "automergeType": "pr",
+      "addLabels": [
+        "automerge-ok"
+      ]
     }
   ]
 }
