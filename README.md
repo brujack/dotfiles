@@ -59,6 +59,20 @@ capability-gated entry and the snap/flatpak branches go dark. Run
 `./setup_env.sh -t doctor` after adding a machine — it fails on an unmapped hostname
 and names it.
 
+**A broken table is a different failure from an unmapped hostname, and it stops
+setup rather than degrading it.** If `config/profiles.sh` cannot be sourced at all —
+a syntax error introduced while editing it, or the file made unreadable — `-t setup`,
+`-t setup_user`, `-t update` and the rest abort with `Refusing to continue` instead
+of provisioning a machine with no identity. `-t doctor` and `-t check-versions` still
+run, deliberately, so you can see what broke:
+
+```
+[FAIL] PROFILE: config/profiles.sh did not load this run — any PROFILE value shown
+       above came from the parent shell, not from this process.
+```
+
+An unmapped hostname is the milder case above and still provisions.
+
 See [Machine Profiles](#machine-profiles) for available profiles and their capabilities.
 
 ### 2. Clone to the required path
