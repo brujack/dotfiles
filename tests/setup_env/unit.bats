@@ -479,6 +479,40 @@ EOF
   [[ "$output" == *"=== Checks ==="* ]]
 }
 
+@test "detect_env returns 0 for an unmapped hostname so setup_env does not abort a new machine" {
+  # setup_env.sh:61 turned detect_env's exit status into a gate for the first
+  # time -- before this branch it was discarded, so nothing depended on it.
+  # detect_env's terminal statement is a no-else `if` on MACOS/LINUX, which
+  # bash evaluates to 0; the line directly above it,
+  # `[[ -n ${legacy} ]] && readonly "${legacy}=1"`, returns 1 whenever the
+  # hostname has no PROFILE_LEGACY entry. Swap those two and every unmapped
+  # machine's `-t setup` and `-t update` abort at :61 -- an unmapped host is
+  # supposed to reach doctor and be told to add a row, not be locked out.
+  # Both arms are asserted because the two branches assign CHRUBY_LOC from
+  # different sides of the conditional.
+  unset "${!HAS_@}" PROFILE
+
+  run bash -c "
+    export PATH='${REPO_ROOT}/tests/mocks:${PATH}'
+    export MOCK_HOSTNAME_OUTPUT='totally-unmapped-host'
+    export MOCK_UNAME_S='Darwin'
+    source '${REPO_ROOT}/lib/detect_env.sh'
+    detect_env; printf 'rc=%s PROFILE=%s\n' \"\$?\" \"\${PROFILE}\"
+  "
+  [[ "$output" == *"rc=0"* ]]
+  [[ "$output" == *"PROFILE=unknown"* ]]
+
+  run bash -c "
+    export PATH='${REPO_ROOT}/tests/mocks:${PATH}'
+    export MOCK_HOSTNAME_OUTPUT='totally-unmapped-host'
+    export MOCK_UNAME_S='Linux'
+    source '${REPO_ROOT}/lib/detect_env.sh'
+    detect_env; printf 'rc=%s PROFILE=%s\n' \"\$?\" \"\${PROFILE}\"
+  "
+  [[ "$output" == *"rc=0"* ]]
+  [[ "$output" == *"PROFILE=unknown"* ]]
+}
+
 @test "detect_env sets PROFILE, the legacy variable, and _PROFILES_LOADED=1 on success" {
   # Load-bearing, not boilerplate: config/profiles.zsh exports PROFILE, every
   # HAS_* and the legacy identity variable into every child of a login
