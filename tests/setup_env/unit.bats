@@ -467,6 +467,15 @@ EOF
   run bash "${fixture}/setup_env.sh" -t doctor
   chmod 644 "${fixture}/config/profiles.sh"
 
+  # Both assertions are required, and the first is the one that makes this
+  # test about the carve-out rather than about doctor printing a banner.
+  # "=== Checks ===" has two producers: the carve-out let doctor run despite
+  # a failed table (intended), or the table loaded fine and doctor ran
+  # normally (alternate). Only the chmod 000 above distinguishes them, and
+  # nothing here asserted it took effect -- mutation-confirmed: deleting the
+  # chmod left this test green. "Refusing to continue" is emitted solely by
+  # detect_env's failure branch, so it pins the alternate out.
+  [[ "$output" == *"Refusing to continue"* ]]
   [[ "$output" == *"=== Checks ==="* ]]
 }
 
