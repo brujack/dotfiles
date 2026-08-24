@@ -20,7 +20,22 @@ detect_env() {
   fi
 
   # Profile resolution
-  source "$(dirname "${BASH_SOURCE[0]}")/../config/profiles.sh"
+  _PROFILES_LOADED=0
+  if ! source "$(dirname "${BASH_SOURCE[0]}")/../config/profiles.sh"; then
+    printf "lib/detect_env.sh: failed to source config/profiles.sh -- PROFILE would be 'unknown', no HAS_* capability set, and no legacy identity variable set. Refusing to continue.\n" >&2
+    return 1
+  fi
+  # A sourced file returns the status of its LAST executed command, and
+  # config/profiles.sh ends with `declare -A PROFILE_LEGACY=(...)`. A failure
+  # confined to an earlier statement therefore leaves `source` returning 0
+  # with the table incomplete -- the guard above alone cannot see that. This
+  # turns the check from "the last statement succeeded" into "the three
+  # arrays the caller depends on actually exist".
+  if ! declare -p PROFILE_MAP PROFILE_CAPS PROFILE_LEGACY >/dev/null 2>&1; then
+    printf "lib/detect_env.sh: config/profiles.sh sourced but did not define PROFILE_MAP, PROFILE_CAPS and PROFILE_LEGACY -- the identity table is incomplete. Refusing to continue.\n" >&2
+    return 1
+  fi
+  _PROFILES_LOADED=1
   local hn
   hn=$(hostname -s)
   # An empty hn indexes PROFILE_MAP with "" below, which bash reports as
@@ -48,6 +63,14 @@ detect_env() {
   # would make the second source return 126. See profiles.zsh's header
   # comment for the full rationale before "fixing" either side to match the
   # other.
+  #
+  # The same pair also disagrees, deliberately, on what happens when
+  # config/profiles.sh itself fails to source: profiles.zsh:41 warns and
+  # continues, this function above aborts with `return 1`. Also not a drift
+  # to reconcile -- profiles.zsh is sourced by .zprofile at login, where
+  # aborting the shell over a degraded lookup is worse than the problem;
+  # this file is sourced only by setup_env.sh, which provisions the machine
+  # and should refuse rather than provision it with no identity table.
   # Read cross-file, which the linter cannot see. This list names EVERY read site -- add one when a site is added, remove one when removed, and treat an omission as seriously as a stale entry: a list that stops naming a live reader reads as "nothing uses these" and is how the variables get deleted. Sites: .config/.zshrc.d/2_functions.zsh, 5_general.zsh (gcloud completion arms at :131/:135 only -- its keychain block reads none of these), 7_final.zsh, .zprofile.
   local legacy
   legacy="${PROFILE_LEGACY[${hn}]:-}"

@@ -799,6 +799,12 @@ firefox  124.0"
   [[ "${_joined}" == *"ai-config git-repos legacy-rsync git-hooks"* ]]
 }
 
+@test "_UPDATE_SECTION_ORDER includes aws and rust after git-hooks" {
+  local _joined
+  _joined="${_UPDATE_SECTION_ORDER[*]}"
+  [[ "${_joined}" == *"git-hooks aws rust"* ]]
+}
+
 @test "_update_summary prints a git-hooks row with the literal result production writes, not a fabricated counts string" {
   # _update_record_end has no git-hooks) case arm -- git-hooks falls
   # through to the generic `*) _result="updated"` branch like every other

@@ -355,6 +355,189 @@ teardown() {
   [ "$status" -eq 0 ]
 }
 
+# ── detect_env fail-closed on an unloadable identity table ────────────────────
+#
+# These two use a fixture copy of lib/detect_env.sh (never the tracked
+# config/profiles.sh) because T1 makes the fixture's profiles.sh unreadable to
+# reach the failing branch, and chmod 000 on the real tracked file would break
+# every subsequent login shell on this machine (.zprofile sources it via
+# config/profiles.zsh) -- see plan Global Constraints and spec section 1.
+
+@test "detect_env returns 1 and names the cause when config/profiles.sh cannot be sourced" {
+  local fixture="${BATS_TEST_TMPDIR}/fixture"
+  mkdir -p "${fixture}/lib" "${fixture}/config"
+  cp "${REPO_ROOT}/lib/detect_env.sh" "${fixture}/lib/"
+  cp "${REPO_ROOT}/config/profiles.sh" "${fixture}/config/"
+  chmod 000 "${fixture}/config/profiles.sh"
+
+  # rc-preserving: $status must report detect_env's own exit code, not the
+  # trailing printf's -- so the sentinel is captured and printed, then the
+  # captured rc is what the subshell actually exits with.
+  run bash -c "source '${fixture}/lib/detect_env.sh'
+               detect_env; rc=\$?
+               printf 'LOADED=%s\n' \"\${_PROFILES_LOADED:-unset}\"
+               exit \$rc"
+  chmod 644 "${fixture}/config/profiles.sh"
+
+  # rc must be exactly 1, not merely non-zero: a wrong fixture path makes
+  # detect_env an unknown command and yields 127, which would falsely satisfy
+  # a bare non-zero check.
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Refusing to continue"* ]]
+  # The sentinel must still read 0 after a failed source -- a mutant that
+  # hoists _PROFILES_LOADED=1 above the guard and drops the post-source
+  # assignment passes rc-exactly-1 and the stderr check above unchanged,
+  # because the mutation never touches the `return 1` path. Only this
+  # assertion catches the ordering defect.
+  [[ "$output" == *"LOADED=0"* ]]
+}
+
+@test "detect_env returns 1 when config/profiles.sh sources cleanly but leaves the identity table incomplete" {
+  local fixture="${BATS_TEST_TMPDIR}/incomplete-fixture"
+  mkdir -p "${fixture}/lib" "${fixture}/config"
+  cp "${REPO_ROOT}/lib/detect_env.sh" "${fixture}/lib/"
+
+  # A profiles.sh whose last statement succeeds but never declares PROFILE_MAP.
+  # `source` returns the status of its LAST command, so a bare guard on
+  # `source`'s own return value cannot see this: rc is 0, yet the table the
+  # caller depends on was never built.
+  cat > "${fixture}/config/profiles.sh" <<'EOF'
+#!/usr/bin/env bash
+declare -A PROFILE_CAPS=([mac_workstation]="devtools")
+declare -A PROFILE_LEGACY=([studio]="STUDIO")
+true
+EOF
+
+  run bash -c "source '${fixture}/lib/detect_env.sh'
+               detect_env; rc=\$?
+               printf 'LOADED=%s\n' \"\${_PROFILES_LOADED:-unset}\"
+               exit \$rc"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"identity table is incomplete"* ]]
+  [[ "$output" == *"LOADED=0"* ]]
+}
+
+# ── setup_env.sh full-invocation fail-closed on an unloadable identity table ──
+#
+# T3/T4 run a full COPY of setup_env.sh, never the tracked repo -- chmod 000
+# on the real config/profiles.sh would break every login shell on this
+# machine (.zprofile sources it via config/profiles.zsh). setup_env.sh
+# sources every lib/*.sh unconditionally at the top, so the fixture needs
+# the whole lib/ directory, not just detect_env.sh as the two tests above.
+
+@test "setup_env.sh -t update aborts before any workflow runs when the identity table did not load" {
+  # run_update reaches brew_update then a real 'sudo softwareupdate' before
+  # the git sync (lib/workflows.sh:325-334). If PATH ever resolved away from
+  # tests/mocks, this test would not merely assert wrongly -- it would
+  # perform a real machine update. Refuse rather than risk it.
+  [[ "$(command -v brew)" == "${REPO_ROOT}/tests/mocks/brew" ]] \
+    || { echo "refusing to run: tests/mocks not on PATH" >&2; return 1; }
+
+  local fixture="${BATS_TEST_TMPDIR}/update-fixture"
+  mkdir -p "${fixture}/lib" "${fixture}/config"
+  cp "${REPO_ROOT}/setup_env.sh" "${fixture}/"
+  cp "${REPO_ROOT}"/lib/*.sh "${fixture}/lib/"
+  cp "${REPO_ROOT}/config/profiles.sh" "${fixture}/config/"
+  chmod 000 "${fixture}/config/profiles.sh"
+
+  # run_update's only durable side effect reachable this early is its own
+  # log file (lib/update_summary.sh:588), appended once at the very end of
+  # the workflow. Its absence is evidence the workflow's body never started
+  # -- not merely that some later step inside it failed.
+  local marker="${TMPDIR_TEST}/.dotfiles-update.log"
+  rm -f "${marker}"
+
+  run bash "${fixture}/setup_env.sh" -t update
+  chmod 644 "${fixture}/config/profiles.sh"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Refusing to continue"* ]]
+  [ ! -f "${marker}" ]
+}
+
+@test "setup_env.sh -t doctor continues to run_doctor when the identity table did not load" {
+  local fixture="${BATS_TEST_TMPDIR}/doctor-fixture"
+  mkdir -p "${fixture}/lib" "${fixture}/config"
+  cp "${REPO_ROOT}/setup_env.sh" "${fixture}/"
+  cp "${REPO_ROOT}"/lib/*.sh "${fixture}/lib/"
+  cp "${REPO_ROOT}/config/profiles.sh" "${fixture}/config/"
+  chmod 000 "${fixture}/config/profiles.sh"
+
+  run bash "${fixture}/setup_env.sh" -t doctor
+  chmod 644 "${fixture}/config/profiles.sh"
+
+  # Both assertions are required, and the first is the one that makes this
+  # test about the carve-out rather than about doctor printing a banner.
+  # "=== Checks ===" has two producers: the carve-out let doctor run despite
+  # a failed table (intended), or the table loaded fine and doctor ran
+  # normally (alternate). Only the chmod 000 above distinguishes them, and
+  # nothing here asserted it took effect -- mutation-confirmed: deleting the
+  # chmod left this test green. "Refusing to continue" is emitted solely by
+  # detect_env's failure branch, so it pins the alternate out.
+  [[ "$output" == *"Refusing to continue"* ]]
+  [[ "$output" == *"=== Checks ==="* ]]
+}
+
+@test "detect_env returns 0 for an unmapped hostname so setup_env does not abort a new machine" {
+  # setup_env.sh:61 turned detect_env's exit status into a gate for the first
+  # time -- before this branch it was discarded, so nothing depended on it.
+  # detect_env's terminal statement is a no-else `if` on MACOS/LINUX, which
+  # bash evaluates to 0; the line directly above it,
+  # `[[ -n ${legacy} ]] && readonly "${legacy}=1"`, returns 1 whenever the
+  # hostname has no PROFILE_LEGACY entry. Swap those two and every unmapped
+  # machine's `-t setup` and `-t update` abort at :61 -- an unmapped host is
+  # supposed to reach doctor and be told to add a row, not be locked out.
+  # Both arms are asserted because the two branches assign CHRUBY_LOC from
+  # different sides of the conditional.
+  unset "${!HAS_@}" PROFILE
+
+  run bash -c "
+    export PATH='${REPO_ROOT}/tests/mocks:${PATH}'
+    export MOCK_HOSTNAME_OUTPUT='totally-unmapped-host'
+    export MOCK_UNAME_S='Darwin'
+    source '${REPO_ROOT}/lib/detect_env.sh'
+    detect_env; printf 'rc=%s PROFILE=%s\n' \"\$?\" \"\${PROFILE}\"
+  "
+  [[ "$output" == *"rc=0"* ]]
+  [[ "$output" == *"PROFILE=unknown"* ]]
+
+  run bash -c "
+    export PATH='${REPO_ROOT}/tests/mocks:${PATH}'
+    export MOCK_HOSTNAME_OUTPUT='totally-unmapped-host'
+    export MOCK_UNAME_S='Linux'
+    source '${REPO_ROOT}/lib/detect_env.sh'
+    detect_env; printf 'rc=%s PROFILE=%s\n' \"\$?\" \"\${PROFILE}\"
+  "
+  [[ "$output" == *"rc=0"* ]]
+  [[ "$output" == *"PROFILE=unknown"* ]]
+}
+
+@test "detect_env sets PROFILE, the legacy variable, and _PROFILES_LOADED=1 on success" {
+  # Load-bearing, not boilerplate: config/profiles.zsh exports PROFILE, every
+  # HAS_* and the legacy identity variable into every child of a login
+  # shell. Without this unset, PROFILE=mac_workstation and STUDIO=1 are
+  # inherited from the parent on any dev machine and two of the three
+  # assertions below pass vacuously regardless of what detect_env does.
+  unset "${!HAS_@}" PROFILE STUDIO
+
+  run bash -c "
+    export PATH='${REPO_ROOT}/tests/mocks:${PATH}'
+    export MOCK_HOSTNAME_OUTPUT='studio'
+    export MOCK_UNAME_S='Darwin'
+    source '${REPO_ROOT}/lib/detect_env.sh'
+    detect_env
+    printf 'PROFILE=%s\n' \"\${PROFILE}\"
+    printf 'STUDIO=%s\n' \"\${STUDIO}\"
+    printf 'LOADED=%s\n' \"\${_PROFILES_LOADED}\"
+  "
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"PROFILE=mac_workstation"* ]]
+  [[ "$output" == *"STUDIO=1"* ]]
+  [[ "$output" == *"LOADED=1"* ]]
+}
+
 @test "lib/macos.sh sources without error" {
   run bash -c "source '${REPO_ROOT}/lib/constants.sh'; source '${REPO_ROOT}/lib/helpers.sh'; source '${REPO_ROOT}/lib/macos.sh'"
   [ "$status" -eq 0 ]
@@ -792,7 +975,8 @@ teardown() {
   unset LINUX
   export UPDATE_BREW=1
   unset UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
-  run_update
+  run run_update
+  [ "$status" -eq 0 ]
   grep -q "brew update" "${MOCK_CALLS_FILE}"
   ! grep -q "gem update" "${MOCK_CALLS_FILE}"
 }
@@ -810,7 +994,8 @@ teardown() {
   export MACOS=1
   unset LINUX
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
-  run_update
+  run run_update
+  [ "$status" -eq 0 ]
   grep -q "brew update" "${MOCK_CALLS_FILE}"
   grep -q "gem update" "${MOCK_CALLS_FILE}"
 }
@@ -823,7 +1008,8 @@ teardown() {
   unset LINUX
   export UPDATE_GEMS=1
   unset UPDATE_BREW UPDATE_PIP UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
-  run_update
+  run run_update
+  [ "$status" -eq 0 ]
   grep -q "gem update" "${MOCK_CALLS_FILE}"
   ! grep -q "brew update" "${MOCK_CALLS_FILE}"
 }
@@ -835,7 +1021,8 @@ teardown() {
   unset LINUX
   export UPDATE_MAS=1
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_CLAUDE UPDATE_PKGS
-  run_update
+  run run_update
+  [ "$status" -eq 0 ]
   grep -q "mas upgrade" "${MOCK_CALLS_FILE}"
   ! grep -q "brew update" "${MOCK_CALLS_FILE}"
 }
@@ -847,7 +1034,8 @@ teardown() {
   unset MACOS
   export UPDATE_BREW=1
   unset UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
-  run_update
+  run run_update
+  [ "$status" -eq 0 ]
   grep -q "brew update" "${MOCK_CALLS_FILE}"
   ! grep -q "gem update" "${MOCK_CALLS_FILE}"
 }
@@ -860,7 +1048,8 @@ teardown() {
   unset LINUX
   export UPDATE_CLAUDE=1
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
-  run_update
+  run run_update
+  [ "$status" -eq 0 ]
   grep -q "claude plugins update" "${MOCK_CALLS_FILE}"
   ! grep -q "brew update" "${MOCK_CALLS_FILE}"
 }
@@ -873,7 +1062,8 @@ teardown() {
   unset MACOS
   export UPDATE_PKGS=1
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
-  run_update
+  run run_update
+  [ "$status" -eq 0 ]
   grep -q "nala" "${MOCK_CALLS_FILE}"
   refute_grep "brew update" "${MOCK_CALLS_FILE}"
   refute_grep "gem update" "${MOCK_CALLS_FILE}"
@@ -959,12 +1149,21 @@ teardown() {
 }
 
 # ── _doctor_check_profile ─────────────────────────────────────────────────────
+#
+# load_setup_env() (tests/helpers/common.bash) sources setup_env.sh, whose own
+# sourcing guard returns before detect_env runs -- so _PROFILES_LOADED is unset
+# in every test in this file unless a test sets it. The three tests below set
+# it at function scope (never export it, never call detect_env) because
+# detect_env assigns PROFILE unconditionally and would clobber the PROFILE
+# fixture these tests control. T5 below is the one test in this file that
+# calls the real detect_env, deliberately, for the opposite reason.
 
 @test "_doctor_check_profile passes for a mapped profile" {
   _DOCTOR_PASS=0
   _DOCTOR_FAIL=0
   _DOCTOR_FAILED=0
   export PROFILE="mac_workstation"
+  _PROFILES_LOADED=1
   _doctor_check_profile
   [ "${_DOCTOR_FAILED}" -eq 0 ]
 }
@@ -972,6 +1171,7 @@ teardown() {
 @test "_doctor_check_profile fails for an unmapped profile and names the hostname" {
   export PROFILE="unknown"
   export MOCK_HOSTNAME_OUTPUT="totally-unmapped-host"
+  _PROFILES_LOADED=1
   run _doctor_check_profile
   [[ "$output" == *"[FAIL]"* ]]
   [[ "$output" == *"totally-unmapped-host"* ]]
@@ -987,8 +1187,84 @@ teardown() {
   _doctor_check_versions()      { :; }
   _doctor_check_github_mcp()    { :; }
   export PROFILE="unknown"
+  _PROFILES_LOADED=1
   run run_doctor
   [ "$status" -eq 1 ]
+}
+
+@test "run_doctor reports the identity table did not load rather than a stale inherited PROFILE" {
+  # T5 -- the regression pin. detect_env.sh:31 assigns PROFILE unconditionally
+  # on master, so an inherited value never survives a failed table load there.
+  # Task 1's early return skips that assignment, so a value config/profiles.zsh
+  # exported at login (simulated here by `export PROFILE` before the table
+  # ever loads) can survive into doctor's report. This is the one test in the
+  # file that drives the sentinel through a REAL detect_env call rather than
+  # injecting it -- an injected _PROFILES_LOADED exercises only
+  # _doctor_check_profile's branch and is invariant under a sentinel-ordering
+  # defect inside detect_env itself.
+  local fixture="${BATS_TEST_TMPDIR}/t5-fixture"
+  mkdir -p "${fixture}/lib" "${fixture}/config"
+  cp "${REPO_ROOT}/setup_env.sh" "${fixture}/"
+  cp "${REPO_ROOT}"/lib/*.sh "${fixture}/lib/"
+  cp "${REPO_ROOT}/config/profiles.sh" "${fixture}/config/"
+  chmod 000 "${fixture}/config/profiles.sh"
+
+  export PROFILE="mac_workstation"
+  run bash "${fixture}/setup_env.sh" -t doctor
+  chmod 644 "${fixture}/config/profiles.sh"
+
+  # doctor_pass/doctor_fail's printf template puts an ANSI reset escape
+  # between "[PASS]"/"[FAIL]" and the label that follows, so a plain
+  # substring spanning both never matches -- strip escapes before asserting.
+  local stripped
+  stripped="$(printf '%s' "$output" | sed -E $'s/\x1b\\[[0-9;]*m//g')"
+  [[ "${stripped}" != *"[PASS] PROFILE ("* ]]
+  [[ "${stripped}" == *"[FAIL] PROFILE: config/profiles.sh did not load this run"* ]]
+}
+
+@test "_doctor_check_profile produces three distinct verdict/message pairs across loaded+mapped, loaded+unmapped, and not-loaded" {
+  export PROFILE="mac_workstation"
+  _PROFILES_LOADED=1
+  run _doctor_check_profile
+  local loaded_mapped="$output"
+
+  export PROFILE="unknown"
+  export MOCK_HOSTNAME_OUTPUT="totally-unmapped-host"
+  _PROFILES_LOADED=1
+  run _doctor_check_profile
+  local loaded_unmapped="$output"
+
+  export PROFILE="mac_workstation"
+  _PROFILES_LOADED=0
+  run _doctor_check_profile
+  local not_loaded="$output"
+
+  [[ "${loaded_mapped}" != "${loaded_unmapped}" ]]
+  [[ "${loaded_mapped}" != "${not_loaded}" ]]
+  [[ "${loaded_unmapped}" != "${not_loaded}" ]]
+
+  [[ "${loaded_mapped}" == *"[PASS]"* ]]
+  [[ "${loaded_unmapped}" == *"[FAIL]"* ]]
+  [[ "${loaded_unmapped}" == *"unmapped hostname"* ]]
+  [[ "${not_loaded}" == *"[FAIL]"* ]]
+  [[ "${not_loaded}" == *"did not load"* ]]
+}
+
+@test "_doctor_check_profile PASSes when the environment supplies _PROFILES_LOADED=1 without detect_env running" {
+  # T7 -- negative control. Pins that an environment-supplied sentinel DOES
+  # defeat the read, so the reader knows protection comes from detect_env's
+  # unconditional _PROFILES_LOADED=0 on entry, not from the variable being
+  # non-exported. If this test ever starts failing, the mechanism changed and
+  # the comment in lib/detect_env.sh describing it is stale.
+  export PROFILE="mac_workstation"
+  export _PROFILES_LOADED=1
+  run _doctor_check_profile
+  # A non-empty [PASS] line, not merely "no FAIL" -- an empty result would
+  # satisfy the weaker check. "[PASS]" and "PROFILE (" are separated by an
+  # ANSI reset escape in doctor_pass's printf template, so they are asserted
+  # separately rather than as one spanning substring.
+  [[ "$output" == *"[PASS]"* ]]
+  [[ "$output" == *"PROFILE (mac_workstation)"* ]]
 }
 
 # ── _doctor_check_symlinks ────────────────────────────────────────────────────
