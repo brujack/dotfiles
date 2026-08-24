@@ -1,5 +1,7 @@
 # Identity Table Fail-Closed Implementation Plan
 
+> **Status: DONE** — merged as dotfiles#239 (`25d41f1`), 2026-08-24.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make `setup_env.sh` refuse to provision a machine when `config/profiles.sh` did not load, instead of continuing with `PROFILE=unknown` and zero `HAS_*`.
