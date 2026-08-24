@@ -684,6 +684,34 @@ remote-preset form produced **8 preset errors and 0 extractions**; inlined, **0 
 nothing detects drift between the copies. ADR-0010 predates this and says each repo
 _extends_ the shared preset — that half no longer holds.
 
+**Confirmed in production 2026-08-24, and the confirmation is worth more than the
+prediction was.** The inlining landed on a repo that had produced **zero** Renovate PRs
+in the 98 days since its `renovate.json` was written, and the paragraph above could only
+say that a fixture run threw 0 errors instead of 8. Renovate has now actually run here:
+**#240** pinned all six `actions/checkout@v6` refs to `d23441a…` and **auto-merged**,
+and **#241** raised the `v7` major bump and **did not** — which is `packageRules`
+working exactly as written, `automerge: true` for patch/minor and `false` for major.
+
+Two things follow that the earlier analysis got wrong or could not see:
+
+- **`mode=silent` is no longer in force for this repo.** The section in
+  `ai-config`'s corpus that established it — from Mend job logs on 2026-08-23, where
+  `Branch … creation is disabled because mode=silent` appears verbatim — was correct when
+  measured and is now stale. A created branch is the one thing silent mode forbids, and
+  there are two. Do not cite the silent-mode finding as a live constraint without
+  re-reading a current job log.
+- **`pinDigests: true` did the thing it was added for**, on its first real run. The
+  description block in `renovate.json` recorded this repo as "0 of 6 refs pinned"; it is
+  now 6 of 6, and #241 preserves the pin rather than reverting to a floating tag —
+  Renovate rebased it to digest-v6 → digest-v7 once #240 merged. ADR-0006's clause is
+  satisfied here by automation rather than by review.
+
+**The zero-PR oracle this repo reasoned from was structurally unfalsifiable, and that is
+the durable lesson.** Under silent mode no repo could ever author a PR, so zero was the
+only reachable value and every "it is not running" verdict built on it was unprovable
+either way. The lesson survives the lift: establish what a mechanism is *permitted* to do
+before drawing any conclusion from what it has not done.
+
 **`pip_requirements` is deliberately absent from `enabledManagers`.** Renovate's pattern is
 `(^|/)[\w-]*requirements([-._]\w+)?\.(txt|pip)$`, which allows at most one `[-._]\w+`
 group after `requirements`, and `\w` excludes `-`. Measured against all five renderings:
