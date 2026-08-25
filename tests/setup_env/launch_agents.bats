@@ -133,3 +133,21 @@ EOF
   [ "$status" -ne 0 ]
   [ "$(find "${_RHN_AGENT_DIR}" -name '*.plist' | wc -l | tr -d ' ')" -eq 0 ]
 }
+
+@test "a path containing sed-meta characters still substitutes correctly" {
+  # `&` in a sed REPLACEMENT means "the whole match", so s|__X__|a&b| yields
+  # a__X__b -- a valid-XML plist pointing at a nonexistent path, installed and
+  # silently failing weekly. Verified against a real `&` in the root path.
+  export PROFILE="mac_workstation" HOSTNAME_SHORT="studio"
+  local _weird="${BATS_TEST_TMPDIR}/a&b|c"
+  mkdir -p "${_weird}/scripts" "${_weird}/LaunchAgents"
+  cp "${REPO_ROOT}/LaunchAgents/cadence.plist.template" "${_weird}/LaunchAgents/"
+  cp "${REPO_ROOT}/scripts/cadence-notify.sh" "${_weird}/scripts/"
+  chmod +x "${_weird}/scripts/cadence-notify.sh"
+  export _OVERRIDE_DOTFILES_ROOT="${_weird}"
+  run install_renovate_held_agent
+  [ "$status" -eq 0 ]
+  local _p="${_RHN_AGENT_DIR}/com.brucejackson.renovate-held.plist"
+  run ! command grep -q '__' "${_p}"
+  command grep -qF "${_weird}/scripts/cadence-notify.sh" "${_p}"
+}

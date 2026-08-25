@@ -67,6 +67,20 @@ _doctor_check_cadence() {
     _now=$(date -u +%s)
     _age=$(( (_now - _epoch) / 86400 ))
 
+    # A future-dated heartbeat yields a NEGATIVE age, and `-N -gt 8` is false
+    # for every negative N -- so the staleness guard below could never fire
+    # again. That is an unknown reading as clean, in the one check whose whole
+    # purpose is detecting an agent that stopped. Trigger: the clock jumps
+    # forward (NTP correction after a long sleep, a VM resume), the agent
+    # writes a heartbeat at the skewed time, the clock corrects back. If the
+    # agent then stops -- exactly the case this check exists for -- doctor
+    # reports PASS forever. Fail closed.
+    if [[ "${_age}" -lt 0 ]]; then
+        doctor_fail "${_cname} cadence" \
+            "heartbeat is dated ${_age}d in the future (clock skew?) — cannot judge staleness"
+        return 1
+    fi
+
     if [[ "${_age}" -gt "${_RENOVATE_CADENCE_MAX_AGE_DAYS}" ]]; then
         doctor_fail "${_cname} cadence" \
             "last run ${_age}d ago (max ${_RENOVATE_CADENCE_MAX_AGE_DAYS}d) — agent not firing"
@@ -153,10 +167,34 @@ _la_install_agent() {
     # over a live one is a no-op that silently keeps the old path.
     "${_lctl}" unload "${_dst}" >/dev/null 2>&1
 
-    sed -e "s|__DOTFILES__|${_root}|g" -e "s|__HOME__|${HOME}|g" \
-        -e "s|__NAME__|${_name}|g" -e "s|__DETECTOR__|${_detector}|g" \
-        -e "s|__MINUTE__|${_minute}|g" \
-        "${_src}" > "${_dst}" || return 1
+    # Bash parameter expansion, NOT sed. In a sed replacement `&` means "the
+    # entire matched text", so a path containing `&` produces
+    #   s|__DOTFILES__|/x/a&b|  ->  /x/a__DOTFILES__b
+    # -- a plist that still passes `plutil -lint` (it is valid XML) while
+    # pointing at a path that does not exist, so the agent fails silently every
+    # week. Measured with a real `&` in the root path: 4 placeholders survived.
+    # NOTE the QUOTES around each replacement -- they are the fix, not style.
+    # bash >= 5.2 gave ${var//pat/rep} the SAME sed-like `&` semantics, so the
+    # unquoted form is corrupt in exactly the way sed was. Measured on 5.3.15
+    # and on the workstation (CI's lineage): unquoted -> Xa__P__bY,
+    # quoted -> Xa&bY. bash 3.2 lacks the behaviour entirely, so a mac using
+    # /usr/bin/bash could never reproduce it -- tdd.md pitfall G.
+    local _plist
+    _plist="$(<"${_src}")" || return 1
+    _plist="${_plist//__DOTFILES__/"${_root}"}"
+    _plist="${_plist//__HOME__/"${HOME}"}"
+    _plist="${_plist//__NAME__/"${_name}"}"
+    _plist="${_plist//__DETECTOR__/"${_detector}"}"
+    _plist="${_plist//__MINUTE__/"${_minute}"}"
+    printf '%s\n' "${_plist}" > "${_dst}" || return 1
+
+    # A surviving placeholder means substitution silently failed. Never install
+    # an agent that points somewhere unresolved.
+    if command grep -q '__[A-Z]*__' "${_dst}"; then
+        printf "cadence: placeholder survived substitution in %s\n" "${_dst}" >&2
+        rm -f "${_dst}"
+        return 1
+    fi
 
     "${_lctl}" load "${_dst}" >/dev/null 2>&1
     return 0

@@ -124,3 +124,16 @@ _beat() {  # $1 = age in days, $2 = result
   [[ "$output" == *"not a valid date"* ]]
   run ! command grep -q 'heartbeat is unparsable' <<<"$output"
 }
+
+@test "a future-dated heartbeat fails rather than passing forever" {
+  # `-N -gt 8` is false for every negative N, so without an explicit guard the
+  # staleness check can never fire again once a heartbeat is future-dated.
+  local _fut
+  _fut=$(date -u -v+400d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d "+400 days" +%Y-%m-%dT%H:%M:%SZ)
+  printf '{"ts": "%s", "result": "clean", "exit_code": 0, "findings": 0}\n' "${_fut}" \
+    > "${_RHN_STATE_DIR}/renovate-held/last-run.json"
+  run _doctor_check_renovate_cadence
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"future"* ]]
+  run ! command grep -q 'PASS' <<<"$output"
+}
