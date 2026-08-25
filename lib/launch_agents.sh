@@ -190,7 +190,13 @@ _la_install_agent() {
 
     # A surviving placeholder means substitution silently failed. Never install
     # an agent that points somewhere unresolved.
-    if command grep -q '__[A-Z]*__' "${_dst}"; then
+    # `__[A-Z]*__` misses any placeholder carrying an internal underscore or a
+    # digit -- __STATE_DIR__, __VER2__ -- which would then install undetected.
+    # Today's five all happen to match, so the narrow form works and cannot be
+    # falsified by the current template; that is exactly the shape shell.md
+    # records for `[A-Z_]+` vs `[A-Z][A-Z0-9_]+`. Found by a test that used a
+    # placeholder the guard could not see.
+    if command grep -qE '__[A-Z][A-Z0-9_]*__' "${_dst}"; then
         printf "cadence: placeholder survived substitution in %s\n" "${_dst}" >&2
         rm -f "${_dst}"
         return 1
