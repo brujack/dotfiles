@@ -173,12 +173,12 @@ This updates Homebrew, apt/snap packages, pip, Ruby gems, Mac App Store apps, an
 
 | Type             | Description                                                                                                                                                      |
 | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `setup_user`     | Sets up user environment: configs, symlinks, shell, directory structure, installs git hooks across personal repos, and installs GNU make on macOS                |
+| `setup_user`     | Sets up user environment: configs, symlinks, shell, directory structure, installs git hooks across personal repos, installs GNU make on macOS, and — **on the Studio only** — installs two weekly LaunchAgents that summon dependency triage (see [ADR-0024](docs/adr/0024-launchagent-for-the-renovate-held-cadence.md)) |
 | `setup`          | Full machine setup (`setup_user` + all apps and tools). Flags: `--brew-install`, `--mas-install`                                                                 |
 | `developer`      | Dev packages + Python/Ansible virtualenv                                                                                                                         |
 | `ansible`        | Ansible venv only — typically used after a Python update                                                                                                         |
 | `update`         | Update all packages (brew, apt/snap, pip, mas, Claude plugins, etc.). Prints a structured summary at the end; each run is appended to `~/.dotfiles-update.log`   |
-| `doctor`         | Active health checks: symlinks, tool presence, credential dir permissions, version drift, global/system `core.hooksPath` pins. Exits non-zero on any failure     |
+| `doctor`         | Active health checks: symlinks, tool presence, credential dir permissions, version drift, global/system `core.hooksPath` pins, and weekly-cadence heartbeats (Studio only — a silent agent is indistinguishable from a healthy one, so liveness is checked separately from findings). Exits non-zero on any failure |
 | `check-versions` | Compare pinned tool versions in `lib/constants.sh` against latest GitHub releases. Exits 1 if any are outdated; `--update` prompts to apply each update in-place |
 
 **Options:**
@@ -273,10 +273,14 @@ dotfiles/
 │   ├── linux_ubuntu.sh       # Ubuntu-specific install functions
 │   ├── developer.sh          # Cross-platform dev tooling (Ruby, Python, Ansible, etc.)
 │   ├── update_summary.sh     # Update run tracking and summary reporting
+│   ├── launch_agents.sh      # Weekly cadence agents + their doctor heartbeat check
 │   └── workflows.sh          # Top-level workflow functions dispatched by setup_env.sh
+├── LaunchAgents/
+│   └── cadence.plist.template # One template, both weekly agents (see docs/adr/0024)
 ├── scripts/
 │   ├── bootstrap_mac.sh      # One-time macOS prerequisite installer (Homebrew + bash 5)
 │   ├── bootstrap_linux.sh    # One-time Linux prerequisite installer (Homebrew prerequisites + Homebrew)
+│   ├── cadence-notify.sh     # Delivery arm for the weekly cadence agents
 │   ├── .osx.sh               # macOS system defaults
 │   └── ...                   # utility scripts
 ├── powershell/
