@@ -92,6 +92,25 @@ Two consequences worth recording:
   anti-pattern; `_la_install_agent` plus a single `cadence.plist.template` now serves both, on
   different minutes (7 and 21) so the jobs cannot collide.
 
+**Two limitations found in review after this ADR was accepted, both recorded rather than
+quietly fixed.**
+
+**The heartbeat's reader is hand-invoked.** `doctor` runs when someone types it — once in
+10,210 lines of this machine's shell history — and nothing automated calls `run_doctor`. The
+liveness channel is therefore correct code with no consumer, which is the same shape as the
+`ledger-drift` deferral this ADR cites as its counter-example. Tracked in
+`docs/superpowers/README.md`'s Backlog with the candidate readers and why none is obviously
+right.
+
+**A6 and A7 test different kinds of property and only one is honestly runnable.** A6
+(idempotency) is a behavioural check any machine can run. A7 (no install off the Studio) is a
+**correctness** property whose failure is silent and permissive — get the guard wrong and four
+other macs each install an agent that queries the whole fleet weekly, producing four pushes per
+event. But four of the five macs are not reachable from the Studio, so A7 is satisfied by
+*simulating* the hostname rather than by running on a non-Studio machine. That is a guard
+tested by mocking the condition it guards on: it passes while the real machine may do something
+else. Stated here rather than left implicit, because the test name does not disclose it.
+
 **Accepted costs.** It does not run when the Studio is off. It is machine-scoped, so a
 rebuild must re-run `setup_env.sh -t setup_user` — which the stale-heartbeat check catches
 within 8 days rather than silently. And it may have no subject: nothing has ever been held.
