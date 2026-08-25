@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
-# Weekly delivery arm for the Renovate held-major cadence.
+# Generic weekly delivery arm for a cadence check. Usage:
 #
-# Detection lives in ai-config (.claude/scripts/renovate_held_check.py) and is
-# deliberately silent: it prints findings and exits 0/1/2. This script is the
-# thin wrapper that turns that into an ntfy push and a heartbeat.
+#     cadence-notify.sh <name> <detector-path>
+#
+# Detection lives elsewhere (ai-config) and is deliberately silent: a detector
+# prints findings to stdout and exits 0/1/2. This script is the thin wrapper
+# that turns that into an ntfy push and a heartbeat.
+#
+# THE DETECTOR IS RUN WITH NTFY_URL SCRUBBED, deliberately. ledger_drift_check.sh
+# makes its own ntfy call, so left alone it would both duplicate this script's
+# push and keep the failure mode below. Scrubbing demotes it to a pure detector
+# without modifying a script this repo does not own.
 #
 # The split matters. ledger_drift_check.sh makes its own ntfy call, so an unset
 # NTFY_URL degrades detection AND delivery together and still returns 0 --
@@ -20,16 +27,14 @@ _rhn_state_dir() {
     printf '%s' "${_RHN_STATE_DIR:-${HOME}/.local/share/dotfiles/renovate-held}"
 }
 
-_rhn_detector() {
-    printf '%s' "${_RHN_DETECTOR:-${HOME}/git-repos/personal/ai-config/.claude/scripts/renovate_held_check.py}"
-}
+_rhn_state_name() { printf '%s' "${_RHN_NAME:-cadence}"; }
 
 # Heartbeat is written on EVERY outcome including failure. A run that errored
 # and a run that never happened must not look alike -- that distinction is the
 # whole reason doctor reads this file rather than trusting the LaunchAgent.
 _rhn_write_heartbeat() {
     local _result="$1" _rc="$2" _count="$3"
-    local _dir; _dir="$(_rhn_state_dir)"
+    local _dir; _dir="$(_rhn_state_dir)/$(_rhn_state_name)"
     mkdir -p "${_dir}" || return 1
     printf '{"ts": "%s", "result": "%s", "exit_code": %s, "findings": %s}\n' \
         "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${_result}" "${_rc}" "${_count}" \
@@ -54,18 +59,21 @@ _rhn_notify() {
     return 0
 }
 
-run_renovate_held_notify() {
-    local _detector _out _rc _count _result _msg
-    _detector="$(_rhn_detector)"
+run_cadence_notify() {
+    local _name="${1:?cadence-notify: name required}"
+    local _detector="${2:?cadence-notify: detector path required}"
+    local _out _rc _count _result _msg
+    _RHN_NAME="${_name}"
 
     if [[ ! -x "${_detector}" ]]; then
         printf "renovate-held: detector not executable at %s\n" "${_detector}" >&2
         _rhn_write_heartbeat "incomplete" 2 0 || return 1
-        _rhn_notify "Renovate cadence INCOMPLETE - cannot determine held majors: detector missing"
+        _rhn_notify "${_name} INCOMPLETE - cannot determine: detector missing"
         return 2
     fi
 
-    _out="$("${_detector}" 2>/dev/null)"
+    # NTFY_URL scrubbed: the detector detects, this script delivers.
+    _out="$(env -u NTFY_URL "${_detector}" 2>/dev/null)"
     _rc=$?
 
     _count=0
@@ -84,10 +92,10 @@ run_renovate_held_notify() {
     fi
 
     if [[ "${_result}" == "incomplete" ]]; then
-        _msg="Renovate cadence INCOMPLETE - cannot determine held majors."
+        _msg="${_name} INCOMPLETE - cannot determine."
         [[ "${_count}" -gt 0 ]] && _msg="${_msg}"$'\n'"Found so far:"$'\n'"${_out}"
     else
-        _msg="Renovate: ${_count} major update(s) held for triage."$'\n'"${_out}"
+        _msg="${_name}: ${_count} finding(s)."$'\n'"${_out}"
     fi
 
     _rhn_notify "${_msg}"
@@ -95,4 +103,4 @@ run_renovate_held_notify() {
 }
 
 [[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0
-run_renovate_held_notify "$@"
+run_cadence_notify "$@"

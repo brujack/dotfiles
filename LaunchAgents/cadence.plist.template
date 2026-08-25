@@ -3,11 +3,13 @@
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.brucejackson.renovate-held</string>
+  <string>com.brucejackson.__NAME__</string>
 
   <key>ProgramArguments</key>
   <array>
-    <string>__DOTFILES__/scripts/renovate-held-notify.sh</string>
+    <string>__DOTFILES__/scripts/cadence-notify.sh</string>
+    <string>__NAME__</string>
+    <string>__DETECTOR__</string>
   </array>
 
   <!-- Monday 09:07 local. Renovate's shared preset schedules "before 5am on
@@ -17,7 +19,7 @@
   <dict>
     <key>Weekday</key><integer>1</integer>
     <key>Hour</key><integer>9</integer>
-    <key>Minute</key><integer>7</integer>
+    <key>Minute</key><integer>__MINUTE__</integer>
   </dict>
 
   <!-- launchd gives an agent a bare PATH; gh and python3 both live in Homebrew
@@ -30,7 +32,7 @@
   </dict>
 
   <key>RunAtLoad</key><false/>
-  <key>StandardOutPath</key><string>__HOME__/.local/share/dotfiles/renovate-held/stdout.log</string>
-  <key>StandardErrorPath</key><string>__HOME__/.local/share/dotfiles/renovate-held/stderr.log</string>
+  <key>StandardOutPath</key><string>__HOME__/.local/share/dotfiles/cadence/__NAME__/stdout.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/.local/share/dotfiles/cadence/__NAME__/stderr.log</string>
 </dict>
 </plist>

@@ -1,4 +1,4 @@
-# ADR-0024: A LaunchAgent for the Renovate held-major cadence
+# ADR-0024: LaunchAgents for weekly cadence checks
 
 ## Status
 
@@ -73,6 +73,24 @@ and treats zero there as a broken query rather than a quiet repo. **That control
 depend on a held PR ever existing**, which is what makes the cadence verifiable from day
 one. Owned by `ai-config`; specified in
 `ai-config/docs/superpowers/specs/2026-08-25-renovate-held-cadence-design.md`.
+
+**A second cadence was folded in, and it is why the installer is generic.** `ledger-drift.yml`
+is not merely the counter-example — it is the same mechanism this repo now has and it was
+missing. Its comment defers real alerting to "an enrolled machine"; the Studio *is* enrolled
+(`ledger` resolves at `~/.local/bin/ledger`), nothing scheduled it, and so drift alerting never
+ran. `install_ledger_drift_agent` makes the deferral true rather than rewording it.
+
+Two consequences worth recording:
+
+- **The detector runs with `NTFY_URL` scrubbed** (`env -u NTFY_URL`). `ledger_drift_check.sh`
+  makes its own `ntfy` call, so left alone it would both duplicate the wrapper's push and keep
+  the failure mode where detection and delivery fail together. Scrubbing demotes it to a pure
+  detector **without modifying a script this repo does not own** — the split applied to
+  someone else's code from the outside. Pinned by a test asserting the detector observes an
+  empty `NTFY_URL`.
+- **Two call sites justify the shared installer.** One would be the premature-helper
+  anti-pattern; `_la_install_agent` plus a single `cadence.plist.template` now serves both, on
+  different minutes (7 and 21) so the jobs cannot collide.
 
 **Accepted costs.** It does not run when the Studio is off. It is machine-scoped, so a
 rebuild must re-run `setup_env.sh -t setup_user` — which the stale-heartbeat check catches
