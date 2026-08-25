@@ -107,3 +107,14 @@ EOF
   [ -f "${_RHN_AGENT_DIR}/com.brucejackson.renovate-held.plist" ]
   [[ "$output" == *"detector absent"* ]]
 }
+
+@test "every lib sourced by setup_env.sh exists — a rename must update both" {
+  # A renamed lib left a stale source line in setup_env.sh and took 1012 tests
+  # down at once. The failure was loud, but nothing pointed at the cause, and a
+  # compound command's exit code reported the whole run as green.
+  local _missing=0 _f
+  while IFS= read -r _f; do
+    [[ -f "${REPO_ROOT}/${_f}" ]] || { printf 'missing: %s\n' "${_f}"; _missing=1; }
+  done < <(command grep -oE 'lib/[a-z_]+\.sh' "${REPO_ROOT}/setup_env.sh" | sort -u)
+  [ "${_missing}" -eq 0 ]
+}
