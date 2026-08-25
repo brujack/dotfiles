@@ -210,6 +210,12 @@ run_setup_user() {
   elif [[ ${_hooks_rc} -eq 2 ]]; then
     log_warn "git hooks sweep reported gaps or a pinned core.hooksPath — see above"
   fi
+  # Studio-only, and a no-op returning 0 everywhere else (ADR-0024). Advisory
+  # like the ledger write below: a machine that cannot install the weekly
+  # cadence must still complete setup_user, and doctor's stale-heartbeat arm is
+  # what reports the gap rather than this line failing the whole workflow.
+  install_renovate_held_agent || log_warn "renovate cadence agent not installed — see above"
+
   _ledger_write_run_entry "setup_user" 0 || true
 }
 
