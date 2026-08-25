@@ -76,7 +76,23 @@ Dotfiles live at the repo root and in the ai-config repo (`.claude/`/`.cursor/`)
 - **`.claude/`** — each item (except `projects/`) symlinked individually into `~/.claude/` from the ai-config repo.
   Exception: `mcp.json.template` is symlinked as `~/.claude/mcp.json.template` (read-only reference); the live
   `~/.claude/mcp.json` is **generated** by `setup_claude_mcp` via `envsubst` and is not a symlink.
-  The `projects/` subdirectory is **not** symlinked wholesale — per-repo memories are managed individually.
+
+  **`projects/` IS symlinked, wholesale, and this line said the opposite until 2026-08-25.**
+  The loop skips it — `[[ "$(basename "${_claude_item}")" == "projects" ]] && continue` — and the
+  very next statement is `safe_link "${_ai_config_dir}/.claude/projects" "${HOME}/.claude/projects"`.
+  So "each item **except** `projects/`" is true of the *loop* and false of the *outcome*, and the
+  bullet above is worded for the mechanism while readers take it for the result. Verified on disk,
+  not from the code: `readlink ~/.claude/projects` →
+  `/Users/bruce/git-repos/personal/ai-config/.claude/projects`.
+
+  **The consequence is not local and it has bitten three sessions.** Anything written under
+  `~/.claude/` is physically inside **ai-config's working tree** — including
+  `~/.claude/projects/<encoded-repo>/memory/`, whose name suggests per-repo scratch space. That
+  path is inside ai-config's `make test` scope, where `validate-memory` is a `test` prerequisite,
+  so a draft one session treats as private is a hard-failing gate for every session trying to
+  commit to ai-config. Measured 2026-08-25: three promoted-but-undeleted drafts there blocked
+  commits for two other sessions. Before writing scratch state under `~/.claude/`, note that you
+  are writing into another repo.
 - **`.cursor/`** — each item (excluding `User/`) symlinked individually into `~/.cursor/` from the ai-config repo; `User/` contents are symlinked into the platform Cursor user settings dir
 
 Always remove the old file before symlinking (`rm -f` then `ln -s`). Validate symlinks with `[[ -L ${HOME}/.file ]]`.
