@@ -110,6 +110,14 @@ _rhn_is_cadence_host() {
 # _la_install_agent <name> <detector-path> <minute>
 _la_install_agent() {
     local _name="$1" _detector="$2" _minute="$3"
+
+    # Same boundary check as cadence-notify.sh, for the same reason one layer
+    # up: _name and _minute are substituted into a sed s|..|..| expression and
+    # into plist XML. A `|` in either terminates the sed command.
+    [[ "${_name}"   =~ ^[a-z0-9][a-z0-9-]*$ ]] || {
+        printf "cadence: refusing agent name %q\n" "${_name}" >&2; return 1; }
+    [[ "${_minute}" =~ ^[0-9]{1,2}$ ]] || {
+        printf "cadence: refusing minute %q\n" "${_minute}" >&2; return 1; }
     local _root _src _dst _dir _lctl _label
     _root="$(_rhn_dotfiles_root)"
     _src="${_root}/LaunchAgents/cadence.plist.template"

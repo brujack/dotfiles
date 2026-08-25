@@ -54,13 +54,29 @@ _rhn_notify() {
         return 0
     fi
     local _curl="${_RHN_CURL_BIN:-curl}"
-    "${_curl}" -fsS -d "${_msg}" "${NTFY_URL}" >/dev/null 2>&1 \
+    # --data-raw, never -d: curl's -d OPENS A FILE when the argument begins with
+    # `@`, so `-d "${var}"` on any unvalidated string is a latent arbitrary
+    # local-file-read that POSTs the contents to NTFY_URL. Verified against
+    # curl's own parser: `-d @/nonexistent` errors "encountered when reading a
+    # file" while --data-raw does not, and curl --help documents --data-raw as
+    # "'@' allowed". Currently unreachable here because _msg always begins with
+    # ${_name}, but _name is argv and this costs one word.
+    "${_curl}" -fsS --data-raw "${_msg}" "${NTFY_URL}" >/dev/null 2>&1 \
         || printf "renovate-held: ntfy delivery failed\n" >&2
     return 0
 }
 
 run_cadence_notify() {
     local _name="${1:?cadence-notify: name required}"
+    # _name is interpolated into a filesystem path and (via the installer) into
+    # a sed replacement and plist XML. Constrain it at the boundary rather than
+    # escaping at each use: a `|` would terminate the installer's `s|..|..|`
+    # expression, `/` or `..` would escape the state directory, and `&` would
+    # produce malformed XML.
+    if [[ ! "${_name}" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
+        printf "cadence-notify: refusing name %q -- must match ^[a-z0-9][a-z0-9-]*$\n" "${_name}" >&2
+        return 2
+    fi
     local _detector="${2:?cadence-notify: detector path required}"
     local _out _rc _count _result _msg
     _RHN_NAME="${_name}"

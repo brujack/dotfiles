@@ -1,4 +1,10 @@
 #!/usr/bin/env bats
+#
+# `run !` (negated run) needs bats >= 1.5.0. Declared rather than assumed:
+# without it bats only warns, and on an older bats the negation would be
+# mis-parsed silently -- tdd.md pitfall G, where the local toolchain cannot
+# express the failure. CI installs 1.10.0 via apt; this box has 1.14.0.
+bats_require_minimum_version 1.5.0
 
 setup() {
   unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
@@ -54,7 +60,7 @@ _detector() {  # $1 = exit code, $2... = stdout lines
   [ -s "${_RHN_NTFY_LOG}" ]
   command grep -qi 'incomplete\|cannot determine' "${_RHN_NTFY_LOG}"
   command grep -q '"result": *"incomplete"' "${_RHN_STATE_DIR}/${NAME}/last-run.json"
-  ! command grep -q '"result": *"clean"' "${_RHN_STATE_DIR}/${NAME}/last-run.json"
+  run ! command grep -q '"result": *"clean"' "${_RHN_STATE_DIR}/${NAME}/last-run.json"
 }
 
 @test "exit 2 with findings still surfaces them — incomplete dominates held" {
@@ -137,7 +143,7 @@ EOF
   run bash "${SCRIPT}" "${NAME}" "${_RHN_DETECTOR}"
   [ "$status" -eq 1 ]
   command grep -q 'NTFY_URL_SEEN=\[\]' "${_RHN_NTFY_LOG}"
-  ! command grep -q 'NTFY_URL_SEEN=\[https' "${_RHN_NTFY_LOG}"
+  run ! command grep -q 'NTFY_URL_SEEN=\[https' "${_RHN_NTFY_LOG}"
 }
 
 @test "two cadences keep separate heartbeats" {
@@ -147,4 +153,25 @@ EOF
   run bash "${SCRIPT}" ledger-drift "${_RHN_DETECTOR}"; [ "$status" -eq 1 ]
   command grep -q '"result": *"clean"' "${_RHN_STATE_DIR}/renovate-held/last-run.json"
   command grep -q '"result": *"held"'  "${_RHN_STATE_DIR}/ledger-drift/last-run.json"
+}
+
+@test "the ntfy call uses --data-raw, never -d" {
+  # curl's -d OPENS A FILE when the argument starts with '@', so -d on an
+  # unvalidated string is a latent local-file-read that POSTs the contents.
+  # Verified against curl's parser: -d @/nonexistent errors "encountered when
+  # reading a file"; --data-raw does not.
+  _detector 1 'x#1  1d  major  y'
+  run bash "${SCRIPT}" "${NAME}" "${_RHN_DETECTOR}"
+  [ "$status" -eq 1 ]
+  command grep -q -- '--data-raw' "${_RHN_NTFY_LOG}"
+  run ! command grep -qE -- '(^| )-d( |$)' "${_RHN_NTFY_LOG}"
+}
+
+@test "a name that could break out of the state path is refused" {
+  _detector 0
+  for _bad in '../escape' 'a/b' 'has|pipe' 'Has-Caps' ''; do
+    run bash "${SCRIPT}" "${_bad}" "${_RHN_DETECTOR}"
+    [ "$status" -ne 0 ]
+    [ ! -d "${_RHN_STATE_DIR}/${_bad}" ]
+  done
 }

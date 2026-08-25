@@ -1,4 +1,10 @@
 #!/usr/bin/env bats
+#
+# `run !` (negated run) needs bats >= 1.5.0. Declared rather than assumed:
+# without it bats only warns, and on an older bats the negation would be
+# mis-parsed silently -- tdd.md pitfall G, where the local toolchain cannot
+# express the failure. CI installs 1.10.0 via apt; this box has 1.14.0.
+bats_require_minimum_version 1.5.0
 
 setup() {
   unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
@@ -32,7 +38,7 @@ EOF
   export PROFILE="mac_workstation" HOSTNAME_SHORT="studio"
   run install_renovate_held_agent
   [ "$status" -eq 0 ]
-  ! command grep -q '__DOTFILES__\|__HOME__' "${_RHN_AGENT_DIR}/com.brucejackson.renovate-held.plist"
+  run ! command grep -q '__DOTFILES__\|__HOME__' "${_RHN_AGENT_DIR}/com.brucejackson.renovate-held.plist"
 }
 
 @test "the installed plist points at a script that exists" {
@@ -73,7 +79,7 @@ EOF
   run install_ledger_drift_agent
   [ "$status" -eq 0 ]
   [ -f "${_RHN_AGENT_DIR}/com.brucejackson.ledger-drift.plist" ]
-  ! command grep -q '__NAME__\|__DETECTOR__\|__MINUTE__\|__DOTFILES__\|__HOME__' \
+  run ! command grep -q '__NAME__\|__DETECTOR__\|__MINUTE__\|__DOTFILES__\|__HOME__' \
       "${_RHN_AGENT_DIR}/com.brucejackson.ledger-drift.plist"
 }
 
@@ -117,4 +123,13 @@ EOF
     [[ -f "${REPO_ROOT}/${_f}" ]] || { printf 'missing: %s\n' "${_f}"; _missing=1; }
   done < <(command grep -oE 'lib/[a-z_]+\.sh' "${REPO_ROOT}/setup_env.sh" | sort -u)
   [ "${_missing}" -eq 0 ]
+}
+
+@test "the installer refuses a name or minute that would break the sed expression" {
+  export PROFILE="mac_workstation" HOSTNAME_SHORT="studio"
+  run _la_install_agent 'has|pipe' "${_OVERRIDE_AI_CONFIG_ROOT}/.claude/scripts/x.sh" 7
+  [ "$status" -ne 0 ]
+  run _la_install_agent 'ok-name' "${_OVERRIDE_AI_CONFIG_ROOT}/.claude/scripts/x.sh" '9|evil'
+  [ "$status" -ne 0 ]
+  [ "$(find "${_RHN_AGENT_DIR}" -name '*.plist' | wc -l | tr -d ' ')" -eq 0 ]
 }
