@@ -151,3 +151,61 @@ EOF
   run ! command grep -q '__' "${_p}"
   command grep -qF "${_weird}/scripts/cadence-notify.sh" "${_p}"
 }
+
+@test "a missing plist template is an install failure, not a silent skip" {
+  export PROFILE="mac_workstation" HOSTNAME_SHORT="studio"
+  local _root="${BATS_TEST_TMPDIR}/noTemplate"
+  mkdir -p "${_root}/scripts"
+  cp "${REPO_ROOT}/scripts/cadence-notify.sh" "${_root}/scripts/"
+  chmod +x "${_root}/scripts/cadence-notify.sh"
+  export _OVERRIDE_DOTFILES_ROOT="${_root}"
+  run install_renovate_held_agent
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"template missing"* ]]
+  [ ! -f "${_RHN_AGENT_DIR}/com.brucejackson.renovate-held.plist" ]
+}
+
+@test "a notify script that exists but is not executable is an install failure" {
+  export PROFILE="mac_workstation" HOSTNAME_SHORT="studio"
+  local _root="${BATS_TEST_TMPDIR}/noExec"
+  mkdir -p "${_root}/scripts" "${_root}/LaunchAgents"
+  cp "${REPO_ROOT}/LaunchAgents/cadence.plist.template" "${_root}/LaunchAgents/"
+  cp "${REPO_ROOT}/scripts/cadence-notify.sh" "${_root}/scripts/"
+  chmod 000 "${_root}/scripts/cadence-notify.sh"
+  export _OVERRIDE_DOTFILES_ROOT="${_root}"
+  run install_renovate_held_agent
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"not executable"* ]]
+  chmod 644 "${_root}/scripts/cadence-notify.sh"
+}
+
+@test "a surviving placeholder aborts the install and removes the partial plist" {
+  export PROFILE="mac_workstation" HOSTNAME_SHORT="studio"
+  local _root="${BATS_TEST_TMPDIR}/badTemplate"
+  mkdir -p "${_root}/scripts" "${_root}/LaunchAgents"
+  cp "${REPO_ROOT}/scripts/cadence-notify.sh" "${_root}/scripts/"
+  chmod +x "${_root}/scripts/cadence-notify.sh"
+  # a placeholder nothing substitutes -- an agent pointing somewhere unresolved
+  # must never be installed
+  sed 's|<key>RunAtLoad</key>|<key>__NEVER_SUBSTITUTED__</key>|' \
+    "${REPO_ROOT}/LaunchAgents/cadence.plist.template" > "${_root}/LaunchAgents/cadence.plist.template"
+  export _OVERRIDE_DOTFILES_ROOT="${_root}"
+  run install_renovate_held_agent
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"placeholder survived"* ]]
+  [ ! -f "${_RHN_AGENT_DIR}/com.brucejackson.renovate-held.plist" ]
+}
+
+@test "install_ledger_drift_agent is a no-op on a non-cadence host" {
+  export PROFILE="personal_laptop" HOSTNAME_SHORT="laptop"
+  run install_ledger_drift_agent
+  [ "$status" -eq 0 ]
+  [ ! -f "${_RHN_AGENT_DIR}/com.brucejackson.ledger-drift.plist" ]
+}
+
+@test "the studio wireless twin is also a cadence host" {
+  export PROFILE="mac_workstation" HOSTNAME_SHORT="studio-1"
+  run install_renovate_held_agent
+  [ "$status" -eq 0 ]
+  [ -f "${_RHN_AGENT_DIR}/com.brucejackson.renovate-held.plist" ]
+}

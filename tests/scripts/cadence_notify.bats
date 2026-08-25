@@ -175,3 +175,23 @@ EOF
     [ ! -d "${_RHN_STATE_DIR}/${_bad}" ]
   done
 }
+
+@test "a detector that exists but is not executable is incomplete, not clean" {
+  local _d="${BATS_TEST_TMPDIR}/noexec-detector"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "${_d}"
+  chmod 000 "${_d}"
+  export _RHN_DETECTOR="${_d}"
+  run bash "${SCRIPT}" "${NAME}" "${_RHN_DETECTOR}"
+  [ "$status" -eq 2 ]
+  command grep -q '"result": *"incomplete"' "${_RHN_STATE_DIR}/${NAME}/last-run.json"
+  chmod 644 "${_d}"
+}
+
+@test "a heartbeat directory that cannot be created fails rather than reporting clean" {
+  _detector 0
+  local _blocked="${BATS_TEST_TMPDIR}/blocked"
+  printf 'not a directory\n' > "${_blocked}"
+  export _RHN_STATE_DIR="${_blocked}"
+  run bash "${SCRIPT}" "${NAME}" "${_RHN_DETECTOR}"
+  [ "$status" -ne 0 ]
+}
