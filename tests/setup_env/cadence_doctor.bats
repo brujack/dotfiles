@@ -1,4 +1,8 @@
 #!/usr/bin/env bats
+#
+# `run !` needs bats >= 1.5.0 (CI 1.10.0, this box 1.14.0). Declared so an
+# older bats fails loudly rather than mis-parsing the negation.
+bats_require_minimum_version 1.5.0
 
 setup() {
   unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
@@ -103,4 +107,20 @@ _beat() {  # $1 = age in days, $2 = result
   run _doctor_check_ledger_drift_cadence
   [ "$status" -ne 0 ]
   [[ "$output" == *"ledger-drift"* ]]
+}
+
+@test "the missing-field and bad-date failures are lexically distinct" {
+  # Guard against re-convergence: if both messages ever share the asserted
+  # word again, the tests above stop discriminating and go green when their
+  # guard is deleted. That has happened twice on this check.
+  printf 'not json at all\n' > "${_RHN_STATE_DIR}/renovate-held/last-run.json"
+  run _doctor_check_renovate_cadence
+  [[ "$output" == *"unparsable"* ]]
+  run ! command grep -q 'not a valid date' <<<"$output"
+
+  printf '{"ts": "garbage-not-a-date", "result": "clean"}\n' \
+    > "${_RHN_STATE_DIR}/renovate-held/last-run.json"
+  run _doctor_check_renovate_cadence
+  [[ "$output" == *"not a valid date"* ]]
+  run ! command grep -q 'heartbeat is unparsable' <<<"$output"
 }

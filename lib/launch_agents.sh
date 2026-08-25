@@ -48,6 +48,10 @@ _doctor_check_cadence() {
     _result="$(_renovate_cadence_field "${_file}" result)"
 
     # Unparsable is unknown, not healthy. Fail closed.
+    # These two failures MUST stay lexically distinct ("unparsable" vs "not a
+    # valid date"). A test asserting a word both branches emit cannot tell them
+    # apart and passes when the guard it names is deleted -- measured twice on
+    # this very check, the second time on a fix that chose the shared word.
     if [[ -z "${_ts}" || -z "${_result}" ]]; then
         doctor_fail "${_cname} cadence" "heartbeat is unparsable: ${_file}"
         return 1
@@ -56,7 +60,7 @@ _doctor_check_cadence() {
     _epoch=$(date -u -j -f "%Y-%m-%dT%H:%M:%SZ" "${_ts}" +%s 2>/dev/null \
              || date -u -d "${_ts}" +%s 2>/dev/null)
     if [[ -z "${_epoch}" ]]; then
-        doctor_fail "${_cname} cadence" "heartbeat timestamp is unparsable: ${_ts}"
+        doctor_fail "${_cname} cadence" "heartbeat timestamp is not a valid date: ${_ts}"
         return 1
     fi
 
