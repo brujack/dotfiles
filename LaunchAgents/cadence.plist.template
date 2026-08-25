@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.brucejackson.__NAME__</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>__DOTFILES__/scripts/cadence-notify.sh</string>
+    <string>__NAME__</string>
+    <string>__DETECTOR__</string>
+  </array>
+
+  <!-- Monday 09:07 local. Renovate's shared preset schedules "before 5am on
+       monday", so 09:07 is after it has raised whatever it will raise. Off the
+       hour deliberately -- :00 is where every scheduler in the world lands. -->
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Weekday</key><integer>1</integer>
+    <key>Hour</key><integer>9</integer>
+    <key>Minute</key><integer>__MINUTE__</integer>
+  </dict>
+
+  <!-- launchd gives an agent a bare PATH; gh and python3 both live in Homebrew
+       prefixes that only an interactive shell puts on PATH. See behavior.md's
+       actor table: this process sources no profile. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+
+  <key>RunAtLoad</key><false/>
+  <key>StandardOutPath</key><string>__HOME__/.local/share/dotfiles/cadence/__NAME__/stdout.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/.local/share/dotfiles/cadence/__NAME__/stderr.log</string>
+</dict>
+</plist>

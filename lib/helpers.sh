@@ -387,6 +387,8 @@ run_doctor() {
   _doctor_check_hooks_path
   _doctor_check_versions
   _doctor_check_github_mcp
+  _doctor_check_renovate_cadence
+  _doctor_check_ledger_drift_cadence
 
   printf "\n=== Summary ===\n"
   printf "%d checks passed, %d failed, %d warnings\n" "${_DOCTOR_PASS}" "${_DOCTOR_FAIL}" "${_DOCTOR_WARN}"

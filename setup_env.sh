@@ -51,6 +51,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/workflows.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/lib/git_sync.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/lib/legacy_rsync.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/lib/git_hooks.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/lib/launch_agents.sh"
 
 # Allow sourcing for unit testing without executing the main script body
 [[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0

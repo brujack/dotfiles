@@ -27,3 +27,4 @@ Cross-cutting decisions that apply across personal repos. Repo-specific decision
 | [0021](0021-hand-typed-test-oracle-for-the-identity-table.md)  | Hand-typed test oracle for the identity table           | 2026-08-18 | Accepted                                              |
 | [0022](0022-ci-dependency-slices-by-purpose.md)                | CI dependency renderings sliced by purpose              | 2026-08-23 | Accepted                                              |
 | [0023](0023-identity-table-load-failure-diverges-by-shell.md)  | Identity table load failure diverges by shell           | 2026-08-23 | Accepted (amends 0020)                                |
+| [0024](0024-launchagent-for-the-renovate-held-cadence.md)      | LaunchAgent for the Renovate held-major cadence          | 2026-08-25 | Accepted                                              |

@@ -11,10 +11,13 @@ dotfiles/
 ├── setup_env.sh       # Main entry — sources lib/, dispatches workflows
 ├── Brewfile           # Homebrew bundle (100+ formulae/casks; [HAS_*] tags are capability-gated)
 ├── lib/               # Shell libraries: constants, helpers, detect_env, macos, linux_shared,
-│                      #   linux_ubuntu, developer, update_summary, workflows, git_hooks
+│                      #   linux_ubuntu, developer, update_summary, workflows, git_hooks,
+│                      #   launch_agents
 ├── config/            # profiles.sh (hostname→profile map); local.sh (machine overrides, git-ignored);
 │                      #   hook_repos.sh (expected-repos list for the git-hooks sweep)
-├── scripts/           # bootstrap_mac.sh, whats-new-*.sh, run-bash-coverage.sh
+├── scripts/           # bootstrap_mac.sh, whats-new-*.sh, run-bash-coverage.sh,
+│                      #   cadence-notify.sh
+├── LaunchAgents/      # cadence.plist.template — one template, both weekly agents
 ├── powershell/        # Windows bootstrap: setup_windows.ps1, Pester tests, Makefile
 ├── tests/             # BATS tests: setup_env/, zshrc.d/, mocks/, helpers/
 ├── docs/              # ADRs, knowledge/, superpowers/, claude-code-new-features/,
@@ -61,7 +64,7 @@ When web research (web-research skill) or context-mode fetches produce findings 
 | `recreate-venv`  | Force-delete and recreate a named pyenv virtualenv. Flags: `--venv-name` (default: `ansible`). Runs full pip install when name is `ansible`.                                                                                                                                                                                                                                                                        |
 | `recreate-ruby`  | Force-delete and reinstall the pinned Ruby version (`RUBY_VER` in `lib/constants.sh`), reusing `install_ruby()`.                                                                                                                                                                                                                                                                                                    |
 | `update`         | Update all packages (brew, apt/snap, pip, gems, tools). Supports `--brew-only`, `--pip-only`, `--gems-only`, `--mas-only`, `--claude-only` flags. Prints a structured summary; logs to `~/.dotfiles-update.log`. Also writes a state-ledger entry (advisory, non-fatal). Full internals: [`dotfiles-update-workflow`](https://github.com/brujack/ai-config/blob/master/docs/knowledge/dotfiles-update-workflow.md). |
-| `doctor`         | Active health checks: identity-table load, symlinks, tool presence, credential dir permissions, version drift, global/system core.hooksPath pins. Exits non-zero on any failure                                                                                                                                                                                                                                                          |
+| `doctor`         | Active health checks: identity-table load, symlinks, tool presence, credential dir permissions, version drift, global/system core.hooksPath pins, weekly-cadence heartbeats (Studio only). Exits non-zero on any failure                                                                                                                                                                                                                                                          |
 | `check-versions` | Compare pinned versions in `lib/constants.sh` against GitHub latest; exits 1 if outdated. `--update` prompts per-tool to apply updates in-place                                                                                                                                                                                                                                                                     |
 
 **Options:**
@@ -587,6 +590,35 @@ CI failure elsewhere, ship `git archive <the sha CI ran>`; if the tree is dirty,
 the finding. Fixed in `b4ced0d`.
 
 **`_PROFILES_LOADED` (`lib/detect_env.sh` and `lib/helpers.sh`) is a sentinel that records whether the identity table loaded successfully** (ADR-0023, `docs/adr/0023-identity-table-load-failure-diverges-by-shell.md`, which amends ADR-0020 with the failure semantics). `detect_env()` sets it to `0` unconditionally on entry, then to `1` only after `config/profiles.sh` sources cleanly _and_ `declare -p PROFILE_MAP PROFILE_CAPS PROFILE_LEGACY` confirms all three arrays exist. `_doctor_check_profile()` in `lib/helpers.sh` branches on it before looking at `PROFILE` at all. The seam is never `export`ed, and that non-export is **not** what makes it safe — an environment-supplied value defeats the check entirely (measured: `env _PROFILES_LOADED=1 PROFILE=mac_workstation <the branch>` reports PASS). What actually protects it is the unconditional `=0` on entry to `detect_env`, combined with `detect_env()` always running before `run_doctor` (`setup_env.sh:61`, then the dispatch at `:69`). Why a sentinel instead of checking `PROFILE`? Because `config/profiles.zsh:46` exports `PROFILE` into every child of a login shell, so after a failed load the stale inherited value survives and `[[ -z ${PROFILE+x} ]]` is false. Measured: with the table unreadable and `PROFILE=mac_workstation` inherited, a pre-sentinel check reported PASS over a machine whose identity table never loaded. A negative control in `tests/setup_env/unit.bats` supplies `_PROFILES_LOADED=1` from the environment _without_ calling `detect_env` and asserts the branch reports PASS — if that test ever starts failing, the mechanism changed and this paragraph is stale.
+
+**Cadence seams (`scripts/cadence-notify.sh`, `lib/launch_agents.sh`) — see ADR-0024.**
+The delivery arm and the LaunchAgent installer both resolve absolute paths and external
+binaries, so a `PATH` mock cannot reach them (`shell.md`: an absolute-path default silently
+defeats the stub). Each seam below exists to make a branch reachable that is otherwise
+unreachable on a provisioned machine, and none grants a capability the operator does not
+already have by editing `PATH` or the plist directly.
+
+| variable | read by | why it exists |
+| --- | --- | --- |
+| `_RHN_DETECTOR` | tests only, via argv `$2` | production passes the detector path positionally from the plist; tests substitute a fixture that returns a chosen exit code |
+| `_RHN_STATE_DIR` | `_rhn_state_dir`, `_renovate_cadence_state_dir` | heartbeat root. Defaults under `~/.local/share/dotfiles/cadence/<name>/` — a test pointing at the real path would assert against the machine's live cadence state |
+| `_RHN_CURL_BIN` | `_rhn_notify` | `curl` is resolved by name, but a test must capture the payload rather than send it. Every ntfy assertion in the suite reads this capture |
+| `_RHN_LAUNCHCTL` | `_rhn_launchctl` | `launchctl load` on a real plist would register a live weekly job on the developer's machine — the destructive-failing-path hazard `tdd.md` E2 names |
+| `_RHN_AGENT_DIR` | `_rhn_agent_dir` | defaults to `~/Library/LaunchAgents`; tests must never write there |
+| `_OVERRIDE_DOTFILES_ROOT` | `_rhn_dotfiles_root` | lets a test build a fixture root — including one whose path contains `&`, which is how the plist-substitution corruption was found |
+| `_OVERRIDE_AI_CONFIG_ROOT` | `_rhn_ai_config_root` | the detector lives in ai-config; a test must not depend on that repo being present or on its script existing |
+
+**The heartbeat is a second channel, deliberately.** The agents are silent when the fleet is
+clean — a weekly "still alive" push trains the operator to ignore the channel and destroys
+the signal arm — so liveness travels in a file that `_doctor_check_cadence` reads and fails
+at 8 days. `ai-config`'s `ledger-drift.yml` is the counter-example the design is built
+against: its comment defers real alerting to "an enrolled machine", nothing on any machine
+ever ran it, and the honest scoping is precisely what stopped anyone looking.
+
+**`install_ledger_drift_agent` makes that deferral true rather than rewording it**, and the
+detector is invoked under `env -u NTFY_URL` so `ledger_drift_check.sh`'s own `ntfy` call
+cannot fire — otherwise detection and delivery would fail together and "no drift" would
+render identically to "no channel".
 
 ### Mock Pattern
 

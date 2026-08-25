@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+# Generic weekly delivery arm for a cadence check. Usage:
+#
+#     cadence-notify.sh <name> <detector-path>
+#
+# Detection lives elsewhere (ai-config) and is deliberately silent: a detector
+# prints findings to stdout and exits 0/1/2. This script is the thin wrapper
+# that turns that into an ntfy push and a heartbeat.
+#
+# THE DETECTOR IS RUN WITH NTFY_URL SCRUBBED, deliberately. ledger_drift_check.sh
+# makes its own ntfy call, so left alone it would both duplicate this script's
+# push and keep the failure mode below. Scrubbing demotes it to a pure detector
+# without modifying a script this repo does not own.
+#
+# The split matters. ledger_drift_check.sh makes its own ntfy call, so an unset
+# NTFY_URL degrades detection AND delivery together and still returns 0 --
+# "no drift" and "no channel" render identically. Here a missing channel is
+# reported on stderr and never touches the exit code.
+#
+# Detector contract:
+#   0 = all repos queried, control passed, nothing held
+#   1 = all repos queried, control passed, findings on stdout
+#   2 = INCOMPLETE: a query or the control failed (dominates 1)
+# Any other value is treated as 2 -- an unknown outcome is not a clean one.
+
+_rhn_state_dir() {
+    printf '%s' "${_RHN_STATE_DIR:-${HOME}/.local/share/dotfiles/renovate-held}"
+}
+
+_rhn_state_name() { printf '%s' "${_RHN_NAME:-cadence}"; }
+
+# Heartbeat is written on EVERY outcome including failure. A run that errored
+# and a run that never happened must not look alike -- that distinction is the
+# whole reason doctor reads this file rather than trusting the LaunchAgent.
+_rhn_write_heartbeat() {
+    local _result="$1" _rc="$2" _count="$3"
+    local _dir; _dir="$(_rhn_state_dir)/$(_rhn_state_name)"
+    mkdir -p "${_dir}" || return 1
+    printf '{"ts": "%s", "result": "%s", "exit_code": %s, "findings": %s}\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${_result}" "${_rc}" "${_count}" \
+        > "${_dir}/last-run.json" || return 1
+}
+
+# Deliberately void: delivery is best-effort and its outcome must never reach the
+# caller's exit code, because a missing or broken channel is not a finding about
+# the fleet. Do NOT add `|| return 1` at the call site -- that is the
+# ledger_drift_check.sh failure, where detection and delivery fail together and
+# "no drift" becomes indistinguishable from "no channel". Both failure branches
+# are pinned by tests; the return value is not read and carries no information.
+_rhn_notify() {
+    local _msg="$1"
+    if [[ -z "${NTFY_URL:-}" ]]; then
+        printf "renovate-held: NTFY_URL not set, no channel to deliver on\n" >&2
+        return 0
+    fi
+    local _curl="${_RHN_CURL_BIN:-curl}"
+    # --data-raw, never -d: curl's -d OPENS A FILE when the argument begins with
+    # `@`, so `-d "${var}"` on any unvalidated string is a latent arbitrary
+    # local-file-read that POSTs the contents to NTFY_URL. Verified against
+    # curl's own parser: `-d @/nonexistent` errors "encountered when reading a
+    # file" while --data-raw does not, and curl --help documents --data-raw as
+    # "'@' allowed". Currently unreachable here because _msg always begins with
+    # ${_name}, but _name is argv and this costs one word.
+    "${_curl}" -fsS --data-raw "${_msg}" "${NTFY_URL}" >/dev/null 2>&1 \
+        || printf "renovate-held: ntfy delivery failed\n" >&2
+    return 0
+}
+
+run_cadence_notify() {
+    local _name="${1:?cadence-notify: name required}"
+    # _name is interpolated into a filesystem path and (via the installer) into
+    # a sed replacement and plist XML. Constrain it at the boundary rather than
+    # escaping at each use: a `|` would terminate the installer's `s|..|..|`
+    # expression, `/` or `..` would escape the state directory, and `&` would
+    # produce malformed XML.
+    if [[ ! "${_name}" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
+        printf "cadence-notify: refusing name %q -- must match ^[a-z0-9][a-z0-9-]*$\n" "${_name}" >&2
+        return 2
+    fi
+    local _detector="${2:?cadence-notify: detector path required}"
+    local _out _rc _count _result _msg
+    _RHN_NAME="${_name}"
+
+    if [[ ! -x "${_detector}" ]]; then
+        printf "renovate-held: detector not executable at %s\n" "${_detector}" >&2
+        _rhn_write_heartbeat "incomplete" 2 0 || return 1
+        _rhn_notify "${_name} INCOMPLETE - cannot determine: detector missing"
+        return 2
+    fi
+
+    # NTFY_URL scrubbed: the detector detects, this script delivers.
+    _out="$(env -u NTFY_URL "${_detector}" 2>/dev/null)"
+    _rc=$?
+
+    _count=0
+    [[ -n "${_out}" ]] && _count=$(printf '%s\n' "${_out}" | command grep -c .)
+
+    case "${_rc}" in
+        0) _result="clean" ;;
+        1) _result="held" ;;
+        *) _result="incomplete"; _rc=2 ;;
+    esac
+
+    _rhn_write_heartbeat "${_result}" "${_rc}" "${_count}" || return 1
+
+    if [[ "${_result}" == "clean" ]]; then
+        return 0
+    fi
+
+    if [[ "${_result}" == "incomplete" ]]; then
+        _msg="${_name} INCOMPLETE - cannot determine."
+        [[ "${_count}" -gt 0 ]] && _msg="${_msg}"$'\n'"Found so far:"$'\n'"${_out}"
+    else
+        _msg="${_name}: ${_count} finding(s)."$'\n'"${_out}"
+    fi
+
+    _rhn_notify "${_msg}"
+    return "${_rc}"
+}
+
+[[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0
+run_cadence_notify "$@"
