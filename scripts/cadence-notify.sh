@@ -24,10 +24,17 @@
 # Any other value is treated as 2 -- an unknown outcome is not a clean one.
 
 _rhn_state_dir() {
-    printf '%s' "${_RHN_STATE_DIR:-${HOME}/.local/share/dotfiles/renovate-held}"
+    printf '%s' "${_RHN_STATE_DIR:-${HOME}/.local/share/dotfiles/cadence}"
 }
 
 _rhn_state_name() { printf '%s' "${_RHN_NAME:-cadence}"; }
+
+# The staleness bound is a property of the CADENCE, so the writer emits it and
+# any reader uses what was actually written rather than its own copy. A reader
+# holding 8 against a writer that has moved to 3 misses four days of staleness
+# and reports clean -- silent, permissive, and indistinguishable from health.
+# One weekly period plus slack.
+_rhn_max_age_days() { printf '%s' "${_RHN_MAX_AGE_DAYS:-8}"; }
 
 # Heartbeat is written on EVERY outcome including failure. A run that errored
 # and a run that never happened must not look alike -- that distinction is the
@@ -36,8 +43,8 @@ _rhn_write_heartbeat() {
     local _result="$1" _rc="$2" _count="$3"
     local _dir; _dir="$(_rhn_state_dir)/$(_rhn_state_name)"
     mkdir -p "${_dir}" || return 1
-    printf '{"ts": "%s", "result": "%s", "exit_code": %s, "findings": %s}\n' \
-        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${_result}" "${_rc}" "${_count}" \
+    printf '{"ts": "%s", "result": "%s", "exit_code": %s, "findings": %s, "max_age_days": %s}\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${_result}" "${_rc}" "${_count}" "$(_rhn_max_age_days)" \
         > "${_dir}/last-run.json" || return 1
 }
 

@@ -11,17 +11,27 @@
 # to "an enrolled machine", no machine runs it, and nothing reports that -- the
 # deferral reads as reassurance and stops anyone looking.
 
+# FALLBACK ONLY. The heartbeat carries the bound its writer actually used; this
+# stands in for heartbeats written before that field existed. A default silently
+# substituting for a missing value is the collapse
+# [[ai-config-count-failure-modes-not-channels]] describes, so the reader reports
+# WHICH source it used rather than just the number.
 readonly _RENOVATE_CADENCE_MAX_AGE_DAYS=8   # one weekly period plus slack
 
 _renovate_cadence_state_dir() {
-    printf '%s' "${_RHN_STATE_DIR:-${HOME}/.local/share/dotfiles/renovate-held}"
+    printf '%s' "${_RHN_STATE_DIR:-${HOME}/.local/share/dotfiles/cadence}"
 }
 
 # Read one string field out of the heartbeat. Deliberately not `jq` -- doctor
 # must not gain a dependency that its own FAIL path would then blame.
+# Reads both quoted and unquoted values. `max_age_days` is numeric and therefore
+# UNQUOTED, so a quoted-only pattern returns empty for it and the caller silently
+# falls back to its default -- defeating the written bound while looking correct.
 _renovate_cadence_field() {
-    local _file="$1" _key="$2"
-    sed -n "s/.*\"${_key}\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" "${_file}" | head -1
+    local _file="$1" _key="$2" _v
+    _v="$(sed -n "s/.*\"${_key}\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" "${_file}" | head -1)"
+    [[ -n "${_v}" ]] && { printf '%s' "${_v}"; return 0; }
+    sed -n "s/.*\"${_key}\"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p" "${_file}" | head -1
 }
 
 _doctor_check_cadence() {
@@ -64,6 +74,15 @@ _doctor_check_cadence() {
         return 1
     fi
 
+    local _bound _bound_src
+    _bound="$(_renovate_cadence_field "${_file}" max_age_days)"
+    if [[ "${_bound}" =~ ^[0-9]+$ ]]; then
+        _bound_src="from heartbeat"
+    else
+        _bound="${_RENOVATE_CADENCE_MAX_AGE_DAYS}"
+        _bound_src="default — heartbeat carries none"
+    fi
+
     _now=$(date -u +%s)
     _age=$(( (_now - _epoch) / 86400 ))
 
@@ -81,9 +100,9 @@ _doctor_check_cadence() {
         return 1
     fi
 
-    if [[ "${_age}" -gt "${_RENOVATE_CADENCE_MAX_AGE_DAYS}" ]]; then
+    if [[ "${_age}" -gt "${_bound}" ]]; then
         doctor_fail "${_cname} cadence" \
-            "last run ${_age}d ago (max ${_RENOVATE_CADENCE_MAX_AGE_DAYS}d) — agent not firing"
+            "last run ${_age}d ago (max ${_bound}d, ${_bound_src}) — agent not firing"
         return 1
     fi
 
@@ -94,6 +113,11 @@ _doctor_check_cadence() {
         doctor_fail "${_cname} cadence" \
             "last run ${_age}d ago was incomplete — could not determine held majors"
         return 1
+    fi
+
+    if [[ "${_result}" == "pending" ]]; then
+        doctor_pass "${_cname} cadence: installed ${_age}d ago, first run not yet due"
+        return 0
     fi
 
     doctor_pass "${_cname} cadence: last run ${_age}d ago (${_result})"
@@ -203,6 +227,26 @@ _la_install_agent() {
     fi
 
     "${_lctl}" load "${_dst}" >/dev/null 2>&1
+
+    # Seed a heartbeat at install time. Without it an agent installed today
+    # reads as "never run" until its first fire -- up to a week of a hard fault
+    # for something behaving exactly as installed. That is tolerable for a check
+    # the operator types deliberately and NOT for one that runs at every session
+    # start, which is what the reader is becoming.
+    #
+    # `pending` is a state, not a grace period: it carries the install time, so
+    # the ordinary staleness rule retires it. If the agent fires, the run
+    # overwrites it; if it never fires, it goes stale on schedule and reports.
+    # An ABSENT heartbeat now means genuinely not installed, which is a real
+    # fault rather than an ambiguous one.
+    local _hb
+    _hb="$(_renovate_cadence_state_dir)/${_name}"
+    if [[ ! -f "${_hb}/last-run.json" ]]; then
+        mkdir -p "${_hb}" 2>/dev/null &&
+        printf '{"ts": "%s", "result": "pending", "exit_code": 0, "findings": 0, "max_age_days": %s}\n' \
+            "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${_RENOVATE_CADENCE_MAX_AGE_DAYS}" \
+            > "${_hb}/last-run.json" 2>/dev/null
+    fi
     return 0
 }
 

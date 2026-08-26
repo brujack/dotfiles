@@ -218,3 +218,38 @@ EOF
   # (setup_env.sh -t setup_user) would not fix it.
   command grep -q 'install_ledger_drift_agent' "${REPO_ROOT}/lib/workflows.sh"
 }
+
+@test "install seeds a pending heartbeat when none exists, carrying the bound" {
+  export PROFILE="mac_workstation" HOSTNAME_SHORT="studio"
+  export _RHN_STATE_DIR="${BATS_TEST_TMPDIR}/state"
+  run install_ledger_drift_agent
+  [ "$status" -eq 0 ]
+  command grep -q '"result": "pending"' "${_RHN_STATE_DIR}/ledger-drift/last-run.json"
+  # the seed must carry max_age_days too, or a pending heartbeat always reports
+  # its bound as defaulted while the installer knew it
+  command grep -q '"max_age_days": [0-9]' "${_RHN_STATE_DIR}/ledger-drift/last-run.json"
+}
+
+@test "re-install migrates an installed agent that has no heartbeat" {
+  # Agents provisioned before the seed existed have none. A re-run of
+  # setup_user is the migration path, so the seed must fire on RE-install too --
+  # not only on a first install.
+  export PROFILE="mac_workstation" HOSTNAME_SHORT="studio"
+  export _RHN_STATE_DIR="${BATS_TEST_TMPDIR}/state"
+  install_ledger_drift_agent
+  rm -f "${_RHN_STATE_DIR}/ledger-drift/last-run.json"
+  run install_ledger_drift_agent
+  [ "$status" -eq 0 ]
+  command grep -q '"result": "pending"' "${_RHN_STATE_DIR}/ledger-drift/last-run.json"
+}
+
+@test "re-install never clobbers a real heartbeat with a pending seed" {
+  export PROFILE="mac_workstation" HOSTNAME_SHORT="studio"
+  export _RHN_STATE_DIR="${BATS_TEST_TMPDIR}/state"
+  mkdir -p "${_RHN_STATE_DIR}/ledger-drift"
+  printf '{"ts": "2026-01-01T00:00:00Z", "result": "held", "exit_code": 1, "findings": 3, "max_age_days": 8}\n' \
+    > "${_RHN_STATE_DIR}/ledger-drift/last-run.json"
+  run install_ledger_drift_agent
+  command grep -q '"result": "held"' "${_RHN_STATE_DIR}/ledger-drift/last-run.json"
+  run ! command grep -q 'pending' "${_RHN_STATE_DIR}/ledger-drift/last-run.json"
+}
