@@ -47,21 +47,60 @@ _rhn_write_heartbeat() {
 # ledger_drift_check.sh failure, where detection and delivery fail together and
 # "no drift" becomes indistinguishable from "no channel". Both failure branches
 # are pinned by tests; the return value is not read and carries no information.
+# Resolve the channel. `config/local.sh` is this repo's established home for
+# machine-local secrets -- git-ignored and untracked (verified two ways), where
+# the plist's EnvironmentVariables is world-readable (`-rw-r--r--`) and would be
+# re-emitted by the installer on every setup_user.
+#
+# Sourced ONLY when NTFY_URL is absent, so an explicit environment still wins and
+# tests never inherit the real machine's channel.
+_rhn_load_channel() {
+    [[ -n "${NTFY_URL:-}" ]] && return 0
+    local _cfg="${_RHN_LOCAL_CFG:-$(dirname "${BASH_SOURCE[0]}")/../config/local.sh}"
+    # shellcheck disable=SC1090 # path is resolved at runtime; see shell.md SC1091 note
+    [[ -r "${_cfg}" ]] && . "${_cfg}" >/dev/null 2>&1
+    return 0
+}
+
+# ntfy routes by TOPIC PATH. Measured against the live endpoint: a POST to the
+# bare host returns 400, host/topic returns 403 anonymously and 200 with
+# credentials. NTFY_URL holds the host and NTFY_TOPIC the topic, so a consumer
+# that POSTs bare ${NTFY_URL} -- as all three in this fleet did -- cannot deliver.
+_rhn_ntfy_target() {
+    local _u="${NTFY_URL%/}"
+    # An NTFY_URL that already carries a path is taken verbatim; only a bare
+    # host gets the topic appended, so setting the full URL still works.
+    [[ "${_u}" =~ ^https?://[^/]+$ ]] && [[ -n "${NTFY_TOPIC:-}" ]] && _u="${_u}/${NTFY_TOPIC}"
+    printf '%s' "${_u}"
+}
+
 _rhn_notify() {
     local _msg="$1"
+    _rhn_load_channel
     if [[ -z "${NTFY_URL:-}" ]]; then
         printf "renovate-held: NTFY_URL not set, no channel to deliver on\n" >&2
         return 0
     fi
-    local _curl="${_RHN_CURL_BIN:-curl}"
+    # The endpoint requires auth -- anonymous POST measured at 403 -- so absent
+    # credentials are a DIFFERENT fault from an absent channel and must not
+    # render as the same message. Reporting them alike is how a 403 every week
+    # would read as "no channel configured" and never get chased.
+    if [[ -z "${NTFY_USER:-}" || -z "${NTFY_PASSWORD:-}" ]]; then
+        printf "renovate-held: NTFY_USER/NTFY_PASSWORD unset — credential missing, cannot authenticate\n" >&2
+        return 0
+    fi
+    local _curl="${_RHN_CURL_BIN:-curl}" _target
+    _target="$(_rhn_ntfy_target)"
     # --data-raw, never -d: curl's -d OPENS A FILE when the argument begins with
     # `@`, so `-d "${var}"` on any unvalidated string is a latent arbitrary
-    # local-file-read that POSTs the contents to NTFY_URL. Verified against
-    # curl's own parser: `-d @/nonexistent` errors "encountered when reading a
-    # file" while --data-raw does not, and curl --help documents --data-raw as
-    # "'@' allowed". Currently unreachable here because _msg always begins with
-    # ${_name}, but _name is argv and this costs one word.
-    "${_curl}" -fsS --data-raw "${_msg}" "${NTFY_URL}" >/dev/null 2>&1 \
+    # local-file-read that POSTs the contents. curl --help documents --data-raw
+    # as "'@' allowed".
+    #
+    # Credentials go in on STDIN via `-K -`, never `-u`: curl's argv is readable
+    # by any `ps` on the box, so `-u user:pass` publishes the password to every
+    # local process for the life of the call.
+    printf 'user = "%s:%s"\n' "${NTFY_USER}" "${NTFY_PASSWORD}" \
+      | "${_curl}" -fsS -K - --data-raw "${_msg}" "${_target}" >/dev/null 2>&1 \
         || printf "renovate-held: ntfy delivery failed\n" >&2
     return 0
 }

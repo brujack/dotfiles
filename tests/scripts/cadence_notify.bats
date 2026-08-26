@@ -14,11 +14,22 @@ setup() {
   NAME="renovate-held"
   export _RHN_NTFY_LOG="${BATS_TEST_TMPDIR}/ntfy.log"
   export NTFY_URL="https://ntfy.invalid/test"
+  export NTFY_TOPIC="t" NTFY_USER="u" NTFY_PASSWORD="p"
   # every ntfy send is captured, never sent
   export _RHN_CURL_BIN="${BATS_TEST_TMPDIR}/fake-curl"
+  export _RHN_NTFY_STDIN="${BATS_TEST_TMPDIR}/ntfy.stdin"
   cat > "${_RHN_CURL_BIN}" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "${_RHN_NTFY_LOG}"
+# Credentials must arrive on STDIN, never argv. Capturing both is what lets the
+# pair of assertions discriminate: absent-from-argv alone passes on a build that
+# sends no credential at all.
+# Read stdin only when something is piped. A bare `cat` here blocks forever
+# when production does not pipe -- the deadlock this repo documents for any
+# process inheriting a live pipe.
+if [ ! -t 0 ] && read -t 1 -r _l 2>/dev/null; then
+  { printf '%s\n' "$_l"; cat; } >> "${_RHN_NTFY_STDIN}" 2>/dev/null || true
+fi
 EOF
   chmod +x "${_RHN_CURL_BIN}"
 }
@@ -194,4 +205,86 @@ EOF
   export _RHN_STATE_DIR="${_blocked}"
   run bash "${SCRIPT}" "${NAME}" "${_RHN_DETECTOR}"
   [ "$status" -ne 0 ]
+}
+
+@test "the credential never appears in curl's argv" {
+  # `curl -u user:pass` puts the password in the process argv, readable by any
+  # `ps` on the box. Credentials go in via a config on stdin instead.
+  export NTFY_USER="u" NTFY_PASSWORD="p" NTFY_TOPIC="topic"
+  _detector 1 'x#1  1d  major  y'
+  run bash "${SCRIPT}" "${NAME}" "${_RHN_DETECTOR}"
+  [ "$status" -eq 1 ]
+  # POSITIVE: the credential is genuinely transmitted...
+  command grep -q 'u:p' "${_RHN_NTFY_STDIN}"
+  # ...and NEGATIVE: it is not on the command line, where any `ps` would see it.
+  run ! command grep -q 'u:p' "${_RHN_NTFY_LOG}"
+  run ! command grep -qE '(^| )-u( |$)' "${_RHN_NTFY_LOG}"
+}
+
+@test "the POST targets host/topic, never the bare host" {
+  export NTFY_URL="https://ntfy.invalid" NTFY_TOPIC="mytopic"
+  _detector 1 'x#1  1d  major  y'
+  run bash "${SCRIPT}" "${NAME}" "${_RHN_DETECTOR}"
+  [ "$status" -eq 1 ]
+  command grep -q 'https://ntfy.invalid/mytopic' "${_RHN_NTFY_LOG}"
+}
+
+@test "a trailing slash on NTFY_URL does not double up" {
+  export NTFY_URL="https://ntfy.invalid/" NTFY_TOPIC="mytopic"
+  _detector 1 'x#1  1d  major  y'
+  run bash "${SCRIPT}" "${NAME}" "${_RHN_DETECTOR}"
+  command grep -q 'https://ntfy.invalid/mytopic' "${_RHN_NTFY_LOG}"
+  run ! command grep -q 'invalid//mytopic' "${_RHN_NTFY_LOG}"
+}
+
+@test "an NTFY_URL that already carries a path is used verbatim" {
+  export NTFY_URL="https://ntfy.invalid/preset" NTFY_TOPIC="mytopic"
+  _detector 1 'x#1  1d  major  y'
+  run bash "${SCRIPT}" "${NAME}" "${_RHN_DETECTOR}"
+  command grep -q 'https://ntfy.invalid/preset' "${_RHN_NTFY_LOG}"
+  run ! command grep -q 'preset/mytopic' "${_RHN_NTFY_LOG}"
+}
+
+@test "missing credentials are reported distinctly from a missing channel" {
+  # The endpoint requires auth (measured: anonymous POST -> 403), so no
+  # credentials means no delivery -- a different fault from no URL, and it must
+  # not render as the same message.
+  export NTFY_URL="https://ntfy.invalid" NTFY_TOPIC="t"
+  unset NTFY_USER NTFY_PASSWORD
+  _detector 1 'x#1  1d  major  y'
+  run bash "${SCRIPT}" "${NAME}" "${_RHN_DETECTOR}"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"credential"* ]]
+  run ! command grep -q 'no channel to deliver on' <<<"$output"
+}
+
+@test "config is sourced only when NTFY_URL is absent, so the env still wins" {
+  local _cfg="${BATS_TEST_TMPDIR}/local.sh"
+  printf 'export NTFY_URL="https://from-config.invalid"\nexport NTFY_TOPIC="cfgtopic"\nexport NTFY_USER="u"\nexport NTFY_PASSWORD="p"\n' > "${_cfg}"
+  export _RHN_LOCAL_CFG="${_cfg}"
+  export NTFY_URL="https://from-env.invalid" NTFY_TOPIC="envtopic" NTFY_USER="u" NTFY_PASSWORD="p"
+  _detector 1 'x#1  1d  major  y'
+  run bash "${SCRIPT}" "${NAME}" "${_RHN_DETECTOR}"
+  command grep -q 'from-env.invalid/envtopic' "${_RHN_NTFY_LOG}"
+  run ! command grep -q 'from-config' "${_RHN_NTFY_LOG}"
+}
+
+@test "config supplies the channel when the env does not" {
+  local _cfg="${BATS_TEST_TMPDIR}/local.sh"
+  printf 'export NTFY_URL="https://from-config.invalid"\nexport NTFY_TOPIC="cfgtopic"\nexport NTFY_USER="u"\nexport NTFY_PASSWORD="p"\n' > "${_cfg}"
+  export _RHN_LOCAL_CFG="${_cfg}"
+  unset NTFY_URL NTFY_TOPIC NTFY_USER NTFY_PASSWORD
+  _detector 1 'x#1  1d  major  y'
+  run bash "${SCRIPT}" "${NAME}" "${_RHN_DETECTOR}"
+  [ "$status" -eq 1 ]
+  command grep -q 'from-config.invalid/cfgtopic' "${_RHN_NTFY_LOG}"
+}
+
+@test "an absent config file is not an error — the no-channel path still reports" {
+  export _RHN_LOCAL_CFG="${BATS_TEST_TMPDIR}/does-not-exist.sh"
+  unset NTFY_URL NTFY_TOPIC NTFY_USER NTFY_PASSWORD
+  _detector 1 'x#1  1d  major  y'
+  run bash "${SCRIPT}" "${NAME}" "${_RHN_DETECTOR}"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no channel"* ]]
 }
