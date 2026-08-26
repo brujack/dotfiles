@@ -288,3 +288,16 @@ EOF
   [ "$status" -eq 1 ]
   [[ "$output" == *"no channel"* ]]
 }
+
+@test "a quote in the credential is escaped, not silently truncated" {
+  # curl's -K value is quote-delimited: an unescaped `"` terminates it early and
+  # the rest is dropped. Measured via --libcurl: user = "has"quote:pw" emits
+  # USERPWD "has:" -- truncated username, no password -- which surfaces as a 403
+  # and reports as "delivery failed", identical to the server being down.
+  export NTFY_USER='ha"s' NTFY_PASSWORD='p\w' NTFY_TOPIC="t"
+  _detector 1 'x#1  1d  major  y'
+  run bash "${SCRIPT}" "${NAME}" "${_RHN_DETECTOR}"
+  [ "$status" -eq 1 ]
+  command grep -q 'ha\\"s' "${_RHN_NTFY_STDIN}"
+  command grep -q 'p\\\\w'  "${_RHN_NTFY_STDIN}"
+}

@@ -99,7 +99,17 @@ _rhn_notify() {
     # Credentials go in on STDIN via `-K -`, never `-u`: curl's argv is readable
     # by any `ps` on the box, so `-u user:pass` publishes the password to every
     # local process for the life of the call.
-    printf 'user = "%s:%s"\n' "${NTFY_USER}" "${NTFY_PASSWORD}" \
+    #
+    # curl's -K value is quote-delimited, so a `"` in the credential TERMINATES
+    # it early and the rest is dropped. Measured against curl's own parser via
+    # --libcurl: `user = "has"quote:pw"` emits USERPWD "has:" -- a truncated
+    # username and no password at all. That surfaces as a 403, which this code
+    # reports as "delivery failed", i.e. identical to the server being down.
+    # Latent today because the current password contains no quote; one rotation
+    # away otherwise. Escape backslash first, then quote.
+    local _cred
+    _cred="$(printf '%s:%s' "${NTFY_USER}" "${NTFY_PASSWORD}" | sed 's/\\/\\\\/g; s/"/\\"/g')"
+    printf 'user = "%s"\n' "${_cred}" \
       | "${_curl}" -fsS -K - --data-raw "${_msg}" "${_target}" >/dev/null 2>&1 \
         || printf "renovate-held: ntfy delivery failed\n" >&2
     return 0
