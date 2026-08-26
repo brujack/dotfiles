@@ -137,3 +137,61 @@ _beat() {  # $1 = age in days, $2 = result
   [[ "$output" == *"future"* ]]
   run ! command grep -q 'PASS' <<<"$output"
 }
+
+@test "the three rendering classes are pairwise distinct" {
+  # Every other test asserts that its OWN branch fires. None asserted that two
+  # branches render DIFFERENTLY -- so a reader that rendered `held` identically
+  # to a fault would pass the whole suite while defeating the decision that a
+  # finding is not a fault. The test shape is the gap, not the code shape.
+  local _fresh; _fresh=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  local _out_clean _out_held _out_incomplete
+  for r in clean held incomplete; do
+    printf '{"ts": "%s", "result": "%s", "exit_code": 0, "findings": 0, "max_age_days": 8}\n' \
+      "${_fresh}" "$r" > "${_RHN_STATE_DIR}/renovate-held/last-run.json"
+    run _doctor_check_renovate_cadence
+    eval "_out_${r}=\"\$output\""
+  done
+  [ "${_out_clean}" != "${_out_held}" ]
+  [ "${_out_clean}" != "${_out_incomplete}" ]
+  [ "${_out_held}" != "${_out_incomplete}" ]
+  # and the fault/non-fault split is real, not just different wording
+  [[ "${_out_incomplete}" == *"FAIL"* ]]
+  [[ "${_out_held}" != *"FAIL"* ]]
+}
+
+@test "the bound comes from the heartbeat, not the reader's own constant" {
+  # A reader holding 8 against a writer that has moved to 3 misses four days of
+  # staleness and reports clean.
+  local _ts; _ts=$(date -u -v-5d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '5 days ago' +%Y-%m-%dT%H:%M:%SZ)
+  printf '{"ts": "%s", "result": "clean", "exit_code": 0, "findings": 0, "max_age_days": 3}\n' \
+    "${_ts}" > "${_RHN_STATE_DIR}/renovate-held/last-run.json"
+  run _doctor_check_renovate_cadence
+  [ "$status" -ne 0 ]                      # 5d > written bound 3, though < default 8
+  [[ "$output" == *"from heartbeat"* ]]
+}
+
+@test "a heartbeat with no bound falls back and SAYS it fell back" {
+  local _ts; _ts=$(date -u -v-9d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '9 days ago' +%Y-%m-%dT%H:%M:%SZ)
+  printf '{"ts": "%s", "result": "clean", "exit_code": 0, "findings": 0}\n' \
+    "${_ts}" > "${_RHN_STATE_DIR}/renovate-held/last-run.json"
+  run _doctor_check_renovate_cadence
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"heartbeat carries none"* ]]
+}
+
+@test "an installed-but-not-yet-due agent is not a fault" {
+  local _fresh; _fresh=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  printf '{"ts": "%s", "result": "pending", "exit_code": 0, "findings": 0, "max_age_days": 8}\n' \
+    "${_fresh}" > "${_RHN_STATE_DIR}/renovate-held/last-run.json"
+  run _doctor_check_renovate_cadence
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"not yet due"* ]]
+}
+
+@test "a pending heartbeat still goes stale — it is a state, not a grace period" {
+  local _old; _old=$(date -u -v-30d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '30 days ago' +%Y-%m-%dT%H:%M:%SZ)
+  printf '{"ts": "%s", "result": "pending", "exit_code": 0, "findings": 0, "max_age_days": 8}\n' \
+    "${_old}" > "${_RHN_STATE_DIR}/renovate-held/last-run.json"
+  run _doctor_check_renovate_cadence
+  [ "$status" -ne 0 ]
+}
