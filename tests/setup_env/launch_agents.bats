@@ -209,3 +209,12 @@ EOF
   [ "$status" -eq 0 ]
   [ -f "${_RHN_AGENT_DIR}/com.brucejackson.renovate-held.plist" ]
 }
+
+@test "run_setup_user wires both cadence agents (call-site regression guard)" {
+  # install_ledger_drift_agent was defined in f6bfe54 but its call site in
+  # run_setup_user was never added. The doctor check
+  # _doctor_check_ledger_drift_cadence is already wired into run_doctor, so on
+  # the Studio the check would permanently fail and the remedy
+  # (setup_env.sh -t setup_user) would not fix it.
+  command grep -q 'install_ledger_drift_agent' "${REPO_ROOT}/lib/workflows.sh"
+}

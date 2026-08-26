@@ -215,6 +215,7 @@ run_setup_user() {
   # cadence must still complete setup_user, and doctor's stale-heartbeat arm is
   # what reports the gap rather than this line failing the whole workflow.
   install_renovate_held_agent || log_warn "renovate cadence agent not installed — see above"
+  install_ledger_drift_agent || log_warn "ledger drift cadence agent not installed — see above"
 
   _ledger_write_run_entry "setup_user" 0 || true
 }
