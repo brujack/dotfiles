@@ -107,8 +107,27 @@ _rhn_notify() {
     # reports as "delivery failed", i.e. identical to the server being down.
     # Latent today because the current password contains no quote; one rotation
     # away otherwise. Escape backslash first, then quote.
-    local _cred
-    _cred="$(printf '%s:%s' "${NTFY_USER}" "${NTFY_PASSWORD}" | sed 's/\\/\\\\/g; s/"/\\"/g')"
+    #
+    # A NEWLINE cannot be escaped -- curl's config format is line-oriented, so a
+    # quoted value simply cannot contain one, and everything after it is parsed
+    # as FURTHER DIRECTIVES. Measured against curl 8.7.1: a password of
+    # $'p\noutput = /tmp/x' made curl obey the smuggled `output` and write the
+    # response body to that path; `user-agent`, `url` and `upload-file` are
+    # reachable the same way. So this refuses rather than escapes -- and refusing
+    # is not a degradation, because the alternative is executing an attacker's
+    # curl options. Credentials come from a trusted local.sh today, so this is
+    # defence in depth, not a live exploit.
+    case "${NTFY_USER}${NTFY_PASSWORD}" in
+        *$'\n'* | *$'\r'*)
+            printf "renovate-held: credential contains a newline — refusing to build a curl config\n" >&2
+            return 0
+            ;;
+    esac
+    # Parameter expansion rather than a sed pipeline: no second process, so the
+    # credential never crosses a process boundary at all. Backslash first.
+    local _cred="${NTFY_USER}:${NTFY_PASSWORD}"
+    _cred="${_cred//\\/\\\\}"
+    _cred="${_cred//\"/\\\"}"
     printf 'user = "%s"\n' "${_cred}" \
       | "${_curl}" -fsS -K - --data-raw "${_msg}" "${_target}" >/dev/null 2>&1 \
         || printf "renovate-held: ntfy delivery failed\n" >&2
