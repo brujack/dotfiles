@@ -93,22 +93,17 @@ second-order gain against 9 more numbers, each carrying an invariant (a step cap
 its job cap is silently ignored). Deferred, with a stated trigger: revisit if an
 install step hits its job cap again under this change.
 
-**Durability: a reduced guard test, and its case is weaker than it first looked.**
+**Durability: nothing mechanical. This was decided against, on measurement.**
 Seven YAML lines change nothing about the next job someone adds, and the file reached
-0 of 7 by accretion rather than by decision. But measured over the population the
-decision actually governs, the guard's expected firing rate is **zero**: `ci.yml` went
-2 -> 6 jobs between 2026-04-02 and 2026-04-27, `pr-title-lint.yml` added its single job
-on 2026-05-17, and every `.github/` commit in the four months since edits steps inside
-existing jobs. An earlier estimate of ~0.4 firings/month was computed over all history
-including the bring-up burst — the wrong reference class. A backlog sweep finds **0 of
-58 rows** proposing a new CI job.
+0 of 7 by accretion rather than by decision — so a guard test was specified across three
+review rounds and then dropped. Measured over the population the decision governs, its
+firing rate is **zero**, and every defect found in nine lens reports was inside it while
+the seven lines drew none. Full reasoning, the three shapes its parser missed, and two
+viable futures are under "What was considered and dropped" below.
 
-So the guard is retained in reduced form: the per-file job-name-set assertion and the
-scope/enumeration properties that make it trustworthy, and nothing else. An eighth job
-turns the suite red on set mismatch, which is the whole of the durability requirement.
-Everything that generated defects in review — a `uses:` branch, a re-indentation
-mutation needing a production seam — is dropped rather than fixed, because the event
-they guard has not occurred in four months and nothing planned would cause it.
+What replaces it is honest disclosure rather than a mechanism: an eighth job added
+without a cap will not be caught by anything, and that is stated in "What this does not
+do" instead of being papered over by a check that reports clean on its own trigger class.
 
 ## Values
 
@@ -141,120 +136,68 @@ Nothing detects these going stale. The comment exists so the next reader can jud
 staleness without re-deriving the baseline, which is the cheapest thing that helps and
 is not a mechanism.
 
-## Guard test
+## What was considered and dropped: a guard test
 
-`tests/scripts/workflow_timeouts.bats` asserts that every job in every tracked
-workflow declares `timeout-minutes`.
+Three review rounds specified a `tests/scripts/workflow_timeouts.bats` asserting that
+every job in every tracked workflow declares `timeout-minutes`. It is **not** part of
+this design. The reasons are recorded here rather than in the review log, because the
+next person to have this idea should find them.
 
-**No new dependency: the parser is awk, not a YAML library.** The `test` job installs
-`bats`, `zsh`, `shellcheck` and `uv`, and no Python packages. `pyyaml` is present on
-this machine (6.0.3, under pyenv Python 3.14.6) and is **not installed by any step in
-either workflow** — so a test importing it would be relying on the contents of the
-`ubuntu-latest` runner image, which is unpinned and can change between runs. Whether
-that image ships `pyyaml` today was not measured and is deliberately not relied upon.
-`CLAUDE.md` already records the cost of the adjacent mistake: `uv` was added to the
-`test` job only, and `bash-coverage` runs the same `make test`, so four tests failed in
-the job that was not updated. Any tool a new test needs must be installed in both jobs;
-needing none avoids the question.
+**Its firing rate over the population the decision governs is zero.** `ci.yml` went
+2 -> 6 jobs between 2026-04-02 and 2026-04-27, `pr-title-lint.yml` added its single job
+on 2026-05-17, and every `.github/` commit in the four months since edits steps inside
+existing jobs — #243 added 42 lines to `auto-merge` as steps, not a job. A sweep of the
+backlog finds **0 of 58** rows whose implementation would add one. An earlier estimate of
+~0.4 firings/month was computed over all history including the bring-up burst, which is
+the wrong reference class.
 
-**Reusable-workflow (`uses:`) jobs are out of scope, and that is now an evidence-based
-exclusion rather than a deferral.** SchemaStore's `github-workflow.json` — the schema
-`actionlint` and most editors validate against — declares `reusableWorkflowCallJob` with
-`additionalProperties: false` and **no `timeout-minutes` key**, while `normalJob` has it.
-A job-level cap is therefore not expressible on such a job, so both earlier drafts were
-wrong: exempting them silently hid a gap, and failing on them created a gate with no
-green path — an adopter could neither add the key nor omit it.
+**A line-oriented matcher cannot enumerate YAML, and three rounds found three shapes it
+misses.** A quoted key (`"deploy":`), a key with a trailing comment (`deploy: # …`), and
+an inline flow job (`quick: {runs-on: …}`) are each invisible to `^  [^ ].*:$` while the
+file still yields jobs and passes. Each was found in about ten seconds once someone
+looked; there is no reason to believe the list is complete. Widening the character class
+fixed instances, not the class — and the expected job-name set is derived by the very
+matcher whose completeness is in question, which `behavior.md` names as a check that
+cannot falsify its subject.
 
-The guard asserts nothing about `uses:` jobs. It is inert today (**0 of 7 jobs** use that
-form) and, because nothing is asserted, the open question of whether GitHub's runner
-*errors* on the key or *silently ignores* it does not need answering to ship this. When a
-reusable workflow is first adopted, the cap for it belongs in the called workflow's own
-jobs; if that workflow is local, it is already in this guard's scope by pathspec.
+**Its failure mode is worse than its absence.** Because the expected set is pinned to
+today's names, a new job the matcher cannot see leaves the derived set identical to the
+pinned set: both assertions green, the uncapped job unreported. A gate that reports clean
+on its own trigger class is a reason not to look.
 
-Recorded as a known limit rather than solved: a *remote* reusable workflow's jobs are
-outside `git ls-files` and this guard cannot see them.
+**And an intent is not a mechanism.** A draft asserted three times that the guard
+"asserts nothing about reusable-workflow jobs." No code did that. The matcher is
+shape-blind, so a `uses:` job key matches like any other, enters the set, and gets
+asserted on — recreating exactly the unsatisfiable state the sentence claimed to have
+removed, now reached by silence rather than by a stated rule.
 
-Two corollaries. `ci.md`'s "Reusable Workflow Calls Cannot Use `strategy: matrix`" is
-**wrong** — the same schema shows `strategy` **is** permitted on a `uses:` job, and
-GitHub now documents "Using a matrix strategy with a reusable workflow". That is a
-cross-cutting finding against a standard nine repos read, and belongs in ai-config's
-backlog, not here. And SchemaStore is a community model of GitHub's parser rather than
-the parser itself — which is exactly why this design no longer depends on it.
+**Two futures, either of which would work**, recorded so this is a deferral with named
+options rather than a rejection:
 
-Four properties, each answering a defect this repo has already paid for:
+1. A real YAML front end (`pyyaml`) instead of `awk` — removing the whole class of
+   matcher defects, at the cost of a dependency installed in **both** `test` and
+   `bash-coverage`, since both run `make test` and `CLAUDE.md` records what a one-job
+   install cost last time.
+2. `actionlint` as a pinned, checksum-verified CI tool per `ci.md`. It validates
+   workflows generally, subsumes this check entirely, and would catch defect classes
+   this guard was never going to see.
 
-1. **Scope derives from the tracked set** —
-   `git ls-files '.github/workflows/*.yml' '.github/workflows/*.yaml'` — never a
-   literal file list. An omitted file is absent from the assertion entirely and cannot
-   make it fail (`tdd.md`, Coverage Denominators). `*.yaml` is included because GitHub
-   accepts both extensions; zero such files exist today.
-2. **The `git ls-files` call is wrapped in
-   `env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE`**, reusing the
-   `_git_ls_clean` helper already in `tests/scripts/makefile_lint_scope.bats`.
-   `scripts/pre-push` runs `make test`, git exports `GIT_DIR` into a hook when the push
-   originates from a worktree, and `git -C` does not override it.
-3. **An empty file list fails the test.** A pathspec that matches nothing must not
-   report a pass — the same rule `SHELL_FILES` and `ZSH_FILES` already follow in the
-   `Makefile`.
-4. **Parsing is per job, anchored after `^jobs:`, with a matcher wide enough for the
-   shapes YAML allows and a fail-closed arm for the ones it is not.** The job-key matcher
-   is `^  [^ ].*:$`, not `^  [A-Za-z0-9_-]+:` — the narrow character class silently misses
-   a **quoted** job key. Measured: a file with `test:` and `"deploy":` yields `['test',
-   'deploy']` to a YAML parser and **only `test`** to the narrow matcher, so an uncapped
-   `deploy` is invisible while the file still contributes >=1 job and passes. The parser
-   additionally **fails** rather than proceeding when `jobs:` carries trailing content on
-   its own line (flow mapping, `jobs: {build: {...}}`, which yields 0 keys to any
-   line-oriented matcher) or when the file contains tab indentation. Unknown shape is a
-   failure, not a pass — `USER.md`, fail closed on unknown.
-
-   A workflow-wide grep
-   for `timeout-minutes` is satisfied by a hit in any job; `CLAUDE.md` records exactly
-   that defect in the test written to keep `uv` in both jobs, which passed on a hit in
-   the wrong job. Anchoring at `jobs:` is equally load-bearing: an exploratory parser
-   written during this design reported `pull_request` as a job in **both** files,
-   because the children of the `on:` block sit at the same two-space indent as job
-   keys.
+Neither is in scope here. A backlog row carries this forward.
 
 ## Verification
 
-- `make test` passes.
-- **Pin the measurement, not only the verdict.** Assert the parser's derived job-name
-  set per file — `ci.yml` yields exactly `test lint-macos powershell bash-coverage
-  secret-scan auto-merge`, and `pr-title-lint.yml` exactly `pr-title-lint` — and assert
-  every tracked workflow contributes at least one job. A named set beats a count of 7,
-  because a count also passes when one real job is dropped and one phantom `on:` child
-  is added, which is precisely the error already caught by hand during this design.
+- The seven values are declared and GitHub enforces them. There is nothing to test in
+  this repo's suite: a `timeout-minutes` key is data read by the runner, not code.
+- **What proves it works is a real timeout, which cannot be manufactured on demand.**
+  Recorded as a limit rather than papered over with a test that would assert the string
+  is present in a file — which is what the dropped guard reduced to.
+- `make test` and `make lint` must stay green, which for a workflow-only change is a
+  statement about not having broken anything else.
 
-  Without this the gate has an unpinned denominator one level below the file list.
-  "Every job declares `timeout-minutes`" is **vacuously true over zero jobs**, so a
-  tracked file the parser cannot read passes silently. That is not hypothetical: a
-  workflow indented four spaces under `jobs:` is valid YAML that GitHub accepts, and
-  yields 2 jobs to a YAML parser and **0 jobs** to a two-space anchored matcher.
-- **One mutation, required.** Delete one `timeout-minutes` line; confirm red, naming
-  that job; restore.
-
-  **A second mutation was specified and then withdrawn, because it cannot run.** The
-  draft asked for a copy of `ci.yml` re-indented to four spaces, asserted red. Property 1
-  derives scope from `git ls-files`, so an untracked copy is invisible to the parser and
-  the mutation returns **green** — it would have shipped as a verification step that
-  proves nothing. Executing it needs either a tracked fixture (which the real-files rule
-  above discourages) or a declared override seam, the shape this repo already uses for
-  `REQUIREMENTS_CI_TARGET`. Neither is built here: under the reduced guard the
-  zero-jobs case is covered structurally instead, because the parser now **fails** on the
-  shapes that produce it rather than returning an empty set.
-- The parser is exercised against the real workflow files, not a hand-written fixture
-  (`tdd.md`, pitfall F).
-
-**Where the guard actually runs.** `scripts/pre-push:57` excuses `^\.github/.*\.ya?ml$`
-from triggering the local suite, so a workflow-only change — which is what adding a job
-is — skips `make test` locally and the guard fires only in CI, in both `test` and
-`bash-coverage`. It does run locally when the author also touched `tests/`, i.e. when
-they have already done the right thing. Presenting `make test` as the gate would be
-wrong; CI is the gate for this guard's own trigger class.
-
-**Stated limit:** nothing here proves a cap actually fires. That requires a real hang,
-which cannot be manufactured on demand. The test proves the declarations are present
-and stay present; GitHub enforces them.
+**Where a change like this is actually gated.** `scripts/pre-push:57` excuses
+`^\.github/.*\.ya?ml$` from triggering the local suite, so a workflow-only change skips
+`make test` locally and is checked by CI alone — in both `test` and `bash-coverage`.
+Worth knowing before assuming a local green means anything here.
 
 ## What this does not do
 
@@ -268,9 +211,18 @@ and stay present; GitHub enforces them.
 - **No retry on timeout.** Retrying a hang spends the cap a second time.
 - **No step-level caps** — deferred, with the trigger stated above.
 - **No staleness detection** on the values themselves.
+- **Nothing stops an eighth job being added with no cap.** This is the requirement the
+  dropped guard existed to meet, and it is now unmet by design rather than by oversight.
+  The bet is explicit: zero job additions in four months, zero backlog rows that would
+  cause one, against a guard that produced every defect three review rounds found. If a
+  job does get added uncapped, the failure is the same six-hour default this spec
+  describes, and the backlog row names two mechanisms that would have caught it.
 - **It does not verify whether GitHub accepts job-level `timeout-minutes` on a
-  reusable-workflow job.** That question is now surfaced by a failing test at the moment
-  it first matters, rather than answered in advance.
+  reusable-workflow job.** SchemaStore says it is not an accepted key, independently
+  derived twice; whether the runner *errors* or *silently ignores* is unsettled and
+  needs a throwaway branch push nobody has made. With no guard, nothing in this repo
+  depends on the answer — and that claim is now load-bearing enough to state carefully,
+  because an earlier draft made it while a shape-blind matcher quietly did depend on it.
 
 ## Related
 
@@ -423,3 +375,87 @@ behaviour changes anything, so no throwaway push is required.
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+## Multi-Lens Review — Round 3
+
+Reviewed at commit: `1c80ff1` (round-2 dispositions applied). Rounds 1 and 2 above are
+history; these lenses were told so, and told the last change was a *subtraction* and to
+look for what a subtraction breaks.
+
+### Goal-Fit
+
+Finding: Build the seven lines. The reduction's stated replacement for the withdrawn
+mutation is factually wrong about the shape it claims to cover — a four-space `jobs:`
+block trips neither fail-closed arm (those are trailing-content and tabs), so the parser
+returns an empty set silently and the case is caught by the `>=1 job` assertion, not
+"structurally". Correct outcome, wrong reason, and the wrong reason is what stops the
+next reader checking. Verification is 4 PASS to 1 RED, and the single RED exercises only
+the timeout assertion, so the two enumeration assertions added *because* vacuous truth
+was the discovered defect ship unfalsified. The withdrawal was a false dichotomy: it
+considered mutating the data (an untracked copy, correctly identified as invisible to
+`git ls-files`) and never mutating the *checker* — break the anchor, confirm red. No
+fixture, no seam, one line.
+Assumption: that the harm window is genuinely unattended; the only observed incident was
+noticed and cancelled by a human at 30m21s, n=1, so if the operator reliably notices
+within ~30 minutes then `test: 20` and `bash-coverage: 25` buy nothing over the human
+they replace and only `powershell: 5` beats the observed response.
+Disposition: **Addressed by removal.** The guard is dropped, so the false justification,
+the unfalsified assertions and the missing checker-mutation all go with it. The
+assumption is **Accepted, reason: it argues against the guard, not the caps** — the caps
+are seven lines whose worst case is one rerun, and "removing the need to notice" is worth
+that whether or not a human usually notices at 30 minutes.
+
+### Ergonomics
+
+Finding: The reduced guard's only blocking assertion fires on the *correct* action —
+adding an eighth job **with** a proper cap still goes red on set mismatch — and four
+costs compound: no local feedback (`pre-push:57` excuses workflow YAML), two CI reds with
+one misattributed as a coverage failure via `bash-coverage`'s red-suite guard (the #226
+shape, already documented), a mandatory second round-trip because the remedy edit touches
+`tests/` and re-arms the local suite, and no remedy in the message. Round 2's "state a
+remedy" finding was marked Addressed but addressed only by deleting a different branch;
+a grep for remedy language over the guard and verification sections returns 0. Half a
+finding dispositioned as whole.
+Assumption: that `jobs:` is the last top-level key in every workflow file — true today by
+authoring order, not by design, and YAML mappings are unordered, so a trailing `env:` or
+`concurrency:` would contribute phantom jobs. One-token fix (`/^[^ ]/{j=0}`).
+Disposition: **Addressed by removal.** Every cost named is a cost of the guard. The
+half-dispositioned remedy finding is recorded here as a process defect rather than
+carried: marking a finding Addressed because an adjacent change made one of its instances
+moot is how the other half survives.
+
+### Risk
+
+Finding: Dropping the `uses:` branch dropped the *detection*, not the coverage. The
+matcher is shape-blind, so a reusable-workflow job key matches like any other, enters the
+derived set, and the timeout assertion applies to it — the same unsatisfiable state round
+2 removed, now undocumented and reached by silence. The spec's claim that it "asserts
+nothing about `uses:` jobs" is implemented by no mechanism. Two further silent misses
+found in one command: a trailing comment on a job key, and an inline flow job. Because
+the expected set is pinned to today's names, a new job the matcher cannot see leaves the
+derived set identical — both assertions green, uncapped job unreported, the guard's own
+trigger class arriving fully green. The widening addressed the instance, not the class,
+because the oracle is derived by the matcher whose completeness is in question. Verdict:
+either give the parser a real YAML front end, or drop the guard and keep the seven lines.
+Assumption: that GitHub's parser actually rejects job-level `timeout-minutes` on a
+`uses:` job, rather than ignoring it — decides whether the shape-blind matcher is
+harmless or a shipping blocker.
+Disposition: **Addressed by removal**, which is this lens's own stated second option. The
+three silent-miss shapes were reproduced independently before acting. The assumption
+becomes genuinely moot once no guard exists — this time as a consequence of there being
+no mechanism at all, rather than as an intent asserted over a mechanism that did the
+opposite.
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+### Note on stopping
+
+Three rounds, nine lens reports, 2,006,685 subagent tokens. Every round's fix produced
+the next round's defect: round 1's hard-failure was unsatisfiable, round 2's widened
+matcher was still incomplete and its `uses:` removal re-enrolled the jobs it claimed to
+exempt, and round 3 found three more shapes in one command. That pattern is the argument
+for the outcome rather than for a fourth round — the findings stopped being about a
+fixable design and started being about the mechanism's fitness. The seven YAML lines drew
+no defect in any round.
