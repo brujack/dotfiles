@@ -227,7 +227,12 @@ Worth knowing before assuming a local green means anything here.
   `shell.md` records as specified and unadopted, and `actionlint`, named as a future in
   this spec's own dropped-guard section. Neither appears in any backlog. So the honest
   statement is that the counted population returned zero twice and is not the population
-  that would falsify the bet.
+  that would falsify the bet — a complete count of the wrong set.
+
+  Note the self-reference, because it is easy to read past: **this spec names `actionlint`
+  as the future that "subsumes this check entirely", and adopting `actionlint` is exactly
+  the change that would add a CI job here.** The bet's own stated escape hatch is the event
+  most likely to falsify it.
 - **It does not verify whether GitHub accepts job-level `timeout-minutes` on a
   reusable-workflow job.** SchemaStore says it is not an accepted key, independently
   derived twice; whether the runner *errors* or *silently ignores* is unsettled and
