@@ -1,5 +1,7 @@
 # CI Job Timeouts Implementation Plan
 
+> **Status: DONE** — merged as #247 (`ecd5d51`), 2026-08-27.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Give all 7 CI jobs a `timeout-minutes` cap so a hung job cannot block `auto-merge` for GitHub's 360-minute default.

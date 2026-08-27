@@ -17,7 +17,7 @@ Master status index for all specs and implementation plans in this directory.
 
 | Date       | Plan                                                                                       | Spec                                                                                                                                      | Status      |
 | ---------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
-| 2026-08-27 | [ci-job-timeouts](plans/2026-08-27-ci-job-timeouts.md) | [spec](specs/2026-08-27-ci-job-timeouts-design.md) | In Progress |
+| 2026-08-27 | [ci-job-timeouts](plans/2026-08-27-ci-job-timeouts.md) | [spec](specs/2026-08-27-ci-job-timeouts-design.md) | Done |
 | 2026-08-23 | [identity-table-fail-closed](plans/2026-08-23-identity-table-fail-closed.md) | [spec](specs/2026-08-23-profiles-bash-version-guard-design.md) | Done |
 | 2026-08-20 | —                                                                                          | [spec](specs/2026-08-20-setup-env-brew-probe-design.md)                                                                                   | Closed |
 | 2026-08-20 | —                                                                                          | [spec](specs/2026-08-20-zshenv-brew-reachability-design.md)                                                                               | Blocked |
