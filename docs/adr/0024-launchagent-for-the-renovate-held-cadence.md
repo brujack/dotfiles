@@ -92,6 +92,28 @@ Two consequences worth recording:
   anti-pattern; `_la_install_agent` plus a single `cadence.plist.template` now serves both, on
   different minutes (7 and 21) so the jobs cannot collide.
 
+**Amended 2026-08-26: the design named two channels and there are three failure modes.**
+The table above splits *signal* from *liveness* so a silent agent is distinguishable from a
+dead one. Correct, and incomplete — three things can fail, not two: **the check runs**, **the
+check finds something**, **the message arrives**. The heartbeat proved the first, the exit
+code the second, and nothing proved the third. It was the third that broke: `NTFY_URL` was
+unset, the wrapper returns early on `clean` and never reaches the notify path, the heartbeat
+is written on every branch so it stayed fresh, and `doctor` inspected delivery zero times. A
+clean week was byte-identical to a healthy channel from every angle anyone would check.
+
+Fixed by making delivery *possible* (topic path plus credentials — the endpoint returns 400
+for a bare host and 403 anonymously) and by making its failure *distinct*: a missing channel,
+a missing credential, a refused credential and a failed POST each report differently, where
+before they would all have read the same. The general rule is recorded as
+`ai-config-count-failure-modes-not-channels`: **enumerate the states that can go wrong, not
+the channels you built** — any state whose failure renders identically to health is asserted
+rather than observed, whatever the design calls it.
+
+**Also amended: the staleness bound is written by the producer, not mirrored by the reader.**
+The heartbeat carries `max_age_days`. A reader holding its own copy drifts the moment the
+bound changes — and that change was already scheduled, since daily session-start reading makes
+8 days loose. The reader names which source it used, so a fallback never passes for a reading.
+
 **Two limitations found in review after this ADR was accepted, both recorded rather than
 quietly fixed.**
 

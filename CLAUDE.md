@@ -379,7 +379,7 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 #### Bash
 
-- **Overall: 91%** (3391/3705 commands, 1524 tests, 20 heuristic disagreements) as measured by CI on `ubuntu-latest` for `f6bfe54` (#244) — the figure the gate actually reads. All four verified from run 32898303337: `TOTAL 3391 3705 91%` and `total: 20` in job 97965928553, `Test count: 1524` in job 97965928609. The +136 coverable and +136 covered over #239 are `lib/launch_agents.sh` (87/90) and `scripts/cadence-notify.sh` (45/49), which the predicate picks up as tracked `lib/*.sh` and `scripts/*.sh`, plus three lines Linux traces that macOS does not. **This provenance sentence was itself wrong for one commit**: the figures were updated to #244's and the run and job IDs left pointing at #239's, which is precisely the mixed-run defect the next sentence warns about — the warning did not prevent it, re-reading the line did. All four numbers come from that single run; earlier revisions of this file carried a ratio and a disagreement count taken from different runs, which is why the two disagreed by one with no change in between. Gated in CI at **91%** (`bash-coverage` job, blocks auto-merge on drop). A percentage without its denominator is not a coverage figure — report both.
+- **Overall: 91%** (3429/3745 commands, 1544 tests, 20 heuristic disagreements) as measured by CI on `ubuntu-latest` for `d36bf68` (#246) — the figure the gate actually reads. All four verified from run 33009820473: `TOTAL 3429 3745 91%` and `total: 20` in job 98312888340, `Test count: 1544` in job 98312888376. The +136 coverable and +136 covered over #239 are `lib/launch_agents.sh` (87/90) and `scripts/cadence-notify.sh` (45/49), which the predicate picks up as tracked `lib/*.sh` and `scripts/*.sh`, plus three lines Linux traces that macOS does not. **This provenance sentence was itself wrong for one commit**: the figures were updated to #244's and the run and job IDs left pointing at #239's, which is precisely the mixed-run defect the next sentence warns about — the warning did not prevent it, re-reading the line did. All four numbers come from that single run; earlier revisions of this file carried a ratio and a disagreement count taken from different runs, which is why the two disagreed by one with no change in between. Gated in CI at **91%** (`bash-coverage` job, blocks auto-merge on drop). A percentage without its denominator is not a coverage figure — report both.
 - **The local-reads-one-point-higher rule did NOT hold on #244, and the exception is more
   useful than another confirmation.** Local measured **91% (3391/3702)** and CI returned
   **91% (3391/3705)** — the *numerator is identical* and the denominator differs by three
@@ -618,6 +618,48 @@ already have by editing `PATH` or the plist directly.
 | `_RHN_AGENT_DIR` | `_rhn_agent_dir` | defaults to `~/Library/LaunchAgents`; tests must never write there |
 | `_OVERRIDE_DOTFILES_ROOT` | `_rhn_dotfiles_root` | lets a test build a fixture root — including one whose path contains `&`, which is how the plist-substitution corruption was found |
 | `_OVERRIDE_AI_CONFIG_ROOT` | `_rhn_ai_config_root` | the detector lives in ai-config; a test must not depend on that repo being present or on its script existing |
+| `_RHN_LOCAL_CFG` | `_rhn_load_channel` | points the channel config at a fixture. Production reads `config/local.sh`, which is git-ignored and therefore **absent from every worktree** — an end-to-end run in one reports `no channel to deliver on` for that reason alone, which is a test-environment fault and not a code fault |
+| `_RHN_MAX_AGE_DAYS` | `_rhn_max_age_days` | the staleness bound the writer stamps into the heartbeat. A test must round-trip it at a **non-default** value: written and read at the default 8, a reader that always fell back to its own constant would agree, and the check would pass while measuring nothing |
+
+**The heartbeat's contract** — `~/.local/share/dotfiles/cadence/<name>/last-run.json`, one
+file per cadence, beside that agent's launchd logs:
+
+```json
+{"ts": "…Z", "result": "clean|held|incomplete|pending", "exit_code": 0, "findings": 0, "max_age_days": 8}
+```
+
+Three properties are load-bearing and none is obvious from the shape:
+
+- **`max_age_days` is written, not mirrored.** A reader holding its own copy of the bound
+  drifts silently: 8 against a writer that moved to 3 misses four days of staleness and
+  reports clean. `_doctor_check_cadence` prefers the written value and **names its source** —
+  `(max 3d, from heartbeat)` versus `(max 8d, default — heartbeat carries none)` — so a
+  fallback is never mistaken for a reading.
+- **`pending` is a state, not a grace period.** The installer seeds it with the install time
+  and the bound, so the ordinary staleness rule retires it, a real run overwrites it, and an
+  **absent** heartbeat now means genuinely *not installed*. Re-install seeds a missing
+  heartbeat and never clobbers a real one, so `setup_user` is the migration path for agents
+  provisioned before the field existed.
+- **`held` is a finding, not a fault.** `doctor` renders the three classes distinctly and a
+  test asserts pairwise inequality — because every other test asserted only that its own
+  branch fires, so a reader rendering `held` as a fault would have passed the whole suite.
+
+**Every value is closed-form on purpose.** The file is hand-built with `printf` and has two
+consumers with opposite constraints: a `sed` reader that breaks on an unquoted value, and a
+`json.loads` reader that breaks on anything `printf` cannot escape. Adding a **free-text**
+field satisfies the first and breaks the second. Emitting through `python3 -c json.dumps`
+was considered and rejected: it puts a hard python3 dependency on the liveness channel, and
+since the reader is also bash-calling-python3, one missing interpreter would kill both
+channels at once — two channels that fail together are one channel.
+
+**ntfy needs a topic and credentials, and neither is optional.** Measured against the live
+endpoint: `POST host` → **400**, `POST host/topic` → **403**, `POST host/topic` with auth →
+**200**. `NTFY_URL` holds the host and `NTFY_TOPIC` the topic, so a consumer that POSTs bare
+`${NTFY_URL}` cannot deliver — which is what `scripts/whats-new-anthropic.sh` still does.
+Credentials go in on **stdin** via `curl -K -`, never `-u`, because argv is readable by any
+`ps`; and a credential containing a **newline is refused rather than escaped**, since curl's
+config format is line-oriented and everything after a line break is parsed as further
+directives.
 
 **The heartbeat is a second channel, deliberately.** The agents are silent when the fleet is
 clean — a weekly "still alive" push trains the operator to ignore the channel and destroys
