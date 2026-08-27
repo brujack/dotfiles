@@ -10,10 +10,16 @@ GitHub's 360-minute default. A hung job therefore blocks `auto-merge` for six ho
 with nothing reporting a cause.
 
 This is not hypothetical. On PR #223 the `powershell` job hung inside its
-`Install PowerShell` step for 29+ minutes against a baseline of well under a minute.
-Because `auto-merge` lists `powershell` in `needs:`, the PR sat blocked with every
-other check green. Clearing it required a manual `gh run cancel` followed by
-`gh run rerun`.
+`Install PowerShell` step. Because `auto-merge` lists `powershell` in `needs:`, the PR
+sat blocked with every other check green, and clearing it required a manual
+`gh run cancel` followed by `gh run rerun`.
+
+**Attribution of the two figures, because they have different sources.** The
+**29+ minute hang** is from the backlog row recording the incident (measured
+2026-08-18); it is not reproduced here and no run in this spec's sample exhibits it.
+The **sub-minute baseline** is independently measured below (p50 54s over 40 runs) and
+corroborates the backlog row's own figure of 47-54s over 7 runs. So the baseline half
+is confirmed twice and the hang half rests on the earlier record alone.
 
 The backlog row that recorded this said "0 of 6 jobs", counting `ci.yml` alone.
 `pr-title-lint.yml` carries a seventh job with no cap either. The correct figure is
@@ -108,6 +114,17 @@ that image ships `pyyaml` today was not measured and is deliberately not relied 
 `test` job only, and `bash-coverage` runs the same `make test`, so four tests failed in
 the job that was not updated. Any tool a new test needs must be installed in both jobs;
 needing none avoids the question.
+
+**Exemption: jobs whose body is a reusable-workflow call.** A job that declares
+`uses:` at job level instead of `steps:` is skipped by the assertion. `ci.md` already
+records that such jobs cannot carry `strategy: matrix`, and job-level `timeout-minutes`
+is believed to be constrained the same way — **that specific constraint is unverified**,
+and it should be checked before this exemption is ever relied on. It is inert today:
+**0 of 7 jobs** across both workflows use the `uses:` form, all seven declare `steps:`.
+Without the exemption the test would demand a key GitHub may reject, turning the guard
+into a blocker the first time a reusable workflow is adopted; with it, a reusable-workflow
+job added later goes uncapped and unreported. Both directions are bad, which is why the
+constraint needs verifying rather than assuming.
 
 Four properties, each answering a defect this repo has already paid for:
 
