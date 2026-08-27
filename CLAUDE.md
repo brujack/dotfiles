@@ -64,7 +64,7 @@ When web research (web-research skill) or context-mode fetches produce findings 
 | `recreate-venv`  | Force-delete and recreate a named pyenv virtualenv. Flags: `--venv-name` (default: `ansible`). Runs full pip install when name is `ansible`.                                                                                                                                                                                                                                                                        |
 | `recreate-ruby`  | Force-delete and reinstall the pinned Ruby version (`RUBY_VER` in `lib/constants.sh`), reusing `install_ruby()`.                                                                                                                                                                                                                                                                                                    |
 | `update`         | Update all packages (brew, apt/snap, pip, gems, tools). Supports `--brew-only`, `--pip-only`, `--gems-only`, `--mas-only`, `--claude-only` flags. Prints a structured summary; logs to `~/.dotfiles-update.log`. Also writes a state-ledger entry (advisory, non-fatal). Full internals: [`dotfiles-update-workflow`](https://github.com/brujack/ai-config/blob/master/docs/knowledge/dotfiles-update-workflow.md). |
-| `doctor`         | Active health checks: identity-table load, symlinks, tool presence, credential dir permissions, version drift, global/system core.hooksPath pins, weekly-cadence heartbeats (Studio only). Exits non-zero on any failure                                                                                                                                                                                                                                                          |
+| `doctor`         | Active health checks: identity-table load, symlinks, tool presence, credential dir permissions, version drift, global/system core.hooksPath pins, weekly-cadence heartbeats (Studio only). Exits non-zero on any failure                                                                                                                                                                                            |
 | `check-versions` | Compare pinned versions in `lib/constants.sh` against GitHub latest; exits 1 if outdated. `--update` prompts per-tool to apply updates in-place                                                                                                                                                                                                                                                                     |
 
 **Options:**
@@ -83,7 +83,7 @@ Dotfiles live at the repo root and in the ai-config repo (`.claude/`/`.cursor/`)
   **`projects/` IS symlinked, wholesale, and this line said the opposite until 2026-08-25.**
   The loop skips it — `[[ "$(basename "${_claude_item}")" == "projects" ]] && continue` — and the
   very next statement is `safe_link "${_ai_config_dir}/.claude/projects" "${HOME}/.claude/projects"`.
-  So "each item **except** `projects/`" is true of the *loop* and false of the *outcome*, and the
+  So "each item **except** `projects/`" is true of the _loop_ and false of the _outcome_, and the
   bullet above is worded for the mechanism while readers take it for the result. Verified on disk,
   not from the code: `readlink ~/.claude/projects` →
   `/Users/bruce/git-repos/personal/ai-config/.claude/projects`.
@@ -96,6 +96,7 @@ Dotfiles live at the repo root and in the ai-config repo (`.claude/`/`.cursor/`)
   commit to ai-config. Measured 2026-08-25: three promoted-but-undeleted drafts there blocked
   commits for two other sessions. Before writing scratch state under `~/.claude/`, note that you
   are writing into another repo.
+
 - **`.cursor/`** — each item (excluding `User/`) symlinked individually into `~/.cursor/` from the ai-config repo; `User/` contents are symlinked into the platform Cursor user settings dir
 
 Always remove the old file before symlinking (`rm -f` then `ln -s`). Validate symlinks with `[[ -L ${HOME}/.file ]]`.
@@ -332,6 +333,7 @@ Rules for any new suppression:
   **A workflow-wide grep cannot catch this.** The test written to prevent it searched the whole file for `UV_SHA256` and passed on presence anywhere — which it had, in the wrong job. An assertion satisfied by a different _job_ than the one under test is the same cause-isolation defect as one satisfied by a different code path; the check must parse per job. It must also account for `working-directory:`, since the naive per-job version flags `powershell` as a false positive — that job runs `make test` under `working-directory: powershell`, i.e. Pester against a different Makefile, finishing in ~56s rather than five minutes.
 - `secret-scan` job: runs gitleaks against recent commits (advisory, not blocking auto-merge)
 - `auto-merge` job: auto-merges any PR when all CI jobs pass (depends on `test`, `lint-macos`, `powershell`, `bash-coverage`, `secret-scan`)
+- **Every job declares `timeout-minutes`**, so a hung job can no longer block auto-merge for GitHub's 360-minute default (PR #223 hit this live — `powershell` stalled 30m21s inside `Install PowerShell`). Caps: `test` 20, `bash-coverage` 25, `powershell` 5, and 10 for `lint-macos`, `secret-scan`, `auto-merge`, and `pr-title-lint.yml`'s own job — each sized to roughly 3x its measured p90 — except `powershell`, deliberately tighter at 5 minutes over a 60s p90 as the known-hang job — with a 10-minute floor on the short jobs where 3x p90 would otherwise sit under normal runner variance. Nothing in the suite asserts these values: a guard test was specified and then deliberately dropped across three review rounds — see `docs/superpowers/specs/2026-08-27-ci-job-timeouts-design.md` for the reasoning and the two futures it leaves open.
 
 CI requirements:
 
@@ -382,11 +384,11 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 - **Overall: 91%** (3429/3745 commands, 1544 tests, 20 heuristic disagreements) as measured by CI on `ubuntu-latest` for `d36bf68` (#246) — the figure the gate actually reads. All four verified from run 33009820473: `TOTAL 3429 3745 91%` and `total: 20` in job 98312888340, `Test count: 1544` in job 98312888376. The +136 coverable and +136 covered over #239 are `lib/launch_agents.sh` (87/90) and `scripts/cadence-notify.sh` (45/49), which the predicate picks up as tracked `lib/*.sh` and `scripts/*.sh`, plus three lines Linux traces that macOS does not. **This provenance sentence was itself wrong for one commit**: the figures were updated to #244's and the run and job IDs left pointing at #239's, which is precisely the mixed-run defect the next sentence warns about — the warning did not prevent it, re-reading the line did. All four numbers come from that single run; earlier revisions of this file carried a ratio and a disagreement count taken from different runs, which is why the two disagreed by one with no change in between. Gated in CI at **91%** (`bash-coverage` job, blocks auto-merge on drop). A percentage without its denominator is not a coverage figure — report both.
 - **The local-reads-one-point-higher rule did NOT hold on #244, and the exception is more
   useful than another confirmation.** Local measured **91% (3391/3702)** and CI returned
-  **91% (3391/3705)** — the *numerator is identical* and the denominator differs by three
+  **91% (3391/3705)** — the _numerator is identical_ and the denominator differs by three
   lines, where every previous occasion differed by enough to cross a rounding boundary. The
   mechanism is visible in the diff: `_doctor_check_cadence` resolves an epoch with
-  `date -u -j -f` (BSD) falling back to `date -u -d` (GNU), and on Linux the first *fails and
-  the second runs*, so both are traced — while macOS never reaches the fallback. A change that
+  `date -u -j -f` (BSD) falling back to `date -u -d` (GNU), and on Linux the first _fails and
+  the second runs_, so both are traced — while macOS never reaches the fallback. A change that
   adds a platform-conditional branch therefore narrows the gap rather than widening it.
   **Keep publishing CI's figure regardless**; the rule is a prior, not a law, and this is the
   first measured counter-example.
@@ -609,23 +611,29 @@ defeats the stub). Each seam below exists to make a branch reachable that is oth
 unreachable on a provisioned machine, and none grants a capability the operator does not
 already have by editing `PATH` or the plist directly.
 
-| variable | read by | why it exists |
-| --- | --- | --- |
-| `_RHN_DETECTOR` | tests only, via argv `$2` | production passes the detector path positionally from the plist; tests substitute a fixture that returns a chosen exit code |
-| `_RHN_STATE_DIR` | `_rhn_state_dir`, `_renovate_cadence_state_dir` | heartbeat root. Defaults under `~/.local/share/dotfiles/cadence/<name>/` — a test pointing at the real path would assert against the machine's live cadence state |
-| `_RHN_CURL_BIN` | `_rhn_notify` | `curl` is resolved by name, but a test must capture the payload rather than send it. Every ntfy assertion in the suite reads this capture |
-| `_RHN_LAUNCHCTL` | `_rhn_launchctl` | `launchctl load` on a real plist would register a live weekly job on the developer's machine — the destructive-failing-path hazard `tdd.md` E2 names |
-| `_RHN_AGENT_DIR` | `_rhn_agent_dir` | defaults to `~/Library/LaunchAgents`; tests must never write there |
-| `_OVERRIDE_DOTFILES_ROOT` | `_rhn_dotfiles_root` | lets a test build a fixture root — including one whose path contains `&`, which is how the plist-substitution corruption was found |
-| `_OVERRIDE_AI_CONFIG_ROOT` | `_rhn_ai_config_root` | the detector lives in ai-config; a test must not depend on that repo being present or on its script existing |
-| `_RHN_LOCAL_CFG` | `_rhn_load_channel` | points the channel config at a fixture. Production reads `config/local.sh`, which is git-ignored and therefore **absent from every worktree** — an end-to-end run in one reports `no channel to deliver on` for that reason alone, which is a test-environment fault and not a code fault |
-| `_RHN_MAX_AGE_DAYS` | `_rhn_max_age_days` | the staleness bound the writer stamps into the heartbeat. A test must round-trip it at a **non-default** value: written and read at the default 8, a reader that always fell back to its own constant would agree, and the check would pass while measuring nothing |
+| variable                   | read by                                         | why it exists                                                                                                                                                                                                                                                                             |
+| -------------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `_RHN_DETECTOR`            | tests only, via argv `$2`                       | production passes the detector path positionally from the plist; tests substitute a fixture that returns a chosen exit code                                                                                                                                                               |
+| `_RHN_STATE_DIR`           | `_rhn_state_dir`, `_renovate_cadence_state_dir` | heartbeat root. Defaults under `~/.local/share/dotfiles/cadence/<name>/` — a test pointing at the real path would assert against the machine's live cadence state                                                                                                                         |
+| `_RHN_CURL_BIN`            | `_rhn_notify`                                   | `curl` is resolved by name, but a test must capture the payload rather than send it. Every ntfy assertion in the suite reads this capture                                                                                                                                                 |
+| `_RHN_LAUNCHCTL`           | `_rhn_launchctl`                                | `launchctl load` on a real plist would register a live weekly job on the developer's machine — the destructive-failing-path hazard `tdd.md` E2 names                                                                                                                                      |
+| `_RHN_AGENT_DIR`           | `_rhn_agent_dir`                                | defaults to `~/Library/LaunchAgents`; tests must never write there                                                                                                                                                                                                                        |
+| `_OVERRIDE_DOTFILES_ROOT`  | `_rhn_dotfiles_root`                            | lets a test build a fixture root — including one whose path contains `&`, which is how the plist-substitution corruption was found                                                                                                                                                        |
+| `_OVERRIDE_AI_CONFIG_ROOT` | `_rhn_ai_config_root`                           | the detector lives in ai-config; a test must not depend on that repo being present or on its script existing                                                                                                                                                                              |
+| `_RHN_LOCAL_CFG`           | `_rhn_load_channel`                             | points the channel config at a fixture. Production reads `config/local.sh`, which is git-ignored and therefore **absent from every worktree** — an end-to-end run in one reports `no channel to deliver on` for that reason alone, which is a test-environment fault and not a code fault |
+| `_RHN_MAX_AGE_DAYS`        | `_rhn_max_age_days`                             | the staleness bound the writer stamps into the heartbeat. A test must round-trip it at a **non-default** value: written and read at the default 8, a reader that always fell back to its own constant would agree, and the check would pass while measuring nothing                       |
 
 **The heartbeat's contract** — `~/.local/share/dotfiles/cadence/<name>/last-run.json`, one
 file per cadence, beside that agent's launchd logs:
 
 ```json
-{"ts": "…Z", "result": "clean|held|incomplete|pending", "exit_code": 0, "findings": 0, "max_age_days": 8}
+{
+  "ts": "…Z",
+  "result": "clean|held|incomplete|pending",
+  "exit_code": 0,
+  "findings": 0,
+  "max_age_days": 8
+}
 ```
 
 Three properties are load-bearing and none is obvious from the shape:
@@ -637,7 +645,7 @@ Three properties are load-bearing and none is obvious from the shape:
   fallback is never mistaken for a reading.
 - **`pending` is a state, not a grace period.** The installer seeds it with the install time
   and the bound, so the ordinary staleness rule retires it, a real run overwrites it, and an
-  **absent** heartbeat now means genuinely *not installed*. Re-install seeds a missing
+  **absent** heartbeat now means genuinely _not installed_. Re-install seeds a missing
   heartbeat and never clobbers a real one, so `setup_user` is the migration path for agents
   provisioned before the field existed.
 - **`held` is a finding, not a fault.** `doctor` renders the three classes distinctly and a
@@ -810,7 +818,7 @@ Two things follow that the earlier analysis got wrong or could not see:
 **The zero-PR oracle this repo reasoned from was structurally unfalsifiable, and that is
 the durable lesson.** Under silent mode no repo could ever author a PR, so zero was the
 only reachable value and every "it is not running" verdict built on it was unprovable
-either way. The lesson survives the lift: establish what a mechanism is *permitted* to do
+either way. The lesson survives the lift: establish what a mechanism is _permitted_ to do
 before drawing any conclusion from what it has not done.
 
 **`pip_requirements` is deliberately absent from `enabledManagers`.** Renovate's pattern is

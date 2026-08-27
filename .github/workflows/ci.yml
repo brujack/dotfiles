@@ -11,6 +11,7 @@ env:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20 # p90 342s, measured 2026-08-27
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -55,6 +56,7 @@ jobs:
 
   lint-macos:
     runs-on: macos-latest
+    timeout-minutes: 10 # p90 12s, floor, measured 2026-08-27
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -78,6 +80,7 @@ jobs:
 
   powershell:
     runs-on: ubuntu-latest
+    timeout-minutes: 5 # p90 60s, measured 2026-08-27
     permissions:
       contents: write
     steps:
@@ -132,6 +135,7 @@ jobs:
 
   bash-coverage:
     runs-on: ubuntu-latest
+    timeout-minutes: 25 # p90 492s, measured 2026-08-27
     permissions:
       contents: write
     steps:
@@ -207,6 +211,7 @@ jobs:
 
   secret-scan:
     runs-on: ubuntu-latest
+    timeout-minutes: 10 # p90 8s, floor, measured 2026-08-27
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -233,6 +238,7 @@ jobs:
     needs: [test, lint-macos, powershell, bash-coverage, secret-scan]
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 10 # p90 11s, floor, measured 2026-08-27
     permissions:
       contents: write
       pull-requests: write
