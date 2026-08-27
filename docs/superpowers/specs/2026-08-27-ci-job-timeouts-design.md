@@ -217,6 +217,17 @@ Worth knowing before assuming a local green means anything here.
   cause one, against a guard that produced every defect three review rounds found. If a
   job does get added uncapped, the failure is the same six-hour default this spec
   describes, and the backlog row names two mechanisms that would have caught it.
+
+  **The bet's population is narrower than "will a job be added", and the gap is named
+  rather than hidden.** What was counted is *changes originating in this repo*: 0 of 58
+  dotfiles backlog rows, and 0 of 151 ai-config backlog rows, propose adding a CI job.
+  But a fleet-wide tooling decision lands here as a per-repo PR with no backlog row in
+  either place — and unadopted tooling of exactly that kind lives in **standards and
+  specs**, which a backlog sweep cannot see. Two candidates exist today: `shfmt`, which
+  `shell.md` records as specified and unadopted, and `actionlint`, named as a future in
+  this spec's own dropped-guard section. Neither appears in any backlog. So the honest
+  statement is that the counted population returned zero twice and is not the population
+  that would falsify the bet.
 - **It does not verify whether GitHub accepts job-level `timeout-minutes` on a
   reusable-workflow job.** SchemaStore says it is not an accepted key, independently
   derived twice; whether the runner *errors* or *silently ignores* is unsettled and
