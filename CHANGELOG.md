@@ -1,114 +1,108 @@
 # Changelog
 
 
+## Bug Fixes
+
+- inline the preset — this repo has never once been processed (#238)
+
+- fail closed when the identity table does not load (#239)
+
+- call install_ledger_drift_agent from run_setup_user (#245)
+
+- authenticate to ntfy, and give the heartbeat one path and a written bound (#246)
+
+
+
+## CI
+
+- hold unlabelled Renovate PRs for triage (#243)
+
+- cap all 7 job runtimes with timeout-minutes (#247)
+
+
+
 ## Documentation
 
-- pip check is not sufficient, and results are discarded
+- tracer's case-label regex misses numeric labels
 
-- backlog the untested no_legacy exception path
+- the preset fix is necessary and not sufficient
 
-- backlog the tolerated double detect_env call
+- narrow the Renovate row — PENDING is not INERT, Monday is the test
 
-- backlog the missing CI job timeouts
+- the cause is mode=silent, set above every repo's config
 
-- record CI figures and close out #223
+- file the BASH_SOURCE tracer row I said I would not claim unmeasured
 
-- ADR-0021 — hand-typed test oracle for the identity table
+- sync CLAUDE.md figures, document renovate.json state, ADR-0022
 
-- ADR-0021's own receipt was wrong, fourth time
+- land two shipped backlog rows, correct one that went false
 
-- say lines, not occurrences
+- spec bash-version guard for config/profiles.sh
 
-- backlog the oracle comment's comment-to-code ratio
+- address Step 8 lens findings on the bash-guard spec
 
-- name the receipt's expiry condition
+- measure the fragility claim, move its test to Group B
 
-- the closing rule rejected its own example
+- rebuild the doctor fix on a sentinel after round 2
 
-- document the mutation that actually isolates the variable (#224)
+- cut the bash-version guard, narrow to the real gap
 
-- backlog pep621 for dotfiles' renovate config
+- prohibit env -i in the test harness, fix five case defects
 
-- spec adding uv to the Brewfile
+- make T3's safety self-verifying, generalize the stopping rule
 
-- uv needs two edits, not one — Linux ignores the Brewfile
+- plan the identity-table fail-closed change
 
-- revise uv spec against three lens findings
+- record #239's CI figures and close the plan
 
-- backlog uv's unpinned drift, with its revisit trigger
+- Renovate is confirmed working here, and mode=silent is not
 
-- --inexact does not protect conflicting packages
+- add Anthropic weekly features digest 2026-08-24
 
-- round 2 — two of my own corrections were defective
+- add Claude Code weekly features digest 2026-08-24
 
-- record the Multi-Lens Review section
+- projects/ IS symlinked, and this file said otherwise
 
-- plan adding uv to both platforms' install paths
+- record CI's coverage figure and a counter-example to the local-vs-CI rule
 
-- index the brewfile-uv plan
+- surface the weekly cadence in README's layout and usage tables
 
-- Task 3 needs ssh -A, measured before dispatch
+- record two review findings against ADR-0024
 
-- coverage figures from CI for #225
+- document the heartbeat contract and amend ADR-0024
 
-- mark brewfile-uv plan done
+- design job timeout-minutes for all 7 CI jobs
 
-- uv is installed on Linux but not reachable
+- fix two self-review findings in the timeout spec
 
-- the reachability table was measured wrong
+- address round-1 lens findings on the timeout spec
 
-- linuxbrew on the login-shell PATH
+- reduce the guard and correct two over-claims
 
-- retire the linuxbrew login-PATH design
+- drop the guard test, ship the seven timeout lines
 
-- backlog names .zshenv, not .zprofile
+- record the 6 Dependabot alerts as upgrade-proof
 
-- brew reachability via a tracked .zshenv
+- scope the no-guard bet to the population actually counted
 
-- scope the .zshenv fix to Linux only
+- name the self-reference in the no-guard bet
 
-- name what would widen the .zshenv scope
+- plan the seven timeout-minutes lines
 
-- exclude cruncher, gate on PROFILE not LINUX
+- two CI jobs documented advisory actually gate
 
-- include cruncher, dormant, per operator
+- mark the timeout plan Done
 
-- cruncher may become native Linux
-
-- .zshenv design blocked, assumption refuted
-
-- v2 -- guard on non-interactive, append not prepend
-
-- v2 blocked -- same class as v1, one file over
-
-- v2's exported append degrades tmux panes
-
-- resolve brew by prefix inside setup_env.sh
-
-- block the setup_env probe -- no consumer
-
-- record the salvage path and the cruncher risk
-
-- close the brew-reachability thread, four designs
-
-- a capability tag does not gate installation
-
-- close v2, its recommendation was stale on arrival
-
-- bats' EXIT trap is what prints the TAP line
-
-- clearing the trap and never installing one are opposite
+- ADR-0025 — no mechanical guard for CI job timeouts
 
 
 
 ## Features
 
-- install uv on macOS and Linux (#225)
+- resize the CI slices, add ci-audit, gate the lock (#236)
 
+- enable npm and pinDigests, document the pip_requirements trap (#237)
 
-
-## Refactoring
-
-- resolve legacy identity vars from one table (#223)
+- weekly LaunchAgent that summons Renovate triage (#244)
 
 
