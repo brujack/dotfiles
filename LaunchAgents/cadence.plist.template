@@ -34,7 +34,16 @@
        reported drift every Monday for the sole reason that it could not run.
        Three other sites in this repo already carry the same fallback --
        lib/workflows.sh:898, :917 and lib/package_capture.sh:11 -- so the repo
-       knew where the binary lives and this was the one place that did not. -->
+       knew where the binary lives and this was the one place that did not.
+
+       PREPENDED, not appended, and the reason is a real collision rather than
+       taste: `brew install ledger` installs the double-entry ACCOUNTING tool at
+       /opt/homebrew/bin/ledger. Appended, that formula would shadow the
+       state-ledger CLI on any machine where someone installs it. Prepending a
+       user-writable directory to a scheduled job's PATH crosses no privilege
+       boundary here -- the agent runs as the operator, anything able to write
+       ~/.local/bin can already edit this plist, and /opt/homebrew/bin is equally
+       operator-writable and already ahead of the system directories. -->
   <key>EnvironmentVariables</key>
   <dict>
     <key>PATH</key>
