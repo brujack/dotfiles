@@ -278,7 +278,14 @@ EOF
   printf '#!/usr/bin/env bash\nexit 0\n' > "${HOME}/.local/bin/ledger"
   chmod +x "${HOME}/.local/bin/ledger"
 
-  run env -i PATH="${_path}" command -v ledger
+  # `/bin/sh -c`, never a bare `env -i PATH=... command -v`. `command` is a shell
+  # BUILTIN, so `env` has to find it as a real executable: macOS ships
+  # /usr/bin/command and Linux does not, so the bare form exits 127 with
+  # `env: 'command': No such file or directory` on every CI runner while passing
+  # on every mac in the fleet. tdd.md pitfall G -- verified on the workstation
+  # (Ubuntu 24.04, the runner's lineage), not reasoned about. /bin/sh is absolute
+  # so the lookup of the shell itself does not depend on the PATH under test.
+  run env -i PATH="${_path}" /bin/sh -c 'command -v ledger'
   [ "$status" -eq 0 ]
   [ "$output" = "${HOME}/.local/bin/ledger" ]
 }
