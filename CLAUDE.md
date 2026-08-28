@@ -327,7 +327,7 @@ Rules for any new suppression:
 
 `.github/workflows/ci.yml` runs on PRs to master only (the pre-push hook gates branch pushes locally):
 
-- `test` job: installs a pinned, checksum-verified shellcheck plus bats, runs `make test`, then verifies test count ≥ 840 (regression proxy; 1478 tests, CI-measured 2026-08-24 on `25d41f1`)
+- `test` job: installs a pinned, checksum-verified shellcheck plus bats, runs `make test`, then verifies test count ≥ 840 (regression proxy; 1545 tests, CI-measured 2026-08-28 on `3530241`)
 - `lint-macos` job: runs on `macos-latest` (**blocks auto-merge** — it is in `auto-merge`'s `needs:`), two independent steps: `bash -n` over the derived `SHELL_FILES` list via `make print-SHELL_FILES | tr ' ' '\n' | xargs`, guarded by its own empty-list check — the `tr` is load-bearing, since `print-%` emits one space-separated line and `xargs -I` implies `-L1` and does not split on blanks, and `zsh -n` over the 10 tracked zsh files selected via `git ls-files '*.zsh' '*.zsh-theme' '.zshrc' '.zprofile'` — this second step refuses to pass on an empty file list
 - `bash-coverage` job: measures bash line coverage via PS4 xtrace on `ubuntu-latest`; **gates at 91%** — blocks auto-merge if coverage drops below floor. **It runs the same suite as `test`, in a separate job, so every tool `make test` depends on must be installed in BOTH jobs.** Measured 2026-08-21 (#226): a pinned `uv` was added to `test` only, 4 tests that pass under `make test` failed here, and the red-suite guard correctly refused to compute coverage over a red run — so the symptom was a coverage job failing on something that is not coverage. Both jobs now install it (`ci.yml:35`, `:158`).
   **A workflow-wide grep cannot catch this.** The test written to prevent it searched the whole file for `UV_SHA256` and passed on presence anywhere — which it had, in the wrong job. An assertion satisfied by a different _job_ than the one under test is the same cause-isolation defect as one satisfied by a different code path; the check must parse per job. It must also account for `working-directory:`, since the naive per-job version flags `powershell` as a false positive — that job runs `make test` under `working-directory: powershell`, i.e. Pester against a different Makefile, finishing in ~56s rather than five minutes.
@@ -381,7 +381,7 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 #### Bash
 
-- **Overall: 91%** (3429/3745 commands, 1544 tests, 20 heuristic disagreements) as measured by CI on `ubuntu-latest` for `d36bf68` (#246) — the figure the gate actually reads. All four verified from run 33009820473: `TOTAL 3429 3745 91%` and `total: 20` in job 98312888340, `Test count: 1544` in job 98312888376. The +136 coverable and +136 covered over #239 are `lib/launch_agents.sh` (87/90) and `scripts/cadence-notify.sh` (45/49), which the predicate picks up as tracked `lib/*.sh` and `scripts/*.sh`, plus three lines Linux traces that macOS does not. **This provenance sentence was itself wrong for one commit**: the figures were updated to #244's and the run and job IDs left pointing at #239's, which is precisely the mixed-run defect the next sentence warns about — the warning did not prevent it, re-reading the line did. All four numbers come from that single run; earlier revisions of this file carried a ratio and a disagreement count taken from different runs, which is why the two disagreed by one with no change in between. Gated in CI at **91%** (`bash-coverage` job, blocks auto-merge on drop). A percentage without its denominator is not a coverage figure — report both.
+- **Overall: 91%** (3429/3745 commands, 1545 tests, 20 heuristic disagreements) as measured by CI on `ubuntu-latest` for `3530241` (#248) — the figure the gate actually reads. All four verified from run 33203096209: `TOTAL 3429 3745 91%` and `total: 20` in job 98957207375, `Test count: 1545` in job 98957207338. **The ratio and the disagreement count did not move across #248 and that is the expected result, not a stale copy**: the one test it adds lives in a `.bats` file, and 0 of the 34 instrumented files are `.bats`, so the denominator cannot change; the function it exercises (`install_ledger_drift_agent`) was already covered. Only the test count moves. A change that adds no instrumented line should be expected to leave 3 of the 4 figures fixed — re-derive them anyway rather than carrying them forward, which is how the mixed-run defect below happened. The +136 coverable and +136 covered over #239 are `lib/launch_agents.sh` (87/90) and `scripts/cadence-notify.sh` (45/49), which the predicate picks up as tracked `lib/*.sh` and `scripts/*.sh`, plus three lines Linux traces that macOS does not. **This provenance sentence was itself wrong for one commit**: the figures were updated to #244's and the run and job IDs left pointing at #239's, which is precisely the mixed-run defect the next sentence warns about — the warning did not prevent it, re-reading the line did. All four numbers come from that single run; earlier revisions of this file carried a ratio and a disagreement count taken from different runs, which is why the two disagreed by one with no change in between. Gated in CI at **91%** (`bash-coverage` job, blocks auto-merge on drop). A percentage without its denominator is not a coverage figure — report both.
 - **The local-reads-one-point-higher rule did NOT hold on #244, and the exception is more
   useful than another confirmation.** Local measured **91% (3391/3702)** and CI returned
   **91% (3391/3705)** — the _numerator is identical_ and the denominator differs by three
@@ -690,6 +690,17 @@ env -i PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin \
 `PATH` out of the **rendered** plist and requires a fixture binary at `~/.local/bin` to
 resolve under it, so a change to the placeholder, the substitution, or the entry order is
 still measured.
+
+**A plist change does not reach a running agent — the template is the source, not the live
+artifact.** `~/Library/LaunchAgents/*.plist` is a rendered copy written at install time, so
+merging a template change leaves every already-installed agent on its old contents until
+`setup_env.sh -t setup_user` re-installs it. Measured during dotfiles#248: the fix landed on
+master while the installed `com.brucejackson.ledger-drift.plist` still carried the pre-fix
+`PATH`. Verify the live file rather than the template after any change here:
+
+```bash
+grep -A1 '<key>PATH</key>' ~/Library/LaunchAgents/com.brucejackson.ledger-drift.plist
+```
 
 **ntfy needs a topic and credentials, and neither is optional.** Measured against the live
 endpoint: `POST host` → **400**, `POST host/topic` → **403**, `POST host/topic` with auth →
