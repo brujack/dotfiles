@@ -253,3 +253,32 @@ EOF
   command grep -q '"result": "held"' "${_RHN_STATE_DIR}/ledger-drift/last-run.json"
   run ! command grep -q 'pending' "${_RHN_STATE_DIR}/ledger-drift/last-run.json"
 }
+
+# Asserts the PROPERTY -- does a binary in ~/.local/bin resolve -- rather than
+# the template's text, and reads the PATH out of the RENDERED plist rather than
+# hardcoding it, so a change to the placeholder, the substitution, or the entry
+# order is still measured. `ledger` is the real dependency: ledger_drift_check.sh
+# resolves it with a bare `command -v ledger`, and on every machine here it lives
+# in ~/.local/bin -- lib/workflows.sh:898,917 and lib/package_capture.sh:11 all
+# carry that same fallback, which is why the plist omitting it was a defect
+# rather than a preference. A fixture stands in for the binary so the test does
+# not depend on the real one being installed, which it is not on any CI runner.
+@test "a binary in ~/.local/bin resolves under the plist's PATH" {
+  export PROFILE="mac_workstation" HOSTNAME_SHORT="studio"
+  run install_ledger_drift_agent
+  [ "$status" -eq 0 ]
+
+  local _path
+  _path=$(command grep -A1 '<key>PATH</key>' \
+            "${_RHN_AGENT_DIR}/com.brucejackson.ledger-drift.plist" \
+          | sed -n 's|.*<string>\(.*\)</string>.*|\1|p')
+  [ -n "${_path}" ]
+
+  mkdir -p "${HOME}/.local/bin"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "${HOME}/.local/bin/ledger"
+  chmod +x "${HOME}/.local/bin/ledger"
+
+  run env -i PATH="${_path}" command -v ledger
+  [ "$status" -eq 0 ]
+  [ "$output" = "${HOME}/.local/bin/ledger" ]
+}

@@ -23,12 +23,22 @@
   </dict>
 
   <!-- launchd gives an agent a bare PATH; gh and python3 both live in Homebrew
-       prefixes that only an interactive shell puts on PATH. See behavior.md's
-       actor table: this process sources no profile. -->
+       prefixes that only an interactive shell puts on PATH, and `ledger` lives
+       in neither -- it is in ~/.local/bin. See behavior.md's actor table: this
+       process sources no profile.
+
+       ~/.local/bin was missing here until 2026-08-28, and the omission was not
+       cosmetic: ledger_drift_check.sh resolves the binary with a bare
+       `command -v ledger`, returns 1 when it finds nothing, and its `main`
+       reads 1 as "stale entities found". So the ledger-drift agent would have
+       reported drift every Monday for the sole reason that it could not run.
+       Three other sites in this repo already carry the same fallback --
+       lib/workflows.sh:898, :917 and lib/package_capture.sh:11 -- so the repo
+       knew where the binary lives and this was the one place that did not. -->
   <key>EnvironmentVariables</key>
   <dict>
     <key>PATH</key>
-    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <string>__HOME__/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
   </dict>
 
   <key>RunAtLoad</key><false/>

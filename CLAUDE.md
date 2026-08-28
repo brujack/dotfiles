@@ -660,6 +660,37 @@ was considered and rejected: it puts a hard python3 dependency on the liveness c
 since the reader is also bash-calling-python3, one missing interpreter would kill both
 channels at once — two channels that fail together are one channel.
 
+**The plist's `PATH` is the agent's whole world, and every detector dependency must be on
+it.** A launchd agent sources no profile, so it gets `_PATH_STDPATH` unless the plist says
+otherwise — see the actor table under MAKEFLAGS below for the general rule.
+`cadence.plist.template` therefore sets `PATH` explicitly, and the entry list is a claim
+about what the wired detectors need:
+`__HOME__/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`.
+
+`__HOME__/.local/bin` was missing until 2026-08-28 and the omission was not cosmetic.
+`ledger` lives there — `lib/workflows.sh:898`, `:917` and `lib/package_capture.sh:11` all
+carry that same fallback, so the repo already knew — while the plist listed only the two
+Homebrew prefixes, named after `gh` and `python3`. `ledger_drift_check.sh` resolves the
+binary with a bare `command -v ledger`, returns **1** when it finds nothing, and its `main`
+reads 1 as _stale entities found_, so the ledger-drift agent would have pushed false drift
+every Monday for the sole reason that it could not run. Neither agent had fired yet when
+this was found (both heartbeats still `pending` from install), so nothing was mis-reported
+in the field. The producer-side half — a detector with no way to say "could not determine"
+— is ai-config's and is being fixed there.
+
+**When wiring a new detector, resolve its dependencies under this `PATH`, not under yours.**
+An interactive shell answers for a different actor and will tell you the tool is present:
+
+```bash
+env -i PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin \
+  bash -c 'command -v <tool> || echo ABSENT'
+```
+
+`tests/setup_env/launch_agents.bats` guards the property rather than the string — it reads
+`PATH` out of the **rendered** plist and requires a fixture binary at `~/.local/bin` to
+resolve under it, so a change to the placeholder, the substitution, or the entry order is
+still measured.
+
 **ntfy needs a topic and credentials, and neither is optional.** Measured against the live
 endpoint: `POST host` → **400**, `POST host/topic` → **403**, `POST host/topic` with auth →
 **200**. `NTFY_URL` holds the host and `NTFY_TOPIC` the topic, so a consumer that POSTs bare
