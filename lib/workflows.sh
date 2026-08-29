@@ -103,9 +103,9 @@ setup_ai_config() {
 }
 
 _dotfiles_run_tmpdir_setup() {
-  _DOTFILES_RUN_TMPDIR=$(mktemp -d)
+  _DOTFILES_RUN_TMPDIR=$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-run.XXXXXXXX")
   export _DOTFILES_RUN_TMPDIR
-  trap 'rm -rf "${_DOTFILES_RUN_TMPDIR}"; unset _DOTFILES_RUN_TMPDIR' EXIT INT TERM
+  trap 'unset _DOTFILES_RUN_TMPDIR' EXIT INT TERM
   date -u +%Y-%m-%dT%H:%M:%SZ > "${_DOTFILES_RUN_TMPDIR}/started_at"
   date +%s > "${_DOTFILES_RUN_TMPDIR}/start_epoch"
   python3 -c "import uuid; print(str(uuid.uuid4()))" \
