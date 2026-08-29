@@ -10,12 +10,22 @@ below and the review section at the bottom for why.
 
 ## Problem
 
-`setup_env.sh -t update` runs on every machine in the fleet and cannot report that it
-failed. `run_update` (`lib/workflows.sh:326-687`) ends on `_update_summary`, whose own last
-statement is `_ledger_write_dotfiles_entry || true`, so the function always returns 0.
-`setup_env.sh:89` wraps it in `_run_or_exit`, a fail-fast runner that therefore can never
-fire for this workflow. No cron job, git hook, wrapper script, or operator `&&` can branch
-on the outcome of an update run.
+`setup_env.sh -t update` runs on every machine in the fleet and cannot report that a
+section failed. `run_update` (`lib/workflows.sh:326-687`) ends on `_update_summary`, whose
+own last statement is `_ledger_write_dotfiles_entry || true`, so every path that reaches the
+summary returns 0 regardless of how many sections recorded FAIL. `setup_env.sh:89` wraps it
+in `_run_or_exit`, a fail-fast runner that therefore never fires for a section failure. No
+cron job, git hook, wrapper script, or operator `&&` can branch on the outcome of an update
+run.
+
+**"`run_update` always returns 0" is false, and the exception matters to this design.** Five
+`cd … || return 1` statements sit inside `run_update` — `lib/workflows.sh:621`, `:631`,
+`:641`, `:661`, `:663` — and each aborts the function before the summary. So `_run_or_exit`
+*can* fire today, for exactly one cause: a directory that could not be entered. Those paths
+are strictly worse than the failure this spec is fixing, because they return 1 having printed
+**no summary**, appended **no log line**, and written **no ledger entry** — `_update_summary`
+is what performs all three. Found by the second review round; the first draft asserted the
+unqualified claim and built the `_run_or_exit` documentation change on it.
 
 A second defect sits underneath that and would survive fixing it alone. `update_aws_cli`
 (`lib/developer.sh:16-33`) and `update_rust` (`:37-55`) check the return code of `cd` and
@@ -78,20 +88,59 @@ expected repos.
 this verdict was ratcheted from warning to failure in the same change that made the sync
 apply the lock, on the grounds that a conflict after that point is a real defect.
 
-**This does not make a healthy run start exiting 1, and that was checked rather than
-assumed.** `~/.dotfiles-update.log` on the Studio holds **3938 runs and 50 `[FAIL]` lines**;
-eleven of the last twelve runs report `0 failed`. All-time FAIL counts by section: `claude`
-21, `brew` 16, `ai-config` 6, `pip` 2, and one each for `tpm`, `terraform-skill`,
-`softwareupdate`, `oh-my-zsh`, `npm`. A blanket `_fail > 0` therefore fires rarely and for
-real reasons; no per-section opt-in list is needed. Population: the Studio's log only — the
-other six machines keep their own, and a machine that routinely fails a section would want
-this re-checked before it starts trusting the exit code.
+**This does make a healthy-looking run exit 1 about a third of the time today, and that is
+a deliberate acceptance rather than an oversight.** The first draft argued the contract would
+fire rarely, citing 50 `[FAIL]` lines across 3938 runs in `~/.dotfiles-update.log` — 1.3%.
+That is a correct count of the wrong population: the ratio is dominated by thousands of
+April–May development runs, and the question is how often a run *now* would exit 1. Measured
+per run rather than per FAIL line:
 
-**`_run_or_exit`'s comment is updated in the same change.** `setup_env.sh:75` reads
-"Fail-fast strict runner: exit immediately on the first failed selected step." After this
-change `run_update` is the one caller where a non-zero return means "ran all sections, some
-failed" rather than "stopped early". A wrapper or cron author reading the current comment
-would infer the run aborted. The comment gains that distinction; the code does not change.
+| window | runs that failed |
+| --- | --- |
+| last 20 | 5 |
+| last 50 | 16 |
+| last 100 | 18 |
+| last 200 | 18 |
+| last 500 | 18 |
+| all 3938 | 41 |
+
+Identical counts at 100, 200 and 500 mean all 18 recent failures sit inside the last 100
+runs. `brew` accounts for 15 of the last 20 FAIL rows, spread across 2026-07-07 to
+2026-08-19 rather than clustered in one debugging session — so it is a standing condition of
+this machine, not churn. (By contrast the 21 all-time `claude` failures that inflate the
+1.3% figure fall on a single day, 2026-04-11.)
+
+**The operator's ruling is to ship anyway, on the grounds that the noise is the finding.**
+`brew` has been failing on roughly a third of runs for six weeks and nothing surfaced it,
+which is precisely the condition the exit code exists to end. The first `exit 1` is the
+prompt to diagnose `brew`. No per-section opt-in list and no WARN demotion: an exit code that
+suppresses the one section actually failing would be a gate that cannot fail, which is the
+defect class this repo's standards spend the most words on.
+
+The accepted risk, stated so it is not rediscovered as a surprise: an exit code firing on one
+run in three is one an operator can learn to ignore before it acquires a consumer. If `brew`
+is still failing a month after this ships, that is the signal to fix `brew` rather than to
+loosen the contract.
+
+**Why the cause is not in this spec.** Every recent `brew` FAIL row reads `exit 1` and
+nothing more — the `result_` column carries no detail, and `err_brew` dies with the tmpdir.
+The artifact that would answer "why does brew fail" is exactly the `err_*` retention deferred
+below. That is an argument for doing the deferred work soon, not for widening this spec.
+
+**`_run_or_exit`'s comment is updated in the same change, and must name both meanings.**
+`setup_env.sh:75` reads "Fail-fast strict runner: exit immediately on the first failed
+selected step." After this change `run_update` returns non-zero for two different situations:
+it ran every section and some recorded FAIL, or it aborted early on one of the five `cd`
+guards above. A wrapper or cron author needs to know that both exist and that only the first
+leaves a summary, a log line, and a ledger entry. The first draft proposed a comment saying
+non-zero means "ran all sections, some failed" — which would have been false for the paths
+that record nothing, and misleading in the direction of trusting an absent record.
+
+**The `cd`-abort paths are left as they are, and given a backlog row.** Making them record a
+FAIL section before returning is the right fix and is a different change: it touches five call
+sites inside `run_update`, and the summary they would need to write does not exist yet at
+`:621`. Under this contract they are pre-existing behaviour made visible, not behaviour this
+spec introduces.
 
 ### 2. Return-code propagation in `lib/developer.sh`
 
@@ -154,9 +203,12 @@ Fails if rc is 0 on a run whose summary shows a non-zero failed count, and fails
 rc is 1 on a run showing `0 failed`. Both directions are asserted; one alone cannot tell a
 working contract from an always-1 contract.
 
-**WARN stays zero.** A run whose only non-OK sections are WARN must exit 0. This is the
-discriminating case: if it exits 1, the `git-hooks` rc-2 mapping has been reversed and
-machines carrying a repo subset now fail every update.
+**WARN stays zero — and the fixture must actually produce a WARN.** A run whose only non-OK
+sections are WARN must exit 0. Asserting the exit code alone is not enough: a fixture with
+zero WARN sections exits 0 too, so the check would pass on nothing having happened. The test
+asserts the summary contains at least one `[WARN]` row *and* that the process exited 0. If it
+exits 1, the `git-hooks` rc-2 mapping has been reversed and machines carrying a repo subset
+now fail every update.
 
 **Section rc is real — mutation, both directions.** Make `curl` fail in a fixture and confirm
 the `aws` section records FAIL and the process exits 1. Before the change this records OK,
@@ -305,3 +357,45 @@ that same rc 2, is recorded in Deferred. (a), (c), (d) and (e) are moot under th
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger. The design proposes a
 return-value contract and a return-code sweep; its acceptance criteria are concrete commands
 with stated failing conditions, and no component judges or ranks anything.
+
+### Risk — round 2 (scoped)
+
+Reviewed at commit: `b8193ab`. Scope: the narrowed body only. The revision cut four
+mechanisms to two, so a single lens was dispatched rather than three, and it was told
+explicitly that the round-1 section above is history rather than findings to confirm.
+
+Finding: (a) The "fires rarely" argument was drawn over the wrong window. All-time
+`[FAIL]`-lines-over-runs is 1.3%, but per-run over the recent population it is 25–32%, and
+`brew` accounts for 15 of the last 20 FAIL rows spread over five weeks rather than clustered
+— so the exit code fires on roughly one run in three from day one. Round 1's Goal-Fit lens
+named this exact assumption and this spec recorded "Checked: refuted" against the safest of
+the available windows. (b) `run_update` does not always reach `_update_summary`: five
+`cd … || return 1` paths abort first, so the Problem section's unqualified claim was false,
+and the `_run_or_exit` comment the round-1 disposition introduced would have been false for
+precisely the paths that record nothing. (c) The rewritten Verification section still had one
+check passing on nothing — "WARN stays zero" is satisfied identically by a fixture with no
+WARN sections at all. Confirmed correct and not raised: `_fail` is in scope with no early
+returns in `_update_summary`'s body; an unset `_DOTFILES_RUN_TMPDIR` leaves `_fail=0` and
+fails safe rather than false-1; `_update_check_brewfile_drift`'s rc is discarded at a bare
+call site; 14 test call sites and zero production callers both verified; `_rustup_found` is
+genuinely write-only; `[FAIL]` appears only as table rows so the log's structure does support
+the counting.
+
+Assumption: that the recent `brew` failures are transient rather than a standing condition —
+if one recurring cause, the exit code fires on a third of runs forever and is ignored before
+it acquires a consumer. The lens proposed settling it by reading each FAIL row's trailing
+text. **Checked: that method does not work.** All 15 recent `brew` rows read `exit 1` and
+nothing more; the `result_` column carries no cause and `err_brew` is discarded with the
+tmpdir. The log cannot answer it, which is itself an argument for the deferred `err_*`
+retention. The remaining discriminator is running `-t update --brew-only` live, which mutates
+state and is the operator's call rather than a reviewer's.
+
+Disposition: **Accepted, reason: the operator ruled that the noise is the finding — brew has
+been failing on a third of runs for six weeks with nothing surfacing it, and the first exit 1
+is the prompt to diagnose it.** No per-section opt-in list and no WARN demotion, since an
+exit code that suppresses the one section actually failing is a gate that cannot fail. The
+measurement itself is **Addressed**: the wrong-window ratio is replaced by the per-window
+table with the accepted risk stated. (b) is **Addressed** — the Problem section now states
+the five `cd` paths and what they fail to record, the comment change names both meanings, and
+the paths get a backlog row rather than a silent fix. (c) is **Addressed** — the WARN check
+now asserts at least one `[WARN]` row alongside the exit code.
