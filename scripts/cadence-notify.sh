@@ -23,31 +23,19 @@
 #   2 = INCOMPLETE: a query or the control failed (dominates 1)
 # Any other value is treated as 2 -- an unknown outcome is not a clean one.
 #
-# STDOUT IS FINDINGS-ONLY. One finding per line, nothing else -- no progress
-# lines, no "alerting via ntfy" banners, no diagnosis. This wrapper counts
-# stdout lines and cannot tell a banner from a finding, so a status line on
-# stdout is reported to the operator as a finding. Measured 2026-08-28 against
-# ledger_drift_check.sh, which printed a banner on BOTH terminal paths:
+# STDOUT IS FINDINGS-ONLY. One finding per line -- no progress lines, no
+# banners, no diagnosis. This wrapper counts stdout lines and cannot tell a
+# banner from a finding. Measured 2026-08-28 against ledger_drift_check.sh,
+# which banner'd on both terminal paths: 31 stale entities recorded as 32, and
+# a fleet with ZERO drift recorded as 1 -- the damaging case, firing when
+# nothing is wrong. Fixed in ai-config#227.
 #
-#   findings path   31 stale entities -> heartbeat recorded 32
-#   clean path      0 findings        -> heartbeat recorded 1, every week
+# STDERR IS THE DIAGNOSIS CHANNEL, and it is PUBLISHED: surfaced in the ntfy
+# push, capped at the last 20 lines, never counted. It was discarded before
+# 2026-08-28, so a detector must not print credentials, tokens or environment
+# dumps there on the assumption that nobody reads it.
 #
-# The clean-path instance is the damaging one -- it fires when nothing is
-# wrong, so the channel reports a finding on a healthy fleet forever. It was
-# invisible from this side: the only heartbeat available here came from a run
-# that HAD drift, so the findings path was the one that could be measured and
-# the clean path had to be found by running the detector. A count sampled on
-# one path says nothing about the others. Fixed in ai-config#227; both banners
-# now go to stderr, leaving stdout at 9/0/0 across findings/clean/cannot-run.
-#
-# That is the detector violating this contract, not the wrapper miscounting.
-# Every diagnosis goes to STDERR, which is surfaced in the notification and
-# never counted.
-#
-# STDERR IS PUBLISHED. It is POSTed to the ntfy endpoint, capped at the last 20
-# lines. A detector must not print credentials, tokens, or full environment
-# dumps there -- it was discarded before 2026-08-28, so anything written on the
-# assumption that nobody reads it is now delivered.
+# Background: CLAUDE.md, "Cadence seams".
 
 _rhn_state_dir() {
     printf '%s' "${_RHN_STATE_DIR:-${HOME}/.local/share/dotfiles/cadence}"
@@ -220,14 +208,8 @@ run_cadence_notify() {
     fi
     _out="$(env -u NTFY_URL "${_detector}" 2>"${_errfile}")"
     _rc=$?
-    #
-    # Capped, and the cap is a security property rather than tidiness: this
-    # stream is POSTed to the ntfy endpoint, so it leaves the machine. stderr
-    # is where tooling prints stack traces, environment dumps and failing URLs
-    # -- the places credentials appear -- and it was discarded until now, so a
-    # detector author had no reason to treat it as published. 20 lines bounds
-    # an accidental dump; it does not make the stream safe, which is why the
-    # contract in the header says so outright.
+    # The cap is a security property, not tidiness -- this stream is POSTed
+    # off-box. It bounds an accidental dump; it does not make the stream safe.
     _err="$(command tail -n 20 "${_errfile}" 2>/dev/null)"
     rm -f "${_errfile}"
 
