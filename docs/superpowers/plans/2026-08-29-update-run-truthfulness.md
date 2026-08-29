@@ -249,6 +249,88 @@ three reachable `log_warn` paths, any of which prepends a line and false-reds `[
 
 ---
 
+### Task 1c: Propagate the run-dir failure to the callers (re-plan, from Task 1b review)
+
+```yaml-task
+id: 8
+description: Make the six run_* callers branch on _dotfiles_run_tmpdir_setup's return value, and correct three stale RED comments in the tests it touches
+role: executor
+model: sonnet
+tdd: required
+acceptance:
+  - cmd: make lint
+    exit_code: 0
+  - cmd: bats tests/setup_env/ledger_integration.bats
+    exit_code: 0
+  - cmd: bats tests/setup_env/workflows.bats
+    exit_code: 0
+  - cmd: make test
+    exit_code: 0
+max_retries: 3
+files_touched:
+  - lib/workflows.sh
+  - tests/setup_env/ledger_integration.bats
+  - tests/setup_env/workflows.bats
+depends_on: [7]
+```
+
+**Task 1b's guard returns into a void, and the whole spec turns on closing it.** All six call
+sites are bare statements, there is no `set -e` in `lib/workflows.sh` or `setup_env.sh`, so a
+non-zero return is discarded and the caller runs on with `_DOTFILES_RUN_TMPDIR` set to the
+empty string. 107 write sites in `lib/update_summary.sh` and 28 in `lib/workflows.sh` then
+target `/`.
+
+Reproduced end to end against the real functions, with an unreachable override:
+
+```
+setup rc=1 var=[]
+summary rc=0
+0 sections: 0 OK, 0 failed, 0 warnings, 0 skipped
+```
+
+`_update_record_end "brew" 1` had recorded a **failure**, and the summary reports `0 failed`
+while `_update_summary` returns 0. Task 2's exit contract cannot save this: `_fail` is 0
+because no status file was ever written, so `$(( _fail > 0 ))` is 0 and `-t update` exits
+clean over a run that did nothing. That is verbatim the defect this spec exists to eliminate,
+reachable today.
+
+**The fix.** All six sites — `lib/workflows.sh:120, 225, 261, 286, 293, 331` — become:
+
+```bash
+_dotfiles_run_tmpdir_setup || return 1
+```
+
+This widens each `run_*` function's contract from "always 0 unless an inner `cd` fails" to
+"non-zero when the run directory cannot be created". `_run_or_exit` (`setup_env.sh:76-80`)
+already treats any non-zero as fatal, which is the correct outcome: a run that cannot create
+its own scratch directory has not run. Per `behavior.md`'s contract-widening rule, enumerate
+the call sites before editing — `grep -n '_dotfiles_run_tmpdir_setup' lib/workflows.sh` — and
+confirm none of the six is written as `fn && x`, `if fn; then`, or a bare `||`, since each
+would read a new non-zero as something other than failure.
+
+**The error-path test is at the caller level, not the function level.** Task 1b already
+covers the function returning 1. What is untested is that a caller *stops*. Drive
+`run_update` with `_OVERRIDE_RUN_TMPDIR_ROOT` pointed at an unreachable path and assert both
+halves: the function returns non-zero, **and** it did not proceed — no summary line, no log
+append. Asserting only the return code would pass against a caller that returned 1 after
+running every section.
+
+**Three stale comments, in the same files.** `ledger_integration.bats:329` says
+`# RED today: mktemp ignores the unreachable root entirely` — false in both halves: `mktemp`
+honours the root and fails, which is the point of the guard, and the test is green at HEAD.
+`:358` says `# RED: name is tmp.XXXXXXXX`, stale since Task 1. `:343` says the trap "removed
+it", describing a trap that unsets a variable and removes nothing. Correct all three; they
+are the same defect class as the code they annotate.
+
+**Interfaces:**
+
+- Consumes: Task 1b's `|| return 1` and the `_OVERRIDE_RUN_TMPDIR_ROOT` seam.
+- Produces: six `run_*` functions that fail closed. Task 2's exit contract composes with this
+  rather than duplicating it — that task governs a run that *completed* with failures, this
+  one a run that could not start.
+
+---
+
 ### Task 2: Exit contract
 
 ```yaml-task
