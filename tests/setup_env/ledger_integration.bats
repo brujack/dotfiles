@@ -326,7 +326,7 @@ EOF
       printf "rc=%s var=[%s]" "$?" "${_DOTFILES_RUN_TMPDIR:-}"'
     unset _OVERRIDE_RUN_TMPDIR_ROOT
     [ "$status" -eq 0 ]                  # bash -c itself exits 0 (rc captured, not propagated)
-    [[ "$output" == "rc=1 var=[]" ]]     # RED today: mktemp ignores the unreachable root entirely
+    [[ "$output" == "rc=1 var=[]" ]]     # mktemp honours the unreachable root and fails, as intended
 }
 
 @test "_dotfiles_run_tmpdir_setup: directory survives the EXIT trap" {
@@ -340,7 +340,7 @@ EOF
       printf "%s" "${_DOTFILES_RUN_TMPDIR}"'
     [ "$status" -eq 0 ]
     [ -n "$output" ]
-    [ -d "$output" ]              # RED today: the trap removed it when bash -c exited
+    [ -d "$output" ]              # the trap only unsets the variable; it never removes the dir
     [ -f "${output}/started_at" ]
     rm -rf "$output"
 }
@@ -355,5 +355,5 @@ EOF
       _dotfiles_run_tmpdir_setup
       printf "%s" "$(basename "${_DOTFILES_RUN_TMPDIR}")"'
     [ "$status" -eq 0 ]
-    [[ "$output" == dotfiles-run.* ]]  # RED: name is tmp.XXXXXXXX
+    [[ "$output" == dotfiles-run.* ]]  # templated since Task 1; name carries the dotfiles-run prefix
 }
