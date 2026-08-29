@@ -389,3 +389,18 @@ _detector_stderr() {  # $1 = exit code, $2 = stderr line, $3... = stdout lines
   [ "$status" -eq 2 ]
   command grep -q '"result": *"incomplete"' "${_RHN_STATE_DIR}/${NAME}/last-run.json"
 }
+
+# The captured stderr is POSTed off-box, so its size is a security property and
+# not a formatting preference. Only-red-under-mutation, like the count guard:
+# verified by removing the `tail -n 20`, which lets line 1 through.
+@test "the published stderr is capped, so a runaway detector cannot dump unbounded output off-box" {
+  local _d="${BATS_TEST_TMPDIR}/detector"
+  { printf '#!/usr/bin/env bash\n'
+    printf 'for i in $(seq 1 100); do printf "errline-%%s\\n" "$i" >&2; done\n'
+    printf 'exit 2\n'; } > "${_d}"
+  chmod +x "${_d}"
+  run bash "${SCRIPT}" "${NAME}" "${_d}"
+  [ "$status" -eq 2 ]
+  command grep -q 'errline-100' "${_RHN_NTFY_LOG}"
+  run ! command grep -q 'errline-1$' "${_RHN_NTFY_LOG}"
+}

@@ -43,6 +43,11 @@
 # That is the detector violating this contract, not the wrapper miscounting.
 # Every diagnosis goes to STDERR, which is surfaced in the notification and
 # never counted.
+#
+# STDERR IS PUBLISHED. It is POSTed to the ntfy endpoint, capped at the last 20
+# lines. A detector must not print credentials, tokens, or full environment
+# dumps there -- it was discarded before 2026-08-28, so anything written on the
+# assumption that nobody reads it is now delivered.
 
 _rhn_state_dir() {
     printf '%s' "${_RHN_STATE_DIR:-${HOME}/.local/share/dotfiles/cadence}"
@@ -215,7 +220,15 @@ run_cadence_notify() {
     fi
     _out="$(env -u NTFY_URL "${_detector}" 2>"${_errfile}")"
     _rc=$?
-    _err="$(cat "${_errfile}" 2>/dev/null)"
+    #
+    # Capped, and the cap is a security property rather than tidiness: this
+    # stream is POSTed to the ntfy endpoint, so it leaves the machine. stderr
+    # is where tooling prints stack traces, environment dumps and failing URLs
+    # -- the places credentials appear -- and it was discarded until now, so a
+    # detector author had no reason to treat it as published. 20 lines bounds
+    # an accidental dump; it does not make the stream safe, which is why the
+    # contract in the header says so outright.
+    _err="$(command tail -n 20 "${_errfile}" 2>/dev/null)"
     rm -f "${_errfile}"
 
     _count=0

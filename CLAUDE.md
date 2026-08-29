@@ -656,7 +656,11 @@ Three properties are load-bearing and none is obvious from the shape:
   discipline.** The wrapper cannot distinguish a finding from a progress banner, so the
   contract is that stdout carries findings one per line and nothing else, while **stderr
   carries the diagnosis** — captured separately, surfaced in the push under `Cause:` on the
-  incomplete path and `Diagnostics:` on the held path, and never counted. A detector that
+  incomplete path and `Diagnostics:` on the held path, and never counted. **That stderr is
+  published**: it is POSTed to the ntfy endpoint, capped at the last 20 lines, so a detector
+  must not print credentials, tokens, or environment dumps there. It was discarded before
+  2026-08-28, which is exactly why a detector author would not have treated it as published —
+  the cap bounds an accidental dump and does not make the stream safe. A detector that
   prints a status line to stdout over-reports by exactly that many lines, silently and
   every week. Measured 2026-08-28 against `ledger_drift_check.sh`, which banner'd on both
   terminal paths: the findings path pushed 31 stale entities as `"findings": 32`, and the
