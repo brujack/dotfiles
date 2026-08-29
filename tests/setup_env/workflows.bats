@@ -731,6 +731,37 @@ EOF
   [[ "$output" == *"no changes"* ]]
 }
 
+@test "run_update stops without running any section when the run dir cannot be created" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
+  export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
+  export _OVERRIDE_RUN_TMPDIR_ROOT="${BATS_TEST_TMPDIR}/nonexistent-root"
+  # setup() already recorded its own probes (e.g. detect_env's `hostname -s`)
+  # into MOCK_CALLS_FILE before this test body runs, so an empty-file
+  # assertion would false-red on that baseline. Compare the count instead —
+  # no section may add to it.
+  local _calls_before
+  _calls_before="$(wc -l < "${MOCK_CALLS_FILE}")"
+  run run_update
+  unset _OVERRIDE_RUN_TMPDIR_ROOT
+  [ "$status" -eq 1 ]
+  # No section ran: the mock-calls ledger gained nothing beyond setup()'s baseline.
+  [ "$(wc -l < "${MOCK_CALLS_FILE}")" -eq "${_calls_before}" ]
+  # No summary was printed and no log line was appended.
+  [[ "$output" != *"sections:"* ]]
+  [ ! -f "${UPDATE_LOG_PATH}" ]
+}
+
+@test "run_update returns 0 when the run dir is created successfully" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
+  export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
+  run run_update
+  [ "$status" -eq 0 ]
+}
+
 # ── run_brew_install ──────────────────────────────────────────────────────────
 
 @test "run_brew_install creates Brewfile symlink at BREWFILE_LOC" {
