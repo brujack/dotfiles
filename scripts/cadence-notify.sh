@@ -22,6 +22,27 @@
 #   1 = all repos queried, control passed, findings on stdout
 #   2 = INCOMPLETE: a query or the control failed (dominates 1)
 # Any other value is treated as 2 -- an unknown outcome is not a clean one.
+#
+# STDOUT IS FINDINGS-ONLY. One finding per line, nothing else -- no progress
+# lines, no "alerting via ntfy" banners, no diagnosis. This wrapper counts
+# stdout lines and cannot tell a banner from a finding, so a status line on
+# stdout is reported to the operator as a finding. Measured 2026-08-28 against
+# ledger_drift_check.sh, which printed a banner on BOTH terminal paths:
+#
+#   findings path   31 stale entities -> heartbeat recorded 32
+#   clean path      0 findings        -> heartbeat recorded 1, every week
+#
+# The clean-path instance is the damaging one -- it fires when nothing is
+# wrong, so the channel reports a finding on a healthy fleet forever. It was
+# invisible from this side: the only heartbeat available here came from a run
+# that HAD drift, so the findings path was the one that could be measured and
+# the clean path had to be found by running the detector. A count sampled on
+# one path says nothing about the others. Fixed in ai-config#227; both banners
+# now go to stderr, leaving stdout at 9/0/0 across findings/clean/cannot-run.
+#
+# That is the detector violating this contract, not the wrapper miscounting.
+# Every diagnosis goes to STDERR, which is surfaced in the notification and
+# never counted.
 
 _rhn_state_dir() {
     printf '%s' "${_RHN_STATE_DIR:-${HOME}/.local/share/dotfiles/cadence}"
@@ -153,7 +174,7 @@ run_cadence_notify() {
         return 2
     fi
     local _detector="${2:?cadence-notify: detector path required}"
-    local _out _rc _count _result _msg
+    local _out _err _rc _count _result _msg
     _RHN_NAME="${_name}"
 
     if [[ ! -x "${_detector}" ]]; then
@@ -164,8 +185,38 @@ run_cadence_notify() {
     fi
 
     # NTFY_URL scrubbed: the detector detects, this script delivers.
-    _out="$(env -u NTFY_URL "${_detector}" 2>/dev/null)"
+    #
+    # The two streams are kept SEPARATE and neither is discarded. stdout is the
+    # findings channel and is what `_count` measures; stderr is the diagnosis
+    # channel -- why a run could not determine an answer -- and is surfaced in
+    # the message but never counted. Folding them together would inflate the
+    # count by however many lines the diagnosis ran to; discarding stderr, which
+    # this did until 2026-08-28, left the operator a push naming no cause at all
+    # (measured: `ERROR: ledger binary not found` vanished, the notification
+    # said only "cannot determine").
+    #
+    # A mktemp failure takes the INCOMPLETE path rather than returning early:
+    # this file's invariant is that a run that errored and a run that never
+    # happened must not look alike, and a bare `return 1` here would write no
+    # heartbeat at all -- indistinguishable from an agent that never fired,
+    # which is the one distinction doctor reads this file to make.
+    #
+    # Seamed rather than called by name because BSD `mktemp` with no template
+    # ignores TMPDIR, so pointing TMPDIR at a nonexistent directory drives this
+    # branch on GNU and not on macOS -- a test that passes on the runner and is
+    # inert on every development machine. The override makes the branch
+    # reachable identically on both.
+    local _errfile _mktemp="${_RHN_MKTEMP:-mktemp}"
+    if ! _errfile="$("${_mktemp}")"; then
+        printf "cadence-notify: cannot create a temp file for the detector's stderr\n" >&2
+        _rhn_write_heartbeat "incomplete" 2 0 || return 1
+        _rhn_notify "${_name} INCOMPLETE - cannot determine: no temp file for detector stderr"
+        return 2
+    fi
+    _out="$(env -u NTFY_URL "${_detector}" 2>"${_errfile}")"
     _rc=$?
+    _err="$(cat "${_errfile}" 2>/dev/null)"
+    rm -f "${_errfile}"
 
     _count=0
     [[ -n "${_out}" ]] && _count=$(printf '%s\n' "${_out}" | command grep -c .)
@@ -184,9 +235,14 @@ run_cadence_notify() {
 
     if [[ "${_result}" == "incomplete" ]]; then
         _msg="${_name} INCOMPLETE - cannot determine."
+        [[ -n "${_err}" ]] && _msg="${_msg}"$'\n'"Cause:"$'\n'"${_err}"
         [[ "${_count}" -gt 0 ]] && _msg="${_msg}"$'\n'"Found so far:"$'\n'"${_out}"
     else
         _msg="${_name}: ${_count} finding(s)."$'\n'"${_out}"
+        # A detector can find things AND warn while doing it -- "9 repos held,
+        # 2 unreachable" is one run with both. Appending under its own label
+        # keeps the diagnosis out of the finding list rather than losing it.
+        [[ -n "${_err}" ]] && _msg="${_msg}"$'\n'"Diagnostics:"$'\n'"${_err}"
     fi
 
     _rhn_notify "${_msg}"
