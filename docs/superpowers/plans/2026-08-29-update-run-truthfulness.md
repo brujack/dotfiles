@@ -76,38 +76,36 @@ depends_on: []
 
 **Files:** `lib/workflows.sh:105-116`, `tests/setup_env/ledger_integration.bats` (new tests near the existing `_dotfiles_run_tmpdir_setup` block at `:290`).
 
-**RED first.** Add to `tests/setup_env/ledger_integration.bats`:
+**RED first.** Add to `tests/setup_env/ledger_integration.bats`, whose `setup()` already
+calls `load_setup_env` and exports `HOME="${BATS_TEST_TMPDIR}"`.
+
+**The subshell is load-bearing and a bare call is vacuous here.** The EXIT trap fires when the
+*shell* exits, not when the function returns — so the existing bare-call tests at `:292` and
+`:300` already assert `[ -d "${_DOTFILES_RUN_TMPDIR}" ]` and pass today. Probed before this
+plan was dispatched: bare call `ok`, subshell form `not ok`. Only the subshell form is red.
 
 ```bash
 @test "_dotfiles_run_tmpdir_setup: directory survives the EXIT trap" {
-  # `run` and not a bare call: the setup function installs an EXIT/INT/TERM trap
-  # that clobbers bats' own, which surfaces as "Executed N-1 instead of expected N"
-  # with no test name. See tests/setup_env/workflows.bats:237.
-  run bash -c "
-    source '${REPO_ROOT}/lib/workflows.sh'
-    _dotfiles_run_tmpdir_setup
-    printf '%s' \"\${_DOTFILES_RUN_TMPDIR}\"
-  "
-  [ "$status" -eq 0 ]
-  [ -n "$output" ]
-  [ -d "$output" ]              # RED today: the trap removed it when bash -c exited
-  [ -f "${output}/started_at" ]
-  rm -rf "$output"
+    run bash -c 'set -e
+      source "'"${REPO_ROOT}"'/setup_env.sh" >/dev/null 2>&1 || true
+      _dotfiles_run_tmpdir_setup
+      printf "%s" "${_DOTFILES_RUN_TMPDIR}"'
+    [ "$status" -eq 0 ]
+    [ -n "$output" ]
+    [ -d "$output" ]              # RED today: the trap removed it when bash -c exited
+    [ -f "${output}/started_at" ]
+    rm -rf "$output"
 }
 
 @test "_dotfiles_run_tmpdir_setup: directory name carries the dotfiles-run prefix" {
-  run bash -c "
-    source '${REPO_ROOT}/lib/workflows.sh'
+    unset _DOTFILES_RUN_TMPDIR
     _dotfiles_run_tmpdir_setup
-    printf '%s' \"\${_DOTFILES_RUN_TMPDIR}\"
-  "
-  [ "$status" -eq 0 ]
-  [[ "$(basename "$output")" == dotfiles-run.* ]]   # RED today: name is tmp.XXXXXXXX
-  rm -rf "$output"
+    [[ "$(basename "${_DOTFILES_RUN_TMPDIR}")" == dotfiles-run.* ]]  # RED: name is tmp.XXXXXXXX
 }
 ```
 
-Run them, confirm both fail — the first because the directory is gone, the second because the name is `tmp.XXXXXXXX`. A pass here before the change means the test is not exercising what it claims.
+The second test may stay a bare call — it asserts on the name, which the trap does not affect,
+and it is not staging a FAIL status.
 
 **GREEN.** In `lib/workflows.sh`, replace lines 106 and 108:
 
