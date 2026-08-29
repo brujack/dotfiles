@@ -129,6 +129,107 @@ Everything below line 108 is unchanged. The trap stays — only `rm -rf "${_DOTF
 
 ---
 
+### Task 1b: Harden the run-dir change (re-plan, from Task 1 review)
+
+```yaml-task
+id: 7
+description: Guard the mktemp assignment, scope TMPDIR in the bats suites so test run dirs are reaped, and fix three test defects found in Task 1 review
+role: executor
+model: sonnet
+tdd: required
+acceptance:
+  - cmd: make lint
+    exit_code: 0
+  - cmd: bats tests/setup_env/ledger_integration.bats
+    exit_code: 0
+  - cmd: 'bash -c "test $(find /var/folders -path \"*/T/dotfiles-run.*\" -maxdepth 4 -type d 2>/dev/null | wc -l) -eq 0"'
+    exit_code: 0
+  - cmd: make test
+    exit_code: 0
+max_retries: 3
+files_touched:
+  - lib/workflows.sh
+  - tests/setup_env/ledger_integration.bats
+  - tests/setup_env/workflows.bats
+  - tests/setup_env/install_guards.bats
+  - tests/setup_env/brewfile_drift.bats
+  - tests/setup_env/update_summary.bats
+  - tests/setup_env/package_capture.bats
+depends_on: [1]
+```
+
+**Why this task exists.** Task 1's review found five defects, four of them inherited from
+this plan rather than introduced by the implementer. The plan's "no pruning" decision rested
+on a wrong population: it counted **3 direct callers** of `_dotfiles_run_tmpdir_setup` and
+concluded the OS reaper was sufficient. The population that actually creates directories is
+**test invocations reaching any of the six `run_*` callers** — measured at ~318 lines across
+six bats files, `run_update` alone accounting for 203. One suite run left **282** directories
+in a temp tree at 362M, and `make test` fires on every push via the pre-push hook.
+
+The distinction the plan missed, and which decides the fix: **production** creates one
+directory per real `-t update` run, a few per week, where the OS reaper is genuinely
+adequate; **tests** create hundreds per suite run. So the fix is test-side scoping, not
+production pruning — the original no-pruning decision stands and is correct for the case it
+was actually about.
+
+**1 — Guard the assignment (HIGH).** `lib/workflows.sh:106` has no `|| return 1`. The
+templated form makes `TMPDIR` load-bearing where bare `mktemp -d` ignored it — measured on
+macOS:
+
+```
+TMPDIR=/tmp/probe  mktemp -d                              -> /var/folders/.../tmp.K4P129yETg   (ignored)
+TMPDIR=/tmp/probe  mktemp -d "${TMPDIR:-/tmp}/x.XXXXXXXX" -> /tmp/probe/x.mLqa55nU             (honoured)
+TMPDIR=/nonexistent ... same templated form               -> rc=1, variable empty
+```
+
+An empty `_DOTFILES_RUN_TMPDIR` sends every subsequent write to `/started_at` and the run
+continues — and per this spec's own Exit contract section an absent tmpdir leaves `_fail=0`,
+so the summary reads clean and the ledger records success over a run that did nothing. That
+is the precise defect this spec exists to eliminate, reintroduced by its first task.
+
+```bash
+_DOTFILES_RUN_TMPDIR=$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-run.XXXXXXXX") || return 1
+```
+
+Add the error-path test `tdd.md` mandates for this branch. `TMPDIR` alone cannot drive it
+hermetically, so introduce a `_OVERRIDE_RUN_TMPDIR_ROOT` seam read only by this function,
+defaulting to `${TMPDIR:-/tmp}`, and point it at a nonexistent path in the test.
+
+**2 — Scope `TMPDIR` in every bats suite that reaches a `run_*` caller.** bats sets
+`BATS_TEST_TMPDIR` but leaves `TMPDIR` as the system temp dir — verified. At `setup()` scope,
+not per test:
+
+```bash
+export TMPDIR="${BATS_TEST_TMPDIR}"
+```
+
+Six files: `ledger_integration.bats`, `workflows.bats`, `install_guards.bats`,
+`brewfile_drift.bats`, `update_summary.bats`, `package_capture.bats`. Setup scope is the
+point — a per-test guard leaves the trap armed for the next test someone adds.
+
+**3 — Convert the prefix test to `run bash -c` form.** `ledger_integration.bats:320` is a
+bare call, so the function's EXIT trap clobbers bats' own and a failure reports
+`Executed N-1 instead of expected N` with no test name and no line number. It is falsifiable
+(rc=1 at RED in isolation) but unattributable. This plan's own Global Constraints name that
+symptom as having cost this repo three prior incidents, and then exempted this test from it.
+
+**4 — Drop `|| true` from the test's `source` line.** `ledger_integration.bats:310` reads
+`source setup_env.sh >/dev/null 2>&1 || true`. Demonstrated in review: appending a syntax
+error to `lib/git_hooks.sh` (sourced after `workflows.sh`) leaves the test reporting `ok`.
+Any breakage past `workflows.sh:116` is masked. `setup_env.sh` returns 0 on the sourcing path
+by construction, so the guard buys nothing.
+
+**5 — Use `run --separate-stderr`** in the survives-the-EXIT-trap test, or write the path to
+a file and read it back. `run` merges stderr into `$output`, and `ensure_state_ledger` has
+three reachable `log_warn` paths, any of which prepends a line and false-reds `[ -d "$output" ]`.
+
+**Interfaces:**
+
+- Consumes: Task 1's production change.
+- Produces: a guarded assignment and a suite that reaps its own run dirs. Tasks 2-6 inherit both.
+
+---
+
 ### Task 2: Exit contract
 
 ```yaml-task
