@@ -117,7 +117,7 @@ _dotfiles_run_tmpdir_setup() {
 }
 
 run_setup_user() {
-  _dotfiles_run_tmpdir_setup
+  _dotfiles_run_tmpdir_setup || return 1
   if [[ -n ${MACOS} ]]; then
     printf "Installing Rosetta if necessary\\n"
     install_rosetta || return 1
@@ -222,7 +222,7 @@ run_setup_user() {
 }
 
 run_setup_or_developer() {
-  _dotfiles_run_tmpdir_setup
+  _dotfiles_run_tmpdir_setup || return 1
   setup_credential_directories || return 1
 
   if [[ -n ${MACOS} ]]; then
@@ -258,7 +258,7 @@ _require_npm_pins() {
 }
 
 run_developer_or_ansible() {
-  _dotfiles_run_tmpdir_setup
+  _dotfiles_run_tmpdir_setup || return 1
   _require_npm_pins || return 1
   printf "Installing json2yaml via npm\n"
   npm install -g "json2yaml@${JSON2YAML_VER}" || return 1
@@ -283,14 +283,14 @@ run_developer_or_ansible() {
 }
 
 run_recreate_venv() {
-  _dotfiles_run_tmpdir_setup
+  _dotfiles_run_tmpdir_setup || return 1
   local _venv_name="${VENV_NAME:-ansible}"
   recreate_python_venv "${_venv_name}" || return 1
   _ledger_write_run_entry "recreate_venv" 0 || true
 }
 
 run_recreate_ruby() {
-  _dotfiles_run_tmpdir_setup
+  _dotfiles_run_tmpdir_setup || return 1
   recreate_ruby || return 1
   _ledger_write_run_entry "recreate_ruby" 0 || true
 }
@@ -328,7 +328,7 @@ run_update() {
   local _run_all=0
   _any_update_flag || _run_all=1
 
-  _dotfiles_run_tmpdir_setup
+  _dotfiles_run_tmpdir_setup || return 1
 
   # ── brew + softwareupdate ─────────────────────────────────────────────────
   if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_BREW:-} ]]; then
