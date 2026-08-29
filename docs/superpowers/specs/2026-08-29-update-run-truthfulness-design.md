@@ -204,9 +204,30 @@ So the **cheap** retention lands first, in its own commit, ahead of the exit con
 
 ```bash
 # lib/workflows.sh:105-108
-_DOTFILES_RUN_TMPDIR=$(mktemp -d -t dotfiles-run)   # was: mktemp -d
+_DOTFILES_RUN_TMPDIR=$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-run.XXXXXXXX")
 trap 'unset _DOTFILES_RUN_TMPDIR' EXIT INT TERM     # was: rm -rf ...; unset ...
 ```
+
+**Not `mktemp -d -t dotfiles-run`, and that form was in this section until plan time.**
+BSD `mktemp` reads `-t` as a filename prefix; GNU `mktemp` reads it as a deprecated
+use-`TMPDIR` flag that still requires the template's `XXXXXX`. Measured on both platforms:
+
+```
+macOS      mktemp -d -t dotfiles-run   -> /var/folders/.../dotfiles-run.tk1xyq1ftx
+Linux      mktemp -d -t dotfiles-run   -> mktemp: too few X's in template 'dotfiles-run'
+           (GNU coreutils 9.4, ssh workstation)
+```
+
+`_dotfiles_run_tmpdir_setup` has no `|| return`, so on Linux the assignment would yield an
+empty string and every subsequent `> "${_DOTFILES_RUN_TMPDIR}/started_at"` would write to
+`/started_at` — permission denied at best, and `run_update` would proceed with an unset
+tmpdir. The explicit-template form above is verified on macOS and on the Linux workstation.
+
+This is the third wrong-population error in this spec's own history — after the all-time
+FAIL ratio and the `ledger classify`/`ledger write` conflation — and it was written into the
+paragraph correcting the second one, verified on the Studio alone. `tdd.md` pitfall G names
+the class: a local pass is not evidence for a BSD/GNU divergence, and `ssh workstation` is
+one hop away.
 
 Two properties make this one line's worth of risk rather than the durable-root project
 deferred below:
