@@ -758,8 +758,15 @@ EOF
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
   export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
+  local _calls_before
+  _calls_before="$(wc -l < "${MOCK_CALLS_FILE}")"
   run run_update
   [ "$status" -eq 0 ]
+  # The negative test above proves no section ran by asserting this count did
+  # NOT move. That oracle is only meaningful if it CAN move, which is what this
+  # asserts -- otherwise the pair demonstrates nothing about the measurement,
+  # only about the comparison.
+  [ "$(wc -l < "${MOCK_CALLS_FILE}")" -gt "${_calls_before}" ]
 }
 
 # ── run_brew_install ──────────────────────────────────────────────────────────
