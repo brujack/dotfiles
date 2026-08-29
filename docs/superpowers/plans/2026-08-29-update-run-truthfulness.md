@@ -358,6 +358,15 @@ depends_on: [1]
 
 **Files:** `lib/update_summary.sh:598` (end of `_update_summary`), `setup_env.sh:75` (comment only), `tests/setup_env/update_summary.bats` (14 call sites).
 
+**Re-read `tests/setup_env/workflows.bats`'s `run_update returns 0 when the run dir is
+created successfully` before starting.** Task 1c added it as a control for the run-dir guard,
+and `run_update`'s rc *is* `_update_summary`'s (`lib/workflows.sh:688`) — which is
+unconditionally 0 today. This task's `return $(( _fail > 0 ))` silently converts that
+assertion from "the guard did not misfire" into "no section failed under mocks", on a full
+`run_update` invocation. If it goes red, the cause is a section legitimately FAILing under the
+mock environment, not the guard. Decide deliberately whether that test should pin `_fail=0`
+explicitly rather than inherit the meaning.
+
 **RED first.** Add a paired test — the pair is the point, since `[ "$status" -eq 1 ]` alone is satisfied by a function that always returns 1:
 
 ```bash
