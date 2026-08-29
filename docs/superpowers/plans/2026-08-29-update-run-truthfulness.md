@@ -151,10 +151,8 @@ files_touched:
   - lib/workflows.sh
   - tests/setup_env/ledger_integration.bats
   - tests/setup_env/workflows.bats
+  - tests/setup_env/unit.bats
   - tests/setup_env/install_guards.bats
-  - tests/setup_env/brewfile_drift.bats
-  - tests/setup_env/update_summary.bats
-  - tests/setup_env/package_capture.bats
 depends_on: [1]
 ```
 
@@ -203,9 +201,30 @@ not per test:
 export TMPDIR="${BATS_TEST_TMPDIR}"
 ```
 
-Six files: `ledger_integration.bats`, `workflows.bats`, `install_guards.bats`,
-`brewfile_drift.bats`, `update_summary.bats`, `package_capture.bats`. Setup scope is the
-point — a per-test guard leaves the trap armed for the next test someone adds.
+**Four** files, and the route to that number is the point. The first list named six by
+resemblance. The second named six by `grep -cE` over the six `run_*` names — which counts
+**test names and comments as invocations**, so `launch_agents.bats` scored 2 on a `@test`
+title plus a comment, and `extracted_functions.bats` scored 1 on a title reading
+*"(mas is called from run_update)"*. Neither file calls a `run_*` function at all; the
+implementer caught it by reading the lines, and it was settled empirically by running just
+those two files against a cleaned temp tree — **0 directories created**.
+
+| file | direct calls | real `run_*` invocations |
+| --- | --- | --- |
+| `workflows.bats` | 3 | 267 |
+| `unit.bats` | 0 | 38 |
+| `install_guards.bats` | 2 | 5 |
+| `ledger_integration.bats` | 12 | 1 |
+
+A text match over a file that discusses the thing it tests will count the discussion. Where
+the question is "does this code run", the settling instrument is running it and counting the
+side effect, not grepping for the name.
+
+`brewfile_drift.bats`, `update_summary.bats`, `package_capture.bats`, `launch_agents.bats`
+and `extracted_functions.bats` all have **zero** invocations — `update_summary.bats` sets `_DOTFILES_RUN_TMPDIR` to
+`BATS_TEST_TMPDIR` directly and never calls the setup function at all, which is also why
+Task 2's bare `_update_summary` call sites are safe there. Setup scope is the point — a
+per-test guard leaves the trap armed for the next test someone adds.
 
 **3 — Convert the prefix test to `run bash -c` form.** `ledger_integration.bats:320` is a
 bare call, so the function's EXIT trap clobbers bats' own and a failure reports
