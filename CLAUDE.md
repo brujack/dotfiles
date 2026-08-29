@@ -615,6 +615,7 @@ already have by editing `PATH` or the plist directly.
 | -------------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `_RHN_DETECTOR`            | tests only, via argv `$2`                       | production passes the detector path positionally from the plist; tests substitute a fixture that returns a chosen exit code                                                                                                                                                               |
 | `_RHN_STATE_DIR`           | `_rhn_state_dir`, `_renovate_cadence_state_dir` | heartbeat root. Defaults under `~/.local/share/dotfiles/cadence/<name>/` — a test pointing at the real path would assert against the machine's live cadence state                                                                                                                         |
+| `_RHN_MKTEMP`              | `run_cadence_notify`                            | selects the `mktemp` used for the detector's stderr capture. Exists because BSD `mktemp` with no template ignores `TMPDIR`, so the obvious seam drives the failure branch on GNU and is inert on every development mac — a test green where it runs most often. Grants nothing beyond `_RHN_CURL_BIN`/`_RHN_LAUNCHCTL`, which already resolve an arbitrary binary from the environment |
 | `_RHN_CURL_BIN`            | `_rhn_notify`                                   | `curl` is resolved by name, but a test must capture the payload rather than send it. Every ntfy assertion in the suite reads this capture                                                                                                                                                 |
 | `_RHN_LAUNCHCTL`           | `_rhn_launchctl`                                | `launchctl load` on a real plist would register a live weekly job on the developer's machine — the destructive-failing-path hazard `tdd.md` E2 names                                                                                                                                      |
 | `_RHN_AGENT_DIR`           | `_rhn_agent_dir`                                | defaults to `~/Library/LaunchAgents`; tests must never write there                                                                                                                                                                                                                        |
@@ -651,6 +652,25 @@ Three properties are load-bearing and none is obvious from the shape:
 - **`held` is a finding, not a fault.** `doctor` renders the three classes distinctly and a
   test asserts pairwise inequality — because every other test asserted only that its own
   branch fires, so a reader rendering `held` as a fault would have passed the whole suite.
+- **`findings` is a count of stdout lines, and it is only as good as the detector's
+  discipline.** The wrapper cannot distinguish a finding from a progress banner, so the
+  contract is that stdout carries findings one per line and nothing else, while **stderr
+  carries the diagnosis** — captured separately, surfaced in the push under `Cause:` on the
+  incomplete path and `Diagnostics:` on the held path, and never counted. **That stderr is
+  published**: it is POSTed to the ntfy endpoint, capped at the last 20 lines, so a detector
+  must not print credentials, tokens, or environment dumps there. It was discarded before
+  2026-08-28, which is exactly why a detector author would not have treated it as published —
+  the cap bounds an accidental dump and does not make the stream safe. A detector that
+  prints a status line to stdout over-reports by exactly that many lines, silently and
+  every week. Measured 2026-08-28 against `ledger_drift_check.sh`, which banner'd on both
+  terminal paths: the findings path pushed 31 stale entities as `"findings": 32`, and the
+  **clean path pushed `"findings": 1` on a fleet with zero drift**. The second is the
+  damaging one — it fires when nothing is wrong — and it was invisible from this side,
+  because the only heartbeat available here came from a run that had drift. A count sampled
+  on one path is evidence about that path and no other. Fixed in ai-config#227 (stdout now
+  9/0/0 across findings/clean/cannot-run), found by that session measuring all three rather
+  than the one this repo reported. Nothing here can detect the class — fixing it means
+  fixing the detector. Before believing a count, ask what else the detector writes to stdout.
 
 **Every value is closed-form on purpose.** The file is hand-built with `printf` and has two
 consumers with opposite constraints: a `sed` reader that breaks on an unquoted value, and a

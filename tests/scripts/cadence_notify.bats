@@ -324,3 +324,83 @@ EOF
   [[ "$output" == *"newline"* ]]
   run ! command grep -q 'evil.invalid' "${_RHN_NTFY_STDIN}"
 }
+
+# A detector's stderr is its DIAGNOSIS channel: it says why a run could not
+# determine an answer. Discarding it leaves the operator a notification naming
+# no cause at all -- measured on the first real ledger-drift run, where
+# `ERROR: ledger binary not found` never reached the push.
+_detector_stderr() {  # $1 = exit code, $2 = stderr line, $3... = stdout lines
+  local _rc="$1" _errline="$2"; shift 2
+  local _d="${BATS_TEST_TMPDIR}/detector"
+  { printf '#!/usr/bin/env bash\n'
+    printf 'printf "%%s\\n" %q >&2\n' "${_errline}"
+    for _l in "$@"; do printf 'printf "%%s\\n" %q\n' "${_l}"; done
+    printf 'exit %s\n' "${_rc}"; } > "${_d}"
+  chmod +x "${_d}"
+  export _RHN_DETECTOR="${_d}"
+}
+
+@test "the detector's stderr names the cause on the incomplete path" {
+  _detector_stderr 2 'ERROR: ledger binary not found'
+  run bash "${SCRIPT}" "${NAME}" "${_RHN_DETECTOR}"
+  [ "$status" -eq 2 ]
+  command grep -q 'ledger binary not found' "${_RHN_NTFY_LOG}"
+}
+
+@test "the detector's stderr is surfaced on the held path too, not only incomplete" {
+  _detector_stderr 1 'WARN: 2 of 9 repos unreachable' 'repo-a  6d  major' 'repo-b  6d  major'
+  run bash "${SCRIPT}" "${NAME}" "${_RHN_DETECTOR}"
+  [ "$status" -eq 1 ]
+  command grep -q '2 of 9 repos unreachable' "${_RHN_NTFY_LOG}"
+  command grep -q 'repo-a' "${_RHN_NTFY_LOG}"
+}
+
+# stdout is the findings channel, stderr is not. Merging the two would inflate
+# the count by the length of the diagnosis. This can only go red under mutation
+# -- verified by rewriting the capture as `2>&1`, which takes it to 3 -- so it
+# is a guard against a plausible future edit, not a repro of a past failure.
+@test "the detector's stderr never inflates the finding count" {
+  _detector_stderr 1 'WARN: 2 of 9 repos unreachable' 'repo-a  6d  major' 'repo-b  6d  major'
+  run bash "${SCRIPT}" "${NAME}" "${_RHN_DETECTOR}"
+  [ "$status" -eq 1 ]
+  command grep -q '"findings": 2' "${_RHN_STATE_DIR}/${NAME}/last-run.json"
+}
+
+# The cannot-determine path prints a diagnosis and no findings. Rendering that
+# diagnosis under "Found so far:" would present a cause as a finding and count
+# it as one -- the same collapse as the exit code, one layer up.
+@test "a diagnosis with no findings is not labelled or counted as a finding" {
+  _detector_stderr 2 'ERROR: ledger binary not found'
+  run bash "${SCRIPT}" "${NAME}" "${_RHN_DETECTOR}"
+  [ "$status" -eq 2 ]
+  command grep -q '"findings": 0' "${_RHN_STATE_DIR}/${NAME}/last-run.json"
+  run ! command grep -q 'Found so far' "${_RHN_NTFY_LOG}"
+}
+
+# The heartbeat must be written on EVERY outcome, including this script's own
+# failures — a run that errored and a run that never happened must not look
+# alike, because that distinction is the only thing doctor reads this file for.
+@test "a temp-file failure is incomplete with a heartbeat, not a bare early return" {
+  _detector 0
+  printf '#!/usr/bin/env bash\nexit 1\n' > "${BATS_TEST_TMPDIR}/false-mktemp"
+  chmod +x "${BATS_TEST_TMPDIR}/false-mktemp"
+  export _RHN_MKTEMP="${BATS_TEST_TMPDIR}/false-mktemp"
+  run bash "${SCRIPT}" "${NAME}" "${_RHN_DETECTOR}"
+  [ "$status" -eq 2 ]
+  command grep -q '"result": *"incomplete"' "${_RHN_STATE_DIR}/${NAME}/last-run.json"
+}
+
+# The captured stderr is POSTed off-box, so its size is a security property and
+# not a formatting preference. Only-red-under-mutation, like the count guard:
+# verified by removing the `tail -n 20`, which lets line 1 through.
+@test "the published stderr is capped, so a runaway detector cannot dump unbounded output off-box" {
+  local _d="${BATS_TEST_TMPDIR}/detector"
+  { printf '#!/usr/bin/env bash\n'
+    printf 'for i in $(seq 1 100); do printf "errline-%%s\\n" "$i" >&2; done\n'
+    printf 'exit 2\n'; } > "${_d}"
+  chmod +x "${_d}"
+  run bash "${SCRIPT}" "${NAME}" "${_d}"
+  [ "$status" -eq 2 ]
+  command grep -q 'errline-100' "${_RHN_NTFY_LOG}"
+  run ! command grep -q 'errline-1$' "${_RHN_NTFY_LOG}"
+}
