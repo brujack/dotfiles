@@ -1,4 +1,8 @@
 #!/usr/bin/env bats
+#
+# `run --separate-stderr` needs bats >= 1.5.0 (CI 1.10.0, this box 1.14.0).
+# Declared so an older bats fails loudly rather than silently ignoring the flag.
+bats_require_minimum_version 1.5.0
 
 setup() {
     # Close stdin for every test in this file. The ledger mock ends with
@@ -303,6 +307,22 @@ EOF
     [ -f "${_DOTFILES_RUN_TMPDIR}/start_epoch" ]
     [ -f "${_DOTFILES_RUN_TMPDIR}/run_id" ]
     [ -f "${_DOTFILES_RUN_TMPDIR}/git_sha" ]
+}
+
+@test "_dotfiles_run_tmpdir_setup: returns 1 and leaves the var unset when the tmpdir root is unreachable" {
+    unset _DOTFILES_RUN_TMPDIR
+    export _OVERRIDE_RUN_TMPDIR_ROOT="${BATS_TEST_TMPDIR}/nonexistent-root"
+    # No `set -e`: the script must survive _dotfiles_run_tmpdir_setup's non-zero
+    # return long enough to capture it and print the variable's post-call state.
+    # --separate-stderr: mktemp's own failure message goes to stderr and would
+    # otherwise land in $output ahead of the printf, corrupting the equality check.
+    run --separate-stderr bash -c '
+      source "'"${REPO_ROOT}"'/setup_env.sh" >/dev/null 2>&1 || true
+      _dotfiles_run_tmpdir_setup
+      printf "rc=%s var=[%s]" "$?" "${_DOTFILES_RUN_TMPDIR:-}"'
+    unset _OVERRIDE_RUN_TMPDIR_ROOT
+    [ "$status" -eq 0 ]                  # bash -c itself exits 0 (rc captured, not propagated)
+    [[ "$output" == "rc=1 var=[]" ]]     # RED today: mktemp ignores the unreachable root entirely
 }
 
 @test "_dotfiles_run_tmpdir_setup: directory survives the EXIT trap" {
