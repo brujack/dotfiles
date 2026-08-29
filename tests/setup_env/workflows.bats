@@ -13,6 +13,10 @@ setup() {
   export DOTFILES="dotfiles"
   export BREWFILE_LOC="${BATS_TEST_TMPDIR}/brew"
   mkdir -p "${PERSONAL_GITREPOS}/${DOTFILES}"
+  # This file's 267 run_* invocations each call _dotfiles_run_tmpdir_setup once.
+  # bats sets BATS_TEST_TMPDIR but leaves TMPDIR at the system temp dir, so
+  # without this every invocation leaks a real dotfiles-run.* dir there.
+  export TMPDIR="${BATS_TEST_TMPDIR}"
 }
 
 teardown() {

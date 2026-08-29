@@ -28,6 +28,10 @@ setup() {
     load_setup_env
     export HOME="${BATS_TEST_TMPDIR}"
     export ORIGINAL_PATH="${PATH}"
+    # This file calls _dotfiles_run_tmpdir_setup directly 12 times. bats sets
+    # BATS_TEST_TMPDIR but leaves TMPDIR pointed at the system temp dir, so
+    # without this every one of those calls leaks a real dotfiles-run.* dir.
+    export TMPDIR="${BATS_TEST_TMPDIR}"
 }
 
 teardown() {
@@ -317,7 +321,7 @@ EOF
     # --separate-stderr: mktemp's own failure message goes to stderr and would
     # otherwise land in $output ahead of the printf, corrupting the equality check.
     run --separate-stderr bash -c '
-      source "'"${REPO_ROOT}"'/setup_env.sh" >/dev/null 2>&1 || true
+      source "'"${REPO_ROOT}"'/setup_env.sh" >/dev/null 2>&1
       _dotfiles_run_tmpdir_setup
       printf "rc=%s var=[%s]" "$?" "${_DOTFILES_RUN_TMPDIR:-}"'
     unset _OVERRIDE_RUN_TMPDIR_ROOT
@@ -326,8 +330,12 @@ EOF
 }
 
 @test "_dotfiles_run_tmpdir_setup: directory survives the EXIT trap" {
-    run bash -c 'set -e
-      source "'"${REPO_ROOT}"'/setup_env.sh" >/dev/null 2>&1 || true
+    # --separate-stderr: ensure_state_ledger has three reachable log_warn paths
+    # (state-ledger pull/clone/init failures), each of which writes to stderr.
+    # `run`'s default merge would prepend a WARN line to $output and false-red
+    # the `-d "$output"` check below.
+    run --separate-stderr bash -c 'set -e
+      source "'"${REPO_ROOT}"'/setup_env.sh" >/dev/null 2>&1
       _dotfiles_run_tmpdir_setup
       printf "%s" "${_DOTFILES_RUN_TMPDIR}"'
     [ "$status" -eq 0 ]
@@ -338,7 +346,14 @@ EOF
 }
 
 @test "_dotfiles_run_tmpdir_setup: directory name carries the dotfiles-run prefix" {
-    unset _DOTFILES_RUN_TMPDIR
-    _dotfiles_run_tmpdir_setup
-    [[ "$(basename "${_DOTFILES_RUN_TMPDIR}")" == dotfiles-run.* ]]  # RED: name is tmp.XXXXXXXX
+    # run --separate-stderr rather than a bare call: a bare call's EXIT trap
+    # clobbers bats' own, so a failure here reported "Executed N-1 instead of
+    # expected N" with no test name and no line number.
+    run --separate-stderr bash -c '
+      source "'"${REPO_ROOT}"'/setup_env.sh" >/dev/null 2>&1
+      unset _DOTFILES_RUN_TMPDIR
+      _dotfiles_run_tmpdir_setup
+      printf "%s" "$(basename "${_DOTFILES_RUN_TMPDIR}")"'
+    [ "$status" -eq 0 ]
+    [[ "$output" == dotfiles-run.* ]]  # RED: name is tmp.XXXXXXXX
 }

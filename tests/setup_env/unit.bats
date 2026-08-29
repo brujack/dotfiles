@@ -8,6 +8,10 @@ setup() {
   TMPDIR_TEST="$(mktemp -d)"
   export HOME="${TMPDIR_TEST}"
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
+  # This file's 38 run_* invocations each call _dotfiles_run_tmpdir_setup once.
+  # bats sets BATS_TEST_TMPDIR but leaves TMPDIR at the system temp dir, so
+  # without this every invocation leaks a real dotfiles-run.* dir there.
+  export TMPDIR="${BATS_TEST_TMPDIR}"
 }
 
 teardown() {
