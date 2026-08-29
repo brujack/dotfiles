@@ -55,6 +55,12 @@ names. The `SKIP_UPGRADE` grep covered tracked and untracked `*.sh` and `*.bats`
 repo root; it did not cover `.zsh` or the `powershell/` subtree, neither of which
 participates in `run_update`.
 
+All four retractions above were caught by reading the source rather than by reasoning about
+the documentation, and the fourth is the sharpest form: `behavior.md`'s account of `ledger
+classify` is accurate, current, and about a different subcommand than `ledger write`. An
+accurate fact about an adjacent thing is what this premise check exists to catch, and no
+amount of re-reading the documentation would have surfaced it.
+
 ## Design
 
 ### 1. Exit contract
@@ -184,6 +190,45 @@ that goes red.
 There are **zero** production callers of `_update_summary` outside `run_update`, verified by
 grep, so this is the whole of the migration.
 
+## Ordering — the `err_*` one-liner ships first
+
+**Scope change, made after the operator's ruling and flagged rather than folded in
+silently.** The ruling is that the noise is the finding: the first `exit 1` is the prompt to
+diagnose `brew`. That prompt arrives with nothing behind it. Every recent `brew` FAIL row
+reads `exit 1`, `result_brew` carries no cause, and `err_brew` — the only artifact holding
+the reason — is removed by the trap at `lib/workflows.sh:108` before anyone can read it. A
+contract that starts firing on one run in three, pointing at a diagnostic that does not
+exist, is worse than one that fires with the evidence attached.
+
+So the **cheap** retention lands first, in its own commit, ahead of the exit contract:
+
+```bash
+# lib/workflows.sh:105-108
+_DOTFILES_RUN_TMPDIR=$(mktemp -d -t dotfiles-run)   # was: mktemp -d
+trap 'unset _DOTFILES_RUN_TMPDIR' EXIT INT TERM     # was: rm -rf ...; unset ...
+```
+
+Two properties make this one line's worth of risk rather than the durable-root project
+deferred below:
+
+- **No isolation work.** The directory is still `mktemp`, so every test writes to a throwaway
+  path exactly as today. Verified: three tests call `_dotfiles_run_tmpdir_setup` directly —
+  `tests/setup_env/install_guards.bats:783`, `tests/setup_env/ledger_integration.bats:294`
+  and `:302` — and all three would simply leave a `/var/folders` directory behind, which the
+  OS reaps. None of the 372 `_DOTFILES_RUN_TMPDIR` references changes.
+- **The directories stay findable.** `mktemp -d -t dotfiles-run` yields
+  `/var/folders/.../dotfiles-run.XXXXXXXX` (verified on macOS), so a later prune can select
+  them by prefix. Without the prefix, retained directories are indistinguishable from every
+  other tool's `tmp.XXXX`.
+
+The cost is that macOS reaps `/var/folders` in roughly three days and Ubuntu's
+`systemd-tmpfiles` defaults to ten, so this buys a diagnostic window rather than a record.
+That is the right trade for the question it has to answer — *why did brew fail on the run
+that just exited 1* — and it is not a substitute for the durable root, which stays deferred.
+
+The EXIT trap itself stays. Dropping `rm -rf` does not remove the trap, so the
+bats-trap-clobbering those three test comments describe is unchanged by this spec.
+
 ## Verification
 
 The first draft's checks were counted during review: five checks, all expecting PASS, three
@@ -216,6 +261,16 @@ which is what makes it a mutation test rather than a restatement. Then revert th
 confirm it returns to OK, so a permanently-failing section is not mistaken for a working
 gate.
 
+**Every new FAIL-staging test uses `run`, never a bare call.** This is the trap section 3
+identifies, and this section was about to walk into it: the mutation test above stages a FAIL
+and calls the function, so written bare it aborts under bats' `set -e` at the call and reports
+a line unrelated to the mutation. The repo has already paid for this class three times —
+`tests/setup_env/workflows.bats:237`, `:1796` and `:1930` each carry a comment recording that
+`_dotfiles_run_tmpdir_setup`'s EXIT trap clobbers bats' own, reproduced as
+`Executed N-1 instead of expected N` with no test name and no line number. `run` isolates the
+trap in its subshell. The rule is stated here rather than left to section 3 because
+Verification is where the next FAIL-staging test gets written.
+
 **Positive control on the FAIL path.** `[ "$status" -eq 1 ]` alone would pass against a
 `_update_summary` that returned 1 unconditionally. The paired assertion is that the same
 fixture with every section OK returns 0, in the same test file, so neither constant can
@@ -232,11 +287,10 @@ Two sections of the first draft were removed. Both are real work and each gets a
 in the same change as this spec, per `behavior.md`'s rule that a mentioned-but-unfixed
 finding needs a destination.
 
-- **A durable run directory** retaining `err_*` past the run. Genuinely useful, and the
-  cheap form is one line — delete `rm -rf` from the trap at `lib/workflows.sh:108` and keep
-  `mktemp -d`, which preserves interrupted runs and needs no isolation work because tests
-  still write to throwaway directories. The expensive form (a durable root under `$HOME`) is
-  what forces everything below, and it is only _required_ by package capture.
+- **A durable run root under `$HOME`**, named and pruned, with the six-caller and
+  sortable-name problems below. Only _package capture_ requires that form. The one-line
+  `err_*` retention that was in this bullet has been pulled back into scope — see Ordering
+  above.
 - **Wiring `package_capture`.** It cannot move any verdict by construction, and it is the
   only reason the run directory must be durable across runs and named by `run_id`. Its own
   defects are now known and belong in its own spec: the hardcoded `"[]"` previous state
