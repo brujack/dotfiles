@@ -304,3 +304,21 @@ EOF
     [ -f "${_DOTFILES_RUN_TMPDIR}/run_id" ]
     [ -f "${_DOTFILES_RUN_TMPDIR}/git_sha" ]
 }
+
+@test "_dotfiles_run_tmpdir_setup: directory survives the EXIT trap" {
+    run bash -c 'set -e
+      source "'"${REPO_ROOT}"'/setup_env.sh" >/dev/null 2>&1 || true
+      _dotfiles_run_tmpdir_setup
+      printf "%s" "${_DOTFILES_RUN_TMPDIR}"'
+    [ "$status" -eq 0 ]
+    [ -n "$output" ]
+    [ -d "$output" ]              # RED today: the trap removed it when bash -c exited
+    [ -f "${output}/started_at" ]
+    rm -rf "$output"
+}
+
+@test "_dotfiles_run_tmpdir_setup: directory name carries the dotfiles-run prefix" {
+    unset _DOTFILES_RUN_TMPDIR
+    _dotfiles_run_tmpdir_setup
+    [[ "$(basename "${_DOTFILES_RUN_TMPDIR}")" == dotfiles-run.* ]]  # RED: name is tmp.XXXXXXXX
+}
