@@ -166,6 +166,40 @@ teardown() {
   ! grep -q "get.nexte.st" "${MOCK_CALLS_FILE:-/dev/null}"
 }
 
+@test "update_rust returns 1 when rustup update fails" {
+  export UBUNTU=1 HAS_RUST=1
+  mkdir -p "${BATS_TEST_TMPDIR}/bin"
+  printf '#!/usr/bin/env bash\n[ "$1" = update ] && exit 1\nexit 0\n' \
+    > "${BATS_TEST_TMPDIR}/bin/rustup"
+  chmod +x "${BATS_TEST_TMPDIR}/bin/rustup"
+  PATH="${BATS_TEST_TMPDIR}/bin:${PATH}" HOME="${BATS_TEST_TMPDIR}" run update_rust
+  [ "$status" -eq 1 ]           # RED today: rustup's rc is discarded
+}
+
+@test "update_rust returns 0 when every rustup call succeeds" {
+  export UBUNTU=1 HAS_RUST=1
+  mkdir -p "${BATS_TEST_TMPDIR}/bin"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "${BATS_TEST_TMPDIR}/bin/rustup"
+  chmod +x "${BATS_TEST_TMPDIR}/bin/rustup"
+  PATH="${BATS_TEST_TMPDIR}/bin:${PATH}" HOME="${BATS_TEST_TMPDIR}" run update_rust
+  [ "$status" -eq 0 ]
+}
+
+@test "update_rust returns 0 and warns when rustup is absent" {
+  export UBUNTU=1 HAS_RUST=1
+  # A filter that strips only "tests/mocks" from PATH is not inert on a
+  # developer machine that has a real rustup on PATH (e.g. ~/.cargo/bin) --
+  # measured directly: it resolves the REAL rustup and runs a real
+  # `rustup self update` / `component add rust-analyzer` against the
+  # operator's actual toolchain (tdd.md E2: a test's failing/absent path must
+  # be inert, never destructive). Restrict PATH to the same minimal,
+  # known-safe set the sibling "logs warning when rustup not found" test
+  # above already uses, so no real toolchain directory can ever be reached.
+  PATH="/usr/bin:/bin:/usr/sbin:/sbin" HOME="${BATS_TEST_TMPDIR}" run update_rust
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"rustup not found"* ]]
+}
+
 # ── clone_personal_repos ─────────────────────────────────────────────────────
 
 @test "clone_personal_repos: skips git clone when dotfiles dir exists" {
