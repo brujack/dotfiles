@@ -17,15 +17,6 @@ setup() {
   # bats sets BATS_TEST_TMPDIR but leaves TMPDIR at the system temp dir, so
   # without this every invocation leaks a real dotfiles-run.* dir there.
   export TMPDIR="${BATS_TEST_TMPDIR}"
-  # _update_summary now returns non-zero when any section FAILed, and
-  # update_aws_cli's MACOS branch `cd`s into ~/software_downloads/awscli
-  # with no mkdir of its own. On a machine with HAS_AWS set (this repo's
-  # profile model sets it for every macOS/Linux dev machine), every full
-  # run_update invocation in this file would otherwise legitimately FAIL
-  # the aws section against a fresh mocked HOME -- unrelated to whatever
-  # each test actually exercises. Pin the precondition here rather than
-  # in each of the ~19 tests that call run_update end to end.
-  mkdir -p "${HOME}/software_downloads/awscli"
 }
 
 teardown() {
