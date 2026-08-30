@@ -533,6 +533,14 @@ production `mkdir` you just added, which is the coupling worth proving rather th
 
 Found by review of Task 2, before either half shipped.
 
+**The GREEN snippet below omitted this `mkdir` until the implementer flagged the
+contradiction.** The paragraph you are reading was added when the defect was routed here, and
+the code block beneath it was not updated to match — so the prose required a line the snippet
+did not show. The implementer followed the prose, said so, and proved it with a dedicated
+RED-then-GREEN test. Recorded because it is a different failure from the measurement errors
+elsewhere in this plan: an amendment that made the document self-contradictory, which is what
+a spec's internal-consistency check exists to catch and this one did not.
+
 **GREEN.** Both branches, every command checked. `rm` becomes `rm -f` so an already-absent
 pkg is not itself a failure:
 
@@ -540,6 +548,7 @@ pkg is not itself a failure:
 update_aws_cli() {
   if [[ -n ${HAS_AWS} ]] && [[ -n ${MACOS} ]]; then
     log_info "Updating MACOS awscli"
+    mkdir -p "${HOME}"/software_downloads/awscli || return 1
     cd "${HOME}/software_downloads/awscli" || return 1
     curl "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "AWSCLIV2.pkg" || return 1
     # Cleanup runs regardless of the installer's result: a stale or partial pkg
