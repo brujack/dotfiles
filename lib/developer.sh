@@ -26,7 +26,11 @@ update_aws_cli() {
       rm -f AWSCLIV2.pkg
       return 1
     fi
-    rm -f AWSCLIV2.pkg || return 1
+    # Not `|| return 1`: this is the same cleanup as the failure arm above, and
+    # cleanup must not gate propagation (tdd.md). `rm -f` on an absent file exits
+    # 0; a genuine filesystem fault here would otherwise report the aws section
+    # FAIL after the install had already succeeded.
+    rm -f AWSCLIV2.pkg
     cd "${PERSONAL_GITREPOS}/${DOTFILES}" || return 1
   fi
   if [[ -n ${HAS_AWS} ]] && [[ -n ${LINUX} ]]; then

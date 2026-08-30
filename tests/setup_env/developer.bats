@@ -9,6 +9,16 @@ setup() {
   export MOCK_ID_U=1000
   export HOME="${BATS_TEST_TMPDIR}/home"
   mkdir -p "${HOME}/software_downloads"
+  # load_setup_env above sources lib/constants.sh BEFORE this HOME override, so
+  # GITREPOS="${HOME}/git-repos" is already bound to the REAL home. update_aws_cli
+  # ends with `cd "${PERSONAL_GITREPOS}/${DOTFILES}"`, so without these exports the
+  # positive tests pass only on a machine where ~/git-repos/personal/dotfiles
+  # happens to exist -- green here, red on ubuntu-latest, which has no such path.
+  # Same shape as extracted_functions.bats:12-19, and at setup() scope so the trap
+  # is not left armed for the next test added to this file.
+  export PERSONAL_GITREPOS="${BATS_TEST_TMPDIR}/git-repos/personal"
+  export DOTFILES="dotfiles"
+  mkdir -p "${PERSONAL_GITREPOS}/${DOTFILES}"
 }
 
 teardown() {
