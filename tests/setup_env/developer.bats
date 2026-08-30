@@ -38,6 +38,47 @@ teardown() {
   ! grep -q "curl.*plug.vim" "${MOCK_CALLS_FILE}"
 }
 
+# ── update_aws_cli ───────────────────────────────────────────────────────────
+
+@test "update_aws_cli: returns 1 when curl fails on macOS" {
+  export MACOS=1 HAS_AWS=1
+  unset LINUX
+  mkdir -p "${HOME}/software_downloads/awscli"
+  export MOCK_CURL_EXIT=1
+  run update_aws_cli
+  [ "$status" -eq 1 ]
+}
+
+@test "update_aws_cli: returns 0 when every command succeeds on macOS" {
+  export MACOS=1 HAS_AWS=1
+  unset LINUX
+  mkdir -p "${HOME}/software_downloads/awscli"
+  run update_aws_cli
+  [ "$status" -eq 0 ]
+}
+
+@test "update_aws_cli: removes the pkg when the installer fails on macOS" {
+  export MACOS=1 HAS_AWS=1
+  unset LINUX
+  mkdir -p "${HOME}/software_downloads/awscli"
+  export MOCK_INSTALLER_EXIT=1
+  run update_aws_cli
+  [ "$status" -eq 1 ]
+  [ ! -f "${HOME}/software_downloads/awscli/AWSCLIV2.pkg" ]
+}
+
+@test "update_aws_cli: creates the awscli directory before cd on macOS" {
+  export MACOS=1 HAS_AWS=1
+  unset LINUX
+  # software_downloads/awscli deliberately absent -- setup() only creates
+  # software_downloads itself. This drives the macOS/Linux mkdir asymmetry:
+  # the Linux branch has always created its own directory; the macOS branch
+  # did not, and would fail here via the `cd ... || return 1` guard alone.
+  run update_aws_cli
+  [ "$status" -eq 0 ]
+  [ -d "${HOME}/software_downloads/awscli" ]
+}
+
 # ── update_rust ──────────────────────────────────────────────────────────────
 
 @test "update_rust: skips when UBUNTU not set" {
