@@ -18,7 +18,11 @@ setup() {
   # is not left armed for the next test added to this file.
   export PERSONAL_GITREPOS="${BATS_TEST_TMPDIR}/git-repos/personal"
   export DOTFILES="dotfiles"
-  mkdir -p "${PERSONAL_GITREPOS}/${DOTFILES}"
+  # The VARIABLES are setup()-scope; the DIRECTORY is not. `clone_personal_repos:
+  # calls git clone for dotfiles when dir missing` (below) requires
+  # ${PERSONAL_GITREPOS}/${DOTFILES} to be ABSENT, so creating it here would make
+  # that test assert nothing while still passing its status check. Each test that
+  # needs the directory creates it itself.
 }
 
 teardown() {
@@ -60,6 +64,10 @@ teardown() {
 }
 
 @test "update_aws_cli: returns 0 when every command succeeds on macOS" {
+  # update_aws_cli ends with `cd "${PERSONAL_GITREPOS}/${DOTFILES}"`; this test
+  # runs through to it, so the directory must exist. Created here rather than in
+  # setup() -- see the note there.
+  mkdir -p "${PERSONAL_GITREPOS}/${DOTFILES}"
   export MACOS=1 HAS_AWS=1
   unset LINUX
   mkdir -p "${HOME}/software_downloads/awscli"
@@ -78,6 +86,10 @@ teardown() {
 }
 
 @test "update_aws_cli: creates the awscli directory before cd on macOS" {
+  # update_aws_cli ends with `cd "${PERSONAL_GITREPOS}/${DOTFILES}"`; this test
+  # runs through to it, so the directory must exist. Created here rather than in
+  # setup() -- see the note there.
+  mkdir -p "${PERSONAL_GITREPOS}/${DOTFILES}"
   export MACOS=1 HAS_AWS=1
   unset LINUX
   # software_downloads/awscli deliberately absent -- setup() only creates
