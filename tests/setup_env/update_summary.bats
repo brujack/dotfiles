@@ -369,6 +369,7 @@ firefox 124.0"
     printf "no changes\n" > "${_DOTFILES_RUN_TMPDIR}/result_${_s}"
   done
   run _update_summary
+  [ "$status" -eq 1 ]
   [[ "$output" == *"[FAIL]"* ]]
   [[ "$output" == *"claude"* ]]
   [[ "$output" == *"exit 1"* ]]
@@ -383,6 +384,7 @@ firefox 124.0"
     printf "no changes\n" > "${_DOTFILES_RUN_TMPDIR}/result_${_s}"
   done
   run _update_summary
+  [ "$status" -eq 0 ]
   [[ "$output" == *"[SKIP]"* ]]
   [[ "$output" == *"mas"* ]]
   [[ "$output" == *"--brew-only flag set"* ]]
@@ -401,6 +403,7 @@ firefox 124.0"
     printf "no changes\n" > "${_DOTFILES_RUN_TMPDIR}/result_${_s}"
   done
   run _update_summary
+  [ "$status" -eq 1 ]
   [[ "$output" == *"8 OK"* ]]
   [[ "$output" == *"1 failed"* ]]
   [[ "$output" == *"1 skipped"* ]]
@@ -413,6 +416,9 @@ firefox 124.0"
     printf "OK\n" > "${_DOTFILES_RUN_TMPDIR}/status_${_s}"
     printf "no changes\n" > "${_DOTFILES_RUN_TMPDIR}/result_${_s}"
   done
+  # Bare call is safe here: only OK sections are staged, so _update_summary
+  # returns 0. A test staging FAIL must use `run` — a bare call returning 1
+  # aborts under bats' `set -e` before its assertions run.
   _update_summary
   [ -f "${UPDATE_LOG_PATH}" ]
 }
@@ -424,6 +430,9 @@ firefox 124.0"
     printf "OK\n" > "${_DOTFILES_RUN_TMPDIR}/status_${_s}"
     printf "no changes\n" > "${_DOTFILES_RUN_TMPDIR}/result_${_s}"
   done
+  # Bare call is safe here: only OK sections are staged, so _update_summary
+  # returns 0. A test staging FAIL must use `run` — a bare call returning 1
+  # aborts under bats' `set -e` before its assertions run.
   _update_summary
   grep -q "previous run" "${UPDATE_LOG_PATH}"
   grep -q "Update Summary" "${UPDATE_LOG_PATH}"
@@ -435,6 +444,9 @@ firefox 124.0"
     printf "OK\n" > "${_DOTFILES_RUN_TMPDIR}/status_${_s}"
     printf "no changes\n" > "${_DOTFILES_RUN_TMPDIR}/result_${_s}"
   done
+  # Bare call is safe here: only OK sections are staged, so _update_summary
+  # returns 0. A test staging FAIL must use `run` — a bare call returning 1
+  # aborts under bats' `set -e` before its assertions run.
   _update_summary
   head -1 "${UPDATE_LOG_PATH}" | grep -q "─"
 }
@@ -459,6 +471,28 @@ firefox 124.0"
   [ "$status" -eq 0 ]
   [[ "$output" == *"brew"* ]]
   [[ "$output" == *"1 OK"* ]]
+}
+
+@test "_update_summary returns 1 when a section FAILed" {
+  printf "FAIL\n" > "${_DOTFILES_RUN_TMPDIR}/status_claude"
+  printf "exit 1\n" > "${_DOTFILES_RUN_TMPDIR}/result_claude"
+  run _update_summary
+  [ "$status" -eq 1 ]
+}
+
+@test "_update_summary returns 0 when every section is OK" {
+  printf "OK\n" > "${_DOTFILES_RUN_TMPDIR}/status_claude"
+  printf "updated\n" > "${_DOTFILES_RUN_TMPDIR}/result_claude"
+  run _update_summary
+  [ "$status" -eq 0 ]
+}
+
+@test "_update_summary returns 0 when the only non-OK section is WARN" {
+  printf "WARN\n" > "${_DOTFILES_RUN_TMPDIR}/status_git-repos"
+  printf "one or more repos unreachable\n" > "${_DOTFILES_RUN_TMPDIR}/result_git-repos"
+  run _update_summary
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[WARN]"* ]]   # a fixture with no WARN row would pass on nothing
 }
 
 # ── _update_record_end — SKIP guard ───────────────────────────────────────
