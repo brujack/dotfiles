@@ -47,20 +47,18 @@ update_aws_cli() {
 update_rust() {
   if [[ -n ${UBUNTU} ]] && [[ -n ${HAS_RUST} ]]; then
     log_info "Updating Rust Ubuntu"
-    local _rustup_found=0
+    local _rustup
     if [[ -x ${HOME}/.cargo/bin/rustup ]]; then
-      "${HOME}"/.cargo/bin/rustup self update
-      "${HOME}"/.cargo/bin/rustup update
-      "${HOME}"/.cargo/bin/rustup component add rust-analyzer
-      _rustup_found=1
+      _rustup="${HOME}/.cargo/bin/rustup"
     elif command -v rustup >/dev/null 2>&1; then
-      rustup self update
-      rustup update
-      rustup component add rust-analyzer
-      _rustup_found=1
+      _rustup="rustup"
     else
       log_warn "rustup not found; skipping Rust update"
+      return 0
     fi
+    "${_rustup}" self update || return 1
+    "${_rustup}" update || return 1
+    "${_rustup}" component add rust-analyzer || return 1
   fi
 }
 
