@@ -145,6 +145,18 @@ On a machine where the repo is already cloned (e.g. synced from another workstat
 
 This updates Homebrew, apt/snap packages, pip, Ruby gems, Mac App Store apps, and Claude plugins in one pass, and sweeps git hooks across every personal repo carrying an `install-hooks` target — reporting which repos were updated and which are missing hooks entirely. See [Update Log](#update-log-dotfiles-updatelog) for the output format.
 
+**It exits non-zero when a section fails.** Before #250 every run exited 0 regardless, so
+nothing could branch on the outcome — a cron job or wrapper had no way to tell a clean run
+from a broken one. A `WARN` section still exits 0: `git-repos`, `legacy-rsync` and
+`git-hooks` map partial success to a warning deliberately, because a machine that
+legitimately carries a subset of the expected repos has not failed.
+
+A non-zero exit means one of three things, and only the first leaves evidence behind: the run
+completed and some section recorded `FAIL` (summary, log line and state-ledger entry all
+written); it could not create its run directory and aborted before any section ran; or it
+aborted mid-run on one of five `cd` guards. **A non-zero exit with no new log line is the
+second or third case.** See [ADR-0027](docs/adr/0027-update-run-exit-code-from-section-status.md).
+
 ## Quick Start (Fresh Mac)
 
 ```bash
@@ -177,7 +189,7 @@ This updates Homebrew, apt/snap packages, pip, Ruby gems, Mac App Store apps, an
 | `setup`          | Full machine setup (`setup_user` + all apps and tools). Flags: `--brew-install`, `--mas-install`                                                                 |
 | `developer`      | Dev packages + Python/Ansible virtualenv                                                                                                                         |
 | `ansible`        | Ansible venv only — typically used after a Python update                                                                                                         |
-| `update`         | Update all packages (brew, apt/snap, pip, mas, Claude plugins, etc.). Prints a structured summary at the end; each run is appended to `~/.dotfiles-update.log`   |
+| `update`         | Update all packages (brew, apt/snap, pip, mas, Claude plugins, etc.). Prints a structured summary at the end; each run is appended to `~/.dotfiles-update.log`. **Exits 1 when any section reports FAIL** (a WARN section still exits 0) |
 | `doctor`         | Active health checks: symlinks, tool presence, credential dir permissions, version drift, global/system `core.hooksPath` pins, and weekly-cadence heartbeats (Studio only — a silent agent is indistinguishable from a healthy one, so liveness is checked separately from findings). Exits non-zero on any failure |
 | `check-versions` | Compare pinned tool versions in `lib/constants.sh` against latest GitHub releases. Exits 1 if any are outdated; `--update` prompts to apply each update in-place |
 
