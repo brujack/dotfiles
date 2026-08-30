@@ -1,6 +1,6 @@
 # `-t update` Run Truthfulness Implementation Plan
 
-> **Status: IN PROGRESS**
+> **Status: DONE**
 >
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -27,12 +27,12 @@
 Every acceptance gate naming a measurable was run against the base tree (`b9338ef`) before
 being written into a task. A gate that passes there is not a gate:
 
-| gate | base-tree result |
-| --- | --- |
-| `! grep -q _rustup_found lib/developer.sh` (T4) | exit 1 — the variable is present |
-| `test -f docs/adr/0027-….md` (T5) | exit 1 — the file is absent |
-| `grep -q "plans/2026-08-29-update-run-truthfulness.md" …` (T6) | exit 1 — the row still reads `—` |
-| `grep -q "2026-08-29-update-run-truthfulness" …` | **exit 0 — rejected as vacuous.** The spec link in the existing row already contains that substring, so the gate would have passed before the task ran. Replaced with the two gates above. |
+| gate                                                           | base-tree result                                                                                                                                                                           |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `! grep -q _rustup_found lib/developer.sh` (T4)                | exit 1 — the variable is present                                                                                                                                                           |
+| `test -f docs/adr/0027-….md` (T5)                              | exit 1 — the file is absent                                                                                                                                                                |
+| `grep -q "plans/2026-08-29-update-run-truthfulness.md" …` (T6) | exit 1 — the row still reads `—`                                                                                                                                                           |
+| `grep -q "2026-08-29-update-run-truthfulness" …`               | **exit 0 — rejected as vacuous.** The spec link in the existing row already contains that substring, so the gate would have passed before the task ran. Replaced with the two gates above. |
 
 Each is exit 1 rather than 2/4/127, so they fail because they measured something rather than
 because a path or binary is missing.
@@ -80,7 +80,7 @@ depends_on: []
 calls `load_setup_env` and exports `HOME="${BATS_TEST_TMPDIR}"`.
 
 **The subshell is load-bearing and a bare call is vacuous here.** The EXIT trap fires when the
-*shell* exits, not when the function returns — so the existing bare-call tests at `:292` and
+_shell_ exits, not when the function returns — so the existing bare-call tests at `:292` and
 `:300` already assert `[ -d "${_DOTFILES_RUN_TMPDIR}" ]` and pass today. Probed before this
 plan was dispatched: bare call `ok`, subshell form `not ok`. Only the subshell form is red.
 
@@ -205,16 +205,16 @@ export TMPDIR="${BATS_TEST_TMPDIR}"
 resemblance. The second named six by `grep -cE` over the six `run_*` names — which counts
 **test names and comments as invocations**, so `launch_agents.bats` scored 2 on a `@test`
 title plus a comment, and `extracted_functions.bats` scored 1 on a title reading
-*"(mas is called from run_update)"*. Neither file calls a `run_*` function at all; the
+_"(mas is called from run_update)"_. Neither file calls a `run_*` function at all; the
 implementer caught it by reading the lines, and it was settled empirically by running just
 those two files against a cleaned temp tree — **0 directories created**.
 
-| file | direct calls | real `run_*` invocations |
-| --- | --- | --- |
-| `workflows.bats` | 3 | 267 |
-| `unit.bats` | 0 | 38 |
-| `install_guards.bats` | 2 | 5 |
-| `ledger_integration.bats` | 12 | 1 |
+| file                      | direct calls | real `run_*` invocations |
+| ------------------------- | ------------ | ------------------------ |
+| `workflows.bats`          | 3            | 267                      |
+| `unit.bats`               | 0            | 38                       |
+| `install_guards.bats`     | 2            | 5                        |
+| `ledger_integration.bats` | 12           | 1                        |
 
 A text match over a file that discusses the thing it tests will count the discussion. Where
 the question is "does this code run", the settling instrument is running it and counting the
@@ -309,7 +309,7 @@ confirm none of the six is written as `fn && x`, `if fn; then`, or a bare `||`, 
 would read a new non-zero as something other than failure.
 
 **The error-path test is at the caller level, not the function level.** Task 1b already
-covers the function returning 1. What is untested is that a caller *stops*. Drive
+covers the function returning 1. What is untested is that a caller _stops_. Drive
 `run_update` with `_OVERRIDE_RUN_TMPDIR_ROOT` pointed at an unreachable path and assert both
 halves: the function returns non-zero, **and** it did not proceed — no summary line, no log
 append. Asserting only the return code would pass against a caller that returned 1 after
@@ -326,7 +326,7 @@ are the same defect class as the code they annotate.
 
 - Consumes: Task 1b's `|| return 1` and the `_OVERRIDE_RUN_TMPDIR_ROOT` seam.
 - Produces: six `run_*` functions that fail closed. Task 2's exit contract composes with this
-  rather than duplicating it — that task governs a run that *completed* with failures, this
+  rather than duplicating it — that task governs a run that _completed_ with failures, this
   one a run that could not start.
 
 ---
@@ -374,7 +374,7 @@ base and reproducing with only the three declared files changed, and the fixes a
 
 **Re-read `tests/setup_env/workflows.bats`'s `run_update returns 0 when the run dir is
 created successfully` before starting.** Task 1c added it as a control for the run-dir guard,
-and `run_update`'s rc *is* `_update_summary`'s (`lib/workflows.sh:688`) — which is
+and `run_update`'s rc _is_ `_update_summary`'s (`lib/workflows.sh:688`) — which is
 unconditionally 0 today. This task's `return $(( _fail > 0 ))` silently converts that
 assertion from "the guard did not misfire" into "no section failed under mocks", on a full
 `run_update` invocation. If it goes red, the cause is a section legitimately FAILing under the
