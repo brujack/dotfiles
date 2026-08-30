@@ -356,7 +356,21 @@ files_touched:
 depends_on: [1]
 ```
 
-**Files:** `lib/update_summary.sh:598` (end of `_update_summary`), `setup_env.sh:75` (comment only), `tests/setup_env/update_summary.bats` (14 call sites).
+**Files:** `lib/update_summary.sh:598` (end of `_update_summary`), `setup_env.sh:75` (comment
+only), `tests/setup_env/update_summary.bats` (14 call sites), and — **added during execution,
+recorded rather than waved through** — `tests/setup_env/workflows.bats`.
+
+That fourth file was not in the declared scope and the acceptance gate required it to pass.
+It could not: making section failures propagate broke **25** tests there, not the one this
+plan named. Nine asserted `[ "$status" -eq 0 ]` on a full `run_update` and began failing
+legitimately (see the aws `mkdir` defect under Task 3), and sixteen vanished from bats' TAP
+output entirely — `Executed 181 instead of expected 197`, no name, no line — because
+`run_update`'s EXIT trap clobbers bats' own when errexit aborts before the save/restore
+`eval`. Six needed `run_update || true` so that restore line is reached; the rest cleared once
+the aws precondition was pinned. The deviation is accepted: the breakage is a correct
+consequence of the requested behaviour change, the implementer verified it by reverting to
+base and reproducing with only the three declared files changed, and the fixes are mechanical.
+**Any future task in this family must declare `tests/setup_env/workflows.bats`.**
 
 **Re-read `tests/setup_env/workflows.bats`'s `run_update returns 0 when the run dir is
 created successfully` before starting.** Task 1c added it as a control for the run-dir guard,
@@ -496,6 +510,16 @@ always returns 1, so the positive control is required, not optional:
   [ ! -f "${HOME}/software_downloads/awscli/AWSCLIV2.pkg" ]
 }
 ```
+
+**A production defect Task 2 surfaced, and this task is where it gets fixed.** The macOS
+branch `cd`s into `${HOME}/software_downloads/awscli` with **no `mkdir -p`**; the Linux branch
+creates the directory first (`lib/developer.sh:27`). On a machine where that directory does
+not exist, the aws section fails. It was invisible until Task 2 made section failures
+propagate — 9 `run_update` tests went red at once on this dev machine, which has `HAS_AWS`
+set. That is the spec's "the noise is the finding" arriving on the first task that makes
+failures visible. Add `mkdir -p "${HOME}/software_downloads/awscli" || return 1` to the macOS
+branch so the two platforms agree, and add a test driving the macOS branch against a `HOME`
+that lacks the directory.
 
 **GREEN.** Both branches, every command checked. `rm` becomes `rm -f` so an already-absent
 pkg is not itself a failure:
