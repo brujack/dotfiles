@@ -596,6 +596,7 @@ _update_summary() {
   printf "Log appended: %s\n" "${_log}"
 
   _ledger_write_dotfiles_entry || true
+  return $(( _fail > 0 ))
 }
 
 # _brewfile_extract_cap LINE

@@ -7,6 +7,10 @@ setup() {
   load_mocks
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
   export MOCK_BATS_VER="${BATS_VER}"
+  # This file's run_* invocations call _dotfiles_run_tmpdir_setup. bats sets
+  # BATS_TEST_TMPDIR but leaves TMPDIR at the system temp dir, so without this
+  # each invocation leaks a real dotfiles-run.* dir there.
+  export TMPDIR="${BATS_TEST_TMPDIR}"
 }
 
 teardown() {

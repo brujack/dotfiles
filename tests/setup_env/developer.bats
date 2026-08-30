@@ -9,6 +9,20 @@ setup() {
   export MOCK_ID_U=1000
   export HOME="${BATS_TEST_TMPDIR}/home"
   mkdir -p "${HOME}/software_downloads"
+  # load_setup_env above sources lib/constants.sh BEFORE this HOME override, so
+  # GITREPOS="${HOME}/git-repos" is already bound to the REAL home. update_aws_cli
+  # ends with `cd "${PERSONAL_GITREPOS}/${DOTFILES}"`, so without these exports the
+  # positive tests pass only on a machine where ~/git-repos/personal/dotfiles
+  # happens to exist -- green here, red on ubuntu-latest, which has no such path.
+  # Same shape as extracted_functions.bats:12-19, and at setup() scope so the trap
+  # is not left armed for the next test added to this file.
+  export PERSONAL_GITREPOS="${BATS_TEST_TMPDIR}/git-repos/personal"
+  export DOTFILES="dotfiles"
+  # The VARIABLES are setup()-scope; the DIRECTORY is not. `clone_personal_repos:
+  # calls git clone for dotfiles when dir missing` (below) requires
+  # ${PERSONAL_GITREPOS}/${DOTFILES} to be ABSENT, so creating it here would make
+  # that test assert nothing while still passing its status check. Each test that
+  # needs the directory creates it itself.
 }
 
 teardown() {
@@ -36,6 +50,55 @@ teardown() {
   run setup_vim_plugins
   [ "$status" -eq 0 ]
   ! grep -q "curl.*plug.vim" "${MOCK_CALLS_FILE}"
+}
+
+# ── update_aws_cli ───────────────────────────────────────────────────────────
+
+@test "update_aws_cli: returns 1 when curl fails on macOS" {
+  export MACOS=1 HAS_AWS=1
+  unset LINUX
+  mkdir -p "${HOME}/software_downloads/awscli"
+  export MOCK_CURL_EXIT=1
+  run update_aws_cli
+  [ "$status" -eq 1 ]
+}
+
+@test "update_aws_cli: returns 0 when every command succeeds on macOS" {
+  # update_aws_cli ends with `cd "${PERSONAL_GITREPOS}/${DOTFILES}"`; this test
+  # runs through to it, so the directory must exist. Created here rather than in
+  # setup() -- see the note there.
+  mkdir -p "${PERSONAL_GITREPOS}/${DOTFILES}"
+  export MACOS=1 HAS_AWS=1
+  unset LINUX
+  mkdir -p "${HOME}/software_downloads/awscli"
+  run update_aws_cli
+  [ "$status" -eq 0 ]
+}
+
+@test "update_aws_cli: removes the pkg when the installer fails on macOS" {
+  export MACOS=1 HAS_AWS=1
+  unset LINUX
+  mkdir -p "${HOME}/software_downloads/awscli"
+  export MOCK_INSTALLER_EXIT=1
+  run update_aws_cli
+  [ "$status" -eq 1 ]
+  [ ! -f "${HOME}/software_downloads/awscli/AWSCLIV2.pkg" ]
+}
+
+@test "update_aws_cli: creates the awscli directory before cd on macOS" {
+  # update_aws_cli ends with `cd "${PERSONAL_GITREPOS}/${DOTFILES}"`; this test
+  # runs through to it, so the directory must exist. Created here rather than in
+  # setup() -- see the note there.
+  mkdir -p "${PERSONAL_GITREPOS}/${DOTFILES}"
+  export MACOS=1 HAS_AWS=1
+  unset LINUX
+  # software_downloads/awscli deliberately absent -- setup() only creates
+  # software_downloads itself. This drives the macOS/Linux mkdir asymmetry:
+  # the Linux branch has always created its own directory; the macOS branch
+  # did not, and would fail here via the `cd ... || return 1` guard alone.
+  run update_aws_cli
+  [ "$status" -eq 0 ]
+  [ -d "${HOME}/software_downloads/awscli" ]
 }
 
 # ── update_rust ──────────────────────────────────────────────────────────────
@@ -101,6 +164,79 @@ teardown() {
   run update_rust
   [ "$status" -eq 0 ]
   ! grep -q "get.nexte.st" "${MOCK_CALLS_FILE:-/dev/null}"
+}
+
+# ── update_rust: fail-fast across all three rustup calls ─────────────────────
+#
+# One helper, driven four ways. Three tests asserting rc=1 and BOTH halves of
+# fail-fast -- the failing subcommand ran, the NEXT one did not -- plus one
+# all-succeed case pinning the whole sequence in order.
+#
+# Why not a single "returns 1 when rustup update fails" test: mutation showed it
+# verified one of the three `|| return 1` guards. Deleting the guard from
+# `self update` or from `component add` survived all 14 update_rust tests across
+# both files, and asserting only `status -eq 1` also passes when rustup never
+# resolves at all -- so it could not tell "the guard propagated" from "nothing
+# ran". Each test below now names a guard no other test kills.
+#
+# PATH carries no inherited entries and no repo mock: the fixture bin, then the
+# minimal system set. A filtered PATH is not inert -- it leaves ~/.cargo/bin
+# reachable, which is how an earlier version of this test ran a real
+# `rustup self update` against the operator's toolchain (tdd.md E2).
+_rust_mock() {
+  mkdir -p "${BATS_TEST_TMPDIR}/bin"
+  {
+    printf '#!/usr/bin/env bash\n'
+    printf 'printf "%%s\\n" "$*" >> "%s/rustup_calls"\n' "${BATS_TEST_TMPDIR}"
+    printf '[ "$*" = "%s" ] && exit 1\n' "$1"
+    printf 'exit 0\n'
+  } > "${BATS_TEST_TMPDIR}/bin/rustup"
+  chmod +x "${BATS_TEST_TMPDIR}/bin/rustup"
+  export PATH="${BATS_TEST_TMPDIR}/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+  export HOME="${BATS_TEST_TMPDIR}"
+  export UBUNTU=1 HAS_RUST=1
+}
+
+@test "update_rust returns 1 and stops when 'self update' fails" {
+  _rust_mock "self update"
+  run update_rust
+  [ "$status" -eq 1 ]
+  grep -qx "self update" "${BATS_TEST_TMPDIR}/rustup_calls"
+  # fail-fast: neither later subcommand may have run. Counted, not `! grep` --
+  # SC2314: a leading `!` does NOT fail a bats test, so the negative form is
+  # inert and would pass whether or not the subcommand ran.
+  [ "$(grep -cx "update" "${BATS_TEST_TMPDIR}/rustup_calls")" -eq 0 ]
+  [ "$(grep -cx "component add rust-analyzer" "${BATS_TEST_TMPDIR}/rustup_calls")" -eq 0 ]
+}
+
+@test "update_rust returns 1 and stops when 'update' fails" {
+  _rust_mock "update"
+  run update_rust
+  [ "$status" -eq 1 ]
+  grep -qx "self update" "${BATS_TEST_TMPDIR}/rustup_calls"
+  grep -qx "update" "${BATS_TEST_TMPDIR}/rustup_calls"
+  ! grep -qx "component add rust-analyzer" "${BATS_TEST_TMPDIR}/rustup_calls"
+}
+
+# The guard on `component add` is an EQUIVALENT MUTANT: it is the terminal
+# statement, so dropping `|| return 1` leaves its non-zero exit as the function's
+# return value regardless. Measured -- with the guard removed, this test still
+# passes. Kept because the three calls should read alike, not because a test can
+# tell the difference. Do not add an assertion to "cover" it; none can.
+@test "update_rust returns 1 when 'component add' fails" {
+  _rust_mock "component add rust-analyzer"
+  run update_rust
+  [ "$status" -eq 1 ]
+  grep -qx "component add rust-analyzer" "${BATS_TEST_TMPDIR}/rustup_calls"
+}
+
+@test "update_rust runs all three subcommands in order when each succeeds" {
+  _rust_mock "__none__"
+  run update_rust
+  [ "$status" -eq 0 ]
+  [ "$(cat "${BATS_TEST_TMPDIR}/rustup_calls")" = "self update
+update
+component add rust-analyzer" ]
 }
 
 # ── clone_personal_repos ─────────────────────────────────────────────────────

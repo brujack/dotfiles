@@ -1,6 +1,6 @@
 # `-t update` Run Truthfulness Implementation Plan
 
-> **Status: IN PROGRESS**
+> **Status: DONE**
 >
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -27,12 +27,12 @@
 Every acceptance gate naming a measurable was run against the base tree (`b9338ef`) before
 being written into a task. A gate that passes there is not a gate:
 
-| gate | base-tree result |
-| --- | --- |
-| `! grep -q _rustup_found lib/developer.sh` (T4) | exit 1 — the variable is present |
-| `test -f docs/adr/0027-….md` (T5) | exit 1 — the file is absent |
-| `grep -q "plans/2026-08-29-update-run-truthfulness.md" …` (T6) | exit 1 — the row still reads `—` |
-| `grep -q "2026-08-29-update-run-truthfulness" …` | **exit 0 — rejected as vacuous.** The spec link in the existing row already contains that substring, so the gate would have passed before the task ran. Replaced with the two gates above. |
+| gate                                                           | base-tree result                                                                                                                                                                           |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `! grep -q _rustup_found lib/developer.sh` (T4)                | exit 1 — the variable is present                                                                                                                                                           |
+| `test -f docs/adr/0027-….md` (T5)                              | exit 1 — the file is absent                                                                                                                                                                |
+| `grep -q "plans/2026-08-29-update-run-truthfulness.md" …` (T6) | exit 1 — the row still reads `—`                                                                                                                                                           |
+| `grep -q "2026-08-29-update-run-truthfulness" …`               | **exit 0 — rejected as vacuous.** The spec link in the existing row already contains that substring, so the gate would have passed before the task ran. Replaced with the two gates above. |
 
 Each is exit 1 rather than 2/4/127, so they fail because they measured something rather than
 because a path or binary is missing.
@@ -76,38 +76,36 @@ depends_on: []
 
 **Files:** `lib/workflows.sh:105-116`, `tests/setup_env/ledger_integration.bats` (new tests near the existing `_dotfiles_run_tmpdir_setup` block at `:290`).
 
-**RED first.** Add to `tests/setup_env/ledger_integration.bats`:
+**RED first.** Add to `tests/setup_env/ledger_integration.bats`, whose `setup()` already
+calls `load_setup_env` and exports `HOME="${BATS_TEST_TMPDIR}"`.
+
+**The subshell is load-bearing and a bare call is vacuous here.** The EXIT trap fires when the
+_shell_ exits, not when the function returns — so the existing bare-call tests at `:292` and
+`:300` already assert `[ -d "${_DOTFILES_RUN_TMPDIR}" ]` and pass today. Probed before this
+plan was dispatched: bare call `ok`, subshell form `not ok`. Only the subshell form is red.
 
 ```bash
 @test "_dotfiles_run_tmpdir_setup: directory survives the EXIT trap" {
-  # `run` and not a bare call: the setup function installs an EXIT/INT/TERM trap
-  # that clobbers bats' own, which surfaces as "Executed N-1 instead of expected N"
-  # with no test name. See tests/setup_env/workflows.bats:237.
-  run bash -c "
-    source '${REPO_ROOT}/lib/workflows.sh'
-    _dotfiles_run_tmpdir_setup
-    printf '%s' \"\${_DOTFILES_RUN_TMPDIR}\"
-  "
-  [ "$status" -eq 0 ]
-  [ -n "$output" ]
-  [ -d "$output" ]              # RED today: the trap removed it when bash -c exited
-  [ -f "${output}/started_at" ]
-  rm -rf "$output"
+    run bash -c 'set -e
+      source "'"${REPO_ROOT}"'/setup_env.sh" >/dev/null 2>&1 || true
+      _dotfiles_run_tmpdir_setup
+      printf "%s" "${_DOTFILES_RUN_TMPDIR}"'
+    [ "$status" -eq 0 ]
+    [ -n "$output" ]
+    [ -d "$output" ]              # RED today: the trap removed it when bash -c exited
+    [ -f "${output}/started_at" ]
+    rm -rf "$output"
 }
 
 @test "_dotfiles_run_tmpdir_setup: directory name carries the dotfiles-run prefix" {
-  run bash -c "
-    source '${REPO_ROOT}/lib/workflows.sh'
+    unset _DOTFILES_RUN_TMPDIR
     _dotfiles_run_tmpdir_setup
-    printf '%s' \"\${_DOTFILES_RUN_TMPDIR}\"
-  "
-  [ "$status" -eq 0 ]
-  [[ "$(basename "$output")" == dotfiles-run.* ]]   # RED today: name is tmp.XXXXXXXX
-  rm -rf "$output"
+    [[ "$(basename "${_DOTFILES_RUN_TMPDIR}")" == dotfiles-run.* ]]  # RED: name is tmp.XXXXXXXX
 }
 ```
 
-Run them, confirm both fail — the first because the directory is gone, the second because the name is `tmp.XXXXXXXX`. A pass here before the change means the test is not exercising what it claims.
+The second test may stay a bare call — it asserts on the name, which the trap does not affect,
+and it is not staging a FAIL status.
 
 **GREEN.** In `lib/workflows.sh`, replace lines 106 and 108:
 
@@ -128,6 +126,208 @@ Everything below line 108 is unchanged. The trap stays — only `rm -rf "${_DOTF
 
 - Consumes: nothing from earlier tasks.
 - Produces: `_DOTFILES_RUN_TMPDIR` now names a surviving directory matching `dotfiles-run.*`. Task 2's tests may rely on `err_*` and `status_*` files persisting past the call that wrote them.
+
+---
+
+### Task 1b: Harden the run-dir change (re-plan, from Task 1 review)
+
+```yaml-task
+id: 7
+description: Guard the mktemp assignment, scope TMPDIR in the bats suites so test run dirs are reaped, and fix three test defects found in Task 1 review
+role: executor
+model: sonnet
+tdd: required
+acceptance:
+  - cmd: make lint
+    exit_code: 0
+  - cmd: bats tests/setup_env/ledger_integration.bats
+    exit_code: 0
+  - cmd: 'bash -c "test $(find /var/folders -path \"*/T/dotfiles-run.*\" -maxdepth 4 -type d 2>/dev/null | wc -l) -eq 0"'
+    exit_code: 0
+  - cmd: make test
+    exit_code: 0
+max_retries: 3
+files_touched:
+  - lib/workflows.sh
+  - tests/setup_env/ledger_integration.bats
+  - tests/setup_env/workflows.bats
+  - tests/setup_env/unit.bats
+  - tests/setup_env/install_guards.bats
+depends_on: [1]
+```
+
+**Why this task exists.** Task 1's review found five defects, four of them inherited from
+this plan rather than introduced by the implementer. The plan's "no pruning" decision rested
+on a wrong population: it counted **3 direct callers** of `_dotfiles_run_tmpdir_setup` and
+concluded the OS reaper was sufficient. The population that actually creates directories is
+**test invocations reaching any of the six `run_*` callers** — measured at ~318 lines across
+six bats files, `run_update` alone accounting for 203. One suite run left **282** directories
+in a temp tree at 362M, and `make test` fires on every push via the pre-push hook.
+
+The distinction the plan missed, and which decides the fix: **production** creates one
+directory per real `-t update` run, a few per week, where the OS reaper is genuinely
+adequate; **tests** create hundreds per suite run. So the fix is test-side scoping, not
+production pruning — the original no-pruning decision stands and is correct for the case it
+was actually about.
+
+**1 — Guard the assignment (HIGH).** `lib/workflows.sh:106` has no `|| return 1`. The
+templated form makes `TMPDIR` load-bearing where bare `mktemp -d` ignored it — measured on
+macOS:
+
+```
+TMPDIR=/tmp/probe  mktemp -d                              -> /var/folders/.../tmp.K4P129yETg   (ignored)
+TMPDIR=/tmp/probe  mktemp -d "${TMPDIR:-/tmp}/x.XXXXXXXX" -> /tmp/probe/x.mLqa55nU             (honoured)
+TMPDIR=/nonexistent ... same templated form               -> rc=1, variable empty
+```
+
+An empty `_DOTFILES_RUN_TMPDIR` sends every subsequent write to `/started_at` and the run
+continues — and per this spec's own Exit contract section an absent tmpdir leaves `_fail=0`,
+so the summary reads clean and the ledger records success over a run that did nothing. That
+is the precise defect this spec exists to eliminate, reintroduced by its first task.
+
+```bash
+_DOTFILES_RUN_TMPDIR=$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-run.XXXXXXXX") || return 1
+```
+
+Add the error-path test `tdd.md` mandates for this branch. `TMPDIR` alone cannot drive it
+hermetically, so introduce a `_OVERRIDE_RUN_TMPDIR_ROOT` seam read only by this function,
+defaulting to `${TMPDIR:-/tmp}`, and point it at a nonexistent path in the test.
+
+**2 — Scope `TMPDIR` in every bats suite that reaches a `run_*` caller.** bats sets
+`BATS_TEST_TMPDIR` but leaves `TMPDIR` as the system temp dir — verified. At `setup()` scope,
+not per test:
+
+```bash
+export TMPDIR="${BATS_TEST_TMPDIR}"
+```
+
+**Four** files, and the route to that number is the point. The first list named six by
+resemblance. The second named six by `grep -cE` over the six `run_*` names — which counts
+**test names and comments as invocations**, so `launch_agents.bats` scored 2 on a `@test`
+title plus a comment, and `extracted_functions.bats` scored 1 on a title reading
+_"(mas is called from run_update)"_. Neither file calls a `run_*` function at all; the
+implementer caught it by reading the lines, and it was settled empirically by running just
+those two files against a cleaned temp tree — **0 directories created**.
+
+| file                      | direct calls | real `run_*` invocations |
+| ------------------------- | ------------ | ------------------------ |
+| `workflows.bats`          | 3            | 267                      |
+| `unit.bats`               | 0            | 38                       |
+| `install_guards.bats`     | 2            | 5                        |
+| `ledger_integration.bats` | 12           | 1                        |
+
+A text match over a file that discusses the thing it tests will count the discussion. Where
+the question is "does this code run", the settling instrument is running it and counting the
+side effect, not grepping for the name.
+
+`brewfile_drift.bats`, `update_summary.bats`, `package_capture.bats`, `launch_agents.bats`
+and `extracted_functions.bats` all have **zero** invocations — `update_summary.bats` sets `_DOTFILES_RUN_TMPDIR` to
+`BATS_TEST_TMPDIR` directly and never calls the setup function at all, which is also why
+Task 2's bare `_update_summary` call sites are safe there. Setup scope is the point — a
+per-test guard leaves the trap armed for the next test someone adds.
+
+**3 — Convert the prefix test to `run bash -c` form.** `ledger_integration.bats:320` is a
+bare call, so the function's EXIT trap clobbers bats' own and a failure reports
+`Executed N-1 instead of expected N` with no test name and no line number. It is falsifiable
+(rc=1 at RED in isolation) but unattributable. This plan's own Global Constraints name that
+symptom as having cost this repo three prior incidents, and then exempted this test from it.
+
+**4 — Drop `|| true` from the test's `source` line.** `ledger_integration.bats:310` reads
+`source setup_env.sh >/dev/null 2>&1 || true`. Demonstrated in review: appending a syntax
+error to `lib/git_hooks.sh` (sourced after `workflows.sh`) leaves the test reporting `ok`.
+Any breakage past `workflows.sh:116` is masked. `setup_env.sh` returns 0 on the sourcing path
+by construction, so the guard buys nothing.
+
+**5 — Use `run --separate-stderr`** in the survives-the-EXIT-trap test, or write the path to
+a file and read it back. `run` merges stderr into `$output`, and `ensure_state_ledger` has
+three reachable `log_warn` paths, any of which prepends a line and false-reds `[ -d "$output" ]`.
+
+**Interfaces:**
+
+- Consumes: Task 1's production change.
+- Produces: a guarded assignment and a suite that reaps its own run dirs. Tasks 2-6 inherit both.
+
+---
+
+### Task 1c: Propagate the run-dir failure to the callers (re-plan, from Task 1b review)
+
+```yaml-task
+id: 8
+description: Make the six run_* callers branch on _dotfiles_run_tmpdir_setup's return value, and correct three stale RED comments in the tests it touches
+role: executor
+model: sonnet
+tdd: required
+acceptance:
+  - cmd: make lint
+    exit_code: 0
+  - cmd: bats tests/setup_env/ledger_integration.bats
+    exit_code: 0
+  - cmd: bats tests/setup_env/workflows.bats
+    exit_code: 0
+  - cmd: make test
+    exit_code: 0
+max_retries: 3
+files_touched:
+  - lib/workflows.sh
+  - tests/setup_env/ledger_integration.bats
+  - tests/setup_env/workflows.bats
+depends_on: [7]
+```
+
+**Task 1b's guard returns into a void, and the whole spec turns on closing it.** All six call
+sites are bare statements, there is no `set -e` in `lib/workflows.sh` or `setup_env.sh`, so a
+non-zero return is discarded and the caller runs on with `_DOTFILES_RUN_TMPDIR` set to the
+empty string. 107 write sites in `lib/update_summary.sh` and 28 in `lib/workflows.sh` then
+target `/`.
+
+Reproduced end to end against the real functions, with an unreachable override:
+
+```
+setup rc=1 var=[]
+summary rc=0
+0 sections: 0 OK, 0 failed, 0 warnings, 0 skipped
+```
+
+`_update_record_end "brew" 1` had recorded a **failure**, and the summary reports `0 failed`
+while `_update_summary` returns 0. Task 2's exit contract cannot save this: `_fail` is 0
+because no status file was ever written, so `$(( _fail > 0 ))` is 0 and `-t update` exits
+clean over a run that did nothing. That is verbatim the defect this spec exists to eliminate,
+reachable today.
+
+**The fix.** All six sites — `lib/workflows.sh:120, 225, 261, 286, 293, 331` — become:
+
+```bash
+_dotfiles_run_tmpdir_setup || return 1
+```
+
+This widens each `run_*` function's contract from "always 0 unless an inner `cd` fails" to
+"non-zero when the run directory cannot be created". `_run_or_exit` (`setup_env.sh:76-80`)
+already treats any non-zero as fatal, which is the correct outcome: a run that cannot create
+its own scratch directory has not run. Per `behavior.md`'s contract-widening rule, enumerate
+the call sites before editing — `grep -n '_dotfiles_run_tmpdir_setup' lib/workflows.sh` — and
+confirm none of the six is written as `fn && x`, `if fn; then`, or a bare `||`, since each
+would read a new non-zero as something other than failure.
+
+**The error-path test is at the caller level, not the function level.** Task 1b already
+covers the function returning 1. What is untested is that a caller _stops_. Drive
+`run_update` with `_OVERRIDE_RUN_TMPDIR_ROOT` pointed at an unreachable path and assert both
+halves: the function returns non-zero, **and** it did not proceed — no summary line, no log
+append. Asserting only the return code would pass against a caller that returned 1 after
+running every section.
+
+**Three stale comments, in the same files.** `ledger_integration.bats:329` says
+`# RED today: mktemp ignores the unreachable root entirely` — false in both halves: `mktemp`
+honours the root and fails, which is the point of the guard, and the test is green at HEAD.
+`:358` says `# RED: name is tmp.XXXXXXXX`, stale since Task 1. `:343` says the trap "removed
+it", describing a trap that unsets a variable and removes nothing. Correct all three; they
+are the same defect class as the code they annotate.
+
+**Interfaces:**
+
+- Consumes: Task 1b's `|| return 1` and the `_OVERRIDE_RUN_TMPDIR_ROOT` seam.
+- Produces: six `run_*` functions that fail closed. Task 2's exit contract composes with this
+  rather than duplicating it — that task governs a run that _completed_ with failures, this
+  one a run that could not start.
 
 ---
 
@@ -156,7 +356,30 @@ files_touched:
 depends_on: [1]
 ```
 
-**Files:** `lib/update_summary.sh:598` (end of `_update_summary`), `setup_env.sh:75` (comment only), `tests/setup_env/update_summary.bats` (14 call sites).
+**Files:** `lib/update_summary.sh:598` (end of `_update_summary`), `setup_env.sh:75` (comment
+only), `tests/setup_env/update_summary.bats` (14 call sites), and — **added during execution,
+recorded rather than waved through** — `tests/setup_env/workflows.bats`.
+
+That fourth file was not in the declared scope and the acceptance gate required it to pass.
+It could not: making section failures propagate broke **25** tests there, not the one this
+plan named. Nine asserted `[ "$status" -eq 0 ]` on a full `run_update` and began failing
+legitimately (see the aws `mkdir` defect under Task 3), and sixteen vanished from bats' TAP
+output entirely — `Executed 181 instead of expected 197`, no name, no line — because
+`run_update`'s EXIT trap clobbers bats' own when errexit aborts before the save/restore
+`eval`. Six needed `run_update || true` so that restore line is reached; the rest cleared once
+the aws precondition was pinned. The deviation is accepted: the breakage is a correct
+consequence of the requested behaviour change, the implementer verified it by reverting to
+base and reproducing with only the three declared files changed, and the fixes are mechanical.
+**Any future task in this family must declare `tests/setup_env/workflows.bats`.**
+
+**Re-read `tests/setup_env/workflows.bats`'s `run_update returns 0 when the run dir is
+created successfully` before starting.** Task 1c added it as a control for the run-dir guard,
+and `run_update`'s rc _is_ `_update_summary`'s (`lib/workflows.sh:688`) — which is
+unconditionally 0 today. This task's `return $(( _fail > 0 ))` silently converts that
+assertion from "the guard did not misfire" into "no section failed under mocks", on a full
+`run_update` invocation. If it goes red, the cause is a section legitimately FAILing under the
+mock environment, not the guard. Decide deliberately whether that test should pin `_fail=0`
+explicitly rather than inherit the meaning.
 
 **RED first.** Add a paired test — the pair is the point, since `[ "$status" -eq 1 ]` alone is satisfied by a function that always returns 1:
 
@@ -288,6 +511,36 @@ always returns 1, so the positive control is required, not optional:
 }
 ```
 
+**A production defect Task 2 surfaced, and this task is where it gets fixed.** The macOS
+branch `cd`s into `${HOME}/software_downloads/awscli` with **no `mkdir -p`**; the Linux branch
+creates the directory first (`lib/developer.sh:27`). On a machine where that directory does
+not exist, the aws section fails. It was invisible until Task 2 made section failures
+propagate — 9 `run_update` tests went red at once on this dev machine, which has `HAS_AWS`
+set. That is the spec's "the noise is the finding" arriving on the first task that makes
+failures visible. Add `mkdir -p "${HOME}/software_downloads/awscli" || return 1` to the macOS
+branch so the two platforms agree, and add a test driving the macOS branch against a `HOME`
+that lacks the directory.
+
+**That test will pass vacuously unless you handle a fixture Task 2 left behind.**
+`tests/setup_env/workflows.bats`'s `setup()` now runs
+`mkdir -p "${HOME}/software_downloads/awscli"` before all 197 test bodies — Task 2 added it so
+the aws section would stop failing every full `run_update`. Once this task adds the production
+`mkdir -p`, that line is dead, and while it exists it guarantees the directory is present in
+that file. So either put the new test in `tests/setup_env/developer.bats` (which has no such
+fixture) and `rm -rf` the directory first, or delete the `setup()` line here — and if you
+delete it, confirm the 197 tests still pass, because they will then be relying on the
+production `mkdir` you just added, which is the coupling worth proving rather than assuming.
+
+Found by review of Task 2, before either half shipped.
+
+**The GREEN snippet below omitted this `mkdir` until the implementer flagged the
+contradiction.** The paragraph you are reading was added when the defect was routed here, and
+the code block beneath it was not updated to match — so the prose required a line the snippet
+did not show. The implementer followed the prose, said so, and proved it with a dedicated
+RED-then-GREEN test. Recorded because it is a different failure from the measurement errors
+elsewhere in this plan: an amendment that made the document self-contradictory, which is what
+a spec's internal-consistency check exists to catch and this one did not.
+
 **GREEN.** Both branches, every command checked. `rm` becomes `rm -f` so an already-absent
 pkg is not itself a failure:
 
@@ -295,6 +548,7 @@ pkg is not itself a failure:
 update_aws_cli() {
   if [[ -n ${HAS_AWS} ]] && [[ -n ${MACOS} ]]; then
     log_info "Updating MACOS awscli"
+    mkdir -p "${HOME}"/software_downloads/awscli || return 1
     cd "${HOME}/software_downloads/awscli" || return 1
     curl "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "AWSCLIV2.pkg" || return 1
     # Cleanup runs regardless of the installer's result: a stale or partial pkg
@@ -382,8 +636,14 @@ distinguish:
 
 @test "update_rust returns 0 and warns when rustup is absent" {
   export UBUNTU=1 HAS_RUST=1
-  _clean="$(printf '%s' "${PATH}" | tr ':' '\n' | grep -v "${BATS_TEST_TMPDIR}" | tr '\n' ':')"
-  PATH="${_clean}" HOME="${BATS_TEST_TMPDIR}" run update_rust
+  # A minimal PATH, NOT a filtered one. Stripping only the mocks directory leaves
+  # the operator's real ~/.cargo/bin in place, so `command -v rustup` resolves the
+  # REAL binary and this test runs a live `rustup self update` and
+  # `component add rust-analyzer` against their toolchain. That is what the first
+  # version of this recipe did -- caught by the implementer from captured output,
+  # toolchain verified unmutated afterwards. tdd.md E2: the degenerate branch must
+  # be inert, and "inert" means unreachable, not unlikely.
+  PATH="/usr/bin:/bin:/usr/sbin:/sbin" HOME="${BATS_TEST_TMPDIR}" run update_rust
   [ "$status" -eq 0 ]
   [[ "$output" == *"rustup not found"* ]]
 }

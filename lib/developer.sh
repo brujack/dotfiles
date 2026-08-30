@@ -17,19 +17,29 @@ clone_or_update_dotfiles() {
 update_aws_cli() {
   if [[ -n ${HAS_AWS} ]] && [[ -n ${MACOS} ]]; then
     log_info "Updating MACOS awscli"
+    mkdir -p "${HOME}"/software_downloads/awscli || return 1
     cd "${HOME}/software_downloads/awscli" || return 1
-    curl "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "AWSCLIV2.pkg"
-    sudo -H installer -pkg AWSCLIV2.pkg -target /
-    rm AWSCLIV2.pkg
+    curl "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "AWSCLIV2.pkg" || return 1
+    # Cleanup runs regardless of the installer's result: a stale or partial pkg
+    # means the next run installs it. tdd.md's cleanup exception.
+    if ! sudo -H installer -pkg AWSCLIV2.pkg -target /; then
+      rm -f AWSCLIV2.pkg
+      return 1
+    fi
+    # Not `|| return 1`: this is the same cleanup as the failure arm above, and
+    # cleanup must not gate propagation (tdd.md). `rm -f` on an absent file exits
+    # 0; a genuine filesystem fault here would otherwise report the aws section
+    # FAIL after the install had already succeeded.
+    rm -f AWSCLIV2.pkg
     cd "${PERSONAL_GITREPOS}/${DOTFILES}" || return 1
   fi
   if [[ -n ${HAS_AWS} ]] && [[ -n ${LINUX} ]]; then
     log_info "Updating Linux awscli"
-    mkdir -p "${HOME}"/software_downloads/awscli
+    mkdir -p "${HOME}"/software_downloads/awscli || return 1
     cd "${HOME}/software_downloads/awscli" || return 1
-    curl "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o "awscliv2.zip"
-    unzip -u -o awscliv2.zip
-    sudo -H "${HOME}"/software_downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin --update
+    curl "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o "awscliv2.zip" || return 1
+    unzip -u -o awscliv2.zip || return 1
+    sudo -H "${HOME}"/software_downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin --update || return 1
     cd "${PERSONAL_GITREPOS}/${DOTFILES}" || return 1
   fi
 }
@@ -37,20 +47,18 @@ update_aws_cli() {
 update_rust() {
   if [[ -n ${UBUNTU} ]] && [[ -n ${HAS_RUST} ]]; then
     log_info "Updating Rust Ubuntu"
-    local _rustup_found=0
+    local _rustup
     if [[ -x ${HOME}/.cargo/bin/rustup ]]; then
-      "${HOME}"/.cargo/bin/rustup self update
-      "${HOME}"/.cargo/bin/rustup update
-      "${HOME}"/.cargo/bin/rustup component add rust-analyzer
-      _rustup_found=1
+      _rustup="${HOME}/.cargo/bin/rustup"
     elif command -v rustup >/dev/null 2>&1; then
-      rustup self update
-      rustup update
-      rustup component add rust-analyzer
-      _rustup_found=1
+      _rustup="rustup"
     else
       log_warn "rustup not found; skipping Rust update"
+      return 0
     fi
+    "${_rustup}" self update || return 1
+    "${_rustup}" update || return 1
+    "${_rustup}" component add rust-analyzer || return 1
   fi
 }
 

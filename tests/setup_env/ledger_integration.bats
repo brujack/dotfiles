@@ -1,4 +1,8 @@
 #!/usr/bin/env bats
+#
+# `run --separate-stderr` needs bats >= 1.5.0 (CI 1.10.0, this box 1.14.0).
+# Declared so an older bats fails loudly rather than silently ignoring the flag.
+bats_require_minimum_version 1.5.0
 
 setup() {
     # Close stdin for every test in this file. The ledger mock ends with
@@ -24,6 +28,10 @@ setup() {
     load_setup_env
     export HOME="${BATS_TEST_TMPDIR}"
     export ORIGINAL_PATH="${PATH}"
+    # This file calls _dotfiles_run_tmpdir_setup directly 12 times. bats sets
+    # BATS_TEST_TMPDIR but leaves TMPDIR pointed at the system temp dir, so
+    # without this every one of those calls leaks a real dotfiles-run.* dir.
+    export TMPDIR="${BATS_TEST_TMPDIR}"
 }
 
 teardown() {
@@ -303,4 +311,49 @@ EOF
     [ -f "${_DOTFILES_RUN_TMPDIR}/start_epoch" ]
     [ -f "${_DOTFILES_RUN_TMPDIR}/run_id" ]
     [ -f "${_DOTFILES_RUN_TMPDIR}/git_sha" ]
+}
+
+@test "_dotfiles_run_tmpdir_setup: returns 1 and leaves the var unset when the tmpdir root is unreachable" {
+    unset _DOTFILES_RUN_TMPDIR
+    export _OVERRIDE_RUN_TMPDIR_ROOT="${BATS_TEST_TMPDIR}/nonexistent-root"
+    # No `set -e`: the script must survive _dotfiles_run_tmpdir_setup's non-zero
+    # return long enough to capture it and print the variable's post-call state.
+    # --separate-stderr: mktemp's own failure message goes to stderr and would
+    # otherwise land in $output ahead of the printf, corrupting the equality check.
+    run --separate-stderr bash -c '
+      source "'"${REPO_ROOT}"'/setup_env.sh" >/dev/null 2>&1
+      _dotfiles_run_tmpdir_setup
+      printf "rc=%s var=[%s]" "$?" "${_DOTFILES_RUN_TMPDIR:-}"'
+    unset _OVERRIDE_RUN_TMPDIR_ROOT
+    [ "$status" -eq 0 ]                  # bash -c itself exits 0 (rc captured, not propagated)
+    [[ "$output" == "rc=1 var=[]" ]]     # mktemp honours the unreachable root and fails, as intended
+}
+
+@test "_dotfiles_run_tmpdir_setup: directory survives the EXIT trap" {
+    # --separate-stderr: ensure_state_ledger has three reachable log_warn paths
+    # (state-ledger pull/clone/init failures), each of which writes to stderr.
+    # `run`'s default merge would prepend a WARN line to $output and false-red
+    # the `-d "$output"` check below.
+    run --separate-stderr bash -c 'set -e
+      source "'"${REPO_ROOT}"'/setup_env.sh" >/dev/null 2>&1
+      _dotfiles_run_tmpdir_setup
+      printf "%s" "${_DOTFILES_RUN_TMPDIR}"'
+    [ "$status" -eq 0 ]
+    [ -n "$output" ]
+    [ -d "$output" ]              # the trap only unsets the variable; it never removes the dir
+    [ -f "${output}/started_at" ]
+    rm -rf "$output"
+}
+
+@test "_dotfiles_run_tmpdir_setup: directory name carries the dotfiles-run prefix" {
+    # run --separate-stderr rather than a bare call: a bare call's EXIT trap
+    # clobbers bats' own, so a failure here reported "Executed N-1 instead of
+    # expected N" with no test name and no line number.
+    run --separate-stderr bash -c '
+      source "'"${REPO_ROOT}"'/setup_env.sh" >/dev/null 2>&1
+      unset _DOTFILES_RUN_TMPDIR
+      _dotfiles_run_tmpdir_setup
+      printf "%s" "$(basename "${_DOTFILES_RUN_TMPDIR}")"'
+    [ "$status" -eq 0 ]
+    [[ "$output" == dotfiles-run.* ]]  # templated since Task 1; name carries the dotfiles-run prefix
 }

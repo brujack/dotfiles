@@ -13,6 +13,10 @@ setup() {
   export DOTFILES="dotfiles"
   export BREWFILE_LOC="${BATS_TEST_TMPDIR}/brew"
   mkdir -p "${PERSONAL_GITREPOS}/${DOTFILES}"
+  # This file's 267 run_* invocations each call _dotfiles_run_tmpdir_setup once.
+  # bats sets BATS_TEST_TMPDIR but leaves TMPDIR at the system temp dir, so
+  # without this every invocation leaks a real dotfiles-run.* dir there.
+  export TMPDIR="${BATS_TEST_TMPDIR}"
 }
 
 teardown() {
@@ -727,6 +731,49 @@ EOF
   [[ "$output" == *"no changes"* ]]
 }
 
+@test "run_update stops without running any section when the run dir cannot be created" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
+  export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
+  export _OVERRIDE_RUN_TMPDIR_ROOT="${BATS_TEST_TMPDIR}/nonexistent-root"
+  # setup() already recorded its own probes (e.g. detect_env's `hostname -s`)
+  # into MOCK_CALLS_FILE before this test body runs, so an empty-file
+  # assertion would false-red on that baseline. Compare the count instead —
+  # no section may add to it.
+  local _calls_before
+  _calls_before="$(wc -l < "${MOCK_CALLS_FILE}")"
+  run run_update
+  unset _OVERRIDE_RUN_TMPDIR_ROOT
+  [ "$status" -eq 1 ]
+  # No section ran: the mock-calls ledger gained nothing beyond setup()'s baseline.
+  [ "$(wc -l < "${MOCK_CALLS_FILE}")" -eq "${_calls_before}" ]
+  # No summary was printed and no log line was appended.
+  [[ "$output" != *"sections:"* ]]
+  [ ! -f "${UPDATE_LOG_PATH}" ]
+}
+
+@test "run_update returns 0 when the run dir is created successfully" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
+  export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
+  # _update_summary now returns non-zero when any section FAILed, so this
+  # control's meaning shifted from "the guard did not misfire" to "no section
+  # failed under mocks" -- pin that deliberately rather than inherit whatever
+  # the mock environment happens to produce. setup()'s awscli mkdir is what
+  # makes that pin hold; see the comment there for why.
+  local _calls_before
+  _calls_before="$(wc -l < "${MOCK_CALLS_FILE}")"
+  run run_update
+  [ "$status" -eq 0 ]
+  # The negative test above proves no section ran by asserting this count did
+  # NOT move. That oracle is only meaningful if it CAN move, which is what this
+  # asserts -- otherwise the pair demonstrates nothing about the measurement,
+  # only about the comparison.
+  [ "$(wc -l < "${MOCK_CALLS_FILE}")" -gt "${_calls_before}" ]
+}
+
 # ── run_brew_install ──────────────────────────────────────────────────────────
 
 @test "run_brew_install creates Brewfile symlink at BREWFILE_LOC" {
@@ -1145,8 +1192,16 @@ setup_constants_copy() {
   # run_update's own trap.
   local _bats_exit_trap
   _bats_exit_trap="$(trap -p EXIT)"
-  run_update
+  # Capture rather than discard: this fixture stages a genuine section FAIL, so
+  # run_update must return non-zero. `|| true` would keep bats' errexit from
+  # aborting before the trap restore below, but it also throws away the only
+  # coverage anywhere in the tree for the _update_summary -> run_update rc
+  # propagation -- verified by mutation: `return 0` after _update_summary left
+  # both suites fully green.
+  local _rc=0
+  run_update || _rc=$?
   eval "${_bats_exit_trap}"
+  [ "${_rc}" -ne 0 ]
   grep -q "FAIL" "${_DOTFILES_RUN_TMPDIR}/status_apt"
   grep -q "OK" "${_DOTFILES_RUN_TMPDIR}/status_snap"
 }
@@ -1166,8 +1221,16 @@ setup_constants_copy() {
   # run_update's own trap.
   local _bats_exit_trap
   _bats_exit_trap="$(trap -p EXIT)"
-  run_update
+  # Capture rather than discard: this fixture stages a genuine section FAIL, so
+  # run_update must return non-zero. `|| true` would keep bats' errexit from
+  # aborting before the trap restore below, but it also throws away the only
+  # coverage anywhere in the tree for the _update_summary -> run_update rc
+  # propagation -- verified by mutation: `return 0` after _update_summary left
+  # both suites fully green.
+  local _rc=0
+  run_update || _rc=$?
   eval "${_bats_exit_trap}"
+  [ "${_rc}" -ne 0 ]
   grep -q "OK" "${_DOTFILES_RUN_TMPDIR}/status_apt"
   grep -q "FAIL" "${_DOTFILES_RUN_TMPDIR}/status_snap"
 }
@@ -1498,8 +1561,16 @@ assert_all_npm_globals_pinned() {
   # its own tmpdir regardless of which trap runs.
   local _bats_exit_trap
   _bats_exit_trap="$(trap -p EXIT)"
-  run_update
+  # Capture rather than discard: this fixture stages a genuine section FAIL, so
+  # run_update must return non-zero. `|| true` would keep bats' errexit from
+  # aborting before the trap restore below, but it also throws away the only
+  # coverage anywhere in the tree for the _update_summary -> run_update rc
+  # propagation -- verified by mutation: `return 0` after _update_summary left
+  # both suites fully green.
+  local _rc=0
+  run_update || _rc=$?
   eval "${_bats_exit_trap}"
+  [ "${_rc}" -ne 0 ]
   [ -f "${_DOTFILES_RUN_TMPDIR}/status_aws" ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_aws")" = "FAIL" ]
 }
@@ -1524,8 +1595,16 @@ assert_all_npm_globals_pinned() {
   update_rust() { return 1; }
   local _bats_exit_trap
   _bats_exit_trap="$(trap -p EXIT)"
-  run_update
+  # Capture rather than discard: this fixture stages a genuine section FAIL, so
+  # run_update must return non-zero. `|| true` would keep bats' errexit from
+  # aborting before the trap restore below, but it also throws away the only
+  # coverage anywhere in the tree for the _update_summary -> run_update rc
+  # propagation -- verified by mutation: `return 0` after _update_summary left
+  # both suites fully green.
+  local _rc=0
+  run_update || _rc=$?
   eval "${_bats_exit_trap}"
+  [ "${_rc}" -ne 0 ]
   [ -f "${_DOTFILES_RUN_TMPDIR}/status_rust" ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_rust")" = "FAIL" ]
 }
@@ -1935,8 +2014,16 @@ assert_all_npm_globals_pinned() {
   # the call so a real failure here still attributes to this test.
   local _bats_exit_trap
   _bats_exit_trap="$(trap -p EXIT)"
-  run_update
+  # Capture rather than discard: this fixture stages a genuine section FAIL, so
+  # run_update must return non-zero. `|| true` would keep bats' errexit from
+  # aborting before the trap restore below, but it also throws away the only
+  # coverage anywhere in the tree for the _update_summary -> run_update rc
+  # propagation -- verified by mutation: `return 0` after _update_summary left
+  # both suites fully green.
+  local _rc=0
+  run_update || _rc=$?
   eval "${_bats_exit_trap}"
+  [ "${_rc}" -ne 0 ]
   # Positive assertion, not negated: `! grep -q "OK" status_npm` is also
   # satisfied by SKIP, a missing file, or an empty variable — none of which
   # mean "npm failed." FAIL is the one value _update_record_end can only
@@ -1996,8 +2083,16 @@ assert_all_npm_globals_pinned() {
   # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
   # because run_update installs its own, which otherwise swallows attribution.
   _bats_exit_trap="$(trap -p EXIT)"
-  run_update
+  # Capture rather than discard: this fixture stages a genuine section FAIL, so
+  # run_update must return non-zero. `|| true` would keep bats' errexit from
+  # aborting before the trap restore below, but it also throws away the only
+  # coverage anywhere in the tree for the _update_summary -> run_update rc
+  # propagation -- verified by mutation: `return 0` after _update_summary left
+  # both suites fully green.
+  local _rc=0
+  run_update || _rc=$?
   eval "${_bats_exit_trap}"
+  [ "${_rc}" -ne 0 ]
   [ -f "${_DOTFILES_RUN_TMPDIR}/status_npm" ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_npm")" = "FAIL" ]
   # An empty pin expands to "jscpd@", which npm resolves to LATEST — the whole
