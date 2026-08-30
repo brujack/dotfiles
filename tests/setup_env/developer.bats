@@ -166,38 +166,77 @@ teardown() {
   ! grep -q "get.nexte.st" "${MOCK_CALLS_FILE:-/dev/null}"
 }
 
-@test "update_rust returns 1 when rustup update fails" {
-  export UBUNTU=1 HAS_RUST=1
+# ── update_rust: fail-fast across all three rustup calls ─────────────────────
+#
+# One helper, driven four ways. Three tests asserting rc=1 and BOTH halves of
+# fail-fast -- the failing subcommand ran, the NEXT one did not -- plus one
+# all-succeed case pinning the whole sequence in order.
+#
+# Why not a single "returns 1 when rustup update fails" test: mutation showed it
+# verified one of the three `|| return 1` guards. Deleting the guard from
+# `self update` or from `component add` survived all 14 update_rust tests across
+# both files, and asserting only `status -eq 1` also passes when rustup never
+# resolves at all -- so it could not tell "the guard propagated" from "nothing
+# ran". Each test below now names a guard no other test kills.
+#
+# PATH carries no inherited entries and no repo mock: the fixture bin, then the
+# minimal system set. A filtered PATH is not inert -- it leaves ~/.cargo/bin
+# reachable, which is how an earlier version of this test ran a real
+# `rustup self update` against the operator's toolchain (tdd.md E2).
+_rust_mock() {
   mkdir -p "${BATS_TEST_TMPDIR}/bin"
-  printf '#!/usr/bin/env bash\n[ "$1" = update ] && exit 1\nexit 0\n' \
-    > "${BATS_TEST_TMPDIR}/bin/rustup"
+  {
+    printf '#!/usr/bin/env bash\n'
+    printf 'printf "%%s\\n" "$*" >> "%s/rustup_calls"\n' "${BATS_TEST_TMPDIR}"
+    printf '[ "$*" = "%s" ] && exit 1\n' "$1"
+    printf 'exit 0\n'
+  } > "${BATS_TEST_TMPDIR}/bin/rustup"
   chmod +x "${BATS_TEST_TMPDIR}/bin/rustup"
-  PATH="${BATS_TEST_TMPDIR}/bin:${PATH}" HOME="${BATS_TEST_TMPDIR}" run update_rust
-  [ "$status" -eq 1 ]           # RED today: rustup's rc is discarded
+  export PATH="${BATS_TEST_TMPDIR}/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+  export HOME="${BATS_TEST_TMPDIR}"
+  export UBUNTU=1 HAS_RUST=1
 }
 
-@test "update_rust returns 0 when every rustup call succeeds" {
-  export UBUNTU=1 HAS_RUST=1
-  mkdir -p "${BATS_TEST_TMPDIR}/bin"
-  printf '#!/usr/bin/env bash\nexit 0\n' > "${BATS_TEST_TMPDIR}/bin/rustup"
-  chmod +x "${BATS_TEST_TMPDIR}/bin/rustup"
-  PATH="${BATS_TEST_TMPDIR}/bin:${PATH}" HOME="${BATS_TEST_TMPDIR}" run update_rust
-  [ "$status" -eq 0 ]
+@test "update_rust returns 1 and stops when 'self update' fails" {
+  _rust_mock "self update"
+  run update_rust
+  [ "$status" -eq 1 ]
+  grep -qx "self update" "${BATS_TEST_TMPDIR}/rustup_calls"
+  # fail-fast: neither later subcommand may have run. Counted, not `! grep` --
+  # SC2314: a leading `!` does NOT fail a bats test, so the negative form is
+  # inert and would pass whether or not the subcommand ran.
+  [ "$(grep -cx "update" "${BATS_TEST_TMPDIR}/rustup_calls")" -eq 0 ]
+  [ "$(grep -cx "component add rust-analyzer" "${BATS_TEST_TMPDIR}/rustup_calls")" -eq 0 ]
 }
 
-@test "update_rust returns 0 and warns when rustup is absent" {
-  export UBUNTU=1 HAS_RUST=1
-  # A filter that strips only "tests/mocks" from PATH is not inert on a
-  # developer machine that has a real rustup on PATH (e.g. ~/.cargo/bin) --
-  # measured directly: it resolves the REAL rustup and runs a real
-  # `rustup self update` / `component add rust-analyzer` against the
-  # operator's actual toolchain (tdd.md E2: a test's failing/absent path must
-  # be inert, never destructive). Restrict PATH to the same minimal,
-  # known-safe set the sibling "logs warning when rustup not found" test
-  # above already uses, so no real toolchain directory can ever be reached.
-  PATH="/usr/bin:/bin:/usr/sbin:/sbin" HOME="${BATS_TEST_TMPDIR}" run update_rust
+@test "update_rust returns 1 and stops when 'update' fails" {
+  _rust_mock "update"
+  run update_rust
+  [ "$status" -eq 1 ]
+  grep -qx "self update" "${BATS_TEST_TMPDIR}/rustup_calls"
+  grep -qx "update" "${BATS_TEST_TMPDIR}/rustup_calls"
+  ! grep -qx "component add rust-analyzer" "${BATS_TEST_TMPDIR}/rustup_calls"
+}
+
+# The guard on `component add` is an EQUIVALENT MUTANT: it is the terminal
+# statement, so dropping `|| return 1` leaves its non-zero exit as the function's
+# return value regardless. Measured -- with the guard removed, this test still
+# passes. Kept because the three calls should read alike, not because a test can
+# tell the difference. Do not add an assertion to "cover" it; none can.
+@test "update_rust returns 1 when 'component add' fails" {
+  _rust_mock "component add rust-analyzer"
+  run update_rust
+  [ "$status" -eq 1 ]
+  grep -qx "component add rust-analyzer" "${BATS_TEST_TMPDIR}/rustup_calls"
+}
+
+@test "update_rust runs all three subcommands in order when each succeeds" {
+  _rust_mock "__none__"
+  run update_rust
   [ "$status" -eq 0 ]
-  [[ "$output" == *"rustup not found"* ]]
+  [ "$(cat "${BATS_TEST_TMPDIR}/rustup_calls")" = "self update
+update
+component add rust-analyzer" ]
 }
 
 # ── clone_personal_repos ─────────────────────────────────────────────────────
