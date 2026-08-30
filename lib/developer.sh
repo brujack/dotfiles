@@ -17,19 +17,25 @@ clone_or_update_dotfiles() {
 update_aws_cli() {
   if [[ -n ${HAS_AWS} ]] && [[ -n ${MACOS} ]]; then
     log_info "Updating MACOS awscli"
+    mkdir -p "${HOME}"/software_downloads/awscli || return 1
     cd "${HOME}/software_downloads/awscli" || return 1
-    curl "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "AWSCLIV2.pkg"
-    sudo -H installer -pkg AWSCLIV2.pkg -target /
-    rm AWSCLIV2.pkg
+    curl "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "AWSCLIV2.pkg" || return 1
+    # Cleanup runs regardless of the installer's result: a stale or partial pkg
+    # means the next run installs it. tdd.md's cleanup exception.
+    if ! sudo -H installer -pkg AWSCLIV2.pkg -target /; then
+      rm -f AWSCLIV2.pkg
+      return 1
+    fi
+    rm -f AWSCLIV2.pkg || return 1
     cd "${PERSONAL_GITREPOS}/${DOTFILES}" || return 1
   fi
   if [[ -n ${HAS_AWS} ]] && [[ -n ${LINUX} ]]; then
     log_info "Updating Linux awscli"
-    mkdir -p "${HOME}"/software_downloads/awscli
+    mkdir -p "${HOME}"/software_downloads/awscli || return 1
     cd "${HOME}/software_downloads/awscli" || return 1
-    curl "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o "awscliv2.zip"
-    unzip -u -o awscliv2.zip
-    sudo -H "${HOME}"/software_downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin --update
+    curl "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o "awscliv2.zip" || return 1
+    unzip -u -o awscliv2.zip || return 1
+    sudo -H "${HOME}"/software_downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin --update || return 1
     cd "${PERSONAL_GITREPOS}/${DOTFILES}" || return 1
   fi
 }
