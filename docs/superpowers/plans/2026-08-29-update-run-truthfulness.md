@@ -636,8 +636,14 @@ distinguish:
 
 @test "update_rust returns 0 and warns when rustup is absent" {
   export UBUNTU=1 HAS_RUST=1
-  _clean="$(printf '%s' "${PATH}" | tr ':' '\n' | grep -v "${BATS_TEST_TMPDIR}" | tr '\n' ':')"
-  PATH="${_clean}" HOME="${BATS_TEST_TMPDIR}" run update_rust
+  # A minimal PATH, NOT a filtered one. Stripping only the mocks directory leaves
+  # the operator's real ~/.cargo/bin in place, so `command -v rustup` resolves the
+  # REAL binary and this test runs a live `rustup self update` and
+  # `component add rust-analyzer` against their toolchain. That is what the first
+  # version of this recipe did -- caught by the implementer from captured output,
+  # toolchain verified unmutated afterwards. tdd.md E2: the degenerate branch must
+  # be inert, and "inert" means unreachable, not unlikely.
+  PATH="/usr/bin:/bin:/usr/sbin:/sbin" HOME="${BATS_TEST_TMPDIR}" run update_rust
   [ "$status" -eq 0 ]
   [[ "$output" == *"rustup not found"* ]]
 }
