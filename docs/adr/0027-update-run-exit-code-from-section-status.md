@@ -57,6 +57,11 @@ recent windows of `~/.dotfiles-update.log`, gives a different picture:
 | last 500 | 18               |
 | all 3938 | 41               |
 
+Measured 2026-08-29 against `~/.dotfiles-update.log` on the Mac Studio. That log has since
+gained one entry from a verification probe run while implementing this change — a run that
+could not create its run directory and recorded `0 sections`, which shifts the `last 20`
+figure to 4. The table is the measurement the decision was taken on, left as taken.
+
 The identical counts at 100, 200 and 500 mean all 18 recent failures sit inside the last 100
 runs — the failures are recent and concentrated, not evenly spread across the log's history.
 `brew` accounts for 15 of the last 20 FAIL rows, spread across 2026-07-07 to 2026-08-19
@@ -89,8 +94,8 @@ enumerates them:
    `~/.dotfiles-update.log` line, and a ledger entry are all written.
 2. It could not create its run directory (`lib/workflows.sh:331`) and aborted before any
    section ran — nothing is recorded anywhere.
-3. It aborted mid-run on one of five `cd` guards (`lib/workflows.sh:621`, `:631`, `:641`,
-   `:661`, `:663`) — also nothing is recorded.
+3. It aborted mid-run on one of five `cd` guards (`lib/workflows.sh:622`, `:632`, `:642`,
+   `:662`, `:664`) — also nothing is recorded.
 
 A wrapper or cron job that sees a non-zero exit and finds no corresponding log line is in
 case 2 or 3, not case 1. Cases 2 and 3 are pre-existing behavior made externally visible by
