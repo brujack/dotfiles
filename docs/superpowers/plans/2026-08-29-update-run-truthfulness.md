@@ -521,6 +521,18 @@ failures visible. Add `mkdir -p "${HOME}/software_downloads/awscli" || return 1`
 branch so the two platforms agree, and add a test driving the macOS branch against a `HOME`
 that lacks the directory.
 
+**That test will pass vacuously unless you handle a fixture Task 2 left behind.**
+`tests/setup_env/workflows.bats`'s `setup()` now runs
+`mkdir -p "${HOME}/software_downloads/awscli"` before all 197 test bodies — Task 2 added it so
+the aws section would stop failing every full `run_update`. Once this task adds the production
+`mkdir -p`, that line is dead, and while it exists it guarantees the directory is present in
+that file. So either put the new test in `tests/setup_env/developer.bats` (which has no such
+fixture) and `rm -rf` the directory first, or delete the `setup()` line here — and if you
+delete it, confirm the 197 tests still pass, because they will then be relying on the
+production `mkdir` you just added, which is the coupling worth proving rather than assuming.
+
+Found by review of Task 2, before either half shipped.
+
 **GREEN.** Both branches, every command checked. `rm` becomes `rm -f` so an already-absent
 pkg is not itself a failure:
 

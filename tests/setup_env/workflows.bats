@@ -1201,11 +1201,16 @@ setup_constants_copy() {
   # run_update's own trap.
   local _bats_exit_trap
   _bats_exit_trap="$(trap -p EXIT)"
-  # || true: this fixture stages a genuine section FAIL, so run_update now
-  # returns non-zero for real -- without it, bats' errexit would abort the
-  # test right here, before the eval line below ever restores the trap.
-  run_update || true
+  # Capture rather than discard: this fixture stages a genuine section FAIL, so
+  # run_update must return non-zero. `|| true` would keep bats' errexit from
+  # aborting before the trap restore below, but it also throws away the only
+  # coverage anywhere in the tree for the _update_summary -> run_update rc
+  # propagation -- verified by mutation: `return 0` after _update_summary left
+  # both suites fully green.
+  local _rc=0
+  run_update || _rc=$?
   eval "${_bats_exit_trap}"
+  [ "${_rc}" -ne 0 ]
   grep -q "FAIL" "${_DOTFILES_RUN_TMPDIR}/status_apt"
   grep -q "OK" "${_DOTFILES_RUN_TMPDIR}/status_snap"
 }
@@ -1225,11 +1230,16 @@ setup_constants_copy() {
   # run_update's own trap.
   local _bats_exit_trap
   _bats_exit_trap="$(trap -p EXIT)"
-  # || true: this fixture stages a genuine section FAIL, so run_update now
-  # returns non-zero for real -- without it, bats' errexit would abort the
-  # test right here, before the eval line below ever restores the trap.
-  run_update || true
+  # Capture rather than discard: this fixture stages a genuine section FAIL, so
+  # run_update must return non-zero. `|| true` would keep bats' errexit from
+  # aborting before the trap restore below, but it also throws away the only
+  # coverage anywhere in the tree for the _update_summary -> run_update rc
+  # propagation -- verified by mutation: `return 0` after _update_summary left
+  # both suites fully green.
+  local _rc=0
+  run_update || _rc=$?
   eval "${_bats_exit_trap}"
+  [ "${_rc}" -ne 0 ]
   grep -q "OK" "${_DOTFILES_RUN_TMPDIR}/status_apt"
   grep -q "FAIL" "${_DOTFILES_RUN_TMPDIR}/status_snap"
 }
@@ -1560,11 +1570,16 @@ assert_all_npm_globals_pinned() {
   # its own tmpdir regardless of which trap runs.
   local _bats_exit_trap
   _bats_exit_trap="$(trap -p EXIT)"
-  # || true: this fixture stages a genuine section FAIL, so run_update now
-  # returns non-zero for real -- without it, bats' errexit would abort the
-  # test right here, before the eval line below ever restores the trap.
-  run_update || true
+  # Capture rather than discard: this fixture stages a genuine section FAIL, so
+  # run_update must return non-zero. `|| true` would keep bats' errexit from
+  # aborting before the trap restore below, but it also throws away the only
+  # coverage anywhere in the tree for the _update_summary -> run_update rc
+  # propagation -- verified by mutation: `return 0` after _update_summary left
+  # both suites fully green.
+  local _rc=0
+  run_update || _rc=$?
   eval "${_bats_exit_trap}"
+  [ "${_rc}" -ne 0 ]
   [ -f "${_DOTFILES_RUN_TMPDIR}/status_aws" ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_aws")" = "FAIL" ]
 }
@@ -1589,11 +1604,16 @@ assert_all_npm_globals_pinned() {
   update_rust() { return 1; }
   local _bats_exit_trap
   _bats_exit_trap="$(trap -p EXIT)"
-  # || true: this fixture stages a genuine section FAIL, so run_update now
-  # returns non-zero for real -- without it, bats' errexit would abort the
-  # test right here, before the eval line below ever restores the trap.
-  run_update || true
+  # Capture rather than discard: this fixture stages a genuine section FAIL, so
+  # run_update must return non-zero. `|| true` would keep bats' errexit from
+  # aborting before the trap restore below, but it also throws away the only
+  # coverage anywhere in the tree for the _update_summary -> run_update rc
+  # propagation -- verified by mutation: `return 0` after _update_summary left
+  # both suites fully green.
+  local _rc=0
+  run_update || _rc=$?
   eval "${_bats_exit_trap}"
+  [ "${_rc}" -ne 0 ]
   [ -f "${_DOTFILES_RUN_TMPDIR}/status_rust" ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_rust")" = "FAIL" ]
 }
@@ -2003,11 +2023,16 @@ assert_all_npm_globals_pinned() {
   # the call so a real failure here still attributes to this test.
   local _bats_exit_trap
   _bats_exit_trap="$(trap -p EXIT)"
-  # || true: this fixture stages a genuine section FAIL, so run_update now
-  # returns non-zero for real -- without it, bats' errexit would abort the
-  # test right here, before the eval line below ever restores the trap.
-  run_update || true
+  # Capture rather than discard: this fixture stages a genuine section FAIL, so
+  # run_update must return non-zero. `|| true` would keep bats' errexit from
+  # aborting before the trap restore below, but it also throws away the only
+  # coverage anywhere in the tree for the _update_summary -> run_update rc
+  # propagation -- verified by mutation: `return 0` after _update_summary left
+  # both suites fully green.
+  local _rc=0
+  run_update || _rc=$?
   eval "${_bats_exit_trap}"
+  [ "${_rc}" -ne 0 ]
   # Positive assertion, not negated: `! grep -q "OK" status_npm` is also
   # satisfied by SKIP, a missing file, or an empty variable — none of which
   # mean "npm failed." FAIL is the one value _update_record_end can only
@@ -2067,11 +2092,16 @@ assert_all_npm_globals_pinned() {
   # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
   # because run_update installs its own, which otherwise swallows attribution.
   _bats_exit_trap="$(trap -p EXIT)"
-  # || true: this fixture stages a genuine section FAIL, so run_update now
-  # returns non-zero for real -- without it, bats' errexit would abort the
-  # test right here, before the eval line below ever restores the trap.
-  run_update || true
+  # Capture rather than discard: this fixture stages a genuine section FAIL, so
+  # run_update must return non-zero. `|| true` would keep bats' errexit from
+  # aborting before the trap restore below, but it also throws away the only
+  # coverage anywhere in the tree for the _update_summary -> run_update rc
+  # propagation -- verified by mutation: `return 0` after _update_summary left
+  # both suites fully green.
+  local _rc=0
+  run_update || _rc=$?
   eval "${_bats_exit_trap}"
+  [ "${_rc}" -ne 0 ]
   [ -f "${_DOTFILES_RUN_TMPDIR}/status_npm" ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_npm")" = "FAIL" ]
   # An empty pin expands to "jscpd@", which npm resolves to LATEST — the whole
