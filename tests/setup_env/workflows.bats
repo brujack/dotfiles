@@ -17,6 +17,15 @@ setup() {
   # bats sets BATS_TEST_TMPDIR but leaves TMPDIR at the system temp dir, so
   # without this every invocation leaks a real dotfiles-run.* dir there.
   export TMPDIR="${BATS_TEST_TMPDIR}"
+  # _update_summary now returns non-zero when any section FAILed, and
+  # update_aws_cli's MACOS branch `cd`s into ~/software_downloads/awscli
+  # with no mkdir of its own. On a machine with HAS_AWS set (this repo's
+  # profile model sets it for every macOS/Linux dev machine), every full
+  # run_update invocation in this file would otherwise legitimately FAIL
+  # the aws section against a fresh mocked HOME -- unrelated to whatever
+  # each test actually exercises. Pin the precondition here rather than
+  # in each of the ~19 tests that call run_update end to end.
+  mkdir -p "${HOME}/software_downloads/awscli"
 }
 
 teardown() {
@@ -758,6 +767,11 @@ EOF
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
   export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
+  # _update_summary now returns non-zero when any section FAILed, so this
+  # control's meaning shifted from "the guard did not misfire" to "no section
+  # failed under mocks" -- pin that deliberately rather than inherit whatever
+  # the mock environment happens to produce. setup()'s awscli mkdir is what
+  # makes that pin hold; see the comment there for why.
   local _calls_before
   _calls_before="$(wc -l < "${MOCK_CALLS_FILE}")"
   run run_update
@@ -1187,7 +1201,10 @@ setup_constants_copy() {
   # run_update's own trap.
   local _bats_exit_trap
   _bats_exit_trap="$(trap -p EXIT)"
-  run_update
+  # || true: this fixture stages a genuine section FAIL, so run_update now
+  # returns non-zero for real -- without it, bats' errexit would abort the
+  # test right here, before the eval line below ever restores the trap.
+  run_update || true
   eval "${_bats_exit_trap}"
   grep -q "FAIL" "${_DOTFILES_RUN_TMPDIR}/status_apt"
   grep -q "OK" "${_DOTFILES_RUN_TMPDIR}/status_snap"
@@ -1208,7 +1225,10 @@ setup_constants_copy() {
   # run_update's own trap.
   local _bats_exit_trap
   _bats_exit_trap="$(trap -p EXIT)"
-  run_update
+  # || true: this fixture stages a genuine section FAIL, so run_update now
+  # returns non-zero for real -- without it, bats' errexit would abort the
+  # test right here, before the eval line below ever restores the trap.
+  run_update || true
   eval "${_bats_exit_trap}"
   grep -q "OK" "${_DOTFILES_RUN_TMPDIR}/status_apt"
   grep -q "FAIL" "${_DOTFILES_RUN_TMPDIR}/status_snap"
@@ -1540,7 +1560,10 @@ assert_all_npm_globals_pinned() {
   # its own tmpdir regardless of which trap runs.
   local _bats_exit_trap
   _bats_exit_trap="$(trap -p EXIT)"
-  run_update
+  # || true: this fixture stages a genuine section FAIL, so run_update now
+  # returns non-zero for real -- without it, bats' errexit would abort the
+  # test right here, before the eval line below ever restores the trap.
+  run_update || true
   eval "${_bats_exit_trap}"
   [ -f "${_DOTFILES_RUN_TMPDIR}/status_aws" ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_aws")" = "FAIL" ]
@@ -1566,7 +1589,10 @@ assert_all_npm_globals_pinned() {
   update_rust() { return 1; }
   local _bats_exit_trap
   _bats_exit_trap="$(trap -p EXIT)"
-  run_update
+  # || true: this fixture stages a genuine section FAIL, so run_update now
+  # returns non-zero for real -- without it, bats' errexit would abort the
+  # test right here, before the eval line below ever restores the trap.
+  run_update || true
   eval "${_bats_exit_trap}"
   [ -f "${_DOTFILES_RUN_TMPDIR}/status_rust" ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_rust")" = "FAIL" ]
@@ -1977,7 +2003,10 @@ assert_all_npm_globals_pinned() {
   # the call so a real failure here still attributes to this test.
   local _bats_exit_trap
   _bats_exit_trap="$(trap -p EXIT)"
-  run_update
+  # || true: this fixture stages a genuine section FAIL, so run_update now
+  # returns non-zero for real -- without it, bats' errexit would abort the
+  # test right here, before the eval line below ever restores the trap.
+  run_update || true
   eval "${_bats_exit_trap}"
   # Positive assertion, not negated: `! grep -q "OK" status_npm` is also
   # satisfied by SKIP, a missing file, or an empty variable — none of which
@@ -2038,7 +2067,10 @@ assert_all_npm_globals_pinned() {
   # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
   # because run_update installs its own, which otherwise swallows attribution.
   _bats_exit_trap="$(trap -p EXIT)"
-  run_update
+  # || true: this fixture stages a genuine section FAIL, so run_update now
+  # returns non-zero for real -- without it, bats' errexit would abort the
+  # test right here, before the eval line below ever restores the trap.
+  run_update || true
   eval "${_bats_exit_trap}"
   [ -f "${_DOTFILES_RUN_TMPDIR}/status_npm" ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_npm")" = "FAIL" ]
