@@ -34,10 +34,15 @@ done
 # set. MOCK_CURL_HTTP_STATUS applies only when MOCK_CURL_EXIT is unset AND an
 # f-bearing form (-f cluster, -fLo, --fail) was passed AND the status value
 # is an error (>=400) -- simulating curl -f's fail-on-HTTP-error behavior. A
-# caller writing 200 to mean success must not get a failure.
+# caller writing 200 to mean success must not get a failure. The ^[0-9]+$
+# gate runs before the arithmetic comparison (shell.md: a non-numeric value
+# does not reliably error -- a pure identifier reads as 0, a partly-numeric
+# one like "4xx" errors to stderr) so a garbage value gets its own
+# fall-through instead of an undefined comparison.
 if [[ -n "${MOCK_CURL_EXIT:-}" ]]; then
   mock_exit="${MOCK_CURL_EXIT}"
 elif [[ -n "${MOCK_CURL_HTTP_STATUS:-}" ]] && [[ "${has_f}" -eq 1 ]] \
+  && [[ "${MOCK_CURL_HTTP_STATUS}" =~ ^[0-9]+$ ]] \
   && [[ "${MOCK_CURL_HTTP_STATUS}" -ge 400 ]]; then
   mock_exit=22
 else

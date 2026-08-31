@@ -126,5 +126,16 @@ setup() {
 
 @test "curl mock: trailing -o with no value does not hang" {
   run timeout 5 "${CURL_MOCK}" -o
-  [ "$status" -ne 124 ]
+  [ "$status" -eq 0 ]
+}
+
+@test "curl mock: a non-numeric MOCK_CURL_HTTP_STATUS is gated before arithmetic, not silently 0" {
+  # "4xx" is the specific case that errors to stderr under an ungated
+  # -ge comparison (shell.md: a partly-numeric operand errors rather than
+  # reading as 0); "abc" would coincidentally return 0 either way and
+  # would not discriminate a missing regex gate from a present one.
+  export MOCK_CURL_HTTP_STATUS=4xx
+  run "${CURL_MOCK}" -fsS http://x
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"value too great for base"* ]]
 }
