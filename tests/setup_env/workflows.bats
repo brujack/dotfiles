@@ -1812,6 +1812,29 @@ assert_all_npm_globals_pinned() {
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_zsh-autosuggestions")" = "not a git checkout — reinstall to enable updates" ]
 }
 
+@test "run_update updates zsh-autosuggestions when .git is a gitdir file (submodule/worktree layout)" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  # A submodule or a linked worktree has .git as a FILE containing
+  # "gitdir: <path>", not a directory. The guard is -e, which admits both;
+  # nothing else in this file pins that choice, so a later "tightening" to
+  # -d would route this install to SKIP forever without ever being wrong
+  # in an obviously loud way.
+  mkdir -p "${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
+  printf 'gitdir: %s\n' "${BATS_TEST_TMPDIR}/elsewhere/.git/modules/zsh-autosuggestions" \
+    > "${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions/.git"
+  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
+  # so a failure here still gets its TAP line instead of being swallowed by
+  # run_update's own trap.
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
+  run_update
+  eval "${_bats_exit_trap}"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_zsh-autosuggestions")" = "OK" ]
+  grep -q "^git pull$" "${MOCK_CALLS_FILE}"
+}
+
 @test "run_update skips zsh-autosuggestions when flag not set" {
   export MACOS=1
   unset LINUX UBUNTU

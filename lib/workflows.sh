@@ -653,6 +653,10 @@ run_update() {
     fi
     local _zsh_autosug="${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
     if [[ -d ${_zsh_autosug} ]]; then
+      # Unlike its tfenv/oh-my-zsh/tpm siblings, this one is guarded: git's
+      # own repo-dir resolution walks upward, and ~/.oh-my-zsh is itself a
+      # checkout, so plumbing here would pull the parent and render a
+      # permanent "no changes" for a non-clone plugin install.
       if [[ -e ${_zsh_autosug}/.git ]]; then
         _update_record_start "zsh-autosuggestions"
         printf "Updating zsh-autosuggestions\\n"
