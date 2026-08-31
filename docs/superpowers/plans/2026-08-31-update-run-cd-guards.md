@@ -204,7 +204,7 @@ acceptance:
     exit_code: 0
   - cmd: 'bash -c ''command grep -q "\[\[ -e \${_zsh_autosug}/.git \]\]" lib/workflows.sh'''
     exit_code: 0
-  - cmd: 'bash -c ''[[ "$(command grep -c "rev-parse --git-dir" lib/workflows.sh)" -eq 0 ]]'''
+  - cmd: 'bash -c ''[[ "$(command grep -c "rev-parse --git-dir" lib/workflows.sh)" -eq 1 ]]'''
     exit_code: 0
   - cmd: 'bats -c tests/setup_env/workflows.bats'
     exit_code: 0
@@ -224,6 +224,19 @@ depends_on: [2, 3]
 **Why a filesystem test and not git plumbing** — this is the defect round-2 review found in round 1's own fix, and it is the reason for the fourth acceptance gate above. `rev-parse --git-dir` walks **upward**, and `~/.oh-my-zsh` is itself a checkout. A tarball install of the plugin nested inside it takes the _update_ arm; `git pull` then targets oh-my-zsh — which the `oh-my-zsh` section already pulled forty lines earlier in the same run, so HEAD has not moved and the row renders `[OK] zsh-autosuggestions no changes` forever. Silently wrong, where the guard existed to prevent a merely-visible wrong FAIL. `-e` also accepts the `.git`-as-file form used by submodules and linked worktrees, and touches no git plumbing so an exported `GIT_DIR` cannot reach it.
 
 **The three SKIP reasons** (hence `-eq 3`): `"not installed"` (no directory), `"not a git checkout — reinstall to enable updates"` (directory without `.git`), `"flag not set"` (outer `_run_all` else). The middle reason names a remedy because that branch never self-heals — `5_general.zsh:44` fires on `[[ ! -d … ]]` only.
+
+**Gate 4 was `-eq 0` and was impossible — corrected to `-eq 1` after Task 4 refused to force it.**
+`lib/workflows.sh:86` has carried `_git_is_valid_repo` using `rev-parse --git-dir` since PR #177 (`c3ceb9f3`), where
+that plumbing is *correct*: for a clone-vs-pull decision a corrupted clone can have a `.git` directory and still fail
+`rev-parse`, and the self-healing depends on detecting it. The count can never be 0, so forcing the gate would have
+meant rewriting an unrelated helper to reintroduce the bug it exists to prevent. The implementer flagged it instead
+of complying, which is the correct response to a wrong gate.
+
+**How it got past pre-verification, which is the transferable part.** Every gate here was run against the base tree,
+and this one returned non-zero — recorded as "genuine gate". It returns non-zero *permanently*: the assertion is
+unsatisfiable, not merely unsatisfied. Checking a gate **fails before the work** is half the test; the other half is
+that it **can pass after**. A gate failing in both states passes the falsifiability check vacuously and blocks
+forever — the same class as a gate naming a file that does not exist.
 
 **The harness will fight three of these tests.** `load_mocks` puts `tests/mocks/` on `PATH` in `setup()`, and `tests/mocks/git:8-9` intercepts `rev-parse --git-dir` returning an env var with no stdout, while `rev-parse HEAD` prints nothing at all. For V1 and V8 use the selective-mock idiom at `workflows.bats:1936` — symlink every mock **except `git`** into a temp dir and prepend that — so real git runs for the snapshot. V3's middle case needs no such thing: the guard is a filesystem test, so fixture shape _is_ the condition.
 
