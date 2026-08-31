@@ -617,30 +617,24 @@ run_update() {
     if [[ -d ${HOME}/.tfenv ]]; then
       _update_record_start "tfenv"
       printf "Updating tfenv\\n"
-      { cd "${HOME}/.tfenv" && git pull; } 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_tfenv"
-      local _tfenv_rc="${PIPESTATUS[0]}"
-      cd "${PERSONAL_GITREPOS}/${DOTFILES}" || return 1
-      _update_record_end "tfenv" "${_tfenv_rc}"
+      ( cd "${HOME}/.tfenv" && git pull ) 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_tfenv"
+      _update_record_end "tfenv" "${PIPESTATUS[0]}"
     else
       _update_skip "tfenv" "not installed"
     fi
     if [[ -d ${HOME}/.oh-my-zsh ]]; then
       _update_record_start "oh-my-zsh"
       printf "Updating oh-my-zsh\\n"
-      { cd "${HOME}/.oh-my-zsh" && git pull; } 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_oh-my-zsh"
-      local _omz_rc="${PIPESTATUS[0]}"
-      cd "${PERSONAL_GITREPOS}/${DOTFILES}" || return 1
-      _update_record_end "oh-my-zsh" "${_omz_rc}"
+      ( cd "${HOME}/.oh-my-zsh" && git pull ) 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_oh-my-zsh"
+      _update_record_end "oh-my-zsh" "${PIPESTATUS[0]}"
     else
       _update_skip "oh-my-zsh" "not installed"
     fi
     if [[ -d ${HOME}/.tmux/plugins/tpm ]]; then
       _update_record_start "tpm"
       printf "Updating tpm\\n"
-      { cd "${HOME}/.tmux/plugins/tpm" && git pull; } 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_tpm"
-      local _tpm_rc="${PIPESTATUS[0]}"
-      cd "${PERSONAL_GITREPOS}/${DOTFILES}" || return 1
-      _update_record_end "tpm" "${_tpm_rc}"
+      ( cd "${HOME}/.tmux/plugins/tpm" && git pull ) 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_tpm"
+      _update_record_end "tpm" "${PIPESTATUS[0]}"
     else
       _update_skip "tpm" "not installed"
     fi
