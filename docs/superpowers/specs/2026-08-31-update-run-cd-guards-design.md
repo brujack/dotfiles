@@ -27,7 +27,7 @@ call sites. **That fix is wrong for three of the five sites**, for a reason meas
 and the two it is right for turn out to sit inside a section that reports nothing at all.
 
 **The most serious defect in this region is none of those, and it is worth stating before
-them.** `lib/workflows.sh:658` fetches the cheat.sh binary with `curl … > ~/bin/cht.sh`, no
+them.** `lib/workflows.sh:650` fetches the cheat.sh binary with `curl … > ~/bin/cht.sh`, no
 `-f`. On any HTTP error curl exits **0** and the shell has already truncated the target, so
 `chmod 754` runs on an empty file, `PIPESTATUS[0]` is 0, and an **already-wired section
 records `[OK] cheat.sh updated` over a zeroed executable**. That is a wrong verdict rather
@@ -213,14 +213,16 @@ design question, and the failure it would catch (a valid-looking file whose cont
 error message) is materially rarer than the two above. See Deferred.
 
 **The class has four sites, and they are not the same construct — an earlier revision said
-they were.** The update path is `:658` (binary) and `:661` (completion);
+they were.** The update path is `:650` (binary) and `:658` (completion);
 `install_developer_tools` carries `curl … > …` at `:162` and `:172`. But `:172` is guarded:
 
 ```bash
-:162   curl https://cht.sh/:cht.sh > ~/bin/cht.sh          # unguarded -- truncates
-:163   chmod 750 "${HOME}"/bin/cht.sh
-:171   if [[ ! -f ${HOME}/.zsh.d/_cht ]]; then             # note the `!`
-:172     curl https://cheat.sh/:zsh > "${HOME}"/.zsh.d/_cht
+update  :650  { curl https://cht.sh/:cht.sh > ~/bin/cht.sh && chmod 754 ...; }   # truncates
+update  :658    curl https://cheat.sh/:zsh > "${HOME}"/.zsh.d/_cht              # truncates
+install :162    curl https://cht.sh/:cht.sh > ~/bin/cht.sh                      # truncates
+install :163    chmod 750 "${HOME}"/bin/cht.sh
+install :171  if [[ ! -f ${HOME}/.zsh.d/_cht ]]; then                           # note the `!`
+install :172    curl https://cheat.sh/:zsh > "${HOME}"/.zsh.d/_cht              # never-retry
 ```
 
 `:172` fetches **only when the file is absent**, so it can never truncate an existing one and
