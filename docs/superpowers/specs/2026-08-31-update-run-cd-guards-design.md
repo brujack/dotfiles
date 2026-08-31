@@ -214,7 +214,7 @@ error message) is materially rarer than the two above. See Deferred.
 
 **The class has four sites, and they are not the same construct — an earlier revision said
 they were.** The update path is `:650` (binary) and `:658` (completion);
-`install_developer_tools` carries `curl … > …` at `:162` and `:172`. But `:172` is guarded:
+`run_setup_user()` carries `curl … > …` at `:162` and `:172`. But `:172` is guarded:
 
 ```bash
 update  :650  { curl https://cht.sh/:cht.sh > ~/bin/cht.sh && chmod 754 ...; }   # truncates

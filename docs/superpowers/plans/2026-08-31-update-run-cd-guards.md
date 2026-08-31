@@ -328,7 +328,9 @@ files_touched:
 depends_on: [1, 5]
 ```
 
-**Files:** `lib/workflows.sh:162`, `:171-173`, `tests/setup_env/workflows.bats`.
+**Files:** `lib/workflows.sh:162`, `:171-173` — both inside **`run_setup_user()`**, not a separate install function — and `tests/setup_env/workflows.bats`.
+
+**Measured 2026-08-31, correcting this plan and the spec:** there is no `install_developer_tools` function anywhere in the repo; the spec named one and it does not exist. Both install-path curls live in `run_setup_user()`. `workflows.bats` is the right test home — it carries 51 references to `run_setup_user` against 5 in `install_guards.bats` and 2 each in `unit.bats` and `launch_agents.bats` — and **no existing test asserts on the install path at all**; the `cht.sh` tests at `workflows.bats:1739+` cover the update path only. So Task 6's tests are new coverage rather than edits to existing cases.
 
 **Two different hazards, not one.** `:162` is unguarded and truncates like the update path. `:172` sits inside `if [[ ! -f ${HOME}/.zsh.d/_cht ]]` — it fetches **only when the file is absent**, so it can never truncate an existing one. Its hazard is the inverse: a 404 creates a **0-byte `_cht` that then satisfies the `! -f` guard forever**, so the install path never retries and the completion is permanently empty. `-fsS -o` fixes that too, because no file is created on failure.
 
