@@ -60,6 +60,14 @@ The second line of the Studio run is the control: the same brace group _without_
 move the parent, so the probe discriminates rather than reporting `/tmp` for an unrelated
 reason.
 
+**The probe is a synthetic fixture, not the production lines, and that is deliberate.** What
+is under test is a bash language property — pipeline elements execute in subshell
+environments — and a fixture isolates it from `git pull`, the `tee`, and the surrounding
+function. Reproducing it inside `run_update` would add three confounders and could not
+falsify anything the fixture cannot. `shopt lastpipe` is read in the same command as the
+result, because `lastpipe` is the single documented way the property can be false; it is off
+on both machines and is inert in a non-interactive shell regardless.
+
 **Consequence.** `:622`, `:632` and `:642` cannot usefully fire. They can only _fail_ — when
 `${PERSONAL_GITREPOS}/${DOTFILES}` is missing or unreadable — and when they do, they abort a
 run mid-way, recording nothing, for a condition that was already harmless. They are not
@@ -130,13 +138,19 @@ No section, no rc check, no `-f`. The shell's `>` truncates the target when it s
 redirect up, before curl has produced anything.
 
 Measured against `https://httpbin.org/status/404` with the target pre-seeded to
-`ORIGINAL\n` (9 bytes):
+`ORIGINAL\n` (9 bytes), on **both** platforms this repo provisions — the production paths
+differ by OS and the curl builds differ with them:
 
-| invocation              | rc  | target after |
-| ----------------------- | --- | ------------ |
-| `curl -sS URL > file`   | 0   | 0 bytes      |
-| `curl -fsS URL > file`  | 56  | 0 bytes      |
-| `curl -fsS -o file URL` | 56  | **9 bytes**  |
+| invocation              | macOS rc (8.7.1) | Linux rc (8.5.0) | target after |
+| ----------------------- | ---------------- | ---------------- | ------------ |
+| `curl -sS URL > file`   | 0                | 0                | 0 bytes      |
+| `curl -fsS URL > file`  | 56               | 22               | 0 bytes      |
+| `curl -fsS -o file URL` | 56               | 22               | **9 bytes**  |
+
+The `target after` column is identical on both. **The exit code is not**, and that is a
+constraint on V5 rather than a curiosity: 22 is `CURLE_HTTP_RETURNED_ERROR`, the code `-f` is
+documented to return, while macOS's SecureTransport build reports 56 (`CURLE_RECV_ERROR`) for
+the same 404. Any test here asserts non-zero, never a specific value.
 
 Two things follow, and they are separate fixes rather than one:
 
@@ -339,10 +353,15 @@ with no plugin directory (`"not installed"`), one with `_run_all=0` (`"flag not 
 
 **V4 — cwd is unchanged across `run_update`.** _(post-implementation)_ Assert `$PWD` before
 and after a full mocked `run_update` are equal, invoked from a directory that is _not_ the
-dotfiles repo. Run against the pre-change code this must fail (M2's block moves cwd to the
-dotfiles repo and leaves it there); against the post-change code it must pass. The
-from-elsewhere invocation is load-bearing: run from the repo root, both versions end at the
-repo root and the case cannot discriminate.
+dotfiles repo. Run against the pre-change code this must fail; against the post-change code
+it must pass. The from-elsewhere invocation is load-bearing: run from the repo root, both
+versions end at the repo root and the case cannot discriminate.
+
+**Note which way it fails pre-change, because there are two and the case must accept
+either.** With a fixture `${PERSONAL_GITREPOS}/${DOTFILES}` present, M2's block moves cwd
+there and leaves it; without one, `:664` fails and `run_update` aborts. The assertion is on
+`$PWD` equality, which is violated in the first case and unreachable in the second — so the
+case must also assert `run_update` completed, or a spurious abort reads as a pass.
 
 **V5 — a 404 on either cheat.sh fetch records FAIL and leaves the target intact.**
 _(post-implementation)_ Point the URLs at a mock returning 404 with the target pre-seeded;
