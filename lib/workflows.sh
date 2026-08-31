@@ -651,17 +651,26 @@ run_update() {
       printf "Updating cheat.sh tab completion\\n"
       curl https://cheat.sh/:zsh > "${HOME}"/.zsh.d/_cht
     fi
-    if [[ -d ${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions ]]; then
-      printf "Updating zsh-autosuggestions\\n"
-      cd "${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions" || return 1
-      git pull
-      cd "${PERSONAL_GITREPOS}/${DOTFILES}" || return 1
+    local _zsh_autosug="${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
+    if [[ -d ${_zsh_autosug} ]]; then
+      if [[ -e ${_zsh_autosug}/.git ]]; then
+        _update_record_start "zsh-autosuggestions"
+        printf "Updating zsh-autosuggestions\\n"
+        ( cd "${_zsh_autosug}" && git pull ) \
+          2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_zsh-autosuggestions"
+        _update_record_end "zsh-autosuggestions" "${PIPESTATUS[0]}"
+      else
+        _update_skip "zsh-autosuggestions" "not a git checkout — reinstall to enable updates"
+      fi
+    else
+      _update_skip "zsh-autosuggestions" "not installed"
     fi
   else
     _update_skip "tfenv" "flag not set"
     _update_skip "oh-my-zsh" "flag not set"
     _update_skip "tpm" "flag not set"
     _update_skip "cheat.sh" "flag not set"
+    _update_skip "zsh-autosuggestions" "flag not set"
   fi
 
   # ── gems ──────────────────────────────────────────────────────────────────
