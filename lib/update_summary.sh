@@ -552,19 +552,19 @@ _update_summary() {
     case "${_status}" in
       OK)
         _ok=$(( _ok + 1 ))
-        _output+="$(printf "[OK]   %-19s %s" "${_section}" "${_result}")\n"
+        _output+="$(printf "[OK]   %-20s %s" "${_section}" "${_result}")\n"
         ;;
       FAIL)
         _fail=$(( _fail + 1 ))
-        _output+="$(printf "[FAIL] %-19s %s" "${_section}" "${_result}")\n"
+        _output+="$(printf "[FAIL] %-20s %s" "${_section}" "${_result}")\n"
         ;;
       SKIP)
         _skip=$(( _skip + 1 ))
-        _output+="$(printf "[SKIP] %-19s %s" "${_section}" "${_result}")\n"
+        _output+="$(printf "[SKIP] %-20s %s" "${_section}" "${_result}")\n"
         ;;
       WARN)
         _warn=$(( _warn + 1 ))
-        _output+="$(printf "[WARN] %-19s %s" "${_section}" "${_result}")\n"
+        _output+="$(printf "[WARN] %-20s %s" "${_section}" "${_result}")\n"
         ;;
     esac
   done
