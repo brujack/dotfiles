@@ -406,3 +406,172 @@ V1–V5.
   durable run root still sit.
 - `dotfiles/CLAUDE.md`, `_UPDATE_SECTION_ORDER` coupling — the documented trap this change
   walks into deliberately and pays for in Group B.
+
+## Multi-Lens Review
+
+Reviewed at commit: `39ee4fd2` (Step 7 self-review commit, before Step 8 dispatch)
+
+Round 1. Three lenses, no shared transcript. Every claim below that this session could check
+against the repo was checked; where a lens was refuted, the refutation and its discriminating
+artifact are recorded beside the finding rather than the finding being dropped.
+
+### Goal-Fit
+
+Finding, five parts:
+
+1. **M1's "returns to a directory the shell never left" is true of what the line returns
+   *from* and false of what it does.** `run_update` contains no `cd` before `:622` other than
+   the one inside the pipeline (`awk 'NR>=320 && NR<=621 && /(^|[^_a-zA-Z])cd /'` returns only
+   the tfenv brace group — confirmed by this session). So on any invocation from outside the
+   dotfiles repo — cron, a wrapper, `$HOME` — the `cd`-back *succeeds and relocates the
+   parent's cwd*. The deletion is still right and is now better justified: these lines are a
+   silent cwd relocation carrying an abort path, not an inert no-op. **V4's note is wrong as
+   written** — with `~/.tfenv` present, `:622` violates `$PWD` equality before M2's block is
+   reached, so the pre-change failure is attributed to the wrong line.
+2. **V5 cannot falsify the `-f` half of Group C.** `tests/mocks/curl` derives its exit solely
+   from `${MOCK_CURL_EXIT:-0}` and never reads `-f` (confirmed: `grep -n '\-f\|MOCK_CURL'
+   tests/mocks/curl` shows an argument loop inspecting only `-o`, then `exit
+   "${MOCK_CURL_EXIT:-0}"`). Reverting `-fsS -o` to `-sS -o` leaves V5 green. M4 establishes
+   two independent fixes and V5 pins only `-o`; the `-f` fix ships with no mutation control.
+3. **All 7 cases expect PASS and none pins a derived value on the success path.**
+   `_update_record_start`'s arm ends `2>/dev/null || true` (`lib/update_summary.sh:117`), and
+   `_update_record_end`'s else renders `"no changes"` for a missing pre-snapshot — byte-identical
+   to a real no-op pull. Every existing sibling fixture is a bare `mkdir -p` under a redirected
+   `HOME` (`workflows.bats:1631`), not a git repo, so `rev-parse` fails and the section would
+   render `[OK] … no changes` having measured nothing, with V1/V2/V3 all passing.
+4. **Reads-it, per group.** B and C pass both questions — consumer is the rendered row,
+   `~/.dotfiles-update.log`, the ledger entry, and via ADR-0027 the process exit code. **Group A
+   has no consumer and changes no verdict.** Acceptable as a deletion (net negative lines), not
+   as a mechanism.
+5. **Proportionality: the spec leads with its weakest third.** The backlog row that spawned it
+   is the least valuable part. The highest-severity defect is introduced as a bullet under M4 —
+   an *already-wired* section reporting OK over a truncated executable is a wrong verdict, not a
+   missing row.
+
+Verified safe, no action: a new `_UPDATE_SECTION_ORDER` entry cannot render a blank row
+(`_update_summary` `continue`s on a missing status file, `:546`); the tally is computed
+dynamically (`:573`); one `else` covers every non-`_run_all` path so a single
+`_update_skip "zsh-autosuggestions" "flag not set"` suffices.
+
+Assumption: **that V1's fixture will actually exercise the pre-snapshot path.** Genuinely
+uncertain — the repo has both patterns, and which one V1 inherits is an implementation choice
+not yet made. Settled by writing V1 first and asserting
+`[ -s "${_DOTFILES_RUN_TMPDIR}/pre_zsh-autosuggestions" ]`; a zero-byte or absent pre-snapshot
+means the case is vacuous.
+
+Disposition:
+
+### Ergonomics
+
+Finding, five parts:
+
+1. **Group C's `|| exit 1` makes the two fetches sequentially dependent, contradicting the
+   spec's own rationale.** Raised independently by the Risk lens. The spec argues for preserving
+   independence and then preserves it only in the *guard*, not the *failure path*: today a
+   failed binary fetch does not stop the completion fetch; under the design it does.
+2. **The folding is right for diagnosis and better than two rows.** `_update_write_detail_from_err`
+   renders the last 10 non-blank lines of the tee'd err file on FAIL, and each fetch prints its
+   own banner immediately before its curl, so the detail names which half failed. `-s` also
+   removes the progress meter that currently pollutes that tail.
+3. **Both cheat.sh artifacts are 0 bytes on this machine right now** — `~/bin/cht.sh` (mode
+   754, a zeroed executable) and `~/.zsh.d/_cht`, both stamped `Aug 29 20:00`. `~/.zsh.d` is on
+   `fpath` (`.config/.zshrc.d/5_general.zsh:190`, confirmed), so the empty completion is live.
+   **The lens then attributed this to a logged `run_update`, and that attribution does not
+   survive checking.** The most recent summary carrying a `cheat.sh` row is `2026-08-29
+   11:31:24` → `[OK] cheat.sh updated`; `~/.dotfiles-update.log`'s mtime is `19:03`; the files
+   are `20:00`. No logged run wrote them. The bats fixtures cannot have: `workflows.bats:11`
+   redirects `HOME` to `BATS_TEST_TMPDIR`. So the artifact is real and its writer is
+   **unattributed** — one observable, two stories, and the discriminating artifact is the
+   timestamps rather than anything in the summary. Record it as evidence that M4's mechanism
+   produces exactly this on-disk state, not as evidence that the section reported OK over it.
+4. **SKIP noise is already the dominant output on partial runs.** Measured from
+   `~/.dotfiles-update.log`: the last full run rendered **22 rows, `22 sections: 16 OK, 0
+   failed, 3 warnings, 3 skipped`** (confirmed by this session); partial runs render 15 rows of
+   which 13 are SKIP. Adding the section takes those to 23 and 16. Correct trade — "every
+   section always appears" is the summary's contract — but the spec should name the 13 so a
+   reader is not judging "+1 SKIP" against an imagined clean summary.
+5. **The `"not installed"` branch is near-unreachable, which is good news the spec does not
+   claim.** `.config/.zshrc.d/5_general.zsh:43-45` self-heals — any interactive zsh `git
+   clone`s the plugin when the directory is missing (confirmed). So the new section is a real
+   OK/FAIL row on every full run on every machine that has ever opened a shell, not a permanent
+   noise SKIP. V3 must construct the absent state artificially.
+
+Also reported: a real `0 sections: 0 OK, 0 failed, 0 warnings, 0 skipped` render at `2026-08-29
+19:03:04`, with two candidate causes and nothing in V1–V7 that would catch either.
+
+Assumption: **that the cheat.sh binary and its zsh completion are one operational unit**, such
+that a completion-only failure should render `[FAIL] cheat.sh`. Settled by the operator's answer
+to "do you want `-t update` to exit 1 when only the zsh completion 404s?" Partial evidence cuts
+toward yes: the completion is on `fpath`, and both artifacts are currently 0 bytes from the same
+event, i.e. they already fail together.
+
+Disposition:
+
+### Risk
+
+Finding, seven parts. Exit-status equivalence between `{ }` and `( )` was verified total for
+these cases under `set -eE` with an `ERR` trap, both for `cd`-fails and inner-command-fails —
+no finding there, and `exit 1` over `return`, and `-o` over `>`, both confirmed correct.
+
+1. **Group A calls the load-bearing half "documentary," and that inversion is the top risk.**
+   The deletion is safe *only while the brace group sits in a pipeline*; the `{ } → ( )`
+   conversion is what makes it safe unconditionally, i.e. it is the guard against a future edit
+   removing the `| tee`. Calling it documentary invites a reviewer to drop it as churn under
+   this repo's Surgical Changes rule, landing the risky half alone. Group A must be stated as
+   one atomic edit whose conversion is the *precondition* for the deletion.
+2. **The falsifier this spec named for M1 is the wrong end of the pipeline.** `lastpipe`
+   governs the **last** element and can never make the left side run in the parent. Confirmed
+   by this session: `shopt -s lastpipe` then a left-element `cd` leaves `$PWD` at `/tmp`, while
+   the same `cd` as the *right* element moves it to `/tmp/lp`. Two consequences — M1's
+   conclusion is **stronger** than argued (no bash option runs a non-final pipeline element in
+   the parent, so the three `cd`-backs are unreachable-as-guards under every shell mode), and a
+   reviewer who tries to break M1 with `lastpipe` gets a confirming result for an unrelated
+   reason. That is `behavior.md`'s "a check that cannot falsify the thing it checks," arriving
+   inside an otherwise-correct measurement.
+3. **M5's published evidence line is false.** It reads `-> 0 matches`; the command returns
+   **63**. `[0-9]*` matches zero digits and the leading `"` binds only to the first branch, so
+   `[0-9]* failed` matches bare prose. Anchored (`grep -rnE '"[0-9]+ (OK|failed|skipped|warnings)"'`)
+   returns **10**, including `update_summary.bats:407-409` (`"8 OK"`, `"1 failed"`, `"1 skipped"`)
+   — exactly the shape `CLAUDE.md` warns about. **The conclusion survives, for a reason M5 never
+   states:** that test seeds its sections explicitly by name (`brew`, `claude`, `mas`, plus a
+   7-element loop) and `_update_summary` `continue`s on a missing status file, so an unseeded
+   array entry is uncounted; and the `workflows.bats:2243/2251/2257` hits are `run_check_versions`,
+   a different function with its own tally. All confirmed by this session.
+4. **Group C silently couples two executions the spec is at pains to keep independent** — same
+   finding as Ergonomics 1, reached independently.
+5. **Group C moves the `printf` banners inside the tee'd subshell.** They then land in
+   `err_cheat.sh`, and on FAIL `_update_write_detail_from_err` renders `tail -10` of that file
+   as operator-facing detail, so banners consume detail lines error output needs. Same class as
+   the findings-count contamination in `CLAUDE.md`'s cadence section, lower severity.
+6. **The `>`-truncation class exists at two further sites the spec neither fixes nor defers:**
+   `lib/workflows.sh:162` (`curl https://cht.sh/:cht.sh > ~/bin/cht.sh`, followed by `chmod
+   750` where the update path uses `754`) and `:172` (`curl https://cheat.sh/:zsh >
+   ~/.zsh.d/_cht`), both on the *install* path. Confirmed by this session, including the
+   750/754 inconsistency.
+7. **Removing the `local _*_rc` temporaries is a small robustness regression.** Confirmed:
+   `local x="${PIPESTATUS[0]}"` is itself a command and resets `PIPESTATUS` to `(0)` — measured
+   `captured=1 then PIPESTATUS[0]=0`. So inline reading is correct *today* and fails silently to
+   `0` — recording OK over a failure — if anyone later inserts a line between the pipeline and
+   the call. It matches the existing `aws`/`rust` style; state the consistency-vs-safety trade
+   rather than presenting it as pure subtraction.
+
+Verdict count: 7 of 7 expect PASS; V1 and V4 carry pre-change mutation controls; no case pins a
+non-zero derived value on the success path.
+
+Assumption: **that the `zsh-autosuggestions` plugin directory is a git clone on every machine
+that has it.** If any machine has it from a tarball or a copied `$HOME`, today's silent no-op
+becomes a weekly FAIL row and a non-zero exit — converting benign silence into a recurring false
+alarm on the one channel this repo keeps quiet. Settled by
+`git -C ~/.oh-my-zsh/custom/plugins/zsh-autosuggestions rev-parse --git-dir` on each of the seven
+machines. **This session checked two of seven:** Mac Studio `.git`, remote
+`https://github.com/zsh-users/zsh-autosuggestions`; Linux workstation `.git`. Both hold. The
+remaining five are unmeasured, so the assumption is supported on the development set and open on
+the fleet.
+
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger. There are no arms to compare,
+no judge or evaluator component, and V1–V7 are commands with concrete observables rather than
+acceptance criteria open to two readings. Not borderline, so not run.
