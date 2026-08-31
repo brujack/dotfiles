@@ -1,17 +1,39 @@
 #!/usr/bin/env bash
 ORIG_ARGS="$*"
 printf "curl %s\n" "${ORIG_ARGS}" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
-# Handle -o <file>: create an empty placeholder file
+# Handle -o <file>: track the target, deferred until the exit code (below) is
+# known -- a simulated failure must leave a pre-seeded target unchanged,
+# mirroring real curl.
 outfile=""
+has_f=0
 while [[ $# -gt 0 ]]; do
   if [[ "$1" == "-o" ]]; then
     outfile="$2"
     shift 2
-  else
-    shift
+    continue
   fi
+  # A short-option cluster containing 'f' (e.g. -fsS). Excludes long options
+  # (--form) that a bare substring match on 'f' would otherwise catch --
+  # production emits `curl -fsS`, never a bare `-f`.
+  if [[ "$1" =~ ^-[a-zA-Z]+$ ]] && [[ "$1" == *f* ]]; then
+    has_f=1
+  fi
+  shift
 done
-[[ -n "${outfile}" ]] && touch "${outfile}"
+# Precedence: MOCK_CURL_EXIT is the pre-existing explicit knob and wins when
+# set. MOCK_CURL_HTTP_STATUS applies only when MOCK_CURL_EXIT is unset AND an
+# f-bearing short cluster was passed, simulating curl -f's fail-on-HTTP-error
+# behavior -- the variable is only ever set to an error status by callers.
+if [[ -n "${MOCK_CURL_EXIT:-}" ]]; then
+  mock_exit="${MOCK_CURL_EXIT}"
+elif [[ -n "${MOCK_CURL_HTTP_STATUS:-}" ]] && [[ "${has_f}" -eq 1 ]]; then
+  mock_exit=22
+else
+  mock_exit=0
+fi
+if [[ "${mock_exit}" -eq 0 ]] && [[ -n "${outfile}" ]]; then
+  printf "%s" "${MOCK_CURL_STDOUT:-}" > "${outfile}"
+fi
 # URL-pattern dispatch for multi-source scripts; falls back to MOCK_CURL_STDOUT
 if [[ "${ORIG_ARGS}" == *"platform.claude.com"* ]] && [[ -n "${MOCK_CURL_PLATFORM_STDOUT:-}" ]]; then
   printf "%s\n" "${MOCK_CURL_PLATFORM_STDOUT}"
@@ -20,4 +42,4 @@ elif [[ "${ORIG_ARGS}" == *"githubusercontent.com"* ]] && [[ -n "${MOCK_CURL_SDK
 elif [[ -n "${MOCK_CURL_STDOUT:-}" ]]; then
   printf "%s\n" "${MOCK_CURL_STDOUT}"
 fi
-exit "${MOCK_CURL_EXIT:-0}"
+exit "${mock_exit}"
