@@ -1701,6 +1701,13 @@ assert_all_npm_globals_pinned() {
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
   mkdir -p "${HOME}/.tfenv"
+  # A real .git marker is required: with the plugin directory present but no
+  # .git, the section would SKIP as "not a git checkout" and this test would
+  # once again prove nothing about the cd-back it exists to catch. Before
+  # docs/superpowers/plans/2026-08-31-update-run-cd-guards.md task 4, this
+  # fixture omitted .oh-my-zsh entirely, so the test's name was true only
+  # because the one remaining relocating cd-back was never exercised.
+  mkdir -p "${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions/.git"
   # A caller cwd distinct from ${PERSONAL_GITREPOS}/${DOTFILES} is the whole
   # point: invoking from that fixture path would make the cd-back a no-op
   # (start there, cd back there) and the test could not discriminate.
@@ -1718,13 +1725,14 @@ assert_all_npm_globals_pinned() {
   local _rc=0
   run_update || _rc=$?
   eval "${_bats_exit_trap}"
-  # Non-zero would mean the cd-back's "|| return 1" guard actually fired
-  # (pre-change failure path 3: abort, never reaching the pwd assertion).
+  # Non-zero would mean the cd-back's "|| return 1" guard actually fired --
+  # see docs/superpowers/plans/2026-08-31-update-run-cd-guards.md task 4 for
+  # the pre-change failure path this guards against.
   [ "${_rc}" -eq 0 ]
-  # Proves the run continued past the tfenv block into the next one, rather
-  # than a spurious early return reading as a pass because nothing after it
-  # was checked.
-  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_oh-my-zsh")" = "SKIP" ]
+  # Proves the zsh-autosuggestions block actually ran `git pull` (OK, not
+  # SKIP) rather than the pwd assertion below passing vacuously because the
+  # block that used to relocate cwd was never exercised.
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_zsh-autosuggestions")" = "OK" ]
   [ "$(pwd)" = "${_pwd_before}" ]
 }
 
@@ -1768,10 +1776,215 @@ assert_all_npm_globals_pinned() {
   export MACOS=1
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
-  mkdir -p "${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
+  # .git is required -- without it the section takes the "not a git checkout"
+  # SKIP branch and git pull is never invoked.
+  mkdir -p "${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions/.git"
   run run_update
   [ "$status" -eq 0 ]
   grep -q "^git pull$" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_update skips zsh-autosuggestions when plugin dir does not exist" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
+  # so a failure here still gets its TAP line instead of being swallowed by
+  # run_update's own trap.
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
+  run_update
+  eval "${_bats_exit_trap}"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_zsh-autosuggestions")" = "SKIP" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_zsh-autosuggestions")" = "not installed" ]
+}
+
+@test "run_update skips zsh-autosuggestions when plugin dir has no .git" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  mkdir -p "${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
+  run_update
+  eval "${_bats_exit_trap}"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_zsh-autosuggestions")" = "SKIP" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_zsh-autosuggestions")" = "not a git checkout — reinstall to enable updates" ]
+}
+
+@test "run_update skips zsh-autosuggestions when flag not set" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE_BREW=1
+  unset UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  mkdir -p "${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions/.git"
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
+  run_update
+  eval "${_bats_exit_trap}"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_zsh-autosuggestions")" = "SKIP" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_zsh-autosuggestions")" = "flag not set" ]
+}
+
+@test "run_update skips zsh-autosuggestions when only the parent oh-my-zsh checkout is a git repo" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  # rev-parse --git-dir walks UPWARD, so a guard built on it would find
+  # .oh-my-zsh/.git for a plugin dir that is not itself a clone -- exactly
+  # the shape that made the rejected design wrong. Build the parent as a
+  # REAL git checkout, resolved past the mock so `git init` does real work,
+  # while leaving run_update's own git mocked -- the oh-my-zsh sibling
+  # section legitimately fires on the same directory and its own `git pull`
+  # is the baseline the count below is measured against.
+  local _real_git
+  _real_git="$(printf '%s' "${PATH}" | tr ':' '\n' | while read -r _dir; do
+    [[ "${_dir}" == *"tests/mocks"* ]] && continue
+    if [[ -x "${_dir}/git" ]]; then
+      printf '%s/git' "${_dir}"
+      break
+    fi
+  done)"
+  [ -n "${_real_git}" ]
+  mkdir -p "${HOME}/.oh-my-zsh"
+  (
+    cd "${HOME}/.oh-my-zsh" || exit 1
+    "${_real_git}" init -q
+    "${_real_git}" -c user.email=test@example.com -c user.name=test commit -q --allow-empty -m init
+  )
+  mkdir -p "${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
+  run_update
+  eval "${_bats_exit_trap}"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_zsh-autosuggestions")" = "SKIP" ]
+  # Exactly one -- from the legitimate oh-my-zsh section's own pull. A
+  # guard that walked upward via rev-parse --git-dir would resolve the
+  # same .git for the plugin dir and record a second, indistinguishable
+  # "git pull" line here.
+  [ "$(grep -c "^git pull$" "${MOCK_CALLS_FILE}")" -eq 1 ]
+}
+
+@test "run_update snapshots zsh-autosuggestions HEAD via real git plumbing" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  # tests/mocks/git prints nothing for `rev-parse HEAD`, so the pre-snapshot
+  # file would read empty regardless of whether _update_record_start ran
+  # real git plumbing at all. Strip only the git mock -- every other mock
+  # stays, and the other git-touching call sites below are stubbed to
+  # no-ops so nothing else in the run attempts a real clone/pull.
+  local tmp_mocks="${BATS_TEST_TMPDIR}/mocks_no_git"
+  mkdir -p "${tmp_mocks}"
+  for f in "${REPO_ROOT}/tests/mocks/"*; do
+    [[ "$(basename "$f")" == "git" ]] && continue
+    ln -sf "$f" "${tmp_mocks}/$(basename "$f")"
+  done
+  local clean_path
+  clean_path="$(printf "%s" "${PATH}" | tr ':' '\n' | grep -v "tests/mocks" | tr '\n' ':' | sed 's/:$//')"
+  export PATH="${tmp_mocks}:${clean_path}"
+  setup_ai_config() { return 0; }
+  sync_git_repos() { return 0; }
+  sync_legacy_dirs() { return 0; }
+  install_git_hooks_all_repos() { return 0; }
+  ensure_state_ledger() { return 0; }
+  export -f setup_ai_config sync_git_repos sync_legacy_dirs install_git_hooks_all_repos ensure_state_ledger
+
+  # _zsh_autosug's parent, ~/.oh-my-zsh, exists the moment the plugin
+  # directory does -- run_update's own oh-my-zsh section then fires too,
+  # with real git now on PATH. Give it a real, pullable clone of its own
+  # rather than a bare directory, or its `git pull` fails ("not a git
+  # repository") and that FAIL alone makes run_update exit non-zero,
+  # unrelated to anything this test is actually checking.
+  local _omz_origin="${BATS_TEST_TMPDIR}/oh-my-zsh-origin"
+  mkdir -p "${_omz_origin}"
+  ( cd "${_omz_origin}" \
+      && git init -q \
+      && git -c user.email=test@example.com -c user.name=test commit -q --allow-empty -m init )
+  git clone -q "${_omz_origin}" "${HOME}/.oh-my-zsh"
+
+  # A clone (rather than a bare `git init` in place) gives the plugin dir a
+  # real origin remote, so the block's own `git pull` succeeds instead of
+  # failing with "no tracking information" -- V1 is about the snapshot,
+  # not about exercising a pull failure.
+  local _origin="${BATS_TEST_TMPDIR}/zsh-autosug-origin"
+  mkdir -p "${_origin}"
+  ( cd "${_origin}" \
+      && git init -q \
+      && git -c user.email=test@example.com -c user.name=test commit -q --allow-empty -m init )
+  mkdir -p "${HOME}/.oh-my-zsh/custom/plugins"
+  local _zsh_autosug="${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
+  git clone -q "${_origin}" "${_zsh_autosug}"
+
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
+  local _rc=0
+  run_update || _rc=$?
+  eval "${_bats_exit_trap}"
+  [ "${_rc}" -eq 0 ]
+  [ -s "${_DOTFILES_RUN_TMPDIR}/pre_zsh-autosuggestions" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_zsh-autosuggestions")" = "OK" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_oh-my-zsh")" = "OK" ]
+}
+
+@test "run_update FAILs zsh-autosuggestions when git pull errors" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  mkdir -p "${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions/.git"
+  export MOCK_GIT_EXIT=1
+  run run_update
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"[FAIL] zsh-autosuggestions"* ]]
+}
+
+@test "run_update reports 2 commit(s) for zsh-autosuggestions across a real pull" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  local _zsh_autosug="${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
+  mkdir -p "${_zsh_autosug}"
+  # Strip the git mock so both _update_record_start and _update_record_end
+  # exercise real git plumbing -- this is the one case in the suite that
+  # tests the measurement (real rev-parse/log output) rather than the
+  # comparison logic against a hand-seeded pre-file.
+  local tmp_mocks="${BATS_TEST_TMPDIR}/mocks_no_git"
+  mkdir -p "${tmp_mocks}"
+  for f in "${REPO_ROOT}/tests/mocks/"*; do
+    [[ "$(basename "$f")" == "git" ]] && continue
+    ln -sf "$f" "${tmp_mocks}/$(basename "$f")"
+  done
+  local clean_path
+  clean_path="$(printf "%s" "${PATH}" | tr ':' '\n' | grep -v "tests/mocks" | tr '\n' ':' | sed 's/:$//')"
+  export PATH="${tmp_mocks}:${clean_path}"
+  # Bypass _dotfiles_run_tmpdir_setup entirely -- it also runs
+  # ensure_state_ledger, which with the git mock stripped would attempt a
+  # real SSH clone of the real state-ledger repo. This test only needs a
+  # writable directory for _update_record_start/_update_record_end to use,
+  # the same minimal setup tests/setup_env/update_summary.bats uses for the
+  # same functions.
+  export _DOTFILES_RUN_TMPDIR="${BATS_TEST_TMPDIR}/run-tmpdir"
+  mkdir -p "${_DOTFILES_RUN_TMPDIR}"
+
+  local _origin="${BATS_TEST_TMPDIR}/zsh-autosug-origin"
+  mkdir -p "${_origin}"
+  ( cd "${_origin}" \
+      && git init -q \
+      && git -c user.email=test@example.com -c user.name=test commit -q --allow-empty -m init )
+  rmdir "${_zsh_autosug}"
+  git clone -q "${_origin}" "${_zsh_autosug}"
+
+  _update_record_start "zsh-autosuggestions"
+  [ -s "${_DOTFILES_RUN_TMPDIR}/pre_zsh-autosuggestions" ]
+
+  # Simulate two commits landing in the upstream, as a real `git pull` would
+  # fetch.
+  ( cd "${_origin}" \
+      && git -c user.email=test@example.com -c user.name=test commit -q --allow-empty -m second \
+      && git -c user.email=test@example.com -c user.name=test commit -q --allow-empty -m third )
+  ( cd "${_zsh_autosug}" && git pull -q )
+
+  _update_record_end "zsh-autosuggestions" 0
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_zsh-autosuggestions")" = "2 commit(s)" ]
 }
 
 # ── run_update — git-repos / legacy-rsync ─────────────────────────────────────
