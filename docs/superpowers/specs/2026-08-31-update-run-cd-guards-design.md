@@ -212,22 +212,34 @@ This is named rather than fixed: a content sanity check on a completion script i
 design question, and the failure it would catch (a valid-looking file whose content is an
 error message) is materially rarer than the two above. See Deferred.
 
-**The class has four sites, not two, and two of them are on the install path.** The update
-path is `:658` (binary) and `:661` (completion); `install_developer_tools` carries the same
-construct at `:162` and `:172`:
+**The class has four sites, and they are not the same construct — an earlier revision said
+they were.** The update path is `:658` (binary) and `:661` (completion);
+`install_developer_tools` carries `curl … > …` at `:162` and `:172`. But `:172` is guarded:
 
 ```bash
-:162   curl https://cht.sh/:cht.sh > ~/bin/cht.sh
-:163   chmod 750 "${HOME}"/bin/cht.sh          # note: 750, where :659 uses 754
-:172   curl https://cheat.sh/:zsh > "${HOME}"/.zsh.d/_cht
+:162   curl https://cht.sh/:cht.sh > ~/bin/cht.sh          # unguarded -- truncates
+:163   chmod 750 "${HOME}"/bin/cht.sh
+:171   if [[ ! -f ${HOME}/.zsh.d/_cht ]]; then             # note the `!`
+:172     curl https://cheat.sh/:zsh > "${HOME}"/.zsh.d/_cht
 ```
 
-All four are in scope. The install path runs once per machine rather than weekly, so its
-exposure is lower — but it is the same characterised class, and leaving half of it unfixed
-and unnamed is the criticism this spec levels at the backlog row. The `750`/`754`
-inconsistency is resolved to `754` in the same edit: the update path is the one that has been
-running, `~/bin/cht.sh` is invoked by the user, and there is no argument on record for the
-group-execute bit differing between the two paths.
+`:172` fetches **only when the file is absent**, so it can never truncate an existing one and
+the hazard M4 measures is structurally unreachable there. Its hazard is the inverse: a 404
+creates a **0-byte `_cht` that then satisfies the `! -f` guard forever**, so the install path
+never retries and the completion is permanently empty. `-fsS -o` fixes that too — no file is
+created on failure — for a reason worth stating rather than folding into "same class".
+
+Widening from two sites to four on class symmetry and then describing all four identically is
+the move this spec criticises the backlog row for, in the other direction. All four are still
+in scope; three exhibit truncation and one exhibits never-retry.
+
+**The `chmod 750` at `:163` is left alone.** An earlier revision harmonised it to the update
+path's `754`, arguing there was "no argument on record for the group-execute bit differing".
+Group-execute does not differ — `750` is `rwxr-x---` and `754` is `rwxr-xr--`, both `r-x` for
+group, and the delta is **other-read**. So that sentence described a difference that does not
+exist, and the change it justified would have made a network-downloaded `$HOME` executable
+world-readable, with no defect behind it and no verification case. Cut. If the split matters
+it gets its own row and an actual argument.
 
 **Both artifacts are 0 bytes on this machine right now, and the writer is unattributed.**
 
@@ -251,6 +263,16 @@ than anything in the summary. The honest reading is that the mechanism M4 measur
 exactly this state and this state exists; the specific event that produced it is not in any
 record this repo keeps. Recorded that way rather than as the stronger claim, which would have
 been the more persuasive sentence and the unsupported one.
+
+**One discriminator does narrow it, and it was sitting in the `ls` output unused.**
+`~/bin/cht.sh` is mode **754**, and only the update path chmods 754 — the install path uses
+750. So the file was created by some execution of the update-path block, which is more than
+the timestamps alone establish. It does not identify the zeroing event, since `>` preserves
+mode, but it rules out the install path as the file's origin.
+
+**Both endpoints are healthy right now** — `curl -w '%{http_code} %{size_download}'` returns
+`200 / 22888` for `:cht.sh` and `200 / 517` for `:zsh`, real script bodies. That removes "the
+service is currently serving empty 200s" as an explanation and leaves the attribution open.
 
 ### M5 — Ten tests do assert summary counts, and adding a section cannot move any of them
 
@@ -396,18 +418,12 @@ else
 fi
 ```
 
-**The conversion is a precondition for the deletion, not a tidy-up beside it. Land them
-together or not at all.** An earlier revision called it "documentary, not behavioural", which
-inverts which half carries the risk. The deletion is safe _only while the group sits in a
-pipeline_: the isolation today is an inherited consequence of the `| tee`, not a property of
-the code. `( )` makes it the code's own property, so a future edit that drops the pipe — this
-spec's own Deferred list contemplates work in these lines — cannot silently reintroduce a
-parent-scope `cd` with no `cd`-back to follow it.
-
-Stated the earlier way, a reviewer applying this repo's Surgical Changes rule ("do not
-reformat as a side effect of an unrelated change") would correctly strike the conversion as
-churn and land the deletion alone, which is the one combination that is worse than doing
-nothing.
+**Keep the conversion with the deletion.** The isolation today is an inherited consequence of
+the `| tee`, not a property of the code; `( )` makes it the code's own, so a future edit that
+drops the pipe cannot silently reintroduce a parent-scope `cd` with no `cd`-back after it. It
+costs two characters. An earlier revision spent a long argument on this — round-2 review
+correctly noted that was the spec's longest single defence, for the least severe of its three
+groups, against a diff that does not exist. Change kept, argument trimmed to this paragraph.
 
 **Exit-code equivalence, verified rather than argued.** `{ cd D && git pull; }` and
 `( cd D && git pull )` as a pipeline's left element return identical `PIPESTATUS[0]` for both
@@ -436,38 +452,71 @@ the three sections that already do this wins, and V2 is the test that catches a 
 ```bash
 _zsh_autosug="${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
 if [[ -d ${_zsh_autosug} ]]; then
-  if git -C "${_zsh_autosug}" rev-parse --git-dir >/dev/null 2>&1; then
+  if [[ -e ${_zsh_autosug}/.git ]]; then
     _update_record_start "zsh-autosuggestions"
     printf "Updating zsh-autosuggestions\\n"
     ( cd "${_zsh_autosug}" && git pull ) \
       2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_zsh-autosuggestions"
     _update_record_end "zsh-autosuggestions" "${PIPESTATUS[0]}"
   else
-    _update_skip "zsh-autosuggestions" "present but not a git checkout"
+    _update_skip "zsh-autosuggestions" "not a git checkout — reinstall to enable updates"
   fi
 else
   _update_skip "zsh-autosuggestions" "not installed"
 fi
 ```
 
-**The git-dir guard is what keeps this change from manufacturing a weekly false alarm on an
-unmeasured machine.** Group B converts a silent no-op into a FAIL that sets `_fail` and, via
-ADR-0027, exits 1 — read by the weekly cadence agent and by `doctor`. That is correct when the
-directory is a clone whose `git pull` genuinely failed, and wrong when the directory arrived
-by some other route (a tarball, a package, a copied `$HOME`), where `git pull` has always
-failed harmlessly and silently. The plugin has several documented install methods, and this
-session measured only 2 of the 7 machines:
+**The guard is a `.git` existence test, and an earlier revision's `git -C … rev-parse
+--git-dir` was fooled in exactly the case the guard exists for.** `rev-parse --git-dir` walks
+**upward**, and `~/.oh-my-zsh` is itself a git checkout (`git -C ~/.oh-my-zsh rev-parse
+--git-dir` → `.git`, measured). So a tarball or package install of the plugin, nested inside
+that working tree, takes the **update** arm:
 
 ```
-Mac Studio        rev-parse --git-dir -> .git   remote -> https://github.com/zsh-users/zsh-autosuggestions
-Linux 7950X       rev-parse --git-dir -> .git
+git -C <omz>/custom/plugins/zsh-autosuggestions rev-parse --git-dir   ->  <omz>/.git   rc 0
+git -C <omz>/custom/plugins/zsh-autosuggestions rev-parse --show-toplevel  ->  <omz>
 ```
 
-Both hold. The other five are unmeasured, and would stay unmeasured only until someone
-reinstalled a plugin by hand — a point-in-time attestation, not a durable one. The guard
-removes the question instead of answering it: a non-repo directory records SKIP with its
-reason, no machine can produce a FAIL for having installed the plugin differently, and nothing
-here depends on a fleet sweep that would need redoing.
+Downstream the misdirection is consistent, which is what makes it invisible: `_update_record_start`
+snapshots the wrong repo's HEAD, `( cd plugin && git pull )` pulls **oh-my-zsh** — which the
+`oh-my-zsh` section already pulled forty lines earlier in the same run, so HEAD has not moved
+— and `_update_record_end` renders `[OK] zsh-autosuggestions   no changes`, forever,
+byte-identical to a healthy up-to-date plugin.
+
+That is strictly worse than the problem the guard was added for. Pre-change the block is a
+silent no-op; the broken guard makes it a silent **false OK** that also double-pulls a second
+repo under a section named for the first. A false FAIL would at least have been visible. Found
+independently by this session and by the round-2 Risk lens, with the same discriminator.
+
+`[[ -e "${dir}/.git" ]]` rejects the nested non-clone, and `-e` rather than `-d` also accepts
+the `.git`-as-file form that submodules and linked worktrees use. It touches no git plumbing,
+so it is immune to the second way past the old guard: **an exported `GIT_DIR` defeats
+`git -C` entirely** —
+
+```
+GIT_DIR=/other/.git git -C <unrelated dir> rev-parse --git-dir   ->  /other/.git   rc 0
+GIT_DIR=... env -u GIT_DIR git -C <same>   rev-parse --git-dir   ->  <its real answer>
+```
+
+— which `shell.md` documents, and which reaches the test harness specifically, since
+`scripts/pre-push` runs `make test` from a hook and git exports `GIT_DIR` into hooks. Any
+future git-based variant of this guard needs `env -u GIT_DIR -u GIT_WORK_TREE -u
+GIT_COMMON_DIR -u GIT_INDEX_FILE`; the `-e` test needs nothing.
+
+**The SKIP reason names a remedy, because this branch never self-heals.**
+`5_general.zsh:44` fires on `[[ ! -d … ]]` only, so `"not installed"` is transient — any
+interactive zsh re-clones — while a directory present without `.git` (an interrupted clone, a
+deleted `.git`) is permanent and would otherwise sit un-updatable in a SKIP column that M5b
+measures as already 13 rows deep on a partial run. `"not a git checkout — reinstall to enable
+updates"` costs nothing and keeps the guard from converting a defect into the silence Group B
+exists to end.
+
+**Verdict choice.** SKIP rather than FAIL, on the grounds that a plugin installed by another
+route is not a failure of this run. Recorded as a decision with a known tension: this fleet
+has no non-git installer for that path — `5_general.zsh:45`'s `git clone` is the only creator
+anywhere in the repo — so the realistic non-git state may be damage rather than an alternative
+install, which would argue for FAIL. The remedy in the reason string is what makes SKIP
+acceptable either way.
 
 and in the outer `_run_all` else, alongside its four siblings:
 
@@ -491,26 +540,44 @@ assertions cannot move, because `_update_summary` skips array entries no test se
 This is the coupling `dotfiles/CLAUDE.md` names explicitly: a section recorded but absent
 from the array is tracked internally and never printed, with no error.
 
+**`_update_summary`'s name column widens from `%-16s` to `%-19s` in the same change.**
+`zsh-autosuggestions` is 19 characters; the longest current name is `terraform-skill` at 15.
+All four render arms (`lib/update_summary.sh:555`, `:559`, `:563`, `:567`) carry the same
+format string, and nothing in the suite asserts summary padding — measured. Left alone, every
+weekly summary on every machine gains one row whose reason column is three characters out of
+line, and it is the newest row, so it reads as the thing that is broken.
+
 ### Group C — fold the `_cht` completion into the `cheat.sh` section
 
 The two fetches become one recorded unit, each keeping its own reachability guard:
 
-The two fetches become one recorded unit, each keeping its own reachability guard **and its
-own failure**:
+The two fetches become one recorded unit, each keeping its own reachability guard, its own
+failure, and its own name in the detail block:
 
 ```bash
 if [[ -f ${HOME}/bin/cht.sh ]] || [[ -f ${HOME}/.zsh.d/_cht ]]; then
   _update_record_start "cheat.sh"
-  [[ -f ${HOME}/bin/cht.sh ]]   && printf "Updating cheat.sh\\n"
-  [[ -f ${HOME}/.zsh.d/_cht ]]  && printf "Updating cheat.sh tab completion\\n"
+  [[ -f ${HOME}/bin/cht.sh ]]  && printf "Updating cheat.sh\\n"
+  [[ -f ${HOME}/.zsh.d/_cht ]] && printf "Updating cheat.sh tab completion\\n"
   (
     _rc=0
     if [[ -f ${HOME}/bin/cht.sh ]]; then
-      curl -fsS -o "${HOME}/bin/cht.sh" https://cht.sh/:cht.sh || _rc=1
-      chmod 754 "${HOME}/bin/cht.sh" || _rc=1
+      if curl -fsS -o "${HOME}/bin/cht.sh" https://cht.sh/:cht.sh \
+         && [[ -s ${HOME}/bin/cht.sh ]]; then
+        chmod 754 "${HOME}/bin/cht.sh" || _rc=1
+      else
+        printf "cheat.sh binary fetch failed\\n" >&2
+        _rc=1
+      fi
     fi
     if [[ -f ${HOME}/.zsh.d/_cht ]]; then
-      curl -fsS -o "${HOME}/.zsh.d/_cht" https://cheat.sh/:zsh || _rc=1
+      if curl -fsS -o "${HOME}/.zsh.d/_cht" https://cheat.sh/:zsh \
+         && [[ -s ${HOME}/.zsh.d/_cht ]]; then
+        :
+      else
+        printf "cheat.sh completion fetch failed\\n" >&2
+        _rc=1
+      fi
     fi
     exit "${_rc}"
   ) 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_cheat.sh"
@@ -520,27 +587,33 @@ else
 fi
 ```
 
-Five deliberate choices, two of them corrections to an earlier revision:
+Six deliberate choices, four of them corrections to earlier revisions:
 
 - **The outer condition is a disjunction, not a nesting.** Today the two `if`s are siblings,
   so a machine carrying `~/.zsh.d/_cht` but not `~/bin/cht.sh` still updates its completion.
   Nesting the completion fetch inside the binary's guard would silently stop that. The
   disjunction preserves both independent conditions while producing one section row.
-- **An `_rc` accumulator, not `|| exit 1`.** An earlier revision used short-circuit `exit`,
-  which reintroduced through _sequencing_ exactly the coupling the disjunction was defending
-  against: a failed binary fetch would terminate the subshell and the completion would never
-  be attempted, under a row named for the binary. Both lenses that read it caught this
-  independently. With the accumulator both fetches always run, and either failure still yields
-  a non-zero status to `PIPESTATUS[0]`.
-- **The `printf` banners stay outside the subshell.** An earlier revision moved them inside,
-  where they would land in `err_cheat.sh` — and on FAIL, `_update_write_detail_from_err`
-  renders `tail -10` of that file as the operator-facing detail block, so two banner lines
-  would displace two lines of the error output the block exists to show. Same class as the
-  detector-banner contamination of the cadence `findings` count that `CLAUDE.md` records, at
-  lower severity. Emitting them from the parent under the same guards keeps the detail tail
-  purely diagnostic. `-s` also removes curl's progress meter from that file.
+- **An `_rc` accumulator, not `|| exit 1`.** A `|| exit 1` revision reintroduced through
+  *sequencing* the coupling the disjunction defends against: a failed binary fetch would
+  terminate the subshell and the completion would never be attempted, under a row named for
+  the binary. With the accumulator both fetches always run and either failure yields non-zero
+  to `PIPESTATUS[0]`. Verified in reproduction: failing first fetch gives `PIPESTATUS[0]=1`,
+  `_rc` does not leak to the parent, and behaviour is unchanged under `set -e`.
+- **Progress banners outside, failure markers inside.** Two rounds pulled in opposite
+  directions here and both were right about their own half. Banners inside the subshell land
+  in `err_cheat.sh` and consume two of the ten lines `_update_write_detail_from_err` renders
+  as operator-facing detail. Banners outside leave the detail block anonymous: `curl -fsS` on
+  a 404 emits `curl: (56) The requested URL returned error: 404` and names **neither the URL
+  nor the file**, so `[FAIL] cheat.sh` becomes unlocatable between two fetches. Failure-only
+  markers on stderr satisfy both — nothing is consumed on the success path, and a failure
+  names its half.
+- **`[[ -s … ]]` after each fetch.** `-f` keys on HTTP status, and per M4 `cht.sh` answers an
+  unknown topic with HTTP 200 and an error body — so `-f` alone cannot distinguish a usable
+  file from a degraded 200. The size check costs one line and covers the deferred
+  200-with-empty-body case as well as any future 4xx. `chmod` is gated behind it, so a
+  re-moded file is now evidence the fetch succeeded rather than incidental.
 - **`-o`, not `>`.** Per M4 this is the half that saves the file; `-f` alone leaves it
-  truncated.
+  truncated, because the shell owns the truncation.
 - **`exit "${_rc}"` inside the subshell, not `return`.** The subshell is not a function, so
   `return` is invalid there. `exit` terminates the subshell only and yields its status to
   `PIPESTATUS[0]`.
@@ -550,108 +623,139 @@ Both artifacts are treated as one operational unit, so a completion-only failure
 `fpath`, so the completion is live rather than dead weight, and M4 shows both files currently
 zeroed by the same event — they already fail together.
 
-**The install path is fixed in the same change** (`lib/workflows.sh:162`, `:172`), per M4's
-four-site count. Same `-fsS -o` treatment, and `chmod 750` there is brought to `754` to match
-the update path — one mode for one file, rather than whichever path last wrote it deciding.
+**The install path gets the same `-fsS -o` treatment at `:162` and `:172`**, per M4's
+four-site count and for the two different hazards recorded there. `chmod 750` at `:163` is
+left as it is — see M4 for why the harmonisation an earlier revision proposed was withdrawn.
 
 The `~/bin/cht.sh` / `"${HOME}/bin/cht.sh"` spelling inconsistency in the current code is
 resolved to the braced form throughout, since the lines are being rewritten anyway.
 
 ## Verification
 
-Each check below is a command with an expected observable. Where the check depends on code
-that does not exist yet it is marked _(post-implementation)_; the rest were run while writing
-this spec and their real output appears in Measurements.
+Each check is a command with an expected observable. Post-implementation cases are marked;
+the rest were run while writing this spec and their output appears in Measurements.
+
+**Read the harness section first — three mocks make the obvious version of these cases
+vacuous, and round-2 review found all three.**
+
+### The harness, before the cases
+
+`tests/setup_env/workflows.bats` and `update_summary.bats` both call `load_mocks` in
+`setup()`, which puts `tests/mocks/` on `PATH`. Three consequences, each measured:
+
+- **`tests/mocks/git:8-9` intercepts `rev-parse --git-dir`** and returns
+  `${MOCK_GIT_REVPARSE_EXIT:-0}` while printing **nothing**. Any guard reading that command's
+  *output* compares an empty string. This is one reason Group B's guard is `[[ -e
+  "${dir}/.git" ]]` rather than git plumbing: a filesystem test is not mockable and needs no
+  harness cooperation, so V3's middle case is driven by fixture shape — the thing under test —
+  rather than by an env var.
+- **`tests/mocks/git` prints nothing for `rev-parse HEAD`**, so a real `git init` fixture
+  still yields a zero-byte `pre_zsh-autosuggestions`. V1 and V7 must strip the mock directory
+  for the calls that need real git, using the `clean_path` idiom already at
+  `workflows.bats:1936`.
+- **`tests/mocks/curl` implements `-o` as bare `touch "${outfile}"`** and derives its exit
+  solely from `${MOCK_CURL_EXIT:-0}`, never reading `-f`. So today a *successful* mocked fetch
+  produces exit 0 and a **zero-byte target** — the exact production state M4 opens this spec
+  with, reproduced inside the harness with a green verdict.
+
+Two mock changes follow, and both are to a file shared fleet-wide:
+
+1. `-o` writes `MOCK_CURL_STDOUT` to the target rather than touching it, so a success can be
+   distinguished from a failure by content.
+2. `MOCK_CURL_HTTP_STATUS`, honoured only when a short-option cluster containing `f` is
+   present. **The production invocation is `-fsS`, not `-f`** — measured: an exact-token test
+   does not fire, and a `*-f*` substring test also fires on `--form`. Iterate `"$@"`, match
+   `^-[a-zA-Z]+$`, and test whether that token contains `f`. Precedence with `MOCK_CURL_EXIT`
+   must be stated in the mock, not left to discovery.
+
+**Proving the mock change is inert:** run `make test` with both new variables unset and diff
+the ok/not-ok set against a pre-change run. Any delta means the shared mock moved under an
+existing suite. Separately, assert the mock directly against the exact production argv —
+`MOCK_CURL_HTTP_STATUS=404 tests/mocks/curl -fsS -o /tmp/x https://cht.sh/:cht.sh` must exit
+non-zero — which is what makes "honoured only when `-f` is in argv" testable rather than
+aspirational.
+
+### The cases
 
 **V1 — the summary gains a `zsh-autosuggestions` row on a run where the plugin exists.**
-_(post-implementation)_ A bats case drives `run_update` with `_run_all=1` and a fixture
-plugin directory, then asserts the rendered summary contains a `zsh-autosuggestions` row.
-Must fail before the `_UPDATE_SECTION_ORDER` entry is added — that is the mutation control,
-since the `record_end` call alone writes a status file that nothing prints.
+_(post-implementation)_ `run_update` with `_run_all=1` and a fixture plugin directory that is
+a real `git init` repo; assert the rendered summary contains the row. Must fail before the
+`_UPDATE_SECTION_ORDER` entry is added — the mutation control, since `record_end` alone writes
+a status file nothing prints. Must also assert
+`[ -s "${_DOTFILES_RUN_TMPDIR}/pre_zsh-autosuggestions" ]`: an absent or zero-byte pre-snapshot
+means the case measured nothing, and per the harness section that is the default outcome
+unless the mock is stripped.
 
-**The fixture must be a real `git init` repo, and the case must assert the pre-snapshot
-landed.** Every existing sibling fixture is a bare `mkdir -p` under a redirected `HOME`
-(`workflows.bats:1631`), which is not a git checkout — so `_update_record_start`'s
-`git -C … rev-parse HEAD > pre_… 2>/dev/null || true` writes nothing, the `|| true` swallows
-it, and `_update_record_end` falls to its no-pre-snapshot branch rendering `no changes`. Under
-the new git-dir guard a bare `mkdir -p` fixture takes the SKIP arm instead, which is a
-different vacuity: the case would assert a row exists and never exercise the update path at
-all. Add `[ -s "${_DOTFILES_RUN_TMPDIR}/pre_zsh-autosuggestions" ]` to V1 — an absent or
-zero-byte pre-snapshot means the case measured nothing.
+**V2 — a failing `git pull` produces FAIL, not silence.** _(post-implementation)_ `git` mock
+returning 1 for `pull`; assert `status_zsh-autosuggestions` is `FAIL` and `run_update`'s exit
+is non-zero. The case ADR-0027's contract exists for.
 
-**V2 — a failing `git pull` in that section produces FAIL, not silence.**
-_(post-implementation)_ With a `git` mock returning 1 for `pull`, assert
-`status_zsh-autosuggestions` is `FAIL` and that `run_update`'s own exit status is non-zero.
-This is the case that ADR-0027's contract exists for and the one M2 says is currently
-unreachable.
+**V3 — SKIP on all three absent branches.** _(post-implementation)_ No plugin directory
+(`"not installed"`); a directory present without `.git` (`"not a git checkout — reinstall…"`);
+`_run_all=0` (`"flag not set"`). The middle case must be a bare `mkdir -p` — the fixture shape
+*is* the condition, which is why the guard is a filesystem test.
 
-**V3 — the section reports SKIP on all three absent branches.** _(post-implementation)_ One
-case with no plugin directory (`"not installed"`), one with a directory that is not a git
-checkout (`"present but not a git checkout"` — the new guard), one with `_run_all=0`
-(`"flag not set"`). The middle case is the one that must not be written as a bare `mkdir -p`
-by accident, since that is also how V1's fixture goes wrong; here it is the point.
+**V3b — the guard is not fooled by a non-clone nested in a git repo.**
+_(post-implementation)_ Build the fixture as `git init "${HOME}/.oh-my-zsh"` plus a plain
+`mkdir -p` plugin directory inside it, mirroring the real machine. Assert SKIP, and assert
+`MOCK_CALLS_FILE` contains **no** `git pull` for that path. This is the case that would have
+caught the `rev-parse --git-dir` guard; without it the fixture in V3 is a non-repo in a
+non-repo and cannot discriminate.
 
-Note that the `"not installed"` state has to be constructed rather than found: per M5b,
-`5_general.zsh:43-45` self-heals the directory on any interactive zsh, so the branch is close
-to unreachable on a real machine.
+**V4 — cwd is unchanged across `run_update`.** _(post-implementation)_ Assert `$PWD` equal
+before and after a full mocked run, invoked from a directory that is _not_ the dotfiles repo.
+The from-elsewhere invocation is load-bearing: from the repo root both versions end there and
+the case cannot discriminate.
 
-**V4 — cwd is unchanged across `run_update`.** _(post-implementation)_ Assert `$PWD` before
-and after a full mocked `run_update` are equal, invoked from a directory that is _not_ the
-dotfiles repo. Run against the pre-change code this must fail; against the post-change code
-it must pass. The from-elsewhere invocation is load-bearing: run from the repo root, both
-versions end at the repo root and the case cannot discriminate.
-
-**Which line fails pre-change, and which way.** An earlier revision attributed this to M2's
-`zsh-autosuggestions` block. That is wrong: M1 establishes there is no `cd` in `run_update`
-before `:622`, so with `~/.tfenv` present the **tfenv** `cd`-back at `:622` relocates cwd to
-the dotfiles repo first and violates `$PWD` equality before M2's block is ever reached.
-
-There are then three pre-change failure paths, and the case must accept any of them:
-`:622`/`:632`/`:642` relocating cwd (fixture repo present), M2's block relocating it (fixture
-repo present, tfenv absent), or a `cd`-back failing outright and aborting the run (no fixture
-repo). The third does not violate `$PWD` equality — it never reaches the assertion — so the
-case must **also assert `run_update` completed**, or a spurious abort reads as a pass.
+Three pre-change failure paths, and the case must accept any: `:622`/`:632`/`:642` relocating
+cwd (fixture repo present — this is the first one hit, not M2's block); M2's block relocating
+it; or a `cd`-back failing outright and aborting. The third never reaches the assertion, so
+the case must **also assert `run_update` completed**, or a spurious abort reads as a pass.
 
 **V5 — a 404 on either cheat.sh fetch records FAIL and leaves the target intact.**
-_(post-implementation)_ With the target pre-seeded, drive a simulated 404 and assert
-`status_cheat.sh` is `FAIL` **and** the target's content is unchanged.
+_(post-implementation)_ Target pre-seeded, `MOCK_CURL_HTTP_STATUS=404`; assert
+`status_cheat.sh` is `FAIL` and the target's content is unchanged. Assert **non-zero**, never a
+specific code — per M4 the same 404 yields 56 on macOS and 22 on Linux.
 
-**This needs a change to `tests/mocks/curl`, which today cannot express the case.** The mock
-derives its exit solely from `${MOCK_CURL_EXIT:-0}` and its argument loop inspects only `-o`;
-`-f` is never read. So a FAIL comes from an env var rather than a simulated HTTP status, and
-reverting `-fsS -o` to `-sS -o` leaves V5 green — pinning M4's `-o` half while the `-f` half,
-the one that stops the section recording OK over a zeroed executable, ships with no mutation
-control at all.
+**Read the "target intact" half honestly: it discriminates `>` from `-o` and nothing more.**
+The mock does not write the target on failure in any variant, so that assertion is evidence
+about the shell's redirect operator, not about curl. It still catches a revert of `-o` to `>`,
+which is what it is for.
 
-Add `MOCK_CURL_HTTP_STATUS`, honoured **only when `-f` appears in argv**: with `-f` and a 4xx
-value the mock exits non-zero and writes nothing; without `-f` it exits 0 and writes the error
-body, mirroring real curl. Unset, it changes nothing, so the shared mock stays
-backward-compatible with every existing suite. Assert on **non-zero**, never a specific code —
-per M4 the same 404 yields 56 on macOS and 22 on Linux.
+**V6 — the FAIL detail names which fetch failed.** _(post-implementation)_ Fail only the
+completion fetch; assert `detail_cheat.sh` contains `cheat.sh completion fetch failed` and not
+the binary marker. Without this the failure-markers-inside decision has no test, and reverting
+to anonymous curl errors leaves every other case green.
 
-**V6 — the three `_UPDATE_SECTION_ORDER` ordering assertions and the ten count assertions
-still pass.** `make test`. Predicted green from M5, on two distinct mechanisms: the ordering
-anchors all terminate at `rust`, and the count assertions seed their sections by name while
-`_update_summary` skips unseeded array entries.
+**V7 — the cheat.sh success path writes content.** _(post-implementation)_ Successful mocked
+fetch with `MOCK_CURL_STDOUT` set; assert `status_cheat.sh` is `OK` **and** `~/bin/cht.sh` is
+non-empty. Without it, a green suite leaves both artifacts at zero bytes. Note this is only
+possible after the mock's `-o` handling changes; it is the reason that change is in scope.
 
-**V7 — a derived value on the success path, not a verdict.** _(post-implementation)_ V1–V6 all
-expect PASS, and none of them would fail if the measurement produced nothing: with the
-pre-snapshot missing, `_update_record_end` renders `no changes` and V1 (row present), V2
-(FAIL), V3 (SKIP), V5 (cheat.sh) all still pass. Pin a value instead — fixture git repo,
-advance `HEAD` by two commits between `record_start` and `record_end`, assert
-`result_zsh-autosuggestions` reads literally `2 commit(s)`.
+**V8 — a derived value on the plugin section's success path.** _(post-implementation)_
+Fixture git repo, advance `HEAD` by two commits between `record_start` and `record_end`,
+assert `result_zsh-autosuggestions` reads literally `2 commit(s)`. Verified the format is
+real: `lib/update_summary.sh:273` renders `"${_commit_count} commit(s)"` and `:275`/`:278`
+render `"no changes"`, so a missing pre-snapshot goes red rather than passing.
 
-The existing `update_summary.bats:793` case looks like this but is not: it hand-seeds the
-pre-file and stubs `_update_git_diff`, so it exercises neither `record_start` writing the
-snapshot nor the `run_update` path. V7 is the only case in the suite that tests the
-measurement rather than the comparison.
+The existing `update_summary.bats:793` looks like this and is not: it hand-seeds the pre-file
+and stubs `_update_git_diff`. V8 must drive `_update_record_start` and must not inherit that
+stub from a shared `setup()` — a stub there would make it vacuous with no visible symptom.
 
-**V8 — full suite and coverage.** `make test`, then read the CI `bash-coverage` figure rather
+**Note what V8 does *not* cover.** `lib/update_summary.sh:155` is `# cheat.sh — no
+pre-snapshot needed` and its success arm sets a constant `"updated"`, so cheat.sh has no
+derived value to pin. V7 pins content on disk instead, which is the closest available
+equivalent for the group this spec ranks highest.
+
+**V9 — the ordering and count assertions still pass.** `make test`. Predicted green from M5 on
+two distinct mechanisms: the ordering anchors all terminate at `rust`, and the ten count
+assertions seed their sections by name while `_update_summary` skips unseeded array entries.
+Includes the `%-19s` column change, which nothing asserts.
+
+**V10 — full suite and coverage.** `make test`, then read the CI `bash-coverage` figure rather
 than a local one. Per `dotfiles/CLAUDE.md`, CI has landed at exactly the 91% floor on five
-consecutive measurements, so this change must not add instrumented lines without tests. The
-net line count in `lib/workflows.sh` is roughly flat (three `cd`-backs and three `local _*_rc`
-temporaries removed, against the Group B guard and the Group C accumulator), and every added
-line is covered by V1–V7.
+consecutive measurements, so this change must not add instrumented lines without tests. Every
+added line is covered by V1–V9.
 
 ## Deferred
 
@@ -885,3 +989,144 @@ reinstallation invalidates.
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger. There are no arms to compare,
 no judge or evaluator component, and V1–V7 are commands with concrete observables rather than
 acceptance criteria open to two readings. Not borderline, so not run.
+
+
+---
+
+## Multi-Lens Review — Round 2
+
+Reviewed at commit: `b580bfcf` (the round-1 revision). All three lenses re-run, per the
+re-review rule: round 1's dispositions changed design substance — a guard added, Group C's
+control flow rewritten, scope widened to the install path — and a correction is new design
+carrying its own defects. That prediction held: **round 2 found a defect in round 1's own fix
+that was worse than the problem round 1 raised.**
+
+### Goal-Fit
+
+Finding, six parts. (1) Group C's **success path is unverified and unverifiable under the
+proposed mock** — `tests/mocks/curl` implements `-o` as bare `touch`, so a green suite leaves
+both artifacts at zero bytes, reproducing the production defect inside the harness; the spec
+applied its own pin-a-derived-value remedy to Group B and not to the group it calls most
+severe. (2) The **750→754 change names the wrong bit** — group-execute is `r-x` in both, the
+delta is other-read, and the change makes a `$HOME` executable world-readable with no defect,
+no consumer and no test behind it. (3) The git-dir guard **defends a state this repo has no
+code path to produce** — the only creator of that directory anywhere in the repo is
+`5_general.zsh:45`'s `git clone`. (4) The **"four sites, one class" framing flattens two
+failure modes**: `:172` is `! -f`-guarded and cannot truncate; its hazard is a 0-byte file
+that satisfies the guard forever. (5) Group A's `( )` conversion **fails the reads-it test** —
+no consumer, no record, insurance against a diff that does not exist, and it carries the
+spec's longest argument for its least severe group. (6) Minor: M4 leaves the **file mode
+unused as a discriminator** — 754 means the update path created the file.
+
+Assumption: **that an HTTP 200 from `cht.sh` implies a usable file** — i.e. that `-f` is
+sufficient to make the section's verdict truthful. Both endpoints measured healthy today
+(`200/22888`, `200/517`), so it is neither confirmed nor dead; cht.sh already serves 200 with
+an error body for unknown topics. Cheapest sufficient hedge named: `[[ -s … ]]` in the
+accumulator.
+
+Disposition: **Addressed** (user, 2026-08-31). (1) — mock `-o` now writes the body, plus V7
+asserting OK **and** non-empty content; user chose this over a production-only check and over
+recording it as a gap. (2) — cut entirely; user chose this over normalising to 750 and over
+keeping 754 with corrected reasoning. (3) — recorded as a stated tension in Group B's verdict
+paragraph rather than removing the guard; the guard survives because round-2 Risk found it
+was also *broken*, which is a separate matter from whether it is needed. (4) — M4 rewritten,
+`:172`'s inverse hazard named. (5) — conversion kept, argument trimmed to one paragraph;
+resolved by this session rather than by the user, since round-1 Risk called the same change
+load-bearing and the two rounds directly conflict. The deciding fact is that it costs two
+characters. (6) — added to M4. Assumption addressed by the `[[ -s … ]]` hedge, which covers
+the 200-empty case without needing to settle it.
+
+### Ergonomics
+
+Finding, four parts. (1) **Moving the banners outside removed the property that justified the
+fold** — `curl -fsS` on a 404 emits `curl: (56) … error: 404`, naming neither URL nor file, so
+`[FAIL] cheat.sh` becomes unlocatable between two fetches; round 1 Ergonomics approved the
+fold *because* each fetch named itself, and the round-1 disposition kept the fold and deleted
+the reason. (2) **`zsh-autosuggestions` is 19 characters against a `%-16s` column** — every
+weekly summary on seven machines gains one misaligned row, and it is the newest one, so it
+reads as broken. (3) The new SKIP reason is legible but is **the one branch that never
+self-heals**, and it lands in a column already 13 rows deep on a partial run; it needs a
+remedy in the reason string. (4) 750→754: no finding from this lens.
+
+Also: three harness defects — `tests/mocks/git` answers `rev-parse --git-dir` from an env var,
+`load_mocks` shadows a real `git init` fixture so V1's own `[ -s … ]` assertion would fail
+against a genuine repo, and both need the `clean_path` idiom at `workflows.bats:1936`.
+
+Assumption: **that a non-git `zsh-autosuggestions` directory is a benign alternative install
+rather than a damaged clone.** Genuinely uncertain — no non-git installer exists in this repo,
+which leans toward damage, but Homebrew ships a formula and oh-my-zsh documents several
+methods. Settled by `ls -a` on any machine where the `.git` test fails: a complete plugin
+layout with no `.git` vindicates SKIP, a partial tree confirms damage and argues FAIL.
+
+Disposition: **Addressed** (user, 2026-08-31). (1) — failure-only markers inside the subshell,
+banners outside; user chose this over moving both banners back in and over accepting the
+ambiguity. It satisfies both rounds, which had pulled in opposite directions and were each
+right about their own half. New V6 tests it. (2) — column widened to `%-19s` in the same
+change; resolved by this session, since nothing asserts padding and the alternative is a
+permanently misaligned row. (3) — remedy added to the reason string. (4) — superseded by
+Goal-Fit 2; the mode change is cut. The harness defects are addressed in Verification's new
+"The harness, before the cases" section, and are the reason Group B's guard is a filesystem
+test rather than git plumbing. Assumption is recorded as an open tension in Group B rather
+than settled, since settling it needs the five unmeasured machines.
+
+### Risk
+
+Finding, seven parts. (1) **Group B's guard is fooled in exactly the case it was added for,
+and fails toward a silent wrong verdict** — `rev-parse --git-dir` walks upward, `~/.oh-my-zsh`
+is itself a checkout, so a nested non-clone takes the update arm; `git pull` then targets
+oh-my-zsh, which the `oh-my-zsh` section already pulled in the same run, so HEAD has not moved
+and the row renders `[OK] zsh-autosuggestions no changes` forever. Worse than the false FAIL
+it prevents, because a FAIL is visible. A second way past it: an exported `GIT_DIR` defeats
+`git -C`, which reaches the bats suite specifically, since `scripts/pre-push` runs it from a
+hook. (2) The **750→754 justification names the wrong bit** and the change is a loosening —
+same finding as Goal-Fit 2, reached independently. (3) **`MOCK_CURL_HTTP_STATUS` "honoured
+only when `-f` appears in argv" is unsatisfiable as worded** — production emits `-fsS`, an
+exact-token test does not fire, and a substring test also fires on `--form`. (4) **V5's
+"target intact" half is structurally unable to fail** — the mock never writes the target, so
+the assertion is evidence about the shell's redirect operator, not about curl. (5) The `_rc`
+accumulator is **correct — no finding**, verified in reproduction including under `set -e`;
+one unremarked side effect, `chmod` was ungated so a re-moded file was not evidence of a
+successful fetch. (6) **M6 holds** — tried to break it and could not. (7) Proportionality:
+Groups B and C earn their weight; Group A remains a deletion carrying the spec's longest
+argument.
+
+Assumption: **that `MOCK_CURL_HTTP_STATUS` can be added to the shared mock without altering
+any existing suite's pass/fail set.** Genuinely uncertain — precedence against
+`MOCK_CURL_EXIT` is unspecified, the `touch "${outfile}"` path has existing consumers, and the
+`-f` detection must match `-fsS` without matching `--form`. Refuted or confirmed by running
+`make test` with the new variables unset and diffing the ok/not-ok set, plus asserting the
+mock against the exact production argv.
+
+Disposition: **Addressed** (user, 2026-08-31). (1) — guard replaced with `[[ -e "${dir}/.git"
+]]`, which rejects the nested non-clone, handles the `.git`-as-file worktree case, and is
+immune to the `GIT_DIR` route because it touches no git plumbing; new V3b builds the fixture
+as a repo-inside-a-repo and asserts no `git pull` is issued. User chose fix-and-keep-SKIP over
+FAIL and over dropping the guard. This session found the same defect independently while the
+lenses ran, with the same discriminator. (2) — cut. (3) — Verification now specifies iterating
+`"$@"` for `^-[a-zA-Z]+$` containing `f`, with the exact-production-argv assertion the lens
+proposed. (4) — V5's scope is now stated honestly in the spec: it discriminates `>` from `-o`
+and nothing more. (5) — `chmod` is now gated behind the fetch and the `[[ -s … ]]` check, so a
+re-moded file is evidence of success. (6) and (7) — no action; (7)'s proportionality point is
+addressed by trimming Group A's argument. Assumption addressed by the two-part inertness proof
+now in Verification.
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — unchanged from round 1. No comparison arms, no judge or evaluator component, and the
+verification cases are commands with concrete observables.
+
+### Stopping here
+
+Round 2's findings have moved from the design into the **apparatus** — three mocks, a
+`PATH`-strip idiom, and which fixture shape drives which branch. Per this skill's stopping
+rule that is prose review's floor: the next instrument is Phase 2's first red test, not a
+third round at ~250k tokens per lens.
+
+The qualifier was checked rather than assumed. Risk 1 is *located* in the design and
+falsifies a design premise, so it is a design finding and would license another round on its
+own — but it is fixed, and its fix is a filesystem test with a dedicated case (V3b) rather
+than a new mechanism. Everything else that survived is a harness question a single `bats` run
+answers in seconds.
+
+Round-1 and round-2 lens cost: 6 dispatches, 1,472,384 tokens, all logged via `cost_log.py`;
+the dispatch count matches the `Agent` calls made.
