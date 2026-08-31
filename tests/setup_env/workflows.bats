@@ -1696,6 +1696,38 @@ assert_all_npm_globals_pinned() {
   grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_tpm"
 }
 
+@test "run_update leaves cwd unmoved when invoked from outside the dotfiles repo" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  mkdir -p "${HOME}/.tfenv"
+  # A caller cwd distinct from ${PERSONAL_GITREPOS}/${DOTFILES} is the whole
+  # point: invoking from that fixture path would make the cd-back a no-op
+  # (start there, cd back there) and the test could not discriminate.
+  local _caller_cwd="${BATS_TEST_TMPDIR}/caller-cwd"
+  mkdir -p "${_caller_cwd}"
+  cd "${_caller_cwd}" || return 1
+  local _pwd_before
+  _pwd_before="$(pwd)"
+  # Bare call, not `run` -- `run`'s output capture is a command substitution,
+  # which forks a subshell, so a `cd` inside run_update would never be
+  # observable back here. Save/restore bats' own EXIT trap for the same
+  # reason the sibling tfenv/oh-my-zsh/tpm tests above do.
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
+  local _rc=0
+  run_update || _rc=$?
+  eval "${_bats_exit_trap}"
+  # Non-zero would mean the cd-back's "|| return 1" guard actually fired
+  # (pre-change failure path 3: abort, never reaching the pwd assertion).
+  [ "${_rc}" -eq 0 ]
+  # Proves the run continued past the tfenv block into the next one, rather
+  # than a spurious early return reading as a pass because nothing after it
+  # was checked.
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_oh-my-zsh")" = "SKIP" ]
+  [ "$(pwd)" = "${_pwd_before}" ]
+}
+
 @test "run_update updates cheat.sh when ~/bin/cht.sh exists" {
   export MACOS=1
   unset LINUX UBUNTU
