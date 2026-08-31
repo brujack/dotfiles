@@ -645,6 +645,28 @@ firefox  124.0"
   [[ "$output" != *"1 failed"* ]]
 }
 
+@test "_update_summary aligns the reason column at the 19-char field width" {
+  # zsh-autosuggestions is 19 chars, the longest section name. A %-16s field
+  # never truncates a longer string, so a row for THIS name alone renders
+  # identically under %-16s and %-19s -- it cannot discriminate. What breaks
+  # under %-16s is every SHORTER name's reason column, which pads to 16 and
+  # then sits 3 columns short of where the 19-char row's reason lands. Seed
+  # both a short and the longest name and assert their reason columns share
+  # one offset -- the wrong implementation (%-16s) fails this because "brew"
+  # pads to 16 while "zsh-autosuggestions" itself is already 19 wide.
+  printf "OK\n" > "${_DOTFILES_RUN_TMPDIR}/status_brew"
+  printf "no changes\n" > "${_DOTFILES_RUN_TMPDIR}/result_brew"
+  printf "OK\n" > "${_DOTFILES_RUN_TMPDIR}/status_zsh-autosuggestions"
+  printf "also fine\n" > "${_DOTFILES_RUN_TMPDIR}/result_zsh-autosuggestions"
+  run _update_summary
+  [ "$status" -eq 0 ]
+  local _expected_brew _expected_zsh
+  _expected_brew=$(printf "[OK]   %-19s %s" "brew" "no changes")
+  _expected_zsh=$(printf "[OK]   %-19s %s" "zsh-autosuggestions" "also fine")
+  [[ "$output" == *"${_expected_brew}"* ]]
+  [[ "$output" == *"${_expected_zsh}"* ]]
+}
+
 @test "_update_summary: detail block printed after table" {
   printf "WARN\n" > "${_DOTFILES_RUN_TMPDIR}/status_brew-drift"
   printf "1 untracked formulae\n" > "${_DOTFILES_RUN_TMPDIR}/result_brew-drift"
@@ -837,6 +859,12 @@ firefox  124.0"
   local _joined
   _joined="${_UPDATE_SECTION_ORDER[*]}"
   [[ "${_joined}" == *"git-hooks aws rust"* ]]
+}
+
+@test "_UPDATE_SECTION_ORDER includes zsh-autosuggestions immediately after oh-my-zsh" {
+  local _joined
+  _joined="${_UPDATE_SECTION_ORDER[*]}"
+  [[ "${_joined}" == *"oh-my-zsh zsh-autosuggestions"* ]]
 }
 
 @test "_update_summary prints a git-hooks row with the literal result production writes, not a fabricated counts string" {
