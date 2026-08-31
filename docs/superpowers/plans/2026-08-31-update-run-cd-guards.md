@@ -284,6 +284,17 @@ depends_on: [1]
 
 **Assert non-zero, never a specific curl exit code.** The same 404 yields 56 on macOS 8.7.1 and 22 on Linux 8.5.0 (measured, both platforms).
 
+**Measured 2026-08-31 against Task 1's finished mock, and it constrains V6 and V7: `err_cheat.sh` receives the fetched body, not just diagnostics.** With `-o`, the mock writes the target *and* emits the body to stdout, so the `2>&1 | tee` captures it:
+
+```
+( MOCK_CURL_STDOUT=BODYTEXT curl -fsS -o /tmp/tgt url ) 2>&1 | tee /tmp/errf
+  target:[BODYTEXT]   teed-file:[BODYTEXT]
+```
+
+So on a **successful** run that file holds content. Assertions on it must check a marker is **present**, never that the file contains only markers. This is the forward consequence of the deliberate stdout-alongside-`-o` deviation now recorded in the backlog — two reviewers confirmed the emission is required by the non-`-o` callers, so it is not a defect to fix here.
+
+Two further measurements behind the banner-outside / marker-inside split: `curl -fsS` on a 404 prints `curl: (56) The requested URL returned error: 404`, naming **neither the URL nor the target file**, so an anonymous detail block genuinely cannot tell the operator which fetch failed; and `lib/update_summary.sh:81` renders `tail -10` of that file as the detail, so the ten-line budget is real.
+
 **Steps:**
 
 - [ ] V5: target pre-seeded, `MOCK_CURL_HTTP_STATUS=404`; assert `status_cheat.sh` is `FAIL` and the target's content is unchanged. Record in the test's own comment that the "target intact" half discriminates `>` from `-o` and nothing more — the mock never writes the target on failure in any variant.
