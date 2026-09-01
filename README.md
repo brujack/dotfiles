@@ -151,11 +151,13 @@ from a broken one. A `WARN` section still exits 0: `git-repos`, `legacy-rsync` a
 `git-hooks` map partial success to a warning deliberately, because a machine that
 legitimately carries a subset of the expected repos has not failed.
 
-A non-zero exit means one of three things, and only the first leaves evidence behind: the run
+A non-zero exit means one of two things, and only the first leaves evidence behind: the run
 completed and some section recorded `FAIL` (summary, log line and state-ledger entry all
-written); it could not create its run directory and aborted before any section ran; or it
-aborted mid-run on one of five `cd` guards. **A non-zero exit with no new log line is the
-second or third case.** See [ADR-0027](docs/adr/0027-update-run-exit-code-from-section-status.md).
+written); or it could not create its run directory and aborted before any section ran.
+**A non-zero exit with no new log line is the second case.** ADR-0027 described a third —
+aborting mid-run on one of five `cd` guards — which #251 removed; those sites now run in a
+subshell and record a section status like any other. See
+[ADR-0027](docs/adr/0027-update-run-exit-code-from-section-status.md).
 
 ## Quick Start (Fresh Mac)
 
@@ -215,20 +217,20 @@ Each `update` run appends a timestamped entry to `~/.dotfiles-update.log`. The e
 ```
 === Update Summary — 2026-04-13 10:00:00 ===
 
-[OK]   brew             3 formulae (git 2.47.0, curl 8.12.1, openssl 3.4.1)
-[OK]   softwareupdate   2 update(s) (Xcode-16.3, macOS Sequoia 15.4.1)
-[OK]   apt              14 package(s) (curl 7.88.1, git 2.44.0, ...)
-[OK]   snap             2 package(s) (firefox 124.0, chromium 123.0)
-[OK]   mas              1 app(s) (Slack (4.42))
-[OK]   claude           2 plugin(s) updated (superpowers: 5.0.8, context7: 1.2.0)
-[OK]   pip              3 package(s) (ansible, boto3, requests)
-[OK]   gems             no changes
-[OK]   oh-my-zsh        2 commit(s)
-[OK]   tpm              no changes
-[OK]   tfenv            no changes
-[OK]   cheat.sh         updated
-[WARN] brew-drift       2 untracked formulae, 1 missing tap
-[SKIP] gems             flag not set
+[OK]   brew                 3 formulae (git 2.47.0, curl 8.12.1, openssl 3.4.1)
+[OK]   softwareupdate       2 update(s) (Xcode-16.3, macOS Sequoia 15.4.1)
+[OK]   apt                  14 package(s) (curl 7.88.1, git 2.44.0, ...)
+[OK]   snap                 2 package(s) (firefox 124.0, chromium 123.0)
+[OK]   mas                  1 app(s) (Slack (4.42))
+[OK]   claude               2 plugin(s) updated (superpowers: 5.0.8, context7: 1.2.0)
+[OK]   pip                  3 package(s) (ansible, boto3, requests)
+[OK]   oh-my-zsh            2 commit(s)
+[OK]   zsh-autosuggestions  no changes
+[OK]   tpm                  no changes
+[OK]   tfenv                no changes
+[OK]   cheat.sh             updated
+[WARN] brew-drift           2 untracked formulae, 1 missing tap
+[SKIP] gems                 flag not set
 
 brew-drift details:
   Untracked (installed, not in Brewfile):
@@ -237,7 +239,7 @@ brew-drift details:
   Missing (in Brewfile, not installed):
     tap: teamookla/speedtest
 
-7 sections: 5 OK, 0 failed, 1 warnings, 1 skipped
+14 sections: 12 OK, 0 failed, 1 warnings, 1 skipped
 ```
 
 Sections show `[OK]`, `[WARN]`, `[FAIL]`, or `[SKIP]`. `WARN` entries are non-blocking advisory findings (e.g. Brewfile drift); detail lines are printed below the table. `FAIL` entries include the exit code; scroll up in the terminal to see the full command output. The log is append-only and never rotated automatically.
