@@ -144,6 +144,48 @@ teardown() {
   [ -d "${HOME}/go-work" ]
 }
 
+@test "run_setup_user leaves a pre-seeded cht.sh binary unchanged when its fetch fails" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  mkdir -p "${HOME}/bin"
+  printf "PRE-EXISTING\n" > "${HOME}/bin/cht.sh"
+  # A local curl() override scoped to exactly this URL, falling through to
+  # the real mock for everything else. run_setup_user makes several other
+  # curl calls (rosetta, terraform skill, ai-config, ...) before reaching
+  # this section, and a bare failure knob would take those down too.
+  curl() {
+    [[ "${*: -1}" == *"cht.sh/:cht.sh" ]] && return 22
+    command curl "$@"
+  }
+  export -f curl
+  run run_setup_user
+  [ "$status" -eq 0 ]
+  # This is the truncation hazard: the shell no longer uses `>` at all (only
+  # -o), so there is nothing left to truncate before curl runs -- confirming
+  # the file the failed fetch left behind is exactly the one that was there
+  # before the call, not an empty one that chmod then succeeded over.
+  [ "$(cat "${HOME}/bin/cht.sh")" = "PRE-EXISTING" ]
+}
+
+@test "run_setup_user does not create ~/.zsh.d/_cht when the completion fetch fails" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  curl() {
+    [[ "${*: -1}" == *"cheat.sh/:zsh" ]] && return 22
+    command curl "$@"
+  }
+  export -f curl
+  run run_setup_user
+  [ "$status" -eq 0 ]
+  # This is the never-retry hazard, and it is the sharper of the two: the
+  # install path guards this fetch with `[[ ! -f ]]`, so a failed fetch that
+  # still creates a 0-byte file via `>` would satisfy that guard forever and
+  # the completion would never be retried on any later run. With -o, curl
+  # writes nothing on failure, so the target must be ABSENT, not merely
+  # empty -- that absence is what lets a subsequent run retry.
+  [ ! -f "${HOME}/.zsh.d/_cht" ]
+}
+
 # ── run_setup_user — platform branching ───────────────────────────────────────
 
 @test "run_setup_user calls install_rosetta on macOS" {
