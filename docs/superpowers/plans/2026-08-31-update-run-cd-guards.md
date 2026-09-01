@@ -395,6 +395,7 @@ acceptance:
 max_retries: 3
 files_touched:
   - CLAUDE.md
+  - docs/adr/0027-update-run-exit-code-from-section-status.md
   - docs/superpowers/README.md
 depends_on: [1, 2, 3, 4, 5, 6]
 ```
@@ -402,6 +403,13 @@ depends_on: [1, 2, 3, 4, 5, 6]
 **Files:** `CLAUDE.md`, `docs/superpowers/README.md`.
 
 `tdd: not-applicable` — documentation only, no executable logic.
+
+**Two documents this branch actively falsifies, located 2026-09-01 — neither is optional and neither was in the original task body.**
+
+1. **`CLAUDE.md:66`, the `-t update` row**, reads: *"Non-zero has three meanings and only the first records anything — section FAIL, run-dir creation failure, or one of five `cd` guards; see ADR-0027."* Tasks 3 and 4 delete all five guards, so after this branch it has **two**. Correct the count and drop the guard clause.
+2. **`docs/adr/0027-update-run-exit-code-from-section-status.md`** enumerates the same three cases, names the five line numbers, and says *"making them record a FAIL section before returning is a separate fix, tracked as its own backlog row."* This branch did something else — it **removed** them, because the `cd` they returned from ran in a pipeline subshell and the guard protected against a hazard that cannot occur. The ADR was true when written and is not superseded; add a dated forward-reference under its Consequences pointing at this branch, rather than editing the original reasoning. A decision record is a historical artifact.
+
+That widens Task 7's `files_touched` to include the ADR.
 
 **CLAUDE.md needs, at minimum:** `zsh-autosuggestions` added to the `_UPDATE_SECTION_ORDER` coupling note; the three SKIP reasons; `MOCK_CURL_HTTP_STATUS` and the changed `-o` semantics in the mock-pattern section; the `%-19s` column; and a line under Test Seams recording that the plugin guard is a filesystem test **specifically because** `rev-parse --git-dir` walks upward past a nested non-clone and because `git -C` does not override an exported `GIT_DIR`.
 
