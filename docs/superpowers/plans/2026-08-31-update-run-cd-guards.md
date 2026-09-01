@@ -1,5 +1,7 @@
 # `run_update` cd guards, invisible section, and truncating fetches — Implementation Plan
 
+> **Status: DONE** — merged as dotfiles#251 (`b5e01e6b`), 2026-09-01. 1601 tests, 91% coverage.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Remove three `cd`-backs that silently relocate cwd and carry an abort path for a hazard that cannot occur; make `zsh-autosuggestions` a reported section; and stop four `curl > file` sites from destroying their target and reporting OK over it.
