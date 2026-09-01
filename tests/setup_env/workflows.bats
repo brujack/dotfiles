@@ -186,6 +186,27 @@ teardown() {
   [ ! -f "${HOME}/.zsh.d/_cht" ]
 }
 
+@test "run_setup_user does not attempt chmod when the cht.sh binary fetch fails" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  # No pre-seeded target: on a real failed fetch curl -o writes nothing, so
+  # chmod is reachable against a file that was never created unless it is
+  # gated behind the fetch succeeding.
+  curl() {
+    [[ "${*: -1}" == *"cht.sh/:cht.sh" ]] && return 22
+    command curl "$@"
+  }
+  export -f curl
+  run run_setup_user
+  [ "$status" -eq 0 ]
+  # The mock chmod is a pass-through that silences its own errors and exit
+  # code (`/bin/chmod "$@" 2>/dev/null || true`), so asserting on stderr
+  # text or a non-zero status cannot discriminate here -- only the call log
+  # can. Before the fix, chmod ran unconditionally against a target curl
+  # never wrote.
+  refute_grep "chmod 750 ${HOME}/bin/cht.sh" "${MOCK_CALLS_FILE}"
+}
+
 # ── run_setup_user — platform branching ───────────────────────────────────────
 
 @test "run_setup_user calls install_rosetta on macOS" {

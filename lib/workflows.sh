@@ -159,8 +159,8 @@ run_setup_user() {
       sudo -H apt update
       sudo -H apt install curl -y
     fi
-    curl -fsS -o "${HOME}/bin/cht.sh" https://cht.sh/:cht.sh
-    chmod 750 "${HOME}"/bin/cht.sh
+    curl -fsS -o "${HOME}/bin/cht.sh" https://cht.sh/:cht.sh \
+      && chmod 750 "${HOME}"/bin/cht.sh
   fi
   if [[ -x $(command -v cht.sh) ]]; then
     printf "cht.sh is installed\\n"
