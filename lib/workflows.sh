@@ -638,18 +638,35 @@ run_update() {
     else
       _update_skip "tpm" "not installed"
     fi
-    if [[ -f ${HOME}/bin/cht.sh ]]; then
+    if [[ -f ${HOME}/bin/cht.sh ]] || [[ -f ${HOME}/.zsh.d/_cht ]]; then
       _update_record_start "cheat.sh"
-      printf "Updating cheat.sh\\n"
-      { curl https://cht.sh/:cht.sh > ~/bin/cht.sh && chmod 754 "${HOME}/bin/cht.sh"; } \
-        2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_cheat.sh"
+      [[ -f ${HOME}/bin/cht.sh ]]  && printf "Updating cheat.sh\\n"
+      [[ -f ${HOME}/.zsh.d/_cht ]] && printf "Updating cheat.sh tab completion\\n"
+      (
+        _rc=0
+        if [[ -f ${HOME}/bin/cht.sh ]]; then
+          if curl -fsS -o "${HOME}/bin/cht.sh" https://cht.sh/:cht.sh \
+             && [[ -s ${HOME}/bin/cht.sh ]]; then
+            chmod 754 "${HOME}/bin/cht.sh" || _rc=1
+          else
+            printf "cheat.sh binary fetch failed\\n" >&2
+            _rc=1
+          fi
+        fi
+        if [[ -f ${HOME}/.zsh.d/_cht ]]; then
+          if curl -fsS -o "${HOME}/.zsh.d/_cht" https://cheat.sh/:zsh \
+             && [[ -s ${HOME}/.zsh.d/_cht ]]; then
+            :
+          else
+            printf "cheat.sh completion fetch failed\\n" >&2
+            _rc=1
+          fi
+        fi
+        exit "${_rc}"
+      ) 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_cheat.sh"
       _update_record_end "cheat.sh" "${PIPESTATUS[0]}"
     else
       _update_skip "cheat.sh" "not installed"
-    fi
-    if [[ -f ${HOME}/.zsh.d/_cht ]]; then
-      printf "Updating cheat.sh tab completion\\n"
-      curl https://cheat.sh/:zsh > "${HOME}"/.zsh.d/_cht
     fi
     local _zsh_autosug="${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
     if [[ -d ${_zsh_autosug} ]]; then
