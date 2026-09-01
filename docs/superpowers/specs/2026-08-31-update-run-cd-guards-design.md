@@ -243,7 +243,7 @@ exist, and the change it justified would have made a network-downloaded `$HOME` 
 world-readable, with no defect behind it and no verification case. Cut. If the split matters
 it gets its own row and an actual argument.
 
-**Both artifacts are 0 bytes on this machine right now, and the writer is unattributed.**
+**Both artifacts were 0 bytes when measured on 2026-08-31, and the writer is unattributed. They were refetched on 2026-09-01 at 11:36 and are now 22888 and 517 bytes — the state below is a dated observation, not a present-tense claim.**
 
 ```
 -rwxr--r--  0  Aug 29 20:00  /Users/bruce/bin/cht.sh        <- mode 754, zero-length executable
