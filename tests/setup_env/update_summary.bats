@@ -645,6 +645,56 @@ firefox  124.0"
   [[ "$output" != *"1 failed"* ]]
 }
 
+@test "_update_summary aligns the reason column at the 20-char field width" {
+  # zsh-autosuggestions is 19 chars, the longest section name. A field
+  # narrower than a name never truncates it, so a row for THAT name alone
+  # renders identically whatever the field width is set to -- it cannot
+  # discriminate on its own. What the width actually controls is every
+  # SHORTER name's reason column: at %-16s "brew" pads to 16, 4 columns
+  # short of where the 19-char row's reason lands at %-20s. Seed both a
+  # short and the longest name and assert their reason columns share one
+  # offset -- the wrong implementation (%-16s, or %-19s before the 2-space
+  # gutter fix) fails this because "brew" pads to a narrower field than
+  # "zsh-autosuggestions" already occupies on its own.
+  printf "OK\n" > "${_DOTFILES_RUN_TMPDIR}/status_brew"
+  printf "no changes\n" > "${_DOTFILES_RUN_TMPDIR}/result_brew"
+  printf "OK\n" > "${_DOTFILES_RUN_TMPDIR}/status_zsh-autosuggestions"
+  printf "also fine\n" > "${_DOTFILES_RUN_TMPDIR}/result_zsh-autosuggestions"
+  run _update_summary
+  [ "$status" -eq 0 ]
+  local _expected_brew _expected_zsh
+  _expected_brew=$(printf "[OK]   %-20s %s" "brew" "no changes")
+  _expected_zsh=$(printf "[OK]   %-20s %s" "zsh-autosuggestions" "also fine")
+  [[ "$output" == *"${_expected_brew}"* ]]
+  [[ "$output" == *"${_expected_zsh}"* ]]
+}
+
+@test "_UPDATE_SECTION_ORDER's longest name always leaves the reason column's 2-space gutter" {
+  # The pad width the summary table renders at is not restated here as a
+  # literal number -- it is read back out of the same printf format the
+  # production code uses, so a deliberate future width change needs no
+  # edit here. What IS computed is the invariant that must hold regardless
+  # of that width: the render is "%-<pad>s" followed by one literal space,
+  # so the total gutter is (pad - name_length) + 1. A 2-space gutter
+  # therefore requires the longest name to be at least 1 character shorter
+  # than the pad -- (pad - max) >= 1. Mutation-confirmed: inserting a
+  # 22-char member into _UPDATE_SECTION_ORDER, with nothing else changed,
+  # makes this go red; restoring the array makes it green again. The
+  # fixed-width test above cannot catch that mutation at all -- its oracle
+  # is a hand-typed printf format that matches production byte-for-byte
+  # and says nothing about names the array doesn't have yet.
+  local _max=0 _n
+  for _n in "${_UPDATE_SECTION_ORDER[@]}"; do
+    (( ${#_n} > _max )) && _max=${#_n}
+  done
+
+  local _pad_width
+  _pad_width=$(grep -m1 -oE '%-[0-9]+s' "${REPO_ROOT}/lib/update_summary.sh" | grep -oE '[0-9]+')
+  [ -n "${_pad_width}" ]
+
+  (( _pad_width - _max >= 1 ))
+}
+
 @test "_update_summary: detail block printed after table" {
   printf "WARN\n" > "${_DOTFILES_RUN_TMPDIR}/status_brew-drift"
   printf "1 untracked formulae\n" > "${_DOTFILES_RUN_TMPDIR}/result_brew-drift"
@@ -837,6 +887,12 @@ firefox  124.0"
   local _joined
   _joined="${_UPDATE_SECTION_ORDER[*]}"
   [[ "${_joined}" == *"git-hooks aws rust"* ]]
+}
+
+@test "_UPDATE_SECTION_ORDER includes zsh-autosuggestions immediately after oh-my-zsh" {
+  local _joined
+  _joined="${_UPDATE_SECTION_ORDER[*]}"
+  [[ "${_joined}" == *"oh-my-zsh zsh-autosuggestions"* ]]
 }
 
 @test "_update_summary prints a git-hooks row with the literal result production writes, not a fabricated counts string" {

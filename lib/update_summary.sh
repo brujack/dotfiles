@@ -4,7 +4,7 @@
 # Fixed section order for summary display
 readonly _UPDATE_SECTION_ORDER=(
   brew softwareupdate apt snap mas claude terraform-skill npm pip pip-check gems
-  ai-config git-repos legacy-rsync git-hooks aws rust oh-my-zsh tpm tfenv cheat.sh brew-drift
+  ai-config git-repos legacy-rsync git-hooks aws rust oh-my-zsh zsh-autosuggestions tpm tfenv cheat.sh brew-drift
 )
 
 # _update_diff_lines PRE_FILE POST_FILE
@@ -552,19 +552,19 @@ _update_summary() {
     case "${_status}" in
       OK)
         _ok=$(( _ok + 1 ))
-        _output+="$(printf "[OK]   %-16s %s" "${_section}" "${_result}")\n"
+        _output+="$(printf "[OK]   %-20s %s" "${_section}" "${_result}")\n"
         ;;
       FAIL)
         _fail=$(( _fail + 1 ))
-        _output+="$(printf "[FAIL] %-16s %s" "${_section}" "${_result}")\n"
+        _output+="$(printf "[FAIL] %-20s %s" "${_section}" "${_result}")\n"
         ;;
       SKIP)
         _skip=$(( _skip + 1 ))
-        _output+="$(printf "[SKIP] %-16s %s" "${_section}" "${_result}")\n"
+        _output+="$(printf "[SKIP] %-20s %s" "${_section}" "${_result}")\n"
         ;;
       WARN)
         _warn=$(( _warn + 1 ))
-        _output+="$(printf "[WARN] %-16s %s" "${_section}" "${_result}")\n"
+        _output+="$(printf "[WARN] %-20s %s" "${_section}" "${_result}")\n"
         ;;
     esac
   done

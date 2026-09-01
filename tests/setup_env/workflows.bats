@@ -144,6 +144,69 @@ teardown() {
   [ -d "${HOME}/go-work" ]
 }
 
+@test "run_setup_user leaves a pre-seeded cht.sh binary unchanged when its fetch fails" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  mkdir -p "${HOME}/bin"
+  printf "PRE-EXISTING\n" > "${HOME}/bin/cht.sh"
+  # A local curl() override scoped to exactly this URL, falling through to
+  # the real mock for everything else. run_setup_user makes several other
+  # curl calls (rosetta, terraform skill, ai-config, ...) before reaching
+  # this section, and a bare failure knob would take those down too.
+  curl() {
+    [[ "${*: -1}" == *"cht.sh/:cht.sh" ]] && return 22
+    command curl "$@"
+  }
+  export -f curl
+  run run_setup_user
+  [ "$status" -eq 0 ]
+  # This is the truncation hazard: the shell no longer uses `>` at all (only
+  # -o), so there is nothing left to truncate before curl runs -- confirming
+  # the file the failed fetch left behind is exactly the one that was there
+  # before the call, not an empty one that chmod then succeeded over.
+  [ "$(cat "${HOME}/bin/cht.sh")" = "PRE-EXISTING" ]
+}
+
+@test "run_setup_user does not create ~/.zsh.d/_cht when the completion fetch fails" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  curl() {
+    [[ "${*: -1}" == *"cheat.sh/:zsh" ]] && return 22
+    command curl "$@"
+  }
+  export -f curl
+  run run_setup_user
+  [ "$status" -eq 0 ]
+  # This is the never-retry hazard, and it is the sharper of the two: the
+  # install path guards this fetch with `[[ ! -f ]]`, so a failed fetch that
+  # still creates a 0-byte file via `>` would satisfy that guard forever and
+  # the completion would never be retried on any later run. With -o, curl
+  # writes nothing on failure, so the target must be ABSENT, not merely
+  # empty -- that absence is what lets a subsequent run retry.
+  [ ! -f "${HOME}/.zsh.d/_cht" ]
+}
+
+@test "run_setup_user does not attempt chmod when the cht.sh binary fetch fails" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  # No pre-seeded target: on a real failed fetch curl -o writes nothing, so
+  # chmod is reachable against a file that was never created unless it is
+  # gated behind the fetch succeeding.
+  curl() {
+    [[ "${*: -1}" == *"cht.sh/:cht.sh" ]] && return 22
+    command curl "$@"
+  }
+  export -f curl
+  run run_setup_user
+  [ "$status" -eq 0 ]
+  # The mock chmod is a pass-through that silences its own errors and exit
+  # code (`/bin/chmod "$@" 2>/dev/null || true`), so asserting on stderr
+  # text or a non-zero status cannot discriminate here -- only the call log
+  # can. Before the fix, chmod ran unconditionally against a target curl
+  # never wrote.
+  refute_grep "chmod 750 ${HOME}/bin/cht.sh" "${MOCK_CALLS_FILE}"
+}
+
 # ── run_setup_user — platform branching ───────────────────────────────────────
 
 @test "run_setup_user calls install_rosetta on macOS" {
@@ -1696,18 +1759,78 @@ assert_all_npm_globals_pinned() {
   grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_tpm"
 }
 
-@test "run_update updates cheat.sh when ~/bin/cht.sh exists" {
+@test "run_update leaves cwd unmoved when invoked from outside the dotfiles repo" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  mkdir -p "${HOME}/.tfenv"
+  # A real .git marker is required: with the plugin directory present but no
+  # .git, the section would SKIP as "not a git checkout" and this test would
+  # once again prove nothing about the cd-back it exists to catch. Before
+  # docs/superpowers/plans/2026-08-31-update-run-cd-guards.md task 4, this
+  # fixture omitted .oh-my-zsh entirely, so the test's name was true only
+  # because the one remaining relocating cd-back was never exercised.
+  mkdir -p "${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions/.git"
+  # A caller cwd distinct from ${PERSONAL_GITREPOS}/${DOTFILES} is the whole
+  # point: invoking from that fixture path would make the cd-back a no-op
+  # (start there, cd back there) and the test could not discriminate.
+  local _caller_cwd="${BATS_TEST_TMPDIR}/caller-cwd"
+  mkdir -p "${_caller_cwd}"
+  cd "${_caller_cwd}" || return 1
+  local _pwd_before
+  _pwd_before="$(pwd)"
+  # Bare call, not `run` -- `run`'s output capture is a command substitution,
+  # which forks a subshell, so a `cd` inside run_update would never be
+  # observable back here. Save/restore bats' own EXIT trap for the same
+  # reason the sibling tfenv/oh-my-zsh/tpm tests above do.
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
+  local _rc=0
+  run_update || _rc=$?
+  eval "${_bats_exit_trap}"
+  # Non-zero would mean the cd-back's "|| return 1" guard actually fired --
+  # see docs/superpowers/plans/2026-08-31-update-run-cd-guards.md task 4 for
+  # the pre-change failure path this guards against.
+  [ "${_rc}" -eq 0 ]
+  # Proves the zsh-autosuggestions block actually ran `git pull` (OK, not
+  # SKIP) rather than the pwd assertion below passing vacuously because the
+  # block that used to relocate cwd was never exercised.
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_zsh-autosuggestions")" = "OK" ]
+  [ "$(pwd)" = "${_pwd_before}" ]
+}
+
+@test "run_update updates cheat.sh binary and reports OK with non-empty content" {
   export MACOS=1
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
   mkdir -p "${HOME}/bin"
   touch "${HOME}/bin/cht.sh"
-  run run_update
-  [ "$status" -eq 0 ]
-  grep -q "curl https://cht.sh/:cht.sh" "${MOCK_CALLS_FILE}"
+  # MOCK_CURL_STDOUT must be set: the fetch now gates chmod behind [[ -s ]],
+  # so an unset stdout leaves the mock's default empty touch, which (as of
+  # this branch) correctly FAILs the section instead of reporting OK over a
+  # zeroed file -- exactly the production defect this task exists to fix.
+  export MOCK_CURL_STDOUT="cheat.sh binary body"
+  # Bare call so _DOTFILES_RUN_TMPDIR survives. Capture run_update's own
+  # return rather than calling it bare: bats runs test bodies under errexit,
+  # and a bare non-zero at the run_update line itself fires errexit BEFORE
+  # the trap restore below runs -- since run_update's internal EXIT trap
+  # (_dotfiles_run_tmpdir_setup) has already clobbered bats' trap-based
+  # "not ok" reporting by that point, the test vanishes from the TAP stream
+  # with no line at all rather than failing. The `|| _rc=$?` form never
+  # triggers errexit regardless of the return value, so a future regression
+  # that makes this section FAIL surfaces as a real assertion failure below.
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
+  local _rc=0
+  run_update || _rc=$?
+  eval "${_bats_exit_trap}"
+  [ "${_rc}" -eq 0 ]
+  grep -q "https://cht.sh/:cht.sh" "${MOCK_CALLS_FILE}"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "OK" ]
+  [ -s "${HOME}/bin/cht.sh" ]
 }
 
-@test "run_update skips cheat.sh when ~/bin/cht.sh does not exist" {
+@test "run_update skips cheat.sh when neither ~/bin/cht.sh nor ~/.zsh.d/_cht exist" {
   export MACOS=1
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
@@ -1721,25 +1844,416 @@ assert_all_npm_globals_pinned() {
   grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh"
 }
 
-@test "run_update updates cheat.sh tab completion when ~/.zsh.d/_cht exists" {
+@test "run_update fetches cheat.sh completion when only ~/.zsh.d/_cht exists" {
   export MACOS=1
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
   mkdir -p "${HOME}/.zsh.d"
   touch "${HOME}/.zsh.d/_cht"
-  run run_update
-  [ "$status" -eq 0 ]
-  grep -q "curl https://cheat.sh/:zsh" "${MOCK_CALLS_FILE}"
+  export MOCK_CURL_STDOUT="cheat.sh completion body"
+  # Bare call + trap save/restore -- this test reads _DOTFILES_RUN_TMPDIR-
+  # derived files, which `run`'s subshell would discard. Capture run_update's
+  # return rather than calling it bare: a bare non-zero at the run_update
+  # line fires bats' errexit BEFORE the trap restore below runs, and since
+  # run_update's own EXIT trap (_dotfiles_run_tmpdir_setup) has already
+  # clobbered bats' trap-based "not ok" reporting by that point, the test
+  # would vanish from the TAP stream with no line at all rather than fail.
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
+  local _rc=0
+  run_update || _rc=$?
+  eval "${_bats_exit_trap}"
+  [ "${_rc}" -eq 0 ]
+  # This is the disjunction case: ~/bin/cht.sh is absent, yet the section is
+  # entered (not SKIP) and the completion fetch runs. The negative assertion
+  # proves the binary branch was never attempted, not merely that it failed.
+  grep -q "https://cheat.sh/:zsh" "${MOCK_CALLS_FILE}"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "OK" ]
+  [ -s "${HOME}/.zsh.d/_cht" ]
+  refute_grep "https://cht.sh/:cht.sh" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_update cheat.sh FAILs and leaves a pre-seeded binary unchanged on HTTP error" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  mkdir -p "${HOME}/bin"
+  printf "PRE-EXISTING\n" > "${HOME}/bin/cht.sh"
+  # MOCK_CURL_HTTP_STATUS is a global knob -- setting it would fail every
+  # curl call run_update makes (aws, rust, ai-config, ...), and bats runs
+  # test bodies under errexit, so an unguarded failure anywhere else in that
+  # chain kills the test silently (its own EXIT trap has already clobbered
+  # bats' trap-based "not ok" reporting -- see lib/workflows.sh's comment on
+  # _dotfiles_run_tmpdir_setup). A local curl() override scoped to exactly
+  # this URL, falling through to the real mock for everything else, is the
+  # surgical way to simulate one failing fetch without perturbing the rest
+  # of the run.
+  curl() {
+    [[ "${*: -1}" == *"cht.sh/:cht.sh" ]] && return 22
+    command curl "$@"
+  }
+  export -f curl
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
+  # Capture rather than discard: this fixture stages a genuine section FAIL,
+  # so run_update must return non-zero. A bare call would hit the same
+  # errexit-vs-trap hazard the curl-override comment above describes -- the
+  # non-zero return itself, not just an unguarded command deeper in the
+  # chain, is what triggers it.
+  local _rc=0
+  run_update || _rc=$?
+  eval "${_bats_exit_trap}"
+  [ "${_rc}" -ne 0 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "FAIL" ]
+  # Proves the fetch failure path never touches the target -- the shell code
+  # no longer uses `>` at all (only -o), so there is nothing left to truncate
+  # before curl runs; this confirms the file the error handler left behind is
+  # exactly the one that was there before the run.
+  [ "$(cat "${HOME}/bin/cht.sh")" = "PRE-EXISTING" ]
+}
+
+@test "run_update cheat.sh detail names only the fetch that actually failed" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  mkdir -p "${HOME}/bin" "${HOME}/.zsh.d"
+  touch "${HOME}/bin/cht.sh" "${HOME}/.zsh.d/_cht"
+  # The shared curl mock has no per-URL exit control (MOCK_CURL_HTTP_STATUS
+  # applies to every call in the test), so it cannot make one fetch succeed
+  # while the other fails within a single run_update invocation. A local
+  # function override, positioned ahead of the mock in command lookup, is
+  # the only way to discriminate by URL -- falling through to the real mock
+  # for every other call (see the sibling FAIL test above for why a global
+  # failure knob is unsafe: an unguarded failure elsewhere in run_update's
+  # chain kills the test silently under bats' errexit).
+  curl() {
+    case "${*: -1}" in
+      # $3 is the -o target -- the production call shape is fixed as
+      # `curl -fsS -o <path> <url>`. Content must actually be written: the
+      # code gates success on [[ -s target ]], and the fixture already
+      # `touch`ed the target, so a bare `return 0` here would leave it
+      # empty and misreport the binary half as failed too.
+      *"cht.sh/:cht.sh") printf "binary-body" > "$3"; return 0 ;;
+      *"cheat.sh/:zsh") return 22 ;;
+      *) command curl "$@" ;;
+    esac
+  }
+  export -f curl
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
+  # Capture rather than discard -- same reason as the sibling FAIL test above.
+  local _rc=0
+  run_update || _rc=$?
+  eval "${_bats_exit_trap}"
+  [ "${_rc}" -ne 0 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "FAIL" ]
+  grep -q "cheat.sh completion fetch failed" "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
+  # And the binary half genuinely succeeded rather than being skipped.
+  [ -s "${HOME}/bin/cht.sh" ]
+  refute_grep "cheat.sh binary fetch failed" "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
+  # The progress banners are printed OUTSIDE the subshell specifically so
+  # they never reach err_cheat.sh/detail_cheat.sh -- that file feeds
+  # _update_write_detail_from_err's `tail -10`, and a banner line would
+  # silently displace real diagnostic content from that budget.
+  refute_grep "Updating cheat.sh" "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
+}
+
+@test "run_update cheat.sh FAILs when curl exits 0 but writes nothing" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  mkdir -p "${HOME}/bin"
+  touch "${HOME}/bin/cht.sh"
+  # curl -f cannot see this case: an HTTP 200 with an error body is still a
+  # successful transfer as far as curl is concerned, so it exits 0. Returning
+  # 0 without writing $3 reproduces exactly that -- only [[ -s ]] can catch
+  # it, which is the whole reason that check exists alongside -f.
+  curl() {
+    [[ "${*: -1}" == *"cht.sh/:cht.sh" ]] && return 0
+    command curl "$@"
+  }
+  export -f curl
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
+  local _rc=0
+  run_update || _rc=$?
+  eval "${_bats_exit_trap}"
+  [ "${_rc}" -ne 0 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "FAIL" ]
+  grep -q "cheat.sh binary fetch failed" "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
+}
+
+@test "run_update still fetches cheat.sh completion when the binary fetch fails" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  mkdir -p "${HOME}/bin" "${HOME}/.zsh.d"
+  touch "${HOME}/bin/cht.sh" "${HOME}/.zsh.d/_cht"
+  # Binary fails, completion succeeds -- the mirror of the sibling test
+  # above. If the binary's failure short-circuited (a bare `exit 1` instead
+  # of the _rc accumulator) the completion branch, and its curl call, would
+  # never run at all: this is the one case that shows the difference.
+  curl() {
+    case "${*: -1}" in
+      *"cht.sh/:cht.sh") return 22 ;;
+      *"cheat.sh/:zsh") printf "completion-body" > "$3"; return 0 ;;
+      *) command curl "$@" ;;
+    esac
+  }
+  export -f curl
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
+  local _rc=0
+  run_update || _rc=$?
+  eval "${_bats_exit_trap}"
+  [ "${_rc}" -ne 0 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "FAIL" ]
+  grep -q "cheat.sh binary fetch failed" "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
+  # The binary marker must appear ALONE here -- the completion half actually
+  # succeeded, so its failure marker must be absent.
+  refute_grep "cheat.sh completion fetch failed" "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
+  # Proves the completion fetch actually ran despite the binary failing
+  # first -- the accumulator, not a short-circuiting exit, let execution
+  # continue into the completion branch.
+  [ -s "${HOME}/.zsh.d/_cht" ]
 }
 
 @test "run_update updates zsh-autosuggestions when plugin dir exists" {
   export MACOS=1
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
-  mkdir -p "${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
+  # .git is required -- without it the section takes the "not a git checkout"
+  # SKIP branch and git pull is never invoked.
+  mkdir -p "${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions/.git"
   run run_update
   [ "$status" -eq 0 ]
   grep -q "^git pull$" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_update skips zsh-autosuggestions when plugin dir does not exist" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
+  # so a failure here still gets its TAP line instead of being swallowed by
+  # run_update's own trap.
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
+  run_update
+  eval "${_bats_exit_trap}"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_zsh-autosuggestions")" = "SKIP" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_zsh-autosuggestions")" = "not installed" ]
+}
+
+@test "run_update skips zsh-autosuggestions when plugin dir has no .git" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  mkdir -p "${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
+  run_update
+  eval "${_bats_exit_trap}"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_zsh-autosuggestions")" = "SKIP" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_zsh-autosuggestions")" = "not a git checkout — reinstall to enable updates" ]
+}
+
+@test "run_update updates zsh-autosuggestions when .git is a gitdir file (submodule/worktree layout)" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  # A submodule or a linked worktree has .git as a FILE containing
+  # "gitdir: <path>", not a directory. The guard is -e, which admits both;
+  # nothing else in this file pins that choice, so a later "tightening" to
+  # -d would route this install to SKIP forever without ever being wrong
+  # in an obviously loud way.
+  mkdir -p "${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
+  printf 'gitdir: %s\n' "${BATS_TEST_TMPDIR}/elsewhere/.git/modules/zsh-autosuggestions" \
+    > "${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions/.git"
+  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
+  # so a failure here still gets its TAP line instead of being swallowed by
+  # run_update's own trap.
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
+  run_update
+  eval "${_bats_exit_trap}"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_zsh-autosuggestions")" = "OK" ]
+  grep -q "^git pull$" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_update skips zsh-autosuggestions when flag not set" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE_BREW=1
+  unset UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  mkdir -p "${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions/.git"
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
+  run_update
+  eval "${_bats_exit_trap}"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_zsh-autosuggestions")" = "SKIP" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_zsh-autosuggestions")" = "flag not set" ]
+}
+
+@test "run_update skips zsh-autosuggestions when only the parent oh-my-zsh checkout is a git repo" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  # rev-parse --git-dir walks UPWARD, so a guard built on it would find
+  # .oh-my-zsh/.git for a plugin dir that is not itself a clone -- exactly
+  # the shape that made the rejected design wrong. Build the parent as a
+  # REAL git checkout, resolved past the mock so `git init` does real work,
+  # while leaving run_update's own git mocked -- the oh-my-zsh sibling
+  # section legitimately fires on the same directory and its own `git pull`
+  # is the baseline the count below is measured against.
+  local _real_git
+  _real_git="$(printf '%s' "${PATH}" | tr ':' '\n' | while read -r _dir; do
+    [[ "${_dir}" == *"tests/mocks"* ]] && continue
+    if [[ -x "${_dir}/git" ]]; then
+      printf '%s/git' "${_dir}"
+      break
+    fi
+  done)"
+  [ -n "${_real_git}" ]
+  mkdir -p "${HOME}/.oh-my-zsh"
+  (
+    cd "${HOME}/.oh-my-zsh" || exit 1
+    "${_real_git}" init -q
+    "${_real_git}" -c user.email=test@example.com -c user.name=test commit -q --allow-empty -m init
+  )
+  mkdir -p "${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
+  run_update
+  eval "${_bats_exit_trap}"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_zsh-autosuggestions")" = "SKIP" ]
+  # Exactly one -- from the legitimate oh-my-zsh section's own pull. A
+  # guard that walked upward via rev-parse --git-dir would resolve the
+  # same .git for the plugin dir and record a second, indistinguishable
+  # "git pull" line here.
+  [ "$(grep -c "^git pull$" "${MOCK_CALLS_FILE}")" -eq 1 ]
+}
+
+@test "run_update snapshots zsh-autosuggestions HEAD via real git plumbing" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  # tests/mocks/git prints nothing for `rev-parse HEAD`, so the pre-snapshot
+  # file would read empty regardless of whether _update_record_start ran
+  # real git plumbing at all. Strip only the git mock -- every other mock
+  # stays, and the other git-touching call sites below are stubbed to
+  # no-ops so nothing else in the run attempts a real clone/pull.
+  local tmp_mocks="${BATS_TEST_TMPDIR}/mocks_no_git"
+  mkdir -p "${tmp_mocks}"
+  for f in "${REPO_ROOT}/tests/mocks/"*; do
+    [[ "$(basename "$f")" == "git" ]] && continue
+    ln -sf "$f" "${tmp_mocks}/$(basename "$f")"
+  done
+  local clean_path
+  clean_path="$(printf "%s" "${PATH}" | tr ':' '\n' | grep -v "tests/mocks" | tr '\n' ':' | sed 's/:$//')"
+  export PATH="${tmp_mocks}:${clean_path}"
+  setup_ai_config() { return 0; }
+  sync_git_repos() { return 0; }
+  sync_legacy_dirs() { return 0; }
+  install_git_hooks_all_repos() { return 0; }
+  ensure_state_ledger() { return 0; }
+  export -f setup_ai_config sync_git_repos sync_legacy_dirs install_git_hooks_all_repos ensure_state_ledger
+
+  # _zsh_autosug's parent, ~/.oh-my-zsh, exists the moment the plugin
+  # directory does -- run_update's own oh-my-zsh section then fires too,
+  # with real git now on PATH. Give it a real, pullable clone of its own
+  # rather than a bare directory, or its `git pull` fails ("not a git
+  # repository") and that FAIL alone makes run_update exit non-zero,
+  # unrelated to anything this test is actually checking.
+  local _omz_origin="${BATS_TEST_TMPDIR}/oh-my-zsh-origin"
+  mkdir -p "${_omz_origin}"
+  ( cd "${_omz_origin}" \
+      && git init -q \
+      && git -c user.email=test@example.com -c user.name=test commit -q --allow-empty -m init )
+  git clone -q "${_omz_origin}" "${HOME}/.oh-my-zsh"
+
+  # A clone (rather than a bare `git init` in place) gives the plugin dir a
+  # real origin remote, so the block's own `git pull` succeeds instead of
+  # failing with "no tracking information" -- V1 is about the snapshot,
+  # not about exercising a pull failure.
+  local _origin="${BATS_TEST_TMPDIR}/zsh-autosug-origin"
+  mkdir -p "${_origin}"
+  ( cd "${_origin}" \
+      && git init -q \
+      && git -c user.email=test@example.com -c user.name=test commit -q --allow-empty -m init )
+  mkdir -p "${HOME}/.oh-my-zsh/custom/plugins"
+  local _zsh_autosug="${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
+  git clone -q "${_origin}" "${_zsh_autosug}"
+
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
+  local _rc=0
+  run_update || _rc=$?
+  eval "${_bats_exit_trap}"
+  [ "${_rc}" -eq 0 ]
+  [ -s "${_DOTFILES_RUN_TMPDIR}/pre_zsh-autosuggestions" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_zsh-autosuggestions")" = "OK" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_oh-my-zsh")" = "OK" ]
+}
+
+@test "run_update FAILs zsh-autosuggestions when git pull errors" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  mkdir -p "${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions/.git"
+  export MOCK_GIT_EXIT=1
+  run run_update
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"[FAIL] zsh-autosuggestions"* ]]
+}
+
+@test "run_update reports 2 commit(s) for zsh-autosuggestions across a real pull" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  local _zsh_autosug="${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
+  mkdir -p "${_zsh_autosug}"
+  # Strip the git mock so both _update_record_start and _update_record_end
+  # exercise real git plumbing -- this is the one case in the suite that
+  # tests the measurement (real rev-parse/log output) rather than the
+  # comparison logic against a hand-seeded pre-file.
+  local tmp_mocks="${BATS_TEST_TMPDIR}/mocks_no_git"
+  mkdir -p "${tmp_mocks}"
+  for f in "${REPO_ROOT}/tests/mocks/"*; do
+    [[ "$(basename "$f")" == "git" ]] && continue
+    ln -sf "$f" "${tmp_mocks}/$(basename "$f")"
+  done
+  local clean_path
+  clean_path="$(printf "%s" "${PATH}" | tr ':' '\n' | grep -v "tests/mocks" | tr '\n' ':' | sed 's/:$//')"
+  export PATH="${tmp_mocks}:${clean_path}"
+  # Bypass _dotfiles_run_tmpdir_setup entirely -- it also runs
+  # ensure_state_ledger, which with the git mock stripped would attempt a
+  # real SSH clone of the real state-ledger repo. This test only needs a
+  # writable directory for _update_record_start/_update_record_end to use,
+  # the same minimal setup tests/setup_env/update_summary.bats uses for the
+  # same functions.
+  export _DOTFILES_RUN_TMPDIR="${BATS_TEST_TMPDIR}/run-tmpdir"
+  mkdir -p "${_DOTFILES_RUN_TMPDIR}"
+
+  local _origin="${BATS_TEST_TMPDIR}/zsh-autosug-origin"
+  mkdir -p "${_origin}"
+  ( cd "${_origin}" \
+      && git init -q \
+      && git -c user.email=test@example.com -c user.name=test commit -q --allow-empty -m init )
+  rmdir "${_zsh_autosug}"
+  git clone -q "${_origin}" "${_zsh_autosug}"
+
+  _update_record_start "zsh-autosuggestions"
+  [ -s "${_DOTFILES_RUN_TMPDIR}/pre_zsh-autosuggestions" ]
+
+  # Simulate two commits landing in the upstream, as a real `git pull` would
+  # fetch.
+  ( cd "${_origin}" \
+      && git -c user.email=test@example.com -c user.name=test commit -q --allow-empty -m second \
+      && git -c user.email=test@example.com -c user.name=test commit -q --allow-empty -m third )
+  ( cd "${_zsh_autosug}" && git pull -q )
+
+  _update_record_end "zsh-autosuggestions" 0
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_zsh-autosuggestions")" = "2 commit(s)" ]
 }
 
 # ── run_update — git-repos / legacy-rsync ─────────────────────────────────────

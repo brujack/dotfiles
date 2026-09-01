@@ -109,9 +109,24 @@ mechanism that will prompt anyone to look again in a month. This is named as an 
 rather than implied to be covered, the same way ADR-0025 names the absence of a mechanical
 guard for CI job timeouts as a bet rather than a closed question.
 
+**Addendum, 2026-09-01: case 3 is closed, and not by the fix this ADR predicted.** The
+paragraph above says making the five `cd` guards record a FAIL section "is a separate fix,
+tracked as its own backlog row." The backlog row was resolved differently: the guards were
+removed outright rather than made to record. Three of the five (`tfenv`, `oh-my-zsh`, `tpm`)
+were `cd`-backs following a `{ cd ... && git pull; } | tee ...` brace group — bash already
+runs that `cd` inside a pipeline subshell, so the parent's cwd never actually moved, and the
+unconditional `cd`-back was guarding a hazard that could not occur while itself relocating
+cwd on any invocation from outside the repo (`run_update` has no earlier `cd`). Those brace
+groups became `( cd ... && git pull )` subshells and the three guards were deleted. The other
+two, in the `zsh-autosuggestions` block, were genuinely load-bearing on `master` — that block
+`cd`ed directly with no enclosing subshell at all — and were retired the same way, by wrapping
+that block in a subshell too, as part of making `zsh-autosuggestions` a reported section (see
+CLAUDE.md's `-t update` row). `run_update` can now return non-zero for the two situations
+numbered above and no longer a third; case 2 is unchanged and remains an open gap.
+
 ## Related
 
 - Spec: [2026-08-29-update-run-truthfulness-design.md](../superpowers/specs/2026-08-29-update-run-truthfulness-design.md) — full measurements and the ordering rationale for shipping `err_*` retention ahead of this contract.
 - [ADR-0017](0017-pre-push-trigger-fail-closed.md) — the same shape of decision: what a gate does when it cannot say "clean," and why the noisier failure mode is the one worth accepting.
 - [ADR-0025](0025-no-mechanical-guard-for-ci-job-timeouts.md) — the pattern this ADR's review trigger follows: naming an unenforced gap explicitly rather than implying a mechanism exists.
-- Backlog rows in `docs/superpowers/README.md`: `run_update`'s five `cd` guards return 1 having recorded nothing; a durable run root under `$HOME` for `err_*` retention; `package_capture` is dead code that would report every package as added.
+- Backlog rows in `docs/superpowers/README.md`: `run_update`'s five `cd` guards return 1 having recorded nothing (marked **Resolved 2026-09-01** in that row — see the addendum above), a durable run root under `$HOME` for `err_*` retention, and `package_capture` is dead code that would report every package as added.
