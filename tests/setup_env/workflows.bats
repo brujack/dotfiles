@@ -1736,18 +1736,30 @@ assert_all_npm_globals_pinned() {
   [ "$(pwd)" = "${_pwd_before}" ]
 }
 
-@test "run_update updates cheat.sh when ~/bin/cht.sh exists" {
+@test "run_update updates cheat.sh binary and reports OK with non-empty content" {
   export MACOS=1
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
   mkdir -p "${HOME}/bin"
   touch "${HOME}/bin/cht.sh"
-  run run_update
-  [ "$status" -eq 0 ]
-  grep -q "curl https://cht.sh/:cht.sh" "${MOCK_CALLS_FILE}"
+  # MOCK_CURL_STDOUT must be set: the fetch now gates chmod behind [[ -s ]],
+  # so an unset stdout leaves the mock's default empty touch, which (as of
+  # this branch) correctly FAILs the section instead of reporting OK over a
+  # zeroed file -- exactly the production defect this task exists to fix.
+  export MOCK_CURL_STDOUT="cheat.sh binary body"
+  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
+  # so a failure here still gets its TAP line instead of being swallowed by
+  # run_update's own trap.
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
+  run_update
+  eval "${_bats_exit_trap}"
+  grep -q "https://cht.sh/:cht.sh" "${MOCK_CALLS_FILE}"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "OK" ]
+  [ -s "${HOME}/bin/cht.sh" ]
 }
 
-@test "run_update skips cheat.sh when ~/bin/cht.sh does not exist" {
+@test "run_update skips cheat.sh when neither ~/bin/cht.sh nor ~/.zsh.d/_cht exist" {
   export MACOS=1
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
@@ -1761,15 +1773,113 @@ assert_all_npm_globals_pinned() {
   grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh"
 }
 
-@test "run_update updates cheat.sh tab completion when ~/.zsh.d/_cht exists" {
+@test "run_update fetches cheat.sh completion when only ~/.zsh.d/_cht exists" {
   export MACOS=1
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
   mkdir -p "${HOME}/.zsh.d"
   touch "${HOME}/.zsh.d/_cht"
-  run run_update
-  [ "$status" -eq 0 ]
-  grep -q "curl https://cheat.sh/:zsh" "${MOCK_CALLS_FILE}"
+  export MOCK_CURL_STDOUT="cheat.sh completion body"
+  # Bare call + trap save/restore, same reason as above -- this test reads
+  # _DOTFILES_RUN_TMPDIR-derived files, which `run`'s subshell would discard.
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
+  run_update
+  eval "${_bats_exit_trap}"
+  # This is the disjunction case: ~/bin/cht.sh is absent, yet the section is
+  # entered (not SKIP) and the completion fetch runs. The negative assertion
+  # proves the binary branch was never attempted, not merely that it failed.
+  grep -q "https://cheat.sh/:zsh" "${MOCK_CALLS_FILE}"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "OK" ]
+  [ -s "${HOME}/.zsh.d/_cht" ]
+  # Must be the last statement: bats runs test bodies under errexit, and a
+  # bare `!` is exempt from errexit regardless of position (SC2314) -- an
+  # earlier `!` line's exit status would be silently discarded rather than
+  # failing the test.
+  ! grep -q "https://cht.sh/:cht.sh" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_update cheat.sh FAILs and leaves a pre-seeded binary unchanged on HTTP error" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  mkdir -p "${HOME}/bin"
+  printf "PRE-EXISTING\n" > "${HOME}/bin/cht.sh"
+  # MOCK_CURL_HTTP_STATUS is a global knob -- setting it would fail every
+  # curl call run_update makes (aws, rust, ai-config, ...), and bats runs
+  # test bodies under errexit, so an unguarded failure anywhere else in that
+  # chain kills the test silently (its own EXIT trap has already clobbered
+  # bats' trap-based "not ok" reporting -- see lib/workflows.sh's comment on
+  # _dotfiles_run_tmpdir_setup). A local curl() override scoped to exactly
+  # this URL, falling through to the real mock for everything else, is the
+  # surgical way to simulate one failing fetch without perturbing the rest
+  # of the run.
+  curl() {
+    [[ "${*: -1}" == *"cht.sh/:cht.sh" ]] && return 22
+    command curl "$@"
+  }
+  export -f curl
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
+  # Capture rather than discard: this fixture stages a genuine section FAIL,
+  # so run_update must return non-zero. A bare call would hit the same
+  # errexit-vs-trap hazard the curl-override comment above describes -- the
+  # non-zero return itself, not just an unguarded command deeper in the
+  # chain, is what triggers it.
+  local _rc=0
+  run_update || _rc=$?
+  eval "${_bats_exit_trap}"
+  [ "${_rc}" -ne 0 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "FAIL" ]
+  # Proves the fetch failure path never touches the target -- the shell code
+  # no longer uses `>` at all (only -o), so there is nothing left to truncate
+  # before curl runs; this confirms the file the error handler left behind is
+  # exactly the one that was there before the run.
+  [ "$(cat "${HOME}/bin/cht.sh")" = "PRE-EXISTING" ]
+}
+
+@test "run_update cheat.sh detail names only the fetch that actually failed" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  mkdir -p "${HOME}/bin" "${HOME}/.zsh.d"
+  touch "${HOME}/bin/cht.sh" "${HOME}/.zsh.d/_cht"
+  # The shared curl mock has no per-URL exit control (MOCK_CURL_HTTP_STATUS
+  # applies to every call in the test), so it cannot make one fetch succeed
+  # while the other fails within a single run_update invocation. A local
+  # function override, positioned ahead of the mock in command lookup, is
+  # the only way to discriminate by URL -- falling through to the real mock
+  # for every other call (see the sibling FAIL test above for why a global
+  # failure knob is unsafe: an unguarded failure elsewhere in run_update's
+  # chain kills the test silently under bats' errexit).
+  curl() {
+    case "${*: -1}" in
+      # $3 is the -o target -- the production call shape is fixed as
+      # `curl -fsS -o <path> <url>`. Content must actually be written: the
+      # code gates success on [[ -s target ]], and the fixture already
+      # `touch`ed the target, so a bare `return 0` here would leave it
+      # empty and misreport the binary half as failed too.
+      *"cht.sh/:cht.sh") printf "binary-body" > "$3"; return 0 ;;
+      *"cheat.sh/:zsh") return 22 ;;
+      *) command curl "$@" ;;
+    esac
+  }
+  export -f curl
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
+  # Capture rather than discard -- same reason as the sibling FAIL test above.
+  local _rc=0
+  run_update || _rc=$?
+  eval "${_bats_exit_trap}"
+  [ "${_rc}" -ne 0 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "FAIL" ]
+  grep -q "cheat.sh completion fetch failed" "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
+  # And the binary half genuinely succeeded rather than being skipped.
+  [ -s "${HOME}/bin/cht.sh" ]
+  # Must be the last statement -- see the sibling comment above (SC2314): a
+  # bare `!` is exempt from bats' errexit at any position, so only as the
+  # final statement does its exit status become the test's own result.
+  ! grep -q "cheat.sh binary fetch failed" "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
 }
 
 @test "run_update updates zsh-autosuggestions when plugin dir exists" {
