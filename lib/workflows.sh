@@ -647,7 +647,8 @@ run_update() {
         if [[ -f ${HOME}/bin/cht.sh ]]; then
           if curl -fsS -o "${HOME}/bin/cht.sh" https://cht.sh/:cht.sh \
              && [[ -s ${HOME}/bin/cht.sh ]]; then
-            chmod 754 "${HOME}/bin/cht.sh" || _rc=1
+            chmod 754 "${HOME}/bin/cht.sh" \
+              || { printf "cheat.sh chmod failed\\n" >&2; _rc=1; }
           else
             printf "cheat.sh binary fetch failed\\n" >&2
             _rc=1

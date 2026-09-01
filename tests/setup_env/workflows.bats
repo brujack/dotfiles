@@ -1747,13 +1747,21 @@ assert_all_npm_globals_pinned() {
   # this branch) correctly FAILs the section instead of reporting OK over a
   # zeroed file -- exactly the production defect this task exists to fix.
   export MOCK_CURL_STDOUT="cheat.sh binary body"
-  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
-  # so a failure here still gets its TAP line instead of being swallowed by
-  # run_update's own trap.
+  # Bare call so _DOTFILES_RUN_TMPDIR survives. Capture run_update's own
+  # return rather than calling it bare: bats runs test bodies under errexit,
+  # and a bare non-zero at the run_update line itself fires errexit BEFORE
+  # the trap restore below runs -- since run_update's internal EXIT trap
+  # (_dotfiles_run_tmpdir_setup) has already clobbered bats' trap-based
+  # "not ok" reporting by that point, the test vanishes from the TAP stream
+  # with no line at all rather than failing. The `|| _rc=$?` form never
+  # triggers errexit regardless of the return value, so a future regression
+  # that makes this section FAIL surfaces as a real assertion failure below.
   local _bats_exit_trap
   _bats_exit_trap="$(trap -p EXIT)"
-  run_update
+  local _rc=0
+  run_update || _rc=$?
   eval "${_bats_exit_trap}"
+  [ "${_rc}" -eq 0 ]
   grep -q "https://cht.sh/:cht.sh" "${MOCK_CALLS_FILE}"
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "OK" ]
   [ -s "${HOME}/bin/cht.sh" ]
@@ -1780,23 +1788,26 @@ assert_all_npm_globals_pinned() {
   mkdir -p "${HOME}/.zsh.d"
   touch "${HOME}/.zsh.d/_cht"
   export MOCK_CURL_STDOUT="cheat.sh completion body"
-  # Bare call + trap save/restore, same reason as above -- this test reads
-  # _DOTFILES_RUN_TMPDIR-derived files, which `run`'s subshell would discard.
+  # Bare call + trap save/restore -- this test reads _DOTFILES_RUN_TMPDIR-
+  # derived files, which `run`'s subshell would discard. Capture run_update's
+  # return rather than calling it bare: a bare non-zero at the run_update
+  # line fires bats' errexit BEFORE the trap restore below runs, and since
+  # run_update's own EXIT trap (_dotfiles_run_tmpdir_setup) has already
+  # clobbered bats' trap-based "not ok" reporting by that point, the test
+  # would vanish from the TAP stream with no line at all rather than fail.
   local _bats_exit_trap
   _bats_exit_trap="$(trap -p EXIT)"
-  run_update
+  local _rc=0
+  run_update || _rc=$?
   eval "${_bats_exit_trap}"
+  [ "${_rc}" -eq 0 ]
   # This is the disjunction case: ~/bin/cht.sh is absent, yet the section is
   # entered (not SKIP) and the completion fetch runs. The negative assertion
   # proves the binary branch was never attempted, not merely that it failed.
   grep -q "https://cheat.sh/:zsh" "${MOCK_CALLS_FILE}"
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "OK" ]
   [ -s "${HOME}/.zsh.d/_cht" ]
-  # Must be the last statement: bats runs test bodies under errexit, and a
-  # bare `!` is exempt from errexit regardless of position (SC2314) -- an
-  # earlier `!` line's exit status would be silently discarded rather than
-  # failing the test.
-  ! grep -q "https://cht.sh/:cht.sh" "${MOCK_CALLS_FILE}"
+  refute_grep "https://cht.sh/:cht.sh" "${MOCK_CALLS_FILE}"
 }
 
 @test "run_update cheat.sh FAILs and leaves a pre-seeded binary unchanged on HTTP error" {
@@ -1876,10 +1887,72 @@ assert_all_npm_globals_pinned() {
   grep -q "cheat.sh completion fetch failed" "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
   # And the binary half genuinely succeeded rather than being skipped.
   [ -s "${HOME}/bin/cht.sh" ]
-  # Must be the last statement -- see the sibling comment above (SC2314): a
-  # bare `!` is exempt from bats' errexit at any position, so only as the
-  # final statement does its exit status become the test's own result.
-  ! grep -q "cheat.sh binary fetch failed" "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
+  refute_grep "cheat.sh binary fetch failed" "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
+  # The progress banners are printed OUTSIDE the subshell specifically so
+  # they never reach err_cheat.sh/detail_cheat.sh -- that file feeds
+  # _update_write_detail_from_err's `tail -10`, and a banner line would
+  # silently displace real diagnostic content from that budget.
+  refute_grep "Updating cheat.sh" "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
+}
+
+@test "run_update cheat.sh FAILs when curl exits 0 but writes nothing" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  mkdir -p "${HOME}/bin"
+  touch "${HOME}/bin/cht.sh"
+  # curl -f cannot see this case: an HTTP 200 with an error body is still a
+  # successful transfer as far as curl is concerned, so it exits 0. Returning
+  # 0 without writing $3 reproduces exactly that -- only [[ -s ]] can catch
+  # it, which is the whole reason that check exists alongside -f.
+  curl() {
+    [[ "${*: -1}" == *"cht.sh/:cht.sh" ]] && return 0
+    command curl "$@"
+  }
+  export -f curl
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
+  local _rc=0
+  run_update || _rc=$?
+  eval "${_bats_exit_trap}"
+  [ "${_rc}" -ne 0 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "FAIL" ]
+  grep -q "cheat.sh binary fetch failed" "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
+}
+
+@test "run_update still fetches cheat.sh completion when the binary fetch fails" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  mkdir -p "${HOME}/bin" "${HOME}/.zsh.d"
+  touch "${HOME}/bin/cht.sh" "${HOME}/.zsh.d/_cht"
+  # Binary fails, completion succeeds -- the mirror of the sibling test
+  # above. If the binary's failure short-circuited (a bare `exit 1` instead
+  # of the _rc accumulator) the completion branch, and its curl call, would
+  # never run at all: this is the one case that shows the difference.
+  curl() {
+    case "${*: -1}" in
+      *"cht.sh/:cht.sh") return 22 ;;
+      *"cheat.sh/:zsh") printf "completion-body" > "$3"; return 0 ;;
+      *) command curl "$@" ;;
+    esac
+  }
+  export -f curl
+  local _bats_exit_trap
+  _bats_exit_trap="$(trap -p EXIT)"
+  local _rc=0
+  run_update || _rc=$?
+  eval "${_bats_exit_trap}"
+  [ "${_rc}" -ne 0 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "FAIL" ]
+  grep -q "cheat.sh binary fetch failed" "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
+  # The binary marker must appear ALONE here -- the completion half actually
+  # succeeded, so its failure marker must be absent.
+  refute_grep "cheat.sh completion fetch failed" "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
+  # Proves the completion fetch actually ran despite the binary failing
+  # first -- the accumulator, not a short-circuiting exit, let execution
+  # continue into the completion branch.
+  [ -s "${HOME}/.zsh.d/_cht" ]
 }
 
 @test "run_update updates zsh-autosuggestions when plugin dir exists" {
