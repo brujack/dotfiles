@@ -159,7 +159,7 @@ run_setup_user() {
       sudo -H apt update
       sudo -H apt install curl -y
     fi
-    curl https://cht.sh/:cht.sh > ~/bin/cht.sh
+    curl -fsS -o "${HOME}/bin/cht.sh" https://cht.sh/:cht.sh
     chmod 750 "${HOME}"/bin/cht.sh
   fi
   if [[ -x $(command -v cht.sh) ]]; then
@@ -169,7 +169,7 @@ run_setup_user() {
   printf "Creating %s/.zsh.d\\n" "${HOME}"
   mkdir -p "${HOME}"/.zsh.d
   if [[ ! -f ${HOME}/.zsh.d/_cht ]]; then
-    curl https://cheat.sh/:zsh > "${HOME}"/.zsh.d/_cht
+    curl -fsS -o "${HOME}/.zsh.d/_cht" https://cheat.sh/:zsh
   fi
 
   printf "Creating %s/go-work\\n" "${HOME}"
