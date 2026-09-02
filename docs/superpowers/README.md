@@ -17,6 +17,7 @@ Master status index for all specs and implementation plans in this directory.
 
 | Date       | Plan                                                                                       | Spec                                                                                                                                      | Status  |
 | ---------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| 2026-09-01 | [awscli-signature-verification](plans/2026-09-01-awscli-signature-verification.md) | [spec](specs/2026-09-01-awscli-signature-verification-design.md) | In Progress |
 | 2026-08-31 | [update-run-cd-guards](plans/2026-08-31-update-run-cd-guards.md)                           | [spec](specs/2026-08-31-update-run-cd-guards-design.md)                                                                                   | Done    |
 | 2026-08-29 | [update-run-truthfulness](plans/2026-08-29-update-run-truthfulness.md)                     | [spec](specs/2026-08-29-update-run-truthfulness-design.md)                                                                                | Done    |
 | 2026-08-27 | [ci-job-timeouts](plans/2026-08-27-ci-job-timeouts.md)                                     | [spec](specs/2026-08-27-ci-job-timeouts-design.md)                                                                                        | Done    |
