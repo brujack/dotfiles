@@ -132,12 +132,51 @@ _aws_verify_pkg() {
   return 0
 }
 
+# _aws_fetch_pkg
+#
+# Fetches AWSCLIV2.pkg into the current directory. `-f` is required: without
+# it a 404 or CDN error page lands on disk with rc=0, and _aws_verify_pkg
+# then reports a signature failure for what was actually a network failure
+# (ci.md's misattribution, costing 200 consecutive daily runs elsewhere).
+_aws_fetch_pkg() {
+  curl -fsS "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "AWSCLIV2.pkg" || return 1
+}
+
+# _aws_fetch_zip
+#
+# Fetches the Linux zip AND its detached .sig into the current directory.
+# The two fetches are separate curl calls against a rolling CDN URL, so a
+# release landing between them is a possibility update_aws_cli's caller
+# handles via retry, not here.
+#
+# A .sig fetch failure gets its own message, deliberately distinct from
+# _aws_verify_zip's "did not verify": one means the network failed, the
+# other means the artifact is suspect, and they call for opposite responses.
+_aws_fetch_zip() {
+  curl -fsS "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o "awscliv2.zip" || return 1
+  curl -fsS "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip.sig" -o "awscliv2.zip.sig" || {
+    log_error "could not fetch the awscli signature (.sig) — network issue, not a signature failure"
+    return 1
+  }
+}
+
 update_aws_cli() {
   if [[ -n ${HAS_AWS} ]] && [[ -n ${MACOS} ]]; then
     log_info "Updating MACOS awscli"
     mkdir -p "${HOME}"/software_downloads/awscli || return 1
     cd "${HOME}/software_downloads/awscli" || return 1
-    curl "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "AWSCLIV2.pkg" || return 1
+    _aws_fetch_pkg || return 1
+    # The zip/pkg and its check are two fetches from a rolling CDN URL (Linux)
+    # or a single fetch that can still be truncated/corrupted in transit
+    # (both platforms) -- a single retry recovers both without masking a
+    # genuine tamper, which fails identically on the second pass.
+    if ! _aws_verify_pkg "AWSCLIV2.pkg"; then
+      _aws_fetch_pkg || return 1
+      if ! _aws_verify_pkg "AWSCLIV2.pkg"; then
+        rm -f AWSCLIV2.pkg
+        return 1
+      fi
+    fi
     # Cleanup runs regardless of the installer's result: a stale or partial pkg
     # means the next run installs it. tdd.md's cleanup exception.
     if ! sudo -H installer -pkg AWSCLIV2.pkg -target /; then
@@ -155,7 +194,11 @@ update_aws_cli() {
     log_info "Updating Linux awscli"
     mkdir -p "${HOME}"/software_downloads/awscli || return 1
     cd "${HOME}/software_downloads/awscli" || return 1
-    curl "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o "awscliv2.zip" || return 1
+    _aws_fetch_zip || return 1
+    if ! _aws_verify_zip "awscliv2.zip" "awscliv2.zip.sig"; then
+      _aws_fetch_zip || return 1
+      _aws_verify_zip "awscliv2.zip" "awscliv2.zip.sig" || return 1
+    fi
     unzip -u -o awscliv2.zip || return 1
     sudo -H "${HOME}"/software_downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin --update || return 1
     cd "${PERSONAL_GITREPOS}/${DOTFILES}" || return 1

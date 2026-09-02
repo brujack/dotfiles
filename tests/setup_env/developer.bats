@@ -139,6 +139,10 @@ teardown() {
   [ "$status" -ne 0 ]
   refute_grep "installer -pkg" "${MOCK_CALLS_FILE:-/dev/null}"
   [ ! -f "${HOME}/software_downloads/awscli/AWSCLIV2.pkg" ]
+  # Pins the retry itself: without it, a single fetch+verify+fail produces
+  # the SAME status/no-installer/no-file observable, so this line is what
+  # keeps the mechanism from silently reverting to no retry at all.
+  [ "$(grep -c "AWSCLIV2.pkg -o AWSCLIV2.pkg" "${MOCK_CALLS_FILE}")" -eq 2 ]
 }
 
 @test "update_aws_cli: fetches the .sig on Linux and retries verification once before giving up" {
