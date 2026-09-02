@@ -383,6 +383,15 @@ _make_fake_dotfiles() {
   unset LINUX
   mkdir -p "${FAKE_HOME}/software_downloads/awscli"
   mkdir -p "${FAKE_DOTFILES_SRC}"
+  # update_aws_cli now gates the installer on _aws_verify_pkg (AWS's Apple
+  # team ID), which reads real pkgutil output -- MOCK_PKGUTIL_EXIT defaults
+  # to 1 with no stdout, which would fail verification (and the retry) and
+  # this test would never reach the installer it asserts on. Give it a
+  # passing read.
+  export MOCK_PKGUTIL_EXIT=0
+  export MOCK_PKGUTIL_STDOUT="   Status: signed by a developer certificate issued by Apple for distribution
+   Notarization: trusted by the Apple notary service
+    1. Developer ID Installer: AMZN Mobile LLC (${AWSCLI_APPLE_TEAM_ID})"
   run update_aws_cli
   [ "$status" -eq 0 ]
   grep -q "curl.*AWSCLIV2.pkg" "${MOCK_CALLS_FILE}"
@@ -394,6 +403,12 @@ _make_fake_dotfiles() {
   export HAS_AWS=1
   unset MACOS
   mkdir -p "${FAKE_DOTFILES_SRC}"
+  # update_aws_cli now gates the install script on _aws_verify_zip, a real
+  # gpg signature check against the vendored key. Stubbed here rather than
+  # driven through a real throwaway key: this test is about the
+  # fetch/unzip/install orchestration, not the verifier itself, which has
+  # its own dedicated real-gpg coverage in tests/setup_env/developer.bats.
+  _aws_verify_zip() { return 0; }
   run update_aws_cli
   [ "$status" -eq 0 ]
   grep -q "curl.*awscli-exe-linux" "${MOCK_CALLS_FILE}"
@@ -406,6 +421,8 @@ _make_fake_dotfiles() {
   export MOCK_UNAME_M="aarch64"
   unset MACOS
   mkdir -p "${FAKE_DOTFILES_SRC}"
+  # Same verification gate as the sibling Linux test above.
+  _aws_verify_zip() { return 0; }
   run update_aws_cli
   [ "$status" -eq 0 ]
   grep -q "curl.*awscli-exe-linux-aarch64" "${MOCK_CALLS_FILE}"

@@ -181,6 +181,20 @@ teardown() {
   refute_grep "aws/install" "${MOCK_CALLS_FILE:-/dev/null}"
 }
 
+@test "update_aws_cli: removes the zip and .sig on Linux when verification fails twice" {
+  # Mirrors the macOS pkg-cleanup test above: an artifact that failed
+  # signature verification twice must not be left on disk where a human
+  # could unzip and install it by hand.
+  export LINUX=1 HAS_AWS=1
+  unset MACOS
+  mkdir -p "${HOME}/software_downloads/awscli"
+  _aws_verify_zip() { return 1; }
+  run update_aws_cli
+  [ "$status" -ne 0 ]
+  [ ! -f "${HOME}/software_downloads/awscli/awscliv2.zip" ]
+  [ ! -f "${HOME}/software_downloads/awscli/awscliv2.zip.sig" ]
+}
+
 @test "update_aws_cli: a .sig 404 on Linux is reported as could-not-fetch, not did-not-verify" {
   export LINUX=1 HAS_AWS=1
   unset MACOS

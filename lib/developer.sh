@@ -197,7 +197,13 @@ update_aws_cli() {
     _aws_fetch_zip || return 1
     if ! _aws_verify_zip "awscliv2.zip" "awscliv2.zip.sig"; then
       _aws_fetch_zip || return 1
-      _aws_verify_zip "awscliv2.zip" "awscliv2.zip.sig" || return 1
+      if ! _aws_verify_zip "awscliv2.zip" "awscliv2.zip.sig"; then
+        # Consistent with the macOS branch above: an artifact that failed
+        # signature verification twice should not be left where a human
+        # might unzip it by hand.
+        rm -f awscliv2.zip awscliv2.zip.sig
+        return 1
+      fi
     fi
     unzip -u -o awscliv2.zip || return 1
     sudo -H "${HOME}"/software_downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin --update || return 1
