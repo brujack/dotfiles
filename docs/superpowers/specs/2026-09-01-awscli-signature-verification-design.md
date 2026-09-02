@@ -232,13 +232,33 @@ the operator's real keyring infrastructure instead.
 The `( )` + `EXIT` form fires exactly once, with `_ring` guaranteed in scope. Found
 independently by two lenses in the same round.
 
-#### Correction: `_status` was never created
+#### Correction: `_status` was never created — and the general form
 
 The previous snippet redirected gpg's stdout to `${_status}` without declaring it anywhere.
 An undeclared variable makes the redirect fail, so the file never exists, both greps read a
 nonexistent path, neither matches, and the helper returns 1. **That is fail-closed, so nothing
 surfaces it** — every reject-case test stays green against a helper that never ran gpg.
 `_status` now lives inside `_ring`, which also means the one trap removes it.
+
+**The general form is worth stating separately, because it is the same principle as the
+positive-control rule further down and a reader may implement one without the other.** A
+fail-closed guard makes its own **non-execution indistinguishable from a correct rejection**.
+Every reject case therefore passes against a guard that never ran — a missing binary, a failed
+redirect, a crashed subprocess, a stub that emits nothing — and no quantity of additional
+reject cases can separate the two, because they all share the observable.
+
+Two instruments break the tie, and they are one idea rather than two:
+
+- **A positive control** — at least one case where the guard _accepts_ and the action _is_
+  taken. A guard that never runs fails this.
+- **An assertion on the intermediate artifact** — that `${_status}` held the specific status
+  lines, not merely that the return code was non-zero. A guard that never runs produces no
+  artifact to assert on.
+
+Both answer "did the measurement happen", where the return code only answers "what was the
+verdict". This design needs both: the positive controls prove the helper can accept, and the
+`_status` content assertions prove the expired- and revoked-key rejections were reached for
+their stated reason rather than by falling off the end of an empty file.
 
 #### Scope correction: not fleet-wide
 
@@ -290,11 +310,30 @@ $ ls -l /tmp/pkgdest/marker.txt
 -rw-r--r--@ 1 root  wheel  3 ...
 ```
 
-`installer` names the defect in its own output and proceeds anyway. Since it does not refuse
-an **unsigned** package, it a fortiori does not refuse a **wrongly-signed** one, so
-`_aws_verify_pkg` is not a second opinion layered over an OS check — it is the only thing
-standing between a network artifact and `sudo`. That makes the macOS arm's value higher than
-this spec originally argued, not lower.
+`installer` names the defect in its own output and proceeds anyway. So for the **unsigned**
+case the OS performs no enforcement, and `_aws_verify_pkg` is the only thing standing between
+a network artifact and `sudo`. That alone makes the macOS arm's value higher than this spec
+originally argued.
+
+**The wrongly-signed case is an inference here, not a measurement, and this paragraph
+previously blurred that.** It read "since it does not refuse an unsigned package, it a
+fortiori does not refuse a wrongly-signed one." The two are not obviously ordered: "verify
+this chain and reject an untrusted signer" and "there is no chain to verify" are plausibly
+different code paths, and a signature-checking implementation could reject the first while
+ignoring the second. The conclusion is probably right and it is still an inference, in a
+document that is careful about the distinction everywhere else.
+
+What would settle it is one command on any mac, using the same third-party notarized package
+already used as the `pkgutil` control:
+
+```bash
+sudo installer -pkg <a non-AWS notarized .pkg> -target / ; echo "rc=$?"
+```
+
+Not run: it needs an interactive `sudo` and installs a real third-party package onto the
+machine, which is a heavier side effect than the `pkgbuild` fixture and buys a conclusion the
+unsigned measurement already supports. Recorded as an open inference rather than asserted as
+measured.
 
 (Method note: an earlier attempt at this probe returned `rc=1` from a non-tty shell where
 `sudo` could not read a password. `installer` never ran. That is the guard-absorbs-its-own-
@@ -708,11 +747,40 @@ shellcheck at default severity over the changed files, which now include a new t
 `keys/` directory containing no shell (`scripts/list-shell-files.sh` derives scope from
 shebangs, so `.asc` is invisible to it and the lint scope is unchanged).
 
-**Bash coverage is the tightest constraint in this change and it has no slack.** The
-instrumented set is `setup_env.sh` plus tracked `config/*.sh`, `lib/*.sh`, `scripts/*.sh` and
-two hooks, so every new line in `lib/developer.sh` joins the denominator. `CLAUDE.md` records
-the CI figure at **91% against a 91% floor for five consecutive measurements** — the margin is
-zero by design, so that an uncovered addition breaches immediately rather than eroding.
+**Bash coverage is the tightest constraint in this change.** The instrumented set is
+`setup_env.sh` plus tracked `config/*.sh`, `lib/*.sh`, `scripts/*.sh` and two hooks, so every
+new line in `lib/developer.sh` joins the denominator. `CLAUDE.md` records the CI figure at
+**91% against a 91% floor for five consecutive measurements**.
+
+**The budget, computed rather than asserted — and the first version of this paragraph was
+wrong about it.** It said "the margin is zero by design". The _displayed_ margin is zero;
+the _arithmetic_ margin is not, because 3454/3772 = **91.57%** and rounds down to the floor.
+Slack is `3454 − 0.91 × 3772` ≈ **21.5 lines**. Adding `N` coverable lines of which `C` are
+covered holds the floor when:
+
+```
+(3454 + C) / (3772 + N) >= 0.91      ->      C >= 0.91N - 21.5
+```
+
+Measured inputs for `N`: `lib/developer.sh` is **216** coverable lines today
+(`run-bash-coverage.sh --count-coverable`); `update_aws_cli` is 22 non-comment lines and
+`install_aws_tools` 28. The change adds `_aws_verify_zip` (~28), `_aws_verify_pkg` (~6),
+`_aws_gpg_fail` (~6), and grows the two callers by ~16 between them — **N ≈ 56**, taking the
+file to ~272.
+
+So **C ≥ 30**: 30 of ~56 new lines must be covered, leaving ~26 uncovered lines of headroom.
+That is a real budget rather than a knife edge, and it changes a Phase 2 discovery into a
+Phase 1 fact. It is still worth watching, because the success paths are the expensive ones and
+the `install_aws_tools` rewrite is the largest single block — if the real-gpg fixture covers
+`_aws_verify_zip` thoroughly and the rewrite not at all, ~30 is reachable but not comfortable.
+Should the estimate prove low in Phase 2, the remedy is coverage rows for the rewrite, not a
+floor change.
+
+This is also the concrete reason the real-gpg fixture is not optional: under stdout-silent
+mocks the `VALIDSIG`-matched branch and both installer-invocation lines are **unreachable**,
+so they would sit in the denominator and out of the numerator — which is exactly the `C` this
+arithmetic needs. An earlier version of this section asserted the new lines "must be covered"
+while specifying an apparatus that could not cover them.
 
 Two new helpers plus a rewritten `install_aws_tools` is a material addition to the
 denominator, and the success paths are the expensive ones to cover. This is the concrete
@@ -909,7 +977,7 @@ N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
 Round 3 is not being run, and the two signals now agree.
 
 **Artifact location:** round 2's findings were design-located, which on its own argues for
-another round. But every one of them was a defect *introduced by round 1's corrections*, and
+another round. But every one of them was a defect _introduced by round 1's corrections_, and
 the corrections for them are **removals**: the ETag bracket, its awk parse, its comparison and
 its two test rows are gone; `trap RETURN` collapses to a subshell; the `doctor` arm moved
 rather than multiplied. Nothing was added except `EXPSIG` — one token in an existing list —
@@ -920,3 +988,27 @@ round 2 removed one entirely and simplified two, and the remaining open items ar
 question and a set of test assertions — both of which are settled by running the suite, not by
 reading it. That is the apparatus boundary: prose review has reached its floor, and the next
 instrument is Phase 2's first red test.
+
+### Instrument errors in this document — four, and three pointed the same way
+
+Worth collecting, because the pattern is more useful than any one of them. Each returned a
+plausible answer rather than an error, which is why none announced itself:
+
+| probe | what it returned | why it was wrong |
+| --- | --- | --- |
+| `grep -iE 'x-amz-meta'` on the CDN headers | no version signal | the header is `x-amz-version-id`; the pattern matched nothing |
+| `sudo installer` in a non-tty shell | `rc=1` | `sudo` could not read a password; `installer` never ran |
+| `sed` range extraction of the docs key block | a 58-line `.asc` | the page carries the block twice; `gpg --import` accepts a doubled file silently |
+| second-source key cross-check via the GitHub docs repo | `Total number processed: 0` | the extraction failed; reported as `DIFFER`, which is about the extraction and not the key |
+
+**Three of the four returned the answer that supported the conclusion already being reached.**
+The `x-amz-meta` one is labelled in place as exactly that — "failed toward *absent*, and
+*absent* was the answer that justified the conclusion already being reached" — and the same
+diagnosis applies to the other three. The `sudo` one is the clearest case of a non-zero exit
+meaning *the checker could not run* being available to read as *the checker refused*, which is
+the defect class this spec spends a section on.
+
+Only one was caught by suspicion; the rest were caught by a lens or by re-running the probe a
+different way. The transferable rule is the one `behavior.md` already states: a result that
+agrees with what you were about to conclude is the one that most needs a second derivation,
+and vigilance is precisely the faculty a confirming result switches off.
