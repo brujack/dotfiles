@@ -233,7 +233,16 @@ run_setup_or_developer() {
     install_ubuntu_packages || return 1
   fi
 
-  install_aws_tools || return 1
+  # Advisory, like install_renovate_held_agent/install_ledger_drift_agent above
+  # in run_setup_user: a wget hiccup or a missing gpg on a fresh machine must
+  # not abort setup_or_developer before setup_vim_plugins and
+  # run_developer_or_ansible run -- that would cost pyenv, the ansible venv,
+  # ruby and rust over one optional CLI. install_aws_tools gained real error
+  # propagation once it started verifying signatures, which armed this guard
+  # for the first time; before that it always returned 0 and `|| return 1`
+  # was dormant. doctor's key-expiry arm and the printed install failure
+  # above are what surface the gap now -- not this line aborting the run.
+  install_aws_tools || log_warn "aws-cli not installed — see above; setup_env.sh -t doctor reports the gap"
   setup_vim_plugins
   _ledger_write_run_entry "setup" 0 || true
 }

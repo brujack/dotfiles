@@ -386,6 +386,7 @@ run_doctor() {
   _doctor_check_cred_dirs
   _doctor_check_hooks_path
   _doctor_check_versions
+  _doctor_check_aws_key_expiry
   _doctor_check_github_mcp
   _doctor_check_renovate_cadence
   _doctor_check_ledger_drift_cadence
@@ -584,6 +585,79 @@ _doctor_check_versions() {
   _doctor_check_one_version "python3" "${PYTHON_VER}" "python3 --version" "[0-9]+\.[0-9]+\.[0-9]+"
   _doctor_check_one_version "ruby"    "${RUBY_VER}"   "ruby --version"    "[0-9]+\.[0-9]+\.[0-9]+"
   _doctor_check_one_version "zsh"     "${ZSH_VER}"    "zsh --version"     "[0-9]+\.[0-9]+(\.[0-9]+)?"
+}
+
+# _doctor_check_aws_key_expiry
+#
+# Warns when the vendored AWS CLI signing key (keys/aws-cli-team.asc) is
+# within 90 days of its own expiry (2027-07-01, per its embedded expiration
+# field -- `gpg --show-keys --with-colons` field 7). Under the fail-closed
+# EXPKEYSIG/EXPSIG reject arms in lib/developer.sh's _aws_verify_zip and
+# _aws_verify_pkg, install_aws_tools/update_aws_cli start refusing every
+# download on that date until someone refreshes the key -- this arm exists
+# to give advance notice before that happens, not to detect it after.
+#
+# 90 days, not GITHUB_PAT_EXPIRY's 30: a PAT is rotated in seconds from a web
+# UI, but refreshing this key means AWS publishing a new one, verifying its
+# fingerprint out of band, updating AWSCLI_GPG_FPR in lib/constants.sh, and
+# shipping that through review -- a slower process needs a longer lead time.
+#
+# Gated on HAS_AWS -- MUST run first, before anything that could exit early
+# for another reason. install_aws_tools/update_aws_cli are themselves
+# HAS_AWS-gated no-ops on every machine that doesn't have the capability
+# (config/profiles.sh: HAS_AWS is unset for e.g. mac_mini). Without this
+# gate, a machine that correctly lacks the AWS CLI would warn on a key it
+# will never use to verify anything -- an alert firing on correct state.
+#
+# Warn only, never fail: an approaching (or even lapsed) expiry is not
+# itself a fault -- the actual failure, if the key is never refreshed, is
+# _aws_verify_zip/_aws_verify_pkg rejecting the next real download, and
+# that failure already propagates on its own (Task 5/6: install_aws_tools's
+# real error propagation, degraded to a log_warn at its run_setup_or_developer
+# call site).
+_doctor_check_aws_key_expiry() {
+  [[ -z "${HAS_AWS}" ]] && return 0
+
+  printf "\nAWS CLI signing key:\n"
+
+  # _AWS_KEY_PATH / _AWS_GPG_BIN: the same seams lib/developer.sh's
+  # _aws_verify_zip reads, read here unconditionally for the same reason --
+  # a test must be able to point this at a fixture key with a controlled
+  # expiry, and at a gpg binary that isn't tests/mocks/gpg (which prints
+  # nothing and would make every expiry unparseable).
+  local _key="${_AWS_KEY_PATH:-}"
+  if [[ -z "${_key}" ]]; then
+    _key="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/keys/aws-cli-team.asc"
+  fi
+
+  if [[ ! -f "${_key}" ]]; then
+    doctor_warn "AWS CLI signing key" "vendored key not found at ${_key}"
+    return 0
+  fi
+
+  if ! command -v "${_AWS_GPG_BIN:-gpg}" >/dev/null 2>&1; then
+    doctor_warn "AWS CLI signing key" "gpg not found; cannot check expiry"
+    return 0
+  fi
+
+  local _expiry_epoch
+  _expiry_epoch="$("${_AWS_GPG_BIN:-gpg}" --show-keys --with-colons "${_key}" 2>/dev/null \
+    | awk -F: '/^pub/{print $7; exit}')"
+
+  if [[ -z "${_expiry_epoch}" ]] || ! [[ "${_expiry_epoch}" =~ ^[0-9]+$ ]]; then
+    doctor_warn "AWS CLI signing key" "could not determine expiry from ${_key}"
+    return 0
+  fi
+
+  local _today_epoch _diff_days
+  _today_epoch=$(date +%s)
+  _diff_days=$(( (_expiry_epoch - _today_epoch) / 86400 ))
+
+  if [[ ${_diff_days} -le 90 ]]; then
+    doctor_warn "AWS CLI signing key" "expires in ${_diff_days} days — refresh keys/aws-cli-team.asc before it lapses"
+  else
+    doctor_pass "AWS CLI signing key (expires in ${_diff_days} days)"
+  fi
 }
 
 _doctor_check_github_mcp() {
