@@ -100,6 +100,38 @@ _aws_verify_zip() {
   )
 }
 
+# _aws_verify_pkg <pkg>
+#
+# Verifies the macOS awscli pkg was signed and notarized under AWS's Apple
+# Developer ID team, NOT merely that pkgutil exited 0 -- rc=0 is returned for
+# ANY Apple-notarized package from ANY developer. Measured against a real
+# Microsoft-signed pkg: "Developer ID Installer: Microsoft Corporation
+# (UBF8T346G9)", rc=0. `sudo installer` performs no signature enforcement of
+# its own -- an unsigned pkg installs cleanly with rc=0 -- so this helper is
+# the only check on the path, not a second opinion.
+_aws_verify_pkg() {
+  local _pkg="$1"
+
+  # _AWS_PKGUTIL_BIN: read unconditionally, defaults to `pkgutil`. Without
+  # this seam the verifier-absent branch is unreachable -- a PATH strip that
+  # removes /usr/sbin (where pkgutil lives) takes the rest of the toolchain
+  # with it.
+  command -v "${_AWS_PKGUTIL_BIN:-pkgutil}" >/dev/null 2>&1 || {
+    log_error "pkgutil not found; cannot verify the awscli package signature"
+    log_error "pkgutil ships with macOS at /usr/sbin/pkgutil -- if it is missing something is very wrong"
+    return 1
+  }
+
+  local _sig_output
+  _sig_output="$("${_AWS_PKGUTIL_BIN:-pkgutil}" --check-signature "${_pkg}" 2>&1)"
+
+  if ! grep -q "Developer ID Installer: AMZN Mobile LLC (${AWSCLI_APPLE_TEAM_ID})" <<< "${_sig_output}"; then
+    log_error "awscli package signature did not verify against AWS's team ID (${AWSCLI_APPLE_TEAM_ID})"
+    return 1
+  fi
+  return 0
+}
+
 update_aws_cli() {
   if [[ -n ${HAS_AWS} ]] && [[ -n ${MACOS} ]]; then
     log_info "Updating MACOS awscli"
