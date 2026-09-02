@@ -15,7 +15,7 @@
 - `AWSCLI_GPG_FPR` is `FB5DB77FD5C118B80511ADA8A6310ACC4672475C` — measured from AWS's docs page and verified end-to-end against the real artifact. No spaces.
 - `AWSCLI_APPLE_TEAM_ID` is `94KV3E626L` — measured from `pkgutil --check-signature` on the real pkg.
 - The reject list is `EXPSIG|EXPKEYSIG|KEYEXPIRED|REVKEYSIG|KEYREVOKED`. `EXPSIG` is signature expiry, distinct from key expiry. `BADSIG`/`ERRSIG` are deliberately excluded — the accept arm already covers them.
-- Reject arms run **before** the accept arm. `VALIDSIG` is emitted for expired and revoked keys, and gpg exits 0 for both.
+- Reject arms run **before** the accept arm. `VALIDSIG` is emitted for expired keys, revoked keys and expired signatures. gpg exits 0 for the first two; `EXPSIG` exits 1 (measured, GnuPG 2.5.22). The helper branches on `${_status}` content, never on gpg's exit status, so all three are uniform.
 - Every reject is `if ... then ... fi` with an explicit terminal `exit 0`. Never `grep ... && return 1` — one reorder from rejecting a clean signature.
 - `_aws_verify_zip`'s body runs in a `( )` subshell with an `EXIT` trap. `trap ... RETURN` is **not** function-scoped in bash and fires again with `_ring` out of scope; `gpgconf --homedir ""` resolves to the operator's real `~/.gnupg`.
 - `_status` and `_err` live **inside** `_ring` so the one trap removes them.
