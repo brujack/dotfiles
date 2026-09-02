@@ -80,8 +80,15 @@ teardown() {
   export MACOS=1 HAS_AWS=1
   unset LINUX
   mkdir -p "${HOME}/software_downloads/awscli"
+  # _aws_verify_pkg now gates the installer -- give it a passing pkgutil
+  # read so this test still reaches the installer step it was written for.
+  export MOCK_PKGUTIL_EXIT=0
+  export MOCK_PKGUTIL_STDOUT="   Status: signed by a developer certificate issued by Apple for distribution
+   Notarization: trusted by the Apple notary service
+    1. Developer ID Installer: AMZN Mobile LLC (${AWSCLI_APPLE_TEAM_ID})"
   run update_aws_cli
   [ "$status" -eq 0 ]
+  grep -q "installer -pkg" "${MOCK_CALLS_FILE}"
 }
 
 @test "update_aws_cli: removes the pkg when the installer fails on macOS" {
@@ -89,9 +96,16 @@ teardown() {
   unset LINUX
   mkdir -p "${HOME}/software_downloads/awscli"
   export MOCK_INSTALLER_EXIT=1
+  # Verification must pass here too, or the pkg is removed by the verify-
+  # failure arm instead of the installer-failure arm this test is about.
+  export MOCK_PKGUTIL_EXIT=0
+  export MOCK_PKGUTIL_STDOUT="   Status: signed by a developer certificate issued by Apple for distribution
+   Notarization: trusted by the Apple notary service
+    1. Developer ID Installer: AMZN Mobile LLC (${AWSCLI_APPLE_TEAM_ID})"
   run update_aws_cli
   [ "$status" -eq 1 ]
   [ ! -f "${HOME}/software_downloads/awscli/AWSCLIV2.pkg" ]
+  grep -q "installer -pkg" "${MOCK_CALLS_FILE}"
 }
 
 @test "update_aws_cli: creates the awscli directory before cd on macOS" {
@@ -101,6 +115,10 @@ teardown() {
   mkdir -p "${PERSONAL_GITREPOS}/${DOTFILES}"
   export MACOS=1 HAS_AWS=1
   unset LINUX
+  export MOCK_PKGUTIL_EXIT=0
+  export MOCK_PKGUTIL_STDOUT="   Status: signed by a developer certificate issued by Apple for distribution
+   Notarization: trusted by the Apple notary service
+    1. Developer ID Installer: AMZN Mobile LLC (${AWSCLI_APPLE_TEAM_ID})"
   # software_downloads/awscli deliberately absent -- setup() only creates
   # software_downloads itself. This drives the macOS/Linux mkdir asymmetry:
   # the Linux branch has always created its own directory; the macOS branch
@@ -108,6 +126,75 @@ teardown() {
   run update_aws_cli
   [ "$status" -eq 0 ]
   [ -d "${HOME}/software_downloads/awscli" ]
+}
+
+@test "update_aws_cli: does not install an unverified pkg on macOS (verification fails twice)" {
+  export MACOS=1 HAS_AWS=1
+  unset LINUX
+  mkdir -p "${HOME}/software_downloads/awscli"
+  # MOCK_PKGUTIL_EXIT defaults to 1 (unmocked failure) -- _aws_verify_pkg
+  # never sees the AWS team-ID string, so both the first attempt and the
+  # single retry fail.
+  run update_aws_cli
+  [ "$status" -ne 0 ]
+  refute_grep "installer -pkg" "${MOCK_CALLS_FILE:-/dev/null}"
+  [ ! -f "${HOME}/software_downloads/awscli/AWSCLIV2.pkg" ]
+}
+
+@test "update_aws_cli: fetches the .sig on Linux and retries verification once before giving up" {
+  export LINUX=1 HAS_AWS=1
+  unset MACOS
+  mkdir -p "${PERSONAL_GITREPOS}/${DOTFILES}"
+  mkdir -p "${HOME}/software_downloads/awscli"
+  local _counter="${BATS_TEST_TMPDIR}/verify_calls"
+  # Stub the already-tested verifier so this test is about update_aws_cli's
+  # own retry orchestration, not about gpg. _aws_verify_zip has its own
+  # real-gpg tests above; re-deriving a signature failure/success pair here
+  # would test gpg a second time and update_aws_cli's retry logic not at all.
+  _aws_verify_zip() {
+    local _n
+    _n=$(( $(cat "${_counter}" 2>/dev/null || printf '0') + 1 ))
+    printf '%s' "${_n}" > "${_counter}"
+    [[ "${_n}" -ge 2 ]]
+  }
+  run update_aws_cli
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_counter}")" -eq 2 ]
+  grep -q "https://awscli.amazonaws.com/awscli-exe-linux-.*\.zip\.sig" "${MOCK_CALLS_FILE}"
+  # Positive control: a run that ultimately succeeds must still reach and
+  # invoke the installer -- a suite of only-rejects below cannot otherwise
+  # tell "correctly rejecting" from "never ran".
+  grep -q "aws/install" "${MOCK_CALLS_FILE}"
+}
+
+@test "update_aws_cli: fails and never installs when Linux zip verification fails twice" {
+  export LINUX=1 HAS_AWS=1
+  unset MACOS
+  mkdir -p "${HOME}/software_downloads/awscli"
+  _aws_verify_zip() { return 1; }
+  run update_aws_cli
+  [ "$status" -ne 0 ]
+  refute_grep "aws/install" "${MOCK_CALLS_FILE:-/dev/null}"
+}
+
+@test "update_aws_cli: a .sig 404 on Linux is reported as could-not-fetch, not did-not-verify" {
+  export LINUX=1 HAS_AWS=1
+  unset MACOS
+  mkdir -p "${HOME}/software_downloads/awscli"
+  # Local override of the zip's own fetch call: the zip succeeds via the
+  # shared mock, the .sig 404s (curl -f style, rc=22) before _aws_verify_zip
+  # is ever reached -- so a message conflating the two would be a defect in
+  # update_aws_cli, not in the verifier.
+  curl() {
+    [[ "$*" == *".zip.sig"* ]] && return 22
+    command curl "$@"
+  }
+  export -f curl
+  run update_aws_cli
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"could not fetch"* ]]
+  [[ "$output" != *"did not verify"* ]]
+  refute_grep "aws/install" "${MOCK_CALLS_FILE:-/dev/null}"
 }
 
 # ── update_rust ──────────────────────────────────────────────────────────────
