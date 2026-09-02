@@ -586,6 +586,69 @@ _dev_probe_gpg_status() {
   [[ "$output" == *"expired"* ]]
 }
 
+@test "_aws_verify_zip: rejects an expired SIGNATURE from a live key (EXPSIG, distinct from EXPKEYSIG)" {
+  export PATH
+  PATH="$(_gpg_only_path)"
+  if ! command -v gpg >/dev/null 2>&1; then
+    skip "real gpg not on PATH outside tests/mocks"
+  fi
+  local _homedir="${BATS_TEST_TMPDIR}/signer" _payload="${BATS_TEST_TMPDIR}/p.txt"
+  local _sig="${BATS_TEST_TMPDIR}/p.sig" _pub="${BATS_TEST_TMPDIR}/pub.asc" _fpr
+
+  # The KEY stays live (1d) -- EXPSIG is signature expiry, DETAILS:484:
+  # "the signature with the keyid is good, but the SIGNATURE is expired".
+  # Reusing _dev_make_signing_key's key-expire argument would produce
+  # EXPKEYSIG (the sibling test above), not EXPSIG. The signature's OWN
+  # expiry is set separately, via --default-sig-expire on detach-sign.
+  mkdir -p "${_homedir}"
+  chmod 700 "${_homedir}"
+  printf 'allow-loopback-pinentry\n' > "${_homedir}/gpg-agent.conf"
+  printf '%s\n' "${_homedir}" >> "${BATS_TEST_TMPDIR}/_gpg_homedirs"
+  gpg --homedir "${_homedir}" --batch --pinentry-mode loopback --passphrase '' \
+    --quick-generate-key "Test Signer <t@example.com>" default default "1d" \
+    >/dev/null 2>&1
+  printf 'awscli test payload\n' > "${_payload}"
+  gpg --homedir "${_homedir}" --batch --pinentry-mode loopback --passphrase '' \
+    --default-sig-expire seconds=2 --yes --detach-sign --output "${_sig}" "${_payload}" \
+    >/dev/null 2>&1
+  gpg --homedir "${_homedir}" --batch --armor --export "Test Signer <t@example.com>" \
+    >"${_pub}" 2>/dev/null
+  _fpr="$(gpg --homedir "${_homedir}" --batch --with-colons --list-keys 2>/dev/null \
+    | awk -F: '/^fpr/{print $10; exit}')"
+  [[ -n "${_fpr}" ]]
+  sleep 3
+
+  local _probe_status="${BATS_TEST_TMPDIR}/probe_status" _probe_rc
+  # Unlike the EXPKEYSIG/REVKEYSIG siblings, this probe genuinely returns
+  # non-zero (see below) -- a bare `cmd; rc=$?` aborts the whole test right
+  # here under bats' own errexit-sensitive test-body execution, since a
+  # failing bare command outside a conditional is treated as the test
+  # failing at that line. Capture it through an `if` instead, which is
+  # exempt from that trap.
+  if _dev_probe_gpg_status "${_pub}" "${_sig}" "${_payload}" "${_probe_status}"; then
+    _probe_rc=0
+  else
+    _probe_rc=$?
+  fi
+  # Measured on GnuPG 2.5.22, reproduced twice on independent keys: unlike
+  # EXPKEYSIG/REVKEYSIG (still a "good signature", gpg exits 0), an expired
+  # SIGNATURE is a harder failure -- gpg exits 1 and status-fd carries an
+  # explicit `FAILURE gpg-exit ...` line alongside EXPSIG. Assert what gpg
+  # actually does for this member of the set, not what the other two do.
+  [ "${_probe_rc}" -eq 1 ]
+  grep -q "VALIDSIG ${_fpr} " "${_probe_status}"
+  grep -q "EXPSIG" "${_probe_status}"
+  # Guard against this test silently degrading into a duplicate of the
+  # EXPKEYSIG test above.
+  refute_grep "EXPKEYSIG" "${_probe_status}"
+
+  local _AWS_KEY_PATH="${_pub}"
+  AWSCLI_GPG_FPR="${_fpr}"
+  run _aws_verify_zip "${_payload}" "${_sig}"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"expired"* ]]
+}
+
 @test "_aws_verify_zip: rejects a revoked key, VALIDSIG and REVKEYSIG both present" {
   export PATH
   PATH="$(_gpg_only_path)"
