@@ -183,10 +183,29 @@ max_retries: 3
 files_touched:
   - lib/developer.sh
   - tests/setup_env/developer.bats
+  - tests/setup_env/extracted_functions.bats
 depends_on: [2, 3]
 ```
 
 **Base-tree value:** `lib/developer.sh:22` and `:40` are `curl "<url>" -o "<file>" || return 1` with **no `-f`** — a 404 lands on disk with rc=0 and would render as a signature failure.
+
+**Scope widened mid-execution (re-plan 1 of 2), and the omission is instructive.**
+`tests/setup_env/extracted_functions.bats` carries three pre-existing `update_aws_cli` tests
+asserting the OLD contract — `status -eq 0` with the installer invoked. Gating the installer
+on verification necessarily breaks all three, and the implementer, correctly staying inside
+its declared scope, could not fix them.
+
+The plan's original `files_touched` was derived by asking _what does this task edit_, and
+`writing-plans` self-review item 8 checks exactly that: does the file list cover what the task
+body describes touching. It did. The question neither asked is **what else calls the function
+whose contract this changes** — a caller-enumeration, not a file-list check. `shell.md`'s
+contract-widening entry states the same rule for production callers ("enumerate every call
+site before editing any of them"); it applies identically to test callers, and nothing in the
+plan-authoring path prompts for it.
+
+**How to apply when authoring:** for any task that changes a function's return contract or
+adds a gate, `grep -rn '<function>' tests/` and put every hit in `files_touched`. A test file
+is a call site.
 
 **Files:** macOS branch fetches the pkg and calls `_aws_verify_pkg`. Linux branch fetches zip **and** `${url}.sig`, then calls `_aws_verify_zip`. On verification failure, re-fetch both **once** and re-verify; a genuine tamper still fails on the second pass. Do not add an ETag bracket — measured at one spurious failure per 12–20 years, and it misses truncated downloads the retry catches.
 
