@@ -31,3 +31,4 @@ Cross-cutting decisions that apply across personal repos. Repo-specific decision
 | [0025](0025-no-mechanical-guard-for-ci-job-timeouts.md)        | No mechanical guard for CI job timeout-minutes                        | 2026-08-27 | Accepted                                              |
 | [0026](0026-cadence-detector-contract-is-two-streams.md)       | The cadence detector contract is two streams, and stderr is published | 2026-08-28 | Accepted                                              |
 | [0027](0027-update-run-exit-code-from-section-status.md)       | The update run's exit code                                            | 2026-08-29 | Accepted                                              |
+| [0028](0028-awscli-download-signature-verification.md)         | AWS CLI download signature verification                               | 2026-09-01 | Accepted                                              |
