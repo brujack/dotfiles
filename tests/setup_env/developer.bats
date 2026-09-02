@@ -443,3 +443,21 @@ component add rust-analyzer" ]
   _got="$(resolve_uv)"
   [ "${_got}" = "${_fake}" ]
 }
+
+# ── AWSCLI_GPG_FPR pin ───────────────────────────────────────────────────────
+
+@test "AWSCLI_GPG_FPR matches the fingerprint derived from the vendored key" {
+  # tests/mocks/gpg emits nothing on stdout; this needs real gpg to derive the
+  # fingerprint independently of the constant it is checked against — two
+  # separate artifacts that can drift apart (a key swap without a constant
+  # bump must go red), not the same derivation asserted against itself.
+  local _clean_path
+  _clean_path="$(printf '%s' "${PATH}" | tr ':' '\n' | grep -v 'tests/mocks' | tr '\n' ':' | sed 's/:$//')"
+  if ! PATH="${_clean_path}" command -v gpg >/dev/null 2>&1; then
+    skip "real gpg not on PATH outside tests/mocks"
+  fi
+  local _fpr
+  _fpr="$(PATH="${_clean_path}" gpg --show-keys --with-colons "${REPO_ROOT}/keys/aws-cli-team.asc" | awk -F: '/^fpr/{print $10; exit}')"
+  [[ -n "${_fpr}" ]]
+  [[ "${_fpr}" == "${AWSCLI_GPG_FPR}" ]]
+}
