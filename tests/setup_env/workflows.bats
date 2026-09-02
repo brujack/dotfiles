@@ -7,6 +7,19 @@ setup() {
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
   touch "${MOCK_CALLS_FILE}"
   load_setup_env
+  # load_setup_env sources real detect_env(), which sets HAS_AWS=1 for real
+  # on this box's actual profile (mac_workstation) -- nothing about that is
+  # test fixture. run_update's aws section now performs real signature
+  # verification (_aws_verify_pkg/_aws_verify_zip), which the mock gpg and
+  # tests/mocks/pkgutil's default MOCK_PKGUTIL_EXIT=1 both fail. So a test
+  # that never mentions AWS at all was silently exercising it anyway and
+  # failing on an unmocked verifier. Unset it here, at setup() scope rather
+  # than per-test (tdd.md pitfall E2): a per-test guard leaves the trap
+  # armed for the next test someone adds to this file, which is exactly how
+  # 15 tests inherited this one. The install_aws_tools tests below and the
+  # run_brew_install tests each `export HAS_AWS=1` or unset it themselves
+  # explicitly and are unaffected.
+  unset HAS_AWS
   # Minimal env so workflow functions don't crash on missing vars
   export HOME="${BATS_TEST_TMPDIR}"
   export PERSONAL_GITREPOS="${BATS_TEST_TMPDIR}/git-repos/personal"
