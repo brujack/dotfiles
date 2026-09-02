@@ -818,3 +818,59 @@ _dev_probe_gpg_status() {
   [ "$(wc -l < "${BATS_TEST_TMPDIR}/gpgconf_calls")" -eq 1 ]
   grep -qE -- '--homedir /' "${BATS_TEST_TMPDIR}/gpgconf_calls"
 }
+
+# ── _aws_verify_pkg ───────────────────────────────────────────────────────────
+#
+# The team-ID-mismatch and good-signature cases drive tests/mocks/pkgutil via
+# its stdout knob (MOCK_PKGUTIL_STDOUT) -- pkgutil's own exit code is
+# insufficient (measured: rc=0 for ANY Apple-notarized package, not just
+# AWS's), so the helper asserts the team ID string and these two cases are
+# what prove it does. The unsigned-pkg case runs against REAL pkgutil via a
+# real pkgbuild fixture, since a stub cannot express "Status: no signature"
+# without encoding this test's own premise -- macOS-only, since pkgbuild and
+# pkgutil do not exist on the ubuntu-latest runners both bats CI jobs use.
+
+@test "_aws_verify_pkg: rejects a notarized package signed under a different team ID" {
+  export MOCK_PKGUTIL_EXIT=0
+  export MOCK_PKGUTIL_STDOUT="   Status: signed by a developer certificate issued by Apple for distribution
+   Notarization: trusted by the Apple notary service
+    1. Developer ID Installer: Microsoft Corporation (UBF8T346G9)"
+  run _aws_verify_pkg "${BATS_TEST_TMPDIR}/whatever.pkg"
+  [ "$status" -ne 0 ]
+}
+
+@test "_aws_verify_pkg: returns 0 for a package signed under the AWS team ID" {
+  export MOCK_PKGUTIL_EXIT=0
+  export MOCK_PKGUTIL_STDOUT="   Status: signed by a developer certificate issued by Apple for distribution
+   Notarization: trusted by the Apple notary service
+    1. Developer ID Installer: AMZN Mobile LLC (${AWSCLI_APPLE_TEAM_ID})"
+  run _aws_verify_pkg "${BATS_TEST_TMPDIR}/whatever.pkg"
+  [ "$status" -eq 0 ]
+}
+
+@test "_aws_verify_pkg: fails when the verifier is not found, naming pkgutil" {
+  local _AWS_PKGUTIL_BIN="/nonexistent/pkgutil"
+  run _aws_verify_pkg "${BATS_TEST_TMPDIR}/whatever.pkg"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"pkgutil"* ]]
+}
+
+@test "_aws_verify_pkg: rejects a real unsigned package (pkgbuild fixture, real pkgutil)" {
+  if [[ "$(uname)" != "Darwin" ]]; then
+    skip "macOS-only: pkgbuild/pkgutil do not exist on ubuntu-latest, where both bats CI jobs run"
+  fi
+  export PATH
+  PATH="$(_gpg_only_path)"
+  if ! command -v pkgbuild >/dev/null 2>&1 || ! command -v pkgutil >/dev/null 2>&1; then
+    skip "pkgbuild/pkgutil not on PATH outside tests/mocks"
+  fi
+
+  local _root="${BATS_TEST_TMPDIR}/pkgroot"
+  mkdir -p "${_root}"
+  printf 'marker\n' > "${_root}/marker.txt"
+  local _pkg="${BATS_TEST_TMPDIR}/unsigned.pkg"
+  pkgbuild --root "${_root}" --identifier com.example.unsigned --version 1.0 "${_pkg}" >/dev/null 2>&1
+
+  run _aws_verify_pkg "${_pkg}"
+  [ "$status" -ne 0 ]
+}
