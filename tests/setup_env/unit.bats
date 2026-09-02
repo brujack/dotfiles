@@ -16,6 +16,41 @@ setup() {
 
 teardown() {
   rm -rf "${TMPDIR_TEST}"
+  # _aws_key_make_fixture (below) spawns a real gpg-agent/scdaemon bound to
+  # each homedir it creates via --quick-generate-key; kill them here rather
+  # than leaking orphans across the suite. Mirrors
+  # tests/setup_env/developer.bats' teardown for the identical hazard.
+  if [[ -f "${BATS_TEST_TMPDIR}/_gpg_homedirs" ]]; then
+    while IFS= read -r _gpg_homedir; do
+      gpgconf --homedir "${_gpg_homedir}" --kill all >/dev/null 2>&1
+    done < "${BATS_TEST_TMPDIR}/_gpg_homedirs"
+  fi
+}
+
+# Real gpg is needed to read a fixture key's expiry field; tests/mocks/gpg
+# (put on PATH by load_mocks in setup() above) prints nothing and would make
+# every expiry unparseable. Mirrors the PATH-scrub idiom in
+# tests/setup_env/developer.bats' _gpg_only_path.
+_aws_key_gpg_only_path() {
+  printf '%s' "${PATH}" | tr ':' '\n' | grep -v 'tests/mocks' | tr '\n' ':' | sed 's/:$//'
+}
+
+# Generates a throwaway ASCII-armored public key in $2 with the gpg expire
+# spec in $3 ("30d", "10y", ...), homed in $1. No signing needed -- the
+# doctor arm only ever reads the key's own expiration field, never verifies
+# a signature against it. Caller must already have PATH pointed at real gpg
+# via _aws_key_gpg_only_path.
+_aws_key_make_fixture() {
+  local _homedir="$1" _pubkey="$2" _expire="$3"
+  mkdir -p "${_homedir}"
+  chmod 700 "${_homedir}"
+  printf 'allow-loopback-pinentry\n' > "${_homedir}/gpg-agent.conf"
+  printf '%s\n' "${_homedir}" >> "${BATS_TEST_TMPDIR}/_gpg_homedirs"
+  gpg --homedir "${_homedir}" --batch --pinentry-mode loopback --passphrase '' \
+    --quick-generate-key "Test AWS Key <t@example.com>" default default "${_expire}" \
+    >/dev/null 2>&1
+  gpg --homedir "${_homedir}" --batch --armor --export "Test AWS Key <t@example.com>" \
+    >"${_pubkey}" 2>/dev/null
 }
 
 # ── quiet_which ─────────────────────────────────────────────────────────────
@@ -778,6 +813,7 @@ EOF
   _doctor_check_cred_dirs()     { :; }
   _doctor_check_hooks_path()    { :; }
   _doctor_check_versions()      { :; }
+  _doctor_check_aws_key_expiry() { :; }
   run_doctor
   [ "${_called}" -eq 1 ]
 }
@@ -790,6 +826,7 @@ EOF
   _doctor_check_cred_dirs()     { :; }
   _doctor_check_hooks_path()    { :; }
   _doctor_check_versions()      { :; }
+  _doctor_check_aws_key_expiry() { :; }
   _doctor_check_github_mcp()    { doctor_warn "test" "a warning"; }
   run run_doctor
   [[ "$output" == *"1 warnings"* ]]
@@ -1716,6 +1753,71 @@ _unmocked_path() {
   _doctor_check_symlink_roots
   [ "${_DOCTOR_FAIL}" -eq 1 ]
   [ "${_DOCTOR_FAILED}" -eq 1 ]
+}
+
+# ── _doctor_check_aws_key_expiry ──────────────────────────────────────────────
+
+@test "_doctor_check_aws_key_expiry is silent when HAS_AWS is unset (e.g. mac_mini)" {
+  _DOCTOR_PASS=0; _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_WARN=0
+  unset HAS_AWS
+  run _doctor_check_aws_key_expiry
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  [ "${_DOCTOR_PASS}" -eq 0 ]
+  [ "${_DOCTOR_WARN}" -eq 0 ]
+  [ "${_DOCTOR_FAILED}" -eq 0 ]
+}
+
+@test "_doctor_check_aws_key_expiry warns on a near-expiry key" {
+  export PATH
+  PATH="$(_aws_key_gpg_only_path)"
+  if ! command -v gpg >/dev/null 2>&1; then
+    skip "real gpg not on PATH outside tests/mocks"
+  fi
+  export HAS_AWS=1
+  _DOCTOR_PASS=0; _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_WARN=0
+  local _homedir="${BATS_TEST_TMPDIR}/near" _pub="${BATS_TEST_TMPDIR}/near.asc"
+  _aws_key_make_fixture "${_homedir}" "${_pub}" "30d"
+  [ -s "${_pub}" ]
+  local _AWS_KEY_PATH="${_pub}"
+  run _doctor_check_aws_key_expiry
+  [[ "$output" == *"WARN"* ]]
+  [[ "$output" == *"AWS CLI signing key"* ]]
+}
+
+@test "_doctor_check_aws_key_expiry does not warn on a far-future key" {
+  export PATH
+  PATH="$(_aws_key_gpg_only_path)"
+  if ! command -v gpg >/dev/null 2>&1; then
+    skip "real gpg not on PATH outside tests/mocks"
+  fi
+  export HAS_AWS=1
+  _DOCTOR_PASS=0; _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_WARN=0
+  local _homedir="${BATS_TEST_TMPDIR}/far" _pub="${BATS_TEST_TMPDIR}/far.asc"
+  _aws_key_make_fixture "${_homedir}" "${_pub}" "10y"
+  [ -s "${_pub}" ]
+  local _AWS_KEY_PATH="${_pub}"
+  run _doctor_check_aws_key_expiry
+  [[ "$output" != *"WARN"* ]]
+  [ "${_DOCTOR_WARN}" -eq 0 ]
+}
+
+@test "_doctor_check_aws_key_expiry warns rather than fails on a near-expiry key" {
+  export PATH
+  PATH="$(_aws_key_gpg_only_path)"
+  if ! command -v gpg >/dev/null 2>&1; then
+    skip "real gpg not on PATH outside tests/mocks"
+  fi
+  export HAS_AWS=1
+  _DOCTOR_PASS=0; _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_WARN=0
+  local _homedir="${BATS_TEST_TMPDIR}/near2" _pub="${BATS_TEST_TMPDIR}/near2.asc"
+  _aws_key_make_fixture "${_homedir}" "${_pub}" "30d"
+  [ -s "${_pub}" ]
+  local _AWS_KEY_PATH="${_pub}"
+  _doctor_check_aws_key_expiry
+  [ "${_DOCTOR_WARN}" -eq 1 ]
+  [ "${_DOCTOR_FAIL}" -eq 0 ]
+  [ "${_DOCTOR_FAILED}" -eq 0 ]
 }
 
 # ── _doctor_check_github_mcp ─────────────────────────────────────────────────

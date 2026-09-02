@@ -1465,13 +1465,33 @@ setup_constants_copy() {
   ! grep -q "install_aws_tools" "${MOCK_CALLS_FILE}"
 }
 
-@test "run_setup_or_developer returns non-zero when install_aws_tools fails" {
+@test "run_setup_or_developer continues and warns when install_aws_tools fails" {
+  # install_aws_tools gained real error propagation once it started verifying
+  # signatures, which ARMS this call site's `|| return 1`/`|| log_warn` guard
+  # for the first time -- previously the function always returned 0 and the
+  # guard was dormant. Armed as `|| return 1`, a transient aws-cli failure
+  # would abort setup_or_developer before setup_vim_plugins runs, costing
+  # pyenv/ansible/ruby/rust over one optional CLI -- so the call site must
+  # degrade like install_renovate_held_agent/install_ledger_drift_agent do in
+  # run_setup_user, not abort. This is the continuation test; the wording
+  # test below asserts a warning was actually printed.
+  export MACOS=1
+  unset LINUX UBUNTU
+  install_macos_packages() { return 0; }
+  install_aws_tools() { return 1; }
+  setup_vim_plugins() { printf "setup_vim_plugins\n" >> "${MOCK_CALLS_FILE}"; }
+  run run_setup_or_developer
+  [ "$status" -eq 0 ]
+  grep -q "setup_vim_plugins" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_setup_or_developer warns when install_aws_tools fails" {
   export MACOS=1
   unset LINUX UBUNTU
   install_macos_packages() { return 0; }
   install_aws_tools() { return 1; }
   run run_setup_or_developer
-  [ "$status" -ne 0 ]
+  [[ "$output" == *"aws-cli not installed"* ]]
 }
 
 # ── return-code propagation: run_developer_or_ansible ────────────────────────
