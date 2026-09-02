@@ -86,22 +86,66 @@ and the update path get identical treatment.
 
 ### Linux: `_aws_verify_zip`
 
+The whole body runs in a `( )` subshell with an `EXIT` trap. That is not style: `trap ...
+RETURN` is **not** function-scoped in bash, and using it here was a defect — see the second
+correction below.
+
 ```bash
-_ring="$(mktemp -d)" || return 1
-# gpg 2.x spawns gpg-agent AND scdaemon bound to the homedir; both survive its
-# deletion. Measured: 3 verifications leave 3 of each orphaned. This is cleanup,
-# not propagation, so it runs on every path (tdd.md's cleanup exception).
-trap 'gpgconf --homedir "${_ring}" --kill all >/dev/null 2>&1; rm -rf "${_ring}"' RETURN
+_aws_verify_zip() {
+  local _zip="$1" _sig="$2"
 
-gpg --homedir "${_ring}" --batch --import "${_key}" || return 1
-gpg --homedir "${_ring}" --batch --status-fd 1 --verify "${_sig}" "${_zip}" \
-  >"${_status}" 2>/dev/null
+  command -v "${_AWS_GPG_BIN:-gpg}" >/dev/null 2>&1 || {
+    log_error "gpg not found; cannot verify the awscli signature"
+    log_error "install: brew install gnupg  /  apt-get install gnupg"
+    return 1
+  }
 
-# Reject BEFORE accepting. VALIDSIG is emitted for an expired or revoked key too,
-# so an accept-only assertion is not sufficient -- see the correction below.
-grep -qE '^\[GNUPG:\] (EXPKEYSIG|REVKEYSIG|KEYREVOKED|KEYEXPIRED)' "${_status}" && return 1
-grep -q "^\[GNUPG:\] VALIDSIG ${AWSCLI_GPG_FPR} " "${_status}" || return 1
+  (
+    _ring="$(mktemp -d)" || exit 1
+    # gpg 2.x spawns gpg-agent AND scdaemon bound to the homedir; both survive
+    # its deletion. Measured: 3 verifications leave 3 of each orphaned. EXIT in a
+    # subshell fires exactly once, with _ring guaranteed in scope.
+    trap 'gpgconf --homedir "${_ring}" --kill all >/dev/null 2>&1; rm -rf "${_ring}"' EXIT
+
+    # _status lives INSIDE _ring so the same trap removes it.
+    _status="${_ring}/status"
+    _err="${_ring}/err"
+
+    "${_AWS_GPG_BIN:-gpg}" --homedir "${_ring}" --batch --import "${_key}" \
+      >/dev/null 2>"${_err}" || { _aws_gpg_fail "${_err}" "could not import the vendored key"; exit 1; }
+
+    "${_AWS_GPG_BIN:-gpg}" --homedir "${_ring}" --batch --status-fd 1 \
+      --verify "${_sig}" "${_zip}" >"${_status}" 2>"${_err}"
+
+    # Reject BEFORE accepting, and split the two causes: they demand opposite
+    # operator responses. VALIDSIG is emitted for both, and gpg exits 0 for both.
+    if grep -qE '^\[GNUPG:\] (REVKEYSIG|KEYREVOKED)' "${_status}"; then
+      log_error "AWS signing key REVOKED — do not install; investigate"
+      exit 1
+    fi
+    if grep -qE '^\[GNUPG:\] (EXPSIG|EXPKEYSIG|KEYEXPIRED)' "${_status}"; then
+      log_error "vendored key or signature expired — refresh keys/aws-cli-team.asc"
+      exit 1
+    fi
+    if ! grep -q "^\[GNUPG:\] VALIDSIG ${AWSCLI_GPG_FPR} " "${_status}"; then
+      _aws_gpg_fail "${_err}" "signature did not verify against the vendored key"
+      exit 1
+    fi
+    exit 0
+  )
+}
 ```
+
+`_aws_gpg_fail` prints the caller's message plus the tail of gpg's stderr. That stderr is
+captured rather than discarded deliberately: it is the only stream separating "no valid
+OpenPGP data found" (a truncated or HTML `.sig`) from a genuine bad signature, and discarding
+it would reproduce, on the verify side, exactly the misattribution the Fetching section
+argues against on the fetch side.
+
+Note the shape of every reject: `if ... then ... fi`, never `grep ... && return 1`. The latter
+is one reorder away from inverting the helper — if a reject line ever becomes the last command
+in the function, a **clean** signature produces no match, `grep` exits 1, and the helper
+rejects a good artifact while the diff reads as a harmless line move.
 
 The keyring is a `mktemp -d` containing only the vendored key, so a zero exit already
 implies our key signed it. The `VALIDSIG` fingerprint assertion is belt — and it is what
@@ -138,14 +182,88 @@ PASS throughout, with no test that could go red. Revocation is the sharper case:
 event where AWS actively says _stop trusting this artifact_ is the one an accept-only guard
 ignores.
 
-**Policy: reject both, fail closed.** The consequence is explicit — on 2027-07-01 the aws
-section starts failing fleet-wide until the vendored key is refreshed. That is an
-availability cliff on a known date, and nothing in this change warns of its approach; a
-`doctor` arm warning at N days out is deferred to a backlog row rather than built here.
+**Policy: reject, fail closed, and split the two causes.** They demand opposite operator
+responses — `EXPSIG`/`EXPKEYSIG`/`KEYEXPIRED` means _our vendored snapshot aged out_, remedied
+by `git pull` and a refreshed key file; `REVKEYSIG`/`KEYREVOKED` means _AWS actively revoked
+this key_, remedied by stopping and investigating. Collapsing them into one message hands the
+one certain event on this path the loudest label the system has, with no remedy attached —
+which is the misattribution this spec argues against elsewhere and then committed here.
 
 `gpg --assert-signer` (2.4.1+) expresses this more directly and was considered. It is not
 used because it would introduce a gpg version floor this repo does not currently state,
 while the reject arm is portable to whatever gpg a machine has.
+
+#### Correction: `EXPSIG` was missing, and the quoted sentence names it
+
+The first reject list was `(EXPKEYSIG|REVKEYSIG|KEYREVOKED|KEYEXPIRED)`. `DETAILS:476` puts
+**`EXPSIG`** in the same mutually-exclusive set, and `DETAILS:484` defines it as "the
+signature with the keyid is good, but **the signature is expired**" — _signature_ expiry,
+independent of _key_ expiry. So the arm closed three of four cases while transcribing from the
+very sentence this spec quotes, which names the fourth. It is now in the list.
+
+`BADSIG` and `ERRSIG` are deliberately **not** added: both are already covered by the accept
+arm's failure to match, and a reject list that grows by superstition is harder to reason about
+than one whose every member is justified.
+
+#### Correction: `trap ... RETURN` is not function-scoped, and this one killed the real keyring
+
+The previous snippet used `trap ... RETURN` at function scope. Reproduced on bash 5.3.15 and
+3.2.57, identically:
+
+```
+  in _verify
+TRAP FIRED ring=[/tmp/FAKE_RING]     <- intended: _ring in scope
+  caller doing more work
+TRAP FIRED ring=[]                   <- caller returns; _ring is a dead local
+  outer done
+TRAP FIRED ring=[]                   <- and again, one level further out
+
+$ gpgconf --homedir "" --list-dirs homedir
+/Users/bruce/.gnupg
+```
+
+An empty `--homedir` resolves to the **operator's real GnuPG home**. So each leaked firing ran
+`gpgconf --homedir ~/.gnupg --kill all`, killing the live `gpg-agent`, `dirmngr` and
+`scdaemon` — and **silently**, because the trap body carries `>/dev/null 2>&1` and `rm -rf ""`
+exits 0. A cleanup whose failure mode is worse than the leak it cleans: round 1 established the
+leaked agents are inert (fds on `/dev/null`, no deadlock possible), and the remedy reached into
+the operator's real keyring infrastructure instead.
+
+The `( )` + `EXIT` form fires exactly once, with `_ring` guaranteed in scope. Found
+independently by two lenses in the same round.
+
+#### Correction: `_status` was never created
+
+The previous snippet redirected gpg's stdout to `${_status}` without declaring it anywhere.
+An undeclared variable makes the redirect fail, so the file never exists, both greps read a
+nonexistent path, neither matches, and the helper returns 1. **That is fail-closed, so nothing
+surfaces it** — every reject-case test stays green against a helper that never ran gpg.
+`_status` now lives inside `_ring`, which also means the one trap removes it.
+
+#### Scope correction: not fleet-wide
+
+This section previously said the 2027-07-01 expiry fails "fleet-wide". Measured against
+`config/profiles.sh`: `HAS_AWS` ∧ Linux is `linux_workstation` + `wsl2_workstation` —
+`workstation` and `cruncher`, **2 of 7 machines**, and per `USER.md` `cruncher` is the WSL2
+backup-of-last-resort. macOS reaches `_aws_verify_pkg`, which has no key and no expiry. The
+inflated figure argued _for_ the `doctor` arm that was then deferred, which is the wrong
+direction for an error to point.
+
+#### Key durability, measured rather than assumed
+
+Both round-2 lenses independently named "AWS keeps signing with this key" as the assumption
+that breaks the design. Measured across the v2 release history:
+
+```
+2.0.30  2.5.0  2.10.0  2.15.0  2.20.0  2.25.0  2.31.0  2.36.37
+   -> all eight .sig files:  keyid=A6310ACC4672475C
+docs page BEGIN PGP PUBLIC KEY BLOCK count: 2 (diffed — identical; no successor staged)
+```
+
+One issuer key across the whole of v2. So `AWSCLI_GPG_FPR` as a single scalar is sound, and
+the keyring-of-N-fingerprints restructure is not needed. The boundary: this is _never rotated
+in v2 history_, not _will never rotate_. A future rotation now fails closed and loudly rather
+than degrading silently, which is the right direction to be wrong in.
 
 ### macOS: `_aws_verify_pkg`
 
@@ -323,8 +441,25 @@ The repo has already decided this exact question 18 lines above, with a comment 
 install_renovate_held_agent || log_warn "renovate cadence agent not installed — see above"
 ```
 
-So the call site becomes `install_aws_tools || log_warn`, paired with a `doctor` arm that
-reports a missing `aws` binary. Note the asymmetry this preserves rather than introduces:
+So the call site becomes `install_aws_tools || log_warn`, paired with a `doctor` arm.
+
+**The `doctor` arm watches key expiry, not tool presence** — a round-2 correction. Tool
+presence is the _contingent_ failure; key expiry is _certain_, _dated_ (2027-07-01), and
+produces the same observable. Building the arm for the contingent failure while deferring the
+guaranteed one is backwards, so the arm warns at N days out and the backlog row now covers
+only the residual question of how AWS rotates.
+
+**It must be gated on `HAS_AWS`, and the spec previously did not say so.**
+`_doctor_check_tools` (`lib/helpers.sh:465`) carries an unconditional
+`_common_tools=(git zsh curl tmux bats)` plus OS-conditional arms, and has no
+capability-conditional arm at all — so the obvious implementation appends to that array.
+`PROFILE_CAPS[mac_mini]="gui printing"` carries no `aws`, three hostnames map to it
+(`office`, `office-1`, `home-1`), and `run_doctor` exits non-zero on any failure. Ungated,
+`-t doctor` goes permanently red on machines that are correctly not supposed to have the AWS
+CLI — an alert firing on correct state, which is the failure this spec names two sections
+earlier.
+
+Note the asymmetry this preserves rather than introduces:
 `update_aws_cli` already degrades correctly — `_update_record_end "aws" "${PIPESTATUS[0]}"`
 records a section FAIL and the run continues. Only the provisioning path escalates, and only
 because of a guard nobody has ever seen execute.
@@ -342,32 +477,67 @@ runs. Adding a second network fetch (the `.sig`) to that idiom, and giving its f
 loudest available label, is the worst case; the `.sig` fetch needs `-f` and a message that
 distinguishes _could not fetch the signature_ from _the signature did not verify_.
 
-**The zip and its `.sig` are two fetches from a rolling URL.** An AWS release landing between
-them yields a genuine fingerprint-verified mismatch on a completely benign event — reported,
-under fail-closed, as a security failure, weekly, on seven machines. A security-shaped alert
-that fires on routine releases is precisely what trains an operator to ignore the channel.
+**The zip and its `.sig` are two fetches from a rolling URL**, so an AWS release landing
+between them yields a fingerprint mismatch on a benign event. Under fail-closed that is
+reported as a security failure.
 
-Resolving a versioned URL was the first choice and was **rejected on measurement**: the CDN
-offers no version signal (`num_redirects=0`, no version header, `awscli.amazonaws.com/latest`
-404s), and `aws/aws-cli` publishes **no GitHub releases** — `releases/latest` returns 404, so
-the repo's existing `_fetch_github_latest` (`workflows.sh:715`) cannot be reused and would
-silently return empty. Only the `tags` API carries the version, which would put a
-rate-limited GitHub dependency on the weekly update path.
-
-The CDN does return an `ETag`, which is a content identity. Bracket the fetches with it:
+**The response is a single retry, and nothing more:**
 
 ```bash
-_etag_before=$(curl -fsSI "${_url}" | awk -F'"' '/^[Ee][Tt]ag:/{print $2}')
-curl -fsS -o "${_zip}" "${_url}"     || return 1
-curl -fsS -o "${_sig}" "${_url}.sig" || return 1
-_etag_after=$(curl -fsSI "${_url}" | awk -F'"' '/^[Ee][Tt]ag:/{print $2}')
+if ! _aws_verify_zip "${_zip}" "${_sig}"; then
+  _aws_fetch_both || return 1        # one retry; a release cannot land twice
+  _aws_verify_zip "${_zip}" "${_sig}" || return 1
+fi
 ```
 
-An unchanged ETag means no release landed between the fetches. A changed one means re-fetch
-both **once** and re-verify before reporting anything; a genuine tamper still fails on the
-second pass. This detects the race rather than preventing it, which is sufficient because
-the response is a retry, and it stays entirely within the CDN already in use — no new
-dependency, no rate limit, no new failure point.
+#### Correction: the ETag bracket was over-engineering, and it absorbed its own failure
+
+A previous version bracketed the two fetches with `curl -fsSI ... | awk` HEAD requests and
+compared ETags. Both round-2 lenses independently said to cut it, and the arithmetic is
+decisive. Measured from the v2 CHANGELOG: **976 releases across ~6.5 years**, one per ~2.4
+days, against a ~30 s window, on the **2** Linux machines that reach this code, weekly:
+
+```
+P(release inside the window) per run   ~1.4e-4
+expected spurious failures             ~1 per 12-20 years
+standing cost                          2 extra HEADs per run, an awk parse,
+                                       a comparison, 2 test rows, and lines
+                                       against a coverage floor with zero margin
+```
+
+Retry-on-verification-failure covers **every** state the bracket covered _and_ two it did
+not — a truncated download and a CDN edge inconsistency both leave the ETag unchanged, so the
+bracket misses them and reports them as signature failures, while a retry recovers.
+
+Worse, the bracket absorbed its own failure. `curl -fsSI` on a 404 sets rc=22 **and still
+emits headers**, and `$(curl ... | awk ...)` takes awk's status, so the failure is discarded
+and a plausible ETag is parsed out of the error response. A missing header, a stripped ETag,
+or two failed HEADs all yield `before == after` — **equal**, i.e. the _success_ verdict,
+having measured nothing. That is `behavior.md`'s guard-absorbs-its-own-failure, in the very
+mechanism added to prevent a misattribution. And because both HEADs hit the same warm
+CloudFront edge (`X-Cache: Hit`, `Age: 74175`), it was likelier to fire on cache variance than
+on its actual cause.
+
+#### Correction: the CDN _does_ expose a version signal
+
+The paragraph above previously said the CDN "offers no version signal", and that was an
+instrument error, not a fact. The probe grepped for `x-amz-meta`, which matches nothing here;
+the header is `x-amz-version-id`:
+
+```
+x-amz-version-id: ahtpaCJQzcSBj6vYLmTFEUx7RyCGdtBh    (the zip)
+x-amz-version-id: mVm8Ujy52vYvDd_Y.qX6Q2bFLCAxZoPy    (the .sig, independently versioned)
+?versionId=<id> HEAD -> 200                           (publicly readable)
+```
+
+The grep failed toward _absent_, and _absent_ was the answer that justified the conclusion
+already being reached — the correlated-sign failure `behavior.md` describes. What survives:
+S3 object versioning would only **narrow** the race, since the two objects carry independent
+versionIds and a release can still land between the two HEADs, and the retry above closes it
+more cheaply either way. What does not survive is the claim that the option did not exist. The
+GitHub half of that paragraph is unaffected and was independently re-confirmed:
+`aws/aws-cli` publishes no releases, `releases/latest` returns 404, so `_fetch_github_latest`
+(`workflows.sh:715`) genuinely cannot be reused.
 
 ## Testing
 
@@ -404,34 +574,69 @@ documented answer is an `_OVERRIDE_*` env seam — `CLAUDE.md`'s Test Seams sect
 `_OVERRIDE_BATS_BIN` and `GGSHIELD_FALLBACK_PATHS` for precisely this
 "the branch is otherwise unreachable" reason — which is not a caller-weakening argument.
 
+### Three seams this change must declare, not discover in Phase 2
+
+- **`_AWS_GPG_BIN` / `_AWS_PKGUTIL_BIN`** — the verifier-absent rows are otherwise
+  untestable. Driving absence through `PATH` means removing `/opt/homebrew/bin`, which also
+  holds `git` and `make`; `shell.md` names that class and this repo has three precedents
+  (`_OVERRIDE_BATS_BIN`, `GGSHIELD_BIN`/`GGSHIELD_FALLBACK_PATHS`, `MINIMAL_PATH`). Both are
+  read unconditionally in production, granting nothing beyond what editing `PATH` already
+  grants.
+- **`_AWS_KEY_PATH`** — points `_aws_verify_zip` at a fixture key so real-gpg cases can drive
+  the fingerprint-mismatch arm.
+
+### Assertions must reach the intermediate artifact, not just the return code
+
+**Every reject row passes against a helper that never invoked gpg.** With `${_status}` empty
+for _any_ reason — gpg absent, gpg crashed, a failed redirect, a stdout-silent stub,
+`--status-fd` changing — the reject greps miss, the accept grep misses, and the helper returns
+non-zero. That is fail-closed and correct in production, and it makes the negative cases
+non-discriminating in test.
+
+So the expired- and revoked-key rows assert on `${_status}`'s **contents**: that it contained
+`VALIDSIG <fpr>` **and** `EXPKEYSIG` (or `REVKEYSIG`), _and_ that the helper still returned
+non-zero. Asserting the return code alone re-creates, one layer in, the exact vacuous pass
+this section exists to prevent — and those two rows are the regression test for the defect
+round 1 actually found, so they are the last ones that should be satisfiable by an inert
+helper.
+
 `_aws_verify_pkg` still needs the `pkgutil` mock, because the `test` job runs on
 `ubuntu-latest` where `pkgutil` does not exist. That mock gains a stdout knob and keeps its
 existing exit knob and `:-1` default: `MOCK_PKGUTIL_EXIT` has **3 live consumers**
 (`tests/setup_env/macos.bats:45,56,66`, the Rosetta check at `lib/macos.sh:25`), so this is a
 backward-compatible shared-fixture change, not a new file.
 
-New cases, in `tests/setup_env/developer.bats`:
+New cases, in `tests/setup_env/developer.bats`. Those marked **real gpg** run against a
+throwaway key rather than a stub.
 
-New cases. Those marked **real gpg** run against a throwaway key rather than a stub.
+| case                                             | asserts                                                                        | fixture              |
+| ------------------------------------------------ | ------------------------------------------------------------------------------ | -------------------- |
+| good signature, live key                         | helper returns 0 **and** the installer IS invoked                              | real gpg             |
+| **expired key**                                  | `_status` held `VALIDSIG <fpr>` AND `EXPKEYSIG`, gpg exited 0, helper failed   | real gpg             |
+| **expired signature (`EXPSIG`)**                 | `_status` held `VALIDSIG <fpr>` AND `EXPSIG`, gpg exited 0, helper failed      | real gpg             |
+| **revoked key**                                  | `_status` held `VALIDSIG <fpr>` AND `REVKEYSIG`, gpg exited 0, helper failed   | real gpg             |
+| revoked vs expired message                       | the two produce **different** messages, each naming its own remedy             | real gpg             |
+| fingerprint mismatch                             | a valid signature from a _different_ key returns non-zero                      | real gpg             |
+| corrupt signature                                | returns non-zero, `aws/install` never invoked, gpg's stderr reaches the caller | real gpg             |
+| the vendored key verifies a real AWS signature   | `keys/aws-cli-team.asc` actually works, not merely parses                      | real gpg             |
+| vendored key fingerprint equals `AWSCLI_GPG_FPR` | two derivations — a key swap without a constant bump goes red                  | real gpg             |
+| verifier absent (gpg)                            | returns non-zero, message names `gpg`, installer never invoked                 | `_AWS_GPG_BIN`       |
+| verifier absent (pkgutil)                        | returns non-zero, message names `pkgutil`, installer never invoked             | `_AWS_PKGUTIL_BIN`   |
+| the real keyring is untouched                    | `~/.gnupg` agent still alive after a verification — the trap regression        | real gpg             |
+| unsigned pkg                                     | `pkgutil` reports `no signature`, helper returns non-zero                      | pkgbuild, macOS-only |
+| team ID mismatch                                 | `pkgutil` rc=0 with a different team ID returns non-zero                       | stub                 |
+| good pkg signature                               | helper returns 0 **and** `sudo installer` IS invoked                           | stub                 |
+| verification fails once, then succeeds           | one retry happens and the section reports OK                                   | stub                 |
+| verification fails twice                         | reports FAIL — the retry does not mask a genuine tamper                        | stub                 |
+| `.sig` fetch 404s                                | message says _could not fetch_, NOT _did not verify_                           | stub                 |
+| leftover download does not suppress install      | `install_aws_tools` still installs when a stale zip/pkg is present             | stub                 |
+| `install_aws_tools` failure does not abort setup | caller warns and `run_setup_or_developer` continues                            | stub                 |
 
-| case                                             | asserts                                                             | fixture  |
-| ------------------------------------------------ | ------------------------------------------------------------------- | -------- |
-| good signature, live key                         | helper returns 0 **and** the installer IS invoked                   | real gpg |
-| **expired key**                                  | returns non-zero despite `VALIDSIG` being present and gpg exiting 0 | real gpg |
-| **revoked key**                                  | returns non-zero despite `VALIDSIG` being present and gpg exiting 0 | real gpg |
-| fingerprint mismatch                             | a valid signature from a _different_ key returns non-zero           | real gpg |
-| corrupt signature                                | returns non-zero, `aws/install` never invoked                       | real gpg |
-| the vendored key verifies a real AWS signature   | `keys/aws-cli-team.asc` actually works, not merely parses           | real gpg |
-| verifier absent (gpg, Linux)                     | returns non-zero, message names `gpg`, installer never invoked      | PATH     |
-| verifier absent (pkgutil, macOS)                 | returns non-zero, message names `pkgutil`, installer never invoked  | PATH     |
-| unsigned pkg                                     | `pkgutil` reports `no signature`, helper returns non-zero           | pkgbuild |
-| team ID mismatch                                 | `pkgutil` rc=0 with a different team ID returns non-zero            | stub     |
-| good pkg signature                               | helper returns 0 **and** `sudo installer` IS invoked                | stub     |
-| vendored key fingerprint equals `AWSCLI_GPG_FPR` | two derivations — a key swap without a constant bump goes red       | real gpg |
-| ETag changed mid-fetch                           | re-fetches once and re-verifies rather than reporting a failure     | stub     |
-| `.sig` fetch 404s                                | message says _could not fetch_, NOT _did not verify_                | stub     |
-| leftover download does not suppress install      | `install_aws_tools` still installs when a stale zip/pkg is present  | stub     |
-| `install_aws_tools` failure does not abort setup | caller warns and `run_setup_or_developer` continues                 | stub     |
+**The `pkgbuild` row runs on zero CI runners and must say so.** Both bats jobs (`test`,
+`bash-coverage`) are `ubuntu-latest`; `lint-macos` runs `bash -n`/`zsh -n` and no bats.
+`pkgbuild` and `pkgutil` are macOS-only, so that row is local-only and needs an explicit
+skip guard — unguarded it fails every CI run. Naming which suite a case belongs to is part
+of specifying it.
 
 **Every negative case needs a positive control in the same file.** A suite of only-fails
 cannot distinguish "correctly rejecting" from "never ran" — the vacuous-pass failure
@@ -495,8 +700,10 @@ staleness sweep was declined as its own piece of work.
 ## Verification
 
 `make test` — the new bats cases plus no regression in the existing suite (1601 tests, a
-figure CI-measured on `b5e01e6b` per `CLAUDE.md`, not re-measured on this branch's base;
-the one intervening commit is docs-only and cannot move it). `make lint` —
+figure CI-measured on `b5e01e6b` per `CLAUDE.md`, not re-measured on this branch's base; the
+**six** intervening commits — `git log --oneline b5e01e6b..HEAD | wc -l`, corrected from
+"one", which was asserted rather than counted — are all docs-only and cannot move it).
+`make lint` —
 shellcheck at default severity over the changed files, which now include a new top-level
 `keys/` directory containing no shell (`scripts/list-shell-files.sh` derives scope from
 shebangs, so `.asc` is invisible to it and the lint scope is unchanged).
@@ -606,3 +813,110 @@ it changes the rotation story but not this change's mechanism.
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+---
+
+## Multi-Lens Review — Round 2
+
+Reviewed at commit: `bdc7fd04` (after the round-1 revision and the `installer` measurement)
+
+Three lenses, ~776k subagent tokens. **Every finding was in the round-1 corrections, not the
+original design** — which is the measured argument against budgeting review rounds on an
+assumption of decaying yield. Two lenses independently found the same blocker.
+
+### Goal-Fit
+
+Finding: (1) The proportionality split is never stated — the expensive Linux arm (vendored
+key, new `keys/` dir, constant, keyring, trap, reject arm, 9 real-gpg rows, a dated cliff)
+protects **2** machines, while the cheap macOS arm protects **4**; "fails fleet-wide" was
+wrong, and wrong in the direction that argued for the arm this spec then deferred. (2) The
+ETag bracket fails the reads-it test both ways and is dominated by plain
+retry-on-verification-failure, which additionally covers truncated downloads that leave the
+ETag unchanged; measured rate ~1 spurious failure per 12–20 years. (3) The `doctor` arm was
+built for the contingent failure (tool presence) while the certain, dated one (key expiry)
+was deferred. (4) Two test rows had no implementable fixture: verifier-absent needs binary
+seams, and the `pkgbuild` row runs on zero CI runners.
+
+Premise check: it verified the claim that closed the design space — "the CDN offers no version
+signal" — and **refuted it**. `x-amz-version-id` is present on both objects and `?versionId=`
+is publicly readable. The spec's own probe had grepped for `x-amz-meta`.
+
+Assumption: has the issuer key ID on the `.sig` ever changed across releases — i.e. can
+`AWSCLI_GPG_FPR` be a scalar at all?
+
+Disposition: **Addressed.** ETag bracket cut for retry; `doctor` arm moved to key expiry and
+gated on `HAS_AWS`; both binary seams and the `pkgbuild` CI guard now named in the spec;
+machine counts corrected throughout; the version-signal claim corrected as an instrument
+error rather than quietly deleted. The assumption was **measured and holds**: eight `.sig`
+files spanning 2.0.30 → 2.36.37 all carry `keyid=A6310ACC4672475C`, so the scalar is sound
+and the keyring-of-N restructure is unnecessary.
+
+### Ergonomics
+
+Finding: (1) **BLOCKER** — `trap ... RETURN` is not function-scoped; it fires again on every
+enclosing return with `_ring` out of scope, and `gpgconf --homedir ""` resolves to the
+operator's real `~/.gnupg`, so the cleanup silently kills their live `gpg-agent`, `dirmngr`
+and `scdaemon`. (2) **BLOCKER** — `curl -fsSI` on a 404 emits headers and the `$( | awk )`
+discards curl's rc, so both HEADs failing yields equal ETags and the guard reports success
+having measured nothing. (3) The one certain event on this path gets the loudest label with
+no remedy attached, while the spec argues the opposite case for `curl` two sections earlier.
+(4) The new `doctor` arm needs a `HAS_AWS` gate or `-t doctor` goes permanently red on the
+three `mac_mini` hostnames. (5) "Fail-closed on a missing verifier" promised a message naming
+the binary, and the snippet contained no `command -v` check to produce it.
+
+Assumption: that `gpg --homedir <mktemp -d> --verify` works for every actor that reaches it,
+not only an interactive shell with a live agent — including the AF_UNIX socket-path length
+limit under macOS's long `$TMPDIR`.
+
+Disposition: **Addressed** for 1–5: subshell + `EXIT` trap, ETag mechanism removed entirely
+(so its absorption is moot), split revoked/expired messages, `HAS_AWS` gate stated, explicit
+`command -v` pre-check added. The socket-path assumption is **Accepted, reason: not
+reproduced in-session** — it is a real class and the right place to settle it is the first
+red test in Phase 2, where the fixture runs on both platforms, rather than by more prose.
+
+### Risk
+
+Finding: HOLD, three defects, all in code the revision introduced. (1) The trap blocker, found
+independently — plus the observation that the snippet declared `_ring` neither `local` nor
+global, and that undeclared choice decides which failure you get. (2) **`EXPSIG` missing from
+the reject list**, while the spec quotes the `DETAILS` sentence that names it; signature expiry
+is independent of key expiry, so `VALIDSIG` is emitted, gpg exits 0, and the accept-grep
+matches. (3) **`_status` never created** — the redirect fails, both greps miss, the helper
+returns 1; fail-closed, so all nine reject rows stay green against a helper that never ran gpg.
+Lesser: `2>/dev/null` on gpg discards the stream that disambiguates the failure;
+`grep ... && return 1` is one reorder from inverting the helper; "one intervening commit" is
+six.
+
+Premise check: it re-verified the key expiry independently and **agreed** with the spec
+(`2027-07-01 20:12:58Z`), and confirmed the vendored file now carries exactly one key block.
+
+Assumption: that AWS signs the rolling artifact with the vendored key on an ongoing basis —
+presence was measured once, provenance over time was not.
+
+Disposition: **Addressed.** `EXPSIG` added (`BADSIG`/`ERRSIG` deliberately not, since the
+accept arm covers them and a reject list should not grow by superstition); `_status` now
+declared inside `_ring` so one trap removes both; gpg's stderr captured and surfaced; every
+reject rewritten as `if ... then ... fi` with an explicit terminal `exit 0`; commit count
+corrected. The provenance assumption is the same one Goal-Fit raised and is **measured and
+holds** — see above.
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+### Stopping
+
+Round 3 is not being run, and the two signals now agree.
+
+**Artifact location:** round 2's findings were design-located, which on its own argues for
+another round. But every one of them was a defect *introduced by round 1's corrections*, and
+the corrections for them are **removals**: the ETag bracket, its awk parse, its comparison and
+its two test rows are gone; `trap RETURN` collapses to a subshell; the `doctor` arm moved
+rather than multiplied. Nothing was added except `EXPSIG` — one token in an existing list —
+and two declarations that should have been there from the start.
+
+**Is the design getting smaller?** Yes, for the first time. Round 1 added six mechanisms;
+round 2 removed one entirely and simplified two, and the remaining open items are a socket-path
+question and a set of test assertions — both of which are settled by running the suite, not by
+reading it. That is the apparatus boundary: prose review has reached its floor, and the next
+instrument is Phase 2's first red test.
