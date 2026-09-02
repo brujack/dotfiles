@@ -154,6 +154,36 @@ pkgutil --check-signature "${_pkg}" \
   | grep -q "Developer ID Installer: AMZN Mobile LLC (${AWSCLI_APPLE_TEAM_ID})" || return 1
 ```
 
+**The OS performs no signature enforcement on this path, so this helper is the only check —
+measured, not assumed.** Review raised the possibility that `sudo installer` validates the
+signature chain itself, which would make this arm redundant. It does not. An unsigned package
+built with `pkgbuild` installs cleanly as root:
+
+```
+$ pkgutil --check-signature /tmp/unsigned.pkg
+   Status: no signature
+   rc=1
+$ sudo installer -pkg /tmp/unsigned.pkg -target /
+installer: Package name is unsigned
+installer: Installing at base path /
+installer: The install was successful.
+   rc=0
+$ ls -l /tmp/pkgdest/marker.txt
+-rw-r--r--@ 1 root  wheel  3 ...
+```
+
+`installer` names the defect in its own output and proceeds anyway. Since it does not refuse
+an **unsigned** package, it a fortiori does not refuse a **wrongly-signed** one, so
+`_aws_verify_pkg` is not a second opinion layered over an OS check — it is the only thing
+standing between a network artifact and `sudo`. That makes the macOS arm's value higher than
+this spec originally argued, not lower.
+
+(Method note: an earlier attempt at this probe returned `rc=1` from a non-tty shell where
+`sudo` could not read a password. `installer` never ran. That is the guard-absorbs-its-own-
+failure shape this spec warns about, occurring in the spec's own verification — a non-zero
+exit that means "the checker could not run", read as though it meant "the checker refused".
+The measurement above was taken in a real terminal.)
+
 **`pkgutil`'s exit code is not sufficient and this is the load-bearing detail.** Measured
 against the real 59.8MB pkg: rc=0, with the chain leaf
 `Developer ID Installer: AMZN Mobile LLC (94KV3E626L)` and
@@ -502,7 +532,7 @@ scoped; this collides with a `bash-coverage` floor that has zero margin. (2) The
 signature mismatch on a benign event — a security-shaped alert on a routine release. (3) The
 macOS arm may be redundant with `sudo installer`'s own signature-chain validation, which the
 spec never states, leaving ~40% of the change's cost unquantified. It also verified the
-premise and found the fail-closed cost argument was made from the *weaker* of two available
+premise and found the fail-closed cost argument was made from the _weaker_ of two available
 arguments: Brewfile presence, where call order (`workflows.sh:229/233` before `:236`) is the
 strong one.
 
@@ -512,10 +542,12 @@ perform. Settled by `pkgbuild`ing an unsigned pkg and attempting to install it.
 
 Disposition: **Addressed** for (1) and (2) — the Testing section now specifies a real-gpg
 fixture and states why mocks structurally cannot catch the `VALIDSIG` defect; the fetch
-section adds `curl -f` and an ETag bracket. (3) is **open pending measurement**: the probe
-needs `sudo` and could not run in-session. `pkgutil` on the unsigned pkg was measured
-(`Status: no signature`, rc=1); the `installer` half is outstanding, and the macOS arm's
-scope is not final until it returns.
+section adds `curl -f` and an ETag bracket. (3) is **Addressed by refutation**: the probe was
+run in a real terminal and `sudo installer` installed an unsigned package with rc=0, printing
+`installer: Package name is unsigned` and proceeding. The OS performs no enforcement on this
+path, so the macOS arm is not redundant — it is the only check. The lens's hypothesis was
+well-formed, worth the probe, and false; the spec now carries the measurement rather than the
+open question.
 
 ### Ergonomics
 
@@ -528,12 +560,12 @@ decided this case 18 lines above with `install_renovate_held_agent || log_warn`.
 justification rests on a false premise. Also: `curl` at `developer.sh:22,40` has no `-f`, so
 a 404 renders as a tamper alert; `mktemp -d` + `gpg --homedir` leaks a daemon per run; the
 vendored key expires 2027-07-01 with no freshness signal; and no test case ever verifies a
-signature *with* the vendored key. It narrowed one of the spec's own claims: `setup_env.sh:30`'s
+signature _with_ the vendored key. It narrowed one of the spec's own claims: `setup_env.sh:30`'s
 brew gate is conditional with three bypasses, so the sentence was broader than the mechanism
 even though the conclusion survives.
 
 Assumption: that AWS keeps publishing a `.sig` for the rolling URL signed by the vendored
-key — signature *presence* was measured once, key *durability* was not, and they are
+key — signature _presence_ was measured once, key _durability_ was not, and they are
 different questions.
 
 Disposition: **Addressed.** (1) → caller becomes `install_aws_tools || log_warn` plus a
@@ -548,13 +580,13 @@ rather than a silent one.
 
 Finding: One blocker, one bounded leak, one apparatus finding. The blocker: measured against
 generated keys, `VALIDSIG` is present and **gpg exits 0** for both expired and revoked keys,
-and the spec's exact grep *accepts a revoked key*. Dropping the pipe would not have helped.
+and the spec's exact grep _accepts a revoked key_. Dropping the pipe would not have helped.
 The leak: `gpg --homedir` spawns `gpg-agent` **and** `scdaemon`, both surviving homedir
 deletion, 3 verifications leaving 3 of each. The apparatus: no mock-based case can ever
 surface the blocker, because the mock encodes the same false premise.
 
 It cleared three hazards the dispatch prompt specifically pointed it at, which is the more
-useful half: the pipe *does* fail closed against a missing or non-executable checker (it
+useful half: the pipe _does_ fail closed against a missing or non-executable checker (it
 asserts a positive marker, so 126/127 cannot be absorbed); `grep` resolves to BSD grep with
 no ugrep wrapper, and the `shell.md` divergence is `-q`+`-v`-specific; and the caller already
 uses `PIPESTATUS[0]`. It also refused the analogy this session expected for the daemon leak —
@@ -563,7 +595,7 @@ deadlock the suite. Leak, not deadlock. And it produced the differently-signed `
 control the spec recorded as unavailable, using a Microsoft-signed pkg already on the machine.
 
 Assumption: that AWS publishes a renewed or successor signing key, discoverably and in time,
-before 2027-07-01 — and specifically whether AWS extends the key *in place*, in which case
+before 2027-07-01 — and specifically whether AWS extends the key _in place_, in which case
 the vendored copy expires while upstream does not, and no upstream event exists to notice.
 
 Disposition: **Addressed** for the blocker and the leak — reject-before-accept and a `RETURN`
