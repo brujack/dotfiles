@@ -236,10 +236,25 @@ max_retries: 3
 files_touched:
   - lib/developer.sh
   - tests/setup_env/developer.bats
+  - tests/setup_env/workflows.bats
 depends_on: [4]
 ```
 
 **Base-tree value:** the first gate exits **1** — `install_aws_tools` (`lib/developer.sh:65-92`) contains no `|| return` anywhere and returns 0 unconditionally.
+
+**`workflows.bats` is in scope from the start, by enumeration rather than discovery.** Task 4
+cost two re-plans for exactly this omission, so the callers were counted before dispatch:
+`grep -rn 'install_aws_tools' tests/` returns **15** references, all in
+`tests/setup_env/workflows.bats` — 4 direct `install_aws_tools` tests at `:529`, `:538`,
+`:550`, `:557`, plus `run_setup_or_developer` cases that stub it at `:1422-1429`. Changing
+this function's contract necessarily reaches them. `tests/setup_env/unit.bats` also names
+`run_setup_or_developer` but only asserts it is _defined_ (`:593-594`) and never calls it, so
+it is deliberately excluded.
+
+The rule Task 4 paid for, stated so it is not re-derived: **enumerate transitive callers, not
+direct ones.** `shell.md` says to enumerate every call site before changing a return contract;
+a test is a call site, and a caller of a caller is one too. The first correction to this plan
+grepped for the function name and still missed 15 tests that reach it through `run_update`.
 
 **Files:** `|| return 1` on every step; remove the downloaded artifact on installer failure so the next run re-fetches; call the verifiers before `sudo`.
 
