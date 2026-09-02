@@ -229,13 +229,41 @@ update_rust() {
   fi
 }
 
+# install_aws_tools -- the fresh-machine path, run once per box.
+#
+# _AWS_BIN: read unconditionally, defaults to `aws`. Without this seam the
+# "already installed" guard is unverifiable on any machine that already has
+# awscli on PATH via an absolute-path location (this dev machine among
+# them) -- `command -v aws` would silently resolve to the real binary
+# regardless of what a test wants to exercise (shell.md: an absolute-path
+# default silently defeats a PATH-based stub).
+#
+# The guard used to be `[[ ! -f <download> ]]` -- a leftover download from an
+# interrupted run suppressed the install entirely and the function reported
+# success having done nothing. It now asks the question it actually means:
+# is the tool installed, not does a file exist.
 install_aws_tools() {
   if [[ -n ${HAS_AWS} ]] && [[ -n ${MACOS} ]]; then
-    mkdir -p "${HOME}"/software_downloads/awscli
-    printf "Installing aws-cli on MacOS\\n"
-    if [[ ! -f ${HOME}/software_downloads/awscli/AWSCLIV2.pkg ]]; then
-      wget -O "${HOME}"/software_downloads/awscli/AWSCLIV2.pkg "https://awscli.amazonaws.com/AWSCLIV2.pkg"
-      sudo installer -pkg "${HOME}"/software_downloads/awscli/AWSCLIV2.pkg -target /
+    if command -v "${_AWS_BIN:-aws}" >/dev/null 2>&1; then
+      printf "aws-cli is already installed MacOS\\n"
+    else
+      printf "Installing aws-cli on MacOS\\n"
+      mkdir -p "${HOME}"/software_downloads/awscli || return 1
+      wget -O "${HOME}"/software_downloads/awscli/AWSCLIV2.pkg "https://awscli.amazonaws.com/AWSCLIV2.pkg" || return 1
+      # Mirrors update_aws_cli's retry: a single fetch+verify failure can be
+      # a truncated or corrupted transfer as much as a genuine tamper -- a
+      # retry recovers the former and fails identically on the latter.
+      if ! _aws_verify_pkg "${HOME}/software_downloads/awscli/AWSCLIV2.pkg"; then
+        wget -O "${HOME}"/software_downloads/awscli/AWSCLIV2.pkg "https://awscli.amazonaws.com/AWSCLIV2.pkg" || return 1
+        if ! _aws_verify_pkg "${HOME}/software_downloads/awscli/AWSCLIV2.pkg"; then
+          rm -f "${HOME}"/software_downloads/awscli/AWSCLIV2.pkg
+          return 1
+        fi
+      fi
+      if ! sudo installer -pkg "${HOME}"/software_downloads/awscli/AWSCLIV2.pkg -target /; then
+        rm -f "${HOME}"/software_downloads/awscli/AWSCLIV2.pkg
+        return 1
+      fi
       rm -f "${HOME}"/software_downloads/awscli/AWSCLIV2.pkg
       if [[ -x $(command -v aws) ]]; then
         printf "aws-cli is installed MacOS\\n"
@@ -243,13 +271,41 @@ install_aws_tools() {
     fi
   fi
   if [[ -n ${HAS_AWS} ]] && [[ -n ${LINUX} ]]; then
-    mkdir -p "${HOME}"/software_downloads/awscli
-    printf "Installing aws-cli on Linux\\n"
-    if [[ ! -f ${HOME}/software_downloads/awscli/awscliv2.zip ]]; then
-      wget -O "${HOME}"/software_downloads/awscli/awscliv2.zip "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip"
-      unzip "${HOME}"/software_downloads/awscli/awscliv2.zip -d "${HOME}"/software_downloads/awscli
-      sudo -H "${HOME}"/software_downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin
-      rm -f "${HOME}"/software_downloads/awscli/awscliv2.zip
+    if command -v "${_AWS_BIN:-aws}" >/dev/null 2>&1; then
+      printf "aws-cli is already installed Linux\\n"
+    else
+      printf "Installing aws-cli on Linux\\n"
+      mkdir -p "${HOME}"/software_downloads/awscli || return 1
+      wget -O "${HOME}"/software_downloads/awscli/awscliv2.zip "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" || return 1
+      # A .sig fetch failure gets its own message, deliberately distinct from
+      # _aws_verify_zip's "did not verify": one means the network failed, the
+      # other means the artifact is suspect, and they call for opposite
+      # responses (ci.md's misattribution, costing 200 consecutive daily
+      # runs elsewhere).
+      wget -O "${HOME}"/software_downloads/awscli/awscliv2.zip.sig "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip.sig" || {
+        log_error "could not fetch the awscli signature (.sig) — network issue, not a signature failure"
+        return 1
+      }
+      if ! _aws_verify_zip "${HOME}/software_downloads/awscli/awscliv2.zip" "${HOME}/software_downloads/awscli/awscliv2.zip.sig"; then
+        wget -O "${HOME}"/software_downloads/awscli/awscliv2.zip "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" || return 1
+        wget -O "${HOME}"/software_downloads/awscli/awscliv2.zip.sig "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip.sig" || {
+          log_error "could not fetch the awscli signature (.sig) — network issue, not a signature failure"
+          return 1
+        }
+        if ! _aws_verify_zip "${HOME}/software_downloads/awscli/awscliv2.zip" "${HOME}/software_downloads/awscli/awscliv2.zip.sig"; then
+          # Consistent with the macOS branch above: an artifact that failed
+          # signature verification twice should not be left where a human
+          # might unzip it by hand.
+          rm -f "${HOME}"/software_downloads/awscli/awscliv2.zip "${HOME}"/software_downloads/awscli/awscliv2.zip.sig
+          return 1
+        fi
+      fi
+      unzip "${HOME}"/software_downloads/awscli/awscliv2.zip -d "${HOME}"/software_downloads/awscli || return 1
+      if ! sudo -H "${HOME}"/software_downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin; then
+        rm -f "${HOME}"/software_downloads/awscli/awscliv2.zip "${HOME}"/software_downloads/awscli/awscliv2.zip.sig
+        return 1
+      fi
+      rm -f "${HOME}"/software_downloads/awscli/awscliv2.zip "${HOME}"/software_downloads/awscli/awscliv2.zip.sig
       rm -rf "${HOME}"/software_downloads/awscli
       if [[ -x $(command -v aws) ]]; then
         printf "aws-cli is installed Linux\\n"
