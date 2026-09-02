@@ -14,6 +14,92 @@ clone_or_update_dotfiles() {
   fi
 }
 
+# _aws_gpg_fail <errfile> <message>
+#
+# Prints the caller's message plus the tail of gpg's captured stderr. That
+# stderr is the only stream separating "no valid OpenPGP data found" (a
+# truncated or HTML .sig) from a genuine bad signature -- discarding it would
+# reproduce, on the verify side, the misattribution ci.md records costing 200
+# consecutive daily runs on the fetch side.
+_aws_gpg_fail() {
+  local _errfile="$1" _msg="$2"
+  log_error "${_msg}"
+  if [[ -s "${_errfile}" ]]; then
+    tail -n 10 "${_errfile}" >&2
+  fi
+}
+
+# _aws_verify_zip <zip> <sig>
+#
+# Verifies the Linux awscli zip against the vendored AWS signing key, using a
+# throwaway keyring holding only that key. Returns 0 when the signature is
+# genuinely from the vendored key and neither expired nor revoked; 1 otherwise.
+#
+# The whole body runs in a `( )` subshell with an EXIT trap -- NOT
+# `trap ... RETURN` at function scope. `trap ... RETURN` is not function-scoped
+# in bash: it stays armed in the calling shell and fires again on every later
+# return up the call chain, with `_ring` out of scope (empty) by then, which
+# resolves `gpgconf --homedir ""` to the operator's REAL ~/.gnupg -- silently
+# killing their live gpg-agent/dirmngr/scdaemon. Reproduced on bash 5.3.15 and
+# 3.2.57. A subshell's EXIT trap fires exactly once, with `_ring` guaranteed
+# in scope.
+_aws_verify_zip() {
+  local _zip="$1" _sig="$2"
+
+  # _AWS_GPG_BIN: read unconditionally, defaults to `gpg`. Without this seam
+  # the verifier-absent branch is unreachable -- a PATH strip that removes
+  # /opt/homebrew/bin takes git and make with it.
+  command -v "${_AWS_GPG_BIN:-gpg}" >/dev/null 2>&1 || {
+    log_error "gpg not found; cannot verify the awscli signature"
+    log_error "install: brew install gnupg  /  apt-get install gnupg"
+    return 1
+  }
+
+  # _AWS_KEY_PATH: read unconditionally, defaults to the repo's vendored key.
+  # Without this seam only the vendored key could ever be exercised and the
+  # fingerprint-mismatch branch would be unreachable.
+  local _key
+  _key="${_AWS_KEY_PATH:-}"
+  if [[ -z "${_key}" ]]; then
+    _key="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/keys/aws-cli-team.asc"
+  fi
+
+  (
+    _ring="$(mktemp -d)" || exit 1
+    # gpg 2.x spawns gpg-agent AND scdaemon bound to the homedir; both survive
+    # its deletion. Measured: 3 verifications leave 3 of each orphaned. EXIT
+    # in a subshell fires exactly once, with _ring guaranteed in scope.
+    trap 'gpgconf --homedir "${_ring}" --kill all >/dev/null 2>&1; rm -rf "${_ring}"' EXIT
+
+    # _status and _err live INSIDE _ring so the same trap removes them.
+    _status="${_ring}/status"
+    _err="${_ring}/err"
+
+    "${_AWS_GPG_BIN:-gpg}" --homedir "${_ring}" --batch --import "${_key}" \
+      >/dev/null 2>"${_err}" || { _aws_gpg_fail "${_err}" "could not import the vendored key"; exit 1; }
+
+    "${_AWS_GPG_BIN:-gpg}" --homedir "${_ring}" --batch --status-fd 1 \
+      --verify "${_sig}" "${_zip}" >"${_status}" 2>"${_err}"
+
+    # Reject BEFORE accepting, and split the two causes: they demand opposite
+    # operator responses. VALIDSIG is emitted for both, and gpg exits 0 for
+    # both -- an accept-only guard would let a revoked or expired key through.
+    if grep -qE '^\[GNUPG:\] (REVKEYSIG|KEYREVOKED)' "${_status}"; then
+      log_error "AWS signing key REVOKED — do not install; investigate"
+      exit 1
+    fi
+    if grep -qE '^\[GNUPG:\] (EXPSIG|EXPKEYSIG|KEYEXPIRED)' "${_status}"; then
+      log_error "vendored key or signature expired — refresh keys/aws-cli-team.asc"
+      exit 1
+    fi
+    if ! grep -q "^\[GNUPG:\] VALIDSIG ${AWSCLI_GPG_FPR} " "${_status}"; then
+      _aws_gpg_fail "${_err}" "signature did not verify against the vendored key"
+      exit 1
+    fi
+    exit 0
+  )
+}
+
 update_aws_cli() {
   if [[ -n ${HAS_AWS} ]] && [[ -n ${MACOS} ]]; then
     log_info "Updating MACOS awscli"
