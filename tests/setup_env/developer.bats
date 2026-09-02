@@ -215,6 +215,223 @@ teardown() {
   refute_grep "aws/install" "${MOCK_CALLS_FILE:-/dev/null}"
 }
 
+# ── install_aws_tools ────────────────────────────────────────────────────────
+#
+# _AWS_BIN gates the "already installed" check (`command -v "${_AWS_BIN:-aws}"`).
+# Read unconditionally, defaults to `aws`. Without this seam these tests are
+# not hermetic: `command -v aws` resolves to a REAL absolute-path binary on
+# any machine that already has awscli installed (this dev machine among
+# them -- /usr/local/bin/aws -> /usr/local/aws-cli/aws), so the guard would
+# silently short-circuit every "fresh install" test and there would be no way
+# to drive the "already installed" branch independent of actual machine
+# state. Same class as _AWS_GPG_BIN/_AWS_PKGUTIL_BIN above (shell.md:
+# an absolute-path default silently defeats a PATH-based stub).
+#
+# Every fresh-install test below points _AWS_BIN at a path guaranteed absent.
+
+@test "install_aws_tools: returns 1 when wget fails fetching the pkg on macOS" {
+  export MACOS=1 HAS_AWS=1
+  unset LINUX
+  export _AWS_BIN="${BATS_TEST_TMPDIR}/nonexistent-aws"
+  mkdir -p "${HOME}/software_downloads/awscli"
+  export MOCK_WGET_EXIT=1
+  run install_aws_tools
+  [ "$status" -eq 1 ]
+}
+
+@test "install_aws_tools: installs on macOS even when a stale pkg is already present" {
+  # The pre-fix guard was `[[ ! -f <download> ]]` -- a leftover pkg from an
+  # interrupted run suppressed the install entirely and the function
+  # returned success having done nothing. This is the regression test for
+  # that fix: a stale file must NOT suppress the install.
+  export MACOS=1 HAS_AWS=1
+  unset LINUX
+  export _AWS_BIN="${BATS_TEST_TMPDIR}/nonexistent-aws"
+  mkdir -p "${HOME}/software_downloads/awscli"
+  printf 'stale partial download\n' > "${HOME}/software_downloads/awscli/AWSCLIV2.pkg"
+  export MOCK_PKGUTIL_EXIT=0
+  export MOCK_PKGUTIL_STDOUT="   Status: signed by a developer certificate issued by Apple for distribution
+   Notarization: trusted by the Apple notary service
+    1. Developer ID Installer: AMZN Mobile LLC (${AWSCLI_APPLE_TEAM_ID})"
+  run install_aws_tools
+  [ "$status" -eq 0 ]
+  grep -q "AWSCLIV2.pkg" "${MOCK_CALLS_FILE}"
+  grep -q "installer -pkg" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_aws_tools: does not reinstall on macOS when aws is already on PATH" {
+  local _fixture_bin="${BATS_TEST_TMPDIR}/fixture-bin"
+  mkdir -p "${_fixture_bin}"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "${_fixture_bin}/fake-aws"
+  chmod +x "${_fixture_bin}/fake-aws"
+  export MACOS=1 HAS_AWS=1
+  unset LINUX
+  export _AWS_BIN="${_fixture_bin}/fake-aws"
+  run install_aws_tools
+  [ "$status" -eq 0 ]
+  refute_grep "AWSCLIV2.pkg" "${MOCK_CALLS_FILE:-/dev/null}"
+}
+
+@test "install_aws_tools: does not install an unverified pkg on macOS (verification fails twice)" {
+  export MACOS=1 HAS_AWS=1
+  unset LINUX
+  export _AWS_BIN="${BATS_TEST_TMPDIR}/nonexistent-aws"
+  mkdir -p "${HOME}/software_downloads/awscli"
+  # MOCK_PKGUTIL_EXIT defaults to 1 (unmocked failure) -- both the first
+  # attempt and the single retry fail.
+  run install_aws_tools
+  [ "$status" -ne 0 ]
+  refute_grep "installer -pkg" "${MOCK_CALLS_FILE:-/dev/null}"
+  [ ! -f "${HOME}/software_downloads/awscli/AWSCLIV2.pkg" ]
+  [ "$(grep -c "^wget " "${MOCK_CALLS_FILE}")" -eq 2 ]
+}
+
+@test "install_aws_tools: returns 1 and removes the pkg when the installer fails on macOS" {
+  export MACOS=1 HAS_AWS=1
+  unset LINUX
+  export _AWS_BIN="${BATS_TEST_TMPDIR}/nonexistent-aws"
+  mkdir -p "${HOME}/software_downloads/awscli"
+  export MOCK_INSTALLER_EXIT=1
+  export MOCK_PKGUTIL_EXIT=0
+  export MOCK_PKGUTIL_STDOUT="   Status: signed by a developer certificate issued by Apple for distribution
+   Notarization: trusted by the Apple notary service
+    1. Developer ID Installer: AMZN Mobile LLC (${AWSCLI_APPLE_TEAM_ID})"
+  run install_aws_tools
+  [ "$status" -eq 1 ]
+  [ ! -f "${HOME}/software_downloads/awscli/AWSCLIV2.pkg" ]
+  grep -q "installer -pkg" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_aws_tools: full success path on macOS installs and reports success" {
+  # Positive control: a suite of only-rejects cannot tell "correctly
+  # rejecting" from "never ran".
+  export MACOS=1 HAS_AWS=1
+  unset LINUX
+  export _AWS_BIN="${BATS_TEST_TMPDIR}/nonexistent-aws"
+  mkdir -p "${HOME}/software_downloads/awscli"
+  export MOCK_PKGUTIL_EXIT=0
+  export MOCK_PKGUTIL_STDOUT="   Status: signed by a developer certificate issued by Apple for distribution
+   Notarization: trusted by the Apple notary service
+    1. Developer ID Installer: AMZN Mobile LLC (${AWSCLI_APPLE_TEAM_ID})"
+  run install_aws_tools
+  [ "$status" -eq 0 ]
+  grep -q "installer -pkg" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_aws_tools: returns 1 when wget fails fetching the zip on Linux" {
+  export LINUX=1 HAS_AWS=1
+  unset MACOS
+  export _AWS_BIN="${BATS_TEST_TMPDIR}/nonexistent-aws"
+  mkdir -p "${HOME}/software_downloads/awscli"
+  export MOCK_WGET_EXIT=1
+  run install_aws_tools
+  [ "$status" -eq 1 ]
+}
+
+@test "install_aws_tools: a .sig fetch failure on Linux is reported as could-not-fetch, not did-not-verify" {
+  export LINUX=1 HAS_AWS=1
+  unset MACOS
+  export _AWS_BIN="${BATS_TEST_TMPDIR}/nonexistent-aws"
+  mkdir -p "${HOME}/software_downloads/awscli"
+  wget() {
+    [[ "$*" == *".zip.sig"* ]] && return 1
+    command wget "$@"
+  }
+  export -f wget
+  run install_aws_tools
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"could not fetch"* ]]
+  [[ "$output" != *"did not verify"* ]]
+  refute_grep "aws/install" "${MOCK_CALLS_FILE:-/dev/null}"
+}
+
+@test "install_aws_tools: installs on Linux even when a stale zip is already present" {
+  export LINUX=1 HAS_AWS=1
+  unset MACOS
+  export _AWS_BIN="${BATS_TEST_TMPDIR}/nonexistent-aws"
+  mkdir -p "${HOME}/software_downloads/awscli"
+  printf 'stale partial download\n' > "${HOME}/software_downloads/awscli/awscliv2.zip"
+  _aws_verify_zip() { return 0; }
+  run install_aws_tools
+  [ "$status" -eq 0 ]
+  grep -q "awscliv2.zip" "${MOCK_CALLS_FILE}"
+  grep -q "aws/install" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_aws_tools: does not reinstall on Linux when aws is already on PATH" {
+  local _fixture_bin="${BATS_TEST_TMPDIR}/fixture-bin"
+  mkdir -p "${_fixture_bin}"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "${_fixture_bin}/fake-aws"
+  chmod +x "${_fixture_bin}/fake-aws"
+  export LINUX=1 HAS_AWS=1
+  unset MACOS
+  export _AWS_BIN="${_fixture_bin}/fake-aws"
+  run install_aws_tools
+  [ "$status" -eq 0 ]
+  refute_grep "awscliv2.zip" "${MOCK_CALLS_FILE:-/dev/null}"
+}
+
+@test "install_aws_tools: fails and never installs when Linux zip verification fails twice" {
+  export LINUX=1 HAS_AWS=1
+  unset MACOS
+  export _AWS_BIN="${BATS_TEST_TMPDIR}/nonexistent-aws"
+  mkdir -p "${HOME}/software_downloads/awscli"
+  _aws_verify_zip() { return 1; }
+  run install_aws_tools
+  [ "$status" -ne 0 ]
+  refute_grep "aws/install" "${MOCK_CALLS_FILE:-/dev/null}"
+}
+
+@test "install_aws_tools: removes the zip and .sig on Linux when verification fails twice" {
+  export LINUX=1 HAS_AWS=1
+  unset MACOS
+  export _AWS_BIN="${BATS_TEST_TMPDIR}/nonexistent-aws"
+  mkdir -p "${HOME}/software_downloads/awscli"
+  _aws_verify_zip() { return 1; }
+  run install_aws_tools
+  [ "$status" -ne 0 ]
+  [ ! -f "${HOME}/software_downloads/awscli/awscliv2.zip" ]
+  [ ! -f "${HOME}/software_downloads/awscli/awscliv2.zip.sig" ]
+}
+
+@test "install_aws_tools: returns 1 when unzip fails on Linux" {
+  export LINUX=1 HAS_AWS=1
+  unset MACOS
+  export _AWS_BIN="${BATS_TEST_TMPDIR}/nonexistent-aws"
+  mkdir -p "${HOME}/software_downloads/awscli"
+  _aws_verify_zip() { return 0; }
+  export MOCK_UNZIP_EXIT=1
+  run install_aws_tools
+  [ "$status" -eq 1 ]
+  refute_grep "aws/install" "${MOCK_CALLS_FILE:-/dev/null}"
+}
+
+@test "install_aws_tools: returns 1 and removes the zip and .sig when aws/install fails on Linux" {
+  export LINUX=1 HAS_AWS=1
+  unset MACOS
+  export _AWS_BIN="${BATS_TEST_TMPDIR}/nonexistent-aws"
+  mkdir -p "${HOME}/software_downloads/awscli"
+  _aws_verify_zip() { return 0; }
+  export MOCK_SUDO_EXIT=1
+  run install_aws_tools
+  [ "$status" -eq 1 ]
+  [ ! -f "${HOME}/software_downloads/awscli/awscliv2.zip" ]
+  [ ! -f "${HOME}/software_downloads/awscli/awscliv2.zip.sig" ]
+}
+
+@test "install_aws_tools: full success path on Linux installs and reports success" {
+  # Positive control: a suite of only-rejects cannot tell "correctly
+  # rejecting" from "never ran".
+  export LINUX=1 HAS_AWS=1
+  unset MACOS
+  export _AWS_BIN="${BATS_TEST_TMPDIR}/nonexistent-aws"
+  mkdir -p "${HOME}/software_downloads/awscli"
+  _aws_verify_zip() { return 0; }
+  run install_aws_tools
+  [ "$status" -eq 0 ]
+  grep -q "aws/install" "${MOCK_CALLS_FILE}"
+}
+
 # ── update_rust ──────────────────────────────────────────────────────────────
 
 @test "update_rust: skips when UBUNTU not set" {
