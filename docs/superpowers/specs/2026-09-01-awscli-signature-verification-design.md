@@ -782,14 +782,6 @@ so they would sit in the denominator and out of the numerator — which is exact
 arithmetic needs. An earlier version of this section asserted the new lines "must be covered"
 while specifying an apparatus that could not cover them.
 
-Two new helpers plus a rewritten `install_aws_tools` is a material addition to the
-denominator, and the success paths are the expensive ones to cover. This is the concrete
-reason the real-gpg fixture is not optional: under stdout-silent mocks the `VALIDSIG`-matched
-branch and both installer-invocation lines are **unreachable**, so they would sit in the
-denominator and out of the numerator, and the `bash-coverage` job would go red on something
-that is not a coverage problem. An earlier version of this section asserted the new lines
-"must be covered" while specifying an apparatus that could not cover them.
-
 ## Multi-Lens Review
 
 Reviewed at commit: `2d358245` (Step 7 self-review commit, before Step 8 dispatch)
@@ -989,23 +981,24 @@ question and a set of test assertions — both of which are settled by running t
 reading it. That is the apparatus boundary: prose review has reached its floor, and the next
 instrument is Phase 2's first red test.
 
-### Instrument errors in this document — four, and three pointed the same way
+### Instrument errors in this document — five, and four pointed the same way
 
 Worth collecting, because the pattern is more useful than any one of them. Each returned a
 plausible answer rather than an error, which is why none announced itself:
 
-| probe | what it returned | why it was wrong |
-| --- | --- | --- |
-| `grep -iE 'x-amz-meta'` on the CDN headers | no version signal | the header is `x-amz-version-id`; the pattern matched nothing |
-| `sudo installer` in a non-tty shell | `rc=1` | `sudo` could not read a password; `installer` never ran |
-| `sed` range extraction of the docs key block | a 58-line `.asc` | the page carries the block twice; `gpg --import` accepts a doubled file silently |
-| second-source key cross-check via the GitHub docs repo | `Total number processed: 0` | the extraction failed; reported as `DIFFER`, which is about the extraction and not the key |
+| probe                                                                                 | what it returned            | why it was wrong                                                                                                                            |
+| ------------------------------------------------------------------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `grep -iE 'x-amz-meta'` on the CDN headers                                            | no version signal           | the header is `x-amz-version-id`; the pattern matched nothing                                                                               |
+| `sudo installer` in a non-tty shell                                                   | `rc=1`                      | `sudo` could not read a password; `installer` never ran                                                                                     |
+| `sed` range extraction of the docs key block                                          | a 58-line `.asc`            | the page carries the block twice; `gpg --import` accepts a doubled file silently                                                            |
+| second-source key cross-check via the GitHub docs repo                                | `Total number processed: 0` | the extraction failed; reported as `DIFFER`, which is about the extraction and not the key                                                  |
+| `grep -c 'concrete reason the real-gpg fixture'`, checking for a duplicated paragraph | `1`, read as "no duplicate" | the string matched only the **new** variant ("This is _also_ the concrete reason"); the old one was still there and was found by a reviewer |
 
 **Three of the four returned the answer that supported the conclusion already being reached.**
-The `x-amz-meta` one is labelled in place as exactly that — "failed toward *absent*, and
-*absent* was the answer that justified the conclusion already being reached" — and the same
+The `x-amz-meta` one is labelled in place as exactly that — "failed toward _absent_, and
+_absent_ was the answer that justified the conclusion already being reached" — and the same
 diagnosis applies to the other three. The `sudo` one is the clearest case of a non-zero exit
-meaning *the checker could not run* being available to read as *the checker refused*, which is
+meaning _the checker could not run_ being available to read as _the checker refused_, which is
 the defect class this spec spends a section on.
 
 Only one was caught by suspicion; the rest were caught by a lens or by re-running the probe a
