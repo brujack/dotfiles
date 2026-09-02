@@ -1,7 +1,5 @@
 # AWS CLI Download Signature Verification Implementation Plan
 
-> **Status: DONE**
-
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Verify that AWS produced the AWS CLI installer before handing it to `sudo`, on both the update path and the first-install path.
