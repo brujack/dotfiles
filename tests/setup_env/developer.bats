@@ -27,6 +27,15 @@ setup() {
 
 teardown() {
   rm -f "${MOCK_CALLS_FILE:-}"
+  # _dev_make_signing_key spawns a real gpg-agent/scdaemon bound to each
+  # homedir it creates; kill them here rather than leaking orphans across
+  # the suite (same class of leak the design's own EXIT trap exists to
+  # bound for _aws_verify_zip's OWN throwaway ring).
+  if [[ -f "${BATS_TEST_TMPDIR}/_gpg_homedirs" ]]; then
+    while IFS= read -r _gpg_homedir; do
+      gpgconf --homedir "${_gpg_homedir}" --kill all >/dev/null 2>&1
+    done < "${BATS_TEST_TMPDIR}/_gpg_homedirs"
+  fi
 }
 
 # ── setup_vim_plugins ────────────────────────────────────────────────────────
@@ -460,4 +469,289 @@ component add rust-analyzer" ]
   _fpr="$(PATH="${_clean_path}" gpg --show-keys --with-colons "${REPO_ROOT}/keys/aws-cli-team.asc" | awk -F: '/^fpr/{print $10; exit}')"
   [[ -n "${_fpr}" ]]
   [[ "${_fpr}" == "${AWSCLI_GPG_FPR}" ]]
+}
+
+# ── _aws_verify_zip / _aws_gpg_fail ──────────────────────────────────────────
+#
+# Every test below runs against REAL gpg, never the tests/mocks stub (which
+# emits nothing on stdout and exits 0 unconditionally, so it cannot express
+# any accept or reject arm). Each test exports PATH with tests/mocks stripped
+# before touching gpg, via _gpg_only_path.
+
+# Echoes PATH with every tests/mocks entry removed.
+_gpg_only_path() {
+  printf '%s' "${PATH}" | tr ':' '\n' | grep -v 'tests/mocks' | tr '\n' ':' | sed 's/:$//'
+}
+
+# Generates a throwaway signing key in $1 (a fresh gpg homedir; loopback
+# pinentry is enabled so --batch can generate/sign without a real prompt),
+# signs a fixed payload written to $2, and writes the detached signature to
+# $3 plus the exported ASCII-armored public key to $4. $5 is gpg's own
+# expire syntax ("1d", "seconds=2", ...). Echoes the new key's fingerprint.
+# Caller must already have PATH pointed at real gpg via _gpg_only_path.
+_dev_make_signing_key() {
+  local _homedir="$1" _payload="$2" _sig="$3" _pubkey="$4" _expire="$5"
+  mkdir -p "${_homedir}"
+  chmod 700 "${_homedir}"
+  printf 'allow-loopback-pinentry\n' > "${_homedir}/gpg-agent.conf"
+  printf '%s\n' "${_homedir}" >> "${BATS_TEST_TMPDIR}/_gpg_homedirs"
+  gpg --homedir "${_homedir}" --batch --pinentry-mode loopback --passphrase '' \
+    --quick-generate-key "Test Signer <t@example.com>" default default "${_expire}" \
+    >/dev/null 2>&1
+  printf 'awscli test payload\n' > "${_payload}"
+  gpg --homedir "${_homedir}" --batch --pinentry-mode loopback --passphrase '' \
+    --yes --detach-sign --output "${_sig}" "${_payload}" >/dev/null 2>&1
+  gpg --homedir "${_homedir}" --batch --armor --export "Test Signer <t@example.com>" \
+    >"${_pubkey}" 2>/dev/null
+  gpg --homedir "${_homedir}" --batch --with-colons --list-keys 2>/dev/null \
+    | awk -F: '/^fpr/{print $10; exit}'
+}
+
+# Revokes the key _dev_make_signing_key generated in $1 (its homedir),
+# stripping the colon GnuPG inserts before the armor header on the
+# auto-generated revocation certificate "to avoid accidental use".
+_dev_revoke_signing_key() {
+  local _homedir="$1"
+  local _revfile
+  _revfile="$(find "${_homedir}/openpgp-revocs.d" -name '*.rev' 2>/dev/null | head -1)"
+  [[ -z "${_revfile}" ]] && return 1
+  sed 's/^:-----BEGIN/-----BEGIN/' "${_revfile}" > "${_homedir}/revoke.asc"
+  gpg --homedir "${_homedir}" --batch --import "${_homedir}/revoke.asc" >/dev/null 2>&1
+  gpg --homedir "${_homedir}" --batch --armor --export "Test Signer <t@example.com>" \
+    2>/dev/null
+}
+
+# Independently reproduces gpg's status-fd output for a (pubkey, sig,
+# payload) triple, using a throwaway probe ring separate from the one
+# _aws_verify_zip itself creates and destroys. This is how a test asserts on
+# status CONTENTS despite the real one being deleted by the function's own
+# EXIT trap before it returns -- a fail-closed guard cannot distinguish its
+# own non-execution from a correct rejection, so the return code alone does
+# not prove the reject arm was reached for its stated reason (tdd.md).
+# Echoes gpg's own exit code; writes status lines to $4.
+_dev_probe_gpg_status() {
+  local _pubkey="$1" _sig="$2" _payload="$3" _outfile="$4"
+  local _probe_ring _rc
+  _probe_ring="$(mktemp -d)"
+  chmod 700 "${_probe_ring}"
+  gpg --homedir "${_probe_ring}" --batch --import "${_pubkey}" >/dev/null 2>&1
+  gpg --homedir "${_probe_ring}" --batch --status-fd 1 --verify "${_sig}" "${_payload}" \
+    >"${_outfile}" 2>/dev/null
+  _rc=$?
+  gpgconf --homedir "${_probe_ring}" --kill all >/dev/null 2>&1
+  rm -rf "${_probe_ring}"
+  return "${_rc}"
+}
+
+@test "_aws_verify_zip: returns 0 for a valid signature from a live key" {
+  export PATH
+  PATH="$(_gpg_only_path)"
+  if ! command -v gpg >/dev/null 2>&1; then
+    skip "real gpg not on PATH outside tests/mocks"
+  fi
+  local _homedir="${BATS_TEST_TMPDIR}/signer" _payload="${BATS_TEST_TMPDIR}/p.txt"
+  local _sig="${BATS_TEST_TMPDIR}/p.sig" _pub="${BATS_TEST_TMPDIR}/pub.asc" _fpr
+  _fpr="$(_dev_make_signing_key "${_homedir}" "${_payload}" "${_sig}" "${_pub}" "1d")"
+  [[ -n "${_fpr}" ]]
+  local _AWS_KEY_PATH="${_pub}"
+  AWSCLI_GPG_FPR="${_fpr}"
+
+  run _aws_verify_zip "${_payload}" "${_sig}"
+  [ "$status" -eq 0 ]
+}
+
+@test "_aws_verify_zip: rejects an expired key, VALIDSIG and EXPKEYSIG both present" {
+  export PATH
+  PATH="$(_gpg_only_path)"
+  if ! command -v gpg >/dev/null 2>&1; then
+    skip "real gpg not on PATH outside tests/mocks"
+  fi
+  local _homedir="${BATS_TEST_TMPDIR}/signer" _payload="${BATS_TEST_TMPDIR}/p.txt"
+  local _sig="${BATS_TEST_TMPDIR}/p.sig" _pub="${BATS_TEST_TMPDIR}/pub.asc" _fpr
+  _fpr="$(_dev_make_signing_key "${_homedir}" "${_payload}" "${_sig}" "${_pub}" "seconds=2")"
+  [[ -n "${_fpr}" ]]
+  sleep 3
+
+  local _probe_status="${BATS_TEST_TMPDIR}/probe_status" _probe_rc
+  _dev_probe_gpg_status "${_pub}" "${_sig}" "${_payload}" "${_probe_status}"
+  _probe_rc=$?
+  [ "${_probe_rc}" -eq 0 ]
+  grep -q "VALIDSIG ${_fpr} " "${_probe_status}"
+  grep -q "EXPKEYSIG" "${_probe_status}"
+
+  local _AWS_KEY_PATH="${_pub}"
+  AWSCLI_GPG_FPR="${_fpr}"
+  run _aws_verify_zip "${_payload}" "${_sig}"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"expired"* ]]
+}
+
+@test "_aws_verify_zip: rejects a revoked key, VALIDSIG and REVKEYSIG both present" {
+  export PATH
+  PATH="$(_gpg_only_path)"
+  if ! command -v gpg >/dev/null 2>&1; then
+    skip "real gpg not on PATH outside tests/mocks"
+  fi
+  local _homedir="${BATS_TEST_TMPDIR}/signer" _payload="${BATS_TEST_TMPDIR}/p.txt"
+  local _sig="${BATS_TEST_TMPDIR}/p.sig" _pub="${BATS_TEST_TMPDIR}/pub.asc" _fpr
+  _fpr="$(_dev_make_signing_key "${_homedir}" "${_payload}" "${_sig}" "${_pub}" "1d")"
+  [[ -n "${_fpr}" ]]
+  _dev_revoke_signing_key "${_homedir}" > "${_pub}"
+
+  local _probe_status="${BATS_TEST_TMPDIR}/probe_status" _probe_rc
+  _dev_probe_gpg_status "${_pub}" "${_sig}" "${_payload}" "${_probe_status}"
+  _probe_rc=$?
+  [ "${_probe_rc}" -eq 0 ]
+  grep -q "VALIDSIG ${_fpr} " "${_probe_status}"
+  grep -q "REVKEYSIG" "${_probe_status}"
+
+  local _AWS_KEY_PATH="${_pub}"
+  AWSCLI_GPG_FPR="${_fpr}"
+  run _aws_verify_zip "${_payload}" "${_sig}"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"REVOKED"* ]]
+}
+
+@test "_aws_verify_zip: revoked and expired keys produce different messages" {
+  export PATH
+  PATH="$(_gpg_only_path)"
+  if ! command -v gpg >/dev/null 2>&1; then
+    skip "real gpg not on PATH outside tests/mocks"
+  fi
+
+  local _fpr_exp
+  _fpr_exp="$(_dev_make_signing_key "${BATS_TEST_TMPDIR}/exp" "${BATS_TEST_TMPDIR}/exp.txt" \
+    "${BATS_TEST_TMPDIR}/exp.sig" "${BATS_TEST_TMPDIR}/exp.pub" "seconds=2")"
+  sleep 3
+  local _AWS_KEY_PATH="${BATS_TEST_TMPDIR}/exp.pub"
+  AWSCLI_GPG_FPR="${_fpr_exp}"
+  run _aws_verify_zip "${BATS_TEST_TMPDIR}/exp.txt" "${BATS_TEST_TMPDIR}/exp.sig"
+  local _exp_status="$status" _exp_output="$output"
+  [ "${_exp_status}" -ne 0 ]
+
+  local _fpr_rev
+  _fpr_rev="$(_dev_make_signing_key "${BATS_TEST_TMPDIR}/rev" "${BATS_TEST_TMPDIR}/rev.txt" \
+    "${BATS_TEST_TMPDIR}/rev.sig" "${BATS_TEST_TMPDIR}/rev.pub" "1d")"
+  _dev_revoke_signing_key "${BATS_TEST_TMPDIR}/rev" > "${BATS_TEST_TMPDIR}/rev.pub"
+  _AWS_KEY_PATH="${BATS_TEST_TMPDIR}/rev.pub"
+  AWSCLI_GPG_FPR="${_fpr_rev}"
+  run _aws_verify_zip "${BATS_TEST_TMPDIR}/rev.txt" "${BATS_TEST_TMPDIR}/rev.sig"
+  local _rev_status="$status" _rev_output="$output"
+  [ "${_rev_status}" -ne 0 ]
+
+  [ "${_exp_output}" != "${_rev_output}" ]
+  [[ "${_exp_output}" == *"expired"* ]]
+  [[ "${_rev_output}" == *"REVOKED"* ]]
+}
+
+@test "_aws_verify_zip: rejects a valid signature from a different key (fingerprint mismatch)" {
+  export PATH
+  PATH="$(_gpg_only_path)"
+  if ! command -v gpg >/dev/null 2>&1; then
+    skip "real gpg not on PATH outside tests/mocks"
+  fi
+  local _homedir="${BATS_TEST_TMPDIR}/signer" _payload="${BATS_TEST_TMPDIR}/p.txt"
+  local _sig="${BATS_TEST_TMPDIR}/p.sig" _pub="${BATS_TEST_TMPDIR}/pub.asc" _fpr
+  _fpr="$(_dev_make_signing_key "${_homedir}" "${_payload}" "${_sig}" "${_pub}" "1d")"
+  [[ -n "${_fpr}" ]]
+  local _AWS_KEY_PATH="${_pub}"
+  # AWSCLI_GPG_FPR is deliberately left at the real production constant --
+  # it is a fixed value unrelated to any throwaway key, so a freshly
+  # generated key's fingerprint is guaranteed to differ from it, giving a
+  # genuine VALIDSIG-present-but-wrong-fingerprint case with no second key.
+  [[ "${_fpr}" != "${AWSCLI_GPG_FPR}" ]]
+
+  run _aws_verify_zip "${_payload}" "${_sig}"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"did not verify"* ]]
+}
+
+@test "_aws_verify_zip: rejects a corrupt signature, and gpg's stderr reaches the caller" {
+  export PATH
+  PATH="$(_gpg_only_path)"
+  if ! command -v gpg >/dev/null 2>&1; then
+    skip "real gpg not on PATH outside tests/mocks"
+  fi
+  local _homedir="${BATS_TEST_TMPDIR}/signer" _payload="${BATS_TEST_TMPDIR}/p.txt"
+  local _sig="${BATS_TEST_TMPDIR}/p.sig" _pub="${BATS_TEST_TMPDIR}/pub.asc" _fpr
+  _fpr="$(_dev_make_signing_key "${_homedir}" "${_payload}" "${_sig}" "${_pub}" "1d")"
+  [[ -n "${_fpr}" ]]
+  local _AWS_KEY_PATH="${_pub}"
+  AWSCLI_GPG_FPR="${_fpr}"
+  printf 'not a signature\n' > "${_sig}"
+
+  run _aws_verify_zip "${_payload}" "${_sig}"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"no valid OpenPGP data"* ]]
+}
+
+@test "_aws_verify_zip: fails when the verifier is not found, naming gpg" {
+  local _AWS_GPG_BIN="/nonexistent/gpg"
+  run _aws_verify_zip "${BATS_TEST_TMPDIR}/whatever.zip" "${BATS_TEST_TMPDIR}/whatever.zip.sig"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"gpg"* ]]
+}
+
+@test "_aws_verify_zip: verifies a real AWS awscli zip against the vendored key" {
+  export PATH
+  PATH="$(_gpg_only_path)"
+  if ! command -v gpg >/dev/null 2>&1; then
+    skip "real gpg not on PATH outside tests/mocks"
+  fi
+  local _sig="${BATS_TEST_TMPDIR}/real.zip.sig"
+  if ! curl -fsS --max-time 5 -o "${_sig}" \
+      "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip.sig"; then
+    skip "network unreachable: awscli.amazonaws.com"
+  fi
+  local _zip="${BATS_TEST_TMPDIR}/real.zip"
+  if ! curl -fsS --max-time 60 -o "${_zip}" \
+      "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"; then
+    skip "could not fetch the real awscli zip within the time budget"
+  fi
+
+  run _aws_verify_zip "${_zip}" "${_sig}"
+  [ "$status" -eq 0 ]
+}
+
+@test "_aws_verify_zip: the operator's real keyring survives a verification (regression for trap RETURN)" {
+  export PATH
+  PATH="$(_gpg_only_path)"
+  if ! command -v gpg >/dev/null 2>&1; then
+    skip "real gpg not on PATH outside tests/mocks"
+  fi
+  local _real_gpgconf
+  _real_gpgconf="$(command -v gpgconf)"
+  local _spy="${BATS_TEST_TMPDIR}/spy"
+  mkdir -p "${_spy}"
+  {
+    printf '#!/usr/bin/env bash\n'
+    printf 'printf "%%s\\n" "$*" >> "%s/gpgconf_calls"\n' "${BATS_TEST_TMPDIR}"
+    printf 'exec "%s" "$@"\n' "${_real_gpgconf}"
+  } > "${_spy}/gpgconf"
+  chmod +x "${_spy}/gpgconf"
+  PATH="${_spy}:${PATH}"
+
+  local _homedir="${BATS_TEST_TMPDIR}/signer" _payload="${BATS_TEST_TMPDIR}/p.txt"
+  local _sig="${BATS_TEST_TMPDIR}/p.sig" _pub="${BATS_TEST_TMPDIR}/pub.asc" _fpr
+  _fpr="$(_dev_make_signing_key "${_homedir}" "${_payload}" "${_sig}" "${_pub}" "1d")"
+  [[ -n "${_fpr}" ]]
+  local _AWS_KEY_PATH="${_pub}"
+  AWSCLI_GPG_FPR="${_fpr}"
+
+  # Called directly, NOT via `run` (which forks the whole call into a
+  # command-substitution subshell, so a leaked trap would die with that
+  # subshell and never get to misfire). A caller and an outer caller each
+  # return afterward in THIS shell -- the exact shape that made the retired
+  # `trap ... RETURN` implementation fire again with `_ring` empty, resolving
+  # `gpgconf --homedir ""` to the operator's real ~/.gnupg.
+  _dev_regr_caller() { _aws_verify_zip "${_payload}" "${_sig}"; }
+  _dev_regr_outer() { _dev_regr_caller; return 0; }
+
+  _dev_regr_outer
+  local _outer_status=$?
+
+  [ "${_outer_status}" -eq 0 ]
+  [ -f "${BATS_TEST_TMPDIR}/gpgconf_calls" ]
+  [ "$(wc -l < "${BATS_TEST_TMPDIR}/gpgconf_calls")" -eq 1 ]
+  grep -qE -- '--homedir /' "${BATS_TEST_TMPDIR}/gpgconf_calls"
 }
