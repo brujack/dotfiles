@@ -14,12 +14,169 @@ clone_or_update_dotfiles() {
   fi
 }
 
+# _aws_gpg_fail <errfile> <message>
+#
+# Prints the caller's message plus the tail of gpg's captured stderr. That
+# stderr is the only stream separating "no valid OpenPGP data found" (a
+# truncated or HTML .sig) from a genuine bad signature -- discarding it would
+# reproduce, on the verify side, the misattribution ci.md records costing 200
+# consecutive daily runs on the fetch side.
+_aws_gpg_fail() {
+  local _errfile="$1" _msg="$2"
+  log_error "${_msg}"
+  if [[ -s "${_errfile}" ]]; then
+    tail -n 10 "${_errfile}" >&2
+  fi
+}
+
+# _aws_verify_zip <zip> <sig>
+#
+# Verifies the Linux awscli zip against the vendored AWS signing key, using a
+# throwaway keyring holding only that key. Returns 0 when the signature is
+# genuinely from the vendored key and neither expired nor revoked; 1 otherwise.
+#
+# The whole body runs in a `( )` subshell with an EXIT trap -- NOT
+# `trap ... RETURN` at function scope. `trap ... RETURN` is not function-scoped
+# in bash: it stays armed in the calling shell and fires again on every later
+# return up the call chain, with `_ring` out of scope (empty) by then, which
+# resolves `gpgconf --homedir ""` to the operator's REAL ~/.gnupg -- silently
+# killing their live gpg-agent/dirmngr/scdaemon. Reproduced on bash 5.3.15 and
+# 3.2.57. A subshell's EXIT trap fires exactly once, with `_ring` guaranteed
+# in scope.
+_aws_verify_zip() {
+  local _zip="$1" _sig="$2"
+
+  # _AWS_GPG_BIN: read unconditionally, defaults to `gpg`. Without this seam
+  # the verifier-absent branch is unreachable -- a PATH strip that removes
+  # /opt/homebrew/bin takes git and make with it.
+  command -v "${_AWS_GPG_BIN:-gpg}" >/dev/null 2>&1 || {
+    log_error "gpg not found; cannot verify the awscli signature"
+    log_error "install: brew install gnupg  /  apt-get install gnupg"
+    return 1
+  }
+
+  # _AWS_KEY_PATH: read unconditionally, defaults to the repo's vendored key.
+  # Without this seam only the vendored key could ever be exercised and the
+  # fingerprint-mismatch branch would be unreachable.
+  local _key
+  _key="${_AWS_KEY_PATH:-}"
+  if [[ -z "${_key}" ]]; then
+    _key="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/keys/aws-cli-team.asc"
+  fi
+
+  (
+    _ring="$(mktemp -d)" || exit 1
+    # gpg 2.x spawns gpg-agent AND scdaemon bound to the homedir; both survive
+    # its deletion. Measured: 3 verifications leave 3 of each orphaned. EXIT
+    # in a subshell fires exactly once, with _ring guaranteed in scope.
+    trap 'gpgconf --homedir "${_ring}" --kill all >/dev/null 2>&1; rm -rf "${_ring}"' EXIT
+
+    # _status and _err live INSIDE _ring so the same trap removes them.
+    _status="${_ring}/status"
+    _err="${_ring}/err"
+
+    "${_AWS_GPG_BIN:-gpg}" --homedir "${_ring}" --batch --import "${_key}" \
+      >/dev/null 2>"${_err}" || { _aws_gpg_fail "${_err}" "could not import the vendored key"; exit 1; }
+
+    "${_AWS_GPG_BIN:-gpg}" --homedir "${_ring}" --batch --status-fd 1 \
+      --verify "${_sig}" "${_zip}" >"${_status}" 2>"${_err}"
+
+    # Reject BEFORE accepting, and split the two causes: they demand opposite
+    # operator responses. VALIDSIG is emitted for both, and gpg exits 0 for
+    # both -- an accept-only guard would let a revoked or expired key through.
+    if grep -qE '^\[GNUPG:\] (REVKEYSIG|KEYREVOKED)' "${_status}"; then
+      log_error "AWS signing key REVOKED — do not install; investigate"
+      exit 1
+    fi
+    if grep -qE '^\[GNUPG:\] (EXPSIG|EXPKEYSIG|KEYEXPIRED)' "${_status}"; then
+      log_error "vendored key or signature expired — refresh keys/aws-cli-team.asc"
+      exit 1
+    fi
+    if ! grep -q "^\[GNUPG:\] VALIDSIG ${AWSCLI_GPG_FPR} " "${_status}"; then
+      _aws_gpg_fail "${_err}" "signature did not verify against the vendored key"
+      exit 1
+    fi
+    exit 0
+  )
+}
+
+# _aws_verify_pkg <pkg>
+#
+# Verifies the macOS awscli pkg was signed and notarized under AWS's Apple
+# Developer ID team, NOT merely that pkgutil exited 0 -- rc=0 is returned for
+# ANY Apple-notarized package from ANY developer. Measured against a real
+# Microsoft-signed pkg: "Developer ID Installer: Microsoft Corporation
+# (UBF8T346G9)", rc=0. `sudo installer` performs no signature enforcement of
+# its own -- an unsigned pkg installs cleanly with rc=0 -- so this helper is
+# the only check on the path, not a second opinion.
+_aws_verify_pkg() {
+  local _pkg="$1"
+
+  # _AWS_PKGUTIL_BIN: read unconditionally, defaults to `pkgutil`. Without
+  # this seam the verifier-absent branch is unreachable -- a PATH strip that
+  # removes /usr/sbin (where pkgutil lives) takes the rest of the toolchain
+  # with it.
+  command -v "${_AWS_PKGUTIL_BIN:-pkgutil}" >/dev/null 2>&1 || {
+    log_error "pkgutil not found; cannot verify the awscli package signature"
+    log_error "pkgutil ships with macOS at /usr/sbin/pkgutil -- if it is missing something is very wrong"
+    return 1
+  }
+
+  local _sig_output
+  _sig_output="$("${_AWS_PKGUTIL_BIN:-pkgutil}" --check-signature "${_pkg}" 2>&1)"
+
+  if ! grep -q "Developer ID Installer: AMZN Mobile LLC (${AWSCLI_APPLE_TEAM_ID})" <<< "${_sig_output}"; then
+    log_error "awscli package signature did not verify against AWS's team ID (${AWSCLI_APPLE_TEAM_ID})"
+    return 1
+  fi
+  return 0
+}
+
+# _aws_fetch_pkg
+#
+# Fetches AWSCLIV2.pkg into the current directory. `-f` is required: without
+# it a 404 or CDN error page lands on disk with rc=0, and _aws_verify_pkg
+# then reports a signature failure for what was actually a network failure
+# (ci.md's misattribution, costing 200 consecutive daily runs elsewhere).
+_aws_fetch_pkg() {
+  curl -fsS "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "AWSCLIV2.pkg" || return 1
+}
+
+# _aws_fetch_zip
+#
+# Fetches the Linux zip AND its detached .sig into the current directory.
+# The two fetches are separate curl calls against a rolling CDN URL, so a
+# release landing between them is a possibility update_aws_cli's caller
+# handles via retry, not here.
+#
+# A .sig fetch failure gets its own message, deliberately distinct from
+# _aws_verify_zip's "did not verify": one means the network failed, the
+# other means the artifact is suspect, and they call for opposite responses.
+_aws_fetch_zip() {
+  curl -fsS "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o "awscliv2.zip" || return 1
+  curl -fsS "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip.sig" -o "awscliv2.zip.sig" || {
+    log_error "could not fetch the awscli signature (.sig) — network issue, not a signature failure"
+    return 1
+  }
+}
+
 update_aws_cli() {
   if [[ -n ${HAS_AWS} ]] && [[ -n ${MACOS} ]]; then
     log_info "Updating MACOS awscli"
     mkdir -p "${HOME}"/software_downloads/awscli || return 1
     cd "${HOME}/software_downloads/awscli" || return 1
-    curl "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "AWSCLIV2.pkg" || return 1
+    _aws_fetch_pkg || return 1
+    # The zip/pkg and its check are two fetches from a rolling CDN URL (Linux)
+    # or a single fetch that can still be truncated/corrupted in transit
+    # (both platforms) -- a single retry recovers both without masking a
+    # genuine tamper, which fails identically on the second pass.
+    if ! _aws_verify_pkg "AWSCLIV2.pkg"; then
+      _aws_fetch_pkg || return 1
+      if ! _aws_verify_pkg "AWSCLIV2.pkg"; then
+        rm -f AWSCLIV2.pkg
+        return 1
+      fi
+    fi
     # Cleanup runs regardless of the installer's result: a stale or partial pkg
     # means the next run installs it. tdd.md's cleanup exception.
     if ! sudo -H installer -pkg AWSCLIV2.pkg -target /; then
@@ -37,7 +194,17 @@ update_aws_cli() {
     log_info "Updating Linux awscli"
     mkdir -p "${HOME}"/software_downloads/awscli || return 1
     cd "${HOME}/software_downloads/awscli" || return 1
-    curl "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o "awscliv2.zip" || return 1
+    _aws_fetch_zip || return 1
+    if ! _aws_verify_zip "awscliv2.zip" "awscliv2.zip.sig"; then
+      _aws_fetch_zip || return 1
+      if ! _aws_verify_zip "awscliv2.zip" "awscliv2.zip.sig"; then
+        # Consistent with the macOS branch above: an artifact that failed
+        # signature verification twice should not be left where a human
+        # might unzip it by hand.
+        rm -f awscliv2.zip awscliv2.zip.sig
+        return 1
+      fi
+    fi
     unzip -u -o awscliv2.zip || return 1
     sudo -H "${HOME}"/software_downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin --update || return 1
     cd "${PERSONAL_GITREPOS}/${DOTFILES}" || return 1
@@ -62,13 +229,41 @@ update_rust() {
   fi
 }
 
+# install_aws_tools -- the fresh-machine path, run once per box.
+#
+# _AWS_BIN: read unconditionally, defaults to `aws`. Without this seam the
+# "already installed" guard is unverifiable on any machine that already has
+# awscli on PATH via an absolute-path location (this dev machine among
+# them) -- `command -v aws` would silently resolve to the real binary
+# regardless of what a test wants to exercise (shell.md: an absolute-path
+# default silently defeats a PATH-based stub).
+#
+# The guard used to be `[[ ! -f <download> ]]` -- a leftover download from an
+# interrupted run suppressed the install entirely and the function reported
+# success having done nothing. It now asks the question it actually means:
+# is the tool installed, not does a file exist.
 install_aws_tools() {
   if [[ -n ${HAS_AWS} ]] && [[ -n ${MACOS} ]]; then
-    mkdir -p "${HOME}"/software_downloads/awscli
-    printf "Installing aws-cli on MacOS\\n"
-    if [[ ! -f ${HOME}/software_downloads/awscli/AWSCLIV2.pkg ]]; then
-      wget -O "${HOME}"/software_downloads/awscli/AWSCLIV2.pkg "https://awscli.amazonaws.com/AWSCLIV2.pkg"
-      sudo installer -pkg "${HOME}"/software_downloads/awscli/AWSCLIV2.pkg -target /
+    if command -v "${_AWS_BIN:-aws}" >/dev/null 2>&1; then
+      printf "aws-cli is already installed MacOS\\n"
+    else
+      printf "Installing aws-cli on MacOS\\n"
+      mkdir -p "${HOME}"/software_downloads/awscli || return 1
+      wget -O "${HOME}"/software_downloads/awscli/AWSCLIV2.pkg "https://awscli.amazonaws.com/AWSCLIV2.pkg" || return 1
+      # Mirrors update_aws_cli's retry: a single fetch+verify failure can be
+      # a truncated or corrupted transfer as much as a genuine tamper -- a
+      # retry recovers the former and fails identically on the latter.
+      if ! _aws_verify_pkg "${HOME}/software_downloads/awscli/AWSCLIV2.pkg"; then
+        wget -O "${HOME}"/software_downloads/awscli/AWSCLIV2.pkg "https://awscli.amazonaws.com/AWSCLIV2.pkg" || return 1
+        if ! _aws_verify_pkg "${HOME}/software_downloads/awscli/AWSCLIV2.pkg"; then
+          rm -f "${HOME}"/software_downloads/awscli/AWSCLIV2.pkg
+          return 1
+        fi
+      fi
+      if ! sudo installer -pkg "${HOME}"/software_downloads/awscli/AWSCLIV2.pkg -target /; then
+        rm -f "${HOME}"/software_downloads/awscli/AWSCLIV2.pkg
+        return 1
+      fi
       rm -f "${HOME}"/software_downloads/awscli/AWSCLIV2.pkg
       if [[ -x $(command -v aws) ]]; then
         printf "aws-cli is installed MacOS\\n"
@@ -76,13 +271,41 @@ install_aws_tools() {
     fi
   fi
   if [[ -n ${HAS_AWS} ]] && [[ -n ${LINUX} ]]; then
-    mkdir -p "${HOME}"/software_downloads/awscli
-    printf "Installing aws-cli on Linux\\n"
-    if [[ ! -f ${HOME}/software_downloads/awscli/awscliv2.zip ]]; then
-      wget -O "${HOME}"/software_downloads/awscli/awscliv2.zip "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip"
-      unzip "${HOME}"/software_downloads/awscli/awscliv2.zip -d "${HOME}"/software_downloads/awscli
-      sudo -H "${HOME}"/software_downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin
-      rm -f "${HOME}"/software_downloads/awscli/awscliv2.zip
+    if command -v "${_AWS_BIN:-aws}" >/dev/null 2>&1; then
+      printf "aws-cli is already installed Linux\\n"
+    else
+      printf "Installing aws-cli on Linux\\n"
+      mkdir -p "${HOME}"/software_downloads/awscli || return 1
+      wget -O "${HOME}"/software_downloads/awscli/awscliv2.zip "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" || return 1
+      # A .sig fetch failure gets its own message, deliberately distinct from
+      # _aws_verify_zip's "did not verify": one means the network failed, the
+      # other means the artifact is suspect, and they call for opposite
+      # responses (ci.md's misattribution, costing 200 consecutive daily
+      # runs elsewhere).
+      wget -O "${HOME}"/software_downloads/awscli/awscliv2.zip.sig "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip.sig" || {
+        log_error "could not fetch the awscli signature (.sig) — network issue, not a signature failure"
+        return 1
+      }
+      if ! _aws_verify_zip "${HOME}/software_downloads/awscli/awscliv2.zip" "${HOME}/software_downloads/awscli/awscliv2.zip.sig"; then
+        wget -O "${HOME}"/software_downloads/awscli/awscliv2.zip "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" || return 1
+        wget -O "${HOME}"/software_downloads/awscli/awscliv2.zip.sig "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip.sig" || {
+          log_error "could not fetch the awscli signature (.sig) — network issue, not a signature failure"
+          return 1
+        }
+        if ! _aws_verify_zip "${HOME}/software_downloads/awscli/awscliv2.zip" "${HOME}/software_downloads/awscli/awscliv2.zip.sig"; then
+          # Consistent with the macOS branch above: an artifact that failed
+          # signature verification twice should not be left where a human
+          # might unzip it by hand.
+          rm -f "${HOME}"/software_downloads/awscli/awscliv2.zip "${HOME}"/software_downloads/awscli/awscliv2.zip.sig
+          return 1
+        fi
+      fi
+      unzip "${HOME}"/software_downloads/awscli/awscliv2.zip -d "${HOME}"/software_downloads/awscli || return 1
+      if ! sudo -H "${HOME}"/software_downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin; then
+        rm -f "${HOME}"/software_downloads/awscli/awscliv2.zip "${HOME}"/software_downloads/awscli/awscliv2.zip.sig
+        return 1
+      fi
+      rm -f "${HOME}"/software_downloads/awscli/awscliv2.zip "${HOME}"/software_downloads/awscli/awscliv2.zip.sig
       rm -rf "${HOME}"/software_downloads/awscli
       if [[ -x $(command -v aws) ]]; then
         printf "aws-cli is installed Linux\\n"

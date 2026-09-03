@@ -27,6 +27,15 @@ setup() {
 
 teardown() {
   rm -f "${MOCK_CALLS_FILE:-}"
+  # _dev_make_signing_key spawns a real gpg-agent/scdaemon bound to each
+  # homedir it creates; kill them here rather than leaking orphans across
+  # the suite (same class of leak the design's own EXIT trap exists to
+  # bound for _aws_verify_zip's OWN throwaway ring).
+  if [[ -f "${BATS_TEST_TMPDIR}/_gpg_homedirs" ]]; then
+    while IFS= read -r _gpg_homedir; do
+      gpgconf --homedir "${_gpg_homedir}" --kill all >/dev/null 2>&1
+    done < "${BATS_TEST_TMPDIR}/_gpg_homedirs"
+  fi
 }
 
 # ── setup_vim_plugins ────────────────────────────────────────────────────────
@@ -71,8 +80,15 @@ teardown() {
   export MACOS=1 HAS_AWS=1
   unset LINUX
   mkdir -p "${HOME}/software_downloads/awscli"
+  # _aws_verify_pkg now gates the installer -- give it a passing pkgutil
+  # read so this test still reaches the installer step it was written for.
+  export MOCK_PKGUTIL_EXIT=0
+  export MOCK_PKGUTIL_STDOUT="   Status: signed by a developer certificate issued by Apple for distribution
+   Notarization: trusted by the Apple notary service
+    1. Developer ID Installer: AMZN Mobile LLC (${AWSCLI_APPLE_TEAM_ID})"
   run update_aws_cli
   [ "$status" -eq 0 ]
+  grep -q "installer -pkg" "${MOCK_CALLS_FILE}"
 }
 
 @test "update_aws_cli: removes the pkg when the installer fails on macOS" {
@@ -80,9 +96,16 @@ teardown() {
   unset LINUX
   mkdir -p "${HOME}/software_downloads/awscli"
   export MOCK_INSTALLER_EXIT=1
+  # Verification must pass here too, or the pkg is removed by the verify-
+  # failure arm instead of the installer-failure arm this test is about.
+  export MOCK_PKGUTIL_EXIT=0
+  export MOCK_PKGUTIL_STDOUT="   Status: signed by a developer certificate issued by Apple for distribution
+   Notarization: trusted by the Apple notary service
+    1. Developer ID Installer: AMZN Mobile LLC (${AWSCLI_APPLE_TEAM_ID})"
   run update_aws_cli
   [ "$status" -eq 1 ]
   [ ! -f "${HOME}/software_downloads/awscli/AWSCLIV2.pkg" ]
+  grep -q "installer -pkg" "${MOCK_CALLS_FILE}"
 }
 
 @test "update_aws_cli: creates the awscli directory before cd on macOS" {
@@ -92,6 +115,10 @@ teardown() {
   mkdir -p "${PERSONAL_GITREPOS}/${DOTFILES}"
   export MACOS=1 HAS_AWS=1
   unset LINUX
+  export MOCK_PKGUTIL_EXIT=0
+  export MOCK_PKGUTIL_STDOUT="   Status: signed by a developer certificate issued by Apple for distribution
+   Notarization: trusted by the Apple notary service
+    1. Developer ID Installer: AMZN Mobile LLC (${AWSCLI_APPLE_TEAM_ID})"
   # software_downloads/awscli deliberately absent -- setup() only creates
   # software_downloads itself. This drives the macOS/Linux mkdir asymmetry:
   # the Linux branch has always created its own directory; the macOS branch
@@ -99,6 +126,310 @@ teardown() {
   run update_aws_cli
   [ "$status" -eq 0 ]
   [ -d "${HOME}/software_downloads/awscli" ]
+}
+
+@test "update_aws_cli: does not install an unverified pkg on macOS (verification fails twice)" {
+  export MACOS=1 HAS_AWS=1
+  unset LINUX
+  mkdir -p "${HOME}/software_downloads/awscli"
+  # MOCK_PKGUTIL_EXIT defaults to 1 (unmocked failure) -- _aws_verify_pkg
+  # never sees the AWS team-ID string, so both the first attempt and the
+  # single retry fail.
+  run update_aws_cli
+  [ "$status" -ne 0 ]
+  refute_grep "installer -pkg" "${MOCK_CALLS_FILE:-/dev/null}"
+  [ ! -f "${HOME}/software_downloads/awscli/AWSCLIV2.pkg" ]
+  # Pins the retry itself: without it, a single fetch+verify+fail produces
+  # the SAME status/no-installer/no-file observable, so this line is what
+  # keeps the mechanism from silently reverting to no retry at all.
+  [ "$(grep -c "AWSCLIV2.pkg -o AWSCLIV2.pkg" "${MOCK_CALLS_FILE}")" -eq 2 ]
+}
+
+@test "update_aws_cli: fetches the .sig on Linux and retries verification once before giving up" {
+  export LINUX=1 HAS_AWS=1
+  unset MACOS
+  mkdir -p "${PERSONAL_GITREPOS}/${DOTFILES}"
+  mkdir -p "${HOME}/software_downloads/awscli"
+  local _counter="${BATS_TEST_TMPDIR}/verify_calls"
+  # Stub the already-tested verifier so this test is about update_aws_cli's
+  # own retry orchestration, not about gpg. _aws_verify_zip has its own
+  # real-gpg tests above; re-deriving a signature failure/success pair here
+  # would test gpg a second time and update_aws_cli's retry logic not at all.
+  _aws_verify_zip() {
+    local _n
+    _n=$(( $(cat "${_counter}" 2>/dev/null || printf '0') + 1 ))
+    printf '%s' "${_n}" > "${_counter}"
+    [[ "${_n}" -ge 2 ]]
+  }
+  run update_aws_cli
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_counter}")" -eq 2 ]
+  grep -q "https://awscli.amazonaws.com/awscli-exe-linux-.*\.zip\.sig" "${MOCK_CALLS_FILE}"
+  # Positive control: a run that ultimately succeeds must still reach and
+  # invoke the installer -- a suite of only-rejects below cannot otherwise
+  # tell "correctly rejecting" from "never ran".
+  grep -q "aws/install" "${MOCK_CALLS_FILE}"
+}
+
+@test "update_aws_cli: fails and never installs when Linux zip verification fails twice" {
+  export LINUX=1 HAS_AWS=1
+  unset MACOS
+  mkdir -p "${HOME}/software_downloads/awscli"
+  _aws_verify_zip() { return 1; }
+  run update_aws_cli
+  [ "$status" -ne 0 ]
+  refute_grep "aws/install" "${MOCK_CALLS_FILE:-/dev/null}"
+}
+
+@test "update_aws_cli: removes the zip and .sig on Linux when verification fails twice" {
+  # Mirrors the macOS pkg-cleanup test above: an artifact that failed
+  # signature verification twice must not be left on disk where a human
+  # could unzip and install it by hand.
+  export LINUX=1 HAS_AWS=1
+  unset MACOS
+  mkdir -p "${HOME}/software_downloads/awscli"
+  _aws_verify_zip() { return 1; }
+  run update_aws_cli
+  [ "$status" -ne 0 ]
+  [ ! -f "${HOME}/software_downloads/awscli/awscliv2.zip" ]
+  [ ! -f "${HOME}/software_downloads/awscli/awscliv2.zip.sig" ]
+}
+
+@test "update_aws_cli: a .sig 404 on Linux is reported as could-not-fetch, not did-not-verify" {
+  export LINUX=1 HAS_AWS=1
+  unset MACOS
+  mkdir -p "${HOME}/software_downloads/awscli"
+  # Local override of the zip's own fetch call: the zip succeeds via the
+  # shared mock, the .sig 404s (curl -f style, rc=22) before _aws_verify_zip
+  # is ever reached -- so a message conflating the two would be a defect in
+  # update_aws_cli, not in the verifier.
+  curl() {
+    [[ "$*" == *".zip.sig"* ]] && return 22
+    command curl "$@"
+  }
+  export -f curl
+  run update_aws_cli
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"could not fetch"* ]]
+  [[ "$output" != *"did not verify"* ]]
+  refute_grep "aws/install" "${MOCK_CALLS_FILE:-/dev/null}"
+}
+
+# ── install_aws_tools ────────────────────────────────────────────────────────
+#
+# _AWS_BIN gates the "already installed" check (`command -v "${_AWS_BIN:-aws}"`).
+# Read unconditionally, defaults to `aws`. Without this seam these tests are
+# not hermetic: `command -v aws` resolves to a REAL absolute-path binary on
+# any machine that already has awscli installed (this dev machine among
+# them -- /usr/local/bin/aws -> /usr/local/aws-cli/aws), so the guard would
+# silently short-circuit every "fresh install" test and there would be no way
+# to drive the "already installed" branch independent of actual machine
+# state. Same class as _AWS_GPG_BIN/_AWS_PKGUTIL_BIN above (shell.md:
+# an absolute-path default silently defeats a PATH-based stub).
+#
+# Every fresh-install test below points _AWS_BIN at a path guaranteed absent.
+
+@test "install_aws_tools: returns 1 when wget fails fetching the pkg on macOS" {
+  export MACOS=1 HAS_AWS=1
+  unset LINUX
+  export _AWS_BIN="${BATS_TEST_TMPDIR}/nonexistent-aws"
+  mkdir -p "${HOME}/software_downloads/awscli"
+  export MOCK_WGET_EXIT=1
+  run install_aws_tools
+  [ "$status" -eq 1 ]
+}
+
+@test "install_aws_tools: installs on macOS even when a stale pkg is already present" {
+  # The pre-fix guard was `[[ ! -f <download> ]]` -- a leftover pkg from an
+  # interrupted run suppressed the install entirely and the function
+  # returned success having done nothing. This is the regression test for
+  # that fix: a stale file must NOT suppress the install.
+  export MACOS=1 HAS_AWS=1
+  unset LINUX
+  export _AWS_BIN="${BATS_TEST_TMPDIR}/nonexistent-aws"
+  mkdir -p "${HOME}/software_downloads/awscli"
+  printf 'stale partial download\n' > "${HOME}/software_downloads/awscli/AWSCLIV2.pkg"
+  export MOCK_PKGUTIL_EXIT=0
+  export MOCK_PKGUTIL_STDOUT="   Status: signed by a developer certificate issued by Apple for distribution
+   Notarization: trusted by the Apple notary service
+    1. Developer ID Installer: AMZN Mobile LLC (${AWSCLI_APPLE_TEAM_ID})"
+  run install_aws_tools
+  [ "$status" -eq 0 ]
+  grep -q "AWSCLIV2.pkg" "${MOCK_CALLS_FILE}"
+  grep -q "installer -pkg" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_aws_tools: does not reinstall on macOS when aws is already on PATH" {
+  local _fixture_bin="${BATS_TEST_TMPDIR}/fixture-bin"
+  mkdir -p "${_fixture_bin}"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "${_fixture_bin}/fake-aws"
+  chmod +x "${_fixture_bin}/fake-aws"
+  export MACOS=1 HAS_AWS=1
+  unset LINUX
+  export _AWS_BIN="${_fixture_bin}/fake-aws"
+  run install_aws_tools
+  [ "$status" -eq 0 ]
+  refute_grep "AWSCLIV2.pkg" "${MOCK_CALLS_FILE:-/dev/null}"
+}
+
+@test "install_aws_tools: does not install an unverified pkg on macOS (verification fails twice)" {
+  export MACOS=1 HAS_AWS=1
+  unset LINUX
+  export _AWS_BIN="${BATS_TEST_TMPDIR}/nonexistent-aws"
+  mkdir -p "${HOME}/software_downloads/awscli"
+  # MOCK_PKGUTIL_EXIT defaults to 1 (unmocked failure) -- both the first
+  # attempt and the single retry fail.
+  run install_aws_tools
+  [ "$status" -ne 0 ]
+  refute_grep "installer -pkg" "${MOCK_CALLS_FILE:-/dev/null}"
+  [ ! -f "${HOME}/software_downloads/awscli/AWSCLIV2.pkg" ]
+  [ "$(grep -c "^wget " "${MOCK_CALLS_FILE}")" -eq 2 ]
+}
+
+@test "install_aws_tools: returns 1 and removes the pkg when the installer fails on macOS" {
+  export MACOS=1 HAS_AWS=1
+  unset LINUX
+  export _AWS_BIN="${BATS_TEST_TMPDIR}/nonexistent-aws"
+  mkdir -p "${HOME}/software_downloads/awscli"
+  export MOCK_INSTALLER_EXIT=1
+  export MOCK_PKGUTIL_EXIT=0
+  export MOCK_PKGUTIL_STDOUT="   Status: signed by a developer certificate issued by Apple for distribution
+   Notarization: trusted by the Apple notary service
+    1. Developer ID Installer: AMZN Mobile LLC (${AWSCLI_APPLE_TEAM_ID})"
+  run install_aws_tools
+  [ "$status" -eq 1 ]
+  [ ! -f "${HOME}/software_downloads/awscli/AWSCLIV2.pkg" ]
+  grep -q "installer -pkg" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_aws_tools: full success path on macOS installs and reports success" {
+  # Positive control: a suite of only-rejects cannot tell "correctly
+  # rejecting" from "never ran".
+  export MACOS=1 HAS_AWS=1
+  unset LINUX
+  export _AWS_BIN="${BATS_TEST_TMPDIR}/nonexistent-aws"
+  mkdir -p "${HOME}/software_downloads/awscli"
+  export MOCK_PKGUTIL_EXIT=0
+  export MOCK_PKGUTIL_STDOUT="   Status: signed by a developer certificate issued by Apple for distribution
+   Notarization: trusted by the Apple notary service
+    1. Developer ID Installer: AMZN Mobile LLC (${AWSCLI_APPLE_TEAM_ID})"
+  run install_aws_tools
+  [ "$status" -eq 0 ]
+  grep -q "installer -pkg" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_aws_tools: returns 1 when wget fails fetching the zip on Linux" {
+  export LINUX=1 HAS_AWS=1
+  unset MACOS
+  export _AWS_BIN="${BATS_TEST_TMPDIR}/nonexistent-aws"
+  mkdir -p "${HOME}/software_downloads/awscli"
+  export MOCK_WGET_EXIT=1
+  run install_aws_tools
+  [ "$status" -eq 1 ]
+}
+
+@test "install_aws_tools: a .sig fetch failure on Linux is reported as could-not-fetch, not did-not-verify" {
+  export LINUX=1 HAS_AWS=1
+  unset MACOS
+  export _AWS_BIN="${BATS_TEST_TMPDIR}/nonexistent-aws"
+  mkdir -p "${HOME}/software_downloads/awscli"
+  wget() {
+    [[ "$*" == *".zip.sig"* ]] && return 1
+    command wget "$@"
+  }
+  export -f wget
+  run install_aws_tools
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"could not fetch"* ]]
+  [[ "$output" != *"did not verify"* ]]
+  refute_grep "aws/install" "${MOCK_CALLS_FILE:-/dev/null}"
+}
+
+@test "install_aws_tools: installs on Linux even when a stale zip is already present" {
+  export LINUX=1 HAS_AWS=1
+  unset MACOS
+  export _AWS_BIN="${BATS_TEST_TMPDIR}/nonexistent-aws"
+  mkdir -p "${HOME}/software_downloads/awscli"
+  printf 'stale partial download\n' > "${HOME}/software_downloads/awscli/awscliv2.zip"
+  _aws_verify_zip() { return 0; }
+  run install_aws_tools
+  [ "$status" -eq 0 ]
+  grep -q "awscliv2.zip" "${MOCK_CALLS_FILE}"
+  grep -q "aws/install" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_aws_tools: does not reinstall on Linux when aws is already on PATH" {
+  local _fixture_bin="${BATS_TEST_TMPDIR}/fixture-bin"
+  mkdir -p "${_fixture_bin}"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "${_fixture_bin}/fake-aws"
+  chmod +x "${_fixture_bin}/fake-aws"
+  export LINUX=1 HAS_AWS=1
+  unset MACOS
+  export _AWS_BIN="${_fixture_bin}/fake-aws"
+  run install_aws_tools
+  [ "$status" -eq 0 ]
+  refute_grep "awscliv2.zip" "${MOCK_CALLS_FILE:-/dev/null}"
+}
+
+@test "install_aws_tools: fails and never installs when Linux zip verification fails twice" {
+  export LINUX=1 HAS_AWS=1
+  unset MACOS
+  export _AWS_BIN="${BATS_TEST_TMPDIR}/nonexistent-aws"
+  mkdir -p "${HOME}/software_downloads/awscli"
+  _aws_verify_zip() { return 1; }
+  run install_aws_tools
+  [ "$status" -ne 0 ]
+  refute_grep "aws/install" "${MOCK_CALLS_FILE:-/dev/null}"
+}
+
+@test "install_aws_tools: removes the zip and .sig on Linux when verification fails twice" {
+  export LINUX=1 HAS_AWS=1
+  unset MACOS
+  export _AWS_BIN="${BATS_TEST_TMPDIR}/nonexistent-aws"
+  mkdir -p "${HOME}/software_downloads/awscli"
+  _aws_verify_zip() { return 1; }
+  run install_aws_tools
+  [ "$status" -ne 0 ]
+  [ ! -f "${HOME}/software_downloads/awscli/awscliv2.zip" ]
+  [ ! -f "${HOME}/software_downloads/awscli/awscliv2.zip.sig" ]
+}
+
+@test "install_aws_tools: returns 1 when unzip fails on Linux" {
+  export LINUX=1 HAS_AWS=1
+  unset MACOS
+  export _AWS_BIN="${BATS_TEST_TMPDIR}/nonexistent-aws"
+  mkdir -p "${HOME}/software_downloads/awscli"
+  _aws_verify_zip() { return 0; }
+  export MOCK_UNZIP_EXIT=1
+  run install_aws_tools
+  [ "$status" -eq 1 ]
+  refute_grep "aws/install" "${MOCK_CALLS_FILE:-/dev/null}"
+}
+
+@test "install_aws_tools: returns 1 and removes the zip and .sig when aws/install fails on Linux" {
+  export LINUX=1 HAS_AWS=1
+  unset MACOS
+  export _AWS_BIN="${BATS_TEST_TMPDIR}/nonexistent-aws"
+  mkdir -p "${HOME}/software_downloads/awscli"
+  _aws_verify_zip() { return 0; }
+  export MOCK_SUDO_EXIT=1
+  run install_aws_tools
+  [ "$status" -eq 1 ]
+  [ ! -f "${HOME}/software_downloads/awscli/awscliv2.zip" ]
+  [ ! -f "${HOME}/software_downloads/awscli/awscliv2.zip.sig" ]
+}
+
+@test "install_aws_tools: full success path on Linux installs and reports success" {
+  # Positive control: a suite of only-rejects cannot tell "correctly
+  # rejecting" from "never ran".
+  export LINUX=1 HAS_AWS=1
+  unset MACOS
+  export _AWS_BIN="${BATS_TEST_TMPDIR}/nonexistent-aws"
+  mkdir -p "${HOME}/software_downloads/awscli"
+  _aws_verify_zip() { return 0; }
+  run install_aws_tools
+  [ "$status" -eq 0 ]
+  grep -q "aws/install" "${MOCK_CALLS_FILE}"
 }
 
 # ── update_rust ──────────────────────────────────────────────────────────────
@@ -442,4 +773,426 @@ component add rust-analyzer" ]
   local _got
   _got="$(resolve_uv)"
   [ "${_got}" = "${_fake}" ]
+}
+
+# ── AWSCLI_GPG_FPR pin ───────────────────────────────────────────────────────
+
+@test "AWSCLI_GPG_FPR matches the fingerprint derived from the vendored key" {
+  # tests/mocks/gpg emits nothing on stdout; this needs real gpg to derive the
+  # fingerprint independently of the constant it is checked against — two
+  # separate artifacts that can drift apart (a key swap without a constant
+  # bump must go red), not the same derivation asserted against itself.
+  local _clean_path
+  _clean_path="$(printf '%s' "${PATH}" | tr ':' '\n' | grep -v 'tests/mocks' | tr '\n' ':' | sed 's/:$//')"
+  if ! PATH="${_clean_path}" command -v gpg >/dev/null 2>&1; then
+    skip "real gpg not on PATH outside tests/mocks"
+  fi
+  local _fpr
+  _fpr="$(PATH="${_clean_path}" gpg --show-keys --with-colons "${REPO_ROOT}/keys/aws-cli-team.asc" | awk -F: '/^fpr/{print $10; exit}')"
+  [[ -n "${_fpr}" ]]
+  [[ "${_fpr}" == "${AWSCLI_GPG_FPR}" ]]
+}
+
+# ── _aws_verify_zip / _aws_gpg_fail ──────────────────────────────────────────
+#
+# Every test below runs against REAL gpg, never the tests/mocks stub (which
+# emits nothing on stdout and exits 0 unconditionally, so it cannot express
+# any accept or reject arm). Each test exports PATH with tests/mocks stripped
+# before touching gpg, via _gpg_only_path.
+
+# Echoes PATH with every tests/mocks entry removed.
+_gpg_only_path() {
+  printf '%s' "${PATH}" | tr ':' '\n' | grep -v 'tests/mocks' | tr '\n' ':' | sed 's/:$//'
+}
+
+# Generates a throwaway signing key in $1 (a fresh gpg homedir; loopback
+# pinentry is enabled so --batch can generate/sign without a real prompt),
+# signs a fixed payload written to $2, and writes the detached signature to
+# $3 plus the exported ASCII-armored public key to $4. $5 is gpg's own
+# expire syntax ("1d", "seconds=2", ...). Echoes the new key's fingerprint.
+# Caller must already have PATH pointed at real gpg via _gpg_only_path.
+_dev_make_signing_key() {
+  local _homedir="$1" _payload="$2" _sig="$3" _pubkey="$4" _expire="$5"
+  mkdir -p "${_homedir}"
+  chmod 700 "${_homedir}"
+  printf 'allow-loopback-pinentry\n' > "${_homedir}/gpg-agent.conf"
+  printf '%s\n' "${_homedir}" >> "${BATS_TEST_TMPDIR}/_gpg_homedirs"
+  gpg --homedir "${_homedir}" --batch --pinentry-mode loopback --passphrase '' \
+    --quick-generate-key "Test Signer <t@example.com>" default default "${_expire}" \
+    >/dev/null 2>&1
+  printf 'awscli test payload\n' > "${_payload}"
+  gpg --homedir "${_homedir}" --batch --pinentry-mode loopback --passphrase '' \
+    --yes --detach-sign --output "${_sig}" "${_payload}" >/dev/null 2>&1
+  gpg --homedir "${_homedir}" --batch --armor --export "Test Signer <t@example.com>" \
+    >"${_pubkey}" 2>/dev/null
+  gpg --homedir "${_homedir}" --batch --with-colons --list-keys 2>/dev/null \
+    | awk -F: '/^fpr/{print $10; exit}'
+}
+
+# Revokes the key _dev_make_signing_key generated in $1 (its homedir),
+# stripping the colon GnuPG inserts before the armor header on the
+# auto-generated revocation certificate "to avoid accidental use".
+_dev_revoke_signing_key() {
+  local _homedir="$1"
+  local _revfile
+  _revfile="$(find "${_homedir}/openpgp-revocs.d" -name '*.rev' 2>/dev/null | head -1)"
+  [[ -z "${_revfile}" ]] && return 1
+  sed 's/^:-----BEGIN/-----BEGIN/' "${_revfile}" > "${_homedir}/revoke.asc"
+  gpg --homedir "${_homedir}" --batch --import "${_homedir}/revoke.asc" >/dev/null 2>&1
+  gpg --homedir "${_homedir}" --batch --armor --export "Test Signer <t@example.com>" \
+    2>/dev/null
+}
+
+# Independently reproduces gpg's status-fd output for a (pubkey, sig,
+# payload) triple, using a throwaway probe ring separate from the one
+# _aws_verify_zip itself creates and destroys. This is how a test asserts on
+# status CONTENTS despite the real one being deleted by the function's own
+# EXIT trap before it returns -- a fail-closed guard cannot distinguish its
+# own non-execution from a correct rejection, so the return code alone does
+# not prove the reject arm was reached for its stated reason (tdd.md).
+# Echoes gpg's own exit code; writes status lines to $4.
+_dev_probe_gpg_status() {
+  local _pubkey="$1" _sig="$2" _payload="$3" _outfile="$4"
+  local _probe_ring _rc
+  _probe_ring="$(mktemp -d)"
+  chmod 700 "${_probe_ring}"
+  gpg --homedir "${_probe_ring}" --batch --import "${_pubkey}" >/dev/null 2>&1
+  gpg --homedir "${_probe_ring}" --batch --status-fd 1 --verify "${_sig}" "${_payload}" \
+    >"${_outfile}" 2>/dev/null
+  _rc=$?
+  gpgconf --homedir "${_probe_ring}" --kill all >/dev/null 2>&1
+  rm -rf "${_probe_ring}"
+  return "${_rc}"
+}
+
+@test "_aws_verify_zip: returns 0 for a valid signature from a live key" {
+  export PATH
+  PATH="$(_gpg_only_path)"
+  if ! command -v gpg >/dev/null 2>&1; then
+    skip "real gpg not on PATH outside tests/mocks"
+  fi
+  local _homedir="${BATS_TEST_TMPDIR}/signer" _payload="${BATS_TEST_TMPDIR}/p.txt"
+  local _sig="${BATS_TEST_TMPDIR}/p.sig" _pub="${BATS_TEST_TMPDIR}/pub.asc" _fpr
+  _fpr="$(_dev_make_signing_key "${_homedir}" "${_payload}" "${_sig}" "${_pub}" "1d")"
+  [[ -n "${_fpr}" ]]
+  local _AWS_KEY_PATH="${_pub}"
+  AWSCLI_GPG_FPR="${_fpr}"
+
+  run _aws_verify_zip "${_payload}" "${_sig}"
+  [ "$status" -eq 0 ]
+}
+
+@test "_aws_verify_zip: rejects an expired key, VALIDSIG and EXPKEYSIG both present" {
+  export PATH
+  PATH="$(_gpg_only_path)"
+  if ! command -v gpg >/dev/null 2>&1; then
+    skip "real gpg not on PATH outside tests/mocks"
+  fi
+  local _homedir="${BATS_TEST_TMPDIR}/signer" _payload="${BATS_TEST_TMPDIR}/p.txt"
+  local _sig="${BATS_TEST_TMPDIR}/p.sig" _pub="${BATS_TEST_TMPDIR}/pub.asc" _fpr
+  _fpr="$(_dev_make_signing_key "${_homedir}" "${_payload}" "${_sig}" "${_pub}" "seconds=2")"
+  [[ -n "${_fpr}" ]]
+  sleep 3
+
+  local _probe_status="${BATS_TEST_TMPDIR}/probe_status" _probe_rc
+  _dev_probe_gpg_status "${_pub}" "${_sig}" "${_payload}" "${_probe_status}"
+  _probe_rc=$?
+  [ "${_probe_rc}" -eq 0 ]
+  grep -q "VALIDSIG ${_fpr} " "${_probe_status}"
+  grep -q "EXPKEYSIG" "${_probe_status}"
+
+  local _AWS_KEY_PATH="${_pub}"
+  AWSCLI_GPG_FPR="${_fpr}"
+  run _aws_verify_zip "${_payload}" "${_sig}"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"expired"* ]]
+}
+
+@test "_aws_verify_zip: rejects an expired SIGNATURE from a live key (EXPSIG, distinct from EXPKEYSIG)" {
+  export PATH
+  PATH="$(_gpg_only_path)"
+  if ! command -v gpg >/dev/null 2>&1; then
+    skip "real gpg not on PATH outside tests/mocks"
+  fi
+  local _homedir="${BATS_TEST_TMPDIR}/signer" _payload="${BATS_TEST_TMPDIR}/p.txt"
+  local _sig="${BATS_TEST_TMPDIR}/p.sig" _pub="${BATS_TEST_TMPDIR}/pub.asc" _fpr
+
+  # The KEY stays live (1d) -- EXPSIG is signature expiry, DETAILS:484:
+  # "the signature with the keyid is good, but the SIGNATURE is expired".
+  # Reusing _dev_make_signing_key's key-expire argument would produce
+  # EXPKEYSIG (the sibling test above), not EXPSIG. The signature's OWN
+  # expiry is set separately, via --default-sig-expire on detach-sign.
+  mkdir -p "${_homedir}"
+  chmod 700 "${_homedir}"
+  printf 'allow-loopback-pinentry\n' > "${_homedir}/gpg-agent.conf"
+  printf '%s\n' "${_homedir}" >> "${BATS_TEST_TMPDIR}/_gpg_homedirs"
+  gpg --homedir "${_homedir}" --batch --pinentry-mode loopback --passphrase '' \
+    --quick-generate-key "Test Signer <t@example.com>" default default "1d" \
+    >/dev/null 2>&1
+  printf 'awscli test payload\n' > "${_payload}"
+  gpg --homedir "${_homedir}" --batch --pinentry-mode loopback --passphrase '' \
+    --default-sig-expire seconds=2 --yes --detach-sign --output "${_sig}" "${_payload}" \
+    >/dev/null 2>&1
+  gpg --homedir "${_homedir}" --batch --armor --export "Test Signer <t@example.com>" \
+    >"${_pub}" 2>/dev/null
+  _fpr="$(gpg --homedir "${_homedir}" --batch --with-colons --list-keys 2>/dev/null \
+    | awk -F: '/^fpr/{print $10; exit}')"
+  [[ -n "${_fpr}" ]]
+  sleep 3
+
+  local _probe_status="${BATS_TEST_TMPDIR}/probe_status" _probe_rc
+  # Unlike the EXPKEYSIG/REVKEYSIG siblings, this probe genuinely returns
+  # non-zero (see below) -- a bare `cmd; rc=$?` aborts the whole test right
+  # here under bats' own errexit-sensitive test-body execution, since a
+  # failing bare command outside a conditional is treated as the test
+  # failing at that line. Capture it through an `if` instead, which is
+  # exempt from that trap.
+  if _dev_probe_gpg_status "${_pub}" "${_sig}" "${_payload}" "${_probe_status}"; then
+    _probe_rc=0
+  else
+    _probe_rc=$?
+  fi
+  # Measured on GnuPG 2.5.22, reproduced twice on independent keys: unlike
+  # EXPKEYSIG/REVKEYSIG (still a "good signature", gpg exits 0), an expired
+  # SIGNATURE is a harder failure -- gpg exits 1 and status-fd carries an
+  # explicit `FAILURE gpg-exit ...` line alongside EXPSIG. Assert what gpg
+  # actually does for this member of the set, not what the other two do.
+  [ "${_probe_rc}" -eq 1 ]
+  grep -q "VALIDSIG ${_fpr} " "${_probe_status}"
+  grep -q "EXPSIG" "${_probe_status}"
+  # Guard against this test silently degrading into a duplicate of the
+  # EXPKEYSIG test above.
+  refute_grep "EXPKEYSIG" "${_probe_status}"
+
+  local _AWS_KEY_PATH="${_pub}"
+  AWSCLI_GPG_FPR="${_fpr}"
+  run _aws_verify_zip "${_payload}" "${_sig}"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"expired"* ]]
+}
+
+@test "_aws_verify_zip: rejects a revoked key, VALIDSIG and REVKEYSIG both present" {
+  export PATH
+  PATH="$(_gpg_only_path)"
+  if ! command -v gpg >/dev/null 2>&1; then
+    skip "real gpg not on PATH outside tests/mocks"
+  fi
+  local _homedir="${BATS_TEST_TMPDIR}/signer" _payload="${BATS_TEST_TMPDIR}/p.txt"
+  local _sig="${BATS_TEST_TMPDIR}/p.sig" _pub="${BATS_TEST_TMPDIR}/pub.asc" _fpr
+  _fpr="$(_dev_make_signing_key "${_homedir}" "${_payload}" "${_sig}" "${_pub}" "1d")"
+  [[ -n "${_fpr}" ]]
+  _dev_revoke_signing_key "${_homedir}" > "${_pub}"
+
+  local _probe_status="${BATS_TEST_TMPDIR}/probe_status" _probe_rc
+  _dev_probe_gpg_status "${_pub}" "${_sig}" "${_payload}" "${_probe_status}"
+  _probe_rc=$?
+  [ "${_probe_rc}" -eq 0 ]
+  grep -q "VALIDSIG ${_fpr} " "${_probe_status}"
+  grep -q "REVKEYSIG" "${_probe_status}"
+
+  local _AWS_KEY_PATH="${_pub}"
+  AWSCLI_GPG_FPR="${_fpr}"
+  run _aws_verify_zip "${_payload}" "${_sig}"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"REVOKED"* ]]
+}
+
+@test "_aws_verify_zip: revoked and expired keys produce different messages" {
+  export PATH
+  PATH="$(_gpg_only_path)"
+  if ! command -v gpg >/dev/null 2>&1; then
+    skip "real gpg not on PATH outside tests/mocks"
+  fi
+
+  local _fpr_exp
+  _fpr_exp="$(_dev_make_signing_key "${BATS_TEST_TMPDIR}/exp" "${BATS_TEST_TMPDIR}/exp.txt" \
+    "${BATS_TEST_TMPDIR}/exp.sig" "${BATS_TEST_TMPDIR}/exp.pub" "seconds=2")"
+  sleep 3
+  local _AWS_KEY_PATH="${BATS_TEST_TMPDIR}/exp.pub"
+  AWSCLI_GPG_FPR="${_fpr_exp}"
+  run _aws_verify_zip "${BATS_TEST_TMPDIR}/exp.txt" "${BATS_TEST_TMPDIR}/exp.sig"
+  local _exp_status="$status" _exp_output="$output"
+  [ "${_exp_status}" -ne 0 ]
+
+  local _fpr_rev
+  _fpr_rev="$(_dev_make_signing_key "${BATS_TEST_TMPDIR}/rev" "${BATS_TEST_TMPDIR}/rev.txt" \
+    "${BATS_TEST_TMPDIR}/rev.sig" "${BATS_TEST_TMPDIR}/rev.pub" "1d")"
+  _dev_revoke_signing_key "${BATS_TEST_TMPDIR}/rev" > "${BATS_TEST_TMPDIR}/rev.pub"
+  _AWS_KEY_PATH="${BATS_TEST_TMPDIR}/rev.pub"
+  AWSCLI_GPG_FPR="${_fpr_rev}"
+  run _aws_verify_zip "${BATS_TEST_TMPDIR}/rev.txt" "${BATS_TEST_TMPDIR}/rev.sig"
+  local _rev_status="$status" _rev_output="$output"
+  [ "${_rev_status}" -ne 0 ]
+
+  [ "${_exp_output}" != "${_rev_output}" ]
+  [[ "${_exp_output}" == *"expired"* ]]
+  [[ "${_rev_output}" == *"REVOKED"* ]]
+}
+
+@test "_aws_verify_zip: rejects a valid signature from a different key (fingerprint mismatch)" {
+  export PATH
+  PATH="$(_gpg_only_path)"
+  if ! command -v gpg >/dev/null 2>&1; then
+    skip "real gpg not on PATH outside tests/mocks"
+  fi
+  local _homedir="${BATS_TEST_TMPDIR}/signer" _payload="${BATS_TEST_TMPDIR}/p.txt"
+  local _sig="${BATS_TEST_TMPDIR}/p.sig" _pub="${BATS_TEST_TMPDIR}/pub.asc" _fpr
+  _fpr="$(_dev_make_signing_key "${_homedir}" "${_payload}" "${_sig}" "${_pub}" "1d")"
+  [[ -n "${_fpr}" ]]
+  local _AWS_KEY_PATH="${_pub}"
+  # AWSCLI_GPG_FPR is deliberately left at the real production constant --
+  # it is a fixed value unrelated to any throwaway key, so a freshly
+  # generated key's fingerprint is guaranteed to differ from it, giving a
+  # genuine VALIDSIG-present-but-wrong-fingerprint case with no second key.
+  [[ "${_fpr}" != "${AWSCLI_GPG_FPR}" ]]
+
+  run _aws_verify_zip "${_payload}" "${_sig}"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"did not verify"* ]]
+}
+
+@test "_aws_verify_zip: rejects a corrupt signature, and gpg's stderr reaches the caller" {
+  export PATH
+  PATH="$(_gpg_only_path)"
+  if ! command -v gpg >/dev/null 2>&1; then
+    skip "real gpg not on PATH outside tests/mocks"
+  fi
+  local _homedir="${BATS_TEST_TMPDIR}/signer" _payload="${BATS_TEST_TMPDIR}/p.txt"
+  local _sig="${BATS_TEST_TMPDIR}/p.sig" _pub="${BATS_TEST_TMPDIR}/pub.asc" _fpr
+  _fpr="$(_dev_make_signing_key "${_homedir}" "${_payload}" "${_sig}" "${_pub}" "1d")"
+  [[ -n "${_fpr}" ]]
+  local _AWS_KEY_PATH="${_pub}"
+  AWSCLI_GPG_FPR="${_fpr}"
+  printf 'not a signature\n' > "${_sig}"
+
+  run _aws_verify_zip "${_payload}" "${_sig}"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"no valid OpenPGP data"* ]]
+}
+
+@test "_aws_verify_zip: fails when the verifier is not found, naming gpg" {
+  local _AWS_GPG_BIN="/nonexistent/gpg"
+  run _aws_verify_zip "${BATS_TEST_TMPDIR}/whatever.zip" "${BATS_TEST_TMPDIR}/whatever.zip.sig"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"gpg"* ]]
+}
+
+@test "_aws_verify_zip: verifies a real AWS awscli zip against the vendored key" {
+  export PATH
+  PATH="$(_gpg_only_path)"
+  if ! command -v gpg >/dev/null 2>&1; then
+    skip "real gpg not on PATH outside tests/mocks"
+  fi
+  local _sig="${BATS_TEST_TMPDIR}/real.zip.sig"
+  if ! curl -fsS --max-time 5 -o "${_sig}" \
+      "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip.sig"; then
+    skip "network unreachable: awscli.amazonaws.com"
+  fi
+  local _zip="${BATS_TEST_TMPDIR}/real.zip"
+  if ! curl -fsS --max-time 60 -o "${_zip}" \
+      "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"; then
+    skip "could not fetch the real awscli zip within the time budget"
+  fi
+
+  run _aws_verify_zip "${_zip}" "${_sig}"
+  [ "$status" -eq 0 ]
+}
+
+@test "_aws_verify_zip: the operator's real keyring survives a verification (regression for trap RETURN)" {
+  export PATH
+  PATH="$(_gpg_only_path)"
+  if ! command -v gpg >/dev/null 2>&1; then
+    skip "real gpg not on PATH outside tests/mocks"
+  fi
+  local _real_gpgconf
+  _real_gpgconf="$(command -v gpgconf)"
+  local _spy="${BATS_TEST_TMPDIR}/spy"
+  mkdir -p "${_spy}"
+  {
+    printf '#!/usr/bin/env bash\n'
+    printf 'printf "%%s\\n" "$*" >> "%s/gpgconf_calls"\n' "${BATS_TEST_TMPDIR}"
+    printf 'exec "%s" "$@"\n' "${_real_gpgconf}"
+  } > "${_spy}/gpgconf"
+  chmod +x "${_spy}/gpgconf"
+  PATH="${_spy}:${PATH}"
+
+  local _homedir="${BATS_TEST_TMPDIR}/signer" _payload="${BATS_TEST_TMPDIR}/p.txt"
+  local _sig="${BATS_TEST_TMPDIR}/p.sig" _pub="${BATS_TEST_TMPDIR}/pub.asc" _fpr
+  _fpr="$(_dev_make_signing_key "${_homedir}" "${_payload}" "${_sig}" "${_pub}" "1d")"
+  [[ -n "${_fpr}" ]]
+  local _AWS_KEY_PATH="${_pub}"
+  AWSCLI_GPG_FPR="${_fpr}"
+
+  # Called directly, NOT via `run` (which forks the whole call into a
+  # command-substitution subshell, so a leaked trap would die with that
+  # subshell and never get to misfire). A caller and an outer caller each
+  # return afterward in THIS shell -- the exact shape that made the retired
+  # `trap ... RETURN` implementation fire again with `_ring` empty, resolving
+  # `gpgconf --homedir ""` to the operator's real ~/.gnupg.
+  _dev_regr_caller() { _aws_verify_zip "${_payload}" "${_sig}"; }
+  _dev_regr_outer() { _dev_regr_caller; return 0; }
+
+  _dev_regr_outer
+  local _outer_status=$?
+
+  [ "${_outer_status}" -eq 0 ]
+  [ -f "${BATS_TEST_TMPDIR}/gpgconf_calls" ]
+  [ "$(wc -l < "${BATS_TEST_TMPDIR}/gpgconf_calls")" -eq 1 ]
+  grep -qE -- '--homedir /' "${BATS_TEST_TMPDIR}/gpgconf_calls"
+}
+
+# ── _aws_verify_pkg ───────────────────────────────────────────────────────────
+#
+# The team-ID-mismatch and good-signature cases drive tests/mocks/pkgutil via
+# its stdout knob (MOCK_PKGUTIL_STDOUT) -- pkgutil's own exit code is
+# insufficient (measured: rc=0 for ANY Apple-notarized package, not just
+# AWS's), so the helper asserts the team ID string and these two cases are
+# what prove it does. The unsigned-pkg case runs against REAL pkgutil via a
+# real pkgbuild fixture, since a stub cannot express "Status: no signature"
+# without encoding this test's own premise -- macOS-only, since pkgbuild and
+# pkgutil do not exist on the ubuntu-latest runners both bats CI jobs use.
+
+@test "_aws_verify_pkg: rejects a notarized package signed under a different team ID" {
+  export MOCK_PKGUTIL_EXIT=0
+  export MOCK_PKGUTIL_STDOUT="   Status: signed by a developer certificate issued by Apple for distribution
+   Notarization: trusted by the Apple notary service
+    1. Developer ID Installer: Microsoft Corporation (UBF8T346G9)"
+  run _aws_verify_pkg "${BATS_TEST_TMPDIR}/whatever.pkg"
+  [ "$status" -ne 0 ]
+}
+
+@test "_aws_verify_pkg: returns 0 for a package signed under the AWS team ID" {
+  export MOCK_PKGUTIL_EXIT=0
+  export MOCK_PKGUTIL_STDOUT="   Status: signed by a developer certificate issued by Apple for distribution
+   Notarization: trusted by the Apple notary service
+    1. Developer ID Installer: AMZN Mobile LLC (${AWSCLI_APPLE_TEAM_ID})"
+  run _aws_verify_pkg "${BATS_TEST_TMPDIR}/whatever.pkg"
+  [ "$status" -eq 0 ]
+}
+
+@test "_aws_verify_pkg: fails when the verifier is not found, naming pkgutil" {
+  local _AWS_PKGUTIL_BIN="/nonexistent/pkgutil"
+  run _aws_verify_pkg "${BATS_TEST_TMPDIR}/whatever.pkg"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"pkgutil"* ]]
+}
+
+@test "_aws_verify_pkg: rejects a real unsigned package (pkgbuild fixture, real pkgutil)" {
+  if [[ "$(uname)" != "Darwin" ]]; then
+    skip "macOS-only: pkgbuild/pkgutil do not exist on ubuntu-latest, where both bats CI jobs run"
+  fi
+  export PATH
+  PATH="$(_gpg_only_path)"
+  if ! command -v pkgbuild >/dev/null 2>&1 || ! command -v pkgutil >/dev/null 2>&1; then
+    skip "pkgbuild/pkgutil not on PATH outside tests/mocks"
+  fi
+
+  local _root="${BATS_TEST_TMPDIR}/pkgroot"
+  mkdir -p "${_root}"
+  printf 'marker\n' > "${_root}/marker.txt"
+  local _pkg="${BATS_TEST_TMPDIR}/unsigned.pkg"
+  pkgbuild --root "${_root}" --identifier com.example.unsigned --version 1.0 "${_pkg}" >/dev/null 2>&1
+
+  run _aws_verify_pkg "${_pkg}"
+  [ "$status" -ne 0 ]
 }

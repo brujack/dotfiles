@@ -118,7 +118,8 @@ _aws_verify_zip() {
       --verify "${_sig}" "${_zip}" >"${_status}" 2>"${_err}"
 
     # Reject BEFORE accepting, and split the two causes: they demand opposite
-    # operator responses. VALIDSIG is emitted for both, and gpg exits 0 for both.
+    # operator responses. VALIDSIG is emitted for all three, and gpg exits 0 for an
+    # expired or revoked KEY (EXPSIG exits 1) -- so branch on content, not status.
     if grep -qE '^\[GNUPG:\] (REVKEYSIG|KEYREVOKED)' "${_status}"; then
       log_error "AWS signing key REVOKED — do not install; investigate"
       exit 1
@@ -168,8 +169,32 @@ keys — generated, signed, then expired and revoked:
 EXPIRED KEY   [GNUPG:] EXPKEYSIG ...   [GNUPG:] VALIDSIG <fpr> ...   gpg exit: 0
 REVOKED KEY   [GNUPG:] REVKEYSIG ...   [GNUPG:] VALIDSIG <fpr> ...   gpg exit: 0
               [GNUPG:] KEYREVOKED
+EXPIRED SIG   [GNUPG:] EXPSIG ...      [GNUPG:] VALIDSIG <fpr> ...   gpg exit: 1
+              [GNUPG:] FAILURE gpg-exit 33554433
   the original accept-only grep, on a REVOKED key:  ACCEPTS (helper returns 0)
 ```
+
+**Correction, measured during implementation: `EXPSIG` exits 1, not 0.** This section
+originally asserted "gpg exits 0 for both" and then extended it to all three states when
+`EXPSIG` was added to the reject list. That extension was never measured. Reproduced twice on
+GnuPG 2.5.22 by the Task 2 implementer and independently confirmed here — a live key signing
+with `--default-sig-expire seconds=2`, verified after the signature lapsed:
+
+```
+[GNUPG:] EXPSIG 06BAC47724B67B7C SigExp <s@e>
+[GNUPG:] VALIDSIG BB628DA79A1DE04FF33197ED06BAC47724B67B7C ...
+[GNUPG:] FAILURE gpg-exit 33554433
+GPG_EXIT=1
+```
+
+So an expired **signature** is a harder failure than an expired or revoked **key**: the latter
+two verify as a good signature and exit 0, while `EXPSIG` carries its own `FAILURE` status
+line. The exit-0 claim stands for `EXPKEYSIG` and `REVKEYSIG` and is false for `EXPSIG`.
+
+**This strengthens the design rather than complicating it.** `_aws_verify_zip` branches on
+`${_status}` content and never reads gpg's exit status, so all three states are handled
+uniformly and no code changes. Had the helper been written to trust the exit code — the
+shape this spec rejected for a different reason — it would have needed a third case here.
 
 Dropping the pipe would not have helped: **gpg exits 0 in both cases.** The fix is to reject
 on the bad-status lines first, which is what the snippet above now does.

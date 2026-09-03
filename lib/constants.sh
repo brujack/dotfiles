@@ -66,6 +66,10 @@ YQ_VER="4.53.3"
 ZSH_VER="5.10"
 # read by lib/linux_ubuntu.sh:_install_ubuntu_k8s_tools
 KUBERNETES_VER="v1.36"
+# read by lib/developer.sh:_aws_verify_zip (not yet written) and tests/setup_env/developer.bats
+AWSCLI_GPG_FPR="FB5DB77FD5C118B80511ADA8A6310ACC4672475C"
+# read by lib/developer.sh:_aws_verify_pkg (not yet written)
+AWSCLI_APPLE_TEAM_ID="94KV3E626L"
 
 # read by lib/linux_ubuntu.sh:_install_ubuntu_cloud_tools
 CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v${CF_TERRAFORMING_VER}/cf-terraforming_${CF_TERRAFORMING_VER}_linux_${_LINUX_ARCH}.tar.gz"

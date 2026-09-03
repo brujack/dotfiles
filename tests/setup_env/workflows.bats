@@ -7,6 +7,19 @@ setup() {
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
   touch "${MOCK_CALLS_FILE}"
   load_setup_env
+  # load_setup_env sources real detect_env(), which sets HAS_AWS=1 for real
+  # on this box's actual profile (mac_workstation) -- nothing about that is
+  # test fixture. run_update's aws section now performs real signature
+  # verification (_aws_verify_pkg/_aws_verify_zip), which the mock gpg and
+  # tests/mocks/pkgutil's default MOCK_PKGUTIL_EXIT=1 both fail. So a test
+  # that never mentions AWS at all was silently exercising it anyway and
+  # failing on an unmocked verifier. Unset it here, at setup() scope rather
+  # than per-test (tdd.md pitfall E2): a per-test guard leaves the trap
+  # armed for the next test someone adds to this file, which is exactly how
+  # 15 tests inherited this one. The install_aws_tools tests below and the
+  # run_brew_install tests each `export HAS_AWS=1` or unset it themselves
+  # explicitly and are unaffected.
+  unset HAS_AWS
   # Minimal env so workflow functions don't crash on missing vars
   export HOME="${BATS_TEST_TMPDIR}"
   export PERSONAL_GITREPOS="${BATS_TEST_TMPDIR}/git-repos/personal"
@@ -530,8 +543,21 @@ teardown() {
   export MACOS=1
   export HAS_AWS=1
   unset LINUX
+  # _AWS_BIN: install_aws_tools now guards on tool presence rather than a
+  # leftover file, via `command -v "${_AWS_BIN:-aws}"`. Point it at a path
+  # guaranteed absent so the guard cannot resolve to a REAL aws-cli on a
+  # machine that already has one on PATH (developer.bats documents this
+  # seam and hazard in full).
+  export _AWS_BIN="${BATS_TEST_TMPDIR}/nonexistent-aws"
   mkdir -p "${HOME}/software_downloads/awscli"
-  install_aws_tools
+  # _aws_verify_pkg now gates the installer -- give it a passing read so
+  # this test reaches the wget call it asserts on with status 0.
+  export MOCK_PKGUTIL_EXIT=0
+  export MOCK_PKGUTIL_STDOUT="   Status: signed by a developer certificate issued by Apple for distribution
+   Notarization: trusted by the Apple notary service
+    1. Developer ID Installer: AMZN Mobile LLC (${AWSCLI_APPLE_TEAM_ID})"
+  run install_aws_tools
+  [ "$status" -eq 0 ]
   grep -q "AWSCLIV2.pkg" "${MOCK_CALLS_FILE}"
 }
 
@@ -539,8 +565,14 @@ teardown() {
   unset MACOS
   export LINUX=1
   export HAS_AWS=1
+  export _AWS_BIN="${BATS_TEST_TMPDIR}/nonexistent-aws"
   mkdir -p "${HOME}/software_downloads/awscli"
-  install_aws_tools
+  # Stub the already-tested verifier -- this test is about wget/install
+  # orchestration, not gpg. _aws_verify_zip has its own real-gpg coverage in
+  # tests/setup_env/developer.bats.
+  _aws_verify_zip() { return 0; }
+  run install_aws_tools
+  [ "$status" -eq 0 ]
   grep -q "awscliv2.zip" "${MOCK_CALLS_FILE}"
 }
 
@@ -549,15 +581,19 @@ teardown() {
   export LINUX=1
   export HAS_AWS=1
   export MOCK_UNAME_M="aarch64"
+  export _AWS_BIN="${BATS_TEST_TMPDIR}/nonexistent-aws"
   mkdir -p "${HOME}/software_downloads/awscli"
-  install_aws_tools
+  _aws_verify_zip() { return 0; }
+  run install_aws_tools
+  [ "$status" -eq 0 ]
   grep -q "awscli-exe-linux-aarch64" "${MOCK_CALLS_FILE}"
 }
 
 @test "install_aws_tools is a no-op when HAS_AWS is unset" {
   export MACOS=1
   unset HAS_AWS LINUX
-  install_aws_tools
+  run install_aws_tools
+  [ "$status" -eq 0 ]
   ! grep -q "awscli" "${MOCK_CALLS_FILE}"
 }
 
@@ -1429,13 +1465,33 @@ setup_constants_copy() {
   ! grep -q "install_aws_tools" "${MOCK_CALLS_FILE}"
 }
 
-@test "run_setup_or_developer returns non-zero when install_aws_tools fails" {
+@test "run_setup_or_developer continues and warns when install_aws_tools fails" {
+  # install_aws_tools gained real error propagation once it started verifying
+  # signatures, which ARMS this call site's `|| return 1`/`|| log_warn` guard
+  # for the first time -- previously the function always returned 0 and the
+  # guard was dormant. Armed as `|| return 1`, a transient aws-cli failure
+  # would abort setup_or_developer before setup_vim_plugins runs, costing
+  # pyenv/ansible/ruby/rust over one optional CLI -- so the call site must
+  # degrade like install_renovate_held_agent/install_ledger_drift_agent do in
+  # run_setup_user, not abort. This is the continuation test; the wording
+  # test below asserts a warning was actually printed.
+  export MACOS=1
+  unset LINUX UBUNTU
+  install_macos_packages() { return 0; }
+  install_aws_tools() { return 1; }
+  setup_vim_plugins() { printf "setup_vim_plugins\n" >> "${MOCK_CALLS_FILE}"; }
+  run run_setup_or_developer
+  [ "$status" -eq 0 ]
+  grep -q "setup_vim_plugins" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_setup_or_developer warns when install_aws_tools fails" {
   export MACOS=1
   unset LINUX UBUNTU
   install_macos_packages() { return 0; }
   install_aws_tools() { return 1; }
   run run_setup_or_developer
-  [ "$status" -ne 0 ]
+  [[ "$output" == *"aws-cli not installed"* ]]
 }
 
 # ── return-code propagation: run_developer_or_ansible ────────────────────────
