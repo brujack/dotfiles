@@ -329,7 +329,7 @@ EOF
     [[ "$output" == "rc=1 var=[]" ]]     # mktemp honours the unreachable root and fails, as intended
 }
 
-@test "_dotfiles_run_tmpdir_setup: directory survives the EXIT trap" {
+@test "_dotfiles_run_tmpdir_setup: the run directory is not removed on exit" {
     # --separate-stderr: ensure_state_ledger has three reachable log_warn paths
     # (state-ledger pull/clone/init failures), each of which writes to stderr.
     # `run`'s default merge would prepend a WARN line to $output and false-red
