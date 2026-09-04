@@ -1,7 +1,4 @@
 #!/usr/bin/env bats
-#
-# `run --separate-stderr` needs bats >= 1.5.0 (CI 1.10.0, this box 1.14.0).
-bats_require_minimum_version 1.5.0
 
 setup() {
   REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
@@ -19,21 +16,17 @@ setup() {
   export TMPDIR="${BATS_TEST_TMPDIR}"
 }
 
-teardown() {
-  :
-}
-
 @test "_dotfiles_run_tmpdir_setup leaves the caller's EXIT INT TERM traps unchanged" {
-  # Bare (non-`run`) call, deliberately: this is the RED case this test
-  # exists to pin. While lib/workflows.sh:109 still installs
-  # `trap 'unset _DOTFILES_RUN_TMPDIR' EXIT INT TERM`, this bare call
-  # replaces bats' own EXIT trap for the remainder of this test's subshell.
-  # If the assertions below then fail, bats' errexit fires the shell exit
-  # immediately -- but the trap that runs is production's `unset` handler,
-  # not bats' trap-based "not ok" reporting, so the test does not print a
-  # `not ok` line at all. It vanishes from the TAP stream, and the overall
-  # run reports `bats warning: Executed N-1 instead of expected N` with a
-  # non-zero exit. That IS the failure this test is meant to surface.
+  # Bare call, never `run`: `run` executes in a subshell, so a trap the callee
+  # installed would be confined there and this test could not observe it.
+  #
+  # This test fails by VANISHING rather than by printing `not ok`. Should
+  # _dotfiles_run_tmpdir_setup ever install an EXIT trap again, that trap
+  # replaces bats' own for the rest of this test's shell; the assertions below
+  # then fail, errexit exits the shell, and the handler that runs is the
+  # callee's rather than bats' `not ok` reporting. The run reports
+  # `bats warning: Executed N-1 instead of expected N` and exits non-zero.
+  # Read a missing `not ok` here as the failure, not as a pass.
   local _exit_before _int_before _term_before
   _exit_before="$(trap -p EXIT)"
   _int_before="$(trap -p INT)"
@@ -47,39 +40,36 @@ teardown() {
 }
 
 @test "a script blocked after _dotfiles_run_tmpdir_setup still dies on SIGTERM" {
-  # Do not assert the literal 143 -- signal-derived exit statuses are not
-  # portable across shells/platforms. Only that it is non-zero: while
-  # lib/workflows.sh:109's trap is in place, bash defers running a trapped
-  # signal's handler until the current foreground command (the `sleep`
-  # below) completes on its own, the handler only unsets a variable, and
-  # the script then falls off the end and exits 0 -- so SIGTERM is
-  # silently absorbed rather than aborting the run.
+  # `/bin/sleep`, never bare `sleep`, at BOTH sites below. setup()'s
+  # load_mocks prepends tests/mocks/ to PATH and tests/mocks/sleep is a stub
+  # that logs its argument and returns immediately, so a bare `sleep` here is
+  # not a delay at all: the child reaches it, returns in ~0.014s, and exits 0
+  # on its own, racing the kill. Measured 3 failures in 25 runs that way. It
+  # is shell.md's PATH-mock pitfall aimed at the test's own blocking
+  # primitive rather than at code under test, so no mutation of production
+  # code can surface it — only running the test repeatedly does.
   #
-  # `/bin/sleep`, not bare `sleep`: this file's own load_mocks (setup(),
-  # above) prepends tests/mocks/ to PATH, and tests/mocks/sleep is a stub
-  # that logs the call and returns immediately rather than blocking --
-  # exactly the shell.md "PATH mock shadows the binary your production
-  # code needs" pitfall, except here it's the TEST's own blocking
-  # primitive that gets shadowed, not code under test. A bare `sleep 30`
-  # in the child measured flaky (~15-40% over several 25-run batches):
-  # the child would "block", touch the ready file, then its `sleep`
-  # would return in milliseconds and the whole script would exit 0 on
-  # its own, racing this test's `kill -TERM` for who got there first.
-  # The absolute path bypasses PATH resolution entirely and reaches the
-  # real, actually-blocking binary. Confirmed via `date +%s.%N` either
-  # side of the mocked `sleep 30`: 0.014s elapsed, not 30s.
+  # The child's fds go to /dev/null deliberately. `kill -TERM` reaches the
+  # `bash -c` shell, not its process group, so the real sleep briefly outlives
+  # it as an orphan; without this redirect that orphan inherits and pins bats'
+  # output pipe, which is the suite-hangs-after-its-last-test class.
+  #
+  # Asserts non-zero, never the literal 143 — signal-derived statuses are not
+  # portable and this suite runs on macOS and Linux. Under a reintroduced
+  # trap the child is not killed at all: it runs the full sleep and exits 0,
+  # which is what makes this assertion discriminate.
   local _ready="${BATS_TEST_TMPDIR}/ready"
   bash -c '
     source "'"${REPO_ROOT}"'/setup_env.sh" >/dev/null 2>&1
     _dotfiles_run_tmpdir_setup
     touch "'"${_ready}"'"
-    /bin/sleep 30
-  ' &
+    /bin/sleep 5
+  ' >/dev/null 2>&1 &
   local _pid=$!
 
   local _waited=0
-  until [[ -f "${_ready}" ]] || [[ ${_waited} -ge 50 ]]; do
-    /bin/sleep 0.1
+  until [[ -f "${_ready}" ]] || [[ ${_waited} -ge 100 ]]; do
+    /bin/sleep 0.05
     _waited=$((_waited + 1))
   done
   [ -f "${_ready}" ]
