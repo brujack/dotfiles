@@ -340,15 +340,16 @@ EOF
       printf "%s" "${_DOTFILES_RUN_TMPDIR}"'
     [ "$status" -eq 0 ]
     [ -n "$output" ]
-    [ -d "$output" ]              # the trap only unsets the variable; it never removes the dir
+    [ -d "$output" ]              # nothing in _dotfiles_run_tmpdir_setup removes the directory; only the subshell's variable is transient
     [ -f "${output}/started_at" ]
     rm -rf "$output"
 }
 
 @test "_dotfiles_run_tmpdir_setup: directory name carries the dotfiles-run prefix" {
-    # run --separate-stderr rather than a bare call: a bare call's EXIT trap
-    # clobbers bats' own, so a failure here reported "Executed N-1 instead of
-    # expected N" with no test name and no line number.
+    # --separate-stderr: ensure_state_ledger has three reachable log_warn paths
+    # (state-ledger pull/clone/init failures), each of which writes to stderr;
+    # `run`'s default merge would prepend a WARN line to $output and corrupt
+    # the basename prefix check below.
     run --separate-stderr bash -c '
       source "'"${REPO_ROOT}"'/setup_env.sh" >/dev/null 2>&1
       unset _DOTFILES_RUN_TMPDIR
