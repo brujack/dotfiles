@@ -106,7 +106,6 @@ _dotfiles_run_tmpdir_setup() {
   _DOTFILES_RUN_TMPDIR=$(mktemp -d "${_OVERRIDE_RUN_TMPDIR_ROOT:-${TMPDIR:-/tmp}}/dotfiles-run.XXXXXXXX") \
     || return 1
   export _DOTFILES_RUN_TMPDIR
-  trap 'unset _DOTFILES_RUN_TMPDIR' EXIT INT TERM
   date -u +%Y-%m-%dT%H:%M:%SZ > "${_DOTFILES_RUN_TMPDIR}/started_at"
   date +%s > "${_DOTFILES_RUN_TMPDIR}/start_epoch"
   python3 -c "import uuid; print(str(uuid.uuid4()))" \
@@ -195,15 +194,14 @@ run_setup_user() {
   #
   # `|| _hooks_rc=$?`, not a bare call followed by `local _hooks_rc=$?`:
   # bats runs every test body under errexit, and a bare non-zero statement
-  # that isn't the left side of an AND/OR list aborts the test immediately
-  # -- silently, because _dotfiles_run_tmpdir_setup's own EXIT trap (set
-  # just above, in this same function) clobbers bats' trap-based "not ok"
-  # reporting on the way out. Reproduced: every bare (non-`run`-wrapped)
-  # caller of run_setup_user in workflows.bats vanished from the TAP
-  # stream with no ok/not-ok line at all when this was a bare statement.
-  # The `||` form never triggers errexit regardless of the command's exit
-  # status, matching the pre-existing `setup_claude_mcp || return 1` style
-  # used everywhere else in this function.
+  # that isn't the left side of an AND/OR list aborts the test immediately,
+  # before the `if` below gets a chance to distinguish rc 1 ("failure")
+  # from rc 2 ("gap") -- a bats test stubbing install_git_hooks_all_repos
+  # to return 2 would abort as a raw, unexplained failure instead of
+  # exercising the intended log_warn branch below. The `||` form never
+  # triggers errexit regardless of the command's exit status, matching the
+  # pre-existing `setup_claude_mcp || return 1` style used everywhere else
+  # in this function.
   local _hooks_rc=0
   install_git_hooks_all_repos || _hooks_rc=$?
   if [[ ${_hooks_rc} -eq 1 ]]; then
