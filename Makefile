@@ -63,7 +63,7 @@ help:
 	@printf "Available targets:\n"
 	@printf "  make test              Run all BATS tests\n"
 	@printf "  make test-unit         Run unit tests only\n"
-	@printf "  make lint              bash -n + ShellCheck over SHELL_FILES, zsh -n over ZSH_FILES\n"
+	@printf "  make lint              bash -n + ShellCheck over SHELL_FILES, zsh -n over ZSH_FILES, lib EXIT-trap ratchet\n"
 	@printf "  make bash-coverage     Measure bash line coverage via PS4 xtrace tracer\n"
 	@printf "  make install-hooks     Install pre-commit and pre-push hooks (run once per checkout)\n"
 	@printf "  make sync-agent-guidance  Regenerate .cursor/rules/global-claude-standards.mdc from CLAUDE.md\n"
@@ -103,6 +103,11 @@ lint:
 	  fi; \
 	else \
 	  printf "shellcheck not found, skipping (install: brew install shellcheck)\n"; \
+	fi; \
+	if [ -x scripts/check-lib-exit-traps.sh ]; then \
+	  bash scripts/check-lib-exit-traps.sh || failed=1; \
+	else \
+	  printf "scripts/check-lib-exit-traps.sh missing or not executable, skipping (chmod +x scripts/check-lib-exit-traps.sh)\n"; \
 	fi; \
 	exit $$failed
 
