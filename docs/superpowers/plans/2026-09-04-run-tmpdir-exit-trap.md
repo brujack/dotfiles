@@ -105,6 +105,27 @@ Baseline on `cd9c0a6d` was 214 planned, 214 executed, 0 `not ok`, no warning.
 
 Also refresh `tests/setup_env/ledger_integration.bats:350`, whose comment explains `run --separate-stderr` as a workaround for the same clobber. Keep the `run` — it is correct for its own reasons — and drop the stale justification.
 
+**Amended after Task 1's spec-compliance review, which surfaced this as uncovered.** Deleting
+the 27 blocks removes the 27 `# Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats'
+EXIT trap` comments with them, but **14 further comment lines in the same file describe the
+trap in the present tense and survive**, at roughly 318-319, 1840, 1872-1873, 1914-1915,
+1941-1942, 2446-2447, 2580, 2740 and 2899. They say things like "run_update's own EXIT trap
+(`_dotfiles_run_tmpdir_setup`) has already clobbered bats' trap-based 'not ok' reporting",
+which is false once Task 1 lands.
+
+Rewrite each past-tense, or delete it where the surrounding code no longer needs the
+explanation. Two constraints carried from Task 1's own review: **do not cite
+`lib/workflows.sh:<line>`** — CLAUDE.md records that exact citation drifting for
+`tests/mocks/curl`, so name the enclosing function instead; and where a comment justifies a
+construct that is still correct for an independent reason (e.g. `run --separate-stderr` at
+`ledger_integration.bats:350`), keep the construct and re-justify it rather than deleting both.
+
+Find them with:
+
+    grep -nE 'EXIT trap|trap-based|clobber' tests/setup_env/workflows.bats \
+      | grep -v 'Bare call so _DOTFILES_RUN_TMPDIR survives'
+
+
 **Differential, required:** re-run and diff the sets. `DIVERGING: 0` is the gate.
 
 ```bash
