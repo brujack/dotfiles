@@ -75,15 +75,35 @@ _lib_trap_scope() {
      git ls-files 'lib/*.sh') | sort
 }
 
-# Counts lines that are actually a `trap ... EXIT` statement, not prose
-# ABOUT one. Anchoring to "trap" at the start of the line (after leading
-# whitespace) is what excludes lib/developer.sh's own header comment --
-# "The whole body runs in a ( ) subshell with an EXIT trap -- NOT" reads
-# EXIT before trap and starts with '#', so it never matches; a real
-# statement always starts the line with the word `trap`.
+# Counts `trap` statements that fire on exit, excluding prose ABOUT one.
+#
+# Two stages, because one regex cannot do both jobs. Stage one drops
+# whole-line comments -- that is what keeps lib/developer.sh's own header
+# ("... with an EXIT trap -- NOT ...") out of the count. Stage two matches
+# `trap` as a word anywhere on the surviving line, NOT anchored to line
+# start: `[[ -n "${d}" ]] && trap 'x' EXIT` and `if ...; then trap 'x'
+# EXIT; fi` are both real installs, and an earlier revision of this script
+# missed both. Its header asserted "a real statement always starts the
+# line with the word `trap`", which is true of today's lib/ and false in
+# general -- a limitation stated as a fact, which stops the next reader
+# checking.
+#
+# `0` is matched as well as `EXIT` because signal 0 IS EXIT in POSIX and
+# bash -- verified: `trap 'echo X' 0` fires at exit. Without it the exact
+# regression this ratchet exists to prevent, written `trap '...' 0 2 15`,
+# passes with no allowlist edit. The `[[:space:]]0([[:space:]]|$)` form
+# requires 0 to be a standalone token so `trap 'echo 0' INT` does not
+# match; verified against both, on BSD and GNU grep.
+#
+# Known and accepted: a trailing comment containing the words trap and
+# EXIT after real code counts, and `trap - EXIT` (which CLEARS a trap)
+# counts as one. Both are loud -- they make the gate fire and a human
+# resolves it via the allowlist. That is the right direction for a
+# ratchet; a miss is silent, a false match is not.
 _lib_trap_count() {
   local _file="$1" _n
-  _n=$(grep -cE '^[[:space:]]*trap[[:space:]]+.*\bEXIT\b' "${_file}" 2>/dev/null)
+  _n=$(grep -vE '^[[:space:]]*#' "${_file}" 2>/dev/null \
+    | grep -cE '(^|[^[:alnum:]_])trap[[:space:]]+.*(\bEXIT\b|[[:space:]]0([[:space:]]|$))')
   printf '%s\n' "${_n:-0}"
 }
 

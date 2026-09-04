@@ -121,3 +121,61 @@ EOF
   [ -n "${_n}" ]
   [ "${_n}" -gt 0 ]
 }
+
+@test "a trap on signal 0 is counted -- signal 0 IS EXIT" {
+  # The regression this ratchet exists to prevent, spelled with the numeric
+  # signal instead of the name. Verified independently that `trap 'echo X' 0`
+  # fires at exit, so a scanner matching only the word EXIT lets the identical
+  # defect through with no allowlist edit and no diff a reviewer would flag.
+  printf 'f() {\n  trap %s 0\n}\n' "'unset _X'" > "${FIXTURE}/lib/newthing.sh"
+  export _OVERRIDE_LIB_TRAP_SCOPE="${FIXTURE}"
+  _run_script
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"lib/newthing.sh 1"* ]]
+}
+
+@test "a trap that is not the first word on its line is counted" {
+  # `[[ ... ]] && trap ... EXIT` and `if ...; then trap ... EXIT; fi` are real
+  # installs. An earlier revision anchored the match to line start, on a header
+  # premise that "a real statement always starts the line with the word trap" --
+  # true of today's lib/ and false in general.
+  {
+    printf 'f() {\n'
+    printf '  [[ -n "${d}" ]] && trap %s EXIT\n' "'unset _X'"
+    printf '}\n'
+  } > "${FIXTURE}/lib/newthing.sh"
+  export _OVERRIDE_LIB_TRAP_SCOPE="${FIXTURE}"
+  _run_script
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"lib/newthing.sh 1"* ]]
+}
+
+@test "prose about a trap is still not counted" {
+  # The counterpart to the two above: widening the match must not start
+  # flagging lib/developer.sh's own header comment, which is what the
+  # line-start anchor used to buy.
+  {
+    printf '# The whole body runs in a ( ) subshell with an EXIT trap -- NOT\n'
+    printf '#   trap %s 0\n' "'unset _X'"
+    printf 'f() { :; }\n'
+  } > "${FIXTURE}/lib/newthing.sh"
+  export _OVERRIDE_LIB_TRAP_SCOPE="${FIXTURE}"
+  _run_script
+  [ "$status" -eq 0 ]
+}
+
+@test "make lint actually RUNS the scanner, not just mentions it" {
+  # Without this the ratchet can be disabled with no test noticing: the guard
+  # predicate was `[ -x ... ]` while the invocation is `bash ...`, so clearing
+  # the exec bit sent lint down the skip branch and `make lint` still exited 0.
+  #
+  # Two ways to write this that do NOT work, both measured:
+  #   - `make -n lint` prints the recipe including BOTH branches of the `if`,
+  #     so grepping it for the script name passes with the bug present.
+  #   - grepping real `make lint` output for "check-lib-exit-traps" also passes,
+  #     because the skip message contains that string too.
+  # Only the scanner's own success line is unreachable from the skip branch.
+  run make --no-print-directory lint
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"check-lib-exit-traps: OK"* ]]
+}

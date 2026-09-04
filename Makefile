@@ -104,10 +104,10 @@ lint:
 	else \
 	  printf "shellcheck not found, skipping (install: brew install shellcheck)\n"; \
 	fi; \
-	if [ -x scripts/check-lib-exit-traps.sh ]; then \
+	if [ -f scripts/check-lib-exit-traps.sh ]; then \
 	  bash scripts/check-lib-exit-traps.sh || failed=1; \
 	else \
-	  printf "scripts/check-lib-exit-traps.sh missing or not executable, skipping (chmod +x scripts/check-lib-exit-traps.sh)\n"; \
+	  printf "scripts/check-lib-exit-traps.sh missing, skipping (restore it: git checkout scripts/check-lib-exit-traps.sh)\n"; \
 	fi; \
 	exit $$failed
 
