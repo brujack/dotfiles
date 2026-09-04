@@ -314,10 +314,11 @@ teardown() {
   unset LINUX UBUNTU
   local _marker="${BATS_TEST_TMPDIR}/git_hooks_sweep.ran"
   install_git_hooks_all_repos() { touch "${_marker}"; return 0; }
-  # run-wrapped (not a bare call): this test only checks the marker file
-  # install_git_hooks_all_repos touches, not anything under
-  # _DOTFILES_RUN_TMPDIR, so nothing here needs a bare call.
   run run_setup_user
+  # Assert status as well as the marker: the marker alone is satisfied both by
+  # run_setup_user succeeding and by it touching the marker then failing at a
+  # later `|| return 1` step, and those need different responses.
+  [ "$status" -eq 0 ]
   [ -f "${_marker}" ]
 }
 
@@ -2666,10 +2667,6 @@ assert_all_npm_globals_pinned() {
 # A pip check conflict is a verdict rather than something swallowed by `|| true`.
 # The conflict case FAILS (see "run_update FAILS the pip-check section" below);
 # this pair pins the clean case, which must stay OK and must not warn.
-#
-# Both use `run` rather than calling run_update directly: both assertions read
-# $output/$status only, with no need for _DOTFILES_RUN_TMPDIR to survive into
-# the test body, so `run`'s subshell isolation costs nothing here.
 
 @test "run_update does not warn when pip check is clean" {
   export MACOS=1
