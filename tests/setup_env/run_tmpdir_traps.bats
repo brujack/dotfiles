@@ -54,18 +54,32 @@ teardown() {
   # below) completes on its own, the handler only unsets a variable, and
   # the script then falls off the end and exits 0 -- so SIGTERM is
   # silently absorbed rather than aborting the run.
+  #
+  # `/bin/sleep`, not bare `sleep`: this file's own load_mocks (setup(),
+  # above) prepends tests/mocks/ to PATH, and tests/mocks/sleep is a stub
+  # that logs the call and returns immediately rather than blocking --
+  # exactly the shell.md "PATH mock shadows the binary your production
+  # code needs" pitfall, except here it's the TEST's own blocking
+  # primitive that gets shadowed, not code under test. A bare `sleep 30`
+  # in the child measured flaky (~15-40% over several 25-run batches):
+  # the child would "block", touch the ready file, then its `sleep`
+  # would return in milliseconds and the whole script would exit 0 on
+  # its own, racing this test's `kill -TERM` for who got there first.
+  # The absolute path bypasses PATH resolution entirely and reaches the
+  # real, actually-blocking binary. Confirmed via `date +%s.%N` either
+  # side of the mocked `sleep 30`: 0.014s elapsed, not 30s.
   local _ready="${BATS_TEST_TMPDIR}/ready"
   bash -c '
     source "'"${REPO_ROOT}"'/setup_env.sh" >/dev/null 2>&1
     _dotfiles_run_tmpdir_setup
     touch "'"${_ready}"'"
-    sleep 5
+    /bin/sleep 30
   ' &
   local _pid=$!
 
   local _waited=0
   until [[ -f "${_ready}" ]] || [[ ${_waited} -ge 50 ]]; do
-    sleep 0.1
+    /bin/sleep 0.1
     _waited=$((_waited + 1))
   done
   [ -f "${_ready}" ]
