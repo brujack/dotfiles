@@ -524,12 +524,18 @@ carried here.
 
 ## Multi-Lens Review
 
-**Verification-case numbers inside the two review sections refer to the numbering as it stood
-when that round ran, not to the current Verification section.** Round 1 reviewed a spec with
-V1-V7; its dispositions were written against the revision's V1-V11; Group A2's withdrawal then
-took three cases out and the current set is V1-V8. The review sections are kept as written
-rather than renumbered, since a disposition that silently referred to a different case than the
-lens did would be worse than a stale number.
+**Every reference inside the two review sections — case numbers and component names alike —
+is frozen at the round that wrote it, not updated to match the current body.** Round 1 reviewed
+a spec with V1-V7; its dispositions were written against the revision's V1-V11; Group A2's
+withdrawal then took three cases out and the current set is V1-V8. Names moved too: round 1's
+G3 was a `! grep` position scanner, round 2's is an allowlist ratchet, and the two are not the
+same mechanism under one label.
+
+The sections are kept as written rather than reconciled, because a disposition that silently
+referred to a different case — or a differently-shaped component — than the lens actually
+judged would be worse than a stale reference. Where a frozen reference would actively mislead
+rather than merely date itself, it carries a bracketed forward-note; it is never edited in
+place.
 
 Reviewed at commit: `0fdbd416` (Step 7 self-review commit, before Step 8 dispatch)
 
@@ -636,6 +642,14 @@ N/A — spec has no comparison/evaluator/ambiguous-criteria trigger. There are n
 arms, no judge or evaluator component, and the acceptance criteria are concrete commands with
 stated failure conditions (V1-V11). The G3 scanner is a mechanical checker with an unambiguous
 predicate, not an evaluator exercising judgement.
+
+> **Forward-note, added after round 2.** "The G3 scanner" and "unambiguous predicate" both name
+> something that no longer exists: round 2 established that its predicate approximated control
+> flow by line position and could not decide subshell containment, and G3 was rebuilt as an
+> allowlist ratchet that decides nothing. The N/A verdict is unaffected and survives on its own
+> terms — the trigger is a comparison, judge, or ambiguous acceptance criteria, and a ratchet
+> over an enumerated set is further from a judge than the scanner was. Only the supporting
+> clause is stale, and it is left in place per the freezing rule above.
 
 ## Multi-Lens Review — Round 2
 
