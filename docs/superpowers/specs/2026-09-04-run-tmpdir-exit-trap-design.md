@@ -6,14 +6,22 @@ and it replaces bats' EXIT trap so 35 test sites lose their name when they fail.
 fixes both and makes a 27-site test idiom — written to work around the second effect, and
 inert on the path it was written for — deletable.
 
-Deleting it also makes two _destructive_ workflows interruptible for the first time, which is
-a real regression and is paid for by Group A2 rather than accepted.
+Deleting it also makes two _destructive_ workflows interruptible for the first time. That was
+believed to be a regression and is not: measurement under the correct actor shows the
+toolchain is lost with or without the trap. It costs a documentation line, not a mechanism.
 
 > **Revision note.** This spec was materially wrong in its first committed form (`0fdbd416`)
 > and the correction is recorded rather than quietly applied. It claimed one inert `! grep`
 > assertion and proposed a lint scanner to catch that class. There are **zero** inert sites;
 > the classifier confused _last line_ with _last executed command_. The scanner and the
 > assertion fix are both withdrawn. See M8 and the Multi-Lens Review section.
+>
+> **Round 2 removed a second section.** The revision above added a Group A2 abort guard for
+> the two delete-then-rebuild workflows, on a measurement (M9) that used single-process
+> SIGTERM — the very actor error M1b had corrected four sections earlier. Under
+> process-group delivery the toolchain is destroyed with or without the trap, so the guard
+> bought one stderr line rather than a machine state, while clobbering bats' own SIGINT
+> handler at 35 call sites. Group A2 is withdrawn. See M9 and the round-2 review.
 
 ## Problem
 
@@ -242,31 +250,51 @@ remain in `tests/setup_env/workflows.bats`". The counts are right for that file.
 readings are wrong: the `! grep` sites are all effective, and the `run_update` sites are
 hazardous for an entirely different reason than the row gives.
 
-### M9 — Two callers are delete-then-rebuild, and Group A makes their window interruptible
+### M9 — Two callers are delete-then-rebuild, and the trap does NOT protect them
 
 `run_recreate_venv` (`lib/workflows.sh:295`) and `run_recreate_ruby` (`:302`) both call
 `_dotfiles_run_tmpdir_setup`, and both destroy before they rebuild:
 
-- `recreate_ruby` — `lib/developer.sh:406`, `rm -rf "${HOME}/.rubies/ruby-${RUBY_VER}"`,
-  followed by a from-source compile.
-- `recreate_python_venv` — `lib/developer.sh:541`, `pyenv virtualenv-delete -f`, followed by
-  a create and a `uv sync` of 269 packages.
+- `recreate_ruby` — `lib/developer.sh:406` `rm -rf "${HOME}/.rubies/ruby-${RUBY_VER}"` on
+  macOS, `:415` `rbenv uninstall -f` on Linux, then a from-source compile.
+- `recreate_python_venv` — `lib/developer.sh:541` `pyenv virtualenv-delete -f`, then a create
+  and a `uv sync` of 269 packages.
 
-The repo already names the window, at `lib/developer.sh:419-424`:
+The repo names the window at `lib/developer.sh:419-424`: *"recreate_ruby has already deleted
+the old installation, so a silent failure here leaves the machine with no Ruby at all — verify
+explicitly."*
 
-> `install_ruby` soft-fails on rbenv/ruby-install errors (returns 0 with a warning) so that
-> initial setup continues. `recreate_ruby` has already deleted the old installation, so a
-> silent failure here leaves the machine with no Ruby at all — verify explicitly.
+**An earlier revision of this section claimed the trap made that window
+uninterruptible-and-complete, and that Group A therefore introduced a destructive regression
+needing its own guard. That claim was false, and it was false for the reason M1b exists.** It
+was measured with `SIGTERM` delivered to the shell alone — the M1 harness — so the rebuild
+child never received the signal and completed for reasons unrelated to the trap. Re-measured
+under process-group delivery, which is what an operator's Ctrl-C does, against a shape
+mirroring `recreate_ruby` (trap, delete, child rebuild, then the real `:422`/`:426`
+verification):
 
-Today the trap makes that window uninterruptible-and-complete. Under Group A alone it becomes
-interruptible-and-destructive: an abort after the delete and before the verification at `:422`
-leaves no Ruby, or a venv that exists and is empty. Group A2 exists because of this.
+```
+trap    rc=1    artifact_present=NO   log=[STEP1-DELETE|STEP2-REBUILD-RETURNED|STEP3-VERIFY-ERROR-PRINTED|]
+notrap  rc=130  artifact_present=NO   log=[STEP1-DELETE|]
+```
 
-**Population:** read from the source, not executed — running a real `recreate_ruby` to
-observe the window would destroy this machine's Ruby, which is precisely the finding. The
-mechanism was confirmed on a synthetic stand-in (delete a resource, spawn a 3s rebuild,
-SIGTERM at 1s): with the trap, `rc=0` and the resource present; without, `rc=143` and every
-statement after the interrupted step unreached.
+**`artifact_present=NO` in both arms.** The trap never protected the toolchain. Its only
+effect is that execution reaches the verification branch and prints the error the repo already
+wrote for this case; without it the shell dies at the interrupted step. The delta is one
+stderr line.
+
+So there is no destructive regression to pay for, and the abort guard this section previously
+justified is withdrawn. What remains is a documentation obligation, discharged in Group D: an
+interrupted recreate leaves the toolchain deleted, and the same command recovers it.
+
+**Population:** bash 5.3.15, Mac Studio, process-group delivery under `set -m`, against a
+stand-in rather than a real `ruby-install` or `uv sync` — running those for real would destroy
+this machine's toolchain, which is the finding itself. The stand-in is a plain `sleep`, so this
+measurement assumes those tools do not install their own SIGINT handling; if either did, it
+would survive the interrupt and the earlier claim would be partially right. That is recorded
+in Deferred rather than asserted away, because it does not change the decision — a guard whose
+value is one message is not worth its mechanism either way.
+
 
 ### M10 — Today's interrupted-run record is false, not merely absent
 
@@ -307,32 +335,6 @@ explains `|| _hooks_rc=$?` as a workaround for this clobber — the code stays, 
 independently correct and matching the surrounding `setup_claude_mcp || return 1` style, but
 its stated reason is gone) and `tests/setup_env/ledger_integration.bats:350`.
 
-### Group A2 — an explicit abort guard for the two destructive windows
-
-M9's window must not become interruptible without the operator being told what state the
-machine is in. Add a guard used only by `recreate_ruby` and `recreate_python_venv`, spanning
-from immediately before the delete to immediately after the post-install verification.
-
-Required properties, each of which is a test in Verification:
-
-1. **The handler exits.** This is the whole difference from the trap being deleted. A handler
-   that returns re-creates the defect one function down. Exit non-zero.
-2. **Assert non-zero, never a literal.** 130 for INT and 143 for TERM are conventional, not
-   portable, and this suite runs on macOS and Linux.
-3. **It prints what state the machine is in**, naming the deleted artifact and the command
-   that recovers it — `setup_env.sh -t recreate-ruby` / `-t recreate-venv`, which are
-   idempotent and are the recovery path. The message goes to stderr.
-4. **It is removed on every exit path**, normal and early-return alike, so it cannot fire for
-   an unrelated later signal. A `trap ... INT TERM` is shell-global, exactly like the one
-   Group A deletes; the guard is a scoped window, not a function-lifetime install.
-5. **It does not wrap the whole function.** Only the destroy-to-verified span. Before the
-   delete there is nothing to warn about, and a plain abort is correct.
-
-A `( )` subshell — the `lib/developer.sh:72` shape — is **not** available here: exiting a
-subshell does not exit the parent, and property 1 requires the process to die. The
-install/remove pair is therefore explicit, and property 4 is the one a future edit will break,
-so it gets its own test rather than a comment.
-
 ### Group B — delete the dead idiom
 
 In `tests/setup_env/workflows.bats`, delete the 27 save/restore blocks (`local
@@ -359,34 +361,45 @@ dies on SIGTERM, exit status non-zero. G2 is the behavioural positive control fo
 a mechanism assertion: G1 alone is satisfiable by a trap installed and immediately restored
 around the `mktemp`, which would leave signal handling broken.
 
-**G3, the class invariant.** G1 and G2 close the one instance. A trap added to any _other_
+**G3, the class invariant.** G1 and G2 close the one instance. A trap added to any *other*
 function on the 35 sites' call paths — `_update_record_start`, `install_ruby`, a future helper
 — re-arms all 35 at once with both green. Group A's own invariant is the class-level guard, so
-pin it: **no function-scope EXIT trap in `lib/`.**
+pin it: **no unreviewed `trap ... EXIT` in `lib/`.**
 
-Scope from `git ls-files 'lib/*.sh'`, under
-`env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE` (`git -C` does not
-override an exported `GIT_DIR`, and `scripts/pre-push` runs `make test`, so a push from a
-worktree would otherwise resolve the scope against the wrong repository). Assert the derived
-list is non-empty before iterating. A `trap ... EXIT` inside a `( )` subshell is permitted;
-one at function scope is not.
+**It is an allowlist ratchet, deliberately, not a scope-deciding scanner.** Two review rounds
+independently rejected a position-based predicate, and the same objection applies here: after
+Group A the only textual difference between `lib/developer.sh:72`'s permitted trap and a
+function-scope one is indentation, and deciding subshell containment from text needs a bash
+parser this repo does not have. Approximating it by position is exactly what the withdrawn
+`! grep` scanner died of.
 
-Group A2's guard traps INT and TERM, not EXIT, so it does not collide with this invariant.
-That is a property worth stating in the scanner's own message, since the next reader will
-otherwise expect a conflict.
+So the check does not decide scope at all. It enumerates every `trap` naming `EXIT` in
+`git ls-files 'lib/*.sh'` and requires the set to equal a recorded allowlist, each entry
+carrying a one-line reason. A new trap fails until a human adds it with a justification —
+which is the same shape this repo already uses for `shellcheck disable=` directives, and it
+cannot be fooled by formatting because it never tries to infer structure.
 
-**This replaces a withdrawn scanner, and the difference is the point.** The withdrawn one
-gated `! grep` position: its corpus was 81 sites with 0 defects, its one hit was a false
-positive, and it approximated control flow by line position. This one gates a property Group A
-establishes, over a corpus of 2 live traps (`lib/workflows.sh:109`, deleted by this change;
-`lib/developer.sh:72`, permitted), with an unambiguous predicate. It has a live positive
-before Group A lands and a real steady-state invariant after.
+Scope derivation uses `env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE`
+(`git -C` does not override an exported `GIT_DIR`, and `scripts/pre-push` runs `make test`, so
+a push from a worktree would otherwise resolve against the wrong repository), and asserts the
+derived file list is non-empty before iterating.
+
+**Contrast with the scanner this replaces.** That one gated `! grep` position: corpus 81
+sites, 0 defects, its one hit a false positive, predicate approximating control flow. This one
+gates a property Group A establishes, over a corpus of 2 live traps — `lib/workflows.sh:109`,
+deleted by this change, and `lib/developer.sh:72`, allowlisted — with no inference at all.
+
 
 ### Group D — docs
 
 - `CLAUDE.md`, the `-t update` row: SIGINT/SIGTERM now abort the run.
-- `CLAUDE.md`, the `recreate-venv` and `recreate-ruby` rows: an interrupt inside the rebuild
-  window aborts with a message naming the recovery command.
+- `CLAUDE.md`, the `recreate-venv` and `recreate-ruby` rows: an interrupt during the rebuild
+  leaves the toolchain **deleted**, and re-running the same command recovers it. State it
+  plainly rather than as a warning against interrupting — per M9 the toolchain is lost on
+  interrupt today as well, and the only thing that changes is that the shell now stops instead
+  of continuing to a verification error. For `recreate-venv`, note that recovery must repeat
+  any `--venv-name` the original invocation carried; a bare re-run rebuilds `ansible` instead
+  (`lib/developer.sh:547` gates the `uv sync` on that name).
 - `docs/adr/0027-update-run-exit-code-from-section-status.md`: cross-reference. ADR-0027
   defines what a non-zero exit from `-t update` means, and this change adds a case — an
   interrupted run exits non-zero with **no summary, no `~/.dotfiles-update.log` entry, and no
@@ -398,83 +411,97 @@ before Group A lands and a real steady-state invariant after.
   killed**, and writes them to the CMDB. The change trades a false record for no record. A
   partial-but-true record is the better end state and is Deferred.
 
+
 ## Verification
 
-Each case states what makes it fail.
+Each case states what makes it fail. Eight cases, renumbered after Group A2's withdrawal took
+three of them with it.
 
 **V1 — G1 goes red with the trap restored.** Restore `lib/workflows.sh:109`, run G1, confirm
-failure; delete it again, confirm `ok`. The pre-fix failure manifests as the test _vanishing_
+failure; delete it again, confirm `ok`. The pre-fix failure manifests as the test *vanishing*
 rather than as `not ok` — that is the defect demonstrating itself, and the run's
 `bats warning: Executed N-1 instead of expected N` plus non-zero rc is the signal. Both
 outcomes are red; do not read the missing `not ok` as a pass.
 
 **V2 — G2 goes red with the trap restored.** Same mutation. Pre-fix `SURVIVED-SIGTERM` rc 0;
-post-fix dead, rc non-zero. Both halves asserted — a G2 checking only the post-fix direction
-would pass against a trap that never installed.
+post-fix dead, rc non-zero — asserted as non-zero, never as the literal 143, since signal
+numbers are not portable and this suite runs on macOS and Linux. Both halves asserted: a G2
+checking only the post-fix direction would pass against a trap that never installed.
 
-**V3 — G3 finds `lib/workflows.sh:109` before Group A deletes it, and nothing after.** Run the
-scanner on the pre-Group-A tree: exactly 1 hit. After: 0 hits, with the derived `lib/*.sh` list
-asserted non-empty. This is the live positive; the scanner is not shipped on a zero.
+**V3 — G3 fails on an un-allowlisted trap.** With `lib/workflows.sh:109` restored and absent
+from the allowlist, G3 reports exactly that line. This is the live positive; the check is not
+shipped on a zero.
 
-**V4 — G3 does not flag the permitted subshell trap.** `lib/developer.sh:72` must be absent
-from the findings both before and after. Without this, a scanner that simply greps `trap.*EXIT`
-passes V3 by flagging both and still "goes to 0" after Group A only if someone also deletes a
-correct trap.
+**V4 — G3 passes on the allowlisted trap alone.** After Group A, the only `EXIT` trap in
+`lib/` is `lib/developer.sh:72`, which is on the allowlist with its reason, and G3 is clean —
+with the derived `lib/*.sh` list asserted non-empty, so "clean" cannot mean "scanned nothing".
 
-**V5 — G3 catches a newly-introduced function-scope trap.** Add one to any `lib/*.sh` function,
-confirm it is named, remove it. Distinct from V3: V3 shows the scanner finds the instance that
-exists, V5 shows it finds one it has never seen.
+**V5 — G3 catches a newly-introduced trap wherever it sits.** Add a `trap ... EXIT` to a
+`lib/*.sh` function, confirm it is named; move the same line inside a `( )` subshell, confirm
+it is **still** named. The second half is the point: G3 does not decide scope, so a subshell
+trap is a finding until someone allowlists it. That is the intended behaviour and V5 pins it,
+so a later "improvement" that starts inferring containment fails this case.
 
-**V6 — the abort guard exits, and says what was destroyed.** Drive `recreate_ruby`'s guarded
-window with the destructive call and the rebuild both stubbed, send SIGTERM inside the window,
-and assert three things: the process exits **non-zero**, stderr names the deleted artifact and
-the recovery command, and the statements after the window did not run. A guard that prints and
-_continues_ passes a message-only assertion, which is the exact defect Group A removes.
-
-**V7 — the abort guard is removed on the normal path.** Run the same function to completion
-with no signal, then assert `trap -p INT` and `trap -p TERM` are empty in the caller. This is
-property 4, and it is the one a later edit breaks silently.
-
-**V8 — the abort guard is removed on an early-return path.** Same as V7 with the rebuild
-stubbed to fail, so the function returns non-zero before its normal end. Without this, a guard
-removed only at the happy-path end passes V7 and leaks on every failure.
-
-**V9 — the 27 idiom deletions move no verdict.** `bats tests/setup_env/workflows.bats` before
+**V6 — the 27 idiom deletions move no verdict.** `bats tests/setup_env/workflows.bats` before
 and after Group B. Baseline on `cd9c0a6d` is 214 planned, 214 executed, 0 `not ok`, no warning
 (M7). Compare the full `ok`/`not ok` **set**, not the count — a count is equal under a swap.
 
-**V10 — full suite, plan equals executed.** `make test`. Assert both that no
+**V7 — full suite, plan equals executed.** `make test`. Assert both that no
 `bats warning: Executed` line appears **and** that the plan line is present and equals the
 expected total. The absence assertion alone passes over a suite that never ran; the plan line
 is what makes it an assertion about a measurement rather than about silence.
 
-**V11 — a bare call that fails now reports by name.** Stage a `run_update` section FAIL, call
+**V8 — a bare call that fails now reports by name.** Stage a `run_update` section FAIL, call
 it bare in a fixture, assert the outer `bats` output carries `not ok` **with the test's name**.
 This is the property the whole change exists to produce, and neither G1 nor G2 asserts it —
 G1 is about traps, G2 about signals. Pre-fix this fixture vanishes; post-fix it names itself.
+
 
 ## Deferred
 
 - **A partial summary and ledger entry on interrupt.** M10 says today's record is false and
   Group D says the change makes it absent. A true partial record is better than either, and
-  needs a handler that renders and _then_ exits non-zero — a different mechanism from Group
-  A2's abort guard, which deliberately does not touch the summary. Do not smuggle it in as
-  A2's implementation.
-- **Whether an absent ledger entry creates false drift findings.** This repo installs a weekly
-  `ledger-drift` cadence agent (`lib/workflows.sh:219`) and `_doctor_check_ledger_drift_cadence`
-  (`lib/helpers.sh:392`), whose input is entity freshness. If a machine's freshness derives
-  from the entry `_update_summary` writes at `lib/update_summary.sh:598`, an operator who now
-  aborts updates stops refreshing it and the Monday agent reports stale-entity findings caused
-  by the interrupt rather than by drift. Settle it by reading `ai-config`'s
-  `ledger_drift_check.sh` for the field it ages against, then comparing `ledger status` across
-  an aborted `-t update`. Unresolved, and it is a _new_ path because Ctrl-C becomes reachable
-  for the first time under this change.
+  needs a handler that renders and *then* exits non-zero. Group A2 was withdrawn without
+  building it, so this stays open rather than foreclosed.
+- **The interrupt UX for the two recreate workflows**, if it is wanted at all. M9 establishes
+  the toolchain is lost either way, so the only question is whether the operator should be
+  *told* at the moment of interrupt rather than reading it in `CLAUDE.md`. Three problems must
+  be solved together before any mechanism is worth it, and each was found by review of the
+  withdrawn Group A2: a `trap ... INT TERM` in a lib function clobbers its caller's handler
+  (`trap -` clears, it does not restore, and bats installs `bats_interrupt_trap` in every
+  test); bash defers a pending trap until the foreground child returns, so under
+  single-process delivery the message fires *after* a successful rebuild and would be false;
+  and `recreate_python_venv` has no post-install verification, so the window has no defined
+  end. A `( )` subshell wrapper solves the first structurally — measured: the caller's handler
+  survives intact — but not the other two.
+- **`recreate_python_venv` has no post-install verification.** `recreate_ruby` verifies at
+  `lib/developer.sh:422-429` precisely because `install_ruby` soft-fails; the venv path has no
+  equivalent, so a partial rebuild reports success. Independent of this spec and probably the
+  more valuable of the two follow-ups.
+- **Whether a real `ruby-install` / `uv sync` child survives SIGINT to the process group.** M9
+  used a `sleep` stand-in. If either installs its own signal handling the child would survive,
+  and the pre-correction claim would be partially right. It does not change this design — a
+  guard worth one message is not worth its mechanism either way — but it changes the Group D
+  wording, since "the toolchain is left deleted" would then be conditional. Settle with a
+  throwaway `ruby-install ruby X --install-dir /tmp/probe` under `set -m`, interrupted at the
+  group.
 - **The 8 bare `run_setup_user` sites.** Safe under Group A; convertible to `run` +
   `[ "$status" -eq 0 ]` if a future change makes any of them read `_DOTFILES_RUN_TMPDIR`.
 - **Any `! grep` work at all.** M8 retires the premise. 81 sites, 81 effective. `refute_grep`
-  remains the better idiom for a _new_ assertion because it names what it found on failure,
+  remains the better idiom for a *new* assertion because it names what it found on failure,
   but that is a style preference with no defect behind it, and no gate should enforce it
   without a measured corpus for all three negation forms (`! grep`, `! [[ ]]`, `! command`).
+
+**Resolved and closed, recorded here because it was Deferred in an earlier revision:** whether
+an absent ledger entry creates false drift findings. It does not, and the reason is worse than
+the concern. `_ledger_write_run_entry` passes the **per-run UUID** as `entity_id`
+(`lib/update_summary.sh:437`), so every recorded run creates a *new* entity and none is ever
+refreshed — measured, 7 `dotfiles` entities, all distinct UUIDs, two already reported STALE at
+35d and 47d. An aborted run therefore refreshes nothing because nothing is refreshed. The
+separate defect this exposes — `ledger drift` can never clear a `dotfiles` entity, so the
+weekly cadence agent reports drift forever — is filed in this repo's backlog rather than
+carried here.
+
 
 ## Related
 
@@ -485,9 +512,9 @@ G1 is about traps, G2 about signals. Pre-fix this fixture vanishes; post-fix it 
 - [2026-08-31-update-run-cd-guards-design.md](2026-08-31-update-run-cd-guards-design.md) —
   where `refute_grep` was added, and where the backlog row that prompted this work was written.
 - `~/.claude/standards/shell.md`, "`trap ... RETURN` is NOT function-scoped" — the sibling
-  trap-scope defect, the origin of `lib/developer.sh:72`'s subshell shape, and the closest
-  precedent for Group A2's requirement that a cleanup mechanism not be worse than what it
-  cleans.
+  trap-scope defect and the origin of `lib/developer.sh:72`'s subshell shape. Its framing, that
+  a cleanup trap's failure mode can be worse than the condition it cleans, is what the deleted
+  trap does to signal handling and is also what retired the withdrawn Group A2.
 - `~/.claude/standards/behavior.md`, "A guard whose output cannot alter what runs after it is
   not a guard" — M4's idiom is that shape: it executes after the decision it was meant to
   affect.
@@ -496,6 +523,13 @@ G1 is about traps, G2 about signals. Pre-fix this fixture vanishes; post-fix it 
   and its last _executed command_ are the same value for most bodies and differ for 30 of them.
 
 ## Multi-Lens Review
+
+**Verification-case numbers inside the two review sections refer to the numbering as it stood
+when that round ran, not to the current Verification section.** Round 1 reviewed a spec with
+V1-V7; its dispositions were written against the revision's V1-V11; Group A2's withdrawal then
+took three cases out and the current set is V1-V8. The review sections are kept as written
+rather than renumbered, since a disposition that silently referred to a different case than the
+lens did would be worse than a stale number.
 
 Reviewed at commit: `0fdbd416` (Step 7 self-review commit, before Step 8 dispatch)
 
@@ -602,3 +636,122 @@ N/A — spec has no comparison/evaluator/ambiguous-criteria trigger. There are n
 arms, no judge or evaluator component, and the acceptance criteria are concrete commands with
 stated failure conditions (V1-V11). The G3 scanner is a mechanical checker with an unambiguous
 predicate, not an evaluator exercising judgement.
+
+## Multi-Lens Review — Round 2
+
+Reviewed at commit: `10c41b13` (the round-1 revision)
+
+All three lenses independently condemned Group A2 — the mechanism round 1's corrections had
+added. Every finding below was re-derived here before being accepted.
+
+### Goal-Fit
+
+Finding: Group A2 rests on a measurement taken with the wrong actor, and the state it protects
+is already lost today. M9 used single-process SIGTERM — the M1 harness — one section after M1b
+established that single-process delivery cannot answer this question, so the rebuild child
+never received the signal and completed for reasons unrelated to the trap. Under process-group
+delivery the artifact is absent in both arms, so A2's entire delta over Group A alone is one
+stderr line, not a machine state. Against that it costs install/remove pairs in two functions,
+property 4 (which the spec itself calls the one a future edit will break) and three
+verification cases. Separately, the revision deletes one shell-global INT/TERM trap and adds
+two, while G3 — added in the same round as the class invariant to stop exactly this — is
+scoped to EXIT and explicitly waives them. Confirmed M8's retraction is now correct
+(four-case fixture reproduced), and confirmed G3's corpus, the 39/81/1641 figures, and that no
+guard anywhere reads `_DOTFILES_RUN_TMPDIR`'s unset-ness.
+
+Assumption: That SIGINT to the process group actually kills the real rebuild child —
+`ruby-install`, `rbenv install`, `uv sync` — as the `sleep` stand-in did. If any installs its
+own signal handling, the child survives and M9's original claim would be partially right.
+
+Disposition: **Addressed.** Group A2 withdrawn entirely; M9 rewritten with the process-group
+measurement, re-derived here (`artifact_present=NO` in both arms) rather than accepted on
+report. The operator chose deletion over rebuilding the guard in a safer shape. The assumption
+is recorded in Deferred: it does not change the decision, since a mechanism worth one message
+is not worth its cost either way, but it does qualify Group D's wording.
+
+### Ergonomics
+
+Finding: Property 3's recovery command was a frozen literal and wrong for
+`recreate_python_venv`, whose venv name is an operator-supplied `--venv-name`. An operator who
+aborted `-t recreate-venv --venv-name foo` and obeyed the message would leave `foo` deleted
+and trigger a full 269-package `uv sync` against `ansible`, since `lib/developer.sh:547` gates
+on that name — the slowest possible wrong action at the moment of maximum stress. Property 4
+was a 10-site edit obligation across two functions, and `recreate_ruby` destroys on two
+mutually exclusive platform branches with a `return 1` between them, so it could not satisfy
+property 5 with one install point. V7 and V8 both passed if the guard was never installed at
+all, since "empty" is satisfied identically by *correctly removed* and *never installed* — the
+spec applied exactly this reasoning to V10 and did not carry it one paragraph up. And G3's
+only textual discriminator between the permitted subshell trap and a function-scope one is
+indentation, which is line position standing in for control flow: the predicate class the
+withdrawn `! grep` scanner died of, in a check gating pre-commit and pre-push.
+
+Assumption: That `pyenv virtualenv-delete -f` succeeds against a virtualenv whose creation was
+itself interrupted, so "re-run the same command" genuinely recovers. If it errors,
+`lib/developer.sh:541`'s `2>/dev/null || true` swallows it and the create at `:544` then fails
+"already exists", looping the operator.
+
+Disposition: **Addressed.** A2's withdrawal removes properties 3, 4 and 5 and cases V6-V8
+outright. The `--venv-name` finding survives A2 and is now a Group D documentation
+requirement, since the recovery instruction is still being written down. G3 is rebuilt as an
+**allowlist ratchet** that does not decide scope at all — it enumerates every `EXIT` trap in
+`lib/*.sh` and requires the set to match a recorded allowlist with reasons — so the
+indentation objection no longer applies, and V5 now pins that a subshell trap is *still* a
+finding, so a later "improvement" toward inference fails. The `virtualenv-delete` assumption
+is recorded in Deferred alongside the missing post-install verification, which is the same
+gap seen from the other side.
+
+### Risk
+
+Finding: Group A2 reintroduces the exact defect Group A deletes. `trap - INT TERM` **removes**
+rather than restores, and bats installs a live `bats_interrupt_trap` SIGINT handler in every
+test — so post-Group-A a bare call at any of the 35 sites would have silently destroyed it, a
+lib function clobbering its caller's trap, which is this spec's Problem statement one signal
+over. Worse, V7 and V8 asserted `trap -p INT` is empty in the caller, which is true only of
+the destroying implementation: a correct save-and-restore guard goes red against them, so the
+verification case forbade the fix. The spec's rejection of the `( )` subshell shape was also
+wrong on its stated grounds — containment is structural, the caller's handler survives, and it
+makes property 4 unnecessary rather than untestable. Finally A2 fires late: bash defers a
+pending trap until the foreground child returns, so under single-process delivery `uv sync`
+completes and the guard then prints that the venv is deleted — false about a machine just
+rebuilt. And `recreate_python_venv` has no post-install verification, so the guarded span had
+no defined endpoint.
+
+Assumption: That the guard's handler runs when the operator interrupts rather than after a
+multi-minute foreground child completes — the design's whole value being to report machine
+state accurately.
+
+Disposition: **Addressed.** All four findings are moot for this spec because Group A2 is
+withdrawn, and all four are recorded in Deferred as the constraints any future interrupt-UX
+mechanism must satisfy together, so the next attempt does not re-derive them. The three
+load-bearing mechanisms were re-measured here rather than accepted: bats installs
+`trap -- 'bats_interrupt_trap' SIGINT` per test; `trap - INT TERM` leaves `INT=[]` where the
+caller had a handler; and a `( )` subshell aborts its window while leaving
+`AFTER=[trap -- 'echo CALLER-INT' SIGINT]` intact. V7/V8 are gone with A2 rather than repaired.
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger. No comparison arms, no
+judge component, and the acceptance criteria are concrete commands with stated failure
+conditions.
+
+### Stopping here
+
+Both of the skill's stop signals agree, which is the condition for ending review rather than
+either alone.
+
+**Artifact location.** Round 2's findings were design findings — a premise measured with the
+wrong actor, a mechanism reintroducing the defect it was added to prevent, a predicate that
+cannot decide what it claims. That would argue for another round. But the disposition for
+every one of them is *deletion*, and what remains — Groups A, B, C, D — is text that has now
+survived two rounds unchanged in substance.
+
+**Direction of the corrections.** Round 1 removed a scanner and an assertion edit and added
+Group A2. Round 2 removed Group A2, its five properties, three verification cases, and
+replaced an inference-based predicate with an enumeration. Across both rounds the design has
+only ever lost surface; nothing was added to replace anything. The spec is roughly half the
+mechanism it proposed at `0fdbd416`.
+
+**The honest residue.** The remaining uncertainty is concentrated in things a first `bats` run
+answers in seconds — whether G3's allowlist enumeration matches, whether V6's ok/not-ok set is
+unmoved — which is the skill's signal that prose review has reached its floor and the next
+round should be Phase 2's first red test.
