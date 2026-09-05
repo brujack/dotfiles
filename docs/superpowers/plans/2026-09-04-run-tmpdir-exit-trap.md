@@ -1,5 +1,7 @@
 # run_tmpdir EXIT Trap Removal Implementation Plan
 
+> **Status: DONE** — merged as dotfiles#254 on 2026-09-05.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Delete `lib/workflows.sh:109`'s EXIT/INT/TERM trap, which swallows abort signals in production and clobbers bats' EXIT trap at 35 test call sites, and pin the resulting invariant so it cannot come back.
