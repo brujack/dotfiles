@@ -314,12 +314,11 @@ teardown() {
   unset LINUX UBUNTU
   local _marker="${BATS_TEST_TMPDIR}/git_hooks_sweep.ran"
   install_git_hooks_all_repos() { touch "${_marker}"; return 0; }
-  # run-wrapped (not a bare call): _dotfiles_run_tmpdir_setup installs an
-  # EXIT trap inside run_setup_user, and a bare call whose surrounding test
-  # later fails clobbers bats' own EXIT trap, silently dropping the test's
-  # TAP output entirely (reproduced: "Executed N-1 instead of expected N").
-  # `run` isolates the trap inside its subshell.
   run run_setup_user
+  # Assert status as well as the marker: the marker alone is satisfied both by
+  # run_setup_user succeeding and by it touching the marker then failing at a
+  # later `|| return 1` step, and those need different responses.
+  [ "$status" -eq 0 ]
   [ -f "${_marker}" ]
 }
 
@@ -1199,13 +1198,7 @@ setup_constants_copy() {
   unset MACOS LINUX UBUNTU
   export UPDATE_BREW=1
   export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
-  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
-  # so a failure here still gets its TAP line instead of being swallowed by
-  # run_update's own trap.
-  local _bats_exit_trap
-  _bats_exit_trap="$(trap -p EXIT)"
   run_update
-  eval "${_bats_exit_trap}"
   grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_brew"
   grep -q "not macOS or Linux" "${_DOTFILES_RUN_TMPDIR}/result_brew"
 }
@@ -1233,13 +1226,7 @@ setup_constants_copy() {
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
   export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
-  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
-  # so a failure here still gets its TAP line instead of being swallowed by
-  # run_update's own trap.
-  local _bats_exit_trap
-  _bats_exit_trap="$(trap -p EXIT)"
   run_update
-  eval "${_bats_exit_trap}"
   grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_apt"
   grep -q "not applicable" "${_DOTFILES_RUN_TMPDIR}/result_apt"
 }
@@ -1250,13 +1237,7 @@ setup_constants_copy() {
   export UPDATE_BREW=1
   unset UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
   export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
-  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
-  # so a failure here still gets its TAP line instead of being swallowed by
-  # run_update's own trap.
-  local _bats_exit_trap
-  _bats_exit_trap="$(trap -p EXIT)"
   run_update
-  eval "${_bats_exit_trap}"
   grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_apt"
   grep -q "flag not set" "${_DOTFILES_RUN_TMPDIR}/result_apt"
   grep -q "flag not set" "${_DOTFILES_RUN_TMPDIR}/result_snap"
@@ -1286,20 +1267,13 @@ setup_constants_copy() {
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
   export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
   export MOCK_APT_EXIT=1
-  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
-  # so a failure here still gets its TAP line instead of being swallowed by
-  # run_update's own trap.
-  local _bats_exit_trap
-  _bats_exit_trap="$(trap -p EXIT)"
   # Capture rather than discard: this fixture stages a genuine section FAIL, so
-  # run_update must return non-zero. `|| true` would keep bats' errexit from
-  # aborting before the trap restore below, but it also throws away the only
-  # coverage anywhere in the tree for the _update_summary -> run_update rc
-  # propagation -- verified by mutation: `return 0` after _update_summary left
-  # both suites fully green.
+  # run_update must return non-zero. `|| true` would swallow that non-zero and
+  # throw away the only coverage anywhere in the tree for the _update_summary
+  # -> run_update rc propagation -- verified by mutation: `return 0` after
+  # _update_summary left both suites fully green.
   local _rc=0
   run_update || _rc=$?
-  eval "${_bats_exit_trap}"
   [ "${_rc}" -ne 0 ]
   grep -q "FAIL" "${_DOTFILES_RUN_TMPDIR}/status_apt"
   grep -q "OK" "${_DOTFILES_RUN_TMPDIR}/status_snap"
@@ -1315,20 +1289,13 @@ setup_constants_copy() {
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
   export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
   export MOCK_SNAP_EXIT=1
-  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
-  # so a failure here still gets its TAP line instead of being swallowed by
-  # run_update's own trap.
-  local _bats_exit_trap
-  _bats_exit_trap="$(trap -p EXIT)"
   # Capture rather than discard: this fixture stages a genuine section FAIL, so
-  # run_update must return non-zero. `|| true` would keep bats' errexit from
-  # aborting before the trap restore below, but it also throws away the only
-  # coverage anywhere in the tree for the _update_summary -> run_update rc
-  # propagation -- verified by mutation: `return 0` after _update_summary left
-  # both suites fully green.
+  # run_update must return non-zero. `|| true` would swallow that non-zero and
+  # throw away the only coverage anywhere in the tree for the _update_summary
+  # -> run_update rc propagation -- verified by mutation: `return 0` after
+  # _update_summary left both suites fully green.
   local _rc=0
   run_update || _rc=$?
-  eval "${_bats_exit_trap}"
   [ "${_rc}" -ne 0 ]
   grep -q "OK" "${_DOTFILES_RUN_TMPDIR}/status_apt"
   grep -q "FAIL" "${_DOTFILES_RUN_TMPDIR}/status_snap"
@@ -1350,13 +1317,7 @@ setup_constants_copy() {
   # environment. Green on macOS, red in CI.
   _snap_available() { return 1; }
 
-  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
-  # so a failure here still gets its TAP line instead of being swallowed by
-  # run_update's own trap.
-  local _bats_exit_trap
-  _bats_exit_trap="$(trap -p EXIT)"
   run_update
-  eval "${_bats_exit_trap}"
 
   grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_snap"
   grep -q "snap not installed on this host" "${_DOTFILES_RUN_TMPDIR}/result_snap"
@@ -1373,13 +1334,7 @@ setup_constants_copy() {
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
   export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
-  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
-  # so a failure here still gets its TAP line instead of being swallowed by
-  # run_update's own trap.
-  local _bats_exit_trap
-  _bats_exit_trap="$(trap -p EXIT)"
   run_update
-  eval "${_bats_exit_trap}"
   grep -q "Updated apt packages" "${_DOTFILES_RUN_TMPDIR}/err_apt"
   grep -q "Updated snap packages" "${_DOTFILES_RUN_TMPDIR}/err_snap"
   refute_grep "Updated apt packages" "${_DOTFILES_RUN_TMPDIR}/err_snap"
@@ -1673,22 +1628,13 @@ assert_all_npm_globals_pinned() {
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
   update_aws_cli() { return 1; }
-  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
-  # so a failure here still gets its TAP line instead of being swallowed by
-  # run_update's own trap. run_update also installs INT/TERM handlers this
-  # save/restore does not touch -- harmless here since bats owns and cleans
-  # its own tmpdir regardless of which trap runs.
-  local _bats_exit_trap
-  _bats_exit_trap="$(trap -p EXIT)"
   # Capture rather than discard: this fixture stages a genuine section FAIL, so
-  # run_update must return non-zero. `|| true` would keep bats' errexit from
-  # aborting before the trap restore below, but it also throws away the only
-  # coverage anywhere in the tree for the _update_summary -> run_update rc
-  # propagation -- verified by mutation: `return 0` after _update_summary left
-  # both suites fully green.
+  # run_update must return non-zero. `|| true` would swallow that non-zero and
+  # throw away the only coverage anywhere in the tree for the _update_summary
+  # -> run_update rc propagation -- verified by mutation: `return 0` after
+  # _update_summary left both suites fully green.
   local _rc=0
   run_update || _rc=$?
-  eval "${_bats_exit_trap}"
   [ "${_rc}" -ne 0 ]
   [ -f "${_DOTFILES_RUN_TMPDIR}/status_aws" ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_aws")" = "FAIL" ]
@@ -1699,10 +1645,7 @@ assert_all_npm_globals_pinned() {
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
   update_aws_cli() { return 0; }
-  local _bats_exit_trap
-  _bats_exit_trap="$(trap -p EXIT)"
   run_update
-  eval "${_bats_exit_trap}"
   [ -f "${_DOTFILES_RUN_TMPDIR}/status_aws" ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_aws")" = "OK" ]
 }
@@ -1712,17 +1655,13 @@ assert_all_npm_globals_pinned() {
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
   update_rust() { return 1; }
-  local _bats_exit_trap
-  _bats_exit_trap="$(trap -p EXIT)"
   # Capture rather than discard: this fixture stages a genuine section FAIL, so
-  # run_update must return non-zero. `|| true` would keep bats' errexit from
-  # aborting before the trap restore below, but it also throws away the only
-  # coverage anywhere in the tree for the _update_summary -> run_update rc
-  # propagation -- verified by mutation: `return 0` after _update_summary left
-  # both suites fully green.
+  # run_update must return non-zero. `|| true` would swallow that non-zero and
+  # throw away the only coverage anywhere in the tree for the _update_summary
+  # -> run_update rc propagation -- verified by mutation: `return 0` after
+  # _update_summary left both suites fully green.
   local _rc=0
   run_update || _rc=$?
-  eval "${_bats_exit_trap}"
   [ "${_rc}" -ne 0 ]
   [ -f "${_DOTFILES_RUN_TMPDIR}/status_rust" ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_rust")" = "FAIL" ]
@@ -1733,10 +1672,7 @@ assert_all_npm_globals_pinned() {
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
   update_rust() { return 0; }
-  local _bats_exit_trap
-  _bats_exit_trap="$(trap -p EXIT)"
   run_update
-  eval "${_bats_exit_trap}"
   [ -f "${_DOTFILES_RUN_TMPDIR}/status_rust" ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_rust")" = "OK" ]
 }
@@ -1757,13 +1693,7 @@ assert_all_npm_globals_pinned() {
   export MACOS=1
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
-  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
-  # so a failure here still gets its TAP line instead of being swallowed by
-  # run_update's own trap.
-  local _bats_exit_trap
-  _bats_exit_trap="$(trap -p EXIT)"
   run_update
-  eval "${_bats_exit_trap}"
   grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_tfenv"
 }
 
@@ -1781,13 +1711,7 @@ assert_all_npm_globals_pinned() {
   export MACOS=1
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
-  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
-  # so a failure here still gets its TAP line instead of being swallowed by
-  # run_update's own trap.
-  local _bats_exit_trap
-  _bats_exit_trap="$(trap -p EXIT)"
   run_update
-  eval "${_bats_exit_trap}"
   grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_oh-my-zsh"
 }
 
@@ -1805,13 +1729,7 @@ assert_all_npm_globals_pinned() {
   export MACOS=1
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
-  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
-  # so a failure here still gets its TAP line instead of being swallowed by
-  # run_update's own trap.
-  local _bats_exit_trap
-  _bats_exit_trap="$(trap -p EXIT)"
   run_update
-  eval "${_bats_exit_trap}"
   grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_tpm"
 }
 
@@ -1837,13 +1755,9 @@ assert_all_npm_globals_pinned() {
   _pwd_before="$(pwd)"
   # Bare call, not `run` -- `run`'s output capture is a command substitution,
   # which forks a subshell, so a `cd` inside run_update would never be
-  # observable back here. Save/restore bats' own EXIT trap for the same
-  # reason the sibling tfenv/oh-my-zsh/tpm tests above do.
-  local _bats_exit_trap
-  _bats_exit_trap="$(trap -p EXIT)"
+  # observable back here.
   local _rc=0
   run_update || _rc=$?
-  eval "${_bats_exit_trap}"
   # Non-zero would mean the cd-back's "|| return 1" guard actually fired --
   # see docs/superpowers/plans/2026-08-31-update-run-cd-guards.md task 4 for
   # the pre-change failure path this guards against.
@@ -1868,18 +1782,12 @@ assert_all_npm_globals_pinned() {
   export MOCK_CURL_STDOUT="cheat.sh binary body"
   # Bare call so _DOTFILES_RUN_TMPDIR survives. Capture run_update's own
   # return rather than calling it bare: bats runs test bodies under errexit,
-  # and a bare non-zero at the run_update line itself fires errexit BEFORE
-  # the trap restore below runs -- since run_update's internal EXIT trap
-  # (_dotfiles_run_tmpdir_setup) has already clobbered bats' trap-based
-  # "not ok" reporting by that point, the test vanishes from the TAP stream
-  # with no line at all rather than failing. The `|| _rc=$?` form never
-  # triggers errexit regardless of the return value, so a future regression
-  # that makes this section FAIL surfaces as a real assertion failure below.
-  local _bats_exit_trap
-  _bats_exit_trap="$(trap -p EXIT)"
+  # so a bare non-zero at the run_update line would abort the test right
+  # here rather than reaching the assertions below -- capturing it means a
+  # future regression that makes this section fail surfaces as an ordinary
+  # assertion failure instead.
   local _rc=0
   run_update || _rc=$?
-  eval "${_bats_exit_trap}"
   [ "${_rc}" -eq 0 ]
   grep -q "https://cht.sh/:cht.sh" "${MOCK_CALLS_FILE}"
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "OK" ]
@@ -1890,13 +1798,7 @@ assert_all_npm_globals_pinned() {
   export MACOS=1
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
-  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
-  # so a failure here still gets its TAP line instead of being swallowed by
-  # run_update's own trap.
-  local _bats_exit_trap
-  _bats_exit_trap="$(trap -p EXIT)"
   run_update
-  eval "${_bats_exit_trap}"
   grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh"
 }
 
@@ -1907,18 +1809,13 @@ assert_all_npm_globals_pinned() {
   mkdir -p "${HOME}/.zsh.d"
   touch "${HOME}/.zsh.d/_cht"
   export MOCK_CURL_STDOUT="cheat.sh completion body"
-  # Bare call + trap save/restore -- this test reads _DOTFILES_RUN_TMPDIR-
-  # derived files, which `run`'s subshell would discard. Capture run_update's
-  # return rather than calling it bare: a bare non-zero at the run_update
-  # line fires bats' errexit BEFORE the trap restore below runs, and since
-  # run_update's own EXIT trap (_dotfiles_run_tmpdir_setup) has already
-  # clobbered bats' trap-based "not ok" reporting by that point, the test
-  # would vanish from the TAP stream with no line at all rather than fail.
-  local _bats_exit_trap
-  _bats_exit_trap="$(trap -p EXIT)"
+  # Bare call -- this test reads _DOTFILES_RUN_TMPDIR-derived files, which
+  # `run`'s subshell would discard. Capture run_update's return rather than
+  # calling it bare: a bare non-zero at that line would abort the test right
+  # here under bats' errexit; capturing it means a future regression that
+  # makes this section fail surfaces as an ordinary assertion failure below.
   local _rc=0
   run_update || _rc=$?
-  eval "${_bats_exit_trap}"
   [ "${_rc}" -eq 0 ]
   # This is the disjunction case: ~/bin/cht.sh is absent, yet the section is
   # entered (not SKIP) and the completion fetch runs. The negative assertion
@@ -1938,27 +1835,22 @@ assert_all_npm_globals_pinned() {
   # MOCK_CURL_HTTP_STATUS is a global knob -- setting it would fail every
   # curl call run_update makes (aws, rust, ai-config, ...), and bats runs
   # test bodies under errexit, so an unguarded failure anywhere else in that
-  # chain kills the test silently (its own EXIT trap has already clobbered
-  # bats' trap-based "not ok" reporting -- see lib/workflows.sh's comment on
-  # _dotfiles_run_tmpdir_setup). A local curl() override scoped to exactly
-  # this URL, falling through to the real mock for everything else, is the
-  # surgical way to simulate one failing fetch without perturbing the rest
-  # of the run.
+  # chain would fail the test right there rather than reaching the assertions
+  # below. A local curl() override scoped to exactly this URL, falling
+  # through to the real mock for everything else, is the surgical way to
+  # simulate one failing fetch without perturbing the rest of the run.
   curl() {
     [[ "${*: -1}" == *"cht.sh/:cht.sh" ]] && return 22
     command curl "$@"
   }
   export -f curl
-  local _bats_exit_trap
-  _bats_exit_trap="$(trap -p EXIT)"
   # Capture rather than discard: this fixture stages a genuine section FAIL,
   # so run_update must return non-zero. A bare call would hit the same
-  # errexit-vs-trap hazard the curl-override comment above describes -- the
+  # errexit hazard the curl-override comment above describes -- the
   # non-zero return itself, not just an unguarded command deeper in the
   # chain, is what triggers it.
   local _rc=0
   run_update || _rc=$?
-  eval "${_bats_exit_trap}"
   [ "${_rc}" -ne 0 ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "FAIL" ]
   # Proves the fetch failure path never touches the target -- the shell code
@@ -1995,12 +1887,9 @@ assert_all_npm_globals_pinned() {
     esac
   }
   export -f curl
-  local _bats_exit_trap
-  _bats_exit_trap="$(trap -p EXIT)"
   # Capture rather than discard -- same reason as the sibling FAIL test above.
   local _rc=0
   run_update || _rc=$?
-  eval "${_bats_exit_trap}"
   [ "${_rc}" -ne 0 ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "FAIL" ]
   grep -q "cheat.sh completion fetch failed" "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
@@ -2029,11 +1918,8 @@ assert_all_npm_globals_pinned() {
     command curl "$@"
   }
   export -f curl
-  local _bats_exit_trap
-  _bats_exit_trap="$(trap -p EXIT)"
   local _rc=0
   run_update || _rc=$?
-  eval "${_bats_exit_trap}"
   [ "${_rc}" -ne 0 ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "FAIL" ]
   grep -q "cheat.sh binary fetch failed" "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
@@ -2057,11 +1943,8 @@ assert_all_npm_globals_pinned() {
     esac
   }
   export -f curl
-  local _bats_exit_trap
-  _bats_exit_trap="$(trap -p EXIT)"
   local _rc=0
   run_update || _rc=$?
-  eval "${_bats_exit_trap}"
   [ "${_rc}" -ne 0 ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "FAIL" ]
   grep -q "cheat.sh binary fetch failed" "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
@@ -2090,13 +1973,7 @@ assert_all_npm_globals_pinned() {
   export MACOS=1
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
-  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
-  # so a failure here still gets its TAP line instead of being swallowed by
-  # run_update's own trap.
-  local _bats_exit_trap
-  _bats_exit_trap="$(trap -p EXIT)"
   run_update
-  eval "${_bats_exit_trap}"
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_zsh-autosuggestions")" = "SKIP" ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_zsh-autosuggestions")" = "not installed" ]
 }
@@ -2106,10 +1983,7 @@ assert_all_npm_globals_pinned() {
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
   mkdir -p "${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
-  local _bats_exit_trap
-  _bats_exit_trap="$(trap -p EXIT)"
   run_update
-  eval "${_bats_exit_trap}"
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_zsh-autosuggestions")" = "SKIP" ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_zsh-autosuggestions")" = "not a git checkout — reinstall to enable updates" ]
 }
@@ -2126,13 +2000,7 @@ assert_all_npm_globals_pinned() {
   mkdir -p "${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
   printf 'gitdir: %s\n' "${BATS_TEST_TMPDIR}/elsewhere/.git/modules/zsh-autosuggestions" \
     > "${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions/.git"
-  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
-  # so a failure here still gets its TAP line instead of being swallowed by
-  # run_update's own trap.
-  local _bats_exit_trap
-  _bats_exit_trap="$(trap -p EXIT)"
   run_update
-  eval "${_bats_exit_trap}"
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_zsh-autosuggestions")" = "OK" ]
   grep -q "^git pull$" "${MOCK_CALLS_FILE}"
 }
@@ -2143,10 +2011,7 @@ assert_all_npm_globals_pinned() {
   export UPDATE_BREW=1
   unset UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
   mkdir -p "${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions/.git"
-  local _bats_exit_trap
-  _bats_exit_trap="$(trap -p EXIT)"
   run_update
-  eval "${_bats_exit_trap}"
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_zsh-autosuggestions")" = "SKIP" ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_zsh-autosuggestions")" = "flag not set" ]
 }
@@ -2178,10 +2043,7 @@ assert_all_npm_globals_pinned() {
     "${_real_git}" -c user.email=test@example.com -c user.name=test commit -q --allow-empty -m init
   )
   mkdir -p "${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
-  local _bats_exit_trap
-  _bats_exit_trap="$(trap -p EXIT)"
   run_update
-  eval "${_bats_exit_trap}"
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_zsh-autosuggestions")" = "SKIP" ]
   # Exactly one -- from the legitimate oh-my-zsh section's own pull. A
   # guard that walked upward via rev-parse --git-dir would resolve the
@@ -2241,11 +2103,8 @@ assert_all_npm_globals_pinned() {
   local _zsh_autosug="${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
   git clone -q "${_origin}" "${_zsh_autosug}"
 
-  local _bats_exit_trap
-  _bats_exit_trap="$(trap -p EXIT)"
   local _rc=0
   run_update || _rc=$?
-  eval "${_bats_exit_trap}"
   [ "${_rc}" -eq 0 ]
   [ -s "${_DOTFILES_RUN_TMPDIR}/pre_zsh-autosuggestions" ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_zsh-autosuggestions")" = "OK" ]
@@ -2337,13 +2196,7 @@ assert_all_npm_globals_pinned() {
   # No UPDATE_* flag set — relies on run_update's default "no flags = run
   # everything" (_run_all) path, not a bare UPDATE var (_any_update_flag
   # only checks UPDATE_BREW/PIP/GEMS/MAS/PKGS/CLAUDE, never bare UPDATE).
-  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
-  # so a failure here still gets its TAP line instead of being swallowed by
-  # run_update's own trap.
-  local _bats_exit_trap
-  _bats_exit_trap="$(trap -p EXIT)"
   run_update
-  eval "${_bats_exit_trap}"
   [ -f "${_DOTFILES_RUN_TMPDIR}/status_git-repos" ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_git-repos")" = "WARN" ]
   # The WARN message references "see detail" — the detail file must actually
@@ -2361,13 +2214,7 @@ assert_all_npm_globals_pinned() {
   # No UPDATE_* flag set — relies on run_update's default "no flags = run
   # everything" (_run_all) path, not a bare UPDATE var (_any_update_flag
   # only checks UPDATE_BREW/PIP/GEMS/MAS/PKGS/CLAUDE, never bare UPDATE).
-  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
-  # so a failure here still gets its TAP line instead of being swallowed by
-  # run_update's own trap.
-  local _bats_exit_trap
-  _bats_exit_trap="$(trap -p EXIT)"
   run_update
-  eval "${_bats_exit_trap}"
   [ -f "${_DOTFILES_RUN_TMPDIR}/status_legacy-rsync" ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_legacy-rsync")" = "WARN" ]
   [ -f "${_DOTFILES_RUN_TMPDIR}/detail_legacy-rsync" ]
@@ -2383,13 +2230,7 @@ assert_all_npm_globals_pinned() {
   # No UPDATE_* flag set — relies on run_update's default "no flags = run
   # everything" (_run_all) path, not a bare UPDATE var (_any_update_flag
   # only checks UPDATE_BREW/PIP/GEMS/MAS/PKGS/CLAUDE, never bare UPDATE).
-  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
-  # so a failure here still gets its TAP line instead of being swallowed by
-  # run_update's own trap.
-  local _bats_exit_trap
-  _bats_exit_trap="$(trap -p EXIT)"
   run_update
-  eval "${_bats_exit_trap}"
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_git-repos")" = "OK" ]
 }
 
@@ -2442,12 +2283,8 @@ assert_all_npm_globals_pinned() {
   export MACOS=1
   unset LINUX UBUNTU
   install_git_hooks_all_repos() { return 1; }
-  # `run run_update` (not a bare call): run_update's _dotfiles_run_tmpdir_setup
-  # installs an EXIT trap, and a bare call whose assertion then fails
-  # clobbers bats' own EXIT trap, silently dropping the test's TAP output
-  # entirely (reproduced here: "Executed N-1 instead of expected N" before
-  # this test was switched to `run`). Assert on the printed summary row
-  # instead of reading _DOTFILES_RUN_TMPDIR/status_git-hooks — `run` forks
+  # `run run_update` (not a bare call): assert on the printed summary row
+  # instead of reading _DOTFILES_RUN_TMPDIR/status_git-hooks -- `run` forks
   # a subshell, so exports made inside run_update do not survive back into
   # this test body.
   run run_update
@@ -2464,13 +2301,7 @@ assert_all_npm_globals_pinned() {
   # No UPDATE_* flag set — relies on run_update's default "no flags = run
   # everything" (_run_all) path, not a bare UPDATE var (_any_update_flag
   # only checks UPDATE_BREW/PIP/GEMS/MAS/PKGS/CLAUDE, never bare UPDATE).
-  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
-  # so a failure here still gets its TAP line instead of being swallowed by
-  # run_update's own trap.
-  local _bats_exit_trap
-  _bats_exit_trap="$(trap -p EXIT)"
   run_update
-  eval "${_bats_exit_trap}"
   [ -f "${_DOTFILES_RUN_TMPDIR}/status_git-hooks" ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_git-hooks")" = "WARN" ]
   [ -f "${_DOTFILES_RUN_TMPDIR}/detail_git-hooks" ]
@@ -2508,13 +2339,7 @@ assert_all_npm_globals_pinned() {
     [[ -x "${dir}/claude" ]] || printf "%s\n" "${dir}"
   done | tr '\n' ':' | sed 's/:$//')"
   export PATH="${tmp_mocks}:${clean_path}"
-  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
-  # so a failure here still gets its TAP line instead of being swallowed by
-  # run_update's own trap.
-  local _bats_exit_trap
-  _bats_exit_trap="$(trap -p EXIT)"
   run_update
-  eval "${_bats_exit_trap}"
   grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_claude"
 }
 
@@ -2523,13 +2348,7 @@ assert_all_npm_globals_pinned() {
   unset LINUX UBUNTU
   export UPDATE_BREW=1
   unset UPDATE_CLAUDE UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
-  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
-  # so a failure here still gets its TAP line instead of being swallowed by
-  # run_update's own trap.
-  local _bats_exit_trap
-  _bats_exit_trap="$(trap -p EXIT)"
   run_update
-  eval "${_bats_exit_trap}"
   grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_claude"
 }
 
@@ -2575,24 +2394,13 @@ assert_all_npm_globals_pinned() {
   # would not survive back into this test body, and the assertion below would
   # read an empty path and pass vacuously regardless of pipeline correctness.
   # See the git-repos WARN tests above for the same established pattern.
-  #
-  # run_update's _dotfiles_run_tmpdir_setup installs its own EXIT/INT/TERM
-  # trap (lib/workflows.sh), which clobbers bats' own EXIT trap for the
-  # remainder of this test. Without saving and restoring it, a failure inside
-  # run_update surfaces only as "bats warning: Executed 0 instead of expected
-  # 1 tests" — no test name, no line number. Save/restore bats' trap around
-  # the call so a real failure here still attributes to this test.
-  local _bats_exit_trap
-  _bats_exit_trap="$(trap -p EXIT)"
   # Capture rather than discard: this fixture stages a genuine section FAIL, so
-  # run_update must return non-zero. `|| true` would keep bats' errexit from
-  # aborting before the trap restore below, but it also throws away the only
-  # coverage anywhere in the tree for the _update_summary -> run_update rc
-  # propagation -- verified by mutation: `return 0` after _update_summary left
-  # both suites fully green.
+  # run_update must return non-zero. `|| true` would swallow that non-zero and
+  # throw away the only coverage anywhere in the tree for the _update_summary
+  # -> run_update rc propagation -- verified by mutation: `return 0` after
+  # _update_summary left both suites fully green.
   local _rc=0
   run_update || _rc=$?
-  eval "${_bats_exit_trap}"
   [ "${_rc}" -ne 0 ]
   # Positive assertion, not negated: `! grep -q "OK" status_npm` is also
   # satisfied by SKIP, a missing file, or an empty variable — none of which
@@ -2650,18 +2458,13 @@ assert_all_npm_globals_pinned() {
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
   # shellcheck disable=SC2034 # read by run_update via _require_npm_pins after source; shellcheck cannot see the consumer
   JSCPD_VER=""
-  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
-  # because run_update installs its own, which otherwise swallows attribution.
-  _bats_exit_trap="$(trap -p EXIT)"
   # Capture rather than discard: this fixture stages a genuine section FAIL, so
-  # run_update must return non-zero. `|| true` would keep bats' errexit from
-  # aborting before the trap restore below, but it also throws away the only
-  # coverage anywhere in the tree for the _update_summary -> run_update rc
-  # propagation -- verified by mutation: `return 0` after _update_summary left
-  # both suites fully green.
+  # run_update must return non-zero. `|| true` would swallow that non-zero and
+  # throw away the only coverage anywhere in the tree for the _update_summary
+  # -> run_update rc propagation -- verified by mutation: `return 0` after
+  # _update_summary left both suites fully green.
   local _rc=0
   run_update || _rc=$?
-  eval "${_bats_exit_trap}"
   [ "${_rc}" -ne 0 ]
   [ -f "${_DOTFILES_RUN_TMPDIR}/status_npm" ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_npm")" = "FAIL" ]
@@ -2675,13 +2478,7 @@ assert_all_npm_globals_pinned() {
   unset LINUX UBUNTU
   export UPDATE_BREW=1
   unset UPDATE_CLAUDE UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
-  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
-  # so a failure here still gets its TAP line instead of being swallowed by
-  # run_update's own trap.
-  local _bats_exit_trap
-  _bats_exit_trap="$(trap -p EXIT)"
   run_update
-  eval "${_bats_exit_trap}"
   grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_npm"
 }
 
@@ -2690,13 +2487,7 @@ assert_all_npm_globals_pinned() {
   unset LINUX UBUNTU
   export UPDATE_PIP=1
   unset HAS_DEVTOOLS UPDATE_BREW UPDATE_CLAUDE UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
-  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
-  # so a failure here still gets its TAP line instead of being swallowed by
-  # run_update's own trap.
-  local _bats_exit_trap
-  _bats_exit_trap="$(trap -p EXIT)"
   run_update
-  eval "${_bats_exit_trap}"
   grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_pip"
 }
 
@@ -2705,13 +2496,7 @@ assert_all_npm_globals_pinned() {
   unset LINUX UBUNTU
   export UPDATE_BREW=1
   unset UPDATE_PIP UPDATE_CLAUDE UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
-  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
-  # so a failure here still gets its TAP line instead of being swallowed by
-  # run_update's own trap.
-  local _bats_exit_trap
-  _bats_exit_trap="$(trap -p EXIT)"
   run_update
-  eval "${_bats_exit_trap}"
   grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_pip"
 }
 
@@ -2722,13 +2507,7 @@ assert_all_npm_globals_pinned() {
   unset UPDATE_BREW UPDATE_CLAUDE UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
   # pyenv which python must return the mock python so $PYTHON stays in mock PATH
   export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
-  # Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats' EXIT trap
-  # so a failure here still gets its TAP line instead of being swallowed by
-  # run_update's own trap.
-  local _bats_exit_trap
-  _bats_exit_trap="$(trap -p EXIT)"
   run_update
-  eval "${_bats_exit_trap}"
   grep -q "OK" "${_DOTFILES_RUN_TMPDIR}/status_pip"
   grep -q "pyenv which python" "${MOCK_CALLS_FILE}"
 }
@@ -2736,10 +2515,7 @@ assert_all_npm_globals_pinned() {
 @test "run_update pip writes pip_outdated from what the sync moved" {
   # Asserts the FILE rather than the rendered summary, because
   # update_summary.sh reads pip_outdated directly. Calls run_update directly
-  # (not via `run`) so _DOTFILES_RUN_TMPDIR survives into this test body;
-  # bats' EXIT trap is saved and restored around the call (below) so a
-  # failure here still gets its TAP line instead of being swallowed by
-  # run_update's own trap.
+  # (not via `run`) so _DOTFILES_RUN_TMPDIR survives into this test body.
   export MACOS=1
   unset LINUX UBUNTU
   export UPDATE_PIP=1 HAS_DEVTOOLS=1
@@ -2749,10 +2525,7 @@ assert_all_npm_globals_pinned() {
  - urllib3==1.26.20
  + urllib3==2.7.0
 "
-  local _bats_exit_trap
-  _bats_exit_trap="$(trap -p EXIT)"
   run_update
-  eval "${_bats_exit_trap}"
   grep -q "^requests$" "${_DOTFILES_RUN_TMPDIR}/pip_outdated"
   grep -q "^urllib3$" "${_DOTFILES_RUN_TMPDIR}/pip_outdated"
   # deduplicated: urllib3 appears on both a - and a + line
@@ -2894,12 +2667,6 @@ assert_all_npm_globals_pinned() {
 # A pip check conflict is a verdict rather than something swallowed by `|| true`.
 # The conflict case FAILS (see "run_update FAILS the pip-check section" below);
 # this pair pins the clean case, which must stay OK and must not warn.
-#
-# Both use `run` rather than calling run_update directly. A direct call leaves an
-# inherited EXIT trap in the test process, and a test that fails after one loses
-# its TAP line entirely — bats still exits non-zero, so the suite can go red, but
-# the failing test name and its message vanish. 50 tests across this file and
-# unit.bats call run_update directly and share that property.
 
 @test "run_update does not warn when pip check is clean" {
   export MACOS=1

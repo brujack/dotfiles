@@ -105,6 +105,51 @@ Baseline on `cd9c0a6d` was 214 planned, 214 executed, 0 `not ok`, no warning.
 
 Also refresh `tests/setup_env/ledger_integration.bats:350`, whose comment explains `run --separate-stderr` as a workaround for the same clobber. Keep the `run` — it is correct for its own reasons — and drop the stale justification.
 
+**Amended after Task 1's spec-compliance review, which surfaced this as uncovered.** Deleting
+the 27 blocks removes the 27 `# Bare call so _DOTFILES_RUN_TMPDIR survives; save/restore bats'
+EXIT trap` comments with them, but **14 further comment lines in the same file describe the
+trap in the present tense and survive**, at roughly 318-319, 1840, 1872-1873, 1914-1915,
+1941-1942, 2446-2447, 2580, 2740 and 2899. They say things like "run_update's own EXIT trap
+(`_dotfiles_run_tmpdir_setup`) has already clobbered bats' trap-based 'not ok' reporting",
+which is false once Task 1 lands.
+
+Rewrite each past-tense, or delete it where the surrounding code no longer needs the
+explanation. Two constraints carried from Task 1's own review: **do not cite
+`lib/workflows.sh:<line>`** — CLAUDE.md records that exact citation drifting for
+`tests/mocks/curl`, so name the enclosing function instead; and where a comment justifies a
+construct that is still correct for an independent reason (e.g. `run --separate-stderr` at
+`ledger_integration.bats:350`), keep the construct and re-justify it rather than deleting both.
+
+**That enumeration was wrong twice, and the correction is the point.** The first version of
+this amendment gave
+`grep -nE 'EXIT trap|trap-based|clobber' tests/setup_env/workflows.bats`. It is scoped to one
+file, and its pattern cannot match a line that carries none of the three tokens —
+`ledger_integration.bats:343` is `# the trap only unsets the variable; it never removes the
+dir`, which is false after Task 1 and invisible to that grep. A worklist that reports done
+while leaving instances false is the omission-invisible-to-its-own-instrument shape `tdd.md`
+describes for coverage denominators.
+
+Enumerate wider, then **read every hit** — this pattern is a starting point, not an oracle:
+
+    git grep -nE 'EXIT trap|trap-based|clobber|the trap|its own trap' -- 'tests/*.bats' \
+      | grep -v 'Bare call so _DOTFILES_RUN_TMPDIR survives'
+
+Measured 2026-09-04: 36 hits across 7 files (`scripts/unit.bats`, `setup_env/developer.bats`,
+`setup_env/launch_agents.bats`, `setup_env/ledger_integration.bats`,
+`setup_env/run_tmpdir_traps.bats`, `setup_env/unit.bats`, `setup_env/workflows.bats`). Most are
+unrelated traps and stay; the ones that must change are those describing
+`_dotfiles_run_tmpdir_setup`'s trap specifically.
+
+**One of them is a test NAME, and that collides with this task's own gate.**
+`ledger_integration.bats:332` is `@test "_dotfiles_run_tmpdir_setup: directory survives the
+EXIT trap"`. Renaming it changes the TAP output, and the differential below compares the
+`ok`/`not ok` **set** — so a rename fails that gate by construction, not by regression. If the
+name is changed, do it in its own commit and record the old and new names in the task report,
+so the set comparison is evaluated against a stated one-line substitution rather than silently
+re-baselined. Leaving the name alone and fixing only `:343`'s body is also acceptable; say which
+was chosen.
+
+
 **Differential, required:** re-run and diff the sets. `DIVERGING: 0` is the gate.
 
 ```bash

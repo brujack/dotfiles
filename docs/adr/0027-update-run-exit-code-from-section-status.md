@@ -124,6 +124,42 @@ that block in a subshell too, as part of making `zsh-autosuggestions` a reported
 CLAUDE.md's `-t update` row). `run_update` can now return non-zero for the two situations
 numbered above and no longer a third; case 2 is unchanged and remains an open gap.
 
+**Addendum, 2026-09-04: a third case, and it is new rather than a closure.**
+`_dotfiles_run_tmpdir_setup` carried `trap 'unset _DOTFILES_RUN_TMPDIR' EXIT INT TERM`, which
+replaces the default action for INT and TERM without itself exiting — so SIGINT/SIGTERM
+delivered to a `-t update` run were absorbed, not propagated, and the run continued to
+completion. That trap is deleted. A signal now aborts the run at the point it is delivered.
+
+This changes what a non-zero exit with no corresponding evidence means. Before this change,
+an interrupted run reached `_update_summary` regardless — it rendered a complete summary
+containing FAIL rows for whichever sections the operator's interrupt had cut short, appended
+it to `~/.dotfiles-update.log`, and wrote a state-ledger entry from it via
+`_ledger_write_dotfiles_entry`, all describing sections that did not fail so much as get
+killed. After this change, an interrupted run exits non-zero with **no summary, no
+`~/.dotfiles-update.log` entry, and no state-ledger entry**, because both
+`_update_summary` and `_ledger_write_dotfiles_entry` sit downstream of the point the signal
+now aborts at and are never reached.
+
+**That is a trade, not a strict improvement — a false record replaced by no record.** A
+partial-but-true record (a summary that says "interrupted after section N" rather than
+misreporting killed sections as FAIL) would be better than either, and is not what this
+change produces; it is deferred, matching the case-2 gap already named above rather than
+closing anything new.
+
+`run_update` can now return non-zero for three distinct situations:
+
+1. It ran every section and at least one recorded FAIL — a summary, a
+   `~/.dotfiles-update.log` line, and a ledger entry are all written.
+2. It could not create its run directory and aborted before any section ran — nothing is
+   recorded anywhere.
+3. It was interrupted by SIGINT or SIGTERM at any point after `_dotfiles_run_tmpdir_setup`
+   returns — nothing is recorded anywhere, for the same reason as case 2: the abort happens
+   before `_update_summary` runs.
+
+Cases 2 and 3 are now indistinguishable from outside the process by exit code alone — both
+are silent. A wrapper or cron job that sees a non-zero `-t update` exit with no corresponding
+log line is in one of the two, not case 1.
+
 ## Related
 
 - Spec: [2026-08-29-update-run-truthfulness-design.md](../superpowers/specs/2026-08-29-update-run-truthfulness-design.md) — full measurements and the ordering rationale for shipping `err_*` retention ahead of this contract.
