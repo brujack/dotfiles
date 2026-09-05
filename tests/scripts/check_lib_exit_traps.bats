@@ -105,11 +105,32 @@ EOF
   [[ "${output}" == *"expected 1"* ]]
 }
 
-@test "empty scope exits 2, not 1" {
+@test "empty scope exits 2, not 1, and says WHICH 2" {
+  # Two branches return 2 -- an unresolvable base and an empty derived scope --
+  # so `status -eq 2` alone does not pin which one fired. Mutation-confirmed:
+  # rewording the empty-scope branch left a status-only assertion green, so it
+  # was not pinning that branch at all. Assert the message too.
   rmdir "${FIXTURE}/lib"
   export _OVERRIDE_LIB_TRAP_SCOPE="${FIXTURE}"
   _run_script
   [ "${status}" -eq 2 ]
+  [[ "${output}" == *"derived scope is EMPTY"* ]]
+}
+
+@test "an unresolvable base exits 2 with its own message, not the empty-scope one" {
+  # The other exit-2 branch, which had no test at all. Run with no override from
+  # a directory outside any git repo, so `git rev-parse --show-toplevel` fails
+  # and the base cannot be resolved. Asserting the two messages are distinct is
+  # what stops a future refactor collapsing both branches into one verdict a
+  # caller cannot act on.
+  local _outside="${BATS_TEST_TMPDIR}/outside"
+  mkdir -p "${_outside}"
+  unset _OVERRIDE_LIB_TRAP_SCOPE
+  run env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+    bash -c "cd '${_outside}' && PATH='${CLEAN_PATH}' bash '${SCRIPT}'"
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"could not resolve a scope base directory"* ]]
+  [[ "${output}" != *"derived scope is EMPTY"* ]]
 }
 
 @test "the real lib/ is clean against the real allowlist, exit 0, and scanned a non-empty set" {
@@ -178,4 +199,28 @@ EOF
   run make --no-print-directory lint
   [ "$status" -eq 0 ]
   [[ "$output" == *"check-lib-exit-traps: OK"* ]]
+}
+
+@test "every allowlist key names a tracked file, by count" {
+  # Step 4d: the fixture-driven tests create lib/developer.sh themselves so it
+  # lands on the real allowlist key -- which means none of them can detect an
+  # entry naming a file that does not exist. The scanner iterates the derived
+  # scope and looks entries UP, so a typo'd or retired key is never consulted
+  # and never reported: a silent dead entry.
+  #
+  # Assert a COUNT, not membership. A membership check passes on a partial
+  # parse; a count fails when the parse degrades as well as when a key is wrong.
+  local _keys _tracked=0 _total=0
+  _keys=$(grep -oE '\["lib/[^"]+"\]' "${SCRIPT}" | tr -d '["]' | sort -u)
+  [ -n "${_keys}" ]
+  while IFS= read -r _k; do
+    [[ -n "${_k}" ]] || continue
+    _total=$((_total + 1))
+    if PATH="${CLEAN_PATH}" env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+         git -C "${REPO_ROOT}" ls-files --error-unmatch "${_k}" >/dev/null 2>&1; then
+      _tracked=$((_tracked + 1))
+    fi
+  done <<< "${_keys}"
+  [ "${_total}" -gt 0 ]
+  [ "${_tracked}" -eq "${_total}" ]
 }
