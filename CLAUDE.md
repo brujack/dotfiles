@@ -583,6 +583,27 @@ defect recorded for `tests/mocks` in `shell.md`. `tests/scripts/pre_commit_hook.
 ggshield. Before this seam existed, the case named "ggshield is absent" ran the **real**
 ggshield on every dev machine and asserted nothing about the branch it named.
 
+**`_OVERRIDE_LIB_TRAP_SCOPE` (`scripts/check-lib-exit-traps.sh`) points the EXIT-trap
+ratchet's scope at a fixture root instead of the repo.** Production derives scope from
+`git ls-files 'lib/*.sh'`; under the override it globs `<root>/lib/*.sh` instead, so a
+fixture file named `lib/developer.sh` lands on the real allowlist key without needing a
+second seam for the allowlist itself. That is what lets the suite drive every verdict —
+un-allowlisted trap, allowlisted count, subshell trap still reported, count change, empty
+scope, unresolvable base — without ever mutating real `lib/`, which is the only alternative
+and would leave the tree dirty mid-run for any concurrent session.
+
+The seam grants nothing: it redirects a read-only scan to a directory the caller can
+already read. It is quoted at every use and reaches no `eval`.
+
+**Two code paths, and the tests only exercise one.** Under the override the scope is a
+plain glob; in the real repo it is `git ls-files` under the four-variable
+`env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE` strip. Every
+fixture-driven test therefore certifies the glob path, while CI and the pre-push hook
+exercise the git path — the displaced-check shape `behavior.md` describes. The one test
+that closes it is "the real lib/ is clean against the real allowlist", which runs with no
+override and asserts the scanned set is non-empty; keep it, because without it nothing
+in the suite touches the path production actually takes.
+
 **`_OVERRIDE_BATS_BIN` (`scripts/run-bash-coverage.sh`) exists because a `PATH` strip
 cannot remove bats on the platform that matters.** The pre-flight guard resolves
 `${_OVERRIDE_BATS_BIN:-bats}` and exits 1 when it is unresolvable, deliberately **above**
