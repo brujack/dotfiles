@@ -48,6 +48,10 @@ declare -A _LIB_TRAP_ALLOWLIST_REASON=(
 
 # Resolves the directory scope is computed relative to: the override root
 # under test, or the real repo root.
+#
+# One call site, deliberately: this is the seam boundary. Keeping the override
+# branch in one named place is what lets the suite drive it without the caller
+# knowing a seam exists, and stops a second reader adding a second override read.
 _lib_trap_base_dir() {
   if [[ -n "${_OVERRIDE_LIB_TRAP_SCOPE:-}" ]]; then
     printf '%s\n' "${_OVERRIDE_LIB_TRAP_SCOPE}"
@@ -61,6 +65,9 @@ _lib_trap_base_dir() {
 # the override seam this is a plain glob (the fixture need not be a git
 # repo at all); in the real repo it is the tracked set, exactly like
 # scripts/list-shell-files.sh's BATS_FILES derivation.
+# One call site, deliberately: the seam's OTHER half. The two scope paths --
+# glob under override, `git ls-files` in the real repo -- diverge here and
+# nowhere else, which is what makes the divergence reviewable in one screen.
 _lib_trap_scope() {
   local _base="$1"
   if [[ -n "${_OVERRIDE_LIB_TRAP_SCOPE:-}" ]]; then
@@ -100,6 +107,9 @@ _lib_trap_scope() {
 # counts as one. Both are loud -- they make the gate fire and a human
 # resolves it via the allowlist. That is the right direction for a
 # ratchet; a miss is silent, a false match is not.
+# One call site, deliberately: this is the unit the tests pin. Three cases
+# (signal 0, non-line-start trap, prose) assert this predicate specifically, so
+# it stays a named function rather than an inline pipeline inside the loop.
 _lib_trap_count() {
   local _file="$1" _n
   _n=$(grep -vE '^[[:space:]]*#' "${_file}" 2>/dev/null \
