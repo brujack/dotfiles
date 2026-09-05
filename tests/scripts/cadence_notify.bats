@@ -15,6 +15,13 @@ setup() {
   export _RHN_NTFY_LOG="${BATS_TEST_TMPDIR}/ntfy.log"
   export NTFY_URL="https://ntfy.invalid/test"
   export NTFY_TOPIC="t" NTFY_USER="u" NTFY_PASSWORD="p"
+  # At setup scope, not per-test. _rhn_load_channel falls back to
+  # REPO_ROOT/config/local.sh when this is unset, and that file exists untracked
+  # on any provisioned machine with a live NTFY_URL -- so any case that unsets
+  # NTFY_URL silently reads the operator's real channel. Setting it per-test
+  # would leave the trap armed for the next case someone adds; three already set
+  # it, and the fourth did not.
+  export _RHN_LOCAL_CFG="${BATS_TEST_TMPDIR}/no-local-cfg.sh"
   # every ntfy send is captured, never sent
   export _RHN_CURL_BIN="${BATS_TEST_TMPDIR}/fake-curl"
   export _RHN_NTFY_STDIN="${BATS_TEST_TMPDIR}/ntfy.stdin"
@@ -87,6 +94,20 @@ _detector() {  # $1 = exit code, $2... = stdout lines
   run bash "${SCRIPT}" "${NAME}" "${_RHN_DETECTOR}"
   [ "$status" -eq 2 ]
   command grep -q '"result": *"incomplete"' "${_RHN_STATE_DIR}/${NAME}/last-run.json"
+}
+
+@test "setup points _RHN_LOCAL_CFG away from the real config/local.sh" {
+  # Asserts the FIXTURE, not behaviour, and deliberately. The behavioural form
+  # would have to write to the real config/local.sh to prove it is not read,
+  # which mutates the operator's untracked machine-local secrets file.
+  #
+  # Three states satisfy a bare `[ ! -e "${_RHN_LOCAL_CFG}" ]` -- correctly
+  # pointed at an absent fixture, unset, and empty -- and only the first is the
+  # one meant, so each is excluded by its own assertion.
+  [ -n "${_RHN_LOCAL_CFG:-}" ]
+  [[ "${_RHN_LOCAL_CFG}" == "${BATS_TEST_TMPDIR}/"* ]]
+  [ "${_RHN_LOCAL_CFG}" != "${REPO_ROOT}/config/local.sh" ]
+  [ ! -e "${_RHN_LOCAL_CFG}" ]
 }
 
 @test "an unset NTFY_URL degrades delivery but never the exit code" {
