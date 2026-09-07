@@ -1196,3 +1196,74 @@ _dev_probe_gpg_status() {
   run _aws_verify_pkg "${_pkg}"
   [ "$status" -ne 0 ]
 }
+
+# ── vendored-key path resolution under a changed cwd ─────────────────────────
+#
+# Every test above reaches lib/developer.sh through load_setup_env, which
+# sources setup_env.sh by an ABSOLUTE path ("${REPO_ROOT}/setup_env.sh"), so
+# BASH_SOURCE[0] inside developer.sh is absolute and the key path resolves
+# from any cwd. Production is the opposite actor: setup_env.sh:48 sources
+# "$(dirname "${BASH_SOURCE[0]}")/lib/developer.sh", which is RELATIVE when
+# the entry point is invoked as ./setup_env.sh -- and update_aws_cli cd's to
+# ${HOME}/software_downloads/awscli before calling the verifier. No test using
+# load_setup_env can fail for this class (behavior.md's actor boundary;
+# tdd.md E3). The two tests below therefore reproduce the production actor:
+# source relatively from the repo root, then cd away.
+
+@test "_aws_verify_zip: resolves the vendored key after a cd, when sourced relatively" {
+  local _clean_path
+  _clean_path="$(_gpg_only_path)"
+  if ! PATH="${_clean_path}" command -v gpg >/dev/null 2>&1; then
+    skip "real gpg not on PATH outside tests/mocks"
+  fi
+  printf 'not a zip\n'       > "${BATS_TEST_TMPDIR}/awscliv2.zip"
+  printf 'not a signature\n' > "${BATS_TEST_TMPDIR}/awscliv2.zip.sig"
+
+  # Asserts on the POST-import failure, not on the absence of the import
+  # failure: an absence is equally satisfied by the function never running
+  # (behavior.md E5). Reaching "signature did not verify" proves the import
+  # succeeded, which is only possible if the key path resolved.
+  run env -u _AWS_KEY_PATH PATH="${_clean_path}" \
+    HOME="${BATS_TEST_TMPDIR}" bash -c '
+      cd "$1" || exit 1
+      source ./lib/constants.sh
+      source ./lib/helpers.sh
+      source ./lib/developer.sh
+      cd "$2" || exit 1
+      _aws_verify_zip awscliv2.zip awscliv2.zip.sig
+    ' _ "${REPO_ROOT}" "${BATS_TEST_TMPDIR}"
+
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"signature did not verify against the vendored key"* ]]
+  refute_grep "could not import the vendored key" <(printf '%s\n' "${output}")
+}
+
+@test "_doctor_check_aws_key_expiry: resolves the vendored key after a cd, when sourced relatively" {
+  local _clean_path
+  _clean_path="$(_gpg_only_path)"
+  if ! PATH="${_clean_path}" command -v gpg >/dev/null 2>&1; then
+    skip "real gpg not on PATH outside tests/mocks"
+  fi
+
+  # HOME is redirected for the same reason as the test above: `gpg --show-keys`
+  # creates ${HOME}/.gnupg with pubring.kbx and trustdb.gpg -- measured, not
+  # assumed -- so an unsandboxed run writes into the operator's home on every
+  # invocation (tdd.md E2).
+  run env -u _AWS_KEY_PATH PATH="${_clean_path}" HOME="${BATS_TEST_TMPDIR}" bash -c '
+      cd "$1" || exit 1
+      source ./lib/constants.sh
+      source ./lib/helpers.sh
+      HAS_AWS=1
+      cd "$2" || exit 1
+      _doctor_check_aws_key_expiry
+    ' _ "${REPO_ROOT}" "${BATS_TEST_TMPDIR}"
+
+  # "AWS CLI signing key" alone does NOT discriminate: helpers.sh prints it as an
+  # unconditional header at function entry, so it is satisfied by the function
+  # merely running. "expires in" is emitted only after the key has been read AND
+  # its expiry parsed -- by either the near-expiry warn or the doctor_pass arm,
+  # so the assertion does not depend on which one this key takes.
+  [[ "${output}" == *"AWS CLI signing key"* ]]
+  [[ "${output}" == *"expires in"* ]]
+  refute_grep "vendored key not found" <(printf '%s\n' "${output}")
+}

@@ -625,9 +625,13 @@ _doctor_check_aws_key_expiry() {
   # a test must be able to point this at a fixture key with a controlled
   # expiry, and at a gpg binary that isn't tests/mocks/gpg (which prints
   # nothing and would make every expiry unparseable).
+  #
+  # The default is DOTFILES_REPO_ROOT (lib/constants.sh), for the same reason
+  # _aws_verify_zip reads it -- latent here, since run_doctor does not cd, but a
+  # defect fixed in one of its two copies is not fixed.
   local _key="${_AWS_KEY_PATH:-}"
   if [[ -z "${_key}" ]]; then
-    _key="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/keys/aws-cli-team.asc"
+    _key="${DOTFILES_REPO_ROOT}/keys/aws-cli-team.asc"
   fi
 
   if [[ ! -f "${_key}" ]]; then

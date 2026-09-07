@@ -95,6 +95,17 @@ readonly AI_CONFIG="ai-config"
 # read by lib/helpers.sh:setup_dotfile_symlinks and lib/workflows.sh:setup_claude_mcp/setup_ai_config
 readonly AI_CONFIG_DIR="${PERSONAL_GITREPOS}/${AI_CONFIG}"
 
+# read by lib/developer.sh:_aws_verify_zip and lib/helpers.sh:_doctor_check_aws_key_expiry
+# to locate keys/aws-cli-team.asc.
+#
+# Two constraints, both load-bearing; CLAUDE.md's Test Seams section carries the
+# measurements. Resolve at SOURCE time, never at the point of use: every entry
+# point sources this file relatively, and both consumers run after a cd, where
+# the derivation returns empty. Keep it a PLAIN assignment: a ${VAR:-} guard
+# protects no reachable case and makes the directory holding a signing key
+# env-settable.
+DOTFILES_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
 HOSTNAME=$(hostname -s)
 
 # oh-my-zsh bootstrap branch — no tagged releases; master is the distribution branch

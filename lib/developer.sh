@@ -58,10 +58,14 @@ _aws_verify_zip() {
   # _AWS_KEY_PATH: read unconditionally, defaults to the repo's vendored key.
   # Without this seam only the vendored key could ever be exercised and the
   # fingerprint-mismatch branch would be unreachable.
+  #
+  # The default is DOTFILES_REPO_ROOT (lib/constants.sh), resolved at source time.
+  # Do not inline the derivation here: update_aws_cli cd's away before calling
+  # this function, and a relative BASH_SOURCE[0] then resolves to nothing.
   local _key
   _key="${_AWS_KEY_PATH:-}"
   if [[ -z "${_key}" ]]; then
-    _key="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/keys/aws-cli-team.asc"
+    _key="${DOTFILES_REPO_ROOT}/keys/aws-cli-team.asc"
   fi
 
   (
