@@ -150,8 +150,9 @@ _aws_fetch_pkg() {
 #
 # Fetches the Linux zip AND its detached .sig into the current directory.
 # The two fetches are separate curl calls against a rolling CDN URL, so a
-# release landing between them is a possibility update_aws_cli's caller
-# handles via retry, not here.
+# release landing between them is a possibility this function's caller --
+# update_aws_cli -- handles by re-fetching and re-verifying once, not here.
+# Nothing above that retries: run_update invokes update_aws_cli exactly once.
 #
 # A .sig fetch failure gets its own message, deliberately distinct from
 # _aws_verify_zip's "did not verify": one means the network failed, the
