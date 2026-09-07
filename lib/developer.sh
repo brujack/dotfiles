@@ -59,11 +59,9 @@ _aws_verify_zip() {
   # Without this seam only the vendored key could ever be exercised and the
   # fingerprint-mismatch branch would be unreachable.
   #
-  # The default comes from DOTFILES_REPO_ROOT (lib/constants.sh), which resolves
-  # BASH_SOURCE[0] at SOURCE time. Deriving it here instead resolved a relative
-  # BASH_SOURCE[0] against the caller's cwd -- and update_aws_cli cd's to
-  # ${HOME}/software_downloads/awscli before calling this function, so the
-  # derivation failed and the key resolved to /keys/aws-cli-team.asc on every run.
+  # The default is DOTFILES_REPO_ROOT (lib/constants.sh), resolved at source time.
+  # Do not inline the derivation here: update_aws_cli cd's away before calling
+  # this function, and a relative BASH_SOURCE[0] then resolves to nothing.
   local _key
   _key="${_AWS_KEY_PATH:-}"
   if [[ -z "${_key}" ]]; then

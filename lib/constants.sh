@@ -98,25 +98,12 @@ readonly AI_CONFIG_DIR="${PERSONAL_GITREPOS}/${AI_CONFIG}"
 # read by lib/developer.sh:_aws_verify_zip and lib/helpers.sh:_doctor_check_aws_key_expiry
 # to locate keys/aws-cli-team.asc.
 #
-# Resolved HERE, at source time, deliberately -- not at the point of use. Every
-# entry point sources this file by a relative path (setup_env.sh:42,
-# scripts/bootstrap_*.sh:7, scripts/sync_git_repos.sh:71), so BASH_SOURCE[0] is
-# relative whenever the entry point is invoked as ./setup_env.sh. Both consumers
-# run after update_aws_cli has cd'd to ${HOME}/software_downloads/awscli
-# (lib/developer.sh:167,196), where `cd ./lib/..` fails, the command
-# substitution returns empty, and the key resolves to /keys/aws-cli-team.asc.
-# Source time is the only moment a relative BASH_SOURCE[0] is guaranteed to mean
-# anything.
-#
-# Plain assignment, NOT a ${VAR:-} self-guard. A guard was written first, to
-# survive a re-source from a changed cwd, and measurement showed it protects
-# nothing reachable: a re-source is either absolute (which resolves correctly
-# from any cwd -- verified from /) or relative (which cannot locate this file
-# after a cd at all). What it did add was an env-settable name selecting the
-# directory a cryptographic trust anchor is read from. That is fail-closed --
-# AWSCLI_GPG_FPR is a plain assignment here, so a substituted key still fails
-# the VALIDSIG fingerprint check -- but an unearned seam on that path is worth
-# less than the case it guarded.
+# Two constraints, both load-bearing; CLAUDE.md's Test Seams section carries the
+# measurements. Resolve at SOURCE time, never at the point of use: every entry
+# point sources this file relatively, and both consumers run after a cd, where
+# the derivation returns empty. Keep it a PLAIN assignment: a ${VAR:-} guard
+# protects no reachable case and makes the directory holding a signing key
+# env-settable.
 DOTFILES_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 HOSTNAME=$(hostname -s)
