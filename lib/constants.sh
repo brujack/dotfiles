@@ -66,9 +66,9 @@ YQ_VER="4.53.3"
 ZSH_VER="5.10"
 # read by lib/linux_ubuntu.sh:_install_ubuntu_k8s_tools
 KUBERNETES_VER="v1.36"
-# read by lib/developer.sh:_aws_verify_zip (not yet written) and tests/setup_env/developer.bats
+# read by lib/developer.sh:_aws_verify_zip and tests/setup_env/developer.bats
 AWSCLI_GPG_FPR="FB5DB77FD5C118B80511ADA8A6310ACC4672475C"
-# read by lib/developer.sh:_aws_verify_pkg (not yet written)
+# read by lib/developer.sh:_aws_verify_pkg and tests/setup_env/developer.bats
 AWSCLI_APPLE_TEAM_ID="94KV3E626L"
 
 # read by lib/linux_ubuntu.sh:_install_ubuntu_cloud_tools
@@ -100,11 +100,17 @@ readonly AI_CONFIG_DIR="${PERSONAL_GITREPOS}/${AI_CONFIG}"
 #
 # Two constraints, both load-bearing; CLAUDE.md's Test Seams section carries the
 # measurements. Resolve at SOURCE time, never at the point of use: every entry
-# point sources this file relatively, and both consumers run after a cd, where
-# the derivation returns empty. Keep it a PLAIN assignment: a ${VAR:-} guard
-# protects no reachable case and makes the directory holding a signing key
-# env-settable.
+# point sources this file relatively, and update_aws_cli cd's to the download
+# directory before calling _aws_verify_zip, where the derivation returns empty.
+# (_doctor_check_aws_key_expiry is latent -- run_doctor does not cd -- and reads
+# the constant so the two copies cannot drift.) Keep it a PLAIN assignment: a
+# ${VAR:-} guard protects no reachable case and makes the directory holding a
+# signing key env-settable.
+# Declared and assigned on separate lines: `readonly VAR="$(cmd)"` masks the
+# command substitution's exit status (SC2155), and an empty value here is
+# precisely the failure this constant exists to prevent.
 DOTFILES_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+readonly DOTFILES_REPO_ROOT
 
 HOSTNAME=$(hostname -s)
 

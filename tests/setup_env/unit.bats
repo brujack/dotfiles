@@ -384,6 +384,23 @@ _aws_key_make_fixture() {
   [ "$status" -eq 0 ]
 }
 
+@test "DOTFILES_REPO_ROOT resolves to the repo root and is readonly" {
+  # Positive control first: a bare `status -ne 0` on the reassignment below is
+  # equally satisfied by the source failing outright (behavior.md E5), so pin
+  # the value before pinning the modifier.
+  run bash -c "source '${REPO_ROOT}/lib/constants.sh'; printf '%s' \"\${DOTFILES_REPO_ROOT}\""
+  [ "$status" -eq 0 ]
+  [ "$output" = "${REPO_ROOT}" ]
+
+  # readonly is a deliberate choice (shell.md: "Constants: SCREAMING_SNAKE_CASE,
+  # marked readonly"), not incidental -- it is what stops a later-sourced lib
+  # repointing the directory the AWS signing key is read from. Non-interactive
+  # bash exits non-zero on assignment to a readonly.
+  run bash -c "source '${REPO_ROOT}/lib/constants.sh'; DOTFILES_REPO_ROOT=/tmp/decoy"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"readonly"* ]]
+}
+
 @test "lib/helpers.sh sources without error" {
   run bash -c "source '${REPO_ROOT}/lib/constants.sh'; source '${REPO_ROOT}/lib/helpers.sh'"
   [ "$status" -eq 0 ]
