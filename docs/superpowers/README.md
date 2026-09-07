@@ -216,6 +216,8 @@ Ideas approved for future specs, in no particular order:
 | `update_aws_cli` and `install_aws_tools` return 1 after a SUCCESSFUL install when their trailing `cd "${PERSONAL_GITREPOS}/${DOTFILES}"` fails | Reports `[FAIL] aws exit 1` over an update that worked. Pre-existing, not triggerable on either development machine; see dotfiles#256. |
 | Three names now mean "the dotfiles root", and two resolve differently in a worktree | `DOTFILES_REPO_ROOT` (sourced tree), `_rhn_dotfiles_root` (configured location), `DOTFILES_ROOT` (script-local). Unifying them would repoint a signing-key lookup; measured in dotfiles#256. |
 
+| `CLAUDE.md`'s `b4ced0d` anchor resolves to nothing and carries no PR pointer | Squash-merge severed it and GC reaped the object, so the Test Seams sentence "Fixed in `b4ced0d`" cites an unrecoverable commit. The two figure anchors in the same file (`917da4da`, `933df693`) are equally unresolvable but carry `(#254)`/`(#255)` beside them, which is the pattern the `docs` skill prescribes; this one does not. Resolve the PR and add the pointer. Found by the mandatory SHA-anchor sweep on 2026-09-07. |
+
 ## Adding a new entry
 
 When a new spec or plan is created, add a row to the All Plans table. Set status to **In Progress** when implementation starts, **Done** when the PR merges. Also add a `> **Status: DONE**` banner at the top of the plan file once complete. Move backlog items to the All Plans table when their spec is written (remove the backlog row).
