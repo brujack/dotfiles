@@ -95,6 +95,21 @@ readonly AI_CONFIG="ai-config"
 # read by lib/helpers.sh:setup_dotfile_symlinks and lib/workflows.sh:setup_claude_mcp/setup_ai_config
 readonly AI_CONFIG_DIR="${PERSONAL_GITREPOS}/${AI_CONFIG}"
 
+# read by lib/developer.sh:_aws_verify_zip and lib/helpers.sh:_doctor_check_aws_key_expiry
+# to locate keys/aws-cli-team.asc.
+#
+# Resolved HERE, at source time, deliberately -- not at the point of use. Every
+# entry point sources this file by a relative path (setup_env.sh:42,
+# scripts/bootstrap_*.sh:7, scripts/sync_git_repos.sh:71), so BASH_SOURCE[0] is
+# relative whenever the entry point is invoked as ./setup_env.sh. Both consumers
+# run after update_aws_cli has cd'd to ${HOME}/software_downloads/awscli
+# (lib/developer.sh:167,196), where `cd ./lib/..` fails, the command
+# substitution returns empty, and the key resolves to /keys/aws-cli-team.asc.
+# Source time is the only moment a relative BASH_SOURCE[0] is guaranteed to mean
+# anything. The ${VAR:-} self-guard keeps a re-source from a changed cwd (the
+# bats suite sources these libs repeatedly) from overwriting a correct value.
+DOTFILES_REPO_ROOT="${DOTFILES_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+
 HOSTNAME=$(hostname -s)
 
 # oh-my-zsh bootstrap branch — no tagged releases; master is the distribution branch
