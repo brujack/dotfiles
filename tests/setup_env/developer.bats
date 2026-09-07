@@ -1245,7 +1245,11 @@ _dev_probe_gpg_status() {
     skip "real gpg not on PATH outside tests/mocks"
   fi
 
-  run env -u _AWS_KEY_PATH PATH="${_clean_path}" bash -c '
+  # HOME is redirected for the same reason as the test above: `gpg --show-keys`
+  # creates ${HOME}/.gnupg with pubring.kbx and trustdb.gpg -- measured, not
+  # assumed -- so an unsandboxed run writes into the operator's home on every
+  # invocation (tdd.md E2).
+  run env -u _AWS_KEY_PATH PATH="${_clean_path}" HOME="${BATS_TEST_TMPDIR}" bash -c '
       cd "$1" || exit 1
       source ./lib/constants.sh
       source ./lib/helpers.sh
@@ -1254,6 +1258,12 @@ _dev_probe_gpg_status() {
       _doctor_check_aws_key_expiry
     ' _ "${REPO_ROOT}" "${BATS_TEST_TMPDIR}"
 
+  # "AWS CLI signing key" alone does NOT discriminate: helpers.sh prints it as an
+  # unconditional header at function entry, so it is satisfied by the function
+  # merely running. "expires in" is emitted only after the key has been read AND
+  # its expiry parsed -- by either the near-expiry warn or the doctor_pass arm,
+  # so the assertion does not depend on which one this key takes.
   [[ "${output}" == *"AWS CLI signing key"* ]]
+  [[ "${output}" == *"expires in"* ]]
   refute_grep "vendored key not found" <(printf '%s\n' "${output}")
 }
