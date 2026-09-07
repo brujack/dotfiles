@@ -106,9 +106,18 @@ readonly AI_CONFIG_DIR="${PERSONAL_GITREPOS}/${AI_CONFIG}"
 # (lib/developer.sh:167,196), where `cd ./lib/..` fails, the command
 # substitution returns empty, and the key resolves to /keys/aws-cli-team.asc.
 # Source time is the only moment a relative BASH_SOURCE[0] is guaranteed to mean
-# anything. The ${VAR:-} self-guard keeps a re-source from a changed cwd (the
-# bats suite sources these libs repeatedly) from overwriting a correct value.
-DOTFILES_REPO_ROOT="${DOTFILES_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+# anything.
+#
+# Plain assignment, NOT a ${VAR:-} self-guard. A guard was written first, to
+# survive a re-source from a changed cwd, and measurement showed it protects
+# nothing reachable: a re-source is either absolute (which resolves correctly
+# from any cwd -- verified from /) or relative (which cannot locate this file
+# after a cd at all). What it did add was an env-settable name selecting the
+# directory a cryptographic trust anchor is read from. That is fail-closed --
+# AWSCLI_GPG_FPR is a plain assignment here, so a substituted key still fails
+# the VALIDSIG fingerprint check -- but an unearned seam on that path is worth
+# less than the case it guarded.
+DOTFILES_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 HOSTNAME=$(hostname -s)
 
