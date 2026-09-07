@@ -106,7 +106,11 @@ readonly AI_CONFIG_DIR="${PERSONAL_GITREPOS}/${AI_CONFIG}"
 # the constant so the two copies cannot drift.) Keep it a PLAIN assignment: a
 # ${VAR:-} guard protects no reachable case and makes the directory holding a
 # signing key env-settable.
+# Declared and assigned on separate lines: `readonly VAR="$(cmd)"` masks the
+# command substitution's exit status (SC2155), and an empty value here is
+# precisely the failure this constant exists to prevent.
 DOTFILES_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+readonly DOTFILES_REPO_ROOT
 
 HOSTNAME=$(hostname -s)
 
