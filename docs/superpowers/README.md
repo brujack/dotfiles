@@ -134,7 +134,7 @@ Master status index for all specs and implementation plans in this directory.
 | 2026-08-16 | hook-make-resolution                                                                       | [spec](specs/2026-08-16-hook-make-resolution-design.md)                                                                                   | Retired |
 | 2026-08-16 | [zsh-identity-single-table](plans/2026-08-16-zsh-identity-single-table.md)                 | [spec](specs/2026-08-16-zsh-identity-single-table-design.md)                                                                              | Done    |
 | 2026-08-17 | [zsh-legacy-identity-consolidation](plans/2026-08-17-zsh-legacy-identity-consolidation.md) | [spec](specs/2026-08-17-zsh-legacy-identity-consolidation-design.md)                                                                      | Done    |
-| 2026-09-10 | [claude rules symlink skip](plans/2026-09-10-claude-rules-symlink-skip.md) | ai-config spec 2026-09-10-claude-md-rearchitecture | In Progress |
+| 2026-09-10 | [claude rules symlink skip](plans/2026-09-10-claude-rules-symlink-skip.md) | ai-config `docs/superpowers/specs/2026-09-10-claude-md-rearchitecture-design.md` at `c9641926` | In Progress |
 
 ---
 

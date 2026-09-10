@@ -98,10 +98,10 @@ When web research (web-research skill) or context-mode fetches produce findings 
 Dotfiles live at the repo root and in the ai-config repo (`.claude/`/`.cursor/`). `setup_env.sh` creates symlinks from `$HOME` into the repos:
 
 - **Repo root** — each dotfile symlinked individually into `$HOME` (e.g. `~/.zshrc → dotfiles/.zshrc`)
-- **`.claude/`** — each item (except `projects/` and `rules/`) symlinked individually into `~/.claude/` from the ai-config repo.
+- **`.claude/`** — each item symlinked individually into `~/.claude/` from the ai-config repo, except `rules/`, which is never linked, and `projects/`, which the loop skips and then links explicitly (see below).
   Exception: `mcp.json.template` is symlinked as `~/.claude/mcp.json.template` (read-only reference); the live
   `~/.claude/mcp.json` is **generated** by `setup_claude_mcp` via `envsubst` and is not a symlink.
-  `rules/` is skipped because a linked `~/.claude/rules` would load ai-config's path-scoped rules as user-level rules in every repo.
+  `rules/` is never linked because a `~/.claude/rules` pointing into ai-config would load ai-config's project rules as user-level rules in every repo: rules without `paths:` load at launch, and how user-level rules with `paths:` behave is unmeasured.
 
   **`projects/` IS symlinked, wholesale, and this line said the opposite until 2026-08-25.**
   The loop skips it — `[[ "$(basename "${_claude_item}")" == "projects" ]] && continue` — and the
