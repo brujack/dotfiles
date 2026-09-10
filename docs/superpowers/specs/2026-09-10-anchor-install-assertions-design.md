@@ -246,4 +246,5 @@ runs through the same function and already passes in CI.
 Revision: the route enumeration in "Problem" is removed and replaced by the instrumented
 result; the other-22 sentence is scoped to deletions; the Verification note is corrected.
 Wording-level only; no design change.
-Disposition:
+Disposition: Addressed. Owner approved the round-3 fixes at `91ec0e17` (2026-09-10) and
+closed review: the plan's mutation run and CI take over from prose review.
