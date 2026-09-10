@@ -1,7 +1,7 @@
 # ADR-0014: State-Ledger CMDB Integration for Update Run Metadata
 
 **Date:** 2026-06-28
-**Status:** Accepted
+**Status:** Accepted — amended 2026-09-09 (ledger_flush_spool deleted; cmd_write is the drain)
 
 ## Context
 
@@ -104,3 +104,27 @@ python3 ~/.local/share/state-ledger/scripts/ledger.py init
 - `lib/update_summary.sh:_ledger_write_dotfiles_entry` — integration point
 - `lib/workflows.sh:ledger_write_entry`, `ledger_flush_spool` — write + spool functions
 - `tests/setup_env/ledger_integration.bats` — 17 tests covering fallback, guards, JSON shape
+
+## Amendment 2026-09-09
+
+`ledger_flush_spool()` (`lib/workflows.sh`) was deleted as redundant on
+`feat/unwired-units-cleanup`. Two claims in the Context and Consequences
+sections above named it as load-bearing for offline scenarios, and both were
+wrong about the mechanism, though not about the outcome.
+
+The `:33-34` alternatives-considered note said the spool "requires a separate
+daemon or cron trigger" — no such trigger was ever required. And the
+Consequences bullet at `:84` credited `ledger_flush_spool` with handling
+offline scenarios; the spool mechanism does handle them, but that function was
+never what made it work.
+
+The actual drain is state-ledger's own `cmd_write`, which calls
+`_flush_spool_internal(LEDGER_DIR)` at `state-ledger/scripts/ledger.py:443`,
+above its own validation, with a comment in that file naming it "the only
+automatic drain that exists on this fleet (nothing invokes `ledger flush`)".
+`run_update` already performs a `ledger write` on every run via
+`_ledger_write_dotfiles_entry()`, so the spool drains as a side effect of the
+normal write path — no daemon, no cron job, nothing dotfiles-side to trigger.
+
+`ledger_write_entry()` is unaffected by this deletion and remains the live
+write path described in Decision items 2 and 3 above.
