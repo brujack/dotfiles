@@ -590,6 +590,24 @@ silently asserts nothing. `tests/setup_env/install_guards.bats` calls `_gnubin_a
 unconditionally rather than only under test — a stray export changes real shell `PATH`,
 which grants no capability beyond setting `PATH` directly but is worth knowing.
 
+**`_OVERRIDE_DOCKER_BIN` (`.config/.zshrc.d/6_path.zsh`) selects Docker Desktop's CLI
+directory, defaulting to `${HOME}/.docker/bin`.** The seam exists for the same reason as the
+gnubin pair: that directory is real on any mac running Docker Desktop, so a test of the
+absent branch that relied on the filesystem would short-circuit the `-d` guard and assert
+nothing. `tests/zshrc.d/unit.bats` points it at `/nonexistent/docker-bin` for that case. It
+is read unconditionally inside the `HAS_DOCKER` block, not only under test — a stray export
+appends a different directory to interactive `PATH`, which grants nothing beyond setting
+`PATH` directly.
+
+The entry used to live in `.zprofile`, written there by Docker Desktop's installer as a
+hardcoded `/Users/<name>/.docker/bin`. Moving it here narrows the actors that see it from
+login shells to interactive ones — deliberately, and the same boundary `brew` already has on
+Linux (see Key Conventions). Measured 2026-09-10: `docker` and the credential helpers are
+symlinked into `/usr/local/bin` and reach every actor regardless; only `docker-compose`
+resolves solely through this directory, and nothing in this repo invokes it
+non-interactively on macOS. If the installer's `.zprofile` lines reappear, delete them
+rather than committing them.
+
 **`GGSHIELD_BIN` / `GGSHIELD_FALLBACK_PATHS` (`scripts/pre-commit-hook.sh`) exist for the
 same reason, one tool over.** `GGSHIELD_BIN` is the operator escape hatch and is checked
 first; a non-executable value there is a hard error rather than a degrade, since an
