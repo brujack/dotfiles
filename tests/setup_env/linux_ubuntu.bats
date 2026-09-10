@@ -124,7 +124,7 @@ teardown() {
 @test "_install_ubuntu_brew_packages: installs pyenv via brew" {
   run _install_ubuntu_brew_packages
   [ "$status" -eq 0 ]
-  grep -q "brew install pyenv" "${MOCK_CALLS_FILE}"
+  grep -qxF "brew install pyenv" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_brew_packages: installs pyenv-virtualenv via brew" {
