@@ -17,7 +17,7 @@ Master status index for all specs and implementation plans in this directory.
 
 | Date       | Plan                                                                                       | Spec                                                                                                                                      | Status  |
 | ---------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | ------- |
-| 2026-09-09 | — | [unwired-units-cleanup](specs/2026-09-09-unwired-units-cleanup-design.md) | In Progress |
+| 2026-09-09 | [unwired-units-cleanup](plans/2026-09-09-unwired-units-cleanup.md) | [unwired-units-cleanup](specs/2026-09-09-unwired-units-cleanup-design.md) | In Progress |
 | 2026-09-04 | [run-tmpdir-exit-trap](plans/2026-09-04-run-tmpdir-exit-trap.md)                           | [spec](specs/2026-09-04-run-tmpdir-exit-trap-design.md)                                                                                   | Done    |
 | 2026-09-01 | [awscli-signature-verification](plans/2026-09-01-awscli-signature-verification.md)         | [spec](specs/2026-09-01-awscli-signature-verification-design.md)                                                                          | Done    |
 | 2026-08-31 | [update-run-cd-guards](plans/2026-08-31-update-run-cd-guards.md)                           | [spec](specs/2026-08-31-update-run-cd-guards-design.md)                                                                                   | Done    |
