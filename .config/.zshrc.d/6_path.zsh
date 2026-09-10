@@ -70,25 +70,26 @@ if [[ ${LINUX} ]]; then
     fi
   fi
 fi
-# Docker Desktop's CLI shims. `docker` and the credential helpers are
-# symlinked into /usr/local/bin by the installer, but `docker-compose` is NOT
-# -- verified 2026-09-10: it resolves only via this directory, so dropping the
-# entry loses compose and nothing else.
+# Docker Desktop's CLI shims. `docker`, `kubectl` and the three credential
+# helpers are also symlinked into /usr/local/bin by the installer. Four entries
+# are not -- docker-compose, docker-compose-v1, docker-index and com.docker.cli
+# (listed 2026-09-10) -- so dropping this entry loses exactly those four.
 #
 # This lives here rather than in .zprofile, where Docker Desktop's installer
-# writes it on every upgrade. Two reasons. The installer hardcodes an absolute
+# wrote it. Two reasons. The installer hardcodes an absolute
 # /Users/<name>, and .zprofile is symlinked onto six other machines including
 # Linux, where that path is meaningless. And a tracked dotfile an installer
 # rewrites is drift nobody notices.
 #
 # The move is a deliberate NARROWING of actor scope: .zshrc.d is sourced by
 # .zshrc, so this reaches interactive shells only, while .zprofile reaches
-# every login shell and its descendants. Nothing in this repo invokes
-# docker-compose non-interactively -- lib/linux_ubuntu.sh's callers are Linux
-# install paths that never see ~/.docker/bin -- so the narrowing costs nothing
-# here. It is the same mechanism that makes brew unreachable to a
-# non-interactive setup_env.sh on the workstation; if a cron job or a script
-# ever needs compose, this is the line that will not be on its PATH.
+# every login shell and its descendants. The actor that loses it is a
+# non-interactive login shell (`zsh -l -c`); cron, launchd and
+# `ssh host '<cmd>'` read neither file, so they never had it. Nothing in this
+# repo invokes any of the four that way -- lib/linux_ubuntu.sh's docker-compose
+# callers are Linux install paths that never see ~/.docker/bin -- so the
+# narrowing costs nothing here. It is the same mechanism that makes brew
+# unreachable to a non-interactive setup_env.sh on the workstation.
 #
 # Seam, not a bare path: ~/.docker/bin exists on any mac running Docker
 # Desktop, so a test for the absent branch would short-circuit on the real

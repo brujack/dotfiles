@@ -602,10 +602,12 @@ appends a different directory to interactive `PATH`, which grants nothing beyond
 The entry used to live in `.zprofile`, written there by Docker Desktop's installer as a
 hardcoded `/Users/<name>/.docker/bin`. Moving it here narrows the actors that see it from
 login shells to interactive ones — deliberately, and the same boundary `brew` already has on
-Linux (see Key Conventions). Measured 2026-09-10: `docker` and the credential helpers are
-symlinked into `/usr/local/bin` and reach every actor regardless; only `docker-compose`
-resolves solely through this directory, and nothing in this repo invokes it
-non-interactively on macOS. If the installer's `.zprofile` lines reappear, delete them
+Linux (see Key Conventions). Measured 2026-09-10: `docker`, `kubectl` and the three
+credential helpers are also symlinked into `/usr/local/bin`; `docker-compose`,
+`docker-compose-v1`, `docker-index` and `com.docker.cli` resolve only through this directory.
+The actor that loses them is a non-interactive login shell (`zsh -l -c`) — cron, launchd and
+`ssh host '<cmd>'` read neither `.zprofile` nor `.zshrc`, so they never had the entry — and
+nothing in this repo invokes any of the four that way on macOS. If the installer's `.zprofile` lines reappear, delete them
 rather than committing them.
 
 **`GGSHIELD_BIN` / `GGSHIELD_FALLBACK_PATHS` (`scripts/pre-commit-hook.sh`) exist for the
