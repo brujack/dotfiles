@@ -1650,7 +1650,7 @@ FIXTURE
 # equal --count-coverable's own total for the same file.
 @test "run-bash-coverage.sh lines-mode emission count reconciles with count-mode's total, per file" {
   : > "${BATS_TEST_TMPDIR}/empty_trace.txt"
-  for _f in lib/git_sync.sh lib/update_summary.sh scripts/bootstrap_mac.sh scripts/pre-push lib/helpers.sh; do
+  for _f in lib/git_sync.sh scripts/whats-new-anthropic.sh scripts/bootstrap_mac.sh scripts/pre-push lib/helpers.sh; do
     run _run_coverage --count-coverable "${REPO_ROOT}/${_f}"
     [ "$status" -eq 0 ]
     _count_total="$output"
