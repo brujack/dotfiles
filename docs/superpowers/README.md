@@ -134,6 +134,7 @@ Master status index for all specs and implementation plans in this directory.
 | 2026-08-16 | hook-make-resolution                                                                       | [spec](specs/2026-08-16-hook-make-resolution-design.md)                                                                                   | Retired |
 | 2026-08-16 | [zsh-identity-single-table](plans/2026-08-16-zsh-identity-single-table.md)                 | [spec](specs/2026-08-16-zsh-identity-single-table-design.md)                                                                              | Done    |
 | 2026-08-17 | [zsh-legacy-identity-consolidation](plans/2026-08-17-zsh-legacy-identity-consolidation.md) | [spec](specs/2026-08-17-zsh-legacy-identity-consolidation-design.md)                                                                      | Done    |
+| 2026-09-10 | [claude rules symlink skip](plans/2026-09-10-claude-rules-symlink-skip.md) | ai-config `docs/superpowers/specs/2026-09-10-claude-md-rearchitecture-design.md` at `c9641926` | In Progress |
 
 ---
 
@@ -214,6 +215,7 @@ Ideas approved for future specs, in no particular order:
 | `tests/zshrc.d/unit.bats` Docker PATH tests lag their siblings | #259's four `_OVERRIDE_DOCKER_BIN` tests sit under the `6_path.zsh GNU make gnubin tests` section header with no header of their own, and `_docker_bin` has no "does not leak" test although `_gnubin` and `_keychain` both do. The `unset` is present, so this is a test-parity gap, not a leak. Found by code review of #259 on 2026-09-10; a `.bats` change, so it needs a branch. |
 | Unanchored mock-log greps can match a longer sibling line | About 400 `grep -q` checks against `MOCK_CALLS_FILE` match substrings. In the 23-site install subset only `pyenv` collided, and it is fixed; an exact-match helper that prints the log on failure is the candidate class fix. Counting command and measurements: [spec](specs/2026-09-10-anchor-install-assertions-design.md). |
 | `docs/superpowers/README.md` reflows whole tables on any Edit | The prettier PostToolUse hook rewrote 249 lines for a one-row edit on 2026-09-10 and 205 on dotfiles#192, because this file's tables are not prettier-formatted. Undecided: format it once (one large diff, then stable) or add it to `.prettierignore`. Measurements: ai-config memory `ai-config-formatter-reflow-inflates-conflict-diff`. |
+| `~/.claude/rules` is a dangling symlink | On the Mac Studio it points at `dotfiles/.claude/rules`, which does not exist. dotfiles ignores `.claude/*` in `.gitignore`, so a local, untracked `dotfiles/.claude/rules` would silently load through that link as user-level rules in every repo, and nothing would show it in `git status`. Remove the link or decide its owner. Found 2026-09-10 during the rules symlink skip (ai-config spec 2026-09-10-claude-md-rearchitecture). |
 
 ## Adding a new entry
 

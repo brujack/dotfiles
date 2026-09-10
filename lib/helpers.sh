@@ -874,6 +874,9 @@ setup_dotfile_symlinks() {
   for _claude_item in "${_ai_config_dir}/.claude/"*; do
     [[ -e "${_claude_item}" ]] || continue
     [[ "$(basename "${_claude_item}")" == "projects" ]] && continue
+    # rules/ would load as user-level Claude Code rules in every repo;
+    # ai-config's .claude/rules is project-scoped to ai-config only.
+    [[ "$(basename "${_claude_item}")" == "rules" ]] && continue
     _claude_target="${HOME}/.claude/$(basename "${_claude_item}")"
     safe_link "${_claude_item}" "${_claude_target}"
   done
