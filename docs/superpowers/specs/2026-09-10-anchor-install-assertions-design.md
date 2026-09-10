@@ -226,4 +226,5 @@ behaviour were all measured.
 Revision: all three claims reworded in "Problem" and "Why one site"; the 397 figure now
 carries its command, re-run at `58bf974` (16 files, 397 lines); a note on steps 3–4 added
 under Verification. Wording-level only; no design change.
-Disposition:
+Disposition: Addressed. Owner approved the round-2 wording fixes (2026-09-10) and asked
+for one more fresh review of that wording, pinned to `f7f1459`, before the plan.
