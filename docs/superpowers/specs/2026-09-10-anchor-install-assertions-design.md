@@ -161,3 +161,69 @@ sites the change buys consistency, not new detection. The PR description says so
   Recorded as one backlog row, not converted here.
 - **Replacing bare `! grep -q` with `refute_grep`.** All install-verb absence checks are
   live today; converting them is a style change with no detection gain.
+
+## Multi-Lens Review
+
+Reviewed at commit: `007590cd` (Step 7 self-review commit, before Step 8 dispatch)
+
+All three lenses independently reproduced the premise: with `brew_install_formula pyenv`
+deleted from `lib/linux_ubuntu.sh:352`, the substring test stays green and `-qx` goes
+red. Goal-fit extended it to the whole of `linux_ubuntu.bats` (80 ok, 0 not ok with the
+install deleted).
+
+### Goal-Fit
+
+Finding: Worth building, but mostly as consistency. By counting substring matches against
+exact matches in each converted test's own mock log, **only `linux_ubuntu.bats:127`
+(`pyenv`) has a sibling collision**. 19 sites match one line either way. The two
+`apt-get -y bats` sites and helm show a second line, but it is the `sudo` mock's own log
+entry from the same call, so a deletion removes both. `bat`, `git` and `zsh` never share a
+log with `bats-core`, `git-lfs` or `zsh-autosuggestions`. Verification steps 2–3 plan 23 production
+mutations to answer what one counting run answers; step 2 cannot fail on its own (an
+unwritten log also turns every site red) and is only meaningful beside step 1. Reads-it
+test: the CLAUDE.md bullet persists but is advice with no check, beside ~370 remaining
+substring examples; step 4 has no consumer after the session.
+Assumption: the 23 recorded lines on `ubuntu-latest` match macOS. Settled by running the
+converted files on the workstation, or by the PR's CI run.
+Disposition:
+
+### Ergonomics
+
+Finding: A failing `-qx` does not show the recorded line. With `--quiet` added to
+`brew_install_formula` in a scratch copy, the pyenv test failed with only
+`` `grep -qx "brew install pyenv" ...' failed ``, the same message as a deleted install.
+`refute_grep` (`tests/helpers/common.bash:27`) exists partly to name what was found, and
+since it landed tests added 39 `refute_grep` calls against 1 bare `! grep -q`; no
+install assertion has been added since the `uv` `-qx` precedent. An exact-match helper
+that prints the log on failure was not considered. The proposed bullet ("assert a
+recorded mock call with `grep -qx`") reads wider than the change: 397 − 23 substring
+sites remain, 59 of them in `install_functions.bats` beside its 2 converted ones. The
+escaping argument for rejecting a helper is weak: `@` is not a regex metacharacter, and
+`-qx` without `-F` is a regex match too.
+Assumption: that a CLAUDE.md bullet, rather than the nearest existing example, decides
+what the next install test uses. Untested; check at the next PR adding an install
+assertion.
+Disposition:
+
+### Risk
+
+Finding: No blocking issue; one unstated new dependency. Three sites
+(`install_guards.bats:120`, `workflows.bats:248`, `linux_ubuntu.bats:393`) pass under
+`-qx` only because `tests/mocks/sudo` passes through to the `apt-get`/`snap` mocks; the
+substring form also matched the `sudo -H apt-get ...` line. Breaking that passthrough
+leaves the old form green and turns the new form red — better fidelity, but the spec
+should say so. Real detection gain is 1 of 23 (pyenv). Platform skew does not bite:
+`brew_install_formula` always runs `brew install "$formula"`, mocks write one line per call
+with no trailing space or CRLF, and `MOCK_CALLS_FILE` is per-test under
+`BATS_TEST_TMPDIR`. An empty log turns step 1 red (brew mock writing nothing failed the
+converted `bat` test). Minor: `developer.bats:691`/`:711` are absence checks written as
+`if … return 1`, not "not assertions"; leaving them is still right. Measured on macOS with
+identity variables removed (all six files green) and on the workstation (24 ok, 0 not ok
+for the 23 converted plus `uv`).
+Assumption: no uncertain assumption found. The runner's PATH order for the sudo
+passthrough is confirmed by the PR's first CI run.
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
