@@ -30,13 +30,16 @@ session and independently by all three round-1 review lenses:
 | unchanged                                               | `grep -qx` | `ok`                            |
 | `:352` deleted, whole of `linux_ubuntu.bats`, `grep -q` | —          | 80 ok, 0 not ok (goal-fit lens) |
 
-No other test can catch the deletion. `linux_ubuntu.bats` is the only test file that names
-`_install_ubuntu_brew_packages`; production also reaches it through
-`install_ubuntu_packages` (`lib/linux_ubuntu.sh:12`). Searching `tests/` for `pyenv`
-finds one other assertion that could involve this install, `workflows.bats:659`
-(`grep -q "pyenv"`). It cannot fail when only the `pyenv` install is deleted: if its
-test reaches this function, the substring still matches `pyenv-virtualenv`; if it does
-not, the deletion never touches its log.
+No other test catches the deletion. Two routes reach `_install_ubuntu_brew_packages`
+from the suite: `linux_ubuntu.bats` calls it directly, and three `workflows.bats` tests
+(`:499`, `:512`, `:525`) reach it through `install_ubuntu_packages`
+(`lib/linux_ubuntu.sh:12`). Those three assert only `apt update`, `nala` and `snap`; the
+round-2 risk lens ran the file's five `install_ubuntu_packages` tests against the mutant
+and got 5 ok, the same as unmutated. Searching `tests/` for `pyenv` finds one other
+assertion that could involve this install, `workflows.bats:659` (`grep -q "pyenv"`). It
+cannot fail when only the `pyenv` install is deleted: if its test reaches this function,
+the substring still matches `pyenv-virtualenv`; if it does not, the deletion never
+touches its log.
 
 ## Why one site, not the class
 
@@ -57,9 +60,18 @@ That audit is done and its result sets the scope.
 - **Absence checks** keep the substring form: there it is the stricter form, since
   `! grep -q "brew install git"` also fails on `brew install git-lfs`.
 
-Converting the other 22 would change no test's ability to fail. The class-wide question
-(397 unanchored mock-log greps across 16 files, and whether an exact-match helper should
-replace them) is recorded as a backlog row and designed separately.
+Today, converting the other 22 would change no test's ability to fail. Nothing stops a
+future sibling formula (for example `bat-extras` beside `bat`) from bringing the collision
+back at a site left unanchored; the backlog row below carries that risk.
+
+The class-wide question is recorded as a backlog row and designed separately: whether an
+exact-match helper should replace the 397 unanchored mock-log greps in 16 files. That
+figure comes from this command at `58bf974`, whose tests are unchanged since `8e2a7d50`;
+other regexes give other totals (379 and 413 in round-2 review):
+
+```bash
+git grep -cE 'grep -q[^x]*"[^"]*" "\$\{?MOCK_CALLS_FILE' -- tests
+```
 
 ## Design
 
@@ -94,6 +106,8 @@ failure output belongs to the class-wide helper, not to this line.
 4. **CI:** the PR's `test` and `bash-coverage` jobs pass on `ubuntu-latest`.
 
 An empty mock log turns step 2 red, so the positive assertion cannot pass on nothing.
+Steps 3 and 4 would also pass if nothing ran: they guard the rest of the suite and the CI
+platform, not this change.
 
 ## Documentation
 
@@ -193,3 +207,23 @@ sudo-passthrough sites is converted, so the dependency is not introduced. The
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+### Round 2 — Risk (re-review of the rewritten body)
+
+Reviewed at commit: `58bf974`
+
+Finding: Proportionate; no new failure point. Three claim problems. (1) "No other test can
+catch the deletion" rested partly on `linux_ubuntu.bats` being the only file that names
+the function, but `workflows.bats` tests reach it through `install_ubuntu_packages`; the
+conclusion held against the mutant (5 ok before and after), so the support is the `pyenv`
+grep, not the name grep. (2) "Converting the other 22 would change no test's ability to
+fail" is true only today; a future sibling formula could reintroduce the collision. (3)
+The 397 figure had no command, while the backlog row sends readers here for it; the lens's
+own regexes gave 379 and 413. Verdicts: steps 1 and 2 fail on an empty log (verified);
+steps 3 and 4 would pass if nothing ran.
+Assumption: no uncertain assumption found. The log line, per-test log and mutation
+behaviour were all measured.
+Revision: all three claims reworded in "Problem" and "Why one site"; the 397 figure now
+carries its command, re-run at `58bf974` (16 files, 397 lines); a note on steps 3–4 added
+under Verification. Wording-level only; no design change.
+Disposition:
