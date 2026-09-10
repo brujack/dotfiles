@@ -943,14 +943,3 @@ ledger_write_entry() {
   fi
   return ${_rc}
 }
-
-ledger_flush_spool() {
-  local _ledger_bin
-  _ledger_bin="$(command -v ledger 2>/dev/null)"
-  [[ -z "${_ledger_bin}" && -x "${HOME}/.local/bin/ledger" ]] && \
-    _ledger_bin="${HOME}/.local/bin/ledger"
-  if [[ -z "${_ledger_bin}" ]]; then
-    return 0
-  fi
-  "${_ledger_bin}" flush
-}

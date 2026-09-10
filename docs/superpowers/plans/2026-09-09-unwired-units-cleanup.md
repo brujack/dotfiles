@@ -1,5 +1,7 @@
 # Unwired Units Cleanup Implementation Plan
 
+> **Status: DONE**
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Delete four `lib/` units with zero production callers, so the gated test count and coverage figure stop describing code nothing runs.
@@ -347,7 +349,7 @@ role: executor
 model: sonnet
 tdd: not-applicable
 acceptance:
-  - cmd: 'grep -q "brew_install_cask.*has no production caller" docs/superpowers/README.md; test $? -ne 0'
+  - cmd: 'grep -qE "has no production caller|dead code that would report every package" docs/superpowers/README.md; test $? -ne 0'
     exit_code: 0
   - cmd: 'grep -qE "2026-09-09-unwired-units-cleanup" docs/superpowers/README.md'
     exit_code: 0
@@ -371,6 +373,15 @@ Remove three now-closed Backlog rows:
 **Keep** the two rows this plan created and did not close: the spool-depth observability row, and the `brew_*` helpers audit row.
 
 In the All Plans table, add the plan row pointing at this file with status `Done`, and add a `> **Status: DONE**` banner at the top of this plan file.
+
+**Gate corrected mid-execution (re-plan, Swap approach).** The original gate was
+`grep -q "brew_install_cask" ... ; test $? -ne 0` — a bare-symbol grep over the whole file.
+It was unsatisfiable: the KEPT row "Are the advertised `brew_*` helpers actually used?"
+legitimately names `brew_install_cask` in its prose, explaining why that helper was deleted.
+The only way to pass was to alter or delete a row the same task's FORBIDDEN list protected.
+The executor refused and reported a blocker rather than contorting the file, which is the
+correct response to a gate that cannot pass. Replaced with a scoped property matching the
+deleted rows' own identifying text. The work itself was correct and needed no change.
 
 `model: sonnet` — two files. This was authored as `haiku` with one file declared while the prose described editing two; the scope guard would have accepted the under-declaration rather than catching it, and the mismatch would have surfaced at dispatch.
 

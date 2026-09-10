@@ -85,31 +85,6 @@ EOF
     [ "${_rc}" -eq 1 ]
 }
 
-# ── ledger_flush_spool ────────────────────────────────────────────────────────
-
-@test "ledger_flush_spool: returns 0 silently when ledger binary absent" {
-    local _clean_path="/usr/bin:/bin"
-    PATH="${_clean_path}" run ledger_flush_spool
-    [ "$status" -eq 0 ]
-    [ -z "$output" ]
-}
-
-@test "ledger_flush_spool: calls ledger flush" {
-    local _mock_dir
-    _mock_dir="$(_make_mock_ledger 0)"
-    PATH="${_mock_dir}:${PATH}" run ledger_flush_spool
-    [ "$status" -eq 0 ]
-    grep -q "ledger flush" "${MOCK_CALLS_FILE}"
-}
-
-@test "ledger_flush_spool: propagates non-zero exit from ledger" {
-    local _mock_dir
-    _mock_dir="$(_make_mock_ledger 2)"
-    local _rc=0
-    PATH="${_mock_dir}:${PATH}" ledger_flush_spool || _rc=$?
-    [ "${_rc}" -eq 2 ]
-}
-
 # ── fallback to ~/.local/bin/ledger ──────────────────────────────────────────
 
 @test "ledger_write_entry: falls back to ~/.local/bin/ledger when not in PATH" {
@@ -121,17 +96,6 @@ EOF
     PATH="${_clean_path}" run ledger_write_entry '{"tool":"dotfiles"}'
     [ "$status" -eq 0 ]
     grep -q "ledger write" "${MOCK_CALLS_FILE}"
-}
-
-@test "ledger_flush_spool: falls back to ~/.local/bin/ledger when not in PATH" {
-    local _mock_dir
-    _mock_dir="$(_make_mock_ledger 0)"
-    mkdir -p "${HOME}/.local/bin"
-    cp "${_mock_dir}/ledger" "${HOME}/.local/bin/ledger"
-    local _clean_path="/usr/bin:/bin"
-    PATH="${_clean_path}" run ledger_flush_spool
-    [ "$status" -eq 0 ]
-    grep -q "ledger flush" "${MOCK_CALLS_FILE}"
 }
 
 # ── _ledger_write_dotfiles_entry ──────────────────────────────────────────────
