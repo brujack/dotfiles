@@ -184,18 +184,6 @@ brew_formula_installed() {
   fi
 }
 
-brew_cask_installed() {
-  local cask="$1"
-  if ! ensure_not_root; then
-    return 1
-  fi
-  if [[ "$cask" == */* ]]; then
-    brew list --cask --full-name | grep -q "^${cask}$"
-  else
-    brew list --cask | grep -q "^${cask}$"
-  fi
-}
-
 brew_install_formula() {
   local formula="$1"
   if ! ensure_not_root; then
@@ -203,16 +191,6 @@ brew_install_formula() {
   fi
   if ! brew_formula_installed "$formula"; then
     NONINTERACTIVE=1 brew install "$formula"
-  fi
-}
-
-brew_install_cask() {
-  local cask="$1"
-  if ! ensure_not_root; then
-    return 1
-  fi
-  if ! brew_cask_installed "$cask"; then
-    NONINTERACTIVE=1 brew install --cask --force --overwrite "$cask"
   fi
 }
 

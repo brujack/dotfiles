@@ -45,33 +45,6 @@ teardown() {
   [ "$status" -eq 1 ]
 }
 
-# ── brew_cask_installed ──────────────────────────────────────────────────────
-
-@test "brew_cask_installed returns 0 when cask is listed" {
-  export MOCK_BREW_LIST_CASK="docker firefox"
-  run brew_cask_installed docker
-  [ "$status" -eq 0 ]
-}
-
-@test "brew_cask_installed returns 1 when cask is not listed" {
-  export MOCK_BREW_LIST_CASK="firefox"
-  run brew_cask_installed docker
-  [ "$status" -eq 1 ]
-}
-
-@test "brew_cask_installed returns 1 when root" {
-  export MOCK_ID_U=0
-  run brew_cask_installed docker
-  [ "$status" -eq 1 ]
-}
-
-@test "brew_cask_installed uses full-name flag for tap-qualified casks" {
-  export MOCK_BREW_LIST_CASK="hashicorp/tap/vault-secrets-operator"
-  run brew_cask_installed hashicorp/tap/vault-secrets-operator
-  [ "$status" -eq 0 ]
-  grep -q "brew list --cask --full-name" "${MOCK_CALLS_FILE}"
-}
-
 # ── brew_install_formula ─────────────────────────────────────────────────────
 
 @test "brew_install_formula calls brew install when formula is absent" {
@@ -368,35 +341,6 @@ _gnubin_present() {
 @test "brew_tap_installed returns 1 when root" {
   export MOCK_ID_U=0
   run brew_tap_installed hashicorp/tap
-  [ "$status" -eq 1 ]
-}
-
-# ── brew_install_cask ────────────────────────────────────────────────────────
-
-@test "brew_install_cask calls brew install --cask when cask is absent" {
-  export MOCK_BREW_LIST_CASK=""
-  run brew_install_cask docker
-  [ "$status" -eq 0 ]
-  grep -q "brew install --cask --force --overwrite docker" "${MOCK_CALLS_FILE}"
-}
-
-@test "brew_install_cask sets NONINTERACTIVE=1 when installing" {
-  export MOCK_BREW_LIST_CASK=""
-  run brew_install_cask docker
-  [ "$status" -eq 0 ]
-  grep -q "NONINTERACTIVE=1" "${MOCK_CALLS_FILE}"
-}
-
-@test "brew_install_cask does not call brew install when cask is present" {
-  export MOCK_BREW_LIST_CASK="docker"
-  run brew_install_cask docker
-  [ "$status" -eq 0 ]
-  ! grep -q "brew install --cask" "${MOCK_CALLS_FILE}"
-}
-
-@test "brew_install_cask returns 1 when root" {
-  export MOCK_ID_U=0
-  run brew_install_cask docker
   [ "$status" -eq 1 ]
 }
 
