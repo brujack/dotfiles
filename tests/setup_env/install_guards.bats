@@ -799,6 +799,25 @@ _gnubin_present() {
   [[ "$(readlink "${_home}/.claude/projects")" == "${_OVERRIDE_AI_CONFIG_DIR}/.claude/projects" ]]
 }
 
+@test "setup_dotfile_symlinks does not symlink .claude/rules (would load as user-level rules in every repo)" {
+  export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
+  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
+  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude/rules"
+  touch "${_OVERRIDE_AI_CONFIG_DIR}/.claude/rules/example.md"
+  touch "${_OVERRIDE_AI_CONFIG_DIR}/.claude/CLAUDE.md"
+  local _home="${BATS_TEST_TMPDIR}/home"
+  mkdir -p "${_home}"
+  export HOME="${_home}"
+
+  run setup_dotfile_symlinks
+  [ "${status}" -eq 0 ]
+  # Positive control: the loop ran and linked a sibling item.
+  [ -L "${_home}/.claude/CLAUDE.md" ]
+  # The rules directory must not exist in ~/.claude in any form.
+  [ ! -L "${_home}/.claude/rules" ]
+  [ ! -e "${_home}/.claude/rules" ]
+}
+
 # ── setup_dotfile_symlinks: gitconfig symlinks ────────────────────────────────
 
 @test "setup_dotfile_symlinks: MACOS creates .gitconfig symlink" {
