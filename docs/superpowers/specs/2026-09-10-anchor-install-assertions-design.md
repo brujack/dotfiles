@@ -30,16 +30,11 @@ session and independently by all three round-1 review lenses:
 | unchanged                                               | `grep -qx` | `ok`                            |
 | `:352` deleted, whole of `linux_ubuntu.bats`, `grep -q` | —          | 80 ok, 0 not ok (goal-fit lens) |
 
-No other test catches the deletion. Two routes reach `_install_ubuntu_brew_packages`
-from the suite: `linux_ubuntu.bats` calls it directly, and three `workflows.bats` tests
-(`:499`, `:512`, `:525`) reach it through `install_ubuntu_packages`
-(`lib/linux_ubuntu.sh:12`). Those three assert only `apt update`, `nala` and `snap`; the
-round-2 risk lens ran the file's five `install_ubuntu_packages` tests against the mutant
-and got 5 ok, the same as unmutated. Searching `tests/` for `pyenv` finds one other
-assertion that could involve this install, `workflows.bats:659` (`grep -q "pyenv"`). It
-cannot fail when only the `pyenv` install is deleted: if its test reaches this function,
-the substring still matches `pyenv-virtualenv`; if it does not, the deletion never
-touches its log.
+No other test catches the deletion. Callers were found by instrumenting the function, not
+by searching for its name: outside `linux_ubuntu.bats`, four tests enter it
+(`workflows.bats:390`, `:499`, `:512`, `:525`), and all four pass with `:352` deleted
+(round-3 review). The only other `pyenv` assertion in `tests/`, `workflows.bats:659`
+(`grep -q "pyenv"`), belongs to a test that never enters the function.
 
 ## Why one site, not the class
 
@@ -60,7 +55,9 @@ That audit is done and its result sets the scope.
 - **Absence checks** keep the substring form: there it is the stricter form, since
   `! grep -q "brew install git"` also fails on `brew install git-lfs`.
 
-Today, converting the other 22 would change no test's ability to fail. Nothing stops a
+Today, converting the other 22 would catch no additional deletion. It would only make
+them fail on an added argument and, at three sites, on a change to the `sudo` mock's
+passthrough. Nothing stops a
 future sibling formula (for example `bat-extras` beside `bat`) from bringing the collision
 back at a site left unanchored; the backlog row below carries that risk.
 
@@ -105,9 +102,9 @@ failure output belongs to the class-wide helper, not to this line.
 3. **Suite:** `make test` exits 0 with the test count unchanged.
 4. **CI:** the PR's `test` and `bash-coverage` jobs pass on `ubuntu-latest`.
 
-An empty mock log turns step 2 red, so the positive assertion cannot pass on nothing.
-Steps 3 and 4 would also pass if nothing ran: they guard the rest of the suite and the CI
-platform, not this change.
+An empty mock log turns steps 1 and 2 red, so the positive assertion cannot pass on
+nothing. Steps 3 and 4 do not show that the edit was applied: they guard the rest of the
+suite and the CI platform.
 
 ## Documentation
 
@@ -228,3 +225,25 @@ carries its command, re-run at `58bf974` (16 files, 397 lines); a note on steps 
 under Verification. Wording-level only; no design change.
 Disposition: Addressed. Owner approved the round-2 wording fixes (2026-09-10) and asked
 for one more fresh review of that wording, pinned to `f7f1459`, before the plan.
+
+### Round 3 — Claim fidelity (fresh reviewer, owner-requested)
+
+Reviewed at commit: `f7f1459`
+
+Finding: Every conclusion holds; three claims were wrong. (1) The route list added in
+round 2 was incomplete. `run_setup_or_developer` (`lib/workflows.sh:231`) is a third route,
+and `workflows.bats:390` enters the function through it. The "5 ok" run selected tests by
+name, included two that stub the caller (`:1404`, `:1413`), and missed `:390`. A marker in
+the function found four tests entering it; all pass with the install deleted, so "no other
+test catches the deletion" is true. (2) "Change no test's ability to fail" was overstated:
+true for deletions only, while `-x` adds sensitivity to extra arguments and, at three sites,
+to the `sudo` mock's passthrough. (3) "Steps 3 and 4 would also pass if nothing ran" is
+false for an empty log (`linux_ubuntu.bats` alone gave 12 not ok); it holds only in the
+sense that they do not show the edit was applied. Step 1 also goes red on an empty log.
+The round-2 Revision line was accurate.
+Assumption: no uncertain assumption found. The existing `grep -qx "brew install uv"` test
+runs through the same function and already passes in CI.
+Revision: the route enumeration in "Problem" is removed and replaced by the instrumented
+result; the other-22 sentence is scoped to deletions; the Verification note is corrected.
+Wording-level only; no design change.
+Disposition:
