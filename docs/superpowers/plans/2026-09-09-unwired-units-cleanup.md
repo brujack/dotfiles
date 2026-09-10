@@ -1,5 +1,7 @@
 # Unwired Units Cleanup Implementation Plan
 
+> **Status: DONE**
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Delete four `lib/` units with zero production callers, so the gated test count and coverage figure stop describing code nothing runs.
