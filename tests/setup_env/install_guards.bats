@@ -813,6 +813,7 @@ _gnubin_present() {
   [ "${status}" -eq 0 ]
   # Positive control: the loop ran and linked a sibling item.
   [ -L "${_home}/.claude/CLAUDE.md" ]
+  [[ "$(readlink "${_home}/.claude/CLAUDE.md")" == "${_OVERRIDE_AI_CONFIG_DIR}/.claude/CLAUDE.md" ]]
   # The rules directory must not exist in ~/.claude in any form.
   [ ! -L "${_home}/.claude/rules" ]
   [ ! -e "${_home}/.claude/rules" ]
