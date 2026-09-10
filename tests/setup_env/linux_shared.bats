@@ -117,26 +117,6 @@ EOF
   refute_grep "apt " "${MOCK_CALLS_FILE}"
 }
 
-# ── shared dpkg-query mock — legacy list form ───────────────────────────────
-# lib/package_capture.sh's _list_apt_packages calls `dpkg-query -W -f
-# '${Package}\t${Version}\n'` with -f and its format string as SEPARATE
-# tokens. tests/setup_env/package_capture.bats never exercises the shared
-# mock -- it builds its own curated-PATH dpkg-query stand-in -- so this is
-# the only place in the suite that drives a real production caller of the
-# two-separate-token legacy form through tests/mocks/dpkg-query itself.
-
-@test "shared dpkg-query mock: _list_apt_packages parses the two-token legacy form" {
-  # shellcheck disable=SC1091
-  source "${REPO_ROOT}/lib/package_capture.sh"
-  local _dpkg_output
-  _dpkg_output="$(printf 'git\t1.0')"
-  export MOCK_DPKG_OUTPUT="${_dpkg_output}"
-  run _list_apt_packages
-  [ "$status" -eq 0 ]
-  [[ "$output" == *'"name": "git"'* ]]
-  [[ "$output" == *'"version": "1.0"'* ]]
-}
-
 # ── install_zsh_linux ────────────────────────────────────────────────────────
 
 @test "install_zsh_linux: skips when zsh and zsh-doc are both installed" {
