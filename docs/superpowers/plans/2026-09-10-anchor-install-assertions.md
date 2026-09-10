@@ -1,5 +1,7 @@
 # Anchor the pyenv install assertion Implementation Plan
 
+> **Status: DONE** — merged in #260 (`ff66c68e`), 2026-09-10.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make `tests/setup_env/linux_ubuntu.bats:127` fail when the `pyenv` brew install is deleted, and record the class-wide finding in the backlog.
