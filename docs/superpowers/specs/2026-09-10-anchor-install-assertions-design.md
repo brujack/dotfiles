@@ -1,170 +1,127 @@
-# Anchor package-named install assertions
+# Anchor the pyenv install assertion
 
 **Date:** 2026-09-10
 **Backlog row:** "`grep -q` in `tests/setup_env/linux_ubuntu.bats` lets a real deletion pass"
-**Scope:** test files only; no production code changes.
+**Scope:** one assertion in one test file; no production code changes.
 
 ## Problem
 
 Bats tests confirm an install happened by searching the mock call log with a
-substring match:
+substring match. Every mock appends one line per call (`printf "brew %s\n" "$*"`), so a
+substring also matches a longer sibling's line.
+
+`tests/setup_env/linux_ubuntu.bats:127` asserts:
 
 ```bash
 grep -q "brew install pyenv" "${MOCK_CALLS_FILE}"
 ```
 
-Every mock appends one line per call (`printf "brew %s\n" "$*"`), so a substring
-also matches a longer sibling's line. The pyenv test above also matches
-`brew install pyenv-virtualenv`. It cannot fail for the formula it names.
+`_install_ubuntu_brew_packages` also installs `pyenv-virtualenv`
+(`lib/linux_ubuntu.sh:353`), so the assertion matches that line and cannot fail for the
+formula it names.
 
-**Measured 2026-09-10** in a `git archive` copy of `bc18bb54` on the Mac Studio,
-bats 1.14.0, one test (`installs pyenv via brew`):
+**Measured 2026-09-10** in `git archive` copies (Mac Studio, bats 1.14.0), by this
+session and independently by all three round-1 review lenses:
 
-| production                           | assertion           | result     |
-| ------------------------------------ | ------------------- | ---------- |
-| `brew_install_formula pyenv` deleted | `grep -q` (current) | `ok 1`     |
-| `brew_install_formula pyenv` deleted | `grep -qx`          | `not ok 1` |
-| unchanged                            | `grep -qx`          | `ok 1`     |
+| production                                              | assertion  | result                          |
+| ------------------------------------------------------- | ---------- | ------------------------------- |
+| `brew_install_formula pyenv` (`:352`) deleted           | `grep -q`  | `ok`                            |
+| `brew_install_formula pyenv` (`:352`) deleted           | `grep -qx` | `not ok`                        |
+| unchanged                                               | `grep -qx` | `ok`                            |
+| `:352` deleted, whole of `linux_ubuntu.bats`, `grep -q` | —          | 80 ok, 0 not ok (goal-fit lens) |
 
-The suite already uses the anchored form at `linux_ubuntu.bats:139` (`uv`), which the
-backlog row records as killing the `uv`->`uvx` mutant the substring form survives.
+No other test can catch the deletion. `linux_ubuntu.bats` is the only test file that names
+`_install_ubuntu_brew_packages`; production also reaches it through
+`install_ubuntu_packages` (`lib/linux_ubuntu.sh:12`). Searching `tests/` for `pyenv`
+finds one other assertion that could involve this install, `workflows.bats:659`
+(`grep -q "pyenv"`). It cannot fail when only the `pyenv` install is deleted: if its
+test reaches this function, the substring still matches `pyenv-virtualenv`; if it does
+not, the deletion never touches its log.
 
-## Population
+## Why one site, not the class
 
-Every site matched by this command at `8e2a7d50`:
+The backlog row asked for an audit of prefix collisions across the install assertions.
+That audit is done and its result sets the scope.
 
-```bash
-git grep -nE 'grep -qx? "(brew|apt-get|sudo apt-get|snap|pip) install' -- tests
-```
+- **Population:** `git grep -nE 'grep -qx? "(brew|apt-get|sudo apt-get|snap|pip) install' -- tests`
+  at `8e2a7d50` returns 36 sites in 7 files: 23 positive assertions naming one package,
+  7 absence checks (`! grep -q`), 2 absence checks written as `if grep -q … return 1`
+  (`developer.bats:691`, `:711`), 2 checks that match any install, 1 regex, and the
+  already-anchored `uv` site (`linux_ubuntu.bats:139`).
+- **Collisions:** for each of the 23, the goal-fit and risk lenses each counted how many
+  lines of that test's own mock log the substring matches against the exact line.
+  **Only `:127` (`pyenv`) matches a line from a different call.** The two
+  `apt-get install -y bats` sites and helm also show a second match, but it is the
+  `sudo` mock's own log line for the same call, so a deletion removes both. `bat`, `git`
+  and `zsh` never share a log with `bats-core`, `git-lfs` or `zsh-autosuggestions`.
+- **Absence checks** keep the substring form: there it is the stricter form, since
+  `! grep -q "brew install git"` also fails on `brew install git-lfs`.
 
-36 sites in 7 files. The population is **install-verb assertions only**; see Out of
-scope for the wider class.
-
-### Changed: 23 positive assertions naming one package
-
-| file                                     | lines                                                                                                                                                                                                                       |
-| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `tests/scripts/unit.bats`                | 499 (`bash`)                                                                                                                                                                                                                |
-| `tests/setup_env/install_functions.bats` | 36 (`git`), 69 (`zsh`)                                                                                                                                                                                                      |
-| `tests/setup_env/install_guards.bats`    | 54 (`git`), 120 (`apt-get -y bats`), 244, 251, 297 (`make`)                                                                                                                                                                 |
-| `tests/setup_env/linux_ubuntu.bats`      | 127 (`pyenv`), 133 (`pyenv-virtualenv`), 247 (`cargo-nextest`), 253 (`cargo-cyclonedx`), 259 (`cyclonedx-python`), 268 (`shfmt`), 393 (`snap install helm`), 428 (`helm`), 434 (`kustomize`), 582 (`bat`), 589 (`ggshield`) |
-| `tests/setup_env/macos.bats`             | 133 (`git`), 157 (`zsh`), 198 (`bats-core`)                                                                                                                                                                                 |
-| `tests/setup_env/workflows.bats`         | 248 (`apt-get -y bats`)                                                                                                                                                                                                     |
-
-### Not changed: 13 sites, each for a stated reason
-
-- **7 absence checks** — `unit.bats:488`, `install_functions.bats:27`, `:60`,
-  `install_guards.bats:68`, `linux_ubuntu.bats:42`, `:596`, `workflows.bats:405`.
-  For an absence check the substring is the **stricter** form:
-  `! grep -q "brew install git"` also fails on `brew install git-lfs`, while
-  `! grep -qx` passes whenever the recorded line differs by one argument. Anchoring
-  them would weaken them. All 7 are the last command of their `@test` body, so none
-  is inert under shellcheck `SC2314` (checked by scanning each site's next non-blank,
-  non-comment line).
-- **2 bare-manager checks** — `unit.bats:600` (`apt-get install`),
-  `linux_ubuntu.bats:34` (`snap install`). They assert that _some_ install ran. No
-  single line exists to anchor to.
-- **2 conditions** — `developer.bats:691`, `:711` (`if grep -q "pip install"`). Not
-  assertions.
-- **1 regex** — `install_functions.bats:534` (`apt-get install.*zlib1g-dev`). A
-  pattern over a multi-package line, deliberately unanchored.
-- **1 already anchored** — `linux_ubuntu.bats:139` (`uv`).
+Converting the other 22 would change no test's ability to fail. The class-wide question
+(397 unanchored mock-log greps across 16 files, and whether an exact-match helper should
+replace them) is recorded as a backlog row and designed separately.
 
 ## Design
 
-Convert each of the 23 sites from `grep -q "<line>"` to `grep -qx "<line>"`.
+Change `tests/setup_env/linux_ubuntu.bats:127` to:
 
-One site needs its expected line widened, not just anchored. `linux_ubuntu.bats:393`
-asserts `snap install helm`, while production runs `sudo snap install helm --classic`
-(`lib/linux_ubuntu.sh:178`). It asserts the full line `snap install helm --classic`.
-The flag is behaviour, not noise: snap refuses a classic-confinement snap without it.
+```bash
+grep -qxF "brew install pyenv" "${MOCK_CALLS_FILE}"
+```
 
-**The recorded helm line is inferred, not observed.** The probe below shows only that
-`-qx "snap install helm"` fails. The first implementation step reads the actual line
-from a run before editing the assertion.
-
-### Alternatives rejected
-
-- **A shared `assert_called` helper matching at word boundaries.** Tolerates trailing
-  arguments, but needs regex escaping for names such as `python@3.13`, and adds a
-  helper for a one-token change per site.
-- **Inline word-boundary regex** (`grep -qE "brew install pyenv( |$)"`). Correct, but
-  leaves two idioms side by side where one already exists.
+- `-x` matches the whole line, so `brew install pyenv-virtualenv` no longer satisfies it.
+- `-F` makes the pattern literal, so no future edit of the package name can introduce a
+  regex metacharacter by accident.
+- The adjacent `uv` site (`:139`) uses `-qx` without `-F`. Its pattern has no
+  metacharacters, so the two behave identically; it is left alone.
 
 ### Accepted trade-off
 
-`-qx` fails a correct implementation that adds an argument (for example
-`brew install --quiet git`). That is intended: the recorded argv is the behaviour
-under test, and the one such case in the population (helm) is handled above.
-
-## Probe
-
-**Measured 2026-09-10** in a `git archive` copy of `8e2a7d50` (no `.git`), Mac Studio,
-bats 1.14.0. All 23 sites converted to plain `-qx` (helm not yet widened); the six
-files containing them were run.
-
-| file                      | ok  | not ok | cause of failures       |
-| ------------------------- | --- | ------ | ----------------------- |
-| `install_functions.bats`  | 52  | 0      | —                       |
-| `install_guards.bats`     | 92  | 0      | —                       |
-| `linux_ubuntu.bats`       | 79  | 1      | helm, as expected above |
-| `macos.bats`              | 30  | 0      | —                       |
-| `workflows.bats`          | 214 | 0      | —                       |
-| `tests/scripts/unit.bats` | 83  | 63     | unrelated — see below   |
-
-All 63 `unit.bats` failures are `run-bash-coverage.sh` tests, which derive their file
-set from `git ls-files` and so fail in a copy with no `.git`. Control: the first of
-them, `run-bash-coverage.sh instruments every tracked lib/*.sh`, passes when run in
-the real worktree. The converted `unit.bats:499` test
-(`_bootstrap_mac_install_bash5 installs when bash < 5`) passed in the probe.
-
-The probe is **macOS only**. The Linux-arm tests run on macOS under mocks, so this
-covers the assertion form, not platform behaviour. CI (`ubuntu-latest`) is the second
-environment.
+`-x` fails a correct implementation that adds an argument (for example
+`brew install --quiet pyenv`), and the failure output shows only the grep command, not the
+recorded line. For one site that is acceptable: `brew_install_formula` has always run
+`brew install "$formula"`, and a changed argv is behaviour the test should notice. Better
+failure output belongs to the class-wide helper, not to this line.
 
 ## Verification
 
-1. **Suite:** `make test` exits 0, and the test count is unchanged (no test is added
-   or removed).
-2. **Each converted assertion is live:** for each of the 23 sites, delete the
-   production install call it names in a scratch copy and run that one test. The
-   anchored test must go red at **all 23**. A site that stays green is a finding, not a
-   pass.
-3. **The change discriminates somewhere:** for the same mutants, record whether the
-   _original_ substring form stayed green. At least `linux_ubuntu.bats:127` (`pyenv`)
-   must, or the mutation is not exercising the defect. Candidate sibling collisions to
-   check: `bat`/`bats-core`, `git`/`git-lfs`, `zsh`/`zsh-autosuggestions`. Record
-   the list of sites where the substring form survived; do not predict it.
-4. **Population is closed:** after the change, the population command above still
-   returns 36 sites. Exactly 24 use `grep -qx` (the 23 plus `uv`), and the 12 that
-   still use `grep -q` are the ones listed under Not changed, excluding `uv`, by
-   file and line.
+1. **Mutation, against the edited file:** in a scratch copy of the branch, delete
+   `brew_install_formula pyenv` from `lib/linux_ubuntu.sh`. The edited test must go red.
+   Run the same mutant against the original assertion: it must stay green, or the mutant
+   is not exercising the defect.
+2. **Control:** unmutated, the edited test is green.
+3. **Suite:** `make test` exits 0 with the test count unchanged.
+4. **CI:** the PR's `test` and `bash-coverage` jobs pass on `ubuntu-latest`.
 
-At sites with no live sibling collision, both forms go red under deletion. For those
-sites the change buys consistency, not new detection. The PR description says so.
+An empty mock log turns step 2 red, so the positive assertion cannot pass on nothing.
 
 ## Documentation
 
-- `CLAUDE.md` Testing Rules: one bullet. Assert a recorded mock call with `grep -qx`,
-  because a substring matches a longer sibling. Keep absence checks as substring,
-  where the substring is the stricter form.
-- `docs/superpowers/README.md`: retire the backlog row this closes; add the Out of
-  scope row below; reword the inherited-variables row added in `8e2a7d50` from
-  `MACOS`/`LINUX`/`HAS_*` to "the variables `detect_env` sets", since the listed names
-  omit `UBUNTU`, `PROFILE` and the legacy identity variables.
+`docs/superpowers/README.md`, in the implementation PR:
+
+- Retire the backlog row this closes.
+- Add one row for the class, pointing at this spec for its measurements: 397 unanchored
+  mock-log greps, 1 collision in the 23-site install subset, and an exact-match helper
+  that prints the log on failure as the candidate fix (`refute_grep` precedent: 39
+  calls added since it landed, against 1 bare `! grep -q`).
+- Reword the inherited-variables row added in `8e2a7d50` from `MACOS`/`LINUX`/`HAS_*` to
+  "the variables `detect_env` sets", since the listed names omit `UBUNTU`, `PROFILE` and
+  the legacy identity variables.
+
+No `CLAUDE.md` change: a one-line assertion fix sets no convention, and a rule beside
+~370 counter-examples with no check behind it would not be followed.
 
 ## Out of scope
 
-- **The wider class.** `git grep -hE 'grep -q[^x]*"[^"]*" "\$\{?MOCK_CALLS_FILE' -- tests`
-  returns 397 lines across 16 files at `8e2a7d50`. That count includes the 36 sites
-  here, absence checks, and non-install verbs. Same weakness, different commands.
-  Recorded as one backlog row, not converted here.
-- **Replacing bare `! grep -q` with `refute_grep`.** All install-verb absence checks are
-  live today; converting them is a style change with no detection gain.
+- The other 22 positive install assertions (no collision; consistency only).
+- The wider class and the `assert_called` helper (backlog row above).
+- Replacing bare `! grep -q` with `refute_grep` (all install-verb absence checks are live).
 
 ## Multi-Lens Review
 
-Reviewed at commit: `007590cd` (Step 7 self-review commit, before Step 8 dispatch)
+Reviewed at commit: `007590cd` (Step 7 self-review commit, before Step 8 dispatch). That
+round reviewed the earlier 23-site design; the body above is the revision it produced.
+References below to "steps 2–4", "the bullet" and "the 23 sites" are to that earlier text.
 
 All three lenses independently reproduced the premise: with `brew_install_formula pyenv`
 deleted from `lib/linux_ubuntu.sh:352`, the substring test stays green and `-qx` goes
@@ -178,14 +135,17 @@ exact matches in each converted test's own mock log, **only `linux_ubuntu.bats:1
 (`pyenv`) has a sibling collision**. 19 sites match one line either way. The two
 `apt-get -y bats` sites and helm show a second line, but it is the `sudo` mock's own log
 entry from the same call, so a deletion removes both. `bat`, `git` and `zsh` never share a
-log with `bats-core`, `git-lfs` or `zsh-autosuggestions`. Verification steps 2–3 plan 23 production
-mutations to answer what one counting run answers; step 2 cannot fail on its own (an
-unwritten log also turns every site red) and is only meaningful beside step 1. Reads-it
-test: the CLAUDE.md bullet persists but is advice with no check, beside ~370 remaining
-substring examples; step 4 has no consumer after the session.
+log with `bats-core`, `git-lfs` or `zsh-autosuggestions`. Verification steps 2–3 plan 23
+production mutations to answer what one counting run answers; step 2 cannot fail on its
+own (an unwritten log also turns every site red) and is only meaningful beside step 1.
+Reads-it test: the CLAUDE.md bullet persists but is advice with no check, beside ~370
+remaining substring examples; step 4 has no consumer after the session.
 Assumption: the 23 recorded lines on `ubuntu-latest` match macOS. Settled by running the
 converted files on the workstation, or by the PR's CI run.
-Disposition:
+Disposition: Addressed. Owner chose the "Pyenv only" scope (2026-09-10). Scope cut from 23
+sites to `:127`; verification reduced to the pyenv deletion mutant, a control, `make test`
+and CI; the CLAUDE.md bullet and the population-closure step removed. The assumption is
+moot for the dropped sites and was measured true on the workstation by the risk lens.
 
 ### Ergonomics
 
@@ -203,7 +163,11 @@ escaping argument for rejecting a helper is weak: `@` is not a regex metacharact
 Assumption: that a CLAUDE.md bullet, rather than the nearest existing example, decides
 what the next install test uses. Untested; check at the next PR adding an install
 assertion.
-Disposition:
+Disposition: Addressed in part: owner chose the "Pyenv only" scope (2026-09-10); the
+bullet is dropped and `-F` is added so the match is literal. Accepted in part, reason: the
+missing failure output and the `assert_called` helper are deferred to the class-wide
+backlog row, to be designed against all 397 checks rather than this slice. The assumption
+no longer applies, since no rule is written.
 
 ### Risk
 
@@ -222,7 +186,9 @@ identity variables removed (all six files green) and on the workstation (24 ok, 
 for the 23 converted plus `uv`).
 Assumption: no uncertain assumption found. The runner's PATH order for the sudo
 passthrough is confirmed by the PR's first CI run.
-Disposition:
+Disposition: Addressed. Owner chose the "Pyenv only" scope (2026-09-10): none of the three
+sudo-passthrough sites is converted, so the dependency is not introduced. The
+`developer.bats` wording is corrected in "Why one site".
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
