@@ -647,7 +647,7 @@ a 60-second red on every run. It read as unreproducible for two hours because th
 reproductions were shipped with `git stash create`, which snapshots the **working tree**,
 so the workstation ran with the seam and CI ran the commit without it. When reproducing a
 CI failure elsewhere, ship `git archive <the sha CI ran>`; if the tree is dirty, that is
-the finding. Fixed in `b4ced0d`.
+the finding. Fixed in `b4ced0d` (#218, merged as `4bd5dd3c`).
 
 **`_OVERRIDE_RUN_TMPDIR_ROOT` is read at exactly one site, `lib/workflows.sh:106`, and is
 read unconditionally in production, not only under test — the same shape as
