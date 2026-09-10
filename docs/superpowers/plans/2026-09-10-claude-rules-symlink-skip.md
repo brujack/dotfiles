@@ -1,5 +1,7 @@
 # Skip `.claude/rules` in the ai-config symlink loop — Implementation Plan
 
+> **Status: DONE** — merged in #261 (`f57c1b36`), 2026-09-10.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Stop `setup_dotfile_symlinks` from linking `ai-config/.claude/rules/` into `~/.claude/rules`, where it would load as user-level Claude Code rules in every repo.
