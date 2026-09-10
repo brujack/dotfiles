@@ -10,9 +10,9 @@ Personal development environment bootstrapping system for macOS and Linux (Ubunt
 dotfiles/
 ├── setup_env.sh       # Main entry — sources lib/, dispatches workflows
 ├── Brewfile           # Homebrew bundle (100+ formulae/casks; [HAS_*] tags are capability-gated)
-├── lib/               # Shell libraries — all 14 tracked: constants, detect_env, developer,
+├── lib/               # Shell libraries — all 13 tracked: constants, detect_env, developer,
 │                      #   git_hooks, git_sync, helpers, launch_agents, legacy_rsync,
-│                      #   linux_shared, linux_ubuntu, macos, package_capture,
+│                      #   linux_shared, linux_ubuntu, macos,
 │                      #   update_summary, workflows
 ├── config/            # profiles.sh (hostname→profile map, bash); profiles.zsh (the zsh-side
 │                      #   derivation of the same table); local.sh (machine overrides,
@@ -173,7 +173,6 @@ Use the established helper functions, don't call `brew` directly:
 
 ```bash
 brew_formula_installed <formula>
-brew_cask_installed <cask>
 quiet_which <command>
 ```
 
@@ -458,8 +457,8 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
   ```bash
   bash scripts/run-bash-coverage.sh --list-sources
-  bash scripts/run-bash-coverage.sh --count-coverable lib/package_capture.sh
-  bash scripts/run-bash-coverage.sh --file-coverage lib/package_capture.sh /path/to/trace
+  bash scripts/run-bash-coverage.sh --count-coverable lib/helpers.sh
+  bash scripts/run-bash-coverage.sh --file-coverage lib/helpers.sh /path/to/trace
   ```
 
 - `make bash-coverage` measures via PS4 xtrace (`scripts/run-bash-coverage.sh`).
@@ -763,8 +762,7 @@ about what the wired detectors need:
 `__HOME__/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`.
 
 `__HOME__/.local/bin` was missing until 2026-08-28 and the omission was not cosmetic.
-`ledger` lives there — `lib/workflows.sh:898`, `:917` and `lib/package_capture.sh:11` all
-carry that same fallback, so the repo already knew — while the plist listed only the two
+`ledger` lives there — `lib/workflows.sh:931` carries that same fallback, so the repo already knew — while the plist listed only the two
 Homebrew prefixes, named after `gh` and `python3`. `ledger_drift_check.sh` resolves the
 binary with a bare `command -v ledger`, returns **1** when it finds nothing, and its `main`
 reads 1 as _stale entities found_, so the ledger-drift agent would have pushed false drift
