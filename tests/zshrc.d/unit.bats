@@ -423,6 +423,72 @@ EOF
   [ "$(printf '%s\n' "$output" | tail -1)" -gt 0 ]
 }
 
+@test "6_path.zsh adds ~/.docker/bin when HAS_DOCKER is set and the dir exists" {
+  local _tmp_dir
+  _tmp_dir="$(mktemp -d)"
+  mkdir -p "${_tmp_dir}/dockerbin"
+
+  run zsh -c "
+    export HAS_DOCKER=1
+    export _OVERRIDE_DOCKER_BIN='${_tmp_dir}/dockerbin'
+    source '${ZSHRC_D}/6_path.zsh' 2>/dev/null
+    printf '%s\n' \"\${path[(r)${_tmp_dir}/dockerbin]}\"
+  "
+  rm -rf "${_tmp_dir}"
+  [ "$status" -eq 0 ]
+  [ "$output" = "${_tmp_dir}/dockerbin" ]
+}
+
+@test "6_path.zsh adds no docker entry when HAS_DOCKER is unset" {
+  local _tmp_dir
+  _tmp_dir="$(mktemp -d)"
+  mkdir -p "${_tmp_dir}/dockerbin"
+
+  # The directory EXISTS -- this pins the capability guard, not the -d test.
+  run zsh -c "
+    unset HAS_DOCKER
+    export _OVERRIDE_DOCKER_BIN='${_tmp_dir}/dockerbin'
+    source '${ZSHRC_D}/6_path.zsh' 2>/dev/null
+    printf '%s\n' \"\${path[(r)${_tmp_dir}/dockerbin]}\"
+  "
+  rm -rf "${_tmp_dir}"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "6_path.zsh adds no docker entry when the dir is absent" {
+  # Seam points at a nonexistent path: pins the -d test, not the capability
+  # guard. Without the seam this would resolve the real ~/.docker/bin, which
+  # exists on any mac running Docker Desktop, and assert nothing.
+  run zsh -c "
+    export HAS_DOCKER=1
+    export _OVERRIDE_DOCKER_BIN='/nonexistent/docker-bin'
+    source '${ZSHRC_D}/6_path.zsh' 2>/dev/null
+    printf '%s\n' \"\${path[(r)/nonexistent/docker-bin]}\"
+  "
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "6_path.zsh docker entry is deduped across repeated sourcing" {
+  local _tmp_dir
+  _tmp_dir="$(mktemp -d)"
+  mkdir -p "${_tmp_dir}/dockerbin"
+
+  run zsh -c "
+    export HAS_DOCKER=1
+    export _OVERRIDE_DOCKER_BIN='${_tmp_dir}/dockerbin'
+    source '${ZSHRC_D}/6_path.zsh' 2>/dev/null
+    source '${ZSHRC_D}/6_path.zsh' 2>/dev/null
+    print -l \$path | grep -c \"^${_tmp_dir}/dockerbin\$\"
+  "
+  rm -rf "${_tmp_dir}"
+  [ "$status" -eq 0 ]
+  # Exactly one, not "contains a 1" -- two entries would print 2 and a
+  # substring match would accept it.
+  [ "$output" -eq 1 ]
+}
+
 @test "6_path.zsh adds no gnubin entry under LINUX, but still adds a known Linux path" {
   local _fake_home
   _fake_home="$(mktemp -d)"

@@ -70,6 +70,39 @@ if [[ ${LINUX} ]]; then
     fi
   fi
 fi
+# Docker Desktop's CLI shims. `docker` and the credential helpers are
+# symlinked into /usr/local/bin by the installer, but `docker-compose` is NOT
+# -- verified 2026-09-10: it resolves only via this directory, so dropping the
+# entry loses compose and nothing else.
+#
+# This lives here rather than in .zprofile, where Docker Desktop's installer
+# writes it on every upgrade. Two reasons. The installer hardcodes an absolute
+# /Users/<name>, and .zprofile is symlinked onto six other machines including
+# Linux, where that path is meaningless. And a tracked dotfile an installer
+# rewrites is drift nobody notices.
+#
+# The move is a deliberate NARROWING of actor scope: .zshrc.d is sourced by
+# .zshrc, so this reaches interactive shells only, while .zprofile reaches
+# every login shell and its descendants. Nothing in this repo invokes
+# docker-compose non-interactively -- lib/linux_ubuntu.sh's callers are Linux
+# install paths that never see ~/.docker/bin -- so the narrowing costs nothing
+# here. It is the same mechanism that makes brew unreachable to a
+# non-interactive setup_env.sh on the workstation; if a cron job or a script
+# ever needs compose, this is the line that will not be on its PATH.
+#
+# Seam, not a bare path: ~/.docker/bin exists on any mac running Docker
+# Desktop, so a test for the absent branch would short-circuit on the real
+# directory and assert nothing -- the same reason the gnubin overrides above
+# exist.
+#
+# Appended, not prepended, matching what the installer did: /usr/local/bin's
+# docker keeps winning, so this changes no existing resolution.
+if [[ ${HAS_DOCKER} ]]; then
+  _docker_bin="${_OVERRIDE_DOCKER_BIN:-${HOME}/.docker/bin}"
+  [[ -d ${_docker_bin} ]] && path+=("${_docker_bin}")
+  unset _docker_bin
+fi
+
 if [[ -d ${HOME}/.cargo/bin ]]; then
   path+=("${HOME}/.cargo/bin")
 fi
