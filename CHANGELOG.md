@@ -3,110 +3,112 @@
 
 ## Bug Fixes
 
-- put ~/.local/bin on the LaunchAgent PATH (#248)
+- delete the EXIT trap in _dotfiles_run_tmpdir_setup (#254)
 
-- keep the detector's stderr out of the finding count (#249)
+- isolate cadence_notify from the real config/local.sh (#255)
 
-- mktemp -t is not portable, use an explicit template
+- resolve the vendored signing key at source time, not call time (#256)
 
-- exit non-zero when a section fails (#250)
+- correct four false comment claims and mark DOTFILES_REPO_ROOT readonly (#257)
 
-- stop run_update reporting OK over failures it cannot see (#251)
+- move Docker Desktop's PATH entry into 6_path.zsh (#259)
 
-
-
-## CI
-
-- cap all 7 job runtimes with timeout-minutes (#247)
+- skip .claude/rules in ai-config symlink loop (#261)
 
 
 
 ## Documentation
 
-- two CI jobs documented advisory actually gate
+- delete the EXIT trap in _dotfiles_run_tmpdir_setup
 
-- mark the timeout plan Done
+- add the run-tmpdir EXIT trap spec, retire its backlog row
 
-- ADR-0025 — no mechanical guard for CI job timeouts
+- retract M8, add the destructive-window guard and class invariant
 
-- correct advisory claim on two blocking jobs
+- ledger drift can never clear a dotfiles entity
 
-- 7 orphaned worktrees hold 192 unique permission rules
+- withdraw Group A2, rebuild G3 as an allowlist ratchet
 
-- sync coverage provenance and the plist re-install requirement
+- freeze review-section references by name as well as number
 
-- _count over-count now has a measured instance
+- run_tmpdir EXIT trap removal, 4 tasks
 
-- sync the figure and its provenance to #249
+- mark run-tmpdir-exit-trap Done
 
-- ADR-0026 — the cadence detector contract is two streams
+- record #254's CI coverage and test count
 
-- -t update run truthfulness design
+- record #255's CI test count and coverage
 
-- retire the pip-check row, correct the summary row
+- record two verified CLAUDE.md drift findings
 
-- narrow update-truthfulness scope after multi-lens review
+- add Anthropic weekly features digest 2026-09-07
 
-- correct the exit-rate window and the always-returns-0 claim
+- add Claude Code weekly features digest 2026-09-07
 
-- ship the err_* one-liner ahead of the exit contract
+- two drift findings from the model-generation-audit re-run
 
-- update-run truthfulness, 6 tasks
+- record #257's CI test count and coverage
 
-- sync the figure to CI's run on #250
+- re-anchor #257's squash-severed SHA, backlog one that cannot be
 
-- record the -t update exit contract
+- correct eight drifted figures and a dangling standards path
 
-- add Anthropic weekly features digest 2026-08-31
+- retract the ledger-drift row, its premise is false
 
-- add Claude Code weekly features digest 2026-08-31
+- unwired units — delete two, wire one
 
-- update_run cd guards split 3/2, not 5
+- drop the wiring — the spool already drains, delete all three
 
-- self-review fixes to cd-guards spec
+- round 2 — fourth unit, and the acceptance check was inert
 
-- record round-1 multi-lens review
+- unwired units cleanup, 8 tasks
 
-- revise cd-guards spec on round-1 findings
+- replace the local coverage preview with CI's figure
 
-- revise on round-2 findings, close review
+- give the b4ced0d anchor its PR pointer
 
-- correct cheat.sh curl line refs
+- retire the b4ced0d anchor row, now fixed
 
-- 7 tasks for the cd-guards spec
+- correct #259 backlog count, record its CI coverage
 
-- cadence_notify test defeated by real local.sh
+- correct nine CLAUDE.md claims found by audit
 
-- record measured gate falsifiability
+- retire three stale rows, narrow one
 
-- curl mock emits stdout alongside -o
+- anchor package-named install assertions
 
-- correct install-path function name to run_setup_user
+- record round-1 multi-lens review of install anchoring
 
-- err_cheat.sh carries the body, not just errors
+- cut install anchoring to the one colliding site
 
-- gate 4 was impossible, corrected to -eq 1
+- fix three claims from round-2 risk re-review
 
-- name the two docs this branch falsifies
+- record owner disposition for round-2 review
 
-- date the cheat.sh artifact sizes
+- fix three claims from round-3 review
 
-- post-merge sync for #251
+- record owner disposition for round-3 review
 
-- correct update-run exit contract and summary sample in README
+- anchor the pyenv install assertion, 2 tasks
 
-- awscli download signature verification design
+- record #260's CI figures, mark its plan Done
 
-- correct the coverage budget and an overstated inference
+- record the plan-index table reflow on Edit
 
-- drop the superseded coverage paragraph
+- mark rules symlink skip plan Done (#261)
 
-- record CI coverage for #252 and close the shipped backlog row
+- CLAUDE.md coverage figures vs tdd.md
 
 
 
-## Features
+## Refactoring
 
-- verify awscli download signatures before sudo (#252)
+- delete four unwired lib/ units and their 37 tests (#258)
+
+
+
+## Testing
+
+- anchor pyenv install assertion (#260)
 
 
