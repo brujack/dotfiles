@@ -89,7 +89,7 @@ what stays rather than moving a rule-5 line.
 
 ### 2. Delivery
 
-1. **ai-config first, direct docs commits to master from a worktree.** Extend the four
+1. **ai-config first, direct docs commits to master from a worktree.** Extend the five
    existing knowledge files and create the four new ones with the moved text, verbatim except
    heading level, and append their rows to `docs/knowledge/README.md`. Message the ai-config
    session before writing; its unmerged `feat/memory-digest` touches one file in that area, so
@@ -111,8 +111,8 @@ what stays rather than moving a rule-5 line.
 - **The dangling `~/.claude/rules` link** into `dotfiles/.claude/rules` and the symlink loop
   linking gitignored runtime state. Both are existing backlog rows; this design adds no
   `.claude/rules/`, so neither blocks it.
-- **Standards moves.** No dotfiles block is a generic rule missing from the standards; none is
-  planned. If the plan's tagging finds one, it is added to the plan, not assumed.
+- **Standards moves.** None is planned. This spec did not check every block for a generic rule
+  the standards lack; the plan's per-block tagging records any it finds and adds a task for it.
 
 ## Rejected
 
@@ -134,8 +134,8 @@ what stays rather than moving a rule-5 line.
 Each check states a non-zero expectation, so a check that inspects nothing fails.
 
 1. **Size:** `CLAUDE.md` ≤ 50,000 UTF-16 units at the PR head.
-2. **Records gone:** `grep -c 'Overall: 91%' CLAUDE.md` is 0 (13 on `ce0495f1` for the dated and rule-held bullets combined is not the instrument — count the exact string: 8 on `ce0495f1`); `Update this figure` is absent.
-3. **Rule-5 lines present:** each of the nine lines above greps once in `CLAUDE.md`.
+2. **Records gone:** `grep -o 'Overall: 91%' CLAUDE.md | wc -l` is 0 (8 on `ce0495f1`), and `Update this figure` is absent (1 on `ce0495f1`).
+3. **Rule-5 lines present:** the plan fixes one grep string per rule-5 line, and each greps at least once in `CLAUDE.md`.
 4. **Pointers resolve:** every `dotfiles-*.md` path named in `CLAUDE.md` exists on ai-config
    `origin/master`, checked by a line-wise loop (not a zsh word-split `for`). Controls: one
    misspelled name reports exactly 1 missing; all misspelled reports all of them.
