@@ -1,10 +1,13 @@
 # dotfiles CLAUDE.md re-sort — design
 
-**Date:** 2026-09-11 (revised after round-1 multi-lens review)
+**Date:** 2026-09-11 (descoped after round-2 review and a second probe)
 **Parent:** ai-config `docs/superpowers/specs/2026-09-10-claude-md-rearchitecture-design.md`
 ("dotfiles, sub-project 2") and ai-config ADR-0077 (five content homes, routing sentence),
 merged as ai-config#263 and live fleet-wide.
-**Prerequisite, met:** dotfiles#261 (`f57c1b36`) — `setup_dotfile_symlinks` never links `rules/`.
+**Scope decision (operator, 2026-09-11):** ship only the subset every review round found clean —
+delete measurement records, flatten the padded Entry Points table, and replace unfetchable
+GitHub links with local paths. Moving reference text into knowledge files is deferred to its
+own spec (see "Deferred").
 
 ## Problem
 
@@ -59,149 +62,120 @@ Three measurements bound the design:
 
 ## Design
 
-### 1. Homes
+All changes are to dotfiles `CLAUDE.md`, plus one appended paragraph in ai-config
+`docs/knowledge/dotfiles-bash-coverage.md`. Line references are to `origin/master` at `e9ea9515`,
+whose `CLAUDE.md` is byte-identical to `ce0495f1`'s.
 
-The five homes of ADR-0077, applied block by block. Every block of 200+ characters is listed in
-the plan's **block manifest** with exactly one disposition: `stay`, `compress`, `move:<file>`,
-`dedupe:<file>` or `delete`, and a `rule5` flag.
+### 1. Delete the bash coverage records, routing the rules they carry
 
-**Rule-5 criterion.** A block keeps a one-line copy in `CLAUDE.md` when any of these hold:
-it states a gate or safety rule; it is a deliberate deviation no test pins; or the moment it
-matters is not an edit of a nameable file (a tool rewriting a tracked file, creating a new test
-with `Write`, choosing where a new test goes). Everything else is reference.
+`#### Bash` under `### Coverage` holds 20 bullets before `- make bash-coverage measures`. Twelve
+are records (12,043 units): the eight `**Overall: 91%**` bullets and the four "local reads one
+point higher" bullets (`The local-reads-one-point-higher rule did NOT hold on #244`,
+`91% has now landed exactly at the floor on the fifth consecutive CI measurement`,
+`The preview discipline paid a fourth time`, `And a fifth time, on #223`). All twelve are
+deleted. The eight method bullets after them stay.
 
-| block | delete | move (to `~/git-repos/personal/ai-config/docs/knowledge/`) | stays in `CLAUDE.md` |
-| --- | --- | --- | --- |
-| Coverage | 13 dated bullets; line 402 | method bullets and the "a lone red on bats test 341 is a re-run candidate" note → extend `dotfiles-bash-coverage.md` | floors (bash 91, CI-gated; PowerShell 90) and both measuring commands |
-| Test Seams | — | split by subsystem so each pointer names at most six files: awscli verification → new `dotfiles-seams-awscli.md`; zsh/shell startup (`profiles.zsh`, keychain, gnubin, Homebrew prefix, Docker bin) → new `dotfiles-seams-shell-startup.md`; hooks, coverage tracer and workflows (`GGSHIELD_*`, `_OVERRIDE_LIB_TRAP_SCOPE`, `_OVERRIDE_BATS_BIN`, `_OVERRIDE_RUN_TMPDIR_ROOT`, `_PROFILES_LOADED`) → new `dotfiles-seams-hooks-and-tracer.md`; cadence seams and heartbeat contract → new `dotfiles-cadence-agents.md` | rule-5 lines |
-| Mock Pattern | "Pass-through mocks" (dedupe into existing text) | remainder → extend `dotfiles-bats-test-infrastructure.md` | — |
-| MAKEFLAGS partition | — | new `dotfiles-makeflags-partition.md` | rule-5 line 10 |
-| Testing Rules | — | the two `load_setup_env`/`run_update` explanations → extend `dotfiles-bats-test-infrastructure.md` | rule-5 lines 1, 2, 7, 8 and the rename/grep bullet |
-| Testing | dated history | requirements-ci renderings narrative → new `dotfiles-requirements-ci.md` | commands, hook behaviour summary, rule-5 lines 3 and 11 |
-| ShellCheck, CI | history → appended to `dotfiles-sc2086-site-manifest.md` with no pointer | CI job and timeout detail → new `dotfiles-ci-jobs.md` | suppression rules (compressed); which jobs block auto-merge |
-| Key Conventions | dated narrative | update-section coupling, git-hooks sweep, pin probe → extend `dotfiles-update-workflow.md`; make/`PATH` actor matrix → extend `dotfiles-brew-path-presence-guards.md` | short conventions; rule-5 lines 6, 12 and 13 |
-| Dependency Automation | dated narrative | new `dotfiles-dependency-automation.md` | three one-line decisions: preset inlined, not extended; `pip_requirements` excluded; Dependabot alerts on, auto-PRs off |
-| Entry Points | table padding | `update` internals → extend `dotfiles-update-workflow.md` (recorded in the manifest as `transform`, since a table cell becomes prose) | the nine types as a list, not a table, so the formatter cannot re-pad it |
-| Layout, 10-80-10, Symlink Strategy, Profile Model, Adding a New Machine, Local-Only State, GitHub MCP, Code Standards | — | — | stay, lightly compressed |
+Five rule-bearing sentences inside those twelve are routed before deletion, not lost:
 
-**Destinations named by a pointer:** 4 extended (`dotfiles-bash-coverage.md`,
-`dotfiles-bats-test-infrastructure.md`, `dotfiles-update-workflow.md`,
-`dotfiles-brew-path-presence-guards.md`) and 8 new (`dotfiles-seams-awscli.md`,
-`dotfiles-seams-shell-startup.md`, `dotfiles-seams-hooks-and-tracer.md`,
-`dotfiles-cadence-agents.md`, `dotfiles-makeflags-partition.md`, `dotfiles-requirements-ci.md`,
-`dotfiles-ci-jobs.md`, `dotfiles-dependency-automation.md`). The two existing pointers to
-`dotfiles-brewfile-conventions.md` and `dotfiles-ruby-version-manager.md` stay, converted to the
-local path. `dotfiles-sc2086-site-manifest.md` (125,240 units) receives history but no pointer.
-The plan may regroup the seam files if a pointer would otherwise name more than six files; check 4
-uses the plan's final list.
+| rule | already stated elsewhere | action |
+| --- | --- | --- |
+| Publish CI's coverage figure, never a local one | `~/.claude/standards/shell.md:1432-1433` (ADR-0061) | none |
+| Read the ratio, the heuristic-disagreement count and the test count from one CI run | no | append to `dotfiles-bash-coverage.md` |
+| A local preview can differ from CI in either direction (#244, #250, #252, #257) | no | append to `dotfiles-bash-coverage.md` |
+| CI bash coverage sits at the 91% floor, so a change adding untested instrumented lines breaches the gate immediately | no | append to `dotfiles-bash-coverage.md` |
+| A lone red on bats test `extract_new_content: no false positives when state is 20KB-truncated subset of current` is a known flake; re-run before treating it as a regression | no | append to `dotfiles-bash-coverage.md` |
 
-**Rule-5 lines** (a floor; the manifest may add more). Each stays in `CLAUDE.md` as one line:
+The appended text is one `## Reading the bash coverage figure` section, written as a short
+reference paragraph; it quotes no per-PR figures.
 
-1. Never modify real system state in tests — use PATH-based mocks from `tests/mocks/`.
-2. `make test` must exit 0 before committing.
-3. `scripts/pre-push` unsets `GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE` below its range-resolution loop, and resolves the repo root with `--show-toplevel` first.
-4. Tests drive a binary's absence through its override seam, never by editing `PATH`.
-5. Both halves of a seam land in the same commit.
-6. Never invoke `scripts/sync_git_repos.sh`, `sync_git_repos` or `sync_legacy_dirs` unmocked outside bats.
-7. `load_setup_env()` does not set `MACOS`/`LINUX`/`UBUNTU`/`HAS_*`; a test that depends on OS detection sets them or calls `detect_env`.
-8. A new `setup_env.sh` function gets a test in `tests/setup_env/unit.bats` (pure logic) or `install_guards.bats` (side effects); a new script gets its own `tests/` directory.
-9. `.warp/settings.toml` keeps `auto_approve_bypasses_command_denylist = false`; a diff flipping it is a sync reversion to re-pin.
-10. A test that wants an exact `make` output value must be **guarded** (`--no-print-directory`), not measuring; `makefile_lint_scope.bats` accepts either category, so it does not catch this.
-11. Roll the ansible venv back with `pip install --no-deps -r <snapshot>`; `uv sync` cannot reproduce the pre-sync state.
-12. If Docker Desktop's installer adds lines to `.zprofile`, delete them rather than committing them.
-13. `setup_env.sh` cannot run non-interactively on the Linux workstation; prepend `/home/linuxbrew/.linuxbrew/bin` to `PATH` rather than re-bootstrapping.
-14. `config/profiles.zsh` uses `export` and `lib/detect_env.sh` uses `readonly` on purpose, and `tests/helpers/legacy_oracle.bash` is hand-typed on purpose — do not "fix" either.
+### 2. Delete the other two recorded figures and the local writer
 
-The previous rule 7 (zsh `$0` and worktree `zsh -i -c exit`) is dropped: `shell.md` already
-states both and loads in every session.
+- PowerShell: delete `- **setup_windows.ps1: 95.54%** (line coverage, …)` and
+  `- Update this figure whenever tests are added or removed.` (line 402). The floor, scope and
+  re-measure bullets stay.
+- CI: in the `test` job bullet, delete the parenthetical figure
+  `(regression proxy; 1626 tests, CI-measured 2026-09-10 on 1d309276, …)`, keeping
+  `verifies test count >= 840`.
 
-**Pointer form**, one per destination, grouped at the end of the section it replaces, naming
-at most six files or functions and using the local path, which exists on both development
-machines: `- Before editing <files>, read ~/git-repos/personal/ai-config/docs/knowledge/<file>.md.`
-The seven existing `github.com/brujack/ai-config` links are replaced with that form.
+### 3. Entry Points table to a list
 
-**Writers.** Line 402 is deleted with the Coverage records. No other in-repo writer exists.
+The nine-row `| Type | Purpose |` table becomes nine bullets, `- ` + the backticked type +
+` — ` + the purpose cell, cell text unchanged. The formatter pads every table cell to the widest
+one, so all nine rows are exactly 1,002 units; 6,328 units are padding. A list cannot be re-padded
+by a later `Edit`. `**Options:**` and its bullet stay. Edits use a script, not the Edit tool.
 
-**Size.** Deletions are estimated at ~22,000 units, moves at ~85,000, and what stays at
-45,000–50,000 including the five added rule-5 lines. The bar is `CLAUDE.md` ≤ 50,000 UTF-16
-units; above it, the plan compresses what stays rather than moving a rule-5 line.
+### 4. Local paths for knowledge links
 
-### 2. Delivery
+The seven `[…](https://github.com/brujack/ai-config/blob/…/docs/knowledge/<file>.md)` links (to five
+distinct files) become `` `~/git-repos/personal/ai-config/docs/knowledge/<file>.md` ``.
+`brujack/ai-config` is PRIVATE, so a session cannot fetch the GitHub form; the local path exists on
+the Mac Studio and the Linux workstation. All five target files exist.
 
-1. **ai-config first, direct docs commits to master from a worktree.** Extend the four existing
-   knowledge files, create the eight new ones, append the suppression history to
-   `dotfiles-sc2086-site-manifest.md`, and add index rows under `### dotfiles` in
-   `docs/knowledge/README.md` — for the eight new files and for the two existing files that
-   lack rows (`dotfiles-sc2086-site-manifest.md`, `dotfiles-brew-path-presence-guards.md`).
-   Moved text is verbatim except heading level and the manifest's `transform` entries. Message
-   the ai-config session before writing.
-2. **dotfiles on a branch, with PR and full Phase 3.** Apply the manifest; add pointers; replace
-   the seven GitHub links. Retarget the code comments that name moved sections:
-   `lib/constants.sh:101`, `scripts/cadence-notify.sh:38`, `tests/scripts/osx.bats:17`,
-   `tests/zshrc.d/profiles.bats:64`, `tests/scripts/makefile_lint_scope.bats:5`. These five are
-   the full set: `git grep -n 'CLAUDE.md' -- ':!*.md'` also finds
-   `tests/setup_env/profiles.bats:465`, which names "Adding a New Machine", a section that stays.
-   Those are code files, so the push runs the full suite. **Check 4 runs against ai-config
-   `origin/master` before `gh pr create`**, because dotfiles auto-merge waits only on CI.
-3. **Close-out.** Widen ai-config's backlog row "Measure the CLAUDE.md writer change" to count
-   dotfiles' root `CLAUDE.md` in both step 3 (growth) and step 4 (pointer follow rate); mark this
-   spec's plan Done.
+### Size
 
-### 3. Out of scope
+156,787 → about 138,100 UTF-16 units (12,043 records, 6,328 padding, about 300 for the other
+figures and link text). The ≤ 50,000 bar belongs to the deferred move work, not this change.
 
-- **A Definition of Done section.** `repo-structure.md` requires one and
-  `.github/PULL_REQUEST_TEMPLATE.md` points at it, but dotfiles `CLAUDE.md` has none. New
-  content, not a sort; backlogged.
-- **The dangling `~/.claude/rules` link** into `dotfiles/.claude/rules` and the symlink loop
-  linking gitignored runtime state. Both are existing backlog rows; this design adds no
-  `.claude/rules/`, so neither blocks it.
-- **Standards moves.** None is planned. The manifest records any generic rule the standards lack
-  and the plan adds a task for it.
+## Delivery
+
+1. **ai-config first**: append the `## Reading the bash coverage figure` section to
+   `docs/knowledge/dotfiles-bash-coverage.md` as a direct docs commit to master from a worktree,
+   after messaging the ai-config session.
+2. **dotfiles**: one scripted commit to `CLAUDE.md` on a branch from a worktree, pushed direct to
+   master. It is docs-only: the pre-push hook skips a `.md`-only push (ADR-0017), and no code
+   comment names a changed section.
+3. **Close-out**: widen ai-config's backlog row "Measure the CLAUDE.md writer change" to count
+   dotfiles' root `CLAUDE.md` in step 3 (growth); mark this spec's plan Done.
+
+## Out of scope
+
+- Moving reference text to knowledge files, rule-5 copies and pointers (see "Deferred").
+- A Definition of Done section (backlog row).
+- The dangling `~/.claude/rules` link and the symlink loop linking runtime state (backlog rows).
+
+## Deferred: moving reference text to knowledge files
+
+The original design moved about 85,000 units of reference to twelve knowledge files behind
+triggered pointers, to reach ≤ 50,000 units. Two review rounds found the design still changing at
+the design level — seam grouping that breaks a six-file pointer cap, accounting that cannot see
+rules inside multi-bullet paragraphs, three wrong and four missing rule-5 lines — with each
+correction adding mechanism. Two probes (recorded in Problem and after round 2) found that
+pointers are followed (5 of 5 read-only; 4 of 5 with Edit/Write) and that moving or deleting
+source-derivable seam text did not change outcome, only effort. The open work is the
+non-derivable hazard text, not the move itself. It gets its own spec, carrying both rounds'
+findings and both probes; a dotfiles backlog row tracks it.
 
 ## Rejected
 
-- **dotfiles `.claude/rules/`.** The Studio's `~/.claude/rules` (2026-03-31) points at
-  `dotfiles/.claude/rules`; a tracked directory there would load as user-level rules in every
-  repo until that link is removed on every machine.
-- **Nested `tests/CLAUDE.md`.** No leak, but it misses a `Write` of a new test file, which is
-  exactly when seam and mock rules matter; the rule-5 copies would be needed anyway.
-- **One knowledge file for all seams.** Its pointer would name 25 paths or "any code file", and
-  the file would reach about 71,000 units with two parallel sections on the same topic.
-- **Move whole sections.** Fewer tasks, but the narrative inside Key Conventions and Entry Points
-  stays and the 50,000 bar is at risk.
-- **Delete first, move later.** Two plan cycles and two review rounds for the same end state.
-- **Bars of 40,000 or none.** 40,000 forces compressing the pre-read sections; no bar leaves the
-  sort without a done condition.
+- **The full move now.** Not converging after two rounds; see Deferred.
+- **Pause the re-sort.** The records, padding and unfetchable links are clean wins independent
+  of the move.
+- **dotfiles `.claude/rules/` and nested `tests/CLAUDE.md`.** Rejected in round 1 for the move
+  work; unchanged.
 
 ## Verification
 
-Each check names a specific non-zero expectation or a control that fails on an empty result.
+Each check states a non-zero before-value or a control.
 
-1. **Size:** `CLAUDE.md` ≤ 50,000 UTF-16 units at the PR head, and ≥ 20,000 (a near-empty file fails).
-2. **Records gone:** `grep -o 'Overall: 91%' CLAUDE.md | wc -l` is 0 (8 on `ce0495f1`), and
-   `Update this figure` is absent (1 on `ce0495f1`).
-3. **Rule-5 lines present:** the plan fixes one grep string per rule-5 line, at least 14 strings,
-   and each greps at least once in `CLAUDE.md`.
-4. **Pointers resolve:** `CLAUDE.md` names exactly the plan's final list of pointer destinations
-   (at least 14 distinct `dotfiles-*.md` paths, all under `~/git-repos/personal/ai-config/`), and
-   each exists on ai-config `origin/master`, checked by a line-wise loop, not a zsh word-split
-   `for`. Controls: one misspelled name reports exactly 1 missing; all misspelled reports the full
-   count. No `github.com/brujack/ai-config` link remains.
-5. **Moves landed:** for every manifest entry `move:` or `dedupe:`, the block is a substring of its
-   named destination on ai-config `origin/master` after allowing only a heading-level change; the
-   number found equals the number of such entries, and their total is at least 80,000 units.
-   `transform` entries are checked by the reviewer against their source cell instead.
-6. **Nothing lost:** every one of the 143 paragraphs of 200+ characters in
-   `ce0495f1:CLAUDE.md` appears in the manifest, and each `stay`/`compress` entry's lead sentence
-   is in the new `CLAUDE.md`, each `move`/`dedupe` entry is in its destination, and each `delete`
-   entry is on the manifest's deletion list. Expect 0 unaccounted and report the count per bucket.
-   Control: removing one entry from the manifest reports exactly 1 unaccounted.
-7. **Gates:** `make lint`, `make check-agent-guidance` and `make test` pass in dotfiles;
-   `make validate-knowledge` passes in ai-config.
-8. **Entry Points:** the section lists exactly nine `-t` types.
-9. **Comments:** none of the five retargeted code comments names a section absent from
-   `CLAUDE.md`, and `git grep -n 'CLAUDE.md' -- ':!*.md'` returns the same six lines, five
-   retargeted plus `profiles.bats:465`.
+1. **Records gone:** `grep -o 'Overall: 91%' CLAUDE.md | wc -l` 8 → 0; `Update this figure` 1 → 0;
+   `95.54%` 1 → 0; `local-reads-one-point-higher rule did NOT hold` 1 → 0.
+2. **Method kept:** the eight method bullet leads under `#### Bash` (from
+   `The instrumented set is` to `covered > coverable`) each grep exactly once, 8 → 8.
+3. **Size:** 137,000 ≤ UTF-16 units ≤ 139,500 — a lower bound, so over-deletion fails.
+4. **Deletion scope:** every line removed by `git diff -U0 e9ea9515 -- CLAUDE.md` belongs to the
+   twelve record bullets, the two PowerShell lines, the CI parenthetical, the nine table rows plus
+   header and separator, or the seven link lines rewritten. Expect 0 unexplained removed lines;
+   control: an extra removed line in a scratch copy reports exactly 1.
+5. **Entry Points:** exactly 9 bullets naming the nine `-t` types, 0 table rows beginning `| \``,
+   and each of the nine purpose cells from `e9ea9515` is a substring of the new `CLAUDE.md`;
+   control: altering one cell in a scratch copy reports exactly 1 missing.
+6. **Links:** `github.com/brujack/ai-config` 7 → 0; exactly 7 `~/git-repos/personal/ai-config/docs/knowledge/`
+   paths, each existing locally, checked by a line-wise loop; control: one misspelled name reports
+   exactly 1 missing.
+7. **Routed rules:** `dotfiles-bash-coverage.md` on ai-config `origin/master` contains all four
+   appended rules (four fixed grep strings, each ≥ 1, 0 before), and `make validate-knowledge`
+   passes.
+8. **Gates:** `make lint` and `make check-agent-guidance` pass in dotfiles.
 
 ## Multi-Lens Review
 
@@ -343,7 +317,7 @@ Assumption: a Phase 2 Sonnet subagent with Edit/Write and a task naming a test f
 function, reads the pointed file before its first Edit. Settle with three arms of five runs
 (pointer, inline, deleted-no-pointer), `--model sonnet`, tools `Read,Grep,Glob,Edit,Write`, unique
 transcript names.
-Disposition:
+Disposition: Descoped (operator, 2026-09-11) — these findings concern the reference moves, which are deferred to their own spec after a second probe; the shipped subset (records, table padding, local links) is unaffected. Carried forward by the dotfiles backlog row for the deferred move.
 
 #### Ergonomics (round 2)
 
@@ -366,7 +340,7 @@ Assumption: a pointer is followed when the prompt names a symptom rather than th
 Settle with five runs of a symptom-only prompt ("`setup_env.sh -t update` reports [FAIL] aws on a
 mac without gpg — fix it") with Edit/Write enabled, plus one interactive run; 1 or fewer of 5
 refutes.
-Disposition:
+Disposition: Descoped (operator, 2026-09-11) — these findings concern the reference moves, which are deferred to their own spec after a second probe; the shipped subset (records, table padding, local links) is unaffected. Carried forward by the dotfiles backlog row for the deferred move.
 
 #### Risk (round 2)
 
@@ -392,7 +366,7 @@ Assumption: a session writing or extending a seam-touching test reads the pointe
 first Edit/Write when the prompt names a behaviour and the edited file is a hub named in several
 pointers. Settle with Edit/Write allowed, the full planned pointer set in a scratch `CLAUDE.md`, and
 three behaviour-phrased prompts on a hub file.
-Disposition:
+Disposition: Descoped (operator, 2026-09-11) — these findings concern the reference moves, which are deferred to their own spec after a second probe; the shipped subset (records, table padding, local links) is unaffected. Carried forward by the dotfiles backlog row for the deferred move.
 
 **Convergence note (orchestrator).** Round 2's findings are still design-level, not apparatus,
 and its corrections add mechanism (delete reasons, key phrases, a regrouping, four more rule-5
