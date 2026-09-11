@@ -317,3 +317,88 @@ Disposition: Addressed (operator, 2026-09-11) — accounting check 6 over every 
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+### Round 2
+
+Reviewed at commit: `edf13c20` (revision addressing round 1). All three lenses re-run, told that
+the round-1 section is history.
+
+#### Goal-Fit (round 2)
+
+Finding: Worth building, and no simpler path gets under 50,000; the sections that stay measure
+about 24,500 units. Load-bearing: nothing tests a `delete` disposition. Check 6's delete clause is
+circular, and its control tests only that the manifest is complete. A rule-bearing paragraph not
+on the 14-line floor can be labelled `delete` and every check passes — as round 1 already caught
+once with the test-341 note. Check 5's ≥80,000-unit floor points the wrong way: a correct extra
+deletion fails it. Proposed: every `delete` carries a reason from a closed set
+(`dated-record`, checked for a SHA, PR or date; `padding`; `superseded-by:<file>`, checked by grep),
+and the 80,000 floor goes. Also: check 9 fails on a correct tree (`git grep -n 'CLAUDE.md' --
+':!*.md'` returns 30 lines at `ce0495f1`, verified); the widened step-4 row has no threshold or
+consequence, so it cannot fail; the probe proves less than stated — pointer transcripts 1 and 2
+were overwritten by the control runs (the per-run results were scored first), the control also
+named the seam from source, and no arm deleted the text without a pointer. Minor: the revision
+added six rule-5 lines, not five; "9 existing pointers" is 9 mentions of 5 files, 7 of them
+GitHub links; `dedupe:` needs the same exemption from check 5 as `transform`.
+Assumption: a Phase 2 Sonnet subagent with Edit/Write and a task naming a test file, not the
+function, reads the pointed file before its first Edit. Settle with three arms of five runs
+(pointer, inline, deleted-no-pointer), `--model sonnet`, tools `Read,Grep,Glob,Edit,Write`, unique
+transcript names.
+Disposition:
+
+#### Ergonomics (round 2)
+
+Finding: The seam split is by variable family, but a pointer fires on a file name. Shell-startup
+needs 14 files; hooks-and-tracer is at six source files with no tests; `_PROFILES_LOADED` sits
+with hooks while its files are the identity table; shared files (`lib/helpers.sh`,
+`lib/workflows.sh`, `6_path.zsh`, `run-bash-coverage.sh`, `lib/macos.sh`) fire several pointers,
+so an edit to `lib/helpers.sh` asks for about 25,000 units of reading. Proposed: group by the file
+a pointer names (an identity file; gnubin, Docker bin and Homebrew prefix folded into
+`dotfiles-brew-path-presence-guards.md`; function-named pointers for `helpers.sh`). Four rule-5
+lines are compressed past usefulness: line 4 contradicts line 1 and 292 `PATH=` assignments (the
+real rule: never strip a directory to hide one binary — use a seam or a shim dir); line 10 uses
+"guarded/measuring" undefined; line 11 drops the snapshot path and interpreter; line 3 drops why
+the `unset` sits below the loop. Check 6 collides with compression: a compressed block's lead
+sentence is the first thing rewritten; check a key phrase recorded in the manifest. Check 9 fails
+on an untouched tree. Minor: pointers are checked against ai-config `origin/master` while sessions
+read local checkouts; two destinations are fed by two sections; two moved paragraphs cite sections
+that land elsewhere (`:608`, `:872`).
+Assumption: a pointer is followed when the prompt names a symptom rather than the pointer's files.
+Settle with five runs of a symptom-only prompt ("`setup_env.sh -t update` reports [FAIL] aws on a
+mac without gpg — fix it") with Edit/Write enabled, plus one interactive run; 1 or fewer of 5
+refutes.
+Disposition:
+
+#### Risk (round 2)
+
+Finding: Check 6 accounts for whole paragraphs, but the homes table splits many paragraphs, so it
+cannot see rule text. Testing Rules (`:367-374`) is one 8-bullet paragraph split three ways, with
+`:370` unhomed; Key Conventions `:882` is one 21-bullet paragraph; the cadence table is one
+10,031-character paragraph; `compress` passes when a lead sentence survives (`:320` "The pre-push
+hook is **permanent**." survives while its fail-closed rule is cut). Proposed: bullet- and
+table-row granularity, and `rule5` entries checked by text. Rule-5 lines against code: 3, 10 and
+13 correct; 4 stronger than the repo and `shell.md:611-617` (which prescribes `PATH="${shim}"`);
+8 wrong — `setup_env.sh` defines one function, functions live in `lib/*.sh` across 21 bats files,
+and `tests/scripts/` is one shared directory; 11 weaker than source and code — a bare `pip` is the
+pyenv shim and installs into the wrong interpreter; the source uses `"$(pyenv which python)" -m pip`
+after `pyenv shell ansible`. Blocks meeting the criterion but not listed: `_RHN_LOCAL_CFG` exported
+in `setup()` not per test; detector stderr is POSTed to ntfy and must carry no credentials;
+Dependabot call order (`PUT vulnerability-alerts` before `DELETE automated-security-fixes`) and the
+latently armed state; every tool `make test` needs installed in both the `test` and
+`bash-coverage` jobs. The six-file cap is already broken by three of four seam groups
+(hooks-and-tracer 12 files, cadence 7+, shell-startup over six). Minor: the ai-config formatter
+rewrites `*x*` to `_x_` in one moved block (`:367`), so check 5 fails there; dropping old rule 7 is
+sound but loses the dotfiles-specific falsifiable startup probe.
+Assumption: a session writing or extending a seam-touching test reads the pointed file before its
+first Edit/Write when the prompt names a behaviour and the edited file is a hub named in several
+pointers. Settle with Edit/Write allowed, the full planned pointer set in a scratch `CLAUDE.md`, and
+three behaviour-phrased prompts on a hub file.
+Disposition:
+
+**Convergence note (orchestrator).** Round 2's findings are still design-level, not apparatus,
+and its corrections add mechanism (delete reasons, key phrases, a regrouping, four more rule-5
+lines, three reworded ones). By the brainstorming stop criteria that is not convergence. One
+subset has been clean in both rounds and depends on nothing else: delete the dated measurement
+records and line 402 (routing the test-341 note to `dotfiles-bash-coverage.md`), convert Entry
+Points from a padded table to a list, and replace the seven GitHub links with local
+`~/git-repos/personal/ai-config/...` paths. That subset moves no reference text and needs no rule-5
+copies.
