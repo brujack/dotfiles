@@ -411,3 +411,40 @@ Each run's JSONL transcript has a unique name.
   runs. It does not measure non-derivable hazard text (e.g. `_RHN_LOCAL_CFG` exported in
   `setup()`, detector stderr carrying no credentials) — the rule-5 content round 2 found missing
   or wrong.
+
+### Round 3 (scoped, descoped design)
+
+Reviewed at commit: `8bc8f945`. One Risk lens, scoped to the rewritten Design, Delivery, Out of
+scope, Deferred, Rejected and Verification sections; Problem and rounds 1–2 treated as history.
+
+#### Risk (round 3, scoped)
+
+Finding: As written, two checks fail on a correct implementation (measured by applying every
+described edit by script in a scratch repo).
+- **Check 5 vs section 4:** the `update` row's purpose cell (`CLAUDE.md:88`) contains one of the
+  seven GitHub links, so rewriting it makes check 5 report exactly 1 missing cell — its own control's
+  output — while leaving it fails check 6. Compare cells after the link rewrite.
+- **Check 3's window:** the scratch result is **135,649** units, below 137,000. The Size arithmetic
+  omits the table header and separator (2,006 units) and undercounts the small edits (655, not
+  ~300). Keeping the orphaned header and separator gives 137,655, inside the window, so the window
+  rewards a broken stub. Re-centre on ~135,650 and assert the header is gone.
+- **Routing:** row 1's citation is wrong — `shell.md:1432-1433` states where a *floor* comes from;
+  the publish rule is ADR-0061:55 ("Publish the CI figure. A local run is a preview."), which no
+  session loads, while figures now go in the PR body at creation, before CI runs. One live rule is
+  not routed: `:432-436` (coverage recorded by derivation is acceptable only because CI
+  independently gates it). Worth folding in: `:411` ("91% is the durable claim and the fraction is
+  not"). Deleting the `:352` parenthetical drops "regression proxy", the only statement of what
+  `>= 840` is for. The flaky test name matches `tests/scripts/whats-new-anthropic.bats:113` exactly.
+- **Check behaviour:** on a correct change 6 of 8 pass (3 and 5 fail); on an empty change 2, 4 and
+  8 still pass, and 8 can never detect this change. Check 4's allow-list should be `e9ea9515` line
+  numbers — 80–90, 197, 233, 352, 398, 402, 406–436, 469, 473, 845, 849 — and must not skip removed
+  bullets with a `^-[^-]` grep (a removed bullet shows as `-- …`).
+- **Checked, not raised:** the table has no inline `|` or `<br>` and nothing parses it; all seven
+  links are plain `blob/master/…md`; `CLAUDE.md` is unchanged since `e9ea9515`; a peer commit fails
+  checks 1 and 4 closed.
+
+Assumption: a rule moved to `dotfiles-bash-coverage.md` reaches the session writing a coverage
+figure, but the only nearby pointer (`:469`) names neither the moment nor the file's role. The
+5-of-5 probe used a file-specific pointer with an absolute path. Settle with a probe prompt such as
+"write this PR's Test Plan including bash coverage", or reword `:469` before shipping.
+Disposition:
