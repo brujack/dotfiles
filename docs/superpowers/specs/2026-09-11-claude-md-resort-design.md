@@ -146,3 +146,118 @@ Each check states a non-zero expectation, so a check that inspects nothing fails
 7. **Entry Points:** the section lists exactly nine `-t` types.
 8. **Comments:** none of the five retargeted code comments names a section absent from
    `CLAUDE.md`.
+
+## Multi-Lens Review
+
+Reviewed at commit: `c9ac2808` (Step 7 self-review commit, before Step 8 dispatch). Adversarial
+Spec Review: N/A — no comparison, judge or evaluator component, and every acceptance criterion
+is a command.
+
+### Goal-Fit
+
+Finding: Worth building, and there is no simpler path. Deleting records, line 402 and table
+padding alone reaches only about 135,000 units. Premises reproduced independently: 156,787 units,
+the 1,002-unit Entry Points rows, and "nothing is duplicated" (0 of 473 sentences of 120+
+characters matched elsewhere). Load-bearing defect: a pure-deletion implementation passes all
+eight checks. Check 4 has no minimum count, and check 5 iterates "each moved block" with no count
+and compares against the old file, never the destination. Proposed: a moved-block manifest
+naming each destination file; each block present in its named file on ai-config `origin/master`,
+with the count equal to the manifest length and at least ~80,000 units found; exactly 9 distinct
+destination names in `CLAUDE.md`. Reads-it test: the knowledge moves only change a decision if a
+pointer is followed. Over 30 days of top-level dotfiles transcripts (28 sessions), 1 used `Read`
+on any `dotfiles-*.md` knowledge file, despite 9 existing pointers to 5 of them. Nothing will
+measure follow-through afterward either: the close-out widens the parent's step 3 (growth) to
+dotfiles but not step 4 (pointer follow rate). The other candidates for rule 5: the venv-snapshot
+rollback's `--no-deps` and `setup_env.sh`'s non-interactive refusal on the Linux workstation.
+Assumption: a session about to edit a path named in a `Before editing <paths>, read …` pointer
+opens that knowledge file. If false, the ~85,000 moved units are archived rather than consulted,
+and verbatim moves across two repos buy nothing over deletion plus rule-5 lines. Settle after
+landing with a widened step 4; ai-config's own step-4 reading for the same pointer style is an
+earlier proxy.
+Disposition:
+
+### Ergonomics
+
+Finding: Five findings, two load-bearing.
+- **One pointer cannot cover the per-variable seams.** They name 25 distinct paths across
+  `lib/`, `scripts/`, `tests/`, `config/` and `.config/` (23,109 units). One pointer either lists
+  all 25 paths or globs "any code file". The destination would also grow from 40,775 to about
+  71,357 units, with two parallel `## Test Seams` and `## Mock Pattern` sections. Split the
+  destination by subsystem so each pointer names a few files: awscli verification, zsh startup,
+  hooks and coverage tracer, test mocks. Cadence is already split this way.
+- **The pointer path does not resolve.** `ai-config/docs/knowledge/<file>.md` is relative, and
+  dotfiles has no `ai-config/` directory. The 7 existing GitHub links cannot be fetched either:
+  `brujack/ai-config` is PRIVATE. Use `~/git-repos/personal/ai-config/docs/knowledge/…`, which
+  exists on both development machines (verified by the orchestrator), and have the plan replace
+  the existing links.
+- **The rule-5 criterion misses notes whose trigger is not an edit.** The Docker Desktop line
+  ("If the installer's `.zprofile` lines reappear, delete them rather than committing them") has
+  the same shape as rule 8, no test pins it, and no "Before editing" pointer can fire for it.
+  Name the criterion: a deliberate deviation not pinned by a test, or one whose trigger is not an
+  edit, is rule 5.
+- **The checks pass when nothing is done.** Only check 7 and check 4's misspelling control carry
+  specific non-zero expectations. Needed: check 4 expects exactly 9 paths, check 3 expects at
+  least 9 strings, and a reverse check shows every non-deleted block of `ce0495f1` is a substring
+  of the new `CLAUDE.md` or one of the 9 files.
+- **Minor:** `dotfiles-sc2086-site-manifest.md` is 125,240 units; give it no pointer.
+
+Also found, harmless: `tests/setup_env/profiles.bats:465` names "Adding a New Machine", which
+stays.
+Assumption: a pointer in dotfiles `CLAUDE.md` is followed by the session or subagent that edits
+the named file. 5 of the last 21 days' dotfiles sessions that edited `tests/`, `lib/` or
+`scripts/` (7 in 60 days, subagents included) opened 0 `dotfiles-*` knowledge files. That proves
+little while the content is still inline and the links cannot be fetched. Settle with a probe
+after the files land: one local-path pointer, `claude -p "add a test for update_aws_cli's
+missing-gpg branch"` several times including via a subagent, counting runs that `Read` the file
+before the first `Edit`/`Write`.
+Disposition:
+
+### Risk
+
+Finding: Nothing proves that every removed paragraph landed somewhere, and `### Testing Rules`
+demonstrates it. That section (master `CLAUDE.md:365-375`) has no row in the homes table. Two
+rule-5 lines come from it, and its other six bullets have no stated home. Five of the eight checks
+pass on an empty result, so the spec's "each check states a non-zero expectation" is false.
+Proposed accounting check: each of the 143 paragraphs of 200+ characters in `ce0495f1:CLAUDE.md`
+lands in the new `CLAUDE.md`, a knowledge file or a named deletion list. Expect 0 unaccounted,
+report every bucket's count, and use one dropped paragraph as a control that reports 1.
+
+**Rule-5 content outside the nine:**
+- `:367`: `load_setup_env()` does not set OS vars, so a test must set them or call `detect_env`.
+- `:369`, `:371`: where a new function's test and a new script's test directory go.
+- `:613`: the Docker `.zprofile` line.
+- `:866`: a case that merely wants an exact value must be *guarded*. The compressed "enforced by
+  `makefile_lint_scope.bats`" claims more than the test enforces: `:678` accepts either category,
+  so the mistake that shipped passes it.
+
+**Cross-repo ordering is not enforced.** dotfiles `auto-merge` waits only on CI, so check 4 must
+run before `gh pr create`, or the PR must open without auto-merge.
+
+**Knowledge README.** It is grouped by repo (`### dotfiles` at :50, `### terraform-ansible`
+last), so rows appended at the end are misfiled. The feared conflict does not exist either:
+`feat/memory-digest` adds lines inside `### ai-config`. `validate_knowledge.py` skips the README,
+which already lacks rows for `dotfiles-sc2086-site-manifest.md` and
+`dotfiles-brew-path-presence-guards.md`.
+
+**Check 5 cannot pass as written for the `update` internals.** A padded table cell turned into
+prose is not a substring, and the ai-config PostToolUse formatter may re-pad moved table fragments.
+
+**Deletions that carry a rule:** `:411`, "treat a lone red there [bats test 341] as a re-run
+candidate", appears nowhere else. Route it to `dotfiles-bash-coverage.md`.
+
+**Premise holds, with exceptions:**
+- 0 paragraph and 0 sentence matches, but an 8-word shingle comparison shows `:847`
+  ("Pass-through mocks") is 82% present in `dotfiles-bats-test-infrastructure.md`. Dedupe rather
+  than duplicate it.
+- Rule 7 is already loaded from `shell.md` (zsh `$0`, and worktree `zsh -i -c exit`).
+
+Assumption: pointer follow-through, as the other two lenses found. ADR-0077's one-in-five figure
+counts `Read`s under code paths, not pointer following; if follow-through is near zero every move
+is a deletion and each misclassified paragraph is a silent loss. Measurable now against today's
+pointers: over 21 days of Studio top-level dotfiles transcripts, count sessions that edited a path
+those pointers cover and how many `Read` the pointed-to file.
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
