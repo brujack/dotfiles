@@ -62,59 +62,67 @@ Three measurements bound the design:
 
 ## Design
 
-All changes are to dotfiles `CLAUDE.md`, plus one appended paragraph in ai-config
-`docs/knowledge/dotfiles-bash-coverage.md`. Line references are to `origin/master` at `e9ea9515`,
-whose `CLAUDE.md` is byte-identical to `ce0495f1`'s.
+All changes are to dotfiles `CLAUDE.md`, plus one appended section in ai-config
+`docs/knowledge/dotfiles-bash-coverage.md`. Line references are to `e9ea9515`, whose `CLAUDE.md` is
+byte-identical to `ce0495f1`'s and to `origin/master` at spec time.
 
 ### 1. Delete the bash coverage records, routing the rules they carry
 
 `#### Bash` under `### Coverage` holds 20 bullets before `- make bash-coverage measures`. Twelve
-are records (12,043 units): the eight `**Overall: 91%**` bullets and the four "local reads one
-point higher" bullets (`The local-reads-one-point-higher rule did NOT hold on #244`,
+are records (lines 406–436, 12,043 units): the eight `**Overall: 91%**` bullets and four "local
+reads one point higher" bullets (`The local-reads-one-point-higher rule did NOT hold on #244`,
 `91% has now landed exactly at the floor on the fifth consecutive CI measurement`,
-`The preview discipline paid a fourth time`, `And a fifth time, on #223`). All twelve are
-deleted. The eight method bullets after them stay.
+`The preview discipline paid a fourth time`, `And a fifth time, on #223`). All twelve are deleted;
+the eight method bullets stay.
 
-Five rule-bearing sentences inside those twelve are routed before deletion, not lost:
+The rules those records carry are routed first:
 
-| rule | already stated elsewhere | action |
+| rule | loaded today? | action |
 | --- | --- | --- |
-| Publish CI's coverage figure, never a local one | `~/.claude/standards/shell.md:1432-1433` (ADR-0061) | none |
-| Read the ratio, the heuristic-disagreement count and the test count from one CI run | no | append to `dotfiles-bash-coverage.md` |
-| A local preview can differ from CI in either direction (#244, #250, #252, #257) | no | append to `dotfiles-bash-coverage.md` |
-| CI bash coverage sits at the 91% floor, so a change adding untested instrumented lines breaches the gate immediately | no | append to `dotfiles-bash-coverage.md` |
-| A lone red on bats test `extract_new_content: no false positives when state is 20KB-truncated subset of current` is a known flake; re-run before treating it as a regression | no | append to `dotfiles-bash-coverage.md` |
+| Publish CI's bash coverage figure; a local run is a preview, labelled as one | no — stated in ADR-0061:55, which no session loads (`shell.md:1432-1433` covers only where a floor comes from) | **inline:** one new bullet in `#### Bash`: `- Publish CI's bash coverage figure in the PR body once CI has run (gh pr edit <n>); a local run is a preview, labelled as one.` Its moment is writing a PR body, not editing a file, so it stays loaded |
+| Read the ratio, the heuristic-disagreement count and the test count from one CI run | no | append |
+| A local preview can differ from CI in either direction (#244, #250, #252, #257) | no | append |
+| CI bash coverage sits at the 91% floor, so a change adding untested instrumented lines breaches the gate immediately | no | append |
+| A lone red on bats test `extract_new_content: no false positives when state is 20KB-truncated subset of current` (`tests/scripts/whats-new-anthropic.bats:113`) is a known flake; re-run before treating it as a regression | no | append |
+| Coverage recorded by derivation rather than re-measurement is acceptable only because this CI job independently gates at the floor (`:432-436`) | no | append |
+| 91% is the durable claim; the command ratio is one sample, not a constant (`:411`) | no | append |
 
-The appended text is one `## Reading the bash coverage figure` section, written as a short
-reference paragraph; it quotes no per-PR figures.
+The six appended rules form one `## Reading the bash coverage figure` section, written as short
+reference prose with no per-PR figures.
 
-### 2. Delete the other two recorded figures and the local writer
+### 2. Delete the other recorded figures and the local writer
 
-- PowerShell: delete `- **setup_windows.ps1: 95.54%** (line coverage, …)` and
-  `- Update this figure whenever tests are added or removed.` (line 402). The floor, scope and
+- PowerShell: delete `- **setup_windows.ps1: 95.54%** (…)` (line 398) and
+  `- Update this figure whenever tests are added or removed.` (line 402). Floor, scope and
   re-measure bullets stay.
-- CI: in the `test` job bullet, delete the parenthetical figure
-  `(regression proxy; 1626 tests, CI-measured 2026-09-10 on 1d309276, …)`, keeping
-  `verifies test count >= 840`.
+- CI (line 352): replace the parenthetical `(regression proxy; 1626 tests, CI-measured … #260)`
+  with `(regression proxy)`, keeping the only statement of what `>= 840` is for.
 
 ### 3. Entry Points table to a list
 
-The nine-row `| Type | Purpose |` table becomes nine bullets, `- ` + the backticked type +
-` — ` + the purpose cell, cell text unchanged. The formatter pads every table cell to the widest
-one, so all nine rows are exactly 1,002 units; 6,328 units are padding. A list cannot be re-padded
-by a later `Edit`. `**Options:**` and its bullet stay. Edits use a script, not the Edit tool.
+Lines 80–90 — the `| Type | Purpose |` header, its separator and nine rows — become nine bullets,
+`- ` + the backticked type + ` — ` + the purpose cell. The formatter pads every cell to the widest
+one (each row is exactly 1,002 units), so a list removes about 8,300 units of padding, header and
+separator, and cannot be re-padded by a later `Edit`. No cell contains `|` or `<br>`, and nothing in
+the repo parses the table. `**Options:**` and its bullet stay. Edits use a script, not the Edit tool.
 
-### 4. Local paths for knowledge links
+### 4. Local paths for knowledge links, and a trigger-worded coverage pointer
 
-The seven `[…](https://github.com/brujack/ai-config/blob/…/docs/knowledge/<file>.md)` links (to five
-distinct files) become `` `~/git-repos/personal/ai-config/docs/knowledge/<file>.md` ``.
-`brujack/ai-config` is PRIVATE, so a session cannot fetch the GitHub form; the local path exists on
-the Mac Studio and the Linux workstation. All five target files exist.
+- The seven `[…](https://github.com/brujack/ai-config/blob/master/docs/knowledge/<file>.md)` links
+  (lines 88, 197, 233, 469, 473, 845, 849; five distinct files, no anchors) become
+  `` `~/git-repos/personal/ai-config/docs/knowledge/<file>.md` ``. `brujack/ai-config` is PRIVATE;
+  the local path exists on the Mac Studio and the Linux workstation.
+- Line 469's pointer (`- Method detail, per-file floors/ceilings, and why kcov/bashcov are ruled
+  out: [...]`) is reworded to name its moment:
+  `- Before recording or publishing a bash coverage figure, or editing scripts/run-bash-coverage.sh
+  or scripts/bash-tracer.sh, read ~/git-repos/personal/ai-config/docs/knowledge/dotfiles-bash-coverage.md
+  (method, floors and ceilings, reading the figure).`
 
 ### Size
 
-156,787 → about 138,100 UTF-16 units (12,043 records, 6,328 padding, about 300 for the other
-figures and link text). The ≤ 50,000 bar belongs to the deferred move work, not this change.
+Measured by applying every edit above by script to `e9ea9515:CLAUDE.md`: **156,787 → 135,902**
+UTF-16 units, with 51 lines removed or rewritten, exactly those listed in check 4. The ≤ 50,000 bar
+belongs to the deferred move work.
 
 ## Delivery
 
@@ -155,27 +163,34 @@ findings and both probes; a dotfiles backlog row tracks it.
 
 ## Verification
 
-Each check states a non-zero before-value or a control.
+Each check states a non-zero before-value or a control. The plan runs the same script as a dry run
+first and records its output.
 
 1. **Records gone:** `grep -o 'Overall: 91%' CLAUDE.md | wc -l` 8 → 0; `Update this figure` 1 → 0;
-   `95.54%` 1 → 0; `local-reads-one-point-higher rule did NOT hold` 1 → 0.
-2. **Method kept:** the eight method bullet leads under `#### Bash` (from
-   `The instrumented set is` to `covered > coverable`) each grep exactly once, 8 → 8.
-3. **Size:** 137,000 ≤ UTF-16 units ≤ 139,500 — a lower bound, so over-deletion fails.
-4. **Deletion scope:** every line removed by `git diff -U0 e9ea9515 -- CLAUDE.md` belongs to the
-   twelve record bullets, the two PowerShell lines, the CI parenthetical, the nine table rows plus
-   header and separator, or the seven link lines rewritten. Expect 0 unexplained removed lines;
-   control: an extra removed line in a scratch copy reports exactly 1.
-5. **Entry Points:** exactly 9 bullets naming the nine `-t` types, 0 table rows beginning `| \``,
-   and each of the nine purpose cells from `e9ea9515` is a substring of the new `CLAUDE.md`;
-   control: altering one cell in a scratch copy reports exactly 1 missing.
+   `95.54%` 1 → 0; `local-reads-one-point-higher rule did NOT hold` 1 → 0; `1626 tests` 1 → 0.
+2. **Kept and added text present:** the eight method bullet leads under `#### Bash` (from
+   `The instrumented set is` to `covered > coverable`) each grep exactly once; `regression proxy`
+   greps once; the new publish bullet greps once (0 before).
+3. **Size:** 135,600 ≤ UTF-16 units ≤ 136,200 around the measured 135,902, and the Entry Points
+   section contains no line beginning `|` — so over-deletion and an orphaned table stub both fail.
+4. **Deletion scope:** the lines that `git diff -U0 e9ea9515 -- CLAUDE.md` removes or rewrites are
+   exactly lines 80–90, 197, 233, 352, 398, 402, 406–436, 469, 473, 845 and 849 (51 lines),
+   counted by hunk headers rather than a `^-[^-]` grep (a removed bullet shows as `-- …`). Expect 0
+   outside that set and 0 inside it left untouched; control: an extra removed line in a scratch copy
+   reports exactly 1.
+5. **Entry Points:** the section has exactly 9 bullets naming the nine `-t` types and no line
+   beginning `|`; each of the nine purpose cells from `e9ea9515`, **after applying the link rewrite of
+   section 4**, is a substring of the new `CLAUDE.md`. Control: altering one cell in a scratch copy
+   reports exactly 1 missing.
 6. **Links:** `github.com/brujack/ai-config` 7 → 0; exactly 7 `~/git-repos/personal/ai-config/docs/knowledge/`
-   paths, each existing locally, checked by a line-wise loop; control: one misspelled name reports
-   exactly 1 missing.
-7. **Routed rules:** `dotfiles-bash-coverage.md` on ai-config `origin/master` contains all four
-   appended rules (four fixed grep strings, each ≥ 1, 0 before), and `make validate-knowledge`
-   passes.
-8. **Gates:** `make lint` and `make check-agent-guidance` pass in dotfiles.
+   paths, each existing locally, checked by a line-wise loop; the reworded coverage pointer greps
+   once. Control: one misspelled name reports exactly 1 missing.
+7. **Routed rules:** `dotfiles-bash-coverage.md` on ai-config `origin/master` has the
+   `## Reading the bash coverage figure` section with all six appended rules (six fixed grep strings,
+   each ≥ 1, 0 before), and `make validate-knowledge` passes.
+8. **Gates:** `make lint` and `make check-agent-guidance` pass in dotfiles. These guard the lint scope
+   and the PowerShell import line only; `sync-agent-guidance.sh:107` reads just the `@` imports, so
+   they cannot detect the sort itself — checks 1–6 do.
 
 ## Multi-Lens Review
 
@@ -447,4 +462,4 @@ Assumption: a rule moved to `dotfiles-bash-coverage.md` reaches the session writ
 figure, but the only nearby pointer (`:469`) names neither the moment nor the file's role. The
 5-of-5 probe used a file-specific pointer with an absolute path. Settle with a probe prompt such as
 "write this PR's Test Plan including bash coverage", or reword `:469` before shipping.
-Disposition:
+Disposition: Addressed (operator, 2026-09-11), no further lens round, since the findings sit in the verification apparatus. Check 5 compares cells after the link rewrite. Check 3's window is re-centred on the scripted dry run (135,902) and asserts no table stub. A dry run also showed that a file-wide "no line beginning `| `" check counts 28 rows of other tables, so check 5 is now scoped to Entry Points. Check 4 uses the measured line allow-list, counted by hunks. The publish rule stays inline because its moment is not an edit. The derivation and "91% is the durable claim" rules are appended. `regression proxy` is kept. The :469 pointer is reworded to name when to read it.
