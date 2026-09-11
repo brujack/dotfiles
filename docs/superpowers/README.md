@@ -135,7 +135,7 @@ Master status index for all specs and implementation plans in this directory.
 | 2026-08-16 | [zsh-identity-single-table](plans/2026-08-16-zsh-identity-single-table.md)                 | [spec](specs/2026-08-16-zsh-identity-single-table-design.md)                                                                              | Done    |
 | 2026-08-17 | [zsh-legacy-identity-consolidation](plans/2026-08-17-zsh-legacy-identity-consolidation.md) | [spec](specs/2026-08-17-zsh-legacy-identity-consolidation-design.md)                                                                      | Done    |
 | 2026-09-10 | [claude rules symlink skip](plans/2026-09-10-claude-rules-symlink-skip.md) | ai-config `docs/superpowers/specs/2026-09-10-claude-md-rearchitecture-design.md` at `c9641926` | Done |
-| 2026-09-11 | — | [CLAUDE.md re-sort](specs/2026-09-11-claude-md-resort-design.md) | Pending — spec in review (descoped to records, table, links) |
+| 2026-09-11 | [plan](plans/2026-09-11-claude-md-resort.md) | [CLAUDE.md re-sort](specs/2026-09-11-claude-md-resort-design.md) | In Progress |
 
 ---
 
