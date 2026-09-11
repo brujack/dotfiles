@@ -21,7 +21,10 @@ Measured on the box by the ansible session over ssh, 2026-09-11:
 | provisioning state            | nothing yet: no docker, no ledger, no make, no `~/.config/dotfiles/machine-id`    |
 
 The box is intended to become the machine every session runs on, taking that role from the
-Mac Studio and the `workstation` 7950X. `workstation` stays in the fleet and keeps its entries: it becomes an additional GitHub runner, so the fleet ends with two runner servers, `workstation` and `claude`. Both are `linux_workstation`, which already carries `docker`, so running a runner needs nothing from this change.
+Mac Studio and the `workstation` 7950X. `workstation` stays in the fleet and keeps its
+entries: it becomes an additional GitHub runner, so the fleet ends with two runner servers,
+`workstation` and `claude`. Both are `linux_workstation`, which already carries `docker`, so
+running a runner needs nothing from this change.
 
 ## Scope
 
@@ -81,8 +84,9 @@ leaks between tests and those two branches silently skip on the new machine.
 The cost, stated rather than discovered later: no consumer can distinguish `claude` from
 `workstation` by legacy variable. Only `hostname -s` separates them. Nothing in the repo
 needs that distinction today — the only host-keyed literals left in `lib/` are `studio` and
-`studio-1` (`lib/legacy_rsync.sh:5`, `lib/launch_agents.sh:149`), measured with a repo-wide
-grep for hostname literals.
+`studio-1` (`lib/legacy_rsync.sh:5`, `lib/launch_agents.sh:149`), measured by grepping `lib`, `scripts`, `config`, `.config` and `.zprofile` for quoted
+hostname literals — `tests/` and `docs/` were outside that population and do contain
+more.
 
 **Ubuntu 26.04 needs nothing.** `detect_env` sets `RESOLUTE` from `lsb_release -rs`, and
 `lib/linux_ubuntu.sh` already has the 26.04 arm installing `ubuntu_common_packages.txt` plus
@@ -143,11 +147,12 @@ exactly the eight legacy identity variable names") stays green by construction: 
 
 ### 4. dotfiles `CLAUDE.md` corrections
 
-- **Line 849 is false and this change makes it more misleading.** It says `WORKSTATION` and
+- **The Key Conventions bullet (line 849 at `cf259c28`) is false, and this change makes it
+  more misleading.** It says `WORKSTATION` and
   `CRUNCHER` "have been removed; use `HAS_*` vars instead". Both are live in
   `PROFILE_LEGACY` (`config/profiles.sh:62-63`) and read by `.zprofile:10`. Corrected to
   describe the table as it is.
-- **Line 1051** names `workstation` and `cruncher` as the wired-only hosts; `claude` joins
+- **The Profile Model paragraph** (line 1051 at `cf259c28`) names `workstation` and `cruncher` as the wired-only hosts; `claude` joins
   that list.
 - **"Adding a New Machine"** says 3 edits across 2 files. That holds for a host with a twin
   and is wrong for a wired-only one, which also needs the `wired_only` exemption. The
