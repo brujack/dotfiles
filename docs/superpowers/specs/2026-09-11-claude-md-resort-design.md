@@ -402,3 +402,38 @@ records and line 402 (routing the test-341 note to `dotfiles-bash-coverage.md`),
 Points from a padded table to a list, and replace the seven GitHub links with local
 `~/git-repos/personal/ai-config/...` paths. That subset moves no reference text and needs no rule-5
 copies.
+
+**Probe 2 (operator chose "probe first", 2026-09-11).** Three arms of five runs, each on a fresh
+scratch copy of dotfiles `origin/master`: `pointer` (awscli, cadence and `_PROFILES_LOADED`
+reference moved to scratch knowledge files, three pointers each naming `lib/helpers.sh`),
+`inline` (today's text) and `deleted` (same text removed, no pointer). `claude -p --model sonnet
+--setting-sources project,local --allowedTools=Read,Grep,Glob,Edit,Write`. Two behaviour-phrased
+prompts naming no function: runs 1–3 "a Mac without gpg reports `[FAIL] aws`; add one bats test",
+runs 4–5 "doctor should fail when the vendored AWS CLI signing key is missing; add one bats test".
+Each run's JSONL transcript has a unique name.
+
+| arm | read knowledge file before first edit | runs that edited | edits using the correct seam | `PATH=` hacks |
+| --- | --- | --- | --- | --- |
+| pointer | 4 of 5 | 3 | 3 of 3 | 0 |
+| inline | — | 4 | 4 of 4 | 0 |
+| deleted | — | 3 | 3 of 3 | 0 |
+
+- **Pointers are followed:** 4 of 5 pointer runs `Read` the knowledge file before their first edit.
+  The fifth (a runs-4–5 prompt) did not, and its edit was still correct.
+- **Outcome did not differ between arms:** all 10 edits used the correct seam (`_AWS_GPG_BIN` or
+  `_AWS_KEY_PATH`), none edited `PATH`, none touched a non-test file. The seams are visible in
+  `lib/developer.sh` and `lib/helpers.sh`, so this subsystem cannot show whether moved text
+  changes an answer — only effort: the one runs-1–3 edit in the deleted arm took 35 tool calls,
+  against 11 with a pointer and 18 and 28 inline.
+- **The five runs that did not edit were correct refusals, spread across arms (2 pointer, 1
+  inline, 2 deleted):** runs 1–3's premise is false — macOS `update_aws_cli` verifies with
+  `pkgutil` (`_aws_verify_pkg`), not gpg — and each run said so instead of writing a test.
+- **Leak and harness caveats:** the Layout section still names `_AWS_KEY_PATH` once (the `keys/`
+  line), so runs 4–5 could find that seam without moved text. One deleted run issued a `Bash`
+  `grep` although Bash was not in `--allowedTools`, so that flag does not restrict tools in
+  `claude -p`; the command was read-only inside the scratch copy, and the real dotfiles tree
+  showed 0 status lines before and after.
+- **Population:** Sonnet via `claude -p`, scratch copies, two prompts, one subsystem's seams, 15
+  runs. It does not measure non-derivable hazard text (e.g. `_RHN_LOCAL_CFG` exported in
+  `setup()`, detector stderr carrying no credentials) — the rule-5 content round 2 found missing
+  or wrong.
