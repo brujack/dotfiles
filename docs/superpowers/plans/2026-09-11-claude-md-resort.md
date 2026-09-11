@@ -1,5 +1,7 @@
 # dotfiles CLAUDE.md Re-sort (descoped) — Implementation Plan
 
+> **Status: DONE** — merged direct to master (564fd477), 2026-09-11.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Cut dotfiles `CLAUDE.md` from 156,787 to 135,902 UTF-16 units by deleting measurement records, flattening the padded Entry Points table and replacing unfetchable knowledge links, without losing a rule.
