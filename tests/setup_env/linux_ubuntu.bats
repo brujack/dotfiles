@@ -309,6 +309,21 @@ teardown() {
 
 @test "_install_ubuntu_docker: HAS_DOCKER set installs docker-ce" {
   export HAS_DOCKER=1
+  # Both seams, even though this test is about the apt call. Unseamed,
+  # _daemon_json falls back to the REAL /etc/docker/daemon.json — and since
+  # `tee` is a pass-through mock and tests/mocks/sudo execs a resolvable
+  # target, this test reaches for a system path outside the repo (tdd.md E2).
+  # On ubuntu-latest `dockerd` also resolves, so the validation step invokes a
+  # real dockerd against that path and returns 1. Green on macOS, where dockerd
+  # is absent and the warn branch runs; red on the runner — tdd.md pitfall G.
+  # This failed exactly that way on the first CI round of the PR that added the
+  # validation, while its sibling test two blocks down passed because that one
+  # had the seam.
+  export _DOCKER_DAEMON_JSON="${BATS_TEST_TMPDIR}/daemon.json"
+  local _stub="${BATS_TEST_TMPDIR}/dockerd-accept-apt"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "${_stub}"
+  chmod +x "${_stub}"
+  export _DOCKER_VALIDATE_BIN="${_stub}"
   run _install_ubuntu_docker
   [ "$status" -eq 0 ]
   grep -q "apt install docker-ce" "${MOCK_CALLS_FILE}"
