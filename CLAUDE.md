@@ -374,7 +374,7 @@ CI requirements:
 
 ### Testing Rules
 
-- **`load_setup_env()` does NOT set OS vars, and this bullet said the opposite until 2026-09-10.** It sources `setup_env.sh`, which *defines* `detect_env` via `lib/detect_env.sh` but returns at its sourcing guard (`setup_env.sh:57`) before the call at `:62`. So `MACOS`, `LINUX`, `UBUNTU` and every `HAS_*` hold whatever the parent shell exported — set in an interactive developer shell, empty under `env -i`, and different again on a CI runner. Measured 2026-09-10 under `env -i` with a scratch `HOME`: `MACOS`, `LINUX` and `HAS_DEVTOOLS` all empty after `load_setup_env`, and `MACOS=1` after an explicit `detect_env` in the same shell. A test whose outcome depends on OS detection must set the variables itself (e.g. `unset MACOS; export LINUX=1; export UBUNTU=1`) or call `detect_env`, never inherit them. 16 of the 21 files in `tests/setup_env/` call `load_setup_env()`; `cadence_doctor`, `launch_agents`, `mocks_curl`, `profiles` and `requirements_ci` do not.
+- **`load_setup_env()` does NOT set OS vars, and this bullet said the opposite until 2026-09-10.** It sources `setup_env.sh`, which _defines_ `detect_env` via `lib/detect_env.sh` but returns at its sourcing guard (`setup_env.sh:57`) before the call at `:62`. So `MACOS`, `LINUX`, `UBUNTU` and every `HAS_*` hold whatever the parent shell exported — set in an interactive developer shell, empty under `env -i`, and different again on a CI runner. Measured 2026-09-10 under `env -i` with a scratch `HOME`: `MACOS`, `LINUX` and `HAS_DEVTOOLS` all empty after `load_setup_env`, and `MACOS=1` after an explicit `detect_env` in the same shell. A test whose outcome depends on OS detection must set the variables itself (e.g. `unset MACOS; export LINUX=1; export UBUNTU=1`) or call `detect_env`, never inherit them. 16 of the 21 files in `tests/setup_env/` call `load_setup_env()`; `cadence_doctor`, `launch_agents`, `mocks_curl`, `profiles` and `requirements_ci` do not.
 - **`run_update` tests stay off real pip because `load_mocks` exports `MOCK_PYENV_WHICH_STDOUT` by default** (`tests/helpers/common.bash:13`). Without it the pyenv mock falls back to `command -v python3`, and a `run_update` test that enters the pip section runs a real `pip install` — the test passes but takes 1–3 min in the full suite. A file that calls `load_setup_env` without `load_mocks` loses that default. (This bullet previously led with a per-test workaround the default had replaced, and claimed `load_setup_env()` sets `HAS_DEVTOOLS=1` — false for the reason in the bullet above.)
 - Every new function in `setup_env.sh` must have a test in `tests/setup_env/unit.bats` (pure logic) or `tests/setup_env/install_guards.bats` (side effects requiring mocks)
 - Every modification to an existing function must update its test
@@ -556,6 +556,40 @@ The two tests covering it are a **pair**, and neither works alone. The non-inter
 asserts zero calls, which is a composite outcome; the interactive test is the control that
 proves production actually reads the seam. Mutation-confirmed: reading the seam under a
 typo'd name leaves the negative test green and fails only the positive one.
+
+**`_OVERRIDE_CURRENT_LOGIN_SHELL` (`lib/helpers.sh`'s `_current_login_shell`, read by
+`setup_zsh_as_default_shell` and `_doctor_check_login_shell`) supplies the ACCOUNT's login
+shell.** Production derives it from `getent passwd "${USER}"` on Linux and
+`dscl . -read /Users/${USER} UserShell` on macOS — deliberately **not** `${SHELL}`, which
+names whichever shell happens to be running. A provision started from zsh read "already
+zsh" while the passwd entry still said `/bin/bash`, so the guard could not see the thing it
+guarded. The seam exists because the only other way to reach either branch is to read — or
+change — the developer's real account. It is not optional in tests: without it they pass on
+a mac whose account is already zsh and fail on any runner whose account is `/bin/bash`,
+which is the machine's reason rather than the code's, and the same trap the homebrew-prefix
+pair above carries. Measured: the three end-to-end `run_doctor` tests stub every sub-check
+by name, so `_doctor_check_login_shell` must be stubbed there too or it reads the real
+account mid-suite.
+
+**`chsh` is why the rest of that function changed, and the failure was a PASS rather than a
+FAIL.** `chsh` is setuid root but authenticates the **invoking** user through PAM, so it
+prompts for a password and exits 1 in every non-interactive actor — a provision run, cron,
+`ssh host '<cmd>'`. Measured on `claude` 2026-09-12:
+
+```
+chsh -s /bin/zsh </dev/null        Password: chsh: PAM: Authentication failure   rc=1, unchanged
+sudo -n chsh -s /bin/zsh "$USER"                                                 rc=0, changed
+```
+
+The old code checked neither rc and then logged `Changed default shell to ${ZSH_PATH}`
+unconditionally, so a full provision reported success over a shell it had not changed —
+found only when the operator logged in and got a bash prompt. `run_setup_user`'s
+`|| return 1` (`lib/workflows.sh:153`) could not fire either, because the function's last
+command was `log_info`. The three pre-existing tests encoded all of it: one asserted only
+that `chsh` was _called_, never that it succeeded, and the error-path test asserted
+`status -eq 0`, pinning the swallow. `_doctor_check_login_shell` is the independent reader
+that would have caught the silent failure, and it renders "could not read the account" as a
+WARN rather than a PASS, since an unreadable account is not evidence the shell is correct.
 
 **`_OVERRIDE_GNUBIN_ARM` / `_OVERRIDE_GNUBIN_INTEL` are read by two files in two
 languages** — `lib/macos.sh`'s `install_make_macos` (bash) and
@@ -1130,7 +1164,7 @@ declare -A PROFILE_MAP=(
    **A wired-only host (no `-1` twin, like `workstation`, `cruncher`, and `claude`) needs a
    fourth edit, in a third file:** add its key to the `wired_only` set in
    `tests/setup_env/profiles.bats`, or the test `every wired PROFILE_MAP key has a wireless
-   -1 twin on the same profile` fails, since that test expects every `PROFILE_MAP` key to
+-1 twin on the same profile` fails, since that test expects every `PROFILE_MAP` key to
    have a `-1` twin unless explicitly exempted.
 
 4. Push a feature branch — CI validates → auto-merges to master.

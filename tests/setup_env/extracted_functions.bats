@@ -333,28 +333,63 @@ _make_fake_dotfiles() {
 
 # ── setup_zsh_as_default_shell ───────────────────────────────────────────────
 
-@test "setup_zsh_as_default_shell does nothing when shell is already zsh" {
-  export SHELL="/bin/zsh"
+# All three drive the ACCOUNT's login shell through
+# _OVERRIDE_CURRENT_LOGIN_SHELL rather than exporting ${SHELL}, and that is not
+# a style change. Production stopped reading ${SHELL} because it names the
+# invoking shell rather than the account, so without this seam these tests fall
+# through to dscl/getent and read the developer's REAL login shell: "already
+# zsh" passed on this mac for the machine's reason, not the code's, and would
+# flip on any box whose account differs -- ubuntu-latest included. Same trap
+# the homebrew-prefix and gnubin seams already carry.
+@test "setup_zsh_as_default_shell does nothing when the account is already zsh" {
+  export _OVERRIDE_CURRENT_LOGIN_SHELL="/bin/zsh"
   run setup_zsh_as_default_shell
   [ "$status" -eq 0 ]
   run grep -q "chsh" "${MOCK_CALLS_FILE}"
   [ "$status" -ne 0 ]
 }
 
-@test "setup_zsh_as_default_shell calls chsh when shell is not zsh" {
-  export SHELL="/bin/bash"
+@test "setup_zsh_as_default_shell calls chsh when the account is not zsh" {
+  export _OVERRIDE_CURRENT_LOGIN_SHELL="/bin/bash"
   run setup_zsh_as_default_shell
   [ "$status" -eq 0 ]
   grep -q "chsh -s /bin/zsh" "${MOCK_CALLS_FILE}"
 }
 
-@test "setup_zsh_as_default_shell logs error when zsh path does not exist" {
-  export SHELL="/bin/bash"
+# Now returns non-zero rather than 0. An absent zsh is a provisioning failure,
+# and run_setup_user's `|| return 1` (workflows.sh:153) should stop on it --
+# the old `status -eq 0` here pinned the swallow that made that line dead.
+@test "setup_zsh_as_default_shell fails when the zsh path does not exist" {
+  export _OVERRIDE_CURRENT_LOGIN_SHELL="/bin/bash"
   export _OVERRIDE_ZSH_PATH="/nonexistent/zsh"
   run setup_zsh_as_default_shell
-  [ "$status" -eq 0 ]
+  [ "$status" -ne 0 ]
   [[ "$output" == *"does not exist"* ]]
   ! grep -q "chsh" "${MOCK_CALLS_FILE}"
+}
+
+# Measured on `claude` 2026-09-12, after a full provision left the login shell
+# as /bin/bash while the run reported success:
+#
+#   $ chsh -s /bin/zsh </dev/null
+#   Password: chsh: PAM: Authentication failure          rc=1, shell unchanged
+#   $ sudo -n chsh -s /bin/zsh "$USER"                   rc=0, shell changed
+#
+# chsh is setuid root but authenticates the INVOKING user through PAM, so it
+# prompts for a password and fails in every non-interactive actor -- ssh
+# 'cmd', cron, a provision run. The old code neither sudo'd nor checked the
+# rc, and then logged "Changed default shell to ${ZSH_PATH}" unconditionally,
+# so a provision that failed to change the shell reported that it had. That is
+# a FAIL rendered as a PASS, and it is why nothing surfaced it for the whole
+# provisioning session. run_setup_user's `|| return 1` (workflows.sh:153)
+# could not fire either, because the function's last command was log_info.
+@test "setup_zsh_as_default_shell fails loudly when chsh cannot change the shell" {
+  export _OVERRIDE_CURRENT_LOGIN_SHELL="/bin/bash"
+  export MOCK_SUDO_EXIT=1
+  export MOCK_CHSH_EXIT=1
+  run setup_zsh_as_default_shell
+  [ "$status" -ne 0 ]
+  [[ "$output" != *"Changed default shell"* ]]
 }
 
 # ── update_system_packages ───────────────────────────────────────────────────
