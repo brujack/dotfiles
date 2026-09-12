@@ -170,11 +170,13 @@ role: executor
 model: sonnet
 tdd: not-applicable
 acceptance:
+  - cmd: 'grep -qE "^\| *Profile .*\| *Machines" README.md'
+    exit_code: 1
   - cmd: 'grep -qE "^\| *Profile .*\| *Capabilities" README.md'
     exit_code: 0
   - cmd: 'grep -q "no wireless interface" README.md'
     exit_code: 1
-  - cmd: 'grep -q "claude" README.md'
+  - cmd: 'grep -qE "linux_workstation.*claude" README.md'
     exit_code: 0
 max_retries: 3
 files_touched:
@@ -183,6 +185,12 @@ depends_on: [2]
 ```
 
 **Files:**
+
+**Gate provenance, measured on the base tree at `c376fbb4`:** the Machines-column gate is
+rc 0 now and must become 1; the `linux_workstation.*claude` gate is rc 1 now and must become
+0; the Capabilities gate is a positive control so the table cannot be satisfied by deleting
+it. An earlier draft gated on `grep -q "claude" README.md`, which passes on the base tree —
+README already contains 13 "claude" hits from `.claude/` paths.
 
 1. `README.md:335-341` — remove the **Machines** column from the profile table, header and
    separator included, leaving Profile and Capabilities. It duplicates `config/profiles.sh`,
@@ -238,7 +246,7 @@ role: executor
 model: sonnet
 tdd: not-applicable
 acceptance:
-  - cmd: 'grep -q "claude" /Users/bruce/git-repos/personal/ai-config-worktrees/docs-claude-fleet/USER.md'
+  - cmd: 'grep -q "Ubuntu 26.04" /Users/bruce/git-repos/personal/ai-config-worktrees/docs-claude-fleet/USER.md'
     exit_code: 0
   - cmd: 'grep -q "seven machines carry repos" /Users/bruce/git-repos/personal/ai-config-worktrees/docs-claude-fleet/USER.md'
     exit_code: 1
@@ -253,6 +261,10 @@ depends_on: [2]
 This task works in a **separate ai-config worktree**, which the orchestrator creates first:
 `/Users/bruce/git-repos/personal/ai-config-worktrees/docs-claude-fleet` on branch
 `docs/claude-fleet`, from `origin/master`.
+
+**Gate provenance, measured on the base tree:** `Ubuntu 26.04` is absent from `USER.md` now
+and must be present after; `seven machines carry repos` is present now and must be gone. An
+earlier draft gated on `grep -q "claude"`, which passes already — the file has 3 such hits.
 
 `USER.md`, Environment section:
 
