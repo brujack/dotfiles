@@ -606,7 +606,17 @@ _doctor_check_versions() {
 
   _doctor_check_one_version() {
     local _tool="$1" _pinned="$2" _cmd="$3" _regex="$4"
-    if ! command -v "${_tool}" &>/dev/null; then
+    # Capture the resolution from the guard rather than calling command -v
+    # twice: the report has to name WHICH binary answered, not just what it
+    # said. A version is not an identity when several are installed. Measured
+    # on the claude box 2026-09-12 -- /usr/bin/python3 3.14.4, linuxbrew's
+    # 3.14.7, and the pyenv shim 3.14.4, where a login+interactive shell
+    # resolves the shim and a provision's PATH resolves linuxbrew's. The bare
+    # figure sent someone hunting for a python no interactive shell there uses.
+    # Declared separately from the assignment so the command substitution's
+    # status is not masked (SC2155).
+    local _resolved
+    if ! _resolved=$(command -v "${_tool}" 2>/dev/null); then
       log_warn "${_tool}: not installed (skipping version check)"
       return
     fi
@@ -614,13 +624,15 @@ _doctor_check_versions() {
     _raw=$(${_cmd} 2>&1)
     _installed=$(printf '%s' "${_raw}" | grep -oE "${_regex}" | head -1)
     if [[ -z "${_installed}" ]]; then
-      log_warn "${_tool}: could not parse version from '${_raw}'"
+      log_warn "${_tool}: could not parse version from '${_raw}' (${_resolved})"
       return
     fi
     if [[ "${_installed}" == "${_pinned}"* ]]; then
-      doctor_pass "${_tool} (${_installed})"
+      doctor_pass "${_tool} (${_installed}) — ${_resolved}"
     else
-      doctor_fail "${_tool}" "installed ${_installed}, pinned ${_pinned}"
+      # The path matters most here: a mismatch is exactly when the question is
+      # "which one of them is doctor even looking at?"
+      doctor_fail "${_tool}" "installed ${_installed} (${_resolved}), pinned ${_pinned}"
     fi
   }
 

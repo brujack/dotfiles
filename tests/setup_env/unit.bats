@@ -1813,6 +1813,47 @@ _unmocked_path() {
   [ "${_DOCTOR_FAILED}" -eq 0 ]
 }
 
+# doctor reports a version without saying which binary produced it, and on a box
+# with several installed that answer is not recoverable from the report.
+# Measured on the claude box, 2026-09-12:
+#
+#   /usr/bin/python3                          Python 3.14.4
+#   /home/linuxbrew/.linuxbrew/bin/python3    Python 3.14.7
+#   ~/.pyenv/shims/python3                    Python 3.14.4
+#
+# A login+interactive shell resolves the pyenv shim; the PATH a provision runs
+# under resolves linuxbrew's. So a report reading "python3 (3.14.7)" sent
+# someone hunting for a python that no interactive shell on that machine uses,
+# and the version string alone cannot tell those three apart. Naming the
+# resolved path makes the report self-describing.
+#
+# The two tests above this one redefine _doctor_check_versions locally, so
+# neither can observe this; only the "real" pair drives the actual function.
+#
+# PATH deliberately keeps /usr/bin:/bin. The function shells out to grep and
+# head, so a lone-fixture PATH would make this fail for the harness's reason
+# rather than the code's — shell.md's note that scrubbing PATH to hide one
+# binary takes its co-located neighbours with it.
+@test "_doctor_check_versions names the resolved binary, not just the version" {
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  local _tmp="${BATS_TEST_TMPDIR}/resolved_bin"
+  mkdir -p "${_tmp}"
+  cat > "${_tmp}/python3" <<STUB
+#!/usr/bin/env bash
+printf 'Python ${PYTHON_VER}\n'
+STUB
+  chmod +x "${_tmp}/python3"
+
+  local _saved_path="$PATH"
+  export PATH="${_tmp}:/usr/bin:/bin"
+  local _out
+  _out="$(_doctor_check_versions 2>&1)"
+  export PATH="${_saved_path}"
+
+  # The stub's own absolute path must appear, not merely the version it printed.
+  [[ "${_out}" == *"${_tmp}/python3"* ]]
+}
+
 # ── _doctor_check_symlink_roots ───────────────────────────────────────────────
 
 @test "_doctor_check_symlink_roots passes when dotfiles repo directory exists" {
