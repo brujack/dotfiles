@@ -111,7 +111,7 @@ _profiles_snapshot() { # <hostname>
   [ "${#keys[@]}" -gt 0 ]
 
   # Hosts intentionally without a legacy identity variable. Empty today --
-  # all 13 PROFILE_MAP keys map to one -- kept as an explicit, reviewable
+  # every PROFILE_MAP key maps to one -- kept as an explicit, reviewable
   # exception set (mirroring config/profiles.sh's own `wired_only` pattern
   # for the wireless-twin check) so a future host that genuinely shouldn't
   # get one is a deliberate addition here, not a silent gap in the case
@@ -132,7 +132,7 @@ _profiles_snapshot() { # <hostname>
     # (unquoted, word-split) still emits ONE blank line, which `sed
     # 's/^/HAS_/'` then turns into the bare prefix "HAS_" -- a value that
     # matches nothing real but isn't empty either. Unreachable via today's
-    # 13 hosts (every PROFILE_CAPS entry is non-empty) but reachable the
+    # hosts (every PROFILE_CAPS entry is non-empty) but reachable the
     # moment a host lands in no_legacy with a zero-capability profile.
     if [[ -z "${PROFILE_CAPS[${expected_profile}]:-}" ]]; then
       printf 'host %s maps to profile %s absent from PROFILE_CAPS\n' "${hn}" "${expected_profile}" >&2
@@ -322,7 +322,7 @@ _profiles_snapshot() { # <hostname>
     # file with no detector elsewhere in this suite: dropping PROFILE_LEGACY
     # from it (or dropping the unset of _profiles_legacy two lines above it)
     # leaves every other test in this file green, and the leak is real --
-    # after sourcing, the shell carries PROFILE_LEGACY as a live 13-key
+    # after sourcing, the shell carries PROFILE_LEGACY as a live
     # associative array. This is the one place in the suite that already
     # runs a real zsh process past a second source, so the check for a
     # leaked map or scratch var lands here rather than in a new process. The
@@ -345,7 +345,7 @@ _profiles_snapshot() { # <hostname>
 }
 
 # ── shared legacy oracle: unmapped-host diagnostic ──────────────────────────
-# All 13 PROFILE_MAP keys have a case arm today, so nothing exercises the
+# Every PROFILE_MAP key has a case arm today, so nothing exercises the
 # oracle's `*) return 1` diagnostic -- three stale file references shipped
 # in that exact position before this fix, undetected, for precisely that
 # reason. This fixture adds a host to a COPY of the table and then drives
