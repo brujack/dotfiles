@@ -317,10 +317,42 @@ teardown() {
 @test "_install_ubuntu_docker: writes daemon.json when absent" {
   export HAS_DOCKER=1
   export _DOCKER_DAEMON_JSON="${BATS_TEST_TMPDIR}/daemon.json"
+  # Seam the validator even though this test is about the written CONTENT.
+  # ubuntu-latest has docker installed, so an unseamed run would resolve the
+  # real dockerd and — because tests/mocks/sudo execs a resolvable target —
+  # invoke it for real on a CI runner. Hermetic here, and it keeps this test
+  # green-or-red for its own reason rather than the runner's.
+  local _stub="${BATS_TEST_TMPDIR}/dockerd-accept-content"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "${_stub}"
+  chmod +x "${_stub}"
+  export _DOCKER_VALIDATE_BIN="${_stub}"
   run _install_ubuntu_docker
   [ "$status" -eq 0 ]
   [ -f "${_DOCKER_DAEMON_JSON}" ]
+
+  # Assert the artifact PARSES. The substring assertion this replaces could not
+  # fail for the defect it was covering: the writer emitted a literal
+  # backslash-n after the closing brace, so the file both contained
+  # "native.cgroupdriver=systemd" AND was invalid JSON, and this test stayed
+  # green over it from the day it was written.
+  #
+  # Measured on the claude box 2026-09-12, the first bare-metal provision in a
+  # long time and therefore the first execution of this branch: 48 bytes,
+  # python JSONDecodeError "Extra data: line 1 column 47 (char 46)", and
+  # `dockerd --validate` refusing it with "invalid character '\\' after
+  # top-level value". Latent rather than visible, because dockerd had started
+  # four seconds before the file was written and never re-read it -- so every
+  # functional check passed and only a cold start would have exposed it.
+  python3 -c "import json,sys; json.load(open(sys.argv[1]))" "${_DOCKER_DAEMON_JSON}"
+
+  # Keep the content check too: parsing proves it is JSON, not that it is the
+  # RIGHT JSON. Both assertions are needed and neither implies the other.
   grep -q "native.cgroupdriver=systemd" "${_DOCKER_DAEMON_JSON}"
+
+  # And pin the byte-level shape, since that is where the defect lived. A
+  # trailing literal backslash-n reads as content to grep and to a size check,
+  # but not to a parser -- so assert the file ends in a real newline.
+  [ "$(tail -c 1 "${_DOCKER_DAEMON_JSON}" | od -An -c | tr -d ' ')" = "\\n" ]
 }
 
 @test "_install_ubuntu_docker: skips daemon.json when already exists" {
@@ -333,6 +365,55 @@ teardown() {
   [ "$status" -eq 0 ]
   run grep "tee.*daemon.json" "${MOCK_CALLS_FILE}"
   [ "$status" -ne 0 ]
+}
+
+# Escaping was the defect; this is the class. The write had no post-condition at
+# all, so a malformed file was indistinguishable from a good one until a daemon
+# cold-started days later and refused it -- on claude, that surfaced as a second
+# dockerd restart-looping and an unrelated warmup unit failing downstream, a
+# hundred tasks from the actual cause.
+#
+# dockerd --validate is the authoritative check: it exits non-zero and prints the
+# parse error, so a bad write fails the provision loudly instead of arming a cold
+# start. _DOCKER_VALIDATE_BIN seams it because dockerd does not exist on the macs
+# this suite runs on, which is the same absolute-binary problem _OVERRIDE_KEYCHAIN_BIN
+# and _AWS_GPG_BIN already carry -- without the seam this branch is unreachable
+# under test on every machine that runs the suite most often.
+@test "_install_ubuntu_docker: fails when the written daemon.json does not validate" {
+  export HAS_DOCKER=1
+  export _DOCKER_DAEMON_JSON="${BATS_TEST_TMPDIR}/daemon.json"
+  local _stub="${BATS_TEST_TMPDIR}/dockerd-reject"
+  cat > "${_stub}" << 'STUB'
+#!/usr/bin/env bash
+printf 'unable to configure the Docker daemon with file: invalid JSON\n' >&2
+exit 1
+STUB
+  chmod +x "${_stub}"
+  export _DOCKER_VALIDATE_BIN="${_stub}"
+  run _install_ubuntu_docker
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"did not validate"* ]]
+}
+
+# Positive control for the test above. A non-zero return is a composite outcome,
+# so without this the negative case could pass for reasons unrelated to
+# validation -- and this also proves production actually reads the seam rather
+# than skipping the branch entirely.
+@test "_install_ubuntu_docker: succeeds when the written daemon.json validates" {
+  export HAS_DOCKER=1
+  export _DOCKER_DAEMON_JSON="${BATS_TEST_TMPDIR}/daemon.json"
+  local _stub="${BATS_TEST_TMPDIR}/dockerd-accept"
+  cat > "${_stub}" << 'STUB'
+#!/usr/bin/env bash
+printf 'configuration OK\n'
+exit 0
+STUB
+  chmod +x "${_stub}"
+  export _DOCKER_VALIDATE_BIN="${_stub}"
+  run _install_ubuntu_docker
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"did not validate"* ]]
+  python3 -c "import json,sys; json.load(open(sys.argv[1]))" "${_DOCKER_DAEMON_JSON}"
 }
 
 # ── _install_ubuntu_k8s_tools ────────────────────────────────────────────────

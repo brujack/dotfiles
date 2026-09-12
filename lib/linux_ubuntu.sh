@@ -140,8 +140,46 @@ _install_ubuntu_docker() {
     local _daemon_json="${_DOCKER_DAEMON_JSON:-/etc/docker/daemon.json}"
     if [[ ! -f ${_daemon_json} ]]; then
       printf "Configuring Docker for cgroup v2\\n"
-      printf '{"exec-opts": ["native.cgroupdriver=systemd"]}\\n' | \
+      # SINGLE-quoted, so the escape is \n and not \\n. Every other printf in
+      # this file is double-quoted -- `printf "Docker is installed\\n"` -- where
+      # the shell collapses \\ to \ and printf then sees \n and emits a newline.
+      # Inside single quotes nothing collapses: printf receives \\n, turns \\
+      # into a literal backslash, and the n stays an n. The correct idiom
+      # inverts when copied across the quoting boundary, and the result is
+      # 46 bytes of valid JSON followed by two bytes of garbage.
+      #
+      # Measured on claude 2026-09-12: 48 bytes, `dockerd --validate` refusing
+      # it with "invalid character '\\' after top-level value". It was latent
+      # rather than visible -- dockerd had started before the file was written
+      # and never re-read it -- so docker info, systemctl is-active and every
+      # functional check passed, and only a cold start would have exposed it.
+      # It surfaced when a second daemon (docker-ci) parsed the file on its own
+      # cold start and restart-looped.
+      printf '{"exec-opts": ["native.cgroupdriver=systemd"]}\n' | \
         sudo tee "${_daemon_json}" > /dev/null
+      # Write, then prove the artifact is loadable. The escaping bug above was
+      # only half the defect: the write had no post-condition, so a file dockerd
+      # could not parse looked identical to a good one. dockerd holds whatever
+      # config it read at start, so `docker info`, `systemctl is-active` and
+      # every functional check keep passing over a broken file -- the only
+      # observable is a cold start, which may be days away and will land on
+      # whoever reboots rather than on whoever provisioned.
+      #
+      # dockerd --validate is the authoritative reader and exits non-zero with
+      # the parse error. _DOCKER_VALIDATE_BIN seams it for the suite, which runs
+      # on macs where dockerd does not exist -- same absolute-binary problem
+      # _OVERRIDE_KEYCHAIN_BIN and _AWS_GPG_BIN carry.
+      local _docker_validate="${_DOCKER_VALIDATE_BIN:-dockerd}"
+      if command -v "${_docker_validate}" > /dev/null 2>&1; then
+        if ! sudo "${_docker_validate}" --validate --config-file "${_daemon_json}" > /dev/null 2>&1; then
+          log_error "${_daemon_json} did not validate — refusing to leave a config dockerd cannot parse"
+          return 1
+        fi
+      else
+        # Absent validator is not evidence the file is good. Say so rather than
+        # passing silently, which is the shape that let the original bug ship.
+        log_warn "dockerd not resolvable — ${_daemon_json} written but NOT validated"
+      fi
     fi
     sudo usermod -a -G docker bruce
     if [[ -x $(command -v docker) ]]; then
