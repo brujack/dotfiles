@@ -201,7 +201,7 @@ entries, `wired_only` exemption, oracle arm, swallow fix, pinned assertion — r
 
 | arm | result |
 | --- | --- |
-| control | rc 0 — **45 ok, 0 not ok** |
+| control | rc 0 — **44 ok, 0 not ok** |
 | `[claude]="mac_mini"` (wrong, valid key) | rc 1 — caught **only** by `claude resolves linux_workstation with the full capability set` |
 | `[claude]="linux_workstatio"` (garbage) | rc 1 — 3 red: the pinned assertion, the un-swallowed zsh loop, and the bash legacy loop |
 | `wired_only` exemption removed | rc 1 — `every wired PROFILE_MAP key has a wireless -1 twin on the same profile` |
@@ -209,7 +209,10 @@ entries, `wired_only` exemption, oracle arm, swallow fix, pinned assertion — r
 
 Each edit therefore has a mutation that fires exactly for it, and the correct table produces
 no false positive. Earlier drafts of this table described configurations that were later
-rejected; these figures are for the design as it now stands.
+rejected; these figures are for the design as it now stands. The control row read 45 until the
+implementation measured it: that figure came from a scratch copy still carrying the standalone
+`PROFILE_CAPS`-key test this design rejected, and the implementer refused to add a fourth test
+to satisfy the gate. Measured on the branch: 44.
 
 Still to run, at implementation:
 

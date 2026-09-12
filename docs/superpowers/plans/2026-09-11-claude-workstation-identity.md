@@ -87,7 +87,7 @@ tdd: not-applicable
 acceptance:
   - cmd: 'bats tests/setup_env/profiles.bats tests/zshrc.d/profiles.bats tests/zshrc.d/cross_shell.bats'
     exit_code: 0
-    stdout_match: 'ok 45 '
+    stdout_match: 'ok 44 '
   - cmd: 'make lint'
     exit_code: 0
 max_retries: 3
@@ -111,7 +111,7 @@ depends_on: [1]
 **Do not add a `claude-1` twin.** The spec's §2 records why, measured: `claude` connects on
 one interface, as `workstation` does.
 
-**Measured gate values** (all at `a63ffa36`, three suites): correct state **45 ok / 0 not ok**.
+**Measured gate values** (all at `a63ffa36`, three suites): correct state **44 ok / 0 not ok**.
 `[claude]="mac_mini"` → red only on Task 1's assertion. `[claude]="linux_workstatio"` → 3 red.
 Exemption omitted → the twin assertion goes red. Oracle arm omitted → 2 red.
 
