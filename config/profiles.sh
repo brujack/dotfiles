@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 # config/profiles.sh — requires bash 5+
 # Maps hostnames to profiles, profiles to capabilities, and hostnames to
-# their legacy identity variable name. Adding a new machine means editing
-# PROFILE_MAP and PROFILE_LEGACY below (both in this file), plus adding a
-# case arm to tests/helpers/legacy_oracle.bash -- 3 edits across 2 files,
-# not the single-file edit this comment used to claim.
+# their legacy identity variable name. Adding a new machine with a wireless
+# twin means editing PROFILE_MAP and PROFILE_LEGACY below (both in this
+# file), plus adding a case arm to tests/helpers/legacy_oracle.bash --
+# three edits across two files, not the single-file edit this comment used
+# to claim. A wired-only machine (no -1 twin, like workstation, cruncher,
+# and claude) also needs its key added to tests/setup_env/profiles.bats's
+# wired_only set -- four edits across three files.
 
 # shellcheck disable=SC2034 # file-wide: all three maps below are read by lib/detect_env.sh:detect_env and config/profiles.zsh
 # PROFILE_MAP, PROFILE_CAPS, and PROFILE_LEGACY are all read via `source`,

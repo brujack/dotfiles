@@ -846,7 +846,7 @@ Invoke `caveman:caveman-commit` skill to generate the commit message before runn
 ## Key Conventions
 
 - Machine roles are now driven by the **profile/capability model** in `config/profiles.sh` — prefer `HAS_*` vars over raw hostname patterns for new code
-- Legacy hostname vars (`LAPTOP`, `STUDIO`, `RECEPTION`, `OFFICE`, `HOMES`) are preserved as readonly aliases in `detect_env.sh` — `WORKSTATION` and `CRUNCHER` have been removed; use `HAS_*` vars instead
+- All eight legacy hostname vars (`LAPTOP`, `STUDIO`, `RECEPTION`, `RATNA`, `OFFICE`, `HOMES`, `WORKSTATION`, `CRUNCHER`) are derived from `PROFILE_LEGACY` in `config/profiles.sh` — `WORKSTATION` and `CRUNCHER` remain live, and are read by `.zprofile:10` and `.config/.zshrc.d/7_final.zsh:60`; new code should still prefer `HAS_*` vars
 - Ubuntu version detection uses `lsb_release -rs` → `NOBLE` var (24.04) or `RESOLUTE` var (26.04); both set in `detect_env.sh` and `.zshrc.d/1_init.zsh`
 - Credential directories (`.aws`, `.tf_creds`, `.tsh`) are created with `chmod 700`
 - Git repos are cloned to `~/git-repos/personal/` and `~/git-repos/work/`
@@ -1068,8 +1068,11 @@ hardcoded case arm in **five** separate files — `config/profiles.sh` (`PROFILE
 two independently hand-typed oracles duplicated across `tests/setup_env/profiles.bats`
 and `tests/zshrc.d/profiles.bats`. `tests/helpers/legacy_oracle.bash` did not exist at
 that commit. This branch's `PROFILE_LEGACY` table plus one shared test oracle brought that
-down to **3 edits across 2 files** — a 40% reduction, not an addition. Read what follows as
-the sentence going from wrong-by-omission to correct, not as new steps this branch created.
+down to **three edits across two files** for a host with a wireless twin — a 40%
+reduction, not an addition — or **four edits across three files** for a wired-only host,
+which also needs an entry in `tests/setup_env/profiles.bats`'s `wired_only` set (see the
+note after step 3 below). Read what follows as the sentence going from wrong-by-omission
+to correct, not as new steps this branch created.
 
 1. Edit `config/profiles.sh` — add **both** the wired and the wireless-interface hostname to
    `PROFILE_MAP`, mapped to the same profile. A machine added under only its wired name
@@ -1107,13 +1110,20 @@ declare -A PROFILE_MAP=(
    consequence at all, because `tests/helpers/legacy_oracle.bash` is read only by the test
    suite and no login shell ever sources it.
 
+   **A wired-only host (no `-1` twin, like `workstation`, `cruncher`, and `claude`) needs a
+   fourth edit, in a third file:** add its key to the `wired_only` set in
+   `tests/setup_env/profiles.bats`, or the test `every wired PROFILE_MAP key has a wireless
+   -1 twin on the same profile` fails, since that test expects every `PROFILE_MAP` key to
+   have a `-1` twin unless explicitly exempted.
+
 4. Push a feature branch — CI validates → auto-merges to master.
 
 **No other file needs changing** — true for production, since `lib/detect_env.sh` and
 `config/profiles.zsh` both derive `PROFILE`/`HAS_*`/the legacy identity variables from
 `PROFILE_MAP`/`PROFILE_LEGACY` in this one file — but not for tests: `tests/helpers/legacy_oracle.bash`
 (step 3) is a second, deliberately independent copy of the same mapping and needs its own
-edit too.
+edit too, and a wired-only host needs a third test edit besides — its key added to
+`tests/setup_env/profiles.bats`'s `wired_only` set.
 
 If a hostname is missing from the table, `run_doctor` fails and names the hostname and
 `config/profiles.sh` in its message — that is the check that catches the omission in step 1
