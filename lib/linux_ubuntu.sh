@@ -48,9 +48,16 @@ _install_ubuntu_base_packages() {
 
 _install_ubuntu_powershell() {
   printf "Installing powershell Ubuntu\\n"
+  # Microsoft publishes a 26.04 config (HTTP 200) whose `resolute` dist carries
+  # ZERO powershell packages -- measured 2026-09-12, against 54 in 24.04/noble.
+  # So `apt install powershell` fails with "Unable to locate package" even
+  # though every step before it succeeded. Unlike the azure-cli and WARP cases
+  # the fallback belongs on the CONFIG url, not on a dist codename.
+  local _ms_rel="${_MS_CONFIG_REL:-$(lsb_release -rs)}"
+  [[ -n "${RESOLUTE:-}" ]] && _ms_rel="24.04"
   if [[ ! -f ${HOME}/software_downloads/packages-microsoft-prod.deb ]]; then
-    # shellcheck disable=SC2046 # `lsb_release -rs` emits one token (e.g. 24.04) inside a URL path; there is nothing to split
-    wget -O "${HOME}"/software_downloads/packages-microsoft-prod.deb https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb
+    wget -O "${HOME}"/software_downloads/packages-microsoft-prod.deb \
+      "https://packages.microsoft.com/config/ubuntu/${_ms_rel}/packages-microsoft-prod.deb"
     sudo -H dpkg -i "${HOME}"/software_downloads/packages-microsoft-prod.deb
     sudo apt update
     sudo -H add-apt-repository universe
@@ -83,7 +90,15 @@ _install_ubuntu_go() {
   printf "Installing Go Ubuntu\\n"
   sudo -H apt update
   _install_go_from_tarball
-  INSTALLED_GO_VER=$(go version | awk '{print $3}' | sed 's/go//g')
+  # /usr/local/go/bin reaches PATH only via 6_path.zsh, which interactive zsh
+  # alone sources -- so during a provision this probe resolved nothing and
+  # printed "go: command not found" twice. Prefer the absolute install path,
+  # fall back to PATH so an existing `go` (and the suite's mock) still drives it.
+  local _go_bin="${_GO_BIN:-}"
+  if [[ -z "${_go_bin}" ]]; then
+    if [[ -x /usr/local/go/bin/go ]]; then _go_bin=/usr/local/go/bin/go; else _go_bin=go; fi
+  fi
+  INSTALLED_GO_VER=$("${_go_bin}" version 2>/dev/null | awk '{print $3}' | sed 's/go//g')
   if [[ ${INSTALLED_GO_VER} == "${GO_VER}" ]]; then
     printf "Go %s is installed\\n" "${GO_VER}"
   fi
@@ -484,7 +499,12 @@ _install_ubuntu_misc() {
       printf "deb [signed-by=/etc/apt/keyrings/opentofu-archive-keyring.gpg] https://packages.opentofu.org/opentofu/tofu/any/ any main\n" \
         | sudo DEBIAN_FRONTEND=noninteractive tee /etc/apt/sources.list.d/opentofu.list > /dev/null
       sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq
-      sudo DEBIAN_FRONTEND=noninteractive apt-get install -y opentofu
+      # The package in packages.opentofu.org/opentofu/tofu/any is named `tofu`,
+      # not `opentofu` -- its amd64 index carries exactly that one package.
+      # Installing `opentofu` failed with "Unable to locate package" on every
+      # Ubuntu release, silently, because the `command -v tofu` check below
+      # simply never fired. Measured on claude 2026-09-12.
+      sudo DEBIAN_FRONTEND=noninteractive apt-get install -y tofu
       if command -v tofu &>/dev/null; then
         printf "opentofu is installed\\n"
       fi

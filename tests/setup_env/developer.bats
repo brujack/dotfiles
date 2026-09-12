@@ -1267,3 +1267,25 @@ _dev_probe_gpg_status() {
   [[ "${output}" == *"expires in"* ]]
   refute_grep "vendored key not found" <(printf '%s\n' "${output}")
 }
+
+@test "install_ruby: version probe does not depend on interactive PATH" {
+  # rbenv shims reach PATH only through the zsh rc files, so a provision run
+  # hits `ruby: command not found` at developer.sh:397 and the success check is
+  # dead. Measured on claude 2026-09-12.
+  export LINUX=1
+  unset MACOS
+  export RUBY_VER="4.0.5"
+  # Pre-create the version dir so the rbenv install branch is skipped entirely
+  # and the test exercises only the probe.
+  mkdir -p "${HOME}/.rbenv/versions/${RUBY_VER}"
+  local _bin="${BATS_TEST_TMPDIR}/rbenvbin"
+  mkdir -p "${_bin}"
+  printf '#!/usr/bin/env bash\nprintf "ruby 4.0.5 (2026-01-01) [x86_64-linux]\\n"\n' > "${_bin}/ruby"
+  chmod +x "${_bin}/ruby"
+  # PATH deliberately carries NO ruby -- that is the provision condition.
+  run env PATH="/usr/bin:/bin" HOME="${HOME}" _RUBY_BIN="${_bin}/ruby" bash -c "
+    source '${REPO_ROOT}/lib/constants.sh' 2>/dev/null
+    source '${REPO_ROOT}/lib/developer.sh'
+    LINUX=1 RUBY_VER='4.0.5' install_ruby"
+  [[ "$output" == *"ruby 4.0.5 is installed"* ]]
+}

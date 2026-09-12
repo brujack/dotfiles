@@ -394,7 +394,15 @@ install_ruby() {
         rbenv rehash
       fi
     fi
-    INSTALLED_RUBY_VERSION=$(ruby --version | awk '{print $2}')
+    # rbenv shims reach PATH only via the zsh rc files, so during a provision
+    # this probe resolved nothing and printed `ruby: command not found`.
+    # Prefer the rbenv shim, fall back to PATH so an existing ruby (and the
+    # suite's mocks) still drive it. Measured on claude 2026-09-12.
+    local _ruby_bin="${_RUBY_BIN:-}"
+    if [[ -z "${_ruby_bin}" ]]; then
+      if [[ -x ${HOME}/.rbenv/shims/ruby ]]; then _ruby_bin="${HOME}/.rbenv/shims/ruby"; else _ruby_bin=ruby; fi
+    fi
+    INSTALLED_RUBY_VERSION=$("${_ruby_bin}" --version 2>/dev/null | awk '{print $2}')
     if [[ ${INSTALLED_RUBY_VERSION} == "${RUBY_VER}" ]]; then
       printf "ruby %s is installed\\n" "${RUBY_VER}"
     fi

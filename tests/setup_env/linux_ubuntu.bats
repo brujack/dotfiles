@@ -766,7 +766,12 @@ teardown() {
   export _FORCE_OPENTOFU_INSTALL=1
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
-  grep -q "DEBIAN_FRONTEND=noninteractive.*apt-get install.*opentofu" "${MOCK_CALLS_FILE}"
+  # The package is named `tofu`, not `opentofu`: that repo's amd64 index
+  # carries exactly one package and this assertion previously pinned the
+  # wrong name -- encoding the bug, which is why the install failed silently
+  # on every Ubuntu release while this test stayed green. Measured on claude
+  # 2026-09-12: keyring and sources.list present, apt-cache policy empty.
+  grep -q "DEBIAN_FRONTEND=noninteractive.*apt-get install.* tofu" "${MOCK_CALLS_FILE}"
   run grep "install-opentofu.sh" "${MOCK_CALLS_FILE:-/dev/null}"
   [ "$status" -ne 0 ]
 }
@@ -813,6 +818,55 @@ teardown() {
   chmod +x "${_tofudir}/tofu"
   PATH="${_tofudir}:${PATH}" run _install_ubuntu_misc
   [ "$status" -eq 0 ]
-  run grep "apt-get install -y opentofu" "${MOCK_CALLS_FILE}"
+  run grep "apt-get install -y tofu" "${MOCK_CALLS_FILE}"
   [ "$status" -ne 0 ]
+}
+
+# ── Ubuntu 26.04 (resolute) provisioning gaps, both measured on `claude` ─────
+
+@test "_install_ubuntu_powershell: RESOLUTE pins the Microsoft config to 24.04" {
+  export RESOLUTE=1
+  # The harness default is 24.04, which would make this assertion match the
+  # DEFAULT rather than the fix. Force the mock to report resolute so unfixed
+  # code builds a 26.04 URL and this test can actually go red.
+  export MOCK_LSB_RELEASE_RS="26.04"
+  run _install_ubuntu_powershell
+  [ "$status" -eq 0 ]
+  # packages.microsoft.com/config/ubuntu/26.04 exists (HTTP 200) and its
+  # resolute dist carries ZERO powershell packages, measured 2026-09-12;
+  # 24.04/noble carries 54. So the config URL, not the dist, is what falls back.
+  grep -qE "wget.*config/ubuntu/24\.04/packages-microsoft-prod\.deb" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_powershell: non-RESOLUTE keeps the lsb_release version" {
+  unset RESOLUTE
+  export NOBLE=1
+  # Positive control: assert the version the mock actually reports is the one
+  # used, rather than asserting the absence of 26.04 -- an absence that is
+  # trivially true whenever the mock does not emit 26.04 in the first place.
+  export MOCK_LSB_RELEASE_RS="24.10"
+  run _install_ubuntu_powershell
+  [ "$status" -eq 0 ]
+  grep -qE "wget.*config/ubuntu/24\.10/packages-microsoft-prod\.deb" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_go: version probe does not depend on interactive PATH" {
+  export GO_VER="1.26"
+  export GO_DOWNLOAD_FILENAME="go1.26.linux-amd64.tar.gz"
+  export GO_DOWNLOAD_URL="https://dl.google.com/go/go1.26.linux-amd64.tar.gz"
+  touch "${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME}"
+  # /usr/local/go/bin reaches PATH only via 6_path.zsh, which interactive zsh
+  # alone sources -- so a provision run resolves nothing and the check is dead.
+  # Point the seam at a stand-in that reports the matching version.
+  local _bin_dir="${BATS_TEST_TMPDIR}/goroot/bin"
+  mkdir -p "${_bin_dir}"
+  printf '#!/usr/bin/env bash\nprintf "go version go1.26 linux/amd64\\n"\n' > "${_bin_dir}/go"
+  chmod +x "${_bin_dir}/go"
+  export _GO_BIN="${_bin_dir}/go"
+  run env PATH="/usr/bin:/bin" bash -c "
+    source '${REPO_ROOT}/lib/constants.sh' 2>/dev/null
+    source '${REPO_ROOT}/lib/linux_ubuntu.sh'
+    _install_go_from_tarball() { :; }
+    GO_VER='1.26' _GO_BIN='${_bin_dir}/go' _install_ubuntu_go"
+  [[ "$output" == *"Go 1.26 is installed"* ]]
 }
