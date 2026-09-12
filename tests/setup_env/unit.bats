@@ -2004,3 +2004,21 @@ _unmocked_path() {
   _update_record_start "legacy-rsync"
   [ ! -f "${_DOTFILES_RUN_TMPDIR}/status_legacy-rsync" ]
 }
+
+# ── tracked .ssh/config: the github block must name its identity ────────────
+# Every non-interactive actor (cron, an editor-spawned git, a GitHub Actions
+# runner, a first-run provision) resolves the GitHub key from this file alone.
+# Interactive shells do not: 5_general.zsh runs `keychain --eval`, which loads
+# ~/.ssh/github into an agent, so a missing IdentityFile is invisible on any
+# machine a human is sitting at. Measured 2026-09-12 on `claude` -- with the
+# block lacking IdentityFile, `ssh -T git@github.com` returned Permission
+# denied (publickey); with it, the same box authenticated. Asserted on the
+# github block specifically, not on every Host: home-secure.conecrazy.ca
+# deliberately carries a cloudflared ProxyCommand and no identity.
+
+@test "the tracked .ssh/config github block names IdentityFile ~/.ssh/github" {
+  local _block
+  _block="$(awk '/^Host github\.com$/{f=1;next} /^Host /{f=0} f' "${REPO_ROOT}/.ssh/config")"
+  [ -n "${_block}" ]
+  printf '%s\n' "${_block}" | grep -qE '^[[:space:]]*IdentityFile[[:space:]]+~/\.ssh/github$'
+}
