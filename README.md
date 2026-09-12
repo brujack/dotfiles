@@ -330,7 +330,7 @@ dotfiles/
 
 ## Machine Profiles
 
-Machines are mapped to profiles in `config/profiles.sh`:
+Each profile grants a fixed set of capabilities; machines are mapped to profiles in `config/profiles.sh`:
 
 | Profile             | Capabilities                                    |
 | ------------------- | ----------------------------------------------- |
