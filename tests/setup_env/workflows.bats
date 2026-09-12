@@ -1029,9 +1029,20 @@ setup_constants_copy() {
 
 # ── _prompt_version_update ────────────────────────────────────────────────────
 
+# All three seed GO_VER in the fixture explicitly instead of inheriting whatever
+# the repo currently pins. setup_constants_copy copies the REAL lib/constants.sh,
+# so before this they asserted against the shipped value -- and when the pin moved
+# 1.26 -> 1.27 on 2026-09-12 the two "skips" tests went red while the "y reply"
+# test went green FOR THE WRONG REASON: the fixture already contained 1.27 before
+# _prompt_version_update ran, so its post-condition held whether or not the
+# function did anything at all. The two reds announced themselves; the vacuous
+# green did not, which is the more expensive half. Seeding makes all three
+# discriminate no matter what the repo pins.
 @test "_prompt_version_update calls _update_version_pin on y reply" {
   setup_constants_copy
   export _OVERRIDE_CONSTANTS_PATH="${_TEST_CONSTANTS_PATH}"
+  sed -i.bak 's|^GO_VER=.*|GO_VER="1.26"|' "${_TEST_CONSTANTS_PATH}"
+  grep -q 'GO_VER="1.26"' "${_TEST_CONSTANTS_PATH}"   # precondition, not decoration
   _prompt_version_update "go" "GO_VER" "1.26" "1.27" <<< "y"
   grep -q 'GO_VER="1.27"' "${_TEST_CONSTANTS_PATH}"
 }
@@ -1039,6 +1050,7 @@ setup_constants_copy() {
 @test "_prompt_version_update skips update on n reply" {
   setup_constants_copy
   export _OVERRIDE_CONSTANTS_PATH="${_TEST_CONSTANTS_PATH}"
+  sed -i.bak 's|^GO_VER=.*|GO_VER="1.26"|' "${_TEST_CONSTANTS_PATH}"
   _prompt_version_update "go" "GO_VER" "1.26" "1.27" <<< "n"
   grep -q 'GO_VER="1.26"' "${_TEST_CONSTANTS_PATH}"
 }
@@ -1046,6 +1058,7 @@ setup_constants_copy() {
 @test "_prompt_version_update skips update on empty reply" {
   setup_constants_copy
   export _OVERRIDE_CONSTANTS_PATH="${_TEST_CONSTANTS_PATH}"
+  sed -i.bak 's|^GO_VER=.*|GO_VER="1.26"|' "${_TEST_CONSTANTS_PATH}"
   _prompt_version_update "go" "GO_VER" "1.26" "1.27" <<< ""
   grep -q 'GO_VER="1.26"' "${_TEST_CONSTANTS_PATH}"
 }
@@ -2583,27 +2596,29 @@ assert_all_npm_globals_pinned() {
 @test "run_check_versions counts skipped tools in summary" {
   _check_one_version() { printf "  [SKIP]     %-12s not installed\n" "$1"; }
   run run_check_versions
-  [[ "$output" == *"8 skipped"* ]]
+  [[ "$output" == *"7 skipped"* ]]
 }
 
 @test "run_check_versions counts warned tools in summary" {
-  # 8 tools via _run_cv_check emit [WARN] + 2 new functions (_check_cv_oh_my_zsh,
-  # _check_cv_homebrew_install) also emit [WARN] when curl fails in test env = 10 total
+  # 7 tools via _run_cv_check emit [WARN] + 2 more functions (_check_cv_oh_my_zsh,
+  # _check_cv_homebrew_install) also emit [WARN] when curl fails in test env = 9 total.
+  # Was 8 + 2 = 10 until zsh was dropped from the _run_cv_check list on 2026-09-12
+  # (apt/brew choose that version, so an upstream comparison is not actionable).
   _check_one_version() { printf "  [WARN]     %-12s could not fetch latest version\n" "$1"; }
   run run_check_versions
-  [[ "$output" == *"10 warnings"* ]]
+  [[ "$output" == *"9 warnings"* ]]
 }
 
 @test "run_check_versions counts OK tools in summary" {
   _check_one_version() { printf "  [OK]       %-12s\n" "$1"; }
   run run_check_versions
-  [[ "$output" == *"8 OK"* ]]
+  [[ "$output" == *"7 OK"* ]]
 }
 
 @test "run_check_versions counts outdated tools and returns non-zero" {
   _check_one_version() { printf "  [OUTDATED] %-12s\n" "$1"; return 1; }
   run run_check_versions
-  [[ "$output" == *"8 outdated"* ]]
+  [[ "$output" == *"7 outdated"* ]]
   [ "$status" -ne 0 ]
 }
 
