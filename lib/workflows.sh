@@ -888,7 +888,15 @@ run_check_versions() {
   _run_cv_check "go"         "${GO_VER}"         "golang/go"           "go version"           "[0-9]+\.[0-9]+(\.[0-9]+)?" "GO_VER"
   _run_cv_check "python3"    "${PYTHON_VER}"      "python/cpython"      "python3 --version"    "[0-9]+\.[0-9]+\.[0-9]+"    "PYTHON_VER"
   _run_cv_check "ruby"       "${RUBY_VER}"        "ruby/ruby"           "ruby --version"       "[0-9]+\.[0-9]+\.[0-9]+"    "RUBY_VER"
-  _run_cv_check "zsh"        "${ZSH_VER}"         "zsh-users/zsh"       "zsh --version"        "[0-9]+\.[0-9]+(\.[0-9]+)?" "ZSH_VER"
+  # zsh is deliberately absent. Every other tool here is one this repo installs
+  # at a version it chooses, so comparing the pin against upstream is actionable.
+  # zsh comes from apt or brew, which pick the version -- apt ships 5.9 on both
+  # 24.04 and 26.04 while brew ships 5.9.2 -- so an upstream comparison can only
+  # ever report OUTDATED at something nobody can act on. Keeping it here would
+  # relocate the permanently-red gate rather than remove it: doctor needs the pin
+  # to prefix-match every installed zsh (5.9), while this check wants upstream
+  # latest (5.9.2), and one constant cannot be both. doctor still floors the
+  # version, and _doctor_check_tools still checks zsh is present at all.
   _run_cv_check "yq"         "${YQ_VER}"          "mikefarah/yq"        "yq --version"         "[0-9]+\.[0-9]+\.[0-9]+"    "YQ_VER"
   _run_cv_check "shellcheck" "${SHELLCHECK_VER}"  "koalaman/shellcheck" "shellcheck --version" "[0-9]+\.[0-9]+\.[0-9]+"    "SHELLCHECK_VER"
   _run_cv_check "vagrant"    "${VAGRANT_VER}"     "hashicorp/vagrant"   "vagrant --version"    "[0-9]+\.[0-9]+\.[0-9]+"    "VAGRANT_VER"

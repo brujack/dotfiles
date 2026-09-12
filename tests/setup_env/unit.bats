@@ -1757,6 +1757,32 @@ _unmocked_path() {
   [ "${_DOCTOR_FAILED}" -eq 1 ]
 }
 
+# The four tests around this one all redefine _doctor_check_versions locally, so
+# none of them reads the real pin. This one does, deliberately: a wrong constant
+# is invisible to every other test in the file.
+#
+# doctor compares with [[ "${_installed}" == "${_pinned}"* ]] (helpers.sh), a
+# PREFIX match, so one pin has to be a prefix of every zsh the fleet ships.
+# Measured 2026-09-12: claude 5.9 (apt, Ubuntu 26.04), workstation 5.9 (apt,
+# 24.04), studio 5.9.2 (brew). The pin was "5.10", which prefix-matches none of
+# them and had never existed upstream at all -- zsh-users/zsh tops out at
+# zsh-5.9.2 -- so doctor exited 1 on every machine in the fleet for a value no
+# install could satisfy. The cost was not the red itself: a permanently-failing
+# gate hid a genuine go pin drift on the studio for as long as it stood.
+#
+# This also pins the upper bound. "5.9.2" would satisfy the studio and fail both
+# Linux boxes, so a future well-meaning bump to match upstream latest turns this
+# red rather than turning doctor red on two machines.
+@test "ZSH_VER prefix-matches every zsh version the fleet actually ships" {
+  local _v
+  for _v in 5.9 5.9.2; do
+    if [[ "${_v}" != "${ZSH_VER}"* ]]; then
+      printf 'installed zsh %s does not prefix-match ZSH_VER=%s\n' "${_v}" "${ZSH_VER}" >&2
+      return 1
+    fi
+  done
+}
+
 @test "_doctor_check_versions real: warns when tools are not installed" {
   _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
   local _saved_path="$PATH"

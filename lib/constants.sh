@@ -34,10 +34,15 @@ JSCPD_VER="5.0.14"
 # read by lib/workflows.sh:_require_npm_pins and run_developer_or_ansible
 JSON2YAML_VER="1.1.0"
 # read by lib/linux_ubuntu.sh:_install_ubuntu_go, lib/helpers.sh:_doctor_check_versions, lib/workflows.sh:run_check_versions
-GO_VER="1.26"
+GO_VER="1.27"
 # Linux architecture: kernel names (x86_64/aarch64) → Debian/GitHub names (amd64/arm64)
 _LINUX_ARCH="$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')"
-GO_DOWNLOAD_FILENAME="go1.26.4.linux-${_LINUX_ARCH}.tar.gz"
+# Carries the full patch while GO_VER carries only major.minor, so the two move
+# together or the Linux installer fetches one version while doctor demands
+# another. Verified published before pinning: go1.27.1.linux-amd64.tar.gz and
+# .linux-arm64.tar.gz both resolve 200 application/x-gzip, and golang/go tags
+# 1.27 at 1.27.0 and 1.27.1.
+GO_DOWNLOAD_FILENAME="go1.27.1.linux-${_LINUX_ARCH}.tar.gz"
 # read by lib/linux_ubuntu.sh:_install_ubuntu_go
 GO_DOWNLOAD_URL="https://go.dev/dl/${GO_DOWNLOAD_FILENAME}"
 KIND_VER="0.32.0"
@@ -63,7 +68,15 @@ VAULT_VER="2.0.2"
 VIRTUALBOX_VER="virtualbox-7.1"
 YQ_VER="4.53.3"
 # read by lib/helpers.sh:_doctor_check_versions, lib/workflows.sh:run_check_versions
-ZSH_VER="5.10"
+# Prefix-matched by lib/helpers.sh:_doctor_check_one_version, so this must be a
+# prefix of every zsh the fleet ships: apt gives 5.9 on 24.04 and 26.04, brew
+# gives 5.9.2. Was "5.10" until 2026-09-12 -- a version that has never existed
+# upstream (zsh-users/zsh tops out at zsh-5.9.2), so doctor exited 1 on every
+# machine for a value no install could satisfy, hiding a real go drift beneath
+# it. Do not "update" this to match upstream latest: 5.9.2 fails both Linux
+# boxes. Deliberately absent from run_check_versions -- apt and brew choose this
+# version, not us. tests/setup_env/unit.bats pins both directions.
+ZSH_VER="5.9"
 # read by lib/linux_ubuntu.sh:_install_ubuntu_k8s_tools
 KUBERNETES_VER="v1.36"
 # read by lib/developer.sh:_aws_verify_zip and tests/setup_env/developer.bats

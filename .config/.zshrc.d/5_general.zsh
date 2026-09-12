@@ -1,4 +1,9 @@
-GO_VER="1.26"
+# RUBY_VER is a hand-maintained duplicate of lib/constants.sh's value, read by
+# the `chruby ${RUBY_VER}` call below. A zsh startup file cannot source the bash
+# constants, so the duplication is structural rather than sloppy -- but it does
+# drift silently, so bump both together. A GO_VER duplicate sat here too until
+# 2026-09-12 and was dead: nothing in any zsh file expanded it, and every real
+# ${GO_VER} consumer is bash reading constants.sh.
 RUBY_VER="4.0.5"
 GITREPOS="${HOME}/git-repos"
 
