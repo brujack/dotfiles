@@ -107,6 +107,33 @@ fi
 if [[ -d ${HOME}/.cargo/bin ]]; then
   path+=("${HOME}/.cargo/bin")
 fi
+
+# brew's rustup formula ships ONLY `rustup` in its main bin dir; cargo, rustc,
+# rustfmt and rust-analyzer live in $(brew --prefix rustup)/bin, which its own
+# caveat tells you to add to PATH. It never creates ~/.cargo/bin, so the guard
+# above cannot find them. Measured on claude 2026-09-12: rustup default set,
+# `rustup which cargo` resolving, and cargo unreachable by every actor.
+#
+# brew --prefix is deliberately NOT called here -- this file is what puts brew
+# on PATH, so it is not reliably resolvable at this point, and this runs in
+# every interactive shell. The prefixes are hardcoded like the gnubin pair.
+#
+# _OVERRIDE_RUSTUP_BIN REPLACES the candidate list rather than joining it: a
+# test pointing the seam at a nonexistent dir must not fall through to a real
+# prefix that exists on the machine running the suite.
+if [[ -n ${_OVERRIDE_RUSTUP_BIN} ]]; then
+  _rustup_candidates=("${_OVERRIDE_RUSTUP_BIN}")
+else
+  _rustup_candidates=(
+    /home/linuxbrew/.linuxbrew/opt/rustup/bin
+    /opt/homebrew/opt/rustup/bin
+    /usr/local/opt/rustup/bin
+  )
+fi
+for _rustup_bin in "${_rustup_candidates[@]}"; do
+  [[ -d ${_rustup_bin} ]] && { path+=("${_rustup_bin}"); break }
+done
+unset _rustup_bin _rustup_candidates
 # for fzf not installed via a package
 if [[ -d ${HOME}/.fzf ]]; then
   path+=("${HOME}/.fzf/bin")

@@ -1102,3 +1102,61 @@ EOF
   [ "$status" -eq 0 ]
   [ "$output" != "unset" ]
 }
+
+# ── 6_path.zsh brew rustup shim dir ──────────────────────────────────────────
+# _OVERRIDE_RUSTUP_BIN is a test seam, same convention as _OVERRIDE_GNUBIN_ARM
+# above: the real prefix exists on any machine with brew's rustup, so a test
+# against it would pass whether or not the code reads the seam at all.
+#
+# Why this exists: brew's rustup formula ships ONLY `rustup` in its main bin
+# dir -- cargo, rustc, rustfmt and rust-analyzer live in
+# $(brew --prefix rustup)/bin, which its own caveat tells you to add to PATH.
+# On claude the toolchain installed correctly (rustup default set, `rustup
+# which cargo` resolving) and cargo was still unreachable by every actor,
+# because ~/.cargo/bin -- the only cargo path this file knew about -- is never
+# created by that formula. Measured 2026-09-12.
+
+@test "6_path.zsh adds the brew rustup shim dir to PATH when present" {
+  local _tmp_dir
+  _tmp_dir="$(mktemp -d)"
+  mkdir -p "${_tmp_dir}/rustup-bin"
+
+  run zsh -c "
+    export LINUX=1
+    export _OVERRIDE_RUSTUP_BIN='${_tmp_dir}/rustup-bin'
+    source '${ZSHRC_D}/6_path.zsh' 2>/dev/null
+    printf '%s\n' \"\${path[(r)${_tmp_dir}/rustup-bin]}\"
+  "
+  rm -rf "${_tmp_dir}"
+  [ "$status" -eq 0 ]
+  [ "$output" = "${_tmp_dir}/rustup-bin" ]
+}
+
+@test "6_path.zsh omits the rustup shim dir when it does not exist" {
+  run zsh -c "
+    export LINUX=1
+    export _OVERRIDE_RUSTUP_BIN='/nonexistent/rustup-bin'
+    source '${ZSHRC_D}/6_path.zsh' 2>/dev/null
+    printf '%s\n' \"\${path[(r)/nonexistent/rustup-bin]}\"
+  "
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "6_path.zsh rustup shim entry is deduped across repeated sourcing" {
+  local _tmp_dir
+  _tmp_dir="$(mktemp -d)"
+  mkdir -p "${_tmp_dir}/rustup-bin"
+
+  run zsh -c "
+    export LINUX=1
+    export _OVERRIDE_RUSTUP_BIN='${_tmp_dir}/rustup-bin'
+    source '${ZSHRC_D}/6_path.zsh' 2>/dev/null
+    source '${ZSHRC_D}/6_path.zsh' 2>/dev/null
+    printf '%s\n' \"\${#path[(R)${_tmp_dir}/rustup-bin]}\"
+    printf 'count=%s\n' \"\$(printf '%s\n' \$path | grep -c \"^${_tmp_dir}/rustup-bin\$\")\"
+  "
+  rm -rf "${_tmp_dir}"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"count=1"* ]]
+}
