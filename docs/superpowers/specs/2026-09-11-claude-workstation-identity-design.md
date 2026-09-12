@@ -120,10 +120,13 @@ Measured 2026-09-11, three ways:
 | fleet DNS | `studio-1`, `ratna-1`, `laptop-1` resolve; `workstation-1`, `cruncher-1`, `claude-1` are NXDOMAIN |
 | `workstation`, over ssh | `/etc/hostname` and static hostname both `workstation`; wireless `wlp14s0` present; `network-manager 1.46.0` installed; still reports `workstation` |
 | `claude`, over ssh | `/etc/hostname` and static hostname both `claude`; `wlo2` DOWN and unconfigured |
+| `cruncher` | not verified — sshd refuses connections on that box; DNS agrees (`cruncher` resolves, `cruncher-1` NXDOMAIN). Reported to have wireless hardware, unconfigured; under WSL2 the host's wifi is not exposed as a wireless interface anyway |
 
 `workstation` is the decisive case: it has the wireless hardware *and* NetworkManager, has
 run that way for months, and is correctly wired-only — because it never connects on the
-second interface. That also retires an argument an earlier draft of this spec made, that
+second interface. The operator confirms `claude` and `cruncher` are the same shape —
+wireless hardware present, unconfigured — so **no host in this table is wired-only for
+lack of hardware**, and a rule written in terms of hardware would misclassify all three. That also retires an argument an earlier draft of this spec made, that
 `ubuntu_common_packages.txt:46` (`network-manager`) would arrive with the first
 `setup_env.sh` and make wired-only unsafe. It arrives, and it changes nothing.
 
