@@ -1048,8 +1048,11 @@ and `PROFILE_CAPS[server]` was deleted with it.
 
 **A `-1` suffix on a hostname is that machine's wireless-interface name** — `hostname -s`
 returns it whenever the machine is off ethernet — and both spellings resolve to the same
-`PROFILE`/`HAS_*` set. `workstation` and `cruncher` are wired-only by design and correctly
-have no wireless twin. `home-1` is the one exception to the suffix meaning "wireless": there
+`workstation`, `cruncher` and `claude` take a single key because each connects on only one
+interface — not because they lack wireless hardware: `workstation` has `wlp14s0` and
+NetworkManager and still reports `workstation`, and `claude` has `wlo2`, down and
+unconfigured. A `-1` name is a second DHCP/DNS registration, so it appears only for a
+machine that actually connects both ways. `home-1` is the one exception to the suffix meaning "wireless": there
 the `-1` is part of the machine's actual name (a naming mistake kept in case a `home-2`
 follows), and it has no separate `home` entry.
 
