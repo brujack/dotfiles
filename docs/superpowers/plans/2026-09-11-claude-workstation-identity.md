@@ -1,5 +1,7 @@
 # `claude` Workstation Identity Implementation Plan
 
+> **Status: DONE** — merged direct to master (`55b9b488`), 2026-09-11.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Give the new Linux box `claude` the same identity as `workstation` in dotfiles' hostname table, and correct the documentation this makes false.
