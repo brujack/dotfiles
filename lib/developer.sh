@@ -591,7 +591,4 @@ clone_personal_repos() {
   if ! [[ -d ${PERSONAL_GITREPOS}/terraform_ansible ]]; then
     git clone git@github.com:brujack/terraform_ansible.git "${PERSONAL_GITREPOS}"/terraform_ansible
   fi
-  if ! [[ -d ${PERSONAL_GITREPOS}/terraspace_env ]]; then
-    git clone git@github.com:brujack/terraspace_env.git "${PERSONAL_GITREPOS}"/terraspace_env
-  fi
 }
