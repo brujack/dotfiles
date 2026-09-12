@@ -135,6 +135,8 @@ _profiles_snapshot() { # <hostname>
     # 13 hosts (every PROFILE_CAPS entry is non-empty) but reachable the
     # moment a host lands in no_legacy with a zero-capability profile.
     if [[ -z "${PROFILE_CAPS[${expected_profile}]:-}" ]]; then
+      printf 'host %s maps to profile %s absent from PROFILE_CAPS\n' "${hn}" "${expected_profile}" >&2
+      return 1
       expected_has=""
     else
       expected_has="$(printf '%s\n' ${PROFILE_CAPS[${expected_profile}]} | tr ' ' '\n' | tr '[:lower:]' '[:upper:]' | sed 's/^/HAS_/' | sort)"
