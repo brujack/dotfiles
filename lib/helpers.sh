@@ -312,18 +312,82 @@ install_bats() {
   fi
 }
 
+# Which shell the ACCOUNT is set to, not which shell is currently running.
+# `${SHELL}` is the invoking shell's environment variable, so a provision run
+# started from zsh reads "already zsh" while the passwd entry still says
+# /bin/bash -- the guard cannot see the thing it guards. Read the account.
+#
+# _OVERRIDE_CURRENT_LOGIN_SHELL exists so tests can drive both branches without
+# reading (or changing) the developer's real account, which is the only other
+# way to reach them.
+_current_login_shell() {
+  if [[ -n ${_OVERRIDE_CURRENT_LOGIN_SHELL+x} ]]; then
+    printf '%s\n' "${_OVERRIDE_CURRENT_LOGIN_SHELL}"
+    return 0
+  fi
+  if [[ -n ${MACOS} ]]; then
+    dscl . -read "/Users/${USER}" UserShell 2>/dev/null | awk '{print $2}'
+  else
+    getent passwd "${USER}" 2>/dev/null | awk -F: '{print $7}'
+  fi
+}
+
 setup_zsh_as_default_shell() {
   log_info "Setting ZSH as shell..."
 
   ZSH_PATH="${_OVERRIDE_ZSH_PATH:-/bin/zsh}"
 
-  if [[ ${SHELL} != "${ZSH_PATH}" ]]; then
-    if [[ -x "${ZSH_PATH}" ]]; then
-      chsh -s "${ZSH_PATH}"
-      log_info "Changed default shell to ${ZSH_PATH}"
-    else
-      log_error "Error: ${ZSH_PATH} does not exist"
-    fi
+  local _current
+  _current="$(_current_login_shell)"
+
+  if [[ "${_current}" == "${ZSH_PATH}" ]]; then
+    log_info "Login shell is already ${ZSH_PATH}"
+    return 0
+  fi
+
+  if [[ ! -x "${ZSH_PATH}" ]]; then
+    log_error "Error: ${ZSH_PATH} does not exist"
+    return 1
+  fi
+
+  # chsh is setuid root but authenticates the INVOKING user through PAM, so it
+  # prompts for a password and exits 1 in every non-interactive actor -- a
+  # provision run, cron, ssh 'cmd'. Measured on `claude` 2026-09-12:
+  # `chsh: PAM: Authentication failure`, rc=1, shell unchanged. Try the
+  # passwordless-sudo form first, which is what a provision run can satisfy,
+  # and fall back to bare chsh for an interactive operator who can type one.
+  #
+  # Both rcs are checked. The previous version checked neither and then logged
+  # success unconditionally, so a failed change reported as a completed one.
+  if ! sudo -n chsh -s "${ZSH_PATH}" "${USER}" 2>/dev/null && ! chsh -s "${ZSH_PATH}"; then
+    log_error "Could not change login shell to ${ZSH_PATH}"
+    return 1
+  fi
+
+  log_info "Changed default shell to ${ZSH_PATH}"
+}
+
+# The check that would have caught the failure above. `claude` was provisioned
+# on 2026-09-12, the run reported success, and the account was still on
+# /bin/bash -- found only when the operator logged in and got a bash prompt.
+# A provisioning step that cannot verify its own outcome needs a checker that
+# reads the outcome independently, which is what this is: it asks the account,
+# not the running shell, and not the provision's own report.
+_doctor_check_login_shell() {
+  printf "\nLogin shell:\n"
+  local _current _expected
+  _expected="${_OVERRIDE_ZSH_PATH:-/bin/zsh}"
+  _current="$(_current_login_shell)"
+
+  if [[ -z ${_current} ]]; then
+    # Distinct from a wrong shell: the probe failed, so we know nothing. A
+    # warn rather than a pass, because an unreadable account is not evidence
+    # the shell is correct.
+    doctor_warn "login shell" "could not read the account's shell"
+  elif [[ "${_current}" == "${_expected}" ]]; then
+    doctor_pass "login shell (${_current})"
+  else
+    doctor_fail "login shell" "is ${_current}, expected ${_expected} — re-run setup_env.sh -t setup_user"
   fi
 }
 
@@ -361,6 +425,7 @@ run_doctor() {
   _doctor_check_symlinks
   _doctor_check_symlink_roots
   _doctor_check_tools
+  _doctor_check_login_shell
   _doctor_check_cred_dirs
   _doctor_check_hooks_path
   _doctor_check_versions

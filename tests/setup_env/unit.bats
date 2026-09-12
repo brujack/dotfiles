@@ -827,6 +827,7 @@ EOF
   _doctor_check_symlinks()      { :; }
   _doctor_check_symlink_roots() { :; }
   _doctor_check_tools()         { :; }
+  _doctor_check_login_shell()   { :; }
   _doctor_check_cred_dirs()     { :; }
   _doctor_check_hooks_path()    { :; }
   _doctor_check_versions()      { :; }
@@ -840,6 +841,7 @@ EOF
   _doctor_check_symlinks()      { :; }
   _doctor_check_symlink_roots() { :; }
   _doctor_check_tools()         { :; }
+  _doctor_check_login_shell()   { :; }
   _doctor_check_cred_dirs()     { :; }
   _doctor_check_hooks_path()    { :; }
   _doctor_check_versions()      { :; }
@@ -1240,6 +1242,7 @@ EOF
   _doctor_check_symlinks()      { :; }
   _doctor_check_symlink_roots() { :; }
   _doctor_check_tools()         { :; }
+  _doctor_check_login_shell()   { :; }
   _doctor_check_cred_dirs()     { :; }
   _doctor_check_hooks_path()    { :; }
   _doctor_check_versions()      { :; }
@@ -1458,6 +1461,44 @@ EOF
   _doctor_check_tools
   export PATH="${_saved_path}"
   [ "${_DOCTOR_FAILED}" -ge 1 ]
+}
+
+# ── _doctor_check_login_shell ─────────────────────────────────────────────────
+
+# These drive the account's shell through _OVERRIDE_CURRENT_LOGIN_SHELL for the
+# same reason the setup_zsh_as_default_shell tests do: without the seam they
+# read the developer's real account via dscl/getent, so "passes" would hold on
+# this mac for the machine's reason and flip on any runner whose account is
+# /bin/bash.
+@test "_doctor_check_login_shell passes when the account is zsh" {
+  _DOCTOR_PASS=0; _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_WARN=0
+  export _OVERRIDE_CURRENT_LOGIN_SHELL="/bin/zsh"
+  run _doctor_check_login_shell
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[PASS]"* ]]
+  [[ "$output" == *"/bin/zsh"* ]]
+}
+
+@test "_doctor_check_login_shell fails when the account is still bash" {
+  _DOCTOR_PASS=0; _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_WARN=0
+  export _OVERRIDE_CURRENT_LOGIN_SHELL="/bin/bash"
+  run _doctor_check_login_shell
+  [[ "$output" == *"[FAIL]"* ]]
+  [[ "$output" == *"is /bin/bash"* ]]
+  [[ "$output" == *"setup_env.sh -t setup_user"* ]]
+}
+
+# An unreadable account is not evidence the shell is correct, so it must not
+# render as a pass. Third state, deliberately distinct: a two-valued pass/fail
+# framing would have folded it into one of the other two, and the one it would
+# most likely have joined is PASS.
+@test "_doctor_check_login_shell warns when the account cannot be read" {
+  _DOCTOR_PASS=0; _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_WARN=0
+  export _OVERRIDE_CURRENT_LOGIN_SHELL=""
+  run _doctor_check_login_shell
+  [[ "$output" == *"[WARN]"* ]]
+  [[ "$output" != *"[PASS]"* ]]
+  [[ "$output" != *"[FAIL]"* ]]
 }
 
 # ── _doctor_check_cred_dirs ───────────────────────────────────────────────────
