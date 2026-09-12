@@ -8,6 +8,11 @@
 # Deliberately hand-typed rather than derived from PROFILE_LEGACY in
 # config/profiles.sh, and the reason is measured rather than stylistic.
 #
+# Every figure in the record below -- key counts, name counts, the "not ok"
+# line numbers -- is frozen at the round the 2x2 was actually run against.
+# They are deliberately NOT renumbered as the table grows: correcting them
+# would make this record claim the experiment saw a tree it never saw.
+#
 # The mutation that tests this is a SELF-CONSISTENT swap of two values, both
 # members of each wired/wireless pair: [reception] and [reception-1] to "RATNA",
 # [ratna] and [ratna-1] to "RECEPTION". All 13 keys remain, all eight names

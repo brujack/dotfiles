@@ -23,9 +23,10 @@
 # connects on only one interface -- not because they lack wireless hardware:
 # `workstation` has wlp14s0 and network-manager and still reports `workstation`,
 # and `claude` has wlo2, down and unconfigured. A `-1` name is a second DHCP/DNS
-# registration, so it appears only for a machine that connects both ways. `home-1` is the one exception to the suffix
-# meaning "wireless": there the `-1` is part of the machine's actual name, a
-# naming mistake kept because a `home-2` may follow.
+# registration, so it appears only for a machine that connects both ways.
+# `home-1` is the one exception to the suffix meaning "wireless": there the
+# `-1` is part of the machine's actual name, a naming mistake kept because a
+# `home-2` may follow.
 #
 # `reception` carries mac_workstation rather than mac_mini despite being the
 # same hardware class as `office`/`home-1`: it was a full-time dev box at
