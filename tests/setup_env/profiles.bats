@@ -544,3 +544,10 @@ _profile_snapshot() {
   detect_env
   [ "${PROFILE}" = "unknown" ]
 }
+
+@test "claude resolves linux_workstation with the full capability set" {
+  local snap
+  snap=$(_profile_snapshot claude)
+  [[ "${snap}" == *"PROFILE=linux_workstation"* ]]
+  [ "$(printf '%s\n' "${snap}" | grep -c '^HAS_')" -eq 8 ]
+}
