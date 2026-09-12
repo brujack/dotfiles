@@ -360,7 +360,7 @@ machine mapped under only one loses every capability whenever it is on the other
 silently, since `PROFILE=unknown` is a well-formed answer with no capabilities. A `-1`
 name is a second DHCP/DNS registration for a machine that **connects** on both a wired
 and a wireless interface — not a property of the hardware. A machine that only ever
-connects on one interface takes a single key (`workstation`, `cruncher`, `claude`), even
+holds one DHCP/DNS registration takes a single key (`workstation`, `cruncher`, `claude` — `claude`'s wired side is a bond, so several NICs hold one registration between them), even
 if it has wireless hardware it never uses. `home-1` is the one exception where `-1` is
 part of the machine's name rather than an interface suffix.
 

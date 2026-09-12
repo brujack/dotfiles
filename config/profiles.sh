@@ -20,10 +20,12 @@
 # must carry a wireless twin mapped to the same profile, or that machine
 # silently resolves PROFILE=unknown (and zero HAS_*) the moment it's off
 # ethernet. `workstation`, `cruncher` and `claude` take a single key because each
-# connects on only one interface -- not because they lack wireless hardware:
-# `workstation` has wlp14s0 and network-manager and still reports `workstation`,
-# and `claude` has wlo2, down and unconfigured. A `-1` name is a second DHCP/DNS
-# registration, so it appears only for a machine that connects both ways.
+# holds ONE DHCP/DNS registration. That is the criterion -- not the interface
+# count, and not the absence of wireless hardware. `workstation` has wlp14s0 and
+# network-manager and still reports `workstation`; `claude` has wlo2 down and
+# unconfigured, and its wired side is a bond, so several physical NICs register
+# once between them. A `-1` name is a second registration, so it appears only for
+# a machine that connects both ways.
 # `home-1` is the one exception to the suffix meaning "wireless": there the
 # `-1` is part of the machine's actual name, a naming mistake kept because a
 # `home-2` may follow.
