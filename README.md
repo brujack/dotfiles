@@ -332,15 +332,15 @@ dotfiles/
 
 Machines are mapped to profiles in `config/profiles.sh`:
 
-| Profile             | Machines          | Capabilities                                    |
-| ------------------- | ----------------- | ----------------------------------------------- |
-| `personal_laptop`   | laptop            | GUI, devtools, AWS, k8s, Docker, Rust, printing |
-| `mac_workstation`   | studio, reception, ratna | GUI, devtools, AWS, k8s, Docker, Rust, printing |
-| `mac_mini`          | office, home-1    | GUI, printing                                   |
-| `linux_workstation` | workstation       | GUI, devtools, AWS, k8s, Docker, Rust, snap, flatpak |
-| `wsl2_workstation`  | cruncher          | GUI, devtools, AWS, k8s, Docker, Rust           |
+| Profile             | Capabilities                                    |
+| ------------------- | ----------------------------------------------- |
+| `personal_laptop`   | GUI, devtools, AWS, k8s, Docker, Rust, printing |
+| `mac_workstation`   | GUI, devtools, AWS, k8s, Docker, Rust, printing |
+| `mac_mini`          | GUI, printing                                   |
+| `linux_workstation` | GUI, devtools, AWS, k8s, Docker, Rust, snap, flatpak |
+| `wsl2_workstation`  | GUI, devtools, AWS, k8s, Docker, Rust           |
 
-**linux_workstation vs wsl2_workstation:** `linux_workstation` (hostname: `workstation`) is a desktop Ubuntu machine with full snap support. `wsl2_workstation` (hostname: `cruncher`) is WSL2 Ubuntu where snap is unavailable — snap-gated installs (Albert, Microsoft Edge, ollama, snap classic packages) are skipped, and Helm is installed via apt instead of snap.
+**linux_workstation vs wsl2_workstation:** `linux_workstation` (hostnames: `workstation`, `claude`) is a desktop Ubuntu machine with full snap support. `wsl2_workstation` (hostname: `cruncher`) is WSL2 Ubuntu where snap is unavailable — snap-gated installs (Albert, Microsoft Edge, ollama, snap classic packages) are skipped, and Helm is installed via apt instead of snap.
 
 ### Adding a New Machine
 
@@ -357,9 +357,12 @@ declare -A PROFILE_MAP=(
 
 `hostname -s` returns `<name>` on the wired interface and `<name>-1` on wireless, so a
 machine mapped under only one loses every capability whenever it is on the other —
-silently, since `PROFILE=unknown` is a well-formed answer with no capabilities. Machines
-with no wireless interface (`workstation`, `cruncher`) take a single key. `home-1` is the
-one exception where `-1` is part of the machine's name rather than an interface suffix.
+silently, since `PROFILE=unknown` is a well-formed answer with no capabilities. A `-1`
+name is a second DHCP/DNS registration for a machine that **connects** on both a wired
+and a wireless interface — not a property of the hardware. A machine that only ever
+connects on one interface takes a single key (`workstation`, `cruncher`, `claude`), even
+if it has wireless hardware it never uses. `home-1` is the one exception where `-1` is
+part of the machine's name rather than an interface suffix.
 
 Then run `./setup_env.sh -t doctor`: it fails on an unmapped hostname and names it, so a
 missed row surfaces immediately rather than as a capability that quietly stopped applying.
