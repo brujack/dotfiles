@@ -1289,3 +1289,19 @@ _dev_probe_gpg_status() {
     LINUX=1 RUBY_VER='4.0.5' install_ruby"
   [[ "$output" == *"ruby 4.0.5 is installed"* ]]
 }
+
+@test "clone_personal_repos does not clone the deleted terraspace_env repo" {
+  # brujack/terraspace_env returns a hard 404 -- gh authenticated as brujack
+  # with repo scope can list private repos, so it is gone rather than merely
+  # invisible. Every provision on every machine attempted the clone and printed
+  # "ERROR: Repository not found. / fatal: Could not read from remote
+  # repository." with nothing propagating. Measured on claude 2026-09-12, where
+  # it was the sole `fatal:` in a 61k-line log. The other 7 clone targets in
+  # this function were checked the same way and all exist, so this is the whole
+  # fix rather than the first of several.
+  #
+  # Asserted against the source rather than by running the function: "the repo
+  # exists on GitHub" is not an offline property, and a network-dependent test
+  # would be worse than none. What this guards is re-adding the dead target.
+  ! command grep -q 'terraspace_env' "${REPO_ROOT}/lib/developer.sh"
+}
