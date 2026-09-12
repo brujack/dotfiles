@@ -82,6 +82,7 @@ _legacy_oracle_expected_var() { # <hostname>
   office | office-1) printf 'OFFICE' ;;
   home-1) printf 'HOMES' ;;
   workstation) printf 'WORKSTATION' ;;
+  claude) printf 'WORKSTATION' ;;
   cruncher) printf 'CRUNCHER' ;;
   *)
     # Returns non-zero rather than printing empty: an empty "expected"

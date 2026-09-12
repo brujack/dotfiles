@@ -293,7 +293,7 @@ _profile_snapshot() {
   source "${REPO_ROOT}/config/profiles.sh"
   # Deliberately wired-only (see config/profiles.sh's own comment) -- not a
   # gap, so excluded rather than expected to fail.
-  local -A wired_only=([workstation]=1 [cruncher]=1)
+  local -A wired_only=([workstation]=1 [cruncher]=1 [claude]=1)
   local k found=0
   for k in "${!PROFILE_MAP[@]}"; do
     # Every existing "-1" key IS a wireless twin (home-1 included -- its

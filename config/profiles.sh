@@ -36,6 +36,7 @@ declare -A PROFILE_MAP=(
   [office]="mac_mini"             [office-1]="mac_mini"
   [home-1]="mac_mini"
   [workstation]="linux_workstation"
+  [claude]="linux_workstation"
   [cruncher]="wsl2_workstation"
 )
 
@@ -60,5 +61,6 @@ declare -A PROFILE_LEGACY=(
   [office]="OFFICE"          [office-1]="OFFICE"
   [home-1]="HOMES"
   [workstation]="WORKSTATION"
+  [claude]="WORKSTATION"
   [cruncher]="CRUNCHER"
 )
