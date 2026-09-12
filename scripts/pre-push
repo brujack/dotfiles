@@ -10,9 +10,11 @@ if [[ -z "${REPO_ROOT}" ]]; then
 fi
 
 needs_test=0
+refuse_paths=""
 # shellcheck disable=SC2034 # git's pre-push protocol supplies 4 whitespace-separated
-# fields per stdin line; local_ref/remote_ref must be named to consume the
-# line positionally even though only local_sha/remote_sha are read below.
+# fields per stdin line; local_ref must be named to consume the line
+# positionally even though it is never read. remote_ref IS read, by the
+# direct-to-master guard below.
 while read -r local_ref local_sha remote_ref remote_sha; do
     [[ "${local_sha}" == "0000000000000000000000000000000000000000" ]] && continue
 
@@ -57,7 +59,32 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     elif [[ -n "${changed}" ]] && printf '%s\n' "${changed}" | grep -qvE '\.md$|^\.github/.*\.ya?ml$|^LICENSE$'; then
         needs_test=1
     fi
+
+    # Direct-to-master guard. ci.yml triggers on pull_request only, so a code
+    # change pushed straight to master is validated by nothing -- measured
+    # 2026-09-11, five such pushes in one session. Accumulate rather than
+    # exiting here: the loop must drain every ref line (a single push can send
+    # a real branch plus a deletion), so the verdict is read after the loop.
+    #
+    # Scope is the executable class the operator chose, deliberately narrower
+    # than sdlc-branch-guard's is_safe_file: .zshrc, starship.toml,
+    # .shellcheckrc and .github/workflows/*.yml stay pushable direct, none
+    # having ever been pushed that way. tests/mocks/* is extensionless shell
+    # and is NOT covered -- a known gap, recorded rather than silently closed.
+    if [[ "${remote_ref}" == "refs/heads/master" && -n "${changed}" ]]; then
+        _offenders="$(printf '%s\n' "${changed}" \
+            | grep -E '\.(sh|bash|bats|zsh)$|(^|/)Makefile$|^scripts/(pre-push|commit-msg)$' || true)"
+        [[ -n "${_offenders}" ]] && refuse_paths="${refuse_paths}${_offenders}"$'\n'
+    fi
 done
+
+if [[ -n "${refuse_paths}" ]]; then
+    printf 'pre-push: refusing a direct push to master carrying executable files.\n' >&2
+    printf '%s\n' "${refuse_paths}" | grep -v '^$' | sed 's/^/  /' >&2
+    printf 'ci.yml runs on pull_request only, so these would reach master with no CI.\n' >&2
+    printf 'Use a branch and a PR: git push -u origin HEAD:feat/<name> && gh pr create\n' >&2
+    exit 1
+fi
 
 [[ "${needs_test}" -eq 0 ]] && exit 0
 

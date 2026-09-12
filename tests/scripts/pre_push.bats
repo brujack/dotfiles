@@ -45,6 +45,11 @@ _commit_file() {
   "
 }
 
+# These cases push to a FEATURE ref, not master, and that is deliberate. Their
+# subject is the inert set -- does this path make the suite run -- not master
+# policy. They used refs/heads/master incidentally until the direct-to-master
+# guard landed, at which point every one of them would have been answered by
+# the refusal instead of by the thing they assert. Do not switch them back.
 _run_pre_push() {
   local _stdin="${1}"
   local _path_with_make="${MAKE_MOCK_DIR}:${CLEAN_PATH}"
@@ -68,7 +73,7 @@ _run_pre_push() {
   base_sha=$(_commit_file "README.md" "v1" "docs: v1")
   local_sha=$(_commit_file "deploy.sh" "echo hi" "feat: add deploy script")
   _write_make_mock 0
-  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
   grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
 }
@@ -77,7 +82,7 @@ _run_pre_push() {
   base_sha=$(_commit_file "README.md" "v1" "docs: v1")
   local_sha=$(_commit_file "scripts/pre-push" "# hook" "chore: touch hook")
   _write_make_mock 0
-  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
   grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
 }
@@ -86,7 +91,7 @@ _run_pre_push() {
   base_sha=$(_commit_file "README.md" "v1" "docs: v1")
   local_sha=$(_commit_file "scripts/commit-msg" "# hook" "chore: touch hook")
   _write_make_mock 0
-  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
   grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
 }
@@ -95,7 +100,7 @@ _run_pre_push() {
   base_sha=$(_commit_file "README.md" "v1" "docs: v1")
   local_sha=$(_commit_file ".config/.zshrc.d/2_functions.zsh" "echo hi" "feat: add a zsh function")
   _write_make_mock 0
-  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
   grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
 }
@@ -140,7 +145,7 @@ _run_pre_push() {
   base_sha=$(_commit_file "README.md" "v1" "docs: v1")
   local_sha=$(_commit_file "Makefile" "test:" "chore: touch Makefile")
   _write_make_mock 0
-  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
   grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
 }
@@ -176,7 +181,7 @@ _run_pre_push() {
   base_sha=$(_commit_file "README.md" "v1" "docs: v1")
   local_sha=$(_commit_file "deploy.sh" "echo hi" "feat: add deploy script")
   _write_make_mock 1
-  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 1 ]
 }
 
@@ -200,7 +205,7 @@ _run_pre_push() {
   base_sha=$(_commit_file "README.md" "v1" "docs: v1")
   local_sha=$(_commit_file "deploy.sh" "echo hi" "feat: add deploy script")
   _write_make_mock 0
-  run _run_pre_push "refs/heads/old-feature 0000000000000000000000000000000000000000 refs/heads/old-feature abc123\nrefs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  run _run_pre_push "refs/heads/old-feature 0000000000000000000000000000000000000000 refs/heads/old-feature abc123\nrefs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
   grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
 }
@@ -232,7 +237,7 @@ _run_pre_push_leaked() {
   base_sha=$(_commit_file "README.md" "v1" "docs: v1")
   local_sha=$(_commit_file "deploy.sh" "echo hi" "feat: add deploy script")
   _write_make_env_mock
-  run _run_pre_push_leaked "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  run _run_pre_push_leaked "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
   grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
   run ! grep -qE "^GIT_(DIR|WORK_TREE|COMMON_DIR|INDEX_FILE)=" "${MOCK_CALLS_FILE}"
@@ -279,7 +284,7 @@ _run_pre_push_leaked() {
   _commit_file "README.md" "v2" "docs: v2" > /dev/null
   local_sha=$(_commit_file "setup_env.sh" "echo hi" "feat: touch setup_env")
   _write_make_mock 0
-  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
   grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
 }
@@ -360,7 +365,7 @@ _run_pre_push_leaked() {
   base_sha=$(_commit_file "README.md" "v1" "docs: v1")
   local_sha=$(_commit_file "docs/gen.sh" "echo hi" "chore: add docs gen script")
   _write_make_mock 0
-  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
   grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
 }
@@ -369,7 +374,7 @@ _run_pre_push_leaked() {
   base_sha=$(_commit_file "README.md" "v1" "docs: v1")
   local_sha=$(_commit_file ".github/scripts/foo.sh" "echo hi" "chore: add github script")
   _write_make_mock 0
-  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
   grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
 }
@@ -378,7 +383,7 @@ _run_pre_push_leaked() {
   base_sha=$(_commit_file "README.md" "v1" "docs: v1")
   local_sha=$(_commit_file "CHANGELOG_gen.sh" "echo hi" "chore: add changelog gen script")
   _write_make_mock 0
-  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
   grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
 }
@@ -398,4 +403,49 @@ _run_pre_push_leaked() {
   run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${bogus_sha}\n"
   [ "$status" -eq 0 ]
   grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+}
+
+# ── direct-to-master guard ──────────────────────────────────────────────────
+# The hook refuses a push whose target ref is master when the diff carries an
+# executable-class path. Measured 2026-09-11: five such pushes reached master
+# in one session with no CI behind them, because ci.yml is pull_request-only.
+# The two allow-cases below are positive controls: without them a passing
+# refusal set cannot distinguish "correctly scoped" from "refuses everything".
+
+@test "pre-push refuses a .sh pushed to master and does not run the suite" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "deploy.sh" "echo hi" "feat: add deploy script")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  [ "$status" -ne 0 ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+  [[ "$output" == *"deploy.sh"* ]]
+}
+
+@test "pre-push refuses a .bash pushed to master" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "tests/helpers/legacy_oracle.bash" "x" "test: oracle")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  [ "$status" -ne 0 ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+  [[ "$output" == *"legacy_oracle.bash"* ]]
+}
+
+@test "pre-push still runs the suite for a .sh pushed to a feature branch" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "deploy.sh" "echo hi" "feat: add deploy script")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+}
+
+@test "pre-push still permits a markdown push to master" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "README.md" "v2" "docs: v2")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
 }
