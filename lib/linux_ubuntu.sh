@@ -81,12 +81,13 @@ _install_ubuntu_powershell() {
 
 _install_go_from_tarball() {
   if [[ ! -f ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} ]]; then
-    wget -O "${HOME}"/software_downloads/"${GO_DOWNLOAD_FILENAME}" "${GO_DOWNLOAD_URL}"
-    tar xvf "${HOME}"/software_downloads/"${GO_DOWNLOAD_FILENAME}" -C "${HOME}"/software_downloads/
-    if [[ -d /usr/local/go ]]; then
-      sudo rm -rf /usr/local/go
-    fi
+    wget -O "${HOME}"/software_downloads/"${GO_DOWNLOAD_FILENAME}" "${GO_DOWNLOAD_URL}" || return 1
+    tar xvf "${HOME}"/software_downloads/"${GO_DOWNLOAD_FILENAME}" -C "${HOME}"/software_downloads/ || return 1
     if [[ -d ${HOME}/software_downloads/go ]]; then
+      # Only remove the existing installation once we know extraction succeeded
+      if [[ -d /usr/local/go ]]; then
+        sudo rm -rf /usr/local/go
+      fi
       sudo mv "${HOME}"/software_downloads/go /usr/local/go
       sudo chmod 755 /usr/local/go
       sudo chown -R root:root /usr/local/go

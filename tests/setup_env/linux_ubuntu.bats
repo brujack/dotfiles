@@ -535,6 +535,26 @@ exit 0'
   grep -q "sudo mv.*software_downloads/go" "${MOCK_CALLS_FILE}"
 }
 
+@test "_install_go_from_tarball: wget failure returns non-zero and does not call sudo rm -rf" {
+  export GO_VER="1.27"
+  export GO_DOWNLOAD_FILENAME="go1.27.1.linux-amd64.tar.gz"
+  export GO_DOWNLOAD_URL="https://go.dev/dl/go1.27.1.linux-amd64.tar.gz"
+  export MOCK_WGET_EXIT=1
+  run _install_go_from_tarball
+  [ "$status" -ne 0 ]
+  ! grep -qF "sudo rm -rf /usr/local/go" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_go_from_tarball: tar failure returns non-zero and does not call sudo rm -rf" {
+  export GO_VER="1.27"
+  export GO_DOWNLOAD_FILENAME="go1.27.1.linux-amd64.tar.gz"
+  export GO_DOWNLOAD_URL="https://go.dev/dl/go1.27.1.linux-amd64.tar.gz"
+  export MOCK_TAR_EXIT=1
+  run _install_go_from_tarball
+  [ "$status" -ne 0 ]
+  ! grep -qF "sudo rm -rf /usr/local/go" "${MOCK_CALLS_FILE}"
+}
+
 # ── _install_ubuntu_docker ───────────────────────────────────────────────────
 
 @test "_install_ubuntu_docker: HAS_DOCKER unset does nothing" {
