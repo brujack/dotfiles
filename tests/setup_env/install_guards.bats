@@ -1130,14 +1130,25 @@ _gnubin_present() {
   run setup_claude_plugins
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"already installed: superpowers@claude-plugins-official"* ]]
-  ! grep -q "claude plugins install superpowers@claude-plugins-official" "${MOCK_CALLS_FILE}"
+  # Flag-agnostic on purpose (tdd.md E5), matching the twin in
+  # tests/setup_env/workflows.bats. Pinning the exact flags here would let both
+  # "install was skipped" and "install ran in a form this pattern no longer
+  # matches" satisfy it, and only the first is the behaviour under test.
+  ! grep -q "plugins install .*superpowers@claude-plugins-official" "${MOCK_CALLS_FILE}"
 }
 
-@test "setup_claude_plugins: plugin not installed → claude plugins install called" {
+@test "setup_claude_plugins: plugin not installed → installs at USER scope" {
+  # Pins `-s user` explicitly. `--scope` already defaults to "user" on
+  # 2.1.269/2.1.270, so there is no live defect here — what this guards is
+  # REMOVAL of the flag. The mock records argv, so it observes our invocation
+  # and could not detect an upstream default change.
   export MOCK_CLAUDE_PLUGINS_LIST_OUTPUT=""
   run setup_claude_plugins
   [ "${status}" -eq 0 ]
-  grep -q "claude plugins install superpowers@claude-plugins-official" "${MOCK_CALLS_FILE}"
+  grep -q "claude plugins install -s user superpowers@claude-plugins-official" "${MOCK_CALLS_FILE}"
+  # The scopeless form must not survive anywhere in the call log: asserting only
+  # the presence of the fixed string would pass if BOTH were emitted.
+  ! grep -qE "claude plugins install (superpowers|[^-])" "${MOCK_CALLS_FILE}"
 }
 
 # ── run_setup_user (mid-chain failure propagation) ────────────────────────────

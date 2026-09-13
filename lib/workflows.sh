@@ -76,7 +76,15 @@ setup_claude_plugins() {
       log_info "Claude plugin already installed: ${_plugin}"
     else
       log_info "Installing Claude plugin: ${_plugin}"
-      claude plugins install "${_plugin}" || log_warn "Failed to install Claude plugin: ${_plugin}"
+      # `-s user` pins the scope instead of inheriting `--scope`'s default, which
+      # is already "user" on 2.1.269/2.1.270 (`claude plugin install --help`). A
+      # provisioning script should not silently follow a default upstream can
+      # change, so this is explicitness, NOT a behaviour fix — do not re-describe
+      # it as one. The project-scope rows in installed_plugins.json are NOT written
+      # by this command — they appear for directories where no install has ever run,
+      # one batch per directory. The verb does not matter either: `plugin` and
+      # `plugins` print byte-identical help (same sha256 on 2.1.270).
+      claude plugins install -s user "${_plugin}" || log_warn "Failed to install Claude plugin: ${_plugin}"
     fi
   done
 }

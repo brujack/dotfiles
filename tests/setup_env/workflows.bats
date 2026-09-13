@@ -281,13 +281,21 @@ teardown() {
 @test "setup_claude_plugins installs plugin when not listed" {
   export MOCK_CLAUDE_PLUGINS_LIST_OUTPUT=""
   setup_claude_plugins
-  grep -q "claude plugins install superpowers@claude-plugins-official" "${MOCK_CALLS_FILE}"
+  # Pins `-s user` explicitly rather than inheriting `--scope`'s default
+  # (currently "user"). What this guards is REMOVAL of the flag: tests/mocks/claude
+  # records argv, so the assertion observes our own invocation and could NOT go red
+  # on an upstream default change. See lib/workflows.sh.
+  grep -q "claude plugins install -s user superpowers@claude-plugins-official" "${MOCK_CALLS_FILE}"
 }
 
 @test "setup_claude_plugins skips install when plugin already listed" {
   export MOCK_CLAUDE_PLUGINS_LIST_OUTPUT="superpowers@claude-plugins-official"
   setup_claude_plugins
-  ! grep -q "claude plugins install superpowers@claude-plugins-official" "${MOCK_CALLS_FILE}"
+  # Flag-agnostic on purpose. Pinning the exact flags here would make this
+  # assertion vacuous the moment they change -- "install was skipped" and
+  # "install ran in a form this pattern no longer matches" would both satisfy
+  # it, and only the first is the behaviour under test.
+  ! grep -q "plugins install .*superpowers@claude-plugins-official" "${MOCK_CALLS_FILE}"
 }
 
 @test "run_setup_user calls setup_claude_plugins" {

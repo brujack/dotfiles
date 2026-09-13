@@ -594,11 +594,13 @@ _install_ubuntu_brew_packages() {
     brew_install_formula ggshield || _failed+=(ggshield)
     brew_install_formula claude-code@latest || _failed+=(claude-code@latest)
     if command -v claude &> /dev/null; then
-      # `-s user`, and plugin@marketplace, and the SINGULAR verb. The old form
-      # (`claude plugins install <bare-name>`) registered at PROJECT scope against
-      # whatever cwd the run happened to have, so `claude plugins update` later
-      # reported "not installed at scope user" for 12 plugins and failed the update's
-      # claude section. Measured on claude 2026-09-12.
+      # `-s user` pins the scope; `--scope` already defaults to "user" on
+      # 2.1.269/2.1.270, so this is explicitness against a future default change
+      # rather than a behaviour fix. The verb is not part of it either —
+      # `claude plugin --help` prints `Usage: claude plugin|plugins` and the two
+      # help outputs are byte-identical. Both claims here previously said
+      # otherwise (project scope, and "the SINGULAR verb"); both were asserted
+      # from a correlation and refuted by reading the CLI, 2026-09-13.
       local _p
       for _p in superpowers@claude-plugins-official code-simplifier@claude-plugins-official \
         code-review@claude-plugins-official context7@claude-plugins-official; do
