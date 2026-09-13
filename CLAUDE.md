@@ -218,9 +218,10 @@ Requires: admin terminal (symlinks need elevation), `GITHUB_PAT` env var for MCP
 All tool versions are defined as constants in `lib/constants.sh`:
 
 ```bash
-GO_VER="1.26"
+GO_VER="1.27"
 PYTHON_VER="3.14.6"
 RUBY_VER="4.0.5"
+RUSTUP_VER="1.29.1"
 ```
 
 Update these constants when bumping versions — don't hardcode versions elsewhere.
@@ -451,6 +452,41 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 See `~/git-repos/personal/ai-config/docs/knowledge/dotfiles-bats-test-infrastructure.md` for the full override env var table (moved to ai-config per ADR-0020).
 
 Pattern: `local _file="${_OVERRIDE_VAR:-$(dirname "${BASH_SOURCE[0]}")/real/path}"`. Tests set the var and pass a writable temp copy; production code leaves it unset.
+
+**`_RUSTUP_INIT_URL` / `_RUSTUP_INIT_SHA256` / `_RUSTUP_INIT_BIN` / `_OVERRIDE_CARGO_BIN_DIR`
+(`lib/linux_ubuntu.sh`'s `_install_rustup_rs`) exist because every test runs against a fake
+`HOME` with no `~/.cargo/bin/rustup`, so all of them would otherwise enter the install path
+and reach the network** — `tdd.md` E2, a test whose _failing_ branch touches the outside
+world. `_OVERRIDE_CARGO_BIN_DIR` selects the directory the idempotency guard reads, making
+both "already installed" and "absent" reachable without a real toolchain.
+
+**`_RUSTUP_INIT_SHA256` is exposed rather than mocking `sha256sum`, and that is the load-bearing
+choice.** There is no `sha256sum` mock and there must not be one: supplying the expected digest
+keeps the real check running, so a mismatch is genuinely exercised in both directions. Mocking
+the verifier would make every one of those assertions vacuous — the absence-claim failure
+`behavior.md` names. The suite's positive control is the mismatch case, which asserts the spy
+binary **never ran**, not merely that the function returned 1.
+
+Note `tests/mocks/curl` does not fetch: it writes `MOCK_CURL_STDOUT` to the `-o` target, or
+`touch`es it when unset. A digest taken over a separate fixture file the mock never copies
+cannot match, so the success-path test computes its digest over `MOCK_CURL_STDOUT`'s exact
+bytes.
+
+**`_OVERRIDE_NVIDIA_GPU_PRESENT` / `_OVERRIDE_NVIDIA_KEYRING` / `_OVERRIDE_NVIDIA_LIST`
+(`_nvidia_gpu_present`, `_install_ubuntu_nvidia`).** `lspci` is **not** mocked, and the suite
+runs on a machine with no NVIDIA card, so the install branch is otherwise unreachable — the
+first seam is what makes both branches testable. The other two redirect the keyring and apt
+source list at fixtures, so no test writes to `/usr/share/keyrings` or
+`/etc/apt/sources.list.d`. See ADR-0029 for why the gate is hardware rather than a `HAS_*`
+capability.
+
+**`brew_install_cask` / `brew_cask_installed` (`lib/helpers.sh`) are a separate pair from the
+formula helpers, deliberately.** `brew_formula_installed` greps `brew list --formula` in
+_both_ branches, so an installed **cask** never matches there and the caller would reinstall
+it on every setup run — an idempotency break, which `code-standards.md` treats as a bug rather
+than a tradeoff. Found via `codex`, which is a Cask on Linux as well as macOS.
+`tests/mocks/brew` already branches on `--cask` and reads `MOCK_BREW_LIST_CASK`, so no new
+mock was needed.
 
 **`config/profiles.zsh` is the single zsh-side derivation of `PROFILE`, `HAS_*`, and the
 eight legacy identity variables (`LAPTOP`, `STUDIO`, `RECEPTION`, `RATNA`, `OFFICE`, `HOMES`,
@@ -892,6 +928,8 @@ Invoke `caveman:caveman-commit` skill to generate the commit message before runn
 ## Key Conventions
 
 - Machine roles are now driven by the **profile/capability model** in `config/profiles.sh` — prefer `HAS_*` vars over raw hostname patterns for new code
+- **GPU provisioning is the one deliberate exception to that rule.** `_install_ubuntu_nvidia` gates on detected hardware (`_nvidia_gpu_present` matching PCI vendor `10de:` in `lspci -nn`), not on a `HAS_*` capability, because `claude` and `workstation` both map to `linux_workstation` and a capability is a property of the profile rather than the box — a `HAS_GPU` there would fire on any future GPU-less machine with that profile, and on WSL2 where the driver lives Windows-side. The vendor ID rather than a device-class match matters too: `workstation` carries a second display adapter, the 7950X's integrated AMD Raphael, which a "is there a VGA controller" test would wrongly claim. Absent `lspci` the default is skip, not attempt. Rationale and accepted costs: ADR-0029
+- **Installing the NVIDIA driver does not bind it** — nouveau holds the card until a reboot, so `_install_ubuntu_nvidia` warns rather than implying the GPU is live. A box can therefore be correctly provisioned and still running nouveau until it restarts
 - All eight legacy hostname vars (`LAPTOP`, `STUDIO`, `RECEPTION`, `RATNA`, `OFFICE`, `HOMES`, `WORKSTATION`, `CRUNCHER`) are derived from `PROFILE_LEGACY` in `config/profiles.sh` — `WORKSTATION` and `CRUNCHER` remain live, and are read by `.zprofile:10` and `.config/.zshrc.d/7_final.zsh:60`; new code should still prefer `HAS_*` vars
 - Ubuntu version detection uses `lsb_release -rs` → `NOBLE` var (24.04) or `RESOLUTE` var (26.04); both set in `detect_env.sh` and `.zshrc.d/1_init.zsh`
 - Credential directories (`.aws`, `.tf_creds`, `.tsh`) are created with `chmod 700`
@@ -907,6 +945,8 @@ Invoke `caveman:caveman-commit` skill to generate the commit message before runn
 - **`_UPDATE_SECTION_ORDER` coupling:** `lib/update_summary.sh` has a `readonly _UPDATE_SECTION_ORDER=(...)` array that controls which sections appear in the printed update summary. Adding `_update_record_start/end "new-section"` in `run_update()` without also adding `"new-section"` to this array means the section is tracked internally but never printed. Both must be updated together — `zsh-autosuggestions` (added 2026-08-31) sits right after `oh-my-zsh` in the array for exactly this reason. **The count-assertion warning this bullet used to carry — that adding or removing a section requires manually auditing hardcoded totals like `[[ "$output" == *"9 OK"* ]]` — is stale and was measured wrong.** `_update_summary` `continue`s past any array entry with no `status_<name>` file (`lib/update_summary.sh:547`), and every count assertion in `tests/setup_env/update_summary.bats` seeds its sections by explicit name rather than by iterating the array — one test alone seeds ten named sections (`brew`, `claude`, `mas`, plus seven more via a `for` loop) and asserts `"8 OK"`/`"1 failed"`/`"1 skipped"` against exactly those. Adding `zsh-autosuggestions` to the array changed none of them, because an unseeded array entry is invisible to the tally by construction. The warning would send a future reader auditing assertions that cannot break; the real risk when **removing** a section is a stray reference to its name surviving in a fixture that still seeds it.
 - **`scripts/sync_git_repos.sh`** replaces the old rsync-only sync script (`scripts/synch_git-repos.sh`, deleted). Two independent modes: git-native fetch/pull/push for `personal/` repos + `state-ledger` (safe on any of the three dev machines — never force-pushes, never auto-merges a diverged repo; dirty does not block a safe push, only a pull), and studio-only rsync push for legacy/no-git-access directories + a full-tree ratna backup. Runs automatically as part of `-t update` (`git-repos`/`legacy-rsync` sections in `_UPDATE_SECTION_ORDER`); `--git-only`/`--legacy-only`/`-h` for standalone use. See `docs/superpowers/specs/2026-07-18-sync-git-repos-design.md` for the full design and the dirty/ahead/behind decision table. **Never invoke this script (or `sync_legacy_dirs`/`sync_git_repos` directly) unmocked outside the BATS test harness** — it performs real `git push`/`rsync --delete` over SSH against real hosts, and `_is_legacy_sync_host` triggers on the real `hostname -s` of whichever machine runs it.
 - **`git-hooks` section coupling:** same `_UPDATE_SECTION_ORDER` trap applies to the hook-install sweep (`lib/git_hooks.sh`) — adding `_update_record_start/end "git-hooks"` in `run_update()` without also adding `"git-hooks"` to `_UPDATE_SECTION_ORDER` means the section is tracked internally but never printed, with no error. Separately: the sweep's post-condition check reads the **installed hooks directory** (`.git/hooks/` or the repo's actual hook path), never `scripts/` — a repo whose hooks were installed by a route other than the Makefile (e.g. `ledger init`) must still read as satisfied. `install_git_hooks_all_repos` returns 0 clean, 1 when a `make install-hooks` call failed, and 2 for partial success — gaps, unreadable hooks, or a `core.hooksPath` pinned at global/system scope. **Both** call sites must branch on it: `run_update` maps 2→0 for `_update_record_end` then calls `_update_warn` (the same shape `git-repos` and `legacy-rsync` use), and `run_setup_user` distinguishes rc 1 ("reported failures") from rc 2 ("gaps or a pinned core.hooksPath") rather than treating any non-zero as failure. Without the `run_update` mapping the section renders `[OK] git-hooks updated` over its own findings.
+- **`_install_ubuntu_brew_packages` returns the same tri-state, and the two bullets are deliberate siblings rather than duplication.** 0 clean, 1 hard failure, 2 partial success with the failed packages named on stderr. `install_ubuntu_packages` therefore captures the rc rather than using `|| return 1`: **only rc 1 aborts**, because a bare guard would kill a whole fresh-machine bootstrap over one briefly-unavailable upstream formula, while unchecked calls report success over packages that never landed. That second half is not hypothetical — every call in this function was unchecked and `brew_install_formula` swallowed its own status, which is how `brew_install_formula go-task/tap/go-task` failed with **exit 127 on every Linux run since it was added** and still reported success. The tap-qualified name resolves to a macOS **Cask** that shells out to `/usr/bin/xattr`, which does not exist on Linux; core ships the formula, so the entry is now plain `go-task`. Same upstream-moved story for `bun` over `oven-sh/bun/bun`. `tests/setup_env/workflows.bats` pins both directions — rc 2 continues, rc 1 aborts — so reinstating a bare `|| return 1` goes red rather than silently revoking the contract.
+- **`claude plugin install` takes `-s user` and a `plugin@marketplace` name, and the singular verb.** The old form (`claude plugins install <bare-name>`) registered plugins at **project** scope against whatever cwd the run happened to have, so a later `claude plugins update` reported `not installed at scope user` for 12 of 14 plugins and failed the update's `claude` section. Measured 2026-09-12 on `claude`: the registry showed `"scope": "project"` with `projectPath` pointing at the dotfiles repo, while only `warp` and `pyright-lsp` were at user scope — exactly the two that updated cleanly.
 - **`zsh-autosuggestions` is a reported section** (`lib/workflows.sh:672-689`), not the fire-and-forget `cd`/`git pull`/`cd`-back it used to be — the old block recorded nothing and discarded `git pull`'s status, so the plugin was absent from the summary whether it succeeded or failed. Three `_update_skip` reasons distinguish why it didn't run: `"not installed"` (the plugin directory is absent), `"not a git checkout — reinstall to enable updates"` (the directory exists but has no `.git`, e.g. a tarball drop), and `"flag not set"` (`--tools` wasn't passed to `run_update`). **The guard is `[[ -e ${_zsh_autosug}/.git ]]`, deliberately not `git rev-parse --git-dir`.** That plumbing command walks upward through parent directories looking for a `.git`, and `~/.oh-my-zsh` is itself a git checkout — so a non-clone plugin install (dropped in by hand, or via a tarball) would resolve to the _parent_ repo's `.git` and `git pull` would silently update oh-my-zsh instead, rendering a permanent `[OK] … no changes` for a plugin that was never actually pulled. A future reader will otherwise "tighten" this to the plumbing form; don't. `-e` rather than `-d` is also deliberate: a submodule or a linked worktree has `.git` as a **file** (`gitdir: <path>`), and tightening to `-d` would route that layout to `SKIP` forever — `tests/setup_env/workflows.bats` ("run_update updates zsh-autosuggestions when .git is a gitdir file") pins this after a mutation of `-e` to `-d` left all eight zsh-autosuggestions tests green with nothing catching it.
 - **The summary's name column widened from `%-16s` to `%-20s`** to fit `zsh-autosuggestions` (19 characters, the longest `_UPDATE_SECTION_ORDER` member) with its 2-space gutter intact. The width is not a number to remember and re-check by hand: `tests/setup_env/update_summary.bats` ("`_UPDATE_SECTION_ORDER`'s longest name always leaves the reason column's 2-space gutter") reads the pad width back out of `lib/update_summary.sh`'s own `printf` format via `grep -oE '%-[0-9]+s'` and asserts `pad - max >= 1` against the array's actual longest entry — so a future section name of 20 characters or more fails this test rather than silently colliding with the reason column, with no width literal to update in the test itself.
 - **The cheat.sh section now covers both artifacts and both failures FAIL the run.** It previously ran the tab-completion fetch (`~/.zsh.d/_cht`) as a bare statement after `_update_record_end "cheat.sh" ...` had already closed out the section, so a completion-only failure was invisible — the section reported whatever the binary fetch alone had recorded. The two fetches now run inside one subshell with a shared `_rc` accumulator: either can fail independently (binary present and stale, completion absent; or vice versa; or both), and the subshell's `exit "${_rc}"` — piped through the same `tee` as before — makes `_update_record_end` see the FAIL. Progress banners (`"Updating cheat.sh"`, `"Updating cheat.sh tab completion"`) print **outside** the subshell specifically so they never land in `err_cheat.sh`/`detail_cheat.sh`, which feeds `_update_write_detail_from_err`'s `tail -10` — a banner line in that budget would silently displace real diagnostic content.

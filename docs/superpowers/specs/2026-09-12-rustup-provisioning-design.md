@@ -1,7 +1,9 @@
 # Provision rustup.rs on Linux — design
 
+> **Status: DONE** — shipped in dotfiles#273 (`0c9e08b3`).
+
 Date: 2026-09-12
-Status: Proposed
+Status: Done
 
 ## Context
 
