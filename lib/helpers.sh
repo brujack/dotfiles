@@ -190,7 +190,29 @@ brew_install_formula() {
     return 1
   fi
   if ! brew_formula_installed "$formula"; then
-    NONINTERACTIVE=1 brew install "$formula"
+    NONINTERACTIVE=1 brew install "$formula" || return 1
+  fi
+}
+
+# A cask needs its own guard: brew_formula_installed above greps `brew list
+# --formula` in BOTH branches, so an installed cask never matches and the caller
+# would reinstall it on every setup run. Measured 2026-09-12 against `codex`,
+# which is a cask on Linux as well as macOS.
+brew_cask_installed() {
+  local cask="$1"
+  if ! ensure_not_root; then
+    return 1
+  fi
+  brew list --cask --full-name 2>/dev/null | grep -q "^${cask}$"
+}
+
+brew_install_cask() {
+  local cask="$1"
+  if ! ensure_not_root; then
+    return 1
+  fi
+  if ! brew_cask_installed "$cask"; then
+    NONINTERACTIVE=1 brew install --cask "$cask" || return 1
   fi
 }
 

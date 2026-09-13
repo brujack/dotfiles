@@ -45,6 +45,54 @@ teardown() {
   [ "$status" -eq 1 ]
 }
 
+# ── brew_cask_installed / brew_install_cask ──────────────────────────────────
+#
+# A cask needs its own guard because brew_formula_installed greps `brew list
+# --formula` in BOTH branches, so an installed cask never matches there and the
+# caller reinstalls it on every setup run. Found via `codex`, which is a Cask on
+# Linux as well as macOS.
+
+@test "brew_cask_installed returns 0 when the cask is listed" {
+  export MOCK_BREW_LIST_CASK="codex docker"
+  run brew_cask_installed codex
+  [ "$status" -eq 0 ]
+}
+
+@test "brew_cask_installed returns 1 when the cask is not listed" {
+  export MOCK_BREW_LIST_CASK="docker"
+  run brew_cask_installed codex
+  [ "$status" -eq 1 ]
+}
+
+@test "brew_cask_installed does not consult the formula list" {
+  # The defect this helper exists for: a name present only in the FORMULA list must
+  # not read as an installed cask.
+  export MOCK_BREW_LIST_FORMULA="codex"
+  export MOCK_BREW_LIST_CASK=""
+  run brew_cask_installed codex
+  [ "$status" -eq 1 ]
+}
+
+@test "brew_install_cask installs when the cask is absent" {
+  export MOCK_BREW_LIST_CASK=""
+  run brew_install_cask codex
+  [ "$status" -eq 0 ]
+  grep -q "brew install --cask codex" "${MOCK_CALLS_FILE}"
+}
+
+@test "brew_install_cask is idempotent when the cask is already installed" {
+  export MOCK_BREW_LIST_CASK="codex"
+  run brew_install_cask codex
+  [ "$status" -eq 0 ]
+  refute_grep "brew install --cask codex" "${MOCK_CALLS_FILE}"
+}
+
+@test "brew_install_cask returns 1 when root" {
+  export MOCK_ID_U=0
+  run brew_install_cask codex
+  [ "$status" -eq 1 ]
+}
+
 # ── brew_install_formula ─────────────────────────────────────────────────────
 
 @test "brew_install_formula calls brew install when formula is absent" {

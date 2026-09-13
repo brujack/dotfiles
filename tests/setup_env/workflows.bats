@@ -494,6 +494,50 @@ teardown() {
   ! grep -q "softwareupdate" "${MOCK_CALLS_FILE}"
 }
 
+# ── install_ubuntu_packages: brew rc-2 propagation ───────────────────────────
+#
+# The pair that keeps the tri-state ruling from being silently revoked. A bare
+# `|| return 1` on the brew step would abort a whole fresh-machine bootstrap because
+# one upstream formula was briefly unavailable; nothing else in the suite would go
+# red if someone reinstated it. Every sub-function is stubbed so the ONLY variable
+# is the brew step's return code.
+_stub_ubuntu_steps() {
+  _install_ubuntu_base_packages() { :; }
+  _install_ubuntu_powershell() { :; }
+  _install_ubuntu_go() { :; }
+  _install_ubuntu_docker() { :; }
+  _install_ubuntu_nvidia() { :; }
+  _install_ubuntu_k8s_tools() { :; }
+  _install_ubuntu_hashicorp() { :; }
+  _install_ubuntu_cloud_tools() { :; }
+  _install_ubuntu_gui_tools() { :; }
+  _install_ubuntu_misc() { :; }
+  _install_ubuntu_rust() { printf 'RUST_STEP_RAN\n'; }
+}
+
+@test "install_ubuntu_packages continues past brew partial success (rc 2)" {
+  unset MACOS
+  export LINUX=1 UBUNTU=1 NOBLE=1
+  _stub_ubuntu_steps
+  _install_ubuntu_brew_packages() { return 2; }
+  run install_ubuntu_packages
+  [ "$status" -eq 0 ]
+  # The steps AFTER brew must still run -- that is what rc 2 means.
+  [[ "$output" == *"RUST_STEP_RAN"* ]]
+}
+
+@test "install_ubuntu_packages aborts on brew hard failure (rc 1)" {
+  unset MACOS
+  export LINUX=1 UBUNTU=1 NOBLE=1
+  _stub_ubuntu_steps
+  _install_ubuntu_brew_packages() { return 1; }
+  run install_ubuntu_packages
+  [ "$status" -eq 1 ]
+  # Fail-fast: the step after brew must NOT have run. Counted rather than `! grep`,
+  # since a leading `!` does not fail a bats test.
+  [[ "$output" != *"RUST_STEP_RAN"* ]]
+}
+
 # ── install_ubuntu_packages ───────────────────────────────────────────────────
 
 @test "install_ubuntu_packages calls apt update on Ubuntu Noble" {

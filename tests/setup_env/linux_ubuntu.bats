@@ -9,6 +9,20 @@ setup() {
   export MOCK_ID_U=1000
   export HOME="${BATS_TEST_TMPDIR}/home"
   mkdir -p "${HOME}/software_downloads"
+  # Seed a rustup at the path _install_rustup_rs guards on, at SETUP scope. Without
+  # it every _install_ubuntu_rust test enters the install path against a fake HOME
+  # and attempts to download rustup-init -- tdd.md E2, a test whose FAILING branch
+  # reaches outside the repo. Setup scope rather than per-test, so the trap is not
+  # re-armed by the next test added to this file. These tests are about Rust
+  # CONFIGURATION; _install_rustup_rs has its own tests, which drive the seams.
+  mkdir -p "${HOME}/.cargo/bin"
+  cp "${REPO_ROOT}/tests/mocks/rustup" "${HOME}/.cargo/bin/rustup"
+  chmod +x "${HOME}/.cargo/bin/rustup"
+  # Truncate AFTER seeding: cp and chmod are pass-through mocks that log their own
+  # invocation, so the seed writes a line containing "rustup" into the call log and
+  # breaks any test asserting that string is absent. Every test already assumes it
+  # starts from an empty log; this makes that invariant explicit rather than luck.
+  : > "${MOCK_CALLS_FILE}"
 }
 
 teardown() {
@@ -225,7 +239,11 @@ teardown() {
   ! grep -q "rustup" "${MOCK_CALLS_FILE}"
 }
 
-@test "_install_ubuntu_rust: HAS_RUST set skips rustup curl (brew provides rustup)" {
+# Renamed rather than re-asserted: the assertion (no sh.rustup.rs call) still holds,
+# but the old name said "brew provides rustup", which stopped being true when this
+# repo began provisioning rustup.rs itself. Reconciling the assertion to match a new
+# name would claim coverage nobody wrote; renaming records what it actually pins.
+@test "_install_ubuntu_rust: never installs rustup via the curl|sh one-liner" {
   export HAS_RUST=1
   run _install_ubuntu_rust
   [ "$status" -eq 0 ]
@@ -268,6 +286,56 @@ teardown() {
   grep -q "brew install shfmt" "${MOCK_CALLS_FILE}"
 }
 
+# ── _install_ubuntu_brew_packages: tri-state contract ────────────────────────
+#
+# 0 clean / 1 hard failure / 2 partial success with the failed packages named,
+# mirroring install_git_hooks_all_repos. Before this the calls were unchecked and
+# brew_install_formula swallowed its own status, which is how go-task/tap/go-task
+# failed with exit 127 on every Linux run since it was added and still reported
+# success. These tests are what make that unfixable-in-silence again.
+
+@test "_install_ubuntu_brew_packages: returns 2 and names the package when one install fails" {
+  # tests/mocks/brew has only MOCK_BREW_INSTALL_EXIT, which fails EVERY install --
+  # that would prove the tri-state fires but not that it names the right package,
+  # since all ~35 would appear. Overriding the helper isolates one failure so the
+  # assertion stays specific.
+  brew_install_formula() {
+    [[ "$1" == "hadolint" ]] && return 1
+    return 0
+  }
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"hadolint"* ]]
+  # Named, not just counted: a bare count would pass if the accumulator recorded
+  # the wrong package.
+  [[ "$output" == *"1 package(s) failed"* ]]
+}
+
+@test "_install_ubuntu_brew_packages: returns 0 when every package installs" {
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 0 ]
+}
+
+@test "_install_ubuntu_brew_packages: installs go-task unqualified, never the tap cask" {
+  # go-task/tap/go-task resolves to a macOS Cask that shells out to /usr/bin/xattr
+  # and exits 127 on Linux. Core ships the formula; the tap-qualified name must not
+  # come back.
+  run _install_ubuntu_brew_packages
+  grep -q "brew install go-task" "${MOCK_CALLS_FILE}"
+  refute_grep "brew install go-task/tap/go-task" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_brew_packages: installs claude plugins at USER scope with a marketplace" {
+  # The old form (`claude plugins install <bare-name>`) registered at PROJECT scope
+  # against whatever cwd the run had, so `claude plugins update` later reported
+  # "not installed at scope user" for 12 plugins and failed the update's claude
+  # section. Measured on claude 2026-09-12.
+  export HAS_DEVTOOLS=1
+  run _install_ubuntu_brew_packages
+  grep -q "plugin install -s user superpowers@claude-plugins-official" "${MOCK_CALLS_FILE}"
+  refute_grep "plugins install superpowers$" "${MOCK_CALLS_FILE}"
+}
+
 @test "_install_ubuntu_rust: sources .cargo/env when file exists" {
   export HAS_RUST=1
   mkdir -p "${HOME}/.cargo"
@@ -283,6 +351,118 @@ teardown() {
   grep -q "rustup self update" "${MOCK_CALLS_FILE}"
   grep -q "rustup update" "${MOCK_CALLS_FILE}"
   grep -q "rustup component add rust-analyzer" "${MOCK_CALLS_FILE}"
+}
+
+# ── _install_rustup_rs ────────────────────────────────────────────────────────
+#
+# sha256sum and mktemp are deliberately NOT mocked, so the digest check runs for
+# real and the mismatch case below is genuine rather than stubbed. _RUSTUP_INIT_SHA256
+# supplies the expected digest instead: mocking sha256sum would make every one of
+# these vacuous, which is the absence-claim failure behavior.md names.
+
+@test "_install_rustup_rs: skips entirely when rustup already present" {
+  # setup() seeds ${HOME}/.cargo/bin/rustup, so this is the already-installed path.
+  run _install_rustup_rs
+  [ "$status" -eq 0 ]
+  refute_grep "rustup-init" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_rustup_rs: installs when absent, and passes --no-modify-path" {
+  rm -f "${HOME}/.cargo/bin/rustup"
+  # tests/mocks/curl does not fetch: it writes MOCK_CURL_STDOUT to the -o target
+  # (or touches it when unset). So the digest must be taken over exactly those
+  # bytes, not over a separate fixture file the mock never copies. sha256sum stays
+  # real, so the verification is genuinely exercised rather than stubbed.
+  export MOCK_CURL_STDOUT='#!/usr/bin/env bash
+exit 0'
+  local _digest
+  _digest="$(printf '%s' "${MOCK_CURL_STDOUT}" | sha256sum | awk '{print $1}')"
+  export _RUSTUP_INIT_SHA256="${_digest}"
+  local _spy="${BATS_TEST_TMPDIR}/rustup-init-spy"
+  printf '#!/usr/bin/env bash\nprintf "rustup-init %%s\\n" "$*" >> "%s"\n' \
+    "${MOCK_CALLS_FILE}" > "${_spy}"
+  chmod +x "${_spy}"
+  export _RUSTUP_INIT_BIN="${_spy}"
+  run _install_rustup_rs
+  [ "$status" -eq 0 ]
+  # --no-modify-path is mandatory: ~/.zshrc and ~/.zprofile are symlinks into this
+  # repo, so without it rustup-init writes into the tracked working tree.
+  grep -q -- "rustup-init .*--no-modify-path" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_rustup_rs: REFUSES to execute on a sha256 mismatch" {
+  rm -f "${HOME}/.cargo/bin/rustup"
+  local _fixture="${BATS_TEST_TMPDIR}/rustup-init-fixture"
+  printf '#!/usr/bin/env bash\nprintf "SHOULD NOT RUN\\n" >> "%s"\n' \
+    "${MOCK_CALLS_FILE}" > "${_fixture}"
+  chmod +x "${_fixture}"
+  export _RUSTUP_INIT_URL="file://${_fixture}"
+  export _RUSTUP_INIT_SHA256="0000000000000000000000000000000000000000000000000000000000000000"
+  export _RUSTUP_INIT_BIN="${_fixture}"
+  run _install_rustup_rs
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"sha256 mismatch"* ]]
+  # The positive control: the binary must not have run at all.
+  refute_grep "SHOULD NOT RUN" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_rustup_rs: unknown machine type is a hard error, not an unverified download" {
+  rm -f "${HOME}/.cargo/bin/rustup"
+  export MOCK_UNAME_M="s390x"
+  run _install_rustup_rs
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"s390x"* ]]
+  refute_grep "curl" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_rustup_rs: arm64 resolves the aarch64 digest rather than failing closed" {
+  # The bats suite runs on the Studio, where uname -m is arm64. A case statement
+  # matching only aarch64 makes this suite unrunnable locally for a reason that has
+  # nothing to do with the code under test.
+  rm -f "${HOME}/.cargo/bin/rustup"
+  export MOCK_UNAME_M="arm64"
+  export _RUSTUP_INIT_URL="file:///nonexistent-so-download-fails"
+  run _install_rustup_rs
+  # Reaches the download and fails there -- NOT at the arch guard.
+  [ "$status" -eq 1 ]
+  refute_grep "no pinned rustup-init sha256" "${MOCK_CALLS_FILE}"
+  [[ "$output" != *"no pinned rustup-init sha256"* ]]
+}
+
+# ── _install_ubuntu_nvidia ────────────────────────────────────────────────────
+#
+# Gated on hardware, not on a HAS_* flag: claude and workstation share the
+# linux_workstation profile, so a capability flag would fire the driver install on a
+# GPU-less box with that profile and on WSL2, where the driver lives Windows-side.
+# lspci is unmocked and absent on macOS, so the default here is "no GPU".
+
+@test "_install_ubuntu_nvidia: no NVIDIA card means no driver and no apt calls" {
+  export _OVERRIDE_NVIDIA_GPU_PRESENT=1
+  run _install_ubuntu_nvidia
+  [ "$status" -eq 0 ]
+  refute_grep "nvidia-driver" "${MOCK_CALLS_FILE}"
+  refute_grep "nvidia-container-toolkit" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_nvidia: installs the pinned driver and the container toolkit when a card is present" {
+  export _OVERRIDE_NVIDIA_GPU_PRESENT=0
+  export _OVERRIDE_NVIDIA_KEYRING="${BATS_TEST_TMPDIR}/nvidia-keyring.gpg"
+  export _OVERRIDE_NVIDIA_LIST="${BATS_TEST_TMPDIR}/nvidia-container-toolkit.list"
+  run _install_ubuntu_nvidia
+  [ "$status" -eq 0 ]
+  grep -q "nvidia-driver-${NVIDIA_DRIVER_VER}" "${MOCK_CALLS_FILE}"
+  grep -q "nvidia-container-toolkit" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_nvidia: warns that a reboot is required rather than implying the driver is live" {
+  # Installing does not bind: nouveau holds the card until reboot. Silence here would
+  # read as "GPU ready" on a box still running nouveau.
+  export _OVERRIDE_NVIDIA_GPU_PRESENT=0
+  export _OVERRIDE_NVIDIA_KEYRING="${BATS_TEST_TMPDIR}/nvidia-keyring.gpg"
+  export _OVERRIDE_NVIDIA_LIST="${BATS_TEST_TMPDIR}/nvidia-container-toolkit.list"
+  run _install_ubuntu_nvidia
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"reboot required"* ]]
 }
 
 # ── _install_go_from_tarball ──────────────────────────────────────────────────

@@ -2,14 +2,25 @@
 # lib/linux_ubuntu.sh — Ubuntu-specific install functions
 
 install_ubuntu_packages() {
+  local _brew_rc
   _install_ubuntu_base_packages  || return 1
   _install_ubuntu_powershell     || return 1
   _install_ubuntu_go             || return 1
   _install_ubuntu_docker         || return 1
+  # After docker: the container toolkit configures the docker runtime.
+  _install_ubuntu_nvidia         || return 1
   _install_ubuntu_k8s_tools      || return 1
   _install_ubuntu_hashicorp      || return 1
   _install_ubuntu_cloud_tools    || return 1
-  _install_ubuntu_brew_packages  || return 1
+  # Tri-state, mirroring install_git_hooks_all_repos: 0 clean, 1 hard failure,
+  # 2 partial success with the failed packages named. A bare `|| return 1` here
+  # would abort a whole fresh-machine bootstrap because one upstream formula was
+  # briefly unavailable, which is the opposite of what a bootstrap should do.
+  _install_ubuntu_brew_packages
+  _brew_rc=$?
+  if [[ ${_brew_rc} -eq 1 ]]; then
+    return 1
+  fi
   _install_ubuntu_rust           || return 1
   _install_ubuntu_gui_tools      || return 1
   _install_ubuntu_misc           || return 1
@@ -104,17 +115,146 @@ _install_ubuntu_go() {
   fi
 }
 
+# Installs rustup.rs into ~/.cargo when absent, from a version-pinned rustup-init
+# whose sha256 is verified BEFORE it is executed (ci.md's third-party binary rule);
+# `curl … | sh` satisfies neither half.
+#
+# --no-modify-path is mandatory, not stylistic: rustup-init edits shell rc files by
+# default, and on this fleet ~/.zshrc and ~/.zprofile are symlinks into this repo,
+# so an unguarded run writes into the tracked working tree.
+#
+# Seams exist because every test runs against a fake HOME with no ~/.cargo/bin/rustup,
+# so all of them would otherwise enter this path and reach the network — tdd.md E2.
+# _RUSTUP_INIT_SHA256 is exposed rather than mocking sha256sum: there is no sha256sum
+# mock, and supplying the expected digest keeps the real check running so a mismatch
+# is genuinely exercised instead of stubbed away.
+_install_rustup_rs() {
+  local _cargo_bin="${_OVERRIDE_CARGO_BIN_DIR:-${HOME}/.cargo/bin}"
+  if [[ -x "${_cargo_bin}/rustup" ]]; then
+    return 0
+  fi
+
+  # Match on the machine type, normalising Apple's `arm64` to the kernel name
+  # rustup publishes under. macOS never reaches this in production (the caller is
+  # HAS_RUST + Ubuntu gated), but the bats suite runs on the Studio, and a case
+  # statement that fails closed on the developer's own arch makes the suite
+  # unrunnable locally for a reason that has nothing to do with the code.
+  local _sha _machine
+  _machine="$(uname -m)"
+  case "${_machine}" in
+    x86_64 | amd64) _sha="${RUSTUP_INIT_SHA256_X86_64}" ;;
+    aarch64 | arm64) _sha="${RUSTUP_INIT_SHA256_AARCH64}" ;;
+    *)
+      log_error "no pinned rustup-init sha256 for ${_machine} — refusing an unverified download"
+      return 1
+      ;;
+  esac
+  _sha="${_RUSTUP_INIT_SHA256:-${_sha}}"
+
+  local _tmp
+  _tmp="$(mktemp -d)" || return 1
+
+  if ! curl -fsSL -o "${_tmp}/rustup-init" "${_RUSTUP_INIT_URL:-${RUSTUP_INIT_URL}}"; then
+    log_error "rustup-init download failed"
+    rm -rf "${_tmp}"
+    return 1
+  fi
+
+  if ! printf '%s  %s\n' "${_sha}" "${_tmp}/rustup-init" | sha256sum -c - > /dev/null 2>&1; then
+    log_error "rustup-init sha256 mismatch — refusing to execute"
+    rm -rf "${_tmp}"
+    return 1
+  fi
+
+  chmod +x "${_tmp}/rustup-init" || {
+    rm -rf "${_tmp}"
+    return 1
+  }
+
+  if ! "${_RUSTUP_INIT_BIN:-${_tmp}/rustup-init}" -y --no-modify-path; then
+    log_error "rustup-init failed"
+    rm -rf "${_tmp}"
+    return 1
+  fi
+
+  rm -rf "${_tmp}"
+}
+
 _install_ubuntu_rust() {
   if [[ -n ${HAS_RUST} ]]; then
     printf "Configuring Rust Ubuntu\\n"
+    _install_rustup_rs || return 1
     if [[ -f ${HOME}/.cargo/env ]]; then
       . "${HOME}"/.cargo/env
     fi
-    if command -v rustup &>/dev/null; then
-      rustup self update
-      rustup update
-      rustup component add rust-analyzer
+    # Resolve explicitly rather than calling bare `rustup`: Homebrew also ships a
+    # rustup on this fleet and it shadows ~/.cargo/bin on PATH, but brew builds it
+    # with self-update compiled out, so `rustup self update` exits 1 there. Bare
+    # calls would install the right binary and then not use it.
+    local _rustup
+    if [[ -x ${HOME}/.cargo/bin/rustup ]]; then
+      _rustup="${HOME}/.cargo/bin/rustup"
+    elif command -v rustup > /dev/null 2>&1; then
+      _rustup="rustup"
+    else
+      log_warn "rustup not found; skipping Rust configuration"
+      return 0
     fi
+    "${_rustup}" self update || return 1
+    "${_rustup}" update || return 1
+    "${_rustup}" component add rust-analyzer || return 1
+  fi
+}
+
+# Gated on HARDWARE, not on a profile capability. `claude` and `workstation` both
+# map to linux_workstation, so a HAS_* flag would fire the driver install on any
+# future GPU-less box with that profile, and on WSL2 where the driver lives on the
+# Windows side. 10de is NVIDIA's PCI vendor ID.
+_nvidia_gpu_present() {
+  if [[ -n ${_OVERRIDE_NVIDIA_GPU_PRESENT+x} ]]; then
+    return "${_OVERRIDE_NVIDIA_GPU_PRESENT}"
+  fi
+  lspci -nn 2> /dev/null | grep -qi '\[10de:'
+}
+
+# Driver comes from Ubuntu's own repo (610.57.04-0ubuntu0.26.04.3 on resolute), so
+# it needs no third-party source. The container toolkit does, and that repo's GPG
+# key is NOT checksum-pinned the way rustup-init is -- NVIDIA publishes no digest
+# for it. The mitigation is `signed-by=`, which scopes the key to this one repo so
+# it cannot vouch for anything else. Weaker than the rustup path, and recorded as a
+# known limitation rather than left to look deliberate.
+#
+# Installing the driver does NOT bind it: nouveau holds the card until a reboot, so
+# this warns rather than pretending success. Measured on claude 2026-09-12.
+_install_ubuntu_nvidia() {
+  if ! _nvidia_gpu_present; then
+    return 0
+  fi
+  printf "Installing NVIDIA driver and container toolkit\\n"
+
+  if ! dpkg -l "nvidia-driver-${NVIDIA_DRIVER_VER}" 2> /dev/null | grep -q '^ii'; then
+    sudo -H DEBIAN_FRONTEND=noninteractive apt install -y "nvidia-driver-${NVIDIA_DRIVER_VER}" || return 1
+    log_warn "NVIDIA driver installed — reboot required before the nvidia module replaces nouveau"
+  fi
+
+  local _keyring="${_OVERRIDE_NVIDIA_KEYRING:-${NVIDIA_CONTAINER_KEYRING}}"
+  local _list="${_OVERRIDE_NVIDIA_LIST:-/etc/apt/sources.list.d/nvidia-container-toolkit.list}"
+
+  if [[ ! -f ${_keyring} ]]; then
+    curl -fsSL "${NVIDIA_CONTAINER_GPGKEY_URL}" | sudo -H gpg --dearmor -o "${_keyring}" || return 1
+  fi
+
+  if [[ ! -f ${_list} ]]; then
+    # NVIDIA serves no per-release list -- ubuntu26.04 and ubuntu24.04 both 404 while
+    # stable/deb returns 200 and is distro-agnostic. Measured 2026-09-12.
+    curl -fsSL "${NVIDIA_CONTAINER_LIST_URL}" \
+      | sed "s#deb https://#deb [signed-by=${_keyring}] https://#g" \
+      | sudo -H tee "${_list}" > /dev/null || return 1
+    sudo -H apt update || return 1
+  fi
+
+  if ! dpkg -l nvidia-container-toolkit 2> /dev/null | grep -q '^ii'; then
+    sudo -H DEBIAN_FRONTEND=noninteractive apt install -y nvidia-container-toolkit || return 1
   fi
 }
 
@@ -379,62 +519,84 @@ _install_ubuntu_cloud_tools() {
   fi
 }
 
+# Returns 0 clean, 1 hard failure, 2 partial success with the failed packages named.
+# The tri-state mirrors install_git_hooks_all_repos: a bootstrap must not abort
+# because one upstream formula was briefly unavailable, but it must not report
+# success over a package that never landed either. Before this, every call was
+# unchecked and brew_install_formula swallowed its own status -- which is how
+# `go-task/tap/go-task` failed with exit 127 on every Linux run since it was added,
+# silently, leaving claude without it. Measured 2026-09-12.
 _install_ubuntu_brew_packages() {
+  local _failed=()
+  # Was `install_homebrew` unchecked inside an if/elif, so a fresh box installed brew
+  # and then skipped the entire package list for that run. Install, then fall through.
   if ! [ -x "$(command -v brew)" ]; then
-    install_homebrew
-  elif [ -x "$(command -v brew)" ]; then
-    printf "Installing brew packages in Ubuntu\\n"
-    brew_update
-    brew_install_formula argocd
-    brew_install_formula bat
-    brew_install_formula cargo-nextest
-    brew_install_formula cargo-cyclonedx
-    brew_install_formula cyclonedx-python
-    brew_install_formula git-lfs
-    brew_install_formula fzf
-    brew_install_formula gh
-    brew_install_formula hadolint
-    brew_install_formula helm
-    brew_install_formula k9s
-    brew_install_formula kustomize
-    brew_install_formula lazydocker
-    brew_install_formula linkerd
-    brew_install_formula mongosh
-    brew_install_formula mongodb-atlas
-    brew_install_formula neovim
-    brew_install_formula pyenv
-    brew_install_formula pyenv-virtualenv
-    brew_install_formula rbenv
-    brew_install_formula ripgrep
-    brew_install_formula rustup
-    # Homebrew rather than apt deliberately: apt ships shfmt 3.8.0 on noble and
-    # 3.12.0 on resolute, against 3.13.1 from brew. A formatter's output is the
-    # gate, so version skew across machines would flag files nobody touched.
-    brew_install_formula shfmt
-    brew_install_formula starship
-    brew_install_formula tgenv
-    brew_install_formula uv
-    brew_install_formula zoxide
-    brew_install_formula go-task/tap/go-task
-    brew_install_formula redpanda-data/tap/redpanda
-    brew_tap_if_missing snyk/tap
-    brew_install_formula snyk
-    if [[ -n ${HAS_DEVTOOLS} ]]; then
-      brew_tap_if_missing gitguardian/tap
-      brew_install_formula ggshield
-      brew_install_formula claude-code@latest
-      if command -v claude &>/dev/null; then
-        claude plugins install superpowers
-        claude plugins install code-simplifier
-        claude plugins install code-review
-        claude plugins install context7
-      fi
+    install_homebrew || return 1
+  fi
+  if ! [ -x "$(command -v brew)" ]; then
+    log_error "brew still unavailable after install_homebrew"
+    return 1
+  fi
+
+  printf "Installing brew packages in Ubuntu\\n"
+  brew_update
+
+  local _f
+  for _f in \
+    argocd bat cargo-nextest cargo-cyclonedx cyclonedx-python git-lfs fzf gh \
+    hadolint helm k9s kustomize lazydocker linkerd mongosh mongodb-atlas neovim \
+    pyenv pyenv-virtualenv rbenv ripgrep rustup \
+    starship tgenv uv zoxide redpanda-data/tap/redpanda \
+    git-cliff kcov mdbook bun getagentseal/codeburn/codeburn \
+    go-task; do
+    # go-task is `go-task`, NOT `go-task/tap/go-task`: the tap-qualified name resolves
+    # to a macOS Cask that shells out to /usr/bin/xattr and exits 127 on Linux. Core
+    # ships the formula now. Same for `bun` over `oven-sh/bun/bun`, and `codeburn` is
+    # only ever the tap-qualified name -- bare `codeburn` resolves to nothing.
+    brew_install_formula "${_f}" || _failed+=("${_f}")
+  done
+
+  # Homebrew rather than apt deliberately: apt ships shfmt 3.8.0 on noble and
+  # 3.12.0 on resolute, against 3.13.1 from brew. A formatter's output is the
+  # gate, so version skew across machines would flag files nobody touched.
+  brew_install_formula shfmt || _failed+=(shfmt)
+
+  brew_tap_if_missing snyk/tap
+  brew_install_formula snyk || _failed+=(snyk)
+
+  # codex is a Cask on Linux as well as macOS, so it needs the cask-aware guard:
+  # brew_formula_installed greps `brew list --formula` and would never see it,
+  # reinstalling on every run.
+  brew_install_cask codex || _failed+=(codex)
+
+  if [[ -n ${HAS_DEVTOOLS} ]]; then
+    brew_tap_if_missing gitguardian/tap
+    brew_install_formula ggshield || _failed+=(ggshield)
+    brew_install_formula claude-code@latest || _failed+=(claude-code@latest)
+    if command -v claude &> /dev/null; then
+      # `-s user`, and plugin@marketplace, and the SINGULAR verb. The old form
+      # (`claude plugins install <bare-name>`) registered at PROJECT scope against
+      # whatever cwd the run happened to have, so `claude plugins update` later
+      # reported "not installed at scope user" for 12 plugins and failed the update's
+      # claude section. Measured on claude 2026-09-12.
+      local _p
+      for _p in superpowers@claude-plugins-official code-simplifier@claude-plugins-official \
+        code-review@claude-plugins-official context7@claude-plugins-official; do
+        claude plugin install -s user "${_p}" < /dev/null || _failed+=("${_p}")
+      done
     fi
-    if [[ -n ${HAS_SNAP} ]]; then
-      brew_install_formula ollama
-    fi
-    # Trust third-party taps for Homebrew 6.0 (idempotent — no-op if already trusted or tap absent)
-    brew trust cloudflare/cloudflare datawire/blackbird getagentseal/codeburn gitguardian/tap go-task/tap oven-sh/bun redpanda-data/tap snyk/tap 2>/dev/null || true
+  fi
+
+  if [[ -n ${HAS_SNAP} ]]; then
+    brew_install_formula ollama || _failed+=(ollama)
+  fi
+
+  # Trust third-party taps for Homebrew 6.0 (idempotent — no-op if already trusted or tap absent)
+  brew trust cloudflare/cloudflare datawire/blackbird getagentseal/codeburn gitguardian/tap go-task/tap oven-sh/bun redpanda-data/tap snyk/tap 2> /dev/null || true
+
+  if [[ ${#_failed[@]} -gt 0 ]]; then
+    log_warn "brew: ${#_failed[@]} package(s) failed: ${_failed[*]}"
+    return 2
   fi
 }
 

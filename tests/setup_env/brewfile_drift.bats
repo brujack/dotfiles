@@ -39,7 +39,19 @@ teardown() {
   [ ! -f "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift" ]
 }
 
-@test "_update_check_brewfile_drift: Linux OK when formulae and taps match (no cask check)" {
+# These two replace tests that asserted Linux OK/WARN verdicts. Brewfile is the macOS
+# manifest -- `brew bundle --file Brewfile` runs only from lib/macos.sh, while Linux
+# installs a hand-listed subset via _install_ubuntu_brew_packages -- so grading a Linux
+# box against it produced 82 "missing" formulae on claude (2026-09-12), ~93% of them
+# mac-only GNU tools, chruby where Linux uses rbenv, and an arm64 cask.
+#
+# Coverage genuinely lost, recorded rather than quietly dropped: the old tests also
+# pinned that cask entries are invisible to Linux drift. That behaviour existed ONLY on
+# Linux (macOS checks casks deliberately), so it disappears with the verdict and is not
+# testable elsewhere. A Linux manifest derived from _install_ubuntu_brew_packages would
+# restore real drift detection here; backlogged.
+
+@test "_update_check_brewfile_drift: Linux SKIPs even when formulae and taps match" {
   unset MACOS
   printf 'brew "git"\ncask "visual-studio-code"\n' > "${BATS_TEST_TMPDIR}/Brewfile"
   export _OVERRIDE_BREWFILE_PATH="${BATS_TEST_TMPDIR}/Brewfile"
@@ -48,9 +60,8 @@ teardown() {
   export MOCK_BREW_TAPS=""
   run _update_check_brewfile_drift
   [ "$status" -eq 0 ]
-  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew-drift")" = "OK" ]
-  grep -q "formulae clean" "${_DOTFILES_RUN_TMPDIR}/result_brew-drift"
-  refute_grep "casks clean" "${_DOTFILES_RUN_TMPDIR}/result_brew-drift"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew-drift")" = "SKIP" ]
+  grep -q "macOS manifest" "${_DOTFILES_RUN_TMPDIR}/result_brew-drift"
   [ ! -f "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift" ]
 }
 
@@ -236,8 +247,10 @@ teardown() {
 
 # ── Linux: casks not checked ──────────────────────────────────────────────────
 
-@test "_update_check_brewfile_drift: Linux WARN for formula drift (cask entries ignored)" {
-  # On Linux: formula/tap drift detected; cask entries in Brewfile are invisible
+@test "_update_check_brewfile_drift: Linux SKIPs even when real drift exists" {
+  # The discriminating half of the pair: the skip must precede DETECTION, not merely
+  # coincide with a clean box. jq is untracked here and would previously have produced
+  # a WARN naming it; on Linux nothing is now graded at all.
   unset MACOS
   printf 'brew "git"\ncask "visual-studio-code"\n' > "${BATS_TEST_TMPDIR}/Brewfile"
   export _OVERRIDE_BREWFILE_PATH="${BATS_TEST_TMPDIR}/Brewfile"
@@ -246,10 +259,9 @@ teardown() {
   export MOCK_BREW_TAPS=""
   run _update_check_brewfile_drift
   [ "$status" -eq 0 ]
-  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew-drift")" = "WARN" ]
-  grep -q "untracked formulae" "${_DOTFILES_RUN_TMPDIR}/result_brew-drift"
-  grep -q "jq" "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift"
-  ! grep -q "cask" "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew-drift")" = "SKIP" ]
+  refute_grep "untracked formulae" "${_DOTFILES_RUN_TMPDIR}/result_brew-drift"
+  [ ! -f "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift" ]
 }
 
 # ── mixed drift ───────────────────────────────────────────────────────────────
