@@ -480,6 +480,19 @@ source list at fixtures, so no test writes to `/usr/share/keyrings` or
 `/etc/apt/sources.list.d`. See ADR-0029 for why the gate is hardware rather than a `HAS_*`
 capability.
 
+**`_OVERRIDE_DOCKER_DAEMON_JSON` (`_install_ubuntu_nvidia`) and `tests/mocks/nvidia-ctk` are
+a pair, and the mock is load-bearing rather than a convenience.** The seam points the
+before/after `daemon.json` comparison at a fixture. The mock exists because the `sudo`
+mock's `command -v nvidia-ctk` otherwise resolves the **real** binary — `claude` and
+`workstation` have both carried it since 2026-09-12 — and execs it against the live
+`/etc/docker/daemon.json`. That is `tdd.md` E2: a test's failing path must be inert, and
+this one would rewrite the operator's docker config. **The Studio cannot reproduce it,
+because macOS has no `nvidia-ctk`**, so a green local run is not evidence for this class —
+`tdd.md` pitfall G, reached through a binary that exists on two of three machines.
+`MOCK_NVIDIA_CTK_WRITES` / `MOCK_NVIDIA_CTK_TARGET` emulate the config write so the caller's
+before/after comparison has something to observe, and `MOCK_NVIDIA_CTK_EXIT` drives the
+failure path.
+
 **`brew_install_cask` / `brew_cask_installed` (`lib/helpers.sh`) are a separate pair from the
 formula helpers, deliberately.** `brew_formula_installed` greps `brew list --formula` in
 _both_ branches, so an installed **cask** never matches there and the caller would reinstall
@@ -930,6 +943,7 @@ Invoke `caveman:caveman-commit` skill to generate the commit message before runn
 - Machine roles are now driven by the **profile/capability model** in `config/profiles.sh` — prefer `HAS_*` vars over raw hostname patterns for new code
 - **GPU provisioning is the one deliberate exception to that rule.** `_install_ubuntu_nvidia` gates on detected hardware (`_nvidia_gpu_present` matching PCI vendor `10de:` in `lspci -nn`), not on a `HAS_*` capability, because `claude` and `workstation` both map to `linux_workstation` and a capability is a property of the profile rather than the box — a `HAS_GPU` there would fire on any future GPU-less machine with that profile, and on WSL2 where the driver lives Windows-side. The vendor ID rather than a device-class match matters too: `workstation` carries a second display adapter, the 7950X's integrated AMD Raphael, which a "is there a VGA controller" test would wrongly claim. Absent `lspci` the default is skip, not attempt. Rationale and accepted costs: ADR-0029
 - **Installing the NVIDIA driver does not bind it** — nouveau holds the card until a reboot, so `_install_ubuntu_nvidia` warns rather than implying the GPU is live. A box can therefore be correctly provisioned and still running nouveau until it restarts
+- **Installing `nvidia-container-toolkit` does not register it with docker either**, which is a separate gap from the one above — `_install_ubuntu_nvidia` therefore runs `nvidia-ctk runtime configure --runtime=docker` after the install. Without that step `docker run --gpus all` fails with `AMD CDI spec not found`: an AMD-named error for a missing **NVIDIA** runtime, which misdirects whoever reads it next. Measured on `claude` 2026-09-12 with toolkit 1.20.0 already installed; `workstation` had been configured by hand and so never surfaced it. Two properties are deliberate: `runtime configure` **merges** into `daemon.json` rather than overwriting (verified with `--dry-run` against a file already carrying `exec-opts`, which survived), and the `systemctl restart docker` is **conditional on `daemon.json` actually changing** — these boxes run GitHub runners, so an unconditional bounce every provision would kill a live job
 - All eight legacy hostname vars (`LAPTOP`, `STUDIO`, `RECEPTION`, `RATNA`, `OFFICE`, `HOMES`, `WORKSTATION`, `CRUNCHER`) are derived from `PROFILE_LEGACY` in `config/profiles.sh` — `WORKSTATION` and `CRUNCHER` remain live, and are read by `.zprofile:10` and `.config/.zshrc.d/7_final.zsh:60`; new code should still prefer `HAS_*` vars
 - Ubuntu version detection uses `lsb_release -rs` → `NOBLE` var (24.04) or `RESOLUTE` var (26.04); both set in `detect_env.sh` and `.zshrc.d/1_init.zsh`
 - Credential directories (`.aws`, `.tf_creds`, `.tsh`) are created with `chmod 700`
