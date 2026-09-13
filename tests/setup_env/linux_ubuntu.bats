@@ -465,6 +465,63 @@ exit 0'
   [[ "$output" == *"reboot required"* ]]
 }
 
+@test "_install_ubuntu_nvidia: registers the nvidia runtime with docker" {
+  # Installing the toolkit does NOT register it: measured on claude 2026-09-12,
+  # nvidia-container-toolkit 1.20.0 was installed and `docker run --gpus all`
+  # still failed with "AMD CDI spec not found" because daemon.json carried no
+  # nvidia runtime. The arm's own comment claimed otherwise.
+  export _OVERRIDE_NVIDIA_GPU_PRESENT=0
+  export _OVERRIDE_NVIDIA_KEYRING="${BATS_TEST_TMPDIR}/nvidia-keyring.gpg"
+  export _OVERRIDE_NVIDIA_LIST="${BATS_TEST_TMPDIR}/nvidia-container-toolkit.list"
+  export _OVERRIDE_DOCKER_DAEMON_JSON="${BATS_TEST_TMPDIR}/daemon.json"
+  printf '{}\n' > "${_OVERRIDE_DOCKER_DAEMON_JSON}"
+  run _install_ubuntu_nvidia
+  [ "$status" -eq 0 ]
+  grep -q "nvidia-ctk runtime configure --runtime=docker" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_nvidia: restarts docker when runtime configure changes daemon.json" {
+  export _OVERRIDE_NVIDIA_GPU_PRESENT=0
+  export _OVERRIDE_NVIDIA_KEYRING="${BATS_TEST_TMPDIR}/nvidia-keyring.gpg"
+  export _OVERRIDE_NVIDIA_LIST="${BATS_TEST_TMPDIR}/nvidia-container-toolkit.list"
+  export _OVERRIDE_DOCKER_DAEMON_JSON="${BATS_TEST_TMPDIR}/daemon.json"
+  printf '{}\n' > "${_OVERRIDE_DOCKER_DAEMON_JSON}"
+  export MOCK_NVIDIA_CTK_TARGET="${_OVERRIDE_DOCKER_DAEMON_JSON}"
+  export MOCK_NVIDIA_CTK_WRITES='{"runtimes":{"nvidia":{"path":"nvidia-container-runtime"}}}'
+  run _install_ubuntu_nvidia
+  [ "$status" -eq 0 ]
+  grep -q "systemctl restart docker" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_nvidia: does not restart docker when the runtime is already registered" {
+  # The before/after compare is why this branch exists: claude and workstation both
+  # run GitHub runners, and restarting docker on every provision would kill a live
+  # job for no reason. Without this case the compare could be deleted and only the
+  # restart-on-change test above would still pass.
+  export _OVERRIDE_NVIDIA_GPU_PRESENT=0
+  export _OVERRIDE_NVIDIA_KEYRING="${BATS_TEST_TMPDIR}/nvidia-keyring.gpg"
+  export _OVERRIDE_NVIDIA_LIST="${BATS_TEST_TMPDIR}/nvidia-container-toolkit.list"
+  export _OVERRIDE_DOCKER_DAEMON_JSON="${BATS_TEST_TMPDIR}/daemon.json"
+  printf '{"runtimes":{"nvidia":{"path":"nvidia-container-runtime"}}}\n' \
+    > "${_OVERRIDE_DOCKER_DAEMON_JSON}"
+  run _install_ubuntu_nvidia
+  [ "$status" -eq 0 ]
+  grep -q "nvidia-ctk runtime configure" "${MOCK_CALLS_FILE}"
+  refute_grep "systemctl restart docker" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_nvidia: a runtime configure failure aborts and never restarts docker" {
+  export _OVERRIDE_NVIDIA_GPU_PRESENT=0
+  export _OVERRIDE_NVIDIA_KEYRING="${BATS_TEST_TMPDIR}/nvidia-keyring.gpg"
+  export _OVERRIDE_NVIDIA_LIST="${BATS_TEST_TMPDIR}/nvidia-container-toolkit.list"
+  export _OVERRIDE_DOCKER_DAEMON_JSON="${BATS_TEST_TMPDIR}/daemon.json"
+  printf '{}\n' > "${_OVERRIDE_DOCKER_DAEMON_JSON}"
+  export MOCK_NVIDIA_CTK_EXIT=1
+  run _install_ubuntu_nvidia
+  [ "$status" -eq 1 ]
+  refute_grep "systemctl restart docker" "${MOCK_CALLS_FILE}"
+}
+
 # ── _install_go_from_tarball ──────────────────────────────────────────────────
 
 @test "_install_go_from_tarball: moves software_downloads/go to /usr/local/go when present" {
@@ -1007,7 +1064,7 @@ STUB
   [ "$status" -ne 0 ]
 }
 
-@test "_install_ubuntu_misc: HAS_DEVTOOLS attempts dotnet-sdk-8.0 install" {
+@test "_install_ubuntu_misc: HAS_DEVTOOLS attempts dotnet-sdk-10.0 install" {
   export DOCKER_COMPOSE_VER="2.24.0"
   export DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64"
   export YQ_VER="4.40.5"
@@ -1015,11 +1072,14 @@ STUB
   export HAS_DEVTOOLS=1
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
-  grep -q "apt install dotnet-sdk-8.0" "${MOCK_CALLS_FILE}"
+  grep -q "apt install dotnet-sdk-10.0" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_misc: dotnet install failure is non-fatal" {
-  # dotnet-sdk-8.0 is missing on resolute; a failed install must warn, not abort.
+  # 10.0 is stock on both live releases -- noble 10.0.112-0ubuntu1~24.04.1 and
+  # resolute 10.0.112-0ubuntu1~26.04.1, measured 2026-09-13 -- so this guard is
+  # no longer covering a known-missing package. It stays for the next release
+  # that drops it, which is how 8.0 failed on resolute in the first place.
   export DOCKER_COMPOSE_VER="2.24.0"
   export DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64"
   export YQ_VER="4.40.5"
@@ -1028,7 +1088,7 @@ STUB
   export MOCK_APT_EXIT=1
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
-  [[ "$output" == *"dotnet-sdk-8.0 not available"* ]]
+  [[ "$output" == *"dotnet-sdk-10.0 not available"* ]]
 }
 
 @test "_install_ubuntu_misc: opentofu absent installs via apt (not piped sh)" {
