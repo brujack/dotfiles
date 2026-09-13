@@ -256,6 +256,26 @@ _install_ubuntu_nvidia() {
   if ! dpkg -l nvidia-container-toolkit 2> /dev/null | grep -q '^ii'; then
     sudo -H DEBIAN_FRONTEND=noninteractive apt install -y nvidia-container-toolkit || return 1
   fi
+
+  # Installing the toolkit does NOT register it with docker. Measured on claude
+  # 2026-09-12: with nvidia-container-toolkit 1.20.0 installed, `docker run --gpus
+  # all` still failed `AMD CDI spec not found` -- an AMD-named error for a missing
+  # NVIDIA runtime, which misdirects whoever reads it next. workstation had been
+  # configured by hand and so never surfaced the gap.
+  #
+  # `runtime configure` merges rather than overwrites: verified with --dry-run
+  # against a daemon.json already carrying exec-opts, which survived.
+  #
+  # Restart only when the config actually changed -- these boxes run GitHub
+  # runners, and bouncing docker on every provision would kill a live job.
+  local _daemon="${_OVERRIDE_DOCKER_DAEMON_JSON:-/etc/docker/daemon.json}"
+  local _before _after
+  _before="$(sudo -H cat "${_daemon}" 2> /dev/null || true)"
+  sudo -H nvidia-ctk runtime configure --runtime=docker || return 1
+  _after="$(sudo -H cat "${_daemon}" 2> /dev/null || true)"
+  if [[ ${_before} != "${_after}" ]]; then
+    sudo -H systemctl restart docker || return 1
+  fi
 }
 
 _install_ubuntu_docker() {
@@ -681,10 +701,13 @@ _install_ubuntu_misc() {
   fi
 
   if [[ -n ${HAS_DEVTOOLS} ]]; then
-    printf "Installing .net8 sdk\\n"
-    # dotnet-sdk-8.0 is absent from some Ubuntu releases (e.g. 26.04 resolute);
-    # don't abort the rest of setup if the package can't be located.
-    sudo -H DEBIAN_FRONTEND=noninteractive apt install dotnet-sdk-8.0 -y || log_warn "dotnet-sdk-8.0 not available on this Ubuntu release; skipping"
+    printf "Installing .net10 sdk\\n"
+    # 8.0 was dropped entirely on 26.04 resolute -- `apt-cache policy dotnet-sdk-8.0`
+    # returns nothing there -- so every provision of that box warned and skipped.
+    # 10.0 is stock on both live releases: noble 10.0.112-0ubuntu1~24.04.1 and
+    # resolute 10.0.112-0ubuntu1~26.04.1, measured 2026-09-13. The guard stays for
+    # whichever release drops 10.0 next.
+    sudo -H DEBIAN_FRONTEND=noninteractive apt install dotnet-sdk-10.0 -y || log_warn "dotnet-sdk-10.0 not available on this Ubuntu release; skipping"
   fi
 
   if [[ -n ${HAS_DEVTOOLS} ]]; then

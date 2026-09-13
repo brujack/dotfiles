@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Without this mock the sudo mock's `command -v nvidia-ctk` resolves the REAL
+# binary on claude and workstation -- both carry it since 2026-09-12 -- and
+# execs it against the live /etc/docker/daemon.json. tdd.md E2: the failing
+# path must be inert. Studio never reproduces it, because macOS has no nvidia-ctk.
+printf "nvidia-ctk %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+# `runtime configure` writes the daemon config. Emulate that write so the
+# caller's before/after comparison has something to observe; the caller points
+# _OVERRIDE_DOCKER_DAEMON_JSON at a fixture, never at the real path.
+if [[ "$*" == *"runtime configure"* ]] && [[ -n "${MOCK_NVIDIA_CTK_WRITES:-}" ]]; then
+  printf '%s\n' "${MOCK_NVIDIA_CTK_WRITES}" > "${MOCK_NVIDIA_CTK_TARGET:?MOCK_NVIDIA_CTK_TARGET required}"
+fi
+exit "${MOCK_NVIDIA_CTK_EXIT:-0}"
