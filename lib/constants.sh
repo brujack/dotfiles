@@ -45,6 +45,33 @@ _LINUX_ARCH="$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')"
 GO_DOWNLOAD_FILENAME="go1.27.1.linux-${_LINUX_ARCH}.tar.gz"
 # read by lib/linux_ubuntu.sh:_install_ubuntu_go
 GO_DOWNLOAD_URL="https://go.dev/dl/${GO_DOWNLOAD_FILENAME}"
+# read by lib/linux_ubuntu.sh:_install_rustup_rs
+RUSTUP_VER="1.29.1"
+# rustup publishes under KERNEL arch names (x86_64/aarch64), not the Debian/GitHub
+# names _LINUX_ARCH produces (amd64/arm64). Reusing _LINUX_ARCH here builds a URL
+# that 404s on both architectures, so this derivation is deliberately separate.
+_RUSTUP_TRIPLE="$(uname -m)-unknown-linux-gnu"
+# read by lib/linux_ubuntu.sh:_install_rustup_rs
+RUSTUP_INIT_URL="https://static.rust-lang.org/rustup/archive/${RUSTUP_VER}/${_RUSTUP_TRIPLE}/rustup-init"
+# sha256 of rustup-init per Linux triple. Both verified published before pinning
+# (HTTP 200, fetched 2026-09-12). An unrecognised machine type is a hard error in
+# _install_rustup_rs rather than an unverified download.
+# read by lib/linux_ubuntu.sh:_install_rustup_rs
+RUSTUP_INIT_SHA256_X86_64="dda7234360b7f578ca8b0ddcb80145646fa61a67c1720a5abc7051b35c9fcb71"
+# read by lib/linux_ubuntu.sh:_install_rustup_rs
+RUSTUP_INIT_SHA256_AARCH64="15f6e4ce9f583b929c996c91562bad6d4454f3281de858b02cdfdef615fac433"
+# read by lib/linux_ubuntu.sh:_install_ubuntu_nvidia
+# Ubuntu's own repo ships this metapackage (610.57.04-0ubuntu0.26.04.3 on resolute),
+# so the driver needs no third-party source — only the container toolkit does.
+NVIDIA_DRIVER_VER="610"
+# read by lib/linux_ubuntu.sh:_install_ubuntu_nvidia
+# NVIDIA serves no per-release list: ubuntu26.04 and ubuntu24.04 both 404, while
+# stable/deb is distro-agnostic and returns 200. Measured 2026-09-12.
+NVIDIA_CONTAINER_GPGKEY_URL="https://nvidia.github.io/libnvidia-container/gpgkey"
+# read by lib/linux_ubuntu.sh:_install_ubuntu_nvidia
+NVIDIA_CONTAINER_LIST_URL="https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list"
+# read by lib/linux_ubuntu.sh:_install_ubuntu_nvidia
+NVIDIA_CONTAINER_KEYRING="/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg"
 KIND_VER="0.32.0"
 # read by lib/linux_ubuntu.sh:_install_ubuntu_hashicorp
 NOMAD_VER="2.0.3"

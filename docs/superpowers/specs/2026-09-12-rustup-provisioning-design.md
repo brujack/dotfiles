@@ -235,6 +235,62 @@ path runs `rustup-init` with `--no-modify-path` and refuses on a digest mismatch
 - **`curl https://sh.rustup.rs | sh`.** Fails `ci.md`'s verification rule; also the exact
   string an existing test asserts is absent.
 
+## Scope widened 2026-09-12, after implementation began
+
+The spec above covers rustup. Investigating why `-t update` failed on claude surfaced
+five more defects of **one class** — a Linux install path naming something it cannot
+install, or doing something wrong, with nothing checking the result — so they ship
+together rather than as six branches through the same two files.
+
+| defect                                                                                                                                                                                        | fix                                                                                        |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `brew_install_formula go-task/tap/go-task` resolves to a macOS **Cask** that shells out to `/usr/bin/xattr` and exits **127** on Linux. Failed on every Linux run since it was added          | install core `go-task`                                                                     |
+| `git-cliff` `kcov` `mdbook` `bun` `codeburn` absent from the Linux list entirely; workstation had them as hand-installs                                                                       | added; `bun` from core rather than `oven-sh/bun/bun`, same upstream-moved story as go-task |
+| `codex` is a Cask, and `brew_formula_installed` greps `brew list --formula` in both branches, so an installed cask never matches and would reinstall every run                                | `brew_cask_installed` / `brew_install_cask`                                                |
+| `brew_install_formula` ended on an unchecked `brew install`, and all 33 call sites were unchecked — this is what hid the go-task 127                                                          | `\|\| return 1`, plus a tri-state accumulator                                              |
+| `install_homebrew` unchecked inside an `if/elif`, so a fresh box installed brew and then **skipped the entire package list** for that run                                                     | `\|\| return 1`, then fall through                                                         |
+| `claude plugins install <bare-name>` registered at **project** scope against whatever cwd the run had, so `claude plugins update` later reported "not installed at scope user" for 12 plugins | `claude plugin install -s user <plugin>@<marketplace>`                                     |
+
+**Failure policy is rc-2 partial success**, per operator ruling, mirroring
+`install_git_hooks_all_repos`: 0 clean, 1 hard failure, 2 partial with the failed
+packages named. A bare `|| return 1` in `install_ubuntu_packages` would abort a whole
+fresh-machine bootstrap because one upstream formula was briefly unavailable — the
+opposite of what a bootstrap should do — while unchecked calls report success over
+packages that never landed.
+
+### NVIDIA
+
+No GPU stack existed anywhere in the repo (zero hits for `nvidia`, `nouveau`, `cuda`,
+`HAS_GPU` across `lib/`, `config/`, `Brewfile`, `ubuntu_*.txt`). claude has an RTX 2060
+SUPER that was running **nouveau** with no driver, no CUDA and no `nvidia-smi`, so
+`ollama` ran CPU-only on a box with an idle GPU.
+
+Gated on **hardware**, not on a capability flag: `claude` and `workstation` both map to
+`linux_workstation`, so a `HAS_*` flag would fire the driver install on any future
+GPU-less box with that profile, and on WSL2 where the driver lives Windows-side.
+`_nvidia_gpu_present` matches PCI vendor `10de:` via `lspci -nn`.
+
+The driver comes from Ubuntu's own repo (`nvidia-driver-610` → `610.57.04-0ubuntu0.26.04.3`
+on resolute). The container toolkit needs NVIDIA's repo, and its signing key is **not**
+checksum-pinned the way rustup-init is — NVIDIA publishes no digest. The mitigation is
+`signed-by=`, scoping the key to that one repo. Recorded as a known limitation; note it
+is also exactly what teleport, cloudflare and gcloud already do in this file.
+
+Installing does **not** bind the driver: nouveau holds the card until reboot, so the
+function warns rather than implying success. Verified end to end on claude — driver
+installed, reboot, `nvidia-smi` reporting the 2060 SUPER on `610.57.04`, `nouveau`
+unloaded, boot id changed.
+
+### Drift
+
+`_update_check_brewfile_drift` at `workflows.sh:716` is ungated, so on Linux it grades a
+box against the **macOS** Brewfile — 82 "missing" formulae on claude, of which ~93% are
+mac-only GNU tools, `chruby` where Linux uses rbenv, and an arm64 cask. It now SKIPs on
+Linux. **Open:** two existing tests (`Linux OK when formulae and taps match`, `Linux WARN
+for formula drift`) deliberately specify Linux drift behaviour that this removes. Awaiting
+a ruling on whether Linux drift stays unmeasured or gets a manifest derived from
+`_install_ubuntu_brew_packages`.
+
 ## Related
 
 - `docs/superpowers/specs/2026-05-28-coverage-developer-gaps-design.md` — covers

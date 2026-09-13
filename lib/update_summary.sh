@@ -662,6 +662,18 @@ _update_check_brewfile_drift() {
     return 0
   fi
 
+  # Brewfile is the macOS manifest -- `brew bundle --file Brewfile` runs only from
+  # lib/macos.sh:install_macos_casks, while Linux installs a hand-listed subset via
+  # _install_ubuntu_brew_packages. Grading a Linux box against it reported 82 missing
+  # formulae on claude (2026-09-12): mac-only GNU tools (bash, coreutils, findutils),
+  # chruby where Linux uses rbenv, and an arm64-only cask. A WARN that fires on
+  # correct state is one a reader learns to skip, and the next one is the one that
+  # mattered. An honest SKIP beats a false WARN; a real Linux manifest is backlogged.
+  if [[ -z ${MACOS} ]]; then
+    _update_skip "brew-drift" "Brewfile is the macOS manifest; Linux installs via _install_ubuntu_brew_packages"
+    return 0
+  fi
+
   if [[ ! -f "${_brewfile}" ]]; then
     _update_skip "brew-drift" "Brewfile not found at ${_brewfile}"
     return 0
