@@ -16,6 +16,7 @@ Running `setup_env.sh -t setup` on a fresh machine:
 - Installs Oh-My-Zsh, Starship, tpm (tmux plugins), pyenv, rbenv, and Ansible virtualenv
 - Sets zsh as the default shell
 - Applies macOS system defaults (`.osx.sh`)
+- On Linux **only if an NVIDIA card is detected** (PCI vendor `10de`): installs the pinned NVIDIA driver and the container toolkit, so Docker and `ollama` can reach the GPU. Machines without one — including WSL2, where the driver lives on the Windows side — skip this entirely. See [ADR-0029](docs/adr/0029-gate-gpu-provisioning-on-hardware-not-capability.md)
 
 ## Prerequisites
 
@@ -124,6 +125,12 @@ At minimum, set `GITHUB_PAT` if you want the GitHub MCP server configured automa
 exec zsh
 ```
 
+**If setup installed the NVIDIA driver, reboot before expecting the GPU to work.** Installing
+the driver does not bind it: nouveau still owns the card until the machine restarts, so
+`nvidia-smi` stays absent and `ollama` keeps running on CPU until then. `exec zsh` is not
+enough for this one. After the reboot, `nvidia-smi` should report the card and
+`lspci -k` should show `Kernel driver in use: nvidia`.
+
 Git hooks install themselves. `-t setup_user` and `-t update` both sweep every repo under
 `~/git-repos/personal/` that carries an `install-hooks` Makefile target and run it, so a hook
 edited on one machine goes live on the rest at the next update. `make install-hooks` still
@@ -185,15 +192,15 @@ subshell and record a section status like any other. See
 ./setup_env.sh -t <type>
 ```
 
-| Type             | Description                                                                                                                                                      |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Type             | Description                                                                                                                                                                                                                                                                                                               |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `setup_user`     | Sets up user environment: configs, symlinks, shell, directory structure, installs git hooks across personal repos, installs GNU make on macOS, and — **on the Studio only** — installs two weekly LaunchAgents that summon dependency triage (see [ADR-0024](docs/adr/0024-launchagent-for-the-renovate-held-cadence.md)) |
-| `setup`          | Full machine setup (`setup_user` + all apps and tools). Flags: `--brew-install`, `--mas-install`                                                                 |
-| `developer`      | Dev packages + Python/Ansible virtualenv                                                                                                                         |
-| `ansible`        | Ansible venv only — typically used after a Python update                                                                                                         |
-| `update`         | Update all packages (brew, apt/snap, pip, mas, Claude plugins, etc.). Prints a structured summary at the end; each run is appended to `~/.dotfiles-update.log`. **Exits 1 when any section reports FAIL** (a WARN section still exits 0) |
-| `doctor`         | Active health checks: symlinks, tool presence, credential dir permissions, version drift, global/system `core.hooksPath` pins, and weekly-cadence heartbeats (Studio only — a silent agent is indistinguishable from a healthy one, so liveness is checked separately from findings). Exits non-zero on any failure |
-| `check-versions` | Compare pinned tool versions in `lib/constants.sh` against latest GitHub releases. Exits 1 if any are outdated; `--update` prompts to apply each update in-place |
+| `setup`          | Full machine setup (`setup_user` + all apps and tools). Flags: `--brew-install`, `--mas-install`                                                                                                                                                                                                                          |
+| `developer`      | Dev packages + Python/Ansible virtualenv                                                                                                                                                                                                                                                                                  |
+| `ansible`        | Ansible venv only — typically used after a Python update                                                                                                                                                                                                                                                                  |
+| `update`         | Update all packages (brew, apt/snap, pip, mas, Claude plugins, etc.). Prints a structured summary at the end; each run is appended to `~/.dotfiles-update.log`. **Exits 1 when any section reports FAIL** (a WARN section still exits 0)                                                                                  |
+| `doctor`         | Active health checks: symlinks, tool presence, credential dir permissions, version drift, global/system `core.hooksPath` pins, and weekly-cadence heartbeats (Studio only — a silent agent is indistinguishable from a healthy one, so liveness is checked separately from findings). Exits non-zero on any failure       |
+| `check-versions` | Compare pinned tool versions in `lib/constants.sh` against latest GitHub releases. Exits 1 if any are outdated; `--update` prompts to apply each update in-place                                                                                                                                                          |
 
 **Options:**
 
@@ -332,13 +339,13 @@ dotfiles/
 
 Each profile grants a fixed set of capabilities; machines are mapped to profiles in `config/profiles.sh`:
 
-| Profile             | Capabilities                                    |
-| ------------------- | ----------------------------------------------- |
-| `personal_laptop`   | GUI, devtools, AWS, k8s, Docker, Rust, printing |
-| `mac_workstation`   | GUI, devtools, AWS, k8s, Docker, Rust, printing |
-| `mac_mini`          | GUI, printing                                   |
+| Profile             | Capabilities                                         |
+| ------------------- | ---------------------------------------------------- |
+| `personal_laptop`   | GUI, devtools, AWS, k8s, Docker, Rust, printing      |
+| `mac_workstation`   | GUI, devtools, AWS, k8s, Docker, Rust, printing      |
+| `mac_mini`          | GUI, printing                                        |
 | `linux_workstation` | GUI, devtools, AWS, k8s, Docker, Rust, snap, flatpak |
-| `wsl2_workstation`  | GUI, devtools, AWS, k8s, Docker, Rust           |
+| `wsl2_workstation`  | GUI, devtools, AWS, k8s, Docker, Rust                |
 
 **linux_workstation vs wsl2_workstation:** `linux_workstation` (hostnames: `workstation`, `claude`) is a desktop Ubuntu machine with full snap support. `wsl2_workstation` (hostname: `cruncher`) is WSL2 Ubuntu where snap is unavailable — snap-gated installs (Albert, Microsoft Edge, ollama, snap classic packages) are skipped, and Helm is installed via apt instead of snap.
 
