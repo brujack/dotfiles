@@ -12,6 +12,14 @@ log_warn()  { printf "${_YELLOW}[WARN]${_NC}  %s\n" "$*" >&2; }
 log_error() { printf "${_RED}[ERROR]${_NC} %s\n" "$*" >&2; }
 
 # ── command wrapper ───────────────────────────────────────────────────────────
+# The only writer of DRY_RUN in this tree is process_args, and it only ever
+# writes the literal "1" -- this accepted-false set exists to neutralise a
+# falsy value inherited from the caller's environment (DRY_RUN=0 exported by
+# a parent shell), not to be a general-purpose boolean parser. Anything
+# unrecognised deliberately falls through to "active": a spurious preview is
+# visible and recoverable, a spurious real run against remote hosts is not.
+# Do not widen this list -- that moves values from safe-dry into
+# real-execution.
 _dry_run_active() {
   case "${DRY_RUN:-}" in
     ""|0|false|no) return 1 ;;
@@ -822,7 +830,7 @@ process_args() {
   while [[ ${_i} -lt ${#_args[@]} ]]; do
     local _arg="${_args[${_i}]}"
     case "${_arg}" in
-      --dry-run)       [[ -n "${DRY_RUN+x}" ]]         || readonly DRY_RUN=1 ;;
+      --dry-run)       _dry_run_active                 || readonly DRY_RUN=1 ;;
       --brew-only)     [[ -n "${UPDATE_BREW+x}" ]]     || readonly UPDATE_BREW=1 ;;
       --pip-only)      [[ -n "${UPDATE_PIP+x}" ]]      || readonly UPDATE_PIP=1 ;;
       --gems-only)     [[ -n "${UPDATE_GEMS+x}" ]]     || readonly UPDATE_GEMS=1 ;;
