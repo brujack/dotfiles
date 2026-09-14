@@ -260,6 +260,29 @@ _aws_key_make_fixture() {
   [ "$output" = "1" ]
 }
 
+@test "process_args --dry-run overrides an inherited falsy DRY_RUN=0" {
+  run bash -c "
+    export DRY_RUN=0
+    source '${BATS_TEST_DIRNAME}/../../setup_env.sh'
+    process_args --dry-run -t setup_user
+    printf '%s' \"\${DRY_RUN}\"
+  "
+  [ "$status" -eq 0 ]
+  [ "$output" = "1" ]
+}
+
+@test "process_args --dry-run does not crash on a second call after overriding an inherited falsy DRY_RUN" {
+  run bash -c "
+    export DRY_RUN=0
+    source '${BATS_TEST_DIRNAME}/../../setup_env.sh'
+    process_args --dry-run -t setup_user
+    process_args --dry-run -t setup_user
+    printf '%s' \"\${DRY_RUN}\"
+  "
+  [ "$status" -eq 0 ]
+  [ "$output" = "1" ]
+}
+
 @test "TERRAFORM_VER matches semver pattern" {
   [[ "${TERRAFORM_VER}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
 }
