@@ -363,7 +363,7 @@ is the one that pins `unit.bats:356`'s existing unknown-flag rejection.
 id: 7
 description: Correct CLAUDE.md:92 and :86 and add the LEDGER_BIN Test Seams row (docs-only, no behaviour change so TDD does not apply)
 role: executor
-model: haiku
+model: sonnet
 tdd: not-applicable
 acceptance:
   - cmd: 'grep -qE "no (operation that leaves|egress)" CLAUDE.md'
@@ -381,6 +381,12 @@ depends_on: [6]
 ```
 
 **Files:** `CLAUDE.md` only.
+
+**This task was `model: haiku` and was escalated to `sonnet` after a dispatch failed with `Prompt is too long`.** The task is genuinely single-file and mechanical — exactly what haiku is for — but the file is **1248 lines / 152,747 bytes (~38k tokens)**, and an editor must read it before editing it. Escalation is authorized re-plan move 4, applied without widening scope: the task, its gates and its one file are unchanged.
+
+**The haiku scope guard cannot catch this class, and that is worth stating where the next author will see it.** `validate-plan.py`'s `_haiku_scope_errors` enforces `files_touched` of **exactly one path** plus a forbidden-pattern list (workflows, migrations, lockfiles). It has no size check, so one enormous file passes a guard whose whole purpose is keeping haiku on work it can hold. A plan can therefore be valid and undispatchable at the same time.
+
+**Task 9 was checked and deliberately left on `haiku`** — verify one level wider than you fix. `README.md` is **515 lines / 25,676 bytes (~6.4k tokens)**, which haiku holds comfortably, so escalating it too would have been a guess dressed as caution. Measure the file before choosing the model for any docs task; line count is the cheap proxy and roughly 1,000 lines is where this stopped working.
 
 `:92` currently promises "log mutating operations (symlinks, installs, mkdir) without executing", which is false. It becomes a statement of what is guaranteed — **no egress** — and enumerates what still runs: package upgrades, venv rebuilds, `git fetch` and `pull --ff-only` on every personal repo, five `npm install -g`, and `uv sync`. Follow `README.md:207`'s enumerate-what-still-runs model.
 
