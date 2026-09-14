@@ -238,3 +238,93 @@ choice — the alternatives were weighed and recorded here, and no structural pa
   of this spec to keep it to one change. Recorded as a backlog candidate rather than
   designed here.
 - The verification gate is an operator check, not a CI gate, for the reason given above.
+
+## Multi-Lens Review
+
+Reviewed at commit: `20a83d77` (Step 7 self-review commit, before Step 8 dispatch)
+
+All three lenses returned blocking findings and converged on the same root cause: the scope
+table was populated by a **destructive-verb classifier** while §1's rule is a **purpose**
+test. Egress hides behind a binary invocation (`| "${_ledger_bin}" write`), a function named
+"sync", and `npm install -g` — none of which contain a destructive verb. Every finding below
+was independently re-verified against the code by the session before being recorded here.
+
+### Goal-Fit
+
+Finding: **The ten gated sites do not include the operation the spec measured.** The push
+that produced `6311ec1` runs `run_setup_user` (`workflows.sh:227`) →
+`_ledger_write_run_entry` (`update_summary.sh:389`) → `ledger_write_entry`
+(`workflows.sh:943`) → `| "${_ledger_bin}" write` → `ledger.py:486` `_git_commit_and_push` →
+`git commit` (`:334`), `git pull --rebase` (`:342`), `git push` (`:344`), all `check=True`
+and unconditional. A second uncovered egress is `git_sync.sh:71`
+(`git -C "${_path}" push --quiet`), which has `DRY_RUN` and `run_cmd` counts of 0. The
+session's own egress sweep found a third class: five `npm install -g` calls
+(`workflows.sh:279,282,285,288,456`). So the design closes **0%** of the measured harm.
+Worse, three of the four line-wrap sites are **delete-recreate pairs** where gating only the
+delete leaves the recreate running against undeleted state: `_install_go_from_tarball`
+(`sudo mv` nests into `/usr/local/go/go`, corrupting a live install that today's ungated path
+replaces cleanly), `setup_ai_config` (`git clone` into a still-present dir fails, and
+`|| return 1` aborts the whole preview), and `setup_ansible` (ungated `pyenv virtualenv` +
+`uv_sync_venv`, the one mutation `CLAUDE.md:274` documents as not reproducible from the
+lock). The Verification gate is therefore unsatisfiable: it counts state-ledger commits moved
+by ungated writes, so it fails after a perfect implementation of all ten sites.
+Assumption: that the new suite can drive `DRY_RUN` without routing through `process_args`,
+since `readonly` inside a bash function is global and would make every later positive control
+run in dry-run mode and pass vacuously. **Checked and refuted** — bash does behave that way
+(`unset` rc=1, reassignment dies `readonly variable`), but bats isolates it per `@test`: a
+two-case fixture where case 1 sets `readonly DRY_RUN=1` and case 2 unsets and reassigns
+returns 2/2 ok with no leak. The positive-control pairing is safe as designed.
+Disposition:
+
+### Ergonomics
+
+Finding: **The guard's `return 0` is durable and remote, not merely returned.** A guarded
+`sync_legacy_dirs` reaches `_update_record_end "legacy-rsync" 0`, whose `*)` arm sets
+`_result="updated"` and writes `OK` — so `-t update --dry-run` prints
+`[OK] legacy-rsync  updated` for a section that synced nothing. `_update_skip` already exists
+as the correct primitive and the spec never mentions it. Worse, `run_recreate_venv`
+(`workflows.sh:300-305`) calls `recreate_python_venv || return 1` and then
+`_ledger_write_run_entry "recreate_venv" 0`: a guard returning 0 means `|| return 1` never
+fires, so the design **writes a false CMDB record** asserting a venv recreate that never
+happened. Same shape at `:227`, `:253`, `:297`, `:310`. Separately, the operator cannot tell
+from the output what was gated — `run_cmd` sites print `[DRY RUN]`, function guards print
+nothing, and the `chsh` site deliberately suppresses its log, so a guarded `sync_legacy_dirs`
+on the Studio is silent where three `rsync --delete` would have been.
+Assumption: that the ten-site table is the complete set of irreversible operations reachable
+from a `-t` workflow, when the instrument behind it is a verb matcher and "leaves the
+machine" is not a verb. **Checked and confirmed false** by the session's egress sweep, which
+found the ledger write, `git_sync.sh:71`, and five `npm install -g` sites.
+Disposition:
+
+### Risk
+
+Finding: **The rejected alternative is already half-shipped, which invalidates the Decision
+section's cost comparison.** `README.md:207` already reads "Honoured by symlinking
+(`lib/helpers.sh`) and the git-hooks sweep only — `run_update` contains no `run_cmd` call
+sites, so `-t update --dry-run` still performs real package upgrades, `git push`, and
+`rsync --delete`. Do not rely on it to preview an update." Only `CLAUDE.md:92` is stale, so
+"narrow the promise" is one line of remaining work rather than a fresh decision. Two further
+factual errors: the spec's "nothing widened it since" is false — `5142258c` (#189) widened
+`run_cmd` into `git_hooks.sh` and that widening **did** carry `DRY_RUN` awareness (four
+references), so the evidence cuts against the spec's own prose-rule argument; and the table
+called "exact" omits `rbenv uninstall -f "${RUBY_VER}"` (`developer.sh:429`). Also:
+`DRY_RUN=0`, `DRY_RUN=false` and `DRY_RUN=no` all take the dry-run branch (only empty/unset
+executes), so after this change an accidental export silently converts `-t update` into a
+no-op for three rsync targets instead of costing seven printed lines. And the borrowed
+marker-file idiom does not transfer: `git_hooks.bats:1269` works because the fixture owns a
+Makefile that writes the marker; `rsync`, `chsh`, `pyenv virtualenv-delete` and `rm -rf` have
+no test-owned recipe, so interception must be PATH mocks — and the mandated positive controls,
+run unmocked on the Studio, would fire real `rsync -ar --delete` at three hosts and a real
+`chsh`.
+Assumption: that the criterion "destroys state the remote cannot reproduce" excludes
+package-manager state. `CLAUDE.md:274` argues the opposite for `uv sync` — pre-sync state is
+not reproducible from the lock and `uv pip install -r` of the freeze "fails as
+unsatisfiable" — which would put `uv_sync_venv` in the table and leave `-t update --dry-run`
+unsafe regardless. Genuinely open; the operator decides whether a package-manager mutation
+meets the criterion.
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison, evaluator, or ambiguous-criteria trigger; acceptance is a
+concrete command with a measurable result.
