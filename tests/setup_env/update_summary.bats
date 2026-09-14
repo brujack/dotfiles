@@ -929,6 +929,31 @@ firefox  124.0"
   [ ! -f "${_DOTFILES_RUN_TMPDIR}/status_legacy-rsync" ]
 }
 
+@test "_update_record_start legacy-rsync case under dry-run skips with reason dry run, not not studio" {
+  # MOCK_HOSTNAME_OUTPUT=studio is mandatory here: it makes _is_legacy_sync_host
+  # (unstubbed, real hostname mock) true, so absent the DRY_RUN branch this case
+  # would fall through to the else arm and NOT skip at all -- collapsing this
+  # test with the "does not skip on studio" test above. Asserting the reason
+  # TEXT (not just that a skip happened) is what proves the dry-run branch fired
+  # ahead of the studio check rather than merely agreeing with it (tdd.md E5).
+  export MOCK_HOSTNAME_OUTPUT=studio
+  export DRY_RUN=1
+  _update_record_start "legacy-rsync"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_legacy-rsync")" = "SKIP" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_legacy-rsync")" = "dry run" ]
+}
+
+@test "_update_record_start git-repos case under dry-run writes no SKIP file" {
+  # Pins the granularity decision: git-repos has no case arm in
+  # _update_record_start (it falls through to the generic `*) ;;` branch) and
+  # must stay that way under dry-run. git_repo_status/pull --ff-only are
+  # line-gated (Task 3), not section-gated, so a [SKIP] git-repos row would
+  # falsely claim working trees never moved.
+  export DRY_RUN=1
+  _update_record_start "git-repos"
+  [ ! -f "${_DOTFILES_RUN_TMPDIR}/status_git-repos" ]
+}
+
 # ── _ledger_write_run_entry: make_version field (macOS-only) ─────────────────
 #
 # _ledger_write_run_entry no-ops until both started_at (in _DOTFILES_RUN_TMPDIR,
