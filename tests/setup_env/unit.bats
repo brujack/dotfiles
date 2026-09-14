@@ -832,6 +832,26 @@ EOF
   [ ! -f "${tmpfile}" ]
 }
 
+@test "run_cmd suppresses the command when DRY_RUN=true" {
+  export DRY_RUN=true
+  local tmpfile="${BATS_TEST_TMPDIR}/dry_run_true_suppresses"
+  run run_cmd touch "${tmpfile}"
+  unset DRY_RUN
+  [ "$status" -eq 0 ]
+  [[ "$output" == "[DRY RUN]"* ]]
+  [ ! -f "${tmpfile}" ]
+}
+
+@test "run_cmd suppresses the command when DRY_RUN=yes" {
+  export DRY_RUN=yes
+  local tmpfile="${BATS_TEST_TMPDIR}/dry_run_yes_suppresses"
+  run run_cmd touch "${tmpfile}"
+  unset DRY_RUN
+  [ "$status" -eq 0 ]
+  [[ "$output" == "[DRY RUN]"* ]]
+  [ ! -f "${tmpfile}" ]
+}
+
 @test "run_cmd executes the command when DRY_RUN=0" {
   export DRY_RUN=0
   local tmpfile="${BATS_TEST_TMPDIR}/dry_run_zero_executes"
