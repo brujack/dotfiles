@@ -362,3 +362,113 @@ defect repair and settling that boundary belongs in its own change.
 
 N/A — no comparison, evaluator, or ambiguous-criteria trigger; acceptance is a concrete
 command with a measurable result.
+
+---
+
+## Multi-Lens Review — Round 2
+
+Reviewed at commit: `3124144b` (the three-site egress design above)
+
+All three lenses blocked again. The headline is that **the replacement verification gate is
+wrong in both directions** — round 1's gate always failed; this one passes today and fails
+after a correct implementation. That is round 1's defect class recurring inside the section
+written to retire it, and it is the second acceptance gate in this spec to be invariant to
+the fix it is meant to measure.
+
+Every claim below was re-verified against the code by the session. Two lens claims were
+**refuted** and are recorded as such rather than carried forward.
+
+### Goal-Fit
+
+Finding: **The gate cannot fail.** `rev-list --count HEAD` moves on _commit_, not on push,
+and both guards the gate exercises are push-side. Worse, `sync_git_repos_main`
+(`scripts/sync_git_repos.sh:34-56`) parses one `${1:-}` through a `case` whose arms are
+`-h|--help`, `--git-only`, `--legacy-only`, `""` and `*)`; `--dry-run` falls to `*)` →
+`Unrecognized option` → `return 1`, so nothing runs, `before == after`, and the assertion
+passes. The spec's "runnable today and currently fails" is false — it passes trivially, and
+`tests/scripts/unit.bats:356` already pins that rejection behaviour. Separately, two of three
+absence cases are non-discriminating: `sync_legacy_dirs` returns at `legacy_rsync.sh:9-12`
+when `_is_legacy_sync_host` is false, and `tests/mocks/git` has no ahead/behind knob, so
+`_git_sync_one_repo` returns 0 at `:87` without reaching the push at `:71`.
+Assumption: that a `--dry-run` invocation is a run the CMDB should have **no record of at
+all**. Package upgrades, venv rebuilds and pulls really happen under `--dry-run`, and
+state-ledger's contract is an append-only record with a spool path so writes are never
+silently dropped — so the right shape may be an entry carrying `dry_run: true` rather than
+suppression, which would make the largest guard in the table the wrong mechanism. Genuinely
+open; operator question.
+Disposition:
+
+### Ergonomics
+
+Finding: **§2's SKIP rendering contradicts the Scope section.** `git-repos` is _line_-gated —
+`_git_repo_status` still runs `git fetch` on every repo and `pull --ff-only` still runs on
+every repo that is behind — so `[SKIP] git-repos  dry run` denies that working trees moved.
+Round 1 was blocked for `[OK]` over a section that did nothing; round 2 ships `[SKIP]` over a
+section that did real work. Same lie, opposite sign. It is also unstable: `_update_warn`
+overwrites status unconditionally, so the same dry run renders SKIP or WARN depending on the
+fleet's state. The rendering has to follow the guard's granularity. Also: `_update_record_start`
+has **no `git-repos` arm** at all (fourteen arms, `legacy-rsync` is the only sync one), so §2
+asserts a symmetry that does not exist; case 8 goes red on CI because the existing
+`_update_skip "legacy-rsync" "not studio"` collides with the proposed `"dry run"` reason and
+the precedence is unspecified; and **no case asserts the `[DRY RUN]` announcement**, so §3 —
+the entire remedy for round 1's "operator cannot tell what was gated" — ships untested.
+Assumption: that `scan_skills.py --write-ledger` (`workflows.sh:415`) is a second ledger
+writer reachable under `--dry-run`. **Checked and refuted** — its `LEDGER_PATH` is
+`~/.claude/plugin-verdicts.json` and `_save_ledger` writes JSON to disk. Different artifact,
+no git, no egress.
+Disposition:
+
+### Risk
+
+Finding: **The gate fails after a correct implementation, for a second independent reason.**
+`sync_git_repos` routes `~/.local/share/state-ledger` through `_git_sync_one_repo`
+(`git_sync.sh:108-112`), and `pull --ff-only` is deliberately ungated — so a pull moves
+`rev-list --count HEAD` and the gate goes red against a working design. state-ledger is
+written from three machines, so _behind_ is its normal state; that repo's own reflog carries
+a `pull --ff-only: fast-forward` dated one day before this spec. The oracle is measuring the
+wrong side of the wire: "nothing left this machine" is a property of the **remote**, so
+`git ls-remote origin main` before/after, or the `origin/main` ref, is falsifiable by a push
+and immune to a pull. Two further defects: the round-1 `DRY_RUN` truthiness finding is marked
+**Addressed** in this file while appearing nowhere in the body — `helpers.sh:16` is still
+`[[ -n ${DRY_RUN:-} ]]`, so `DRY_RUN=0` takes the dry-run branch, and after this change a
+stray export silently suppresses every push, rsync and ledger write while reporting success.
+And the named test harness cannot coexist with its target: `tests/setup_env/git_sync.bats`
+deliberately uses no `load_mocks`, building a real bare origin with real
+`git init/clone/commit/push`, so adding mocks for cases 3–4 collapses the file.
+Assumption: that `ledger_write_entry` is the sole chokepoint for ledger **egress**, when
+`ensure_state_ledger` runs `ledger.py init` unconditionally on every run — including dry ones
+— before the gated write. **Checked and refuted.** `cmd_init` spans `ledger.py:372-436` and
+contains zero references to `_git_commit_and_push` or `_flush_spool_internal`; the four push
+sites are `:486` (`cmd_write`), `:668` (`_flush_spool_internal`), `:791` (`cmd_promote`) and
+`:850`, and the flush's callers are `:467`, `:831`, `:948` and `:1010` — none in `cmd_init`.
+The two `check=True` git calls in that range are `pull --ff-only` and `clone`, both inbound.
+No fourth egress row is needed.
+Disposition:
+
+### Session-verified corrections to the spec body
+
+Independent of the lens findings, these were measured and are wrong as written:
+
+- `:108` "Every caller invokes it as `|| true`" is **false** for the two direct callers —
+  `update_summary.sh:521` and `:523` are bare. The conclusion survives (both sit inside
+  `_ledger_write_run_entry`, whose five callers do use `|| true`), but the stated evidence
+  does not.
+- "sole chokepoint for every ledger **write**" overreaches. `ensure_state_ledger` runs
+  `ledger.py init` (`workflows.sh:937`) and `run_update` runs `scan_skills.py --write-ledger`
+  (`:415`) outside it. Neither pushes, so the design is unaffected — the sentence needs
+  narrowing to _egress_, which is what it actually establishes.
+- The rsync-control safety rationale names the wrong mechanism. `HOME` feeds only the rsync
+  _source_ (`legacy_rsync.sh:15`); the three destinations are hardcoded
+  `bruce@workstation:`/`laptop-1:`/`ratna:`. An empty `HOME` with real rsync reachable is
+  **worse** than none. The existing suite's actual protection is `load_mocks` plus
+  `_OVERRIDE_GIT_REPOS_SRC` plus `MOCK_HOSTNAME_OUTPUT` (`legacy_rsync.bats:6,11,16`) — and
+  that hostname knob is exactly what case 5 needs and the spec never names.
+- There is **no in-repo precedent** for verifying a mock is live before a dangerous call.
+  `refute_grep` asserts absence, and `load_mocks` only prepends `tests/mocks` to `PATH`. A
+  rule of that shape would be introduced here, not cited — which is a stronger claim and has
+  to be written as one. It matters most for the ledger, whose `command -v ledger` arm
+  (`workflows.sh:946`) is checked _before_ the `${HOME}`-relative fallback, so `HOME`
+  redirection alone does not intercept it and `tests/mocks/ledger` is load-bearing.
+- The Decision section corrects the `README.md:207` fact but never re-runs the arithmetic it
+  inverts: the rejected alternative is ~90% shipped and costs one line, so the case for
+  building three guards has to be argued against _that_ cost, not the stated one.
