@@ -12,8 +12,15 @@ log_warn()  { printf "${_YELLOW}[WARN]${_NC}  %s\n" "$*" >&2; }
 log_error() { printf "${_RED}[ERROR]${_NC} %s\n" "$*" >&2; }
 
 # ── command wrapper ───────────────────────────────────────────────────────────
+_dry_run_active() {
+  case "${DRY_RUN:-}" in
+    ""|0|false|no) return 1 ;;
+    *)             return 0 ;;
+  esac
+}
+
 run_cmd() {
-  if [[ -n ${DRY_RUN:-} ]]; then
+  if _dry_run_active; then
     printf "[DRY RUN] %s\n" "$*"
   else
     "$@"
