@@ -18,6 +18,11 @@
 - `_dry_run_active` is the single truthiness authority. Unset, empty, `0`, `false`, `no` mean **off**; anything else means on. `run_cmd` and all three guards call it so the four sites cannot drift.
 - Every guard prints `[DRY RUN] <what would have run>` on **stdout** (verified: `lib/helpers.sh:17` emits to stdout, stderr empty).
 - Every absence assertion is paired with a positive control, and additionally asserts the `[DRY RUN]` line — an absence alone passes when the guard was never reached.
+- **What "the gate was proven" means differs by gate shape — read the task body, do not assume.** Measured at pre-flight:
+  - **Behavioural proofs (Tasks 1–4).** The defect itself was reproduced on the base tree: `DRY_RUN=0` suppresses execution, a guarded push still moves a fixture `origin` ref, the rsync mock is invoked 3×, the ledger mock is invoked 1×. That is what guarantees the RED test fails for the right reason.
+  - **Whole-file bats gates (Tasks 3–6) pass on the base tree by construction** — `git_sync.bats` 24 tests, `legacy_rsync.bats` 6, `update_summary.bats` 101, `scripts/unit.bats` 146, all exit 0. Inherent to TDD: the new test does not exist yet. The gate becomes discriminating the moment the RED test is written, and a whole-file run necessarily includes it. **Verify RED directly before implementing**; never read the green base run as evidence.
+  - **Filtered gates (Tasks 1–2) must match zero tests on base**, and both do: `-f "dry_run_active"` and `-f "dry-run"` each exit 1 with `ERROR: Found no tests`. A filter matching a pre-existing passing test is vacuous — Task 2's original `-f "ledger"` was exactly that, exiting 0 on base against one pre-existing test, and was corrected at pre-flight.
+- If a gate passes on the unmodified tree in a way its task body does not predict, that is a plan defect — report it as a blocker rather than proceeding.
 
 ---
 
@@ -75,7 +80,7 @@ role: executor
 model: sonnet
 tdd: required
 acceptance:
-  - cmd: bats tests/setup_env/workflows.bats -f "ledger"
+  - cmd: bats tests/setup_env/workflows.bats -f "dry-run"
     exit_code: 0
   - cmd: make lint
     exit_code: 0
@@ -105,6 +110,16 @@ fi
 Seam: resolve `LEDGER_BIN` first, then `command -v ledger`, then `${HOME}/.local/bin/ledger`. Needed because `command -v` is checked **before** the `${HOME}` fallback, so redirecting `HOME` cannot intercept on the Linux boxes. `tests/mocks/ledger` records argv to `MOCK_CALLS_FILE` and drains stdin.
 
 Tests: absence case asserts the mock is uncalled **and** `[DRY RUN]` appears; control (`DRY_RUN` unset) asserts the mock is called and receives the JSON on stdin.
+
+**Both new test names MUST contain the literal string `dry-run`**, because the acceptance
+gate filters on it. Measured at pre-flight: `-f "ledger"` was the original filter and it
+exits **0** on the base tree — it matches one pre-existing passing test
+(`run_setup_user still calls _ledger_write_run_entry when install_git_hooks_all_repos returns 1`),
+so it passed against zero implementation, and it would have kept passing if the new tests were
+named without that substring. `-f "dry-run"` matches **zero** tests on base (exit 1,
+`ERROR: Found no tests`), so the gate cannot pass until this task's tests exist. Suggested
+names: `ledger_write_entry under dry-run does not invoke the ledger binary` and
+`ledger_write_entry without dry-run invokes the ledger binary with the JSON on stdin`.
 
 **Interfaces:**
 
