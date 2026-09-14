@@ -97,8 +97,19 @@ Dotfiles live at the repo root and in the ai-config repo (`.claude/`/`.cursor/`)
 
 - **Repo root** — each dotfile symlinked individually into `$HOME` (e.g. `~/.zshrc → dotfiles/.zshrc`)
 - **`.claude/`** — each item symlinked individually into `~/.claude/` from the ai-config repo, except `rules/`, which is never linked, and `projects/`, which the loop skips and then links explicitly (see below).
-  Exception: `mcp.json.template` is symlinked as `~/.claude/mcp.json.template` (read-only reference); the live
-  `~/.claude/mcp.json` is **generated** by `setup_claude_mcp` via `envsubst` and is not a symlink.
+  Exception: `mcp.json.template` is symlinked as `~/.claude/mcp.json.template` (read-only reference).
+
+  **The live `~/.claude/mcp.json` is ALSO a symlink, and template generation is unreachable — this line
+  claimed the opposite until 2026-09-14.** The loop above links every item in `ai-config/.claude/` except
+  `projects` and `rules`, and `mcp.json` is tracked there, so it is linked by `setup_dotfile_symlinks`
+  (`lib/workflows.sh:157`). `setup_claude_mcp` runs afterwards at `:188`, finds a valid symlink, and returns 0
+  with two WARN lines rather than writing credentials into a tracked file (`lib/workflows.sh:32`). The ordering
+  makes that every run on every machine, not a race. Verified on the Studio 2026-09-14: the live file resolves
+  into `ai-config/.claude/mcp.json`, and that tracked target holds 1 `mcpServers`
+  key, 0 credential-shaped strings and 0 unexpanded `$GITHUB_PAT` placeholders — so the guard is working and
+  nothing has leaked. **`-t doctor` cannot verify this**: `_doctor_check_github_mcp` reports
+  `[PASS] ~/.claude/mcp.json (generated)` (`lib/helpers.sh:757`) for a path it only tested for existence, so
+  the word "generated" asserts a mechanism that never ran. Read the GitHub MCP section below with that in mind.
   `rules/` is never linked because a `~/.claude/rules` pointing into ai-config would load ai-config's project rules as user-level rules in every repo: rules without `paths:` load at launch, and how user-level rules with `paths:` behave is unmeasured.
 
   **`projects/` IS symlinked, wholesale, and this line said the opposite until 2026-08-25.**
