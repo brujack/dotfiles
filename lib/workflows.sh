@@ -942,8 +942,17 @@ ensure_state_ledger() {
 
 ledger_write_entry() {
   local _json="${1:?ledger_write_entry: json payload required}"
-  local _ledger_bin
-  _ledger_bin="$(command -v ledger 2>/dev/null)"
+  if _dry_run_active; then
+    printf "[DRY RUN] ledger write (entry suppressed)\n"
+    return 0
+  fi
+  # LEDGER_BIN is an operator/test override, checked first: command -v is
+  # otherwise checked before the ${HOME} fallback below, so redirecting HOME
+  # alone cannot force resolution to a fixture on a machine that already has
+  # a real ledger on PATH (both Linux dev boxes do).
+  local _ledger_bin="${LEDGER_BIN:-}"
+  [[ -n "${_ledger_bin}" && ! -x "${_ledger_bin}" ]] && _ledger_bin=""
+  [[ -z "${_ledger_bin}" ]] && _ledger_bin="$(command -v ledger 2>/dev/null)"
   [[ -z "${_ledger_bin}" && -x "${HOME}/.local/bin/ledger" ]] && \
     _ledger_bin="${HOME}/.local/bin/ledger"
   if [[ -z "${_ledger_bin}" ]]; then
