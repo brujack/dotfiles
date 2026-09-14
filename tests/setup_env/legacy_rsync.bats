@@ -61,3 +61,30 @@ setup() {
   run sync_legacy_dirs
   [ "$status" -eq 0 ]
 }
+
+@test "sync_legacy_dirs under dry-run invokes no rsync and prints the DRY RUN marker" {
+  export MOCK_HOSTNAME_OUTPUT=studio
+  export DRY_RUN=1
+  run sync_legacy_dirs
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[DRY RUN]"* ]]
+  run grep -q rsync "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+}
+
+@test "sync_legacy_dirs without dry-run invokes rsync three times" {
+  export MOCK_HOSTNAME_OUTPUT=studio
+  run sync_legacy_dirs
+  [ "$status" -eq 0 ]
+  run grep -c "bruce@" "${MOCK_CALLS_FILE}"
+  [ "$output" -eq 3 ]
+}
+
+@test "sync_legacy_dirs under dry-run on non-studio still reports the host skip, not the DRY RUN marker" {
+  export MOCK_HOSTNAME_OUTPUT=workstation
+  export DRY_RUN=1
+  run sync_legacy_dirs
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"not studio"* ]]
+  [[ "$output" != *"[DRY RUN]"* ]]
+}

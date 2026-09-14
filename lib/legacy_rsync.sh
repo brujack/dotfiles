@@ -11,6 +11,11 @@ sync_legacy_dirs() {
     return 0
   fi
 
+  if _dry_run_active; then
+    printf "[DRY RUN] rsync -ar --delete to workstation, laptop-1, ratna\n"
+    return 0
+  fi
+
   local _had_failure=0
   local _src="${_OVERRIDE_GIT_REPOS_SRC:-${HOME}/git-repos}/"
 
