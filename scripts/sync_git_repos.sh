@@ -4,7 +4,7 @@
 
 _sync_git_repos_usage() {
   cat <<'USAGE'
-Usage: sync_git_repos.sh [--git-only|--legacy-only|-h|--help]
+Usage: sync_git_repos.sh [--git-only|--legacy-only] [--dry-run] [-h|--help]
 
 Two independent sync modes:
 
@@ -23,6 +23,8 @@ Two independent sync modes:
 Options:
   --git-only     Run only the git sync.
   --legacy-only  Run only the legacy rsync sync.
+  --dry-run      Preview: print what would push/rsync without doing it.
+                 Composable with --git-only / --legacy-only.
   -h, --help     Show this help and exit.
 
 Exit codes:
@@ -33,26 +35,39 @@ USAGE
 
 sync_git_repos_main() {
   local _mode="both"
-  case "${1:-}" in
-    -h|--help)
-      _sync_git_repos_usage
-      return 0
-      ;;
-    --git-only)
-      _mode="git"
-      ;;
-    --legacy-only)
-      _mode="legacy"
-      ;;
-    "")
-      _mode="both"
-      ;;
-    *)
-      printf "Unrecognized option: %s\n\n" "${1}" >&2
-      _sync_git_repos_usage >&2
-      return 1
-      ;;
-  esac
+  local _arg
+
+  for _arg in "$@"; do
+    case "${_arg}" in
+      -h|--help)
+        _sync_git_repos_usage
+        return 0
+        ;;
+      --git-only)
+        _mode="git"
+        ;;
+      --legacy-only)
+        _mode="legacy"
+        ;;
+      --dry-run)
+        # Deliberately a plain (non-readonly) assignment: this is the
+        # standalone entry point's own process, invoked once per run, but a
+        # readonly DRY_RUN would make a second parse in the same shell (e.g.
+        # a test that calls sync_git_repos_main more than once) fail outright.
+        # _dry_run_active reads it back from this same process, so a plain
+        # assignment is sufficient.
+        # shellcheck disable=SC2034 # consumed by _dry_run_active() in
+        # lib/helpers.sh (sourced below at runtime) -- cross-file, so a
+        # single-file shellcheck pass over this script cannot see the read.
+        DRY_RUN=1
+        ;;
+      *)
+        printf "Unrecognized option: %s\n\n" "${_arg}" >&2
+        _sync_git_repos_usage >&2
+        return 1
+        ;;
+    esac
+  done
 
   local _rc=0
 

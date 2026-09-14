@@ -377,6 +377,54 @@ teardown() {
   grep -q rsync "${MOCK_CALLS_FILE}"
 }
 
+@test "sync_git_repos.sh --dry-run --git-only leaves the origin ref unmoved" {
+  export HOME="${BATS_TEST_TMPDIR}"
+  export GIT_AUTHOR_NAME="bats" GIT_AUTHOR_EMAIL="bats@example.com"
+  export GIT_COMMITTER_NAME="bats" GIT_COMMITTER_EMAIL="bats@example.com"
+
+  # tests/mocks/git (on PATH via load_mocks in setup()) is a full stub with no
+  # real refs and no real ahead/behind detection -- it cannot exercise the
+  # actual push-suppression guard this test is about. Strip the mocks dir so
+  # every git invocation below, including the script's own, hits the real
+  # binary.
+  local _clean_path
+  _clean_path="$(printf '%s' "${PATH}" | tr ':' '\n' | grep -v 'tests/mocks' | tr '\n' ':' | sed 's/:$//')"
+
+  local origin="${HOME}/origin.git"
+  local clone="${HOME}/git-repos/personal/dry-repo"
+  mkdir -p "${HOME}/git-repos/personal"
+  PATH="${_clean_path}" git init -q --bare "${origin}"
+  PATH="${_clean_path}" git clone -q "${origin}" "${clone}"
+  PATH="${_clean_path}" git -C "${clone}" commit -q --allow-empty -m init
+  PATH="${_clean_path}" git -C "${clone}" push -q -u origin HEAD:master
+  # Ahead by one unpushed commit -- this is the state a real (non-dry) run
+  # would push and a dry run must not.
+  PATH="${_clean_path}" git -C "${clone}" commit -q --allow-empty -m ahead
+
+  local before
+  before="$(PATH="${_clean_path}" git -C "${origin}" rev-parse master)"
+
+  run env PATH="${_clean_path}" bash "${REPO_ROOT}/scripts/sync_git_repos.sh" --git-only --dry-run
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[DRY RUN]"* ]]
+
+  local after
+  after="$(PATH="${_clean_path}" git -C "${origin}" rev-parse master)"
+  [ "${before}" = "${after}" ]
+}
+
+@test "sync_git_repos.sh --legacy-only --dry-run prints the DRY RUN marker and invokes no real rsync" {
+  export MOCK_HOSTNAME_OUTPUT=studio
+  export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
+  export HOME="${BATS_TEST_TMPDIR}"
+  mkdir -p "${HOME}/git-repos/personal"
+  run bash "${REPO_ROOT}/scripts/sync_git_repos.sh" --legacy-only --dry-run
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[DRY RUN]"* ]]
+  run grep -q "^rsync " "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+}
+
 # ── pre-commit-hook.sh ────────────────────────────────────────────────────────
 
 @test "pre-commit-hook.sh is executable" {
