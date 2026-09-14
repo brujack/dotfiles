@@ -12,10 +12,10 @@
 
 ## Global Constraints
 
-- **No task may declare `make test`.** Measured on the Studio 2026-09-14: `rc=0`, 1675 ok, 0 not ok, **784s** — past the 600s Bash cap, so it backgrounds and a backgrounded command never wakes a subagent. The orchestrator runs `make test` **once**, uncontended, after Task 6 (the last code-touching task). That single run is the real gate; the scoped per-task gates are regression checks, not a weakening.
+- **No task may declare `make test`.** Measured on the Studio 2026-09-14: `rc=0`, 1675 ok, 0 not ok, **784s** — past the 600s Bash cap, so it backgrounds and a backgrounded command never wakes a subagent. The orchestrator runs `make test` **once**, uncontended, after **Task 8** — the last code-touching task. That single run is the real gate; the scoped per-task gates are regression checks, not a weakening. (This read "after Task 6" until Task 8 was spliced in for finding C2; Task 8 edits `lib/git_hooks.sh`, so a run at Task 6 would predate the final code change.)
 - **No task declares `parallel_group`.** Sequential dispatch; at these durations parallelism buys nothing and avoids the shared-worktree hazard.
 - **Phase 2 runs in the worktree** `/Users/bruce/git-repos/personal/dotfiles-dry-run-egress` on branch `fix/dry-run-egress-gating`, created from `a334e7aa`. Do not work in the main checkout.
-- `_dry_run_active` is the single truthiness authority. Unset, empty, `0`, `false`, `no` mean **off**; anything else means on. `run_cmd` and all three guards call it so the four sites cannot drift.
+- `_dry_run_active` is the single truthiness authority. Unset, empty, `0`, `false`, `no` mean **off**; anything else means on. **There are SIX sites, not four**, and this bullet said four until Task 1's review measured otherwise: `run_cmd`, the three guards (Tasks 2–4), `process_args`'s `--dry-run` arm (`helpers.sh:825`, fixed inside Task 1 — see C1 there), and `install_git_hooks_all_repos` (`git_hooks.sh:386`, Task 8). Every one calls the helper so they cannot drift. The two that were missed are the two that read `DRY_RUN` **directly** rather than through `run_cmd`, which is the shape to grep for if a seventh is ever added: `git grep -n 'DRY_RUN' -- lib/ scripts/ setup_env.sh .config/`.
 - Every guard prints `[DRY RUN] <what would have run>` on **stdout** (verified: `lib/helpers.sh:17` emits to stdout, stderr empty).
 - Every absence assertion is paired with a positive control, and additionally asserts the `[DRY RUN]` line — an absence alone passes when the guard was never reached.
 - **What "the gate was proven" means differs by gate shape — read the task body, do not assume.** Measured at pre-flight:
@@ -357,6 +357,8 @@ acceptance:
     exit_code: 0
   - cmd: grep -q "LEDGER_BIN" CLAUDE.md
     exit_code: 0
+  - cmd: grep -q "DRY_RUN=0" CLAUDE.md
+    exit_code: 0
   - cmd: make lint
     exit_code: 0
 max_retries: 3
@@ -373,13 +375,109 @@ depends_on: [6]
 
 Add a Test Seams row for `LEDGER_BIN` beside `UV_BIN` and `GGSHIELD_BIN`, stating it is checked before `command -v ledger` and that `tests/mocks/ledger` is load-bearing rather than convenient.
 
+**Also state the truthiness contract, which lands documented nowhere otherwise.** `CLAUDE.md:92` and `README.md:207` describe `--dry-run`'s _scope_ and never its accepted _values_, so the `0`/`false`/`no`/empty/unset rule this plan introduces would ship fleet-wide undocumented. One sentence: `DRY_RUN=0`, `false`, `no`, empty and unset all mean dry-run is **off**, any other value means on, and `--dry-run` wins over an inherited falsy value. The third acceptance gate (`grep -q "DRY_RUN=0" CLAUDE.md`) pins it — measured at pre-flight, `CLAUDE.md` contains **zero** occurrences of `DRY_RUN=0`, `LEDGER_BIN`, and the egress phrasing, so all three greps exit 1 on base and none is vacuous.
+
+---
+
+### Task 8: Route `install_git_hooks_all_repos` through `_dry_run_active`
+
+```yaml-task
+id: 8
+description: Fix the sixth DRY_RUN reader at git_hooks.sh:386 so the sweep and run_cmd agree
+role: executor
+model: sonnet
+tdd: required
+acceptance:
+  - cmd: bats tests/setup_env/git_hooks.bats -f "dry-run"
+    exit_code: 0
+  - cmd: bats tests/setup_env/git_hooks.bats
+    exit_code: 0
+  - cmd: make lint
+    exit_code: 0
+max_retries: 3
+files_touched:
+  - lib/git_hooks.sh
+  - tests/setup_env/git_hooks.bats
+depends_on: [1]
+```
+
+**Files:** `lib/git_hooks.sh` (`:386` only), `tests/setup_env/git_hooks.bats`.
+
+**This task exists because the plan was wrong, and that is worth recording.** The spec enumerated `git_hooks.sh:386` as a `DRY_RUN` reader; no task 1–7 touched `lib/git_hooks.sh`, and the Global Constraints bullet above counted four sites when there are six. Found by Task 1's code-quality review, confirmed independently before scheduling — `git grep` shows the file appears in no other task's `files_touched`.
+
+`:386` still reads `[[ -n "${DRY_RUN:-}" ]] && _dry=1`, so after Task 1 the two predicates **disagree** on exactly the values Task 1 changed:
+
+```
+DRY_RUN=[0]      run_cmd=EXEC   git_hooks.sh:386 -> _dry=1
+DRY_RUN=[false]  run_cmd=EXEC   git_hooks.sh:386 -> _dry=1
+DRY_RUN=[no]     run_cmd=EXEC   git_hooks.sh:386 -> _dry=1
+```
+
+Measured at review, end-to-end against the file's own `_sweep_build_cp_repo` fixture with `DRY_RUN=0 install_git_hooks_all_repos`: `make install-hooks` really ran in both repos (both markers present) while the summary reported `2 checked, n/a updated, 0 gaps`. On base this was **coherent** — `DRY_RUN=0` meant dry on both halves, nothing ran, and `n/a` was truthful. Task 1 introduces the incoherence; it is not pre-existing.
+
+Two consequences, both at lines the fix must leave alone:
+
+- `:538-540` forces `_updated_str="n/a"` whenever `_dry -eq 1`, under a comment reading _"`0` under DRY_RUN would falsely assert every repo was already current — nothing ran, so nothing is known."_ Post-Task-1 that comment is false in precisely the new case: things ran, and the summary denies it.
+- `:449`'s `[[ ${_dry} -eq 0 ]] && _pre=...` skips the pre-digest, so `_updated` cannot increment even without the `n/a` override — real installs are structurally uncountable while `_dry=1`.
+
+Fix is one line: `_dry_run_active && _dry=1`. It sits mid-function so there is no trailing-return hazard, and `lib/helpers.sh` is already a hard dependency of this file through `run_cmd`/`log_warn`, so the symbol resolves. **Do not** rewrite `:449` or `:538` — once `_dry` is correct they are correct, and widening scope here re-opens the counting question this plan deliberately left alone.
+
+**Every new test name MUST contain the literal string `dry-run`.** Measured at pre-flight: `git_hooks.bats` holds 92 tests, **zero** of whose names contain `dry-run`, so `-f "dry-run"` exits 1 with `ERROR: Found no tests` and the gate cannot pass until this task's tests exist; the whole-file arm exits 0 at 92 ok on base, which is both the regression arm and the positive control proving the filter works. Mirror the existing `git_hooks.bats:1254` (`DRY_RUN=1`) with a `DRY_RUN=0` case asserting the markers **do** exist and the summary does **not** contain `n/a updated`.
+
+**Interfaces:**
+
+- Consumes: `_dry_run_active()` from Task 1.
+
+---
+
+### Task 9: Correct `README.md:207`, which this branch falsifies
+
+```yaml-task
+id: 9
+description: Rewrite README.md's --dry-run option entry, which becomes false when this branch merges (docs-only, no behaviour change so TDD does not apply)
+role: executor
+model: haiku
+tdd: not-applicable
+acceptance:
+  - cmd: grep -q "leaves this machine" README.md
+    exit_code: 0
+  - cmd: '! grep -q "git-hooks sweep only" README.md'
+    exit_code: 0
+  - cmd: make lint
+    exit_code: 0
+max_retries: 3
+files_touched:
+  - README.md
+depends_on: [8]
+```
+
+**Files:** `README.md` only (`:207`).
+
+**This task exists because the plan was wrong a second time, in the same way as Task 8.** The spec discusses `README.md:207` in eight places and no task's `files_touched` contained `README.md`. Found by checking Task 7's pointers against the file rather than trusting them.
+
+`:207` currently reads:
+
+> `--dry-run` — log mutating operations without executing. **Honoured by symlinking (`lib/helpers.sh`) and the git-hooks sweep only** — `run_update` contains no `run_cmd` call sites, so `-t update --dry-run` still performs real package upgrades, `git push`, and `rsync --delete`. Do not rely on it to preview an update.
+
+Every clause is accurate **today** and the emphasised one is exactly what Tasks 2–4 and 8 falsify. Left alone it becomes a confident, specific, wrong warning telling operators not to trust a flag that now works — worse than the vague promise at `CLAUDE.md:92` that Task 7 fixes, because this one names mechanisms and reads as freshly verified.
+
+Rewrite it on `README.md:207`'s own enumerate-what-still-runs model — the model Task 7 is told to imitate, which this line is the origin of. State what is now **guaranteed** (no operation that leaves this machine: no `git push`, no `rsync --delete`, no state-ledger write) and enumerate what still runs (package upgrades, venv rebuilds, `git fetch` and `pull --ff-only` on every personal repo, five `npm install -g`, `uv sync`). Keep it one bullet; do not restructure the Options list.
+
+**Gate discrimination, measured at pre-flight.** Presence gate: `leaves this machine` occurs **0** times in `README.md` today (as do `no egress` and `DRY_RUN=0`), so it cannot pass until the rewrite lands. Absence gate: `git-hooks sweep only` occurs exactly **1** time, so its removal is observable — and it is paired with the presence gate deliberately, because an absence alone is satisfied by several states including the line being deleted outright rather than rewritten.
+
+**Scope discipline:** `:162` also mentions a state-ledger entry, and `:456` describes the pre-push hook. Neither is this task's business — do not touch them.
+
+**Interfaces:**
+
+- Consumes: the finished behaviour of Tasks 2, 3, 4 and 8. Runs last so it describes the merged state rather than an intermediate one.
+
 ---
 
 ## Verification
 
 Per-task gates above are regression checks. The feature-level verification is:
 
-1. **Orchestrator runs `make test` once after Task 6**, uncontended. Baseline `rc=0`, 1675 ok, 0 not ok, 784s. Expect ok to rise by the new cases and not-ok to stay 0.
+1. **Orchestrator runs `make test` once after Task 8**, uncontended — Task 8 is the last code-touching task, not Task 6. Baseline `rc=0`, 1675 ok, 0 not ok, 784s. Expect ok to rise by the new cases and not-ok to stay 0.
 2. **Operator check on the Studio, after the branch merges** — proves the whole change against the real world rather than fixtures:
 
 ```bash
@@ -391,7 +489,14 @@ after=$(git -C ~/.local/share/state-ledger ls-remote origin main | awk '{print $
 
 `ls-remote` is the oracle because "nothing left this machine" is a property of the **remote**. Two earlier gates measured `rev-list --count HEAD`, which a _pull_ moves and a _push_ does not — one could only fail, the other could only pass.
 
-3. **Edge cases that must be exercised:** `DRY_RUN=0` executes (Task 1); the behind-branch pull still runs under `DRY_RUN=1` (Task 3); `legacy-rsync` renders `dry run` and not `not studio` on a studio host (Task 5); the `*)` unknown-flag rejection still works (Task 6).
+3. **Edge cases that must be exercised:** `DRY_RUN=0` executes (Task 1); **an exported `DRY_RUN=0` plus an explicit `--dry-run` previews rather than executing** (Task 1, finding C1); the sweep summary does not report `n/a updated` over hooks it really installed (Task 8, finding C2); the behind-branch pull still runs under `DRY_RUN=1` (Task 3); `legacy-rsync` renders `dry run` and not `not studio` on a studio host (Task 5); the `*)` unknown-flag rejection still works (Task 6).
+
+The C1 case is the one to run by hand on the Studio before merging, because it is the only edge case whose failure mode is **real egress under an explicit preview flag** rather than a wrong report. Measured on both trees at review time, which is what makes it a regression case rather than a hypothetical:
+
+```
+DRY_RUN=0 + --dry-run, base 582fac1c -> PREVIEW            (correct, by accident)
+DRY_RUN=0 + --dry-run, Task 1 as first shipped -> EXECUTES FOR REAL
+```
 
 ## Out of scope
 
