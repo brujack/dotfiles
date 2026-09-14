@@ -1,13 +1,24 @@
-# `--dry-run` gates irreversible operations
+# `--dry-run` gates egress
+
+**Filename note:** this file is `…-dry-run-irreversible-gating-design.md`, from round 1 when
+the scope was "irreversible operations". Round 2 narrowed that to egress. The path is kept
+because the round-1 commits, the All Plans index row and the Step 8 review all reference it;
+the title states the current scope.
 
 **Date:** 2026-09-14
-**Status:** Design — approved by operator, pending Multi-Lens Review
+**Status:** Design — revised after Step 8 round 1, pending re-review
+
+> **Round 2 rewrite.** Round 1 proposed gating ten sites selected by a destructive-verb
+> classifier. All three lenses blocked it: the ten sites closed **none** of the harm the
+> problem statement measured, and three of them made `--dry-run` worse than doing nothing.
+> The scope below is re-derived from the rule instead of from the classifier. The round-1
+> review is preserved verbatim at the bottom — it is the record of why this document changed,
+> not a description of the design above it.
 
 ## Problem
 
-`--dry-run` is documented as "log mutating operations (symlinks, installs, mkdir) without
-executing" (`CLAUDE.md:92`). It does not do that. It executes destructive operations,
-including a push to a GitHub remote.
+`--dry-run` is documented in `CLAUDE.md:92` as "log mutating operations (symlinks, installs,
+mkdir) without executing". It does not do that. It pushes to a GitHub remote.
 
 Measured on the **Studio**, 2026-09-14, one run of `setup_env.sh -t setup_user --dry-run`:
 
@@ -17,314 +28,337 @@ real git pull into ai-config            3000d538..754bdffc, 4 files, 117 inserti
 real commit + push to state-ledger      e76d0d9..6311ec1  main -> main
 ```
 
-The state-ledger push was verified independently of the run's own output: commit `6311ec1`
-is present in that repo and `git rev-list --count origin/main..HEAD` reads 0, so it reached
-the remote. That is one run on one machine, not a fleet claim.
+Verified independently of the run's own output: commit `6311ec1` is present in state-ledger
+and `git rev-list --count origin/main..HEAD` reads 0, so it reached the remote. One run, one
+machine.
 
-One correction to an earlier reading of the same log, recorded because it would otherwise
-inflate the problem: the `Created /Users/bruce/.tf_creds`-style lines are **not** evidence of
-mutation. All seven such directories carry birth dates from 2022 or 2026-01, none from the
-run, so `mkdir -p` no-op'd and the log line prints unconditionally. The two mutations above
-are the whole measured harm.
+The full chain, traced: `run_setup_user` (`workflows.sh:227`) → `_ledger_write_run_entry`
+(`update_summary.sh:389`) → `ledger_write_entry` (`workflows.sh:943`) →
+`| "${_ledger_bin}" write` (`:954`) → `ledger.py:486` `_git_commit_and_push` → `git commit`
+(`:334`), `git pull --rebase` (`:342`), `git push` (`:344`) — all `check=True`, all
+unconditional.
+
+**Not** evidence of harm, recorded so the problem is not inflated: the
+`Created /Users/bruce/.tf_creds`-style lines. All seven such directories carry birth dates
+from 2022 or 2026-01, so `mkdir -p` no-op'd and the log line prints unconditionally.
 
 ### Where it comes from
 
-The design this flag shipped under
-(`specs/2026-04-08-doctor-dry-run-design.md:18`) calls `run_cmd` "a thin wrapper used by
-**all mutating helpers**". Its plan wired exactly one caller — `safe_link` — and nothing
-widened it since. This is `behavior.md`'s "a fix scoped to one call site, verified at that
-call site": the verification passed because it only ever exercised `safe_link`.
+`specs/2026-04-08-doctor-dry-run-design.md:18` calls `run_cmd` "a thin wrapper used by all
+mutating helpers". Its plan wired one caller, `safe_link`.
 
-Static counts over `setup_env.sh` + `lib/*.sh` + `scripts/*.sh` (36 files), 2026-09-14:
+An earlier draft of this spec said "nothing widened it since". **That is false**, and the
+correction matters because it cuts against the argument it was supporting: `5142258c`
+(#189, 2026-07-29) widened `run_cmd` into `lib/git_hooks.sh`, and that widening **did** carry
+`DRY_RUN` awareness (`git_hooks.sh:386,401,443,538`). So the mechanism has been extended
+correctly once already; the gap is coverage, not a broken practice.
+
+Static counts, 2026-09-14, over `setup_env.sh` + `lib/*.sh` + `scripts/*.sh`:
 
 ```
-mutating-verb lines          234
-run_cmd call sites             5      (4 in lib/helpers.sh, 1 in lib/git_hooks.sh)
-DRY_RUN read sites             6      (2 in lib/helpers.sh, 4 in lib/git_hooks.sh)
+run_cmd call sites             5      (helpers.sh:50,54,56,59 in safe_link; git_hooks.sh:459)
+DRY_RUN occurrences            6      of which 3 are non-comment: 2 reads + 1 assignment
+                                      (git_hooks.sh:386, helpers.sh:16; helpers.sh:818 sets it)
 ```
 
-`lib/developer.sh`, `lib/macos.sh`, `lib/workflows.sh`, `lib/git_sync.sh` and
-`lib/legacy_rsync.sh` read `DRY_RUN` **zero** times.
+An earlier draft reported "6 read sites", counting three comment lines. That erred toward
+making the status quo look better and is corrected here.
 
-These are counts from a verb-matching classifier written for this spec, not from a parser.
-It was run with a positive control (8 hits in `lib/legacy_rsync.sh`, a file known to contain
-them) after an earlier version of it returned `TOTAL 0` — a broken instrument, not a clean
-codebase. Treat 234 as the order of magnitude, not a precise inventory. The 9-site scope
-table below was enumerated individually and is exact.
+### Why the first attempt missed it
+
+Round 1 populated its scope table with a **destructive-verb classifier** (`rm -rf`,
+`rsync --delete`, `virtualenv-delete`, `chsh`) while the decision rule is a **purpose** test.
+Egress does not contain a destructive verb: it hides behind a binary invocation
+(`| "${_ledger_bin}" write`), a function named `sync`, and `npm install -g`. The instrument
+was structurally incapable of finding the thing the problem statement measured. Scope below
+is derived by asking what leaves the machine, then checked against the verb list — not the
+reverse.
 
 ## Decision
 
-**Gate the operations that leave the machine or destroy state the remote cannot reproduce.
-Do not attempt to make `--dry-run` a total no-op.**
+**Gate egress: the operations that leave this machine.** Three sites.
 
-Rejected: widening `run_cmd` to all 234 sites. 47 of them are pipelines, in-command
-redirects, or commands inside quoted `trap` strings, which `run_cmd "$@"` structurally
-cannot wrap, so a total guarantee needs a second mechanism as well; and the diff would touch
-every lib file and every workflow, with regression risk across `setup`, `setup_user`,
-`developer` and `update`. (The 187/47 split is from the same approximate classifier.)
+This is deliberately narrower than round 1's ten. It closes 100% of the measured harm; round
+1's table closed 0% of it.
 
-Also rejected: leaving behaviour alone and narrowing `CLAUDE.md:92` to match. Cheapest and
-zero code risk, but it leaves no safe way to preview a run — which is the thing the flag
-exists for — and `-t update` / `-t developer` stay unrunnable without accepting live
-`rsync --delete` and venv deletion.
+**The "narrow the promise" alternative is already half-shipped**, which round 1 got wrong.
+`README.md:207` reads: "`--dry-run` — log mutating operations without executing. **Honoured by
+symlinking (`lib/helpers.sh`) and the git-hooks sweep only** — `run_update` contains no
+`run_cmd` call sites, so `-t update --dry-run` still performs real package upgrades,
+`git push`, and `rsync --delete`. Do not rely on it to preview an update." Only `CLAUDE.md:92`
+is stale. So that alternative is one line of remaining work, not a fresh decision — and this
+spec does that line too, regardless.
+
+What it does not do: make `--dry-run` a no-op. Package upgrades, venv rebuilds and local
+deletions still run. The documentation says so.
 
 ## Scope
 
-Ten sites in eight functions — `sync_legacy_dirs` holds three of them. Enumerated
-individually with enclosing function and shape;
-`shape` is what `run_cmd` can accept.
+| site                                      | operation                                   | guard    |
+| ----------------------------------------- | ------------------------------------------- | -------- |
+| `ledger_write_entry` (`workflows.sh:943`) | `\| "${_ledger_bin}" write` → commit + push | function |
+| `_git_sync_one_repo` (`git_sync.sh:71`)   | `git -C "${_path}" push --quiet`            | line     |
+| `sync_legacy_dirs` (`legacy_rsync.sh:8`)  | 3 × `rsync -ar --delete` to remote hosts    | function |
 
-| function                                          | operation                                            | shape    |
-| ------------------------------------------------- | ---------------------------------------------------- | -------- |
-| `sync_legacy_dirs` (`legacy_rsync.sh:17,19,27`)   | `rsync -ar --delete` to workstation, laptop-1, ratna | simple   |
-| `setup_ansible` (`developer.sh:530`)              | `pyenv virtualenv-delete -f ansible`                 | simple   |
-| `recreate_python_venv` (`developer.sh:554`)       | `pyenv virtualenv-delete -f`                         | guarded  |
-| `recreate_ruby` (`developer.sh:419`)              | `rm -rf ~/.rubies/ruby-${RUBY_VER}`                  | simple   |
-| `_install_go_from_tarball` (`linux_ubuntu.sh:89`) | `sudo rm -rf /usr/local/go`                          | simple   |
-| `setup_ai_config` (`workflows.sh:107`)            | `rm -rf` the ai-config repo root                     | guarded  |
-| `ensure_state_ledger` (`workflows.sh:931`)        | `rm -rf` the ledger checkout                         | guarded  |
-| `setup_zsh_as_default_shell` (`helpers.sh:384`)   | `chsh`                                               | compound |
+**`ledger_write_entry` is the sole chokepoint for every ledger write.** All six
+`_ledger_write_run_entry` call sites (`workflows.sh:227,253,297,304,310` and
+`update_summary.sh:598` via `_ledger_write_dotfiles_entry`) funnel through
+`update_summary.sh:521/523` into it. One guard covers all of them, including the
+`_update_summary` write that fires at the end of every `run_update`. Every caller invokes it
+as `|| true`, so returning 0 is safe and misleads nothing.
 
-`workflows.sh:107` fires only in the `else` branch, when `_git_is_valid_repo` is false — it
-deletes a corrupt checkout before re-cloning, and that checkout may hold uncommitted work.
-`workflows.sh:931` deletes a tool-managed cache, included because it can hold unpushed spool
-entries the remote cannot reproduce.
+**`git_sync.sh:71` takes a line guard, not a function guard, and the distinction is the
+rule.** `_git_sync_one_repo` has exactly two mutations: the push at `:71` and
+`git pull --ff-only --quiet` at `:82`. Its purpose is _sync_, not _push_ — the pull is neither
+egress nor irreversible (fast-forward only, refused on a dirty tree at `:78-80`). Guarding the
+function would suppress a preview of the pull for no benefit. `sync_git_repos` (`:97`) routes
+both the personal repos and `~/.local/share/state-ledger` (`:108-112`) through this same
+function, so the one line guard covers both.
 
-**Deliberately not gated**, so the omission reads as a decision: the `trap` string at
-`developer.sh:76` (`rm -rf "${_ring}"`, its own gpg homedir), `~/software_downloads/*`
-download dirs, the five `rm -rf "${_tmp}"` in `_install_rustup_rs`, and
-`rm -rf "/tmp/python-build.*"` — all self-created scratch, recreated on the next run.
+**`sync_legacy_dirs` takes a function guard** because the whole function is the rsync push.
 
-`scripts/whats-new-anthropic.sh` and `scripts/whats-new-claude-code.sh` both call `git push`
-and are **out of scope because they are unreachable** from any `-t` workflow or LaunchAgent.
-Measured repo-wide over tracked files: excluding `docs/`, five files reference them and all
-five are tests or a mock comment; `LaunchAgents/cadence.plist.template` runs
-`scripts/cadence-notify.sh` only. Verified with positive controls in the same sweep
-(`cadence-notify` 8 referencing files, `run-bash-coverage` 26), because an unchecked zero is
-what this spec's own problem statement is made of. Those scripts already carry their own
-`--dry-run`.
+### The rule
+
+> Guard the function where its purpose **is** the egress. Guard the line where egress is one
+> branch of a function that does other useful work.
+
+Round 1 used a superficially similar rule to justify wrapping single lines inside
+delete-recreate pairs. That produced three regressions and is **not** what this says: no site
+in this scope has a recreate step following it.
+
+### Out of scope, with reasons
+
+These were in round 1's table and are removed, because none of them leaves the machine:
+
+`setup_ansible`, `recreate_python_venv`, `recreate_ruby`, `_install_go_from_tarball`,
+`setup_ai_config`, `ensure_state_ledger`, `setup_zsh_as_default_shell` (`chsh`), and
+`rbenv uninstall -f` (`developer.sh:429`, which round 1's "exact" table omitted anyway).
+
+Three of them were actively dangerous to gate, because gating the delete leaves the recreate
+running against undeleted state — measured by two lenses independently:
+
+- `_install_go_from_tarball`: gating `sudo rm -rf /usr/local/go` (`:89`) leaves
+  `sudo mv .../go /usr/local/go` (`:91`), and `mv` of a directory onto an existing directory
+  nests it, yielding `/usr/local/go/go`. A dry run would corrupt a live Go install that a real
+  run replaces cleanly.
+- `setup_ai_config`: gating `rm -rf "${_dir}"` (`:107`) leaves
+  `git clone … "${_dir}" || return 1` (`:109`), which fails into a non-empty directory and
+  aborts the whole preview through `run_setup_user`'s `|| return 1`.
+- `setup_ansible`: gating `pyenv virtualenv-delete -f ansible` (`:530`) leaves
+  `pyenv virtualenv` (`:531`) and `uv_sync_venv` (`:536`) live — and `CLAUDE.md:274` documents
+  `uv sync` as pruning and downgrading to a state "not reproducible from the lock".
+
+Also out of scope: `npm install -g` (`workflows.sh:279,282,285,288,456`) and `uv_sync_venv`.
+Both fetch from a registry, so both arguably meet a wider reading of the criterion. See Known
+limitations.
 
 ## Design
 
-### 1. The rule
+### 1. Guard shape
 
-> If the function's **purpose** is the destructive act, guard the function.
-> If destruction is **incidental** to otherwise-useful work, wrap the line.
+Function guards return **0**, early, after any logging. The zero is load-bearing: callers
+invoke these as `fn || return 1` or `|| true`, so a non-zero guard would report a preview as a
+failed run.
 
-Stated here because the design uses two mechanisms, and without the rule a reviewer will
-apply the wrong one.
+### 2. A guard must not be recorded as success
 
-**Function guards** — an early `return 0` at the top, after any logging. The zero is
-load-bearing: callers invoke these as `fn || return 1`, so a non-zero dry-run guard would
-report a preview as a failed run. Applies to `sync_legacy_dirs`, `recreate_python_venv`,
-`recreate_ruby`.
+Round 1's guards returned 0 into machinery that writes that 0 down. Two consequences, both
+measured:
 
-**Line wraps** via `run_cmd`: `setup_ai_config`, `ensure_state_ledger`,
-`_install_go_from_tarball`, `setup_ansible`. Each of these does substantial non-destructive
-work that a preview should still perform and report — `setup_ai_config` pulls when the repo
-is valid, `setup_ansible` builds the venv — so a function guard would make `--dry-run` show
-_less_ than it does today.
+- `sync_legacy_dirs` returning 0 reaches `_update_record_end "legacy-rsync" 0`
+  (`workflows.sh:606`), whose `*)` arm sets `_result="updated"` and writes `OK` — printing
+  `[OK] legacy-rsync  updated` for a section that synced nothing.
+- `recreate_python_venv` returning 0 means `run_recreate_venv`'s `|| return 1`
+  (`workflows.sh:303`) never fires, so `_ledger_write_run_entry "recreate_venv" 0` writes a
+  **false CMDB record** for a rebuild that did not happen.
 
-The function-guard shape mirrors existing in-repo prior art rather than inventing one:
-`scripts/whats-new-claude-code.sh:116` holds a local `_dry_run`, prints, and returns 0
-before ever reaching `commit_and_push`, which itself has no dry-run awareness.
+The second is fixed structurally by this scope: `ledger_write_entry` is itself guarded, so no
+ledger record is written under `--dry-run` at all.
 
-### 2. The `chsh` exception
+The first is fixed by rendering a SKIP. `_update_record_start` already has the precedent —
+its `legacy-rsync)` arm calls `_update_skip "legacy-rsync" "not studio"`
+(`update_summary.sh:152-153`). Under `DRY_RUN`, the `legacy-rsync` and `git-repos` arms call
+`_update_skip "<section>" "dry run"`.
 
-`helpers.sh:384` is line-level by the rule, but **`run_cmd` is the wrong tool there** and
-using it would reintroduce a bug the file was just fixed for.
+### 3. Every gated site announces itself
 
-The construct is:
+All three guards print `[DRY RUN] <what would have run>` on the same channel `run_cmd` uses,
+so a transcript can be grepped for what was prevented. Round 1's function guards printed
+nothing, which on the Studio meant silence where three `rsync --delete` would have been.
 
-```bash
-if ! sudo -n chsh -s "${ZSH_PATH}" "${USER}" 2>/dev/null && ! chsh -s "${ZSH_PATH}"; then
-  log_error "Could not change login shell to ${ZSH_PATH}"
-  return 1
-fi
-log_info "Changed default shell to ${ZSH_PATH}"
-```
+### 4. Standalone entry point
 
-Under `DRY_RUN`, `run_cmd` prints and returns 0, so `! 0` is false, the `&&` short-circuits,
-the error body is skipped, and control falls through to `log_info "Changed default shell"` —
-reporting a shell change that never happened. That is exactly the failure the comment at
-`helpers.sh:382` records as having just been fixed ("the previous version checked neither
-and then logged success unconditionally").
+`scripts/sync_git_repos.sh` dispatches both `sync_git_repos` (`:60`) and `sync_legacy_dirs`
+(`:63`), and both are now gated — so a `--dry-run` flag added to its own arg loop is honoured
+by everything the script does. Round 1 proposed this flag while gating only one of the two,
+which would have advertised a preview that still pushed.
 
-So this site gets an explicit `DRY_RUN` check immediately before the `if`, printing the
-intended command and returning 0 **without** the success log.
+### 5. A seam for the ledger binary
 
-Everything above it — resolving `ZSH_PATH`, reading the account's real login shell via
-`_current_login_shell`, the already-zsh early return, the not-executable error — is
-non-destructive and must still run, because it is exactly what a preview should show.
+`ledger_write_entry` resolves `command -v ledger`, falling back to `${HOME}/.local/bin/ledger`
+(`workflows.sh:946-948`). There is **no override**, and `tests/mocks/ledger` does not exist.
+Existing tests avoid the real binary by stubbing the _caller_ (`workflows.bats:358` redefines
+`_ledger_write_run_entry`) or by the machine-id early return (`update_summary.sh:394-395`).
+Neither can test this guard: stubbing the caller bypasses it.
 
-### 3. Standalone entry point
-
-`scripts/sync_git_repos.sh` sources `lib/helpers.sh` at its own line 72, so `run_cmd` is
-reachable there. But `--dry-run` is parsed only in `process_args` (`helpers.sh:811`, with the
-flag's own arm at `:818`), which is called only from `setup_env.sh:60` — so the standalone
-path has no `--dry-run` today and `DRY_RUN` is simply unset.
-
-Add `--dry-run` to that script's own arg loop, beside its existing `--git-only`,
-`--legacy-only` and `-h`. It is the entry point that fires `rsync --delete` at three hosts,
-`CLAUDE.md` already warns never to invoke it unmocked outside the bats harness, and its
-sibling `whats-new-*.sh` scripts already carry the same flag.
+Add `LEDGER_BIN` as the first candidate, matching the `UV_BIN` pattern already documented in
+`CLAUDE.md`. It grants nothing — a caller who can set it can already put a `ledger` on `PATH`.
 
 ## Testing
 
-Adopt the marker-file idiom already used by
-`tests/setup_env/git_hooks.bats:1269` — a fixture whose recipe `touch`es a marker, with the
-test asserting `[ ! -f marker ]`. That proves the command never executed, rather than
-asserting on output text, which a printed `[DRY RUN]` line would satisfy either way.
+**The marker-file idiom does not transfer, and round 1 was wrong to name it.**
+`git_hooks.bats:1269` works because the fixture owns a Makefile that writes the marker.
+`rsync`, `git push` and `ledger write` have no test-owned recipe. Interception is by PATH
+mock: `tests/mocks/rsync` and `tests/mocks/git` exist; `tests/mocks/ledger` must be added
+alongside the `LEDGER_BIN` seam.
 
-**Every marker-absence case is paired with a positive control** — the same fixture run
-_without_ `DRY_RUN`, asserting the marker **is** created. Without the pair, marker-absence
-passes vacuously when the fixture never ran at all, and the suite would then test the
-comparison and never the measurement feeding it.
+**Positive controls must be mocked, not live.** Each DRY_RUN case asserting "the mock was not
+called" is paired with a control asserting it **was** called — otherwise the absence passes
+vacuously when the fixture never ran. Round 1 mandated the pairing without saying what the
+control runs against; unmocked on the Studio it would fire real `rsync -ar --delete` at three
+hosts, since `hostname -s` is `studio` and `_is_legacy_sync_host` passes. Every control runs
+against the PATH mock with `HOME` redirected to `BATS_TEST_TMPDIR` at `setup()` scope. Note
+`tests/mocks/rm` passes through to `/bin/rm`, so an unredirected `HOME` really deletes.
 
-Established idiom for driving the flag, from the existing suite:
-`DRY_RUN=1 PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos`. `DRY_RUN` is an
-ordinary environment variable in test context — the `readonly` at `helpers.sh:818` fires only
-inside `process_args` when the flag is parsed, and `tests/setup_env/unit.bats:740-742`
-already does `export DRY_RUN=1` … `unset DRY_RUN`.
+Eight cases — three gated sites with a paired positive control each, plus two that pin
+behaviour a future change is likely to break:
 
-Cases: for each of the eight functions, a DRY_RUN case asserting the destructive command did
-not run, and its positive control. Plus one case pinning the `chsh` behaviour specifically —
-that under `DRY_RUN` the function returns 0 and does **not** emit
-`Changed default shell`, which is the assertion that would have caught the short-circuit
-bug described above.
+| case                                             | asserts                                                 |
+| ------------------------------------------------ | ------------------------------------------------------- |
+| `ledger_write_entry` under DRY_RUN               | `LEDGER_BIN` mock never invoked                         |
+| `ledger_write_entry` control                     | mock invoked, receives the JSON on stdin                |
+| `_git_sync_one_repo` ahead-branch under DRY_RUN  | git mock records no `push`                              |
+| `_git_sync_one_repo` ahead-branch control        | git mock records `push`                                 |
+| `sync_legacy_dirs` under DRY_RUN                 | rsync mock never invoked                                |
+| `sync_legacy_dirs` control                       | rsync mock invoked 3×                                   |
+| `_git_sync_one_repo` behind-branch under DRY_RUN | `pull --ff-only` **still runs** — the pull is not gated |
+| `run_update` section rendering under DRY_RUN     | `[SKIP] legacy-rsync  dry run`, never `[OK] … updated`  |
+
+The seventh is the one that fails if a future change over-widens the guard from the line to
+the function, which is the likeliest regression.
+
+`readonly DRY_RUN` does not threaten the controls. `readonly` inside a bash function is global
+and sticks (`unset` returns 1; reassignment dies with `readonly variable`), but bats isolates
+it per `@test` — verified with a two-case fixture where case 1 sets `readonly DRY_RUN=1` and
+case 2 unsets and reassigns: 2/2 ok, no leak.
 
 ## Verification
 
-Runnable today and currently **failing**, which is what makes it a gate rather than a
-prediction:
+Round 1's gate counted state-ledger commits under `-t update --dry-run`. It was
+**unsatisfiable** — the count moved via the ungated ledger write, so it would have failed
+after a perfect implementation — and running it performs a real update. Replaced.
+
+The cheap gate, which exercises two of the three guards with no package upgrades:
 
 ```bash
 before=$(git -C ~/.local/share/state-ledger rev-list --count HEAD)
-setup_env.sh -t update --dry-run
+scripts/sync_git_repos.sh --dry-run
 after=$(git -C ~/.local/share/state-ledger rev-list --count HEAD)
 [ "${before}" = "${after}" ]
 ```
 
-Plus: `rsync`, `pyenv virtualenv-delete` and `git push` appear in the output only on
-`[DRY RUN]` lines.
+Expect the run to print `[DRY RUN]` lines for the three rsync targets and for any repo that is
+ahead, and to leave the count unchanged. This is runnable today and currently fails, because
+the flag does not exist and the pushes are real.
 
-This must be run on a machine where the `-t update` path is exercised. It cannot be run as
-part of `make test`, because it performs a real update when the gate fails — which is the
-condition it is testing for. It is an operator check, run once after implementation.
+The third guard is covered by the suite rather than by an operator check, since exercising
+`ledger_write_entry` end-to-end requires a real ledger write.
 
 ## Documentation
 
-`CLAUDE.md:92` changes from "log mutating operations (symlinks, installs, mkdir) without
-executing" to a statement of what is actually guaranteed: **no irreversible operations** —
-nothing that leaves the machine and nothing that destroys state the remote cannot reproduce
-— while idempotent local work (`mkdir -p`, `git pull`) still runs so the preview is useful.
-The gated set is named.
+`CLAUDE.md:92` changes to state what is guaranteed — **no egress**: nothing leaves this
+machine. Package upgrades, venv rebuilds and local deletions still run, and the line says so,
+matching `README.md:207` rather than contradicting it.
 
 ## ADR
 
-Not warranted. This is a defect repair restoring a documented contract, not an architectural
-choice — the alternatives were weighed and recorded here, and no structural pattern changes.
+Not warranted. A defect repair restoring a documented contract; no structural pattern changes.
 
 ## Known limitations
 
-- **`--dry-run` remains a partial guarantee.** 224 mutating lines stay ungated by design.
-  A future destructive line added outside the ten gated sites is not covered, which is the
-  same mechanism that produced the current 5-of-234 state. The rule in §1 is the only thing
-  preventing recurrence, and it is prose, not a gate.
-- **Nothing detects drift.** No test asserts that the set of destructive verbs in the repo
-  is a subset of the gated set, so a new `rsync --delete` or `git push` elsewhere would be
-  silently ungated. A ratchet of that shape is possible — `scripts/check-lib-exit-traps.sh`
-  is an existing precedent for a scanner ratchet in this repo — and is deliberately left out
-  of this spec to keep it to one change. Recorded as a backlog candidate rather than
-  designed here.
-- The verification gate is an operator check, not a CI gate, for the reason given above.
+- **`--dry-run` is not a no-op and the docs must keep saying so.** Only egress is gated.
+- **Registry fetches are unresolved, deliberately.** `npm install -g` (5 sites) and
+  `uv_sync_venv` fetch from a registry and mutate global state. `uv sync` in particular is
+  documented at `CLAUDE.md:274` as producing a state "not reproducible from the lock" — which
+  meets the _second_ clause of a wider criterion ("destroys state the remote cannot
+  reproduce") even though it is not egress in the sense used here. Deciding that is a separate
+  question with its own blast radius; it goes to the backlog with these measurements rather
+  than being settled inside a defect repair.
+- **Delete-recreate pairs stay ungated.** Gating them requires guarding whole functions, which
+  changes what a preview reports. Backlog.
+- **Nothing detects drift.** No test asserts that the set of egress points is a subset of the
+  gated set, so a new `git push` elsewhere is silently ungated — the same mechanism that
+  produced this defect. `scripts/check-lib-exit-traps.sh` is an in-repo precedent for a scanner
+  ratchet. Backlog, deliberately out of this change.
+
+---
 
 ## Multi-Lens Review
 
-Reviewed at commit: `20a83d77` (Step 7 self-review commit, before Step 8 dispatch)
+Reviewed at commit: `20a83d77` (round 1 — the ten-site verb-derived design, now superseded)
 
 All three lenses returned blocking findings and converged on the same root cause: the scope
-table was populated by a **destructive-verb classifier** while §1's rule is a **purpose**
-test. Egress hides behind a binary invocation (`| "${_ledger_bin}" write`), a function named
-"sync", and `npm install -g` — none of which contain a destructive verb. Every finding below
-was independently re-verified against the code by the session before being recorded here.
+table was populated by a **destructive-verb classifier** while the design's rule is a
+**purpose** test. Every finding below was independently re-verified against the code by the
+session before being recorded.
 
 ### Goal-Fit
 
-Finding: **The ten gated sites do not include the operation the spec measured.** The push
-that produced `6311ec1` runs `run_setup_user` (`workflows.sh:227`) →
-`_ledger_write_run_entry` (`update_summary.sh:389`) → `ledger_write_entry`
-(`workflows.sh:943`) → `| "${_ledger_bin}" write` → `ledger.py:486` `_git_commit_and_push` →
-`git commit` (`:334`), `git pull --rebase` (`:342`), `git push` (`:344`), all `check=True`
-and unconditional. A second uncovered egress is `git_sync.sh:71`
-(`git -C "${_path}" push --quiet`), which has `DRY_RUN` and `run_cmd` counts of 0. The
-session's own egress sweep found a third class: five `npm install -g` calls
-(`workflows.sh:279,282,285,288,456`). So the design closes **0%** of the measured harm.
-Worse, three of the four line-wrap sites are **delete-recreate pairs** where gating only the
-delete leaves the recreate running against undeleted state: `_install_go_from_tarball`
-(`sudo mv` nests into `/usr/local/go/go`, corrupting a live install that today's ungated path
-replaces cleanly), `setup_ai_config` (`git clone` into a still-present dir fails, and
-`|| return 1` aborts the whole preview), and `setup_ansible` (ungated `pyenv virtualenv` +
-`uv_sync_venv`, the one mutation `CLAUDE.md:274` documents as not reproducible from the
-lock). The Verification gate is therefore unsatisfiable: it counts state-ledger commits moved
-by ungated writes, so it fails after a perfect implementation of all ten sites.
-Assumption: that the new suite can drive `DRY_RUN` without routing through `process_args`,
-since `readonly` inside a bash function is global and would make every later positive control
-run in dry-run mode and pass vacuously. **Checked and refuted** — bash does behave that way
-(`unset` rc=1, reassignment dies `readonly variable`), but bats isolates it per `@test`: a
-two-case fixture where case 1 sets `readonly DRY_RUN=1` and case 2 unsets and reassigns
-returns 2/2 ok with no leak. The positive-control pairing is safe as designed.
-Disposition:
+Finding: **The ten gated sites did not include the operation the spec measured.** The push
+came via `run_setup_user` → `_ledger_write_run_entry` → `ledger_write_entry` →
+`ledger.py:486` `_git_commit_and_push` → `git push` (`:344`), all unconditional. A second
+uncovered egress was `git_sync.sh:71` (`DRY_RUN` and `run_cmd` counts both 0 in that file),
+and the session's own egress sweep found a third class, five `npm install -g` calls. The
+design closed **0%** of the measured harm. Three of four line-wrap sites were
+delete-recreate pairs where gating only the delete left the recreate running against
+undeleted state — `/usr/local/go/go` nesting, an aborted preview, and a live `uv sync`. The
+verification gate was unsatisfiable, counting commits moved by ungated writes.
+Assumption: that the suite could drive `DRY_RUN` without routing through `process_args`,
+since `readonly` inside a bash function is global. **Checked and refuted** — bash does behave
+that way, but bats isolates it per `@test` (2/2 ok, no leak). The pairing is safe.
+Disposition: **Addressed.** Scope re-derived from egress rather than from the verb
+classifier; `ledger_write_entry` and `git_sync.sh:71` are now the first two gated sites. All
+four line-wrap sites removed, eliminating every delete-recreate regression. Verification gate
+replaced with a `sync_git_repos.sh --dry-run` check that exercises two guards without a real
+update. The refuted assumption is recorded in Testing so it is not re-litigated.
 
 ### Ergonomics
 
-Finding: **The guard's `return 0` is durable and remote, not merely returned.** A guarded
-`sync_legacy_dirs` reaches `_update_record_end "legacy-rsync" 0`, whose `*)` arm sets
-`_result="updated"` and writes `OK` — so `-t update --dry-run` prints
-`[OK] legacy-rsync  updated` for a section that synced nothing. `_update_skip` already exists
-as the correct primitive and the spec never mentions it. Worse, `run_recreate_venv`
-(`workflows.sh:300-305`) calls `recreate_python_venv || return 1` and then
-`_ledger_write_run_entry "recreate_venv" 0`: a guard returning 0 means `|| return 1` never
-fires, so the design **writes a false CMDB record** asserting a venv recreate that never
-happened. Same shape at `:227`, `:253`, `:297`, `:310`. Separately, the operator cannot tell
-from the output what was gated — `run_cmd` sites print `[DRY RUN]`, function guards print
-nothing, and the `chsh` site deliberately suppresses its log, so a guarded `sync_legacy_dirs`
-on the Studio is silent where three `rsync --delete` would have been.
-Assumption: that the ten-site table is the complete set of irreversible operations reachable
-from a `-t` workflow, when the instrument behind it is a verb matcher and "leaves the
-machine" is not a verb. **Checked and confirmed false** by the session's egress sweep, which
-found the ledger write, `git_sync.sh:71`, and five `npm install -g` sites.
-Disposition:
+Finding: **The guard's `return 0` was durable and remote, not merely returned.** A guarded
+`sync_legacy_dirs` reached `_update_record_end … 0`, printing `[OK] legacy-rsync  updated`
+for a section that synced nothing, with `_update_skip` already available and unused. Worse,
+`run_recreate_venv` would have written a **false CMDB record** asserting a venv recreate that
+never happened. Separately, an operator could not tell from the output what was gated —
+function guards printed nothing.
+Assumption: that the ten-site table was the complete set of irreversible operations reachable
+from a `-t` workflow, when the instrument was a verb matcher and "leaves the machine" is not
+a verb. **Checked and confirmed false** by the session's egress sweep.
+Disposition: **Addressed.** §2 requires SKIP rendering via the existing
+`_update_record_start` precedent; the false-record class is removed structurally, because
+`ledger_write_entry` is itself gated so no record is written under `--dry-run`. §3 requires
+every gated site to print `[DRY RUN]`, ending the silent-guard case.
 
 ### Risk
 
-Finding: **The rejected alternative is already half-shipped, which invalidates the Decision
-section's cost comparison.** `README.md:207` already reads "Honoured by symlinking
-(`lib/helpers.sh`) and the git-hooks sweep only — `run_update` contains no `run_cmd` call
-sites, so `-t update --dry-run` still performs real package upgrades, `git push`, and
-`rsync --delete`. Do not rely on it to preview an update." Only `CLAUDE.md:92` is stale, so
-"narrow the promise" is one line of remaining work rather than a fresh decision. Two further
-factual errors: the spec's "nothing widened it since" is false — `5142258c` (#189) widened
-`run_cmd` into `git_hooks.sh` and that widening **did** carry `DRY_RUN` awareness (four
-references), so the evidence cuts against the spec's own prose-rule argument; and the table
-called "exact" omits `rbenv uninstall -f "${RUBY_VER}"` (`developer.sh:429`). Also:
-`DRY_RUN=0`, `DRY_RUN=false` and `DRY_RUN=no` all take the dry-run branch (only empty/unset
-executes), so after this change an accidental export silently converts `-t update` into a
-no-op for three rsync targets instead of costing seven printed lines. And the borrowed
-marker-file idiom does not transfer: `git_hooks.bats:1269` works because the fixture owns a
-Makefile that writes the marker; `rsync`, `chsh`, `pyenv virtualenv-delete` and `rm -rf` have
-no test-owned recipe, so interception must be PATH mocks — and the mandated positive controls,
-run unmocked on the Studio, would fire real `rsync -ar --delete` at three hosts and a real
-`chsh`.
-Assumption: that the criterion "destroys state the remote cannot reproduce" excludes
-package-manager state. `CLAUDE.md:274` argues the opposite for `uv sync` — pre-sync state is
-not reproducible from the lock and `uv pip install -r` of the freeze "fails as
-unsatisfiable" — which would put `uv_sync_venv` in the table and leave `-t update --dry-run`
-unsafe regardless. Genuinely open; the operator decides whether a package-manager mutation
-meets the criterion.
-Disposition:
+Finding: **The rejected alternative was already half-shipped.** `README.md:207` already
+narrows the promise; only `CLAUDE.md:92` is stale, so "narrow the docs" was one line of
+remaining work rather than a fresh decision, which invalidated the Decision section's cost
+comparison. Two further factual errors: "nothing widened it since" is false — `5142258c`
+(#189) widened `run_cmd` into `git_hooks.sh` **with** `DRY_RUN` awareness, so the evidence cut
+against the spec's own argument — and the table called "exact" omitted `rbenv uninstall -f`
+(`developer.sh:429`). Also: `DRY_RUN=0`, `false` and `no` all take the dry-run branch, so an
+accidental export would silently no-op three rsync targets. And the marker-file idiom does not
+transfer, while the mandated positive controls run unmocked would fire real `rsync --delete`
+and `chsh`.
+Assumption: that "destroys state the remote cannot reproduce" excludes package-manager state,
+when `CLAUDE.md:274` argues the opposite for `uv sync`. Genuinely open.
+Disposition: **Addressed**, with the assumption deferred rather than resolved. README
+correction and both factual errors are fixed in the body above. Testing now specifies PATH
+mocks with `HOME` redirected at `setup()` scope. The package-manager question is recorded as
+the first Known limitation and goes to the backlog with its measurements — this spec is a
+defect repair and settling that boundary belongs in its own change.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
-N/A — spec has no comparison, evaluator, or ambiguous-criteria trigger; acceptance is a
-concrete command with a measurable result.
+N/A — no comparison, evaluator, or ambiguous-criteria trigger; acceptance is a concrete
+command with a measurable result.
