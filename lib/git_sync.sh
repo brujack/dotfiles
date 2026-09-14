@@ -68,6 +68,10 @@ _git_sync_one_repo() {
         return 1
       fi
       if [[ ${_ahead} -gt 0 ]]; then
+        if _dry_run_active; then
+          printf "[DRY RUN] git -C %s push --quiet\n" "${_path}"
+          return 0
+        fi
         if GIT_SSH_COMMAND="$(_git_ssh_opts)" git -C "${_path}" push --quiet; then
           return 0
         fi
