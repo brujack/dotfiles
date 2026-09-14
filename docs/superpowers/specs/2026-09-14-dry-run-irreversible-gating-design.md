@@ -6,7 +6,8 @@ because the round-1 commits, the All Plans index row and the Step 8 review all r
 the title states the current scope.
 
 **Date:** 2026-09-14
-**Status:** Design — revised after Step 8 round 1, pending re-review
+**Status:** Design — revised after Step 8 round 2; operator dispositioned all findings
+Addressed and ruled to stop review here, so the next step is `writing-plans`
 
 > **Round 2 rewrite.** Round 1 proposed gating ten sites selected by a destructive-verb
 > classifier. All three lenses blocked it: the ten sites closed **none** of the harm the
@@ -89,8 +90,25 @@ symlinking (`lib/helpers.sh`) and the git-hooks sweep only** — `run_update` co
 is stale. So that alternative is one line of remaining work, not a fresh decision — and this
 spec does that line too, regardless.
 
-What it does not do: make `--dry-run` a no-op. Package upgrades, venv rebuilds and local
-deletions still run. The documentation says so.
+**That fact inverts the comparison, and correcting it is not the same as re-running it.** An
+earlier draft fixed the README claim and left the arithmetic built on the old cost. Re-run
+properly, the choice is: **one line** (correct `CLAUDE.md:92`, ship nothing) against **three
+guards plus a seam, a mock, a truthiness fix and eight cases**. The cheap option is not
+merely cheaper — it is already 90% delivered.
+
+The case for building anyway is that the two options are not substitutes. Documenting the
+flag as unsafe leaves `-t update` and `-t developer` unrunnable without accepting live
+`rsync --delete` to three hosts and a push per repo — which is how this session ended up
+unable to answer a direct question about whether those workflows work, and had to refuse to
+run them. The guards buy back a preview of exactly the two workflows that most need one. If
+that is not worth three guards, the honest outcome is to ship the one-line doc fix and
+backlog the rest — and this spec should be retired rather than narrowed a third time.
+
+What it does not do: make `--dry-run` a no-op. Package upgrades, venv rebuilds, `git fetch`
+and `pull --ff-only` on every personal repo, five `npm install -g` and `uv sync` all still
+run. The documentation enumerates them rather than gesturing at "local work", following
+`README.md:207`'s model — and `CLAUDE.md:86` ("Also writes a state-ledger entry") needs the
+same edit, since under `--dry-run` it will no longer be true.
 
 ## Scope
 
@@ -100,12 +118,25 @@ deletions still run. The documentation says so.
 | `_git_sync_one_repo` (`git_sync.sh:71`)   | `git -C "${_path}" push --quiet`            | line     |
 | `sync_legacy_dirs` (`legacy_rsync.sh:8`)  | 3 × `rsync -ar --delete` to remote hosts    | function |
 
-**`ledger_write_entry` is the sole chokepoint for every ledger write.** All six
+**`ledger_write_entry` is the sole chokepoint for ledger EGRESS.** All six
 `_ledger_write_run_entry` call sites (`workflows.sh:227,253,297,304,310` and
 `update_summary.sh:598` via `_ledger_write_dotfiles_entry`) funnel through
 `update_summary.sh:521/523` into it. One guard covers all of them, including the
-`_update_summary` write that fires at the end of every `run_update`. Every caller invokes it
-as `|| true`, so returning 0 is safe and misleads nothing.
+`_update_summary` write that fires at the end of every `run_update`.
+
+Two precision corrections, both measured, because earlier drafts overstated this:
+
+- **"every ledger write" is too wide; "egress" is what is true.** `ensure_state_ledger` runs
+  `ledger.py init` (`workflows.sh:937`) and `run_update` runs `scan_skills.py --write-ledger`
+  (`:415`) outside this function. Neither pushes — `cmd_init` spans `ledger.py:372-436` and
+  contains no path to `_git_commit_and_push` or `_flush_spool_internal`, and
+  `scan_skills.py` writes `~/.claude/plugin-verdicts.json`, a local file. So the design is
+  unaffected and no fourth guard is needed, but the sentence had to narrow.
+- **"Every caller invokes it as `|| true`" is false for the two direct callers.**
+  `update_summary.sh:521` and `:523` are bare. The conclusion survives — both sit inside
+  `_ledger_write_run_entry`, whose five callers do use `|| true`, and
+  `_ledger_write_dotfiles_entry` is called `|| true` at `:598` — so returning 0 is still
+  safe. The evidence was wrong, not the claim.
 
 **`git_sync.sh:71` takes a line guard, not a function guard, and the distinction is the
 rule.** `_git_sync_one_repo` has exactly two mutations: the push at `:71` and
@@ -175,10 +206,24 @@ measured:
 The second is fixed structurally by this scope: `ledger_write_entry` is itself guarded, so no
 ledger record is written under `--dry-run` at all.
 
-The first is fixed by rendering a SKIP. `_update_record_start` already has the precedent —
-its `legacy-rsync)` arm calls `_update_skip "legacy-rsync" "not studio"`
-(`update_summary.sh:152-153`). Under `DRY_RUN`, the `legacy-rsync` and `git-repos` arms call
-`_update_skip "<section>" "dry run"`.
+The first is fixed by rendering a SKIP — **for `legacy-rsync` only**.
+`_update_record_start` already has the precedent: its `legacy-rsync)` arm calls
+`_update_skip "legacy-rsync" "not studio"` (`update_summary.sh:152-153`). Under `DRY_RUN`
+that arm calls `_update_skip "legacy-rsync" "dry run"` instead.
+
+**`git-repos` deliberately does NOT get a SKIP, and the reason is the guard's granularity.**
+That section is line-gated: `_git_repo_status` still runs `git fetch` against every repo
+(`git_sync.sh:22`) and `pull --ff-only` still runs on every repo that is behind (`:82`).
+Printing `[SKIP] git-repos  dry run` would deny that working trees moved, in the only durable
+record of the run — replacing round 1's false `[OK]` with an equally false `[SKIP]`. A
+section whose guard covers one line of several cannot be rendered as wholly skipped.
+`_update_record_start` has fourteen arms and no `git-repos` arm at all, so there is nothing
+to add there.
+
+Two consequences follow and are accepted. `git-repos` renders `[OK]` with its ordinary
+result, which is truthful — the fetches and pulls really happened, only the pushes were
+suppressed. And a diverged repo still returns rc 2, so `_update_warn` overwrites status
+unconditionally; that is pre-existing behaviour and this change does not alter it.
 
 ### 3. Every gated site announces itself
 
@@ -203,6 +248,37 @@ Neither can test this guard: stubbing the caller bypasses it.
 
 Add `LEDGER_BIN` as the first candidate, matching the `UV_BIN` pattern already documented in
 `CLAUDE.md`. It grants nothing — a caller who can set it can already put a `ledger` on `PATH`.
+Unprefixed rather than `_OVERRIDE_*` is deliberate: `UV_BIN` and `GGSHIELD_BIN` are the
+precedent for an operator escape hatch that doubles as a test seam, and this is that shape.
+
+**The seam is load-bearing, not a convenience, and the reason is the resolution order.**
+`command -v ledger` is checked _before_ the `${HOME}`-relative fallback, so redirecting `HOME`
+in a test does not intercept the binary on any machine where `ledger` is on `PATH` — which is
+the Linux boxes. Without `LEDGER_BIN` plus `tests/mocks/ledger`, the guard's test would hit
+the real ledger. Add a row for it to `CLAUDE.md`'s Test Seams table in the same change; every
+sibling seam is documented there and a Definition of Done item covers it.
+
+### 6. `DRY_RUN` must mean what it looks like
+
+`helpers.sh:16` is `[[ -n ${DRY_RUN:-} ]]`, so `DRY_RUN=0`, `DRY_RUN=false` and `DRY_RUN=no`
+all take the dry-run branch — only unset or empty executes. `process_args` compounds it:
+`[[ -n "${DRY_RUN+x}" ]] || readonly DRY_RUN=1` (`helpers.sh:818`) _preserves_ an inherited
+value rather than overwriting it.
+
+Today that costs a few printed symlink lines. After this change a stray `DRY_RUN=0` in the
+environment silently suppresses every push, every `rsync --delete` and every ledger write on a
+run nobody asked to be a preview — and it reports success, because `ledger_write_entry`'s two
+direct callers are bare and `_ledger_write_run_entry` is invoked `|| true`. The thing that
+notices is `ledger drift`, a week later, blaming the machine.
+
+So `run_cmd` and the guards test a normalised value: unset, empty, `0`, `false` and `no` all
+mean off; anything else means on. One helper, `_dry_run_active`, used by `run_cmd` and all
+three guards so the four sites cannot drift apart.
+
+**This was raised by round 1's Risk lens, marked "Addressed", and not done** — the disposition
+listed the README fix and the PATH mocks and silently omitted this. It is recorded here
+because a false disposition in a review record is worse than an open finding: the record is
+what a later reader trusts once the code is forgotten.
 
 ## Testing
 
@@ -212,27 +288,60 @@ Add `LEDGER_BIN` as the first candidate, matching the `UV_BIN` pattern already d
 mock: `tests/mocks/rsync` and `tests/mocks/git` exist; `tests/mocks/ledger` must be added
 alongside the `LEDGER_BIN` seam.
 
-**Positive controls must be mocked, not live.** Each DRY_RUN case asserting "the mock was not
-called" is paired with a control asserting it **was** called — otherwise the absence passes
-vacuously when the fixture never ran. Round 1 mandated the pairing without saying what the
-control runs against; unmocked on the Studio it would fire real `rsync -ar --delete` at three
-hosts, since `hostname -s` is `studio` and `_is_legacy_sync_host` passes. Every control runs
-against the PATH mock with `HOME` redirected to `BATS_TEST_TMPDIR` at `setup()` scope. Note
-`tests/mocks/rm` passes through to `/bin/rm`, so an unredirected `HOME` really deletes.
+**The safety mechanism is `load_mocks` plus a source override — NOT `HOME`.** An earlier draft
+said every control runs "with `HOME` redirected to `BATS_TEST_TMPDIR`", which names the wrong
+thing. `HOME` feeds only the rsync _source_ (`legacy_rsync.sh:15`); the three destinations are
+hardcoded `bruce@workstation:`, `bruce@laptop-1:` and `bruce@ratna:`. An empty `HOME` with a
+real `rsync` reachable is **worse** than none — `rsync -ar --delete <empty>/ bruce@ratna:…`
+empties the target. What actually protects the existing suite is `load_mocks` plus
+`_OVERRIDE_GIT_REPOS_SRC` plus `MOCK_HOSTNAME_OUTPUT` (`legacy_rsync.bats:6,11,16`), and that
+is what these cases use.
+
+**Every absence case asserts the announcement, not only the absence.** A case that asserts
+"the mock was not called" passes when the fixture never reached the guard at all. §3 mandates
+a `[DRY RUN] <command>` line, so each absence case additionally asserts that line is present
+— a positive claim about a derived value, which an unreached guard cannot satisfy. That is
+also what gives §3 test coverage; without it the entire remedy for round 1's
+"operator cannot tell what was gated" ships untested.
+
+**A rule this repo does not yet have, introduced here rather than cited.** A test whose safety
+depends on a mock being resolved must verify the mock is live before the dangerous call.
+Measured: there is no such precedent — `refute_grep` asserts absence, and `load_mocks` only
+prepends `tests/mocks` to `PATH` without checking anything resolves. It matters most for the
+ledger, per §5's resolution order.
+
+**`tests/setup_env/git_sync.bats` cannot simply take `load_mocks`.** That file deliberately
+uses none: its `setup()` builds a real bare origin with real `git init`, `clone`, `commit` and
+`push`. Adding the git mock would shadow the git the fixture is made of and collapse the file
+— the PATH-mock-shadowing pitfall `shell.md` documents. Cases 3, 4 and 7 therefore intercept
+by asserting on the real fixture's refs (did `origin` move?) rather than on a git mock.
 
 Eight cases — three gated sites with a paired positive control each, plus two that pin
 behaviour a future change is likely to break:
 
-| case                                             | asserts                                                 |
-| ------------------------------------------------ | ------------------------------------------------------- |
-| `ledger_write_entry` under DRY_RUN               | `LEDGER_BIN` mock never invoked                         |
-| `ledger_write_entry` control                     | mock invoked, receives the JSON on stdin                |
-| `_git_sync_one_repo` ahead-branch under DRY_RUN  | git mock records no `push`                              |
-| `_git_sync_one_repo` ahead-branch control        | git mock records `push`                                 |
-| `sync_legacy_dirs` under DRY_RUN                 | rsync mock never invoked                                |
-| `sync_legacy_dirs` control                       | rsync mock invoked 3×                                   |
-| `_git_sync_one_repo` behind-branch under DRY_RUN | `pull --ff-only` **still runs** — the pull is not gated |
-| `run_update` section rendering under DRY_RUN     | `[SKIP] legacy-rsync  dry run`, never `[OK] … updated`  |
+| case                                             | asserts                                                                               |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| `ledger_write_entry` under DRY_RUN               | `LEDGER_BIN` mock never invoked, **and** `[DRY RUN]` names the suppressed write       |
+| `ledger_write_entry` control                     | mock invoked, receives the JSON on stdin                                              |
+| `_git_sync_one_repo` ahead-branch under DRY_RUN  | fixture `origin` ref unmoved, **and** `[DRY RUN]` names the push                      |
+| `_git_sync_one_repo` ahead-branch control        | fixture `origin` ref advances                                                         |
+| `sync_legacy_dirs` under DRY_RUN                 | `MOCK_HOSTNAME_OUTPUT=studio`, rsync mock never invoked, **and** `[DRY RUN]` names it |
+| `sync_legacy_dirs` control                       | `MOCK_HOSTNAME_OUTPUT=studio`, rsync mock invoked 3×                                  |
+| `_git_sync_one_repo` behind-branch under DRY_RUN | `pull --ff-only` **still runs** — the pull is not gated                               |
+| `_update_record_start` under DRY_RUN             | `legacy-rsync` reason is `dry run`; **no** `git-repos` SKIP is written                |
+
+**Case 5 must force `MOCK_HOSTNAME_OUTPUT=studio` and an earlier draft named that only for the
+control.** `sync_legacy_dirs` returns at `legacy_rsync.sh:9-12` when `_is_legacy_sync_host` is
+false, and `hostname -s` is not `studio` on `ubuntu-latest` or on two of the three dev
+machines — so without the knob the rsync mock goes uncalled because of the host gate, not the
+guard, and the case passes against zero implementation. Subject and control must differ only
+in `DRY_RUN`.
+
+**Case 8 asserts the reason, and must not collide with the existing skip.**
+`_update_record_start` already writes `_update_skip "legacy-rsync" "not studio"` on a
+non-studio host (`update_summary.sh:152-153`), so the case sets `MOCK_HOSTNAME_OUTPUT=studio`
+and asserts the reason is `dry run`. Its second half — that no `git-repos` SKIP is written —
+is what pins §2's granularity decision.
 
 The seventh is the one that fails if a future change over-widens the guard from the line to
 the function, which is the likeliest regression.
@@ -244,24 +353,37 @@ case 2 unsets and reassigns: 2/2 ok, no leak.
 
 ## Verification
 
-Round 1's gate counted state-ledger commits under `-t update --dry-run`. It was
-**unsatisfiable** — the count moved via the ungated ledger write, so it would have failed
-after a perfect implementation — and running it performs a real update. Replaced.
+**Two gates have now been written for this spec and both were invariant to the fix.** Round
+1's counted state-ledger commits and could only fail, because the count moved via the ungated
+ledger write. Round 2's counted the same thing around `sync_git_repos.sh --dry-run` and could
+only pass, because `--dry-run` falls to that script's `*)` arm (`Unrecognized option`,
+`return 1`), nothing runs, and `before == after`. It also fails in the other direction once
+implemented, because the deliberately ungated `pull --ff-only` moves `rev-list --count HEAD`
+on a repo written from three machines, where _behind_ is the normal state.
 
-The cheap gate, which exercises two of the three guards with no package upgrades:
+The fault in both was the oracle, not the command: `rev-list --count HEAD` is a statement
+about the **local** repository, and "nothing left this machine" is a statement about the
+**remote**. A push moves the remote ref; a pull cannot.
 
 ```bash
-before=$(git -C ~/.local/share/state-ledger rev-list --count HEAD)
+before=$(git ls-remote ~/.local/share/state-ledger-origin 2>/dev/null || \
+         git -C ~/.local/share/state-ledger ls-remote origin main | awk '{print $1}')
 scripts/sync_git_repos.sh --dry-run
-after=$(git -C ~/.local/share/state-ledger rev-list --count HEAD)
+after=$(git -C ~/.local/share/state-ledger ls-remote origin main | awk '{print $1}')
 [ "${before}" = "${after}" ]
 ```
 
-Expect the run to print `[DRY RUN]` lines for the three rsync targets and for any repo that is
-ahead, and to leave the count unchanged. This is runnable today and currently fails, because
-the flag does not exist and the pushes are real.
+Expect `[DRY RUN]` lines for the three rsync targets and for any repo that is ahead, and the
+`origin/main` SHA unchanged.
 
-The third guard is covered by the suite rather than by an operator check, since exercising
+**This is NOT runnable today, and saying so is the correction.** Both earlier rounds claimed
+"runnable today and currently fails"; both claims were false, and the second was false in the
+flattering direction. `scripts/sync_git_repos.sh` does not parse `--dry-run` at all yet —
+`tests/scripts/unit.bats:356` already pins that it rejects unknown flags without running
+either leg — so the gate becomes meaningful only once §4 ships. Before that, the
+pre-implementation evidence is the measured harm in the Problem section, not this command.
+
+The ledger guard is covered by the suite rather than by this check, since exercising
 `ledger_write_entry` end-to-end requires a real ledger write.
 
 ## Documentation
@@ -396,7 +518,14 @@ state-ledger's contract is an append-only record with a spool path so writes are
 silently dropped — so the right shape may be an entry carrying `dry_run: true` rather than
 suppression, which would make the largest guard in the table the wrong mechanism. Genuinely
 open; operator question.
-Disposition:
+Disposition: **Addressed.** The assumption was put to the operator rather than argued by the
+author, and the ruling is that **a dry run gets no CMDB entry at all** — so the guard stays
+and the "no egress" headline holds. The `dry_run: true` alternative was considered and
+rejected: it would keep the state-ledger push alive under `--dry-run`, which is the exact
+egress the Problem section measured, in exchange for a record of a run that deliberately did
+less than it reports. Recorded here so it is not reopened. The gate and absence-case defects
+in this finding are fixed in the body: the verification oracle now measures the remote, and
+cases 1/3/5 assert the `[DRY RUN]` line rather than an absence alone.
 
 ### Ergonomics
 
@@ -416,7 +545,14 @@ Assumption: that `scan_skills.py --write-ledger` (`workflows.sh:415`) is a secon
 writer reachable under `--dry-run`. **Checked and refuted** — its `LEDGER_PATH` is
 `~/.claude/plugin-verdicts.json` and `_save_ledger` writes JSON to disk. Different artifact,
 no git, no egress.
-Disposition:
+Disposition: **Addressed.** The `git-repos` SKIP is removed entirely — that section is
+line-gated, its `git fetch` and `pull --ff-only` really run, and printing SKIP over them
+would deny real work in the only durable record of the run. SKIP is kept for `legacy-rsync`
+alone, where the whole function is gated, so the rendering now follows the guard's
+granularity. The claim that `_update_record_start` has a `git-repos` arm is deleted; it has
+fourteen arms and `legacy-rsync` is the only sync one. Case 8 is rewritten to assert the
+`legacy-rsync` reason without colliding with the pre-existing `"not studio"` skip, and cases
+1/3/5 now assert the `[DRY RUN]` announcement so §3 ships tested.
 
 ### Risk
 
@@ -443,7 +579,14 @@ sites are `:486` (`cmd_write`), `:668` (`_flush_spool_internal`), `:791` (`cmd_p
 `:850`, and the flush's callers are `:467`, `:831`, `:948` and `:1010` — none in `cmd_init`.
 The two `check=True` git calls in that range are `pull --ff-only` and `clone`, both inbound.
 No fourth egress row is needed.
-Disposition:
+Disposition: **Addressed.** The verification gate is replaced with a remote-side oracle —
+`git ls-remote origin main` before and after — which a push moves and a pull cannot, and it
+is now labelled honestly as **not runnable until the flag exists**, since both prior rounds
+claimed "runnable today and currently fails" and both claims were false. `DRY_RUN`
+truthiness is fixed in the body rather than dispositioned away a second time. The
+`git_sync.bats` harness constraint is stated: that file deliberately uses no `load_mocks` and
+builds a real bare origin, so cases 3/4 must intercept without shadowing the git the fixture
+is made of. The refuted assumption is recorded above so no fourth guard is added.
 
 ### Session-verified corrections to the spec body
 
