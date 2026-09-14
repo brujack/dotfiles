@@ -20,8 +20,10 @@
 - Every absence assertion is paired with a positive control, and additionally asserts the `[DRY RUN]` line — an absence alone passes when the guard was never reached.
 - **What "the gate was proven" means differs by gate shape — read the task body, do not assume.** Measured at pre-flight:
   - **Behavioural proofs (Tasks 1–4).** The defect itself was reproduced on the base tree: `DRY_RUN=0` suppresses execution, a guarded push still moves a fixture `origin` ref, the rsync mock is invoked 3×, the ledger mock is invoked 1×. That is what guarantees the RED test fails for the right reason.
-  - **Whole-file bats gates (Tasks 3–6) pass on the base tree by construction** — `git_sync.bats` 24 tests, `legacy_rsync.bats` 6, `update_summary.bats` 101, `scripts/unit.bats` 146, all exit 0. Inherent to TDD: the new test does not exist yet. The gate becomes discriminating the moment the RED test is written, and a whole-file run necessarily includes it. **Verify RED directly before implementing**; never read the green base run as evidence.
-  - **Filtered gates (Tasks 1–2) must match zero tests on base**, and both do: `-f "dry_run_active"` and `-f "dry-run"` each exit 1 with `ERROR: Found no tests`. A filter matching a pre-existing passing test is vacuous — Task 2's original `-f "ledger"` was exactly that, exiting 0 on base against one pre-existing test, and was corrected at pre-flight.
+  - **Every task from 2 to 6 declares TWO bats arms, and they have opposite base-tree behaviour on purpose.** Read the pair, not either half.
+    - The **discriminating arm** is `-f "dry-run"` (Task 1: `-f "dry_run_active"`). It must match **zero** tests on base, and every one does — exit 1 with `ERROR: Found no tests`, measured per file at pre-flight. This arm is what forces the task's tests to _exist_: a whole-file run exits 0 for a subagent that wrote no test at all, and this arm does not. A filter matching a pre-existing passing test is vacuous — Task 2's original `-f "ledger"` was exactly that, exiting 0 on base against one pre-existing test, and was corrected at pre-flight. **This is why every task body mandates that new test names carry the literal `dry-run`.**
+    - The **regression arm** is the unfiltered whole-file run, and it **passes on the base tree by construction** — `workflows.bats` 216 tests, `git_sync.bats` 24, `legacy_rsync.bats` 6, `update_summary.bats` 101, `scripts/unit.bats` 146, all exit 0. Inherent to TDD: the new test does not exist yet. That green is also the positive control proving the filter mechanism works, so the discriminating arm's zero is a real absence rather than a broken filter. It becomes discriminating the moment the RED test is written, since a whole-file run necessarily includes it. **Verify RED directly before implementing**; never read the green base run as evidence of anything but the population.
+  - **Task 1 carries a third gate, `-f "run_cmd"`, which exits 0 on base against 3 pre-existing tests. That is deliberate.** It is a regression arm in filtered clothing: Task 1's body requires `unit.bats:744`'s existing `[[ "$output" == "[DRY RUN]"* ]]` prefix assertion keep working, and those 3 tests are what pin it. It is also the **only** gate covering the second half of the deliverable — confirmed by mutation at review: reverting `run_cmd` to `[[ -n ${DRY_RUN:-} ]]` while keeping the helper leaves `-f "dry_run_active"` fully green and turns `-f "run_cmd"` red. Do not "correct" it to a zero-match filter; it would stop pinning the routing.
 - If a gate passes on the unmodified tree in a way its task body does not predict, that is a plan defect — report it as a blocker rather than proceeding.
 
 ---
@@ -82,6 +84,8 @@ tdd: required
 acceptance:
   - cmd: bats tests/setup_env/workflows.bats -f "dry-run"
     exit_code: 0
+  - cmd: bats tests/setup_env/workflows.bats
+    exit_code: 0
   - cmd: make lint
     exit_code: 0
 max_retries: 3
@@ -137,6 +141,8 @@ role: executor
 model: sonnet
 tdd: required
 acceptance:
+  - cmd: bats tests/setup_env/git_sync.bats -f "dry-run"
+    exit_code: 0
   - cmd: bats tests/setup_env/git_sync.bats
     exit_code: 0
   - cmd: make lint
@@ -169,6 +175,14 @@ if [[ ${_ahead} -gt 0 ]]; then
 
 Tests: ahead-branch absence (origin ref unmoved + `[DRY RUN]` names the push); ahead-branch control (ref advances); behind-branch under `DRY_RUN=1` asserting `pull --ff-only` **still ran** — that case is what fails if someone later widens this to a function guard.
 
+**Every new test name MUST contain the literal string `dry-run`.** The unfiltered
+whole-file run is a regression arm, not a gate: measured at pre-flight, `bats
+tests/setup_env/git_sync.bats` exits **0** on the base tree with 24 passing tests, so on its
+own it would have passed against zero implementation. The `-f "dry-run"` arm matches
+**zero** tests on base (exit 1, `ERROR: Found no tests`) and is what makes the gate
+discriminate; the 24-test population is the positive control proving the filter mechanism
+works rather than the zero being an artifact. Keep both arms.
+
 **Interfaces:**
 
 - Consumes: `_dry_run_active()` from Task 1.
@@ -184,6 +198,8 @@ role: executor
 model: sonnet
 tdd: required
 acceptance:
+  - cmd: bats tests/setup_env/legacy_rsync.bats -f "dry-run"
+    exit_code: 0
   - cmd: bats tests/setup_env/legacy_rsync.bats
     exit_code: 0
   - cmd: make lint
@@ -212,6 +228,14 @@ fi
 
 Safety: protection is `load_mocks` + `_OVERRIDE_GIT_REPOS_SRC` + `MOCK_HOSTNAME_OUTPUT` (`legacy_rsync.bats:6,11,16`) — **not** `HOME`. `HOME` feeds only the rsync _source_; the three destinations are hardcoded `bruce@workstation:`, `bruce@laptop-1:`, `bruce@ratna:`, so an empty `HOME` with real rsync reachable would empty the targets.
 
+**Every new test name MUST contain the literal string `dry-run`.** The unfiltered
+whole-file run is a regression arm, not a gate: measured at pre-flight, `bats
+tests/setup_env/legacy_rsync.bats` exits **0** on the base tree with 6 passing tests, so on
+its own it would have passed against zero implementation. The `-f "dry-run"` arm matches
+**zero** tests on base (exit 1, `ERROR: Found no tests`) and is what makes the gate
+discriminate; the 6-test population is the positive control proving the filter mechanism
+works rather than the zero being an artifact. Keep both arms.
+
 **Interfaces:**
 
 - Consumes: `_dry_run_active()` from Task 1.
@@ -227,6 +251,8 @@ role: executor
 model: sonnet
 tdd: required
 acceptance:
+  - cmd: bats tests/setup_env/update_summary.bats -f "dry-run"
+    exit_code: 0
   - cmd: bats tests/setup_env/update_summary.bats
     exit_code: 0
   - cmd: make lint
@@ -256,6 +282,16 @@ legacy-rsync)
 
 Tests: with `MOCK_HOSTNAME_OUTPUT=studio` and `DRY_RUN=1`, the `legacy-rsync` reason is `dry run` (not `not studio` — they collide otherwise); and no `status_git-repos` SKIP file is written. The second half pins the granularity decision.
 
+**Every new test name MUST contain the literal string `dry-run`** — note the hyphen, while
+the rendered SKIP _reason_ is the two-word `dry run`; the test name and the asserted output
+are different strings and only the name feeds the filter. The unfiltered whole-file run is a
+regression arm, not a gate: measured at pre-flight, `bats tests/setup_env/update_summary.bats`
+exits **0** on the base tree with 101 passing tests, so on its own it would have passed
+against zero implementation. The `-f "dry-run"` arm matches **zero** tests on base (exit 1,
+`ERROR: Found no tests`) and is what makes the gate discriminate; the 101-test population is
+the positive control proving the filter mechanism works rather than the zero being an
+artifact. Keep both arms.
+
 **Interfaces:**
 
 - Consumes: `_dry_run_active()` from Task 1; the Task 4 guard.
@@ -271,6 +307,8 @@ role: executor
 model: sonnet
 tdd: required
 acceptance:
+  - cmd: bats tests/scripts/unit.bats -f "dry-run"
+    exit_code: 0
   - cmd: bats tests/scripts/unit.bats
     exit_code: 0
   - cmd: make lint
@@ -289,6 +327,16 @@ depends_on: [3, 4]
 `--dry-run` sets `DRY_RUN=1` and is composable with the existing `--git-only` / `--legacy-only`, so the current single-`${1:-}` `case` must become a loop. Preserve the existing `*)` rejection for genuinely unknown flags — `unit.bats:356` pins it and must keep passing.
 
 Both legs are gated by Tasks 3 and 4, so the flag is honoured by everything the script does. Round 1 proposed this flag while gating only one leg, which would have advertised a preview that still pushed.
+
+**Every new test name MUST contain the literal string `dry-run`.** The unfiltered whole-file
+run is a regression arm, not a gate: measured at pre-flight, `bats tests/scripts/unit.bats`
+exits **0** on the base tree with 146 passing tests, so on its own it would have passed
+against zero implementation. The `-f "dry-run"` arm matches **zero** tests in this file on
+base (exit 1, `ERROR: Found no tests`) and is what makes the gate discriminate; the 146-test
+population is the positive control proving the filter mechanism works rather than the zero
+being an artifact. Other files in `tests/scripts/` do carry `--dry-run` test names, which is
+irrelevant — the filter is scoped to this file. Keep both arms, and note the regression arm
+is the one that pins `unit.bats:356`'s existing unknown-flag rejection.
 
 **Interfaces:**
 
