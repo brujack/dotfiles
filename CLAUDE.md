@@ -83,13 +83,13 @@ When web research (web-research skill) or context-mode fetches produce findings 
 - `ansible` — Ansible venv setup only (after Python updates)
 - `recreate-venv` — Force-delete and recreate a named pyenv virtualenv. Flags: `--venv-name` (default: `ansible`). Runs full pip install when name is `ansible`. **SIGINT/SIGTERM during the rebuild now abort the shell** instead of continuing to a verification error — either way the toolchain is left deleted, since the signal reaches the rebuild child regardless of the trap change. Recover with the same command; if the original invocation carried `--venv-name`, repeat it — a bare re-run rebuilds `ansible` instead, because `recreate_python_venv` gates the `uv sync` on that name.
 - `recreate-ruby` — Force-delete and reinstall the pinned Ruby version (`RUBY_VER` in `lib/constants.sh`), reusing `install_ruby()`. **SIGINT/SIGTERM during the rebuild now abort the shell** instead of continuing to `install_ruby()`'s post-install verification error — either way the toolchain is left deleted. Recover by re-running the same command.
-- `update` — Update all packages (brew, apt/snap, pip, gems, tools). Supports `--brew-only`, `--pip-only`, `--gems-only`, `--mas-only`, `--claude-only` flags. Prints a structured summary; logs to `~/.dotfiles-update.log`. Also writes a state-ledger entry (advisory, non-fatal). **Exits 1 when any section reports FAIL**; a WARN section still exits 0, preserving the deliberate rc-2 -> 0 mapping in `git-repos`, `legacy-rsync` and `git-hooks`. **SIGINT/SIGTERM now abort the run** rather than being absorbed by `_dotfiles_run_tmpdir_setup`'s former EXIT/INT/TERM trap (deleted). Non-zero has three meanings and only the first records anything — section FAIL, a run-dir creation failure, or an interrupt; see ADR-0027. The five `cd` guards ADR-0027 named as a fourth, recordless case are gone as of 2026-09-01 — see the `zsh-autosuggestions` bullet below. Full internals: `~/git-repos/personal/ai-config/docs/knowledge/dotfiles-update-workflow.md`.
+- `update` — Update all packages (brew, apt/snap, pip, gems, tools). Supports `--brew-only`, `--pip-only`, `--gems-only`, `--mas-only`, `--claude-only` flags. Prints a structured summary; logs to `~/.dotfiles-update.log`. Also writes a state-ledger entry (advisory, non-fatal; skipped under `--dry-run`). **Exits 1 when any section reports FAIL**; a WARN section still exits 0, preserving the deliberate rc-2 -> 0 mapping in `git-repos`, `legacy-rsync` and `git-hooks`. **SIGINT/SIGTERM now abort the run** rather than being absorbed by `_dotfiles_run_tmpdir_setup`'s former EXIT/INT/TERM trap (deleted). Non-zero has three meanings and only the first records anything — section FAIL, a run-dir creation failure, or an interrupt; see ADR-0027. The five `cd` guards ADR-0027 named as a fourth, recordless case are gone as of 2026-09-01 — see the `zsh-autosuggestions` bullet below. Full internals: `~/git-repos/personal/ai-config/docs/knowledge/dotfiles-update-workflow.md`.
 - `doctor` — Active health checks: identity-table load, symlinks, tool presence, credential dir permissions, version drift, global/system core.hooksPath pins, weekly-cadence heartbeats (Studio only). Exits non-zero on any failure
 - `check-versions` — Compare pinned versions in `lib/constants.sh` against GitHub latest; exits 1 if outdated. `--update` prompts per-tool to apply updates in-place
 
 **Options:**
 
-- `--dry-run` — log mutating operations (symlinks, installs, mkdir) without executing
+- `--dry-run` — guarantees **no operation that leaves this machine**: no `git push`, no `rsync --delete`, no state-ledger write. Everything else still runs — package upgrades, venv rebuilds, `git fetch`/`pull --ff-only` on every personal repo, the five `npm install -g` calls, and `uv sync`. Truthiness: `DRY_RUN=0`, `false`, `no`, empty, and unset all mean dry-run is off; any other value means on; an explicit `--dry-run` flag wins over an inherited falsy `DRY_RUN`.
 
 ## Symlink Strategy
 
@@ -702,6 +702,24 @@ defect recorded for `tests/mocks` in `shell.md`. `tests/scripts/pre_commit_hook.
 `MINIMAL_PATH=/usr/bin:/bin` instead: a real PATH that carries `git` and `make` and no
 ggshield. Before this seam existed, the case named "ggshield is absent" ran the **real**
 ggshield on every dev machine and asserted nothing about the branch it named.
+
+**`LEDGER_BIN` (`lib/workflows.sh`'s `ledger_write_entry`) is checked before `command -v
+ledger`, and `tests/mocks/ledger` is load-bearing rather than convenient.** Resolution order
+is `LEDGER_BIN` (if executable), then `command -v ledger`, then the
+`${HOME}/.local/bin/ledger` fallback — so a seam that only redirects `HOME` cannot force
+resolution to a fixture, because `command -v` runs first and wins on any machine that
+already has a real `ledger` on `PATH`. That split is actor-specific, not machine-specific:
+on `workstation`/`claude`, interactive zsh — and the harness Bash tool descended from it,
+which is what runs the suite there — sources `.config/.zshrc.d/6_path.zsh` and puts
+`~/.local/bin` on `PATH`, so `command -v ledger` resolves the **real** binary for exactly
+that actor; a non-interactive actor on those same boxes (`ssh host '<cmd>'`) resolves
+nothing, and so does every actor on the Studio or `ubuntu-latest`, where `ledger` is not
+installed at all. A `HOME`-only seam would therefore pass on the Studio and in CI — cheap to
+run, uninformative — and silently write to the real ledger on `workstation`/`claude`, where
+the binary actually lives. `tests/mocks/ledger` closes this because it is a `PATH`-prepended
+mock: it wins the resolution race before `command -v` ever reaches the real binary,
+regardless of actor, which is why it is required on every assertion touching
+`ledger_write_entry` rather than a convenience.
 
 **`_OVERRIDE_LIB_TRAP_SCOPE` (`scripts/check-lib-exit-traps.sh`) points the EXIT-trap
 ratchet's scope at a fixture root instead of the repo.** Production derives scope from
