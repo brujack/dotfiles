@@ -727,6 +727,63 @@ EOF
   [ "$?" -eq 0 ]
 }
 
+# ── _dry_run_active ───────────────────────────────────────────────────────────
+
+@test "dry_run_active returns 1 (inactive) when DRY_RUN is unset" {
+  unset DRY_RUN
+  run _dry_run_active
+  [ "$status" -eq 1 ]
+}
+
+@test "dry_run_active returns 1 (inactive) when DRY_RUN is empty" {
+  export DRY_RUN=""
+  run _dry_run_active
+  unset DRY_RUN
+  [ "$status" -eq 1 ]
+}
+
+@test "dry_run_active returns 1 (inactive) when DRY_RUN=0" {
+  export DRY_RUN=0
+  run _dry_run_active
+  unset DRY_RUN
+  [ "$status" -eq 1 ]
+}
+
+@test "dry_run_active returns 1 (inactive) when DRY_RUN=false" {
+  export DRY_RUN=false
+  run _dry_run_active
+  unset DRY_RUN
+  [ "$status" -eq 1 ]
+}
+
+@test "dry_run_active returns 1 (inactive) when DRY_RUN=no" {
+  export DRY_RUN=no
+  run _dry_run_active
+  unset DRY_RUN
+  [ "$status" -eq 1 ]
+}
+
+@test "dry_run_active returns 0 (active) when DRY_RUN=1" {
+  export DRY_RUN=1
+  run _dry_run_active
+  unset DRY_RUN
+  [ "$status" -eq 0 ]
+}
+
+@test "dry_run_active returns 0 (active) when DRY_RUN=true" {
+  export DRY_RUN=true
+  run _dry_run_active
+  unset DRY_RUN
+  [ "$status" -eq 0 ]
+}
+
+@test "dry_run_active returns 0 (active) when DRY_RUN=yes" {
+  export DRY_RUN=yes
+  run _dry_run_active
+  unset DRY_RUN
+  [ "$status" -eq 0 ]
+}
+
 # ── run_cmd ──────────────────────────────────────────────────────────────────
 
 @test "run_cmd executes command when DRY_RUN is unset" {
@@ -750,6 +807,33 @@ EOF
   run run_cmd touch "${tmpfile}"
   unset DRY_RUN
   [ ! -f "${tmpfile}" ]
+}
+
+@test "run_cmd executes the command when DRY_RUN=0" {
+  export DRY_RUN=0
+  local tmpfile="${BATS_TEST_TMPDIR}/dry_run_zero_executes"
+  run run_cmd touch "${tmpfile}"
+  unset DRY_RUN
+  [ "$status" -eq 0 ]
+  [ -f "${tmpfile}" ]
+}
+
+@test "run_cmd executes the command when DRY_RUN=false" {
+  export DRY_RUN=false
+  local tmpfile="${BATS_TEST_TMPDIR}/dry_run_false_executes"
+  run run_cmd touch "${tmpfile}"
+  unset DRY_RUN
+  [ "$status" -eq 0 ]
+  [ -f "${tmpfile}" ]
+}
+
+@test "run_cmd executes the command when DRY_RUN=no" {
+  export DRY_RUN=no
+  local tmpfile="${BATS_TEST_TMPDIR}/dry_run_no_executes"
+  run run_cmd touch "${tmpfile}"
+  unset DRY_RUN
+  [ "$status" -eq 0 ]
+  [ -f "${tmpfile}" ]
 }
 
 # ── safe_link error handling ──────────────────────────────────────────────────
