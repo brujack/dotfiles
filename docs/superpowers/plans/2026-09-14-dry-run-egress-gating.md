@@ -111,7 +111,20 @@ fi
 
 `return 0` is load-bearing: `update_summary.sh:521` and `:523` are **bare** calls (the spec's earlier "every caller uses `|| true`" was wrong); safety comes from `_ledger_write_run_entry`'s five callers using `|| true` and `:598`'s `_ledger_write_dotfiles_entry || true`.
 
-Seam: resolve `LEDGER_BIN` first, then `command -v ledger`, then `${HOME}/.local/bin/ledger`. Needed because `command -v` is checked **before** the `${HOME}` fallback, so redirecting `HOME` cannot intercept on the Linux boxes. `tests/mocks/ledger` records argv to `MOCK_CALLS_FILE` and drains stdin.
+Seam: resolve `LEDGER_BIN` first, then `command -v ledger`, then `${HOME}/.local/bin/ledger`. Needed because `command -v` is checked **before** the `${HOME}` fallback, so redirecting `HOME` cannot intercept. `tests/mocks/ledger` records argv to `MOCK_CALLS_FILE` and drains stdin.
+
+**That justification is true of one actor and false of three, so it carries a qualifier — measured 2026-09-14 across the fleet rather than asserted:**
+
+| actor                                      | `~/.local/bin` on `PATH` | `command -v ledger`             | could a `HOME` redirect intercept? |
+| ------------------------------------------ | ------------------------ | ------------------------------- | ---------------------------------- |
+| `workstation` / `claude`, interactive zsh  | yes                      | `/home/bruce/.local/bin/ledger` | **no — the seam is required**      |
+| `workstation` / `claude`, `ssh host 'cmd'` | no                       | none                            | yes                                |
+| Studio, harness Bash tool                  | no                       | none                            | yes                                |
+| `ubuntu-latest`                            | n/a                      | none (ledger not installed)     | yes                                |
+
+**The one row that matters is the first, because it is the actor that runs the suite on a Linux dev box** — a session's Bash tool is profile-sourced, so it inherits the interactive `PATH`. A `HOME`-only test seam would therefore pass in CI and on the Studio and fail on `workstation` and `claude`: green where it is cheap to run and red where the real binary lives. That split is the argument for `LEDGER_BIN`, not the bare ordering claim.
+
+This qualifier exists because the unqualified sentence was checked against `ssh host 'command -v ledger'`, which returned `none` on both Linux boxes and appeared to refute it. `ssh` is the non-interactive actor and answers for a different `PATH` — `behavior.md`'s actor-boundary rule, hit while auditing this very premise. Do not re-derive this with `ssh`.
 
 Tests: absence case asserts the mock is uncalled **and** `[DRY RUN]` appears; control (`DRY_RUN` unset) asserts the mock is called and receives the JSON on stdin.
 
@@ -374,6 +387,8 @@ depends_on: [6]
 `:86` says `-t update` "Also writes a state-ledger entry" — now conditionally false, since no entry is written under `--dry-run`. Add that qualifier.
 
 Add a Test Seams row for `LEDGER_BIN` beside `UV_BIN` and `GGSHIELD_BIN`, stating it is checked before `command -v ledger` and that `tests/mocks/ledger` is load-bearing rather than convenient.
+
+**Write the reason with its actor, not the bare ordering claim.** The row must say that on a Linux dev box the suite's actor is profile-sourced and therefore resolves a real `ledger` at `~/.local/bin/ledger` through `command -v`, so a `HOME`-only seam would pass on the Studio and in CI — where `command -v ledger` finds nothing — and fail on `workstation` and `claude`. Task 2's body carries the measured four-actor table; copy that reasoning, and do **not** write the unqualified sentence "redirecting `HOME` cannot intercept on the Linux boxes", which is true only of the interactive actor and reads as true of all of them.
 
 **Also state the truthiness contract, which lands documented nowhere otherwise.** `CLAUDE.md:92` and `README.md:207` describe `--dry-run`'s _scope_ and never its accepted _values_, so the `0`/`false`/`no`/empty/unset rule this plan introduces would ship fleet-wide undocumented. One sentence: `DRY_RUN=0`, `false`, `no`, empty and unset all mean dry-run is **off**, any other value means on, and `--dry-run` wins over an inherited falsy value. The third acceptance gate (`grep -q "DRY_RUN=0" CLAUDE.md`) pins it — measured at pre-flight, `CLAUDE.md` contains **zero** occurrences of `DRY_RUN=0`, `LEDGER_BIN`, and the egress phrasing, so all three greps exit 1 on base and none is vacuous.
 
