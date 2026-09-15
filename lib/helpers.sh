@@ -299,7 +299,9 @@ Types:
   check-versions : Compare pinned tool versions in lib/constants.sh against latest GitHub releases
                Flags: --update
 Options:
-  --dry-run       : Log mutating operations (symlinks, installs, mkdir) without executing them
+  --dry-run       : Suppress outbound writes (git push, rsync --delete, state-ledger
+                    writes) without executing them. NOT an offline mode: fetches,
+                    ff-only pulls, package upgrades, and uv sync still run for real
   --brew-install  : (setup only) Ensure Homebrew is installed, update, and run brew bundle installs
   --mas-install   : (setup only) Install/update Mac App Store apps via mas (macOS only)
   --brew-only     : (update only) Update Homebrew formulae and casks only
