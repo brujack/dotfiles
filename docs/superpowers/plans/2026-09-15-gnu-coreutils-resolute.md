@@ -208,7 +208,7 @@ Add inside the `LINUX` block, immediately after the `/home/linuxbrew/.linuxbrew/
 
 `unset` sits on its own line, outside the `&&`, so it runs whether or not the directory existed — the macOS loop at `:41-45` does the same.
 
-The block is **not** gated on `RESOLUTE`. It is release-blind by design: the directory only exists where Task 2 installed the formula, so the `-d` test is the gate. Say this in review if asked — the install half is release-based and the `PATH` half is not, and that asymmetry is deliberate.
+The block is **not** gated on `RESOLUTE`. It is release-blind by design, and the `-d` test is the gate. Note the directory is not *only* creatable by Task 2 — a hand install, or a future non-RESOLUTE install, creates it too. The consequence is benign (brew's GNU coreutils ahead of the distro's GNU coreutils is a version change, not a semantic one), and the real argument is that `-d` verifies the artifact the code actually needs rather than deriving the gate from a release string. Say this in review if asked — the install half is release-based and the `PATH` half is not, and that asymmetry is deliberate.
 
 **Tests** — one at a time, RED then GREEN. Mirror the macOS four, each beginning `unset MACOS LINUX` then `export LINUX=1`, with both macOS seams pointed at `/nonexistent/...` so the macOS arm cannot interfere:
 
