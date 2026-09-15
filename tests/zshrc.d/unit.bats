@@ -658,6 +658,31 @@ EOF
   [ "$output" = "unset" ]
 }
 
+@test "6_path.zsh's Linux gnubin supplies a sort that distinguishes py.test from pytest" {
+  # The defect, directly: uutils `sort -u` collates py.test and pytest as equal
+  # and drops one, so pyenv-versions:47 emits no pytest shim. GNU keeps both.
+  #
+  # Resolve sort THROUGH the prepend, never from the ambient PATH. This machine's
+  # /usr/bin/sort is BSD and already answers 2 (measured, 2.3-Apple (199)), so an
+  # ambient assertion would pass for a reason that says nothing about the fix.
+  # The provider assertion is what makes the 2 mean something.
+  local _gnubin=/home/linuxbrew/.linuxbrew/opt/coreutils/libexec/gnubin
+  [[ -x "${_gnubin}/sort" ]] || skip "GNU coreutils gnubin absent on this machine"
+  run zsh -c "
+    unset MACOS LINUX
+    export LINUX=1
+    export _OVERRIDE_GNUBIN_LINUX='${_gnubin}'
+    export _OVERRIDE_GNUBIN_ARM='/nonexistent/gnubin-arm'
+    export _OVERRIDE_GNUBIN_INTEL='/nonexistent/gnubin-intel'
+    source '${ZSHRC_D}/6_path.zsh' 2>/dev/null
+    sort --version | head -1
+    printf 'py.test\npytest\n' | sort -u | wc -l | tr -d ' '
+  "
+  [ "$status" -eq 0 ]
+  [[ "$(printf '%s\n' "$output" | head -1)" == *GNU* ]]
+  [ "$(printf '%s\n' "$output" | tail -1)" -eq 2 ]
+}
+
 @test "5_general.zsh does not call rbenv local (would overwrite project .ruby-version)" {
   local _tmp_dir _project_dir
   _tmp_dir="$(mktemp -d)"
