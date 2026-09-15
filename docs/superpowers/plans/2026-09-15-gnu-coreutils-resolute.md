@@ -50,7 +50,7 @@ Every acceptance gate below was proven reachable at this state. Conditions state
    cd /Users/bruce/git-repos/personal/dotfiles-coreutils && make test < /dev/null
    ```
 
-   Expected: rc 0. Baseline on `c978b1ff` is 1714 ok / 0 not ok; this plan adds roughly 12 tests, so expect ~1726 ok, 0 not ok, and **1 skipped** (Task 4's collation case skips wherever GNU coreutils is not installed — the Studio and CI both).
+   Expected: rc 0. Baseline on `c978b1ff` is 1714 ok / 0 not ok; this plan adds roughly 12 tests, so expect ~1726 ok and 0 not ok. **A skip does not reduce that count**: measured on bats 1.14.0, a skipped test prints `ok N <name> # skip <reason>`, so `grep -c '^ok '` includes it. Task 4's collation case runs on any machine carrying a GNU coreutils gnubin — every mac, via the untagged `brew "coreutils"` in `Brewfile` — and skips on CI, which has none.
 
 2. **The behavioural acceptance, on `claude`, after the branch merges and `setup_env.sh -t setup` has run there.** The spec's acceptance line names no actor, and that omission is load-bearing: `6_path.zsh` is sourced by **interactive zsh only**, so `ssh claude '<cmd>'` and `bash -lc` both answer about a shell that never saw the prepend. Run it as an interactive zsh:
 
@@ -260,15 +260,24 @@ Every other verdict this change produces is an absence assertion — satisfied e
   # /usr/bin/sort is BSD and already answers 2 (measured, 2.3-Apple (199)), so an
   # ambient assertion would pass for a reason that says nothing about the fix.
   # The provider assertion is what makes the 2 mean something.
-  local _gnubin=/home/linuxbrew/.linuxbrew/opt/coreutils/libexec/gnubin
-  [[ -x "${_gnubin}/sort" ]] || skip "GNU coreutils gnubin absent on this machine"
+  # First gnubin whose sort is executable. NEVER /usr/bin -- that is the ambient
+  # shape this test exists to avoid. Skip only when no prefix carries one.
+  local _gnubin=""
+  for _c in /home/linuxbrew/.linuxbrew/opt/coreutils/libexec/gnubin \
+            /opt/homebrew/opt/coreutils/libexec/gnubin \
+            /usr/local/opt/coreutils/libexec/gnubin; do
+    [[ -x "${_c}/sort" ]] && { _gnubin="${_c}"; break; }
+  done
+  [[ -n ${_gnubin} ]] || skip "no GNU coreutils gnubin (checked linuxbrew, /opt/homebrew, /usr/local)"
   run zsh -c "
+    export PATH=/usr/bin:/bin:/usr/sbin:/sbin
     unset MACOS LINUX
     export LINUX=1
     export _OVERRIDE_GNUBIN_LINUX='${_gnubin}'
     export _OVERRIDE_GNUBIN_ARM='/nonexistent/gnubin-arm'
     export _OVERRIDE_GNUBIN_INTEL='/nonexistent/gnubin-intel'
     source '${ZSHRC_D}/6_path.zsh' 2>/dev/null
+    whence -p sort
     sort --version | head -1
     printf 'py.test\npytest\n' | sort -u | wc -l | tr -d ' '
   "
@@ -278,9 +287,9 @@ Every other verdict this change produces is an absence assertion — satisfied e
 }
 ```
 
-**The `skip` is honest and is not a pass.** bats reports it as skipped, not ok, so it cannot be mistaken for a green assertion. It discriminates only on `claude` after Task 2 has installed the formula — which is exactly the acceptance step in Verification Planning, not a gate. Do not replace the skip with an ambient-`sort` assertion to make it run everywhere; that converts a real check into one that agrees with BSD `sort` about nothing.
+**The `skip` is honest, but not reported the way this plan first claimed.** Measured on bats 1.14.0, a skipped test prints `ok N <name> # skip <reason>` — a reader sees the skip, a `^ok` count does not. It discriminates only on `claude` after Task 2 has installed the formula — which is exactly the acceptance step in Verification Planning, not a gate. Do not replace the skip with an ambient-`sort` assertion to make it run everywhere; that converts a real check into one that agrees with BSD `sort` about nothing.
 
-Expected after this task: 60 ok, 0 not ok, 1 skipped (Studio and CI).
+Expected after this task: 61 ok, 0 not ok, and **0 skipped on a mac** — the guard finds the Homebrew gnubin and the test runs. CI skips, having none.
 
 **Interfaces:**
 
@@ -348,7 +357,7 @@ _doctor_check_gnu_coreutils() {
 
 Expected after this task: 206 ok, 0 not ok.
 
-**Orchestrator, after this task and before Task 6:** run `make test < /dev/null` once, uncontended, from the worktree. Expect rc 0, ~1726 ok, 0 not ok, 1 skipped. This is the plan's single aggregate gate.
+**Orchestrator, after this task and before Task 6:** run `make test < /dev/null` once, uncontended, from the worktree. Expect rc 0, ~1726 ok, 0 not ok; a skip prints as an `ok ... # skip` line and does not reduce that count. This is the plan's single aggregate gate.
 
 **Interfaces:**
 
