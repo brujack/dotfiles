@@ -364,13 +364,16 @@ teardown() {
   run _install_ubuntu_brew_packages
   [ "$status" -eq 0 ]
   refute_grep "brew install coreutils" "${MOCK_CALLS_FILE}"
-  # Positive control downstream of the gate: `brew trust` (:628) is
-  # unconditional and runs after every branch in this function, including
-  # the coreutils gate. A control emitted upstream of the gate (e.g. the
-  # shfmt install at :583) would prove only that the function body started,
-  # not that execution reached the code under test -- an early return
-  # between the two would leave the absence assertion above vacuously
-  # satisfied with an upstream control still green.
+  # Positive control downstream of the gate: the unconditional `brew trust`
+  # call at the end of this function runs after every branch, including the
+  # coreutils gate. A control emitted upstream of the gate (e.g. the shfmt
+  # install near the top of the package list) would prove only that the
+  # function body started, not that execution reached the code under test --
+  # an early return between the two would leave the absence assertion above
+  # vacuously satisfied with an upstream control still green.
+  # Named by construct, not by line number: a cross-file address drifts the
+  # moment a line is inserted above it, which CLAUDE.md records happening to
+  # tests/mocks/curl's own citation.
   grep -q "brew trust" "${MOCK_CALLS_FILE}"
 }
 
