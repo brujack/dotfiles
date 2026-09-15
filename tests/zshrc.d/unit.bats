@@ -660,7 +660,10 @@ EOF
 
 @test "6_path.zsh's Linux gnubin supplies a sort that distinguishes py.test from pytest" {
   # The defect, directly: uutils `sort -u` collates py.test and pytest as equal
-  # and drops one, so pyenv-versions:47 emits no pytest shim. GNU keeps both.
+  # and drops one, so pyenv's `versions` shim -- which pipes its name list
+  # through sort -- emits no pytest shim. GNU keeps both. Named by construct
+  # rather than by line: a cross-file address drifts the moment a line is
+  # inserted above it, which CLAUDE.md records happening in this repo.
   #
   # Resolve sort THROUGH the prepend, never from the ambient PATH. This machine's
   # /usr/bin/sort is BSD and already answers 2 (measured, 2.3-Apple (199)), so an
