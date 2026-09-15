@@ -966,6 +966,18 @@ firefox  124.0"
   export DRY_RUN=1
   _update_record_start "git-repos"
   [ ! -f "${_DOTFILES_RUN_TMPDIR}/status_git-repos" ]
+
+  # test-quality-review W4: the assertion above holds identically at base
+  # (git-repos has no case arm at all, dry-run or not) and is equally
+  # satisfied by _update_record_start erroring before reaching the `case`.
+  # This positive companion, in the same test and the same DRY_RUN=1
+  # environment, proves the function actually ran its case logic: the
+  # sibling legacy-rsync arm DOES write a SKIP file here (default mock
+  # hostname is not "studio"), so the git-repos absence means something
+  # rather than nothing having executed.
+  _update_record_start "legacy-rsync"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_legacy-rsync")" = "SKIP" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_legacy-rsync")" = "not studio" ]
 }
 
 # ── _ledger_write_run_entry: make_version field (macOS-only) ─────────────────
