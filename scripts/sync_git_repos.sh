@@ -35,6 +35,7 @@ USAGE
 
 sync_git_repos_main() {
   local _mode="both"
+  local _mode_set=0
   local _arg
 
   for _arg in "$@"; do
@@ -44,10 +45,22 @@ sync_git_repos_main() {
         return 0
         ;;
       --git-only)
+        if [[ "${_mode_set}" -eq 1 && "${_mode}" != "git" ]]; then
+          printf "Conflicting mode flags: --git-only and --legacy-only are mutually exclusive\n\n" >&2
+          _sync_git_repos_usage >&2
+          return 1
+        fi
         _mode="git"
+        _mode_set=1
         ;;
       --legacy-only)
+        if [[ "${_mode_set}" -eq 1 && "${_mode}" != "legacy" ]]; then
+          printf "Conflicting mode flags: --git-only and --legacy-only are mutually exclusive\n\n" >&2
+          _sync_git_repos_usage >&2
+          return 1
+        fi
         _mode="legacy"
+        _mode_set=1
         ;;
       --dry-run)
         # Deliberately a plain (non-readonly) assignment: this is the

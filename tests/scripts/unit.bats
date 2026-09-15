@@ -367,6 +367,46 @@ teardown() {
   [ "$status" -ne 0 ]
 }
 
+@test "sync_git_repos.sh rejects --git-only combined with --legacy-only and invokes neither leg" {
+  export MOCK_HOSTNAME_OUTPUT=studio
+  export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
+  export HOME="${BATS_TEST_TMPDIR}"
+  mkdir -p "${HOME}/git-repos/personal/fake-repo/.git"
+  run bash "${REPO_ROOT}/scripts/sync_git_repos.sh" --git-only --legacy-only
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Conflicting mode flags"* ]]
+  run grep -q "^git " "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+  run grep -q rsync "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+}
+
+@test "sync_git_repos.sh rejects --legacy-only combined with --git-only (reverse order) and invokes neither leg" {
+  export MOCK_HOSTNAME_OUTPUT=studio
+  export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
+  export HOME="${BATS_TEST_TMPDIR}"
+  mkdir -p "${HOME}/git-repos/personal/fake-repo/.git"
+  run bash "${REPO_ROOT}/scripts/sync_git_repos.sh" --legacy-only --git-only
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Conflicting mode flags"* ]]
+  run grep -q "^git " "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+  run grep -q rsync "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+}
+
+@test "sync_git_repos.sh --git-only --git-only (repeated same flag) stays legal" {
+  export MOCK_HOSTNAME_OUTPUT=studio
+  export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
+  export HOME="${BATS_TEST_TMPDIR}"
+  mkdir -p "${HOME}/git-repos/personal/fake-repo/.git"
+  run bash "${REPO_ROOT}/scripts/sync_git_repos.sh" --git-only --git-only
+  [ "$status" -eq 0 ]
+  grep -q "^git " "${MOCK_CALLS_FILE}"
+  run grep -q rsync "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+}
+
 @test "sync_git_repos.sh --legacy-only skips the git sync leg" {
   export MOCK_HOSTNAME_OUTPUT=studio
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
