@@ -355,7 +355,7 @@ _doctor_check_gnu_coreutils() {
 
 **Then add `_doctor_check_gnu_coreutils() { :; }` to all three existing end-to-end stub blocks** — `:993`ff, `:1020`ff and `:1412`ff. Without it, on a `RESOLUTE` box those tests run the real check: the `1 warnings` assertion at `:1020` and the exit-code assertion at `:1412` both break. This is the same reason every other arm is stubbed there.
 
-Expected after this task: 206 ok, 0 not ok.
+Expected after this task: **205 ok, 0 not ok**. 201 baseline plus the four new tests. Stubbing the three end-to-end `run_doctor` blocks modifies existing tests and adds none — an earlier draft of this line said 206 by counting that as a fifth.
 
 **Orchestrator, after this task and before Task 6:** run `make test < /dev/null` once, uncontended, from the worktree. Expect rc 0, ~1726 ok, 0 not ok; a skip prints as an `ok ... # skip` line and does not reduce that count. This is the plan's single aggregate gate.
 
