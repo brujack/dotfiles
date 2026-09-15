@@ -661,29 +661,69 @@ EOF
 @test "6_path.zsh's Linux gnubin supplies a sort that distinguishes py.test from pytest" {
   # The defect, directly: uutils `sort -u` collates py.test and pytest as equal
   # and drops one, so pyenv's `versions` shim -- which pipes its name list
-  # through sort -- emits no pytest shim. GNU keeps both. Named by construct
-  # rather than by line: a cross-file address drifts the moment a line is
-  # inserted above it, which CLAUDE.md records happening in this repo.
+  # through sort -- emits no pytest shim. GNU keeps both (named by construct,
+  # not by line -- a cross-file address drifts).
   #
-  # Resolve sort THROUGH the prepend, never from the ambient PATH. This machine's
-  # /usr/bin/sort is BSD and already answers 2 (measured, 2.3-Apple (199)), so an
-  # ambient assertion would pass for a reason that says nothing about the fix.
-  # The provider assertion is what makes the 2 mean something.
-  local _gnubin=/home/linuxbrew/.linuxbrew/opt/coreutils/libexec/gnubin
-  [[ -x "${_gnubin}/sort" ]] || skip "GNU coreutils gnubin absent on this machine"
+  # Resolve sort THROUGH the prepend, never from the ambient PATH. This
+  # machine's /usr/bin/sort is BSD and already answers 2 (measured 2026-09-15
+  # on studio: 2.3-Apple (199)), so an ambient assertion would pass for a
+  # reason that says nothing about the fix. The provider assertion is what
+  # makes the 2 mean something.
+  #
+  # PATH is pinned to a minimal set inside the subshell -- same idiom as the
+  # two absence-case gnubin tests above. Without it the test cannot
+  # discriminate on the one machine it currently runs on: an interactive
+  # shell there has already sourced 6_path.zsh, so once the formula is
+  # installed the real gnubin is on the caller's PATH before this subshell
+  # starts, and both assertions would pass whether or not the prepend below
+  # ran. `whence -p sort` makes resolution itself assertable -- it must
+  # equal the seam's own directory, not merely find *some* GNU sort on PATH.
+  #
+  # Candidates cover every machine that can run this assertion. Brewfile
+  # installs coreutils untagged on every mac, so a real GNU sort exists there
+  # too (measured 9.12 on studio) even though this block only ever runs under
+  # LINUX=1 in production -- the seam drives that branch against a directory
+  # that happens to exist on whichever machine runs the test. /usr/bin is
+  # deliberately never a candidate: that is the ambient-sort shape this test
+  # exists to rule out.
+
+  # Drift guard: the linuxbrew candidate below is a literal copy of
+  # 6_path.zsh's own default. If the two diverge, the loop below eventually
+  # finds nothing anywhere and silently SKIPs -- lowering no count, reading
+  # as absence of a problem rather than as drift. No bats-support here (no
+  # `fail`, measured), so a bare failing command is the mechanism.
+  grep -q '_OVERRIDE_GNUBIN_LINUX:-/home/linuxbrew/.linuxbrew/opt/coreutils/libexec/gnubin' "${ZSHRC_D}/6_path.zsh"
+
+  local -a _candidates=(
+    /home/linuxbrew/.linuxbrew/opt/coreutils/libexec/gnubin
+    /opt/homebrew/opt/coreutils/libexec/gnubin
+    /usr/local/opt/coreutils/libexec/gnubin
+  )
+  local _gnubin _candidate
+  for _candidate in "${_candidates[@]}"; do
+    if [[ -x "${_candidate}/sort" ]]; then
+      _gnubin="${_candidate}"
+      break
+    fi
+  done
+  [[ -n "${_gnubin:-}" ]] || skip "no GNU sort in: ${_candidates[*]} -- this assertion did not run, so a green suite here is not evidence for it"
+
   run zsh -c "
+    export PATH=/usr/bin:/bin:/usr/sbin:/sbin
     unset MACOS LINUX
     export LINUX=1
     export _OVERRIDE_GNUBIN_LINUX='${_gnubin}'
     export _OVERRIDE_GNUBIN_ARM='/nonexistent/gnubin-arm'
     export _OVERRIDE_GNUBIN_INTEL='/nonexistent/gnubin-intel'
     source '${ZSHRC_D}/6_path.zsh' 2>/dev/null
+    whence -p sort
     sort --version | head -1
     printf 'py.test\npytest\n' | sort -u | wc -l | tr -d ' '
   "
   [ "$status" -eq 0 ]
-  [[ "$(printf '%s\n' "$output" | head -1)" == *GNU* ]]
-  [ "$(printf '%s\n' "$output" | tail -1)" -eq 2 ]
+  [ "$(printf '%s\n' "$output" | sed -n '1p')" = "${_gnubin}/sort" ]
+  [[ "$(printf '%s\n' "$output" | sed -n '2p')" == *GNU* ]]
+  [ "$(printf '%s\n' "$output" | sed -n '3p')" -eq 2 ]
 }
 
 @test "5_general.zsh does not call rbenv local (would overwrite project .ruby-version)" {
