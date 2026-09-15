@@ -509,6 +509,36 @@ teardown() {
   [ "$status" -ne 0 ]
 }
 
+@test "sync_git_repos_main's dry-run does not leak DRY_RUN into a later call in the same shell" {
+  export MOCK_HOSTNAME_OUTPUT=studio
+  export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
+  export HOME="${BATS_TEST_TMPDIR}"
+  mkdir -p "${HOME}/git-repos/personal"
+  # sync_git_repos_main is only reachable as a function (not `run bash
+  # script.sh`, a fresh subprocess every time) by sourcing the script
+  # directly, matching its own sourcing-guard convention. That is also what
+  # makes a leak observable at all: a `run` wraps its command in a
+  # subshell, and DRY_RUN set inside one never reaches the parent's shell
+  # regardless of `local` -- the bug this pins only escapes when the first
+  # call is unwrapped, in the current shell, exactly as a caller in this
+  # position would invoke it.
+  source "${REPO_ROOT}/lib/constants.sh"
+  source "${REPO_ROOT}/lib/helpers.sh"
+  source "${REPO_ROOT}/lib/workflows.sh"
+  source "${REPO_ROOT}/lib/git_sync.sh"
+  source "${REPO_ROOT}/lib/legacy_rsync.sh"
+  source "${REPO_ROOT}/scripts/sync_git_repos.sh"
+
+  unset DRY_RUN
+  sync_git_repos_main --legacy-only --dry-run >/dev/null
+
+  : > "${MOCK_CALLS_FILE}"
+  run sync_git_repos_main --legacy-only
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"[DRY RUN]"* ]]
+  grep -q "^rsync " "${MOCK_CALLS_FILE}"
+}
+
 # ── pre-commit-hook.sh ────────────────────────────────────────────────────────
 
 @test "pre-commit-hook.sh is executable" {

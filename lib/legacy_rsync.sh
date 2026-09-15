@@ -1,6 +1,19 @@
 #!/usr/bin/env bash
 # lib/legacy_rsync.sh — one-way rsync push of legacy/no-git-access dirs, studio-only
 
+# _dry_run_active is normally provided by lib/helpers.sh (same sourcing chain
+# in setup_env.sh). Without the real predicate an undefined function call
+# exits 127, which `if` reads as false -- the fail-OPEN direction -- and
+# sync_legacy_dirs's else-branch is three real `rsync -ar --delete` pushes.
+if ! declare -f _dry_run_active >/dev/null 2>&1; then
+  # Fail closed: this file's guard protects three rsync --delete pushes.
+  # Sourced without lib/helpers.sh the real predicate is absent and an
+  # undefined function exits 127, which `if` reads as "not dry run" -- the
+  # fail-OPEN direction. Suppressing is the only safe answer when the
+  # authority is missing.
+  _dry_run_active() { return 0; }
+fi
+
 _is_legacy_sync_host() {
   [[ "$(hostname -s)" == "studio" ]]
 }

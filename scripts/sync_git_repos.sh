@@ -40,6 +40,14 @@ sync_git_repos_main() {
   local _mode="both"
   local _mode_set=0
   local _arg
+  # Local, seeded from any inherited value: bash's dynamic scoping still
+  # reaches _dry_run_active and everything it calls, but the assignment
+  # below no longer escapes to the caller's shell once this function
+  # returns -- a bare (non-local) DRY_RUN=1 here used to leak into whatever
+  # shell called sync_git_repos_main directly (not via a subshell), so a
+  # second call in that same shell with no --dry-run flag was still read as
+  # dry-run.
+  local DRY_RUN="${DRY_RUN:-}"
 
   for _arg in "$@"; do
     case "${_arg}" in
@@ -66,12 +74,10 @@ sync_git_repos_main() {
         _mode_set=1
         ;;
       --dry-run)
-        # Deliberately a plain (non-readonly) assignment: this is the
-        # standalone entry point's own process, invoked once per run, but a
-        # readonly DRY_RUN would make a second parse in the same shell (e.g.
-        # a test that calls sync_git_repos_main more than once) fail outright.
-        # _dry_run_active reads it back from this same process, so a plain
-        # assignment is sufficient.
+        # DRY_RUN is declared `local` at function entry above, so this
+        # assignment updates that local rather than the caller's shell --
+        # safe for a test (or any future caller) that calls
+        # sync_git_repos_main more than once in the same shell.
         # shellcheck disable=SC2034 # consumed by _dry_run_active() in
         # lib/helpers.sh (sourced below at runtime) -- cross-file, so a
         # single-file shellcheck pass over this script cannot see the read.

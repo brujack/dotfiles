@@ -807,6 +807,39 @@ EOF
   [ "$status" -eq 0 ]
 }
 
+# ── _dry_run_active fallback: sourced standalone, without lib/helpers.sh ─────
+#
+# lib/git_sync.sh and lib/legacy_rsync.sh each carry a same-shape fallback
+# for _dry_run_active (mirroring the pre-existing _git_ssh_opts fallback in
+# git_sync.sh), because their else-branch performs real egress -- a push in
+# one, three rsync --delete pushes in the other. Without it, sourcing
+# either file on its own leaves _dry_run_active undefined; an undefined
+# function call exits 127, which `if` reads as false, and the DRY_RUN guard
+# fails OPEN into the real-execution branch. A genuinely fresh `bash -c`
+# process is required here (not a subshell of this bats process, which
+# already has the real _dry_run_active from setup()'s load_setup_env and
+# would inherit it via bash's function-table fork) so the fallback branch
+# in each file is actually the one under test.
+@test "git_sync.sh's _dry_run_active fallback suppresses (fails closed) when sourced standalone (dry-run)" {
+  run bash -c "
+    source '${REPO_ROOT}/lib/git_sync.sh'
+    unset DRY_RUN
+    declare -f _dry_run_active >/dev/null 2>&1 || exit 9
+    _dry_run_active
+  "
+  [ "$status" -eq 0 ]
+}
+
+@test "legacy_rsync.sh's _dry_run_active fallback suppresses (fails closed) when sourced standalone (dry-run)" {
+  run bash -c "
+    source '${REPO_ROOT}/lib/legacy_rsync.sh'
+    unset DRY_RUN
+    declare -f _dry_run_active >/dev/null 2>&1 || exit 9
+    _dry_run_active
+  "
+  [ "$status" -eq 0 ]
+}
+
 # ── run_cmd ──────────────────────────────────────────────────────────────────
 
 @test "run_cmd executes command when DRY_RUN is unset" {
