@@ -854,14 +854,18 @@ _doctor_check_gnu_coreutils() {
     # emits the package name untranslated, so this is locale-safe, and it
     # closes off a future non-GNU banner that merely mentions GNU.
     doctor_pass "sort is GNU (${_ver})"
-  elif [[ -d "${_gnubin_linux}" ]]; then
-    # The formula IS installed -- this actor's PATH just never sourced
-    # 6_path.zsh, which only interactive zsh does. `-t doctor` is one of the
-    # two workflows that bypass the brew prereq, so it is reachable over
-    # ssh/cron/launchd, where the prepend never ran. Not an unhealthy
-    # machine, so warn rather than fail: a FAIL here would carry the
-    # `setup_env.sh -t setup` remedy, which does nothing for this actor.
-    doctor_warn "sort" "not GNU on this shell's PATH (${_ver}), but ${_gnubin_linux} exists — 6_path.zsh is sourced by interactive zsh only, so this actor never saw the prepend"
+  elif [[ -d "${_gnubin_linux}" && ":${PATH}:" != *":${_gnubin_linux}:"* ]]; then
+    # The directory existing is NOT enough -- that is also true for an
+    # interactive shell whose prepend has regressed (block deleted, opt
+    # path renamed, a shadowing PATH entry). Only when this shell's own
+    # PATH lacks the directory is the cause "wrong actor" rather than "the
+    # fix stopped working" -- `-t doctor` is one of the two workflows that
+    # bypass the brew prereq, so it is reachable over ssh/cron/launchd,
+    # where the prepend never ran. Not an unhealthy machine, so warn rather
+    # than fail: a FAIL here would carry the `setup_env.sh -t setup` remedy,
+    # which does nothing for an actor that was never going to source
+    # 6_path.zsh. State what was observed, not what it's inferred to mean.
+    doctor_warn "sort" "not GNU on this shell's PATH (${_ver}); ${_gnubin_linux} exists but is not on this shell's PATH"
   else
     doctor_fail "sort" "not GNU (${_ver}) — pyenv will drop the pytest shim; run: setup_env.sh -t setup"
   fi

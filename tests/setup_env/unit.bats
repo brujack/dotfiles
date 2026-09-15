@@ -2386,6 +2386,53 @@ STUB
   [[ "$(cat "${_outfile}")" == *"[WARN]"* ]]
 }
 
+@test "_doctor_check_gnu_coreutils fails when the gnubin directory is on PATH but sort still resolves uutils" {
+  # The regression the WARN split was missing: an interactive shell whose
+  # PATH genuinely carries the gnubin directory (Task 3's block ran) but
+  # whose sort is still not GNU -- a deleted block would leave the
+  # directory off PATH entirely (the WARN case above), but this is a
+  # renamed opt path, a shadowing PATH entry ahead of it, or a gnubin dir
+  # that lost its `sort` binary. `-d` alone cannot tell this from the WARN
+  # case; only checking THIS shell's PATH can.
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  export RESOLUTE=1
+  local _gnubin="${BATS_TEST_TMPDIR}/gnubin_on_path_broken"
+  mkdir -p "${_gnubin}"
+  export _OVERRIDE_GNUBIN_LINUX="${_gnubin}"
+  local _shim="${BATS_TEST_TMPDIR}/uutils_sort_shim_on_path"
+  mkdir -p "${_shim}"
+  cat > "${_shim}/sort" <<'STUB'
+#!/usr/bin/env bash
+printf 'sort (uutils coreutils) 9.5\n'
+STUB
+  chmod +x "${_shim}/sort"
+  local _saved_path="${PATH}"
+  local _outfile="${BATS_TEST_TMPDIR}/gnubin_on_path_out.txt"
+  # The gnubin dir IS a genuine PATH member here -- placed behind the
+  # uutils shim, so sort still resolves uutils despite the directory
+  # being reachable.
+  export PATH="${_shim}:${_gnubin}:${PATH}"
+  _doctor_check_gnu_coreutils > "${_outfile}"
+  export PATH="${_saved_path}"
+  [ "${_DOCTOR_FAIL}" -eq 1 ]
+  [ "${_DOCTOR_FAILED}" -eq 1 ]
+  [[ "$(cat "${_outfile}")" == *"[FAIL]"* ]]
+}
+
+@test "_doctor_check_gnu_coreutils's gnubin default matches 6_path.zsh's" {
+  # helpers.sh and 6_path.zsh each carry the same literal default with
+  # nothing forcing them equal. A future formula-path change that updates
+  # only one of them would make branch 3's on-PATH conjunct compare against
+  # a stale directory -- it would never match, and a healthy box would go
+  # back to FAIL. No bats-support: a bare failing command is the mechanism.
+  local _helpers_default _path_zsh_default
+  _helpers_default="$(grep -oE '_OVERRIDE_GNUBIN_LINUX:-[^}]+' "${REPO_ROOT}/lib/helpers.sh" | head -1 | sed 's/^_OVERRIDE_GNUBIN_LINUX:-//')"
+  _path_zsh_default="$(grep -oE '_OVERRIDE_GNUBIN_LINUX:-[^}]+' "${REPO_ROOT}/.config/.zshrc.d/6_path.zsh" | head -1 | sed 's/^_OVERRIDE_GNUBIN_LINUX:-//')"
+  [ -n "${_helpers_default}" ]
+  [ -n "${_path_zsh_default}" ]
+  [ "${_helpers_default}" = "${_path_zsh_default}" ]
+}
+
 @test "_doctor_check_gnu_coreutils does not treat a third, unbranded sort as GNU" {
   # The empty-output test above cannot discriminate a fail-open provider
   # match (e.g. "not uutils" standing in for "is GNU") from the real one --
