@@ -595,7 +595,7 @@ _install_ubuntu_brew_packages() {
   # `pytest` shim and every bare-`pytest` Makefile target breaks. apt cannot make
   # GNU the provider -- build-essential pins coreutils-from-uutils by name -- so
   # the formula is the route. 24.04 and earlier already ship GNU; gate to avoid
-  # installing a second copy on machines that do not need it.
+  # installing a second copy on machines that do not need it. Measured 2026-09-15.
   if [[ -n ${RESOLUTE} ]]; then
     brew_install_formula coreutils || _failed+=(coreutils)
   fi

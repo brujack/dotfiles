@@ -352,15 +352,39 @@ teardown() {
   grep -q "brew install coreutils" "${MOCK_CALLS_FILE}"
 }
 
-@test "_install_ubuntu_brew_packages: no RESOLUTE skips coreutils" {
+@test "_install_ubuntu_brew_packages: neither RESOLUTE nor NOBLE set skips coreutils" {
+  # NOBLE is held unset here, matching the RESOLUTE test above and the
+  # accumulator test below -- RESOLUTE is the only variable that differs
+  # between this test and those. An implementation gating on
+  # `[[ -z ${NOBLE} ]]` instead of `[[ -n ${RESOLUTE} ]]` would install here
+  # too, since NOBLE is unset, which is exactly what this test exists to
+  # catch. This state is also reachable for real: any Linux actor where
+  # detect_env never ran, or a release detect_env.sh:19 does not recognise.
+  unset NOBLE RESOLUTE
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 0 ]
+  refute_grep "brew install coreutils" "${MOCK_CALLS_FILE}"
+  # Positive control downstream of the gate: `brew trust` (:628) is
+  # unconditional and runs after every branch in this function, including
+  # the coreutils gate. A control emitted upstream of the gate (e.g. the
+  # shfmt install at :583) would prove only that the function body started,
+  # not that execution reached the code under test -- an early return
+  # between the two would leave the absence assertion above vacuously
+  # satisfied with an upstream control still green.
+  grep -q "brew trust" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_brew_packages: NOBLE (24.04) skips coreutils" {
+  # The real 24.04 state the test above gives up by holding NOBLE constant:
+  # NOBLE=1, RESOLUTE unset. 24.04 already ships GNU coreutils, so the gate
+  # must skip here too.
   export NOBLE=1
   unset RESOLUTE
   run _install_ubuntu_brew_packages
   [ "$status" -eq 0 ]
   refute_grep "brew install coreutils" "${MOCK_CALLS_FILE}"
-  # Positive control: proves the function ran at all, so the absence above
-  # cannot be satisfied by a deleted function body.
-  grep -q "brew install shfmt" "${MOCK_CALLS_FILE}"
+  # Same downstream positive control as above.
+  grep -q "brew trust" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_brew_packages: coreutils failure feeds the _failed accumulator" {
