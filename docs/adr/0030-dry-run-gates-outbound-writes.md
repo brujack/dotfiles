@@ -79,7 +79,7 @@ procedure rather than three precedents to pattern-match.
   (`lib/workflows.sh:923-941`) is called ungated from `_dotfiles_run_tmpdir_setup:123` by every
   entry point, so a dry run still clones or pulls the state-ledger repo, runs `ledger.py init`,
   and `rm -rf`s the directory when it exists but is not a valid repo. Those are local writes.
-  The outbound-write guarantee survives because `cmd_init` (`ledger.py:372-433`) reaches none
+  The outbound-write guarantee survives because `cmd_init` (`ledger.py:372-436`) reaches none
   of that script's four push sites (`:486`, `:668`, `:791`, `:850`) — verified by reading
   `cmd_init`, not by grepping the calling bash for `push`, which cannot see a subprocess.
 - **Registry fetches stay ungated**, deliberately. `uv sync` in particular produces a venv
