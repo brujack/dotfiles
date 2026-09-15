@@ -339,10 +339,11 @@ teardown() {
 # ── _install_ubuntu_brew_packages: RESOLUTE-gated coreutils ──────────────────
 #
 # 26.04 ships uutils coreutils. Its `sort -u` collates `py.test` and `pytest`
-# as equal and drops one, so pyenv-versions:47 emits no `pytest` shim. apt
-# cannot make GNU the provider -- build-essential pins coreutils-from-uutils
-# by name -- so the formula is the route, gated to 26.04 since earlier
-# releases already ship GNU.
+# as equal and drops one, so pyenv's `versions` command -- which pipes its
+# name list through `sort` -- emits no `pytest` shim. apt cannot make GNU the
+# provider -- build-essential pins coreutils-from-uutils by name -- so the
+# formula is the route, gated to 26.04 since earlier releases already ship
+# GNU.
 
 @test "_install_ubuntu_brew_packages: RESOLUTE installs coreutils via brew" {
   export RESOLUTE=1
