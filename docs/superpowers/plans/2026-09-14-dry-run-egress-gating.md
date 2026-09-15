@@ -283,17 +283,19 @@ Without this, a guarded `sync_legacy_dirs` returning 0 reaches `_update_record_e
 
 ```bash
 legacy-rsync)
-  if _dry_run_active; then
+  if ! _is_legacy_sync_host; then
+    _update_skip "legacy-rsync" "not studio"
+  elif _dry_run_active; then
     _update_skip "legacy-rsync" "dry run"
-  else
-    _is_legacy_sync_host || _update_skip "legacy-rsync" "not studio"
   fi
   ;;
 ```
 
 **`git-repos` gets NO arm and no SKIP.** That section is line-gated: `_git_repo_status` still runs `git fetch` on every repo and `pull --ff-only` still runs on every repo that is behind. `[SKIP] git-repos` would deny that working trees moved — replacing round 1's false `[OK]` with an equally false `[SKIP]`. `_update_record_start` has fourteen arms and no `git-repos` arm; do not add one.
 
-Tests: with `MOCK_HOSTNAME_OUTPUT=studio` and `DRY_RUN=1`, the `legacy-rsync` reason is `dry run` (not `not studio` — they collide otherwise); and no `status_git-repos` SKIP file is written. The second half pins the granularity decision.
+Tests: with `MOCK_HOSTNAME_OUTPUT=studio` and `DRY_RUN=1`, the `legacy-rsync` reason is `dry run`; with a **non-studio** host and `DRY_RUN=1` the reason is `not studio`; and no `status_git-repos` SKIP file is written. The last part pins the granularity decision.
+
+**The ordering above is a correction, and the original is worth keeping because it shipped.** This task first mandated `_dry_run_active` **first**, justified as "they collide otherwise" — which is true of the studio case and silently wrong everywhere else. On a non-studio host under `--dry-run` that ordering records `dry run` while the true, permanent cause is `not studio`, and `err_legacy-rsync` simultaneously says "not studio, skipping"; the operator concludes the section would have run without the flag, when it never would. Task 5 exists because a guarded `sync_legacy_dirs` produced a false `[OK]` — replacing it with a false `[SKIP] dry run` is the same defect one step over. Caught by Phase 3's `bug-scan` (W2), fixed in `0dbc4f50`, and pinned by a non-studio test whose mutation control turns it red under the old ordering. The implementer followed the original instruction exactly; the instruction was the defect.
 
 **Every new test name MUST contain the literal string `dry-run`** — note the hyphen, while
 the rendered SKIP _reason_ is the two-word `dry run`; the test name and the asserted output
@@ -403,7 +405,9 @@ Against haiku 4.5's 200k window that is ~83% consumed at dispatch, so **no `mode
 
 **Do not choose `haiku` for any task in this repo until the preamble shrinks or the guard learns to check it.** `validate-plan.py`'s `_haiku_scope_errors` enforces `files_touched` of exactly one path plus a forbidden-pattern list (workflows, migrations, lockfiles) and has no notion of context budget — so it will keep certifying `model: haiku` plans that cannot be dispatched. A plan can be valid and undispatchable at once, and this one was, twice.
 
-`:92` currently promises "log mutating operations (symlinks, installs, mkdir) without executing", which is false. It becomes a statement of what is guaranteed — **no egress** — and enumerates what still runs: package upgrades, venv rebuilds, `git fetch` and `pull --ff-only` on every personal repo, five `npm install -g`, and `uv sync`. Follow `README.md:207`'s enumerate-what-still-runs model.
+`:92` currently promises "log mutating operations (symlinks, installs, mkdir) without executing", which is false. It becomes a statement of what is guaranteed — **no outbound write** — and enumerates what still runs: package upgrades, venv rebuilds, `git fetch` and `pull --ff-only` on every personal repo, five `npm install -g`, and `uv sync`. Follow `README.md:207`'s enumerate-what-still-runs model.
+
+**This said "no egress" until Phase 3, and that word was wrong for the same reason Task 9's was.** `git fetch`, `pull --ff-only`, `npm install -g` and `uv sync` are all egress; what the guards actually prevent is an outbound **write**. See Task 9's retraction note for the measurement. The `grep -qE "no (operation that leaves|egress)"` acceptance gate below still matches the shipped text, so it was left alone — but note it matches on the _old_ vocabulary, which is why the prose above is the authority here and the gate is only a presence check.
 
 `:86` says `-t update` "Also writes a state-ledger entry" — now conditionally false, since no entry is written under `--dry-run`. Add that qualifier.
 
@@ -475,7 +479,7 @@ role: executor
 model: sonnet
 tdd: not-applicable
 acceptance:
-  - cmd: grep -q "leaves this machine" README.md
+  - cmd: grep -q "no outbound write" README.md
     exit_code: 0
   - cmd: '! grep -q "git-hooks sweep only" README.md'
     exit_code: 0
@@ -497,9 +501,13 @@ depends_on: [8]
 
 Every clause is accurate **today** and the emphasised one is exactly what Tasks 2–4 and 8 falsify. Left alone it becomes a confident, specific, wrong warning telling operators not to trust a flag that now works — worse than the vague promise at `CLAUDE.md:92` that Task 7 fixes, because this one names mechanisms and reads as freshly verified.
 
-Rewrite it on `README.md:207`'s own enumerate-what-still-runs model — the model Task 7 is told to imitate, which this line is the origin of. State what is now **guaranteed** (no operation that leaves this machine: no `git push`, no `rsync --delete`, no state-ledger write) and enumerate what still runs (package upgrades, venv rebuilds, `git fetch` and `pull --ff-only` on every personal repo, five `npm install -g`, `uv sync`). Keep it one bullet; do not restructure the Options list.
+Rewrite it on `README.md:207`'s own enumerate-what-still-runs model — the model Task 7 is told to imitate, which this line is the origin of. State what is now **guaranteed** (no outbound **write**: no `git push`, no `rsync --delete`, no state-ledger write) and enumerate what still runs (package upgrades, venv rebuilds, `git fetch` and `pull --ff-only` on every personal repo, five `npm install -g`, `uv sync`). Keep it one bullet; do not restructure the Options list.
 
-**Gate discrimination, measured at pre-flight.** Presence gate: `leaves this machine` occurs **0** times in `README.md` today (as do `no egress` and `DRY_RUN=0`), so it cannot pass until the rewrite lands. Absence gate: `git-hooks sweep only` occurs exactly **1** time, so its removal is observable — and it is paired with the presence gate deliberately, because an absence alone is satisfied by several states including the line being deleted outright rather than rewritten.
+**"No operation that leaves this machine" was this plan's wording and it is false — retracted here rather than quietly edited.** Tasks 7 and 9 both shipped it, faithfully rendered by their implementers, and Phase 3's `security-review` caught it (LOW-1): `_git_repo_status` runs `git fetch` against every personal repo's remote and authenticates with the operator's SSH key on every `--dry-run`, and `npm install -g`/`uv sync` reach registries. Every one of those leaves the machine. The property the code actually delivers is **no outbound write** — nothing mutates remote state — which is the correct and still-strong claim. The enumeration two clauses later always contradicted the bolded guarantee, which is the same self-contradiction shape the branch corrected elsewhere; a guarantee and its own exception list disagreeing is the tell.
+
+**Gate discrimination, measured at pre-flight.** Presence gate: `no outbound write` occurs **0** times in `README.md` today (as do `no egress` and `DRY_RUN=0`), so it cannot pass until the rewrite lands.
+
+**The presence gate was `leaves this machine` until Phase 3 and had to change with the claim.** When `security-review` retracted the false guarantee, the corrected README says "guarantees **no outbound write**" and "It is **not** an offline mode" — so the old grep went red at HEAD. Restoring the phrase to satisfy the gate would have been the exact failure this plan keeps naming: a gate passing on a string whose meaning had inverted. The gate follows the true claim instead. Absence gate: `git-hooks sweep only` occurs exactly **1** time, so its removal is observable — and it is paired with the presence gate deliberately, because an absence alone is satisfied by several states including the line being deleted outright rather than rewritten.
 
 **Scope discipline:** `:162` also mentions a state-ledger entry, and `:456` describes the pre-push hook. Neither is this task's business — do not touch them.
 

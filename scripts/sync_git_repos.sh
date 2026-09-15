@@ -23,8 +23,11 @@ Two independent sync modes:
 Options:
   --git-only     Run only the git sync.
   --legacy-only  Run only the legacy rsync sync.
-  --dry-run      Preview: print what would push/rsync without doing it.
-                 Composable with --git-only / --legacy-only.
+  --dry-run      Suppress every outbound write: no push, no rsync.
+                 NOT a no-op: still fetches from each remote and
+                 fast-forwards clean repos that are behind.
+                 Composable with --git-only / --legacy-only, but
+                 those two together are rejected as ambiguous.
   -h, --help     Show this help and exit.
 
 Exit codes:
