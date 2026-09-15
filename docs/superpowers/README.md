@@ -139,7 +139,7 @@ Master status index for all specs and implementation plans in this directory.
 | 2026-09-11 | [CLAUDE.md re-sort](plans/2026-09-11-claude-md-resort.md)                                  | [spec](specs/2026-09-11-claude-md-resort-design.md)                                                                                       | Done    |
 | 2026-09-11 | [claude workstation identity](plans/2026-09-11-claude-workstation-identity.md)             | [spec](specs/2026-09-11-claude-workstation-identity-design.md)                                                                            | Done    |
 | 2026-09-13 | —                                                                                          | [gnu-coreutils-precedence-resolute](specs/2026-09-13-gnu-coreutils-precedence-resolute-design.md)                                         | Pending |
-| 2026-09-14 | [dry-run-egress-gating](plans/2026-09-14-dry-run-egress-gating.md)                         | [dry-run-irreversible-gating](specs/2026-09-14-dry-run-irreversible-gating-design.md)                                                     | Pending |
+| 2026-09-14 | [dry-run-egress-gating](plans/2026-09-14-dry-run-egress-gating.md)                         | [dry-run-irreversible-gating](specs/2026-09-14-dry-run-irreversible-gating-design.md)                                                     | Done    |
 
 ---
 
