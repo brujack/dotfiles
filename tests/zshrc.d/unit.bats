@@ -358,6 +358,7 @@ EOF
   mkdir -p "${_tmp_dir}/gnubin"
 
   run zsh -c "
+    unset LINUX MACOS
     export MACOS=1
     export _OVERRIDE_GNUBIN_ARM='${_tmp_dir}/gnubin'
     export _OVERRIDE_GNUBIN_INTEL='/nonexistent/gnubin-intel'
@@ -375,6 +376,7 @@ EOF
   mkdir -p "${_tmp_dir}/gnubin"
 
   run zsh -c "
+    unset LINUX MACOS
     export MACOS=1
     export _OVERRIDE_GNUBIN_ARM='/nonexistent/gnubin-arm'
     export _OVERRIDE_GNUBIN_INTEL='${_tmp_dir}/gnubin'
@@ -392,6 +394,7 @@ EOF
   mkdir -p "${_tmp_dir}/gnubin"
 
   run zsh -c "
+    unset LINUX MACOS
     export MACOS=1
     export _OVERRIDE_GNUBIN_ARM='${_tmp_dir}/gnubin'
     export _OVERRIDE_GNUBIN_INTEL='/nonexistent/gnubin-intel'
@@ -407,6 +410,7 @@ EOF
 @test "6_path.zsh adds no gnubin entry when neither Homebrew prefix has it" {
   run zsh -c "
     export PATH=/usr/bin:/bin:/usr/sbin:/sbin
+    unset LINUX MACOS
     export MACOS=1
     export _OVERRIDE_GNUBIN_ARM='/nonexistent/gnubin-arm'
     export _OVERRIDE_GNUBIN_INTEL='/nonexistent/gnubin-intel'
