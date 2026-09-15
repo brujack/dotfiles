@@ -493,6 +493,14 @@ EOF
   [ "$output" -eq 1 ]
 }
 
+# This test predates the Linux coreutils gnubin block. Its claim used to be
+# "there is no Linux gnubin" -- true only because nothing under LINUX ever
+# prepended one. Now that the block exists, the true claim is "the seam is
+# honoured": _OVERRIDE_GNUBIN_LINUX is pointed at a nonexistent path, so
+# NO_GNUBIN pins the -d guard rather than an absent feature. Without this
+# seam the test would resolve the real linuxbrew coreutils gnubin dir on any
+# machine that has it (RESOLUTE, once Task 2 installs the formula) and
+# assert nothing.
 @test "6_path.zsh adds no gnubin entry under LINUX, but still adds a known Linux path" {
   local _fake_home
   _fake_home="$(mktemp -d)"
@@ -505,6 +513,7 @@ EOF
     export LINUX=1
     export _OVERRIDE_GNUBIN_ARM='/nonexistent/gnubin-arm'
     export _OVERRIDE_GNUBIN_INTEL='/nonexistent/gnubin-intel'
+    export _OVERRIDE_GNUBIN_LINUX='/nonexistent/coreutils-gnubin'
     source '${ZSHRC_D}/6_path.zsh' 2>/dev/null
     if [[ \${path[(r)*gnubin*]} ]]; then
       printf 'HAS_GNUBIN\n'
@@ -564,6 +573,82 @@ EOF
   rm -rf "${_tmp_dir}"
   [ "$status" -eq 0 ]
   [ "$output" = "${_tmp_dir}/gnubin" ]
+}
+
+@test "6_path.zsh adds no Linux coreutils gnubin entry when the dir is absent" {
+  local _fake_home
+  _fake_home="$(mktemp -d)"
+  mkdir -p "${_fake_home}/.local/bin"
+
+  # The positive control (HAS_LOCAL_BIN) is emitted from a block that runs
+  # AFTER the gnubin block in 6_path.zsh -- ${HOME}/.local/bin is appended
+  # immediately below it. Asserting that entry landed proves execution
+  # reached and passed the gnubin gate; a control taken from above the block
+  # would prove only that the block started, leaving NO_GNUBIN vacuously
+  # true for an early return between the two.
+  run zsh -c "
+    export PATH=/usr/bin:/bin:/usr/sbin:/sbin
+    unset MACOS LINUX
+    export HOME='${_fake_home}'
+    export LINUX=1
+    export _OVERRIDE_GNUBIN_ARM='/nonexistent/gnubin-arm'
+    export _OVERRIDE_GNUBIN_INTEL='/nonexistent/gnubin-intel'
+    export _OVERRIDE_GNUBIN_LINUX='/nonexistent/coreutils-gnubin'
+    source '${ZSHRC_D}/6_path.zsh' 2>/dev/null
+    if [[ \${path[(r)*gnubin*]} ]]; then
+      printf 'HAS_GNUBIN\n'
+    else
+      printf 'NO_GNUBIN\n'
+    fi
+    if [[ \${path[(r)${_fake_home}/.local/bin]} ]]; then
+      printf 'HAS_LOCAL_BIN\n'
+    else
+      printf 'NO_LOCAL_BIN\n'
+    fi
+  "
+  rm -rf "${_fake_home}"
+  [ "$status" -eq 0 ]
+  [ "$(printf '%s\n' "$output" | head -1)" = "NO_GNUBIN" ]
+  [ "$(printf '%s\n' "$output" | tail -1)" = "HAS_LOCAL_BIN" ]
+}
+
+@test "6_path.zsh Linux coreutils gnubin entry is deduped across repeated sourcing" {
+  local _tmp_dir
+  _tmp_dir="$(mktemp -d)"
+  mkdir -p "${_tmp_dir}/gnubin"
+
+  run zsh -c "
+    unset MACOS LINUX
+    export LINUX=1
+    export _OVERRIDE_GNUBIN_ARM='/nonexistent/gnubin-arm'
+    export _OVERRIDE_GNUBIN_INTEL='/nonexistent/gnubin-intel'
+    export _OVERRIDE_GNUBIN_LINUX='${_tmp_dir}/gnubin'
+    source '${ZSHRC_D}/6_path.zsh' 2>/dev/null
+    source '${ZSHRC_D}/6_path.zsh' 2>/dev/null
+    source '${ZSHRC_D}/6_path.zsh' 2>/dev/null
+    printf '%s\n' \$path | grep -c '^${_tmp_dir}/gnubin\$'
+  "
+  rm -rf "${_tmp_dir}"
+  [ "$output" = "1" ]
+}
+
+@test "6_path.zsh unsets _gnubin_linux after sourcing, does not leak" {
+  local _tmp_dir
+  _tmp_dir="$(mktemp -d)"
+  mkdir -p "${_tmp_dir}/gnubin"
+
+  run zsh -c "
+    unset MACOS LINUX
+    export LINUX=1
+    export _OVERRIDE_GNUBIN_ARM='/nonexistent/gnubin-arm'
+    export _OVERRIDE_GNUBIN_INTEL='/nonexistent/gnubin-intel'
+    export _OVERRIDE_GNUBIN_LINUX='${_tmp_dir}/gnubin'
+    source '${ZSHRC_D}/6_path.zsh' 2>/dev/null
+    printf '%s\n' \"\${_gnubin_linux:-unset}\"
+  "
+  rm -rf "${_tmp_dir}"
+  [ "$status" -eq 0 ]
+  [ "$output" = "unset" ]
 }
 
 @test "5_general.zsh does not call rbenv local (would overwrite project .ruby-version)" {
