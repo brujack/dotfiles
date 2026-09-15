@@ -943,6 +943,20 @@ firefox  124.0"
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_legacy-rsync")" = "dry run" ]
 }
 
+@test "_update_record_start legacy-rsync case on a non-studio host under dry-run records not studio, not dry run" {
+  # bug-scan W2: the true, permanent cause on a non-studio host is "not
+  # studio" -- it would never run whether or not --dry-run was passed. Under
+  # the pre-fix ordering (dry-run checked first) this recorded "dry run",
+  # which reads as "the section would have run without the flag" when it
+  # never would. A non-default hostname makes _is_legacy_sync_host false
+  # without stubbing it, so this exercises the real (unstubbed) host check.
+  export MOCK_HOSTNAME_OUTPUT=not-studio-at-all
+  export DRY_RUN=1
+  _update_record_start "legacy-rsync"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_legacy-rsync")" = "SKIP" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_legacy-rsync")" = "not studio" ]
+}
+
 @test "_update_record_start git-repos case under dry-run writes no SKIP file" {
   # Pins the granularity decision: git-repos has no case arm in
   # _update_record_start (it falls through to the generic `*) ;;` branch) and
