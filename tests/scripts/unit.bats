@@ -424,11 +424,18 @@ teardown() {
 
   # tests/mocks/git (on PATH via load_mocks in setup()) is a full stub with no
   # real refs and no real ahead/behind detection -- it cannot exercise the
-  # actual push-suppression guard this test is about. Strip the mocks dir so
-  # every git invocation below, including the script's own, hits the real
-  # binary.
-  local _clean_path
-  _clean_path="$(printf '%s' "${PATH}" | tr ':' '\n' | grep -v 'tests/mocks' | tr '\n' ':' | sed 's/:$//')"
+  # actual push-suppression guard this test is about. A wholesale strip of
+  # tests/mocks from PATH also un-mocks hostname and rsync, and this
+  # machine's real `hostname -s` is "studio" -- so _is_legacy_sync_host
+  # would read TRUE for the rest of this test with nothing but --git-only
+  # keeping sync_legacy_dirs's real rsync --delete calls unreached
+  # (shell.md: prefer a shim dir holding only the one real binary you need
+  # over a wholesale PATH strip). Prepend a shim containing only a real
+  # `git`, ahead of the still-mocked PATH.
+  local _shim="${BATS_TEST_TMPDIR}/realgit"
+  mkdir -p "${_shim}"
+  ln -sf "$(PATH=/usr/bin:/bin:/opt/homebrew/bin command -v git)" "${_shim}/git"
+  local _clean_path="${_shim}:${PATH}"
 
   local origin="${HOME}/origin.git"
   local clone="${HOME}/git-repos/personal/dry-repo"
@@ -466,11 +473,18 @@ teardown() {
 
   # tests/mocks/git (on PATH via load_mocks in setup()) is a full stub with no
   # real refs and no real ahead/behind detection -- it cannot exercise the
-  # actual push-suppression guard this test is about. Strip the mocks dir so
-  # every git invocation below, including the script's own, hits the real
-  # binary.
-  local _clean_path
-  _clean_path="$(printf '%s' "${PATH}" | tr ':' '\n' | grep -v 'tests/mocks' | tr '\n' ':' | sed 's/:$//')"
+  # actual push-suppression guard this test is about. A wholesale strip of
+  # tests/mocks from PATH also un-mocks hostname and rsync, and this
+  # machine's real `hostname -s` is "studio" -- so _is_legacy_sync_host
+  # would read TRUE for the rest of this test with nothing but --git-only
+  # keeping sync_legacy_dirs's real rsync --delete calls unreached
+  # (shell.md: prefer a shim dir holding only the one real binary you need
+  # over a wholesale PATH strip). Prepend a shim containing only a real
+  # `git`, ahead of the still-mocked PATH.
+  local _shim="${BATS_TEST_TMPDIR}/realgit"
+  mkdir -p "${_shim}"
+  ln -sf "$(PATH=/usr/bin:/bin:/opt/homebrew/bin command -v git)" "${_shim}/git"
+  local _clean_path="${_shim}:${PATH}"
 
   local origin="${HOME}/origin.git"
   local clone="${HOME}/git-repos/personal/dry-repo"

@@ -2879,7 +2879,7 @@ assert_all_npm_globals_pinned() {
   run ledger_write_entry '{"test":"payload"}'
   [ "$status" -eq 0 ]
   [[ "$output" == *"[DRY RUN]"* ]]
-  ! grep -q "ledger write" "${MOCK_CALLS_FILE}"
+  refute_grep "ledger write" "${MOCK_CALLS_FILE}"
 }
 
 @test "ledger_write_entry without dry-run invokes the ledger binary with the JSON on stdin" {

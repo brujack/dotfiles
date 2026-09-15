@@ -807,6 +807,17 @@ EOF
   [ "$status" -eq 0 ]
 }
 
+# CLAUDE.md documents "any other value means on" -- an unrecognised value
+# must fall through the case statement's catch-all `*` arm to active, not
+# silently match one of the inactive spellings. Pins the fail-safe
+# direction against a future nocasematch or pattern change (dry-run).
+@test "dry_run_active returns 0 (active) when DRY_RUN is an unrecognised value" {
+  export DRY_RUN=banana
+  run _dry_run_active
+  unset DRY_RUN
+  [ "$status" -eq 0 ]
+}
+
 # ── _dry_run_active fallback: sourced standalone, without lib/helpers.sh ─────
 #
 # lib/git_sync.sh and lib/legacy_rsync.sh each carry a same-shape fallback
