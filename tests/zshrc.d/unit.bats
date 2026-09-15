@@ -688,11 +688,20 @@ EOF
   # exists to rule out.
 
   # Drift guard: the linuxbrew candidate below is a literal copy of
-  # 6_path.zsh's own default. If the two diverge, the loop below eventually
-  # finds nothing anywhere and silently SKIPs -- lowering no count, reading
-  # as absence of a problem rather than as drift. No bats-support here (no
+  # 6_path.zsh's own default. On a mac the loop falls through to the
+  # /opt/homebrew candidate and this test still runs, so nothing else here
+  # ever reads the linuxbrew literal -- this grep is the only check that it
+  # still matches production. On a Linux-only box the same drift degrades to
+  # a silent SKIP instead, lowering no count. No bats-support here (no
   # `fail`, measured), so a bare failing command is the mechanism.
-  grep -q '_OVERRIDE_GNUBIN_LINUX:-/home/linuxbrew/.linuxbrew/opt/coreutils/libexec/gnubin' "${ZSHRC_D}/6_path.zsh"
+  #
+  # The trailing `}` and -F are load-bearing rather than noise. Without the
+  # brace the pattern also matches a default that merely STARTS with this
+  # path -- a suffix, or a trailing slash -- so the guard stays silent on
+  # exactly the edit it exists to catch. Measured both directions against a
+  # drifted fixture, 2026-09-15. -F stops the unescaped dots being read as
+  # regex any-char.
+  grep -qF '_OVERRIDE_GNUBIN_LINUX:-/home/linuxbrew/.linuxbrew/opt/coreutils/libexec/gnubin}' "${ZSHRC_D}/6_path.zsh"
 
   local -a _candidates=(
     /home/linuxbrew/.linuxbrew/opt/coreutils/libexec/gnubin
