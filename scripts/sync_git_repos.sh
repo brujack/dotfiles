@@ -74,13 +74,6 @@ sync_git_repos_main() {
         _mode_set=1
         ;;
       --dry-run)
-        # DRY_RUN is declared `local` at function entry above, so this
-        # assignment updates that local rather than the caller's shell --
-        # safe for a test (or any future caller) that calls
-        # sync_git_repos_main more than once in the same shell.
-        # shellcheck disable=SC2034 # consumed by _dry_run_active() in
-        # lib/helpers.sh (sourced below at runtime) -- cross-file, so a
-        # single-file shellcheck pass over this script cannot see the read.
         DRY_RUN=1
         ;;
       *)

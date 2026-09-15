@@ -942,6 +942,7 @@ ensure_state_ledger() {
 
 ledger_write_entry() {
   local _json="${1:?ledger_write_entry: json payload required}"
+  # _dry_run_active: see lib/helpers.sh
   if _dry_run_active; then
     printf "[DRY RUN] ledger write (entry suppressed)\n"
     return 0

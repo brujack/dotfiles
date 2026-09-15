@@ -383,6 +383,7 @@ _git_hooks_hookspath_offenders() {
 # none of which a failed make explains) -- see the return block below.
 install_git_hooks_all_repos() {
   local _dry=0
+  # _dry_run_active: see lib/helpers.sh
   _dry_run_active && _dry=1
 
   local _checked=0

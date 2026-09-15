@@ -16,10 +16,6 @@ fi
 # call exits 127, which `if` reads as false -- the fail-OPEN direction -- and
 # _git_sync_one_repo's else-branch is a real `git push`. Fail CLOSED instead:
 if ! declare -f _dry_run_active >/dev/null 2>&1; then
-  # Fail closed: this file's guard protects a push. Sourced without
-  # lib/helpers.sh the real predicate is absent and an undefined function
-  # exits 127, which `if` reads as "not dry run" -- the fail-OPEN direction.
-  # Suppressing is the only safe answer when the authority is missing.
   _dry_run_active() { return 0; }
 fi
 

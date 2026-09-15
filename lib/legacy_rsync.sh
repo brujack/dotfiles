@@ -6,11 +6,6 @@
 # exits 127, which `if` reads as false -- the fail-OPEN direction -- and
 # sync_legacy_dirs's else-branch is three real `rsync -ar --delete` pushes.
 if ! declare -f _dry_run_active >/dev/null 2>&1; then
-  # Fail closed: this file's guard protects three rsync --delete pushes.
-  # Sourced without lib/helpers.sh the real predicate is absent and an
-  # undefined function exits 127, which `if` reads as "not dry run" -- the
-  # fail-OPEN direction. Suppressing is the only safe answer when the
-  # authority is missing.
   _dry_run_active() { return 0; }
 fi
 

@@ -1,7 +1,7 @@
-# `--dry-run` gates egress
+# `--dry-run` gates outbound writes
 
 **Filename note:** this file is `…-dry-run-irreversible-gating-design.md`, from round 1 when
-the scope was "irreversible operations". Round 2 narrowed that to egress. The path is kept
+the scope was "irreversible operations". Round 2 narrowed that to outbound writes. The path is kept
 because the round-1 commits, the All Plans index row and the Step 8 review all reference it;
 the title states the current scope.
 
@@ -77,7 +77,7 @@ reverse.
 
 ## Decision
 
-**Gate egress: the operations that leave this machine.** Three sites.
+**Gate outbound writes: the operations that write to another machine.** Three sites.
 
 This is deliberately narrower than round 1's ten. It closes 100% of the measured harm; round
 1's table closed 0% of it.
@@ -126,7 +126,7 @@ same edit, since under `--dry-run` it will no longer be true.
 
 Two precision corrections, both measured, because earlier drafts overstated this:
 
-- **"every ledger write" is too wide; "egress" is what is true.** `ensure_state_ledger` runs
+- **"every ledger write" is too wide; "outbound write" is what is true.** `ensure_state_ledger` runs
   `ledger.py init` (`workflows.sh:937`) and `run_update` runs `scan_skills.py --write-ledger`
   (`:415`) outside this function. Neither pushes — `cmd_init` spans `ledger.py:372-436` and
   contains no path to `_git_commit_and_push` or `_flush_spool_internal`, and
@@ -141,7 +141,9 @@ Two precision corrections, both measured, because earlier drafts overstated this
 **`git_sync.sh:71` takes a line guard, not a function guard, and the distinction is the
 rule.** `_git_sync_one_repo` has exactly two mutations: the push at `:71` and
 `git pull --ff-only --quiet` at `:82`. Its purpose is _sync_, not _push_ — the pull is neither
-egress nor irreversible (fast-forward only, refused on a dirty tree at `:78-80`). Guarding the
+an outbound write nor irreversible (fast-forward only, refused on a dirty tree at `:78-80`). It
+does reach the remote, so it is egress; that is precisely why the guarantee is scoped to writes
+rather than to egress. Guarding the
 function would suppress a preview of the pull for no benefit. `sync_git_repos` (`:97`) routes
 both the personal repos and `~/.local/share/state-ledger` (`:108-112`) through this same
 function, so the one line guard covers both.
@@ -150,8 +152,8 @@ function, so the one line guard covers both.
 
 ### The rule
 
-> Guard the function where its purpose **is** the egress. Guard the line where egress is one
-> branch of a function that does other useful work.
+> Guard the function where its purpose **is** the outbound write. Guard the line where the
+> outbound write is one branch of a function that does other useful work.
 
 Round 1 used a superficially similar rule to justify wrapping single lines inside
 delete-recreate pairs. That produced three regressions and is **not** what this says: no site
@@ -412,17 +414,17 @@ Not warranted. A defect repair restoring a documented contract; no structural pa
 
 ## Known limitations
 
-- **`--dry-run` is not a no-op and the docs must keep saying so.** Only egress is gated.
+- **`--dry-run` is not a no-op and the docs must keep saying so.** Only outbound writes are gated.
 - **Registry fetches are unresolved, deliberately.** `npm install -g` (5 sites) and
   `uv_sync_venv` fetch from a registry and mutate global state. `uv sync` in particular is
   documented at `CLAUDE.md:274` as producing a state "not reproducible from the lock" — which
   meets the _second_ clause of a wider criterion ("destroys state the remote cannot
-  reproduce") even though it is not egress in the sense used here. Deciding that is a separate
+  reproduce") even though it is not an outbound write in the sense used here. Deciding that is a separate
   question with its own blast radius; it goes to the backlog with these measurements rather
   than being settled inside a defect repair.
 - **Delete-recreate pairs stay ungated.** Gating them requires guarding whole functions, which
   changes what a preview reports. Backlog.
-- **Nothing detects drift.** No test asserts that the set of egress points is a subset of the
+- **Nothing detects drift.** No test asserts that the set of outbound-write sites is a subset of the
   gated set, so a new `git push` elsewhere is silently ungated — the same mechanism that
   produced this defect. `scripts/check-lib-exit-traps.sh` is an in-repo precedent for a scanner
   ratchet. Backlog, deliberately out of this change.
