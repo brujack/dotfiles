@@ -1003,6 +1003,7 @@ EOF
   _doctor_check_hooks_path()    { :; }
   _doctor_check_versions()      { :; }
   _doctor_check_aws_key_expiry() { :; }
+  _doctor_check_gnu_coreutils() { :; }
   run_doctor
   [ "${_called}" -eq 1 ]
 }
@@ -1018,6 +1019,7 @@ EOF
   _doctor_check_versions()      { :; }
   _doctor_check_aws_key_expiry() { :; }
   _doctor_check_github_mcp()    { doctor_warn "test" "a warning"; }
+  _doctor_check_gnu_coreutils() { :; }
   run run_doctor
   [[ "$output" == *"1 warnings"* ]]
 }
@@ -1418,6 +1420,7 @@ EOF
   _doctor_check_hooks_path()    { :; }
   _doctor_check_versions()      { :; }
   _doctor_check_github_mcp()    { :; }
+  _doctor_check_gnu_coreutils() { :; }
   export PROFILE="unknown"
   _PROFILES_LOADED=1
   run run_doctor
@@ -2264,6 +2267,216 @@ STUB
   export GITHUB_PAT_EXPIRY="2020-01-01"
   _doctor_check_github_mcp
   [ "${_DOCTOR_FAILED}" -ge 1 ]
+}
+
+# ── _doctor_check_gnu_coreutils ───────────────────────────────────────────────
+#
+# `sort` is driven through a shim directory holding ONLY a `sort` stub,
+# prepended to PATH — never by stripping a PATH entry, which on this fleet
+# takes git, make and the rest of the toolchain with it alongside the one
+# binary the test meant to hide (shell.md's PATH-mock co-location trap).
+#
+# The non-GNU stubs below all print the same version number (9.5) as the
+# GNU stub -- provider word is the only thing that varies between them, so
+# a match on the version number cannot survive the pair.
+
+@test "_doctor_check_gnu_coreutils does nothing when RESOLUTE is unset" {
+  # Paired with the GNU-pass case below as the positive control: on its own
+  # this test passes identically whether the real check ran and returned
+  # early, or the function is a no-op stub that was never wired up at all.
+  unset RESOLUTE
+  run _doctor_check_gnu_coreutils
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "_doctor_check_gnu_coreutils passes when sort resolves GNU coreutils" {
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  export RESOLUTE=1
+  local _shim="${BATS_TEST_TMPDIR}/gnu_sort_shim"
+  mkdir -p "${_shim}"
+  cat > "${_shim}/sort" <<'STUB'
+#!/usr/bin/env bash
+printf 'sort (GNU coreutils) 9.5\n'
+STUB
+  chmod +x "${_shim}/sort"
+  local _saved_path="${PATH}"
+  local _outfile="${BATS_TEST_TMPDIR}/gnu_pass_out.txt"
+  export PATH="${_shim}:${PATH}"
+  # Called directly, not via `run` — `run`'s command substitution forks a
+  # subshell, so a doctor_pass/doctor_fail write to the global _DOCTOR_*
+  # counters inside it would never reach this shell. Redirecting stdout on
+  # a direct call does not fork one.
+  _doctor_check_gnu_coreutils > "${_outfile}"
+  export PATH="${_saved_path}"
+  [ "${_DOCTOR_FAILED}" -eq 0 ]
+  [[ "$(cat "${_outfile}")" == *"[PASS]"* ]]
+}
+
+@test "_doctor_check_gnu_coreutils fails when sort --version produces no output" {
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  export RESOLUTE=1
+  local _shim="${BATS_TEST_TMPDIR}/silent_sort_shim"
+  mkdir -p "${_shim}"
+  cat > "${_shim}/sort" <<'STUB'
+#!/usr/bin/env bash
+exit 1
+STUB
+  chmod +x "${_shim}/sort"
+  local _saved_path="${PATH}"
+  local _outfile="${BATS_TEST_TMPDIR}/silent_fail_out.txt"
+  export PATH="${_shim}:${PATH}"
+  _doctor_check_gnu_coreutils > "${_outfile}"
+  export PATH="${_saved_path}"
+  # Empty output is reachable from sort-absent, sort-rejects-the-flag, and
+  # sort-not-executable alike -- none of those means "not GNU", so the
+  # message must say the probe could not run, not that the provider is wrong.
+  [ "${_DOCTOR_FAIL}" -eq 1 ]
+  [ "${_DOCTOR_FAILED}" -eq 1 ]
+  [[ "$(cat "${_outfile}")" == *"[FAIL]"* ]]
+  [[ "$(cat "${_outfile}")" == *"could not determine the provider"* ]]
+}
+
+@test "_doctor_check_gnu_coreutils fails when sort resolves uutils and the gnubin formula is absent" {
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  export RESOLUTE=1
+  # Never created -- the absence is the point of this test.
+  export _OVERRIDE_GNUBIN_LINUX="${BATS_TEST_TMPDIR}/gnubin_absent"
+  local _shim="${BATS_TEST_TMPDIR}/uutils_sort_shim"
+  mkdir -p "${_shim}"
+  cat > "${_shim}/sort" <<'STUB'
+#!/usr/bin/env bash
+printf 'sort (uutils coreutils) 9.5\n'
+STUB
+  chmod +x "${_shim}/sort"
+  local _saved_path="${PATH}"
+  local _outfile="${BATS_TEST_TMPDIR}/uutils_fail_out.txt"
+  export PATH="${_shim}:${PATH}"
+  _doctor_check_gnu_coreutils > "${_outfile}"
+  export PATH="${_saved_path}"
+  # _DOCTOR_FAIL is the count; _DOCTOR_FAILED is the 0/1 flag. Both are
+  # asserted here because doctor_fail sets both in the same call.
+  [ "${_DOCTOR_FAIL}" -eq 1 ]
+  [ "${_DOCTOR_FAILED}" -eq 1 ]
+  [[ "$(cat "${_outfile}")" == *"[FAIL]"* ]]
+}
+
+@test "_doctor_check_gnu_coreutils warns when sort resolves uutils but the gnubin formula is installed" {
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  export RESOLUTE=1
+  local _gnubin="${BATS_TEST_TMPDIR}/gnubin_present"
+  mkdir -p "${_gnubin}"
+  export _OVERRIDE_GNUBIN_LINUX="${_gnubin}"
+  local _shim="${BATS_TEST_TMPDIR}/uutils_sort_shim_warn"
+  mkdir -p "${_shim}"
+  cat > "${_shim}/sort" <<'STUB'
+#!/usr/bin/env bash
+printf 'sort (uutils coreutils) 9.5\n'
+STUB
+  chmod +x "${_shim}/sort"
+  local _saved_path="${PATH}"
+  local _outfile="${BATS_TEST_TMPDIR}/uutils_warn_out.txt"
+  export PATH="${_shim}:${PATH}"
+  _doctor_check_gnu_coreutils > "${_outfile}"
+  export PATH="${_saved_path}"
+  # This is the point of the test: the formula IS installed on this
+  # provisioned box, so a FAIL here would be a false alarm carrying a
+  # `setup_env.sh -t setup` remedy that does nothing.
+  [ "${_DOCTOR_FAILED}" -eq 0 ]
+  [[ "$(cat "${_outfile}")" == *"[WARN]"* ]]
+}
+
+@test "_doctor_check_gnu_coreutils fails when the gnubin directory is on PATH but sort still resolves uutils" {
+  # The regression the WARN split was missing: an interactive shell whose
+  # PATH genuinely carries the gnubin directory (Task 3's block ran) but
+  # whose sort is still not GNU -- a deleted block would leave the
+  # directory off PATH entirely (the WARN case above), but this is a
+  # renamed opt path, a shadowing PATH entry ahead of it, or a gnubin dir
+  # that lost its `sort` binary. `-d` alone cannot tell this from the WARN
+  # case; only checking THIS shell's PATH can.
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  export RESOLUTE=1
+  local _gnubin="${BATS_TEST_TMPDIR}/gnubin_on_path_broken"
+  mkdir -p "${_gnubin}"
+  export _OVERRIDE_GNUBIN_LINUX="${_gnubin}"
+  local _shim="${BATS_TEST_TMPDIR}/uutils_sort_shim_on_path"
+  mkdir -p "${_shim}"
+  cat > "${_shim}/sort" <<'STUB'
+#!/usr/bin/env bash
+printf 'sort (uutils coreutils) 9.5\n'
+STUB
+  chmod +x "${_shim}/sort"
+  local _saved_path="${PATH}"
+  local _outfile="${BATS_TEST_TMPDIR}/gnubin_on_path_out.txt"
+  # The gnubin dir IS a genuine PATH member here -- placed behind the
+  # uutils shim, so sort still resolves uutils despite the directory
+  # being reachable.
+  export PATH="${_shim}:${_gnubin}:${PATH}"
+  _doctor_check_gnu_coreutils > "${_outfile}"
+  export PATH="${_saved_path}"
+  [ "${_DOCTOR_FAIL}" -eq 1 ]
+  [ "${_DOCTOR_FAILED}" -eq 1 ]
+  [[ "$(cat "${_outfile}")" == *"[FAIL]"* ]]
+}
+
+@test "_doctor_check_gnu_coreutils's gnubin default matches 6_path.zsh's" {
+  # helpers.sh and 6_path.zsh each carry the same literal default with
+  # nothing forcing them equal. A future formula-path change that updates
+  # only one of them would make branch 3's on-PATH conjunct compare against
+  # a stale directory -- it would never match, and a healthy box would go
+  # back to FAIL. No bats-support: a bare failing command is the mechanism.
+  local _helpers_default _path_zsh_default
+  _helpers_default="$(grep -oE '_OVERRIDE_GNUBIN_LINUX:-[^}]+' "${REPO_ROOT}/lib/helpers.sh" | head -1 | sed 's/^_OVERRIDE_GNUBIN_LINUX:-//')"
+  _path_zsh_default="$(grep -oE '_OVERRIDE_GNUBIN_LINUX:-[^}]+' "${REPO_ROOT}/.config/.zshrc.d/6_path.zsh" | head -1 | sed 's/^_OVERRIDE_GNUBIN_LINUX:-//')"
+  [ -n "${_helpers_default}" ]
+  [ -n "${_path_zsh_default}" ]
+  [ "${_helpers_default}" = "${_path_zsh_default}" ]
+}
+
+@test "_doctor_check_gnu_coreutils does not treat a third, unbranded sort as GNU" {
+  # The empty-output test above cannot discriminate a fail-open provider
+  # match (e.g. "not uutils" standing in for "is GNU") from the real one --
+  # `-z` is checked first and short-circuits before the provider test is
+  # ever reached, by Finding A's own requirement that the branch sit BEFORE
+  # it. A provider that is neither GNU- nor uutils-branded is what actually
+  # distinguishes "== *(GNU coreutils)*" from "!= *uutils*": the former
+  # correctly rejects it, the latter wrongly accepts it as GNU.
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  export RESOLUTE=1
+  export _OVERRIDE_GNUBIN_LINUX="${BATS_TEST_TMPDIR}/gnubin_absent_third"
+  local _shim="${BATS_TEST_TMPDIR}/busybox_sort_shim"
+  mkdir -p "${_shim}"
+  cat > "${_shim}/sort" <<'STUB'
+#!/usr/bin/env bash
+printf 'sort (busybox) 1.36.1\n'
+STUB
+  chmod +x "${_shim}/sort"
+  local _saved_path="${PATH}"
+  local _outfile="${BATS_TEST_TMPDIR}/busybox_out.txt"
+  export PATH="${_shim}:${PATH}"
+  _doctor_check_gnu_coreutils > "${_outfile}"
+  export PATH="${_saved_path}"
+  [ "${_DOCTOR_FAILED}" -eq 1 ]
+  [[ "$(cat "${_outfile}")" != *"[PASS]"* ]]
+}
+
+@test "run_doctor calls _doctor_check_gnu_coreutils" {
+  local _called=0
+  _doctor_check_gnu_coreutils() { _called=1; }
+  # Stub all other sub-checks to avoid side effects — mirrors "run_doctor
+  # calls _doctor_check_github_mcp" above.
+  _doctor_check_profile()       { :; }
+  _doctor_check_symlinks()      { :; }
+  _doctor_check_symlink_roots() { :; }
+  _doctor_check_tools()         { :; }
+  _doctor_check_login_shell()   { :; }
+  _doctor_check_cred_dirs()     { :; }
+  _doctor_check_hooks_path()    { :; }
+  _doctor_check_versions()      { :; }
+  _doctor_check_aws_key_expiry() { :; }
+  _doctor_check_github_mcp()    { :; }
+  run_doctor
+  [ "${_called}" -eq 1 ]
 }
 
 # ── _update_record_start legacy-rsync ─────────────────────────────────────────

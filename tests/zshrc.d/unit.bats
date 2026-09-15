@@ -358,6 +358,7 @@ EOF
   mkdir -p "${_tmp_dir}/gnubin"
 
   run zsh -c "
+    unset MACOS LINUX
     export MACOS=1
     export _OVERRIDE_GNUBIN_ARM='${_tmp_dir}/gnubin'
     export _OVERRIDE_GNUBIN_INTEL='/nonexistent/gnubin-intel'
@@ -375,6 +376,7 @@ EOF
   mkdir -p "${_tmp_dir}/gnubin"
 
   run zsh -c "
+    unset MACOS LINUX
     export MACOS=1
     export _OVERRIDE_GNUBIN_ARM='/nonexistent/gnubin-arm'
     export _OVERRIDE_GNUBIN_INTEL='${_tmp_dir}/gnubin'
@@ -392,6 +394,7 @@ EOF
   mkdir -p "${_tmp_dir}/gnubin"
 
   run zsh -c "
+    unset MACOS LINUX
     export MACOS=1
     export _OVERRIDE_GNUBIN_ARM='${_tmp_dir}/gnubin'
     export _OVERRIDE_GNUBIN_INTEL='/nonexistent/gnubin-intel'
@@ -407,6 +410,7 @@ EOF
 @test "6_path.zsh adds no gnubin entry when neither Homebrew prefix has it" {
   run zsh -c "
     export PATH=/usr/bin:/bin:/usr/sbin:/sbin
+    unset MACOS LINUX
     export MACOS=1
     export _OVERRIDE_GNUBIN_ARM='/nonexistent/gnubin-arm'
     export _OVERRIDE_GNUBIN_INTEL='/nonexistent/gnubin-intel'
@@ -489,7 +493,22 @@ EOF
   [ "$output" -eq 1 ]
 }
 
-@test "6_path.zsh adds no gnubin entry under LINUX, but still adds a known Linux path" {
+# This test predates the Linux coreutils gnubin block. Its claim used to be
+# "there is no Linux gnubin" -- true only because nothing under LINUX ever
+# prepended one. Now that the block exists, the true claim is "the seam is
+# honoured": _OVERRIDE_GNUBIN_LINUX is pointed at a nonexistent path, so
+# NO_GNUBIN pins the -d guard rather than an absent feature. Without this
+# seam the test would resolve the real linuxbrew coreutils gnubin dir on any
+# machine that has it (RESOLUTE, once Task 2 installs the formula) and
+# assert nothing.
+#
+# The HAS_LOCAL_BIN assertion below is a positive control, and it is taken
+# from ${HOME}/.local/bin deliberately: that entry is appended AFTER the
+# gnubin block, so it proves execution reached and passed the gate. A control
+# taken from above the block (any /opt/local or linuxbrew entry) would prove
+# only that the block started, leaving NO_GNUBIN vacuously satisfied if
+# anything returned early in between. Do not move it upstream.
+@test "6_path.zsh honours _OVERRIDE_GNUBIN_LINUX and adds no gnubin entry when the dir is absent" {
   local _fake_home
   _fake_home="$(mktemp -d)"
   mkdir -p "${_fake_home}/.local/bin"
@@ -501,6 +520,7 @@ EOF
     export LINUX=1
     export _OVERRIDE_GNUBIN_ARM='/nonexistent/gnubin-arm'
     export _OVERRIDE_GNUBIN_INTEL='/nonexistent/gnubin-intel'
+    export _OVERRIDE_GNUBIN_LINUX='/nonexistent/coreutils-gnubin'
     source '${ZSHRC_D}/6_path.zsh' 2>/dev/null
     if [[ \${path[(r)*gnubin*]} ]]; then
       printf 'HAS_GNUBIN\n'
@@ -534,6 +554,185 @@ EOF
   rm -rf "${_tmp_dir}"
   [ "$status" -eq 0 ]
   [ "$output" = "unset" ]
+}
+
+# ── 6_path.zsh Linux coreutils gnubin tests ──────────────────────────────────
+# _OVERRIDE_GNUBIN_LINUX is a test seam, same convention as the macOS
+# _OVERRIDE_GNUBIN_ARM/_OVERRIDE_GNUBIN_INTEL pair above -- default is the real
+# linuxbrew coreutils gnubin path, redirected to a fixture dir here. Both
+# macOS seams are pointed at /nonexistent paths in every case below so the
+# macOS arm cannot contribute a *gnubin* match and confuse an assertion.
+
+@test "6_path.zsh prepends Linux coreutils gnubin dir to PATH when present" {
+  local _tmp_dir
+  _tmp_dir="$(mktemp -d)"
+  mkdir -p "${_tmp_dir}/gnubin"
+
+  run zsh -c "
+    unset MACOS LINUX
+    export LINUX=1
+    export _OVERRIDE_GNUBIN_ARM='/nonexistent/gnubin-arm'
+    export _OVERRIDE_GNUBIN_INTEL='/nonexistent/gnubin-intel'
+    export _OVERRIDE_GNUBIN_LINUX='${_tmp_dir}/gnubin'
+    source '${ZSHRC_D}/6_path.zsh' 2>/dev/null
+    printf '%s\n' \"\${path[1]}\"
+  "
+  rm -rf "${_tmp_dir}"
+  [ "$status" -eq 0 ]
+  [ "$output" = "${_tmp_dir}/gnubin" ]
+}
+
+@test "6_path.zsh Linux coreutils gnubin path survives word splitting and a spaced path" {
+  local _base _dir
+  _base="$(mktemp -d)"
+  _dir="${_base}/dir with space"
+  mkdir -p "${_dir}"
+
+  # `setopt shwordsplit` is what makes this test able to fail. zsh does not
+  # word-split unquoted parameter expansions by default, so with the option
+  # off the quoted and unquoted forms are indistinguishable and this
+  # assertion would pass either way -- vacuous. Under shwordsplit an
+  # unquoted ${_gnubin_linux} splits on the space, landing as three path
+  # entries instead of one; the quoted form keeps it a single element.
+  #
+  # Not hypothetical: it is what `emulate sh`/`emulate ksh` set, and
+  # 3_oh_my_zsh.zsh sources oh-my-zsh with 16 third-party plugins upstream
+  # of this file, any one of which could emulate. Same precedent as
+  # "5_general.zsh keychain path survives word splitting and a spaced path".
+  #
+  # Do NOT swap `setopt shwordsplit` for `emulate sh` here. emulate sh also
+  # turns on ksh-style 0-indexing, so ${path[1]} becomes the SECOND element
+  # and this assertion goes red for an indexing reason that looks exactly
+  # like a splitting regression. Measured 2026-09-15.
+  run zsh -c "
+    setopt shwordsplit
+    unset MACOS LINUX
+    export LINUX=1
+    export _OVERRIDE_GNUBIN_ARM='/nonexistent/gnubin-arm'
+    export _OVERRIDE_GNUBIN_INTEL='/nonexistent/gnubin-intel'
+    export _OVERRIDE_GNUBIN_LINUX='${_dir}'
+    source '${ZSHRC_D}/6_path.zsh' 2>/dev/null
+    printf '%s\n' \"\${path[1]}\"
+  "
+  rm -rf "${_base}"
+  [ "$status" -eq 0 ]
+  [ "$output" = "${_dir}" ]
+}
+
+@test "6_path.zsh Linux coreutils gnubin entry is deduped across repeated sourcing" {
+  local _tmp_dir
+  _tmp_dir="$(mktemp -d)"
+  mkdir -p "${_tmp_dir}/gnubin"
+
+  run zsh -c "
+    unset MACOS LINUX
+    export LINUX=1
+    export _OVERRIDE_GNUBIN_ARM='/nonexistent/gnubin-arm'
+    export _OVERRIDE_GNUBIN_INTEL='/nonexistent/gnubin-intel'
+    export _OVERRIDE_GNUBIN_LINUX='${_tmp_dir}/gnubin'
+    source '${ZSHRC_D}/6_path.zsh' 2>/dev/null
+    source '${ZSHRC_D}/6_path.zsh' 2>/dev/null
+    source '${ZSHRC_D}/6_path.zsh' 2>/dev/null
+    printf '%s\n' \$path | grep -c '^${_tmp_dir}/gnubin\$'
+  "
+  rm -rf "${_tmp_dir}"
+  [ "$output" = "1" ]
+}
+
+@test "6_path.zsh unsets _gnubin_linux after sourcing, does not leak" {
+  local _tmp_dir
+  _tmp_dir="$(mktemp -d)"
+  mkdir -p "${_tmp_dir}/gnubin"
+
+  run zsh -c "
+    unset MACOS LINUX
+    export LINUX=1
+    export _OVERRIDE_GNUBIN_ARM='/nonexistent/gnubin-arm'
+    export _OVERRIDE_GNUBIN_INTEL='/nonexistent/gnubin-intel'
+    export _OVERRIDE_GNUBIN_LINUX='${_tmp_dir}/gnubin'
+    source '${ZSHRC_D}/6_path.zsh' 2>/dev/null
+    printf '%s\n' \"\${_gnubin_linux:-unset}\"
+  "
+  rm -rf "${_tmp_dir}"
+  [ "$status" -eq 0 ]
+  [ "$output" = "unset" ]
+}
+
+@test "6_path.zsh's Linux gnubin supplies a sort that distinguishes py.test from pytest" {
+  # The defect, directly: uutils `sort -u` collates py.test and pytest as equal
+  # and drops one, so pyenv's `versions` shim -- which pipes its name list
+  # through sort -- emits no pytest shim. GNU keeps both (named by construct,
+  # not by line -- a cross-file address drifts).
+  #
+  # Resolve sort THROUGH the prepend, never from the ambient PATH. This
+  # machine's /usr/bin/sort is BSD and already answers 2 (measured 2026-09-15
+  # on studio: 2.3-Apple (199)), so an ambient assertion would pass for a
+  # reason that says nothing about the fix. The provider assertion is what
+  # makes the 2 mean something.
+  #
+  # PATH is pinned to a minimal set inside the subshell -- same idiom as the
+  # two absence-case gnubin tests above. Without it the test cannot
+  # discriminate on the one machine it currently runs on: an interactive
+  # shell there has already sourced 6_path.zsh, so once the formula is
+  # installed the real gnubin is on the caller's PATH before this subshell
+  # starts, and both assertions would pass whether or not the prepend below
+  # ran. `whence -p sort` makes resolution itself assertable -- it must
+  # equal the seam's own directory, not merely find *some* GNU sort on PATH.
+  #
+  # Candidates cover every machine that can run this assertion. Brewfile
+  # installs coreutils untagged on every mac, so a real GNU sort exists there
+  # too (measured 9.12 on studio) even though this block only ever runs under
+  # LINUX=1 in production -- the seam drives that branch against a directory
+  # that happens to exist on whichever machine runs the test. /usr/bin is
+  # deliberately never a candidate: that is the ambient-sort shape this test
+  # exists to rule out.
+
+  # Drift guard: the linuxbrew candidate below is a literal copy of
+  # 6_path.zsh's own default. On a mac the loop falls through to the
+  # /opt/homebrew candidate and this test still runs, so nothing else here
+  # ever reads the linuxbrew literal -- this grep is the only check that it
+  # still matches production. On a Linux-only box the same drift degrades to
+  # a silent SKIP instead, lowering no count. No bats-support here (no
+  # `fail`, measured), so a bare failing command is the mechanism.
+  #
+  # The trailing `}` and -F are load-bearing rather than noise. Without the
+  # brace the pattern also matches a default that merely STARTS with this
+  # path -- a suffix, or a trailing slash -- so the guard stays silent on
+  # exactly the edit it exists to catch. Measured both directions against a
+  # drifted fixture, 2026-09-15. -F stops the unescaped dots being read as
+  # regex any-char.
+  grep -qF '_OVERRIDE_GNUBIN_LINUX:-/home/linuxbrew/.linuxbrew/opt/coreutils/libexec/gnubin}' "${ZSHRC_D}/6_path.zsh"
+
+  local -a _candidates=(
+    /home/linuxbrew/.linuxbrew/opt/coreutils/libexec/gnubin
+    /opt/homebrew/opt/coreutils/libexec/gnubin
+    /usr/local/opt/coreutils/libexec/gnubin
+  )
+  local _gnubin _candidate
+  for _candidate in "${_candidates[@]}"; do
+    if [[ -x "${_candidate}/sort" ]]; then
+      _gnubin="${_candidate}"
+      break
+    fi
+  done
+  [[ -n "${_gnubin:-}" ]] || skip "no GNU sort in: ${_candidates[*]} -- this assertion did not run, so a green suite here is not evidence for it"
+
+  run zsh -c "
+    export PATH=/usr/bin:/bin:/usr/sbin:/sbin
+    unset MACOS LINUX
+    export LINUX=1
+    export _OVERRIDE_GNUBIN_LINUX='${_gnubin}'
+    export _OVERRIDE_GNUBIN_ARM='/nonexistent/gnubin-arm'
+    export _OVERRIDE_GNUBIN_INTEL='/nonexistent/gnubin-intel'
+    source '${ZSHRC_D}/6_path.zsh' 2>/dev/null
+    whence -p sort
+    sort --version | head -1
+    printf 'py.test\npytest\n' | sort -u | wc -l | tr -d ' '
+  "
+  [ "$status" -eq 0 ]
+  [ "$(printf '%s\n' "$output" | sed -n '1p')" = "${_gnubin}/sort" ]
+  [[ "$(printf '%s\n' "$output" | sed -n '2p')" == *GNU* ]]
+  [ "$(printf '%s\n' "$output" | sed -n '3p')" -eq 2 ]
 }
 
 @test "5_general.zsh does not call rbenv local (would overwrite project .ruby-version)" {

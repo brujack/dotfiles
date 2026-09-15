@@ -665,6 +665,20 @@ silently asserts nothing. `tests/setup_env/install_guards.bats` calls `_gnubin_a
 unconditionally rather than only under test — a stray export changes real shell `PATH`,
 which grants no capability beyond setting `PATH` directly but is worth knowing.
 
+**`_OVERRIDE_GNUBIN_LINUX` is the same pattern one platform and one tool over — Linux
+coreutils rather than macOS `make`.** Read by `.config/.zshrc.d/6_path.zsh` (the `PATH`
+prepend) and by `lib/helpers.sh`'s `_doctor_check_gnu_coreutils` (locating the formula to
+explain a non-GNU `sort`), both defaulting to
+`/home/linuxbrew/.linuxbrew/opt/coreutils/libexec/gnubin`. See
+[ADR-0031](docs/adr/0031-gnu-coreutils-precedence-on-resolute.md) for why the install is
+gated on `RESOLUTE` (Ubuntu 26.04) while this `PATH` prepend is not — it is gated only on
+`[[ -d ... ]]`. That directory is real on any `claude`-class box once the coreutils formula
+has been installed, so a test that forgets to point this seam at a nonexistent path
+short-circuits the `-d` guard and silently asserts nothing, the same failure mode the ARM
+gnubin seam above exists to prevent. `lib/helpers.sh` carries the identical default, and a
+test asserts the two stay equal — a drift between them would make the doctor arm's
+diagnosis and the shell's actual `PATH` disagree about what "the gnubin directory" means.
+
 **`_OVERRIDE_DOCKER_BIN` (`.config/.zshrc.d/6_path.zsh`) selects Docker Desktop's CLI
 directory, defaulting to `${HOME}/.docker/bin`.** The seam exists for the same reason as the
 gnubin pair: that directory is real on any mac running Docker Desktop, so a test of the
@@ -998,7 +1012,7 @@ Invoke `caveman:caveman-commit` skill to generate the commit message before runn
 
 - **The pin probe must read `--includes`, and the remedy must name the origin file:** `git config --<scope> --get` defaults to `--no-includes`, but git's own hook resolution traverses includes. A pin reached through an `[include]` therefore answered rc 1 with **empty stderr** — byte-identical to a genuinely unset key — while `rev-parse --git-path hooks` returned the pinned path and every repo on the box was silently redirected; both surfaces rendered `[PASS] <scope>: unset` over a live machine-wide redirect. `_git_hooks_hookspath_offenders` now re-reads any apparently-clean scope with `git config --<scope> --includes -z --show-origin --get`. `-z` is required rather than the default tab-separated `--show-origin` format (the value may be empty or whitespace-only, and NUL is the only delimiter git will not also emit inside a value), and because command substitution silently drops NUL bytes the pair must be consumed with `read -d ''` off a process substitution, never `$(...)`. The remedy differs by origin: a scope-level `--unset` **cannot** clear a key held in an included file — it exits 5 and the pin survives — so the function emits `git config --file <origin> --unset core.hooksPath` for that case and keeps the scope form only for a key in the scope's own file. Output contract is `scope<TAB>remedy<TAB>value`, with value last so a tab inside a pinned path cannot truncate the command the operator is told to run. Remaining limit: a conditional `includeIf "gitdir:…"` is visible only when git evaluates it from a matching directory, and the probe runs once per sweep rather than once per discovered repo.
 
-- **Homebrew `make` gnubin prepend:** `.config/.zshrc.d/6_path.zsh` prepends the Homebrew `make` formula's `gnubin` directory on macOS, so plain `make` resolves to GNU 4.x instead of `/usr/bin/make` 3.81. **It must be a prepend, not `path+=`.** This file's existing idiom is append-via-`+=`, which leaves `/usr/bin` ahead of anything it adds — an append here would be completely inert and would still look correct to a reader. Both Homebrew prefixes are tested for existence (ARM at `/opt/homebrew/opt/make/libexec/gnubin` and Intel at `/usr/local/opt/make/libexec/gnubin`); the invocation never calls `brew --prefix` because this same file is what puts `/opt/homebrew/bin` on `PATH`, so `brew` is not guaranteed resolvable at that point.
+- **Homebrew `make` gnubin prepend:** `.config/.zshrc.d/6_path.zsh` prepends the Homebrew `make` formula's `gnubin` directory on macOS, so plain `make` resolves to GNU 4.x instead of `/usr/bin/make` 3.81. **It must be a prepend, not `path+=`.** This file's existing idiom is append-via-`+=`, which leaves `/usr/bin` ahead of anything it adds — an append here would be completely inert and would still look correct to a reader. Both Homebrew prefixes are tested for existence (ARM at `/opt/homebrew/opt/make/libexec/gnubin` and Intel at `/usr/local/opt/make/libexec/gnubin`); the invocation never calls `brew --prefix` because this same file is what puts `/opt/homebrew/bin` on `PATH`, so `brew` is not guaranteed resolvable at that point. The same file applies the identical prepend-not-append rule one more time, for Linux coreutils rather than macOS `make` — see [ADR-0031](docs/adr/0031-gnu-coreutils-precedence-on-resolute.md) for the mechanism. The `PATH` prepend for the linuxbrew `coreutils` gnubin directory is gated only on `[[ -d ... ]]`, deliberately not on `RESOLUTE`: the install is release-gated, the `PATH` edit is release-blind, and the ADR records why that asymmetry is intentional rather than a bug to reconcile.
 
 - **Which `make` an actor resolves — measured, and it does not change any gate verdict.** Because `6_path.zsh` is sourced by interactive zsh only, `make`'s version on a provisioned mac is a function of how the process was started. There are four answers, not the two this file used to describe, all measured 2026-08-16 on the Studio:
 

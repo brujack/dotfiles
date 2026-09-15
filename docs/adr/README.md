@@ -34,3 +34,4 @@ Cross-cutting decisions that apply across personal repos. Repo-specific decision
 | [0028](0028-awscli-download-signature-verification.md)           | AWS CLI download signature verification                               | 2026-09-01 | Accepted                                              |
 | [0029](0029-gate-gpu-provisioning-on-hardware-not-capability.md) | Gate GPU provisioning on hardware, not a profile capability           | 2026-09-12 | Accepted                                              |
 | [0030](0030-dry-run-gates-outbound-writes.md)                    | `--dry-run` gates outbound writes, and fails closed                   | 2026-09-14 | Accepted                                              |
+| [0031](0031-gnu-coreutils-precedence-on-resolute.md)             | GNU coreutils precedence on resolute (Ubuntu 26.04)                   | 2026-09-15 | Accepted                                              |

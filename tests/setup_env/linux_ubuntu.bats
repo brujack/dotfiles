@@ -336,6 +336,77 @@ teardown() {
   refute_grep "plugins install superpowers$" "${MOCK_CALLS_FILE}"
 }
 
+# ── _install_ubuntu_brew_packages: RESOLUTE-gated coreutils ──────────────────
+#
+# 26.04 ships uutils coreutils. Its `sort -u` collates `py.test` and `pytest`
+# as equal and drops one, so pyenv's `versions` command -- which pipes its
+# name list through `sort` -- emits no `pytest` shim. apt cannot make GNU the
+# provider -- build-essential pins coreutils-from-uutils by name -- so the
+# formula is the route, gated to 26.04 since earlier releases already ship
+# GNU.
+
+@test "_install_ubuntu_brew_packages: RESOLUTE installs coreutils via brew" {
+  export RESOLUTE=1
+  unset NOBLE
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 0 ]
+  grep -q "brew install coreutils" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_brew_packages: neither RESOLUTE nor NOBLE set skips coreutils" {
+  # NOBLE is held unset here, matching the RESOLUTE test above and the
+  # accumulator test below -- RESOLUTE is the only variable that differs
+  # between this test and those. An implementation gating on
+  # `[[ -z ${NOBLE} ]]` instead of `[[ -n ${RESOLUTE} ]]` would install here
+  # too, since NOBLE is unset, which is exactly what this test exists to
+  # catch. This state is also reachable for real: any Linux actor where
+  # detect_env never ran, or a release detect_env.sh:19 does not recognise.
+  unset NOBLE RESOLUTE
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 0 ]
+  refute_grep "brew install coreutils" "${MOCK_CALLS_FILE}"
+  # Positive control downstream of the gate: the unconditional `brew trust`
+  # call at the end of this function runs after every branch, including the
+  # coreutils gate. A control emitted upstream of the gate (e.g. the shfmt
+  # install near the top of the package list) would prove only that the
+  # function body started, not that execution reached the code under test --
+  # an early return between the two would leave the absence assertion above
+  # vacuously satisfied with an upstream control still green.
+  # Named by construct, not by line number: a cross-file address drifts the
+  # moment a line is inserted above it, which CLAUDE.md records happening to
+  # tests/mocks/curl's own citation.
+  grep -q "brew trust" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_brew_packages: NOBLE (24.04) skips coreutils" {
+  # The real 24.04 state the test above gives up by holding NOBLE constant:
+  # NOBLE=1, RESOLUTE unset. 24.04 already ships GNU coreutils, so the gate
+  # must skip here too.
+  export NOBLE=1
+  unset RESOLUTE
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 0 ]
+  refute_grep "brew install coreutils" "${MOCK_CALLS_FILE}"
+  # Same downstream positive control as above.
+  grep -q "brew trust" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_brew_packages: coreutils failure feeds the _failed accumulator" {
+  # tests/mocks/brew's shared MOCK_BREW_INSTALL_EXIT fails EVERY install, which
+  # would prove the tri-state fires but not that it names the right package --
+  # see the identical comment on the hadolint test above.
+  brew_install_formula() {
+    [[ "$1" == "coreutils" ]] && return 1
+    return 0
+  }
+  export RESOLUTE=1
+  unset NOBLE
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"coreutils"* ]]
+  [[ "$output" == *"1 package(s) failed"* ]]
+}
+
 @test "_install_ubuntu_rust: sources .cargo/env when file exists" {
   export HAS_RUST=1
   mkdir -p "${HOME}/.cargo"
