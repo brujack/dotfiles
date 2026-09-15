@@ -540,6 +540,32 @@ EOF
   [ "$output" = "unset" ]
 }
 
+# ── 6_path.zsh Linux coreutils gnubin tests ──────────────────────────────────
+# _OVERRIDE_GNUBIN_LINUX is a test seam, same convention as the macOS
+# _OVERRIDE_GNUBIN_ARM/_OVERRIDE_GNUBIN_INTEL pair above -- default is the real
+# linuxbrew coreutils gnubin path, redirected to a fixture dir here. Both
+# macOS seams are pointed at /nonexistent paths in every case below so the
+# macOS arm cannot contribute a *gnubin* match and confuse an assertion.
+
+@test "6_path.zsh prepends Linux coreutils gnubin dir to PATH when present" {
+  local _tmp_dir
+  _tmp_dir="$(mktemp -d)"
+  mkdir -p "${_tmp_dir}/gnubin"
+
+  run zsh -c "
+    unset MACOS LINUX
+    export LINUX=1
+    export _OVERRIDE_GNUBIN_ARM='/nonexistent/gnubin-arm'
+    export _OVERRIDE_GNUBIN_INTEL='/nonexistent/gnubin-intel'
+    export _OVERRIDE_GNUBIN_LINUX='${_tmp_dir}/gnubin'
+    source '${ZSHRC_D}/6_path.zsh' 2>/dev/null
+    printf '%s\n' \"\${path[1]}\"
+  "
+  rm -rf "${_tmp_dir}"
+  [ "$status" -eq 0 ]
+  [ "$output" = "${_tmp_dir}/gnubin" ]
+}
+
 @test "5_general.zsh does not call rbenv local (would overwrite project .ruby-version)" {
   local _tmp_dir _project_dir
   _tmp_dir="$(mktemp -d)"
