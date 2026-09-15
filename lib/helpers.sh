@@ -859,8 +859,10 @@ _doctor_check_gnu_coreutils() {
     # interactive shell whose prepend has regressed (block deleted, opt
     # path renamed, a shadowing PATH entry). Only when this shell's own
     # PATH lacks the directory is the cause "wrong actor" rather than "the
-    # fix stopped working" -- `-t doctor` is one of the two workflows that
-    # bypass the brew prereq, so it is reachable over ssh/cron/launchd,
+    # fix stopped working" -- `-t doctor` is one of two `-t` workflows that
+    # bypass the brew prereq (`check-versions` is the other; `--brew-install`
+    # is a third bypass, but a flag rather than a workflow), so it is
+    # reachable over ssh/cron/launchd,
     # where the prepend never ran. Not an unhealthy machine, so warn rather
     # than fail: a FAIL here would carry the `setup_env.sh -t setup` remedy,
     # which does nothing for an actor that was never going to source
