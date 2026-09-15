@@ -1287,6 +1287,36 @@ _sweep_build_partial_repo() {
   [[ "$output" == *"repo-one: missing pre-commit pre-push commit-msg (pre-run state; make was not executed)"* ]]
 }
 
+# The DRY_RUN=0 counterpart to the test above. Task 1 changed
+# _dry_run_active's truthiness rule so "0" means dry-run is OFF, and
+# git_hooks.sh:386 read the old `[[ -n "${DRY_RUN:-}" ]]` predicate, which
+# disagrees with run_cmd on exactly this value -- DRY_RUN=0 read as
+# "dry-run active" here while run_cmd (lib/helpers.sh) really executed.
+# Reverting :386 to the old predicate must turn this red: the markers
+# would then never be written (run_cmd only prints under the stale
+# reading of _dry=1) and the summary would wrongly say "n/a updated" for
+# a sweep that in fact ran `make` for real.
+@test "install_git_hooks_all_repos with DRY_RUN=0 (dry-run mode off) really invokes make and never reports n/a updated" {
+  local _base="${TESTDIR}/sweep-dry-run-off"
+  local _markers="${TESTDIR}/sweep-dry-run-off-markers"
+  mkdir -p "${_base}" "${_markers}"
+  _sweep_build_cp_repo "${_base}" "repo-one" "${_markers}"
+  _sweep_build_cp_repo "${_base}" "repo-two" "${_markers}"
+
+  HOOK_EXPECTED_REPOS=()
+  DRY_RUN=0 PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  # Both fixtures start with no installed hooks; a real install-hooks call
+  # closes the gap for both, so the sweep returns clean.
+  [ "$status" -eq 0 ]
+  # The direct regression check for :386 -- run_cmd actually execs under
+  # DRY_RUN=0, so each recipe's own marker touch really ran.
+  [ -f "${_markers}/repo-one.ran" ]
+  [ -f "${_markers}/repo-two.ran" ]
+  [[ "$output" == *"2 checked"* ]]
+  [[ "$output" == *"2 updated"* ]]
+  [[ "$output" != *"n/a updated"* ]]
+}
+
 @test "install_git_hooks_all_repos called twice on an already-current tree produces identical summary counters both times" {
   # Each real install-hooks target is already idempotent (cp/ln -sf per
   # repo-structure.md and the design's Idempotency section) -- re-running

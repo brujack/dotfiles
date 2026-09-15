@@ -367,6 +367,46 @@ teardown() {
   [ "$status" -ne 0 ]
 }
 
+@test "sync_git_repos.sh rejects --git-only combined with --legacy-only and invokes neither leg" {
+  export MOCK_HOSTNAME_OUTPUT=studio
+  export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
+  export HOME="${BATS_TEST_TMPDIR}"
+  mkdir -p "${HOME}/git-repos/personal/fake-repo/.git"
+  run bash "${REPO_ROOT}/scripts/sync_git_repos.sh" --git-only --legacy-only
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Conflicting mode flags"* ]]
+  run grep -q "^git " "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+  run grep -q rsync "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+}
+
+@test "sync_git_repos.sh rejects --legacy-only combined with --git-only (reverse order) and invokes neither leg" {
+  export MOCK_HOSTNAME_OUTPUT=studio
+  export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
+  export HOME="${BATS_TEST_TMPDIR}"
+  mkdir -p "${HOME}/git-repos/personal/fake-repo/.git"
+  run bash "${REPO_ROOT}/scripts/sync_git_repos.sh" --legacy-only --git-only
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Conflicting mode flags"* ]]
+  run grep -q "^git " "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+  run grep -q rsync "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+}
+
+@test "sync_git_repos.sh --git-only --git-only (repeated same flag) stays legal" {
+  export MOCK_HOSTNAME_OUTPUT=studio
+  export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
+  export HOME="${BATS_TEST_TMPDIR}"
+  mkdir -p "${HOME}/git-repos/personal/fake-repo/.git"
+  run bash "${REPO_ROOT}/scripts/sync_git_repos.sh" --git-only --git-only
+  [ "$status" -eq 0 ]
+  grep -q "^git " "${MOCK_CALLS_FILE}"
+  run grep -q rsync "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+}
+
 @test "sync_git_repos.sh --legacy-only skips the git sync leg" {
   export MOCK_HOSTNAME_OUTPUT=studio
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
@@ -375,6 +415,142 @@ teardown() {
   run bash "${REPO_ROOT}/scripts/sync_git_repos.sh" --legacy-only
   [ "$status" -eq 0 ]
   grep -q rsync "${MOCK_CALLS_FILE}"
+}
+
+@test "sync_git_repos.sh --dry-run --git-only leaves the origin ref unmoved" {
+  export HOME="${BATS_TEST_TMPDIR}"
+  export GIT_AUTHOR_NAME="bats" GIT_AUTHOR_EMAIL="bats@example.com"
+  export GIT_COMMITTER_NAME="bats" GIT_COMMITTER_EMAIL="bats@example.com"
+
+  # tests/mocks/git (on PATH via load_mocks in setup()) is a full stub with no
+  # real refs and no real ahead/behind detection -- it cannot exercise the
+  # actual push-suppression guard this test is about. A wholesale strip of
+  # tests/mocks from PATH also un-mocks hostname and rsync, and this
+  # machine's real `hostname -s` is "studio" -- so _is_legacy_sync_host
+  # would read TRUE for the rest of this test with nothing but --git-only
+  # keeping sync_legacy_dirs's real rsync --delete calls unreached
+  # (shell.md: prefer a shim dir holding only the one real binary you need
+  # over a wholesale PATH strip). Prepend a shim containing only a real
+  # `git`, ahead of the still-mocked PATH.
+  local _shim="${BATS_TEST_TMPDIR}/realgit"
+  mkdir -p "${_shim}"
+  ln -sf "$(PATH=/usr/bin:/bin:/opt/homebrew/bin command -v git)" "${_shim}/git"
+  local _clean_path="${_shim}:${PATH}"
+
+  local origin="${HOME}/origin.git"
+  local clone="${HOME}/git-repos/personal/dry-repo"
+  mkdir -p "${HOME}/git-repos/personal"
+  PATH="${_clean_path}" git init -q --bare "${origin}"
+  PATH="${_clean_path}" git clone -q "${origin}" "${clone}"
+  PATH="${_clean_path}" git -C "${clone}" commit -q --allow-empty -m init
+  PATH="${_clean_path}" git -C "${clone}" push -q -u origin HEAD:master
+  # Ahead by one unpushed commit -- this is the state a real (non-dry) run
+  # would push and a dry run must not.
+  PATH="${_clean_path}" git -C "${clone}" commit -q --allow-empty -m ahead
+
+  local before
+  before="$(PATH="${_clean_path}" git -C "${origin}" rev-parse master)"
+  [[ "${before}" =~ ^[0-9a-f]{40}$ ]]
+
+  # Flag order matches the test name -- --dry-run first, --git-only second.
+  # This is the untested ordering the parser rewrite exists to enable: under
+  # the old single-case parser, a leading --dry-run hit the `*)` arm and
+  # returned 1 before --git-only was ever read.
+  run env PATH="${_clean_path}" bash "${REPO_ROOT}/scripts/sync_git_repos.sh" --dry-run --git-only
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[DRY RUN]"* ]]
+
+  local after
+  after="$(PATH="${_clean_path}" git -C "${origin}" rev-parse master)"
+  [[ "${after}" =~ ^[0-9a-f]{40}$ ]]
+  [ "${before}" = "${after}" ]
+}
+
+@test "sync_git_repos.sh --git-only --dry-run (reverse order) also leaves the origin ref unmoved" {
+  export HOME="${BATS_TEST_TMPDIR}"
+  export GIT_AUTHOR_NAME="bats" GIT_AUTHOR_EMAIL="bats@example.com"
+  export GIT_COMMITTER_NAME="bats" GIT_COMMITTER_EMAIL="bats@example.com"
+
+  # tests/mocks/git (on PATH via load_mocks in setup()) is a full stub with no
+  # real refs and no real ahead/behind detection -- it cannot exercise the
+  # actual push-suppression guard this test is about. A wholesale strip of
+  # tests/mocks from PATH also un-mocks hostname and rsync, and this
+  # machine's real `hostname -s` is "studio" -- so _is_legacy_sync_host
+  # would read TRUE for the rest of this test with nothing but --git-only
+  # keeping sync_legacy_dirs's real rsync --delete calls unreached
+  # (shell.md: prefer a shim dir holding only the one real binary you need
+  # over a wholesale PATH strip). Prepend a shim containing only a real
+  # `git`, ahead of the still-mocked PATH.
+  local _shim="${BATS_TEST_TMPDIR}/realgit"
+  mkdir -p "${_shim}"
+  ln -sf "$(PATH=/usr/bin:/bin:/opt/homebrew/bin command -v git)" "${_shim}/git"
+  local _clean_path="${_shim}:${PATH}"
+
+  local origin="${HOME}/origin.git"
+  local clone="${HOME}/git-repos/personal/dry-repo"
+  mkdir -p "${HOME}/git-repos/personal"
+  PATH="${_clean_path}" git init -q --bare "${origin}"
+  PATH="${_clean_path}" git clone -q "${origin}" "${clone}"
+  PATH="${_clean_path}" git -C "${clone}" commit -q --allow-empty -m init
+  PATH="${_clean_path}" git -C "${clone}" push -q -u origin HEAD:master
+  # Ahead by one unpushed commit -- this is the state a real (non-dry) run
+  # would push and a dry run must not.
+  PATH="${_clean_path}" git -C "${clone}" commit -q --allow-empty -m ahead
+
+  local before
+  before="$(PATH="${_clean_path}" git -C "${origin}" rev-parse master)"
+  [[ "${before}" =~ ^[0-9a-f]{40}$ ]]
+
+  run env PATH="${_clean_path}" bash "${REPO_ROOT}/scripts/sync_git_repos.sh" --git-only --dry-run
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[DRY RUN]"* ]]
+
+  local after
+  after="$(PATH="${_clean_path}" git -C "${origin}" rev-parse master)"
+  [[ "${after}" =~ ^[0-9a-f]{40}$ ]]
+  [ "${before}" = "${after}" ]
+}
+
+@test "sync_git_repos.sh --legacy-only --dry-run prints the DRY RUN marker and invokes no real rsync" {
+  export MOCK_HOSTNAME_OUTPUT=studio
+  export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
+  export HOME="${BATS_TEST_TMPDIR}"
+  mkdir -p "${HOME}/git-repos/personal"
+  run bash "${REPO_ROOT}/scripts/sync_git_repos.sh" --legacy-only --dry-run
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[DRY RUN]"* ]]
+  run grep -q "^rsync " "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+}
+
+@test "sync_git_repos_main's dry-run does not leak DRY_RUN into a later call in the same shell" {
+  export MOCK_HOSTNAME_OUTPUT=studio
+  export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
+  export HOME="${BATS_TEST_TMPDIR}"
+  mkdir -p "${HOME}/git-repos/personal"
+  # sync_git_repos_main is only reachable as a function (not `run bash
+  # script.sh`, a fresh subprocess every time) by sourcing the script
+  # directly, matching its own sourcing-guard convention. That is also what
+  # makes a leak observable at all: a `run` wraps its command in a
+  # subshell, and DRY_RUN set inside one never reaches the parent's shell
+  # regardless of `local` -- the bug this pins only escapes when the first
+  # call is unwrapped, in the current shell, exactly as a caller in this
+  # position would invoke it.
+  source "${REPO_ROOT}/lib/constants.sh"
+  source "${REPO_ROOT}/lib/helpers.sh"
+  source "${REPO_ROOT}/lib/workflows.sh"
+  source "${REPO_ROOT}/lib/git_sync.sh"
+  source "${REPO_ROOT}/lib/legacy_rsync.sh"
+  source "${REPO_ROOT}/scripts/sync_git_repos.sh"
+
+  unset DRY_RUN
+  sync_git_repos_main --legacy-only --dry-run >/dev/null
+
+  : > "${MOCK_CALLS_FILE}"
+  run sync_git_repos_main --legacy-only
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"[DRY RUN]"* ]]
+  grep -q "^rsync " "${MOCK_CALLS_FILE}"
 }
 
 # ── pre-commit-hook.sh ────────────────────────────────────────────────────────

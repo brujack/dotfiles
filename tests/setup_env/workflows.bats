@@ -2871,3 +2871,21 @@ assert_all_npm_globals_pinned() {
   _n="$(find "${_dir}" -maxdepth 1 -name 'ansible-*.txt' -type f | wc -l | tr -d ' ')"
   [ "${_n}" -eq 10 ]
 }
+
+# ── ledger_write_entry — dry-run guard ────────────────────────────────────────
+
+@test "ledger_write_entry under dry-run does not invoke the ledger binary" {
+  export DRY_RUN=1
+  run ledger_write_entry '{"test":"payload"}'
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[DRY RUN]"* ]]
+  refute_grep "ledger write" "${MOCK_CALLS_FILE}"
+}
+
+@test "ledger_write_entry without dry-run invokes the ledger binary with the JSON on stdin" {
+  unset DRY_RUN
+  run ledger_write_entry '{"test":"payload"}'
+  [ "$status" -eq 0 ]
+  grep -q "ledger write" "${MOCK_CALLS_FILE}"
+  grep -qF '{"test":"payload"}' "${MOCK_CALLS_FILE}"
+}

@@ -150,7 +150,12 @@ _update_record_start() {
         > "${_DOTFILES_RUN_TMPDIR}/pre_npm" || true
       ;;
     legacy-rsync)
-      _is_legacy_sync_host || _update_skip "legacy-rsync" "not studio"
+      if ! _is_legacy_sync_host; then
+        _update_skip "legacy-rsync" "not studio"
+      # _dry_run_active: see lib/helpers.sh
+      elif _dry_run_active; then
+        _update_skip "legacy-rsync" "dry run"
+      fi
       ;;
     # cheat.sh — no pre-snapshot needed
     *) ;;

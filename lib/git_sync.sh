@@ -11,6 +11,14 @@ if ! declare -f _git_ssh_opts >/dev/null 2>&1; then
   }
 fi
 
+# _dry_run_active is normally provided by lib/helpers.sh (same sourcing chain
+# as _git_ssh_opts above). Without the real predicate an undefined function
+# call exits 127, which `if` reads as false -- the fail-OPEN direction -- and
+# _git_sync_one_repo's else-branch is a real `git push`. Fail CLOSED instead:
+if ! declare -f _dry_run_active >/dev/null 2>&1; then
+  _dry_run_active() { return 0; }
+fi
+
 _git_repo_status() {
   local _path="$1"
 
@@ -68,6 +76,10 @@ _git_sync_one_repo() {
         return 1
       fi
       if [[ ${_ahead} -gt 0 ]]; then
+        if _dry_run_active; then
+          printf "[DRY RUN] git -C %s push --quiet\n" "${_path}"
+          return 0
+        fi
         if GIT_SSH_COMMAND="$(_git_ssh_opts)" git -C "${_path}" push --quiet; then
           return 0
         fi

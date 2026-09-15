@@ -12,8 +12,23 @@ log_warn()  { printf "${_YELLOW}[WARN]${_NC}  %s\n" "$*" >&2; }
 log_error() { printf "${_RED}[ERROR]${_NC} %s\n" "$*" >&2; }
 
 # ── command wrapper ───────────────────────────────────────────────────────────
+# The only writer of DRY_RUN in this tree is process_args, and it only ever
+# writes the literal "1" -- this accepted-false set exists to neutralise a
+# falsy value inherited from the caller's environment (DRY_RUN=0 exported by
+# a parent shell), not to be a general-purpose boolean parser. Anything
+# unrecognised deliberately falls through to "active": a spurious preview is
+# visible and recoverable, a spurious real run against remote hosts is not.
+# Do not widen this list -- that moves values from safe-dry into
+# real-execution.
+_dry_run_active() {
+  case "${DRY_RUN:-}" in
+    ""|0|false|no) return 1 ;;
+    *)             return 0 ;;
+  esac
+}
+
 run_cmd() {
-  if [[ -n ${DRY_RUN:-} ]]; then
+  if _dry_run_active; then
     printf "[DRY RUN] %s\n" "$*"
   else
     "$@"
@@ -284,7 +299,10 @@ Types:
   check-versions : Compare pinned tool versions in lib/constants.sh against latest GitHub releases
                Flags: --update
 Options:
-  --dry-run       : Log mutating operations (symlinks, installs, mkdir) without executing them
+  --dry-run       : Suppress outbound writes (git push, rsync --delete, state-ledger
+                    entry writes). NOT an offline mode: fetches, ff-only pulls,
+                    package upgrades, uv sync, and the state-ledger clone/init
+                    still run for real
   --brew-install  : (setup only) Ensure Homebrew is installed, update, and run brew bundle installs
   --mas-install   : (setup only) Install/update Mac App Store apps via mas (macOS only)
   --brew-only     : (update only) Update Homebrew formulae and casks only
@@ -815,7 +833,7 @@ process_args() {
   while [[ ${_i} -lt ${#_args[@]} ]]; do
     local _arg="${_args[${_i}]}"
     case "${_arg}" in
-      --dry-run)       [[ -n "${DRY_RUN+x}" ]]         || readonly DRY_RUN=1 ;;
+      --dry-run)       _dry_run_active                 || readonly DRY_RUN=1 ;;
       --brew-only)     [[ -n "${UPDATE_BREW+x}" ]]     || readonly UPDATE_BREW=1 ;;
       --pip-only)      [[ -n "${UPDATE_PIP+x}" ]]      || readonly UPDATE_PIP=1 ;;
       --gems-only)     [[ -n "${UPDATE_GEMS+x}" ]]     || readonly UPDATE_GEMS=1 ;;

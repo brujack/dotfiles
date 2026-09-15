@@ -4,7 +4,7 @@
 
 _sync_git_repos_usage() {
   cat <<'USAGE'
-Usage: sync_git_repos.sh [--git-only|--legacy-only|-h|--help]
+Usage: sync_git_repos.sh [--git-only|--legacy-only] [--dry-run] [-h|--help]
 
 Two independent sync modes:
 
@@ -23,6 +23,11 @@ Two independent sync modes:
 Options:
   --git-only     Run only the git sync.
   --legacy-only  Run only the legacy rsync sync.
+  --dry-run      Suppress every outbound write: no push, no rsync.
+                 NOT a no-op: still fetches from each remote and
+                 fast-forwards clean repos that are behind.
+                 Composable with --git-only / --legacy-only, but
+                 those two together are rejected as ambiguous.
   -h, --help     Show this help and exit.
 
 Exit codes:
@@ -33,26 +38,51 @@ USAGE
 
 sync_git_repos_main() {
   local _mode="both"
-  case "${1:-}" in
-    -h|--help)
-      _sync_git_repos_usage
-      return 0
-      ;;
-    --git-only)
-      _mode="git"
-      ;;
-    --legacy-only)
-      _mode="legacy"
-      ;;
-    "")
-      _mode="both"
-      ;;
-    *)
-      printf "Unrecognized option: %s\n\n" "${1}" >&2
-      _sync_git_repos_usage >&2
-      return 1
-      ;;
-  esac
+  local _mode_set=0
+  local _arg
+  # Local, seeded from any inherited value: bash's dynamic scoping still
+  # reaches _dry_run_active and everything it calls, but the assignment
+  # below no longer escapes to the caller's shell once this function
+  # returns -- a bare (non-local) DRY_RUN=1 here used to leak into whatever
+  # shell called sync_git_repos_main directly (not via a subshell), so a
+  # second call in that same shell with no --dry-run flag was still read as
+  # dry-run.
+  local DRY_RUN="${DRY_RUN:-}"
+
+  for _arg in "$@"; do
+    case "${_arg}" in
+      -h|--help)
+        _sync_git_repos_usage
+        return 0
+        ;;
+      --git-only)
+        if [[ "${_mode_set}" -eq 1 && "${_mode}" != "git" ]]; then
+          printf "Conflicting mode flags: --git-only and --legacy-only are mutually exclusive\n\n" >&2
+          _sync_git_repos_usage >&2
+          return 1
+        fi
+        _mode="git"
+        _mode_set=1
+        ;;
+      --legacy-only)
+        if [[ "${_mode_set}" -eq 1 && "${_mode}" != "legacy" ]]; then
+          printf "Conflicting mode flags: --git-only and --legacy-only are mutually exclusive\n\n" >&2
+          _sync_git_repos_usage >&2
+          return 1
+        fi
+        _mode="legacy"
+        _mode_set=1
+        ;;
+      --dry-run)
+        DRY_RUN=1
+        ;;
+      *)
+        printf "Unrecognized option: %s\n\n" "${_arg}" >&2
+        _sync_git_repos_usage >&2
+        return 1
+        ;;
+    esac
+  done
 
   local _rc=0
 

@@ -929,6 +929,57 @@ firefox  124.0"
   [ ! -f "${_DOTFILES_RUN_TMPDIR}/status_legacy-rsync" ]
 }
 
+@test "_update_record_start legacy-rsync case under dry-run skips with reason dry run, not not studio" {
+  # MOCK_HOSTNAME_OUTPUT=studio is mandatory here: it makes _is_legacy_sync_host
+  # (unstubbed, real hostname mock) true, so absent the DRY_RUN branch this case
+  # would fall through to the else arm and NOT skip at all -- collapsing this
+  # test with the "does not skip on studio" test above. Asserting the reason
+  # TEXT (not just that a skip happened) is what proves the dry-run branch fired
+  # ahead of the studio check rather than merely agreeing with it (tdd.md E5).
+  export MOCK_HOSTNAME_OUTPUT=studio
+  export DRY_RUN=1
+  _update_record_start "legacy-rsync"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_legacy-rsync")" = "SKIP" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_legacy-rsync")" = "dry run" ]
+}
+
+@test "_update_record_start legacy-rsync case on a non-studio host under dry-run records not studio, not dry run" {
+  # bug-scan W2: the true, permanent cause on a non-studio host is "not
+  # studio" -- it would never run whether or not --dry-run was passed. Under
+  # the pre-fix ordering (dry-run checked first) this recorded "dry run",
+  # which reads as "the section would have run without the flag" when it
+  # never would. A non-default hostname makes _is_legacy_sync_host false
+  # without stubbing it, so this exercises the real (unstubbed) host check.
+  export MOCK_HOSTNAME_OUTPUT=not-studio-at-all
+  export DRY_RUN=1
+  _update_record_start "legacy-rsync"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_legacy-rsync")" = "SKIP" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_legacy-rsync")" = "not studio" ]
+}
+
+@test "_update_record_start git-repos case under dry-run writes no SKIP file" {
+  # Pins the granularity decision: git-repos has no case arm in
+  # _update_record_start (it falls through to the generic `*) ;;` branch) and
+  # must stay that way under dry-run. git_repo_status/pull --ff-only are
+  # line-gated (Task 3), not section-gated, so a [SKIP] git-repos row would
+  # falsely claim working trees never moved.
+  export DRY_RUN=1
+  _update_record_start "git-repos"
+  [ ! -f "${_DOTFILES_RUN_TMPDIR}/status_git-repos" ]
+
+  # test-quality-review W4: the assertion above holds identically at base
+  # (git-repos has no case arm at all, dry-run or not) and is equally
+  # satisfied by _update_record_start erroring before reaching the `case`.
+  # This positive companion, in the same test and the same DRY_RUN=1
+  # environment, proves the function actually ran its case logic: the
+  # sibling legacy-rsync arm DOES write a SKIP file here (default mock
+  # hostname is not "studio"), so the git-repos absence means something
+  # rather than nothing having executed.
+  _update_record_start "legacy-rsync"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_legacy-rsync")" = "SKIP" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_legacy-rsync")" = "not studio" ]
+}
+
 # ── _ledger_write_run_entry: make_version field (macOS-only) ─────────────────
 #
 # _ledger_write_run_entry no-ops until both started_at (in _DOTFILES_RUN_TMPDIR,

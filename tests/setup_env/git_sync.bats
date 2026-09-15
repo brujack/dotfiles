@@ -253,6 +253,37 @@ setup() {
   [ "$status" -eq 0 ]
 }
 
+@test "_git_sync_one_repo dry-run: ahead push is skipped, origin ref unmoved, and output names it" {
+  git -C "${CLONE}" commit -q --allow-empty -m "local work"
+  local _origin_before
+  _origin_before="$(git -C "${ORIGIN}" rev-parse master)"
+  DRY_RUN=1 run _git_sync_one_repo "${CLONE}"
+  [ "$status" -eq 0 ]
+  [ "$(git -C "${ORIGIN}" rev-parse master)" = "${_origin_before}" ]
+  [[ "$output" == *"[DRY RUN]"* ]]
+  [[ "$output" == *"push"* ]]
+}
+
+@test "_git_sync_one_repo dry-run: control with DRY_RUN unset still pushes and advances origin" {
+  git -C "${CLONE}" commit -q --allow-empty -m "local work"
+  local _origin_before
+  _origin_before="$(git -C "${ORIGIN}" rev-parse master)"
+  run _git_sync_one_repo "${CLONE}"
+  [ "$status" -eq 0 ]
+  [ "$(git -C "${ORIGIN}" rev-parse master)" != "${_origin_before}" ]
+  [ "$(git -C "${ORIGIN}" rev-parse master)" = "$(git -C "${CLONE}" rev-parse HEAD)" ]
+}
+
+@test "_git_sync_one_repo dry-run: behind pull --ff-only still runs under DRY_RUN=1" {
+  local second="${TESTDIR}/second-clone"
+  git clone -q "${ORIGIN}" "${second}"
+  git -C "${second}" commit -q --allow-empty -m "from second machine"
+  git -C "${second}" push -q
+  DRY_RUN=1 run _git_sync_one_repo "${CLONE}"
+  [ "$status" -eq 0 ]
+  [ "$(git -C "${CLONE}" rev-parse HEAD)" = "$(git -C "${ORIGIN}" rev-parse master)" ]
+}
+
 @test "sync_git_repos is idempotent: running twice on a clean tree gives identical exit 0 both times" {
   local base="${TESTDIR}/fake-personal-idempotent"
   mkdir -p "${base}"

@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# ledger_write_entry pipes its JSON payload into `ledger write` on stdin --
+# drain it into MOCK_CALLS_FILE alongside argv, so a test can assert both
+# that the binary ran and what it received, without a real ledger repo.
+printf "ledger %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+cat >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+exit "${MOCK_LEDGER_EXIT:-0}"

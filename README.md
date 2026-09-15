@@ -204,7 +204,7 @@ subshell and record a section status like any other. See
 
 **Options:**
 
-- `--dry-run` — log mutating operations without executing. **Honoured by symlinking (`lib/helpers.sh`) and the git-hooks sweep only** — `run_update` contains no `run_cmd` call sites, so `-t update --dry-run` still performs real package upgrades, `git push`, and `rsync --delete`. Do not rely on it to preview an update.
+- `--dry-run` — **guarantees no outbound write**: no `git push`, no `rsync --delete`, no state-ledger **entry** write. Nothing it covers mutates state on another machine. It is **not** an offline mode: `git fetch` still contacts every personal repo's remote, `pull --ff-only` still fast-forwards clean repos that are behind, `ensure_state_ledger` still clones/pulls the state-ledger repo and runs `ledger.py init` (a local write — it never pushes), and package upgrades, venv rebuilds, five `npm install -g`, and `uv sync` still run under `-t update --dry-run`.
 - `--brew-install` — (setup only) Ensure Homebrew is installed, update, and run brew bundle installs
 - `--mas-install` — (setup only) Install/update Mac App Store apps via mas (macOS only)
 - `--brew-only` — update Homebrew formulae and casks only (with `-t update`)

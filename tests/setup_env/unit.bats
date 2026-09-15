@@ -260,6 +260,29 @@ _aws_key_make_fixture() {
   [ "$output" = "1" ]
 }
 
+@test "process_args --dry-run overrides an inherited falsy DRY_RUN=0" {
+  run bash -c "
+    export DRY_RUN=0
+    source '${BATS_TEST_DIRNAME}/../../setup_env.sh'
+    process_args --dry-run -t setup_user
+    printf '%s' \"\${DRY_RUN}\"
+  "
+  [ "$status" -eq 0 ]
+  [ "$output" = "1" ]
+}
+
+@test "process_args --dry-run does not crash on a second call after overriding an inherited falsy DRY_RUN" {
+  run bash -c "
+    export DRY_RUN=0
+    source '${BATS_TEST_DIRNAME}/../../setup_env.sh'
+    process_args --dry-run -t setup_user
+    process_args --dry-run -t setup_user
+    printf '%s' \"\${DRY_RUN}\"
+  "
+  [ "$status" -eq 0 ]
+  [ "$output" = "1" ]
+}
+
 @test "TERRAFORM_VER matches semver pattern" {
   [[ "${TERRAFORM_VER}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
 }
@@ -727,6 +750,107 @@ EOF
   [ "$?" -eq 0 ]
 }
 
+# ── _dry_run_active ───────────────────────────────────────────────────────────
+
+@test "dry_run_active returns 1 (inactive) when DRY_RUN is unset" {
+  unset DRY_RUN
+  run _dry_run_active
+  [ "$status" -eq 1 ]
+}
+
+@test "dry_run_active returns 1 (inactive) when DRY_RUN is empty" {
+  export DRY_RUN=""
+  run _dry_run_active
+  unset DRY_RUN
+  [ "$status" -eq 1 ]
+}
+
+@test "dry_run_active returns 1 (inactive) when DRY_RUN=0" {
+  export DRY_RUN=0
+  run _dry_run_active
+  unset DRY_RUN
+  [ "$status" -eq 1 ]
+}
+
+@test "dry_run_active returns 1 (inactive) when DRY_RUN=false" {
+  export DRY_RUN=false
+  run _dry_run_active
+  unset DRY_RUN
+  [ "$status" -eq 1 ]
+}
+
+@test "dry_run_active returns 1 (inactive) when DRY_RUN=no" {
+  export DRY_RUN=no
+  run _dry_run_active
+  unset DRY_RUN
+  [ "$status" -eq 1 ]
+}
+
+@test "dry_run_active returns 0 (active) when DRY_RUN=1" {
+  export DRY_RUN=1
+  run _dry_run_active
+  unset DRY_RUN
+  [ "$status" -eq 0 ]
+}
+
+@test "dry_run_active returns 0 (active) when DRY_RUN=true" {
+  export DRY_RUN=true
+  run _dry_run_active
+  unset DRY_RUN
+  [ "$status" -eq 0 ]
+}
+
+@test "dry_run_active returns 0 (active) when DRY_RUN=yes" {
+  export DRY_RUN=yes
+  run _dry_run_active
+  unset DRY_RUN
+  [ "$status" -eq 0 ]
+}
+
+# CLAUDE.md documents "any other value means on" -- an unrecognised value
+# must fall through the case statement's catch-all `*` arm to active, not
+# silently match one of the inactive spellings. Pins the fail-safe
+# direction against a future nocasematch or pattern change (dry-run).
+@test "dry_run_active returns 0 (active) when DRY_RUN is an unrecognised value" {
+  export DRY_RUN=banana
+  run _dry_run_active
+  unset DRY_RUN
+  [ "$status" -eq 0 ]
+}
+
+# ── _dry_run_active fallback: sourced standalone, without lib/helpers.sh ─────
+#
+# lib/git_sync.sh and lib/legacy_rsync.sh each carry a same-shape fallback
+# for _dry_run_active (mirroring the pre-existing _git_ssh_opts fallback in
+# git_sync.sh), because their else-branch performs real egress -- a push in
+# one, three rsync --delete pushes in the other. Without it, sourcing
+# either file on its own leaves _dry_run_active undefined; an undefined
+# function call exits 127, which `if` reads as false, and the DRY_RUN guard
+# fails OPEN into the real-execution branch. A genuinely fresh `bash -c`
+# process is required here (not a subshell of this bats process, which
+# already has the real _dry_run_active from setup()'s load_setup_env and
+# would inherit it via bash's function-table fork) so the fallback branch
+# in each file is actually the one under test.
+@test "git_sync.sh's _dry_run_active fallback suppresses (fails closed) when sourced standalone (dry-run)" {
+  run bash -c "
+    source '${REPO_ROOT}/lib/git_sync.sh'
+    unset DRY_RUN
+    declare -f _dry_run_active >/dev/null 2>&1 || exit 9
+    _dry_run_active
+  "
+  [ "$status" -eq 0 ]
+}
+
+@test "legacy_rsync.sh's _dry_run_active fallback suppresses (fails closed) when sourced standalone (dry-run)" {
+  run bash -c "
+    source '${REPO_ROOT}/lib/legacy_rsync.sh'
+    unset DRY_RUN
+    declare -f _dry_run_active >/dev/null 2>&1 || exit 9
+    _dry_run_active
+  "
+  [ "$status" -eq 0 ]
+}
+
 # ── run_cmd ──────────────────────────────────────────────────────────────────
 
 @test "run_cmd executes command when DRY_RUN is unset" {
@@ -750,6 +874,53 @@ EOF
   run run_cmd touch "${tmpfile}"
   unset DRY_RUN
   [ ! -f "${tmpfile}" ]
+}
+
+@test "run_cmd suppresses the command when DRY_RUN=true" {
+  export DRY_RUN=true
+  local tmpfile="${BATS_TEST_TMPDIR}/dry_run_true_suppresses"
+  run run_cmd touch "${tmpfile}"
+  unset DRY_RUN
+  [ "$status" -eq 0 ]
+  [[ "$output" == "[DRY RUN]"* ]]
+  [ ! -f "${tmpfile}" ]
+}
+
+@test "run_cmd suppresses the command when DRY_RUN=yes" {
+  export DRY_RUN=yes
+  local tmpfile="${BATS_TEST_TMPDIR}/dry_run_yes_suppresses"
+  run run_cmd touch "${tmpfile}"
+  unset DRY_RUN
+  [ "$status" -eq 0 ]
+  [[ "$output" == "[DRY RUN]"* ]]
+  [ ! -f "${tmpfile}" ]
+}
+
+@test "run_cmd executes the command when DRY_RUN=0" {
+  export DRY_RUN=0
+  local tmpfile="${BATS_TEST_TMPDIR}/dry_run_zero_executes"
+  run run_cmd touch "${tmpfile}"
+  unset DRY_RUN
+  [ "$status" -eq 0 ]
+  [ -f "${tmpfile}" ]
+}
+
+@test "run_cmd executes the command when DRY_RUN=false" {
+  export DRY_RUN=false
+  local tmpfile="${BATS_TEST_TMPDIR}/dry_run_false_executes"
+  run run_cmd touch "${tmpfile}"
+  unset DRY_RUN
+  [ "$status" -eq 0 ]
+  [ -f "${tmpfile}" ]
+}
+
+@test "run_cmd executes the command when DRY_RUN=no" {
+  export DRY_RUN=no
+  local tmpfile="${BATS_TEST_TMPDIR}/dry_run_no_executes"
+  run run_cmd touch "${tmpfile}"
+  unset DRY_RUN
+  [ "$status" -eq 0 ]
+  [ -f "${tmpfile}" ]
 }
 
 # ── safe_link error handling ──────────────────────────────────────────────────

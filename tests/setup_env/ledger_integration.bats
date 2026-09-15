@@ -40,11 +40,16 @@ teardown() {
 
 _make_mock_ledger() {
     local _exit="${1:-0}"
+    # Tag defaults to "ledger", matching every existing caller's
+    # `grep -q "ledger write"` assertion. A non-default tag lets a test tell
+    # apart two mock ledgers on the same PATH+LEDGER_BIN (e.g. proving which
+    # one actually ran) without inventing a second fixture function.
+    local _tag="${2:-ledger}"
     local _dir
     _dir="$(mktemp -d)"
     cat > "${_dir}/ledger" << EOF
 #!/usr/bin/env bash
-printf "ledger %s\n" "\$*" >> "\${MOCK_CALLS_FILE}"
+printf "${_tag} %s\n" "\$*" >> "\${MOCK_CALLS_FILE}"
 cat > /dev/null 2>&1
 exit ${_exit}
 EOF
@@ -83,6 +88,34 @@ EOF
     local _rc=0
     PATH="${_mock_dir}:${PATH}" ledger_write_entry '{"tool":"test"}' || _rc=$?
     [ "${_rc}" -eq 1 ]
+}
+
+# ── LEDGER_BIN resolution order ───────────────────────────────────────────────
+
+@test "ledger_write_entry: LEDGER_BIN set and executable is invoked directly, without consulting command -v ledger" {
+    local _bin_mock_dir _path_mock_dir
+    _bin_mock_dir="$(_make_mock_ledger 0 "ledger-bin-mock")"
+    _path_mock_dir="$(_make_mock_ledger 0 "path-mock")"
+    LEDGER_BIN="${_bin_mock_dir}/ledger" PATH="${_path_mock_dir}:${PATH}" \
+      run ledger_write_entry '{"tool":"test"}'
+    [ "$status" -eq 0 ]
+    grep -q "^ledger-bin-mock write" "${MOCK_CALLS_FILE}"
+    run grep "^path-mock" "${MOCK_CALLS_FILE}"
+    [ "$status" -ne 0 ]
+}
+
+@test "ledger_write_entry: LEDGER_BIN set but not executable falls through to command -v ledger" {
+    local _path_mock_dir
+    _path_mock_dir="$(_make_mock_ledger 0 "path-mock")"
+    local _non_exec="${BATS_TEST_TMPDIR}/not-executable-ledger"
+    printf '#!/usr/bin/env bash\nexit 0\n' > "${_non_exec}"
+    # Deliberately no chmod +x -- this is the reset case: LEDGER_BIN is set
+    # but not executable, so ledger_write_entry must clear it and fall
+    # through to the next candidate rather than trying to exec it.
+    LEDGER_BIN="${_non_exec}" PATH="${_path_mock_dir}:${PATH}" \
+      run ledger_write_entry '{"tool":"test"}'
+    [ "$status" -eq 0 ]
+    grep -q "^path-mock write" "${MOCK_CALLS_FILE}"
 }
 
 # ── fallback to ~/.local/bin/ledger ──────────────────────────────────────────

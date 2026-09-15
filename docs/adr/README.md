@@ -33,3 +33,4 @@ Cross-cutting decisions that apply across personal repos. Repo-specific decision
 | [0027](0027-update-run-exit-code-from-section-status.md)         | The update run's exit code                                            | 2026-08-29 | Accepted                                              |
 | [0028](0028-awscli-download-signature-verification.md)           | AWS CLI download signature verification                               | 2026-09-01 | Accepted                                              |
 | [0029](0029-gate-gpu-provisioning-on-hardware-not-capability.md) | Gate GPU provisioning on hardware, not a profile capability           | 2026-09-12 | Accepted                                              |
+| [0030](0030-dry-run-gates-outbound-writes.md)                    | `--dry-run` gates outbound writes, and fails closed                   | 2026-09-14 | Accepted                                              |

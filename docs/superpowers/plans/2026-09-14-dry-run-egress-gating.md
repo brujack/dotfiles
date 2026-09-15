@@ -12,16 +12,18 @@
 
 ## Global Constraints
 
-- **No task may declare `make test`.** Measured on the Studio 2026-09-14: `rc=0`, 1675 ok, 0 not ok, **784s** — past the 600s Bash cap, so it backgrounds and a backgrounded command never wakes a subagent. The orchestrator runs `make test` **once**, uncontended, after Task 6 (the last code-touching task). That single run is the real gate; the scoped per-task gates are regression checks, not a weakening.
+- **No task may declare `make test`.** Measured on the Studio 2026-09-14: `rc=0`, 1675 ok, 0 not ok, **784s** — past the 600s Bash cap, so it backgrounds and a backgrounded command never wakes a subagent. The orchestrator runs `make test` **once**, uncontended, after **Task 8** — the last code-touching task. That single run is the real gate; the scoped per-task gates are regression checks, not a weakening. (This read "after Task 6" until Task 8 was spliced in for finding C2; Task 8 edits `lib/git_hooks.sh`, so a run at Task 6 would predate the final code change.)
 - **No task declares `parallel_group`.** Sequential dispatch; at these durations parallelism buys nothing and avoids the shared-worktree hazard.
 - **Phase 2 runs in the worktree** `/Users/bruce/git-repos/personal/dotfiles-dry-run-egress` on branch `fix/dry-run-egress-gating`, created from `a334e7aa`. Do not work in the main checkout.
-- `_dry_run_active` is the single truthiness authority. Unset, empty, `0`, `false`, `no` mean **off**; anything else means on. `run_cmd` and all three guards call it so the four sites cannot drift.
+- `_dry_run_active` is the single truthiness authority. Unset, empty, `0`, `false`, `no` mean **off**; anything else means on. **There are SIX sites, not four**, and this bullet said four until Task 1's review measured otherwise: `run_cmd`, the three guards (Tasks 2–4), `process_args`'s `--dry-run` arm (`helpers.sh:825`, fixed inside Task 1 — see C1 there), and `install_git_hooks_all_repos` (`git_hooks.sh:386`, Task 8). Every one calls the helper so they cannot drift. The two that were missed are the two that read `DRY_RUN` **directly** rather than through `run_cmd`, which is the shape to grep for if a seventh is ever added: `git grep -n 'DRY_RUN' -- lib/ scripts/ setup_env.sh .config/`.
 - Every guard prints `[DRY RUN] <what would have run>` on **stdout** (verified: `lib/helpers.sh:17` emits to stdout, stderr empty).
 - Every absence assertion is paired with a positive control, and additionally asserts the `[DRY RUN]` line — an absence alone passes when the guard was never reached.
 - **What "the gate was proven" means differs by gate shape — read the task body, do not assume.** Measured at pre-flight:
   - **Behavioural proofs (Tasks 1–4).** The defect itself was reproduced on the base tree: `DRY_RUN=0` suppresses execution, a guarded push still moves a fixture `origin` ref, the rsync mock is invoked 3×, the ledger mock is invoked 1×. That is what guarantees the RED test fails for the right reason.
-  - **Whole-file bats gates (Tasks 3–6) pass on the base tree by construction** — `git_sync.bats` 24 tests, `legacy_rsync.bats` 6, `update_summary.bats` 101, `scripts/unit.bats` 146, all exit 0. Inherent to TDD: the new test does not exist yet. The gate becomes discriminating the moment the RED test is written, and a whole-file run necessarily includes it. **Verify RED directly before implementing**; never read the green base run as evidence.
-  - **Filtered gates (Tasks 1–2) must match zero tests on base**, and both do: `-f "dry_run_active"` and `-f "dry-run"` each exit 1 with `ERROR: Found no tests`. A filter matching a pre-existing passing test is vacuous — Task 2's original `-f "ledger"` was exactly that, exiting 0 on base against one pre-existing test, and was corrected at pre-flight.
+  - **Every task from 2 to 6 declares TWO bats arms, and they have opposite base-tree behaviour on purpose.** Read the pair, not either half.
+    - The **discriminating arm** is `-f "dry-run"` (Task 1: `-f "dry_run_active"`). It must match **zero** tests on base, and every one does — exit 1 with `ERROR: Found no tests`, measured per file at pre-flight. This arm is what forces the task's tests to _exist_: a whole-file run exits 0 for a subagent that wrote no test at all, and this arm does not. A filter matching a pre-existing passing test is vacuous — Task 2's original `-f "ledger"` was exactly that, exiting 0 on base against one pre-existing test, and was corrected at pre-flight. **This is why every task body mandates that new test names carry the literal `dry-run`.**
+    - The **regression arm** is the unfiltered whole-file run, and it **passes on the base tree by construction** — `workflows.bats` 216 tests, `git_sync.bats` 24, `legacy_rsync.bats` 6, `update_summary.bats` 101, `scripts/unit.bats` 146, all exit 0. Inherent to TDD: the new test does not exist yet. That green is also the positive control proving the filter mechanism works, so the discriminating arm's zero is a real absence rather than a broken filter. It becomes discriminating the moment the RED test is written, since a whole-file run necessarily includes it. **Verify RED directly before implementing**; never read the green base run as evidence of anything but the population.
+  - **Task 1 carries a third gate, `-f "run_cmd"`, which exits 0 on base against 3 pre-existing tests. That is deliberate.** It is a regression arm in filtered clothing: Task 1's body requires `unit.bats:744`'s existing `[[ "$output" == "[DRY RUN]"* ]]` prefix assertion keep working, and those 3 tests are what pin it. It is also the **only** gate covering the second half of the deliverable — confirmed by mutation at review: reverting `run_cmd` to `[[ -n ${DRY_RUN:-} ]]` while keeping the helper leaves `-f "dry_run_active"` fully green and turns `-f "run_cmd"` red. Do not "correct" it to a zero-match filter; it would stop pinning the routing.
 - If a gate passes on the unmodified tree in a way its task body does not predict, that is a plan defect — report it as a blocker rather than proceeding.
 
 ---
@@ -82,6 +84,8 @@ tdd: required
 acceptance:
   - cmd: bats tests/setup_env/workflows.bats -f "dry-run"
     exit_code: 0
+  - cmd: bats tests/setup_env/workflows.bats
+    exit_code: 0
   - cmd: make lint
     exit_code: 0
 max_retries: 3
@@ -107,7 +111,20 @@ fi
 
 `return 0` is load-bearing: `update_summary.sh:521` and `:523` are **bare** calls (the spec's earlier "every caller uses `|| true`" was wrong); safety comes from `_ledger_write_run_entry`'s five callers using `|| true` and `:598`'s `_ledger_write_dotfiles_entry || true`.
 
-Seam: resolve `LEDGER_BIN` first, then `command -v ledger`, then `${HOME}/.local/bin/ledger`. Needed because `command -v` is checked **before** the `${HOME}` fallback, so redirecting `HOME` cannot intercept on the Linux boxes. `tests/mocks/ledger` records argv to `MOCK_CALLS_FILE` and drains stdin.
+Seam: resolve `LEDGER_BIN` first, then `command -v ledger`, then `${HOME}/.local/bin/ledger`. Needed because `command -v` is checked **before** the `${HOME}` fallback, so redirecting `HOME` cannot intercept. `tests/mocks/ledger` records argv to `MOCK_CALLS_FILE` and drains stdin.
+
+**That justification is true of one actor and false of three, so it carries a qualifier — measured 2026-09-14 across the fleet rather than asserted:**
+
+| actor                                      | `~/.local/bin` on `PATH` | `command -v ledger`             | could a `HOME` redirect intercept? |
+| ------------------------------------------ | ------------------------ | ------------------------------- | ---------------------------------- |
+| `workstation` / `claude`, interactive zsh  | yes                      | `/home/bruce/.local/bin/ledger` | **no — the seam is required**      |
+| `workstation` / `claude`, `ssh host 'cmd'` | no                       | none                            | yes                                |
+| Studio, harness Bash tool                  | no                       | none                            | yes                                |
+| `ubuntu-latest`                            | n/a                      | none (ledger not installed)     | yes                                |
+
+**The one row that matters is the first, because it is the actor that runs the suite on a Linux dev box** — a session's Bash tool is profile-sourced, so it inherits the interactive `PATH`. A `HOME`-only test seam would therefore pass in CI and on the Studio and fail on `workstation` and `claude`: green where it is cheap to run and red where the real binary lives. That split is the argument for `LEDGER_BIN`, not the bare ordering claim.
+
+This qualifier exists because the unqualified sentence was checked against `ssh host 'command -v ledger'`, which returned `none` on both Linux boxes and appeared to refute it. `ssh` is the non-interactive actor and answers for a different `PATH` — `behavior.md`'s actor-boundary rule, hit while auditing this very premise. Do not re-derive this with `ssh`.
 
 Tests: absence case asserts the mock is uncalled **and** `[DRY RUN]` appears; control (`DRY_RUN` unset) asserts the mock is called and receives the JSON on stdin.
 
@@ -137,6 +154,8 @@ role: executor
 model: sonnet
 tdd: required
 acceptance:
+  - cmd: bats tests/setup_env/git_sync.bats -f "dry-run"
+    exit_code: 0
   - cmd: bats tests/setup_env/git_sync.bats
     exit_code: 0
   - cmd: make lint
@@ -169,6 +188,14 @@ if [[ ${_ahead} -gt 0 ]]; then
 
 Tests: ahead-branch absence (origin ref unmoved + `[DRY RUN]` names the push); ahead-branch control (ref advances); behind-branch under `DRY_RUN=1` asserting `pull --ff-only` **still ran** — that case is what fails if someone later widens this to a function guard.
 
+**Every new test name MUST contain the literal string `dry-run`.** The unfiltered
+whole-file run is a regression arm, not a gate: measured at pre-flight, `bats
+tests/setup_env/git_sync.bats` exits **0** on the base tree with 24 passing tests, so on its
+own it would have passed against zero implementation. The `-f "dry-run"` arm matches
+**zero** tests on base (exit 1, `ERROR: Found no tests`) and is what makes the gate
+discriminate; the 24-test population is the positive control proving the filter mechanism
+works rather than the zero being an artifact. Keep both arms.
+
 **Interfaces:**
 
 - Consumes: `_dry_run_active()` from Task 1.
@@ -184,6 +211,8 @@ role: executor
 model: sonnet
 tdd: required
 acceptance:
+  - cmd: bats tests/setup_env/legacy_rsync.bats -f "dry-run"
+    exit_code: 0
   - cmd: bats tests/setup_env/legacy_rsync.bats
     exit_code: 0
   - cmd: make lint
@@ -212,6 +241,14 @@ fi
 
 Safety: protection is `load_mocks` + `_OVERRIDE_GIT_REPOS_SRC` + `MOCK_HOSTNAME_OUTPUT` (`legacy_rsync.bats:6,11,16`) — **not** `HOME`. `HOME` feeds only the rsync _source_; the three destinations are hardcoded `bruce@workstation:`, `bruce@laptop-1:`, `bruce@ratna:`, so an empty `HOME` with real rsync reachable would empty the targets.
 
+**Every new test name MUST contain the literal string `dry-run`.** The unfiltered
+whole-file run is a regression arm, not a gate: measured at pre-flight, `bats
+tests/setup_env/legacy_rsync.bats` exits **0** on the base tree with 6 passing tests, so on
+its own it would have passed against zero implementation. The `-f "dry-run"` arm matches
+**zero** tests on base (exit 1, `ERROR: Found no tests`) and is what makes the gate
+discriminate; the 6-test population is the positive control proving the filter mechanism
+works rather than the zero being an artifact. Keep both arms.
+
 **Interfaces:**
 
 - Consumes: `_dry_run_active()` from Task 1.
@@ -227,6 +264,8 @@ role: executor
 model: sonnet
 tdd: required
 acceptance:
+  - cmd: bats tests/setup_env/update_summary.bats -f "dry-run"
+    exit_code: 0
   - cmd: bats tests/setup_env/update_summary.bats
     exit_code: 0
   - cmd: make lint
@@ -244,17 +283,29 @@ Without this, a guarded `sync_legacy_dirs` returning 0 reaches `_update_record_e
 
 ```bash
 legacy-rsync)
-  if _dry_run_active; then
+  if ! _is_legacy_sync_host; then
+    _update_skip "legacy-rsync" "not studio"
+  elif _dry_run_active; then
     _update_skip "legacy-rsync" "dry run"
-  else
-    _is_legacy_sync_host || _update_skip "legacy-rsync" "not studio"
   fi
   ;;
 ```
 
 **`git-repos` gets NO arm and no SKIP.** That section is line-gated: `_git_repo_status` still runs `git fetch` on every repo and `pull --ff-only` still runs on every repo that is behind. `[SKIP] git-repos` would deny that working trees moved — replacing round 1's false `[OK]` with an equally false `[SKIP]`. `_update_record_start` has fourteen arms and no `git-repos` arm; do not add one.
 
-Tests: with `MOCK_HOSTNAME_OUTPUT=studio` and `DRY_RUN=1`, the `legacy-rsync` reason is `dry run` (not `not studio` — they collide otherwise); and no `status_git-repos` SKIP file is written. The second half pins the granularity decision.
+Tests: with `MOCK_HOSTNAME_OUTPUT=studio` and `DRY_RUN=1`, the `legacy-rsync` reason is `dry run`; with a **non-studio** host and `DRY_RUN=1` the reason is `not studio`; and no `status_git-repos` SKIP file is written. The last part pins the granularity decision.
+
+**The ordering above is a correction, and the original is worth keeping because it shipped.** This task first mandated `_dry_run_active` **first**, justified as "they collide otherwise" — which is true of the studio case and silently wrong everywhere else. On a non-studio host under `--dry-run` that ordering records `dry run` while the true, permanent cause is `not studio`, and `err_legacy-rsync` simultaneously says "not studio, skipping"; the operator concludes the section would have run without the flag, when it never would. Task 5 exists because a guarded `sync_legacy_dirs` produced a false `[OK]` — replacing it with a false `[SKIP] dry run` is the same defect one step over. Caught by Phase 3's `bug-scan` (W2), fixed in `0dbc4f50`, and pinned by a non-studio test whose mutation control turns it red under the old ordering. The implementer followed the original instruction exactly; the instruction was the defect.
+
+**Every new test name MUST contain the literal string `dry-run`** — note the hyphen, while
+the rendered SKIP _reason_ is the two-word `dry run`; the test name and the asserted output
+are different strings and only the name feeds the filter. The unfiltered whole-file run is a
+regression arm, not a gate: measured at pre-flight, `bats tests/setup_env/update_summary.bats`
+exits **0** on the base tree with 101 passing tests, so on its own it would have passed
+against zero implementation. The `-f "dry-run"` arm matches **zero** tests on base (exit 1,
+`ERROR: Found no tests`) and is what makes the gate discriminate; the 101-test population is
+the positive control proving the filter mechanism works rather than the zero being an
+artifact. Keep both arms.
 
 **Interfaces:**
 
@@ -271,6 +322,8 @@ role: executor
 model: sonnet
 tdd: required
 acceptance:
+  - cmd: bats tests/scripts/unit.bats -f "dry-run"
+    exit_code: 0
   - cmd: bats tests/scripts/unit.bats
     exit_code: 0
   - cmd: make lint
@@ -290,6 +343,16 @@ depends_on: [3, 4]
 
 Both legs are gated by Tasks 3 and 4, so the flag is honoured by everything the script does. Round 1 proposed this flag while gating only one leg, which would have advertised a preview that still pushed.
 
+**Every new test name MUST contain the literal string `dry-run`.** The unfiltered whole-file
+run is a regression arm, not a gate: measured at pre-flight, `bats tests/scripts/unit.bats`
+exits **0** on the base tree with 146 passing tests, so on its own it would have passed
+against zero implementation. The `-f "dry-run"` arm matches **zero** tests in this file on
+base (exit 1, `ERROR: Found no tests`) and is what makes the gate discriminate; the 146-test
+population is the positive control proving the filter mechanism works rather than the zero
+being an artifact. Other files in `tests/scripts/` do carry `--dry-run` test names, which is
+irrelevant — the filter is scoped to this file. Keep both arms, and note the regression arm
+is the one that pins `unit.bats:356`'s existing unknown-flag rejection.
+
 **Interfaces:**
 
 - Consumes: Task 3's push guard, Task 4's rsync guard.
@@ -302,12 +365,14 @@ Both legs are gated by Tasks 3 and 4, so the flag is honoured by everything the 
 id: 7
 description: Correct CLAUDE.md:92 and :86 and add the LEDGER_BIN Test Seams row (docs-only, no behaviour change so TDD does not apply)
 role: executor
-model: haiku
+model: sonnet
 tdd: not-applicable
 acceptance:
-  - cmd: 'grep -qE "no (operation that leaves|egress)" CLAUDE.md'
+  - cmd: grep -q "no outbound write" CLAUDE.md
     exit_code: 0
   - cmd: grep -q "LEDGER_BIN" CLAUDE.md
+    exit_code: 0
+  - cmd: grep -q "DRY_RUN=0" CLAUDE.md
     exit_code: 0
   - cmd: make lint
     exit_code: 0
@@ -319,11 +384,140 @@ depends_on: [6]
 
 **Files:** `CLAUDE.md` only.
 
-`:92` currently promises "log mutating operations (symlinks, installs, mkdir) without executing", which is false. It becomes a statement of what is guaranteed — **no egress** — and enumerates what still runs: package upgrades, venv rebuilds, `git fetch` and `pull --ff-only` on every personal repo, five `npm install -g`, and `uv sync`. Follow `README.md:207`'s enumerate-what-still-runs model.
+**This task was `model: haiku` and was escalated to `sonnet` after a dispatch failed with `Prompt is too long`.** The task is genuinely single-file and mechanical — exactly what haiku is for. Escalation is authorized re-plan move 4, applied without widening scope: the task, its gates and its one file are unchanged.
+
+**The first diagnosis recorded here was wrong and is retracted.** It blamed the size of `CLAUDE.md` and offered "roughly 1,000 lines" as a threshold. Task 9 then failed identically on `README.md` at **515 lines / 25,676 bytes** — a 6× smaller file, same `Prompt is too long`. The target file is not the variable.
+
+**The variable is the fixed preamble every subagent in this repo carries before it reads anything**, measured 2026-09-14:
+
+| component                             | bytes                     |
+| ------------------------------------- | ------------------------- |
+| repo `CLAUDE.md`                      | 154,612                   |
+| `~/.claude/standards/*.md` (14 files) | 491,947                   |
+| `USER.md`                             | 19,047                    |
+| **total**                             | **665,606 ≈ 166k tokens** |
+
+Against haiku 4.5's 200k window that is ~83% consumed at dispatch, so **no `model: haiku` task in this repo is dispatchable at all**, whatever it touches. Both escalations are therefore the same fix, not two coincidences.
+
+**Pinning those bytes, because they are reproducible only against a tree that no longer exists.** The `CLAUDE.md` figure above was measured mid-branch, while this branch was still editing that file; at the branch's base `582fac1c` it is **152,747**, giving a total of **663,741**. Both numbers are real measurements of real trees — the table is kept as taken rather than overwritten, since the escalation decision rested on it — but a byte count for a file a branch is actively editing needs its SHA attached, or the next reader finds a third figure and cannot tell which is right. The token column is **bytes ÷ 4, an estimate**, not measured tokens, and the margin against the 200k window is what the whole finding turns on. The cross-repo record, with ai-config and dotfiles each pinned to a SHA, is `ai-config/docs/knowledge/ai-config-haiku-preamble-headroom.md`; note the dominant term is the 491,947 bytes of **shared** standards, so this is a fleet-wide constraint rather than a property of this repo's `CLAUDE.md`.
+
+**The haiku scope guard cannot catch this class, and that is worth stating where the next author will see it.** `validate-plan.py`'s `_haiku_scope_errors` enforces `files_touched` of **exactly one path** plus a forbidden-pattern list (workflows, migrations, lockfiles). It has no size check, so one enormous file passes a guard whose whole purpose is keeping haiku on work it can hold. A plan can therefore be valid and undispatchable at the same time.
+
+**Task 9 was checked, deliberately left on `haiku`, and then failed too — so the check was right in form and wrong in its criterion.** Sizing `README.md` at 515 lines and concluding haiku "holds it comfortably" was verifying one level wider than the fix, which is the correct instinct; it measured the wrong quantity. The question was never how big the target file is, but how much of the window is gone before the agent starts. Task 9 is now `sonnet` for the same reason Task 7 is.
+
+**Do not choose `haiku` for any task in this repo until the preamble shrinks or the guard learns to check it.** `validate-plan.py`'s `_haiku_scope_errors` enforces `files_touched` of exactly one path plus a forbidden-pattern list (workflows, migrations, lockfiles) and has no notion of context budget — so it will keep certifying `model: haiku` plans that cannot be dispatched. A plan can be valid and undispatchable at once, and this one was, twice.
+
+`:92` currently promises "log mutating operations (symlinks, installs, mkdir) without executing", which is false. It becomes a statement of what is guaranteed — **no outbound write** — and enumerates what still runs: package upgrades, venv rebuilds, `git fetch` and `pull --ff-only` on every personal repo, five `npm install -g`, and `uv sync`. Follow `README.md:207`'s enumerate-what-still-runs model.
+
+**The acceptance gate was amended too, for the same reason Task 9's was.** It read `grep -qE "no (operation that leaves|egress)" CLAUDE.md`, and after the retraction the _only_ thing it matched was `CLAUDE.md:92`'s retraction quote — `…the earlier wording here ("no operation that leaves this machine") was false`. Measured at Phase 3 cycle 2: one hit, at line 92. So the gate passed on the negation of what it was written to assert. It now greps `no outbound write`. `diff-scope-review` raised this (D2) after noting Task 9's identical gate had been amended while this one was only disclosed in prose — two opposite treatments of one defect, now consistent.
+
+**This said "no egress" until Phase 3, and that word was wrong for the same reason Task 9's was.** `git fetch`, `pull --ff-only`, `npm install -g` and `uv sync` are all egress; what the guards actually prevent is an outbound **write**. See Task 9's retraction note for the measurement. The `grep -qE "no (operation that leaves|egress)"` acceptance gate that used to sit below was **not** left alone — see the amendment note above; it now greps `no outbound write`. This sentence said it had been left alone, which stopped being true the moment the gate was amended, and it is corrected rather than deleted because a plan that contradicts itself two lines apart is the exact defect this branch spent two review cycles removing.
 
 `:86` says `-t update` "Also writes a state-ledger entry" — now conditionally false, since no entry is written under `--dry-run`. Add that qualifier.
 
 Add a Test Seams row for `LEDGER_BIN` beside `UV_BIN` and `GGSHIELD_BIN`, stating it is checked before `command -v ledger` and that `tests/mocks/ledger` is load-bearing rather than convenient.
+
+**Write the reason with its actor, not the bare ordering claim.** The row must say that on a Linux dev box the suite's actor is profile-sourced and therefore resolves a real `ledger` at `~/.local/bin/ledger` through `command -v`, so a `HOME`-only seam would pass on the Studio and in CI — where `command -v ledger` finds nothing — and fail on `workstation` and `claude`. Task 2's body carries the measured four-actor table; copy that reasoning, and do **not** write the unqualified sentence "redirecting `HOME` cannot intercept on the Linux boxes", which is true only of the interactive actor and reads as true of all of them.
+
+**Also state the truthiness contract, which lands documented nowhere otherwise.** `CLAUDE.md:92` and `README.md:207` describe `--dry-run`'s _scope_ and never its accepted _values_, so the `0`/`false`/`no`/empty/unset rule this plan introduces would ship fleet-wide undocumented. One sentence: `DRY_RUN=0`, `false`, `no`, empty and unset all mean dry-run is **off**, any other value means on, and `--dry-run` wins over an inherited falsy value. The third acceptance gate (`grep -q "DRY_RUN=0" CLAUDE.md`) pins it — measured at pre-flight, `CLAUDE.md` contains **zero** occurrences of `DRY_RUN=0`, `LEDGER_BIN`, and the egress phrasing, so all three greps exit 1 on base and none is vacuous.
+
+---
+
+### Task 8: Route `install_git_hooks_all_repos` through `_dry_run_active`
+
+```yaml-task
+id: 8
+description: Fix the sixth DRY_RUN reader at git_hooks.sh:386 so the sweep and run_cmd agree
+role: executor
+model: sonnet
+tdd: required
+acceptance:
+  - cmd: bats tests/setup_env/git_hooks.bats -f "dry-run"
+    exit_code: 0
+  - cmd: bats tests/setup_env/git_hooks.bats
+    exit_code: 0
+  - cmd: make lint
+    exit_code: 0
+max_retries: 3
+files_touched:
+  - lib/git_hooks.sh
+  - tests/setup_env/git_hooks.bats
+depends_on: [1]
+```
+
+**Files:** `lib/git_hooks.sh` (`:386` only), `tests/setup_env/git_hooks.bats`.
+
+**This task exists because the plan was wrong, and that is worth recording.** The spec enumerated `git_hooks.sh:386` as a `DRY_RUN` reader; no task 1–7 touched `lib/git_hooks.sh`, and the Global Constraints bullet above counted four sites when there are six. Found by Task 1's code-quality review, confirmed independently before scheduling — `git grep` shows the file appears in no other task's `files_touched`.
+
+`:386` still reads `[[ -n "${DRY_RUN:-}" ]] && _dry=1`, so after Task 1 the two predicates **disagree** on exactly the values Task 1 changed:
+
+```
+DRY_RUN=[0]      run_cmd=EXEC   git_hooks.sh:386 -> _dry=1
+DRY_RUN=[false]  run_cmd=EXEC   git_hooks.sh:386 -> _dry=1
+DRY_RUN=[no]     run_cmd=EXEC   git_hooks.sh:386 -> _dry=1
+```
+
+Measured at review, end-to-end against the file's own `_sweep_build_cp_repo` fixture with `DRY_RUN=0 install_git_hooks_all_repos`: `make install-hooks` really ran in both repos (both markers present) while the summary reported `2 checked, n/a updated, 0 gaps`. On base this was **coherent** — `DRY_RUN=0` meant dry on both halves, nothing ran, and `n/a` was truthful. Task 1 introduces the incoherence; it is not pre-existing.
+
+Two consequences, both at lines the fix must leave alone:
+
+- `:538-540` forces `_updated_str="n/a"` whenever `_dry -eq 1`, under a comment reading _"`0` under DRY_RUN would falsely assert every repo was already current — nothing ran, so nothing is known."_ Post-Task-1 that comment is false in precisely the new case: things ran, and the summary denies it.
+- `:449`'s `[[ ${_dry} -eq 0 ]] && _pre=...` skips the pre-digest, so `_updated` cannot increment even without the `n/a` override — real installs are structurally uncountable while `_dry=1`.
+
+Fix is one line: `_dry_run_active && _dry=1`. It sits mid-function so there is no trailing-return hazard, and `lib/helpers.sh` is already a hard dependency of this file through `run_cmd`/`log_warn`, so the symbol resolves. **Do not** rewrite `:449` or `:538` — once `_dry` is correct they are correct, and widening scope here re-opens the counting question this plan deliberately left alone.
+
+**Every new test name MUST contain the literal string `dry-run`.** Measured at pre-flight: `git_hooks.bats` holds 92 tests, **zero** of whose names contain `dry-run`, so `-f "dry-run"` exits 1 with `ERROR: Found no tests` and the gate cannot pass until this task's tests exist; the whole-file arm exits 0 at 92 ok on base, which is both the regression arm and the positive control proving the filter works. Mirror the existing `git_hooks.bats:1254` (`DRY_RUN=1`) with a `DRY_RUN=0` case asserting the markers **do** exist and the summary does **not** contain `n/a updated`.
+
+**Interfaces:**
+
+- Consumes: `_dry_run_active()` from Task 1.
+
+---
+
+### Task 9: Correct `README.md:207`, which this branch falsifies
+
+```yaml-task
+id: 9
+description: Rewrite README.md's --dry-run option entry, which becomes false when this branch merges (docs-only, no behaviour change so TDD does not apply)
+role: executor
+model: sonnet
+tdd: not-applicable
+acceptance:
+  - cmd: grep -q "no outbound write" README.md
+    exit_code: 0
+  - cmd: '! grep -q "git-hooks sweep only" README.md'
+    exit_code: 0
+  - cmd: make lint
+    exit_code: 0
+max_retries: 3
+files_touched:
+  - README.md
+depends_on: [8]
+```
+
+**Files:** `README.md` only (`:207`).
+
+**This task exists because the plan was wrong a second time, in the same way as Task 8.** The spec discusses `README.md:207` in eight places and no task's `files_touched` contained `README.md`. Found by checking Task 7's pointers against the file rather than trusting them.
+
+`:207` currently reads:
+
+> `--dry-run` — log mutating operations without executing. **Honoured by symlinking (`lib/helpers.sh`) and the git-hooks sweep only** — `run_update` contains no `run_cmd` call sites, so `-t update --dry-run` still performs real package upgrades, `git push`, and `rsync --delete`. Do not rely on it to preview an update.
+
+Every clause is accurate **today** and the emphasised one is exactly what Tasks 2–4 and 8 falsify. Left alone it becomes a confident, specific, wrong warning telling operators not to trust a flag that now works — worse than the vague promise at `CLAUDE.md:92` that Task 7 fixes, because this one names mechanisms and reads as freshly verified.
+
+Rewrite it on `README.md:207`'s own enumerate-what-still-runs model — the model Task 7 is told to imitate, which this line is the origin of. State what is now **guaranteed** (no outbound **write**: no `git push`, no `rsync --delete`, no state-ledger write) and enumerate what still runs (package upgrades, venv rebuilds, `git fetch` and `pull --ff-only` on every personal repo, five `npm install -g`, `uv sync`). Keep it one bullet; do not restructure the Options list.
+
+**"No operation that leaves this machine" was this plan's wording and it is false — retracted here rather than quietly edited.** Tasks 7 and 9 both shipped it, faithfully rendered by their implementers, and Phase 3's `security-review` caught it (LOW-1): `_git_repo_status` runs `git fetch` against every personal repo's remote and authenticates with the operator's SSH key on every `--dry-run`, and `npm install -g`/`uv sync` reach registries. Every one of those leaves the machine. The property the code actually delivers is **no outbound write** — nothing mutates remote state — which is the correct and still-strong claim. The enumeration two clauses later always contradicted the bolded guarantee, which is the same self-contradiction shape the branch corrected elsewhere; a guarantee and its own exception list disagreeing is the tell.
+
+**Gate discrimination, measured at pre-flight.** Presence gate: `no outbound write` occurs **0** times in `README.md` today (as do `no egress` and `DRY_RUN=0`), so it cannot pass until the rewrite lands.
+
+**The presence gate was `leaves this machine` until Phase 3 and had to change with the claim.** When `security-review` retracted the false guarantee, the corrected README says "guarantees **no outbound write**" and "It is **not** an offline mode" — so the old grep went red at HEAD. Restoring the phrase to satisfy the gate would have been the exact failure this plan keeps naming: a gate passing on a string whose meaning had inverted. The gate follows the true claim instead. Absence gate: `git-hooks sweep only` occurs exactly **1** time, so its removal is observable — and it is paired with the presence gate deliberately, because an absence alone is satisfied by several states including the line being deleted outright rather than rewritten.
+
+**Scope discipline:** `:162` also mentions a state-ledger entry, and `:456` describes the pre-push hook. Neither is this task's business — do not touch them.
+
+**Interfaces:**
+
+- Consumes: the finished behaviour of Tasks 2, 3, 4 and 8. Runs last so it describes the merged state rather than an intermediate one.
 
 ---
 
@@ -331,7 +525,7 @@ Add a Test Seams row for `LEDGER_BIN` beside `UV_BIN` and `GGSHIELD_BIN`, statin
 
 Per-task gates above are regression checks. The feature-level verification is:
 
-1. **Orchestrator runs `make test` once after Task 6**, uncontended. Baseline `rc=0`, 1675 ok, 0 not ok, 784s. Expect ok to rise by the new cases and not-ok to stay 0.
+1. **Orchestrator runs `make test` once after Task 8**, uncontended — Task 8 is the last code-touching task, not Task 6. Baseline `rc=0`, 1675 ok, 0 not ok, 784s. Expect ok to rise by the new cases and not-ok to stay 0.
 2. **Operator check on the Studio, after the branch merges** — proves the whole change against the real world rather than fixtures:
 
 ```bash
@@ -343,7 +537,14 @@ after=$(git -C ~/.local/share/state-ledger ls-remote origin main | awk '{print $
 
 `ls-remote` is the oracle because "nothing left this machine" is a property of the **remote**. Two earlier gates measured `rev-list --count HEAD`, which a _pull_ moves and a _push_ does not — one could only fail, the other could only pass.
 
-3. **Edge cases that must be exercised:** `DRY_RUN=0` executes (Task 1); the behind-branch pull still runs under `DRY_RUN=1` (Task 3); `legacy-rsync` renders `dry run` and not `not studio` on a studio host (Task 5); the `*)` unknown-flag rejection still works (Task 6).
+3. **Edge cases that must be exercised:** `DRY_RUN=0` executes (Task 1); **an exported `DRY_RUN=0` plus an explicit `--dry-run` previews rather than executing** (Task 1, finding C1); the sweep summary does not report `n/a updated` over hooks it really installed (Task 8, finding C2); the behind-branch pull still runs under `DRY_RUN=1` (Task 3); `legacy-rsync` renders `dry run` and not `not studio` on a studio host (Task 5); the `*)` unknown-flag rejection still works (Task 6).
+
+The C1 case is the one to run by hand on the Studio before merging, because it is the only edge case whose failure mode is **real egress under an explicit preview flag** rather than a wrong report. Measured on both trees at review time, which is what makes it a regression case rather than a hypothetical:
+
+```
+DRY_RUN=0 + --dry-run, base 582fac1c -> PREVIEW            (correct, by accident)
+DRY_RUN=0 + --dry-run, Task 1 as first shipped -> EXECUTES FOR REAL
+```
 
 ## Out of scope
 
