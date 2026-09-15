@@ -94,7 +94,7 @@ depends_on: []
 
 Each currently does `export MACOS=1` inside its `zsh -c` and never unsets `LINUX`. `.config/.zshrc.d/1_init.zsh:3` exports `LINUX=1`, which reaches bats grandchildren, so on a Linux box those four run with **both** set. `CLAUDE.md`'s Testing Rules already forbid this: `load_setup_env()` does not set OS vars, and a test whose outcome depends on OS detection must set them itself.
 
-In each of the four, add `unset LINUX MACOS` as the first line inside the `zsh -c` body, immediately before `export MACOS=1`. Do not touch anything else in those tests. `:389` and `:407` get the same treatment even though only `:355`, `:407` and `:492` were measured RED — `:372` is byte-identical in construct to `:355`, and `:389` shares the `path[1]`-adjacent assumption.
+In each of the four, add `unset MACOS LINUX` inside the `zsh -c` body, immediately before `export MACOS=1`. Do not touch anything else in those tests. `:389` and `:407` get the same treatment even though only `:355`, `:407` and `:492` were measured RED on the target box. `:372` is byte-identical in construct to `:355`, so it fails the same way. `:389` is different, and is fixed prophylactically rather than because it breaks: it asserts `grep -c` equals 1 against its own fixture dir and never reads `path[1]`, so a prepend of some other directory cannot move it. Fix it anyway — leaving one instance of the construct behind reinstates the defect for whoever edits it next.
 
 **This must land before Task 3.** With Task 3's block present, `:355`, `:407` and `:492` go RED on `claude`; `scripts/pre-push` runs `make test`, so the branch would otherwise block every push from that box.
 
@@ -114,7 +114,7 @@ Report both outputs in the task result. A green run that never saw the block is 
 **Interfaces:**
 
 - Consumes: nothing.
-- Produces: four `@test` bodies that begin `unset LINUX MACOS` before setting `MACOS=1`. Task 3 mirrors this shape in its four new Linux tests (`unset LINUX MACOS`, then `export LINUX=1`).
+- Produces: four `@test` bodies that begin `unset MACOS LINUX` before setting `MACOS=1`. Task 3 mirrors this shape in its four new Linux tests (`unset MACOS LINUX`, then `export LINUX=1`).
 
 ---
 
@@ -210,7 +210,7 @@ Add inside the `LINUX` block, immediately after the `/home/linuxbrew/.linuxbrew/
 
 The block is **not** gated on `RESOLUTE`. It is release-blind by design: the directory only exists where Task 2 installed the formula, so the `-d` test is the gate. Say this in review if asked — the install half is release-based and the `PATH` half is not, and that asymmetry is deliberate.
 
-**Tests** — one at a time, RED then GREEN. Mirror the macOS four, each beginning `unset LINUX MACOS` then `export LINUX=1`, with both macOS seams pointed at `/nonexistent/...` so the macOS arm cannot interfere:
+**Tests** — one at a time, RED then GREEN. Mirror the macOS four, each beginning `unset MACOS LINUX` then `export LINUX=1`, with both macOS seams pointed at `/nonexistent/...` so the macOS arm cannot interfere:
 
 1. **present** → `path[1]` equals the fixture dir. Asserting `path[1]`, not membership, is what makes this a prepend test rather than a presence test.
 2. **absent** → seam at `/nonexistent/coreutils-gnubin`, print `NO_GNUBIN`. **Pair with a positive control**: also assert a known Linux entry landed (`HOME/.local/bin`, the `:492` pattern), so a `6_path.zsh` that failed to source cannot satisfy it.
@@ -263,7 +263,7 @@ Every other verdict this change produces is an absence assertion — satisfied e
   local _gnubin=/home/linuxbrew/.linuxbrew/opt/coreutils/libexec/gnubin
   [[ -x "${_gnubin}/sort" ]] || skip "GNU coreutils gnubin absent on this machine"
   run zsh -c "
-    unset LINUX MACOS
+    unset MACOS LINUX
     export LINUX=1
     export _OVERRIDE_GNUBIN_LINUX='${_gnubin}'
     export _OVERRIDE_GNUBIN_ARM='/nonexistent/gnubin-arm'
