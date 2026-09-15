@@ -591,12 +591,13 @@ _install_ubuntu_brew_packages() {
   brew_install_cask codex || _failed+=(codex)
 
   # Ubuntu 26.04 ships uutils coreutils. Its `sort -u` collates `py.test` and
-  # `pytest` as equal under UTF-8 and drops one, so pyenv's `versions` shim --
-  # which pipes its name list through `sort` -- emits no `pytest` shim and
-  # every bare-`pytest` Makefile target breaks. apt cannot make
-  # GNU the provider -- build-essential pins coreutils-from-uutils by name -- so
-  # the formula is the route. 24.04 and earlier already ship GNU; gate to avoid
-  # installing a second copy on machines that do not need it. Measured 2026-09-15.
+  # `pytest` as equal under UTF-8 and drops one, so pyenv's `versions` command
+  # (`libexec/pyenv-versions`), which pipes its name list through `sort`, emits
+  # no `pytest` shim and every bare-`pytest` Makefile target breaks. apt cannot
+  # make GNU the provider -- build-essential pins coreutils-from-uutils by name
+  # -- so the formula is the route. 24.04 and earlier already ship GNU; gate to
+  # avoid installing a second copy on machines that do not need it. Measured
+  # 2026-09-15.
   if [[ -n ${RESOLUTE} ]]; then
     brew_install_formula coreutils || _failed+=(coreutils)
   fi

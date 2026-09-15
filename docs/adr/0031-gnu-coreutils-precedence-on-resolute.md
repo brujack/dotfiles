@@ -29,9 +29,10 @@ changes one binary's behavior fleet-wide with nothing in the repo explaining it.
 reorder. It was rejected for **CI parity**, not preference: the box that runs the gating
 `pre-push` hook and the `ubuntu-latest` runner that runs CI already disagree on coreutils
 provider — measured at 104 binaries differing between uutils and CI's GNU 9.4, the same
-104-entry set named again below as "gnubin names" (the full command list the coreutils
-formula installs; confirmed by counting that directory directly — 104 entries on the
-Studio, 2026-09-15) — which is `tdd.md` pitfall G, a local pass that is not evidence for
+104-name set named again below as "gnubin names" (the full command list the coreutils
+formula installs unprefixed into `libexec/gnubin`, counted on `claude` during the Step 8
+collision check, 2026-09-15; the Studio cannot confirm it — macOS ships neither `chcon`
+nor `runcon`, and its gnubin holds 102 commands) — which is `tdd.md` pitfall G, a local pass that is not evidence for
 what CI will do. Installing GNU
 coreutils locally makes the gating actor match CI instead of diverging further from it; the
 wrapper would not.
@@ -101,8 +102,8 @@ workflow), so `doctor` is reachable non-interactively (`ssh`, cron, launchd), wh
 non-interactive actor on an otherwise-healthy machine produces "directory present, not on
 this shell's `PATH`" — rendered as a **warning**, not a failure, because a FAIL there would
 carry the `setup_env.sh -t setup` remedy, which fixes nothing for an actor that was never
-going to source `6_path.zsh` in the first place. The remaining case — directory present,
-on `PATH`, `sort` still not GNU — is the one genuine regression, and fails.
+going to source `6_path.zsh` in the first place. The remaining cases — the gnubin directory absent because the formula was
+never installed, or present and on `PATH` with `sort` still not GNU — fail.
 
 ## Consequences
 
@@ -152,6 +153,7 @@ expected to be silently correct.
   `coreutils`' `gnubin` holds ~100 binaries against this one's single `make` — is a
   materially different trade and should be argued on its own terms, not inherited from
   this decision" — so this ADR is that argument, not a silent extension of ADR-0018's
+  decision.
 - [ADR-0029](0029-gate-gpu-provisioning-on-hardware-not-capability.md) — nearest peer in
   shape: a provisioning decision with measured, rejected alternatives and an accepted,
   named cost rather than a silent one
