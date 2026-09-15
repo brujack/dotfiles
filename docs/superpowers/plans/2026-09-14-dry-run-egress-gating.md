@@ -368,7 +368,7 @@ role: executor
 model: sonnet
 tdd: not-applicable
 acceptance:
-  - cmd: 'grep -qE "no (operation that leaves|egress)" CLAUDE.md'
+  - cmd: grep -q "no outbound write" CLAUDE.md
     exit_code: 0
   - cmd: grep -q "LEDGER_BIN" CLAUDE.md
     exit_code: 0
@@ -407,7 +407,9 @@ Against haiku 4.5's 200k window that is ~83% consumed at dispatch, so **no `mode
 
 `:92` currently promises "log mutating operations (symlinks, installs, mkdir) without executing", which is false. It becomes a statement of what is guaranteed — **no outbound write** — and enumerates what still runs: package upgrades, venv rebuilds, `git fetch` and `pull --ff-only` on every personal repo, five `npm install -g`, and `uv sync`. Follow `README.md:207`'s enumerate-what-still-runs model.
 
-**This said "no egress" until Phase 3, and that word was wrong for the same reason Task 9's was.** `git fetch`, `pull --ff-only`, `npm install -g` and `uv sync` are all egress; what the guards actually prevent is an outbound **write**. See Task 9's retraction note for the measurement. The `grep -qE "no (operation that leaves|egress)"` acceptance gate below still matches the shipped text, so it was left alone — but note it matches on the _old_ vocabulary, which is why the prose above is the authority here and the gate is only a presence check.
+**The acceptance gate was amended too, for the same reason Task 9's was.** It read `grep -qE "no (operation that leaves|egress)" CLAUDE.md`, and after the retraction the _only_ thing it matched was `CLAUDE.md:92`'s retraction quote — `…the earlier wording here ("no operation that leaves this machine") was false`. Measured at Phase 3 cycle 2: one hit, at line 92. So the gate passed on the negation of what it was written to assert. It now greps `no outbound write`. `diff-scope-review` raised this (D2) after noting Task 9's identical gate had been amended while this one was only disclosed in prose — two opposite treatments of one defect, now consistent.
+
+**This said "no egress" until Phase 3, and that word was wrong for the same reason Task 9's was.** `git fetch`, `pull --ff-only`, `npm install -g` and `uv sync` are all egress; what the guards actually prevent is an outbound **write**. See Task 9's retraction note for the measurement. The `grep -qE "no (operation that leaves|egress)"` acceptance gate that used to sit below was **not** left alone — see the amendment note above; it now greps `no outbound write`. This sentence said it had been left alone, which stopped being true the moment the gate was amended, and it is corrected rather than deleted because a plan that contradicts itself two lines apart is the exact defect this branch spent two review cycles removing.
 
 `:86` says `-t update` "Also writes a state-ledger entry" — now conditionally false, since no entry is written under `--dry-run`. Add that qualifier.
 
