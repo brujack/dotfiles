@@ -388,9 +388,23 @@ The ledger guard is covered by the suite rather than by this check, since exerci
 
 ## Documentation
 
-`CLAUDE.md:92` changes to state what is guaranteed — **no egress**: nothing leaves this
-machine. Package upgrades, venv rebuilds and local deletions still run, and the line says so,
-matching `README.md:207` rather than contradicting it.
+`CLAUDE.md:92` changes to state what is guaranteed — **no outbound write**: no `git push`, no
+`rsync --delete`, no state-ledger **entry** write. Package upgrades, venv rebuilds and local
+deletions still run, and the line says so, matching `README.md:207` rather than contradicting
+it.
+
+**This paragraph said "no egress: nothing leaves this machine" until Phase 3, and that
+directive was false.** `security-review` (LOW-1) measured it: `_git_repo_status` runs
+`git fetch` against every personal repo's remote and authenticates with the operator's SSH
+key on every dry run, and `npm install -g` and `uv sync` reach registries — all egress. What
+the guards actually deliver is no outbound **write**, which is the correct and still-strong
+claim. `bug-scan` then narrowed it once more: `ensure_state_ledger` runs ungated and performs
+a local `ledger.py init`, so the guarantee is "no state-ledger **entry** write" rather than
+"no state-ledger write". Corrected here rather than only in the plan, because this spec is the
+artifact the plan's tasks were written from, and leaving the directive intact would have it
+mandate the retracted wording to the next reader. The `Disposition` blocks below are records
+of what each review round judged and are deliberately **not** rewritten — they say "no egress"
+because that is what was true when they were written.
 
 ## ADR
 
