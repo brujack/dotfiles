@@ -78,12 +78,12 @@ marked and load-bearing, since pyenv compiles Python from source on this box.
 
 ### Alternatives considered and rejected
 
-| Option                                 | Why rejected                                                                                                                                                                                                                                                                                                                                                |
-| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `apt install coreutils-from-gnu`       | Unsatisfiable, see above. Not a trade-off — it does not work.                                                                                                                                                                                                                                                                                               |
-| `dpkg-divert /usr/bin/sort`            | The only genuinely machine-wide route that survives the `build-essential` pin (23 diversions already exist on the box, so the mechanism is established there). Rejected as disproportionate: it fights the package manager, needs re-asserting after coreutils updates, and silently changes one binary's behaviour with nothing in the repo explaining it. |
-| Patch `pyenv-versions:47` post-install | The vendored-patch burden the operator rejected, and worse than first described: the file is pyenv **core** in the brew Cellar, erased by every `brew upgrade pyenv`, and the repair would need its own test proving the patch is still applied.                                                                                                            |
-| Export `LC_ALL=C` narrowly             | A one-line `pyenv() { LC_ALL=C command pyenv "$@" }` fixes the measured defect exactly, with no package and no PATH reorder — so the coreutils route needs a reason this row originally did not give. The reason is **CI parity**: `claude`'s `pre-push` runs `make test` while CI runs `ubuntu-latest` (GNU 9.4), so today the *gating* actor and CI disagree across 104 binaries — `tdd.md` pitfall G, where a local pass is not evidence. Installing GNU makes the gate match CI; the one-liner does not. Operator re-affirmed the coreutils route on 2026-09-15 after being shown the 26-binary install-time radius and the 3–4 broken tests. |
+| Option                                 | Why rejected                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apt install coreutils-from-gnu`       | Unsatisfiable, see above. Not a trade-off — it does not work.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `dpkg-divert /usr/bin/sort`            | The only genuinely machine-wide route that survives the `build-essential` pin (23 diversions already exist on the box, so the mechanism is established there). Rejected as disproportionate: it fights the package manager, needs re-asserting after coreutils updates, and silently changes one binary's behaviour with nothing in the repo explaining it.                                                                                                                                                                                                                                                                                       |
+| Patch `pyenv-versions:47` post-install | The vendored-patch burden the operator rejected, and worse than first described: the file is pyenv **core** in the brew Cellar, erased by every `brew upgrade pyenv`, and the repair would need its own test proving the patch is still applied.                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Export `LC_ALL=C` narrowly             | A one-line `pyenv() { LC_ALL=C command pyenv "$@" }` fixes the measured defect exactly, with no package and no PATH reorder — so the coreutils route needs a reason this row originally did not give. The reason is **CI parity**: `claude`'s `pre-push` runs `make test` while CI runs `ubuntu-latest` (GNU 9.4), so today the _gating_ actor and CI disagree across 104 binaries — `tdd.md` pitfall G, where a local pass is not evidence. Installing GNU makes the gate match CI; the one-liner does not. Operator re-affirmed the coreutils route on 2026-09-15 after being shown the 26-binary install-time radius and the 3–4 broken tests. |
 
 ## Design
 
@@ -181,8 +181,8 @@ prepend displaces it — an **ordering** failure that no `_OVERRIDE_*` seam repa
 The root cause is pre-existing and already forbidden: `.config/.zshrc.d/1_init.zsh:3`
 is `export LINUX=1`, which reaches bats grandchildren, while `:355`, `:372`, `:389` and
 `:407` set `MACOS=1` and never unset `LINUX` — exactly what `CLAUDE.md:389` forbids
-(*"A test whose outcome depends on OS detection must set the variables itself ... never
-inherit them"*). The repair is `unset LINUX MACOS` plus explicit sets in each gnubin
+(_"A test whose outcome depends on OS detection must set the variables itself ... never
+inherit them"_). The repair is `unset LINUX MACOS` plus explicit sets in each gnubin
 test, **not** a fifth seam. Operator dispositioned this into THIS change (2026-09-15),
 because `scripts/pre-push` runs `make test` and the branch would otherwise block every
 push from `claude`. The original note is kept below as written, since it records what
@@ -208,24 +208,32 @@ coreutils path.
 
 ## Known limitation
 
-**CORRECTED 2026-09-15: this is false for 26 binaries, and false at INSTALL time,
+**CORRECTED 2026-09-15: this is false for 27 binaries, and false at INSTALL time,
 independent of the PATH edit.** Homebrew's `coreutils.rb` sets `no_conflict` to an empty
-list only on macOS; on Linux it is a 26-name list, and `bin.install_symlink "g#{cmd}" =>
+list only on macOS; on Linux it is a 27-name list, and `bin.install_symlink "g#{cmd}" =>
 cmd` runs unconditionally. The formula is not keg-only, so those names link into
 `/home/linuxbrew/.linuxbrew/bin`, which `6_path.zsh:55-57` already appends — measured at
 PATH index 5 on `claude`, ahead of `/usr/bin` at index 10. So `brew_install_formula
 coreutils` alone replaces, for every actor with linuxbrew on PATH: `b2sum base32 basenc
-dir dircolors factor hostid md5sum nproc numfmt pinky ptx realpath sha1sum sha224sum
-sha256sum sha384sum sha512sum shred shuf stdbuf tac timeout truncate vdir`. `sort` is
-**not** among them, so section 2's prepend is still genuinely required.
+chcon dir dircolors factor hostid md5sum nproc numfmt pinky ptx realpath runcon sha1sum
+sha224sum sha256sum sha384sum sha512sum shred shuf stdbuf tac timeout truncate vdir`.
+`sort` is **not** among them, so section 2's prepend is still genuinely required.
+
+**CORRECTED again, 2026-09-15 (second pass, ADR-0031 Multi-Lens Review): the count directly
+above was itself wrong — 26, omitting `chcon` and `runcon`, is now 27.** The direction
+stated in this section was already correct: `bin.install_symlink "g#{cmd}" => cmd` names,
+on the right of `=>`, the unprefixed target, so each name **in** `no_conflict` is the one
+that gets the unprefixed link — only the count drifted here, and only here. The direction
+was inverted later, while this section was being paraphrased into the ADR, and both ADR
+reviewers derived the correction independently from the formula rather than from each other
+or from this spec.
 
 Repo impact, measured 2026-09-15 across `lib/ scripts/ .config/ setup_env.sh tests/`:
 exactly **one** live executable call site — `lib/linux_ubuntu.sh:164`'s `sha256sum -c -`,
 the rustup signature gate, which `tests/setup_env/linux_ubuntu.bats:358-360` deliberately
 does not mock so the digest check runs for real. Every other hit is prose in comments.
 GNU is the reference implementation uutils reimplements, so this moves that path toward
-CI's behaviour rather than away from it. No `tests/mocks/` entry collides with any of the
-26. Accepted by the operator on that basis.
+CI's behaviour rather than away from it. No `tests/mocks/` entry collides with any of the 27. Accepted by the operator on that basis.
 
 The rest of this section is correct as written:
 
@@ -242,7 +250,6 @@ Warranted. This is a toolchain-precedence decision with alternatives that were w
 measured, closer in kind to ADR-0029 (gate GPU provisioning on hardware, not a profile
 capability) than to a routine flag change. To be written alongside the implementation.
 
-
 ## Multi-Lens Review
 
 Three independent lenses, dispatched 2026-09-15 as fresh agents with no prior context, against
@@ -253,19 +260,19 @@ and the findings below are about scope, observability and accuracy rather than a
 
 ### Findings and dispositions
 
-| # | Finding | Disposition |
-| --- | --- | --- |
-| F1 | The Known limitation is false for 26 binaries, and false at install time independent of the PATH edit | **Addressed** — corrected in place above, with the measured one-call-site repo impact |
-| F2 | "One existing test must change" understates by 3; the mechanism is an ordering failure no seam repairs; root cause is a pre-existing `CLAUDE.md:389` violation | **Addressed** — corrected above; operator scoped the test-hygiene fix into this change |
-| F3 | Nothing reads the fix after the session: install failure degrades to a WARN, the PATH arm has no else, and the acceptance line writes to no file | **Addressed** — a `_doctor_check_*` arm asserting the GNU *provider* (`sort --version` contains `GNU`), not directory existence, is added to the plan |
-| F4 | ~10 expected verdicts, all PASS, 3–4 satisfied equally by a dead mechanism (absence assertions with `2>/dev/null` sourcing) | **Addressed** — plan pairs each absence assertion with the positive control already used at `:407`, and adds one discriminating case — `printf 'py.test\npytest\n' \| sort -u \| wc -l` must equal **2** (2 under GNU, 1 under uutils) |
-| F5 | `:173-178` names `workstation`, which is 24.04, is `RESOLUTE`-gated out, and never receives the formula | **Addressed** — corrected; caught independently by two lenses |
-| F6 | The `LC_ALL=C` arm was dismissed with a ruling rather than a reason, and the argument that carries the 104-binary mechanism (CI parity) was absent | **Addressed** — the Alternatives row now states the reason; operator re-affirmed the route knowing the costs |
+| #   | Finding                                                                                                                                                        | Disposition                                                                                                                                                                                                                                                                                                   |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| F1  | The Known limitation is false for 27 binaries, and false at install time independent of the PATH edit                                                          | **Addressed** — corrected in place above, with the measured one-call-site repo impact. Count corrected again 2026-09-15 (second pass, ADR-0031 Multi-Lens Review): the "26" written here was itself wrong, omitting `chcon` and `runcon` — see the second `CORRECTED` note above the Known limitation's list. |
+| F2  | "One existing test must change" understates by 3; the mechanism is an ordering failure no seam repairs; root cause is a pre-existing `CLAUDE.md:389` violation | **Addressed** — corrected above; operator scoped the test-hygiene fix into this change                                                                                                                                                                                                                        |
+| F3  | Nothing reads the fix after the session: install failure degrades to a WARN, the PATH arm has no else, and the acceptance line writes to no file               | **Addressed** — a `_doctor_check_*` arm asserting the GNU _provider_ (`sort --version` contains `GNU`), not directory existence, is added to the plan                                                                                                                                                         |
+| F4  | ~10 expected verdicts, all PASS, 3–4 satisfied equally by a dead mechanism (absence assertions with `2>/dev/null` sourcing)                                    | **Addressed** — plan pairs each absence assertion with the positive control already used at `:407`, and adds one discriminating case — `printf 'py.test\npytest\n' \| sort -u \| wc -l` must equal **2** (2 under GNU, 1 under uutils)                                                                        |
+| F5  | `:173-178` names `workstation`, which is 24.04, is `RESOLUTE`-gated out, and never receives the formula                                                        | **Addressed** — corrected; caught independently by two lenses                                                                                                                                                                                                                                                 |
+| F6  | The `LC_ALL=C` arm was dismissed with a ruling rather than a reason, and the argument that carries the 104-binary mechanism (CI parity) was absent             | **Addressed** — the Alternatives row now states the reason; operator re-affirmed the route knowing the costs                                                                                                                                                                                                  |
 
 ### Assumptions named, and their refutations
 
 - **goal-fit — "no actor outside interactive zsh triggers `pyenv rehash`"**, the concern being that
-  shims are last-writer-wins, so a uutils-side rehash would *delete* the restored `pytest` shim and
+  shims are last-writer-wins, so a uutils-side rehash would _delete_ the restored `pytest` shim and
   the fix would oscillate. **Refuted.** `bash -lc` on `claude` returns `NO_PYENV_ON_PATH` and
   `NO_BREW_ON_PATH`; that actor's PATH is the compiled default with no linuxbrew. `setup_env.sh:30`
   gates on `env which brew` and exits 1, and both `pyenv rehash` callers (`lib/developer.sh:537,567`)

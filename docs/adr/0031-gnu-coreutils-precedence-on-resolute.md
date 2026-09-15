@@ -28,8 +28,11 @@ changes one binary's behavior fleet-wide with nothing in the repo explaining it.
 "$@" }` wrapper fixes the measured defect exactly, with no new package and no `PATH`
 reorder. It was rejected for **CI parity**, not preference: the box that runs the gating
 `pre-push` hook and the `ubuntu-latest` runner that runs CI already disagree on coreutils
-provider — measured at 104 binaries differing between uutils and CI's GNU 9.4 — which is
-`tdd.md` pitfall G, a local pass that is not evidence for what CI will do. Installing GNU
+provider — measured at 104 binaries differing between uutils and CI's GNU 9.4, the same
+104-entry set named again below as "gnubin names" (the full command list the coreutils
+formula installs; confirmed by counting that directory directly — 104 entries on the
+Studio, 2026-09-15) — which is `tdd.md` pitfall G, a local pass that is not evidence for
+what CI will do. Installing GNU
 coreutils locally makes the gating actor match CI instead of diverging further from it; the
 wrapper would not.
 
@@ -59,17 +62,19 @@ appended via `path+=`, which lands behind `/usr/bin` (index 10 on `claude`) and 
 the change completely inert while still reading as correct to a reviewer.
 
 **The install has a side effect the `PATH` edit does not cause.** Homebrew's `coreutils.rb`
-sets its `no_conflict` exclusion list to empty only on macOS; on Linux it is a 26-name list
-(`b2sum base32 basenc dir dircolors factor hostid md5sum nproc numfmt pinky ptx realpath
-sha1sum sha224sum sha256sum sha384sum sha512sum shred shuf stdbuf tac timeout truncate
-vdir`), and everything outside that list links unprefixed into
-`/home/linuxbrew/.linuxbrew/bin`. That directory is already appended to `path` by this same
-file, at index 5 on `claude`, ahead of `/usr/bin` at index 10 — so those 26 binaries change
-provider at **brew-install time**, independent of and before this change's prepend ever
-runs. `sort` is not on that list, which is why the prepend is still required to fix the
-defect this ADR exists for.
+sets its `no_conflict` list to empty only on macOS; on Linux it lists `b2sum base32 basenc
+chcon dir dircolors factor hostid md5sum nproc numfmt pinky ptx realpath runcon sha1sum
+sha224sum sha256sum sha384sum sha512sum shred shuf stdbuf tac timeout truncate vdir`. The
+formula's `no_conflict.each { |cmd| bin.install_symlink "g#{cmd}" => cmd }` links every
+name **in** that list unprefixed into `/home/linuxbrew/.linuxbrew/bin` — the direction is
+load-bearing: everything else is installed only as `g<cmd>` there, reachable unprefixed
+solely through `libexec/gnubin`. That `bin` directory is already appended to `path` by
+this same file, at index 5 on `claude`, ahead of `/usr/bin` at index 10 — so those
+binaries change provider at **brew-install time**, independent of and before this change's
+prepend ever runs. `sort` is not on the list, which is why the prepend is still required
+to fix the defect this ADR exists for.
 
-Repo-wide impact of that 26-binary shift was measured across `lib/ scripts/ .config/
+Repo-wide impact of that install-time shift was measured across `lib/ scripts/ .config/
 setup_env.sh tests/`: exactly one live executable call site, the rustup signature gate in
 `lib/linux_ubuntu.sh` (`sha256sum -c -` against a pinned digest), and its test
 (`tests/setup_env/linux_ubuntu.bats`) deliberately does not mock `sha256sum`, so the real
@@ -77,20 +82,27 @@ GNU binary now runs the real check. GNU is the reference implementation uutils
 reimplements, so this moves that call site toward CI's behavior, not away from it.
 
 **A doctor arm asserts the provider, not the directory.** `_doctor_check_gnu_coreutils` in
-`lib/helpers.sh` is gated on `RESOLUTE` and reads `sort --version`, matching the literal
-`(GNU coreutils)` string — not a bare `*GNU*`, since `version_etc` emits the package name
-untranslated and a bare match would pass a future non-GNU banner that merely mentions GNU.
-A gnubin directory existing is explicitly **not** sufficient: the same directory exists for
-an interactive shell whose prepend has regressed (block deleted, `opt` path renamed, a
-shadowing `PATH` entry earlier in the file) as for one where it works. The arm distinguishes
-those from a third case that is not a regression at all — `-t doctor` is one of exactly two
-`setup_env.sh` workflows that bypass the brew prereq check, so it is reachable
-non-interactively (`ssh`, cron, launchd), while `6_path.zsh` is sourced by interactive zsh
-only. Reaching the doctor check from a non-interactive actor on an otherwise-healthy machine
-produces "directory present, not on this shell's `PATH`" — rendered as a **warning**, not a
-failure, because a FAIL there would carry the `setup_env.sh -t setup` remedy, which fixes
-nothing for an actor that was never going to source `6_path.zsh` in the first place. Only
-"directory present, on `PATH`, `sort` still not GNU" is a genuine regression and fails.
+`lib/helpers.sh` is gated on `RESOLUTE` and branches on `sort --version` into four
+outcomes, not two. A literal `(GNU coreutils)` match — not a bare `*GNU*`, since
+`version_etc` emits the package name untranslated and a bare match would pass a future
+non-GNU banner that merely mentions GNU — passes. Empty output fails, naming the failure
+"could not determine the provider": `sort` absent from `PATH`, rejecting `--version`, and
+not executable are three distinct states behind that emptiness, and none of them means
+"not GNU" — asserting a provider verdict there would claim a probe that never ran, which is
+the three-valued-outcome distinction this branch spent two review rounds winning. A gnubin
+directory existing is explicitly **not** sufficient on its own to explain a non-GNU result:
+the same directory exists for an interactive shell whose prepend has regressed (block
+deleted, `opt` path renamed, a shadowing `PATH` entry earlier in the file) as for one where
+it works. The arm distinguishes that regressed-prepend case from a third, non-regression
+cause — `-t doctor` is one of two `-t` workflows (`doctor`, `check-versions`) that bypass
+the brew prereq check (`--brew-install` is a third bypass, but a flag rather than a
+workflow), so `doctor` is reachable non-interactively (`ssh`, cron, launchd), while
+`6_path.zsh` is sourced by interactive zsh only. Reaching the doctor check from a
+non-interactive actor on an otherwise-healthy machine produces "directory present, not on
+this shell's `PATH`" — rendered as a **warning**, not a failure, because a FAIL there would
+carry the `setup_env.sh -t setup` remedy, which fixes nothing for an actor that was never
+going to source `6_path.zsh` in the first place. The remaining case — directory present,
+on `PATH`, `sort` still not GNU — is the one genuine regression, and fails.
 
 ## Consequences
 
@@ -103,17 +115,19 @@ merely-non-interactive actor.
 
 **Costs, accepted.**
 
-- The install unprefixes 26 binaries into `linuxbrew/bin` at install time, ahead of
-  `/usr/bin`, independent of this ADR's `PATH` prepend. One live call site is affected
-  (the rustup `sha256sum` signature check) and it was accepted deliberately rather than
-  overlooked — moving toward the reference implementation is the safer direction.
+- The install unprefixes the `no_conflict` list's binaries into `linuxbrew/bin` at
+  install time, ahead of `/usr/bin`, independent of this ADR's `PATH` prepend. One live
+  call site is affected (the rustup `sha256sum` signature check) and it was accepted
+  deliberately rather than overlooked — moving toward the reference implementation is the
+  safer direction.
 - The prepend lands at global `PATH` index 1, ahead of all four pyenv/rbenv shim
   directories (pyenv-virtualenv, `~/.rbenv/shims`, pyenv-virtualenv again, `~/.pyenv/shims`
   — that ordering itself set at login by `.zprofile`, before `.zshrc.d` runs). A GNU
   coreutils name could in principle shadow a Python or Ruby shim sharing that name.
-  Measured: **0 collisions** between 164 shim names (148 pyenv + 16 rbenv) and 104 gnubin
-  names, with a positive control (`sort` is present in the gnubin set and a seeded name
-  returns through `comm`) so the zero discriminates rather than reflecting a broken probe.
+  Measured: **0 collisions** between 164 shim names (148 pyenv + 16 rbenv) and the same
+  104 gnubin names cited above, with a positive control (`sort` is present in the gnubin
+  set and a seeded name returns through `comm`) so the zero discriminates rather than
+  reflecting a broken probe.
   Nothing re-runs that check on an ongoing basis — a future pyenv or rbenv entry point that
   happens to share a coreutils name would shadow silently, and this paragraph is the only
   record of the risk having been checked once.
@@ -133,12 +147,16 @@ expected to be silently correct.
 
 - [ADR-0018](0018-gnu-make-4-on-macos.md) — the same prepend-not-append `PATH` convention,
   for a different tool and platform; also the origin of the interactive-shell actor
-  boundary this ADR's doctor arm re-applies
+  boundary this ADR's doctor arm re-applies. ADR-0018 named this exact widening in
+  advance — "a future change that widens the prepend beyond this single directory —
+  `coreutils`' `gnubin` holds ~100 binaries against this one's single `make` — is a
+  materially different trade and should be argued on its own terms, not inherited from
+  this decision" — so this ADR is that argument, not a silent extension of ADR-0018's
 - [ADR-0029](0029-gate-gpu-provisioning-on-hardware-not-capability.md) — nearest peer in
   shape: a provisioning decision with measured, rejected alternatives and an accepted,
   named cost rather than a silent one
 - `docs/superpowers/specs/2026-09-13-gnu-coreutils-precedence-resolute-design.md` — the
   spec this shipped under, including the Multi-Lens Review that found and corrected the
-  26-binary install-time side effect and required the collision measurement
+  install-time side effect and required the collision measurement
 - `CLAUDE.md` Test Seams (`_OVERRIDE_GNUBIN_LINUX`) and Key Conventions (the gnubin
   prepend bullet) — the seam and convention this decision introduces
