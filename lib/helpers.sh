@@ -832,18 +832,38 @@ _doctor_check_github_mcp() {
 _doctor_check_gnu_coreutils() {
   # 26.04 ships uutils, whose `sort -u` collates py.test and pytest as equal and
   # drops one, leaving pyenv with no pytest shim. Earlier Ubuntu and macOS ship
-  # GNU already, so there is nothing here to check on them.
+  # GNU already, so there is nothing here to check on them. Measured 2026-09-15
+  # against uutils coreutils on Ubuntu 26.04.
   [[ -n ${RESOLUTE} ]] || return 0
   printf "\nGNU coreutils:\n"
   # The PROVIDER, not the directory. A gnubin directory can exist while PATH
-  # still resolves uutils -- directory existence is what the zshrc.d tests
-  # already cover, and it is not the property that matters.
+  # still resolves uutils -- the directory is read below, but only to choose
+  # which non-GNU message applies. It never decides pass/fail on its own.
   local _ver
   _ver="$(sort --version 2>/dev/null | head -1)"
-  if [[ "${_ver}" == *GNU* ]]; then
+  # Same seam 6_path.zsh uses to locate the formula.
+  local _gnubin_linux="${_OVERRIDE_GNUBIN_LINUX:-/home/linuxbrew/.linuxbrew/opt/coreutils/libexec/gnubin}"
+  if [[ -z "${_ver}" ]]; then
+    # Empty is reachable from three states -- sort absent from PATH, sort
+    # rejecting --version, sort not executable -- and none of them means
+    # "not GNU". Asserting a provider verdict here would claim a probe that
+    # never ran.
+    doctor_fail "sort" "--version produced no output — could not determine the provider (is sort on PATH and executable?); run: setup_env.sh -t setup"
+  elif [[ "${_ver}" == *"(GNU coreutils)"* ]]; then
+    # The literal parenthesized form, not a bare *GNU* match: version_etc
+    # emits the package name untranslated, so this is locale-safe, and it
+    # closes off a future non-GNU banner that merely mentions GNU.
     doctor_pass "sort is GNU (${_ver})"
+  elif [[ -d "${_gnubin_linux}" ]]; then
+    # The formula IS installed -- this actor's PATH just never sourced
+    # 6_path.zsh, which only interactive zsh does. `-t doctor` is one of the
+    # two workflows that bypass the brew prereq, so it is reachable over
+    # ssh/cron/launchd, where the prepend never ran. Not an unhealthy
+    # machine, so warn rather than fail: a FAIL here would carry the
+    # `setup_env.sh -t setup` remedy, which does nothing for this actor.
+    doctor_warn "sort" "not GNU on this shell's PATH (${_ver}), but ${_gnubin_linux} exists — 6_path.zsh is sourced by interactive zsh only, so this actor never saw the prepend"
   else
-    doctor_fail "sort" "not GNU (${_ver:-no --version output}) — pyenv will drop the pytest shim; run: setup_env.sh -t setup"
+    doctor_fail "sort" "not GNU (${_ver}) — pyenv will drop the pytest shim; run: setup_env.sh -t setup"
   fi
 }
 

@@ -2275,6 +2275,10 @@ STUB
 # prepended to PATH — never by stripping a PATH entry, which on this fleet
 # takes git, make and the rest of the toolchain with it alongside the one
 # binary the test meant to hide (shell.md's PATH-mock co-location trap).
+#
+# The non-GNU stubs below all print the same version number (9.5) as the
+# GNU stub -- provider word is the only thing that varies between them, so
+# a match on the version number cannot survive the pair.
 
 @test "_doctor_check_gnu_coreutils does nothing when RESOLUTE is unset" {
   # Paired with the GNU-pass case below as the positive control: on its own
@@ -2309,14 +2313,40 @@ STUB
   [[ "$(cat "${_outfile}")" == *"[PASS]"* ]]
 }
 
-@test "_doctor_check_gnu_coreutils fails when sort resolves uutils" {
+@test "_doctor_check_gnu_coreutils fails when sort --version produces no output" {
   _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
   export RESOLUTE=1
+  local _shim="${BATS_TEST_TMPDIR}/silent_sort_shim"
+  mkdir -p "${_shim}"
+  cat > "${_shim}/sort" <<'STUB'
+#!/usr/bin/env bash
+exit 1
+STUB
+  chmod +x "${_shim}/sort"
+  local _saved_path="${PATH}"
+  local _outfile="${BATS_TEST_TMPDIR}/silent_fail_out.txt"
+  export PATH="${_shim}:${PATH}"
+  _doctor_check_gnu_coreutils > "${_outfile}"
+  export PATH="${_saved_path}"
+  # Empty output is reachable from sort-absent, sort-rejects-the-flag, and
+  # sort-not-executable alike -- none of those means "not GNU", so the
+  # message must say the probe could not run, not that the provider is wrong.
+  [ "${_DOCTOR_FAIL}" -eq 1 ]
+  [ "${_DOCTOR_FAILED}" -eq 1 ]
+  [[ "$(cat "${_outfile}")" == *"[FAIL]"* ]]
+  [[ "$(cat "${_outfile}")" == *"could not determine the provider"* ]]
+}
+
+@test "_doctor_check_gnu_coreutils fails when sort resolves uutils and the gnubin formula is absent" {
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  export RESOLUTE=1
+  # Never created -- the absence is the point of this test.
+  export _OVERRIDE_GNUBIN_LINUX="${BATS_TEST_TMPDIR}/gnubin_absent"
   local _shim="${BATS_TEST_TMPDIR}/uutils_sort_shim"
   mkdir -p "${_shim}"
   cat > "${_shim}/sort" <<'STUB'
 #!/usr/bin/env bash
-printf 'sort (uutils coreutils) 0.2.2\n'
+printf 'sort (uutils coreutils) 9.5\n'
 STUB
   chmod +x "${_shim}/sort"
   local _saved_path="${PATH}"
@@ -2329,6 +2359,58 @@ STUB
   [ "${_DOCTOR_FAIL}" -eq 1 ]
   [ "${_DOCTOR_FAILED}" -eq 1 ]
   [[ "$(cat "${_outfile}")" == *"[FAIL]"* ]]
+}
+
+@test "_doctor_check_gnu_coreutils warns when sort resolves uutils but the gnubin formula is installed" {
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  export RESOLUTE=1
+  local _gnubin="${BATS_TEST_TMPDIR}/gnubin_present"
+  mkdir -p "${_gnubin}"
+  export _OVERRIDE_GNUBIN_LINUX="${_gnubin}"
+  local _shim="${BATS_TEST_TMPDIR}/uutils_sort_shim_warn"
+  mkdir -p "${_shim}"
+  cat > "${_shim}/sort" <<'STUB'
+#!/usr/bin/env bash
+printf 'sort (uutils coreutils) 9.5\n'
+STUB
+  chmod +x "${_shim}/sort"
+  local _saved_path="${PATH}"
+  local _outfile="${BATS_TEST_TMPDIR}/uutils_warn_out.txt"
+  export PATH="${_shim}:${PATH}"
+  _doctor_check_gnu_coreutils > "${_outfile}"
+  export PATH="${_saved_path}"
+  # This is the point of the test: the formula IS installed on this
+  # provisioned box, so a FAIL here would be a false alarm carrying a
+  # `setup_env.sh -t setup` remedy that does nothing.
+  [ "${_DOCTOR_FAILED}" -eq 0 ]
+  [[ "$(cat "${_outfile}")" == *"[WARN]"* ]]
+}
+
+@test "_doctor_check_gnu_coreutils does not treat a third, unbranded sort as GNU" {
+  # The empty-output test above cannot discriminate a fail-open provider
+  # match (e.g. "not uutils" standing in for "is GNU") from the real one --
+  # `-z` is checked first and short-circuits before the provider test is
+  # ever reached, by Finding A's own requirement that the branch sit BEFORE
+  # it. A provider that is neither GNU- nor uutils-branded is what actually
+  # distinguishes "== *(GNU coreutils)*" from "!= *uutils*": the former
+  # correctly rejects it, the latter wrongly accepts it as GNU.
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  export RESOLUTE=1
+  export _OVERRIDE_GNUBIN_LINUX="${BATS_TEST_TMPDIR}/gnubin_absent_third"
+  local _shim="${BATS_TEST_TMPDIR}/busybox_sort_shim"
+  mkdir -p "${_shim}"
+  cat > "${_shim}/sort" <<'STUB'
+#!/usr/bin/env bash
+printf 'sort (busybox) 1.36.1\n'
+STUB
+  chmod +x "${_shim}/sort"
+  local _saved_path="${PATH}"
+  local _outfile="${BATS_TEST_TMPDIR}/busybox_out.txt"
+  export PATH="${_shim}:${PATH}"
+  _doctor_check_gnu_coreutils > "${_outfile}"
+  export PATH="${_saved_path}"
+  [ "${_DOCTOR_FAILED}" -eq 1 ]
+  [[ "$(cat "${_outfile}")" != *"[PASS]"* ]]
 }
 
 @test "run_doctor calls _doctor_check_gnu_coreutils" {
