@@ -351,9 +351,11 @@ _doctor_check_gnu_coreutils() {
 1. `RESOLUTE` unset → the function returns 0 and prints nothing. **Pair with (2) as the positive control** — on its own this passes against a deleted function.
 2. `RESOLUTE=1`, stub `sort` printing `sort (GNU coreutils) 9.5` → output contains `[PASS]`, `_DOCTOR_FAILED` is 0.
 3. `RESOLUTE=1`, stub printing `sort (uutils coreutils) 0.2.2` → output contains `[FAIL]`, `_DOCTOR_FAILED` is 1.
-4. `run_doctor` calls the new arm — mirror the existing `run_doctor calls _doctor_check_github_mcp` test at `:993`.
+4. `run_doctor` calls the new arm — mirror the existing `run_doctor calls _doctor_check_github_mcp` test.
 
-**Then add `_doctor_check_gnu_coreutils() { :; }` to all three existing end-to-end stub blocks** — `:993`ff, `:1020`ff and `:1412`ff. Without it, on a `RESOLUTE` box those tests run the real check: the `1 warnings` assertion at `:1020` and the exit-code assertion at `:1412` both break. This is the same reason every other arm is stubbed there.
+**Then add `_doctor_check_gnu_coreutils() { :; }` to all three existing end-to-end stub blocks** — the tests named `run_doctor calls _doctor_check_github_mcp`, `run_doctor summary includes warnings count`, and `run_doctor exit code reflects an unmapped profile`. Locate them by name; the line numbers an earlier draft gave here had already drifted by the time this task ran.
+
+Add them for consistency with every other sub-check — **not** for the reason that draft gave. It claimed the arm would otherwise fire in-process on a `RESOLUTE` box and break the warnings-count and exit-code assertions. Measured false twice over: `RESOLUTE` is `readonly` but never **exported**, and `load_setup_env` returns at `setup_env.sh`'s sourcing guard before `detect_env` runs, so the gate cannot pass in-process under bats on any machine — and even if it did, the arm emits FAIL rather than WARN, leaving the warnings count unmoved, while the exit-code test already asserts status 1, which a FAIL also yields.
 
 Expected after this task: **205 ok, 0 not ok**. 201 baseline plus the four new tests. Stubbing the three end-to-end `run_doctor` blocks modifies existing tests and adds none — an earlier draft of this line said 206 by counting that as a fifth.
 
