@@ -473,6 +473,7 @@ run_doctor() {
   _doctor_check_versions
   _doctor_check_aws_key_expiry
   _doctor_check_github_mcp
+  _doctor_check_gnu_coreutils
   _doctor_check_renovate_cadence
   _doctor_check_ledger_drift_cadence
 
@@ -825,6 +826,24 @@ _doctor_check_github_mcp() {
     doctor_warn "GITHUB_PAT_EXPIRY" "expires in ${_diff_days} days (${GITHUB_PAT_EXPIRY}) — rotate at https://github.com/settings/tokens"
   else
     doctor_pass "GITHUB_PAT_EXPIRY (${GITHUB_PAT_EXPIRY}, ${_diff_days} days)"
+  fi
+}
+
+_doctor_check_gnu_coreutils() {
+  # 26.04 ships uutils, whose `sort -u` collates py.test and pytest as equal and
+  # drops one, leaving pyenv with no pytest shim. Earlier Ubuntu and macOS ship
+  # GNU already, so there is nothing here to check on them.
+  [[ -n ${RESOLUTE} ]] || return 0
+  printf "\nGNU coreutils:\n"
+  # The PROVIDER, not the directory. A gnubin directory can exist while PATH
+  # still resolves uutils -- directory existence is what the zshrc.d tests
+  # already cover, and it is not the property that matters.
+  local _ver
+  _ver="$(sort --version 2>/dev/null | head -1)"
+  if [[ "${_ver}" == *GNU* ]]; then
+    doctor_pass "sort is GNU (${_ver})"
+  else
+    doctor_fail "sort" "not GNU (${_ver:-no --version output}) — pyenv will drop the pytest shim; run: setup_env.sh -t setup"
   fi
 }
 
