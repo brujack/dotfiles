@@ -501,6 +501,13 @@ EOF
 # seam the test would resolve the real linuxbrew coreutils gnubin dir on any
 # machine that has it (RESOLUTE, once Task 2 installs the formula) and
 # assert nothing.
+#
+# The HAS_LOCAL_BIN assertion below is a positive control, and it is taken
+# from ${HOME}/.local/bin deliberately: that entry is appended AFTER the
+# gnubin block, so it proves execution reached and passed the gate. A control
+# taken from above the block (any /opt/local or linuxbrew entry) would prove
+# only that the block started, leaving NO_GNUBIN vacuously satisfied if
+# anything returned early in between. Do not move it upstream.
 @test "6_path.zsh honours _OVERRIDE_GNUBIN_LINUX and adds no gnubin entry when the dir is absent" {
   local _fake_home
   _fake_home="$(mktemp -d)"
@@ -592,6 +599,11 @@ EOF
   # 3_oh_my_zsh.zsh sources oh-my-zsh with 16 third-party plugins upstream
   # of this file, any one of which could emulate. Same precedent as
   # "5_general.zsh keychain path survives word splitting and a spaced path".
+  #
+  # Do NOT swap `setopt shwordsplit` for `emulate sh` here. emulate sh also
+  # turns on ksh-style 0-indexing, so ${path[1]} becomes the SECOND element
+  # and this assertion goes red for an indexing reason that looks exactly
+  # like a splitting regression. Measured 2026-09-15.
   run zsh -c "
     setopt shwordsplit
     unset MACOS LINUX
