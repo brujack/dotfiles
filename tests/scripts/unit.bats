@@ -421,6 +421,13 @@ teardown() {
   export HOME="${BATS_TEST_TMPDIR}"
   export GIT_AUTHOR_NAME="bats" GIT_AUTHOR_EMAIL="bats@example.com"
   export GIT_COMMITTER_NAME="bats" GIT_COMMITTER_EMAIL="bats@example.com"
+  # git -C only chdirs; an exported GIT_DIR still wins, so every git call below
+  # would read the leaked repo instead of these fixtures. Measured: without this
+  # strip these two tests fail loudly under a leak (rc=1, 0 ok, 2 not ok) rather
+  # than passing for the wrong reason -- so this is robustness, not a silent-pass
+  # hazard. scripts/pre-push:95 already strips before `make test`; a direct `bats`
+  # run from a shell carrying GIT_DIR is what remains. Same strip as :70/:91/:1070.
+  unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
 
   # tests/mocks/git (on PATH via load_mocks in setup()) is a full stub with no
   # real refs and no real ahead/behind detection -- it cannot exercise the
@@ -470,6 +477,9 @@ teardown() {
   export HOME="${BATS_TEST_TMPDIR}"
   export GIT_AUTHOR_NAME="bats" GIT_AUTHOR_EMAIL="bats@example.com"
   export GIT_COMMITTER_NAME="bats" GIT_COMMITTER_EMAIL="bats@example.com"
+  # See the sibling test above: git -C only chdirs, so a leaked GIT_DIR would
+  # point these fixtures at the wrong repository.
+  unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
 
   # tests/mocks/git (on PATH via load_mocks in setup()) is a full stub with no
   # real refs and no real ahead/behind detection -- it cannot exercise the

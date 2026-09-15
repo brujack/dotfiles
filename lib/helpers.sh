@@ -12,8 +12,10 @@ log_warn()  { printf "${_YELLOW}[WARN]${_NC}  %s\n" "$*" >&2; }
 log_error() { printf "${_RED}[ERROR]${_NC} %s\n" "$*" >&2; }
 
 # ── command wrapper ───────────────────────────────────────────────────────────
-# The only writer of DRY_RUN in this tree is process_args, and it only ever
-# writes the literal "1" -- this accepted-false set exists to neutralise a
+# The only writer of the *global* DRY_RUN in this tree is process_args, and it
+# only ever writes the literal "1". scripts/sync_git_repos.sh:77 also assigns
+# DRY_RUN=1, but to the function-local declared at :50, so it never reaches
+# this predicate -- this accepted-false set exists to neutralise a
 # falsy value inherited from the caller's environment (DRY_RUN=0 exported by
 # a parent shell), not to be a general-purpose boolean parser. Anything
 # unrecognised deliberately falls through to "active": a spurious preview is

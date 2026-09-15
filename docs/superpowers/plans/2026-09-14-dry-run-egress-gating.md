@@ -1,5 +1,7 @@
 # `--dry-run` Egress Gating Implementation Plan
 
+> **Status: DONE** — merged as #277 (`b0f382cb`), 2026-09-15.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make `setup_env.sh --dry-run` stop performing operations that leave this machine — a push to state-ledger, a push per personal repo, and three `rsync --delete` to remote hosts.
