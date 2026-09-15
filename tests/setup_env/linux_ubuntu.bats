@@ -336,6 +336,49 @@ teardown() {
   refute_grep "plugins install superpowers$" "${MOCK_CALLS_FILE}"
 }
 
+# ── _install_ubuntu_brew_packages: RESOLUTE-gated coreutils ──────────────────
+#
+# 26.04 ships uutils coreutils. Its `sort -u` collates `py.test` and `pytest`
+# as equal and drops one, so pyenv-versions:47 emits no `pytest` shim. apt
+# cannot make GNU the provider -- build-essential pins coreutils-from-uutils
+# by name -- so the formula is the route, gated to 26.04 since earlier
+# releases already ship GNU.
+
+@test "_install_ubuntu_brew_packages: RESOLUTE installs coreutils via brew" {
+  export RESOLUTE=1
+  unset NOBLE
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 0 ]
+  grep -q "brew install coreutils" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_brew_packages: no RESOLUTE skips coreutils" {
+  export NOBLE=1
+  unset RESOLUTE
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 0 ]
+  refute_grep "brew install coreutils" "${MOCK_CALLS_FILE}"
+  # Positive control: proves the function ran at all, so the absence above
+  # cannot be satisfied by a deleted function body.
+  grep -q "brew install shfmt" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_brew_packages: coreutils failure feeds the _failed accumulator" {
+  # tests/mocks/brew's shared MOCK_BREW_INSTALL_EXIT fails EVERY install, which
+  # would prove the tri-state fires but not that it names the right package --
+  # see the identical comment on the hadolint test above.
+  brew_install_formula() {
+    [[ "$1" == "coreutils" ]] && return 1
+    return 0
+  }
+  export RESOLUTE=1
+  unset NOBLE
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"coreutils"* ]]
+  [[ "$output" == *"1 package(s) failed"* ]]
+}
+
 @test "_install_ubuntu_rust: sources .cargo/env when file exists" {
   export HAS_RUST=1
   mkdir -p "${HOME}/.cargo"
