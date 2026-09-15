@@ -65,8 +65,16 @@ if [[ ${LINUX} ]]; then
   # which lands behind /usr/bin (index 10 on claude) and would be inert while
   # still reading as correct. `typeset -U path` at the top of this file handles
   # the dedup. Measured 2026-09-15.
+  #
+  # Both expansions are quoted. zsh does not word-split unquoted expansions by
+  # default, but `emulate sh`/`emulate ksh` both set SH_WORD_SPLIT and restore
+  # it -- and 3_oh_my_zsh.zsh sources 16 third-party plugins upstream of this
+  # file, any one of which could emulate. Quoting only the seam is a half-fix:
+  # an existing spaced element of $path would still split. The empty-element
+  # hazard quoting normally invites is unreachable here -- `:-` guarantees a
+  # non-empty value and `[[ -d "" ]]` is false.
   _gnubin_linux="${_OVERRIDE_GNUBIN_LINUX:-/home/linuxbrew/.linuxbrew/opt/coreutils/libexec/gnubin}"
-  [[ -d ${_gnubin_linux} ]] && path=(${_gnubin_linux} $path)
+  [[ -d ${_gnubin_linux} ]] && path=("${_gnubin_linux}" "${path[@]}")
   unset _gnubin_linux
 
   if [[ -d ${HOME}/.local/bin ]]; then

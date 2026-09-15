@@ -501,7 +501,7 @@ EOF
 # seam the test would resolve the real linuxbrew coreutils gnubin dir on any
 # machine that has it (RESOLUTE, once Task 2 installs the formula) and
 # assert nothing.
-@test "6_path.zsh adds no gnubin entry under LINUX, but still adds a known Linux path" {
+@test "6_path.zsh honours _OVERRIDE_GNUBIN_LINUX and adds no gnubin entry when the dir is absent" {
   local _fake_home
   _fake_home="$(mktemp -d)"
   mkdir -p "${_fake_home}/.local/bin"
@@ -575,41 +575,36 @@ EOF
   [ "$output" = "${_tmp_dir}/gnubin" ]
 }
 
-@test "6_path.zsh adds no Linux coreutils gnubin entry when the dir is absent" {
-  local _fake_home
-  _fake_home="$(mktemp -d)"
-  mkdir -p "${_fake_home}/.local/bin"
+@test "6_path.zsh Linux coreutils gnubin path survives word splitting and a spaced path" {
+  local _base _dir
+  _base="$(mktemp -d)"
+  _dir="${_base}/dir with space"
+  mkdir -p "${_dir}"
 
-  # The positive control (HAS_LOCAL_BIN) is emitted from a block that runs
-  # AFTER the gnubin block in 6_path.zsh -- ${HOME}/.local/bin is appended
-  # immediately below it. Asserting that entry landed proves execution
-  # reached and passed the gnubin gate; a control taken from above the block
-  # would prove only that the block started, leaving NO_GNUBIN vacuously
-  # true for an early return between the two.
+  # `setopt shwordsplit` is what makes this test able to fail. zsh does not
+  # word-split unquoted parameter expansions by default, so with the option
+  # off the quoted and unquoted forms are indistinguishable and this
+  # assertion would pass either way -- vacuous. Under shwordsplit an
+  # unquoted ${_gnubin_linux} splits on the space, landing as three path
+  # entries instead of one; the quoted form keeps it a single element.
+  #
+  # Not hypothetical: it is what `emulate sh`/`emulate ksh` set, and
+  # 3_oh_my_zsh.zsh sources oh-my-zsh with 16 third-party plugins upstream
+  # of this file, any one of which could emulate. Same precedent as
+  # "5_general.zsh keychain path survives word splitting and a spaced path".
   run zsh -c "
-    export PATH=/usr/bin:/bin:/usr/sbin:/sbin
+    setopt shwordsplit
     unset MACOS LINUX
-    export HOME='${_fake_home}'
     export LINUX=1
     export _OVERRIDE_GNUBIN_ARM='/nonexistent/gnubin-arm'
     export _OVERRIDE_GNUBIN_INTEL='/nonexistent/gnubin-intel'
-    export _OVERRIDE_GNUBIN_LINUX='/nonexistent/coreutils-gnubin'
+    export _OVERRIDE_GNUBIN_LINUX='${_dir}'
     source '${ZSHRC_D}/6_path.zsh' 2>/dev/null
-    if [[ \${path[(r)*gnubin*]} ]]; then
-      printf 'HAS_GNUBIN\n'
-    else
-      printf 'NO_GNUBIN\n'
-    fi
-    if [[ \${path[(r)${_fake_home}/.local/bin]} ]]; then
-      printf 'HAS_LOCAL_BIN\n'
-    else
-      printf 'NO_LOCAL_BIN\n'
-    fi
+    printf '%s\n' \"\${path[1]}\"
   "
-  rm -rf "${_fake_home}"
+  rm -rf "${_base}"
   [ "$status" -eq 0 ]
-  [ "$(printf '%s\n' "$output" | head -1)" = "NO_GNUBIN" ]
-  [ "$(printf '%s\n' "$output" | tail -1)" = "HAS_LOCAL_BIN" ]
+  [ "$output" = "${_dir}" ]
 }
 
 @test "6_path.zsh Linux coreutils gnubin entry is deduped across repeated sourcing" {
