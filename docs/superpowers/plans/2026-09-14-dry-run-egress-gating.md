@@ -382,11 +382,26 @@ depends_on: [6]
 
 **Files:** `CLAUDE.md` only.
 
-**This task was `model: haiku` and was escalated to `sonnet` after a dispatch failed with `Prompt is too long`.** The task is genuinely single-file and mechanical — exactly what haiku is for — but the file is **1248 lines / 152,747 bytes (~38k tokens)**, and an editor must read it before editing it. Escalation is authorized re-plan move 4, applied without widening scope: the task, its gates and its one file are unchanged.
+**This task was `model: haiku` and was escalated to `sonnet` after a dispatch failed with `Prompt is too long`.** The task is genuinely single-file and mechanical — exactly what haiku is for. Escalation is authorized re-plan move 4, applied without widening scope: the task, its gates and its one file are unchanged.
+
+**The first diagnosis recorded here was wrong and is retracted.** It blamed the size of `CLAUDE.md` and offered "roughly 1,000 lines" as a threshold. Task 9 then failed identically on `README.md` at **515 lines / 25,676 bytes** — a 6× smaller file, same `Prompt is too long`. The target file is not the variable.
+
+**The variable is the fixed preamble every subagent in this repo carries before it reads anything**, measured 2026-09-14:
+
+| component                             | bytes                     |
+| ------------------------------------- | ------------------------- |
+| repo `CLAUDE.md`                      | 154,612                   |
+| `~/.claude/standards/*.md` (14 files) | 491,947                   |
+| `USER.md`                             | 19,047                    |
+| **total**                             | **665,606 ≈ 166k tokens** |
+
+Against haiku 4.5's 200k window that is ~83% consumed at dispatch, so **no `model: haiku` task in this repo is dispatchable at all**, whatever it touches. Both escalations are therefore the same fix, not two coincidences.
 
 **The haiku scope guard cannot catch this class, and that is worth stating where the next author will see it.** `validate-plan.py`'s `_haiku_scope_errors` enforces `files_touched` of **exactly one path** plus a forbidden-pattern list (workflows, migrations, lockfiles). It has no size check, so one enormous file passes a guard whose whole purpose is keeping haiku on work it can hold. A plan can therefore be valid and undispatchable at the same time.
 
-**Task 9 was checked and deliberately left on `haiku`** — verify one level wider than you fix. `README.md` is **515 lines / 25,676 bytes (~6.4k tokens)**, which haiku holds comfortably, so escalating it too would have been a guess dressed as caution. Measure the file before choosing the model for any docs task; line count is the cheap proxy and roughly 1,000 lines is where this stopped working.
+**Task 9 was checked, deliberately left on `haiku`, and then failed too — so the check was right in form and wrong in its criterion.** Sizing `README.md` at 515 lines and concluding haiku "holds it comfortably" was verifying one level wider than the fix, which is the correct instinct; it measured the wrong quantity. The question was never how big the target file is, but how much of the window is gone before the agent starts. Task 9 is now `sonnet` for the same reason Task 7 is.
+
+**Do not choose `haiku` for any task in this repo until the preamble shrinks or the guard learns to check it.** `validate-plan.py`'s `_haiku_scope_errors` enforces `files_touched` of exactly one path plus a forbidden-pattern list (workflows, migrations, lockfiles) and has no notion of context budget — so it will keep certifying `model: haiku` plans that cannot be dispatched. A plan can be valid and undispatchable at once, and this one was, twice.
 
 `:92` currently promises "log mutating operations (symlinks, installs, mkdir) without executing", which is false. It becomes a statement of what is guaranteed — **no egress** — and enumerates what still runs: package upgrades, venv rebuilds, `git fetch` and `pull --ff-only` on every personal repo, five `npm install -g`, and `uv sync`. Follow `README.md:207`'s enumerate-what-still-runs model.
 
@@ -457,7 +472,7 @@ Fix is one line: `_dry_run_active && _dry=1`. It sits mid-function so there is n
 id: 9
 description: Rewrite README.md's --dry-run option entry, which becomes false when this branch merges (docs-only, no behaviour change so TDD does not apply)
 role: executor
-model: haiku
+model: sonnet
 tdd: not-applicable
 acceptance:
   - cmd: grep -q "leaves this machine" README.md
