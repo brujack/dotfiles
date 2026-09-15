@@ -1003,6 +1003,7 @@ EOF
   _doctor_check_hooks_path()    { :; }
   _doctor_check_versions()      { :; }
   _doctor_check_aws_key_expiry() { :; }
+  _doctor_check_gnu_coreutils() { :; }
   run_doctor
   [ "${_called}" -eq 1 ]
 }
@@ -1018,6 +1019,7 @@ EOF
   _doctor_check_versions()      { :; }
   _doctor_check_aws_key_expiry() { :; }
   _doctor_check_github_mcp()    { doctor_warn "test" "a warning"; }
+  _doctor_check_gnu_coreutils() { :; }
   run run_doctor
   [[ "$output" == *"1 warnings"* ]]
 }
@@ -1418,6 +1420,7 @@ EOF
   _doctor_check_hooks_path()    { :; }
   _doctor_check_versions()      { :; }
   _doctor_check_github_mcp()    { :; }
+  _doctor_check_gnu_coreutils() { :; }
   export PROFILE="unknown"
   _PROFILES_LOADED=1
   run run_doctor
@@ -2264,6 +2267,87 @@ STUB
   export GITHUB_PAT_EXPIRY="2020-01-01"
   _doctor_check_github_mcp
   [ "${_DOCTOR_FAILED}" -ge 1 ]
+}
+
+# ── _doctor_check_gnu_coreutils ───────────────────────────────────────────────
+#
+# `sort` is driven through a shim directory holding ONLY a `sort` stub,
+# prepended to PATH — never by stripping a PATH entry, which on this fleet
+# takes git, make and the rest of the toolchain with it alongside the one
+# binary the test meant to hide (shell.md's PATH-mock co-location trap).
+
+@test "_doctor_check_gnu_coreutils does nothing when RESOLUTE is unset" {
+  # Paired with the GNU-pass case below as the positive control: on its own
+  # this test passes identically whether the real check ran and returned
+  # early, or the function is a no-op stub that was never wired up at all.
+  unset RESOLUTE
+  run _doctor_check_gnu_coreutils
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "_doctor_check_gnu_coreutils passes when sort resolves GNU coreutils" {
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  export RESOLUTE=1
+  local _shim="${BATS_TEST_TMPDIR}/gnu_sort_shim"
+  mkdir -p "${_shim}"
+  cat > "${_shim}/sort" <<'STUB'
+#!/usr/bin/env bash
+printf 'sort (GNU coreutils) 9.5\n'
+STUB
+  chmod +x "${_shim}/sort"
+  local _saved_path="${PATH}"
+  local _outfile="${BATS_TEST_TMPDIR}/gnu_pass_out.txt"
+  export PATH="${_shim}:${PATH}"
+  # Called directly, not via `run` — `run`'s command substitution forks a
+  # subshell, so a doctor_pass/doctor_fail write to the global _DOCTOR_*
+  # counters inside it would never reach this shell. Redirecting stdout on
+  # a direct call does not fork one.
+  _doctor_check_gnu_coreutils > "${_outfile}"
+  export PATH="${_saved_path}"
+  [ "${_DOCTOR_FAILED}" -eq 0 ]
+  [[ "$(cat "${_outfile}")" == *"[PASS]"* ]]
+}
+
+@test "_doctor_check_gnu_coreutils fails when sort resolves uutils" {
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  export RESOLUTE=1
+  local _shim="${BATS_TEST_TMPDIR}/uutils_sort_shim"
+  mkdir -p "${_shim}"
+  cat > "${_shim}/sort" <<'STUB'
+#!/usr/bin/env bash
+printf 'sort (uutils coreutils) 0.2.2\n'
+STUB
+  chmod +x "${_shim}/sort"
+  local _saved_path="${PATH}"
+  local _outfile="${BATS_TEST_TMPDIR}/uutils_fail_out.txt"
+  export PATH="${_shim}:${PATH}"
+  _doctor_check_gnu_coreutils > "${_outfile}"
+  export PATH="${_saved_path}"
+  # _DOCTOR_FAIL is the count; _DOCTOR_FAILED is the 0/1 flag. Both are
+  # asserted here because doctor_fail sets both in the same call.
+  [ "${_DOCTOR_FAIL}" -eq 1 ]
+  [ "${_DOCTOR_FAILED}" -eq 1 ]
+  [[ "$(cat "${_outfile}")" == *"[FAIL]"* ]]
+}
+
+@test "run_doctor calls _doctor_check_gnu_coreutils" {
+  local _called=0
+  _doctor_check_gnu_coreutils() { _called=1; }
+  # Stub all other sub-checks to avoid side effects — mirrors "run_doctor
+  # calls _doctor_check_github_mcp" above.
+  _doctor_check_profile()       { :; }
+  _doctor_check_symlinks()      { :; }
+  _doctor_check_symlink_roots() { :; }
+  _doctor_check_tools()         { :; }
+  _doctor_check_login_shell()   { :; }
+  _doctor_check_cred_dirs()     { :; }
+  _doctor_check_hooks_path()    { :; }
+  _doctor_check_versions()      { :; }
+  _doctor_check_aws_key_expiry() { :; }
+  _doctor_check_github_mcp()    { :; }
+  run_doctor
+  [ "${_called}" -eq 1 ]
 }
 
 # ── _update_record_start legacy-rsync ─────────────────────────────────────────
