@@ -32,7 +32,11 @@ provider — measured at 104 binaries differing between uutils and CI's GNU 9.4,
 104-name set named again below as "gnubin names" (the full command list the coreutils
 formula installs unprefixed into `libexec/gnubin`, counted on `claude` during the Step 8
 collision check, 2026-09-15; the Studio cannot confirm it — macOS ships neither `chcon`
-nor `runcon`, and its gnubin holds 102 commands) — which is `tdd.md` pitfall G, a local pass that is not evidence for
+nor `runcon`, and its gnubin holds 102 commands; and re-counted on `claude` after the
+formula actually installed, the gnubin directory holds **103** entries at coreutils
+9.12, so the difference-set and the gnubin name-set are near-identical rather than the
+same set — the 104 stands as the figure measured during the Step 8 review and is not
+restated here) — which is `tdd.md` pitfall G, a local pass that is not evidence for
 what CI will do. Installing GNU
 coreutils locally makes the gating actor match CI instead of diverging further from it; the
 wrapper would not.
