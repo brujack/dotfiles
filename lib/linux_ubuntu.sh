@@ -752,7 +752,8 @@ _install_ubuntu_misc() {
   fi
 
   check_and_install_nala
-  sudo -H nala autoremove -y
+  # </dev/null: same job-control hang as update_apt_packages in lib/linux_shared.sh.
+  sudo -H nala autoremove -y < /dev/null
 }
 
 [[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0

@@ -34,6 +34,26 @@ refute_grep() {
   fi
 }
 
+# Write a stub for <name> that logs its argv plus the first line it can read
+# from stdin, and print the stub's directory so the caller can prepend it to
+# PATH. Pair it with a caller-supplied stdin file carrying a sentinel line:
+# `stdin=[]` means the command's stdin was redirected away from the caller's,
+# `stdin=[<sentinel>]` means it inherited it. The file is regular, so the read
+# reaches EOF rather than blocking on an fd that never closes.
+stdin_probe_stub_path() {
+  local _name="$1" _dir _bash_bin
+  _dir="$(mktemp -d -p "${BATS_TEST_TMPDIR}")"
+  _bash_bin="$(command -v bash)"
+  cat > "${_dir}/${_name}" << EOF
+#!${_bash_bin}
+IFS= read -r _line || true
+printf '%s %s stdin=[%s]\n' "${_name}" "\$*" "\${_line}" >> "\${MOCK_CALLS_FILE}"
+exit 0
+EOF
+  chmod +x "${_dir}/${_name}"
+  printf '%s' "${_dir}"
+}
+
 # Source setup_env.sh — the sourcing guard prevents main body execution
 load_setup_env() {
   source "${REPO_ROOT}/setup_env.sh"
