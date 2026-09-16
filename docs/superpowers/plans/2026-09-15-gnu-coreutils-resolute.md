@@ -1,5 +1,7 @@
 # GNU coreutils Precedence on Resolute — Implementation Plan
 
+> **Status: DONE** — merged as [#279](https://github.com/brujack/dotfiles/pull/279), squashed to `d8383ab5`. Accepted on `claude` 2026-09-16: `sort` resolves through the prepend to GNU 9.12, `printf 'py.test\npytest\n' | sort -u | wc -l` returns 2, and `pyenv versions --executables | grep -cx pytest` returns 1.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** On Ubuntu 26.04 (`RESOLUTE`) only, install GNU coreutils from linuxbrew and prepend its `gnubin` to interactive `PATH`, so `sort -u` stops collating `py.test` and `pytest` as equal and pyenv regains its `pytest` shim.
