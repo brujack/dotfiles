@@ -110,8 +110,19 @@ EOF
   printf 'CALLER-STDIN\n%.0s' 1 2 3 > "${_stdin}"
   PATH="${_stub_dir}:${PATH}" run update_apt_packages < "${_stdin}"
   [ "$status" -eq 0 ]
-  grep -qF "nala full-upgrade -y stdin=[]" "${MOCK_CALLS_FILE}"
+  grep -qE '^nala full-upgrade -y( .*)? stdin=\[\]$' "${MOCK_CALLS_FILE}"
   grep -qF "nala autoremove -y stdin=[]" "${MOCK_CALLS_FILE}"
+}
+
+# With stdin closed, dpkg cannot answer a conffile prompt: it fails with "end of
+# file on stdin at conffile prompt" and leaves the package unpacked but
+# unconfigured. confdef+confold keeps the local edit and installs the package's
+# copy beside it. Measured on claude 2026-09-16 through apt's install path.
+@test "update_apt_packages: nala full-upgrade answers conffile prompts non-interactively" {
+  export UBUNTU=1
+  run update_apt_packages
+  [ "$status" -eq 0 ]
+  grep -qF -- "nala full-upgrade -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold" "${MOCK_CALLS_FILE}"
 }
 
 # ── update_snap_packages ─────────────────────────────────────────────────────

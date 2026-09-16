@@ -58,7 +58,14 @@ update_apt_packages() {
   # child still holds the terminal as stdin, job control stops it and the run
   # hangs after "Downloading". DEBIAN_FRONTEND=noninteractive alone does not
   # prevent it. Reproduced on Ubuntu 26.04 / nala 0.16.0, 2026-09-16.
-  sudo -H nala full-upgrade -y < /dev/null || { log_error "nala full-upgrade failed"; return 1; }
+  #
+  # With stdin closed dpkg cannot answer a conffile prompt: it fails "end of file
+  # on stdin at conffile prompt" and leaves the package unpacked but unconfigured.
+  # confdef+confold keeps the local edit and writes the package copy as
+  # .dpkg-dist, the same choice unattended-upgrades makes. Measured 2026-09-16.
+  sudo -H nala full-upgrade -y \
+    -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold \
+    < /dev/null || { log_error "nala full-upgrade failed"; return 1; }
   sudo -H nala autoremove -y < /dev/null || { log_error "nala autoremove failed"; return 1; }
   log_info "Updated apt packages"
 }
