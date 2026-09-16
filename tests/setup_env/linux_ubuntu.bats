@@ -1099,6 +1099,20 @@ STUB
   grep -q "wget.*docker-compose" "${MOCK_CALLS_FILE}"
 }
 
+@test "_install_ubuntu_misc: nala autoremove does not inherit the caller's stdin" {
+  export DOCKER_COMPOSE_VER="2.24.0"
+  export DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64"
+  export YQ_VER="4.40.5"
+  export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
+  unset HAS_DEVTOOLS
+  local _stub_dir _stdin="${BATS_TEST_TMPDIR}/caller_stdin"
+  _stub_dir="$(stdin_probe_stub_path nala)"
+  printf 'CALLER-STDIN\n%.0s' 1 2 3 > "${_stdin}"
+  PATH="${_stub_dir}:${PATH}" run _install_ubuntu_misc < "${_stdin}"
+  [ "$status" -eq 0 ]
+  grep -qF "nala autoremove -y stdin=[]" "${MOCK_CALLS_FILE}"
+}
+
 @test "_install_ubuntu_misc: skips docker-compose wget when file already exists" {
   export DOCKER_COMPOSE_VER="2.24.0"
   export DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64"
