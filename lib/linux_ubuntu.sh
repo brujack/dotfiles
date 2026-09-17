@@ -977,6 +977,10 @@ _install_ubuntu_misc() {
   # Each is self-gated on HAS_DEVTOOLS and advisory, as the dotnet install above.
   _install_ubuntu_tflint || log_warn "tflint install failed; skipping"
   _install_ubuntu_tfsec || log_warn "tfsec install failed; skipping"
+  # _install_ubuntu_tfenv always returns 0 (every failure warns internally
+  # and returns 0, unlike tflint/tfsec's helper), so this `||` cannot fire
+  # today. Kept for parity with the two lines above and as a guard if that
+  # contract ever changes.
   _install_ubuntu_tfenv || log_warn "tfenv install failed; skipping"
 
   check_and_install_nala
