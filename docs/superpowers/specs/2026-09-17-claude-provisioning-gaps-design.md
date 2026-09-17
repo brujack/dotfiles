@@ -692,3 +692,77 @@ between `make_shims` and `install_registered_shims`. Checked on `workstation`'s 
 clone (lines 191/196/203), so it holds today. Part 2's doctor arm refutes it after any
 pyenv update.
 Disposition: Addressed (revision 4). `shopt -p … || true`, with a suite case under `set -e`; tfenv is preserved (Part 4c, verification case 7); Part 6 is Linux-only; case 3 asserts the hook link first.
+
+### Round 4 (revision 4, reviewed at commit `5fdb8df0`)
+
+All three lenses ran the real hook end to end against pyenv's `pyenv-rehash` under
+`set -e`, with a scratch `PYENV_ROOT` and a `sort` that drops `pytest`:
+
+| lens | pyenv | extra condition | result |
+| --- | --- | --- | --- |
+| Goal-Fit | 2.8.5 on the Studio | none | clean |
+| Risk | 2.8.x | bash 3.2 and 5.3, `conda.bash`-style `shopt -u` first | rc 0, `pytest` present, no `*` shim |
+| Ergonomics | linuxbrew pyenv on `claude` | none | clean |
+
+Without the hook, the risk lens saw `pytest` removed.
+
+**Goal-Fit.**
+
+Finding:
+
+1. DESIGN. Part 4b does not say which binary the skip check runs. If it runs the one on
+   `PATH`, `claude`'s hand-installed `/usr/local/bin/tflint` makes case 6 skip, and its
+   negative passes vacuously. It must run `${_RELEASE_BIN_DIR}/<name>`.
+2. APPARATUS. `claude` already has `tflint`, and case 5's doctor negative also WARNs on
+   `zig` and `tfsec`.
+3. DESIGN (claim scope). "A brew libgit2 soname bump cannot break it" holds only for fresh
+   installs. `claude`'s existing rpath tarpaulin probes `ok` and is never rebuilt until it
+   breaks.
+4. DESIGN. The pins never move and `--help` cannot see staleness: `cargo-semver-checks`
+   depends on the rustdoc JSON format, which `update_rust` moves on every update. Wire
+   `CARGO_TOOLS` into `check-versions`, or leave that crate unpinned.
+
+Assumption: pinned `cargo-semver-checks` 0.47.0 keeps working across `rustup update`.
+Disposition:
+
+**Ergonomics.**
+
+Finding:
+
+1. DESIGN, measured. A dangling hook link makes rehash fail **silently**: rc 1, 0 bytes of
+   stderr, no new shims, stale shims kept. This was checked on brew 2.8.5 and on `claude`.
+   `pyenv init --path` ignores the rc. The main checkout has been off master for hours
+   (`claude` reflog, 2026-08-12 and 08-24). Options: install a copy rather than a link, or
+   add a doctor check that the link resolves.
+2. DESIGN, minor. Part 2 runs only when someone runs doctor, while the event that retires
+   the hook (`brew upgrade pyenv`) happens inside `-t update`. Suggests running the shim
+   check at the end of `-t update`.
+3. DESIGN, minor. `--brew-only` can now trigger a first-run compile of tens of minutes.
+   `update_rust` sits inside the `_run_all`-only block, so the new section must be its own
+   block.
+4. APPARATUS. Case 8 runs a real `brew upgrade` on `workstation`.
+5. APPARATUS. Case 5's negative under-lists the WARNs.
+6. Not raised: doctor probes take 0.02-0.24 s; `claude` compiles nothing.
+
+Assumption: the main checkout always carries the hook file. Refuted by the reflog above.
+Disposition:
+
+**Risk.**
+
+Finding:
+
+1. DESIGN. The section placement is contradictory. `update_rust` is inside the
+   `_run_all`-only block (`lib/workflows.sh:589-711`), so "directly after `rust`, gated on
+   `_run_all || UPDATE_BREW`" is unreachable for `--brew-only`, and case 8 fails. It needs
+   its own block after `:711`, with only the display order after `rust`. APPARATUS: no
+   suite case proves `--brew-only` runs it.
+2. DESIGN, measured on brew pyenv under bash 3.2 and 5.3. Same as Ergonomics 1: the
+   dangling link is silent, not loud.
+3. DESIGN, minor. Part 4c's `sudo ln -s` has no destination; name `/usr/local/bin/<name>`.
+   tfenv's check against HashiCorp `SHA256SUMS` is same-origin only, and PGP is skipped
+   without gpg/keybase (`tfenv-install:318-376`), which is weaker than the in-repo pins.
+4. APPARATUS. Case 6 leaves root-owned files in scratch, because the helper always uses
+   `sudo`.
+
+Assumption: the main checkout always has the hook file. Refuted by the reflog.
+Disposition:
