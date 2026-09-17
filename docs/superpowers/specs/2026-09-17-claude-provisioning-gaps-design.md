@@ -1,6 +1,6 @@
 # Close the provisioning gaps found moving sessions to `claude`
 
-> **Status:** Draft, revision 4 — spec review pending.
+> **Status:** Draft, revision 5 — spec review pending.
 
 ## Problem
 
@@ -123,8 +123,8 @@ and returned 0.
 
 ## Design
 
-This is revision 4. It replaces revision 3 (`1987f7c8`), which replaced revisions 2
-(`9fa812a9`) and 1 (`41eb9352`). The Multi-Lens Review section below records why. One branch, one PR, six
+This is revision 5. It replaces revision 4 (`5fdb8df0`); earlier revisions are
+`1987f7c8`, `9fa812a9` and `41eb9352`. The Multi-Lens Review section below records why. One branch, one PR, six
 independent parts, each testable alone.
 
 ### Part 1: a pyenv rehash hook that registers every shim, whatever `sort` is
@@ -190,14 +190,22 @@ unset _dotfiles_rehash_opts
   `workstation` it does re-register names that `conda.bash` deregisters. Those are conda
   shims, and no conda version is installed on any development machine. The plan confirms
   with `ls ~/.pyenv/versions` on all three.
-- **Install.** `setup_dotfile_symlinks` links it with `safe_link` into
-  `${PYENV_ROOT:-${HOME}/.pyenv}/pyenv.d/rehash/`, creating the directory.
-  - On `claude` and the Studio that directory does not exist yet.
-  - On `workstation` the link lands as an untracked file inside the pyenv git clone.
-    `pyenv update` (`developer.sh:487`) tolerates untracked files.
-- **Dangling link.** The link targets the main checkout. If that checkout is ever on a
-  branch without the file, `pyenv-hooks`' `realpath` fails and rehash errors loudly on
-  every login shell, but removes nothing. This is accepted and recorded.
+- **Install as a copy, not a symlink.** A new `install_pyenv_rehash_hook` in
+  `lib/helpers.sh` runs
+  `install -m 0644 <repo>/pyenv.d/rehash/dotfiles-register-all-executables.bash`
+  into `${PYENV_ROOT:-${HOME}/.pyenv}/pyenv.d/rehash/`. It creates the directory, and it
+  skips the install when `cmp -s` shows the copy is already current.
+  - **Why a copy.** Round 4 measured a dangling symlink on brew pyenv 2.8.5 and on `claude`:
+    rehash exits 1 with **no stderr**, creates no new shims, and `pyenv init --path` ignores
+    the rc. The link would point into the main checkout, and `claude`'s reflog shows that
+    checkout on other branches for hours (2026-08-12, 2026-08-24). A copy cannot dangle.
+  - **Cost.** After the hook file changes in the repo, the copy stays stale until the next
+    refresh.
+  - **Called from:** `run_setup_user`, and the `pyenv-shims` section of `run_update`
+    (Part 2).
+  - On `claude` and the Studio, `pyenv.d` does not exist yet. On `workstation`, `~/.pyenv`
+    is a pyenv 2.7.2 git clone, so the copy lands as an untracked file there, and
+    `pyenv update` (`developer.sh:487`) tolerates it.
 - **macOS:** the hook runs, and it registers only names already in the list from BSD `sort`.
   Round 3 showed this holds only with the `|| true` above, which the suite pins.
 - **No `.zprofile` change.** The operator's uncommitted `.zprofile` edit is untouched.
@@ -218,6 +226,15 @@ a gate breaks. The arm checks the outcome, so it also catches any future rehash 
   `claude` (143/143), `workstation` (144/144) and the Studio (142/142).
 - An empty `bin/` WARNs `ansible venv bin is empty`. It never PASSes `0 of 0`.
 - Seam: `_OVERRIDE_PYENV_ROOT`.
+- **Also runs in `-t update`.** The event that retires the hook, `brew upgrade pyenv`
+  (Linux, Mac) or `pyenv update` (a clone), happens inside `-t update`. So a `pyenv-shims`
+  section runs after `pip`, in its own block gated on
+  `_run_all || UPDATE_BREW || UPDATE_PIP`, and is added to `_UPDATE_SECTION_ORDER` after
+  `pip-check`.
+  - First it calls `install_pyenv_rehash_hook`.
+  - Then it records WARN when the same predicate the doctor arm uses (a shared
+    `_pyenv_missing_shims` that prints the names) reports any missing shim, and SKIP when
+    there is no ansible venv.
 
 ### Part 3: cargo plugins, repaired where they break
 
@@ -270,8 +287,10 @@ components, per `shell.md`'s semver pitfall, and never lexically.
   - `env -i ldd` shows no linuxbrew path and no `not found`.
   - The binary runs.
 
-  So a brew libgit2 soname bump cannot break it. An Ubuntu OpenSSL major could, and that
-  is what `broken` recovers from. No rpath flag is used.
+  So a brew libgit2 soname bump cannot break a tarpaulin **built this way**. An Ubuntu
+  OpenSSL major could, and `broken` recovers from that. No rpath flag is used. Existing
+  rpath builds (on `claude`, from 2026-09-17) still probe `ok` and keep their brew link
+  until they break. The next `-t update` run then rebuilds them vendored.
 - **macOS: no flag, which is unmeasured.** The Studio's hand-installed tarpaulin links
   `/opt/homebrew/opt/libgit2/lib/libgit2.1.9.dylib`, so a brew bump can break it there, and
   the `broken` → `--force` path in `-t update` is the recovery. The flag is not applied on
@@ -283,16 +302,31 @@ components, per `shell.md`'s semver pitfall, and never lexically.
 
 - `run_setup_or_developer`, after the platform installs:
   `install_cargo_tools || log_warn "cargo tools incomplete — see above"`.
-- **`run_update`**, as a `cargo-tools` section added to `_UPDATE_SECTION_ORDER` directly
-  after `rust`:
-  - It runs after `update_rust`, gated on `_run_all || UPDATE_BREW`. `brew upgrade` and
-    `cleanup` are what can break a linked binary, so `--brew-only` repairs it, while
-    `--pip-only`, `--gems-only` and `--claude-only` render it `SKIP`.
+- **`run_update`**, as a `cargo-tools` section:
+  - It is **its own block, placed after the `_run_all`-only "git-based tools" block**
+    (after `lib/workflows.sh:711`), gated on `_run_all || UPDATE_BREW`. `update_rust` sits
+    inside that `_run_all`-only block, so a section placed next to it would be unreachable
+    from `--brew-only`. Only its display position in `_UPDATE_SECTION_ORDER` comes directly
+    after `rust`.
+  - `--brew-only` repairs a binary that a brew upgrade broke. `--pip-only`,
+    `--gems-only` and `--claude-only` render it `SKIP`.
+  - **`--brew-only` can compile.** On a first run, or after a pin bump, every `absent` or
+    `older` crate builds, which can take tens of minutes. This is stated, not hidden.
   - With `HAS_RUST` unset it calls `_update_skip "cargo-tools" "HAS_RUST not set"`, never
     `[OK]`.
   - The rc maps to a status the same way `git-hooks` does: 2 is WARN, 1 is FAIL.
-  - When all tools are `ok` it costs one list read plus eight `--help` probes (0.13 s on
+  - When all tools are `ok`, the cost is one list read plus eight `--help` probes (0.13 s on
     `claude`).
+- **Pins get staleness reports through `check-versions`.** `run_check_versions` is
+  GitHub-release based, and two things break it here: `cargo-audit` releases carry
+  monorepo tags (`cargo-audit/v…`), and `~/.cargo/bin` is not on the non-interactive
+  `PATH`, so its `command -v` probe would SKIP everything.
+  - A small `_check_cv_cargo_tools` therefore reads each crate's `max_stable_version` from
+    `https://crates.io/api/v1/crates/<crate>` and prints `[OK]` or
+    `[OUTDATED] … latest=<v>` in the same format, counting toward the existing totals.
+  - It is report-only (no in-place `--update` prompt), because the pins live in one array.
+  - This is what surfaces a `cargo-semver-checks` pin falling behind the rustdoc format
+    that `update_rust` moves on. The `--help` probe cannot see that.
 - **No cargo doctor arm.** `-t update`'s summary is where the result is read.
 
 **Rollout cost, stated.** `workstation` has `HAS_RUST` and today only `cargo-auditable`
@@ -314,12 +348,14 @@ consumers are enough to justify one helper here.
 `_install_pinned_release_binary <name> <version> <url> <sha256> <kind> <version-line-regex>`:
 
 - `<kind>` is `zip` or `raw`.
-- It skips when the tool's version output has a **whole line** matching
+- It runs `${_RELEASE_BIN_DIR:-/usr/local/bin}/<name>`, never the copy on `PATH`, and
+  skips when that binary's version output has a **whole line** matching
   `<version-line-regex>`, anchored `^…$`. A substring match is not enough, because
   `tflint --version` also prints an "out of date … latest is X" line.
 - Otherwise: `curl -fsSL` into a `mktemp -d` removed by a subshell `EXIT` trap (per
-  `shell.md`), `sha256sum -c`, extract per kind, then `sudo install -m 0755` into
-  `${_RELEASE_BIN_DIR:-/usr/local/bin}`.
+  `shell.md`), `sha256sum -c`, extract per kind, then `install -m 0755` into
+  `${_RELEASE_BIN_DIR:-/usr/local/bin}`, prefixed with `sudo` only when that directory is
+  not writable by the caller.
 - It returns 1 on any failure, and a checksum failure installs nothing.
 - Seams: `_RELEASE_BIN_DIR` and per-tool URL/SHA overrides. `sha256sum` is never mocked.
 - Call site: `_install_ubuntu_tflint` and `_install_ubuntu_tfsec`, gated on
@@ -345,15 +381,19 @@ consumers are enough to justify one helper here.
 1. If `~/.tfenv` is absent, `git clone https://github.com/tfutils/tfenv.git ~/.tfenv`.
    That is the layout `run_update`'s existing `tfenv` section already pulls.
 2. For each of `tfenv` and `terraform` in `/usr/local/bin`:
-   - Absent: `sudo ln -s ~/.tfenv/bin/<name>`.
+   - Absent: `sudo ln -s "${HOME}/.tfenv/bin/<name>" "/usr/local/bin/<name>"`.
    - Already a symlink into `~/.tfenv/bin`: leave it.
    - Anything else (a regular file, or a symlink elsewhere): `log_warn` naming the path,
      and **do not touch it**. Overwriting is how revision 3 would have silently replaced
      tfenv.
 3. If `~/.tfenv/version` is absent, run `tfenv install ${TERRAFORM_VER}` then
    `tfenv use ${TERRAFORM_VER}`. If it exists, the operator chose a version, so leave it
-   (`workstation` stays on 1.14.9). tfenv verifies the download against HashiCorp's
-   `SHA256SUMS` itself.
+   (`workstation` stays on 1.14.9). tfenv checks the download against HashiCorp's
+   `SHA256SUMS`. That is a **same-origin** integrity check: `tfenv-install` skips PGP
+   verification unless gpg or keybase is configured (measured on `workstation`,
+   `libexec/tfenv-install:318-376`). It is weaker than the in-repo sha256 pins used for
+   `tflint` and `tfsec`, and is accepted because it matches how terraform already arrives
+   on the Mac and on `workstation`.
 4. Any failure: `log_warn` and return 0.
 
 - `TERRAFORM_VER` ("1.15.6") gains a `lib/` consumer, and its annotation is updated.
@@ -419,17 +459,19 @@ absent. Cases that delete a shim run against a **scratch copy of `PYENV_ROOT`**,
 4. **The Part 2 doctor arm can fail.** Point `_OVERRIDE_PYENV_ROOT` at case 1's no-hook
    scratch root. Expected: FAIL naming `pytest`. Pointed at the hooked root: PASS with a
    non-zero count.
-5. **pwsh and tfenv install for real on `claude`.** `pwsh`, tfenv and `terraform` are
-   absent there. Run `setup_env.sh -t doctor` first and expect WARNs for `pwsh` and
-   `terraform`: that is the negative. Then run `setup_env.sh -t developer`. Expected:
+5. **pwsh and tfenv install for real on `claude`.** `pwsh`, tfenv, `terraform`, `tfsec`
+   and `zig` are absent there, while `tflint` is hand-installed. Run
+   `setup_env.sh -t doctor` first. Expect exactly four WARNs (`pwsh`, `terraform`, `tfsec`,
+   `zig`) and one PASS (`tflint`): that is the negative. Then run `setup_env.sh -t developer`. Expected:
    - `microsoft-prod.list` reads `24.04`.
    - `/usr/local/bin/terraform` and `/usr/local/bin/tfenv` are symlinks into `~/.tfenv/bin`.
    - `terraform version`'s first line is `Terraform v1.15.6`.
-   - A second `-t doctor` shows PASS for `pwsh` and `terraform`.
+   - A second `-t doctor` shows PASS for all five.
 6. **Release-binary installs run for real without touching `/usr/local/bin`.** On
    `claude`, call `_install_pinned_release_binary` for `tflint` and `tfsec` with
-   `_RELEASE_BIN_DIR` set to a scratch directory. Expected: both binaries, each with its
-   anchored version line.
+   `_RELEASE_BIN_DIR` set to a scratch directory the caller owns, so no `sudo`. Expected:
+   both binaries, each with its anchored version line. The existing
+   `/usr/local/bin/tflint` must not cause a skip.
    - **Negative:** a wrong sha256 override leaves the scratch directory empty.
 7. **Cargo and zig install for real on `workstation`, and tfenv is preserved.**
    - Record `readlink /usr/local/bin/terraform` and `cat ~/.tfenv/version` (1.14.9).
@@ -438,7 +480,8 @@ absent. Cases that delete a shim run against a **scratch copy of `PYENV_ROOT`**,
      printed.
    - Run `-t doctor` again. Expected: `zig` PASS, the `readlink` unchanged, and the
      version file still 1.14.9.
-8. **`-t update --brew-only` repairs `broken` and preserves `newer`.** On `workstation`
+8. **`-t update --brew-only` repairs `broken` and preserves `newer`.** This runs a real
+   `brew upgrade` on `workstation`, a side effect the operator accepts by running it. On `workstation`
    after case 7, `chmod -x ~/.cargo/bin/cargo-machete`, then
    `setup_env.sh -t update --brew-only`. Expected: the `cargo-tools` section prints one
    `--force` reinstall and seven `… ok` lines. The assertion is on those lines.
@@ -469,10 +512,23 @@ In the suite:
 - `run_update`'s `cargo-tools` section:
   - rc 2 renders WARN and rc 1 renders FAIL.
   - `--pip-only` renders SKIP.
+  - **`--brew-only` records a non-SKIP status.** This proves the block placement: the
+    SKIP assertion alone also passes when the section is unreachable.
   - `HAS_RUST` unset renders SKIP with its reason.
 - Hook test **under `set -e`** with `dotglob` off on entry, the default: rehash-like
   caller survives and options are restored. This is the case that fails without
   `|| true`.
+- `install_pyenv_rehash_hook`:
+  - it creates the directory and copies the hook;
+  - `cmp`-equal means no rewrite;
+  - a changed source is re-copied;
+  - the result is a regular file, not a symlink.
+- The `pyenv-shims` update section: WARN naming a missing shim; SKIP without a venv;
+  SKIP under `--gems-only`.
+- `_check_cv_cargo_tools` against a fixture crates.io response: `[OK]`, `[OUTDATED]`
+  with `latest=`, and `[WARN]` on a failed fetch.
+- `_install_pinned_release_binary`: a `PATH` binary at the pinned version does not cause
+  a skip when `_RELEASE_BIN_DIR` is empty.
 - `_install_ubuntu_tfenv`, each against a fixture `/usr/local/bin`:
   - absent paths get symlinks;
   - an existing `~/.tfenv` symlink is left;
@@ -723,7 +779,7 @@ Finding:
    `CARGO_TOOLS` into `check-versions`, or leave that crate unpinned.
 
 Assumption: pinned `cargo-semver-checks` 0.47.0 keeps working across `rustup update`.
-Disposition:
+Disposition: Addressed (revision 5). The skip check runs `${_RELEASE_BIN_DIR}/<name>`; case 5 lists exact WARN/PASS counts; the tarpaulin claim is scoped to fresh builds; `_check_cv_cargo_tools` reports stale pins from crates.io.
 
 **Ergonomics.**
 
@@ -745,7 +801,7 @@ Finding:
 6. Not raised: doctor probes take 0.02-0.24 s; `claude` compiles nothing.
 
 Assumption: the main checkout always carries the hook file. Refuted by the reflog above.
-Disposition:
+Disposition: Addressed (revision 5). The operator chose "revision 5, then plan": the hook is installed as a copy; the shim check also runs in `-t update`; the cargo-tools block is standalone with its `--brew-only` compile cost stated; case 8 names its brew side effect; case 5 lists exact counts.
 
 **Risk.**
 
@@ -765,4 +821,4 @@ Finding:
    `sudo`.
 
 Assumption: the main checkout always has the hook file. Refuted by the reflog.
-Disposition:
+Disposition: Addressed (revision 5). Standalone cargo-tools block plus a `--brew-only` suite case; hook copied not linked; `ln` destination named; tfenv same-origin checksum stated; `sudo` only when the bin dir is not writable.
