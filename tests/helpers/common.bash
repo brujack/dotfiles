@@ -11,6 +11,10 @@ load_mocks() {
   # shells out to real python3/pip on dev machines (real pip is slow, hits the
   # network, and mutates the ansible venv). Individual tests may override it.
   export MOCK_PYENV_WHICH_STDOUT="${REPO_ROOT}/tests/mocks/python"
+  # install_cargo_tools resolves _CARGO_BIN before ${HOME}/.cargo/bin/cargo or
+  # a PATH cargo, so pointing it at the mock here means no test -- present or
+  # future -- can reach a real cargo and compile crates for real (tdd.md E2).
+  export _CARGO_BIN="${REPO_ROOT}/tests/mocks/cargo"
 }
 
 # Assert a pattern is ABSENT from a file.
