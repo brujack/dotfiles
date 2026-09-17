@@ -292,3 +292,77 @@ In the suite:
   recompiling, because their versions match the pins.
 - `USER.md`'s session-placement text, which still names the Studio and `workstation`. That
   is an ai-config docs edit and ships separately.
+
+## Multi-Lens Review
+
+Reviewed at commit: `41eb9352` (Step 7 self-review commit, before Step 8 dispatch)
+
+### Goal-Fit
+
+Finding:
+
+1. Part 1 fixes the wrong layer. Rehash also runs under uutils `sort` from
+   `lib/developer.sh:537` and `:567` (bash), from `ssh claude '<cmd>'`, and from pyenv's
+   own install and virtualenv paths. `pyenv-rehash` sources `pyenv-hooks rehash` after
+   `make_shims $(pyenv-versions --executables)` and before
+   `install_registered_shims`/`remove_stale_shims`. A tracked hook under
+   `${PYENV_ROOT}/pyenv.d/rehash/` that calls `make_shims "$PYENV_ROOT"/versions/*/bin/*`
+   would therefore fix every actor with no `PATH` ordering. The author verified this
+   ordering in `pyenv-rehash` 2.8.6.
+2. The tarpaulin rpath build breaks silently when brew bumps libgit2's soname. Part 3a
+   skips the rebuild on the version match, and Part 5 reads the same list.
+3. `cargo-fuzz` and `cross` have no consumer: zero hits across math, etch-cli,
+   terraform_ansible and ai-config. `cargo-machete`'s consumer, etch-cli's `Makefile`,
+   is unnamed.
+4. Part 2 is close to decoration: `make test` already fails loudly, and nothing runs
+   doctor on `claude` on a schedule.
+5. The verification cases are PASS-shaped. Part 5 has no positive control.
+
+Assumption: the login shell is the only rehash actor that matters. It is refuted if
+`PYENV_ROOT=~/.pyenv pyenv rehash` over ssh (uutils `sort`) removes the shim, or if
+provisioning runs on `claude` are ever started over ssh.
+Disposition:
+
+### Ergonomics
+
+Finding:
+
+1. tarpaulin links 7 linuxbrew sonames (`libgit2.so.1.9`, `libllhttp.so.9.4`,
+   `libssh2.so.1`, `libssl.so.3`, and others). `-t update` runs `brew upgrade` plus
+   `brew cleanup`, so a routine update breaks it, and neither Part 3a nor Part 5 notices.
+   The Mac links `libgit2.1.9.dylib`, so the same exposure applies there.
+2. Verification case 5 is wrong. `workstation` has `HAS_RUST` and only
+   `cargo-auditable`/`cargo-nextest` installed, so doctor prints 10 new WARNs until
+   `-t developer` compiles all ten crates. That rollout cost is not stated.
+3. Case 4 passes vacuously if `install_cargo_tools` never runs. Part 5 does not say how
+   doctor resolves `cargo`, or what it reports when `cargo` is not found.
+4. Part 4 re-downloads, runs `dpkg -i` and `apt update` on every run while `pwsh` keeps
+   failing. This cost is unstated. The lens checked the noble `powershell` Depends and
+   found them satisfiable on `claude`.
+
+Assumption: a cargo tool installed at the pinned version keeps working. It is refuted
+by `ldd` plus any minor-soname bump of libgit2 or llhttp.
+Disposition:
+
+### Risk
+
+Finding:
+
+1. Same as Goal-Fit 1. `setup_env.sh -t recreate-venv` on `claude` deletes the shim again
+   after Part 1, because `developer.sh:567` calls `pyenv rehash` under bash with no
+   gnubin on PATH. No verification case runs recreate-venv.
+2. Same as Ergonomics 1 for tarpaulin. Suggests a doctor arm that executes the binary,
+   or vendoring libgit2 (possibly `LIBGIT2_NO_PKG_CONFIG=1`, unverified).
+3. Same as Ergonomics 3: doctor's `cargo` resolution is unspecified, and an empty list
+   must not PASS.
+4. Part 4's repeated download is time-only. The noble feed carries no `dotnet-*-10.0`,
+   so the stated accepted cost holds.
+5. Case 4 needs to assert the skip lines, not an absence of compiles.
+
+Assumption: the login-shell rehash is the recurring one. It is refuted by running
+`setup_env.sh -t recreate-venv` on `claude` and then `test -e ~/.pyenv/shims/pytest`.
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
