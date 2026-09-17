@@ -1,6 +1,6 @@
 # Close the provisioning gaps found moving sessions to `claude`
 
-> **Status:** Draft, revision 8 — spec review pending.
+> **Status:** Revision 8 — multi-lens review complete (8 rounds); awaiting operator approval.
 
 ## Problem
 
@@ -943,4 +943,24 @@ Finding:
 
 Assumption: after the hook install, a rehash happens before anything consumes shims.
 Revision 8 makes this structural rather than dependent on the operator opening a new shell.
-Disposition:
+Disposition: Addressed (revision 8, `03954b14`). The hook install moved to directly before each rehash, with warn-and-continue handling and a call-order assertion. The operator asked for one more scoped review, recorded below.
+
+### Round 8 (scoped risk review of revision 8 changes, reviewed at commit `03954b14`)
+
+Finding: No issues. The reviewer checked each point against the code:
+
+- Both rehashes (`lib/developer.sh:537`, `:566`) are their function's last command, so the
+  rc still propagates.
+- The already-provisioned path skips that rehash, and `run_setup_user` and the update
+  section cover it.
+- `PYENV_ROOT` is exported at `:525` and `:547`.
+- pyenv rebuilds `PYENV_HOOK_PATH` on each call, so a copy made just before the rehash is
+  visible to it.
+- `log_warn` is in scope.
+- `tests/mocks/pyenv` logs calls in order to `MOCK_CALLS_FILE`, so an order assertion is
+  implementable with a spy.
+- Existing tests use a fixture `HOME` without `versions/`, so nothing writes the real
+  `~/.pyenv/pyenv.d` (tdd.md E2).
+
+Assumption: no uncertain assumption found. All candidates were verified directly.
+Disposition: N/A — clean, no action needed.
