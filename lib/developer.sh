@@ -612,6 +612,14 @@ _semver_cmp() {
   for ((_i = 0; _i < _len; _i++)); do
     _av="${_a_parts[_i]:-0}"
     _bv="${_b_parts[_i]:-0}"
+    # A non-numeric component -- including a pre-release/build suffix like
+    # the "3-rc9" in "1.2.3-rc9" -- compares as 0, so "1.2.3-rc9" and
+    # "1.2.3-rc1" compare EQUAL. Deliberate, not a gap: every CARGO_TOOLS
+    # consumer (_cargo_tool_state) only distinguishes "the pin" from
+    # "not strictly greater than the pin", and anything not strictly
+    # greater lands on ok-equal or older, both of which reinstall at (or
+    # already sit at) the pin -- safe regardless of how two suffixed
+    # versions would order against each other.
     [[ "${_av}" =~ ^[0-9]+$ ]] || _av=0
     [[ "${_bv}" =~ ^[0-9]+$ ]] || _bv=0
     if ((10#${_av} > 10#${_bv})); then
@@ -629,12 +637,20 @@ _semver_cmp() {
 # in <list> (verbatim `cargo install --list` output, e.g.
 # "cargo-audit v0.22.1:\n    cargo-audit"), or empty if <crate> is not
 # listed at all.
+#
+# A path or git install renders as "cargo-audit v0.22.1
+# (/Users/x/src/cargo-audit):" -- cargo appends the source location after
+# the version, inside the same colon-terminated header line. Cutting at
+# the first space (before stripping the trailing colon) keeps only the
+# version in both that case and the ordinary registry case, which has no
+# space to cut at.
 _cargo_list_version() {
   local _crate="$1" _list="$2"
   local _line
   while IFS= read -r _line; do
     if [[ "${_line}" == "${_crate} v"*: ]]; then
       _line="${_line#"${_crate} v"}"
+      _line="${_line%% *}"
       printf '%s\n' "${_line%:}"
       return 0
     fi
@@ -676,6 +692,12 @@ _cargo_tool_state() {
       printf '%s\n' 'broken'
     fi
   else
+    # Deliberately unprobed: an "older" install is going to be reinstalled
+    # at the pin regardless of whether its --help currently runs, so a
+    # runnability check here would answer a question install_cargo_tools
+    # never asks. Only "at the pin" (ok/broken) and "newer" (newer/broken)
+    # need the probe, because those are the states where the answer
+    # changes what install_cargo_tools does next.
     printf '%s\n' 'older'
   fi
 }
@@ -688,8 +710,10 @@ _cargo_tool_state() {
 #
 # _CARGO_BIN is read unconditionally, ahead of ${HOME}/.cargo/bin/cargo and
 # a PATH cargo. tests/helpers/common.bash's load_mocks exports it at the
-# recording mock by default, so no test -- present or future -- can reach
-# a real cargo and compile crates for real (tdd.md E2).
+# recording mock by default, so any suite that calls load_mocks cannot
+# reach a real cargo and compile crates for real (tdd.md E2) -- except a
+# test that deliberately unsets _CARGO_BIN to exercise the other
+# resolution branches, which is then responsible for its own isolation.
 install_cargo_tools() {
   if [[ -z ${HAS_RUST} ]]; then
     printf '%s\n' 'cargo tools: skipped (HAS_RUST unset)'
