@@ -1,6 +1,6 @@
 # Close the provisioning gaps found moving sessions to `claude`
 
-> **Status:** Draft, revision 7 — spec review pending.
+> **Status:** Draft, revision 8 — spec review pending.
 
 ## Problem
 
@@ -123,8 +123,8 @@ and returned 0.
 
 ## Design
 
-This is revision 7. It replaces revision 6 (`b6c7f44b`); earlier revisions are
-`37b04d9a`, `5fdb8df0`, `1987f7c8`, `9fa812a9` and `41eb9352`. The Multi-Lens Review section below records why. One branch, one PR, six
+This is revision 8. It replaces revision 7 (`ab42f5a6`); earlier revisions are
+`b6c7f44b`, `37b04d9a`, `5fdb8df0`, `1987f7c8`, `9fa812a9` and `41eb9352`. The Multi-Lens Review section below records why. One branch, one PR, six
 independent parts, each testable alone.
 
 ### Part 1: a pyenv rehash hook that registers every shim, whatever `sort` is
@@ -205,15 +205,27 @@ unset _dotfiles_rehash_opts
     checkout on other branches for hours (2026-08-12, 2026-08-24). A copy cannot dangle.
   - **Cost.** After the hook file changes in the repo, the copy stays stale until the next
     refresh.
-  - **Called from four places:**
+  - **Called from four places, each immediately before a rehash that needs it:**
     - `run_setup_user`;
-    - the end of `setup_ansible` (`lib/developer.sh`);
-    - the end of `run_recreate_venv`;
-    - the `pyenv-shims` section of `run_update` (Part 2).
-  - `setup_ansible` and `run_recreate_venv` are needed because `-t setup_user` runs before
-    pyenv creates `versions/` on a fresh host (`setup_env.sh:96` before
-    `lib/workflows.sh:295`). Without them the gate would leave a new machine hookless until
-    its first `-t update`.
+    - `setup_ansible`, directly **before** its `pyenv rehash` (`lib/developer.sh:537`, after
+      `uv_sync_venv`);
+    - `recreate_python_venv`, directly **before** its `pyenv rehash`
+      (`lib/developer.sh:566`);
+    - the `pyenv-shims` section of `run_update`, before that section's own rehash
+      (Part 2).
+  - **Why before, not "at the end".** `-t setup_user` runs before pyenv creates `versions/`
+    on a fresh host (`setup_env.sh:96` before `lib/workflows.sh:295`), so the gate skips
+    there. The first rehash that sees the venv's console scripts is the one right after
+    `uv sync`. A hook installed after it lands too late: that rehash has already dropped
+    `pytest`, and nothing rehashes again until a new interactive shell runs
+    `pyenv init -`'s own `command pyenv rehash`. Placing the install before the rehash makes
+    provisioning end with the shim present in the same shell.
+  - **Error handling at these call sites is warn-and-continue**:
+    `install_pyenv_rehash_hook || log_warn "pyenv rehash hook not installed — see above"`.
+    A failed copy must not skip the rehash or `setup_ansible`'s later steps, and the rehash
+    stays the function's last command, so its rc still propagates through
+    `setup_ansible || return 1` (`lib/workflows.sh:294`) exactly as today. Part 2 reports a
+    missing hook's consequence.
   - On `claude` and the Studio, `pyenv.d` does not exist yet. On `workstation`, `~/.pyenv`
     is a pyenv 2.7.2 git clone, so the copy lands as an untracked file there, and
     `pyenv update` (`developer.sh:487`) tolerates it.
@@ -548,7 +560,10 @@ In the suite:
   `|| true`.
 - `install_pyenv_rehash_hook`:
   - with no `versions/` it creates nothing;
-  - `setup_ansible` and `run_recreate_venv` each call it (spy);
+  - in `setup_ansible` and `recreate_python_venv` it is called **before** `pyenv rehash`:
+    assert on the recorded call order, not mere presence, because a presence spy passes
+    on the broken order;
+  - a failing install still reaches the rehash, and the function returns the rehash's rc;
   - it creates the directory and copies the hook;
   - `cmp`-equal means no rewrite;
   - a changed source is re-copied;
@@ -910,3 +925,22 @@ review": the hook is also installed from `setup_ansible` and `run_recreate_venv`
 uses the default expansion; pyenv resolution names `lib/workflows.sh:510-515`; a failed
 rehash is recorded and non-fatal, with the 60 s wait stated; the `-A` test matches the
 token and sets `MOCK_CALLS_FILE`.
+
+### Round 7 (scoped risk review of revision 7 changes, reviewed at commit `ab42f5a6`)
+
+Finding:
+
+1. DESIGN. "At the end" of `setup_ansible`/`run_recreate_venv` installs the hook **after**
+   the rehash that needs it (`lib/developer.sh:537` and `:566`, which the author
+   confirmed), so a fresh 26.04 host still ends provisioning without the `pytest` shim
+   until a new interactive shell rehashes. A presence spy would pass on that order. The
+   install belongs before the rehash, with an order assertion.
+2. APPARATUS. Error handling at the new call sites was unspecified. A bare call appended
+   last would mask a failed rehash's rc and let a failed copy skip later steps.
+3. Checked clean: the pip-section resolution pattern, the gate default expansion, the 60 s
+   lock wait being non-fatal, the `-A` token match, and that `run_recreate_venv` exists
+   (`lib/workflows.sh:300`).
+
+Assumption: after the hook install, a rehash happens before anything consumes shims.
+Revision 8 makes this structural rather than dependent on the operator opening a new shell.
+Disposition:
