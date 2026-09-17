@@ -95,11 +95,13 @@ RUBY_INSTALL_VER="0.10.2"
 RUBY_VER="4.0.5"
 # read by lib/workflows.sh:run_check_versions
 SHELLCHECK_VER="0.11.0"
-# read by lib/linux_ubuntu.sh:_install_ubuntu_tflint
+# read by lib/linux_ubuntu.sh:_install_ubuntu_tflint, which also builds the
+# anchored skip-check version regex from this same value (^TFLint version <ver>$)
 TFLINT_VER="0.61.0"
 TFLINT_SHA256_AMD64="ca4e4e8cb7cc3436f2b6979e9c4fd4e2623a66fcca1ad1fe12f8669967636ae2"
 TFLINT_SHA256_ARM64="999c25cfdb5208fe1133dec6b219e666a39fc2a7a0786a781dc9924ea5945ebf"
-# read by lib/linux_ubuntu.sh:_install_ubuntu_tfsec
+# read by lib/linux_ubuntu.sh:_install_ubuntu_tfsec, which also builds the
+# anchored skip-check version regex from this same value (^v<ver>$)
 TFSEC_VER="1.28.14"
 TFSEC_SHA256_AMD64="a32d0799bbefababaa4fcd814da9f4d251cd932789590b99d1d5fcb89ace6f68"
 TFSEC_SHA256_ARM64="7b872b0e8f398abebc21ab78f6c0535029ff649f0d18f0f3454a01bece3006a2"
