@@ -593,11 +593,13 @@ run_update() {
   fi
 
   # ── pyenv-shims ────────────────────────────────────────────────────────────
-  # brew upgrade pyenv (macOS/Linux) and pyenv update (a clone) both happen
-  # inside -t update, and either can retire install_pyenv_rehash_hook's fix
-  # for the uutils sort -u collation defect (see pyenv.d/rehash/). So this
-  # section runs whenever brew or pip might have run, not only at setup_user
-  # time.
+  # brew upgrade pyenv (macOS/Linux) is what can retire
+  # install_pyenv_rehash_hook's fix for the uutils sort -u collation defect
+  # (see pyenv.d/rehash/), and that happens inside -t update -- so this
+  # section runs whenever brew or pip might have run, not only at
+  # setup_user time. (pyenv update itself runs only inside setup_ansible,
+  # lib/developer.sh, reached by -t developer/-t ansible -- not by -t
+  # update. The brew half alone is why this section belongs here.)
   if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_BREW:-} ]] || [[ -n ${UPDATE_PIP:-} ]]; then
     local _pyenv_shims_bin
     _pyenv_shims_bin="$(_pyenv_ansible_venv_bin)"
@@ -608,13 +610,21 @@ run_update() {
 
       install_pyenv_rehash_hook || log_warn "pyenv rehash hook not installed — see above"
 
-      # Resolved independently of the pip block above, following the same
-      # pattern: under --brew-only the pip block never runs, so its PATH
-      # prepend / PYENV_ROOT export cannot be relied on here.
-      export PYENV_ROOT="$HOME/.pyenv"
-      export PATH="$PYENV_ROOT/bin:$PYENV_ROOT/shims:$PATH"
+      # Resolved ONCE and reused for both the export and the PATH prepend.
+      # Exporting PYENV_ROOT from its own independent expansion of the same
+      # override chain let the hook install above and the rehash below
+      # target different roots whenever _OVERRIDE_PYENV_ROOT/PYENV_ROOT
+      # disagreed -- latent on this fleet only because PYENV_ROOT happens
+      # to equal $HOME/.pyenv everywhere it's set. Also resolved
+      # independently of the pip block above: under --brew-only the pip
+      # block never runs, so its own PATH prepend / PYENV_ROOT export
+      # cannot be relied on here.
+      local _pyenv_root
+      _pyenv_root="${_OVERRIDE_PYENV_ROOT:-${PYENV_ROOT:-${HOME}/.pyenv}}"
+      export PYENV_ROOT="${_pyenv_root}"
+      export PATH="${_pyenv_root}/bin:${_pyenv_root}/shims:${PATH}"
 
-      local _rehash_rc=0
+      local _rehash_rc=0 _pyenv_found=1
       if command -v pyenv >/dev/null 2>&1; then
         # A rehash can wait up to 60s for pyenv's own lock
         # (PYENV_REHASH_TIMEOUT); a lock left by a rehash killed under 2
@@ -625,17 +635,33 @@ run_update() {
         pyenv rehash 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_pyenv-shims"
         _rehash_rc="${PIPESTATUS[0]}"
       else
+        _pyenv_found=0
         log_warn "pyenv not found on PATH — skipping pyenv rehash"
-        : > "${_DOTFILES_RUN_TMPDIR}/err_pyenv-shims"
+        printf "pyenv not found on PATH — rehash skipped\n" > "${_DOTFILES_RUN_TMPDIR}/err_pyenv-shims"
       fi
       if [[ ${_rehash_rc} -ne 0 ]]; then
         printf "pyenv rehash exited %d\n" "${_rehash_rc}" >> "${_DOTFILES_RUN_TMPDIR}/err_pyenv-shims"
+        # A failed rehash is non-fatal (see above) but must not be
+        # invisible: without this, a rehash failure on an otherwise fully
+        # shimmed machine rendered [OK] with the failure surfaced nowhere.
+        _update_write_detail_from_err "pyenv-shims" "rehash output"
       fi
 
-      local _pyenv_shims_missing
+      local _pyenv_shims_missing _pyenv_shims_missing_rc
       _pyenv_shims_missing="$(_pyenv_missing_shims)"
+      _pyenv_shims_missing_rc=$?
       _update_record_end "pyenv-shims" 0
-      if [[ -n "${_pyenv_shims_missing}" ]]; then
+      if [[ ${_pyenv_found} -eq 0 ]]; then
+        # The check never ran at all -- distinct from, and worse than, a
+        # rehash that ran and failed.
+        _update_warn "pyenv-shims" "pyenv not found on PATH — rehash skipped"
+        _update_write_detail_from_err "pyenv-shims" "rehash output"
+      elif [[ ${_pyenv_shims_missing_rc} -eq 2 ]]; then
+        # rc 2 ("no ansible venv") is empty stdout, exactly like "nothing
+        # missing" -- discarding the rc is what let those two render
+        # identically as a silent [OK].
+        _update_warn "pyenv-shims" "ansible venv disappeared during the run (${_pyenv_shims_bin})"
+      elif [[ -n "${_pyenv_shims_missing}" ]]; then
         _update_warn "pyenv-shims" "missing shim(s): $(printf '%s' "${_pyenv_shims_missing}" | paste -sd', ' -)"
         _update_write_detail_from_err "pyenv-shims" "warning output"
       fi
