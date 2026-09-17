@@ -103,7 +103,7 @@ TFLINT_SHA256_ARM64="999c25cfdb5208fe1133dec6b219e666a39fc2a7a0786a781dc9924ea59
 TFSEC_VER="1.28.14"
 TFSEC_SHA256_AMD64="a32d0799bbefababaa4fcd814da9f4d251cd932789590b99d1d5fcb89ace6f68"
 TFSEC_SHA256_ARM64="7b872b0e8f398abebc21ab78f6c0535029ff649f0d18f0f3454a01bece3006a2"
-# read by lib/linux_ubuntu.sh:_install_ubuntu_tfenv
+# read by lib/linux_ubuntu.sh:_install_ubuntu_tfenv, tests/setup_env/unit.bats semver check
 TERRAFORM_VER="1.15.6"
 # read by lib/linux_ubuntu.sh:_install_ubuntu_hashicorp, lib/workflows.sh:run_check_versions
 VAGRANT_VER="2.4.9"
