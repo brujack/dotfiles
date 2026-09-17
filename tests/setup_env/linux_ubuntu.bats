@@ -18,6 +18,13 @@ setup() {
   mkdir -p "${HOME}/.cargo/bin"
   cp "${REPO_ROOT}/tests/mocks/rustup" "${HOME}/.cargo/bin/rustup"
   chmod +x "${HOME}/.cargo/bin/rustup"
+  # Same rule, one release-binary helper over: _RELEASE_BIN_DIR at SETUP
+  # scope so a future HAS_DEVTOOLS=1 test that forgets to stub
+  # _install_ubuntu_tflint/_install_ubuntu_tfsec cannot reach real
+  # /usr/local/bin -- _install_pinned_release_binary has its own tests in
+  # release_binary.bats, which drive the seams.
+  export _RELEASE_BIN_DIR="${BATS_TEST_TMPDIR}/release-bin"
+  mkdir -p "${_RELEASE_BIN_DIR}"
   # Truncate AFTER seeding: cp and chmod are pass-through mocks that log their own
   # invocation, so the seed writes a line containing "rustup" into the call log and
   # breaks any test asserting that string is absent. Every test already assumes it

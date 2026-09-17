@@ -721,8 +721,24 @@ _install_pinned_release_binary() {
   # `trap ... EXIT` in lib/*.sh against a hand-maintained allowlist, so this
   # mirrors _install_rustup_rs above instead -- an explicit `rm -rf "${_tmp}"`
   # before every return, rather than a subshell-scoped trap.
+  #
+  # _RELEASE_TMP_ROOT is a seam, not a convenience: BSD mktemp -d with no
+  # template ignores TMPDIR entirely, so a TMPDIR-based assertion is inert on
+  # the Studio, where this suite runs. Precedent: _OVERRIDE_RUN_TMPDIR_ROOT in
+  # lib/workflows.sh.
   local _tmp
-  _tmp="$(mktemp -d)" || return 1
+  _tmp="$(mktemp -d "${_RELEASE_TMP_ROOT:-${TMPDIR:-/tmp}}/release-bin.XXXXXXXX")" || return 1
+
+  # A malformed or empty pin must fail closed rather than let sha256sum decide.
+  # Measured: macOS /sbin/sha256sum exits 0 on a malformed checksum line (only
+  # warning on stderr, which the redirect below discards), while GNU exits 1 --
+  # so without this, the Studio's suite is structurally unable to fail for an
+  # empty or typo'd pin.
+  if [[ ! "${_sha256}" =~ ^[0-9a-fA-F]{64}$ ]]; then
+    log_error "${_name}: pinned sha256 is not 64 hex chars"
+    rm -rf "${_tmp}"
+    return 1
+  fi
 
   local _artifact="${_tmp}/${_name}.download"
   if ! curl -fsSL -o "${_artifact}" "${_url}"; then
@@ -759,11 +775,13 @@ _install_pinned_release_binary() {
 
   if [[ -w "${_dir}" ]]; then
     if ! install -m 0755 "${_extracted}" "${_dir}/${_name}"; then
+      log_error "${_name} install into ${_dir} failed"
       rm -rf "${_tmp}"
       return 1
     fi
   else
     if ! sudo install -m 0755 "${_extracted}" "${_dir}/${_name}"; then
+      log_error "${_name} install into ${_dir} failed"
       rm -rf "${_tmp}"
       return 1
     fi
@@ -786,7 +804,7 @@ _install_ubuntu_tflint() {
   esac
   _install_pinned_release_binary tflint "${TFLINT_VER}" \
     "${_TFLINT_URL:-https://github.com/terraform-linters/tflint/releases/download/v${TFLINT_VER}/tflint_linux_${_LINUX_ARCH}.zip}" \
-    "${_TFLINT_SHA256:-${_sha}}" zip '^TFLint version 0\.61\.0$'
+    "${_TFLINT_SHA256:-${_sha}}" zip "^TFLint version ${TFLINT_VER//./\\.}$"
 }
 
 _install_ubuntu_tfsec() {
@@ -802,7 +820,7 @@ _install_ubuntu_tfsec() {
   esac
   _install_pinned_release_binary tfsec "${TFSEC_VER}" \
     "${_TFSEC_URL:-https://github.com/aquasecurity/tfsec/releases/download/v${TFSEC_VER}/tfsec-linux-${_LINUX_ARCH}}" \
-    "${_TFSEC_SHA256:-${_sha}}" raw '^v1\.28\.14$'
+    "${_TFSEC_SHA256:-${_sha}}" raw "^v${TFSEC_VER//./\\.}$"
 }
 
 _install_ubuntu_misc() {

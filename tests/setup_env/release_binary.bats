@@ -161,6 +161,156 @@ EOF
   [ ! -e "${_RELEASE_BIN_DIR}/footool" ]
 }
 
+@test "_install_pinned_release_binary: an HTTP failure is reported as a download failure, not a checksum mismatch" {
+  # MOCK_CURL_EXIT above fails regardless of whether -f is on the command
+  # line, so it cannot prove the invocation actually asked curl to fail on
+  # HTTP error. MOCK_CURL_HTTP_STATUS only fails for an f-bearing form
+  # (tests/setup_env/mocks_curl.bats) -- dropping -fsSL's f would silently
+  # turn this into a "successful" empty download that fails at the checksum
+  # step instead, with the wrong diagnostic.
+  export MOCK_CURL_HTTP_STATUS=404
+  run _install_pinned_release_binary footool 9.9.9 \
+    "https://example.invalid/footool" \
+    "0000000000000000000000000000000000000000000000000000000000000000" \
+    raw '^footool version 9\.9\.9$'
+  [ "$status" -eq 1 ]
+  [ ! -e "${_RELEASE_BIN_DIR}/footool" ]
+  [[ "$output" == *"download failed"* ]]
+  [[ "$output" != *"sha256 mismatch"* ]]
+}
+
+@test "_install_pinned_release_binary: a malformed pinned sha256 fails closed before any download" {
+  # Boundary: the pin itself must be a plausible 64-hex-char digest before
+  # anything is trusted to verify against it. macOS /sbin/sha256sum exits 0
+  # on a malformed checksum LINE (only warns on stderr, discarded by the
+  # redirect), so without this guard an empty or typo'd pin would sail
+  # through sha256sum -c on this platform specifically.
+  export MOCK_CURL_STDOUT="whatever"
+  run _install_pinned_release_binary footool 9.9.9 \
+    "https://example.invalid/footool" \
+    "not-a-valid-sha256" \
+    raw '^footool version 9\.9\.9$'
+  [ "$status" -eq 1 ]
+  [ ! -e "${_RELEASE_BIN_DIR}/footool" ]
+  [[ "$output" == *"pinned sha256"* ]]
+  refute_grep 'curl' "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_pinned_release_binary: failure path leaves no residue under _RELEASE_TMP_ROOT" {
+  # _RELEASE_TMP_ROOT is the seam that makes this assertable at all: BSD
+  # mktemp -d with no template ignores TMPDIR, so a TMPDIR-based version of
+  # this test would be inert on the Studio, where this suite runs.
+  local _tmp_root="${BATS_TEST_TMPDIR}/release-tmp-root"
+  mkdir -p "${_tmp_root}"
+  export _RELEASE_TMP_ROOT="${_tmp_root}"
+  export MOCK_CURL_STDOUT="not the real payload"
+  run _install_pinned_release_binary footool 9.9.9 \
+    "https://example.invalid/footool" \
+    "0000000000000000000000000000000000000000000000000000000000000000" \
+    raw '^footool version 9\.9\.9$'
+  [ "$status" -eq 1 ]
+  [ -z "$(ls -A "${_tmp_root}")" ]
+}
+
+@test "_install_pinned_release_binary: defaults to /usr/local/bin when _RELEASE_BIN_DIR is unset" {
+  unset _RELEASE_BIN_DIR
+  # Recording (non-executing) install/sudo stubs: the point is only to
+  # observe the destination path the helper resolves, never to touch the
+  # real /usr/local/bin regardless of whether it happens to be writable on
+  # this machine.
+  local _shim="${BATS_TEST_TMPDIR}/default-dir-shim"
+  mkdir -p "${_shim}"
+  cat > "${_shim}/install" << EOF
+#!/usr/bin/env bash
+printf "install %s\n" "\$*" >> "${MOCK_CALLS_FILE}"
+exit 0
+EOF
+  cp "${_shim}/install" "${_shim}/sudo"
+  chmod +x "${_shim}/install" "${_shim}/sudo"
+
+  local _payload="raw-payload-9.9.9"
+  local _sha
+  _sha="$(printf '%s' "${_payload}" | sha256sum | awk '{print $1}')"
+  export MOCK_CURL_STDOUT="${_payload}"
+
+  PATH="${_shim}:${PATH}" run _install_pinned_release_binary footool 9.9.9 \
+    "https://example.invalid/footool" \
+    "${_sha}" raw '^footool version 9\.9\.9$'
+  [ "$status" -eq 0 ]
+  grep -qF '/usr/local/bin/footool' "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_pinned_release_binary: a non-writable destination routes install through sudo" {
+  local _dest="${BATS_TEST_TMPDIR}/readonly-bin"
+  mkdir -p "${_dest}"
+  chmod 0555 "${_dest}"
+  export _RELEASE_BIN_DIR="${_dest}"
+
+  # A recording sudo stub, deliberately NOT tests/mocks/sudo -- that mock
+  # execs the real command when it resolves on PATH, which would be a
+  # genuine write here (tdd.md E2, the test's failing/passing path must be
+  # inert regardless).
+  local _sudo_shim="${BATS_TEST_TMPDIR}/sudo-shim"
+  mkdir -p "${_sudo_shim}"
+  cat > "${_sudo_shim}/sudo" << EOF
+#!/usr/bin/env bash
+printf "sudo %s\n" "\$*" >> "${MOCK_CALLS_FILE}"
+exit 0
+EOF
+  chmod +x "${_sudo_shim}/sudo"
+
+  local _payload="raw-payload-9.9.9"
+  local _sha
+  _sha="$(printf '%s' "${_payload}" | sha256sum | awk '{print $1}')"
+  export MOCK_CURL_STDOUT="${_payload}"
+
+  PATH="${_sudo_shim}:${PATH}" run _install_pinned_release_binary footool 9.9.9 \
+    "https://example.invalid/footool" \
+    "${_sha}" raw '^footool version 9\.9\.9$'
+  [ "$status" -eq 0 ]
+  grep -qF "sudo install -m 0755" "${MOCK_CALLS_FILE}"
+  grep -qF "${_dest}/footool" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_pinned_release_binary: a failing sudo install returns 1 and installs nothing" {
+  local _dest="${BATS_TEST_TMPDIR}/readonly-bin"
+  mkdir -p "${_dest}"
+  chmod 0555 "${_dest}"
+  export _RELEASE_BIN_DIR="${_dest}"
+
+  local _sudo_shim="${BATS_TEST_TMPDIR}/sudo-shim"
+  mkdir -p "${_sudo_shim}"
+  cat > "${_sudo_shim}/sudo" << EOF
+#!/usr/bin/env bash
+printf "sudo %s\n" "\$*" >> "${MOCK_CALLS_FILE}"
+exit 1
+EOF
+  chmod +x "${_sudo_shim}/sudo"
+
+  local _payload="raw-payload-9.9.9"
+  local _sha
+  _sha="$(printf '%s' "${_payload}" | sha256sum | awk '{print $1}')"
+  export MOCK_CURL_STDOUT="${_payload}"
+
+  PATH="${_sudo_shim}:${PATH}" run _install_pinned_release_binary footool 9.9.9 \
+    "https://example.invalid/footool" \
+    "${_sha}" raw '^footool version 9\.9\.9$'
+  [ "$status" -eq 1 ]
+  [ ! -e "${_dest}/footool" ]
+}
+
+@test "_install_pinned_release_binary: unknown kind returns 1" {
+  local _payload="raw-payload-9.9.9"
+  local _sha
+  _sha="$(printf '%s' "${_payload}" | sha256sum | awk '{print $1}')"
+  export MOCK_CURL_STDOUT="${_payload}"
+  run _install_pinned_release_binary footool 9.9.9 \
+    "https://example.invalid/footool" \
+    "${_sha}" tarball '^footool version 9\.9\.9$'
+  [ "$status" -eq 1 ]
+  [ ! -e "${_RELEASE_BIN_DIR}/footool" ]
+}
+
 # ── _install_ubuntu_tflint / _install_ubuntu_tfsec: HAS_DEVTOOLS gate ───────
 
 @test "_install_ubuntu_tflint: no-op and no network reached when HAS_DEVTOOLS is unset" {
@@ -229,4 +379,50 @@ EOF
   run _install_ubuntu_tflint
   [ "$status" -eq 0 ]
   refute_grep 'curl' "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_tflint: honours _TFLINT_URL and _TFLINT_SHA256 overrides" {
+  export HAS_DEVTOOLS=1
+  export _TFLINT_URL="https://example.invalid/tflint-override.zip"
+  export _TFLINT_SHA256="override-sha-tflint"
+  _install_pinned_release_binary() { printf '%s\n' "$*" >> "${MOCK_CALLS_FILE}"; }
+  run _install_ubuntu_tflint
+  [ "$status" -eq 0 ]
+  grep -qF "https://example.invalid/tflint-override.zip override-sha-tflint" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_tfsec: honours _TFSEC_URL and _TFSEC_SHA256 overrides" {
+  export HAS_DEVTOOLS=1
+  export _TFSEC_URL="https://example.invalid/tfsec-override"
+  export _TFSEC_SHA256="override-sha-tfsec"
+  _install_pinned_release_binary() { printf '%s\n' "$*" >> "${MOCK_CALLS_FILE}"; }
+  run _install_ubuntu_tfsec
+  [ "$status" -eq 0 ]
+  grep -qF "https://example.invalid/tfsec-override override-sha-tfsec" "${MOCK_CALLS_FILE}"
+}
+
+# ── _install_ubuntu_misc call sites are advisory ────────────────────────────
+
+@test "linux_ubuntu.sh: _install_ubuntu_tflint and _install_ubuntu_tfsec call sites are each followed by || log_warn" {
+  # Statically pin the call site against the source, not via a mocked run --
+  # both wrappers are stubbed in linux_ubuntu.bats's own _install_ubuntu_misc
+  # dispatcher tests, so a run-based assertion there would never see a
+  # swapped `|| return 1`. Line numbers are derived with grep -n at test
+  # time, never hardcoded (Task 4's precedent, tests/setup_env/developer.bats
+  # "install_pyenv_rehash_hook is the line immediately before pyenv rehash").
+  local _src="${BATS_TEST_DIRNAME}/../../lib/linux_ubuntu.sh"
+  local _name
+  for _name in _install_ubuntu_tflint _install_ubuntu_tfsec; do
+    local _line _content
+    _line="$(grep -n "^  ${_name} || " "${_src}" | cut -d: -f1)"
+    if [ -z "${_line}" ]; then
+      printf "no '%s || ...' call site found in %s\n" "${_name}" "${_src}" >&2
+      return 1
+    fi
+    _content="$(sed -n "${_line}p" "${_src}")"
+    if [[ "${_content}" != *"|| log_warn"* ]]; then
+      printf "call site at line %s: %q does not contain || log_warn\n" "${_line}" "${_content}" >&2
+      return 1
+    fi
+  done
 }
