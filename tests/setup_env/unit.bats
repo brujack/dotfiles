@@ -1004,6 +1004,7 @@ EOF
   _doctor_check_symlinks()      { :; }
   _doctor_check_symlink_roots() { :; }
   _doctor_check_tools()         { :; }
+  _doctor_check_dev_tools()     { :; }
   _doctor_check_login_shell()   { :; }
   _doctor_check_cred_dirs()     { :; }
   _doctor_check_hooks_path()    { :; }
@@ -1020,6 +1021,7 @@ EOF
   _doctor_check_symlinks()      { :; }
   _doctor_check_symlink_roots() { :; }
   _doctor_check_tools()         { :; }
+  _doctor_check_dev_tools()     { :; }
   _doctor_check_login_shell()   { :; }
   _doctor_check_cred_dirs()     { :; }
   _doctor_check_hooks_path()    { :; }
@@ -1423,6 +1425,7 @@ EOF
   _doctor_check_symlinks()      { :; }
   _doctor_check_symlink_roots() { :; }
   _doctor_check_tools()         { :; }
+  _doctor_check_dev_tools()     { :; }
   _doctor_check_login_shell()   { :; }
   _doctor_check_cred_dirs()     { :; }
   _doctor_check_hooks_path()    { :; }
@@ -2478,6 +2481,7 @@ STUB
   _doctor_check_symlinks()      { :; }
   _doctor_check_symlink_roots() { :; }
   _doctor_check_tools()         { :; }
+  _doctor_check_dev_tools()     { :; }
   _doctor_check_login_shell()   { :; }
   _doctor_check_cred_dirs()     { :; }
   _doctor_check_hooks_path()    { :; }

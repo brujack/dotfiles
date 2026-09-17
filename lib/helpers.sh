@@ -467,6 +467,7 @@ run_doctor() {
   _doctor_check_symlinks
   _doctor_check_symlink_roots
   _doctor_check_tools
+  _doctor_check_dev_tools
   _doctor_check_login_shell
   _doctor_check_cred_dirs
   _doctor_check_hooks_path
@@ -580,6 +581,57 @@ _doctor_check_tools() {
       fi
     fi
   fi
+}
+# Macs get pwsh/tflint/zig/terraform/tfsec from the Brewfile, so this arm is
+# Linux-only. WARN only, never FAIL -- every install it reports on is
+# advisory (setup_env.sh -t developer). Judged by whether each tool RUNS,
+# not merely resolves: a probe from ${HOME} under `timeout` so a hung binary
+# cannot block doctor and a project-local version file (e.g.
+# .terraform-version) cannot steer the result.
+_doctor_check_dev_tools() {
+  if [[ -z ${LINUX} ]] || [[ -z ${HAS_DEVTOOLS} ]]; then
+    return 0
+  fi
+
+  printf "\nDev tools:\n"
+
+  # Resolved once, defensively: an absent `timeout` must not turn every
+  # tool's probe into a false "does not run" -- degrade to running the
+  # probe unbounded rather than report the whole arm broken.
+  local _timeout_bin
+  _timeout_bin="$(command -v timeout 2>/dev/null)"
+
+  local _tool _bin _args _rc
+  for _tool in pwsh tflint zig terraform tfsec; do
+    case "${_tool}" in
+      pwsh) _args="-NoProfile -Command exit" ;;
+      tflint) _args="--version" ;;
+      zig) _args="version" ;;
+      terraform) _args="version" ;;
+      tfsec) _args="--version" ;;
+    esac
+
+    _bin="$(command -v "${_tool}" 2>/dev/null)"
+    if [[ -z "${_bin}" ]]; then
+      doctor_warn "${_tool}" "not found — setup_env.sh -t developer"
+      continue
+    fi
+
+    if [[ -n "${_timeout_bin}" ]]; then
+      # shellcheck disable=SC2086 # word-splitting is the point: ${_args} carries multiple args
+      ( cd "${HOME}" && "${_timeout_bin}" "${_DOCTOR_PROBE_TIMEOUT:-10}" "${_bin}" ${_args} ) &>/dev/null
+    else
+      # shellcheck disable=SC2086 # word-splitting is the point: ${_args} carries multiple args
+      ( cd "${HOME}" && "${_bin}" ${_args} ) &>/dev/null
+    fi
+    _rc=$?
+
+    if [[ ${_rc} -eq 0 ]]; then
+      doctor_pass "${_tool}"
+    else
+      doctor_warn "${_tool}" "does not run (rc ${_rc}) — setup_env.sh -t developer"
+    fi
+  done
 }
 _doctor_check_cred_dirs() {
   printf "\nCredential directories:\n"
