@@ -567,7 +567,7 @@ _install_ubuntu_brew_packages() {
     argocd bat cargo-nextest cargo-cyclonedx cyclonedx-python git-lfs fzf gh \
     hadolint helm k9s kustomize lazydocker linkerd mongosh mongodb-atlas neovim \
     pyenv pyenv-virtualenv rbenv ripgrep rustup \
-    starship tgenv uv zoxide redpanda-data/tap/redpanda \
+    starship tgenv uv zig zoxide redpanda-data/tap/redpanda \
     git-cliff kcov mdbook bun getagentseal/codeburn/codeburn \
     go-task; do
     # go-task is `go-task`, NOT `go-task/tap/go-task`: the tap-qualified name resolves
@@ -688,6 +688,123 @@ _install_ubuntu_gui_tools() {
   fi
 }
 
+# Installs a checksum-verified release binary, skipping when the copy already
+# in place reports the pinned version. tflint and tfsec share an identical
+# pinned-version / per-arch-sha256 / download / verify / extract / install
+# sequence -- exactly where a hand copy drops the verify step, so two
+# consumers are enough to justify one helper.
+#
+# Reads ${_RELEASE_BIN_DIR:-/usr/local/bin}/<name>'s own --version output,
+# never the copy on PATH (shell.md: an absolute-path default is the only
+# thing a PATH mock cannot defeat, and here a PATH stub must not satisfy the
+# skip check when the target directory is genuinely empty). <version-line-
+# regex> is matched as given -- it carries its own ^...$ anchors, because a
+# substring match would let an "out of date, latest is X" notice look like
+# X is already installed.
+#
+# sha256sum is never mocked, mirroring _install_rustup_rs above: mocking it
+# would make every mismatch case vacuous.
+_install_pinned_release_binary() {
+  local _name="$1" _version="$2" _url="$3" _sha256="$4" _kind="$5" _version_regex="$6"
+  local _dir="${_RELEASE_BIN_DIR:-/usr/local/bin}"
+
+  if [[ -x "${_dir}/${_name}" ]]; then
+    local _current
+    _current="$("${_dir}/${_name}" --version 2>&1)"
+    if printf '%s\n' "${_current}" | grep -qE "${_version_regex}"; then
+      printf "%s %s already installed\\n" "${_name}" "${_version}"
+      return 0
+    fi
+  fi
+
+  # No trap here, deliberately: scripts/check-lib-exit-traps.sh ratchets every
+  # `trap ... EXIT` in lib/*.sh against a hand-maintained allowlist, so this
+  # mirrors _install_rustup_rs above instead -- an explicit `rm -rf "${_tmp}"`
+  # before every return, rather than a subshell-scoped trap.
+  local _tmp
+  _tmp="$(mktemp -d)" || return 1
+
+  local _artifact="${_tmp}/${_name}.download"
+  if ! curl -fsSL -o "${_artifact}" "${_url}"; then
+    log_error "${_name} download failed"
+    rm -rf "${_tmp}"
+    return 1
+  fi
+
+  if ! printf '%s  %s\n' "${_sha256}" "${_artifact}" | sha256sum -c - > /dev/null 2>&1; then
+    log_error "${_name} sha256 mismatch — refusing to install"
+    rm -rf "${_tmp}"
+    return 1
+  fi
+
+  local _extracted
+  case "${_kind}" in
+    zip)
+      if ! unzip -o -q "${_artifact}" "${_name}" -d "${_tmp}"; then
+        log_error "${_name} unzip failed"
+        rm -rf "${_tmp}"
+        return 1
+      fi
+      _extracted="${_tmp}/${_name}"
+      ;;
+    raw)
+      _extracted="${_artifact}"
+      ;;
+    *)
+      log_error "unknown release-binary kind for ${_name}: ${_kind}"
+      rm -rf "${_tmp}"
+      return 1
+      ;;
+  esac
+
+  if [[ -w "${_dir}" ]]; then
+    if ! install -m 0755 "${_extracted}" "${_dir}/${_name}"; then
+      rm -rf "${_tmp}"
+      return 1
+    fi
+  else
+    if ! sudo install -m 0755 "${_extracted}" "${_dir}/${_name}"; then
+      rm -rf "${_tmp}"
+      return 1
+    fi
+  fi
+
+  rm -rf "${_tmp}"
+  printf "%s %s installed\\n" "${_name}" "${_version}"
+}
+
+_install_ubuntu_tflint() {
+  [[ -n ${HAS_DEVTOOLS} ]] || return 0
+  local _sha
+  case "${_LINUX_ARCH}" in
+    amd64) _sha="${TFLINT_SHA256_AMD64}" ;;
+    arm64) _sha="${TFLINT_SHA256_ARM64}" ;;
+    *)
+      log_warn "no pinned tflint sha256 for ${_LINUX_ARCH}; skipping"
+      return 0
+      ;;
+  esac
+  _install_pinned_release_binary tflint "${TFLINT_VER}" \
+    "${_TFLINT_URL:-https://github.com/terraform-linters/tflint/releases/download/v${TFLINT_VER}/tflint_linux_${_LINUX_ARCH}.zip}" \
+    "${_TFLINT_SHA256:-${_sha}}" zip '^TFLint version 0\.61\.0$'
+}
+
+_install_ubuntu_tfsec() {
+  [[ -n ${HAS_DEVTOOLS} ]] || return 0
+  local _sha
+  case "${_LINUX_ARCH}" in
+    amd64) _sha="${TFSEC_SHA256_AMD64}" ;;
+    arm64) _sha="${TFSEC_SHA256_ARM64}" ;;
+    *)
+      log_warn "no pinned tfsec sha256 for ${_LINUX_ARCH}; skipping"
+      return 0
+      ;;
+  esac
+  _install_pinned_release_binary tfsec "${TFSEC_VER}" \
+    "${_TFSEC_URL:-https://github.com/aquasecurity/tfsec/releases/download/v${TFSEC_VER}/tfsec-linux-${_LINUX_ARCH}}" \
+    "${_TFSEC_SHA256:-${_sha}}" raw '^v1\.28\.14$'
+}
+
 _install_ubuntu_misc() {
   printf "Installing docker-compose Ubuntu\\n"
   if [[ ! -f ${HOME}/software_downloads/docker-compose_${DOCKER_COMPOSE_VER} ]]; then
@@ -750,6 +867,10 @@ _install_ubuntu_misc() {
       printf "opentofu already installed\\n"
     fi
   fi
+
+  # Each is self-gated on HAS_DEVTOOLS and advisory, as the dotnet install above.
+  _install_ubuntu_tflint || log_warn "tflint install failed; skipping"
+  _install_ubuntu_tfsec || log_warn "tfsec install failed; skipping"
 
   check_and_install_nala
   # </dev/null: same job-control hang as update_apt_packages in lib/linux_shared.sh.
