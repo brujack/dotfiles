@@ -534,6 +534,7 @@ setup_ansible() {
       local _uv
       _uv="$(resolve_uv)" || return 1
       uv_sync_venv "${_uv}" "${PYENV_ROOT}/versions/ansible/bin/python" "${PYENV_ROOT}/versions/ansible" || return 1
+      install_pyenv_rehash_hook || log_warn "pyenv rehash hook not installed — see above"
       pyenv rehash
     fi
   fi
@@ -564,6 +565,7 @@ recreate_python_venv() {
     local _uv
     _uv="$(resolve_uv)" || return 1
     uv_sync_venv "${_uv}" "${_python}" "${PYENV_ROOT}/versions/${_venv_name}" || return 1
+    install_pyenv_rehash_hook || log_warn "pyenv rehash hook not installed — see above"
     pyenv rehash
   fi
 }

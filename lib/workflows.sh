@@ -223,6 +223,13 @@ run_setup_user() {
   # what reports the gap rather than this line failing the whole workflow.
   install_renovate_held_agent || log_warn "renovate cadence agent not installed — see above"
   install_ledger_drift_agent || log_warn "ledger drift cadence agent not installed — see above"
+  # A no-op when ~/.pyenv/versions does not exist yet (install_pyenv_rehash_hook's
+  # own guard), which is true here on a fresh host -- setup_user runs before pyenv
+  # creates versions/. Called anyway so it is a no-op the FIRST time and installs
+  # the hook on every re-run once pyenv exists, rather than depending solely on
+  # setup_ansible/recreate_python_venv to have installed it by the time a rehash
+  # runs outside those two call sites.
+  install_pyenv_rehash_hook || log_warn "pyenv rehash hook not installed — see above"
 
   _ledger_write_run_entry "setup_user" 0 || true
 }

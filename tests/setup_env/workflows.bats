@@ -372,6 +372,31 @@ teardown() {
   [ "$(sed -n '2p' "${_log}")" = "sweep" ]
 }
 
+# ── run_setup_user: install_pyenv_rehash_hook wiring ──────────────────────────
+#
+# Advisory, like install_renovate_held_agent/install_ledger_drift_agent
+# above: a machine that cannot install the rehash hook must still complete
+# setup_user.
+
+@test "run_setup_user calls install_pyenv_rehash_hook" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  local _marker="${BATS_TEST_TMPDIR}/pyenv_rehash_hook.ran"
+  install_pyenv_rehash_hook() { touch "${_marker}"; return 0; }
+  run run_setup_user
+  [ "$status" -eq 0 ]
+  [ -f "${_marker}" ]
+}
+
+@test "run_setup_user returns 0 when install_pyenv_rehash_hook fails" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  install_pyenv_rehash_hook() { return 1; }
+  run run_setup_user
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"pyenv rehash hook not installed"* ]]
+}
+
 @test "setup_env.sh passes bash -n with the git_hooks.sh source line" {
   run bash -n "${REPO_ROOT}/setup_env.sh"
   [ "$status" -eq 0 ]

@@ -731,6 +731,87 @@ component add rust-analyzer" ]
   fi
 }
 
+# ── install_pyenv_rehash_hook wiring: setup_ansible / recreate_python_venv ──
+#
+# A fresh host runs -t setup_user before pyenv creates versions/, so
+# install_pyenv_rehash_hook's own [[ -d "${_root}/versions" ]] guard skips
+# there. The FIRST rehash that can see the venv's console scripts is the one
+# right after uv_sync_venv -- so the install must land strictly before that
+# rehash, not merely somewhere in the function. A presence-only assertion
+# (both lines appear in MOCK_CALLS_FILE) passes on the broken order too, so
+# these assert relative line position via grep -n.
+
+@test "setup_ansible: installs the pyenv rehash hook before pyenv rehash" {
+  export LINUX=1; unset MACOS
+  export HAS_DEVTOOLS=1
+  install_pyenv_rehash_hook() { printf 'hook-install\n' >> "${MOCK_CALLS_FILE}"; }
+  run setup_ansible
+  [ "${status}" -eq 0 ]
+  local _hook_line _rehash_line
+  _hook_line="$(grep -n '^hook-install$' "${MOCK_CALLS_FILE}" | head -1 | cut -d: -f1)"
+  _rehash_line="$(grep -n '^pyenv rehash$' "${MOCK_CALLS_FILE}" | head -1 | cut -d: -f1)"
+  [ -n "${_hook_line}" ]
+  [ -n "${_rehash_line}" ]
+  [ "${_hook_line}" -lt "${_rehash_line}" ]
+}
+
+@test "setup_ansible: pyenv rehash still runs and its rc propagates when the hook install fails" {
+  export LINUX=1; unset MACOS
+  export HAS_DEVTOOLS=1
+  # setup_ansible's earlier pyenv virtualenv-delete/virtualenv/activate calls
+  # are bare statements (unchecked), so a blanket MOCK_PYENV_EXIT only ever
+  # reaches the function's rc via the LAST pyenv call -- pyenv rehash, which
+  # is also the function's own last statement. Pick a value distinct from the
+  # spy's rc (1) so a pass can't be explained by the hook's rc leaking through
+  # the warn-and-continue wrapper instead.
+  export MOCK_PYENV_EXIT=3
+  install_pyenv_rehash_hook() { return 1; }
+  run setup_ansible
+  [ "${status}" -eq 3 ]
+  grep -q "^pyenv rehash$" "${MOCK_CALLS_FILE}"
+}
+
+@test "recreate_python_venv: installs the pyenv rehash hook before pyenv rehash" {
+  export LINUX=1; unset MACOS
+  export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
+  install_pyenv_rehash_hook() { printf 'hook-install\n' >> "${MOCK_CALLS_FILE}"; }
+  run recreate_python_venv ansible
+  [ "${status}" -eq 0 ]
+  local _hook_line _rehash_line
+  _hook_line="$(grep -n '^hook-install$' "${MOCK_CALLS_FILE}" | head -1 | cut -d: -f1)"
+  _rehash_line="$(grep -n '^pyenv rehash$' "${MOCK_CALLS_FILE}" | head -1 | cut -d: -f1)"
+  [ -n "${_hook_line}" ]
+  [ -n "${_rehash_line}" ]
+  [ "${_hook_line}" -lt "${_rehash_line}" ]
+}
+
+@test "recreate_python_venv: pyenv rehash still runs and its rc propagates when the hook install fails" {
+  export LINUX=1; unset MACOS
+  export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
+  # Unlike setup_ansible, recreate_python_venv's `pyenv virtualenv ... ||
+  # return 1` and `pyenv activate ... || return 1` ARE checked, so the
+  # tests/mocks/pyenv blanket MOCK_PYENV_EXIT would abort the function before
+  # it ever reaches pyenv rehash -- the assertion under test could never be
+  # reached. Shadow `pyenv` with a local function instead: every subcommand
+  # but rehash succeeds (matching the real mock's logging format), and only
+  # rehash carries MOCK_PYENV_EXIT, distinct from the spy's rc (1) so a pass
+  # can't be explained by the hook's rc leaking through instead.
+  export MOCK_PYENV_EXIT=3
+  pyenv() {
+    printf "pyenv %s\n" "$*" >> "${MOCK_CALLS_FILE}"
+    case "$1" in
+      init | virtualenv-init) return 0 ;;
+      which) printf '%s\n' "${MOCK_PYENV_WHICH_STDOUT}"; return 0 ;;
+      rehash) return "${MOCK_PYENV_EXIT}" ;;
+      *) return 0 ;;
+    esac
+  }
+  install_pyenv_rehash_hook() { return 1; }
+  run recreate_python_venv ansible
+  [ "${status}" -eq 3 ]
+  grep -q "^pyenv rehash$" "${MOCK_CALLS_FILE}"
+}
+
 @test "resolve_uv fails with an install remedy when uv is genuinely absent" {
   unset UV_BIN
   # Empty PATH plus an empty candidate list is the only way to reach this
