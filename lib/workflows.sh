@@ -246,6 +246,10 @@ run_setup_or_developer() {
     install_ubuntu_packages || return 1
   fi
 
+  # Same degrade-not-abort shape as install_aws_tools below: an absent
+  # toolchain or one broken crate must not cost pyenv/ansible/ruby/rust.
+  install_cargo_tools || log_warn "cargo tools incomplete — see above"
+
   # Advisory, like install_renovate_held_agent/install_ledger_drift_agent above
   # in run_setup_user: a wget hiccup or a missing gpg on a fresh machine must
   # not abort setup_or_developer before setup_vim_plugins and
@@ -793,6 +797,33 @@ run_update() {
     _update_skip "tpm" "flag not set"
     _update_skip "cheat.sh" "flag not set"
     _update_skip "zsh-autosuggestions" "flag not set"
+  fi
+
+  # ── cargo-tools ────────────────────────────────────────────────────────────
+  # Deliberately its OWN block, outside the _run_all-only region above, and
+  # gated on the same condition as brew itself: --brew-only repairs exactly
+  # the failure mode this section exists for -- brew upgrading a linked
+  # libgit2/openssl out from under a cargo-installed binary (spec Part 3) --
+  # so --brew-only must reach it, unlike update_rust, which sits inside the
+  # _run_all-only block and is unreachable from --brew-only. Only its
+  # display position in _UPDATE_SECTION_ORDER comes directly after rust.
+  # A first run, or a pin bump in lib/constants.sh's CARGO_TOOLS, compiles
+  # every absent/older crate from source and can take tens of minutes.
+  if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_BREW:-} ]]; then
+    if [[ -z ${HAS_RUST:-} ]]; then
+      _update_skip "cargo-tools" "HAS_RUST not set"
+    else
+      _update_record_start "cargo-tools"
+      install_cargo_tools 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_cargo-tools"
+      local _cargo_tools_rc="${PIPESTATUS[0]}"
+      _update_record_end "cargo-tools" "$(( _cargo_tools_rc == 2 ? 0 : _cargo_tools_rc ))"
+      if [[ ${_cargo_tools_rc} -eq 2 ]]; then
+        _update_warn "cargo-tools" "one or more tools failed to install — see detail"
+        _update_write_detail_from_err "cargo-tools" "install output"
+      fi
+    fi
+  else
+    _update_skip "cargo-tools" "flag not set"
   fi
 
   # ── gems ──────────────────────────────────────────────────────────────────
