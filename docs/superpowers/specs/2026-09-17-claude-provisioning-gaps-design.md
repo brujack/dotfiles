@@ -314,7 +314,7 @@ components, per `shell.md`'s semver pitfall, and never lexically.
     left alone.
   - `absent` or `older`: `cargo install --locked <crate>@<version>`.
   - `broken`: `cargo install --locked --force <crate>@<version>`.
-- **tarpaulin links a vendored libgit2 on Linux.** It builds with
+- **tarpaulin builds with a vendored libgit2 on both platforms.** On Linux it builds with
   `LIBGIT2_NO_PKG_CONFIG=1`, so `git2-sys` compiles its bundled libgit2 instead of linking
   linuxbrew's. Measured on `claude` on 2026-09-17 with
   `cargo install --locked --root <scratch> cargo-tarpaulin@0.35.2`:
@@ -323,14 +323,27 @@ components, per `shell.md`'s semver pitfall, and never lexically.
   - `env -i ldd` shows no linuxbrew path and no `not found`.
   - The binary runs.
 
-  So a brew libgit2 soname bump cannot break a tarpaulin **built this way**. An Ubuntu
-  OpenSSL major could, and `broken` recovers from that. No rpath flag is used. Existing
-  rpath builds (on `claude`, from 2026-09-17) still probe `ok` and keep their brew link
-  until they break. The next `-t update` run then rebuilds them vendored.
-- **macOS: no flag, which is unmeasured.** The Studio's hand-installed tarpaulin links
-  `/opt/homebrew/opt/libgit2/lib/libgit2.1.9.dylib`, so a brew bump can break it there, and
-  the `broken` → `--force` path in `-t update` is the recovery. The flag is not applied on
-  macOS until it has been measured there.
+  No rpath flag is used on either platform.
+- **macOS: the same flag, measured.** A scratch build on the Studio on 2026-09-17
+  (`LIBGIT2_NO_PKG_CONFIG=1 cargo install --locked --root <scratch> cargo-tarpaulin@0.35.2`)
+  compiled `libgit2-sys` from source:
+  - `otool -L` shows no libgit2. The remaining links are system frameworks plus
+    `/opt/homebrew/opt/openssl@3/lib/libssl.3.dylib` and `libcrypto.3.dylib`.
+  - The binary runs.
+  - For comparison, the Studio's existing hand install links
+    `/opt/homebrew/opt/libgit2/lib/libgit2.1.9.dylib`.
+
+  So the flag applies on **both** platforms, and neither is on a break-and-repair cycle
+  keyed to brew's libgit2 releases.
+- **What can still break a vendored build, and what then happens.**
+  - Only an OpenSSL major version change breaks it. On macOS that means the `openssl@3`
+    keg being removed; on Linux, Ubuntu's `libssl.so.3` being replaced.
+  - That is a rare, one-time event. The next `-t update` then sees `broken` and rebuilds
+    once against the new library, so `--force` is a one-off rebuild, not a recurring
+    cycle.
+- **Existing hand installs** still link brew libgit2: the Studio's, and `claude`'s rpath
+  build. They probe `ok` until a libgit2 bump breaks them. The first `-t update` after that
+  rebuilds them vendored, and they leave the cycle permanently.
 - Tri-state return: 0 all `ok`/`newer`; 2 some crates failed (named on stderr); 1 `cargo`
   unresolvable.
 
@@ -499,14 +512,20 @@ absent. Cases that delete a shim run against a **scratch copy of `PYENV_ROOT`**,
 4. **The Part 2 doctor arm can fail.** Point `_OVERRIDE_PYENV_ROOT` at case 1's no-hook
    scratch root. Expected: FAIL naming `pytest`. Pointed at the hooked root: PASS with a
    non-zero count.
-5. **pwsh and tfenv install for real on `claude`.** `pwsh`, tfenv, `terraform`, `tfsec`
-   and `zig` are absent there, while `tflint` is hand-installed. Run
-   `setup_env.sh -t doctor` first. Expect exactly four WARNs (`pwsh`, `terraform`, `tfsec`,
-   `zig`) and one PASS (`tflint`): that is the negative. Then run `setup_env.sh -t developer`. Expected:
+5. **pwsh and tfenv install for real on `claude`.** On 2026-09-17, `pwsh`, tfenv,
+   `terraform`, `tfsec` and `zig` were absent there and `tflint` was hand-installed. The
+   case does **not** freeze that inventory.
+   - **Before.** For each of the five tools, run the doctor arm's own probe (resolve, then
+     the version command under `timeout 10` from `${HOME}`) and record set `A` (does not
+     run) and set `P` (runs). Then run `setup_env.sh -t doctor`.
+   - **The negative.** The set of tools doctor WARNs on equals `A`, and the set it PASSes
+     equals `P`. `A` must be non-empty, or the case cannot exercise any install and is
+     reported as such, not passed.
+   - **Then** run `setup_env.sh -t developer`. Expected:
    - `microsoft-prod.list` reads `24.04`.
    - `/usr/local/bin/terraform` and `/usr/local/bin/tfenv` are symlinks into `~/.tfenv/bin`.
    - `terraform version`'s first line is `Terraform v1.15.6`.
-   - A second `-t doctor` shows PASS for all five.
+   - A second `-t doctor` WARNs on the empty set and PASSes all five.
 6. **Release-binary installs run for real without touching `/usr/local/bin`.** On
    `claude`, call `_install_pinned_release_binary` for `tflint` and `tfsec` with
    `_RELEASE_BIN_DIR` set to a scratch directory the caller owns, so no `sudo`. Expected:
@@ -964,3 +983,20 @@ Finding: No issues. The reviewer checked each point against the code:
 
 Assumption: no uncertain assumption found. All candidates were verified directly.
 Disposition: N/A — clean, no action needed.
+
+### External architect review (after round 8, commit `a231d1a8`)
+
+Finding:
+
+1. The macOS tarpaulin row was stated as a "recovery" but was really a break-and-repair
+   cycle: each brew libgit2 bump breaks it, and `--force` rebuilds it against the new
+   libgit2 unvendored.
+2. Verification case 5's exact WARN count depends on `claude`'s tool inventory staying
+   frozen between approval and verification. Use set equality with the set derived at run
+   time.
+
+Disposition: Addressed. For (1) the cycle was removed rather than documented. The author
+measured `LIBGIT2_NO_PKG_CONFIG=1` on the Studio (no libgit2 in `otool -L`, the binary
+runs), and the flag now applies on both platforms. For (2), case 5 records the not-running
+set `A` and the running set `P` at run time and asserts that the WARN and PASS sets equal
+them; an empty `A` is reported as not exercised, never as passed.
