@@ -1,6 +1,6 @@
 # Close the provisioning gaps found moving sessions to `claude`
 
-> **Status:** Draft, revision 6 — spec review pending.
+> **Status:** Draft, revision 7 — spec review pending.
 
 ## Problem
 
@@ -123,8 +123,8 @@ and returned 0.
 
 ## Design
 
-This is revision 6. It replaces revision 5 (`37b04d9a`); earlier revisions are
-`5fdb8df0`, `1987f7c8`, `9fa812a9` and `41eb9352`. The Multi-Lens Review section below records why. One branch, one PR, six
+This is revision 7. It replaces revision 6 (`b6c7f44b`); earlier revisions are
+`37b04d9a`, `5fdb8df0`, `1987f7c8`, `9fa812a9` and `41eb9352`. The Multi-Lens Review section below records why. One branch, one PR, six
 independent parts, each testable alone.
 
 ### Part 1: a pyenv rehash hook that registers every shim, whatever `sort` is
@@ -194,7 +194,8 @@ unset _dotfiles_rehash_opts
   `lib/helpers.sh` runs
   `install -m 0644 <repo>/pyenv.d/rehash/dotfiles-register-all-executables.bash`
   into `${PYENV_ROOT:-${HOME}/.pyenv}/pyenv.d/rehash/`.
-  - It returns 0 and does nothing when `${PYENV_ROOT}/versions` does not exist. A host
+  - It returns 0 and does nothing when `${PYENV_ROOT:-${HOME}/.pyenv}/versions` does not
+    exist. The gate uses the same default expansion as the install path. A host
     with no pyenv gets no `pyenv.d` state.
   - Otherwise it creates the directory, and it skips the install when `cmp -s` shows the
     copy is already current.
@@ -204,8 +205,15 @@ unset _dotfiles_rehash_opts
     checkout on other branches for hours (2026-08-12, 2026-08-24). A copy cannot dangle.
   - **Cost.** After the hook file changes in the repo, the copy stays stale until the next
     refresh.
-  - **Called from:** `run_setup_user`, and the `pyenv-shims` section of `run_update`
-    (Part 2).
+  - **Called from four places:**
+    - `run_setup_user`;
+    - the end of `setup_ansible` (`lib/developer.sh`);
+    - the end of `run_recreate_venv`;
+    - the `pyenv-shims` section of `run_update` (Part 2).
+  - `setup_ansible` and `run_recreate_venv` are needed because `-t setup_user` runs before
+    pyenv creates `versions/` on a fresh host (`setup_env.sh:96` before
+    `lib/workflows.sh:295`). Without them the gate would leave a new machine hookless until
+    its first `-t update`.
   - On `claude` and the Studio, `pyenv.d` does not exist yet. On `workstation`, `~/.pyenv`
     is a pyenv 2.7.2 git clone, so the copy lands as an untracked file there, and
     `pyenv update` (`developer.sh:487`) tolerates it.
@@ -234,8 +242,17 @@ a gate breaks. The arm checks the outcome, so it also catches any future rehash 
   section runs after `pip`, in its own block gated on
   `_run_all || UPDATE_BREW || UPDATE_PIP`, and is added to `_UPDATE_SECTION_ORDER` after
   `pip-check`.
-  - First it calls `install_pyenv_rehash_hook`, then `pyenv rehash`, using the
-    `pyenv` resolved the same way `setup_ansible` resolves it.
+  - First it calls `install_pyenv_rehash_hook`, then `pyenv rehash`.
+    - **pyenv resolution.** The section resolves pyenv itself, following the pip section's
+      pattern at `lib/workflows.sh:510-515`: export `PYENV_ROOT`, prepend
+      `${PYENV_ROOT}/bin:${PYENV_ROOT}/shims` to `PATH`, then `command -v pyenv`. It cannot
+      inherit that `PATH`, because under `--brew-only` the pip block never runs.
+    - **A failed rehash is recorded, not fatal.** Its rc goes into the section detail and
+      the section continues to the missing-shim check, which reports the consequence. A
+      rehash can wait up to 60 s for pyenv's lock (`PYENV_REHASH_TIMEOUT`). A lock left by
+      a rehash killed under 2 minutes earlier is not yet stale (`find -mmin +2`), so that
+      wait can end in rc 1. Measured in `libexec/pyenv-rehash` on pyenv 2.8.6 (`claude`)
+      and 2.7.2 (`workstation`).
     - Why rehash first: `uv sync` in the `pip` section writes console scripts straight into
       the venv without a rehash. Checking before a rehash would WARN on a correct run.
     - The check afterwards therefore reports only shims that a rehash could not produce.
@@ -531,16 +548,19 @@ In the suite:
   `|| true`.
 - `install_pyenv_rehash_hook`:
   - with no `versions/` it creates nothing;
+  - `setup_ansible` and `run_recreate_venv` each call it (spy);
   - it creates the directory and copies the hook;
   - `cmp`-equal means no rewrite;
   - a changed source is re-copied;
   - the result is a regular file, not a symlink.
-- The `pyenv-shims` update section: `pyenv rehash` is called before the check; WARN naming a missing shim; SKIP without a venv;
+- The `pyenv-shims` update section: `pyenv rehash` is called before the check; a failing rehash still reaches the check and records its rc; under `--brew-only` pyenv resolves without the pip block; WARN naming a missing shim; SKIP without a venv;
   SKIP under `--gems-only`.
 - `_check_cv_cargo_tools` against a fixture crates.io response: `[OK]`, `[OUTDATED]`
-  with `latest=`, and `[WARN]` on a failed fetch. Also assert that the `curl` argv
-  recorded by `tests/mocks/curl` carries `-A` with a non-empty User-Agent; the fixture
-  alone cannot see a missing header.
+  with `latest=`, and `[WARN]` on a failed fetch. Also assert that the `curl` call recorded by `tests/mocks/curl` carries `-A` followed by
+  a non-space token; the fixture alone cannot see a missing header. The mock logs `$*`,
+  which flattens quoting, so match the token, not the quoted string. Set
+  `MOCK_CALLS_FILE` in the test so the log does not fall back to the shared
+  `/tmp/mock_calls`.
 - `_install_pinned_release_binary`: a `PATH` binary at the pinned version does not cause
   a skip when `_RELEASE_BIN_DIR` is empty.
 - `_install_ubuntu_tfenv`, each against a fixture `/usr/local/bin`:
@@ -863,3 +883,30 @@ including `47871b2d rehash: drop redundant sort -u from make_shims call` and
 `8037f226 rehash: streamline executables discovery`. The internals churn, so the rationale
 holds.
 Disposition: Addressed (revision 6). The operator chose "apply fixes, one more scoped review": crates.io requests send a User-Agent, with a suite argv assertion; cases 1 and 3 check for a regular copied file; `pyenv rehash` runs before the update shim check; the hook install is gated on `${PYENV_ROOT}/versions`.
+
+### Round 6 (scoped risk review of revision 6 changes, reviewed at commit `b6c7f44b`)
+
+Finding:
+
+1. DESIGN. The `versions/` gate means a fresh host never gets the hook from provisioning:
+   `run_setup_user` runs before `setup_ansible` creates `versions/`, and nothing else calls
+   the install until `-t update`. APPARATUS: the gate wrote `${PYENV_ROOT}/versions`
+   without the default expansion.
+2. APPARATUS. "Resolved the same way `setup_ansible` resolves it" is vague: that function
+   uses three mechanisms. The concrete precedent is `lib/workflows.sh:510-515`, and it is
+   not inherited under `--brew-only`.
+3. DESIGN, minor. The rehash rc is unspecified, and the rehash can wait 60 s for the lock
+   and then exit 1 when a lock is under 2 minutes old.
+4. APPARATUS. The `-A` assertion is implementable: `tests/mocks/curl:8-9` logs `curl $*`.
+   Match the token and set `MOCK_CALLS_FILE`.
+5. Nothing else contradictory. The User-Agent names the operator's email, which is already
+   public in commit metadata. Noted, not raised.
+
+Assumption: `-t setup_user` runs after pyenv versions exist. The reviewer expects this is
+false for a fresh host (`setup_env.sh:96` vs `lib/workflows.sh:295`), which finding 1
+addresses.
+Disposition: Addressed (revision 7). The operator chose "apply fixes, another scoped
+review": the hook is also installed from `setup_ansible` and `run_recreate_venv`; the gate
+uses the default expansion; pyenv resolution names `lib/workflows.sh:510-515`; a failed
+rehash is recorded and non-fatal, with the 60 s wait stated; the `-A` test matches the
+token and sets `MOCK_CALLS_FILE`.
