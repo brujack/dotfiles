@@ -1,6 +1,6 @@
 # Close the provisioning gaps found moving sessions to `claude`
 
-> **Status:** Draft, revision 3 — spec review pending.
+> **Status:** Draft, revision 4 — spec review pending.
 
 ## Problem
 
@@ -92,6 +92,17 @@ with `error while loading shared libraries: libgit2.so.1.9`. Rebuilding with
 `RUSTFLAGS="-C link-args=-Wl,-rpath,/home/linuxbrew/.linuxbrew/lib"` gave a working
 binary. `ldd` over every `~/.cargo/bin/cargo-*` then reported no `not found` line.
 
+**Added in revision 2: `terraform` and `tfsec`.** terraform_ansible
+`aws-terraform/ca-central-1/Makefile:18-23` runs `terraform validate`, `tflint` and
+`tfsec`. `workstation` has both tools, `claude` has neither. On the Mac and on
+`workstation`, terraform comes from **tfenv**:
+
+- The Mac has `brew "tfenv"` (`Brewfile:118`).
+- `workstation` has `/usr/local/bin/terraform` and `/usr/local/bin/tfenv` symlinked into a
+  `~/.tfenv` clone of `tfutils/tfenv`, whose global version is 1.14.9.
+- `run_update` already `git pull`s `~/.tfenv` when it exists (`lib/workflows.sh:632`).
+- No `lib/linux_*.sh` provisions tfenv.
+
 ### D4. `pwsh` never installs on a box that first provisioned before the RESOLUTE fix
 
 `_install_ubuntu_powershell` skips everything while
@@ -112,8 +123,8 @@ and returned 0.
 
 ## Design
 
-This is revision 3. It replaces revision 2 (`9fa812a9`), which replaced revision 1
-(`41eb9352`). The Multi-Lens Review section below records why. One branch, one PR, six
+This is revision 4. It replaces revision 3 (`1987f7c8`), which replaced revisions 2
+(`9fa812a9`) and 1 (`41eb9352`). The Multi-Lens Review section below records why. One branch, one PR, six
 independent parts, each testable alone.
 
 ### Part 1: a pyenv rehash hook that registers every shim, whatever `sort` is
@@ -155,13 +166,17 @@ which is additive, so duplicates are harmless. `pyenv-hooks` globs
 # the same glob here, without sort, restores it for every caller. See
 # docs/superpowers/specs/2026-09-17-claude-provisioning-gaps-design.md.
 declare -f make_shims >/dev/null || return 0
-_dotfiles_rehash_opts="$(shopt -p nullglob dotglob)"
+_dotfiles_rehash_opts="$(shopt -p nullglob dotglob || true)"
 shopt -s nullglob dotglob
 make_shims "${PYENV_ROOT}"/versions/*/bin/* "${PYENV_ROOT}"/versions/*/envs/*/bin/*
 eval "${_dotfiles_rehash_opts}"
 unset _dotfiles_rehash_opts
 ```
 
+- **`|| true` on the capture is load-bearing.** `shopt -p` exits 1 when any named
+  option is off, and `pyenv-rehash` runs under `set -e`. Without it the assignment aborts
+  every rehash. Round 3 measured this: a scratch `PYENV_ROOT` gave rc 1 and zero shims.
+  With `|| true`, both option lines are captured on bash 3.2 and 5.3.
 - **The hook owns its glob options.** On `workstation`, `~/.pyenv` is a pyenv 2.7.2 git
   clone with `pyenv.d/rehash/conda.bash`, and that hook runs `shopt -u dotglob nullglob`
   before ours (hooks run in alphabetical order). Without its own `nullglob`, an unmatched
@@ -183,8 +198,8 @@ unset _dotfiles_rehash_opts
 - **Dangling link.** The link targets the main checkout. If that checkout is ever on a
   branch without the file, `pyenv-hooks`' `realpath` fails and rehash errors loudly on
   every login shell, but removes nothing. This is accepted and recorded.
-- **macOS:** the hook runs and is a no-op, because the BSD/GNU `sort` list is already
-  complete.
+- **macOS:** the hook runs, and it registers only names already in the list from BSD `sort`.
+  Round 3 showed this holds only with the `|| true` above, which the suite pins.
 - **No `.zprofile` change.** The operator's uncommitted `.zprofile` edit is untouched.
 
 ### Part 2: doctor verifies the outcome, whatever the mechanism
@@ -231,7 +246,7 @@ none.
 - `broken`: listed but `--help` exits non-zero.
 - `absent`: not listed.
 
-`--help` is the probe because `cargo zigbuild --version` exits 2 while all eight exit 0 on
+A non-executable subcommand binary makes `cargo <sub> --help` exit 101, measured on `claude` with a scratch `cargo-zzz` at mode 644, so `chmod -x` yields `broken`. `--help` is the probe because `cargo zigbuild --version` exits 2 while all eight exit 0 on
 `--help`. A load failure exits 127 whatever the argv. Versions are compared by numeric
 components, per `shell.md`'s semver pitfall, and never lexically.
 
@@ -246,13 +261,21 @@ components, per `shell.md`'s semver pitfall, and never lexically.
     left alone.
   - `absent` or `older`: `cargo install --locked <crate>@<version>`.
   - `broken`: `cargo install --locked --force <crate>@<version>`.
-- On Linux, tarpaulin's link strategy is decided by one measurement in the plan. The plan
-  builds it with `LIBGIT2_NO_PKG_CONFIG=1` and checks `readelf -d` NEEDED. If no linuxbrew
-  `libgit2` appears, that flag is used and nothing depends on a brew soname. Otherwise the
-  rpath flag (`-C link-args=-Wl,-rpath,$(brew --prefix)/lib`) is used and the `broken`
-  path is the recovery. `readelf -d` on the current `claude` build lists NEEDED
-  `libgit2.so.1.9`, `libssl.so.3`, `libcrypto.so.3`, `libgcc_s` and `libc`, so a libgit2
-  soname bump or an OpenSSL major breaks it.
+- **tarpaulin links a vendored libgit2 on Linux.** It builds with
+  `LIBGIT2_NO_PKG_CONFIG=1`, so `git2-sys` compiles its bundled libgit2 instead of linking
+  linuxbrew's. Measured on `claude` on 2026-09-17 with
+  `cargo install --locked --root <scratch> cargo-tarpaulin@0.35.2`:
+  - `readelf -d` NEEDED lists only `libz.so.1`, `libssl.so.3`, `libcrypto.so.3`,
+    `libgcc_s.so.1` and `libc.so.6`, with no RUNPATH.
+  - `env -i ldd` shows no linuxbrew path and no `not found`.
+  - The binary runs.
+
+  So a brew libgit2 soname bump cannot break it. An Ubuntu OpenSSL major could, and that
+  is what `broken` recovers from. No rpath flag is used.
+- **macOS: no flag, which is unmeasured.** The Studio's hand-installed tarpaulin links
+  `/opt/homebrew/opt/libgit2/lib/libgit2.1.9.dylib`, so a brew bump can break it there, and
+  the `broken` → `--force` path in `-t update` is the recovery. The flag is not applied on
+  macOS until it has been measured there.
 - Tri-state return: 0 all `ok`/`newer`; 2 some crates failed (named on stderr); 1 `cargo`
   unresolvable.
 
@@ -260,12 +283,16 @@ components, per `shell.md`'s semver pitfall, and never lexically.
 
 - `run_setup_or_developer`, after the platform installs:
   `install_cargo_tools || log_warn "cargo tools incomplete — see above"`.
-- **The end of `run_update`**, as a new `cargo-tools` section registered in
-  `_UPDATE_SECTION_ORDER` after `brew`. `-t update`'s `brew upgrade` and `cleanup` are what
-  break tarpaulin, so the repair runs in the same command that caused the break. When
-  everything is `ok` this costs one list read plus eight `--help` probes (0.13 s measured
-  on `claude`). The rc maps to a status the same way `git-hooks` does: 2 is WARN, 1 is
-  FAIL.
+- **`run_update`**, as a `cargo-tools` section added to `_UPDATE_SECTION_ORDER` directly
+  after `rust`:
+  - It runs after `update_rust`, gated on `_run_all || UPDATE_BREW`. `brew upgrade` and
+    `cleanup` are what can break a linked binary, so `--brew-only` repairs it, while
+    `--pip-only`, `--gems-only` and `--claude-only` render it `SKIP`.
+  - With `HAS_RUST` unset it calls `_update_skip "cargo-tools" "HAS_RUST not set"`, never
+    `[OK]`.
+  - The rc maps to a status the same way `git-hooks` does: 2 is WARN, 1 is FAIL.
+  - When all tools are `ok` it costs one list read plus eight `--help` probes (0.13 s on
+    `claude`).
 - **No cargo doctor arm.** `-t update`'s summary is where the result is read.
 
 **Rollout cost, stated.** `workstation` has `HAS_RUST` and today only `cargo-auditable`
@@ -274,45 +301,64 @@ minutes. The Studio has all eight at the pins and compiles nothing. `personal_la
 `wsl2_workstation` also carry `HAS_RUST` and are unmeasured. On the WSL VM this is expected
 to be substantially longer, and the first run there is the operator's call.
 
-### Part 4: Linux terraform tooling (`zig`, `tflint`, `terraform`, `tfsec`)
+### Part 4: Linux terraform tooling (`zig`, `tflint`, `tfsec`, tfenv)
 
 **4a. `zig`.** Add it to the `_install_ubuntu_brew_packages` formula loop. `brew install
 zig` gave 0.16.0 on `claude`, the Studio's version.
 
-**4b. One helper for pinned release binaries.** `tflint`, `terraform` and `tfsec` share the
-same shape: a pinned version, a per-arch sha256, a download, a verify, an install to
-`/usr/local/bin`. That is three consumers, so one helper earns its place.
+**4b. `tflint` and `tfsec` through one pinned release-binary helper.** The two share an
+identical sequence: pinned version, per-arch sha256, download, `sha256sum -c`, extract,
+install. That sequence is exactly where a hand copy drops the verify step, so two
+consumers are enough to justify one helper here.
 
-`_install_pinned_release_binary <name> <version> <url> <sha256> <kind> <version-probe>`:
+`_install_pinned_release_binary <name> <version> <url> <sha256> <kind> <version-line-regex>`:
 
-- `<kind>` is `zip`, `tar.gz` or `raw`.
-- It skips when `<version-probe>` output contains `<version>`.
-- Otherwise: `curl -fsSL` into a `mktemp -d`, `sha256sum -c`, extract per kind, then
-  `sudo install -m 0755` into `${_RELEASE_BIN_DIR:-/usr/local/bin}`.
-- It returns 1 on a download, checksum or extract failure. A checksum failure installs
-  nothing.
-- Seams: `_RELEASE_BIN_DIR` plus a per-tool URL/SHA override. The digest is exposed and
-  `sha256sum` is never mocked.
+- `<kind>` is `zip` or `raw`.
+- It skips when the tool's version output has a **whole line** matching
+  `<version-line-regex>`, anchored `^…$`. A substring match is not enough, because
+  `tflint --version` also prints an "out of date … latest is X" line.
+- Otherwise: `curl -fsSL` into a `mktemp -d` removed by a subshell `EXIT` trap (per
+  `shell.md`), `sha256sum -c`, extract per kind, then `sudo install -m 0755` into
+  `${_RELEASE_BIN_DIR:-/usr/local/bin}`.
+- It returns 1 on any failure, and a checksum failure installs nothing.
+- Seams: `_RELEASE_BIN_DIR` and per-tool URL/SHA overrides. `sha256sum` is never mocked.
+- Call site: `_install_ubuntu_tflint` and `_install_ubuntu_tfsec`, gated on
+  `HAS_DEVTOOLS`, called beside the OpenTofu block. Each is advisory: `|| log_warn`, as
+  `dotnet` is.
 
-Pins in `lib/constants.sh`, all fetched 2026-09-17 from each project's own checksum file:
+| tool | version | artifact | version line | amd64 sha256 | arm64 sha256 |
+| --- | --- | --- | --- | --- | --- |
+| tflint | 0.61.0 | `tflint_linux_<arch>.zip` | `^TFLint version 0\.61\.0$` | `ca4e4e8cb7cc3436f2b6979e9c4fd4e2623a66fcca1ad1fe12f8669967636ae2` | `999c25cfdb5208fe1133dec6b219e666a39fc2a7a0786a781dc9924ea5945ebf` |
+| tfsec | 1.28.14 | `tfsec-linux-<arch>` (raw) | `^v1\.28\.14$` | `a32d0799bbefababaa4fcd814da9f4d251cd932789590b99d1d5fcb89ace6f68` | `7b872b0e8f398abebc21ab78f6c0535029ff649f0d18f0f3454a01bece3006a2` |
 
-| tool | version | artifact | amd64 sha256 | arm64 sha256 |
-| --- | --- | --- | --- | --- |
-| tflint | 0.61.0 | `tflint_linux_<arch>.zip` | `ca4e4e8cb7cc3436f2b6979e9c4fd4e2623a66fcca1ad1fe12f8669967636ae2` | `999c25cfdb5208fe1133dec6b219e666a39fc2a7a0786a781dc9924ea5945ebf` |
-| terraform | 1.15.6 (existing `TERRAFORM_VER`) | `terraform_1.15.6_linux_<arch>.zip` | `a7150d3b0e1b5c466ad42e8c499954a3c54645f8b56b385fa025d34f7e88faa9` | `404c9cfa43728d31005f6e7a848b8a7cc701320067d9d87d8850031a5beb37b0` |
-| tfsec | 1.28.14 | `tfsec-linux-<arch>` (raw) | `a32d0799bbefababaa4fcd814da9f4d251cd932789590b99d1d5fcb89ace6f68` | `7b872b0e8f398abebc21ab78f6c0535029ff649f0d18f0f3454a01bece3006a2` |
-
-- `TERRAFORM_VER` gains a real `lib/` consumer, so its annotation (currently "no lib/
-  consumer") is updated. The header comment naming `TFLINT_VER`/`TFSEC_VER` as deleted dead
+- The version-line formats were measured on `workstation`: `TFLint version 0.61.0`, and
+  tfsec's banner followed by `v1.28.4`.
+- `workstation`'s tfsec is a regular hand-installed file at 1.28.4, so the pin replaces it
+  with 1.28.14. That is not a symlink, so nothing is managed through it.
+- tfsec is archived upstream in favour of Trivy. It is pinned because a gate calls it.
+- The header comment in `lib/constants.sh` naming `TFLINT_VER`/`TFSEC_VER` as deleted dead
   pins is corrected in the same edit.
-- **Consumer.** terraform_ansible `aws-terraform/ca-central-1/Makefile:18-23` runs
-  `terraform validate`, `tflint` and `tfsec`. `cloudflare/` and `proxmox/` run `tflint`.
-- `workstation` runs terraform 1.14.9 today, so the pin moves it to 1.15.6, the repo's
-  existing pin.
-- tfsec is archived upstream in favour of Trivy. It is pinned because a gate calls it;
-  migrating that gate is terraform_ansible's decision.
-- Gated on `HAS_DEVTOOLS`, called beside the OpenTofu block. Each call is advisory with
-  `log_warn`, matching `dotnet`.
+
+**4c. terraform through tfenv, matching the Mac and `workstation`.** Add
+`_install_ubuntu_tfenv`, gated on `HAS_DEVTOOLS`:
+
+1. If `~/.tfenv` is absent, `git clone https://github.com/tfutils/tfenv.git ~/.tfenv`.
+   That is the layout `run_update`'s existing `tfenv` section already pulls.
+2. For each of `tfenv` and `terraform` in `/usr/local/bin`:
+   - Absent: `sudo ln -s ~/.tfenv/bin/<name>`.
+   - Already a symlink into `~/.tfenv/bin`: leave it.
+   - Anything else (a regular file, or a symlink elsewhere): `log_warn` naming the path,
+     and **do not touch it**. Overwriting is how revision 3 would have silently replaced
+     tfenv.
+3. If `~/.tfenv/version` is absent, run `tfenv install ${TERRAFORM_VER}` then
+   `tfenv use ${TERRAFORM_VER}`. If it exists, the operator chose a version, so leave it
+   (`workstation` stays on 1.14.9). tfenv verifies the download against HashiCorp's
+   `SHA256SUMS` itself.
+4. Any failure: `log_warn` and return 0.
+
+- `TERRAFORM_VER` ("1.15.6") gains a `lib/` consumer, and its annotation is updated.
+- ca-central-1 requires `>= 1.14.0`, which both versions satisfy.
+- **The helper is not used for terraform.**
 
 ### Part 5: `pwsh` installs on a box whose first attempt failed
 
@@ -334,16 +380,19 @@ Measured and accepted:
 - **While `pwsh` keeps failing, every run repeats download, `dpkg -i` and `apt update`.**
   That costs time only.
 
-### Part 6: doctor reports the Linux dev tools
+### Part 6: doctor reports the Linux dev tools (Linux only)
 
 `_doctor_check_dev_tools` in `lib/helpers.sh`, after `_doctor_check_tools`. It WARNs,
 never FAILs, because every install it reports on is advisory.
 
-- `HAS_DEVTOOLS`: `pwsh`, `tflint`, `zig`, `terraform`, `tfsec`. Each must resolve **and**
+- Gated on `LINUX` **and** `HAS_DEVTOOLS`. Macs get these tools from the `Brewfile`, and
+  stock macOS has no `timeout`, so the arm does not run there. On `claude`, `timeout` is
+  `/usr/bin/timeout` (uutils).
+- Tools: `pwsh`, `tflint`, `zig`, `terraform`, `tfsec`. Each must resolve **and**
   run its version probe under `timeout 10`, since a hung binary must not block doctor.
-- Neither `HAS_DEVTOOLS` nor any tool: prints nothing.
-- The probes run with `cd` to `${HOME}`, so no project-local `rust-toolchain.toml` or
-  `.terraform-version` can steer them.
+- Off Linux or without `HAS_DEVTOOLS`: prints nothing.
+- The probes run from `${HOME}`, so `terraform` resolves tfenv's global version and no
+  project-local `.terraform-version` can steer the result.
 
 ## Verification
 
@@ -363,30 +412,36 @@ absent. Cases that delete a shim run against a **scratch copy of `PYENV_ROOT`**,
    `pyenv.d/rehash/aaa.bash` that runs `shopt -u nullglob dotglob`, and a second version
    directory with no `bin/` entries. Expected: no shim named `*`, `pytest` present.
 3. **The login shell no longer breaks gates.** On `claude`, after `-t setup_user` links
-   the hook:
+   the hook, first assert `test -L ~/.pyenv/pyenv.d/rehash/dotfiles-register-all-executables.bash`. Then:
    - Open a login shell, then run `make test` in a clone of math `fib`. Expected: rc 0,
      where it was rc 2 before.
    - **Negative:** already recorded in D1 (rc 2 before the change).
 4. **The Part 2 doctor arm can fail.** Point `_OVERRIDE_PYENV_ROOT` at case 1's no-hook
    scratch root. Expected: FAIL naming `pytest`. Pointed at the hooked root: PASS with a
    non-zero count.
-5. **pwsh install runs for real.** On `claude`, where `pwsh` is absent,
-   `setup_env.sh -t developer`. Expected: `microsoft-prod.list` reads `24.04`,
-   `pwsh -NoProfile -Command exit` rc 0, and doctor PASS for `pwsh`.
+5. **pwsh and tfenv install for real on `claude`.** `pwsh`, tfenv and `terraform` are
+   absent there. Run `setup_env.sh -t doctor` first and expect WARNs for `pwsh` and
+   `terraform`: that is the negative. Then run `setup_env.sh -t developer`. Expected:
+   - `microsoft-prod.list` reads `24.04`.
+   - `/usr/local/bin/terraform` and `/usr/local/bin/tfenv` are symlinks into `~/.tfenv/bin`.
+   - `terraform version`'s first line is `Terraform v1.15.6`.
+   - A second `-t doctor` shows PASS for `pwsh` and `terraform`.
 6. **Release-binary installs run for real without touching `/usr/local/bin`.** On
-   `claude`, call `_install_pinned_release_binary` for each of `tflint`, `terraform` and
-   `tfsec` with `_RELEASE_BIN_DIR` set to a scratch directory. Expected: three binaries,
-   each reporting its pin.
+   `claude`, call `_install_pinned_release_binary` for `tflint` and `tfsec` with
+   `_RELEASE_BIN_DIR` set to a scratch directory. Expected: both binaries, each with its
+   anchored version line.
    - **Negative:** a wrong sha256 override leaves the scratch directory empty.
-7. **Cargo and zig install for real.** On `workstation`, where eight crates and `zig` are
-   absent, run `setup_env.sh -t developer`. The printed lines show eight installs, a
-   `zig` install, and doctor's `zig` WARN turning to PASS. That doctor WARN before the run
-   is the negative control.
-8. **`-t update` repairs `broken` and preserves `newer`.**
-   - On `workstation` after case 7, `chmod -x ~/.cargo/bin/cargo-machete`, then
-     `setup_env.sh -t update`. Expected: the `cargo-tools` section shows one `--force`
-     reinstall and seven `… ok` lines.
-   - Assert on those printed lines, never on the absence of compiles.
+7. **Cargo and zig install for real on `workstation`, and tfenv is preserved.**
+   - Record `readlink /usr/local/bin/terraform` and `cat ~/.tfenv/version` (1.14.9).
+   - Run `setup_env.sh -t doctor`. Expected: a `zig` WARN, the negative.
+   - Run `setup_env.sh -t developer`. Expected: eight crate installs and a `zig` install
+     printed.
+   - Run `-t doctor` again. Expected: `zig` PASS, the `readlink` unchanged, and the
+     version file still 1.14.9.
+8. **`-t update --brew-only` repairs `broken` and preserves `newer`.** On `workstation`
+   after case 7, `chmod -x ~/.cargo/bin/cargo-machete`, then
+   `setup_env.sh -t update --brew-only`. Expected: the `cargo-tools` section prints one
+   `--force` reinstall and seven `… ok` lines. The assertion is on those lines.
 
 In the suite:
 
@@ -410,8 +465,21 @@ In the suite:
   - WARN when the probe times out, using a stub that sleeps past a lowered timeout seam.
   - Silence without `HAS_DEVTOOLS`.
 - `_install_pinned_release_binary`: a sha256 mismatch installs nothing; the skip on a
-  matching version; each of the three `kind` extractors.
-- `run_update`'s `cargo-tools` section: rc 2 renders WARN and rc 1 renders FAIL.
+  matching version; both `kind` extractors (`zip`, `raw`).
+- `run_update`'s `cargo-tools` section:
+  - rc 2 renders WARN and rc 1 renders FAIL.
+  - `--pip-only` renders SKIP.
+  - `HAS_RUST` unset renders SKIP with its reason.
+- Hook test **under `set -e`** with `dotglob` off on entry, the default: rehash-like
+  caller survives and options are restored. This is the case that fails without
+  `|| true`.
+- `_install_ubuntu_tfenv`, each against a fixture `/usr/local/bin`:
+  - absent paths get symlinks;
+  - an existing `~/.tfenv` symlink is left;
+  - a regular file is left, with a WARN;
+  - an existing `version` file suppresses `tfenv use`.
+- The anchored version probe: fixture output carrying the pin only inside an
+  "out of date … latest is 0.61.0" line must not skip.
 
 ## Out of scope
 
@@ -580,7 +648,7 @@ Assumption: tfenv is the intended terraform manager on Linux, as on the Mac. The
 checked: `run_update` already has a tfenv section that `git pull`s a `~/.tfenv` clone
 (`lib/workflows.sh:632`); `workstation`'s clone is `tfutils/tfenv`, last pulled
 2026-04-28; `claude` has none; no `lib/linux_*.sh` provisions it.
-Disposition:
+Disposition: Addressed (revision 4). The operator chose "revision 4, everything": terraform now comes through tfenv on Linux (Part 4c), never overwriting a non-tfenv path or an existing version choice; D3 names terraform and tfsec; `chmod -x` → rc 101 → `broken` is measured; case 6 uses a scratch bin dir.
 
 **Ergonomics.**
 
@@ -600,8 +668,9 @@ Finding:
 
 Assumption: `LIBGIT2_NO_PKG_CONFIG=1` gives a tarpaulin with no linuxbrew dependency. It
 may still link linuxbrew openssl. Settle with `ldd <bin> | grep linuxbrew` after building
-with the flag.
-Disposition:
+with the flag. **Checked by the author on 2026-09-17:** a scratch build on `claude` has no
+linuxbrew NEEDED, no RUNPATH, and runs. Confirmed.
+Disposition: Addressed (revision 4). The cargo-tools update section is gated on `_run_all || UPDATE_BREW`, renders SKIP without `HAS_RUST`, and sits after `rust` in the section order; Part 6 is Linux-only; version probes are anchored whole-line regexes; case 7 runs doctor before and after; case 8 uses `--brew-only`.
 
 **Risk.**
 
@@ -622,4 +691,4 @@ Assumption: every dev machine's login pyenv sources `${PYENV_ROOT}/pyenv.d/rehas
 between `make_shims` and `install_registered_shims`. Checked on `workstation`'s 2.7.2
 clone (lines 191/196/203), so it holds today. Part 2's doctor arm refutes it after any
 pyenv update.
-Disposition:
+Disposition: Addressed (revision 4). `shopt -p … || true`, with a suite case under `set -e`; tfenv is preserved (Part 4c, verification case 7); Part 6 is Linux-only; case 3 asserts the hook link first.
