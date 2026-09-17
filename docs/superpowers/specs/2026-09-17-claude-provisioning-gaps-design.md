@@ -822,3 +822,30 @@ Finding:
 
 Assumption: the main checkout always has the hook file. Refuted by the reflog.
 Disposition: Addressed (revision 5). Standalone cargo-tools block plus a `--brew-only` suite case; hook copied not linked; `ln` destination named; tfenv same-origin checksum stated; `sudo` only when the bin dir is not writable.
+
+### Round 5 (scoped risk review of revision 5 changes, reviewed at commit `37b04d9a`)
+
+Finding:
+
+1. DESIGN, measured. crates.io returns **403** to curl's default User-Agent (tested from
+   the Studio, `claude` and `workstation`), and 200 with `-A 'dotfiles-check (<contact>)'`.
+   `_check_cv_cargo_tools` must send a User-Agent. The fixture test cannot catch this, so
+   add a suite assertion that the curl argv carries `-A`.
+2. APPARATUS. Cases 1 and 3 still say "link" and `test -L`, which fails on a correct copy
+   install.
+3. DESIGN, minor. The `pyenv-shims` section never converges. `uv sync` writes the venv
+   without a rehash, so a new console script WARNs on the same run. Run `pyenv rehash`
+   before the check.
+4. DESIGN, minor. `install_pyenv_rehash_hook` creates `~/.pyenv/pyenv.d/rehash/` on a host
+   with no pyenv. Gate it on an existing `${PYENV_ROOT}/versions`.
+5. Checked clean: `/usr/local/bin` is not user-writable on any of the three hosts, so
+   production still uses `sudo`; the block placement is reachable from `--brew-only`; the
+   copy is refreshed before the check.
+
+Assumption: pyenv upgrades change the rehash internals often enough to justify a check in
+`-t update`. **Checked by the author on 2026-09-17** in `workstation`'s pyenv clone (a
+shallow 303-commit history): `libexec/pyenv-rehash` has 8 commits since 2025-12-05,
+including `47871b2d rehash: drop redundant sort -u from make_shims call` and
+`8037f226 rehash: streamline executables discovery`. The internals churn, so the rationale
+holds.
+Disposition:
