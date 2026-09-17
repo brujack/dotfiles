@@ -7,9 +7,8 @@
 # per-line directive here would otherwise silently do nothing). Genuinely
 # dead pins (no consumer found via `git grep -w <VAR>` across the whole
 # repo) were deleted rather than suppressed — see git history for
-# CHRUBY_VER, GIT_VER, GIT_URL, TFLINT_VER, TFLINT_URL, TFSEC_VER,
-# TFSEC_URL, WSL_HOME. Each remaining constant's real consumer is noted
-# below for readability.
+# CHRUBY_VER, GIT_VER, GIT_URL, WSL_HOME. Each remaining constant's real
+# consumer is noted below for readability.
 # lib/constants.sh — version pins, download URLs, directory locations
 
 # software versions to install
@@ -60,6 +59,17 @@ RUSTUP_INIT_URL="https://static.rust-lang.org/rustup/archive/${RUSTUP_VER}/${_RU
 RUSTUP_INIT_SHA256_X86_64="dda7234360b7f578ca8b0ddcb80145646fa61a67c1720a5abc7051b35c9fcb71"
 # read by lib/linux_ubuntu.sh:_install_rustup_rs
 RUSTUP_INIT_SHA256_AARCH64="15f6e4ce9f583b929c996c91562bad6d4454f3281de858b02cdfdef615fac433"
+# read by lib/developer.sh:install_cargo_tools, lib/workflows.sh:run_check_versions
+CARGO_TOOLS=(
+  "cargo-audit@0.22.1"          # consumer: etch-cli Makefile; math scripts/sbom-sign.sh
+  "cargo-deny@0.19.4"           # consumer: etch-cli Makefile
+  "cargo-insta@1.47.2"          # consumer: etch-cli Makefile
+  "cargo-machete@0.9.2"         # consumer: etch-cli Makefile
+  "cargo-mutants@27.0.0"        # consumer: math *-rs/Makefile; etch-cli Makefile; mutation-pr skill
+  "cargo-semver-checks@0.47.0"  # consumer: etch-cli Makefile
+  "cargo-tarpaulin@0.35.2"      # consumer: per-crate coverage gate; DoD coverage evidence
+  "cargo-zigbuild@0.22.3"       # consumer: etch-cli Makefile
+)
 # read by lib/linux_ubuntu.sh:_install_ubuntu_nvidia
 # Ubuntu's own repo ships this metapackage (610.57.04-0ubuntu0.26.04.3 on resolute),
 # so the driver needs no third-party source — only the container toolkit does.
@@ -85,7 +95,15 @@ RUBY_INSTALL_VER="0.10.2"
 RUBY_VER="4.0.5"
 # read by lib/workflows.sh:run_check_versions
 SHELLCHECK_VER="0.11.0"
-# read by tests/setup_env/unit.bats semver check (terraform installs via package manager, no lib/ consumer)
+# read by lib/linux_ubuntu.sh:_install_ubuntu_tflint
+TFLINT_VER="0.61.0"
+TFLINT_SHA256_AMD64="ca4e4e8cb7cc3436f2b6979e9c4fd4e2623a66fcca1ad1fe12f8669967636ae2"
+TFLINT_SHA256_ARM64="999c25cfdb5208fe1133dec6b219e666a39fc2a7a0786a781dc9924ea5945ebf"
+# read by lib/linux_ubuntu.sh:_install_ubuntu_tfsec
+TFSEC_VER="1.28.14"
+TFSEC_SHA256_AMD64="a32d0799bbefababaa4fcd814da9f4d251cd932789590b99d1d5fcb89ace6f68"
+TFSEC_SHA256_ARM64="7b872b0e8f398abebc21ab78f6c0535029ff649f0d18f0f3454a01bece3006a2"
+# read by lib/linux_ubuntu.sh:_install_ubuntu_tfenv
 TERRAFORM_VER="1.15.6"
 # read by lib/linux_ubuntu.sh:_install_ubuntu_hashicorp, lib/workflows.sh:run_check_versions
 VAGRANT_VER="2.4.9"
