@@ -816,10 +816,25 @@ run_update() {
       _update_record_start "cargo-tools"
       install_cargo_tools 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_cargo-tools"
       local _cargo_tools_rc="${PIPESTATUS[0]}"
-      _update_record_end "cargo-tools" "$(( _cargo_tools_rc == 2 ? 0 : _cargo_tools_rc ))"
-      if [[ ${_cargo_tools_rc} -eq 2 ]]; then
-        _update_warn "cargo-tools" "one or more tools failed to install — see detail"
-        _update_write_detail_from_err "cargo-tools" "install output"
+      if [[ ${_cargo_tools_rc} -eq 1 ]]; then
+        # rc 1 means install_cargo_tools could not resolve a cargo binary
+        # at all -- an ABSENCE, not a failure. Reachable on a fresh mac:
+        # `brew "rustup"` is keg-only and nothing in the macOS install path
+        # runs `rustup default`/`rustup-init`, so a HAS_RUST box can have
+        # no ~/.cargo/bin/cargo yet. Same treatment update_rust already
+        # gives the identical condition ("rustup not found; skipping Rust
+        # update"; return 0) -- FAIL here would make every future
+        # `-t update` on that box exit 1 forever.
+        _update_skip "cargo-tools" "cargo not found"
+      else
+        # rc 2 (some pins failed to install) stays a distinct WARN, so the
+        # two cases -- no toolchain at all vs. a toolchain that installed
+        # some tools and not others -- remain distinguishable.
+        _update_record_end "cargo-tools" "$(( _cargo_tools_rc == 2 ? 0 : _cargo_tools_rc ))"
+        if [[ ${_cargo_tools_rc} -eq 2 ]]; then
+          _update_warn "cargo-tools" "one or more tools failed to install — see detail"
+          _update_write_detail_from_err "cargo-tools" "install output"
+        fi
       fi
     fi
   else

@@ -86,21 +86,80 @@ teardown() {
   [[ "$(cat "${_DOTFILES_RUN_TMPDIR}/detail_cargo-tools")" == *"cargo-tarpaulin"* ]]
 }
 
-@test "run_update marks cargo-tools FAIL when install_cargo_tools returns 1" {
+# F2 fix round: install_cargo_tools prints one "cargo tools: <crate> <ver>
+# ok" line per satisfied pin, and _update_write_detail_from_err keeps only
+# tail -10 of the merged output -- with several "ok" lines after an early
+# failure, that failure's own line can fall out of the retained window
+# before the operator reads it. This test exercises the REAL
+# install_cargo_tools (via the shared tests/mocks/cargo, not a stub) with
+# two crates absent and six present at their pin, so it also regression-
+# guards lib/developer.sh's fix directly: the fix appends a final "cargo
+# tools: failed: <names>" summary line, guaranteed by position to be the
+# newest line in the file and therefore always inside the tail -10 window
+# regardless of how many "ok" lines came before it -- removing that line
+# (or the fix that produces it) turns this test red even though today's
+# 8-pin CARGO_TOOLS array is too short to trigger the truncation itself.
+@test "run_update's cargo-tools detail file names both failed crates when several others succeed" {
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  export HAS_RUST=1
+  export MOCK_CARGO_LIST
+  MOCK_CARGO_LIST="$(cat <<'LIST'
+cargo-insta v1.47.2:
+    cargo-insta
+cargo-machete v0.9.2:
+    cargo-machete
+cargo-mutants v27.0.0:
+    cargo-mutants
+cargo-semver-checks v0.47.0:
+    cargo-semver-checks
+cargo-tarpaulin v0.35.2:
+    cargo-tarpaulin
+cargo-zigbuild v0.22.3:
+    cargo-zigbuild
+LIST
+)"
+  # cargo-audit and cargo-deny are absent from the list above, so both
+  # trigger a real `cargo install --locked` call through the mock, which
+  # fails every install call uniformly via MOCK_CARGO_INSTALL_EXIT.
+  export MOCK_CARGO_INSTALL_EXIT=3
+  run_update
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cargo-tools")" = "WARN" ]
+  [ -f "${_DOTFILES_RUN_TMPDIR}/detail_cargo-tools" ]
+  [[ "$(cat "${_DOTFILES_RUN_TMPDIR}/detail_cargo-tools")" == *"cargo tools: failed: cargo-audit cargo-deny"* ]]
+}
+
+@test "run_update skips cargo-tools ('cargo not found') when install_cargo_tools returns 1 -- no resolvable toolchain is an absence, not a failure" {
+  # F1 fix round: a fresh mac has no resolvable cargo (rustup is keg-only
+  # and nothing in the macOS install path runs `rustup default`), so this
+  # is reachable on real hardware, not just a test fixture. FAIL here would
+  # make every future `-t update` on that box exit 1 forever. update_rust
+  # already treats the identical condition as a skip ("rustup not found;
+  # skipping Rust update"; return 0) -- this test now pins the same
+  # behaviour, replacing the prior version that pinned FAIL and therefore
+  # encoded the behaviour under question.
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
   export HAS_RUST=1
   install_cargo_tools() {
     printf 'cargo not found\n' >&2
     return 1
   }
-  # run_update's overall status is 1 when any section FAILs (_update_summary
-  # returns $(( _fail > 0 ))), so this needs `run` -- a bare call would abort
-  # the test body under bats' own set -e semantics. `run` forks a subshell,
-  # so exports made inside run_update (including _DOTFILES_RUN_TMPDIR) don't
-  # survive back into this test body -- assert on the printed summary row
-  # instead of reading status_cargo-tools, same as the git-hooks FAIL test.
-  run run_update
-  [[ "$output" == *"[FAIL] cargo-tools"* ]]
+  run_update
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cargo-tools")" = "SKIP" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_cargo-tools")" = "cargo not found" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cargo-tools")" != "FAIL" ]
+}
+
+@test "run_update marks cargo-tools WARN, not SKIP or FAIL, when install_cargo_tools returns 2 -- distinct from the rc-1 absence case" {
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  export HAS_RUST=1
+  install_cargo_tools() {
+    printf 'cargo tools: cargo-tarpaulin install failed\n' >&2
+    return 2
+  }
+  run_update
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cargo-tools")" = "WARN" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cargo-tools")" != "SKIP" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cargo-tools")" != "FAIL" ]
 }
 
 @test "run_update marks cargo-tools OK when install_cargo_tools returns 0" {
@@ -127,4 +186,21 @@ teardown() {
   run run_setup_or_developer
   [ "$status" -eq 0 ]
   [[ "$output" == *"cargo tools incomplete"* ]]
+}
+
+@test "run_setup_or_developer calls install_cargo_tools AFTER install_macos_packages, not before" {
+  # F4 (spec review, low): nothing previously pinned the ordering, and the
+  # platform install is what provides cargo (rustup/cargo land via the
+  # Brewfile) -- moving the call before install_macos_packages passed all
+  # other tests, so only an explicit order log catches a regression. Same
+  # order.log + sed -n '1p'/'2p' style as the existing
+  # "run_setup_user calls install_git_hooks_all_repos after
+  # setup_claude_plugins" test in tests/setup_env/workflows.bats.
+  local _log="${BATS_TEST_TMPDIR}/order.log"
+  : > "${_log}"
+  install_macos_packages() { printf 'macos\n' >> "${_log}"; return 0; }
+  install_cargo_tools() { printf 'cargo-tools\n' >> "${_log}"; return 0; }
+  run run_setup_or_developer
+  [ "$(sed -n '1p' "${_log}")" = "macos" ]
+  [ "$(sed -n '2p' "${_log}")" = "cargo-tools" ]
 }

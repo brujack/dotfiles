@@ -772,6 +772,17 @@ install_cargo_tools() {
   done
 
   if ((${#_failed[@]} > 0)); then
+    # The detail file run_update builds from this function's merged
+    # stdout+stderr keeps only the LAST 10 lines (tail -10) -- with enough
+    # "ok" lines after an early failure, that per-crate "install failed"
+    # line can fall out of the window entirely before the operator ever
+    # reads it. This summary is deliberately the LAST thing this function
+    # prints, on stdout rather than stderr so the existing single-failure
+    # unit test in tests/setup_env/cargo_tools.bats (which asserts stderr
+    # is exactly one line) stays accurate -- the merged capture in
+    # run_update reads both streams together regardless of which one this
+    # line uses, so the guarantee is unaffected by the channel choice.
+    printf 'cargo tools: failed: %s\n' "${_failed[*]}"
     return 2
   fi
   return 0
