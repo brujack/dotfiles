@@ -103,6 +103,15 @@ _install_ubuntu_powershell() {
     return 0
   fi
 
+  # apt exits 0 for "powershell is already the newest version" even when the
+  # installed binary is broken -- the `claude` failure mode one level out.
+  # Re-run the same execution check the guard opened with rather than
+  # trusting apt's own exit status for this claim.
+  if ! "${_PWSH_BIN:-pwsh}" -NoProfile -Command exit &>/dev/null; then
+    log_warn "powershell: apt install succeeded but pwsh still does not run"
+    return 0
+  fi
+
   printf "pwsh is installed\\n"
 }
 
