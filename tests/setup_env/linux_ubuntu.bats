@@ -1,4 +1,10 @@
 #!/usr/bin/env bats
+#
+# `run !` (negated run) needs bats >= 1.5.0. Declared rather than assumed:
+# without it bats only warns, and on an older bats the negation would be
+# mis-parsed silently -- tdd.md pitfall G, where the local toolchain cannot
+# express the failure. CI installs 1.10.0 via apt; this box has 1.14.0.
+bats_require_minimum_version 1.5.0
 
 setup() {
   REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
@@ -34,6 +40,27 @@ setup() {
 
 teardown() {
   rm -f "${MOCK_CALLS_FILE:-}"
+}
+
+# Writes a stub pwsh binary to a fresh directory and prints its full path.
+# `_rc` is the exit status the stub returns when RUN -- 0 for "pwsh already
+# works", nonzero for "pwsh resolves but does not run", which is the
+# distinction _install_ubuntu_powershell's guard exists to make (a
+# `command -v`-only guard cannot see it: the file exists and is executable
+# either way). For "pwsh is absent entirely", callers point `_PWSH_BIN` at a
+# path this helper never creates, e.g. "${BATS_TEST_TMPDIR}/nonexistent-pwsh".
+_pwsh_stub_dir() {
+  local _rc="${1:-0}" _dir
+  _dir="$(mktemp -d -p "${BATS_TEST_TMPDIR}")"
+  cat > "${_dir}/pwsh" << EOF
+#!/usr/bin/env bash
+exit ${_rc}
+EOF
+  # /bin/chmod, not the mocked `chmod` load_mocks put ahead of it on PATH --
+  # that mock is a pass-through that ALSO logs to MOCK_CALLS_FILE, which
+  # would pollute the very log a caller asserting "nothing was called" reads.
+  /bin/chmod +x "${_dir}/pwsh"
+  printf '%s/pwsh' "${_dir}"
 }
 
 # ── _install_ubuntu_base_packages ────────────────────────────────────────────
@@ -169,17 +196,110 @@ teardown() {
 
 # ── _install_ubuntu_powershell ───────────────────────────────────────────────
 
+@test "_install_ubuntu_powershell: pwsh already runs — installs nothing" {
+  _PWSH_BIN="$(_pwsh_stub_dir 0)"
+  run _install_ubuntu_powershell
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"pwsh is installed"* ]]
+  # Guard must return before touching wget/dpkg/sudo/apt.
+  ! grep -qE "^(wget|dpkg|sudo|apt) " "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_powershell: pwsh resolves but does not run still installs" {
+  # A `command -v pwsh`-only guard would see this stub as "installed" (it
+  # exists and is executable) and stop here -- the guard must actually RUN
+  # it. This is the case a command-v mutation of the guard cannot pass.
+  _PWSH_BIN="$(_pwsh_stub_dir 1)"
+  run _install_ubuntu_powershell
+  [ "$status" -eq 0 ]
+  grep -q "wget.*packages-microsoft-prod.deb" "${MOCK_CALLS_FILE}"
+  grep -q "dpkg -i" "${MOCK_CALLS_FILE}"
+  grep -q "apt update" "${MOCK_CALLS_FILE}"
+  grep -qE "apt install powershell" "${MOCK_CALLS_FILE}"
+}
+
 @test "_install_ubuntu_powershell: calls wget for packages-microsoft-prod.deb" {
+  _PWSH_BIN="${BATS_TEST_TMPDIR}/nonexistent-pwsh"
   run _install_ubuntu_powershell
   [ "$status" -eq 0 ]
   grep -q "wget.*packages-microsoft-prod.deb" "${MOCK_CALLS_FILE}"
 }
 
-@test "_install_ubuntu_powershell: skips wget when deb already downloaded" {
+@test "_install_ubuntu_powershell: a stale .deb from a prior failed attempt does not block reinstall" {
+  # The regression this task exists to fix: a box whose first attempt hit the
+  # resolute gap (see comment in lib/linux_ubuntu.sh) downloaded and
+  # dpkg -i'd the WRONG config and left the .deb behind. Every run since
+  # skipped the whole block because the file existed -- measured on `claude`,
+  # 2026-09-17. The guard must now be independent of any pre-existing .deb.
   touch "${HOME}/software_downloads/packages-microsoft-prod.deb"
+  _PWSH_BIN="${BATS_TEST_TMPDIR}/nonexistent-pwsh"
   run _install_ubuntu_powershell
   [ "$status" -eq 0 ]
-  ! grep -q "wget.*packages-microsoft-prod.deb" "${MOCK_CALLS_FILE}"
+  grep -q "wget.*packages-microsoft-prod.deb" "${MOCK_CALLS_FILE}"
+  grep -q "dpkg -i" "${MOCK_CALLS_FILE}"
+  grep -q "apt update" "${MOCK_CALLS_FILE}"
+  grep -qE "apt install powershell" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_powershell: wget failure warns naming wget and skips dpkg/apt" {
+  _PWSH_BIN="${BATS_TEST_TMPDIR}/nonexistent-pwsh"
+  export MOCK_WGET_EXIT=1
+  run _install_ubuntu_powershell
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[WARN]"* ]]
+  [[ "$output" == *"wget"* ]]
+  # `run !` (not a follow-up `[ "$status" -eq 0 ]`) IS the assertion: bats
+  # fails the test itself, with "expected nonzero exit code!", if the negated
+  # command succeeds -- i.e. if "dpkg -i" WAS logged. $status after `run !`
+  # is the un-negated grep status, so asserting on it again would check the
+  # wrong thing.
+  run ! grep -q "dpkg -i" "${MOCK_CALLS_FILE}"
+  ! grep -q "^apt " "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_powershell: dpkg failure warns naming dpkg and skips apt" {
+  _PWSH_BIN="${BATS_TEST_TMPDIR}/nonexistent-pwsh"
+  export MOCK_DPKG_EXIT=1
+  run _install_ubuntu_powershell
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[WARN]"* ]]
+  [[ "$output" == *"dpkg"* ]]
+  grep -q "wget.*packages-microsoft-prod.deb" "${MOCK_CALLS_FILE}"
+  ! grep -q "^apt " "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_powershell: apt update failure warns naming apt update and skips apt install" {
+  _PWSH_BIN="${BATS_TEST_TMPDIR}/nonexistent-pwsh"
+  export MOCK_APT_EXIT=1
+  run _install_ubuntu_powershell
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[WARN]"* ]]
+  [[ "$output" == *"apt update"* ]]
+  grep -q "dpkg -i" "${MOCK_CALLS_FILE}"
+  ! grep -q "install powershell" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_powershell: apt install failure warns after a successful apt update" {
+  # MOCK_APT_EXIT is one binary for both `apt update` and `apt install`, so
+  # asserting install-only failure needs a stub that discriminates by
+  # argument -- do not edit tests/mocks/apt, which every other test depends
+  # on defaulting to success.
+  _PWSH_BIN="${BATS_TEST_TMPDIR}/nonexistent-pwsh"
+  local _stub_dir="${BATS_TEST_TMPDIR}/apt-install-fails"
+  mkdir -p "${_stub_dir}"
+  cat > "${_stub_dir}/apt" << 'EOF'
+#!/usr/bin/env bash
+printf "apt %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+[[ "$1" == "install" ]] && exit 1
+exit 0
+EOF
+  chmod +x "${_stub_dir}/apt"
+  PATH="${_stub_dir}:${PATH}" run _install_ubuntu_powershell
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[WARN]"* ]]
+  [[ "$output" == *"apt install"* ]]
+  grep -q "apt update" "${MOCK_CALLS_FILE}"
+  grep -q "apt install powershell" "${MOCK_CALLS_FILE}"
 }
 
 # ── _install_ubuntu_go ───────────────────────────────────────────────────────
@@ -1302,6 +1422,7 @@ STUB
   # DEFAULT rather than the fix. Force the mock to report resolute so unfixed
   # code builds a 26.04 URL and this test can actually go red.
   export MOCK_LSB_RELEASE_RS="26.04"
+  _PWSH_BIN="${BATS_TEST_TMPDIR}/nonexistent-pwsh"
   run _install_ubuntu_powershell
   [ "$status" -eq 0 ]
   # packages.microsoft.com/config/ubuntu/26.04 exists (HTTP 200) and its
@@ -1317,6 +1438,7 @@ STUB
   # used, rather than asserting the absence of 26.04 -- an absence that is
   # trivially true whenever the mock does not emit 26.04 in the first place.
   export MOCK_LSB_RELEASE_RS="24.10"
+  _PWSH_BIN="${BATS_TEST_TMPDIR}/nonexistent-pwsh"
   run _install_ubuntu_powershell
   [ "$status" -eq 0 ]
   grep -qE "wget.*config/ubuntu/24\.10/packages-microsoft-prod\.deb" "${MOCK_CALLS_FILE}"

@@ -58,6 +58,15 @@ _install_ubuntu_base_packages() {
 }
 
 _install_ubuntu_powershell() {
+  # Judge by whether pwsh RUNS, not merely resolves -- a box whose first
+  # attempt hit the resolute gap below downloaded and dpkg -i'd the WRONG
+  # config, leaving a `pwsh` that resolves via `command -v` but is absent or
+  # broken. A presence-only guard would loop forever on that box.
+  if "${_PWSH_BIN:-pwsh}" -NoProfile -Command exit &>/dev/null; then
+    printf "pwsh is installed\\n"
+    return 0
+  fi
+
   printf "Installing powershell Ubuntu\\n"
   # Microsoft publishes a 26.04 config (HTTP 200) whose `resolute` dist carries
   # ZERO powershell packages -- measured 2026-09-12, against 54 in 24.04/noble.
@@ -66,17 +75,35 @@ _install_ubuntu_powershell() {
   # the fallback belongs on the CONFIG url, not on a dist codename.
   local _ms_rel="${_MS_CONFIG_REL:-$(lsb_release -rs)}"
   [[ -n "${RESOLUTE:-}" ]] && _ms_rel="24.04"
-  if [[ ! -f ${HOME}/software_downloads/packages-microsoft-prod.deb ]]; then
-    wget -O "${HOME}"/software_downloads/packages-microsoft-prod.deb \
-      "https://packages.microsoft.com/config/ubuntu/${_ms_rel}/packages-microsoft-prod.deb"
-    sudo -H dpkg -i "${HOME}"/software_downloads/packages-microsoft-prod.deb
-    sudo apt update
-    sudo -H add-apt-repository universe
-    sudo -H DEBIAN_FRONTEND=noninteractive apt install powershell -y
-    if [[ -x $(command -v pwsh) ]]; then
-      printf "pwsh is installed\\n"
-    fi
+
+  # Independent of any pre-existing .deb: a box whose first attempt failed
+  # (see above) left a stale/wrong .deb behind, and only a fresh download and
+  # a fresh dpkg -i repair it -- measured on `claude`, 2026-09-17. Every step
+  # below checks its own exit status, so one broken upstream repository warns
+  # and returns rather than aborting the whole bootstrap (the dispatcher
+  # calls this function with `|| return 1`).
+  if ! wget -O "${HOME}"/software_downloads/packages-microsoft-prod.deb \
+    "https://packages.microsoft.com/config/ubuntu/${_ms_rel}/packages-microsoft-prod.deb"; then
+    log_warn "powershell: wget for packages-microsoft-prod.deb failed; skipping"
+    return 0
   fi
+
+  if ! sudo -H dpkg -i "${HOME}"/software_downloads/packages-microsoft-prod.deb; then
+    log_warn "powershell: dpkg -i packages-microsoft-prod.deb failed; skipping"
+    return 0
+  fi
+
+  if ! sudo apt update; then
+    log_warn "powershell: apt update failed; skipping"
+    return 0
+  fi
+
+  if ! sudo -H DEBIAN_FRONTEND=noninteractive apt install powershell -y; then
+    log_warn "powershell: apt install powershell failed; skipping"
+    return 0
+  fi
+
+  printf "pwsh is installed\\n"
 }
 
 _install_go_from_tarball() {
