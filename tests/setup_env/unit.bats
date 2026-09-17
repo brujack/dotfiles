@@ -18,6 +18,15 @@ setup() {
   # operator's real ~/.pyenv (tdd.md E2). Read-only, but see
   # tests/setup_env/doctor_pyenv_shims.bats for the seam these tests rely on.
   unset PYENV_ROOT
+  # load_setup_env() does NOT set OS vars (CLAUDE.md) -- LINUX/HAS_DEVTOOLS
+  # carry whatever the invoking shell exported. On a real Linux dev machine
+  # (workstation, claude) the profile legitimately exports both, so the
+  # three unstubbed run_doctor tests below (Doctor Report header, PROFILE,
+  # HAS_GUI) would otherwise drive _doctor_check_dev_tools for real -- up to
+  # five 10s-timeout process spawns per run against whatever
+  # pwsh/tflint/zig/terraform/tfsec happen to be installed there (tdd.md
+  # E2). Mirrors doctor_dev_tools.bats' own setup().
+  unset LINUX HAS_DEVTOOLS
 }
 
 teardown() {

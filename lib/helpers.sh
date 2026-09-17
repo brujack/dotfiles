@@ -593,11 +593,31 @@ _doctor_check_dev_tools() {
     return 0
   fi
 
+  # `cd ""` returns 0 and leaves cwd untouched -- an unset HOME would
+  # silently probe from wherever doctor happened to be invoked, letting a
+  # project-local version file (e.g. .terraform-version) steer the result,
+  # which is exactly the property this arm exists to prevent. An unreadable
+  # HOME fails the OTHER direction: `cd` returns 1 for every tool, and five
+  # healthy installs would report "does not run (rc 1)" and send the
+  # operator to reinstall them. Neither is a per-tool problem, so this is
+  # one WARN for the whole arm rather than five misleading verdicts.
+  local _probe_dir="${HOME:-}"
+  if [[ -z "${_probe_dir}" ]] || [[ ! -d "${_probe_dir}" ]]; then
+    printf "\nDev tools:\n"
+    doctor_warn "dev tools" "cannot probe: HOME is unset or unreadable"
+    return 0
+  fi
+
   printf "\nDev tools:\n"
 
   # Resolved once, defensively: an absent `timeout` must not turn every
   # tool's probe into a false "does not run" -- degrade to running the
-  # probe unbounded rather than report the whole arm broken.
+  # probe unbounded rather than report the whole arm broken. The accepted
+  # cost of that degrade: a genuinely hung tool can then block doctor
+  # itself, since nothing bounds the probe any more. Accepted because every
+  # Linux target this arm runs on ships coreutils (and therefore `timeout`)
+  # by construction -- the fallback exists for a shim-scoped test PATH, not
+  # for an expected production gap.
   local _timeout_bin
   _timeout_bin="$(command -v timeout 2>/dev/null)"
 
@@ -619,10 +639,10 @@ _doctor_check_dev_tools() {
 
     if [[ -n "${_timeout_bin}" ]]; then
       # shellcheck disable=SC2086 # word-splitting is the point: ${_args} carries multiple args
-      ( cd "${HOME}" && "${_timeout_bin}" "${_DOCTOR_PROBE_TIMEOUT:-10}" "${_bin}" ${_args} ) &>/dev/null
+      ( cd "${_probe_dir}" && "${_timeout_bin}" "${_DOCTOR_PROBE_TIMEOUT:-10}" "${_bin}" ${_args} ) &>/dev/null
     else
       # shellcheck disable=SC2086 # word-splitting is the point: ${_args} carries multiple args
-      ( cd "${HOME}" && "${_bin}" ${_args} ) &>/dev/null
+      ( cd "${_probe_dir}" && "${_bin}" ${_args} ) &>/dev/null
     fi
     _rc=$?
 
