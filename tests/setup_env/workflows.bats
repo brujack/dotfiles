@@ -2695,12 +2695,16 @@ assert_all_npm_globals_pinned() {
 
 @test "run_check_versions counts warned tools in summary" {
   # 7 tools via _run_cv_check emit [WARN] + 2 more functions (_check_cv_oh_my_zsh,
-  # _check_cv_homebrew_install) also emit [WARN] when curl fails in test env = 9 total.
-  # Was 8 + 2 = 10 until zsh was dropped from the _run_cv_check list on 2026-09-12
+  # _check_cv_homebrew_install) also emit [WARN] when curl fails in test env,
+  # plus the 8 CARGO_TOOLS pins via the real (unstubbed) _check_one_cargo_version,
+  # whose curl call also fails in test env = 17 total. Was 9 until the cargo
+  # loop was added to run_check_versions on 2026-09-17 (crates.io answers for
+  # pins GitHub releases and a command -v PATH probe both cannot). Was 8 + 2 =
+  # 10 until zsh was dropped from the _run_cv_check list on 2026-09-12
   # (apt/brew choose that version, so an upstream comparison is not actionable).
   _check_one_version() { printf "  [WARN]     %-12s could not fetch latest version\n" "$1"; }
   run run_check_versions
-  [[ "$output" == *"9 warnings"* ]]
+  [[ "$output" == *"17 warnings"* ]]
 }
 
 @test "run_check_versions counts OK tools in summary" {

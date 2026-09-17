@@ -987,6 +987,41 @@ _check_cv_homebrew_install() {
   fi
 }
 
+# _check_one_cargo_version <crate> <pinned> -- reports a CARGO_TOOLS pin
+# against crates.io's current max_stable_version. GitHub releases (what
+# _check_one_version above uses) cannot answer for these crates: cargo-audit's
+# releases carry monorepo tags (cargo-audit/vX.Y.Z, not a bare vX.Y.Z), and a
+# `command -v` probe would SKIP every crate because ~/.cargo/bin is not on the
+# non-interactive PATH. crates.io returns 403 to curl's default User-Agent --
+# measured from the Studio, `claude` and `workstation` on 2026-09-17 -- and
+# 200 with -A, so the header is mandatory, not defensive.
+#
+# Report-only: unlike _run_cv_check's tools, these pins live in one array
+# (lib/constants.sh) rather than in an individual variable, so there is no
+# single _var name to hand _prompt_version_update.
+_check_one_cargo_version() {
+  local _crate="$1" _pinned="$2"
+  local _json _latest
+  _json=$(curl -sf -A "dotfiles check-versions (bjackson@pobox.com)" \
+    "${_CRATES_API:-https://crates.io/api/v1/crates}/${_crate}" 2>/dev/null)
+  _latest=$(printf '%s' "${_json}" \
+    | grep -oE '"max_stable_version":"[^"]*"' | head -1 | cut -d'"' -f4)
+
+  if [[ -z "${_latest}" ]]; then
+    printf "  [WARN]     %-20s could not fetch latest version\n" "${_crate}"
+    return 0
+  fi
+
+  local _cmp
+  _cmp="$(_semver_cmp "${_pinned}" "${_latest}")"
+  if [[ "${_cmp}" == "-1" ]]; then
+    printf "  [OUTDATED] %-20s pinned=%-10s latest=%s\n" "${_crate}" "${_pinned}" "${_latest}"
+    return 1
+  fi
+  printf "  [OK]       %-20s pinned=%-10s latest=%s\n" "${_crate}" "${_pinned}" "${_latest}"
+  return 0
+}
+
 run_check_versions() {
   local _outdated=0 _skipped=0 _warned=0 _ok=0
 
@@ -1027,6 +1062,18 @@ run_check_versions() {
   _run_cv_check "gitleaks"  "${GITLEAKS_VER}"    "gitleaks/gitleaks"   "gitleaks version"     "[0-9]+\.[0-9]+\.[0-9]+"    "GITLEAKS_VER"
   _check_cv_oh_my_zsh
   _check_cv_homebrew_install
+
+  local _cargo_pin _cargo_crate _cargo_version _cargo_out
+  for _cargo_pin in "${CARGO_TOOLS[@]}"; do
+    _cargo_crate="${_cargo_pin%@*}"
+    _cargo_version="${_cargo_pin##*@}"
+    _cargo_out=$(_check_one_cargo_version "${_cargo_crate}" "${_cargo_version}" 2>&1)
+    printf '%s\n' "${_cargo_out}"
+    if [[ "${_cargo_out}" == *"[WARN]"* ]];       then _warned=$(( _warned + 1 ))
+    elif [[ "${_cargo_out}" == *"[OUTDATED]"* ]]; then _outdated=$(( _outdated + 1 ))
+    elif [[ "${_cargo_out}" == *"[OK]"* ]];       then _ok=$(( _ok + 1 ))
+    fi
+  done
 
   printf "\n%d outdated, %d skipped, %d warnings, %d OK\n" \
     "${_outdated}" "${_skipped}" "${_warned}" "${_ok}"
