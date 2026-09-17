@@ -1,6 +1,6 @@
 # Close the provisioning gaps found moving sessions to `claude`
 
-> **Status:** Draft, revision 2 — spec review pending.
+> **Status:** Draft, revision 3 — spec review pending.
 
 ## Problem
 
@@ -112,39 +112,39 @@ and returned 0.
 
 ## Design
 
-This is revision 2 and replaces the round-1 design. The Multi-Lens Review section below
-records why. One branch, one PR, four independent parts, each testable alone.
+This is revision 3. It replaces revision 2 (`9fa812a9`), which replaced revision 1
+(`41eb9352`). The Multi-Lens Review section below records why. One branch, one PR, six
+independent parts, each testable alone.
 
 ### Part 1: a pyenv rehash hook that registers every shim, whatever `sort` is
 
-The defect is not in `.zprofile`. It is in `pyenv-versions --executables`, which
-`pyenv-rehash` calls through `sort -u`. Any actor that runs `pyenv rehash` with uutils
-`sort` ahead of GNU loses the `pytest` shim, and at least these reach it:
+The defect is in `pyenv-versions --executables`, which `pyenv-rehash` calls through
+`sort -u`. Any actor that runs `pyenv rehash` with uutils `sort` first on `PATH` loses
+the `pytest` shim. At least these actors reach it:
 
 - `.zprofile:9` (login zsh).
-- `lib/developer.sh:537` and `:567` (`setup_ansible`, `recreate_python_venv`), from
-  `setup_env.sh`'s bash, where no gnubin is on `PATH`.
-- `ssh claude '<cmd>'`, which resolves `sort` to `/usr/bin/sort` (measured by the
-  goal-fit lens).
+- `lib/developer.sh:537` and `:567`, run from `setup_env.sh`'s bash.
+- `ssh claude '<cmd>'`.
 - pyenv's own `install` and `virtualenv` subcommands.
 
-Fixing `PATH` order would need one change per actor. pyenv 2.8.6 offers one choke point
-instead. In `libexec/pyenv-rehash`, the author read the following order:
+Fixing `PATH` order would take one change per actor. `libexec/pyenv-rehash` offers one
+choke point instead. Both lenses and the author read it:
 
 ```
+186: shopt -s nullglob
 193: make_shims $(pyenv-versions --executables)   # the uutils-damaged list
-196: # Allow plugins to register shims.
-198: IFS=$'\n' scripts=(`pyenv-hooks rehash`)   ... source "$script"
+198: IFS=$'\n' scripts=(`pyenv-hooks rehash`) ... source "$script"
 205: install_registered_shims
 206: remove_stale_shims
 ```
 
-`make_shims` takes basenames of the paths it is given and calls `register_shim` for each.
-With bash >= 4 that is an associative-array assignment, so duplicates are harmless and no
-`sort` is involved. A hook sourced at line 198 can therefore register the complete set
-before anything is installed or removed.
+That is on pyenv 2.8.6 (brew) on `claude` and `workstation`, 2.8.5 on the Studio (the
+same lines), and upstream master. `make_shims` takes basenames and calls `register_shim`,
+which is additive, so duplicates are harmless. `pyenv-hooks` globs
+`$path/rehash/*.bash` and resolves symlinks with `realpath`. pyenv-virtualenv's own
+`envs.bash` already calls `make_shims` from a hook, so the pattern is proven.
 
-**The hook.** Add a tracked file `pyenv.d/rehash/dotfiles-register-all-executables.bash`:
+**The hook.** A tracked file, `pyenv.d/rehash/dotfiles-register-all-executables.bash`:
 
 ```bash
 # shellcheck shell=bash
@@ -154,38 +154,61 @@ before anything is installed or removed.
 # pytest shim is never registered and remove_stale_shims deletes it. Registering
 # the same glob here, without sort, restores it for every caller. See
 # docs/superpowers/specs/2026-09-17-claude-provisioning-gaps-design.md.
-shopt -s dotglob
+declare -f make_shims >/dev/null || return 0
+_dotfiles_rehash_opts="$(shopt -p nullglob dotglob)"
+shopt -s nullglob dotglob
 make_shims "${PYENV_ROOT}"/versions/*/bin/* "${PYENV_ROOT}"/versions/*/envs/*/bin/*
-shopt -u dotglob
+eval "${_dotfiles_rehash_opts}"
+unset _dotfiles_rehash_opts
 ```
 
-- **The glob mirrors pyenv's own.** `pyenv-versions --executables` globs
-  `"$versions_dir"/*/bin/* "$versions_dir"/*/envs/*/bin/*` under `dotglob nullglob`, with
-  no executable filter. The hook registers exactly that set, so it cannot add a shim pyenv
-  would not have made.
-- `nullglob` is already on when hooks are sourced (`pyenv-rehash` sets it before line 193),
-  so the hook leaves it alone. `dotglob` is off at that point, so the hook restores it to
-  off.
-- **Install.** `setup_dotfile_symlinks` links the file with `safe_link` to
-  `${PYENV_ROOT:-${HOME}/.pyenv}/pyenv.d/rehash/`, creating the directory. pyenv searches
-  `${PYENV_ROOT}/pyenv.d` (`libexec/pyenv:96`). That directory does not exist on `claude`
-  today, so the link cannot shadow anything.
-- **macOS.** The hook runs there too and is a no-op: GNU/BSD `sort` already keeps both
-  names, and the extra registrations are duplicates.
-- **No `.zprofile` change.** The operator's uncommitted `.zprofile` edit in the main
-  checkout is therefore untouched.
-- **Rejected in round 1:** a `.zprofile` `PATH` prepend (covers one actor);
-  `pyenv init --path --no-rehash` (leaves no automatic rehash); `LC_ALL=C` (unmeasured,
-  one call site).
+- **The hook owns its glob options.** On `workstation`, `~/.pyenv` is a pyenv 2.7.2 git
+  clone with `pyenv.d/rehash/conda.bash`, and that hook runs `shopt -u dotglob nullglob`
+  before ours (hooks run in alphabetical order). Without its own `nullglob`, an unmatched
+  glob would register a shim literally named `*`. The hook sets both options and then
+  restores exactly what its caller had, via `shopt -p`.
+- **Contract guard.** If a pyenv upgrade removes or renames `make_shims`, the hook returns
+  0 and rehash behaves as stock pyenv. It never aborts rehash under `set -e`. Part 2 is
+  what notices that the hook stopped helping.
+- **The glob mirrors pyenv's own** (`versions/*/bin/*`, `versions/*/envs/*/bin/*`, no
+  executable filter), so the hook cannot add a name pyenv's unsorted list would lack. On
+  `workstation` it does re-register names that `conda.bash` deregisters. Those are conda
+  shims, and no conda version is installed on any development machine. The plan confirms
+  with `ls ~/.pyenv/versions` on all three.
+- **Install.** `setup_dotfile_symlinks` links it with `safe_link` into
+  `${PYENV_ROOT:-${HOME}/.pyenv}/pyenv.d/rehash/`, creating the directory.
+  - On `claude` and the Studio that directory does not exist yet.
+  - On `workstation` the link lands as an untracked file inside the pyenv git clone.
+    `pyenv update` (`developer.sh:487`) tolerates untracked files.
+- **Dangling link.** The link targets the main checkout. If that checkout is ever on a
+  branch without the file, `pyenv-hooks`' `realpath` fails and rehash errors loudly on
+  every login shell, but removes nothing. This is accepted and recorded.
+- **macOS:** the hook runs and is a no-op, because the BSD/GNU `sort` list is already
+  complete.
+- **No `.zprofile` change.** The operator's uncommitted `.zprofile` edit is untouched.
 
-**D2 is resolved by removing the cause, not by a detector.** The round-1 doctor shim arm
-is dropped. `make test` already fails loudly on a missing `pytest`, and nothing runs doctor
-on `claude` on a schedule, so the arm added attribution without detection.
+### Part 2: doctor verifies the outcome, whatever the mechanism
 
-### Part 2: provision the cargo plugins, verified by running them
+Add `_doctor_check_pyenv_shims` to `lib/helpers.sh`, called after
+`_doctor_check_gnu_coreutils`. Round 1 dropped this arm as decoration because `make test`
+already fails loudly. Round 2 found it is the only detector for a pyenv upgrade silently
+retiring Part 1's hook, which would bring D1 back on every 26.04 box with no signal until
+a gate breaks. The arm checks the outcome, so it also catches any future rehash defect.
 
-**Pins.** Add `CARGO_TOOLS` to `lib/constants.sh`: eight entries, each with its consumer
-stated in a comment.
+- It returns silently when `${PYENV_ROOT}/versions/ansible/bin` does not exist.
+- For every entry there it expects `${PYENV_ROOT}/shims/<name>`. It FAILs naming the
+  missing shims, with the remedy `pyenv rehash`, and when all are present it PASSes with
+  the count: `pyenv shims: 143 of 143 ansible venv entries shimmed`.
+- **No exclusion list.** After a rehash with GNU `sort`, every entry was shimmed on
+  `claude` (143/143), `workstation` (144/144) and the Studio (142/142).
+- An empty `bin/` WARNs `ansible venv bin is empty`. It never PASSes `0 of 0`.
+- Seam: `_OVERRIDE_PYENV_ROOT`.
+
+### Part 3: cargo plugins, repaired where they break
+
+**Pins.** `CARGO_TOOLS` in `lib/constants.sh`, eight entries, each carrying a consumer
+comment. The plan re-derives every consumer with `git grep` and drops any row that has
+none.
 
 | crate | version | consumer |
 | --- | --- | --- |
@@ -198,166 +221,201 @@ stated in a comment.
 | cargo-tarpaulin | 0.35.2 | per-crate coverage gate; DoD coverage evidence |
 | cargo-zigbuild | 0.22.3 | etch-cli `Makefile` |
 
-`cargo-fuzz` and `cross` are excluded: the goal-fit lens found zero references across
-math, etch-cli, terraform_ansible and ai-config. The plan re-derives every consumer with
-`git grep` before pinning, and drops any row that has none.
+`cargo-fuzz` and `cross` are excluded: no consumer in any repo.
 
-**Readiness is "runs", not "listed".** Both lenses found that a version match in
-`cargo install --list` says nothing about whether the binary loads. tarpaulin links seven
-linuxbrew sonames, including `libgit2.so.1.9` and `libllhttp.so.9.4`, and `-t update` runs
-`brew upgrade` then `brew cleanup` (`lib/helpers.sh:164,175`). So one routine update can
-leave a listed binary that dies at load. Define one helper used by both install and doctor:
+**State.** `_cargo_tool_state <cargo> <crate> <version>` prints one of:
 
-`_cargo_tool_state <cargo> <crate> <version>` prints exactly one of:
+- `ok`: listed at the pin and `<cargo> <sub> --help` exits 0.
+- `newer`: listed at a higher version and `--help` exits 0.
+- `older`: listed at a lower version.
+- `broken`: listed but `--help` exits non-zero.
+- `absent`: not listed.
 
-- `ok`: the list has `<crate> v<version>:` **and** `<cargo> <sub> --help` exits 0, where
-  `<sub>` is the crate name without its `cargo-` prefix.
-- `wrong-version`: the list has the crate at a different version.
-- `broken`: the list has the version but `--help` exits non-zero.
-- `absent`: the crate is not in the list.
-
-The probe is `--help`, not `--version`. On `claude`, all eight exited 0 on `--help`, but
-`cargo zigbuild --version` exits 2. A load failure exits 127 regardless of argv, as
-measured on `claude` for tarpaulin before the rpath rebuild.
+`--help` is the probe because `cargo zigbuild --version` exits 2 while all eight exit 0 on
+`--help`. A load failure exits 127 whatever the argv. Versions are compared by numeric
+components, per `shell.md`'s semver pitfall, and never lexically.
 
 **`install_cargo_tools`** (`lib/developer.sh`):
 
-- Returns 0 immediately when `HAS_RUST` is unset. It prints
-  `cargo tools: skipped (HAS_RUST unset)`, so a skipped run can be told apart from a clean
-  one.
-- Resolves `cargo` as `${HOME}/.cargo/bin/cargo` when executable, else `command -v cargo`.
-  When neither exists it returns 1 with `cargo not found`.
-- Reads `cargo install --list` once, then for each pin acts on `_cargo_tool_state`:
-  - `ok`: print `cargo tools: <crate> <version> ok`.
-  - `absent` or `wrong-version`: `cargo install --locked <crate>@<version>`.
-  - `broken`: `cargo install --locked --force <crate>@<version>`. Without `--force`, cargo
-    reports the version already installed and does nothing.
-- On Linux, `cargo-tarpaulin` builds with
-  `RUSTFLAGS="-C link-args=-Wl,-rpath,${_brew_lib}"`, where `_brew_lib` is
-  `$(brew --prefix)/lib`, resolved once. That flag gave a working binary on `claude`.
-  Building a vendored libgit2 instead would remove the soname exposure. The plan measures
-  one candidate (`LIBGIT2_NO_PKG_CONFIG=1`) with `ldd` and prefers it if `ldd` shows no
-  linuxbrew libgit2. Otherwise the `broken` → `--force` path is the recovery.
-- Return is tri-state, like `_install_ubuntu_brew_packages`: 0 all `ok` after the run,
-  2 some crates failed (named on stderr), 1 `cargo` unresolvable.
-- Called from `run_setup_or_developer` after the platform installs, advisory:
-  `install_cargo_tools || log_warn "cargo tools incomplete — see above; setup_env.sh -t doctor reports the gap"`.
-- **Not in `-t update`.** A broken binary is repaired by the next `-t setup`/`-t developer`,
-  which doctor tells the operator to run.
+- When `HAS_RUST` is unset, it prints `cargo tools: skipped (HAS_RUST unset)` and returns
+  0.
+- `cargo` resolves as `${HOME}/.cargo/bin/cargo` if that is executable, else
+  `command -v cargo`. If neither resolves it prints `cargo not found` and returns 1.
+- Per pin:
+  - `ok` or `newer`: prints `cargo tools: <crate> <installed> ok`. A newer hand install is
+    left alone.
+  - `absent` or `older`: `cargo install --locked <crate>@<version>`.
+  - `broken`: `cargo install --locked --force <crate>@<version>`.
+- On Linux, tarpaulin's link strategy is decided by one measurement in the plan. The plan
+  builds it with `LIBGIT2_NO_PKG_CONFIG=1` and checks `readelf -d` NEEDED. If no linuxbrew
+  `libgit2` appears, that flag is used and nothing depends on a brew soname. Otherwise the
+  rpath flag (`-C link-args=-Wl,-rpath,$(brew --prefix)/lib`) is used and the `broken`
+  path is the recovery. `readelf -d` on the current `claude` build lists NEEDED
+  `libgit2.so.1.9`, `libssl.so.3`, `libcrypto.so.3`, `libgcc_s` and `libc`, so a libgit2
+  soname bump or an OpenSSL major breaks it.
+- Tri-state return: 0 all `ok`/`newer`; 2 some crates failed (named on stderr); 1 `cargo`
+  unresolvable.
 
-**Rollout cost, stated.** `workstation` has `HAS_RUST` and today carries only
-`cargo-auditable` and `cargo-nextest`. The first `-t developer` there compiles all eight
-crates, tens of minutes. Until then doctor reports eight WARNs. Macs with `HAS_RUST` carry
-hand installs at the pinned versions, so they report `ok` and compile nothing.
+**Call sites.**
 
-### Part 3: `zig` and `tflint` on Linux
+- `run_setup_or_developer`, after the platform installs:
+  `install_cargo_tools || log_warn "cargo tools incomplete — see above"`.
+- **The end of `run_update`**, as a new `cargo-tools` section registered in
+  `_UPDATE_SECTION_ORDER` after `brew`. `-t update`'s `brew upgrade` and `cleanup` are what
+  break tarpaulin, so the repair runs in the same command that caused the break. When
+  everything is `ok` this costs one list read plus eight `--help` probes (0.13 s measured
+  on `claude`). The rc maps to a status the same way `git-hooks` does: 2 is WARN, 1 is
+  FAIL.
+- **No cargo doctor arm.** `-t update`'s summary is where the result is read.
 
-**3a. `zig`.** Add `zig` to the `_install_ubuntu_brew_packages` formula loop. On
-2026-09-17, `brew install zig` on `claude` installed 0.16.0, the Studio's version.
+**Rollout cost, stated.** `workstation` has `HAS_RUST` and today only `cargo-auditable`
+and `cargo-nextest`, so its first `-t developer` or `-t update` compiles all eight, tens of
+minutes. The Studio has all eight at the pins and compiles nothing. `personal_laptop` and
+`wsl2_workstation` also carry `HAS_RUST` and are unmeasured. On the WSL VM this is expected
+to be substantially longer, and the first run there is the operator's call.
 
-**3b. `tflint`.** Add `_install_ubuntu_tflint` to `lib/linux_ubuntu.sh`, gated on
-`HAS_DEVTOOLS`, called beside the OpenTofu block.
+### Part 4: Linux terraform tooling (`zig`, `tflint`, `terraform`, `tfsec`)
 
-- Pins in `lib/constants.sh`: `TFLINT_VER="0.61.0"`,
-  `TFLINT_SHA256_AMD64="ca4e4e8cb7cc3436f2b6979e9c4fd4e2623a66fcca1ad1fe12f8669967636ae2"`,
-  `TFLINT_SHA256_ARM64="999c25cfdb5208fe1133dec6b219e666a39fc2a7a0786a781dc9924ea5945ebf"`.
-  Both come from the release's `checksums.txt`, fetched 2026-09-17.
-- Skips when `tflint --version` reports `TFLINT_VER`.
-- Otherwise it downloads `tflint_linux_${_LINUX_ARCH}.zip` with `curl -fsSL`, verifies it
-  with `sha256sum -c`, extracts, and runs `sudo install -m 0755` to
-  `/usr/local/bin/tflint`.
-- Returns 1 on a download or checksum failure. A checksum failure installs nothing.
-- The amd64 binary from exactly this route on `claude` was byte-identical to
-  `workstation`'s `/usr/local/bin/tflint` (sha256 `51ade70d…8a1b`).
-- Seams `_TFLINT_URL`, `_TFLINT_SHA256`, `_TFLINT_BIN_DIR`, following `_RUSTUP_INIT_*`: the
-  digest is exposed and `sha256sum` is never mocked.
+**4a. `zig`.** Add it to the `_install_ubuntu_brew_packages` formula loop. `brew install
+zig` gave 0.16.0 on `claude`, the Studio's version.
 
-### Part 4: `pwsh` installs on a box whose first attempt failed
+**4b. One helper for pinned release binaries.** `tflint`, `terraform` and `tfsec` share the
+same shape: a pinned version, a per-arch sha256, a download, a verify, an install to
+`/usr/local/bin`. That is three consumers, so one helper earns its place.
 
-Rewrite the guard in `_install_ubuntu_powershell`:
+`_install_pinned_release_binary <name> <version> <url> <sha256> <kind> <version-probe>`:
 
-1. If `command -v pwsh` resolves, print `pwsh is installed` and return 0.
-2. Otherwise, always download the Microsoft config `.deb` for the resolved release
-   (`24.04` under `RESOLUTE`, as today) and run `dpkg -i`. This replaces a stale
-   `microsoft-prod.list`.
-3. Run `apt update`, then `apt install powershell -y`, checking every exit status.
-4. On any failure, `log_warn` naming the failed step and return 0. The dispatcher calls
-   this function second, with `|| return 1`, so a hard failure would abort the bootstrap
-   over one upstream repository.
+- `<kind>` is `zip`, `tar.gz` or `raw`.
+- It skips when `<version-probe>` output contains `<version>`.
+- Otherwise: `curl -fsSL` into a `mktemp -d`, `sha256sum -c`, extract per kind, then
+  `sudo install -m 0755` into `${_RELEASE_BIN_DIR:-/usr/local/bin}`.
+- It returns 1 on a download, checksum or extract failure. A checksum failure installs
+  nothing.
+- Seams: `_RELEASE_BIN_DIR` plus a per-tool URL/SHA override. The digest is exposed and
+  `sha256sum` is never mocked.
 
-Accepted costs, measured:
+Pins in `lib/constants.sh`, all fetched 2026-09-17 from each project's own checksum file:
 
-- **Repointing `microsoft-prod.list`.** On `claude` nothing installed comes from it:
-  azure-cli has its own list, and `dotnet-*-10.0` comes from Ubuntu `resolute-updates`.
-  The risk lens confirmed the noble feed carries no `dotnet-*-10.0`. Two lenses checked
-  noble `powershell`'s Depends (`libgcc1`, `libicu76|…`, `libssl3`) and found them
-  satisfied on `claude` by `libgcc-s1`, `libicu78` and `libssl3t64`.
-- **Repeated work while `pwsh` keeps failing.** Each `-t setup`/`-t developer` run
-  downloads again, runs `dpkg -i` and `apt update`, then warns. That costs time only, and
-  it is the price of never skipping on an artifact again.
+| tool | version | artifact | amd64 sha256 | arm64 sha256 |
+| --- | --- | --- | --- | --- |
+| tflint | 0.61.0 | `tflint_linux_<arch>.zip` | `ca4e4e8cb7cc3436f2b6979e9c4fd4e2623a66fcca1ad1fe12f8669967636ae2` | `999c25cfdb5208fe1133dec6b219e666a39fc2a7a0786a781dc9924ea5945ebf` |
+| terraform | 1.15.6 (existing `TERRAFORM_VER`) | `terraform_1.15.6_linux_<arch>.zip` | `a7150d3b0e1b5c466ad42e8c499954a3c54645f8b56b385fa025d34f7e88faa9` | `404c9cfa43728d31005f6e7a848b8a7cc701320067d9d87d8850031a5beb37b0` |
+| tfsec | 1.28.14 | `tfsec-linux-<arch>` (raw) | `a32d0799bbefababaa4fcd814da9f4d251cd932789590b99d1d5fcb89ace6f68` | `7b872b0e8f398abebc21ab78f6c0535029ff649f0d18f0f3454a01bece3006a2` |
 
-### Part 5: `doctor` reports the dev tools
+- `TERRAFORM_VER` gains a real `lib/` consumer, so its annotation (currently "no lib/
+  consumer") is updated. The header comment naming `TFLINT_VER`/`TFSEC_VER` as deleted dead
+  pins is corrected in the same edit.
+- **Consumer.** terraform_ansible `aws-terraform/ca-central-1/Makefile:18-23` runs
+  `terraform validate`, `tflint` and `tfsec`. `cloudflare/` and `proxmox/` run `tflint`.
+- `workstation` runs terraform 1.14.9 today, so the pin moves it to 1.15.6, the repo's
+  existing pin.
+- tfsec is archived upstream in favour of Trivy. It is pinned because a gate calls it;
+  migrating that gate is terraform_ansible's decision.
+- Gated on `HAS_DEVTOOLS`, called beside the OpenTofu block. Each call is advisory with
+  `log_warn`, matching `dotnet`.
 
-Add `_doctor_check_dev_tools` to `lib/helpers.sh`, called from `run_doctor` after
-`_doctor_check_tools`. It WARNs rather than FAILs, because every install it reports on is
-advisory.
+### Part 5: `pwsh` installs on a box whose first attempt failed
 
-- `HAS_DEVTOOLS`: `pwsh`, `tflint` and `zig` must resolve **and** run
-  (`pwsh -NoProfile -Command exit`, `tflint --version`, `zig version`). Output is PASS or
-  WARN.
-- `HAS_RUST`:
-  - `cargo` resolves the same way as `install_cargo_tools`.
-  - Unresolvable `cargo` is one WARN, `cargo not found — run setup_env.sh -t developer`,
-    never eight.
-  - Otherwise, one line per `CARGO_TOOLS` entry from `_cargo_tool_state`. `ok` is PASS.
-    `absent`, `wrong-version` and `broken` each WARN with that word and the remedy
-    `setup_env.sh -t developer`.
-  - If `CARGO_TOOLS` is empty, the arm WARNs `no cargo tools pinned` and does not PASS.
-- Neither capability set: the arm prints nothing.
+1. If `pwsh -NoProfile -Command exit` exits 0, print `pwsh is installed` and return 0. The
+   guard tests that pwsh runs, the same as Part 6.
+2. Otherwise download the Microsoft config `.deb` for the resolved release (`24.04` under
+   `RESOLUTE`) and `dpkg -i` it. That replaces a stale `microsoft-prod.list`.
+3. `apt update`, then `apt install powershell -y`, checking every exit status.
+4. On failure, `log_warn` naming the step and return 0, so one upstream repository cannot
+   abort the bootstrap.
+
+Measured and accepted:
+
+- **noble `pwsh` runs on resolute.** `powershell_7.6.2-1` extracted into a scratch
+  directory on `claude` ran and printed `7.6.2`, rc 0.
+- **Repointing `microsoft-prod.list` affects nothing installed.** azure-cli has its own
+  list, and `dotnet-*-10.0` comes from Ubuntu `resolute-updates`. The noble feed carries no
+  `dotnet-*-10.0`.
+- **While `pwsh` keeps failing, every run repeats download, `dpkg -i` and `apt update`.**
+  That costs time only.
+
+### Part 6: doctor reports the Linux dev tools
+
+`_doctor_check_dev_tools` in `lib/helpers.sh`, after `_doctor_check_tools`. It WARNs,
+never FAILs, because every install it reports on is advisory.
+
+- `HAS_DEVTOOLS`: `pwsh`, `tflint`, `zig`, `terraform`, `tfsec`. Each must resolve **and**
+  run its version probe under `timeout 10`, since a hung binary must not block doctor.
+- Neither `HAS_DEVTOOLS` nor any tool: prints nothing.
+- The probes run with `cd` to `${HOME}`, so no project-local `rust-toolchain.toml` or
+  `.terraform-version` can steer them.
 
 ## Verification
 
-End-to-end, on the real hosts after merge. Every PASS-expected case below has a paired
-negative, so no case can pass only because nothing ran.
+End-to-end, after merge. Cases that exercise install code run where the tool is genuinely
+absent. Cases that delete a shim run against a **scratch copy of `PYENV_ROOT`**, never
+`claude`'s live one, because five sessions use it.
 
-1. **Hook covers a non-login actor.** On `claude`, after `setup_env.sh -t setup_user`
-   links the hook, run `ssh claude 'PYENV_ROOT=$HOME/.pyenv /home/linuxbrew/.linuxbrew/bin/pyenv rehash'`.
-   This rehash uses uutils `sort`. Expected: `~/.pyenv/shims/pytest` present.
-   - **Negative control:** temporarily move the hook link aside, repeat, and expect
-     `pytest` absent. Restore it and rehash again. (The operator is told before this
-     step, because it deletes a shim for a few seconds.)
-2. **The original failures pass.** On `claude`, run `setup_env.sh -t recreate-venv`, open
-   a login shell, then `make test` in a clone of math `fib`. Expected: the shim is
-   present, and rc 0 where it was rc 2.
-3. **Doctor reads runnability.** On `claude`, `setup_env.sh -t doctor` shows eight cargo
-   PASS lines and PASS for `pwsh`, `tflint` and `zig`.
-   - **Negative control:** `chmod -x ~/.cargo/bin/cargo-machete`, then doctor. Expected:
-     `cargo-machete … broken` WARN. Restore with `chmod +x`.
-4. **Install repairs `broken`.** With `cargo-machete` still made non-executable as in
-   case 3, `setup_env.sh -t developer` prints a `--force` reinstall for `cargo-machete`
-   only, and prints `… ok` lines for the other seven. The assertion is on those printed
-   lines, not on an absence of compiles.
-5. **`workstation` rollout.** Doctor shows eight `absent` WARNs, as stated above. Then
-   `-t developer` compiles them and doctor shows eight PASS.
+1. **The hook fixes the uutils actor.**
+   - Setup: on `claude`, `cp -a ~/.pyenv/versions/ansible` into a scratch `PYENV_ROOT` with
+     empty `shims/` and a `pyenv.d/rehash/` holding the hook link.
+   - Run `/home/linuxbrew/.linuxbrew/bin/pyenv rehash` with `PYENV_ROOT` set to the scratch
+     copy. `ssh` gives uutils `sort`.
+   - Expected: `shims/pytest` present.
+   - **Negative:** the same scratch root without the hook gives `pytest` absent. This
+     proves the control can fail.
+2. **The hook is safe with nullglob off.** Same scratch root plus a stub
+   `pyenv.d/rehash/aaa.bash` that runs `shopt -u nullglob dotglob`, and a second version
+   directory with no `bin/` entries. Expected: no shim named `*`, `pytest` present.
+3. **The login shell no longer breaks gates.** On `claude`, after `-t setup_user` links
+   the hook:
+   - Open a login shell, then run `make test` in a clone of math `fib`. Expected: rc 0,
+     where it was rc 2 before.
+   - **Negative:** already recorded in D1 (rc 2 before the change).
+4. **The Part 2 doctor arm can fail.** Point `_OVERRIDE_PYENV_ROOT` at case 1's no-hook
+   scratch root. Expected: FAIL naming `pytest`. Pointed at the hooked root: PASS with a
+   non-zero count.
+5. **pwsh install runs for real.** On `claude`, where `pwsh` is absent,
+   `setup_env.sh -t developer`. Expected: `microsoft-prod.list` reads `24.04`,
+   `pwsh -NoProfile -Command exit` rc 0, and doctor PASS for `pwsh`.
+6. **Release-binary installs run for real without touching `/usr/local/bin`.** On
+   `claude`, call `_install_pinned_release_binary` for each of `tflint`, `terraform` and
+   `tfsec` with `_RELEASE_BIN_DIR` set to a scratch directory. Expected: three binaries,
+   each reporting its pin.
+   - **Negative:** a wrong sha256 override leaves the scratch directory empty.
+7. **Cargo and zig install for real.** On `workstation`, where eight crates and `zig` are
+   absent, run `setup_env.sh -t developer`. The printed lines show eight installs, a
+   `zig` install, and doctor's `zig` WARN turning to PASS. That doctor WARN before the run
+   is the negative control.
+8. **`-t update` repairs `broken` and preserves `newer`.**
+   - On `workstation` after case 7, `chmod -x ~/.cargo/bin/cargo-machete`, then
+     `setup_env.sh -t update`. Expected: the `cargo-tools` section shows one `--force`
+     reinstall and seven `… ok` lines.
+   - Assert on those printed lines, never on the absence of compiles.
 
 In the suite:
 
-- Every new function gets tests for both branches of every guard, its error paths, and
-  idempotency.
-- The hook is tested by sourcing it with a stub `make_shims` that records its arguments,
-  against a fixture `PYENV_ROOT`. The assertions:
-  - both `py.test` and `pytest` are registered;
-  - a dotfile in `bin/` is registered;
-  - `dotglob` is off afterwards;
-  - an empty `versions/` registers nothing and does not error.
-- `_cargo_tool_state` is tested for all four states against a fixture `cargo` whose
-  `install --list` output and per-subcommand `--help` exit codes are set by the test.
-- The `sha256sum` mismatch test for `tflint` asserts that nothing was installed.
+- Every new function: both branches of every guard, the error paths, and idempotency.
+- Hook tests source the file with a stub `make_shims` over a fixture `PYENV_ROOT`:
+  - `pytest` and `py.test` are both registered, and a dotfile entry is registered.
+  - **With `nullglob` off on entry:** an empty version dir registers no literal `*`, and
+    `nullglob`/`dotglob` are restored to off afterwards.
+  - With both options on on entry: they are restored to on.
+  - With `make_shims` undefined: the hook returns 0 and registers nothing.
+- `_cargo_tool_state`: all five states, against a fixture `cargo` whose list output and
+  per-subcommand exit codes the test sets. The version comparison is tested at `0.9.2`
+  vs `0.10.0`, which a lexical comparison gets wrong.
+- `_doctor_check_pyenv_shims`: PASS with count, FAIL naming the missing shims, empty-`bin`
+  WARN, and silence without a venv.
+- `_doctor_check_dev_tools`:
+  - PASS (resolves and runs).
+  - WARN when absent.
+  - WARN when it resolves but the probe exits non-zero. This is the case that proves "runs,
+    not resolves".
+  - WARN when the probe times out, using a stub that sleeps past a lowered timeout seam.
+  - Silence without `HAS_DEVTOOLS`.
+- `_install_pinned_release_binary`: a sha256 mismatch installs nothing; the skip on a
+  matching version; each of the three `kind` extractors.
+- `run_update`'s `cargo-tools` section: rc 2 renders WARN and rc 1 renders FAIL.
 
 ## Out of scope
 
 - `gitleaks`, `cosign`, `etch`: absent on the Studio too, so `claude` is at parity.
-- `terraform`, `tfsec`: no terraform_ansible gate invokes them. Its Makefiles use `tofu`.
 - `cargo-fuzz`, `cross`: no consumer found (see Part 2).
 - `USER.md`'s session-placement text, which still names the Studio and `workstation`.
   That is an ai-config docs edit and ships separately.
@@ -457,7 +515,7 @@ Finding:
 
 Assumption: tarpaulin breaking on a routine update is frequent enough to justify the
 `broken` machinery. Settle with `brew log libgit2`: how often has the soname changed?
-Disposition:
+Disposition: Addressed (revision 3). `install_cargo_tools` runs at the end of `-t update`; the cargo doctor arm is dropped; host cases exercise the real installs; the claim about paired negatives is removed; no `recreate-venv` on `claude`; `terraform`/`tfsec` added; the dangling-link behaviour is recorded.
 
 **Ergonomics.**
 
@@ -480,7 +538,7 @@ Finding:
 Assumption: noble `pwsh` starts on resolute. **Checked by the author on 2026-09-17:** noble
 `powershell_7.6.2-1` extracted with `dpkg-deb -x` into a scratch directory on `claude`
 ran `pwsh -NoProfile` and printed `7.6.2`, rc 0. Confirmed.
-Disposition:
+Disposition: Addressed (revision 3). The pwsh guard tests that pwsh runs; case counts are corrected; `newer` installs are preserved; the exposure is restated from `readelf -d`; the hook text names `workstation`; negative controls use a scratch `PYENV_ROOT`; rollout cost is stated for laptop/WSL.
 
 **Risk.**
 
@@ -502,4 +560,4 @@ Finding:
 Assumption: the pyenv hook contract (`make_shims` in scope; hooks sourced between
 `make_shims` and `remove_stale_shims`) survives brew pyenv upgrades. Settle with
 `git log -p -- libexec/pyenv-rehash` upstream, and re-grep after each upgrade.
-Disposition:
+Disposition: Addressed (revision 3). The hook owns and restores `nullglob`/`dotglob`; `declare -f make_shims` guard; the Part 2 outcome doctor arm is restored as the upgrade detector; doctor probes run under `timeout 10` from `${HOME}`; suite tests cover every doctor branch and the nullglob-off hook case.
