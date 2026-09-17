@@ -1143,6 +1143,7 @@ STUB
   # tflint/tfsec's real curl+sha256sum path.
   _install_ubuntu_tflint() { :; }
   _install_ubuntu_tfsec() { :; }
+  _install_ubuntu_tfenv() { :; }
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
   grep -q "wget.*yq" "${MOCK_CALLS_FILE}"
@@ -1189,6 +1190,7 @@ STUB
   export HAS_DEVTOOLS=1
   _install_ubuntu_tflint() { :; }
   _install_ubuntu_tfsec() { :; }
+  _install_ubuntu_tfenv() { :; }
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
   grep -q "apt install dotnet-sdk-10.0" "${MOCK_CALLS_FILE}"
@@ -1207,6 +1209,7 @@ STUB
   export MOCK_APT_EXIT=1
   _install_ubuntu_tflint() { :; }
   _install_ubuntu_tfsec() { :; }
+  _install_ubuntu_tfenv() { :; }
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
   [[ "$output" == *"dotnet-sdk-10.0 not available"* ]]
@@ -1223,6 +1226,7 @@ STUB
   export _FORCE_OPENTOFU_INSTALL=1
   _install_ubuntu_tflint() { :; }
   _install_ubuntu_tfsec() { :; }
+  _install_ubuntu_tfenv() { :; }
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
   # The package is named `tofu`, not `opentofu`: that repo's amd64 index
@@ -1246,6 +1250,7 @@ STUB
   export _FORCE_OPENTOFU_INSTALL=1
   _install_ubuntu_tflint() { :; }
   _install_ubuntu_tfsec() { :; }
+  _install_ubuntu_tfenv() { :; }
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
   grep -q "opentofu-archive-keyring.gpg" "${MOCK_CALLS_FILE}"
@@ -1262,6 +1267,7 @@ STUB
   export _FORCE_OPENTOFU_INSTALL=1
   _install_ubuntu_tflint() { :; }
   _install_ubuntu_tfsec() { :; }
+  _install_ubuntu_tfenv() { :; }
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
   grep -q "mkdir.*-p.*/etc/apt/keyrings" "${MOCK_CALLS_FILE}"
@@ -1277,6 +1283,7 @@ STUB
   # regardless of whether the host actually has tofu.
   _install_ubuntu_tflint() { :; }
   _install_ubuntu_tfsec() { :; }
+  _install_ubuntu_tfenv() { :; }
   local _tofudir="${BATS_TEST_TMPDIR}/tofubin"
   mkdir -p "${_tofudir}"
   printf '#!/usr/bin/env bash\nexit 0\n' > "${_tofudir}/tofu"

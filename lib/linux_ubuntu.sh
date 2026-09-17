@@ -823,6 +823,67 @@ _install_ubuntu_tfsec() {
     "${_TFSEC_SHA256:-${_sha}}" raw "^v${TFSEC_VER//./\\.}$"
 }
 
+# terraform on the Mac and on `workstation` comes from tfenv, not a static
+# binary: /usr/local/bin/terraform is a symlink into ~/.tfenv/bin, and
+# run_update already `git pull`s ~/.tfenv. _install_pinned_release_binary is
+# NOT used here -- installing a standalone terraform binary would silently
+# replace that symlink with a regular file and orphan tfenv underneath it.
+#
+# tfenv-install verifies its download against HashiCorp's SHA256SUMS, which is
+# a same-origin check only: it skips PGP verification unless gpg or keybase is
+# configured (measured on workstation, libexec/tfenv-install:318-376). That is
+# weaker than the in-repo sha256 pins _install_pinned_release_binary uses for
+# tflint/tfsec above, and is accepted because it matches how terraform already
+# arrives on the Mac and on workstation.
+_install_ubuntu_tfenv() {
+  [[ -n ${HAS_DEVTOOLS} ]] || return 0
+
+  local _root="${_TFENV_ROOT:-${HOME}/.tfenv}"
+  local _links="${_TFENV_LINK_DIR:-/usr/local/bin}"
+  local _repo="${_TFENV_REPO_URL:-https://github.com/tfutils/tfenv.git}"
+
+  if [[ ! -d "${_root}" ]]; then
+    if ! git clone "${_repo}" "${_root}"; then
+      log_warn "tfenv clone into ${_root} failed; skipping"
+      return 0
+    fi
+  fi
+
+  local _name _target _link
+  for _name in tfenv terraform; do
+    _target="${_root}/bin/${_name}"
+    _link="${_links}/${_name}"
+    if [[ -L "${_link}" ]]; then
+      if [[ "$(readlink "${_link}")" != "${_target}" ]]; then
+        log_warn "${_link} is a symlink to $(readlink "${_link}"), not ${_target}; leaving it"
+      fi
+      continue
+    fi
+    if [[ -e "${_link}" ]]; then
+      log_warn "${_link} already exists and is not a tfenv symlink; leaving it"
+      continue
+    fi
+    if [[ -w "${_links}" ]]; then
+      ln -s "${_target}" "${_link}" || log_warn "linking ${_link} failed; skipping"
+    else
+      sudo ln -s "${_target}" "${_link}" || log_warn "linking ${_link} failed; skipping"
+    fi
+  done
+
+  if [[ ! -f "${_root}/version" ]]; then
+    if ! "${_root}/bin/tfenv" install "${TERRAFORM_VER}"; then
+      log_warn "tfenv install ${TERRAFORM_VER} failed; skipping"
+      return 0
+    fi
+    if ! "${_root}/bin/tfenv" use "${TERRAFORM_VER}"; then
+      log_warn "tfenv use ${TERRAFORM_VER} failed; skipping"
+      return 0
+    fi
+  fi
+
+  return 0
+}
+
 _install_ubuntu_misc() {
   printf "Installing docker-compose Ubuntu\\n"
   if [[ ! -f ${HOME}/software_downloads/docker-compose_${DOCKER_COMPOSE_VER} ]]; then
@@ -889,6 +950,7 @@ _install_ubuntu_misc() {
   # Each is self-gated on HAS_DEVTOOLS and advisory, as the dotnet install above.
   _install_ubuntu_tflint || log_warn "tflint install failed; skipping"
   _install_ubuntu_tfsec || log_warn "tfsec install failed; skipping"
+  _install_ubuntu_tfenv || log_warn "tfenv install failed; skipping"
 
   check_and_install_nala
   # </dev/null: same job-control hang as update_apt_packages in lib/linux_shared.sh.
