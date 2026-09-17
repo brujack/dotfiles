@@ -1136,6 +1136,26 @@ install_terraform_skill() {
   fi
 }
 
+install_pyenv_rehash_hook() {
+  local _root="${_OVERRIDE_PYENV_ROOT:-${PYENV_ROOT:-${HOME}/.pyenv}}"
+
+  # A host with no pyenv installed gets no pyenv.d state.
+  [[ -d "${_root}/versions" ]] || return 0
+
+  local _src="${DOTFILES_REPO_ROOT}/pyenv.d/rehash/dotfiles-register-all-executables.bash"
+  local _dst="${_root}/pyenv.d/rehash/dotfiles-register-all-executables.bash"
+
+  mkdir -p "${_root}/pyenv.d/rehash" || return 1
+
+  if [[ -f "${_dst}" ]] && cmp -s "${_src}" "${_dst}"; then
+    return 0
+  fi
+
+  # Always a regular-file copy, never a symlink: a dangling symlink here
+  # makes every `pyenv rehash` exit 1 silently (source fails under set -e).
+  install -m 0644 "${_src}" "${_dst}" || return 1
+}
+
 setup_credential_directories() {
   log_info "Creating ${HOME}/.aws"
   if mkdir -p "${HOME}"/.aws; then
