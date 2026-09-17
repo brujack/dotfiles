@@ -19,6 +19,14 @@ setup() {
   load_setup_env
   export HOME="${BATS_TEST_TMPDIR}/home"
   mkdir -p "${HOME}"
+  # _check_one_cargo_version's isolation from the live crates.io endpoint
+  # should not rest solely on the PATH mock intercepting `curl` -- the seam
+  # (_CRATES_API) exists precisely so isolation is structural. Pinning a
+  # sentinel here, at setup() scope, means every test in this file requests
+  # the sentinel rather than the real host, and "requests _CRATES_API when
+  # is set" below asserts that in the affirmative rather than trusting it by
+  # absence of a network call.
+  export _CRATES_API="https://crates-sentinel.invalid/api/v1/crates"
 }
 
 teardown() {
@@ -67,6 +75,37 @@ teardown() {
   [[ "$output" == *"8 OK"* ]]
 }
 
+@test "run_check_versions does not prompt for an OUTDATED cargo crate" {
+  # Report-only per the header comment on _check_one_cargo_version: the pins
+  # live in one array (CARGO_TOOLS), so there is no single _var name to hand
+  # _prompt_version_update the way _run_cv_check's tools each have one. This
+  # is called out in a comment but nothing enforces it -- an unconditional
+  # _prompt_version_update added to the OUTDATED arm would survive every
+  # other test in this file.
+  #
+  # A shell-variable counter does NOT discriminate this: the cargo loop
+  # invokes _check_one_cargo_version via `_out=$(...)` command substitution,
+  # which forks a subshell, so a mutation calling _prompt_version_update
+  # FROM INSIDE that function increments a copy of the counter that dies
+  # with the subshell -- the parent test process still reads 0, and the
+  # mutation survives. Measured directly: a debug build of exactly that
+  # mutation printed "PROMPTED called" 8 times to fd 3 while the variable
+  # read back 0 afterward. A file write crosses that boundary because the
+  # subshell inherits the real filesystem, not a copy of it.
+  _check_one_version() { printf "  [SKIP]     %-12s not installed\n" "$1"; }
+  _check_cv_oh_my_zsh() { :; }
+  _check_cv_homebrew_install() { :; }
+  local _prompt_log="${BATS_TEST_TMPDIR}/prompt_calls"
+  : > "${_prompt_log}"
+  _prompt_version_update() { printf '%s\n' "$1" >> "${_prompt_log}"; }
+  export UPDATE_VERSIONS=1
+  # A max_stable_version far above every CARGO_TOOLS pin makes all eight
+  # crates OUTDATED, maximizing the chance of catching a call in the arm.
+  export MOCK_CURL_STDOUT='{"crate":{"max_stable_version":"999.0.0"}}'
+  run_check_versions > /dev/null || true
+  [ ! -s "${_prompt_log}" ]
+}
+
 # ── _check_one_cargo_version ────────────────────────────────────────────────
 
 @test "_check_one_cargo_version prints OK when pin equals upstream max_stable_version" {
@@ -108,13 +147,60 @@ teardown() {
   [[ "$output" == *"[WARN]"* ]]
   [[ "$output" == *"cargo-audit"* ]]
   [[ "$output" == *"could not fetch latest version"* ]]
+  [[ "$output" != *"could not parse"* ]]
 }
 
-@test "_check_one_cargo_version's curl call carries -A followed by a token" {
+@test "_check_one_cargo_version prints a distinct WARN when the body has no max_stable_version" {
+  # A 404 body from crates.io, or any response missing the field entirely --
+  # curl succeeded (this is a real, non-empty JSON body), so the failure is
+  # at parse time, not fetch time. _check_one_version (the GitHub sibling)
+  # already separates these with two messages; this must not say "fetch".
+  export MOCK_CURL_STDOUT='{"errors":[{"detail":"Not Found"}]}'
+  run _check_one_cargo_version "cargo-audit" "0.22.1"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[WARN]"* ]]
+  [[ "$output" == *"could not parse latest version"* ]]
+  [[ "$output" != *"could not fetch"* ]]
+}
+
+@test "_check_one_cargo_version prints a distinct WARN when max_stable_version is null" {
+  # The real shape crates.io returns for a crate with no stable release --
+  # JSON null, not a quoted empty string, so the "[^\"]*" capture cannot
+  # match it either. Same parse-failure family as the missing-field case
+  # above, not a fetch failure.
+  export MOCK_CURL_STDOUT='{"crate":{"max_stable_version":null}}'
+  run _check_one_cargo_version "cargo-audit" "0.22.1"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[WARN]"* ]]
+  [[ "$output" == *"could not parse latest version"* ]]
+  [[ "$output" != *"could not fetch"* ]]
+}
+
+@test "_check_one_cargo_version's curl call carries the exact User-Agent string" {
   export MOCK_CURL_STDOUT='{"crate":{"max_stable_version":"0.22.1"}}'
   _check_one_cargo_version "cargo-audit" "0.22.1" > /dev/null
-  # The mock logs "curl $*", which flattens quoting -- a multi-word User-Agent
-  # string arrives as several bare words rather than one quoted argument, so
-  # this matches the -A TOKEN shape rather than the quoted UA string itself.
-  grep -qE '(^| )-A ([^[:space:]]+)' "${MOCK_CALLS_FILE}"
+  # The mock logs "curl $*", which flattens quoting -- the multi-word
+  # User-Agent arrives as several bare words rather than one quoted argument
+  # ("-A dotfiles check-versions (bjackson@pobox.com) ..."). That flattening
+  # changes the STRING'S FORM, not its determinism: the flattened form is
+  # exactly reproducible, so a literal match on it pins the actual value sent
+  # -- not just that -A was followed by some token, which a default-shaped
+  # UA like "curl/8.7.1" (the value crates.io 403s on) would also satisfy.
+  # -F (fixed string) avoids needing to escape the parentheses as regex.
+  #
+  # What this proves and does not prove: that the code SENDS the User-Agent
+  # we intend. No offline test can prove crates.io's server accepts this
+  # exact string -- that is a live-network fact, verified manually against
+  # the real endpoint (spec Part 3) and unreachable from a mocked suite.
+  grep -qF -- '-A dotfiles check-versions (bjackson@pobox.com)' "${MOCK_CALLS_FILE}"
+}
+
+@test "_check_one_cargo_version requests _CRATES_API, not the live crates.io default" {
+  export MOCK_CURL_STDOUT='{"crate":{"max_stable_version":"0.22.1"}}'
+  _check_one_cargo_version "cargo-audit" "0.22.1" > /dev/null
+  # setup() pins _CRATES_API to a sentinel host. Isolation from the real
+  # crates.io endpoint should be structural (the code reads the override),
+  # not incidental (only the PATH mock stands between this suite and a real
+  # network call) -- this asserts the override is actually consulted.
+  grep -qF -- "${_CRATES_API}/cargo-audit" "${MOCK_CALLS_FILE}"
 }

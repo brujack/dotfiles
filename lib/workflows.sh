@@ -1016,14 +1016,25 @@ _check_cv_homebrew_install() {
 # single _var name to hand _prompt_version_update.
 _check_one_cargo_version() {
   local _crate="$1" _pinned="$2"
-  local _json _latest
+  local _json
   _json=$(curl -sf -A "dotfiles check-versions (bjackson@pobox.com)" \
     "${_CRATES_API:-https://crates.io/api/v1/crates}/${_crate}" 2>/dev/null)
+  if [[ -z "${_json}" ]]; then
+    printf "  [WARN]     %-20s could not fetch latest version\n" "${_crate}"
+    return 0
+  fi
+
+  # A non-empty body that doesn't yield a version is a PARSE failure, not a
+  # fetch failure -- distinct causes, same as _check_one_version's fetch vs.
+  # parse split above. Two real shapes land here: a 404 body (no
+  # max_stable_version key at all) and the crate's actual shape for "no
+  # stable release", "max_stable_version":null -- neither is quoted, so
+  # this regex (which requires quotes) matches neither.
+  local _latest
   _latest=$(printf '%s' "${_json}" \
     | grep -oE '"max_stable_version":"[^"]*"' | head -1 | cut -d'"' -f4)
-
   if [[ -z "${_latest}" ]]; then
-    printf "  [WARN]     %-20s could not fetch latest version\n" "${_crate}"
+    printf "  [WARN]     %-20s could not parse latest version\n" "${_crate}"
     return 0
   fi
 
