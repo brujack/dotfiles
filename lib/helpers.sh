@@ -874,30 +874,63 @@ _doctor_check_gnu_coreutils() {
   fi
 }
 
-_pyenv_missing_shims() {
+# Single source of truth for the ansible venv's bin directory. Both
+# _pyenv_missing_shims (enumerates it) and _doctor_check_pyenv_shims
+# (counts it) must describe the exact same directory -- resolving
+# _OVERRIDE_PYENV_ROOT/PYENV_ROOT/HOME in two places let an edit to one
+# silently make them disagree about what "the venv" even is.
+_pyenv_ansible_venv_bin() {
   local _root="${_OVERRIDE_PYENV_ROOT:-${PYENV_ROOT:-${HOME}/.pyenv}}"
-  local _bin="${_root}/versions/ansible/bin"
-  local _shims="${_root}/shims"
+  printf '%s' "${_root}/versions/ansible/bin"
+}
 
+# Every basename in the ansible venv's bin/, one per line, exactly as
+# pyenv's own rehash hook would see them: it turns nullglob AND dotglob ON
+# before its glob (pyenv.d/rehash/dotfiles-register-all-executables.bash)
+# -- a dot-prefixed venv entry it shims would otherwise be invisible here
+# -- and restores both via shopt -p/eval, never leaving them set, since
+# this runs inside run_doctor, in the same shell as every later doctor
+# check. `-e || -L` treats a DANGLING symlink as present: `-e` alone
+# follows the link and reports false for a broken one, which would drop it
+# from both the missing list and the total. This machine's ansible venv
+# holds six absolute symlinks into a versioned pyenv install; a pyenv
+# uninstall/partial reinstall breaks them.
+_pyenv_ansible_venv_entries() {
+  local _bin
+  _bin="$(_pyenv_ansible_venv_bin)"
+  [[ -d "${_bin}" ]] || return 0
+
+  local _opts
+  _opts="$(shopt -p nullglob dotglob || true)"
+  shopt -s nullglob dotglob
+
+  local _entry
+  for _entry in "${_bin}"/*; do
+    [[ -e "${_entry}" || -L "${_entry}" ]] || continue
+    printf '%s\n' "$(basename "${_entry}")"
+  done
+
+  eval "${_opts}"
+}
+
+_pyenv_missing_shims() {
+  local _bin
+  _bin="$(_pyenv_ansible_venv_bin)"
   # No ansible venv at all -- nothing to check, and the caller must not
   # print a header over a check that found nothing to look at.
   [[ -d "${_bin}" ]] || return 2
 
-  local _entry _name
-  for _entry in "${_bin}"/*; do
-    # nullglob is off (repo-wide default, per shell.md's Script Standards) --
-    # an empty bin/ leaves the glob unexpanded, so this guard is what makes
-    # an empty directory print nothing rather than one literal "*" line.
-    [[ -e "${_entry}" ]] || continue
-    _name="$(basename "${_entry}")"
+  local _shims="${_bin%/versions/ansible/bin}/shims"
+  local _name
+  while IFS= read -r _name; do
     [[ -e "${_shims}/${_name}" ]] || printf '%s\n' "${_name}"
-  done
+  done < <(_pyenv_ansible_venv_entries)
   return 0
 }
 
 _doctor_check_pyenv_shims() {
-  local _root="${_OVERRIDE_PYENV_ROOT:-${PYENV_ROOT:-${HOME}/.pyenv}}"
-  local _bin="${_root}/versions/ansible/bin"
+  local _bin
+  _bin="$(_pyenv_ansible_venv_bin)"
 
   local _missing _rc
   _missing="$(_pyenv_missing_shims)"
@@ -910,13 +943,15 @@ _doctor_check_pyenv_shims() {
 
   # _pyenv_missing_shims alone cannot tell "bin/ is empty" apart from
   # "bin/ is complete" -- both print nothing. Count entries separately so an
-  # empty venv WARNs instead of silently PASSing "0 of 0".
+  # empty venv WARNs instead of silently PASSing "0 of 0". Sourced from the
+  # same _pyenv_ansible_venv_entries the missing-list uses, so a dangling
+  # symlink or a dot-prefixed entry can never be counted differently here
+  # than it was enumerated there.
   local _total=0
-  local _entry
-  for _entry in "${_bin}"/*; do
-    [[ -e "${_entry}" ]] || continue
+  local _name
+  while IFS= read -r _name; do
     _total=$(( _total + 1 ))
-  done
+  done < <(_pyenv_ansible_venv_entries)
 
   if [[ ${_total} -eq 0 ]]; then
     doctor_warn "pyenv shims" "ansible venv bin is empty (${_bin})"
@@ -924,9 +959,16 @@ _doctor_check_pyenv_shims() {
   fi
 
   if [[ -n "${_missing}" ]]; then
-    local _missing_list
-    _missing_list="$(printf '%s' "${_missing}" | tr '\n' ' ')"
-    doctor_fail "pyenv shims" "missing: ${_missing_list} — run: pyenv rehash"
+    # Unbounded, a wiped shims/ prints every venv entry on one line. State
+    # the true count up front and cap what is actually shown.
+    local _missing_count
+    _missing_count="$(printf '%s\n' "${_missing}" | wc -l | tr -d '[:space:]')"
+    local _missing_shown
+    _missing_shown="$(printf '%s\n' "${_missing}" | head -n 5 | tr '\n' ' ')"
+    _missing_shown="${_missing_shown% }"
+    local _suffix=""
+    [[ ${_missing_count} -gt 5 ]] && _suffix=" ..."
+    doctor_fail "pyenv shims" "missing: ${_missing_count} entries (${_missing_shown}${_suffix}) — run: pyenv rehash"
     return 0
   fi
 

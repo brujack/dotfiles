@@ -12,6 +12,12 @@ setup() {
   # bats sets BATS_TEST_TMPDIR but leaves TMPDIR at the system temp dir, so
   # without this every invocation leaks a real dotfiles-run.* dir there.
   export TMPDIR="${BATS_TEST_TMPDIR}"
+  # This developer session exports a real PYENV_ROOT, which wins over the
+  # HOME redirect above in _pyenv_ansible_venv_bin's fallback chain -- every
+  # unstubbed run_doctor call in this file would otherwise read the
+  # operator's real ~/.pyenv (tdd.md E2). Read-only, but see
+  # tests/setup_env/doctor_pyenv_shims.bats for the seam these tests rely on.
+  unset PYENV_ROOT
 }
 
 teardown() {
