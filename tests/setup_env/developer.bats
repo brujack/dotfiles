@@ -769,6 +769,11 @@ component add rust-analyzer" ]
   run setup_ansible
   [ "${status}" -eq 3 ]
   grep -q "^pyenv rehash$" "${MOCK_CALLS_FILE}"
+  # Pins the actual call site's warn text, not just "warn-and-continue
+  # happened" -- `|| true` at the call site would satisfy every assertion
+  # above (rehash still called, rc still propagates) while silently
+  # discarding the diagnostic the operator needs.
+  [[ "$output" == *"pyenv rehash hook not installed"* ]]
 }
 
 @test "recreate_python_venv: installs the pyenv rehash hook before pyenv rehash" {
@@ -810,6 +815,42 @@ component add rust-analyzer" ]
   run recreate_python_venv ansible
   [ "${status}" -eq 3 ]
   grep -q "^pyenv rehash$" "${MOCK_CALLS_FILE}"
+  # Pins the actual call site's warn text, not just "warn-and-continue
+  # happened" -- `|| true` at the call site would satisfy every assertion
+  # above (rehash still called, rc still propagates) while silently
+  # discarding the diagnostic the operator needs.
+  [[ "$output" == *"pyenv rehash hook not installed"* ]]
+}
+
+@test "developer.sh: install_pyenv_rehash_hook is the line immediately before pyenv rehash, at both call sites" {
+  # The two call-order tests above only assert hook-before-rehash somewhere
+  # in the function -- moving both installs to the TOP of setup_ansible /
+  # recreate_python_venv, outside the HAS_DEVTOOLS / venv-name branches
+  # entirely, still satisfies "before" while violating the spec's "directly
+  # before". Pin adjacency statically against the source instead of via a
+  # mocked run, so the check can't be defeated by relocating the call to any
+  # earlier point in the function. Line numbers are derived with grep -n at
+  # test time, never hardcoded, since this file is edited by sibling tasks.
+  local _src="${BATS_TEST_DIRNAME}/../../lib/developer.sh"
+  local _hook_lines=()
+  while IFS=: read -r _line _rest; do
+    _hook_lines+=("${_line}")
+  done < <(grep -n 'install_pyenv_rehash_hook' "${_src}")
+  if [ "${#_hook_lines[@]}" -ne 2 ]; then
+    printf "expected exactly 2 install_pyenv_rehash_hook call sites in %s, found %d\n" \
+      "${_src}" "${#_hook_lines[@]}" >&2
+    return 1
+  fi
+  local _hook_line _next_line _next_content
+  for _hook_line in "${_hook_lines[@]}"; do
+    _next_line=$(( _hook_line + 1 ))
+    _next_content="$(sed -n "${_next_line}p" "${_src}")"
+    if [[ "${_next_content}" != *"pyenv rehash"* ]]; then
+      printf "call site at line %s: line %s is %q, not pyenv rehash\n" \
+        "${_hook_line}" "${_next_line}" "${_next_content}" >&2
+      return 1
+    fi
+  done
 }
 
 @test "resolve_uv fails with an install remedy when uv is genuinely absent" {

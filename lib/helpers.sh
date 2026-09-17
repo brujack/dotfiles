@@ -1245,7 +1245,7 @@ install_pyenv_rehash_hook() {
   [[ -d "${_root}/versions" ]] || return 0
 
   local _src="${DOTFILES_REPO_ROOT}/pyenv.d/rehash/dotfiles-register-all-executables.bash"
-  [[ -f "${_src}" ]] || return 1
+  [[ -f "${_src}" ]] || { log_error "pyenv rehash hook source missing: ${_src}"; return 1; }
   local _dst="${_root}/pyenv.d/rehash/dotfiles-register-all-executables.bash"
 
   mkdir -p "${_root}/pyenv.d/rehash" || return 1
@@ -1256,7 +1256,7 @@ install_pyenv_rehash_hook() {
 
   # A directory at the destination can't be a hook; `install` would write
   # inside it and report success for a file pyenv will never source.
-  [[ -d "${_dst}" ]] && return 1
+  [[ -d "${_dst}" ]] && { log_error "pyenv rehash hook destination is a directory: ${_dst}"; return 1; }
 
   if [[ -f "${_dst}" ]] && cmp -s "${_src}" "${_dst}"; then
     return 0

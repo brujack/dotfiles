@@ -30,6 +30,13 @@ setup() {
   # Unset here so the fallback lands on the redirected HOME below instead,
   # where no venv exists and the section is a no-op SKIP by default.
   unset PYENV_ROOT
+  # Absence of PYENV_ROOT is not isolation by itself -- a test that exports
+  # it later (or a future call site that reads it before this file's own
+  # HOME redirect takes effect) would still resolve against the operator's
+  # real ~/.pyenv. Pin the root positively, at setup() scope rather than
+  # per-test (tdd.md pitfall E2): a per-test guard leaves the trap armed for
+  # the next test someone adds to this file.
+  export _OVERRIDE_PYENV_ROOT="${BATS_TEST_TMPDIR}/pyenv"
   # Minimal env so workflow functions don't crash on missing vars
   export HOME="${BATS_TEST_TMPDIR}"
   export PERSONAL_GITREPOS="${BATS_TEST_TMPDIR}/git-repos/personal"
