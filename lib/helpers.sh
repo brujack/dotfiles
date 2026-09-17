@@ -474,6 +474,7 @@ run_doctor() {
   _doctor_check_aws_key_expiry
   _doctor_check_github_mcp
   _doctor_check_gnu_coreutils
+  _doctor_check_pyenv_shims
   _doctor_check_renovate_cadence
   _doctor_check_ledger_drift_cadence
 
@@ -871,6 +872,65 @@ _doctor_check_gnu_coreutils() {
   else
     doctor_fail "sort" "not GNU (${_ver}) — pyenv will drop the pytest shim; run: setup_env.sh -t setup"
   fi
+}
+
+_pyenv_missing_shims() {
+  local _root="${_OVERRIDE_PYENV_ROOT:-${PYENV_ROOT:-${HOME}/.pyenv}}"
+  local _bin="${_root}/versions/ansible/bin"
+  local _shims="${_root}/shims"
+
+  # No ansible venv at all -- nothing to check, and the caller must not
+  # print a header over a check that found nothing to look at.
+  [[ -d "${_bin}" ]] || return 2
+
+  local _entry _name
+  for _entry in "${_bin}"/*; do
+    # nullglob is off (repo-wide default, per shell.md's Script Standards) --
+    # an empty bin/ leaves the glob unexpanded, so this guard is what makes
+    # an empty directory print nothing rather than one literal "*" line.
+    [[ -e "${_entry}" ]] || continue
+    _name="$(basename "${_entry}")"
+    [[ -e "${_shims}/${_name}" ]] || printf '%s\n' "${_name}"
+  done
+  return 0
+}
+
+_doctor_check_pyenv_shims() {
+  local _root="${_OVERRIDE_PYENV_ROOT:-${PYENV_ROOT:-${HOME}/.pyenv}}"
+  local _bin="${_root}/versions/ansible/bin"
+
+  local _missing _rc
+  _missing="$(_pyenv_missing_shims)"
+  _rc=$?
+  # rc 2 means there is no ansible venv -- silent, no section header, so a
+  # machine with no ansible venv gets no line about it at all.
+  [[ ${_rc} -eq 2 ]] && return 0
+
+  printf "\nPyenv shims:\n"
+
+  # _pyenv_missing_shims alone cannot tell "bin/ is empty" apart from
+  # "bin/ is complete" -- both print nothing. Count entries separately so an
+  # empty venv WARNs instead of silently PASSing "0 of 0".
+  local _total=0
+  local _entry
+  for _entry in "${_bin}"/*; do
+    [[ -e "${_entry}" ]] || continue
+    _total=$(( _total + 1 ))
+  done
+
+  if [[ ${_total} -eq 0 ]]; then
+    doctor_warn "pyenv shims" "ansible venv bin is empty (${_bin})"
+    return 0
+  fi
+
+  if [[ -n "${_missing}" ]]; then
+    local _missing_list
+    _missing_list="$(printf '%s' "${_missing}" | tr '\n' ' ')"
+    doctor_fail "pyenv shims" "missing: ${_missing_list} — run: pyenv rehash"
+    return 0
+  fi
+
+  doctor_pass "pyenv shims: ${_total} of ${_total} ansible venv entries shimmed"
 }
 
 process_args() {

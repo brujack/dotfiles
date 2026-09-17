@@ -1004,6 +1004,7 @@ EOF
   _doctor_check_versions()      { :; }
   _doctor_check_aws_key_expiry() { :; }
   _doctor_check_gnu_coreutils() { :; }
+  _doctor_check_pyenv_shims()   { :; }
   run_doctor
   [ "${_called}" -eq 1 ]
 }
@@ -1020,6 +1021,7 @@ EOF
   _doctor_check_aws_key_expiry() { :; }
   _doctor_check_github_mcp()    { doctor_warn "test" "a warning"; }
   _doctor_check_gnu_coreutils() { :; }
+  _doctor_check_pyenv_shims()   { :; }
   run run_doctor
   [[ "$output" == *"1 warnings"* ]]
 }
@@ -1421,6 +1423,7 @@ EOF
   _doctor_check_versions()      { :; }
   _doctor_check_github_mcp()    { :; }
   _doctor_check_gnu_coreutils() { :; }
+  _doctor_check_pyenv_shims()   { :; }
   export PROFILE="unknown"
   _PROFILES_LOADED=1
   run run_doctor
@@ -2475,6 +2478,7 @@ STUB
   _doctor_check_versions()      { :; }
   _doctor_check_aws_key_expiry() { :; }
   _doctor_check_github_mcp()    { :; }
+  _doctor_check_pyenv_shims()   { :; }
   run_doctor
   [ "${_called}" -eq 1 ]
 }
