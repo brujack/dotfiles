@@ -561,3 +561,65 @@ Assumption: the pyenv hook contract (`make_shims` in scope; hooks sourced betwee
 `make_shims` and `remove_stale_shims`) survives brew pyenv upgrades. Settle with
 `git log -p -- libexec/pyenv-rehash` upstream, and re-grep after each upgrade.
 Disposition: Addressed (revision 3). The hook owns and restores `nullglob`/`dotglob`; `declare -f make_shims` guard; the Part 2 outcome doctor arm is restored as the upgrade detector; doctor probes run under `timeout 10` from `${HOME}`; suite tests cover every doctor branch and the nullglob-off hook case.
+
+### Round 3 (revision 3, reviewed at commit `1987f7c8`)
+
+**Goal-Fit.**
+
+Finding:
+
+1. **Blocking.** Part 4's terraform row replaces tfenv. The Mac uses `brew "tfenv"`
+   (`Brewfile:118`), and on `workstation` `/usr/local/bin/terraform` is a symlink to
+   `~/.tfenv/bin/terraform`, with versions 1.3.5, 1.9.0 and 1.14.9. GNU `install`
+   replaces that symlink with a regular file, so tfenv would silently stop managing
+   terraform. `terraform` was also never in D3.
+2. Case 8's `chmod -x` → `broken` mapping is unmeasured.
+3. `claude` already has a hand-installed `/usr/local/bin/tflint`.
+
+Assumption: tfenv is the intended terraform manager on Linux, as on the Mac. The author
+checked: `run_update` already has a tfenv section that `git pull`s a `~/.tfenv` clone
+(`lib/workflows.sh:632`); `workstation`'s clone is `tfutils/tfenv`, last pulled
+2026-04-28; `claude` has none; no `lib/linux_*.sh` provisions it.
+Disposition:
+
+**Ergonomics.**
+
+Finding:
+
+1. **Blocker.** Same tfenv overwrite as Goal-Fit 1. Case 7 would trigger it.
+2. The `cargo-tools` section has no flag gate, so `--pip-only` and friends would run it,
+   including a first-run compile.
+3. With `HAS_RUST` unset it returns 0, so the summary shows `[OK] cargo-tools`. It should
+   use `_update_skip`.
+4. Part 6 is titled Linux but gates on `HAS_DEVTOOLS`, so Macs are in scope. `timeout`
+   exists on macOS only through brew coreutils, so without it every probe exits 127.
+5. Case 7 needs an explicit `-t doctor` before and after. Case 8 needs a flag gate to be
+   practical.
+6. The version-probe skip is a substring match, which `terraform version`'s
+   "out of date" line can satisfy.
+
+Assumption: `LIBGIT2_NO_PKG_CONFIG=1` gives a tarpaulin with no linuxbrew dependency. It
+may still link linuxbrew openssl. Settle with `ldd <bin> | grep linuxbrew` after building
+with the flag.
+Disposition:
+
+**Risk.**
+
+Finding:
+
+1. **Blocker, measured end to end.** `shopt -p nullglob dotglob` exits 1 when any named
+   option is off, and `pyenv-rehash` runs under `set -e`. So the hook's
+   `x="$(shopt -p …)"` aborts every rehash: a scratch `PYENV_ROOT` gave rc 1 and zero
+   shims on brew pyenv (macOS), against rc 0 with both shims without the hook. Fix:
+   `"$(shopt -p nullglob dotglob || true)"`, verified to survive `set -e` and capture
+   both lines on bash 3.2 and 5.3.
+2. **Blocker.** tfenv overwrite, as above.
+3. Part 6 gates on `HAS_DEVTOOLS`, and Macs lack a system `timeout`.
+4. Case 3 is PASS-shaped. Add `test -L` on the hook link, and delete the shim in a scratch
+   root first.
+
+Assumption: every dev machine's login pyenv sources `${PYENV_ROOT}/pyenv.d/rehash`
+between `make_shims` and `install_registered_shims`. Checked on `workstation`'s 2.7.2
+clone (lines 191/196/203), so it holds today. Part 2's doctor arm refutes it after any
+pyenv update.
+Disposition:
