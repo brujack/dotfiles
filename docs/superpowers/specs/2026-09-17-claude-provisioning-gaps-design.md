@@ -1,6 +1,6 @@
 # Close the provisioning gaps found moving sessions to `claude`
 
-> **Status:** Draft, revision 5 — spec review pending.
+> **Status:** Draft, revision 6 — spec review pending.
 
 ## Problem
 
@@ -123,8 +123,8 @@ and returned 0.
 
 ## Design
 
-This is revision 5. It replaces revision 4 (`5fdb8df0`); earlier revisions are
-`1987f7c8`, `9fa812a9` and `41eb9352`. The Multi-Lens Review section below records why. One branch, one PR, six
+This is revision 6. It replaces revision 5 (`37b04d9a`); earlier revisions are
+`5fdb8df0`, `1987f7c8`, `9fa812a9` and `41eb9352`. The Multi-Lens Review section below records why. One branch, one PR, six
 independent parts, each testable alone.
 
 ### Part 1: a pyenv rehash hook that registers every shim, whatever `sort` is
@@ -193,8 +193,11 @@ unset _dotfiles_rehash_opts
 - **Install as a copy, not a symlink.** A new `install_pyenv_rehash_hook` in
   `lib/helpers.sh` runs
   `install -m 0644 <repo>/pyenv.d/rehash/dotfiles-register-all-executables.bash`
-  into `${PYENV_ROOT:-${HOME}/.pyenv}/pyenv.d/rehash/`. It creates the directory, and it
-  skips the install when `cmp -s` shows the copy is already current.
+  into `${PYENV_ROOT:-${HOME}/.pyenv}/pyenv.d/rehash/`.
+  - It returns 0 and does nothing when `${PYENV_ROOT}/versions` does not exist. A host
+    with no pyenv gets no `pyenv.d` state.
+  - Otherwise it creates the directory, and it skips the install when `cmp -s` shows the
+    copy is already current.
   - **Why a copy.** Round 4 measured a dangling symlink on brew pyenv 2.8.5 and on `claude`:
     rehash exits 1 with **no stderr**, creates no new shims, and `pyenv init --path` ignores
     the rc. The link would point into the main checkout, and `claude`'s reflog shows that
@@ -231,7 +234,11 @@ a gate breaks. The arm checks the outcome, so it also catches any future rehash 
   section runs after `pip`, in its own block gated on
   `_run_all || UPDATE_BREW || UPDATE_PIP`, and is added to `_UPDATE_SECTION_ORDER` after
   `pip-check`.
-  - First it calls `install_pyenv_rehash_hook`.
+  - First it calls `install_pyenv_rehash_hook`, then `pyenv rehash`, using the
+    `pyenv` resolved the same way `setup_ansible` resolves it.
+    - Why rehash first: `uv sync` in the `pip` section writes console scripts straight into
+      the venv without a rehash. Checking before a rehash would WARN on a correct run.
+    - The check afterwards therefore reports only shims that a rehash could not produce.
   - Then it records WARN when the same predicate the doctor arm uses (a shared
     `_pyenv_missing_shims` that prints the names) reports any missing shim, and SKIP when
     there is no ansible venv.
@@ -322,7 +329,10 @@ components, per `shell.md`'s semver pitfall, and never lexically.
   monorepo tags (`cargo-audit/v…`), and `~/.cargo/bin` is not on the non-interactive
   `PATH`, so its `command -v` probe would SKIP everything.
   - A small `_check_cv_cargo_tools` therefore reads each crate's `max_stable_version` from
-    `https://crates.io/api/v1/crates/<crate>` and prints `[OK]` or
+    `https://crates.io/api/v1/crates/<crate>`, sending
+    `-A "dotfiles check-versions (bjackson@pobox.com)"`. crates.io returns **403** to
+    curl's default User-Agent: measured from the Studio, `claude` and `workstation` on
+    2026-09-17, and the same request with `-A` returned 200. It prints `[OK]` or
     `[OUTDATED] … latest=<v>` in the same format, counting toward the existing totals.
   - It is report-only (no in-place `--update` prompt), because the pins live in one array.
   - This is what surfaces a `cargo-semver-checks` pin falling behind the rustdoc format
@@ -442,7 +452,7 @@ absent. Cases that delete a shim run against a **scratch copy of `PYENV_ROOT`**,
 
 1. **The hook fixes the uutils actor.**
    - Setup: on `claude`, `cp -a ~/.pyenv/versions/ansible` into a scratch `PYENV_ROOT` with
-     empty `shims/` and a `pyenv.d/rehash/` holding the hook link.
+     empty `shims/` and a `pyenv.d/rehash/` holding a copy of the hook.
    - Run `/home/linuxbrew/.linuxbrew/bin/pyenv rehash` with `PYENV_ROOT` set to the scratch
      copy. `ssh` gives uutils `sort`.
    - Expected: `shims/pytest` present.
@@ -452,7 +462,8 @@ absent. Cases that delete a shim run against a **scratch copy of `PYENV_ROOT`**,
    `pyenv.d/rehash/aaa.bash` that runs `shopt -u nullglob dotglob`, and a second version
    directory with no `bin/` entries. Expected: no shim named `*`, `pytest` present.
 3. **The login shell no longer breaks gates.** On `claude`, after `-t setup_user` links
-   the hook, first assert `test -L ~/.pyenv/pyenv.d/rehash/dotfiles-register-all-executables.bash`. Then:
+   the hook, first assert that `~/.pyenv/pyenv.d/rehash/dotfiles-register-all-executables.bash` is a
+   regular file (`test -f` and `! test -L`) and `cmp`-equal to the repo copy. Then:
    - Open a login shell, then run `make test` in a clone of math `fib`. Expected: rc 0,
      where it was rc 2 before.
    - **Negative:** already recorded in D1 (rc 2 before the change).
@@ -519,14 +530,17 @@ In the suite:
   caller survives and options are restored. This is the case that fails without
   `|| true`.
 - `install_pyenv_rehash_hook`:
+  - with no `versions/` it creates nothing;
   - it creates the directory and copies the hook;
   - `cmp`-equal means no rewrite;
   - a changed source is re-copied;
   - the result is a regular file, not a symlink.
-- The `pyenv-shims` update section: WARN naming a missing shim; SKIP without a venv;
+- The `pyenv-shims` update section: `pyenv rehash` is called before the check; WARN naming a missing shim; SKIP without a venv;
   SKIP under `--gems-only`.
 - `_check_cv_cargo_tools` against a fixture crates.io response: `[OK]`, `[OUTDATED]`
-  with `latest=`, and `[WARN]` on a failed fetch.
+  with `latest=`, and `[WARN]` on a failed fetch. Also assert that the `curl` argv
+  recorded by `tests/mocks/curl` carries `-A` with a non-empty User-Agent; the fixture
+  alone cannot see a missing header.
 - `_install_pinned_release_binary`: a `PATH` binary at the pinned version does not cause
   a skip when `_RELEASE_BIN_DIR` is empty.
 - `_install_ubuntu_tfenv`, each against a fixture `/usr/local/bin`:
@@ -848,4 +862,4 @@ shallow 303-commit history): `libexec/pyenv-rehash` has 8 commits since 2025-12-
 including `47871b2d rehash: drop redundant sort -u from make_shims call` and
 `8037f226 rehash: streamline executables discovery`. The internals churn, so the rationale
 holds.
-Disposition:
+Disposition: Addressed (revision 6). The operator chose "apply fixes, one more scoped review": crates.io requests send a User-Agent, with a suite argv assertion; cases 1 and 3 check for a regular copied file; `pyenv rehash` runs before the update shim check; the hook install is gated on `${PYENV_ROOT}/versions`.
