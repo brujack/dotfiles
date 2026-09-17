@@ -435,3 +435,71 @@ Disposition: Addressed. The hook covers recreate-venv and ssh actors, and verifi
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+### Round 2 (revision 2, reviewed at commit `9fa812a9`)
+
+**Goal-Fit.**
+
+Finding:
+
+1. The repair runs at the wrong time. `-t update` (`brew upgrade` + `cleanup`) is what
+   breaks tarpaulin, yet `install_cargo_tools` is not in `-t update`, and the Part 5 cargo
+   arm fails the same reads-it test that removed the shim arm. Suggests calling
+   `install_cargo_tools` at the end of `-t update` and dropping the Part 5 cargo arm.
+2. "Every PASS case has a paired negative" is false. `claude` already carries every tool
+   by hand, so cases 3 and 5 pass without the new install code running, and no host case
+   runs `_install_ubuntu_tflint` or Part 4.
+3. Case 2 runs `-t recreate-venv` on the host where five live sessions use the venv.
+4. Out-of-scope is wrong: `aws-terraform/ca-central-1/Makefile:18-23` runs `terraform`,
+   `tflint` and `tfsec`. `workstation` has both; `claude` has neither. The author verified
+   this.
+5. A dangling hook link makes every rehash exit 1 under `set -e`. It fails safe but loudly.
+
+Assumption: tarpaulin breaking on a routine update is frequent enough to justify the
+`broken` machinery. Settle with `brew log libgit2`: how often has the soname changed?
+Disposition:
+
+**Ergonomics.**
+
+Finding:
+
+1. Doctor runtime is fine: 0.13s for eight `--help` probes on `claude`, 1.15s for `pwsh`
+   on the Studio. Not raised.
+2. The Part 4 guard (`command -v pwsh`) and the doctor probe (`pwsh` runs) test different
+   things, so a crashing `pwsh` would loop forever.
+3. Case 5 miscounts: `workstation` also lacks `zig`, so it shows 9 WARNs, not 8.
+4. The paired-negative claim is overstated (as Goal-Fit 2).
+5. Repairing `broken` costs a full `-t developer`. The real exposure is libgit2 or OpenSSL
+   only (`readelf -d` NEEDED), not seven sonames.
+6. `wrong-version` downgrades hand-upgraded newer installs to the pin.
+7. "Cannot shadow" is false on `workstation`: `~/.pyenv` is a pyenv 2.7.2 git clone that
+   already has `pyenv.d/rehash/conda.bash` and `source.bash`.
+8. Case 1's negative control deletes live shims on `claude`. Use a scratch `PYENV_ROOT`.
+9. Rollout cost is unmeasured for `personal_laptop` and `wsl2_workstation`.
+
+Assumption: noble `pwsh` starts on resolute. **Checked by the author on 2026-09-17:** noble
+`powershell_7.6.2-1` extracted with `dpkg-deb -x` into a scratch directory on `claude`
+ran `pwsh -NoProfile` and printed `7.6.2`, rc 0. Confirmed.
+Disposition:
+
+**Risk.**
+
+Finding:
+
+1. "`nullglob` is already on" is false on `workstation`. Hooks sort alphabetically, and
+   `conda.bash`'s `conda_exists` runs `shopt -u dotglob nullglob` first. With nullglob
+   off, an unmatched glob registers a shim named `*`, and under bash 3.2 the unquoted loop
+   expands it against the cwd. This is latent today. The hook must save its caller's
+   options, set its own, and restore them.
+2. A missing `make_shims` (after a pyenv upgrade) or a dangling link aborts every rehash
+   under `set -e`, and with the D2 detector dropped nothing reports it. Guard with
+   `declare -f make_shims >/dev/null || return 0`, as pyenv-virtualenv's `envs.bash` does.
+3. The paired-negative claim is false. No suite tests cover `_doctor_check_dev_tools`'s
+   branches, and the empty-`versions/` hook test passes whenever the harness sets nullglob.
+4. Doctor runs binaries with no timeout. `~/.cargo/bin/cargo` is the rustup proxy and can
+   download a toolchain under a `rust-toolchain.toml`. Latent.
+
+Assumption: the pyenv hook contract (`make_shims` in scope; hooks sourced between
+`make_shims` and `remove_stale_shims`) survives brew pyenv upgrades. Settle with
+`git log -p -- libexec/pyenv-rehash` upstream, and re-grep after each upgrade.
+Disposition:
