@@ -592,6 +592,58 @@ run_update() {
     _update_skip "pip" "flag not set"
   fi
 
+  # ── pyenv-shims ────────────────────────────────────────────────────────────
+  # brew upgrade pyenv (macOS/Linux) and pyenv update (a clone) both happen
+  # inside -t update, and either can retire install_pyenv_rehash_hook's fix
+  # for the uutils sort -u collation defect (see pyenv.d/rehash/). So this
+  # section runs whenever brew or pip might have run, not only at setup_user
+  # time.
+  if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_BREW:-} ]] || [[ -n ${UPDATE_PIP:-} ]]; then
+    local _pyenv_shims_bin
+    _pyenv_shims_bin="$(_pyenv_ansible_venv_bin)"
+    if [[ ! -d "${_pyenv_shims_bin}" ]]; then
+      _update_skip "pyenv-shims" "no ansible venv"
+    else
+      _update_record_start "pyenv-shims"
+
+      install_pyenv_rehash_hook || log_warn "pyenv rehash hook not installed — see above"
+
+      # Resolved independently of the pip block above, following the same
+      # pattern: under --brew-only the pip block never runs, so its PATH
+      # prepend / PYENV_ROOT export cannot be relied on here.
+      export PYENV_ROOT="$HOME/.pyenv"
+      export PATH="$PYENV_ROOT/bin:$PYENV_ROOT/shims:$PATH"
+
+      local _rehash_rc=0
+      if command -v pyenv >/dev/null 2>&1; then
+        # A rehash can wait up to 60s for pyenv's own lock
+        # (PYENV_REHASH_TIMEOUT); a lock left by a rehash killed under 2
+        # minutes earlier is not yet stale (find -mmin +2), so this can
+        # legitimately end in rc 1 on an otherwise healthy machine. Never
+        # fatal — the rc is recorded below and the section still runs the
+        # missing-shim check, which reports the actual consequence.
+        pyenv rehash 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_pyenv-shims"
+        _rehash_rc="${PIPESTATUS[0]}"
+      else
+        log_warn "pyenv not found on PATH — skipping pyenv rehash"
+        : > "${_DOTFILES_RUN_TMPDIR}/err_pyenv-shims"
+      fi
+      if [[ ${_rehash_rc} -ne 0 ]]; then
+        printf "pyenv rehash exited %d\n" "${_rehash_rc}" >> "${_DOTFILES_RUN_TMPDIR}/err_pyenv-shims"
+      fi
+
+      local _pyenv_shims_missing
+      _pyenv_shims_missing="$(_pyenv_missing_shims)"
+      _update_record_end "pyenv-shims" 0
+      if [[ -n "${_pyenv_shims_missing}" ]]; then
+        _update_warn "pyenv-shims" "missing shim(s): $(printf '%s' "${_pyenv_shims_missing}" | paste -sd', ' -)"
+        _update_write_detail_from_err "pyenv-shims" "warning output"
+      fi
+    fi
+  else
+    _update_skip "pyenv-shims" "flag not set"
+  fi
+
   # ── git-based tools + misc (run_all only) ─────────────────────────────────
   if [[ ${_run_all} -eq 1 ]]; then
     _update_record_start "ai-config"

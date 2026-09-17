@@ -20,6 +20,16 @@ setup() {
   # run_brew_install tests each `export HAS_AWS=1` or unset it themselves
   # explicitly and are unaffected.
   unset HAS_AWS
+  # PYENV_ROOT is exported for real by this developer session's own pyenv
+  # shell integration (/Users/bruce/.pyenv), and run_update's new
+  # pyenv-shims section resolves _OVERRIDE_PYENV_ROOT, then PYENV_ROOT,
+  # then HOME as its fallback chain -- same shape as the HAS_AWS fix above.
+  # Left set, any test that reaches _run_all or UPDATE_BREW/UPDATE_PIP would
+  # find the operator's REAL ansible venv (versions/ansible/bin) and have
+  # install_pyenv_rehash_hook write into the real ~/.pyenv/pyenv.d/rehash/.
+  # Unset here so the fallback lands on the redirected HOME below instead,
+  # where no venv exists and the section is a no-op SKIP by default.
+  unset PYENV_ROOT
   # Minimal env so workflow functions don't crash on missing vars
   export HOME="${BATS_TEST_TMPDIR}"
   export PERSONAL_GITREPOS="${BATS_TEST_TMPDIR}/git-repos/personal"
