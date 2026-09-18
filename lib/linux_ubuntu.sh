@@ -57,12 +57,30 @@ _install_ubuntu_base_packages() {
   fi
 }
 
+# Whether pwsh actually runs, bounded by `timeout` so a hung binary cannot
+# block install_ubuntu_packages -- and therefore the whole -t setup/
+# -t developer run -- indefinitely. Mirrors _doctor_check_dev_tools's
+# identical probe/fallback shape in lib/helpers.sh: an absent `timeout`
+# degrades to running the probe unbounded rather than failing outright,
+# since every Ubuntu target this runs on ships coreutils by construction --
+# the fallback exists for a shim-scoped test PATH, not an expected
+# production gap.
+_pwsh_probe_runs() {
+  local _timeout_bin
+  _timeout_bin="$(command -v timeout 2>/dev/null)"
+  if [[ -n "${_timeout_bin}" ]]; then
+    "${_timeout_bin}" "${_PWSH_PROBE_TIMEOUT:-10}" "${_PWSH_BIN:-pwsh}" -NoProfile -Command exit &>/dev/null
+  else
+    "${_PWSH_BIN:-pwsh}" -NoProfile -Command exit &>/dev/null
+  fi
+}
+
 _install_ubuntu_powershell() {
   # Judge by whether pwsh RUNS, not merely resolves -- a box whose first
   # attempt hit the resolute gap below downloaded and dpkg -i'd the WRONG
   # config, leaving a `pwsh` that resolves via `command -v` but is absent or
   # broken. A presence-only guard would loop forever on that box.
-  if "${_PWSH_BIN:-pwsh}" -NoProfile -Command exit &>/dev/null; then
+  if _pwsh_probe_runs; then
     printf "pwsh is installed\\n"
     return 0
   fi
@@ -107,7 +125,7 @@ _install_ubuntu_powershell() {
   # installed binary is broken -- the `claude` failure mode one level out.
   # Re-run the same execution check the guard opened with rather than
   # trusting apt's own exit status for this claim.
-  if ! "${_PWSH_BIN:-pwsh}" -NoProfile -Command exit &>/dev/null; then
+  if ! _pwsh_probe_runs; then
     log_warn "powershell: apt install succeeded but pwsh still does not run"
     return 0
   fi

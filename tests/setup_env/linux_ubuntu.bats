@@ -63,6 +63,29 @@ EOF
   printf '%s/pwsh' "${_dir}"
 }
 
+# Writes a pwsh stub that sleeps past any sane probe timeout before exiting
+# 0, and prints its own path. Simulates the half-installed hang state
+# _PWSH_PROBE_TIMEOUT exists to bound -- driving a genuinely indefinite hang
+# is not practical in a unit test, so the test that uses this measures
+# wall-clock time to prove the probe was actually killed rather than run to
+# completion. The stub calls /bin/sleep by absolute path, not a bare
+# `sleep` lookup -- this file's setup() calls load_mocks, and
+# tests/mocks/sleep is a pass-through fake that returns instantly without
+# sleeping (shell.md: a PATH mock shadows the binary your own stub needs,
+# not just the caller's), which would make the hang this helper exists to
+# simulate impossible to produce.
+_pwsh_hanging_stub_bin() {
+  local _sleep_secs="${1:-5}" _dir
+  _dir="$(mktemp -d -p "${BATS_TEST_TMPDIR}")"
+  cat > "${_dir}/pwsh" << EOF
+#!/usr/bin/env bash
+/bin/sleep ${_sleep_secs}
+exit 0
+EOF
+  /bin/chmod +x "${_dir}/pwsh"
+  printf '%s/pwsh' "${_dir}"
+}
+
 # ── _install_ubuntu_base_packages ────────────────────────────────────────────
 
 @test "_install_ubuntu_base_packages: installs hwe-24.04" {
@@ -330,6 +353,27 @@ EOF
   [[ "$output" == *"apt install"* ]]
   grep -q "apt update" "${MOCK_CALLS_FILE}"
   grep -q "apt install powershell" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_powershell: a hanging pwsh probe is bounded by timeout rather than blocking the run" {
+  # timeout is real here, not mocked (shell.md: the point is whether OUR
+  # wrapping resolves/wraps/reads rc correctly, not whether timeout itself
+  # works). Both probes in the function (the initial guard and the
+  # post-apt-install re-check) hit this same hanging stub, so an unbounded
+  # probe would sleep the full 5s at each of the two call sites; bounding
+  # each at 1s keeps the whole run well under that ceiling.
+  export _PWSH_PROBE_TIMEOUT=1
+  _PWSH_BIN="$(_pwsh_hanging_stub_bin 5)"
+
+  local _start _end _elapsed
+  _start="$(date +%s)"
+  run _install_ubuntu_powershell
+  _end="$(date +%s)"
+  _elapsed=$(( _end - _start ))
+
+  [ "$status" -eq 0 ]
+  [ "${_elapsed}" -lt 5 ]
+  [[ "$output" == *"apt install succeeded but pwsh still does not run"* ]]
 }
 
 # ── _install_ubuntu_go ───────────────────────────────────────────────────────
