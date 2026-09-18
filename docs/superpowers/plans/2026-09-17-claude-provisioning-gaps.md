@@ -1,5 +1,7 @@
 # Claude Provisioning Gaps Implementation Plan
 
+> **Status: DONE**
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Close the four provisioning defects found moving sessions onto `claude`:
