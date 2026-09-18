@@ -601,8 +601,16 @@ _doctor_check_dev_tools() {
   # healthy installs would report "does not run (rc 1)" and send the
   # operator to reinstall them. Neither is a per-tool problem, so this is
   # one WARN for the whole arm rather than five misleading verdicts.
+  #
+  # `-d` alone only stats the path -- it says nothing about whether IT is
+  # traversable, only that it exists and is a directory. A HOME lacking its
+  # own execute bit (e.g. chmod 0600) passes `-d` and then fails every
+  # probe's `cd`, which is exactly the rc-1 misattribution this guard
+  # exists to prevent. `( cd ... )` in a subshell is the actual operation
+  # every probe below performs, so testing it directly is what the guard
+  # needs rather than a proxy for it.
   local _probe_dir="${HOME:-}"
-  if [[ -z "${_probe_dir}" ]] || [[ ! -d "${_probe_dir}" ]]; then
+  if [[ -z "${_probe_dir}" ]] || [[ ! -d "${_probe_dir}" ]] || ! ( cd "${_probe_dir}" ) 2>/dev/null; then
     printf "\nDev tools:\n"
     doctor_warn "dev tools" "cannot probe: HOME is unset or unreadable"
     return 0

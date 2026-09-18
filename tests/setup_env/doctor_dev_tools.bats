@@ -240,6 +240,35 @@ STUB
   [[ "$output" != *"rc 1"* ]]
 }
 
+@test "_doctor_check_dev_tools warns once for the whole arm when HOME exists but is not traversable" {
+  # `[[ -d ]]` only stats the path -- it needs `x` on the PARENT, not on the
+  # directory itself, so a HOME lacking its own execute bit passes a bare
+  # `-d` guard and every probe's `cd` then fails, reporting five healthy
+  # installs as "does not run (rc 1)" exactly like the does-not-exist case
+  # above. Running as root makes every directory traversable regardless of
+  # mode, so this test cannot discriminate under a root runner -- skip
+  # there rather than pass for the wrong reason (bats/tests/scripts'
+  # existing convention for the same hazard).
+  [ "$(id -u)" -ne 0 ] || skip "running as root; chmod 0600 does not block traversal"
+  export LINUX=1 HAS_DEVTOOLS=1
+  _write_stub "pwsh" "exit 0"
+  _write_stub "tflint" "exit 0"
+  _write_stub "zig" "exit 0"
+  _write_stub "terraform" "exit 0"
+  _write_stub "tfsec" "exit 0"
+  local _unreadable_home="${BATS_TEST_TMPDIR}/unreadable-home"
+  mkdir -p "${_unreadable_home}"
+  chmod 0600 "${_unreadable_home}"
+  export HOME="${_unreadable_home}"
+
+  PATH="${_BIN_DIR}" run _doctor_check_dev_tools
+  chmod 0700 "${_unreadable_home}"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"cannot probe: HOME is unset or unreadable"* ]]
+  [[ "$output" != *"[PASS]"* ]]
+  [[ "$output" != *"rc 1"* ]]
+}
+
 # ── T1: the timeout-absent fallback must still discriminate a real
 # failure, not vacuously PASS every tool ──────────────────────────────────
 
