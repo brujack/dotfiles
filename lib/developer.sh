@@ -534,9 +534,31 @@ setup_ansible() {
       local _uv
       _uv="$(resolve_uv)" || return 1
       uv_sync_venv "${_uv}" "${PYENV_ROOT}/versions/ansible/bin/python" "${PYENV_ROOT}/versions/ansible" || return 1
-      install_pyenv_rehash_hook || log_warn "pyenv rehash hook not installed — see above"
-      pyenv rehash
     fi
+  fi
+
+  # Deliberately OUTSIDE the block above. That block runs only when the venv is
+  # being created, so on an already-provisioned box -- the ordinary case --
+  # setup_ansible skipped the hook install entirely and `-t developer` could
+  # never deliver it. Measured 2026-09-18 on claude and workstation: both runs
+  # exited 0 and left ${PYENV_ROOT}/pyenv.d/rehash/ absent, so the uutils
+  # sort -u collation fix #282 shipped was unreachable on exactly the machines
+  # it was written for.
+  #
+  # Both calls are idempotent, which is what makes running them on every pass
+  # safe: install_pyenv_rehash_hook no-ops when ${PYENV_ROOT}/versions is
+  # absent and skips the write when cmp -s says the file already matches, and
+  # `pyenv rehash` is safe to repeat.
+  #
+  # The quiet_which guard is not defensive noise. The create path above exports
+  # PATH and runs `pyenv init -`; the skip path does neither, so pyenv may be
+  # unresolvable here. Unguarded, `pyenv rehash` would then fail and, via
+  # setup_ansible's caller (`setup_ansible || return 1`), abort a run that
+  # previously succeeded -- a regression on any box whose pyenv binary is gone
+  # while ~/.pyenv survives.
+  if quiet_which pyenv; then
+    install_pyenv_rehash_hook || log_warn "pyenv rehash hook not installed — see above"
+    pyenv rehash
   fi
 }
 
