@@ -217,6 +217,54 @@ EOF
   [ "$status" -ne 0 ]
 }
 
+# Writes a pwsh stub with an ABSOLUTE shebang (`#!/bin/bash`, not `#!/usr/bin/env
+# bash`), and prints its own path. The two tests below scope PATH to a dir
+# containing no `timeout` at all, to exercise _pwsh_probe_runs' timeout-absent
+# ELSE branch directly (T1's approach in doctor_dev_tools.bats, for the
+# sibling probe). `#!/usr/bin/env bash` (what _pwsh_stub_bin and
+# _pwsh_hanging_stub_bin above use) needs `env` to resolve `bash` via THAT
+# same restricted PATH and fails with rc 127 ("env: bash: No such file or
+# directory") -- measured directly before writing these tests. An absolute
+# shebang is resolved by the kernel exec, never by a PATH search, so it is
+# unaffected by how narrow the invoking PATH is.
+_pwsh_absolute_shebang_stub_bin() {
+  local _rc="${1:-0}" _dir
+  _dir="$(mktemp -d -p "${BATS_TEST_TMPDIR}")"
+  cat > "${_dir}/pwsh" << EOF
+#!/bin/bash
+exit ${_rc}
+EOF
+  /bin/chmod +x "${_dir}/pwsh"
+  printf '%s/pwsh' "${_dir}"
+}
+
+# ── _pwsh_probe_runs: the timeout-absent fallback branch, direct ───────────
+
+@test "_pwsh_probe_runs: the timeout-absent fallback still succeeds when pwsh runs" {
+  # Called directly, not through _install_ubuntu_powershell, which would
+  # drag in wget/dpkg/apt and obscure which branch of the probe ran.
+  local _no_timeout_dir="${BATS_TEST_TMPDIR}/no_timeout_ok"
+  mkdir -p "${_no_timeout_dir}"
+  _PWSH_BIN="$(_pwsh_absolute_shebang_stub_bin 0)"
+
+  PATH="${_no_timeout_dir}" run _pwsh_probe_runs
+  [ "$status" -eq 0 ]
+}
+
+@test "_pwsh_probe_runs: the timeout-absent fallback still fails when pwsh does not run" {
+  # Companion negative case -- the fallback must discriminate a genuine
+  # failure, not vacuously report success for every pwsh. Without this
+  # pair, the ELSE branch (lib/linux_ubuntu.sh's _pwsh_probe_runs) is
+  # executed by zero tests: `command -v timeout` resolves on every machine
+  # this suite runs on, so nothing before this pair ever took it.
+  local _no_timeout_dir="${BATS_TEST_TMPDIR}/no_timeout_fail"
+  mkdir -p "${_no_timeout_dir}"
+  _PWSH_BIN="$(_pwsh_absolute_shebang_stub_bin 1)"
+
+  PATH="${_no_timeout_dir}" run _pwsh_probe_runs
+  [ "$status" -ne 0 ]
+}
+
 # ── _install_ubuntu_powershell ───────────────────────────────────────────────
 
 @test "_install_ubuntu_powershell: pwsh already runs — installs nothing" {
