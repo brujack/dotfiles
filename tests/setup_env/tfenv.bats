@@ -116,6 +116,15 @@ FIXTURE
   run _install_ubuntu_tfenv
   [ "$status" -eq 0 ]
   [[ "$output" == *"tfenv clone"*"failed"* ]]
+  # Status + warn text alone are satisfied equally by "returned immediately"
+  # and by "fell through and symlinked a nonexistent target anyway" -- the
+  # mock's mkdir-only clone stub creates ${_TFENV_ROOT} even on a simulated
+  # failure, so without these, deleting the `return 0` above leaves every
+  # assertion in this test green (E5: an absence claim needs a positive
+  # control, and this test's positive control is any of the seeded-root
+  # symlink tests below).
+  refute_grep "^ln " "${MOCK_CALLS_FILE}"
+  [ ! -e "${_TFENV_LINK_DIR}/terraform" ]
 }
 
 @test "_install_ubuntu_tfenv: an existing root is not re-cloned" {
@@ -123,6 +132,46 @@ FIXTURE
   run _install_ubuntu_tfenv
   [ "$status" -eq 0 ]
   refute_grep "^git clone" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_tfenv: default repo URL is the real tfutils clone URL when the seam is unset" {
+  unset _TFENV_REPO_URL
+  run _install_ubuntu_tfenv
+  [ "$status" -eq 0 ]
+  grep -q "^git clone https://github.com/tfutils/tfenv.git ${_TFENV_ROOT}\$" "${MOCK_CALLS_FILE}"
+}
+
+# ── existing-but-invalid root (interrupted clone, stray mkdir, damaged
+#    checkout -- present, but no usable tfenv entry point) ──────────────────
+
+@test "_install_ubuntu_tfenv: an existing root with no usable tfenv entry point warns, names the remedy, and returns 0" {
+  mkdir -p "${_TFENV_ROOT}"
+  run _install_ubuntu_tfenv
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"${_TFENV_ROOT}"* ]]
+  [[ "$output" == *"rm -rf ${_TFENV_ROOT}"* ]]
+}
+
+@test "_install_ubuntu_tfenv: an invalid root plants no symlinks and never reaches tfenv install" {
+  mkdir -p "${_TFENV_ROOT}"
+  run _install_ubuntu_tfenv
+  [ "$status" -eq 0 ]
+  refute_grep "^(sudo )?ln " "${MOCK_CALLS_FILE}" -E
+  [ ! -e "${_TFENV_LINK_DIR}/tfenv" ]
+  [ ! -e "${_TFENV_LINK_DIR}/terraform" ]
+  [ -z "$(cat "${TFENV_CALLS_FILE}")" ]
+}
+
+@test "_install_ubuntu_tfenv: a valid root still symlinks and installs (positive control for the invalid-root guard)" {
+  # Pairs with the two tests directly above: without this, a mutation that
+  # made the invalid-root guard fire unconditionally (E5 -- warn-and-return
+  # is an absence claim satisfiable by the function never running its real
+  # path at all) would leave both of them green.
+  _seed_tfenv_root "yes"
+  run _install_ubuntu_tfenv
+  [ "$status" -eq 0 ]
+  [ -L "${_TFENV_LINK_DIR}/tfenv" ]
+  [ -L "${_TFENV_LINK_DIR}/terraform" ]
 }
 
 # ── symlink management ──────────────────────────────────────────────────────
@@ -178,27 +227,48 @@ FIXTURE
   refute_grep "^sudo " "${MOCK_CALLS_FILE}"
 }
 
-@test "_install_ubuntu_tfenv: a non-writable link dir routes symlinking through sudo" {
-  _seed_tfenv_root "yes"
-  chmod 0555 "${_TFENV_LINK_DIR}"
-
-  # A recording-only sudo shim, deliberately NOT tests/mocks/sudo -- that
-  # mock execs the real command when it resolves on PATH, which here would
-  # attempt a genuine write into a directory this test just made read-only
-  # (tdd.md E2: a test's failing path must be inert).
+# Installs a recording-only sudo shim at the front of PATH, deliberately NOT
+# tests/mocks/sudo -- that mock execs the real command when it resolves on
+# PATH, which here would attempt a genuine write into a directory the caller
+# has made read-only (tdd.md E2: a test's failing path must be inert). Exit
+# code is driven by MOCK_SUDO_SHIM_EXIT (default 0) so both the success and
+# failure arms of the sudo `ln` call can be tested.
+_install_sudo_shim() {
   local _sudo_shim="${BATS_TEST_TMPDIR}/sudo-shim"
   mkdir -p "${_sudo_shim}"
   cat > "${_sudo_shim}/sudo" <<EOF
 #!/usr/bin/env bash
 printf "sudo %s\n" "\$*" >> "${MOCK_CALLS_FILE}"
-exit 0
+exit "\${MOCK_SUDO_SHIM_EXIT:-0}"
 EOF
   chmod +x "${_sudo_shim}/sudo"
+  printf '%s' "${_sudo_shim}"
+}
+
+@test "_install_ubuntu_tfenv: a non-writable link dir routes symlinking through sudo" {
+  _seed_tfenv_root "yes"
+  chmod 0555 "${_TFENV_LINK_DIR}"
+  local _sudo_shim
+  _sudo_shim="$(_install_sudo_shim)"
 
   PATH="${_sudo_shim}:${PATH}" run _install_ubuntu_tfenv
   chmod 0755 "${_TFENV_LINK_DIR}"
   [ "$status" -eq 0 ]
   grep -qF "sudo ln -s" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_tfenv: a failing sudo symlink warns and returns 0 rather than propagating" {
+  _seed_tfenv_root "yes"
+  chmod 0555 "${_TFENV_LINK_DIR}"
+  local _sudo_shim
+  _sudo_shim="$(_install_sudo_shim)"
+  export MOCK_SUDO_SHIM_EXIT=1
+
+  PATH="${_sudo_shim}:${PATH}" run _install_ubuntu_tfenv
+  chmod 0755 "${_TFENV_LINK_DIR}"
+  [ "$status" -eq 0 ]
+  grep -qF "sudo ln -s" "${MOCK_CALLS_FILE}"
+  [[ "$output" == *"linking"*"failed"* ]]
 }
 
 # ── version management ──────────────────────────────────────────────────────

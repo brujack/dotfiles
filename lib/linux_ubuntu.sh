@@ -883,6 +883,20 @@ _install_ubuntu_tfenv() {
       log_warn "tfenv clone into ${_root} failed; skipping"
       return 0
     fi
+  elif [[ ! -x "${_root}/bin/tfenv" ]]; then
+    # ${_root} exists but is not a usable checkout -- an interrupted clone
+    # (git self-cleans on an ordinary error exit but not on
+    # SIGINT/SIGTERM/timeout/OOM), a stray mkdir, or a damaged checkout. Do
+    # NOT re-clone: `git clone` into a non-empty directory fails, so it
+    # would not self-heal, and do not auto-delete the directory either --
+    # destroying an operator's directory is their call, not ours. Warning
+    # and returning before the symlink loop below is what keeps this state
+    # from becoming permanent: the loop's own `-L` branch treats an
+    # already-correct dangling symlink as done and repairs nothing on every
+    # subsequent run, which is what running this while ${_root} is broken
+    # would otherwise plant.
+    log_warn "${_root} exists but has no usable tfenv entry point; run 'rm -rf ${_root}' and retry"
+    return 0
   fi
 
   local _name _target _link
