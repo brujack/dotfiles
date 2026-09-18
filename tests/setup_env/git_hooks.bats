@@ -1030,6 +1030,30 @@ _build_subdir_target_repo() {
   [ -z "$output" ]
 }
 
+@test "a skipped candidate does not count as a Makefile: FIFO-only repo is rc 4 and reported by bare name" {
+  # The contract says a skipped candidate is reported as missing. Every other
+  # FIFO fixture carries a root Makefile, which answers rc 1 on its own, so
+  # counting the skipped candidate as present would pass them all.
+  local _base="${TESTDIR}/fifo-only"
+  local _repo="${_base}/fifo-only-repo"
+  mkdir -p "${_repo}/sub"
+  git init -q "${_repo}"
+  printf 'install-hooks:\n\t@true\n' > "${_repo}/sub/Makefile"
+  git -C "${_repo}" add sub/Makefile
+  git -C "${_repo}" commit -q -m init
+  rm "${_repo}/sub/Makefile"
+  mkfifo "${_repo}/sub/Makefile"
+
+  run timeout 10 bash -c 'source "$1"; _git_hooks_target_dir "$2"' _ \
+    "${REPO_ROOT}/lib/git_hooks.sh" "${_repo}"
+  [ "$status" -eq 4 ]
+
+  run timeout 10 bash -c 'source "$1"; HOOK_EXPECTED_REPOS=(fifo-only-repo); PERSONAL_GITREPOS="$2" _git_hooks_gap_repos' _ \
+    "${REPO_ROOT}/lib/git_hooks.sh" "${_base}"
+  [ "$status" -eq 0 ]
+  [ "$output" = "fifo-only-repo" ]
+}
+
 @test "_git_hooks_target_dir resolves a committed symlinked Makefile that points inside the repo" {
   # A symlink is a legitimate way to share one Makefile between components.
   # Write access to the operator's own checkout is outside this code's threat
