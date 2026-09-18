@@ -18,6 +18,19 @@ setup() {
   mkdir -p "${HOME}/.cargo/bin"
   cp "${REPO_ROOT}/tests/mocks/rustup" "${HOME}/.cargo/bin/rustup"
   chmod +x "${HOME}/.cargo/bin/rustup"
+  # Same rule, one release-binary helper over: _RELEASE_BIN_DIR at SETUP
+  # scope so a future HAS_DEVTOOLS=1 test that forgets to stub
+  # _install_ubuntu_tflint/_install_ubuntu_tfsec cannot reach real
+  # /usr/local/bin -- _install_pinned_release_binary has its own tests in
+  # release_binary.bats, which drive the seams.
+  export _RELEASE_BIN_DIR="${BATS_TEST_TMPDIR}/release-bin"
+  mkdir -p "${_RELEASE_BIN_DIR}"
+  # Default _PWSH_BIN to a path that cannot resolve, at SETUP scope. Without
+  # it, a test that forgets its own override resolves the LITERAL `pwsh` --
+  # and this Mac has a real /opt/homebrew/bin/pwsh, so that test would
+  # silently take the early-return "already installed" branch and assert
+  # nothing about the install path it meant to exercise.
+  export _PWSH_BIN="${BATS_TEST_TMPDIR}/nonexistent-pwsh"
   # Truncate AFTER seeding: cp and chmod are pass-through mocks that log their own
   # invocation, so the seed writes a line containing "rustup" into the call log and
   # breaks any test asserting that string is absent. Every test already assumes it
@@ -27,6 +40,50 @@ setup() {
 
 teardown() {
   rm -f "${MOCK_CALLS_FILE:-}"
+}
+
+# Writes a stub pwsh binary and prints its own file path (not a directory --
+# the name says so). `_rc` is the exit status the stub returns when RUN -- 0
+# for "pwsh already works", nonzero for "pwsh resolves but does not run",
+# which is the distinction _install_ubuntu_powershell's guard exists to make
+# (a `command -v`-only guard cannot see it: the file exists and is executable
+# either way). "pwsh is absent entirely" needs no call to this helper at all
+# -- setup()'s own _PWSH_BIN default already points at a path nothing creates.
+_pwsh_stub_bin() {
+  local _rc="${1:-0}" _dir
+  _dir="$(mktemp -d -p "${BATS_TEST_TMPDIR}")"
+  cat > "${_dir}/pwsh" << EOF
+#!/usr/bin/env bash
+exit ${_rc}
+EOF
+  # /bin/chmod, not the mocked `chmod` load_mocks put ahead of it on PATH --
+  # that mock is a pass-through that ALSO logs to MOCK_CALLS_FILE, which
+  # would pollute the very log a caller asserting "nothing was called" reads.
+  /bin/chmod +x "${_dir}/pwsh"
+  printf '%s/pwsh' "${_dir}"
+}
+
+# Writes a pwsh stub that sleeps past any sane probe timeout before exiting
+# 0, and prints its own path. Simulates the half-installed hang state
+# _PWSH_PROBE_TIMEOUT exists to bound -- driving a genuinely indefinite hang
+# is not practical in a unit test, so the test that uses this measures
+# wall-clock time to prove the probe was actually killed rather than run to
+# completion. The stub calls /bin/sleep by absolute path, not a bare
+# `sleep` lookup -- this file's setup() calls load_mocks, and
+# tests/mocks/sleep is a pass-through fake that returns instantly without
+# sleeping (shell.md: a PATH mock shadows the binary your own stub needs,
+# not just the caller's), which would make the hang this helper exists to
+# simulate impossible to produce.
+_pwsh_hanging_stub_bin() {
+  local _sleep_secs="${1:-5}" _dir
+  _dir="$(mktemp -d -p "${BATS_TEST_TMPDIR}")"
+  cat > "${_dir}/pwsh" << EOF
+#!/usr/bin/env bash
+/bin/sleep ${_sleep_secs}
+exit 0
+EOF
+  /bin/chmod +x "${_dir}/pwsh"
+  printf '%s/pwsh' "${_dir}"
 }
 
 # ── _install_ubuntu_base_packages ────────────────────────────────────────────
@@ -160,7 +217,118 @@ teardown() {
   [ "$status" -ne 0 ]
 }
 
+# Writes a pwsh stub with an ABSOLUTE shebang (`#!/bin/bash`, not `#!/usr/bin/env
+# bash`), and prints its own path. The two tests below scope PATH to a dir
+# containing no `timeout` at all, to exercise _pwsh_probe_runs' timeout-absent
+# ELSE branch directly (T1's approach in doctor_dev_tools.bats, for the
+# sibling probe). `#!/usr/bin/env bash` (what _pwsh_stub_bin and
+# _pwsh_hanging_stub_bin above use) needs `env` to resolve `bash` via THAT
+# same restricted PATH and fails with rc 127 ("env: bash: No such file or
+# directory") -- measured directly before writing these tests. An absolute
+# shebang is resolved by the kernel exec, never by a PATH search, so it is
+# unaffected by how narrow the invoking PATH is.
+_pwsh_absolute_shebang_stub_bin() {
+  local _rc="${1:-0}" _dir
+  _dir="$(mktemp -d -p "${BATS_TEST_TMPDIR}")"
+  cat > "${_dir}/pwsh" << EOF
+#!/bin/bash
+exit ${_rc}
+EOF
+  /bin/chmod +x "${_dir}/pwsh"
+  printf '%s/pwsh' "${_dir}"
+}
+
+# ── _pwsh_probe_runs: the timeout-absent fallback branch, direct ───────────
+
+@test "_pwsh_probe_runs: the timeout-absent fallback still succeeds when pwsh runs" {
+  # Called directly, not through _install_ubuntu_powershell, which would
+  # drag in wget/dpkg/apt and obscure which branch of the probe ran.
+  local _no_timeout_dir="${BATS_TEST_TMPDIR}/no_timeout_ok"
+  mkdir -p "${_no_timeout_dir}"
+  _PWSH_BIN="$(_pwsh_absolute_shebang_stub_bin 0)"
+
+  PATH="${_no_timeout_dir}" run _pwsh_probe_runs
+  [ "$status" -eq 0 ]
+}
+
+@test "_pwsh_probe_runs: the timeout-absent fallback still fails when pwsh does not run" {
+  # Companion negative case -- the fallback must discriminate a genuine
+  # failure, not vacuously report success for every pwsh. Without this
+  # pair, the ELSE branch (lib/linux_ubuntu.sh's _pwsh_probe_runs) is
+  # executed by zero tests: `command -v timeout` resolves on every machine
+  # this suite runs on, so nothing before this pair ever took it.
+  local _no_timeout_dir="${BATS_TEST_TMPDIR}/no_timeout_fail"
+  mkdir -p "${_no_timeout_dir}"
+  _PWSH_BIN="$(_pwsh_absolute_shebang_stub_bin 1)"
+
+  PATH="${_no_timeout_dir}" run _pwsh_probe_runs
+  [ "$status" -ne 0 ]
+}
+
 # ── _install_ubuntu_powershell ───────────────────────────────────────────────
+
+@test "_install_ubuntu_powershell: pwsh already runs — installs nothing" {
+  _PWSH_BIN="$(_pwsh_stub_bin 0)"
+  run _install_ubuntu_powershell
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"pwsh is installed"* ]]
+  # Guard must return before touching wget/dpkg/sudo/apt.
+  refute_grep "^(wget|dpkg|sudo|apt) " "${MOCK_CALLS_FILE}" -E
+}
+
+@test "_install_ubuntu_powershell: pwsh resolves but does not run still installs" {
+  # A `command -v pwsh`-only guard would see this stub as "installed" (it
+  # exists and is executable) and stop here -- the guard must actually RUN
+  # it. This is the case a command-v mutation of the guard cannot pass.
+  _PWSH_BIN="$(_pwsh_stub_bin 1)"
+  run _install_ubuntu_powershell
+  [ "$status" -eq 0 ]
+  grep -q "wget.*packages-microsoft-prod.deb" "${MOCK_CALLS_FILE}"
+  grep -q "dpkg -i" "${MOCK_CALLS_FILE}"
+  grep -q "apt update" "${MOCK_CALLS_FILE}"
+  grep -qE "apt install powershell" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_powershell: apt install succeeding does not mean pwsh runs" {
+  # The condition this task exists for, one level out: apt exits 0 for
+  # "powershell is already the newest version" even when the installed
+  # binary is broken (measured on `claude`). The success message must be
+  # gated on pwsh actually running afterward, not on apt's exit status.
+  # tdd.md E5: the absence of "pwsh is installed" alone would also be
+  # satisfied by the function never running at all, so also assert the WARN
+  # naming the real cause is present.
+  _PWSH_BIN="$(_pwsh_stub_bin 1)"
+  run _install_ubuntu_powershell
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[WARN]"* ]]
+  [[ "$output" == *"apt install succeeded but pwsh still does not run"* ]]
+  [[ "$output" != *"pwsh is installed"* ]]
+}
+
+@test "_install_ubuntu_powershell: a genuinely successful install prints pwsh is installed only once verified" {
+  # Companion to the test above: prove the fix does not just suppress the
+  # success message unconditionally -- a run where pwsh genuinely starts
+  # working after apt install must still print it. Modeled by having the
+  # apt-install STEP materialize the working binary, since a stub's own
+  # exit code is otherwise static for the life of one test.
+  local _stub_dir="${BATS_TEST_TMPDIR}/apt-installs-pwsh"
+  local _working_pwsh="${BATS_TEST_TMPDIR}/working-pwsh"
+  mkdir -p "${_stub_dir}"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "${_working_pwsh}"
+  /bin/chmod +x "${_working_pwsh}"
+  _PWSH_BIN="${BATS_TEST_TMPDIR}/pwsh-appears-after-install"
+  cat > "${_stub_dir}/apt" << EOF
+#!/usr/bin/env bash
+printf "apt %s\n" "\$*" >> "${MOCK_CALLS_FILE}"
+[[ "\$1" == "install" ]] && cp "${_working_pwsh}" "${_PWSH_BIN}" && chmod +x "${_PWSH_BIN}"
+exit 0
+EOF
+  chmod +x "${_stub_dir}/apt"
+  PATH="${_stub_dir}:${PATH}" run _install_ubuntu_powershell
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"pwsh is installed"* ]]
+  [[ "$output" != *"[WARN]"* ]]
+}
 
 @test "_install_ubuntu_powershell: calls wget for packages-microsoft-prod.deb" {
   run _install_ubuntu_powershell
@@ -168,11 +336,92 @@ teardown() {
   grep -q "wget.*packages-microsoft-prod.deb" "${MOCK_CALLS_FILE}"
 }
 
-@test "_install_ubuntu_powershell: skips wget when deb already downloaded" {
+@test "_install_ubuntu_powershell: a stale .deb from a prior failed attempt does not block reinstall" {
+  # The regression this task exists to fix: a box whose first attempt hit the
+  # resolute gap (see comment in lib/linux_ubuntu.sh) downloaded and
+  # dpkg -i'd the WRONG config and left the .deb behind. Every run since
+  # skipped the whole block because the file existed -- measured on `claude`,
+  # 2026-09-17. The guard must now be independent of any pre-existing .deb.
   touch "${HOME}/software_downloads/packages-microsoft-prod.deb"
   run _install_ubuntu_powershell
   [ "$status" -eq 0 ]
-  ! grep -q "wget.*packages-microsoft-prod.deb" "${MOCK_CALLS_FILE}"
+  grep -q "wget.*packages-microsoft-prod.deb" "${MOCK_CALLS_FILE}"
+  grep -q "dpkg -i" "${MOCK_CALLS_FILE}"
+  grep -q "apt update" "${MOCK_CALLS_FILE}"
+  grep -qE "apt install powershell" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_powershell: wget failure warns naming wget and skips dpkg/apt" {
+  export MOCK_WGET_EXIT=1
+  run _install_ubuntu_powershell
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[WARN]"* ]]
+  [[ "$output" == *"wget"* ]]
+  refute_grep "dpkg -i" "${MOCK_CALLS_FILE}"
+  refute_grep "^apt " "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_powershell: dpkg failure warns naming dpkg and skips apt" {
+  export MOCK_DPKG_EXIT=1
+  run _install_ubuntu_powershell
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[WARN]"* ]]
+  [[ "$output" == *"dpkg"* ]]
+  grep -q "wget.*packages-microsoft-prod.deb" "${MOCK_CALLS_FILE}"
+  refute_grep "^apt " "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_powershell: apt update failure warns naming apt update and skips apt install" {
+  export MOCK_APT_EXIT=1
+  run _install_ubuntu_powershell
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[WARN]"* ]]
+  [[ "$output" == *"apt update"* ]]
+  grep -q "dpkg -i" "${MOCK_CALLS_FILE}"
+  refute_grep "install powershell" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_powershell: apt install failure warns after a successful apt update" {
+  # MOCK_APT_EXIT is one binary for both `apt update` and `apt install`, so
+  # asserting install-only failure needs a stub that discriminates by
+  # argument -- do not edit tests/mocks/apt, which every other test depends
+  # on defaulting to success.
+  local _stub_dir="${BATS_TEST_TMPDIR}/apt-install-fails"
+  mkdir -p "${_stub_dir}"
+  cat > "${_stub_dir}/apt" << 'EOF'
+#!/usr/bin/env bash
+printf "apt %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+[[ "$1" == "install" ]] && exit 1
+exit 0
+EOF
+  chmod +x "${_stub_dir}/apt"
+  PATH="${_stub_dir}:${PATH}" run _install_ubuntu_powershell
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[WARN]"* ]]
+  [[ "$output" == *"apt install"* ]]
+  grep -q "apt update" "${MOCK_CALLS_FILE}"
+  grep -q "apt install powershell" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_powershell: a hanging pwsh probe is bounded by timeout rather than blocking the run" {
+  # timeout is real here, not mocked (shell.md: the point is whether OUR
+  # wrapping resolves/wraps/reads rc correctly, not whether timeout itself
+  # works). Both probes in the function (the initial guard and the
+  # post-apt-install re-check) hit this same hanging stub, so an unbounded
+  # probe would sleep the full 5s at each of the two call sites; bounding
+  # each at 1s keeps the whole run well under that ceiling.
+  export _PWSH_PROBE_TIMEOUT=1
+  _PWSH_BIN="$(_pwsh_hanging_stub_bin 5)"
+
+  local _start _end _elapsed
+  _start="$(date +%s)"
+  run _install_ubuntu_powershell
+  _end="$(date +%s)"
+  _elapsed=$(( _end - _start ))
+
+  [ "$status" -eq 0 ]
+  [ "${_elapsed}" -lt 5 ]
+  [[ "$output" == *"apt install succeeded but pwsh still does not run"* ]]
 }
 
 # ── _install_ubuntu_go ───────────────────────────────────────────────────────
@@ -1131,6 +1380,12 @@ STUB
   export DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64"
   export YQ_VER="4.40.5"
   export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
+  # Stubbed: _install_pinned_release_binary has its own coverage in
+  # release_binary.bats; without this, HAS_DEVTOOLS=1 here would also reach
+  # tflint/tfsec's real curl+sha256sum path.
+  _install_ubuntu_tflint() { :; }
+  _install_ubuntu_tfsec() { :; }
+  _install_ubuntu_tfenv() { :; }
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
   grep -q "wget.*yq" "${MOCK_CALLS_FILE}"
@@ -1175,6 +1430,9 @@ STUB
   export YQ_VER="4.40.5"
   export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
   export HAS_DEVTOOLS=1
+  _install_ubuntu_tflint() { :; }
+  _install_ubuntu_tfsec() { :; }
+  _install_ubuntu_tfenv() { :; }
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
   grep -q "apt install dotnet-sdk-10.0" "${MOCK_CALLS_FILE}"
@@ -1191,6 +1449,9 @@ STUB
   export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
   export HAS_DEVTOOLS=1
   export MOCK_APT_EXIT=1
+  _install_ubuntu_tflint() { :; }
+  _install_ubuntu_tfsec() { :; }
+  _install_ubuntu_tfenv() { :; }
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
   [[ "$output" == *"dotnet-sdk-10.0 not available"* ]]
@@ -1205,6 +1466,9 @@ STUB
   # tofu may already be installed on the host (/usr/bin/tofu on Linux, brew on
   # macOS); force the install branch so the test is independent of host state.
   export _FORCE_OPENTOFU_INSTALL=1
+  _install_ubuntu_tflint() { :; }
+  _install_ubuntu_tfsec() { :; }
+  _install_ubuntu_tfenv() { :; }
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
   # The package is named `tofu`, not `opentofu`: that repo's amd64 index
@@ -1226,6 +1490,9 @@ STUB
   # tofu may already be installed on the host (/usr/bin/tofu on Linux, brew on
   # macOS); force the install branch so the test is independent of host state.
   export _FORCE_OPENTOFU_INSTALL=1
+  _install_ubuntu_tflint() { :; }
+  _install_ubuntu_tfsec() { :; }
+  _install_ubuntu_tfenv() { :; }
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
   grep -q "opentofu-archive-keyring.gpg" "${MOCK_CALLS_FILE}"
@@ -1240,6 +1507,9 @@ STUB
   # tofu may already be installed on the host (/usr/bin/tofu on Linux, brew on
   # macOS); force the install branch so the test is independent of host state.
   export _FORCE_OPENTOFU_INSTALL=1
+  _install_ubuntu_tflint() { :; }
+  _install_ubuntu_tfsec() { :; }
+  _install_ubuntu_tfenv() { :; }
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
   grep -q "mkdir.*-p.*/etc/apt/keyrings" "${MOCK_CALLS_FILE}"
@@ -1253,6 +1523,9 @@ STUB
   export HAS_DEVTOOLS=1
   # Mock tofu present on PATH and no force flag — install branch must be skipped
   # regardless of whether the host actually has tofu.
+  _install_ubuntu_tflint() { :; }
+  _install_ubuntu_tfsec() { :; }
+  _install_ubuntu_tfenv() { :; }
   local _tofudir="${BATS_TEST_TMPDIR}/tofubin"
   mkdir -p "${_tofudir}"
   printf '#!/usr/bin/env bash\nexit 0\n' > "${_tofudir}/tofu"

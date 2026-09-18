@@ -889,10 +889,22 @@ firefox  124.0"
   [[ "${_joined}" == *"git-hooks aws rust"* ]]
 }
 
+@test "_UPDATE_SECTION_ORDER includes cargo-tools immediately after rust" {
+  local _joined
+  _joined="${_UPDATE_SECTION_ORDER[*]}"
+  [[ "${_joined}" == *"rust cargo-tools oh-my-zsh"* ]]
+}
+
 @test "_UPDATE_SECTION_ORDER includes zsh-autosuggestions immediately after oh-my-zsh" {
   local _joined
   _joined="${_UPDATE_SECTION_ORDER[*]}"
   [[ "${_joined}" == *"oh-my-zsh zsh-autosuggestions"* ]]
+}
+
+@test "_UPDATE_SECTION_ORDER includes pyenv-shims immediately after pip-check" {
+  local _joined
+  _joined="${_UPDATE_SECTION_ORDER[*]}"
+  [[ "${_joined}" == *"pip-check pyenv-shims"* ]]
 }
 
 @test "_update_summary prints a git-hooks row with the literal result production writes, not a fabricated counts string" {

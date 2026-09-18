@@ -20,6 +20,23 @@ setup() {
   # run_brew_install tests each `export HAS_AWS=1` or unset it themselves
   # explicitly and are unaffected.
   unset HAS_AWS
+  # PYENV_ROOT is exported for real by this developer session's own pyenv
+  # shell integration (/Users/bruce/.pyenv), and run_update's new
+  # pyenv-shims section resolves _OVERRIDE_PYENV_ROOT, then PYENV_ROOT,
+  # then HOME as its fallback chain -- same shape as the HAS_AWS fix above.
+  # Left set, any test that reaches _run_all or UPDATE_BREW/UPDATE_PIP would
+  # find the operator's REAL ansible venv (versions/ansible/bin) and have
+  # install_pyenv_rehash_hook write into the real ~/.pyenv/pyenv.d/rehash/.
+  # Unset here so the fallback lands on the redirected HOME below instead,
+  # where no venv exists and the section is a no-op SKIP by default.
+  unset PYENV_ROOT
+  # Absence of PYENV_ROOT is not isolation by itself -- a test that exports
+  # it later (or a future call site that reads it before this file's own
+  # HOME redirect takes effect) would still resolve against the operator's
+  # real ~/.pyenv. Pin the root positively, at setup() scope rather than
+  # per-test (tdd.md pitfall E2): a per-test guard leaves the trap armed for
+  # the next test someone adds to this file.
+  export _OVERRIDE_PYENV_ROOT="${BATS_TEST_TMPDIR}/pyenv"
   # Minimal env so workflow functions don't crash on missing vars
   export HOME="${BATS_TEST_TMPDIR}"
   export PERSONAL_GITREPOS="${BATS_TEST_TMPDIR}/git-repos/personal"
@@ -370,6 +387,31 @@ teardown() {
   run run_setup_user
   [ "$(sed -n '1p' "${_log}")" = "plugins" ]
   [ "$(sed -n '2p' "${_log}")" = "sweep" ]
+}
+
+# ── run_setup_user: install_pyenv_rehash_hook wiring ──────────────────────────
+#
+# Advisory, like install_renovate_held_agent/install_ledger_drift_agent
+# above: a machine that cannot install the rehash hook must still complete
+# setup_user.
+
+@test "run_setup_user calls install_pyenv_rehash_hook" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  local _marker="${BATS_TEST_TMPDIR}/pyenv_rehash_hook.ran"
+  install_pyenv_rehash_hook() { touch "${_marker}"; return 0; }
+  run run_setup_user
+  [ "$status" -eq 0 ]
+  [ -f "${_marker}" ]
+}
+
+@test "run_setup_user returns 0 when install_pyenv_rehash_hook fails" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  install_pyenv_rehash_hook() { return 1; }
+  run run_setup_user
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"pyenv rehash hook not installed"* ]]
 }
 
 @test "setup_env.sh passes bash -n with the git_hooks.sh source line" {
@@ -2653,12 +2695,16 @@ assert_all_npm_globals_pinned() {
 
 @test "run_check_versions counts warned tools in summary" {
   # 7 tools via _run_cv_check emit [WARN] + 2 more functions (_check_cv_oh_my_zsh,
-  # _check_cv_homebrew_install) also emit [WARN] when curl fails in test env = 9 total.
-  # Was 8 + 2 = 10 until zsh was dropped from the _run_cv_check list on 2026-09-12
+  # _check_cv_homebrew_install) also emit [WARN] when curl fails in test env,
+  # plus the 8 CARGO_TOOLS pins via the real (unstubbed) _check_one_cargo_version,
+  # whose curl call also fails in test env = 17 total. Was 9 until the cargo
+  # loop was added to run_check_versions on 2026-09-17 (crates.io answers for
+  # pins GitHub releases and a command -v PATH probe both cannot). Was 8 + 2 =
+  # 10 until zsh was dropped from the _run_cv_check list on 2026-09-12
   # (apt/brew choose that version, so an upstream comparison is not actionable).
   _check_one_version() { printf "  [WARN]     %-12s could not fetch latest version\n" "$1"; }
   run run_check_versions
-  [[ "$output" == *"9 warnings"* ]]
+  [[ "$output" == *"17 warnings"* ]]
 }
 
 @test "run_check_versions counts OK tools in summary" {

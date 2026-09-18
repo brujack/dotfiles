@@ -3,6 +3,12 @@
 **Date:** 2026-09-15
 **Status:** Accepted
 
+**Amended by [ADR-0032](0032-pyenv-rehash-hook.md):** this ADR's `PATH` fix reaches
+interactive zsh only. ADR-0032 adds a tracked pyenv rehash hook for the four actors that
+call `pyenv rehash` without ever sourcing `6_path.zsh` — login zsh's own `pyenv init
+--path`, `lib/developer.sh`'s two rehash call sites, `ssh claude '<cmd>'`, and pyenv's
+own `install`/`virtualenv` subcommands.
+
 ## Context
 
 Ubuntu 26.04 ships **uutils coreutils** as `/usr/bin/sort` and friends, not GNU. uutils'

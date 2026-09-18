@@ -11,6 +11,14 @@ load_mocks() {
   # shells out to real python3/pip on dev machines (real pip is slow, hits the
   # network, and mutates the ansible venv). Individual tests may override it.
   export MOCK_PYENV_WHICH_STDOUT="${REPO_ROOT}/tests/mocks/python"
+  # install_cargo_tools resolves _CARGO_BIN before ${HOME}/.cargo/bin/cargo or
+  # a PATH cargo, so any suite that calls load_mocks gets the mock here and
+  # cannot compile crates for real (tdd.md E2). Residual: a test that
+  # deliberately unsets _CARGO_BIN (to exercise the other resolution
+  # branches) is on its own to keep ${HOME}/.cargo/bin and PATH cargo-free,
+  # and a suite that never calls load_mocks at all (e.g.
+  # tests/setup_env/git_sync.bats) gets no protection from this seam.
+  export _CARGO_BIN="${REPO_ROOT}/tests/mocks/cargo"
 }
 
 # Assert a pattern is ABSENT from a file.

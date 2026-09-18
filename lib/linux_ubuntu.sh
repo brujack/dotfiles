@@ -57,7 +57,34 @@ _install_ubuntu_base_packages() {
   fi
 }
 
+# Whether pwsh actually runs, bounded by `timeout` so a hung binary cannot
+# block install_ubuntu_packages -- and therefore the whole -t setup/
+# -t developer run -- indefinitely. Mirrors _doctor_check_dev_tools's
+# identical probe/fallback shape in lib/helpers.sh: an absent `timeout`
+# degrades to running the probe unbounded rather than failing outright,
+# since every Ubuntu target this runs on ships coreutils by construction --
+# the fallback exists for a shim-scoped test PATH, not an expected
+# production gap.
+_pwsh_probe_runs() {
+  local _timeout_bin
+  _timeout_bin="$(command -v timeout 2>/dev/null)"
+  if [[ -n "${_timeout_bin}" ]]; then
+    "${_timeout_bin}" "${_PWSH_PROBE_TIMEOUT:-10}" "${_PWSH_BIN:-pwsh}" -NoProfile -Command exit &>/dev/null
+  else
+    "${_PWSH_BIN:-pwsh}" -NoProfile -Command exit &>/dev/null
+  fi
+}
+
 _install_ubuntu_powershell() {
+  # Judge by whether pwsh RUNS, not merely resolves -- a box whose first
+  # attempt hit the resolute gap below downloaded and dpkg -i'd the WRONG
+  # config, leaving a `pwsh` that resolves via `command -v` but is absent or
+  # broken. A presence-only guard would loop forever on that box.
+  if _pwsh_probe_runs; then
+    printf "pwsh is installed\\n"
+    return 0
+  fi
+
   printf "Installing powershell Ubuntu\\n"
   # Microsoft publishes a 26.04 config (HTTP 200) whose `resolute` dist carries
   # ZERO powershell packages -- measured 2026-09-12, against 54 in 24.04/noble.
@@ -66,17 +93,44 @@ _install_ubuntu_powershell() {
   # the fallback belongs on the CONFIG url, not on a dist codename.
   local _ms_rel="${_MS_CONFIG_REL:-$(lsb_release -rs)}"
   [[ -n "${RESOLUTE:-}" ]] && _ms_rel="24.04"
-  if [[ ! -f ${HOME}/software_downloads/packages-microsoft-prod.deb ]]; then
-    wget -O "${HOME}"/software_downloads/packages-microsoft-prod.deb \
-      "https://packages.microsoft.com/config/ubuntu/${_ms_rel}/packages-microsoft-prod.deb"
-    sudo -H dpkg -i "${HOME}"/software_downloads/packages-microsoft-prod.deb
-    sudo apt update
-    sudo -H add-apt-repository universe
-    sudo -H DEBIAN_FRONTEND=noninteractive apt install powershell -y
-    if [[ -x $(command -v pwsh) ]]; then
-      printf "pwsh is installed\\n"
-    fi
+
+  # Independent of any pre-existing .deb: a box whose first attempt failed
+  # (see above) left a stale/wrong .deb behind, and only a fresh download and
+  # a fresh dpkg -i repair it -- measured on `claude`, 2026-09-17. Every step
+  # below checks its own exit status, so one broken upstream repository warns
+  # and returns rather than aborting the whole bootstrap (the dispatcher
+  # calls this function with `|| return 1`).
+  if ! wget -O "${HOME}"/software_downloads/packages-microsoft-prod.deb \
+    "https://packages.microsoft.com/config/ubuntu/${_ms_rel}/packages-microsoft-prod.deb"; then
+    log_warn "powershell: wget for packages-microsoft-prod.deb failed; skipping"
+    return 0
   fi
+
+  if ! sudo -H dpkg -i "${HOME}"/software_downloads/packages-microsoft-prod.deb; then
+    log_warn "powershell: dpkg -i packages-microsoft-prod.deb failed; skipping"
+    return 0
+  fi
+
+  if ! sudo apt update; then
+    log_warn "powershell: apt update failed; skipping"
+    return 0
+  fi
+
+  if ! sudo -H DEBIAN_FRONTEND=noninteractive apt install powershell -y; then
+    log_warn "powershell: apt install powershell failed; skipping"
+    return 0
+  fi
+
+  # apt exits 0 for "powershell is already the newest version" even when the
+  # installed binary is broken -- the `claude` failure mode one level out.
+  # Re-run the same execution check the guard opened with rather than
+  # trusting apt's own exit status for this claim.
+  if ! _pwsh_probe_runs; then
+    log_warn "powershell: apt install succeeded but pwsh still does not run"
+    return 0
+  fi
+
+  printf "pwsh is installed\\n"
 }
 
 _install_go_from_tarball() {
@@ -567,7 +621,7 @@ _install_ubuntu_brew_packages() {
     argocd bat cargo-nextest cargo-cyclonedx cyclonedx-python git-lfs fzf gh \
     hadolint helm k9s kustomize lazydocker linkerd mongosh mongodb-atlas neovim \
     pyenv pyenv-virtualenv rbenv ripgrep rustup \
-    starship tgenv uv zoxide redpanda-data/tap/redpanda \
+    starship tgenv uv zig zoxide redpanda-data/tap/redpanda \
     git-cliff kcov mdbook bun getagentseal/codeburn/codeburn \
     go-task; do
     # go-task is `go-task`, NOT `go-task/tap/go-task`: the tap-qualified name resolves
@@ -688,6 +742,216 @@ _install_ubuntu_gui_tools() {
   fi
 }
 
+# Installs a checksum-verified release binary, skipping when the copy already
+# in place reports the pinned version. tflint and tfsec share an identical
+# pinned-version / per-arch-sha256 / download / verify / extract / install
+# sequence -- exactly where a hand copy drops the verify step, so two
+# consumers are enough to justify one helper.
+#
+# Reads ${_RELEASE_BIN_DIR:-/usr/local/bin}/<name>'s own --version output,
+# never the copy on PATH (shell.md: an absolute-path default is the only
+# thing a PATH mock cannot defeat, and here a PATH stub must not satisfy the
+# skip check when the target directory is genuinely empty). <version-line-
+# regex> is matched as given -- it carries its own ^...$ anchors, because a
+# substring match would let an "out of date, latest is X" notice look like
+# X is already installed.
+#
+# sha256sum is never mocked, mirroring _install_rustup_rs above: mocking it
+# would make every mismatch case vacuous.
+_install_pinned_release_binary() {
+  local _name="$1" _version="$2" _url="$3" _sha256="$4" _kind="$5" _version_regex="$6"
+  local _dir="${_RELEASE_BIN_DIR:-/usr/local/bin}"
+
+  if [[ -x "${_dir}/${_name}" ]]; then
+    local _current
+    _current="$("${_dir}/${_name}" --version 2>&1)"
+    if printf '%s\n' "${_current}" | grep -qE "${_version_regex}"; then
+      printf "%s %s already installed\\n" "${_name}" "${_version}"
+      return 0
+    fi
+  fi
+
+  # No trap here, deliberately: scripts/check-lib-exit-traps.sh ratchets every
+  # `trap ... EXIT` in lib/*.sh against a hand-maintained allowlist, so this
+  # mirrors _install_rustup_rs above instead -- an explicit `rm -rf "${_tmp}"`
+  # before every return, rather than a subshell-scoped trap.
+  #
+  # _RELEASE_TMP_ROOT is a seam, not a convenience: BSD mktemp -d with no
+  # template ignores TMPDIR entirely, so a TMPDIR-based assertion is inert on
+  # the Studio, where this suite runs. Precedent: _OVERRIDE_RUN_TMPDIR_ROOT in
+  # lib/workflows.sh.
+  local _tmp
+  _tmp="$(mktemp -d "${_RELEASE_TMP_ROOT:-${TMPDIR:-/tmp}}/release-bin.XXXXXXXX")" || return 1
+
+  # A malformed or empty pin must fail closed rather than let sha256sum decide.
+  # Measured: macOS /sbin/sha256sum exits 0 on a malformed checksum line (only
+  # warning on stderr, which the redirect below discards), while GNU exits 1 --
+  # so without this, the Studio's suite is structurally unable to fail for an
+  # empty or typo'd pin.
+  if [[ ! "${_sha256}" =~ ^[0-9a-fA-F]{64}$ ]]; then
+    log_error "${_name}: pinned sha256 is not 64 hex chars"
+    rm -rf "${_tmp}"
+    return 1
+  fi
+
+  local _artifact="${_tmp}/${_name}.download"
+  if ! curl -fsSL -o "${_artifact}" "${_url}"; then
+    log_error "${_name} download failed"
+    rm -rf "${_tmp}"
+    return 1
+  fi
+
+  if ! printf '%s  %s\n' "${_sha256}" "${_artifact}" | sha256sum -c - > /dev/null 2>&1; then
+    log_error "${_name} sha256 mismatch — refusing to install"
+    rm -rf "${_tmp}"
+    return 1
+  fi
+
+  local _extracted
+  case "${_kind}" in
+    zip)
+      if ! unzip -o -q "${_artifact}" "${_name}" -d "${_tmp}"; then
+        log_error "${_name} unzip failed"
+        rm -rf "${_tmp}"
+        return 1
+      fi
+      _extracted="${_tmp}/${_name}"
+      ;;
+    raw)
+      _extracted="${_artifact}"
+      ;;
+    *)
+      log_error "unknown release-binary kind for ${_name}: ${_kind}"
+      rm -rf "${_tmp}"
+      return 1
+      ;;
+  esac
+
+  if [[ -w "${_dir}" ]]; then
+    if ! install -m 0755 "${_extracted}" "${_dir}/${_name}"; then
+      log_error "${_name} install into ${_dir} failed"
+      rm -rf "${_tmp}"
+      return 1
+    fi
+  else
+    if ! sudo install -m 0755 "${_extracted}" "${_dir}/${_name}"; then
+      log_error "${_name} install into ${_dir} failed"
+      rm -rf "${_tmp}"
+      return 1
+    fi
+  fi
+
+  rm -rf "${_tmp}"
+  printf "%s %s installed\\n" "${_name}" "${_version}"
+}
+
+_install_ubuntu_tflint() {
+  [[ -n ${HAS_DEVTOOLS} ]] || return 0
+  local _sha
+  case "${_LINUX_ARCH}" in
+    amd64) _sha="${TFLINT_SHA256_AMD64}" ;;
+    arm64) _sha="${TFLINT_SHA256_ARM64}" ;;
+    *)
+      log_warn "no pinned tflint sha256 for ${_LINUX_ARCH}; skipping"
+      return 0
+      ;;
+  esac
+  _install_pinned_release_binary tflint "${TFLINT_VER}" \
+    "${_TFLINT_URL:-https://github.com/terraform-linters/tflint/releases/download/v${TFLINT_VER}/tflint_linux_${_LINUX_ARCH}.zip}" \
+    "${_TFLINT_SHA256:-${_sha}}" zip "^TFLint version ${TFLINT_VER//./\\.}$"
+}
+
+_install_ubuntu_tfsec() {
+  [[ -n ${HAS_DEVTOOLS} ]] || return 0
+  local _sha
+  case "${_LINUX_ARCH}" in
+    amd64) _sha="${TFSEC_SHA256_AMD64}" ;;
+    arm64) _sha="${TFSEC_SHA256_ARM64}" ;;
+    *)
+      log_warn "no pinned tfsec sha256 for ${_LINUX_ARCH}; skipping"
+      return 0
+      ;;
+  esac
+  _install_pinned_release_binary tfsec "${TFSEC_VER}" \
+    "${_TFSEC_URL:-https://github.com/aquasecurity/tfsec/releases/download/v${TFSEC_VER}/tfsec-linux-${_LINUX_ARCH}}" \
+    "${_TFSEC_SHA256:-${_sha}}" raw "^v${TFSEC_VER//./\\.}$"
+}
+
+# terraform on the Mac and on `workstation` comes from tfenv, not a static
+# binary: /usr/local/bin/terraform is a symlink into ~/.tfenv/bin, and
+# run_update already `git pull`s ~/.tfenv. _install_pinned_release_binary is
+# NOT used here -- installing a standalone terraform binary would silently
+# replace that symlink with a regular file and orphan tfenv underneath it.
+#
+# tfenv-install verifies its download against HashiCorp's SHA256SUMS, which is
+# a same-origin check only: it skips PGP verification unless gpg or keybase is
+# configured (measured on workstation, libexec/tfenv-install:318-376). That is
+# weaker than the in-repo sha256 pins _install_pinned_release_binary uses for
+# tflint/tfsec above, and is accepted because it matches how terraform already
+# arrives on the Mac and on workstation.
+_install_ubuntu_tfenv() {
+  [[ -n ${HAS_DEVTOOLS} ]] || return 0
+
+  local _root="${_TFENV_ROOT:-${HOME}/.tfenv}"
+  local _links="${_TFENV_LINK_DIR:-/usr/local/bin}"
+  local _repo="${_TFENV_REPO_URL:-https://github.com/tfutils/tfenv.git}"
+
+  if [[ ! -d "${_root}" ]]; then
+    if ! git clone "${_repo}" "${_root}"; then
+      log_warn "tfenv clone into ${_root} failed; skipping"
+      return 0
+    fi
+  elif [[ ! -x "${_root}/bin/tfenv" ]]; then
+    # ${_root} exists but is not a usable checkout -- an interrupted clone
+    # (git self-cleans on an ordinary error exit but not on
+    # SIGINT/SIGTERM/timeout/OOM), a stray mkdir, or a damaged checkout. Do
+    # NOT re-clone: `git clone` into a non-empty directory fails, so it
+    # would not self-heal, and do not auto-delete the directory either --
+    # destroying an operator's directory is their call, not ours. Warning
+    # and returning before the symlink loop below is what keeps this state
+    # from becoming permanent: the loop's own `-L` branch treats an
+    # already-correct dangling symlink as done and repairs nothing on every
+    # subsequent run, which is what running this while ${_root} is broken
+    # would otherwise plant.
+    log_warn "${_root} exists but has no usable tfenv entry point; run 'rm -rf ${_root}' and retry"
+    return 0
+  fi
+
+  local _name _target _link
+  for _name in tfenv terraform; do
+    _target="${_root}/bin/${_name}"
+    _link="${_links}/${_name}"
+    if [[ -L "${_link}" ]]; then
+      if [[ "$(readlink "${_link}")" != "${_target}" ]]; then
+        log_warn "${_link} is a symlink to $(readlink "${_link}"), not ${_target}; leaving it"
+      fi
+      continue
+    fi
+    if [[ -e "${_link}" ]]; then
+      log_warn "${_link} already exists and is not a tfenv symlink; leaving it"
+      continue
+    fi
+    if [[ -w "${_links}" ]]; then
+      ln -s "${_target}" "${_link}" || log_warn "linking ${_link} failed; skipping"
+    else
+      sudo ln -s "${_target}" "${_link}" || log_warn "linking ${_link} failed; skipping"
+    fi
+  done
+
+  if [[ ! -f "${_root}/version" ]]; then
+    if ! "${_root}/bin/tfenv" install "${TERRAFORM_VER}"; then
+      log_warn "tfenv install ${TERRAFORM_VER} failed; skipping"
+      return 0
+    fi
+    if ! "${_root}/bin/tfenv" use "${TERRAFORM_VER}"; then
+      log_warn "tfenv use ${TERRAFORM_VER} failed; skipping"
+      return 0
+    fi
+  fi
+
+  return 0
+}
+
 _install_ubuntu_misc() {
   printf "Installing docker-compose Ubuntu\\n"
   if [[ ! -f ${HOME}/software_downloads/docker-compose_${DOCKER_COMPOSE_VER} ]]; then
@@ -750,6 +1014,15 @@ _install_ubuntu_misc() {
       printf "opentofu already installed\\n"
     fi
   fi
+
+  # Each is self-gated on HAS_DEVTOOLS and advisory, as the dotnet install above.
+  _install_ubuntu_tflint || log_warn "tflint install failed; skipping"
+  _install_ubuntu_tfsec || log_warn "tfsec install failed; skipping"
+  # _install_ubuntu_tfenv always returns 0 (every failure warns internally
+  # and returns 0, unlike tflint/tfsec's helper), so this `||` cannot fire
+  # today. Kept for parity with the two lines above and as a guard if that
+  # contract ever changes.
+  _install_ubuntu_tfenv || log_warn "tfenv install failed; skipping"
 
   check_and_install_nala
   # </dev/null: same job-control hang as update_apt_packages in lib/linux_shared.sh.

@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# tests/mocks/cargo -- records every invocation, and, for `install`, the
+# LIBGIT2_NO_PKG_CONFIG value it was called with, so install_cargo_tools's
+# tests can assert on both without ever reaching a real cargo (tdd.md E2 --
+# the real installer would compile crates for real). See lib/developer.sh's
+# install_cargo_tools for why LIBGIT2_NO_PKG_CONFIG matters only for
+# cargo-tarpaulin.
+printf "cargo %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+
+if [[ "$1" == "install" ]]; then
+  printf "cargo-env LIBGIT2_NO_PKG_CONFIG=%s\n" "${LIBGIT2_NO_PKG_CONFIG:-}" \
+    >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+  if [[ "$2" == "--list" ]]; then
+    printf "%s" "${MOCK_CARGO_LIST:-}"
+    exit 0
+  fi
+  exit "${MOCK_CARGO_INSTALL_EXIT:-0}"
+fi
+
+if [[ "$2" == "--help" ]]; then
+  _sub="${1//-/_}"
+  _var="MOCK_CARGO_HELP_EXIT_${_sub}"
+  exit "${!_var:-0}"
+fi
+
+exit 0

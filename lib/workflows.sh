@@ -223,6 +223,13 @@ run_setup_user() {
   # what reports the gap rather than this line failing the whole workflow.
   install_renovate_held_agent || log_warn "renovate cadence agent not installed — see above"
   install_ledger_drift_agent || log_warn "ledger drift cadence agent not installed — see above"
+  # A no-op when ~/.pyenv/versions does not exist yet (install_pyenv_rehash_hook's
+  # own guard), which is true here on a fresh host -- setup_user runs before pyenv
+  # creates versions/. Called anyway so it is a no-op the FIRST time and installs
+  # the hook on every re-run once pyenv exists, rather than depending solely on
+  # setup_ansible/recreate_python_venv to have installed it by the time a rehash
+  # runs outside those two call sites.
+  install_pyenv_rehash_hook || log_warn "pyenv rehash hook not installed — see above"
 
   _ledger_write_run_entry "setup_user" 0 || true
 }
@@ -238,6 +245,10 @@ run_setup_or_developer() {
   if [[ -n ${UBUNTU} ]]; then
     install_ubuntu_packages || return 1
   fi
+
+  # Same degrade-not-abort shape as install_aws_tools below: an absent
+  # toolchain or one broken crate must not cost pyenv/ansible/ruby/rust.
+  install_cargo_tools || log_warn "cargo tools incomplete — see above"
 
   # Advisory, like install_renovate_held_agent/install_ledger_drift_agent above
   # in run_setup_user: a wget hiccup or a missing gpg on a fresh machine must
@@ -585,6 +596,84 @@ run_update() {
     _update_skip "pip" "flag not set"
   fi
 
+  # ── pyenv-shims ────────────────────────────────────────────────────────────
+  # brew upgrade pyenv (macOS/Linux) is what can retire
+  # install_pyenv_rehash_hook's fix for the uutils sort -u collation defect
+  # (see pyenv.d/rehash/), and that happens inside -t update -- so this
+  # section runs whenever brew or pip might have run, not only at
+  # setup_user time. (pyenv update itself runs only inside setup_ansible,
+  # lib/developer.sh, reached by -t developer/-t ansible -- not by -t
+  # update. The brew half alone is why this section belongs here.)
+  if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_BREW:-} ]] || [[ -n ${UPDATE_PIP:-} ]]; then
+    local _pyenv_shims_bin
+    _pyenv_shims_bin="$(_pyenv_ansible_venv_bin)"
+    if [[ ! -d "${_pyenv_shims_bin}" ]]; then
+      _update_skip "pyenv-shims" "no ansible venv"
+    else
+      _update_record_start "pyenv-shims"
+
+      install_pyenv_rehash_hook || log_warn "pyenv rehash hook not installed — see above"
+
+      # Resolved ONCE and reused for both the export and the PATH prepend.
+      # Exporting PYENV_ROOT from its own independent expansion of the same
+      # override chain let the hook install above and the rehash below
+      # target different roots whenever _OVERRIDE_PYENV_ROOT/PYENV_ROOT
+      # disagreed -- latent on this fleet only because PYENV_ROOT happens
+      # to equal $HOME/.pyenv everywhere it's set. Also resolved
+      # independently of the pip block above: under --brew-only the pip
+      # block never runs, so its own PATH prepend / PYENV_ROOT export
+      # cannot be relied on here.
+      local _pyenv_root
+      _pyenv_root="${_OVERRIDE_PYENV_ROOT:-${PYENV_ROOT:-${HOME}/.pyenv}}"
+      export PYENV_ROOT="${_pyenv_root}"
+      export PATH="${_pyenv_root}/bin:${_pyenv_root}/shims:${PATH}"
+
+      local _rehash_rc=0 _pyenv_found=1
+      if command -v pyenv >/dev/null 2>&1; then
+        # A rehash can wait up to 60s for pyenv's own lock
+        # (PYENV_REHASH_TIMEOUT); a lock left by a rehash killed under 2
+        # minutes earlier is not yet stale (find -mmin +2), so this can
+        # legitimately end in rc 1 on an otherwise healthy machine. Never
+        # fatal — the rc is recorded below and the section still runs the
+        # missing-shim check, which reports the actual consequence.
+        pyenv rehash 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_pyenv-shims"
+        _rehash_rc="${PIPESTATUS[0]}"
+      else
+        _pyenv_found=0
+        log_warn "pyenv not found on PATH — skipping pyenv rehash"
+        printf "pyenv not found on PATH — rehash skipped\n" > "${_DOTFILES_RUN_TMPDIR}/err_pyenv-shims"
+      fi
+      if [[ ${_rehash_rc} -ne 0 ]]; then
+        printf "pyenv rehash exited %d\n" "${_rehash_rc}" >> "${_DOTFILES_RUN_TMPDIR}/err_pyenv-shims"
+        # A failed rehash is non-fatal (see above) but must not be
+        # invisible: without this, a rehash failure on an otherwise fully
+        # shimmed machine rendered [OK] with the failure surfaced nowhere.
+        _update_write_detail_from_err "pyenv-shims" "rehash output"
+      fi
+
+      local _pyenv_shims_missing _pyenv_shims_missing_rc
+      _pyenv_shims_missing="$(_pyenv_missing_shims)"
+      _pyenv_shims_missing_rc=$?
+      _update_record_end "pyenv-shims" 0
+      if [[ ${_pyenv_found} -eq 0 ]]; then
+        # The check never ran at all -- distinct from, and worse than, a
+        # rehash that ran and failed.
+        _update_warn "pyenv-shims" "pyenv not found on PATH — rehash skipped"
+        _update_write_detail_from_err "pyenv-shims" "rehash output"
+      elif [[ ${_pyenv_shims_missing_rc} -eq 2 ]]; then
+        # rc 2 ("no ansible venv") is empty stdout, exactly like "nothing
+        # missing" -- discarding the rc is what let those two render
+        # identically as a silent [OK].
+        _update_warn "pyenv-shims" "ansible venv disappeared during the run (${_pyenv_shims_bin})"
+      elif [[ -n "${_pyenv_shims_missing}" ]]; then
+        _update_warn "pyenv-shims" "missing shim(s): $(printf '%s' "${_pyenv_shims_missing}" | paste -sd', ' -)"
+        _update_write_detail_from_err "pyenv-shims" "warning output"
+      fi
+    fi
+  else
+    _update_skip "pyenv-shims" "flag not set"
+  fi
+
   # ── git-based tools + misc (run_all only) ─────────────────────────────────
   if [[ ${_run_all} -eq 1 ]]; then
     _update_record_start "ai-config"
@@ -708,6 +797,48 @@ run_update() {
     _update_skip "tpm" "flag not set"
     _update_skip "cheat.sh" "flag not set"
     _update_skip "zsh-autosuggestions" "flag not set"
+  fi
+
+  # ── cargo-tools ────────────────────────────────────────────────────────────
+  # Deliberately its OWN block, outside the _run_all-only region above, and
+  # gated on the same condition as brew itself: --brew-only repairs exactly
+  # the failure mode this section exists for -- brew upgrading a linked
+  # libgit2/openssl out from under a cargo-installed binary (spec Part 3) --
+  # so --brew-only must reach it, unlike update_rust, which sits inside the
+  # _run_all-only block and is unreachable from --brew-only. Only its
+  # display position in _UPDATE_SECTION_ORDER comes directly after rust.
+  # A first run, or a pin bump in lib/constants.sh's CARGO_TOOLS, compiles
+  # every absent/older crate from source and can take tens of minutes.
+  if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_BREW:-} ]]; then
+    if [[ -z ${HAS_RUST:-} ]]; then
+      _update_skip "cargo-tools" "HAS_RUST not set"
+    else
+      _update_record_start "cargo-tools"
+      install_cargo_tools 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_cargo-tools"
+      local _cargo_tools_rc="${PIPESTATUS[0]}"
+      if [[ ${_cargo_tools_rc} -eq 1 ]]; then
+        # rc 1 means install_cargo_tools could not resolve a cargo binary
+        # at all -- an ABSENCE, not a failure. Reachable on a fresh mac:
+        # `brew "rustup"` is keg-only and nothing in the macOS install path
+        # runs `rustup default`/`rustup-init`, so a HAS_RUST box can have
+        # no ~/.cargo/bin/cargo yet. Same treatment update_rust already
+        # gives the identical condition ("rustup not found; skipping Rust
+        # update"; return 0) -- FAIL here would make every future
+        # `-t update` on that box exit 1 forever.
+        _update_skip "cargo-tools" "cargo not found"
+      else
+        # rc 2 (some pins failed to install) stays a distinct WARN, so the
+        # two cases -- no toolchain at all vs. a toolchain that installed
+        # some tools and not others -- remain distinguishable.
+        _update_record_end "cargo-tools" "$(( _cargo_tools_rc == 2 ? 0 : _cargo_tools_rc ))"
+        if [[ ${_cargo_tools_rc} -eq 2 ]]; then
+          _update_warn "cargo-tools" "one or more tools failed to install — see detail"
+          _update_write_detail_from_err "cargo-tools" "install output"
+        fi
+      fi
+    fi
+  else
+    _update_skip "cargo-tools" "flag not set"
   fi
 
   # ── gems ──────────────────────────────────────────────────────────────────
@@ -871,6 +1002,52 @@ _check_cv_homebrew_install() {
   fi
 }
 
+# _check_one_cargo_version <crate> <pinned> -- reports a CARGO_TOOLS pin
+# against crates.io's current max_stable_version. GitHub releases (what
+# _check_one_version above uses) cannot answer for these crates: cargo-audit's
+# releases carry monorepo tags (cargo-audit/vX.Y.Z, not a bare vX.Y.Z), and a
+# `command -v` probe would SKIP every crate because ~/.cargo/bin is not on the
+# non-interactive PATH. crates.io returns 403 to curl's default User-Agent --
+# measured from the Studio, `claude` and `workstation` on 2026-09-17 -- and
+# 200 with -A, so the header is mandatory, not defensive.
+#
+# Report-only: unlike _run_cv_check's tools, these pins live in one array
+# (lib/constants.sh) rather than in an individual variable, so there is no
+# single _var name to hand _prompt_version_update.
+_check_one_cargo_version() {
+  local _crate="$1" _pinned="$2"
+  local _json
+  _json=$(curl -sf -A "dotfiles check-versions (bjackson@pobox.com)" \
+    "${_CRATES_API:-https://crates.io/api/v1/crates}/${_crate}" 2>/dev/null)
+  if [[ -z "${_json}" ]]; then
+    printf "  [WARN]     %-20s could not fetch latest version\n" "${_crate}"
+    return 0
+  fi
+
+  # A non-empty body that doesn't yield a version is a PARSE failure, not a
+  # fetch failure -- distinct causes, same as _check_one_version's fetch vs.
+  # parse split above. Two real shapes land here: a 404 body (no
+  # max_stable_version key at all) and the crate's actual shape for "no
+  # stable release", "max_stable_version":null -- neither is quoted, so
+  # this regex (which requires quotes) matches neither.
+  local _latest
+  _latest=$(printf '%s' "${_json}" \
+    | grep -oE '"max_stable_version":"[^"]*"' | head -1 | cut -d'"' -f4)
+  if [[ -z "${_latest}" ]]; then
+    printf "  [WARN]     %-20s could not parse latest version\n" "${_crate}"
+    return 0
+  fi
+
+  local _cmp
+  _cmp="$(_semver_cmp "${_pinned}" "${_latest}")"
+  if [[ "${_cmp}" == "-1" ]]; then
+    printf "  [OUTDATED] %-20s pinned=%-10s latest=%s\n" "${_crate}" "${_pinned}" "${_latest}"
+    return 1
+  fi
+  printf "  [OK]       %-20s pinned=%-10s latest=%s\n" "${_crate}" "${_pinned}" "${_latest}"
+  return 0
+}
+
 run_check_versions() {
   local _outdated=0 _skipped=0 _warned=0 _ok=0
 
@@ -911,6 +1088,18 @@ run_check_versions() {
   _run_cv_check "gitleaks"  "${GITLEAKS_VER}"    "gitleaks/gitleaks"   "gitleaks version"     "[0-9]+\.[0-9]+\.[0-9]+"    "GITLEAKS_VER"
   _check_cv_oh_my_zsh
   _check_cv_homebrew_install
+
+  local _cargo_pin _cargo_crate _cargo_version _cargo_out
+  for _cargo_pin in "${CARGO_TOOLS[@]}"; do
+    _cargo_crate="${_cargo_pin%@*}"
+    _cargo_version="${_cargo_pin##*@}"
+    _cargo_out=$(_check_one_cargo_version "${_cargo_crate}" "${_cargo_version}" 2>&1)
+    printf '%s\n' "${_cargo_out}"
+    if [[ "${_cargo_out}" == *"[WARN]"* ]];       then _warned=$(( _warned + 1 ))
+    elif [[ "${_cargo_out}" == *"[OUTDATED]"* ]]; then _outdated=$(( _outdated + 1 ))
+    elif [[ "${_cargo_out}" == *"[OK]"* ]];       then _ok=$(( _ok + 1 ))
+    fi
+  done
 
   printf "\n%d outdated, %d skipped, %d warnings, %d OK\n" \
     "${_outdated}" "${_skipped}" "${_warned}" "${_ok}"

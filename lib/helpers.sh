@@ -467,6 +467,7 @@ run_doctor() {
   _doctor_check_symlinks
   _doctor_check_symlink_roots
   _doctor_check_tools
+  _doctor_check_dev_tools
   _doctor_check_login_shell
   _doctor_check_cred_dirs
   _doctor_check_hooks_path
@@ -474,6 +475,7 @@ run_doctor() {
   _doctor_check_aws_key_expiry
   _doctor_check_github_mcp
   _doctor_check_gnu_coreutils
+  _doctor_check_pyenv_shims
   _doctor_check_renovate_cadence
   _doctor_check_ledger_drift_cadence
 
@@ -579,6 +581,85 @@ _doctor_check_tools() {
       fi
     fi
   fi
+}
+# Macs get pwsh/tflint/zig/terraform/tfsec from the Brewfile, so this arm is
+# Linux-only. WARN only, never FAIL -- every install it reports on is
+# advisory (setup_env.sh -t developer). Judged by whether each tool RUNS,
+# not merely resolves: a probe from ${HOME} under `timeout` so a hung binary
+# cannot block doctor and a project-local version file (e.g.
+# .terraform-version) cannot steer the result.
+_doctor_check_dev_tools() {
+  if [[ -z ${LINUX} ]] || [[ -z ${HAS_DEVTOOLS} ]]; then
+    return 0
+  fi
+
+  # `cd ""` returns 0 and leaves cwd untouched -- an unset HOME would
+  # silently probe from wherever doctor happened to be invoked, letting a
+  # project-local version file (e.g. .terraform-version) steer the result,
+  # which is exactly the property this arm exists to prevent. An unreadable
+  # HOME fails the OTHER direction: `cd` returns 1 for every tool, and five
+  # healthy installs would report "does not run (rc 1)" and send the
+  # operator to reinstall them. Neither is a per-tool problem, so this is
+  # one WARN for the whole arm rather than five misleading verdicts.
+  #
+  # `-d` alone only stats the path -- it says nothing about whether IT is
+  # traversable, only that it exists and is a directory. A HOME lacking its
+  # own execute bit (e.g. chmod 0600) passes `-d` and then fails every
+  # probe's `cd`, which is exactly the rc-1 misattribution this guard
+  # exists to prevent. `( cd ... )` in a subshell is the actual operation
+  # every probe below performs, so testing it directly is what the guard
+  # needs rather than a proxy for it.
+  local _probe_dir="${HOME:-}"
+  if [[ -z "${_probe_dir}" ]] || [[ ! -d "${_probe_dir}" ]] || ! ( cd "${_probe_dir}" ) 2>/dev/null; then
+    printf "\nDev tools:\n"
+    doctor_warn "dev tools" "cannot probe: HOME is unset or unreadable"
+    return 0
+  fi
+
+  printf "\nDev tools:\n"
+
+  # Resolved once, defensively: an absent `timeout` must not turn every
+  # tool's probe into a false "does not run" -- degrade to running the
+  # probe unbounded rather than report the whole arm broken. The accepted
+  # cost of that degrade: a genuinely hung tool can then block doctor
+  # itself, since nothing bounds the probe any more. Accepted because every
+  # Linux target this arm runs on ships coreutils (and therefore `timeout`)
+  # by construction -- the fallback exists for a shim-scoped test PATH, not
+  # for an expected production gap.
+  local _timeout_bin
+  _timeout_bin="$(command -v timeout 2>/dev/null)"
+
+  local _tool _bin _args _rc
+  for _tool in pwsh tflint zig terraform tfsec; do
+    case "${_tool}" in
+      pwsh) _args="-NoProfile -Command exit" ;;
+      tflint) _args="--version" ;;
+      zig) _args="version" ;;
+      terraform) _args="version" ;;
+      tfsec) _args="--version" ;;
+    esac
+
+    _bin="$(command -v "${_tool}" 2>/dev/null)"
+    if [[ -z "${_bin}" ]]; then
+      doctor_warn "${_tool}" "not found — setup_env.sh -t developer"
+      continue
+    fi
+
+    if [[ -n "${_timeout_bin}" ]]; then
+      # shellcheck disable=SC2086 # word-splitting is the point: ${_args} carries multiple args
+      ( cd "${_probe_dir}" && "${_timeout_bin}" "${_DOCTOR_PROBE_TIMEOUT:-10}" "${_bin}" ${_args} ) &>/dev/null
+    else
+      # shellcheck disable=SC2086 # word-splitting is the point: ${_args} carries multiple args
+      ( cd "${_probe_dir}" && "${_bin}" ${_args} ) &>/dev/null
+    fi
+    _rc=$?
+
+    if [[ ${_rc} -eq 0 ]]; then
+      doctor_pass "${_tool}"
+    else
+      doctor_warn "${_tool}" "does not run (rc ${_rc}) — setup_env.sh -t developer"
+    fi
+  done
 }
 _doctor_check_cred_dirs() {
   printf "\nCredential directories:\n"
@@ -873,6 +954,107 @@ _doctor_check_gnu_coreutils() {
   fi
 }
 
+# Single source of truth for the ansible venv's bin directory. Both
+# _pyenv_missing_shims (enumerates it) and _doctor_check_pyenv_shims
+# (counts it) must describe the exact same directory -- resolving
+# _OVERRIDE_PYENV_ROOT/PYENV_ROOT/HOME in two places let an edit to one
+# silently make them disagree about what "the venv" even is.
+_pyenv_ansible_venv_bin() {
+  local _root="${_OVERRIDE_PYENV_ROOT:-${PYENV_ROOT:-${HOME}/.pyenv}}"
+  printf '%s' "${_root}/versions/ansible/bin"
+}
+
+# Every basename in the ansible venv's bin/, one per line, exactly as
+# pyenv's own rehash hook would see them: it turns nullglob AND dotglob ON
+# before its glob (pyenv.d/rehash/dotfiles-register-all-executables.bash)
+# -- a dot-prefixed venv entry it shims would otherwise be invisible here
+# -- and restores both via shopt -p/eval, never leaving them set, since
+# this runs inside run_doctor, in the same shell as every later doctor
+# check. `-e || -L` treats a DANGLING symlink as present: `-e` alone
+# follows the link and reports false for a broken one, which would drop it
+# from both the missing list and the total. This machine's ansible venv
+# holds six absolute symlinks into a versioned pyenv install; a pyenv
+# uninstall/partial reinstall breaks them.
+_pyenv_ansible_venv_entries() {
+  local _bin
+  _bin="$(_pyenv_ansible_venv_bin)"
+  [[ -d "${_bin}" ]] || return 0
+
+  local _opts
+  _opts="$(shopt -p nullglob dotglob || true)"
+  shopt -s nullglob dotglob
+
+  local _entry
+  for _entry in "${_bin}"/*; do
+    [[ -e "${_entry}" || -L "${_entry}" ]] || continue
+    printf '%s\n' "$(basename "${_entry}")"
+  done
+
+  eval "${_opts}"
+}
+
+_pyenv_missing_shims() {
+  local _bin
+  _bin="$(_pyenv_ansible_venv_bin)"
+  # No ansible venv at all -- nothing to check, and the caller must not
+  # print a header over a check that found nothing to look at.
+  [[ -d "${_bin}" ]] || return 2
+
+  local _shims="${_bin%/versions/ansible/bin}/shims"
+  local _name
+  while IFS= read -r _name; do
+    [[ -e "${_shims}/${_name}" ]] || printf '%s\n' "${_name}"
+  done < <(_pyenv_ansible_venv_entries)
+  return 0
+}
+
+_doctor_check_pyenv_shims() {
+  local _bin
+  _bin="$(_pyenv_ansible_venv_bin)"
+
+  local _missing _rc
+  _missing="$(_pyenv_missing_shims)"
+  _rc=$?
+  # rc 2 means there is no ansible venv -- silent, no section header, so a
+  # machine with no ansible venv gets no line about it at all.
+  [[ ${_rc} -eq 2 ]] && return 0
+
+  printf "\nPyenv shims:\n"
+
+  # _pyenv_missing_shims alone cannot tell "bin/ is empty" apart from
+  # "bin/ is complete" -- both print nothing. Count entries separately so an
+  # empty venv WARNs instead of silently PASSing "0 of 0". Sourced from the
+  # same _pyenv_ansible_venv_entries the missing-list uses, so a dangling
+  # symlink or a dot-prefixed entry can never be counted differently here
+  # than it was enumerated there.
+  local _total=0
+  local _name
+  while IFS= read -r _name; do
+    _total=$(( _total + 1 ))
+  done < <(_pyenv_ansible_venv_entries)
+
+  if [[ ${_total} -eq 0 ]]; then
+    doctor_warn "pyenv shims" "ansible venv bin is empty (${_bin})"
+    return 0
+  fi
+
+  if [[ -n "${_missing}" ]]; then
+    # Unbounded, a wiped shims/ prints every venv entry on one line. State
+    # the true count up front and cap what is actually shown.
+    local _missing_count
+    _missing_count="$(printf '%s\n' "${_missing}" | wc -l | tr -d '[:space:]')"
+    local _missing_shown
+    _missing_shown="$(printf '%s\n' "${_missing}" | head -n 5 | tr '\n' ' ')"
+    _missing_shown="${_missing_shown% }"
+    local _suffix=""
+    [[ ${_missing_count} -gt 5 ]] && _suffix=" ..."
+    doctor_fail "pyenv shims" "missing: ${_missing_count} entries (${_missing_shown}${_suffix}) — run: pyenv rehash"
+    return 0
+  fi
+
+  doctor_pass "pyenv shims: ${_total} of ${_total} ansible venv entries shimmed"
+}
+
 process_args() {
   local _short_args=()
   local _i=0
@@ -1134,6 +1316,35 @@ install_terraform_skill() {
     log_info "Cloning terraform-skill into ${_cursor_skill_dir}"
     git clone --depth=1 "${_skill_repo}" "${_cursor_skill_dir}" || return 1
   fi
+}
+
+install_pyenv_rehash_hook() {
+  local _root="${_OVERRIDE_PYENV_ROOT:-${PYENV_ROOT:-${HOME}/.pyenv}}"
+
+  # A host with no pyenv installed gets no pyenv.d state.
+  [[ -d "${_root}/versions" ]] || return 0
+
+  local _src="${DOTFILES_REPO_ROOT}/pyenv.d/rehash/dotfiles-register-all-executables.bash"
+  [[ -f "${_src}" ]] || { log_error "pyenv rehash hook source missing: ${_src}"; return 1; }
+  local _dst="${_root}/pyenv.d/rehash/dotfiles-register-all-executables.bash"
+
+  mkdir -p "${_root}/pyenv.d/rehash" || return 1
+
+  # A pre-existing symlink is replaced, not written through: it may point at
+  # the source itself (install refuses) and it is the dangling-link hazard below.
+  [[ -L "${_dst}" ]] && rm -f "${_dst}"
+
+  # A directory at the destination can't be a hook; `install` would write
+  # inside it and report success for a file pyenv will never source.
+  [[ -d "${_dst}" ]] && { log_error "pyenv rehash hook destination is a directory: ${_dst}"; return 1; }
+
+  if [[ -f "${_dst}" ]] && cmp -s "${_src}" "${_dst}"; then
+    return 0
+  fi
+
+  # Always a regular-file copy, never a symlink: a dangling symlink here
+  # makes every `pyenv rehash` exit 1 silently (source fails under set -e).
+  install -m 0644 "${_src}" "${_dst}" || return 1
 }
 
 setup_credential_directories() {

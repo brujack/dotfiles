@@ -3,8 +3,8 @@
 
 # Fixed section order for summary display
 readonly _UPDATE_SECTION_ORDER=(
-  brew softwareupdate apt snap mas claude terraform-skill npm pip pip-check gems
-  ai-config git-repos legacy-rsync git-hooks aws rust oh-my-zsh zsh-autosuggestions tpm tfenv cheat.sh brew-drift
+  brew softwareupdate apt snap mas claude terraform-skill npm pip pip-check pyenv-shims gems
+  ai-config git-repos legacy-rsync git-hooks aws rust cargo-tools oh-my-zsh zsh-autosuggestions tpm tfenv cheat.sh brew-drift
 )
 
 # _update_diff_lines PRE_FILE POST_FILE
@@ -48,8 +48,13 @@ _update_ok() {
 }
 
 # _update_warn SECTION MESSAGE
-# Records a section as a non-blocking warning. Same lifecycle constraint as
-# _update_ok: for advisory check sections only, not timed _update_record_end sections.
+# Records a section as a non-blocking warning. Two lifecycles call this:
+# (1) an advisory check section that bypasses _update_record_end entirely,
+# same as _update_ok; and (2) a timed section using the rc-2-means-partial-
+# success shape -- _update_record_end "SECTION" 0 first (so the section's
+# own case-arm result, or the default "updated", is recorded), then this
+# call overwrites the status to WARN. pyenv-shims, git-repos, legacy-rsync,
+# git-hooks and cargo-tools all use shape (2); brew-drift is shape (1).
 _update_warn() {
   local _section="$1" _msg="$2"
   printf "WARN\n" > "${_DOTFILES_RUN_TMPDIR}/status_${_section}"

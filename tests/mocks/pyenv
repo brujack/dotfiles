@@ -18,4 +18,19 @@ fi
 if [[ "$1" == "virtualenv-delete" ]]; then
   exit "${MOCK_PYENV_VIRTUALENV_DELETE_EXIT:-${MOCK_PYENV_EXIT:-0}}"
 fi
+# 'pyenv rehash' is a no-op by default -- most suites call it only to assert
+# it was invoked. Opt in with MOCK_PYENV_REHASH_LINKS=1 to make it actually
+# link every ansible venv bin/ entry into shims/, for the one test that
+# needs to tell "the rehash created the shim" apart from "the fixture
+# already had it".
+if [[ "$1" == "rehash" ]] && [[ -n "${MOCK_PYENV_REHASH_LINKS:-}" ]]; then
+  _mock_pyenv_root="${_OVERRIDE_PYENV_ROOT:-${PYENV_ROOT:-}}"
+  if [[ -n "${_mock_pyenv_root}" ]] && [[ -d "${_mock_pyenv_root}/versions/ansible/bin" ]]; then
+    mkdir -p "${_mock_pyenv_root}/shims"
+    for _mock_pyenv_entry in "${_mock_pyenv_root}/versions/ansible/bin"/*; do
+      [[ -e "${_mock_pyenv_entry}" ]] || continue
+      : > "${_mock_pyenv_root}/shims/$(basename "${_mock_pyenv_entry}")"
+    done
+  fi
+fi
 exit "${MOCK_PYENV_EXIT:-0}"

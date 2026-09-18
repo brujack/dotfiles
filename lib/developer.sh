@@ -534,6 +534,7 @@ setup_ansible() {
       local _uv
       _uv="$(resolve_uv)" || return 1
       uv_sync_venv "${_uv}" "${PYENV_ROOT}/versions/ansible/bin/python" "${PYENV_ROOT}/versions/ansible" || return 1
+      install_pyenv_rehash_hook || log_warn "pyenv rehash hook not installed — see above"
       pyenv rehash
     fi
   fi
@@ -564,6 +565,7 @@ recreate_python_venv() {
     local _uv
     _uv="$(resolve_uv)" || return 1
     uv_sync_venv "${_uv}" "${_python}" "${PYENV_ROOT}/versions/${_venv_name}" || return 1
+    install_pyenv_rehash_hook || log_warn "pyenv rehash hook not installed — see above"
     pyenv rehash
   fi
 }
@@ -591,4 +593,197 @@ clone_personal_repos() {
   if ! [[ -d ${PERSONAL_GITREPOS}/terraform_ansible ]]; then
     git clone git@github.com:brujack/terraform_ansible.git "${PERSONAL_GITREPOS}"/terraform_ansible
   fi
+}
+
+# _semver_cmp a b -- prints -1, 0 or 1 comparing dot-separated NUMERIC
+# components; a missing component on either side is treated as 0. Never a
+# lexical comparison (shell.md's semver pitfall): "1.9" > "1.10" as
+# strings, because '9' > '1' at the first differing character, which is
+# the wrong answer for 9 < 10.
+_semver_cmp() {
+  local _a="$1" _b="$2"
+  local -a _a_parts _b_parts
+  IFS='.' read -r -a _a_parts <<< "${_a}"
+  IFS='.' read -r -a _b_parts <<< "${_b}"
+  local _len=${#_a_parts[@]}
+  ((${#_b_parts[@]} > _len)) && _len=${#_b_parts[@]}
+
+  local _i _av _bv
+  for ((_i = 0; _i < _len; _i++)); do
+    _av="${_a_parts[_i]:-0}"
+    _bv="${_b_parts[_i]:-0}"
+    # A non-numeric component -- including a pre-release/build suffix like
+    # the "3-rc9" in "1.2.3-rc9" -- compares as 0, so "1.2.3-rc9" and
+    # "1.2.3-rc1" compare EQUAL. Deliberate, not a gap: every CARGO_TOOLS
+    # consumer (_cargo_tool_state) only distinguishes "the pin" from
+    # "not strictly greater than the pin", and anything not strictly
+    # greater lands on ok-equal or older, both of which reinstall at (or
+    # already sit at) the pin -- safe regardless of how two suffixed
+    # versions would order against each other.
+    [[ "${_av}" =~ ^[0-9]+$ ]] || _av=0
+    [[ "${_bv}" =~ ^[0-9]+$ ]] || _bv=0
+    if ((10#${_av} > 10#${_bv})); then
+      printf '%s\n' '1'
+      return 0
+    elif ((10#${_av} < 10#${_bv})); then
+      printf '%s\n' '-1'
+      return 0
+    fi
+  done
+  printf '%s\n' '0'
+}
+
+# _cargo_list_version <crate> <list> -- the installed version for <crate>
+# in <list> (verbatim `cargo install --list` output, e.g.
+# "cargo-audit v0.22.1:\n    cargo-audit"), or empty if <crate> is not
+# listed at all.
+#
+# A path or git install renders as "cargo-audit v0.22.1
+# (/Users/x/src/cargo-audit):" -- cargo appends the source location after
+# the version, inside the same colon-terminated header line. Cutting at
+# the first space (before stripping the trailing colon) keeps only the
+# version in both that case and the ordinary registry case, which has no
+# space to cut at.
+_cargo_list_version() {
+  local _crate="$1" _list="$2"
+  local _line
+  while IFS= read -r _line; do
+    if [[ "${_line}" == "${_crate} v"*: ]]; then
+      _line="${_line#"${_crate} v"}"
+      _line="${_line%% *}"
+      printf '%s\n' "${_line%:}"
+      return 0
+    fi
+  done <<< "${_list}"
+}
+
+# _cargo_tool_state <cargo> <crate> <version> <list> -- prints one of ok,
+# newer, older, broken or absent. Runnability, not the version string, is
+# what "ok"/"newer" mean: a crate listed at the right version whose
+# subcommand no longer loads (a stale build against a moved shared
+# library, for example) is "broken", not "ok". <list> is the caller's
+# single `cargo install --list` read, passed in so eight pins don't each
+# re-run it.
+_cargo_tool_state() {
+  local _cargo="$1" _crate="$2" _version="$3" _list="$4"
+  local _installed
+  _installed="$(_cargo_list_version "${_crate}" "${_list}")"
+  if [[ -z "${_installed}" ]]; then
+    printf '%s\n' 'absent'
+    return 0
+  fi
+
+  local _sub="${_crate#cargo-}"
+  if [[ "${_installed}" == "${_version}" ]]; then
+    if "${_cargo}" "${_sub}" --help > /dev/null 2>&1; then
+      printf '%s\n' 'ok'
+    else
+      printf '%s\n' 'broken'
+    fi
+    return 0
+  fi
+
+  local _cmp
+  _cmp="$(_semver_cmp "${_installed}" "${_version}")"
+  if [[ "${_cmp}" == "1" ]]; then
+    if "${_cargo}" "${_sub}" --help > /dev/null 2>&1; then
+      printf '%s\n' 'newer'
+    else
+      printf '%s\n' 'broken'
+    fi
+  else
+    # Deliberately unprobed: an "older" install is going to be reinstalled
+    # at the pin regardless of whether its --help currently runs, so a
+    # runnability check here would answer a question install_cargo_tools
+    # never asks. Only "at the pin" (ok/broken) and "newer" (newer/broken)
+    # need the probe, because those are the states where the answer
+    # changes what install_cargo_tools does next.
+    printf '%s\n' 'older'
+  fi
+}
+
+# install_cargo_tools -- brings every CARGO_TOOLS pin (lib/constants.sh) to
+# at least its pinned version, or repairs a broken (non-runnable) install
+# in place with --force. State is judged by whether the binary runs
+# (_cargo_tool_state), not by the version string cargo reports -- a listed
+# version says nothing about whether the binary loads.
+#
+# _CARGO_BIN is read unconditionally, ahead of ${HOME}/.cargo/bin/cargo and
+# a PATH cargo. tests/helpers/common.bash's load_mocks exports it at the
+# recording mock by default, so any suite that calls load_mocks cannot
+# reach a real cargo and compile crates for real (tdd.md E2) -- except a
+# test that deliberately unsets _CARGO_BIN to exercise the other
+# resolution branches, which is then responsible for its own isolation.
+install_cargo_tools() {
+  if [[ -z ${HAS_RUST} ]]; then
+    printf '%s\n' 'cargo tools: skipped (HAS_RUST unset)'
+    return 0
+  fi
+
+  local _cargo
+  if [[ -n "${_CARGO_BIN:-}" ]] && [[ -x "${_CARGO_BIN}" ]]; then
+    _cargo="${_CARGO_BIN}"
+  elif [[ -x "${HOME}/.cargo/bin/cargo" ]]; then
+    _cargo="${HOME}/.cargo/bin/cargo"
+  elif command -v cargo > /dev/null 2>&1; then
+    _cargo="cargo"
+  else
+    printf '%s\n' 'cargo not found' >&2
+    return 1
+  fi
+
+  local _list
+  _list="$("${_cargo}" install --list 2>/dev/null)"
+
+  local -a _failed=()
+  local _pin _crate _version _state _installed
+  for _pin in "${CARGO_TOOLS[@]}"; do
+    _crate="${_pin%@*}"
+    _version="${_pin##*@}"
+    _state="$(_cargo_tool_state "${_cargo}" "${_crate}" "${_version}" "${_list}")"
+
+    if [[ "${_state}" == "ok" ]] || [[ "${_state}" == "newer" ]]; then
+      _installed="$(_cargo_list_version "${_crate}" "${_list}")"
+      printf 'cargo tools: %s %s ok\n' "${_crate}" "${_installed}"
+      continue
+    fi
+
+    local -a _install_args=(install --locked)
+    if [[ "${_state}" == "broken" ]]; then
+      _install_args+=(--force)
+    fi
+    _install_args+=("${_crate}@${_version}")
+
+    # tarpaulin's build vendors libgit2 with this flag so git2-sys builds
+    # its bundled copy rather than linking a Homebrew/linuxbrew libgit2 a
+    # later brew upgrade can break underneath it (spec Part 3). No other
+    # pin needs it, so it is set only for this one install call.
+    if [[ "${_crate}" == "cargo-tarpaulin" ]]; then
+      if ! LIBGIT2_NO_PKG_CONFIG=1 "${_cargo}" "${_install_args[@]}"; then
+        printf 'cargo tools: %s install failed\n' "${_crate}" >&2
+        _failed+=("${_crate}")
+      fi
+    else
+      if ! "${_cargo}" "${_install_args[@]}"; then
+        printf 'cargo tools: %s install failed\n' "${_crate}" >&2
+        _failed+=("${_crate}")
+      fi
+    fi
+  done
+
+  if ((${#_failed[@]} > 0)); then
+    # The detail file run_update builds from this function's merged
+    # stdout+stderr keeps only the LAST 10 lines (tail -10) -- with enough
+    # "ok" lines after an early failure, that per-crate "install failed"
+    # line can fall out of the window entirely before the operator ever
+    # reads it. This summary is deliberately the LAST thing this function
+    # prints, on stdout rather than stderr so the existing single-failure
+    # unit test in tests/setup_env/cargo_tools.bats (which asserts stderr
+    # is exactly one line) stays accurate -- the merged capture in
+    # run_update reads both streams together regardless of which one this
+    # line uses, so the guarantee is unaffected by the channel choice.
+    printf 'cargo tools: failed: %s\n' "${_failed[*]}"
+    return 2
+  fi
+  return 0
 }
