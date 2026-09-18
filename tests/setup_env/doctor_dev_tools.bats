@@ -297,21 +297,30 @@ STUB
 # ── T3: the documented probe arguments are what actually reaches each
 # tool ─────────────────────────────────────────────────────────────────
 
-@test "_doctor_check_dev_tools invokes pwsh and zig with their documented probe arguments" {
+@test "_doctor_check_dev_tools invokes every tool with its documented probe arguments" {
   export LINUX=1 HAS_DEVTOOLS=1
-  # Blanking every _args value, or corrupting only pwsh's, survives every
-  # other test in this file (a bare `pwsh` with no args starts an
-  # interactive REPL instead of exiting -- the exact failure mode this
-  # test exists to catch, since it would convert a PASS into a 10s timeout
-  # WARN on every real doctor run). MOCK_CALLS_FILE is exported in setup()
-  # and otherwise unused by this file.
+  # Blanking any single tool's _args value survives every other test in
+  # this file -- only argv itself discriminates it. A bare `pwsh` with no
+  # args starts an interactive REPL instead of exiting (the exact failure
+  # mode this test exists to catch, since it would convert a PASS into a
+  # 10s timeout WARN on every real doctor run); a bare `tfsec`/`tflint`
+  # with no args scans the probe's cwd instead of printing a version,
+  # which would surface as an rc-124 timeout rather than a wrong-args
+  # failure and be misdiagnosed as "does not run". MOCK_CALLS_FILE is
+  # exported in setup() and otherwise unused by this file.
   _write_stub "pwsh" 'printf "pwsh %s\n" "$*" >> "${MOCK_CALLS_FILE}"; exit 0'
   _write_stub "zig" 'printf "zig %s\n" "$*" >> "${MOCK_CALLS_FILE}"; exit 0'
+  _write_stub "tflint" 'printf "tflint %s\n" "$*" >> "${MOCK_CALLS_FILE}"; exit 0'
+  _write_stub "terraform" 'printf "terraform %s\n" "$*" >> "${MOCK_CALLS_FILE}"; exit 0'
+  _write_stub "tfsec" 'printf "tfsec %s\n" "$*" >> "${MOCK_CALLS_FILE}"; exit 0'
 
   PATH="${_BIN_DIR}" run _doctor_check_dev_tools
   [ "$status" -eq 0 ]
   grep -qF 'pwsh -NoProfile -Command exit' "${MOCK_CALLS_FILE}"
   grep -qF 'zig version' "${MOCK_CALLS_FILE}"
+  grep -qF 'tflint --version' "${MOCK_CALLS_FILE}"
+  grep -qF 'terraform version' "${MOCK_CALLS_FILE}"
+  grep -qF 'tfsec --version' "${MOCK_CALLS_FILE}"
 }
 
 # ── T6: wiring order is pinned against the source, not just presence
