@@ -25,8 +25,44 @@ if [[ -z "${_GIT_HOOKS_MANDATED+x}" ]]; then
   readonly _GIT_HOOKS_MANDATED=(pre-commit pre-push commit-msg)
 fi
 
+# _git_hooks_target_dir resolves which directory holds REPO_DIR's
+# install-hooks target. The root Makefile wins; otherwise exactly one
+# tracked Makefile one directory down may carry it -- terraform_ansible
+# keeps its target in ansible/Makefile and none at the root. Contract:
+#   exit 0 -- prints the directory to run `make install-hooks` in.
+#   exit 1 -- no target anywhere. Prints nothing.
+#   exit 2 -- two or more subdirectory Makefiles carry a target. Prints
+#             nothing: hooks are repo-wide, so the recipes would overwrite
+#             each other, and picking one would be a guess.
+# Candidates come from `git ls-files`, not the filesystem, so an untracked
+# scratch Makefile cannot change what the sweep runs.
+_git_hooks_target_dir() {
+  local _repo="${1%/}"
+  if [[ -f "${_repo}/Makefile" ]] && grep -q '^install-hooks:' "${_repo}/Makefile"; then
+    printf '%s\n' "${_repo}"
+    return 0
+  fi
+
+  local _mk
+  local -a _found=()
+  while IFS= read -r -d '' _mk; do
+    grep -q '^install-hooks:' "${_repo}/${_mk}" 2>/dev/null && _found+=("${_repo}/${_mk%/Makefile}")
+  done < <(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+    git -C "${_repo}" ls-files -z -- ':(glob)*/Makefile' 2>/dev/null)
+
+  case ${#_found[@]} in
+    0) return 1 ;;
+    1) printf '%s\n' "${_found[0]}" ;;
+    *) return 2 ;;
+  esac
+}
+
+# _git_hooks_discover prints one line per repo with a resolvable
+# install-hooks target: the repo directory, a tab, then the directory to run
+# make in. The two differ only for a subdirectory target.
 _git_hooks_discover() {
   local _dir
+  local _make_dir
   for _dir in "${PERSONAL_GITREPOS}"/*/; do
     # -d not -e: a worktree/submodule .git is a FILE — skip those (hooks
     # live in the common dir), and stop rev-parse walking up into an
@@ -41,13 +77,8 @@ _git_hooks_discover() {
     # this repo's pre-push hook runs `make test`, which sources this file.
     env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
       git -C "${_dir}" rev-parse --git-dir >/dev/null 2>&1 || continue
-    # Not a correctness guard: grep already exits 2 on a missing file, so
-    # `|| continue` would exclude the repo without it. It exists to suppress
-    # grep's "No such file or directory" on stderr, which would otherwise
-    # print once per Makefile-less repo on every weekly `-t update`.
-    [[ -f "${_dir}Makefile" ]] || continue
-    grep -q '^install-hooks:' "${_dir}Makefile" || continue
-    printf '%s\n' "${_dir}"
+    _make_dir="$(_git_hooks_target_dir "${_dir}")" || continue
+    printf '%s\t%s\n' "${_dir%/}" "${_make_dir}"
   done
 }
 
@@ -185,23 +216,27 @@ _git_hooks_check_complete() {
   return 1
 }
 
-# _git_hooks_gap_repos prints three distinct gap shapes for repos on
+# _git_hooks_gap_repos prints four distinct gap shapes for repos on
 # HOOK_EXPECTED_REPOS, one name per line:
 #   "${name}"           -- exists under PERSONAL_GITREPOS as a real git
 #                          repo but carries no Makefile at all.
 #   "${name}:no-target" -- exists as a real git repo, has a Makefile, but
-#                          that Makefile has no ^install-hooks: target.
-#                          This shape mirrors _git_hooks_discover's own
-#                          two checks exactly (its complement, not merely
-#                          "no Makefile") -- collapsing it into "Makefile
-#                          present => not a gap" let a repo shaped exactly
-#                          like this fall through BOTH discovery (no
-#                          target => not discovered) and this function
-#                          (Makefile present => not a gap), so it was
-#                          never installed into, never checked, and never
-#                          reported. Real example on the fleet:
-#                          terraform_ansible (.git yes, Makefile yes, no
-#                          install-hooks: target).
+#                          neither it nor any tracked subdirectory Makefile
+#                          has an ^install-hooks: target. This shape is the
+#                          complement of _git_hooks_discover, which is why
+#                          both call _git_hooks_target_dir: collapsing it
+#                          into "Makefile present => not a gap" let a repo
+#                          fall through BOTH discovery and this function,
+#                          so it was never installed into, never checked,
+#                          and never reported. terraform_ansible was once
+#                          cited here as the fleet example -- wrongly: its
+#                          target is in ansible/Makefile, so reading the
+#                          root Makefile alone mislabelled it and left its
+#                          cp-installed hooks stale on every machine.
+#   "${name}:ambiguous" -- two or more tracked subdirectory Makefiles carry
+#                          a target and the root carries none. Not run:
+#                          hooks are repo-wide, so the recipes would
+#                          overwrite each other.
 #   "${name}:absent"    -- no directory for this name exists under
 #                          PERSONAL_GITREPOS at all (never cloned, or
 #                          clone failed). This is the largest possible
@@ -218,6 +253,7 @@ _git_hooks_check_complete() {
 _git_hooks_gap_repos() {
   local _name
   local _dir
+  local _rc
 
   for _name in "${HOOK_EXPECTED_REPOS[@]}"; do
     _dir="${PERSONAL_GITREPOS}/${_name}"
@@ -238,18 +274,22 @@ _git_hooks_gap_repos() {
     # applied here too.
     env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
       git -C "${_dir}" rev-parse --git-dir >/dev/null 2>&1 || continue
+    # The same resolver _git_hooks_discover uses, so a repo is either
+    # discovered or reported here -- never both, never neither.
+    _rc=0
+    _git_hooks_target_dir "${_dir}" >/dev/null || _rc=$?
+    [[ ${_rc} -eq 0 ]] && continue
+    if [[ ${_rc} -eq 2 ]]; then
+      printf '%s:ambiguous\n' "${_name}"
+      continue
+    fi
     # No Makefile at all is one gap shape (bare name); a Makefile that
     # exists but has no install-hooks: target is a second, distinct shape
-    # ("${_name}:no-target") -- see the contract comment above. Testing
-    # `-f Makefile` alone and treating its presence as "not a gap" (the
-    # previous logic) is not the complement of _git_hooks_discover's own
-    # two checks, and silently reintroduces the hole this function exists
-    # to close.
+    # ("${_name}:no-target") -- see the contract comment above.
     if [[ ! -f "${_dir}/Makefile" ]]; then
       printf '%s\n' "${_name}"
       continue
     fi
-    grep -q '^install-hooks:' "${_dir}/Makefile" && continue
     printf '%s:no-target\n' "${_name}"
   done
   return 0
@@ -433,8 +473,8 @@ install_git_hooks_all_repos() {
     log_warn "core.hooksPath pinned at ${_hp_scope} scope: ${_hp_value} (remedy: ${_hp_remedy})"
   done <<< "$(_git_hooks_hookspath_offenders)"
 
-  local _dir
-  while IFS= read -r _dir; do
+  local _dir _make_dir
+  while IFS=$'\t' read -r _dir _make_dir; do
     [[ -z "${_dir}" ]] && continue
     _checked=$((_checked + 1))
 
@@ -458,7 +498,7 @@ install_git_hooks_all_repos() {
     # measured to redirect this call; GIT_WORK_TREE and GIT_INDEX_FILE are
     # stripped for symmetry with those read paths, not because they do.
     run_cmd env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
-      make -s -C "${_dir}" install-hooks
+      make -s -C "${_make_dir}" install-hooks
     _rc=$?
 
     if [[ ${_rc} -ne 0 ]]; then
@@ -511,11 +551,12 @@ install_git_hooks_all_repos() {
   # _git_hooks_gap_repos catches gaps _git_hooks_discover cannot see at
   # all: a listed repo with no Makefile, or a Makefile with no
   # install-hooks: target, has nothing (or nothing matching) for discover
-  # to glob a decision from. Its three shapes stay distinct labels here
+  # to glob a decision from. Its four shapes stay distinct labels here
   # too -- a bare name (real repo, no Makefile at all) needs hook scripts
   # AND a target added; ":no-target" (real repo, Makefile present, target
-  # missing) needs only the target added; ":absent" (never cloned) needs
-  # the clone itself. Collapsing any of these would state a false cause
+  # missing) needs only the target added; ":ambiguous" needs one of the
+  # competing targets removed; ":absent" (never cloned) needs the clone
+  # itself. Collapsing any of these would state a false cause
   # in an operator-facing report, the same way collapsing check_complete's
   # rc 1/2 would.
   local _gap_name
@@ -528,6 +569,9 @@ install_git_hooks_all_repos() {
         ;;
       *:no-target)
         _gap_lines+=("${_gap_name%:no-target}: Makefile has no install-hooks target")
+        ;;
+      *:ambiguous)
+        _gap_lines+=("${_gap_name%:ambiguous}: install-hooks target in more than one subdirectory Makefile")
         ;;
       *)
         _gap_lines+=("${_gap_name}: no Makefile")
