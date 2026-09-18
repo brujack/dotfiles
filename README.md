@@ -198,8 +198,8 @@ subshell and record a section status like any other. See
 | `setup`          | Full machine setup (`setup_user` + all apps and tools). Flags: `--brew-install`, `--mas-install`                                                                                                                                                                                                                                                                                                                                            |
 | `developer`      | Dev packages + Python/Ansible virtualenv                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `ansible`        | Ansible venv only — typically used after a Python update                                                                                                                                                                                                                                                                                                                                                                                    |
-| `recreate-venv`  | Force-delete and recreate a named pyenv virtualenv. Flags: `--venv-name` (default: `ansible`). SIGINT/SIGTERM during the rebuild abort the shell, leaving the toolchain deleted — recover by re-running, repeating `--venv-name` if the original invocation carried it |
-| `recreate-ruby`  | Force-delete and reinstall the pinned Ruby version (`RUBY_VER` in `lib/constants.sh`), reusing `install_ruby()`. SIGINT/SIGTERM during the rebuild abort the shell, leaving the toolchain deleted — recover by re-running |
+| `recreate-venv`  | Force-delete and recreate a named pyenv virtualenv. Flags: `--venv-name` (default: `ansible`). SIGINT/SIGTERM during the rebuild abort the shell, leaving the toolchain deleted — recover by re-running, repeating `--venv-name` if the original invocation carried it                                                                                                                                                                      |
+| `recreate-ruby`  | Force-delete and reinstall the pinned Ruby version (`RUBY_VER` in `lib/constants.sh`), reusing `install_ruby()`. SIGINT/SIGTERM during the rebuild abort the shell, leaving the toolchain deleted — recover by re-running                                                                                                                                                                                                                   |
 | `update`         | Update all packages (brew, apt/snap, pip, mas, Claude plugins, etc.). Prints a structured summary at the end; each run is appended to `~/.dotfiles-update.log`. **Exits 1 when any section reports FAIL** (a WARN section still exits 0)                                                                                                                                                                                                    |
 | `doctor`         | Active health checks: symlinks, tool presence, credential dir permissions, version drift, global/system `core.hooksPath` pins, the GNU coreutils provider (Ubuntu 26.04 only — see [ADR-0031](docs/adr/0031-gnu-coreutils-precedence-on-resolute.md)), and weekly-cadence heartbeats (Studio only — a silent agent is indistinguishable from a healthy one, so liveness is checked separately from findings). Exits non-zero on any failure |
 | `check-versions` | Compare pinned tool versions in `lib/constants.sh` against latest GitHub releases. Exits 1 if any are outdated; `--update` prompts to apply each update in-place                                                                                                                                                                                                                                                                            |
@@ -233,6 +233,8 @@ Each `update` run appends a timestamped entry to `~/.dotfiles-update.log`. The e
 [OK]   mas                  1 app(s) (Slack (4.42))
 [OK]   claude               2 plugin(s) updated (superpowers: 5.0.8, context7: 1.2.0)
 [OK]   pip                  3 package(s) (ansible, boto3, requests)
+[OK]   pyenv-shims          every venv entry has a shim
+[OK]   cargo-tools          1 crate(s) (cargo-tarpaulin 0.35.2)
 [OK]   oh-my-zsh            2 commit(s)
 [OK]   zsh-autosuggestions  no changes
 [OK]   tpm                  no changes
@@ -248,7 +250,7 @@ brew-drift details:
   Missing (in Brewfile, not installed):
     tap: teamookla/speedtest
 
-14 sections: 12 OK, 0 failed, 1 warnings, 1 skipped
+16 sections: 14 OK, 0 failed, 1 warnings, 1 skipped
 ```
 
 Sections show `[OK]`, `[WARN]`, `[FAIL]`, or `[SKIP]`. `WARN` entries are non-blocking advisory findings (e.g. Brewfile drift); detail lines are printed below the table. `FAIL` entries include the exit code; scroll up in the terminal to see the full command output. The log is append-only and never rotated automatically.
@@ -298,6 +300,8 @@ dotfiles/
 │   ├── update_summary.sh     # Update run tracking and summary reporting
 │   ├── launch_agents.sh      # Weekly cadence agents + their doctor heartbeat check
 │   └── workflows.sh          # Top-level workflow functions dispatched by setup_env.sh
+├── pyenv.d/
+│   └── rehash/               # pyenv rehash hooks, copied into ${PYENV_ROOT}/pyenv.d (see docs/adr/0032)
 ├── LaunchAgents/
 │   └── cadence.plist.template # One template, both weekly agents (see docs/adr/0024)
 ├── scripts/
