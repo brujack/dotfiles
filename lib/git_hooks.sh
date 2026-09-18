@@ -37,10 +37,19 @@ fi
 #             each other, and picking one would be a guess.
 #   exit 3 -- `git ls-files` failed (e.g. a corrupt index), so the
 #             subdirectory Makefiles are unknown. Prints nothing.
-#   exit 4 -- no Makefile at the root or one level down. Prints nothing.
-# Subdirectory candidates come from `git ls-files`, not the filesystem, so an
-# untracked scratch Makefile below the root cannot change what the sweep
-# runs. The root check is a filesystem test, as it was before this resolver.
+#   exit 4 -- no usable Makefile at the root or one level down. A candidate
+#             skipped below (newline/tab name, not a regular file) does not
+#             count, so it is reported as missing. Prints nothing.
+# Subdirectory candidates come from `git ls-files`, so an untracked scratch
+# Makefile below the root is never a candidate. The root check is a
+# filesystem test, as it was before this resolver.
+#
+# Threat model: write access to the operator's own checkout is out of scope.
+# Anyone holding it can edit the tracked Makefile directly, so symlinks,
+# swapped directories and races between resolving and running `make` give
+# them nothing new. The guards below exist for correctness -- a malformed
+# name must not make the sweep run make in the wrong directory, and a
+# non-regular file must not hang it -- not to contain that writer.
 _git_hooks_target_dir() {
   local _repo="${1%/}"
   local _any_makefile=0
@@ -66,10 +75,10 @@ _git_hooks_target_dir() {
     # tab is stripped by the sweep's `read` -- either way the record can name
     # an untracked sibling the sweep would then run make in.
     [[ ${_mk} == *[$'\n\t']* ]] && continue
-    # ls-files lists the index, but grep and make read the working tree and
-    # follow symlinks: a tracked subdirectory replaced by a symlink would
-    # hand the sweep a recipe from outside the repo.
-    [[ -L "${_repo}/${_mk%/Makefile}" || -L "${_repo}/${_mk}" ]] && continue
+    # A regular file only: grep on a FIFO blocks forever, and this runs for
+    # every repo on each weekly -t update. -f follows symlinks, so a symlinked
+    # Makefile resolves -- see the threat-model note above.
+    [[ -f "${_repo}/${_mk}" ]] || continue
     _any_makefile=1
     grep -q '^install-hooks:' "${_repo}/${_mk}" 2>/dev/null && _found+=("${_repo}/${_mk%/Makefile}")
   done < <(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
@@ -444,8 +453,9 @@ _git_hooks_hookspath_offenders() {
 
 # install_git_hooks_all_repos sweeps every repo _git_hooks_discover() finds,
 # running `make -s -C <resolved target dir> install-hooks` in each (see
-# _git_hooks_target_dir) and reporting what changed. Fail-closed, not fail-fast: every discovered repo is attempted
-# regardless of an earlier one's outcome, and the function returns 1 only
+# _git_hooks_target_dir) and reporting what changed. Fail-closed, not
+# fail-fast: every discovered repo is attempted regardless of an earlier
+# one's outcome, and the function returns 1 only
 # once the whole sweep has run — a single broken Makefile must not cost the
 # repos discovered after it. Return code contract: 0 clean, 1 a failed
 # `make` call, 2 partial success (gaps, unknowns, or a pinned hooksPath,
@@ -585,9 +595,9 @@ install_git_hooks_all_repos() {
   # AND a target added; ":no-target" (real repo, Makefile present, target
   # missing) needs only the target added; ":ambiguous" needs one of the
   # competing targets removed; ":unreadable" needs the repo's index
-  # repaired; ":absent" (never cloned) needs the clone itself. Collapsing any of these would state a false cause
-  # in an operator-facing report, the same way collapsing check_complete's
-  # rc 1/2 would.
+  # repaired; ":absent" (never cloned) needs the clone itself. Collapsing
+  # any of these would state a false cause in an operator-facing report, the
+  # same way collapsing check_complete's rc 1/2 would.
   local _gap_name
   while IFS= read -r _gap_name; do
     [[ -z "${_gap_name}" ]] && continue

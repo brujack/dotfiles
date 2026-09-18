@@ -1014,23 +1014,39 @@ _build_subdir_target_repo() {
   [[ "$output" == *"0 checked"* ]]
 }
 
-@test "install_git_hooks_all_repos never follows an untracked symlink that replaced a tracked subdirectory" {
-  # security-review cycle 2: ls-files lists the INDEX, but grep and make
-  # read the working tree. A tracked sub/ swapped for a symlink to a
-  # directory outside the repo made the sweep run the outside recipe.
-  local _base="${TESTDIR}/subdir-symlink"
-  local _outside="${TESTDIR}/outside-repo"
-  local _marker="${TESTDIR}/outside-ran"
-  mkdir -p "${_base}" "${_outside}"
-  _build_subdir_target_repo "${_base}" "link-repo" "sub"
-  rm -rf "${_base}/link-repo/sub"
-  printf 'install-hooks:\n\ttouch "%s"\n' "${_marker}" > "${_outside}/Makefile"
-  ln -s "${_outside}" "${_base}/link-repo/sub"
+@test "_git_hooks_target_dir does not block on a FIFO in place of a tracked subdirectory Makefile" {
+  # security-review cycle 3: grep on a FIFO blocks forever, and the resolver
+  # runs for every repo on each weekly -t update, so one such file hung the
+  # whole update. `timeout` bounds the RED case; 124 means it blocked.
+  local _base="${TESTDIR}/subdir-fifo"
+  mkdir -p "${_base}"
+  _build_subdir_target_repo "${_base}" "fifo-repo" "sub"
+  rm "${_base}/fifo-repo/sub/Makefile"
+  mkfifo "${_base}/fifo-repo/sub/Makefile"
 
-  HOOK_EXPECTED_REPOS=()
-  PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
-  [ ! -e "${_marker}" ]
-  [[ "$output" == *"0 checked"* ]]
+  run timeout 10 bash -c 'source "$1"; _git_hooks_target_dir "$2"' _ \
+    "${REPO_ROOT}/lib/git_hooks.sh" "${_base}/fifo-repo"
+  [ "$status" -eq 1 ]
+  [ -z "$output" ]
+}
+
+@test "_git_hooks_target_dir resolves a committed symlinked Makefile that points inside the repo" {
+  # A symlink is a legitimate way to share one Makefile between components.
+  # Write access to the operator's own checkout is outside this code's threat
+  # model (anyone holding it can edit the tracked Makefile directly), so a
+  # symlinked candidate is not rejected on principle.
+  local _base="${TESTDIR}/subdir-symlink-in-repo"
+  local _repo="${_base}/shared-mk"
+  mkdir -p "${_repo}/mk" "${_repo}/ans"
+  git init -q "${_repo}"
+  printf 'install-hooks:\n\t@true\n' > "${_repo}/mk/ans.mk"
+  ln -s ../mk/ans.mk "${_repo}/ans/Makefile"
+  git -C "${_repo}" add mk/ans.mk ans/Makefile
+  git -C "${_repo}" commit -q -m init
+
+  run _git_hooks_target_dir "${_repo}"
+  [ "$status" -eq 0 ]
+  [ "$output" = "${_repo}/ans" ]
 }
 
 # _build_no_root_makefile_repo REPO_BASE NAME SUBDIR RECIPE_TARGET creates a
