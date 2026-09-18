@@ -465,6 +465,19 @@ EOF
   printf '#!/usr/bin/env bash\nprintf "go version go1.26 linux/amd64\\n"\n' > "${_bin_dir}/go"
   chmod +x "${_bin_dir}/go"
   export PATH="${_bin_dir}:${PATH}"
+  # PATH alone does not reach this function: _install_ubuntu_go prefers the
+  # absolute /usr/local/go/bin/go when it exists, deliberately, because that
+  # path reaches PATH only via 6_path.zsh and a provision run is not
+  # interactive. So on any box with Go actually installed the stub above is
+  # bypassed and the real `go version` answers -- measured 2026-09-18 on claude
+  # and workstation (both go1.27.1), where this test failed while passing on
+  # macOS, which has no /usr/local/go/bin/go. That is shell.md's
+  # absolute-path-default pitfall, and `make test` failing here means the
+  # pre-push hook refuses every source push from those two boxes.
+  #
+  # _GO_BIN is the seam the function already reads for exactly this; the test
+  # at the foot of this file has always set it.
+  export _GO_BIN="${_bin_dir}/go"
   run _install_ubuntu_go
   [ "$status" -eq 0 ]
   [[ "$output" == *"Go 1.26 is installed"* ]]
