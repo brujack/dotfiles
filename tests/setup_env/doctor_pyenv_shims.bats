@@ -263,4 +263,9 @@ _make_venv_bin() {
   [[ "$output" == *"[FAIL]"* ]]
   [[ "$output" == *"6 entries"* ]]
   [[ "$output" == *"..."* ]]
+  # _missing_count/_suffix are computed independently of the `head -n 5`
+  # that does the capping, so the two assertions above hold whether or not
+  # the cap itself runs. This pair pins the cap.
+  [[ "$output" == *"e5"* ]]   # five names ARE shown
+  [[ "$output" != *"e6"* ]]   # the sixth is NOT -- this is the cap
 }
