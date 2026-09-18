@@ -793,12 +793,39 @@ component add rust-analyzer" ]
   mkdir -p "${HOME}/.pyenv/versions/${PYTHON_VER}/envs/ansible"
   ln -sfn "${HOME}/.pyenv/versions/${PYTHON_VER}/envs/ansible" \
     "${HOME}/.pyenv/versions/ansible"
+  # refute_grep returns true on a MISSING file, so both refutes below would be
+  # vacuous if nothing had written to MOCK_CALLS_FILE yet. Today the fixture's
+  # `ln -sfn` happens to hit the ln pass-through mock and create it, which is
+  # luck, not construction -- touch it so the assertions stay real if the
+  # fixture ever stops logging.
+  : > "${MOCK_CALLS_FILE}"
   quiet_which() { return 1; }
   install_pyenv_rehash_hook() { printf 'hook-install\n' >> "${MOCK_CALLS_FILE}"; }
   run setup_ansible
   [ "${status}" -eq 0 ]
   refute_grep '^hook-install$' "${MOCK_CALLS_FILE}"
   refute_grep '^pyenv rehash$' "${MOCK_CALLS_FILE}"
+  # Positive control for the premise, matching the sibling test: with
+  # quiet_which stubbed false the guard is skipped either way, so without this
+  # the test cannot tell the skip path from the create path.
+  refute_grep '^pyenv virtualenv ' "${MOCK_CALLS_FILE}"
+}
+
+@test "setup_ansible: a failing rehash on the already-provisioned path propagates" {
+  export LINUX=1; unset MACOS
+  export HAS_DEVTOOLS=1
+  # The skip path used to end on an untaken `if` and always return 0. It now
+  # ends on the guarded rehash, so its rc reaches run_developer_or_ansible's
+  # `setup_ansible || return 1`. Pin that deliberately: the create path has
+  # always propagated, and the rc test at the create path cannot speak for this
+  # one. 7 is distinct from the hook spy's rc so a pass cannot be explained by
+  # the wrong failure leaking through.
+  mkdir -p "${HOME}/.pyenv/versions/${PYTHON_VER}/envs/ansible"
+  ln -sfn "${HOME}/.pyenv/versions/${PYTHON_VER}/envs/ansible" \
+    "${HOME}/.pyenv/versions/ansible"
+  export MOCK_PYENV_EXIT=7
+  run setup_ansible
+  [ "${status}" -eq 7 ]
 }
 
 @test "setup_ansible: pyenv rehash still runs and its rc propagates when the hook install fails" {

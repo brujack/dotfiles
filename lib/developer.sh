@@ -556,6 +556,15 @@ setup_ansible() {
   # setup_ansible's caller (`setup_ansible || return 1`), abort a run that
   # previously succeeded -- a regression on any box whose pyenv binary is gone
   # while ~/.pyenv survives.
+  #
+  # Note what this same edit OPENS, deliberately: the skip path used to end on
+  # an untaken `if` and so always returned 0, and now it returns `pyenv
+  # rehash`'s rc. Via run_developer_or_ansible's `setup_ansible || return 1`, a
+  # failing rehash on an already-provisioned box now aborts the run before
+  # clone_personal_repos. That is the correct direction -- the create path has
+  # always propagated it, and a rehash that fails is exactly the condition this
+  # function exists to keep working -- but it is a behaviour change on a path
+  # that was previously silent, not a side effect of the guard.
   if quiet_which pyenv; then
     install_pyenv_rehash_hook || log_warn "pyenv rehash hook not installed — see above"
     pyenv rehash
