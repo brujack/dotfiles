@@ -134,9 +134,12 @@ EOF
     "${_sha}" tarxz '^footool version 9\.9\.9$'
   [ "$status" -eq 0 ]
   [ -x "${_RELEASE_BIN_DIR}/footool" ]
-  # The sibling file must NOT be installed -- a naive "extract everything and
-  # take the first file" would pick README.txt on some tar orderings.
-  [ ! -e "${_RELEASE_BIN_DIR}/README.txt" ]
+  # Running it is what discriminates, and the archive's sibling README.txt is
+  # why: `install` always names the target footool, so asserting that
+  # ${_RELEASE_BIN_DIR}/README.txt is absent is true of every reachable state
+  # and pins nothing (E5). Executing the installed file is what catches a find
+  # that picked the wrong member -- mutation-confirmed: forcing the find to
+  # -name README.txt reddens HERE, not on an absence assertion.
   run "${_RELEASE_BIN_DIR}/footool"
   [[ "$output" == *"footool version 9.9.9"* ]]
 }
@@ -614,7 +617,7 @@ EOF
 
 # ── _install_ubuntu_misc call sites are advisory ────────────────────────────
 
-@test "linux_ubuntu.sh: _install_ubuntu_tflint and _install_ubuntu_tfsec call sites are each followed by || log_warn" {
+@test "linux_ubuntu.sh: every pinned-release wrapper's call site is followed by || log_warn" {
   # Statically pin the call site against the source, not via a mocked run --
   # both wrappers are stubbed in linux_ubuntu.bats's own _install_ubuntu_misc
   # dispatcher tests, so a run-based assertion there would never see a
@@ -622,8 +625,31 @@ EOF
   # time, never hardcoded (Task 4's precedent, tests/setup_env/developer.bats
   # "install_pyenv_rehash_hook is the line immediately before pyenv rehash").
   local _src="${BATS_TEST_DIRNAME}/../../lib/linux_ubuntu.sh"
-  local _name
-  for _name in _install_ubuntu_tflint _install_ubuntu_tfsec; do
+  # Derive the wrapper set from the source rather than listing it. A hardcoded
+  # list silently stops covering the repo the moment a wrapper is added, and the
+  # omission is invisible in this test's own output -- the same
+  # hand-maintained-denominator defect the coverage tracer's INCLUDE_FILES array
+  # and make lint's literal file list both had. Measured: _install_ubuntu_shellcheck
+  # was added and this list was not extended, so its call site was unpinned.
+  local _name _wrappers=()
+  while IFS= read -r _name; do
+    [ -n "${_name}" ] && _wrappers+=("${_name}")
+  # Reset on ANY function header, not just _install_ubuntu_* ones: otherwise fn
+  # survives past a wrapper that does not call the helper and gets attributed
+  # the next match -- including _install_pinned_release_binary's own definition
+  # line. Requiring an INDENTED call excludes that definition, which sits at
+  # column 0.
+  done < <(awk '/^[A-Za-z_][A-Za-z0-9_]*\(\)[[:space:]]*\{/ { fn=$1; sub(/\(\).*/, "", fn); next }
+                /^[[:space:]]+_install_pinned_release_binary[[:space:]]/ {
+                  if (fn ~ /^_install_ubuntu_/) { print fn; fn="" } }' "${_src}")
+  # Refuse to report a pass having checked nothing -- the same guard make lint
+  # puts on its own derived file list.
+  if [ "${#_wrappers[@]}" -lt 3 ]; then
+    printf "derived only %d pinned-release wrappers from %s; expected at least 3\n" \
+      "${#_wrappers[@]}" "${_src}" >&2
+    return 1
+  fi
+  for _name in "${_wrappers[@]}"; do
     local _line _content
     _line="$(grep -n "^  ${_name} || " "${_src}" | cut -d: -f1)"
     if [ -z "${_line}" ]; then
