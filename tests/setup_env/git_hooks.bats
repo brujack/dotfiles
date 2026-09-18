@@ -933,6 +933,116 @@ _build_subdir_target_repo() {
   [ -z "$output" ]
 }
 
+@test "install_git_hooks_all_repos never runs make in an untracked sibling of a newline-named tracked subdirectory" {
+  # security-review finding: discover's output is newline-framed, so a
+  # tracked "x<NL>y/Makefile" split into two records and the sweep ran
+  # `make -C <repo>/x` -- an UNTRACKED Makefile. The marker proves whether
+  # that recipe ran; the tracked one's target is deliberately spelled so the
+  # resolver's own grep would never pick x/ on its own.
+  local _base="${TESTDIR}/subdir-newline"
+  local _repo="${_base}/nl-repo"
+  local _marker="${TESTDIR}/untracked-x-ran"
+  local _nl_dir=$'x\ny'
+  mkdir -p "${_repo}/${_nl_dir}" "${_repo}/x"
+  git init -q "${_repo}"
+  printf 'lint:\n\t@true\n' > "${_repo}/Makefile"
+  printf 'install-hooks:\n\t@true\n' > "${_repo}/${_nl_dir}/Makefile"
+  git -C "${_repo}" add Makefile "${_nl_dir}/Makefile"
+  git -C "${_repo}" commit -q -m init
+  printf 'install-hooks :\n\ttouch "%s"\n' "${_marker}" > "${_repo}/x/Makefile"
+
+  HOOK_EXPECTED_REPOS=()
+  PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  [ ! -e "${_marker}" ]
+  [[ "$output" == *"0 checked"* ]]
+}
+
+@test "install_git_hooks_all_repos never runs make in a directory named by the tail of a newline-named repo" {
+  # Same framing break one level up: a repo directory "nl<NL>repo" split
+  # discover's record so the second line read `repo<TAB><base>/nl`, and the
+  # sweep ran make in <base>/nl -- a plain directory that is not a repo.
+  local _base="${TESTDIR}/repo-newline"
+  local _marker="${TESTDIR}/plain-nl-ran"
+  local _nl_repo="${_base}/"$'nl\nrepo'
+  mkdir -p "${_nl_repo}" "${_base}/nl"
+  git init -q "${_nl_repo}"
+  printf 'install-hooks:\n\t@true\n' > "${_nl_repo}/Makefile"
+  printf 'install-hooks:\n\ttouch "%s"\n' "${_marker}" > "${_base}/nl/Makefile"
+
+  HOOK_EXPECTED_REPOS=()
+  PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  [ ! -e "${_marker}" ]
+  [[ "$output" == *"0 checked"* ]]
+}
+
+# _build_no_root_makefile_repo REPO_BASE NAME SUBDIR RECIPE_TARGET creates a
+# repo with NO root Makefile and one tracked SUBDIR/Makefile whose only
+# target is RECIPE_TARGET. Every other fixture in this section carries a
+# root Makefile, so without this a discovery that silently required one
+# would pass them all.
+_build_no_root_makefile_repo() {
+  local _repo="$1/$2"
+  git init -q "${_repo}"
+  mkdir -p "${_repo}/$3"
+  printf '%s:\n\t@true\n' "$4" > "${_repo}/$3/Makefile"
+  git -C "${_repo}" add "$3/Makefile"
+  git -C "${_repo}" commit -q -m init
+}
+
+@test "_git_hooks_discover finds a subdirectory target in a repo with no root Makefile" {
+  local _base="${TESTDIR}/no-root-target"
+  mkdir -p "${_base}"
+  _build_no_root_makefile_repo "${_base}" "sub-only" "ansible" "install-hooks"
+
+  PERSONAL_GITREPOS="${_base}" run _git_hooks_discover
+  [ "$status" -eq 0 ]
+  [ "$output" = "${_base}/sub-only"$'\t'"${_base}/sub-only/ansible" ]
+}
+
+@test "_git_hooks_gap_repos labels a repo with only target-less subdirectory Makefiles :no-target, not no Makefile" {
+  # The bare-name label means "no Makefile at all" and tells the operator to
+  # add hook scripts AND a target. A repo that already has Makefiles, just
+  # none carrying the target, needs only the target.
+  local _base="${TESTDIR}/no-root-no-target"
+  mkdir -p "${_base}"
+  _build_no_root_makefile_repo "${_base}" "sub-lint" "ansible" "lint"
+  # Control: a repo with no Makefile anywhere keeps the bare-name label.
+  mkdir -p "${_base}/empty-repo"
+  git init -q "${_base}/empty-repo"
+
+  HOOK_EXPECTED_REPOS=(sub-lint empty-repo)
+  PERSONAL_GITREPOS="${_base}" run _git_hooks_gap_repos
+  [ "$status" -eq 0 ]
+  [ "$output" = "sub-lint:no-target"$'\n'"empty-repo" ]
+}
+
+@test "a repo whose tracked Makefiles cannot be listed is reported :unreadable, never :no-target" {
+  # test-quality-review finding: a corrupt index makes `git ls-files` exit
+  # 128 while `rev-parse` still succeeds, so the repo passes discovery's
+  # guard, the target in ansible/Makefile is invisible, and the report blamed
+  # a missing target that exists.
+  local _base="${TESTDIR}/subdir-unreadable"
+  mkdir -p "${_base}"
+  _build_subdir_target_repo "${_base}" "bad-index" "ansible"
+  printf 'garbage' > "${_base}/bad-index/.git/index"
+  run env -u GIT_DIR git -C "${_base}/bad-index" ls-files
+  [ "$status" -ne 0 ]
+
+  PERSONAL_GITREPOS="${_base}" run _git_hooks_discover
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+
+  HOOK_EXPECTED_REPOS=(bad-index)
+  PERSONAL_GITREPOS="${_base}" run _git_hooks_gap_repos
+  [ "$status" -eq 0 ]
+  [ "$output" = "bad-index:unreadable" ]
+
+  PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"bad-index: could not list tracked Makefiles"* ]]
+  [[ "$output" != *"no install-hooks target"* ]]
+}
+
 @test "_git_hooks_target_dir ignores a leaked GIT_DIR when listing subdirectory Makefiles" {
   # A pre-push hook pushed from a worktree exports GIT_DIR, and this repo's
   # pre-push runs `make test`. Unstripped, ls-files would list the DECOY's
@@ -1759,7 +1869,7 @@ _sweep_build_stray_unreadable_repo() {
   # real-repo is a gap, so rc=2 (partial success) under the widened
   # contract, not rc=0.
   [ "$status" -eq 2 ]
-  [[ "$output" == *"1 gaps (real-repo: no Makefile)"* ]]
+  [[ "$output" == *"1 gaps (real-repo: no Makefile (root or one level down))"* ]]
   [[ "$output" != *"2 gaps"* ]]
   [[ "$output" != *": no Makefile; "* ]]
   [[ "$output" != *"( : no Makefile"* ]]
