@@ -975,6 +975,64 @@ _build_subdir_target_repo() {
   [[ "$output" == *"0 checked"* ]]
 }
 
+@test "install_git_hooks_all_repos never runs make in an untracked sibling of a tab-suffixed tracked subdirectory" {
+  # security-review cycle 2: `IFS=$'\t' read` strips a trailing tab from the
+  # last field, so a tracked "ans<TAB>/Makefile" resolved to <repo>/ans --
+  # an untracked sibling.
+  local _base="${TESTDIR}/subdir-tab"
+  local _repo="${_base}/tab-repo"
+  local _marker="${TESTDIR}/untracked-ans-ran"
+  local _tab_dir=$'ans\t'
+  mkdir -p "${_repo}/${_tab_dir}" "${_repo}/ans"
+  git init -q "${_repo}"
+  printf 'lint:\n\t@true\n' > "${_repo}/Makefile"
+  printf 'install-hooks:\n\t@true\n' > "${_repo}/${_tab_dir}/Makefile"
+  git -C "${_repo}" add Makefile "${_tab_dir}/Makefile"
+  git -C "${_repo}" commit -q -m init
+  printf 'install-hooks:\n\ttouch "%s"\n' "${_marker}" > "${_repo}/ans/Makefile"
+
+  HOOK_EXPECTED_REPOS=()
+  PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  [ ! -e "${_marker}" ]
+  [[ "$output" == *"0 checked"* ]]
+}
+
+@test "install_git_hooks_all_repos never runs make in a directory named by the head of a tab-named repo" {
+  # Discovery's tab guard, pinned: a repo "tb<TAB>repo" would split into
+  # _dir=<base>/tb and a make dir starting "repo", so without the guard the
+  # record names the wrong directory.
+  local _base="${TESTDIR}/repo-tab"
+  local _tab_repo="${_base}/"$'tb\trepo'
+  local _marker="${TESTDIR}/tab-repo-ran"
+  mkdir -p "${_tab_repo}"
+  git init -q "${_tab_repo}"
+  printf 'install-hooks:\n\ttouch "%s"\n' "${_marker}" > "${_tab_repo}/Makefile"
+
+  HOOK_EXPECTED_REPOS=()
+  PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  [ ! -e "${_marker}" ]
+  [[ "$output" == *"0 checked"* ]]
+}
+
+@test "install_git_hooks_all_repos never follows an untracked symlink that replaced a tracked subdirectory" {
+  # security-review cycle 2: ls-files lists the INDEX, but grep and make
+  # read the working tree. A tracked sub/ swapped for a symlink to a
+  # directory outside the repo made the sweep run the outside recipe.
+  local _base="${TESTDIR}/subdir-symlink"
+  local _outside="${TESTDIR}/outside-repo"
+  local _marker="${TESTDIR}/outside-ran"
+  mkdir -p "${_base}" "${_outside}"
+  _build_subdir_target_repo "${_base}" "link-repo" "sub"
+  rm -rf "${_base}/link-repo/sub"
+  printf 'install-hooks:\n\ttouch "%s"\n' "${_marker}" > "${_outside}/Makefile"
+  ln -s "${_outside}" "${_base}/link-repo/sub"
+
+  HOOK_EXPECTED_REPOS=()
+  PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  [ ! -e "${_marker}" ]
+  [[ "$output" == *"0 checked"* ]]
+}
+
 # _build_no_root_makefile_repo REPO_BASE NAME SUBDIR RECIPE_TARGET creates a
 # repo with NO root Makefile and one tracked SUBDIR/Makefile whose only
 # target is RECIPE_TARGET. Every other fixture in this section carries a
@@ -1871,8 +1929,10 @@ _sweep_build_stray_unreadable_repo() {
   [ "$status" -eq 2 ]
   [[ "$output" == *"1 gaps (real-repo: no Makefile (root or one level down))"* ]]
   [[ "$output" != *"2 gaps"* ]]
-  [[ "$output" != *": no Makefile; "* ]]
-  [[ "$output" != *"( : no Makefile"* ]]
+  # A phantom renders as an empty name before the label, first in the list
+  # or after a "; " join -- the two positions it can occupy.
+  [[ "$output" != *"(: no Makefile"* ]]
+  [[ "$output" != *"; : no Makefile"* ]]
 }
 
 @test "_git_hooks_hookspath_offenders prints nothing and returns 0 when neither scope is set" {

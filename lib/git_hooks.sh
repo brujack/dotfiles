@@ -61,10 +61,15 @@ _git_hooks_target_dir() {
   local _mk
   local -a _found=()
   while IFS= read -r -d '' _mk; do
-    # _git_hooks_discover emits newline-framed records, so a newline in a
-    # directory name would split one record into two -- and the second half
-    # can name an untracked sibling the sweep would then run make in.
-    [[ ${_mk} == *$'\n'* ]] && continue
+    # _git_hooks_discover emits tab-separated, newline-framed records, so a
+    # newline in a directory name splits one record into two, and a trailing
+    # tab is stripped by the sweep's `read` -- either way the record can name
+    # an untracked sibling the sweep would then run make in.
+    [[ ${_mk} == *[$'\n\t']* ]] && continue
+    # ls-files lists the index, but grep and make read the working tree and
+    # follow symlinks: a tracked subdirectory replaced by a symlink would
+    # hand the sweep a recipe from outside the repo.
+    [[ -L "${_repo}/${_mk%/Makefile}" || -L "${_repo}/${_mk}" ]] && continue
     _any_makefile=1
     grep -q '^install-hooks:' "${_repo}/${_mk}" 2>/dev/null && _found+=("${_repo}/${_mk%/Makefile}")
   done < <(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
@@ -438,8 +443,8 @@ _git_hooks_hookspath_offenders() {
 }
 
 # install_git_hooks_all_repos sweeps every repo _git_hooks_discover() finds,
-# running `make -s -C <repo> install-hooks` in each and reporting what
-# changed. Fail-closed, not fail-fast: every discovered repo is attempted
+# running `make -s -C <resolved target dir> install-hooks` in each (see
+# _git_hooks_target_dir) and reporting what changed. Fail-closed, not fail-fast: every discovered repo is attempted
 # regardless of an earlier one's outcome, and the function returns 1 only
 # once the whole sweep has run — a single broken Makefile must not cost the
 # repos discovered after it. Return code contract: 0 clean, 1 a failed
