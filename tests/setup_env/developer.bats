@@ -755,6 +755,79 @@ component add rust-analyzer" ]
   [ "${_hook_line}" -lt "${_rehash_line}" ]
 }
 
+@test "setup_ansible: installs the hook when the ansible venv is already correct" {
+  export LINUX=1; unset MACOS
+  export HAS_DEVTOOLS=1
+  # Drive BOTH skip paths at once -- the interpreter version already exists and
+  # versions/ansible already points where setup_ansible would point it. That is
+  # the ordinary state of a provisioned box, and it is the state every other
+  # setup_ansible test in this file avoids: they all exercise the create path.
+  #
+  # Measured 2026-09-18 on claude and workstation: `-t developer` returned 0 and
+  # left ~/.pyenv/pyenv.d/rehash/ absent, because the hook install sat INSIDE the
+  # venv-creation block. So the headline fix of #282 could not reach an
+  # already-provisioned machine at all.
+  mkdir -p "${HOME}/.pyenv/versions/${PYTHON_VER}/envs/ansible"
+  ln -sfn "${HOME}/.pyenv/versions/${PYTHON_VER}/envs/ansible" \
+    "${HOME}/.pyenv/versions/ansible"
+  install_pyenv_rehash_hook() { printf 'hook-install\n' >> "${MOCK_CALLS_FILE}"; }
+  run setup_ansible
+  [ "${status}" -eq 0 ]
+  grep -q '^hook-install$' "${MOCK_CALLS_FILE}"
+  # Positive control for the premise: if the create path had run, this test
+  # would pass for the old reason and prove nothing about the skip path.
+  refute_grep '^pyenv virtualenv ' "${MOCK_CALLS_FILE}"
+}
+
+@test "setup_ansible: skips the hook and rehash when pyenv is unresolvable" {
+  export LINUX=1; unset MACOS
+  export HAS_DEVTOOLS=1
+  # Same already-provisioned fixture as the test above, so the two form a pair:
+  # that one proves the hook DOES install on the skip path, this one proves the
+  # guard is what decides it. Without the pair, a guard that never fires and a
+  # guard that always fires look identical from the passing side.
+  #
+  # quiet_which is overridden rather than scrubbing PATH: removing the directory
+  # that resolves pyenv also removes the rest of the toolchain the function
+  # needs, which is how a scrub turns into a 127 on the CI runner.
+  mkdir -p "${HOME}/.pyenv/versions/${PYTHON_VER}/envs/ansible"
+  ln -sfn "${HOME}/.pyenv/versions/${PYTHON_VER}/envs/ansible" \
+    "${HOME}/.pyenv/versions/ansible"
+  # refute_grep returns true on a MISSING file, so both refutes below would be
+  # vacuous if nothing had written to MOCK_CALLS_FILE yet. Today the fixture's
+  # `ln -sfn` happens to hit the ln pass-through mock and create it, which is
+  # luck, not construction -- touch it so the assertions stay real if the
+  # fixture ever stops logging.
+  : > "${MOCK_CALLS_FILE}"
+  quiet_which() { return 1; }
+  install_pyenv_rehash_hook() { printf 'hook-install\n' >> "${MOCK_CALLS_FILE}"; }
+  run setup_ansible
+  [ "${status}" -eq 0 ]
+  refute_grep '^hook-install$' "${MOCK_CALLS_FILE}"
+  refute_grep '^pyenv rehash$' "${MOCK_CALLS_FILE}"
+  # Positive control for the premise, matching the sibling test: with
+  # quiet_which stubbed false the guard is skipped either way, so without this
+  # the test cannot tell the skip path from the create path.
+  refute_grep '^pyenv virtualenv ' "${MOCK_CALLS_FILE}"
+}
+
+@test "setup_ansible: a failing rehash on the already-provisioned path propagates" {
+  export LINUX=1; unset MACOS
+  export HAS_DEVTOOLS=1
+  # The skip path used to end on an untaken `if` and always return 0. It now
+  # ends on the guarded rehash, so its rc reaches run_developer_or_ansible's
+  # `setup_ansible || return 1`. Pin that deliberately: the create path has
+  # always propagated, and the rc test at the create path cannot speak for this
+  # one. 7 is distinct from the hook spy's rc so a pass cannot be explained by
+  # the wrong failure leaking through.
+  mkdir -p "${HOME}/.pyenv/versions/${PYTHON_VER}/envs/ansible"
+  ln -sfn "${HOME}/.pyenv/versions/${PYTHON_VER}/envs/ansible" \
+    "${HOME}/.pyenv/versions/ansible"
+  export MOCK_PYENV_EXIT=7
+  run setup_ansible
+  [ "${status}" -eq 7 ]
+}
+
 @test "setup_ansible: pyenv rehash still runs and its rc propagates when the hook install fails" {
   export LINUX=1; unset MACOS
   export HAS_DEVTOOLS=1
@@ -835,7 +908,11 @@ component add rust-analyzer" ]
   local _hook_lines=()
   while IFS=: read -r _line _rest; do
     _hook_lines+=("${_line}")
-  done < <(grep -n 'install_pyenv_rehash_hook' "${_src}")
+  # Anchored to statement start: an unanchored match counts any COMMENT that
+  # names the function as a third call site, which makes the file impossible to
+  # document. The assertion below is unchanged in strength -- still exactly two
+  # real call sites, still adjacency-checked -- so relocating a call still fails.
+  done < <(grep -nE '^[[:space:]]*install_pyenv_rehash_hook' "${_src}")
   if [ "${#_hook_lines[@]}" -ne 2 ]; then
     printf "expected exactly 2 install_pyenv_rehash_hook call sites in %s, found %d\n" \
       "${_src}" "${#_hook_lines[@]}" >&2
