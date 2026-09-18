@@ -59,7 +59,6 @@ ranger
 rar
 rlwrap
 screen
-shellcheck
 smartmontools
 snapd
 software-properties-common

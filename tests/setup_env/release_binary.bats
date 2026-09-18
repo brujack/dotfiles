@@ -95,6 +95,89 @@ EOF
   [ -x "${_RELEASE_BIN_DIR}/footool" ]
 }
 
+@test "_install_pinned_release_binary: tarxz kind installs from a nested directory" {
+  # NOTE: shellcheck and friends ship .tar.xz with the binary one level down
+  # (shellcheck-v0.11.0/shellcheck), unlike the zip wrappers above whose
+  # member sits at the archive root. Build a real archive with that shape so
+  # the extraction runs for real -- tar and xz are not mocked here, same
+  # reasoning as the zip test.
+  local _payload_dir="${BATS_TEST_TMPDIR}/tarxz-payload/footool-v9.9.9"
+  local _fixture_tar="${BATS_TEST_TMPDIR}/footool.tar.xz"
+  mkdir -p "${_payload_dir}"
+  printf '#!/usr/bin/env bash\nprintf "footool version 9.9.9\\n"\n' > "${_payload_dir}/footool"
+  chmod +x "${_payload_dir}/footool"
+  printf 'not the binary\n' > "${_payload_dir}/README.txt"
+  (cd "${BATS_TEST_TMPDIR}/tarxz-payload" && tar -cJf "${_fixture_tar}" footool-v9.9.9)
+  local _sha
+  _sha="$(sha256sum "${_fixture_tar}" | awk '{print $1}')"
+
+  local _shim="${BATS_TEST_TMPDIR}/tarxz-curl-shim"
+  mkdir -p "${_shim}"
+  cat > "${_shim}/curl" << EOF
+#!/usr/bin/env bash
+out=""
+while [[ \$# -gt 0 ]]; do
+  if [[ "\$1" == "-o" ]]; then
+    out="\$2"
+    shift 2
+    continue
+  fi
+  shift
+done
+cp "${_fixture_tar}" "\${out}"
+exit 0
+EOF
+  chmod +x "${_shim}/curl"
+
+  PATH="${_shim}:${PATH}" run _install_pinned_release_binary footool 9.9.9 \
+    "https://example.invalid/footool.tar.xz" \
+    "${_sha}" tarxz '^footool version 9\.9\.9$'
+  [ "$status" -eq 0 ]
+  [ -x "${_RELEASE_BIN_DIR}/footool" ]
+  # The sibling file must NOT be installed -- a naive "extract everything and
+  # take the first file" would pick README.txt on some tar orderings.
+  [ ! -e "${_RELEASE_BIN_DIR}/README.txt" ]
+  run "${_RELEASE_BIN_DIR}/footool"
+  [[ "$output" == *"footool version 9.9.9"* ]]
+}
+
+@test "_install_pinned_release_binary: tarxz kind fails when the archive holds no matching binary" {
+  local _payload_dir="${BATS_TEST_TMPDIR}/tarxz-bad/other-v1"
+  local _fixture_tar="${BATS_TEST_TMPDIR}/bad.tar.xz"
+  mkdir -p "${_payload_dir}"
+  printf 'nothing useful\n' > "${_payload_dir}/NOTES.txt"
+  (cd "${BATS_TEST_TMPDIR}/tarxz-bad" && tar -cJf "${_fixture_tar}" other-v1)
+  local _sha
+  _sha="$(sha256sum "${_fixture_tar}" | awk '{print $1}')"
+
+  local _shim="${BATS_TEST_TMPDIR}/tarxz-bad-shim"
+  mkdir -p "${_shim}"
+  cat > "${_shim}/curl" << EOF
+#!/usr/bin/env bash
+out=""
+while [[ \$# -gt 0 ]]; do
+  if [[ "\$1" == "-o" ]]; then out="\$2"; shift 2; continue; fi
+  shift
+done
+cp "${_fixture_tar}" "\${out}"
+exit 0
+EOF
+  chmod +x "${_shim}/curl"
+
+  PATH="${_shim}:${PATH}" run _install_pinned_release_binary footool 9.9.9 \
+    "https://example.invalid/bad.tar.xz" \
+    "${_sha}" tarxz '^footool version 9\.9\.9$'
+  [ "$status" -eq 1 ]
+  [ ! -e "${_RELEASE_BIN_DIR}/footool" ]
+  # Name the branch, not just the rc. Deleting the not-found guard ALSO returns
+  # 1 -- an empty _extracted makes the install step fail instead -- so
+  # `status -eq 1` alone is satisfied by either cause and pins neither.
+  # Mutation-confirmed: without this line, removing the guard leaves the test
+  # green.
+  [[ "$output" == *"not found in the extracted archive"* ]]
+  [[ "$output" != *"install into"* ]]
+}
+
 @test "_install_pinned_release_binary: skips when the installed binary already prints the pinned version line" {
   printf '#!/usr/bin/env bash\nprintf "footool version 9.9.9\\n"\n' > "${_RELEASE_BIN_DIR}/footool"
   chmod +x "${_RELEASE_BIN_DIR}/footool"
@@ -449,6 +532,56 @@ EOF
   run _install_ubuntu_tfsec
   [ "$status" -eq 0 ]
   grep -qF 'tfsec 1.28.14 https://github.com/aquasecurity/tfsec/releases/download/v1.28.14/tfsec-linux-amd64 a32d0799bbefababaa4fcd814da9f4d251cd932789590b99d1d5fcb89ace6f68 raw ^v1\.28\.14$' "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_shellcheck: no-op and no network reached when HAS_DEVTOOLS is unset" {
+  unset HAS_DEVTOOLS
+  run _install_ubuntu_shellcheck
+  [ "$status" -eq 0 ]
+  refute_grep 'curl' "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_shellcheck: passes the pinned amd64 URL, sha, kind and version regex" {
+  export HAS_DEVTOOLS=1
+  _LINUX_ARCH=amd64
+  _install_pinned_release_binary() { printf '%s\n' "$*" >> "${MOCK_CALLS_FILE}"; }
+  run _install_ubuntu_shellcheck
+  [ "$status" -eq 0 ]
+  # The whole argv, not a substring: the arch SPELLING is the part most likely
+  # to be wrong, since shellcheck publishes x86_64 while _LINUX_ARCH says amd64.
+  grep -qF 'shellcheck 0.11.0 https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.x86_64.tar.xz 8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198 tarxz ^version: 0\.11\.0$' "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_shellcheck: passes the pinned arm64 sha and the aarch64 URL" {
+  export HAS_DEVTOOLS=1
+  _LINUX_ARCH=arm64
+  _install_pinned_release_binary() { printf '%s\n' "$*" >> "${MOCK_CALLS_FILE}"; }
+  run _install_ubuntu_shellcheck
+  [ "$status" -eq 0 ]
+  grep -qF "shellcheck-v0.11.0.linux.aarch64.tar.xz 12b331c1d2db6b9eb13cfca64306b1b157a86eb69db83023e261eaa7e7c14588" "${MOCK_CALLS_FILE}"
+  # arm64 must NOT reuse the amd64 spelling or digest
+  refute_grep 'x86_64' "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_shellcheck: unknown arch skips without attempting a download" {
+  export HAS_DEVTOOLS=1
+  _LINUX_ARCH=riscv64
+  run _install_ubuntu_shellcheck
+  [ "$status" -eq 0 ]
+  refute_grep 'curl' "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_shellcheck: the version regex matches shellcheck's real --version output" {
+  # NOTE: shellcheck prints a multi-line banner whose version line is `version: X.Y.Z`,
+  # unlike tflint's `TFLint version X.Y.Z`. A regex copied from the tflint
+  # wrapper would never match, so the skip-check would reinstall on every run.
+  # Assert against the real binary's real output rather than a remembered shape.
+  local _real
+  _real="$(command -v shellcheck || true)"
+  [ -n "${_real}" ] || skip "shellcheck not installed on this machine"
+  local _ver_line
+  _ver_line="$("${_real}" --version | grep '^version:')"
+  [[ "${_ver_line}" =~ ^version:\ [0-9]+\.[0-9]+\.[0-9]+$ ]]
 }
 
 @test "_install_ubuntu_tflint: unknown arch skips without attempting a download" {

@@ -817,6 +817,24 @@ _install_pinned_release_binary() {
       fi
       _extracted="${_tmp}/${_name}"
       ;;
+    tarxz)
+      # Extract the whole archive and then locate the binary by name, rather
+      # than naming a member path: shellcheck ships its binary one level down
+      # (shellcheck-v0.11.0/shellcheck) and that prefix carries the version, so
+      # a hardcoded member path would need editing on every bump. The artifact
+      # itself is ${_name}.download, which `-name "${_name}"` cannot match.
+      if ! tar -xJf "${_artifact}" -C "${_tmp}"; then
+        log_error "${_name} tar extraction failed"
+        rm -rf "${_tmp}"
+        return 1
+      fi
+      _extracted="$(find "${_tmp}" -type f -name "${_name}" | head -1)"
+      if [[ -z "${_extracted}" ]]; then
+        log_error "${_name} not found in the extracted archive"
+        rm -rf "${_tmp}"
+        return 1
+      fi
+      ;;
     raw)
       _extracted="${_artifact}"
       ;;
@@ -843,6 +861,24 @@ _install_pinned_release_binary() {
 
   rm -rf "${_tmp}"
   printf "%s %s installed\\n" "${_name}" "${_version}"
+}
+
+_install_ubuntu_shellcheck() {
+  [[ -n ${HAS_DEVTOOLS} ]] || return 0
+  local _sha _arch
+  # NOTE: shellcheck publishes x86_64/aarch64, not the amd64/arm64 spelling
+  # _LINUX_ARCH carries, so the two names are mapped rather than interpolated.
+  case "${_LINUX_ARCH}" in
+    amd64) _sha="${SHELLCHECK_SHA256_AMD64}"; _arch="x86_64" ;;
+    arm64) _sha="${SHELLCHECK_SHA256_ARM64}"; _arch="aarch64" ;;
+    *)
+      log_warn "no pinned shellcheck sha256 for ${_LINUX_ARCH}; skipping"
+      return 0
+      ;;
+  esac
+  _install_pinned_release_binary shellcheck "${SHELLCHECK_VER}" \
+    "${_SHELLCHECK_URL:-https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VER}/shellcheck-v${SHELLCHECK_VER}.linux.${_arch}.tar.xz}" \
+    "${_SHELLCHECK_SHA256:-${_sha}}" tarxz "^version: ${SHELLCHECK_VER//./\\.}$"
 }
 
 _install_ubuntu_tflint() {
@@ -1016,6 +1052,7 @@ _install_ubuntu_misc() {
   fi
 
   # Each is self-gated on HAS_DEVTOOLS and advisory, as the dotnet install above.
+  _install_ubuntu_shellcheck || log_warn "shellcheck install failed; skipping"
   _install_ubuntu_tflint || log_warn "tflint install failed; skipping"
   _install_ubuntu_tfsec || log_warn "tfsec install failed; skipping"
   # _install_ubuntu_tfenv always returns 0 (every failure warns internally
