@@ -299,6 +299,84 @@ EOF
   [ ! -e "${_dest}/footool" ]
 }
 
+@test "_install_pinned_release_binary: a failing non-sudo install returns 1 and installs nothing" {
+  # Sibling of the sudo-failure test above, but for the writable-destination
+  # branch (line 812's `[[ -w "${_dir}" ]]` true arm). This is the damaging
+  # half: on a box where the operator owns _RELEASE_BIN_DIR (both claude and
+  # workstation have /usr/local/bin as root:root, so this branch is
+  # unreachable there today, but is kept deliberately -- see the comment at
+  # the -w guard), a swallowed failure here reports success with nothing on
+  # disk, and _install_ubuntu_misc's `|| log_warn` never fires.
+  local _dest="${BATS_TEST_TMPDIR}/writable-bin"
+  mkdir -p "${_dest}"
+  export _RELEASE_BIN_DIR="${_dest}"
+
+  # A recording install stub, deliberately not tests/mocks -- it must fail
+  # every time rather than exec a real install (tdd.md E2).
+  local _install_shim="${BATS_TEST_TMPDIR}/install-shim"
+  mkdir -p "${_install_shim}"
+  cat > "${_install_shim}/install" << EOF
+#!/usr/bin/env bash
+printf "install %s\n" "\$*" >> "${MOCK_CALLS_FILE}"
+exit 1
+EOF
+  chmod +x "${_install_shim}/install"
+
+  local _payload="raw-payload-9.9.9"
+  local _sha
+  _sha="$(printf '%s' "${_payload}" | sha256sum | awk '{print $1}')"
+  export MOCK_CURL_STDOUT="${_payload}"
+
+  PATH="${_install_shim}:${PATH}" run _install_pinned_release_binary footool 9.9.9 \
+    "https://example.invalid/footool" \
+    "${_sha}" raw '^footool version 9\.9\.9$'
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"install into"* ]]
+  [ ! -e "${_dest}/footool" ]
+}
+
+@test "_install_pinned_release_binary: unzip failure returns 1 before reaching install" {
+  # The archive genuinely lacks the expected member -- unzip -o -q "${_artifact}"
+  # "${_name}" -d "${_tmp}" has nothing to extract. The "!= *install into*"
+  # half is what discriminates this arm from the install-failure test above:
+  # without it, the install guard failing later on an empty _extracted would
+  # satisfy the same bare "status -eq 1" assertion.
+  local _payload_dir="${BATS_TEST_TMPDIR}/zip-payload-bad"
+  local _fixture_zip="${BATS_TEST_TMPDIR}/footool-bad.zip"
+  mkdir -p "${_payload_dir}"
+  printf '#!/usr/bin/env bash\nprintf "footool version 9.9.9\\n"\n' > "${_payload_dir}/wrongname"
+  chmod +x "${_payload_dir}/wrongname"
+  (cd "${_payload_dir}" && zip -q "${_fixture_zip}" wrongname)
+  local _sha
+  _sha="$(sha256sum "${_fixture_zip}" | awk '{print $1}')"
+
+  local _zip_curl_shim="${BATS_TEST_TMPDIR}/zip-curl-shim-bad"
+  mkdir -p "${_zip_curl_shim}"
+  cat > "${_zip_curl_shim}/curl" << EOF
+#!/usr/bin/env bash
+out=""
+while [[ \$# -gt 0 ]]; do
+  if [[ "\$1" == "-o" ]]; then
+    out="\$2"
+    shift 2
+    continue
+  fi
+  shift
+done
+cp "${_fixture_zip}" "\${out}"
+exit 0
+EOF
+  chmod +x "${_zip_curl_shim}/curl"
+
+  PATH="${_zip_curl_shim}:${PATH}" run _install_pinned_release_binary footool 9.9.9 \
+    "https://example.invalid/footool.zip" \
+    "${_sha}" zip '^footool version 9\.9\.9$'
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"unzip failed"* ]]
+  [[ "$output" != *"install into"* ]]
+  [ ! -e "${_RELEASE_BIN_DIR}/footool" ]
+}
+
 @test "_install_pinned_release_binary: unknown kind returns 1" {
   local _payload="raw-payload-9.9.9"
   local _sha
