@@ -93,8 +93,17 @@ PYTHON_VER="3.14.6"
 RUBY_INSTALL_VER="0.10.2"
 # read by lib/developer.sh:install_ruby, lib/helpers.sh:_doctor_check_versions, lib/workflows.sh:run_check_versions, .config/.zshrc.d/5_general.zsh
 RUBY_VER="4.0.5"
-# read by lib/workflows.sh:run_check_versions
+# read by lib/workflows.sh:run_check_versions and
+# lib/linux_ubuntu.sh:_install_ubuntu_shellcheck, which also builds the anchored
+# skip-check version regex from this same value (^version: <ver>$). Asserted
+# equal to .github/workflows/ci.yml's SC_VER by tests/setup_env/shellcheck_pin.bats:
+# the gate and the machines must run the same shellcheck, because shellcheck is
+# pre-1.0 and moves its severity assignments between releases. Ubuntu's apt
+# package is whatever the distro ships -- 0.9.0 on 24.04, 0.11.0 on 26.04 -- so
+# this is pinned rather than listed in ubuntu_common_packages.txt.
 SHELLCHECK_VER="0.11.0"
+SHELLCHECK_SHA256_AMD64="8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198"
+SHELLCHECK_SHA256_ARM64="12b331c1d2db6b9eb13cfca64306b1b157a86eb69db83023e261eaa7e7c14588"
 # read by lib/linux_ubuntu.sh:_install_ubuntu_tflint, which also builds the
 # anchored skip-check version regex from this same value (^TFLint version <ver>$)
 TFLINT_VER="0.61.0"
