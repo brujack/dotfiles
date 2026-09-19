@@ -322,6 +322,25 @@ setup_claude_plugins() {
   return 2
 }
 
+# Wraps setup_claude_plugins with the write guard: records the settings
+# file's git state before and after, and reports any drift via
+# _claude_settings_guard_check. Deliberately never changes what it
+# returns on the guard's account -- the guard is an advisory (a warning
+# to review, or an info line saying why it could not check), never a
+# reason to fail a call that otherwise succeeded. Callers get
+# setup_claude_plugins's own rc, unchanged.
+provision_claude_plugins() {
+  local _before _rc=0 _msg
+  _before="$(_claude_settings_git_state)"
+  setup_claude_plugins || _rc=$?
+  if _msg="$(_claude_settings_guard_check "${_before}" "$(_claude_settings_git_state)")"; then
+    [[ -n ${_msg} ]] && log_info "${_msg}"
+  else
+    log_warn "${_msg}"
+  fi
+  return "${_rc}"
+}
+
 _git_is_valid_repo() {
   local _dir="$1"
   [[ -d "${_dir}" ]] && git -C "${_dir}" rev-parse --git-dir >/dev/null 2>&1
@@ -419,7 +438,19 @@ run_setup_user() {
   fi
 
   setup_claude_mcp || return 1
-  setup_claude_plugins || return 1
+  # rc 1 (unreadable/unparsable settings.json, or no python3) means
+  # provisioning cannot proceed from a settings file it cannot read, so
+  # that still aborts setup_user. rc 2 (a partial reconcile -- e.g. one
+  # failed install, or an unsupported marketplace) is not a reason to skip
+  # run_setup_or_developer, the git-hooks sweep and the ledger entry below
+  # -- warn and continue instead.
+  local _plugins_rc=0
+  provision_claude_plugins || _plugins_rc=$?
+  if [[ ${_plugins_rc} -eq 1 ]]; then
+    return 1
+  elif [[ ${_plugins_rc} -ne 0 ]]; then
+    log_warn "Claude plugin provisioning was partial — see the warnings above"
+  fi
   # Not `|| return 1`: setup_env.sh's _run_or_exit wrapper would abort the
   # entire script (run_setup_or_developer, run_developer_or_ansible never
   # run) on a single broken repo's Makefile, and would also skip

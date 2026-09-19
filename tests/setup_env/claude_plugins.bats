@@ -736,3 +736,43 @@ JSON
   [[ "$output" == *"malformed"* ]]
   refute_grep "plugins install" "${MOCK_CALLS_FILE}"
 }
+
+# ── provision_claude_plugins ─────────────────────────────────────────────────
+
+@test "provision_claude_plugins warns but still returns setup_claude_plugins's rc when settings.json changes during provisioning" {
+  _guard_repo_setup
+  # Overwrite the {} _guard_repo_setup committed with a manifest carrying
+  # one enabled, not-yet-installed plugin, then commit it -- the BEFORE
+  # state this test needs is "clean", so the change must be committed
+  # rather than left dirty (that is the second test below).
+  cat > "${GUARD_REPO}/sub/settings.json" <<'JSON'
+{"enabledPlugins":{"superpowers@claude-plugins-official":true}}
+JSON
+  "${_CLAUDE_GUARD_GIT}" -C "${GUARD_REPO}" -c user.email=t@t -c user.name=T add sub/settings.json
+  "${_CLAUDE_GUARD_GIT}" -C "${GUARD_REPO}" -c user.email=t@t -c user.name=T commit -qm update
+  # tests/mocks/claude appends a newline to _OVERRIDE_CLAUDE_SETTINGS on the
+  # `install` call that this manifest triggers, simulating the CLI editing
+  # settings.json as a side effect of installing a plugin.
+  export MOCK_CLAUDE_EDIT_SETTINGS=install
+  run provision_claude_plugins
+  # setup_claude_plugins itself has no failures (the install call the mock
+  # intercepts still exits 0), so the wrapper's rc must be 0 -- the guard's
+  # own rc (2, since the file just went clean -> dirty) must not leak out.
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"changed during plugin provisioning"* ]]
+}
+
+@test "provision_claude_plugins reports an already-dirty settings.json without checking further, and still returns setup_claude_plugins's rc" {
+  _guard_repo_setup
+  # Dirty the tracked file BEFORE calling provision_claude_plugins, so the
+  # state it captures going in is already "dirty" -- distinct from the
+  # clean-then-dirty case above.
+  printf '\n' >> "${GUARD_REPO}/sub/settings.json"
+  run provision_claude_plugins
+  # {} (from _guard_repo_setup) declares no enabled plugins, so
+  # setup_claude_plugins's own "no enabled plugins declared" failure is
+  # what sets this rc -- the guard's "not checked" branch always returns 0
+  # on its own account and must not override it.
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"was already modified; not checked"* ]]
+}

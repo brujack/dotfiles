@@ -332,6 +332,23 @@ teardown() {
   [ "$status" -ne 0 ]
 }
 
+@test "run_setup_user completes and warns partial when provision_claude_plugins returns 2" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  provision_claude_plugins() { return 2; }
+  run run_setup_user
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"partial"* ]]
+}
+
+@test "run_setup_user returns non-zero when provision_claude_plugins returns 1" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  provision_claude_plugins() { return 1; }
+  run run_setup_user
+  [ "$status" -ne 0 ]
+}
+
 # ── run_setup_user: install_git_hooks_all_repos wiring ────────────────────────
 
 @test "run_setup_user calls install_git_hooks_all_repos" {
