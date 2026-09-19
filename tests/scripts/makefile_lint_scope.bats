@@ -1089,3 +1089,21 @@ _is_make_c_candidate() {
   # cannot commit the change that installs uv
   grep -A2 '^check-lock:' "${REPO_ROOT}/Makefile" | grep -q 'ifeq ($(UV),)'
 }
+
+@test "lint skip hint names setup_env.sh -t developer on non-Darwin" {
+  run env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+    _OVERRIDE_PLATFORM=Linux PATH="${CLEAN_PATH}" \
+    make --no-print-directory -C "${REPO_ROOT}" lint SHELLCHECK=
+  [[ "${output}" == *"shellcheck not found, skipping"* ]]
+  [[ "${output}" == *"./setup_env.sh -t developer on Ubuntu"* ]]
+  [[ "${output}" != *"brew install shellcheck"* ]]
+}
+
+@test "lint skip hint names brew install shellcheck on Darwin" {
+  run env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+    _OVERRIDE_PLATFORM=Darwin PATH="${CLEAN_PATH}" \
+    make --no-print-directory -C "${REPO_ROOT}" lint SHELLCHECK=
+  [[ "${output}" == *"shellcheck not found, skipping"* ]]
+  [[ "${output}" == *"brew install shellcheck"* ]]
+  [[ "${output}" != *"setup_env.sh -t developer"* ]]
+}
