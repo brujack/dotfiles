@@ -7,6 +7,21 @@
 # tests to this same file.
 
 setup() {
+  # A leaked GIT_DIR/GIT_INDEX_FILE (e.g. from a pre-push hook invoking this
+  # suite from a worktree) would make _guard_repo_setup's `git init`/`add`/
+  # `commit` calls operate on THAT repo instead of the throwaway fixture --
+  # git -C does not override an inherited GIT_DIR (shell.md). Required at
+  # setup scope per git-workflow.md for any bats setup that creates a
+  # fixture repo.
+  unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
+  # Neutralize the operator's real global/system git config for the whole
+  # suite, not just the fixture repo's own -c overrides. Without this, a
+  # machine with commit.gpgsign=true hangs/fails on the fixture commits
+  # below, and a machine with a global core.hooksPath pin actually RUNS
+  # that real hook against the throwaway repo -- writing outside
+  # BATS_TEST_TMPDIR from what looks like an isolated fixture. /dev/null
+  # also closes the XDG_CONFIG_HOME route to the same file.
+  export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
   REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
   source "${REPO_ROOT}/tests/helpers/common.bash"
   load_mocks
@@ -40,23 +55,38 @@ setup() {
   export _CLAUDE_GUARD_GIT="${_git_shim}/git"
 }
 
-# Builds ${BATS_TEST_TMPDIR}/repo as a real git repo tracking settings.json,
-# then points the settings path (via a symlink at ${HOME}/.claude/settings.json)
-# through it -- mirrors production, where _claude_settings_path resolves
-# through a real symlink into a tracked checkout. Exports GUARD_REPO (the
-# path git commands were run against) and GUARD_REPO_REAL (its realpath, the
-# form _claude_settings_git_state reports).
+# Builds ${BATS_TEST_TMPDIR}/repo as a real git repo tracking sub/settings.json
+# (a SUBDIRECTORY, deliberately -- see the GIT_DIR-decoy test below, which
+# needs the tracked file's directory to differ from the repo's top-level so
+# an unstripped `rev-parse --show-toplevel` reports a distinguishably wrong
+# answer rather than coincidentally the right one), then points the settings
+# path at a symlink through it. HOME is relocated INSIDE the repo
+# (${GUARD_REPO}/home, itself untracked) so a caller can also build an
+# untracked-but-inside-a-repo file under ${HOME}/.claude without a second
+# fixture -- see the "never committed" and "symlink replaced" tests below.
+# Exports GUARD_REPO (the path git commands were run against) and
+# GUARD_REPO_REAL (its realpath, the form _claude_settings_git_state
+# reports).
 _guard_repo_setup() {
   GUARD_REPO="${BATS_TEST_TMPDIR}/repo"
-  mkdir -p "${GUARD_REPO}"
+  mkdir -p "${GUARD_REPO}/sub"
   "${_CLAUDE_GUARD_GIT}" -C "${GUARD_REPO}" init -q
-  printf '{}' > "${GUARD_REPO}/settings.json"
-  "${_CLAUDE_GUARD_GIT}" -C "${GUARD_REPO}" -c user.email=t@t -c user.name=T add settings.json
+  printf '{}' > "${GUARD_REPO}/sub/settings.json"
+  "${_CLAUDE_GUARD_GIT}" -C "${GUARD_REPO}" -c user.email=t@t -c user.name=T add sub/settings.json
   "${_CLAUDE_GUARD_GIT}" -C "${GUARD_REPO}" -c user.email=t@t -c user.name=T commit -qm init
   GUARD_REPO_REAL="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "${GUARD_REPO}")"
+  export HOME="${GUARD_REPO}/home"
   mkdir -p "${HOME}/.claude"
-  ln -sf "${GUARD_REPO}/settings.json" "${HOME}/.claude/settings.json"
+  ln -sf "${GUARD_REPO}/sub/settings.json" "${HOME}/.claude/settings.json"
   export _OVERRIDE_CLAUDE_SETTINGS="${HOME}/.claude/settings.json"
+}
+
+# Realpath, for asserting expected values the same way _claude_settings_git_state
+# computes them -- a bare literal comparison fails on any machine whose
+# TMPDIR is itself reached through a symlink (every mac; CI is Linux-only
+# and cannot see this class of bug).
+_realpath() {
+  python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$1"
 }
 
 # ── _claude_settings_path ───────────────────────────────────────────────────
@@ -305,15 +335,15 @@ JSON
   _guard_repo_setup
   run _claude_settings_git_state
   [ "$status" -eq 0 ]
-  [ "$output" = "$(printf 'clean\t%s\tsettings.json' "${GUARD_REPO_REAL}")" ]
+  [ "$output" = "$(printf 'clean\t%s\tsub/settings.json' "${GUARD_REPO_REAL}")" ]
 }
 
 @test "_claude_settings_git_state reports dirty after the tracked file is modified" {
   _guard_repo_setup
-  printf 'x' >> "${GUARD_REPO}/settings.json"
+  printf 'x' >> "${GUARD_REPO}/sub/settings.json"
   run _claude_settings_git_state
   [ "$status" -eq 0 ]
-  [ "$output" = "$(printf 'dirty\t%s\tsettings.json' "${GUARD_REPO_REAL}")" ]
+  [ "$output" = "$(printf 'dirty\t%s\tsub/settings.json' "${GUARD_REPO_REAL}")" ]
 }
 
 @test "_claude_settings_git_state reports untracked for a file outside any git repo" {
@@ -322,18 +352,39 @@ JSON
   mkdir -p "${HOME}/.claude"
   ln -sf "${_outside}" "${HOME}/.claude/settings.json"
   export _OVERRIDE_CLAUDE_SETTINGS="${HOME}/.claude/settings.json"
+  local _outside_real
+  _outside_real="$(_realpath "${_outside}")"
   run _claude_settings_git_state
   [ "$status" -eq 0 ]
-  [ "$output" = "$(printf 'untracked\t-\t%s' "${_outside}")" ]
+  [ "$output" = "$(printf 'untracked\t-\t%s' "${_outside_real}")" ]
+}
+
+@test "_claude_settings_git_state reports untracked for a file inside a repo that was never committed" {
+  _guard_repo_setup
+  local _uncommitted="${GUARD_REPO}/sub/uncommitted.json"
+  printf '{}' > "${_uncommitted}"
+  export _OVERRIDE_CLAUDE_SETTINGS="${_uncommitted}"
+  local _uncommitted_real
+  _uncommitted_real="$(_realpath "${_uncommitted}")"
+  run _claude_settings_git_state
+  [ "$status" -eq 0 ]
+  [ "$output" = "$(printf 'untracked\t%s\t%s' "${GUARD_REPO_REAL}" "${_uncommitted_real}")" ]
 }
 
 @test "_claude_settings_git_state reports untracked when the symlink is replaced by a regular file" {
   _guard_repo_setup
-  rm -f "${HOME}/.claude/settings.json"
-  printf '{}' > "${HOME}/.claude/settings.json"
+  local _settings_path="${HOME}/.claude/settings.json"
+  rm -f "${_settings_path}"
+  printf '{}' > "${_settings_path}"
+  local _settings_real
+  _settings_real="$(_realpath "${_settings_path}")"
   run _claude_settings_git_state
   [ "$status" -eq 0 ]
-  [ "$output" = "$(printf 'untracked\t-\t%s' "${HOME}/.claude/settings.json")" ]
+  # ${HOME}/.claude lives INSIDE the fixture repo (_guard_repo_setup), so
+  # this is genuinely detachment from a tracked file -- the replacement
+  # file is still inside a repo, just no longer the tracked one -- not the
+  # weaker "outside any repo" case the "-" placeholder would report.
+  [ "$output" = "$(printf 'untracked\t%s\t%s' "${GUARD_REPO_REAL}" "${_settings_real}")" ]
 }
 
 @test "_claude_settings_git_state ignores an exported GIT_DIR pointing at a decoy repo" {
@@ -343,14 +394,14 @@ JSON
   "${_CLAUDE_GUARD_GIT}" -C "${_decoy}" init -q
   GIT_DIR="${_decoy}/.git" run _claude_settings_git_state
   [ "$status" -eq 0 ]
-  [ "$output" = "$(printf 'clean\t%s\tsettings.json' "${GUARD_REPO_REAL}")" ]
+  [ "$output" = "$(printf 'clean\t%s\tsub/settings.json' "${GUARD_REPO_REAL}")" ]
 }
 
 # ── _claude_settings_guard_check ────────────────────────────────────────────
 
 @test "_claude_settings_guard_check prints nothing and returns 0 when state is unchanged (clean)" {
   local _clean
-  _clean="$(printf 'clean\t%s\tsettings.json' "${GUARD_REPO:-/some/repo}")"
+  _clean="$(printf 'clean\t/some/repo\tsettings.json')"
   run _claude_settings_guard_check "${_clean}" "${_clean}"
   [ "$status" -eq 0 ]
   [ -z "$output" ]
@@ -371,7 +422,23 @@ JSON
   _after="$(printf 'untracked\t-\t/some/repo/settings.json')"
   run _claude_settings_guard_check "${_before}" "${_after}"
   [ "$status" -eq 2 ]
-  [[ "$output" == *"no longer resolves into a tracked file"* ]]
+  # Full line, not a substring: pins _br/_bp (BEFORE fields) as the message's
+  # source, so a mutant swapping in _ar/_ap (AFTER fields, "-"/abspath here)
+  # is caught rather than passing on the shared "no longer resolves..." text.
+  [ "$output" = "/some/repo/settings.json no longer resolves into a tracked file" ]
+}
+
+@test "_claude_settings_guard_check warns and returns 2 when clean becomes unknown" {
+  local _before _after
+  _before="$(printf 'clean\t/some/repo\tsettings.json')"
+  _after="$(printf 'unknown\t/some/repo\tsettings.json')"
+  run _claude_settings_guard_check "${_before}" "${_after}"
+  [ "$status" -eq 2 ]
+  # unknown means the git-status READ failed, not that the file stopped
+  # being tracked -- a distinct message from the untracked case above, so
+  # asserting only a shared "not checked"/"tracked file" substring could not
+  # tell the two branches apart.
+  [ "$output" = "could not read git status for /some/repo/settings.json (was clean)" ]
 }
 
 @test "_claude_settings_guard_check returns 0 and says not checked when already dirty before" {
@@ -379,7 +446,7 @@ JSON
   _dirty="$(printf 'dirty\t/some/repo\tsettings.json')"
   run _claude_settings_guard_check "${_dirty}" "${_dirty}"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"was already modified; not checked"* ]]
+  [ "$output" = "/some/repo/settings.json was already modified; not checked" ]
 }
 
 @test "_claude_settings_guard_check returns 0 and says not checked when already untracked before" {
@@ -387,5 +454,9 @@ JSON
   _untracked="$(printf 'untracked\t-\t/some/path/settings.json')"
   run _claude_settings_guard_check "${_untracked}" "${_untracked}"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"not checked"* ]]
+  # Full line: distinguishes this catch-all ("%s is %s; not checked") from
+  # the dirty branch's "%s/%s was already modified; not checked" -- both
+  # previously satisfied a bare "not checked" substring, so line 174's
+  # message could be copied onto line 175 with nothing catching it.
+  [ "$output" = "/some/path/settings.json is untracked; not checked" ]
 }

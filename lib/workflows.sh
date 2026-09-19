@@ -178,7 +178,13 @@ _claude_settings_guard_check() {
     clean) return 0 ;;
     dirty) printf '%s/%s changed during plugin provisioning — review: git -C %s diff -- %s\n' \
              "${_ar}" "${_ap}" "${_ar}" "${_ap}"; return 2 ;;
-    *) printf '%s/%s no longer resolves into a tracked file (%s)\n' "${_br}" "${_bp}" "${_as}"
+    untracked) printf '%s/%s no longer resolves into a tracked file\n' "${_br}" "${_bp}"
+       return 2 ;;
+    # unknown means the git-status READ failed (a git call errored), not
+    # that the file stopped being tracked -- a distinct condition from the
+    # untracked branch above, so it gets its own message rather than
+    # reusing "no longer resolves into a tracked file" for both.
+    *) printf 'could not read git status for %s/%s (was clean)\n' "${_br}" "${_bp}"
        return 2 ;;
   esac
 }
