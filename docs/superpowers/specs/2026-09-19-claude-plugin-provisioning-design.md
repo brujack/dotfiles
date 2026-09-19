@@ -1,6 +1,6 @@
 # Claude plugin provisioning reads settings.json and registers marketplaces
 
-**Status:** Approved design 2026-09-19, pending spec review
+**Status:** Approved design 2026-09-19; revised after Multi-Lens Review round 1
 **Closes backlog rows:** "`setup_claude_plugins` installs `plugin@marketplace` refs with no
 `marketplace add` anywhere" (#84) and "`setup_claude_plugins`'s membership test is an
 unanchored substring match" (#101). Leaves "Claude plugin marketplaces are a dependency
@@ -71,10 +71,15 @@ list. The 7 marketplaces the setup list uses match the 7 declared, exactly.
 1. **`settings.json` is the single source of truth** for both marketplaces
    (`extraKnownMarketplaces`) and plugins (`enabledPlugins`). Both hardcoded lists in
    dotfiles are deleted.
-2. **Disabled plugins are skipped.** Only ids whose value is `true` are installed.
+2. **Disabled plugins are never installed.** Only ids whose value is `true` are
+   installed. Every declared id already installed at user scope is still updated, whether
+   `true` or `false` (Multi-Lens Review E4/R5).
 3. **Tri-state return:** 0 all present, 2 partial with named failures, 1 hard failure.
-4. **`-t update` reconciles, then updates.** A plugin enabled in ai-config on one machine
-   reaches the others on their next update, not only on a rerun of `setup_user`.
+   `run_setup_user` warns on 2; `run_update` WARNs on 2, like `git-hooks` and
+   `cargo-tools` (E2). rc 1 aborts `setup_user` and FAILs the update section.
+4. **`-t update` reconciles, then updates,** against the settings.json this run just
+   pulled (E1). A plugin enabled in ai-config on one machine reaches the others on their
+   next full update.
 
 ## Design
 
@@ -83,16 +88,16 @@ list. The 7 marketplaces the setup list uses match the 7 declared, exactly.
 Reads `${_OVERRIDE_CLAUDE_SETTINGS:-${HOME}/.claude/settings.json}` with `python3` (already
 used elsewhere in `lib/workflows.sh`) and prints tab-separated lines:
 
-| line                                  | from                                                                                                                  |
-| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `marketplace<TAB><name><TAB><source>` | each `extraKnownMarketplaces` entry; `source.source == "github"` gives `<repo>` (`owner/repo`), `"git"` gives `<url>` |
-| `unsupported<TAB><name><TAB><type>`   | an entry with any other `source.source`, or a missing `repo`/`url`                                                    |
-| `plugin<TAB><id>`                     | each `enabledPlugins` key whose value is exactly `true`                                                               |
+| line                                   | from                                                                                                                  |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `marketplace<TAB><name><TAB><source>`  | each `extraKnownMarketplaces` entry; `source.source == "github"` gives `<repo>` (`owner/repo`), `"git"` gives `<url>` |
+| `unsupported<TAB><name><TAB><type>`    | an entry with any other `source.source`, or a missing `repo`/`url`                                                    |
+| `plugin<TAB><id><TAB><true or false>`  | each `enabledPlugins` key, with its boolean value; a non-boolean value is emitted as `false`                          |
 
 Returns 1, printing nothing to stdout, when `python3` is absent or the file is missing,
 unreadable, not valid JSON, or not a JSON object. Missing or empty
-`extraKnownMarketplaces`/`enabledPlugins` keys are not errors: they produce no lines of
-that kind.
+`extraKnownMarketplaces`/`enabledPlugins` keys are not errors here: they produce no lines
+of that kind, and `setup_claude_plugins` decides what an empty set means.
 
 Only these two source types exist in today's file (measured: `{'git', 'github'}`).
 Mapping others is deferred until one appears; `unsupported` makes that visible rather
@@ -102,48 +107,73 @@ than silent.
 
 1. `claude` not on PATH → `log_warn`, return 0 (unchanged).
 2. Read the manifest. rc 1 → return 1.
-3. Read registered marketplace names from `claude plugins marketplace list --json`
+3. Record a hash of the resolved settings file's content (R1).
+4. Read registered marketplace names from `claude plugins marketplace list --json`
    (`[].name`) and installed plugins from `claude plugins list --json`, keeping the `id`s
    whose `scope` is `"user"`. Either call failing, or its output not parsing, → return 1.
    Exact id equality replaces today's `grep -qF` substring test (#101).
-4. For each `marketplace` line whose name is not registered:
+5. For each `marketplace` line whose name is not registered:
    `claude plugins marketplace add <source>`. A failure is recorded by name.
-5. For each `unsupported` line: record a failure naming the marketplace and its type.
-6. For each `plugin` line whose id is not installed at user scope:
+6. For each `unsupported` line: record a failure naming the marketplace and its type.
+7. If no `plugin` line is `true`, record `no enabled plugins declared in <path>` (R3).
+   A valid file that provisions nothing is the silent success this spec removes.
+8. For each `true` `plugin` line whose id is not installed at user scope:
    `claude plugins install -s user <id>`. A failure is recorded by id. A plugin whose
    marketplace failed to add is still attempted, and its own failure is recorded.
-7. Print every recorded failure to stderr. Return 2 if any, else 0.
+9. Re-hash the settings file. If the content changed, record
+   `settings.json content changed during provisioning (<path>)`: an interactive toggle, a
+   peer session or a CLI version that re-serialises the file has written ai-config's
+   tracked copy, and the operator must know.
+10. Print every recorded failure to stderr. Return 2 if any, else 0.
 
-**Invariant: this function never writes `settings.json`.** It adds only marketplaces
-already declared there and installs only plugins already `true`, and both were measured
-to leave the file byte-identical. The real-CLI acceptance check below re-proves it on
-each run of that check. Unit tests cannot prove it, because the mock writes nothing.
+**Invariant: this function never changes `settings.json`'s content.** It adds only
+marketplaces already declared there and installs only plugins already `true`. Measured on
+CLI 2.1.278, on Linux and on macOS, through a symlinked `settings.json`: the CLI replaces
+the target file (new inode) on `marketplace add` and `install`, the symlink survives, and
+the content is byte-identical (E3). Step 9 turns that measurement into a check made on
+every run, because a later CLI version, or a concurrent write, can break it.
 
 ### Callers
 
-- **`run_setup_user`** (`lib/workflows.sh:189`, today `setup_claude_plugins || return 1`):
-  capture the rc. 1 → return 1. 2 → `log_warn` naming that plugin provisioning was
-  partial, and continue.
-- **`run_update`'s claude section:** call `setup_claude_plugins` first. Then run
-  `claude plugins update <id>` for each `plugin` line of the manifest, replacing the
-  hardcoded 14-item loop. A reconcile rc 2 adds `reconcile` to the section's existing
-  named-failure list; a reconcile rc 1 does too, and the update loop is skipped because
-  it has no list to iterate. Any entry in that list FAILs the section, which is how an
-  update failure is reported today. The post-update skill scan and attestation audit
-  that follow are unchanged.
+- **`run_setup_user`** (`lib/workflows.sh:189`): the line
+  `setup_claude_plugins || return 1` has never been able to fire, because the function
+  has always returned 0. This spec activates it (R2): a missing or broken settings file,
+  an absent `python3`, or a failed `--json` list call now returns 1, which stops
+  `setup_user` before `run_setup_or_developer`, the git-hooks sweep and the ledger entry.
+  That is deliberate, since provisioning cannot proceed from a settings file it cannot
+  read, but it is a change in behaviour. rc 2 → `log_warn` naming that plugin provisioning
+  was partial, and continue.
+- **`run_update`:**
+  - **Order (E1).** The `ai-config` section (`setup_ai_config`, today at
+    `lib/workflows.sh:700-703`, gated `_run_all`) moves ahead of the claude section, so a
+    full update reconciles against the settings.json it just pulled.
+    `--claude-only` does not pull ai-config; it reconciles against the current checkout.
+    That is documented in `CLAUDE.md`, not changed.
+  - **Claude section.** Call `setup_claude_plugins`, with its output tee'd into
+    `err_claude` so the section's detail shows the reason (R4). Then, whenever the
+    manifest parsed, even if reconcile returned 1 because a list call failed (G5), run
+    `claude plugins update <id>` for every declared id installed at user scope. That
+    replaces the hardcoded 14-item loop. An update failure FAILs the section, as today.
+    A reconcile rc 1 FAILs it. A reconcile rc 2 with no update failures WARNs, naming the
+    reconcile failures (E2). The post-update skill scan and attestation audit that follow
+    are unchanged.
 
 ### Tests (bats)
 
 `tests/mocks/claude` gains `--json` handling: `plugins list --json` prints
 `MOCK_CLAUDE_PLUGINS_LIST_JSON`, `plugins marketplace list --json` prints
 `MOCK_CLAUDE_MARKETPLACE_LIST_JSON`, and `MOCK_CLAUDE_FAIL_ARGS` (a substring of the argv)
-makes a matching invocation exit 1. Each defaults to an empty JSON list or to not
-failing, and every argv is still recorded to `MOCK_CALLS_FILE`. The existing
-`MOCK_CLAUDE_PLUGINS_LIST_OUTPUT` text path stays for any caller that does not pass
-`--json`; the 9 tests using it are updated where they exercise `setup_claude_plugins`.
+makes a matching invocation exit 1. `MOCK_CLAUDE_TOUCH_SETTINGS=1` makes an `install` call
+append a byte to the file `_OVERRIDE_CLAUDE_SETTINGS` names, to drive step 9. Each
+defaults to an empty JSON list, to not failing or to not touching, and every argv is still
+recorded to `MOCK_CALLS_FILE`. The existing `MOCK_CLAUDE_PLUGINS_LIST_OUTPUT` text path
+stays for any caller that does not pass `--json`; the 9 tests using it are updated where
+they exercise `setup_claude_plugins`.
 
 A fixture `settings.json` is supplied through `_OVERRIDE_CLAUDE_SETTINGS`, set in
-`setup()` so no test can read the operator's real file.
+`setup()` so no test can read the operator's real file. Every positive case below uses
+the same fixture, which declares at least one `github` and one `git` marketplace and both
+`true` and `false` plugins.
 
 Cases:
 
@@ -157,38 +187,50 @@ Cases:
 - One marketplace's add failing returns 2, names it on stderr, and the remaining
   marketplaces and plugins are still processed.
 - An `unsupported` source returns 2 and names the marketplace and type.
+- A valid file with no `true` plugin returns 2, naming it (R3).
+- The settings content changing during the run returns 2, naming the file (R1).
 - Missing, unparsable and non-object settings each return 1 with zero `claude` calls.
 - `plugins list --json` failing returns 1.
 - `claude` absent returns 0.
-- Everything present: zero `add` and zero `install` calls, return 0 (idempotency).
+- Everything present: zero `add` and zero `install` calls, return 0 — and the manifest
+  produced at least one `true` `plugin` line, so the case cannot pass on an empty reader
+  (G3).
 - `run_setup_user` continues after a 2 and returns non-zero after a 1.
-- `run_update` calls reconcile before any `update`, and runs `update` once per `true` id
-  in the fixture, including an id absent from the old hardcoded list.
-- A regression test fails if `lib/workflows.sh` again carries a hardcoded
-  `@claude-plugins-official` plugin id, since a reintroduced list is exactly the drift
-  this removes.
+- `run_update` pulls ai-config before reading the manifest (E1), reconciles before any
+  `update`, runs `update` once per declared id installed at user scope (including a
+  `false` one and one absent from the old hardcoded list), WARNs on a reconcile rc 2 and
+  FAILs on an update failure, and still runs the update loop when reconcile returned 1 on
+  a list failure (G5).
+- A regression test fails if `lib/workflows.sh` again contains a literal
+  `<name>@<marketplace>` id for any marketplace declared in the fixture (G4).
 
 ### Real-CLI acceptance (manual, recorded in the PR body)
 
-In a fresh `HOME` holding a copy of the real `settings.json`, run `setup_claude_plugins`
-against the real CLI:
+In a fresh `HOME` whose `.claude/settings.json` is a **symlink** to a copy of the real
+file (the production shape), with a cwd outside any repository (so no command can fall
+back to project scope), and with `claude` wrapped by a `PATH` shim that appends each argv
+to a log before exec'ing the real binary (G2):
 
 1. rc 0; 7 marketplaces registered; the 11 `true` plugins installed; none of the 4
-   `false` ones installed; `settings.json` byte-identical to the copy (`cmp`).
-2. Run it again: rc 0, zero `add` and zero `install` invocations.
+   `false` ones installed; the copy's content unchanged (`cmp`), and
+   `.claude/settings.json` still a symbolic link.
+2. Run it again: rc 0; the shim log shows zero `marketplace add` and zero
+   `plugins install` lines for that run.
 3. Add a bogus marketplace to the copy's `extraKnownMarketplaces`: rc 2, named on stderr,
    the other entries unaffected.
 
-This is the check that proves the write invariant, because the unit tests run against a
-mock that writes nothing.
+Run it on Linux and on macOS. This proves the content invariant against the real CLI;
+step 9's hash re-checks it on every production run.
 
 ### Docs
 
-- `CLAUDE.md`: the `setup_user` entry-point bullet (plugins come from ai-config's
-  `settings.json`), and a Test Seams paragraph for `_OVERRIDE_CLAUDE_SETTINGS`.
+- `CLAUDE.md`: the `setup_user` and `update` entry-point bullets (plugins come from
+  ai-config's `settings.json`; `--claude-only` reconciles against the current checkout),
+  and a Test Seams paragraph for `_OVERRIDE_CLAUDE_SETTINGS`.
 - ADR in `docs/adr/`: ai-config's `settings.json` is the plugin source of truth for
-  dotfiles provisioning. It is a contract between two repos, so a change to it lands in
-  ai-config and takes effect in dotfiles on the next run.
+  dotfiles provisioning. It is a contract between two repos: a change to it lands in
+  ai-config and takes effect in dotfiles on the next run, and a broken or `unsupported`
+  entry makes every machine's next update WARN until ai-config is fixed.
 - `docs/superpowers/README.md`: remove the #84 and #101 backlog rows when this ships.
 
 ## Out of scope
@@ -226,7 +268,7 @@ Assumption: `marketplace add` of an already-declared entry may re-serialise it o
 CLI version or on macOS. Measured 2026-09-19 on `studio` (CLI 2.1.278) through a symlinked
 copy: content byte-identical after `add` and after `install` of a `true` plugin. Holds on
 both platforms at this version.
-Disposition:
+Disposition: Addressed G2 (argv shim, symlinked settings, cwd outside any repo), G3 (shared fixture; idempotency case asserts a `true` plugin line), G4 (regression grep covers every declared marketplace), G5 (update loop runs whenever the manifest parsed). Accepted G1, reason: the CLI self-install is an unconfirmed timestamp inference, and reconcile costs two list calls when nothing is missing.
 
 ### Ergonomics
 
@@ -245,7 +287,7 @@ disabled plugins stop receiving updates.
 Assumption: that on macOS the CLI writes through the symlink rather than replacing it.
 Measured 2026-09-19 on `studio`: after `marketplace add`, `stat -f %HT` still reports
 `Symbolic Link` (target inode changed, content identical). Holds.
-Disposition:
+Disposition: Addressed E1 (ai-config pull moved ahead of the claude section; `--claude-only` documented), E2 (reconcile rc 2 WARNs), E3 (invariant reworded to content; acceptance on a symlink with a link check), E4 (every declared installed id is updated).
 
 ### Risk
 
@@ -265,7 +307,7 @@ leave content identical; install of a `false` plugin rewrites it to `true`, link
 Assumption: that CLI versions the fleet auto-updates to keep not writing settings.json on
 `add` of a declared marketplace or `install` of a `true` plugin. Refutable per version by
 the fixture above; the before/after hash in finding (1) would check it on every run.
-Disposition:
+Disposition: Addressed R1 (before/after content hash, step 9), R2 (abort path stated in Callers), R3 (zero `true` plugins is rc 2), R4 (reconcile output tee'd into `err_claude`), R5 (same as E4).
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
