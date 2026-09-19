@@ -6,6 +6,11 @@ fi
 case "$*" in
   "plugins list --json")
     if [[ -n "${MOCK_CLAUDE_FAIL_ON_CALL:-}" ]]; then
+      if [[ ! "${MOCK_CLAUDE_FAIL_ON_CALL}" =~ ^[0-9]+$ ]]; then
+        printf 'mock claude: MOCK_CLAUDE_FAIL_ON_CALL must be a positive integer, got %s\n' \
+          "${MOCK_CLAUDE_FAIL_ON_CALL}" >&2
+        exit 2
+      fi
       _cf="${BATS_TEST_TMPDIR:-/tmp}/mock_claude_list_calls"
       _n=$(( $(cat "${_cf}" 2>/dev/null || printf 0) + 1 ))
       printf '%s\n' "${_n}" > "${_cf}"
@@ -21,7 +26,13 @@ case "$1" in
   plugins|plugin)
     if [[ -n "${MOCK_CLAUDE_EDIT_SETTINGS:-}" && "$2" == "${MOCK_CLAUDE_EDIT_SETTINGS}" \
           && -n "${_OVERRIDE_CLAUDE_SETTINGS:-}" ]]; then
-      printf '\n' >> "${_OVERRIDE_CLAUDE_SETTINGS}"
+      if [[ -n "${BATS_TEST_TMPDIR:-}" && "${_OVERRIDE_CLAUDE_SETTINGS}" == "${BATS_TEST_TMPDIR}"/* ]]; then
+        printf '\n' >> "${_OVERRIDE_CLAUDE_SETTINGS}"
+      else
+        printf 'mock claude: refusing to edit %s -- not under BATS_TEST_TMPDIR\n' \
+          "${_OVERRIDE_CLAUDE_SETTINGS}" >&2
+        exit 2
+      fi
     fi
     [[ "$2" == "list" ]] && printf "%s\n" "${MOCK_CLAUDE_PLUGINS_LIST_OUTPUT:-}"
     exit 0 ;;

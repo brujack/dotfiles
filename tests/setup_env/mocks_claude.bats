@@ -51,7 +51,7 @@ setup() {
   [ "$output" = "superpowers@claude-plugins-official" ]
 }
 
-@test "claude mock: MOCK_CLAUDE_FAIL_ARGS matching the full argv fails that call" {
+@test "claude mock: MOCK_CLAUDE_FAIL_ARGS substring of argv fails that call" {
   export MOCK_CLAUDE_FAIL_ARGS="marketplace add"
   run "${CLAUDE_MOCK}" plugins marketplace add anthropics/claude-plugins-official
   [ "$status" -eq 1 ]
@@ -72,16 +72,27 @@ setup() {
 }
 
 @test "claude mock: MOCK_CLAUDE_FAIL_ON_CALL counter is not advanced by marketplace list --json" {
+  # Discriminating form: if marketplace list --json advanced the shared
+  # counter, this single marketplace call would leave it at 1, and the FIRST
+  # "plugins list --json" below would then advance it to 2 and fail --
+  # contradicting the "$status" -eq 0 assertion on that call. A version of
+  # this test that ran two marketplace calls before ever calling "plugins
+  # list --json" and asserted only on that third call is vacuous: a
+  # marketplace-increments-counter mutant satisfies it identically (0, 0, 0
+  # either way).
   export MOCK_CLAUDE_FAIL_ON_CALL=2
-  # Two marketplace list calls must not count toward the plugins-list counter --
-  # the third call here is the first REAL "plugins list --json" call and must
-  # still pass, since only the second such call should fail.
-  run "${CLAUDE_MOCK}" plugins marketplace list --json
-  [ "$status" -eq 0 ]
   run "${CLAUDE_MOCK}" plugins marketplace list --json
   [ "$status" -eq 0 ]
   run "${CLAUDE_MOCK}" plugins list --json
   [ "$status" -eq 0 ]
+  run "${CLAUDE_MOCK}" plugins list --json
+  [ "$status" -eq 1 ]
+}
+
+@test "claude mock: non-numeric MOCK_CLAUDE_FAIL_ON_CALL exits 2 rather than silently never failing" {
+  export MOCK_CLAUDE_FAIL_ON_CALL="abc"
+  run "${CLAUDE_MOCK}" plugins list --json
+  [ "$status" -eq 2 ]
 }
 
 @test "claude mock: MOCK_CLAUDE_EDIT_SETTINGS=install grows the settings file on plugins install" {
@@ -112,11 +123,33 @@ setup() {
   [ "${_after}" -eq "${_before}" ]
 }
 
-@test "claude mock: every call is logged to MOCK_CALLS_FILE" {
+@test "load_mocks points _OVERRIDE_CLAUDE_SETTINGS at a copy under BATS_TEST_TMPDIR" {
+  case "${_OVERRIDE_CLAUDE_SETTINGS}" in
+    "${BATS_TEST_TMPDIR}"/*) : ;;
+    *) return 1 ;;
+  esac
+  cmp -s "${_OVERRIDE_CLAUDE_SETTINGS}" "${REPO_ROOT}/tests/fixtures/claude-settings.json"
+}
+
+@test "claude mock: refuses to edit settings outside BATS_TEST_TMPDIR and leaves the tracked fixture unchanged" {
+  local _tracked="${REPO_ROOT}/tests/fixtures/claude-settings.json"
+  local _snapshot="${BATS_TEST_TMPDIR}/tracked-snapshot.json"
+  cp "${_tracked}" "${_snapshot}"
+  export _OVERRIDE_CLAUDE_SETTINGS="${_tracked}"
+  export MOCK_CLAUDE_EDIT_SETTINGS=install
+  run "${CLAUDE_MOCK}" plugins install -s user x@y
+  [ "$status" -eq 2 ]
+  cmp -s "${_tracked}" "${_snapshot}"
+}
+
+@test "claude mock: every call is logged to MOCK_CALLS_FILE, including one that exits early via MOCK_CLAUDE_FAIL_ARGS" {
   "${CLAUDE_MOCK}" plugins list --json > /dev/null
   "${CLAUDE_MOCK}" plugins marketplace list --json > /dev/null
+  export MOCK_CLAUDE_FAIL_ARGS="marketplace add"
+  "${CLAUDE_MOCK}" plugins marketplace add anthropics/claude-plugins-official > /dev/null 2>&1 || true
   grep -qF "claude plugins list --json" "${MOCK_CALLS_FILE}"
   grep -qF "claude plugins marketplace list --json" "${MOCK_CALLS_FILE}"
+  grep -qF "claude plugins marketplace add anthropics/claude-plugins-official" "${MOCK_CALLS_FILE}"
 }
 
 @test "claude mock: plugin (singular) install still exits 0 by default" {
