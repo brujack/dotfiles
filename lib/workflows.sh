@@ -446,6 +446,28 @@ run_update() {
     _update_skip "claude" "flag not set"
   fi
 
+  # ── plugin-node ───────────────────────────────────────────────────────────
+  # `brew upgrade node` deletes the versioned Cellar node that some plugins
+  # write into their cached configs (see _claude_plugin_cache_dir), so the
+  # repair runs wherever brew or a plugin update just ran.
+  if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_BREW:-} ]] || [[ -n ${UPDATE_CLAUDE:-} ]]; then
+    if [[ ! -d "$(_claude_plugin_cache_dir)" ]]; then
+      _update_skip "plugin-node" "no Claude plugin cache"
+    else
+      _update_record_start "plugin-node"
+      local _plugin_node_rc=0
+      repair_plugin_node_paths > "${_DOTFILES_RUN_TMPDIR}/err_plugin-node" 2>&1 || _plugin_node_rc=$?
+      cat "${_DOTFILES_RUN_TMPDIR}/err_plugin-node"
+      _update_record_end "plugin-node" 0
+      if [[ ${_plugin_node_rc} -ne 0 ]]; then
+        _update_warn "plugin-node" "stale node path(s) could not be repaired — see detail"
+        _update_write_detail_from_err "plugin-node" "repair output"
+      fi
+    fi
+  else
+    _update_skip "plugin-node" "flag not set"
+  fi
+
   # ── terraform-skill (Cursor git checkout; Claude Code uses plugin) ───────────
   # Same trigger as Claude plugins: full update or --claude-only (no claude CLI required).
   if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_CLAUDE:-} ]]; then
