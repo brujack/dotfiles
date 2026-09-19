@@ -1,4 +1,4 @@
-# doctor: the resolved shellcheck must match SHELLCHECK_VER
+# lint: the shellcheck it runs must match SHELLCHECK_VER
 
 **Status:** Spec
 **Closes backlog rows:** "the pinned shellcheck is outranked by linuxbrew on both Linux boxes' PATH",
@@ -28,77 +28,111 @@ three development machines, a check added today passes.
 
 ## Design
 
-Add shellcheck to `_doctor_check_versions` (`lib/helpers.sh`) through the existing
-`_doctor_check_one_version`, which already does what the row asks. It resolves the binary
-with `command -v`, parses its version, prefix-matches the pin, and names the resolved path
-in both the PASS and the mismatch message.
+**Revised after Step 8 round 1.** The first version added the check to `doctor`. The goal-fit
+lens showed that nothing runs `doctor` on a schedule, so the check fired only when someone
+remembered to run it, and the macOS WARN persisted nowhere. The check now lives in the lint
+gate itself (operator decision, 2026-09-19). `doctor` is unchanged.
 
-One change to that helper: an optional fifth argument, `_on_mismatch` (`fail`, the
-default, or `warn`). Every existing caller keeps FAIL. `warn` reports through
-`doctor_warn`, which counts toward the summary's warnings, not `log_warn`, which counts
-nothing. The shellcheck call passes `warn` only when `MACOS` is set and omits the argument
-otherwise, so Linux takes the helper's default.
+**Where.** A new `scripts/check-shellcheck-pin.sh BINARY` compares the version `BINARY`
+reports with `SHELLCHECK_VER`, read from `lib/constants.sh`. `make lint` calls it first
+inside its existing `if [ -n "$(SHELLCHECK)" ]` block, and adds `failed=1` on a non-zero exit, so
+the rest of lint still runs and reports. It follows the pattern of the
+`scripts/check-lib-exit-traps.sh` call a few lines below: guarded by `[ -f ... ]` with a
+restore hint when the script is missing.
 
-| platform | on mismatch                                                                        | why                                                                                                                       |
-| -------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Linux    | **FAIL**, naming the resolved path and the pin                                     | the repo pins it there, and the remedy is concrete: remove the competing copy, or run `-t developer` to reinstall the pin |
-| macOS    | **WARN**: local lint runs a different shellcheck than CI (installed, path, CI pin) | brew-managed and unpinned; a FAIL would stay red with no remedy this repo provides. Operator decision, 2026-09-19         |
+**The checked binary is the binary run.** The recipe today resolves `$(SHELLCHECK)` (parse
+time, `command -v`) for its presence test, then runs a bare `shellcheck`, which the recipe
+shell resolves again. Both runs of it change to `"$(SHELLCHECK)"`, so the verdict is about the
+copy that lints. It also gives tests a seam: `make lint SHELLCHECK=<stub>`.
 
-Not installed keeps the helper's existing behaviour: a WARN, "not installed (skipping
-version check)", the same as go, python3, ruby and zsh today.
+**Verdicts.**
 
-**Actor.** `command -v` answers for the shell `doctor` runs in, which is the same shell a
-`make lint` launched from it resolves through. A hook started by an editor or cron gets a
-different `PATH` (see `CLAUDE.md`'s actor table) and is out of scope; the report names the
-path it checked, so a reader can tell which copy the verdict is about.
+| case | Linux | macOS |
+|---|---|---|
+| reported version prefix-matches the pin | prints `shellcheck pin OK (<ver>) — <path>`, exit 0 | same |
+| mismatch | exit 1: `shellcheck <ver> at <path> does not match SHELLCHECK_VER <pin>`, plus the remedy: remove the competing copy (`brew uninstall shellcheck`); the pinned copy is `/usr/local/bin/shellcheck` | exit 0, with a warning line naming path, installed version and CI's pin: macOS shellcheck is brew-managed and unpinned (operator decision) |
+| version cannot be parsed from the output | exit 1, fail closed: the gate cannot say which tool it is running | exit 0 with a warning |
+| pin cannot be read from `lib/constants.sh` | exit 1 on both: the repo itself is misconfigured | exit 1 |
+
+Platform comes from `uname -s`. The `MACOS`/`LINUX` variables are not in a make recipe's
+environment. Test seam: `_OVERRIDE_PLATFORM` (`Darwin` or `Linux`). The constants path has
+a seam too, `_OVERRIDE_CONSTANTS`, so the unreadable-pin branch is reachable. Neither grants
+anything beyond editing the script's inputs directly.
+
+Parsing uses bash regex only: `version: X.Y.Z` from the binary's output, and
+`SHELLCHECK_VER="X.Y.Z"` from the constants file. The script calls no external tool except
+the binary it checks, so a test's `PATH` cannot change its verdict. That is the defect all
+three lenses found in the doctor version's harness.
+
+Absent shellcheck is not this script's case. Lint already prints
+`shellcheck not found, skipping` and never calls it. Making a missing tool fail on Linux is
+a separate decision and out of scope.
+
+**Actor.** `$(SHELLCHECK)` is resolved by the make process that the pre-commit or pre-push
+hook started, which inherits whoever invoked git. The check therefore answers for the actor
+that actually runs the gate, including editor and cron invocations that the doctor version
+could not see.
+
+**CI.** The `test` job runs `make test`, which runs lint. It resolves the pinned
+`/usr/local/bin/shellcheck` it installed, so the check passes there. `lint-macos` runs no
+shellcheck. `tests/setup_env/shellcheck_pin.bats` already ties `SHELLCHECK_VER` to CI's
+`SC_VER`.
 
 ## Rows closed
 
-- **Outranked pin**: the recurrence now turns `doctor` red on Linux and names the copy.
-- **`run_check_versions` reads PATH**: it reports on the same artifact `doctor` now asserts
-  is the pin. It is correct whenever `doctor` passes, and `doctor` catches the case where it
-  is not. No change to `run_check_versions` itself.
-- **Doctor arm**: this change.
+- **Outranked pin**: a linuxbrew copy ahead of the pin now fails lint on the next commit or
+  push, naming the copy and how to remove it.
+- **`run_check_versions` reads PATH**: it reports on the copy lint now requires to be the
+  pin, so on Linux the two cannot silently diverge. No change to `run_check_versions`.
+- **Doctor arm**: superseded by the lint check, per the round-1 goal-fit finding.
 
 ## Testing
 
-Real-function tests in `tests/setup_env/unit.bats`, beside the existing
-`_doctor_check_versions real:` cases. Stubs are `#!/bin/sh` scripts that print
-`version: X`, placed in stub directories. Each test builds `PATH` as its stub directories
-plus `/usr/bin:/bin`, so `grep` and `head` still resolve. `MACOS`, `LINUX` and `UBUNTU` are
-set explicitly in every test: `load_setup_env` leaves them as inherited, and a Mac
-developer's shell exports `MACOS`.
+A new `tests/scripts/check_shellcheck_pin.bats` drives the script directly. The binary is a
+`#!/bin/sh` stub passed by absolute path, printing `version: X`. The pin is read from the
+real `lib/constants.sh` except in case 6. `_OVERRIDE_PLATFORM` is set in every case.
 
-| #   | setup                                                                          | expected                                                                             |
-| --- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ |
-| 1   | Linux, stub 0.11.0                                                             | PASS naming the stub's path                                                          |
-| 2   | **negative control**: Linux, stub 0.10.0 in a directory ahead of a stub 0.11.0 | FAIL naming the 0.10.0 stub's path, not the pinned one                               |
-| 3   | macOS, stub 0.12.0                                                             | WARN (not FAIL) naming path, installed version and CI pin; `_DOCTOR_WARN` +1, `_DOCTOR_FAILED` stays 0 |
-| 4   | macOS, mismatched `python3` stub                                               | still FAIL, which proves the WARN severity is scoped to shellcheck                   |
-| 5   | Linux, stub printing no version                                                | WARN "could not parse", unchanged helper path                                        |
+| # | case | expected |
+|---|---|---|
+| 1 | Linux, stub prints the pin | exit 0; output contains `shellcheck pin OK` and the stub's path |
+| 2 | **negative control**: Linux, stub prints 0.10.0 | exit 1; output names the stub's path, `0.10.0`, the pin and `brew uninstall shellcheck` |
+| 3 | Darwin, stub prints 0.12.0 | exit 0; output contains a warning naming the path, `0.12.0` and the pin; does not contain `shellcheck pin OK` |
+| 4 | Linux, stub prints no version | exit 1; says the version could not be parsed |
+| 5 | Darwin, stub prints no version | exit 0 with a warning |
+| 6 | `_OVERRIDE_CONSTANTS` points at a file with no `SHELLCHECK_VER` | exit 1 on both platforms |
+| 7 | **wiring**: `make --no-print-directory -C <repo> lint SHELLCHECK=<stub 0.10.0>`, `_OVERRIDE_PLATFORM=Linux` | non-zero, and output contains the mismatch line. The stub exits 0 for lint's own invocations |
 
-Test 2 is the one the backlog row demands. The check passes on every machine today, so
-without a case where a competing copy is present and wins, the check would ship untested
-against the only failure it exists to catch. Three mutations are part of verification, one per decision:
+Case 2 is the one the backlog row demands: the check passes on every development machine
+today, so without a competing copy present it would ship untested against the only failure
+it exists to catch. Case 7 proves the Makefile calls the script and acts on its exit. The
+guarded `--no-print-directory` form keeps it inside the MAKEFLAGS stdout partition that
+`tests/scripts/makefile_lint_scope.bats` enforces.
 
-- deleting the new call line turns 1–3 red;
-- passing `warn` for shellcheck unconditionally turns 2 red;
-- changing the helper's `_on_mismatch` default to `warn` turns 4 red, and 2 as well
-  because the Linux call relies on the default.
+Mutations, all part of verification:
+
+- delete the script call from the lint recipe: case 7 goes red;
+- make the mismatch branch exit 0 on Linux: cases 2 and 7 go red;
+- make the macOS mismatch exit 1: case 3 goes red;
+- make an unparseable version exit 0 on Linux: case 4 goes red;
+- revert the recipe's `"$(SHELLCHECK)"` to a bare `shellcheck`: case 7 still goes red on the
+  mismatch message, but the lint run it reports on uses a different binary. This is a
+  readability check on the diff, not a test.
 
 ## Verification
 
-- `make test` green; the five cases above pass; all three mutations go red.
-- On `claude`: `setup_env.sh -t doctor` shows `[PASS] shellcheck (0.11.0) — /usr/local/bin/shellcheck`.
-- On the Studio: the same line with `/opt/homebrew/bin/shellcheck`, and a WARN rather than a
-  FAIL the day brew moves past 0.11.0.
+- `make test` green; the seven cases above pass; the four test mutations go red.
+- On `claude` and `workstation`: `make lint` prints `shellcheck pin OK (0.11.0) —
+  /usr/local/bin/shellcheck`.
+- On the Studio: the same line with `/opt/homebrew/bin/shellcheck` today; a warning, not a
+  failure, the day brew moves past 0.11.0.
 
 ## Out of scope
 
-- Pinning shellcheck on macOS (`brew pin`, or a pinned download). The Mac verdict is a WARN
-  by decision; revisit if Mac-vs-CI lint skew ever costs a red CI run.
-- Resolving as a non-interactive actor (hooks started from editors, cron).
-- Doctor checks for `tflint`/`tfsec` pins, which have their own backlog row.
+- Pinning shellcheck on macOS (`brew pin`, or a pinned download). The Mac verdict is a
+  warning by decision; revisit if Mac-vs-CI lint skew ever costs a red CI run.
+- Failing lint on Linux when shellcheck is absent.
+- A `doctor` arm. Superseded, see Design.
+- Lint checks for the `tflint`/`tfsec` pins, which have their own backlog row.
 
 ## Multi-Lens Review
 
@@ -120,7 +154,7 @@ terraform_ansible's `common` role does list apt `shellcheck`, but `/usr/bin` is 
 position 11 on both Linux boxes, behind `/usr/local/bin` at 9, so an apt copy cannot
 outrank the pin. Only linuxbrew (positions 5–6) can. Neither box has the apt package
 installed.
-Disposition:
+Disposition: Addressed (operator, 2026-09-19): the check moved from `doctor` into `make lint` via `scripts/check-shellcheck-pin.sh`; the remedy text now names `brew uninstall shellcheck`.
 
 ### Ergonomics
 
@@ -134,7 +168,7 @@ shellcheck anyway, since the Brewfile tag doesn't gate installs, so it gets the 
 Assumption: the Mac WARN will be rare and brief rather than a standing warning. Settled by
 comparing brew shellcheck release dates against `git log -S 'SHELLCHECK_VER='
 lib/constants.sh`.
-Disposition:
+Disposition: (1) and (2) Addressed (operator, 2026-09-19): the script parses with bash regex and calls no external tool except the binary, so test PATH no longer matters; the remedy is corrected. (4) is moot, because lint does not run on a mac_mini. (3) is pending operator: the spec now lists "fail lint when shellcheck is absent on Linux" as out of scope.
 
 ### Risk
 
@@ -146,7 +180,7 @@ verdict, because the parse-failure message also names the path; assert `[PASS]` 
 found: the optional fifth argument is safe (4 callers), and the run_doctor end-to-end tests
 stub `_doctor_check_versions` by name.
 Assumption: no uncertain assumption found.
-Disposition:
+Disposition: Addressed (operator, 2026-09-19): the harness no longer depends on PATH; case 1 asserts `shellcheck pin OK`; the remedy is corrected.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
