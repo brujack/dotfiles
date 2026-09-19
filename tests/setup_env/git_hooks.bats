@@ -1075,6 +1075,21 @@ _build_subdir_target_repo() {
   [ "$output" = "tab-only-repo" ]
 }
 
+@test "_git_hooks_target_dir does not block on a FIFO as the root Makefile" {
+  # The root arm's own regular-file test. grep on a FIFO blocks forever,
+  # and nothing else in the suite puts a non-regular file at the root.
+  local _base="${TESTDIR}/root-fifo"
+  local _repo="${_base}/root-fifo-repo"
+  mkdir -p "${_repo}"
+  git init -q "${_repo}"
+  mkfifo "${_repo}/Makefile"
+
+  run timeout 10 bash -c 'source "$1"; _git_hooks_target_dir "$2"' _ \
+    "${REPO_ROOT}/lib/git_hooks.sh" "${_repo}"
+  [ "$status" -eq 4 ]
+  [ -z "$output" ]
+}
+
 @test "_git_hooks_target_dir resolves a committed symlinked Makefile that points inside the repo" {
   # A symlink is a legitimate way to share one Makefile between components.
   # Write access to the operator's own checkout is outside this code's threat
