@@ -41,7 +41,11 @@ if a linuxbrew copy ever appears.
 | platform | hint |
 |---|---|
 | Darwin | `install: brew install shellcheck` (unchanged; `Brewfile:108` is the source there) |
-| anything else | `install: ./setup_env.sh -t developer (installs the pinned SHELLCHECK_VER)` |
+| anything else | `install: ./setup_env.sh -t developer on Ubuntu (installs the pinned SHELLCHECK_VER)` |
+
+The "on Ubuntu" qualifier is load-bearing. `_install_ubuntu_shellcheck` runs only when
+`UBUNTU` and `HAS_DEVTOOLS` are both set, so on another Linux distribution, or an unmapped
+host, `-t developer` installs nothing. Every Linux box in today's fleet meets both conditions.
 
 The platform comes from `$${_OVERRIDE_PLATFORM:-$$(uname -s)}` in the recipe. A make recipe
 has no `MACOS`/`LINUX` in its environment. The override exists so one machine can test both
@@ -56,7 +60,9 @@ is correct whenever that copy is the pin, which is the only state the fleet reac
 ## Testing
 
 In `tests/scripts/makefile_lint_scope.bats`, beside the existing lint tests. Each case runs
-`make --no-print-directory -C <repo> lint SHELLCHECK=`. Overriding the variable to empty on
+`env PATH="${CLEAN_PATH}" make --no-print-directory -C <repo> lint SHELLCHECK=`, the same
+mock-stripped `PATH` the file's other real-lint cases use, so the `git` and `make` mocks
+cannot shadow the real tools. Overriding the variable to empty on
 the command line takes the skip branch on any machine, including ones that have
 shellcheck, and the guarded form keeps the case inside the MAKEFLAGS stdout partition.
 
@@ -159,3 +165,14 @@ commit that fixes the script, `make VAR=` is the only override that works (`:=` 
 exported variable), and case 7 costs less than the existing real-`make lint` test.
 Assumption: no uncertain assumption found. Disposition: Addressed (operator, 2026-09-19):
 descoped.
+
+### Round 3 (scoped)
+
+Reviewed at commit: `3ae53ad7`, one risk lens on the descoped sections only. Finding: no
+blocking issues. Two wording gaps: the tests must use the file's `CLEAN_PATH`, and the Linux
+hint holds only where `UBUNTU` and `HAS_DEVTOOLS` are set. Checked clean: `SHELLCHECK=` takes
+the skip branch (`Makefile:98` tests `$(SHELLCHECK)`), each case asserts presence and absence,
+and the apt claim matches `eccf7a1a`. Assumption: no uncertain assumption found. Disposition:
+Addressed. Both are wording fixes applied in the commit after `3ae53ad7`, which is why there
+is no re-review.
+
