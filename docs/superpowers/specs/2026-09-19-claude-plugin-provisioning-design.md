@@ -56,6 +56,27 @@ Today's hardcoded list installs 4 plugins that `settings.json` disables
 (`frontend-design`, `ansible-good-practices`, `terraform-skill`, `rust-analyzer-lsp`), so a
 fresh provision that succeeded would dirty ai-config and re-enable them.
 
+### Registration alone installs nothing, and some commands write by cwd
+
+Two further measurements, both 2026-09-19 on `claude`, CLI 2.1.278:
+
+- **`marketplace add` does not install plugins.** In a fresh `HOME` holding a copy of the
+  real `settings.json`, with a cwd outside any repository, adding all 7 marketplaces left
+  `claude plugins list --json` empty (0 plugins) and `settings.json` byte-identical. So the
+  reconcile's install step is load-bearing on the provisioning path. `installed_plugins.json`
+  on `claude` carries a user-scope `code-simplifier` row dotfiles never installed, with
+  timestamps that suggest a batch write. That may be an **interactive** session installing
+  enabled plugins at startup, which cannot be measured here without authenticating the
+  scratch `HOME`. It does not change the design: provisioning runs before any interactive
+  session exists.
+- **Some `claude plugins` subcommands write settings by cwd.** During review, a lens ran
+  `claude plugins disable caveman@caveman` under a scratch `HOME` with the dotfiles checkout
+  as its cwd. `disable` auto-detects scope, so it wrote `dotfiles/.claude/settings.json`
+  (project scope, the `permissions` block reordered) rather than the scratch file. It was
+  reverted and `git status` confirmed clean. This design calls only `marketplace add`,
+  `install -s user` and `update`, which default to user scope, and the real-CLI acceptance
+  runs with a cwd outside any repository for this reason.
+
 ### Three copies of one list, already drifted
 
 - `settings.json` `enabledPlugins`: 15 ids (11 `true`, 4 `false`).
