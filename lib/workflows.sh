@@ -131,6 +131,58 @@ if ids:
     || { printf 'claude plugins list: unparsable JSON\n' >&2; return 1; }
 }
 
+# Prints one tab-separated line describing the settings file's git status:
+#   <state>\t<repo-or-dash>\t<path>
+# state is clean|dirty|untracked|unknown. path is relative to repo for
+# clean/dirty, and the resolved absolute path (repo is "-") otherwise. Always
+# returns 0 -- this is an observation for the write guard below, never a
+# gate on its own. git is ${_CLAUDE_GUARD_GIT:-git}, always run with the four
+# repo-location variables stripped: git -C does not override an inherited
+# GIT_DIR (see shell.md), and git exports GIT_DIR into a pre-push hook
+# whenever the push originates from a worktree.
+_claude_settings_git_state() {
+  local _path _real _top _rel _out _git="${_CLAUDE_GUARD_GIT:-git}"
+  local -a _env=(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE)
+  _path="$(_claude_settings_path)"
+  if ! _real="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "${_path}" 2>/dev/null)"; then
+    printf 'unknown\t-\t%s\n' "${_path}"; return 0
+  fi
+  _top="$("${_env[@]}" "${_git}" -C "$(dirname "${_real}")" rev-parse --show-toplevel 2>/dev/null)"
+  if [[ -z ${_top} ]]; then printf 'untracked\t-\t%s\n' "${_real}"; return 0; fi
+  _rel="${_real#"${_top}"/}"
+  if ! "${_env[@]}" "${_git}" -C "${_top}" ls-files --error-unmatch -- "${_rel}" >/dev/null 2>&1; then
+    printf 'untracked\t%s\t%s\n' "${_top}" "${_real}"; return 0
+  fi
+  if ! _out="$("${_env[@]}" "${_git}" -C "${_top}" status --porcelain -- "${_rel}" 2>/dev/null)"; then
+    printf 'unknown\t%s\t%s\n' "${_top}" "${_rel}"; return 0
+  fi
+  if [[ -z ${_out} ]]; then printf 'clean\t%s\t%s\n' "${_top}" "${_rel}"
+  else printf 'dirty\t%s\t%s\n' "${_top}" "${_rel}"; fi
+}
+
+# Compares a before/after pair of _claude_settings_git_state lines (taken
+# around a plugin-provisioning run) and prints at most one advisory line.
+# Never changes what the caller returns on its own account -- rc 2 here
+# means "a warning was printed", not "provisioning failed"; the caller
+# decides whether that warrants aborting.
+_claude_settings_guard_check() {
+  local _bs _br _bp _as _ar _ap
+  IFS=$'\t' read -r _bs _br _bp <<<"$1"
+  IFS=$'\t' read -r _as _ar _ap <<<"$2"
+  case "${_bs}" in
+    clean) ;;
+    dirty) printf '%s/%s was already modified; not checked\n' "${_br}" "${_bp}"; return 0 ;;
+    *) printf '%s is %s; not checked\n' "${_bp}" "${_bs}"; return 0 ;;
+  esac
+  case "${_as}" in
+    clean) return 0 ;;
+    dirty) printf '%s/%s changed during plugin provisioning — review: git -C %s diff -- %s\n' \
+             "${_ar}" "${_ap}" "${_ar}" "${_ap}"; return 2 ;;
+    *) printf '%s/%s no longer resolves into a tracked file (%s)\n' "${_br}" "${_bp}" "${_as}"
+       return 2 ;;
+  esac
+}
+
 setup_claude_plugins() {
   if ! command -v claude &>/dev/null; then
     log_warn "claude not installed — skipping plugin setup"

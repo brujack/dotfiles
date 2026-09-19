@@ -19,6 +19,44 @@ setup() {
   cp "${REPO_ROOT}/tests/fixtures/claude-settings.json" "${SETTINGS}"
   export _OVERRIDE_CLAUDE_SETTINGS="${SETTINGS}"
   unset MOCK_CLAUDE_PLUGINS_LIST_JSON MOCK_CLAUDE_MARKETPLACE_LIST_JSON MOCK_CLAUDE_FAIL_ARGS
+
+  # _claude_settings_git_state/_claude_settings_guard_check tests need a REAL
+  # git, never tests/mocks/git (which answers almost everything with an empty
+  # stdout / exit 0 -- shell.md's PATH-mock-shadows-production-code pitfall).
+  # Resolve it with the mocks directory stripped by string filtering, the
+  # same `_clean_path` idiom tests/scripts/unit.bats already uses, rather
+  # than stripping a PATH directory outright -- that would also remove every
+  # other tool co-located with the mock (shell.md's co-location pitfall). A
+  # shim directory holding a symlink to the resolved binary keeps git's own
+  # argv0/exec-path resolution intact.
+  local _clean_path
+  _clean_path="$(printf '%s' "${PATH}" | tr ':' '\n' | grep -v 'tests/mocks' | tr '\n' ':' | sed 's/:$//')"
+  local _real_git
+  _real_git="$(PATH="${_clean_path}" command -v git)"
+  [[ -n "${_real_git}" ]]
+  local _git_shim="${BATS_TEST_TMPDIR}/git-shim"
+  mkdir -p "${_git_shim}"
+  ln -sf "${_real_git}" "${_git_shim}/git"
+  export _CLAUDE_GUARD_GIT="${_git_shim}/git"
+}
+
+# Builds ${BATS_TEST_TMPDIR}/repo as a real git repo tracking settings.json,
+# then points the settings path (via a symlink at ${HOME}/.claude/settings.json)
+# through it -- mirrors production, where _claude_settings_path resolves
+# through a real symlink into a tracked checkout. Exports GUARD_REPO (the
+# path git commands were run against) and GUARD_REPO_REAL (its realpath, the
+# form _claude_settings_git_state reports).
+_guard_repo_setup() {
+  GUARD_REPO="${BATS_TEST_TMPDIR}/repo"
+  mkdir -p "${GUARD_REPO}"
+  "${_CLAUDE_GUARD_GIT}" -C "${GUARD_REPO}" init -q
+  printf '{}' > "${GUARD_REPO}/settings.json"
+  "${_CLAUDE_GUARD_GIT}" -C "${GUARD_REPO}" -c user.email=t@t -c user.name=T add settings.json
+  "${_CLAUDE_GUARD_GIT}" -C "${GUARD_REPO}" -c user.email=t@t -c user.name=T commit -qm init
+  GUARD_REPO_REAL="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "${GUARD_REPO}")"
+  mkdir -p "${HOME}/.claude"
+  ln -sf "${GUARD_REPO}/settings.json" "${HOME}/.claude/settings.json"
+  export _OVERRIDE_CLAUDE_SETTINGS="${HOME}/.claude/settings.json"
 }
 
 # ── _claude_settings_path ───────────────────────────────────────────────────
@@ -259,4 +297,95 @@ JSON
   PATH="${_shim}" run _claude_installed_user_ids
   [ "$status" -eq 1 ]
   [ -z "$output" ]
+}
+
+# ── _claude_settings_git_state ──────────────────────────────────────────────
+
+@test "_claude_settings_git_state reports clean for an unmodified tracked file" {
+  _guard_repo_setup
+  run _claude_settings_git_state
+  [ "$status" -eq 0 ]
+  [ "$output" = "$(printf 'clean\t%s\tsettings.json' "${GUARD_REPO_REAL}")" ]
+}
+
+@test "_claude_settings_git_state reports dirty after the tracked file is modified" {
+  _guard_repo_setup
+  printf 'x' >> "${GUARD_REPO}/settings.json"
+  run _claude_settings_git_state
+  [ "$status" -eq 0 ]
+  [ "$output" = "$(printf 'dirty\t%s\tsettings.json' "${GUARD_REPO_REAL}")" ]
+}
+
+@test "_claude_settings_git_state reports untracked for a file outside any git repo" {
+  local _outside="${BATS_TEST_TMPDIR}/outside-settings.json"
+  printf '{}' > "${_outside}"
+  mkdir -p "${HOME}/.claude"
+  ln -sf "${_outside}" "${HOME}/.claude/settings.json"
+  export _OVERRIDE_CLAUDE_SETTINGS="${HOME}/.claude/settings.json"
+  run _claude_settings_git_state
+  [ "$status" -eq 0 ]
+  [ "$output" = "$(printf 'untracked\t-\t%s' "${_outside}")" ]
+}
+
+@test "_claude_settings_git_state reports untracked when the symlink is replaced by a regular file" {
+  _guard_repo_setup
+  rm -f "${HOME}/.claude/settings.json"
+  printf '{}' > "${HOME}/.claude/settings.json"
+  run _claude_settings_git_state
+  [ "$status" -eq 0 ]
+  [ "$output" = "$(printf 'untracked\t-\t%s' "${HOME}/.claude/settings.json")" ]
+}
+
+@test "_claude_settings_git_state ignores an exported GIT_DIR pointing at a decoy repo" {
+  _guard_repo_setup
+  local _decoy="${BATS_TEST_TMPDIR}/decoy"
+  mkdir -p "${_decoy}"
+  "${_CLAUDE_GUARD_GIT}" -C "${_decoy}" init -q
+  GIT_DIR="${_decoy}/.git" run _claude_settings_git_state
+  [ "$status" -eq 0 ]
+  [ "$output" = "$(printf 'clean\t%s\tsettings.json' "${GUARD_REPO_REAL}")" ]
+}
+
+# ── _claude_settings_guard_check ────────────────────────────────────────────
+
+@test "_claude_settings_guard_check prints nothing and returns 0 when state is unchanged (clean)" {
+  local _clean
+  _clean="$(printf 'clean\t%s\tsettings.json' "${GUARD_REPO:-/some/repo}")"
+  run _claude_settings_guard_check "${_clean}" "${_clean}"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "_claude_settings_guard_check warns and returns 2 when clean becomes dirty" {
+  local _before _after
+  _before="$(printf 'clean\t/some/repo\tsettings.json')"
+  _after="$(printf 'dirty\t/some/repo\tsettings.json')"
+  run _claude_settings_guard_check "${_before}" "${_after}"
+  [ "$status" -eq 2 ]
+  [ "$output" = "/some/repo/settings.json changed during plugin provisioning — review: git -C /some/repo diff -- settings.json" ]
+}
+
+@test "_claude_settings_guard_check warns and returns 2 when clean becomes untracked" {
+  local _before _after
+  _before="$(printf 'clean\t/some/repo\tsettings.json')"
+  _after="$(printf 'untracked\t-\t/some/repo/settings.json')"
+  run _claude_settings_guard_check "${_before}" "${_after}"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"no longer resolves into a tracked file"* ]]
+}
+
+@test "_claude_settings_guard_check returns 0 and says not checked when already dirty before" {
+  local _dirty
+  _dirty="$(printf 'dirty\t/some/repo\tsettings.json')"
+  run _claude_settings_guard_check "${_dirty}" "${_dirty}"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"was already modified; not checked"* ]]
+}
+
+@test "_claude_settings_guard_check returns 0 and says not checked when already untracked before" {
+  local _untracked
+  _untracked="$(printf 'untracked\t-\t/some/path/settings.json')"
+  run _claude_settings_guard_check "${_untracked}" "${_untracked}"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"not checked"* ]]
 }
