@@ -63,12 +63,11 @@ Two further measurements, both 2026-09-19 on `claude`, CLI 2.1.278:
 - **`marketplace add` does not install plugins.** In a fresh `HOME` holding a copy of the
   real `settings.json`, with a cwd outside any repository, adding all 7 marketplaces left
   `claude plugins list --json` empty (0 plugins) and `settings.json` byte-identical. So the
-  reconcile's install step is load-bearing on the provisioning path. `installed_plugins.json`
-  on `claude` carries a user-scope `code-simplifier` row dotfiles never installed, with
-  timestamps that suggest a batch write. That may be an **interactive** session installing
-  enabled plugins at startup, which cannot be measured here without authenticating the
-  scratch `HOME`. It does not change the design: provisioning runs before any interactive
-  session exists.
+  reconcile's install step is load-bearing on the provisioning path. The user-scope
+  `code-simplifier` row whose batch timestamp suggested an automatic install was written by
+  the fourth copy above, not by the CLI; the Goal-Fit round 1 inference is refuted. That same
+  loop is most likely the "four installs failed on first provision" in the #84 row: four
+  plugins, installed before any marketplace was registered.
 - **Some `claude plugins` subcommands write settings by cwd.** During review, a lens ran
   `claude plugins disable caveman@caveman` under a scratch `HOME` with the dotfiles checkout
   as its cwd. `disable` auto-detects scope, so it wrote `dotfiles/.claude/settings.json`
@@ -77,15 +76,19 @@ Two further measurements, both 2026-09-19 on `claude`, CLI 2.1.278:
   `install -s user` and `update`, which default to user scope, and the real-CLI acceptance
   runs with a cwd outside any repository for this reason.
 
-### Three copies of one list, already drifted
+### Four copies of one list, already drifted
 
 - `settings.json` `enabledPlugins`: 15 ids (11 `true`, 4 `false`).
 - `setup_claude_plugins`' list: 14 ids.
 - `run_update`'s claude-section loop (`lib/workflows.sh`): 14 ids, identical to the setup
   list.
+- `_install_ubuntu_brew_packages` (`lib/linux_ubuntu.sh:672-675`, added in #275): 4 ids
+  (`superpowers`, `code-simplifier`, `code-review`, `context7`), installed right after
+  `claude-code@latest`. Found while writing the plan (2026-09-19); the spec's first version
+  counted three copies.
 
-`code-simplifier@claude-plugins-official` is enabled in settings and in neither dotfiles
-list. The 7 marketplaces the setup list uses match the 7 declared, exactly.
+`code-simplifier@claude-plugins-official` is enabled in settings and in neither of the
+first two dotfiles lists; the fourth copy is what installed it. The 7 marketplaces the setup list uses match the 7 declared, exactly.
 
 ## Decisions (operator, 2026-09-19)
 
@@ -203,6 +206,13 @@ shadows `git` on `PATH`, so guard tests point this seam at the real binary (`she
   absent `python3` returns 1; a failed list call is rc 2 (step 3). rc 2 → `log_warn`
   naming that plugin provisioning was partial, and continue. The write guard wraps the call
   and only ever warns.
+- **`_install_ubuntu_brew_packages`** (`lib/linux_ubuntu.sh`): its hardcoded 4-plugin loop
+  is replaced by the same call `run_setup_user` makes (the guarded provision). On a fresh
+  Linux box this is the provisioning path that matters: `setup_user` runs before
+  `claude-code` is installed, so its call skips (`claude` absent, rc 0), and this is the
+  first point at which plugins can be provisioned. Any non-zero result adds
+  `claude-plugins` to the function's `_failed` list, so it reports through that function's
+  existing tri-state (rc 2, partial) and never aborts `install_ubuntu_packages`.
 - **`run_update`:**
   - **Order (E1).** The `ai-config` section (`setup_ai_config`, today at
     `lib/workflows.sh:700-703`, gated `_run_all`) moves ahead of the claude section, so a
@@ -255,8 +265,12 @@ recorded to `MOCK_CALLS_FILE`. The existing `MOCK_CLAUDE_PLUGINS_LIST_OUTPUT` te
 stays for any caller that does not pass `--json`; the 9 tests using it are updated where
 they exercise `setup_claude_plugins`.
 
-A fixture `settings.json` is supplied through `_OVERRIDE_CLAUDE_SETTINGS`, set in
-`setup()` so no test can read the operator's real file. Every positive case below uses
+A fixture `settings.json` is supplied through `_OVERRIDE_CLAUDE_SETTINGS`. `load_mocks`
+exports it by default, pointing at a tracked read-only fixture, for the same reason it
+already exports `MOCK_PYENV_WHICH_STDOUT` and `_CARGO_BIN`: every existing `run_update` and
+`run_setup_user` test runs under a redirected `HOME` with no `settings.json`, and would
+otherwise hit the manifest's rc 1 and FAIL. A test that lets the mock edit the file points
+the variable at its own copy. Every positive case below uses
 the same fixture, which declares at least one `github` and one `git` marketplace and both
 `true` and `false` plugins.
 
