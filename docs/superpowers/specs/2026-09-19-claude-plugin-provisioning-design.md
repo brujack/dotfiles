@@ -200,3 +200,73 @@ mock that writes nothing.
   one such failure).
 - **Removing plugins no longer in `settings.json`.** Uninstalling is destructive and was
   not asked for.
+
+## Multi-Lens Review
+
+Reviewed at commit: `7fa3c2b8` (Step 7 self-review commit, before Step 8 dispatch)
+
+### Goal-Fit
+
+Finding: Worth building, sized about right. (1) The CLI appears to install enabled
+plugins by itself once their marketplace is registered: `code-simplifier` has a user-scope
+row dotfiles never installed, and `warp`/`pyright` rows share one millisecond timestamp
+across scopes. That is inferred from timestamps, not confirmed. If true, the load-bearing
+value is marketplace registration, failure propagation and exact-id matching; reconcile in
+`-t update` adds little beyond it. (2) Acceptance case 2 names no instrument: against the
+real CLI there is no `MOCK_CALLS_FILE`, so "zero add/install" needs an argv-logging `PATH`
+shim, and the acceptance should use a symlinked `settings.json`. (3) An empty manifest is
+caught only if the positive cases share one fixture; the idempotency case should also
+assert the manifest produced at least one `plugin` line. (4) The hardcoded-list regression
+test greps only `@claude-plugins-official`; a reintroduced `caveman@caveman` list passes
+it. (5) In `run_update`, a reconcile rc 1 caused by `plugins list --json` failing also
+skips the update loop, although the manifest parsed. The lens also reported, and reverted,
+an accidental project-scope write to `dotfiles/.claude/settings.json` from
+`claude plugins disable` run with the repo as cwd; `git status` confirmed clean afterwards.
+Assumption: `marketplace add` of an already-declared entry may re-serialise it on another
+CLI version or on macOS. Measured 2026-09-19 on `studio` (CLI 2.1.278) through a symlinked
+copy: content byte-identical after `add` and after `install` of a `true` plugin. Holds on
+both platforms at this version.
+Disposition:
+
+### Ergonomics
+
+Finding: (1) Section order defeats decision 4. The claude section runs at
+`lib/workflows.sh:383-449`, before `setup_ai_config` at `:700-703`, which runs only under
+`_run_all`. A full `-t update` reconciles against the settings.json from before this run's
+pull, so a newly enabled plugin arrives on the second update. `--claude-only` never pulls
+ai-config at all. (2) Reconcile rc 2 FAILs the whole update, while `git-repos`,
+`git-hooks`, `legacy-rsync` and `cargo-tools` map rc 2 to WARN. One unreachable
+marketplace or `unsupported` source would keep every routine update red on every machine.
+(3) The invariant is false as worded: `marketplace add` and `install` replace the target
+file (new inode) with identical content, which `cmp` cannot see. Reword to "never changes
+its content", and run the acceptance against a symlinked `settings.json`, checking the
+link survives. (4) The update loop now covers only `true` ids, so the 4 installed but
+disabled plugins stop receiving updates.
+Assumption: that on macOS the CLI writes through the symlink rather than replacing it.
+Measured 2026-09-19 on `studio`: after `marketplace add`, `stat -f %HT` still reports
+`Symbolic Link` (target inode changed, content identical). Holds.
+Disposition:
+
+### Risk
+
+Finding: (1) The write invariant is proven once, manually, and never enforced at run time.
+A plugin disabled between the manifest read and a later install (interactive toggle, peer
+session, ai-config pull) is flipped back to `true` in the tracked file, and a future CLI
+version that re-serialises on install would dirty ai-config on every provision silently.
+Remedy: hash the resolved settings file before and after, and return rc 2 naming the
+change if it moved. (2) The spec activates a dormant abort path: `run_setup_user`'s
+`setup_claude_plugins || return 1` has never been able to fire; rc 1 would now skip
+everything after it in `setup_user`. State that. (3) A valid file yielding zero `plugin`
+lines returns rc 0, the silent success the spec exists to remove; zero plugins should be
+rc 2. (4) Where reconcile's stderr goes in `run_update` is unstated; unless captured into
+`err_claude`, the FAIL detail will not say why. (5) The 4 disabled plugins stop updating.
+Premise re-verified with a symlinked settings.json: add and install of a `true` plugin
+leave content identical; install of a `false` plugin rewrites it to `true`, link intact.
+Assumption: that CLI versions the fleet auto-updates to keep not writing settings.json on
+`add` of a declared marketplace or `install` of a `true` plugin. Refutable per version by
+the fixture above; the before/after hash in finding (1) would check it on every run.
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
