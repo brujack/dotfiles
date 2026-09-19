@@ -760,6 +760,10 @@ JSON
   # own rc (2, since the file just went clean -> dirty) must not leak out.
   [ "$status" -eq 0 ]
   [[ "$output" == *"changed during plugin provisioning"* ]]
+  # A guard warning must reach log_warn, not log_info. bats merges stderr
+  # into $output, so without this the routing is unobserved and swapping
+  # the two calls leaves every other assertion in this file green.
+  [[ "$output" == *"[WARN]"* ]]
 }
 
 @test "provision_claude_plugins reports an already-dirty settings.json without checking further, and still returns setup_claude_plugins's rc" {
@@ -775,4 +779,24 @@ JSON
   # on its own account and must not override it.
   [ "$status" -eq 2 ]
   [[ "$output" == *"was already modified; not checked"* ]]
+  # An informational guard line is log_info, never log_warn: a file that
+  # was already dirty before provisioning started is not a finding.
+  [[ "$output" == *"[INFO]"* ]]
+  [[ "$output" != *"[WARN]  ${GUARD_REPO_REAL}"* ]]
+}
+
+@test "provision_claude_plugins prints no guard line at all when settings.json stays clean" {
+  _guard_repo_setup
+  # clean -> clean is the third routing case the guard has to handle, and
+  # the only one whose correct output is nothing. Without this test the
+  # `[[ -n ${_msg} ]]` emptiness guard can be deleted and the suite stays
+  # green while every clean provision emits a bare, contentless log line.
+  run provision_claude_plugins
+  [ "$status" -eq 2 ]
+  # Nothing on this path logs at INFO: the {} manifest reaches no install
+  # and no marketplace add, so an [INFO] line here can only be the guard's.
+  # Asserting on the level rather than on each message text is what makes
+  # the emptiness guard load-bearing -- `log_info ""` still prints a line,
+  # and it carries none of the guard's message text to match against.
+  [[ "$output" != *"[INFO]"* ]]
 }
