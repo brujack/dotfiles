@@ -45,6 +45,76 @@ setup_claude_mcp() {
   log_info "GitHub MCP configured (${_output})"
 }
 
+# Single source of truth for where the plugin manifest lives — every reader
+# below and the write guard (a later task) resolve the path through this one
+# helper rather than repeating the fallback chain.
+_claude_settings_path() {
+  printf '%s' "${_OVERRIDE_CLAUDE_SETTINGS:-${HOME}/.claude/settings.json}"
+}
+
+# Prints tab-separated manifest lines derived from settings.json:
+#   marketplace\t<name>\t<repo-or-url>   -- a declared extraKnownMarketplaces entry
+#   unsupported\t<name>\t<type>          -- an entry whose source type/ref this
+#                                            reads as neither github nor git
+#   plugin\t<id>\t<true|false>           -- an enabledPlugins entry (non-boolean
+#                                            values read as false)
+# Returns 1 with no stdout when the file is missing, unreadable, not valid
+# JSON, not a JSON object, or python3 cannot be resolved.
+_claude_plugin_manifest() {
+  local _file
+  _file="$(_claude_settings_path)"
+  [[ -r "${_file}" ]] || return 1
+  command -v python3 >/dev/null 2>&1 || return 1
+  python3 - "${_file}" <<'PY'
+import json, sys
+try:
+    with open(sys.argv[1], encoding="utf-8") as fh:
+        data = json.load(fh)
+except (OSError, ValueError):
+    sys.exit(1)
+if not isinstance(data, dict):
+    sys.exit(1)
+out = []
+markets = data.get("extraKnownMarketplaces") or {}
+for name, entry in (markets.items() if isinstance(markets, dict) else []):
+    src = entry.get("source") if isinstance(entry, dict) else None
+    kind = src.get("source") if isinstance(src, dict) else None
+    key = {"github": "repo", "git": "url"}.get(kind)
+    ref = src.get(key) if key else None
+    if isinstance(ref, str) and ref:
+        out.append(f"marketplace\t{name}\t{ref}")
+    else:
+        out.append(f"unsupported\t{name}\t{kind or 'missing'}")
+plugins = data.get("enabledPlugins") or {}
+for pid, val in (plugins.items() if isinstance(plugins, dict) else []):
+    out.append(f"plugin\t{pid}\t{'true' if val is True else 'false'}")
+if out:
+    print("\n".join(out))
+PY
+}
+
+# Prints one registered marketplace name per line, from
+# `claude plugins marketplace list --json`. Returns 1 (CLI output echoed to
+# stderr) when the call or the parse fails.
+_claude_registered_marketplaces() {
+  local _json
+  _json="$(claude plugins marketplace list --json < /dev/null 2>&1)" \
+    || { printf '%s\n' "${_json}" >&2; return 1; }
+  printf '%s' "${_json}" | python3 -c 'import json,sys
+print("\n".join(m["name"] for m in json.load(sys.stdin)))' 2>/dev/null
+}
+
+# Prints one installed plugin id per line, restricted to user-scope
+# installs, from `claude plugins list --json`. Same failure contract as
+# _claude_registered_marketplaces.
+_claude_installed_user_ids() {
+  local _json
+  _json="$(claude plugins list --json < /dev/null 2>&1)" \
+    || { printf '%s\n' "${_json}" >&2; return 1; }
+  printf '%s' "${_json}" | python3 -c 'import json,sys
+print("\n".join(p["id"] for p in json.load(sys.stdin) if p.get("scope") == "user"))' 2>/dev/null
+}
+
 setup_claude_plugins() {
   if ! command -v claude &>/dev/null; then
     log_warn "claude not installed — skipping plugin setup"
