@@ -1107,3 +1107,22 @@ _is_make_c_candidate() {
   [[ "${output}" == *"brew install shellcheck"* ]]
   [[ "${output}" != *"setup_env.sh -t developer"* ]]
 }
+
+@test "lint skip hint follows uname -s when _OVERRIDE_PLATFORM is unset" {
+  # The two cases above both set the override, so neither exercises the
+  # default every real run takes. Derive the expectation independently of
+  # the recipe: a hardcoded platform in the Makefile then fails on whichever
+  # host it does not name.
+  local _want _not
+  if [ "$(uname -s)" = Darwin ]; then
+    _want="brew install shellcheck"; _not="setup_env.sh -t developer"
+  else
+    _want="./setup_env.sh -t developer on Ubuntu"; _not="brew install shellcheck"
+  fi
+  run env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+    -u _OVERRIDE_PLATFORM PATH="${CLEAN_PATH}" \
+    make --no-print-directory -C "${REPO_ROOT}" lint SHELLCHECK=
+  [[ "${output}" == *"shellcheck not found, skipping"* ]]
+  [[ "${output}" == *"${_want}"* ]]
+  [[ "${output}" != *"${_not}"* ]]
+}
