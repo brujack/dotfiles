@@ -39,7 +39,7 @@ load_mocks() {
 # half of its test's claim. Failure output names what was actually found,
 # which a bare `!` never did.
 #
-# Extra args are passed through to grep, so `refute_grep -E 'pat' file` works.
+# Extra args are passed through to grep, so `refute_grep 'pat' file -E` works.
 refute_grep() {
   local _pattern="$1" _file="$2"
   shift 2

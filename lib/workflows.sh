@@ -189,6 +189,41 @@ _claude_settings_guard_check() {
   esac
 }
 
+# Splits one tab-separated manifest line ($1) into _type/_name/_ref/_extra.
+# Deliberately NOT `IFS=$'\t' read -r _type _name _ref`: bash always treats
+# tab as "IFS whitespace" regardless of what else IFS holds, so a run of
+# adjacent tabs collapses to a single delimiter -- an empty middle field
+# (an empty marketplace name or plugin id) silently shifts _ref into _name
+# and leaves _ref empty, rather than producing the empty _name the manifest
+# actually encodes. Parameter-expansion splitting below takes each tab as
+# its own boundary, so an empty field stays empty.
+#
+# _extra catches the opposite corruption: a settings.json key that itself
+# contains a literal tab or newline re-splits into extra fields the manifest
+# never intended, silently shrinking _name and shifting real content into
+# _ref (e.g. an id "a<TAB>b" makes _name="a" and _ref start with "b"). A
+# non-empty _extra after taking the first three fields means the line has
+# more than three fields, which only happens this way -- callers must
+# record and skip such a line rather than trust _name/_ref from it.
+_claude_manifest_split_line() {
+  local _s="$1"
+  if [[ "${_s}" == *$'\t'* ]]; then
+    _type="${_s%%$'\t'*}"; _s="${_s#*$'\t'}"
+  else
+    _type="${_s}"; _s=""
+  fi
+  if [[ "${_s}" == *$'\t'* ]]; then
+    _name="${_s%%$'\t'*}"; _s="${_s#*$'\t'}"
+  else
+    _name="${_s}"; _s=""
+  fi
+  if [[ "${_s}" == *$'\t'* ]]; then
+    _ref="${_s%%$'\t'*}"; _extra="${_s#*$'\t'}"
+  else
+    _ref="${_s}"; _extra=""
+  fi
+}
+
 setup_claude_plugins() {
   if ! command -v claude &>/dev/null; then
     log_warn "claude not installed — skipping plugin setup"
@@ -219,16 +254,23 @@ setup_claude_plugins() {
   fi
 
   local -a _failures=()
-  local _type _name _ref
+  local _line _type _name _ref _extra
 
   # Register every declared marketplace not already registered, and record
   # every unsupported source. `< /dev/null` on the claude call is required:
   # without it, claude would read from the loop's own here-string stdin and
   # consume the manifest lines still waiting to be read.
-  while IFS=$'\t' read -r _type _name _ref; do
+  while IFS= read -r _line; do
+    _claude_manifest_split_line "${_line}"
+    if [[ -n "${_extra}" ]]; then
+      _failures+=("malformed Claude manifest entry, skipped (embedded tab or newline): ${_type} ${_name}")
+      continue
+    fi
     case "${_type}" in
       marketplace)
-        if ! grep -qxF -- "${_name}" <<<"${_registered}"; then
+        if [[ -z "${_name}" ]]; then
+          _failures+=("Claude marketplace entry has an empty name (source: ${_ref})")
+        elif ! grep -qxF -- "${_name}" <<<"${_registered}"; then
           if ! claude plugins marketplace add "${_ref}" < /dev/null; then
             _failures+=("failed to add Claude marketplace: ${_name} (${_ref})")
           fi
@@ -246,10 +288,18 @@ setup_claude_plugins() {
   # "already installed". A plugin whose marketplace failed to add above is
   # still attempted here; its own failure is recorded independently.
   local _enabled_count=0
-  while IFS=$'\t' read -r _type _name _ref; do
-    [[ "${_type}" == "plugin" && "${_ref}" == "true" ]] || continue
+  while IFS= read -r _line; do
+    _claude_manifest_split_line "${_line}"
+    [[ "${_type}" == "plugin" ]] || continue
+    if [[ -n "${_extra}" ]]; then
+      _failures+=("malformed Claude manifest entry, skipped (embedded tab or newline): plugin ${_name}")
+      continue
+    fi
+    [[ "${_ref}" == "true" ]] || continue
     _enabled_count=$((_enabled_count + 1))
-    if grep -qxF -- "${_name}" <<<"${_installed}"; then
+    if [[ -z "${_name}" ]]; then
+      _failures+=("Claude plugin entry has an empty id")
+    elif grep -qxF -- "${_name}" <<<"${_installed}"; then
       log_info "Claude plugin already installed: ${_name}"
     elif ! claude plugins install -s user "${_name}" < /dev/null; then
       _failures+=("failed to install Claude plugin: ${_name}")
