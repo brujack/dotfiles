@@ -1,6 +1,6 @@
 # Claude plugin provisioning reads settings.json and registers marketplaces
 
-**Status:** Approved design 2026-09-19; revised after Multi-Lens Review rounds 1-3
+**Status:** Approved design 2026-09-19; revised after Multi-Lens Review rounds 1-4
 **Closes backlog rows:** "`setup_claude_plugins` installs `plugin@marketplace` refs with no
 `marketplace add` anywhere" (#84) and "`setup_claude_plugins`'s membership test is an
 unanchored substring match" (#101). Leaves "Claude plugin marketplaces are a dependency
@@ -147,16 +147,20 @@ tracked file every session on the machine shares. So the guard asks git that que
 directly, before and after the span in which the CLI may write (round 3, replacing the
 round 2 snapshot/compare design, which kept producing defects of its own):
 
-- Resolve `~/.claude/settings.json` to its real path with `python3`
-  (`os.path.realpath`), find the enclosing repository, and print
+- Resolve the same path the manifest reads, `${_OVERRIDE_CLAUDE_SETTINGS:-${HOME}/.claude/settings.json}`,
+  to its real path with `python3` (`os.path.realpath`), find the enclosing repository, and print
   `git status --porcelain -- <file>` for it, with the git environment stripped
   (`env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE`, `shell.md`).
   Print `untracked` if the file is not in a git repository, and `unknown` if git fails.
 - The caller compares the two results:
-  - clean before, modified after → WARN
-    `ai-config settings.json modified during plugin provisioning — review: git -C <repo> diff .claude/settings.json`;
+  - clean before, and anything other than clean after (a status line, `untracked` or
+    `unknown`) → WARN
+    `<real path> changed during plugin provisioning — review: git -C <repo> diff -- <path in repo>`,
+    or, for `untracked`/`unknown` after, `<path> no longer resolves into a tracked file`.
+    The second form catches the symlink being replaced by a regular file, which would
+    silently detach the machine from ai-config (Multi-Lens Review round 4);
   - already modified before → one info line (`was already modified; not checked`);
-  - `untracked` or `unknown` either time → one info line naming which.
+  - `untracked` or `unknown` before → one info line naming which.
 - It never fails and never aborts. It reports what git sees, so a reformat, a flipped
   value and a concurrent session's edit are all reported the same way, as a dirty file
   with a diff to read. That is the actionable fact in each case. It cannot tell them apart
@@ -170,9 +174,9 @@ shadows `git` on `PATH`, so guard tests point this seam at the real binary (`she
 
 - **`run_setup_user`** (`lib/workflows.sh:189`): the line
   `setup_claude_plugins || return 1` has never been able to fire, because the function
-  has always returned 0. This spec activates it (R2): a missing or broken settings file,
-  an absent `python3`, or a failed `--json` list call now returns 1, which stops
-  `setup_user` before `run_setup_or_developer`, the git-hooks sweep and the ledger entry.
+  has always returned 0. This spec activates it (R2): a missing or broken settings file or
+  an absent `python3` now returns 1, which stops `setup_user` before
+  `run_setup_or_developer`, the git-hooks sweep and the ledger entry.
   That is deliberate, since provisioning cannot proceed from a settings file it cannot
   read, but it is a change in behaviour. Only a missing or unparsable settings file or an
   absent `python3` returns 1; a failed list call is rc 2 (step 3). rc 2 → `log_warn`
@@ -195,9 +199,14 @@ shadows `git` on `PATH`, so guard tests point this seam at the real binary (`she
       it at user scope. This replaces the hardcoded 14-item loop. If that list fails, the
       loop is skipped and the section FAILs naming it (round 3), rather than updating
       nothing and reporting OK. An update failure FAILs the section, as today.
-    - Then check the guard. Its warning, or a reconcile rc 2, WARNs the section (E2). If
-      the section FAILed, the guard's warning is appended to `fail_result_claude` so it is
-      not hidden behind the failure (round 3).
+    - Then check the guard, before `_update_record_end`, and settle the status once:
+      - if anything FAILed (reconcile rc 1, the re-list, an update), write every message,
+        including the guard's warning and any reconcile rc 2 failures, to
+        `fail_result_claude`, then `_update_record_end "claude" 1`. `_update_warn` is never
+        called on this path, because it overwrites the status and would downgrade the FAIL
+        (round 4);
+      - otherwise `_update_record_end "claude" 0`, then, if there is a guard warning or a
+        reconcile rc 2, one `_update_warn` whose message joins them with `; ` (E2).
     - The post-update skill scan and attestation audit that follow are unchanged.
   - **Coupling to ai-config's checkout (round 2 R2).** With the pull ahead of it, the
     section reads whatever the pull left. `setup_ai_config` runs
@@ -215,10 +224,12 @@ shadows `git` on `PATH`, so guard tests point this seam at the real binary (`she
 `tests/mocks/claude` gains `--json` handling: `plugins list --json` prints
 `MOCK_CLAUDE_PLUGINS_LIST_JSON`, `plugins marketplace list --json` prints
 `MOCK_CLAUDE_MARKETPLACE_LIST_JSON`, and `MOCK_CLAUDE_FAIL_ARGS` (a substring of the argv)
-makes a matching invocation exit 1. `MOCK_CLAUDE_EDIT_SETTINGS=<verb>:<mode>` makes the
-named verb (`install` or `update`) append a newline to the file `_OVERRIDE_CLAUDE_SETTINGS`
-names, to drive the guard. `MOCK_CLAUDE_FAIL_ON_CALL=<n>` fails only the nth
-`plugins list --json` invocation, so the re-list can fail while reconcile's list succeeds. Each defaults to an empty JSON list, to not failing or to not editing, and every argv is still
+makes a matching invocation exit 1. `MOCK_CLAUDE_EDIT_SETTINGS=<verb>` makes the named
+verb (`install` or `update`) append a newline to the file `_OVERRIDE_CLAUDE_SETTINGS`
+names, to drive the guard. `MOCK_CLAUDE_FAIL_ON_CALL=<n>` fails only the nth invocation
+whose argv is exactly `plugins list --json` (not `plugins marketplace list --json`),
+counting in a file under `BATS_TEST_TMPDIR`, so the re-list can fail while reconcile's
+list succeeds. Each defaults to an empty JSON list, to not failing or to not editing, and every argv is still
 recorded to `MOCK_CALLS_FILE`. The existing `MOCK_CLAUDE_PLUGINS_LIST_OUTPUT` text path
 stays for any caller that does not pass `--json`; the 9 tests using it are updated where
 they exercise `setup_claude_plugins`.
@@ -241,18 +252,23 @@ Cases:
   marketplaces and plugins are still processed.
 - An `unsupported` source returns 2 and names the marketplace and type.
 - A valid file with no `true` plugin returns 2, naming it (R3).
-- Guard, with the settings fixture committed in a real temporary git repo and
-  `_CLAUDE_GUARD_GIT` pointed at the real git: an edit during `install` produces the
-  `modified during plugin provisioning` warning with the `git diff` pointer; an edit
-  during `update` in `run_update` is caught too; an already-modified file produces only
-  the info line; a fixture outside any repo produces `untracked`; a `run_update` that
-  FAILs still carries the guard warning in its result; the guard never changes an rc.
+- Guard, with the settings fixture committed in a real temporary git repo,
+  `_OVERRIDE_CLAUDE_SETTINGS` naming it and `_CLAUDE_GUARD_GIT` pointed at the real git:
+  - an edit during `install` produces the `changed during plugin provisioning` warning
+    with the `git diff` pointer, and `setup_claude_plugins`' rc is unchanged by it;
+  - an edit during `update` in `run_update` is caught too, and the section is WARN;
+  - a `run_update` that FAILs and has an edit keeps `status_claude` FAIL and carries the
+    guard warning in its result;
+  - an already-modified file produces the `was already modified; not checked` line and no
+    warning;
+  - a fixture outside any repo produces the `untracked` info line;
+  - a fixture that is clean before and replaced by an untracked regular file during the
+    run produces the `no longer resolves into a tracked file` warning.
 - A list-call failure in `setup_claude_plugins` returns 2 with the CLI's message and zero
   `add`/`install` calls.
 - In `run_update`, a failing re-list (`MOCK_CLAUDE_FAIL_ON_CALL=2`) makes zero `update`
   calls and FAILs naming it.
 - Missing, unparsable and non-object settings each return 1 with zero `claude` calls.
-- `plugins list --json` failing returns 1.
 - `claude` absent returns 0.
 - Everything present: zero `add` and zero `install` calls, return 0 — and the manifest
   produced at least one `true` `plugin` line, so the case cannot pass on an empty reader
@@ -281,7 +297,8 @@ to a log before exec'ing the real binary (G2):
 3. Add a bogus marketplace to the copy's `extraKnownMarketplaces`: rc 2, named on stderr,
    the other entries unaffected.
 4. In a second fresh `HOME`, put the settings copy re-indented to 4 spaces inside a
-   temporary git repository and commit it. Record the guard state, run
+   temporary git repository, commit it, and make `$HOME/.claude/settings.json` a symlink
+   to it. Record the guard state, run
    `setup_claude_plugins`, record it again: the guard reports the file modified (the CLI
    re-serialises it on `add`/`install`), and `git diff` shows whitespace only.
 
@@ -444,3 +461,23 @@ compare step, the reread branch and the key classification, and reports concurre
 as what they are, a dirty ai-config. The re-list failure FAILs by name; a list-call
 failure is rc 2, not rc 1. The concurrency assumption no longer breaks the design: the
 guard reports whatever git sees.
+
+### Round 4 (scoped: risk lens on the round 3 revision)
+
+Reviewed at commit: `5bca25d9`.
+
+Risk: No new mechanism defects. Specification gaps: (1) a FAIL could be downgraded to WARN,
+because the guard check was unordered against `_update_record_end` and `_update_warn`
+overwrites the status; (2) a leftover Callers sentence still said a failed list call
+returns 1; (3) a symlink replaced by a regular file produced only an info line, silently
+detaching the machine from ai-config; (4) the guard, the mock and the tests could watch
+different files, and acceptance case 4 did not state the symlink. Harness details: a test
+still encoded the retired rc 1; a leftover `<mode>` in the mock variable; the nth-call mock
+needed persisted state and an exact argv; the guard-emits-nothing case needed companions.
+Verified: git reports ` M` for same-size rewrites (new inode, and same inode with mtime
+restored) under ai-config's default config; the git environment strip is load-bearing
+(a leaked `GIT_DIR` reads `??` and silences the guard). Assumption: the CLI rewrites
+through the symlink rather than replacing it; now checked on every run by gap (3)'s fix.
+Disposition: Addressed, pending operator confirmation. All eight applied as wording and
+test changes; no mechanism added. Review stops here: the remaining findings sat in
+specification wording and test apparatus, and the last two rounds removed mechanism.
