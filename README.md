@@ -132,7 +132,8 @@ enough for this one. After the reboot, `nvidia-smi` should report the card and
 `lspci -k` should show `Kernel driver in use: nvidia`.
 
 Git hooks install themselves. `-t setup_user` and `-t update` both sweep every repo under
-`~/git-repos/personal/` that carries an `install-hooks` Makefile target and run it, so a hook
+`~/git-repos/personal/` that carries an `install-hooks` target (in its root Makefile, or in
+exactly one tracked Makefile one directory down, as terraform_ansible's `ansible/` does) and run it, so a hook
 edited on one machine goes live on the rest at the next update. `make install-hooks` still
 works if you want them immediately in a fresh clone.
 

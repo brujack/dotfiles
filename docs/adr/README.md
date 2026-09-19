@@ -36,3 +36,4 @@ Cross-cutting decisions that apply across personal repos. Repo-specific decision
 | [0030](0030-dry-run-gates-outbound-writes.md)                    | `--dry-run` gates outbound writes, and fails closed                   | 2026-09-14 | Accepted                                              |
 | [0031](0031-gnu-coreutils-precedence-on-resolute.md)             | GNU coreutils precedence on resolute (Ubuntu 26.04)                   | 2026-09-15 | Accepted                                              |
 | [0032](0032-pyenv-rehash-hook.md)                                | A tracked pyenv rehash hook, installed as a copy                      | 2026-09-17 | Accepted                                              |
+| [0033](0033-hook-target-at-depth-one-and-sweep-threat-model.md) | Git-hooks sweep resolves the target one level down; threat model excludes your own checkout | 2026-09-18 | Accepted |

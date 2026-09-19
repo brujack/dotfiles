@@ -1,7 +1,7 @@
 # ADR-0016: Auto-Install Git Hooks Across Personal Repos
 
 **Date:** 2026-07-28
-**Status:** Accepted
+**Status:** Accepted. §1 discovery amended by [ADR-0033](0033-hook-target-at-depth-one-and-sweep-threat-model.md) (target may sit one level down).
 
 ## Context
 
