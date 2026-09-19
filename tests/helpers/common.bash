@@ -19,6 +19,9 @@ load_mocks() {
   # and a suite that never calls load_mocks at all (e.g.
   # tests/setup_env/git_sync.bats) gets no protection from this seam.
   export _CARGO_BIN="${REPO_ROOT}/tests/mocks/cargo"
+  # Every run_update/run_setup_user test runs under a redirected HOME with no
+  # settings file; point the claude plugin manifest reader at a fixture instead.
+  export _OVERRIDE_CLAUDE_SETTINGS="${REPO_ROOT}/tests/fixtures/claude-settings.json"
 }
 
 # Assert a pattern is ABSENT from a file.

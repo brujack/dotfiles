@@ -1,17 +1,35 @@
 #!/usr/bin/env bash
 printf "claude %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+if [[ -n "${MOCK_CLAUDE_FAIL_ARGS:-}" && "$*" == *"${MOCK_CLAUDE_FAIL_ARGS}"* ]]; then
+  exit 1
+fi
+case "$*" in
+  "plugins list --json")
+    if [[ -n "${MOCK_CLAUDE_FAIL_ON_CALL:-}" ]]; then
+      _cf="${BATS_TEST_TMPDIR:-/tmp}/mock_claude_list_calls"
+      _n=$(( $(cat "${_cf}" 2>/dev/null || printf 0) + 1 ))
+      printf '%s\n' "${_n}" > "${_cf}"
+      [[ "${_n}" -eq "${MOCK_CLAUDE_FAIL_ON_CALL}" ]] && exit 1
+    fi
+    printf '%s\n' "${MOCK_CLAUDE_PLUGINS_LIST_JSON:-[]}"
+    exit 0 ;;
+  "plugins marketplace list --json")
+    printf '%s\n' "${MOCK_CLAUDE_MARKETPLACE_LIST_JSON:-[]}"
+    exit 0 ;;
+esac
 case "$1" in
-  plugins)
+  plugins|plugin)
+    if [[ -n "${MOCK_CLAUDE_EDIT_SETTINGS:-}" && "$2" == "${MOCK_CLAUDE_EDIT_SETTINGS}" \
+          && -n "${_OVERRIDE_CLAUDE_SETTINGS:-}" ]]; then
+      printf '\n' >> "${_OVERRIDE_CLAUDE_SETTINGS}"
+    fi
     [[ "$2" == "list" ]] && printf "%s\n" "${MOCK_CLAUDE_PLUGINS_LIST_OUTPUT:-}"
-    exit 0
-    ;;
+    exit 0 ;;
   -p)
     [[ "${MOCK_CLAUDE_EXIT:-0}" -ne 0 ]] && exit "${MOCK_CLAUDE_EXIT}"
     _default="## New Features
 - Mock feature added"
-    printf "%s\n" "${MOCK_CLAUDE_STDOUT:-${_default}}"
-    ;;
+    printf "%s\n" "${MOCK_CLAUDE_STDOUT:-${_default}}" ;;
   *)
-    exit "${MOCK_CLAUDE_EXIT:-0}"
-    ;;
+    exit "${MOCK_CLAUDE_EXIT:-0}" ;;
 esac
