@@ -269,3 +269,20 @@ _make_plugin() {
   [ "$status" -eq 1 ]
   [[ "$output" == *"pins missing ${STALE_NODE}"* ]]
 }
+
+# ── default cache location ───────────────────────────────────────────────────
+
+@test "_plugin_stale_node_paths reads ~/.claude/plugins/cache when no override is set" {
+  # Every other test sets the override, so a typo in the production default
+  # would make the whole feature inert while they stayed green. HOME is the
+  # fixture from setup(), so this still never reaches the real cache.
+  _make_brew_node
+  _make_plugin "ctx/ctx/1.0.169" "${STALE_NODE}"
+  mkdir -p "${HOME}/.claude/plugins"
+  mv "${_OVERRIDE_CLAUDE_PLUGIN_CACHE}" "${HOME}/.claude/plugins/cache"
+  unset _OVERRIDE_CLAUDE_PLUGIN_CACHE
+
+  run _plugin_stale_node_paths
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"${HOME}/.claude/plugins/cache/ctx/ctx/1.0.169/hooks/hooks.json"$'\t'"${STALE_NODE}"* ]]
+}
