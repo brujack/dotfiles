@@ -811,7 +811,9 @@ _build_subdir_target_repo() {
   local _sub
   for _sub in "$@"; do
     mkdir -p "${_repo}/${_sub}"
-    printf 'install-hooks:\n\t@true\n' > "${_repo}/${_sub}/Makefile"
+    # The real shape: terraform_ansible's ansible/Makefile carries a help
+    # comment after the colon, so an end-anchored match must not pass here.
+    printf 'install-hooks:   ## Install git hooks\n\t@true\n' > "${_repo}/${_sub}/Makefile"
     git -C "${_repo}" add "${_sub}/Makefile"
   done
   git -C "${_repo}" add Makefile
@@ -904,7 +906,8 @@ _build_subdir_target_repo() {
   # Two subdirectory targets as well, so a resolver that consulted the
   # subdirectories first would answer ambiguous rather than root.
   _build_subdir_target_repo "${_base}" "both" "ansible" "proxmox"
-  printf 'install-hooks:\n\t@true\n' > "${_base}/both/Makefile"
+  # The real root shape: dotfiles' own target carries a prerequisite.
+  printf 'install-hooks: ledger-symlink\n\t@true\nledger-symlink:\n\t@true\n' > "${_base}/both/Makefile"
 
   run _git_hooks_target_dir "${_base}/both"
   [ "$status" -eq 0 ]
