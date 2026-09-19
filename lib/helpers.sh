@@ -476,6 +476,7 @@ run_doctor() {
   _doctor_check_github_mcp
   _doctor_check_gnu_coreutils
   _doctor_check_pyenv_shims
+  _doctor_check_plugin_node_paths
   _doctor_check_renovate_cadence
   _doctor_check_ledger_drift_cadence
 
@@ -1114,6 +1115,26 @@ repair_plugin_node_paths() {
     printf "repaired %s: %s -> %s\n" "${_file}" "${_node}" "${_stable}"
   done <<< "${_stale}"
   return "${_failed}"
+}
+
+_doctor_check_plugin_node_paths() {
+  local _stale _rc _cache
+  _stale="$(_plugin_stale_node_paths)"
+  _rc=$?
+  # No plugin cache means no Claude Code plugins -- nothing to report.
+  [[ ${_rc} -eq 2 ]] && return 0
+
+  printf "\nClaude plugin node paths:\n"
+  if [[ -z "${_stale}" ]]; then
+    doctor_pass "no plugin pins a missing node binary"
+    return 0
+  fi
+
+  _cache="$(_claude_plugin_cache_dir)"
+  local _file _node
+  while IFS=$'\t' read -r _file _node; do
+    doctor_fail "${_file#"${_cache}/"}" "pins missing ${_node} — run: setup_env.sh -t update --brew-only"
+  done <<< "${_stale}"
 }
 
 process_args() {

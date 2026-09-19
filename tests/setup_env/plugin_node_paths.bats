@@ -207,3 +207,65 @@ _make_plugin() {
   grep -qF "\"command\":\"${BREW_PREFIX}/opt/node@22/bin/node\"" \
     "${_OVERRIDE_CLAUDE_PLUGIN_CACHE}/ctx/ctx/1.0.169/.claude-plugin/plugin.json"
 }
+
+# ── _doctor_check_plugin_node_paths ──────────────────────────────────────────
+
+@test "_doctor_check_plugin_node_paths FAILs each stale pin and names the remedy" {
+  _make_brew_node
+  _make_plugin "ctx/ctx/1.0.169" "${STALE_NODE}"
+
+  run _doctor_check_plugin_node_paths
+  [ "$status" -eq 0 ]
+  [ "$(printf '%s\n' "$output" | grep -c '\[FAIL\]')" -eq 2 ]
+  [[ "$output" == *"ctx/ctx/1.0.169/hooks/hooks.json: pins missing ${STALE_NODE}"* ]]
+  [[ "$output" == *"setup_env.sh -t update --brew-only"* ]]
+}
+
+@test "_doctor_check_plugin_node_paths sets the doctor failure flag" {
+  _make_brew_node
+  _make_plugin "ctx/ctx/1.0.169" "${STALE_NODE}"
+  _DOCTOR_FAILED=0
+
+  _doctor_check_plugin_node_paths >/dev/null
+  [ "${_DOCTOR_FAILED}" -eq 1 ]
+}
+
+@test "_doctor_check_plugin_node_paths PASSes when no plugin pins a missing node" {
+  _make_brew_node
+  _make_plugin "ctx/ctx/1.0.169" "node"
+
+  run _doctor_check_plugin_node_paths
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[PASS]"* ]]
+  [[ "$output" != *"[FAIL]"* ]]
+}
+
+@test "_doctor_check_plugin_node_paths prints nothing when there is no plugin cache" {
+  run _doctor_check_plugin_node_paths
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "run_doctor runs the plugin node path check, and its FAIL fails doctor" {
+  _make_brew_node
+  _make_plugin "ctx/ctx/1.0.169" "${STALE_NODE}"
+  _doctor_check_profile()        { :; }
+  _doctor_check_symlinks()       { :; }
+  _doctor_check_symlink_roots()  { :; }
+  _doctor_check_tools()          { :; }
+  _doctor_check_dev_tools()      { :; }
+  _doctor_check_login_shell()    { :; }
+  _doctor_check_cred_dirs()      { :; }
+  _doctor_check_hooks_path()     { :; }
+  _doctor_check_versions()       { :; }
+  _doctor_check_aws_key_expiry() { :; }
+  _doctor_check_github_mcp()     { :; }
+  _doctor_check_gnu_coreutils()  { :; }
+  _doctor_check_pyenv_shims()    { :; }
+  _doctor_check_renovate_cadence()     { :; }
+  _doctor_check_ledger_drift_cadence() { :; }
+
+  run run_doctor
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"pins missing ${STALE_NODE}"* ]]
+}
