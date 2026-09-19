@@ -106,3 +106,11 @@ _make_stale_plugin() {
   run _update_summary
   [[ "$output" == *"plugin-node"* ]]
 }
+
+@test "plugin-node: a full update with no flags repairs a stale pin" {
+  # The common invocation. The flag tests above cannot see the _run_all arm.
+  _make_stale_plugin 1
+  run_update
+  grep -q '^OK$' "${_DOTFILES_RUN_TMPDIR}/status_plugin-node"
+  grep -qF "\"command\":\"${BREW_PREFIX}/opt/node/bin/node\"" "${PLUGIN_JSON}"
+}
