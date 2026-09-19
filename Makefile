@@ -102,7 +102,11 @@ lint:
 	    shellcheck --severity=warning $(BATS_FILES) && printf "shellcheck bats OK\n" || { printf "shellcheck bats FAIL\n"; failed=1; }; \
 	  fi; \
 	else \
-	  printf "shellcheck not found, skipping (install: brew install shellcheck)\n"; \
+	  if [ "$${_OVERRIDE_PLATFORM:-$$(uname -s)}" = Darwin ]; then \
+	    printf "shellcheck not found, skipping (install: brew install shellcheck)\n"; \
+	  else \
+	    printf "shellcheck not found, skipping (install: ./setup_env.sh -t developer on Ubuntu (installs the pinned SHELLCHECK_VER))\n"; \
+	  fi; \
 	fi; \
 	if [ -f scripts/check-lib-exit-traps.sh ]; then \
 	  bash scripts/check-lib-exit-traps.sh || failed=1; \
