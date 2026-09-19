@@ -1055,6 +1055,67 @@ _doctor_check_pyenv_shims() {
   doctor_pass "pyenv shims: ${_total} of ${_total} ansible venv entries shimmed"
 }
 
+# Some Claude Code plugins write process.execPath into their cached
+# hooks/hooks.json and .claude-plugin/plugin.json. Under Homebrew that is the
+# versioned Cellar path, which `brew upgrade node` deletes -- every hook then
+# fails with "/bin/sh: 1: <path>: not found". context-mode does this on Linux
+# and cannot heal itself, because its MCP server starts from the same dead
+# path: https://github.com/mksglu/context-mode/issues/1090 (added 2026-09-19).
+# Remove the repair once upstream stops persisting versioned paths.
+_claude_plugin_cache_dir() {
+  printf '%s' "${_OVERRIDE_CLAUDE_PLUGIN_CACHE:-${HOME}/.claude/plugins/cache}"
+}
+
+# Prints "<config file>\t<node path>" for every versioned Homebrew node a
+# plugin config names that is no longer executable. rc 2 when there is no
+# plugin cache at all, so callers can tell "nothing to check" from "clean".
+_plugin_stale_node_paths() {
+  local _cache
+  _cache="$(_claude_plugin_cache_dir)"
+  [[ -d "${_cache}" ]] || return 2
+
+  local _file _node
+  while IFS= read -r -d '' _file; do
+    while IFS= read -r _node; do
+      [[ -x "${_node}" ]] || printf '%s\t%s\n' "${_file}" "${_node}"
+    done < <(grep -oE '/[^"[:space:]\\]*/Cellar/node(@[0-9]+)?/[^/"[:space:]\\]+/bin/node' "${_file}" | LC_ALL=C sort -u)
+  done < <(find "${_cache}" -type f \( -path '*/hooks/hooks.json' -o -path '*/.claude-plugin/plugin.json' \) -print0)
+  return 0
+}
+
+# Rewrites each stale pin to the keg's opt/ symlink, which brew keeps pointed
+# at the current version: .../Cellar/node/26.8.2/bin/node becomes
+# .../opt/node/bin/node. rc 0 when nothing was stale or everything was
+# repaired, 1 when any pin could not be repaired, 2 when there is no cache.
+repair_plugin_node_paths() {
+  local _stale _rc
+  _stale="$(_plugin_stale_node_paths)"
+  _rc=$?
+  [[ ${_rc} -ne 0 ]] && return "${_rc}"
+  [[ -z "${_stale}" ]] && return 0
+
+  local _file _node _formula _stable _content _failed=0
+  while IFS=$'\t' read -r _file _node; do
+    _formula="${_node#*/Cellar/}"
+    _formula="${_formula%%/*}"
+    _stable="${_node%%/Cellar/*}/opt/${_formula}/bin/node"
+    if [[ ! -x "${_stable}" ]]; then
+      printf "cannot repair %s: %s is gone and %s does not exist\n" "${_file}" "${_node}" "${_stable}" >&2
+      _failed=1
+      continue
+    fi
+    # Quoted replacement: bash >= 5.2 expands & in an unquoted one (shell.md).
+    if ! _content="$(<"${_file}")" \
+      || ! printf '%s\n' "${_content//"${_node}"/"${_stable}"}" > "${_file}"; then
+      printf "cannot repair %s: rewrite failed\n" "${_file}" >&2
+      _failed=1
+      continue
+    fi
+    printf "repaired %s: %s -> %s\n" "${_file}" "${_node}" "${_stable}"
+  done <<< "${_stale}"
+  return "${_failed}"
+}
+
 process_args() {
   local _short_args=()
   local _i=0
