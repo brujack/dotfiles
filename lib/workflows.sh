@@ -195,42 +195,81 @@ setup_claude_plugins() {
     return 0
   fi
 
-  local _plugins=(
-    "superpowers@claude-plugins-official"
-    "code-review@claude-plugins-official"
-    "context7@claude-plugins-official"
-    "context-mode@context-mode"
-    "rust-analyzer-lsp@claude-plugins-official"
-    "pyright-lsp@claude-plugins-official"
-    "caveman@caveman"
-    "firecrawl@firecrawl"
-    "skill-creator@claude-plugins-official"
-    "frontend-design@claude-plugins-official"
-    "security-guidance@claude-plugins-official"
-    "ansible-good-practices@claude-ansible-skills"
-    "terraform-skill@antonbabenko"
-    "warp@claude-code-warp"
-  )
+  local _settings_path
+  _settings_path="$(_claude_settings_path)"
 
-  local _installed
-  _installed="$(claude plugins list 2>/dev/null)" || true
+  local _manifest
+  if ! _manifest="$(_claude_plugin_manifest)"; then
+    log_error "could not read Claude plugin manifest: ${_settings_path}"
+    return 1
+  fi
 
-  for _plugin in "${_plugins[@]}"; do
-    if printf '%s' "${_installed}" | grep -qF "${_plugin}"; then
-      log_info "Claude plugin already installed: ${_plugin}"
-    else
-      log_info "Installing Claude plugin: ${_plugin}"
-      # `-s user` pins the scope instead of inheriting `--scope`'s default, which
-      # is already "user" on 2.1.269/2.1.270 (`claude plugin install --help`). A
-      # provisioning script should not silently follow a default upstream can
-      # change, so this is explicitness, NOT a behaviour fix — do not re-describe
-      # it as one. The project-scope rows in installed_plugins.json are NOT written
-      # by this command — they appear for directories where no install has ever run,
-      # one batch per directory. The verb does not matter either: `plugin` and
-      # `plugins` print byte-identical help (same sha256 on 2.1.270).
-      claude plugins install -s user "${_plugin}" || log_warn "Failed to install Claude plugin: ${_plugin}"
+  # Read both CLI lists before touching anything. Either can fail for
+  # reasons outside settings.json (e.g. not logged in yet), so a failure
+  # here is rc 2, not rc 1 -- the state steps 4-7 would act on is unknown,
+  # not the settings file itself.
+  local _registered _installed
+  if ! _registered="$(_claude_registered_marketplaces)"; then
+    log_warn "claude plugin state unreadable (list call failed; logged in?)"
+    return 2
+  fi
+  if ! _installed="$(_claude_installed_user_ids)"; then
+    log_warn "claude plugin state unreadable (list call failed; logged in?)"
+    return 2
+  fi
+
+  local -a _failures=()
+  local _type _name _ref
+
+  # Register every declared marketplace not already registered, and record
+  # every unsupported source. `< /dev/null` on the claude call is required:
+  # without it, claude would read from the loop's own here-string stdin and
+  # consume the manifest lines still waiting to be read.
+  while IFS=$'\t' read -r _type _name _ref; do
+    case "${_type}" in
+      marketplace)
+        if ! grep -qxF -- "${_name}" <<<"${_registered}"; then
+          if ! claude plugins marketplace add "${_ref}" < /dev/null; then
+            _failures+=("failed to add Claude marketplace: ${_name} (${_ref})")
+          fi
+        fi
+        ;;
+      unsupported)
+        _failures+=("unsupported Claude marketplace source: ${_name} (${_ref})")
+        ;;
+    esac
+  done <<<"${_manifest}"
+
+  # Install every enabled (true) plugin not already installed at user
+  # scope. Membership is exact id equality (grep -qxF), never a substring
+  # match -- a superstring id or a project-scope install must not count as
+  # "already installed". A plugin whose marketplace failed to add above is
+  # still attempted here; its own failure is recorded independently.
+  local _enabled_count=0
+  while IFS=$'\t' read -r _type _name _ref; do
+    [[ "${_type}" == "plugin" && "${_ref}" == "true" ]] || continue
+    _enabled_count=$((_enabled_count + 1))
+    if grep -qxF -- "${_name}" <<<"${_installed}"; then
+      log_info "Claude plugin already installed: ${_name}"
+    elif ! claude plugins install -s user "${_name}" < /dev/null; then
+      _failures+=("failed to install Claude plugin: ${_name}")
     fi
+  done <<<"${_manifest}"
+
+  # A valid file that declares zero enabled plugins is not an empty-but-fine
+  # state -- it is the silent success this reconcile exists to remove.
+  if [[ "${_enabled_count}" -eq 0 ]]; then
+    _failures+=("no enabled plugins declared in ${_settings_path}")
+  fi
+
+  if [[ "${#_failures[@]}" -eq 0 ]]; then
+    return 0
+  fi
+  local _f
+  for _f in "${_failures[@]}"; do
+    log_warn "${_f}"
   done
+  return 2
 }
 
 _git_is_valid_repo() {

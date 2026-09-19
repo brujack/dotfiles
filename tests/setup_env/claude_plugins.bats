@@ -460,3 +460,201 @@ JSON
   # message could be copied onto line 175 with nothing catching it.
   [ "$output" = "/some/path/settings.json is untracked; not checked" ]
 }
+
+# ── setup_claude_plugins: reconcile ─────────────────────────────────────────
+#
+# Task 4 of docs/superpowers/specs/2026-09-19-claude-plugin-provisioning-design.md.
+# All cases below use the default fixture copy `load_mocks` already points
+# `_OVERRIDE_CLAUDE_SETTINGS` at (via `${SETTINGS}`, this file's `setup()`),
+# which declares one github marketplace (claude-plugins-official), one git
+# marketplace (caveman), and three plugins: superpowers@claude-plugins-official
+# (true), caveman@caveman (true), frontend-design@claude-plugins-official
+# (false). MOCK_CLAUDE_MARKETPLACE_LIST_JSON and MOCK_CLAUDE_PLUGINS_LIST_JSON
+# both default to `[]` (nothing registered, nothing installed) per Task 1,
+# so a bare `run setup_claude_plugins` with no overrides exercises the
+# "everything missing" path.
+
+@test "setup_claude_plugins adds an unregistered github marketplace as owner/repo" {
+  run setup_claude_plugins
+  grep -qF "claude plugins marketplace add anthropics/claude-plugins-official" "${MOCK_CALLS_FILE}"
+}
+
+@test "setup_claude_plugins adds an unregistered git marketplace as its URL" {
+  run setup_claude_plugins
+  grep -qF "claude plugins marketplace add https://github.com/juliusbrussee/caveman.git" "${MOCK_CALLS_FILE}"
+}
+
+@test "setup_claude_plugins does not re-add an already-registered marketplace" {
+  export MOCK_CLAUDE_MARKETPLACE_LIST_JSON='[{"name":"claude-plugins-official"},{"name":"caveman"}]'
+  run setup_claude_plugins
+  refute_grep -F "marketplace add" "${MOCK_CALLS_FILE}"
+}
+
+@test "setup_claude_plugins installs a missing enabled plugin at user scope" {
+  export MOCK_CLAUDE_MARKETPLACE_LIST_JSON='[{"name":"claude-plugins-official"},{"name":"caveman"}]'
+  run setup_claude_plugins
+  grep -qF "claude plugins install -s user superpowers@claude-plugins-official" "${MOCK_CALLS_FILE}"
+}
+
+@test "setup_claude_plugins never installs a disabled plugin" {
+  export MOCK_CLAUDE_MARKETPLACE_LIST_JSON='[{"name":"claude-plugins-official"},{"name":"caveman"}]'
+  run setup_claude_plugins
+  refute_grep -F "install -s user frontend-design@claude-plugins-official" "${MOCK_CALLS_FILE}"
+}
+
+@test "setup_claude_plugins does not count a superstring id as installed" {
+  export MOCK_CLAUDE_MARKETPLACE_LIST_JSON='[{"name":"claude-plugins-official"},{"name":"caveman"}]'
+  export MOCK_CLAUDE_PLUGINS_LIST_JSON='[{"id":"superpowers@claude-plugins-official-fork","scope":"user"}]'
+  run setup_claude_plugins
+  grep -qF "claude plugins install -s user superpowers@claude-plugins-official" "${MOCK_CALLS_FILE}"
+}
+
+@test "setup_claude_plugins does not count a project-scope install as installed" {
+  export MOCK_CLAUDE_MARKETPLACE_LIST_JSON='[{"name":"claude-plugins-official"},{"name":"caveman"}]'
+  export MOCK_CLAUDE_PLUGINS_LIST_JSON='[{"id":"superpowers@claude-plugins-official","scope":"project"}]'
+  run setup_claude_plugins
+  grep -qF "claude plugins install -s user superpowers@claude-plugins-official" "${MOCK_CALLS_FILE}"
+}
+
+@test "setup_claude_plugins: one marketplace add failing still processes the rest and returns 2" {
+  export MOCK_CLAUDE_FAIL_ARGS="marketplace add https"
+  run setup_claude_plugins
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"caveman"* ]]
+  grep -qF "claude plugins install -s user superpowers@claude-plugins-official" "${MOCK_CALLS_FILE}"
+}
+
+@test "setup_claude_plugins returns 2 and names an unsupported marketplace source and its type" {
+  cat > "${SETTINGS}" <<'JSON'
+{"extraKnownMarketplaces":{"weird":{"source":{"source":"url","url":"https://example.com"}}},
+ "enabledPlugins":{"superpowers@claude-plugins-official":true}}
+JSON
+  run setup_claude_plugins
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"weird"* ]]
+  [[ "$output" == *"url"* ]]
+}
+
+@test "setup_claude_plugins returns 2 and names it when no plugin is enabled" {
+  cat > "${SETTINGS}" <<'JSON'
+{"enabledPlugins":{"frontend-design@claude-plugins-official":false}}
+JSON
+  run setup_claude_plugins
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"no enabled plugins declared in ${SETTINGS}"* ]]
+}
+
+@test "setup_claude_plugins returns 1 with zero claude plugins calls when settings is missing" {
+  rm -f "${SETTINGS}"
+  run setup_claude_plugins
+  [ "$status" -eq 1 ]
+  refute_grep -F "claude plugins" "${MOCK_CALLS_FILE}"
+}
+
+@test "setup_claude_plugins returns 1 with zero claude plugins calls when settings is unparsable" {
+  printf 'not json' > "${SETTINGS}"
+  run setup_claude_plugins
+  [ "$status" -eq 1 ]
+  refute_grep -F "claude plugins" "${MOCK_CALLS_FILE}"
+}
+
+@test "setup_claude_plugins returns 1 with zero claude plugins calls when settings is a JSON array" {
+  printf '[]' > "${SETTINGS}"
+  run setup_claude_plugins
+  [ "$status" -eq 1 ]
+  refute_grep -F "claude plugins" "${MOCK_CALLS_FILE}"
+}
+
+@test "setup_claude_plugins returns 2 with zero add/install calls when the plugin list call fails" {
+  export MOCK_CLAUDE_FAIL_ARGS="plugins list --json"
+  run setup_claude_plugins
+  [ "$status" -eq 2 ]
+  refute_grep -F "marketplace add" "${MOCK_CALLS_FILE}"
+  refute_grep -F "plugins install" "${MOCK_CALLS_FILE}"
+}
+
+@test "setup_claude_plugins returns 2 with zero add/install calls when the marketplace list call fails" {
+  export MOCK_CLAUDE_FAIL_ARGS="marketplace list --json"
+  run setup_claude_plugins
+  [ "$status" -eq 2 ]
+  refute_grep -F "marketplace add" "${MOCK_CALLS_FILE}"
+  refute_grep -F "plugins install" "${MOCK_CALLS_FILE}"
+}
+
+@test "setup_claude_plugins returns 0 with zero add/install calls when everything is already present" {
+  export MOCK_CLAUDE_MARKETPLACE_LIST_JSON='[{"name":"claude-plugins-official"},{"name":"caveman"}]'
+  export MOCK_CLAUDE_PLUGINS_LIST_JSON='[{"id":"superpowers@claude-plugins-official","scope":"user"},{"id":"caveman@caveman","scope":"user"}]'
+  # G3 guard: prove the manifest actually declares at least one enabled
+  # plugin before trusting the "zero calls" result below -- otherwise an
+  # empty-manifest bug would satisfy this test just as well as a correct
+  # reconcile would.
+  _claude_plugin_manifest | grep -qE $'^plugin\t[^\t]+\ttrue$'
+  run setup_claude_plugins
+  [ "$status" -eq 0 ]
+  refute_grep -F "marketplace add" "${MOCK_CALLS_FILE}"
+  refute_grep -F "plugins install" "${MOCK_CALLS_FILE}"
+}
+
+@test "setup_claude_plugins: claude not on PATH returns 0 and skips (unchanged)" {
+  local _clean_path
+  _clean_path="$(printf '%s' "${PATH}" | tr ':' '\n' | grep -v 'tests/mocks' | while read -r _dir; do
+    [[ -x "${_dir}/claude" ]] || printf '%s\n' "${_dir}"
+  done | tr '\n' ':' | sed 's/:$//')"
+  PATH="${_clean_path}" run setup_claude_plugins
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"skipping plugin setup"* ]]
+}
+
+@test "setup_claude_plugins redirects each install call's stdin from /dev/null (mutation pin)" {
+  # Regression pin for the `< /dev/null` on the `claude plugins install`
+  # call inside the manifest-reading while loop. tests/mocks/claude never
+  # reads its own stdin, so it cannot observe this hazard -- and
+  # tests/mocks/claude is outside this task's files_touched scope, so this
+  # test builds its own throwaway stub instead. Three enabled plugins with
+  # a stub that (mis)behaves as an un-redirected `claude` would let a
+  # stdin-reading child do: if the install call's stdin is the loop's own
+  # here-string fd rather than /dev/null, the stub's `read` consumes the
+  # NEXT manifest line before the loop's own `read` gets to it, and one
+  # plugin (b) is silently skipped -- 2 installs instead of 3.
+  cat > "${SETTINGS}" <<'JSON'
+{
+  "extraKnownMarketplaces": {
+    "claude-plugins-official": {
+      "source": {"source": "github", "repo": "anthropics/claude-plugins-official"}
+    }
+  },
+  "enabledPlugins": {
+    "a@claude-plugins-official": true,
+    "b@claude-plugins-official": true,
+    "c@claude-plugins-official": true
+  }
+}
+JSON
+  export MOCK_CLAUDE_MARKETPLACE_LIST_JSON='[{"name":"claude-plugins-official"}]'
+
+  local _stub_dir="${BATS_TEST_TMPDIR}/stdin-probe-claude"
+  mkdir -p "${_stub_dir}"
+  cat > "${_stub_dir}/claude" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "${MOCK_CALLS_FILE}"
+case "$*" in
+  "plugins marketplace list --json") printf '[]\n'; exit 0 ;;
+  "plugins list --json") printf '[]\n'; exit 0 ;;
+  "plugins install -s user "*)
+    # Deliberately reads whatever stdin it was handed. A correctly
+    # redirected caller gives it /dev/null (immediate EOF, nothing
+    # consumed); an un-redirected caller leaks the shared here-string fd.
+    IFS= read -r _stray
+    exit 0
+    ;;
+esac
+exit 0
+STUB
+  chmod +x "${_stub_dir}/claude"
+
+  PATH="${_stub_dir}:${PATH}" run setup_claude_plugins
+  [ "$status" -eq 0 ]
+  local _n
+  _n="$(grep -c '^plugins install -s user ' "${MOCK_CALLS_FILE}")"
+  [ "${_n}" -eq 3 ]
+}

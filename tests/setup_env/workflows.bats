@@ -296,7 +296,7 @@ teardown() {
 # ── setup_claude_plugins ──────────────────────────────────────────────────────
 
 @test "setup_claude_plugins installs plugin when not listed" {
-  export MOCK_CLAUDE_PLUGINS_LIST_OUTPUT=""
+  export MOCK_CLAUDE_PLUGINS_LIST_JSON='[]'
   setup_claude_plugins
   # Pins `-s user` explicitly rather than inheriting `--scope`'s default
   # (currently "user"). What this guards is REMOVAL of the flag: tests/mocks/claude
@@ -306,7 +306,7 @@ teardown() {
 }
 
 @test "setup_claude_plugins skips install when plugin already listed" {
-  export MOCK_CLAUDE_PLUGINS_LIST_OUTPUT="superpowers@claude-plugins-official"
+  export MOCK_CLAUDE_PLUGINS_LIST_JSON='[{"id":"superpowers@claude-plugins-official","scope":"user"}]'
   setup_claude_plugins
   # Flag-agnostic on purpose. Pinning the exact flags here would make this
   # assertion vacuous the moment they change -- "install was skipped" and
