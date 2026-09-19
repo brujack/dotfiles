@@ -317,9 +317,8 @@ _git_hooks_gap_repos() {
     # applied here too.
     env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
       git -C "${_dir}" rev-parse --git-dir >/dev/null 2>&1 || continue
-    # The same resolver _git_hooks_discover uses, so a listed repo that
-    # reaches this point (a real clone rev-parse accepts) is either
-    # discovered or reported here -- never both, never neither.
+    # The same resolver _git_hooks_discover uses, so the two agree on what
+    # counts as a target.
     _rc=0
     _git_hooks_target_dir "${_dir}" >/dev/null || _rc=$?
     # One label per resolver outcome -- see the contract comment above.

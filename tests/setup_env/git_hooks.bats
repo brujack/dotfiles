@@ -1054,6 +1054,27 @@ _build_subdir_target_repo() {
   [ "$output" = "fifo-only-repo" ]
 }
 
+@test "a skipped candidate does not count as a Makefile: tab-named-only repo is rc 4 and reported by bare name" {
+  # The name guard's half of the same contract. The FIFO test above pins
+  # the regular-file skip; this pins the tab/newline skip.
+  local _base="${TESTDIR}/tab-only"
+  local _repo="${_base}/tab-only-repo"
+  local _tab_dir=$'ans\t'
+  mkdir -p "${_repo}/${_tab_dir}"
+  git init -q "${_repo}"
+  printf 'install-hooks:\n\t@true\n' > "${_repo}/${_tab_dir}/Makefile"
+  git -C "${_repo}" add "${_tab_dir}/Makefile"
+  git -C "${_repo}" commit -q -m init
+
+  run _git_hooks_target_dir "${_repo}"
+  [ "$status" -eq 4 ]
+
+  HOOK_EXPECTED_REPOS=(tab-only-repo)
+  PERSONAL_GITREPOS="${_base}" run _git_hooks_gap_repos
+  [ "$status" -eq 0 ]
+  [ "$output" = "tab-only-repo" ]
+}
+
 @test "_git_hooks_target_dir resolves a committed symlinked Makefile that points inside the repo" {
   # A symlink is a legitimate way to share one Makefile between components.
   # Write access to the operator's own checkout is outside this code's threat
