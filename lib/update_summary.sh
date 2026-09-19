@@ -53,8 +53,9 @@ _update_ok() {
 # same as _update_ok; and (2) a timed section using the rc-2-means-partial-
 # success shape -- _update_record_end "SECTION" 0 first (so the section's
 # own case-arm result, or the default "updated", is recorded), then this
-# call overwrites the status to WARN. pyenv-shims, git-repos, legacy-rsync,
-# git-hooks and cargo-tools all use shape (2); brew-drift is shape (1).
+# call overwrites the status to WARN. brew-drift is shape (1); every other
+# caller is shape (2). The call sites are the list, not this comment:
+# git grep -n '_update_warn ' lib/
 _update_warn() {
   local _section="$1" _msg="$2"
   printf "WARN\n" > "${_DOTFILES_RUN_TMPDIR}/status_${_section}"
