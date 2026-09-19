@@ -1,6 +1,6 @@
 # Claude plugin provisioning reads settings.json and registers marketplaces
 
-**Status:** Approved design 2026-09-19; revised after Multi-Lens Review round 1
+**Status:** Approved design 2026-09-19; revised after Multi-Lens Review rounds 1 and 2
 **Closes backlog rows:** "`setup_claude_plugins` installs `plugin@marketplace` refs with no
 `marketplace add` anywhere" (#84) and "`setup_claude_plugins`'s membership test is an
 unanchored substring match" (#101). Leaves "Claude plugin marketplaces are a dependency
@@ -107,31 +107,59 @@ than silent.
 
 1. `claude` not on PATH → `log_warn`, return 0 (unchanged).
 2. Read the manifest. rc 1 → return 1.
-3. Record a hash of the resolved settings file's content (R1).
-4. Read registered marketplace names from `claude plugins marketplace list --json`
+3. Read registered marketplace names from `claude plugins marketplace list --json`
    (`[].name`) and installed plugins from `claude plugins list --json`, keeping the `id`s
    whose `scope` is `"user"`. Either call failing, or its output not parsing, → return 1.
    Exact id equality replaces today's `grep -qF` substring test (#101).
-5. For each `marketplace` line whose name is not registered:
+4. For each `marketplace` line whose name is not registered:
    `claude plugins marketplace add <source>`. A failure is recorded by name.
-6. For each `unsupported` line: record a failure naming the marketplace and its type.
-7. If no `plugin` line is `true`, record `no enabled plugins declared in <path>` (R3).
+5. For each `unsupported` line: record a failure naming the marketplace and its type.
+6. If no `plugin` line is `true`, record `no enabled plugins declared in <path>` (R3).
    A valid file that provisions nothing is the silent success this spec removes.
-8. For each `true` `plugin` line whose id is not installed at user scope:
+7. For each `true` `plugin` line whose id is not installed at user scope:
    `claude plugins install -s user <id>`. A failure is recorded by id. A plugin whose
    marketplace failed to add is still attempted, and its own failure is recorded.
-9. Re-hash the settings file. If the content changed, record
-   `settings.json content changed during provisioning (<path>)`: an interactive toggle, a
-   peer session or a CLI version that re-serialises the file has written ai-config's
-   tracked copy, and the operator must know.
-10. Print every recorded failure to stderr. Return 2 if any, else 0.
+8. Print every recorded failure to stderr. Return 2 if any, else 0.
 
-**Invariant: this function never changes `settings.json`'s content.** It adds only
-marketplaces already declared there and installs only plugins already `true`. Measured on
-CLI 2.1.278, on Linux and on macOS, through a symlinked `settings.json`: the CLI replaces
-the target file (new inode) on `marketplace add` and `install`, the symlink survives, and
-the content is byte-identical (E3). Step 9 turns that measurement into a check made on
-every run, because a later CLI version, or a concurrent write, can break it.
+**Invariant: this function never changes what `settings.json` means.** It adds only
+marketplaces already declared there and installs only plugins already `true`. What the CLI
+does to the file, measured on 2.1.278 (Multi-Lens Review round 2, ergonomics):
+
+- `marketplace add` and `install` **rewrite** user `settings.json` every time, replacing
+  the target file through the symlink (new inode, link intact, Linux and macOS) and
+  serialising it in the CLI's canonical form (2-space indent, known keys reordered).
+- The parsed content is unchanged. The bytes are unchanged only when the file was already
+  canonical, which ai-config's copy is today.
+- `update`, including of a `false` plugin, left the file untouched.
+
+So the invariant holds by meaning and only coincidentally by bytes. The settings guard
+below checks both on every run and reports them separately.
+
+### `_claude_settings_snapshot` and `_claude_settings_compare` (new, `lib/workflows.sh`)
+
+A guard around every span in which the CLI may write settings, replacing round 1's byte
+hash (round 1 R1; round 2 ergonomics and risk):
+
+- `_claude_settings_snapshot <file>` records, with `python3`, the raw bytes' SHA-256 and a
+  canonical serialisation of the parsed JSON. rc 1 if the settings file cannot be read or
+  parsed, or `python3` is absent.
+- `_claude_settings_compare <file>` re-reads the settings and prints one line per
+  difference: `enabledPlugins.<id>: <old> -> <new>`, `extraKnownMarketplaces.<name>:
+  added|removed|changed`, `other keys changed`, or, when the parsed content is equal but
+  the bytes differ, `reformatted (whitespace or key order only)`. rc 0 unchanged, rc 2
+  changed, rc 1 if either snapshot or re-read failed. A failed snapshot is never read as
+  "unchanged".
+
+Both callers wrap their CLI span with it and treat rc 2 as a partial result naming the
+lines, and rc 1 as a failure:
+
+- `run_setup_user` wraps `setup_claude_plugins`.
+- `run_update` wraps the whole claude section, reconcile and update loop together
+  (round 2 R3), so an update that flips a value is also caught.
+
+A reformat-only change still dirties ai-config's working tree (whitespace), so it is
+reported, not ignored; the message says it is formatting, so the operator can tell it
+from a flipped value.
 
 ### Callers
 
@@ -149,23 +177,39 @@ every run, because a later CLI version, or a concurrent write, can break it.
     full update reconciles against the settings.json it just pulled.
     `--claude-only` does not pull ai-config; it reconciles against the current checkout.
     That is documented in `CLAUDE.md`, not changed.
-  - **Claude section.** Call `setup_claude_plugins`, with its output tee'd into
-    `err_claude` so the section's detail shows the reason (R4). Then, whenever the
-    manifest parsed, even if reconcile returned 1 because a list call failed (G5), run
-    `claude plugins update <id>` for every declared id installed at user scope. That
-    replaces the hardcoded 14-item loop. An update failure FAILs the section, as today.
-    A reconcile rc 1 FAILs it. A reconcile rc 2 with no update failures WARNs, naming the
-    reconcile failures (E2). The post-update skill scan and attestation audit that follow
-    are unchanged.
+  - **Claude section.** Snapshot settings, then call `setup_claude_plugins` with its
+    output tee'd into `err_claude` so the section's detail shows the reason (R4).
+    - Reconcile rc 1: the update loop is skipped and the section FAILs, naming the
+      reason. (Round 1's G5 rule, "run the loop even after a failed list call", is
+      removed: the set it iterates comes from the call that failed, so it could not be
+      implemented; round 2, all three lenses.)
+    - Otherwise run `claude plugins update <id>` for every declared id installed at user
+      scope, re-listing with `plugins list --json` after reconcile so newly installed ids
+      are included. This replaces the hardcoded 14-item loop. An update failure FAILs the
+      section, as today.
+    - Then compare settings. A change, or a reconcile rc 2, WARNs with the named lines
+      (E2), unless something FAILed.
+    - The post-update skill scan and attestation audit that follow are unchanged.
+  - **Coupling to ai-config's checkout (round 2 R2).** With the pull ahead of it, the
+    section reads whatever the pull left. `setup_ai_config` runs
+    `pull --rebase --autostash`; a conflict leaves markers in `settings.json`, the
+    manifest fails to parse, and the section FAILs naming that, with zero updates. That is
+    loud, and preferred to reconciling against a guess. `_UPDATE_SECTION_ORDER` moves
+    `ai-config` ahead of `claude` so the summary matches execution order.
+  - **`--dry-run`.** Neither `setup_ai_config` nor the claude section checks
+    `_dry_run_active` today, and the reconcile does not either: a dry run registers
+    marketplaces and installs plugins. That matches `--dry-run`'s documented contract,
+    no outbound write, since both are downloads plus local writes.
 
 ### Tests (bats)
 
 `tests/mocks/claude` gains `--json` handling: `plugins list --json` prints
 `MOCK_CLAUDE_PLUGINS_LIST_JSON`, `plugins marketplace list --json` prints
 `MOCK_CLAUDE_MARKETPLACE_LIST_JSON`, and `MOCK_CLAUDE_FAIL_ARGS` (a substring of the argv)
-makes a matching invocation exit 1. `MOCK_CLAUDE_TOUCH_SETTINGS=1` makes an `install` call
-append a byte to the file `_OVERRIDE_CLAUDE_SETTINGS` names, to drive step 9. Each
-defaults to an empty JSON list, to not failing or to not touching, and every argv is still
+makes a matching invocation exit 1. `MOCK_CLAUDE_EDIT_SETTINGS=<verb>:<mode>` makes the
+named verb (`install` or `update`) rewrite the file `_OVERRIDE_CLAUDE_SETTINGS` names,
+either re-indenting it (`reformat`) or setting a named `false` id to `true` (`flip:<id>`),
+to drive the guard. Each defaults to an empty JSON list, to not failing or to not editing, and every argv is still
 recorded to `MOCK_CALLS_FILE`. The existing `MOCK_CLAUDE_PLUGINS_LIST_OUTPUT` text path
 stays for any caller that does not pass `--json`; the 9 tests using it are updated where
 they exercise `setup_claude_plugins`.
@@ -188,7 +232,10 @@ Cases:
   marketplaces and plugins are still processed.
 - An `unsupported` source returns 2 and names the marketplace and type.
 - A valid file with no `true` plugin returns 2, naming it (R3).
-- The settings content changing during the run returns 2, naming the file (R1).
+- Guard: a `flip` during `install` reports `enabledPlugins.<id>: false -> true` and rc 2;
+  a `flip` during `update` in `run_update` is caught too (the guard spans the loop); a
+  `reformat` reports `reformatted (whitespace or key order only)` and no key lines; an
+  unreadable settings file at snapshot time is rc 1, never "unchanged".
 - Missing, unparsable and non-object settings each return 1 with zero `claude` calls.
 - `plugins list --json` failing returns 1.
 - `claude` absent returns 0.
@@ -198,9 +245,9 @@ Cases:
 - `run_setup_user` continues after a 2 and returns non-zero after a 1.
 - `run_update` pulls ai-config before reading the manifest (E1), reconciles before any
   `update`, runs `update` once per declared id installed at user scope (including a
-  `false` one and one absent from the old hardcoded list), WARNs on a reconcile rc 2 and
-  FAILs on an update failure, and still runs the update loop when reconcile returned 1 on
-  a list failure (G5).
+  `false` one and one absent from the old hardcoded list, asserted as an exact count),
+  WARNs on a reconcile rc 2, FAILs on an update failure, and on a reconcile rc 1 makes
+  zero `update` calls and FAILs naming the reason.
 - A regression test fails if `lib/workflows.sh` again contains a literal
   `<name>@<marketplace>` id for any marketplace declared in the fixture (G4).
 
@@ -218,9 +265,12 @@ to a log before exec'ing the real binary (G2):
    `plugins install` lines for that run.
 3. Add a bogus marketplace to the copy's `extraKnownMarketplaces`: rc 2, named on stderr,
    the other entries unaffected.
+4. Re-indent the copy to 4 spaces and run with one marketplace unregistered: rc 2,
+   `reformatted (whitespace or key order only)` reported, no key-level lines, and the
+   parsed content still equal to the original.
 
 Run it on Linux and on macOS. This proves the content invariant against the real CLI;
-step 9's hash re-checks it on every production run.
+the settings guard re-checks it on every production run.
 
 ### Docs
 
@@ -231,7 +281,14 @@ step 9's hash re-checks it on every production run.
   dotfiles provisioning. It is a contract between two repos: a change to it lands in
   ai-config and takes effect in dotfiles on the next run, and a broken or `unsupported`
   entry makes every machine's next update WARN until ai-config is fixed.
-- `docs/superpowers/README.md`: remove the #84 and #101 backlog rows when this ships.
+- `docs/superpowers/README.md`: remove the #84 and #101 backlog rows when this ships, and
+  add one: the update ledger entry records dotfiles' `git_sha` but not ai-config's HEAD,
+  although plugin provisioning now depends on it (round 2 R2).
+- ai-config backlog row: its prettier hook formats `settings.json`, and prettier and the
+  CLI disagree on short arrays, so the first such edit makes the file non-canonical and
+  every later add or install reformats it. Candidate fixes are `.prettierignore` or a
+  canonical-form check (round 2 ergonomics). Out of this spec; the guard makes it visible
+  meanwhile.
 
 ## Out of scope
 
@@ -312,3 +369,42 @@ Disposition: Addressed R1 (before/after content hash, step 9), R2 (abort path st
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+### Round 2
+
+Reviewed at commit: `9a7695e0`. All three lenses re-ran against the revised body.
+
+Goal-Fit: Worth building. The round-1 G5 rule cannot be implemented: the update set comes
+from the `plugins list --json` call whose failure triggers the rule, the caller receives
+only an rc, and both fallbacks fail (updating every declared id FAILs on the uninstalled
+`false` ones, measured `Plugin "terraform-skill" is not installed`; updating none makes
+the rule inert), while its test passes on zero calls. Assumption: no declared plugin needs
+`-y` (command-source or headersHelper install) under a non-TTY stdout; holds for all 7
+catalogs today.
+Disposition: Addressed (G5 removed; reconcile rc 1 skips the update loop and FAILs).
+Accepted the `-y` assumption, reason: it holds for every current catalog and a violation
+fails loudly as rc 2 naming the plugin.
+
+Ergonomics: The byte hash is the wrong instrument. `marketplace add` and `install` rewrite
+settings.json into the CLI's canonical form every time; the file was byte-identical only
+because ai-config's copy is already canonical (a 4-space copy changed on both, parsed
+content equal). ai-config's prettier hook can make it non-canonical on the first short
+array, after which every add or install produces a whitespace-only dirty ai-config and a
+WARN the byte hash cannot tell from a flipped value. Confirmed live that `update` of a
+`false` plugin leaves the file unchanged. Also found the G5 contradiction independently.
+Assumption: ai-config's settings.json stays canonical under agent edits through the
+prettier hook; true today.
+Disposition: Addressed (guard compares parsed content and bytes separately, reports
+reformat-only distinctly; ai-config prettier row backlogged).
+
+Risk: (1) G5, as above. (2) Moving the pull earlier couples plugin updates to ai-config's
+checkout (a rebase conflict leaves an unparsable manifest); `--dry-run` would now also add
+and install; the ledger records no ai-config HEAD; the summary order no longer matches
+execution. (3) The hash guarded reconcile but not the update loop, and its tool was
+unspecified (`sha256sum` is absent from a bare macOS PATH). Assumption: `update` of a
+`false` plugin across a real version bump does not flip it to `true`; measured on the
+no-op path only.
+Disposition: Addressed (G5 removed; coupling, dry-run and conflict behaviour stated;
+`_UPDATE_SECTION_ORDER` reordered; ledger-HEAD row backlogged; guard spans the whole
+claude section and uses `python3`). The version-bump assumption is covered by the guard
+spanning the update loop, which reports a flip whenever it happens.
