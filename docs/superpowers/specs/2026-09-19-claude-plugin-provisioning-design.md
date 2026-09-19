@@ -1,6 +1,6 @@
 # Claude plugin provisioning reads settings.json and registers marketplaces
 
-**Status:** Approved design 2026-09-19; revised after Multi-Lens Review rounds 1-4
+**Status:** Spec approved 2026-09-19 after Multi-Lens Review rounds 1-4; next step writing-plans
 **Closes backlog rows:** "`setup_claude_plugins` installs `plugin@marketplace` refs with no
 `marketplace add` anywhere" (#84) and "`setup_claude_plugins`'s membership test is an
 unanchored substring match" (#101). Leaves "Claude plugin marketplaces are a dependency
@@ -478,6 +478,6 @@ Verified: git reports ` M` for same-size rewrites (new inode, and same inode wit
 restored) under ai-config's default config; the git environment strip is load-bearing
 (a leaked `GIT_DIR` reads `??` and silences the guard). Assumption: the CLI rewrites
 through the symlink rather than replacing it; now checked on every run by gap (3)'s fix.
-Disposition: Addressed, pending operator confirmation. All eight applied as wording and
+Disposition: Addressed (confirmed by the operator, 2026-09-19). All eight applied as wording and
 test changes; no mechanism added. Review stops here: the remaining findings sat in
 specification wording and test apparatus, and the last two rounds removed mechanism.
