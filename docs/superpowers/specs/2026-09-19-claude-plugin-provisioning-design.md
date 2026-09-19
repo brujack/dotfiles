@@ -1,6 +1,6 @@
 # Claude plugin provisioning reads settings.json and registers marketplaces
 
-**Status:** Approved design 2026-09-19; revised after Multi-Lens Review rounds 1 and 2
+**Status:** Approved design 2026-09-19; revised after Multi-Lens Review rounds 1-3
 **Closes backlog rows:** "`setup_claude_plugins` installs `plugin@marketplace` refs with no
 `marketplace add` anywhere" (#84) and "`setup_claude_plugins`'s membership test is an
 unanchored substring match" (#101). Leaves "Claude plugin marketplaces are a dependency
@@ -109,8 +109,13 @@ than silent.
 2. Read the manifest. rc 1 → return 1.
 3. Read registered marketplace names from `claude plugins marketplace list --json`
    (`[].name`) and installed plugins from `claude plugins list --json`, keeping the `id`s
-   whose `scope` is `"user"`. Either call failing, or its output not parsing, → return 1.
-   Exact id equality replaces today's `grep -qF` substring test (#101).
+   whose `scope` is `"user"`. Exact id equality replaces today's `grep -qF` substring test
+   (#101). If either call fails or its output does not parse, record the failure with the
+   CLI's message, skip steps 4-7 (the state they act on is unknown), and return 2. This
+   is rc 2, not rc 1, because the list calls can fail for reasons outside settings: in a
+   fresh `HOME` the same argv returned `Not logged in · Please run /login` minutes after
+   succeeding (Multi-Lens Review round 3, cause unknown), and a box not yet logged in must
+   not abort `setup_user`.
 4. For each `marketplace` line whose name is not registered:
    `claude plugins marketplace add <source>`. A failure is recorded by name.
 5. For each `unsupported` line: record a failure naming the marketplace and its type.
@@ -132,34 +137,34 @@ does to the file, measured on 2.1.278 (Multi-Lens Review round 2, ergonomics):
   canonical, which ai-config's copy is today.
 - `update`, including of a `false` plugin, left the file untouched.
 
-So the invariant holds by meaning and only coincidentally by bytes. The settings guard
-below checks both on every run and reports them separately.
+So the invariant holds by meaning and only coincidentally by bytes. The write guard below
+reports any change git can see after each run.
 
-### `_claude_settings_snapshot` and `_claude_settings_compare` (new, `lib/workflows.sh`)
+### `_claude_settings_git_state` (new, `lib/workflows.sh`): the write guard
 
-A guard around every span in which the CLI may write settings, replacing round 1's byte
-hash (round 1 R1; round 2 ergonomics and risk):
+The harm the invariant protects against is a dirty ai-config: an unreviewed change in a
+tracked file every session on the machine shares. So the guard asks git that question
+directly, before and after the span in which the CLI may write (round 3, replacing the
+round 2 snapshot/compare design, which kept producing defects of its own):
 
-- `_claude_settings_snapshot <file>` records, with `python3`, the raw bytes' SHA-256 and a
-  canonical serialisation of the parsed JSON. rc 1 if the settings file cannot be read or
-  parsed, or `python3` is absent.
-- `_claude_settings_compare <file>` re-reads the settings and prints one line per
-  difference: `enabledPlugins.<id>: <old> -> <new>`, `extraKnownMarketplaces.<name>:
-  added|removed|changed`, `other keys changed`, or, when the parsed content is equal but
-  the bytes differ, `reformatted (whitespace or key order only)`. rc 0 unchanged, rc 2
-  changed, rc 1 if either snapshot or re-read failed. A failed snapshot is never read as
-  "unchanged".
+- Resolve `~/.claude/settings.json` to its real path with `python3`
+  (`os.path.realpath`), find the enclosing repository, and print
+  `git status --porcelain -- <file>` for it, with the git environment stripped
+  (`env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE`, `shell.md`).
+  Print `untracked` if the file is not in a git repository, and `unknown` if git fails.
+- The caller compares the two results:
+  - clean before, modified after → WARN
+    `ai-config settings.json modified during plugin provisioning — review: git -C <repo> diff .claude/settings.json`;
+  - already modified before → one info line (`was already modified; not checked`);
+  - `untracked` or `unknown` either time → one info line naming which.
+- It never fails and never aborts. It reports what git sees, so a reformat, a flipped
+  value and a concurrent session's edit are all reported the same way, as a dirty file
+  with a diff to read. That is the actionable fact in each case. It cannot tell them apart
+  and does not try.
 
-Both callers wrap their CLI span with it and treat rc 2 as a partial result naming the
-lines, and rc 1 as a failure:
-
-- `run_setup_user` wraps `setup_claude_plugins`.
-- `run_update` wraps the whole claude section, reconcile and update loop together
-  (round 2 R3), so an update that flips a value is also caught.
-
-A reformat-only change still dirties ai-config's working tree (whitespace), so it is
-reported, not ignored; the message says it is formatting, so the operator can tell it
-from a flipped value.
+git is resolved through `${_CLAUDE_GUARD_GIT:-git}`: the bats suite's `tests/mocks/git`
+shadows `git` on `PATH`, so guard tests point this seam at the real binary (`shell.md`,
+"A PATH mock shadows the binary your production code needs").
 
 ### Callers
 
@@ -169,26 +174,30 @@ from a flipped value.
   an absent `python3`, or a failed `--json` list call now returns 1, which stops
   `setup_user` before `run_setup_or_developer`, the git-hooks sweep and the ledger entry.
   That is deliberate, since provisioning cannot proceed from a settings file it cannot
-  read, but it is a change in behaviour. rc 2 → `log_warn` naming that plugin provisioning
-  was partial, and continue.
+  read, but it is a change in behaviour. Only a missing or unparsable settings file or an
+  absent `python3` returns 1; a failed list call is rc 2 (step 3). rc 2 → `log_warn`
+  naming that plugin provisioning was partial, and continue. The write guard wraps the call
+  and only ever warns.
 - **`run_update`:**
   - **Order (E1).** The `ai-config` section (`setup_ai_config`, today at
     `lib/workflows.sh:700-703`, gated `_run_all`) moves ahead of the claude section, so a
     full update reconciles against the settings.json it just pulled.
     `--claude-only` does not pull ai-config; it reconciles against the current checkout.
     That is documented in `CLAUDE.md`, not changed.
-  - **Claude section.** Snapshot settings, then call `setup_claude_plugins` with its
+  - **Claude section.** Record the guard state, then call `setup_claude_plugins` with its
     output tee'd into `err_claude` so the section's detail shows the reason (R4).
     - Reconcile rc 1: the update loop is skipped and the section FAILs, naming the
       reason. (Round 1's G5 rule, "run the loop even after a failed list call", is
       removed: the set it iterates comes from the call that failed, so it could not be
       implemented; round 2, all three lenses.)
-    - Otherwise run `claude plugins update <id>` for every declared id installed at user
-      scope, re-listing with `plugins list --json` after reconcile so newly installed ids
-      are included. This replaces the hardcoded 14-item loop. An update failure FAILs the
-      section, as today.
-    - Then compare settings. A change, or a reconcile rc 2, WARNs with the named lines
-      (E2), unless something FAILed.
+    - Otherwise list installed plugins once more with `plugins list --json` (reconcile does
+      not return its set) and run `claude plugins update <id>` for every declared id in
+      it at user scope. This replaces the hardcoded 14-item loop. If that list fails, the
+      loop is skipped and the section FAILs naming it (round 3), rather than updating
+      nothing and reporting OK. An update failure FAILs the section, as today.
+    - Then check the guard. Its warning, or a reconcile rc 2, WARNs the section (E2). If
+      the section FAILed, the guard's warning is appended to `fail_result_claude` so it is
+      not hidden behind the failure (round 3).
     - The post-update skill scan and attestation audit that follow are unchanged.
   - **Coupling to ai-config's checkout (round 2 R2).** With the pull ahead of it, the
     section reads whatever the pull left. `setup_ai_config` runs
@@ -207,9 +216,9 @@ from a flipped value.
 `MOCK_CLAUDE_PLUGINS_LIST_JSON`, `plugins marketplace list --json` prints
 `MOCK_CLAUDE_MARKETPLACE_LIST_JSON`, and `MOCK_CLAUDE_FAIL_ARGS` (a substring of the argv)
 makes a matching invocation exit 1. `MOCK_CLAUDE_EDIT_SETTINGS=<verb>:<mode>` makes the
-named verb (`install` or `update`) rewrite the file `_OVERRIDE_CLAUDE_SETTINGS` names,
-either re-indenting it (`reformat`) or setting a named `false` id to `true` (`flip:<id>`),
-to drive the guard. Each defaults to an empty JSON list, to not failing or to not editing, and every argv is still
+named verb (`install` or `update`) append a newline to the file `_OVERRIDE_CLAUDE_SETTINGS`
+names, to drive the guard. `MOCK_CLAUDE_FAIL_ON_CALL=<n>` fails only the nth
+`plugins list --json` invocation, so the re-list can fail while reconcile's list succeeds. Each defaults to an empty JSON list, to not failing or to not editing, and every argv is still
 recorded to `MOCK_CALLS_FILE`. The existing `MOCK_CLAUDE_PLUGINS_LIST_OUTPUT` text path
 stays for any caller that does not pass `--json`; the 9 tests using it are updated where
 they exercise `setup_claude_plugins`.
@@ -232,10 +241,16 @@ Cases:
   marketplaces and plugins are still processed.
 - An `unsupported` source returns 2 and names the marketplace and type.
 - A valid file with no `true` plugin returns 2, naming it (R3).
-- Guard: a `flip` during `install` reports `enabledPlugins.<id>: false -> true` and rc 2;
-  a `flip` during `update` in `run_update` is caught too (the guard spans the loop); a
-  `reformat` reports `reformatted (whitespace or key order only)` and no key lines; an
-  unreadable settings file at snapshot time is rc 1, never "unchanged".
+- Guard, with the settings fixture committed in a real temporary git repo and
+  `_CLAUDE_GUARD_GIT` pointed at the real git: an edit during `install` produces the
+  `modified during plugin provisioning` warning with the `git diff` pointer; an edit
+  during `update` in `run_update` is caught too; an already-modified file produces only
+  the info line; a fixture outside any repo produces `untracked`; a `run_update` that
+  FAILs still carries the guard warning in its result; the guard never changes an rc.
+- A list-call failure in `setup_claude_plugins` returns 2 with the CLI's message and zero
+  `add`/`install` calls.
+- In `run_update`, a failing re-list (`MOCK_CLAUDE_FAIL_ON_CALL=2`) makes zero `update`
+  calls and FAILs naming it.
 - Missing, unparsable and non-object settings each return 1 with zero `claude` calls.
 - `plugins list --json` failing returns 1.
 - `claude` absent returns 0.
@@ -265,9 +280,10 @@ to a log before exec'ing the real binary (G2):
    `plugins install` lines for that run.
 3. Add a bogus marketplace to the copy's `extraKnownMarketplaces`: rc 2, named on stderr,
    the other entries unaffected.
-4. Re-indent the copy to 4 spaces and run with one marketplace unregistered: rc 2,
-   `reformatted (whitespace or key order only)` reported, no key-level lines, and the
-   parsed content still equal to the original.
+4. In a second fresh `HOME`, put the settings copy re-indented to 4 spaces inside a
+   temporary git repository and commit it. Record the guard state, run
+   `setup_claude_plugins`, record it again: the guard reports the file modified (the CLI
+   re-serialises it on `add`/`install`), and `git diff` shows whitespace only.
 
 Run it on Linux and on macOS. This proves the content invariant against the real CLI;
 the settings guard re-checks it on every production run.
@@ -408,3 +424,23 @@ Disposition: Addressed (G5 removed; coupling, dry-run and conflict behaviour sta
 `_UPDATE_SECTION_ORDER` reordered; ledger-HEAD row backlogged; guard spans the whole
 claude section and uses `python3`). The version-bump assumption is covered by the guard
 spanning the update loop, which reports a flip whenever it happens.
+
+### Round 3 (scoped: risk lens on the round 2 revision)
+
+Reviewed at commit: `c2d366f9`.
+
+Risk: Five of eight findings were in the round 2 snapshot/compare guard: a FAIL hid its
+report; a snapshot or re-read failure could abort `setup_user`, including on a first
+provision before `claude` is installed; acceptance case 4 had nothing to run against;
+`other keys changed` was too coarse for `hooks`/`permissions`; a concurrent edit could be
+silently reverted and read as unchanged. Outside the guard: the re-list after reconcile
+had no failure branch (silent zero updates), and the list calls returned
+`Not logged in · Please run /login` in a fresh `HOME` minutes after succeeding, so a box
+not yet logged in could abort `setup_user`. Assumption: nothing but the spanned CLI calls
+writes settings.json during the span.
+Disposition: Addressed. The snapshot/compare guard is replaced by a before/after
+`git status` on the tracked file that only warns, which removes the snapshot state, the
+compare step, the reread branch and the key classification, and reports concurrent edits
+as what they are, a dirty ai-config. The re-list failure FAILs by name; a list-call
+failure is rc 2, not rc 1. The concurrency assumption no longer breaks the design: the
+guard reports whatever git sees.
