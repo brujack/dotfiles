@@ -1090,6 +1090,33 @@ _build_subdir_target_repo() {
   [ -z "$output" ]
 }
 
+@test "a near-miss target name is not the install-hooks target, at the root or one level down" {
+  # The match is `^install-hooks:` -- anchored and colon-terminated. A
+  # prefix-sharing target or an indented mention must not count, or the sweep
+  # would run a recipe that does not exist and report a make failure instead
+  # of :no-target.
+  local _base="${TESTDIR}/near-miss"
+  local _near=$'install-hooks-check:\n\t@true\n  # install-hooks: mentioned, not declared\n'
+  mkdir -p "${_base}/root-near" "${_base}/sub-near/sub"
+  git init -q "${_base}/root-near"
+  printf '%s' "${_near}" > "${_base}/root-near/Makefile"
+  git init -q "${_base}/sub-near"
+  printf 'lint:\n\t@true\n' > "${_base}/sub-near/Makefile"
+  printf '%s' "${_near}" > "${_base}/sub-near/sub/Makefile"
+  git -C "${_base}/sub-near" add Makefile sub/Makefile
+  git -C "${_base}/sub-near" commit -q -m init
+
+  run _git_hooks_target_dir "${_base}/root-near"
+  [ "$status" -eq 1 ]
+  run _git_hooks_target_dir "${_base}/sub-near"
+  [ "$status" -eq 1 ]
+
+  HOOK_EXPECTED_REPOS=(root-near sub-near)
+  PERSONAL_GITREPOS="${_base}" run _git_hooks_gap_repos
+  [ "$status" -eq 0 ]
+  [ "$output" = "root-near:no-target"$'\n'"sub-near:no-target" ]
+}
+
 @test "_git_hooks_target_dir resolves a committed symlinked Makefile that points inside the repo" {
   # A symlink is a legitimate way to share one Makefile between components.
   # Write access to the operator's own checkout is outside this code's threat
