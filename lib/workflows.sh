@@ -75,8 +75,10 @@ except (OSError, ValueError):
 if not isinstance(data, dict):
     sys.exit(1)
 out = []
-markets = data.get("extraKnownMarketplaces") or {}
-for name, entry in (markets.items() if isinstance(markets, dict) else []):
+markets = data.get("extraKnownMarketplaces")
+if markets is not None and not isinstance(markets, dict):
+    sys.exit(1)
+for name, entry in (markets or {}).items():
     src = entry.get("source") if isinstance(entry, dict) else None
     kind = src.get("source") if isinstance(src, dict) else None
     key = {"github": "repo", "git": "url"}.get(kind)
@@ -85,8 +87,10 @@ for name, entry in (markets.items() if isinstance(markets, dict) else []):
         out.append(f"marketplace\t{name}\t{ref}")
     else:
         out.append(f"unsupported\t{name}\t{kind or 'missing'}")
-plugins = data.get("enabledPlugins") or {}
-for pid, val in (plugins.items() if isinstance(plugins, dict) else []):
+plugins = data.get("enabledPlugins")
+if plugins is not None and not isinstance(plugins, dict):
+    sys.exit(1)
+for pid, val in (plugins or {}).items():
     out.append(f"plugin\t{pid}\t{'true' if val is True else 'false'}")
 if out:
     print("\n".join(out))
@@ -94,25 +98,37 @@ PY
 }
 
 # Prints one registered marketplace name per line, from
-# `claude plugins marketplace list --json`. Returns 1 (CLI output echoed to
-# stderr) when the call or the parse fails.
+# `claude plugins marketplace list --json`, suppressing a genuinely empty
+# result rather than printing a lone blank line (mirrors the manifest's own
+# `if out:` guard — an empty line would read as a real, empty-string name to
+# a caller comparing with `grep -qxF`). Returns 1 with nothing of our own on
+# stdout in three cases: python3 cannot be resolved; the CLI call fails, in
+# which case its own stderr is left to flow through uncaptured rather than
+# being captured and re-echoed; or the JSON does not parse, in which case a
+# one-line diagnostic is printed to stderr.
 _claude_registered_marketplaces() {
   local _json
-  _json="$(claude plugins marketplace list --json < /dev/null 2>&1)" \
-    || { printf '%s\n' "${_json}" >&2; return 1; }
+  command -v python3 >/dev/null 2>&1 || return 1
+  _json="$(claude plugins marketplace list --json < /dev/null)" || return 1
   printf '%s' "${_json}" | python3 -c 'import json,sys
-print("\n".join(m["name"] for m in json.load(sys.stdin)))' 2>/dev/null
+names = [m["name"] for m in json.load(sys.stdin)]
+if names:
+    print("\n".join(names))' 2>/dev/null \
+    || { printf 'claude plugins marketplace list: unparsable JSON\n' >&2; return 1; }
 }
 
 # Prints one installed plugin id per line, restricted to user-scope
-# installs, from `claude plugins list --json`. Same failure contract as
-# _claude_registered_marketplaces.
+# installs, from `claude plugins list --json`. Same empty-result guard and
+# failure contract as _claude_registered_marketplaces.
 _claude_installed_user_ids() {
   local _json
-  _json="$(claude plugins list --json < /dev/null 2>&1)" \
-    || { printf '%s\n' "${_json}" >&2; return 1; }
+  command -v python3 >/dev/null 2>&1 || return 1
+  _json="$(claude plugins list --json < /dev/null)" || return 1
   printf '%s' "${_json}" | python3 -c 'import json,sys
-print("\n".join(p["id"] for p in json.load(sys.stdin) if p.get("scope") == "user"))' 2>/dev/null
+ids = [p["id"] for p in json.load(sys.stdin) if p.get("scope") == "user"]
+if ids:
+    print("\n".join(ids))' 2>/dev/null \
+    || { printf 'claude plugins list: unparsable JSON\n' >&2; return 1; }
 }
 
 setup_claude_plugins() {

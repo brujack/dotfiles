@@ -125,6 +125,31 @@ JSON
   [ -z "$output" ]
 }
 
+@test "_claude_plugin_manifest returns 1 with no stdout when extraKnownMarketplaces is not an object" {
+  printf '{"extraKnownMarketplaces": []}' > "${SETTINGS}"
+  run _claude_plugin_manifest
+  [ "$status" -eq 1 ]
+  [ -z "$output" ]
+}
+
+@test "_claude_plugin_manifest returns 1 with no stdout when enabledPlugins is not an object" {
+  printf '{"enabledPlugins": []}' > "${SETTINGS}"
+  run _claude_plugin_manifest
+  [ "$status" -eq 1 ]
+  [ -z "$output" ]
+}
+
+@test "_claude_plugin_manifest returns 1 with no stdout when the settings file exists but is unreadable" {
+  if [[ "$(id -u)" -eq 0 ]]; then
+    skip "root ignores file mode bits"
+  fi
+  chmod 000 "${SETTINGS}"
+  run _claude_plugin_manifest
+  chmod 644 "${SETTINGS}"
+  [ "$status" -eq 1 ]
+  [ -z "$output" ]
+}
+
 @test "_claude_plugin_manifest returns 1 with no stdout when python3 cannot be resolved" {
   local _shim="${BATS_TEST_TMPDIR}/no-python3-shim"
   mkdir -p "${_shim}"
@@ -152,12 +177,45 @@ JSON
   export MOCK_CLAUDE_FAIL_ARGS="marketplace list --json"
   run _claude_registered_marketplaces
   [ "$status" -eq 1 ]
+  # The mock prints nothing of its own on this path, and the reader no
+  # longer captures-then-echoes stderr (that echo used to duplicate
+  # whatever the 2>&1-merged capture held) -- it lets the CLI's real
+  # stderr flow through uncaptured instead. Nothing here manufactures a
+  # message, so $output (bats merges stdout+stderr) must be empty.
+  [ -z "$output" ]
 }
 
 @test "_claude_registered_marketplaces returns 1 when the CLI output does not parse" {
   export MOCK_CLAUDE_MARKETPLACE_LIST_JSON='not json'
   run _claude_registered_marketplaces
   [ "$status" -eq 1 ]
+  [[ "$output" == *"unparsable JSON"* ]]
+}
+
+@test "_claude_registered_marketplaces prints zero bytes for an empty marketplace list" {
+  # "\n".join([]) followed by print() would emit one blank line -- a single
+  # "\n" byte. bats' `run`/$output is the WRONG instrument here: it captures
+  # via command substitution, which strips a lone trailing newline on its
+  # own, so [ -z "$output" ] would pass whether or not the reader itself
+  # emits that byte (confirmed against a `printf '\n'` probe). Redirect to a
+  # file instead, which preserves exactly what was written.
+  export MOCK_CLAUDE_MARKETPLACE_LIST_JSON='[]'
+  local _outfile="${BATS_TEST_TMPDIR}/mkt-empty-out"
+  _claude_registered_marketplaces > "${_outfile}"
+  local _rc=$?
+  [ "${_rc}" -eq 0 ]
+  [ ! -s "${_outfile}" ]
+}
+
+@test "_claude_registered_marketplaces returns 1 with no stdout when python3 cannot be resolved" {
+  local _shim="${BATS_TEST_TMPDIR}/no-python3-shim-mkt"
+  mkdir -p "${_shim}"
+  # python3 is checked before the CLI is ever invoked, so the shim need
+  # not resolve `claude` either -- same empty-shim approach as the
+  # manifest's python3-absent test above.
+  PATH="${_shim}" run _claude_registered_marketplaces
+  [ "$status" -eq 1 ]
+  [ -z "$output" ]
 }
 
 # ── _claude_installed_user_ids ──────────────────────────────────────────────
@@ -173,10 +231,32 @@ JSON
   export MOCK_CLAUDE_FAIL_ARGS="plugins list --json"
   run _claude_installed_user_ids
   [ "$status" -eq 1 ]
+  [ -z "$output" ]
 }
 
 @test "_claude_installed_user_ids returns 1 when the CLI output does not parse" {
   export MOCK_CLAUDE_PLUGINS_LIST_JSON='not json'
   run _claude_installed_user_ids
   [ "$status" -eq 1 ]
+  [[ "$output" == *"unparsable JSON"* ]]
+}
+
+@test "_claude_installed_user_ids prints zero bytes for an empty plugin list" {
+  # Same instrument fix as the marketplace-reader sibling above: $output
+  # cannot discriminate a lone blank-line print from true emptiness because
+  # `run` captures through command substitution, which strips it either way.
+  export MOCK_CLAUDE_PLUGINS_LIST_JSON='[]'
+  local _outfile="${BATS_TEST_TMPDIR}/ids-empty-out"
+  _claude_installed_user_ids > "${_outfile}"
+  local _rc=$?
+  [ "${_rc}" -eq 0 ]
+  [ ! -s "${_outfile}" ]
+}
+
+@test "_claude_installed_user_ids returns 1 with no stdout when python3 cannot be resolved" {
+  local _shim="${BATS_TEST_TMPDIR}/no-python3-shim-ids"
+  mkdir -p "${_shim}"
+  PATH="${_shim}" run _claude_installed_user_ids
+  [ "$status" -eq 1 ]
+  [ -z "$output" ]
 }
