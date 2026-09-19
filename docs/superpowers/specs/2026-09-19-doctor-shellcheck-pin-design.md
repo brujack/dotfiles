@@ -99,3 +99,55 @@ against the only failure it exists to catch. Three mutations are part of verific
   by decision; revisit if Mac-vs-CI lint skew ever costs a red CI run.
 - Resolving as a non-interactive actor (hooks started from editors, cron).
 - Doctor checks for `tflint`/`tfsec` pins, which have their own backlog row.
+
+## Multi-Lens Review
+
+Reviewed at commit: `7cbc04b5` (Step 7 self-review commit, before Step 8 dispatch)
+
+### Goal-Fit
+
+Finding: The Linux arm is worth having, but `doctor` is the wrong consumer. Its only caller
+is a manual `setup_env.sh -t doctor`, and nothing schedules or stores it, so "nothing would
+report one" stays true until someone thinks to run it. The macOS WARN moves no exit code and
+persists nowhere, so it fails the reads-it test. A simpler path with more value: compare
+`$(SHELLCHECK) --version` against `SHELLCHECK_VER` inside `make lint`, where the gate
+actually decides. That runs on every commit and push, as whichever actor invoked git.
+Separately, the Linux remedy is wrong: `-t developer` reinstalls into `/usr/local/bin`,
+which a competing copy still outranks. All five cases fail on empty output, so none passes
+vacuously.
+Assumption: the removed competing copies were a one-off. Checked 2026-09-19:
+terraform_ansible's `common` role does list apt `shellcheck`, but `/usr/bin` is at PATH
+position 11 on both Linux boxes, behind `/usr/local/bin` at 9, so an apt copy cannot
+outrank the pin. Only linuxbrew (positions 5–6) can. Neither box has the apt package
+installed.
+Disposition:
+
+### Ergonomics
+
+Finding: (1) Test 3 cannot hold as written. The spec's test PATH includes `/usr/bin`, so the
+real python3 (Studio 3.9.6, ubuntu-latest 3.12) fails its pin and sets `_DOCTOR_FAILED`. The
+existing real tests leave `/usr/bin` out for this reason; shim only `grep` and `head`.
+(2) The Linux remedy should say `brew uninstall shellcheck`, not `-t developer`. (3) A
+missing pin on Linux, where `make lint` skips shellcheck entirely, is reported only through
+an uncounted `log_warn`, which is weaker than a mismatch. (4) mac_mini installs brew
+shellcheck anyway, since the Brewfile tag doesn't gate installs, so it gets the Mac WARN too.
+Assumption: the Mac WARN will be rare and brief rather than a standing warning. Settled by
+comparing brew shellcheck release dates against `git log -S 'SHELLCHECK_VER='
+lib/constants.sh`.
+Disposition:
+
+### Risk
+
+Finding: (1) The same test-PATH defect as Ergonomics (1). `_doctor_check_one_version` is
+nested, so every test runs all of `_doctor_check_versions`; go, python3, ruby and zsh must be
+stubbed or hidden in every case that asserts a counter. (2) Test 1 could pass on the wrong
+verdict, because the parse-failure message also names the path; assert `[PASS]` or the
+`_DOCTOR_PASS` increment. (3) The same wrong `-t developer` remedy. Checked with no problem
+found: the optional fifth argument is safe (4 callers), and the run_doctor end-to-end tests
+stub `_doctor_check_versions` by name.
+Assumption: no uncertain assumption found.
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
