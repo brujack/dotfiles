@@ -1,6 +1,6 @@
 # lint's shellcheck install hint names the pinned path on Linux
 
-**Status:** Spec (descoped 2026-09-19, see "Decision")
+**Status:** Approved 2026-09-19 (descoped, see "Decision")
 **Closes backlog rows:** "the pinned shellcheck is outranked by linuxbrew on both Linux boxes' PATH",
 "`run_check_versions` checks the shellcheck on PATH, not the one the pin manages",
 "doctor arm: the RESOLVED shellcheck must match `SHELLCHECK_VER`"
@@ -121,7 +121,7 @@ shellcheck anyway, since the Brewfile tag doesn't gate installs, so it gets the 
 Assumption: the Mac WARN will be rare and brief rather than a standing warning. Settled by
 comparing brew shellcheck release dates against `git log -S 'SHELLCHECK_VER='
 lib/constants.sh`.
-Disposition: (1) and (2) Addressed (operator, 2026-09-19): the script parses with bash regex and calls no external tool except the binary, so test PATH no longer matters; the remedy is corrected. (4) is moot, because lint does not run on a mac_mini. (3) is pending operator: the spec now lists "fail lint when shellcheck is absent on Linux" as out of scope.
+Disposition: (1) and (2) Addressed (operator, 2026-09-19): the script parses with bash regex and calls no external tool except the binary, so test PATH no longer matters; the remedy is corrected. (4) is moot, because lint does not run on a mac_mini. (3) Accepted (operator, 2026-09-19): out of scope for this change, with a backlog row to consider failing on Linux once the pin is expected to be present.
 
 ### Risk
 
