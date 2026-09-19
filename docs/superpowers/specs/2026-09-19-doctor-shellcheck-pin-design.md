@@ -34,7 +34,10 @@ with `command -v`, parses its version, prefix-matches the pin, and names the res
 in both the PASS and the mismatch message.
 
 One change to that helper: an optional fifth argument, `_on_mismatch` (`fail`, the
-default, or `warn`). Every existing caller keeps FAIL.
+default, or `warn`). Every existing caller keeps FAIL. `warn` reports through
+`doctor_warn`, which counts toward the summary's warnings, not `log_warn`, which counts
+nothing. The shellcheck call passes `warn` only when `MACOS` is set and omits the argument
+otherwise, so Linux takes the helper's default.
 
 | platform | on mismatch                                                                        | why                                                                                                                       |
 | -------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
@@ -70,19 +73,22 @@ developer's shell exports `MACOS`.
 | --- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ |
 | 1   | Linux, stub 0.11.0                                                             | PASS naming the stub's path                                                          |
 | 2   | **negative control**: Linux, stub 0.10.0 in a directory ahead of a stub 0.11.0 | FAIL naming the 0.10.0 stub's path, not the pinned one                               |
-| 3   | macOS, stub 0.12.0                                                             | WARN (not FAIL), naming path, installed version and CI pin; `_DOCTOR_FAILED` stays 0 |
+| 3   | macOS, stub 0.12.0                                                             | WARN (not FAIL) naming path, installed version and CI pin; `_DOCTOR_WARN` +1, `_DOCTOR_FAILED` stays 0 |
 | 4   | macOS, mismatched `python3` stub                                               | still FAIL, which proves the WARN severity is scoped to shellcheck                   |
 | 5   | Linux, stub printing no version                                                | WARN "could not parse", unchanged helper path                                        |
 
 Test 2 is the one the backlog row demands. The check passes on every machine today, so
 without a case where a competing copy is present and wins, the check would ship untested
-against the only failure it exists to catch. Removing the new call line must turn 1–3 red,
-and changing the default of `_on_mismatch` to `warn` must turn 2 and 4 red. Both mutations
-are part of verification.
+against the only failure it exists to catch. Three mutations are part of verification, one per decision:
+
+- deleting the new call line turns 1–3 red;
+- passing `warn` for shellcheck unconditionally turns 2 red;
+- changing the helper's `_on_mismatch` default to `warn` turns 4 red, and 2 as well
+  because the Linux call relies on the default.
 
 ## Verification
 
-- `make test` green; the five cases above pass; both mutations go red.
+- `make test` green; the five cases above pass; all three mutations go red.
 - On `claude`: `setup_env.sh -t doctor` shows `[PASS] shellcheck (0.11.0) — /usr/local/bin/shellcheck`.
 - On the Studio: the same line with `/opt/homebrew/bin/shellcheck`, and a WARN rather than a
   FAIL the day brew moves past 0.11.0.
