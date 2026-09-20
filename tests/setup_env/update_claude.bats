@@ -153,6 +153,106 @@ _claude_guard_repo_setup() {
   refute_grep "claude plugins update" "${MOCK_CALLS_FILE}"
 }
 
+@test "run_update: a partial reconcile followed by a re-list failure keeps both messages in the FAILed result" {
+  export UPDATE_CLAUDE=1
+  export MOCK_CLAUDE_PLUGINS_LIST_JSON='[{"id":"superpowers@claude-plugins-official","scope":"user"}]'
+  # Both unregistered by default; the git-source marketplace's URL is
+  # https, so this fails only that one add call inside setup_claude_plugins
+  # (rc 2), and MOCK_CLAUDE_FAIL_ON_CALL=2 separately fails run_update's
+  # OWN re-read of the installed-id list (the second "plugins list --json"
+  # call; setup_claude_plugins's own read is the first). A fatal early-exit
+  # must not drop the message the earlier rc-2 already queued.
+  export MOCK_CLAUDE_FAIL_ARGS="marketplace add https"
+  export MOCK_CLAUDE_FAIL_ON_CALL=2
+  local _rc=0
+  run_update || _rc=$?
+  [ "${_rc}" -ne 0 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_claude")" = "FAIL" ]
+  local _result
+  _result="$(cat "${_DOTFILES_RUN_TMPDIR}/result_claude")"
+  [[ "${_result}" == *"partial"* ]]
+  [[ "${_result}" == *"installed-plugin list failed"* ]]
+}
+
+@test "run_update: the write guard warning survives a re-list failure" {
+  _claude_guard_repo_setup
+  export UPDATE_CLAUDE=1
+  export MOCK_CLAUDE_MARKETPLACE_LIST_JSON='[{"name":"claude-plugins-official"},{"name":"caveman"}]'
+  # Both plugins start uninstalled, so setup_claude_plugins's own install
+  # loop is what dirties settings.json (MOCK_CLAUDE_EDIT_SETTINGS=install)
+  # -- before run_update's own re-read fails on the second "plugins list
+  # --json" call and never reaches the update loop at all.
+  export MOCK_CLAUDE_PLUGINS_LIST_JSON='[]'
+  export MOCK_CLAUDE_EDIT_SETTINGS=install
+  export MOCK_CLAUDE_FAIL_ON_CALL=2
+  local _rc=0
+  run_update || _rc=$?
+  [ "${_rc}" -ne 0 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_claude")" = "FAIL" ]
+  local _result
+  _result="$(cat "${_DOTFILES_RUN_TMPDIR}/result_claude")"
+  [[ "${_result}" == *"installed-plugin list failed"* ]]
+  [[ "${_result}" == *"changed during plugin provisioning"* ]]
+}
+
+@test "run_update: a manifest line with an embedded tab is skipped rather than updated" {
+  export UPDATE_CLAUDE=1
+  local _settings="${BATS_TEST_TMPDIR}/embedded-tab-settings.json"
+  # A JSON string containing a literal \t (two characters: backslash, t)
+  # parses to a Python string holding an actual TAB -- exactly the
+  # "id containing an embedded tab" case _claude_manifest_split_line's own
+  # docblock says a caller must record and skip, never act on. The manifest
+  # line becomes "plugin\ta\tb@m\ttrue": split gives _name="a", _extra="true"
+  # (non-empty). "a" is deliberately ALSO a real installed id below, so the
+  # only thing standing between this test and a real (wrong) update call is
+  # the _extra check -- without it, grep -qxF -- "a" <<<"${_installed}"
+  # would match and fire "claude plugins update a".
+  python3 - "${_settings}" <<'PY'
+import json, sys
+data = {
+    "extraKnownMarketplaces": {"m": {"source": {"source": "github", "repo": "org/m"}}},
+    "enabledPlugins": {"good@m": True, "a\tb@m": True},
+}
+with open(sys.argv[1], "w") as fh:
+    json.dump(data, fh)
+PY
+  export _OVERRIDE_CLAUDE_SETTINGS="${_settings}"
+  export MOCK_CLAUDE_MARKETPLACE_LIST_JSON='[{"name":"m"}]'
+  export MOCK_CLAUDE_PLUGINS_LIST_JSON='[{"id":"good@m","scope":"user"},{"id":"a","scope":"user"}]'
+  run run_update
+  grep -q '^claude plugins update good@m$' "${MOCK_CALLS_FILE}"
+  refute_grep '^claude plugins update a$' "${MOCK_CALLS_FILE}"
+}
+
+@test "run_update: an unreadable manifest on the second read FAILs claude instead of silently updating nothing" {
+  export UPDATE_CLAUDE=1
+  export MOCK_CLAUDE_MARKETPLACE_LIST_JSON='[{"name":"claude-plugins-official"},{"name":"caveman"}]'
+  export MOCK_CLAUDE_PLUGINS_LIST_JSON='[{"id":"superpowers@claude-plugins-official","scope":"user"}]'
+  # setup_claude_plugins's own reconcile is the first call to
+  # _claude_plugin_manifest and must succeed (else _setup_rc would be 1,
+  # never reaching run_update's own second read at all); the wrapper fails
+  # only that second call, using a FILE counter -- setup_claude_plugins
+  # runs on the left of a pipe, its own subshell, so a shell-variable
+  # counter would not be visible here (shell.md: pipeline subshells).
+  local _count_file="${BATS_TEST_TMPDIR}/manifest_calls"
+  printf '0' > "${_count_file}"
+  eval "$(declare -f _claude_plugin_manifest | sed '1s/_claude_plugin_manifest/_real_claude_plugin_manifest_for_test/')"
+  _claude_plugin_manifest() {
+    local _n
+    _n=$(( $(cat "${_count_file}") + 1 ))
+    printf '%s' "${_n}" > "${_count_file}"
+    [[ "${_n}" -eq 2 ]] && return 1
+    _real_claude_plugin_manifest_for_test
+  }
+  export -f _claude_plugin_manifest _real_claude_plugin_manifest_for_test
+  local _rc=0
+  run_update || _rc=$?
+  [ "${_rc}" -ne 0 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_claude")" = "FAIL" ]
+  [[ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_claude")" == *"plugin manifest unreadable"* ]]
+  refute_grep "claude plugins update" "${MOCK_CALLS_FILE}"
+}
+
 @test "run_update: the write guard WARNs when the update run edits settings.json" {
   _claude_guard_repo_setup
   export UPDATE_CLAUDE=1

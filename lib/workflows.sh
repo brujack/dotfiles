@@ -664,57 +664,80 @@ run_update() {
       # never a short name, and update is deliberately unfiltered by the
       # enabled/disabled flag: a disabled-but-installed plugin still gets
       # updated so its cache does not go stale.
-      local _g_before _setup_rc=0
+      # Single exit: every branch below only ever appends to _messages and
+      # sets _fatal=1 -- the guard check and the FAIL/OK decision happen
+      # once, after all of them, so a fatal early-exit never drops a
+      # message (the rc-2 partial note, a plugin-update failure) or skips
+      # the write guard just because something else also failed.
+      local _g_before _setup_rc=0 _fatal=0
       local -a _messages=() _claude_failed=()
       _g_before="$(_claude_settings_git_state)"
       setup_claude_plugins 2>&1 | tee -a "${_DOTFILES_RUN_TMPDIR}/err_claude"
       _setup_rc="${PIPESTATUS[0]}"
       if [[ ${_setup_rc} -eq 1 ]]; then
-        printf "plugin settings unreadable: %s\n" "$(_claude_settings_path)" \
-          > "${_DOTFILES_RUN_TMPDIR}/fail_result_claude"
-        _update_record_end "claude" 1
+        _fatal=1
+        _messages+=("plugin settings unreadable: $(_claude_settings_path)")
       else
         if [[ ${_setup_rc} -eq 2 ]]; then
           _messages+=("plugin provisioning partial — see detail")
         fi
         local _manifest _installed
-        _manifest="$(_claude_plugin_manifest)"
-        if ! _installed="$(_claude_installed_user_ids)"; then
-          printf "installed-plugin list failed — updates skipped\n" \
-            > "${_DOTFILES_RUN_TMPDIR}/fail_result_claude"
-          _update_record_end "claude" 1
+        if ! _manifest="$(_claude_plugin_manifest)"; then
+          # Unreachable today -- setup_claude_plugins already read this
+          # same file and would have returned 1 above if it could not.
+          # Kept as a guard against exactly the failure this rewrite closed
+          # for the installed-list read below: an unchecked read here would
+          # feed an empty manifest to the loop, update nothing, and record
+          # OK -- "updated nothing and reported success".
+          _fatal=1
+          _messages+=("plugin manifest unreadable — updates skipped")
+        elif ! _installed="$(_claude_installed_user_ids)"; then
+          _fatal=1
+          _messages+=("installed-plugin list failed — updates skipped")
         else
           local _line _type _name _ref _extra
           while IFS= read -r _line; do
             _claude_manifest_split_line "${_line}"
             [[ "${_type}" == "plugin" ]] || continue
+            # A non-empty _extra means the line has more than the three
+            # fields it should (an id containing an embedded tab/newline);
+            # _claude_manifest_split_line's own docblock requires callers
+            # to skip it. setup_claude_plugins already recorded the failure
+            # for this same line (folded into the rc-2 message above), so
+            # nothing further is added here -- just don't act on garbage.
+            [[ -z "${_extra}" ]] || continue
             grep -qxF -- "${_name}" <<<"${_installed}" || continue
             claude plugins update "${_name}" < /dev/null 2>&1 \
               | tee -a "${_DOTFILES_RUN_TMPDIR}/err_claude"
             [[ "${PIPESTATUS[0]}" -ne 0 ]] && _claude_failed+=("${_name%%@*}")
           done <<<"${_manifest}"
           if [[ ${#_claude_failed[@]} -gt 0 ]]; then
+            _fatal=1
             _messages+=("$(printf '%d plugin(s) failed (%s)' "${#_claude_failed[@]}" "${_claude_failed[*]}")")
           fi
-          local _g_msg
-          if _g_msg="$(_claude_settings_guard_check "${_g_before}" "$(_claude_settings_git_state)")"; then
-            [[ -n ${_g_msg} ]] && log_info "${_g_msg}"
-          else
-            _messages+=("${_g_msg}")
-          fi
-          local _joined="" _m
-          for _m in "${_messages[@]}"; do
-            _joined+="$(printf '%s; ' "${_m}")"
-          done
-          _joined="${_joined%; }"
-          if [[ ${#_claude_failed[@]} -gt 0 ]]; then
-            printf '%s\n' "${_joined}" > "${_DOTFILES_RUN_TMPDIR}/fail_result_claude"
-            _update_record_end "claude" 1
-          else
-            _update_record_end "claude" 0
-            [[ -n ${_joined} ]] && _update_warn "claude" "${_joined}"
-          fi
         fi
+      fi
+      # The guard runs unconditionally, even after a fatal early-exit --
+      # settings.json was still open to writes for whatever ran before the
+      # failure (an install during the reconcile, say), so a fatal result
+      # must not silently drop the guard's warning.
+      local _g_msg
+      if _g_msg="$(_claude_settings_guard_check "${_g_before}" "$(_claude_settings_git_state)")"; then
+        [[ -n ${_g_msg} ]] && log_info "${_g_msg}"
+      else
+        _messages+=("${_g_msg}")
+      fi
+      local _joined="" _m
+      for _m in "${_messages[@]}"; do
+        _joined+="${_m}; "
+      done
+      _joined="${_joined%; }"
+      if [[ ${_fatal} -eq 1 ]]; then
+        printf '%s\n' "${_joined}" > "${_DOTFILES_RUN_TMPDIR}/fail_result_claude"
+        _update_record_end "claude" 1
+      else
+        _update_record_end "claude" 0
+        [[ -n ${_joined} ]] && _update_warn "claude" "${_joined}"
       fi
       # Post-update skill security scan — supply chain guard.
       # Advisory: never aborts the update. REVIEW/HOLD findings require human
