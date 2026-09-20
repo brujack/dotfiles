@@ -588,14 +588,41 @@ EOF
 }
 
 @test "_install_ubuntu_brew_packages: installs claude plugins at USER scope with a marketplace" {
-  # The old form (`claude plugins install <bare-name>`) registered at PROJECT scope
-  # against whatever cwd the run had, so `claude plugins update` later reported
-  # "not installed at scope user" for 12 plugins and failed the update's claude
-  # section. Measured on claude 2026-09-12.
+  # Task 7 of docs/superpowers/plans/2026-09-19-claude-plugin-provisioning.md:
+  # the hardcoded 4-plugin loop is gone -- provision_claude_plugins reconciles
+  # from settings.json instead. load_mocks (setup(), above) already points
+  # _OVERRIDE_CLAUDE_SETTINGS at a per-test copy of
+  # tests/fixtures/claude-settings.json, which declares the
+  # claude-plugins-official marketplace and enables superpowers@claude-plugins-official
+  # and caveman@caveman (frontend-design@claude-plugins-official is false and
+  # code-simplifier is absent entirely). The old form
+  # (`claude plugin install <bare-name>`, no marketplace step at all)
+  # registered at PROJECT scope against whatever cwd the run had, so `claude
+  # plugins update` later reported "not installed at scope user" for 12
+  # plugins and failed the update's claude section. Measured on claude
+  # 2026-09-12.
   export HAS_DEVTOOLS=1
   run _install_ubuntu_brew_packages
-  grep -q "plugin install -s user superpowers@claude-plugins-official" "${MOCK_CALLS_FILE}"
-  refute_grep "plugins install superpowers$" "${MOCK_CALLS_FILE}"
+  [ "$status" -eq 0 ]
+  local _marketplace_line _install_line
+  _marketplace_line="$(grep -n '^claude plugins marketplace add anthropics/claude-plugins-official$' "${MOCK_CALLS_FILE}" | head -1 | cut -d: -f1)"
+  _install_line="$(grep -n '^claude plugins install -s user superpowers@claude-plugins-official$' "${MOCK_CALLS_FILE}" | head -1 | cut -d: -f1)"
+  [ -n "${_marketplace_line}" ]
+  [ -n "${_install_line}" ]
+  [ "${_marketplace_line}" -lt "${_install_line}" ]
+  refute_grep "code-simplifier" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_brew_packages: returns 2 and names claude-plugins when plugin provisioning fails" {
+  # MOCK_CLAUDE_FAIL_ARGS matches on substring against the mock's "$*", so
+  # "plugins install" fails only the `claude plugins install -s user <id>`
+  # calls -- "plugins list --json" and "plugins marketplace add ..." do not
+  # contain that substring and still succeed.
+  export HAS_DEVTOOLS=1
+  export MOCK_CLAUDE_FAIL_ARGS="plugins install"
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"claude-plugins"* ]]
 }
 
 # ── _install_ubuntu_brew_packages: RESOLUTE-gated coreutils ──────────────────
