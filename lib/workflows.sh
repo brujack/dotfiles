@@ -644,41 +644,78 @@ run_update() {
     _update_skip "softwareupdate" "flag not set"
   fi
 
+  # ai-config is pulled before the claude section so the plugin reconcile
+  # below reads the settings.json this run just fetched, not a stale copy.
+  if [[ ${_run_all} -eq 1 ]]; then
+    _update_record_start "ai-config"
+    setup_ai_config 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_ai-config"
+    _update_record_end "ai-config" "${PIPESTATUS[0]}"
+  fi
+
   # ── claude plugins ────────────────────────────────────────────────────────
   if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_CLAUDE:-} ]]; then
     if command -v claude &>/dev/null; then
       _update_record_start "claude"
       printf "Updating Claude plugins\\n"
-      # CLI matches installed plugins by plugin@marketplace (see `claude plugins list`), not short names.
-      # Run each independently so a single failure doesn't abort the rest, and failures are named.
-      local _claude_failed=()
-      local _plugin_rc=0
-      for _plugin in \
-        superpowers@claude-plugins-official \
-        code-review@claude-plugins-official \
-        context7@claude-plugins-official \
-        context-mode@context-mode \
-        rust-analyzer-lsp@claude-plugins-official \
-        pyright-lsp@claude-plugins-official \
-        caveman@caveman \
-        firecrawl@firecrawl \
-        skill-creator@claude-plugins-official \
-        frontend-design@claude-plugins-official \
-        security-guidance@claude-plugins-official \
-        ansible-good-practices@claude-ansible-skills \
-        terraform-skill@antonbabenko \
-        warp@claude-code-warp; do
-        claude plugins update "${_plugin}" 2>&1 | tee -a "${_DOTFILES_RUN_TMPDIR}/err_claude"
-        _plugin_rc="${PIPESTATUS[0]}"
-        [[ ${_plugin_rc} -ne 0 ]] && _claude_failed+=("${_plugin%%@*}")
-      done
-      local _claude_rc=0
-      if [[ ${#_claude_failed[@]} -gt 0 ]]; then
-        _claude_rc=1
-        printf "%d plugin(s) failed (%s)\n" "${#_claude_failed[@]}" "${_claude_failed[*]}" \
+      # Reconcile declared marketplaces/plugins from settings.json (adds
+      # missing marketplaces, installs missing enabled plugins), then update
+      # every declared plugin id that is actually installed at user scope --
+      # the CLI matches by plugin@marketplace (see `claude plugins list`),
+      # never a short name, and update is deliberately unfiltered by the
+      # enabled/disabled flag: a disabled-but-installed plugin still gets
+      # updated so its cache does not go stale.
+      local _g_before _setup_rc=0
+      local -a _messages=() _claude_failed=()
+      _g_before="$(_claude_settings_git_state)"
+      setup_claude_plugins 2>&1 | tee -a "${_DOTFILES_RUN_TMPDIR}/err_claude"
+      _setup_rc="${PIPESTATUS[0]}"
+      if [[ ${_setup_rc} -eq 1 ]]; then
+        printf "plugin settings unreadable: %s\n" "$(_claude_settings_path)" \
           > "${_DOTFILES_RUN_TMPDIR}/fail_result_claude"
+        _update_record_end "claude" 1
+      else
+        if [[ ${_setup_rc} -eq 2 ]]; then
+          _messages+=("plugin provisioning partial — see detail")
+        fi
+        local _manifest _installed
+        _manifest="$(_claude_plugin_manifest)"
+        if ! _installed="$(_claude_installed_user_ids)"; then
+          printf "installed-plugin list failed — updates skipped\n" \
+            > "${_DOTFILES_RUN_TMPDIR}/fail_result_claude"
+          _update_record_end "claude" 1
+        else
+          local _line _type _name _ref _extra
+          while IFS= read -r _line; do
+            _claude_manifest_split_line "${_line}"
+            [[ "${_type}" == "plugin" ]] || continue
+            grep -qxF -- "${_name}" <<<"${_installed}" || continue
+            claude plugins update "${_name}" < /dev/null 2>&1 \
+              | tee -a "${_DOTFILES_RUN_TMPDIR}/err_claude"
+            [[ "${PIPESTATUS[0]}" -ne 0 ]] && _claude_failed+=("${_name%%@*}")
+          done <<<"${_manifest}"
+          if [[ ${#_claude_failed[@]} -gt 0 ]]; then
+            _messages+=("$(printf '%d plugin(s) failed (%s)' "${#_claude_failed[@]}" "${_claude_failed[*]}")")
+          fi
+          local _g_msg
+          if _g_msg="$(_claude_settings_guard_check "${_g_before}" "$(_claude_settings_git_state)")"; then
+            [[ -n ${_g_msg} ]] && log_info "${_g_msg}"
+          else
+            _messages+=("${_g_msg}")
+          fi
+          local _joined="" _m
+          for _m in "${_messages[@]}"; do
+            _joined+="$(printf '%s; ' "${_m}")"
+          done
+          _joined="${_joined%; }"
+          if [[ ${#_claude_failed[@]} -gt 0 ]]; then
+            printf '%s\n' "${_joined}" > "${_DOTFILES_RUN_TMPDIR}/fail_result_claude"
+            _update_record_end "claude" 1
+          else
+            _update_record_end "claude" 0
+            [[ -n ${_joined} ]] && _update_warn "claude" "${_joined}"
+          fi
+        fi
       fi
-      _update_record_end "claude" "${_claude_rc}"
       # Post-update skill security scan — supply chain guard.
       # Advisory: never aborts the update. REVIEW/HOLD findings require human
       # review before using the flagged skill. Re-running does not clear REVIEW.
@@ -962,10 +999,6 @@ run_update() {
 
   # ── git-based tools + misc (run_all only) ─────────────────────────────────
   if [[ ${_run_all} -eq 1 ]]; then
-    _update_record_start "ai-config"
-    setup_ai_config 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_ai-config"
-    _update_record_end "ai-config" "${PIPESTATUS[0]}"
-
     _update_record_start "git-repos"
     sync_git_repos 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_git-repos"
     local _git_repos_rc="${PIPESTATUS[0]}"

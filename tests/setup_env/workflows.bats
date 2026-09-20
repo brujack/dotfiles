@@ -2441,6 +2441,10 @@ assert_all_npm_globals_pinned() {
   unset LINUX UBUNTU
   export UPDATE_CLAUDE=1
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  # The update set now comes from the CLI's own installed-at-user-scope
+  # list, not a hardcoded id — name it here so the loop has something to
+  # match against the fixture's declared "superpowers" plugin.
+  export MOCK_CLAUDE_PLUGINS_LIST_JSON='[{"id":"superpowers@claude-plugins-official","scope":"user"}]'
   run run_update
   [ "$status" -eq 0 ]
   grep -q "claude plugins update superpowers@claude-plugins-official" "${MOCK_CALLS_FILE}"
