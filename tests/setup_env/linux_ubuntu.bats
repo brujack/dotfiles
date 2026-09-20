@@ -622,7 +622,11 @@ EOF
   export MOCK_CLAUDE_FAIL_ARGS="plugins install"
   run _install_ubuntu_brew_packages
   [ "$status" -eq 2 ]
-  [[ "$output" == *"claude-plugins"* ]]
+  # Anchor on the summary line, not on a bare substring: setup_claude_plugins
+  # prints "failed to install Claude plugin: superpowers@claude-plugins-official"
+  # on this path, which contains "claude-plugins" and satisfies a loose match
+  # even when the _failed entry is named something else entirely.
+  [[ "$output" == *"package(s) failed:"*"claude-plugins"* ]]
 }
 
 # ── _install_ubuntu_brew_packages: RESOLUTE-gated coreutils ──────────────────
