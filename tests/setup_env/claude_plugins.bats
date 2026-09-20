@@ -800,3 +800,33 @@ JSON
   # and it carries none of the guard's message text to match against.
   [[ "$output" != *"[INFO]"* ]]
 }
+
+# ── regression: no reintroduced hardcoded plugin list ──────────────────────
+
+@test "no hardcoded plugin@marketplace ids remain in lib or setup_env.sh" {
+  # Tasks 4/6/7 deleted the four hardcoded plugin@marketplace lists that
+  # used to live in lib/workflows.sh and lib/linux_ubuntu.sh, replacing
+  # them with settings.json-manifest-driven reads. This pins that deletion:
+  # a future edit that reintroduces a literal id (e.g. to "quick-fix" a
+  # provisioning gap) should fail here rather than ship silently.
+  #
+  # The marketplace name alternation below is a DENYLIST of marketplaces
+  # known at the time this test was written, and it is deliberately NOT
+  # derived from settings.json or any other file outside this repo -- a
+  # derived list would make the test agree with whatever the manifest
+  # currently says, which is exactly the "check derived from the same
+  # decision as the thing it checks cannot falsify it" trap (behavior.md).
+  # Adding a new marketplace to the fleet means adding its name to this
+  # alternation by hand.
+  #
+  # `command grep` bypasses this session's grep function/alias wrapper
+  # (shell.md: "an agent shell's grep is not grep") so the assertion is
+  # against the same grep semantics CI's ubuntu-latest runner uses.
+  run command grep -rnE '[A-Za-z0-9._-]+@(claude-plugins-official|claude-code-warp|context-mode|caveman|firecrawl|claude-ansible-skills|antonbabenko)\b' \
+    "${REPO_ROOT}/lib" "${REPO_ROOT}/setup_env.sh"
+  # grep exit 1 = no lines matched (0 = found at least one, 2 = error, e.g.
+  # a bad path) -- assert both the status AND emptiness, since a status-1
+  # exit is not itself proof the search ran cleanly over both targets.
+  [ "$status" -eq 1 ]
+  [ -z "$output" ]
+}
