@@ -18,7 +18,7 @@ which are this repo's content living in ai-config's knowledge directory per ADR-
 A dotfiles session loads ~165,000 tokens of markdown before doing any work -- measured on this
 session, on `claude`, by summing the launch-loaded files; every dotfiles session loads the same
 set, so the figure is per-session rather than per-machine. `dotfiles/CLAUDE.md`
-is 44,012 tokens of it — the largest single file anyone in this fleet loads, larger than any
+is ~44,700 tokens of it — the largest single file anyone in this fleet loads, larger than any
 fleet-wide standard.
 
 The binding constraint is not the 1M main-thread window. It is **haiku executor headroom**.
@@ -50,8 +50,10 @@ That design is not revived here.
 
 ## Measurement
 
-Every paragraph of `### Test Seams` and `### MAKEFLAGS and Stdout Partition` (66,200 bytes,
-~86 paragraphs) classified against real source, 10 spot-verified by grep:
+Every paragraph of `### Test Seams` and `### MAKEFLAGS and Stdout Partition` (66,125 bytes at `20023924`,
+~86 paragraphs; the classification ran against `c2990e5c`, before the parallel-bats PR added
+2,513 bytes to this file, so a small number of new paragraphs are unclassified and the plan must
+re-run the split rather than reuse the table) classified against real source, 10 spot-verified by grep:
 
 | class     | bytes  | share |
 | --------- | ------ | ----- |
@@ -194,3 +196,100 @@ Against the fleet plan (ai-config's three items, ~31,600 tokens) the combined ta
 The plan-changing threshold for the fleet-wide RECORD figure is ~10,000 tokens, against an
 independently bracketed 18k–37k. This spec's own 6,300 is a smaller and more certain number: it
 is a byte count of already-classified paragraphs, not an estimate of a class boundary.
+
+---
+
+## Multi-Lens Review
+
+Reviewed at commit: `20023924` (Step 7 self-review commit, before Step 8 dispatch).
+Three lenses, fresh `general-purpose` subagents, no conversation context.
+
+### Goal-Fit
+
+Finding: Design is sound on goal-fit. The reads-it test passes -- the consumer is
+`dotfiles/CLAUDE.md`'s own launch-load, which every session and every dispatched haiku task's
+preamble pays for, so shrinking it changes a decision rather than decorating one. Of the 5 gates,
+only 2 are pure measurement; gates 2 and 3 are constructed to fail on the nothing-happened case,
+which is the opposite of the PASS-dominant pattern this lens looks for. Soft spot: this slice is
+~6,300 tokens of a ~37,900 fleet target and the larger payoff depends on a peer effort landing
+separately. Sharper: the spec leaves `_haiku_scope_errors` unfixed, and making that validator
+budget-aware would close the opening failure mode *loudly at plan-validation time* rather than
+making it less likely by shrinking the preamble. Scoped out as ai-config's file, which is a
+legitimate split, but this spec alone does not close the failure mode it opens with.
+
+Assumption: The whole quantitative case rests on bytes/4, and this content is table- and
+code-block-heavy, which can tokenize at a materially different ratio in either direction.
+Refute by running `/context` in a real dotfiles session before and after, or tokenising
+`CLAUDE.md` with the real tokenizer instead of bytes/4.
+
+Disposition:
+
+### Ergonomics
+
+Finding: The DUPLICATE remedy is specified at symbol/table-row granularity, but the content is
+not atomic at that granularity -- verified directly, not inferred. For `_OVERRIDE_LIB_TRAP_SCOPE`
+(one of the two pairs this spec says were personally verified), the `CLAUDE.md` block holds two
+sub-paragraphs: a mechanics paragraph that *is* a near-verbatim duplicate of the
+`scripts/check-lib-exit-traps.sh` header, and a second paragraph -- "Two code paths, and the
+tests only exercise one" -- with **zero counterpart** in that source file or its test file. A
+literal reading of "delete the CLAUDE.md copy for this pair" deletes the hazard with the
+duplicate. The end state is fine when classification is done per sub-paragraph; the gap is
+specification precision, and it will produce a wrong result the first time a dispatched task
+follows the DUPLICATE section at face value. The commit history already shows this failure at
+smaller scale -- 3 of 7 line-number citations wrong in the first draft even after
+spot-verification.
+
+Assumption: That a full per-paragraph classification of all ~86 paragraphs will exist as a
+durable artifact for gates 2 and 3 to check against. No such artifact is in the repo. If the plan
+only restates the 7-row table plus prose, gate 3 has no ground truth for the other ~79 paragraphs
+and degrades from a gate to a spot-check. Confirm by checking whether the plan file enumerates
+paragraph-level classifications.
+
+Disposition:
+
+### Risk
+
+Finding: The coarse classification unit lets a HAZARD sentence be destroyed while **both** gates
+report success -- confirmed, not hypothetical. The "login-shell seam, chsh PAM" row maps to two
+`CLAUDE.md` paragraphs. Paragraph B is genuinely near-verbatim in `lib/helpers.sh:356-364`.
+Paragraph A ends with a sentence that exists only in `CLAUDE.md`: *"Measured: the three
+end-to-end `run_doctor` tests stub every sub-check by name, so `_doctor_check_login_shell` must
+be stubbed there too or it reads the real account mid-suite."* A tree-wide grep for it returns
+zero hits. Gate 2 requires only **one** phrase-match per row to authorize deleting the pair; gate
+3 never re-examines it because the classifier scored it DUPLICATE, not HAZARD. It falls into
+neither net: an implementer picks a chsh phrase, deletes both paragraphs, gates 2/3/4 go green,
+and the test-stubbing guidance is gone with nothing pointing at its absence.
+
+Second finding: gate 3 is circular as written. Nothing requires the distinctive phrase to be
+chosen from the **pre-compression** text and locked before editing. A phrase selected from the
+surviving text proves only that the edit contains a substring of itself -- `behavior.md`'s "a
+check derived from the same decision as the thing it checks cannot falsify it", in this spec's
+own gate.
+
+Assumption: Whether HAZARD compression preserves claim substance is decided by execution quality
+the spec does not gate on. Gate 3 can detect a claim's complete disappearance but not a claim
+silently weakened into a vague summary that still contains the keyword. Confirm or refute by
+having a reviewer who did not perform the compression re-derive phrases from
+`git show <parent-sha>:CLAUDE.md` and grep the post-compression file -- never a phrase chosen by
+the implementer from their own output.
+
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A -- spec has no comparison arms, no evaluator component, and concrete acceptance criteria.
+
+### External finding (ai-config peer session, same round)
+
+Finding: The DUPLICATE test "the source file carries the same prose" is wrong. The correct test
+is **both copies must serve the same argument**. Where each copy is evidence for a different
+claim it is shared evidence, not restatement: keep both and cross-reference. That session's own
+top lexical hit -- the `make` version table at 0.83 containment across `tdd.md` and
+`behavior.md` -- fails this test: `tdd.md` uses it to argue *a local mac pass is not evidence and
+CI is*, `behavior.md` to argue *a boundary can be an actor rather than a place*. Applied to this
+spec, at least two of seven pairs look doubtful: `brew_cask_installed`'s source comment argues
+why the code is shaped that way while the `CLAUDE.md` entry argues how to test it, and
+`check-lib-exit-traps.sh`'s header argues why an allowlist rather than an inference while the
+`CLAUDE.md` entry argues which seam a test drives.
+
+Disposition:
