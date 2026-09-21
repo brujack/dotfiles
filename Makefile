@@ -15,7 +15,7 @@ MAKEFLAGS += --no-print-directory
 # stripped, and no leading zero. $(origin JOBS) is in the message because a
 # command-line JOBS reaches a nested make through BOTH MAKEFLAGS and the
 # recipe environment, so "where did this value come from" is a real question.
-JOBS ?= 12
+JOBS ?= 24
 _JOBS_NONDIGIT := $(subst 0,,$(subst 1,,$(subst 2,,$(subst 3,,$(subst 4,,$(subst 5,,$(subst 6,,$(subst 7,,$(subst 8,,$(subst 9,,$(JOBS)))))))))))
 ifneq ($(words $(JOBS))$(_JOBS_NONDIGIT)$(filter 0%,$(JOBS)),1)
 $(error JOBS must be a positive integer, got '$(JOBS)' (from $(origin JOBS)))
@@ -75,10 +75,10 @@ ZSH_FILES := $(shell env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_IN
 HAVE_PARALLEL := $(shell parallel --version 2>/dev/null | grep -q '^GNU parallel' && echo yes)
 
 # Files that run alone, after the parallel phase. Empty today: the per-file
-# check measured all 54 files clean at --jobs 12, and the one file that was
-# not was fixed (39704a12) rather than carved out. A name here needs a
-# measurement beside it, not a suspicion -- a carve-out is a permanent
-# exemption from the gate everything else runs under.
+# check measured every file clean at --jobs 12, and the one that was not was
+# fixed (39704a12) rather than carved out. A name here needs a measurement
+# beside it, not a suspicion -- a carve-out is a permanent exemption from the
+# gate everything else runs under.
 BATS_SERIAL_FILES :=
 # A filesystem walk, not `git ls-files`: an untracked .bats file is exactly
 # what a TDD red step produces, and a tracked-only list would report it green
@@ -154,11 +154,22 @@ test: lint check-lock check-requirements-ci test-python
 ifndef BATS
 	$(error $(BATS_MISSING))
 endif
-ifeq ($(HAVE_PARALLEL),yes)
+ifeq ($(strip $(BATS_ALL_FILES)),)
+# Refuses to report a pass on an empty list, the same way SHELL_FILES and
+# BATS_FILES do. bats does exit 1 on no arguments, but its message
+# ("Must specify at least one <test>") reads as a usage mistake rather than
+# as "the file list derivation returned nothing", which is the actual fault
+# -- a missing find, a moved tests/ directory. A conditional, not a
+# parse-time $(error): that would abort `make help` too.
+	@printf "no .bats files found under tests/ (BATS_ALL_FILES is empty) -- refusing to report a pass over zero tests\n" >&2; exit 1
+else ifeq ($(HAVE_PARALLEL),yes)
 	bats --jobs $(JOBS) $(BATS_PARALLEL_FILES)
 else
-	@printf "GNU parallel not found, running bats serially (install: brew install parallel / sudo apt-get install parallel)\n"
-	bats $(BATS_ALL_FILES)
+	@printf "running bats serially: HAVE_PARALLEL is not yes -- GNU parallel absent, or overridden on the command line (install: brew install parallel / sudo apt-get install parallel; force with make test HAVE_PARALLEL=)\n"
+# BATS_PARALLEL_FILES, not BATS_ALL_FILES: a carved-out file is run by the
+# phase below, so the unfiltered list would run it twice. Both runs pass, so
+# no assertion about outcomes would have caught it.
+	bats $(BATS_PARALLEL_FILES)
 endif
 ifneq ($(strip $(BATS_SERIAL_FILES)),)
 	bats $(BATS_SERIAL_FILES)
