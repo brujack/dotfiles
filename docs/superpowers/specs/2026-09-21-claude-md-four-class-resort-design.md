@@ -90,6 +90,52 @@ against a large one -- its `CLAUDE.md` pulls `python.md` and `rust.md`, 93,244 b
 fitted repo loads, and it still lands within 2,000 tokens -- but that bounds the effect rather
 than eliminating it.
 
+**A bytes-to-tokens model was fitted across four repos, then abandoned. The refutation is kept
+because it is worth more to the next reader than the formula was.**
+
+Four repos measured by probe, two sessions running two of them independently:
+
+```
+repo             bytes    actual   4-pt fit      err
+ai-config      527,021   163,091    161,264   -1,827
+dotfiles       609,797   185,132    184,373     -759
+math           580,548   174,222    176,208   +1,986
+etch-config    454,484   140,414    141,014     +600
+```
+
+Max error 1.14%, which looks like a working model and is not one. **The pairwise slopes span
+2.681 to 4.809 -- a 79% spread** -- so a single global B/tok does not exist for this corpus and
+the four fits computed today put the intercept at 22,760, 25,823, 10,424 and 14,132.
+
+Two explanations were tested and both fail. **Edit drift:** no commit touched a launch-loaded file
+in the 12 hours spanning the probes, and the checkout `~/.claude/standards` resolves into is
+clean. **Content density** -- the natural story, that code blocks and tables tokenize denser than
+prose -- was measured by ai-config from `etch-config` as baseline: the extra mass is 62%
+code-heavy for ai-config and 61% for math, near-identical, and their marginal ratios differ by
+17% *in the wrong direction*.
+
+**An unstable parameter says collect more points; an unexplained slope says the functional form
+is wrong and more points will fit a better curve to the wrong thing.** No fifth probe. Framing
+owed to the ai-config session.
+
+**What replaces it: measure the thing, do not model it.** Every use either spec had for a ratio
+was a proxy for a question a probe answers directly and exactly -- what a trim buys is a probe
+before and a probe after; a repo's headroom is one probe in that repo; and a haiku budget
+threshold is bytes of `files_touched` against *that repo's measured headroom*, which `math`
+reached independently. Accordingly this spec's acceptance gate is a **before/after probe**, not a
+byte or token target. See gate 1.
+
+**Byte counts are unaffected by any of this** and none of them was derived through the model.
+`dotfiles/CLAUDE.md` at 178,625 B, the 37%/63% scope split, and the class byte totals all stand.
+
+**The skill-surface hypothesis is back in play, not withdrawn.** An earlier draft read the
+inter-repo gap as partly repo-specific skill and tool surface; a two-point fit appeared to refute
+it by producing an identical residual for both repos. With four points the intercept is not
+identified at all, so nothing excludes a repo-varying component. `math` is the strongest evidence
+against a large one -- its `CLAUDE.md` pulls `python.md` and `rust.md`, 93,244 bytes neither
+fitted repo loads, and it still lands within 2,000 tokens -- but that bounds the effect rather
+than eliminating it.
+
 **Four repos measured, and the two-parameter model is misspecified rather than merely noisy.**
 Two sessions independently ran a third probe -- `math` at this session's request, `etch-config`
 at ai-config's. Each fitted model missed the point it was not built from by roughly 3,000 tokens,
@@ -352,9 +398,20 @@ with the reason, rather than a rule applied blindly.
 
 Run before implementation, not predicted:
 
-1. **Baseline, recorded at the implementation commit's parent SHA:**
-   `wc -c CLAUDE.md` and the per-section byte counts for `### Test Seams` and
-   `### MAKEFLAGS and Stdout Partition`.
+1. **Baseline, measured not estimated.** At the implementation commit's parent SHA record
+   `wc -c CLAUDE.md` and the per-section byte counts for the two scoped sections, **and dispatch
+   a Haiku starting-context probe** -- entire prompt `Reply with exactly the word OK. Do not use
+   any tools. Do not explain.`, then read turn 1's
+   `input_tokens + cache_read_input_tokens + cache_creation_input_tokens` from the task's
+   `<output-file>` JSONL. Baseline for this repo at `6fdab371` is **185,132 tokens, 14,868
+   headroom**. Do not use the notification's `subagent_tokens` field -- it is cumulative across
+   turns and read 190,214 against a true 185,132.
+
+   **The acceptance criterion is the post-change probe, not a byte target.** Re-probe after the
+   change; the delta is the result. This cannot be wrong about the quantity it measures, needs no
+   bytes-to-tokens model, and is falsifiable in a way "we removed N bytes" is not. A trim that
+   moves the probe by materially less than its byte count implies is itself a finding.
+
 2. **Phrase manifest, written first and locked.** Before any edit, produce
    `docs/superpowers/plans/<plan>-phrases.md`: one row per sub-paragraph of both sections, its
    class, and a distinctive phrase taken from the pre-change text at the parent SHA. Commit it
@@ -482,27 +539,27 @@ rather than an input to it.
 HAZARD compression is not sized at all. It is judgement work with no predictable yield, and
 claiming a figure for it would be the restated-count failure this corpus records.
 
-**The fleet combined target, restated against the measurement and decomposed per repo.** There
-is no single fleet headroom figure, because `dotfiles/CLAUDE.md` is in dotfiles' launch-load and
-not in ai-config's, and the two repos start from different bases:
+**Headroom, measured per repo. No fleet figure, and no predicted ones.**
 
-| | today | + standards work | + this spec | after |
-| --- | --- | --- | --- | --- |
-| dotfiles | 14,868 measured | ~35,300 | <=7,060 upper bound | **~57,200** |
-| ai-config | 36,909 measured | ~35,300 | n/a | **~72,200** |
-| math | 25,778 measured | ~35,300 | n/a | **~61,100** |
-| etch-config | 59,586 measured | ~35,300 | n/a | **~94,900** |
-| other 5 repos | predicted +/- 2,000 | ~35,300 | n/a | predicted |
+| repo | measured headroom | probe |
+| --- | --- | --- |
+| dotfiles | **14,868** | 185,132 of 200,000, 92.6% consumed |
+| math | **25,778** | 174,222, 87.1% |
+| ai-config | **36,909** | 163,091, 81.5% |
+| etch-config | **59,586** | 140,414, 70.2% |
+| other five | not measured | one probe each, ~30 seconds |
 
-**An earlier draft claimed `~35k -> ~73k` and both terms were wrong.** The base was bytes / 4 and
-understated by 12%; the target counted this spec's dotfiles gain against a fleet-wide base, which
-is two different denominators. Corrected, dotfiles goes from **7.4% of the window free to about
-26%** -- roughly tripling, which is a real result and not the one previously claimed.
+Four measured repos span **14,868 to 59,586** -- a 4x range -- which is why the parent convention
+has to say the dominant lever is repo-dependent rather than quote a fleet number. dotfiles is the
+worst in the fleet and is where the dispatches actually failed.
 
-The other seven repos are deliberately left unmeasured rather than represented by a figure. Each
-has its own `CLAUDE.md` and skill surface, and the two measured repos differ by 22,041 tokens
-against a markdown delta that does not account for all of it -- so interpolating the rest would
-be inventing numbers in exactly the way this spec's history has already been burned by twice.
+**What this spec buys is deliberately not stated as a token figure.** Earlier drafts carried
+`~35k -> ~73k`, then `~52.8k`, `~55.3k`, `~54.2k` and `~57.2k` as the ratio moved under them --
+five numbers for one claim, every one an artifact of a model now retired. The honest statement is
+that this spec removes an upper bound of **25,294 bytes from a 178,625-byte file**, within the
+37% of it that has been classified, and **gate 1's post-change probe reports what that is worth
+in headroom**. If the answer disappoints, that is a result rather than a failure of the spec to
+predict it.
 
 **Durability: the trim refills, and the rate is measured.** dotfiles `CLAUDE.md` grew +16.0
 lines/day over the 11 days since ADR-0077's writer routing went live (23 commits, +176 net),
