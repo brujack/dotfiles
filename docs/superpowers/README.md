@@ -142,7 +142,7 @@ Master status index for all specs and implementation plans in this directory.
 | 2026-09-14 | [dry-run-egress-gating](plans/2026-09-14-dry-run-egress-gating.md)                         | [dry-run-irreversible-gating](specs/2026-09-14-dry-run-irreversible-gating-design.md)                                                     | Done    |
 | 2026-09-17 | [claude-provisioning-gaps](plans/2026-09-17-claude-provisioning-gaps.md)                   | [claude-provisioning-gaps](specs/2026-09-17-claude-provisioning-gaps-design.md)                                                           | Done    |
 | 2026-09-19 | [shellcheck-install-hint](plans/2026-09-19-shellcheck-install-hint.md) | [doctor-shellcheck-pin](specs/2026-09-19-doctor-shellcheck-pin-design.md) | Done |
-| 2026-09-19 | [claude-plugin-provisioning](plans/2026-09-19-claude-plugin-provisioning.md) | [spec](specs/2026-09-19-claude-plugin-provisioning-design.md) | In Progress |
+| 2026-09-19 | [claude-plugin-provisioning](plans/2026-09-19-claude-plugin-provisioning.md) | [spec](specs/2026-09-19-claude-plugin-provisioning-design.md) | Done |
 
 ---
 

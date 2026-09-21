@@ -1,5 +1,7 @@
 # Claude Plugin Provisioning Implementation Plan
 
+> **Status: DONE** — merged as dotfiles#290, 2026-09-20.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Provision Claude Code plugins from ai-config's `settings.json`, registering the
