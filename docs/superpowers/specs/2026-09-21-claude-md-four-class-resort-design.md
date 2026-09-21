@@ -105,7 +105,7 @@ confirmed each symbol resolves to a definition carrying an adjacent explanatory 
 that the prose is near-verbatim. The first draft of this table carried line numbers relayed from
 that classifier and **three of seven were wrong** -- `lib/detect_env.sh:59-62` most clearly, where
 the `readonly` assignments are at lines 6-11. That is why the table is keyed by symbol, and why
-gate 2 below re-verifies every pair at implementation time rather than trusting this table.
+gate 3 below re-verifies every pair at implementation time rather than trusting this table.
 
 So this is a **duplication** problem, not a routing problem. Nothing keeps the copies in sync,
 they have no shared source of truth, and a reader cannot tell which is current.
@@ -213,9 +213,16 @@ Run before implementation, not predicted:
    without it gate 3 has no ground truth for the ~79 paragraphs outside the candidate table and
    degrades to a spot-check.
 
+   **The phrase is taken from the claim sentence of the sub-paragraph, never from its supporting
+   narrative.** The constraint below obliges the compressor to keep the phrase verbatim, so a
+   phrase drawn from the narrative would force them to keep prose the HAZARD remedy says to cut.
+   Taking it from the claim also makes gate 4 check the same sentence gate 5 judges, rather than
+   an arbitrary substring beside it.
+
    **The phrases are chosen by someone other than whoever performs the compression.** A phrase
-   selected from surviving text proves only that the edit contains a substring of itself. This is
-   the one gate the spec previously called falsifiable, and as first written it could not fail.
+   selected from surviving text proves only that the edit contains a substring of itself. The phrase check
+   (gate 4) was the gate this spec first called falsifiable, and as first written it could not
+   fail.
 
 3. **Every DUPLICATE deletion: every sentence removed has a counterpart.** Per candidate, per
    sub-paragraph, `grep -n '<phrase>' <source file>` for **each sentence being deleted**, not one
@@ -293,7 +300,118 @@ file that grows returns the fleet to the starting condition with nothing to say 
 ai-config's file and is referred to that session; this spec improves the odds and does not close
 the failure mode.
 
-### External review (operator's architect session, round 1)
+---
+
+## Multi-Lens Review
+
+Reviewed at commit: `20023924` (Step 7 self-review commit, before Step 8 dispatch).
+Three lenses, fresh `general-purpose` subagents, no conversation context.
+
+### Goal-Fit
+
+Finding: Design is sound on goal-fit. The reads-it test passes -- the consumer is
+`dotfiles/CLAUDE.md`'s own launch-load, which every session and every dispatched haiku task's
+preamble pays for, so shrinking it changes a decision rather than decorating one. Of the 5 gates,
+only 2 are pure measurement; gates 2 and 3 are constructed to fail on the nothing-happened case,
+which is the opposite of the PASS-dominant pattern this lens looks for. Soft spot: this slice is
+~6,300 tokens of a ~37,900 fleet target and the larger payoff depends on a peer effort landing
+separately. Sharper: the spec leaves `_haiku_scope_errors` unfixed, and making that validator
+budget-aware would close the opening failure mode *loudly at plan-validation time* rather than
+making it less likely by shrinking the preamble. Scoped out as ai-config's file, which is a
+legitimate split, but this spec alone does not close the failure mode it opens with.
+
+Assumption: The whole quantitative case rests on bytes/4, and this content is table- and
+code-block-heavy, which can tokenize at a materially different ratio in either direction.
+Refute by running `/context` in a real dotfiles session before and after, or tokenising
+`CLAUDE.md` with the real tokenizer instead of bytes/4.
+
+Disposition: **Addressed** for the finding -- the `_haiku_scope_errors` half is referred to the
+ai-config session as a question about their file (operator, 2026-09-21); it is not scoped into
+this spec. Assumption stands unrefuted: every figure here remains labelled bytes / 4.
+
+### Ergonomics
+
+Finding: The DUPLICATE remedy is specified at symbol/table-row granularity, but the content is
+not atomic at that granularity -- verified directly, not inferred. For `_OVERRIDE_LIB_TRAP_SCOPE`
+(one of the two pairs this spec says were personally verified), the `CLAUDE.md` block holds two
+sub-paragraphs: a mechanics paragraph that *is* a near-verbatim duplicate of the
+`scripts/check-lib-exit-traps.sh` header, and a second paragraph -- "Two code paths, and the
+tests only exercise one" -- with **zero counterpart** in that source file or its test file. A
+literal reading of "delete the CLAUDE.md copy for this pair" deletes the hazard with the
+duplicate. The end state is fine when classification is done per sub-paragraph; the gap is
+specification precision, and it will produce a wrong result the first time a dispatched task
+follows the DUPLICATE section at face value. The commit history already shows this failure at
+smaller scale -- 3 of 7 line-number citations wrong in the first draft even after
+spot-verification.
+
+Assumption: That a full per-paragraph classification of all ~86 paragraphs will exist as a
+durable artifact for gates 2 and 3 to check against. No such artifact is in the repo. If the plan
+only restates the 7-row table plus prose, gate 3 has no ground truth for the other ~79 paragraphs
+and degrades from a gate to a spot-check. Confirm by checking whether the plan file enumerates
+paragraph-level classifications.
+
+Disposition: **Addressed** (operator, 2026-09-21). Classification unit is now the sub-paragraph.
+The assumption is closed rather than left open: gate 2 makes the per-paragraph phrase manifest a
+committed artifact produced before the first edit, which is exactly the ground truth this lens
+found missing.
+
+### Risk
+
+Finding: The coarse classification unit lets a HAZARD sentence be destroyed while **both** gates
+report success -- confirmed, not hypothetical. The "login-shell seam, chsh PAM" row maps to two
+`CLAUDE.md` paragraphs. Paragraph B is genuinely near-verbatim in `lib/helpers.sh:356-364`.
+Paragraph A ends with a sentence that exists only in `CLAUDE.md`: *"Measured: the three
+end-to-end `run_doctor` tests stub every sub-check by name, so `_doctor_check_login_shell` must
+be stubbed there too or it reads the real account mid-suite."* A tree-wide grep for it returns
+zero hits. Gate 2 requires only **one** phrase-match per row to authorize deleting the pair; gate
+3 never re-examines it because the classifier scored it DUPLICATE, not HAZARD. It falls into
+neither net: an implementer picks a chsh phrase, deletes both paragraphs, gates 2/3/4 go green,
+and the test-stubbing guidance is gone with nothing pointing at its absence.
+
+Second finding: gate 3 is circular as written. Nothing requires the distinctive phrase to be
+chosen from the **pre-compression** text and locked before editing. A phrase selected from the
+surviving text proves only that the edit contains a substring of itself -- `behavior.md`'s "a
+check derived from the same decision as the thing it checks cannot falsify it", in this spec's
+own gate.
+
+Assumption: Whether HAZARD compression preserves claim substance is decided by execution quality
+the spec does not gate on. Gate 3 can detect a claim's complete disappearance but not a claim
+silently weakened into a vague summary that still contains the keyword. Confirm or refute by
+having a reviewer who did not perform the compression re-derive phrases from
+`git show <parent-sha>:CLAUDE.md` and grep the post-compression file -- never a phrase chosen by
+the implementer from their own output.
+
+Disposition: **Addressed** (operator, 2026-09-21). Both findings taken. Deletion now requires a
+counterpart for every sentence removed, not one phrase per block. Phrases are taken from the
+pre-change text, committed before the first edit, and chosen by someone other than the
+implementer -- the lens's own refutation procedure is now the gate itself.
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A -- spec has no comparison arms, no evaluator component, and concrete acceptance criteria.
+
+### External finding (ai-config peer session, same round)
+
+Finding: The DUPLICATE test "the source file carries the same prose" is wrong. The correct test
+is **both copies must serve the same argument**. Where each copy is evidence for a different
+claim it is shared evidence, not restatement: keep both and cross-reference. That session's own
+top lexical hit -- the `make` version table at 0.83 containment across `tdd.md` and
+`behavior.md` -- fails this test: `tdd.md` uses it to argue *a local mac pass is not evidence and
+CI is*, `behavior.md` to argue *a boundary can be an actor rather than a place*. Applied to this
+spec, at least two of seven pairs look doubtful: `brew_cask_installed`'s source comment argues
+why the code is shaped that way while the `CLAUDE.md` entry argues how to test it, and
+`check-lib-exit-traps.sh`'s header argues why an allowlist rather than an inference while the
+`CLAUDE.md` entry argues which seam a test drives.
+
+Disposition: **Addressed** (operator, 2026-09-21). The same-argument definition is adopted
+wholesale as the class definition rather than as a tiebreak. The candidate table is re-marked:
+two fail outright, one is partial, four remain candidates for per-sub-paragraph adjudication in
+the plan. The peer's 0-of-12 result and its citation-ranking cause are recorded in Design item 1
+as the reason this class is expected non-empty here and empty in the standards.
+
+---
+
+## External Review (architect session, after multi-lens round 1)
 
 Three findings, all taken.
 
@@ -329,3 +447,22 @@ Three findings, all taken.
 Also noted and recorded rather than actioned: without a budget-aware `_haiku_scope_errors`, the
 next file that grows returns the fleet to the starting condition with nothing to say so. That is
 referred to the ai-config session as their file; the ordering note is in Expected outcome.
+
+### Round-1 external review, second pass
+
+Finding: the revision that addressed the three findings above **deleted the entire Multi-Lens
+Review section** -- three lens records, the Adversarial N/A, and the ai-config peer finding that
+produced the same-argument test, with their dispositions. The body kept citing them: gate 2 cites
+the ergonomics lens, Design item 1 cites the peer's 0-of-12 result, and the Goal-Fit assumption
+about bytes / 4 was left unrefuted with its record gone while every figure still depends on it.
+Cause: the edit sliced `index("## Expected outcome")` to **end of string**, and the review section
+sat after it -- the same unbounded-region class this corpus records twice already. Two smaller
+residues from the same revision: two gate cross-references drifted when gates were inserted, and
+the new verbatim-phrase constraint made phrase selection load-bearing without giving it a rule.
+
+Disposition: **Addressed** (operator, 2026-09-21). Section restored from `9d28db69` with all
+seven dispositions intact, placed after the lens record rather than nested under Expected outcome,
+and relabelled -- it followed the multi-lens round rather than being round 1. Both cross-references
+corrected. Phrase selection now has a rule: the phrase comes from the **claim sentence** of each
+HAZARD sub-paragraph, which also aligns what gate 4 checks with what gate 5 judges. The edit that
+restored it used bounded slices and the section list was re-grepped afterwards.
