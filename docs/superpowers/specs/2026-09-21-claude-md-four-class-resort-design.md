@@ -87,13 +87,34 @@ the two repos as partly "dotfiles-specific skill and tool surface". Under this f
 is identical for both repos and the entire gap is markdown bytes. The skill-surface hypothesis is
 withdrawn; the third probe below is what could revive it.
 
-**The model is fitted and untested.** `starting_context ~= launch_loaded_bytes / 3.756 + 22,760`
-reproduces both measured repos by construction, so it has not been tested at all. **One dispatch
-in any third repo falsifies or confirms it** -- if a third repo's measured context matches its
-predicted value the ratio and residual are both real and every repo gets a figure without a
-probe; if it misses, the residual is repo-specific and the skill-surface hypothesis returns. That
-probe must be dispatched *from a session in that repo*, since a subagent inherits its parent's
-preamble -- it cannot be run from here.
+**The model was fitted on two points and has now been tested on a third.** The `math` session
+ran the probe from its own repo -- necessary, since a subagent inherits its parent's preamble:
+
+```
+                   launch-loaded B    measured tok   2-pt prediction
+ai-config                  527,021         163,091   163,093  (fit)
+dotfiles                   609,797         185,132   185,134  (fit)
+math                       580,548         174,222   177,346  +1.79%  <- out of sample
+```
+
+**An out-of-sample hit inside 2%**, and discriminating rather than lucky: math's `CLAUDE.md`
+`@`-imports `python.md` and `rust.md`, 93,244 bytes neither fitted repo pulls, so the third point
+differs by a large repo-specific block rather than a few KB. The residual stayed near-constant
+across that difference, which is the test the withdrawn skill-surface hypothesis needed.
+
+Refitting on all three by least squares:
+
+```
+3-point   ratio 3.860 B/tok   residual 25,823 tok    max error 1.16%
+2-point   ratio 3.756         residual 22,760        max error 1.79%
+```
+
+**The residual moved 13% on one added point**, so it is pinned to no better than a few thousand
+tokens. Use the 3-point fit, quote the ratio as ~3.86, and treat the residual as 23-26k rather
+than a figure. `math` also checked the obvious confound before trusting the agreement --
+`~/.claude/CLAUDE.md` resolves into `ai-config/.claude/CLAUDE.md`, so counting both would
+double-count 17,351 bytes in every total. Verified here by `os.path.realpath`: this spec's
+609,797 reconstructs exactly from deduped components, delta 0.
 
 ## What was already established, and must not be re-derived
 
@@ -415,9 +436,10 @@ not in ai-config's, and the two repos start from different bases:
 
 | | today | + standards work | + this spec | after |
 | --- | --- | --- | --- | --- |
-| dotfiles | 14,868 measured | ~33,700 | <=6,735 upper bound | **~55,300** |
-| ai-config | 36,909 measured | ~33,700 | n/a | **~70,600** |
-| other 7 repos | predicted, not measured | ~33,700 | n/a | predicted |
+| dotfiles | 14,868 measured | ~32,800 | <=6,554 upper bound | **~54,200** |
+| ai-config | 36,909 measured | ~32,800 | n/a | **~69,700** |
+| math | 25,778 measured | ~32,800 | n/a | **~58,600** |
+| other 6 repos | predicted, not measured | ~32,800 | n/a | predicted |
 
 **An earlier draft claimed `~35k -> ~73k` and both terms were wrong.** The base was bytes / 4 and
 understated by 12%; the target counted this spec's dotfiles gain against a fleet-wide base, which
