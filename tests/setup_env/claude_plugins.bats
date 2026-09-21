@@ -403,6 +403,48 @@ JSON
   [ "$output" = "$(printf 'clean\t%s\tsub/settings.json' "${GUARD_REPO_REAL}")" ]
 }
 
+# The two `unknown` branches below were unreachable from this suite until
+# 2026-09-20: deleting BOTH of them left all 65 tests green, because every
+# other case exits at clean/dirty/untracked first. `unknown` is the state the
+# guard reports when it could not determine anything, so an untested branch
+# there means a broken instrument reads exactly like a clean file.
+
+@test "_claude_settings_git_state reports unknown when git status fails" {
+  _guard_repo_setup
+  # A stub that answers rev-parse and ls-files through the real git -- so the
+  # function reaches the status call rather than exiting at an earlier branch
+  # -- and fails only `status`. Absolute shebang, per the stdin_probe_stub_path
+  # precedent: `#!/usr/bin/env bash` cannot resolve under a scoped PATH.
+  local _stub_dir="${BATS_TEST_TMPDIR}/git-status-fails"
+  mkdir -p "${_stub_dir}"
+  {
+    printf '#!%s\n' "$(command -v bash)"
+    printf 'for _a in "$@"; do [ "${_a}" = "status" ] && exit 1; done\n'
+    printf 'exec %s "$@"\n' "${_CLAUDE_GUARD_GIT}"
+  } > "${_stub_dir}/git"
+  chmod +x "${_stub_dir}/git"
+  _CLAUDE_GUARD_GIT="${_stub_dir}/git" run _claude_settings_git_state
+  [ "$status" -eq 0 ]
+  [ "$output" = "$(printf 'unknown\t%s\tsub/settings.json' "${GUARD_REPO_REAL}")" ]
+}
+
+@test "_claude_settings_git_state reports unknown when python3 cannot be resolved" {
+  _guard_repo_setup
+  # Scope PATH to a shim holding only the externals this function needs BEFORE
+  # python3 (env, dirname) -- never by stripping a PATH directory, which would
+  # take co-located tools with it (shell.md). git comes from the absolute
+  # _CLAUDE_GUARD_GIT seam, so it is unaffected.
+  local _shim="${BATS_TEST_TMPDIR}/no-python3"
+  mkdir -p "${_shim}"
+  ln -sf "$(command -v env)" "${_shim}/env"
+  ln -sf "$(command -v dirname)" "${_shim}/dirname"
+  PATH="${_shim}" run _claude_settings_git_state
+  [ "$status" -eq 0 ]
+  # The path is reported unresolved -- the symlink, not its target -- because
+  # resolving it is exactly what failed.
+  [ "$output" = "$(printf 'unknown\t-\t%s' "${_OVERRIDE_CLAUDE_SETTINGS}")" ]
+}
+
 # ── _claude_settings_guard_check ────────────────────────────────────────────
 
 @test "_claude_settings_guard_check prints nothing and returns 0 when state is unchanged (clean)" {

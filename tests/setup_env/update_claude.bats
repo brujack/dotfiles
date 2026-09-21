@@ -134,7 +134,16 @@ _claude_guard_repo_setup() {
   run_update || _rc=$?
   [ "${_rc}" -ne 0 ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_claude")" = "FAIL" ]
-  [[ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_claude")" == *"unreadable"* ]]
+  # Assert the phrase unique to the reconcile-rc-1 branch, not the shared word
+  # "unreadable": the second manifest read emits "plugin manifest unreadable --
+  # updates skipped", which also sets _fatal and also leaves zero update calls,
+  # so a bare *"unreadable"* match is satisfied by either branch. Mutation-
+  # confirmed: with the rc-1 branch dead, result_claude carried the manifest
+  # wording and all 12 tests stayed green.
+  [[ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_claude")" == *"plugin settings unreadable: "* ]]
+  # And pin the two wordings apart, so a future edit that re-converges them
+  # goes red here rather than silently disarming both tests.
+  [[ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_claude")" != *"manifest unreadable"* ]]
   refute_grep "claude plugins update" "${MOCK_CALLS_FILE}"
 }
 
