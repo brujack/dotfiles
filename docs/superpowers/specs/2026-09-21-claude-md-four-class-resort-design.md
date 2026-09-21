@@ -60,11 +60,40 @@ same shape at 81.5% consumed; this was 92.6%.
 Stated as headroom, not overflow: 185,132 is under 200,000. The claim is that 14,868 is not
 enough room, not that the window is exceeded.
 
-**A correction to every estimate in this document's earlier drafts.** The Problem statement
-previously said "~165,000 tokens of markdown" and "roughly 35k" of headroom, both derived by
-bytes / 4 over the launch-loaded set. Measured, the preamble is 185,132: **bytes / 4 understated
-it by about 12%**, in the direction that flatters the current state. Every bytes / 4 figure that
-survives below is labelled as such and should be read as a floor.
+**A correction to every estimate in this document's earlier drafts, and then a correction to
+that correction.** Earlier drafts said "~165,000 tokens of markdown" and "roughly 35k" of
+headroom, both bytes / 4. A first pass at reconciling that with the measurement attributed the
+whole 20k gap to the tokenizer ratio and called it 12%. **That was two causes read off one
+observable.** The gap between bytes / 4 and a measured context has two terms -- the tokenizer
+ratio and a non-markdown residual (tool schemas, system prompt, skill listings) -- and one repo
+cannot separate them. Two repos can, because the residual cancels in the difference:
+
+```
+ai-config   527,021 B markdown  ->  163,091 tok   measured
+dotfiles    609,797 B markdown  ->  185,132 tok   measured
+delta       + 82,776 B          ->  + 22,041 tok
+
+marginal ratio = 82,776 / 22,041 = 3.756 B/tok    bytes / 4 understates by 6.5%, not 12%
+back-solved residual = 22,760 tok, both repos
+```
+
+The residual agreeing across repos is **true by construction** -- two equations, two unknowns --
+not corroboration. What it buys is a sanity check a single-repo fit cannot: a badly wrong ratio
+would have produced a negative or absurd residual, and 22,760 is a plausible size for a tool and
+skill block. Owed to the ai-config session, which did the separation.
+
+**One inference of this spec's is refuted by it.** An earlier draft read the +22,041 gap between
+the two repos as partly "dotfiles-specific skill and tool surface". Under this fit the residual
+is identical for both repos and the entire gap is markdown bytes. The skill-surface hypothesis is
+withdrawn; the third probe below is what could revive it.
+
+**The model is fitted and untested.** `starting_context ~= launch_loaded_bytes / 3.756 + 22,760`
+reproduces both measured repos by construction, so it has not been tested at all. **One dispatch
+in any third repo falsifies or confirms it** -- if a third repo's measured context matches its
+predicted value the ratio and residual are both real and every repo gets a figure without a
+probe; if it misses, the residual is repo-specific and the skill-surface hypothesis returns. That
+probe must be dispatched *from a session in that repo*, since a subagent inherits its parent's
+preamble -- it cannot be run from here.
 
 ## What was already established, and must not be re-derived
 
@@ -82,6 +111,17 @@ cap, so a pointer on `lib/helpers.sh` would demand ~25,000 tokens of reading for
 That design is not revived here.
 
 ## Measurement
+
+**Scope, stated because this spec examines a minority of the file and never said so.** At the
+measured ratio `dotfiles/CLAUDE.md` is 178,625 B = **47,563 tokens -- larger than any standards
+file in the fleet, 1.7x `shell.md`, and 3.2x this repo's entire current headroom of 14,868.** The
+two sections classified below are 66,125 B = 17,607 tokens, **37.0% of the file**. The other
+112,500 B = 29,956 tokens -- **63%, itself twice the current headroom** -- has not been examined
+by any instrument in this project. Whether the same class mix holds there is unknown and
+untested. So this spec's yield is an upper bound *within a minority of the file*, and the
+dominant lever for this repo may well be the unexamined 63% rather than anything here. For
+ai-config the ordering is reversed -- its repo `CLAUDE.md` is 37,326 B and the shared standards
+dominate -- which is why the parent convention has to say the dominant lever is repo-dependent.
 
 Every paragraph of `### Test Seams` and `### MAKEFLAGS and Stdout Partition` (66,125 bytes at `20023924`,
 ~86 paragraphs; the classification ran against `c2990e5c`, before the parallel-bats PR added
@@ -375,9 +415,9 @@ not in ai-config's, and the two repos start from different bases:
 
 | | today | + standards work | + this spec | after |
 | --- | --- | --- | --- | --- |
-| dotfiles | 14,868 measured | ~31,605 | <=6,300 upper bound | **~52,800** |
-| ai-config | 36,909 measured | ~31,605 | n/a | **~68,500** |
-| other 7 repos | unmeasured | ~31,605 | n/a | unmeasured |
+| dotfiles | 14,868 measured | ~33,700 | <=6,735 upper bound | **~55,300** |
+| ai-config | 36,909 measured | ~33,700 | n/a | **~70,600** |
+| other 7 repos | predicted, not measured | ~33,700 | n/a | predicted |
 
 **An earlier draft claimed `~35k -> ~73k` and both terms were wrong.** The base was bytes / 4 and
 understated by 12%; the target counted this spec's dotfiles gain against a fleet-wide base, which
