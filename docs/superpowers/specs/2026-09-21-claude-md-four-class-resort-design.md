@@ -21,17 +21,50 @@ set, so the figure is per-session rather than per-machine. `dotfiles/CLAUDE.md`
 is ~44,700 tokens of it — the largest single file anyone in this fleet loads, larger than any
 fleet-wide standard.
 
-The binding constraint is not the 1M main-thread window. It is **haiku executor headroom**.
-`roleModels.executor-mechanical` is Haiku 4.5 at 200k, so a dotfiles session leaves a dispatched
-mechanical task roughly 35k for its prompt, tool schemas, file reads and output.
-`.claude/scripts/validate-plan.py:105` `_haiku_scope_errors` checks `files_touched` length and
-forbidden patterns and never checks context budget, so such a task is certified green and then
-fails. Two dotfiles dispatches have already failed this way (ai-config backlog row, and
-`docs/knowledge/ai-config-haiku-preamble-headroom.md`).
+The binding constraint is not the 1M main-thread window. It is **haiku executor headroom**, and
+it is now measured rather than inferred.
 
-Stated as headroom, not overflow: both totals are under 200k. The claim is that ~35k is not
-enough room, not that the window is exceeded. All token figures in this spec are bytes ÷ 4
-estimates and are labelled where they matter.
+**Measured 2026-09-21, this repo.** A Haiku 4.5 subagent dispatched from a dotfiles session with
+the entire prompt `Reply with exactly the word OK. Do not use any tools. Do not explain.` --
+so everything consumed is preamble:
+
+```
+turn 1   input=10   cache_read=16,588   cache_creation=168,534   output=39
+         starting context = 185,132 tokens
+         headroom against Haiku 4.5's 200,000 = 14,868      92.6% of the window consumed
+```
+
+**Method**, because a subagent cannot introspect its own context and the parent can: the harness
+persists the subagent transcript as JSONL with a `message.usage` block per turn, at the task's
+`<output-file>` path. Turn 1's `input_tokens + cache_read_input_tokens +
+cache_creation_input_tokens` is the starting context. Owed to the ai-config session, which
+established the method and measured its own repo first.
+
+**Do not use the `subagent_tokens` figure from the task notification.** For this probe it read
+190,214 against a true 185,132 -- a 5,082 overstatement, close enough to look usable and a
+different quantity (cumulative across turns, including cache re-reads). Comparing it to a window
+size is a category error that happens to land near the right answer at this length.
+
+`roleModels.executor-mechanical` is Haiku, and `.claude/scripts/validate-plan.py:105`
+`_haiku_scope_errors` checks `files_touched` length and forbidden patterns and never checks
+context budget -- so such a task is certified green with 14,868 tokens for its prompt, tool
+schemas, file reads and output. Two dotfiles dispatches have already failed this way.
+
+**The failure mode reproduced during this probe**, at both repos' preambles. The agent replied
+`OK` on turn 1 as instructed, then ran four more turns on a prompt forbidding tools, and on turn
+4 spent 786 output tokens writing a summary of a session that never happened -- "resuming from a
+prior context-limited session", "No action items or pending work", a list of standards it had
+loaded. It did not fail. It complied, failed to stop, and confabulated history. ai-config saw the
+same shape at 81.5% consumed; this was 92.6%.
+
+Stated as headroom, not overflow: 185,132 is under 200,000. The claim is that 14,868 is not
+enough room, not that the window is exceeded.
+
+**A correction to every estimate in this document's earlier drafts.** The Problem statement
+previously said "~165,000 tokens of markdown" and "roughly 35k" of headroom, both derived by
+bytes / 4 over the launch-loaded set. Measured, the preamble is 185,132: **bytes / 4 understated
+it by about 12%**, in the direction that flatters the current state. Every bytes / 4 figure that
+survives below is labelled as such and should be read as a floor.
 
 ## What was already established, and must not be re-derived
 
@@ -336,21 +369,36 @@ rather than an input to it.
 HAZARD compression is not sized at all. It is judgement work with no predictable yield, and
 claiming a figure for it would be the restated-count failure this corpus records.
 
-The fleet combined target (~37,900 tokens, ~165k -> ~127k, haiku headroom ~35k -> ~73k)
-inherits this bound and should be quoted the same way: an upper bound whose dotfiles component
-will shrink. The fleet-wide RECORD component is unaffected -- it was classified directly rather
-than through DERIVABLE.
+**The fleet combined target, restated against the measurement and decomposed per repo.** There
+is no single fleet headroom figure, because `dotfiles/CLAUDE.md` is in dotfiles' launch-load and
+not in ai-config's, and the two repos start from different bases:
 
-**The gap this spec is sized against has never itself been measured, and that is a hole in the
-Problem statement rather than in the arithmetic.** Two haiku dispatches failed; neither the
-ai-config knowledge file nor this spec records **how much headroom either dispatch actually
-needed**. So every figure here sizes the *fix* without knowing the size of the *gap*, and
-"~35k -> ~73k" cannot be read as sufficient, only as larger. The work remains directionally
-right -- more headroom cannot hurt a context-starved dispatch -- but nothing in either document
-establishes that the post-change figure prevents recurrence. Closing it is cheap and does not
-block this spec: dispatch one trivial haiku task, record its starting context, and compare.
-Referred to the ai-config session, which owns the dispatch path and has been asked for whatever
-it already measured.
+| | today | + standards work | + this spec | after |
+| --- | --- | --- | --- | --- |
+| dotfiles | 14,868 measured | ~31,605 | <=6,300 upper bound | **~52,800** |
+| ai-config | 36,909 measured | ~31,605 | n/a | **~68,500** |
+| other 7 repos | unmeasured | ~31,605 | n/a | unmeasured |
+
+**An earlier draft claimed `~35k -> ~73k` and both terms were wrong.** The base was bytes / 4 and
+understated by 12%; the target counted this spec's dotfiles gain against a fleet-wide base, which
+is two different denominators. Corrected, dotfiles goes from **7.4% of the window free to about
+26%** -- roughly tripling, which is a real result and not the one previously claimed.
+
+The other seven repos are deliberately left unmeasured rather than represented by a figure. Each
+has its own `CLAUDE.md` and skill surface, and the two measured repos differ by 22,041 tokens
+against a markdown delta that does not account for all of it -- so interpolating the rest would
+be inventing numbers in exactly the way this spec's history has already been burned by twice.
+
+**Durability: the trim refills, and the rate is measured.** dotfiles `CLAUDE.md` grew +16.0
+lines/day over the 11 days since ADR-0077's writer routing went live (23 commits, +176 net),
+against +7.9/day over the 90 days before it. At roughly 240 tokens/day, this spec's <=6,300
+tokens refill in about **26 days**. The fleet-wide trim is larger and buys proportionally longer.
+Attribution matters and cuts against reading this as routing having failed: the post-routing
+split is `fix` +83, `feat` +47, `docs` +46, so the dominant writer is feature work documenting
+itself, which ADR-0077's routing does not govern and arguably should not. Caveats: 11 days
+against 90, 23 commits, three of them unusually documentation-heavy. Not a trend -- the
+defensible claim is that **trim durability is not secured by routing alone**, which is the
+argument for the launch-load ratchet ADR-0077 deferred.
 
 **Ordering note, recorded rather than actioned here.** Shrinking the preamble raises the ceiling;
 it does not make a future overrun legible. Without a budget-aware `_haiku_scope_errors`, the next
