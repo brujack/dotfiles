@@ -242,14 +242,20 @@ share of the movable mass is. Whole-file measurement:
 
 | class | scoped 37% | rest 63% | whole file | share | remedy |
 | --- | --- | --- | --- | --- | --- |
-| HAZARD | 40,906 | 64,289 | **105,195** | 58.9% | stays, compressed |
-| DUPLICATE | 21,112 | 14,322 | **35,434** | 19.8% | one copy dies |
-| RECORD | 780 | 16,526 | **17,306** | 9.7% | to `docs/knowledge/` |
-| REFERENCE | 0 | 14,309 | **14,309** | 8.0% | to the skill that needs it |
-| AMBIGUOUS | 3,402 | 3,031 | 6,433 | 3.6% | adjudicated per paragraph |
+| HAZARD | 41,090 | 64,709 | **105,799** | 58.9% | stays, compressed |
+| DUPLICATE | 21,207 | 14,430 | **35,637** | 19.8% | one copy dies |
+| RECORD | 784 | 16,621 | **17,405** | 9.7% | **two destinations, see below** |
+| REFERENCE | 0 | 14,391 | **14,391** | 8.0% | to the skill that needs it |
+| AMBIGUOUS | 3,418 | 3,052 | 6,470 | 3.6% | adjudicated per paragraph |
 
-**Movable upper bound is 67,049 B, 2.7x what the scoped version claimed.** The file is 178,625 B
-and 286 blank-line paragraphs.
+**Movable upper bound is 67,434 B, 2.7x what the scoped version claimed.** The file is
+**179,650 bytes** and 286 blank-line paragraphs.
+
+**Every byte figure in earlier drafts was a character count mislabelled.** They were produced by
+python `len()` over decoded text; the file carries 1,025 multibyte characters (em-dashes,
+arrows), so `wc -c` reads 179,650 against 178,625 characters. A 0.57% error that changes no
+conclusion and every label. Caught by ai-config's goal-fit lens as G-5, against a figure this
+session had measured itself and then relayed twice.
 
 Three properties of the newly-classified 63% matter more than its size:
 
@@ -400,11 +406,33 @@ This is the item with no mechanical check and the worst review-cost ratio in the
 included because it is the reason the work is worth more than the tokens: a preamble that is
 two-thirds hazard narrative buries the prescriptive rule inside the incident report.
 
-### 3. RECORD and AMBIGUOUS — 4,182 bytes, resolve individually
+### 3. RECORD -- two destinations, not one
 
-RECORD is 780 bytes and AMBIGUOUS is 3,402. Too small to design a process around. Each of the
-six AMBIGUOUS paragraphs the classifier named gets a stated call in the implementation plan,
-with the reason, rather than a rule applied blindly.
+Adopted from the parent spec (`ai-config`
+`docs/superpowers/specs/2026-09-21-standards-launch-load-reduction-design.md` §4.1), which
+splits RECORD into ADR-0077's two **existing** destinations rather than inventing a third:
+
+- **Bare dated figures** -- a measurement whose only content is the number and its date -- are
+  **deleted**. Git history and the PR body hold them, per the routing rule already in
+  `~/.claude/CLAUDE.md`.
+- **Incident write-ups** -- a narrative whose mechanism is the point -- move to
+  `ai-config/docs/knowledge/dotfiles-<topic>.md` (ADR-0020), with the **rule they taught staying
+  in this file** behind a one-line pointer.
+
+**The discriminator is the parent's:** does a reader who has never seen the incident still need
+the narrative to apply the rule? Where yes, it moves and is cited. Where the rule stands alone,
+the narrative is deleted.
+
+**The highest-severity failure in this spec is a rule deleted with its record**, and the parent
+names it as the thing review should attack hardest. Gate 5 is what catches it -- every manifest
+phrase classed HAZARD or RULE must still return a hit after the change, and a RECORD move that
+takes its rule with it fails there.
+
+**A move with no citation is a deletion.** Decide it as one. Relocated narrative that nothing
+cites is deleted content with extra steps, and `docs/knowledge/` becomes a graveyard.
+
+AMBIGUOUS is 6,470 B and is adjudicated per paragraph in the plan, with the reason recorded --
+not a rule applied blindly.
 
 ## Non-goals
 
@@ -886,4 +914,58 @@ N/A -- no comparison arms, no evaluator component, concrete acceptance criteria.
 **body** was retargeted and re-listed; the references inside the review sections above were left
 alone, because they record what a lens said against the numbering it read. That is the frozen
 reference rule -- a record is not edited to match a present it was not written against.
+
+## Parent spec review — ai-config, approved 2026-09-21
+
+Reviewed `ai-config/docs/superpowers/specs/2026-09-21-standards-launch-load-reduction-design.md`
+at `b41bfbcb` after operator approval. Six revisions since the version this sub-project was
+written against. Five findings bind here.
+
+**1. RECORD splits into two destinations. ADOPTED** — Design item 3 rewritten. Bare dated figures
+deleted, incident narratives to `docs/knowledge/` with the rule staying behind a pointer, and the
+parent's discriminator adopted verbatim: does a reader who has never seen the incident still need
+the narrative to apply the rule?
+
+**2. Their class set is five, mine is four, and the difference is real rather than cosmetic.**
+The parent runs RULE / HAZARD / RECORD / DUPLICATE plus REFERENCE. This spec runs HAZARD /
+DUPLICATE / RECORD / REFERENCE with **no RULE class** — its classifiers folded prescriptive
+content into HAZARD. Both remedies are identical (stays, compressed), so nothing in the design
+turns on it and no paragraph is routed differently. But **the whole-file mix above is not
+comparable to the parent's**, whose HAZARD excludes RULE and is correspondingly smaller. Stated
+rather than reconciled: re-splitting 286 paragraphs to match a taxonomy that changes no remedy
+buys nothing, and a false comparison between the two mixes is the cost of not saying so.
+
+**3. §3: class is not mechanically decidable — and this spec's measurement inherits it.** The
+parent built a paragraph classifier, measured RECORD at 26.6%, then audited it on twelve
+paragraphs and found failures in **both** directions: a `behavior.md` RULE classed RECORD for
+matching the word "measured", a `tdd.md` RECORD classed RULE for carrying no date. Cause is not a
+weak classifier — these files put a rule and its dated evidence in the same paragraph, so **the
+class boundary runs through paragraphs rather than between them**.
+
+Consequence here: the gates are unaffected, because they verify *survival* of a human-assigned
+class rather than assigning one — but **the class mix in Measurement was produced by the same
+kind of instrument and carries the same error bars in both directions.** Treat 105,799 / 35,637 /
+17,405 / 14,391 as a bracket, not a target. The manifest's per-paragraph assignment is the real
+classification and it is a reader's, per gate 2.
+
+**4. Merges must be sequenced, not parallel. ADOPTED as a constraint on the plan.** The parent's
+R-3 finding: merging a standards change rewrites the live preamble of every running session, and
+the Cursor mirror is a second full copy. Its own words — the merge "must be sequenced against the
+companion dotfiles spec rather than landing in parallel". This spec's changes are repo-local and
+do not touch the shared preamble, so the ordering constraint is theirs to set; the plan records
+that it must be agreed before either lands.
+
+**5. G-5, their finding against this spec's own figure, and they were right.** They gave
+`dotfiles/CLAUDE.md` as 178,625 B; the correct figure is 179,650. Both of us had it wrong in the
+same direction because this session measured it with python `len()` over decoded text and relayed
+the result as bytes. Corrected throughout, with the 0.57% rescale applied to the class mix.
+
+**What did not change.** The four gates that matter here — whitespace-normalised verification
+never `grep -n`, manifest row count asserted against an independently derived count, the
+before/after probe as acceptance, and no class-based mechanical HOLD — are all in the parent too,
+several of them derived from measurements this session sent them. The two specs agree on
+mechanism without either having copied the other's text.
+
+**The parent's size gate is WITHDRAWN** (§4.5), so there is no ratchet to align with. This spec's
+durability note stands as an observation rather than a commitment to build one.
 
