@@ -242,13 +242,21 @@ _make_fixture_root_no_envs() {
 
   touch -t 202001010000 "${_dst}"
   local _mtime_before
-  _mtime_before=$(stat -f '%m' "${_dst}" 2>/dev/null || stat -c '%Y' "${_dst}")
+  _mtime_before=$(stat -c '%Y' "${_dst}" 2>/dev/null || stat -f '%m' "${_dst}")
 
   run install_pyenv_rehash_hook
   [ "$status" -eq 0 ]
 
   local _mtime_after
-  _mtime_after=$(stat -f '%m' "${_dst}" 2>/dev/null || stat -c '%Y' "${_dst}")
+  _mtime_after=$(stat -c '%Y' "${_dst}" 2>/dev/null || stat -f '%m' "${_dst}")
+  # Shape, not just equality. GNU stat's -f is FILESYSTEM status, not format
+  # (that is BSD), so the old `stat -f '%m' f || stat -c '%Y' f` order left
+  # five lines of tmpfs Blocks/Inodes counters on stdout and appended the
+  # epoch as a sixth. Equality then compared free-space counters, which are
+  # stable serially and move under `bats --jobs` -- a false positive with
+  # eleven concurrent writers. The comparison below was always correct; it
+  # was reading the wrong bytes.
+  [[ "${_mtime_before}" =~ ^[0-9]+$ ]]
   [ "${_mtime_before}" = "${_mtime_after}" ]
 }
 
