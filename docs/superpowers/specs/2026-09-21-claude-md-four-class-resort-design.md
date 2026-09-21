@@ -62,6 +62,16 @@ re-run the split rather than reuse the table) classified against real source, 10
 | AMBIGUOUS | 3,402  | 5.1%  |
 | RECORD    | 780    | 1.2%  |
 
+**The measurement table and the Design table use different class sets, deliberately, and this
+is the reconciliation.** The classifier ran HAZARD / DERIVABLE / AMBIGUOUS / RECORD, where
+DERIVABLE means *derivable from source*. The Design below runs HAZARD / DUPLICATE / RECORD /
+REFERENCE, where DUPLICATE is the narrower same-argument test. DERIVABLE is therefore a
+**superset of DUPLICATE**: every duplicate is derivable, not every derivable paragraph is a
+duplicate. **REFERENCE has no row here because it has no instance in these two sections** -- it
+is a class of the parent convention, carried so the four classes are stated once fleet-wide, and
+in this repo its instances (`ci.md`'s hook bodies, `repo-structure.md`'s template) live in
+ai-config's half. Nothing in this spec moves REFERENCE text, which is what the Non-goals forbid.
+
 Instrument: one Sonnet pass, 10 of ~86 paragraphs verified against source, the HAZARD/DERIVABLE
 boundary its judgement. The 62/32 split is lopsided enough to be directionally safe through any
 reasonable boundary slop; the exact percentages are not quotable.
@@ -213,141 +223,109 @@ Run before implementation, not predicted:
    and the candidate is recorded as partial. Verdict plus reason recorded per candidate.
 
 4. **No hazard claim lost.** Every phrase in the manifest whose row is classed HAZARD returns
-   a hit in the post-change file. Not a byte count -- a byte count cannot distinguish
-   compression from deletion. Run by a reviewer who did not perform the compression, against
-   the manifest committed at gate 2.
+   a hit in the post-change file. Not a byte count -- a byte count cannot distinguish compression
+   from deletion. Run by a reviewer who did not perform the compression.
 
-5. **`make test` green** — `make lint` covers `CLAUDE.md` only via `check-agent-guidance`, so
+   **Compression must preserve the manifest phrase verbatim.** That is a constraint on the
+   compressor, not a property the gate discovers. Without it the gate has a false-red mode: the
+   HAZARD remedy asks for the claim to move to the first sentence, and a legitimate rewording
+   drops the exact phrase chosen from the old narrative, failing the gate on correct work.
+
+   **State plainly what this gate does not do.** The manifest is committed before editing, so the
+   compressor works with the phrases in view. Gate 4 therefore detects **outright loss of a
+   claim** and nothing else. It cannot detect a claim silently weakened -- a specific measured
+   failure mode replaced by a vague summary that still contains the phrase -- and committing the
+   manifest makes that easier to hit, not harder. Substance is carried by gate 5, not by gate 4,
+   and the spec's falsifiability rests on the two of them together.
+
+5. **Substance review by a non-implementer.** For every HAZARD paragraph the compression touched,
+   a reviewer who did not write the compression reads the pre-change text at the parent SHA
+   against the post-change text and judges whether the claim still says the same thing. This is
+   the only check on weakening, it is judgement rather than mechanism, and it is named as such.
+   A HAZARD paragraph that was not touched needs no review beyond gate 4.
+
+6. **`make test` green** — `make lint` covers `CLAUDE.md` only via `check-agent-guidance`, so
    `make sync-agent-guidance` runs if `.cursor/rules/global-claude-standards.mdc` goes stale.
    Note that target is generated from the `@`-imports, not from body prose, so a body-only edit
    should leave it unchanged — if it does not, that is a finding.
-6. **Post-change size reported with its denominator**, not as a bare figure: bytes before, bytes
+7. **Post-change size reported with its denominator**, not as a bare figure: bytes before, bytes
    after, and the estimated token delta labelled as bytes ÷ 4.
 
-**Falsifiability:** gate 4 is what makes this spec refutable rather than self-confirming. A
-change that deletes hazard text while hitting its size target passes gates 1, 5 and 6 and fails
-gate 4. Gate 3 is the same shape one level down — it can fail, and a failure means a planned
-deletion does not happen.
+**Falsifiability rests on gates 3, 4 and 5 together, and each covers a different failure.**
+Gate 3 can refuse a planned deletion when a sentence has no counterpart. Gate 4 catches a hazard
+claim disappearing outright; a change that hits its size target by deleting hazard text passes
+1, 6 and 7 and fails 4. Gate 5 is the only check on a claim surviving as a string while being
+weakened as a claim, and it is a human reading rather than a mechanism -- so the spec is
+refutable on deletion mechanically and on weakening only by review. Saying that plainly is
+better than an earlier draft's claim that gate 4 alone made the spec refutable, which was true
+of string loss and false of the failure the HAZARD section itself calls the worst
+review-cost ratio in the spec.
 
 ## Expected outcome
 
-Movable from `dotfiles/CLAUDE.md`: DERIVABLE 21,112B + RECORD 780B + AMBIGUOUS 3,402B ≈ 25,294B
-≈ **6,300 tokens**, bytes ÷ 4. HAZARD compression is not sized here — it is judgement work with
-no predictable yield, and claiming a figure for it would be the restated-count failure this
-corpus records.
+**Upper bound, not a count, and the distinction is load-bearing.** The classifier's DERIVABLE
+21,112B + RECORD 780B + AMBIGUOUS 3,402B = 25,294B ~= **6,300 tokens** is the most that can
+move. It is an upper bound because DERIVABLE was scored under *derivable from source*, and the
+Design deletes under the narrower *same argument* test that replaced it. Two of the seven
+candidates already fail that test outright and one is partial, so the same-argument test will
+remove an unknown share of the 21,112B. AMBIGUOUS is adjudicated per paragraph rather than moved
+wholesale, so its 3,402B is a ceiling too.
 
-Against the fleet plan (ai-config's three items, ~31,600 tokens) the combined target is
-~37,900 tokens: a dotfiles session ~165k → ~127k, haiku executor headroom ~35k → ~73k.
+An earlier draft called this figure "a byte count of already-classified paragraphs, not an
+estimate of a class boundary". That was true of the classifier's taxonomy and false of the
+Design's, and it survived the revision that replaced the class definition -- the
+premise-moved-conclusion-carried shape this corpus records. **The real number is not knowable
+until gate 3 has run**, which is the correct place for it: gate 3 adjudicates every candidate
+per sub-paragraph and records the verdict, so the figure is an output of the implementation
+rather than an input to it.
 
-The plan-changing threshold for the fleet-wide RECORD figure is ~10,000 tokens, against an
-independently bracketed 18k–37k. This spec's own 6,300 is a smaller and more certain number: it
-is a byte count of already-classified paragraphs, not an estimate of a class boundary.
+HAZARD compression is not sized at all. It is judgement work with no predictable yield, and
+claiming a figure for it would be the restated-count failure this corpus records.
 
----
+The fleet combined target (~37,900 tokens, ~165k -> ~127k, haiku headroom ~35k -> ~73k)
+inherits this bound and should be quoted the same way: an upper bound whose dotfiles component
+will shrink. The fleet-wide RECORD component is unaffected -- it was classified directly rather
+than through DERIVABLE.
 
-## Multi-Lens Review
+**Ordering note, recorded rather than actioned here.** Shrinking the preamble raises the ceiling;
+it does not make a future overrun legible. Without a budget-aware `_haiku_scope_errors`, the next
+file that grows returns the fleet to the starting condition with nothing to say so. That work is
+ai-config's file and is referred to that session; this spec improves the odds and does not close
+the failure mode.
 
-Reviewed at commit: `20023924` (Step 7 self-review commit, before Step 8 dispatch).
-Three lenses, fresh `general-purpose` subagents, no conversation context.
+### External review (operator's architect session, round 1)
 
-### Goal-Fit
+Three findings, all taken.
 
-Finding: Design is sound on goal-fit. The reads-it test passes -- the consumer is
-`dotfiles/CLAUDE.md`'s own launch-load, which every session and every dispatched haiku task's
-preamble pays for, so shrinking it changes a decision rather than decorating one. Of the 5 gates,
-only 2 are pure measurement; gates 2 and 3 are constructed to fail on the nothing-happened case,
-which is the opposite of the PASS-dominant pattern this lens looks for. Soft spot: this slice is
-~6,300 tokens of a ~37,900 fleet target and the larger payoff depends on a peer effort landing
-separately. Sharper: the spec leaves `_haiku_scope_errors` unfixed, and making that validator
-budget-aware would close the opening failure mode *loudly at plan-validation time* rather than
-making it less likely by shrinking the preamble. Scoped out as ai-config's file, which is a
-legitimate split, but this spec alone does not close the failure mode it opens with.
+1. **The Expected Outcome was computed from the class definition the Design replaced.** The
+   6,300-token figure sums the classifier's DERIVABLE, scored under *derivable from source*,
+   while the Design deletes under the *same argument* test that superseded it -- and the draft
+   asserted the figure was "a byte count of already-classified paragraphs, not an estimate of a
+   class boundary", which was true of the old taxonomy and false of the new one. The sizing was
+   not re-derived when the external finding changed the class.
+   Disposition: **Addressed** (operator, 2026-09-21). Expected outcome is restated as an upper
+   bound, the superseded sentence is deleted and its failure recorded in place, and the real
+   figure is made an output of gate 3 rather than an input to the spec.
 
-Assumption: The whole quantitative case rests on bytes/4, and this content is table- and
-code-block-heavy, which can tokenize at a materially different ratio in either direction.
-Refute by running `/context` in a real dotfiles session before and after, or tokenising
-`CLAUDE.md` with the real tokenizer instead of bytes/4.
+2. **Gate 4 was open in both directions.** The manifest is committed before editing, so the
+   compressor sees the phrases: false green by preserving the phrase and weakening everything
+   around it -- which committing the manifest makes easier, not harder -- and false red when a
+   legitimate rewording moves the claim to the first sentence and drops the phrase. Gate 4
+   refutes deletion of a string, not weakening of a claim.
+   Disposition: **Addressed** (operator, 2026-09-21). Compression must now preserve the manifest
+   phrase verbatim, which converts the false-red case from a gate failure into a constraint on
+   the compressor. Gate 5 is added as a non-implementer substance review, named as judgement
+   rather than mechanism. The falsifiability paragraph no longer claims gate 4 alone makes the
+   spec refutable.
 
-Disposition: **Addressed** for the finding -- the `_haiku_scope_errors` half is referred to the
-ai-config session as a question about their file (operator, 2026-09-21); it is not scoped into
-this spec. Assumption stands unrefuted: every figure here remains labelled bytes / 4.
+3. **REFERENCE was a design class with no measurement row and a remedy the Non-goals forbid.**
+   The measurement ran HAZARD / DERIVABLE / AMBIGUOUS / RECORD and the Design runs HAZARD /
+   DUPLICATE / RECORD / REFERENCE -- two different class sets -- so a plan author reading the
+   Design table would move REFERENCE text to a knowledge file and violate the non-goal.
+   Disposition: **Addressed** (operator, 2026-09-21). The two taxonomies are reconciled where the
+   measurement is stated: DERIVABLE is a superset of DUPLICATE, and REFERENCE has no instance in
+   these two sections because its instances in this fleet are in ai-config's half.
 
-### Ergonomics
-
-Finding: The DUPLICATE remedy is specified at symbol/table-row granularity, but the content is
-not atomic at that granularity -- verified directly, not inferred. For `_OVERRIDE_LIB_TRAP_SCOPE`
-(one of the two pairs this spec says were personally verified), the `CLAUDE.md` block holds two
-sub-paragraphs: a mechanics paragraph that *is* a near-verbatim duplicate of the
-`scripts/check-lib-exit-traps.sh` header, and a second paragraph -- "Two code paths, and the
-tests only exercise one" -- with **zero counterpart** in that source file or its test file. A
-literal reading of "delete the CLAUDE.md copy for this pair" deletes the hazard with the
-duplicate. The end state is fine when classification is done per sub-paragraph; the gap is
-specification precision, and it will produce a wrong result the first time a dispatched task
-follows the DUPLICATE section at face value. The commit history already shows this failure at
-smaller scale -- 3 of 7 line-number citations wrong in the first draft even after
-spot-verification.
-
-Assumption: That a full per-paragraph classification of all ~86 paragraphs will exist as a
-durable artifact for gates 2 and 3 to check against. No such artifact is in the repo. If the plan
-only restates the 7-row table plus prose, gate 3 has no ground truth for the other ~79 paragraphs
-and degrades from a gate to a spot-check. Confirm by checking whether the plan file enumerates
-paragraph-level classifications.
-
-Disposition: **Addressed** (operator, 2026-09-21). Classification unit is now the sub-paragraph.
-The assumption is closed rather than left open: gate 2 makes the per-paragraph phrase manifest a
-committed artifact produced before the first edit, which is exactly the ground truth this lens
-found missing.
-
-### Risk
-
-Finding: The coarse classification unit lets a HAZARD sentence be destroyed while **both** gates
-report success -- confirmed, not hypothetical. The "login-shell seam, chsh PAM" row maps to two
-`CLAUDE.md` paragraphs. Paragraph B is genuinely near-verbatim in `lib/helpers.sh:356-364`.
-Paragraph A ends with a sentence that exists only in `CLAUDE.md`: *"Measured: the three
-end-to-end `run_doctor` tests stub every sub-check by name, so `_doctor_check_login_shell` must
-be stubbed there too or it reads the real account mid-suite."* A tree-wide grep for it returns
-zero hits. Gate 2 requires only **one** phrase-match per row to authorize deleting the pair; gate
-3 never re-examines it because the classifier scored it DUPLICATE, not HAZARD. It falls into
-neither net: an implementer picks a chsh phrase, deletes both paragraphs, gates 2/3/4 go green,
-and the test-stubbing guidance is gone with nothing pointing at its absence.
-
-Second finding: gate 3 is circular as written. Nothing requires the distinctive phrase to be
-chosen from the **pre-compression** text and locked before editing. A phrase selected from the
-surviving text proves only that the edit contains a substring of itself -- `behavior.md`'s "a
-check derived from the same decision as the thing it checks cannot falsify it", in this spec's
-own gate.
-
-Assumption: Whether HAZARD compression preserves claim substance is decided by execution quality
-the spec does not gate on. Gate 3 can detect a claim's complete disappearance but not a claim
-silently weakened into a vague summary that still contains the keyword. Confirm or refute by
-having a reviewer who did not perform the compression re-derive phrases from
-`git show <parent-sha>:CLAUDE.md` and grep the post-compression file -- never a phrase chosen by
-the implementer from their own output.
-
-Disposition: **Addressed** (operator, 2026-09-21). Both findings taken. Deletion now requires a
-counterpart for every sentence removed, not one phrase per block. Phrases are taken from the
-pre-change text, committed before the first edit, and chosen by someone other than the
-implementer -- the lens's own refutation procedure is now the gate itself.
-
-### Adversarial Spec Review (comparison/judge designs only)
-
-N/A -- spec has no comparison arms, no evaluator component, and concrete acceptance criteria.
-
-### External finding (ai-config peer session, same round)
-
-Finding: The DUPLICATE test "the source file carries the same prose" is wrong. The correct test
-is **both copies must serve the same argument**. Where each copy is evidence for a different
-claim it is shared evidence, not restatement: keep both and cross-reference. That session's own
-top lexical hit -- the `make` version table at 0.83 containment across `tdd.md` and
-`behavior.md` -- fails this test: `tdd.md` uses it to argue *a local mac pass is not evidence and
-CI is*, `behavior.md` to argue *a boundary can be an actor rather than a place*. Applied to this
-spec, at least two of seven pairs look doubtful: `brew_cask_installed`'s source comment argues
-why the code is shaped that way while the `CLAUDE.md` entry argues how to test it, and
-`check-lib-exit-traps.sh`'s header argues why an allowlist rather than an inference while the
-`CLAUDE.md` entry argues which seam a test drives.
-
-Disposition: **Addressed** (operator, 2026-09-21). The same-argument definition is adopted
-wholesale as the class definition rather than as a tiebreak. The candidate table is re-marked:
-two fail outright, one is partial, four remain candidates for per-sub-paragraph adjudication in
-the plan. The peer's 0-of-12 result and its citation-ranking cause are recorded in Design item 1
-as the reason this class is expected non-empty here and empty in the standards.
+Also noted and recorded rather than actioned: without a budget-aware `_haiku_scope_errors`, the
+next file that grows returns the fleet to the starting condition with nothing to say so. That is
+referred to the ai-config session as their file; the ordering note is in Expected outcome.
