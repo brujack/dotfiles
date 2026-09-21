@@ -82,6 +82,58 @@ not corroboration. What it buys is a sanity check a single-repo fit cannot: a ba
 would have produced a negative or absurd residual, and 22,760 is a plausible size for a tool and
 skill block. Owed to the ai-config session, which did the separation.
 
+**The skill-surface hypothesis is back in play, not withdrawn.** An earlier draft read the
+inter-repo gap as partly repo-specific skill and tool surface; a two-point fit appeared to refute
+it by producing an identical residual for both repos. With four points the intercept is not
+identified at all, so nothing excludes a repo-varying component. `math` is the strongest evidence
+against a large one -- its `CLAUDE.md` pulls `python.md` and `rust.md`, 93,244 bytes neither
+fitted repo loads, and it still lands within 2,000 tokens -- but that bounds the effect rather
+than eliminating it.
+
+**Four repos measured, and the two-parameter model is misspecified rather than merely noisy.**
+Two sessions independently ran a third probe -- `math` at this session's request, `etch-config`
+at ai-config's. Each fitted model missed the point it was not built from by roughly 3,000 tokens,
+in the same direction:
+
+```
+repo             bytes    actual     fit4     err
+ai-config      527,021   163,091  161,264   -1,827
+dotfiles       609,797   185,132  184,373     -759
+math           580,548   174,222  176,208   +1,986
+etch-config    454,484   140,414  141,014     +600
+
+4-point least squares:  ratio 3.582 B/tok   intercept 14,132   max error 1.14%
+bytes / 4 understates markdown tokens by 11.7%
+```
+
+**The pairwise slopes settle it.** A collinear model requires them equal:
+
+```
+ai-config<->math       4.809      dotfiles<->math         2.681
+ai-config<->dotfiles   3.756      dotfiles<->etch-config  3.473
+math<->etch-config     3.729      ai-config<->etch-config 3.199
+```
+
+A **79% spread**. Not scatter around a line. Edit drift was proposed as an explanation and is
+ruled out here: no commit touched a launch-loaded file in the 12 hours spanning the four probes,
+and ai-config's main checkout -- which `~/.claude/standards` resolves into -- is clean.
+
+**The intercept is not identified and should never be quoted.** Across the four fits that have
+been computed it reads 22,760, 25,823, 10,424 and 14,132 -- a 2.5x swing driven entirely by which
+points were used. What survives is the ratio at roughly **3.6 B/tok, +/- 0.3**, and a prediction
+error of about **+/- 2,000 tokens** for any repo not measured. That is adequate for sizing a trim
+and inadequate for a gate threshold, which is the distinction that matters for the budget-aware
+`_haiku_scope_errors` question referred to ai-config.
+
+**Three figures for the same quantity were published in this exercise, and the process that
+produced them is worth more than the number.** An initial 12% from a single repo; a 6.5%
+correction from a two-point fit with **zero degrees of freedom**; a 15% from three points; 11.7%
+from four. The 6.5% was wrong in direction as well as magnitude -- it said the current state was
+less dire than the first estimate, and it is more. It arrived carrying an explicit caveat that
+the fit was true by construction, and that caveat did none of the work of making it true: it made
+the claim read as careful and it was taken on that basis. Naming a limitation is not neutralising
+it.
+
 **One inference of this spec's is refuted by it.** An earlier draft read the +22,041 gap between
 the two repos as partly "dotfiles-specific skill and tool surface". Under this fit the residual
 is identical for both repos and the entire gap is markdown bytes. The skill-surface hypothesis is
@@ -436,10 +488,11 @@ not in ai-config's, and the two repos start from different bases:
 
 | | today | + standards work | + this spec | after |
 | --- | --- | --- | --- | --- |
-| dotfiles | 14,868 measured | ~32,800 | <=6,554 upper bound | **~54,200** |
-| ai-config | 36,909 measured | ~32,800 | n/a | **~69,700** |
-| math | 25,778 measured | ~32,800 | n/a | **~58,600** |
-| other 6 repos | predicted, not measured | ~32,800 | n/a | predicted |
+| dotfiles | 14,868 measured | ~35,300 | <=7,060 upper bound | **~57,200** |
+| ai-config | 36,909 measured | ~35,300 | n/a | **~72,200** |
+| math | 25,778 measured | ~35,300 | n/a | **~61,100** |
+| etch-config | 59,586 measured | ~35,300 | n/a | **~94,900** |
+| other 5 repos | predicted +/- 2,000 | ~35,300 | n/a | predicted |
 
 **An earlier draft claimed `~35k -> ~73k` and both terms were wrong.** The base was bytes / 4 and
 understated by 12%; the target counted this spec's dotfiles gain against a fleet-wide base, which
