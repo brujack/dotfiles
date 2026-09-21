@@ -105,7 +105,7 @@ confirmed each symbol resolves to a definition carrying an adjacent explanatory 
 that the prose is near-verbatim. The first draft of this table carried line numbers relayed from
 that classifier and **three of seven were wrong** -- `lib/detect_env.sh:59-62` most clearly, where
 the `readonly` assignments are at lines 6-11. That is why the table is keyed by symbol, and why
-gate 3 below re-verifies every pair at implementation time rather than trusting this table.
+gate 4 below re-verifies every pair at implementation time rather than trusting this table.
 
 So this is a **duplication** problem, not a routing problem. Nothing keeps the copies in sync,
 they have no shared source of truth, and a reader cannot tell which is current.
@@ -211,64 +211,107 @@ Run before implementation, not predicted:
    `### MAKEFLAGS and Stdout Partition`.
 2. **Phrase manifest, written first and locked.** Before any edit, produce
    `docs/superpowers/plans/<plan>-phrases.md`: one row per sub-paragraph of both sections, its
-   class, and a distinctive phrase **taken from the pre-change text at the parent SHA**. Commit
-   it before the first edit. This is the artifact gates 3 and 4 check against, and it is the
-   per-paragraph classification the ergonomics lens correctly noted does not otherwise exist --
-   without it gate 3 has no ground truth for the ~79 paragraphs outside the candidate table and
-   degrades to a spot-check.
+   class, and a distinctive phrase taken from the pre-change text at the parent SHA. Commit it
+   before the first edit. This is the ground truth gates 4, 5 and 6 check against, and it is the
+   per-paragraph classification that does not otherwise exist -- without it gate 5 has no universe
+   beyond the candidate table.
 
-   **The phrase is taken from the claim sentence of the sub-paragraph, never from its supporting
-   narrative.** The constraint below obliges the compressor to keep the phrase verbatim, so a
-   phrase drawn from the narrative would force them to keep prose the HAZARD remedy says to cut.
-   Taking it from the claim also makes gate 4 check the same sentence gate 5 judges, rather than
-   an arbitrary substring beside it.
+   **2a. The manifest must be complete, and completeness is asserted, not trusted.** Row count
+   must equal a paragraph count re-derived from the two sections at the parent SHA by a blank-line
+   split. At `60e72a02` that count is **88** -- 78 in `### Test Seams`, 10 in
+   `### MAKEFLAGS and Stdout Partition`. A short count fails the gate. Without this, an omitted row
+   is invisible to every later gate: gate 5's universe *is* the manifest, and gate 6 is scoped to
+   what the manifest classed HAZARD, so an omitted paragraph is unprotected by both while the
+   gates report clean. That is `tdd.md`'s hand-maintained-denominator failure, and every previous
+   revision of this spec added a check on classification *correctness* while leaving *completeness*
+   ungated.
 
-   **The phrases are chosen by someone other than whoever performs the compression.** A phrase
-   selected from surviving text proves only that the edit contains a substring of itself. The phrase check
-   (gate 4) was the gate this spec first called falsifiable, and as first written it could not
-   fail.
+   **2b. Phrase selection has three mechanical constraints, all checked before the manifest is
+   locked.** Each exists because the obvious phrasing breaks the check:
 
-3. **Every DUPLICATE deletion: every sentence removed has a counterpart.** Per candidate, per
-   sub-paragraph, `grep -n '<phrase>' <source file>` for **each sentence being deleted**, not one
-   phrase authorising a block. A miss means that sentence is not part of a duplicate -- it stays,
-   and the candidate is recorded as partial. Verdict plus reason recorded per candidate.
+   - **Unique.** The phrase must occur exactly once in the pre-change file. A phrase that also
+     appears elsewhere lets gate 5 match an unrelated surviving occurrence and report a gutted
+     paragraph as preserved -- the gate defeated by its own instrument. Measured: a 4-word window
+     from a paragraph's first sentence collides in 2 of 78 cases, so this is uncommon rather than
+     routine, and cheap to assert.
+   - **Not sentence-initial.** The phrase must not begin at a sentence boundary. The HAZARD remedy
+     moves the claim to the first sentence, which requires capitalising its first word, and the
+     search is case-sensitive -- so a sentence-initial phrase fails on a correct rewrite.
+   - **Wrap-tolerant by construction of the check, not by choosing short phrases.** See 3a.
 
-4. **No hazard claim lost.** Every phrase in the manifest whose row is classed HAZARD returns
-   a hit in the post-change file. Not a byte count -- a byte count cannot distinguish compression
-   from deletion. Run by a reviewer who did not perform the compression.
+3. **The check is a whitespace-normalised substring search, never `grep -n`.** `CLAUDE.md` is
+   hand-wrapped at 80-100 columns and `grep` is line-oriented, so a phrase spanning a wrap returns
+   no hit **on unmodified text**. Measured at `60e72a02`: **46 of 78** `### Test Seams` paragraphs
+   have a first sentence that itself spans a wrap, so a phrase drawn from the claim sentence --
+   which this spec's own rule directs -- is unfindable by `grep` in the majority of cases, and
+   gates 5 and 6 would false-HOLD on correct, untouched work. Normalise both sides and count:
 
-   **Compression must preserve the manifest phrase verbatim.** That is a constraint on the
-   compressor, not a property the gate discovers. Without it the gate has a false-red mode: the
-   HAZARD remedy asks for the claim to move to the first sentence, and a legitimate rewording
-   drops the exact phrase chosen from the old narrative, failing the gate on correct work.
+   ```python
+   import re
+   norm = lambda s: re.sub(r'\s+', ' ', s)
+   hits = norm(open('CLAUDE.md').read()).count(norm(phrase))
+   ```
 
-   **State plainly what this gate does not do.** The manifest is committed before editing, so the
-   compressor works with the phrases in view. Gate 4 therefore detects **outright loss of a
-   claim** and nothing else. It cannot detect a claim silently weakened -- a specific measured
-   failure mode replaced by a vague summary that still contains the phrase -- and committing the
-   manifest makes that easier to hit, not harder. Substance is carried by gate 5, not by gate 4,
-   and the spec's falsifiability rests on the two of them together.
+   `hits == 1` before locking the manifest; `hits >= 1` after the change for a HAZARD row.
 
-5. **Substance review by a non-implementer.** For every HAZARD paragraph the compression touched,
-   a reviewer who did not write the compression reads the pre-change text at the parent SHA
-   against the post-change text and judges whether the claim still says the same thing. This is
-   the only check on weakening, it is judgement rather than mechanism, and it is named as such.
-   A HAZARD paragraph that was not touched needs no review beyond gate 4.
+   **3a.** Because the check normalises, phrases may be full claim clauses rather than short
+   wrap-safe fragments. An earlier draft would have relied on authors picking short phrases by
+   unstated convention while the stated rule pointed the other way.
 
-6. **`make test` green** — `make lint` covers `CLAUDE.md` only via `check-agent-guidance`, so
+4. **Every DUPLICATE deletion: every sentence removed has a counterpart.** Per candidate, per
+   sub-paragraph, the normalised search of gate 3 run against the source file for **each sentence
+   being deleted**, not one phrase authorising a block. A miss means that sentence is not part of
+   a duplicate -- it stays, and the candidate is recorded as partial. Verdict plus reason recorded
+   per candidate.
+
+5. **No hazard claim lost.** Every manifest phrase whose row is classed HAZARD returns a hit in
+   the post-change file under the gate 3 search. Not a byte count -- a byte count cannot
+   distinguish compression from deletion.
+
+   **Compression must preserve the manifest phrase**, modulo the whitespace the search normalises.
+   That is a constraint on the compressor, not a property the gate discovers.
+
+   **What this gate does not do.** The manifest is committed before editing, so the compressor
+   works with the phrases in view. Gate 5 detects **outright loss of a claim** and nothing else.
+   It cannot detect a claim silently weakened -- a specific measured failure mode replaced by a
+   vague summary that still contains the phrase -- and committing the manifest makes that easier
+   to hit, not harder. Substance is carried by gate 6, not by this gate.
+
+6. **Substance review by a non-implementer, with a recorded verdict.** For every HAZARD paragraph
+   the compression touched, a reviewer who did not perform the compression reads the pre-change
+   text at the parent SHA against the post-change text and judges whether the claim still says the
+   same thing. **Verdict plus one-line reason recorded per paragraph**, in the manifest file, the
+   same way gate 4 records per candidate -- without a record this gate produces a PASS that is
+   purely an assertion, which is the trust-signal failure `USER.md` names. This is the only check
+   on weakening; it is judgement rather than mechanism and is named as such.
+
+   **Batch bound.** Roughly 52 sub-paragraphs are HAZARD-classed. Compression and this review run
+   in batches of at most 10 paragraphs per dispatch. Nothing detects a single subagent attempting
+   all 52 in one pass, and that is the shape most likely to produce uniform shallow rewrites that
+   each retain their phrase.
+
+   **Separation is two actors, not three, and nothing mechanically enforces it.** Gate 2's phrase
+   author and this gate's reviewer may be the same actor; only the compressor must differ. That
+   maps onto the existing ADR-0009 cycle -- operator writes the manifest in Phase 1, dispatches a
+   compressor in Phase 2, reviews in Phase 3 -- so it is not new ceremony. But no gate checks that
+   the manifest commit and the compression commits came from different actors, and nothing stops
+   the compressor editing the locked manifest. If one context does both, the separation is fiction
+   and nothing says so.
+
+7. **`make test` green** — `make lint` covers `CLAUDE.md` only via `check-agent-guidance`, so
    `make sync-agent-guidance` runs if `.cursor/rules/global-claude-standards.mdc` goes stale.
    Note that target is generated from the `@`-imports, not from body prose, so a body-only edit
    should leave it unchanged — if it does not, that is a finding.
-7. **Post-change size reported with its denominator**, not as a bare figure: bytes before, bytes
+8. **Post-change size reported with its denominator**, not as a bare figure: bytes before, bytes
    after, and the estimated token delta labelled as bytes ÷ 4.
 
-**Falsifiability rests on gates 3, 4 and 5 together, and each covers a different failure.**
-Gate 3 can refuse a planned deletion when a sentence has no counterpart. Gate 4 catches a hazard
+**Falsifiability rests on gates 4, 5 and 6 together, and each covers a different failure.**
+Gate 4 can refuse a planned deletion when a sentence has no counterpart. Gate 5 catches a hazard
 claim disappearing outright; a change that hits its size target by deleting hazard text passes
-1, 6 and 7 and fails 4. Gate 5 is the only check on a claim surviving as a string while being
+1, 7 and 8 and fails 5. Gate 6 is the only check on a claim surviving as a string while being
 weakened as a claim, and it is a human reading rather than a mechanism -- so the spec is
 refutable on deletion mechanically and on weakening only by review. Saying that plainly is
-better than an earlier draft's claim that gate 4 alone made the spec refutable, which was true
+better than an earlier draft's claim that the phrase gate alone made the spec refutable, which was true
 of string loss and false of the failure the HAZARD section itself calls the worst
 review-cost ratio in the spec.
 
@@ -286,7 +329,7 @@ An earlier draft called this figure "a byte count of already-classified paragrap
 estimate of a class boundary". That was true of the classifier's taxonomy and false of the
 Design's, and it survived the revision that replaced the class definition -- the
 premise-moved-conclusion-carried shape this corpus records. **The real number is not knowable
-until gate 3 has run**, which is the correct place for it: gate 3 adjudicates every candidate
+until gate 4 has run**, which is the correct place for it: gate 4 adjudicates every candidate
 per sub-paragraph and records the verdict, so the figure is an output of the implementation
 rather than an input to it.
 
@@ -518,4 +561,73 @@ Two findings from the voided round transfer to the current text and are taken:
 A third finding -- that Expected outcome double-counts AMBIGUOUS as certainly movable -- was
 already addressed at `4250cf5b`, before the lens read the file. Its own text now reads "AMBIGUOUS
 is adjudicated per paragraph rather than moved wholesale, so its 3,402B is a ceiling too."
+
+## Multi-Lens Review, round 2 (re-dispatched against `60e72a02`)
+
+All three lenses ran the SHA check as their first command and all three reported `60e72a02`.
+The check is the remedy for the voided round above and it worked.
+
+### Goal-Fit (round 2)
+
+Finding: manifest exhaustiveness is required in prose and gated nowhere. Nothing compares the
+manifest's row count to an independently derived paragraph count. An omitted row is invisible to
+every later gate, because the hazard gate's universe *is* the manifest and the substance review
+is scoped to what the manifest classed HAZARD. `tdd.md`'s hand-maintained-denominator failure.
+Sharper framing: all three prior fixes added checks on classification *correctness* and none on
+manifest *completeness*. Proportionality remains a soft spot -- eight gates and two review roles
+for an upper bound the spec says will shrink -- noted as open rather than as a new defect.
+Assumption: that the manifest will be exhaustive by diligence alone. Refute by asserting row
+count against a re-derived split before trusting the hazard gate.
+Disposition: **Addressed** (operator, 2026-09-21). Gate 2a asserts row count against a blank-line
+split at the parent SHA. The baseline is measured and stated: **88** -- 78 in Test Seams, 10 in
+MAKEFLAGS.
+
+### Ergonomics (round 2)
+
+Finding: **demonstrated against unmodified text, not reasoned.** `grep -n` is line-oriented and
+`CLAUDE.md` is hand-wrapped, so a phrase spanning a wrap returns no hit on the *original* file --
+reproduced on lines 496-497. The spec's own rule ("taken from the claim sentence") points authors
+at exactly the phrases most likely to break it. Re-measured here: **46 of 78** Test Seams
+paragraphs have a first sentence that itself spans a wrap, so the gates would false-HOLD on
+correct untouched work in the majority of cases. Compounding: the HAZARD remedy moves the claim to
+sentence-initial position, which requires capitalising its first word, and the search is
+case-sensitive. Also corrected the brief's premise: the spec requires **two** actors, not three --
+the phrase author and the substance reviewer may be the same, only the compressor must differ --
+which maps onto the existing ADR-0009 cycle rather than being new ceremony. And nothing bounds
+batch size over the ~52 HAZARD paragraphs.
+Assumption: that authors will pick short wrap-safe phrases by unstated convention while the
+stated rule points the other way.
+Disposition: **Addressed** (operator, 2026-09-21). The check is now a whitespace-normalised
+substring search with the code given, never `grep -n`, which removes the wrap problem at the
+mechanism rather than by convention and lets phrases be full claim clauses. Phrases must not be
+sentence-initial, which removes the capitalisation break. The two-actor correction and the
+batch bound of 10 are both written into gate 6.
+
+### Risk (round 2)
+
+Finding 1: gate 4 had no uniqueness requirement on its phrase, so it could match an unrelated
+surviving occurrence and report a gutted claim preserved -- the gate defeated by its own
+instrument. Finding 2: the substance review had no recorded verdict, unlike the per-candidate
+gate beside it, and nothing detects it being skipped or performed by the implementer: a PASS that
+is purely an assertion, which is `USER.md`'s trust-signal rule. Finding 3: manifest completeness
+ungated, independently of Goal-Fit. Gate renumbering checked across 21 cross-references and found
+clean. Empty input: the deletion gate is vacuously satisfied when nothing is deleted, so the full
+machinery can run for a DUPLICATE yield of zero with nothing flagging it -- proportionality risk,
+not a correctness defect.
+Assumption: that the chosen phrase is actually distinctive. Refute by `grep -c` per row before
+locking.
+Disposition: **Addressed** (operator, 2026-09-21) for findings 1-3. Uniqueness is asserted in gate
+2b, with the measured collision rate stated (2 of 78 for a 4-word window -- uncommon rather than
+routine, and the Risk lens's single-term examples overstated it). Gate 6 now records a verdict
+plus reason per paragraph. Completeness is gate 2a. The empty-yield observation is recorded and
+**not** designed around: the spec deliberately refuses to promise a floor.
+
+### Adversarial Spec Review
+
+N/A -- no comparison arms, no evaluator component, concrete acceptance criteria.
+
+**Renumbering note.** These fixes took the gate list from 7 to 8. Every cross-reference in the
+**body** was retargeted and re-listed; the references inside the review sections above were left
+alone, because they record what a lens said against the numbering it read. That is the frozen
+reference rule -- a record is not edited to match a present it was not written against.
 
