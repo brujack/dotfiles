@@ -460,7 +460,7 @@ Then restart Claude Code. Run this after every `brew upgrade node` on Linux.
 
 ## Branch Workflow
 
-All changes go on feature branches. The pre-push hook runs `make test` locally before the push reaches GitHub. It **fails closed** ([ADR-0017](docs/adr/0017-pre-push-trigger-fail-closed.md)): the suite runs unless every changed path is provably inert (`.md`, `.yml`/`.yaml` under `.github/`, `LICENSE`), so most pushes run it — expect ~9–10 minutes. Use `git push --no-verify` only when you have just run `make test` yourself. GitHub Actions CI runs `test`, `lint-macos`, `powershell`, `bash-coverage`, and `secret-scan` on PRs only, and auto-merges when all five pass.
+All changes go on feature branches. The pre-push hook runs `make test` locally before the push reaches GitHub. It **fails closed** ([ADR-0017](docs/adr/0017-pre-push-trigger-fail-closed.md)): the suite runs unless every changed path is provably inert (`.md`, `.yml`/`.yaml` under `.github/`, `LICENSE`), so most pushes run it. It runs bats at `--jobs $(JOBS)` when GNU `parallel` is present (`JOBS` defaults to 24, [ADR-0035](docs/adr/0035-parallel-bats-under-a-validated-jobs-knob.md)) and serially with a notice otherwise — roughly a minute on a many-core box against roughly twelve serial, so if a push still takes ten minutes, check whether GNU `parallel` is installed. Use `git push --no-verify` only when you have just run `make test` yourself. GitHub Actions CI runs `test`, `lint-macos`, `powershell`, `bash-coverage`, and `secret-scan` on PRs only, and auto-merges when all five pass.
 
 ```bash
 git checkout -b my-feature
@@ -475,7 +475,7 @@ gh pr create
 Uses [BATS](https://github.com/bats-core/bats-core) (Bash Automated Testing System), installed natively.
 
 ```bash
-make test          # lint + Python tests + all BATS tests
+make test          # lint + Python tests + all BATS tests (parallel; override with JOBS=N, force serial with HAVE_PARALLEL=)
 make test-unit     # unit + profiles tests only (faster)
 make test-python   # the vendored .claude/scripts/triage_log.py suite only
 make lint          # syntax + shellcheck only

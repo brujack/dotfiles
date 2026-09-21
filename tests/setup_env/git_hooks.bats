@@ -294,14 +294,33 @@ setup() {
   local _before="$output"
 
   local _mtime_before
-  _mtime_before=$(stat -f '%m' "${_hooks_dir}/pre-commit" 2>/dev/null || stat -c '%Y' "${_hooks_dir}/pre-commit")
+  _mtime_before=$(stat -c '%Y' "${_hooks_dir}/pre-commit" 2>/dev/null || stat -f '%m' "${_hooks_dir}/pre-commit")
   sleep 1
   cp "${_source}" "${_hooks_dir}/pre-commit"
   local _mtime_after
-  _mtime_after=$(stat -f '%m' "${_hooks_dir}/pre-commit" 2>/dev/null || stat -c '%Y' "${_hooks_dir}/pre-commit")
+  _mtime_after=$(stat -c '%Y' "${_hooks_dir}/pre-commit" 2>/dev/null || stat -f '%m' "${_hooks_dir}/pre-commit")
 
   # Guard the guard: prove cp genuinely rewrote mtime, so a pass below isn't
   # vacuous because nothing actually changed on disk.
+  #
+  # The shape check guards a different direction to the one in
+  # pyenv_rehash_hook.bats. GNU stat's -f is FILESYSTEM status, not format
+  # (that is BSD), so the old `stat -f '%m' f || stat -c '%Y' f` order put
+  # five lines of tmpfs Blocks/Inodes counters ahead of the epoch. Those
+  # counters can move between two stat calls, and an INEQUALITY assertion is
+  # satisfied by that movement alone -- so in principle this guard could pass
+  # with the cp below removed.
+  #
+  # Measured, and the condition is the whole finding: the churn has to hit
+  # the SAME filesystem the test writes to. With the cp below deleted and the
+  # old stat order restored, a loop of dd+rm against /tmp (tmpfs, where
+  # BATS_TEST_TMPDIR lives) gave 10 of 10 FALSE PASSES -- the guard green
+  # with nothing rewriting the mtime. Idle, and with the same load aimed at a
+  # different filesystem, it is caught every time. So this guard is silently
+  # satisfiable exactly when the suite runs concurrently, which is the
+  # condition `bats --jobs` creates by construction.
+  [[ "${_mtime_before}" =~ ^[0-9]+$ ]]
+  [[ "${_mtime_after}" =~ ^[0-9]+$ ]]
   [ "${_mtime_before}" != "${_mtime_after}" ]
 
   run _git_hooks_digest "${_repo}/"
