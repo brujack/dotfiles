@@ -78,15 +78,15 @@ anything is inserted above it, and this repo has already recorded that happening
 citing `workflows.sh:696`. Each row names the file and the symbol whose comment carries the
 duplicate prose.
 
-| CLAUDE.md topic | symbol | file |
-| --- | --- | --- |
-| cask guard, incl. `Measured 2026-09-12` | `brew_cask_installed` | `lib/helpers.sh` |
-| ggshield actor boundary | `GGSHIELD_FALLBACK_PATHS` | `scripts/pre-commit-hook.sh` |
-| EXIT-trap ratchet scope | `_OVERRIDE_LIB_TRAP_SCOPE` | `scripts/check-lib-exit-traps.sh` |
-| FIFO deadlock pre-flight | `_OVERRIDE_BATS_BIN` | `scripts/run-bash-coverage.sh` |
-| rustup seams, why sha256sum is not mocked | `_RUSTUP_INIT_SHA256` | `lib/linux_ubuntu.sh` |
-| login-shell seam, chsh PAM | `_OVERRIDE_CURRENT_LOGIN_SHELL` | `lib/helpers.sh` |
-| `export` vs `readonly` re-source scope | -- | `config/profiles.zsh` |
+| CLAUDE.md topic | symbol | file | status |
+| --- | --- | --- | --- |
+| cask guard, incl. `Measured 2026-09-12` | `brew_cask_installed` | `lib/helpers.sh` | **fails** -- source argues why the code is shaped that way, CLAUDE.md argues how to test it |
+| ggshield actor boundary | `GGSHIELD_FALLBACK_PATHS` | `scripts/pre-commit-hook.sh` | candidate |
+| EXIT-trap ratchet scope | `_OVERRIDE_LIB_TRAP_SCOPE` | `scripts/check-lib-exit-traps.sh` | **fails** -- source argues allowlist-not-inference, CLAUDE.md argues which seam a test drives; also carries a zero-counterpart hazard paragraph |
+| FIFO deadlock pre-flight | `_OVERRIDE_BATS_BIN` | `scripts/run-bash-coverage.sh` | candidate |
+| rustup seams, why sha256sum is not mocked | `_RUSTUP_INIT_SHA256` | `lib/linux_ubuntu.sh` | candidate |
+| login-shell seam, chsh PAM | `_OVERRIDE_CURRENT_LOGIN_SHELL` | `lib/helpers.sh` | **partial** -- one paragraph duplicates, one carries a zero-counterpart sentence |
+| `export` vs `readonly` re-source scope | -- | `config/profiles.zsh` | candidate |
 
 **Provenance of this table, stated because it is the kind of claim that gets relayed unchecked.**
 Two rows I verified myself by reading the source this session (`brew_cask_installed`,
@@ -108,23 +108,54 @@ from the class.**
 | class         | test                                                                               | remedy in `dotfiles/CLAUDE.md`                               |
 | ------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------ |
 | **HAZARD**    | a consequence reading the source does not reveal, that changes what a session does | **stays**, compressed so the claim is the first sentence     |
-| **DUPLICATE** | the source file carries the same prose                                             | **delete the CLAUDE.md copy**, keep the one next to the code |
+| **DUPLICATE** | both copies serve the **same argument** -- not merely the same prose                                             | **delete the CLAUDE.md copy**, keep the one next to the code |
 | **RECORD**    | dated provenance whose rule is stated adjacently                                   | move to `ai-config/docs/knowledge/dotfiles-*.md`             |
 | **REFERENCE** | bibliography or bootstrapping scaffolding                                          | move to the skill or knowledge file that needs it            |
 
-### 1. DUPLICATE — delete the CLAUDE.md copy, keep the source comment
+### 1. DUPLICATE -- delete the CLAUDE.md copy, keep the source comment
 
-For each pair in the table above: delete the `CLAUDE.md` prose, leave the source comment
-untouched. **Direction is fixed and not a per-pair judgement** — the copy next to the code is
-the one a reader reaches while editing, and it cannot drift from the code it annotates without
-someone seeing both in one diff.
+**The unit of classification is the sub-paragraph, never the symbol.** A symbol's `CLAUDE.md`
+block routinely mixes classes: `_OVERRIDE_CURRENT_LOGIN_SHELL`'s block has one paragraph that is
+near-verbatim in `lib/helpers.sh` and another ending *"Measured: the three end-to-end
+`run_doctor` tests stub every sub-check by name, so `_doctor_check_login_shell` must be stubbed
+there too or it reads the real account mid-suite"* -- which a tree-wide grep places nowhere else.
+`_OVERRIDE_LIB_TRAP_SCOPE` is the same shape. Deleting "the pair" destroys the hazard with the
+duplicate.
+
+**The test is the same argument, not the same prose.** Where each copy is evidence for a
+different claim it is shared evidence: keep both, cross-reference. A citation is not a duplicate
+of the thing it cites. Only where one copy adds nothing its neighbour already says is a copy
+deleted, and the surviving home is the file whose argument the evidence was gathered for.
+
+Under that test the table above holds **candidates, not confirmed pairs**. Two already fail on
+inspection and one is partial. The plan adjudicates each remaining candidate per sub-paragraph
+and records the verdict with its reason; the expected surviving set is smaller than seven.
+
+**Why the class is non-empty here and empty in the standards**, which is the best evidence the
+classification is real rather than fitted to this file: the ai-config session applied the same
+test to all 12 of its above-noise candidates and **0 survived**. Its three highest-ranked hits,
+two at containment 1.00, were *citations of the paragraph they matched* -- a cross-reference
+necessarily shares its target's words, so in citation-dense prose a lexical scan ranks references
+above restatements. The rival copy in this repo is a **source comment**, which has no reason to
+cite the standard, so prose matching works here and does not there.
+
+**Cost of this definition, stated rather than discovered:** DUPLICATE was the one class with no
+judgement in its remedy and it no longer is. Under "same prose" a script decides; under "same
+argument" a reader does. The lexical scan is demoted from measurement to **candidate generator**
+-- cheap, no judgement, proposes; the argument test disposes. Its output is a worklist, never a
+figure.
+
+Direction, where a pair does survive: delete the `CLAUDE.md` prose, leave the source comment. The
+copy next to the code is the one a reader reaches while editing and cannot drift from the code it
+annotates without someone seeing both in one diff.
 
 Where deleting the `CLAUDE.md` copy would leave the seam unnamed, a one-line entry stays naming
-the variable and the file that defines it, with no rationale. The rationale is in the source.
+the variable and the file that defines it, with no rationale.
 
-Every deletion requires the source copy to be **verified present for the named symbol in the
-same change**, not assumed from this table. A pair where the source comment has since been trimmed is
-not a DUPLICATE — it is the only surviving copy and it stays.
+**Every deletion requires that every sentence being removed has a counterpart**, verified in the
+same change -- not one phrase-match authorising the removal of a whole block. A sentence with no
+counterpart is not part of a duplicate; it is HAZARD that happens to sit next to one, and it
+stays.
 
 ### 2. HAZARD — compress in place, claim first
 
@@ -164,23 +195,38 @@ Run before implementation, not predicted:
 1. **Baseline, recorded at the implementation commit's parent SHA:**
    `wc -c CLAUDE.md` and the per-section byte counts for `### Test Seams` and
    `### MAKEFLAGS and Stdout Partition`.
-2. **Every DUPLICATE deletion has its source copy asserted present first:**
-   for each pair, `grep -n '<distinctive phrase>' <source file>` returns a hit at the named line
-   **before** the `CLAUDE.md` prose is removed. A miss means that pair is not a DUPLICATE and
-   the `CLAUDE.md` copy stays. This gate runs per pair, not once.
-3. **No hazard claim lost:** every paragraph classified HAZARD is present in the post-change file,
-   verified by a distinctive-phrase grep per paragraph, not by a byte count. A byte count cannot
-   distinguish compression from deletion.
-4. **`make test` green** — `make lint` covers `CLAUDE.md` only via `check-agent-guidance`, so
+2. **Phrase manifest, written first and locked.** Before any edit, produce
+   `docs/superpowers/plans/<plan>-phrases.md`: one row per sub-paragraph of both sections, its
+   class, and a distinctive phrase **taken from the pre-change text at the parent SHA**. Commit
+   it before the first edit. This is the artifact gates 3 and 4 check against, and it is the
+   per-paragraph classification the ergonomics lens correctly noted does not otherwise exist --
+   without it gate 3 has no ground truth for the ~79 paragraphs outside the candidate table and
+   degrades to a spot-check.
+
+   **The phrases are chosen by someone other than whoever performs the compression.** A phrase
+   selected from surviving text proves only that the edit contains a substring of itself. This is
+   the one gate the spec previously called falsifiable, and as first written it could not fail.
+
+3. **Every DUPLICATE deletion: every sentence removed has a counterpart.** Per candidate, per
+   sub-paragraph, `grep -n '<phrase>' <source file>` for **each sentence being deleted**, not one
+   phrase authorising a block. A miss means that sentence is not part of a duplicate -- it stays,
+   and the candidate is recorded as partial. Verdict plus reason recorded per candidate.
+
+4. **No hazard claim lost.** Every phrase in the manifest whose row is classed HAZARD returns
+   a hit in the post-change file. Not a byte count -- a byte count cannot distinguish
+   compression from deletion. Run by a reviewer who did not perform the compression, against
+   the manifest committed at gate 2.
+
+5. **`make test` green** — `make lint` covers `CLAUDE.md` only via `check-agent-guidance`, so
    `make sync-agent-guidance` runs if `.cursor/rules/global-claude-standards.mdc` goes stale.
    Note that target is generated from the `@`-imports, not from body prose, so a body-only edit
    should leave it unchanged — if it does not, that is a finding.
-5. **Post-change size reported with its denominator**, not as a bare figure: bytes before, bytes
+6. **Post-change size reported with its denominator**, not as a bare figure: bytes before, bytes
    after, and the estimated token delta labelled as bytes ÷ 4.
 
-**Falsifiability:** gate 3 is what makes this spec refutable rather than self-confirming. A
-change that deletes hazard text while hitting its size target passes gates 1, 4 and 5 and fails
-gate 3. Gate 2 is the same shape one level down — it can fail, and a failure means a planned
+**Falsifiability:** gate 4 is what makes this spec refutable rather than self-confirming. A
+change that deletes hazard text while hitting its size target passes gates 1, 5 and 6 and fails
+gate 4. Gate 3 is the same shape one level down — it can fail, and a failure means a planned
 deletion does not happen.
 
 ## Expected outcome
@@ -222,7 +268,9 @@ code-block-heavy, which can tokenize at a materially different ratio in either d
 Refute by running `/context` in a real dotfiles session before and after, or tokenising
 `CLAUDE.md` with the real tokenizer instead of bytes/4.
 
-Disposition:
+Disposition: **Addressed** for the finding -- the `_haiku_scope_errors` half is referred to the
+ai-config session as a question about their file (operator, 2026-09-21); it is not scoped into
+this spec. Assumption stands unrefuted: every figure here remains labelled bytes / 4.
 
 ### Ergonomics
 
@@ -245,7 +293,10 @@ only restates the 7-row table plus prose, gate 3 has no ground truth for the oth
 and degrades from a gate to a spot-check. Confirm by checking whether the plan file enumerates
 paragraph-level classifications.
 
-Disposition:
+Disposition: **Addressed** (operator, 2026-09-21). Classification unit is now the sub-paragraph.
+The assumption is closed rather than left open: gate 2 makes the per-paragraph phrase manifest a
+committed artifact produced before the first edit, which is exactly the ground truth this lens
+found missing.
 
 ### Risk
 
@@ -273,7 +324,10 @@ having a reviewer who did not perform the compression re-derive phrases from
 `git show <parent-sha>:CLAUDE.md` and grep the post-compression file -- never a phrase chosen by
 the implementer from their own output.
 
-Disposition:
+Disposition: **Addressed** (operator, 2026-09-21). Both findings taken. Deletion now requires a
+counterpart for every sentence removed, not one phrase per block. Phrases are taken from the
+pre-change text, committed before the first edit, and chosen by someone other than the
+implementer -- the lens's own refutation procedure is now the gate itself.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
@@ -292,4 +346,8 @@ why the code is shaped that way while the `CLAUDE.md` entry argues how to test i
 `check-lib-exit-traps.sh`'s header argues why an allowlist rather than an inference while the
 `CLAUDE.md` entry argues which seam a test drives.
 
-Disposition:
+Disposition: **Addressed** (operator, 2026-09-21). The same-argument definition is adopted
+wholesale as the class definition rather than as a tiebreak. The candidate table is re-marked:
+two fail outright, one is partial, four remain candidates for per-sub-paragraph adjudication in
+the plan. The peer's 0-of-12 result and its citation-ranking cause are recorded in Design item 1
+as the reason this class is expected non-empty here and empty in the standards.
