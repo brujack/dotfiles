@@ -8,6 +8,19 @@ MAKEFLAGS += --no-print-directory
 # `env -u MAKEFLAGS`, or it measures this exported variable rather than the
 # Makefile (tests/scripts/makefile_lint_scope.bats; ci.md pitfall G).
 
+# JOBS is the bats worker count for `make test`. Validated here in pure make --
+# no $(shell), no fork -- and BEFORE every other assignment in this file, so a
+# bad value aborts at parse time rather than after four subprocesses have run.
+# The three terms are: exactly one word, nothing left once the digits are
+# stripped, and no leading zero. $(origin JOBS) is in the message because a
+# command-line JOBS reaches a nested make through BOTH MAKEFLAGS and the
+# recipe environment, so "where did this value come from" is a real question.
+JOBS ?= 12
+_JOBS_NONDIGIT := $(subst 0,,$(subst 1,,$(subst 2,,$(subst 3,,$(subst 4,,$(subst 5,,$(subst 6,,$(subst 7,,$(subst 8,,$(subst 9,,$(JOBS)))))))))))
+ifneq ($(words $(JOBS))$(_JOBS_NONDIGIT)$(filter 0%,$(JOBS)),1)
+$(error JOBS must be a positive integer, got '$(JOBS)' (from $(origin JOBS)))
+endif
+
 BATS := $(shell command -v bats 2>/dev/null)
 SHELLCHECK := $(shell command -v shellcheck 2>/dev/null)
 UV := $(shell command -v uv 2>/dev/null)
@@ -50,6 +63,28 @@ BATS_FILES := $(shell env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_I
 # parse it too.
 ZSH_FILES := $(shell env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
                  git ls-files '*.zsh' '*.zsh-theme' '.zshrc' '.zprofile' 'config/profiles.sh')
+
+# Detection asks what the binary IS, not that a binary of that name exists.
+# moreutils ships an incompatible `parallel` under the same name (dpkg
+# diverts it to /usr/bin/parallel.moreutils on this box), and `command -v`
+# is true for it -- so a presence check would send `bats --jobs` at a program
+# that does something else with those arguments instead of taking the serial
+# path this promises. The guard is required rather than defensive:
+# bats-exec-suite calls parallel even when it is absent, so without it
+# `bats --jobs` dies with `command not found` rather than declining cleanly.
+HAVE_PARALLEL := $(shell parallel --version 2>/dev/null | grep -q '^GNU parallel' && echo yes)
+
+# Files that run alone, after the parallel phase. Empty today: the per-file
+# check measured all 54 files clean at --jobs 12, and the one file that was
+# not was fixed (39704a12) rather than carved out. A name here needs a
+# measurement beside it, not a suspicion -- a carve-out is a permanent
+# exemption from the gate everything else runs under.
+BATS_SERIAL_FILES :=
+# A filesystem walk, not `git ls-files`: an untracked .bats file is exactly
+# what a TDD red step produces, and a tracked-only list would report it green
+# by never running it. This is the same set `bats --recursive tests/` walks.
+BATS_ALL_FILES := $(shell find tests -name '*.bats' 2>/dev/null | sort)
+BATS_PARALLEL_FILES := $(filter-out $(BATS_SERIAL_FILES),$(BATS_ALL_FILES))
 
 # Message text only, never the $(error ...) call itself: $(error) fires wherever
 # it is expanded, so folding it into a := assignment would abort every make
@@ -119,7 +154,15 @@ test: lint check-lock check-requirements-ci test-python
 ifndef BATS
 	$(error $(BATS_MISSING))
 endif
-	bats --recursive tests/
+ifeq ($(HAVE_PARALLEL),yes)
+	bats --jobs $(JOBS) $(BATS_PARALLEL_FILES)
+else
+	@printf "GNU parallel not found, running bats serially (install: brew install parallel / sudo apt-get install parallel)\n"
+	bats $(BATS_ALL_FILES)
+endif
+ifneq ($(strip $(BATS_SERIAL_FILES)),)
+	bats $(BATS_SERIAL_FILES)
+endif
 
 # The only Python in this repo is .claude/scripts/triage_log.py, vendored from
 # ai-config so bug-fix-cycle can emit telemetry here. It ships with its suite
