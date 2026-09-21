@@ -193,8 +193,12 @@ with the reason, rather than a rule applied blindly.
   design does not converge and the probes established the moved text is not outcome-changing.
   What leaves this file is deleted (DUPLICATE) or is a small RECORD remainder.
 - **No edits to `~/.claude/standards/*.md`.** ai-config's half.
-- **No `.claude/rules/` destination.** `~/.claude/rules` is a dangling symlink (own backlog row),
-  so that home does not exist today.
+- **No `.claude/rules/` destination.** `~/.claude/rules` does **not exist at all** -- verified
+  `ls`, `readlink` and `find ~/.claude -maxdepth 1 -name 'rules*'`, all absent. This corpus
+  describes it as a "dangling symlink" in several places, including the 2026-09-11 re-sort spec's
+  out-of-scope list; that characterisation is wrong and was inherited here before being checked.
+  The practical conclusion is unchanged -- that home does not exist today -- but the stated
+  mechanism was.
 - **No launch-load ratchet.** Deferred in ai-config with three rounds of findings; this spec does
   not revive it.
 
@@ -293,6 +297,17 @@ The fleet combined target (~37,900 tokens, ~165k -> ~127k, haiku headroom ~35k -
 inherits this bound and should be quoted the same way: an upper bound whose dotfiles component
 will shrink. The fleet-wide RECORD component is unaffected -- it was classified directly rather
 than through DERIVABLE.
+
+**The gap this spec is sized against has never itself been measured, and that is a hole in the
+Problem statement rather than in the arithmetic.** Two haiku dispatches failed; neither the
+ai-config knowledge file nor this spec records **how much headroom either dispatch actually
+needed**. So every figure here sizes the *fix* without knowing the size of the *gap*, and
+"~35k -> ~73k" cannot be read as sufficient, only as larger. The work remains directionally
+right -- more headroom cannot hurt a context-starved dispatch -- but nothing in either document
+establishes that the post-change figure prevents recurrence. Closing it is cheap and does not
+block this spec: dispatch one trivial haiku task, record its starting context, and compare.
+Referred to the ai-config session, which owns the dispatch path and has been asked for whatever
+it already measured.
 
 **Ordering note, recorded rather than actioned here.** Shrinking the preamble raises the ceiling;
 it does not make a future overrun legible. Without a budget-aware `_haiku_scope_errors`, the next
@@ -466,3 +481,41 @@ and relabelled -- it followed the multi-lens round rather than being round 1. Bo
 corrected. Phrase selection now has a rule: the phrase comes from the **claim sentence** of each
 HAZARD sub-paragraph, which also aligns what gate 4 checks with what gate 5 judges. The edit that
 restored it used bounded slices and the section list was re-grepped afterwards.
+
+## Multi-Lens Review, round 2 (aborted and re-dispatched)
+
+**All three round-2 lenses were pointed at a stale file and the round was voided.** The lenses
+were given `/home/bruce/git-repos/personal/dotfiles/...`, the main checkout, which was three
+revisions behind: every spec commit after `20023924` was pushed from the worktree
+`dotfiles-wt-launchload` and the main checkout was never fast-forwarded. The goal-fit lens read a
+document ending at "Expected outcome" with no review section, correctly reported that as either
+a recurrence of the deletion incident or a briefing mismatch, and said so rather than working
+around it. The other two were stopped before spending their remaining budget on the same text.
+
+**Round 1's ergonomics lens reported this exact condition and it was not acted on.** Its words:
+*"I had to locate the spec on an uncommitted-to-master branch... it isn't on `master` or in the
+working tree, so the path given in the task didn't resolve directly; worth flagging in case that
+branch state itself is a coordination gap for review."* It was flagged, it was a coordination
+gap, and it then invalidated a whole round. A reviewer pointed at the wrong artifact produces a
+correct verdict about something else, which is this corpus's displaced-check failure arriving
+through a checkout rather than through a file path.
+
+**How to apply, for any future dispatch:** state the SHA the reviewer should see and have it
+verify with `git log --oneline -1 -- <path>` before reading, so a stale tree fails loudly at the
+first command instead of silently producing a review of superseded text. Syncing the checkout is
+the fix; the verification step is what makes the fix checkable.
+
+Two findings from the voided round transfer to the current text and are taken:
+
+- **`~/.claude/rules` does not exist at all**, rather than being a dangling symlink. Verified
+  three ways. Corrected in Non-goals, with the note that the wrong characterisation was inherited
+  from this corpus rather than invented here.
+- **The gap has never been measured.** Neither this spec nor the referenced knowledge file
+  records how much headroom the two failed dispatches actually needed, so every figure sizes the
+  fix without knowing the size of the problem. Recorded in Expected outcome as an open item, with
+  the cheap closing procedure named.
+
+A third finding -- that Expected outcome double-counts AMBIGUOUS as certainly movable -- was
+already addressed at `4250cf5b`, before the lens read the file. Its own text now reads "AMBIGUOUS
+is adjudicated per paragraph rather than moved wholesale, so its 3,402B is a ceiling too."
+
