@@ -45,48 +45,300 @@ setup_claude_mcp() {
   log_info "GitHub MCP configured (${_output})"
 }
 
+# Single source of truth for where the plugin manifest lives — every reader
+# below and the write guard (a later task) resolve the path through this one
+# helper rather than repeating the fallback chain.
+_claude_settings_path() {
+  printf '%s' "${_OVERRIDE_CLAUDE_SETTINGS:-${HOME}/.claude/settings.json}"
+}
+
+# Prints tab-separated manifest lines derived from settings.json:
+#   marketplace\t<name>\t<repo-or-url>   -- a declared extraKnownMarketplaces entry
+#   unsupported\t<name>\t<type>          -- an entry whose source type/ref this
+#                                            reads as neither github nor git
+#   plugin\t<id>\t<true|false>           -- an enabledPlugins entry (non-boolean
+#                                            values read as false)
+# Returns 1 with no stdout when the file is missing, unreadable, not valid
+# JSON, not a JSON object, or python3 cannot be resolved.
+_claude_plugin_manifest() {
+  local _file
+  _file="$(_claude_settings_path)"
+  [[ -r "${_file}" ]] || return 1
+  command -v python3 >/dev/null 2>&1 || return 1
+  python3 - "${_file}" <<'PY'
+import json, sys
+try:
+    with open(sys.argv[1], encoding="utf-8") as fh:
+        data = json.load(fh)
+except (OSError, ValueError):
+    sys.exit(1)
+if not isinstance(data, dict):
+    sys.exit(1)
+out = []
+markets = data.get("extraKnownMarketplaces")
+if markets is not None and not isinstance(markets, dict):
+    sys.exit(1)
+for name, entry in (markets or {}).items():
+    src = entry.get("source") if isinstance(entry, dict) else None
+    kind = src.get("source") if isinstance(src, dict) else None
+    key = {"github": "repo", "git": "url"}.get(kind)
+    ref = src.get(key) if key else None
+    if isinstance(ref, str) and ref:
+        out.append(f"marketplace\t{name}\t{ref}")
+    else:
+        out.append(f"unsupported\t{name}\t{kind or 'missing'}")
+plugins = data.get("enabledPlugins")
+if plugins is not None and not isinstance(plugins, dict):
+    sys.exit(1)
+for pid, val in (plugins or {}).items():
+    out.append(f"plugin\t{pid}\t{'true' if val is True else 'false'}")
+if out:
+    print("\n".join(out))
+PY
+}
+
+# Prints one registered marketplace name per line, from
+# `claude plugins marketplace list --json`, suppressing a genuinely empty
+# result rather than printing a lone blank line (mirrors the manifest's own
+# `if out:` guard — an empty line would read as a real, empty-string name to
+# a caller comparing with `grep -qxF`). Returns 1 with nothing of our own on
+# stdout in three cases: python3 cannot be resolved; the CLI call fails, in
+# which case its own stderr is left to flow through uncaptured rather than
+# being captured and re-echoed; or the JSON does not parse, in which case a
+# one-line diagnostic is printed to stderr.
+_claude_registered_marketplaces() {
+  local _json
+  command -v python3 >/dev/null 2>&1 || return 1
+  _json="$(claude plugins marketplace list --json < /dev/null)" || return 1
+  printf '%s' "${_json}" | python3 -c 'import json,sys
+names = [m["name"] for m in json.load(sys.stdin)]
+if names:
+    print("\n".join(names))' 2>/dev/null \
+    || { printf 'claude plugins marketplace list: unparsable JSON\n' >&2; return 1; }
+}
+
+# Prints one installed plugin id per line, restricted to user-scope
+# installs, from `claude plugins list --json`. Same empty-result guard and
+# failure contract as _claude_registered_marketplaces.
+_claude_installed_user_ids() {
+  local _json
+  command -v python3 >/dev/null 2>&1 || return 1
+  _json="$(claude plugins list --json < /dev/null)" || return 1
+  printf '%s' "${_json}" | python3 -c 'import json,sys
+ids = [p["id"] for p in json.load(sys.stdin) if p.get("scope") == "user"]
+if ids:
+    print("\n".join(ids))' 2>/dev/null \
+    || { printf 'claude plugins list: unparsable JSON\n' >&2; return 1; }
+}
+
+# Prints one tab-separated line describing the settings file's git status:
+#   <state>\t<repo-or-dash>\t<path>
+# state is clean|dirty|untracked|unknown. path is relative to repo for
+# clean/dirty, and the resolved absolute path (repo is "-") otherwise. Always
+# returns 0 -- this is an observation for the write guard below, never a
+# gate on its own. git is ${_CLAUDE_GUARD_GIT:-git}, always run with the four
+# repo-location variables stripped: git -C does not override an inherited
+# GIT_DIR (see shell.md), and git exports GIT_DIR into a pre-push hook
+# whenever the push originates from a worktree.
+_claude_settings_git_state() {
+  local _path _real _top _rel _out _git="${_CLAUDE_GUARD_GIT:-git}"
+  local -a _env=(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE)
+  _path="$(_claude_settings_path)"
+  if ! _real="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "${_path}" 2>/dev/null)"; then
+    printf 'unknown\t-\t%s\n' "${_path}"; return 0
+  fi
+  _top="$("${_env[@]}" "${_git}" -C "$(dirname "${_real}")" rev-parse --show-toplevel 2>/dev/null)"
+  if [[ -z ${_top} ]]; then printf 'untracked\t-\t%s\n' "${_real}"; return 0; fi
+  _rel="${_real#"${_top}"/}"
+  if ! "${_env[@]}" "${_git}" -C "${_top}" ls-files --error-unmatch -- "${_rel}" >/dev/null 2>&1; then
+    printf 'untracked\t%s\t%s\n' "${_top}" "${_real}"; return 0
+  fi
+  if ! _out="$("${_env[@]}" "${_git}" -C "${_top}" status --porcelain -- "${_rel}" 2>/dev/null)"; then
+    printf 'unknown\t%s\t%s\n' "${_top}" "${_rel}"; return 0
+  fi
+  if [[ -z ${_out} ]]; then printf 'clean\t%s\t%s\n' "${_top}" "${_rel}"
+  else printf 'dirty\t%s\t%s\n' "${_top}" "${_rel}"; fi
+}
+
+# Compares a before/after pair of _claude_settings_git_state lines (taken
+# around a plugin-provisioning run) and prints at most one advisory line.
+# Never changes what the caller returns on its own account -- rc 2 here
+# means "a warning was printed", not "provisioning failed"; the caller
+# decides whether that warrants aborting.
+_claude_settings_guard_check() {
+  local _bs _br _bp _as _ar _ap
+  IFS=$'\t' read -r _bs _br _bp <<<"$1"
+  IFS=$'\t' read -r _as _ar _ap <<<"$2"
+  case "${_bs}" in
+    clean) ;;
+    dirty) printf '%s/%s was already modified; not checked\n' "${_br}" "${_bp}"; return 0 ;;
+    *) printf '%s is %s; not checked\n' "${_bp}" "${_bs}"; return 0 ;;
+  esac
+  case "${_as}" in
+    clean) return 0 ;;
+    dirty) printf '%s/%s changed during plugin provisioning — review: git -C %s diff -- %s\n' \
+             "${_ar}" "${_ap}" "${_ar}" "${_ap}"; return 2 ;;
+    untracked) printf '%s/%s no longer resolves into a tracked file\n' "${_br}" "${_bp}"
+       return 2 ;;
+    # unknown means the git-status READ failed (a git call errored), not
+    # that the file stopped being tracked -- a distinct condition from the
+    # untracked branch above, so it gets its own message rather than
+    # reusing "no longer resolves into a tracked file" for both.
+    *) printf 'could not read git status for %s/%s (was clean)\n' "${_br}" "${_bp}"
+       return 2 ;;
+  esac
+}
+
+# Splits one tab-separated manifest line ($1) into _type/_name/_ref/_extra.
+# Deliberately NOT `IFS=$'\t' read -r _type _name _ref`: bash always treats
+# tab as "IFS whitespace" regardless of what else IFS holds, so a run of
+# adjacent tabs collapses to a single delimiter -- an empty middle field
+# (an empty marketplace name or plugin id) silently shifts _ref into _name
+# and leaves _ref empty, rather than producing the empty _name the manifest
+# actually encodes. Parameter-expansion splitting below takes each tab as
+# its own boundary, so an empty field stays empty.
+#
+# _extra catches the opposite corruption: a settings.json key that itself
+# contains a literal tab or newline re-splits into extra fields the manifest
+# never intended, silently shrinking _name and shifting real content into
+# _ref (e.g. an id "a<TAB>b" makes _name="a" and _ref start with "b"). A
+# non-empty _extra after taking the first three fields means the line has
+# more than three fields, which only happens this way -- callers must
+# record and skip such a line rather than trust _name/_ref from it.
+_claude_manifest_split_line() {
+  local _s="$1"
+  if [[ "${_s}" == *$'\t'* ]]; then
+    _type="${_s%%$'\t'*}"; _s="${_s#*$'\t'}"
+  else
+    _type="${_s}"; _s=""
+  fi
+  if [[ "${_s}" == *$'\t'* ]]; then
+    _name="${_s%%$'\t'*}"; _s="${_s#*$'\t'}"
+  else
+    _name="${_s}"; _s=""
+  fi
+  if [[ "${_s}" == *$'\t'* ]]; then
+    _ref="${_s%%$'\t'*}"; _extra="${_s#*$'\t'}"
+  else
+    _ref="${_s}"; _extra=""
+  fi
+}
+
 setup_claude_plugins() {
   if ! command -v claude &>/dev/null; then
     log_warn "claude not installed — skipping plugin setup"
     return 0
   fi
 
-  local _plugins=(
-    "superpowers@claude-plugins-official"
-    "code-review@claude-plugins-official"
-    "context7@claude-plugins-official"
-    "context-mode@context-mode"
-    "rust-analyzer-lsp@claude-plugins-official"
-    "pyright-lsp@claude-plugins-official"
-    "caveman@caveman"
-    "firecrawl@firecrawl"
-    "skill-creator@claude-plugins-official"
-    "frontend-design@claude-plugins-official"
-    "security-guidance@claude-plugins-official"
-    "ansible-good-practices@claude-ansible-skills"
-    "terraform-skill@antonbabenko"
-    "warp@claude-code-warp"
-  )
+  local _settings_path
+  _settings_path="$(_claude_settings_path)"
 
-  local _installed
-  _installed="$(claude plugins list 2>/dev/null)" || true
+  local _manifest
+  if ! _manifest="$(_claude_plugin_manifest)"; then
+    log_error "could not read Claude plugin manifest: ${_settings_path}"
+    return 1
+  fi
 
-  for _plugin in "${_plugins[@]}"; do
-    if printf '%s' "${_installed}" | grep -qF "${_plugin}"; then
-      log_info "Claude plugin already installed: ${_plugin}"
-    else
-      log_info "Installing Claude plugin: ${_plugin}"
-      # `-s user` pins the scope instead of inheriting `--scope`'s default, which
-      # is already "user" on 2.1.269/2.1.270 (`claude plugin install --help`). A
-      # provisioning script should not silently follow a default upstream can
-      # change, so this is explicitness, NOT a behaviour fix — do not re-describe
-      # it as one. The project-scope rows in installed_plugins.json are NOT written
-      # by this command — they appear for directories where no install has ever run,
-      # one batch per directory. The verb does not matter either: `plugin` and
-      # `plugins` print byte-identical help (same sha256 on 2.1.270).
-      claude plugins install -s user "${_plugin}" || log_warn "Failed to install Claude plugin: ${_plugin}"
+  # Read both CLI lists before touching anything. Either can fail for
+  # reasons outside settings.json (e.g. not logged in yet), so a failure
+  # here is rc 2, not rc 1 -- the state steps 4-7 would act on is unknown,
+  # not the settings file itself.
+  local _registered _installed
+  if ! _registered="$(_claude_registered_marketplaces)"; then
+    log_warn "claude plugin state unreadable (list call failed; logged in?)"
+    return 2
+  fi
+  if ! _installed="$(_claude_installed_user_ids)"; then
+    log_warn "claude plugin state unreadable (list call failed; logged in?)"
+    return 2
+  fi
+
+  local -a _failures=()
+  local _line _type _name _ref _extra
+
+  # Register every declared marketplace not already registered, and record
+  # every unsupported source. `< /dev/null` on the claude call is required:
+  # without it, claude would read from the loop's own here-string stdin and
+  # consume the manifest lines still waiting to be read.
+  while IFS= read -r _line; do
+    _claude_manifest_split_line "${_line}"
+    if [[ -n "${_extra}" ]]; then
+      _failures+=("malformed Claude manifest entry, skipped (embedded tab or newline): ${_type} ${_name}")
+      continue
     fi
+    case "${_type}" in
+      marketplace)
+        if [[ -z "${_name}" ]]; then
+          _failures+=("Claude marketplace entry has an empty name (source: ${_ref})")
+        elif ! grep -qxF -- "${_name}" <<<"${_registered}"; then
+          if ! claude plugins marketplace add "${_ref}" < /dev/null; then
+            _failures+=("failed to add Claude marketplace: ${_name} (${_ref})")
+          fi
+        fi
+        ;;
+      unsupported)
+        _failures+=("unsupported Claude marketplace source: ${_name} (${_ref})")
+        ;;
+    esac
+  done <<<"${_manifest}"
+
+  # Install every enabled (true) plugin not already installed at user
+  # scope. Membership is exact id equality (grep -qxF), never a substring
+  # match -- a superstring id or a project-scope install must not count as
+  # "already installed". A plugin whose marketplace failed to add above is
+  # still attempted here; its own failure is recorded independently.
+  local _enabled_count=0
+  while IFS= read -r _line; do
+    _claude_manifest_split_line "${_line}"
+    [[ "${_type}" == "plugin" ]] || continue
+    if [[ -n "${_extra}" ]]; then
+      _failures+=("malformed Claude manifest entry, skipped (embedded tab or newline): plugin ${_name}")
+      continue
+    fi
+    [[ "${_ref}" == "true" ]] || continue
+    _enabled_count=$((_enabled_count + 1))
+    if [[ -z "${_name}" ]]; then
+      _failures+=("Claude plugin entry has an empty id")
+    elif grep -qxF -- "${_name}" <<<"${_installed}"; then
+      log_info "Claude plugin already installed: ${_name}"
+    elif ! claude plugins install -s user "${_name}" < /dev/null; then
+      _failures+=("failed to install Claude plugin: ${_name}")
+    fi
+  done <<<"${_manifest}"
+
+  # A valid file that declares zero enabled plugins is not an empty-but-fine
+  # state -- it is the silent success this reconcile exists to remove.
+  if [[ "${_enabled_count}" -eq 0 ]]; then
+    _failures+=("no enabled plugins declared in ${_settings_path}")
+  fi
+
+  if [[ "${#_failures[@]}" -eq 0 ]]; then
+    return 0
+  fi
+  local _f
+  for _f in "${_failures[@]}"; do
+    log_warn "${_f}"
   done
+  return 2
+}
+
+# Wraps setup_claude_plugins with the write guard: records the settings
+# file's git state before and after, and reports any drift via
+# _claude_settings_guard_check. Deliberately never changes what it
+# returns on the guard's account -- the guard is an advisory (a warning
+# to review, or an info line saying why it could not check), never a
+# reason to fail a call that otherwise succeeded. Callers get
+# setup_claude_plugins's own rc, unchanged.
+provision_claude_plugins() {
+  local _before _rc=0 _msg
+  _before="$(_claude_settings_git_state)"
+  setup_claude_plugins || _rc=$?
+  if _msg="$(_claude_settings_guard_check "${_before}" "$(_claude_settings_git_state)")"; then
+    [[ -n ${_msg} ]] && log_info "${_msg}"
+  else
+    log_warn "${_msg}"
+  fi
+  return "${_rc}"
 }
 
 _git_is_valid_repo() {
@@ -186,7 +438,19 @@ run_setup_user() {
   fi
 
   setup_claude_mcp || return 1
-  setup_claude_plugins || return 1
+  # rc 1 (unreadable/unparsable settings.json, or no python3) means
+  # provisioning cannot proceed from a settings file it cannot read, so
+  # that still aborts setup_user. rc 2 (a partial reconcile -- e.g. one
+  # failed install, or an unsupported marketplace) is not a reason to skip
+  # run_setup_or_developer, the git-hooks sweep and the ledger entry below
+  # -- warn and continue instead.
+  local _plugins_rc=0
+  provision_claude_plugins || _plugins_rc=$?
+  if [[ ${_plugins_rc} -eq 1 ]]; then
+    return 1
+  elif [[ ${_plugins_rc} -ne 0 ]]; then
+    log_warn "Claude plugin provisioning was partial — see the warnings above"
+  fi
   # Not `|| return 1`: setup_env.sh's _run_or_exit wrapper would abort the
   # entire script (run_setup_or_developer, run_developer_or_ansible never
   # run) on a single broken repo's Makefile, and would also skip
@@ -380,41 +644,101 @@ run_update() {
     _update_skip "softwareupdate" "flag not set"
   fi
 
+  # ai-config is pulled before the claude section so the plugin reconcile
+  # below reads the settings.json this run just fetched, not a stale copy.
+  if [[ ${_run_all} -eq 1 ]]; then
+    _update_record_start "ai-config"
+    setup_ai_config 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_ai-config"
+    _update_record_end "ai-config" "${PIPESTATUS[0]}"
+  fi
+
   # ── claude plugins ────────────────────────────────────────────────────────
   if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_CLAUDE:-} ]]; then
     if command -v claude &>/dev/null; then
       _update_record_start "claude"
       printf "Updating Claude plugins\\n"
-      # CLI matches installed plugins by plugin@marketplace (see `claude plugins list`), not short names.
-      # Run each independently so a single failure doesn't abort the rest, and failures are named.
-      local _claude_failed=()
-      local _plugin_rc=0
-      for _plugin in \
-        superpowers@claude-plugins-official \
-        code-review@claude-plugins-official \
-        context7@claude-plugins-official \
-        context-mode@context-mode \
-        rust-analyzer-lsp@claude-plugins-official \
-        pyright-lsp@claude-plugins-official \
-        caveman@caveman \
-        firecrawl@firecrawl \
-        skill-creator@claude-plugins-official \
-        frontend-design@claude-plugins-official \
-        security-guidance@claude-plugins-official \
-        ansible-good-practices@claude-ansible-skills \
-        terraform-skill@antonbabenko \
-        warp@claude-code-warp; do
-        claude plugins update "${_plugin}" 2>&1 | tee -a "${_DOTFILES_RUN_TMPDIR}/err_claude"
-        _plugin_rc="${PIPESTATUS[0]}"
-        [[ ${_plugin_rc} -ne 0 ]] && _claude_failed+=("${_plugin%%@*}")
-      done
-      local _claude_rc=0
-      if [[ ${#_claude_failed[@]} -gt 0 ]]; then
-        _claude_rc=1
-        printf "%d plugin(s) failed (%s)\n" "${#_claude_failed[@]}" "${_claude_failed[*]}" \
-          > "${_DOTFILES_RUN_TMPDIR}/fail_result_claude"
+      # Reconcile declared marketplaces/plugins from settings.json (adds
+      # missing marketplaces, installs missing enabled plugins), then update
+      # every declared plugin id that is actually installed at user scope --
+      # the CLI matches by plugin@marketplace (see `claude plugins list`),
+      # never a short name, and update is deliberately unfiltered by the
+      # enabled/disabled flag: a disabled-but-installed plugin still gets
+      # updated so its cache does not go stale.
+      # Single exit: every branch below only ever appends to _messages and
+      # sets _fatal=1 -- the guard check and the FAIL/OK decision happen
+      # once, after all of them, so a fatal early-exit never drops a
+      # message (the rc-2 partial note, a plugin-update failure) or skips
+      # the write guard just because something else also failed.
+      local _g_before _setup_rc=0 _fatal=0
+      local -a _messages=() _claude_failed=()
+      _g_before="$(_claude_settings_git_state)"
+      setup_claude_plugins 2>&1 | tee -a "${_DOTFILES_RUN_TMPDIR}/err_claude"
+      _setup_rc="${PIPESTATUS[0]}"
+      if [[ ${_setup_rc} -eq 1 ]]; then
+        _fatal=1
+        _messages+=("plugin settings unreadable: $(_claude_settings_path)")
+      else
+        if [[ ${_setup_rc} -eq 2 ]]; then
+          _messages+=("plugin provisioning partial — see detail")
+        fi
+        local _manifest _installed
+        if ! _manifest="$(_claude_plugin_manifest)"; then
+          # Unreachable today -- setup_claude_plugins already read this
+          # same file and would have returned 1 above if it could not.
+          # Kept as a guard against exactly the failure this rewrite closed
+          # for the installed-list read below: an unchecked read here would
+          # feed an empty manifest to the loop, update nothing, and record
+          # OK -- "updated nothing and reported success".
+          _fatal=1
+          _messages+=("plugin manifest unreadable — updates skipped")
+        elif ! _installed="$(_claude_installed_user_ids)"; then
+          _fatal=1
+          _messages+=("installed-plugin list failed — updates skipped")
+        else
+          local _line _type _name _ref _extra
+          while IFS= read -r _line; do
+            _claude_manifest_split_line "${_line}"
+            [[ "${_type}" == "plugin" ]] || continue
+            # A non-empty _extra means the line has more than the three
+            # fields it should (an id containing an embedded tab/newline);
+            # _claude_manifest_split_line's own docblock requires callers
+            # to skip it. setup_claude_plugins already recorded the failure
+            # for this same line (folded into the rc-2 message above), so
+            # nothing further is added here -- just don't act on garbage.
+            [[ -z "${_extra}" ]] || continue
+            grep -qxF -- "${_name}" <<<"${_installed}" || continue
+            claude plugins update "${_name}" < /dev/null 2>&1 \
+              | tee -a "${_DOTFILES_RUN_TMPDIR}/err_claude"
+            [[ "${PIPESTATUS[0]}" -ne 0 ]] && _claude_failed+=("${_name%%@*}")
+          done <<<"${_manifest}"
+          if [[ ${#_claude_failed[@]} -gt 0 ]]; then
+            _fatal=1
+            _messages+=("$(printf '%d plugin(s) failed (%s)' "${#_claude_failed[@]}" "${_claude_failed[*]}")")
+          fi
+        fi
       fi
-      _update_record_end "claude" "${_claude_rc}"
+      # The guard runs unconditionally, even after a fatal early-exit --
+      # settings.json was still open to writes for whatever ran before the
+      # failure (an install during the reconcile, say), so a fatal result
+      # must not silently drop the guard's warning.
+      local _g_msg
+      if _g_msg="$(_claude_settings_guard_check "${_g_before}" "$(_claude_settings_git_state)")"; then
+        [[ -n ${_g_msg} ]] && log_info "${_g_msg}"
+      else
+        _messages+=("${_g_msg}")
+      fi
+      local _joined="" _m
+      for _m in "${_messages[@]}"; do
+        _joined+="${_m}; "
+      done
+      _joined="${_joined%; }"
+      if [[ ${_fatal} -eq 1 ]]; then
+        printf '%s\n' "${_joined}" > "${_DOTFILES_RUN_TMPDIR}/fail_result_claude"
+        _update_record_end "claude" 1
+      else
+        _update_record_end "claude" 0
+        [[ -n ${_joined} ]] && _update_warn "claude" "${_joined}"
+      fi
       # Post-update skill security scan — supply chain guard.
       # Advisory: never aborts the update. REVIEW/HOLD findings require human
       # review before using the flagged skill. Re-running does not clear REVIEW.
@@ -698,10 +1022,6 @@ run_update() {
 
   # ── git-based tools + misc (run_all only) ─────────────────────────────────
   if [[ ${_run_all} -eq 1 ]]; then
-    _update_record_start "ai-config"
-    setup_ai_config 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_ai-config"
-    _update_record_end "ai-config" "${PIPESTATUS[0]}"
-
     _update_record_start "git-repos"
     sync_git_repos 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_git-repos"
     local _git_repos_rc="${PIPESTATUS[0]}"

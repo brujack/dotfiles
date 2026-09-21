@@ -871,16 +871,22 @@ firefox  124.0"
 
 # ── _UPDATE_SECTION_ORDER ─────────────────────────────────────────────────────
 
-@test "_UPDATE_SECTION_ORDER includes git-repos and legacy-rsync after ai-config" {
+@test "_UPDATE_SECTION_ORDER puts ai-config immediately before claude" {
   local _joined
   _joined="${_UPDATE_SECTION_ORDER[*]}"
-  [[ "${_joined}" == *"ai-config git-repos legacy-rsync"* ]]
+  [[ "${_joined}" == *"ai-config claude"* ]]
+}
+
+@test "_UPDATE_SECTION_ORDER includes git-repos immediately followed by legacy-rsync" {
+  local _joined
+  _joined="${_UPDATE_SECTION_ORDER[*]}"
+  [[ "${_joined}" == *"git-repos legacy-rsync"* ]]
 }
 
 @test "_UPDATE_SECTION_ORDER includes git-hooks after legacy-rsync" {
   local _joined
   _joined="${_UPDATE_SECTION_ORDER[*]}"
-  [[ "${_joined}" == *"ai-config git-repos legacy-rsync git-hooks"* ]]
+  [[ "${_joined}" == *"git-repos legacy-rsync git-hooks"* ]]
 }
 
 @test "_UPDATE_SECTION_ORDER includes aws and rust after git-hooks" {

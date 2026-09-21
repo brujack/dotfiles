@@ -19,6 +19,14 @@ load_mocks() {
   # and a suite that never calls load_mocks at all (e.g.
   # tests/setup_env/git_sync.bats) gets no protection from this seam.
   export _CARGO_BIN="${REPO_ROOT}/tests/mocks/cargo"
+  # Every run_update/run_setup_user test runs under a redirected HOME with no
+  # settings file; point the claude plugin manifest reader at a per-test COPY
+  # of the fixture under BATS_TEST_TMPDIR, never the tracked file itself.
+  # tests/mocks/claude's MOCK_CLAUDE_EDIT_SETTINGS mode appends to whatever
+  # this points at, so pointing it at the tracked fixture would let a test
+  # dirty the working tree (`git status` showing `M tests/fixtures/...`).
+  cp "${REPO_ROOT}/tests/fixtures/claude-settings.json" "${BATS_TEST_TMPDIR}/claude-settings.json"
+  export _OVERRIDE_CLAUDE_SETTINGS="${BATS_TEST_TMPDIR}/claude-settings.json"
 }
 
 # Assert a pattern is ABSENT from a file.
@@ -31,7 +39,7 @@ load_mocks() {
 # half of its test's claim. Failure output names what was actually found,
 # which a bare `!` never did.
 #
-# Extra args are passed through to grep, so `refute_grep -E 'pat' file` works.
+# Extra args are passed through to grep, so `refute_grep 'pat' file -E` works.
 refute_grep() {
   local _pattern="$1" _file="$2"
   shift 2

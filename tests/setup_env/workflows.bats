@@ -296,7 +296,7 @@ teardown() {
 # ── setup_claude_plugins ──────────────────────────────────────────────────────
 
 @test "setup_claude_plugins installs plugin when not listed" {
-  export MOCK_CLAUDE_PLUGINS_LIST_OUTPUT=""
+  export MOCK_CLAUDE_PLUGINS_LIST_JSON='[]'
   setup_claude_plugins
   # Pins `-s user` explicitly rather than inheriting `--scope`'s default
   # (currently "user"). What this guards is REMOVAL of the flag: tests/mocks/claude
@@ -306,7 +306,7 @@ teardown() {
 }
 
 @test "setup_claude_plugins skips install when plugin already listed" {
-  export MOCK_CLAUDE_PLUGINS_LIST_OUTPUT="superpowers@claude-plugins-official"
+  export MOCK_CLAUDE_PLUGINS_LIST_JSON='[{"id":"superpowers@claude-plugins-official","scope":"user"}]'
   setup_claude_plugins
   # Flag-agnostic on purpose. Pinning the exact flags here would make this
   # assertion vacuous the moment they change -- "install was skipped" and
@@ -328,6 +328,23 @@ teardown() {
   export MACOS=1
   unset LINUX UBUNTU
   setup_claude_plugins() { return 1; }
+  run run_setup_user
+  [ "$status" -ne 0 ]
+}
+
+@test "run_setup_user completes and warns partial when provision_claude_plugins returns 2" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  provision_claude_plugins() { return 2; }
+  run run_setup_user
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"partial"* ]]
+}
+
+@test "run_setup_user returns non-zero when provision_claude_plugins returns 1" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  provision_claude_plugins() { return 1; }
   run run_setup_user
   [ "$status" -ne 0 ]
 }
@@ -2424,6 +2441,10 @@ assert_all_npm_globals_pinned() {
   unset LINUX UBUNTU
   export UPDATE_CLAUDE=1
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  # The update set now comes from the CLI's own installed-at-user-scope
+  # list, not a hardcoded id — name it here so the loop has something to
+  # match against the fixture's declared "superpowers" plugin.
+  export MOCK_CLAUDE_PLUGINS_LIST_JSON='[{"id":"superpowers@claude-plugins-official","scope":"user"}]'
   run run_update
   [ "$status" -eq 0 ]
   grep -q "claude plugins update superpowers@claude-plugins-official" "${MOCK_CALLS_FILE}"
