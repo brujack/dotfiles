@@ -1,5 +1,9 @@
 # dotfiles CLAUDE.md four-class re-sort — design
 
+**Scope widened 2026-09-21 (operator): the whole file, not two sections.** The 63% previously
+unexamined was classified by three further passes and holds the larger share of the movable
+mass; see Measurement.
+
 **Date:** 2026-09-21
 **Parent convention:** ai-config, ADR-0077 (five content homes, routing sentence) plus the
 four-class decision procedure amendment that session is writing. This spec is the dotfiles
@@ -231,16 +235,43 @@ That design is not revived here.
 
 ## Measurement
 
-**Scope, stated because this spec examines a minority of the file and never said so.** At the
-measured ratio `dotfiles/CLAUDE.md` is 178,625 B = **47,563 tokens -- larger than any standards
-file in the fleet, 1.7x `shell.md`, and 3.2x this repo's entire current headroom of 14,868.** The
-two sections classified below are 66,125 B = 17,607 tokens, **37.0% of the file**. The other
-112,500 B = 29,956 tokens -- **63%, itself twice the current headroom** -- has not been examined
-by any instrument in this project. Whether the same class mix holds there is unknown and
-untested. So this spec's yield is an upper bound *within a minority of the file*, and the
-dominant lever for this repo may well be the unexamined 63% rather than anything here. For
-ai-config the ordering is reversed -- its repo `CLAUDE.md` is 37,326 B and the shared standards
-dominate -- which is why the parent convention has to say the dominant lever is repo-dependent.
+**Scope: the whole file.** An earlier draft classified only `### Test Seams` and
+`### MAKEFLAGS and Stdout Partition` -- 66,125 B, 37% -- and did not state the denominator. The
+remaining 63% has since been classified by three further passes, and it is where the larger
+share of the movable mass is. Whole-file measurement:
+
+| class | scoped 37% | rest 63% | whole file | share | remedy |
+| --- | --- | --- | --- | --- | --- |
+| HAZARD | 40,906 | 64,289 | **105,195** | 58.9% | stays, compressed |
+| DUPLICATE | 21,112 | 14,322 | **35,434** | 19.8% | one copy dies |
+| RECORD | 780 | 16,526 | **17,306** | 9.7% | to `docs/knowledge/` |
+| REFERENCE | 0 | 14,309 | **14,309** | 8.0% | to the skill that needs it |
+| AMBIGUOUS | 3,402 | 3,031 | 6,433 | 3.6% | adjudicated per paragraph |
+
+**Movable upper bound is 67,049 B, 2.7x what the scoped version claimed.** The file is 178,625 B
+and 286 blank-line paragraphs.
+
+Three properties of the newly-classified 63% matter more than its size:
+
+- **Its DUPLICATE has already passed the same-argument test**, with the other copy's file and
+  symbol named and verified per row. The scoped 21,112 B is `DERIVABLE` under the superseded
+  definition -- two of its seven candidate pairs already fail the current test and one is partial
+  -- so the scoped figure is the softer of the two despite being larger.
+- **Most of it duplicates fleet-wide standards, not source comments**: `shell.md` x5, `ci.md` x3,
+  `git-workflow.md` x2, `repo-structure.md` x2, `tdd.md`, `writing-plans/SKILL.md`,
+  `~/.claude/CLAUDE.md` x2. Those load in every session regardless, so each is paid **twice** per
+  dotfiles session. A source-comment duplicate is paid once.
+- **REFERENCE, 8% of the file, did not exist in the scoped sections at all** -- bootstrapping
+  scaffolding and command reference a session in an already-provisioned repo never reads.
+
+**The drift hazard is demonstrated, not argued.** `CLAUDE.md:398` states
+`actions/checkout@v5`; `CLAUDE.md:1126` states `v6`; `.github/workflows/ci.yml` pins
+`actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1`. One file, two mutually inconsistent
+copies, both stale against the live pin. `Version Pinning` is the same shape: four constants
+byte-identical to `lib/constants.sh`, with a warning one sentence later to keep them updated,
+which concedes the copy cannot maintain itself. And one duplicate sits **one line below its own
+pointer** -- "See `dotfiles-bats-test-infrastructure.md` for the full `MOCK_*` reference table
+and the usage pattern", then the usage pattern restated near-verbatim.
 
 Every paragraph of `### Test Seams` and `### MAKEFLAGS and Stdout Partition` (66,125 bytes at `20023924`,
 ~86 paragraphs; the classification ran against `c2990e5c`, before the parallel-bats PR added
@@ -413,7 +444,7 @@ Run before implementation, not predicted:
    moves the probe by materially less than its byte count implies is itself a finding.
 
 2. **Phrase manifest, written first and locked.** Before any edit, produce
-   `docs/superpowers/plans/<plan>-phrases.md`: one row per sub-paragraph of both sections, its
+   `docs/superpowers/plans/<plan>-phrases.md`: one row per sub-paragraph of the file, its
    class, and a distinctive phrase taken from the pre-change text at the parent SHA. Commit it
    before the first edit. This is the ground truth gates 4, 5 and 6 check against, and it is the
    per-paragraph classification that does not otherwise exist -- without it gate 5 has no universe
@@ -421,8 +452,8 @@ Run before implementation, not predicted:
 
    **2a. The manifest must be complete, and completeness is asserted, not trusted.** Row count
    must equal a paragraph count re-derived from the two sections at the parent SHA by a blank-line
-   split. At `60e72a02` that count is **88** -- 78 in `### Test Seams`, 10 in
-   `### MAKEFLAGS and Stdout Partition`. A short count fails the gate. Without this, an omitted row
+   split **over the whole file**. At `d60427e8` that count is **286**. A short count fails the
+   gate. Without this, an omitted row
    is invisible to every later gate: gate 5's universe *is* the manifest, and gate 6 is scoped to
    what the manifest classed HAZARD, so an omitted paragraph is unprotected by both while the
    gates report clean. That is `tdd.md`'s hand-maintained-denominator failure, and every previous
@@ -488,9 +519,9 @@ Run before implementation, not predicted:
    purely an assertion, which is the trust-signal failure `USER.md` names. This is the only check
    on weakening; it is judgement rather than mechanism and is named as such.
 
-   **Batch bound.** Roughly 52 sub-paragraphs are HAZARD-classed. Compression and this review run
+   **Batch bound.** Roughly 165 sub-paragraphs are HAZARD-classed across the file (105,195 B, 59%). Compression and this review run
    in batches of at most 10 paragraphs per dispatch. Nothing detects a single subagent attempting
-   all 52 in one pass, and that is the shape most likely to produce uniform shallow rewrites that
+   a whole section in one pass, and that is the shape most likely to produce uniform shallow rewrites that
    each retain their phrase.
 
    **Separation is two actors, not three, and nothing mechanically enforces it.** Gate 2's phrase
@@ -554,12 +585,17 @@ has to say the dominant lever is repo-dependent rather than quote a fleet number
 worst in the fleet and is where the dispatches actually failed.
 
 **What this spec buys is deliberately not stated as a token figure.** Earlier drafts carried
-`~35k -> ~73k`, then `~52.8k`, `~55.3k`, `~54.2k` and `~57.2k` as the ratio moved under them --
-five numbers for one claim, every one an artifact of a model now retired. The honest statement is
-that this spec removes an upper bound of **25,294 bytes from a 178,625-byte file**, within the
-37% of it that has been classified, and **gate 1's post-change probe reports what that is worth
-in headroom**. If the answer disappoints, that is a result rather than a failure of the spec to
-predict it.
+`~35k -> ~73k`, then `~52.8k`, `~55.3k`, `~54.2k` and `~57.2k` as the bytes-to-tokens ratio moved
+under them -- five numbers for one claim, every one an artifact of a model since retired. The
+honest statement is that this spec removes an upper bound of **67,049 bytes from a 178,625-byte
+file**, and **gate 1's post-change probe reports what that is worth in headroom**. If the answer
+disappoints, that is a result rather than a failure of the spec to predict it.
+
+**What widening changed and what it did not.** The design is unchanged: same four classes, same
+eight gates, same manifest mechanism, same two-actor separation. What grew is the manifest --
+88 rows to 286 -- and the adjudication work behind it. The 63% needed no new thinking, which is
+the argument for one cycle rather than two: a follow-on spec would have bought a second review
+round for a design this one already carries.
 
 **Durability: the trim refills, and the rate is measured.** dotfiles `CLAUDE.md` grew +16.0
 lines/day over the 11 days since ADR-0077's writer routing went live (23 commits, +176 net),
