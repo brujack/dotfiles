@@ -107,8 +107,16 @@ def parse_manifest(path: Path) -> list[Row]:
 
 
 def split_paragraphs(text: str) -> list[str]:
-    """Split text into non-empty blank-line-delimited paragraphs."""
-    return [p for p in text.split("\n\n") if p.strip()]
+    """Split text into non-empty blank-line-delimited paragraphs.
+
+    The separator is a blank line, and "blank" means no visible content --
+    not literally two adjacent newlines with nothing between them. A
+    separator line holding only spaces or tabs is blank to a reader, but
+    text.split("\n\n") does not treat it as one: it silently merges the
+    two paragraphs on either side, undercounting the coverage denominator
+    with nothing in the excluded count to reveal it.
+    """
+    return [p for p in re.split(r"\n[ \t]*\n", text) if p.strip()]
 
 
 def is_excluded_paragraph(paragraph: str) -> bool:
@@ -150,7 +158,17 @@ def classify_paragraphs(text: str) -> tuple[list[str], int]:
 
 
 def find_occurrences(haystack_norm: str, needle_norm: str) -> list[int]:
-    """Return the start index of every non-overlapping occurrence of needle in haystack."""
+    """Return the start index of every occurrence of needle in haystack,
+    including ones that overlap a previous match.
+
+    Advancing past the whole match (start = idx + len(needle_norm)) counts
+    a self-similar phrase once even when it genuinely occurs twice -- "run
+    make test run make test" inside "...run make test run make test run
+    make test..." is two overlapping occurrences by any ordinary reading,
+    and a non-overlapping scan finds only one, so --assert-unique
+    certified an ambiguous phrase as unique. Advancing by one character
+    instead finds every start position, including overlapping ones.
+    """
     if not needle_norm:
         return []
     positions = []
@@ -160,7 +178,7 @@ def find_occurrences(haystack_norm: str, needle_norm: str) -> list[int]:
         if idx == -1:
             break
         positions.append(idx)
-        start = idx + len(needle_norm)
+        start = idx + 1
     return positions
 
 
@@ -172,15 +190,45 @@ def is_sentence_initial(haystack_norm: str, index: int) -> bool:
     return bool(before) and before[-1] in _SENTENCE_END_CHARS
 
 
-def match_phrase(haystack_norm: str, phrase: str) -> tuple[int, bool]:
-    """Return (occurrence count, whether any occurrence begins a sentence)."""
+def paragraph_start_norms(source_text: str) -> list[str]:
+    """Normalised text of every paragraph in source_text.
+
+    main() normalises the whole file into one line before matching, so the
+    character preceding a paragraph's first word is whatever ended the
+    previous block -- a heading's last letter, a fenced-code backtick, a
+    colon, a bullet dash -- never one of _SENTENCE_END_CHARS.
+    is_sentence_initial's punctuation test therefore never fires for a
+    phrase that opens a paragraph, even though a paragraph's first word is
+    the strongest case of "sentence-initial" this tool exists to catch. A
+    phrase whose normalised text is a PREFIX of a normalised paragraph
+    opens that paragraph and is sentence-initial regardless of what
+    precedes it in the flattened haystack.
+    """
+    return [normalize(p) for p in split_paragraphs(source_text)]
+
+
+def match_phrase(
+    haystack_norm: str,
+    phrase: str,
+    paragraph_norms: list[str] | None = None,
+) -> tuple[int, bool]:
+    """Return (occurrence count, whether any occurrence begins a sentence
+    or opens a paragraph -- see paragraph_start_norms)."""
     needle_norm = normalize(phrase)
     positions = find_occurrences(haystack_norm, needle_norm)
     sentence_initial = any(is_sentence_initial(haystack_norm, p) for p in positions)
+    if not sentence_initial and needle_norm and paragraph_norms:
+        sentence_initial = any(
+            para.startswith(needle_norm) for para in paragraph_norms
+        )
     return len(positions), sentence_initial
 
 
-def check_unique(rows: list[Row], source_norm: str) -> list[str]:
+def check_unique(
+    rows: list[Row],
+    source_norm: str,
+    paragraph_norms: list[str] | None = None,
+) -> list[str]:
     """Every row's phrase occurs exactly once in source -- except a row
     marked deleted, whose phrase is supposed to be gone. Checking a deleted
     row's phrase for presence would report the intended removal as a
@@ -191,7 +239,7 @@ def check_unique(rows: list[Row], source_norm: str) -> list[str]:
     for row in rows:
         if row.is_deleted:
             continue
-        count, sentence_initial = match_phrase(source_norm, row.phrase)
+        count, sentence_initial = match_phrase(source_norm, row.phrase, paragraph_norms)
         if count != 1:
             errors.append(
                 f"line {row.line_no} [{row.cls}]: phrase occurs {count} time(s), "
@@ -238,12 +286,25 @@ def check_paragraph_coverage(rows: list[Row], source_text: str) -> list[str]:
     return errors
 
 
-def check_survives(rows: list[Row], cls: str, source_norm: str) -> list[str]:
+def check_survives(
+    rows: list[Row],
+    cls: str,
+    source_norm: str,
+    paragraph_norms: list[str] | None = None,
+) -> list[str]:
+    """Every row of CLASS still matches in source -- and CLASS must
+    actually be carried by at least one row. Filtering by exact string
+    equality with no zero-row guard means a mistyped, wrong-case,
+    trailing-space, or later-renamed class name silently examines nothing
+    and reports clean; the guard below turns that into a failure instead
+    of a silent no-op."""
     errors = []
+    matched_any = False
     for row in rows:
         if row.cls != cls:
             continue
-        count, sentence_initial = match_phrase(source_norm, row.phrase)
+        matched_any = True
+        count, sentence_initial = match_phrase(source_norm, row.phrase, paragraph_norms)
         if count == 0:
             errors.append(
                 f"line {row.line_no} [{row.cls}]: phrase no longer found: {row.phrase!r}"
@@ -253,6 +314,10 @@ def check_survives(rows: list[Row], cls: str, source_norm: str) -> list[str]:
                 f"line {row.line_no} [{row.cls}]: surviving phrase begins at a "
                 f"sentence boundary: {row.phrase!r}"
             )
+    if not matched_any:
+        errors.append(
+            f"--survives {cls!r}: no manifest row carries this class -- checked nothing"
+        )
     return errors
 
 
@@ -363,6 +428,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     source_text = ""
     source_norm = ""
+    paragraph_norms: list[str] = []
     if needs_source:
         if args.source is None:
             print(
@@ -377,13 +443,14 @@ def main(argv: list[str] | None = None) -> int:
             print(f"error: cannot read source {args.source}: {exc}", file=sys.stderr)
             return 2
         source_norm = normalize(source_text)
+        paragraph_norms = paragraph_start_norms(source_text)
 
     ran_any = False
     errors: list[str] = []
 
     if args.assert_unique:
         ran_any = True
-        errors += check_unique(rows, source_norm)
+        errors += check_unique(rows, source_norm, paragraph_norms)
 
     if args.assert_complete is not None:
         ran_any = True
@@ -403,7 +470,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.survives:
         ran_any = True
-        errors += check_survives(rows, args.survives, source_norm)
+        errors += check_survives(rows, args.survives, source_norm, paragraph_norms)
 
     if args.deleted_have_counterparts:
         ran_any = True

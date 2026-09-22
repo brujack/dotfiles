@@ -394,6 +394,85 @@ class TestSentenceInitialPhraseRejected(PhraseCheckTestCase):
         self.assertNotEqual(rc, 0)
 
 
+class TestSentenceInitialAtParagraphStart(PhraseCheckTestCase):
+    """A phrase that opens a paragraph is sentence-initial even though the
+    character preceding it, in the whole-file-normalised haystack, is not
+    one of '.'/'!'/'?' -- it's whatever ended the previous block (a
+    heading's last letter, a code-fence backtick, a colon, a bullet dash),
+    none of which is in _SENTENCE_END_CHARS. A later HAZARD remedy
+    capitalises a sentence's leading word, and a paragraph's first word is
+    the strongest case of that."""
+
+    def test_phrase_opening_a_paragraph_after_a_heading_is_rejected(self):
+        source = self._write(
+            "source.md",
+            "## Heading\n\nThe quick brown fox jumps over lazy dogs.",
+        )
+        manifest = self._write_manifest(
+            "phrases.md", ["HAZARD | The quick brown fox jumps | | | note"]
+        )
+        rc = _PC.main(
+            ["--manifest", str(manifest), "--source", str(source), "--assert-unique"]
+        )
+        self.assertNotEqual(rc, 0)
+
+    def test_phrase_opening_a_paragraph_after_a_fenced_code_block_is_rejected(self):
+        source = self._write(
+            "source.md",
+            "```bash\necho hi\n```\n\nThe quick brown fox jumps over lazy dogs.",
+        )
+        manifest = self._write_manifest(
+            "phrases.md", ["HAZARD | The quick brown fox jumps | | | note"]
+        )
+        rc = _PC.main(
+            ["--manifest", str(manifest), "--source", str(source), "--assert-unique"]
+        )
+        self.assertNotEqual(rc, 0)
+
+    def test_phrase_opening_a_paragraph_after_a_colon_is_rejected(self):
+        source = self._write(
+            "source.md",
+            "Intro says this:\n\nThe quick brown fox jumps over lazy dogs.",
+        )
+        manifest = self._write_manifest(
+            "phrases.md", ["HAZARD | The quick brown fox jumps | | | note"]
+        )
+        rc = _PC.main(
+            ["--manifest", str(manifest), "--source", str(source), "--assert-unique"]
+        )
+        self.assertNotEqual(rc, 0)
+
+    def test_phrase_opening_a_paragraph_after_a_bullet_dash_is_rejected(self):
+        source = self._write(
+            "source.md",
+            "- a bullet point\n\nThe quick brown fox jumps over lazy dogs.",
+        )
+        manifest = self._write_manifest(
+            "phrases.md", ["HAZARD | The quick brown fox jumps | | | note"]
+        )
+        rc = _PC.main(
+            ["--manifest", str(manifest), "--source", str(source), "--assert-unique"]
+        )
+        self.assertNotEqual(rc, 0)
+
+    def test_phrase_not_opening_a_paragraph_is_still_accepted(self):
+        # Positive control: a phrase that genuinely sits mid-paragraph,
+        # even in a document that has a heading elsewhere, must still pass
+        # -- this rule must not reject every phrase that merely follows a
+        # heading somewhere in the file.
+        source = self._write(
+            "source.md",
+            "## Heading\n\nIntro clause says the quick brown fox jumps over lazy dogs.",
+        )
+        manifest = self._write_manifest(
+            "phrases.md", ["HAZARD | the quick brown fox jumps | | | note"]
+        )
+        rc = _PC.main(
+            ["--manifest", str(manifest), "--source", str(source), "--assert-unique"]
+        )
+        self.assertEqual(rc, 0)
+
+
 class TestSurvives(PhraseCheckTestCase):
     """RED test 6: --survives CLASS exits non-zero when a row of that class is gone."""
 
@@ -453,6 +532,99 @@ class TestSurvives(PhraseCheckTestCase):
                 str(source),
                 "--survives",
                 "HAZARD",
+            ]
+        )
+        self.assertEqual(rc, 0)
+
+
+class TestSurvivesZeroRowsIsAnError(PhraseCheckTestCase):
+    """--survives CLASS must fail when the manifest carries zero rows of
+    that class, rather than passing having examined nothing. check_survives
+    filtered with exact string equality and no zero-row guard, so a
+    mistyped, wrong-case, trailing-space, or later-renamed class name
+    silently checked nothing and reported clean."""
+
+    def test_fails_when_no_row_carries_the_named_class(self):
+        source = self._write("source.md", "Alpha beta gamma delta epsilon here.")
+        manifest = self._write_manifest(
+            "phrases.md",
+            ["HAZARD | THIS TEXT IS NOT IN THE SOURCE AT ALL | - | - | n"],
+        )
+        rc, combined = _run_and_capture(
+            [
+                "--manifest", str(manifest),
+                "--source", str(source),
+                "--survives", "NOSUCHCLASS",
+            ]
+        )
+        self.assertNotEqual(rc, 0)
+        self.assertIn("NOSUCHCLASS", combined)
+
+    def test_fails_on_a_lowercase_typo_of_an_existing_class(self):
+        source = self._write("source.md", "Alpha beta gamma delta epsilon here.")
+        manifest = self._write_manifest(
+            "phrases.md",
+            ["HAZARD | THIS TEXT IS NOT IN THE SOURCE AT ALL | - | - | n"],
+        )
+        rc, combined = _run_and_capture(
+            [
+                "--manifest", str(manifest),
+                "--source", str(source),
+                "--survives", "hazard",
+            ]
+        )
+        self.assertNotEqual(rc, 0)
+        self.assertIn("hazard", combined)
+
+    def test_fails_on_a_trailing_space_variant_of_an_existing_class(self):
+        source = self._write("source.md", "Alpha beta gamma delta epsilon here.")
+        manifest = self._write_manifest(
+            "phrases.md",
+            ["HAZARD | THIS TEXT IS NOT IN THE SOURCE AT ALL | - | - | n"],
+        )
+        rc = _PC.main(
+            [
+                "--manifest", str(manifest),
+                "--source", str(source),
+                "--survives", "HAZARD ",
+            ]
+        )
+        self.assertNotEqual(rc, 0)
+
+    def test_still_fails_normally_when_the_class_exists_and_the_row_is_gone(self):
+        # Positive control: an existing class whose only row genuinely
+        # fails must still report the real per-row failure -- the zero-row
+        # guard must not swallow or replace it.
+        source = self._write("source.md", "Alpha beta gamma delta epsilon here.")
+        manifest = self._write_manifest(
+            "phrases.md",
+            ["HAZARD | THIS TEXT IS NOT IN THE SOURCE AT ALL | - | - | n"],
+        )
+        rc, combined = _run_and_capture(
+            [
+                "--manifest", str(manifest),
+                "--source", str(source),
+                "--survives", "HAZARD",
+            ]
+        )
+        self.assertNotEqual(rc, 0)
+        self.assertIn("phrase no longer found", combined)
+
+    def test_passes_when_the_class_exists_and_every_row_survives(self):
+        # Positive control: an existing class whose row genuinely survives
+        # must still pass -- the zero-row guard must not fire when rows
+        # were actually examined.
+        source = self._write(
+            "source.md", "Reminder: this safety phrase must remain in place."
+        )
+        manifest = self._write_manifest(
+            "phrases.md", ["HAZARD | this safety phrase must remain | | | note"]
+        )
+        rc = _PC.main(
+            [
+                "--manifest", str(manifest),
+                "--source", str(source),
+                "--survives", "HAZARD",
             ]
         )
         self.assertEqual(rc, 0)
@@ -890,3 +1062,131 @@ class TestDerivedDenominatorIsReported(PhraseCheckTestCase):
         self.assertIn("excluded", combined)
         self.assertIn("denominator=2", combined)
         self.assertIn("excluded=1", combined)
+
+
+class TestSplitParagraphsWhitespaceOnlySeparatorLine(PhraseCheckTestCase):
+    """A separator line holding only spaces or tabs is blank to a reader,
+    but text.split('\\n\\n') does not treat it as a paragraph break: it
+    silently merges two paragraphs into one, undercounting the derived
+    coverage denominator with nothing in the excluded count to reveal it."""
+
+    def test_denominator_counts_two_paragraphs_across_a_whitespace_only_separator(
+        self,
+    ):
+        source = self._write(
+            "source.md",
+            "First content paragraph here.\n   \nSecond content paragraph here.",
+        )
+        manifest = self._write_manifest(
+            "phrases.md",
+            [
+                "HAZARD | irst content paragraph here | | | note",
+                "HAZARD | econd content paragraph here | | | note",
+            ],
+        )
+        rc, combined = _run_and_capture(
+            [
+                "--manifest", str(manifest),
+                "--source", str(source),
+                "--assert-complete-derived",
+            ]
+        )
+        self.assertEqual(rc, 0)
+        self.assertIn("denominator=2", combined)
+
+    def test_a_tab_only_separator_line_also_splits(self):
+        source = self._write(
+            "source.md",
+            "First content paragraph here.\n\t\nSecond content paragraph here.",
+        )
+        manifest = self._write_manifest(
+            "phrases.md",
+            [
+                "HAZARD | irst content paragraph here | | | note",
+                "HAZARD | econd content paragraph here | | | note",
+            ],
+        )
+        rc, combined = _run_and_capture(
+            [
+                "--manifest", str(manifest),
+                "--source", str(source),
+                "--assert-complete-derived",
+            ]
+        )
+        self.assertEqual(rc, 0)
+        self.assertIn("denominator=2", combined)
+
+    def test_a_genuinely_blank_line_still_splits_the_same_way(self):
+        # Positive control: an ordinary blank-line separator must keep
+        # splitting exactly as before.
+        source = self._write(
+            "source.md",
+            "First content paragraph here.\n\nSecond content paragraph here.",
+        )
+        manifest = self._write_manifest(
+            "phrases.md",
+            [
+                "HAZARD | irst content paragraph here | | | note",
+                "HAZARD | econd content paragraph here | | | note",
+            ],
+        )
+        rc, combined = _run_and_capture(
+            [
+                "--manifest", str(manifest),
+                "--source", str(source),
+                "--assert-complete-derived",
+            ]
+        )
+        self.assertEqual(rc, 0)
+        self.assertIn("denominator=2", combined)
+
+
+class TestFindOccurrencesCountsOverlappingMatches(PhraseCheckTestCase):
+    """A self-similar phrase occurring twice, where the second occurrence
+    starts inside the first, must count as two occurrences. A
+    non-overlapping scan (advancing past the whole match) finds only one,
+    so --assert-unique certified an ambiguous phrase as unique."""
+
+    def test_an_overlapping_repeated_phrase_is_rejected_as_not_unique(self):
+        source = self._write(
+            "source.md",
+            "Preface here: run make test run make test run make test and stop.",
+        )
+        manifest = self._write_manifest(
+            "phrases.md",
+            ["HAZARD | run make test run make test | | | note"],
+        )
+        rc = _PC.main(
+            ["--manifest", str(manifest), "--source", str(source), "--assert-unique"]
+        )
+        self.assertNotEqual(rc, 0)
+
+    def test_a_genuinely_unique_phrase_is_still_accepted(self):
+        # Positive control: a phrase that occurs exactly once, with no
+        # self-overlap anywhere in source, must still pass.
+        source = self._write(
+            "source.md", "Preface here: run make test once and stop."
+        )
+        manifest = self._write_manifest(
+            "phrases.md", ["HAZARD | run make test once | | | note"]
+        )
+        rc = _PC.main(
+            ["--manifest", str(manifest), "--source", str(source), "--assert-unique"]
+        )
+        self.assertEqual(rc, 0)
+
+    def test_a_non_overlapping_double_occurrence_is_still_rejected(self):
+        # Positive control: the ordinary (non-overlapping) double-occurrence
+        # case must not regress under the overlap-counting fix.
+        source = self._write(
+            "source.md",
+            "Note: the widget calibration steps matter "
+            "and the widget calibration steps repeat.",
+        )
+        manifest = self._write_manifest(
+            "phrases.md", ["HAZARD | the widget calibration steps | | | note"]
+        )
+        rc = _PC.main(
+            ["--manifest", str(manifest), "--source", str(source), "--assert-unique"]
+        )
+        self.assertNotEqual(rc, 0)
