@@ -19,6 +19,16 @@ _MODULE = _REPO / "scripts" / "phrase_check.py"
 
 
 def _load():
+    # Bypass the bytecode cache. SourceFileLoader validates a cached .pyc on
+    # mtime plus size, so two mutants that change the file by the same number
+    # of bytes within one mtime second are indistinguishable to it: the second
+    # runs against the first's cached module and silently inherits its verdict.
+    # Reproduced on Python 3.14.6 -- a same-size edit with mtime restored
+    # served stale bytecode and the change was invisible, which would make
+    # every mutation test of this module report on the wrong source.
+    sys.dont_write_bytecode = True
+    for stale in (_MODULE.parent / "__pycache__").glob(f"{_MODULE.stem}.*.pyc"):
+        stale.unlink()
     spec = importlib.util.spec_from_file_location("phrase_check", _MODULE)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
