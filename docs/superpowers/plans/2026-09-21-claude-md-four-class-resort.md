@@ -280,11 +280,11 @@ depends_on: [6]
 
 ---
 
-### Task 8: DUPLICATE deletions — Testing block
+### Task 8: DUPLICATE deletions — the verbatim-verified rows, all fragments
 
 ```yaml-task
 id: 8
-description: Delete CLAUDE.md copies whose counterpart is confirmed present, for fragment B's scope only
+description: Delete the 8 DUPLICATE rows whose full phrase is literally present in the named counterpart, sentence-level, across all fragments
 role: executor
 model: sonnet
 tdd: not-applicable
@@ -312,11 +312,11 @@ Same per-sentence rule as Task 7.
 
 ---
 
-### Task 9: DUPLICATE deletions — Test Seams, MAKEFLAGS and remaining sections
+### Task 9: reclassify the DUPLICATE rows the manifest format cannot express
 
 ```yaml-task
 id: 9
-description: Delete CLAUDE.md copies whose counterpart is confirmed present, for fragment C's scope only
+description: Record a measured verdict for the 11 paraphrase rows and the 1 self-referential row, which the counterpart gate cannot authorise deleting (manifest-only, no CLAUDE.md edit)
 role: executor
 model: sonnet
 tdd: not-applicable
@@ -330,7 +330,7 @@ acceptance:
   - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --deleted-have-counterparts'
     exit_code: 0
 max_retries: 3
-files_touched: [CLAUDE.md, docs/superpowers/plans/phrases.md]
+files_touched: [docs/superpowers/plans/phrases.md]
 depends_on: [8]
 ```
 
@@ -341,6 +341,21 @@ depends_on: [8]
 - [ ] Commit.
 
 ---
+
+> **Tasks 8 and 9 were restructured after Task 7 measured 0 of 4 deletable.**
+> The spec defines DUPLICATE as *same argument, not same prose*, while
+> `--deleted-have-counterparts` requires the full phrase to occur literally in the
+> counterpart file. Re-run against the full phrase with the tool's own `match_phrase`:
+> **9 of 21** rows qualify, one of which is self-referential (`CLAUDE.md` duplicating
+> itself, which the format cannot express either). The remaining 11 are genuine
+> duplicated arguments in different words. Task 8 now deletes only the verbatim set;
+> Task 9 records the rest for the compression plan, where the remedy is to compress
+> both copies rather than delete one.
+>
+> Measured yield, disjoint per paragraph: HAZARD-only paragraphs hold **64.2%** of the
+> file's bytes. Pure DUPLICATE+RECORD+REFERENCE is 17,279 B, under 10%. This plan's
+> deletion yield is **~1.2%** against a 14,868-token headroom gap. Deletion cannot reach
+> the target; compression is the lever that does.
 
 ### Task 10: RECORD — delete bare dated figures
 
