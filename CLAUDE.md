@@ -896,7 +896,7 @@ otherwise — see the actor table under MAKEFLAGS below for the general rule.
 about what the wired detectors need:
 `__HOME__/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`.
 
-`ledger` lives in that first entry, which the plist did not originally carry — `lib/workflows.sh:931` carries the same fallback, so the repo already knew — while the plist as first written named only the two
+`ledger` lives in that first entry, which the plist did not originally carry — `lib/workflows.sh`'s `ledger_write_entry` carries the same fallback, so the repo already knew — while the plist as first written named only the two
 Homebrew prefixes, after `gh` and `python3`. `ledger_drift_check.sh` resolves the
 binary with a bare `command -v ledger`, returns **1** when it finds nothing, and its `main`
 reads 1 as _stale entities found_, so the ledger-drift agent would have pushed false drift

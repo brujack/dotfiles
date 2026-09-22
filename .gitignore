@@ -22,15 +22,25 @@ powershell/coverage.xml
 # bash/kcov coverage output
 coverage/
 
-# Python tooling artifacts. Reachable as of this branch: the repo went from one
-# Python script to two scripts plus two suites, so `coverage run` and a bytecode
-# cache now land here. repo-structure.md's canonical .gitignore template lists
-# all four; dotfiles carried none of them because it had almost no Python.
+# Python tooling artifacts, from repo-structure.md's canonical template, which
+# lists exactly these four.
+#
+# `.coverage` is the only one that was genuinely untracked here -- a `coverage
+# run` during review left one in the worktree, one `git add -A` from being
+# committed. `__pycache__/` and `*.pyc` were already covered two ways:
+# `.gitignore_global` carries both, and `.claude/scripts/*` below already
+# shadows that directory. They are repeated here anyway because a global
+# excludesFile is per-machine and buys nothing on CI or a fresh clone.
+#
+# `.hypothesis/` is deliberately ABSENT. Hypothesis writes
+# `.hypothesis/.gitignore` containing `*`, so the directory ignores itself and
+# needs no entry anywhere -- measured in 95b67ea2 on this branch, which removed
+# exactly this line from .gitignore_global for exactly this reason. Do not
+# re-add it; if a future Hypothesis stops self-ignoring, say so here.
 __pycache__/
 *.pyc
 .coverage
 htmlcov/
-.hypothesis/
 
 # .claude/ and .cursor/ have moved to ~/git-repos/personal/ai-config
 # These entries prevent leftover on-disk directories from being tracked
