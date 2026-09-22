@@ -69,7 +69,7 @@ The validator (`~/.claude/scripts/validate-plan.py`, shared from ai-config) enfo
 
 ## Knowledge Directory
 
-Reference material for this repo lives in `ai-config/docs/knowledge/` under `dotfiles-<topic>.md` naming (per ADR-0020). The local `docs/knowledge/README.md` is a pointer stub. See `ai-config/docs/knowledge/README.md` for the master index.
+Reference material for this repo lives in `ai-config/docs/knowledge/` under `dotfiles-<topic>.md` naming (per ADR-0020). The local `docs/knowledge/README.md` is a pointer stub.
 
 When web research (web-research skill) or context-mode fetches produce findings worth preserving, save to `ai-config/docs/knowledge/dotfiles-<topic>.md`.
 
@@ -231,10 +231,7 @@ Requires: admin terminal (symlinks need elevation), `GITHUB_PAT` env var for MCP
 All tool versions are defined as constants in `lib/constants.sh`:
 
 ```bash
-GO_VER="1.27"
-PYTHON_VER="3.14.6"
-RUBY_VER="4.0.5"
-RUSTUP_VER="1.29.1"
+# see lib/constants.sh for current pins: GO_VER, PYTHON_VER, RUBY_VER, RUSTUP_VER
 ```
 
 Update these constants when bumping versions — don't hardcode versions elsewhere.
