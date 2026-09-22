@@ -3,7 +3,9 @@
 Loaded by path (the script is not a package) — same pattern as test_triage_log.py.
 """
 
+import contextlib
 import importlib.util
+import io
 import sys
 import tempfile
 import unittest
@@ -26,6 +28,15 @@ def _load():
 
 
 _PC = _load()
+
+
+def _run_and_capture(argv: list[str]) -> tuple[int, str]:
+    """Run main() and return (rc, combined stdout+stderr) regardless of which
+    stream the tool writes its informational output to."""
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        rc = _PC.main(argv)
+    return rc, out.getvalue() + err.getvalue()
 
 
 class PhraseCheckTestCase(unittest.TestCase):
@@ -471,3 +482,221 @@ class TestParagraphCoverage(PhraseCheckTestCase):
              "--assert-complete-derived"]
         )
         self.assertEqual(rc, 0)
+
+
+class TestIsExcludedParagraph(unittest.TestCase):
+    """Unit tests for the exclusion predicate itself, independent of the CLI."""
+
+    def test_one_hash_heading_is_excluded(self):
+        self.assertTrue(_PC.is_excluded_paragraph("# Title"))
+
+    def test_six_hash_heading_is_excluded(self):
+        self.assertTrue(_PC.is_excluded_paragraph("###### Deep Heading"))
+
+    def test_three_dash_rule_is_excluded(self):
+        self.assertTrue(_PC.is_excluded_paragraph("---"))
+
+    def test_many_dash_rule_is_excluded(self):
+        self.assertTrue(_PC.is_excluded_paragraph("----------"))
+
+    def test_two_dashes_is_not_a_rule(self):
+        self.assertFalse(_PC.is_excluded_paragraph("--"))
+
+    def test_ordinary_prose_is_not_excluded(self):
+        self.assertFalse(_PC.is_excluded_paragraph("Just a normal sentence here."))
+
+    def test_fenced_code_block_is_not_excluded(self):
+        self.assertFalse(_PC.is_excluded_paragraph("```bash\necho hi\n```"))
+
+    def test_heading_with_prose_in_same_chunk_is_not_excluded(self):
+        self.assertFalse(
+            _PC.is_excluded_paragraph(
+                "## Heading\nFollowing prose in the same chunk."
+            )
+        )
+
+    def test_heading_with_surrounding_whitespace_is_still_excluded(self):
+        self.assertTrue(_PC.is_excluded_paragraph("   ## Heading   "))
+
+
+class TestExcludedParagraphsDoNotCountTowardDerivedCoverage(PhraseCheckTestCase):
+    """A heading-only or rule-only chunk has no claim sentence for a manifest
+    row's phrase to be drawn from, so it must not inflate the derived
+    denominator or require a row of its own."""
+
+    def test_heading_only_paragraph_excluded_from_derived_count(self):
+        source = self._write(
+            "source.md",
+            "## Heading One\n\nContent paragraph text here.",
+        )
+        manifest = self._write_manifest(
+            "phrases.md",
+            ["HAZARD | ontent paragraph text here | | | note"],
+        )
+        rc = _PC.main(
+            [
+                "--manifest", str(manifest),
+                "--source", str(source),
+                "--assert-complete-derived",
+            ]
+        )
+        self.assertEqual(rc, 0)
+
+    def test_separator_only_paragraph_excluded_from_derived_count(self):
+        source = self._write(
+            "source.md",
+            "Content paragraph text here.\n\n---\n\nSecond content paragraph.",
+        )
+        manifest = self._write_manifest(
+            "phrases.md",
+            [
+                "HAZARD | ontent paragraph text here | | | note",
+                "HAZARD | econd content paragraph | | | note",
+            ],
+        )
+        rc = _PC.main(
+            [
+                "--manifest", str(manifest),
+                "--source", str(source),
+                "--assert-complete-derived",
+            ]
+        )
+        self.assertEqual(rc, 0)
+
+    def test_fenced_code_block_paragraph_is_not_excluded_and_still_requires_a_row(
+        self,
+    ):
+        source = self._write(
+            "source.md",
+            "Intro paragraph text here.\n\n```bash\necho hello\n```",
+        )
+        manifest = self._write_manifest(
+            "phrases.md",
+            ["HAZARD | ntro paragraph text here | | | note"],
+        )
+        rc = _PC.main(
+            [
+                "--manifest", str(manifest),
+                "--source", str(source),
+                "--assert-complete-derived",
+            ]
+        )
+        self.assertNotEqual(rc, 0)
+
+    def test_markdown_table_paragraph_is_not_excluded(self):
+        source = self._write(
+            "source.md",
+            "Intro paragraph text here.\n\n"
+            "| Var | Values |\n| --- | --- |\n| PROFILE | example |",
+        )
+        manifest = self._write_manifest(
+            "phrases.md",
+            ["HAZARD | ntro paragraph text here | | | note"],
+        )
+        rc = _PC.main(
+            [
+                "--manifest", str(manifest),
+                "--source", str(source),
+                "--assert-complete-derived",
+            ]
+        )
+        self.assertNotEqual(rc, 0)
+
+    def test_heading_with_following_prose_in_same_chunk_is_not_excluded(self):
+        source = self._write(
+            "source.md",
+            "## Heading With Prose\nThis is prose right after the heading.",
+        )
+        manifest = self._write_manifest("phrases.md", [])
+        rc = _PC.main(
+            [
+                "--manifest", str(manifest),
+                "--source", str(source),
+                "--assert-complete-derived",
+            ]
+        )
+        self.assertNotEqual(rc, 0)
+
+    def test_manifest_covering_content_but_no_heading_now_passes(self):
+        # Before the exclusion, this manifest (3 rows) would have failed
+        # --assert-complete-derived twice over: the row count would be
+        # short against 7 raw paragraphs, and the 4 heading/rule chunks
+        # would each report "no manifest row". With headings and the rule
+        # excluded, the 3 content paragraphs are the whole denominator.
+        source = self._write(
+            "source.md",
+            "# Title\n\n"
+            "## Section One\n\n"
+            "First content paragraph.\n\n"
+            "## Section Two\n\n"
+            "Second content paragraph.\n\n"
+            "---\n\n"
+            "Third content paragraph.",
+        )
+        manifest = self._write_manifest(
+            "phrases.md",
+            [
+                "HAZARD | irst content paragraph | | | note",
+                "HAZARD | econd content paragraph | | | note",
+                "HAZARD | hird content paragraph | | | note",
+            ],
+        )
+        rc = _PC.main(
+            [
+                "--manifest", str(manifest),
+                "--source", str(source),
+                "--assert-complete-derived",
+            ]
+        )
+        self.assertEqual(rc, 0)
+
+
+class TestDerivedDenominatorIsReported(PhraseCheckTestCase):
+    """The tool must state the denominator it used and how many paragraphs
+    it excluded, on success as well as on failure -- a ratio over an
+    unstated denominator is not a coverage figure."""
+
+    def test_success_output_states_denominator_and_excluded_count(self):
+        source = self._write(
+            "source.md",
+            "## Heading One\n\nContent paragraph one.\n\nContent paragraph two.",
+        )
+        manifest = self._write_manifest(
+            "phrases.md",
+            [
+                "HAZARD | ontent paragraph one | | | note",
+                "HAZARD | ontent paragraph two | | | note",
+            ],
+        )
+        rc, combined = _run_and_capture(
+            [
+                "--manifest", str(manifest),
+                "--source", str(source),
+                "--assert-complete-derived",
+            ]
+        )
+        self.assertEqual(rc, 0)
+        self.assertIn("excluded", combined)
+        self.assertIn("denominator=2", combined)
+        self.assertIn("excluded=1", combined)
+
+    def test_failure_output_also_states_denominator_and_excluded_count(self):
+        source = self._write(
+            "source.md",
+            "## Heading One\n\nContent paragraph one.\n\nContent paragraph two.",
+        )
+        manifest = self._write_manifest(
+            "phrases.md",
+            ["HAZARD | ontent paragraph one | | | note"],
+        )
+        rc, combined = _run_and_capture(
+            [
+                "--manifest", str(manifest),
+                "--source", str(source),
+                "--assert-complete-derived",
+            ]
+        )
+        self.assertNotEqual(rc, 0)
+        self.assertIn("excluded", combined)
+        self.assertIn("denominator=2", combined)
+        self.assertIn("excluded=1", combined)
