@@ -204,7 +204,11 @@ def paragraph_start_norms(source_text: str) -> list[str]:
     opens that paragraph and is sentence-initial regardless of what
     precedes it in the flattened haystack.
     """
-    return [normalize(p) for p in split_paragraphs(source_text)]
+    # lstrip: normalize() collapses a run of whitespace to a single space but does
+    # not remove it, so an indented paragraph's norm would begin with that space
+    # and startswith() could never match -- the arm would fail OPEN for the 15 of
+    # 249 CLAUDE.md paragraphs that begin indented.
+    return [normalize(p).lstrip() for p in split_paragraphs(source_text)]
 
 
 def match_phrase(

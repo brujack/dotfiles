@@ -92,6 +92,52 @@ class TestNormalize(unittest.TestCase):
         self.assertEqual(once, twice)
 
 
+class TestParagraphPrefixArmHandlesIndentedParagraphs(PhraseCheckTestCase):
+    """The paragraph-prefix arm must fire for a paragraph that begins indented.
+
+    normalize() collapses a run of whitespace to a single space but does not
+    strip it, so an indented paragraph's stored norm starts with that space
+    and `para.startswith(phrase)` never matches. The arm then fails OPEN --
+    a fragile paragraph-initial phrase is certified safe.
+
+    Every case here gives the PREVIOUS block no sentence-ending punctuation,
+    so the punctuation arm cannot fire and only the prefix arm can. A fixture
+    whose previous paragraph ends in '.' passes either way and discriminates
+    nothing.
+    """
+
+    def test_indented_paragraph_start_is_sentence_initial(self):
+        for name, indent in (("two spaces", "  "), ("a tab", "\t"), ("none", "")):
+            with self.subTest(indent=name):
+                source = f"The rules are:\n\n{indent}Delta epsilon zeta here."
+                norms = _PC.paragraph_start_norms(source)
+                count, initial = _PC.match_phrase(
+                    _PC.normalize(source), "Delta epsilon zeta here.", norms
+                )
+                self.assertEqual(count, 1)
+                self.assertTrue(initial)
+
+    def test_a_genuinely_mid_paragraph_phrase_is_not_flagged(self):
+        source = "The rules are:\n\n  Delta epsilon zeta here."
+        norms = _PC.paragraph_start_norms(source)
+        count, initial = _PC.match_phrase(_PC.normalize(source), "epsilon zeta here.", norms)
+        self.assertEqual(count, 1)
+        self.assertFalse(initial)
+
+
+class TestNoCheckRequestedIsAnError(PhraseCheckTestCase):
+    """A manifest-only invocation must not report success having checked nothing.
+
+    The `ran_any` guard is the sibling of the --survives zero-row guard: both
+    exist so the tool cannot run, examine nothing, and exit 0. Mutation
+    testing found this one pinned by no test at all.
+    """
+
+    def test_manifest_without_any_check_flag_errors(self):
+        path = self._write_manifest("m.md", ["HAZARD | alpha beta gamma | - | - | n"])
+        self.assertEqual(_PC.main(["--manifest", str(path)]), 2)
+
+
 class TestManifestSplitsOnNewlineOnly(PhraseCheckTestCase):
     """A phrase carrying a Unicode line separator must stay one row.
 
