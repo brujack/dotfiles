@@ -416,6 +416,69 @@ depends_on: [10]
       therefore reads the untrimmed file and reports the baseline, and the resulting
       `RESULT_CONTEXT` would be a measurement of the wrong artifact that looks exactly like
       a measurement of the right one. `depends_on: [10]` is necessary and not sufficient.
+- [ ] **RETIRED: no probe dispatched from a long-running session can measure a change to
+      its own preamble's file content. Measured 2026-09-22, and this supersedes the
+      confounding analysis below rather than refining it.**
+
+      ai-config merged an 11,958 B trim of the fleet-shared standards. Verified live through
+      the symlinked paths my preamble reads: 427,663 -> 415,705 B, delta exact, ai-config
+      HEAD at the merge commit, 0 behind. A probe taken immediately after returned
+      **185,853 — identical to the anchor, delta 0.**
+
+      The cache breakdown is the diagnosis:
+
+      ```
+      probe              input  cache_read  cache_creation     total
+      baseline-era 1        10           0         185,835   185,845
+      baseline-era 2        10     185,835               0   185,845
+      anchor A              10           0         185,843   185,853
+      anchor B              10     185,843               0   185,853
+      P1  post-merge        10     185,843               0   185,853   <- cache READ
+      ```
+
+      P1 is a cache hit on the block anchor A created *before* the pull. A prompt cache is
+      keyed on prefix content, so a hit means the composed prompt was byte-identical and the
+      post-merge standards never entered it.
+
+      **The +8 proves the mechanism rather than contradicting it.** Between the baseline-era
+      probes and the anchor pair, `CLAUDE.md` content did not change but a peer commit
+      landed; the total moved +8 and a *new* cache block was created. So the dynamic blocks
+      — git status, recent commits — are recomposed per dispatch, while the file content of
+      `CLAUDE.md` and its `@`-imports does not change for the life of the session.
+
+      **The freeze is upstream of the cache, established by a second session's probe that
+      discriminates where this one could not.** A cache *hit* on an identical prefix is
+      consistent with two causes: a stale cache serving old content, or a frozen
+      composition the cache is faithfully storing. The ai-config session's probe separates
+      them — it ran in a session started pre-merge, after a mid-session pull it had
+      verified on disk, and recorded:
+
+      ```
+      turn-1: input=10  cache_read=16,588  cache_creation=146,491  TOTAL=163,089
+      pre-merge baseline, same session:                            TOTAL=163,091
+      bytes removed from that repo's launch load:                       -13,715
+      ```
+
+      That is a cache **miss** — 146k of new block written — returning the pre-merge total
+      anyway, and -2 tokens against -13,715 B. A cache-keyed explanation predicts that a
+      miss recomposes from disk. It does not. So the session's preamble is frozen at
+      session start and the cache stores the frozen composition faithfully.
+
+      Two consequences. Anything built on *clear the cache and re-probe* fails for the same
+      reason. And the two derivations are genuinely independent — cache-block structure
+      here, an absolute number against a just-verified disk state there — which is the
+      standard this corpus requires before believing an agreement.
+
+      **Consequence.** The A/B design controlled for session-local drift, and session-local
+      drift is the only thing it can see. `BASELINE_CONTEXT`, `CONTROL_*`, `FRESH_ANCHOR`
+      and `P1` are all true measurements of this session's preamble at their moment, and
+      none is comparable to another across a content change. The byte figures are unaffected:
+      11,958 and 1,566 are `wc -c`, verified independently by two sessions.
+
+      **The measurement that was always available:** `/context` in a fresh session, which
+      composes its preamble from disk. One command, no baseline, no protocol. Neither
+      session reached for it.
+
 - [ ] **The naive before/after probe is confounded and cannot resolve this trim. Measured,
       2026-09-22.** A control probe run with the main checkout's `CLAUDE.md` *byte-identical*
       to the baseline returned **185,845** against `BASELINE_CONTEXT=185132` — **+713 tokens
@@ -523,4 +586,8 @@ CONTROL_CONTEXT_UNCHANGED_FILE=185845
 CONTROL_DRIFT=+713
 CONTROL_PROBE_2=185845
 CONTROL_ADJACENT_DRIFT=0
+FRESH_ANCHOR=185853
+P1_POST_MERGE=185853
+P1_DELTA=0
+PROBE_VERDICT=INVALID — see below
 ```
