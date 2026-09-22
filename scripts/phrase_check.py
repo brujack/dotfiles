@@ -32,6 +32,8 @@ from pathlib import Path
 
 _WHITESPACE_RE = re.compile(r"\s+")
 _SENTENCE_END_CHARS = (".", "!", "?")
+_HEADING_ONLY_RE = re.compile(r"^#{1,6} .+$")
+_RULE_ONLY_RE = re.compile(r"^-{3,}$")
 
 
 class ManifestError(Exception):
@@ -98,9 +100,47 @@ def parse_manifest(path: Path) -> list[Row]:
     return rows
 
 
-def derive_paragraph_count(text: str) -> int:
-    """Count non-empty blank-line-delimited paragraphs, matching the baseline probe's method."""
-    return len([p for p in text.split("\n\n") if p.strip()])
+def split_paragraphs(text: str) -> list[str]:
+    """Split text into non-empty blank-line-delimited paragraphs."""
+    return [p for p in text.split("\n\n") if p.strip()]
+
+
+def is_excluded_paragraph(paragraph: str) -> bool:
+    """True when a paragraph carries no claim sentence for a manifest row.
+
+    This exclusion follows from THIS TOOL's row contract, not from any
+    general claim that headings are unimportant: a manifest row's phrase is
+    drawn from a paragraph's claim sentence, and a chunk that is entirely one
+    markdown ATX heading or entirely a horizontal rule has no sentence to
+    draw one from. A fenced code block or a markdown table is real content
+    and is never excluded here -- only these two content-free chunk shapes
+    are.
+
+    Do not copy this predicate into a tool with a different contract. A
+    sibling tool computing "coverage" over the same kind of corpus, where
+    every paragraph either survives unchanged or carries a disposition,
+    finds a heading perfectly countable -- it can itself be deleted or
+    promoted (a real case: two `###` subsections promoted to `##`) -- and
+    excluding headings there would silently drop a recorded event. A
+    denominator follows the contract, not the file.
+    """
+    stripped = paragraph.strip()
+    if not stripped:
+        return False
+    return bool(_HEADING_ONLY_RE.fullmatch(stripped)) or bool(
+        _RULE_ONLY_RE.fullmatch(stripped)
+    )
+
+
+def classify_paragraphs(text: str) -> tuple[list[str], int]:
+    """Split into paragraphs and separate classifiable ones from excluded ones.
+
+    Returns (classifiable_paragraphs, excluded_count). See
+    is_excluded_paragraph for what "excluded" means and why.
+    """
+    paragraphs = split_paragraphs(text)
+    classifiable = [p for p in paragraphs if not is_excluded_paragraph(p)]
+    return classifiable, len(paragraphs) - len(classifiable)
 
 
 def find_occurrences(haystack_norm: str, needle_norm: str) -> list[int]:
@@ -158,7 +198,11 @@ def check_complete(row_count: int, minimum: int) -> list[str]:
 
 
 def check_paragraph_coverage(rows: list[Row], source_text: str) -> list[str]:
-    """Every source paragraph must carry at least one manifest row.
+    """Every classifiable source paragraph must carry at least one manifest row.
+
+    A heading-only or rule-only paragraph is excluded from this population --
+    see is_excluded_paragraph -- so this walks the same paragraph list the
+    derived count is computed over.
 
     A row count equal to the paragraph count is an aggregate, and coverage is a
     per-paragraph property: a manifest whose rows all sit in one paragraph
@@ -167,7 +211,7 @@ def check_paragraph_coverage(rows: list[Row], source_text: str) -> list[str]:
     the manifest -- so it is absent from numerator and denominator alike and
     the figure does not move.
     """
-    paragraphs = [p for p in source_text.split("\n\n") if p.strip()]
+    paragraphs, _ = classify_paragraphs(source_text)
     phrases = [normalize(row.phrase) for row in rows]
     errors: list[str] = []
     for index, paragraph in enumerate(paragraphs, start=1):
@@ -316,7 +360,13 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.assert_complete_derived:
         ran_any = True
-        minimum = derive_paragraph_count(source_text)
+        classifiable, excluded = classify_paragraphs(source_text)
+        minimum = len(classifiable)
+        print(
+            f"assert-complete-derived: denominator={minimum} paragraph(s), "
+            f"excluded={excluded} (heading/rule chunks with no claim sentence)",
+            file=sys.stderr,
+        )
         errors += check_complete(len(rows), minimum)
         errors += check_paragraph_coverage(rows, source_text)
 
