@@ -138,6 +138,17 @@ depends_on: [2]
 parallel_group: manifest
 ```
 
+> **The `phrases-*.md` gate above is point-in-time and is RED at merge — deliberately.**
+> These fragment files are *inputs*, consumed when Task 6 merged them into
+> `phrases.md`. Tasks 7 and 8 then deleted or re-anchored the CLAUDE.md text some
+> fragment rows pointed at, so `--assert-unique` against a fragment no longer passes.
+> Measured by replaying every commit on this branch: the gate was green when this task
+> ran (`865f25fc`..`c0311c63`) and went red at `ee32e12f`/`2b2a86d5`, the deletion
+> commits. Nothing degraded — the merged `phrases.md` is the live artifact and its gates
+> are green. A replay of this plan today will show these two reds; they carry no
+> information, which is exactly the argument that retired the index-pinned Task 6 gate.
+
+
 **Files:** `docs/superpowers/plans/phrases-a.md` (new).
 
 One row per sub-paragraph, pipe-separated: `class | phrase | counterpart-file | counterpart-symbol | note`.
@@ -201,6 +212,17 @@ depends_on: [2]
 parallel_group: manifest
 ```
 
+> **The `phrases-*.md` gate above is point-in-time and is RED at merge — deliberately.**
+> These fragment files are *inputs*, consumed when Task 6 merged them into
+> `phrases.md`. Tasks 7 and 8 then deleted or re-anchored the CLAUDE.md text some
+> fragment rows pointed at, so `--assert-unique` against a fragment no longer passes.
+> Measured by replaying every commit on this branch: the gate was green when this task
+> ran (`865f25fc`..`c0311c63`) and went red at `ee32e12f`/`2b2a86d5`, the deletion
+> commits. Nothing degraded — the merged `phrases.md` is the live artifact and its gates
+> are green. A replay of this plan today will show these two reds; they carry no
+> information, which is exactly the argument that retired the index-pinned Task 6 gate.
+
+
 **Files:** `docs/superpowers/plans/phrases-c.md` (new).
 
 Same row format and phrase rules as Task 3.
@@ -226,9 +248,9 @@ acceptance:
     exit_code: 0
   - cmd: 'test "$(python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --assert-complete-derived 2>&1 | grep -c "has no manifest row")" = 2'
     exit_code: 0
-  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --assert-complete-derived 2>&1 | grep -q "no manifest row: .@~/.claude/standards/powershell.md."'
+  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --assert-complete-derived 2>&1 | grep -q "no manifest row: .@~/.claude/standards/powershell.md.$"'
     exit_code: 0
-  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --assert-complete-derived 2>&1 | grep -q "no manifest row: .CI requirements:."'
+  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --assert-complete-derived 2>&1 | grep -q "no manifest row: .CI requirements:.$"'
     exit_code: 0
 max_retries: 3
 files_touched: [docs/superpowers/plans/phrases.md]

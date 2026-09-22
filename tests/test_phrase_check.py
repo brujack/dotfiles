@@ -125,6 +125,68 @@ class TestParagraphPrefixArmHandlesIndentedParagraphs(PhraseCheckTestCase):
         self.assertFalse(initial)
 
 
+class TestParagraphPrefixArmSeesThroughProseMarkers(PhraseCheckTestCase):
+    """A phrase opening a paragraph behind a prose marker is still paragraph-initial.
+
+    The prefix arm compares against the paragraph's normalised text, so a
+    leading `- `, `> `, `1. ` or `### ` sits between the marker and the
+    phrase and `startswith()` cannot match. The arm then fails OPEN for the
+    exact case it exists to catch: a bullet's first word carries the same
+    position-dependent capital a sentence's first word does.
+
+    Every fixture ends the previous block without sentence-ending
+    punctuation, so the punctuation arm cannot fire and only the prefix arm
+    discriminates.
+    """
+
+    def test_phrase_opening_a_paragraph_behind_a_prose_marker_is_initial(self):
+        for name, marker in (
+            ("dash bullet", "- "),
+            ("star bullet", "* "),
+            ("plus bullet", "+ "),
+            ("blockquote", "> "),
+            ("ordered dot", "1. "),
+            ("ordered paren", "2) "),
+            ("heading", "### "),
+        ):
+            with self.subTest(marker=name):
+                source = f"The rules are:\n\n{marker}Delta epsilon zeta here."
+                norms = _PC.paragraph_start_norms(source)
+                count, initial = _PC.match_phrase(
+                    _PC.normalize(source), "Delta epsilon zeta here.", norms
+                )
+                self.assertEqual(count, 1)
+                self.assertTrue(initial)
+
+    def test_a_fenced_code_line_is_NOT_treated_as_paragraph_initial(self):
+        """Deliberate exclusion, pinned so nobody "completes" the marker list.
+
+        The rule rejects a phrase whose leading capital is a function of its
+        POSITION. A line inside a fence has its case fixed by the shell --
+        `make`, `./setup_env.sh`, `grep -A1` are lowercase wherever they
+        appear -- so the rationale does not reach it. Measured 2026-09-22
+        against this repo's own manifest: stripping fences alongside prose
+        markers turns 10 correctly-anchored rows RED and 3 genuinely
+        fragile ones, so the wider rule is 4x the hazard and mostly wrong.
+        """
+        source = "The command is:\n\n```bash\nmake validate-plan PLAN=x\n```"
+        norms = _PC.paragraph_start_norms(source)
+        count, initial = _PC.match_phrase(
+            _PC.normalize(source), "make validate-plan PLAN=x", norms
+        )
+        self.assertEqual(count, 1)
+        self.assertFalse(initial)
+
+    def test_a_mid_bullet_phrase_is_not_flagged(self):
+        source = "The rules are:\n\n- Delta epsilon zeta here."
+        norms = _PC.paragraph_start_norms(source)
+        count, initial = _PC.match_phrase(
+            _PC.normalize(source), "epsilon zeta here.", norms
+        )
+        self.assertEqual(count, 1)
+        self.assertFalse(initial)
+
+
 class TestNoCheckRequestedIsAnError(PhraseCheckTestCase):
     """A manifest-only invocation must not report success having checked nothing.
 

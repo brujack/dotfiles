@@ -34,6 +34,10 @@ _WHITESPACE_RE = re.compile(r"\s+")
 _SENTENCE_END_CHARS = (".", "!", "?")
 _HEADING_ONLY_RE = re.compile(r"^#{1,6} .+$")
 _RULE_ONLY_RE = re.compile(r"^-{3,}$")
+# Leading markdown markers that shield a paragraph's first word from the
+# prefix arm in paragraph_start_norms. Prose markers only -- see the comment
+# there for why a code fence is deliberately absent.
+_PROSE_MARKER_RE = re.compile(r"^(?:[-*+] |> |\d+[.)] |#{1,6} )+")
 
 
 class ManifestError(Exception):
@@ -208,7 +212,25 @@ def paragraph_start_norms(source_text: str) -> list[str]:
     # not remove it, so an indented paragraph's norm would begin with that space
     # and startswith() could never match -- the arm would fail OPEN for the 15 of
     # 249 CLAUDE.md paragraphs that begin indented.
-    return [normalize(p).lstrip() for p in split_paragraphs(source_text)]
+    #
+    # _PROSE_MARKER_RE: the same failure one marker over. A paragraph opening
+    # "- **Phase 1 ...**" keeps its marker in the norm, so startswith() misses a
+    # phrase beginning right after it -- and a bullet's first word carries the
+    # same position-dependent capital a sentence's first word does.
+    #
+    # A code fence is DELIBERATELY not in that pattern. The rule rejects a
+    # phrase whose leading capital is a function of its POSITION; a line inside
+    # a fence has its case fixed by the shell (`make`, `./setup_env.sh`,
+    # `grep -A1` are lowercase wherever they sit), so the rationale does not
+    # reach it. Measured 2026-09-22 against this repo's own manifest: stripping
+    # fences too turns 10 correctly-anchored rows RED against 3 genuinely
+    # fragile ones -- 4x the hazard, and mostly wrong. Both halves are pinned
+    # in tests/test_phrase_check.py, the fence half as a negative control so
+    # nobody "completes" the marker list later.
+    return [
+        _PROSE_MARKER_RE.sub("", normalize(p).lstrip())
+        for p in split_paragraphs(source_text)
+    ]
 
 
 def match_phrase(
