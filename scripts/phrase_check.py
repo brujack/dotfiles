@@ -67,7 +67,13 @@ def parse_manifest(path: Path) -> list[Row]:
     wrapped in a leading/trailing '|' (markdown-table style); either form is accepted.
     """
     try:
-        raw_lines = path.read_text(encoding="utf-8").splitlines()
+        # Split on LF only. str.splitlines() also breaks on VT, FF, FS, GS,
+        # RS, NEL, LS and PS, so a phrase carrying one of those is silently
+        # cut into two rows and truncated at the separator -- measured: 2
+        # rows, phrase "alpha". No exception is raised, so the manifest
+        # parses and the truncated phrase then fails to match, or matches a
+        # span it was never meant to.
+        raw_lines = path.read_text(encoding="utf-8").split("\n")
     except OSError as exc:
         raise ManifestError(f"cannot read manifest {path}: {exc}") from exc
 

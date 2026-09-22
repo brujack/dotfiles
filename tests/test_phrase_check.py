@@ -88,6 +88,38 @@ class TestNormalize(unittest.TestCase):
         self.assertEqual(once, twice)
 
 
+class TestManifestSplitsOnNewlineOnly(PhraseCheckTestCase):
+    """A phrase carrying a Unicode line separator must stay one row.
+
+    str.splitlines() breaks on VT, FF, FS, GS, RS, NEL, LS and PS as well as
+    LF, so a phrase containing one is silently split into two rows and the
+    phrase is truncated at the separator -- measured: 2 rows, phrase 'alpha'.
+    No exception is raised, so the manifest parses and the truncated phrase
+    then fails to match, or matches something it was never meant to.
+    CLAUDE.md carries none of these today, so this is latent rather than live.
+    """
+
+    def test_a_unicode_line_separator_in_a_phrase_stays_one_row(self):
+        for name, sep in (
+            ("LS", "\u2028"),
+            ("PS", "\u2029"),
+            ("NEL", "\x85"),
+            ("VT", "\x0b"),
+            ("FF", "\x0c"),
+            ("FS", "\x1c"),
+            ("GS", "\x1d"),
+            ("RS", "\x1e"),
+        ):
+            with self.subTest(separator=name):
+                path = self._write_manifest(
+                    f"sep-{name}.md",
+                    [f"HAZARD | alpha{sep}beta gamma | - | - | note"],
+                )
+                rows = _PC.parse_manifest(path)
+                self.assertEqual(len(rows), 1)
+                self.assertEqual(rows[0].phrase, f"alpha{sep}beta gamma")
+
+
 class TestPhraseSpanningLineWrapIsFound(PhraseCheckTestCase):
     """RED test 1: the defect that retired grep -n."""
 
