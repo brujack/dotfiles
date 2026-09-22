@@ -409,6 +409,13 @@ depends_on: [10]
 
 **Files:** this plan file.
 
+- [ ] **This task runs AFTER the merge, not after Task 10.** A subagent's preamble is
+      composed from the *session's project directory*, which is the main checkout — not the
+      worktree the trim lives in. Measured while the branch was unmerged: main checkout
+      `CLAUDE.md` 179,650 B, worktree 178,084 B. A probe dispatched from an unmerged branch
+      therefore reads the untrimmed file and reports the baseline, and the resulting
+      `RESULT_CONTEXT` would be a measurement of the wrong artifact that looks exactly like
+      a measurement of the right one. `depends_on: [10]` is necessary and not sufficient.
 - [ ] Re-run Task 1's probe verbatim, same prompt, same turn-1 extraction.
 - [ ] Record `RESULT_BYTES`, `RESULT_CONTEXT`, and the two deltas.
 - [ ] **Report the byte delta and the token delta side by side.** A token delta materially smaller than the byte delta implies is a finding about the trim, not a rounding artifact — record it rather than explaining it away.
