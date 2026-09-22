@@ -138,6 +138,17 @@ depends_on: [2]
 parallel_group: manifest
 ```
 
+> **The `phrases-*.md` gate above is point-in-time and is RED at merge — deliberately.**
+> These fragment files are *inputs*, consumed when Task 6 merged them into
+> `phrases.md`. Tasks 7 and 8 then deleted or re-anchored the CLAUDE.md text some
+> fragment rows pointed at, so `--assert-unique` against a fragment no longer passes.
+> Measured by replaying every commit on this branch: the gate was green when this task
+> ran (`865f25fc`..`c0311c63`) and went red at `ee32e12f`/`2b2a86d5`, the deletion
+> commits. Nothing degraded — the merged `phrases.md` is the live artifact and its gates
+> are green. A replay of this plan today will show these two reds; they carry no
+> information, which is exactly the argument that retired the index-pinned Task 6 gate.
+
+
 **Files:** `docs/superpowers/plans/phrases-a.md` (new).
 
 One row per sub-paragraph, pipe-separated: `class | phrase | counterpart-file | counterpart-symbol | note`.
@@ -174,7 +185,7 @@ parallel_group: manifest
 
 Same row format and phrase rules as Task 3.
 
-- [ ] Scope: `## Testing` intro, `### ShellCheck`, `### Testing Rules`, `### PowerShell Testing`, `### Coverage`, `### Mock Pattern`. **Exclude** `### Test Seams` and `### MAKEFLAGS and Stdout Partition` — Task 4 owns those.
+- [ ] Scope: `## Testing` intro, `### ShellCheck`, `### Testing Rules`, `### PowerShell Testing`, `### Coverage`, `### Mock Pattern`. **Exclude** `### Test Seams` and `### MAKEFLAGS and Stdout Partition` — Task 5 owns those.
 - [ ] Known DUPLICATE counterparts for this scope: `shell.md` (moreutils/`HAVE_PARALLEL` detection, the `SC1091` structurally-unavoidable rationale, file-wide directive scope, `SC1124`, the `git ls-files` pathspec argument), `ci.md` (`$(nproc)` is the worst worker count on a 2-vCPU runner), `git-workflow.md` (`GIT_DIR` strip in `pre-push`), and `ai-config/docs/knowledge/dotfiles-bats-test-infrastructure.md` (pass-through mocks, `env -i` strips PATH).
 - [ ] Three paragraphs in this scope were checked and are **not** duplicated — ggshield actor-boundary resolution, `tests/mocks/curl` short-option-cluster parsing, and the `-o` deferred-write semantics. Class them HAZARD.
 
@@ -201,6 +212,17 @@ depends_on: [2]
 parallel_group: manifest
 ```
 
+> **The `phrases-*.md` gate above is point-in-time and is RED at merge — deliberately.**
+> These fragment files are *inputs*, consumed when Task 6 merged them into
+> `phrases.md`. Tasks 7 and 8 then deleted or re-anchored the CLAUDE.md text some
+> fragment rows pointed at, so `--assert-unique` against a fragment no longer passes.
+> Measured by replaying every commit on this branch: the gate was green when this task
+> ran (`865f25fc`..`c0311c63`) and went red at `ee32e12f`/`2b2a86d5`, the deletion
+> commits. Nothing degraded — the merged `phrases.md` is the live artifact and its gates
+> are green. A replay of this plan today will show these two reds; they carry no
+> information, which is exactly the argument that retired the index-pinned Task 6 gate.
+
+
 **Files:** `docs/superpowers/plans/phrases-c.md` (new).
 
 Same row format and phrase rules as Task 3.
@@ -224,12 +246,45 @@ tdd: not-applicable
 acceptance:
   - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --assert-unique'
     exit_code: 0
-  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --assert-complete-derived'
+  - cmd: 'test "$(python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --assert-complete-derived 2>&1 | grep -c "has no manifest row")" = 2'
+    exit_code: 0
+  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --assert-complete-derived 2>&1 | grep -q "no manifest row: .@~/.claude/standards/powershell.md.$"'
+    exit_code: 0
+  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --assert-complete-derived 2>&1 | grep -q "no manifest row: .CI requirements:.$"'
     exit_code: 0
 max_retries: 3
 files_touched: [docs/superpowers/plans/phrases.md]
 depends_on: [3, 4, 5]
 ```
+
+> **Task 6's derived-coverage gate was declared `exit_code: 0` and can never reach it.
+> Corrected during pr-review cycle 1, after the gate was found red at every commit on
+> this branch while Tasks 7 and 8 landed on top of it.**
+>
+> Two of the 249 content paragraphs admit no valid phrase at all, proven by exhaustive
+> search under the tool's own `match_phrase`: `@~/.claude/standards/powershell.md`
+> — uniqueness needs the leading `@`, which sits immediately after a sentence-ending
+> period, so every unique candidate is sentence-initial — and `CI requirements:`, whose
+> whole text occurs inside `**Sync CI requirements:**` elsewhere, so no substring of it
+> is unique. A gate demanding zero uncovered was asserting something the corpus cannot
+> satisfy. That is the trust-signal failure in its permissive form: it was never going
+> to go green, so its red carried no information and nobody acted on it.
+>
+> Replaced by three gates pinning the **exact** exemption set rather than a count of
+> zero: uncovered must be exactly 2, and must be those two paragraphs **identified by
+> their text**, not by their index. The first draft of this amendment matched
+> `paragraph 51` and `paragraph 100` by number, which is positional and rots — measured:
+> inserting a single paragraph above them shifts 51 to 52, and the gate then goes red on
+> correct state. Fail-closed rather than fail-open, so nothing would have shipped wrong,
+> but an arm that fires on a legitimate edit is one a reader learns to skip, and the next
+> one is the one that mattered. Matching the text is position-independent.
+>
+> Strictly stronger than the original either way, which failed identically whether 2
+> paragraphs were uncovered or 20.
+>
+> Nine further paragraphs were genuinely uncovered and are now classified. Their
+> original rows had been consumed when the phrases were deleted or re-anchored, which
+> is the mechanism by which an edit campaign silently loses its own coverage.
 
 **Files:** `docs/superpowers/plans/phrases.md` (new, merged).
 
@@ -256,6 +311,10 @@ tdd: not-applicable
 acceptance:
   - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --survives HAZARD'
     exit_code: 0
+  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --survives AMBIGUOUS'
+    exit_code: 0
+  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --survives REFERENCE'
+    exit_code: 0
   - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --deleted-have-counterparts'
     exit_code: 0
 max_retries: 3
@@ -276,16 +335,20 @@ depends_on: [6]
 
 ---
 
-### Task 8: DUPLICATE deletions — Testing block
+### Task 8: DUPLICATE deletions — the verbatim-verified rows, all fragments
 
 ```yaml-task
 id: 8
-description: Delete CLAUDE.md copies whose counterpart is confirmed present, for fragment B's scope only
+description: Delete the 8 DUPLICATE rows whose full phrase is literally present in the named counterpart, sentence-level, across all fragments
 role: executor
 model: sonnet
 tdd: not-applicable
 acceptance:
   - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --survives HAZARD'
+    exit_code: 0
+  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --survives AMBIGUOUS'
+    exit_code: 0
+  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --survives REFERENCE'
     exit_code: 0
   - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --deleted-have-counterparts'
     exit_code: 0
@@ -304,21 +367,25 @@ Same per-sentence rule as Task 7.
 
 ---
 
-### Task 9: DUPLICATE deletions — Test Seams, MAKEFLAGS and remaining sections
+### Task 9: reclassify the DUPLICATE rows the manifest format cannot express
 
 ```yaml-task
 id: 9
-description: Delete CLAUDE.md copies whose counterpart is confirmed present, for fragment C's scope only
+description: Record a measured verdict for the 11 paraphrase rows and the 1 self-referential row, which the counterpart gate cannot authorise deleting (manifest-only, no CLAUDE.md edit)
 role: executor
 model: sonnet
 tdd: not-applicable
 acceptance:
   - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --survives HAZARD'
     exit_code: 0
+  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --survives AMBIGUOUS'
+    exit_code: 0
+  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --survives REFERENCE'
+    exit_code: 0
   - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --deleted-have-counterparts'
     exit_code: 0
 max_retries: 3
-files_touched: [CLAUDE.md, docs/superpowers/plans/phrases.md]
+files_touched: [docs/superpowers/plans/phrases.md]
 depends_on: [8]
 ```
 
@@ -329,6 +396,21 @@ depends_on: [8]
 - [ ] Commit.
 
 ---
+
+> **Tasks 8 and 9 were restructured after Task 7 measured 0 of 4 deletable.**
+> The spec defines DUPLICATE as *same argument, not same prose*, while
+> `--deleted-have-counterparts` requires the full phrase to occur literally in the
+> counterpart file. Re-run against the full phrase with the tool's own `match_phrase`:
+> **9 of 21** rows qualify, one of which is self-referential (`CLAUDE.md` duplicating
+> itself, which the format cannot express either). The remaining 11 are genuine
+> duplicated arguments in different words. Task 8 now deletes only the verbatim set;
+> Task 9 records the rest for the compression plan, where the remedy is to compress
+> both copies rather than delete one.
+>
+> Measured yield, disjoint per paragraph: HAZARD-only paragraphs hold **64.2%** of the
+> file's bytes. Pure DUPLICATE+RECORD+REFERENCE is 17,279 B, under 10%. This plan's
+> deletion yield is **~1.2%** against a 14,868-token headroom gap. Deletion cannot reach
+> the target; compression is the lever that does.
 
 ### Task 10: RECORD — delete bare dated figures
 
@@ -341,7 +423,9 @@ tdd: not-applicable
 acceptance:
   - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --survives HAZARD'
     exit_code: 0
-  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --survives RULE'
+  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --survives AMBIGUOUS'
+    exit_code: 0
+  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --survives REFERENCE'
     exit_code: 0
 max_retries: 3
 files_touched: [CLAUDE.md, docs/superpowers/plans/phrases.md]
@@ -380,6 +464,100 @@ depends_on: [10]
 
 **Files:** this plan file.
 
+- [ ] **This task runs AFTER the merge, not after Task 10.** A subagent's preamble is
+      composed from the *session's project directory*, which is the main checkout — not the
+      worktree the trim lives in. Measured while the branch was unmerged: main checkout
+      `CLAUDE.md` 179,650 B, worktree 178,084 B. A probe dispatched from an unmerged branch
+      therefore reads the untrimmed file and reports the baseline, and the resulting
+      `RESULT_CONTEXT` would be a measurement of the wrong artifact that looks exactly like
+      a measurement of the right one. `depends_on: [10]` is necessary and not sufficient.
+- [ ] **RETIRED: no probe dispatched from a long-running session can measure a change to
+      its own preamble's file content. Measured 2026-09-22, and this supersedes the
+      confounding analysis below rather than refining it.**
+
+      ai-config merged an 11,958 B trim of the fleet-shared standards. Verified live through
+      the symlinked paths my preamble reads: 427,663 -> 415,705 B, delta exact, ai-config
+      HEAD at the merge commit, 0 behind. A probe taken immediately after returned
+      **185,853 — identical to the anchor, delta 0.**
+
+      The cache breakdown is the diagnosis:
+
+      ```
+      probe              input  cache_read  cache_creation     total
+      baseline-era 1        10           0         185,835   185,845
+      baseline-era 2        10     185,835               0   185,845
+      anchor A              10           0         185,843   185,853
+      anchor B              10     185,843               0   185,853
+      P1  post-merge        10     185,843               0   185,853   <- cache READ
+      ```
+
+      P1 is a cache hit on the block anchor A created *before* the pull. A prompt cache is
+      keyed on prefix content, so a hit means the composed prompt was byte-identical and the
+      post-merge standards never entered it.
+
+      **The +8 proves the mechanism rather than contradicting it.** Between the baseline-era
+      probes and the anchor pair, `CLAUDE.md` content did not change but a peer commit
+      landed; the total moved +8 and a *new* cache block was created. So the dynamic blocks
+      — git status, recent commits — are recomposed per dispatch, while the file content of
+      `CLAUDE.md` and its `@`-imports does not change for the life of the session.
+
+      **The freeze is upstream of the cache, established by a second session's probe that
+      discriminates where this one could not.** A cache *hit* on an identical prefix is
+      consistent with two causes: a stale cache serving old content, or a frozen
+      composition the cache is faithfully storing. The ai-config session's probe separates
+      them — it ran in a session started pre-merge, after a mid-session pull it had
+      verified on disk, and recorded:
+
+      ```
+      turn-1: input=10  cache_read=16,588  cache_creation=146,491  TOTAL=163,089
+      pre-merge baseline, same session:                            TOTAL=163,091
+      bytes removed from that repo's launch load:                       -13,715
+      ```
+
+      That is a cache **miss** — 146k of new block written — returning the pre-merge total
+      anyway, and -2 tokens against -13,715 B. A cache-keyed explanation predicts that a
+      miss recomposes from disk. It does not. So the session's preamble is frozen at
+      session start and the cache stores the frozen composition faithfully.
+
+      Two consequences. Anything built on *clear the cache and re-probe* fails for the same
+      reason. And the two derivations are genuinely independent — cache-block structure
+      here, an absolute number against a just-verified disk state there — which is the
+      standard this corpus requires before believing an agreement.
+
+      **Consequence.** The A/B design controlled for session-local drift, and session-local
+      drift is the only thing it can see. `BASELINE_CONTEXT`, `CONTROL_*`, `FRESH_ANCHOR`
+      and `P1` are all true measurements of this session's preamble at their moment, and
+      none is comparable to another across a content change. The byte figures are unaffected:
+      11,958 and 1,566 are `wc -c`, verified independently by two sessions.
+
+      **The measurement that was always available:** `/context` in a fresh session, which
+      composes its preamble from disk. One command, no baseline, no protocol. Neither
+      session reached for it.
+
+- [ ] **The naive before/after probe is confounded and cannot resolve this trim. Measured,
+      2026-09-22.** A control probe run with the main checkout's `CLAUDE.md` *byte-identical*
+      to the baseline returned **185,845** against `BASELINE_CONTEXT=185132` — **+713 tokens
+      of drift with nothing trimmed**. The trim is 1,566 B, roughly 402 tokens at this
+      corpus's measured rate. The confounder is larger than the signal and points the other
+      way, so `RESULT_CONTEXT - BASELINE_CONTEXT` measures drift, not the trim.
+      Sources of drift, none of them `CLAUDE.md`: `~/.claude/standards/` resolves into
+      ai-config, which moved 3 commits in the same window; MCP servers loaded mid-session;
+      and the preamble's own git-status and recent-commits blocks changed.
+- [ ] **Adjacency is only sufficient once the session's tool surface has settled, and that
+      must be measured rather than assumed.** The ai-config session's own null control moved
+      **-8 tokens** across the same 20-hour window on the same machine, against this repo's
+      +713 — and the main checkout's shared base was byte-identical in both, so the drift is
+      session-local, not repo-level. It was MCP servers loading mid-run. A second probe from
+      this session, nothing changed between, returned **185,845 — identical to the digit, 0
+      drift**, which is what makes A/B usable here. Take A and B from one session that has
+      been running a while, never a fresh one, and record a same-session null probe beside
+      them.
+- [ ] **Required design: two probes back to back across the merge, nothing else landing
+      between them.** Probe immediately before merging this branch and immediately after.
+      Because the shared standards are in the same preamble, ai-config's merge must not fall
+      between the two — under the standing handshake theirs lands first, so the order is:
+      their merge, then probe A, then this merge, then probe B. Record both raw figures and
+      the interval; a delta whose sibling probes are hours apart is not evidence.
 - [ ] Re-run Task 1's probe verbatim, same prompt, same turn-1 extraction.
 - [ ] Record `RESULT_BYTES`, `RESULT_CONTEXT`, and the two deltas.
 - [ ] **Report the byte delta and the token delta side by side.** A token delta materially smaller than the byte delta implies is a finding about the trim, not a rounding artifact — record it rather than explaining it away.
@@ -398,6 +576,10 @@ acceptance:
   - cmd: 'grep -cE "^\\| (kept|weakened|lost) \\|" docs/superpowers/plans/phrases.md'
     exit_code: 0
   - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --survives HAZARD'
+    exit_code: 0
+  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --survives AMBIGUOUS'
+    exit_code: 0
+  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --survives REFERENCE'
     exit_code: 0
 max_retries: 2
 files_touched: [docs/superpowers/plans/phrases.md]
@@ -453,6 +635,14 @@ BASELINE_BYTES=179650
 BASELINE_PARAGRAPHS=286
 BASELINE_CONTEXT=185132
 BASELINE_SHA=aba0ebec67cd17df8b91555917668767e8d513b3
-RESULT_BYTES=
+RESULT_BYTES=178084
 RESULT_CONTEXT=
+CONTROL_CONTEXT_UNCHANGED_FILE=185845
+CONTROL_DRIFT=+713
+CONTROL_PROBE_2=185845
+CONTROL_ADJACENT_DRIFT=0
+FRESH_ANCHOR=185853
+P1_POST_MERGE=185853
+P1_DELTA=0
+PROBE_VERDICT=INVALID — see below
 ```

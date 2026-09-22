@@ -175,10 +175,16 @@ ifneq ($(strip $(BATS_SERIAL_FILES)),)
 	bats $(BATS_SERIAL_FILES)
 endif
 
-# The only Python in this repo is .claude/scripts/triage_log.py, vendored from
-# ai-config so bug-fix-cycle can emit telemetry here. It ships with its suite
-# rather than untested: a repo gating at 90% coverage does not take unverified
-# code to unblock a gate.
+# Python here is .claude/scripts/triage_log.py, vendored from ai-config so
+# bug-fix-cycle can emit telemetry, and scripts/phrase_check.py, the CLAUDE.md
+# manifest checker. Each ships with its suite rather than untested: a repo
+# gating at 90% coverage does not take unverified code to unblock a gate.
+#
+# This runs SERIAL, and as a prerequisite of `test` -- so it finishes before
+# the parallel bats phase starts and gets none of `--jobs`. Adding a second
+# suite here is what makes that worth saying: the figure a `make test` run
+# reports for wall-clock is the bats phase, and this phase is invisible in it.
+# Parallelising it is backlogged, not done.
 test-python:
 ifndef PYTHON3
 	@printf "python3 not found, skipping Python tests (install: brew install python@3 / apt-get install python3)\n"
