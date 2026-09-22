@@ -218,19 +218,50 @@ def paragraph_start_norms(source_text: str) -> list[str]:
     # phrase beginning right after it -- and a bullet's first word carries the
     # same position-dependent capital a sentence's first word does.
     #
+    # That holds for a chunk's LEADING bullet only. split_paragraphs splits on
+    # blank lines, so a multi-bullet list is one paragraph and the `+` run-strip
+    # reaches only its first marker; bullets 2..N keep `- ` in the norm and are
+    # also invisible to the punctuation arm, because the `-` shields any
+    # preceding `.`. Pre-existing rather than introduced here, and backlogged --
+    # closing it means one norm per list item, which moves the coverage
+    # denominator and every --assert-complete-derived figure.
+    #
     # A code fence is DELIBERATELY not in that pattern. The rule rejects a
     # phrase whose leading capital is a function of its POSITION; a line inside
     # a fence has its case fixed by the shell (`make`, `./setup_env.sh`,
     # `grep -A1` are lowercase wherever they sit), so the rationale does not
-    # reach it. Measured 2026-09-22 against this repo's own manifest: stripping
-    # fences too turns 10 correctly-anchored rows RED against 3 genuinely
-    # fragile ones -- 4x the hazard, and mostly wrong. Both halves are pinned
-    # in tests/test_phrase_check.py, the fence half as a negative control so
-    # nobody "completes" the marker list later.
-    return [
-        _PROSE_MARKER_RE.sub("", normalize(p).lstrip())
-        for p in split_paragraphs(source_text)
-    ]
+    # reach it.
+    #
+    # The evidence is that NONE of the fence-shielded rows is capital-initial --
+    # which is a property of shell commands, not of today's manifest, so it does
+    # not rot the way a row count does. Stripping fences would turn every one of
+    # them RED for a capital that cannot vary. Re-derive rather than trusting a
+    # figure here: widen this pattern with ```` ```[a-z]* ```` and diff
+    # match_phrase's sentence_initial verdict across the manifest.
+    #
+    # An earlier version of this comment quoted "10 rows against 3 -- 4x the
+    # hazard". Both numbers were wrong and the ratio was incoherent: the 10 went
+    # stale inside this same branch when one of those rows was re-anchored, and
+    # the 3 counted PROSE-marker rows, a different population, presented as
+    # though it shared a denominator with the fence count.
+    #
+    # Both halves are pinned in tests/test_phrase_check.py, the fence half as a
+    # negative control so nobody "completes" the marker list later.
+    # BOTH forms, stripped and not. Stripping alone fixes the shielded case
+    # ("- " + phrase) and opens its mirror: a phrase whose own text carries the
+    # marker stops prefix-matching a paragraph it demonstrably opens. Keeping
+    # both means neither direction can fail open, and the obvious alternative --
+    # skipping the strip when the needle looks like a marker -- re-opens the 3
+    # shielded rows this exists to close. Duplicates cost nothing: the arm is an
+    # any() over startswith.
+    norms = []
+    for para in split_paragraphs(source_text):
+        plain = normalize(para).lstrip()
+        norms.append(plain)
+        stripped = _PROSE_MARKER_RE.sub("", plain)
+        if stripped != plain:
+            norms.append(stripped)
+    return norms
 
 
 def match_phrase(

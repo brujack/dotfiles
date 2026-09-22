@@ -13,8 +13,30 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from hypothesis import given
-from hypothesis import strategies as st
+# hypothesis is OPTIONAL, deliberately. dotfiles' CI runs `make test` ->
+# `test-python` -> plain `python3 -m unittest discover` against the runner's
+# SYSTEM python3, and ci.yml has no `pip install` step anywhere -- it installs
+# bats, zsh, pinned shellcheck and pinned uv, and nothing else. A hard
+# module-level import therefore raises ModuleNotFoundError in the loader and
+# takes all 80 tests down as a single _FailedTest, not just the one property.
+#
+# Measured 2026-09-22 on this box, which reproduces both actors:
+#   ~/.pyenv/shims/python3  hypothesis 6.165.10      -> Ran 80 tests, OK
+#   /usr/bin/python3        ModuleNotFoundError      -> Ran 1 test, FAILED
+# The local green was reading a different interpreter than CI runs.
+#
+# Adding a pip install to CI was the alternative and was rejected: it buys a
+# network dependency and a new per-PR failure mode to save one test. Instead
+# the property test skips where the library is absent, and
+# test_is_idempotent_over_a_fixed_table below covers the same property
+# deterministically so CI is not left examining nothing.
+try:
+    from hypothesis import given
+    from hypothesis import strategies as st
+
+    _HAVE_HYPOTHESIS = True
+except ImportError:  # pragma: no cover - depends on the interpreter, not the code
+    _HAVE_HYPOTHESIS = False
 
 _REPO = Path(__file__).resolve().parent.parent
 _MODULE = _REPO / "scripts" / "phrase_check.py"
@@ -85,11 +107,41 @@ class TestNormalize(unittest.TestCase):
     def test_empty_string_stays_empty(self):
         self.assertEqual(_PC.normalize(""), "")
 
-    @given(st.text())
-    def test_is_idempotent(self, s):
-        once = _PC.normalize(s)
-        twice = _PC.normalize(once)
-        self.assertEqual(once, twice)
+    def test_is_idempotent_over_a_fixed_table(self):
+        """Deterministic twin of the property test below.
+
+        The hypothesis version skips wherever the library is absent, which
+        includes CI (see the import guard). Without this, normalize()'s
+        idempotency would be asserted by nothing on the one interpreter that
+        gates the merge.
+        """
+        for name, s in (
+            ("empty", ""),
+            ("single space", " "),
+            ("run of spaces", "a    b"),
+            ("tabs", "a\t\tb"),
+            ("newlines", "a\n\nb"),
+            ("mixed run", "a \t\n b"),
+            ("leading", "   a"),
+            ("trailing", "a   "),
+            ("both", "  a  b  "),
+            ("only whitespace", " \t\n "),
+            ("vertical tab", "a\x0bb"),
+            ("form feed", "a\x0cb"),
+            ("nbsp", "a\xa0b"),
+        ):
+            with self.subTest(case=name):
+                once = _PC.normalize(s)
+                self.assertEqual(_PC.normalize(once), once)
+
+    @unittest.skipUnless(_HAVE_HYPOTHESIS, "hypothesis not installed")
+    def test_is_idempotent(self):
+        @given(st.text())
+        def _inner(s):
+            once = _PC.normalize(s)
+            self.assertEqual(_PC.normalize(once), once)
+
+        _inner()
 
 
 class TestParagraphPrefixArmHandlesIndentedParagraphs(PhraseCheckTestCase):
@@ -125,6 +177,98 @@ class TestParagraphPrefixArmHandlesIndentedParagraphs(PhraseCheckTestCase):
         self.assertFalse(initial)
 
 
+class TestSurvivesRejectsASentenceInitialPhrase(PhraseCheckTestCase):
+    """--survives must reject a still-present phrase that opens a sentence.
+
+    check_unique's identical guard IS tested; this call site was not. Measured
+    by test-quality-review cycle 3: deleting check_survives' whole
+    `elif sentence_initial:` branch left the suite OK with 0 failures, so the
+    documented behaviour (module docstring, --survives help) was asserted by
+    nothing at this call site. One of two guards covered is not the guard
+    covered.
+    """
+
+    def test_a_surviving_phrase_at_a_sentence_boundary_fails(self):
+        source = self._write(
+            "source.md",
+            "## Heading\n\nThe quick brown fox jumps over lazy dogs.",
+        )
+        manifest = self._write_manifest(
+            "phrases.md", ["HAZARD | The quick brown fox jumps | | | note"]
+        )
+        rc = _PC.main(
+            [
+                "--manifest",
+                str(manifest),
+                "--source",
+                str(source),
+                "--survives",
+                "HAZARD",
+            ]
+        )
+        self.assertEqual(rc, 1)
+
+    def test_the_failure_names_the_sentence_boundary_not_absence(self):
+        """rc alone cannot separate this branch from 'phrase no longer found'.
+
+        Both append to the same errors list and both yield rc 1, so a bare
+        rc assertion passes against either -- the two-producers-of-one-value
+        shape. Assert the branch's own message.
+        """
+        source = self._write(
+            "source.md",
+            "## Heading\n\nThe quick brown fox jumps over lazy dogs.",
+        )
+        manifest = self._write_manifest(
+            "phrases.md", ["HAZARD | The quick brown fox jumps | | | note"]
+        )
+        with mock.patch("sys.stderr", new_callable=io.StringIO) as err:
+            _PC.main(
+                [
+                    "--manifest",
+                    str(manifest),
+                    "--source",
+                    str(source),
+                    "--survives",
+                    "HAZARD",
+                ]
+            )
+        self.assertIn("surviving phrase begins at a sentence boundary", err.getvalue())
+        self.assertNotIn("no longer found", err.getvalue())
+
+
+class TestIsDeletedIsCaseInsensitive(PhraseCheckTestCase):
+    """The module docstring advertises case-insensitive 'deleted' matching.
+
+    Measured by test-quality-review cycle 3: removing `.lower()` from
+    Row.is_deleted left the suite OK, because every class literal in every
+    fixture is already lowercase. A row written DUPLICATE-DELETED would have
+    been silently treated as not-deleted -- its phrase then checked for
+    presence in a file it was deliberately removed from.
+    """
+
+    def test_an_uppercase_deleted_class_is_still_deleted(self):
+        for name, cls in (
+            ("lower", "DUPLICATE-deleted"),
+            ("upper", "DUPLICATE-DELETED"),
+            ("mixed", "DUPLICATE-DeLeTeD"),
+            ("bare upper", "DELETED"),
+        ):
+            with self.subTest(cls=name):
+                row = _PC.Row(
+                    cls=cls, phrase="x", counterpart_file="", counterpart_symbol="",
+                    note="", line_no=1, raw="",
+                )
+                self.assertTrue(row.is_deleted)
+
+    def test_a_class_without_the_word_is_not_deleted(self):
+        row = _PC.Row(
+            cls="HAZARD", phrase="x", counterpart_file="", counterpart_symbol="",
+            note="", line_no=1, raw="",
+        )
+        self.assertFalse(row.is_deleted)
+
+
 class TestParagraphPrefixArmSeesThroughProseMarkers(PhraseCheckTestCase):
     """A phrase opening a paragraph behind a prose marker is still paragraph-initial.
 
@@ -134,9 +278,15 @@ class TestParagraphPrefixArmSeesThroughProseMarkers(PhraseCheckTestCase):
     exact case it exists to catch: a bullet's first word carries the same
     position-dependent capital a sentence's first word does.
 
-    Every fixture ends the previous block without sentence-ending
+    Six of the eight rows end the previous block without sentence-ending
     punctuation, so the punctuation arm cannot fire and only the prefix arm
-    discriminates.
+    discriminates. The `1. ` row is NOT one of them and is annotated below --
+    the premise is about the previous block, while the conclusion needs no
+    sentence-end char anywhere before the phrase, and `1.` supplies one itself.
+    Measured: `1. ` stays green against a build with the prefix arm deleted
+    outright, so it is a punctuation-arm regression guard rather than a member
+    of this class. The `1. - ` row is what actually pins the ordered-dot
+    alternative.
     """
 
     def test_phrase_opening_a_paragraph_behind_a_prose_marker_is_initial(self):
@@ -145,7 +295,16 @@ class TestParagraphPrefixArmSeesThroughProseMarkers(PhraseCheckTestCase):
             ("star bullet", "* "),
             ("plus bullet", "+ "),
             ("blockquote", "> "),
+            # Green even with the prefix arm deleted: the '.' in '1.' is a
+            # sentence-end char, so the PUNCTUATION arm carries it. Kept as a
+            # free regression guard on that arm, not as evidence about this one.
             ("ordered dot", "1. "),
+            # The row that actually pins `\d+[.)]`. With a bare '1. ' the '.'
+            # makes the punctuation arm fire regardless; behind a following
+            # bullet the preceding char is '-', so only the run-strip (the `+`
+            # quantifier over both markers) can reach the phrase. Measured: the
+            # sole failure when the ordered-dot alternative is removed.
+            ("ordered dot then bullet", "1. - "),
             ("ordered paren", "2) "),
             ("heading", "### "),
         ):
@@ -158,16 +317,43 @@ class TestParagraphPrefixArmSeesThroughProseMarkers(PhraseCheckTestCase):
                 self.assertEqual(count, 1)
                 self.assertTrue(initial)
 
+    def test_a_phrase_that_CARRIES_the_marker_is_also_initial(self):
+        """The mirror of the case above, and the one the strip itself opens.
+
+        Stripping the marker from the paragraph means a phrase whose own text
+        begins WITH that marker no longer prefix-matches -- so the fix for the
+        shielded case creates a fail-open for the inclusive one. Found by
+        security-review cycle 3 as a routed behavioural note, reproduced here:
+        '- **Phase 1**' returned sentence_initial=False against a paragraph it
+        demonstrably opens. Zero live manifest rows hit it, which is why it is
+        a regression guard rather than an incident.
+
+        The remedy is to compare against BOTH forms, never to drop the strip:
+        dropping it re-opens the 3 shielded rows this commit exists to close.
+        """
+        for name, marker in (("dash", "- "), ("blockquote", "> "), ("ordered", "3) ")):
+            with self.subTest(marker=name):
+                source = f"The rules are:\n\n{marker}Delta epsilon zeta here."
+                norms = _PC.paragraph_start_norms(source)
+                count, initial = _PC.match_phrase(
+                    _PC.normalize(source), f"{marker}Delta epsilon zeta here.", norms
+                )
+                self.assertEqual(count, 1)
+                self.assertTrue(initial)
+
     def test_a_fenced_code_line_is_NOT_treated_as_paragraph_initial(self):
         """Deliberate exclusion, pinned so nobody "completes" the marker list.
 
         The rule rejects a phrase whose leading capital is a function of its
         POSITION. A line inside a fence has its case fixed by the shell --
         `make`, `./setup_env.sh`, `grep -A1` are lowercase wherever they
-        appear -- so the rationale does not reach it. Measured 2026-09-22
-        against this repo's own manifest: stripping fences alongside prose
-        markers turns 10 correctly-anchored rows RED and 3 genuinely
-        fragile ones, so the wider rule is 4x the hazard and mostly wrong.
+        appear -- so the rationale does not reach it.
+
+        The decisive evidence is that no fence-shielded row is capital-initial,
+        which follows from what a shell command looks like rather than from
+        today's manifest. See the comment in paragraph_start_norms, including
+        the retraction of the row counts an earlier version of this docstring
+        carried -- they were stale and drawn from two different populations.
         """
         source = "The command is:\n\n```bash\nmake validate-plan PLAN=x\n```"
         norms = _PC.paragraph_start_norms(source)
@@ -269,7 +455,7 @@ class TestAssertComplete(PhraseCheckTestCase):
             ],
         )
         rc = _PC.main(["--manifest", str(manifest), "--assert-complete", "3"])
-        self.assertNotEqual(rc, 0)
+        self.assertEqual(rc, 1)
 
     def test_passes_when_row_count_meets_n(self):
         manifest = self._write_manifest(
@@ -325,7 +511,7 @@ class TestAssertCompleteDerived(PhraseCheckTestCase):
                 "--assert-complete-derived",
             ]
         )
-        self.assertNotEqual(rc, 0)
+        self.assertEqual(rc, 1)
 
     def test_a_different_source_with_a_different_paragraph_count_changes_the_verdict(
         self,
@@ -383,7 +569,7 @@ class TestAssertUnique(PhraseCheckTestCase):
         rc = _PC.main(
             ["--manifest", str(manifest), "--source", str(source), "--assert-unique"]
         )
-        self.assertNotEqual(rc, 0)
+        self.assertEqual(rc, 1)
 
     def test_accepts_a_phrase_occurring_exactly_once(self):
         source = self._write(
@@ -444,7 +630,7 @@ class TestAssertUniqueSkipsDeleted(PhraseCheckTestCase):
         rc = _PC.main(
             ["--manifest", str(manifest), "--source", str(source), "--assert-unique"]
         )
-        self.assertNotEqual(rc, 0)
+        self.assertEqual(rc, 1)
 
     def test_withdrawn_row_is_not_skipped_and_still_fails_when_absent(self):
         # "withdrawn" means the text was never removed -- unlike "deleted",
@@ -457,7 +643,7 @@ class TestAssertUniqueSkipsDeleted(PhraseCheckTestCase):
         rc = _PC.main(
             ["--manifest", str(manifest), "--source", str(source), "--assert-unique"]
         )
-        self.assertNotEqual(rc, 0)
+        self.assertEqual(rc, 1)
 
 
 class TestSentenceInitialPhraseRejected(PhraseCheckTestCase):
@@ -475,7 +661,7 @@ class TestSentenceInitialPhraseRejected(PhraseCheckTestCase):
         rc = _PC.main(
             ["--manifest", str(manifest), "--source", str(source), "--assert-unique"]
         )
-        self.assertNotEqual(rc, 0)
+        self.assertEqual(rc, 1)
 
     def test_accepts_the_same_phrase_when_mid_sentence(self):
         source = self._write(
@@ -499,7 +685,7 @@ class TestSentenceInitialPhraseRejected(PhraseCheckTestCase):
         rc = _PC.main(
             ["--manifest", str(manifest), "--source", str(source), "--assert-unique"]
         )
-        self.assertNotEqual(rc, 0)
+        self.assertEqual(rc, 1)
 
 
 class TestSentenceInitialAtParagraphStart(PhraseCheckTestCase):
@@ -522,7 +708,7 @@ class TestSentenceInitialAtParagraphStart(PhraseCheckTestCase):
         rc = _PC.main(
             ["--manifest", str(manifest), "--source", str(source), "--assert-unique"]
         )
-        self.assertNotEqual(rc, 0)
+        self.assertEqual(rc, 1)
 
     def test_phrase_opening_a_paragraph_after_a_fenced_code_block_is_rejected(self):
         source = self._write(
@@ -535,7 +721,7 @@ class TestSentenceInitialAtParagraphStart(PhraseCheckTestCase):
         rc = _PC.main(
             ["--manifest", str(manifest), "--source", str(source), "--assert-unique"]
         )
-        self.assertNotEqual(rc, 0)
+        self.assertEqual(rc, 1)
 
     def test_phrase_opening_a_paragraph_after_a_colon_is_rejected(self):
         source = self._write(
@@ -548,7 +734,7 @@ class TestSentenceInitialAtParagraphStart(PhraseCheckTestCase):
         rc = _PC.main(
             ["--manifest", str(manifest), "--source", str(source), "--assert-unique"]
         )
-        self.assertNotEqual(rc, 0)
+        self.assertEqual(rc, 1)
 
     def test_phrase_opening_a_paragraph_after_a_bullet_dash_is_rejected(self):
         source = self._write(
@@ -561,7 +747,7 @@ class TestSentenceInitialAtParagraphStart(PhraseCheckTestCase):
         rc = _PC.main(
             ["--manifest", str(manifest), "--source", str(source), "--assert-unique"]
         )
-        self.assertNotEqual(rc, 0)
+        self.assertEqual(rc, 1)
 
     def test_phrase_not_opening_a_paragraph_is_still_accepted(self):
         # Positive control: a phrase that genuinely sits mid-paragraph,
@@ -599,7 +785,7 @@ class TestSurvives(PhraseCheckTestCase):
                 "HAZARD",
             ]
         )
-        self.assertNotEqual(rc, 0)
+        self.assertEqual(rc, 1)
 
     def test_passes_when_the_hazard_row_still_matches(self):
         source = self._write(
@@ -665,7 +851,7 @@ class TestSurvivesZeroRowsIsAnError(PhraseCheckTestCase):
                 "--survives", "NOSUCHCLASS",
             ]
         )
-        self.assertNotEqual(rc, 0)
+        self.assertEqual(rc, 1)
         self.assertIn("NOSUCHCLASS", combined)
 
     def test_fails_on_a_lowercase_typo_of_an_existing_class(self):
@@ -681,7 +867,7 @@ class TestSurvivesZeroRowsIsAnError(PhraseCheckTestCase):
                 "--survives", "hazard",
             ]
         )
-        self.assertNotEqual(rc, 0)
+        self.assertEqual(rc, 1)
         self.assertIn("hazard", combined)
 
     def test_fails_on_a_trailing_space_variant_of_an_existing_class(self):
@@ -697,7 +883,7 @@ class TestSurvivesZeroRowsIsAnError(PhraseCheckTestCase):
                 "--survives", "HAZARD ",
             ]
         )
-        self.assertNotEqual(rc, 0)
+        self.assertEqual(rc, 1)
 
     def test_still_fails_normally_when_the_class_exists_and_the_row_is_gone(self):
         # Positive control: an existing class whose only row genuinely
@@ -715,7 +901,7 @@ class TestSurvivesZeroRowsIsAnError(PhraseCheckTestCase):
                 "--survives", "HAZARD",
             ]
         )
-        self.assertNotEqual(rc, 0)
+        self.assertEqual(rc, 1)
         self.assertIn("phrase no longer found", combined)
 
     def test_passes_when_the_class_exists_and_every_row_survives(self):
@@ -750,7 +936,7 @@ class TestDeletedHaveCounterparts(PhraseCheckTestCase):
             ],
         )
         rc = _PC.main(["--manifest", str(manifest), "--deleted-have-counterparts"])
-        self.assertNotEqual(rc, 0)
+        self.assertEqual(rc, 1)
 
     def test_passes_when_the_counterpart_file_has_the_phrase(self):
         counterpart = self._write(
@@ -778,7 +964,7 @@ class TestDeletedHaveCounterparts(PhraseCheckTestCase):
             "phrases.md", ["DUPLICATE-deleted | some phrase | | | note"]
         )
         rc = _PC.main(["--manifest", str(manifest), "--deleted-have-counterparts"])
-        self.assertNotEqual(rc, 0)
+        self.assertEqual(rc, 1)
 
     def test_fails_when_a_duplicate_deleted_row_names_dash_as_counterpart(self):
         # DUPLICATE asserts the text lives elsewhere; '-' names no elsewhere.
@@ -786,7 +972,7 @@ class TestDeletedHaveCounterparts(PhraseCheckTestCase):
             "phrases.md", ["DUPLICATE-deleted | some phrase | - | | note"]
         )
         rc = _PC.main(["--manifest", str(manifest), "--deleted-have-counterparts"])
-        self.assertNotEqual(rc, 0)
+        self.assertEqual(rc, 1)
 
     def test_passes_when_a_record_deleted_row_names_dash_as_counterpart(self):
         # RECORD asserts git history holds provenance -- no counterpart to check.
@@ -821,7 +1007,7 @@ class TestDeletedHaveCounterparts(PhraseCheckTestCase):
             [f"RECORD-deleted | the deleted record phrase | {counterpart} | | note"],
         )
         rc = _PC.main(["--manifest", str(manifest), "--deleted-have-counterparts"])
-        self.assertNotEqual(rc, 0)
+        self.assertEqual(rc, 1)
 
     def test_expands_a_tilde_prefixed_counterpart_path_that_exists(self):
         fake_home = self.tmp_path / "home"
@@ -852,7 +1038,7 @@ class TestDeletedHaveCounterparts(PhraseCheckTestCase):
             rc, output = _run_and_capture(
                 ["--manifest", str(manifest), "--deleted-have-counterparts"]
             )
-        self.assertNotEqual(rc, 0)
+        self.assertEqual(rc, 1)
         expanded = str(fake_home / ".claude" / "standards" / "tdd.md")
         self.assertIn(
             expanded,
@@ -901,7 +1087,7 @@ class TestCliUsage(unittest.TestCase):
             manifest = Path(tmp) / "phrases.md"
             manifest.write_text("HAZARD | a phrase | | | note\n", encoding="utf-8")
             rc = _PC.main(["--manifest", str(manifest), "--assert-unique"])
-            self.assertNotEqual(rc, 0)
+            self.assertEqual(rc, 2)
 
 
 if __name__ == "__main__":
@@ -935,7 +1121,7 @@ class TestParagraphCoverage(PhraseCheckTestCase):
             ["--manifest", str(manifest), "--source", str(source),
              "--assert-complete-derived"]
         )
-        self.assertNotEqual(rc, 0)
+        self.assertEqual(rc, 1)
 
     def test_every_paragraph_covered_passes(self):
         source = self._write("source.md", self._SRC)
@@ -1051,7 +1237,7 @@ class TestExcludedParagraphsDoNotCountTowardDerivedCoverage(PhraseCheckTestCase)
                 "--assert-complete-derived",
             ]
         )
-        self.assertNotEqual(rc, 0)
+        self.assertEqual(rc, 1)
 
     def test_markdown_table_paragraph_is_not_excluded(self):
         source = self._write(
@@ -1070,7 +1256,7 @@ class TestExcludedParagraphsDoNotCountTowardDerivedCoverage(PhraseCheckTestCase)
                 "--assert-complete-derived",
             ]
         )
-        self.assertNotEqual(rc, 0)
+        self.assertEqual(rc, 1)
 
     def test_heading_with_following_prose_in_same_chunk_is_not_excluded(self):
         source = self._write(
@@ -1085,7 +1271,7 @@ class TestExcludedParagraphsDoNotCountTowardDerivedCoverage(PhraseCheckTestCase)
                 "--assert-complete-derived",
             ]
         )
-        self.assertNotEqual(rc, 0)
+        self.assertEqual(rc, 1)
 
     def test_manifest_covering_content_but_no_heading_now_passes(self):
         # Before the exclusion, this manifest (3 rows) would have failed
@@ -1166,7 +1352,7 @@ class TestDerivedDenominatorIsReported(PhraseCheckTestCase):
                 "--assert-complete-derived",
             ]
         )
-        self.assertNotEqual(rc, 0)
+        self.assertEqual(rc, 1)
         self.assertIn("excluded", combined)
         self.assertIn("denominator=2", combined)
         self.assertIn("excluded=1", combined)
@@ -1267,7 +1453,7 @@ class TestFindOccurrencesCountsOverlappingMatches(PhraseCheckTestCase):
         rc = _PC.main(
             ["--manifest", str(manifest), "--source", str(source), "--assert-unique"]
         )
-        self.assertNotEqual(rc, 0)
+        self.assertEqual(rc, 1)
 
     def test_a_genuinely_unique_phrase_is_still_accepted(self):
         # Positive control: a phrase that occurs exactly once, with no
@@ -1297,4 +1483,4 @@ class TestFindOccurrencesCountsOverlappingMatches(PhraseCheckTestCase):
         rc = _PC.main(
             ["--manifest", str(manifest), "--source", str(source), "--assert-unique"]
         )
-        self.assertNotEqual(rc, 0)
+        self.assertEqual(rc, 1)
