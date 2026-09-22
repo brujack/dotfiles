@@ -32,7 +32,11 @@ def _load():
     for stale in (_MODULE.parent / "__pycache__").glob(f"{_MODULE.stem}.*.pyc"):
         stale.unlink()
     spec = importlib.util.spec_from_file_location("phrase_check", _MODULE)
-    assert spec is not None and spec.loader is not None
+    # Not an assert: python -O strips asserts, and this one is the only thing
+    # standing between a bad module path and an opaque AttributeError far away
+    # from the cause. bandit flags the assert form as B101 for that reason.
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load phrase_check from {_MODULE}")
     module = importlib.util.module_from_spec(spec)
     sys.modules["phrase_check"] = module
     spec.loader.exec_module(module)
