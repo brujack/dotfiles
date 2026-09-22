@@ -254,6 +254,68 @@ class TestAssertUnique(PhraseCheckTestCase):
         self.assertEqual(rc, 0)
 
 
+class TestAssertUniqueSkipsDeleted(PhraseCheckTestCase):
+    """A row marked deleted asserts its phrase is GONE, not present -- so
+    --assert-unique must skip it rather than reporting the intended removal
+    as a failure. A row merely marked withdrawn (text never removed) still
+    keeps the ordinary uniqueness check."""
+
+    def test_deleted_row_whose_phrase_is_absent_does_not_fail(self):
+        source = self._write("source.md", "Nothing relevant is written here.")
+        manifest = self._write_manifest(
+            "phrases.md",
+            ["RECORD-deleted | this phrase was removed from source | | | note"],
+        )
+        rc = _PC.main(
+            ["--manifest", str(manifest), "--source", str(source), "--assert-unique"]
+        )
+        self.assertEqual(rc, 0)
+
+    def test_duplicate_deleted_row_whose_phrase_is_absent_does_not_fail(self):
+        source = self._write("source.md", "Nothing relevant is written here.")
+        manifest = self._write_manifest(
+            "phrases.md",
+            ["DUPLICATE-deleted | this phrase was removed too | | | note"],
+        )
+        rc = _PC.main(
+            ["--manifest", str(manifest), "--source", str(source), "--assert-unique"]
+        )
+        self.assertEqual(rc, 0)
+
+    def test_a_non_deleted_row_is_still_checked_alongside_a_deleted_one(self):
+        # The deleted row's absence must not mask a real uniqueness failure
+        # on the row that survives.
+        source = self._write(
+            "source.md",
+            "Note: the widget calibration steps matter and the widget "
+            "calibration steps repeat.",
+        )
+        manifest = self._write_manifest(
+            "phrases.md",
+            [
+                "RECORD-deleted | this phrase was removed from source | | | note",
+                "HAZARD | the widget calibration steps | | | note",
+            ],
+        )
+        rc = _PC.main(
+            ["--manifest", str(manifest), "--source", str(source), "--assert-unique"]
+        )
+        self.assertNotEqual(rc, 0)
+
+    def test_withdrawn_row_is_not_skipped_and_still_fails_when_absent(self):
+        # "withdrawn" means the text was never removed -- unlike "deleted",
+        # is_deleted must not treat it as gone.
+        source = self._write("source.md", "Nothing relevant is written here.")
+        manifest = self._write_manifest(
+            "phrases.md",
+            ["RECORD-withdrawn | this phrase is supposed to still be there | | | note"],
+        )
+        rc = _PC.main(
+            ["--manifest", str(manifest), "--source", str(source), "--assert-unique"]
+        )
+        self.assertNotEqual(rc, 0)
+
+
 class TestSentenceInitialPhraseRejected(PhraseCheckTestCase):
     """RED test 5: a phrase beginning at a sentence boundary is rejected."""
 

@@ -175,8 +175,16 @@ def match_phrase(haystack_norm: str, phrase: str) -> tuple[int, bool]:
 
 
 def check_unique(rows: list[Row], source_norm: str) -> list[str]:
+    """Every row's phrase occurs exactly once in source -- except a row
+    marked deleted, whose phrase is supposed to be gone. Checking a deleted
+    row's phrase for presence would report the intended removal as a
+    failure; skip it instead. A row merely marked withdrawn (is_deleted is
+    false for it) keeps the ordinary check, because its text was never
+    removed."""
     errors = []
     for row in rows:
+        if row.is_deleted:
+            continue
         count, sentence_initial = match_phrase(source_norm, row.phrase)
         if count != 1:
             errors.append(
