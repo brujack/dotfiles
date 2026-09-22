@@ -416,6 +416,30 @@ depends_on: [10]
       therefore reads the untrimmed file and reports the baseline, and the resulting
       `RESULT_CONTEXT` would be a measurement of the wrong artifact that looks exactly like
       a measurement of the right one. `depends_on: [10]` is necessary and not sufficient.
+- [ ] **The naive before/after probe is confounded and cannot resolve this trim. Measured,
+      2026-09-22.** A control probe run with the main checkout's `CLAUDE.md` *byte-identical*
+      to the baseline returned **185,845** against `BASELINE_CONTEXT=185132` — **+713 tokens
+      of drift with nothing trimmed**. The trim is 1,566 B, roughly 402 tokens at this
+      corpus's measured rate. The confounder is larger than the signal and points the other
+      way, so `RESULT_CONTEXT - BASELINE_CONTEXT` measures drift, not the trim.
+      Sources of drift, none of them `CLAUDE.md`: `~/.claude/standards/` resolves into
+      ai-config, which moved 3 commits in the same window; MCP servers loaded mid-session;
+      and the preamble's own git-status and recent-commits blocks changed.
+- [ ] **Adjacency is only sufficient once the session's tool surface has settled, and that
+      must be measured rather than assumed.** The ai-config session's own null control moved
+      **-8 tokens** across the same 20-hour window on the same machine, against this repo's
+      +713 — and the main checkout's shared base was byte-identical in both, so the drift is
+      session-local, not repo-level. It was MCP servers loading mid-run. A second probe from
+      this session, nothing changed between, returned **185,845 — identical to the digit, 0
+      drift**, which is what makes A/B usable here. Take A and B from one session that has
+      been running a while, never a fresh one, and record a same-session null probe beside
+      them.
+- [ ] **Required design: two probes back to back across the merge, nothing else landing
+      between them.** Probe immediately before merging this branch and immediately after.
+      Because the shared standards are in the same preamble, ai-config's merge must not fall
+      between the two — under the standing handshake theirs lands first, so the order is:
+      their merge, then probe A, then this merge, then probe B. Record both raw figures and
+      the interval; a delta whose sibling probes are hours apart is not evidence.
 - [ ] Re-run Task 1's probe verbatim, same prompt, same turn-1 extraction.
 - [ ] Record `RESULT_BYTES`, `RESULT_CONTEXT`, and the two deltas.
 - [ ] **Report the byte delta and the token delta side by side.** A token delta materially smaller than the byte delta implies is a finding about the trim, not a rounding artifact — record it rather than explaining it away.
@@ -493,6 +517,10 @@ BASELINE_BYTES=179650
 BASELINE_PARAGRAPHS=286
 BASELINE_CONTEXT=185132
 BASELINE_SHA=aba0ebec67cd17df8b91555917668767e8d513b3
-RESULT_BYTES=
+RESULT_BYTES=178084
 RESULT_CONTEXT=
+CONTROL_CONTEXT_UNCHANGED_FILE=185845
+CONTROL_DRIFT=+713
+CONTROL_PROBE_2=185845
+CONTROL_ADJACENT_DRIFT=0
 ```
