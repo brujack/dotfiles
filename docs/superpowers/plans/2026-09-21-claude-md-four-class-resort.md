@@ -413,7 +413,7 @@ The phrase gate detects a claim disappearing. It cannot detect one weakened into
 id: 13
 description: Mark the spec Done, close the two backlog rows this plan resolves, and record what moved to the follow-on plan (docs-only, no behavior change, so TDD does not apply)
 role: executor
-model: haiku
+model: sonnet
 tdd: not-applicable
 acceptance:
   - cmd: 'grep -q "2026-09-21-claude-md-four-class-resort" docs/superpowers/README.md'
@@ -424,6 +424,12 @@ depends_on: [12]
 ```
 
 **Files:** `docs/superpowers/README.md`.
+
+**Escalated from `haiku` to `sonnet` at dispatch time.** `roleModels.executor-mechanical` is
+Haiku 4.5 and this task is mechanical enough for it, but this repo's measured haiku headroom is
+**14,868 tokens** and three of three prior haiku dispatches here failed with
+`Autocompact is thrashing`. Revert to `haiku` once a post-change probe shows headroom that
+supports it — which is what Task 11 measures.
 
 - [ ] Set the All Plans row to `Done` and point it at this plan file.
 - [ ] Close backlog row `Move CLAUDE.md reference text to knowledge files` (row 244) and `CLAUDE.md Test Seams duplicates source comments near-verbatim`.
