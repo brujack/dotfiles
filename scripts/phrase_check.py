@@ -243,22 +243,39 @@ def check_survives(rows: list[Row], cls: str, source_norm: str) -> list[str]:
 
 
 def check_deleted_have_counterparts(rows: list[Row]) -> list[str]:
+    """Every DUPLICATE-deleted row must name a readable counterpart that
+    contains its phrase; every other deleted row may name '-'/'' (no
+    counterpart asserted) but, if it names one anyway, that claim is
+    verified exactly like a DUPLICATE's.
+
+    DUPLICATE asserts "this text exists elsewhere" and must prove it.
+    RECORD (and any other non-DUPLICATE deleted class) asserts "git history
+    holds this provenance" and names no counterpart at all -- '-' or an
+    empty field is a valid absence there, not a gap. A stated counterpart
+    is never taken on trust, whatever the class.
+    """
     errors = []
     for row in rows:
         if not row.is_deleted:
             continue
-        if not row.counterpart_file:
-            errors.append(
-                f"line {row.line_no} [{row.cls}]: deleted row has no counterpart-file"
-            )
+        requires_counterpart = "duplicate" in row.cls.lower()
+        no_counterpart_named = row.counterpart_file in ("", "-")
+        if no_counterpart_named:
+            if requires_counterpart:
+                errors.append(
+                    f"line {row.line_no} [{row.cls}]: deleted row has no counterpart-file"
+                )
             continue
-        counterpart_path = Path(row.counterpart_file)
+        # expanduser(), not os.path.expandvars(): no manifest row uses a
+        # '$VAR' path segment, and expanding one would widen what a row can
+        # reach.
+        counterpart_path = Path(row.counterpart_file).expanduser()
         try:
             counterpart_text = counterpart_path.read_text(encoding="utf-8")
         except OSError as exc:
             errors.append(
                 f"line {row.line_no} [{row.cls}]: cannot read counterpart-file "
-                f"{row.counterpart_file}: {exc}"
+                f"{counterpart_path}: {exc}"
             )
             continue
         counterpart_norm = normalize(counterpart_text)
