@@ -226,9 +226,9 @@ acceptance:
     exit_code: 0
   - cmd: 'test "$(python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --assert-complete-derived 2>&1 | grep -c "has no manifest row")" = 2'
     exit_code: 0
-  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --assert-complete-derived 2>&1 | grep -q "paragraph 51 has no manifest row"'
+  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --assert-complete-derived 2>&1 | grep -q "no manifest row: .@~/.claude/standards/powershell.md."'
     exit_code: 0
-  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --assert-complete-derived 2>&1 | grep -q "paragraph 100 has no manifest row"'
+  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --assert-complete-derived 2>&1 | grep -q "no manifest row: .CI requirements:."'
     exit_code: 0
 max_retries: 3
 files_touched: [docs/superpowers/plans/phrases.md]
@@ -249,9 +249,16 @@ depends_on: [3, 4, 5]
 > to go green, so its red carried no information and nobody acted on it.
 >
 > Replaced by three gates pinning the **exact** exemption set rather than a count of
-> zero — uncovered must be exactly 2, and must be those two paragraphs by number.
-> Strictly stronger than the original, which failed identically whether 2 paragraphs
-> were uncovered or 20.
+> zero: uncovered must be exactly 2, and must be those two paragraphs **identified by
+> their text**, not by their index. The first draft of this amendment matched
+> `paragraph 51` and `paragraph 100` by number, which is positional and rots — measured:
+> inserting a single paragraph above them shifts 51 to 52, and the gate then goes red on
+> correct state. Fail-closed rather than fail-open, so nothing would have shipped wrong,
+> but an arm that fires on a legitimate edit is one a reader learns to skip, and the next
+> one is the one that mattered. Matching the text is position-independent.
+>
+> Strictly stronger than the original either way, which failed identically whether 2
+> paragraphs were uncovered or 20.
 >
 > Nine further paragraphs were genuinely uncovered and are now classified. Their
 > original rows had been consumed when the phrases were deleted or re-anchored, which
