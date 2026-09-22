@@ -210,8 +210,12 @@ def paragraph_start_norms(source_text: str) -> list[str]:
     """
     # lstrip: normalize() collapses a run of whitespace to a single space but does
     # not remove it, so an indented paragraph's norm would begin with that space
-    # and startswith() could never match -- the arm would fail OPEN for the 15 of
-    # 249 CLAUDE.md paragraphs that begin indented.
+    # and startswith() could never match -- the arm would fail OPEN for any
+    # paragraph that begins indented, pinned by
+    # TestParagraphPrefixArmHandlesIndentedParagraphs. (No count here on
+    # purpose: it would rot, and the "of N" denominator this line used to carry
+    # came from classify_paragraphs, which this function never calls -- so it
+    # was not re-derivable from the code it annotates.)
     #
     # _PROSE_MARKER_RE: the same failure one marker over. A paragraph opening
     # "- **Phase 1 ...**" keeps its marker in the norm, so startswith() misses a
