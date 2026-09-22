@@ -22,6 +22,16 @@ powershell/coverage.xml
 # bash/kcov coverage output
 coverage/
 
+# Python tooling artifacts. Reachable as of this branch: the repo went from one
+# Python script to two scripts plus two suites, so `coverage run` and a bytecode
+# cache now land here. repo-structure.md's canonical .gitignore template lists
+# all four; dotfiles carried none of them because it had almost no Python.
+__pycache__/
+*.pyc
+.coverage
+htmlcov/
+.hypothesis/
+
 # .claude/ and .cursor/ have moved to ~/git-repos/personal/ai-config
 # These entries prevent leftover on-disk directories from being tracked
 .claude/*
