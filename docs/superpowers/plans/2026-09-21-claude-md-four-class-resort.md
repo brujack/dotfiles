@@ -174,7 +174,7 @@ parallel_group: manifest
 
 Same row format and phrase rules as Task 3.
 
-- [ ] Scope: `## Testing` intro, `### ShellCheck`, `### Testing Rules`, `### PowerShell Testing`, `### Coverage`, `### Mock Pattern`. **Exclude** `### Test Seams` and `### MAKEFLAGS and Stdout Partition` — Task 4 owns those.
+- [ ] Scope: `## Testing` intro, `### ShellCheck`, `### Testing Rules`, `### PowerShell Testing`, `### Coverage`, `### Mock Pattern`. **Exclude** `### Test Seams` and `### MAKEFLAGS and Stdout Partition` — Task 5 owns those.
 - [ ] Known DUPLICATE counterparts for this scope: `shell.md` (moreutils/`HAVE_PARALLEL` detection, the `SC1091` structurally-unavoidable rationale, file-wide directive scope, `SC1124`, the `git ls-files` pathspec argument), `ci.md` (`$(nproc)` is the worst worker count on a 2-vCPU runner), `git-workflow.md` (`GIT_DIR` strip in `pre-push`), and `ai-config/docs/knowledge/dotfiles-bats-test-infrastructure.md` (pass-through mocks, `env -i` strips PATH).
 - [ ] Three paragraphs in this scope were checked and are **not** duplicated — ggshield actor-boundary resolution, `tests/mocks/curl` short-option-cluster parsing, and the `-o` deferred-write semantics. Class them HAZARD.
 
@@ -256,6 +256,10 @@ tdd: not-applicable
 acceptance:
   - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --survives HAZARD'
     exit_code: 0
+  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --survives AMBIGUOUS'
+    exit_code: 0
+  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --survives REFERENCE'
+    exit_code: 0
   - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --deleted-have-counterparts'
     exit_code: 0
 max_retries: 3
@@ -287,6 +291,10 @@ tdd: not-applicable
 acceptance:
   - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --survives HAZARD'
     exit_code: 0
+  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --survives AMBIGUOUS'
+    exit_code: 0
+  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --survives REFERENCE'
+    exit_code: 0
   - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --deleted-have-counterparts'
     exit_code: 0
 max_retries: 3
@@ -315,6 +323,10 @@ tdd: not-applicable
 acceptance:
   - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --survives HAZARD'
     exit_code: 0
+  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --survives AMBIGUOUS'
+    exit_code: 0
+  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --survives REFERENCE'
+    exit_code: 0
   - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --deleted-have-counterparts'
     exit_code: 0
 max_retries: 3
@@ -341,7 +353,9 @@ tdd: not-applicable
 acceptance:
   - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --survives HAZARD'
     exit_code: 0
-  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --survives RULE'
+  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --survives AMBIGUOUS'
+    exit_code: 0
+  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --survives REFERENCE'
     exit_code: 0
 max_retries: 3
 files_touched: [CLAUDE.md, docs/superpowers/plans/phrases.md]
@@ -398,6 +412,10 @@ acceptance:
   - cmd: 'grep -cE "^\\| (kept|weakened|lost) \\|" docs/superpowers/plans/phrases.md'
     exit_code: 0
   - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --survives HAZARD'
+    exit_code: 0
+  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --survives AMBIGUOUS'
+    exit_code: 0
+  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --survives REFERENCE'
     exit_code: 0
 max_retries: 2
 files_touched: [docs/superpowers/plans/phrases.md]
