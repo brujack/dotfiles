@@ -20,7 +20,7 @@ dotfiles/
 │                      #   hook_repos.sh (expected-repos list for the git-hooks sweep)
 ├── scripts/           # bootstrap_{mac,linux}.sh, whats-new-*.sh, run-bash-coverage.sh,
 │                      #   bash-tracer.sh, cadence-notify.sh, sync-requirements-ci.sh,
-│                      #   sync-agent-guidance.sh, list-shell-files.sh,
+│                      #   sync-agent-guidance.sh, list-shell-files.sh, phrase_check.py,
 │                      #   check-lib-exit-traps.sh, sync_git_repos.sh,
 │                      #   and the extensionless hooks pre-commit-hook.sh/pre-push/commit-msg
 ├── LaunchAgents/      # cadence.plist.template — one template, both weekly agents
@@ -269,9 +269,26 @@ Uses **BATS** (Bash Automated Testing System), installed natively:
 **CI takes the parallel path too, and not because the workflow asks for it.** `ubuntu-latest` preinstalls GNU parallel, so `HAVE_PARALLEL` resolves to `yes` on the runner whatever the workflow installs — a claim to the contrary read off `ci.yml` is reading a file with no field for what the image ships (ai-config ADR-0078 Amendment 2). Never pass `JOBS="$(nproc)"`: on a 2-vCPU runner that is two workers, which ai-config's runner data shows is the worst available setting — slower than serial, while a fixed count well above the core count beats it. Figures in ADR-0035. To force serial anywhere, `make test HAVE_PARALLEL=`.
 
 **Run unit tests only:** `make test-unit` (runs `unit.bats`, `profiles.bats`, and `zshrc.d/unit.bats`)
-**Run lint only:** `make lint` — `bash -n` over `SHELL_FILES` (derived by `scripts/list-shell-files.sh`, which emits every tracked file whose first line is a bash/sh shebang — 107 files, measured 2026-09-08, including the `tests/mocks/` fixtures and the two extensionless hooks), `zsh -n` over `ZSH_FILES` (12 tracked files: `.zsh`/`.zsh-theme`/`.zshrc`/`.zprofile` plus `config/profiles.sh`, named explicitly), then shellcheck at default severity for `SHELL_FILES` and `--severity=warning` for `.bats`. `ZSH_FILES` is derived from `git ls-files`; `SHELL_FILES` is content-derived rather than pathspec-derived, for the reason in the ShellCheck section below. Both refuse to report a pass on an empty list. When `shellcheck` is absent the lint step skips it and prints an install hint that names the platform's real path: `brew install shellcheck` on Darwin, and `./setup_env.sh -t developer on Ubuntu` elsewhere, because a `brew install` on Linux would put an unmanaged linuxbrew copy ahead of the pinned `/usr/local/bin/shellcheck`. The recipe reads `_OVERRIDE_PLATFORM` (default `uname -s`) so one machine can test both branches; it changes only the printed string.
+**Run lint only:** `make lint` — `bash -n` over `SHELL_FILES` (derived by `scripts/list-shell-files.sh`, which emits every tracked file whose first line is a bash/sh shebang, including the `tests/mocks/` fixtures and the two extensionless hooks), `zsh -n` over `ZSH_FILES` (12 tracked files: `.zsh`/`.zsh-theme`/`.zshrc`/`.zprofile` plus `config/profiles.sh`, named explicitly), then shellcheck at default severity for `SHELL_FILES` and `--severity=warning` for `.bats`. `ZSH_FILES` is derived from `git ls-files`; `SHELL_FILES` is content-derived rather than pathspec-derived, for the reason in the ShellCheck section below. Both refuse to report a pass on an empty list. When `shellcheck` is absent the lint step skips it and prints an install hint that names the platform's real path: `brew install shellcheck` on Darwin, and `./setup_env.sh -t developer on Ubuntu` elsewhere, because a `brew install` on Linux would put an unmanaged linuxbrew copy ahead of the pinned `/usr/local/bin/shellcheck`. The recipe reads `_OVERRIDE_PLATFORM` (default `uname -s`) so one machine can test both branches; it changes only the printed string.
 
 `config/profiles.sh` is a bash file — it stays in `SHELL_FILES` for `bash -n` and shellcheck — and is also the one deliberate entry in `ZSH_FILES`: `config/profiles.zsh` sources it from both `.zprofile` and `1_init.zsh`, so `zsh -n` must parse it too. One file, both parsers, by design; `tests/scripts/makefile_lint_scope.bats` asserts this is the _only_ `SHELL_FILES`/`ZSH_FILES` overlap and that it is actually present in both, so a future accidental overlap is caught and this deliberate one can't silently disappear. The pathspec is duplicated at two independent call sites — `Makefile`'s `ZSH_FILES` and `.github/workflows/ci.yml`'s `lint-macos` job — and both must carry `config/profiles.sh` together; a fix to one alone leaves the other checking a stale set.
+**`scripts/phrase_check.py`** verifies the CLAUDE.md four-class re-sort: every classified
+paragraph carries a row in `docs/superpowers/plans/phrases.md` anchored to a verbatim phrase,
+and the tool asserts those anchors still hold. Matching is whitespace-normalised and never
+line-oriented, because a hand-wrapped paragraph routinely splits a sentence across a wrap a
+`grep` cannot cross; a phrase that begins a sentence, or opens a paragraph, is rejected as a
+fragile anchor, since a later edit capitalising a leading word would silently break it.
+
+**Its suite runs in `make test`; the tool does not.** `test-python` runs
+`tests/test_phrase_check.py`, so the checker is tested — but nothing runs the checker against
+the real manifest, and its only executable call sites are the `acceptance:` blocks of
+`docs/superpowers/plans/2026-09-21-claude-md-four-class-resort.md`, driven by the orchestrator
+during Phase 2. A green suite at high coverage therefore reads as a gate that does not exist.
+That is deliberate — wiring it would commit every future CLAUDE.md edit to keeping every phrase
+anchor valid, with no owner — but it is deliberate rather than decided: the question is open and
+belongs to that plan's Task 13 close-out. Do not read the suite's coverage as evidence the
+manifest is enforced.
+
 **Install hooks:** `make install-hooks` (installs pre-commit and pre-push hooks; run once per checkout)
 **Sync agent guidance:** `make sync-agent-guidance` (regenerates `.cursor/rules/global-claude-standards.mdc` from root `CLAUDE.md`'s `@~/.claude/standards/*.md` imports, resolved against the global symlinked standards dir)
 **Check agent guidance drift:** `make check-agent-guidance` (fails when generated Cursor guidance is stale)
