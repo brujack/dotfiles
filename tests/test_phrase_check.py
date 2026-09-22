@@ -6,10 +6,12 @@ Loaded by path (the script is not a package) — same pattern as test_triage_log
 import contextlib
 import importlib.util
 import io
+import os
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from hypothesis import given
 from hypothesis import strategies as st
@@ -399,6 +401,86 @@ class TestDeletedHaveCounterparts(PhraseCheckTestCase):
         )
         rc = _PC.main(["--manifest", str(manifest), "--deleted-have-counterparts"])
         self.assertNotEqual(rc, 0)
+
+    def test_fails_when_a_duplicate_deleted_row_names_dash_as_counterpart(self):
+        # DUPLICATE asserts the text lives elsewhere; '-' names no elsewhere.
+        manifest = self._write_manifest(
+            "phrases.md", ["DUPLICATE-deleted | some phrase | - | | note"]
+        )
+        rc = _PC.main(["--manifest", str(manifest), "--deleted-have-counterparts"])
+        self.assertNotEqual(rc, 0)
+
+    def test_passes_when_a_record_deleted_row_names_dash_as_counterpart(self):
+        # RECORD asserts git history holds provenance -- no counterpart to check.
+        manifest = self._write_manifest(
+            "phrases.md",
+            ["RECORD-deleted | some phrase never verified | - | | note"],
+        )
+        rc = _PC.main(["--manifest", str(manifest), "--deleted-have-counterparts"])
+        self.assertEqual(rc, 0)
+
+    def test_passes_when_a_record_deleted_row_names_a_counterpart_with_the_phrase(
+        self,
+    ):
+        # A RECORD row that DOES name a counterpart is a claim, and a claim
+        # gets checked whatever the class.
+        counterpart = self._write(
+            "tdd.md", "Provenance for the deleted record phrase lives here."
+        )
+        manifest = self._write_manifest(
+            "phrases.md",
+            [f"RECORD-deleted | the deleted record phrase | {counterpart} | | note"],
+        )
+        rc = _PC.main(["--manifest", str(manifest), "--deleted-have-counterparts"])
+        self.assertEqual(rc, 0)
+
+    def test_fails_when_a_record_deleted_row_names_a_counterpart_missing_the_phrase(
+        self,
+    ):
+        counterpart = self._write("tdd.md", "Nothing relevant is in this file.")
+        manifest = self._write_manifest(
+            "phrases.md",
+            [f"RECORD-deleted | the deleted record phrase | {counterpart} | | note"],
+        )
+        rc = _PC.main(["--manifest", str(manifest), "--deleted-have-counterparts"])
+        self.assertNotEqual(rc, 0)
+
+    def test_expands_a_tilde_prefixed_counterpart_path_that_exists(self):
+        fake_home = self.tmp_path / "home"
+        standards_dir = fake_home / ".claude" / "standards"
+        standards_dir.mkdir(parents=True)
+        (standards_dir / "tdd.md").write_text(
+            "Elsewhere: the tilde-expanded counterpart phrase lives here.",
+            encoding="utf-8",
+        )
+        manifest = self._write_manifest(
+            "phrases.md",
+            [
+                "RECORD-deleted | the tilde-expanded counterpart phrase | ~/.claude/standards/tdd.md | | note"
+            ],
+        )
+        with mock.patch.dict(os.environ, {"HOME": str(fake_home)}, clear=False):
+            rc = _PC.main(["--manifest", str(manifest), "--deleted-have-counterparts"])
+        self.assertEqual(rc, 0)
+
+    def test_tilde_prefixed_counterpart_path_that_does_not_exist_still_fails(self):
+        fake_home = self.tmp_path / "home"
+        fake_home.mkdir()
+        manifest = self._write_manifest(
+            "phrases.md",
+            ["RECORD-deleted | some phrase | ~/.claude/standards/tdd.md | | note"],
+        )
+        with mock.patch.dict(os.environ, {"HOME": str(fake_home)}, clear=False):
+            rc, output = _run_and_capture(
+                ["--manifest", str(manifest), "--deleted-have-counterparts"]
+            )
+        self.assertNotEqual(rc, 0)
+        expanded = str(fake_home / ".claude" / "standards" / "tdd.md")
+        self.assertIn(
+            expanded,
+            output,
+            "error message must name the expanded path, not the literal '~/...'",
+        )
 
 
 class TestParseManifest(PhraseCheckTestCase):
