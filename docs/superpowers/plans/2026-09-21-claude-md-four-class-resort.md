@@ -224,12 +224,38 @@ tdd: not-applicable
 acceptance:
   - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --assert-unique'
     exit_code: 0
-  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --assert-complete-derived'
+  - cmd: 'test "$(python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --assert-complete-derived 2>&1 | grep -c "has no manifest row")" = 2'
+    exit_code: 0
+  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --assert-complete-derived 2>&1 | grep -q "paragraph 51 has no manifest row"'
+    exit_code: 0
+  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --assert-complete-derived 2>&1 | grep -q "paragraph 100 has no manifest row"'
     exit_code: 0
 max_retries: 3
 files_touched: [docs/superpowers/plans/phrases.md]
 depends_on: [3, 4, 5]
 ```
+
+> **Task 6's derived-coverage gate was declared `exit_code: 0` and can never reach it.
+> Corrected during pr-review cycle 1, after the gate was found red at every commit on
+> this branch while Tasks 7 and 8 landed on top of it.**
+>
+> Two of the 249 content paragraphs admit no valid phrase at all, proven by exhaustive
+> search under the tool's own `match_phrase`: `@~/.claude/standards/powershell.md`
+> — uniqueness needs the leading `@`, which sits immediately after a sentence-ending
+> period, so every unique candidate is sentence-initial — and `CI requirements:`, whose
+> whole text occurs inside `**Sync CI requirements:**` elsewhere, so no substring of it
+> is unique. A gate demanding zero uncovered was asserting something the corpus cannot
+> satisfy. That is the trust-signal failure in its permissive form: it was never going
+> to go green, so its red carried no information and nobody acted on it.
+>
+> Replaced by three gates pinning the **exact** exemption set rather than a count of
+> zero — uncovered must be exactly 2, and must be those two paragraphs by number.
+> Strictly stronger than the original, which failed identically whether 2 paragraphs
+> were uncovered or 20.
+>
+> Nine further paragraphs were genuinely uncovered and are now classified. Their
+> original rows had been consumed when the phrases were deleted or re-anchored, which
+> is the mechanism by which an edit campaign silently loses its own coverage.
 
 **Files:** `docs/superpowers/plans/phrases.md` (new, merged).
 
