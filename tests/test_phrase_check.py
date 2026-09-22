@@ -269,6 +269,83 @@ class TestIsDeletedIsCaseInsensitive(PhraseCheckTestCase):
         self.assertFalse(row.is_deleted)
 
 
+class TestNormalizeCollapsesTheWhitespaceCLASS(PhraseCheckTestCase):
+    """Assert normalize's VALUE, not only its fixed point.
+
+    Idempotency cannot discriminate the pattern at all: `\\s+ -> " "` is a fixed
+    point for any pattern, including a wrong one. Measured -- narrowing the
+    class to ASCII-only `[ \\t\\n\\r\\f\\v]+` survives every idempotency
+    assertion under every interpreter, and survived the whole 86-test suite.
+    The vertical-tab / form-feed / nbsp rows in the idempotency table look like
+    Unicode coverage and are precisely the inputs that assertion cannot use.
+    """
+
+    def test_unicode_whitespace_collapses_to_a_single_space(self):
+        for name, raw, want in (
+            ("ascii space run", "a   b", "a b"),
+            ("tab", "a\tb", "a b"),
+            ("newline", "a\nb", "a b"),
+            ("vertical tab", "a\x0bb", "a b"),
+            ("form feed", "a\x0cb", "a b"),
+            ("nbsp", "a\xa0b", "a b"),
+            ("next line", "a\x85b", "a b"),
+            ("ideographic space", "a\u3000b", "a b"),
+            ("mixed run", "a \t\n\xa0 b", "a b"),
+        ):
+            with self.subTest(case=name):
+                self.assertEqual(_PC.normalize(raw), want)
+
+
+class TestFindOccurrencesRejectsAnEmptyNeedle(PhraseCheckTestCase):
+    """The empty-needle guard is load-bearing and was pinned by nothing.
+
+    Without it str.find returns 0 for an empty needle at every position, so
+    find_occurrences("abc", "") yields [0, 1, 2, 3] -- an occurrence count
+    equal to len+1 for a phrase that is not there. Deleting the guard left all
+    86 tests green.
+    """
+
+    def test_an_empty_needle_finds_nothing(self):
+        self.assertEqual(_PC.find_occurrences("abc", ""), [])
+
+    def test_a_real_needle_still_finds_its_positions(self):
+        """Positive control -- an empty result must mean the guard, not a dead function."""
+        self.assertEqual(_PC.find_occurrences("abcabc", "abc"), [0, 3])
+
+
+class TestMainTranslatesFailuresIntoExitCode2(PhraseCheckTestCase):
+    """The CLI's rc-2 contract was half-asserted.
+
+    check_unique's ManifestError is asserted at the LIBRARY boundary; main()'s
+    translation of it into rc 2 was asserted nowhere -- the displaced-check
+    shape, where a sound test covers a different object than the one that acts.
+    An unreadable --source is the tool's likeliest real failure (a typo'd path)
+    and its message was asserted nowhere either. This matters more now that 29
+    tests pin rc exactly: a suite that demands rc 1 precisely should be able to
+    say which rc-2 producer it is not.
+    """
+
+    def test_an_unparsable_manifest_exits_2_and_says_so(self):
+        source = self._write("source.md", "Alpha beta gamma delta epsilon.")
+        manifest = self._write_manifest("phrases.md", ["no-pipe-here-at-all"])
+        with mock.patch("sys.stderr", new_callable=io.StringIO) as err:
+            rc = _PC.main(
+                ["--manifest", str(manifest), "--source", str(source), "--assert-unique"]
+            )
+        self.assertEqual(rc, 2)
+        self.assertIn("expected at least", err.getvalue())
+
+    def test_an_unreadable_source_exits_2_and_names_the_path(self):
+        manifest = self._write_manifest("phrases.md", ["HAZARD | alpha beta | | | n"])
+        missing = Path(self._tmp.name) / "no-such-source.md"
+        with mock.patch("sys.stderr", new_callable=io.StringIO) as err:
+            rc = _PC.main(
+                ["--manifest", str(manifest), "--source", str(missing), "--assert-unique"]
+            )
+        self.assertEqual(rc, 2)
+        self.assertIn("cannot read source", err.getvalue())
+
+
 class TestParagraphPrefixArmSeesThroughProseMarkers(PhraseCheckTestCase):
     """A phrase opening a paragraph behind a prose marker is still paragraph-initial.
 
@@ -278,9 +355,9 @@ class TestParagraphPrefixArmSeesThroughProseMarkers(PhraseCheckTestCase):
     exact case it exists to catch: a bullet's first word carries the same
     position-dependent capital a sentence's first word does.
 
-    Six of the eight rows end the previous block without sentence-ending
+    Every row but `1. ` ends the previous block without sentence-ending
     punctuation, so the punctuation arm cannot fire and only the prefix arm
-    discriminates. The `1. ` row is NOT one of them and is annotated below --
+    discriminates. That row is the exception and is annotated below --
     the premise is about the previous block, while the conclusion needs no
     sentence-end char anywhere before the phrase, and `1.` supplies one itself.
     Measured: `1. ` stays green against a build with the prefix arm deleted
@@ -329,7 +406,8 @@ class TestParagraphPrefixArmSeesThroughProseMarkers(PhraseCheckTestCase):
         a regression guard rather than an incident.
 
         The remedy is to compare against BOTH forms, never to drop the strip:
-        dropping it re-opens the 3 shielded rows this commit exists to close.
+        dropping it re-opens the shielded case, which the marker rows in this
+        same class pin.
         """
         for name, marker in (("dash", "- "), ("blockquote", "> "), ("ordered", "3) ")):
             with self.subTest(marker=name):
@@ -551,7 +629,7 @@ class TestAssertCompleteDerived(PhraseCheckTestCase):
             ]
         )
         self.assertEqual(rc_two, 0)
-        self.assertNotEqual(rc_three, 0)
+        self.assertEqual(rc_three, 1)
 
 
 class TestAssertUnique(PhraseCheckTestCase):
@@ -678,6 +756,15 @@ class TestSentenceInitialPhraseRejected(PhraseCheckTestCase):
         self.assertEqual(rc, 0)
 
     def test_the_very_start_of_the_source_counts_as_sentence_initial(self):
+        """End-to-end. Deliberately NOT the pin for the index <= 0 arm.
+
+        A phrase at offset 0 also opens paragraph 1, so the paragraph-prefix
+        arm added on this branch produces the same rc independently. Measured:
+        deleting `index <= 0` alone leaves the whole suite green, and deleting
+        the prefix arm alone does too -- only removing both turns this red.
+        The unit test below is what actually pins the arm; this one pins the
+        CLI wiring, and the two are separated on purpose.
+        """
         source = self._write("source.md", "The quick brown fox jumps over lazy dogs.")
         manifest = self._write_manifest(
             "phrases.md", ["HAZARD | The quick brown fox jumps | | | note"]
@@ -686,6 +773,20 @@ class TestSentenceInitialPhraseRejected(PhraseCheckTestCase):
             ["--manifest", str(manifest), "--source", str(source), "--assert-unique"]
         )
         self.assertEqual(rc, 1)
+
+    def test_is_sentence_initial_pins_offset_zero_directly(self):
+        """The unit-level pin, reached with no other arm in play.
+
+        is_sentence_initial is called with an explicit index, so nothing about
+        paragraphs, markers or prefixes can satisfy it on the arm's behalf.
+        """
+        norm = _PC.normalize("The quick brown fox jumps over lazy dogs.")
+        self.assertTrue(_PC.is_sentence_initial(norm, 0))
+
+    def test_is_sentence_initial_is_false_mid_sentence(self):
+        """Positive control -- True at 0 must mean the arm, not a constant."""
+        norm = _PC.normalize("The quick brown fox jumps over lazy dogs.")
+        self.assertFalse(_PC.is_sentence_initial(norm, 4))
 
 
 class TestSentenceInitialAtParagraphStart(PhraseCheckTestCase):
@@ -1090,8 +1191,6 @@ class TestCliUsage(unittest.TestCase):
             self.assertEqual(rc, 2)
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 class TestParagraphCoverage(PhraseCheckTestCase):
@@ -1484,3 +1583,13 @@ class TestFindOccurrencesCountsOverlappingMatches(PhraseCheckTestCase):
             ["--manifest", str(manifest), "--source", str(source), "--assert-unique"]
         )
         self.assertEqual(rc, 1)
+
+
+# At EOF deliberately. Sitting mid-file this guard is still syntactically fine
+# and still runs unittest.main(), but every class defined below it is absent
+# from a direct `python3 tests/test_phrase_check.py` -- measured 61 of 86,
+# reported as OK. `make test-python` uses discover and was unaffected, so no
+# gate was weakened; the cost lands on whoever runs the file directly while
+# iterating, which is exactly when a green OK gets trusted.
+if __name__ == "__main__":
+    unittest.main()

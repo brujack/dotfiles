@@ -16,10 +16,10 @@ remedy capitalises a sentence's leading word, and matching is case-sensitive, so
 sentence-initial phrase is fragile against edits made elsewhere in the file.
 
 CLI:
-    python3 .claude/scripts/phrase_check.py --manifest phrases.md --source CLAUDE.md --assert-unique
-    python3 .claude/scripts/phrase_check.py --manifest phrases.md --source CLAUDE.md --assert-complete-derived
-    python3 .claude/scripts/phrase_check.py --manifest phrases.md --source CLAUDE.md --survives HAZARD
-    python3 .claude/scripts/phrase_check.py --manifest phrases.md --deleted-have-counterparts
+    python3 scripts/phrase_check.py --manifest phrases.md --source CLAUDE.md --assert-unique
+    python3 scripts/phrase_check.py --manifest phrases.md --source CLAUDE.md --assert-complete-derived
+    python3 scripts/phrase_check.py --manifest phrases.md --source CLAUDE.md --survives HAZARD
+    python3 scripts/phrase_check.py --manifest phrases.md --deleted-have-counterparts
 """
 
 from __future__ import annotations
@@ -251,8 +251,9 @@ def paragraph_start_norms(source_text: str) -> list[str]:
     # ("- " + phrase) and opens its mirror: a phrase whose own text carries the
     # marker stops prefix-matching a paragraph it demonstrably opens. Keeping
     # both means neither direction can fail open, and the obvious alternative --
-    # skipping the strip when the needle looks like a marker -- re-opens the 3
-    # shielded rows this exists to close. Duplicates cost nothing: the arm is an
+    # skipping the strip when the needle looks like a marker -- re-opens the
+    # shielded case, which the marker rows in
+    # TestParagraphPrefixArmSeesThroughProseMarkers pin. Duplicates cost nothing: the arm is an
     # any() over startswith.
     norms = []
     for para in split_paragraphs(source_text):
