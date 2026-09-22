@@ -82,14 +82,21 @@ tdd: required
 acceptance:
   - cmd: 'python3 -m pytest tests/test_phrase_check.py -q'
     exit_code: 0
-  - cmd: 'python3 .claude/scripts/phrase_check.py --help'
+  - cmd: 'python3 scripts/phrase_check.py --help'
     exit_code: 0
 max_retries: 3
-files_touched: [.claude/scripts/phrase_check.py, tests/test_phrase_check.py]
+files_touched: [scripts/phrase_check.py, tests/test_phrase_check.py]
 depends_on: [1]
 ```
 
-**Files:** `.claude/scripts/phrase_check.py`, `tests/test_phrase_check.py`.
+**Files:** `scripts/phrase_check.py`, `tests/test_phrase_check.py`.
+
+**Relocated from `.claude/scripts/` at execution time.** That directory tracks exactly one file
+in this repo and its `.gitignore` allow-path is deliberately one file wide — the comment there
+calls all three lines load-bearing. Widening it to admit this script would be the loose-escape-
+hatch failure `USER.md` names; `scripts/` is where this repo's own 22 tracked scripts live and is
+the correct home. The first dispatch reported this as a blocker rather than force-adding, which
+is the right call, though its proposed remedy was the widening.
 
 Exists before any manifest row, because every later gate calls it. Write each test first.
 
@@ -123,7 +130,7 @@ tdd: not-applicable
 acceptance:
   - cmd: 'test -s docs/superpowers/plans/phrases-a.md'
     exit_code: 0
-  - cmd: 'python3 .claude/scripts/phrase_check.py --manifest docs/superpowers/plans/phrases-a.md --source CLAUDE.md --assert-unique'
+  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases-a.md --source CLAUDE.md --assert-unique'
     exit_code: 0
 max_retries: 3
 files_touched: [docs/superpowers/plans/phrases-a.md]
@@ -155,7 +162,7 @@ tdd: not-applicable
 acceptance:
   - cmd: 'test -s docs/superpowers/plans/phrases-b.md'
     exit_code: 0
-  - cmd: 'python3 .claude/scripts/phrase_check.py --manifest docs/superpowers/plans/phrases-b.md --source CLAUDE.md --assert-unique'
+  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases-b.md --source CLAUDE.md --assert-unique'
     exit_code: 0
 max_retries: 3
 files_touched: [docs/superpowers/plans/phrases-b.md]
@@ -186,7 +193,7 @@ tdd: not-applicable
 acceptance:
   - cmd: 'test -s docs/superpowers/plans/phrases-c.md'
     exit_code: 0
-  - cmd: 'python3 .claude/scripts/phrase_check.py --manifest docs/superpowers/plans/phrases-c.md --source CLAUDE.md --assert-unique'
+  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases-c.md --source CLAUDE.md --assert-unique'
     exit_code: 0
 max_retries: 3
 files_touched: [docs/superpowers/plans/phrases-c.md]
@@ -215,9 +222,9 @@ role: executor
 model: sonnet
 tdd: not-applicable
 acceptance:
-  - cmd: 'python3 .claude/scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --assert-unique'
+  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --assert-unique'
     exit_code: 0
-  - cmd: 'python3 .claude/scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --assert-complete-derived'
+  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --assert-complete-derived'
     exit_code: 0
 max_retries: 3
 files_touched: [docs/superpowers/plans/phrases.md]
@@ -247,9 +254,9 @@ role: executor
 model: sonnet
 tdd: not-applicable
 acceptance:
-  - cmd: 'python3 .claude/scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --survives HAZARD'
+  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --survives HAZARD'
     exit_code: 0
-  - cmd: 'python3 .claude/scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --deleted-have-counterparts'
+  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --deleted-have-counterparts'
     exit_code: 0
 max_retries: 3
 files_touched: [CLAUDE.md, docs/superpowers/plans/phrases.md]
@@ -278,9 +285,9 @@ role: executor
 model: sonnet
 tdd: not-applicable
 acceptance:
-  - cmd: 'python3 .claude/scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --survives HAZARD'
+  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --survives HAZARD'
     exit_code: 0
-  - cmd: 'python3 .claude/scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --deleted-have-counterparts'
+  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --deleted-have-counterparts'
     exit_code: 0
 max_retries: 3
 files_touched: [CLAUDE.md, docs/superpowers/plans/phrases.md]
@@ -306,9 +313,9 @@ role: executor
 model: sonnet
 tdd: not-applicable
 acceptance:
-  - cmd: 'python3 .claude/scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --survives HAZARD'
+  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --survives HAZARD'
     exit_code: 0
-  - cmd: 'python3 .claude/scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --deleted-have-counterparts'
+  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --deleted-have-counterparts'
     exit_code: 0
 max_retries: 3
 files_touched: [CLAUDE.md, docs/superpowers/plans/phrases.md]
@@ -332,9 +339,9 @@ role: executor
 model: sonnet
 tdd: not-applicable
 acceptance:
-  - cmd: 'python3 .claude/scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --survives HAZARD'
+  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --survives HAZARD'
     exit_code: 0
-  - cmd: 'python3 .claude/scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --survives RULE'
+  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --survives RULE'
     exit_code: 0
 max_retries: 3
 files_touched: [CLAUDE.md, docs/superpowers/plans/phrases.md]
@@ -390,7 +397,7 @@ tdd: not-applicable
 acceptance:
   - cmd: 'grep -cE "^\\| (kept|weakened|lost) \\|" docs/superpowers/plans/phrases.md'
     exit_code: 0
-  - cmd: 'python3 .claude/scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --survives HAZARD'
+  - cmd: 'python3 scripts/phrase_check.py --manifest docs/superpowers/plans/phrases.md --source CLAUDE.md --survives HAZARD'
     exit_code: 0
 max_retries: 2
 files_touched: [docs/superpowers/plans/phrases.md]
