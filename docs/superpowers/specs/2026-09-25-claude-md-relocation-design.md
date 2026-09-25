@@ -182,3 +182,29 @@ figure is check 6's output, not this line.
 - **Delete the narratives instead of moving them.** `behavior.md`: "a move with no citation is
   a deletion". The pointers are the citation. Deleting would remove incident evidence the
   rules cite as their reason.
+
+## Multi-Lens Review
+
+Reviewed at commit: `8d67be06` (Step 7 self-review commit, before Step 8 dispatch)
+
+### Goal-Fit
+
+Finding: Worth building, but it moves about 17% of the 178.4k and the spec never says so. The global preamble (`~/.claude/CLAUDE.md`, `USER.md` and the 10 imported standards) is 418,189 B, about 107k tokens, and is out of scope. Best case lands a fresh session around 146–150k. Check 6 has no threshold, so success is undefined. Only check 2 fails when the relocation does nothing, and moving one paragraph satisfies it. Proposed: a hard `wc -c CLAUDE.md <= 70,000` check. Check 4's verdicts have no durable home; the PR body should hold them.
+Assumption: The 3.9 B/token ratio holds for this file, which is dense with paths, code and tables. Settle it with the per-file "Memory files" line of `/context` in a fresh dotfiles session, taken before the dotfiles merge. The baseline cannot be recovered afterwards.
+Disposition:
+
+### Ergonomics
+
+Finding: Check 1's unit, the blank-line paragraph, is wrong for this file. Key Conventions paragraph 2 is 26 bullets and 18,532 chars in one block. Moving one bullet forces all 18.5k into a destination or tempts loosening the checker. The unit must also be the top-level list item. Pointers need a trigger condition ("before editing X, read Y"), following the working bash-coverage pointer. The 15-word seam-row cap is too tight where the hazard is a destructive failing path (`nvidia-ctk`, `_CARGO_BIN`).
+Assumption: A fresh session doing a seam task acts on the index row or follows the pointer, rather than copying what `tests/` looks like. Check after merge: give a fresh session "add a test for `_install_ubuntu_nvidia`'s restart branch", then look for a Read of `dotfiles-test-seams.md` and for `_OVERRIDE_DOCKER_DAEMON_JSON` plus the `nvidia-ctk` mock. Run the same task on today's file as the baseline.
+Disposition:
+
+### Risk
+
+Finding: The verification plan cannot catch the spec's own worst case. Check 1 certifies the destination, and nothing mechanical checks what stays in `CLAUDE.md`. A gate rule that leaves with its narrative is green on check 1 by construction. The only "Never invoke" in the file (`sync_git_repos.sh`) sits inside the 18.5k Key Conventions block. Proposed: a retention check. Every pre-change sentence matching `never|must|do not|required|refuse|HOLD` must appear, normalised, in the post-change `CLAUDE.md` or in a waiver list the reviewer signs. Add a negative control: delete one rule from `CLAUDE.md` while it survives in the destination, and confirm red. Scratch drafts under `~/.claude/projects/` block ai-config `make test`.
+Assumption: A pointer plus a bullet of 15 words or fewer is enough for correct behaviour without the narrative. This is argued, not measured. Test it the same way as the Ergonomics assumption.
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
