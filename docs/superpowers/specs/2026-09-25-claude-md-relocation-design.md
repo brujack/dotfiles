@@ -139,7 +139,12 @@ text. `### Test Seams` shrinks to:
   failing path touches live state, and the regex does not reach all of them. Measured:
   `_CARGO_BIN`'s paragraph ("compile all eight `CARGO_TOOLS` pins for real") contains no rule
   keyword. The predicate is the literal token `E2`. At `2e38f5e4` it selects 5 units,
-  13,841 B: rustup, `nvidia-ctk`, the cadence seam table, `_CARGO_BIN`, and the plugin cache;
+  13,841 B: rustup, `nvidia-ctk`, the cadence seam table, `_CARGO_BIN`, and the plugin cache.
+  **The predicate misses members, so it is a floor, not the list.** Round 3 found two units
+  that also touch live state but carry neither `E2` nor a rule keyword: `_RELEASE_BIN_DIR` /
+  `_TFENV_LINK_DIR` (`tests/mocks/sudo` execs real commands) and `_OVERRIDE_CLAUDE_SETTINGS`
+  (a mock that dirties a tracked fixture). Both stay inline, whole, by name. The plan carries
+  the full inline-whole list, and check 5's reviewer may add to it but not remove from it;
 - the cross-cutting rules listed above;
 - a pointer to `dotfiles-test-seams.md`.
 
@@ -182,7 +187,13 @@ post-change file. Its splitter is pinned, so every count below can be reproduced
    items;
 3. normalise whitespace with `phrase_check.py`'s normaliser, never `grep -n` (#293 found line
    wraps split sentences);
-4. split sentences at `(?<=[.!?])\s+`.
+4. split sentences at `(?<=[.!?][*`)"]{0,3})\s+(?=[A-Z*`(\[])`. This splits after closing markup
+   and does not split after `e.g.`, `i.e.` or `vs.` (a lowercase letter follows). The plan's
+   first task measures the splitter against the file and pins the count. The figures below are
+   from a simpler splitter and are indicative only.
+
+The **moving sections** are exactly the headings in the Destinations table. The plan lists
+them by literal heading text, and the script reads that list. It does not infer it.
 
 The **rule regex** is `\b(never|must|do not|don't|required|refuse[sd]?|HOLD|always|prefer|avoid|verify|only)\b`,
 case-insensitive. **Measured at `2e38f5e4` with this splitter:** 187 matching sentences, 47,010
@@ -206,13 +217,15 @@ bytes, inside the sections that move.
      stays green, then revert.
 3. **Non-zero and size (mechanical).**
    - The count of relocated units must be greater than 0.
+   - **Relocated bytes >= 60,000.** This fails an empty or token relocation. The floor
+     threshold below cannot, because the floor grows with every unit kept.
    - **Hard threshold:** `wc -c CLAUDE.md <= floor + 8,000`.
      - The script computes the **floor**: unmoved sections, plus retained rule sentences, plus
        inline E2 units, with overlap counted once.
      - The 8,000 B allows for pointers and seam-name bullets.
-     - The threshold is derived from the floor on purpose. It exists to fail an empty, token or
-       bloated relocation, not to force a size.
-   - An empty or token relocation fails here.
+     - The threshold is derived from the floor on purpose. It catches bloat, meaning text
+       added beyond retained rules and pointers. It is not a size target.
+   - An empty or token relocation fails on relocated bytes.
    - If check 2 cannot be met under the threshold, **stop and report**. Do not drop rules or
      add waivers to reach the number.
 4. **Every pointer resolves.**
@@ -226,6 +239,9 @@ bytes, inside the sections that move.
      Keyword-less rules like "Always remove…" are now caught by `always`, but others may not
      be. Verdict per block: complete, or rule missing plus the sentence.
    - **Each waiver row:** narrative, or actually a rule.
+   - **Each retained sentence whose meaning depends on a moved antecedent** ("**Both** call
+     sites must…"): retain its whole unit instead. The reviewer flags these, and a flagged
+     sentence's unit moves back inline.
 
    Both sets of verdicts go in the dotfiles PR body, the only record that outlives the session.
    Expected volume: one verdict per block (about 40) plus the waiver rows. Waivers are
@@ -239,10 +255,13 @@ bytes, inside the sections that move.
      start (#293 plan, Task 11).
    - **Pass:** the per-file `CLAUDE.md` figure falls by at least 40%.
    - The total is recorded, not gated.
-8. **Behaviour (post-merge, advisory).** In a fresh dotfiles session, give the task "add a test
-   for `_install_ubuntu_nvidia`'s restart branch".
-   - **Pass:** the test sets `_OVERRIDE_DOCKER_DAEMON_JSON` and runs under the `nvidia-ctk`
-     mock.
+8. **Behaviour (post-merge, advisory).** In a fresh dotfiles session, run two tasks.
+   - **Task A:** "add a test for `_install_ubuntu_nvidia`'s restart branch". This seam stays
+     inline. **Pass:** the test sets `_OVERRIDE_DOCKER_DAEMON_JSON` and runs under the
+     `nvidia-ctk` mock.
+   - **Task B:** "add a test for `_install_ubuntu_tflint`'s checksum-mismatch branch". This seam
+     moves to index-only. **Pass:** the test sets `_RELEASE_BIN_DIR`, `_RELEASE_TMP_ROOT` and
+     `_TFLINT_SHA256`, and does not mock `sha256sum`.
    - **Baseline:** the same task in a session started in a worktree at `2e38f5e4`, the
      pre-change file.
    - n=1 per arm, so a single fail does not prove the index insufficient. It triggers a second
@@ -322,6 +341,25 @@ Assumption: about 130 rule sentences can be cut under 70 KB by accepted one-line
 | extended (adds `always|prefer|avoid|verify|only`) | 187 | 47,010 |
 
 The floor if all are kept verbatim is **38,418 + 25,625 + ~7,000 index ≈ 71 KB** for the base regex, and **≈ 92 KB** for the extended one, before pointers.
+
+### Round 3 (scoped Risk, reviewed at `17f3b891`)
+
+Finding:
+1. The `sudo` mock exec hazard (`_RELEASE_BIN_DIR`/`_TFENV_LINK_DIR`) has 0 regex hits and no `E2`, so it would relocate whole, and `_OVERRIDE_CLAUDE_SETTINGS` likewise.
+2. "A token relocation fails here" was false: the floor includes unmoved text, so moving one unit passes. Retention bloat is absorbed one-for-one.
+3. The splitter mis-splits. It does not split after `.**` or `` .` `` (35 of 192 matches glue two or more sentences). It does split inside `e.g.`, producing fragments. 1 of 6 sampled retained sentences depends on a moved antecedent. The set of moving sections was not pinned (192 / 47,999 B against the spec's 187 / 47,010).
+
+Assumption: a name-and-reader index is enough for a seam that moves to index-only. Refute by running check 8's task against `_RELEASE_BIN_DIR`, not `nvidia-ctk`, which stays inline.
+
+Disposition:
+
+**Author's proposed resolution, already applied at the next commit, pending operator disposition:**
+1. Both units are named inline-whole. The E2 predicate is declared a floor, and the reviewer may only add to the list.
+2. New check: relocated bytes >= 60,000. The floor threshold is re-described as a bloat check.
+3. The splitter is revised and its count is pinned by the plan's first task. The moving sections are listed by literal heading. A retained sentence that depends on a moved antecedent keeps its whole unit.
+4. The assumption becomes check 8's second task, against `_RELEASE_BIN_DIR`.
+
+**Stopping note.** Round 3's findings sit in the apparatus: splitter regex, threshold arithmetic, predicate membership. The rule-loss finding (1) is closed by naming the units and by check 5, which no mechanical predicate replaces. Per the brainstorming stop rule, the next instrument is the plan's first measured task, not a fourth lens.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
