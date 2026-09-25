@@ -372,3 +372,24 @@ Disposition: Addressed (operator, 2026-09-25), per the resolution below. Assumpt
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+## Amendment 2026-09-25: rule bullets replace verbatim sentence retention
+
+**Operator decision, after Task 5's block review.** The verbatim design failed check 5: 58 of 85 MOVE groups had a finding.
+- The keyword regex misses rules phrased as plain imperatives, and prohibitions phrased as "not optional" or "deliberately".
+- Sentences kept on their own lose their antecedents ("**Both** call sites must…").
+
+Verbatim retention guarded against paraphrase weakening a rule. The fragments it produced weaken rules more, and more often. Findings are recorded in the map under `## Block review verdicts` (f9733db3).
+
+**New representation.** For each MOVE group, `CLAUDE.md` carries 1–3 imperative lines, written by hand, stating every rule in the group, followed by the group's pointer. INLINE units are unchanged.
+
+**Coverage contract.** A group's rule lines must cover:
+(a) every sentence the verbatim design retained for that group;
+(b) every "rule missing" sentence the Task 5 review listed for it.
+
+**Changed checks:**
+- **Check 2 (mechanical, bullets mode):** every MOVE (dest, heading) has exactly one pointer in `CLAUDE.md`.
+- **Check 3:** relocated bytes >= 60,000, and `wc -c CLAUDE.md <= 90,000`.
+- **Check 5:** the independent reviewer judges each group's rule lines against the coverage contract. Verdicts: `covered`, `weakened: <rule>` or `missing: <rule>`. Any non-`covered` verdict blocks.
+
+Checks 1 and 4 are unchanged. **Test Seams:** one bullet per seam. The lead is `` `VAR` (`file:function`) ``, with the reader taken from the code, followed by its rule lines and pointer. INLINE units carry no added lead.
