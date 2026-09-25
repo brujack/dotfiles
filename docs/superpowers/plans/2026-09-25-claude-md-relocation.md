@@ -15,7 +15,7 @@
 - **Base revision is `2e38f5e4`.** Read it with `git show 2e38f5e4:CLAUDE.md`, never from the worktree once edits start.
 - **No rewording.** Relocated units move verbatim. The only new text in `CLAUDE.md` is pointer lines and seam-name bullets.
 - **Rule regex, case-insensitive:** `\b(never|must|do not|don't|required|refuse[sd]?|HOLD|always|prefer|avoid|verify|only)\b`.
-- **Splitter:** strip fenced code, then split into units (blank-line paragraphs, then top-level list items), then normalise with `phrase_check.normalize`, then split sentences at each match of `(?<!\be\.g)(?<!\bi\.e)(?<!\bvs)[.!?][*`)"]{0,3}\s+(?=[A-Z*`(\[])`.
+- **Splitter:** strip fenced code, then split into units (blank-line paragraphs, then top-level list items), then normalise with `phrase_check.normalize`, then split sentences at each match of `(?<!\be\.g)(?<!\bi\.e)(?<!\bvs)[.!?][*`)"]{0,3}\s+(?=[A-Z0-9*`(\[])` (0-9 added after Task 1 review: a sentence may begin with a digit).
 - **Waivers are narrative-only.** There is no "restated as" waiver.
 - **Inline-whole units:** every Test Seams unit containing the token `E2`, plus `_RELEASE_BIN_DIR`/`_TFENV_LINK_DIR` and `_OVERRIDE_CLAUDE_SETTINGS`. A reviewer may add units to this list but never remove them.
 - **Pointer form:** `**Before** <action> **on** <paths or symbols>, read \`ai-config/docs/knowledge/<file>.md\` § \`<heading>\`.`
