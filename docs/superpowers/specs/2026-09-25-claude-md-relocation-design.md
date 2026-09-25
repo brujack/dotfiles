@@ -393,3 +393,13 @@ Verbatim retention guarded against paraphrase weakening a rule. The fragments it
 - **Check 5:** the independent reviewer judges each group's rule lines against the coverage contract. Verdicts: `covered`, `weakened: <rule>` or `missing: <rule>`. Any non-`covered` verdict blocks.
 
 Checks 1 and 4 are unchanged. **Test Seams:** one bullet per seam. The lead is `` `VAR` (`file:function`) ``, with the reader taken from the code, followed by its rule lines and pointer. INLINE units carry no added lead.
+
+## Amendment 2026-09-25 (b): compact pointers
+
+Task 9 measured the full bullets file at 130,104 B:
+- unmoved text 44,901 B;
+- INLINE units 24,528 B;
+- rule lines 39,416 B;
+- pointers 18,246 B (85 × ~215 B).
+
+The 90 KB estimate was wrong: unmoved text plus INLINE units alone come to 69 KB. **Operator chose compact pointers.** A pointer is now a suffix on a group's last rule line, `→ \`<dest file>\` § \`<heading>\``, and one legend line near the top of `CLAUDE.md` says the arrow means "read `ai-config/docs/knowledge/<dest file>` at that section". The concrete trigger ("before X on Y") already lives in the rule lines. The trigger-wording premise was argued and never measured; check 8's behaviour test still measures the index-only premise. **Check 3 in bullets mode:** `--max-bytes 120000`.
