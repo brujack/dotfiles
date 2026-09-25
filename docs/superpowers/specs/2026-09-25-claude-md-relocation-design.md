@@ -258,6 +258,8 @@ paths, code and tables, so its real ratio may differ. Check 7's per-file line se
 
 Reviewed at commit: `8d67be06` (Step 7 self-review commit, before Step 8 dispatch)
 
+Every reference in round 1 (check numbers, section names) describes the spec at `8d67be06`. The Verification section has since been renumbered, and these references are not updated to follow it.
+
 ### Goal-Fit
 
 Finding: Worth building, but it moves about 17% of the 178.4k and the spec never says so. The global preamble (`~/.claude/CLAUDE.md`, `USER.md` and the 10 imported standards) is 418,189 B, about 107k tokens, and is out of scope. Best case lands a fresh session around 146–150k. Check 6 has no threshold, so success is undefined. Only check 2 fails when the relocation does nothing, and moving one paragraph satisfies it. Proposed: a hard `wc -c CLAUDE.md <= 70,000` check. Check 4's verdicts have no durable home; the PR body should hold them.
