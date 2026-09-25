@@ -12,13 +12,33 @@ SECTION | ### Mock Pattern
 SECTION | ### MAKEFLAGS and Stdout Partition
 
 INLINE | **`_RUSTUP_INIT_URL` / `_RUSTUP_INIT_SHA256` / `_RUSTUP_INIT
-INLINE | **`_OVERRIDE_DOCKER_DAEMON_JSON` (`_install_ubuntu_nvidia`)
-INLINE | **`tests/helpers/legacy_oracle.bash` is that shared oracle,
+INLINE | **`_OVERRIDE_DOCKER_DAEMON_JSON` (`_install_ubuntu_nvidia`) 
+INLINE | **`tests/helpers/legacy_oracle.bash` is that shared oracle, 
+INLINE | | variable | read by | why it exists | | -------------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | | `_RHN_DETECTOR` | tests
 INLINE | **`_CARGO_BIN` (`install_cargo_tools`, `lib/developer.sh`) i
 INLINE | **`_RELEASE_BIN_DIR` (`_install_pinned_release_binary`, `lib
 INLINE | `_OVERRIDE_CLAUDE_SETTINGS` points every reader above at a f
 INLINE | **`_OVERRIDE_CLAUDE_PLUGIN_CACHE` (`_claude_plugin_cache_dir
+INLINE | - Machine roles are now driven by the **profile/capability m
+INLINE | - All eight legacy hostname vars (`LAPTOP`, `STUDIO`, `RECEP
+INLINE | - Ubuntu version detection uses `lsb_release -rs` → `NOBLE` 
+INLINE | - Credential directories (`.aws`, `.tf_creds`, `.tsh`) are c
+INLINE | - Git repos are cloned to `~/git-repos/personal/` and `~/git
+INLINE | - Python environments managed via **pyenv** + **pyenv-virtua
+INLINE | - **Ansible venv packages:** declared once in `pyproject.tom
+INLINE | - **ruff is venv-managed** (not brew); run `brew uninstall r
+INLINE | - **Test runner:** `pytest` — runs `unittest.TestCase` tests
+INLINE | - Application installs are kept in alphabetical order
+INLINE | - For shell syntax-only fixes, validate with `bash -n <file>
 INLINE | - **`scripts/sync_git_repos.sh`** replaces the old rsync-onl
+INLINE | Uses **BATS** (Bash Automated Testing System), installed nat
+INLINE | `install_bats()` in `lib/helpers.sh` is a platform dispatche
+INLINE | - macOS: `install_bats_macos()` in `lib/macos.sh` — `brew in
+INLINE | - Ubuntu: `install_bats_linux()` in `lib/linux_shared.sh` — 
+INLINE | **Run tests:** `make test` (runs lint, the lock and requirem
+INLINE | **Run unit tests only:** `make test-unit` (runs `unit.bats`,
+INLINE | **Install hooks:** `make install-hooks` (installs pre-commit
+INLINE | | file | group | pins | consumers | | ----------------------
 
 WAIVE | The suite's positive control is the mismatch case, which asserts the spy binary **never ran**, not merely that the function returned 1. | narrative: describes what the test's own positive control observes, not a directive
 WAIVE | `brew_formula_installed` greps `brew list --formula` in _both_ branches, so an installed **cask** never matches there and the caller would reinstall it on every setup run — an idempotency break, which `code-standards.md` treats as a bug rather than a tradeoff. | narrative: describes a bug mechanism (an idempotency break already named as such), not a directive
@@ -26,7 +46,6 @@ WAIVE | Mutation-confirmed: reading the seam under a typo'd name leaves the nega
 WAIVE | The seam exists because the only other way to reach either branch is to read — or change — the developer's real account. | narrative: explains why the seam is needed (rationale), not itself a rule
 WAIVE | The three pre-existing tests encoded all of it: one asserted only that `chsh` was _called_, never that it succeeded, and the error-path test asserted `status -eq 0`, pinning the swallow. | narrative: describes what pre-existing tests happened to assert, historical
 WAIVE | **Two code paths, and the tests only exercise one.** | narrative: describes test coverage as observed (one of two paths exercised)
-WAIVE | The hazard runs in both directions and only one was documented until 2026-09-05. | narrative: describes how long a hazard went undocumented, historical
 WAIVE | Re-install seeds a missing heartbeat and never clobbers a real one, so `setup_user` is the migration path for agents provisioned before the field existed. | narrative: describes the installer's guarantee as a property, not an instruction to the reader
 WAIVE | The `rm -rf` in the WARN is the only thing that does. | narrative: describes what the WARN's rm -rf accomplishes, not a directive
 WAIVE | This conserves GitHub Actions minutes — CI runs only on PRs. | narrative: states a consequence (GitHub Actions minutes), not a directive
@@ -120,6 +139,7 @@ MOVE | - **A global/system `core.hooksPath` pin redirects every rep | dotfiles-c
 MOVE | - **The pin probe must read `--includes`, and the remedy mus | dotfiles-conventions.md | Global/system core.hooksPath pin: detection and remedy
 MOVE | - **Homebrew `make` gnubin prepend:** `.config/.zshrc.d/6_pa | dotfiles-conventions.md | Homebrew make gnubin prepend (prepend, not append)
 MOVE | - **Which `make` an actor resolves — measured, and it does n | dotfiles-conventions.md | Which make an actor resolves (gnubin/actor table)
+MOVE | | actor | `PATH` source | resolves | version | | ----------- | dotfiles-conventions.md | Which make an actor resolves (gnubin/actor table)
 MOVE | **The split is real and its consequence to this repo is nil. | dotfiles-conventions.md | Which make an actor resolves (gnubin/actor table)
 MOVE | Two traps recorded from those retirements, because both cost | dotfiles-conventions.md | Which make an actor resolves (gnubin/actor table)
 MOVE | - **`/usr/local/bin` reaches none of the non-interactive act | dotfiles-conventions.md | setup_env.sh cannot run non-interactively on the Linux workstation (brew PATH)
@@ -141,6 +161,7 @@ MOVE | **Its suite runs in `make test`; the tool does not.** `test- | dotfiles-t
 MOVE | **The venv is snapshotted before every sync, and that file i | dotfiles-testing-toolchain.md | Ansible venv snapshot before every sync (uv sync prune/downgrade, rollback)
 MOVE | `--no-deps` is required — the state being restored is one th | dotfiles-testing-toolchain.md | Ansible venv snapshot before every sync (uv sync prune/downgrade, rollback)
 MOVE | **Environment overrides added by the uv work.** All three ex | dotfiles-testing-toolchain.md | Environment overrides added by the uv work (UV_BIN, UV_FALLBACK_PATHS, REQUIREMENTS_CI_TARGET)
+MOVE | | variable | read by | why it exists | | ------------------------ | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | | `UV_BIN` | `resolve_uv` (`lib/helpers.sh`) | operato | dotfiles-testing-toolchain.md | Environment overrides added by the uv work (UV_BIN, UV_FALLBACK_PATHS, REQUIREMENTS_CI_TARGET)
 MOVE | **Sync CI requirements:** `make sync-requirements-ci` (rende | dotfiles-testing-toolchain.md | Sync/check CI requirements commands and the five renderings
 MOVE | **There are five renderings, deliberately separate files.** | dotfiles-testing-toolchain.md | Sync/check CI requirements commands and the five renderings
 MOVE | Do not harmonise them — `tests/setup_env/requirements_ci.bat | dotfiles-testing-toolchain.md | Requirements CI groups: do not harmonise (distinctness tests)
@@ -210,120 +231,91 @@ MOVE | **The domain is derived from `git ls-files`, not listed.** T | dotfiles-b
 MOVE | **Known gap: recursive sub-make and `-w` are invisible to it | dotfiles-bats-test-infrastructure.md | MAKEFLAGS: known gap -- recursive sub-make and -w invisible to the scanner
 ```
 
-BASELINE rule_sentences=155 floor=91112
+BASELINE rule_sentences=143 floor=101679
+
 
 ## Notes
 
-**Span semantics.** Built under the orchestrator's mid-task correction: a SECTION's span is
-its heading line through the line before the next heading of **any** level (body only), not
-"next heading of level <= this one's" (the pre-fix `find_heading_span` behaviour, which would
-have made `## Testing` swallow ShellCheck/CI/Testing Rules/PowerShell/Coverage/Test
-Seams/Mock Pattern/MAKEFLAGS). Most of this map's unit inventory and grouping decisions were
-made before the fix landed, using a throwaway body-only-span implementation
-(`/tmp/claude-1000/scratch/measure_body.py`, mirroring
-`analyze_sections`/`compute_floor`/`non_moving_bytes_for` exactly, substituting only
-`find_heading_span`) rather than trusting the then-unpatched script's own (inflated,
-double-counting) output. `21d39bfa` ("fix(relocation): body-only SECTION spans, line match")
-landed before this map was committed. Re-run against the real, now-fixed tool:
+**Span semantics.** A SECTION's span is its heading line through the line before the next
+heading of **any** level (body only), not "next heading of level <= this one's" (the
+pre-fix `find_heading_span` behaviour, which would have made `## Testing` swallow
+ShellCheck/CI/Testing Rules/PowerShell/Coverage/Test Seams/Mock Pattern/MAKEFLAGS). Fixed in
+`21d39bfa`, landed before this map's first commit.
+
+**The map's field parsing is now structural, not a naive `" | "` split.** Fixed in
+`8dc3cad6` ("fix(relocation): structural map parse, unit completeness"): `parse_map` peels
+the record-type tag off the left with one split, then SECTION/INLINE take the remainder
+whole (pipes and all) while MOVE/WAIVE peel their fixed trailing fields off the _right_ with
+`rsplit`, leaving anything left over — including embedded `" | "` — as the anchor or
+sentence. This is what makes a markdown-table anchor expressible at all; the previous
+revision of this map worked around the naive-split limitation by exempting four table units
+from INLINE/MOVE entirely, which is no longer necessary and no longer done (see below).
+
+**The same commit added a completeness check: every unit inside a SECTION span must be
+claimed by exactly one INLINE or MOVE record.** `measure`/`check` now list every unmatched
+unit and exit 1 rather than silently treating an unclaimed unit as "stays, but only its rule
+sentences are retained" — a decision this map had made implicitly (18 unlisted units) without
+recording it as one. All units are now claimed; see the classification list below.
+
+Re-run against the real tool:
 
 ```
 python3 scripts/relocation_check.py measure --pre-rev 2e38f5e4 \
   --map docs/superpowers/plans/2026-09-25-relocation-map.md
 ```
 
-Output: `units=195 rule_sentences=155 rule_bytes=37469 floor=91112` — byte-for-byte identical
-to the throwaway script's number, which is the BASELINE line below. The two independent
-implementations agreeing is what makes 91112 trustworthy, not either one alone.
+Output: `units=175 rule_sentences=143 rule_bytes=33064 floor=101679` — matches the BASELINE
+line below and my independent throwaway body-only-span implementation
+(`/tmp/claude-1000/scratch/measure_body.py`), run before and after this classification pass.
 
 **Every anchor was verified against the whole-document unit list**
-(`/tmp/claude-1000/scratch/verify_map.py`), not eyeballed: all 173 MOVE anchors and all 8
+(`/tmp/claude-1000/scratch/verify_map.py`), not eyeballed: all 175 MOVE anchors and all 28
 INLINE anchors resolve to **exactly one** unit each among the 326 units `extract_units()`
 finds in the whole `2e38f5e4:CLAUDE.md` (not just the 7 moving sections) — confirming
 check4's first-match-in-document-order search targets the intended unit for every record.
 
-**Two anchors are longer than 60 normalised characters, deliberately.** Test Seams unit 0
-("See `.../dotfiles-bats-test-infrastructure.md` for the full override env var...") and Mock
-Pattern unit 0 ("See `.../dotfiles-bats-test-infrastructure.md` for the full `MOCK_\*` env
-var...") are identical for their first 102 normalised characters and diverge only at byte 103. Both anchors are extended to 115 chars so `startswith` resolves each to its own unit; the
-map format is "prefix-matched", and 60 is the _default_ length, not a hard requirement, so
-this is not a deviation from the format, only from the default length.
+**Four anchors are longer than 60 normalised characters, deliberately** — the map format is
+"prefix-matched", and 60 is the _default_ length, not a hard requirement.
 
-**Four units cannot be expressed as an INLINE or MOVE record at all: their normalised text
-begins, within the first 60 (or, for the two disambiguated anchors above, 115) characters,
-with the literal substring `" | "`, which is the map's own field delimiter.** `parse_map` splits every fenced-block line
-on `" | "`, so an anchor containing it makes the record parse as more fields than the record
-type allows, and `measure`/`check` exit 1 on a `MapError` before any check runs. There is no
-escape mechanism in the parser and no way to shorten the anchor below the delimiter's first
-occurrence without colliding with an unrelated unit that shares the same header row (see
-below) — this is a genuine format/content collision, not a mistake in this map, and it cannot
-be fixed from the map side. The four affected units, all markdown tables:
+- Test Seams unit 0 and Mock Pattern unit 0 both open with "See `.../dotfiles-bats-test-infrastructure.md` for the full ..."; identical for their first 102 normalised
+  characters, diverging only at byte 103. Both extended to 115 chars.
+- Test Seams unit 43 (the cadence seams table) and Testing unit 18 (the uv overrides table)
+  open with the _identical_ header-and-separator row (`| variable | read by | why it exists
+|`), which only diverges from padding width at byte 65 — too fragile to anchor on, since a
+  table-reformatting pass could change dash counts without changing content. Per the
+  orchestrator's instruction, each anchor instead runs past the separator into its first real
+  data row: Test Seams unit 43 to 900 chars (well past `` `_RHN_DETECTOR` ``, its first
+  variable cell), Testing unit 18 to 400 chars (well past `` `UV_BIN` ``, its first variable
+  cell).
 
-- `### Test Seams` unit index 43 (the cadence seams table, `_RHN_*`/`_OVERRIDE_DOTFILES_ROOT`/
-  etc.) — **this one is in the plan's mandatory Inline-whole list** ("the cadence seam
-  table", one of the 5 `E2`-token units named in the spec). It cannot be added as an `INLINE`
-  record, so `analyze_sections` treats it as an ordinary (non-inline) unit: its rule-matching
-  fragments (5 sentences, 2532 of its 10043 raw bytes, several containing stray `|`
-  characters from table-cell boundaries the sentence splitter cannot see) land in
-  `retained_sentences` and are counted toward the floor; the remaining **7511 bytes are not
-  counted anywhere**, even though the plan requires this table to stay whole in `CLAUDE.md`.
-  That is close to the entire 8000-byte slack on its own. **Task 4 must keep this table
-  exactly where it is** (do not attempt to move it) and should expect `check3` to need
-  compensating savings elsewhere if it comes in tight; this map cannot verify the table's
-  placement mechanically. Reviewer note for Task 5: this is a "cannot express" case, not a
-  "chose not to inline" case.
-- `## Testing` unit index 18 (the uv seams table: `UV_BIN`/`UV_FALLBACK_PATHS`/
-  `REQUIREMENTS_CI_TARGET`) and unit index 21 (the five-renderings table) — **not** in the
-  mandatory Inline-whole list, so Task 4 may relocate these to `dotfiles-testing-toolchain.md`
-  by hand; `check1` will still pass (it matches on content present anywhere in the
-  destination directory, independent of any MOVE record), just without this map's per-heading
-  verification for these two specific units.
-- `## Key Conventions` unit index 29 (the actor/`PATH`-source/resolves/version table) —
-  likewise not mandatory-inline; Task 4 may relocate it to `dotfiles-conventions.md` by hand,
-  same caveat.
+**Classification of every unit that the structural-parse fix's completeness check newly
+requires a record for** (previously either exempted for the pipe-collision reason above, or
+left with no record at all, relying on slack) — decided by the orchestrator:
 
-Both `## Testing` unit 18 and unit 43 in Test Seams begin with the _identical_ header row
-(`| variable | read by | why it exists |`), so even if the pipe collision did not exist, a
-60-char anchor would not disambiguate them; this is a second, independent reason a short
-prefix cannot serve these units.
+- `## Key Conventions` unit indices 0, 4-13 (11 short standing conventions: profile/capability
+  model, legacy hostname vars, Ubuntu version detection, credential dir chmod 700, git repo
+  layout, pyenv, Ansible venv packages, ruff venv-managed, pytest runner, alphabetical
+  installs, shell syntax-only fixes) — now **INLINE**: a session needs these at start.
+- `## Testing` unit indices 0-4, 11, 14 (the BATS intro, the `install_bats()` dispatcher, the
+  macOS/Ubuntu install lines, and the **Run tests**, **Run unit tests only** and **Install
+  hooks** command bullets) — now **INLINE**, same reason.
+- `## Testing` unit index 21 (the `| file | group | pins | consumers |` five-renderings
+  table) — now **INLINE**: it is small, and the "do not harmonise" retained rule sentence
+  refers to it directly.
+- `### Test Seams` unit index 43 (the cadence seams table) — now **INLINE**, as the plan
+  already mandated ("the cadence seam table", one of the 5 `E2`-token units); previously
+  un-expressible, now expressed directly with the 900-char anchor above.
+- `## Testing` unit index 18 (the `UV_BIN`/`UV_FALLBACK_PATHS`/`REQUIREMENTS_CI_TARGET`
+  overrides table) — now a **MOVE** to `dotfiles-testing-toolchain.md`, sharing the heading of
+  the narrative unit (17) it belongs to ("Environment overrides added by the uv work").
+- `## Key Conventions` unit index 29 (the actor/`PATH`-source/resolves/version table) — now a
+  **MOVE** to `dotfiles-conventions.md`, sharing the heading of the gnubin/actor narrative it
+  belongs to ("Which make an actor resolves (gnubin/actor table)").
 
-**Units left with no map record at all — neither INLINE, MOVE, nor WAIVE — are units this
-map decided should simply stay where they are, untouched, relying on the 8000-byte slack
-rather than on explicit floor credit:**
-
-- `## Key Conventions` unit indices 0, 4-13 (11 short factual/procedural bullets: machine
-  roles pointer, legacy hostname var list, Ubuntu version detection, credential dir chmod,
-  git-repos clone paths, pyenv/pyenv-virtualenv note, ansible venv packages, ruff venv-managed,
-  pytest runner, alphabetical installs, `bash -n` validation) — none of these read as
-  "narrative" under the spec's Destinations row (which names specific topics: git-hooks sweep,
-  core.hooksPath, gnubin/actor table, linuxbrew non-interactive, zsh-autosuggestions, summary
-  width, cheat.sh, Warp, tfenv, cargo-tools, NVIDIA), and each is short enough (53-442 raw
-  bytes, ~2500 bytes total) that leaving them untouched costs a small, bounded slice of the
-  slack rather than a modeled INLINE credit.
-- `## Testing` unit indices 0-4, 11, 14 (BATS install dispatcher references, the `make
-test-unit`/`make lint` command list, the `make install-hooks`/`sync-agent-guidance`/
-  `check-agent-guidance` command list) — these are command references, not narrative, and are
-  outside the Destinations row's named list (uv/renderings, requirements groups, hook
-  internals, `phrase_check`).
-
-If Task 4 finds these do not fit the remaining slack once the rest of the section is
-compressed, treat that as a real finding (per the plan's "stop and report" clause), not as
-license to silently WAIVE a genuine rule sentence to compensate.
-
-**Waiver count is 14, under the 15-waiver stop threshold**, and every one is a keyword match
-on narrative/historical/incidental text (a test's own observed behaviour, a retracted claim
-quoted from an earlier draft, or `\bverify\b` matching inside the CLI flag `--no-verify`),
-per-sentence reasons given inline in the fence. 155 rule sentences remain retained after
-waiving.
-
-**Command used for gate 1**, run against the actual (possibly still-unpatched) checker:
-
-```
-python3 scripts/relocation_check.py measure --pre-rev 2e38f5e4 \
-  --map docs/superpowers/plans/2026-09-25-relocation-map.md
-```
-
-If the checker has landed its SECTION-span fix by the time this is read, re-run the command
-above and compare its printed `floor=` against the BASELINE line; they should agree, since
-both use body-only spans over the same 7 SECTION headings, INLINE anchors, and WAIVE
-sentences. A genuine disagreement means either this map's manual computation or the fixed
-checker has a bug — resolve before trusting either number.
+One waiver was dropped as a side effect: "The hazard runs in both directions and only one was
+documented until 2026-09-05." was a fragment of the cadence table (unit 43) that fell into
+`retained_sentences` only because that unit was not yet INLINE. Now that it is, the
+sentence-extraction step never runs over it, so the WAIVE would match nothing — removed
+rather than left as dead weight. **Waiver count is now 13**, all narrative/historical/
+incidental keyword matches, per-sentence reasons given inline in the fence. 143 rule
+sentences remain retained after waiving.
