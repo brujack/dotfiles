@@ -321,3 +321,162 @@ incidental keyword matches, per-sentence reasons given inline in the fence. 143 
 sentences remain retained after waiving.
 
 - **Reclassified MOVE → INLINE after Task 4 attempt 1 (orchestrator, 2026-09-25):** the `install_cargo_tools` bullet and the `--no-deps is required` sentence. Every sentence of each is a retained rule sentence, so check 2 requires the unit's full text in `CLAUDE.md` while check 4 forbids it. A unit whose whole text is retained stays whole. Their verbatim copies in the knowledge files are harmless duplicates.
+
+## Block review verdicts
+
+Reviewed at `41bf8cc7` by an independent reviewer (Task 5). `CLAUDE.md` and this map are unchanged through `d4af17b1`; the two later commits touch only `phrases.md`.
+
+Method: `/tmp/claude-1000/rv/pair.py` resolved every MOVE anchor to its pre-change unit with `relocation_check.extract_units`, grouped units by destination heading (85 groups), split each unit with the checker's pinned splitter, and marked each sentence present or absent in the normalised post-change `CLAUDE.md`. The script only paired the text. Every verdict below comes from reading the pre-change block beside what remains in `CLAUDE.md`, including where the retained sentences sit relative to their pointer. A group can have both a missing rule and a sentence that needs its unit. Such groups are marked with both and counted under each.
+
+Borderline calls are marked *(borderline)*. Everything else I would defend as a clear finding.
+
+| group (dest § heading) | verdict | detail |
+| --- | --- | --- |
+| G0 test-seams § Test seam idiom and override pattern | rule missing | "Tests set the var and pass a writable temp copy; production code leaves it unset." Only the idiom line survives. |
+| G1 test-seams § Rustup signature verification seams | needs unit | "A digest taken over a separate fixture file the mock never copies cannot match, so the success-path test computes its digest over `MOCK_CURL_STDOUT`'s exact bytes." Here "the mock" is `tests/mocks/curl`, and the sentence explaining what it writes moved. |
+| G2 test-seams § NVIDIA GPU detection seams | rule missing | "The other two redirect the keyring and apt source list at fixtures, so no test writes to `/usr/share/keyrings` or `/etc/apt/sources.list.d`." This is a live-state (E2-class) hazard, and the lead now carries no body. |
+| G3 test-seams § brew_install_cask / brew_cask_installed seam | rule missing | "**`brew_install_cask` / `brew_cask_installed` (`lib/helpers.sh`) are a separate pair from the formula helpers, deliberately.**" Only the name survives, and "use the cask helpers for casks" is gone. |
+| G4 test-seams § config/profiles.zsh and the legacy identity oracle | complete | |
+| G5 test-seams § config/profiles.zsh export vs lib/detect_env.sh readonly | rule missing | "**`config/profiles.zsh` uses `export`; `lib/detect_env.sh` uses `readonly` — this is deliberate, not drift, and a future reader will otherwise "fix" one to match the other.**" The lead survives with an empty body. |
+| G6 test-seams § _OVERRIDE_HOMEBREW_PREFIX_ARM / _INTEL seam | complete | |
+| G7 test-seams § _OVERRIDE_KEYCHAIN_BIN seam and the interactive guard | rule missing + needs unit | Missing: "It is quoted anyway because that safety is a default, not a guarantee." and "The block it guards is wrapped in `[[ -o interactive ]]`, and that guard is load-bearing rather than tidy: …". Needs unit: "Measured 2026-08-16 on the Linux workstation: 16 agents pinning the suite's pipe …" cannot be read once the agent leak it measures has moved. |
+| G8 test-seams § _OVERRIDE_CURRENT_LOGIN_SHELL seam and the chsh guard | rule missing | "It is not optional in tests: without it they pass on a mac whose account is already zsh and fail on any runner whose account is `/bin/bash`, …". Also the prohibition "deliberately **not** `${SHELL}`". |
+| G9 test-seams § _OVERRIDE_GNUBIN_ARM / _INTEL seam | rule missing | Missing: "Both default to … respectively; keep the pairs in step, since a drift makes the install guard and the `PATH` consumer disagree." and "The seam is not optional in tests: … a test that forgets to point these at a nonexistent path short-circuits the guard and silently asserts nothing." |
+| G10 test-seams § _OVERRIDE_GNUBIN_LINUX seam | rule missing | "That directory is real on any `claude`-class box …, so a test that forgets to point this seam at a nonexistent path short-circuits the `-d` guard and silently asserts nothing, …" |
+| G11 test-seams § _OVERRIDE_DOCKER_BIN seam | rule missing | "If the installer's `.zprofile` lines reappear, delete them rather than committing them." |
+| G12 test-seams § GGSHIELD_BIN / GGSHIELD_FALLBACK_PATHS seams | complete | |
+| G13 test-seams § LEDGER_BIN seam | complete | |
+| G14 test-seams § _OVERRIDE_LIB_TRAP_SCOPE seam | rule missing + needs unit | Missing: "The one test that closes it is "the real lib/ is clean against the real allowlist", …; keep it, because without it nothing in the suite touches the path production actually takes." Needs unit: "That is what lets the suite drive every verdict — …", whose "That" is the fixture glob, and that sentence moved. |
+| G15 test-seams § _OVERRIDE_BATS_BIN seam | rule missing | "When reproducing a CI failure elsewhere, ship `git archive <the sha CI ran>`; if the tree is dirty, that is the finding." |
+| G16 test-seams § _OVERRIDE_RUN_TMPDIR_ROOT seam | complete | |
+| G17 test-seams § _PROFILES_LOADED sentinel | complete | |
+| G18 test-seams § _AWS_GPG_BIN / _AWS_PKGUTIL_BIN / _AWS_KEY_PATH seams | needs unit | "`DOTFILES_REPO_ROOT` resolves the same expression at **source time**, …": "the same expression" is the inline `cd`/`dirname` derivation, and that sentence moved. |
+| G19 test-seams § _AWS_BIN seam | rule missing *(borderline)* | "This machine has a real `aws` at `/usr/local/bin/aws`, so without the seam every `install_aws_tools` test silently takes the already-installed branch and asserts nothing about the install path at all …" The retained lead says the seam is "load-bearing" but never says that tests must set it. |
+| G20 test-seams § Cadence seams overview | complete | |
+| G21 test-seams § Cadence heartbeat contract | rule missing + needs unit | Missing: "**Every value is closed-form on purpose.** … Adding a **free-text** field satisfies the first and breaks the second." and "Before believing a count, ask what else the detector writes to stdout." Needs unit: "The second is the damaging one — …", whose two cases moved. Also "`doctor` renders the three classes distinctly …", which depends on the `result` values in the moved JSON contract. |
+| G22 test-seams § Cadence agent PATH and plist rendering | rule missing + needs unit | Missing: "**When wiring a new detector, resolve its dependencies under this `PATH`, not under yours.**" Needs unit: "`ledger` lives in that first entry, …", where "that first entry" names the moved `PATH` list. Also "Verify the live file rather than the template after any change here:" now ends in a colon with nothing after it, because its `grep` command moved. |
+| G23 test-seams § Cadence ntfy delivery and heartbeat rationale | rule missing | "**ntfy needs a topic and credentials, and neither is optional.**" The consequence also moved: POSTing bare `${NTFY_URL}` cannot deliver. |
+| G24 test-seams § Pyenv-rehash and cargo-tools seams overview | complete | |
+| G25 test-seams § _OVERRIDE_PYENV_ROOT seam | rule missing *(borderline)* | "The seam exists precisely to remove that ordering hazard, and every test that touches shim counting or the hook install sets it explicitly rather than relying on `HOME`." |
+| G26 test-seams § _RELEASE_TMP_ROOT seam | rule missing *(borderline)* | "**`_RELEASE_TMP_ROOT` … exists because BSD `mktemp -d` with a template argument ignores `TMPDIR` entirely** — … a `TMPDIR`-based assertion of the failure-path cleanup would be silently inert there." Check 8 task B depends on a session knowing to set this seam. |
+| G27 test-seams § _TFLINT_URL / _TFLINT_SHA256 / _TFSEC_URL / _TFSEC_SHA256 seams | complete | The never-mock-`sha256sum` rule survives, but only under the rustup bullet. The tflint lead has no body. |
+| G28 test-seams § _TFENV_ROOT / _TFENV_REPO_URL seams | complete | |
+| G29 test-seams § _PWSH_BIN / _PWSH_PROBE_TIMEOUT seams | rule missing + needs unit | Missing: "**The `timeout`-absent fallback inside that helper needs its own two tests, and this is why.**" Needs unit: "Reaching it requires a PATH scoped to a directory holding no `timeout`, …", where "it" is the fallback branch, and "The pair must cover both directions, …", where "the pair" is the two tests. |
+| G30 test-seams § _DOCTOR_PROBE_TIMEOUT seam | complete | |
+| G31 test-seams § _CRATES_API seam | complete | |
+| G32 test-seams § Claude plugin provisioning seams overview | complete | |
+| G33 test-seams § _CLAUDE_GUARD_GIT seam | complete | |
+| G34 test-seams § tests/mocks/claude seam modes | complete | |
+| G35 test-seams § Claude plugin provisioning: stdin redirect and IFS tab collapse | rule missing | "**Every `claude` call inside a `while read` loop in `setup_claude_plugins`/`run_update`'s claude section redirects stdin from `/dev/null`** … without it, `claude` would … consume the remaining manifest lines …, silently truncating iteration after the first external call." The lead still names "the stdin redirect", but its rule is gone. |
+| G36 conventions § GPU provisioning as the HAS_* exception | rule missing + needs unit | Missing: "**GPU provisioning is the one deliberate exception to that rule.**" (gate on hardware, not a `HAS_*` capability). This matters because the retained first Key Conventions bullet says "prefer `HAS_*` vars". Also missing: "the `systemctl restart docker` is **conditional on `daemon.json` actually changing** — … an unconditional bounce every provision would kill a live job". Needs unit: the standalone bullet "Measured on `claude` 2026-09-12 with toolkit 1.20.0 already installed; `workstation` … never surfaced it." |
+| G37 conventions § zsh -i -c 'exit' after .zshrc changes | rule missing | "After any change to `.zshrc` or `.zshrc.d/` files, run `zsh -i -c 'exit'` before committing to catch re-source crashes before they reach prod." and "From a worktree, source the branch's own files explicitly instead — …". Only the pointer remains. |
+| G38 conventions § $0 resolution in zsh startup files | rule missing | "Use `${${(%):-%x}:A:h}` in any file that may be read as a startup file — …". Only the pointer remains. |
+| G39 conventions § _UPDATE_SECTION_ORDER coupling | needs unit | "Adding `_update_record_start/end "new-section"` in `run_update()` without also adding `"new-section"` to this array …": "this array" was named only in the moved lead. |
+| G40 conventions § git-hooks section coupling and _git_hooks_target_dir | needs unit | "**Both** call sites must branch on it: …" is the spec's own example. "it" is `install_git_hooks_all_repos`'s 0/1/2 return, and that sentence moved. Also "This matters more than a mislabel, …". |
+| G41 conventions § _install_ubuntu_brew_packages tri-state return | needs unit | "`install_ubuntu_packages` therefore captures the rc rather than using `\|\| return 1`: **only rc 1 aborts**, …": "therefore" rests on the moved 0/1/2 contract. |
+| G42 conventions § claude plugins install -s user scope flag | rule missing | "**`claude plugins install` takes `-s user` and a `plugin@marketplace` id; the flag pins the scope rather than fixing a defect.**" Only the pointer remains. |
+| G43 conventions § zsh-autosuggestions reported update section | rule missing + needs unit | Missing: "`-e` rather than `-d` is also deliberate: … tightening to `-d` would route that layout to `SKIP` forever …". Needs unit: "That plumbing command walks upward …" and "A future reader will otherwise "tighten" this to the plumbing form; don't." The guard they refer to is named only in the moved bold sentence. |
+| G44 conventions § Update summary name column width | complete | |
+| G45 conventions § cheat.sh section: both artifacts, both failures FAIL the run | needs unit | "It previously ran the tab-completion fetch …": "It" is the cheat.sh section, named only in the moved lead. |
+| G46 conventions § .warp/settings.toml Warp-owned symlink | needs unit | "One value in it is a **deliberate non-default, not drift**: …": "it" is `.warp/settings.toml`, named only in the moved lead. |
+| G47 conventions § Global/system core.hooksPath pin: detection and remedy | needs unit | "An **empty or whitespace-only** value is a real pin, not an absent one: …": the value of what? `core.hooksPath` is introduced only in the moved lead. |
+| G48 conventions § Homebrew make gnubin prepend | needs unit | "**It must be a prepend, not `path+=`.**": "It" is the gnubin prepend in the moved lead. |
+| G49 conventions § Which make an actor resolves (gnubin/actor table) | needs unit | "`Makefile:1`'s `MAKEFLAGS += --no-print-directory` is why — …" and "Do not reopen this without re-running that comparison; …": the claim and the comparison both moved. The block also ends on "Two traps recorded from those retirements, …:", while the traps themselves are grouped under G50. |
+| G50 conventions § setup_env.sh cannot run non-interactively on the Linux workstation | rule missing + needs unit | Missing: "Workaround for a non-interactive caller is to prepend the prefix explicitly rather than to re-bootstrap: `PATH="/home/linuxbrew/.linuxbrew/bin:${PATH}" ./setup_env.sh -t developer`." Needs unit: "It leads `/usr/bin` in `/etc/paths`, …", where "It" is `/usr/local/bin`, and "The macOS bullet above and this one are the same defect at two severities — …". |
+| G51 conventions § terraform on Linux via tfenv, and the checkout guard | rule missing | "That ordering is load-bearing: run the loop first and it plants two dangling symlinks, …": the guard must stay before the symlink loop. This comes with "**… the remedy is in the WARN, not in doctor.**" |
+| G52 conventions § tflint/tfsec staleness gap; CARGO_TOOLS staleness | complete | |
+| G53 testing-toolchain § make test parallel jobs | rule missing + needs unit | Missing: "Override it per invocation (`make test JOBS=6`).", "To force serial anywhere, `make test HAVE_PARALLEL=`." and "A name here needs a measurement beside it." (`BATS_SERIAL_FILES`). Needs unit: "The guard is required rather than defensive, …" (the detection bullet moved) and "The error names `$(origin JOBS)`, …". |
+| G54 testing-toolchain § config/profiles.sh dual lint scope; phrase_check.py | complete | |
+| G55 testing-toolchain § Ansible venv snapshot before every sync | rule missing + needs unit | Missing: "Reverting this repo does not restore the venv." and the rollback procedure ("To roll back:" plus its fenced `pip install --no-deps -r …` command). Needs unit: the INLINE "`--no-deps` is required — …" now qualifies a command that is no longer in `CLAUDE.md`. |
+| G56 testing-toolchain § Environment overrides added by the uv work | needs unit | The splitter cut the table into sentences, so the retained "sentence" is the header row, the separator row and a truncated `UV_FALLBACK_PATHS` row ending at "array of prefix candidates." `CLAUDE.md:282` is now a broken, partial table. Keep the table whole. |
+| G57 testing-toolchain § Sync/check CI requirements commands | rule missing *(borderline)* | "**Sync CI requirements:** `make sync-requirements-ci` … **Check CI requirements drift:** `make check-requirements-ci` …" is a command entry of the same class as the **Run tests**/**Install hooks** units that stayed INLINE. |
+| G58 testing-toolchain § Requirements CI groups: do not harmonise | complete | |
+| G59 testing-toolchain § Requirements CI groups: purpose over CI/local | rule missing + needs unit | Missing: "**Provenance does not go in these headers, and that is load-bearing.**" with "Provenance belongs on a _consumer's_ copy, written at copy time." Also "**`bandit`, `radon` and `vulture` stay in `test-lint` and are absent from every CI group, which is the point.**" Needs unit: "**The framing that matters …: this was never a deletion problem.**" and "A `runtime`-group edit moves `uv.lock` … in that header …". |
+| G60 testing-toolchain § Requirements CI groups: drift-gate blindness | needs unit + rule missing | Needs unit: "Never hand-edit it." stands alone at `CLAUDE.md:304`, and "it" (`requirements-ci.txt`) is gone. Missing: "A green `check-requirements-ci` is not evidence about grouping." |
+| G61 testing-toolchain § Pre-commit hook: make lint and ggshield | needs unit | "**Resolved by explicit override, then `PATH`, then absolute prefixes — …**" has no subject, because the ggshield step moved. Also "The absent case still exits 0 — … but it now says so twice on stderr". |
+| G62 testing-toolchain § Pre-push hook: fail-closed inert-path set | rule missing + needs unit | Missing: "The pre-push hook is **permanent**." Needs unit: "`docs/` and `.github/` are **not** wholesale-inert: …", because the inert set it qualifies moved. |
+| G63 testing-toolchain § Pre-push hook: worktree root resolution and git env strip | complete | |
+| G64 testing-toolchain § Pre-push hook: direct-to-master guard | rule missing | "And the refusal is checked **before** the `needs_test` early-exit, because an inert-but-unsafe path would otherwise skip the guard along with the suite." This is one of "two implementation constraints, both load-bearing". Its sibling survived. |
+| G65 bash-coverage § Instrumented set: git ls-files derivation | rule missing + needs unit | Missing: "**`git ls-files` rather than a filesystem glob is load-bearing, not stylistic.**" Needs unit: the retained bullet "The tracer enables tracing through `BASH_ENV`, … discarded by a predicate that globbed only `config/` and `lib/`." is history cut off from its context. |
+| G66 bash-coverage § Denominator counts commands, not source lines | needs unit | "That was 13 of `config/profiles.sh`'s 15 lines and 8 of `lib/helpers.sh`'s. - **Pure-argument backslash continuations** — …" is a fragment spanning two items of a list that was split, and it renders as one garbled bullet. |
+| G67 bash-coverage § Denominator is the union of the heuristic and the real trace | needs unit | "**Read it beside the ratio from the same run, never a ratio from another one.**": "it" is the heuristic-disagreement count, and that sentence moved. |
+| G68 bash-coverage § covered > coverable is now a hard exit; publishing and reading the figure | rule missing | "Publish CI's bash coverage figure in the PR body once CI has run (`gh pr edit <n>`); a local run is a preview, labelled as one." |
+| G69 dependency-automation § renovate.json inlines the shared preset | rule missing + needs unit | Missing: "`ai-config/renovate-presets/default.json` stays canonical; keep the `extends`, `schedule`, `labels` and `packageRules` keys in sync with it by hand, …". Needs unit: "Measured 2026-08-23 with config as the only variable: the remote-preset form …" now opens `## Dependency Automation` without saying what was varied. |
+| G70 dependency-automation § Renovate confirmed working | complete | |
+| G71 dependency-automation § The zero-PR oracle was structurally unfalsifiable | rule missing | "The lesson survives the lift: establish what a mechanism is _permitted_ to do before drawing any conclusion from what it has not done." |
+| G72 dependency-automation § pip_requirements deliberately absent from enabledManagers | rule missing + needs unit | Missing: "**`pip_requirements` is deliberately absent from `enabledManagers`.**" Needs unit: "Measured against all five renderings: only `requirements-ci.txt` matches — …". What it matches is Renovate's pattern, and that sentence moved. |
+| G73 dependency-automation § Dependabot: security auto-PRs off, alerts on | rule missing *(borderline)* | "**Decided 2026-08-21, fleet-wide across all 18 non-archived repos: Dependabot security auto-PRs OFF, Dependabot vulnerability alerts ON.**" This policy state is now held by nothing in `CLAUDE.md` except the pointer's trigger. |
+| G74 dependency-automation § Dependabot: mechanical details | rule missing | "Order the calls: `PUT vulnerability-alerts`, then `DELETE automated-security-fixes`." |
+| G75 dependency-automation § Consequence: Python has no automated update path | complete | |
+| G76 bats-test-infrastructure § Mock Pattern full reference pointer | complete | |
+| G77 bats-test-infrastructure § Mock Pattern: pass-through mocks | rule missing | "Set the corresponding exit var to a non-zero value to simulate failure instead." The pass-through fact also moved: `ln`/`chmod`/`mv`/`cp`/`tee` call the real binary. |
+| G78 bats-test-infrastructure § Mock Pattern: env -i strips PATH | rule missing | "**`env -i` subprocess strips PATH** — `setup_ansible()`'s pyenv calls need the mock placed at `${HOME}/.pyenv/bin/pyenv`, not PATH-injected." |
+| G79 bats-test-infrastructure § tests/mocks/curl short-option cluster parsing | complete | |
+| G80 bats-test-infrastructure § tests/mocks/curl -o write ordering | complete | |
+| G81 bats-test-infrastructure § MAKEFLAGS: --no-print-directory directive | rule missing *(borderline)* | "**The load-bearing protection is the per-call flag and the partition below, not this line**". Also "The directive does not cover a direct `make -C` on GNU Make 4.3 …". |
+| G82 bats-test-infrastructure § MAKEFLAGS: guarded vs measuring test partition | needs unit + rule missing | `CLAUDE.md:596` reads "… tests fall into two categories: Use it only for that — …". Both categories were deleted between the colon and "Use it", so "it" and "Both categories must exist" have no referent. Missing: "- **Guarded:** Per-call `--no-print-directory` flag …, for tests that care about exact output shape" and "- **Measuring:** `env -u MAKEFLAGS` prefix …". This whole block should be INLINE. |
+| G83 bats-test-infrastructure § MAKEFLAGS: partition enforcement test | complete | |
+| G84 bats-test-infrastructure § MAKEFLAGS: known gap | complete | The retained "A line scanner can only see what is on the invoking line." is orphaned but harmless. |
+
+### Waivers
+
+| waived sentence (abridged) | verdict | note |
+| --- | --- | --- |
+| The suite's positive control is the mismatch case, … | narrative | |
+| `brew_formula_installed` greps `brew list --formula` in _both_ branches, … | narrative | The rule it motivates is missing separately (G3). |
+| Mutation-confirmed: reading the seam under a typo'd name … | narrative | |
+| The seam exists because the only other way to reach either branch … | narrative | |
+| The three pre-existing tests encoded all of it: … | narrative | |
+| **Two code paths, and the tests only exercise one.** | narrative | The rule it sets up ("keep it") is missing separately (G14). |
+| Re-install seeds a missing heartbeat and never clobbers a real one, … | **rule** | This is an installer invariant any edit to the installer must preserve. "never clobbers a real one" is a prohibition on the code, not a description of the past. |
+| The `rm -rf` in the WARN is the only thing that does. | narrative | |
+| This conserves GitHub Actions minutes — CI runs only on PRs. | narrative | |
+| The fix needs a branch and a PR, or `--no-verify`. | **rule** | The reason given ("`verify` matches inside `--no-verify`") is true, but it does not address whether the sentence is a rule. It is: a defective guard cannot be fixed by a direct push to master, and the sentence names the permitted route. |
+| This bullet used to read "nothing under test sources them, …" | narrative | |
+| The exclusion was asserted, never measured. | narrative | |
+| A union-added line raises numerator and denominator together, … | narrative | This is the rationale for the retained "Read it beside the ratio …" rule. |
+
+### Pointers
+
+All 50 pointer lines are pointer-only: each matches `^(- )?**Before** … read … § \`…\`.$`, with no text before or after. Most triggers name a concrete path or symbol. The exceptions:
+
+| pointer | score | why |
+| --- | --- | --- |
+| `CLAUDE.md:640` cheat.sh, "**on** `lib/update_summary.sh`" | weak trigger | The cheat.sh section is in `lib/workflows.sh` (`_update_record_end "cheat.sh"` at `:1114`). A session editing it touches `lib/workflows.sh`, not the file named. |
+| `CLAUDE.md:636` zsh-autosuggestions, "**on** `lib/workflows.sh:672-689`" | weak trigger | The line range is stale: that code is now at `lib/workflows.sh:1118-1126`. A session searching for the lines will not match them. |
+| `CLAUDE.md:651` "**on** a hook that shells out to `make`" | weak trigger | Names no path or symbol. |
+| `CLAUDE.md:270` "changing lint scope **on** `Makefile`, `scripts/phrase_check.py`" | weak trigger | The target heading joins two unrelated blocks. A session wiring `phrase_check.py` into a gate is not "changing lint scope", so the phrase_check half never fires. |
+| `CLAUDE.md:578` "looking up a `MOCK_*` var" | ok trigger, stub target | The cited heading holds a single sentence that points back at the same file. The pointer resolves, but to a stub. |
+| `CLAUDE.md:574` Test Seams single pointer | ok | This is the only pointer for `### Test Seams`. It cites only the idiom heading, and none of the ~35 per-seam headings in `dotfiles-test-seams.md` is reachable by name from `CLAUDE.md`. The spec allows "a pointer to `dotfiles-test-seams.md`", so this is acceptable, but a session following it lands on the idiom block, not on its seam. |
+| `CLAUDE.md:679`, `:683` Dependabot "on GitHub repo Settings" / "the GitHub API" | ok | No in-repo artifact exists, and the block says so, so naming the setting is the best available trigger. |
+
+### Structure findings
+
+Test Seams (`CLAUDE.md:408-574`):
+
+1. **A lead labels a different seam's INLINE unit.** The `_OVERRIDE_NVIDIA_GPU_PRESENT`/`_KEYRING`/`_LIST` lead (`:422`) has no body. It is immediately followed by the INLINE `_OVERRIDE_DOCKER_DAEMON_JSON` / `nvidia-ctk` unit, so the NVIDIA lead visually heads the docker-daemon seam.
+2. **Same defect, twice more.** The `config/profiles.zsh` lead (`:439`) is followed by the INLINE `tests/helpers/legacy_oracle.bash` unit. The `the stdin redirect and IFS tab-collapse …` lead (`:570`) is followed by the INLINE `_OVERRIDE_CLAUDE_PLUGIN_CACHE` unit. In both cases the lead names a different subject from the INLINE unit under it. The INLINE `_CARGO_BIN` and `_RELEASE_BIN_DIR` units likewise follow the `_OVERRIDE_PYENV_ROOT` bullet with no lead of their own.
+3. **A lead duplicates an INLINE unit's own bold lead.** The INLINE rustup unit (`:412`) opens with bold `_RUSTUP_INIT_URL` / `_RUSTUP_INIT_SHA256` / `_RUSTUP_INIT_BIN` / `_OVERRIDE_CARGO_BIN_DIR`. The bullet lead that follows (`:419`) repeats those four names, and it comes after the unit it is meant to label. `_OVERRIDE_RUN_TMPDIR_ROOT` and `_AWS_BIN` do the same with their own retained bold sentences, which repeat the lead.
+4. **Invented prose beyond seam names.** The spec allows only seam-name leads plus pointers. These leads carry descriptive text that is neither a seam name nor a reader:
+   - "(`the legacy identity oracle`)", which is backticked prose in the reader slot;
+   - "`config/profiles.zsh` vs `lib/detect_env.sh` (`export` vs `readonly` scope)", which names no seam and has no body;
+   - "the stdin redirect and IFS tab-collapse in claude plugin provisioning";
+   - "the heartbeat contract (`last-run.json`)", "the plist `PATH` (`cadence.plist.template`)", "ntfy delivery (`_rhn_notify`)" and "`tests/mocks/claude` mock modes (`MOCK_CLAUDE_*` env vars)".
+
+   Each is short, but each is new text that no check covers. Reader slots are also inconsistent with the spec's `file:function` form. Some give a function only (`install_make_macos`, `_install_rustup_rs`). One is wrong: "the pyenv-rehash and cargo-tools seams (`lib/helpers.sh`)", when the cargo seam is in `lib/developer.sh`.
+5. **The seam idiom line is cut down.** It keeps `local _file="${_OVERRIDE_VAR:-...}"`, but "Tests set the var and pass a writable temp copy; production code leaves it unset." is gone (G0).
+
+Outside Test Seams:
+
+6. **Retained sentences are placed as orphans before their pointer.** Across `## Testing`, `## Key Conventions` and `## Dependency Automation`, most MOVE groups become "retained sentence(s), then pointer". The sentence is read before the pointer that would supply its antecedent, which is why the needs-unit count is high. Placing the pointer first would not fix a dangling "it", but it would at least put the subject in front of the reader.
+7. **Splitter artefacts render as broken markdown.** The splitter cut a table (`CLAUDE.md:282`, G56) and a flattened nested list (`CLAUDE.md:401`, G66) mid-structure. The retained "sentences" are fragments of a table row and of a list item. Spec check 2 treats them as sentences, but they are not.
+8. **Knowledge-file grouping mismatches**, which affect what a pointer delivers:
+   - G49 ends with "Two traps recorded from those retirements …:", but the two traps are filed under G50's heading (`setup_env.sh cannot run non-interactively …`).
+   - G68's heading begins "covered > coverable is now a hard exit", but that unit is filed under G67.
+   - G54's heading joins two unrelated blocks (`config/profiles.sh` dual scope, `phrase_check.py`).
+
+### Summary
+
+complete: 27, rule missing: 44, needs unit: 31, weak trigger: 4, waiver-is-rule: 2
+
+85 MOVE groups: 27 complete and 58 with findings. 17 groups carry both a missing rule and a sentence that needs its unit, and are counted under each. 6 of the 44 rule-missing verdicts are marked borderline (G19, G25, G26, G57, G73, G81). Excluding them still leaves 38 clear findings. Under spec check 5, every needs-unit verdict sends its unit back inline. The volume of rule-missing verdicts shows that the regex-keyed retention rule loses imperatives and "is not optional"/"deliberately" prohibitions routinely, not occasionally.
