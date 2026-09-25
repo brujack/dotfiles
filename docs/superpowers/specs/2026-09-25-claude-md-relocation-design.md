@@ -78,7 +78,9 @@ mechanism, measurements and incident history. For each block this spec touches:
 
 1. The block moves **verbatim** into a knowledge file. It is not reworded, shortened or merged.
    Relocation is then checkable by machine.
-2. `CLAUDE.md` keeps **one bullet**: the rule in the imperative, plus a pointer.
+2. `CLAUDE.md` keeps **every rule sentence of the block, verbatim**: every sentence matching
+   check 2's regex. It adds **one pointer line**. The pointer is the only new text. Nothing is
+   reworded, so no rule can be weakened by a paraphrase.
 
 **A pointer carries its trigger.** The pointer in this file that sessions demonstrably follow is
 conditional: "Before recording or publishing a bash coverage figure, or editing
@@ -98,8 +100,7 @@ tell from a moved one.
 
 - Layout, the 10-80-10 pointer, Entry Points command list, Symlink Strategy, Code Standards
   headings, Profile Model table, Adding a New Machine, Local-Only State, Committing Work.
-- Every sentence that is a **gate or safety rule** is kept, either verbatim or as its
-  one-bullet rule form. That includes: never invoke `sync_git_repos.sh` unmocked, the
+- Every sentence that is a **gate or safety rule** is kept verbatim (check 2). That includes: never invoke `sync_git_repos.sh` unmocked, the
   direct-to-master pre-push guard, the `sudo` mock exec hazard, never mock `sha256sum`, drive
   absence through seams rather than `PATH`, and the hand-typed identity oracle.
 
@@ -131,16 +132,18 @@ the reason the 2026-09-21 spec kept the seam text inline. The fix is an index, n
 text. `### Test Seams` shrinks to:
 
 - the seam idiom line (`local _file="${_OVERRIDE_VAR:-...}"`);
-- a table with one row per seam: variable, reader (`file:function`), and a rule of 15 words
-  or fewer. **Exception: up to 30 words where the seam's failing path is destructive**
-  (`tdd.md` E2). That covers a real binary writing live state when the seam or mock is
-  missing, such as `nvidia-ctk` rewriting `/etc/docker/daemon.json`, `_CARGO_BIN` compiling
-  real crates, or `LEDGER_BIN` writing the live ledger. For those rows the hazard itself is
-  the rule, and it must be in the row;
+- one bullet per seam: the variable, its reader (`file:function`), then that seam's retained
+  rule sentences verbatim, per check 2. A seam with no rule sentence gets only its name and
+  reader;
+- **every Test Seams unit that cites `tdd.md` E2 stays inline, whole.** These are seams whose
+  failing path touches live state, and the regex does not reach all of them. Measured:
+  `_CARGO_BIN`'s paragraph ("compile all eight `CARGO_TOOLS` pins for real") contains no rule
+  keyword. The predicate is the literal token `E2`. At `2e38f5e4` it selects 5 units,
+  13,841 B: rustup, `nvidia-ctk`, the cadence seam table, `_CARGO_BIN`, and the plugin cache;
 - the cross-cutting rules listed above;
 - a pointer to `dotfiles-test-seams.md`.
 
-The table replaces 62,057 characters with an estimated 6,000–8,000.
+The section shrinks from 62,057 characters to its rule sentences plus seam names.
 
 ### The #293 manifest is frozen, not updated
 
@@ -171,69 +174,84 @@ tree, and a draft left there fails ai-config's `make test` for every session on 
 
 ## Verification
 
-Checks 1 to 3 are one script, run against the pre-change file at `2e38f5e4` and the
-post-change file. It normalises whitespace with the same function as `phrase_check.py`'s
-matcher, never `grep -n`: #293 found that line wraps split sentences.
+**One script runs checks 1 to 4**, against the pre-change file at `2e38f5e4` and the
+post-change file. Its splitter is pinned, so every count below can be reproduced:
 
-1. **Nothing lost from the destination (mechanical).** Split the pre-change `CLAUDE.md` into
-   units, as defined in the Design. Every unit absent from the post-change `CLAUDE.md` must
-   appear verbatim in one of the destination files. **Positive control:** change one word in
-   one relocated unit in the destination and confirm the check fails and names that unit.
-   Revert.
-2. **Rules retained in `CLAUDE.md` (mechanical).** This check exists because check 1 cannot
-   fail for the worst case. Check 1 certifies the destination, so a gate rule that leaves with
-   its narrative is green there by construction.
-   - Take every pre-change sentence, outside fenced code, matching
-     `\b(never|must|do not|don't|required|refuse[sd]?|HOLD)\b` (case-insensitive).
-     **Measured at `2e38f5e4`: 134 sentences, 32,479 characters.**
-   - Each must either appear, normalised, in the post-change `CLAUDE.md`, or have a row in a
-     **waiver table** committed beside the plan.
-   - A waiver row has three parts: the sentence, a **replacement phrase that must itself be
-     present in the post-change `CLAUDE.md`**, and a reason. The reason is either "restated as
-     `<phrase>`" or "narrative use, not a rule", for example "nothing ever ran".
-   - The script checks every replacement phrase is present, so a waiver cannot point at text
-     that is not there.
+1. strip fenced code;
+2. split into units as the Design defines them: blank-line paragraphs, then top-level list
+   items;
+3. normalise whitespace with `phrase_check.py`'s normaliser, never `grep -n` (#293 found line
+   wraps split sentences);
+4. split sentences at `(?<=[.!?])\s+`.
+
+The **rule regex** is `\b(never|must|do not|don't|required|refuse[sd]?|HOLD|always|prefer|avoid|verify|only)\b`,
+case-insensitive. **Measured at `2e38f5e4` with this splitter:** 187 matching sentences, 47,010
+bytes, inside the sections that move.
+
+1. **Nothing lost from the destination (mechanical).** Every unit absent from the post-change
+   `CLAUDE.md` must appear verbatim in one of the destination files.
+   **Positive control:** change one word in one relocated unit in the destination. Confirm the
+   check fails and names that unit, then revert.
+2. **Rules retained in `CLAUDE.md` (mechanical).** Check 1 cannot catch the worst case: it
+   certifies the destination, so a rule that leaves with its narrative passes there by
+   construction.
+   - Every pre-change sentence matching the rule regex must appear, normalised, in the
+     post-change `CLAUDE.md`.
+   - The **only** exemption is a waiver row naming a sentence that uses a keyword in narrative,
+     not as a rule. For example, "nothing ever ran", or "only surfaced because…".
+   - A waiver row is the sentence plus a one-line reason. There is no "restated as" waiver:
+     nothing is reworded.
    - **Negative control:** delete one retained rule sentence from the post-change `CLAUDE.md`
      while it survives verbatim in the destination. Confirm check 2 goes red while check 1
-     stays green. Revert.
+     stays green, then revert.
 3. **Non-zero and size (mechanical).**
-   - The script reports the count of relocated units, and the count must be greater than 0.
-   - **Hard threshold:** `wc -c CLAUDE.md <= 70,000`.
-   - An empty or token relocation fails here, and nowhere else would it fail.
-   - If check 2 and the threshold conflict, meaning the retained rules alone will not fit,
-     **stop and report**. Do not drop rules to reach the number.
-4. **Every pointer resolves.** Each `dotfiles-*.md` named in `CLAUDE.md` exists on ai-config
-   `origin/master`, and each heading a pointer names exists in that file.
-5. **Rules survive, judged (review).** A reviewer who did not do the edit reads each removed
-   block against its replacement bullet and each waiver row against its replacement phrase. The
-   reviewer records one verdict per block and per waiver: preserved, or weakened with the
-   sentence.
-   - Check 2 enumerates what to judge, and this check judges it.
-   - **The verdicts go in the dotfiles PR body.** That body is the merge decision's record and
-     the only place they outlive the session.
+   - The count of relocated units must be greater than 0.
+   - **Hard threshold:** `wc -c CLAUDE.md <= floor + 8,000`.
+     - The script computes the **floor**: unmoved sections, plus retained rule sentences, plus
+       inline E2 units, with overlap counted once.
+     - The 8,000 B allows for pointers and seam-name bullets.
+     - The threshold is derived from the floor on purpose. It exists to fail an empty, token or
+       bloated relocation, not to force a size.
+   - An empty or token relocation fails here.
+   - If check 2 cannot be met under the threshold, **stop and report**. Do not drop rules or
+     add waivers to reach the number.
+4. **Every pointer resolves.**
+   - Each `dotfiles-*.md` named in `CLAUDE.md` exists on ai-config `origin/master`.
+   - Each heading a pointer names exists in that file **exactly once**.
+   - Headings: the implementer writes one `###` heading per relocated block in the destination,
+     named for its subject. Pointers cite those headings. No two pointers may share a heading
+     unless they cite the same block.
+5. **Review (judgement).** A reviewer who did not do the edit judges two things:
+   - **Each relocated block:** did any rule in it that the regex cannot see leave `CLAUDE.md`?
+     Keyword-less rules like "Always remove…" are now caught by `always`, but others may not
+     be. Verdict per block: complete, or rule missing plus the sentence.
+   - **Each waiver row:** narrative, or actually a rule.
+
+   Both sets of verdicts go in the dotfiles PR body, the only record that outlives the session.
+   Expected volume: one verdict per block (about 40) plus the waiver rows. Waivers are
+   narrative-only, so a double-digit count is itself a finding worth stating.
 6. **Knowledge gate.** `make validate-knowledge` in ai-config passes.
 7. **Outcome (operator).** Baseline and result both come from `/context` in a **fresh** dotfiles
-   session: the total, and the per-file `CLAUDE.md` line.
-   - **The baseline must be taken before the dotfiles merge**, because it cannot be recovered
-     in a fresh session afterwards. The result is taken after both merges.
-   - Probes inside a running session do not count: that session's preamble was fixed when it
-     started (#293 plan, Task 11).
-   - **Pass:** the per-file `CLAUDE.md` figure falls by at least 60% of its baseline.
-   - The whole-session total is recorded but not gated. Most of it is out of scope (see
-     Problem).
-8. **Behaviour (post-merge).** Give a fresh dotfiles session the task "add a test for
-   `_install_ubuntu_nvidia`'s restart branch".
-   - Check its transcript for a Read of `dotfiles-test-seams.md`, or for use of the index row.
-   - Check that its test sets `_OVERRIDE_DOCKER_DAEMON_JSON` and uses the `nvidia-ctk` mock.
-   - Run the same task on today's file as the baseline.
-   - This tests the one assumption nobody has measured: that an index row is enough without
-     the narrative.
-   - A failure here does not revert the relocation. It moves that seam's narrative back
-     inline, or widens its row.
+   session, with the per-file `CLAUDE.md` line and the total recorded.
+   - **The baseline is taken before the dotfiles merge.** It is the first line of the dotfiles
+     PR body, and the PR does not merge without it, because it cannot be recovered afterwards.
+   - Probes inside a running session do not count, because a session's preamble is fixed at
+     start (#293 plan, Task 11).
+   - **Pass:** the per-file `CLAUDE.md` figure falls by at least 40%.
+   - The total is recorded, not gated.
+8. **Behaviour (post-merge, advisory).** In a fresh dotfiles session, give the task "add a test
+   for `_install_ubuntu_nvidia`'s restart branch".
+   - **Pass:** the test sets `_OVERRIDE_DOCKER_DAEMON_JSON` and runs under the `nvidia-ctk`
+     mock.
+   - **Baseline:** the same task in a session started in a worktree at `2e38f5e4`, the
+     pre-change file.
+   - n=1 per arm, so a single fail does not prove the index insufficient. It triggers a second
+     run. Two fails move that seam's narrative back inline.
+   - Result recorded as a comment on the merged dotfiles PR.
 
-**Expected, stated as an estimate:** `CLAUDE.md` from 179 KB to 55–70 KB. At this corpus's
-average of ~3.9 bytes per token, that is roughly 28–32k fewer tokens. This file is dense with
-paths, code and tables, so its real ratio may differ. Check 7's per-file line settles it.
+**Expected, stated as an estimate:** `CLAUDE.md` from 179 KB to about 95–105 KB, roughly 19–21k
+fewer tokens at this corpus's average of ~3.9 B/token. This file is dense with paths and
+tables, so its real ratio may differ. Check 7's per-file line settles it.
 
 ## Non-goals
 
@@ -282,7 +300,7 @@ Disposition: Addressed (operator, 2026-09-25). New check 2 is a retention check:
 
 Round-1 fixes changed design substance, so all three lenses re-ran. **Every round-2 finding is a defect the round-1 fixes introduced.**
 
-**Goal-fit.** Finding: the size budget does not close. Unmoved sections hold 38,418 B. Rule sentences inside the moving sections, kept verbatim, add about 28 KB. With the seam index, `CLAUDE.md` reaches about 74 KB before any pointer, so `<= 70,000` needs about 100 reworded "restated as" waivers. That is the compress-in-place work the spec rejects. Suggested: derive the threshold from the measured floor. Assumption: a large share of the 104 moving rule sentences are narrative uses that can be waived without loss. Refuted if more than 16 of a random 20 are real rules. Disposition:
+**Goal-fit.** Finding: the size budget does not close. Unmoved sections hold 38,418 B. Rule sentences inside the moving sections, kept verbatim, add about 28 KB. With the seam index, `CLAUDE.md` reaches about 74 KB before any pointer, so `<= 70,000` needs about 100 reworded "restated as" waivers. That is the compress-in-place work the spec rejects. Suggested: derive the threshold from the measured floor. Assumption: a large share of the 104 moving rule sentences are narrative uses that can be waived without loss. Refuted if more than 16 of a random 20 are real rules. Disposition: Addressed (operator, 2026-09-25: "Verbatim, extended").
 
 **Ergonomics.** Finding:
 - The check-2 population cannot be reproduced: the splitter is undefined, and other splitters give 124 or 130, not 134.
@@ -290,9 +308,11 @@ Round-1 fixes changed design substance, so all three lenses re-ran. **Every roun
 - Pointers must name `file § heading`, but nothing creates per-block headings in the destinations.
 - Check 7's baseline is easy to miss. Check 8 needs a `2e38f5e4` worktree for its baseline and has no pass criterion.
 
-Assumption: about 130 rule sentences can be cut under 70 KB by accepted one-line restatements. Disposition:
+Assumption: about 130 rule sentences can be cut under 70 KB by accepted one-line restatements. Disposition: Addressed (operator, 2026-09-25: "Verbatim, extended").
 
-**Risk.** Finding: checks 2 and 3 conflict structurally. The waiver check only tests that a string is present, so "`sync_git_repos.sh`" alone would satisfy a "restated as" row. All of check 2's guarantee therefore falls onto check 5's human judgement again. Rules without the keywords are missed ("Always remove the old file before symlinking", "Prefer deleting to suppressing", "Verify the directive is live"). Check 1 remains sound. Assumption: restated bullets for Key Conventions are well under half the verbatim size. Disposition:
+**Risk.** Finding: checks 2 and 3 conflict structurally. The waiver check only tests that a string is present, so "`sync_git_repos.sh`" alone would satisfy a "restated as" row. All of check 2's guarantee therefore falls onto check 5's human judgement again. Rules without the keywords are missed ("Always remove the old file before symlinking", "Prefer deleting to suppressing", "Verify the directive is live"). Check 1 remains sound. Assumption: restated bullets for Key Conventions are well under half the verbatim size. Disposition: Addressed (operator, 2026-09-25: "Verbatim, extended").
+
+**Resolution.** Operator chose to keep rules verbatim with the extended regex. "Restated as" waivers are removed. Waivers are narrative-only. The splitter is pinned in Verification. The threshold is 100,000 B, derived from the floor. Pointer headings are written per block and must be unique. Check 7 passes at 40%, and its baseline blocks the merge. Check 8 is advisory, with a baseline worktree, a pass criterion, and a second run on fail.
 
 **Author's measurement at `2e38f5e4`, for the disposition.** The splitter is: strip fences; split on blank lines and at list-item starts; normalise whitespace; split at `(?<=[.!?])\s+`. That gives:
 
