@@ -3,112 +3,106 @@
 
 ## Bug Fixes
 
-- delete the EXIT trap in _dotfiles_run_tmpdir_setup (#254)
+- point the Linux shellcheck hint at the pinned install (#287)
 
-- isolate cadence_notify from the real config/local.sh (#255)
-
-- resolve the vendored signing key at source time, not call time (#256)
-
-- correct four false comment claims and mark DOTFILES_REPO_ROOT readonly (#257)
-
-- move Docker Desktop's PATH entry into 6_path.zsh (#259)
-
-- skip .claude/rules in ai-config symlink loop (#261)
+- repair Claude plugin configs pinning a deleted brew node (#288)
 
 
 
 ## Documentation
 
-- delete the EXIT trap in _dotfiles_run_tmpdir_setup
+- descope shellcheck pin rows to a platform-aware install hint
 
-- add the run-tmpdir EXIT trap spec, retire its backlog row
+- scope the Linux hint to Ubuntu, name CLEAN_PATH in tests
 
-- retract M8, add the destructive-window guard and class invariant
+- approve shellcheck hint spec, backlog absent-tool gap
 
-- ledger drift can never clear a dotfiles entity
+- shellcheck install hint plan
 
-- withdraw Group A2, rebuild G3 as an allowlist ratchet
+- mark shellcheck install hint Done (#287)
 
-- freeze review-section references by name as well as number
+- stop hand-listing _update_warn callers (#289)
 
-- run_tmpdir EXIT trap removal, 4 tasks
+- record missing fleet host keys on new boxes
 
-- mark run-tmpdir-exit-trap Done
+- claude plugin provisioning from settings.json
 
-- record #254's CI coverage and test count
+- multi-lens review of plugin provisioning spec
 
-- record #255's CI test count and coverage
+- revise plugin provisioning after lens review
 
-- record two verified CLAUDE.md drift findings
+- revise plugin provisioning after round 2 review
 
-- add Anthropic weekly features digest 2026-09-07
+- replace settings guard with git status check
 
-- add Claude Code weekly features digest 2026-09-07
+- close round 4 review gaps in plugin provisioning spec
 
-- two drift findings from the model-generation-audit re-run
+- approve claude plugin provisioning spec
 
-- record #257's CI test count and coverage
+- record registration and cwd-scope measurements
 
-- re-anchor #257's squash-severed SHA, backlog one that cannot be
+- add fourth plugin list copy and third caller
 
-- correct eight drifted figures and a dangling standards path
+- claude plugin provisioning plan
 
-- retract the ledger-drift row, its premise is false
+- provision GNU parallel on Linux
 
-- unwired units — delete two, wire one
+- mark claude plugin provisioning Done
 
-- drop the wiring — the spool already drains, delete all three
+- add Anthropic weekly features digest 2026-09-21
 
-- round 2 — fourth unit, and the acceptance check was inert
+- add Claude Code weekly features digest 2026-09-21
 
-- unwired units cleanup, 8 tasks
+- move the JOBS measurements out of CLAUDE.md into ADR-0035
 
-- replace the local coverage preview with CI's figure
+- record CLAUDE.md/source comment duplication
 
-- give the b4ced0d anchor its PR pointer
+- four-class re-sort of dotfiles CLAUDE.md
 
-- retire the b4ced0d anchor row, now fixed
+- Step 8 multi-lens review, three findings
 
-- correct #259 backlog count, record its CI coverage
+- address round-1 lens findings
 
-- correct nine CLAUDE.md claims found by audit
+- address external review, three findings
 
-- retire three stale rows, narrow one
+- restore deleted review record, fix cross-references
 
-- anchor package-named install assertions
+- void round-2 review, fix two transferable findings
 
-- record round-1 multi-lens review of install anchoring
+- round-2 lens findings, gate mechanism rewritten
 
-- cut install anchoring to the one colliding site
+- replace estimated headroom with a measurement
 
-- fix three claims from round-2 risk re-review
+- separate the ratio from the residual, disclose scope
 
-- record owner disposition for round-2 review
+- third probe tests the context model out of sample
 
-- fix three claims from round-3 review
+- four repos measured, the fitted model is misspecified
 
-- record owner disposition for round-3 review
+- retire the bytes-to-tokens model, probe instead
 
-- anchor the pyenv install assertion, 2 tasks
+- widen scope to the whole CLAUDE.md
 
-- record #260's CI figures, mark its plan Done
+- review the approved parent spec, adopt five findings
 
-- record the plan-index table reflow on Edit
+- four-class re-sort of CLAUDE.md, 13 tasks
 
-- mark rules symlink skip plan Done (#261)
+- escalate task 13 off haiku on measured headroom
 
-- CLAUDE.md coverage figures vs tdd.md
+- record three run_update piped-section findings
 
-
-
-## Refactoring
-
-- delete four unwired lib/ units and their 37 tests (#258)
+- sync CLAUDE.md and the plan index after #293
 
 
 
-## Testing
+## Features
 
-- anchor pyenv install assertion (#260)
+- provision Claude plugins from ai-config settings.json (#290)
+
+- run bats in parallel under a validated JOBS knob (#291)
+
+- whitespace-normalised phrase manifest checker
+
+- four-class re-sort with a manifest checker (#293)
 
 
