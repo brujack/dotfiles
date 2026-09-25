@@ -16,7 +16,7 @@ covers:
 
 lead: none
 
-- The denominator counts commands, not source lines — bash xtrace emits one line per command. Exclude: heredoc bodies/terminators (any interpreter); multi-line `python3 -c "..."` bodies; multi-line array literals (trace as one line — cost `config/profiles.sh` 13 of its 15 lines and `lib/helpers.sh` 8); and pure-argument backslash continuations (only more arguments — **not** excluded if it begins or contains `||`, `&&`, `|`, or `;`). Single-line forms of all four still count.
+- The denominator counts commands, not source lines — bash xtrace emits one line per command. Exclude: heredoc bodies/terminators (any interpreter); multi-line `python3 -c "..."` bodies; multi-line array literals (trace as one line — cost `config/profiles.sh` 13 of its 15 lines and `lib/helpers.sh` 8); and pure-argument backslash continuations (only more arguments — **not** excluded if it begins or contains `||`, `&&`, `|`, or `;`). A one-line instance of any of the four is still counted normally.
 - Never add a function-declaration exclusion — tried and removed on evidence: a real trace showed `lib/detect_env.sh` line 4 traced twice (source, then re-source under an active `set -x`), so the assumption was wrong, not just too broad.
 
 trigger: editing coverable-line exclusions | scripts/run-bash-coverage.sh
