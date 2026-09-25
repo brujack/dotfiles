@@ -187,8 +187,13 @@ post-change file. Its splitter is pinned, so every count below can be reproduced
    items;
 3. normalise whitespace with `phrase_check.py`'s normaliser, never `grep -n` (#293 found line
    wraps split sentences);
-4. split sentences at `(?<=[.!?][*`)"]{0,3})\s+(?=[A-Z*`(\[])`. This splits after closing markup
-   and does not split after `e.g.`, `i.e.` or `vs.` (a lowercase letter follows). The plan's
+4. split sentences at each match of
+   `(?<!\be\.g)(?<!\bi\.e)(?<!\bvs)[.!?][*`)"]{0,3}\s+(?=[A-Z*`(\[])`. The sentence ends after
+   the punctuation and any closing markup. Python rejects a variable-width lookbehind, so this
+   is a boundary match, not a `re.split` lookbehind; the first draft of this line would not
+   compile. Tested on
+   `Use it (e.g. \`ledger init\`) must still read. **Both** call sites must branch. Done \`x\`.`,
+   which gives 3 sentences, with no split inside `e.g.` and a split after `` .` ``. The plan's
    first task measures the splitter against the file and pins the count. The figures below are
    from a simpler splitter and are indicative only.
 
