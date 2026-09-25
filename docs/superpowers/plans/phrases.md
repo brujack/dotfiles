@@ -1,4 +1,7 @@
-> **Frozen at `e6167816`.** These anchors describe `CLAUDE.md` as #293's reviewers judged it. The 2026-09-25 relocation moved many of them to `ai-config/docs/knowledge/dotfiles-*.md` and they are deliberately not updated. Any change that wires `phrase_check.py` into a gate must re-anchor first.
+# FROZEN at e6167816. These anchors describe CLAUDE.md as #293's reviewers judged it.
+# The 2026-09-25 relocation moved many of them to ai-config/docs/knowledge/dotfiles-*.md
+# and they are deliberately not updated. Any change that wires phrase_check.py into a
+# gate must re-anchor first.
 
 # Phrase manifest — CLAUDE.md four-class re-sort
 #
