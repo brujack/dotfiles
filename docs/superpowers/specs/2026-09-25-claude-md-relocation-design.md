@@ -1,6 +1,6 @@
 # CLAUDE.md relocation — move narrative out, keep the rules
 
-**Status:** Proposed, 2026-09-25.
+**Status:** Approved by operator, 2026-09-25.
 **Operator directive (2026-09-25):** "you work on dotfiles claude.md and move things around",
 given after a fresh-session `/context` still read **178.4k** following #293.
 **Supersedes:** the Non-goal in `2026-09-21-claude-md-four-class-resort-design.md` that forbade
@@ -356,7 +356,7 @@ Finding:
 
 Assumption: a name-and-reader index is enough for a seam that moves to index-only. Refute by running check 8's task against `_RELEASE_BIN_DIR`, not `nvidia-ctk`, which stays inline.
 
-Disposition:
+Disposition: Addressed (operator, 2026-09-25), per the resolution below. Assumption Accepted, reason: tested after merge by check 8 task B.
 
 **Author's proposed resolution, already applied at the next commit, pending operator disposition:**
 1. Both units are named inline-whole. The E2 predicate is declared a floor, and the reviewer may only add to the list.
