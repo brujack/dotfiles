@@ -21,6 +21,13 @@ session needs before it reads any file. Incident write-ups and tool reference go
 `CLAUDE.md` whatever their form (ADR-0077 rule 5). Most of this file breaks that rule. It keeps
 the rule and the story of how the rule was learned in the same paragraph.
 
+**What this spec can and cannot move.** The 178.4k is a whole-session figure, and this file is
+about a quarter of it. The rest of the instruction preamble is `~/.claude/CLAUDE.md`, `USER.md`
+and the 10 imported standards: **418,189 B**, roughly 107k tokens, all owned by ai-config and
+out of scope here. So even the best case of this spec lands a fresh session at roughly
+**146–150k**, not under 100k. That is the expected result, not a shortfall. The next lever
+after this spec is the shared standards, which is ai-config's work.
+
 **Where the bytes are.** Measured with `awk` over headings at `2e38f5e4`. These are
 **characters**, not bytes, because the file carries multibyte characters. Every figure covers
 this file only.
@@ -58,13 +65,30 @@ this file only.
 
 ### The unit is a narrative block, moved byte-for-byte
 
-A **block** is one or more consecutive blank-line paragraphs that make one argument: a rule,
-plus its mechanism, measurements and incident history. For each block this spec touches:
+A **unit** is the smallest thing that moves or stays whole:
+
+- a blank-line paragraph of prose;
+- **each top-level item of a bullet list**, because several sections here are one blank-line
+  paragraph holding many bullets. `## Key Conventions` paragraph 2 is 26 bullets and 18,532
+  characters in one block, mixing bullets that stay with bullets that move;
+- a table or fenced code block, taken whole.
+
+A **block** is one or more consecutive units that make one argument: a rule, plus its
+mechanism, measurements and incident history. For each block this spec touches:
 
 1. The block moves **verbatim** into a knowledge file. It is not reworded, shortened or merged.
    Relocation is then checkable by machine.
-2. `CLAUDE.md` keeps **one bullet**: the rule in the imperative, plus a pointer naming the
-   knowledge file and the heading the block now sits under.
+2. `CLAUDE.md` keeps **one bullet**: the rule in the imperative, plus a pointer.
+
+**A pointer carries its trigger.** The pointer in this file that sessions demonstrably follow is
+conditional: "Before recording or publishing a bash coverage figure, or editing
+`scripts/run-bash-coverage.sh`… read …". A bare "see X" is not followed. Every pointer this spec
+adds takes the form:
+
+> **Before** `<action>` **on** `<paths or symbols>`, read
+> `ai-config/docs/knowledge/<file>.md` § `<heading>`.
+
+Where no action is natural, the pointer names the symbol a session would search for.
 
 Rewording the relocated text is out of scope. Compression and relocation are separate
 operations with separate failure modes. Doing both at once makes a lost claim impossible to
@@ -108,7 +132,11 @@ text. `### Test Seams` shrinks to:
 
 - the seam idiom line (`local _file="${_OVERRIDE_VAR:-...}"`);
 - a table with one row per seam: variable, reader (`file:function`), and a rule of 15 words
-  or fewer;
+  or fewer. **Exception: up to 30 words where the seam's failing path is destructive**
+  (`tdd.md` E2). That covers a real binary writing live state when the seam or mock is
+  missing, such as `nvidia-ctk` rewriting `/etc/docker/daemon.json`, `_CARGO_BIN` compiling
+  real crates, or `LEDGER_BIN` writing the live ledger. For those rows the hazard itself is
+  the rule, and it must be in the row;
 - the cross-cutting rules listed above;
 - a pointer to `dotfiles-test-seams.md`.
 
@@ -138,31 +166,74 @@ coverage as manifest enforcement".
 Reversed, `CLAUDE.md` would point at files that are not there yet for as long as the two
 merges are apart.
 
+No scratch file is written under `~/.claude/projects/`. That path is inside ai-config's working
+tree, and a draft left there fails ai-config's `make test` for every session on the machine.
+
 ## Verification
 
-1. **Nothing lost (mechanical).** Split the pre-change `CLAUDE.md` into blank-line paragraphs.
-   Every paragraph absent from the post-change `CLAUDE.md` must appear verbatim in one of the
-   destination files after whitespace normalisation. Normalise with the same function as
-   `phrase_check.py`'s matcher, never `grep -n`: #293 found line wraps split sentences.
-   **Positive control:** change one word in one relocated paragraph in the destination and
-   confirm the check fails and names that paragraph. Revert.
-2. **Non-zero control.** The check must report the count of relocated paragraphs, and that
-   count must be greater than 0. An empty diff passes check 1 trivially.
-3. **Every pointer resolves.** Each `dotfiles-*.md` named in `CLAUDE.md` exists on ai-config
-   `origin/master`. Each heading a pointer names exists in that file.
-4. **Rules survive (review).** A reviewer who did not do the edit reads each removed block
-   against its replacement bullet and records one verdict per block: rule preserved, or rule
-   weakened, with the sentence. This check has no mechanical form. It exists because the worst
-   failure here is a rule that leaves with its record.
-5. **Size.** `wc -c CLAUDE.md` before and after, both recorded in the PR body.
-6. **Outcome.** Operator runs `/context` in a **fresh** dotfiles session after both merges and
-   reports the figure. This is the acceptance check. Probes taken inside a running session are
-   not, because that session's preamble was fixed when it started (#293 plan, Task 11).
-7. **Knowledge gate.** `make validate-knowledge` in ai-config passes.
+Checks 1 to 3 are one script, run against the pre-change file at `2e38f5e4` and the
+post-change file. It normalises whitespace with the same function as `phrase_check.py`'s
+matcher, never `grep -n`: #293 found that line wraps split sentences.
+
+1. **Nothing lost from the destination (mechanical).** Split the pre-change `CLAUDE.md` into
+   units, as defined in the Design. Every unit absent from the post-change `CLAUDE.md` must
+   appear verbatim in one of the destination files. **Positive control:** change one word in
+   one relocated unit in the destination and confirm the check fails and names that unit.
+   Revert.
+2. **Rules retained in `CLAUDE.md` (mechanical).** This check exists because check 1 cannot
+   fail for the worst case. Check 1 certifies the destination, so a gate rule that leaves with
+   its narrative is green there by construction.
+   - Take every pre-change sentence, outside fenced code, matching
+     `\b(never|must|do not|don't|required|refuse[sd]?|HOLD)\b` (case-insensitive).
+     **Measured at `2e38f5e4`: 134 sentences, 32,479 characters.**
+   - Each must either appear, normalised, in the post-change `CLAUDE.md`, or have a row in a
+     **waiver table** committed beside the plan.
+   - A waiver row has three parts: the sentence, a **replacement phrase that must itself be
+     present in the post-change `CLAUDE.md`**, and a reason. The reason is either "restated as
+     `<phrase>`" or "narrative use, not a rule", for example "nothing ever ran".
+   - The script checks every replacement phrase is present, so a waiver cannot point at text
+     that is not there.
+   - **Negative control:** delete one retained rule sentence from the post-change `CLAUDE.md`
+     while it survives verbatim in the destination. Confirm check 2 goes red while check 1
+     stays green. Revert.
+3. **Non-zero and size (mechanical).**
+   - The script reports the count of relocated units, and the count must be greater than 0.
+   - **Hard threshold:** `wc -c CLAUDE.md <= 70,000`.
+   - An empty or token relocation fails here, and nowhere else would it fail.
+   - If check 2 and the threshold conflict, meaning the retained rules alone will not fit,
+     **stop and report**. Do not drop rules to reach the number.
+4. **Every pointer resolves.** Each `dotfiles-*.md` named in `CLAUDE.md` exists on ai-config
+   `origin/master`, and each heading a pointer names exists in that file.
+5. **Rules survive, judged (review).** A reviewer who did not do the edit reads each removed
+   block against its replacement bullet and each waiver row against its replacement phrase. The
+   reviewer records one verdict per block and per waiver: preserved, or weakened with the
+   sentence.
+   - Check 2 enumerates what to judge, and this check judges it.
+   - **The verdicts go in the dotfiles PR body.** That body is the merge decision's record and
+     the only place they outlive the session.
+6. **Knowledge gate.** `make validate-knowledge` in ai-config passes.
+7. **Outcome (operator).** Baseline and result both come from `/context` in a **fresh** dotfiles
+   session: the total, and the per-file `CLAUDE.md` line.
+   - **The baseline must be taken before the dotfiles merge**, because it cannot be recovered
+     in a fresh session afterwards. The result is taken after both merges.
+   - Probes inside a running session do not count: that session's preamble was fixed when it
+     started (#293 plan, Task 11).
+   - **Pass:** the per-file `CLAUDE.md` figure falls by at least 60% of its baseline.
+   - The whole-session total is recorded but not gated. Most of it is out of scope (see
+     Problem).
+8. **Behaviour (post-merge).** Give a fresh dotfiles session the task "add a test for
+   `_install_ubuntu_nvidia`'s restart branch".
+   - Check its transcript for a Read of `dotfiles-test-seams.md`, or for use of the index row.
+   - Check that its test sets `_OVERRIDE_DOCKER_DAEMON_JSON` and uses the `nvidia-ctk` mock.
+   - Run the same task on today's file as the baseline.
+   - This tests the one assumption nobody has measured: that an index row is enough without
+     the narrative.
+   - A failure here does not revert the relocation. It moves that seam's narrative back
+     inline, or widens its row.
 
 **Expected, stated as an estimate:** `CLAUDE.md` from 179 KB to 55–70 KB. At this corpus's
-measured ~3.9 bytes per token, that is roughly 28–32k fewer tokens loaded at launch. The real
-figure is check 6's output, not this line.
+average of ~3.9 bytes per token, that is roughly 28–32k fewer tokens. This file is dense with
+paths, code and tables, so its real ratio may differ. Check 7's per-file line settles it.
 
 ## Non-goals
 
@@ -191,19 +262,19 @@ Reviewed at commit: `8d67be06` (Step 7 self-review commit, before Step 8 dispatc
 
 Finding: Worth building, but it moves about 17% of the 178.4k and the spec never says so. The global preamble (`~/.claude/CLAUDE.md`, `USER.md` and the 10 imported standards) is 418,189 B, about 107k tokens, and is out of scope. Best case lands a fresh session around 146–150k. Check 6 has no threshold, so success is undefined. Only check 2 fails when the relocation does nothing, and moving one paragraph satisfies it. Proposed: a hard `wc -c CLAUDE.md <= 70,000` check. Check 4's verdicts have no durable home; the PR body should hold them.
 Assumption: The 3.9 B/token ratio holds for this file, which is dense with paths, code and tables. Settle it with the per-file "Memory files" line of `/context` in a fresh dotfiles session, taken before the dotfiles merge. The baseline cannot be recovered afterwards.
-Disposition:
+Disposition: Addressed (operator, 2026-09-25). Added a Problem paragraph stating the ~17% ceiling and the 418,189 B out of scope. Check 3 now carries a hard `wc -c CLAUDE.md <= 70,000`. Check 5's verdicts go in the PR body. Check 7 takes the per-file `/context` baseline before the dotfiles merge and passes at a 60% per-file drop.
 
 ### Ergonomics
 
 Finding: Check 1's unit, the blank-line paragraph, is wrong for this file. Key Conventions paragraph 2 is 26 bullets and 18,532 chars in one block. Moving one bullet forces all 18.5k into a destination or tempts loosening the checker. The unit must also be the top-level list item. Pointers need a trigger condition ("before editing X, read Y"), following the working bash-coverage pointer. The 15-word seam-row cap is too tight where the hazard is a destructive failing path (`nvidia-ctk`, `_CARGO_BIN`).
 Assumption: A fresh session doing a seam task acts on the index row or follows the pointer, rather than copying what `tests/` looks like. Check after merge: give a fresh session "add a test for `_install_ubuntu_nvidia`'s restart branch", then look for a Read of `dotfiles-test-seams.md` and for `_OVERRIDE_DOCKER_DAEMON_JSON` plus the `nvidia-ctk` mock. Run the same task on today's file as the baseline.
-Disposition:
+Disposition: Addressed (operator, 2026-09-25). The unit is now a paragraph, a top-level list item, or a whole table or code block. Pointers carry a "Before <action> on <paths>, read …" trigger. Seam rows may run to 30 words where the failing path is destructive. The assumption is Accepted, reason: tested after merge as check 8.
 
 ### Risk
 
 Finding: The verification plan cannot catch the spec's own worst case. Check 1 certifies the destination, and nothing mechanical checks what stays in `CLAUDE.md`. A gate rule that leaves with its narrative is green on check 1 by construction. The only "Never invoke" in the file (`sync_git_repos.sh`) sits inside the 18.5k Key Conventions block. Proposed: a retention check. Every pre-change sentence matching `never|must|do not|required|refuse|HOLD` must appear, normalised, in the post-change `CLAUDE.md` or in a waiver list the reviewer signs. Add a negative control: delete one rule from `CLAUDE.md` while it survives in the destination, and confirm red. Scratch drafts under `~/.claude/projects/` block ai-config `make test`.
 Assumption: A pointer plus a bullet of 15 words or fewer is enough for correct behaviour without the narrative. This is argued, not measured. Test it the same way as the Ergonomics assumption.
-Disposition:
+Disposition: Addressed (operator, 2026-09-25). New check 2 is a retention check: 134 rule-shaped sentences, each either kept or waived to a replacement phrase that is verified present. It has a negative control. Check 3 says stop rather than drop rules if it conflicts with the size threshold. A no-scratch-under-`~/.claude/projects/` rule is added to Sequencing. The assumption is Accepted, reason: tested after merge as check 8.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
