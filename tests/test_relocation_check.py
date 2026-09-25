@@ -536,6 +536,168 @@ class TestCheck3(unittest.TestCase):
         self.assertIn("records match unit", check3[2])
 
 
+class TestBulletsMode(unittest.TestCase):
+    """Amendment 2026-09-25: rule bullets replace verbatim sentence
+    retention. --rules-mode bullets replaces check 2's rule-sentence
+    retention with "one pointer per MOVE group" and check 3's floor+slack
+    bound with a flat --max-bytes ceiling."""
+
+    def _two_group_fixture(self):
+        unit_a = "This unit belongs to group A and must move there."
+        unit_b = "This unit belongs to group B and must also move there."
+        pre_text = f"# Doc\n\n### Widget\n\n{unit_a}\n\n{unit_b}\n"
+        anchor_a = rc.normalize(unit_a)[:60]
+        anchor_b = rc.normalize(unit_b)[:60]
+        move_a = rc.MoveRecord(anchor_a, "dotfiles-a.md", "Group A")
+        move_b = rc.MoveRecord(anchor_b, "dotfiles-b.md", "Group B")
+        map_data = rc.MapData(
+            section_headings=["### Widget"], move_records=[move_a, move_b]
+        )
+        return unit_a, unit_b, pre_text, map_data
+
+    def _write_dest(self, dest_dir: Path, unit_a: str, unit_b: str) -> None:
+        (dest_dir / "dotfiles-a.md").write_text(
+            f"### Group A\n\n{unit_a}\n", encoding="utf-8"
+        )
+        (dest_dir / "dotfiles-b.md").write_text(
+            f"### Group B\n\n{unit_b}\n", encoding="utf-8"
+        )
+
+    _POINTER_A = (
+        "**Before** touching widgets **on** group A, read "
+        "`ai-config/docs/knowledge/dotfiles-a.md` § `Group A`.\n"
+    )
+    _POINTER_B = (
+        "**Before** touching widgets **on** group B, read "
+        "`ai-config/docs/knowledge/dotfiles-b.md` § `Group B`.\n"
+    )
+
+    def test_passes_with_one_pointer_per_group(self):
+        unit_a, unit_b, pre_text, map_data = self._two_group_fixture()
+        post_text = "# Doc\n\n" + self._POINTER_A + "\n" + self._POINTER_B
+        with tempfile.TemporaryDirectory() as tmp:
+            dest_dir = Path(tmp)
+            self._write_dest(dest_dir, unit_a, unit_b)
+            results = rc.run_check(
+                pre_text,
+                post_text,
+                dest_dir,
+                map_data,
+                min_relocated=0,
+                slack=8_000,
+                rules_mode="bullets",
+            )
+        by_number = {n: (ok, detail) for n, ok, detail in results}
+        self.assertTrue(by_number[2][0], by_number[2][1])
+        self.assertTrue(by_number[3][0], by_number[3][1])
+
+    def test_fails_on_a_missing_pointer(self):
+        unit_a, unit_b, pre_text, map_data = self._two_group_fixture()
+        post_text = "# Doc\n\n" + self._POINTER_A  # Group B pointer missing
+        with tempfile.TemporaryDirectory() as tmp:
+            dest_dir = Path(tmp)
+            self._write_dest(dest_dir, unit_a, unit_b)
+            results = rc.run_check(
+                pre_text,
+                post_text,
+                dest_dir,
+                map_data,
+                min_relocated=0,
+                slack=8_000,
+                rules_mode="bullets",
+            )
+        check2 = next(r for r in results if r[0] == 2)
+        self.assertFalse(check2[1])
+        self.assertIn("missing pointer", check2[2])
+
+    def test_fails_on_a_duplicate_pointer(self):
+        unit_a, unit_b, pre_text, map_data = self._two_group_fixture()
+        post_text = (
+            "# Doc\n\n" + self._POINTER_A + "\n" + self._POINTER_A + "\n" + self._POINTER_B
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            dest_dir = Path(tmp)
+            self._write_dest(dest_dir, unit_a, unit_b)
+            results = rc.run_check(
+                pre_text,
+                post_text,
+                dest_dir,
+                map_data,
+                min_relocated=0,
+                slack=8_000,
+                rules_mode="bullets",
+            )
+        check2 = next(r for r in results if r[0] == 2)
+        self.assertFalse(check2[1])
+        self.assertIn("duplicated pointer", check2[2])
+
+    def test_fails_when_post_exceeds_max_bytes(self):
+        unit_a, unit_b, pre_text, map_data = self._two_group_fixture()
+        post_text = "# Doc\n\n" + self._POINTER_A + "\n" + self._POINTER_B
+        with tempfile.TemporaryDirectory() as tmp:
+            dest_dir = Path(tmp)
+            self._write_dest(dest_dir, unit_a, unit_b)
+            results = rc.run_check(
+                pre_text,
+                post_text,
+                dest_dir,
+                map_data,
+                min_relocated=0,
+                slack=8_000,
+                rules_mode="bullets",
+                max_bytes=50,
+            )
+        check3 = next(r for r in results if r[0] == 3)
+        self.assertFalse(check3[1])
+        self.assertIn("max_bytes", check3[2])
+
+    def test_check2_passes_in_bullets_mode_but_fails_in_sentences_mode(self):
+        unit_text = (
+            "You must always flush the cache before reuse. "
+            "It stays warm otherwise."
+        )
+        pre_text = f"# Doc\n\n### Widget\n\n{unit_text}\n"
+        # post drops the unit's whole text (its rule sentence included) but
+        # still carries the group's one pointer.
+        post_text = (
+            "# Doc\n\n"
+            "**Before** touching this **on** widgets, read "
+            "`ai-config/docs/knowledge/dotfiles-x.md` § `Widget`.\n"
+        )
+        anchor = rc.normalize(unit_text)[:60]
+        with tempfile.TemporaryDirectory() as tmp:
+            dest_dir = Path(tmp)
+            (dest_dir / "dotfiles-x.md").write_text(
+                f"### Widget\n\n{unit_text}\n", encoding="utf-8"
+            )
+            move = rc.MoveRecord(anchor, "dotfiles-x.md", "Widget")
+            map_data = rc.MapData(
+                section_headings=["### Widget"], move_records=[move]
+            )
+            results_bullets = rc.run_check(
+                pre_text,
+                post_text,
+                dest_dir,
+                map_data,
+                min_relocated=0,
+                slack=8_000,
+                rules_mode="bullets",
+            )
+            results_sentences = rc.run_check(
+                pre_text,
+                post_text,
+                dest_dir,
+                map_data,
+                min_relocated=0,
+                slack=8_000,
+                rules_mode="sentences",
+            )
+        check2_bullets = next(r for r in results_bullets if r[0] == 2)
+        check2_sentences = next(r for r in results_sentences if r[0] == 2)
+        self.assertTrue(check2_bullets[1], check2_bullets[2])
+        self.assertFalse(check2_sentences[1])
+
+
 class TestCheck4(unittest.TestCase):
     def _run(self, post_text: str, dest_files: dict[str, str]):
         pre_text = "# Doc\n\nSomething unrelated.\n"

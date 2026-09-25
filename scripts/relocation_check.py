@@ -9,7 +9,8 @@ directory of `dotfiles-*.md` knowledge files, and a relocation map.
 CLI:
     python3 scripts/relocation_check.py measure --pre-rev REV --map MAP
     python3 scripts/relocation_check.py check --pre-rev REV --post FILE \
-        --dest DIR --map MAP [--min-relocated N] [--slack N]
+        --dest DIR --map MAP [--min-relocated N] [--slack N] \
+        [--rules-mode {sentences,bullets}] [--max-bytes N]
 
 The pre-change file is read with `git show <rev>:CLAUDE.md`, never from the
 worktree -- per the plan's Global Constraints, edits may already be underway.
@@ -493,11 +494,23 @@ def run_check(
     map_data: MapData,
     min_relocated: int = 60_000,
     slack: int = 8_000,
+    rules_mode: str = "sentences",
+    max_bytes: int | None = None,
 ) -> list[tuple[int, bool, str]]:
     """Run checks 1-4 and return (check_number, passed, detail) triples, one
     per check, in order. Raises MapError if a SECTION heading named in the
     map cannot be found in the pre-file -- that is a broken map, not a
-    check failure."""
+    check failure.
+
+    rules_mode="sentences" (default) is the original design: check 2
+    retains verbatim rule sentences, check 3 bounds post-file bytes by a
+    floor derived from them. rules_mode="bullets" is the 2026-09-25
+    amendment: CLAUDE.md carries hand-written rule bullets per MOVE group
+    instead, so check 2 becomes "every MOVE group has exactly one pointer"
+    and check 3 drops the floor+slack bound (the floor was defined BY the
+    retained sentences, which no longer exist) in favour of a flat
+    max_bytes ceiling, checked only when one is given. Checks 1 and 4 are
+    identical in both modes."""
     lines = pre_text.splitlines(keepends=True)
     spans = resolve_spans(lines, map_data.section_headings)
 
@@ -506,6 +519,7 @@ def run_check(
     dest_texts = _read_dest_texts(dest_dir)
     dest_text_all = "\n".join(dest_texts.values())
     dest_norm_all = normalize(dest_text_all)
+    pointer_matches = list(_POINTER_RE.finditer(post_text))
 
     # CHECK 1: nothing lost from the destination.
     lost: list[str] = []
@@ -526,39 +540,69 @@ def run_check(
         + "; ".join(u[:80].replace("\n", " ") for u in lost[:5])
     )
 
-    # Sections analysis, shared by check 2 and the check-3 floor.
+    # Sections analysis, shared by check 2 and the check-3 floor in
+    # sentences mode. Cheap to compute either way; bullets mode ignores it.
     analysis = analyze_sections(
         lines, spans, map_data.inline_anchors, map_data.waive_sentences
     )
 
-    # CHECK 2: retained rule sentences.
-    missing_sentences = [
-        s for s in analysis.retained_sentences if s not in post_norm
-    ]
-    check2_ok = not missing_sentences
-    check2_detail = (
-        ""
-        if check2_ok
-        else "rule sentence not retained in post: "
-        + "; ".join(s[:80] for s in missing_sentences[:5])
-    )
+    # CHECK 2: sentences mode retains verbatim rule sentences; bullets mode
+    # requires exactly one pointer per distinct MOVE (dest, heading) group.
+    if rules_mode == "bullets":
+        check2_errors: list[str] = []
+        distinct_pairs = sorted(
+            {(move.dest_file, move.dest_heading) for move in map_data.move_records}
+        )
+        for dest_file, dest_heading in distinct_pairs:
+            count = sum(
+                1
+                for match in pointer_matches
+                if match.group(1) == dest_file
+                and match.group(2).strip() == dest_heading
+            )
+            if count == 0:
+                check2_errors.append(f"missing pointer: {dest_file} § {dest_heading}")
+            elif count > 1:
+                check2_errors.append(
+                    f"duplicated pointer ({count}x): {dest_file} § {dest_heading}"
+                )
+        check2_ok = not check2_errors
+        check2_detail = "; ".join(check2_errors[:5])
+    else:
+        missing_sentences = [
+            s for s in analysis.retained_sentences if s not in post_norm
+        ]
+        check2_ok = not missing_sentences
+        check2_detail = (
+            ""
+            if check2_ok
+            else "rule sentence not retained in post: "
+            + "; ".join(s[:80] for s in missing_sentences[:5])
+        )
 
-    # CHECK 3: non-zero and size.
+    # CHECK 3: non-zero and size. Sentences mode bounds post bytes by the
+    # floor+slack derived from retained sentences; bullets mode drops that
+    # bound (there is no floor without retained sentences) for a flat
+    # max_bytes ceiling, checked only when one is given.
     relocated_bytes = sum(len(u.encode("utf-8")) for u in relocated)
-    floor = compute_floor(non_moving_bytes_for(lines, spans), analysis)
     post_bytes = len(post_text.encode("utf-8"))
-    pointer_bytes = _pointer_line_bytes(post_text)
-    adjusted_post_bytes = post_bytes - pointer_bytes
     reasons: list[str] = []
     if len(relocated) == 0:
         reasons.append("no relocated units")
     if relocated_bytes < min_relocated:
         reasons.append(f"relocated bytes {relocated_bytes} < min {min_relocated}")
-    if adjusted_post_bytes > floor + slack:
-        reasons.append(
-            f"post {post_bytes} - pointers {pointer_bytes} = "
-            f"{adjusted_post_bytes} > floor {floor} + slack {slack}"
-        )
+    if rules_mode == "bullets":
+        if max_bytes is not None and post_bytes > max_bytes:
+            reasons.append(f"post bytes {post_bytes} > max_bytes {max_bytes}")
+    else:
+        floor = compute_floor(non_moving_bytes_for(lines, spans), analysis)
+        pointer_bytes = _pointer_line_bytes(post_text)
+        adjusted_post_bytes = post_bytes - pointer_bytes
+        if adjusted_post_bytes > floor + slack:
+            reasons.append(
+                f"post {post_bytes} - pointers {pointer_bytes} = "
+                f"{adjusted_post_bytes} > floor {floor} + slack {slack}"
+            )
     reasons.extend(
         find_completeness_errors(
             lines, spans, map_data.inline_anchors, map_data.move_records
@@ -569,7 +613,6 @@ def run_check(
 
     # CHECK 4: every pointer resolves, and every MOVE landed under its heading.
     check4_errors: list[str] = []
-    pointer_matches = list(_POINTER_RE.finditer(post_text))
     if relocated and not pointer_matches:
         check4_errors.append(
             f"relocated units present (n={len(relocated)}) but "
@@ -657,6 +700,10 @@ def build_parser() -> argparse.ArgumentParser:
     check_p.add_argument("--map", required=True, type=Path)
     check_p.add_argument("--min-relocated", type=int, default=60_000)
     check_p.add_argument("--slack", type=int, default=8_000)
+    check_p.add_argument(
+        "--rules-mode", choices=("sentences", "bullets"), default="sentences"
+    )
+    check_p.add_argument("--max-bytes", type=int, default=None)
 
     return parser
 
@@ -707,7 +754,14 @@ def run(argv: list[str] | None = None) -> int:
     post_text = args.post.read_text(encoding="utf-8")
     try:
         results = run_check(
-            pre_text, post_text, args.dest, map_data, args.min_relocated, args.slack
+            pre_text,
+            post_text,
+            args.dest,
+            map_data,
+            args.min_relocated,
+            args.slack,
+            rules_mode=args.rules_mode,
+            max_bytes=args.max_bytes,
         )
     except MapError as exc:
         print(f"error: {exc}", file=sys.stderr)
