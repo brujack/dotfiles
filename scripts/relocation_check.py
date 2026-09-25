@@ -65,10 +65,33 @@ _RULE_REGEX = re.compile(
     re.IGNORECASE,
 )
 
-# Pointer form: "read `ai-config/docs/knowledge/<file>.md` § `<heading>`".
+# Pointer form: "read `ai-config/docs/knowledge/<file>.md` § `<heading>`",
+# or, per the 2026-09-25 (b) amendment, the compact suffix form
+# "→ `<file>.md` § `<heading>`" appended to a rule line that also carries
+# its own rule text. Python's re forbids reusing one named group across
+# alternation branches, so each branch gets its own pair; _pointer_target()
+# below picks whichever pair actually matched, so callers see (file,
+# heading) uniformly regardless of which form was used.
 _POINTER_RE = re.compile(
-    r"read `ai-config/docs/knowledge/(dotfiles-[a-z0-9-]+\.md)` § `([^`]+)`"
+    r"read `ai-config/docs/knowledge/(?P<long_file>dotfiles-[a-z0-9-]+\.md)` § `(?P<long_heading>[^`]+)`"
+    r"|"
+    r"→ `(?P<compact_file>dotfiles-[a-z0-9-]+\.md)` § `(?P<compact_heading>[^`]+)`"
 )
+
+
+def _pointer_target(match: re.Match[str]) -> tuple[str, str]:
+    """(dest_file, dest_heading), stripped, from a _POINTER_RE match --
+    whichever alternative (long or compact form) actually matched."""
+    file = match.group("long_file")
+    heading = match.group("long_heading")
+    if file is None:
+        file = match.group("compact_file")
+        heading = match.group("compact_heading")
+    return file, heading.strip()
+
+
+def _pointer_is_long_form(match: re.Match[str]) -> bool:
+    return match.group("long_file") is not None
 
 
 class GitError(Exception):
@@ -444,21 +467,31 @@ def _read_dest_texts(dest_dir: Path) -> dict[str, str]:
 
 
 def _pointer_line_bytes(text: str) -> int:
-    """Total bytes of every physical line in text that contains a match of
-    the pointer regex -- the same one check 4 resolves. A pointer is the
-    only new text this tool permits, so its bytes are excluded from check
-    3's bloat bound; without this, the 50-odd required pointers alone cost
+    """Total bytes attributable to pointers in text, excluded from check
+    3's bloat bound -- without this, the required pointers alone cost
     thousands of bytes and the bound could never pass, while text the
     bound actually exists to catch (bloat beyond retained rules and
-    pointers) goes unaffected by them. A line that merely mentions a
-    knowledge-file path without the full pointer form is ordinary prose
-    and is not excluded -- `search`, not a looser substring check, is what
-    enforces that."""
-    return sum(
-        len(line.encode("utf-8"))
-        for line in text.splitlines(keepends=True)
-        if _POINTER_RE.search(line)
-    )
+    pointers) goes unaffected by them.
+
+    A long-form pointer's lead-in prose ("**Before** X on Y, read...") is
+    part of the pointer's own required form, so a line carrying one is
+    pointer content in its entirety and its WHOLE byte length is excluded.
+    A compact pointer is a suffix on a rule line that also carries its own,
+    independent rule text, so only the matched suffix's own bytes are
+    excluded -- excluding the whole line would wrongly exclude that rule
+    text too. A line that merely mentions a knowledge-file path without
+    the full pointer form is ordinary prose and contributes nothing --
+    `search`, not a looser substring check, is what enforces that."""
+    total = 0
+    for line in text.splitlines(keepends=True):
+        matches = list(_POINTER_RE.finditer(line))
+        if not matches:
+            continue
+        if any(_pointer_is_long_form(m) for m in matches):
+            total += len(line.encode("utf-8"))
+        else:
+            total += sum(len(m.group(0).encode("utf-8")) for m in matches)
+    return total
 
 
 _SHORT_UNIT_MAX_LEN = 40
@@ -557,8 +590,7 @@ def run_check(
             count = sum(
                 1
                 for match in pointer_matches
-                if match.group(1) == dest_file
-                and match.group(2).strip() == dest_heading
+                if _pointer_target(match) == (dest_file, dest_heading)
             )
             if count == 0:
                 check2_errors.append(f"missing pointer: {dest_file} § {dest_heading}")
@@ -619,7 +651,7 @@ def run_check(
             f"pointer count={len(pointer_matches)} in post"
         )
     for match in pointer_matches:
-        file_name, heading_text = match.group(1), match.group(2).strip()
+        file_name, heading_text = _pointer_target(match)
         dest_path = dest_dir / file_name
         if not dest_path.is_file():
             check4_errors.append(f"pointer names missing file {file_name}")

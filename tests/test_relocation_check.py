@@ -367,6 +367,18 @@ class TestPointerLineBytes(unittest.TestCase):
             rc._pointer_line_bytes(text), len(full_pointer.encode("utf-8"))
         )
 
+    def test_compact_suffix_excludes_only_its_own_bytes_not_the_whole_line(self):
+        rule_text = "You must always flush the cache before reuse."
+        compact_suffix = "→ `dotfiles-x.md` § `Widget`"
+        line = f"{rule_text} {compact_suffix}\n"
+        self.assertEqual(
+            rc._pointer_line_bytes(line), len(compact_suffix.encode("utf-8"))
+        )
+
+    def test_a_stray_arrow_without_the_backticked_shape_does_not_match(self):
+        line = "→ see the widget docs for more, no backticks here.\n"
+        self.assertEqual(rc._pointer_line_bytes(line), 0)
+
 
 class TestCheck3(unittest.TestCase):
     def test_pointer_lines_excluded_from_bloat_bound_even_when_over_slack(self):
@@ -696,6 +708,52 @@ class TestBulletsMode(unittest.TestCase):
         check2_sentences = next(r for r in results_sentences if r[0] == 2)
         self.assertTrue(check2_bullets[1], check2_bullets[2])
         self.assertFalse(check2_sentences[1])
+
+    def test_compact_pointers_satisfy_check2_and_check4(self):
+        unit_a, unit_b, pre_text, map_data = self._two_group_fixture()
+        post_text = (
+            "# Doc\n\n"
+            "Widget rule for group A. → `dotfiles-a.md` § `Group A`\n\n"
+            "Widget rule for group B. → `dotfiles-b.md` § `Group B`\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            dest_dir = Path(tmp)
+            self._write_dest(dest_dir, unit_a, unit_b)
+            results = rc.run_check(
+                pre_text,
+                post_text,
+                dest_dir,
+                map_data,
+                min_relocated=0,
+                slack=8_000,
+                rules_mode="bullets",
+            )
+        by_number = {n: (ok, detail) for n, ok, detail in results}
+        self.assertTrue(by_number[2][0], by_number[2][1])
+        self.assertTrue(by_number[4][0], by_number[4][1])
+
+    def test_compact_pointer_to_a_missing_heading_fails_check4(self):
+        unit_a, unit_b, pre_text, map_data = self._two_group_fixture()
+        post_text = (
+            "# Doc\n\n"
+            "Widget rule for group A. → `dotfiles-a.md` § `No Such Heading`\n\n"
+            "Widget rule for group B. → `dotfiles-b.md` § `Group B`\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            dest_dir = Path(tmp)
+            self._write_dest(dest_dir, unit_a, unit_b)
+            results = rc.run_check(
+                pre_text,
+                post_text,
+                dest_dir,
+                map_data,
+                min_relocated=0,
+                slack=8_000,
+                rules_mode="bullets",
+            )
+        check4 = next(r for r in results if r[0] == 4)
+        self.assertFalse(check4[1])
+        self.assertIn("heading not found", check4[2])
 
 
 class TestCheck4(unittest.TestCase):
