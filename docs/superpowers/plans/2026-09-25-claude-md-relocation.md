@@ -61,7 +61,7 @@ depends_on: []
 - `SECTION | <literal heading line>`: a moving section.
 - `INLINE | <first 60 normalised chars of unit>`: a unit that stays whole.
 - `WAIVE | <normalised sentence> | <reason>`: a narrative-only waiver.
-- `MOVE | <unit anchor> | <dest file> | <dest heading>`: a planned move.
+- `MOVE | <unit anchor> | <dest file> | <dest heading>`: a planned move. `<dest heading>` is the bare heading text, with no `### ` prefix. It is the same string a pointer cites after `§`.
 
 **The checks:**
 1. Every pre-change unit whose normalised text is absent from the post file is present in some `DIR/dotfiles-*.md`.
