@@ -289,32 +289,49 @@ def parse_map(path: Path) -> MapData:
         line = raw_line.strip()
         if not line or line.startswith("#"):
             continue
-        fields = [f.strip() for f in line.split(" | ")]
-        kind = fields[0].upper()
+        # A unit's anchor or a waived sentence can itself contain " | " --
+        # a markdown table row's normalised text starts with "| ...", and
+        # prose can quote a literal pipe. Splitting the whole line on every
+        # " | " would shred that content into extra fields. Instead, peel
+        # off only the record-type tag with a single left split, then
+        # parse the remainder structurally: SECTION/INLINE take it whole
+        # (their one field IS the remainder, pipes and all); MOVE/WAIVE
+        # peel their trailing, pipe-free fields off the RIGHT with rsplit,
+        # leaving anything left over -- including embedded " | " -- as the
+        # anchor or sentence.
+        tag_split = line.split(" | ", 1)
+        kind = tag_split[0].strip().upper()
+        rest = tag_split[1] if len(tag_split) == 2 else ""
         if kind == "SECTION":
-            if len(fields) != 2 or not fields[1]:
+            heading = rest.strip()
+            if not heading:
                 raise MapError(f"map:{line_no}: SECTION needs 1 field: {line!r}")
-            if fields[1] in data.section_headings:
+            if heading in data.section_headings:
                 raise MapError(
-                    f"map:{line_no}: duplicate SECTION heading: {fields[1]!r}"
+                    f"map:{line_no}: duplicate SECTION heading: {heading!r}"
                 )
-            data.section_headings.append(fields[1])
+            data.section_headings.append(heading)
         elif kind == "INLINE":
-            if len(fields) != 2 or not fields[1]:
+            anchor = rest.strip()
+            if not anchor:
                 raise MapError(f"map:{line_no}: INLINE needs 1 field: {line!r}")
-            data.inline_anchors.append(normalize(fields[1]))
+            data.inline_anchors.append(normalize(anchor))
         elif kind == "WAIVE":
-            if len(fields) != 3 or not fields[1]:
+            parts = rest.rsplit(" | ", 1)
+            if len(parts) != 2 or not parts[0].strip() or not parts[1].strip():
                 raise MapError(f"map:{line_no}: WAIVE needs 2 fields: {line!r}")
-            data.waive_sentences.add(normalize(fields[1]))
+            sentence, _reason = parts
+            data.waive_sentences.add(normalize(sentence.strip()))
         elif kind == "MOVE":
-            if len(fields) != 4 or not fields[1] or not fields[2] or not fields[3]:
+            parts = rest.rsplit(" | ", 2)
+            if len(parts) != 3 or not all(p.strip() for p in parts):
                 raise MapError(f"map:{line_no}: MOVE needs 3 fields: {line!r}")
+            anchor, dest_file, dest_heading = (p.strip() for p in parts)
             data.move_records.append(
-                MoveRecord(normalize(fields[1]), fields[2], fields[3])
+                MoveRecord(normalize(anchor), dest_file, dest_heading)
             )
         else:
-            raise MapError(f"map:{line_no}: unknown record type {fields[0]!r}")
+            raise MapError(f"map:{line_no}: unknown record type {tag_split[0]!r}")
     return data
 
 
@@ -381,6 +398,36 @@ def resolve_spans(
     lines: list[str], section_headings: list[str]
 ) -> list[tuple[int, int]]:
     return [find_heading_span(lines, heading)[:2] for heading in section_headings]
+
+
+def find_completeness_errors(
+    lines: list[str],
+    spans: list[tuple[int, int]],
+    inline_anchors: list[str],
+    move_records: list[MoveRecord],
+) -> list[str]:
+    """Every unit inside a SECTION span must be claimed by exactly one
+    INLINE or MOVE record -- one saying it stays whole, the other saying
+    where it goes. A unit claimed by neither is ambiguous: nothing in the
+    map says what happens to it, and today's code silently treated that as
+    "stays, but only its rule sentences are retained", which is a decision
+    nobody made. A unit claimed by two or more is contradictory. Returns
+    one message per offending unit, naming its anchor, in map order."""
+    errors: list[str] = []
+    move_anchors = [move.anchor for move in move_records]
+    for span in spans:
+        for unit in extract_units(section_substring(lines, span)):
+            norm = normalize(unit)
+            match_count = sum(
+                1 for anchor in inline_anchors if anchor and norm.startswith(anchor)
+            ) + sum(1 for anchor in move_anchors if anchor and norm.startswith(anchor))
+            if match_count == 0:
+                errors.append(f"no INLINE/MOVE record matches unit: {norm[:60]!r}")
+            elif match_count > 1:
+                errors.append(
+                    f"{match_count} INLINE/MOVE records match unit: {norm[:60]!r}"
+                )
+    return errors
 
 
 # --------------------------------------------------------------------------
@@ -489,6 +536,11 @@ def run_check(
         reasons.append(f"relocated bytes {relocated_bytes} < min {min_relocated}")
     if post_bytes > floor + slack:
         reasons.append(f"post bytes {post_bytes} > floor {floor} + slack {slack}")
+    reasons.extend(
+        find_completeness_errors(
+            lines, spans, map_data.inline_anchors, map_data.move_records
+        )
+    )
     check3_ok = not reasons
     check3_detail = "; ".join(reasons)
 
@@ -610,6 +662,9 @@ def run(argv: list[str] | None = None) -> int:
                 lines, spans, map_data.inline_anchors, map_data.waive_sentences
             )
             floor = compute_floor(non_moving_bytes_for(lines, spans), analysis)
+            completeness_errors = find_completeness_errors(
+                lines, spans, map_data.inline_anchors, map_data.move_records
+            )
         except MapError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
@@ -619,6 +674,10 @@ def run(argv: list[str] | None = None) -> int:
             f"rule_sentences={len(analysis.retained_sentences)} "
             f"rule_bytes={rule_bytes} floor={floor}"
         )
+        if completeness_errors:
+            for error in completeness_errors:
+                print(f"error: {error}", file=sys.stderr)
+            return 1
         return 0
 
     # args.command == "check"

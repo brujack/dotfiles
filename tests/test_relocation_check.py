@@ -190,9 +190,52 @@ class TestParseMap(unittest.TestCase):
         map_path = _REPO / "tests" / "fixtures" / "relocation" / "map.md"
         data = rc.parse_map(map_path)
         self.assertEqual(data.section_headings, ["### Mock Pattern"])
-        self.assertEqual(data.inline_anchors, [])
+        self.assertEqual(len(data.inline_anchors), 3)
         self.assertEqual(data.waive_sentences, set())
-        self.assertEqual(data.move_records, [])
+        self.assertEqual(len(data.move_records), 2)
+
+    def test_inline_anchor_containing_a_table_row_parses_correctly(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            map_path = Path(tmp) / "map.md"
+            map_path.write_text(
+                "```relocation-map\n"
+                "INLINE | | Var | Values |\n"
+                "```\n",
+                encoding="utf-8",
+            )
+            data = rc.parse_map(map_path)
+        self.assertEqual(data.inline_anchors, [rc.normalize("| Var | Values |")])
+
+    def test_move_anchor_containing_a_table_row_parses_correctly(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            map_path = Path(tmp) / "map.md"
+            map_path.write_text(
+                "```relocation-map\n"
+                "MOVE | | Var | Values | | dotfiles-x.md | Profile Table\n"
+                "```\n",
+                encoding="utf-8",
+            )
+            data = rc.parse_map(map_path)
+        self.assertEqual(len(data.move_records), 1)
+        move = data.move_records[0]
+        self.assertEqual(move.anchor, rc.normalize("| Var | Values |"))
+        self.assertEqual(move.dest_file, "dotfiles-x.md")
+        self.assertEqual(move.dest_heading, "Profile Table")
+
+    def test_waive_sentence_containing_a_pipe_parses_correctly(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            map_path = Path(tmp) / "map.md"
+            map_path.write_text(
+                "```relocation-map\n"
+                "WAIVE | Use `a | b` as the separator in prose. | narrative example\n"
+                "```\n",
+                encoding="utf-8",
+            )
+            data = rc.parse_map(map_path)
+        self.assertEqual(
+            data.waive_sentences,
+            {rc.normalize("Use `a | b` as the separator in prose.")},
+        )
 
 
 class TestCheck1(unittest.TestCase):
@@ -363,7 +406,8 @@ class TestCheck3(unittest.TestCase):
             (dest_dir / "dotfiles-x.md").write_text(
                 "### Widget\n\n" + widget + "\n", encoding="utf-8"
             )
-            map_data = rc.MapData(section_headings=["### Widget"])
+            move = rc.MoveRecord(rc.normalize(widget)[:60], "dotfiles-x.md", "Widget")
+            map_data = rc.MapData(section_headings=["### Widget"], move_records=[move])
             results = rc.run_check(
                 pre_text, post_text, dest_dir, map_data, min_relocated=0, slack=0
             )
@@ -383,13 +427,48 @@ class TestCheck3(unittest.TestCase):
             (dest_dir / "dotfiles-x.md").write_text(
                 "### Widget\n\n" + widget + "\n", encoding="utf-8"
             )
-            map_data = rc.MapData(section_headings=["### Widget"])
+            move = rc.MoveRecord(rc.normalize(widget)[:60], "dotfiles-x.md", "Widget")
+            map_data = rc.MapData(section_headings=["### Widget"], move_records=[move])
             results = rc.run_check(
                 pre_text, post_text, dest_dir, map_data, min_relocated=0, slack=8_000
             )
         check3 = next(r for r in results if r[0] == 3)
         self.assertFalse(check3[1])
         self.assertIn("> floor", check3[2])
+
+    def test_fails_when_a_section_unit_has_no_inline_or_move_record(self):
+        pre_text = (
+            "# Doc\n\n### Widget\n\n"
+            "This unit has no INLINE or MOVE record naming it at all.\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            dest_dir = Path(tmp)
+            map_data = rc.MapData(section_headings=["### Widget"])
+            results = rc.run_check(
+                pre_text, pre_text, dest_dir, map_data, min_relocated=0, slack=1_000_000
+            )
+        check3 = next(r for r in results if r[0] == 3)
+        self.assertFalse(check3[1])
+        self.assertIn("no INLINE/MOVE record", check3[2])
+
+    def test_fails_when_a_section_unit_matches_two_records(self):
+        unit_text = "This unit is claimed by both an INLINE and a MOVE record."
+        pre_text = f"# Doc\n\n### Widget\n\n{unit_text}\n"
+        anchor = rc.normalize(unit_text)[:60]
+        with tempfile.TemporaryDirectory() as tmp:
+            dest_dir = Path(tmp)
+            move = rc.MoveRecord(anchor, "dotfiles-x.md", "Widget")
+            map_data = rc.MapData(
+                section_headings=["### Widget"],
+                inline_anchors=[anchor],
+                move_records=[move],
+            )
+            results = rc.run_check(
+                pre_text, pre_text, dest_dir, map_data, min_relocated=0, slack=1_000_000
+            )
+        check3 = next(r for r in results if r[0] == 3)
+        self.assertFalse(check3[1])
+        self.assertIn("records match unit", check3[2])
 
 
 class TestCheck4(unittest.TestCase):
