@@ -214,9 +214,11 @@ def _fence_mask(lines: list[str]) -> list[bool]:
 
 
 def find_heading_span(lines: list[str], heading_text: str) -> tuple[int, int, int]:
-    """Return (start, end, level) for the section opened by the line that
-    equals heading_text exactly, after stripping. `end` is exclusive and is
-    the index of the next heading whose level is <= this one's, or len(lines).
+    """Return (start, end, level) for the BODY of the heading that equals
+    heading_text exactly, after stripping. `end` is exclusive and is the
+    index of the very next heading line of ANY level (`^#{1,6} `), or
+    len(lines) -- a span never crosses into a subsection, so nesting two
+    SECTION entries can never overlap and there is nothing to merge.
     Lines inside fenced code are never read as headings, in either search."""
     target = heading_text.strip()
     fenced = _fence_mask(lines)
@@ -240,8 +242,7 @@ def find_heading_span(lines: list[str], heading_text: str) -> tuple[int, int, in
         if fenced[index]:
             continue
         line = lines[index].rstrip("\n")
-        match = _HEADING_LINE_RE.match(line.strip())
-        if match and len(match.group(1)) <= level:
+        if _HEADING_LINE_RE.match(line.strip()):
             end = index
             break
     return start, end, level
@@ -293,6 +294,10 @@ def parse_map(path: Path) -> MapData:
         if kind == "SECTION":
             if len(fields) != 2 or not fields[1]:
                 raise MapError(f"map:{line_no}: SECTION needs 1 field: {line!r}")
+            if fields[1] in data.section_headings:
+                raise MapError(
+                    f"map:{line_no}: duplicate SECTION heading: {fields[1]!r}"
+                )
             data.section_headings.append(fields[1])
         elif kind == "INLINE":
             if len(fields) != 2 or not fields[1]:
@@ -393,17 +398,26 @@ def _read_dest_texts(dest_dir: Path) -> dict[str, str]:
 _SHORT_UNIT_MAX_LEN = 40
 
 
-def _unit_present(norm: str, raw_text: str, norm_blob: str) -> bool:
+def _unit_present(unit: str, norm: str, raw_text: str, norm_blob: str) -> bool:
     """Is a unit's normalised text present in a target? A unit shorter than
-    _SHORT_UNIT_MAX_LEN normalised characters counts as present only if it
-    equals a WHOLE normalised line of the target, not merely a substring
-    of the flattened blob -- a short string is generic enough to turn up
-    as a coincidental embedded substring of an unrelated line. A longer
-    unit keeps substring matching against the flattened, whitespace-
-    normalised blob (norm_blob), since a real multi-sentence block can be
-    re-wrapped across different line breaks in its destination."""
-    if len(norm) < _SHORT_UNIT_MAX_LEN:
-        return norm in {normalize(line) for line in raw_text.splitlines()}
+    _SHORT_UNIT_MAX_LEN normalised characters, with no embedded newline in
+    its own (pre-normalised) text, counts as present only if it equals a
+    WHOLE, stripped, normalised line of the target -- a short string is
+    generic enough to turn up as a coincidental embedded substring of an
+    unrelated line, and normalize() alone does not strip a line's leading
+    or trailing whitespace (it collapses a run to one space, it does not
+    remove it), so an indented copy would otherwise be missed.
+
+    A unit that originally spans more than one physical line can still
+    normalise to something short once its internal newline collapses to a
+    space, but no single target line can ever equal a multi-line-collapsed
+    string -- so that case, and every longer unit, keeps substring matching
+    against the flattened, whitespace-normalised blob (norm_blob), since a
+    real multi-sentence block can be re-wrapped across different line
+    breaks in its destination."""
+    if len(norm) < _SHORT_UNIT_MAX_LEN and "\n" not in unit:
+        target_lines_norm = {normalize(line).strip() for line in raw_text.splitlines()}
+        return norm in target_lines_norm
     return norm in norm_blob
 
 
@@ -433,9 +447,9 @@ def run_check(
     relocated: list[str] = []
     for unit in pre_units:
         norm = normalize(unit)
-        if _unit_present(norm, post_text, post_norm):
+        if _unit_present(unit, norm, post_text, post_norm):
             continue
-        if _unit_present(norm, dest_text_all, dest_norm_all):
+        if _unit_present(unit, norm, dest_text_all, dest_norm_all):
             relocated.append(unit)
         else:
             lost.append(unit)

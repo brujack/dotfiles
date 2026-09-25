@@ -115,6 +115,75 @@ class TestFindHeadingSpan(unittest.TestCase):
         self.assertIn("Real trailing prose", span_text)
         self.assertNotIn("### Next Section", span_text)
 
+    def test_parent_section_span_excludes_a_nested_child_heading(self):
+        text = (
+            "## Parent\n\n"
+            "Parent intro text that must move.\n\n"
+            "### Child\n\n"
+            "Child body text that must not leak into the parent span.\n\n"
+            "## Next Top\n\n"
+            "Unrelated trailing text.\n"
+        )
+        lines = text.splitlines(keepends=True)
+        start, end, _level = rc.find_heading_span(lines, "## Parent")
+        span_text = "".join(lines[start:end])
+        self.assertIn("Parent intro text", span_text)
+        self.assertNotIn("Child body text", span_text)
+        self.assertNotIn("### Child", span_text)
+
+    def test_start_search_skips_a_heading_shaped_line_inside_a_fence(self):
+        text = (
+            "```text\n"
+            "### Widget\n"
+            "```\n\n"
+            "Intro text before the real heading.\n\n"
+            "### Widget\n\n"
+            "Real widget body.\n\n"
+            "### Next\n\n"
+            "Other text.\n"
+        )
+        lines = text.splitlines(keepends=True)
+        start, end, _level = rc.find_heading_span(lines, "### Widget")
+        span_text = "".join(lines[start:end])
+        self.assertIn("Real widget body", span_text)
+        self.assertNotIn("Intro text before", span_text)
+
+
+class TestAnalyzeSectionsNesting(unittest.TestCase):
+    def test_parent_and_child_both_listed_produce_no_double_count(self):
+        text = (
+            "## Parent\n\n"
+            "Parent intro text that must move.\n\n"
+            "### Child\n\n"
+            "Child body text that should not be duplicated.\n\n"
+            "## Next Top\n\n"
+            "Unrelated trailing text.\n"
+        )
+        lines = text.splitlines(keepends=True)
+        spans = rc.resolve_spans(lines, ["## Parent", "### Child"])
+        analysis = rc.analyze_sections(lines, spans, [], set())
+        child_count = sum(1 for u in analysis.units if "Child body text" in u)
+        self.assertEqual(child_count, 1)
+
+    def test_unknown_section_heading_is_an_error(self):
+        pre_text = "# Doc\n\nSome text.\n"
+        lines = pre_text.splitlines(keepends=True)
+        with self.assertRaises(rc.MapError):
+            rc.resolve_spans(lines, ["### Does Not Exist"])
+
+    def test_duplicate_section_heading_is_an_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            map_path = Path(tmp) / "map.md"
+            map_path.write_text(
+                "```relocation-map\n"
+                "SECTION | ### Widget\n"
+                "SECTION | ### Widget\n"
+                "```\n",
+                encoding="utf-8",
+            )
+            with self.assertRaises(rc.MapError):
+                rc.parse_map(map_path)
+
 
 class TestParseMap(unittest.TestCase):
     def test_fixture_map_parses(self):
@@ -161,6 +230,31 @@ class TestCheck1(unittest.TestCase):
         check1 = next(r for r in results if r[0] == 1)
         self.assertFalse(check1[1])
         self.assertIn("It stays warm", check1[2])
+
+    def test_short_unit_matches_an_indented_copy_of_the_same_line(self):
+        short_unit = "It stays warm."
+        pre_text = f"# Doc\n\n{short_unit}\n\nOther untouched paragraph.\n"
+        # The target's copy of the same short unit is indented -- still the
+        # same whole line once stripped, and must still count as present.
+        post_text = f"# Doc\n\n  {short_unit}\n\nOther untouched paragraph.\n"
+        with tempfile.TemporaryDirectory() as tmp:
+            dest_dir = Path(tmp)
+            results = rc.run_check(pre_text, post_text, dest_dir, rc.MapData())
+        check1 = next(r for r in results if r[0] == 1)
+        self.assertTrue(check1[1], check1[2])
+
+    def test_wrapped_short_unit_falls_back_to_substring_matching(self):
+        # This unit is short once normalised (its newline collapses to a
+        # space) but was never a single physical LINE -- no whole line of
+        # the target can equal it, so it must fall back to substring
+        # matching against the flattened blob, like any long unit.
+        pre_text = "# Doc\n\n- It stays\n  warm.\n\nOther untouched paragraph.\n"
+        post_text = "# Doc\n\n- It stays\n  warm.\n\nOther untouched paragraph.\n"
+        with tempfile.TemporaryDirectory() as tmp:
+            dest_dir = Path(tmp)
+            results = rc.run_check(pre_text, post_text, dest_dir, rc.MapData())
+        check1 = next(r for r in results if r[0] == 1)
+        self.assertTrue(check1[1], check1[2])
 
 
 class TestCheck2(unittest.TestCase):
