@@ -145,6 +145,7 @@ Master status index for all specs and implementation plans in this directory.
 | 2026-09-19 | [shellcheck-install-hint](plans/2026-09-19-shellcheck-install-hint.md) | [doctor-shellcheck-pin](specs/2026-09-19-doctor-shellcheck-pin-design.md) | Done |
 | 2026-09-19 | [claude-plugin-provisioning](plans/2026-09-19-claude-plugin-provisioning.md) | [spec](specs/2026-09-19-claude-plugin-provisioning-design.md) | Done |
 | 2026-09-21 | [CLAUDE.md four-class re-sort](plans/2026-09-21-claude-md-four-class-resort.md) | [spec](specs/2026-09-21-claude-md-four-class-resort-design.md) | In Progress |
+| 2026-09-25 | [CLAUDE.md relocation](plans/2026-09-25-claude-md-relocation.md) | [spec](specs/2026-09-25-claude-md-relocation-design.md) | In Progress |
 
 ---
 
