@@ -45,15 +45,17 @@ _HEADING_ONLY_RE = re.compile(r"^#{1,6}\s+.+$")
 _HR_ONLY_RE = re.compile(r"^-{3,}$")
 _BULLET_MARKER_RE = re.compile(r"^(?:[-*+]|\d+[.)])\s")
 _HEADING_LINE_RE = re.compile(r"^(#{1,6})\s+.+$")
+_FENCE_LINE_RE = re.compile(r"^```")
 
 # The pinned splitter (plan Global Constraints). Python rejects a
 # variable-width lookbehind, so this is a boundary match consumed via
-# finditer, never a re.split lookbehind -- see the module docstring's sibling
-# note in the design doc. Capturing group 1 isolates the punctuation and any
-# closing markup so the sentence boundary lands after it and before the
-# whitespace that follows.
+# finditer, never a re.split lookbehind. Capturing group 1 isolates the
+# punctuation and any closing markup so the sentence boundary lands after
+# it and before the whitespace that follows.
+# Lookahead includes 0-9 per the plan's amended pinned constant; otherwise
+# these are the same boundaries as the originally pinned string.
 _SENTENCE_BOUNDARY_RE = re.compile(
-    r'(?<!\be\.g)(?<!\bi\.e)(?<!\bvs)([.!?][*`)"]{0,3})\s+(?=[A-Z*`(\[])'
+    r'(?<!\be\.g)(?<!\bi\.e)(?<!\bvs)([.!?][*`)"]{0,3})\s+(?=[A-Z0-9*`(\[])'
 )
 
 # Rule regex, case-insensitive (plan Global Constraints).
@@ -129,12 +131,18 @@ def is_heading_or_rule_only(paragraph: str) -> bool:
 
 
 def split_bullet_items(paragraph: str) -> list[str]:
-    """Split a paragraph into its top-level list items when its first line
-    opens one. A continuation line (indented, or otherwise not itself a
-    top-level marker) stays attached to the item above it. A paragraph that
-    is not a list is returned whole, as a single-element list."""
+    """Split a paragraph at every top-level list-item marker, wherever it
+    appears -- not only when the paragraph opens with one. Fence-stripping
+    can recombine text that was never meant to share a unit with a bullet
+    that follows it (a fence inside a list item, once removed, can rejoin
+    its trailing prose with the next line into one blank-line paragraph
+    whose first line is that prose, not a marker); a leading chunk before
+    the first marker becomes its own unit rather than swallowing the
+    bullet after it. A continuation line (indented, or otherwise not
+    itself a top-level marker) stays attached to the item above it. A
+    paragraph with no marker at all is returned whole, as a single unit."""
     lines = paragraph.split("\n")
-    if not lines or not _BULLET_MARKER_RE.match(lines[0]):
+    if not any(_BULLET_MARKER_RE.match(line) for line in lines):
         return [paragraph]
     items: list[str] = []
     current: list[str] = []
@@ -185,25 +193,38 @@ def split_sentences(normalized_text: str) -> list[str]:
     return sentences
 
 
-def anchor_of(unit: str) -> str:
-    """The first 60 characters of a unit's normalised text -- the anchor
-    form INLINE and MOVE records use. Matching against it is by prefix."""
-    return normalize(unit)[:60]
-
-
 # --------------------------------------------------------------------------
 # Heading spans
 # --------------------------------------------------------------------------
 
 
+def _fence_mask(lines: list[str]) -> list[bool]:
+    """True for every line inside, opening, or closing a fenced code block,
+    so heading detection can skip a heading-shaped line a fence hides --
+    e.g. a `# comment` inside a ```bash block, which is not a real heading."""
+    mask = [False] * len(lines)
+    in_fence = False
+    for index, raw_line in enumerate(lines):
+        if _FENCE_LINE_RE.match(raw_line.rstrip("\n").strip()):
+            mask[index] = True
+            in_fence = not in_fence
+            continue
+        mask[index] = in_fence
+    return mask
+
+
 def find_heading_span(lines: list[str], heading_text: str) -> tuple[int, int, int]:
     """Return (start, end, level) for the section opened by the line that
     equals heading_text exactly, after stripping. `end` is exclusive and is
-    the index of the next heading whose level is <= this one's, or len(lines)."""
+    the index of the next heading whose level is <= this one's, or len(lines).
+    Lines inside fenced code are never read as headings, in either search."""
     target = heading_text.strip()
+    fenced = _fence_mask(lines)
     start = None
     level = None
     for index, raw_line in enumerate(lines):
+        if fenced[index]:
+            continue
         line = raw_line.rstrip("\n")
         if line.strip() != target:
             continue
@@ -216,6 +237,8 @@ def find_heading_span(lines: list[str], heading_text: str) -> tuple[int, int, in
         raise MapError(f"heading not found: {heading_text!r}")
     end = len(lines)
     for index in range(start + 1, len(lines)):
+        if fenced[index]:
+            continue
         line = lines[index].rstrip("\n")
         match = _HEADING_LINE_RE.match(line.strip())
         if match and len(match.group(1)) <= level:
@@ -227,18 +250,6 @@ def find_heading_span(lines: list[str], heading_text: str) -> tuple[int, int, in
 def section_substring(lines: list[str], span: tuple[int, int]) -> str:
     start, end = span
     return "".join(lines[start:end])
-
-
-def build_non_moving_text(lines: list[str], spans: list[tuple[int, int]]) -> str:
-    """The pre-file with every moving-section span removed, with a blank
-    line inserted at each cut so paragraphs on either side never merge."""
-    pieces: list[str] = []
-    prev_end = 0
-    for start, end in sorted(spans):
-        pieces.append("".join(lines[prev_end:start]))
-        prev_end = end
-    pieces.append("".join(lines[prev_end:]))
-    return "\n\n".join(pieces)
 
 
 # --------------------------------------------------------------------------
@@ -337,8 +348,18 @@ def analyze_sections(
 
 
 def non_moving_bytes_for(lines: list[str], spans: list[tuple[int, int]]) -> int:
-    text = build_non_moving_text(lines, spans)
-    return sum(len(unit.encode("utf-8")) for unit in extract_units(text))
+    """Raw whole-file bytes outside every moving-section span -- headings,
+    fenced code, and blank lines all count, matching how the post file's
+    own byte count is measured (`wc -c`, i.e. `len(text.encode())`). Using
+    extract_units() here instead would drop exactly the structure the post
+    file still has to carry, undercounting the floor by every heading and
+    fenced block in the unmoved text."""
+    excluded_indexes = {i for start, end in spans for i in range(start, end)}
+    return sum(
+        len(line.encode("utf-8"))
+        for i, line in enumerate(lines)
+        if i not in excluded_indexes
+    )
 
 
 def compute_floor(non_moving_bytes: int, analysis: SectionAnalysis) -> int:
@@ -369,6 +390,23 @@ def _read_dest_texts(dest_dir: Path) -> dict[str, str]:
     }
 
 
+_SHORT_UNIT_MAX_LEN = 40
+
+
+def _unit_present(norm: str, raw_text: str, norm_blob: str) -> bool:
+    """Is a unit's normalised text present in a target? A unit shorter than
+    _SHORT_UNIT_MAX_LEN normalised characters counts as present only if it
+    equals a WHOLE normalised line of the target, not merely a substring
+    of the flattened blob -- a short string is generic enough to turn up
+    as a coincidental embedded substring of an unrelated line. A longer
+    unit keeps substring matching against the flattened, whitespace-
+    normalised blob (norm_blob), since a real multi-sentence block can be
+    re-wrapped across different line breaks in its destination."""
+    if len(norm) < _SHORT_UNIT_MAX_LEN:
+        return norm in {normalize(line) for line in raw_text.splitlines()}
+    return norm in norm_blob
+
+
 def run_check(
     pre_text: str,
     post_text: str,
@@ -387,16 +425,17 @@ def run_check(
     pre_units = extract_units(pre_text)
     post_norm = normalize(post_text)
     dest_texts = _read_dest_texts(dest_dir)
-    dest_norm_all = normalize("\n".join(dest_texts.values()))
+    dest_text_all = "\n".join(dest_texts.values())
+    dest_norm_all = normalize(dest_text_all)
 
     # CHECK 1: nothing lost from the destination.
     lost: list[str] = []
     relocated: list[str] = []
     for unit in pre_units:
         norm = normalize(unit)
-        if norm in post_norm:
+        if _unit_present(norm, post_text, post_norm):
             continue
-        if norm in dest_norm_all:
+        if _unit_present(norm, dest_text_all, dest_norm_all):
             relocated.append(unit)
         else:
             lost.append(unit)
@@ -441,7 +480,13 @@ def run_check(
 
     # CHECK 4: every pointer resolves, and every MOVE landed under its heading.
     check4_errors: list[str] = []
-    for match in _POINTER_RE.finditer(post_text):
+    pointer_matches = list(_POINTER_RE.finditer(post_text))
+    if relocated and not pointer_matches:
+        check4_errors.append(
+            f"relocated units present (n={len(relocated)}) but "
+            f"pointer count={len(pointer_matches)} in post"
+        )
+    for match in pointer_matches:
         file_name, heading_text = match.group(1), match.group(2).strip()
         dest_path = dest_dir / file_name
         if not dest_path.is_file():

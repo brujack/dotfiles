@@ -46,6 +46,15 @@ class TestSplitSentences(unittest.TestCase):
         )
 
 
+    def test_splits_before_a_sentence_that_starts_with_a_digit(self):
+        text = "First part ends here. 2026 is the year that follows."
+        sentences = rc.split_sentences(text)
+        self.assertEqual(
+            sentences,
+            ["First part ends here.", "2026 is the year that follows."],
+        )
+
+
 class TestExtractUnits(unittest.TestCase):
     def test_fenced_code_is_excluded(self):
         text = (
@@ -75,10 +84,36 @@ class TestExtractUnits(unittest.TestCase):
             ],
         )
 
+    def test_a_fenced_block_inside_a_list_item_does_not_swallow_the_next_bullet(self):
+        text = "- a\n```\ncode here\n```\ntail text\n- b\n"
+        units = rc.extract_units(text)
+        self.assertIn("tail text", units)
+        self.assertIn("- b", units)
+        self.assertNotIn("tail text\n- b", units)
+
     def test_heading_only_paragraph_is_not_a_unit(self):
         text = "### Some Heading\n\nReal prose paragraph.\n"
         units = rc.extract_units(text)
         self.assertEqual(units, ["Real prose paragraph."])
+
+
+class TestFindHeadingSpan(unittest.TestCase):
+    def test_ignores_a_heading_shaped_line_inside_fenced_code(self):
+        text = (
+            "### Version Pinning\n\n"
+            "```bash\n"
+            "# comment that looks like a heading\n"
+            "GO_VER=1.2.3\n"
+            "```\n\n"
+            "Real trailing prose that belongs to Version Pinning.\n\n"
+            "### Next Section\n\n"
+            "Other text.\n"
+        )
+        lines = text.splitlines(keepends=True)
+        start, end, _level = rc.find_heading_span(lines, "### Version Pinning")
+        span_text = "".join(lines[start:end])
+        self.assertIn("Real trailing prose", span_text)
+        self.assertNotIn("### Next Section", span_text)
 
 
 class TestParseMap(unittest.TestCase):
@@ -106,6 +141,26 @@ class TestCheck1(unittest.TestCase):
         check1 = next(r for r in results if r[0] == 1)
         self.assertFalse(check1[1])
         self.assertIn("must be moved intact", check1[2])
+
+
+    def test_short_unit_requires_a_whole_line_match_not_a_substring(self):
+        short_unit = "It stays warm."  # 14 normalised chars, well under 40
+        pre_text = f"# Doc\n\n{short_unit}\n\nOther untouched paragraph.\n"
+        # The short unit's text is embedded inside a longer, unrelated line
+        # -- never as its own whole line -- so it must NOT count as present.
+        post_text = (
+            "# Doc\n\nXIt stays warm.Y unrelated wrapper text\n\n"
+            "Other untouched paragraph.\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            dest_dir = Path(tmp)
+            (dest_dir / "dotfiles-x.md").write_text(
+                "### X\n\nUnrelated dest content.\n", encoding="utf-8"
+            )
+            results = rc.run_check(pre_text, post_text, dest_dir, rc.MapData())
+        check1 = next(r for r in results if r[0] == 1)
+        self.assertFalse(check1[1])
+        self.assertIn("It stays warm", check1[2])
 
 
 class TestCheck2(unittest.TestCase):
@@ -196,6 +251,31 @@ class TestCheck3(unittest.TestCase):
         self.assertFalse(check3[1])
         self.assertIn("< min 60000", check3[2])
 
+    def test_bloat_bound_counts_unmoved_fences_and_headings_as_raw_bytes(self):
+        widget = "This sentence about widgets has no rule keyword in it today."
+        fence_block = (
+            "```text\n"
+            "some fenced content that must still count toward the floor\n"
+            "```\n"
+        )
+        unmoved = (
+            "# Doc\n\n" + fence_block + "\nKeep this structure around please.\n"
+        )
+        pre_text = unmoved + "\n### Widget\n\n" + widget + "\n"
+        post_text = unmoved  # only the Widget span is gone; the unmoved part
+        # (heading, fence, blank lines and all) is byte-for-byte untouched.
+        with tempfile.TemporaryDirectory() as tmp:
+            dest_dir = Path(tmp)
+            (dest_dir / "dotfiles-x.md").write_text(
+                "### Widget\n\n" + widget + "\n", encoding="utf-8"
+            )
+            map_data = rc.MapData(section_headings=["### Widget"])
+            results = rc.run_check(
+                pre_text, post_text, dest_dir, map_data, min_relocated=0, slack=0
+            )
+        check3 = next(r for r in results if r[0] == 3)
+        self.assertTrue(check3[1], check3[2])
+
     def test_fails_when_post_exceeds_floor_plus_slack(self):
         widget = "This sentence has no rule keyword in it at all today."
         pre_text = (
@@ -266,12 +346,64 @@ class TestCheck4(unittest.TestCase):
         self.assertFalse(check4[1])
         self.assertIn("duplicated", check4[2])
 
+    def test_fails_when_units_relocated_but_no_pointer_written(self):
+        moved = "A paragraph that must relocate somewhere without a pointer."
+        pre_text = f"# Doc\n\nKeep me around please.\n\n{moved}\n"
+        post_text = "# Doc\n\nKeep me around please.\n"  # no pointer at all
+        with tempfile.TemporaryDirectory() as tmp:
+            dest_dir = Path(tmp)
+            (dest_dir / "dotfiles-x.md").write_text(
+                f"### X\n\n{moved}\n", encoding="utf-8"
+            )
+            results = rc.run_check(
+                pre_text,
+                post_text,
+                dest_dir,
+                rc.MapData(),
+                min_relocated=0,
+                slack=1_000_000,
+            )
+        check4 = next(r for r in results if r[0] == 4)
+        self.assertFalse(check4[1])
+        self.assertIn("pointer count=0", check4[2])
+
+    def test_fails_when_a_move_unit_lands_under_the_wrong_heading(self):
+        unit_text = "This paragraph must move to the Widget heading specifically."
+        pre_text = f"# Doc\n\n{unit_text}\n"
+        post_text = "# Doc\n\n"
+        with tempfile.TemporaryDirectory() as tmp:
+            dest_dir = Path(tmp)
+            # The unit really is present in dest -- just under the WRONG
+            # heading, not the one the MOVE record names.
+            (dest_dir / "dotfiles-x.md").write_text(
+                f"### Other Heading\n\n{unit_text}\n\n"
+                "### Widget\n\nUnrelated widget text.\n",
+                encoding="utf-8",
+            )
+            move = rc.MoveRecord(rc.normalize(unit_text)[:60], "dotfiles-x.md", "Widget")
+            map_data = rc.MapData(move_records=[move])
+            results = rc.run_check(
+                pre_text,
+                post_text,
+                dest_dir,
+                map_data,
+                min_relocated=0,
+                slack=1_000_000,
+            )
+        check4 = next(r for r in results if r[0] == 4)
+        self.assertFalse(check4[1])
+        self.assertIn("not found under heading", check4[2])
+
 
 class TestCliEndToEnd(unittest.TestCase):
     def test_check_success_path_on_a_tiny_fixture(self):
         moved = "A small unit that must move somewhere else today."
         pre_text = f"# Doc\n\nKeep me around please.\n\n{moved}\n"
-        post_text = "# Doc\n\nKeep me around please.\n"
+        post_text = (
+            "# Doc\n\nKeep me around please.\n\n"
+            "**Before** touching this **on** widgets, read "
+            "`ai-config/docs/knowledge/dotfiles-x.md` § `X`.\n"
+        )
         with tempfile.TemporaryDirectory() as repo_dir, tempfile.TemporaryDirectory() as dest_tmp:
             repo = Path(repo_dir)
             _init_git_repo(repo, {"CLAUDE.md": pre_text})
@@ -332,7 +464,31 @@ class TestCliEndToEnd(unittest.TestCase):
         self.assertNotEqual(rc_code, 0)
 
 
+def _has_commit(rev: str) -> bool:
+    """True if `rev` resolves to a real commit in this checkout. actions/
+    checkout's default depth-1 shallow clone does not carry the pinned
+    2e38f5e4 revision this test reads, so a CI shallow clone must skip it
+    rather than fail on a GitError that says nothing about the code."""
+    env = dict(os.environ)
+    for var in rc._GIT_ENV_STRIP:
+        env.pop(var, None)
+    result = subprocess.run(
+        ["git", "cat-file", "-e", f"{rev}^{{commit}}"],
+        cwd=_REPO,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0
+
+
+_HAS_2E38F5E4 = _has_commit("2e38f5e4")
+
+
 class TestMeasureAgainstRealClaudeMd(unittest.TestCase):
+    @unittest.skipUnless(
+        _HAS_2E38F5E4, "2e38f5e4 not present in this checkout (shallow clone?)"
+    )
     def test_measure_against_real_claude_md_has_rule_sentences(self):
         map_path = _REPO / "tests" / "fixtures" / "relocation" / "map.md"
         buf = io.StringIO()
