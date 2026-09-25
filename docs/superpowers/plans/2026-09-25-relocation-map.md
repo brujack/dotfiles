@@ -146,7 +146,7 @@ MOVE | - **`/usr/local/bin` reaches none of the non-interactive act | dotfiles-c
 MOVE | - **`setup_env.sh` cannot run non-interactively on the Linux | dotfiles-conventions.md | setup_env.sh cannot run non-interactively on the Linux workstation (brew PATH)
 MOVE | A non-interactive invocation dies in seconds with `[ERROR] H | dotfiles-conventions.md | setup_env.sh cannot run non-interactively on the Linux workstation (brew PATH)
 MOVE | The macOS bullet above and this one are the same defect at t | dotfiles-conventions.md | setup_env.sh cannot run non-interactively on the Linux workstation (brew PATH)
-MOVE | - **`install_cargo_tools` (`lib/developer.sh`) judges each ` | dotfiles-conventions.md | install_cargo_tools judges by runnability, not version string
+INLINE | - **`install_cargo_tools` (`lib/developer.sh`) judges each `
 MOVE | - **terraform on Linux now comes through tfenv** (`_install_ | dotfiles-conventions.md | terraform on Linux via tfenv, and the checkout guard
 MOVE | - **A `~/.tfenv` that exists but is not a usable checkout is | dotfiles-conventions.md | terraform on Linux via tfenv, and the checkout guard
 MOVE | - **`tflint` and `tfsec` staleness is invisible to `check-ve | dotfiles-conventions.md | tflint/tfsec staleness gap; CARGO_TOOLS staleness via crates.io
@@ -159,7 +159,7 @@ MOVE | **CI takes the parallel path too, and not because the workfl | dotfiles-t
 MOVE | `config/profiles.sh` is a bash file — it stays in `SHELL_FIL | dotfiles-testing-toolchain.md | config/profiles.sh dual lint scope; scripts/phrase_check.py manifest checker
 MOVE | **Its suite runs in `make test`; the tool does not.** `test- | dotfiles-testing-toolchain.md | config/profiles.sh dual lint scope; scripts/phrase_check.py manifest checker
 MOVE | **The venv is snapshotted before every sync, and that file i | dotfiles-testing-toolchain.md | Ansible venv snapshot before every sync (uv sync prune/downgrade, rollback)
-MOVE | `--no-deps` is required — the state being restored is one th | dotfiles-testing-toolchain.md | Ansible venv snapshot before every sync (uv sync prune/downgrade, rollback)
+INLINE | `--no-deps` is required — the state being restored is one th
 MOVE | **Environment overrides added by the uv work.** All three ex | dotfiles-testing-toolchain.md | Environment overrides added by the uv work (UV_BIN, UV_FALLBACK_PATHS, REQUIREMENTS_CI_TARGET)
 MOVE | | variable | read by | why it exists | | ------------------------ | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | | `UV_BIN` | `resolve_uv` (`lib/helpers.sh`) | operato | dotfiles-testing-toolchain.md | Environment overrides added by the uv work (UV_BIN, UV_FALLBACK_PATHS, REQUIREMENTS_CI_TARGET)
 MOVE | **Sync CI requirements:** `make sync-requirements-ci` (rende | dotfiles-testing-toolchain.md | Sync/check CI requirements commands and the five renderings
@@ -231,7 +231,7 @@ MOVE | **The domain is derived from `git ls-files`, not listed.** T | dotfiles-b
 MOVE | **Known gap: recursive sub-make and `-w` are invisible to it | dotfiles-bats-test-infrastructure.md | MAKEFLAGS: known gap -- recursive sub-make and -w invisible to the scanner
 ```
 
-BASELINE rule_sentences=143 floor=101679
+BASELINE rule_sentences=139 floor=101681
 
 
 ## Notes
@@ -319,3 +319,5 @@ sentence-extraction step never runs over it, so the WAIVE would match nothing �
 rather than left as dead weight. **Waiver count is now 13**, all narrative/historical/
 incidental keyword matches, per-sentence reasons given inline in the fence. 143 rule
 sentences remain retained after waiving.
+
+- **Reclassified MOVE → INLINE after Task 4 attempt 1 (orchestrator, 2026-09-25):** the `install_cargo_tools` bullet and the `--no-deps is required` sentence. Every sentence of each is a retained rule sentence, so check 2 requires the unit's full text in `CLAUDE.md` while check 4 forbids it. A unit whose whole text is retained stays whole. Their verbatim copies in the knowledge files are harmless duplicates.
