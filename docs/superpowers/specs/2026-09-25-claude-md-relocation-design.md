@@ -179,6 +179,9 @@ tree, and a draft left there fails ai-config's `make test` for every session on 
 
 ## Verification
 
+> **Amended 2026-09-25 (Task 4 attempt 1):** the bloat bound is `post bytes - pointer-line bytes <= floor + 8,000`. The 50 required pointers cost at least 7,526 B before any trigger words, so charging them to the slack made the bound unsatisfiable. The bound's purpose is unchanged: it catches text beyond retained rules and pointers. A pointer line must carry nothing but the pointer; Task 5's reviewer checks this. A MOVE unit whose every sentence is retained cannot satisfy checks 2 and 4 together, so such units are INLINE.
+
+
 **One script runs checks 1 to 4**, against the pre-change file at `2e38f5e4` and the
 post-change file. Its splitter is pinned, so every count below can be reproduced:
 

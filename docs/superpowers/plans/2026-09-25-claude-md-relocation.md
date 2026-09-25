@@ -12,6 +12,9 @@
 
 ## Global Constraints
 
+> **Amended 2026-09-25 (Task 4 attempt 1):** the bloat bound is `post bytes - pointer-line bytes <= floor + 8,000`. The 50 required pointers cost at least 7,526 B before any trigger words, so charging them to the slack made the bound unsatisfiable. The bound's purpose is unchanged: it catches text beyond retained rules and pointers. A pointer line must carry nothing but the pointer; Task 5's reviewer checks this. A MOVE unit whose every sentence is retained cannot satisfy checks 2 and 4 together, so such units are INLINE.
+
+
 - **Base revision is `2e38f5e4`.** Read it with `git show 2e38f5e4:CLAUDE.md`, never from the worktree once edits start.
 - **No rewording.** Relocated units move verbatim. The only new text in `CLAUDE.md` is pointer lines and seam-name bullets.
 - **Rule regex, case-insensitive:** `\b(never|must|do not|don't|required|refuse[sd]?|HOLD|always|prefer|avoid|verify|only)\b`.
