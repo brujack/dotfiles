@@ -278,6 +278,31 @@ Finding: The verification plan cannot catch the spec's own worst case. Check 1 c
 Assumption: A pointer plus a bullet of 15 words or fewer is enough for correct behaviour without the narrative. This is argued, not measured. Test it the same way as the Ergonomics assumption.
 Disposition: Addressed (operator, 2026-09-25). New check 2 is a retention check: 134 rule-shaped sentences, each either kept or waived to a replacement phrase that is verified present. It has a negative control. Check 3 says stop rather than drop rules if it conflicts with the size threshold. A no-scratch-under-`~/.claude/projects/` rule is added to Sequencing. The assumption is Accepted, reason: tested after merge as check 8.
 
+### Round 2 (all three lenses, reviewed at `3191d194`)
+
+Round-1 fixes changed design substance, so all three lenses re-ran. **Every round-2 finding is a defect the round-1 fixes introduced.**
+
+**Goal-fit.** Finding: the size budget does not close. Unmoved sections hold 38,418 B. Rule sentences inside the moving sections, kept verbatim, add about 28 KB. With the seam index, `CLAUDE.md` reaches about 74 KB before any pointer, so `<= 70,000` needs about 100 reworded "restated as" waivers. That is the compress-in-place work the spec rejects. Suggested: derive the threshold from the measured floor. Assumption: a large share of the 104 moving rule sentences are narrative uses that can be waived without loss. Refuted if more than 16 of a random 20 are real rules. Disposition:
+
+**Ergonomics.** Finding:
+- The check-2 population cannot be reproduced: the splitter is undefined, and other splitters give 124 or 130, not 134.
+- About 100–150 waiver verdicts in one PR is a review nobody reads.
+- Pointers must name `file § heading`, but nothing creates per-block headings in the destinations.
+- Check 7's baseline is easy to miss. Check 8 needs a `2e38f5e4` worktree for its baseline and has no pass criterion.
+
+Assumption: about 130 rule sentences can be cut under 70 KB by accepted one-line restatements. Disposition:
+
+**Risk.** Finding: checks 2 and 3 conflict structurally. The waiver check only tests that a string is present, so "`sync_git_repos.sh`" alone would satisfy a "restated as" row. All of check 2's guarantee therefore falls onto check 5's human judgement again. Rules without the keywords are missed ("Always remove the old file before symlinking", "Prefer deleting to suppressing", "Verify the directive is live"). Check 1 remains sound. Assumption: restated bullets for Key Conventions are well under half the verbatim size. Disposition:
+
+**Author's measurement at `2e38f5e4`, for the disposition.** The splitter is: strip fences; split on blank lines and at list-item starts; normalise whitespace; split at `(?<=[.!?])\s+`. That gives:
+
+| regex | sentences in moved sections | bytes |
+| --- | ---: | ---: |
+| base (`never|must|do not|...|HOLD`) | 104 | 25,625 |
+| extended (adds `always|prefer|avoid|verify|only`) | 187 | 47,010 |
+
+The floor if all are kept verbatim is **38,418 + 25,625 + ~7,000 index ≈ 71 KB** for the base regex, and **≈ 92 KB** for the extended one, before pointers.
+
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
