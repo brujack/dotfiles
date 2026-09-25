@@ -442,6 +442,24 @@ def _read_dest_texts(dest_dir: Path) -> dict[str, str]:
     }
 
 
+def _pointer_line_bytes(text: str) -> int:
+    """Total bytes of every physical line in text that contains a match of
+    the pointer regex -- the same one check 4 resolves. A pointer is the
+    only new text this tool permits, so its bytes are excluded from check
+    3's bloat bound; without this, the 50-odd required pointers alone cost
+    thousands of bytes and the bound could never pass, while text the
+    bound actually exists to catch (bloat beyond retained rules and
+    pointers) goes unaffected by them. A line that merely mentions a
+    knowledge-file path without the full pointer form is ordinary prose
+    and is not excluded -- `search`, not a looser substring check, is what
+    enforces that."""
+    return sum(
+        len(line.encode("utf-8"))
+        for line in text.splitlines(keepends=True)
+        if _POINTER_RE.search(line)
+    )
+
+
 _SHORT_UNIT_MAX_LEN = 40
 
 
@@ -529,13 +547,18 @@ def run_check(
     relocated_bytes = sum(len(u.encode("utf-8")) for u in relocated)
     floor = compute_floor(non_moving_bytes_for(lines, spans), analysis)
     post_bytes = len(post_text.encode("utf-8"))
+    pointer_bytes = _pointer_line_bytes(post_text)
+    adjusted_post_bytes = post_bytes - pointer_bytes
     reasons: list[str] = []
     if len(relocated) == 0:
         reasons.append("no relocated units")
     if relocated_bytes < min_relocated:
         reasons.append(f"relocated bytes {relocated_bytes} < min {min_relocated}")
-    if post_bytes > floor + slack:
-        reasons.append(f"post bytes {post_bytes} > floor {floor} + slack {slack}")
+    if adjusted_post_bytes > floor + slack:
+        reasons.append(
+            f"post {post_bytes} - pointers {pointer_bytes} = "
+            f"{adjusted_post_bytes} > floor {floor} + slack {slack}"
+        )
     reasons.extend(
         find_completeness_errors(
             lines, spans, map_data.inline_anchors, map_data.move_records

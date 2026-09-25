@@ -355,7 +355,72 @@ class TestCheck2(unittest.TestCase):
         self.assertTrue(by_number[2])
 
 
+class TestPointerLineBytes(unittest.TestCase):
+    def test_excludes_only_the_full_pointer_form_not_a_bare_mention(self):
+        bare_mention = "See ai-config/docs/knowledge/x.md for details.\n"
+        full_pointer = (
+            "Before touching this, read "
+            "`ai-config/docs/knowledge/dotfiles-x.md` § `Heading`.\n"
+        )
+        text = bare_mention + full_pointer
+        self.assertEqual(
+            rc._pointer_line_bytes(text), len(full_pointer.encode("utf-8"))
+        )
+
+
 class TestCheck3(unittest.TestCase):
+    def test_pointer_lines_excluded_from_bloat_bound_even_when_over_slack(self):
+        widget = "This sentence about widgets has no rule keyword in it today."
+        unmoved = "# Doc\n\nKeep me around please.\n"
+        pre_text = unmoved + "\n### Widget\n\n" + widget + "\n"
+        pointer_line = (
+            "**Before** touching this **on** widgets, read "
+            "`ai-config/docs/knowledge/dotfiles-x.md` § `Widget`.\n"
+        )
+        # Five pointer lines -- deliberately far more bytes than an 8-byte
+        # slack, to prove they are excluded rather than merely small.
+        post_text = unmoved + "\n" + pointer_line * 5
+        with tempfile.TemporaryDirectory() as tmp:
+            dest_dir = Path(tmp)
+            (dest_dir / "dotfiles-x.md").write_text(
+                "### Widget\n\n" + widget + "\n", encoding="utf-8"
+            )
+            move = rc.MoveRecord(rc.normalize(widget)[:60], "dotfiles-x.md", "Widget")
+            map_data = rc.MapData(
+                section_headings=["### Widget"], move_records=[move]
+            )
+            results = rc.run_check(
+                pre_text, post_text, dest_dir, map_data, min_relocated=0, slack=8
+            )
+        check3 = next(r for r in results if r[0] == 3)
+        self.assertTrue(check3[1], check3[2])
+
+    def test_non_pointer_bloat_still_fails_alongside_pointer_lines(self):
+        widget = "This sentence about widgets has no rule keyword in it today."
+        unmoved = "# Doc\n\nKeep me around please.\n"
+        pre_text = unmoved + "\n### Widget\n\n" + widget + "\n"
+        pointer_line = (
+            "**Before** touching this **on** widgets, read "
+            "`ai-config/docs/knowledge/dotfiles-x.md` § `Widget`.\n"
+        )
+        bloat = "Extra padding text that nobody asked to keep here. " * 500
+        post_text = unmoved + "\n" + pointer_line * 5 + bloat
+        with tempfile.TemporaryDirectory() as tmp:
+            dest_dir = Path(tmp)
+            (dest_dir / "dotfiles-x.md").write_text(
+                "### Widget\n\n" + widget + "\n", encoding="utf-8"
+            )
+            move = rc.MoveRecord(rc.normalize(widget)[:60], "dotfiles-x.md", "Widget")
+            map_data = rc.MapData(
+                section_headings=["### Widget"], move_records=[move]
+            )
+            results = rc.run_check(
+                pre_text, post_text, dest_dir, map_data, min_relocated=0, slack=8
+            )
+        check3 = next(r for r in results if r[0] == 3)
+        self.assertFalse(check3[1])
+        self.assertIn("pointers", check3[2])
+
     def test_fails_on_an_empty_relocation(self):
         text = "# Doc\n\nKeep me around please.\n"
         with tempfile.TemporaryDirectory() as tmp:
