@@ -237,6 +237,53 @@ class TestParseMap(unittest.TestCase):
             {rc.normalize("Use `a | b` as the separator in prose.")},
         )
 
+    def _write_map(self, tmp: str, body: str) -> Path:
+        map_path = Path(tmp) / "map.md"
+        map_path.write_text(body, encoding="utf-8")
+        return map_path
+
+    def test_missing_fence_is_an_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            map_path = self._write_map(tmp, "# No fenced block here at all\n")
+            with self.assertRaisesRegex(rc.MapError, "no ```relocation-map"):
+                rc.parse_map(map_path)
+
+    def test_malformed_section_is_an_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            map_path = self._write_map(tmp, "```relocation-map\nSECTION\n```\n")
+            with self.assertRaisesRegex(rc.MapError, "SECTION needs 1 field"):
+                rc.parse_map(map_path)
+
+    def test_malformed_inline_is_an_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            map_path = self._write_map(tmp, "```relocation-map\nINLINE\n```\n")
+            with self.assertRaisesRegex(rc.MapError, "INLINE needs 1 field"):
+                rc.parse_map(map_path)
+
+    def test_malformed_waive_is_an_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            map_path = self._write_map(
+                tmp, "```relocation-map\nWAIVE | onlyonefield\n```\n"
+            )
+            with self.assertRaisesRegex(rc.MapError, "WAIVE needs 2 fields"):
+                rc.parse_map(map_path)
+
+    def test_malformed_move_is_an_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            map_path = self._write_map(
+                tmp, "```relocation-map\nMOVE | onlyonefield\n```\n"
+            )
+            with self.assertRaisesRegex(rc.MapError, "MOVE needs 3 fields"):
+                rc.parse_map(map_path)
+
+    def test_unknown_record_type_is_an_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            map_path = self._write_map(
+                tmp, "```relocation-map\nFOOBAR | something\n```\n"
+            )
+            with self.assertRaisesRegex(rc.MapError, "unknown record type"):
+                rc.parse_map(map_path)
+
 
 class TestCheck1(unittest.TestCase):
     def test_fails_when_moved_unit_altered_in_destination(self):
@@ -329,7 +376,14 @@ class TestCheck2(unittest.TestCase):
             )
             map_data = rc.MapData(section_headings=["### Widget"])
             results = rc.run_check(
-                self._PRE, self._POST, dest_dir, map_data, min_relocated=0, slack=1_000_000
+                self._PRE,
+                self._POST,
+                dest_dir,
+                map_data,
+                rc.CheckOptions(
+                    min_relocated=0,
+                    slack=1_000_000,
+                ),
             )
         by_number = {n: (ok, detail) for n, ok, detail in results}
         self.assertFalse(by_number[2][0])
@@ -349,7 +403,14 @@ class TestCheck2(unittest.TestCase):
                 waive_sentences={self._RULE_SENTENCE},
             )
             results = rc.run_check(
-                self._PRE, self._POST, dest_dir, map_data, min_relocated=0, slack=1_000_000
+                self._PRE,
+                self._POST,
+                dest_dir,
+                map_data,
+                rc.CheckOptions(
+                    min_relocated=0,
+                    slack=1_000_000,
+                ),
             )
         by_number = {n: ok for n, ok, _ in results}
         self.assertTrue(by_number[2])
@@ -402,7 +463,14 @@ class TestCheck3(unittest.TestCase):
                 section_headings=["### Widget"], move_records=[move]
             )
             results = rc.run_check(
-                pre_text, post_text, dest_dir, map_data, min_relocated=0, slack=8
+                pre_text,
+                post_text,
+                dest_dir,
+                map_data,
+                rc.CheckOptions(
+                    min_relocated=0,
+                    slack=8,
+                ),
             )
         check3 = next(r for r in results if r[0] == 3)
         self.assertTrue(check3[1], check3[2])
@@ -427,7 +495,14 @@ class TestCheck3(unittest.TestCase):
                 section_headings=["### Widget"], move_records=[move]
             )
             results = rc.run_check(
-                pre_text, post_text, dest_dir, map_data, min_relocated=0, slack=8
+                pre_text,
+                post_text,
+                dest_dir,
+                map_data,
+                rc.CheckOptions(
+                    min_relocated=0,
+                    slack=8,
+                ),
             )
         check3 = next(r for r in results if r[0] == 3)
         self.assertFalse(check3[1])
@@ -438,7 +513,14 @@ class TestCheck3(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             dest_dir = Path(tmp)
             results = rc.run_check(
-                text, text, dest_dir, rc.MapData(), min_relocated=60_000, slack=8_000
+                text,
+                text,
+                dest_dir,
+                rc.MapData(),
+                rc.CheckOptions(
+                    min_relocated=60_000,
+                    slack=8_000,
+                ),
             )
         check3 = next(r for r in results if r[0] == 3)
         self.assertFalse(check3[1])
@@ -458,8 +540,10 @@ class TestCheck3(unittest.TestCase):
                 post_text,
                 dest_dir,
                 rc.MapData(),
-                min_relocated=60_000,
-                slack=1_000_000,
+                rc.CheckOptions(
+                    min_relocated=60_000,
+                    slack=1_000_000,
+                ),
             )
         check3 = next(r for r in results if r[0] == 3)
         self.assertFalse(check3[1])
@@ -486,7 +570,14 @@ class TestCheck3(unittest.TestCase):
             move = rc.MoveRecord(rc.normalize(widget)[:60], "dotfiles-x.md", "Widget")
             map_data = rc.MapData(section_headings=["### Widget"], move_records=[move])
             results = rc.run_check(
-                pre_text, post_text, dest_dir, map_data, min_relocated=0, slack=0
+                pre_text,
+                post_text,
+                dest_dir,
+                map_data,
+                rc.CheckOptions(
+                    min_relocated=0,
+                    slack=0,
+                ),
             )
         check3 = next(r for r in results if r[0] == 3)
         self.assertTrue(check3[1], check3[2])
@@ -507,7 +598,14 @@ class TestCheck3(unittest.TestCase):
             move = rc.MoveRecord(rc.normalize(widget)[:60], "dotfiles-x.md", "Widget")
             map_data = rc.MapData(section_headings=["### Widget"], move_records=[move])
             results = rc.run_check(
-                pre_text, post_text, dest_dir, map_data, min_relocated=0, slack=8_000
+                pre_text,
+                post_text,
+                dest_dir,
+                map_data,
+                rc.CheckOptions(
+                    min_relocated=0,
+                    slack=8_000,
+                ),
             )
         check3 = next(r for r in results if r[0] == 3)
         self.assertFalse(check3[1])
@@ -522,7 +620,14 @@ class TestCheck3(unittest.TestCase):
             dest_dir = Path(tmp)
             map_data = rc.MapData(section_headings=["### Widget"])
             results = rc.run_check(
-                pre_text, pre_text, dest_dir, map_data, min_relocated=0, slack=1_000_000
+                pre_text,
+                pre_text,
+                dest_dir,
+                map_data,
+                rc.CheckOptions(
+                    min_relocated=0,
+                    slack=1_000_000,
+                ),
             )
         check3 = next(r for r in results if r[0] == 3)
         self.assertFalse(check3[1])
@@ -541,7 +646,14 @@ class TestCheck3(unittest.TestCase):
                 move_records=[move],
             )
             results = rc.run_check(
-                pre_text, pre_text, dest_dir, map_data, min_relocated=0, slack=1_000_000
+                pre_text,
+                pre_text,
+                dest_dir,
+                map_data,
+                rc.CheckOptions(
+                    min_relocated=0,
+                    slack=1_000_000,
+                ),
             )
         check3 = next(r for r in results if r[0] == 3)
         self.assertFalse(check3[1])
@@ -595,9 +707,11 @@ class TestBulletsMode(unittest.TestCase):
                 post_text,
                 dest_dir,
                 map_data,
-                min_relocated=0,
-                slack=8_000,
-                rules_mode="bullets",
+                rc.CheckOptions(
+                    min_relocated=0,
+                    slack=8_000,
+                    rules_mode="bullets",
+                ),
             )
         by_number = {n: (ok, detail) for n, ok, detail in results}
         self.assertTrue(by_number[2][0], by_number[2][1])
@@ -614,9 +728,11 @@ class TestBulletsMode(unittest.TestCase):
                 post_text,
                 dest_dir,
                 map_data,
-                min_relocated=0,
-                slack=8_000,
-                rules_mode="bullets",
+                rc.CheckOptions(
+                    min_relocated=0,
+                    slack=8_000,
+                    rules_mode="bullets",
+                ),
             )
         check2 = next(r for r in results if r[0] == 2)
         self.assertFalse(check2[1])
@@ -635,9 +751,11 @@ class TestBulletsMode(unittest.TestCase):
                 post_text,
                 dest_dir,
                 map_data,
-                min_relocated=0,
-                slack=8_000,
-                rules_mode="bullets",
+                rc.CheckOptions(
+                    min_relocated=0,
+                    slack=8_000,
+                    rules_mode="bullets",
+                ),
             )
         check2 = next(r for r in results if r[0] == 2)
         self.assertFalse(check2[1])
@@ -654,10 +772,12 @@ class TestBulletsMode(unittest.TestCase):
                 post_text,
                 dest_dir,
                 map_data,
-                min_relocated=0,
-                slack=8_000,
-                rules_mode="bullets",
-                max_bytes=50,
+                rc.CheckOptions(
+                    min_relocated=0,
+                    slack=8_000,
+                    rules_mode="bullets",
+                    max_bytes=50,
+                ),
             )
         check3 = next(r for r in results if r[0] == 3)
         self.assertFalse(check3[1])
@@ -691,18 +811,22 @@ class TestBulletsMode(unittest.TestCase):
                 post_text,
                 dest_dir,
                 map_data,
-                min_relocated=0,
-                slack=8_000,
-                rules_mode="bullets",
+                rc.CheckOptions(
+                    min_relocated=0,
+                    slack=8_000,
+                    rules_mode="bullets",
+                ),
             )
             results_sentences = rc.run_check(
                 pre_text,
                 post_text,
                 dest_dir,
                 map_data,
-                min_relocated=0,
-                slack=8_000,
-                rules_mode="sentences",
+                rc.CheckOptions(
+                    min_relocated=0,
+                    slack=8_000,
+                    rules_mode="sentences",
+                ),
             )
         check2_bullets = next(r for r in results_bullets if r[0] == 2)
         check2_sentences = next(r for r in results_sentences if r[0] == 2)
@@ -724,9 +848,11 @@ class TestBulletsMode(unittest.TestCase):
                 post_text,
                 dest_dir,
                 map_data,
-                min_relocated=0,
-                slack=8_000,
-                rules_mode="bullets",
+                rc.CheckOptions(
+                    min_relocated=0,
+                    slack=8_000,
+                    rules_mode="bullets",
+                ),
             )
         by_number = {n: (ok, detail) for n, ok, detail in results}
         self.assertTrue(by_number[2][0], by_number[2][1])
@@ -747,9 +873,11 @@ class TestBulletsMode(unittest.TestCase):
                 post_text,
                 dest_dir,
                 map_data,
-                min_relocated=0,
-                slack=8_000,
-                rules_mode="bullets",
+                rc.CheckOptions(
+                    min_relocated=0,
+                    slack=8_000,
+                    rules_mode="bullets",
+                ),
             )
         check4 = next(r for r in results if r[0] == 4)
         self.assertFalse(check4[1])
@@ -818,8 +946,10 @@ class TestCheck4(unittest.TestCase):
                 post_text,
                 dest_dir,
                 rc.MapData(),
-                min_relocated=0,
-                slack=1_000_000,
+                rc.CheckOptions(
+                    min_relocated=0,
+                    slack=1_000_000,
+                ),
             )
         check4 = next(r for r in results if r[0] == 4)
         self.assertFalse(check4[1])
@@ -845,12 +975,69 @@ class TestCheck4(unittest.TestCase):
                 post_text,
                 dest_dir,
                 map_data,
-                min_relocated=0,
-                slack=1_000_000,
+                rc.CheckOptions(
+                    min_relocated=0,
+                    slack=1_000_000,
+                ),
             )
         check4 = next(r for r in results if r[0] == 4)
         self.assertFalse(check4[1])
         self.assertIn("not found under heading", check4[2])
+
+    def test_move_anchor_not_found_in_pre_file_fails(self):
+        pre_text = "# Doc\n\nSomething unrelated.\n"
+        post_text = "# Doc\n\nSomething unrelated.\n"
+        move = rc.MoveRecord(
+            "this anchor matches nothing in the pre-file at all",
+            "dotfiles-x.md",
+            "Heading",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            dest_dir = Path(tmp)
+            (dest_dir / "dotfiles-x.md").write_text(
+                "### Heading\n\nSome text.\n", encoding="utf-8"
+            )
+            map_data = rc.MapData(move_records=[move])
+            results = rc.run_check(pre_text, post_text, dest_dir, map_data)
+        check4 = next(r for r in results if r[0] == 4)
+        self.assertFalse(check4[1])
+        self.assertIn("MOVE anchor not found in pre-file", check4[2])
+
+    def test_move_unit_still_present_in_post_fails(self):
+        unit_text = "This unit was supposed to move but never left the post file."
+        pre_text = f"# Doc\n\n{unit_text}\n"
+        post_text = f"# Doc\n\n{unit_text}\n"  # still there
+        anchor = rc.normalize(unit_text)[:60]
+        with tempfile.TemporaryDirectory() as tmp:
+            dest_dir = Path(tmp)
+            (dest_dir / "dotfiles-x.md").write_text(
+                f"### Heading\n\n{unit_text}\n", encoding="utf-8"
+            )
+            move = rc.MoveRecord(anchor, "dotfiles-x.md", "Heading")
+            map_data = rc.MapData(move_records=[move])
+            results = rc.run_check(pre_text, post_text, dest_dir, map_data)
+        check4 = next(r for r in results if r[0] == 4)
+        self.assertFalse(check4[1])
+        self.assertIn("MOVE unit still present in post", check4[2])
+
+    def test_move_dest_heading_missing_fails(self):
+        unit_text = "This unit genuinely relocated but its named heading is absent."
+        pre_text = f"# Doc\n\n{unit_text}\n"
+        post_text = "# Doc\n\n"  # unit correctly removed
+        anchor = rc.normalize(unit_text)[:60]
+        with tempfile.TemporaryDirectory() as tmp:
+            dest_dir = Path(tmp)
+            # dest file exists and even carries the unit's text, but under
+            # a heading OTHER than the one the MOVE record names.
+            (dest_dir / "dotfiles-x.md").write_text(
+                f"### Other Heading\n\n{unit_text}\n", encoding="utf-8"
+            )
+            move = rc.MoveRecord(anchor, "dotfiles-x.md", "Missing Heading")
+            map_data = rc.MapData(move_records=[move])
+            results = rc.run_check(pre_text, post_text, dest_dir, map_data)
+        check4 = next(r for r in results if r[0] == 4)
+        self.assertFalse(check4[1])
+        self.assertIn("MOVE dest heading missing", check4[2])
 
 
 class TestCliEndToEnd(unittest.TestCase):
@@ -970,10 +1157,20 @@ class TestMeasureAgainstRealClaudeMd(unittest.TestCase):
 
 
 def _init_git_repo(repo: Path, files: dict[str, str]) -> None:
-    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    # A test worktree can be built from a session whose own shell exports
+    # GIT_DIR/GIT_WORK_TREE/GIT_COMMON_DIR/GIT_INDEX_FILE (git sets these
+    # when a push originates from a worktree). Left inherited, they would
+    # make these calls operate on the WRONG repository -- per shell.md,
+    # `cwd=` alone does not override an exported GIT_DIR. Strip the same
+    # four variables read_pre_file() strips, so this fixture repo is
+    # genuinely isolated regardless of what invoked the test suite.
+    env = dict(os.environ)
+    for var in rc._GIT_ENV_STRIP:
+        env.pop(var, None)
+    subprocess.run(["git", "init", "-q"], cwd=repo, env=env, check=True)
     for name, content in files.items():
         (repo / name).write_text(content, encoding="utf-8")
-    subprocess.run(["git", "add", "."], cwd=repo, check=True)
+    subprocess.run(["git", "add", "."], cwd=repo, env=env, check=True)
     subprocess.run(
         [
             "git",
@@ -987,6 +1184,7 @@ def _init_git_repo(repo: Path, files: dict[str, str]) -> None:
             "init",
         ],
         cwd=repo,
+        env=env,
         check=True,
     )
 

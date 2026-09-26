@@ -300,6 +300,58 @@ class MapData:
 _MAP_FENCE_RE = re.compile(r"```relocation-map\n(.*?)```", re.DOTALL)
 
 
+# A unit's anchor or a waived sentence can itself contain " | " -- a
+# markdown table row's normalised text starts with "| ...", and prose can
+# quote a literal pipe. Splitting the whole line on every " | " would
+# shred that content into extra fields. parse_map instead peels off only
+# the record-type tag with a single left split, then hands the remainder
+# to one of these per-kind parsers: SECTION/INLINE take it whole (their
+# one field IS the remainder, pipes and all); MOVE/WAIVE peel their
+# trailing, pipe-free fields off the RIGHT with rsplit, leaving anything
+# left over -- including embedded " | " -- as the anchor or sentence. Each
+# parser mutates `data` in place and raises MapError on a malformed line.
+
+
+def _parse_section(rest: str, line: str, line_no: int, data: MapData) -> None:
+    heading = rest.strip()
+    if not heading:
+        raise MapError(f"map:{line_no}: SECTION needs 1 field: {line!r}")
+    if heading in data.section_headings:
+        raise MapError(f"map:{line_no}: duplicate SECTION heading: {heading!r}")
+    data.section_headings.append(heading)
+
+
+def _parse_inline(rest: str, line: str, line_no: int, data: MapData) -> None:
+    anchor = rest.strip()
+    if not anchor:
+        raise MapError(f"map:{line_no}: INLINE needs 1 field: {line!r}")
+    data.inline_anchors.append(normalize(anchor))
+
+
+def _parse_waive(rest: str, line: str, line_no: int, data: MapData) -> None:
+    parts = rest.rsplit(" | ", 1)
+    if len(parts) != 2 or not parts[0].strip() or not parts[1].strip():
+        raise MapError(f"map:{line_no}: WAIVE needs 2 fields: {line!r}")
+    sentence, _reason = parts
+    data.waive_sentences.add(normalize(sentence.strip()))
+
+
+def _parse_move(rest: str, line: str, line_no: int, data: MapData) -> None:
+    parts = rest.rsplit(" | ", 2)
+    if len(parts) != 3 or not all(p.strip() for p in parts):
+        raise MapError(f"map:{line_no}: MOVE needs 3 fields: {line!r}")
+    anchor, dest_file, dest_heading = (p.strip() for p in parts)
+    data.move_records.append(MoveRecord(normalize(anchor), dest_file, dest_heading))
+
+
+_MAP_RECORD_PARSERS = {
+    "SECTION": _parse_section,
+    "INLINE": _parse_inline,
+    "WAIVE": _parse_waive,
+    "MOVE": _parse_move,
+}
+
+
 def parse_map(path: Path) -> MapData:
     try:
         text = path.read_text(encoding="utf-8")
@@ -313,49 +365,13 @@ def parse_map(path: Path) -> MapData:
         line = raw_line.strip()
         if not line or line.startswith("#"):
             continue
-        # A unit's anchor or a waived sentence can itself contain " | " --
-        # a markdown table row's normalised text starts with "| ...", and
-        # prose can quote a literal pipe. Splitting the whole line on every
-        # " | " would shred that content into extra fields. Instead, peel
-        # off only the record-type tag with a single left split, then
-        # parse the remainder structurally: SECTION/INLINE take it whole
-        # (their one field IS the remainder, pipes and all); MOVE/WAIVE
-        # peel their trailing, pipe-free fields off the RIGHT with rsplit,
-        # leaving anything left over -- including embedded " | " -- as the
-        # anchor or sentence.
         tag_split = line.split(" | ", 1)
         kind = tag_split[0].strip().upper()
         rest = tag_split[1] if len(tag_split) == 2 else ""
-        if kind == "SECTION":
-            heading = rest.strip()
-            if not heading:
-                raise MapError(f"map:{line_no}: SECTION needs 1 field: {line!r}")
-            if heading in data.section_headings:
-                raise MapError(
-                    f"map:{line_no}: duplicate SECTION heading: {heading!r}"
-                )
-            data.section_headings.append(heading)
-        elif kind == "INLINE":
-            anchor = rest.strip()
-            if not anchor:
-                raise MapError(f"map:{line_no}: INLINE needs 1 field: {line!r}")
-            data.inline_anchors.append(normalize(anchor))
-        elif kind == "WAIVE":
-            parts = rest.rsplit(" | ", 1)
-            if len(parts) != 2 or not parts[0].strip() or not parts[1].strip():
-                raise MapError(f"map:{line_no}: WAIVE needs 2 fields: {line!r}")
-            sentence, _reason = parts
-            data.waive_sentences.add(normalize(sentence.strip()))
-        elif kind == "MOVE":
-            parts = rest.rsplit(" | ", 2)
-            if len(parts) != 3 or not all(p.strip() for p in parts):
-                raise MapError(f"map:{line_no}: MOVE needs 3 fields: {line!r}")
-            anchor, dest_file, dest_heading = (p.strip() for p in parts)
-            data.move_records.append(
-                MoveRecord(normalize(anchor), dest_file, dest_heading)
-            )
-        else:
+        parser = _MAP_RECORD_PARSERS.get(kind)
+        if parser is None:
             raise MapError(f"map:{line_no}: unknown record type {tag_split[0]!r}")
+        parser(rest, line, line_no, data)
     return data
 
 
@@ -520,41 +536,61 @@ def _unit_present(unit: str, norm: str, raw_text: str, norm_blob: str) -> bool:
     return norm in norm_blob
 
 
-def run_check(
-    pre_text: str,
-    post_text: str,
-    dest_dir: Path,
-    map_data: MapData,
-    min_relocated: int = 60_000,
-    slack: int = 8_000,
-    rules_mode: str = "sentences",
-    max_bytes: int | None = None,
-) -> list[tuple[int, bool, str]]:
-    """Run checks 1-4 and return (check_number, passed, detail) triples, one
-    per check, in order. Raises MapError if a SECTION heading named in the
-    map cannot be found in the pre-file -- that is a broken map, not a
-    check failure.
+@dataclass
+class CheckOptions:
+    """Everything about a check run that isn't the four core inputs
+    (pre_text, post_text, dest_dir, map_data). Grouping these keeps
+    run_check's own parameter count small no matter how many modes or
+    thresholds accumulate."""
 
-    rules_mode="sentences" (default) is the original design: check 2
-    retains verbatim rule sentences, check 3 bounds post-file bytes by a
-    floor derived from them. rules_mode="bullets" is the 2026-09-25
-    amendment: CLAUDE.md carries hand-written rule bullets per MOVE group
-    instead, so check 2 becomes "every MOVE group has exactly one pointer"
-    and check 3 drops the floor+slack bound (the floor was defined BY the
-    retained sentences, which no longer exist) in favour of a flat
-    max_bytes ceiling, checked only when one is given. Checks 1 and 4 are
-    identical in both modes."""
+    min_relocated: int = 60_000
+    slack: int = 8_000
+    rules_mode: str = "sentences"
+    max_bytes: int | None = None
+
+
+@dataclass
+class CheckContext:
+    """Every derived value the four checks read, computed once so no check
+    repeats another's work and every check sees the same snapshot."""
+
+    pre_text: str
+    post_text: str
+    dest_dir: Path
+    map_data: MapData
+    lines: list[str]
+    spans: list[tuple[int, int]]
+    pre_units: list[str]
+    post_norm: str
+    dest_texts: dict[str, str]
+    dest_text_all: str
+    dest_norm_all: str
+    pointer_matches: list[re.Match[str]]
+    analysis: SectionAnalysis
+    lost: list[str]
+    relocated: list[str]
+
+
+def _build_check_context(
+    pre_text: str, post_text: str, dest_dir: Path, map_data: MapData
+) -> CheckContext:
+    """Resolve spans, extract units, read the destination, and classify
+    every pre-file unit as present-in-post, relocated, or lost -- the
+    shared groundwork checks 1-4 all read from. Raises MapError if a
+    SECTION heading named in the map cannot be found in the pre-file --
+    that is a broken map, not a check failure."""
     lines = pre_text.splitlines(keepends=True)
     spans = resolve_spans(lines, map_data.section_headings)
-
     pre_units = extract_units(pre_text)
     post_norm = normalize(post_text)
     dest_texts = _read_dest_texts(dest_dir)
     dest_text_all = "\n".join(dest_texts.values())
     dest_norm_all = normalize(dest_text_all)
     pointer_matches = list(_POINTER_RE.finditer(post_text))
+    analysis = analyze_sections(
+        lines, spans, map_data.inline_anchors, map_data.waive_sentences
+    )
 
-    # CHECK 1: nothing lost from the destination.
     lost: list[str] = []
     relocated: list[str] = []
     for unit in pre_units:
@@ -565,145 +601,210 @@ def run_check(
             relocated.append(unit)
         else:
             lost.append(unit)
-    check1_ok = not lost
-    check1_detail = (
+
+    return CheckContext(
+        pre_text=pre_text,
+        post_text=post_text,
+        dest_dir=dest_dir,
+        map_data=map_data,
+        lines=lines,
+        spans=spans,
+        pre_units=pre_units,
+        post_norm=post_norm,
+        dest_texts=dest_texts,
+        dest_text_all=dest_text_all,
+        dest_norm_all=dest_norm_all,
+        pointer_matches=pointer_matches,
+        analysis=analysis,
+        lost=lost,
+        relocated=relocated,
+    )
+
+
+def _check1(ctx: CheckContext) -> tuple[bool, str]:
+    """Nothing lost from the destination."""
+    ok = not ctx.lost
+    detail = (
         ""
-        if check1_ok
+        if ok
         else "unit missing from post and dest: "
-        + "; ".join(u[:80].replace("\n", " ") for u in lost[:5])
+        + "; ".join(u[:80].replace("\n", " ") for u in ctx.lost[:5])
     )
+    return ok, detail
 
-    # Sections analysis, shared by check 2 and the check-3 floor in
-    # sentences mode. Cheap to compute either way; bullets mode ignores it.
-    analysis = analyze_sections(
-        lines, spans, map_data.inline_anchors, map_data.waive_sentences
-    )
 
-    # CHECK 2: sentences mode retains verbatim rule sentences; bullets mode
-    # requires exactly one pointer per distinct MOVE (dest, heading) group.
-    if rules_mode == "bullets":
-        check2_errors: list[str] = []
+def _check2(ctx: CheckContext, options: CheckOptions) -> tuple[bool, str]:
+    """Sentences mode retains verbatim rule sentences; bullets mode
+    requires exactly one pointer per distinct MOVE (dest, heading) group."""
+    if options.rules_mode == "bullets":
+        errors: list[str] = []
         distinct_pairs = sorted(
-            {(move.dest_file, move.dest_heading) for move in map_data.move_records}
+            {
+                (move.dest_file, move.dest_heading)
+                for move in ctx.map_data.move_records
+            }
         )
         for dest_file, dest_heading in distinct_pairs:
             count = sum(
                 1
-                for match in pointer_matches
+                for match in ctx.pointer_matches
                 if _pointer_target(match) == (dest_file, dest_heading)
             )
             if count == 0:
-                check2_errors.append(f"missing pointer: {dest_file} § {dest_heading}")
+                errors.append(f"missing pointer: {dest_file} § {dest_heading}")
             elif count > 1:
-                check2_errors.append(
+                errors.append(
                     f"duplicated pointer ({count}x): {dest_file} § {dest_heading}"
                 )
-        check2_ok = not check2_errors
-        check2_detail = "; ".join(check2_errors[:5])
-    else:
-        missing_sentences = [
-            s for s in analysis.retained_sentences if s not in post_norm
-        ]
-        check2_ok = not missing_sentences
-        check2_detail = (
-            ""
-            if check2_ok
-            else "rule sentence not retained in post: "
-            + "; ".join(s[:80] for s in missing_sentences[:5])
-        )
+        return not errors, "; ".join(errors[:5])
 
-    # CHECK 3: non-zero and size. Sentences mode bounds post bytes by the
-    # floor+slack derived from retained sentences; bullets mode drops that
-    # bound (there is no floor without retained sentences) for a flat
-    # max_bytes ceiling, checked only when one is given.
-    relocated_bytes = sum(len(u.encode("utf-8")) for u in relocated)
-    post_bytes = len(post_text.encode("utf-8"))
+    missing_sentences = [
+        s for s in ctx.analysis.retained_sentences if s not in ctx.post_norm
+    ]
+    ok = not missing_sentences
+    detail = (
+        ""
+        if ok
+        else "rule sentence not retained in post: "
+        + "; ".join(s[:80] for s in missing_sentences[:5])
+    )
+    return ok, detail
+
+
+def _check3(ctx: CheckContext, options: CheckOptions) -> tuple[bool, str]:
+    """Non-zero and size. Sentences mode bounds post bytes by the
+    floor+slack derived from retained sentences; bullets mode drops that
+    bound (there is no floor without retained sentences) for a flat
+    max_bytes ceiling, checked only when one is given. Completeness errors
+    are enforced in both modes."""
+    relocated_bytes = sum(len(u.encode("utf-8")) for u in ctx.relocated)
+    post_bytes = len(ctx.post_text.encode("utf-8"))
     reasons: list[str] = []
-    if len(relocated) == 0:
+    if len(ctx.relocated) == 0:
         reasons.append("no relocated units")
-    if relocated_bytes < min_relocated:
-        reasons.append(f"relocated bytes {relocated_bytes} < min {min_relocated}")
-    if rules_mode == "bullets":
-        if max_bytes is not None and post_bytes > max_bytes:
-            reasons.append(f"post bytes {post_bytes} > max_bytes {max_bytes}")
+    if relocated_bytes < options.min_relocated:
+        reasons.append(
+            f"relocated bytes {relocated_bytes} < min {options.min_relocated}"
+        )
+    if options.rules_mode == "bullets":
+        if options.max_bytes is not None and post_bytes > options.max_bytes:
+            reasons.append(f"post bytes {post_bytes} > max_bytes {options.max_bytes}")
     else:
-        floor = compute_floor(non_moving_bytes_for(lines, spans), analysis)
-        pointer_bytes = _pointer_line_bytes(post_text)
+        floor = compute_floor(
+            non_moving_bytes_for(ctx.lines, ctx.spans), ctx.analysis
+        )
+        pointer_bytes = _pointer_line_bytes(ctx.post_text)
         adjusted_post_bytes = post_bytes - pointer_bytes
-        if adjusted_post_bytes > floor + slack:
+        if adjusted_post_bytes > floor + options.slack:
             reasons.append(
                 f"post {post_bytes} - pointers {pointer_bytes} = "
-                f"{adjusted_post_bytes} > floor {floor} + slack {slack}"
+                f"{adjusted_post_bytes} > floor {floor} + slack {options.slack}"
             )
     reasons.extend(
         find_completeness_errors(
-            lines, spans, map_data.inline_anchors, map_data.move_records
+            ctx.lines,
+            ctx.spans,
+            ctx.map_data.inline_anchors,
+            ctx.map_data.move_records,
         )
     )
-    check3_ok = not reasons
-    check3_detail = "; ".join(reasons)
+    return not reasons, "; ".join(reasons)
 
-    # CHECK 4: every pointer resolves, and every MOVE landed under its heading.
-    check4_errors: list[str] = []
-    if relocated and not pointer_matches:
-        check4_errors.append(
-            f"relocated units present (n={len(relocated)}) but "
-            f"pointer count={len(pointer_matches)} in post"
-        )
-    for match in pointer_matches:
+
+def _check4_pointer_errors(ctx: CheckContext) -> list[str]:
+    """Every pointer in post names a real destination file, and a heading
+    that occurs in it exactly once."""
+    errors: list[str] = []
+    for match in ctx.pointer_matches:
         file_name, heading_text = _pointer_target(match)
-        dest_path = dest_dir / file_name
+        dest_path = ctx.dest_dir / file_name
         if not dest_path.is_file():
-            check4_errors.append(f"pointer names missing file {file_name}")
+            errors.append(f"pointer names missing file {file_name}")
             continue
-        content = dest_texts.get(file_name, "")
+        content = ctx.dest_texts.get(file_name, "")
         occurrences = sum(
             1 for line in content.splitlines() if line.strip() == f"### {heading_text}"
         )
         if occurrences == 0:
-            check4_errors.append(
-                f"pointer heading not found: {file_name} § {heading_text}"
-            )
+            errors.append(f"pointer heading not found: {file_name} § {heading_text}")
         elif occurrences > 1:
-            check4_errors.append(
+            errors.append(
                 f"pointer heading duplicated {occurrences}x: "
                 f"{file_name} § {heading_text}"
             )
-    for move in map_data.move_records:
-        target = next(
-            (u for u in pre_units if normalize(u).startswith(move.anchor)), None
-        )
-        if target is None:
-            check4_errors.append(f"MOVE anchor not found in pre-file: {move.anchor!r}")
-            continue
-        target_norm = normalize(target)
-        if target_norm in post_norm:
-            check4_errors.append(f"MOVE unit still present in post: {move.anchor!r}")
-            continue
-        dest_path = dest_dir / move.dest_file
-        if not dest_path.is_file():
-            check4_errors.append(f"MOVE dest file missing: {move.dest_file}")
-            continue
-        dest_content = dest_texts.get(move.dest_file, "")
-        dest_lines = dest_content.splitlines(keepends=True)
-        try:
-            hstart, hend, _level = find_heading_span(
-                dest_lines, f"### {move.dest_heading}"
-            )
-        except MapError:
-            check4_errors.append(
-                f"MOVE dest heading missing: {move.dest_file} § {move.dest_heading}"
-            )
-            continue
-        heading_section = "".join(dest_lines[hstart:hend])
-        if target_norm not in normalize(heading_section):
-            check4_errors.append(
-                f"MOVE unit not found under heading: "
-                f"{move.dest_file} § {move.dest_heading}"
-            )
-    check4_ok = not check4_errors
-    check4_detail = "; ".join(check4_errors[:5])
+    return errors
 
+
+def _check4_one_move_error(ctx: CheckContext, move: MoveRecord) -> str | None:
+    """The single failure reason for one MOVE record, or None if it landed
+    correctly: its unit exists in the pre-file, is genuinely absent from
+    post, and is present under its named heading in its named dest file."""
+    target = next(
+        (u for u in ctx.pre_units if normalize(u).startswith(move.anchor)), None
+    )
+    if target is None:
+        return f"MOVE anchor not found in pre-file: {move.anchor!r}"
+    target_norm = normalize(target)
+    if target_norm in ctx.post_norm:
+        return f"MOVE unit still present in post: {move.anchor!r}"
+    dest_path = ctx.dest_dir / move.dest_file
+    if not dest_path.is_file():
+        return f"MOVE dest file missing: {move.dest_file}"
+    dest_content = ctx.dest_texts.get(move.dest_file, "")
+    dest_lines = dest_content.splitlines(keepends=True)
+    try:
+        hstart, hend, _level = find_heading_span(
+            dest_lines, f"### {move.dest_heading}"
+        )
+    except MapError:
+        return f"MOVE dest heading missing: {move.dest_file} § {move.dest_heading}"
+    heading_section = "".join(dest_lines[hstart:hend])
+    if target_norm not in normalize(heading_section):
+        return f"MOVE unit not found under heading: {move.dest_file} § {move.dest_heading}"
+    return None
+
+
+def _check4_move_errors(ctx: CheckContext) -> list[str]:
+    errors = []
+    for move in ctx.map_data.move_records:
+        error = _check4_one_move_error(ctx, move)
+        if error is not None:
+            errors.append(error)
+    return errors
+
+
+def _check4(ctx: CheckContext) -> tuple[bool, str]:
+    """Every pointer resolves, and every MOVE landed under its heading."""
+    errors: list[str] = []
+    if ctx.relocated and not ctx.pointer_matches:
+        errors.append(
+            f"relocated units present (n={len(ctx.relocated)}) but "
+            f"pointer count={len(ctx.pointer_matches)} in post"
+        )
+    errors.extend(_check4_pointer_errors(ctx))
+    errors.extend(_check4_move_errors(ctx))
+    return not errors, "; ".join(errors[:5])
+
+
+def run_check(
+    pre_text: str,
+    post_text: str,
+    dest_dir: Path,
+    map_data: MapData,
+    options: CheckOptions | None = None,
+) -> list[tuple[int, bool, str]]:
+    """Run checks 1-4 and return (check_number, passed, detail) triples, one
+    per check, in order. Raises MapError if a SECTION heading named in the
+    map cannot be found in the pre-file -- that is a broken map, not a
+    check failure. See CheckOptions for the sentences/bullets mode split;
+    checks 1 and 4 are identical in both modes."""
+    if options is None:
+        options = CheckOptions()
+    ctx = _build_check_context(pre_text, post_text, dest_dir, map_data)
+    check1_ok, check1_detail = _check1(ctx)
+    check2_ok, check2_detail = _check2(ctx, options)
+    check3_ok, check3_detail = _check3(ctx, options)
+    check4_ok, check4_detail = _check4(ctx)
     return [
         (1, check1_ok, check1_detail),
         (2, check2_ok, check2_detail),
@@ -784,17 +885,14 @@ def run(argv: list[str] | None = None) -> int:
 
     # args.command == "check"
     post_text = args.post.read_text(encoding="utf-8")
+    options = CheckOptions(
+        min_relocated=args.min_relocated,
+        slack=args.slack,
+        rules_mode=args.rules_mode,
+        max_bytes=args.max_bytes,
+    )
     try:
-        results = run_check(
-            pre_text,
-            post_text,
-            args.dest,
-            map_data,
-            args.min_relocated,
-            args.slack,
-            rules_mode=args.rules_mode,
-            max_bytes=args.max_bytes,
-        )
+        results = run_check(pre_text, post_text, args.dest, map_data, options)
     except MapError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
