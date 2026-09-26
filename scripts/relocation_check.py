@@ -554,7 +554,6 @@ class CheckContext:
     """Every derived value the four checks read, computed once so no check
     repeats another's work and every check sees the same snapshot."""
 
-    pre_text: str
     post_text: str
     dest_dir: Path
     map_data: MapData
@@ -563,8 +562,6 @@ class CheckContext:
     pre_units: list[str]
     post_norm: str
     dest_texts: dict[str, str]
-    dest_text_all: str
-    dest_norm_all: str
     pointer_matches: list[re.Match[str]]
     analysis: SectionAnalysis
     lost: list[str]
@@ -603,7 +600,6 @@ def _build_check_context(
             lost.append(unit)
 
     return CheckContext(
-        pre_text=pre_text,
         post_text=post_text,
         dest_dir=dest_dir,
         map_data=map_data,
@@ -612,8 +608,6 @@ def _build_check_context(
         pre_units=pre_units,
         post_norm=post_norm,
         dest_texts=dest_texts,
-        dest_text_all=dest_text_all,
-        dest_norm_all=dest_norm_all,
         pointer_matches=pointer_matches,
         analysis=analysis,
         lost=lost,

@@ -1039,6 +1039,50 @@ class TestCheck4(unittest.TestCase):
         self.assertFalse(check4[1])
         self.assertIn("MOVE dest heading missing", check4[2])
 
+    def test_move_dest_file_missing_fails(self):
+        unit_text = "This unit relocated but its destination file was never written."
+        pre_text = f"# Doc\n\n{unit_text}\n"
+        post_text = "# Doc\n\n"  # unit correctly removed from post
+        anchor = rc.normalize(unit_text)[:60]
+        with tempfile.TemporaryDirectory() as tmp:
+            dest_dir = Path(tmp)
+            # dest_dir intentionally has NO dotfiles-x.md at all -- the
+            # unit is genuinely gone from post, but nowhere to be found.
+            move = rc.MoveRecord(anchor, "dotfiles-x.md", "Heading")
+            map_data = rc.MapData(move_records=[move])
+            results = rc.run_check(pre_text, post_text, dest_dir, map_data)
+        check4 = next(r for r in results if r[0] == 4)
+        self.assertFalse(check4[1])
+        self.assertIn("MOVE dest file missing", check4[2])
+
+    def test_move_unit_not_found_under_heading_fails_directly(self):
+        unit_text = "This unit must land under its own named heading exactly."
+        pre_text = f"# Doc\n\n{unit_text}\n"
+        # A pointer is present, so the "relocated but no pointer" guard
+        # never fires here -- this isolates "not found under heading" as
+        # the ONLY thing check 4 can possibly fail on.
+        post_text = (
+            "# Doc\n\n**Before** touching this **on** widgets, read "
+            "`ai-config/docs/knowledge/dotfiles-x.md` § `Widget`.\n"
+        )
+        anchor = rc.normalize(unit_text)[:60]
+        with tempfile.TemporaryDirectory() as tmp:
+            dest_dir = Path(tmp)
+            # The "Widget" heading is real -- the pointer resolves -- but
+            # its body is unrelated content, not the unit's own text.
+            (dest_dir / "dotfiles-x.md").write_text(
+                "### Widget\n\nCompletely unrelated widget content.\n",
+                encoding="utf-8",
+            )
+            move = rc.MoveRecord(anchor, "dotfiles-x.md", "Widget")
+            map_data = rc.MapData(move_records=[move])
+            results = rc.run_check(pre_text, post_text, dest_dir, map_data)
+        check4 = next(r for r in results if r[0] == 4)
+        self.assertFalse(check4[1])
+        self.assertEqual(
+            check4[2], "MOVE unit not found under heading: dotfiles-x.md § Widget"
+        )
+
 
 class TestCliEndToEnd(unittest.TestCase):
     def test_check_success_path_on_a_tiny_fixture(self):
