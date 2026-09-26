@@ -403,3 +403,7 @@ Task 9 measured the full bullets file at 130,104 B:
 - pointers 18,246 B (85 × ~215 B).
 
 The 90 KB estimate was wrong: unmoved text plus INLINE units alone come to 69 KB. **Operator chose compact pointers.** A pointer is now a suffix on a group's last rule line, `→ \`<dest file>\` § \`<heading>\``, and one legend line near the top of `CLAUDE.md` says the arrow means "read `ai-config/docs/knowledge/<dest file>` at that section". The concrete trigger ("before X on Y") already lives in the rule lines. The trigger-wording premise was argued and never measured; check 8's behaviour test still measures the index-only premise. **Check 3 in bullets mode:** `--max-bytes 120000`.
+
+## Amendment 2026-09-25 (c): cap 123,000
+
+The round-2 review restored rules the authors had missed, which added 2,595 B of rule lines. The result is 122,392 B, over the 120,000 cap that was set from an estimate. The operator chose to keep every rule and raise the cap to `--max-bytes 123000`. The cap remains a bloat guard, not a target.
