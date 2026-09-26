@@ -597,3 +597,34 @@ Method: `/tmp/claude-1000/rv2/pair.py` resolved every MOVE anchor to its unit in
 covered: 71, weakened: 2, missing: 8, wrong: 4
 
 Non-covered: G0 (wrong), G7 (missing), G8 (missing), G18 (missing), G21 (weakened), G39 (missing, borderline), G47 (missing), G50 (wrong), G51 (wrong), G53 (weakened), G59 (missing), G64 (missing), G76 (wrong), G80 (missing). Four of the eight missing verdicts (G7, G39, G59, G80) are (c) items that round 1 and the authors both missed. Round 1 flagged G64's item as a waiver that is really a rule. G8, G18 and G47 lost an (a) sentence containing "must" or its equivalent. Under check 5, all 14 block.
+
+## Block review verdicts — round 3 (scoped)
+
+Reviewed at cfe34a3a by an independent reviewer. The scope is the 14 groups and 4 structure items that round 2 flagged. Fixes are in 8401dbb1 (rules files) and cfe34a3a (CLAUDE.md regenerated). For each group I read the original block in `2e38f5e4:CLAUDE.md` or the knowledge file, the round-2 finding, and the group's lines in `CLAUDE.md` at HEAD, and grepped the code behind each file or function claim. Every rules-file bullet appears verbatim in `CLAUDE.md`, and the pointer count is still 85. Neighbour check: every line that cfe34a3a removed from `CLAUDE.md` belongs to one of the 18 rows below. No unflagged group's rule lines changed.
+
+| group | verdict | detail |
+| --- | --- | --- |
+| G0 test-seams § Test seam idiom | covered | The naming rule is gone. The line now calls a seam a variable with a production default and lists non-`_OVERRIDE_` names. |
+| G7 test-seams § _OVERRIDE_KEYCHAIN_BIN | covered | The unquoted `[[ ${VAR} ]]` rule and the `setopt shwordsplit` companion are both present (`CLAUDE.md:483`). "here" resolves through the lead to `5_general.zsh`. `tests/zshrc.d/unit.bats:591` carries `setopt shwordsplit`. |
+| G8 test-seams § _OVERRIDE_CURRENT_LOGIN_SHELL | covered | The `run_doctor` stub rule is restored. Note, not blocking: "the three end-to-end `run_doctor` tests" is a stale count copied from the original. Five tests stub `_doctor_check_login_shell`: `tests/setup_env/unit.bats` at 1008, 1029, 1439 and 2491, and `tests/setup_env/plugin_node_paths.bats:249`. The fix did not introduce the count and did not correct it either. |
+| G18 test-seams § _AWS_* seams | covered | The plain-assignment rule is restored, and `lib/constants.sh:185` is a plain assignment. The post-import-failure assertion (E5) is restored, and the string it names is at `tests/setup_env/developer.bats:1436`. |
+| G21 test-seams § Cadence heartbeat contract | covered | The "names its source" rule is restored. `lib/launch_agents.sh:78-83` sets `from heartbeat` or `default — heartbeat carries none`. The default of 8 matches `_RENOVATE_CADENCE_MAX_AGE_DAYS=8` (`:19`). |
+| G22 test-seams § Cadence agent PATH (structure) | covered | The lead and trigger now name `LaunchAgents/cadence.plist.template`, which exists. |
+| G23 test-seams § Cadence ntfy delivery (structure) | covered | The lead now names `_rhn_ntfy_target`, which reads both `NTFY_URL` and `NTFY_TOPIC` (`scripts/cadence-notify.sh:90-94`). |
+| G39 conventions § _UPDATE_SECTION_ORDER coupling | covered | The count-audit retraction and the removal-risk rule are both present. "same commit" became "together", with no loss of rule. |
+| G47 conventions § core.hooksPath pin | covered | The `setup()` neutralisation rule and the output contract are both present. Code: `tests/setup_env/git_hooks.bats:30-31` and `lib/git_hooks.sh:449` (`scope\tremedy\tvalue`). |
+| G48 conventions § Homebrew make gnubin prepend (structure) | covered | "this file" is now `.config/.zshrc.d/6_path.zsh` in both lines. |
+| G50 conventions § setup_env.sh non-interactive on Linux | missing: "**`/usr/local/bin` reaches none of the non-interactive actors.** It leads `/usr/bin` in `/etc/paths`, but `/etc/paths` is consumed by `path_helper`, which only **login shells** invoke … A symlink there changes nothing for any of them." | The wrong claim is gone. The generalisation ("interactive-only rc file gates whichever actor sources it") and the hook-mock reason (28 of 36) are restored. But the fix deleted the `/usr/local/bin` trap instead of restating it correctly as a macOS `make` trap. This is a new defect from the fix. Map line 145 assigns that unit to this group's heading. The group's `covers:` line for it was removed, and no rule line in `CLAUDE.md` now carries it. G49, the natural home, has no such line either. Nothing now stops a reader from "fixing" hook or cron `make` resolution on the Studio with a `/usr/local/bin` symlink, which the original says was measured and does nothing. |
+| G51 conventions § tfenv checkout guard | covered | The `-L` branch is now attributed to the loop. Code: guard at `lib/linux_ubuntu.sh:929` returns at `:942`, before the loop at `:946` and its `[[ -L "${_link}" ]]` at `:949`. |
+| G53 testing-toolchain § make test parallel jobs | covered | The unset rule is now test-scoped with the real form (`tests/makefile_parallel_target.bats:21`, `unset MAKEFLAGS MFLAGS MAKELEVEL JOBS`), and the stated reason is correct. "see MAKEFLAGS section" resolves to `CLAUDE.md:625`. |
+| G56 testing-toolchain § uv environment overrides (structure) | covered | The dangling "three-row variable table" sentence is removed. |
+| G59 testing-toolchain § Requirements CI groups: erosion guard | covered | The rule is restored with both test names, which exist at `tests/setup_env/requirements_ci.bats:145` and `:167`, plus the measurement-only admission rule. The reworded `bandit` line ("`test-lint` only") still excludes the CI groups. |
+| G64 testing-toolchain § Pre-push direct-to-master guard | covered | The self-repair rule (branch+PR or `--no-verify`) and the `git diff --name-only <remote-sha>..HEAD` diagnostic are both present. |
+| G76 bats-test-infrastructure § Mock Pattern pointer | covered | The line now truthfully says the table is in `dotfiles-bats-test-infrastructure.md`. Note, not blocking and outside this file's write scope: the pointer's target heading (knowledge file line 217, "…(superseded by this section)") has a body that only says "see dotfiles-bats-test-infrastructure.md", which is the same file. The table itself is at `## Mock Pattern` (line 97). A reader who follows the pointer lands on a circular stub. |
+| G80 bats-test-infrastructure § tests/mocks/curl -o write ordering | covered | The deferred-write rule is restored. Code: the exit code is decided at `tests/mocks/curl:42-46`, before the `-o` write at `:57`. |
+
+### Summary
+
+covered: 17, weakened: 0, missing: 1, wrong: 0
+
+Non-covered: G50 (missing). The fix removed a wrong rule without restating the trap it misplaced. Notes, not blocking: G8's stale "three" test count, and G76's circular target stub in the knowledge file.
