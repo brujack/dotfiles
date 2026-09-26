@@ -1,5 +1,7 @@
 # CLAUDE.md — dotfiles
 
+A trailing `` → `file` § `heading` `` on a rule means: before acting on that rule's subject, read `ai-config/docs/knowledge/<file>` at that heading for the incident history and measurements.
+
 ## Repository Overview
 
 Personal development environment bootstrapping system for macOS and Linux (Ubuntu). Manages shell configs, tool installation, and symlink setup across multiple machine types.
@@ -258,68 +260,33 @@ Uses **BATS** (Bash Automated Testing System), installed natively:
 
 **Run tests:** `make test` (runs lint, the lock and requirements-CI drift checks, the Python suite, then all BATS tests)
 
-`make test` runs bats at `--jobs $(JOBS)` when **GNU** parallel is present, and serially with a notice when it is not. Three things about that are load-bearing:
-
-- **Detection asks what the binary is, not that one exists.** moreutils ships an incompatible `parallel` under the same name, so `command -v parallel` is true for it; `HAVE_PARALLEL` greps `parallel --version` for `^GNU parallel` instead. The guard is required rather than defensive, because bats' own one is inverted: `bats-exec-suite:106` reads `! type -p "$p" && "$p" --version`, so with `parallel` absent the second term invokes the binary just established not to exist, the branch meant to decline is skipped, and `bats --jobs` dies with `command not found`.
-- **`JOBS` defaults to 24 and is validated in pure make at parse time** — no `$(shell)`, no fork. Override it per invocation (`make test JOBS=6`). 24 was selected by measurement under 4-way concurrency, not guessed; [ADR-0035](docs/adr/0035-parallel-bats-under-a-validated-jobs-knob.md) carries the arms and the selection rule. The error names `$(origin JOBS)`, because a command-line `JOBS` reaches a nested make through **both** `MAKEFLAGS` and the recipe environment, so a test that invokes make inside make must unset both to stay discriminating.
-- **The file list is a filesystem walk, not `git ls-files`.** An untracked `.bats` file is exactly what a TDD red step produces, and a tracked-only list would report it green by never running it.
-
-`BATS_SERIAL_FILES` carves a file out of the parallel pool to run alone afterwards. It is empty: the per-file check measured every file clean at `--jobs 12`, and the one that was not was fixed rather than exempted. A name here needs a measurement beside it. `tests/makefile_parallel_target.bats` pins all of the above, including the carve-out branch, by reading `make -n test` output under a from-scratch `PATH`.
-
-**CI takes the parallel path too, and not because the workflow asks for it.** `ubuntu-latest` preinstalls GNU parallel, so `HAVE_PARALLEL` resolves to `yes` on the runner whatever the workflow installs — a claim to the contrary read off `ci.yml` is reading a file with no field for what the image ships (ai-config ADR-0078 Amendment 2). Never pass `JOBS="$(nproc)"`: on a 2-vCPU runner that is two workers, which ai-config's runner data shows is the worst available setting — slower than serial, while a fixed count well above the core count beats it. Figures in ADR-0035. To force serial anywhere, `make test HAVE_PARALLEL=`.
+- Detect GNU parallel by version string (`parallel --version` matching `^GNU parallel`), never by presence — moreutils ships an incompatible `parallel` under the same name, and bats' own absence-guard is inverted, so a fooled detector dies with `command not found`.
+- `JOBS` defaults to 24; override per invocation with `make test JOBS=6`, and never pass `JOBS="$(nproc)"` (worst setting on a 2-vCPU runner).
+- In a **test** that invokes make inside make, `unset MAKEFLAGS MFLAGS MAKELEVEL JOBS` (`tests/makefile_parallel_target.bats:21`) — a command-line `JOBS` reaches the nested make via both `MAKEFLAGS` and the recipe environment, which is why the error names `$(origin JOBS)`. Test-scoped: stripping `MAKEFLAGS` elsewhere also strips `--no-print-directory` (see MAKEFLAGS section).
+- Force serial anywhere with `make test HAVE_PARALLEL=`. The bats file list is a filesystem walk, not `git ls-files` (untracked `.bats` files still run); add to `BATS_SERIAL_FILES` only with a measurement showing failure under `--jobs`. → `dotfiles-testing-toolchain.md` § `make test parallel jobs: detection, JOBS validation, and the CI file list`
 
 **Run unit tests only:** `make test-unit` (runs `unit.bats`, `profiles.bats`, and `zshrc.d/unit.bats`)
 **Run lint only:** `make lint` — `bash -n` over `SHELL_FILES` (derived by `scripts/list-shell-files.sh`, which emits every tracked file whose first line is a bash/sh shebang, including the `tests/mocks/` fixtures and the two extensionless hooks), `zsh -n` over `ZSH_FILES` (12 tracked files: `.zsh`/`.zsh-theme`/`.zshrc`/`.zprofile` plus `config/profiles.sh`, named explicitly), then shellcheck at default severity for `SHELL_FILES` and `--severity=warning` for `.bats`. `ZSH_FILES` is derived from `git ls-files`; `SHELL_FILES` is content-derived rather than pathspec-derived, for the reason in the ShellCheck section below. Both refuse to report a pass on an empty list. When `shellcheck` is absent the lint step skips it and prints an install hint that names the platform's real path: `brew install shellcheck` on Darwin, and `./setup_env.sh -t developer on Ubuntu` elsewhere, because a `brew install` on Linux would put an unmanaged linuxbrew copy ahead of the pinned `/usr/local/bin/shellcheck`. The recipe reads `_OVERRIDE_PLATFORM` (default `uname -s`) so one machine can test both branches; it changes only the printed string.
 
-`config/profiles.sh` is a bash file — it stays in `SHELL_FILES` for `bash -n` and shellcheck — and is also the one deliberate entry in `ZSH_FILES`: `config/profiles.zsh` sources it from both `.zprofile` and `1_init.zsh`, so `zsh -n` must parse it too. One file, both parsers, by design; `tests/scripts/makefile_lint_scope.bats` asserts this is the _only_ `SHELL_FILES`/`ZSH_FILES` overlap and that it is actually present in both, so a future accidental overlap is caught and this deliberate one can't silently disappear. The pathspec is duplicated at two independent call sites — `Makefile`'s `ZSH_FILES` and `.github/workflows/ci.yml`'s `lint-macos` job — and both must carry `config/profiles.sh` together; a fix to one alone leaves the other checking a stale set.
-**`scripts/phrase_check.py`** verifies the CLAUDE.md four-class re-sort: every classified
-paragraph carries a row in `docs/superpowers/plans/phrases.md` anchored to a verbatim phrase,
-and the tool asserts those anchors still hold. Matching is whitespace-normalised and never
-line-oriented, because a hand-wrapped paragraph routinely splits a sentence across a wrap a
-`grep` cannot cross; a phrase that begins a sentence, or opens a paragraph, is rejected as a
-fragile anchor, since a later edit capitalising a leading word would silently break it.
-
-**Its suite runs in `make test`; the tool does not.** `test-python` runs
-`tests/test_phrase_check.py`, so the checker is tested — but nothing runs the checker against
-the real manifest, and its only executable call sites are the `acceptance:` blocks of
-`docs/superpowers/plans/2026-09-21-claude-md-four-class-resort.md`, driven by the orchestrator
-during Phase 2. A green suite at high coverage therefore reads as a gate that does not exist.
-That is deliberate — wiring it would commit every future CLAUDE.md edit to keeping every phrase
-anchor valid, with no owner — but it is deliberate rather than decided: the question is open and
-belongs to that plan's Task 13 close-out. Do not read the suite's coverage as evidence the
-manifest is enforced.
+- Keep `config/profiles.sh` in both `SHELL_FILES` (`bash -n`, shellcheck) and `ZSH_FILES` (`zsh -n`) — it is sourced from `.zprofile` and `1_init.zsh` and must parse under both. Update the pathspec at both call sites, `Makefile`'s `ZSH_FILES` and `ci.yml`'s `lint-macos` job, together, or the other silently checks a stale set.
+- `scripts/phrase_check.py` must verify every classified CLAUDE.md paragraph has a `phrases.md` anchor that still holds, matching whitespace-normalised (never line-oriented, so a wrapped sentence isn't missed) and rejecting any anchor that opens a sentence or paragraph as too fragile.
+- `test-python` only runs the checker's own unit tests, not the checker against the real manifest — that only runs from the four-class-resort plan's `acceptance:` blocks, so do not read this suite's coverage as evidence the manifest is enforced. → `dotfiles-testing-toolchain.md` § `config/profiles.sh dual lint scope; scripts/phrase_check.py manifest checker`
 
 **Install hooks:** `make install-hooks` (installs pre-commit and pre-push hooks; run once per checkout)
 **Sync agent guidance:** `make sync-agent-guidance` (regenerates `.cursor/rules/global-claude-standards.mdc` from root `CLAUDE.md`'s `@~/.claude/standards/*.md` imports, resolved against the global symlinked standards dir)
 **Check agent guidance drift:** `make check-agent-guidance` (fails when generated Cursor guidance is stale)
 
-**The venv is snapshotted before every sync, and that file is the only rollback path.**
-`run_update` writes `pip freeze` to `~/.local/share/dotfiles/venv-snapshots/ansible-<UTC>.txt`
-before applying the lock, keeping the newest 10. This is not belt-and-braces: `uv sync` prunes
-and downgrades, and the pre-sync state is **not reproducible from the lock** — `uv pip install
--r` of the venv's own freeze fails as unsatisfiable, because pip reached that state
-incrementally and the cumulative set is unsolvable. Reverting this repo does not restore the
-venv. To roll back:
-
-```bash
-"$(pyenv which python)" -m pip install --no-deps -r ~/.local/share/dotfiles/venv-snapshots/ansible-<UTC>.txt
-```
+- The venv is snapshotted (`pip freeze`) before every sync, and that snapshot is the only rollback path — `uv sync` prunes and downgrades, and the pre-sync state cannot be reproduced from `uv.lock`. Reverting this repo does not restore the venv.
+- To roll back, run `"$(pyenv which python)" -m pip install --no-deps -r ~/.local/share/dotfiles/venv-snapshots/ansible-<UTC>.txt` — `--no-deps` is required because the resolver refuses the exact state being restored. → `dotfiles-testing-toolchain.md` § `Ansible venv snapshot before every sync (uv sync prune/downgrade, rollback)`
 
 `--no-deps` is required — the state being restored is one the resolver refuses.
 
-**Environment overrides added by the uv work.** All three exist for a stated reason and
-none grants a capability the operator did not already have:
+- `UV_BIN` (`resolve_uv`, `lib/helpers.sh`) is the operator escape hatch and the only seam that can drive the "not executable" branch — PATH mocking cannot remove the absolute fallback candidates.
+- `UV_FALLBACK_PATHS` (`resolve_uv`) holds prefix candidates so a test can reach the genuine not-found branch, otherwise unreachable on any machine with `uv`; it is env-settable as a scalar deliberately, since `UV_BIN`, checked first, already grants the same capability.
+- `REQUIREMENTS_CI_TARGET` (`scripts/sync-requirements-ci.sh`) points the drift check at a fixture, so a test that crashes between mutating and restoring cannot leave a modified tracked `requirements-ci.txt` to be committed by accident. → `dotfiles-testing-toolchain.md` § `Environment overrides added by the uv work (UV_BIN, UV_FALLBACK_PATHS, REQUIREMENTS_CI_TARGET)`
 
-| variable                 | read by                           | why it exists                                                                                                                                                                                                                                   |
-| ------------------------ | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `UV_BIN`                 | `resolve_uv` (`lib/helpers.sh`)   | operator escape hatch, and the only seam a test can use to drive the "not executable" branch — PATH mocking cannot remove the absolute fallback candidates                                                                                      |
-| `UV_FALLBACK_PATHS`      | `resolve_uv`                      | array of prefix candidates. Exists so a test can reach the genuine not-found branch, which is otherwise unreachable on any machine that has `uv`. Env-settable as a scalar, deliberately; `UV_BIN` is checked first and already grants the same |
-| `REQUIREMENTS_CI_TARGET` | `scripts/sync-requirements-ci.sh` | points the drift check at a fixture, so a test that crashes between mutating and restoring cannot leave a modified tracked `requirements-ci.txt` to be committed by accident                                                                    |
-
-**Sync CI requirements:** `make sync-requirements-ci` (renders **all five** CI requirements files from `uv.lock`)
-**Check CI requirements drift:** `make check-requirements-ci` (fails when **any** of the five renderings is stale; a prerequisite of `make test`)
-
-**There are five renderings, deliberately separate files.**
+- `make sync-requirements-ci` renders all five CI requirements files from `uv.lock`; `make check-requirements-ci` fails when any of the five renderings is stale and is a prerequisite of `make test`.
+- There are five renderings, and they are deliberately separate files — never collapse them into one. → `dotfiles-testing-toolchain.md` § `Sync/check CI requirements commands and the five renderings`
 
 | file                           | group         | pins | consumers                   |
 | ------------------------------ | ------------- | ---- | --------------------------- |
@@ -329,48 +296,31 @@ none grants a capability the operator did not already have:
 | `requirements-ci-mutation.txt` | `ci-mutation` | 30   | mutation jobs               |
 | `requirements-ci-audit.txt`    | `ci-audit`    | 28   | dependency-audit steps      |
 
-Do not harmonise them — `tests/setup_env/requirements_ci.bats` asserts distinctness across two tests: "the two renderings are different files with different content" (`test-lint` vs `runtime`) and "all four renderings are distinct files" (three pairwise diffs over `test-lint`, `runtime`, `ci-test`, `ci-mutation`). `requirements-ci-audit.txt` has a drift assertion but no distinctness assertion — four of the five are pinned, not all five.
+- Never harmonise the five requirements-CI renderings — `tests/setup_env/requirements_ci.bats` asserts distinctness: `test-lint` differs from `runtime`, and `test-lint`/`runtime`/`ci-test`/`ci-mutation` are four pairwise-distinct files. → `dotfiles-testing-toolchain.md` § `Requirements CI groups: do not harmonise (distinctness tests)`
 
-**The CI groups are not "test-lint minus the unused bits", and that shape was measured and rejected rather than skipped.** Dropping every genuinely-uninvoked tool takes the test-lint rendering 80 → 73, so a consumer running three tools still installs 70 it never runs. The useful boundary is **purpose**, not CI-versus-local: `ci-test` is exactly what a per-PR `test`/`lint` job runs, `ci-mutation` exactly what a mutation job runs. Measured 2026-09-08: etch-cli runs `ruff`, `pytest` and `pytest-cov` and needs **19 pins instead of 80** — 61 fewer packages on every PR. (It was 11 when the group was cut; `hypothesis` and its transitive set are the growth, admitted deliberately — see the erosion guard below.)
+- Scope CI requirements groups by purpose, not by pruning uninvoked tools — pruning still leaves a rendering installing packages a consumer never runs (test-lint 80→73 still left 70 unused for a 3-tool consumer). Not a deletion problem: the packages belong in the venv; each group installs only what its own job runs (`ci-test` = per-PR test/lint, `ci-mutation` = mutation).
+- Keep `bandit`, `radon` and `vulture` in `test-lint` only — `bandit` runs via `security-review` on a dev machine, not CI; skills are a caller class a repo-only sweep can't see (`pip-audit`, `hypothesis` too).
+- Never put provenance (a `uv.lock` SHA) in a rendering's header — a `runtime`-group edit moves `uv.lock` without changing `test-lint`'s export, forcing a re-render on unrelated changes. Provenance belongs on a consumer's own copy, at copy time.
+- `ci-test`'s boundary is stated in `pyproject.toml` and **guarded by a test, not by review**: `ci-test carries none of the mutation whales` fails if `sqlalchemy`/`aiohttp`/`gitpython`/`yarl`/`frozenlist`/`multidict` ever appear there, and `ci-test is materially smaller than the full test-lint rendering` fails if the two converge. Add a tool only on a measurement, as `hypothesis` was — never because "that is where tools go". → `dotfiles-testing-toolchain.md` § `Requirements CI groups: purpose over CI/local, and the erosion guard`
 
-**The framing that matters, because it was wrong for most of the design: this was never a deletion problem.** The packages are legitimately in the venv — a human might use any of them — and the defect was that CI inherited the venv's shape. Nothing needed removing from anywhere; a job just needed to stop installing what it does not run. The groups are purely additive: the lock is unchanged at 269 packages and no machine's venv moves.
+- The drift gate only verifies a rendering is faithful to its declared group — a package in the wrong group still renders faithfully and passes, so a green `check-requirements-ci` is not evidence about grouping (`cosmic-ray` sat wrongly grouped through every green run for months).
+- `requirements-ci.txt` is a rendering of `pyproject.toml` plus `uv.lock`, not a declaration — never hand-edit it.
+- `uv export` is not byte-deterministic (its header echoes the invoking argv), so `scripts/sync-requirements-ci.sh` must strip and replace that header, or the drift gate fires on every PR; the Makefile guard must skip cleanly when `uv` is absent, and CI must install a pinned, checksum-verified `uv`. → `dotfiles-testing-toolchain.md` § `Requirements CI groups: drift-gate blindness and uv export determinism`
 
-**`ci-test`'s boundary is stated in `pyproject.toml` and guarded by a test, not by review.** The predicted failure is erosion — a repo needs one more tool, it lands in `ci-test` because that is where tools go, and in a year `ci-test` is the union again. `ci-test carries none of the mutation whales` fails if `sqlalchemy`, `aiohttp`, `gitpython`, `yarl`, `frozenlist` or `multidict` ever appear there, and `ci-test is materially smaller than the full test-lint rendering` fails if the two converge. `hypothesis` is the first instance of that pressure and is admitted deliberately, on a measurement rather than a principle: it costs 2 packages against the cost of a third group.
+- The pre-commit hook is required: run `make lint` (blocks on any syntax/shellcheck failure), then `ggshield secret scan pre-commit` (scans staged changes for secrets before they reach the remote).
+- Resolve `ggshield` by explicit override, then `PATH`, then absolute prefixes — never `command -v` alone — since a git hook inherits whoever invoked `git`, and an interactive-only `PATH` prepend makes `ggshield` invisible to cron and `ssh host '<cmd>'`.
+- If `ggshield` is unresolvable, exit 0 (a machine lacking it must still be able to commit the fix that installs it) but announce the skip twice on stderr — never silently. → `dotfiles-testing-toolchain.md` § `Pre-commit hook: make lint and the ggshield actor-boundary resolution`
 
-**`bandit`, `radon` and `vulture` stay in `test-lint` and are absent from every CI group, which is the point.** `bandit` is invoked by `security-review/SKILL.md:110` — a Phase 3 gate that runs on a developer machine, so `test-lint` is exactly its right home and `ci-test` exactly the wrong one. A repo-only sweep cannot see that call: **skills are a caller class living outside every repo**, and `pip-audit` and `hypothesis` are skill-invoked too. `radon` and `vulture` are named by `python.md:102-103` as advisory tooling; the operator's ruling is that they stay.
+- The pre-push hook is permanent — it runs `make test` (lint + bats) on every push and fails closed: the suite runs unless every changed path is provably inert, and an unresolvable diff range also fails closed rather than reading as no-change.
+- `docs/` and `.github/` are **not** wholesale-inert: `make lint`'s `SHELL_FILES` walk is recursive, so any `.sh` file anywhere in the repo — including under `docs/` or `.github/` — is linted by `make test` and must still trigger the suite. → `dotfiles-testing-toolchain.md` § `Pre-push hook: fail-closed inert-path set`
 
-**Provenance does not go in these headers, and that is load-bearing.** A `runtime`-group edit moves `uv.lock` without changing the `test-lint` export, so a `uv.lock` SHA in that header would demand a re-render whose only effect is one header line — a gate firing on correct state, forever. Provenance belongs on a _consumer's_ copy, written at copy time.
+- `scripts/pre-push` must resolve repo root with `git rev-parse --show-toplevel` first, falling back to the `git rev-parse --git-common-dir` parent only if that fails — direct `--git-common-dir` resolution can test the shared checkout instead of the active worktree branch.
+- `scripts/pre-push` must `unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE` before invoking `make test`, and that line must stay below the range-resolution loop (which needs the git environment) — without the strip, a worktree push leaks `GIT_DIR` into every fixture-building test and `git -C <fixture>` silently operates on the leaked repo instead. → `dotfiles-testing-toolchain.md` § `Pre-push hook: worktree root resolution and git env strip`
 
-**The drift gate cannot see a wrong-group declaration.** It verifies each rendering is faithful to its group; a package in the wrong group renders faithfully and passes. `cosmic-ray` sat in `runtime` through every green run until 2026-08-21 (#231), and was found by enumerating five repos' CI by hand — which is not a mechanism. A green `check-requirements-ci` is not evidence about grouping.
-
-`requirements-ci.txt` is a **rendering, not a declaration** — `pyproject.toml` plus `uv.lock` are the source. It exists so the other repos' CI can `pip install -r` it with stock pip and no `uv` on the runner; verified on macOS and Linux, 80 packages and 655 enforced hashes (measured 2026-09-08). Never hand-edit it.
-
-Two properties are load-bearing and were measured rather than assumed. **`uv export` is not byte-deterministic** — its header echoes the argv it was given, including an absolute `--project` path, so `scripts/sync-requirements-ci.sh` strips that header and writes a fixed one; without this the drift gate would fire on every PR forever. And **the Makefile guard skips when `uv` is absent**, matching lint's `shellcheck` idiom, so CI installs a pinned checksum-verified `uv` to keep the check from being inert exactly where it is the real gate.
-
-The pre-commit hook is **required**. It runs on every `git commit`:
-
-1. `make lint` — blocks the commit on any syntax or shellcheck failure
-2. `ggshield secret scan pre-commit` — scans staged changes for secrets before they reach the remote. **Resolved by explicit override, then `PATH`, then absolute prefixes — not by `command -v` alone — and the skip is announced on stderr, never silent.** A git hook is not an actor of its own: it inherits whoever invoked `git`. Measured 2026-08-21 on the Linux workstation, where ggshield 1.53.0 is installed and authenticated at `/home/linuxbrew/.linuxbrew/bin/ggshield`: `zsh -i -c` resolves it, while `zsh -l -c`, `ssh host '<cmd>'`, cron and `env -i sh` all report NOT-ON-PATH, because that prefix reaches `PATH` only through `.config/.zshrc.d/6_path.zsh`, which interactive zsh alone sources. Under the previous bare `command -v` guard the scan ran from a terminal and silently did not run for any of the others — **the gate was not absent, it was invisible**, which is the worse of the two for a security arm because silence is indistinguishable from "scanned and found nothing". This is the same actor-boundary class as the `make` 3.81/4.4.1 split documented above, for a different tool on a different platform. The absent case still exits 0 — a machine lacking ggshield must be able to commit the change that installs it — but it now says so twice on stderr
-
-The pre-push hook is **permanent**. It runs `make test` (lint + bats) on every push before the push reaches GitHub, and it **fails closed** (ADR-0017, `docs/adr/0017-pre-push-trigger-fail-closed.md`): the suite runs unless every changed path is provably inert, and it also fails closed if `git diff` itself cannot resolve the push's revision range (e.g. `remote_sha` names an object the local checkout lacks) rather than silently reading that as "nothing changed". The inert set is deliberately small — `.md` files, `.yml`/`.yaml` files under `.github/`, and `LICENSE` — and is matched with `grep -qv`, so a single changed path outside that set is enough to trigger the run. `docs/` and `.github/` are **not** wholesale-inert: `make lint`'s `SHELL_FILES` walk is recursive, so a `.sh` file anywhere in the repo — including `docs/gen.sh` or `.github/scripts/foo.sh` — is linted by `make test` and must still trigger the suite. This means `starship.toml`, `.zshrc`, `.gitignore_global`, and `ubuntu_common_packages.txt` all trigger the suite even though none is a `.sh`/`.bats`/`.zsh` file, because none is in the inert set. Skips branch deletions. This conserves GitHub Actions minutes — CI runs only on PRs.
-
-**Worktree compatibility requirement:** `scripts/pre-push` must resolve repo root with `git rev-parse --show-toplevel` first, and use `git rev-parse --git-common-dir` parent only as a fallback. Direct `git-common-dir` resolution can run tests against the shared checkout instead of the active worktree branch.
-
-**Git env strip requirement:** `scripts/pre-push` must `unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE` before invoking `make test`, and that line must stay **below** the range-resolution loop, which legitimately needs the git environment. Git exports `GIT_DIR` into the hook only when the push originates from a worktree; without the strip, every suite that builds a git fixture inherits it and `git -C <fixture>` silently operates on the leaked repo instead — measured at 90 failures, with the local test gate effectively absent for the standard worktree workflow. Covered by `tests/scripts/pre_push.bats` ("clears inherited git repo-location vars"), which fails if the line is removed.
-
-**Direct-to-master guard:** `scripts/pre-push` refuses a push whose `remote_ref` is `refs/heads/master` when the diff carries an executable-class path — `*.sh`, `*.bash`, `*.bats`, `*.zsh`, `Makefile`, and the extensionless `scripts/pre-push` / `scripts/commit-msg`. It exits 1, names the offending paths on stderr, and does not run `make test`. Why: `.github/workflows/ci.yml` triggers on `pull_request` only, so a code change pushed straight to master is validated by nothing. Measured 2026-09-11 over 30 days — 263 direct-to-master commits, of which 254 are docs-only and permitted and 3 are `renovate.json` which `git-workflow.md` also permits, leaving 5 genuine code pushes, all from a single session. The background rate outside that session is zero, which is why the guard is local and free rather than a `push:` trigger costing ~3,700 ubuntu-minutes a month to catch nothing.
-
-The scope is **deliberately narrower** than `sdlc-branch-guard.sh`'s `is_safe_file`, and the exclusions are chosen rather than overlooked: `.zshrc`, `starship.toml`, `.shellcheckrc` and `.github/workflows/*.yml` stay pushable direct, and `tests/mocks/*` is extensionless shell the class does not match. The workflow case is the widest remaining hole and carries its own backlog row — those files are inert to this hook _and_ uncovered by CI.
-
-Two implementation constraints, both load-bearing. The verdict **accumulates in a flag inside the stdin loop and is read after it**, never `exit`ing mid-loop, for the same reason the existing range resolution drains every ref line: one push can send a real branch and a deletion together. And the refusal is checked **before** the `needs_test` early-exit, because an inert-but-unsafe path would otherwise skip the guard along with the suite.
-
-**The guard evaluates the push RANGE, not the tip commit, and the first person to hit that will read it as a false positive.** A docs-only commit stacked on an unpushed executable-class commit is refused, correctly — both commits would reach master. Verified end-to-end against a real `git push` rather than the bats harness: a `README.md`-only commit pushed to master from a branch still carrying an unpushed `deploy.sh` was refused naming `deploy.sh`, while the same commit from a clean base landed. If a docs push is refused and names a file you did not touch in that commit, check `git diff --name-only <remote-sha>..HEAD` before assuming the guard is wrong.
-
-**`scripts/pre-push` is itself executable-class, so a defective guard cannot be repaired by a direct push to master.** The fix needs a branch and a PR, or `--no-verify`. That is deliberate rather than an oversight — the escape hatch is the workflow the guard exists to enforce — but it is worth knowing before you need it at speed.
-
-**Twelve tests in `tests/scripts/pre_push.bats` push to a feature ref deliberately — do not switch them back to master.** Their subject is the inert set (does this path make the suite run), not master policy; they named `refs/heads/master` only because that is what the harness author typed. Under the guard, master would answer for them and retire what they assert. One did exactly that before it was re-pointed: `pre-push propagates a make test failure as a non-zero exit` went **green while testing nothing**, because `status -ne 0` is satisfied by the refusal as readily as by the make failure it exists to pin. Mutation-confirmed after re-pointing — flipping its make mock from exit 1 to exit 0 turns it red.
-
-The CI `secret-scan` job (gitleaks) is a backstop, not a substitute for local scanning. Install ggshield: `brew install gitguardian/tap/ggshield && ggshield auth login`.
+- Refuse any push to `refs/heads/master` whose diff carries an executable-class path (`*.sh`, `*.bash`, `*.bats`, `*.zsh`, `Makefile`, or the extensionless `scripts/pre-push`/`scripts/commit-msg`) — `ci.yml` triggers on `pull_request` only, so nothing else validates a direct-to-master code push.
+- Accumulate the refusal in a flag inside the stdin loop, read it after the loop finishes (never exit mid-loop — one push can carry a branch and a deletion together), and check it **before** the `needs_test` early-exit, or an inert-but-unsafe path skips the guard too.
+- Evaluate the refusal against the whole push RANGE, not the tip commit: a docs-only commit stacked on an unpushed executable-class commit is still refused, since both would reach master. If a docs push is refused naming a file you did not touch in that commit, run `git diff --name-only <remote-sha>..HEAD` before assuming the guard is wrong. Never repoint the twelve `tests/scripts/pre_push.bats` tests from their feature ref to master, or they stop testing the inert-set logic and start testing this guard.
+- `scripts/pre-push` is itself executable-class, so a defective guard needs a branch and a PR to fix — or `--no-verify` — never a direct push to master. → `dotfiles-testing-toolchain.md` § `Pre-push hook: direct-to-master guard (executable-class paths)`
 
 ### ShellCheck
 
@@ -447,46 +397,20 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 #### Bash
 
-- **The instrumented set is `setup_env.sh` plus tracked `config/*.sh`, `lib/*.sh`, `scripts/*.sh` and the two extensionless hooks (`scripts/pre-push`, `scripts/commit-msg`), derived from `git ls-files` at run time, less `scripts/bash-tracer.sh`.** It was a 13-entry literal array until 2026-08-07, covering 13 of 36 tracked `.sh` files, so the previously published 91% was computed over 36% of the repo. An omitted file left the percentage unchanged rather than lowering it, which is why nothing surfaced it. The predicate is _reached by the suite_, not _lives in a particular directory_ — `lib/detect_env.sh` sources `config/profiles.sh` and `lib/git_hooks.sh` sources `config/hook_repos.sh`. Check what is measured:
-  ```bash
-  bash scripts/run-bash-coverage.sh --list-sources
-  ```
-- **`scripts/` was outside the set until 2026-08-09, and the stated reason for that was wrong.** This bullet used to read "nothing under test sources them, so instrumenting them would add only zeros to the denominator." Measured 2026-08-08: all 19 tracked files under `scripts/` are executed by the bats suite, between 2 and 29 times each — `whats-new-anthropic.sh` 29, `bootstrap_linux.sh` and `sync-agent-guidance.sh` 15 apiece. The tracer enables tracing through `BASH_ENV`, which non-interactive bash subprocesses inherit, so their trace lines were already being collected and then discarded by a predicate that globbed only `config/` and `lib/`. The exclusion was asserted, never measured. The predicate has since widened to include `scripts/`, which is why the instrumented set now reads 34 of the 35 files the predicate matches, rather than 16 — this history is kept here as the record of what the wrong claim cost, not as a live caveat.
-- **`scripts/bash-tracer.sh` is the sole remaining exclusion, and it is measured rather than asserted.** `set -x` is its last command, so nothing before it can be traced and nothing follows it to trace. A real run against it attributes zero trace lines to the file — verified directly:
-  ```bash
-  _COV_TRACE_FILE=$PWD/tr.txt BASH_ENV=scripts/bash-tracer.sh bash -c 'x=1; y=2'
-  grep -c 'bash-tracer.sh' tr.txt   # -> 0
-  ```
-- **`git ls-files` rather than a filesystem glob is load-bearing, not stylistic.** `config/local.sh` is machine-local and git-ignored, but it exists on developer machines and not on a CI runner — a glob would put it in the denominator locally and leave it out in CI, so the same commit would measure two different sets. Deriving from the tracked set makes local and CI agree by construction rather than by coincidence.
-- **The denominator counts commands, not source lines.** bash xtrace emits one line per _command_, so any construct where one command spans several lines inflates the count with lines no test can ever reach. Four classes are excluded, each verified against real `bash -x` output rather than assumed:
-  - **Heredoc bodies and terminators, in any form** — `<<` and `<<-`, any interpreter (not just bash's own `usage()` blocks) — because a heredoc body can contain arbitrary text, including lines that would otherwise parse as commands, comments, or continuations of their own.
-  - **Multi-line `python3 -c "..."` bodies** — 54 of `lib/package_capture.sh`'s 107 counted lines. It reported 22% against a ceiling it could not reach; it now reads 45% of 53 real bash lines.
-  - **Multi-line array literals** — `declare -A M=(\n [a]=1\n)` traces as a single `M=([a]=1)`. That was 13 of `config/profiles.sh`'s 15 lines and 8 of `lib/helpers.sh`'s.
-  - **Pure-argument backslash continuations** — a continuation line whose only content is more arguments to the command the backslash opened. A continuation that itself begins or contains `||`, `&&`, `|`, or `;` is **not** excluded, because bash starts tracing a new command at that point regardless of the backslash — it is counted like any other command.
+- Derive the instrumented set from `git ls-files`, never a glob — `config/local.sh` is git-ignored and machine-local, so a glob would diverge from CI. Set: `setup_env.sh` plus tracked `config/*.sh`, `lib/*.sh`, `scripts/*.sh` and the two extensionless hooks, less `scripts/bash-tracer.sh`. The predicate is "reached by the suite" via `BASH_ENV` tracing, not "lives in a directory" — a directory-only predicate silently discards already-collected trace lines, which is how `scripts/` was wrongly excluded, on a claim that was asserted, never measured.
+- Check the current set: `bash scripts/run-bash-coverage.sh --list-sources`. → `dotfiles-bash-coverage.md` § `Instrumented set: git ls-files derivation and the scripts/ history`
+- The denominator counts commands, not source lines — bash xtrace emits one line per command. Exclude: heredoc bodies/terminators (any interpreter); multi-line `python3 -c "..."` bodies; multi-line array literals (trace as one line — cost `config/profiles.sh` 13 of its 15 lines and `lib/helpers.sh` 8); and pure-argument backslash continuations (only more arguments — **not** excluded if it begins or contains `||`, `&&`, `|`, or `;`). A one-line instance of any of the four is still counted normally.
+- Never add a function-declaration exclusion — tried and removed on evidence: a real trace showed `lib/detect_env.sh` line 4 traced twice (source, then re-source under an active `set -x`), so the assumption was wrong, not just too broad. → `dotfiles-bash-coverage.md` § `Denominator counts commands, not source lines (heredocs, python -c, arrays, continuations)`
+- The coverable-line denominator is the union of the static heuristic's count and whatever the real trace actually contains — never the heuristic alone — so `covered <= coverable` holds by construction: a wrongly-excluded line raises the denominator (and numerator) rather than lowering the percentage. Each run prints every union-added line as a heuristic-disagreement count; read that count beside the ratio from the same run, never a ratio from a different one.
+- Treat `covered > coverable` as a hard, loud non-zero exit, never a silent clamp — it means an exclusion heuristic over-matched, and the run must fail rather than report a number nobody can trust.
+- Inspect a file's denominator or a run's coverage against a real trace: `bash scripts/run-bash-coverage.sh --count-coverable <file>` and `--file-coverage <file> <trace>`. → `dotfiles-bash-coverage.md` § `Denominator is the union of the heuristic and the real trace`
 
-  Single-line forms of all four still count.
-
-- **A function-declaration exclusion was tried and removed on evidence, not preference.** The heuristic once dropped lines like `detect_env() {` from the coverable count on the theory that bash doesn't consistently trace them. A real tracer run over the bats suite showed the opposite for roughly 150 instances: `lib/detect_env.sh` line 4 was traced twice, once for the source and once when a caller re-sources it under an already-active `set -x`. The rule was deleted outright rather than narrowed, because the mechanism it assumed was wrong, not just its scope.
-- **The denominator is the union of the static heuristic's coverable-line count and whatever the trace file actually contains for that file, never the heuristic alone.** This is what makes `covered <= coverable` hold by construction rather than by luck — every traced line is by definition a member of the union, so it can never exceed it. A wrongly-excluded line therefore raises the denominator (and the numerator, since the trace hit it) rather than silently lowering the percentage; an over-matching exclusion rule can never manufacture a higher score. Each run prints every union-added line as a **heuristic disagreement** — the heuristic said not-coverable, the trace disagreed — so a systematically wrong exclusion rule stays visible instead of being absorbed into a bigger denominator. A non-zero count is a to-do against the heuristic, not a failure of the gate, and it moves with coverage: widening what the suite executes surfaces more traced lines. **Read it beside the ratio from the same run, never a ratio from another one.** A union-added line raises numerator and denominator together, so a count and a ratio from different runs describe a pair that never existed.
-- **`covered > coverable` is now a hard, loud non-zero exit — replacing a silent clamp that had been hiding real over-matches.** Before the union approach, `lib/detect_env.sh` read 24/24 = 100% while the trace actually emitted 25 distinct lines for it; the clamp absorbed the discrepancy instead of surfacing it. Under the union rule that discrepancy cannot occur by construction, so a `covered > coverable` result now means an exclusion heuristic double-counted or otherwise over-matched, and the run fails rather than reports a number nobody can trust.
-
-  Inspect one file's denominator, or a full run's coverage against a real trace, without waiting on the bats suite:
-
-  ```bash
-  bash scripts/run-bash-coverage.sh --list-sources
-  bash scripts/run-bash-coverage.sh --count-coverable lib/helpers.sh
-  bash scripts/run-bash-coverage.sh --file-coverage lib/helpers.sh /path/to/trace
-  ```
-
-- Publish CI's bash coverage figure in the PR body once CI has run (`gh pr edit <n>`); a local run is a preview, labelled as one.
-- `make bash-coverage` measures via PS4 xtrace (`scripts/run-bash-coverage.sh`).
-- Before recording or publishing a bash coverage figure, or editing `scripts/run-bash-coverage.sh` or `scripts/bash-tracer.sh`, read `~/git-repos/personal/ai-config/docs/knowledge/dotfiles-bash-coverage.md` (method, floors and ceilings, reading the figure).
+- Publish CI's bash coverage figure in the PR body once CI has run (`gh pr edit <n>`); a local run is a preview and must be labelled as one. → `dotfiles-bash-coverage.md` § `covered > coverable is now a hard exit; publishing and reading the figure`
 
 ### Test Seams
 
-See `~/git-repos/personal/ai-config/docs/knowledge/dotfiles-bats-test-infrastructure.md` for the full override env var table (moved to ai-config per ADR-0020).
-
-Pattern: `local _file="${_OVERRIDE_VAR:-$(dirname "${BASH_SOURCE[0]}")/real/path}"`. Tests set the var and pass a writable temp copy; production code leaves it unset.
+- A test seam is a variable with a production default — `local _file="${VAR:-<real path>}"` — not a naming rule: seams below are named `_RUSTUP_INIT_*`, `GGSHIELD_BIN`, `LEDGER_BIN`, `_AWS_*`, `_RHN_*`, `_CARGO_BIN`, and more.
+- In tests, set the seam variable to a writable temp copy; leave it unset in production code. → `dotfiles-test-seams.md` § `Test seam idiom and override pattern`
 
 **`_RUSTUP_INIT_URL` / `_RUSTUP_INIT_SHA256` / `_RUSTUP_INIT_BIN` / `_OVERRIDE_CARGO_BIN_DIR`
 (`lib/linux_ubuntu.sh`'s `_install_rustup_rs`) exist because every test runs against a fake
@@ -495,25 +419,13 @@ and reach the network** — `tdd.md` E2, a test whose _failing_ branch touches t
 world. `_OVERRIDE_CARGO_BIN_DIR` selects the directory the idempotency guard reads, making
 both "already installed" and "absent" reachable without a real toolchain.
 
-**`_RUSTUP_INIT_SHA256` is exposed rather than mocking `sha256sum`, and that is the load-bearing
-choice.** There is no `sha256sum` mock and there must not be one: supplying the expected digest
-keeps the real check running, so a mismatch is genuinely exercised in both directions. Mocking
-the verifier would make every one of those assertions vacuous — the absence-claim failure
-`behavior.md` names. The suite's positive control is the mismatch case, which asserts the spy
-binary **never ran**, not merely that the function returned 1.
+- `_RUSTUP_INIT_SHA256` (`lib/linux_ubuntu.sh:_install_rustup_rs`)
+  - Never mock `sha256sum`; supply the real digest via `_RUSTUP_INIT_SHA256` so a mismatch is genuinely exercised in both directions.
+  - `tests/mocks/curl` never fetches — it writes `MOCK_CURL_STDOUT` to the `-o` target (or touches it when unset); compute the success-path digest over `MOCK_CURL_STDOUT`'s exact bytes, never a separate fixture file the mock never copies. → `dotfiles-test-seams.md` § `Rustup signature verification seams (_RUSTUP_INIT_URL / _RUSTUP_INIT_SHA256 / _RUSTUP_INIT_BIN / _OVERRIDE_CARGO_BIN_DIR)`
 
-Note `tests/mocks/curl` does not fetch: it writes `MOCK_CURL_STDOUT` to the `-o` target, or
-`touch`es it when unset. A digest taken over a separate fixture file the mock never copies
-cannot match, so the success-path test computes its digest over `MOCK_CURL_STDOUT`'s exact
-bytes.
-
-**`_OVERRIDE_NVIDIA_GPU_PRESENT` / `_OVERRIDE_NVIDIA_KEYRING` / `_OVERRIDE_NVIDIA_LIST`
-(`_nvidia_gpu_present`, `_install_ubuntu_nvidia`).** `lspci` is **not** mocked, and the suite
-runs on a machine with no NVIDIA card, so the install branch is otherwise unreachable — the
-first seam is what makes both branches testable. The other two redirect the keyring and apt
-source list at fixtures, so no test writes to `/usr/share/keyrings` or
-`/etc/apt/sources.list.d`. See ADR-0029 for why the gate is hardware rather than a `HAS_*`
-capability.
+- `_OVERRIDE_NVIDIA_GPU_PRESENT` (`lib/linux_ubuntu.sh:_nvidia_gpu_present`, `_install_ubuntu_nvidia`)
+  - `lspci` is never mocked; `_OVERRIDE_NVIDIA_GPU_PRESENT` is what makes both the install and skip branches testable on a machine with no NVIDIA card.
+  - Point `_OVERRIDE_NVIDIA_KEYRING`/`_OVERRIDE_NVIDIA_LIST` at fixtures so no test ever writes to the real `/usr/share/keyrings` or `/etc/apt/sources.list.d`. → `dotfiles-test-seams.md` § `NVIDIA GPU detection seams (_OVERRIDE_NVIDIA_GPU_PRESENT / _OVERRIDE_NVIDIA_KEYRING / _OVERRIDE_NVIDIA_LIST)`
 
 **`_OVERRIDE_DOCKER_DAEMON_JSON` (`_install_ubuntu_nvidia`) and `tests/mocks/nvidia-ctk` are
 a pair, and the mock is load-bearing rather than a convenience.** The seam points the
@@ -528,23 +440,11 @@ because macOS has no `nvidia-ctk`**, so a green local run is not evidence for th
 before/after comparison has something to observe, and `MOCK_NVIDIA_CTK_EXIT` drives the
 failure path.
 
-**`brew_install_cask` / `brew_cask_installed` (`lib/helpers.sh`) are a separate pair from the
-formula helpers, deliberately.** `brew_formula_installed` greps `brew list --formula` in
-_both_ branches, so an installed **cask** never matches there and the caller would reinstall
-it on every setup run — an idempotency break, which `code-standards.md` treats as a bug rather
-than a tradeoff. Found via `codex`, which is a Cask on Linux as well as macOS.
-`tests/mocks/brew` already branches on `--cask` and reads `MOCK_BREW_LIST_CASK`, so no new
-mock was needed.
+- `brew_install_cask`/`brew_cask_installed` (`lib/helpers.sh`)
+  - Use `brew_install_cask`/`brew_cask_installed` for a Cask, never `brew_formula_installed` — it greps `brew list --formula` in both branches, never matches an installed cask, and the caller reinstalls it every run. → `dotfiles-test-seams.md` § `brew_install_cask / brew_cask_installed seam`
 
-**`config/profiles.zsh` is the single zsh-side derivation of `PROFILE`, `HAS_*`, and the
-eight legacy identity variables (`LAPTOP`, `STUDIO`, `RECEPTION`, `RATNA`, `OFFICE`, `HOMES`,
-`WORKSTATION`, `CRUNCHER`) from `config/profiles.sh`'s table.** Both `.zprofile` (login) and
-`.config/.zshrc.d/1_init.zsh` (interactive) source it, so a login+interactive shell runs it
-twice in one process — the same pattern `1_init.zsh`'s own `${NOBLE+x}` guard exists for.
-`lib/detect_env.sh` derives the identical eight variables on the bash side; `tests/zshrc.d/
-cross_shell.bats` asserts both shells produce the same `PROFILE`/`HAS_*` set for every table
-key, which is the property the pre-existing test suite could not check because its own
-oracle was derived from the same wired-only table it was testing.
+- `config/profiles.zsh` and `lib/detect_env.sh` must derive `PROFILE`/`HAS_*`/all eight legacy identity vars from the same `config/profiles.sh` table; `tests/zshrc.d/cross_shell.bats` asserts both shells agree on every table key.
+- `tests/helpers/legacy_oracle.bash` must stay hand-typed, never derived from `PROFILE_LEGACY` — a derived oracle would agree with a mis-mapped table entry and pass silently. → `dotfiles-test-seams.md` § `config/profiles.zsh and the legacy identity oracle`
 
 **`tests/helpers/legacy_oracle.bash` is that shared oracle, sourced by both
 `tests/setup_env/profiles.bats` and `tests/zshrc.d/profiles.bats`, and it is deliberately
@@ -571,271 +471,67 @@ _are_ named host-specifically elsewhere -- `tests/setup_env/profiles.bats:94` an
 not touch, which is why those two stay green. The qualifier is the whole criterion: drop it and a
 two-second grep appears to refute the rule.
 
-`tests/helpers/legacy_oracle.bash` carries a `#!/usr/bin/env bash` shebang, which is
-what puts it in `make lint`'s scope — `scripts/list-shell-files.sh` derives scope from
-first-line shebangs, not filenames, so this file is linted by the same mechanism as the
-extensionless hooks, not because its `.bash` extension happens to match a pathspec.
+- `config/profiles.zsh` must use `export`, never `readonly` — it is sourced twice per login+interactive shell, and a `readonly` reassignment on the second source makes that `source` return 126, silently degrading shell identity.
+- `lib/detect_env.sh`'s `detect_env()` runs exactly once per bash process, so `readonly` there is correct; do not "fix" one file to match the other. → `dotfiles-test-seams.md` § `config/profiles.zsh export vs lib/detect_env.sh readonly`
 
-**`config/profiles.zsh` uses `export`; `lib/detect_env.sh` uses `readonly` — this is
-deliberate, not drift, and a future reader will otherwise "fix" one to match the other.**
-The zsh file is sourced twice per login+interactive shell, and a `readonly` reassignment on
-the second pass makes that `source` return 126 — silently degrading the shell's identity
-rather than crashing it outright, since nothing else in the chain checks that exit code.
-`lib/detect_env.sh`'s `detect_env()` runs exactly once per bash process, so `readonly` there
-is safe and keeps the guarantee that nothing later in the process can mutate identity.
-Neither scope modifier is a stray choice; each is correct for how often its file re-runs.
+- `_OVERRIDE_HOMEBREW_PREFIX_ARM`/`_OVERRIDE_HOMEBREW_PREFIX_INTEL` (`.config/.zshrc.d/5_general.zsh`)
+  - Drive both "present" and "absent" through the override, never through the real filesystem — both real prefixes (`/opt/homebrew`, `/usr/local/opt`) exist on any provisioned mac, so an unset override short-circuits the guard and asserts nothing. → `dotfiles-test-seams.md` § `_OVERRIDE_HOMEBREW_PREFIX_ARM / _OVERRIDE_HOMEBREW_PREFIX_INTEL seam`
 
-**`_OVERRIDE_HOMEBREW_PREFIX_ARM` / `_OVERRIDE_HOMEBREW_PREFIX_INTEL`** replace the
-hostname-keyed branches that used to stand in for "which Homebrew prefix does this machine
-have" in `.config/.zshrc.d/5_general.zsh` (`CHRUBY_LOC`, `FZF_BASE`, the keychain binary
-path) — the actual question those sites were asking, answered directly instead of by proxy
-through a hostname list that needed a new arm for every Intel mac. As with the gnubin
-override pair, the real prefix directories (`/opt/homebrew`, `/usr/local/opt`) exist on any
-provisioned mac, so a test that forgets to point these at a nonexistent path short-circuits
-the guard and silently asserts nothing — drive both "present" and "absent" through the
-override, never through the real filesystem.
+- `_OVERRIDE_KEYCHAIN_BIN` (`.config/.zshrc.d/5_general.zsh`)
+  - `_OVERRIDE_KEYCHAIN_BIN` exists because keychain's real path is absolute and unmockable via `PATH`; without it, an absent-branch test only fails where keychain is actually installed.
+  - Keep `"${_keychain}" --eval …` quoted — a default (zsh doesn't word-split unquoted params), not a guarantee, since `emulate sh`/`ksh` re-enable `SH_WORD_SPLIT`. Keep the block wrapped in `[[ -o interactive ]]`: sourcing it non-interactively starts a daemonizing `ssh-agent` that holds the bats pipe and hangs `make test` (measured: 16/run, 161 accumulated).
+  - Leave every `[[ ${VAR} ]]` test here unquoted — `[[ ]]` suppresses splitting regardless of `SH_WORD_SPLIT`; quoting them is churn (command vs. test position, not a style rule). `tests/zshrc.d/unit.bats` must keep `setopt shwordsplit`, or the quoting assertion above is vacuous.
+  - The non-interactive (zero calls) and interactive (seam read) tests are a pair; neither alone catches a typo'd seam name. → `dotfiles-test-seams.md` § `_OVERRIDE_KEYCHAIN_BIN seam and the interactive guard`
 
-**`_OVERRIDE_KEYCHAIN_BIN` (`.config/.zshrc.d/5_general.zsh`) selects the `keychain`
-binary, defaulting to `/usr/local/bin/keychain` (RATNA), `/opt/homebrew/bin/keychain`
-(other macOS) or `/usr/bin/keychain` (Linux).** The seam exists because those paths are
-absolute, so a `PATH` mock cannot shadow them — `shell.md`'s "an absolute-path default
-silently defeats the stub". Without it a regression test could only fail on a machine that
-has keychain installed, which is neither CI nor macOS, so the test would pass vacuously
-exactly where it runs most often.
+- `_OVERRIDE_CURRENT_LOGIN_SHELL` (`lib/helpers.sh:_current_login_shell`)
+  - Derive login shell from `getent passwd`/`dscl UserShell`, never `${SHELL}` — `${SHELL}` names the running shell, not the account's, so a provision started from zsh can misread a `/bin/bash` account as already-zsh.
+  - Tests must set `_OVERRIDE_CURRENT_LOGIN_SHELL`: without it they pass on a mac already on zsh and fail on any runner whose account is `/bin/bash` — a machine-dependent pass, not a code-dependent one.
+  - Check both `chsh`'s and `sudo -n chsh`'s exit codes rather than logging "Changed default shell" unconditionally — `chsh` authenticates via PAM and exits 1 non-interactively, so an unchecked rc reports success over an unchanged shell.
+  - The end-to-end `run_doctor` tests stub every sub-check by name; stub `_doctor_check_login_shell` there too, or it reads the real account mid-suite. → `dotfiles-test-seams.md` § `_OVERRIDE_CURRENT_LOGIN_SHELL seam and the chsh guard`
 
-**The expansion is quoted — `` `"${_keychain}" --eval …` `` — and the reason is not the one
-first given for it.** That was a threat-model argument: anyone able to set
-`_OVERRIDE_KEYCHAIN_BIN` in your interactive environment already has code execution as you, so
-word-splitting buys an attacker nothing. True, but language-agnostic, and it would license the
-same unquoted form in a `.sh` file where it genuinely splits. The real reason the unquoted form
-was safe here is narrower: **zsh does not word-split unquoted parameter expansions** —
-`SH_WORD_SPLIT` is off by default, unlike bash and sh — so a path containing a space ran
-correctly either way. Measured 2026-08-16: `v="/a b/c"; printf "[%s]\n" ${v}` yields one field
-in zsh and two in bash.
+- `_OVERRIDE_GNUBIN_ARM`/`_OVERRIDE_GNUBIN_INTEL` (`lib/macos.sh:install_make_macos`, `.config/.zshrc.d/6_path.zsh`)
+  - Keep the ARM/Intel default pair (`/opt/homebrew/opt/make/libexec/gnubin`, `/usr/local/opt/make/libexec/gnubin`) identical in `install_make_macos` and `6_path.zsh` — a drift makes the install guard and the `PATH` consumer disagree.
+  - Tests must set the override to a nonexistent path to reach the absent branch — the real ARM gnubin dir exists on any provisioned mac and an unset override asserts nothing. → `dotfiles-test-seams.md` § `_OVERRIDE_GNUBIN_ARM / _OVERRIDE_GNUBIN_INTEL seam`
 
-It is quoted anyway because that safety is a default, not a guarantee. `emulate sh` and
-`emulate ksh` both set `SH_WORD_SPLIT`, so any future code path that emulates another shell
-before sourcing this file gets splitting back, and `shellcheck` cannot parse zsh at all, so
-nothing in `make lint` would ever flag the regression. `tests/zshrc.d/unit.bats` covers it by
-setting `setopt shwordsplit` explicitly — without that option the quoted and unquoted forms are
-indistinguishable and the test would be vacuous.
+- `_OVERRIDE_GNUBIN_LINUX` (`.config/.zshrc.d/6_path.zsh`, `lib/helpers.sh:_doctor_check_gnu_coreutils`)
+  - Tests must set `_OVERRIDE_GNUBIN_LINUX` to a nonexistent path to reach the absent branch — the real linuxbrew coreutils gnubin dir exists on any `claude`-class box and an unset override short-circuits the `-d` guard.
+  - Keep the default identical in both readers and assert they stay equal, or the doctor diagnosis and the shell's actual `PATH` disagree about what "the gnubin directory" means. → `dotfiles-test-seams.md` § `_OVERRIDE_GNUBIN_LINUX seam`
 
-The `[[ ${VAR} ]]` tests throughout this file are deliberately **not** quoted: `[[ ]]`
-suppresses word splitting regardless of `SH_WORD_SPLIT`, so there is nothing to protect against
-and quoting them would be churn. The distinction is command position versus test position, not
-a blanket style rule.
+- `_OVERRIDE_DOCKER_BIN` (`.config/.zshrc.d/6_path.zsh`)
+  - Point `tests/zshrc.d/unit.bats` at `/nonexistent/docker-bin` to reach the absent branch — the real `${HOME}/.docker/bin` exists on any mac running Docker Desktop.
+  - If Docker Desktop's installer re-adds its `.zprofile` PATH lines, delete them rather than committing them — the entry belongs only in the interactive `6_path.zsh` block. → `dotfiles-test-seams.md` § `_OVERRIDE_DOCKER_BIN seam`
 
-The block it guards is wrapped in `[[ -o interactive ]]`, and that guard is load-bearing
-rather than tidy: `keychain` starts an `ssh-agent` that daemonizes, reparents to init, and
-keeps every fd it inherited. `tests/zshrc.d/unit.bats` sources this file non-interactively
-to reach the rbenv branch, so before the guard each source leaked an agent still holding
-the `bats-exec-suite` output pipe — `make test` ran every test and then hung forever
-waiting on an EOF that could not arrive. Measured 2026-08-16 on the Linux workstation: 16
-agents pinning the suite's pipe (4 tests × 4 keychain calls) and 161 accumulated since
-2026-07-28, one of which the operator's own keychain pidfile had adopted as the login
-agent. macOS and CI were never affected only because the Linux branch names an absolute
-`/usr/bin/keychain` that neither has — not because the defect was absent there.
+- `GGSHIELD_BIN`/`GGSHIELD_FALLBACK_PATHS` (`scripts/pre-commit-hook.sh`)
+  - Drive ggshield absence only through `GGSHIELD_BIN`/`GGSHIELD_FALLBACK_PATHS`, never by editing `PATH` — stripping the directory holding ggshield also removes `git`/`make` from that same directory.
+  - A non-executable `GGSHIELD_BIN` is a hard error, not a silent degrade. → `dotfiles-test-seams.md` § `GGSHIELD_BIN / GGSHIELD_FALLBACK_PATHS seams`
 
-The two tests covering it are a **pair**, and neither works alone. The non-interactive test
-asserts zero calls, which is a composite outcome; the interactive test is the control that
-proves production actually reads the seam. Mutation-confirmed: reading the seam under a
-typo'd name leaves the negative test green and fails only the positive one.
+- `LEDGER_BIN` (`lib/workflows.sh:ledger_write_entry`)
+  - Always prepend `tests/mocks/ledger` to `PATH`; a `HOME`-only redirect cannot force resolution to a fixture, because `command -v ledger` runs before the `${HOME}/.local/bin/ledger` fallback and wins on any machine (`workstation`/`claude`) that already has a real `ledger` on `PATH`. → `dotfiles-test-seams.md` § `LEDGER_BIN seam`
 
-**`_OVERRIDE_CURRENT_LOGIN_SHELL` (`lib/helpers.sh`'s `_current_login_shell`, read by
-`setup_zsh_as_default_shell` and `_doctor_check_login_shell`) supplies the ACCOUNT's login
-shell.** Production derives it from `getent passwd "${USER}"` on Linux and
-`dscl . -read /Users/${USER} UserShell` on macOS — deliberately **not** `${SHELL}`, which
-names whichever shell happens to be running. A provision started from zsh read "already
-zsh" while the passwd entry still said `/bin/bash`, so the guard could not see the thing it
-guarded. The seam exists because the only other way to reach either branch is to read — or
-change — the developer's real account. It is not optional in tests: without it they pass on
-a mac whose account is already zsh and fail on any runner whose account is `/bin/bash`,
-which is the machine's reason rather than the code's, and the same trap the homebrew-prefix
-pair above carries. Measured: the three end-to-end `run_doctor` tests stub every sub-check
-by name, so `_doctor_check_login_shell` must be stubbed there too or it reads the real
-account mid-suite.
+- `_OVERRIDE_LIB_TRAP_SCOPE` (`scripts/check-lib-exit-traps.sh`)
+  - Under the override the scope is a plain glob (`<root>/lib/*.sh`); in the real repo it is `git ls-files 'lib/*.sh'` under the four-variable `env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE` strip — a fixture-only suite never exercises the git path CI and the pre-push hook actually run.
+  - Keep the one test that runs with no override against the real `lib/` and the real allowlist, asserting the scanned set is non-empty — without it, nothing in the suite touches the path production actually takes. → `dotfiles-test-seams.md` § `_OVERRIDE_LIB_TRAP_SCOPE seam`
 
-**`chsh` is why the rest of that function changed, and the failure was a PASS rather than a
-FAIL.** `chsh` is setuid root but authenticates the **invoking** user through PAM, so it
-prompts for a password and exits 1 in every non-interactive actor — a provision run, cron,
-`ssh host '<cmd>'`. Measured on `claude` 2026-09-12:
+- `_OVERRIDE_BATS_BIN` (`scripts/run-bash-coverage.sh`)
+  - Drive bats absence only through `_OVERRIDE_BATS_BIN`, never by editing `PATH` — on `ubuntu-latest`, bats shares a directory with bash/grep/sed/mktemp, so removing that directory removes the toolchain, not just bats.
+  - Both halves of a seam (test and production) must land in the same commit; reproduce a suspected CI-only failure from `git archive <the sha CI ran>`, never a dirty working tree — a `git stash create` snapshot can silently include a seam CI never had. → `dotfiles-test-seams.md` § `_OVERRIDE_BATS_BIN seam`
 
-```
-chsh -s /bin/zsh </dev/null        Password: chsh: PAM: Authentication failure   rc=1, unchanged
-sudo -n chsh -s /bin/zsh "$USER"                                                 rc=0, changed
-```
+- `_OVERRIDE_RUN_TMPDIR_ROOT` (`lib/workflows.sh:_dotfiles_run_tmpdir_setup`)
+  - `_OVERRIDE_RUN_TMPDIR_ROOT` is read unconditionally in production, the same shape as `_OVERRIDE_GNUBIN_ARM`/`_INTEL` — it exists because bats leaves `TMPDIR` pointed at the real system temp dir, so `TMPDIR` alone cannot isolate the `mktemp -d ... || return 1` error path. → `dotfiles-test-seams.md` § `_OVERRIDE_RUN_TMPDIR_ROOT seam`
 
-The old code checked neither rc and then logged `Changed default shell to ${ZSH_PATH}`
-unconditionally, so a full provision reported success over a shell it had not changed —
-found only when the operator logged in and got a bash prompt. `run_setup_user`'s
-`|| return 1` (`lib/workflows.sh:153`) could not fire either, because the function's last
-command was `log_info`. The three pre-existing tests encoded all of it: one asserted only
-that `chsh` was _called_, never that it succeeded, and the error-path test asserted
-`status -eq 0`, pinning the swallow. `_doctor_check_login_shell` is the independent reader
-that would have caught the silent failure, and it renders "could not read the account" as a
-WARN rather than a PASS, since an unreadable account is not evidence the shell is correct.
+- `_PROFILES_LOADED` (`lib/detect_env.sh:detect_env`, `lib/helpers.sh`)
+  - `detect_env()` must set `_PROFILES_LOADED=0` unconditionally on entry, `1` only after `config/profiles.sh` sources cleanly and all three arrays exist — never derive the check from `PROFILE` alone, since `config/profiles.zsh` exports it into child shells and a stale value survives a failed load.
+  - Never trust an environment-supplied `_PROFILES_LOADED=1` unexamined — the unconditional reset plus `detect_env()` always running before `run_doctor` is what protects it, not the variable being unexported. → `dotfiles-test-seams.md` § `_PROFILES_LOADED sentinel`
 
-**`_OVERRIDE_GNUBIN_ARM` / `_OVERRIDE_GNUBIN_INTEL` are read by two files in two
-languages** — `lib/macos.sh`'s `install_make_macos` (bash) and
-`.config/.zshrc.d/6_path.zsh` (zsh, sourced by every interactive shell). Both default to
-`/opt/homebrew/opt/make/libexec/gnubin` and `/usr/local/opt/make/libexec/gnubin`
-respectively; keep the pairs in step, since a drift makes the install guard and the `PATH`
-consumer disagree.
+- `_AWS_GPG_BIN`/`_AWS_PKGUTIL_BIN`/`_AWS_KEY_PATH` (`lib/developer.sh:_aws_verify_zip`/`_aws_verify_pkg`, `lib/helpers.sh:_doctor_check_aws_key_expiry`)
+  - Resolve `_AWS_GPG_BIN`/`_AWS_PKGUTIL_BIN` via `command -v`, never by stripping `PATH` — stripping `/opt/homebrew/bin` or `/usr/sbin` removes the rest of the toolchain those dirs hold.
+  - `_AWS_KEY_PATH` defaults via `DOTFILES_REPO_ROOT`, resolved at **source time** in `lib/constants.sh` as a **plain assignment**, never a `${VAR:-}` self-guard — tried and retired, since a guard only adds an env-settable name selecting where a trust anchor is read from. Never re-derive the expression inline as `$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)`, which returns empty once the caller (e.g. `update_aws_cli`) has already `cd`'d elsewhere.
+  - An absolute-path suite (bats' `load_setup_env`) can't exercise this cwd-sensitivity; regression tests must `source ./lib/...` relatively, `cd` away, then assert on the **post-import failure message** — never on absence (tdd.md E5), which an unrelated skip satisfies equally. → `dotfiles-test-seams.md` § `_AWS_GPG_BIN / _AWS_PKGUTIL_BIN / _AWS_KEY_PATH seams`
 
-The seam is not optional in tests: the real ARM gnubin dir exists on any provisioned mac,
-so a test that forgets to point these at a nonexistent path short-circuits the guard and
-silently asserts nothing. `tests/setup_env/install_guards.bats` calls `_gnubin_absent` /
-`_gnubin_present` for exactly that reason. Unlike most seams here these are read
-unconditionally rather than only under test — a stray export changes real shell `PATH`,
-which grants no capability beyond setting `PATH` directly but is worth knowing.
+- `_AWS_BIN` (`lib/developer.sh:install_aws_tools`)
+  - Set `_AWS_BIN` in every `install_aws_tools` test on this machine — a real `aws` exists at `/usr/local/bin/aws`, so without the seam the already-installed guard is always taken and the install path is never asserted. → `dotfiles-test-seams.md` § `_AWS_BIN seam`
 
-**`_OVERRIDE_GNUBIN_LINUX` is the same pattern one platform and one tool over — Linux
-coreutils rather than macOS `make`.** Read by `.config/.zshrc.d/6_path.zsh` (the `PATH`
-prepend) and by `lib/helpers.sh`'s `_doctor_check_gnu_coreutils` (locating the formula to
-explain a non-GNU `sort`), both defaulting to
-`/home/linuxbrew/.linuxbrew/opt/coreutils/libexec/gnubin`. See
-[ADR-0031](docs/adr/0031-gnu-coreutils-precedence-on-resolute.md) for why the install is
-gated on `RESOLUTE` (Ubuntu 26.04) while this `PATH` prepend is not — it is gated only on
-`[[ -d ... ]]`. That directory is real on any `claude`-class box once the coreutils formula
-has been installed, so a test that forgets to point this seam at a nonexistent path
-short-circuits the `-d` guard and silently asserts nothing, the same failure mode the ARM
-gnubin seam above exists to prevent. `lib/helpers.sh` carries the identical default, and a
-test asserts the two stay equal — a drift between them would make the doctor arm's
-diagnosis and the shell's actual `PATH` disagree about what "the gnubin directory" means.
-
-**`_OVERRIDE_DOCKER_BIN` (`.config/.zshrc.d/6_path.zsh`) selects Docker Desktop's CLI
-directory, defaulting to `${HOME}/.docker/bin`.** The seam exists for the same reason as the
-gnubin pair: that directory is real on any mac running Docker Desktop, so a test of the
-absent branch that relied on the filesystem would short-circuit the `-d` guard and assert
-nothing. `tests/zshrc.d/unit.bats` points it at `/nonexistent/docker-bin` for that case. It
-is read unconditionally inside the `HAS_DOCKER` block, not only under test — a stray export
-appends a different directory to interactive `PATH`, which grants nothing beyond setting
-`PATH` directly.
-
-The entry used to live in `.zprofile`, written there by Docker Desktop's installer as a
-hardcoded `/Users/<name>/.docker/bin`. Moving it here narrows the actors that see it from
-login shells to interactive ones — deliberately, and the same boundary `brew` already has on
-Linux (see Key Conventions). Measured 2026-09-10: `docker`, `kubectl` and the three
-credential helpers are also symlinked into `/usr/local/bin`; `docker-compose`,
-`docker-compose-v1`, `docker-index` and `com.docker.cli` resolve only through this directory.
-The actor that loses them is a non-interactive login shell (`zsh -l -c`) — cron, launchd and
-`ssh host '<cmd>'` read neither `.zprofile` nor `.zshrc`, so they never had the entry — and
-nothing in this repo invokes any of the four that way on macOS. If the installer's `.zprofile` lines reappear, delete them
-rather than committing them.
-
-**`GGSHIELD_BIN` / `GGSHIELD_FALLBACK_PATHS` (`scripts/pre-commit-hook.sh`) exist for the
-same reason, one tool over.** `GGSHIELD_BIN` is the operator escape hatch and is checked
-first; a non-executable value there is a hard error rather than a degrade, since an
-explicit override that silently falls back is worse than no override.
-`GGSHIELD_FALLBACK_PATHS` is a space-separated candidate list, consulted only when `PATH`
-resolution fails, and it is env-settable **solely** so a test can reach the genuinely
-not-found branch — on any machine that has ggshield the hardcoded prefixes always resolve,
-which makes that branch otherwise unreachable. It grants no capability `GGSHIELD_BIN` does
-not already grant.
-
-Tests must drive absence through these seams and never by editing `PATH`. Stripping the
-directory that contains ggshield takes the toolchain with it — `/opt/homebrew/bin` also
-holds `git` and `make` — which is the same "delete a directory to delete one binary"
-defect recorded for `tests/mocks` in `shell.md`. `tests/scripts/pre_commit_hook.bats` uses
-`MINIMAL_PATH=/usr/bin:/bin` instead: a real PATH that carries `git` and `make` and no
-ggshield. Before this seam existed, the case named "ggshield is absent" ran the **real**
-ggshield on every dev machine and asserted nothing about the branch it named.
-
-**`LEDGER_BIN` (`lib/workflows.sh`'s `ledger_write_entry`) is checked before `command -v
-ledger`, and `tests/mocks/ledger` is load-bearing rather than convenient.** Resolution order
-is `LEDGER_BIN` (if executable), then `command -v ledger`, then the
-`${HOME}/.local/bin/ledger` fallback — so a seam that only redirects `HOME` cannot force
-resolution to a fixture, because `command -v` runs first and wins on any machine that
-already has a real `ledger` on `PATH`. That split is actor-specific, not machine-specific:
-on `workstation`/`claude`, interactive zsh — and the harness Bash tool descended from it,
-which is what runs the suite there — sources `.config/.zshrc.d/6_path.zsh` and puts
-`~/.local/bin` on `PATH`, so `command -v ledger` resolves the **real** binary for exactly
-that actor; a non-interactive actor on those same boxes (`ssh host '<cmd>'`) resolves
-nothing, and so does every actor on the Studio or `ubuntu-latest`, where `ledger` is not
-installed at all. A `HOME`-only seam would therefore pass on the Studio and in CI — cheap to
-run, uninformative — and silently write to the real ledger on `workstation`/`claude`, where
-the binary actually lives. `tests/mocks/ledger` closes this because it is a `PATH`-prepended
-mock: it wins the resolution race before `command -v` ever reaches the real binary,
-regardless of actor, which is why it is required on every assertion touching
-`ledger_write_entry` rather than a convenience.
-
-**`_OVERRIDE_LIB_TRAP_SCOPE` (`scripts/check-lib-exit-traps.sh`) points the EXIT-trap
-ratchet's scope at a fixture root instead of the repo.** Production derives scope from
-`git ls-files 'lib/*.sh'`; under the override it globs `<root>/lib/*.sh` instead, so a
-fixture file named `lib/developer.sh` lands on the real allowlist key without needing a
-second seam for the allowlist itself. That is what lets the suite drive every verdict —
-un-allowlisted trap, allowlisted count, subshell trap still reported, count change, empty
-scope, unresolvable base — without ever mutating real `lib/`, which is the only alternative
-and would leave the tree dirty mid-run for any concurrent session.
-
-The seam grants nothing: it redirects a read-only scan to a directory the caller can
-already read. It is quoted at every use and reaches no `eval`.
-
-**Two code paths, and the tests only exercise one.** Under the override the scope is a
-plain glob; in the real repo it is `git ls-files` under the four-variable
-`env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE` strip. Every
-fixture-driven test therefore certifies the glob path, while CI and the pre-push hook
-exercise the git path — the displaced-check shape `behavior.md` describes. The one test
-that closes it is "the real lib/ is clean against the real allowlist", which runs with no
-override and asserts the scanned set is non-empty; keep it, because without it nothing
-in the suite touches the path production actually takes.
-
-**`_OVERRIDE_BATS_BIN` (`scripts/run-bash-coverage.sh`) exists because a `PATH` strip
-cannot remove bats on the platform that matters.** The pre-flight guard resolves
-`${_OVERRIDE_BATS_BIN:-bats}` and exits 1 when it is unresolvable, deliberately **above**
-the `mkfifo`, so the FIFO-reader deadlock it prevents is unreachable rather than merely
-unlikely. Tests must drive absence through this variable, never by editing `PATH`: on
-`ubuntu-latest` bats lives in `/usr/bin` alongside bash, grep, sed and mktemp, so removing
-the directory that contains it removes the toolchain — the same "delete a directory to
-delete one binary" defect that broke three tests on this branch and is documented for
-`tests/mocks` in `shell.md`.
-
-Both halves of a seam must land in the same commit. This one shipped with the test half
-committed and the production half left uncommitted in a worktree: the override was inert
-on CI, `command -v bats` resolved the real `/usr/bin/bats`, the guard did not fire, and the
-script launched the whole suite under the tracer until the test's `timeout 60` killed it —
-a 60-second red on every run. It read as unreproducible for two hours because the local
-reproductions were shipped with `git stash create`, which snapshots the **working tree**,
-so the workstation ran with the seam and CI ran the commit without it. When reproducing a
-CI failure elsewhere, ship `git archive <the sha CI ran>`; if the tree is dirty, that is
-the finding. Fixed in `b4ced0d` (#218, merged as `4bd5dd3c`).
-
-**`_OVERRIDE_RUN_TMPDIR_ROOT` is read at exactly one site, `lib/workflows.sh:106`, and is
-read unconditionally in production, not only under test — the same shape as
-`_OVERRIDE_GNUBIN_ARM`/`_OVERRIDE_GNUBIN_INTEL` above.** `_dotfiles_run_tmpdir_setup`
-resolves the run's scratch directory as
-`mktemp -d "${_OVERRIDE_RUN_TMPDIR_ROOT:-${TMPDIR:-/tmp}}/dotfiles-run.XXXXXXXX" || return 1`.
-The seam grants nothing beyond what setting `TMPDIR` already grants — both select the
-parent directory the run's tmpdir is created under, and anyone who can export one can
-export the other. It exists because `TMPDIR` alone is not hermetic under bats: bats leaves
-`TMPDIR` pointed at the real system temp dir rather than a fixture, and other machinery in
-the suite reads it, so a test cannot redirect `TMPDIR` at an unreachable path without also
-disturbing everything else that reads it. Without this seam the `|| return 1` guard on that
-line has no error-path test at all. What the guard protects: an unreachable root makes
-`mktemp` exit 1; without it, `_DOTFILES_RUN_TMPDIR` would be empty, and the 28 write sites
-in `lib/workflows.sh` and 107 in `lib/update_summary.sh` that build paths as
-`"${_DOTFILES_RUN_TMPDIR}/..."` would all target `/` instead — no status file would be
-written, `_fail` would stay 0, and the update summary would report a clean run over one
-that did nothing.
-
-**`_PROFILES_LOADED` (`lib/detect_env.sh` and `lib/helpers.sh`) is a sentinel that records whether the identity table loaded successfully** (ADR-0023, `docs/adr/0023-identity-table-load-failure-diverges-by-shell.md`, which amends ADR-0020 with the failure semantics). `detect_env()` sets it to `0` unconditionally on entry, then to `1` only after `config/profiles.sh` sources cleanly _and_ `declare -p PROFILE_MAP PROFILE_CAPS PROFILE_LEGACY` confirms all three arrays exist. `_doctor_check_profile()` in `lib/helpers.sh` branches on it before looking at `PROFILE` at all. The seam is never `export`ed, and that non-export is **not** what makes it safe — an environment-supplied value defeats the check entirely (measured: `env _PROFILES_LOADED=1 PROFILE=mac_workstation <the branch>` reports PASS). What actually protects it is the unconditional `=0` on entry to `detect_env`, combined with `detect_env()` always running before `run_doctor` (`setup_env.sh:61`, then the dispatch at `:69`). Why a sentinel instead of checking `PROFILE`? Because `config/profiles.zsh:46` exports `PROFILE` into every child of a login shell, so after a failed load the stale inherited value survives and `[[ -z ${PROFILE+x} ]]` is false. Measured: with the table unreadable and `PROFILE=mac_workstation` inherited, a pre-sentinel check reported PASS over a machine whose identity table never loaded. A negative control in `tests/setup_env/unit.bats` supplies `_PROFILES_LOADED=1` from the environment _without_ calling `detect_env` and asserts the branch reports PASS — if that test ever starts failing, the mechanism changed and this paragraph is stale.
-
-**`_AWS_GPG_BIN` / `_AWS_PKGUTIL_BIN` / `_AWS_KEY_PATH` (`lib/developer.sh`'s `_aws_verify_zip` and `_aws_verify_pkg`, and `lib/helpers.sh`'s `_doctor_check_aws_key_expiry`) exist for the same absolute-toolchain reason as `_OVERRIDE_KEYCHAIN_BIN` above, applied to the awscli signature-verification path.** `_AWS_GPG_BIN` defaults to `gpg` and `_AWS_PKGUTIL_BIN` to `pkgutil`, each resolved with `command -v` — a `PATH` strip cannot isolate either without removing tools the rest of the suite depends on: stripping `/opt/homebrew/bin` to make `gpg` absent takes `git` and `make` with it, and stripping `/usr/sbin` to make `pkgutil` absent takes the rest of the macOS toolchain that lives there. Each seam makes the verifier-absent branch reachable without disturbing anything else on `PATH` — the same "delete a directory to delete one binary" defect `shell.md` records for `tests/mocks`. `_AWS_KEY_PATH` defaults to the repo's vendored `keys/aws-cli-team.asc` and lets a test point at a fixture key instead; without it only the real vendored key could ever be exercised, so the fingerprint-mismatch and key-expiry branches — the latter also read by `_doctor_check_aws_key_expiry` — would be unreachable.
-
-**`_AWS_KEY_PATH`'s default now comes from `DOTFILES_REPO_ROOT` (`lib/constants.sh`), and the reason is that the previous derivation was cwd-sensitive.** Both consumers computed it inline as `$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/keys/aws-cli-team.asc`. `setup_env.sh:48` sources `lib/developer.sh` by a **relative** path, so `BASH_SOURCE[0]` is `./lib/developer.sh` whenever the entry point is invoked as `./setup_env.sh` — and `update_aws_cli` `cd`s to `${HOME}/software_downloads/awscli` — once per platform arm, before calling the verifier. From there `cd ./lib/..` fails, `&&` short-circuits, the command substitution returns **empty**, and the key resolves to `/keys/aws-cli-team.asc`. Measured 2026-09-07: `setup_env.sh -t update` reported `[FAIL] aws exit 1` on every run, with `gpg: can't open '/keys/aws-cli-team.asc'` and a retry that failed identically. `DOTFILES_REPO_ROOT` resolves the same expression at **source time**, which is the only moment a relative `BASH_SOURCE[0]` is guaranteed to mean anything; It is a plain assignment rather than a `${VAR:-}` self-guard: a guard was written first and measurement retired it, since a re-source is either absolute — which resolves correctly from any cwd, verified from `/` — or relative, which cannot locate `lib/constants.sh` after a `cd` at all. The guard protected nothing reachable and added an env-settable name selecting the directory a cryptographic trust anchor is read from. That would have been fail-closed (`AWSCLI_GPG_FPR` is a plain assignment, so a substituted key still fails the `VALIDSIG` fingerprint check), but an unearned seam on that path is worth less than the case it guarded.
-
-**Sixty-seven `developer.bats` tests covered this code and none could fail for it, which is the durable half.** `load_setup_env` sources `"${REPO_ROOT}/setup_env.sh"` — an **absolute** path — so `BASH_SOURCE[0]` inside every lib file is absolute under bats and the cwd sensitivity is unreachable. Every `update_aws_cli` test additionally stubs `_aws_verify_zip`/`_aws_verify_pkg`, replacing the exact code that fails. That is `behavior.md`'s actor boundary and `tdd.md` E3 with the attribute being **how the file was sourced**: a test that reaches production code by a different path than production does is not testing that path. The two regression tests at the foot of `tests/setup_env/developer.bats` reproduce the production actor deliberately — `source ./lib/...` relatively from the repo root, then `cd` away — and assert on the **post-import** failure (`signature did not verify against the vendored key`) rather than on the absence of the import failure, since an absence is equally satisfied by the function never running (`behavior.md` E5).
-
-**`lib/helpers.sh`'s `_doctor_check_aws_key_expiry` carried the identical expression and was fixed in the same change.** It is latent rather than live — `run_doctor` does not `cd` — but a defect fixed in one of its two copies is not fixed.
-
-**`_AWS_BIN` (`lib/developer.sh`'s `install_aws_tools`) is load-bearing on this development machine specifically, not only in the abstract.** It defaults to `aws` and gates the already-installed guard, `command -v "${_AWS_BIN:-aws}"`. This machine has a real `aws` at `/usr/local/bin/aws`, so without the seam every `install_aws_tools` test silently takes the already-installed branch and asserts nothing about the install path at all — `shell.md`'s absolute-path-default pitfall, sharpened: the binary is not merely resolvable via `PATH`, it exists at the exact absolute location a naive `PATH` strip would leave untouched.
-
-**Cadence seams (`scripts/cadence-notify.sh`, `lib/launch_agents.sh`) — see ADR-0024, and ADR-0026 for the two-stream detector contract.**
-The delivery arm and the LaunchAgent installer both resolve absolute paths and external
-binaries, so a `PATH` mock cannot reach them (`shell.md`: an absolute-path default silently
-defeats the stub). Each seam below exists to make a branch reachable that is otherwise
-unreachable on a provisioned machine, and none grants a capability the operator does not
-already have by editing `PATH` or the plist directly.
+- Every cadence seam exists because the delivery arm and the LaunchAgent installer resolve absolute paths and external binaries that a `PATH` mock cannot reach; none grants a capability beyond what editing `PATH` or the plist directly would already grant. → `dotfiles-test-seams.md` § `Cadence seams overview (scripts/cadence-notify.sh, lib/launch_agents.sh)`
 
 | variable                   | read by                                         | why it exists                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | -------------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -850,189 +546,96 @@ already have by editing `PATH` or the plist directly.
 | `_RHN_LOCAL_CFG`           | `_rhn_load_channel`                             | points the channel config at a fixture, and **`tests/scripts/cadence_notify.bats` sets it in `setup()`, not per-test**. The hazard runs in both directions and only one was documented until 2026-09-05. Absent: `config/local.sh` is git-ignored, so an end-to-end run in a worktree reports `no channel to deliver on` for that reason alone — a test-environment fault, not a code fault. Present: in the main checkout it carries a live `NTFY_URL`, so any case that does `unset NTFY_URL` without setting this seam silently reads the operator's real channel and asserts against it. That is why the export is at setup scope — three cases set it per-test and a fourth did not, which left `make test` red on a provisioned machine and green in CI and every worktree |
 | `_RHN_MAX_AGE_DAYS`        | `_rhn_max_age_days`                             | the staleness bound the writer stamps into the heartbeat. A test must round-trip it at a **non-default** value: written and read at the default 8, a reader that always fell back to its own constant would agree, and the check would pass while measuring nothing                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 
-**The heartbeat's contract** — `~/.local/share/dotfiles/cadence/<name>/last-run.json`, one
-file per cadence, beside that agent's launchd logs:
+- `result`/`findings`/`max_age_days` (`scripts/cadence-notify.sh`, `lib/launch_agents.sh:_doctor_check_cadence`)
+  - Write `max_age_days` into the heartbeat; when a heartbeat carries none, the reader falls back to its own default (8) and must **name its source** (`from heartbeat` vs `default`), so a fallback is never mistaken for a reading. Render `held`/`incomplete`/`clean`/`pending` as pairwise-unequal states — `pending` is seeded at install (not a grace period), absent means "not installed", and a reinstall must never clobber a real heartbeat.
+  - stdout carries findings one per line and nothing else; a stray status/banner line silently over-reports (measured: a clean fleet reporting `"findings": 1`) — check what else the detector writes to stdout before trusting a count. stderr carries the diagnosis, capped at 20 lines and POSTed to ntfy, so never print credentials or env dumps there.
+  - Keep heartbeat fields closed-form via `printf`; never add a free-text field or shell out to `python3 -c json.dumps` — free text breaks the `sed`/`json.loads` readers, and a python3 dependency would take down both sides of the one liveness channel. → `dotfiles-test-seams.md` § `Cadence heartbeat contract`
 
-```json
-{
-  "ts": "…Z",
-  "result": "clean|held|incomplete|pending",
-  "exit_code": 0,
-  "findings": 0,
-  "max_age_days": 8
-}
-```
+- `PATH` (`LaunchAgents/cadence.plist.template`, `lib/launch_agents.sh`)
+  - Every detector dependency must be listed in the plist's `PATH` (`__HOME__/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`) — launchd sources no profile, so an absent tool (e.g. `ledger`, in the first entry) makes the agent silently unable to run.
+  - Resolve a new detector's dependencies under that exact `PATH` (`env -i PATH=<the plist PATH> bash -c 'command -v <tool>'`), never under an interactive shell, which answers for a different actor.
+  - A template edit does not reach an installed agent — the live `~/Library/LaunchAgents/*.plist` is a rendered copy from install time. Re-run `setup_env.sh -t setup_user`, then verify the **live** file (`grep -A1 '<key>PATH</key>' <plist>`), not the template. → `dotfiles-test-seams.md` § `Cadence agent PATH and plist rendering`
 
-Three properties are load-bearing and none is obvious from the shape:
+- `NTFY_URL`/`NTFY_TOPIC` (`scripts/cadence-notify.sh:_rhn_ntfy_target`)
+  - ntfy needs both a topic and credentials — POSTing bare `${NTFY_URL}` (host only) cannot deliver; always POST to `${NTFY_URL}/${NTFY_TOPIC}` with auth.
+  - Send credentials on **stdin** via `curl -K -`, never `-u` (argv is readable by `ps`), and refuse (never escape) a credential containing a newline — curl's config is line-oriented and reads past a break as a further directive.
+  - Keep the heartbeat as a second, silent-when-clean channel; wrap the detector call in `env -u NTFY_URL` so delivery failure and detection failure never collapse into one "no drift" signal. → `dotfiles-test-seams.md` § `Cadence ntfy delivery and heartbeat rationale`
 
-- **`max_age_days` is written, not mirrored.** A reader holding its own copy of the bound
-  drifts silently: 8 against a writer that moved to 3 misses four days of staleness and
-  reports clean. `_doctor_check_cadence` prefers the written value and **names its source** —
-  `(max 3d, from heartbeat)` versus `(max 8d, default — heartbeat carries none)` — so a
-  fallback is never mistaken for a reading.
-- **`pending` is a state, not a grace period.** The installer seeds it with the install time
-  and the bound, so the ordinary staleness rule retires it, a real run overwrites it, and an
-  **absent** heartbeat now means genuinely _not installed_. Re-install seeds a missing
-  heartbeat and never clobbers a real one, so `setup_user` is the migration path for agents
-  provisioned before the field existed.
-- **`held` is a finding, not a fault.** `doctor` renders the three classes distinctly and a
-  test asserts pairwise inequality — because every other test asserted only that its own
-  branch fires, so a reader rendering `held` as a fault would have passed the whole suite.
-- **`findings` is a count of stdout lines, and it is only as good as the detector's
-  discipline.** The wrapper cannot distinguish a finding from a progress banner, so the
-  contract is that stdout carries findings one per line and nothing else, while **stderr
-  carries the diagnosis** — captured separately, surfaced in the push under `Cause:` on the
-  incomplete path and `Diagnostics:` on the held path, and never counted. **That stderr is
-  published**: it is POSTed to the ntfy endpoint, capped at the last 20 lines, so a detector
-  must not print credentials, tokens, or environment dumps there. It was discarded before
-  2026-08-28, which is exactly why a detector author would not have treated it as published —
-  the cap bounds an accidental dump and does not make the stream safe. A detector that
-  prints a status line to stdout over-reports by exactly that many lines, silently and
-  every week. Measured 2026-08-28 against `ledger_drift_check.sh`, which banner'd on both
-  terminal paths: the findings path pushed 31 stale entities as `"findings": 32`, and the
-  **clean path pushed `"findings": 1` on a fleet with zero drift**. The second is the
-  damaging one — it fires when nothing is wrong — and it was invisible from this side,
-  because the only heartbeat available here came from a run that had drift. A count sampled
-  on one path is evidence about that path and no other. Fixed in ai-config#227 (stdout now
-  9/0/0 across findings/clean/cannot-run), found by that session measuring all three rather
-  than the one this repo reported. Nothing here can detect the class — fixing it means
-  fixing the detector. Before believing a count, ask what else the detector writes to stdout.
+- This group covers the pyenv shim defect and the cargo plugin repair added 2026-09-17; treat each seam below individually, not as one combined pyenv/cargo unit. → `dotfiles-test-seams.md` § `Pyenv-rehash and cargo-tools seams overview`
 
-**Every value is closed-form on purpose.** The file is hand-built with `printf` and has two
-consumers with opposite constraints: a `sed` reader that breaks on an unquoted value, and a
-`json.loads` reader that breaks on anything `printf` cannot escape. Adding a **free-text**
-field satisfies the first and breaks the second. Emitting through `python3 -c json.dumps`
-was considered and rejected: it puts a hard python3 dependency on the liveness channel, and
-since the reader is also bash-calling-python3, one missing interpreter would kill both
-channels at once — two channels that fail together are one channel.
-
-**The plist's `PATH` is the agent's whole world, and every detector dependency must be on
-it.** A launchd agent sources no profile, so it gets `_PATH_STDPATH` unless the plist says
-otherwise — see the actor table under MAKEFLAGS below for the general rule.
-`cadence.plist.template` therefore sets `PATH` explicitly, and the entry list is a claim
-about what the wired detectors need:
-`__HOME__/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`.
-
-`ledger` lives in that first entry, which the plist did not originally carry — `lib/workflows.sh`'s `ledger_write_entry` carries the same fallback, so the repo already knew — while the plist as first written named only the two
-Homebrew prefixes, after `gh` and `python3`. `ledger_drift_check.sh` resolves the
-binary with a bare `command -v ledger`, returns **1** when it finds nothing, and its `main`
-reads 1 as _stale entities found_, so the ledger-drift agent would have pushed false drift
-every Monday for the sole reason that it could not run. Neither agent had fired yet when
-this was found (both heartbeats still `pending` from install), so nothing was mis-reported
-in the field. The producer-side half — a detector with no way to say "could not determine"
-— is ai-config's and is being fixed there.
-
-**When wiring a new detector, resolve its dependencies under this `PATH`, not under yours.**
-An interactive shell answers for a different actor and will tell you the tool is present:
-
-```bash
-env -i PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin \
-  bash -c 'command -v <tool> || echo ABSENT'
-```
-
-`tests/setup_env/launch_agents.bats` guards the property rather than the string — it reads
-`PATH` out of the **rendered** plist and requires a fixture binary at `~/.local/bin` to
-resolve under it, so a change to the placeholder, the substitution, or the entry order is
-still measured.
-
-**A plist change does not reach a running agent — the template is the source, not the live
-artifact.** `~/Library/LaunchAgents/*.plist` is a rendered copy written at install time, so
-merging a template change leaves every already-installed agent on its old contents until
-`setup_env.sh -t setup_user` re-installs it. Measured during dotfiles#248: the fix landed on
-master while the installed `com.brucejackson.ledger-drift.plist` still carried the pre-fix
-`PATH`. Verify the live file rather than the template after any change here:
-
-```bash
-grep -A1 '<key>PATH</key>' ~/Library/LaunchAgents/com.brucejackson.ledger-drift.plist
-```
-
-**ntfy needs a topic and credentials, and neither is optional.** Measured against the live
-endpoint: `POST host` → **400**, `POST host/topic` → **403**, `POST host/topic` with auth →
-**200**. `NTFY_URL` holds the host and `NTFY_TOPIC` the topic, so a consumer that POSTs bare
-`${NTFY_URL}` cannot deliver — which is what `scripts/whats-new-anthropic.sh` still does.
-Credentials go in on **stdin** via `curl -K -`, never `-u`, because argv is readable by any
-`ps`; and a credential containing a **newline is refused rather than escaped**, since curl's
-config format is line-oriented and everything after a line break is parsed as further
-directives.
-
-**The heartbeat is a second channel, deliberately.** The agents are silent when the fleet is
-clean — a weekly "still alive" push trains the operator to ignore the channel and destroys
-the signal arm — so liveness travels in a file that `_doctor_check_cadence` reads and fails
-at 8 days. `ai-config`'s `ledger-drift.yml` is the counter-example the design is built
-against: its comment defers real alerting to "an enrolled machine", nothing on any machine
-ever ran it, and the honest scoping is precisely what stopped anyone looking.
-
-**`install_ledger_drift_agent` makes that deferral true rather than rewording it**, and the
-detector is invoked under `env -u NTFY_URL` so `ledger_drift_check.sh`'s own `ntfy` call
-cannot fire — otherwise detection and delivery would fail together and "no drift" would
-render identically to "no channel".
-
-**Pyenv-rehash and cargo-tools seams (`lib/helpers.sh`, `lib/developer.sh`, `lib/workflows.sh`) — the pyenv shim defect and the cargo plugin repair added 2026-09-17.**
-
-**`_OVERRIDE_PYENV_ROOT` is read by `_pyenv_ansible_venv_bin` and `install_pyenv_rehash_hook` (`lib/helpers.sh`) and by `run_update`'s `pyenv-shims` section (`lib/workflows.sh`), all three via the identical chain `${_OVERRIDE_PYENV_ROOT:-${PYENV_ROOT:-${HOME}/.pyenv}}`.** A `HOME`-only redirect does not isolate any of them: `PYENV_ROOT` sits ahead of the `HOME` fallback in that chain, and pyenv's own `init` exports it into every interactive shell, so a test's real `PYENV_ROOT` (if inherited) would outrank a fixture `HOME` and the function would read the operator's live `~/.pyenv`. The seam exists precisely to remove that ordering hazard, and every test that touches shim counting or the hook install sets it explicitly rather than relying on `HOME`.
+- `_OVERRIDE_PYENV_ROOT` (`lib/helpers.sh:_pyenv_ansible_venv_bin`, `install_pyenv_rehash_hook`; `lib/workflows.sh` pyenv-shims section)
+  - Set `_OVERRIDE_PYENV_ROOT` explicitly in every test touching shim counting or the hook install — a `HOME`-only redirect cannot isolate these functions, because `PYENV_ROOT` (exported by pyenv's own `init` into every interactive shell) is checked before the `HOME` fallback and would outrank a fixture `HOME`. → `dotfiles-test-seams.md` § `_OVERRIDE_PYENV_ROOT seam`
 
 **`_CARGO_BIN` (`install_cargo_tools`, `lib/developer.sh`) is exported to a recording mock by `tests/helpers/common.bash`'s `load_mocks`, not left to a test's discretion.** Resolution order is `_CARGO_BIN` (if executable), then `${HOME}/.cargo/bin/cargo`, then `command -v cargo`, checked first and unconditionally — so without the default export, any suite calling `load_mocks` could fall through to a real `~/.cargo/bin/cargo` and compile all eight `CARGO_TOOLS` pins for real (`tdd.md` E2). A test exercising the other two resolution branches deliberately unsets it and is responsible for its own isolation from there.
 
 **`_RELEASE_BIN_DIR` (`_install_pinned_release_binary`, `lib/linux_ubuntu.sh`) and `_TFENV_LINK_DIR` (`_install_ubuntu_tfenv`, same file) both default to `/usr/local/bin` and both exist for the same reason: `tests/mocks/sudo` execs real commands.** Neither function's `sudo install`/`sudo ln` is mockable by stubbing `sudo` alone — a real, unwritable-looking `/usr/local/bin` still gets a real write once `sudo` execs through. Every test pointing at either function's install path sets the corresponding directory seam to a scratch directory the test owns, so no `sudo` branch is ever taken.
 
-**`_RELEASE_TMP_ROOT` (`_install_pinned_release_binary`) exists because BSD `mktemp -d` with a template argument ignores `TMPDIR` entirely** — the Studio's `mktemp` is BSD, and it is where this suite runs, so a `TMPDIR`-based assertion of the failure-path cleanup would be silently inert there. Precedent: `_OVERRIDE_RUN_TMPDIR_ROOT` in `lib/workflows.sh` above, same defect, same fix.
+- `_RELEASE_TMP_ROOT` (`lib/linux_ubuntu.sh:_install_pinned_release_binary`)
+  - Set `_RELEASE_TMP_ROOT` when asserting the failure-path cleanup of `_install_pinned_release_binary` — BSD `mktemp -d` with a template argument ignores `TMPDIR` entirely, and the Studio's `mktemp` is BSD, so a `TMPDIR`-based assertion is silently inert there (same fix as `_OVERRIDE_RUN_TMPDIR_ROOT`). → `dotfiles-test-seams.md` § `_RELEASE_TMP_ROOT seam`
 
-**`_TFLINT_URL`/`_TFLINT_SHA256`/`_TFSEC_URL`/`_TFSEC_SHA256` (`_install_ubuntu_tflint`/`_install_ubuntu_tfsec`, `lib/linux_ubuntu.sh`) let a test drive `_install_pinned_release_binary` against a local fixture URL and a deliberately wrong checksum, without `sha256sum` itself ever being mocked.** `sha256sum` is left real everywhere in this path, mirroring `_install_rustup_rs`'s existing rule: mocking the checksum tool would make every mismatch case vacuous, since the mismatch is exactly the property under test.
+- `_TFLINT_URL`/`_TFLINT_SHA256`/`_TFSEC_URL`/`_TFSEC_SHA256` (`lib/linux_ubuntu.sh:_install_ubuntu_tflint`/`_install_ubuntu_tfsec`)
+  - Drive `_install_pinned_release_binary` with a local fixture URL and a deliberately wrong checksum via these four vars; never mock `sha256sum` itself, mirroring the rustup rule — mocking it would make every mismatch case vacuous. → `dotfiles-test-seams.md` § `_TFLINT_URL / _TFLINT_SHA256 / _TFSEC_URL / _TFSEC_SHA256 seams`
 
-**`_TFENV_ROOT` (`_install_ubuntu_tfenv`) isolates the clone target from a real `~/.tfenv`, and `_TFENV_REPO_URL` lets a test drive the clone-failure branch** (a bad or unreachable URL) without a real network call — both default to the same values `run_update`'s pre-existing `tfenv` `git pull` section already assumes.
+- `_TFENV_ROOT`/`_TFENV_REPO_URL` (`lib/linux_ubuntu.sh:_install_ubuntu_tfenv`)
+  - Isolate the clone target from a real `~/.tfenv` with `_TFENV_ROOT`, and drive the clone-failure branch (bad/unreachable URL) with `_TFENV_REPO_URL` — never a real network call. → `dotfiles-test-seams.md` § `_TFENV_ROOT / _TFENV_REPO_URL seams`
 
-**`_PWSH_BIN` and `_PWSH_PROBE_TIMEOUT` are both read by `_pwsh_probe_runs` (`lib/linux_ubuntu.sh:68`), the single helper `_install_ubuntu_powershell` calls at *both* its probe sites — the opening "is pwsh already working" guard and the post-`apt` verification.** `_PWSH_BIN` points the probe at a stub rather than the real binary; `_doctor_check_dev_tools`'s separate `pwsh` probe resolves through plain `command -v pwsh` and does not read either seam. Tests drive three states through `_PWSH_BIN`: a stub that exits 0 (installed and working), a stub that exits non-zero (installed but broken), and a nonexistent path (not installed at all) — the probe tests that `pwsh` *runs*, not merely that a `.deb` was downloaded, so all three must be reachable without a real PowerShell install. `_PWSH_PROBE_TIMEOUT` (default `10`) bounds it, mirroring `_DOCTOR_PROBE_TIMEOUT` below: a `pwsh` that hangs rather than exiting non-zero is exactly the half-installed state this function exists to repair, and unbounded it would stall `install_ubuntu_packages` and the whole `-t setup`/`-t developer` run.
+- `_PWSH_BIN`/`_PWSH_PROBE_TIMEOUT` (`lib/linux_ubuntu.sh:_pwsh_probe_runs`)
+  - Drive all three pwsh states — working, installed-but-broken, not-installed — through `_PWSH_BIN`, since `_pwsh_probe_runs` tests that `pwsh` actually _runs_, not merely that a `.deb` was downloaded.
+  - Test the `timeout`-absent fallback with a `PATH` scoped to a directory holding no `timeout` **and** an absolute `#!/bin/bash`-shebang stub (`#!/usr/bin/env bash` exits 127 there, since `env` must resolve `bash` through the same scoped `PATH`); cover both directions — a one-sided test passes vacuously under the opposite mutation. → `dotfiles-test-seams.md` § `_PWSH_BIN / _PWSH_PROBE_TIMEOUT seams`
 
-**The `timeout`-absent fallback inside that helper needs its own two tests, and this is why.** `command -v timeout` resolves on every machine in the fleet and on `ubuntu-latest`, and there is no `tests/mocks/timeout`, so the fallback branch is unreachable from the suite by default — measured: replacing its whole body with `return 1` left all 117 tests in `linux_ubuntu.bats` green on macOS *and* on `workstation`. Reaching it requires a PATH scoped to a directory holding no `timeout`, and a stub written with an **absolute** `#!/bin/bash` shebang — a `#!/usr/bin/env bash` stub exits 127 under that PATH because `env` must resolve `bash` through it too (measured rc 127 on macOS, `workstation` and `claude` alike). `_pwsh_absolute_shebang_stub_bin` exists for that. The pair must cover both directions, since a one-sided test passes vacuously under the opposite mutation.
+- `_DOCTOR_PROBE_TIMEOUT` (`lib/helpers.sh:_doctor_check_dev_tools`)
+  - Drive the timeout branch with a stub that sleeps under `_DOCTOR_PROBE_TIMEOUT=1`; never wait on the real 10-second default to prove a hung version probe doesn't block doctor. → `dotfiles-test-seams.md` § `_DOCTOR_PROBE_TIMEOUT seam`
 
-**`_DOCTOR_PROBE_TIMEOUT` (`_doctor_check_dev_tools`, `lib/helpers.sh`) overrides the `timeout` bound each tool's version probe runs under, default `10`.** A test drives the timeout branch with a stub that sleeps 3s under `_DOCTOR_PROBE_TIMEOUT=1`, rather than waiting on the real 10-second bound to prove a hung binary doesn't block doctor.
+- `_CRATES_API` (`lib/workflows.sh:_check_one_cargo_version`)
+  - Override `_CRATES_API` (default `https://crates.io/api/v1/crates`) for any test of `CARGO_TOOLS` staleness that must exercise an unreachable crates.io, mirroring the tflint/tfsec URL-override pattern. → `dotfiles-test-seams.md` § `_CRATES_API seam`
 
-**`_CRATES_API` (`_check_one_cargo_version`, `lib/workflows.sh`) overrides the crates.io API base the `CARGO_TOOLS` staleness check queries, default `https://crates.io/api/v1/crates`.** Existing tests exercise it through `tests/mocks/curl` matching the real default URL rather than by setting the override — the seam mirrors the URL-override pattern the tflint/tfsec pins already use, so a future test or a genuinely unreachable crates.io has the same escape hatch without touching production code.
-
-**Claude plugin provisioning seams (`_OVERRIDE_CLAUDE_SETTINGS`, `_CLAUDE_GUARD_GIT`, `tests/mocks/claude`) — `lib/workflows.sh`'s `_claude_settings_path`, `_claude_plugin_manifest`, `_claude_registered_marketplaces`, `_claude_installed_user_ids`, `_claude_settings_git_state`, `_claude_settings_guard_check`, `_claude_manifest_split_line`, `setup_claude_plugins`, `provision_claude_plugins`.**
+- `_OVERRIDE_CLAUDE_SETTINGS`, `_CLAUDE_GUARD_GIT` and `tests/mocks/claude` together isolate every one of `_claude_settings_path`, `_claude_plugin_manifest`, `_claude_registered_marketplaces`, `_claude_installed_user_ids`, `_claude_settings_git_state`, `_claude_settings_guard_check`, `_claude_manifest_split_line`, `setup_claude_plugins` and `provision_claude_plugins` from the real `${HOME}/.claude/settings.json` and the real `claude`/`git` binaries. → `dotfiles-test-seams.md` § `Claude plugin provisioning seams overview`
 
 `_OVERRIDE_CLAUDE_SETTINGS` points every reader above at a fixture instead of `${HOME}/.claude/settings.json`, the real ai-config-managed file. `load_mocks` (`tests/helpers/common.bash`) exports it by default, pointed at a **per-test copy** of `tests/fixtures/claude-settings.json` under `BATS_TEST_TMPDIR` — never the tracked fixture directly. That copy is load-bearing rather than a convenience: `tests/mocks/claude`'s `MOCK_CLAUDE_EDIT_SETTINGS` mode appends a newline to whatever `_OVERRIDE_CLAUDE_SETTINGS` names (to drive the write guard), so pointing it at the tracked file would let any test that forgets to override it again dirty the working tree with an `M tests/fixtures/claude-settings.json` nobody asked for. Every `run_update`/`run_setup_user` test runs under a redirected `HOME` with no settings file at all, so without this default they would all hit the manifest's rc 1 and FAIL for a reason unrelated to what they test — the same shape as the pre-existing `MOCK_PYENV_WHICH_STDOUT`/`_CARGO_BIN` defaults above.
 
-`_CLAUDE_GUARD_GIT` (default `git`) is what `_claude_settings_git_state` resolves git through. It exists because `tests/mocks/claude`'s sibling, `tests/mocks/git`, answers almost every subcommand with empty stdout and exit 0 — a mock built for callers that only care whether a `git` call succeeded, not for one whose whole job is to read real repository state (`shell.md`'s "a PATH mock shadows the binary your production code needs"). Guard tests resolve a **real** git with the mocks directory stripped from `PATH` (the same `_clean_path` filter idiom `tests/scripts/unit.bats` already uses) and symlink it into a private shim dir, then export that path — so the shadowing mock never intercepts a guard call, while every other `git`-shaped call in the same test file still hits the fast, harmless mock.
+- `_CLAUDE_GUARD_GIT` (`lib/workflows.sh:_claude_settings_git_state`)
+  - Resolve git through `_CLAUDE_GUARD_GIT`, never through `tests/mocks/git` alone — that mock returns empty stdout and exit 0 for almost every subcommand and shadows the real repository state `_claude_settings_git_state` needs.
+  - In guard tests, strip the mocks directory from `PATH`, symlink the real `git` into a private shim dir, and export that path as `_CLAUDE_GUARD_GIT`, so every other `git`-shaped call in the same file still hits the fast mock. → `dotfiles-test-seams.md` § `_CLAUDE_GUARD_GIT seam`
 
-`tests/mocks/claude` gained five new modes for this: `MOCK_CLAUDE_PLUGINS_LIST_JSON` and `MOCK_CLAUDE_MARKETPLACE_LIST_JSON` are the `--json` payloads `_claude_installed_user_ids`/`_claude_registered_marketplaces` parse (default `[]`, i.e. nothing installed/registered); `MOCK_CLAUDE_FAIL_ARGS` fails any invocation whose full argv contains it as a substring (e.g. `"plugins install"` fails only installs, not the list/marketplace-add calls); `MOCK_CLAUDE_FAIL_ON_CALL=<n>` fails only the *n*th invocation whose argv is exactly `plugins list --json`, counted in a file under `BATS_TEST_TMPDIR`, so `run_update`'s re-list (after `setup_claude_plugins`'s own list call already succeeded) can be made to fail on its own; `MOCK_CLAUDE_EDIT_SETTINGS=<verb>` (`install` or `update`) makes only that verb touch `_OVERRIDE_CLAUDE_SETTINGS`, described above. Every invocation is still recorded to `MOCK_CALLS_FILE` regardless of mode.
+- `MOCK_CLAUDE_*` (`tests/mocks/claude`)
+  - Use `MOCK_CLAUDE_PLUGINS_LIST_JSON`/`MOCK_CLAUDE_MARKETPLACE_LIST_JSON` for the `--json` payload (default `[]`); `MOCK_CLAUDE_FAIL_ARGS` to fail only invocations whose argv contains a given substring; `MOCK_CLAUDE_FAIL_ON_CALL=<n>` to fail only the nth `plugins list --json` call; and `MOCK_CLAUDE_EDIT_SETTINGS=<verb>` to make only `install` or `update` touch `_OVERRIDE_CLAUDE_SETTINGS`.
+  - Every invocation is still recorded to `MOCK_CALLS_FILE` regardless of mode. → `dotfiles-test-seams.md` § `tests/mocks/claude seam modes`
 
-Two non-obvious facts a future reader needs. **Every `claude` call inside a `while read` loop in `setup_claude_plugins`/`run_update`'s claude section redirects stdin from `/dev/null`** (`claude plugins marketplace add "${_ref}" < /dev/null`, and similarly for `install`/`update`) — without it, `claude` would read from the loop's own `<<<"${_manifest}"` here-string and consume the remaining manifest lines the loop still needs, silently truncating iteration after the first external call. **`IFS=$'\t' read` collapses a run of adjacent tabs**, because bash always treats tab as "IFS whitespace" regardless of what else `IFS` holds — an empty middle field (an empty marketplace name, or a git-state line's repo field when the file isn't tracked) would otherwise shift the next field left rather than staying empty. `_claude_manifest_split_line` exists to avoid this for manifest lines, splitting by parameter expansion instead of `read`; `_claude_settings_git_state` sidesteps the same hazard for its own three-field lines by never emitting a genuinely empty field — the repo position is a literal `-` placeholder (`untracked\t-\t<path>`, `unknown\t-\t<path>`) rather than an empty string, so `_claude_settings_guard_check`'s `IFS=$'\t' read -r _bs _br _bp` (which does *not* use the split-line helper) always sees three real fields.
+- Every `claude` call inside a `while read` loop in `setup_claude_plugins`/`run_update`'s claude section must redirect stdin from `/dev/null` (e.g. `claude plugins marketplace add "${_ref}" < /dev/null`) — without it, `claude` consumes the loop's own `<<<"${_manifest}"` here-string, truncating iteration after the first external call.
+- `IFS=$'\t' read` collapses adjacent tabs, so an empty field shifts the next one left instead of staying empty — split manifest lines with `_claude_manifest_split_line`'s parameter expansion, and never emit a genuinely empty tab-separated field (use a literal `-` placeholder, as `_claude_settings_git_state` does). → `dotfiles-test-seams.md` § `Claude plugin provisioning: stdin redirect and IFS tab collapse`
 
 **`_OVERRIDE_CLAUDE_PLUGIN_CACHE` (`_claude_plugin_cache_dir`, `lib/helpers.sh`) points the plugin node-path check and repair at a fixture instead of `~/.claude/plugins/cache`.** Both test files set it in `setup()`, not per test: the repair rewrites files, so a test that forgot it would edit the operator's real plugin cache (`tdd.md` E2). What it guards: context-mode writes `process.execPath` into its cached `hooks/hooks.json` and `.claude-plugin/plugin.json` on Linux ([mksglu/context-mode#1090](https://github.com/mksglu/context-mode/issues/1090)). Under linuxbrew that is the versioned `Cellar/node/<ver>/bin/node`, so `brew upgrade node` deletes it: every hook then fails with `/bin/sh: 1: <path>: not found` and the MCP server does not start. The plugin cannot heal itself, because its repair runs only when that MCP server starts. Measured 2026-09-19 on `claude` (26.8.2) and `workstation` (26.4.0, all six cached versions); `studio` was clean, since upstream skips the rewrite on macOS. The `plugin-node` update section repoints each dead pin at the keg's `opt/` link. The plugin does not rewrite a cache it has already normalized, so the `opt/` path holds until a plugin update extracts a new version. That version is then pinned to whichever versioned node is current, so a later node upgrade needs the repair again. A node upgrade outside `-t update` does not run the repair: `brew bundle` under `-t setup` or `-t developer`, a manual `brew upgrade`, or Claude Code's own background plugin update. `doctor` is the backstop that names each dead pin. Delete the section, the doctor check and the seam once upstream stops writing versioned paths.
 
 ### Mock Pattern
 
-See `~/git-repos/personal/ai-config/docs/knowledge/dotfiles-bats-test-infrastructure.md` for the full `MOCK_*` env var reference table and the usage pattern.
+- The full `MOCK_*` env var reference table and the general mock usage pattern live in `dotfiles-bats-test-infrastructure.md` — this group's own suffix target, not a `CLAUDE.md` section. → `dotfiles-bats-test-infrastructure.md` § `Mock Pattern full reference pointer (superseded by this section)`
 
-**Pass-through mocks:** `ln`, `chmod`, `mv`, `cp`, and `tee` call the real binary (`/bin/cmd "$@" 2>/dev/null || true`) so tests that assert actual filesystem state work correctly. Set the corresponding exit var to a non-zero value to simulate failure instead.
+- `tests/mocks/ln`, `chmod`, `mv`, `cp` and `tee` pass through to the real binary (`/bin/cmd "$@" 2>/dev/null || true`), so a test asserting real filesystem state gets a real result.
+- Set the mock's exit-code variable to a non-zero value to simulate a failure instead of calling through. → `dotfiles-bats-test-infrastructure.md` § `Mock Pattern: pass-through mocks (ln, chmod, mv, cp, tee)`
 
-**`env -i` subprocess strips PATH** — `setup_ansible()`'s pyenv calls need the mock placed at `${HOME}/.pyenv/bin/pyenv`, not PATH-injected. Detail and doctor-test conventions (`_DOCTOR_FAIL` vs `_DOCTOR_FAILED`, `log_warn` vs `doctor_warn`, PATH isolation): `~/git-repos/personal/ai-config/docs/knowledge/dotfiles-bats-test-infrastructure.md`.
+- `env -i` strips `PATH`, so a `PATH`-injected pyenv mock is invisible to `setup_ansible()`'s pyenv calls — place the mock binary at the absolute path `${HOME}/.pyenv/bin/pyenv` instead. → `dotfiles-bats-test-infrastructure.md` § `Mock Pattern: env -i strips PATH (pyenv mock placement) -- CLAUDE.md addendum`
 
-**`tests/mocks/curl` parses short-option clusters, not just bare `-o`/`--fail`.** Production calls curl as `-fsS -o <file> <url>` and `-fLo <file> <url>` (`developer.sh:105`), so the mock's arg loop recognizes any `-[a-zA-Z]+` cluster: an `f` anywhere in it sets the fail-mode flag, and a cluster **ending in `o`** takes the next argument as the `-o` target — a bare `-o` alone would silently never capture `-fLo`'s target. `MOCK_CURL_HTTP_STATUS` simulates curl's `-f`/`--fail` behavior (fail on HTTP error) without a real network call: it only takes effect when `MOCK_CURL_EXIT` is unset, an f-bearing form was actually passed, and the status value matches `^[0-9]+$` and is `>= 400` — the numeric gate runs before the comparison per `shell.md`'s non-numeric-operand pitfall, so a garbage status value falls through to success rather than an undefined comparison. `MOCK_CURL_EXIT` is the older, unconditional knob and always wins when set.
+- Recognize any `-[a-zA-Z]+` short-option cluster in `tests/mocks/curl`'s arg loop, not just bare `-o`/`--fail`: an `f` anywhere sets fail-mode, a cluster ending in `o` takes the next arg as the `-o` target (production passes `-fsS -o` and `-fLo`, `developer.sh:105`).
+- Gate `MOCK_CURL_HTTP_STATUS` on all three: `MOCK_CURL_EXIT` unset, an f-bearing form passed, and the value matching `^[0-9]+$` before comparing `>= 400` (numeric check first, per `shell.md`). `MOCK_CURL_EXIT` always wins when set. → `dotfiles-bats-test-infrastructure.md` § `Mock Pattern: tests/mocks/curl short-option cluster parsing`
 
-**`-o`'s write is now deferred until after the exit code is decided, and it is a deliberate deviation from real curl.** A simulated failure (`MOCK_CURL_HTTP_STATUS >= 400` or a nonzero `MOCK_CURL_EXIT`) leaves a pre-seeded target file completely unchanged, mirroring real curl's behavior with `-f`/`-o` on an HTTP error. On success, the mock writes `MOCK_CURL_STDOUT` to the target file **and still also emits it on stdout** — real curl with `-o` writes only to the file and stays silent on stdout. This is kept deliberately because the callers that never pass `-o` (the `whats-new*.sh` scripts, `_fetch_github_latest` in `lib/workflows.sh`, `install_homebrew` in `lib/macos.sh`) require the stdout emission from the same mock, and no current production caller both passes `-o` and consumes stdout — verify that still holds before removing the dual emission. (The mock's own header comment cites `workflows.sh:696` and `macos.sh:82` for these call sites. The first was accurate when written and has since drifted to 721 as later commits inserted code above it; the second still resolves. Naming the enclosing functions — `_fetch_github_latest` and `install_homebrew` — would not drift at all, which is the fix, backlogged rather than applied here because `tests/mocks/curl` is extensionless and so is code to the branch guard, not a docs-safe path.) When no `MOCK_CURL_STDOUT` is set, a successful `-o` call still just `touch`es the target, which is the pre-existing behavior every caller not exercising this failure path already depends on.
+- `tests/mocks/curl`'s `-o` write is deferred until **after** the exit code is decided, a deliberate deviation from real curl: a simulated failure (`MOCK_CURL_HTTP_STATUS >= 400` or a nonzero `MOCK_CURL_EXIT`) leaves a pre-seeded target file completely unchanged.
+- On success it writes `MOCK_CURL_STDOUT` to the target file AND still emits it on stdout — keep the dual emission: `whats-new*.sh`, `_fetch_github_latest` (`lib/workflows.sh`) and `install_homebrew` (`lib/macos.sh`) never pass `-o` and need the stdout copy from this mock.
+- Before removing it, verify no current caller both passes `-o` and consumes stdout. → `dotfiles-bats-test-infrastructure.md` § `Mock Pattern: tests/mocks/curl -o write ordering (deferred success write)`
 
 ### MAKEFLAGS and Stdout Partition
 
-`Makefile:1` carries `MAKEFLAGS += --no-print-directory`. GNU Make 4.0+ prints `Entering directory` / `Leaving directory` on stdout when `-C` changes directory; macOS's `/usr/bin/make` is 3.81 and does not.
+- `Makefile:1`'s `MAKEFLAGS += --no-print-directory` suppresses `Entering`/`Leaving directory` only for a child `make` that inherits it, and only on GNU Make 4.0+ (macOS's 3.81 never prints them).
+- It does not cover a direct `make -C` on GNU Make 4.3 (`ubuntu-latest`) — that line prints before the Makefile parses, so an in-file directive is too late. The load-bearing protection is the per-call flag plus the partition below, never this directive alone. → `dotfiles-bats-test-infrastructure.md` § `MAKEFLAGS: --no-print-directory directive and its GNU Make version limit`
 
-**The directive does not cover a direct `make -C` on GNU Make 4.3 — which is what `ubuntu-latest` runs.** Measured on Ubuntu 24.04: with the directive 3 lines, without it 3 lines, byte-identical — `-C` prints the message before the Makefile is parsed, so a directive inside it is too late. 4.4.1 (Homebrew, macOS) does suppress. A per-call `--no-print-directory` and an inherited `MAKEFLAGS` both suppress on **both** versions.
+- `MAKEFLAGS` is an exported env var every spawned `make` inherits — a test capturing `make` output must be guarded or measuring, never neither.
+- Guarded: per-call `--no-print-directory` flag, for an exact output-shape assertion.
+- Measuring: `env -u MAKEFLAGS` prefix, only to observe directory lines — on GNU Make 4.3 it strips the one working suppression, so never use it for a guarded assertion. Both categories must exist in the suite. → `dotfiles-bats-test-infrastructure.md` § `MAKEFLAGS: exported env var; guarded vs measuring test partition`
 
-What the directive actually buys is the export: under `make test` every child `make` inherits it, and that works on every version. A direct `make -C …` outside an outer make on 4.3 is uncovered. **The load-bearing protection is the per-call flag and the partition below, not this line** — which is what `tdd.md` pitfall G prescribes first.
+- `tests/scripts/makefile_lint_scope.bats` enforces the partition mechanically: it scans every stdout-capturing `make -C` invocation in its domain and requires each in exactly one category, both sets non-empty.
+- Derive that domain from `git ls-files` (the same four-variable `env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE` strip), never a hardcoded list — an earlier two-file array excluded the one real violation and still reported clean. → `dotfiles-bats-test-infrastructure.md` § `MAKEFLAGS: partition enforcement test and the git ls-files domain`
 
-**`MAKEFLAGS` is an exported environment variable, not a file-local Makefile directive.** Every `make` a test spawns inherits it. So any test that captures and measures `make` output must explicitly account for it — tests fall into two categories:
-
-- **Guarded:** Per-call `--no-print-directory` flag (overrides the exported `MAKEFLAGS`), for tests that care about exact output shape
-- **Measuring:** `env -u MAKEFLAGS` prefix (strips the inherited directive), for tests that genuinely need to observe directory lines. Use it only for that — on 4.3 it strips the one mechanism that works and leaves the inert file directive, so a case that merely wants an exact value must be **guarded**, not measuring. That mistake shipped once and was caught by CI, green on macOS and red on `ubuntu-latest`.
-
-Both categories must exist in the test suite. A test capturing `make` output without guarding or measuring it gets the environment's `MAKEFLAGS`, so it is measuring the environment rather than the Makefile.
-
-**The partition is enforced, not aspirational.** `tests/scripts/makefile_lint_scope.bats:596` ("every stdout-capturing make -C invocation in-domain is guarded or measuring, both sets nonempty") scans every stdout-capturing `make` invocation across the scanner's domain and requires each to land in exactly one of guarded/measuring, with both sets non-empty.
-
-**The domain is derived from `git ls-files`, not listed.** The scanner pulls its file set through `_git_ls_clean 'tests/*.bats' 'tests/*.bash'` — the same four-variable `env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE` strip `ZSH_FILES`/`SHELL_FILES` use, and for the identical reason: `git -C` does not override an exported `GIT_DIR`, and `scripts/pre-push` runs `make test`. An earlier version hardcoded a two-file array (`tests/makefile_scope.bats` and this file) that held exactly the two files already in compliance and excluded the one real violation, `tests/scripts/unit.bats:819` (`make -C "${REPO_ROOT}" -n test-python`, carrying neither guard). That is the same invisible-omission shape `tdd.md`'s Coverage Denominators section describes — an excluded file is absent from both numerator and denominator, so the check reports clean either way — and the third time that shape has shown up in this repo, after the bash coverage tracer's 13-entry `INCLUDE_FILES` array and `make lint`'s original literal file list (both above, under Coverage and ShellCheck).
-
-**Known gap: recursive sub-make and `-w` are invisible to it.** A line scanner can only see what is on the invoking line. `$(MAKE)` recursion and `-w`/`--print-directory` both print `Entering`/`Leaving` with no `-C` anywhere on the line that triggers them, so neither is reachable by this scanner's `-C`/`--directory` pattern. Not exploitable today — the root `Makefile` has zero `$(MAKE)` recipes and `make -n test` emits no sub-make — but `powershell/Makefile` exists and sits outside this scanner's domain entirely. Recorded as an accepted boundary a line scanner cannot close, not a defect to fix.
+- The partition scanner sees only the invoking line, so it is blind to recursive `$(MAKE)` calls and to `-w`/`--print-directory` — both print `Entering`/`Leaving` with no `-C` on the line that triggers them.
+- Not exploitable today (the root `Makefile` has no `$(MAKE)` recipes), but `powershell/Makefile` sits outside this scanner's domain entirely — treat this as an accepted boundary, not a defect to silently fix. → `dotfiles-bats-test-infrastructure.md` § `MAKEFLAGS: known gap -- recursive sub-make and -w invisible to the scanner`
 
 ## Committing Work
 
@@ -1041,9 +644,8 @@ Invoke `caveman:caveman-commit` skill to generate the commit message before runn
 ## Key Conventions
 
 - Machine roles are now driven by the **profile/capability model** in `config/profiles.sh` — prefer `HAS_*` vars over raw hostname patterns for new code
-- **GPU provisioning is the one deliberate exception to that rule.** `_install_ubuntu_nvidia` gates on detected hardware (`_nvidia_gpu_present` matching PCI vendor `10de:` in `lspci -nn`), not on a `HAS_*` capability, because `claude` and `workstation` both map to `linux_workstation` and a capability is a property of the profile rather than the box — a `HAS_GPU` there would fire on any future GPU-less machine with that profile, and on WSL2 where the driver lives Windows-side. The vendor ID rather than a device-class match matters too: `workstation` carries a second display adapter, the 7950X's integrated AMD Raphael, which a "is there a VGA controller" test would wrongly claim. Absent `lspci` the default is skip, not attempt. Rationale and accepted costs: ADR-0029
-- **Installing the NVIDIA driver does not bind it** — nouveau holds the card until a reboot, so `_install_ubuntu_nvidia` warns rather than implying the GPU is live. A box can therefore be correctly provisioned and still running nouveau until it restarts
-- **Installing `nvidia-container-toolkit` does not register it with docker either**, which is a separate gap from the one above — `_install_ubuntu_nvidia` therefore runs `nvidia-ctk runtime configure --runtime=docker` after the install. Without that step `docker run --gpus all` fails with `AMD CDI spec not found`: an AMD-named error for a missing **NVIDIA** runtime, which misdirects whoever reads it next. Measured on `claude` 2026-09-12 with toolkit 1.20.0 already installed; `workstation` had been configured by hand and so never surfaced it. Two properties are deliberate: `runtime configure` **merges** into `daemon.json` rather than overwriting (verified with `--dry-run` against a file already carrying `exec-opts`, which survived), and the `systemctl restart docker` is **conditional on `daemon.json` actually changing** — these boxes run GitHub runners, so an unconditional bounce every provision would kill a live job
+- GPU provisioning gates on detected hardware — `_nvidia_gpu_present` matching PCI vendor `10de:` in `lspci -nn` — never a `HAS_*` capability, since `claude` and `workstation` share the `linux_workstation` profile but not a GPU, and WSL2's driver lives Windows-side. Absent `lspci`, default to skip, not attempt.
+- Installing the driver does not bind it (nouveau holds the card until reboot), and installing `nvidia-container-toolkit` does not register it with docker — run `nvidia-ctk runtime configure --runtime=docker` after install, and restart docker only when `daemon.json` actually changed, since these boxes run live GitHub runners. → `dotfiles-conventions.md` § `GPU provisioning as the HAS_* exception (not a capability)`
 - All eight legacy hostname vars (`LAPTOP`, `STUDIO`, `RECEPTION`, `RATNA`, `OFFICE`, `HOMES`, `WORKSTATION`, `CRUNCHER`) are derived from `PROFILE_LEGACY` in `config/profiles.sh` — `WORKSTATION` and `CRUNCHER` remain live, and are read by `.zprofile:10` and `.config/.zshrc.d/7_final.zsh:60`; new code should still prefer `HAS_*` vars
 - Ubuntu version detection uses `lsb_release -rs` → `NOBLE` var (24.04) or `RESOLUTE` var (26.04); both set in `detect_env.sh` and `.zshrc.d/1_init.zsh`
 - Credential directories (`.aws`, `.tf_creds`, `.tsh`) are created with `chmod 700`
@@ -1054,162 +656,67 @@ Invoke `caveman:caveman-commit` skill to generate the commit message before runn
 - **Test runner:** `pytest` — runs `unittest.TestCase` tests natively; test file contents do not change
 - Application installs are kept in alphabetical order
 - For shell syntax-only fixes, validate with `bash -n <file>` for any file `scripts/list-shell-files.sh` picks up (every tracked bash/sh-shebang file, extension or not — includes the hooks and the `tests/mocks/` fixtures), or `zsh -n <file>` for `.zsh`/`.zsh-theme`/`.zshrc`/`.zprofile` files — `make lint` runs both checks over their respective `SHELL_FILES`/`ZSH_FILES` sets before commit
-- After any change to `.zshrc` or `.zshrc.d/` files, run `zsh -i -c 'exit'` before committing to catch re-source crashes before they reach prod. **In a worktree that command is evidence about the main checkout, not about your branch** — `~/.zshrc` and `~/.config/.zshrc.d` are symlinks into the main checkout, so an interactive shell launched from anywhere sources the unmodified files and passes regardless of what the branch changed. From a worktree, source the branch's own files explicitly instead — `zsh -c 'unset -m "HAS_*"; source .zprofile; source .config/.zshrc.d/1_init.zsh; [[ -n ${PROFILE} ]]'` — which is proven falsifiable: rc 0 on the branch, rc 1 on the pre-change tree.
-- **`$0` is not the file's path in a zsh startup file, and `${0:A:h}` therefore resolves against `cwd`.** `FUNCTION_ARGZERO` sets `$0` for the `source` builtin and for functions; zsh reads `.zprofile`/`.zshrc` with its own internal reader, where `$0` stays the literal `zsh`. Use `${${(%):-%x}:A:h}` in any file that may be read as a startup file — it names the containing file in both actors, verified at cwd `/` and `/usr`, via `source`, and through a symlink to another directory. Measured in a real login shell with a fixture `$HOME`: the `${0:A:h}` form produced `no such file or directory: //config/profiles.zsh`, lost `PROFILE` and every `HAS_*`, and then skipped the `/opt/homebrew/bin` prepend that `pyenv init` depends on. Every test missed it because bats reaches these files through the `source` builtin — the one actor where `$0` is set.
-- **`_UPDATE_SECTION_ORDER` coupling:** `lib/update_summary.sh` has a `readonly _UPDATE_SECTION_ORDER=(...)` array that controls which sections appear in the printed update summary. Adding `_update_record_start/end "new-section"` in `run_update()` without also adding `"new-section"` to this array means the section is tracked internally but never printed. Both must be updated together — `zsh-autosuggestions` (added 2026-08-31) sits right after `oh-my-zsh` in the array for exactly this reason. **The count-assertion warning this bullet used to carry — that adding or removing a section requires manually auditing hardcoded totals like `[[ "$output" == *"9 OK"* ]]` — is stale and was measured wrong.** `_update_summary` `continue`s past any array entry with no `status_<name>` file (`lib/update_summary.sh:547`), and every count assertion in `tests/setup_env/update_summary.bats` seeds its sections by explicit name rather than by iterating the array — one test alone seeds ten named sections (`brew`, `claude`, `mas`, plus seven more via a `for` loop) and asserts `"8 OK"`/`"1 failed"`/`"1 skipped"` against exactly those. Adding `zsh-autosuggestions` to the array changed none of them, because an unseeded array entry is invisible to the tally by construction. The warning would send a future reader auditing assertions that cannot break; the real risk when **removing** a section is a stray reference to its name surviving in a fixture that still seeds it.
+- After any change to `.zshrc` or `.zshrc.d/`, run `zsh -i -c 'exit'` before committing, to catch a re-source crash before it reaches prod.
+- In a worktree that command only proves the main checkout is sane, since `~/.zshrc` symlinks there — source the branch's own files explicitly instead. → `dotfiles-conventions.md` § `zsh -i -c 'exit' after .zshrc changes, and the worktree caveat`
+- `$0` is not a startup file's own path in zsh — its internal startup reader leaves `$0` as the literal `zsh`, so `${0:A:h}` resolves against cwd instead of the file's directory.
+- Use `${${(%):-%x}:A:h}` in any file that may be sourced as a startup file — it names the containing file correctly in both actors. → `dotfiles-conventions.md` § `$0 resolution in zsh startup files (${0:A:h} pitfall)`
+- `lib/update_summary.sh`'s `_UPDATE_SECTION_ORDER` array controls which sections print. Add `_update_record_start/end "new-section"` and the array entry together — omitting the entry tracks the section internally but never prints it, with no error.
+- Don't audit hardcoded count assertions (`[[ "$output" == *"9 OK"* ]]`) on add/remove — `tests/setup_env/update_summary.bats` seeds sections by name, so an unseeded entry is invisible to the tally by construction.
+- The real risk is on **removal**: grep fixtures for a stray reference to the removed name that still seeds it. → `dotfiles-conventions.md` § `_UPDATE_SECTION_ORDER coupling`
 - **`scripts/sync_git_repos.sh`** replaces the old rsync-only sync script (`scripts/synch_git-repos.sh`, deleted). Two independent modes: git-native fetch/pull/push for `personal/` repos + `state-ledger` (safe on any of the three dev machines — never force-pushes, never auto-merges a diverged repo; dirty does not block a safe push, only a pull), and studio-only rsync push for legacy/no-git-access directories + a full-tree ratna backup. Runs automatically as part of `-t update` (`git-repos`/`legacy-rsync` sections in `_UPDATE_SECTION_ORDER`); `--git-only`/`--legacy-only`/`--dry-run`/`-h` for standalone use, where `--dry-run` suppresses every outbound write and `--git-only` combined with `--legacy-only` is rejected as ambiguous rather than resolved. See `docs/superpowers/specs/2026-07-18-sync-git-repos-design.md` for the full design and the dirty/ahead/behind decision table. **Never invoke this script (or `sync_legacy_dirs`/`sync_git_repos` directly) unmocked outside the BATS test harness** — it performs real `git push`/`rsync --delete` over SSH against real hosts, and `_is_legacy_sync_host` triggers on the real `hostname -s` of whichever machine runs it.
-- **`git-hooks` section coupling:** same `_UPDATE_SECTION_ORDER` trap applies to the hook-install sweep (`lib/git_hooks.sh`) — adding `_update_record_start/end "git-hooks"` in `run_update()` without also adding `"git-hooks"` to `_UPDATE_SECTION_ORDER` means the section is tracked internally but never printed, with no error. Separately: the sweep's post-condition check reads the **installed hooks directory** (`.git/hooks/` or the repo's actual hook path), never `scripts/` — a repo whose hooks were installed by a route other than the Makefile (e.g. `ledger init`) must still read as satisfied. `install_git_hooks_all_repos` returns 0 clean, 1 when a `make install-hooks` call failed, and 2 for partial success — gaps, unreadable hooks, or a `core.hooksPath` pinned at global/system scope. **Both** call sites must branch on it: `run_update` maps 2→0 for `_update_record_end` then calls `_update_warn` (the same shape `git-repos` and `legacy-rsync` use), and `run_setup_user` distinguishes rc 1 ("reported failures") from rc 2 ("gaps or a pinned core.hooksPath") rather than treating any non-zero as failure. Without the `run_update` mapping the section renders `[OK] git-hooks updated` over its own findings. **The target is resolved by `_git_hooks_target_dir`, not assumed to be at the root:** the root Makefile first, else exactly one tracked `*/Makefile` one level down (terraform_ansible keeps it in `ansible/Makefile`); two or more is reported as `:ambiguous` and never run, and a failed `git ls-files` is reported as `:unreadable` rather than as a missing target. Discovery skips any repo directory whose name holds a newline or tab, and the resolver skips any such subdirectory, because the records are tab-separated and newline-framed and a split record names a different directory to run `make` in. It also skips a candidate that is not a regular file, because `grep` on a FIFO blocks forever and would hang every `-t update`. Symlinked candidates resolve deliberately: write access to your own checkout is outside this code's threat model, since anyone holding it can edit the tracked Makefile directly ([ADR-0033](docs/adr/0033-hook-target-at-depth-one-and-sweep-threat-model.md)). Discovery and the gap report both call it, so they agree on what counts as a target. This matters more than a mislabel, because the completeness check reads presence and the executable bit only: a stale `cp`-installed hook passes it, and only re-running the recipe refreshes it.
-- **`_install_ubuntu_brew_packages` returns the same tri-state, and the two bullets are deliberate siblings rather than duplication.** 0 clean, 1 hard failure, 2 partial success with the failed packages named on stderr. `install_ubuntu_packages` therefore captures the rc rather than using `|| return 1`: **only rc 1 aborts**, because a bare guard would kill a whole fresh-machine bootstrap over one briefly-unavailable upstream formula, while unchecked calls report success over packages that never landed. That second half is not hypothetical — every call in this function was unchecked and `brew_install_formula` swallowed its own status, so `go-task/tap/go-task` exited 127 on every Linux run while reporting success. That tap-qualified name resolves to a macOS **Cask** that shells out to `/usr/bin/xattr`, which does not exist on Linux; core ships the formula, so the entry is now plain `go-task`. Same upstream-moved story for `bun` over `oven-sh/bun/bun`. `tests/setup_env/workflows.bats` pins both directions — rc 2 continues, rc 1 aborts — so reinstating a bare `|| return 1` goes red rather than silently revoking the contract.
-- **`claude plugins install` takes `-s user` and a `plugin@marketplace` id; the flag pins the scope rather than fixing a defect.** `--scope` already defaults to `"user"` (verified on 2.1.269, 2.1.270 and 2.1.278), so the flag does not change where an install lands today — it keeps the scope pinned if that default ever changes. The tests guard the flag against **removal**, not against a default change: they assert our own argv through `tests/mocks/claude` and cannot observe the CLI's behaviour at all. **There is now one call site, `setup_claude_plugins` in `lib/workflows.sh`.** The hardcoded 4-plugin loop that used to carry a second, independent `-s user` in `lib/linux_ubuntu.sh` (`_install_ubuntu_brew_packages`) was deleted by the settings.json-manifest rewrite (Task 7 of `docs/superpowers/plans/2026-09-19-claude-plugin-provisioning.md`) — that function now calls `provision_claude_plugins`, which reaches the same one function. **Two earlier versions of this line were wrong and are retracted:** it credited "the singular verb" (the spellings are aliases), then claimed the unscoped form registered at **project** scope against whatever cwd the run happened to have (it does not). The project-scope rows that prompted all of this are **not written by the install command at all** — they appear one batch per directory, including for directories where no install has ever run — so `claude plugins update` reporting `not installed at scope user` was a correct report of a genuine absence, and installing at user scope is what resolved it, flag or no flag. Both wrong versions were asserted from a single correlation without reading `--help`; the refutation came from a peer session and was confirmed here.
-- **`zsh-autosuggestions` is a reported section** (`lib/workflows.sh:672-689`), not the fire-and-forget `cd`/`git pull`/`cd`-back it used to be — the old block recorded nothing and discarded `git pull`'s status, so the plugin was absent from the summary whether it succeeded or failed. Three `_update_skip` reasons distinguish why it didn't run: `"not installed"` (the plugin directory is absent), `"not a git checkout — reinstall to enable updates"` (the directory exists but has no `.git`, e.g. a tarball drop), and `"flag not set"` (`--tools` wasn't passed to `run_update`). **The guard is `[[ -e ${_zsh_autosug}/.git ]]`, deliberately not `git rev-parse --git-dir`.** That plumbing command walks upward through parent directories looking for a `.git`, and `~/.oh-my-zsh` is itself a git checkout — so a non-clone plugin install (dropped in by hand, or via a tarball) would resolve to the _parent_ repo's `.git` and `git pull` would silently update oh-my-zsh instead, rendering a permanent `[OK] … no changes` for a plugin that was never actually pulled. A future reader will otherwise "tighten" this to the plumbing form; don't. `-e` rather than `-d` is also deliberate: a submodule or a linked worktree has `.git` as a **file** (`gitdir: <path>`), and tightening to `-d` would route that layout to `SKIP` forever — `tests/setup_env/workflows.bats` ("run_update updates zsh-autosuggestions when .git is a gitdir file") pins this after a mutation of `-e` to `-d` left all eight zsh-autosuggestions tests green with nothing catching it.
-- **The summary's name column widened from `%-16s` to `%-20s`** to fit `zsh-autosuggestions` (19 characters, the longest `_UPDATE_SECTION_ORDER` member) with its 2-space gutter intact. The width is not a number to remember and re-check by hand: `tests/setup_env/update_summary.bats` ("`_UPDATE_SECTION_ORDER`'s longest name always leaves the reason column's 2-space gutter") reads the pad width back out of `lib/update_summary.sh`'s own `printf` format via `grep -oE '%-[0-9]+s'` and asserts `pad - max >= 1` against the array's actual longest entry — so a future section name of 20 characters or more fails this test rather than silently colliding with the reason column, with no width literal to update in the test itself.
-- **The cheat.sh section now covers both artifacts and both failures FAIL the run.** It previously ran the tab-completion fetch (`~/.zsh.d/_cht`) as a bare statement after `_update_record_end "cheat.sh" ...` had already closed out the section, so a completion-only failure was invisible — the section reported whatever the binary fetch alone had recorded. The two fetches now run inside one subshell with a shared `_rc` accumulator: either can fail independently (binary present and stale, completion absent; or vice versa; or both), and the subshell's `exit "${_rc}"` — piped through the same `tee` as before — makes `_update_record_end` see the FAIL. Progress banners (`"Updating cheat.sh"`, `"Updating cheat.sh tab completion"`) print **outside** the subshell specifically so they never land in `err_cheat.sh`/`detail_cheat.sh`, which feeds `_update_write_detail_from_err`'s `tail -10` — a banner line in that budget would silently displace real diagnostic content.
-- **`.warp/settings.toml` is Warp-owned and symlinked live** (`~/.warp/settings.toml` → repo, via `safe_link` in `lib/helpers.sh`). Warp rewrites it on upgrade — an unexplained diff there is usually a materialized default, not a hand edit. One value in it is a **deliberate non-default, not drift**: `agents.warp_agent.other.auto_approve_bypasses_command_denylist = false` (Warp defaults it to `true`, which makes the `execution_profiles` `command_denylist` inert whenever auto-approve is on — `permissions.rs` then consults only the org denylist, and a personal machine has no org). That key carries `sync_to_cloud: Globally`, so a fleet machine still holding `true` can push it back and Warp will rewrite the file; treat a diff flipping it to `true` as a sync reversion to re-pin, never as an upgrade artifact to accept.
-- **A global/system `core.hooksPath` pin redirects every repo's hooks at once:** `git rev-parse --git-path hooks` honors `core.hooksPath`, so a single global/system pin redirects **every** repo's hooks directory, not just one. The sweep therefore folds the resulting per-repo "no hooks directory" gaps into one aggregated line attributed to the pin, rather than reporting each repo as individually broken with an `install-hooks` remedy that cannot fix it. An **empty or whitespace-only** value is a real pin, not an absent one: `git config --get` reports it as rc 0 with empty stdout, and git honors it — it disables every hook on the machine. Both the doctor check and the sweep summary render it as `(empty)`. `tests/setup_env/git_hooks.bats`'s `setup()` must neutralize `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM`, because the sweep now reads them — without it the suite fails on any machine that actually has a pin, and since `scripts/pre-push` runs `make test`, that developer cannot push.
+- The `git-hooks` section carries the same `_UPDATE_SECTION_ORDER` trap as above, one function over — miss the array entry and the section is tracked internally but never printed.
+- The sweep's post-condition reads the installed hooks directory, never `scripts/`, so hooks installed by any route (e.g. `ledger init`) still count; only presence and the executable bit are checked, so a stale `cp`-installed hook still passes.
+- `install_git_hooks_all_repos` returns 0 clean / 1 hard failure / 2 partial (gaps or a pinned `core.hooksPath`); both `run_update` and `run_setup_user` must branch on all three. `_git_hooks_target_dir` resolves the Makefile target (root, else exactly one `*/Makefile` one level down, else `:ambiguous`/`:unreadable`) rather than assuming root. → `dotfiles-conventions.md` § `git-hooks section coupling and _git_hooks_target_dir`
+- `_install_ubuntu_brew_packages` returns 0 clean, 1 hard failure, 2 partial success, with failed packages named on stderr.
+- `install_ubuntu_packages` captures that rc rather than using `|| return 1`: only rc 1 aborts, since a bare guard would kill a whole bootstrap over one briefly-unavailable formula, while an unchecked call reports success over packages that never landed. → `dotfiles-conventions.md` § `_install_ubuntu_brew_packages tri-state return`
+- `claude plugins install` takes `-s user` and a `plugin@marketplace` id; the flag pins scope (already the CLI's own default) rather than fixing a defect — keep it so a future default change can't silently move installs. → `dotfiles-conventions.md` § `claude plugins install -s user scope flag`
+- The zsh-autosuggestions guard is `[[ -e ${_zsh_autosug}/.git ]]`, never `git rev-parse --git-dir` — that plumbing command walks upward through parent directories, and `~/.oh-my-zsh` is itself a git checkout, so a non-clone install would silently update oh-my-zsh instead and report a permanent false "no changes".
+- Use `-e`, not `-d`: a submodule or linked worktree has `.git` as a file, and `-d` would route that layout to SKIP forever. → `dotfiles-conventions.md` § `zsh-autosuggestions reported update section`
+- The update summary's name-column width is derived, not hardcoded: a test reads the pad width out of `lib/update_summary.sh`'s `printf` format and asserts it stays >= 1 wider than `_UPDATE_SECTION_ORDER`'s longest entry, so a section name of 20+ characters fails the test rather than silently colliding with the reason column. → `dotfiles-conventions.md` § `Update summary name column width`
+- The cheat.sh update section (`lib/workflows.sh`) fetches the binary and the tab-completion file inside one subshell sharing an `_rc`, so either fetch's failure fails the section — it previously ran the completion fetch as a bare statement after the section had already closed, hiding a completion-only failure.
+- Progress banners print outside that subshell so they never land in `err_cheat.sh`/`detail_cheat.sh`, which feeds the `tail -10` diagnostic budget. → `dotfiles-conventions.md` § `cheat.sh section: both artifacts, both failures FAIL the run`
+- `.warp/settings.toml` is Warp-owned and symlinked live (`~/.warp/settings.toml` -> repo); Warp rewrites it on upgrade, so an unexplained diff there is usually a materialized default, not a hand edit.
+- `agents.warp_agent.other.auto_approve_bypasses_command_denylist = false` is a deliberate non-default (Warp defaults `true`, which makes `command_denylist` inert under auto-approve). It syncs globally, so a diff flipping it back to `true` is a sync reversion to re-pin, never an upgrade artifact to accept. → `dotfiles-conventions.md` § `.warp/settings.toml Warp-owned symlink and auto_approve_bypasses_command_denylist`
+- `core.hooksPath` set at global/system scope redirects every repo's hooks at once (`git rev-parse --git-path hooks` honors it); empty or whitespace-only counts as a real pin — `git config --get` returns rc 0 with empty stdout and git still disables every hook on the machine.
+- Probe with `--includes` (the default `--no-includes` misses a pin reached through an include) and `-z`, consumed via `read -d ''` off a process substitution, never `$(...)`. A key held in an included file needs `git config --file <origin> --unset core.hooksPath`; a scope-level `--unset` there exits 5 and leaves the pin. Output contract is `scope<TAB>remedy<TAB>value`, value last, so a tab in a pinned path can't truncate the remedy.
+- `tests/setup_env/git_hooks.bats`'s `setup()` must neutralize `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM`, or the suite fails on any machine with a pin — and since `scripts/pre-push` runs `make test`, that developer cannot push. → `dotfiles-conventions.md` § `Global/system core.hooksPath pin: detection and remedy`
 
-- **The pin probe must read `--includes`, and the remedy must name the origin file:** `git config --<scope> --get` defaults to `--no-includes`, but git's own hook resolution traverses includes. A pin reached through an `[include]` therefore answered rc 1 with **empty stderr** — byte-identical to a genuinely unset key — while `rev-parse --git-path hooks` returned the pinned path and every repo on the box was silently redirected; both surfaces rendered `[PASS] <scope>: unset` over a live machine-wide redirect. `_git_hooks_hookspath_offenders` now re-reads any apparently-clean scope with `git config --<scope> --includes -z --show-origin --get`. `-z` is required rather than the default tab-separated `--show-origin` format (the value may be empty or whitespace-only, and NUL is the only delimiter git will not also emit inside a value), and because command substitution silently drops NUL bytes the pair must be consumed with `read -d ''` off a process substitution, never `$(...)`. The remedy differs by origin: a scope-level `--unset` **cannot** clear a key held in an included file — it exits 5 and the pin survives — so the function emits `git config --file <origin> --unset core.hooksPath` for that case and keeps the scope form only for a key in the scope's own file. Output contract is `scope<TAB>remedy<TAB>value`, with value last so a tab inside a pinned path cannot truncate the command the operator is told to run. Remaining limit: a conditional `includeIf "gitdir:…"` is visible only when git evaluates it from a matching directory, and the probe runs once per sweep rather than once per discovered repo.
+- The Homebrew `make` gnubin directory must be prepended to `PATH`, never appended (`path+=`) — `.config/.zshrc.d/6_path.zsh`'s existing idiom appends, which would leave `/usr/bin/make` 3.81 ahead and be completely inert.
+- Test both Homebrew prefixes for existence (ARM `/opt/homebrew/opt/make/libexec/gnubin`, Intel `/usr/local/opt/make/libexec/gnubin`) rather than calling `brew --prefix`, since `.config/.zshrc.d/6_path.zsh` is what puts `brew` on `PATH`. The linuxbrew coreutils gnubin prepend is gated only on `[[ -d ... ]]`, deliberately not on `RESOLUTE` — the install is release-gated, the `PATH` edit is release-blind. → `dotfiles-conventions.md` § `Homebrew make gnubin prepend (prepend, not append)`
 
-- **Homebrew `make` gnubin prepend:** `.config/.zshrc.d/6_path.zsh` prepends the Homebrew `make` formula's `gnubin` directory on macOS, so plain `make` resolves to GNU 4.x instead of `/usr/bin/make` 3.81. **It must be a prepend, not `path+=`.** This file's existing idiom is append-via-`+=`, which leaves `/usr/bin` ahead of anything it adds — an append here would be completely inert and would still look correct to a reader. Both Homebrew prefixes are tested for existence (ARM at `/opt/homebrew/opt/make/libexec/gnubin` and Intel at `/usr/local/opt/make/libexec/gnubin`); the invocation never calls `brew --prefix` because this same file is what puts `/opt/homebrew/bin` on `PATH`, so `brew` is not guaranteed resolvable at that point. The same file applies the identical prepend-not-append rule one more time, for Linux coreutils rather than macOS `make` — see [ADR-0031](docs/adr/0031-gnu-coreutils-precedence-on-resolute.md) for the mechanism. The `PATH` prepend for the linuxbrew `coreutils` gnubin directory is gated only on `[[ -d ... ]]`, deliberately not on `RESOLUTE`: the install is release-gated, the `PATH` edit is release-blind, and the ADR records why that asymmetry is intentional rather than a bug to reconcile.
+- Which `make` an actor resolves depends on whether the process sourced `6_path.zsh`: interactive zsh and everything descended from it (tmux, hooks it launches, this harness's own shell) get GNU 4.4.1; cron, launchd, `ssh host '<cmd>'`, and editor-spawned git hooks get `/usr/bin/make` 3.81.
+- The split is currently harmless to this repo's gates: `Makefile:1`'s `MAKEFLAGS += --no-print-directory` suppresses on 4.x what 3.81 never printed. Do not reopen this without re-running that comparison (`specs/2026-08-16-system-wide-gnu-make-design.md`, `specs/2026-08-16-hook-make-resolution-design.md`). → `dotfiles-conventions.md` § `Which make an actor resolves (gnubin/actor table)`
 
-- **Which `make` an actor resolves — measured, and it does not change any gate verdict.** Because `6_path.zsh` is sourced by interactive zsh only, `make`'s version on a provisioned mac is a function of how the process was started. There are four answers:
-
-  | actor                                                                                                 | `PATH` source                                              | resolves          | version |
-  | ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- | ----------------- | ------- |
-  | interactive zsh; anything descended from it (tmux, Warp, this harness's Bash tool, hooks it launches) | `6_path.zsh` / `.zprofile`                                 | `.../gnubin/make` | 4.4.1   |
-  | editor-spawned `git` and its hooks (VS Code measured live)                                            | launchd, plus Homebrew's shim dir                          | `/usr/bin/make`   | 3.81    |
-  | cron                                                                                                  | compiled `_PATH_DEFPATH` = `/usr/bin:/bin`                 | `/usr/bin/make`   | 3.81    |
-  | launchd job, `ssh host '<cmd>'`                                                                       | compiled `_PATH_STDPATH` = `/usr/bin:/bin:/usr/sbin:/sbin` | `/usr/bin/make`   | 3.81    |
-
-  **The split is real and its consequence to this repo is nil.** The full suite was run under both versions sequentially: `rc=0, 1363 ok, 0 not ok` under each, with an empty `not ok` diff. `make lint` is byte-identical, rc 0 under both. `Makefile:1`'s `MAKEFLAGS += --no-print-directory` is why — it suppresses on 4.x what 3.81 never printed, so the one documented behavioural difference does not reach these gates. Do not reopen this without re-running that comparison; two designs were written and retired on the assumption it mattered (`specs/2026-08-16-system-wide-gnu-make-design.md` and `specs/2026-08-16-hook-make-resolution-design.md`, both carrying the measurements).
-
-  Two traps recorded from those retirements, because both cost real work and neither is obvious:
-
-  - **`/usr/local/bin` reaches none of the non-interactive actors.** It leads `/usr/bin` in `/etc/paths`, but `/etc/paths` is consumed by `path_helper`, which only **login shells** invoke. cron, launchd and sshd use the compiled constants above and never see it. A symlink there changes nothing for any of them.
-  - **A `PATH` prepend inside a hook shadows the test suite's own `make` mock.** `tests/scripts/pre_push.bats` builds `PATH="${MAKE_MOCK_DIR}:${CLEAN_PATH}"`; production code prepending a real directory from inside the hook wins that race and the hook then runs the real suite against a bats fixture. Measured at 28 of 36 tests failing. This is `shell.md`'s PATH-mock pitfall inverted — there the mock shadows production, here production shadows the mock — and any future change that manipulates `PATH` in a hook must route through `_OVERRIDE_GNUBIN_ARM`/`_OVERRIDE_GNUBIN_INTEL` so the harness can point it at the mock dir.
-
-- **`setup_env.sh` cannot run non-interactively on the Linux workstation, and the cause is
-  the bullet above generalised.** `6_path.zsh` also appends `/home/linuxbrew/.linuxbrew/bin`
-  on Linux, and that file is sourced by **interactive zsh only**. `setup_env.sh` gates every
-  workflow on `env which brew` (`setup_env.sh:30`), so the entry point resolves `brew` for a
-  human at a prompt and not for anything else. Measured 2026-08-14 on the 7950X, which has
-  had Homebrew 6.0.17 installed since 2024-12-27:
-
-  ```
-  non-interactive bash : ABSENT
-  interactive zsh      : /home/linuxbrew/.linuxbrew/bin/brew
-  ```
-
-  A non-interactive invocation dies in seconds with `[ERROR] Homebrew not found. On Linux,
-run first: ./scripts/bootstrap_linux.sh` — advice that is wrong, because bootstrap already
-  ran. **No cron job, git hook, CI runner, or agent session can run this
-  script on that machine**, which bounds anything that would automate through it. Workaround
-  for a non-interactive caller is to prepend the prefix explicitly rather than to re-bootstrap:
-  `PATH="/home/linuxbrew/.linuxbrew/bin:${PATH}" ./setup_env.sh -t developer`.
-
-  The macOS bullet above and this one are the same defect at two severities — there it
-  answers wrong for one tool's version, here it refuses the entry point outright — so treat a
-  tool path placed in an interactive-only rc file as gating whichever actor sources that file,
-  not as a machine-wide fact. `behavior.md`'s actor-boundary rule states the general form:
-  **who runs this in production, and did I run it as them?**
+- `setup_env.sh` gates every workflow on `env which brew`, and `6_path.zsh`'s linuxbrew `PATH` prepend is sourced by interactive zsh only — so no cron job, git hook, CI runner, or agent session can run `setup_env.sh` non-interactively on the Linux workstation; it fails with a misleading "run bootstrap_linux.sh first" even after bootstrap has already run.
+- This is the macOS `make`-resolution trap one severity worse: treat a tool path placed in an interactive-only rc file as gating whichever actor sources that file, never as a machine-wide fact. A `PATH` prepend inside a hook shadows `tests/scripts/pre_push.bats`'s own `make` mock (measured: 28 of 36 tests failed) — route any future hook `PATH` edit through `_OVERRIDE_GNUBIN_ARM`/`_OVERRIDE_GNUBIN_INTEL` instead.
+- On macOS, a `/usr/local/bin` symlink cannot fix `make` for hooks, cron, launchd or `ssh host '<cmd>'`: `/etc/paths` is read only by `path_helper`, which only login shells run — measured, it changes nothing for any non-interactive actor.
+- Workaround for a non-interactive caller: prepend the prefix explicitly rather than re-bootstrapping — `PATH="/home/linuxbrew/.linuxbrew/bin:${PATH}" ./setup_env.sh -t developer`. → `dotfiles-conventions.md` § `setup_env.sh cannot run non-interactively on the Linux workstation (brew PATH)`
 - **`install_cargo_tools` (`lib/developer.sh`) judges each `CARGO_TOOLS` pin (`lib/constants.sh`) by whether the binary runs (`--help`), never by the version string cargo reports, and repairs a non-runnable install with `--force`.** `-t update --brew-only` reaches the `cargo-tools` section deliberately — a brew upgrade of a shared library is exactly what can break a linked binary the pin already satisfies by version, so the repair path has to run there too, not only under a full update. A first run, or a pin bump in `CARGO_TOOLS`, compiles every `absent`/`older` crate from scratch, which can take tens of minutes — stated rather than hidden, since `workstation` had only two of the eight pins installed before this landed.
-- **terraform on Linux now comes through tfenv** (`_install_ubuntu_tfenv`, `lib/linux_ubuntu.sh`), matching how the Mac and `workstation` already get it, rather than a standalone pinned binary. It clones `~/.tfenv` if absent, symlinks `tfenv`/`terraform` into `/usr/local/bin` only when neither name is already a regular file or a foreign symlink, and installs `TERRAFORM_VER` only when `~/.tfenv/version` does not exist yet — an operator's chosen version (`workstation` stays on 1.14.9) is never overwritten.
-- **A `~/.tfenv` that exists but is not a usable checkout is the one tfenv state doctor cannot talk an operator out of, and the remedy is in the WARN, not in doctor.** An interrupted clone (git self-cleans on an ordinary error exit but not on SIGINT/SIGTERM/timeout/OOM), a stray `mkdir`, or a damaged checkout leaves a directory with no `bin/tfenv`. `_install_ubuntu_tfenv` gates on `[[ ! -x "${_root}/bin/tfenv" ]]`, warns naming `rm -rf ${_root}`, and returns **before** the symlink loop — deliberately neither re-cloning (`git clone` into a non-empty directory fails, so it would not self-heal) nor deleting the directory (destroying an operator's directory is their call). That ordering is load-bearing: run the loop first and it plants two dangling symlinks, after which its own `-L` branch sees `readlink` already equal to the target, `continue`s, and repairs nothing on every later run. Meanwhile `_doctor_check_dev_tools` correctly reports `terraform: not found` (a dangling symlink is skipped by `command -v`) and prescribes `setup_env.sh -t developer` — which reaches this same guard and cannot fix it. The `rm -rf` in the WARN is the only thing that does.
-- **`tflint` and `tfsec` staleness is invisible to `check-versions`** — see the Backlog. **The eight `CARGO_TOOLS` pins are not**: `run_check_versions` reports each against crates.io's `max_stable_version`, which needs `-A "dotfiles check-versions (bjackson@pobox.com)"` or the request 403s (measured from all three development machines on 2026-09-17) — crates.io's GitHub-release checker can't be reused here, since `cargo-audit` tags its releases `cargo-audit/vX.Y.Z` rather than a bare `vX.Y.Z`.
+- `_install_ubuntu_tfenv` clones `~/.tfenv` if absent, symlinks `tfenv`/`terraform` into `/usr/local/bin` only when neither name already exists as a regular file or a foreign symlink, and installs `TERRAFORM_VER` only when `~/.tfenv/version` is absent — an operator's chosen version is never overwritten.
+- The `[[ ! -x "${_root}/bin/tfenv" ]]` guard must run and return before the symlink loop: running the loop first plants two dangling symlinks that the **loop's own** `-L` branch (`[[ -L "${_link}" ]]`, further down) then treats as already repaired on every subsequent run. The remedy for a broken checkout (`rm -rf ${_root}`) belongs in the WARN, not in doctor. → `dotfiles-conventions.md` § `terraform on Linux via tfenv, and the checkout guard`
+- `tflint`/`tfsec` staleness is not checked by `check-versions` (tracked as a Backlog gap). The eight `CARGO_TOOLS` pins are checked, against crates.io's `max_stable_version`, which needs a `-A "dotfiles check-versions (bjackson@pobox.com)"` header or the request 403s. → `dotfiles-conventions.md` § `tflint/tfsec staleness gap; CARGO_TOOLS staleness via crates.io`
 
 ## Dependency Automation
 
-**`renovate.json` inlines the shared preset rather than extending it, and that is
-load-bearing.** `ai-config` is a **private** repo and dotfiles is **public**. Renovate
-resolves `extends` at `initRepo`, _before any dependency extraction_, so an unfetchable
-preset throws `config-validation` and abandons the whole repository — no PRs, no dependency
-dashboard, no visible error. Measured 2026-08-23 with config as the only variable: the
-remote-preset form produced **8 preset errors and 0 extractions**; inlined, **0 errors and
-1 extraction**. `ai-config/renovate-presets/default.json` stays canonical; keep the
-`extends`, `schedule`, `labels` and `packageRules` keys in sync with it by hand, because
-nothing detects drift between the copies. ADR-0010 predates this and says each repo
-_extends_ the shared preset — that half no longer holds.
+- Inline the shared Renovate preset into `renovate.json`, don't `extends` it — ai-config is private, dotfiles public, and an unfetchable `extends` throws `config-validation` at `initRepo` and silently abandons the repo (measured: `extends` gave 8 errors/0 extractions; inlined gave 0/1). ADR-0010's "each repo extends the preset" no longer holds.
+- Hand-sync `extends`/`schedule`/`labels`/`packageRules` with canonical `ai-config/renovate-presets/default.json` — nothing detects drift between the copies. → `dotfiles-dependency-automation.md` § `renovate.json inlines the shared preset (private-repo visibility)`
 
-**Confirmed in production 2026-08-24, and the confirmation is worth more than the
-prediction was.** The inlining landed on a repo that had produced **zero** Renovate PRs
-in the 98 days since its `renovate.json` was written. Renovate has now actually run here:
-**#240** pinned all six `actions/checkout` refs to `d23441a…` and **auto-merged**,
-and **#241** raised a major-version bump and **did not** — which is `packageRules`
-working exactly as written, `automerge: true` for patch/minor and `false` for major.
+- Treat Renovate as confirmed running here, not merely configured: #240 pinned every `actions/checkout` ref to a digest and auto-merged, #241 raised a major bump and did not — `packageRules` working as written — and `pinDigests: true` moved this repo from 0-of-6 pinned refs to 6-of-6.
+- Do not cite the `mode=silent` finding as a live constraint without re-reading a current Mend job log — silent mode is no longer in force here (a created branch is the one thing it forbids). → `dotfiles-dependency-automation.md` § `Renovate confirmed working: pinDigests and auto-merge in production`
 
-Two things follow that the earlier analysis got wrong or could not see:
+- Never conclude Renovate is inactive from a zero-PR count alone: under `mode=silent` zero was the only reachable value, so every "not running" verdict built on it was unprovable either way.
+- Before concluding anything from what a mechanism has not done, establish what it was even permitted to do — this holds even once silent mode is lifted elsewhere. → `dotfiles-dependency-automation.md` § `The zero-PR oracle was structurally unfalsifiable under silent mode`
 
-- **`mode=silent` is no longer in force for this repo.** The section in
-  `ai-config`'s corpus that established it — from Mend job logs on 2026-08-23, where
-  `Branch … creation is disabled because mode=silent` appears verbatim — was correct when
-  measured and is now stale. A created branch is the one thing silent mode forbids, and
-  there are two. Do not cite the silent-mode finding as a live constraint without
-  re-reading a current job log.
-- **`pinDigests: true` did the thing it was added for**, on its first real run. The
-  description block in `renovate.json` recorded this repo as "0 of 6 refs pinned"; it is
-  now 6 of 6, and #241 preserves the pin rather than reverting to a floating tag —
-  Renovate rebased it to digest-v6 → digest-v7 once #240 merged. ADR-0006's clause is
-  satisfied here by automation rather than by review.
+- Do not add `pip_requirements` to `renovate.json`'s `enabledManagers` — deliberately absent. Its pattern allows only one suffix after "requirements", so of five generated renderings only `requirements-ci.txt` matches, by luck not design; `tests/setup_env/requirements_ci.bats` pins it since a rename would silently widen scope.
+- All five renderings are generated from `uv.lock`; enabling the manager would raise PRs against generated files `check-requirements-ci` fails. The real declaration is `pyproject.toml`, owned by `pep621`. → `dotfiles-dependency-automation.md` § `pip_requirements deliberately absent from enabledManagers`
 
-**The zero-PR oracle this repo reasoned from was structurally unfalsifiable, and that is
-the durable lesson.** Under silent mode no repo could ever author a PR, so zero was the
-only reachable value and every "it is not running" verdict built on it was unprovable
-either way. The lesson survives the lift: establish what a mechanism is _permitted_ to do
-before drawing any conclusion from what it has not done.
+- Keep Dependabot security auto-PRs OFF, vulnerability alerts ON, fleet-wide across all 18 non-archived repos (decided 2026-08-21) — a GitHub repo-Settings toggle no tracked file captures (`dependabot.yml` governs version updates, not security), so absence from any file is not evidence it's unset.
+- Rationale: alerts are the signal, auto-PRs an unreviewed write path — #227 auto-merged an unattended lockfile edit because it passed CI. Don't re-enable auto-PRs without deliberately re-opening that path; 16 of 18 repos had alerts off entirely before this decision. → `dotfiles-dependency-automation.md` § `Dependabot: security auto-PRs off, vulnerability alerts on (fleet-wide)`
 
-**`pip_requirements` is deliberately absent from `enabledManagers`.** Renovate's pattern is
-`(^|/)[\w-]*requirements([-._]\w+)?\.(txt|pip)$`, which allows at most one `[-._]\w+`
-group after `requirements`, and `\w` excludes `-`. Measured against all five renderings:
-only `requirements-ci.txt` matches — the four narrow slices are two-segment names and cannot.
-**That is luck, not design**, so `tests/setup_env/requirements_ci.bats` pins it: renaming a
-slice to a single-segment name would silently bring it into scope. All five are generated
-from `uv.lock`, so Renovate would raise PRs against generated files that
-`check-requirements-ci` fails and the next `make sync-requirements-ci` reverts. The
-declaration is `pyproject.toml`; `pep621` is the manager that belongs.
+- `automated-security-fixes` is repo-wide — there is no per-ecosystem toggle, so "turn Dependabot off for Python only" is not expressible.
+- The flag cannot be cleared while alerts are off: `DELETE automated-security-fixes` 422s "Vulnerability alerts must be enabled…" on a repo left inert but latently armed. Always call `PUT vulnerability-alerts` first, then `DELETE automated-security-fixes` — never the reverse. → `dotfiles-dependency-automation.md` § `Dependabot: mechanical details (repo-wide toggle, ordering)`
 
-**Decided 2026-08-21, fleet-wide across all 18 non-archived repos: Dependabot
-security auto-PRs OFF, Dependabot vulnerability alerts ON.** Verified on this repo
-and spot-checked on `math` and `state-ledger` — `GET /vulnerability-alerts` returns
-`204`, `GET /automated-security-fixes` returns `enabled: false`.
-
-**This section exists because the decision lives nowhere in any repo.** It is a
-GitHub repo-_settings_ toggle, which is the identical defect that produced #227 — a
-control governing the repository, declared outside it. A tracked
-`.github/dependabot.yml` would not capture it either: that file governs _version_
-updates, and these are _security_ updates. Recording state and reasoning here is the
-minimum that makes it discoverable, and it is the reason a reader should not conclude
-from an absent config file that Dependabot is not running.
-
-**Rationale: alerts are the signal; auto-PRs are an unreviewed write path.** #227,
-titled "bump asteval from 1.0.6 to 1.0.9", edited `uv.lock` and nothing else, walked
-checkov back a year, and auto-merged because an internally consistent lock passes
-every CI check. Keeping alerts and closing auto-PRs gives visibility without letting
-a bot modify a lockfile unattended. Anyone re-enabling auto-PRs re-opens that path.
-
-**The fleet-wide measurement inverted the expectation and is the more useful half.**
-The premise all day was "an automated bot did something unreviewed." The actual
-condition was under-notification: **16 of 18 repos had vulnerability alerts switched
-off entirely**, including `math`, `state-ledger`, `etch-cli` and every homelab repo.
-One repo had an undeclared write path; sixteen had no signal at all. Net effect is
-strictly more visibility and strictly less automation.
-
-Two mechanical details, both non-obvious:
-
-- **`automated-security-fixes` is repo-wide — GitHub offers no per-ecosystem toggle.**
-  "Turn Dependabot off for Python" is not expressible; only the whole repo. That cost
-  nothing here because `renovate.json` already owns the other ecosystem via
-  `enabledManagers: ["github-actions"]`.
-- **The flag cannot be cleared while alerts are off.** `DELETE
-.../automated-security-fixes` returns **422 "Vulnerability alerts must be enabled to
-  configure automated security fixes."** A repo in that state (`terraform_ansible` was)
-  is inert but _latently armed_ — enabling alerts later lights auto-PRs instantly. Order
-  the calls: `PUT vulnerability-alerts`, then `DELETE automated-security-fixes`.
-
-**Consequence, stated so it is not found as a surprise: Python now has no automated
-update path at all.** Dependabot's write path is closed, and Renovate manages no Python
-in any repo (`pep621` is enabled nowhere), including this one — despite `pyproject.toml`
-and `uv.lock` living here. Alerts will fire with nothing proposing fixes. That is the
-right order — visibility before a reviewed write path — but it is a gap with a name and
-a duration, not a steady state.
+- Do not assume Python packages get automated update PRs here: Dependabot's write path is closed (auto-PRs off) and Renovate manages no Python anywhere (`pep621` enabled in no repo), including this one, despite `pyproject.toml`/`uv.lock` living here — vulnerability alerts will fire with nothing proposing a fix. → `dotfiles-dependency-automation.md` § `Consequence: Python has no automated dependency update path`
 
 ## Local-Only State
 
