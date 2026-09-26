@@ -235,5 +235,5 @@ The spec amendment "rule bullets replace verbatim sentence retention" governs. T
 
   Files: `scripts/relocation_check.py`, `tests/test_relocation_check.py`.
 - **Task 8 (sonnet ×6, wave `rules`).** One author per destination file writes `docs/superpowers/plans/relocation-rules/<dest-stem>.md`. It has a `### <heading>` per MOVE group of that destination, then 1–3 imperative rule lines, then a `trigger:` line (action | paths/symbols). Test Seams entries also carry `lead:` `` `VAR` (`file:function`) ``, verified against the code. Coverage is per the amendment. Each author lists `covers:` for each item of (a) and (b). The files are disjoint.
-- **Task 9 (sonnet).** Regenerate `CLAUDE.md` from the rules files plus INLINE units, then fix the four weak triggers. The gate is `check --rules-mode bullets --max-bytes 90000`.
+- **Task 9 (sonnet).** *(Superseded gate: spec amendments (b) and (c) moved the cap from 90000 to 120000, then to 123000. The executed gate is `--rules-mode bullets --max-bytes 123000`.)* Regenerate `CLAUDE.md` from the rules files plus INLINE units, then fix the four weak triggers. The gate is `check --rules-mode bullets --max-bytes 90000`.
 - **Task 10 (opus reviewer).** Check 5 re-review against the coverage contract, plus structure. Any non-`covered` verdict returns to Task 8 for that group.
