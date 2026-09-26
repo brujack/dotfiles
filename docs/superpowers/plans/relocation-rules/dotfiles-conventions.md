@@ -164,6 +164,7 @@ lead: none
 
 - `setup_env.sh` gates every workflow on `env which brew`, and `6_path.zsh`'s linuxbrew `PATH` prepend is sourced by interactive zsh only — so no cron job, git hook, CI runner, or agent session can run `setup_env.sh` non-interactively on the Linux workstation; it fails with a misleading "run bootstrap_linux.sh first" even after bootstrap has already run.
 - This is the macOS `make`-resolution trap one severity worse: treat a tool path placed in an interactive-only rc file as gating whichever actor sources that file, never as a machine-wide fact. A `PATH` prepend inside a hook shadows `tests/scripts/pre_push.bats`'s own `make` mock (measured: 28 of 36 tests failed) — route any future hook `PATH` edit through `_OVERRIDE_GNUBIN_ARM`/`_OVERRIDE_GNUBIN_INTEL` instead.
+- On macOS, a `/usr/local/bin` symlink cannot fix `make` for hooks, cron, launchd or `ssh host '<cmd>'`: `/etc/paths` is read only by `path_helper`, which only login shells run — measured, it changes nothing for any non-interactive actor.
 - Workaround for a non-interactive caller: prepend the prefix explicitly rather than re-bootstrapping — `PATH="/home/linuxbrew/.linuxbrew/bin:${PATH}" ./setup_env.sh -t developer`.
   trigger: running it non-interactively on Linux | `setup_env.sh`
   covers:

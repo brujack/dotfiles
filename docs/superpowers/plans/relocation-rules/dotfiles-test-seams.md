@@ -102,7 +102,7 @@ lead: `_OVERRIDE_CURRENT_LOGIN_SHELL` (`lib/helpers.sh:_current_login_shell`)
 - Derive login shell from `getent passwd`/`dscl UserShell`, never `${SHELL}` — `${SHELL}` names the running shell, not the account's, so a provision started from zsh can misread a `/bin/bash` account as already-zsh.
 - Tests must set `_OVERRIDE_CURRENT_LOGIN_SHELL`: without it they pass on a mac already on zsh and fail on any runner whose account is `/bin/bash` — a machine-dependent pass, not a code-dependent one.
 - Check both `chsh`'s and `sudo -n chsh`'s exit codes rather than logging "Changed default shell" unconditionally — `chsh` authenticates via PAM and exits 1 non-interactively, so an unchecked rc reports success over an unchanged shell.
-- The three end-to-end `run_doctor` tests stub every sub-check by name; stub `_doctor_check_login_shell` there too, or it reads the real account mid-suite.
+- The end-to-end `run_doctor` tests stub every sub-check by name; stub `_doctor_check_login_shell` there too, or it reads the real account mid-suite.
   trigger: editing `setup_zsh_as_default_shell` or `_doctor_check_login_shell` | `lib/helpers.sh`
   covers:
   - a: "supplies the ACCOUNT's login shell"
