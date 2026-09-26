@@ -35,11 +35,14 @@ lead: none
 
 lead: none
 
-- `lib/update_summary.sh`'s `_UPDATE_SECTION_ORDER` array controls which sections the update summary prints. Adding `_update_record_start/end "new-section"` in `run_update()` without also adding that name to the array tracks the section internally but never prints it, with no error.
-- Add both edits together in the same commit.
-  trigger: adding a `run_update` section | `_UPDATE_SECTION_ORDER` in `lib/update_summary.sh`
+- `lib/update_summary.sh`'s `_UPDATE_SECTION_ORDER` array controls which sections print. Add `_update_record_start/end "new-section"` and the array entry together — omitting the entry tracks the section internally but never prints it, with no error.
+- Don't audit hardcoded count assertions (`[[ "$output" == *"9 OK"* ]]`) on add/remove — `tests/setup_env/update_summary.bats` seeds sections by name, so an unseeded entry is invisible to the tally by construction.
+- The real risk is on **removal**: grep fixtures for a stray reference to the removed name that still seeds it.
+  trigger: adding or removing a `run_update` section | `_UPDATE_SECTION_ORDER` in `lib/update_summary.sh`
   covers:
   - a: "Adding _update_record_start/end new-section in run_update"
+  - a: "is stale and was measured wrong"
+  - a: "the real risk when **removing** a section is a stray refe"
   - b: "this array was named only in the moved lead"
 
 ### git-hooks section coupling and _git_hooks_target_dir
@@ -122,20 +125,23 @@ lead: none
 
 lead: none
 
-- `core.hooksPath` set at global or system scope redirects every repo's hooks at once (`git rev-parse --git-path hooks` honors it); an empty or whitespace-only value is a real pin, not an absent one — `git config --get` reports rc 0 with empty stdout and git still disables every hook on the machine.
-- Probe with `--includes` (the default `--no-includes` misses a pin reached through an include) and `-z`, consumed via `read -d ''` off a process substitution, never `$(...)`. A key held in an included file needs `git config --file <origin> --unset core.hooksPath`; a scope-level `--unset` there exits 5 and leaves the pin.
-  trigger: diagnosing dead git hooks | `_git_hooks_hookspath_offenders`
+- `core.hooksPath` set at global/system scope redirects every repo's hooks at once (`git rev-parse --git-path hooks` honors it); empty or whitespace-only counts as a real pin — `git config --get` returns rc 0 with empty stdout and git still disables every hook on the machine.
+- Probe with `--includes` (the default `--no-includes` misses a pin reached through an include) and `-z`, consumed via `read -d ''` off a process substitution, never `$(...)`. A key held in an included file needs `git config --file <origin> --unset core.hooksPath`; a scope-level `--unset` there exits 5 and leaves the pin. Output contract is `scope<TAB>remedy<TAB>value`, value last, so a tab in a pinned path can't truncate the remedy.
+- `tests/setup_env/git_hooks.bats`'s `setup()` must neutralize `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM`, or the suite fails on any machine with a pin — and since `scripts/pre-push` runs `make test`, that developer cannot push.
+  trigger: diagnosing dead git hooks, or editing `tests/setup_env/git_hooks.bats` | `_git_hooks_hookspath_offenders`
   covers:
   - a: "An empty or whitespace-only value is a real pin, not an a"
   - a: "The pin probe must read --includes, and the remedy must n"
+  - a: "Output contract is `scope<TAB>remedy<TAB>value`"
+  - a: "must neutralize `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM`"
   - b: "the value of what? core.hooksPath is introduced only in "
 
 ### Homebrew make gnubin prepend (prepend, not append)
 
 lead: none
 
-- The Homebrew `make` gnubin directory must be prepended to `PATH`, never appended (`path+=`) — this file's existing idiom appends, which would leave `/usr/bin/make` 3.81 ahead and be completely inert.
-- Test both Homebrew prefixes for existence (ARM `/opt/homebrew/opt/make/libexec/gnubin`, Intel `/usr/local/opt/make/libexec/gnubin`) rather than calling `brew --prefix`, since this same file is what puts `brew` on `PATH`. The linuxbrew coreutils gnubin prepend is gated only on `[[ -d ... ]]`, deliberately not on `RESOLUTE` — the install is release-gated, the `PATH` edit is release-blind.
+- The Homebrew `make` gnubin directory must be prepended to `PATH`, never appended (`path+=`) — `.config/.zshrc.d/6_path.zsh`'s existing idiom appends, which would leave `/usr/bin/make` 3.81 ahead and be completely inert.
+- Test both Homebrew prefixes for existence (ARM `/opt/homebrew/opt/make/libexec/gnubin`, Intel `/usr/local/opt/make/libexec/gnubin`) rather than calling `brew --prefix`, since `.config/.zshrc.d/6_path.zsh` is what puts `brew` on `PATH`. The linuxbrew coreutils gnubin prepend is gated only on `[[ -d ... ]]`, deliberately not on `RESOLUTE` — the install is release-gated, the `PATH` edit is release-blind.
   trigger: editing the `PATH` prepend | `.config/.zshrc.d/6_path.zsh`
   covers:
   - a: "It must be a prepend, not path+=. Both Homebrew prefixes "
@@ -157,20 +163,21 @@ lead: none
 lead: none
 
 - `setup_env.sh` gates every workflow on `env which brew`, and `6_path.zsh`'s linuxbrew `PATH` prepend is sourced by interactive zsh only — so no cron job, git hook, CI runner, or agent session can run `setup_env.sh` non-interactively on the Linux workstation; it fails with a misleading "run bootstrap_linux.sh first" even after bootstrap has already run.
-- `/usr/local/bin` cannot substitute: it reaches login shells only via `/etc/paths`/`path_helper`, which cron/launchd/sshd never invoke. Any future `PATH` edit in a hook must route through `_OVERRIDE_GNUBIN_ARM`/`_OVERRIDE_GNUBIN_INTEL`.
+- This is the macOS `make`-resolution trap one severity worse: treat a tool path placed in an interactive-only rc file as gating whichever actor sources that file, never as a machine-wide fact. A `PATH` prepend inside a hook shadows `tests/scripts/pre_push.bats`'s own `make` mock (measured: 28 of 36 tests failed) — route any future hook `PATH` edit through `_OVERRIDE_GNUBIN_ARM`/`_OVERRIDE_GNUBIN_INTEL` instead.
 - Workaround for a non-interactive caller: prepend the prefix explicitly rather than re-bootstrapping — `PATH="/home/linuxbrew/.linuxbrew/bin:${PATH}" ./setup_env.sh -t developer`.
   trigger: running it non-interactively on Linux | `setup_env.sh`
   covers:
-  - a: "It leads /usr/bin in /etc/paths, but /etc/paths is consum"
+  - a: "the same defect at two severities"
+  - a: "treat a tool path placed in an interactive-only rc file a"
+  - b: "A `PATH` prepend inside a hook shadows the test suite's o"
   - b: "Workaround for a non-interactive caller is to prepend the"
-  - b: "The macOS bullet above and this one are the same defect a"
 
 ### terraform on Linux via tfenv, and the checkout guard
 
 lead: none
 
 - `_install_ubuntu_tfenv` clones `~/.tfenv` if absent, symlinks `tfenv`/`terraform` into `/usr/local/bin` only when neither name already exists as a regular file or a foreign symlink, and installs `TERRAFORM_VER` only when `~/.tfenv/version` is absent — an operator's chosen version is never overwritten.
-- The `[[ ! -x "${_root}/bin/tfenv" ]]` guard must run and return before the symlink loop: running the loop first plants two dangling symlinks that the guard's own `-L` branch then treats as already repaired. The remedy for a broken checkout (`rm -rf ${_root}`) belongs in the WARN, not in doctor.
+- The `[[ ! -x "${_root}/bin/tfenv" ]]` guard must run and return before the symlink loop: running the loop first plants two dangling symlinks that the **loop's own** `-L` branch (`[[ -L "${_link}" ]]`, further down) then treats as already repaired on every subsequent run. The remedy for a broken checkout (`rm -rf ${_root}`) belongs in the WARN, not in doctor.
   trigger: editing the tfenv installer | `_install_ubuntu_tfenv`
   covers:
   - a: "It clones ~/.tfenv if absent, symlinks tfenv/terraform in"

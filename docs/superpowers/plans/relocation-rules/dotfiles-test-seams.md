@@ -6,11 +6,11 @@ One entry per MOVE group (G0–G35), per the 2026-09-25 relocation re-plan Task 
 
 lead: none
 
-- Name a test seam `_OVERRIDE_VAR` and default it with `local _file="${_OVERRIDE_VAR:-$(dirname "${BASH_SOURCE[0]}")/real/path}"`.
-- In tests, set `_OVERRIDE_VAR` to a writable temp copy; leave it unset in production code.
-  trigger: adding a new `_OVERRIDE_*` test seam | `lib/*.sh`, `scripts/*`, `.config/.zshrc.d/*.zsh`
+- A test seam is a variable with a production default — `local _file="${VAR:-<real path>}"` — not a naming rule: seams below are named `_RUSTUP_INIT_*`, `GGSHIELD_BIN`, `LEDGER_BIN`, `_AWS_*`, `_RHN_*`, `_CARGO_BIN`, and more.
+- In tests, set the seam variable to a writable temp copy; leave it unset in production code.
+  trigger: adding a new test seam | `lib/*.sh`, `scripts/*`, `.config/.zshrc.d/*.zsh`
   covers:
-  - a: "the `_OVERRIDE_VAR` seam idiom (`local _file=\"${_OVE"
+  - a: "Pattern: `local _file=\"${_OVERRIDE_VAR:-$(dirname \"${"
   - b: "Tests set the var and pass a writable temp copy; produ"
 
 ### Rustup signature verification seams (_RUSTUP_INIT_URL / _RUSTUP_INIT_SHA256 / _RUSTUP_INIT_BIN / _OVERRIDE_CARGO_BIN_DIR)
@@ -82,7 +82,8 @@ lead: `_OVERRIDE_HOMEBREW_PREFIX_ARM`/`_OVERRIDE_HOMEBREW_PREFIX_INTEL` (`.confi
 lead: `_OVERRIDE_KEYCHAIN_BIN` (`.config/.zshrc.d/5_general.zsh`)
 
 - `_OVERRIDE_KEYCHAIN_BIN` exists because keychain's real path is absolute and unmockable via `PATH`; without it, an absent-branch test only fails where keychain is actually installed.
-- Keep `"${_keychain}" --eval …` quoted — it's a default (zsh doesn't word-split unquoted params), not a guarantee, since `emulate sh`/`ksh` re-enable `SH_WORD_SPLIT`. Keep the block wrapped in `[[ -o interactive ]]`: sourcing it non-interactively starts a daemonizing `ssh-agent` that holds the bats pipe and hangs `make test` (measured 16 agents/run, 161 accumulated).
+- Keep `"${_keychain}" --eval …` quoted — a default (zsh doesn't word-split unquoted params), not a guarantee, since `emulate sh`/`ksh` re-enable `SH_WORD_SPLIT`. Keep the block wrapped in `[[ -o interactive ]]`: sourcing it non-interactively starts a daemonizing `ssh-agent` that holds the bats pipe and hangs `make test` (measured: 16/run, 161 accumulated).
+- Leave every `[[ ${VAR} ]]` test here unquoted — `[[ ]]` suppresses splitting regardless of `SH_WORD_SPLIT`; quoting them is churn (command vs. test position, not a style rule). `tests/zshrc.d/unit.bats` must keep `setopt shwordsplit`, or the quoting assertion above is vacuous.
 - The non-interactive (zero calls) and interactive (seam read) tests are a pair; neither alone catches a typo'd seam name.
   trigger: editing `_OVERRIDE_KEYCHAIN_BIN` or the keychain block | `.config/.zshrc.d/5_general.zsh`, `tests/zshrc.d/unit.bats`
   covers:
@@ -90,6 +91,8 @@ lead: `_OVERRIDE_KEYCHAIN_BIN` (`.config/.zshrc.d/5_general.zsh`)
   - a: "The expansion is quoted"
   - b: "It is quoted anyway because that safety is a default"
   - b: "The block it guards is wrapped in `[[ -o interactive ]]`"
+  - c: "The `[[ ${VAR} ]]` tests throughout this file are delibe"
+  - c: "without that option the quoted and unquoted forms are in"
   - b: "Measured 2026-08-16 on the Linux workstation: 16 agents" (needs unit)
 
 ### _OVERRIDE_CURRENT_LOGIN_SHELL seam and the chsh guard
@@ -99,10 +102,12 @@ lead: `_OVERRIDE_CURRENT_LOGIN_SHELL` (`lib/helpers.sh:_current_login_shell`)
 - Derive login shell from `getent passwd`/`dscl UserShell`, never `${SHELL}` — `${SHELL}` names the running shell, not the account's, so a provision started from zsh can misread a `/bin/bash` account as already-zsh.
 - Tests must set `_OVERRIDE_CURRENT_LOGIN_SHELL`: without it they pass on a mac already on zsh and fail on any runner whose account is `/bin/bash` — a machine-dependent pass, not a code-dependent one.
 - Check both `chsh`'s and `sudo -n chsh`'s exit codes rather than logging "Changed default shell" unconditionally — `chsh` authenticates via PAM and exits 1 non-interactively, so an unchecked rc reports success over an unchanged shell.
+- The three end-to-end `run_doctor` tests stub every sub-check by name; stub `_doctor_check_login_shell` there too, or it reads the real account mid-suite.
   trigger: editing `setup_zsh_as_default_shell` or `_doctor_check_login_shell` | `lib/helpers.sh`
   covers:
   - a: "supplies the ACCOUNT's login shell"
   - a: "`chsh` is why the rest of that function changed"
+  - a: "the three end-to-end `run_doctor` tests stub every sub-c"
   - b: "deliberately **not** `${SHELL}`, which names whichever s"
   - b: "It is not optional in tests: without it they pass on"
 
@@ -206,12 +211,14 @@ lead: `_PROFILES_LOADED` (`lib/detect_env.sh:detect_env`, `lib/helpers.sh`)
 
 lead: `_AWS_GPG_BIN`/`_AWS_PKGUTIL_BIN`/`_AWS_KEY_PATH` (`lib/developer.sh:_aws_verify_zip`/`_aws_verify_pkg`, `lib/helpers.sh:_doctor_check_aws_key_expiry`)
 
-- Resolve `_AWS_GPG_BIN`/`_AWS_PKGUTIL_BIN` with `command -v`, never strip `PATH` to make them absent — stripping `/opt/homebrew/bin` or `/usr/sbin` removes the rest of the toolchain those dirs also hold.
-- `_AWS_KEY_PATH` defaults via `DOTFILES_REPO_ROOT`, resolved at **source time** in `lib/constants.sh` — never re-derive it inline as `$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)`, since that returns empty once the caller (e.g. `update_aws_cli`) has already `cd`'d elsewhere.
-- A suite sourcing via an absolute path (bats' `load_setup_env`) can't exercise this cwd-sensitivity; regression tests must `source ./lib/...` relatively from the repo root, then `cd` away before asserting.
+- Resolve `_AWS_GPG_BIN`/`_AWS_PKGUTIL_BIN` via `command -v`, never by stripping `PATH` — stripping `/opt/homebrew/bin` or `/usr/sbin` removes the rest of the toolchain those dirs hold.
+- `_AWS_KEY_PATH` defaults via `DOTFILES_REPO_ROOT`, resolved at **source time** in `lib/constants.sh` as a **plain assignment**, never a `${VAR:-}` self-guard — tried and retired, since a guard only adds an env-settable name selecting where a trust anchor is read from. Never re-derive the expression inline as `$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)`, which returns empty once the caller (e.g. `update_aws_cli`) has already `cd`'d elsewhere.
+- An absolute-path suite (bats' `load_setup_env`) can't exercise this cwd-sensitivity; regression tests must `source ./lib/...` relatively, `cd` away, then assert on the **post-import failure message** — never on absence (tdd.md E5), which an unrelated skip satisfies equally.
   trigger: editing AWS CLI signature verification or its key path | `lib/developer.sh`, `lib/helpers.sh`, `lib/constants.sh`
   covers:
   - a: "exist for the same absolute-toolchain reason as"
+  - a: "It is a plain assignment rather than a `${VAR:-}` self-gu"
+  - a: "assert on the **post-import** failure"
   - b: "`DOTFILES_REPO_ROOT` resolves the same expression at **s" (needs unit: "the same expression" = the cd/dirname derivation)
 
 ### _AWS_BIN seam
@@ -237,12 +244,13 @@ lead: none
 
 lead: `result`/`findings`/`max_age_days` (`scripts/cadence-notify.sh`, `lib/launch_agents.sh:_doctor_check_cadence`)
 
-- Write `max_age_days` into the heartbeat, never mirror the bound in the reader, and render `held`/`incomplete`/`clean`/`pending` as pairwise-unequal states — `pending` is seeded at install (not a grace period), absent means "not installed", and a reinstall must never clobber a real heartbeat.
+- Write `max_age_days` into the heartbeat; when a heartbeat carries none, the reader falls back to its own default (8) and must **name its source** (`from heartbeat` vs `default`), so a fallback is never mistaken for a reading. Render `held`/`incomplete`/`clean`/`pending` as pairwise-unequal states — `pending` is seeded at install (not a grace period), absent means "not installed", and a reinstall must never clobber a real heartbeat.
 - stdout carries findings one per line and nothing else; a stray status/banner line silently over-reports (measured: a clean fleet reporting `"findings": 1`) — check what else the detector writes to stdout before trusting a count. stderr carries the diagnosis, capped at 20 lines and POSTed to ntfy, so never print credentials or env dumps there.
 - Keep heartbeat fields closed-form via `printf`; never add a free-text field or shell out to `python3 -c json.dumps` — free text breaks the `sed`/`json.loads` readers, and a python3 dependency would take down both sides of the one liveness channel.
   trigger: writing or changing a cadence detector's stdout/heartbeat contract | `scripts/cadence-notify.sh`, `lib/launch_agents.sh`
   covers:
   - a: "`max_age_days` is written, not mirrored."
+  - a: "prefers the written value and **names its source**"
   - a: "`pending` is a state, not a grace period."
   - a: "`held` is a finding, not a fault."
   - a: "`findings` is a count of stdout lines"
@@ -252,12 +260,12 @@ lead: `result`/`findings`/`max_age_days` (`scripts/cadence-notify.sh`, `lib/laun
 
 ### Cadence agent PATH and plist rendering
 
-lead: `PATH` (`cadence.plist.template`, `lib/launch_agents.sh`)
+lead: `PATH` (`LaunchAgents/cadence.plist.template`, `lib/launch_agents.sh`)
 
 - Every detector dependency must be listed in the plist's `PATH` (`__HOME__/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`) — launchd sources no profile, so an absent tool (e.g. `ledger`, in the first entry) makes the agent silently unable to run.
 - Resolve a new detector's dependencies under that exact `PATH` (`env -i PATH=<the plist PATH> bash -c 'command -v <tool>'`), never under an interactive shell, which answers for a different actor.
 - A template edit does not reach an installed agent — the live `~/Library/LaunchAgents/*.plist` is a rendered copy from install time. Re-run `setup_env.sh -t setup_user`, then verify the **live** file (`grep -A1 '<key>PATH</key>' <plist>`), not the template.
-  trigger: editing `cadence.plist.template` or adding a cadence detector | `lib/launch_agents.sh`, `cadence.plist.template`
+  trigger: editing `LaunchAgents/cadence.plist.template` or adding a cadence detector | `lib/launch_agents.sh`, `LaunchAgents/cadence.plist.template`
   covers:
   - a: "The plist's `PATH` is the agent's whole world"
   - a: "`tests/setup_env/launch_agents.bats` guards the property"
@@ -268,7 +276,7 @@ lead: `PATH` (`cadence.plist.template`, `lib/launch_agents.sh`)
 
 ### Cadence ntfy delivery and heartbeat rationale
 
-lead: `NTFY_URL`/`NTFY_TOPIC` (`scripts/cadence-notify.sh:_rhn_notify`)
+lead: `NTFY_URL`/`NTFY_TOPIC` (`scripts/cadence-notify.sh:_rhn_ntfy_target`)
 
 - ntfy needs both a topic and credentials — POSTing bare `${NTFY_URL}` (host only) cannot deliver; always POST to `${NTFY_URL}/${NTFY_TOPIC}` with auth.
 - Send credentials on **stdin** via `curl -K -`, never `-u` (argv is readable by `ps`), and refuse (never escape) a credential containing a newline — curl's config is line-oriented and reads past a break as a further directive.

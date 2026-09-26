@@ -2,7 +2,7 @@
 
 lead: none
 
-- For the full `MOCK_*` env var reference table and the general mock usage pattern, use this file's own `Mock Pattern` section below rather than looking elsewhere — this heading exists only to receive the pointer.
+- The full `MOCK_*` env var reference table and the general mock usage pattern live in `dotfiles-bats-test-infrastructure.md` — this group's own suffix target, not a `CLAUDE.md` section.
   trigger: read | `tests/mocks/*`, `MOCK_*` env vars
   covers:
   - a: (none — nothing retained beyond the pointer itself)
@@ -44,12 +44,14 @@ lead: none
 
 lead: none
 
-- On success, `tests/mocks/curl` writes `MOCK_CURL_STDOUT` to the `-o` target file AND still emits it on stdout — a deliberate deviation from real curl. Keep the dual emission: `whats-new*.sh`, `_fetch_github_latest` (`lib/workflows.sh`) and `install_homebrew` (`lib/macos.sh`) never pass `-o` and need the stdout copy from this mock.
+- `tests/mocks/curl`'s `-o` write is deferred until **after** the exit code is decided, a deliberate deviation from real curl: a simulated failure (`MOCK_CURL_HTTP_STATUS >= 400` or a nonzero `MOCK_CURL_EXIT`) leaves a pre-seeded target file completely unchanged.
+- On success it writes `MOCK_CURL_STDOUT` to the target file AND still emits it on stdout — keep the dual emission: `whats-new*.sh`, `_fetch_github_latest` (`lib/workflows.sh`) and `install_homebrew` (`lib/macos.sh`) never pass `-o` and need the stdout copy from this mock.
 - Before removing it, verify no current caller both passes `-o` and consumes stdout.
   trigger: edit | tests/mocks/curl
   covers:
-  - a: "On success, the mock writes `MOCK_CURL_STDOUT` to the target "
-  - b: (none — verdict: complete)
+  - a: "`-o`'s write is now deferred until after the exit code is "
+  - a: "leaves a pre-seeded target file completely unchanged"
+  - b: "On success, the mock writes `MOCK_CURL_STDOUT` to the target "
 
 ### MAKEFLAGS: --no-print-directory directive and its GNU Make version limit
 
