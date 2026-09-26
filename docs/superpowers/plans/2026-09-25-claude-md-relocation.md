@@ -1,5 +1,7 @@
 # CLAUDE.md relocation Implementation Plan
 
+> **Status: DONE** — merged as brujack/dotfiles#294 (cd803833) after brujack/ai-config#282 (fa6e1b80), 2026-09-26.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `subagent-driven-development` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Move narrative text out of `dotfiles/CLAUDE.md` into `ai-config/docs/knowledge/dotfiles-*.md`, byte for byte. Every rule sentence stays verbatim in `CLAUDE.md`, and each moved block leaves a triggered pointer behind.

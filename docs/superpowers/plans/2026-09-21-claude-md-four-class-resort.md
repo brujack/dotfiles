@@ -1,5 +1,7 @@
 # CLAUDE.md four-class re-sort — Implementation Plan
 
+> **Status: DONE** — #293 shipped the DUPLICATE deletions; the remaining scope (RECORD/REFERENCE moves, HAZARD compression) was superseded by the 2026-09-25 relocation (#294, ADR-0036). Task 13 close-out is resolved by that plan: the `phrase_check` manifest is frozen at `e6167816`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `subagent-driven-development` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Remove the DUPLICATE and bare-figure RECORD mass from `dotfiles/CLAUDE.md` — the largest file any session in this fleet launch-loads — without losing a single hazard claim.
