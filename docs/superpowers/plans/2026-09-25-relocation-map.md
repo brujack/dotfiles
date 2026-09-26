@@ -480,3 +480,120 @@ Outside Test Seams:
 complete: 27, rule missing: 44, needs unit: 31, weak trigger: 4, waiver-is-rule: 2
 
 85 MOVE groups: 27 complete and 58 with findings. 17 groups carry both a missing rule and a sentence that needs its unit, and are counted under each. 6 of the 44 rule-missing verdicts are marked borderline (G19, G25, G26, G57, G73, G81). Excluding them still leaves 38 clear findings. Under spec check 5, every needs-unit verdict sends its unit back inline. The volume of rule-missing verdicts shows that the regex-keyed retention rule loses imperatives and "is not optional"/"deliberately" prohibitions routinely, not occasionally.
+
+## Block review verdicts — round 2 (rule bullets)
+
+Reviewed at 4516504e by an independent reviewer (Task 10).
+
+Method: `/tmp/claude-1000/rv2/pair.py` resolved every MOVE anchor to its unit in `2e38f5e4:CLAUDE.md`, grouped the units by destination heading (85 groups), recomputed each group's (a) set with the checker's own splitter, rule regex and waivers, and located the group's single compact pointer in `CLAUDE.md` at HEAD. `/tmp/claude-1000/rv2/dump.py` put the original block, its (a) sentences, its round-1 row and the authors' rules-file section side by side. `/tmp/claude-1000/rv2/suffix.py` checked placement mechanically: every rules-file bullet appears verbatim in `CLAUDE.md` within the 8 lines above its group's pointer, the pointer suffix sits on that group's last bullet, and each Test Seams lead is present. The scripts only paired the text. I made every verdict below by reading the original block against the rule lines. The rules files' `covers:` lists were not taken as evidence. Leads and function claims were checked by extracting each named function's body and grepping it for the variable.
+
+| group | verdict | detail |
+| --- | --- | --- |
+| G0 test-seams § Test seam idiom and override pattern | wrong: "Name a test seam `_OVERRIDE_VAR`" | The original gives the idiom (`${_OVERRIDE_VAR:-…}`, a placeholder), not a naming rule. Read as a convention, the line contradicts most seams in the same section: `_RUSTUP_INIT_*`, `GGSHIELD_BIN`, `LEDGER_BIN`, `_AWS_*`, `_RHN_*`, `_RELEASE_TMP_ROOT`, `_TFLINT_*`, `_PWSH_*`, `_CRATES_API`, `_CLAUDE_GUARD_GIT`, `_CARGO_BIN`. The (b) item "set it to a writable temp copy; leave it unset in production" is covered. |
+| G1 test-seams § Rustup signature verification seams | covered | |
+| G2 test-seams § NVIDIA GPU detection seams | covered | |
+| G3 test-seams § brew_install_cask / brew_cask_installed seam | covered | |
+| G4 test-seams § config/profiles.zsh and the legacy identity oracle | covered | |
+| G5 test-seams § config/profiles.zsh export vs lib/detect_env.sh readonly | covered | |
+| G6 test-seams § _OVERRIDE_HOMEBREW_PREFIX_ARM / _INTEL seam | covered | |
+| G7 test-seams § _OVERRIDE_KEYCHAIN_BIN seam and the interactive guard | missing: "The `[[ ${VAR} ]]` tests throughout this file are deliberately **not** quoted" | Round 1 and the authors both missed this (c) prohibition. `[[ ]]` suppresses splitting regardless of `SH_WORD_SPLIT`, so quoting them is churn. The line says to keep one expansion quoted, which invites a reader to quote the rest. The companion rule is also absent: `tests/zshrc.d/unit.bats` must keep `setopt shwordsplit`, because without it the quoting test is vacuous. Everything in (a) and (b) is covered. |
+| G8 test-seams § _OVERRIDE_CURRENT_LOGIN_SHELL seam and the chsh guard | missing: "the three end-to-end `run_doctor` tests stub every sub-check by name, so `_doctor_check_login_shell` must be stubbed there too or it reads the real account mid-suite" | This is an (a) sentence with "must". The rule lines tell tests to set `_OVERRIDE_CURRENT_LOGIN_SHELL`, which does not cover the `run_doctor` tests, which stub by name. The `sudo -n chsh` then `chsh` claim checks out against `setup_zsh_as_default_shell` (`lib/helpers.sh`). |
+| G9 test-seams § _OVERRIDE_GNUBIN_ARM / _INTEL seam | covered | |
+| G10 test-seams § _OVERRIDE_GNUBIN_LINUX seam | covered | |
+| G11 test-seams § _OVERRIDE_DOCKER_BIN seam | covered | |
+| G12 test-seams § GGSHIELD_BIN / GGSHIELD_FALLBACK_PATHS seams | covered | |
+| G13 test-seams § LEDGER_BIN seam | covered | |
+| G14 test-seams § _OVERRIDE_LIB_TRAP_SCOPE seam | covered | |
+| G15 test-seams § _OVERRIDE_BATS_BIN seam | covered | |
+| G16 test-seams § _OVERRIDE_RUN_TMPDIR_ROOT seam | covered | |
+| G17 test-seams § _PROFILES_LOADED sentinel | covered | |
+| G18 test-seams § _AWS_GPG_BIN / _AWS_PKGUTIL_BIN / _AWS_KEY_PATH seams | missing: "It is a plain assignment rather than a `${VAR:-}` self-guard" | Part of an (a) sentence. The self-guard was written, measured, and retired. It added an env-settable name that selects where a cryptographic trust anchor is read from. Nothing in the rule lines stops a reader from re-adding it. `lib/constants.sh:185` is a plain assignment today. Also weakened: the (a) rule that the regression tests "assert on the **post-import** failure rather than on the absence of the import failure" (E5) is gone. What remains is "`cd` away before asserting", which an absence assertion satisfies. |
+| G19 test-seams § _AWS_BIN seam | covered | |
+| G20 test-seams § Cadence seams overview | covered | |
+| G21 test-seams § Cadence heartbeat contract | weakened: `max_age_days` fallback — "names its source" dropped | (a) sentence: `_doctor_check_cadence` prefers the written value and **names its source**, `(max 3d, from heartbeat)` versus `(max 8d, default — heartbeat carries none)`, "so a fallback is never mistaken for a reading". The rule line says "never mirror the bound in the reader", but the reader does carry a default of 8. The line forbids that default without saying it must be labelled when used. Everything else in (a) and (b) is covered, including closed-form fields, the stdout discipline and "never clobber". |
+| G22 test-seams § Cadence agent PATH and plist rendering | covered | |
+| G23 test-seams § Cadence ntfy delivery and heartbeat rationale | covered | See structure finding 2 on the lead's reader. |
+| G24 test-seams § Pyenv-rehash and cargo-tools seams overview | covered | The original has no rule. The rule line is filler ("treat each seam below individually"). |
+| G25 test-seams § _OVERRIDE_PYENV_ROOT seam | covered | |
+| G26 test-seams § _RELEASE_TMP_ROOT seam | covered | |
+| G27 test-seams § _TFLINT_URL / _TFLINT_SHA256 / _TFSEC_URL / _TFSEC_SHA256 seams | covered | |
+| G28 test-seams § _TFENV_ROOT / _TFENV_REPO_URL seams | covered | |
+| G29 test-seams § _PWSH_BIN / _PWSH_PROBE_TIMEOUT seams | covered | |
+| G30 test-seams § _DOCTOR_PROBE_TIMEOUT seam | covered | |
+| G31 test-seams § _CRATES_API seam | covered | |
+| G32 test-seams § Claude plugin provisioning seams overview | covered | |
+| G33 test-seams § _CLAUDE_GUARD_GIT seam | covered | |
+| G34 test-seams § tests/mocks/claude seam modes | covered | |
+| G35 test-seams § Claude plugin provisioning: stdin redirect and IFS tab collapse | covered | |
+| G36 conventions § GPU provisioning as the HAS_* exception | covered | |
+| G37 conventions § zsh -i -c 'exit' after .zshrc changes | covered | The explicit worktree sourcing command is left to the pointer. The rule ("source the branch's own files") stands. |
+| G38 conventions § $0 resolution in zsh startup files | covered | |
+| G39 conventions § _UPDATE_SECTION_ORDER coupling | missing *(borderline)*: "the real risk when **removing** a section is a stray reference to its name surviving in a fixture that still seeds it" | Round 1 and the authors both missed this (c) item. The original also retracts the older rule that hardcoded count assertions must be audited. Without that retraction, a reader may reinstate the audit or skip the fixture check. |
+| G40 conventions § git-hooks section coupling and _git_hooks_target_dir | covered | Not raised: the newline/tab and non-regular-file (FIFO) skips in discovery. They are code invariants stated descriptively, not directives. |
+| G41 conventions § _install_ubuntu_brew_packages tri-state return | covered | |
+| G42 conventions § claude plugins install -s user scope flag | covered | |
+| G43 conventions § zsh-autosuggestions reported update section | covered | |
+| G44 conventions § Update summary name column width | covered | |
+| G45 conventions § cheat.sh section: both artifacts, both failures FAIL the run | covered | |
+| G46 conventions § .warp/settings.toml Warp-owned symlink | covered | |
+| G47 conventions § Global/system core.hooksPath pin: detection and remedy | missing: "`tests/setup_env/git_hooks.bats`'s `setup()` must neutralize `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM`" | This is an (a) sentence. Without it, the suite fails on any machine that has a pin, and because pre-push runs `make test`, that developer cannot push. The output-contract rule is also absent: `scope<TAB>remedy<TAB>value` with the value last, so a tab in a pinned path cannot truncate the remedy command. |
+| G48 conventions § Homebrew make gnubin prepend | covered | See structure finding 4: "this file" is dangling. |
+| G49 conventions § Which make an actor resolves | covered | |
+| G50 conventions § setup_env.sh cannot run non-interactively on the Linux workstation | wrong: "`/usr/local/bin` cannot substitute: it reaches login shells only via `/etc/paths`/`path_helper`" | `/etc/paths` and `path_helper` are macOS-only. The original trap is about macOS `make` resolution: a symlink in `/usr/local/bin` does not reach cron, launchd or sshd. Here it is stated as the reason `/usr/local/bin` cannot fix a Linux-workstation problem, where that mechanism does not exist. Also weakened: the (a) generalisation "treat a tool path placed in an interactive-only rc file as gating whichever actor sources that file, not as a machine-wide fact" became a Linux-specific statement. The hook-`PATH` rule kept its instruction but lost its reason: it shadows `tests/scripts/pre_push.bats`'s `make` mock, and 28 of 36 tests failed. |
+| G51 conventions § terraform on Linux via tfenv, and the checkout guard | wrong: "…dangling symlinks that the guard's own `-L` branch then treats as already repaired" | The `-L` branch belongs to the symlink loop, not the `-x` guard. See the code's own comment in `_install_ubuntu_tfenv` ("the loop's own `-L` branch") and the loop at the `for _name in tfenv terraform` / `[[ -L "${_link}" ]]` lines. The ordering rule itself is correct and covered. |
+| G52 conventions § tflint/tfsec staleness gap; CARGO_TOOLS staleness | covered | |
+| G53 testing-toolchain § make test parallel jobs | weakened: "Unset `MAKEFLAGS` and the recipe environment when nesting make — the `$(origin JOBS)` error depends on both being clear" | Original: "a **test** that invokes make inside make must unset both [routes by which a command-line `JOBS` arrives] to stay discriminating". The line drops the test-only condition. As written, it tells anyone nesting make to strip `MAKEFLAGS`, which also strips `--no-print-directory` (see the MAKEFLAGS section). It also misstates the reason: the error *names* `$(origin JOBS)` because `JOBS` arrives by two routes. It does not depend on them being clear. `tests/makefile_parallel_target.bats:21` shows the real form: `unset MAKEFLAGS MFLAGS MAKELEVEL JOBS`. |
+| G54 testing-toolchain § config/profiles.sh dual lint scope; phrase_check.py | covered | |
+| G55 testing-toolchain § Ansible venv snapshot before every sync | covered | See structure finding 6. |
+| G56 testing-toolchain § Environment overrides added by the uv work | covered | See structure finding 4 on "the three-row variable table". |
+| G57 testing-toolchain § Sync/check CI requirements commands | covered | |
+| G58 testing-toolchain § Requirements CI groups: do not harmonise | covered | |
+| G59 testing-toolchain § Requirements CI groups: purpose over CI/local, and the erosion guard | missing: "**`ci-test`'s boundary is stated in `pyproject.toml` and guarded by a test, not by review.**" | Round 1 and the authors both missed this (c) item, even though the heading names "the erosion guard". The rule: do not add a tool to `ci-test` because "that is where tools go". The `mutation whales` and `materially smaller` tests guard the boundary, and additions are admitted only on a measurement, as `hypothesis` was. None of the three rule lines mentions it. |
+| G60 testing-toolchain § Requirements CI groups: drift-gate blindness | covered | Minor: "for months" is not in the original, which gives only "until 2026-08-21 (#231)". |
+| G61 testing-toolchain § Pre-commit hook: make lint and ggshield | covered | |
+| G62 testing-toolchain § Pre-push hook: fail-closed inert-path set | covered | |
+| G63 testing-toolchain § Pre-push hook: worktree root resolution and git env strip | covered | |
+| G64 testing-toolchain § Pre-push hook: direct-to-master guard | missing: "`scripts/pre-push` is itself executable-class, so a defective guard cannot be repaired by a direct push to master. The fix needs a branch and a PR, or `--no-verify`." | Round 1 ruled this waived sentence a rule (waiver table). No rule line carries it. Also missing from (a): "If a docs push is refused and names a file you did not touch in that commit, check `git diff --name-only <remote-sha>..HEAD` before assuming the guard is wrong." The range rule survives, but its diagnostic does not. |
+| G65 bash-coverage § Instrumented set: git ls-files derivation | covered | |
+| G66 bash-coverage § Denominator counts commands, not source lines | covered | |
+| G67 bash-coverage § Denominator is the union of the heuristic and the real trace | covered | |
+| G68 bash-coverage § covered > coverable is now a hard exit; publishing the figure | covered | |
+| G69 dependency-automation § renovate.json inlines the shared preset | covered | |
+| G70 dependency-automation § Renovate confirmed working | covered | |
+| G71 dependency-automation § The zero-PR oracle was structurally unfalsifiable | covered | |
+| G72 dependency-automation § pip_requirements deliberately absent from enabledManagers | covered | |
+| G73 dependency-automation § Dependabot: security auto-PRs off, alerts on | covered | |
+| G74 dependency-automation § Dependabot: mechanical details | covered | |
+| G75 dependency-automation § Consequence: Python has no automated update path | covered | |
+| G76 bats-test-infrastructure § Mock Pattern full reference pointer | wrong: "use this file's own `Mock Pattern` section below rather than looking elsewhere — this heading exists only to receive the pointer" | In `CLAUDE.md`, "this file" is `CLAUDE.md`. There is no Mock Pattern section below this line, because it is the first line of `### Mock Pattern`. The full `MOCK_*` table is not in `CLAUDE.md`: it is in the knowledge file, which the original named. "This heading exists only to receive the pointer" describes the knowledge file's heading, not anything a `CLAUDE.md` reader can see. The line sends the reader away from the table. |
+| G77 bats-test-infrastructure § Mock Pattern: pass-through mocks | covered | |
+| G78 bats-test-infrastructure § Mock Pattern: env -i strips PATH | covered | |
+| G79 bats-test-infrastructure § tests/mocks/curl short-option cluster parsing | covered | |
+| G80 bats-test-infrastructure § tests/mocks/curl -o write ordering | missing: "**`-o`'s write is now deferred until after the exit code is decided, and it is a deliberate deviation from real curl.** A simulated failure … leaves a pre-seeded target file completely unchanged" | Round 1 and the authors both missed this (c) item, even though it is what the group's heading names. The rule lines cover only the dual stdout emission. A reader editing the mock is not told that the write must follow the exit decision. |
+| G81 bats-test-infrastructure § MAKEFLAGS: --no-print-directory directive | covered | |
+| G82 bats-test-infrastructure § MAKEFLAGS: guarded vs measuring test partition | covered | |
+| G83 bats-test-infrastructure § MAKEFLAGS: partition enforcement test | covered | |
+| G84 bats-test-infrastructure § MAKEFLAGS: known gap | covered | |
+
+### Structure findings
+
+1. **Legend line is correct.** `CLAUDE.md:3` says a trailing `` → `file` § `heading` `` means "before acting on that rule's subject, read `ai-config/docs/knowledge/<file>` at that heading". That matches amendment (b). Its placeholder `file` does not match `_POINTER_RE` (`dotfiles-…`), so the legend is not counted as a pointer: 86 `§` suffixes, 85 pointers.
+2. **Test Seams leads: 28 of 29 name the right seam with the right reader.** I checked every function-qualified lead by extracting the function body and grepping it for the variable. All resolve. One is wrong: the G23 lead `` `NTFY_URL`/`NTFY_TOPIC` (`scripts/cadence-notify.sh:_rhn_notify`) `` (`CLAUDE.md:554`). `_rhn_notify` does not read `NTFY_TOPIC`. `_rhn_ntfy_target` (`scripts/cadence-notify.sh:90-96`) is the only reader, and it joins host and topic. Minor: G22's lead cites `cadence.plist.template`, which lives at `LaunchAgents/cadence.plist.template`. G21's lead (`result`/`findings`/`max_age_days`) names heartbeat fields rather than a seam. That fits the group, but the fields are not seams.
+3. **No lead labels an INLINE unit.** All eight INLINE units in Test Seams (rustup, `_OVERRIDE_DOCKER_DAEMON_JSON`, `legacy_oracle.bash`, the cadence table, `_CARGO_BIN`, `_RELEASE_BIN_DIR`, `_OVERRIDE_CLAUDE_SETTINGS`, `_OVERRIDE_CLAUDE_PLUGIN_CACHE`) stand as their own paragraphs. Each lead's nested lines end at its own pointer. Round-1 structure findings 1–3 are resolved.
+4. **Dangling references in rule lines:**
+   - G48 (`CLAUDE.md:676-677`): "this file's existing idiom appends" and "this same file is what puts `brew` on `PATH`". `6_path.zsh` appears in neither line. It was in the rules file's `trigger:`, which the compact pointer dropped. In `CLAUDE.md`, "this file" reads as `CLAUDE.md`.
+   - G56 (`CLAUDE.md:285`): "Keep the three-row variable table whole — never split it across a pointer." No such table exists in `CLAUDE.md`. The rule lines replaced it with three bullets, and the table moved.
+   - G76 (`CLAUDE.md:606`): "this file's own `Mock Pattern` section below" / "this heading". See the G76 verdict.
+5. **Every suffix closes its own group.** For all 85 groups, the pointer suffix sits on the group's last rules-file bullet, and every bullet of the group is within the 8 lines above it (`suffix.py`, 0 mismatches). Each (dest, heading) has exactly one pointer.
+6. **Redundant INLINE unit.** `CLAUDE.md:281` (INLINE "`--no-deps` is required — the state being restored is one the resolver refuses.") now repeats G55's second rule line directly above it. The duplicate is harmless, and it resolves round-1's needs-unit on G55. The INLINE record could now be dropped.
+7. **Not raised.** These were checked and left alone:
+   - `covers:` claims that cite round-1 items verbatim but map to a paraphrase. I judged the paraphrase itself instead.
+   - Omitted measurement detail: agent counts, PR numbers and the fixture-hostname rationale. It is narrative, not rule.
+   - G40's discovery skips (newline/tab, FIFO): descriptive invariants.
+   - G22's "silently unable to run". The original consequence is a false-drift push rather than silence, but the rule (list every dependency on the plist `PATH`) is intact.
+
+### Summary
+
+covered: 71, weakened: 2, missing: 8, wrong: 4
+
+Non-covered: G0 (wrong), G7 (missing), G8 (missing), G18 (missing), G21 (weakened), G39 (missing, borderline), G47 (missing), G50 (wrong), G51 (wrong), G53 (weakened), G59 (missing), G64 (missing), G76 (wrong), G80 (missing). Four of the eight missing verdicts (G7, G39, G59, G80) are (c) items that round 1 and the authors both missed. Round 1 flagged G64's item as a waiver that is really a rule. G8, G18 and G47 lost an (a) sentence containing "must" or its equivalent. Under check 5, all 14 block.
