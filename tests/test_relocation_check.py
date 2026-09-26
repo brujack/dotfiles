@@ -18,7 +18,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 _REPO = Path(__file__).resolve().parent.parent
@@ -95,6 +95,19 @@ class TestExtractUnits(unittest.TestCase):
         text = "### Some Heading\n\nReal prose paragraph.\n"
         units = rc.extract_units(text)
         self.assertEqual(units, ["Real prose paragraph."])
+
+
+class TestBoundaryEmptyInput(unittest.TestCase):
+    def test_empty_and_whitespace_only_input(self):
+        for text in ("", "   "):
+            self.assertEqual(rc.extract_units(text), [])
+            self.assertEqual(rc.split_paragraphs(text), [])
+            self.assertEqual(rc.split_sentences(text), [])
+            self.assertEqual(rc.is_heading_or_rule_only(text), False)
+        # normalize() collapses a whitespace RUN to one space rather than
+        # stripping it away, so the empty and whitespace-only cases differ.
+        self.assertEqual(rc.normalize(""), "")
+        self.assertEqual(rc.normalize("   "), " ")
 
 
 class TestFindHeadingSpan(unittest.TestCase):
@@ -283,6 +296,12 @@ class TestParseMap(unittest.TestCase):
             )
             with self.assertRaisesRegex(rc.MapError, "unknown record type"):
                 rc.parse_map(map_path)
+
+
+    def test_raises_on_a_nonexistent_map_path(self):
+        missing = Path("/nonexistent/definitely/not/here/relocation-map.md")
+        with self.assertRaisesRegex(rc.MapError, "cannot read map"):
+            rc.parse_map(missing)
 
 
 class TestCheck1(unittest.TestCase):
@@ -1151,6 +1170,161 @@ class TestCliEndToEnd(unittest.TestCase):
             finally:
                 os.chdir(old_cwd)
         self.assertNotEqual(rc_code, 0)
+
+
+    def test_check_command_fails_when_a_moved_unit_is_still_in_post(self):
+        moved = "A small unit that must move somewhere else but never left."
+        pre_text = f"# Doc\n\nKeep me around please.\n\n{moved}\n"
+        # The unit was supposed to relocate but never left post -- nothing
+        # is available to count as relocated, so check 3 must fail.
+        post_text = f"# Doc\n\nKeep me around please.\n\n{moved}\n"
+        with tempfile.TemporaryDirectory() as repo_dir, tempfile.TemporaryDirectory() as dest_tmp:
+            repo = Path(repo_dir)
+            _init_git_repo(repo, {"CLAUDE.md": pre_text})
+            dest_dir = Path(dest_tmp)
+            post_path = repo / "POST.md"
+            post_path.write_text(post_text, encoding="utf-8")
+            map_path = repo / "map.md"
+            map_path.write_text("```relocation-map\n```\n", encoding="utf-8")
+            rc_code, out, _err = _run_cli(
+                repo,
+                [
+                    "check",
+                    "--pre-rev",
+                    "HEAD",
+                    "--post",
+                    str(post_path),
+                    "--dest",
+                    str(dest_dir),
+                    "--map",
+                    str(map_path),
+                    "--min-relocated",
+                    "0",
+                    "--slack",
+                    "1000000",
+                ],
+            )
+        self.assertEqual(rc_code, 1)
+        self.assertIn("CHECK3 FAIL", out)
+
+    def test_measure_command_fails_when_a_section_unit_is_unclaimed(self):
+        pre_text = (
+            "# Doc\n\n### Widget\n\n"
+            "This unit has no INLINE or MOVE record naming it at all.\n"
+        )
+        with tempfile.TemporaryDirectory() as repo_dir:
+            repo = Path(repo_dir)
+            _init_git_repo(repo, {"CLAUDE.md": pre_text})
+            map_path = repo / "map.md"
+            map_path.write_text(
+                "```relocation-map\nSECTION | ### Widget\n```\n", encoding="utf-8"
+            )
+            rc_code, _out, _err = _run_cli(
+                repo, ["measure", "--pre-rev", "HEAD", "--map", str(map_path)]
+            )
+        self.assertEqual(rc_code, 1)
+
+    def test_measure_command_fails_on_a_malformed_map(self):
+        with tempfile.TemporaryDirectory() as repo_dir:
+            repo = Path(repo_dir)
+            _init_git_repo(repo, {"CLAUDE.md": "# Doc\n\nSome text.\n"})
+            map_path = repo / "map.md"
+            map_path.write_text(
+                "```relocation-map\nSECTION\n```\n", encoding="utf-8"
+            )
+            rc_code, _out, err = _run_cli(
+                repo, ["measure", "--pre-rev", "HEAD", "--map", str(map_path)]
+            )
+        self.assertNotEqual(rc_code, 0)
+        self.assertIn("SECTION needs 1 field", err)
+
+    def test_check_command_fails_on_a_malformed_map(self):
+        with tempfile.TemporaryDirectory() as repo_dir, tempfile.TemporaryDirectory() as dest_tmp:
+            repo = Path(repo_dir)
+            _init_git_repo(repo, {"CLAUDE.md": "# Doc\n\nSome text.\n"})
+            dest_dir = Path(dest_tmp)
+            post_path = repo / "POST.md"
+            post_path.write_text("# Doc\n\nSome text.\n", encoding="utf-8")
+            map_path = repo / "map.md"
+            map_path.write_text(
+                "```relocation-map\nSECTION\n```\n", encoding="utf-8"
+            )
+            rc_code, _out, err = _run_cli(
+                repo,
+                [
+                    "check",
+                    "--pre-rev",
+                    "HEAD",
+                    "--post",
+                    str(post_path),
+                    "--dest",
+                    str(dest_dir),
+                    "--map",
+                    str(map_path),
+                ],
+            )
+        self.assertNotEqual(rc_code, 0)
+        self.assertIn("SECTION needs 1 field", err)
+
+    def test_measure_command_fails_on_an_unresolvable_section_heading(self):
+        with tempfile.TemporaryDirectory() as repo_dir:
+            repo = Path(repo_dir)
+            _init_git_repo(repo, {"CLAUDE.md": "# Doc\n\nSome text.\n"})
+            map_path = repo / "map.md"
+            map_path.write_text(
+                "```relocation-map\nSECTION | ### Does Not Exist\n```\n",
+                encoding="utf-8",
+            )
+            rc_code, _out, err = _run_cli(
+                repo, ["measure", "--pre-rev", "HEAD", "--map", str(map_path)]
+            )
+        self.assertNotEqual(rc_code, 0)
+        self.assertIn("heading not found", err)
+
+    def test_check_command_fails_on_an_unresolvable_section_heading(self):
+        with tempfile.TemporaryDirectory() as repo_dir, tempfile.TemporaryDirectory() as dest_tmp:
+            repo = Path(repo_dir)
+            _init_git_repo(repo, {"CLAUDE.md": "# Doc\n\nSome text.\n"})
+            dest_dir = Path(dest_tmp)
+            post_path = repo / "POST.md"
+            post_path.write_text("# Doc\n\nSome text.\n", encoding="utf-8")
+            map_path = repo / "map.md"
+            map_path.write_text(
+                "```relocation-map\nSECTION | ### Does Not Exist\n```\n",
+                encoding="utf-8",
+            )
+            rc_code, _out, err = _run_cli(
+                repo,
+                [
+                    "check",
+                    "--pre-rev",
+                    "HEAD",
+                    "--post",
+                    str(post_path),
+                    "--dest",
+                    str(dest_dir),
+                    "--map",
+                    str(map_path),
+                ],
+            )
+        self.assertNotEqual(rc_code, 0)
+        self.assertIn("heading not found", err)
+
+
+def _run_cli(repo: Path, argv: list[str]) -> tuple[int, str, str]:
+    """Run rc.run(argv) with cwd temporarily switched to repo, capturing
+    stdout and stderr separately (the CLI prints CHECKn lines to stdout
+    and error messages to stderr). Restores cwd unconditionally."""
+    old_cwd = Path.cwd()
+    os.chdir(repo)
+    try:
+        out = io.StringIO()
+        err = io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            rc_code = rc.run(argv)
+    finally:
+        os.chdir(old_cwd)
+    return rc_code, out.getvalue(), err.getvalue()
 
 
 def _has_commit(rev: str) -> bool:
