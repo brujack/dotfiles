@@ -396,6 +396,29 @@ _ms_require_gnu_ar() {
   [[ "$output" == *"revoked or expired"* ]]
 }
 
+@test "_ms_verify_deb refuses when extraction yields nothing, as Apple's ar does" {
+  _ms_require_gnu_ar
+  # Lists the expected members, then "extracts" nothing and exits 0: the
+  # failure mode of Apple's ar on GNU member names.
+  local _stub="${BATS_TEST_TMPDIR}/ar-empty"
+  {
+    printf '#!/usr/bin/env bash\n'
+    printf '[ "$1" = t ] && exec %q "$@"\n' "$(command -v "${_MS_AR_BIN}")"
+    printf 'exit 0\n'
+  } > "${_stub}"
+  chmod +x "${_stub}"
+  _MS_AR_BIN="${_stub}" run _ms_verify_deb "${_ms_fixture}"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"could not extract"* ]]
+}
+
+@test "_ms_verify_deb refuses when the key cannot be imported" {
+  _ms_require_gnu_ar
+  _MS_KEY_PATH="${BATS_TEST_TMPDIR}/no-such-key.asc" run _ms_verify_deb "${_ms_fixture}"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"could not import"* ]]
+}
+
 @test "_ms_verify_deb fails with a named cause when ar is missing" {
   _ms_require_gnu_ar
   _MS_AR_BIN="/nonexistent/ar" run _ms_verify_deb "${_ms_fixture}"

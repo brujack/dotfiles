@@ -136,13 +136,13 @@ _ms_verify_deb() {
         ;;
     esac
     mkdir "${_ring}/deb" || exit 1
-    (cd "${_ring}/deb" && "${_MS_AR_BIN:-ar}" x "${_abs_deb}") 2> /dev/null || {
-      log_error "packages-microsoft-prod.deb is not a readable .deb"
-      exit 1
-    }
-    cat "${_ring}/deb/debian-binary" "${_ring}/deb/control.tar.gz" \
-      "${_ring}/deb/data.tar.gz" > "${_ring}/signed" 2> /dev/null || {
-      log_error "packages-microsoft-prod.deb is missing a signed member"
+    # The member list is already known good, so this fails only when extraction
+    # itself breaks: an I/O error, or an ar that exits 0 having extracted
+    # nothing (Apple's, on GNU member names). cat catches the second.
+    { (cd "${_ring}/deb" && "${_MS_AR_BIN:-ar}" x "${_abs_deb}") &&
+      cat "${_ring}/deb/debian-binary" "${_ring}/deb/control.tar.gz" \
+        "${_ring}/deb/data.tar.gz" > "${_ring}/signed"; } 2> /dev/null || {
+      log_error "could not extract packages-microsoft-prod.deb; not installing"
       exit 1
     }
     "${_MS_GPG_BIN:-gpg}" --homedir "${_ring}" --batch --import "${_key}" \
