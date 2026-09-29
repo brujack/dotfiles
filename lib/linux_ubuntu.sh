@@ -117,15 +117,29 @@ _ms_verify_deb() {
     # gpg 2.x leaves gpg-agent and scdaemon bound to the homedir; see
     # _aws_verify_zip. EXIT in a subshell fires once with _ring in scope.
     trap 'gpgconf --homedir "${_ring}" --kill all >/dev/null 2>&1; rm -rf "${_ring}"' EXIT
+    # The member list must be exactly the four signed-for members, in order.
+    # dpkg reads the FIRST control.tar.* and data.tar.* it meets while `ar x`
+    # keeps the LAST of a repeated name, so a genuine signed .deb with an evil
+    # data.tar.xz, or evil members ahead of repeated genuine ones, would
+    # otherwise verify here and install something else.
+    local _members
+    _members="$("${_MS_AR_BIN:-ar}" t "${_abs_deb}" 2> /dev/null | sed 's|/$||' | tr '\n' ' ')"
+    case "${_members}" in
+      "debian-binary control.tar.gz data.tar.gz _gpgorigin ") ;;
+      "debian-binary control.tar.gz data.tar.gz ")
+        log_error "packages-microsoft-prod.deb carries no signature (_gpgorigin); not installing"
+        exit 1
+        ;;
+      *)
+        log_error "packages-microsoft-prod.deb has unexpected members (${_members% }); not installing"
+        exit 1
+        ;;
+    esac
     mkdir "${_ring}/deb" || exit 1
     (cd "${_ring}/deb" && "${_MS_AR_BIN:-ar}" x "${_abs_deb}") 2> /dev/null || {
       log_error "packages-microsoft-prod.deb is not a readable .deb"
       exit 1
     }
-    if [[ ! -f "${_ring}/deb/_gpgorigin" ]]; then
-      log_error "packages-microsoft-prod.deb carries no signature (_gpgorigin); not installing"
-      exit 1
-    fi
     cat "${_ring}/deb/debian-binary" "${_ring}/deb/control.tar.gz" \
       "${_ring}/deb/data.tar.gz" > "${_ring}/signed" 2> /dev/null || {
       log_error "packages-microsoft-prod.deb is missing a signed member"

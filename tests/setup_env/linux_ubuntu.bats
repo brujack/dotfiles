@@ -32,6 +32,22 @@ setup() {
   _MS_GPG_BIN="$(PATH="$(printf '%s' "${PATH}" | tr ':' '\n' | grep -v 'tests/mocks' | tr '\n' ':' | sed 's/:$//')" command -v gpg)"
   export _MS_GPG_BIN="${_MS_GPG_BIN:-/nonexistent/gpg}"
   export MOCK_WGET_FILE="${REPO_ROOT}/tests/fixtures/packages-microsoft-prod.deb"
+  # Microsoft's .deb stores GNU-format member names, which Apple's /usr/bin/ar
+  # cannot extract (it prints an error and still exits 0). The verifier only
+  # runs on Ubuntu, so on a Mac without GNU ar (Homebrew binutils' gar) the
+  # verifier tests skip, and the install-flow tests stub the verifier so they
+  # still exercise what happens after it.
+  _MS_GNU_AR=""
+  if ar --version 2>/dev/null | grep -q 'GNU ar'; then
+    _MS_GNU_AR="ar"
+  elif command -v gar > /dev/null 2>&1; then
+    _MS_GNU_AR="gar"
+  fi
+  if [[ -n "${_MS_GNU_AR}" ]]; then
+    export _MS_AR_BIN="${_MS_GNU_AR}"
+  else
+    _ms_verify_deb() { return 0; }
+  fi
   # Default _PWSH_BIN to a path that cannot resolve, at SETUP scope. Without
   # it, a test that forgets its own override resolves the LITERAL `pwsh` --
   # and this Mac has a real /opt/homebrew/bin/pwsh, so that test would
@@ -283,12 +299,18 @@ _ms_rebuild_deb() {
   (cd "${BATS_TEST_TMPDIR}/m" && ar rc "${_out}" "$@")
 }
 
+_ms_require_gnu_ar() {
+  [[ -n "${_MS_GNU_AR}" ]] || skip "no GNU ar: Apple's ar cannot read the GNU member names in Microsoft's .deb; the verifier runs on Ubuntu only"
+}
+
 @test "_ms_verify_deb accepts the real Microsoft-signed .deb" {
+  _ms_require_gnu_ar
   run _ms_verify_deb "${_ms_fixture}"
   [ "$status" -eq 0 ]
 }
 
 @test "_ms_verify_deb rejects a .deb whose data was changed after signing" {
+  _ms_require_gnu_ar
   _ms_unpack
   printf 'X' >> "${BATS_TEST_TMPDIR}/m/data.tar.gz"
   _ms_rebuild_deb "${BATS_TEST_TMPDIR}/tampered.deb" debian-binary control.tar.gz data.tar.gz _gpgorigin
@@ -298,6 +320,7 @@ _ms_rebuild_deb() {
 }
 
 @test "_ms_verify_deb rejects an unsigned .deb" {
+  _ms_require_gnu_ar
   _ms_unpack
   _ms_rebuild_deb "${BATS_TEST_TMPDIR}/unsigned.deb" debian-binary control.tar.gz data.tar.gz
   run _ms_verify_deb "${BATS_TEST_TMPDIR}/unsigned.deb"
@@ -306,6 +329,7 @@ _ms_rebuild_deb() {
 }
 
 @test "_ms_verify_deb rejects a signature from a key other than Microsoft's" {
+  _ms_require_gnu_ar
   # A throwaway key signs the same members; import it as the "vendored" key,
   # so only the fingerprint pin can refuse it.
   local _gh="${BATS_TEST_TMPDIR}/gh"
@@ -319,15 +343,63 @@ _ms_rebuild_deb() {
   gpgconf --homedir "${_gh}" --kill all >/dev/null 2>&1
   _MS_KEY_PATH="${BATS_TEST_TMPDIR}/other.asc" run _ms_verify_deb "${BATS_TEST_TMPDIR}/other.deb"
   [ "$status" -eq 1 ]
+  [[ "$output" == *"did not verify"* ]]
+}
+
+@test "_ms_verify_deb rejects evil members placed ahead of repeated genuine ones" {
+  _ms_require_gnu_ar
+  _ms_unpack
+  local _evil="${BATS_TEST_TMPDIR}/evil"
+  mkdir -p "${_evil}"
+  printf 'evil\n' > "${_evil}/control.tar.gz"
+  printf 'evil\n' > "${_evil}/data.tar.gz"
+  cp "${BATS_TEST_TMPDIR}/m/debian-binary" "${_evil}/"
+  (cd "${_evil}" && "${_MS_AR_BIN}" rc "${BATS_TEST_TMPDIR}/dup.deb" debian-binary control.tar.gz data.tar.gz)
+  (cd "${BATS_TEST_TMPDIR}/m" && "${_MS_AR_BIN}" q "${BATS_TEST_TMPDIR}/dup.deb" control.tar.gz data.tar.gz _gpgorigin)
+  run _ms_verify_deb "${BATS_TEST_TMPDIR}/dup.deb"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"unexpected members"* ]]
+}
+
+@test "_ms_verify_deb rejects an extra data.tar.xz alongside the genuine members" {
+  _ms_require_gnu_ar
+  _ms_unpack
+  printf 'evil\n' > "${BATS_TEST_TMPDIR}/m/data.tar.xz"
+  _ms_rebuild_deb "${BATS_TEST_TMPDIR}/xz.deb" debian-binary control.tar.gz data.tar.xz data.tar.gz _gpgorigin
+  run _ms_verify_deb "${BATS_TEST_TMPDIR}/xz.deb"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"unexpected members"* ]]
+}
+
+@test "_ms_verify_deb rejects a revoked or expired key even when the signature is valid" {
+  _ms_require_gnu_ar
+  # gpg emits VALIDSIG for a revoked or expired key too, and exits 0, so the
+  # reject check must run first. A stub gpg emits exactly that combination.
+  local _stub="${BATS_TEST_TMPDIR}/gpg-expired"
+  {
+    printf '#!/usr/bin/env bash\n'
+    printf 'case " $* " in\n'
+    printf '  *" --verify "*)\n'
+    printf '    printf "[GNUPG:] EXPKEYSIG %s Microsoft\\n"\n' "${MS_GPG_FPR}"
+    printf '    printf "[GNUPG:] VALIDSIG %s 2026-01-01 0 4 0 1 10 00 %s\\n" ;;\n' "${MS_GPG_FPR}" "${MS_GPG_FPR}"
+    printf 'esac\n'
+    printf 'exit 0\n'
+  } > "${_stub}"
+  chmod +x "${_stub}"
+  _MS_GPG_BIN="${_stub}" run _ms_verify_deb "${_ms_fixture}"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"revoked or expired"* ]]
 }
 
 @test "_ms_verify_deb fails with a named cause when ar is missing" {
+  _ms_require_gnu_ar
   _MS_AR_BIN="/nonexistent/ar" run _ms_verify_deb "${_ms_fixture}"
   [ "$status" -eq 1 ]
   [[ "$output" == *"ar not found"* ]]
 }
 
 @test "_ms_verify_deb fails with a named cause when gpg is missing" {
+  _ms_require_gnu_ar
   _MS_GPG_BIN="/nonexistent/gpg" run _ms_verify_deb "${_ms_fixture}"
   [ "$status" -eq 1 ]
   [[ "$output" == *"gpg not found"* ]]
@@ -343,6 +415,7 @@ _ms_rebuild_deb() {
 }
 
 @test "_install_ubuntu_powershell does not dpkg -i a .deb that fails verification" {
+  _ms_require_gnu_ar
   _PWSH_BIN="$(_pwsh_stub_bin 1)"
   unset MOCK_WGET_FILE  # the wget mock then writes an empty, unverifiable file
   run _install_ubuntu_powershell
