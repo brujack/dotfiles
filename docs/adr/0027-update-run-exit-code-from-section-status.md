@@ -160,6 +160,21 @@ Cases 2 and 3 are now indistinguishable from outside the process by exit code al
 are silent. A wrapper or cron job that sees a non-zero `-t update` exit with no corresponding
 log line is in one of the two, not case 1.
 
+**Addendum, 2026-09-29: deleting the absorbing trap was necessary and not sufficient.**
+Measured 2026-09-22: a Ctrl-C during the `snap` section wrote `status_snap=FAIL`
+(`exit 141`) and the run carried on through `git-repos`, `gems` and `cargo-tools`. The cause
+is not the `| tee` pipe. A non-interactive bash aborts on SIGINT only when its foreground
+child died of it, and sudo, snap, brew and pip catch the signal and exit normally, so bash
+never learns it was interrupted. Reproduced in isolation with a leaf that catches INT: the
+run continues with or without the pipe; the pipe only adds the 141, because `tee` dies first.
+
+`run_update` now installs `_update_trap_signals`, a handler that resets the default action
+and re-raises. Bash runs it once the interrupted command finishes, so the process dies of
+the signal before `_update_record_end` for that section, and nothing is recorded. That is
+case 3 above, which is now what actually happens. The handler that was deleted differs in
+one respect only: it caught the signal without exiting. The caller's INT and TERM handlers
+are saved and restored around the run.
+
 ## Related
 
 - Spec: [2026-08-29-update-run-truthfulness-design.md](../superpowers/specs/2026-08-29-update-run-truthfulness-design.md) — full measurements and the ordering rationale for shipping `err_*` retention ahead of this contract.

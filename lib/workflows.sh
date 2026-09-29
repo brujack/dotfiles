@@ -614,11 +614,32 @@ run_mas_install() {
   mas upgrade
 }
 
+# _update_trap_signals -- makes SIGINT and SIGTERM abort the run once the
+# current command finishes (ADR-0027 case 3). A non-interactive bash aborts on
+# SIGINT only when its foreground child died of it, and sudo, snap, brew and
+# pip catch it and exit normally, so without this the run continued into the
+# next section and recorded the interrupted one as FAIL. The handler resets
+# the default action and re-raises, so the process dies of the signal and its
+# caller sees 130/143. Re-raising is the point: the handler ADR-0027 deleted
+# caught the signal without exiting. BASHPID names the shell running the
+# handler even in a subshell; bash 3.2 (macOS /bin/bash) lacks it, and there
+# $$ is the same process for the top-level run setup_env.sh makes.
+_update_trap_signals() {
+  trap 'trap - INT; kill -INT "${BASHPID:-$$}"' INT
+  trap 'trap - TERM; kill -TERM "${BASHPID:-$$}"' TERM
+}
+
 run_update() {
   local _run_all=0
   _any_update_flag || _run_all=1
 
   _dotfiles_run_tmpdir_setup || return 1
+
+  # The handlers are shell-wide, so the caller's (bats' interrupt trap, for
+  # one) are saved here and put back before returning.
+  local _saved_traps
+  _saved_traps="$(trap -p INT TERM)"
+  _update_trap_signals
 
   # ── brew + softwareupdate ─────────────────────────────────────────────────
   if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_BREW:-} ]]; then
@@ -1203,6 +1224,10 @@ run_update() {
 
   # ── summary ───────────────────────────────────────────────────────────────
   _update_summary
+  local _summary_rc=$?
+  trap - INT TERM
+  eval "${_saved_traps}"
+  return "${_summary_rc}"
 }
 
 _fetch_github_latest() {
