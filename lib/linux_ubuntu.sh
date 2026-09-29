@@ -7,16 +7,24 @@
 # failed ones are named on stderr: most steps return whatever their LAST
 # command returned, so chaining them with `|| return 1` let one flaky
 # third-party repo abort every later step and, through run_setup_or_developer,
-# the whole pyenv/ansible half (backlog #117). _install_ubuntu_brew_packages is
-# itself tri-state; its rc 2 counts as a failed step here too.
+# the whole pyenv/ansible half. _install_ubuntu_brew_packages is itself
+# tri-state; its rc 2 counts as a failed step here too.
 install_ubuntu_packages() {
   _install_ubuntu_base_packages || return 1
 
   local -a _failed=()
   local _step
-  # Order matters: the nvidia container toolkit configures docker's runtime.
-  for _step in powershell go docker nvidia k8s_tools hashicorp cloud_tools \
-    brew_packages rust gui_tools misc; do
+  # Order matters: the nvidia container toolkit configures docker's runtime,
+  # so nvidia runs after docker and is skipped when docker failed. It would
+  # otherwise rewrite a daemon.json docker's own step rejected, then restart
+  # docker on a box running live CI runners.
+  for _step in workstation powershell go docker nvidia k8s_tools hashicorp \
+    cloud_tools brew_packages rust gui_tools misc; do
+    if [[ ${_step} == nvidia ]] && [[ " ${_failed[*]} " == *" docker "* ]]; then
+      printf 'ubuntu packages: skipping nvidia because docker failed\n' >&2
+      _failed+=("${_step}")
+      continue
+    fi
     "_install_ubuntu_${_step}" || _failed+=("${_step}")
   done
 
@@ -47,15 +55,22 @@ _install_ubuntu_base_packages() {
     log_error "Unsupported Ubuntu version: ${UBUNTU_VERSION:-unknown}"
     return 1
   fi
+  # Only an unsupported release is fatal here. Without this the function
+  # returned its last install's status, so one flaky package aborted every
+  # later step and the pyenv/ansible half. The installs above are unchecked,
+  # like the mid-step commands the backlog records.
+  return 0
+}
 
-  if [[ -n ${HAS_SNAP} ]]; then
-    printf "Installing workstation packages\\n"
-    grep -vE '^[[:space:]]*(#|$)' ./ubuntu_workstation_packages.txt | xargs -r sudo DEBIAN_FRONTEND=noninteractive nala install -y
+# The HAS_SNAP workstation packages, split out of the base step so a flaky
+# snap is one failed step rather than a failed base.
+_install_ubuntu_workstation() {
+  [[ -n ${HAS_SNAP} ]] || return 0
+  printf "Installing workstation packages\\n"
+  grep -vE '^[[:space:]]*(#|$)' ./ubuntu_workstation_packages.txt | xargs -r sudo DEBIAN_FRONTEND=noninteractive nala install -y
 
-    printf "Installing workstation snap packages\\n"
-    grep -vE '^[[:space:]]*(#|$)' ./ubuntu_workstation_snap_packages.txt | xargs -r sudo snap install
-
-  fi
+  printf "Installing workstation snap packages\\n"
+  grep -vE '^[[:space:]]*(#|$)' ./ubuntu_workstation_snap_packages.txt | xargs -r sudo snap install
 }
 
 # Whether pwsh actually runs, bounded by `timeout` so a hung binary cannot

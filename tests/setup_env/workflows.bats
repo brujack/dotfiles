@@ -588,8 +588,9 @@ teardown() {
 
 # ── install_ubuntu_packages: one failing step must not cost the rest ────────
 #
-# Backlog #117: every step was chained with `|| return 1`, and most steps
-# return whatever their LAST command returned, so one flaky third-party repo
+# Backlog row "a hard package failure aborts -t developer": every step was
+# chained with `|| return 1`, and most steps return whatever their LAST
+# command returned, so one flaky third-party repo
 # aborted every later step and -- through run_setup_or_developer and
 # setup_env.sh's _run_or_exit -- the whole pyenv/ansible half. Every step after
 # the base packages now runs regardless; failures are collected and named, and
@@ -597,6 +598,7 @@ teardown() {
 # the return code of the step under test.
 _stub_ubuntu_steps() {
   _install_ubuntu_base_packages() { :; }
+  _install_ubuntu_workstation() { :; }
   _install_ubuntu_powershell() { :; }
   _install_ubuntu_go() { :; }
   _install_ubuntu_docker() { :; }
@@ -624,7 +626,7 @@ _stub_ubuntu_steps() {
   unset MACOS
   export LINUX=1 UBUNTU=1 NOBLE=1
   local _step
-  for _step in powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools; do
+  for _step in workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools; do
     _stub_ubuntu_steps
     eval "_install_ubuntu_${_step}() { return 1; }"
     run --separate-stderr install_ubuntu_packages
@@ -655,6 +657,64 @@ _stub_ubuntu_steps() {
   [ "$status" -eq 2 ]
   [[ "$output" == *"RUST_STEP_RAN"* ]]
   [[ "$stderr" == *"brew_packages"* ]]
+}
+
+@test "install_ubuntu_packages skips nvidia when docker failed, and names both" {
+  unset MACOS
+  export LINUX=1 UBUNTU=1 NOBLE=1
+  _stub_ubuntu_steps
+  _install_ubuntu_docker() { return 1; }
+  _install_ubuntu_nvidia() { printf 'NVIDIA_STEP_RAN\n'; }
+  run --separate-stderr install_ubuntu_packages
+  [ "$status" -eq 2 ]
+  [[ "$output" != *"NVIDIA_STEP_RAN"* ]]
+  [[ "$stderr" == *"docker nvidia"* ]]
+  [[ "$output" == *"MISC_STEP_RAN"* ]]
+}
+
+@test "install_ubuntu_packages runs docker before nvidia" {
+  unset MACOS
+  export LINUX=1 UBUNTU=1 NOBLE=1
+  _stub_ubuntu_steps
+  _install_ubuntu_docker() { printf 'docker\n' >> "${BATS_TEST_TMPDIR}/order"; }
+  _install_ubuntu_nvidia() { printf 'nvidia\n' >> "${BATS_TEST_TMPDIR}/order"; }
+  run install_ubuntu_packages
+  [ "$status" -eq 0 ]
+  [ "$(cat "${BATS_TEST_TMPDIR}/order")" = "docker
+nvidia" ]
+}
+
+@test "_install_ubuntu_base_packages returns 0 when a package install fails on a supported release" {
+  unset MACOS RESOLUTE
+  export LINUX=1 UBUNTU=1 NOBLE=1
+  export MOCK_XARGS_EXIT=1
+  check_and_install_nala() { :; }
+  # The package lists are read relative to cwd; from anywhere else xargs -r
+  # gets no input, nala never runs, and the 0 below would prove nothing.
+  cd "${REPO_ROOT}"
+  run _install_ubuntu_base_packages
+  [ "$status" -eq 0 ]
+  # The failing install really ran: the 0 above is the explicit return, not a skip.
+  grep -q "^xargs -r sudo DEBIAN_FRONTEND=noninteractive nala install" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_base_packages returns 1 on an unsupported release" {
+  unset MACOS NOBLE RESOLUTE
+  export LINUX=1 UBUNTU=1
+  run _install_ubuntu_base_packages
+  [ "$status" -eq 1 ]
+}
+
+@test "_install_ubuntu_workstation installs snap packages only when HAS_SNAP" {
+  unset MACOS
+  export LINUX=1 UBUNTU=1 NOBLE=1
+  unset HAS_SNAP
+  run _install_ubuntu_workstation
+  [ "$status" -eq 0 ]
+  [ "$(grep -c "snap" "${MOCK_CALLS_FILE}")" -eq 0 ]
+  export HAS_SNAP=1
+  run _install_ubuntu_workstation
+  grep -q "snap install" "${MOCK_CALLS_FILE}"
 }
 
 @test "install_ubuntu_packages aborts with 1 when the base packages fail" {
