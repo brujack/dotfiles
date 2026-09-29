@@ -184,7 +184,7 @@ whole pipeline finishes. Whether the rest of that section's function runs first 
 the bash version: measured 2026-09-29, bash 5.3.9 stopped the section at the interrupt, while
 5.2.21 (what `ubuntu-latest` and `workstation` run) kept running its steps until the
 section's own shell wrote to the dead `tee`. Nothing after the pipeline runs on either. And a signal that was ignored when the
-shell started cannot be trapped, so a run launched with SIGINT ignored (`nohup`, `&` from a
+shell started cannot be trapped, so a run launched with SIGINT ignored (with `&` from a
 non-interactive shell) cannot be stopped with Ctrl-C at all; SIGTERM still stops it.
 
 ## Related
