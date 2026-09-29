@@ -434,12 +434,14 @@ teardown() {
 
 # ── update_rust ──────────────────────────────────────────────────────────────
 
-@test "update_rust: skips when UBUNTU not set" {
-  unset UBUNTU
+@test "update_rust: skips when neither UBUNTU nor MACOS is set" {
+  unset UBUNTU MACOS
   export HAS_RUST=1
   run update_rust
   [ "$status" -eq 0 ]
-  ! grep -q "rustup" "${MOCK_CALLS_FILE:-/dev/null}"
+  # Counted, not `! grep`: a leading `!` does not fail a bats test (SC2314).
+  touch "${MOCK_CALLS_FILE}"
+  [ "$(grep -c "rustup" "${MOCK_CALLS_FILE}")" -eq 0 ]
 }
 
 @test "update_rust: calls ~/.cargo/bin/rustup when it exists" {
@@ -514,15 +516,22 @@ teardown() {
 # minimal system set. A filtered PATH is not inert -- it leaves ~/.cargo/bin
 # reachable, which is how an earlier version of this test ran a real
 # `rustup self update` against the operator's toolchain (tdd.md E2).
-_rust_mock() {
-  mkdir -p "${BATS_TEST_TMPDIR}/bin"
+# _rustup_mock_in <dir> <failing-args> [calls-file] -- writes a rustup mock into
+# <dir> that logs its argv and exits 1 only for the exact <failing-args>.
+_rustup_mock_in() {
+  local _dir="$1" _fail="$2" _calls="${3:-${BATS_TEST_TMPDIR}/rustup_calls}"
+  mkdir -p "${_dir}"
   {
     printf '#!/usr/bin/env bash\n'
-    printf 'printf "%%s\\n" "$*" >> "%s/rustup_calls"\n' "${BATS_TEST_TMPDIR}"
-    printf '[ "$*" = "%s" ] && exit 1\n' "$1"
+    printf 'printf "%%s\\n" "$*" >> "%s"\n' "${_calls}"
+    printf '[ "$*" = "%s" ] && exit 1\n' "${_fail}"
     printf 'exit 0\n'
-  } > "${BATS_TEST_TMPDIR}/bin/rustup"
-  chmod +x "${BATS_TEST_TMPDIR}/bin/rustup"
+  } > "${_dir}/rustup"
+  chmod +x "${_dir}/rustup"
+}
+
+_rust_mock() {
+  _rustup_mock_in "${BATS_TEST_TMPDIR}/bin" "$1"
   export PATH="${BATS_TEST_TMPDIR}/bin:/usr/bin:/bin:/usr/sbin:/sbin"
   export HOME="${BATS_TEST_TMPDIR}"
   export UBUNTU=1 HAS_RUST=1
@@ -565,9 +574,95 @@ _rust_mock() {
   _rust_mock "__none__"
   run update_rust
   [ "$status" -eq 0 ]
-  [ "$(cat "${BATS_TEST_TMPDIR}/rustup_calls")" = "self update
+  [ "$(cat "${BATS_TEST_TMPDIR}/rustup_calls")" = "show active-toolchain
+self update
 update
 component add rust-analyzer" ]
+}
+
+# ── update_rust on macOS ─────────────────────────────────────────────────────
+#
+# Until 2026-09-29 update_rust was gated on UBUNTU, so no mac ever updated its
+# toolchain: the laptop was still on rustc 1.68.1 (2023-03-20) when the
+# CARGO_TOOLS pins started needing edition 2024 (cargo >= 1.85). Homebrew's
+# rustup formula is keg-only, so its rustup is found by keg path, not PATH.
+# _OVERRIDE_RUSTUP_BREW_KEGS points that lookup at a fixture; load_mocks
+# defaults it to a nonexistent directory so no test reaches a real keg.
+
+_macos_rust_env() {
+  export HOME="${BATS_TEST_TMPDIR}"
+  export PATH="/usr/bin:/bin:/usr/sbin:/sbin"
+  export MACOS=1 HAS_RUST=1
+  unset UBUNTU
+}
+
+@test "update_rust runs on macOS with a rustup-init managed ~/.cargo/bin/rustup" {
+  _macos_rust_env
+  _rustup_mock_in "${HOME}/.cargo/bin" "__none__"
+  # A keg rustup is present too: ~/.cargo/bin/rustup must win over it.
+  _rustup_mock_in "${BATS_TEST_TMPDIR}/keg/bin" "__none__" "${BATS_TEST_TMPDIR}/keg_calls"
+  export _OVERRIDE_RUSTUP_BREW_KEGS="${BATS_TEST_TMPDIR}/keg/bin"
+  run update_rust
+  [ "$status" -eq 0 ]
+  [ "$(cat "${BATS_TEST_TMPDIR}/rustup_calls")" = "show active-toolchain
+self update
+update
+component add rust-analyzer" ]
+  [ ! -e "${BATS_TEST_TMPDIR}/keg_calls" ]
+}
+
+@test "update_rust finds Homebrew's keg-only rustup and skips 'self update'" {
+  _macos_rust_env
+  # The keg is a symlink, as a real one is (opt/rustup -> Cellar/rustup/<ver>)
+  # and as macOS's /var is. Its target is deliberately not a Cellar path, so
+  # only the unresolved keg-prefix match can classify it: resolving the
+  # rustup path before comparing against an unresolved prefix never matches.
+  _rustup_mock_in "${BATS_TEST_TMPDIR}/keg-target/bin" "__none__"
+  ln -s "${BATS_TEST_TMPDIR}/keg-target" "${BATS_TEST_TMPDIR}/keg"
+  export _OVERRIDE_RUSTUP_BREW_KEGS="${BATS_TEST_TMPDIR}/keg/bin"
+  run update_rust
+  [ "$status" -eq 0 ]
+  # Homebrew builds rustup with self-update compiled out; calling it exits 1.
+  [ "$(cat "${BATS_TEST_TMPDIR}/rustup_calls")" = "show active-toolchain
+update
+component add rust-analyzer" ]
+  [[ "$output" == *"Homebrew"* ]]
+}
+
+@test "update_rust falls through a dangling ~/.cargo/bin/rustup to the keg" {
+  # The laptop's shape: ~/.cargo/bin/rustup -> a removed rustup-init.
+  _macos_rust_env
+  mkdir -p "${HOME}/.cargo/bin"
+  ln -s "${BATS_TEST_TMPDIR}/gone/rustup-init" "${HOME}/.cargo/bin/rustup"
+  _rustup_mock_in "${BATS_TEST_TMPDIR}/keg/bin" "__none__"
+  export _OVERRIDE_RUSTUP_BREW_KEGS="${BATS_TEST_TMPDIR}/keg/bin"
+  run update_rust
+  [ "$status" -eq 0 ]
+  grep -qx "update" "${BATS_TEST_TMPDIR}/rustup_calls"
+}
+
+@test "update_rust skips 'self update' for a PATH rustup that resolves into a Homebrew Cellar" {
+  # /opt/homebrew/bin/rustup -> ../Cellar/rustup/<ver>/bin/rustup on the laptop.
+  _macos_rust_env
+  _rustup_mock_in "${BATS_TEST_TMPDIR}/Cellar/rustup/1.29.1/bin" "__none__"
+  mkdir -p "${BATS_TEST_TMPDIR}/bin"
+  ln -s "${BATS_TEST_TMPDIR}/Cellar/rustup/1.29.1/bin/rustup" "${BATS_TEST_TMPDIR}/bin/rustup"
+  export PATH="${BATS_TEST_TMPDIR}/bin:${PATH}"
+  run update_rust
+  [ "$status" -eq 0 ]
+  [ "$(grep -cx "self update" "${BATS_TEST_TMPDIR}/rustup_calls")" -eq 0 ]
+  grep -qx "update" "${BATS_TEST_TMPDIR}/rustup_calls"
+}
+
+@test "update_rust returns 2 and names the remedy when rustup has no default toolchain" {
+  _macos_rust_env
+  _rustup_mock_in "${BATS_TEST_TMPDIR}/keg/bin" "show active-toolchain"
+  export _OVERRIDE_RUSTUP_BREW_KEGS="${BATS_TEST_TMPDIR}/keg/bin"
+  run update_rust
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"default stable"* ]]
+  [ "$(grep -cx "update" "${BATS_TEST_TMPDIR}/rustup_calls")" -eq 0 ]
+  [ "$(grep -cx "component add rust-analyzer" "${BATS_TEST_TMPDIR}/rustup_calls")" -eq 0 ]
 }
 
 # ── clone_personal_repos ─────────────────────────────────────────────────────

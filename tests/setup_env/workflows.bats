@@ -2345,6 +2345,18 @@ assert_all_npm_globals_pinned() {
   [[ "$(cat "${_DOTFILES_RUN_TMPDIR}/detail_legacy-rsync")" == *"one target unreachable"* ]]
 }
 
+@test "run_update records rust as WARN (not OK or FAIL) when update_rust returns 2" {
+  sync_git_repos() { return 0; }
+  sync_legacy_dirs() { return 0; }
+  update_rust() { echo "rustup has no default toolchain"; return 2; }
+  export -f sync_git_repos sync_legacy_dirs update_rust
+  export MACOS=1
+  unset LINUX UBUNTU
+  run_update
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_rust")" = "WARN" ]
+  [[ "$(cat "${_DOTFILES_RUN_TMPDIR}/detail_rust")" == *"no default toolchain"* ]]
+}
+
 @test "run_update records git-repos as OK when sync_git_repos returns 0" {
   sync_git_repos() { return 0; }
   sync_legacy_dirs() { return 0; }

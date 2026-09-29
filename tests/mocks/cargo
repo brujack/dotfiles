@@ -7,6 +7,15 @@
 # cargo-tarpaulin.
 printf "cargo %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
 
+# `cargo --version`: MOCK_CARGO_VERSION, defaulting (when unset) to a cargo new
+# enough for install_cargo_tools's CARGO_MIN_VER floor. Set it empty to
+# simulate an unreadable version.
+if [[ "$1" == "--version" ]]; then
+  _ver="${MOCK_CARGO_VERSION-cargo 1.90.0 (mock)}"
+  [[ -n "${_ver}" ]] && printf '%s\n' "${_ver}"
+  exit 0
+fi
+
 if [[ "$1" == "install" ]]; then
   printf "cargo-env LIBGIT2_NO_PKG_CONFIG=%s\n" "${LIBGIT2_NO_PKG_CONFIG:-}" \
     >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"

@@ -386,6 +386,48 @@ cargo-denylist v9.9.9:
   [[ "$output" != *"install failed"* ]]
 }
 
+# ── install_cargo_tools: cargo version floor (CARGO_MIN_VER) ─────────────────
+#
+# A cargo older than the pins can build fails every install separately, each
+# blaming its crate (edition 2024 / lockfile v4 parse errors). The laptop hit
+# exactly that on cargo 1.68.1. The floor check replaces those with one line
+# naming the toolchain and the remedy.
+
+@test "install_cargo_tools: cargo below CARGO_MIN_VER installs nothing and returns 2 with one line naming the remedy" {
+  export HAS_RUST=1
+  export MOCK_CARGO_VERSION="cargo 1.84.1 (66221abde 2024-11-19)"
+  export MOCK_CARGO_LIST
+  MOCK_CARGO_LIST="$(_cargo_list_fixture "cargo-audit=ABSENT" "cargo-deny=0.1.0")"
+  run --separate-stderr install_cargo_tools
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"1.84.1"* ]]
+  [[ "$stderr" == *"${CARGO_MIN_VER}"* ]]
+  [[ "$stderr" == *"rustup update"* ]]
+  [ "$(printf '%s\n' "$stderr" | wc -l)" -eq 1 ]
+  refute_grep "install --locked" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_cargo_tools: cargo exactly at CARGO_MIN_VER proceeds to install" {
+  export HAS_RUST=1
+  export MOCK_CARGO_VERSION="cargo ${CARGO_MIN_VER} (4d91b0f33 2025-02-18)"
+  export MOCK_CARGO_LIST
+  MOCK_CARGO_LIST="$(_cargo_list_fixture "cargo-audit=ABSENT")"
+  run install_cargo_tools
+  [ "$status" -eq 0 ]
+  grep -qF "cargo install --locked cargo-audit@0.22.1" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_cargo_tools: an unreadable cargo version proceeds to install and says so" {
+  export HAS_RUST=1
+  export MOCK_CARGO_VERSION=""
+  export MOCK_CARGO_LIST
+  MOCK_CARGO_LIST="$(_cargo_list_fixture "cargo-audit=ABSENT")"
+  run --separate-stderr install_cargo_tools
+  [ "$status" -eq 0 ]
+  [[ "$stderr" == *"could not read cargo version"* ]]
+  grep -qF "cargo install --locked cargo-audit@0.22.1" "${MOCK_CALLS_FILE}"
+}
+
 @test "install_cargo_tools: LIBGIT2_NO_PKG_CONFIG=1 only on tarpaulin's install, empty on another crate's" {
   export HAS_RUST=1
   export MOCK_CARGO_LIST

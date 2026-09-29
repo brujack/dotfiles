@@ -19,6 +19,12 @@ load_mocks() {
   # and a suite that never calls load_mocks at all (e.g.
   # tests/setup_env/git_sync.bats) gets no protection from this seam.
   export _CARGO_BIN="${REPO_ROOT}/tests/mocks/cargo"
+  # update_rust looks for Homebrew's keg-only rustup ahead of PATH, and the
+  # real kegs exist on provisioned machines (/opt/homebrew on a mac,
+  # /home/linuxbrew on claude), so without this default an update_rust test
+  # would run a real `rustup update` (tdd.md E2). Tests that exercise the keg
+  # branch point it at a fixture.
+  export _OVERRIDE_RUSTUP_BREW_KEGS="${BATS_TEST_TMPDIR:-/nonexistent}/no-rustup-keg"
   # Every run_update/run_setup_user test runs under a redirected HOME with no
   # settings file; point the claude plugin manifest reader at a per-test COPY
   # of the fixture under BATS_TEST_TMPDIR, never the tracked file itself.

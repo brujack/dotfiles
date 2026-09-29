@@ -59,6 +59,15 @@ RUSTUP_INIT_URL="https://static.rust-lang.org/rustup/archive/${RUSTUP_VER}/${_RU
 RUSTUP_INIT_SHA256_X86_64="dda7234360b7f578ca8b0ddcb80145646fa61a67c1720a5abc7051b35c9fcb71"
 # read by lib/linux_ubuntu.sh:_install_rustup_rs
 RUSTUP_INIT_SHA256_AARCH64="15f6e4ce9f583b929c996c91562bad6d4454f3281de858b02cdfdef615fac433"
+# Homebrew's rustup keg bin dirs: Apple silicon, Intel mac, linuxbrew. The formula
+# is keg-only, so none of these is on PATH unless an rc file puts it there.
+# read by lib/developer.sh:_resolve_rustup, _rustup_is_brew_build
+RUSTUP_BREW_KEGS="/opt/homebrew/opt/rustup/bin /usr/local/opt/rustup/bin /home/linuxbrew/.linuxbrew/opt/rustup/bin"
+# Oldest cargo that can build every CARGO_TOOLS pin: seven of the eight declare
+# edition 2024 (cargo 1.85); cargo-tarpaulin also ships a v4 Cargo.lock (1.78).
+# Raise it when a pin bump needs a newer cargo.
+# read by lib/developer.sh:install_cargo_tools
+CARGO_MIN_VER="1.85.0"
 # read by lib/developer.sh:install_cargo_tools, lib/workflows.sh:run_check_versions
 CARGO_TOOLS=(
   "cargo-audit@0.22.1"          # consumer: etch-cli Makefile; math scripts/sbom-sign.sh
