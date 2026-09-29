@@ -507,7 +507,16 @@ run_setup_or_developer() {
   fi
 
   if [[ -n ${UBUNTU} ]]; then
-    install_ubuntu_packages || return 1
+    # rc 2 (some steps failed, each named above) warns and continues, like the
+    # cargo and aws steps below: one broken package source must not cost
+    # pyenv and ansible. rc 1 means the base packages failed, and stops here.
+    local _pkgs_rc=0
+    install_ubuntu_packages || _pkgs_rc=$?
+    if [[ ${_pkgs_rc} -eq 1 ]]; then
+      return 1
+    elif [[ ${_pkgs_rc} -ne 0 ]]; then
+      log_warn "ubuntu packages incomplete — see above"
+    fi
   fi
 
   # Same degrade-not-abort shape as install_aws_tools below: an absent

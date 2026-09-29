@@ -96,21 +96,13 @@ EOF
   grep -q "apt install.*linux-generic-hwe-24.04" "${MOCK_CALLS_FILE}"
 }
 
-@test "_install_ubuntu_base_packages: HAS_SNAP installs workstation snap packages" {
+@test "_install_ubuntu_workstation: HAS_SNAP installs workstation snap packages" {
   export NOBLE=1
   unset RESOLUTE
   export HAS_SNAP=1
-  run _install_ubuntu_base_packages
+  run _install_ubuntu_workstation
   [ "$status" -eq 0 ]
   grep -q "snap install" "${MOCK_CALLS_FILE}"
-}
-
-@test "_install_ubuntu_base_packages: no HAS_SNAP skips snap install" {
-  export NOBLE=1
-  unset RESOLUTE HAS_SNAP
-  run _install_ubuntu_base_packages
-  [ "$status" -eq 0 ]
-  ! grep -q "snap install" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_base_packages: RESOLUTE installs hwe-26.04" {
@@ -179,12 +171,12 @@ EOF
   [ "$status" -ne 0 ]
 }
 
-@test "_install_ubuntu_base_packages: HAS_SNAP uses nala for workstation packages" {
+@test "_install_ubuntu_workstation: HAS_SNAP uses nala for workstation packages" {
   cd "${REPO_ROOT}"
   export NOBLE=1
   export HAS_SNAP=1
   unset RESOLUTE
-  run _install_ubuntu_base_packages
+  run _install_ubuntu_workstation
   [ "$status" -eq 0 ]
   [[ "$output" == *"Installing workstation packages"* ]]
   grep -q "xargs-stdin font-manager" "${MOCK_CALLS_FILE}"

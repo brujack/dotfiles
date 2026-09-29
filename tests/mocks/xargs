@@ -9,4 +9,5 @@ if [ ! -t 0 ]; then
     [ -n "${_line}" ] && printf "xargs-stdin %s\n" "${_line}" >> "${MOCK_CALLS_FILE}"
   done
 fi
-exit 0
+# MOCK_XARGS_EXIT stands in for the install xargs ran having failed.
+exit "${MOCK_XARGS_EXIT:-0}"
