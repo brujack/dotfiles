@@ -1058,7 +1058,12 @@ run_update() {
 
     _update_record_start "rust"
     update_rust 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_rust"
-    _update_record_end "rust" "${PIPESTATUS[0]}"
+    local _rust_rc="${PIPESTATUS[0]}"
+    _update_record_end "rust" "$(( _rust_rc == 2 ? 0 : _rust_rc ))"
+    if [[ ${_rust_rc} -eq 2 ]]; then
+      _update_warn "rust" "rustup has no default toolchain — see detail"
+      _update_write_detail_from_err "rust" "warning output"
+    fi
 
     if [[ -d ${HOME}/.tfenv ]]; then
       _update_record_start "tfenv"

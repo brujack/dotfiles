@@ -216,22 +216,70 @@ update_aws_cli() {
   fi
 }
 
-update_rust() {
-  if [[ -n ${UBUNTU} ]] && [[ -n ${HAS_RUST} ]]; then
-    log_info "Updating Rust Ubuntu"
-    local _rustup
-    if [[ -x ${HOME}/.cargo/bin/rustup ]]; then
-      _rustup="${HOME}/.cargo/bin/rustup"
-    elif command -v rustup >/dev/null 2>&1; then
-      _rustup="rustup"
-    else
-      log_warn "rustup not found; skipping Rust update"
+# _resolve_rustup -- prints the rustup to use: ~/.cargo/bin/rustup, then
+# Homebrew's keg-only rustup, then PATH. Returns 1 when none exists. -x is
+# false for a dangling symlink, so a ~/.cargo/bin left behind by a removed
+# rustup-init falls through rather than being chosen.
+# _OVERRIDE_RUSTUP_BREW_KEGS replaces RUSTUP_BREW_KEGS; tests point it at a
+# fixture because the real kegs exist on provisioned machines.
+_resolve_rustup() {
+  if [[ -x ${HOME}/.cargo/bin/rustup ]]; then
+    printf '%s\n' "${HOME}/.cargo/bin/rustup"
+    return 0
+  fi
+  local -a _kegs
+  read -r -a _kegs <<< "${_OVERRIDE_RUSTUP_BREW_KEGS:-${RUSTUP_BREW_KEGS}}"
+  local _keg
+  for _keg in "${_kegs[@]}"; do
+    if [[ -x ${_keg}/rustup ]]; then
+      printf '%s\n' "${_keg}/rustup"
       return 0
     fi
-    "${_rustup}" self update || return 1
-    "${_rustup}" update || return 1
-    "${_rustup}" component add rust-analyzer || return 1
+  done
+  command -v rustup 2> /dev/null
+}
+
+# _rustup_is_brew_build <path> -- true when <path> resolves into a Homebrew
+# rustup keg or Cellar. Homebrew builds rustup with self-update compiled out,
+# so `rustup self update` exits 1 there; brew upgrades rustup itself.
+_rustup_is_brew_build() {
+  local _real
+  _real="$(readlink -f "$1" 2> /dev/null)"
+  [[ -n ${_real} ]] || _real="$1"
+  [[ ${_real} == */Cellar/rustup/* ]] && return 0
+  local -a _kegs
+  read -r -a _kegs <<< "${_OVERRIDE_RUSTUP_BREW_KEGS:-${RUSTUP_BREW_KEGS}}"
+  local _keg
+  for _keg in "${_kegs[@]}"; do
+    [[ ${_real} == "${_keg}"/* ]] && return 0
+  done
+  return 1
+}
+
+# update_rust -- returns 0 on success or when rustup is absent, 1 when a
+# rustup call fails, 2 when rustup exists but has no default toolchain (a
+# keg-only brew rustup nobody ran `rustup default stable` on). run_update maps
+# 2 to WARN: FAIL would fail every run on such a mac, OK would hide it.
+update_rust() {
+  [[ -n ${HAS_RUST} ]] || return 0
+  [[ -n ${UBUNTU} ]] || [[ -n ${MACOS} ]] || return 0
+  log_info "Updating Rust"
+  local _rustup
+  if ! _rustup="$(_resolve_rustup)"; then
+    log_warn "rustup not found; skipping Rust update"
+    return 0
   fi
+  if ! "${_rustup}" show active-toolchain > /dev/null 2>&1; then
+    log_warn "rustup has no default toolchain; run: ${_rustup} default stable"
+    return 2
+  fi
+  if _rustup_is_brew_build "${_rustup}"; then
+    log_info "rustup is Homebrew-built (no self-update); brew upgrades it"
+  else
+    "${_rustup}" self update || return 1
+  fi
+  "${_rustup}" update || return 1
+  "${_rustup}" component add rust-analyzer || return 1
 }
 
 # install_aws_tools -- the fresh-machine path, run once per box.
@@ -761,6 +809,23 @@ install_cargo_tools() {
   else
     printf '%s\n' 'cargo not found' >&2
     return 1
+  fi
+
+  # Below the floor every install fails on its own, each blaming its crate
+  # with an edition or lockfile parse error; one line naming the toolchain
+  # replaces them. An unreadable version proceeds -- the installs are the
+  # real check, and refusing on a format change would block a good toolchain.
+  local _cargo_ver
+  _cargo_ver="$("${_cargo}" --version 2> /dev/null)"
+  if [[ ${_cargo_ver} =~ ^cargo\ ([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+    _cargo_ver="${BASH_REMATCH[1]}"
+    if [[ "$(_semver_cmp "${_cargo_ver}" "${CARGO_MIN_VER}")" == "-1" ]]; then
+      printf 'cargo tools: skipped: cargo %s is older than %s, which the pins need; run: rustup update stable\n' \
+        "${_cargo_ver}" "${CARGO_MIN_VER}" >&2
+      return 2
+    fi
+  else
+    printf '%s\n' 'cargo tools: could not read cargo version; skipping toolchain check' >&2
   fi
 
   local _list
