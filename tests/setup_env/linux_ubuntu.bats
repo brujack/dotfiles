@@ -25,6 +25,13 @@ setup() {
   # release_binary.bats, which drive the seams.
   export _RELEASE_BIN_DIR="${BATS_TEST_TMPDIR}/release-bin"
   mkdir -p "${_RELEASE_BIN_DIR}"
+  # _install_ubuntu_powershell verifies packages-microsoft-prod.deb before
+  # installing it. tests/mocks/gpg cannot verify anything, so point the seam at
+  # the real gpg, and have the wget mock hand back the real signed .deb. The
+  # test that needs an unverifiable download unsets MOCK_WGET_FILE itself.
+  _MS_GPG_BIN="$(PATH="$(printf '%s' "${PATH}" | tr ':' '\n' | grep -v 'tests/mocks' | tr '\n' ':' | sed 's/:$//')" command -v gpg)"
+  export _MS_GPG_BIN="${_MS_GPG_BIN:-/nonexistent/gpg}"
+  export MOCK_WGET_FILE="${REPO_ROOT}/tests/fixtures/packages-microsoft-prod.deb"
   # Default _PWSH_BIN to a path that cannot resolve, at SETUP scope. Without
   # it, a test that forgets its own override resolves the LITERAL `pwsh` --
   # and this Mac has a real /opt/homebrew/bin/pwsh, so that test would
@@ -255,6 +262,94 @@ EOF
 
   PATH="${_no_timeout_dir}" run _pwsh_probe_runs
   [ "$status" -ne 0 ]
+}
+
+# ── _ms_verify_deb ───────────────────────────────────────────────────────────
+#
+# packages-microsoft-prod.deb carries a debsig origin signature (_gpgorigin):
+# Microsoft's release key signed debian-binary + control.tar.gz + data.tar.gz,
+# concatenated. The fixture is the real 1.2-ubuntu24.04 .deb, so the pass case
+# is checked against Microsoft's actual signature and the vendored key.
+_ms_fixture="${BATS_TEST_DIRNAME}/../fixtures/packages-microsoft-prod.deb"
+
+# _ms_rebuild_deb <out> <members...> -- re-archives the fixture's members
+# (optionally modified in ${BATS_TEST_TMPDIR}/m) into <out>.
+_ms_unpack() {
+  mkdir -p "${BATS_TEST_TMPDIR}/m"
+  (cd "${BATS_TEST_TMPDIR}/m" && ar x "${_ms_fixture}")
+}
+_ms_rebuild_deb() {
+  local _out="$1"; shift
+  (cd "${BATS_TEST_TMPDIR}/m" && ar rc "${_out}" "$@")
+}
+
+@test "_ms_verify_deb accepts the real Microsoft-signed .deb" {
+  run _ms_verify_deb "${_ms_fixture}"
+  [ "$status" -eq 0 ]
+}
+
+@test "_ms_verify_deb rejects a .deb whose data was changed after signing" {
+  _ms_unpack
+  printf 'X' >> "${BATS_TEST_TMPDIR}/m/data.tar.gz"
+  _ms_rebuild_deb "${BATS_TEST_TMPDIR}/tampered.deb" debian-binary control.tar.gz data.tar.gz _gpgorigin
+  run _ms_verify_deb "${BATS_TEST_TMPDIR}/tampered.deb"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"did not verify"* ]]
+}
+
+@test "_ms_verify_deb rejects an unsigned .deb" {
+  _ms_unpack
+  _ms_rebuild_deb "${BATS_TEST_TMPDIR}/unsigned.deb" debian-binary control.tar.gz data.tar.gz
+  run _ms_verify_deb "${BATS_TEST_TMPDIR}/unsigned.deb"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no signature"* ]]
+}
+
+@test "_ms_verify_deb rejects a signature from a key other than Microsoft's" {
+  # A throwaway key signs the same members; import it as the "vendored" key,
+  # so only the fingerprint pin can refuse it.
+  local _gh="${BATS_TEST_TMPDIR}/gh"
+  mkdir -p "${_gh}" && chmod 700 "${_gh}"
+  "${_MS_GPG_BIN}" --homedir "${_gh}" --batch --passphrase '' --quick-gen-key 'Not Microsoft <x@example.invalid>' ed25519 sign never 2>/dev/null
+  "${_MS_GPG_BIN}" --homedir "${_gh}" --batch --armor --export > "${BATS_TEST_TMPDIR}/other.asc"
+  _ms_unpack
+  cat "${BATS_TEST_TMPDIR}/m/debian-binary" "${BATS_TEST_TMPDIR}/m/control.tar.gz" "${BATS_TEST_TMPDIR}/m/data.tar.gz" \
+    | "${_MS_GPG_BIN}" --homedir "${_gh}" --batch --detach-sign > "${BATS_TEST_TMPDIR}/m/_gpgorigin"
+  _ms_rebuild_deb "${BATS_TEST_TMPDIR}/other.deb" debian-binary control.tar.gz data.tar.gz _gpgorigin
+  gpgconf --homedir "${_gh}" --kill all >/dev/null 2>&1
+  _MS_KEY_PATH="${BATS_TEST_TMPDIR}/other.asc" run _ms_verify_deb "${BATS_TEST_TMPDIR}/other.deb"
+  [ "$status" -eq 1 ]
+}
+
+@test "_ms_verify_deb fails with a named cause when ar is missing" {
+  _MS_AR_BIN="/nonexistent/ar" run _ms_verify_deb "${_ms_fixture}"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"ar not found"* ]]
+}
+
+@test "_ms_verify_deb fails with a named cause when gpg is missing" {
+  _MS_GPG_BIN="/nonexistent/gpg" run _ms_verify_deb "${_ms_fixture}"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"gpg not found"* ]]
+}
+
+@test "the vendored Microsoft key has the pinned fingerprint" {
+  # Derived from the key file by real gpg, independently of the constant it is
+  # checked against: a key swap without a pin bump must go red.
+  local _fpr
+  _fpr="$("${_MS_GPG_BIN}" --show-keys --with-colons "${REPO_ROOT}/keys/microsoft.asc" 2>/dev/null | awk -F: '/^fpr/{print $10; exit}')"
+  [ -n "${_fpr}" ]
+  [ "${_fpr}" = "${MS_GPG_FPR}" ]
+}
+
+@test "_install_ubuntu_powershell does not dpkg -i a .deb that fails verification" {
+  _PWSH_BIN="$(_pwsh_stub_bin 1)"
+  unset MOCK_WGET_FILE  # the wget mock then writes an empty, unverifiable file
+  run _install_ubuntu_powershell
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"failed verification"* ]]
+  [ "$(grep -c "dpkg -i" "${MOCK_CALLS_FILE}")" -eq 0 ]
+  [ "$(grep -c "apt install powershell" "${MOCK_CALLS_FILE}")" -eq 0 ]
 }
 
 # ── _install_ubuntu_powershell ───────────────────────────────────────────────

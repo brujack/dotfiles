@@ -150,6 +150,12 @@ ZSH_VER="5.9"
 KUBERNETES_VER="v1.36"
 # read by lib/developer.sh:_aws_verify_zip and tests/setup_env/developer.bats
 AWSCLI_GPG_FPR="FB5DB77FD5C118B80511ADA8A6310ACC4672475C"
+# Microsoft (Release signing) <gpgsecurity@microsoft.com>, vendored as
+# keys/microsoft.asc. It signs packages-microsoft-prod.deb (its debsig
+# _gpgorigin member) and the packages.microsoft.com apt indexes. Checked
+# 2026-09-29 against two keyrings apt installed on claude by separate routes.
+# read by lib/linux_ubuntu.sh:_ms_verify_deb
+MS_GPG_FPR="BC528686B50D79E339D3721CEB3E94ADBE1229CF"
 # read by lib/developer.sh:_aws_verify_pkg and tests/setup_env/developer.bats
 AWSCLI_APPLE_TEAM_ID="94KV3E626L"
 

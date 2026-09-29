@@ -91,6 +91,64 @@ _pwsh_probe_runs() {
   fi
 }
 
+# _ms_verify_deb <deb> -- 0 when the .deb's debsig origin signature
+# (_gpgorigin, over debian-binary + control.tar.gz + data.tar.gz) verifies
+# against the vendored Microsoft key with the pinned fingerprint, else 1.
+# packages-microsoft-prod.deb is installed as root, and Microsoft rewrites it
+# in place per release, so a sha256 pin cannot work; the signature can.
+# Seams: _MS_GPG_BIN, _MS_AR_BIN, _MS_KEY_PATH (defaults gpg, ar, the vendored
+# key). Mirrors lib/developer.sh:_aws_verify_zip.
+_ms_verify_deb() {
+  local _deb="$1"
+  command -v "${_MS_GPG_BIN:-gpg}" > /dev/null 2>&1 || {
+    log_error "gpg not found; cannot verify packages-microsoft-prod.deb"
+    return 1
+  }
+  command -v "${_MS_AR_BIN:-ar}" > /dev/null 2>&1 || {
+    log_error "ar not found (binutils); cannot verify packages-microsoft-prod.deb"
+    return 1
+  }
+  local _key="${_MS_KEY_PATH:-${DOTFILES_REPO_ROOT}/keys/microsoft.asc}"
+  local _abs_deb
+  _abs_deb="$(cd "$(dirname "${_deb}")" && pwd)/$(basename "${_deb}")"
+
+  (
+    _ring="$(mktemp -d)" || exit 1
+    # gpg 2.x leaves gpg-agent and scdaemon bound to the homedir; see
+    # _aws_verify_zip. EXIT in a subshell fires once with _ring in scope.
+    trap 'gpgconf --homedir "${_ring}" --kill all >/dev/null 2>&1; rm -rf "${_ring}"' EXIT
+    mkdir "${_ring}/deb" || exit 1
+    (cd "${_ring}/deb" && "${_MS_AR_BIN:-ar}" x "${_abs_deb}") 2> /dev/null || {
+      log_error "packages-microsoft-prod.deb is not a readable .deb"
+      exit 1
+    }
+    if [[ ! -f "${_ring}/deb/_gpgorigin" ]]; then
+      log_error "packages-microsoft-prod.deb carries no signature (_gpgorigin); not installing"
+      exit 1
+    fi
+    cat "${_ring}/deb/debian-binary" "${_ring}/deb/control.tar.gz" \
+      "${_ring}/deb/data.tar.gz" > "${_ring}/signed" 2> /dev/null || {
+      log_error "packages-microsoft-prod.deb is missing a signed member"
+      exit 1
+    }
+    "${_MS_GPG_BIN:-gpg}" --homedir "${_ring}" --batch --import "${_key}" \
+      > /dev/null 2>&1 || { log_error "could not import ${_key}"; exit 1; }
+    "${_MS_GPG_BIN:-gpg}" --homedir "${_ring}" --batch --status-fd 1 \
+      --verify "${_ring}/deb/_gpgorigin" "${_ring}/signed" > "${_ring}/status" 2> /dev/null
+    # Reject before accepting: VALIDSIG is emitted for a revoked or expired key
+    # too, and gpg exits 0 for both.
+    if grep -qE '^\[GNUPG:\] (REVKEYSIG|KEYREVOKED|EXPSIG|EXPKEYSIG|KEYEXPIRED)' "${_ring}/status"; then
+      log_error "packages-microsoft-prod.deb: Microsoft key revoked or expired; not installing"
+      exit 1
+    fi
+    if ! grep -q "^\[GNUPG:\] VALIDSIG ${MS_GPG_FPR} " "${_ring}/status"; then
+      log_error "packages-microsoft-prod.deb signature did not verify against the Microsoft key; not installing"
+      exit 1
+    fi
+    exit 0
+  )
+}
+
 _install_ubuntu_powershell() {
   # Judge by whether pwsh RUNS, not merely resolves -- a box whose first
   # attempt hit the resolute gap below downloaded and dpkg -i'd the WRONG
@@ -119,6 +177,11 @@ _install_ubuntu_powershell() {
   if ! wget -O "${HOME}"/software_downloads/packages-microsoft-prod.deb \
     "https://packages.microsoft.com/config/ubuntu/${_ms_rel}/packages-microsoft-prod.deb"; then
     log_warn "powershell: wget for packages-microsoft-prod.deb failed; skipping"
+    return 0
+  fi
+
+  if ! _ms_verify_deb "${HOME}"/software_downloads/packages-microsoft-prod.deb; then
+    log_warn "powershell: packages-microsoft-prod.deb failed verification; skipping"
     return 0
   fi
 

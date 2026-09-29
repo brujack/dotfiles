@@ -41,9 +41,11 @@ set -o pipefail
 # itself. A file with no entry here is expected to carry zero EXIT traps.
 declare -A _LIB_TRAP_ALLOWLIST=(
   ["lib/developer.sh"]="1"
+  ["lib/linux_ubuntu.sh"]="1"
 )
 declare -A _LIB_TRAP_ALLOWLIST_REASON=(
   ["lib/developer.sh"]="subshell-scoped gpg homedir cleanup, see the header comment above _aws_verify_zip"
+  ["lib/linux_ubuntu.sh"]="subshell-scoped gpg homedir cleanup in _ms_verify_deb, the same shape as _aws_verify_zip"
 )
 
 # Resolves the directory scope is computed relative to: the override root
