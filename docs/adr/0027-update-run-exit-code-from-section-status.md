@@ -176,8 +176,10 @@ one respect only: it caught the signal without exiting. The caller's INT and TER
 are saved and restored around the run.
 
 For a section piped through `tee`, "once the interrupted command finishes" means once the
-whole pipeline finishes: the section function keeps running quiet steps until its first
-write to the dead `tee`, and dies of SIGPIPE there. And a signal that was ignored when the
+whole pipeline finishes. Whether the rest of that section's function runs first depends on
+the bash version: measured 2026-09-29, bash 5.3.9 stopped the section at the interrupt, while
+5.2.21 (what `ubuntu-latest` and `workstation` run) kept running its steps until the
+section's own shell wrote to the dead `tee`. Nothing after the pipeline runs on either. And a signal that was ignored when the
 shell started cannot be trapped, so a run launched with SIGINT ignored (`nohup`, `&` from a
 non-interactive shell) aborts only on SIGTERM.
 
