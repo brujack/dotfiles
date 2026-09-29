@@ -239,21 +239,24 @@ _resolve_rustup() {
   command -v rustup 2> /dev/null
 }
 
-# _rustup_is_brew_build <path> -- true when <path> resolves into a Homebrew
-# rustup keg or Cellar. Homebrew builds rustup with self-update compiled out,
-# so `rustup self update` exits 1 there; brew upgrades rustup itself.
+# _rustup_is_brew_build <path> -- true when <path> is a Homebrew rustup.
+# Homebrew builds rustup with self-update compiled out, so `rustup self
+# update` exits 1 there; brew upgrades rustup itself. Two checks, because
+# the two resolution routes reach it in different forms: the keg branch of
+# _resolve_rustup returns the keg path verbatim, matched unresolved (a keg is
+# a symlink into Cellar, and on macOS so is /var, so resolving only one side
+# of a prefix comparison never matches); a PATH or ~/.cargo/bin symlink is
+# resolved and matched on Cellar.
 _rustup_is_brew_build() {
-  local _real
-  _real="$(readlink -f "$1" 2> /dev/null)"
-  [[ -n ${_real} ]] || _real="$1"
-  [[ ${_real} == */Cellar/rustup/* ]] && return 0
   local -a _kegs
   read -r -a _kegs <<< "${_OVERRIDE_RUSTUP_BREW_KEGS:-${RUSTUP_BREW_KEGS}}"
   local _keg
   for _keg in "${_kegs[@]}"; do
-    [[ ${_real} == "${_keg}"/* ]] && return 0
+    [[ $1 == "${_keg}"/* ]] && return 0
   done
-  return 1
+  local _real
+  _real="$(readlink -f "$1" 2> /dev/null)"
+  [[ ${_real} == */Cellar/rustup/* ]]
 }
 
 # update_rust -- returns 0 on success or when rustup is absent, 1 when a
@@ -270,7 +273,7 @@ update_rust() {
     return 0
   fi
   if ! "${_rustup}" show active-toolchain > /dev/null 2>&1; then
-    log_warn "rustup has no default toolchain; run: ${_rustup} default stable"
+    log_warn "'${_rustup} show active-toolchain' failed -- usually no default toolchain; run: ${_rustup} default stable"
     return 2
   fi
   if _rustup_is_brew_build "${_rustup}"; then

@@ -613,7 +613,12 @@ component add rust-analyzer" ]
 
 @test "update_rust finds Homebrew's keg-only rustup and skips 'self update'" {
   _macos_rust_env
-  _rustup_mock_in "${BATS_TEST_TMPDIR}/keg/bin" "__none__"
+  # The keg is a symlink, as a real one is (opt/rustup -> Cellar/rustup/<ver>)
+  # and as macOS's /var is. Its target is deliberately not a Cellar path, so
+  # only the unresolved keg-prefix match can classify it: resolving the
+  # rustup path before comparing against an unresolved prefix never matches.
+  _rustup_mock_in "${BATS_TEST_TMPDIR}/keg-target/bin" "__none__"
+  ln -s "${BATS_TEST_TMPDIR}/keg-target" "${BATS_TEST_TMPDIR}/keg"
   export _OVERRIDE_RUSTUP_BREW_KEGS="${BATS_TEST_TMPDIR}/keg/bin"
   run update_rust
   [ "$status" -eq 0 ]
