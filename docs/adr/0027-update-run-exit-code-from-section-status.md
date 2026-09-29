@@ -160,6 +160,33 @@ Cases 2 and 3 are now indistinguishable from outside the process by exit code al
 are silent. A wrapper or cron job that sees a non-zero `-t update` exit with no corresponding
 log line is in one of the two, not case 1.
 
+**Addendum, 2026-09-29: deleting the absorbing trap was necessary and not sufficient.**
+Measured 2026-09-22: a Ctrl-C during the `snap` section wrote `status_snap=FAIL`
+(`exit 141`) and the run carried on through `git-repos`, `gems` and `cargo-tools`. The cause
+is not the `| tee` pipe. A non-interactive bash aborts on SIGINT only when its foreground
+child died of it, and sudo, snap, brew and pip catch the signal and exit normally, so bash
+never learns it was interrupted. Reproduced in isolation with a leaf that catches INT: the
+run continues with or without the pipe; the pipe only adds the 141, because `tee` dies first.
+
+`run_update` now installs `_update_trap_sigint`, a SIGINT handler that resets the default
+action and re-raises. Bash runs it once the interrupted command finishes, so the process dies
+of SIGINT before `_update_record_end` for that section, and nothing is recorded. That is case
+3 above, which is now what actually happens. The handler that was deleted differs in one
+respect only: it caught the signal without exiting. The caller's INT handler is saved and
+restored around the run.
+
+SIGTERM gets no handler, deliberately. With no trap, a non-interactive bash dies of SIGTERM
+at once, even mid-section, which already satisfies case 3. A handler would only postpone the
+abort until the current command finished, which for a long `snap refresh` is worse.
+
+For a section piped through `tee`, "once the interrupted command finishes" means once the
+whole pipeline finishes. Whether the rest of that section's function runs first depends on
+the bash version: measured 2026-09-29, bash 5.3.9 stopped the section at the interrupt, while
+5.2.21 (what `ubuntu-latest` and `workstation` run) kept running its steps until the
+section's own shell wrote to the dead `tee`. Nothing after the pipeline runs on either. And a signal that was ignored when the
+shell started cannot be trapped, so a run launched with SIGINT ignored (with `&` from a
+non-interactive shell) cannot be stopped with Ctrl-C at all; SIGTERM still stops it.
+
 ## Related
 
 - Spec: [2026-08-29-update-run-truthfulness-design.md](../superpowers/specs/2026-08-29-update-run-truthfulness-design.md) — full measurements and the ordering rationale for shipping `err_*` retention ahead of this contract.

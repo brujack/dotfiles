@@ -614,11 +614,34 @@ run_mas_install() {
   mas upgrade
 }
 
+# _update_trap_sigint -- makes SIGINT (Ctrl-C) abort the run once the current
+# command finishes (ADR-0027 case 3). A non-interactive bash aborts on SIGINT
+# only when its foreground child died of it, and sudo, snap, brew and pip catch
+# it and exit normally, so without this the run continued into the next section
+# and recorded the interrupted one as FAIL. The handler resets the default
+# action and re-raises, so the process dies of SIGINT and its caller sees 130.
+# Re-raising is the point: the handler ADR-0027 deleted caught the signal
+# without exiting. For a piped section "the current command" is the whole
+# pipeline. A shell that starts with SIGINT ignored (launched with `&` from a
+# non-interactive shell) cannot trap it. SIGTERM needs nothing: with no trap, bash dies of it at once.
+# BASHPID covers run_update being called inside a subshell (bats' `run`,
+# `( ... )`), where $$ names the parent; bash 3.2 lacks BASHPID, and there
+# $$ is correct for the top-level call setup_env.sh makes.
+_update_trap_sigint() {
+  trap 'trap - INT; kill -INT "${BASHPID:-$$}"' INT
+}
+
 run_update() {
   local _run_all=0
   _any_update_flag || _run_all=1
 
   _dotfiles_run_tmpdir_setup || return 1
+
+  # The handler is shell-wide, so the caller's (bats' interrupt trap, for
+  # one) is saved here and put back before returning.
+  local _saved_traps
+  _saved_traps="$(trap -p INT)"
+  _update_trap_sigint
 
   # ── brew + softwareupdate ─────────────────────────────────────────────────
   if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_BREW:-} ]]; then
@@ -1203,6 +1226,10 @@ run_update() {
 
   # ── summary ───────────────────────────────────────────────────────────────
   _update_summary
+  local _summary_rc=$?
+  trap - INT
+  eval "${_saved_traps}"
+  return "${_summary_rc}"
 }
 
 _fetch_github_latest() {
