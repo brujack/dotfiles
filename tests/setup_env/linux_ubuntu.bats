@@ -45,7 +45,9 @@ setup() {
   fi
   if [[ -n "${_MS_GNU_AR}" ]]; then
     export _MS_AR_BIN="${_MS_GNU_AR}"
-  else
+  elif [[ "$(uname -s)" == "Darwin" ]]; then
+    # Only on a Mac: elsewhere a missing GNU ar must fail, not skip, or a CI
+    # image without binutils would silently drop every verifier test.
     _ms_verify_deb() { return 0; }
   fi
   # Default _PWSH_BIN to a path that cannot resolve, at SETUP scope. Without
@@ -292,15 +294,18 @@ _ms_fixture="${BATS_TEST_DIRNAME}/../fixtures/packages-microsoft-prod.deb"
 # (optionally modified in ${BATS_TEST_TMPDIR}/m) into <out>.
 _ms_unpack() {
   mkdir -p "${BATS_TEST_TMPDIR}/m"
-  (cd "${BATS_TEST_TMPDIR}/m" && ar x "${_ms_fixture}")
+  (cd "${BATS_TEST_TMPDIR}/m" && "${_MS_AR_BIN}" x "${_ms_fixture}")
 }
 _ms_rebuild_deb() {
   local _out="$1"; shift
-  (cd "${BATS_TEST_TMPDIR}/m" && ar rc "${_out}" "$@")
+  (cd "${BATS_TEST_TMPDIR}/m" && "${_MS_AR_BIN}" rc "${_out}" "$@")
 }
 
 _ms_require_gnu_ar() {
-  [[ -n "${_MS_GNU_AR}" ]] || skip "no GNU ar: Apple's ar cannot read the GNU member names in Microsoft's .deb; the verifier runs on Ubuntu only"
+  [[ -n "${_MS_GNU_AR}" ]] && return 0
+  [[ "$(uname -s)" == "Darwin" ]] && skip "no GNU ar: Apple's ar cannot read the GNU member names in Microsoft's .deb; the verifier runs on Ubuntu only"
+  printf 'GNU ar (binutils) is required to test _ms_verify_deb off macOS\n' >&2
+  return 1
 }
 
 @test "_ms_verify_deb accepts the real Microsoft-signed .deb" {
