@@ -292,7 +292,7 @@ Uses **BATS** (Bash Automated Testing System), installed natively:
 | file                           | group         | pins | consumers                   |
 | ------------------------------ | ------------- | ---- | --------------------------- |
 | `requirements-ci.txt`          | `test-lint`   | 80   | the full local/dev test set |
-| `requirements-runtime-ci.txt`  | `runtime`     | 229  | terraform_ansible           |
+| `requirements-runtime-ci.txt`  | `runtime`     | 229  | none today                  |
 | `requirements-ci-test.txt`     | `ci-test`     | 11   | per-PR test/lint jobs       |
 | `requirements-ci-mutation.txt` | `ci-mutation` | 30   | mutation jobs               |
 | `requirements-ci-audit.txt`    | `ci-audit`    | 28   | dependency-audit steps      |
