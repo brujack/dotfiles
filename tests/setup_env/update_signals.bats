@@ -114,7 +114,25 @@ PY
   [ "${lines[1]}" = "trap -- 'printf caller-term' SIGTERM" ]
 }
 
-@test "run_update returns _update_summary's status after restoring the caller's handlers" {
+@test "run_update removes its handler when the caller had none" {
+  local _f="${BATS_TEST_TMPDIR}/nocaller.sh" _seen="${BATS_TEST_TMPDIR}/seen"
+  {
+    printf 'source %q\n' "${REPO_ROOT}/setup_env.sh"
+    printf 'export UPDATE_GEMS=1\n'
+    printf 'update_gems() { :; }\n'
+    printf '_update_check_brewfile_drift() { trap -p INT TERM > %q; }\n' "${_seen}"
+    printf 'run_update > /dev/null 2>&1\n'
+    printf 'printf "after:[%%s]\\n" "$(trap -p INT TERM)"\n'
+  } > "${_f}"
+
+  run _with_default_signals "${_f}"
+
+  # Positive control: an empty result below means removed, not never installed.
+  grep -q 'kill -INT' "${_seen}"
+  [ "$output" = "after:[]" ]
+}
+
+@test "run_update returns _update_summary's status" {
   export UPDATE_GEMS=1
   update_gems() { :; }
   _update_summary() { return 7; }

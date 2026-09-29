@@ -621,9 +621,12 @@ run_mas_install() {
 # next section and recorded the interrupted one as FAIL. The handler resets
 # the default action and re-raises, so the process dies of the signal and its
 # caller sees 130/143. Re-raising is the point: the handler ADR-0027 deleted
-# caught the signal without exiting. BASHPID names the shell running the
-# handler even in a subshell; bash 3.2 (macOS /bin/bash) lacks it, and there
-# $$ is the same process for the top-level run setup_env.sh makes.
+# caught the signal without exiting. For a piped section "the current
+# command" is the whole pipeline. A shell that starts with SIGINT ignored
+# (nohup, a `&` launch) cannot trap it, and then only SIGTERM aborts.
+# BASHPID covers run_update being called inside a subshell (bats' `run`,
+# `( ... )`), where $$ names the parent; bash 3.2 lacks BASHPID, and there
+# $$ is correct for the top-level call setup_env.sh makes.
 _update_trap_signals() {
   trap 'trap - INT; kill -INT "${BASHPID:-$$}"' INT
   trap 'trap - TERM; kill -TERM "${BASHPID:-$$}"' TERM

@@ -175,6 +175,12 @@ case 3 above, which is now what actually happens. The handler that was deleted d
 one respect only: it caught the signal without exiting. The caller's INT and TERM handlers
 are saved and restored around the run.
 
+For a section piped through `tee`, "once the interrupted command finishes" means once the
+whole pipeline finishes: the section function keeps running quiet steps until its first
+write to the dead `tee`, and dies of SIGPIPE there. And a signal that was ignored when the
+shell started cannot be trapped, so a run launched with SIGINT ignored (`nohup`, `&` from a
+non-interactive shell) aborts only on SIGTERM.
+
 ## Related
 
 - Spec: [2026-08-29-update-run-truthfulness-design.md](../superpowers/specs/2026-08-29-update-run-truthfulness-design.md) — full measurements and the ordering rationale for shipping `err_*` retention ahead of this contract.
