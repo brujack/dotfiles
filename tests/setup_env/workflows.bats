@@ -438,6 +438,31 @@ teardown() {
 
 # ── run_setup_or_developer ────────────────────────────────────────────────────
 
+@test "run_setup_or_developer continues past incomplete Ubuntu packages (rc 2)" {
+  unset MACOS
+  export LINUX=1 UBUNTU=1
+  install_ubuntu_packages() { return 2; }
+  local _marker="${BATS_TEST_TMPDIR}/cargo.ran"
+  install_cargo_tools() { touch "${_marker}"; }
+  install_aws_tools() { :; }
+  setup_vim_plugins() { :; }
+  run run_setup_or_developer
+  [ "$status" -eq 0 ]
+  [ -f "${_marker}" ]
+  [[ "$output" == *"ubuntu packages incomplete"* ]]
+}
+
+@test "run_setup_or_developer stops when the Ubuntu base packages fail (rc 1)" {
+  unset MACOS
+  export LINUX=1 UBUNTU=1
+  install_ubuntu_packages() { return 1; }
+  local _marker="${BATS_TEST_TMPDIR}/cargo.ran"
+  install_cargo_tools() { touch "${_marker}"; }
+  run run_setup_or_developer
+  [ "$status" -eq 1 ]
+  [ ! -e "${_marker}" ]
+}
+
 @test "run_setup_or_developer creates credential directories" {
   export MACOS=1
   unset LINUX UBUNTU
@@ -561,13 +586,15 @@ teardown() {
   ! grep -q "softwareupdate" "${MOCK_CALLS_FILE}"
 }
 
-# ── install_ubuntu_packages: brew rc-2 propagation ───────────────────────────
+# ── install_ubuntu_packages: one failing step must not cost the rest ────────
 #
-# The pair that keeps the tri-state ruling from being silently revoked. A bare
-# `|| return 1` on the brew step would abort a whole fresh-machine bootstrap because
-# one upstream formula was briefly unavailable; nothing else in the suite would go
-# red if someone reinstated it. Every sub-function is stubbed so the ONLY variable
-# is the brew step's return code.
+# Backlog #117: every step was chained with `|| return 1`, and most steps
+# return whatever their LAST command returned, so one flaky third-party repo
+# aborted every later step and -- through run_setup_or_developer and
+# setup_env.sh's _run_or_exit -- the whole pyenv/ansible half. Every step after
+# the base packages now runs regardless; failures are collected and named, and
+# the function returns 2. Every sub-function is stubbed so the ONLY variable is
+# the return code of the step under test.
 _stub_ubuntu_steps() {
   _install_ubuntu_base_packages() { :; }
   _install_ubuntu_powershell() { :; }
@@ -577,32 +604,68 @@ _stub_ubuntu_steps() {
   _install_ubuntu_k8s_tools() { :; }
   _install_ubuntu_hashicorp() { :; }
   _install_ubuntu_cloud_tools() { :; }
+  _install_ubuntu_brew_packages() { :; }
   _install_ubuntu_gui_tools() { :; }
-  _install_ubuntu_misc() { :; }
+  _install_ubuntu_misc() { printf 'MISC_STEP_RAN\n'; }
   _install_ubuntu_rust() { printf 'RUST_STEP_RAN\n'; }
 }
 
-@test "install_ubuntu_packages continues past brew partial success (rc 2)" {
+@test "install_ubuntu_packages returns 0 when every step succeeds" {
+  unset MACOS
+  export LINUX=1 UBUNTU=1 NOBLE=1
+  _stub_ubuntu_steps
+  run --separate-stderr install_ubuntu_packages
+  [ "$status" -eq 0 ]
+  [ -z "$stderr" ]
+  [[ "$output" == *"MISC_STEP_RAN"* ]]
+}
+
+@test "install_ubuntu_packages runs every later step when any one step fails, and names it" {
+  unset MACOS
+  export LINUX=1 UBUNTU=1 NOBLE=1
+  local _step
+  for _step in powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools; do
+    _stub_ubuntu_steps
+    eval "_install_ubuntu_${_step}() { return 1; }"
+    run --separate-stderr install_ubuntu_packages
+    [ "$status" -eq 2 ] || { printf 'step %s: status %s\n' "${_step}" "$status" >&3; return 1; }
+    [[ "$output" == *"MISC_STEP_RAN"* ]] || { printf 'step %s: misc did not run\n' "${_step}" >&3; return 1; }
+    [[ "$stderr" == *"${_step}"* ]] || { printf 'step %s: not named in stderr\n' "${_step}" >&3; return 1; }
+  done
+}
+
+@test "install_ubuntu_packages names every failed step, not just the first" {
+  unset MACOS
+  export LINUX=1 UBUNTU=1 NOBLE=1
+  _stub_ubuntu_steps
+  _install_ubuntu_docker() { return 1; }
+  _install_ubuntu_hashicorp() { return 1; }
+  run --separate-stderr install_ubuntu_packages
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"docker"* ]]
+  [[ "$stderr" == *"hashicorp"* ]]
+}
+
+@test "install_ubuntu_packages treats a partial brew result (rc 2) as a failed step" {
   unset MACOS
   export LINUX=1 UBUNTU=1 NOBLE=1
   _stub_ubuntu_steps
   _install_ubuntu_brew_packages() { return 2; }
-  run install_ubuntu_packages
-  [ "$status" -eq 0 ]
-  # The steps AFTER brew must still run -- that is what rc 2 means.
+  run --separate-stderr install_ubuntu_packages
+  [ "$status" -eq 2 ]
   [[ "$output" == *"RUST_STEP_RAN"* ]]
+  [[ "$stderr" == *"brew_packages"* ]]
 }
 
-@test "install_ubuntu_packages aborts on brew hard failure (rc 1)" {
+@test "install_ubuntu_packages aborts with 1 when the base packages fail" {
   unset MACOS
   export LINUX=1 UBUNTU=1 NOBLE=1
   _stub_ubuntu_steps
-  _install_ubuntu_brew_packages() { return 1; }
+  _install_ubuntu_base_packages() { return 1; }
   run install_ubuntu_packages
   [ "$status" -eq 1 ]
-  # Fail-fast: the step after brew must NOT have run. Counted rather than `! grep`,
-  # since a leading `!` does not fail a bats test.
-  [[ "$output" != *"RUST_STEP_RAN"* ]]
+  # Counted rather than `! grep`: a leading `!` does not fail a bats test.
+  [[ "$output" != *"MISC_STEP_RAN"* ]]
 }
 
 # ── install_ubuntu_packages ───────────────────────────────────────────────────

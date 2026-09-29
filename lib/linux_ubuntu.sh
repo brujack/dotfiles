@@ -1,29 +1,30 @@
 #!/usr/bin/env bash
 # lib/linux_ubuntu.sh — Ubuntu-specific install functions
 
+# install_ubuntu_packages -- 0 when every step succeeded, 1 when the base
+# packages failed (nothing after them can work), 2 when any later step failed.
+# Every step after the base packages runs regardless of the others, and the
+# failed ones are named on stderr: most steps return whatever their LAST
+# command returned, so chaining them with `|| return 1` let one flaky
+# third-party repo abort every later step and, through run_setup_or_developer,
+# the whole pyenv/ansible half (backlog #117). _install_ubuntu_brew_packages is
+# itself tri-state; its rc 2 counts as a failed step here too.
 install_ubuntu_packages() {
-  local _brew_rc
-  _install_ubuntu_base_packages  || return 1
-  _install_ubuntu_powershell     || return 1
-  _install_ubuntu_go             || return 1
-  _install_ubuntu_docker         || return 1
-  # After docker: the container toolkit configures the docker runtime.
-  _install_ubuntu_nvidia         || return 1
-  _install_ubuntu_k8s_tools      || return 1
-  _install_ubuntu_hashicorp      || return 1
-  _install_ubuntu_cloud_tools    || return 1
-  # Tri-state, mirroring install_git_hooks_all_repos: 0 clean, 1 hard failure,
-  # 2 partial success with the failed packages named. A bare `|| return 1` here
-  # would abort a whole fresh-machine bootstrap because one upstream formula was
-  # briefly unavailable, which is the opposite of what a bootstrap should do.
-  _install_ubuntu_brew_packages
-  _brew_rc=$?
-  if [[ ${_brew_rc} -eq 1 ]]; then
-    return 1
+  _install_ubuntu_base_packages || return 1
+
+  local -a _failed=()
+  local _step
+  # Order matters: the nvidia container toolkit configures docker's runtime.
+  for _step in powershell go docker nvidia k8s_tools hashicorp cloud_tools \
+    brew_packages rust gui_tools misc; do
+    "_install_ubuntu_${_step}" || _failed+=("${_step}")
+  done
+
+  if ((${#_failed[@]} > 0)); then
+    printf 'ubuntu packages: failed: %s\n' "${_failed[*]}" >&2
+    return 2
   fi
-  _install_ubuntu_rust           || return 1
-  _install_ubuntu_gui_tools      || return 1
-  _install_ubuntu_misc           || return 1
+  return 0
 }
 
 _install_ubuntu_base_packages() {
