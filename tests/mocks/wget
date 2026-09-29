@@ -5,7 +5,13 @@ while [[ $i -le $# ]]; do
   if [[ "${!i}" == "-O" ]]; then
     j=$((i+1))
     mkdir -p "$(dirname "${!j}")" 2>/dev/null
-    touch "${!j}" 2>/dev/null || true
+    # MOCK_WGET_FILE: copy this file to the -O target instead of an empty one,
+    # for callers that verify what they downloaded.
+    if [[ -n "${MOCK_WGET_FILE:-}" ]]; then
+      cp "${MOCK_WGET_FILE}" "${!j}" || { printf 'mock wget: cannot copy MOCK_WGET_FILE=%s\n' "${MOCK_WGET_FILE}" >&2; exit 1; }
+    else
+      touch "${!j}" 2>/dev/null || true
+    fi
     break
   fi
   ((i++))

@@ -1,5 +1,8 @@
 #!/usr/bin/env bats
 
+# `run --separate-stderr` needs bats 1.5.0; without this each use emits BW02.
+bats_require_minimum_version 1.5.0
+
 setup() {
   REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
   source "${REPO_ROOT}/tests/helpers/common.bash"

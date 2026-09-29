@@ -26,7 +26,8 @@ dotfiles/
 │                      #   check-lib-exit-traps.sh, sync_git_repos.sh,
 │                      #   and the extensionless hooks pre-commit-hook.sh/pre-push/commit-msg
 ├── LaunchAgents/      # cadence.plist.template — one template, both weekly agents
-├── keys/              # aws-cli-team.asc — vendored AWS signing key (_AWS_KEY_PATH default)
+├── keys/              # vendored signing keys: aws-cli-team.asc (_AWS_KEY_PATH default),
+│                      #   microsoft.asc (_MS_KEY_PATH default)
 ├── manifests/         # manifests/dotfiles/*.yaml — state-ledger entity manifests
 ├── powershell/        # Windows bootstrap: setup_windows.ps1, Pester tests, Makefile
 ├── pyenv.d/           # rehash/dotfiles-register-all-executables.bash — installed as a
@@ -527,6 +528,10 @@ two-second grep appears to refute the rule.
   - Resolve `_AWS_GPG_BIN`/`_AWS_PKGUTIL_BIN` via `command -v`, never by stripping `PATH` — stripping `/opt/homebrew/bin` or `/usr/sbin` removes the rest of the toolchain those dirs hold.
   - `_AWS_KEY_PATH` defaults via `DOTFILES_REPO_ROOT`, resolved at **source time** in `lib/constants.sh` as a **plain assignment**, never a `${VAR:-}` self-guard — tried and retired, since a guard only adds an env-settable name selecting where a trust anchor is read from. Never re-derive the expression inline as `$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)`, which returns empty once the caller (e.g. `update_aws_cli`) has already `cd`'d elsewhere.
   - An absolute-path suite (bats' `load_setup_env`) can't exercise this cwd-sensitivity; regression tests must `source ./lib/...` relatively, `cd` away, then assert on the **post-import failure message** — never on absence (tdd.md E5), which an unrelated skip satisfies equally. → `dotfiles-test-seams.md` § `_AWS_GPG_BIN / _AWS_PKGUTIL_BIN / _AWS_KEY_PATH seams`
+
+- `_MS_GPG_BIN`/`_MS_AR_BIN`/`_MS_KEY_PATH` (`lib/linux_ubuntu.sh:_ms_verify_deb`)
+  - `_install_ubuntu_powershell` verifies `packages-microsoft-prod.deb`'s debsig signature (`_gpgorigin`) against the vendored Microsoft key, pinned by `MS_GPG_FPR`, before `sudo dpkg -i`; a failure warns and skips. A sha256 pin cannot work, because Microsoft rewrites that file in place per release. The archive must list exactly `debian-binary control.tar.gz data.tar.gz _gpgorigin`, in order: dpkg reads the first control/data member while `ar x` keeps the last of a repeated name, so any other layout could verify one set of members and install another.
+  - `tests/mocks/gpg` cannot verify anything, so `tests/setup_env/linux_ubuntu.bats` points `_MS_GPG_BIN` at the real gpg at setup scope and sets `MOCK_WGET_FILE` to the real signed fixture `tests/fixtures/packages-microsoft-prod.deb`, which the wget mock copies to its `-O` target. The verifier needs GNU `ar` (Apple's cannot read Microsoft's GNU member names, and still exits 0): on macOS without it the verifier tests skip and the install-flow tests stub the verifier; off macOS a missing GNU `ar` fails the tests rather than skipping them.
 
 - `_AWS_BIN` (`lib/developer.sh:install_aws_tools`)
   - Set `_AWS_BIN` in every `install_aws_tools` test on this machine — a real `aws` exists at `/usr/local/bin/aws`, so without the seam the already-installed guard is always taken and the install path is never asserted. → `dotfiles-test-seams.md` § `_AWS_BIN seam`
