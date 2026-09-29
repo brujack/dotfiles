@@ -1,6 +1,7 @@
 #!/usr/bin/env bats
 
 # Ctrl-C and SIGTERM during `-t update` must abort the run (ADR-0027 case 3).
+# SIGTERM needs no handler: with no trap, bash dies of it at once. SIGINT does.
 #
 # A non-interactive bash aborts on SIGINT only when its foreground child DIED
 # of SIGINT. sudo, snap, brew and pip catch the signal and exit normally, so
@@ -33,7 +34,7 @@ _signal_fixture() {
   local _install="$1" _sig="$2" _pipe="$3" _f="${BATS_TEST_TMPDIR}/fixture.sh"
   {
     printf 'source %q\n' "${REPO_ROOT}/setup_env.sh"
-    [[ ${_install} -eq 1 ]] && printf '_update_trap_signals\n'
+    [[ ${_install} -eq 1 ]] && printf '_update_trap_sigint\n'
     printf '_leaf() { bash -c %q; }\n' "trap 'exit 1' INT TERM; kill -${_sig} 0; sleep 2"
     if [[ ${_pipe} -eq 1 ]]; then
       printf '_leaf 2>&1 | tee %q > /dev/null\n' "${BATS_TEST_TMPDIR}/tee_out"
@@ -72,22 +73,22 @@ PY
   [ -e "${BATS_TEST_TMPDIR}/after" ]
 }
 
-@test "_update_trap_signals aborts the run on SIGINT with 130, before the next command" {
+@test "_update_trap_sigint aborts the run on SIGINT with 130, before the next command" {
   run _in_new_session "$(_signal_fixture 1 INT 0)"
   [ "$status" -eq 0 ]
   [ "$output" = "130" ]
   [ ! -e "${BATS_TEST_TMPDIR}/after" ]
 }
 
-@test "_update_trap_signals aborts a tee-piped section on SIGINT with 130" {
+@test "_update_trap_sigint aborts a tee-piped section on SIGINT with 130" {
   run _in_new_session "$(_signal_fixture 1 INT 1)"
   [ "$status" -eq 0 ]
   [ "$output" = "130" ]
   [ ! -e "${BATS_TEST_TMPDIR}/after" ]
 }
 
-@test "_update_trap_signals aborts the run on SIGTERM with 143, before the next command" {
-  run _in_new_session "$(_signal_fixture 1 TERM 0)"
+@test "SIGTERM aborts the run with 143 by bash's default action, no handler installed" {
+  run _in_new_session "$(_signal_fixture 0 TERM 0)"
   [ "$status" -eq 0 ]
   [ "$output" = "143" ]
   [ ! -e "${BATS_TEST_TMPDIR}/after" ]
@@ -113,7 +114,7 @@ sys.exit(subprocess.run(["bash", sys.argv[1]], stdin=subprocess.DEVNULL,
 PY
 }
 
-@test "run_update installs the abort handler for its sections and restores the caller's afterwards" {
+@test "run_update installs the SIGINT handler, leaves TERM alone, and restores the caller's afterwards" {
   local _f="${BATS_TEST_TMPDIR}/wiring.sh" _seen="${BATS_TEST_TMPDIR}/seen"
   {
     printf 'source %q\n' "${REPO_ROOT}/setup_env.sh"
@@ -130,7 +131,9 @@ PY
   run _with_default_signals "${_f}"
 
   grep -q 'kill -INT' "${_seen}"
-  grep -q 'kill -TERM' "${_seen}"
+  # SIGTERM is left to bash's default: the caller's TERM trap stays in place
+  # during the run, not just after it.
+  grep -qF "trap -- 'printf caller-term' SIGTERM" "${_seen}"
   [ "${lines[0]}" = "trap -- 'printf caller-int' SIGINT" ]
   [ "${lines[1]}" = "trap -- 'printf caller-term' SIGTERM" ]
 }

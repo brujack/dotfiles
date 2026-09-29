@@ -168,12 +168,16 @@ child died of it, and sudo, snap, brew and pip catch the signal and exit normall
 never learns it was interrupted. Reproduced in isolation with a leaf that catches INT: the
 run continues with or without the pipe; the pipe only adds the 141, because `tee` dies first.
 
-`run_update` now installs `_update_trap_signals`, a handler that resets the default action
-and re-raises. Bash runs it once the interrupted command finishes, so the process dies of
-the signal before `_update_record_end` for that section, and nothing is recorded. That is
-case 3 above, which is now what actually happens. The handler that was deleted differs in
-one respect only: it caught the signal without exiting. The caller's INT and TERM handlers
-are saved and restored around the run.
+`run_update` now installs `_update_trap_sigint`, a SIGINT handler that resets the default
+action and re-raises. Bash runs it once the interrupted command finishes, so the process dies
+of SIGINT before `_update_record_end` for that section, and nothing is recorded. That is case
+3 above, which is now what actually happens. The handler that was deleted differs in one
+respect only: it caught the signal without exiting. The caller's INT handler is saved and
+restored around the run.
+
+SIGTERM gets no handler, deliberately. With no trap, a non-interactive bash dies of SIGTERM
+at once, even mid-section, which already satisfies case 3. A handler would only postpone the
+abort until the current command finished, which for a long `snap refresh` is worse.
 
 For a section piped through `tee`, "once the interrupted command finishes" means once the
 whole pipeline finishes. Whether the rest of that section's function runs first depends on
@@ -181,7 +185,7 @@ the bash version: measured 2026-09-29, bash 5.3.9 stopped the section at the int
 5.2.21 (what `ubuntu-latest` and `workstation` run) kept running its steps until the
 section's own shell wrote to the dead `tee`. Nothing after the pipeline runs on either. And a signal that was ignored when the
 shell started cannot be trapped, so a run launched with SIGINT ignored (`nohup`, `&` from a
-non-interactive shell) aborts only on SIGTERM.
+non-interactive shell) cannot be stopped with Ctrl-C at all; SIGTERM still stops it.
 
 ## Related
 
