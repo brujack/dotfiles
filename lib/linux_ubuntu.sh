@@ -2,7 +2,7 @@
 # lib/linux_ubuntu.sh — Ubuntu-specific install functions
 
 # install_ubuntu_packages -- 0 when every step succeeded, 1 when the base
-# packages failed (nothing after them can work), 2 when any later step failed.
+# step failed (only on an unsupported release), 2 when any later step failed.
 # Every step after the base packages runs regardless of the others, and the
 # failed ones are named on stderr: most steps return whatever their LAST
 # command returned, so chaining them with `|| return 1` let one flaky
@@ -15,9 +15,9 @@ install_ubuntu_packages() {
   local -a _failed=()
   local _step
   # Order matters: the nvidia container toolkit configures docker's runtime,
-  # so nvidia runs after docker and is skipped when docker failed. It would
-  # otherwise rewrite a daemon.json docker's own step rejected, then restart
-  # docker on a box running live CI runners.
+  # so nvidia runs after docker and is skipped when docker failed, driver
+  # install included. It would otherwise rewrite a daemon.json docker's own
+  # step rejected, then restart docker on a box running live CI runners.
   for _step in workstation powershell go docker nvidia k8s_tools hashicorp \
     cloud_tools brew_packages rust gui_tools misc; do
     if [[ ${_step} == nvidia ]] && [[ " ${_failed[*]} " == *" docker "* ]]; then
