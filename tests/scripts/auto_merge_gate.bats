@@ -119,6 +119,22 @@ _pr() {
   [ "$(cat "${GITHUB_OUTPUT}")" = "merge=true" ]
 }
 
+@test "an empty gh payload with exit 0 exits 1 and writes no merge decision" {
+  export FAKE_GH_JSON="" FAKE_GH_EXIT=0
+  run bash "${GATE}" 1
+  [ "$status" -eq 1 ]
+  [ ! -s "${GITHUB_OUTPUT}" ]
+  [[ "$output" == *"unexpected gate verdict"* ]]
+}
+
+@test "two concatenated gh payloads exit 1 and write no merge decision" {
+  _pr "brujack" '[]' '["lib/a.sh"]'
+  export FAKE_GH_JSON="${FAKE_GH_JSON}${FAKE_GH_JSON}" FAKE_GH_EXIT=0
+  run bash "${GATE}" 1
+  [ "$status" -eq 1 ]
+  [ ! -s "${GITHUB_OUTPUT}" ]
+}
+
 @test "a PR whose file list is truncated is held, since uv.lock could be hidden" {
   _pr "brujack" '[]' '["lib/a.sh"]' 150
   run bash "${GATE}" 1

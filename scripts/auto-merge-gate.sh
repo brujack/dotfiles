@@ -81,6 +81,12 @@ auto_merge_gate() {
       printf 'cleared to merge\n'
       return 0
       ;;
+    *)
+      # jq exits 0 on empty input and prints nothing, and prints one verdict
+      # per document when gh returns more than one, so this is reachable.
+      printf 'unexpected gate verdict %q -- refusing to auto-merge\n' "${_verdict}" >&2
+      return 1
+      ;;
   esac
   printf 'merge=false\n' >> "${GITHUB_OUTPUT}"
 }
