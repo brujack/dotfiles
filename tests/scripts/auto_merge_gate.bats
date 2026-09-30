@@ -135,6 +135,15 @@ _pr() {
   [ ! -s "${GITHUB_OUTPUT}" ]
 }
 
+@test "a valid payload followed by a malformed one exits 1 rather than merging" {
+  _pr "brujack" '[]' '["lib/a.sh"]'
+  export FAKE_GH_JSON="${FAKE_GH_JSON}"'{"author":null}' FAKE_GH_EXIT=0
+  run bash "${GATE}" 1
+  [ "$status" -eq 1 ]
+  [ ! -s "${GITHUB_OUTPUT}" ]
+  [[ "$output" == *"cannot read"* ]]
+}
+
 @test "a PR whose file list is truncated is held, since uv.lock could be hidden" {
   _pr "brujack" '[]' '["lib/a.sh"]' 150
   run bash "${GATE}" 1
