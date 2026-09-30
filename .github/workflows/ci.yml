@@ -245,53 +245,44 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - name: Hold unlabelled Renovate PRs for triage
+      - name: Hold PRs that need a human
         id: hold
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-        # Renovate's `automerge: false` for majors was bypassed: this job filtered
-        # on nothing, so majors auto-merged against the repo's own declared policy.
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        # scripts/auto-merge-gate.sh holds a Renovate PR without automerge-ok,
+        # any PR changing uv.lock without pyproject.toml, and any PR gh cannot
+        # list in full; it writes merge=true|false to GITHUB_OUTPUT, and exits
+        # 1 (red) when it cannot decide.
         #
-        # AFFIRMATIVE label, not `!major`. Excluding a negative fails OPEN -- every
-        # way labelling can break yields a PR without the label, which an exclusion
-        # then merges. Requiring `automerge-ok` fails CLOSED.
-        #
-        # SCOPED TO RENOVATE: the label comes from renovate.json, so no human PR can
-        # carry it; an unscoped check would hold every PR in the repo.
-        #
-        # `app/renovate` is what `gh pr view --json author` returns. REST says
-        # `renovate[bot]` for the SAME PR, and mixing them fails open. Do NOT settle
-        # it with `gh pr list --author`: it accepts BOTH and bare `renovate` returns
-        # 0, indistinguishable from "no PRs".
+        # The gate runs as it exists on the BASE commit, never the PR's copy:
+        # otherwise a PR editing the script is judged by its own edited gate,
+        # and scripts/ lacks the `workflows` token scope that guards changes to
+        # this file. A base without the script (the PR that adds it) is held
+        # for a human; a failed fetch is red.
         #
         # The GITHUB_OUTPUT + `if:` on the merge step is load-bearing. An earlier
-        # draft used `exit 0` in this step to hold -- which does NOT stop the next
-        # step, so the merge ran anyway while the log claimed it was held. Do not
-        # re-split this into an exit-code guard.
-        #
-        # Exit codes differ on purpose: a missing label is NORMAL (green, held); a
-        # failed author query is a BROKEN INSTRUMENT (red), because falling through
-        # to merge on a query failure is the guard disabling itself quietly.
+        # draft used `exit 0` to hold -- which does NOT stop the next step, so the
+        # merge ran anyway while the log claimed it was held. Do not re-split this
+        # into an exit-code guard.
         run: |
-          author=$(gh pr view "${PR_NUMBER}" --json author --jq '.author.login') \
-            || { echo "cannot determine PR author -- refusing to auto-merge" >&2; exit 1; }
-          if [ "${author}" = "app/renovate" ]; then
-            gh pr view "${PR_NUMBER}" --json labels --jq '.labels[].name' \
-              | grep -qx 'automerge-ok' \
-              || { echo "renovate PR lacks automerge-ok -- leaving open for triage"
-                   echo "merge=false" >> "${GITHUB_OUTPUT}"
-                   exit 0; }
+          git fetch --no-tags --depth=1 origin "${BASE_SHA}" \
+            || { echo "cannot fetch the base commit -- refusing to auto-merge" >&2; exit 1; }
+          gate="${RUNNER_TEMP}/auto-merge-gate.sh"
+          if ! git show "${BASE_SHA}:scripts/auto-merge-gate.sh" > "${gate}"; then
+            echo "no auto-merge gate on the base commit -- leaving open for a human"
+            echo "merge=false" >> "${GITHUB_OUTPUT}"
+            exit 0
           fi
-          echo "merge=true" >> "${GITHUB_OUTPUT}"
-          echo "cleared to merge (author=${author})"
+          bash "${gate}" "${PR_NUMBER}"
 
       - name: Auto-merge passing PRs
         if: steps.hold.outputs.merge == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          PR=$(gh pr list --head "${{ github.head_ref || github.ref_name }}" --json number --jq '.[0].number' 2>/dev/null || echo "")
-          if [[ -n "${PR}" ]]; then
-            gh pr merge "${PR}" --squash
-          fi
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        # Merge the PR the gate judged, at the commit it judged: by number rather
+        # than by looking up the head branch, and refused if the head moved.
+        run: gh pr merge "${PR_NUMBER}" --squash --match-head-commit "${HEAD_SHA}"
