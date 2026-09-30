@@ -105,6 +105,13 @@ _pr() {
   [ "$(cat "${GITHUB_OUTPUT}")" = "merge=false" ]
 }
 
+@test "a file list one short of changedFiles is held (gh lists 100 of a 101-file PR)" {
+  _pr "brujack" '[]' '["lib/a.sh"]' 2
+  run bash "${GATE}" 1
+  [ "$status" -eq 0 ]
+  [ "$(cat "${GITHUB_OUTPUT}")" = "merge=false" ]
+}
+
 @test "a failed gh query exits 1 and writes no merge decision" {
   export FAKE_GH_JSON="" FAKE_GH_EXIT=1
   run bash "${GATE}" 1
