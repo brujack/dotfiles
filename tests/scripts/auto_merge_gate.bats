@@ -98,6 +98,27 @@ _pr() {
   [ ! -s "${GITHUB_OUTPUT}" ]
 }
 
+@test "a files field that is not an array exits 1" {
+  export FAKE_GH_JSON='{"author":{"login":"brujack"},"labels":[],"files":{"x":{"path":"lib/a.sh"}},"changedFiles":1}'
+  run bash "${GATE}" 1
+  [ "$status" -eq 1 ]
+  [ ! -s "${GITHUB_OUTPUT}" ]
+}
+
+@test "a null labels field exits 1 even for a human PR" {
+  export FAKE_GH_JSON='{"author":{"login":"brujack"},"labels":null,"files":[{"path":"lib/a.sh"}],"changedFiles":1}'
+  run bash "${GATE}" 1
+  [ "$status" -eq 1 ]
+  [ ! -s "${GITHUB_OUTPUT}" ]
+}
+
+@test "a nested uv.lock alone is cleared, since only the root lock pins the venv" {
+  _pr "brujack" '[]' '["vendor/tool/uv.lock"]'
+  run bash "${GATE}" 1
+  [ "$status" -eq 0 ]
+  [ "$(cat "${GITHUB_OUTPUT}")" = "merge=true" ]
+}
+
 @test "a PR whose file list is truncated is held, since uv.lock could be hidden" {
   _pr "brujack" '[]' '["lib/a.sh"]' 150
   run bash "${GATE}" 1
