@@ -70,6 +70,34 @@ _pr() {
   [ "$(cat "${GITHUB_OUTPUT}")" = "merge=true" ]
 }
 
+@test "a pyproject.toml in a subdirectory does not count as the manifest" {
+  _pr "brujack" '[]' '["uv.lock","docs/pyproject.toml"]'
+  run bash "${GATE}" 1
+  [ "$status" -eq 0 ]
+  [ "$(cat "${GITHUB_OUTPUT}")" = "merge=false" ]
+}
+
+@test "a filename containing a newline cannot pose as pyproject.toml" {
+  export FAKE_GH_JSON='{"author":{"login":"brujack"},"labels":[],"files":[{"path":"uv.lock"},{"path":"x\npyproject.toml"}],"changedFiles":2}'
+  run bash "${GATE}" 1
+  [ "$status" -eq 0 ]
+  [ "$(cat "${GITHUB_OUTPUT}")" = "merge=false" ]
+}
+
+@test "a payload missing changedFiles exits 1 rather than skipping the truncation check" {
+  export FAKE_GH_JSON='{"author":{"login":"brujack"},"labels":[],"files":[{"path":"lib/a.sh"}]}'
+  run bash "${GATE}" 1
+  [ "$status" -eq 1 ]
+  [ ! -s "${GITHUB_OUTPUT}" ]
+}
+
+@test "a payload with a null author exits 1" {
+  export FAKE_GH_JSON='{"author":null,"labels":[],"files":[{"path":"lib/a.sh"}],"changedFiles":1}'
+  run bash "${GATE}" 1
+  [ "$status" -eq 1 ]
+  [ ! -s "${GITHUB_OUTPUT}" ]
+}
+
 @test "a PR whose file list is truncated is held, since uv.lock could be hidden" {
   _pr "brujack" '[]' '["lib/a.sh"]' 150
   run bash "${GATE}" 1
