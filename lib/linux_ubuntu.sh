@@ -799,7 +799,14 @@ _install_ubuntu_gui_tools() {
   if [[ -n ${HAS_SNAP} ]]; then
     printf "Installing microsoft edge\\n"
     # Microsoft Edge has no ARM64 Linux build — amd64 only
-    sudo sh -c 'echo "deb [arch=amd64] https://packages.microsoft.com/repos/edge stable main" > /etc/apt/sources.list.d/microsoft-edge.list'
+    # The installed package owns microsoft-edge.sources and migrates the legacy
+    # .list itself, so only bootstrap a .list when the package has not yet landed.
+    local _edge_dir="${_EDGE_SOURCES_DIR:-/etc/apt/sources.list.d}"
+    if [[ -e "${_edge_dir}/microsoft-edge.sources" ]]; then
+      sudo rm -f "${_edge_dir}/microsoft-edge.list"
+    else
+      echo "deb [arch=amd64] https://packages.microsoft.com/repos/edge stable main" | sudo tee "${_edge_dir}/microsoft-edge.list" > /dev/null
+    fi
     sudo -H apt update
     sudo -H DEBIAN_FRONTEND=noninteractive apt install microsoft-edge-stable -y
   fi

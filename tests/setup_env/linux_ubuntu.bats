@@ -25,6 +25,11 @@ setup() {
   # release_binary.bats, which drive the seams.
   export _RELEASE_BIN_DIR="${BATS_TEST_TMPDIR}/release-bin"
   mkdir -p "${_RELEASE_BIN_DIR}"
+  # Same rule for the apt sources dir _install_ubuntu_gui_tools reads and
+  # writes: tests/mocks/sudo execs real commands, so without this every HAS_SNAP
+  # test would touch the real /etc/apt/sources.list.d.
+  export _EDGE_SOURCES_DIR="${BATS_TEST_TMPDIR}/apt-sources"
+  mkdir -p "${_EDGE_SOURCES_DIR}"
   # _install_ubuntu_powershell verifies packages-microsoft-prod.deb before
   # installing it. tests/mocks/gpg cannot verify anything, so point the seam at
   # the real gpg, and have the wget mock hand back the real signed .deb. The
@@ -1552,6 +1557,38 @@ STUB
   run _install_ubuntu_gui_tools
   [ "$status" -eq 0 ]
   grep -q "apt install albert" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_gui_tools: edge .sources present removes stale .list and keeps .sources" {
+  export HAS_SNAP=1
+  unset HAS_DEVTOOLS
+  printf 'Types: deb\n' > "${_EDGE_SOURCES_DIR}/microsoft-edge.sources"
+  printf 'deb stale\n' > "${_EDGE_SOURCES_DIR}/microsoft-edge.list"
+  run _install_ubuntu_gui_tools
+  [ "$status" -eq 0 ]
+  [ ! -e "${_EDGE_SOURCES_DIR}/microsoft-edge.list" ]
+  [ "$(cat "${_EDGE_SOURCES_DIR}/microsoft-edge.sources")" = "Types: deb" ]
+  grep -q "apt install microsoft-edge-stable" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_gui_tools: edge .sources absent writes bootstrap .list and no .sources" {
+  export HAS_SNAP=1
+  unset HAS_DEVTOOLS
+  run _install_ubuntu_gui_tools
+  [ "$status" -eq 0 ]
+  grep -q "packages.microsoft.com/repos/edge stable main" "${_EDGE_SOURCES_DIR}/microsoft-edge.list"
+  [ ! -e "${_EDGE_SOURCES_DIR}/microsoft-edge.sources" ]
+  grep -q "apt install microsoft-edge-stable" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_gui_tools: edge bootstrap .list is idempotent across two runs" {
+  export HAS_SNAP=1
+  unset HAS_DEVTOOLS
+  run _install_ubuntu_gui_tools
+  [ "$status" -eq 0 ]
+  run _install_ubuntu_gui_tools
+  [ "$status" -eq 0 ]
+  [ "$(wc -l < "${_EDGE_SOURCES_DIR}/microsoft-edge.list")" -eq 1 ]
 }
 
 @test "_install_ubuntu_gui_tools: no HAS_SNAP skips albert and edge" {
