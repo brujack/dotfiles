@@ -602,11 +602,13 @@ EOF
   # timeout is real here, not mocked (shell.md: the point is whether OUR
   # wrapping resolves/wraps/reads rc correctly, not whether timeout itself
   # works). Both probes in the function (the initial guard and the
-  # post-apt-install re-check) hit this same hanging stub, so an unbounded
-  # probe would sleep the full 5s at each of the two call sites; bounding
-  # each at 1s keeps the whole run well under that ceiling.
+  # post-apt-install re-check) hit this same 20s hanging stub. Both bounded at
+  # 1s costs about 2s; one bounded and one unbounded about 21s; neither
+  # bounded 40s. A 20s ceiling still fails both unbounded cases while leaving
+  # about 18s of headroom for a loaded CI runner (a 5s stub with a 5s ceiling
+  # left only ~3s and flaked at 1 of 5 under bats --jobs).
   export _PWSH_PROBE_TIMEOUT=1
-  _PWSH_BIN="$(_pwsh_hanging_stub_bin 5)"
+  _PWSH_BIN="$(_pwsh_hanging_stub_bin 20)"
 
   local _start _end _elapsed
   _start="$(date +%s)"
@@ -615,7 +617,7 @@ EOF
   _elapsed=$(( _end - _start ))
 
   [ "$status" -eq 0 ]
-  [ "${_elapsed}" -lt 5 ]
+  [ "${_elapsed}" -lt 20 ]
   [[ "$output" == *"apt install succeeded but pwsh still does not run"* ]]
 }
 
