@@ -125,6 +125,40 @@ EOF
   grep -qF -- "nala full-upgrade -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold" "${MOCK_CALLS_FILE}"
 }
 
+# needrestart's apt Post-Invoke hook raises a debconf dialog when stdout is not a
+# tty, and run_update tees stdout. sudo drops the caller's DEBIAN_FRONTEND, so the
+# value has to be on the sudo command line for the hook's process to see it.
+@test "update_apt_packages: nala full-upgrade sees DEBIAN_FRONTEND=noninteractive when the caller has none" {
+  export UBUNTU=1
+  unset DEBIAN_FRONTEND
+  local _stub_dir
+  _stub_dir="$(frontend_probe_stub_path nala)"
+  PATH="${_stub_dir}:${PATH}" run update_apt_packages
+  [ "$status" -eq 0 ]
+  grep -qE '^frontend: nala full-upgrade .* DEBIAN_FRONTEND=noninteractive$' "${MOCK_CALLS_FILE}"
+}
+
+@test "update_apt_packages: nala autoremove sees DEBIAN_FRONTEND=noninteractive when the caller has none" {
+  export UBUNTU=1
+  unset DEBIAN_FRONTEND
+  local _stub_dir
+  _stub_dir="$(frontend_probe_stub_path nala)"
+  PATH="${_stub_dir}:${PATH}" run update_apt_packages
+  [ "$status" -eq 0 ]
+  grep -qE '^frontend: nala autoremove .* DEBIAN_FRONTEND=noninteractive$' "${MOCK_CALLS_FILE}"
+}
+
+@test "update_apt_packages: the command-line value wins over a caller's DEBIAN_FRONTEND" {
+  export UBUNTU=1
+  export DEBIAN_FRONTEND=dialog
+  local _stub_dir
+  _stub_dir="$(frontend_probe_stub_path nala)"
+  PATH="${_stub_dir}:${PATH}" run update_apt_packages
+  [ "$status" -eq 0 ]
+  grep -qE '^frontend: nala full-upgrade .* DEBIAN_FRONTEND=noninteractive$' "${MOCK_CALLS_FILE}"
+  grep -qE '^frontend: nala autoremove .* DEBIAN_FRONTEND=noninteractive$' "${MOCK_CALLS_FILE}"
+}
+
 # ── update_snap_packages ─────────────────────────────────────────────────────
 
 @test "update_snap_packages: propagates a failing snap refresh" {
@@ -203,6 +237,17 @@ EOF
   [[ "$output" == *"Installed zsh"* ]]
 }
 
+@test "install_zsh_linux: apt install zsh sees DEBIAN_FRONTEND=noninteractive" {
+  unset MACOS
+  export LINUX=1 UBUNTU=1
+  unset MOCK_DPKG_STATUS_zsh MOCK_DPKG_STATUS_zsh_doc DEBIAN_FRONTEND
+  local _stub_dir
+  _stub_dir="$(frontend_probe_stub_path apt)"
+  PATH="${_stub_dir}:${PATH}" run install_zsh_linux
+  [ "$status" -eq 0 ]
+  grep -qE '^frontend: apt install zsh zsh-doc .*DEBIAN_FRONTEND=noninteractive$' "${MOCK_CALLS_FILE}"
+}
+
 @test "install_zsh_linux: does not run dist-upgrade" {
   unset MACOS
   export LINUX=1 UBUNTU=1
@@ -226,6 +271,17 @@ EOF
   [ "$status" -eq 0 ]
   [[ "$output" == *"already installed"* ]]
   refute_grep "apt install" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_git_linux: apt install git sees DEBIAN_FRONTEND=noninteractive" {
+  unset MACOS
+  export LINUX=1 UBUNTU=1
+  unset MOCK_DPKG_STATUS_git DEBIAN_FRONTEND
+  local _stub_dir
+  _stub_dir="$(frontend_probe_stub_path apt)"
+  PATH="${_stub_dir}:${PATH}" run install_git_linux
+  [ "$status" -eq 0 ]
+  grep -qE '^frontend: apt install git .*DEBIAN_FRONTEND=noninteractive$' "${MOCK_CALLS_FILE}"
 }
 
 @test "install_git_linux: installs when git is absent" {
