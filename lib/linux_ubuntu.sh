@@ -782,7 +782,7 @@ _edge_keyring_has_pinned_fpr() {
   _rc=$?
   rm -rf "${_home}"
   [[ ${_rc} -eq 0 ]] || return 1
-  printf '%s\n' "${_listing}" | grep -qx "fpr:::::::::${MS_GPG_FPR}:"
+  printf '%s\n' "${_listing}" | grep -qxF "fpr:::::::::${MS_GPG_FPR}:"
 }
 
 # Own function so tests can drive the edge source logic without also running the
@@ -805,8 +805,9 @@ _install_ubuntu_edge_source() {
   else
     local _edge_key="${_MS_KEY_PATH:-${DOTFILES_REPO_ROOT}/keys/microsoft.asc}"
     "${_MS_GPG_BIN:-gpg}" --dearmor < "${_edge_key}" 2> /dev/null | sudo tee "${_edge_keyring}" > /dev/null
-    # gpg's own status, not tee's: a truncated key makes gpg exit non-zero yet
-    # still emit bytes, so a non-empty keyring alone does not prove it worked.
+    # gpg's own status, not tee's: on GnuPG 2.4 a truncated key exits non-zero
+    # yet still emits bytes; 2.5 exits 0, which the fingerprint check below
+    # catches. Either way a non-empty keyring alone does not prove it worked.
     local _edge_gpg_rc="${PIPESTATUS[0]}"
     if [[ ${_edge_gpg_rc} -eq 0 && -s "${_edge_keyring}" ]] \
       && _edge_keyring_has_pinned_fpr "${_edge_keyring}"; then

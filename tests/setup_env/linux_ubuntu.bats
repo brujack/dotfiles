@@ -1733,6 +1733,37 @@ _edge_live_sources() {
   [ ! -e "${_EDGE_BOOTSTRAP_KEYRING}" ]
 }
 
+# A well-formed key that is not Microsoft's: it dearmors and lists cleanly, so
+# only the exact fingerprint comparison can refuse it.
+@test "_install_ubuntu_edge_source: fails closed on a valid key with a different fingerprint" {
+  local _gh="${BATS_TEST_TMPDIR}/gh-edge"
+  mkdir -p "${_gh}" && chmod 700 "${_gh}"
+  "${_MS_GPG_BIN}" --homedir "${_gh}" --batch --passphrase '' --quick-gen-key 'Not Microsoft <x@example.invalid>' ed25519 sign never 2> /dev/null
+  "${_MS_GPG_BIN}" --homedir "${_gh}" --batch --armor --export > "${BATS_TEST_TMPDIR}/other-edge.asc"
+  gpgconf --homedir "${_gh}" --kill all > /dev/null 2>&1
+  [ -s "${BATS_TEST_TMPDIR}/other-edge.asc" ]
+  printf 'deb stale\n' > "${_EDGE_SOURCES_DIR}/microsoft-edge.list"
+  _MS_KEY_PATH="${BATS_TEST_TMPDIR}/other-edge.asc" run _install_ubuntu_edge_source
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"edge: could not build ${_EDGE_BOOTSTRAP_KEYRING}"* ]]
+  [ ! -e "${_EDGE_SOURCES_DIR}/microsoft-edge.list" ]
+  [ ! -e "${_EDGE_BOOTSTRAP_KEYRING}" ]
+}
+
+# A listing that prints the right fingerprint but exits non-zero is not a
+# trustworthy listing; the status must be honoured, not only the text.
+@test "_install_ubuntu_edge_source: fails closed when the listing prints the pinned fingerprint but exits non-zero" {
+  local _stub="${BATS_TEST_TMPDIR}/gpg-listing-fails"
+  printf '#!/usr/bin/env bash\nfor a in "$@"; do\n  [[ "$a" == --dearmor ]] && { cat; exit 0; }\n  [[ "$a" == --show-keys ]] && { printf "fpr:::::::::%%s:\\n" "'"${MS_GPG_FPR}"'"; exit 2; }\ndone\nexit 0\n' > "${_stub}"
+  chmod +x "${_stub}"
+  printf 'deb stale\n' > "${_EDGE_SOURCES_DIR}/microsoft-edge.list"
+  _MS_GPG_BIN="${_stub}" run _install_ubuntu_edge_source
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"edge: could not build ${_EDGE_BOOTSTRAP_KEYRING}"* ]]
+  [ ! -e "${_EDGE_SOURCES_DIR}/microsoft-edge.list" ]
+  [ ! -e "${_EDGE_BOOTSTRAP_KEYRING}" ]
+}
+
 @test "_install_ubuntu_edge_source: fails closed when gpg is missing" {
   printf 'deb stale\n' > "${_EDGE_SOURCES_DIR}/microsoft-edge.list"
   _MS_GPG_BIN=/nonexistent/gpg run _install_ubuntu_edge_source
