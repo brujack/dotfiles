@@ -770,6 +770,30 @@ _install_ubuntu_brew_packages() {
   fi
 }
 
+# Own function so tests can drive the edge source logic without also running the
+# unseamed albert writes that share _install_ubuntu_gui_tools.
+_install_ubuntu_edge_source() {
+  # The package owns microsoft-edge.sources, but do-release-upgrade can leave it
+  # disabled, so only a live one retires the bootstrap .list and keyring.
+  local _edge_dir="${_EDGE_SOURCES_DIR:-/etc/apt/sources.list.d}"
+  local _edge_src="${_edge_dir}/microsoft-edge.sources"
+  local _edge_list="${_edge_dir}/microsoft-edge.list"
+  local _edge_keyring="${_EDGE_BOOTSTRAP_KEYRING:-/usr/share/keyrings/microsoft-edge-bootstrap.gpg}"
+  if [[ -f "${_edge_src}" ]] && grep -q '^URIs:' "${_edge_src}" && ! grep -qiE '^Enabled:[[:space:]]*no' "${_edge_src}"; then
+    sudo rm -f "${_edge_list}" "${_edge_keyring}"
+  else
+    local _edge_key="${_MS_KEY_PATH:-${DOTFILES_REPO_ROOT}/keys/microsoft.asc}"
+    "${_MS_GPG_BIN:-gpg}" --dearmor < "${_edge_key}" 2> /dev/null | sudo tee "${_edge_keyring}" > /dev/null
+    if [[ -s "${_edge_keyring}" ]]; then
+      # Microsoft Edge has no ARM64 Linux build — amd64 only
+      printf 'deb [arch=amd64 signed-by=%s] https://packages.microsoft.com/repos/edge stable main\n' "${_edge_keyring}" | sudo tee "${_edge_list}" > /dev/null
+    else
+      log_warn "edge: could not build the Microsoft keyring (gpg missing or ${_edge_key} unreadable); writing no Edge source"
+      sudo rm -f "${_edge_list}" "${_edge_keyring}"
+    fi
+  fi
+}
+
 _install_ubuntu_gui_tools() {
   if [[ -n ${HAS_DEVTOOLS} ]]; then
     printf "Installing Virtualbox\\n"
@@ -798,25 +822,7 @@ _install_ubuntu_gui_tools() {
 
   if [[ -n ${HAS_SNAP} ]]; then
     printf "Installing microsoft edge\\n"
-    # Microsoft Edge has no ARM64 Linux build — amd64 only
-    # The package owns microsoft-edge.sources, but do-release-upgrade can leave it
-    # disabled, so only a live one retires the bootstrap .list and keyring.
-    local _edge_dir="${_EDGE_SOURCES_DIR:-/etc/apt/sources.list.d}"
-    local _edge_src="${_edge_dir}/microsoft-edge.sources"
-    local _edge_list="${_edge_dir}/microsoft-edge.list"
-    local _edge_keyring="${_EDGE_BOOTSTRAP_KEYRING:-/usr/share/keyrings/microsoft-edge-bootstrap.gpg}"
-    if [[ -f "${_edge_src}" ]] && grep -q '^URIs:' "${_edge_src}" && ! grep -qiE '^Enabled:[[:space:]]*no' "${_edge_src}"; then
-      sudo rm -f "${_edge_list}" "${_edge_keyring}"
-    else
-      local _edge_key="${_MS_KEY_PATH:-${DOTFILES_REPO_ROOT}/keys/microsoft.asc}"
-      "${_MS_GPG_BIN:-gpg}" --dearmor < "${_edge_key}" 2> /dev/null | sudo tee "${_edge_keyring}" > /dev/null
-      if [[ -s "${_edge_keyring}" ]]; then
-        printf 'deb [arch=amd64 signed-by=%s] https://packages.microsoft.com/repos/edge stable main\n' "${_edge_keyring}" | sudo tee "${_edge_list}" > /dev/null
-      else
-        log_warn "edge: could not build the Microsoft keyring (gpg missing or ${_edge_key} unreadable); writing no Edge source"
-        sudo rm -f "${_edge_list}" "${_edge_keyring}"
-      fi
-    fi
+    _install_ubuntu_edge_source
     sudo -H apt update
     sudo -H DEBIAN_FRONTEND=noninteractive apt install microsoft-edge-stable -y
   fi
