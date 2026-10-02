@@ -200,3 +200,47 @@ commit under test, not against this number.
 - **Tests that skip on Darwin.** The GNU `ar` verifier tests skip on macOS by design.
   12 tests skip there today. The job does not print or gate on the count: nothing
   would read it.
+
+## Multi-Lens Review
+
+Reviewed at commit: `64ca3b07` (Step 7 self-review commit, before Step 8 dispatch).
+Every reference in this section, to a test number, a row or a section, is to the spec
+as it stood at that commit. The body above was revised at `fbd29d35` in response.
+
+### Goal-Fit
+
+Finding: Worth building and close to the minimum. (1) The cause table misdiagnosed 1698
+and 1700: `tests/setup_env/unit.bats:2237` already branches on `MACOS`, so they fail for
+the same inherited-variable reason as 1667, 1668 and 1702, and the proposed date helper
+is unnecessary. (2) The evidence for code regressing on macOS is one undiagnosed test
+(1266); the other five are a harness artefact. The Problem section should say so. Also:
+the skip-count print has no reader.
+Assumption: The suite is deterministic on a 3-vCPU runner at `JOBS=24`. Re-run the first
+red job five times and compare the `not ok` sets before the job enters `needs:`.
+Disposition:
+
+### Ergonomics
+
+Finding: (1) No Verification row can fail if the `common.bash` unset is a no-op. Missing:
+a hostile-inheritance control, the wrong platform exported, red before the change and
+rc 0 after. (2) The diagnosis path from Linux is unspecified: the job saves `make test`
+output to a file and never says it prints it, and the reproduction loop on the Studio is
+not named.
+Assumption: A hosted runner reproduces the Studio's six failures and only those. The
+first CI run with the job added and no fixes settles it.
+Disposition:
+
+### Risk
+
+Finding: No blocking flaw. (1) The six failures were measured under GNU Make 4.4.1 and
+the job uses 3.81; four bats files run real `make`. (2) The executed-count check has no
+guard on the declared side, so 0 equals 0 passes; it also needs an anchored match.
+Assumption: The Studio measurement predicts the runner. Run the suite on the Studio under
+`env -i`, an empty `HOME` and system make, and compare the `not ok` set to the six.
+Checked after the review: same six, 2155 ok (run B in Problem). The runner-image half
+stays open until the first CI run.
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
