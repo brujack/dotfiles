@@ -168,6 +168,17 @@ teardown() {
   grep -q "apt-get install -y bats" "${MOCK_CALLS_FILE}"
 }
 
+@test "install_bats_linux: apt-get install bats sees DEBIAN_FRONTEND=noninteractive" {
+  export MOCK_WHICH_MISSING=bats
+  unset MACOS DEBIAN_FRONTEND
+  export UBUNTU=1
+  local _stub_dir
+  _stub_dir="$(frontend_probe_stub_path apt-get)"
+  PATH="${_stub_dir}:${PATH}" run install_bats_linux
+  [ "$status" -eq 0 ]
+  grep -qE '^frontend: apt-get install -y bats DEBIAN_FRONTEND=noninteractive$' "${MOCK_CALLS_FILE}"
+}
+
 # ── install_bats (dispatcher) ────────────────────────────────────────────────
 
 @test "install_bats dispatches to install_bats_macos on macOS" {

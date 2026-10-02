@@ -199,7 +199,7 @@ _install_ubuntu_powershell() {
     return 0
   fi
 
-  if ! sudo -H dpkg -i "${HOME}"/software_downloads/packages-microsoft-prod.deb; then
+  if ! sudo -H DEBIAN_FRONTEND=noninteractive dpkg -i "${HOME}"/software_downloads/packages-microsoft-prod.deb; then
     log_warn "powershell: dpkg -i packages-microsoft-prod.deb failed; skipping"
     return 0
   fi
@@ -1176,7 +1176,7 @@ _install_ubuntu_misc() {
 
   check_and_install_nala
   # </dev/null: same job-control hang as update_apt_packages in lib/linux_shared.sh.
-  sudo -H nala autoremove -y < /dev/null
+  sudo -H DEBIAN_FRONTEND=noninteractive nala autoremove -y < /dev/null
 }
 
 [[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0

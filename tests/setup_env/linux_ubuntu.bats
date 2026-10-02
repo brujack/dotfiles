@@ -484,6 +484,16 @@ _ms_require_gnu_ar() {
   grep -qE "apt install powershell" "${MOCK_CALLS_FILE}"
 }
 
+@test "_install_ubuntu_powershell: dpkg -i sees DEBIAN_FRONTEND=noninteractive" {
+  _PWSH_BIN="$(_pwsh_stub_bin 1)"
+  unset DEBIAN_FRONTEND
+  local _stub_dir
+  _stub_dir="$(frontend_probe_stub_path dpkg)"
+  PATH="${_stub_dir}:${PATH}" run _install_ubuntu_powershell
+  [ "$status" -eq 0 ]
+  grep -qE '^frontend: dpkg -i .*DEBIAN_FRONTEND=noninteractive$' "${MOCK_CALLS_FILE}"
+}
+
 @test "_install_ubuntu_powershell: apt install succeeding does not mean pwsh runs" {
   # The condition this task exists for, one level out: apt exits 0 for
   # "powershell is already the newest version" even when the installed
@@ -1784,6 +1794,19 @@ _edge_live_sources() {
   PATH="${_stub_dir}:${PATH}" run _install_ubuntu_misc < "${_stdin}"
   [ "$status" -eq 0 ]
   grep -qF "nala autoremove -y stdin=[]" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_misc: nala autoremove sees DEBIAN_FRONTEND=noninteractive" {
+  export DOCKER_COMPOSE_VER="2.24.0"
+  export DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64"
+  export YQ_VER="4.40.5"
+  export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
+  unset HAS_DEVTOOLS DEBIAN_FRONTEND
+  local _stub_dir
+  _stub_dir="$(frontend_probe_stub_path nala)"
+  PATH="${_stub_dir}:${PATH}" run _install_ubuntu_misc
+  [ "$status" -eq 0 ]
+  grep -qE '^frontend: nala autoremove .* DEBIAN_FRONTEND=noninteractive$' "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_misc: skips docker-compose wget when file already exists" {

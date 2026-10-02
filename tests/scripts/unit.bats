@@ -786,6 +786,17 @@ teardown() {
   grep -q "apt-get install" "${MOCK_CALLS_FILE}"
 }
 
+@test "_bootstrap_linux_install_prereqs: apt-get install sees DEBIAN_FRONTEND=noninteractive" {
+  source "${REPO_ROOT}/scripts/bootstrap_linux.sh"
+  _DISTRO_FAMILY="ubuntu"
+  unset DEBIAN_FRONTEND
+  local _stub_dir
+  _stub_dir="$(frontend_probe_stub_path apt-get)"
+  PATH="${_stub_dir}:${PATH}" run _bootstrap_linux_install_prereqs
+  [ "$status" -eq 0 ]
+  grep -qE '^frontend: apt-get install -y .* DEBIAN_FRONTEND=noninteractive$' "${MOCK_CALLS_FILE}"
+}
+
 @test "_bootstrap_linux_install_prereqs prints warning for unknown" {
   source "${REPO_ROOT}/scripts/bootstrap_linux.sh"
   _DISTRO_FAMILY="unknown"

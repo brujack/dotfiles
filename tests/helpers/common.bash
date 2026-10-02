@@ -76,6 +76,26 @@ EOF
   printf '%s' "${_dir}"
 }
 
+# Write a stub for <name> that records the DEBIAN_FRONTEND its own process
+# environment holds, as `frontend: <name> <argv> DEBIAN_FRONTEND=<value>` in
+# MOCK_CALLS_FILE (`<unset>` when absent), and print the stub's directory so the
+# caller can prepend it to PATH. This asserts on what the child sees, not on the
+# text of the sudo line. A misplaced assignment (`DEBIAN_FRONTEND=x sudo cmd`)
+# fails because tests/mocks/sudo scrubs the caller's DEBIAN_FRONTEND, as real
+# sudo resets the environment; only a value on the sudo command line survives.
+frontend_probe_stub_path() {
+  local _name="$1" _dir _bash_bin
+  _dir="$(mktemp -d -p "${BATS_TEST_TMPDIR}")"
+  _bash_bin="$(command -v bash)"
+  cat > "${_dir}/${_name}" << EOF
+#!${_bash_bin}
+printf 'frontend: %s %s DEBIAN_FRONTEND=%s\n' "${_name}" "\$*" "\${DEBIAN_FRONTEND:-<unset>}" >> "\${MOCK_CALLS_FILE}"
+exit 0
+EOF
+  chmod +x "${_dir}/${_name}"
+  printf '%s' "${_dir}"
+}
+
 # Source setup_env.sh — the sourcing guard prevents main body execution
 load_setup_env() {
   source "${REPO_ROOT}/setup_env.sh"

@@ -32,7 +32,7 @@ _bootstrap_linux_install_prereqs() {
     ubuntu)
       printf "[INFO]  Installing Homebrew prerequisites (Ubuntu)...\n"
       sudo apt-get update || return 1
-      sudo apt-get install -y build-essential curl file git procps || return 1
+      sudo DEBIAN_FRONTEND=noninteractive apt-get install -y build-essential curl file git procps || return 1
       ;;
     *)
       printf "[WARN]  Unknown distro. Ensure Homebrew prerequisites are installed: build tools, curl, file, git, procps.\n"

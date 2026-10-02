@@ -258,6 +258,18 @@ teardown() {
   ! grep -q "rosetta" "${MOCK_CALLS_FILE}"
 }
 
+@test "run_setup_user on Linux: apt install curl sees DEBIAN_FRONTEND=noninteractive" {
+  unset MACOS DEBIAN_FRONTEND
+  export LINUX=1
+  export UBUNTU=1
+  export NOBLE=1
+  mkdir -p "${HOME}/bin"
+  local _stub_dir
+  _stub_dir="$(frontend_probe_stub_path apt)"
+  PATH="${_stub_dir}:${PATH}" run_setup_user
+  grep -qE '^frontend: apt install curl -y DEBIAN_FRONTEND=noninteractive$' "${MOCK_CALLS_FILE}"
+}
+
 @test "run_setup_user calls install_bats on Linux when bats is missing" {
   unset MACOS
   export LINUX=1
@@ -877,6 +889,16 @@ nvidia" ]
 }
 
 # ── install_github_cli_linux ──────────────────────────────────────────────────
+
+@test "install_github_cli_linux: apt install gh sees DEBIAN_FRONTEND=noninteractive" {
+  unset MACOS DEBIAN_FRONTEND
+  export LINUX=1
+  export UBUNTU=1
+  local _stub_dir
+  _stub_dir="$(frontend_probe_stub_path apt)"
+  PATH="${_stub_dir}:${PATH}" install_github_cli_linux
+  grep -qE '^frontend: apt install gh DEBIAN_FRONTEND=noninteractive$' "${MOCK_CALLS_FILE}"
+}
 
 @test "install_github_cli_linux calls apt install gh on Ubuntu" {
   unset MACOS

@@ -171,6 +171,41 @@ teardown() {
   refute_grep "apt install nala" "${MOCK_CALLS_FILE}"
 }
 
+# Every dpkg-running sudo call needs DEBIAN_FRONTEND on its own command line:
+# needrestart's apt hook raises a debconf dialog when stdout is not a tty, and
+# sudo does not pass the caller's value through.
+@test "check_and_install_nala: apt install nala sees DEBIAN_FRONTEND=noninteractive" {
+  export MOCK_UNAME_S=Linux
+  export MOCK_AWK_OS_NAME="Ubuntu"
+  export RESOLUTE=1
+  export HOME="${BATS_TEST_TMPDIR}"
+  unset DEBIAN_FRONTEND
+  local _stub_dir
+  _stub_dir="$(frontend_probe_stub_path apt)"
+  PATH="${_stub_dir}:${PATH}" run check_and_install_nala
+  [ "$status" -eq 0 ]
+  grep -qE '^frontend: apt install nala .*DEBIAN_FRONTEND=noninteractive$' "${MOCK_CALLS_FILE}"
+}
+
+@test "check_and_install_nala: volian dpkg --install sees DEBIAN_FRONTEND=noninteractive" {
+  export MOCK_UNAME_S=Linux
+  export MOCK_AWK_OS_NAME="Ubuntu"
+  export NOBLE=1
+  unset RESOLUTE
+  export HOME="${BATS_TEST_TMPDIR}"
+  mkdir -p "${BATS_TEST_TMPDIR}/software_downloads"
+  unset DEBIAN_FRONTEND
+  local _stub_dir
+  _stub_dir="$(frontend_probe_stub_path dpkg)"
+  PATH="${_stub_dir}:${PATH}" run check_and_install_nala
+  [ "$status" -eq 0 ]
+  # Each .deb is its own call site: assert both, so deleting the assignment from
+  # either one is red. No dpkg --install may have seen the variable unset.
+  grep -qE '^frontend: dpkg --install .*volian-archive-keyring.*DEBIAN_FRONTEND=noninteractive$' "${MOCK_CALLS_FILE}"
+  grep -qE '^frontend: dpkg --install .*volian-archive-nala.*DEBIAN_FRONTEND=noninteractive$' "${MOCK_CALLS_FILE}"
+  refute_grep '^frontend: dpkg --install .*DEBIAN_FRONTEND=<unset>$' "${MOCK_CALLS_FILE}" -E
+}
+
 @test "check_and_install_nala on RESOLUTE uses apt install, skips volian wget" {
   export MOCK_UNAME_S=Linux
   export MOCK_AWK_OS_NAME="Ubuntu"
@@ -532,6 +567,21 @@ teardown() {
   run setup_ansible
   [ "$status" -eq 0 ]
   grep -q "apt-get install.*zlib1g-dev" "${MOCK_CALLS_FILE}"
+}
+
+@test "setup_ansible on Linux: Python build deps apt-get install sees DEBIAN_FRONTEND=noninteractive" {
+  export LINUX=1
+  unset MACOS UBUNTU DEBIAN_FRONTEND
+  export HOME="${BATS_TEST_TMPDIR}"
+  export PYTHON_VER="3.14.6"
+  export HAS_DEVTOOLS=""
+  mkdir -p "${HOME}/.pyenv/bin"
+  cp "${BATS_TEST_DIRNAME}/../mocks/pyenv" "${HOME}/.pyenv/bin/pyenv"
+  local _stub_dir
+  _stub_dir="$(frontend_probe_stub_path apt-get)"
+  PATH="${_stub_dir}:${BATS_TEST_DIRNAME}/../mocks:${PATH}" run setup_ansible
+  [ "$status" -eq 0 ]
+  grep -qE '^frontend: apt-get install -y zlib1g-dev .* DEBIAN_FRONTEND=noninteractive$' "${MOCK_CALLS_FILE}"
 }
 
 @test "setup_ansible on Linux creates ~/.pyenv/bin/pyenv symlink when pyenv installed via brew" {
