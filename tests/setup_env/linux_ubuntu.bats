@@ -612,11 +612,13 @@ EOF
   # timeout is real here, not mocked (shell.md: the point is whether OUR
   # wrapping resolves/wraps/reads rc correctly, not whether timeout itself
   # works). Both probes in the function (the initial guard and the
-  # post-apt-install re-check) hit this same hanging stub, so an unbounded
-  # probe would sleep the full 5s at each of the two call sites; bounding
-  # each at 1s keeps the whole run well under that ceiling.
+  # post-apt-install re-check) hit this same 20s hanging stub. Both bounded at
+  # 1s costs about 2s; one bounded and one unbounded about 21s; neither
+  # bounded 40s. A 20s ceiling still fails both unbounded cases while leaving
+  # about 18s of headroom for a loaded CI runner (a 5s stub with a 5s ceiling
+  # left only ~3s and flaked at 1 of 5 under bats --jobs).
   export _PWSH_PROBE_TIMEOUT=1
-  _PWSH_BIN="$(_pwsh_hanging_stub_bin 5)"
+  _PWSH_BIN="$(_pwsh_hanging_stub_bin 20)"
 
   local _start _end _elapsed
   _start="$(date +%s)"
@@ -625,7 +627,7 @@ EOF
   _elapsed=$(( _end - _start ))
 
   [ "$status" -eq 0 ]
-  [ "${_elapsed}" -lt 5 ]
+  [ "${_elapsed}" -lt 20 ]
   [[ "$output" == *"apt install succeeded but pwsh still does not run"* ]]
 }
 
@@ -1726,6 +1728,54 @@ _edge_live_sources() {
   [ ! -e "${_EDGE_BOOTSTRAP_KEYRING}" ]
 }
 
+# gpg 2.5 exits 0 on a truncated key and still writes bytes (measured on
+# GnuPG 2.5.24; 2.4.8 exits 2), so gpg's status alone cannot be the guard. This
+# stub reproduces the 2.5 behaviour on any platform: --dearmor "succeeds", and
+# the keyring then holds no key.
+@test "_install_ubuntu_edge_source: fails closed when gpg exits 0 but the keyring lacks the pinned fingerprint" {
+  local _stub="${BATS_TEST_TMPDIR}/gpg-lenient"
+  printf '#!/usr/bin/env bash\nfor a in "$@"; do [[ "$a" == --dearmor ]] && { cat; exit 0; }; done\nexit 0\n' > "${_stub}"
+  chmod +x "${_stub}"
+  printf 'deb stale\n' > "${_EDGE_SOURCES_DIR}/microsoft-edge.list"
+  _MS_GPG_BIN="${_stub}" run _install_ubuntu_edge_source
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"edge: could not build ${_EDGE_BOOTSTRAP_KEYRING}"* ]]
+  [[ "$output" == *"fingerprint"* ]]
+  [ ! -e "${_EDGE_SOURCES_DIR}/microsoft-edge.list" ]
+  [ ! -e "${_EDGE_BOOTSTRAP_KEYRING}" ]
+}
+
+# A well-formed key that is not Microsoft's: it dearmors and lists cleanly, so
+# only the exact fingerprint comparison can refuse it.
+@test "_install_ubuntu_edge_source: fails closed on a valid key with a different fingerprint" {
+  local _gh="${BATS_TEST_TMPDIR}/gh-edge"
+  mkdir -p "${_gh}" && chmod 700 "${_gh}"
+  "${_MS_GPG_BIN}" --homedir "${_gh}" --batch --passphrase '' --quick-gen-key 'Not Microsoft <x@example.invalid>' ed25519 sign never 2> /dev/null
+  "${_MS_GPG_BIN}" --homedir "${_gh}" --batch --armor --export > "${BATS_TEST_TMPDIR}/other-edge.asc"
+  gpgconf --homedir "${_gh}" --kill all > /dev/null 2>&1
+  [ -s "${BATS_TEST_TMPDIR}/other-edge.asc" ]
+  printf 'deb stale\n' > "${_EDGE_SOURCES_DIR}/microsoft-edge.list"
+  _MS_KEY_PATH="${BATS_TEST_TMPDIR}/other-edge.asc" run _install_ubuntu_edge_source
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"edge: could not build ${_EDGE_BOOTSTRAP_KEYRING}"* ]]
+  [ ! -e "${_EDGE_SOURCES_DIR}/microsoft-edge.list" ]
+  [ ! -e "${_EDGE_BOOTSTRAP_KEYRING}" ]
+}
+
+# A listing that prints the right fingerprint but exits non-zero is not a
+# trustworthy listing; the status must be honoured, not only the text.
+@test "_install_ubuntu_edge_source: fails closed when the listing prints the pinned fingerprint but exits non-zero" {
+  local _stub="${BATS_TEST_TMPDIR}/gpg-listing-fails"
+  printf '#!/usr/bin/env bash\nfor a in "$@"; do\n  [[ "$a" == --dearmor ]] && { cat; exit 0; }\n  [[ "$a" == --show-keys ]] && { printf "fpr:::::::::%%s:\\n" "'"${MS_GPG_FPR}"'"; exit 2; }\ndone\nexit 0\n' > "${_stub}"
+  chmod +x "${_stub}"
+  printf 'deb stale\n' > "${_EDGE_SOURCES_DIR}/microsoft-edge.list"
+  _MS_GPG_BIN="${_stub}" run _install_ubuntu_edge_source
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"edge: could not build ${_EDGE_BOOTSTRAP_KEYRING}"* ]]
+  [ ! -e "${_EDGE_SOURCES_DIR}/microsoft-edge.list" ]
+  [ ! -e "${_EDGE_BOOTSTRAP_KEYRING}" ]
+}
+
 @test "_install_ubuntu_edge_source: fails closed when gpg is missing" {
   printf 'deb stale\n' > "${_EDGE_SOURCES_DIR}/microsoft-edge.list"
   _MS_GPG_BIN=/nonexistent/gpg run _install_ubuntu_edge_source
@@ -1835,7 +1885,7 @@ _edge_live_sources() {
   _install_ubuntu_tfenv() { :; }
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
-  grep -q "wget.*yq" "${MOCK_CALLS_FILE}"
+  grep -qF "wget -O ${HOME}/software_downloads/yq_${YQ_VER} ${YQ_URL}" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_misc: no HAS_DEVTOOLS skips yq" {
@@ -1846,7 +1896,7 @@ _edge_live_sources() {
   export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
-  ! grep -q "wget.*yq" "${MOCK_CALLS_FILE}"
+  ! grep -qF "${YQ_URL}" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_misc: calls nala autoremove" {

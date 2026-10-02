@@ -78,6 +78,67 @@ jobs:
           fi
           printf '%s\n' "${files}" | xargs -I{} zsh -n {}
 
+  test-macos:
+    runs-on: macos-latest
+    timeout-minutes: 30 # provisional; re-size to ~3x p90 after five green runs
+    # The repo's default token is read-write, and this job runs unpinned
+    # Homebrew bottles. It only needs to read the checkout.
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      # coreutils supplies `timeout`, which macOS does not ship and which six
+      # tests use to bound a hang. Every provisioned mac has it: it is an
+      # untagged Brewfile entry.
+      - name: Install bash, bats, GNU parallel and coreutils
+        run: brew install bash bats-core parallel coreutils
+
+      - name: Install shellcheck (pinned)
+        env:
+          SC_VER: "0.11.0"
+          SC_SHA256: "56affdd8de5527894dca6dc3d7e0a99a873b0f004d7aabc30ae407d3f48b0a79"
+        run: |
+          curl -fsSL -o /tmp/sc.tar.xz \
+            "https://github.com/koalaman/shellcheck/releases/download/v${SC_VER}/shellcheck-v${SC_VER}.darwin.aarch64.tar.xz"
+          echo "${SC_SHA256}  /tmp/sc.tar.xz" | shasum -a 256 -c -
+          tar -xJf /tmp/sc.tar.xz -C /tmp
+          sudo install -m755 "/tmp/shellcheck-v${SC_VER}/shellcheck" /usr/local/bin/shellcheck
+          shellcheck --version | grep -q "version: ${SC_VER}"
+
+      - name: Install uv (pinned)
+        env:
+          UV_VER: "0.12.5"
+          UV_SHA256: "5bb0e5fe008a773c3dbcb97ff79cd89e1241464fe9d2f986d52ad8f1b037bd62"
+        run: |
+          curl -fsSL -o /tmp/uv.tar.gz \
+            "https://github.com/astral-sh/uv/releases/download/${UV_VER}/uv-aarch64-apple-darwin.tar.gz"
+          echo "${UV_SHA256}  /tmp/uv.tar.gz" | shasum -a 256 -c -
+          tar -xzf /tmp/uv.tar.gz -C /tmp
+          sudo install -m755 /tmp/uv-aarch64-apple-darwin/uv /usr/local/bin/uv
+          uv --version | grep -q "uv ${UV_VER}"
+
+      - name: Tool versions
+        run: |
+          bash --version | head -1
+          bats --version
+          make --version | head -1
+          parallel --version | head -1
+
+      - name: Run tests
+        run: |
+          set +e
+          make test > /tmp/make-test.log 2>&1 < /dev/null
+          rc=$?
+          bash scripts/ci-suite-report.sh /tmp/make-test.log tests
+          report_rc=$?
+          if [ "${rc}" -ne 0 ]; then
+            printf 'make test exited %d\n' "${rc}" >&2
+            tail -40 /tmp/make-test.log
+            exit 1
+          fi
+          exit "${report_rc}"
+
   powershell:
     runs-on: ubuntu-latest
     timeout-minutes: 5 # p90 60s, measured 2026-08-27
@@ -235,7 +296,7 @@ jobs:
             --verbose
 
   auto-merge:
-    needs: [test, lint-macos, powershell, bash-coverage, secret-scan]
+    needs: [test, lint-macos, test-macos, powershell, bash-coverage, secret-scan]
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10 # p90 11s, floor, measured 2026-08-27
