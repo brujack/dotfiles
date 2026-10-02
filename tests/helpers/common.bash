@@ -4,6 +4,16 @@
 # Absolute path to repo root (two levels up from tests/helpers/)
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
+# Tests must not inherit the platform from the parent shell: an interactive
+# mac shell exports MACOS=1, an ssh command or a CI runner exports nothing,
+# and the same test then takes a different branch (dotfiles spec
+# 2026-10-02-macos-test-gate). A test that needs a platform sets it.
+unset MACOS LINUX UBUNTU NOBLE RESOLUTE PROFILE
+for _inherited_cap in "${!HAS_@}"; do
+  unset "${_inherited_cap}"
+done
+unset _inherited_cap
+
 # Prepend tests/mocks/ to PATH so mock executables shadow real ones
 load_mocks() {
   export PATH="${REPO_ROOT}/tests/mocks:${PATH}"

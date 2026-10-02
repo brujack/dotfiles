@@ -1769,6 +1769,7 @@ EOF
 }
 
 @test "_doctor_check_cred_dirs real: passes when all dirs have correct 700 perms" {
+  if [[ "$(uname -s)" == "Darwin" ]]; then export MACOS=1; else unset MACOS; fi
   _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
   export HOME="${TMPDIR_TEST}"
   mkdir -p "${TMPDIR_TEST}/.aws" "${TMPDIR_TEST}/.tf_creds" "${TMPDIR_TEST}/.ssh" "${TMPDIR_TEST}/.tsh"
@@ -1779,6 +1780,7 @@ EOF
 }
 
 @test "_doctor_check_cred_dirs real: fails when a dir has wrong perms" {
+  if [[ "$(uname -s)" == "Darwin" ]]; then export MACOS=1; else unset MACOS; fi
   _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
   export HOME="${TMPDIR_TEST}"
   mkdir -p "${TMPDIR_TEST}/.aws" "${TMPDIR_TEST}/.tf_creds" "${TMPDIR_TEST}/.ssh" "${TMPDIR_TEST}/.tsh"
@@ -2228,6 +2230,7 @@ STUB
 }
 
 @test "_doctor_check_github_mcp warns when GITHUB_PAT_EXPIRY within 30 days" {
+  if [[ "$(uname -s)" == "Darwin" ]]; then export MACOS=1; else unset MACOS; fi
   _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
   export GITHUB_PAT="fake-token"
   mkdir -p "${HOME}/.claude"
@@ -2257,6 +2260,7 @@ STUB
 }
 
 @test "_doctor_check_github_mcp passes when all checks pass" {
+  if [[ "$(uname -s)" == "Darwin" ]]; then export MACOS=1; else unset MACOS; fi
   _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
   export GITHUB_PAT="fake-token"
   mkdir -p "${HOME}/.claude"
@@ -2287,6 +2291,7 @@ STUB
 }
 
 @test "_doctor_check_github_mcp fails when GITHUB_PAT has expired" {
+  if [[ "$(uname -s)" == "Darwin" ]]; then export MACOS=1; else unset MACOS; fi
   _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
   export GITHUB_PAT="fake-token"
   mkdir -p "${HOME}/.claude"
