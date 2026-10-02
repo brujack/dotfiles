@@ -536,8 +536,9 @@ two-second grep appears to refute the rule.
 - `_AWS_BIN` (`lib/developer.sh:install_aws_tools`)
   - Set `_AWS_BIN` in every `install_aws_tools` test on this machine — a real `aws` exists at `/usr/local/bin/aws`, so without the seam the already-installed guard is always taken and the install path is never asserted. → `dotfiles-test-seams.md` § `_AWS_BIN seam`
 
-- `_EDGE_SOURCES_DIR` (`lib/linux_ubuntu.sh:_install_ubuntu_gui_tools`)
-  - Set `_EDGE_SOURCES_DIR` at setup scope in `tests/setup_env/linux_ubuntu.bats` — `tests/mocks/sudo` execs real commands, so an unset seam lets any `HAS_SNAP` test write the real `/etc/apt/sources.list.d`; drive both the `.sources`-present and `.sources`-absent branches through it.
+- `_EDGE_SOURCES_DIR`/`_EDGE_BOOTSTRAP_KEYRING` (`lib/linux_ubuntu.sh:_install_ubuntu_gui_tools`)
+  - Set both at setup scope in `tests/setup_env/linux_ubuntu.bats` — `tests/mocks/sudo` execs real commands, so unset seams let the edge block write the real `/etc/apt/sources.list.d` and `/usr/share/keyrings`. They cover the edge block only; the albert write beside it is unseamed.
+  - Drive the live-`.sources` branch and the inert ones (`Enabled: no`, zero-byte) through the dir. The bootstrap `.list` is always `signed-by` the keyring built from `keys/microsoft.asc`; when the key cannot be read it fails closed (WARN, no source written), never an unsigned line.
 
 - Every cadence seam exists because the delivery arm and the LaunchAgent installer resolve absolute paths and external binaries that a `PATH` mock cannot reach; none grants a capability beyond what editing `PATH` or the plist directly would already grant. → `dotfiles-test-seams.md` § `Cadence seams overview (scripts/cadence-notify.sh, lib/launch_agents.sh)`
 
