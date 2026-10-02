@@ -115,6 +115,13 @@ Without this, a job that ran zero tests would pass. The existing floor check in 
 
 ### 2. Tests stop inheriting the platform
 
+> **Changed during implementation, 2026-10-02.** The `common.bash` unset described below
+> was built and then removed on the operator's decision. With the block deleted, the full
+> suite stayed green under hostile exported variables: `LINUX=1 UBUNTU=1` and
+> `MACOS=1 HAS_DEVTOOLS=1 HAS_SNAP=1 PROFILE=linux_workstation` on the Studio, `MACOS=1` on
+> `claude`. The five `uname -s` edits in the test bodies are the whole fix. The text below
+> is kept as the record of what was reviewed.
+
 `load_setup_env` does not run `detect_env`, so `MACOS`, `LINUX`, `UBUNTU` and every
 `HAS_*` hold whatever the parent shell exported. That is the cause of five of the six
 failures.

@@ -38,9 +38,13 @@ maximum of 12 seconds over the last 40 successful runs.
    that stopped early or found nothing cannot pass.
 5. **The job runs with `permissions: contents: read`.** The repository's default workflow
    token is read-write and this job runs unpinned Homebrew bottles.
-6. **Tests start with no platform.** `tests/helpers/common.bash` unsets the inherited
-   platform variables, and the truncated-key bootstrap now also requires the built keyring
-   to list the pinned fingerprint `MS_GPG_FPR`.
+6. **Tests that run a real platform tool set the platform themselves.** The five that run
+   a real `stat` or `date` set `MACOS` from `uname -s`. A helper that unset every inherited
+   platform variable was built and then removed: with it deleted, the suite stayed green
+   under hostile exported variables on both the Studio and `claude`, so nothing could tell
+   it was there.
+7. **The Edge bootstrap keyring must list the pinned fingerprint `MS_GPG_FPR`**, because
+   GnuPG 2.5 exits 0 on a truncated key.
 
 ## Consequences
 
