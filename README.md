@@ -338,7 +338,7 @@ dotfiles/
 │   └── helpers/
 ├── .github/
 │   └── workflows/
-│       └── ci.yml            # lint + test + lint-macos + secret-scan + auto-merge
+│       └── ci.yml            # test + lint-macos + test-macos + bash-coverage + powershell + secret-scan + auto-merge
 └── ubuntu_*_packages.txt     # Package lists per Ubuntu version
 ```
 
