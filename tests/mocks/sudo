@@ -11,8 +11,8 @@ done
 # Real sudo resets the caller's environment: `DEBIAN_FRONTEND=x sudo cmd` never
 # reaches cmd, while `sudo DEBIAN_FRONTEND=x cmd` does. This mock would otherwise
 # pass the caller's whole environment through, hiding a misplaced assignment.
-# Scrub only this one variable: ~38 test files rely on MOCK_*, PATH and HOME
-# reaching the child, and this is the one whose placement the suite must tell apart.
+# Scrub only this one variable: the suite relies on MOCK_*, PATH and HOME reaching
+# the child, and this is the one whose placement the suite must tell apart.
 unset DEBIAN_FRONTEND
 # Skip leading VAR=value env assignments (e.g. DEBIAN_FRONTEND=noninteractive);
 # export them so the exec'd child inherits them.

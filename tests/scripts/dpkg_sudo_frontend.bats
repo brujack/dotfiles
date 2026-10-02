@@ -5,9 +5,17 @@
 # tty (run_update tees it), and sudo resets the caller's environment, so a call
 # without the assignment in that position can hang the update.
 #
-# Known blind spots, not detected: `sudo sh -c '...apt install...'`, a command held
-# in a variable (`sudo "${VAR}" install`), and an absolute-path tool
-# (`sudo /usr/bin/apt install`). A dpkg call made by one of those is unguarded.
+# Known blind spots. NOT detected, so a dpkg call in one of these forms is unguarded:
+#   sudo sh -c '...apt install...'    sudo "${VAR}" install    sudo /usr/bin/apt install
+#   sudo -u user apt install          (any sudo flag that takes an argument)
+#   sudo env|nice|command apt install (a wrapper between sudo and the tool)
+#   verbs and flags absent from the tables in classify() (apt satisfy, dpkg --unpack,
+#   apt-get --option X=Y install, combined dpkg flags such as -Ei)
+# Falsely reported `bad`: `sudo apt install` text inside a string, heredoc or trailing
+# comment, and a quoted value (DEBIAN_FRONTEND="noninteractive").
+# On a false positive, reword the line (unquote the value, move the text to a
+# whole-line comment). Do not teach the tokenizer a new shell form: add it to this
+# list instead. The per-function frontend_probe_stub_path tests are the backstop.
 
 setup() {
   REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
@@ -33,6 +41,7 @@ _dpkg_sudo_calls() {
       if (tool == "apt" || tool == "apt-get" || tool == "nala") {
         j = i + 1
         while (j <= n && t[j] ~ /^-/) {
+          # -o/-c/-t take a value; skip it or the value is read as the verb.
           if (t[j] == "-o" || t[j] == "-c" || t[j] == "-t") j++
           j++
         }
@@ -49,8 +58,10 @@ _dpkg_sudo_calls() {
       n = split(seg, t, /[[:space:]]+/)
       i = 1
       while (i <= n && t[i] == "") i++
+      # sudo own flags (-H, -E). A flag that takes an argument is a listed blind spot.
       while (i <= n && t[i] ~ /^-/) i++
       has = 0
+      # Only the VAR=value run directly before the command reaches the child.
       while (i <= n && t[i] ~ /^[A-Za-z_][A-Za-z0-9_]*=/) {
         if (t[i] == "DEBIAN_FRONTEND=noninteractive") has = 1
         i++
@@ -65,12 +76,15 @@ _dpkg_sudo_calls() {
         seg = substr(rest, RSTART + RLENGTH)
         rest = seg
         cut = seg
+        # A call ends at the first | ; & so the next command is not read as this one.
         if (match(cut, /[|;&]/)) cut = substr(cut, 1, RSTART - 1)
         judge(cut)
       }
       cmd = ""
     }
+    # The leading class keeps visudo, my_sudo and path/sudo from matching.
     BEGIN { sudo_re = "(^|[^A-Za-z0-9_./-])sudo[[:space:]]+" }
+    # A continuation must not join across files.
     FNR == 1 { flush(); fname = FILENAME }
     /^[[:space:]]*#/ { flush(); next }
     {
@@ -108,7 +122,7 @@ _expect_single() {
   fi
 }
 
-@test "every dpkg-running sudo call in tracked shell carries DEBIAN_FRONTEND=noninteractive" {
+@test "every dpkg-running sudo call in lib/, setup_env.sh and scripts/ carries DEBIAN_FRONTEND=noninteractive" {
   local _files=() _f
   while IFS= read -r _f; do _files+=("${_f}"); done < <(_tracked_shell_files)
   [ "${#_files[@]}" -gt 0 ]
@@ -124,6 +138,7 @@ _expect_single() {
     printf '  sudo -H DEBIAN_FRONTEND=noninteractive apt install foo -y\n' >&2
     printf 'An assignment before sudo (DEBIAN_FRONTEND=... sudo ...) is dropped by sudo.\n' >&2
     printf 'See CLAUDE.md, Shell Scripts.\n' >&2
+    printf 'False positive? See the blind-spot note at the top of %s.\n' "${BATS_TEST_FILENAME##*/}" >&2
     return 1
   fi
 }
@@ -138,7 +153,8 @@ _expect_single() {
   for _spec in \
     'lib/linux_shared.sh|sudo.*nala full-upgrade' \
     'lib/linux_ubuntu.sh|sudo.*dpkg -i' \
-    'lib/helpers.sh|sudo.*dpkg --install'; do
+    'lib/helpers.sh|sudo.*dpkg --install' \
+    'scripts/bootstrap_linux.sh|sudo.*apt-get install'; do
     _file="${_spec%%|*}"
     _pat="${_spec#*|}"
     _hits=0
@@ -171,7 +187,8 @@ _expect_single() {
   for _line in \
     'DEBIAN_FRONTEND=noninteractive sudo apt install foo -y' \
     'export DEBIAN_FRONTEND=noninteractive; sudo apt install foo -y' \
-    'sudo apt install foo -y # DEBIAN_FRONTEND=noninteractive'; do
+    'sudo apt install foo -y # DEBIAN_FRONTEND=noninteractive' \
+    'sudo DEBIAN_FRONTEND=dialog apt install foo -y'; do
     _expect_single bad "${_line}"
   done
 }
@@ -181,6 +198,8 @@ _expect_single() {
   for _line in \
     'sudo -H DEBIAN_FRONTEND=noninteractive apt install foo -y' \
     'sudo DEBIAN_FRONTEND=noninteractive apt-get install -y foo' \
+    'sudo FOO=1 DEBIAN_FRONTEND=noninteractive apt install foo -y' \
+    'sudo DEBIAN_FRONTEND=noninteractive FOO=1 apt install foo -y' \
     'xargs -r sudo DEBIAN_FRONTEND=noninteractive nala install -y' \
     'if ! sudo -H DEBIAN_FRONTEND=noninteractive dpkg -i foo.deb; then'; do
     _expect_single ok "${_line}"
@@ -241,6 +260,10 @@ _expect_single() {
     'sudo dpkg --configure -a' \
     'sudo dpkg -r foo' \
     'sudo dpkg --purge foo' \
+    'sudo dpkg --remove foo' \
+    'sudo dpkg -P foo' \
+    'sudo apt -c /etc/apt/x.conf install foo' \
+    'sudo apt -t noble install foo' \
     'sudo dpkg-reconfigure foo'; do
     _expect_single bad "${_line}"
   done
@@ -252,6 +275,8 @@ _expect_single() {
     'sudo -H apt update' \
     'sudo apt-get update -qq' \
     'sudo systemctl restart docker' \
+    'pseudosudo apt install foo' \
+    'my_sudo apt install foo' \
     'sudo tee /etc/apt/sources.list.d/x.list'; do
     [ -z "$(_detect_fixture "${_line}")" ]
   done
