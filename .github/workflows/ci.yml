@@ -81,6 +81,10 @@ jobs:
   test-macos:
     runs-on: macos-latest
     timeout-minutes: 30 # provisional; re-size to ~3x p90 after five green runs
+    # The repo's default token is read-write, and this job runs unpinned
+    # Homebrew bottles. It only needs to read the checkout.
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
