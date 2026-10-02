@@ -16,7 +16,8 @@ in an interactive mac shell and unset over `ssh` and on a runner. The sixth,
 `_install_ubuntu_edge_source ... truncated key`, failed because GnuPG 2.5.24 exits 0 when
 it dearmors a truncated key where GnuPG 2.4.8 exits 2.
 
-ADR-0008 moved CI off macOS runners because of queues of 30 to 60 minutes. That reason no
+ADR-0008 moved the `bash-coverage` job off macOS runners because of queues of 30 to 60
+minutes. That reason no
 longer holds for this repository's job: `lint-macos` queued a median of 8 seconds and a
 maximum of 12 seconds over the last 40 successful runs.
 
@@ -49,8 +50,8 @@ maximum of 12 seconds over the last 40 successful runs.
   three times, and six plus one timing-sensitive test once
   (`_install_ubuntu_powershell: a hanging pwsh probe is bounded by timeout`, whose 3-second
   margin was widened to 18).
-- **Cost.** The macOS test step took between 9m08s and 11m46s over six runs on a 3-vCPU
-  runner. `bash-coverage` on the same PR took about 9m40s, so the PR's wall clock is about
+- **Cost.** The macOS job took between 9m08s and 11m46s over five runs of one commit on a
+  3-vCPU runner. `bash-coverage` on the same PR took about 9m40s, so the PR's wall clock is about
   the same.
 - **Unpinned Homebrew tools can turn the job red with no code change.** The banner step is
   the diagnostic.
@@ -65,7 +66,8 @@ maximum of 12 seconds over the last 40 successful runs.
 
 ## Related
 
-- ADR-0008 (CI off macOS runners; its queue-time reason no longer holds for this job)
+- ADR-0008 (`bash-coverage` moved off macOS runners; its queue-time reason no longer holds
+  for this job)
 - ADR-0035 (parallel bats under a validated `JOBS` knob)
 - `docs/superpowers/specs/2026-10-02-macos-test-gate-design.md`
 - `docs/superpowers/plans/2026-10-02-macos-test-gate.md`
