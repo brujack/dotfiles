@@ -88,8 +88,11 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - name: Install bash, bats and GNU parallel
-        run: brew install bash bats-core parallel
+      # coreutils supplies `timeout`, which macOS does not ship and which six
+      # tests use to bound a hang. Every provisioned mac has it: it is an
+      # untagged Brewfile entry.
+      - name: Install bash, bats, GNU parallel and coreutils
+        run: brew install bash bats-core parallel coreutils
 
       - name: Install shellcheck (pinned)
         env:
