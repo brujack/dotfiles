@@ -1,7 +1,7 @@
 # macOS test gate
 
 **Date:** 2026-10-02
-**Status:** Draft, awaiting operator review
+**Status:** Approved 2026-10-02
 
 ## Problem
 
@@ -223,7 +223,7 @@ is unnecessary. (2) The evidence for code regressing on macOS is one undiagnosed
 the skip-count print has no reader.
 Assumption: The suite is deterministic on a 3-vCPU runner at `JOBS=24`. Re-run the first
 red job five times and compare the `not ok` sets before the job enters `needs:`.
-Disposition:
+Disposition: Addressed — date helper cut; Problem restated as one regression plus five harness failures; determinism re-runs added to Order of work; skip-count print removed. Operator, 2026-10-02.
 
 ### Ergonomics
 
@@ -234,7 +234,7 @@ output to a file and never says it prints it, and the reproduction loop on the S
 not named.
 Assumption: A hosted runner reproduces the Studio's six failures and only those. The
 first CI run with the job added and no fixes settles it.
-Disposition:
+Disposition: Addressed — hostile-inheritance rows added to Verification; job prints `not ok` blocks; Studio reproduction command added. Operator, 2026-10-02.
 
 ### Risk
 
@@ -245,7 +245,7 @@ Assumption: The Studio measurement predicts the runner. Run the suite on the Stu
 `env -i`, an empty `HOME` and system make, and compare the `not ok` set to the six.
 Checked after the review: same six, 2155 ok (run B in Problem). The runner-image half
 stays open until the first CI run.
-Disposition:
+Disposition: Addressed — run B measured under make 3.81; count check requires declared > 0 and anchored matches. Operator, 2026-10-02.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
@@ -265,7 +265,7 @@ mechanism was wrong. (3) Apparatus. Run B's `PATH` held `gmake` 4.4.1, so it is 
 row: `MACOS=1` on `claude` fails exactly the five tests, and `env -u MACOS` fails none.
 Assumption: The hosted runner fails the same six tests as Run B. The first CI run's
 `not ok` list settles it.
-Disposition:
+Disposition: Addressed — job is in `needs:` from the first commit; helper mechanism and make claim corrected; declared count anchored. Not re-reviewed: see the stopping note below. Operator, 2026-10-02.
 
 Review stops here. Findings 3 and 4 are in the test apparatus, which the first CI run
 exercises directly. Finding 1 was fixed by removing a step, not by adding one.
