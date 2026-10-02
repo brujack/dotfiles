@@ -199,7 +199,11 @@ teardown() {
   _stub_dir="$(frontend_probe_stub_path dpkg)"
   PATH="${_stub_dir}:${PATH}" run check_and_install_nala
   [ "$status" -eq 0 ]
-  grep -qE '^frontend: dpkg --install .*DEBIAN_FRONTEND=noninteractive$' "${MOCK_CALLS_FILE}"
+  # Each .deb is its own call site: assert both, so deleting the assignment from
+  # either one is red. No dpkg --install may have seen the variable unset.
+  grep -qE '^frontend: dpkg --install .*volian-archive-keyring.*DEBIAN_FRONTEND=noninteractive$' "${MOCK_CALLS_FILE}"
+  grep -qE '^frontend: dpkg --install .*volian-archive-nala.*DEBIAN_FRONTEND=noninteractive$' "${MOCK_CALLS_FILE}"
+  refute_grep '^frontend: dpkg --install .*DEBIAN_FRONTEND=<unset>$' "${MOCK_CALLS_FILE}" -E
 }
 
 @test "check_and_install_nala on RESOLUTE uses apt install, skips volian wget" {

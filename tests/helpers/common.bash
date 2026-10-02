@@ -80,7 +80,9 @@ EOF
 # environment holds, as `frontend: <name> <argv> DEBIAN_FRONTEND=<value>` in
 # MOCK_CALLS_FILE (`<unset>` when absent), and print the stub's directory so the
 # caller can prepend it to PATH. This asserts on what the child sees, not on the
-# text of the sudo line, so a misplaced or wrapper-less assignment cannot pass.
+# text of the sudo line. A misplaced assignment (`DEBIAN_FRONTEND=x sudo cmd`)
+# fails because tests/mocks/sudo scrubs the caller's DEBIAN_FRONTEND, as real
+# sudo resets the environment; only a value on the sudo command line survives.
 frontend_probe_stub_path() {
   local _name="$1" _dir _bash_bin
   _dir="$(mktemp -d -p "${BATS_TEST_TMPDIR}")"
