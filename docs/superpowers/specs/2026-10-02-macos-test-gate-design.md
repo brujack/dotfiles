@@ -62,9 +62,10 @@ macOS.
 ### 1. A `test-macos` job
 
 A new job in `.github/workflows/ci.yml`, `runs-on: macos-latest`, that runs `make test`.
-`auto-merge` has no `always()`, so adding a job to its `needs:` makes it blocking with
-nothing else to change. The job is added to `needs:` only after the determinism check in
-Order of work passes.
+It is in `auto-merge`'s `needs:` from the first commit that adds it. `auto-merge` has no
+`always()`, so that alone makes it blocking. It cannot be added later: the merge step is
+a plain `gh pr merge --squash`, so a PR that carried the job outside `needs:` would
+merge as soon as the Linux jobs passed, with `test-macos` still red.
 
 Tool installs:
 
@@ -81,9 +82,13 @@ The job prints `bash --version`, `bats --version`, `make --version` and
 told from one caused by the PR. Homebrew does not offer version pins for these three.
 The `test` job's `apt-get install bats` is unpinned in the same way.
 
-The job uses the system `make` (GNU Make 3.81). Run B shows the suite gives the same
-result under 3.81 as under 4.4.1. Using 3.81 here covers the one `make` version that
-`ubuntu-latest` (4.3) and the development machines (4.4.1) do not.
+The job uses the system `make` (GNU Make 3.81), which covers the one `make` version
+that `ubuntu-latest` (4.3) and the development machines (4.4.1) do not. Run B drove the
+suite with 3.81 and failed the same six tests. It is not a 3.81-only measurement: its
+`PATH` held Homebrew's `gmake` 4.4.1, and `tests/scripts/makefile_lint_scope.bats` has
+arms that look for a `make` of version 4 or later and skip without one. The job installs
+no `gmake`, so those arms skip on the runner unless the image ships one. That is
+accepted: `ubuntu-latest` runs them on every PR.
 
 `make test` runs with stdin from `/dev/null` and its output is written to a file, so the
 exit status is `make`'s own. **The job then prints every `not ok` line and its diagnostic
@@ -102,7 +107,8 @@ fails unless they are equal and the declared count is greater than zero:
 - executed: lines in the saved output matching `^(ok|not ok) `. The match is anchored
   because lint prints `bash -n OK` and the Python suite prints `OK`. A skipped test
   prints as `ok`, so skips do not break the equality.
-- declared: `@test` declarations under `tests/`.
+- declared: lines matching `^@test` in the `.bats` files under `tests/`. Anchored for
+  the same reason: an unanchored match also counts fixture strings.
 
 Without this, a job that ran zero tests would pass. The existing floor check in the
 `test` job counts declarations, not executions, so it cannot see this.
@@ -114,9 +120,10 @@ Without this, a job that ran zero tests would pass. The existing floor check in 
 failures.
 
 `tests/helpers/common.bash` will unset `MACOS`, `LINUX`, `UBUNTU`, `NOBLE`, `RESOLUTE`,
-`PROFILE` and every `HAS_*` variable when it is sourced. Most bats files source it, at
-file top level (`git grep -l common.bash -- 'tests/*.bats'` lists them). The rest are
-left alone: a grep of `tests/` found no
+`PROFILE` and every `HAS_*` variable when it is sourced. Most of the bats files that source it do so inside `setup()`, a few at file top level
+(`git grep -n common.bash -- 'tests/*.bats'` lists them); either way the unset runs
+before the test body. No file sets a platform variable before its source line or in
+`setup_file`. The files that never source it are left alone: a grep of `tests/` found no
 test that relies on an inherited platform variable. A test that needs a platform sets
 it, as `CLAUDE.md`'s Testing Rules already require.
 
@@ -134,15 +141,14 @@ made.
 
 ### Order of work
 
-1. The `test-macos` job lands first in the PR, outside `needs:`, before any fix. Its
+1. The `test-macos` job lands first in the PR, in `needs:`, before any fix. Its
    first run is expected to be red with the six failures above. A different set is a
    finding: it is reported before any fix, because it means the fix scope here is wrong.
 2. That red run is re-run four more times. The five `not ok` sets must be identical. A
    blocking gate that flakes gets bypassed, and `CLAUDE.md` records tests that are
    sensitive to `bats --jobs`. If the sets differ, the flaky tests are fixed or the job
-   runs `make test HAVE_PARALLEL=` before it becomes a gate.
+   runs `make test HAVE_PARALLEL=`, in this PR.
 3. The fixes follow, one behaviour per commit, until the job is green.
-4. The job is added to `auto-merge`'s `needs:`.
 
 ### Reproducing a macOS failure from Linux
 
@@ -244,3 +250,22 @@ Disposition:
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+### Round 2 (scoped: Risk, revised sections only)
+
+Reviewed at commit: `98bc3c45`. References are to the spec as it stood at that commit.
+
+Finding: (1) Design. Order of work put the job outside `needs:` first, and the merge
+step has no `--auto`, so the PR would have merged with `test-macos` red once the Linux
+jobs passed. Introduced by the round-1 revision. (2) Design 2 said most files source the
+helper at file top level; 35 of 41 source it inside `setup()`. Harmless, but the stated
+mechanism was wrong. (3) Apparatus. Run B's `PATH` held `gmake` 4.4.1, so it is not a
+3.81-only population. (4) Apparatus. The declared count must be anchored: `^@test` gives
+2161, an unanchored match 2180. The lens also confirmed the hostile-inheritance "before"
+row: `MACOS=1` on `claude` fails exactly the five tests, and `env -u MACOS` fails none.
+Assumption: The hosted runner fails the same six tests as Run B. The first CI run's
+`not ok` list settles it.
+Disposition:
+
+Review stops here. Findings 3 and 4 are in the test apparatus, which the first CI run
+exercises directly. Finding 1 was fixed by removing a step, not by adding one.
