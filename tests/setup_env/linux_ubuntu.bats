@@ -1608,7 +1608,6 @@ _edge_live_sources() {
 }
 
 @test "_install_ubuntu_edge_source: bootstrap .list is key-scoped to a keyring equal to the vendored key" {
-  [[ "${_MS_GPG_BIN}" != "/nonexistent/gpg" ]] || skip "no gpg"
   run _install_ubuntu_edge_source
   [ "$status" -eq 0 ]
   grep -q "signed-by=${_EDGE_BOOTSTRAP_KEYRING}" "${_EDGE_SOURCES_DIR}/microsoft-edge.list"
@@ -1621,7 +1620,7 @@ _edge_live_sources() {
   printf 'deb stale\n' > "${_EDGE_SOURCES_DIR}/microsoft-edge.list"
   _MS_KEY_PATH="${BATS_TEST_TMPDIR}/no-such-key.asc" run _install_ubuntu_edge_source
   [ "$status" -eq 0 ]
-  [[ "$output" == *"edge: could not build the Microsoft keyring"* ]]
+  [[ "$output" == *"edge: could not build ${_EDGE_BOOTSTRAP_KEYRING} (gpg missing or failed on"* ]]
   [ ! -e "${_EDGE_SOURCES_DIR}/microsoft-edge.list" ]
   [ ! -e "${_EDGE_BOOTSTRAP_KEYRING}" ]
 }
@@ -1636,9 +1635,94 @@ _edge_live_sources() {
 @test "_install_ubuntu_edge_source: bootstrap .list is idempotent across two runs" {
   run _install_ubuntu_edge_source
   [ "$status" -eq 0 ]
+  cp "${_EDGE_BOOTSTRAP_KEYRING}" "${BATS_TEST_TMPDIR}/keyring-after-first"
   run _install_ubuntu_edge_source
   [ "$status" -eq 0 ]
   [ "$(wc -l < "${_EDGE_SOURCES_DIR}/microsoft-edge.list")" -eq 1 ]
+  cmp "${BATS_TEST_TMPDIR}/keyring-after-first" "${_EDGE_BOOTSTRAP_KEYRING}"
+}
+
+@test "_install_ubuntu_edge_source: .sources with Enabled: false is inert and bootstraps a .list" {
+  _edge_live_sources
+  printf 'Enabled: false\n' >> "${_EDGE_SOURCES_DIR}/microsoft-edge.sources"
+  local _before
+  _before="$(cat "${_EDGE_SOURCES_DIR}/microsoft-edge.sources")"
+  run _install_ubuntu_edge_source
+  [ "$status" -eq 0 ]
+  grep -q "signed-by=${_EDGE_BOOTSTRAP_KEYRING}" "${_EDGE_SOURCES_DIR}/microsoft-edge.list"
+  [ "$(cat "${_EDGE_SOURCES_DIR}/microsoft-edge.sources")" = "${_before}" ]
+}
+
+@test "_install_ubuntu_edge_source: .sources with Enabled: 0 is inert and bootstraps a .list" {
+  _edge_live_sources
+  printf 'Enabled: 0\n' >> "${_EDGE_SOURCES_DIR}/microsoft-edge.sources"
+  local _before
+  _before="$(cat "${_EDGE_SOURCES_DIR}/microsoft-edge.sources")"
+  run _install_ubuntu_edge_source
+  [ "$status" -eq 0 ]
+  grep -q "signed-by=${_EDGE_BOOTSTRAP_KEYRING}" "${_EDGE_SOURCES_DIR}/microsoft-edge.list"
+  [ "$(cat "${_EDGE_SOURCES_DIR}/microsoft-edge.sources")" = "${_before}" ]
+}
+
+@test "_install_ubuntu_edge_source: .sources with Enabled:no (no space) is inert and bootstraps a .list" {
+  _edge_live_sources
+  printf 'Enabled:no\n' >> "${_EDGE_SOURCES_DIR}/microsoft-edge.sources"
+  local _before
+  _before="$(cat "${_EDGE_SOURCES_DIR}/microsoft-edge.sources")"
+  run _install_ubuntu_edge_source
+  [ "$status" -eq 0 ]
+  grep -q "signed-by=${_EDGE_BOOTSTRAP_KEYRING}" "${_EDGE_SOURCES_DIR}/microsoft-edge.list"
+  [ "$(cat "${_EDGE_SOURCES_DIR}/microsoft-edge.sources")" = "${_before}" ]
+}
+
+@test "_install_ubuntu_edge_source: .sources with URIs only in a comment is inert and bootstraps a .list" {
+  printf '# URIs: https://packages.microsoft.com/repos/edge-stable\nTypes: deb\n' > "${_EDGE_SOURCES_DIR}/microsoft-edge.sources"
+  local _before
+  _before="$(cat "${_EDGE_SOURCES_DIR}/microsoft-edge.sources")"
+  run _install_ubuntu_edge_source
+  [ "$status" -eq 0 ]
+  grep -q "signed-by=${_EDGE_BOOTSTRAP_KEYRING}" "${_EDGE_SOURCES_DIR}/microsoft-edge.list"
+  [ "$(cat "${_EDGE_SOURCES_DIR}/microsoft-edge.sources")" = "${_before}" ]
+}
+
+@test "_install_ubuntu_edge_source: .sources with Enabled: true is live" {
+  _edge_live_sources
+  printf 'Enabled: true\n' >> "${_EDGE_SOURCES_DIR}/microsoft-edge.sources"
+  printf 'deb stale\n' > "${_EDGE_SOURCES_DIR}/microsoft-edge.list"
+  printf 'stale-key' > "${_EDGE_BOOTSTRAP_KEYRING}"
+  run _install_ubuntu_edge_source
+  [ "$status" -eq 0 ]
+  [ ! -e "${_EDGE_SOURCES_DIR}/microsoft-edge.list" ]
+  [ ! -e "${_EDGE_BOOTSTRAP_KEYRING}" ]
+}
+
+@test "_install_ubuntu_edge_source: .sources with no Enabled line is live" {
+  _edge_live_sources
+  printf 'deb stale\n' > "${_EDGE_SOURCES_DIR}/microsoft-edge.list"
+  printf 'stale-key' > "${_EDGE_BOOTSTRAP_KEYRING}"
+  run _install_ubuntu_edge_source
+  [ "$status" -eq 0 ]
+  [ ! -e "${_EDGE_SOURCES_DIR}/microsoft-edge.list" ]
+  [ ! -e "${_EDGE_BOOTSTRAP_KEYRING}" ]
+}
+
+@test "_install_ubuntu_edge_source: fails closed when gpg fails but still emits bytes (truncated key)" {
+  head -c 400 "${REPO_ROOT}/keys/microsoft.asc" > "${BATS_TEST_TMPDIR}/trunc.asc"
+  printf 'deb stale\n' > "${_EDGE_SOURCES_DIR}/microsoft-edge.list"
+  _MS_KEY_PATH="${BATS_TEST_TMPDIR}/trunc.asc" run _install_ubuntu_edge_source
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"edge: could not build ${_EDGE_BOOTSTRAP_KEYRING} (gpg missing or failed on"* ]]
+  [ ! -e "${_EDGE_SOURCES_DIR}/microsoft-edge.list" ]
+  [ ! -e "${_EDGE_BOOTSTRAP_KEYRING}" ]
+}
+
+@test "_install_ubuntu_edge_source: fails closed when gpg is missing" {
+  printf 'deb stale\n' > "${_EDGE_SOURCES_DIR}/microsoft-edge.list"
+  _MS_GPG_BIN=/nonexistent/gpg run _install_ubuntu_edge_source
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"edge: could not build ${_EDGE_BOOTSTRAP_KEYRING} (gpg missing or failed on"* ]]
+  [ ! -e "${_EDGE_SOURCES_DIR}/microsoft-edge.list" ]
+  [ ! -e "${_EDGE_BOOTSTRAP_KEYRING}" ]
 }
 
 @test "_install_ubuntu_gui_tools: HAS_SNAP wires the edge source helper and installs edge" {
