@@ -770,6 +770,21 @@ _install_ubuntu_brew_packages() {
   fi
 }
 
+# gpg 2.5 exits 0 when it dearmors a truncated key and still writes bytes, so
+# the keyring is judged by its content: it must list MS_GPG_FPR exactly. Any
+# failure of the listing itself (gpg missing, unreadable keyring) is "no".
+_edge_keyring_has_pinned_fpr() {
+  local _ring="$1" _home _listing _rc
+  # No EXIT trap: scripts/check-lib-exit-traps.sh ratchets those in lib/, and
+  # this body has no early exit that would skip the rm below.
+  _home="$(mktemp -d)" || return 1
+  _listing="$("${_MS_GPG_BIN:-gpg}" --homedir "${_home}" --batch --show-keys --with-colons "${_ring}" 2> /dev/null)"
+  _rc=$?
+  rm -rf "${_home}"
+  [[ ${_rc} -eq 0 ]] || return 1
+  printf '%s\n' "${_listing}" | grep -qx "fpr:::::::::${MS_GPG_FPR}:"
+}
+
 # Own function so tests can drive the edge source logic without also running the
 # unseamed albert writes that share _install_ubuntu_gui_tools.
 _install_ubuntu_edge_source() {
@@ -793,11 +808,12 @@ _install_ubuntu_edge_source() {
     # gpg's own status, not tee's: a truncated key makes gpg exit non-zero yet
     # still emit bytes, so a non-empty keyring alone does not prove it worked.
     local _edge_gpg_rc="${PIPESTATUS[0]}"
-    if [[ ${_edge_gpg_rc} -eq 0 && -s "${_edge_keyring}" ]]; then
+    if [[ ${_edge_gpg_rc} -eq 0 && -s "${_edge_keyring}" ]] \
+      && _edge_keyring_has_pinned_fpr "${_edge_keyring}"; then
       # Microsoft Edge has no ARM64 Linux build — amd64 only
       printf 'deb [arch=amd64 signed-by=%s] https://packages.microsoft.com/repos/edge stable main\n' "${_edge_keyring}" | sudo tee "${_edge_list}" > /dev/null
     else
-      log_warn "edge: could not build ${_edge_keyring} (gpg missing or failed on ${_edge_key}, or the keyring is not writable); writing no Edge source"
+      log_warn "edge: could not build ${_edge_keyring} (gpg missing or failed on ${_edge_key}, the keyring lacks the pinned fingerprint, or it is not writable); writing no Edge source"
       sudo rm -f "${_edge_list}" "${_edge_keyring}"
     fi
   fi

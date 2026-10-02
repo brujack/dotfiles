@@ -1716,6 +1716,23 @@ _edge_live_sources() {
   [ ! -e "${_EDGE_BOOTSTRAP_KEYRING}" ]
 }
 
+# gpg 2.5 exits 0 on a truncated key and still writes bytes (measured on
+# GnuPG 2.5.24; 2.4.8 exits 2), so gpg's status alone cannot be the guard. This
+# stub reproduces the 2.5 behaviour on any platform: --dearmor "succeeds", and
+# the keyring then holds no key.
+@test "_install_ubuntu_edge_source: fails closed when gpg exits 0 but the keyring lacks the pinned fingerprint" {
+  local _stub="${BATS_TEST_TMPDIR}/gpg-lenient"
+  printf '#!/usr/bin/env bash\nfor a in "$@"; do [[ "$a" == --dearmor ]] && { cat; exit 0; }; done\nexit 0\n' > "${_stub}"
+  chmod +x "${_stub}"
+  printf 'deb stale\n' > "${_EDGE_SOURCES_DIR}/microsoft-edge.list"
+  _MS_GPG_BIN="${_stub}" run _install_ubuntu_edge_source
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"edge: could not build ${_EDGE_BOOTSTRAP_KEYRING}"* ]]
+  [[ "$output" == *"fingerprint"* ]]
+  [ ! -e "${_EDGE_SOURCES_DIR}/microsoft-edge.list" ]
+  [ ! -e "${_EDGE_BOOTSTRAP_KEYRING}" ]
+}
+
 @test "_install_ubuntu_edge_source: fails closed when gpg is missing" {
   printf 'deb stale\n' > "${_EDGE_SOURCES_DIR}/microsoft-edge.list"
   _MS_GPG_BIN=/nonexistent/gpg run _install_ubuntu_edge_source
@@ -1812,7 +1829,7 @@ _edge_live_sources() {
   _install_ubuntu_tfenv() { :; }
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
-  grep -q "wget.*yq" "${MOCK_CALLS_FILE}"
+  grep -qF "wget -O ${HOME}/software_downloads/yq_${YQ_VER} ${YQ_URL}" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_misc: no HAS_DEVTOOLS skips yq" {
@@ -1823,7 +1840,7 @@ _edge_live_sources() {
   export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
-  ! grep -q "wget.*yq" "${MOCK_CALLS_FILE}"
+  ! grep -qF "${YQ_URL}" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_misc: calls nala autoremove" {
