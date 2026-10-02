@@ -40,3 +40,4 @@ Cross-cutting decisions that apply across personal repos. Repo-specific decision
 | [0034](0034-claude-plugins-from-ai-config-settings.md)           | Claude plugin provisioning reads ai-config's `settings.json`                                | 2026-09-19 | Accepted                                              |
 | [0035](0035-parallel-bats-under-a-validated-jobs-knob.md)        | `make test` runs bats in parallel under a validated `JOBS` knob                              | 2026-09-21 | Accepted                                              |
 | [0036](0036-claude-md-rule-bullets-with-knowledge-pointers.md) | CLAUDE.md carries rule bullets; narratives live in ai-config knowledge | 2026-09-26 | Accepted |
+| [0037](0037-macos-suite-gates-merge.md) | The macOS test suite gates merge | 2026-10-02 | Accepted |
