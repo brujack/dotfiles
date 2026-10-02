@@ -1403,6 +1403,17 @@ STUB
   grep -q "apt install azure-cli" "${MOCK_CALLS_FILE}"
 }
 
+@test "_install_ubuntu_cloud_tools: installs google-cloud-cli packages, not retired google-cloud-sdk names" {
+  export CF_TERRAFORMING_VER="0.13.0"
+  export CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v0.13.0/cf-terraforming_0.13.0_linux_amd64.tar.gz"
+  unset HAS_DEVTOOLS
+  run _install_ubuntu_cloud_tools
+  [ "$status" -eq 0 ]
+  grep -q "apt install google-cloud-cli -y" "${MOCK_CALLS_FILE}"
+  grep -q "apt install google-cloud-cli-app-engine-go" "${MOCK_CALLS_FILE}"
+  refute_grep "apt install google-cloud-sdk" "${MOCK_CALLS_FILE}"
+}
+
 @test "_install_ubuntu_cloud_tools: HAS_DEVTOOLS installs teleport" {
   export HAS_DEVTOOLS=1
   export CF_TERRAFORMING_VER="0.13.0"

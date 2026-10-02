@@ -661,9 +661,8 @@ _install_ubuntu_cloud_tools() {
     echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
   fi
   sudo apt update
-  sudo -H DEBIAN_FRONTEND=noninteractive apt install google-cloud-sdk -y
-  sudo -H DEBIAN_FRONTEND=noninteractive apt install google-cloud-sdk-app-engine-go -y
   sudo -H DEBIAN_FRONTEND=noninteractive apt install google-cloud-cli -y
+  sudo -H DEBIAN_FRONTEND=noninteractive apt install google-cloud-cli-app-engine-go -y
 
   printf "Installing cf-terraforming Ubuntu\\n"
   if [[ ! -f ${HOME}/software_downloads/cf-terraforming_${CF_TERRAFORMING_VER}_linux_${_LINUX_ARCH}.tar.gz ]]; then
