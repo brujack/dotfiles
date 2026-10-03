@@ -41,3 +41,4 @@ Cross-cutting decisions that apply across personal repos. Repo-specific decision
 | [0035](0035-parallel-bats-under-a-validated-jobs-knob.md)        | `make test` runs bats in parallel under a validated `JOBS` knob                              | 2026-09-21 | Accepted                                              |
 | [0036](0036-claude-md-rule-bullets-with-knowledge-pointers.md) | CLAUDE.md carries rule bullets; narratives live in ai-config knowledge | 2026-09-26 | Accepted |
 | [0037](0037-macos-suite-gates-merge.md) | The macOS test suite gates merge | 2026-10-02 | Accepted |
+| [0038](0038-master-guard-default-deny.md) | The direct-to-master guard is default-deny | 2026-10-02 | Accepted |

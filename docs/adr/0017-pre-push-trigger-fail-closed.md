@@ -1,6 +1,6 @@
 # ADR-0017: The pre-push trigger fails closed
 
-**Status:** Accepted
+**Status:** Accepted. Inert set amended by [ADR-0038](0038-master-guard-default-deny.md).
 **Date:** 2026-08-01
 
 ## Context

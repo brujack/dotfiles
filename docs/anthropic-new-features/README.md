@@ -5,7 +5,7 @@ Weekly summaries of Anthropic platform and Python SDK changes, generated every M
 ## Files
 
 - `features-YYYY-MM-DD.md` — weekly digest committed each Monday
-- `.platform-state.txt` — last-fetched platform release notes (HTML-stripped; do not edit manually)
+- `.platform-state.md` — last-fetched platform release notes (HTML-stripped; do not edit manually)
 - `.sdk-state.md` — last-fetched Python SDK CHANGELOG snapshot (do not edit manually)
 
 ## Generating a digest

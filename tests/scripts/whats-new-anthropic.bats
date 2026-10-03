@@ -261,7 +261,7 @@ ${_full_current}"
     bash "${REPO_ROOT}/scripts/whats-new-anthropic.sh"
   [ "$status" -eq 0 ]
   [ -f "${_OVERRIDE_FEATURES_DIR}/features-${_today}.md" ]
-  [ -f "${_OVERRIDE_FEATURES_DIR}/.platform-state.txt" ]
+  [ -f "${_OVERRIDE_FEATURES_DIR}/.platform-state.md" ]
   [ -f "${_OVERRIDE_FEATURES_DIR}/.sdk-state.md" ]
   grep -q "^git add" "${MOCK_CALLS_FILE}"
   grep -q "^git commit" "${MOCK_CALLS_FILE}"
@@ -294,7 +294,7 @@ text = re.sub(r'<[^>]+>', ' ', content)
 text = re.sub(r'\s+', ' ', text).strip()
 print(text)
 ")"
-  printf "%s" "${strip_result}" > "${_OVERRIDE_FEATURES_DIR}/.platform-state.txt"
+  printf "%s" "${strip_result}" > "${_OVERRIDE_FEATURES_DIR}/.platform-state.md"
   printf "%s" "${FAKE_SDK_CHANGELOG}" > "${_OVERRIDE_FEATURES_DIR}/.sdk-state.md"
 
   run env \
@@ -341,7 +341,7 @@ text = re.sub(r'<[^>]+>', ' ', content)
 text = re.sub(r'\s+', ' ', text).strip()
 print(text)
 ")"
-  printf "%s" "${strip_result}" > "${_OVERRIDE_FEATURES_DIR}/.platform-state.txt"
+  printf "%s" "${strip_result}" > "${_OVERRIDE_FEATURES_DIR}/.platform-state.md"
 
   run env \
     _OVERRIDE_FEATURES_DIR="${_OVERRIDE_FEATURES_DIR}" \
@@ -372,7 +372,7 @@ print(text)
   [ "$status" -eq 0 ]
   [[ "$output" == *"Model & API Changes"* ]]
   [ ! -f "${_OVERRIDE_FEATURES_DIR}/features-${_today}.md" ]
-  [ ! -f "${_OVERRIDE_FEATURES_DIR}/.platform-state.txt" ]
+  [ ! -f "${_OVERRIDE_FEATURES_DIR}/.platform-state.md" ]
 }
 
 @test "main --dry-run: exits 1 when claude CLI is missing" {
@@ -397,7 +397,7 @@ print(text)
     PATH="${REPO_ROOT}/tests/mocks:${PATH}" \
     bash "${REPO_ROOT}/scripts/whats-new-anthropic.sh"
   [ "$status" -eq 1 ]
-  [ ! -f "${_OVERRIDE_FEATURES_DIR}/.platform-state.txt" ]
+  [ ! -f "${_OVERRIDE_FEATURES_DIR}/.platform-state.md" ]
 }
 
 @test "main: exits 1 when claude fails, state files not modified" {
@@ -411,7 +411,7 @@ print(text)
     PATH="${REPO_ROOT}/tests/mocks:${PATH}" \
     bash "${REPO_ROOT}/scripts/whats-new-anthropic.sh"
   [ "$status" -eq 1 ]
-  [ ! -f "${_OVERRIDE_FEATURES_DIR}/.platform-state.txt" ]
+  [ ! -f "${_OVERRIDE_FEATURES_DIR}/.platform-state.md" ]
   [ ! -f "${_OVERRIDE_FEATURES_DIR}/.sdk-state.md" ]
 }
 
