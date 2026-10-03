@@ -2159,24 +2159,55 @@ _seed_ring() {
   [ -z "$(ls -A "${_APT_KEY_TMP_ROOT}")" ]
 }
 
+# tests/fixtures/subkey-pin.asc: an rsa2048 primary (0F686855...F39878D) carrying a
+# cv25519 encryption subkey, generated once offline so no test needs a gpg-agent
+# (a keygen under BATS_TEST_TMPDIR overflows macOS's unix-socket path limit).
 @test "_build_pinned_keyring: a pin equal to a SUBKEY fingerprint returns 1 and leaves the existing keyring untouched" {
   _seed_ring
   printf 'old' > "${BATS_TEST_TMPDIR}/expect"
-  local _gh="${BATS_TEST_TMPDIR}/subkey-gnupg" _subfpr
-  mkdir -m 700 "${_gh}"
-  "${_MS_GPG_BIN}" --homedir "${_gh}" --batch --passphrase '' --quick-gen-key 'subkey test <s@example.invalid>' ed25519 sign never 2> /dev/null
-  local _primary
-  _primary="$("${_MS_GPG_BIN}" --homedir "${_gh}" --batch --list-keys --with-colons 2> /dev/null | awk -F: '/^fpr:/{print $10; exit}')"
-  "${_MS_GPG_BIN}" --homedir "${_gh}" --batch --passphrase '' --quick-add-key "${_primary}" cv25519 encr never 2> /dev/null
-  _subfpr="$("${_MS_GPG_BIN}" --homedir "${_gh}" --batch --list-keys --with-colons 2> /dev/null | awk -F: '/^sub:/{s=1;next} s&&/^fpr:/{print $10; exit}')"
-  "${_MS_GPG_BIN}" --homedir "${_gh}" --armor --export > "${BATS_TEST_TMPDIR}/subkey.asc" 2> /dev/null
-  gpgconf --homedir "${_gh}" --kill all 2> /dev/null || true
-  [ -n "${_subfpr}" ]
-  [ "${_subfpr}" != "${_primary}" ]
-  run _build_pinned_keyring "${BATS_TEST_TMPDIR}/subkey.asc" "${_ring}" "${_subfpr}"
+  run _build_pinned_keyring "${REPO_ROOT}/tests/fixtures/subkey-pin.asc" "${_ring}" "05E7C322791E474134B4CC27A3B2ED738EF1BBCA"
   [ "$status" -eq 1 ]
   cmp "${BATS_TEST_TMPDIR}/expect" "${_ring}"
   [ -z "$(ls -A "${_APT_KEY_TMP_ROOT}")" ]
+}
+
+@test "_build_pinned_keyring: the fixture's primary fingerprint does install" {
+  _seed_ring
+  run _build_pinned_keyring "${REPO_ROOT}/tests/fixtures/subkey-pin.asc" "${_ring}" "0F6868553876AAD0A8C17C72591C21DEFD39878D"
+  [ "$status" -eq 0 ]
+  ! cmp -s <(printf 'old') "${_ring}"
+}
+
+@test "_build_pinned_keyring: install ok but mv failing returns 3, keeps the keyring and removes the staged file" {
+  _seed_ring
+  printf 'old' > "${BATS_TEST_TMPDIR}/expect"
+  mkdir "${BATS_TEST_TMPDIR}/mvstub"
+  printf '#!/usr/bin/env bash\nexit 1\n' > "${BATS_TEST_TMPDIR}/mvstub/mv"
+  chmod +x "${BATS_TEST_TMPDIR}/mvstub/mv"
+  PATH="${BATS_TEST_TMPDIR}/mvstub:${PATH}" run _build_pinned_keyring "${REPO_ROOT}/keys/microsoft.asc" "${_ring}" "${MS_GPG_FPR}"
+  [ "$status" -eq 3 ]
+  cmp "${BATS_TEST_TMPDIR}/expect" "${_ring}"
+  [ ! -e "${_ring}.new" ]
+  [ -z "$(ls -A "${_APT_KEY_TMP_ROOT}")" ]
+}
+
+@test "_keyring_has_pinned_fpr: an empty pin returns 1" {
+  local _h
+  _h="$(mktemp -d "${_APT_KEY_TMP_ROOT}/h.XXXXXXXX")"
+  "${_MS_GPG_BIN}" --dearmor < "${REPO_ROOT}/keys/microsoft.asc" > "${BATS_TEST_TMPDIR}/ms.gpg"
+  run _keyring_has_pinned_fpr "${BATS_TEST_TMPDIR}/ms.gpg" "" "${_h}"
+  [ "$status" -eq 1 ]
+}
+
+@test "_build_pinned_keyring: an empty keyring path, key path or pin is refused before anything runs" {
+  run _build_pinned_keyring "${REPO_ROOT}/keys/microsoft.asc" "" "${MS_GPG_FPR}"
+  [ "$status" -eq 3 ]
+  run _build_pinned_keyring "" "${BATS_TEST_TMPDIR}/final.gpg" "${MS_GPG_FPR}"
+  [ "$status" -eq 3 ]
+  [ ! -e "${BATS_TEST_TMPDIR}/final.gpg" ]
+  run _build_pinned_keyring "${REPO_ROOT}/keys/microsoft.asc" "${BATS_TEST_TMPDIR}/final.gpg" ""
+  [ "$status" -eq 3 ]
+  [ ! -e "${BATS_TEST_TMPDIR}/final.gpg" ]
 }
 
 @test "_build_pinned_keyring: an unwritable keyring directory returns 3, keeps the keyring and leaves no staging file" {

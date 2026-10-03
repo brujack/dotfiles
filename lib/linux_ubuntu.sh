@@ -787,6 +787,7 @@ _keyring_has_pinned_fpr() {
   [[ ${_pubs} -ge 1 ]] || return 2
   [[ ${_pubs} -eq 1 ]] || return 1
   _primary="$(printf '%s\n' "${_listing}" | awk -F: '/^pub:/{p=1;next} p&&/^fpr:/{print $10;exit}')"
+  [[ -n ${_fpr} && -n ${_primary} ]] || return 1
   [[ ${_primary} == "${_fpr}" ]] || return 1
 }
 
@@ -804,6 +805,7 @@ _keyring_has_pinned_fpr() {
 # below reaches the single rm -rf instead.
 _build_pinned_keyring() {
   local _key="$1" _ring="$2" _fpr="$3" _dir _gpg_rc _rc
+  [[ -n ${_key} && -n ${_ring} && -n ${_fpr} ]] || return 3
   _dir="$(mktemp -d "${_APT_KEY_TMP_ROOT:-${TMPDIR:-/tmp}}/apt-key.XXXXXXXX")" || return 3
   if ! mkdir -m 700 "${_dir}/home"; then
     rm -rf "${_dir}"
