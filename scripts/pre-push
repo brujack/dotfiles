@@ -9,6 +9,26 @@ if [[ -z "${REPO_ROOT}" ]]; then
     REPO_ROOT="$(cd "$(git rev-parse --git-common-dir)/.." && pwd)"
 fi
 
+# Default-deny: a path is inert only if it is a .md outside the root tests/,
+# or the root LICENSE, AND its blob does not start with #! (make lint selects
+# shell files by first line, whatever their name). Call only in a conditional:
+# this hook runs under set -e.
+_path_is_inert() {
+    local _path="${1}" _sha="${2}" _head
+    case "${_path}" in
+        tests/*) return 1 ;;
+        LICENSE | *.md) ;;
+        *) return 1 ;;
+    esac
+    # Deleted at the tip: never lands, so judged by name alone.
+    git cat-file -e "${_sha}:${_path}" 2>/dev/null || return 0
+    [[ "$(git cat-file -t "${_sha}:${_path}" 2>/dev/null)" == "blob" ]] || return 1
+    # Process substitution, not a pipe: head closing early is SIGPIPE (141)
+    # under pipefail on any blob larger than the pipe buffer.
+    _head="$(head -c 2 < <(git cat-file blob "${_sha}:${_path}"))"
+    [[ "${_head}" != '#!' ]]
+}
+
 needs_test=0
 refuse_paths=""
 # shellcheck disable=SC2034 # git's pre-push protocol supplies 4 whitespace-separated
@@ -27,22 +47,17 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     fi
 
     # Fail closed (ADR-0017): trigger unless EVERY changed path is provably
-    # inert. grep -qv succeeds when any path does NOT match the inert set, so
-    # one unrecognized path is enough to run the suite. Do not "fix" this back
-    # to an allowlist (-qE of trigger patterns) — that shape missed four real
-    # file classes in one session; see the ADR for the full history.
-    #
-    # `make lint`'s SHELL_FILES walks the whole repo recursively, so a .sh
-    # file under docs/ or .github/ is still linted by `make test` even though
-    # those directories are otherwise mostly inert — the inert set below only
-    # excuses .md files and .yml/.yaml files under .github/, not every path
-    # under those directories.
+    # inert, as _path_is_inert defines it. Default-deny: a path the predicate
+    # does not recognise runs the suite. --no-renames lists both sides of a
+    # rename, so x.sh -> x.md cannot hide the .sh; core.quotePath=false keeps
+    # non-ASCII names unquoted so the predicate sees the real path.
     #
     # git diff itself can fail (e.g. remote_sha names an object this checkout
     # doesn't have) — that must also fail closed, not silently read as "no
     # changes". The assignment is wrapped in an if-condition so a non-zero
     # exit doesn't trip this script's own `set -e`.
-    if changed="$(git diff --name-only "${range}" 2>/dev/null)"; then
+    live_paths=""
+    if changed="$(git -c core.quotePath=false diff --no-renames --name-only "${range}" 2>/dev/null)"; then
         diff_rc=0
     else
         diff_rc=$?
@@ -50,14 +65,14 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 
     if [[ ${diff_rc} -ne 0 ]]; then
         needs_test=1
-    elif [[ -n "${changed}" ]] && printf '%s\n' "${changed}" | grep -qE '^tests/'; then
-        # Anything under tests/ always triggers, ahead of the inert check.
-        # `\.md$` below is unanchored on the left, so without this a future
-        # .md fixture under tests/ would be read by the suite and skipped by
-        # the gate — the same shape as the bug this whole hook exists to fix.
-        needs_test=1
-    elif [[ -n "${changed}" ]] && printf '%s\n' "${changed}" | grep -qvE '\.md$|^\.github/.*\.ya?ml$|^LICENSE$'; then
-        needs_test=1
+    else
+        while IFS= read -r _p; do
+            [[ -z "${_p}" ]] && continue
+            if ! _path_is_inert "${_p}" "${local_sha}"; then
+                needs_test=1
+                live_paths="${live_paths}${_p}"$'\n'
+            fi
+        done <<< "${changed}"
     fi
 
     # Direct-to-master guard. ci.yml triggers on pull_request only, so a code
