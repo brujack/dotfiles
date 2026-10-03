@@ -92,23 +92,30 @@ readonly -a APT_CONFFILE_OPTS=(-o Dpkg::Options::=--force-confdef -o Dpkg::Optio
   and nowhere else. No other `dpkg -i`/`--install` exists in `lib/`, `setup_env.sh` or
   `scripts/` today; one added later needs confdef+confold from the gate and gets confmiss only
   by adding it to the gate's allow-set (see Enforcement).
-- **`.dpkg-dist` advisory.** confold means the operator is no longer told when a package ships a
-  changed conffile; dpkg writes the package copy beside it as `<file>.dpkg-dist` and moves on.
-  A helper `report_new_dpkg_dist <marker>` (`lib/linux_shared.sh`) prints one `log_warn` line
-  per `.dpkg-dist` under `/etc` newer than `<marker>`, naming the path and saying the local copy
-  was kept. It never changes a return code. The marker is `${_DOTFILES_RUN_TMPDIR}/started_at`,
-  which `_dotfiles_run_tmpdir_setup` (`lib/workflows.sh`) already writes at run start for every
-  entry point, before any apt step; no new marker is created. Callers: `run_update`, as a
-  `conffiles` section in `_UPDATE_SECTION_ORDER` (WARN when any are found, which exits 0 per the
-  existing WARN mapping; OK when none), and `run_setup_or_developer` on Ubuntu (a plain
-  `log_warn` list at the end, since that path has no summary). `find /etc` runs unprivileged
-  with stderr discarded, so a `.dpkg-dist` under a root-only directory is not reported; that
-  boundary is stated in the helper's header comment rather than worked around with sudo.
-  Pre-existing `.dpkg-dist` files are not reported, because they predate the marker.
-- `scripts/bootstrap_linux.sh` runs before anything under `lib/` is sourced, so it cannot use
-  the array. Its single `apt-get install` carries the two `-o Dpkg::Options::=` options
-  literally. This puts the bootstrap inside the enforcement scope below instead of carving out
-  an exemption for it.
+- **`.dpkg-dist` doctor check.** confold means the operator is no longer prompted when a package
+  ships a changed conffile; dpkg writes the package copy beside it as `<file>.dpkg-dist` and moves
+  on. A new `_doctor_check_dpkg_dist` (`lib/helpers.sh`), registered in `run_doctor`, runs on
+  Linux only (`[[ -n ${LINUX} ]] || return 0`, the early-return shape `_doctor_check_gnu_coreutils`
+  uses). It runs `find <root> -name '*.dpkg-dist'` with `<root>` from a seam
+  `_OVERRIDE_DPKG_DIST_ROOT` defaulting to `/etc`. Each file gets one `doctor_warn` naming it and
+  the remedy (`diff <file> <file>.dpkg-dist`, merge what you want, delete the `.dpkg-dist`); none
+  gives one `doctor_pass`. WARN does not fail doctor. The file keeps being reported until the
+  operator resolves it, which is the point: confold took away the one-time prompt, and a one-time
+  warning would repeat the loss.
+
+  Why not "files created during this run": dpkg extracts with the archive's mtime and the rename to
+  `.dpkg-dist` keeps it. Measured on claude, 2026-10-03, same probe package with its conffile
+  stamped 2020-01-01, upgraded under confold after an edit: the `.dpkg-dist` had mtime
+  `2020-01-01 00:00:00` and ctime of the install, and `find -newer <run marker>` found 0 files
+  where `-cnewer` found 1. A presence check needs no timestamp at all.
+
+  Boundary: `find` runs unprivileged with stderr discarded, so a `.dpkg-dist` under a root-only
+  directory is missed. Measured on claude: 7 `/etc` directories are unreadable to the user
+  (`/etc/multipath`, `/etc/credstore`, `/etc/credstore.encrypted`, `/etc/lvm/backup`,
+  `/etc/lvm/archive`, `/etc/polkit-1/rules.d`, `/etc/ssl/private`), and none of the 1028
+  conffiles `dpkg-query -W -f='${Conffiles}'` lists lives under any of them. That is one machine;
+  the helper's header comment states the boundary. Also on claude: 0 `.dpkg-dist` files exist
+  today, unprivileged or under sudo, so the check starts silent.
 
 Rejected:
 
@@ -170,15 +177,18 @@ TDD, vertical slices:
    separate argument for an xargs+nala site, a direct `apt install` site, the powershell
    `dpkg -i` and one volian `dpkg --install`, plus `--force-confmiss` for the last two. This shows
    the array expands at run time, which a text check cannot.
-3. **`.dpkg-dist` advisory.** Point the helper's search root at a fixture directory through a
-   test seam (the real `/etc` is never searched under bats). Cases: one `.dpkg-dist` newer than
-   the marker is reported by path; one older is not; none gives no output; the return code is 0
-   in all three. A `run_update` test asserts the `conffiles` row reads WARN with one found and OK
-   with none, and that the run still exits 0.
+3. **`.dpkg-dist` doctor check.** Point `_OVERRIDE_DPKG_DIST_ROOT` at a fixture directory (the
+   real `/etc` is never searched under bats). Cases: a `.dpkg-dist` in a nested subdirectory is
+   reported with its path and the `diff` remedy; one whose mtime is set to 2020 with `touch -d` is
+   still reported, pinning the measured defect class; an empty root gives one PASS and no WARN;
+   `LINUX` unset gives no output; the check never sets `_DOCTOR_FAILED`. The end-to-end
+   `run_doctor` tests in `tests/setup_env/unit.bats` stub every sub-check by name, so they gain a
+   `_doctor_check_dpkg_dist` stub.
 4. **Mutation check.** Remove `"${APT_CONFFILE_OPTS[@]}"` from one xargs line and confirm both
    the gate and the argv test go red. Remove `--force-confmiss` from one volian line and confirm
    the confmiss check goes red. Make the configuring-verb list match nothing and confirm the
-   judged-count assertion goes red.
+   judged-count assertion goes red. Make the doctor check's `find` match nothing and confirm the
+   nested-file and old-mtime cases go red.
 
 The real-tool proof is V1 and V2 below. The bats suite never runs a real apt or dpkg.
 
@@ -198,20 +208,21 @@ The real-tool proof is V1 and V2 below. The bats suite never runs a real apt or 
 - **R12.** `[PR1]` A `bad` conffile record's failure message names the file and line, the array (or the two literal options for a file that cannot source `lib/constants.sh`) as the apt fix, `--force-confdef --force-confold` as the dpkg fix, and `dotfiles-apt-upgrade-hazards.md` §2.
 - **R13.** `[PR1]` Fixture cases cover: array token after the verb `ok`, array token before the verb `ok`, literal pair `ok`, missing options `bad`, only one of the pair `bad`, dpkg force flags after the archive path `ok`, and a `remove` call not judged.
 - **R14.** `[PR1]` Argv-recording tests assert the options arrive as separate arguments at an xargs+nala site, a direct `apt install` site, the powershell `dpkg -i` and one volian `dpkg --install`, the last two also receiving `--force-confmiss`.
-- **R15.** `[PR1]` `report_new_dpkg_dist <marker>` in `lib/linux_shared.sh` prints one `log_warn` line per `*.dpkg-dist` file under its search root newer than `<marker>`, always returns 0, and takes its search root from a test seam defaulting to `/etc`.
-- **R16.** `[PR1]` `run_update` and `run_setup_or_developer` call `report_new_dpkg_dist "${_DOTFILES_RUN_TMPDIR}/started_at"` after their last apt step, on Ubuntu only.
-- **R17.** `[PR1]` `run_update` records a `conffiles` section in `_UPDATE_SECTION_ORDER`: WARN when the helper found any file, OK when it found none; the run's exit code is unaffected by it.
-- **R18.** `[PR1]` Tests cover: a `.dpkg-dist` newer than the marker reported, an older one not reported, none found gives no output, rc 0 in all three, and the `conffiles` row reading WARN and OK.
+- **R15.** `[PR1]` `_doctor_check_dpkg_dist` in `lib/helpers.sh`, called from `run_doctor`, returns immediately unless `LINUX` is set, lists every `*.dpkg-dist` under the root given by `_OVERRIDE_DPKG_DIST_ROOT` (default `/etc`) with no timestamp test, emits one `doctor_warn` per file naming it and the `diff` remedy, and one `doctor_pass` when there are none.
+- **R16.** `[PR1]` `_doctor_check_dpkg_dist` never calls `doctor_fail`, and its header comment states that an unprivileged `find` misses files under root-only directories.
+- **R17.** `[PR1]` Tests cover: a nested `.dpkg-dist` reported with path and remedy, a `.dpkg-dist` with a 2020 mtime still reported, an empty root giving one PASS, `LINUX` unset giving no output, and `_DOCTOR_FAILED` left unset.
+- **R18.** `[PR1]` Every end-to-end `run_doctor` test that stubs sub-checks by name also stubs `_doctor_check_dpkg_dist`.
 - **R19.** `[PR1]` A backlog row is added for repairing packages other than the three R5 packages that are already left at `iU` by an earlier conffile failure.
-- **V1.** On claude, re-run the §2 `dotfiles-cfprobe` probe through a changed `xargs … nala install` line (stdin `/dev/null`, edited conffile, v1 to v2). Expect rc 0, state `ii`, local edit kept, `.dpkg-dist` written, and `report_new_dpkg_dist` naming it.
+- **V1.** On claude, re-run the §2 `dotfiles-cfprobe` probe through a changed `xargs … nala install` line (stdin `/dev/null`, edited conffile, v1 to v2). Expect rc 0, state `ii`, local edit kept, `.dpkg-dist` written, and `setup_env.sh -t doctor` WARNing on it; delete it and confirm the next doctor run PASSes.
 - **V2.** Done at spec time on claude, 2026-10-03, recorded in Decision: same-version `dpkg -i --force-confdef --force-confold --force-confmiss` over an `iU` package with a deleted conffile gave rc 0, `ii`, file restored; without confmiss, rc 0, `ii`, file still absent. Re-run with the R5 command copied from the final code before merge.
-- **V3.** Mutation: dropping the array from one xargs line turns both the R8 gate and the R14 argv test red; dropping `--force-confmiss` from one volian line turns the R11 check red; making the configuring-verb list match nothing turns the R9 count red.
+- **V3.** Mutation: dropping the array from one xargs line turns both the R8 gate and the R14 argv test red; dropping `--force-confmiss` from one volian line turns the R11 check red; making the configuring-verb list match nothing turns the R9 count red; making the doctor `find` match nothing turns the R17 reported-file cases red.
 - **N1.** No file is written under `/etc/apt/apt.conf.d/` or anywhere else outside the repo.
 - **N2.** `--force-confmiss` is not added to any call other than the three R5 calls.
 - **N3.** `remove`, `purge`, `autoremove` and `autopurge` calls are not changed.
 - **N4.** `Vagrantfile` is not changed; it has its own backlog row.
 - **N5.** No wrapper function is introduced between `sudo` and apt, apt-get, nala or dpkg.
-- **N6.** `report_new_dpkg_dist` does not run `find` under sudo, and does not move, delete or merge any `.dpkg-dist` file.
+- **N6.** `_doctor_check_dpkg_dist` does not run `find` under sudo, and does not move, delete or merge any `.dpkg-dist` file.
+- **N7.** No `.dpkg-dist` reporting is added to `run_update`, `run_setup_or_developer` or `_UPDATE_SECTION_ORDER`.
 
 ## Multi-Lens Review
 
@@ -234,6 +245,19 @@ Disposition: Addressed (operator, 2026-10-03) — (1) as Goal-Fit; (2) R9 judged
 Finding: Sound and proportionate. Probes: `nala install --help` documents `-o` pass-through (nala 0.16.0); `dpkg --force-help` lists confdef/confold/confmiss; the array token survives the tokenizer as one token; re-sourcing a `readonly -a` behaves like the file's existing readonly scalars; no `lib/` code deletes `microsoft-prod.gpg` (only the azure legacy cleanup at `linux_ubuntu.sh:641-645` removes Microsoft files, different ones). Gaps: (1) judged-subset emptiness, as Ergonomics (2); the confmiss check must assert exactly one matched record, or a reworded line passes "no other call does" vacuously. (2) The token check cannot see the array's contents or a token in a trailing comment; R10 is the only contents check and must stay. (3) dpkg flag placement unspecified; copying `classify()`'s leading-flag loop would false-fail a flag after the `.deb` path. (4) `helpers.sh:275,277`; volian-archive-keyring is keyring-only, so the confmiss argument applies to it too — give it confmiss or say why not.
 Assumption: same as Ergonomics — same-version `dpkg -i --force-confmiss` over an `iU` package with a deleted conffile ends `ii` with the file restored.
 Disposition: Addressed (operator, 2026-10-03) — (1) R9 and R11; (2) R14 argv tests stated as the only contents check, required; (3) dpkg force flags matched anywhere in the call, R8/R13; (4) volian debs in R5 with confmiss. Assumption probed: holds; confmiss shown load-bearing by the confold-only control.
+
+### Round 2
+
+Reviewed at commit: `931f40e0` (round-1 revisions). All three lenses re-run in full, since round 1 changed design substance.
+
+**Goal-Fit (r2).** Finding: R1–R14 core proportionate and sound. The run-scoped `.dpkg-dist` advisory (old R15–R18) reports nothing in production: dpkg keeps the archive mtime on `.dpkg-dist`, so `find -newer started_at` misses it; four of its six cases pass on a helper that finds nothing. Simpler path: one persistent `doctor` check with no marker. Assumption: `.dpkg-dist` mtime is the archive's, not install time. Measured by the author on claude with the probe package: mtime `2020-01-01`, `-newer` 0, `-cnewer` 1 — holds.
+Disposition: Addressed (operator, 2026-10-03) — operator chose the doctor check; old R15–R18 replaced by `_doctor_check_dpkg_dist` (new R15–R18), N7 added.
+
+**Ergonomics (r2).** Finding: same mtime defect; R15/R17 mismatch (helper's only output was `log_warn` on stderr, so `run_update` had no found/none signal); no SKIP arms for the `conffiles` row; warning shown once then gone; unreadable-directory misses invisible to the operator. Assumption: same as Goal-Fit, settled the same way.
+Disposition: Addressed (operator, 2026-10-03) — doctor check removes the marker, the summary row and the SKIP question; the warning persists until resolved and carries the `diff` remedy; unreadable directories measured (7 on claude, 0 conffiles under them) and stated as a boundary in R16.
+
+**Risk (r2).** Finding: same mtime defect, with a `dpkg-deb -x` reproduction; `_DOTFILES_RUN_TMPDIR`/`started_at` wiring, summary width, ordering tests, volian confmiss blast radius, R11 exact-match and the array-token skip all checked clean. Assumption: whether conffiles that would get a `.dpkg-dist` live under root-only `/etc` directories. Measured by the author on claude: 7 unreadable directories, 0 of 1028 conffiles under them — holds on that machine.
+Disposition: Addressed (operator, 2026-10-03) — advisory replaced by the doctor check; boundary measured and recorded in Decision.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
