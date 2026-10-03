@@ -145,3 +145,29 @@ The real-tool proof is V1 and V2 below. The bats suite never runs a real apt or 
 - **N3.** `remove`, `purge`, `autoremove` and `autopurge` calls are not changed.
 - **N4.** `Vagrantfile` is not changed; it has its own backlog row.
 - **N5.** No wrapper function is introduced between `sudo` and apt, apt-get, nala or dpkg.
+
+## Multi-Lens Review
+
+Reviewed at commit: `992dcc3d` (Step 7 self-review commit, before Step 8 dispatch)
+
+### Goal-Fit
+
+Finding: Worth building; premises verified (5 xargs sites at `lib/linux_ubuntu.sh:46,47,52,53,70`, #280 literals at `lib/linux_shared.sh:70-72`, R5 at `:202`, R7 at `scripts/bootstrap_linux.sh:35`, before-verb placement argument correct per `classify()`). Gap: `lib/helpers.sh:275,277` (`dpkg --install` of the volian keyring and nala debs, Noble path of `check_and_install_nala`) are judged by R8 but named by no requirement, so Phase 2's "watch it go red" step hits them with no mandate. R6/N2 is an absence check protected only by the shared non-empty call set.
+Assumption: the xargs sites always take nala's apt path (honouring `Dpkg::Options`) rather than `dpkg -i`; refuted if a package list holds a local `.deb` path. Checked by the author: `grep -nE '\.deb|/' ubuntu_*_packages.txt` returns nothing.
+Disposition:
+
+### Ergonomics
+
+Finding: (1) same `helpers.sh:275,277` gap. (2) The conffile verdict's empty-set guard is over the frontend call set, which `remove`/`autoremove` keep non-empty, so a classifier that judges zero configuring calls passes. (3) Array-before-verb drops out of both verdicts silently; the existing failure message names only DEBIAN_FRONTEND and the spec defines none for the new verdict. (4) Advisory: nothing surfaces new `.dpkg-dist` files, so an upstream conffile change now arrives unannounced; suggests a `-t update`/doctor advisory.
+Assumption: `dpkg -i --force-confmiss` repairs the §2b state (same-version deb over an `iU` package with a deleted conffile). §2b measured `dpkg --configure --force-confmiss`; V2 tests a newer version over `ii`. Settled by a throwaway-package probe on claude.
+Disposition:
+
+### Risk
+
+Finding: Sound and proportionate. Probes: `nala install --help` documents `-o` pass-through (nala 0.16.0); `dpkg --force-help` lists confdef/confold/confmiss; the array token survives the tokenizer as one token; re-sourcing a `readonly -a` behaves like the file's existing readonly scalars; no `lib/` code deletes `microsoft-prod.gpg` (only the azure legacy cleanup at `linux_ubuntu.sh:641-645` removes Microsoft files, different ones). Gaps: (1) judged-subset emptiness, as Ergonomics (2); the confmiss check must assert exactly one matched record, or a reworded line passes "no other call does" vacuously. (2) The token check cannot see the array's contents or a token in a trailing comment; R10 is the only contents check and must stay. (3) dpkg flag placement unspecified; copying `classify()`'s leading-flag loop would false-fail a flag after the `.deb` path. (4) `helpers.sh:275,277`; volian-archive-keyring is keyring-only, so the confmiss argument applies to it too — give it confmiss or say why not.
+Assumption: same as Ergonomics — same-version `dpkg -i --force-confmiss` over an `iU` package with a deleted conffile ends `ii` with the file restored.
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
