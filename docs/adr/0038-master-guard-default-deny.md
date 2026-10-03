@@ -34,8 +34,12 @@ test (1) and `.github/workflows/ci.yml` (1). That is about three a month.
    the guard's deliberately narrow executable-class scope. The two can no longer drift.
 2. **A path is inert only if** it is a `.md` outside the root `tests/`, or the root
    `LICENSE`, **and** its blob at the pushed tip does not start with `#!`. `make lint`
-   selects shell files by first line whatever their name, so a name alone is not enough. A
-   path deleted at the tip is judged by name. Everything else is not inert, including any
+   selects shell files by first line whatever their name, so a name alone is not enough.
+   The decision reads the path's entry in the pushed tree (`git ls-tree`), not the object:
+   only a regular file (mode `100644` or `100755`) can be inert, so a symlink or a gitlink
+   named `*.md` is not. A lookup by object let both through, because a submodule's commit
+   is absent from the superproject's object store and read as a deletion. A path absent
+   from the tree at the tip was deleted and is judged by name. Everything else is not inert, including any
    file type added in future.
 3. **A push to `refs/heads/master` is refused if its range carries any non-inert path.**
    The range is the whole push, not the tip commit.
