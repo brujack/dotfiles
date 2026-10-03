@@ -297,6 +297,8 @@ then on each:
 - R2 -> `_install_ubuntu_edge_source` builds its keyring through `_build_pinned_keyring`, and no existing edge test is modified except that tests running the whole `_install_ubuntu_gui_tools` step supply albert's key (`MOCK_CURL_STDOUT`), since that step now fetches it. — Task 2 review: `linux_ubuntu.bats` "HAS_SNAP wires the edge source helper and installs edge" runs the whole step, so without a key albert returns 2 and the step fails for a reason unrelated to edge.
 - R10 -> A non-zero return from `_install_ubuntu_albert` makes `_install_ubuntu_gui_tools` return 2 after the rest of the step runs; the step's own tail status is captured and returned otherwise. — Task 2 review: the step ends in an `if` with no `else`, so its tail status is 0 on every reachable path and "without changing its return on the success path" could not be falsified by any test.
 - R6 -> On success `_install_ubuntu_albert` writes `${_APT_SOURCES_DIR}/albert.list` with an `https://download.opensuse.org/` URL and `signed-by=${_APT_KEYRINGS_DIR}/albert-obs.gpg` and returns 0 only if `apt install albert` succeeds; a failed list write or install logs a WARN naming the file or package and returns 2. — Task 2 review: the unchecked install returned 0 over a failed install, contradicting the function's own 0/2 contract.
+- finding R1 (2026-10-03, reviewer both): DIFFERS — Temp-dir build, primary-only pin (awk takes the first fpr: after the pub:), install -m 0644 to <keyring>.new then mv -f (:835), and 3 for local failures all match. But a listing with exactly one pub: record and no fpr: record after it returns 2 (:801, pinned by the test 'a pub: record with no fpr: record returns 2'). R1 reserves 2 for 'no pub: record could be read' and gives 1 to any listing that lacks exactly one pub: whose primary fingerprint equals the pin. That difference reaches albert: 2 keeps the source and 1 removes it.
+- R1 -> `_build_pinned_keyring` builds and verifies in a temporary directory, compares the pin against the primary key's fingerprint only (the `fpr:` record immediately after the single `pub:` record), installs onto the final path only on success by `sudo install -m 0644` to `<keyring>.new` then `sudo mv -f` into place, and never modifies the final path on failure; it returns 2 when no usable primary key could be read (gpg non-zero, a non-key body, or a `pub:` record with no `fpr:` record after it), 1 when the listing does not hold exactly one `pub:` record whose primary fingerprint equals the pin, and 3 for a local failure (temp directory, staging or install) that leaves the final path unchanged. — real gpg always emits `fpr:` after `pub:`, so a `pub:` without one means gpg itself misbehaved: a local reading failure like gpg exiting non-zero, where keeping albert's last verified source (2) is right and deleting it (1) is not; changed in 19f6bffc after test-quality-review found the guard untested.
 
 ## Multi-Lens Review
 
@@ -444,3 +446,24 @@ Author check: confirmed (1) against §2 steps 1 and 3 at `dc5fb70a`. Edge's own 
 removes its keyring in edge's code, so R2 still holds.
 Disposition: Addressed (operator, 2026-10-03: "yes to both") — F1: builder builds and verifies in a temp directory and installs with `sudo install -m 0644` only on success (§2, R1); F2: first-run caveat stated in §5. Follow-up from the same reviewer: R8 and its test row now remove `albert-obs.gpg` as well as `albert.list` (`72fae2a9`).
 
+## Spec alignment (2026-10-03)
+
+- spec: docs/superpowers/specs/2026-10-03-scoped-apt-keys-azure-albert-design.md
+- anchor: 985a727b0a02726b8243a3b4cbc4787e4297df46
+- in scope: R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+| R1 | both | DIFFERS | Temp-dir build, primary-only pin (awk takes the first fpr: after the pub:), install -m 0644 to <keyring>.new then mv -f (:835), and 3 for local failures all match. But a listing with exactly one pub: record and no fpr: record after it returns 2 (:801, pinned by the test 'a pub: record with no fpr: record returns 2'). R1 reserves 2 for 'no pub: record could be read' and gives 1 to any listing that lacks exactly one pub: whose primary fingerprint equals the pin. That difference reaches albert: 2 keeps the source and 1 removes it. | - R1 -> `_build_pinned_keyring` builds and verifies in a temporary directory, compares the pin against the primary key's fingerprint only (the `fpr:` record immediately after the single `pub:` record), installs onto the final path only on success by `sudo install -m 0644` to `<keyring>.new` then `sudo mv -f` into place, and never modifies the final path on failure; it returns 2 when no usable primary key could be read (gpg non-zero, a non-key body, or a `pub:` record with no `fpr:` record after it), 1 when the listing does not hold exactly one `pub:` record whose primary fingerprint equals the pin, and 3 for a local failure (temp directory, staging or install) that leaves the final path unchanged. — real gpg always emits `fpr:` after `pub:`, so a `pub:` without one means gpg itself misbehaved: a local reading failure like gpg exiting non-zero, where keeping albert's last verified source (2) is right and deleting it (1) is not; changed in 19f6bffc after test-quality-review found the guard untested. |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: no evidence recorded
+- V2: no evidence recorded
