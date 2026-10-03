@@ -4,6 +4,13 @@
 # Absolute path to repo root (two levels up from tests/helpers/)
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
+# A git hook exports GIT_DIR (and from a worktree GIT_INDEX_FILE), and git -C
+# does not override it, so a fixture's git init/config/commit would land in
+# whatever repo the caller came from. Measured 2026-10-03: whats-new.bats,
+# git_hooks.bats, git_sync.bats and workflows.bats wrote commits and a
+# user.name into a decoy repo named by an exported GIT_DIR.
+unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
+
 # Prepend tests/mocks/ to PATH so mock executables shadow real ones
 load_mocks() {
   export PATH="${REPO_ROOT}/tests/mocks:${PATH}"
