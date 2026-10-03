@@ -593,6 +593,11 @@ _assert_refused() {
   [ ! -f "${MOCK_CALLS_FILE}" ]
   [[ "$output" == *"gh pr merge --admin"* ]]
   [[ "$output" != *"--no-verify"* ]]
+  # The rule text must name every exclusion, or a refused tests/a.md or
+  # shebang .md reads as contradicting it.
+  [[ "$output" == *"outside the root tests/"* ]]
+  [[ "$output" == *"#!"* ]]
+  [[ "$output" == *"symlink"* ]]
 }
 
 # Commit one path (content via printf) and push it to master; sets $output.

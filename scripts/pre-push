@@ -149,7 +149,9 @@ fi
 if [[ -n "${refuse_paths}" ]]; then
     printf 'pre-push: refusing a direct push to master carrying non-inert paths:\n' >&2
     printf '%s\n' "${refuse_paths}" | grep -v '^$' | sed 's/^/  /' >&2
-    printf 'Only .md files and the root LICENSE may go to master directly.\n' >&2
+    printf 'Only .md files outside the root tests/, and the root LICENSE, may go to master\n' >&2
+    printf 'directly, and only as regular files (not a symlink or submodule) whose content\n' >&2
+    printf 'does not start with #!.\n' >&2
     printf 'ci.yml runs on pull_request only, so these would reach master untested.\n' >&2
     _print_recovery "${refuse_local_ref}"
     printf 'Emergency (hotfix-cycle, rollback-cycle): open the PR the same way and merge\n' >&2
