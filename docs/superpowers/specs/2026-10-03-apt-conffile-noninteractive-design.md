@@ -48,10 +48,29 @@ runs as part of a dotfiles workflow:
 
 - **confdef + confold everywhere.** Keep the operator's edited file; dpkg writes the package
   copy beside it as `.dpkg-dist`.
-- **confmiss only at the `packages-microsoft-prod.deb` `dpkg -i`.** That package carries only
-  the Microsoft apt keyring and source, so restoring a deleted file is always right there.
-  Elsewhere it would silently undo a deliberate deletion (a cron file or apt source removed to
-  disable something), so it is not applied.
+- **confmiss only at the three vendor archive-setup `dpkg` installs:** `packages-microsoft-prod.deb`
+  (`_install_ubuntu_powershell`) and the two volian debs, `volian-archive-keyring_0.2.0_all.deb` and
+  `volian-archive-nala_0.2.0_all.deb` (`check_and_install_nala`, Noble path, `lib/helpers.sh`).
+  Each package carries only a vendor apt keyring and/or source, so restoring a deleted file is
+  always right there. Elsewhere confmiss would silently undo a deliberate deletion (a cron file or
+  apt source removed to disable something), so it is not applied.
+
+  confmiss is load-bearing, not belt-and-braces. Measured on claude, 2026-10-03, with a throwaway
+  `dotfiles-cfprobe2` package (one conffile, v1 and v2 differing in it), stdin `/dev/null`
+  throughout. That population is one package on one machine; it shows dpkg's behaviour, not any
+  particular vendor package's:
+
+  | step                                                                         | rc  | state | conffile             |
+  | ---------------------------------------------------------------------------- | --- | ----- | -------------------- |
+  | `dpkg -i` v1, then delete the conffile                                       | 0   | `ii`  | absent               |
+  | `dpkg -i` v2, no force (reproduces §2b)                                      | 1   | `iU`  | absent               |
+  | `dpkg -i --force-confdef --force-confold --force-confmiss` v2, same version  | 0   | `ii`  | restored (v2 copy)   |
+  | control, from a fresh `iU`: `--force-confdef --force-confold` only           | 0   | `ii`  | **still absent**     |
+
+  Without confmiss the call stops wedging but leaves the keyring missing. For an archive-setup
+  package that means a configured source with no key, and every later `apt update` fails on it.
+  The probe also settles a question §2b left open: §2b repaired with `dpkg --configure`, and a
+  re-run of `dpkg -i` with the **same** version over an `iU` package repairs the same way.
 
 ### Mechanism
 
@@ -63,16 +82,29 @@ readonly -a APT_CONFFILE_OPTS=(-o Dpkg::Options::=--force-confdef -o Dpkg::Optio
 
 - Every `sudo … apt|apt-get|nala` call in `lib/` whose verb configures packages (`install`,
   `reinstall`, `upgrade`, `full-upgrade`, `dist-upgrade`, `build-dep`) carries
-  `"${APT_CONFFILE_OPTS[@]}"` **after the verb**. Placement matters: the tokenizer reads the
-  first non-flag token after the tool as the verb, so `apt "${APT_CONFFILE_OPTS[@]}" install`
-  would be read as verb `"${APT_CONFFILE_OPTS[@]}"`, and the call would drop out of both
-  verdicts (frontend and conffile) unseen. In the xargs lines the array is in the fixed part of the
+  `"${APT_CONFFILE_OPTS[@]}"`. apt accepts `-o` before or after the verb, and so does the gate
+  (see Enforcement), so placement is free. In the xargs lines the array is in the fixed part of the
   command, so it expands before xargs runs and reaches every nala invocation. The #280
   `full-upgrade` site moves onto the array. `remove`, `purge`, `autoremove` and `autopurge`
   configure nothing and are left alone.
-- `_install_ubuntu_powershell`'s `dpkg -i` carries
-  `--force-confdef --force-confold --force-confmiss` as dpkg flags (dpkg does not take `-o`).
-  A comment on that line says why confmiss is there and nowhere else.
+- The three archive-setup `dpkg` calls carry `--force-confdef --force-confold --force-confmiss`
+  as dpkg flags (dpkg does not take `-o`). A comment at each site says why confmiss is there
+  and nowhere else. No other `dpkg -i`/`--install` exists in `lib/`, `setup_env.sh` or
+  `scripts/` today; one added later needs confdef+confold from the gate and gets confmiss only
+  by adding it to the gate's allow-set (see Enforcement).
+- **`.dpkg-dist` advisory.** confold means the operator is no longer told when a package ships a
+  changed conffile; dpkg writes the package copy beside it as `<file>.dpkg-dist` and moves on.
+  A helper `report_new_dpkg_dist <marker>` (`lib/linux_shared.sh`) prints one `log_warn` line
+  per `.dpkg-dist` under `/etc` newer than `<marker>`, naming the path and saying the local copy
+  was kept. It never changes a return code. The marker is `${_DOTFILES_RUN_TMPDIR}/started_at`,
+  which `_dotfiles_run_tmpdir_setup` (`lib/workflows.sh`) already writes at run start for every
+  entry point, before any apt step; no new marker is created. Callers: `run_update`, as a
+  `conffiles` section in `_UPDATE_SECTION_ORDER` (WARN when any are found, which exits 0 per the
+  existing WARN mapping; OK when none), and `run_setup_or_developer` on Ubuntu (a plain
+  `log_warn` list at the end, since that path has no summary). `find /etc` runs unprivileged
+  with stderr discarded, so a `.dpkg-dist` under a root-only directory is not reported; that
+  boundary is stated in the helper's header comment rather than worked around with sudo.
+  Pre-existing `.dpkg-dist` files are not reported, because they predate the marker.
 - `scripts/bootstrap_linux.sh` runs before anything under `lib/` is sourced, so it cannot use
   the array. Its single `apt-get install` carries the two `-o Dpkg::Options::=` options
   literally. This puts the bootstrap inside the enforcement scope below instead of carving out
@@ -96,55 +128,90 @@ a second, independent verdict over the same call set:
 
 - An `apt`/`apt-get`/`nala` call whose verb is one of the six configuring verbs is `ok` only if
   it carries the `"${APT_CONFFILE_OPTS[@]}"` token, or both
-  `Dpkg::Options::=--force-confdef` and `Dpkg::Options::=--force-confold` literally.
+  `Dpkg::Options::=--force-confdef` and `Dpkg::Options::=--force-confold` literally, anywhere in
+  the call.
 - A `dpkg` call with `-i`, `--install` or `--configure` is `ok` only if it carries
-  `--force-confdef` and `--force-confold`.
-- confmiss is checked separately and positively: the `packages-microsoft-prod.deb` call carries
-  `--force-confmiss`, and no other call does.
+  `--force-confdef` and `--force-confold` anywhere in the call, not only among the leading flags.
+  dpkg accepts force options after the archive path, so a leading-flags-only scan would report a
+  correct call `bad`.
+- **`classify()` learns the array token.** It already skips `-o`, `-c` and `-t` with their values
+  when looking for the verb. It now also skips a `"${APT_CONFFILE_OPTS[@]}"` token, so
+  `apt "${APT_CONFFILE_OPTS[@]}" install x` is classified as an `install` instead of dropping out
+  of both verdicts as verb `"${APT_CONFFILE_OPTS[@]}"`. This is our own token, not a new shell
+  form, so it does not conflict with the file's "do not teach the tokenizer a new shell form"
+  rule. That rule exists for third-party constructs that would otherwise be false positives.
+- **confmiss allow-set.** The test holds an explicit list of the three archive-setup debs. Each
+  `dpkg` record naming one of them must carry `--force-confmiss`. No other record may. Each name
+  must match exactly one record, so a reworded or deleted line fails instead of passing
+  "no other call carries it" vacuously.
+- **Non-vacuity, per verdict.** The frontend verdict keeps its non-empty guard over the whole call
+  set. The conffile verdict asserts separately that the number of records it **judged** is
+  greater than zero, because `remove`/`autoremove` calls keep the shared set non-empty even if
+  the configuring-verb classifier matches nothing.
+- **Failure message.** A `bad` conffile record prints the file and line plus the fix: add
+  `"${APT_CONFFILE_OPTS[@]}"` (or, in a file that cannot source `lib/constants.sh`, the two
+  literal `-o Dpkg::Options::=` options) to an apt/apt-get/nala call, or
+  `--force-confdef --force-confold` to a `dpkg` call. It names the knowledge doc section for why.
 
-The existing blind-spot list in that file applies unchanged to the new verdict. The call count is
-not restated here. It is derived by the tokenizer, and the test fails if the derived set is empty.
+What the token check cannot see: the array's contents, and a token sitting in a trailing comment
+(`judge` does not strip trailing comments, already a listed false-positive class for the frontend
+verdict). The argv tests in Testing step 2 are the only check on what the array actually holds,
+so they are required, not optional. The existing blind-spot list applies unchanged to the new
+verdict. The call count is not restated here; it is derived by the tokenizer.
 
 ## Testing
 
 TDD, vertical slices:
 
-1. **Gate first.** Fixture cases for the new verdict: a configuring call without the options is
-   `bad`, with the array token is `ok`, with the literal pair is `ok`, with only one of the pair
-   is `bad`, `remove` without options is not judged. Then run the gate against the real tree and
-   watch it go red on the unfixed sites before fixing any of them.
+1. **Gate first.** Fixture cases for the new verdict, then run it against the real tree and watch
+   it go red on the unfixed sites before fixing any of them.
 2. **Behaviour, one test per call shape.** An argv-recording stub on `PATH` for `nala`, `apt` and
    `dpkg`, reached through `tests/mocks/sudo`. Assert the recorded argv contains each option as a
-   separate argument for an xargs+nala site, a direct `apt install` site, and the `dpkg -i` site,
-   plus `--force-confmiss` for the last. This shows the array expands at run time, which a text
-   check cannot.
-3. **Mutation check.** Remove `"${APT_CONFFILE_OPTS[@]}"` from one xargs line and confirm both
-   the gate and the argv test go red. Remove `--force-confmiss` and confirm the confmiss check
-   goes red.
+   separate argument for an xargs+nala site, a direct `apt install` site, the powershell
+   `dpkg -i` and one volian `dpkg --install`, plus `--force-confmiss` for the last two. This shows
+   the array expands at run time, which a text check cannot.
+3. **`.dpkg-dist` advisory.** Point the helper's search root at a fixture directory through a
+   test seam (the real `/etc` is never searched under bats). Cases: one `.dpkg-dist` newer than
+   the marker is reported by path; one older is not; none gives no output; the return code is 0
+   in all three. A `run_update` test asserts the `conffiles` row reads WARN with one found and OK
+   with none, and that the run still exits 0.
+4. **Mutation check.** Remove `"${APT_CONFFILE_OPTS[@]}"` from one xargs line and confirm both
+   the gate and the argv test go red. Remove `--force-confmiss` from one volian line and confirm
+   the confmiss check goes red. Make the configuring-verb list match nothing and confirm the
+   judged-count assertion goes red.
 
 The real-tool proof is V1 and V2 below. The bats suite never runs a real apt or dpkg.
 
 ## Requirements
 
 - **R1.** `[PR1]` `lib/constants.sh` defines `APT_CONFFILE_OPTS` as a readonly array holding exactly `-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold`.
-- **R2.** `[PR1]` Every `sudo` call in tracked `lib/*.sh` and `setup_env.sh` running `apt`, `apt-get` or `nala` with `install`, `reinstall`, `upgrade`, `full-upgrade`, `dist-upgrade` or `build-dep` carries `"${APT_CONFFILE_OPTS[@]}"`, placed after the verb.
+- **R2.** `[PR1]` Every `sudo` call in tracked `lib/*.sh` and `setup_env.sh` running `apt`, `apt-get` or `nala` with `install`, `reinstall`, `upgrade`, `full-upgrade`, `dist-upgrade` or `build-dep` carries `"${APT_CONFFILE_OPTS[@]}"`.
 - **R3.** `[PR1]` The five `xargs -r sudo … nala install -y` lines in `lib/linux_ubuntu.sh` carry `"${APT_CONFFILE_OPTS[@]}"` in the fixed part of the command, before the package names xargs appends.
 - **R4.** `[PR1]` `update_apt_packages`' `nala full-upgrade` in `lib/linux_shared.sh` uses `"${APT_CONFFILE_OPTS[@]}"` in place of its literal options.
-- **R5.** `[PR1]` `_install_ubuntu_powershell`'s `dpkg -i` of `packages-microsoft-prod.deb` carries `--force-confdef --force-confold --force-confmiss`, with a comment saying why confmiss is there and nowhere else.
-- **R6.** `[PR1]` No apt, apt-get, nala or dpkg call in `lib/`, `setup_env.sh` or `scripts/` other than the R5 call carries `--force-confmiss`.
+- **R5.** `[PR1]` `_install_ubuntu_powershell`'s `dpkg -i` of `packages-microsoft-prod.deb` and `check_and_install_nala`'s two `dpkg --install` calls of `volian-archive-keyring_0.2.0_all.deb` and `volian-archive-nala_0.2.0_all.deb` each carry `--force-confdef --force-confold --force-confmiss`, with a comment at each saying why confmiss is there and nowhere else.
+- **R6.** `[PR1]` No apt, apt-get, nala or dpkg call in `lib/`, `setup_env.sh` or `scripts/` other than the three R5 calls carries `--force-confmiss`.
 - **R7.** `[PR1]` `scripts/bootstrap_linux.sh`'s `apt-get install` carries `-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold` literally.
-- **R8.** `[PR1]` `tests/scripts/dpkg_sudo_frontend.bats` gains a conffile verdict over the same call set as its frontend verdict: configuring apt/apt-get/nala verbs need the array token or both literal options, and `dpkg -i`/`--install`/`--configure` need `--force-confdef` and `--force-confold`. It fails on any `bad` record and on an empty call set.
-- **R9.** `[PR1]` The R8 verdict has fixture cases for: array token `ok`, literal pair `ok`, missing options `bad`, only one of the pair `bad`, and a `remove` call not judged.
-- **R10.** `[PR1]` Argv-recording tests assert the options arrive as separate arguments at an xargs+nala site, a direct `apt install` site and the R5 `dpkg -i`, which also receives `--force-confmiss`.
-- **R11.** `[PR1]` A backlog row is added for repairing machines already left at `iU` by an earlier conffile failure.
-- **V1.** On claude, re-run the §2 `dotfiles-cfprobe` probe through a changed `xargs … nala install` line (stdin `/dev/null`, edited conffile, v1 to v2). Expect rc 0, state `ii`, local edit kept, `.dpkg-dist` written.
-- **V2.** On claude, with a throwaway package whose conffile is deleted after install, run `dpkg -i` with the R5 options on a newer version. Expect rc 0, state `ii`, conffile restored.
-- **V3.** Mutation: dropping the array from one xargs line turns both the R8 gate and the R10 argv test red, and dropping `--force-confmiss` turns the R6/R5 check red.
+- **R8.** `[PR1]` `tests/scripts/dpkg_sudo_frontend.bats` gains a conffile verdict over the same call set as its frontend verdict: configuring apt/apt-get/nala verbs need the array token or both literal options anywhere in the call, and `dpkg -i`/`--install`/`--configure` need `--force-confdef` and `--force-confold` anywhere in the call. It fails on any `bad` record.
+- **R9.** `[PR1]` The conffile verdict asserts its own judged-record count is greater than zero, separate from the frontend verdict's non-empty guard.
+- **R10.** `[PR1]` `classify()` skips a `"${APT_CONFFILE_OPTS[@]}"` token when looking for the verb, so `apt "${APT_CONFFILE_OPTS[@]}" install x` is classified as `install`.
+- **R11.** `[PR1]` The test holds an explicit allow-set of the three R5 deb names; each name matches exactly one `dpkg` record, that record carries `--force-confmiss`, and no record outside the set does.
+- **R12.** `[PR1]` A `bad` conffile record's failure message names the file and line, the array (or the two literal options for a file that cannot source `lib/constants.sh`) as the apt fix, `--force-confdef --force-confold` as the dpkg fix, and `dotfiles-apt-upgrade-hazards.md` §2.
+- **R13.** `[PR1]` Fixture cases cover: array token after the verb `ok`, array token before the verb `ok`, literal pair `ok`, missing options `bad`, only one of the pair `bad`, dpkg force flags after the archive path `ok`, and a `remove` call not judged.
+- **R14.** `[PR1]` Argv-recording tests assert the options arrive as separate arguments at an xargs+nala site, a direct `apt install` site, the powershell `dpkg -i` and one volian `dpkg --install`, the last two also receiving `--force-confmiss`.
+- **R15.** `[PR1]` `report_new_dpkg_dist <marker>` in `lib/linux_shared.sh` prints one `log_warn` line per `*.dpkg-dist` file under its search root newer than `<marker>`, always returns 0, and takes its search root from a test seam defaulting to `/etc`.
+- **R16.** `[PR1]` `run_update` and `run_setup_or_developer` call `report_new_dpkg_dist "${_DOTFILES_RUN_TMPDIR}/started_at"` after their last apt step, on Ubuntu only.
+- **R17.** `[PR1]` `run_update` records a `conffiles` section in `_UPDATE_SECTION_ORDER`: WARN when the helper found any file, OK when it found none; the run's exit code is unaffected by it.
+- **R18.** `[PR1]` Tests cover: a `.dpkg-dist` newer than the marker reported, an older one not reported, none found gives no output, rc 0 in all three, and the `conffiles` row reading WARN and OK.
+- **R19.** `[PR1]` A backlog row is added for repairing packages other than the three R5 packages that are already left at `iU` by an earlier conffile failure.
+- **V1.** On claude, re-run the §2 `dotfiles-cfprobe` probe through a changed `xargs … nala install` line (stdin `/dev/null`, edited conffile, v1 to v2). Expect rc 0, state `ii`, local edit kept, `.dpkg-dist` written, and `report_new_dpkg_dist` naming it.
+- **V2.** Done at spec time on claude, 2026-10-03, recorded in Decision: same-version `dpkg -i --force-confdef --force-confold --force-confmiss` over an `iU` package with a deleted conffile gave rc 0, `ii`, file restored; without confmiss, rc 0, `ii`, file still absent. Re-run with the R5 command copied from the final code before merge.
+- **V3.** Mutation: dropping the array from one xargs line turns both the R8 gate and the R14 argv test red; dropping `--force-confmiss` from one volian line turns the R11 check red; making the configuring-verb list match nothing turns the R9 count red.
 - **N1.** No file is written under `/etc/apt/apt.conf.d/` or anywhere else outside the repo.
-- **N2.** `--force-confmiss` is not added to any call other than the R5 `dpkg -i`.
+- **N2.** `--force-confmiss` is not added to any call other than the three R5 calls.
 - **N3.** `remove`, `purge`, `autoremove` and `autopurge` calls are not changed.
 - **N4.** `Vagrantfile` is not changed; it has its own backlog row.
 - **N5.** No wrapper function is introduced between `sudo` and apt, apt-get, nala or dpkg.
+- **N6.** `report_new_dpkg_dist` does not run `find` under sudo, and does not move, delete or merge any `.dpkg-dist` file.
 
 ## Multi-Lens Review
 
@@ -154,19 +221,19 @@ Reviewed at commit: `992dcc3d` (Step 7 self-review commit, before Step 8 dispatc
 
 Finding: Worth building; premises verified (5 xargs sites at `lib/linux_ubuntu.sh:46,47,52,53,70`, #280 literals at `lib/linux_shared.sh:70-72`, R5 at `:202`, R7 at `scripts/bootstrap_linux.sh:35`, before-verb placement argument correct per `classify()`). Gap: `lib/helpers.sh:275,277` (`dpkg --install` of the volian keyring and nala debs, Noble path of `check_and_install_nala`) are judged by R8 but named by no requirement, so Phase 2's "watch it go red" step hits them with no mandate. R6/N2 is an absence check protected only by the shared non-empty call set.
 Assumption: the xargs sites always take nala's apt path (honouring `Dpkg::Options`) rather than `dpkg -i`; refuted if a package list holds a local `.deb` path. Checked by the author: `grep -nE '\.deb|/' ubuntu_*_packages.txt` returns nothing.
-Disposition:
+Disposition: Addressed (operator, 2026-10-03) — `helpers.sh:275,277` added to R5 with confmiss (operator chose confmiss for the volian keyring/source debs, same class as packages-microsoft-prod); R6 confmiss absence now backed by R11's exact-match allow-set. Assumption checked: `grep -nE '\.deb|/' ubuntu_*_packages.txt` returns nothing.
 
 ### Ergonomics
 
 Finding: (1) same `helpers.sh:275,277` gap. (2) The conffile verdict's empty-set guard is over the frontend call set, which `remove`/`autoremove` keep non-empty, so a classifier that judges zero configuring calls passes. (3) Array-before-verb drops out of both verdicts silently; the existing failure message names only DEBIAN_FRONTEND and the spec defines none for the new verdict. (4) Advisory: nothing surfaces new `.dpkg-dist` files, so an upstream conffile change now arrives unannounced; suggests a `-t update`/doctor advisory.
 Assumption: `dpkg -i --force-confmiss` repairs the §2b state (same-version deb over an `iU` package with a deleted conffile). §2b measured `dpkg --configure --force-confmiss`; V2 tests a newer version over `ii`. Settled by a throwaway-package probe on claude.
-Disposition:
+Disposition: Addressed (operator, 2026-10-03) — (1) as Goal-Fit; (2) R9 judged-count; (3) R10 `classify()` skips the array token, placement rule removed, R12 failure message; (4) operator chose to add it to this spec: R15–R18 `.dpkg-dist` advisory. Assumption probed on claude before disposition: holds (Decision table, V2).
 
 ### Risk
 
 Finding: Sound and proportionate. Probes: `nala install --help` documents `-o` pass-through (nala 0.16.0); `dpkg --force-help` lists confdef/confold/confmiss; the array token survives the tokenizer as one token; re-sourcing a `readonly -a` behaves like the file's existing readonly scalars; no `lib/` code deletes `microsoft-prod.gpg` (only the azure legacy cleanup at `linux_ubuntu.sh:641-645` removes Microsoft files, different ones). Gaps: (1) judged-subset emptiness, as Ergonomics (2); the confmiss check must assert exactly one matched record, or a reworded line passes "no other call does" vacuously. (2) The token check cannot see the array's contents or a token in a trailing comment; R10 is the only contents check and must stay. (3) dpkg flag placement unspecified; copying `classify()`'s leading-flag loop would false-fail a flag after the `.deb` path. (4) `helpers.sh:275,277`; volian-archive-keyring is keyring-only, so the confmiss argument applies to it too — give it confmiss or say why not.
 Assumption: same as Ergonomics — same-version `dpkg -i --force-confmiss` over an `iU` package with a deleted conffile ends `ii` with the file restored.
-Disposition:
+Disposition: Addressed (operator, 2026-10-03) — (1) R9 and R11; (2) R14 argv tests stated as the only contents check, required; (3) dpkg force flags matched anywhere in the call, R8/R13; (4) volian debs in R5 with confmiss. Assumption probed: holds; confmiss shown load-bearing by the confold-only control.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
