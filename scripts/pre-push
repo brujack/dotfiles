@@ -23,18 +23,49 @@ _path_is_inert() {
     # Deleted at the tip: never lands, so judged by name alone.
     git cat-file -e "${_sha}:${_path}" 2>/dev/null || return 0
     [[ "$(git cat-file -t "${_sha}:${_path}" 2>/dev/null)" == "blob" ]] || return 1
-    # Process substitution, not a pipe: head closing early is SIGPIPE (141)
-    # under pipefail on any blob larger than the pipe buffer.
-    _head="$(head -c 2 < <(git cat-file blob "${_sha}:${_path}"))"
+    # Process substitution rather than a pipe: a pipe would be harmless here
+    # (no pipefail), and this stays quiet about SIGPIPE if pipefail is ever added.
+    # A blob that exists but cannot be read is not inert; note only head's own
+    # failure is visible here, since a process substitution's status is not.
+    _head="$(head -c 2 < <(git cat-file blob "${_sha}:${_path}"))" || return 1
     [[ "${_head}" != '#!' ]]
+}
+
+# Recovery for refused paths, chosen from the ref line's local_ref, not the
+# current branch: a session on feat can still push local master. git hands the
+# hook local_ref=HEAD when the push names HEAD as its source, so HEAD is resolved.
+_print_recovery() {
+    local _ref="${1}" _branch
+    case "${_ref}" in
+        refs/heads/*) _branch="${_ref#refs/heads/}" ;;
+        HEAD)
+            if ! _branch="$(git symbolic-ref -q --short HEAD 2>/dev/null)"; then
+                _branch=""
+            fi
+            ;;
+        *) _branch="" ;;
+    esac
+    if [[ "${_branch}" == "master" ]]; then
+        printf 'Move the commits onto a branch, open a PR, then reset local master:\n' >&2
+        printf '  git switch -c <name>\n' >&2
+        printf '  git push -u origin <name> && gh pr create --fill\n' >&2
+        printf '  git switch master && git reset --keep origin/master\n' >&2
+        printf 'If reset --keep refuses, commit or set aside the uncommitted change first;\n' >&2
+        printf 'nothing is lost. In a worktree, run the reset in the main checkout.\n' >&2
+    elif [[ -n "${_branch}" ]]; then
+        printf 'Push the branch itself and open a PR:\n' >&2
+        printf '  git push -u origin %s && gh pr create --fill\n' "${_branch}" >&2
+    else
+        printf 'Create a branch first (detached HEAD), then push it and open a PR:\n' >&2
+        printf '  git switch -c <name>\n' >&2
+        printf '  git push -u origin <name> && gh pr create --fill\n' >&2
+    fi
 }
 
 needs_test=0
 refuse_paths=""
-# shellcheck disable=SC2034 # git's pre-push protocol supplies 4 whitespace-separated
-# fields per stdin line; local_ref must be named to consume the line
-# positionally even though it is never read. remote_ref IS read, by the
-# direct-to-master guard below.
+refuse_local_ref=""
+unresolved_refs=""
 while read -r local_ref local_sha remote_ref remote_sha; do
     [[ "${local_sha}" == "0000000000000000000000000000000000000000" ]] && continue
 
@@ -75,29 +106,37 @@ while read -r local_ref local_sha remote_ref remote_sha; do
         done <<< "${changed}"
     fi
 
-    # Direct-to-master guard. ci.yml triggers on pull_request only, so a code
-    # change pushed straight to master is validated by nothing -- measured
-    # 2026-09-11, five such pushes in one session. Accumulate rather than
-    # exiting here: the loop must drain every ref line (a single push can send
-    # a real branch plus a deletion), so the verdict is read after the loop.
-    #
-    # Scope is the executable class the operator chose, deliberately narrower
-    # than sdlc-branch-guard's is_safe_file: .zshrc, starship.toml,
-    # .shellcheckrc and .github/workflows/*.yml stay pushable direct, none
-    # having ever been pushed that way. tests/mocks/* is extensionless shell
-    # and is NOT covered -- a known gap, recorded rather than silently closed.
-    if [[ "${remote_ref}" == "refs/heads/master" && -n "${changed}" ]]; then
-        _offenders="$(printf '%s\n' "${changed}" \
-            | grep -E '\.(sh|bash|bats|zsh)$|(^|/)Makefile$|^scripts/(pre-push|commit-msg)$' || true)"
-        [[ -n "${_offenders}" ]] && refuse_paths="${refuse_paths}${_offenders}"$'\n'
+    # Direct-to-master guard. ci.yml triggers on pull_request only, so anything
+    # pushed straight to master that is not provably inert is validated by
+    # nothing. Accumulate rather than exiting: the loop must drain every ref
+    # line (a push can carry a branch plus a deletion); the verdict is read
+    # after it.
+    if [[ "${remote_ref}" == "refs/heads/master" ]]; then
+        if [[ ${diff_rc} -ne 0 ]]; then
+            unresolved_refs="${unresolved_refs}${remote_ref}"$'\n'
+        elif [[ -n "${live_paths}" ]]; then
+            refuse_paths="${refuse_paths}${live_paths}"
+            refuse_local_ref="${local_ref}"
+        fi
     fi
 done
 
+if [[ -n "${unresolved_refs}" ]]; then
+    printf 'pre-push: cannot resolve the diff range for a push to:\n' >&2
+    printf '%s\n' "${unresolved_refs}" | grep -v '^$' | sed 's/^/  /' >&2
+    printf 'Run git fetch and retry the push.\n' >&2
+    exit 1
+fi
+
 if [[ -n "${refuse_paths}" ]]; then
-    printf 'pre-push: refusing a direct push to master carrying executable files.\n' >&2
+    printf 'pre-push: refusing a direct push to master carrying non-inert paths:\n' >&2
     printf '%s\n' "${refuse_paths}" | grep -v '^$' | sed 's/^/  /' >&2
-    printf 'ci.yml runs on pull_request only, so these would reach master with no CI.\n' >&2
-    printf 'Use a branch and a PR: git push -u origin HEAD:feat/<name> && gh pr create\n' >&2
+    printf 'Only .md files and the root LICENSE may go to master directly.\n' >&2
+    printf 'ci.yml runs on pull_request only, so these would reach master untested.\n' >&2
+    _print_recovery "${refuse_local_ref}"
+    printf 'Emergency (hotfix-cycle, rollback-cycle): open the PR the same way and merge\n' >&2
+    printf 'it with gh pr merge --admin. Do not bypass this hook.\n' >&2
+    printf 'A push carrying a branch and master is refused whole; push the branch on its own.\n' >&2
     exit 1
 fi
 

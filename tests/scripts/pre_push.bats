@@ -11,7 +11,7 @@ setup() {
   mkdir -p "${REPO_DIR}" "${MAKE_MOCK_DIR}"
   bash -c "
     export PATH='${CLEAN_PATH}'
-    unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+    unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
     git -C '${REPO_DIR}' init --quiet
     git -C '${REPO_DIR}' config user.email 'test@test.com'
     git -C '${REPO_DIR}' config user.name 'Test'
@@ -36,7 +36,7 @@ _commit_file() {
   local _path="${1}" _content="${2}" _msg="${3}"
   bash -c "
     export PATH='${CLEAN_PATH}'
-    unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+    unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
     mkdir -p \"\$(dirname '${REPO_DIR}/${_path}')\"
     printf '%s\n' '${_content}' > '${REPO_DIR}/${_path}'
     git -C '${REPO_DIR}' add '${_path}'
@@ -55,7 +55,7 @@ _run_pre_push() {
   local _path_with_make="${MAKE_MOCK_DIR}:${CLEAN_PATH}"
   printf "%b" "${_stdin}" | bash -c "
     export PATH='${_path_with_make}'
-    unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+    unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
     cd '${REPO_DIR}' && bash '${REPO_ROOT}/scripts/pre-push'
   "
 }
@@ -412,7 +412,7 @@ _commit_raw() {
   local _path="${1}" _src="${2}" _msg="${3}"
   bash -c "
     export PATH='${CLEAN_PATH}'
-    unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+    unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
     mkdir -p \"\$(dirname '${REPO_DIR}/${_path}')\"
     cp '${_src}' '${REPO_DIR}/${_path}'
     git -C '${REPO_DIR}' add '${_path}'
@@ -424,7 +424,7 @@ _commit_raw() {
 _git_clean() {
   bash -c "
     export PATH='${CLEAN_PATH}'
-    unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+    unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
     git -C '${REPO_DIR}' $*
   "
 }
@@ -576,4 +576,309 @@ _assert_suite_ran() { grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"; }
   run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
   [ "$status" -eq 0 ]
   [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
+# ── default-deny master guard and recovery messages ─────────────────────────
+# Guard tests push to refs/heads/master. _on_branch sets the checkout the hook
+# sees, because a local_ref of HEAD is resolved from it.
+
+_on_branch() { _git_clean "checkout --quiet -B ${1}"; }
+
+_assert_refused() {
+  [ "$status" -eq 1 ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+  [[ "$output" == *"gh pr merge --admin"* ]]
+  [[ "$output" != *"--no-verify"* ]]
+}
+
+# Commit one path (content via printf) and push it to master; sets $output.
+_master_push_of() {
+  local _path="${1}" _content="${2:-x}" _base _sha
+  _base=$(_commit_file "README.md" "v1" "docs: v1")
+  _sha=$(_commit_file "${_path}" "${_content}" "chore: add path")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${_sha} refs/heads/master ${_base}\n"
+}
+
+@test "master guard refuses and names tests/mocks/x" {
+  _master_push_of "tests/mocks/x" "echo hi"
+  _assert_refused
+  [[ "$output" == *"tests/mocks/x"* ]]
+}
+
+@test "master guard refuses and names a.py" {
+  _master_push_of "a.py" "print(1)"
+  _assert_refused
+  [[ "$output" == *"a.py"* ]]
+}
+
+@test "master guard refuses and names .zshrc" {
+  _master_push_of ".zshrc" "echo hi"
+  _assert_refused
+  [[ "$output" == *".zshrc"* ]]
+}
+
+@test "master guard refuses and names uv.lock" {
+  _master_push_of "uv.lock" "lock"
+  _assert_refused
+  [[ "$output" == *"uv.lock"* ]]
+}
+
+@test "master guard refuses and names a workflow file" {
+  _master_push_of ".github/workflows/ci.yml" "name: CI"
+  _assert_refused
+  [[ "$output" == *".github/workflows/ci.yml"* ]]
+}
+
+@test "master guard refuses and names .warp/settings.toml" {
+  _master_push_of ".warp/settings.toml" "a = 1"
+  _assert_refused
+  [[ "$output" == *".warp/settings.toml"* ]]
+}
+
+@test "master guard refuses and names renovate.json" {
+  _master_push_of "renovate.json" "{}"
+  _assert_refused
+  [[ "$output" == *"renovate.json"* ]]
+}
+
+@test "master guard refuses and names a dotfile txt under docs" {
+  _master_push_of "docs/x/.state.txt" "s"
+  _assert_refused
+  [[ "$output" == *"docs/x/.state.txt"* ]]
+}
+
+@test "master guard refuses and names an unknown extension" {
+  _master_push_of "foo.unknown" "s"
+  _assert_refused
+  [[ "$output" == *"foo.unknown"* ]]
+}
+
+@test "master guard allows docs/a.md" {
+  _master_push_of "docs/a.md" "x"
+  [ "$status" -eq 0 ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
+@test "master guard allows README.md" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "README.md" "v2" "docs: v2")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
+@test "master guard allows the root LICENSE" {
+  _master_push_of "LICENSE" "MIT"
+  [ "$status" -eq 0 ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
+@test "master guard allows a non-ASCII markdown name" {
+  _master_push_of "docs/café.md" "x"
+  [ "$status" -eq 0 ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
+@test "master guard allows a 300 KB markdown file" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  head -c 300000 /dev/zero | tr '\0' 'a' > "${BATS_TEST_TMPDIR}/big"
+  local_sha=$(_commit_raw "docs/big.md" "${BATS_TEST_TMPDIR}/big" "docs: big")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
+@test "master guard allows foo/tests/a.md" {
+  _master_push_of "foo/tests/a.md" "x"
+  [ "$status" -eq 0 ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
+@test "master guard allows deleting docs/old.md" {
+  _commit_file "docs/old.md" "x" "docs: old" > /dev/null
+  base_sha=$(_git_clean "rev-parse HEAD")
+  _git_clean "rm --quiet docs/old.md"
+  _git_clean "commit --quiet -m 'docs: rm'"
+  local_sha=$(_git_clean "rev-parse HEAD")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
+@test "master guard refuses a shebang .md" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  printf '#!/usr/bin/env bash\necho hi\n' > "${BATS_TEST_TMPDIR}/evil"
+  local_sha=$(_commit_raw "docs/evil.md" "${BATS_TEST_TMPDIR}/evil" "docs: evil")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  _assert_refused
+  [[ "$output" == *"docs/evil.md"* ]]
+}
+
+@test "master guard refuses a shebang LICENSE" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  printf '#!/usr/bin/env bash\necho hi\n' > "${BATS_TEST_TMPDIR}/lic"
+  local_sha=$(_commit_raw "LICENSE" "${BATS_TEST_TMPDIR}/lic" "chore: license")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  _assert_refused
+}
+
+@test "master guard refuses tests/a.md" {
+  _master_push_of "tests/a.md" "x"
+  _assert_refused
+  [[ "$output" == *"tests/a.md"* ]]
+}
+
+@test "master guard refuses x/LICENSE" {
+  _master_push_of "x/LICENSE" "MIT"
+  _assert_refused
+  [[ "$output" == *"x/LICENSE"* ]]
+}
+
+@test "master guard refuses a.md.sh" {
+  _master_push_of "a.md.sh" "echo hi"
+  _assert_refused
+  [[ "$output" == *"a.md.sh"* ]]
+}
+
+@test "master guard refuses a path containing a newline" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  bash -c "
+    export PATH='${CLEAN_PATH}'
+    unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
+    p=\$'a\nb.md'
+    printf 'x\n' > '${REPO_DIR}/'\"\${p}\"
+    git -C '${REPO_DIR}' add -A
+    git -C '${REPO_DIR}' commit --quiet -m 'chore: newline name'
+  "
+  local_sha=$(_git_clean "rev-parse HEAD")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  _assert_refused
+}
+
+@test "master guard refuses the deletion of a shell script" {
+  _commit_file "x.sh" "echo hi" "feat: x" > /dev/null
+  base_sha=$(_git_clean "rev-parse HEAD")
+  _git_clean "rm --quiet x.sh"
+  _git_clean "commit --quiet -m 'chore: rm'"
+  local_sha=$(_git_clean "rev-parse HEAD")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  _assert_refused
+  [[ "$output" == *"x.sh"* ]]
+}
+
+@test "master guard refuses x.sh renamed to x.md and names x.sh" {
+  _commit_file "x.sh" "echo hi" "feat: x" > /dev/null
+  base_sha=$(_git_clean "rev-parse HEAD")
+  _git_clean "mv x.sh x.md"
+  _git_clean "commit --quiet -m 'chore: rename'"
+  local_sha=$(_git_clean "rev-parse HEAD")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  _assert_refused
+  [[ "$output" == *"x.sh"* ]]
+}
+
+@test "master guard with an unknown remote_sha says fetch and omits the PR recipe" {
+  local_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n"
+  [ "$status" -eq 1 ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+  [[ "$output" == *"git fetch"* ]]
+  [[ "$output" == *"refs/heads/master"* ]]
+  [[ "$output" != *"gh pr create"* ]]
+}
+
+@test "master recipe for local_ref master uses reset --keep, not a push of the current branch" {
+  _on_branch feat
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "deploy.sh" "echo hi" "feat: deploy")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  _assert_refused
+  [[ "$output" == *"git switch -c"* ]]
+  [[ "$output" == *"git reset --keep origin/master"* ]]
+  [[ "$output" != *"git push -u origin feat"* ]]
+}
+
+@test "branch recipe for local_ref feat names feat and lacks reset --keep" {
+  _on_branch feat
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "deploy.sh" "echo hi" "feat: deploy")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/feat ${local_sha} refs/heads/master ${base_sha}\n"
+  _assert_refused
+  [[ "$output" == *"git push -u origin feat"* ]]
+  [[ "$output" != *"reset --keep"* ]]
+}
+
+@test "HEAD on branch feat gives the feat recipe" {
+  _on_branch feat
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "deploy.sh" "echo hi" "feat: deploy")
+  _write_make_mock 0
+  run _run_pre_push "HEAD ${local_sha} refs/heads/master ${base_sha}\n"
+  _assert_refused
+  [[ "$output" == *"git push -u origin feat"* ]]
+  [[ "$output" != *"reset --keep"* ]]
+}
+
+@test "HEAD on master gives the local-master recipe" {
+  _on_branch master
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "deploy.sh" "echo hi" "feat: deploy")
+  _write_make_mock 0
+  run _run_pre_push "HEAD ${local_sha} refs/heads/master ${base_sha}\n"
+  _assert_refused
+  [[ "$output" == *"git reset --keep origin/master"* ]]
+}
+
+@test "detached HEAD gives git switch -c" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "deploy.sh" "echo hi" "feat: deploy")
+  _git_clean "checkout --quiet --detach"
+  _write_make_mock 0
+  run _run_pre_push "HEAD ${local_sha} refs/heads/master ${base_sha}\n"
+  _assert_refused
+  [[ "$output" == *"git switch -c"* ]]
+  [[ "$output" != *"reset --keep"* ]]
+}
+
+@test "master guard refuses a docs commit stacked on an unpushed code commit" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  _commit_file "deploy.sh" "echo hi" "feat: deploy" > /dev/null
+  local_sha=$(_commit_file "docs/a.md" "x" "docs: a")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  _assert_refused
+  [[ "$output" == *"deploy.sh"* ]]
+}
+
+@test "non-inert path on a feature ref runs the suite and exits 0" {
+  _master_push_of "deploy.sh" "echo hi" # populates repo; ignore its result
+  rm -f "${MOCK_CALLS_FILE}"
+  base_sha=$(_git_clean "rev-parse HEAD~1")
+  local_sha=$(_git_clean "rev-parse HEAD")
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  _assert_suite_ran
+}
+
+@test "master guard resets live_paths per ref: second inert ref does not hide the first, first does not leak into second" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  sha1=$(_commit_file "deploy.sh" "echo hi" "feat: deploy")
+  sha2=$(_commit_file "docs/a.md" "x" "docs: a")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${sha1} refs/heads/master ${base_sha}\nrefs/heads/master ${sha2} refs/heads/master ${sha1}\n"
+  _assert_refused
+  [[ "$output" == *"deploy.sh"* ]]
+  [[ "$output" != *"docs/a.md"* ]]
 }
