@@ -429,7 +429,9 @@ _git_clean() {
   "
 }
 
-_assert_suite_ran() { grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"; }
+_assert_suite_ran() {
+  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+}
 
 @test "pre-push skips a docs markdown file" {
   base_sha=$(_commit_file "README.md" "v1" "docs: v1")
