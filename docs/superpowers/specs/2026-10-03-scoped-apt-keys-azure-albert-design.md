@@ -49,9 +49,11 @@ A new `_build_pinned_keyring <key_file> <keyring> <fpr>` builds a keyring as fol
 
 1. Runs `gpg --dearmor < key_file | sudo tee keyring > /dev/null` through `_MS_GPG_BIN`
    (default `gpg`), so tests can use the real gpg.
-2. Succeeds only if gpg's own exit status (`PIPESTATUS[0]`) is 0, the keyring is
-   non-empty, **and** the `--show-keys --with-colons` listing holds exactly one `pub:`
-   record, whose `fpr` equals the pin.
+2. Succeeds only if gpg's own exit status (`PIPESTATUS[0]`) is 0 **and** the
+   `--show-keys --with-colons` listing holds exactly one `pub:` record, that record's
+   validity field is not `r` (revoked), and its `fpr` equals the pin. An empty keyring
+   fails the count, so no separate emptiness check is needed. Expired (`e`) is accepted:
+   apt reports an expired key itself, and the albert test fixture expires 2027-02-10.
 3. On any failure, `sudo rm -f` the keyring and return 1.
 
 **The single-key rule is new and load-bearing.** Today's check passes if _any_ `fpr:` line
@@ -72,10 +74,19 @@ Extracted from `_install_ubuntu_cloud_tools`, the same way edge was extracted.
   package's own `.sources` is live.
 - Source `${_APT_SOURCES_DIR}/azure-cli.list`, written directly:
   `deb [arch=$(dpkg --print-architecture) signed-by=<keyring>] https://packages.microsoft.com/repos/azure-cli/ <codename> main`.
-  The codename keeps the existing rule: `noble` when `RESOLUTE` is set.
+  The codename is `$(lsb_release -cs)`. The `noble` fallback for `RESOLUTE` is dropped:
+  azure-cli publishes a `resolute` suite (`2.90.0-1~resolute`, measured 2026-10-03),
+  signed by the pinned key.
 - `add-apt-repository` and the `http://` key fetch are removed.
-- If the keyring fails: `log_warn` naming the keyring and the cause, remove the source, and
-  **skip** `apt install azure-cli`.
+- If the keyring fails: `log_warn` naming the keyring and the cause, remove the source,
+  **skip** `apt install azure-cli`, and return 2.
+- **Microsoft re-keying is not caught here, deliberately.** The vendored key keeps matching
+  `MS_GPG_FPR`, so if Microsoft moves azure-cli to its 2025 key
+  (`AA86F75E427A19DD33346403EE4D7792F748182B`, already published) the keyring builds and the
+  failure appears as `NO_PUBKEY AA86…` from `apt update`. Recovery: vendor
+  `https://packages.microsoft.com/keys/microsoft-2025.asc` after checking its fingerprint,
+  and point azure at it. Accepted at review: neither azure-cli suite is signed by it today,
+  and the failure is loud.
 
 ### 3. `_install_ubuntu_albert`
 
@@ -92,7 +103,19 @@ Extracted from `_install_ubuntu_gui_tools`; still gated on `HAS_SNAP`.
   expiry without changing the fingerprint, so a fingerprint pin follows an extension
   automatically and a vendored copy would not. A changed fingerprint still fails closed.
 - A curl failure or a keyring failure takes the same path as azure: warn, no source, no
-  install.
+  install, return 2. On a fingerprint mismatch the WARN prints the fetched fingerprint next
+  to `ALBERT_GPG_FPR` and names the remedy: verify the new key out of band, then edit
+  `lib/constants.sh`.
+
+### Return codes
+
+Both new functions return 0 on success and 2 on a key failure. `_install_ubuntu_cloud_tools`
+and `_install_ubuntu_gui_tools` must surface that 2 as a non-zero return, so the step loop
+(`lib/linux_ubuntu.sh:28`, `"_install_ubuntu_${_step}" || _failed+=(...)`) names the step in
+`ubuntu packages: failed:` and `-t developer` reports it. Both callers today return whatever
+their last command returned, and that must not change on the success path: capture the
+child's rc, let the rest of the step run, and return non-zero at the end only when a child
+failed. A trailing `return "${_rc}"` with `_rc=0` would mask the last command's status.
 
 ### 4. Legacy cleanup
 
@@ -122,9 +145,14 @@ scope in `tests/setup_env/linux_ubuntu.bats`:
 | `_APT_TRUSTED_DIR`  | `/etc/apt/trusted.gpg.d`  |
 | `_APT_KEYRINGS_DIR` | `/usr/share/keyrings`     |
 
-`_ALBERT_KEY_URL` is a fourth seam, so tests never reach the network. It uses a `file://`
-URL to a fixture, read by the real curl; `tests/mocks/curl` cannot carry a key through
-`-o`. The edge seams (`_EDGE_SOURCES_DIR`, `_EDGE_BOOTSTRAP_KEYRING`) stay as they are.
+`_ALBERT_KEY_URL` is a fourth seam, a production escape hatch for the key URL. Tests do not
+need it to stay off the network: `tests/mocks/curl` is first on `PATH`, never fetches, and
+writes `MOCK_CURL_STDOUT` to the `-o` target (it only `touch`es the target when that is
+unset). Tests feed the fixture's armored text through `MOCK_CURL_STDOUT` and drive the fetch
+failure with `MOCK_CURL_EXIT`. The edge seams (`_EDGE_SOURCES_DIR`,
+`_EDGE_BOOTSTRAP_KEYRING`) stay as they are. `_MS_GPG_BIN` keeps its name although it now
+also governs the albert key: renaming it would edit the edge tests, which R2 keeps
+unchanged. The comment at `lib/linux_ubuntu.sh:789` ("unseamed albert writes") is updated.
 
 ### Testing
 
@@ -135,26 +163,34 @@ expiry does not break the tests.
 
 The builder is tested directly, plus once through each caller. Cases:
 
-| case                                  | expected                                                                                    |
-| ------------------------------------- | ------------------------------------------------------------------------------------------- |
-| pinned key                            | keyring holds exactly the pinned fingerprint; returns 0                                     |
-| wrong key                             | returns 1; keyring absent                                                                   |
-| pinned key with a second key appended | returns 1; keyring absent                                                                   |
-| truncated key                         | returns 1; keyring absent                                                                   |
-| gpg exits non-zero                    | returns 1; keyring absent                                                                   |
-| azure, good key                       | `azure-cli.list` holds `https://` and `signed-by=<keyring>`; `apt install azure-cli` called |
-| azure, bad key                        | no `azure-cli.list`; `apt install azure-cli` not called; WARN names the keyring             |
-| albert, good key                      | `albert.list` holds `https://` and `signed-by=`; `apt install albert` called                |
-| albert, curl fails                    | no `albert.list`, no keyring, no install; temp file removed                                 |
-| legacy cleanup                        | every file in §4 removed, including a glob-matched `archive_uri-…-resolute.list`            |
-| legacy cleanup on the failure path    | global keys removed even when the new keyring fails                                         |
-| second run                            | the same files, byte-identical                                                              |
-| no `http://` sources left             | no `.list` either function writes contains `http://`                                        |
+| case | expected |
+| --- | --- |
+| pinned key | keyring holds exactly the pinned fingerprint; returns 0 |
+| wrong key | returns 1; keyring absent |
+| pinned key with a second key appended | returns 1; keyring absent |
+| truncated key | returns 1; keyring absent |
+| revoked pinned key | returns 1; keyring absent |
+| gpg exits non-zero | returns 1; keyring absent |
+| azure, good key | `azure-cli.list` holds `https://`, `signed-by=<keyring>` and the `dpkg --print-architecture` value; `apt install azure-cli` called; returns 0 |
+| azure, codename | `azure-cli.list` names the `lsb_release -cs` value, including `resolute` |
+| azure, bad key | no `azure-cli.list`; `apt install azure-cli` not called; WARN names the keyring; returns 2 |
+| albert, good key | `albert.list` holds `https://` and `signed-by=`; `apt install albert` called; returns 0 |
+| albert, wrong fingerprint | no source, no install; WARN prints the fetched fingerprint and `ALBERT_GPG_FPR`; returns 2 |
+| albert, curl fails (`MOCK_CURL_EXIT`) | no `albert.list`, no keyring, no install; temp file removed; returns 2 |
+| caller propagation | a key failure makes `_install_ubuntu_cloud_tools` / `_install_ubuntu_gui_tools` return non-zero, and `install_ubuntu_packages` names the step |
+| legacy cleanup | fixtures seeded and asserted present first; then every file in §4 removed, including a glob-matched `archive_uri-…-resolute.list` |
+| legacy cleanup on the failure path | fixtures seeded and asserted present first; global keys removed even when the new keyring fails |
+| second run | both `.list` files asserted present first; then byte-identical after a second run |
+| no `http://` sources left | both `.list` files asserted present first; neither contains `http://` |
 
-The existing test "removes stale azure-cli sources before add-apt-repository" is replaced by
-the legacy-cleanup case, which asserts on real files rather than the mock log. Assertions on
-absence carry a positive control: the good-key case in the same file proves the mechanism
-writes when it should (`tdd.md` E5).
+Every row asserting an absence or an equality carries its own presence assertion in the same
+test (`tdd.md` E5): a separate good-key test is not a control on this test's run.
+
+Existing tests that change: "removes stale azure-cli sources before add-apt-repository"
+(`:1497`, greps the mock log) is replaced by the legacy-cleanup rows; "azure-cli APT stanza
+uses dpkg --print-architecture" (`:1454`) and "on RESOLUTE uses noble for azure-cli repo"
+(`:1487`) assert on `add-apt-repository` and are rewritten as the "azure, good key" and
+"azure, codename" rows against `azure-cli.list`'s contents.
 
 ## Verification after merge
 
@@ -165,6 +201,11 @@ Run `./setup_env.sh -t developer` on `claude`, then:
   `signed-by`, and no `archive_uri-http…azure-cli…` file.
 - `sudo apt update` exits 0 with no `NO_PUBKEY` for either source.
 - `az version` and `albert --version` still run.
+- `cruncher` (WSL2) was unreachable at review time. Before it next runs setup, check that
+  `grep -rLE 'signed-by|Signed-By' /etc/apt/sources.list.d/ | xargs -r grep -lE 'microsoft|manuelschneid3r'`
+  prints only the two legacy files.
+- Albert pool `.deb`s redirect to a geo-chosen mirror and apt refuses https-to-http. Only
+  `claude`'s location was measured (https end to end); accepted at review.
 
 ## Out of scope
 
@@ -174,16 +215,17 @@ Run `./setup_env.sh -t developer` on `claude`, then:
 
 ## Requirements
 
-- **R1.** `_build_pinned_keyring` returns 1 and leaves no keyring when gpg exits non-zero, the keyring is empty, the listing holds more than one `pub:` record, or the single key's fingerprint differs from the pin.
+- **R1.** `_build_pinned_keyring` returns 1 and leaves no keyring when gpg exits non-zero, the listing does not hold exactly one `pub:` record, that record is revoked, or its fingerprint differs from the pin.
 - **R2.** `_install_ubuntu_edge_source` builds its keyring through `_build_pinned_keyring`, and every existing edge test passes unchanged.
 - **R3.** `lib/linux_ubuntu.sh` contains no `http://packages.microsoft.com` URL and no `add-apt-repository` call for azure-cli.
-- **R4.** `_install_ubuntu_azure_cli` writes `${_APT_SOURCES_DIR}/azure-cli.list` with an `https://packages.microsoft.com/repos/azure-cli/` URL and `signed-by=${_APT_KEYRINGS_DIR}/microsoft-azure-cli.gpg`, built from the vendored key and pinned to `MS_GPG_FPR`.
+- **R4.** `_install_ubuntu_azure_cli` writes `${_APT_SOURCES_DIR}/azure-cli.list` with an `https://packages.microsoft.com/repos/azure-cli/` URL, the `lsb_release -cs` codename (no `noble` fallback), and `signed-by=${_APT_KEYRINGS_DIR}/microsoft-azure-cli.gpg`, built from the vendored key and pinned to `MS_GPG_FPR`.
 - **R5.** `lib/constants.sh` defines `ALBERT_GPG_FPR="A4B83CD05FDF5C5178482D4A1488EB46E192A257"`.
 - **R6.** `_install_ubuntu_albert` fetches the key over `https` to a temp file it always removes, and writes `${_APT_SOURCES_DIR}/albert.list` with an `https://download.opensuse.org/` URL and `signed-by=${_APT_KEYRINGS_DIR}/albert-obs.gpg`.
-- **R7.** When a keyring cannot be built, or albert's key fetch fails, the function logs a WARN naming the keyring, writes no source, and does not run `apt install` for that package.
+- **R7.** When a keyring cannot be built, or albert's key fetch fails, the function logs a WARN naming the keyring, writes no source, does not run `apt install` for that package, and returns 2; on an albert fingerprint mismatch the WARN also prints the fetched fingerprint and `ALBERT_GPG_FPR`.
 - **R8.** Each function removes its legacy files (Design §4), including the globbed `archive_uri-http_packages_microsoft_com_repos_azure-cli_-*.list`, before attempting the new keyring, so they are removed on both the success and the failure path.
 - **R9.** `_APT_SOURCES_DIR`, `_APT_TRUSTED_DIR`, `_APT_KEYRINGS_DIR` and `_ALBERT_KEY_URL` are honoured by the code, and set at setup scope in `tests/setup_env/linux_ubuntu.bats`.
-- **R10.** Tests cover every row of the Testing table with real gpg and the `tests/fixtures/albert-obs.asc` fixture, and the mock-log purge test is replaced by one that asserts on real files.
+- **R10.** Tests cover every row of the Testing table with real gpg and the `tests/fixtures/albert-obs.asc` fixture fed through `MOCK_CURL_STDOUT`; the tests at `linux_ubuntu.bats:1454`, `:1487` and `:1497` are replaced by rows asserting on real file contents.
+- **R11.** A return of 2 from either new function makes its caller (`_install_ubuntu_cloud_tools`, `_install_ubuntu_gui_tools`) return non-zero after the rest of the step runs, without changing the caller's return on the success path.
 - **V1.** After merge, `./setup_env.sh -t developer` on `claude` leaves no legacy key in `/etc/apt/trusted.gpg.d/`, and `sudo apt update` exits 0 with no `NO_PUBKEY`.
 - **V2.** `az version` and `albert --version` run on `claude` after that setup.
 - **N1.** No change to any other `_install_ubuntu_*` source or key handling except edge's move onto the shared builder.
@@ -219,7 +261,7 @@ Assumption: Each repo stays signed by the one key pinned. Azure is genuinely unc
 Microsoft publishes `microsoft-2025.asc` and already signs `ubuntu/26.04/prod` with it.
 Refute by `gpg --verify` of `repos/azure-cli/dists/<suite>/InRelease` against the pinned
 keyring.
-Disposition:
+Disposition: Addressed (operator, 2026-10-03: "yes" to the proposed dispositions) — F2: new functions return 2, callers surface it (Return codes section, R7, R11); F3: `noble` fallback dropped (R4); F4: emptiness clause dropped from R1. Assumption (Microsoft re-key) Accepted, reason: no azure-cli suite is signed by the 2025 key today and the failure is loud in `apt update`; recovery written into §2.
 
 ### Ergonomics
 
@@ -237,7 +279,7 @@ Finding:
    ("unseamed albert writes") goes stale.
 
 Assumption: azure-cli keeps signing with `EB3E94ADBE1229CF`; refute as in Goal-Fit.
-Disposition:
+Disposition: Addressed (operator, 2026-10-03, same answer) — F2: albert WARN prints fetched fingerprint and pin plus the remedy (§3, R7); F3: as Goal-Fit F2; F4: in-test presence assertions on every absence/equality row; F5: comment at `:789` updated, `_MS_GPG_BIN` name kept because renaming edits edge tests. F1 and the Assumption Accepted, reason: as Goal-Fit Assumption.
 
 ### Risk
 
@@ -261,7 +303,7 @@ Assumption: Nothing on any host that runs `-t developer` still needs the global 
 Refute with
 `grep -rLE 'signed-by|Signed-By' /etc/apt/sources.list.d/ | xargs grep -lE 'microsoft|manuelschneid3r'`
 on every Ubuntu host; only the two legacy files may print.
-Disposition:
+Disposition: Addressed (operator, 2026-10-03, same answer) — F1: tests drive curl through `MOCK_CURL_STDOUT`/`MOCK_CURL_EXIT` (Seams); F2: `:1454` and `:1487` rewritten (Testing, R10); F3: presence assertions; F5: revoked key rejected (§1, R1). F4/Assumption Accepted, reason: `cruncher` is the backup box and rarely runs setup; the check command is in Verification after merge. F6 Accepted, reason: acknowledged in the spec, one geography measured.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
