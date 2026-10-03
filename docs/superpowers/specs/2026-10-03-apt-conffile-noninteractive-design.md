@@ -4,6 +4,7 @@
 - **Backlog rows closed:** "`xargs ... nala install -y` in `lib/linux_ubuntu.sh` cannot answer a
   dpkg conffile prompt" and "`_install_ubuntu_powershell` runs `sudo … dpkg -i` with no
   `--force-conf*`" (both P2 — bugs and security).
+- **Approved:** 2026-10-03, operator: "write it up and get er done"
 
 ## Problem
 
