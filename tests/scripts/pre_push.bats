@@ -977,3 +977,27 @@ _commit_entry() {
   [ "$status" -eq 0 ]
   [ ! -f "${MOCK_CALLS_FILE}" ]
 }
+
+@test "master guard refuses a .md whose blob object is missing from the repo" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  printf '#!/usr/bin/env bash\necho hi\n' > "${BATS_TEST_TMPDIR}/evil"
+  local_sha=$(_commit_raw "docs/gone.md" "${BATS_TEST_TMPDIR}/evil" "docs: gone")
+  blob=$(_git_clean "rev-parse ${local_sha}:docs/gone.md")
+  obj="${REPO_DIR}/.git/objects/${blob:0:2}/${blob:2}"
+  [ -f "${obj}" ]
+  rm -f "${obj}"
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  _assert_refused
+  [[ "$output" == *"docs/gone.md"* ]]
+}
+
+@test "master guard allows an executable-mode .md with no shebang" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  blob=$(printf 'plain text' | _git_clean "hash-object -w --stdin")
+  local_sha=$(_commit_entry 100755 "${blob}" "docs/exec.md")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}

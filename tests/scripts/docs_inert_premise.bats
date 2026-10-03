@@ -349,6 +349,41 @@ _fixture_makefile() {
   [[ "${output}" == *tests/w.py* ]]
 }
 
+@test "fixture: root variable REPO reading CLAUDE.md fails" {
+  mkdir -p "${BATS_TEST_TMPDIR}/fx/tests"
+  printf 'cat "${REPO}/CLAUDE.md"\n' >"${BATS_TEST_TMPDIR}/fx/tests/rv.bats"
+  run -1 _check_readers "${BATS_TEST_TMPDIR}/fx"
+  [[ "${output}" == *tests/rv.bats* ]]
+}
+
+@test "fixture: root variable ROOT reading CLAUDE.md fails" {
+  mkdir -p "${BATS_TEST_TMPDIR}/fx/tests"
+  printf 'cat "${ROOT}/CLAUDE.md"\n' >"${BATS_TEST_TMPDIR}/fx/tests/rv.bats"
+  run -1 _check_readers "${BATS_TEST_TMPDIR}/fx"
+  [[ "${output}" == *tests/rv.bats* ]]
+}
+
+@test "fixture: root variable repo_root reading CLAUDE.md fails" {
+  mkdir -p "${BATS_TEST_TMPDIR}/fx/tests"
+  printf 'cat "${repo_root}/CLAUDE.md"\n' >"${BATS_TEST_TMPDIR}/fx/tests/rv.bats"
+  run -1 _check_readers "${BATS_TEST_TMPDIR}/fx"
+  [[ "${output}" == *tests/rv.bats* ]]
+}
+
+@test "fixture: root variable REPO_DIR reading CLAUDE.md fails" {
+  mkdir -p "${BATS_TEST_TMPDIR}/fx/tests"
+  printf 'cat "${REPO_DIR}/CLAUDE.md"\n' >"${BATS_TEST_TMPDIR}/fx/tests/rv.bats"
+  run -1 _check_readers "${BATS_TEST_TMPDIR}/fx"
+  [[ "${output}" == *tests/rv.bats* ]]
+}
+
+@test "fixture: a hyphenated path outside tests/ fails" {
+  mkdir -p "${BATS_TEST_TMPDIR}/fx/tests"
+  printf 'cat "${REPO_ROOT}/docs/a-b.md"\n' >"${BATS_TEST_TMPDIR}/fx/tests/hy.bats"
+  run -1 _check_readers "${BATS_TEST_TMPDIR}/fx"
+  [[ "${output}" == *tests/hy.bats* ]]
+}
+
 @test "fixture: a path that climbs out of tests/ through .. fails" {
   mkdir -p "${BATS_TEST_TMPDIR}/fx/tests"
   printf 'cat "${REPO_ROOT}/tests/../CLAUDE.md"\n' >"${BATS_TEST_TMPDIR}/fx/tests/v.bats"

@@ -23,17 +23,21 @@ _path_is_inert() {
     # Decide from the tree entry at the pushed commit, never from the object:
     # an object can be absent from this repo while the path is present (a
     # gitlink to a commit never fetched). --literal-pathspecs stops [ * ? in a
-    # name acting as globs. A failing ls-tree is not inert.
+    # name acting as globs. A failing ls-tree is not inert; that branch is not
+    # expected to be reachable once the diff has succeeded, and it fails closed.
     _entry="$(git --literal-pathspecs ls-tree "${_sha}" -- "${_path}")" || return 1
     # No entry: absent at the tip (deleted), so it never lands.
     [[ -z "${_entry}" ]] && return 0
     _mode="${_entry%% *}"
     # Only regular files; a symlink (120000) or gitlink (160000) is not inert.
     [[ "${_mode}" == "100644" || "${_mode}" == "100755" ]] || return 1
+    # An unreadable blob is not inert. The read below runs in a process
+    # substitution, whose status nothing sees, so a missing object would leave
+    # _head empty and read as inert: check the object exists first.
+    git cat-file -e "${_sha}:${_path}" 2>/dev/null || return 1
     # Process substitution rather than a pipe: a pipe would be harmless here
-    # (no pipefail), and this stays quiet about SIGPIPE if pipefail is ever added.
-    # A blob that exists but cannot be read is not inert; note only head's own
-    # failure is visible here, since a process substitution's status is not.
+    # (no pipefail), and this stays quiet about SIGPIPE if pipefail is ever
+    # added. Only head's own failure is visible through the || below.
     _head="$(head -c 2 < <(git cat-file blob "${_sha}:${_path}"))" || return 1
     [[ "${_head}" != '#!' ]]
 }
