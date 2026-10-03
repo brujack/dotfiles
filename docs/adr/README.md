@@ -42,3 +42,4 @@ Cross-cutting decisions that apply across personal repos. Repo-specific decision
 | [0036](0036-claude-md-rule-bullets-with-knowledge-pointers.md) | CLAUDE.md carries rule bullets; narratives live in ai-config knowledge | 2026-09-26 | Accepted |
 | [0037](0037-macos-suite-gates-merge.md) | The macOS test suite gates merge | 2026-10-02 | Accepted |
 | [0038](0038-master-guard-default-deny.md) | The direct-to-master guard is default-deny | 2026-10-02 | Accepted |
+| [0039](0039-apt-keys-are-scoped-and-pinned.md) | Third-party apt keys are scoped and pinned, never global | 2026-10-03 | Accepted |
