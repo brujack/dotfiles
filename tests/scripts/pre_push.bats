@@ -1018,3 +1018,56 @@ _commit_entry() {
   _assert_refused
   [[ "$output" == *"docs/a.md"* ]]
 }
+
+# ── the hook reads the PUSHED commit, not HEAD ──────────────────────────────
+# "On feat, push local master": HEAD and local_sha differ. _sha must reach
+# every read, so each fixture makes HEAD answer differently from local_sha.
+_pushed_vs_head() {
+  # _pushed_vs_head <pushed: shebang|plain|gone> <head: shebang|plain|absent>
+  local _pushed="${1}" _head="${2}" _base _s
+  printf '#!/usr/bin/env bash\necho hi\n' > "${BATS_TEST_TMPDIR}/sb"
+  printf 'plain text\n' > "${BATS_TEST_TMPDIR}/pl"
+  _on_branch master
+  _base=$(_commit_file "README.md" "v1" "docs: v1")
+  if [[ "${_pushed}" == "plain" ]]; then
+    PUSHED_SHA=$(_commit_raw "docs/a.md" "${BATS_TEST_TMPDIR}/pl" "docs: pushed")
+  else
+    PUSHED_SHA=$(_commit_raw "docs/a.md" "${BATS_TEST_TMPDIR}/sb" "docs: pushed")
+  fi
+  if [[ "${_pushed}" == "gone" ]]; then
+    _s=$(_git_clean "rev-parse ${PUSHED_SHA}:docs/a.md")
+    rm -f "${REPO_DIR}/.git/objects/${_s:0:2}/${_s:2}"
+  fi
+  BASE_SHA="${_base}"
+  _git_clean "checkout --quiet -B feat ${_base}"
+  case "${_head}" in
+    shebang) _commit_raw "docs/a.md" "${BATS_TEST_TMPDIR}/sb" "docs: head" > /dev/null ;;
+    plain) _commit_raw "docs/a.md" "${BATS_TEST_TMPDIR}/pl" "docs: head" > /dev/null ;;
+  esac
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${PUSHED_SHA} refs/heads/master ${BASE_SHA}\n"
+}
+
+@test "pushed shebang .md is refused when HEAD's copy is plain text" {
+  _pushed_vs_head shebang plain
+  _assert_refused
+  [[ "$output" == *"docs/a.md"* ]]
+}
+
+@test "pushed shebang .md is refused when HEAD does not have the path at all" {
+  _pushed_vs_head shebang absent
+  _assert_refused
+  [[ "$output" == *"docs/a.md"* ]]
+}
+
+@test "pushed plain .md is allowed when HEAD's copy has a shebang" {
+  _pushed_vs_head plain shebang
+  [ "$status" -eq 0 ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
+@test "pushed .md with a missing blob is refused when HEAD's copy is readable" {
+  _pushed_vs_head gone plain
+  _assert_refused
+  [[ "$output" == *"docs/a.md"* ]]
+}

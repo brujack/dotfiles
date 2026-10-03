@@ -418,6 +418,13 @@ _fixture_makefile() {
   run -0 _check_readers "${BATS_TEST_TMPDIR}/fx"
 }
 
+@test "fixture: a single-quoted python path fails" {
+  mkdir -p "${BATS_TEST_TMPDIR}/fx/tests"
+  printf "%s\n" "ROOT / 'CLAUDE.md'" >"${BATS_TEST_TMPDIR}/fx/tests/sq.py"
+  run -1 _check_readers "${BATS_TEST_TMPDIR}/fx"
+  [[ "${output}" == *tests/sq.py* ]]
+}
+
 @test "fixture: a path that climbs out of tests/ through .. fails" {
   mkdir -p "${BATS_TEST_TMPDIR}/fx/tests"
   printf 'cat "${REPO_ROOT}/tests/../CLAUDE.md"\n' >"${BATS_TEST_TMPDIR}/fx/tests/v.bats"
@@ -479,6 +486,24 @@ _fixture_makefile() {
 
 @test "fixture: a recipe ending in a bare make fails" {
   _fixture_makefile "${BATS_TEST_TMPDIR}/fx" "$(printf 'test: lint\n\tcd sub && make')"
+  run -1 _check_prereqs "${BATS_TEST_TMPDIR}/fx"
+  [[ "${output}" == *"sub-make"* ]]
+}
+
+@test "fixture: an @make lint recipe line fails" {
+  _fixture_makefile "${BATS_TEST_TMPDIR}/fx" "$(printf 'test: lint\n\t@make lint')"
+  run -1 _check_prereqs "${BATS_TEST_TMPDIR}/fx"
+  [[ "${output}" == *"sub-make"* ]]
+}
+
+@test "fixture: a braced MAKE variable recipe line fails" {
+  _fixture_makefile "${BATS_TEST_TMPDIR}/fx" "$(printf 'test: lint\n\t${MAKE} lint')"
+  run -1 _check_prereqs "${BATS_TEST_TMPDIR}/fx"
+  [[ "${output}" == *"sub-make"* ]]
+}
+
+@test "fixture: make after || in a recipe fails" {
+  _fixture_makefile "${BATS_TEST_TMPDIR}/fx" "$(printf 'test: lint\n\tcd x || make lint')"
   run -1 _check_prereqs "${BATS_TEST_TMPDIR}/fx"
   [[ "${output}" == *"sub-make"* ]]
 }
