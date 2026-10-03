@@ -217,7 +217,7 @@ is by fingerprint and `--show-keys` lists expired keys, so expiry does not break
 | albert, fetch fails (`MOCK_CURL_EXIT`) | a pre-seeded `albert.list` and keyring asserted present, then unchanged afterwards; WARN names the URL; no install; returns 2 |
 | albert, non-key body (HTML via `MOCK_CURL_STDOUT`) | pre-seeded `albert.list` and keyring asserted present, then unchanged; WARN names the URL; no install; returns 2 |
 | builder, non-key input | final keyring pre-seeded and asserted present; returns 2 (not 1); final keyring byte-identical afterwards |
-| albert, wrong fingerprint | pre-seeded `albert.list` asserted present, then absent; WARN prints the fetched fingerprint and `ALBERT_GPG_FPR`; no install; returns 2 |
+| albert, wrong fingerprint | pre-seeded `albert.list` and `albert-obs.gpg` asserted present, then both absent; WARN prints the fetched fingerprint and `ALBERT_GPG_FPR`; no install; returns 2 |
 | albert, temp dir | curl is invoked with `-o`, and the logged `-o` target starts with `${_APT_KEY_TMP_ROOT}/albert-key.`; `_APT_KEY_TMP_ROOT` is empty afterwards, on both the success and fetch-fail paths |
 | gui_tools propagation | albert returning 2 makes `_install_ubuntu_gui_tools` return non-zero, and `install_ubuntu_packages` names `gui_tools` |
 | gui_tools success path | albert succeeds and the step's last command is made to fail (`MOCK_SNAP_EXIT`, `HAS_FLATPAK` unset); the non-zero return survives |
@@ -275,7 +275,7 @@ then on each:
 - **R5.** `lib/constants.sh` defines `ALBERT_GPG_FPR="A4B83CD05FDF5C5178482D4A1488EB46E192A257"`.
 - **R6.** On success `_install_ubuntu_albert` writes `${_APT_SOURCES_DIR}/albert.list` with an `https://download.opensuse.org/` URL and `signed-by=${_APT_KEYRINGS_DIR}/albert-obs.gpg`, and returns 0.
 - **R7.** On a key fetch failure, or when no key can be read from the fetched body, `_install_ubuntu_albert` leaves an existing `albert.list` and `albert-obs.gpg` unchanged, logs a WARN naming the URL, skips `apt install albert`, and returns 2.
-- **R8.** On a key mismatch (builder returns 1) `_install_ubuntu_albert` removes `albert.list`, logs a WARN printing the fetched fingerprint(s) and `ALBERT_GPG_FPR`, skips `apt install albert`, and returns 2.
+- **R8.** On a key mismatch (builder returns 1) `_install_ubuntu_albert` removes `albert.list` and `albert-obs.gpg`, logs a WARN printing the fetched fingerprint(s) and `ALBERT_GPG_FPR`, skips `apt install albert`, and returns 2.
 - **R9.** The albert key fetch and the builder's temporary keyring live in directories created under `_APT_KEY_TMP_ROOT` with explicit `mktemp -d` templates, removed on every path.
 - **R10.** A non-zero return from `_install_ubuntu_albert` makes `_install_ubuntu_gui_tools` return non-zero after the rest of the step runs, without changing its return on the success path.
 - **R11.** The legacy files in Design §5, including the globbed `archive_uri-http_packages_microsoft_com_repos_azure-cli_-*.list`, are removed on every run, before any new key work.
