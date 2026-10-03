@@ -2125,6 +2125,7 @@ _seed_ring() {
   run _build_pinned_keyring "${BATS_TEST_TMPDIR}/two.asc" "${_ring}" "${MS_GPG_FPR}"
   [ "$status" -eq 1 ]
   cmp "${BATS_TEST_TMPDIR}/expect" "${_ring}"
+  [ -z "$(ls -A "${_APT_KEY_TMP_ROOT}")" ]
 }
 
 @test "_build_pinned_keyring: a truncated key returns 2 and leaves the existing keyring untouched" {
@@ -2144,6 +2145,7 @@ _seed_ring() {
   run _build_pinned_keyring "${BATS_TEST_TMPDIR}/html.asc" "${_ring}" "${MS_GPG_FPR}"
   [ "$status" -eq 2 ]
   cmp "${BATS_TEST_TMPDIR}/expect" "${_ring}"
+  [ -z "$(ls -A "${_APT_KEY_TMP_ROOT}")" ]
 }
 
 @test "_build_pinned_keyring: gpg exiting non-zero returns 2 and leaves the existing keyring untouched" {
@@ -2155,4 +2157,47 @@ _seed_ring() {
   [ "$status" -eq 2 ]
   cmp "${BATS_TEST_TMPDIR}/expect" "${_ring}"
   [ -z "$(ls -A "${_APT_KEY_TMP_ROOT}")" ]
+}
+
+@test "_build_pinned_keyring: a pin equal to a SUBKEY fingerprint returns 1 and leaves the existing keyring untouched" {
+  _seed_ring
+  printf 'old' > "${BATS_TEST_TMPDIR}/expect"
+  local _gh="${BATS_TEST_TMPDIR}/subkey-gnupg" _subfpr
+  mkdir -m 700 "${_gh}"
+  "${_MS_GPG_BIN}" --homedir "${_gh}" --batch --passphrase '' --quick-gen-key 'subkey test <s@example.invalid>' ed25519 sign never 2> /dev/null
+  local _primary
+  _primary="$("${_MS_GPG_BIN}" --homedir "${_gh}" --batch --list-keys --with-colons 2> /dev/null | awk -F: '/^fpr:/{print $10; exit}')"
+  "${_MS_GPG_BIN}" --homedir "${_gh}" --batch --passphrase '' --quick-add-key "${_primary}" cv25519 encr never 2> /dev/null
+  _subfpr="$("${_MS_GPG_BIN}" --homedir "${_gh}" --batch --list-keys --with-colons 2> /dev/null | awk -F: '/^sub:/{s=1;next} s&&/^fpr:/{print $10; exit}')"
+  "${_MS_GPG_BIN}" --homedir "${_gh}" --armor --export > "${BATS_TEST_TMPDIR}/subkey.asc" 2> /dev/null
+  gpgconf --homedir "${_gh}" --kill all 2> /dev/null || true
+  [ -n "${_subfpr}" ]
+  [ "${_subfpr}" != "${_primary}" ]
+  run _build_pinned_keyring "${BATS_TEST_TMPDIR}/subkey.asc" "${_ring}" "${_subfpr}"
+  [ "$status" -eq 1 ]
+  cmp "${BATS_TEST_TMPDIR}/expect" "${_ring}"
+  [ -z "$(ls -A "${_APT_KEY_TMP_ROOT}")" ]
+}
+
+@test "_build_pinned_keyring: an unwritable keyring directory returns 3, keeps the keyring and leaves no staging file" {
+  if [[ ${EUID} -eq 0 ]]; then
+    skip "root can write into a 0555 directory, so the install cannot be made to fail"
+  fi
+  mkdir "${BATS_TEST_TMPDIR}/ro"
+  local _ring="${BATS_TEST_TMPDIR}/ro/final.gpg"
+  printf 'old' > "${_ring}"
+  printf 'old' > "${BATS_TEST_TMPDIR}/expect"
+  chmod 555 "${BATS_TEST_TMPDIR}/ro"
+  [ -f "${_ring}" ]
+  run _build_pinned_keyring "${REPO_ROOT}/keys/microsoft.asc" "${_ring}" "${MS_GPG_FPR}"
+  chmod 755 "${BATS_TEST_TMPDIR}/ro"
+  [ "$status" -eq 3 ]
+  cmp "${BATS_TEST_TMPDIR}/expect" "${_ring}"
+  [ ! -e "${_ring}.new" ]
+  [ -z "$(ls -A "${_APT_KEY_TMP_ROOT}")" ]
+}
+
+@test "_keyring_has_pinned_fpr: an empty homedir argument is refused with 2" {
+  run _keyring_has_pinned_fpr "${REPO_ROOT}/keys/microsoft.asc" "${MS_GPG_FPR}" ""
+  [ "$status" -eq 2 ]
 }

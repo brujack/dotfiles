@@ -772,32 +772,42 @@ _install_ubuntu_brew_packages() {
 
 # gpg 2.5 exits 0 when it dearmors a truncated key and still writes bytes, so
 # a keyring is judged by its content: it must hold exactly one primary key and
-# that key's fingerprint must equal the pin. Returns 0 match, 1 mismatch, 2 when
-# the listing itself failed or showed no primary key (gpg missing, junk input).
-# Takes the work dir so its throwaway homedir is removed with the caller's dir.
+# the fingerprint of that primary key (the fpr: record right after its pub:
+# record, never a subkey's) must equal the pin. Returns 0 match, 1 mismatch,
+# 2 when the listing failed or showed no primary key (gpg missing, junk input,
+# or an empty homedir argument). <home> is a throwaway gpg homedir the caller
+# owns and removes; an empty one would make gpg use the operator's ~/.gnupg.
 _keyring_has_pinned_fpr() {
-  local _ring="$1" _fpr="$2" _home="$3" _listing _rc _pubs
+  local _ring="$1" _fpr="$2" _home="$3" _listing _rc _pubs _primary
+  [[ -n ${_home} ]] || return 2
   _listing="$("${_MS_GPG_BIN:-gpg}" --homedir "${_home}" --batch --show-keys --with-colons "${_ring}" 2> /dev/null)"
   _rc=$?
   [[ ${_rc} -eq 0 ]] || return 2
   _pubs="$(printf '%s\n' "${_listing}" | grep -c '^pub:')"
   [[ ${_pubs} -ge 1 ]] || return 2
   [[ ${_pubs} -eq 1 ]] || return 1
-  printf '%s\n' "${_listing}" | grep -qxF "fpr:::::::::${_fpr}:" || return 1
+  _primary="$(printf '%s\n' "${_listing}" | awk -F: '/^pub:/{p=1;next} p&&/^fpr:/{print $10;exit}')"
+  [[ ${_primary} == "${_fpr}" ]] || return 1
 }
 
 # Dearmor <key_file> into a temp dir, verify it holds exactly the pinned key,
-# and only then install it at <keyring>. The final path is never written or
-# removed on failure, so a keyring that already works survives a bad fetch.
-# Returns 0 installed, 1 key mismatch (or install failed), 2 unusable key input.
-# No EXIT/RETURN trap: scripts/check-lib-exit-traps.sh forbids new ones in lib/,
-# and every path below reaches the single rm -rf.
+# and only then install it at <keyring>. The final path is never modified on
+# failure, so a keyring that already works survives a bad fetch: the install
+# is staged to <keyring>.new and renamed into place, because GNU install
+# unlinks its target before copying.
+# Returns 0 installed; 1 the key is not the pinned one (not exactly one primary
+# key, or its fingerprint differs); 2 no key could be read (gpg failed, or the
+# input held no key); 3 a local failure (temp dir, staging, install) that left
+# the final path unchanged.
+# No EXIT/RETURN trap: scripts/check-lib-exit-traps.sh ratchets `trap ... EXIT`
+# in lib/, and a RETURN trap is not function-scoped (shell.md), so every path
+# below reaches the single rm -rf instead.
 _build_pinned_keyring() {
   local _key="$1" _ring="$2" _fpr="$3" _dir _gpg_rc _rc
-  _dir="$(mktemp -d "${_APT_KEY_TMP_ROOT:-${TMPDIR:-/tmp}}/apt-key.XXXXXXXX")" || return 1
+  _dir="$(mktemp -d "${_APT_KEY_TMP_ROOT:-${TMPDIR:-/tmp}}/apt-key.XXXXXXXX")" || return 3
   if ! mkdir -m 700 "${_dir}/home"; then
     rm -rf "${_dir}"
-    return 1
+    return 3
   fi
   { "${_MS_GPG_BIN:-gpg}" --dearmor < "${_key}" > "${_dir}/k.gpg"; } 2> /dev/null
   _gpg_rc=$?
@@ -808,7 +818,10 @@ _build_pinned_keyring() {
     _rc=$?
   fi
   if [[ ${_rc} -eq 0 ]]; then
-    sudo install -m 0644 "${_dir}/k.gpg" "${_ring}" || _rc=1
+    if ! { sudo install -m 0644 "${_dir}/k.gpg" "${_ring}.new" && sudo mv -f "${_ring}.new" "${_ring}"; }; then
+      sudo rm -f "${_ring}.new"
+      _rc=3
+    fi
   fi
   rm -rf "${_dir}"
   return "${_rc}"
