@@ -39,12 +39,16 @@ test (1) and `.github/workflows/ci.yml` (1). That is about three a month.
    only a regular file (mode `100644` or `100755`) can be inert, so a symlink or a gitlink
    named `*.md` is not. A lookup by object let both through, because a submodule's commit
    is absent from the superproject's object store and read as a deletion. A path absent
-   from the tree at the tip was deleted and is judged by name. Everything else is not inert, including any
+   from the tree at the tip was deleted and is judged by name. A regular file whose
+   blob cannot be read locally is not inert: the first two bytes come through a process
+   substitution whose failure is invisible, so the blob's existence is checked first. Everything else is not inert, including any
    file type added in future.
 3. **A push to `refs/heads/master` is refused if its range carries any non-inert path.**
    The range is the whole push, not the tip commit.
 4. **An unresolvable range on `master` is refused**, with a message to `git fetch` and retry.
-   On any other ref it still runs the suite.
+   On any other ref it still runs the suite. A first push with no merge-base is diffed from
+   the empty tree (`git hash-object -t tree /dev/null`), so the root commit's own files are
+   judged; diffing from the root commit missed them.
 5. **Recovery is printed from each ref line's `local_ref`**, not from the current branch.
    Measured: `git push origin HEAD:master` hands the hook `local_ref=HEAD`, which the hook
    resolves with `git symbolic-ref`.

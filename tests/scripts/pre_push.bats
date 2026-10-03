@@ -536,8 +536,8 @@ _assert_suite_ran() {
 }
 
 # ── direct-to-master guard ──────────────────────────────────────────────────
-# The hook refuses a push whose target ref is master when the diff carries an
-# executable-class path. Measured 2026-09-11: five such pushes reached master
+# The hook refuses a push whose target ref is master when the diff carries a
+# path _path_is_inert rejects (ADR-0038). Measured 2026-09-11: five such pushes reached master
 # in one session with no CI behind them, because ci.yml is pull_request-only.
 # The two allow-cases below are positive controls: without them a passing
 # refusal set cannot distinguish "correctly scoped" from "refuses everything".
