@@ -189,3 +189,80 @@ Run `./setup_env.sh -t developer` on `claude`, then:
 - **N1.** No change to any other `_install_ubuntu_*` source or key handling except edge's move onto the shared builder.
 - **N2.** No vendored copy of the albert key outside `tests/fixtures/`.
 - **N3.** No test reaches the network or writes under the real `/etc/apt` or `/usr/share/keyrings`.
+
+## Multi-Lens Review
+
+Reviewed at commit: `3e3b7ab5` (Step 7 self-review commit, before Step 8 dispatch)
+
+Claims re-checked by the author before recording, 2026-10-03: the azure-cli `resolute` suite
+exists (`2.90.0-1~resolute`, signed `EB3E94ADBE1229CF`); `keys/microsoft-2025.asc` exists
+(`AA86F75E427A19DD33346403EE4D7792F748182B`) and neither azure-cli suite is signed by it
+yet; `tests/mocks/curl` is first on `PATH` and only `touch`es `-o` unless `MOCK_CURL_STDOUT`
+is set; the step loop at `lib/linux_ubuntu.sh:28` records a step as failed only on its
+non-zero return; `cruncher` (the only `wsl2_workstation`) refused ssh on port 22, so it is
+unsurveyed.
+
+### Goal-Fit
+
+Finding:
+1. Worth building. The single-`pub:` rule is load-bearing: two concatenated armored keys
+   dearmor to 2 `pub:` records on gpg 2.4.8, which the old any-`fpr` check accepts.
+2. Reads-it test fails on the failure path. R7 sets no return code, so a keyring failure
+   never reaches `ubuntu packages: failed:` and `-t developer` exits 0. Combined with R8
+   (legacy source removed first), an installed `az`/`albert` silently stops updating. Doctor
+   checks neither tool.
+3. The `noble` fallback carried forward is stale: `repos/azure-cli/dists/resolute` serves
+   `2.90.0-1~resolute`, signed by the pinned key.
+4. R1's "keyring is empty" clause has no test row and is subsumed by the `pub:` count.
+
+Assumption: Each repo stays signed by the one key pinned. Azure is genuinely uncertain:
+Microsoft publishes `microsoft-2025.asc` and already signs `ubuntu/26.04/prod` with it.
+Refute by `gpg --verify` of `repos/azure-cli/dists/<suite>/InRelease` against the pinned
+keyring.
+Disposition:
+
+### Ergonomics
+
+Finding:
+1. A Microsoft re-key fails as `NO_PUBKEY` from `apt update`, not as the WARN: the vendored
+   file still matches `MS_GPG_FPR`, so the keyring builds and the source is written. The
+   spec does not say what the operator sees or how to recover.
+2. The albert WARN cannot distinguish rotation from tampering from a network failure. It
+   should print the fetched fingerprint beside `ALBERT_GPG_FPR` and name the remedy (verify
+   out of band, edit `lib/constants.sh`). No caller-level wrong-fingerprint albert test.
+3. No return code (same as Goal-Fit 2).
+4. "Second run byte-identical" and "no `http://` sources left" pass when nothing is written;
+   each needs an in-test presence assertion.
+5. `_MS_GPG_BIN` now governs a non-Microsoft key; the comment at `lib/linux_ubuntu.sh:789`
+   ("unseamed albert writes") goes stale.
+
+Assumption: azure-cli keeps signing with `EB3E94ADBE1229CF`; refute as in Goal-Fit.
+Disposition:
+
+### Risk
+
+Finding:
+1. The albert test seam cannot work: `tests/mocks/curl` shadows the real curl, ignores the
+   URL, and `touch`es `-o`, so the good-key case builds an empty keyring and the curl-fails
+   case cannot be driven by a missing fixture. Use `MOCK_CURL_STDOUT` / `MOCK_CURL_EXIT`.
+   The spec's stated reason ("cannot carry a key through -o") is false.
+2. Two more existing tests assert on `add-apt-repository` and break under R3:
+   `linux_ubuntu.bats:1454` (arch) and `:1487` (noble). The spec names only `:1497`.
+3. Four rows can pass on nothing (second run, no `http://`, both legacy-cleanup rows if
+   fixtures were never seeded or the seams are ignored). A separate good-key test is not a
+   control on this test's run.
+4. Global-key deletion surveyed on 2 of 3 Linux hosts; `cruncher` unchecked. Another
+   unsigned Microsoft source there would silently lose verification.
+5. The builder ignores validity: a revoked (`pub:r`) pinned key still gets a source written.
+6. Pool `.deb`s redirect to a geo-chosen mirror; apt refuses https-to-http. Acknowledged in
+   the spec; low risk.
+
+Assumption: Nothing on any host that runs `-t developer` still needs the global keys.
+Refute with
+`grep -rLE 'signed-by|Signed-By' /etc/apt/sources.list.d/ | xargs grep -lE 'microsoft|manuelschneid3r'`
+on every Ubuntu host; only the two legacy files may print.
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
