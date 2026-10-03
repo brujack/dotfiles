@@ -219,7 +219,10 @@ then on each:
   file.
 - `sudo apt update` exits 0 with no `NO_PUBKEY` or `EXPKEYSIG`.
 - `dpkg -s azure-cli` reports not installed; `command -v az` resolves under
-  `/home/linuxbrew`; `az version` and `albert --version` run.
+  `/home/linuxbrew`; `az version` runs. `albert --version` runs on `workstation`, the only
+  machine meant to carry desktop apps. `claude` is server-only but maps to
+  `linux_workstation` (`config/profiles.sh:48`), so it gets albert too until that mapping
+  is fixed (separate Backlog row); this change does not alter that.
 - `cruncher` (WSL2) was unreachable at review time. Before it next runs setup, check that
   `grep -rLE 'signed-by|Signed-By' /etc/apt/sources.list.d/ | xargs -r grep -lE 'microsoft|manuelschneid3r'`
   prints only the two legacy files.
@@ -250,7 +253,7 @@ then on each:
 - **R12.** `_APT_SOURCES_DIR`, `_APT_TRUSTED_DIR`, `_APT_KEYRINGS_DIR`, `_ALBERT_TMP_ROOT` and `_ALBERT_KEY_URL` are honoured by the code, and the first four are set at setup scope in `tests/setup_env/linux_ubuntu.bats`.
 - **R13.** Tests cover every row of the Testing table with real gpg and `tests/fixtures/albert-obs.asc` fed per test through `MOCK_CURL_STDOUT`, and the tests at `linux_ubuntu.bats:1416`, `:1454`, `:1487`, `:1497` and `:1568` are changed as the Testing section states.
 - **V1.** After merge, `./setup_env.sh -t developer` on `claude` and on `workstation` leaves no legacy key in `/etc/apt/trusted.gpg.d/`, and `sudo apt update` exits 0 with no `NO_PUBKEY`.
-- **V2.** After that setup on each of `claude` and `workstation`, `dpkg -s azure-cli` reports not installed, `command -v az` resolves under `/home/linuxbrew`, and `az version` and `albert --version` run.
+- **V2.** After that setup on each of `claude` and `workstation`, `dpkg -s azure-cli` reports not installed, `command -v az` resolves under `/home/linuxbrew`, `az version` runs, and on `workstation` `albert --version` runs.
 - **N1.** No change to any other `_install_ubuntu_*` source or key handling except edge's move onto the shared builder and the azure block's removal.
 - **N2.** No vendored copy of the albert key outside `tests/fixtures/`.
 - **N3.** No test reaches the network or writes under the real `/etc/apt` or `/usr/share/keyrings`.
