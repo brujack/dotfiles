@@ -22,82 +22,208 @@ setup() {
   export PATH="${CLEAN_PATH}"
 }
 
+# Known blind spots (not detected by either checker):
+#   - os.path.join / joinpath / multi-segment `/` joins (REPO / "tests" / "x.md"
+#     is not seen; only ROOT / "x.md" and ROOT/x.md single-join forms are)
+#   - Path(__file__).parents[N] and $(dirname "$BATS_TEST_FILENAME") forms
+#   - `cd "$ROOT" && cat X.md` and globs
+#   - tests/mocks/ is not scanned (only *.bats, *.py and helpers/*)
+#   - reads done by scripts a test invokes, e.g. sync-agent-guidance.sh defaults
+#     to the real CLAUDE.md when _OVERRIDE_CLAUDE_MD_PATH is unset
+#   - make recipe scan covers `$(MAKE)`/`make` invocations and literal .md paths
+#     in recipe text; a recipe that builds a .md path from a variable is not seen
+
 # Prints the prerequisites of every rule for target $2 in the make database
 # dump $1. Order-only prerequisites (after |) are included: they still run.
+# Handles `t::`, and skips variable assignments (`t: VAR = x`, `t := x`).
 _rule_prereqs() {
   local _db="${1}" _target="${2}"
   printf '%s\n' "${_db}" | awk -v t="${_target}" '
-    index($0, t ":") == 1 && substr($0, length(t) + 2, 1) != "=" {
-      line = substr($0, length(t) + 2)
-      gsub(/\|/, " ", line)
-      print line
+    {
+      n = length(t)
+      if (substr($0, 1, n) != t) next
+      rest = substr($0, n + 1)
+      if (substr(rest, 1, 2) == "::") rest = substr(rest, 3)
+      else if (substr(rest, 1, 1) == ":") rest = substr(rest, 2)
+      else next
+      if (rest ~ /^[ \t]*[:+?!]?=/) next
+      if (rest ~ /^[ \t]*[^ \t:]+[ \t]*[:+?!]?=/) next
+      gsub(/\|/, " ", rest)
+      print rest
     }'
 }
 
+# Prints the recipe lines of every rule for target $2 in the database dump $1.
+_rule_recipe() {
+  local _db="${1}" _target="${2}"
+  printf '%s\n' "${_db}" | awk -v t="${_target}" '
+    {
+      n = length(t)
+      if (substr($0, 1, n) == t && substr($0, n + 1, 1) == ":") {
+        rest = substr($0, n + 2)
+        sub(/^:/, "", rest)
+        if (rest ~ /^[ \t]*[:+?!]?=/ || rest ~ /^[ \t]*[^ \t:]+[ \t]*[:+?!]?=/) { in_r = 0; next }
+        in_r = 1
+        next
+      }
+      if (in_r && substr($0, 1, 1) == "\t") { print; next }
+      if ($0 ~ /^#/) next
+      in_r = 0
+    }'
+}
+
+_is_allowed_prereq() {
+  local _t="${1}" _a
+  for _a in "${ALLOWED_TEST_PREREQS[@]}"; do
+    [[ "${_t}" == "${_a}" ]] && return 0
+  done
+  return 1
+}
+
+# _make_db <root>: print make's database dump for the test target. -q makes
+# make exit 1 by design, so 0 and 1 are both a successful parse; 2 or more is
+# a Makefile error and fails loudly with make's own message.
+_make_db() {
+  local _root="${1}" _out _rc _err="${BATS_TEST_TMPDIR}/make.err"
+  _out="$(make --no-print-directory -C "${_root}" -pnq test 2>"${_err}")" && _rc=0 || _rc=$?
+  if [[ "${_rc}" -ge 2 ]]; then
+    printf 'FAIL: make exited %s reading %s/Makefile: %s\n' "${_rc}" "${_root}" "$(head -3 "${_err}" | tr '\n' ' ')" >&2
+    return 1
+  fi
+  printf '%s\n' "${_out}"
+}
+
+# _recipe_violations <db> <target>: print one line per recipe problem. A recipe
+# fails if it names a .md path or runs a sub-make on a target outside the
+# allowlist.
+_recipe_violations() {
+  local _db="${1}" _t="${2}" _line _rest _tok _skip=0
+  local _re='(\$[({]MAKE[)}]|(^|[^A-Za-z0-9_-])make)[[:space:]]+(.*)'
+  while IFS= read -r _line; do
+    [[ -z "${_line}" ]] && continue
+    if [[ "${_line}" == *.md* ]]; then
+      printf 'recipe of %s names a .md path: %s\n' "${_t}" "${_line}"
+    fi
+    if [[ "${_line}" =~ ${_re} ]]; then
+      _rest="${BASH_REMATCH[3]}"
+      _rest="${_rest%%[;&|]*}"
+      _skip=0
+      for _tok in ${_rest}; do
+        if [[ "${_skip}" -eq 1 ]]; then _skip=0; continue; fi
+        case "${_tok}" in
+          -C | -f) _skip=1; continue ;;
+          -* | *=*) continue ;;
+        esac
+        _is_allowed_prereq "${_tok}" || printf 'recipe of %s runs sub-make on %s\n' "${_t}" "${_tok}"
+      done
+    fi
+  done < <(_rule_recipe "${_db}" "${_t}")
+}
+
 # _check_prereqs <root>: fail if the `make test` closure differs from
-# ALLOWED_TEST_PREREQS. Parses stdout only; -q makes make exit 1 by design.
+# ALLOWED_TEST_PREREQS, names a .md file, or has a recipe problem. File
+# prerequisites are followed when they have their own rule.
 _check_prereqs() {
-  local _root="${1}" _db _queue=() _seen=" " _t _p _extra=() _a _ok
-  # -q exits 1 by design; parse stdout, never branch on the status
-  _db="$(make --no-print-directory -C "${_root}" -pnq test 2>/dev/null || true)"
+  local _root="${1}" _db _queue=() _seen=" " _t _p _extra=() _fail=0 _v
+  _db="$(_make_db "${_root}")" || return 1
   # shellcheck disable=SC2207 # word-splitting is the point: one name per token
   _queue=($(_rule_prereqs "${_db}" test))
+  _queue+=(test)
   while [[ ${#_queue[@]} -gt 0 ]]; do
     _t="${_queue[0]}"
     _queue=("${_queue[@]:1}")
     [[ "${_seen}" == *" ${_t} "* ]] && continue
-    [[ -e "${_root}/${_t}" ]] && continue
     _seen+="${_t} "
+    if [[ "${_t}" == *.md ]]; then
+      printf 'FAIL: make test depends on the .md file %s\n' "${_t}" >&2
+      _fail=1
+    fi
     # shellcheck disable=SC2207 # word-splitting is the point
     for _p in $(_rule_prereqs "${_db}" "${_t}"); do
       _queue+=("${_p}")
     done
+    while IFS= read -r _v; do
+      [[ -z "${_v}" ]] && continue
+      printf 'FAIL: %s\n' "${_v}" >&2
+      _fail=1
+    done < <(_recipe_violations "${_db}" "${_t}")
+    [[ "${_t}" == test ]] && continue
+    [[ -e "${_root}/${_t}" ]] && continue
+    _is_allowed_prereq "${_t}" || _extra+=("${_t}")
   done
-  if [[ "${_seen}" == " " ]]; then
+  if [[ "${_seen}" == " test " ]]; then
     printf 'FAIL: empty make test prerequisite closure; the parse found nothing\n' >&2
     return 1
   fi
-  for _t in ${_seen}; do
-    _ok=0
-    for _a in "${ALLOWED_TEST_PREREQS[@]}"; do
-      [[ "${_t}" == "${_a}" ]] && _ok=1
-    done
-    [[ "${_ok}" -eq 0 ]] && _extra+=("${_t}")
-  done
   if [[ ${#_extra[@]} -gt 0 ]]; then
     printf 'FAIL: make test gained prerequisite(s) not in ALLOWED_TEST_PREREQS: %s\n' "${_extra[*]}" >&2
     printf 'Check whether each reads a tracked .md; if not, add it to ALLOWED_TEST_PREREQS.\n' >&2
     printf 'check-agent-guidance is the known reader (it reads CLAUDE.md), so it must not be a prerequisite.\n' >&2
-    return 1
+    _fail=1
   fi
-  return 0
+  return "${_fail}"
+}
+
+# _normalize_path <a/b/../c>: collapse . and .. segments; a path that climbs
+# above its start keeps a leading ../ so it can never read as under tests/.
+_normalize_path() {
+  local IFS=/ _seg _out=() _n
+  for _seg in ${1}; do
+    case "${_seg}" in
+      '' | .) ;;
+      ..)
+        _n=${#_out[@]}
+        if [[ "${_n}" -gt 0 && "${_out[$((_n - 1))]}" != .. ]]; then
+          unset "_out[$((_n - 1))]"
+          _out=("${_out[@]}")
+        else
+          _out+=(..)
+        fi
+        ;;
+      *) _out+=("${_seg}") ;;
+    esac
+  done
+  printf '%s' "${_out[*]}"
 }
 
 # _check_readers <root>: fail if a file under <root>/tests builds a path from a
-# root variable that ends in .md and is not under tests/.
+# root variable that ends in .md and does not resolve under tests/.
 # docs_inert_premise.bats is excluded: its own source names these patterns.
 _check_readers() {
-  local _root="${1}" _files _f _hit _rel _bad=0 _entry _allowed _n=0
-  local _re='(^|[^A-Za-z0-9_])(REPO_ROOT|ROOT|repo_root|BATS_TEST_DIRNAME/\.\./\.\.)\}?["'"'"']?[[:space:]]*/?[[:space:]]*["'"'"']?/?[A-Za-z0-9_./-]+\.md'
+  local _root="${1}" _files _f _hits _grc _hit _rel _bad=0 _entry _allowed _n=0 _path _base _resolved
+  local _pre='(^|[^A-Za-z0-9_])\$?\{?'
+  local _close='\}?["'"'"']?'
+  local _re_root="${_pre}_{0,2}(REPO_ROOT|REPO|ROOT|repo_root|REPO_DIR)${_close}[[:space:]]*/[[:space:]]*[\"']?[A-Za-z0-9_./-]+\\.md"
+  local _re_bats="${_pre}BATS_TEST_DIRNAME${_close}/[A-Za-z0-9_./-]*\\.md"
   _files="$(find "${_root}/tests" -type f \( -name '*.bats' -o -name '*.py' -o -path '*/helpers/*' \) | sort)"
   while IFS= read -r _f; do
     [[ -z "${_f}" ]] && continue
     [[ "$(basename "${_f}")" == "docs_inert_premise.bats" ]] && continue
     _n=$((_n + 1))
     _rel="${_f#"${_root}"/}"
+    _hits="$(grep -noE -e "${_re_root}" -e "${_re_bats}" "${_f}")" && _grc=0 || _grc=$?
+    if [[ "${_grc}" -ge 2 ]]; then
+      printf 'FAIL: could not scan %s (grep exit %s)\n' "${_rel}" "${_grc}" >&2
+      _bad=1
+      continue
+    fi
     while IFS= read -r _hit; do
       [[ -z "${_hit}" ]] && continue
-      # strip the root-variable prefix, leaving the path it is joined to
-      _path="$(printf '%s' "${_hit#*:}" | sed -E 's/^[^A-Za-z0-9_]?(REPO_ROOT|ROOT|repo_root|BATS_TEST_DIRNAME\/\.\.\/\.\.)\}?["'"'"']?[[:space:]]*\/?[[:space:]]*["'"'"']?\/?//')"
-      [[ "${_path}" == tests/* ]] && continue
+      # drop "LINE:" and everything up to the first "/", which follows the root variable
+      _path="${_hit#*:}"
+      _path="$(printf '%s' "${_path}" | sed -E "s/^[^/]*\/[[:space:]]*[\"']?//")"
+      _base=""
+      [[ "${_hit}" == *BATS_TEST_DIRNAME* ]] && _base="$(dirname "${_rel}")/"
+      _resolved="$(_normalize_path "${_base}${_path}")"
+      [[ "${_resolved}" == tests/* ]] && continue
       _allowed=0
       for _entry in "${ALLOWED_MD_READERS[@]}"; do
         [[ "${_entry%%|*}" == "${_rel}" ]] && _allowed=1
       done
       [[ "${_allowed}" -eq 1 ]] && continue
-      printf 'FAIL: %s:%s reads tracked .md outside tests/: %s\n' "${_rel}" "${_hit%%:*}" "${_path}" >&2
+      printf 'FAIL: %s:%s reads tracked .md outside tests/: %s\n' "${_rel}" "${_hit%%:*}" "${_resolved}" >&2
       _bad=1
-    done < <(grep -noE "${_re}" "${_f}" 2>/dev/null | sed -E 's/^([0-9]+):/\1:/')
+    done <<<"${_hits}"
   done <<<"${_files}"
   if [[ "${_n}" -eq 0 ]]; then
     printf 'FAIL: scanned zero test files under %s/tests\n' "${_root}" >&2
@@ -122,8 +248,7 @@ _fixture_makefile() {
 
 @test "positive control: the real closure parse is non-empty and contains lint" {
   local _db
-  # -q exits 1 by design; the database on stdout is what matters
-  _db="$(make --no-print-directory -C "${REPO_ROOT}" -pnq test 2>/dev/null || true)"
+  _db="$(_make_db "${REPO_ROOT}")"
   run _rule_prereqs "${_db}" test
   [ "${status}" -eq 0 ]
   [[ "${output}" == *lint* ]]
@@ -180,4 +305,105 @@ _fixture_makefile() {
 @test "fixture: a tests directory with no scannable files fails rather than passing vacuously" {
   mkdir -p "${BATS_TEST_TMPDIR}/fx/tests"
   run -1 _check_readers "${BATS_TEST_TMPDIR}/fx"
+}
+
+@test "fixture: braced BATS_TEST_DIRNAME two levels up to CLAUDE.md fails" {
+  mkdir -p "${BATS_TEST_TMPDIR}/fx/tests/scripts"
+  printf 'cat "${BATS_TEST_DIRNAME}/../../CLAUDE.md"\n' >"${BATS_TEST_TMPDIR}/fx/tests/scripts/q.bats"
+  run -1 _check_readers "${BATS_TEST_TMPDIR}/fx"
+  [[ "${output}" == *tests/scripts/q.bats* ]]
+}
+
+@test "fixture: BATS_TEST_DIRNAME one level up from tests/ itself to README.md fails" {
+  mkdir -p "${BATS_TEST_TMPDIR}/fx/tests"
+  printf 'cat "${BATS_TEST_DIRNAME}/../README.md"\n' >"${BATS_TEST_TMPDIR}/fx/tests/q.bats"
+  run -1 _check_readers "${BATS_TEST_TMPDIR}/fx"
+  [[ "${output}" == *tests/q.bats* ]]
+}
+
+@test "fixture: BATS_TEST_DIRNAME one level up from tests/scripts to a tests/ fixture passes" {
+  mkdir -p "${BATS_TEST_TMPDIR}/fx/tests/scripts"
+  printf 'cat "${BATS_TEST_DIRNAME}/../fixtures/a.md"\n' >"${BATS_TEST_TMPDIR}/fx/tests/scripts/q.bats"
+  run -0 _check_readers "${BATS_TEST_TMPDIR}/fx"
+}
+
+@test "fixture: python _REPO / CLAUDE.md fails" {
+  mkdir -p "${BATS_TEST_TMPDIR}/fx/tests"
+  printf '_X = _REPO / "CLAUDE.md"\n' >"${BATS_TEST_TMPDIR}/fx/tests/w.py"
+  run -1 _check_readers "${BATS_TEST_TMPDIR}/fx"
+  [[ "${output}" == *tests/w.py* ]]
+}
+
+@test "fixture: a path that climbs out of tests/ through .. fails" {
+  mkdir -p "${BATS_TEST_TMPDIR}/fx/tests"
+  printf 'cat "${REPO_ROOT}/tests/../CLAUDE.md"\n' >"${BATS_TEST_TMPDIR}/fx/tests/v.bats"
+  run -1 _check_readers "${BATS_TEST_TMPDIR}/fx"
+  [[ "${output}" == *tests/v.bats* ]]
+}
+
+@test "fixture: DOTFILES_ROOT (a temp fixture dir, not the repo) is not a root variable" {
+  mkdir -p "${BATS_TEST_TMPDIR}/fx/tests"
+  printf 'OUT="${DOTFILES_ROOT}/features.md"\n' >"${BATS_TEST_TMPDIR}/fx/tests/u.bats"
+  run -0 _check_readers "${BATS_TEST_TMPDIR}/fx"
+}
+
+@test "fixture: an unreadable test file fails loudly instead of hiding the read" {
+  mkdir -p "${BATS_TEST_TMPDIR}/fx/tests" "${BATS_TEST_TMPDIR}/shim"
+  printf 'true\n' >"${BATS_TEST_TMPDIR}/fx/tests/t.bats"
+  printf '#!/bin/sh\nexit 2\n' >"${BATS_TEST_TMPDIR}/shim/grep"
+  chmod +x "${BATS_TEST_TMPDIR}/shim/grep"
+  PATH="${BATS_TEST_TMPDIR}/shim:${PATH}" run -1 _check_readers "${BATS_TEST_TMPDIR}/fx"
+  [[ "${output}" == *tests/t.bats* ]]
+}
+
+@test "fixture: a .md prerequisite fails naming it" {
+  _fixture_makefile "${BATS_TEST_TMPDIR}/fx" "test: lint README.md"
+  printf 'x\n' >"${BATS_TEST_TMPDIR}/fx/README.md"
+  run -1 _check_prereqs "${BATS_TEST_TMPDIR}/fx"
+  [[ "${output}" == *README.md* ]]
+}
+
+@test "fixture: a file prerequisite with its own rule is followed" {
+  _fixture_makefile "${BATS_TEST_TMPDIR}/fx" "test: lint stamp.txt"
+  printf 'stamp.txt: check-agent-guidance\n' >>"${BATS_TEST_TMPDIR}/fx/Makefile"
+  printf 'x\n' >"${BATS_TEST_TMPDIR}/fx/stamp.txt"
+  run -1 _check_prereqs "${BATS_TEST_TMPDIR}/fx"
+  [[ "${output}" == *check-agent-guidance* ]]
+}
+
+@test "fixture: a recipe invoking a sub-make on an unrecorded target fails" {
+  _fixture_makefile "${BATS_TEST_TMPDIR}/fx" "$(printf 'test: lint\n\t@$(MAKE) check-agent-guidance')"
+  run -1 _check_prereqs "${BATS_TEST_TMPDIR}/fx"
+  [[ "${output}" == *check-agent-guidance* ]]
+}
+
+@test "fixture: a recipe invoking a sub-make on a recorded target passes" {
+  _fixture_makefile "${BATS_TEST_TMPDIR}/fx" "$(printf 'test: lint\n\t@$(MAKE) lint')"
+  run -0 _check_prereqs "${BATS_TEST_TMPDIR}/fx"
+}
+
+@test "fixture: a recipe naming a .md path fails" {
+  _fixture_makefile "${BATS_TEST_TMPDIR}/fx" "$(printf 'test: lint\n\t@cat CLAUDE.md')"
+  run -1 _check_prereqs "${BATS_TEST_TMPDIR}/fx"
+  [[ "${output}" == *CLAUDE.md* ]]
+}
+
+@test "fixture: a Makefile that does not parse fails loudly" {
+  mkdir -p "${BATS_TEST_TMPDIR}/fx"
+  printf 'ifeq (a,a)\ntest: lint\nlint:\n\t@true\n' >"${BATS_TEST_TMPDIR}/fx/Makefile"
+  run -1 _check_prereqs "${BATS_TEST_TMPDIR}/fx"
+  [[ "${output}" == *"make exited"* ]]
+}
+
+@test "fixture: a target-specific variable on test is not a prerequisite" {
+  _fixture_makefile "${BATS_TEST_TMPDIR}/fx" "test: lint"
+  printf 'test: JOBS = 5\n' >>"${BATS_TEST_TMPDIR}/fx/Makefile"
+  run -0 _check_prereqs "${BATS_TEST_TMPDIR}/fx"
+}
+
+@test "fixture: a double-colon test rule is parsed and names the real prerequisite" {
+  _fixture_makefile "${BATS_TEST_TMPDIR}/fx" "test:: lint check-agent-guidance"
+  run -1 _check_prereqs "${BATS_TEST_TMPDIR}/fx"
+  [[ "${output}" == *check-agent-guidance* ]]
+  [[ "${output}" != *JOBS* && "${output}" != *"= "* ]]
 }
