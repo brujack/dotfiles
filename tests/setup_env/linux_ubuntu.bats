@@ -1562,6 +1562,17 @@ _az_cloud_env() {
   refute_grep "apt-get remove" "${MOCK_CALLS_FILE}"
 }
 
+@test "_is_system_az_path: true for exactly /bin/az and /usr/bin/az, false otherwise" {
+  # Pure string predicate: no az is ever executed here.
+  run _is_system_az_path /bin/az
+  [ "$status" -eq 0 ]
+  run _is_system_az_path /usr/bin/az
+  [ "$status" -eq 0 ]
+  run ! _is_system_az_path /home/linuxbrew/.linuxbrew/bin/az
+  run ! _is_system_az_path ""
+  run ! _is_system_az_path /usr/bin/az2
+}
+
 @test "_install_ubuntu_brew_packages: never treats /usr/bin/az as the brew az" {
   export _BREW_AZ_BIN="/usr/bin/az"
   export MOCK_DPKG_S_STATUS="install ok installed"
@@ -1607,6 +1618,15 @@ _az_cloud_env() {
   for _f in "${_files[@]}"; do
     [ ! -e "${_f}" ]
   done
+}
+
+@test "_install_ubuntu_cloud_tools: warns when the legacy azure-cli cleanup cannot remove a file" {
+  # tests/mocks/rm swallows a real EACCES (/bin/rm ... || true), so a 0555 directory
+  # cannot fail the cleanup under the mock; MOCK_RM_EXIT is the mock's failure seam.
+  _az_cloud_env
+  printf 'x\n' > "${_APT_SOURCES_DIR}/azure-cli.list"
+  MOCK_RM_EXIT=1 run --separate-stderr _install_ubuntu_cloud_tools
+  [[ "$stderr" == *"could not remove legacy azure-cli apt key/sources"* ]]
 }
 
 # ── _install_ubuntu_brew_packages ────────────────────────────────────────────
@@ -2246,10 +2266,12 @@ _seed_ring() {
   [ -z "$(ls -A "${_APT_KEY_TMP_ROOT}")" ]
 }
 
-@test "_build_pinned_keyring: gpg exiting non-zero returns 2 and leaves the existing keyring untouched" {
+@test "_build_pinned_keyring: gpg exiting non-zero returns 2 even when it still wrote a good key" {
   _seed_ring
   printf 'old' > "${BATS_TEST_TMPDIR}/expect"
-  printf '#!/usr/bin/env bash\nexit 2\n' > "${BATS_TEST_TMPDIR}/gpg-fail"
+  # Fails ONLY the dearmor, after writing the correct bytes, so the fingerprint
+  # check alone would pass: only the dearmor exit-status check can return 2 here.
+  printf '#!/usr/bin/env bash\nif [[ $1 == --dearmor ]]; then "%s" --dearmor; exit 2; fi\nexec "%s" "$@"\n' "${_MS_GPG_BIN}" "${_MS_GPG_BIN}" > "${BATS_TEST_TMPDIR}/gpg-fail"
   chmod +x "${BATS_TEST_TMPDIR}/gpg-fail"
   _MS_GPG_BIN="${BATS_TEST_TMPDIR}/gpg-fail" run _build_pinned_keyring "${REPO_ROOT}/keys/microsoft.asc" "${_ring}" "${MS_GPG_FPR}"
   [ "$status" -eq 2 ]
@@ -2324,6 +2346,24 @@ _seed_ring() {
   cmp "${BATS_TEST_TMPDIR}/expect" "${_ring}"
   [ ! -e "${_ring}.new" ]
   [ -z "$(ls -A "${_APT_KEY_TMP_ROOT}")" ]
+}
+
+@test "_keyring_has_pinned_fpr: a listing with no pub: record returns 2" {
+  local _h
+  _h="$(mktemp -d "${_APT_KEY_TMP_ROOT}/h.XXXXXXXX")"
+  printf '#!/usr/bin/env bash\nprintf "tru::1:0:0:0:0:0\\n"\nexit 0\n' > "${BATS_TEST_TMPDIR}/gpg-nopub"
+  chmod +x "${BATS_TEST_TMPDIR}/gpg-nopub"
+  _MS_GPG_BIN="${BATS_TEST_TMPDIR}/gpg-nopub" run _keyring_has_pinned_fpr "${BATS_TEST_TMPDIR}/any.gpg" "${MS_GPG_FPR}" "${_h}"
+  [ "$status" -eq 2 ]
+}
+
+@test "_keyring_has_pinned_fpr: a pub: record with no fpr: record returns 2" {
+  local _h
+  _h="$(mktemp -d "${_APT_KEY_TMP_ROOT}/h.XXXXXXXX")"
+  printf '#!/usr/bin/env bash\nprintf "pub:-:2048:1:591C21DEFD39878D:1:::::scESC:\\n"\nexit 0\n' > "${BATS_TEST_TMPDIR}/gpg-nofpr"
+  chmod +x "${BATS_TEST_TMPDIR}/gpg-nofpr"
+  _MS_GPG_BIN="${BATS_TEST_TMPDIR}/gpg-nofpr" run _keyring_has_pinned_fpr "${BATS_TEST_TMPDIR}/any.gpg" "${MS_GPG_FPR}" "${_h}"
+  [ "$status" -eq 2 ]
 }
 
 @test "_keyring_has_pinned_fpr: an empty homedir argument is refused with 2" {
@@ -2401,6 +2441,7 @@ _albert_assert_last_good_untouched() {
   [[ "$stderr" != *"fetch failed"* ]]
   grep -q "^curl " "${MOCK_CALLS_FILE}"
   refute_grep "apt install albert" "${MOCK_CALLS_FILE}"
+  [ -z "$(ls -A "${_APT_KEY_TMP_ROOT}")" ]
 }
 
 @test "_install_ubuntu_albert: wrong fingerprint removes the source and keyring, warns with both fingerprints" {
@@ -2414,6 +2455,7 @@ _albert_assert_last_good_untouched() {
   [[ "$stderr" == *"${_ALBERT_FPR}"* ]]
   grep -q "^curl " "${MOCK_CALLS_FILE}"
   refute_grep "apt install albert" "${MOCK_CALLS_FILE}"
+  [ -z "$(ls -A "${_APT_KEY_TMP_ROOT}")" ]
 }
 
 @test "_install_ubuntu_albert: keyring install failure (builder 3) keeps the last good source and returns 2" {
@@ -2426,6 +2468,7 @@ _albert_assert_last_good_untouched() {
   [[ "$stderr" == *"${_APT_KEYRINGS_DIR}/albert-obs.gpg"* ]]
   grep -q "^curl " "${MOCK_CALLS_FILE}"
   refute_grep "apt install albert" "${MOCK_CALLS_FILE}"
+  [ -z "$(ls -A "${_APT_KEY_TMP_ROOT}")" ]
 }
 
 @test "_install_ubuntu_albert: fetches into a temp dir under _APT_KEY_TMP_ROOT and leaves it empty (success)" {

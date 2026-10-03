@@ -721,7 +721,7 @@ _install_ubuntu_brew_packages() {
   _bp="$(brew --prefix 2> /dev/null)"
   if [[ -n ${_BREW_AZ_BIN:-} || -n ${_bp} ]]; then
     _az_probe="${_BREW_AZ_BIN:-${_bp}/bin/az}"
-    if [[ ${_az_probe} != /bin/az && ${_az_probe} != /usr/bin/az ]] \
+    if ! _is_system_az_path "${_az_probe}" \
       && "${_az_probe}" version > /dev/null 2>&1 \
       && dpkg -s azure-cli 2> /dev/null | grep -qx 'Status: install ok installed'; then
       sudo DEBIAN_FRONTEND=noninteractive apt-get remove -y azure-cli || _failed+=(azure-cli-apt-remove)
@@ -775,12 +775,18 @@ _install_ubuntu_brew_packages() {
   fi
 }
 
+# True for the apt-packaged az, which on a merged-usr Ubuntu is also what a bare
+# /bin/az resolves to; the brew migration must never accept it as the brew az.
+_is_system_az_path() {
+  [[ $1 == /bin/az || $1 == /usr/bin/az ]]
+}
+
 # gpg 2.5 exits 0 when it dearmors a truncated key and still writes bytes, so
 # a keyring is judged by its content: it must hold exactly one primary key and
 # the fingerprint of that primary key (the fpr: record right after its pub:
 # record, never a subkey's) must equal the pin. Returns 0 match, 1 mismatch,
 # 2 when the listing failed or showed no primary key (gpg missing, junk input,
-# or an empty homedir argument). <home> is a throwaway gpg homedir the caller
+# a pub: record with no fpr: record after it, or an empty homedir argument). <home> is a throwaway gpg homedir the caller
 # owns and removes; an empty one would make gpg use the operator's ~/.gnupg.
 _keyring_has_pinned_fpr() {
   local _ring="$1" _fpr="$2" _home="$3" _listing _rc _pubs _primary
@@ -792,7 +798,8 @@ _keyring_has_pinned_fpr() {
   [[ ${_pubs} -ge 1 ]] || return 2
   [[ ${_pubs} -eq 1 ]] || return 1
   _primary="$(printf '%s\n' "${_listing}" | awk -F: '/^pub:/{p=1;next} p&&/^fpr:/{print $10;exit}')"
-  [[ -n ${_fpr} && -n ${_primary} ]] || return 1
+  [[ -n ${_primary} ]] || return 2
+  [[ -n ${_fpr} ]] || return 1
   [[ ${_primary} == "${_fpr}" ]] || return 1
 }
 
@@ -877,14 +884,14 @@ _install_ubuntu_albert() {
   local _trusted="${_APT_TRUSTED_DIR:-/etc/apt/trusted.gpg.d}"
   local _list="${_sources}/albert.list"
   local _ring="${_keyrings}/albert-obs.gpg"
-  local _release _url _dir _brc _have _fprs _npub _f
-  _have="keeping last verified source"
+  local _release _url _dir _brc _keep_note _fprs _npub _f
+  _keep_note="keeping last verified source"
 
   _release="$(lsb_release -rs)"
   printf "Installing Albert Ubuntu %s\\n" "${_release}"
   # Legacy cleanup runs first, before any fetch, so it happens on every path.
   sudo rm -f "${_trusted}/home_manuelschneid3r.gpg" "${_sources}/home:manuelschneid3r.list"
-  [[ -e ${_list} ]] || _have="no verified albert source is present yet"
+  [[ -e ${_list} ]] || _keep_note="no verified albert source is present yet"
 
   _url="${_ALBERT_KEY_URL:-https://download.opensuse.org/repositories/home:manuelschneid3r/xUbuntu_${_release}/Release.key}"
   _dir="$(mktemp -d "${_APT_KEY_TMP_ROOT:-${TMPDIR:-/tmp}}/albert-key.XXXXXXXX")" || {
@@ -894,7 +901,7 @@ _install_ubuntu_albert() {
 
   if ! curl -fsSL -o "${_dir}/albert-key.asc" "${_url}"; then
     rm -rf "${_dir}"
-    log_warn "albert key fetch failed (${_url}); ${_have}"
+    log_warn "albert key fetch failed (${_url}); ${_keep_note}"
     return 2
   fi
 
@@ -923,12 +930,12 @@ _install_ubuntu_albert() {
       ;;
     2)
       rm -rf "${_dir}"
-      log_warn "albert: no key could be read from ${_url}; ${_have}"
+      log_warn "albert: no key could be read from ${_url}; ${_keep_note}"
       return 2
       ;;
     *)
       rm -rf "${_dir}"
-      log_warn "albert: could not install the keyring ${_ring}; ${_have}"
+      log_warn "albert: could not install the keyring ${_ring}; ${_keep_note}"
       return 2
       ;;
   esac
@@ -992,7 +999,9 @@ _install_ubuntu_gui_tools() {
       printf "Steam is installed\\n"
     fi
   fi
-  # Capture first, so a clean albert hands back the step's own status unchanged.
+  # Captures the status of the HAS_FLATPAK `if` block directly above (0 when it is
+  # skipped); keep this capture directly after it so a clean albert hands back that
+  # step's own status unchanged.
   _tail_rc=$?
   [[ ${_albert_rc} -ne 0 ]] && return "${_albert_rc}"
   return "${_tail_rc}"
