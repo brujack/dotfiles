@@ -381,6 +381,7 @@ CI requirements:
 - Every modification to an existing function must update its test
 - New shell scripts get their own directory under `tests/` (e.g., `tests/scripts/`)
 - Never modify real system state in tests — use PATH-based mocks from `tests/mocks/`
+- `tests/helpers/common.bash` unsets `GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE` when sourced, because `git -C` does not override an exported `GIT_DIR` and four files once wrote commits and a `user.name` into the repo a hook had named (#308). A bats file that builds git fixtures without sourcing that helper must strip the same four itself; `tests/helpers_git_env.bats` pins the helper's strip.
 - `make test` must exit 0 before committing
 - When moving or renaming a directory that tests reference, run `grep -r "<old-path>" tests/` before claiming no test changes are needed — hardcoded paths in test fixtures will break even when the production code uses `$PERSONAL_GITREPOS/$DOTFILES/` prefixes
 
