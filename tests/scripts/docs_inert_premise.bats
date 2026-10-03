@@ -44,19 +44,31 @@ setup() {
 # (`t: VAR = x`, `t: VAR := x`, `t := x`) rather than a prerequisite list.
 _ASSIGN_RE='^[ \t]*([^ \t:]+[ \t]*)?[:+?!]?='
 
+# awk function shared by _rule_prereqs and _rule_recipe so both parse a rule
+# line identically. rule_rest(line, target) returns the text after `target:` or
+# `target::` and sets matched=1; for any other line it sets matched=0.
+_AWK_RULE_FN='
+  function rule_rest(line, t,   n, rest) {
+    n = length(t)
+    matched = 0
+    if (substr(line, 1, n) != t) return ""
+    rest = substr(line, n + 1)
+    if (substr(rest, 1, 2) == "::") rest = substr(rest, 3)
+    else if (substr(rest, 1, 1) == ":") rest = substr(rest, 2)
+    else return ""
+    matched = 1
+    return rest
+  }'
+
 # Prints the prerequisites of every rule for target $2 in the make database
 # dump $1. Order-only prerequisites (after |) are included: they still run.
 # Handles `t::`, and skips variable assignments (`t: VAR = x`, `t := x`).
 _rule_prereqs() {
   local _db="${1}" _target="${2}"
-  printf '%s\n' "${_db}" | awk -v t="${_target}" -v asg="${_ASSIGN_RE}" '
+  printf '%s\n' "${_db}" | awk -v t="${_target}" -v asg="${_ASSIGN_RE}" "${_AWK_RULE_FN}"'
     {
-      n = length(t)
-      if (substr($0, 1, n) != t) next
-      rest = substr($0, n + 1)
-      if (substr(rest, 1, 2) == "::") rest = substr(rest, 3)
-      else if (substr(rest, 1, 1) == ":") rest = substr(rest, 2)
-      else next
+      rest = rule_rest($0, t)
+      if (!matched) next
       if (rest ~ asg) next
       gsub(/\|/, " ", rest)
       print rest
@@ -64,14 +76,14 @@ _rule_prereqs() {
 }
 
 # Prints the recipe lines of every rule for target $2 in the database dump $1.
+# Separate from _rule_prereqs because it is a stateful scan (recipe lines follow
+# their rule line) while _rule_prereqs is a stateless per-line filter.
 _rule_recipe() {
   local _db="${1}" _target="${2}"
-  printf '%s\n' "${_db}" | awk -v t="${_target}" -v asg="${_ASSIGN_RE}" '
+  printf '%s\n' "${_db}" | awk -v t="${_target}" -v asg="${_ASSIGN_RE}" "${_AWK_RULE_FN}"'
     {
-      n = length(t)
-      if (substr($0, 1, n) == t && substr($0, n + 1, 1) == ":") {
-        rest = substr($0, n + 2)
-        sub(/^:/, "", rest)
+      rest = rule_rest($0, t)
+      if (matched) {
         if (rest ~ asg) { in_r = 0; next }
         in_r = 1
         next
@@ -80,14 +92,6 @@ _rule_recipe() {
       if ($0 ~ /^#/) next
       in_r = 0
     }'
-}
-
-_is_allowed_prereq() {
-  local _t="${1}" _a
-  for _a in "${ALLOWED_TEST_PREREQS[@]}"; do
-    [[ "${_t}" == "${_a}" ]] && return 0
-  done
-  return 1
 }
 
 # _make_db <root>: print make's database dump for the test target. -q makes
@@ -124,7 +128,7 @@ _recipe_violations() {
 # ALLOWED_TEST_PREREQS, names a .md file, or has a recipe problem. File
 # prerequisites are followed when they have their own rule.
 _check_prereqs() {
-  local _root="${1}" _db _queue=() _seen=" " _t _p _extra=() _fail=0 _v
+  local _root="${1}" _db _queue=() _seen=" " _t _p _extra=() _fail=0 _v _a _ok
   _db="$(_make_db "${_root}")" || return 1
   # shellcheck disable=SC2207 # word-splitting is the point: one name per token
   _queue=($(_rule_prereqs "${_db}" test))
@@ -149,7 +153,11 @@ _check_prereqs() {
     done < <(_recipe_violations "${_db}" "${_t}")
     [[ "${_t}" == test ]] && continue
     [[ -e "${_root}/${_t}" ]] && continue
-    _is_allowed_prereq "${_t}" || _extra+=("${_t}")
+    _ok=0
+    for _a in "${ALLOWED_TEST_PREREQS[@]}"; do
+      [[ "${_t}" == "${_a}" ]] && _ok=1
+    done
+    [[ "${_ok}" -eq 1 ]] || _extra+=("${_t}")
   done
   if [[ "${_seen}" == " test " ]]; then
     printf 'FAIL: empty make test prerequisite closure; the parse found nothing\n' >&2
@@ -163,6 +171,15 @@ _check_prereqs() {
   fi
   return "${_fail}"
 }
+
+# Pieces of the reader scanner's regexes (ERE). Each shows a string it matches.
+_RE_BOUNDARY='(^|[^A-Za-z0-9_])\$?\{?'                       # ` "${` before a variable name
+_RE_ROOT_VARS='_{0,2}(REPO_ROOT|REPO|ROOT|repo_root|REPO_DIR)' # _REPO, REPO_ROOT
+_RE_VAR_END="\\}?[\"']?"                                       # `}"` closing the variable
+_RE_AFTER_SLASH="[[:space:]]*[\"']?"                           # ` "` between the slash and the path
+_RE_SEP="[[:space:]]*/${_RE_AFTER_SLASH}"                      # `/` or ` / "`
+_RE_PATH_CHARS='[A-Za-z0-9_./-]'                               # a path character: `docs/x`
+_RE_MD='\.md'                                                  # the .md suffix
 
 # _normalize_path <a/b/../c>: collapse . and .. segments; a path that climbs
 # above its start keeps a leading ../ so it can never read as under tests/.
@@ -191,10 +208,8 @@ _normalize_path() {
 # docs_inert_premise.bats is excluded: its own source names these patterns.
 _check_readers() {
   local _root="${1}" _files _f _hits _grc _hit _rel _bad=0 _entry _allowed _n=0 _path _base _resolved
-  local _pre='(^|[^A-Za-z0-9_])\$?\{?'
-  local _close='\}?["'"'"']?'
-  local _re_root="${_pre}_{0,2}(REPO_ROOT|REPO|ROOT|repo_root|REPO_DIR)${_close}[[:space:]]*/[[:space:]]*[\"']?[A-Za-z0-9_./-]+\\.md"
-  local _re_bats="${_pre}BATS_TEST_DIRNAME${_close}/[A-Za-z0-9_./-]*\\.md"
+  local _re_root="${_RE_BOUNDARY}${_RE_ROOT_VARS}${_RE_VAR_END}${_RE_SEP}${_RE_PATH_CHARS}+${_RE_MD}"
+  local _re_bats="${_RE_BOUNDARY}BATS_TEST_DIRNAME${_RE_VAR_END}/${_RE_PATH_CHARS}*${_RE_MD}"
   _files="$(find "${_root}/tests" -type f \( -name '*.bats' -o -name '*.py' -o -path '*/helpers/*' \) | sort)"
   while IFS= read -r _f; do
     [[ -z "${_f}" ]] && continue
@@ -211,7 +226,7 @@ _check_readers() {
       [[ -z "${_hit}" ]] && continue
       # drop "LINE:" and everything up to the first "/", which follows the root variable
       _path="${_hit#*:}"
-      _path="$(printf '%s' "${_path}" | sed -E "s/^[^/]*\/[[:space:]]*[\"']?//")"
+      _path="$(printf '%s' "${_path}" | sed -E "s/^[^/]*\/${_RE_AFTER_SLASH}//")"
       _base=""
       [[ "${_hit}" == *BATS_TEST_DIRNAME* ]] && _base="$(dirname "${_rel}")/"
       _resolved="$(_normalize_path "${_base}${_path}")"
