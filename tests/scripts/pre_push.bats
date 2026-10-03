@@ -1001,3 +1001,20 @@ _commit_entry() {
   [ "$status" -eq 0 ]
   [ ! -f "${MOCK_CALLS_FILE}" ]
 }
+
+@test "master guard refuses an ordinary .md when head itself fails" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "docs/a.md" "x" "docs: a")
+  mkdir -p "${BATS_TEST_TMPDIR}/headshim"
+  printf '#!/bin/sh\nexit 1\n' > "${BATS_TEST_TMPDIR}/headshim/head"
+  chmod +x "${BATS_TEST_TMPDIR}/headshim/head"
+  _write_make_mock 0
+  # Control: without the shim the same push is allowed, so the refusal below
+  # is caused by head failing and not by anything else in the fixture.
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  MAKE_MOCK_DIR="${BATS_TEST_TMPDIR}/headshim:${MAKE_MOCK_DIR}"
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  _assert_refused
+  [[ "$output" == *"docs/a.md"* ]]
+}

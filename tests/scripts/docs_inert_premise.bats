@@ -384,6 +384,40 @@ _fixture_makefile() {
   [[ "${output}" == *tests/hy.bats* ]]
 }
 
+@test "fixture: a root variable at the very start of a line fails" {
+  mkdir -p "${BATS_TEST_TMPDIR}/fx/tests"
+  printf '%s\n' 'ROOT / "x.md"' >"${BATS_TEST_TMPDIR}/fx/tests/sl.py"
+  run -1 _check_readers "${BATS_TEST_TMPDIR}/fx"
+  [[ "${output}" == *tests/sl.py* ]]
+}
+
+@test "fixture: a quote between the variable and the slash fails" {
+  mkdir -p "${BATS_TEST_TMPDIR}/fx/tests"
+  printf '%s\n' 'cat "${REPO_ROOT}"/README.md' >"${BATS_TEST_TMPDIR}/fx/tests/qs.bats"
+  run -1 _check_readers "${BATS_TEST_TMPDIR}/fx"
+  [[ "${output}" == *tests/qs.bats* ]]
+}
+
+@test "fixture: an underscore in the path fails" {
+  mkdir -p "${BATS_TEST_TMPDIR}/fx/tests"
+  printf '%s\n' 'cat "${REPO_ROOT}/docs/a_b.md"' >"${BATS_TEST_TMPDIR}/fx/tests/us.bats"
+  run -1 _check_readers "${BATS_TEST_TMPDIR}/fx"
+  [[ "${output}" == *tests/us.bats* ]]
+}
+
+@test "fixture: digits in the path fail" {
+  mkdir -p "${BATS_TEST_TMPDIR}/fx/tests"
+  printf '%s\n' 'cat "${REPO_ROOT}/docs/adr/0001-x.md"' >"${BATS_TEST_TMPDIR}/fx/tests/dg.bats"
+  run -1 _check_readers "${BATS_TEST_TMPDIR}/fx"
+  [[ "${output}" == *tests/dg.bats* ]]
+}
+
+@test "fixture: a non-md path ending in md-like letters passes" {
+  mkdir -p "${BATS_TEST_TMPDIR}/fx/tests"
+  printf '%s\n' 'cat "${REPO_ROOT}/bin/cmd"' >"${BATS_TEST_TMPDIR}/fx/tests/nm.bats"
+  run -0 _check_readers "${BATS_TEST_TMPDIR}/fx"
+}
+
 @test "fixture: a path that climbs out of tests/ through .. fails" {
   mkdir -p "${BATS_TEST_TMPDIR}/fx/tests"
   printf 'cat "${REPO_ROOT}/tests/../CLAUDE.md"\n' >"${BATS_TEST_TMPDIR}/fx/tests/v.bats"
@@ -430,6 +464,23 @@ _fixture_makefile() {
 @test "fixture: a recipe invoking a sub-make on a recorded target fails" {
   _fixture_makefile "${BATS_TEST_TMPDIR}/fx" "$(printf 'test: lint\n\t@$(MAKE) lint')"
   run -1 _check_prereqs "${BATS_TEST_TMPDIR}/fx"
+}
+
+@test "fixture: a recipe line that is exactly make lint fails" {
+  _fixture_makefile "${BATS_TEST_TMPDIR}/fx" "$(printf 'test: lint\n\tmake lint')"
+  run -1 _check_prereqs "${BATS_TEST_TMPDIR}/fx"
+  [[ "${output}" == *"sub-make"* ]]
+}
+
+@test "fixture: makeinfo is not a sub-make" {
+  _fixture_makefile "${BATS_TEST_TMPDIR}/fx" "$(printf 'test: lint\n\tmakeinfo foo.texi')"
+  run -0 _check_prereqs "${BATS_TEST_TMPDIR}/fx"
+}
+
+@test "fixture: a recipe ending in a bare make fails" {
+  _fixture_makefile "${BATS_TEST_TMPDIR}/fx" "$(printf 'test: lint\n\tcd sub && make')"
+  run -1 _check_prereqs "${BATS_TEST_TMPDIR}/fx"
+  [[ "${output}" == *"sub-make"* ]]
 }
 
 @test "fixture: a recipe naming a .md path fails" {
