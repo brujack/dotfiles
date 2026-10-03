@@ -1,5 +1,7 @@
 # Master Guard Default-Deny Implementation Plan
 
+> **Status: DONE** — merged in #307 (69dbeb08), 2026-10-03.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the pre-push hook's direct-to-master deny list with one default-deny
