@@ -72,14 +72,22 @@ azure half no longer needs an apt key at all. Only albert keeps an apt source.
 The existing `_edge_keyring_has_pinned_fpr` becomes `_keyring_has_pinned_fpr <ring> <fpr>`.
 A new `_build_pinned_keyring <key_file> <keyring> <fpr>`:
 
-1. Runs `gpg --dearmor < key_file | sudo tee keyring > /dev/null` through `_MS_GPG_BIN`
-   (default `gpg`).
-2. Succeeds only if gpg's own exit status (`PIPESTATUS[0]`) is 0 **and** the
+1. Dearmors into a **temporary** keyring inside its own
+   `mktemp -d "${_APT_KEY_TMP_ROOT:-${TMPDIR:-/tmp}}/apt-key.XXXXXXXX"` directory, through
+   `_MS_GPG_BIN` (default `gpg`), as the invoking user. The directory is removed on every
+   path.
+2. Verifies the temporary keyring: gpg's own exit status is 0 **and** the
    `--show-keys --with-colons` listing holds exactly one `pub:` record whose `fpr` equals
    the pin. An empty keyring fails the count.
-3. On any failure, `sudo rm -f` the keyring. Return 2 when no `pub:` record could be read
-   (gpg missing or non-zero, or a body that is not a key); return 1 when keys were read but
-   the single-key or fingerprint rule failed. Edge treats both as failure, unchanged.
+3. Only on success, `sudo install -m 0644 <tmp> <keyring>` onto the final path, and return 0.
+4. On failure the final path is **never touched**: no truncation, no `rm`. Return 2 when no
+   `pub:` record could be read (gpg missing or non-zero, or a body that is not a key);
+   return 1 when keys were read but the single-key or fingerprint rule failed.
+
+Building outside the final path is what makes the albert keep-last-good rule (R7) possible:
+writing in place would truncate the verified `albert-obs.gpg` before the check could fail.
+Edge removes its own bootstrap keyring and `.list` when the build fails, in edge's code, so
+edge's behaviour is unchanged (R2).
 
 **The single-key rule is new and load-bearing.** Today's check passes if *any* `fpr:` line
 matches. Albert's key arrives over the network, so a response carrying the real key plus an
@@ -103,12 +111,13 @@ Extracted from `_install_ubuntu_gui_tools`; still gated on `HAS_SNAP`.
   `lib/constants.sh`.
 - The key is fetched with
   `curl -fsSL "${_ALBERT_KEY_URL:-https://download.opensuse.org/repositories/home:manuelschneid3r/xUbuntu_<release>/Release.key}"`
-  into a temp file under `mktemp -d "${_ALBERT_TMP_ROOT:-${TMPDIR:-/tmp}}/albert-key.XXXXXXXX"`,
+  into a temp file under `mktemp -d "${_APT_KEY_TMP_ROOT:-${TMPDIR:-/tmp}}/albert-key.XXXXXXXX"`,
   removed on every path. This is the `_RELEASE_TMP_ROOT` pattern (`lib/linux_ubuntu.sh:909`):
   BSD `mktemp` ignores `TMPDIR` without a template.
 - The key is fetched rather than vendored (operator decision, 2026-10-03). OBS extends key
   expiry without changing the fingerprint, so a fingerprint pin follows an extension.
-- On success, the shared builder produces `${_APT_KEYRINGS_DIR}/albert-obs.gpg`, then
+- The fetched key lands in the same `_APT_KEY_TMP_ROOT` directory scheme. On success, the
+  shared builder installs `${_APT_KEYRINGS_DIR}/albert-obs.gpg`, then
   `${_APT_SOURCES_DIR}/albert.list` is written as
   `deb [signed-by=<keyring>] https://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_<release>/ /`,
   then `apt install albert`. Returns 0.
@@ -122,7 +131,7 @@ Extracted from `_install_ubuntu_gui_tools`; still gated on `HAS_SNAP`.
   skip `apt install`, return 2. The builder reports this as a distinct return (2) from a
   pin mismatch (1), so the caller can tell them apart.
 - **Key mismatch** (the builder returns 1: one or more valid keys, but not exactly one
-  whose fingerprint equals the pin): remove `albert.list`, WARN with the fetched fingerprint(s) beside
+  whose fingerprint equals the pin): remove `albert.list` and `albert-obs.gpg`, WARN with the fetched fingerprint(s) beside
   `ALBERT_GPG_FPR` and the remedy (verify the new key out of band, then edit
   `lib/constants.sh`), skip `apt install`, return 2.
 - **Key expiry.** The key on the fleet expires 2027-02-10. Only `-t developer`/`-t setup`
@@ -164,6 +173,13 @@ In `_install_ubuntu_albert`:
 The azure source must go with the key: a source left behind without its key fails
 `apt update` with `NO_PUBKEY`.
 
+**The one run where a network failure does drop albert.** On the first run after this change
+on `claude` and `workstation` there is no `albert.list` yet; the legacy source is removed
+with its global key. If the key fetch fails on that run, there is no last verified source to
+keep, and albert has no apt source until a later run succeeds. This is accepted: removing
+the global trust is the point of the change. A missing albert source after the first run is
+expected, not a bug; re-run `-t developer`.
+
 ### Seams
 
 `tests/mocks/sudo` execs real commands, so an unseamed path is a real write to `/etc/apt`
@@ -175,7 +191,7 @@ The azure source must go with the key: a source left behind without its key fail
 | `_APT_SOURCES_DIR` | `/etc/apt/sources.list.d` |
 | `_APT_TRUSTED_DIR` | `/etc/apt/trusted.gpg.d` |
 | `_APT_KEYRINGS_DIR` | `/usr/share/keyrings` |
-| `_ALBERT_TMP_ROOT` | `${TMPDIR:-/tmp}` |
+| `_APT_KEY_TMP_ROOT` | `${TMPDIR:-/tmp}` |
 
 `_ALBERT_KEY_URL` is a production escape hatch for the key URL. Tests stay off the network
 without it: `tests/mocks/curl` is first on `PATH`, never fetches, and writes
@@ -192,17 +208,17 @@ is by fingerprint and `--show-keys` lists expired keys, so expiry does not break
 
 | case | expected |
 | --- | --- |
-| builder, pinned key | keyring holds exactly the pinned fingerprint; returns 0 |
-| builder, wrong key | keyring path pre-seeded and asserted present; then returns 1 and keyring absent |
-| builder, pinned key plus a second key appended | as above |
-| builder, truncated key | as above |
-| builder, gpg exits non-zero | as above |
+| builder, pinned key | final keyring holds exactly the pinned fingerprint, mode 0644; returns 0; temp directory removed |
+| builder, wrong key | final keyring path pre-seeded and asserted present; returns 1; final keyring byte-identical afterwards; temp directory removed |
+| builder, pinned key plus a second key appended | as wrong key; returns 1 |
+| builder, truncated key | as wrong key, but returns 2 (no `pub:` record readable) |
+| builder, gpg exits non-zero | as wrong key, but returns 2 |
 | albert, good key | `albert.list` holds `https://` and `signed-by=`; `apt install albert` called; returns 0 |
 | albert, fetch fails (`MOCK_CURL_EXIT`) | a pre-seeded `albert.list` and keyring asserted present, then unchanged afterwards; WARN names the URL; no install; returns 2 |
 | albert, non-key body (HTML via `MOCK_CURL_STDOUT`) | pre-seeded `albert.list` and keyring asserted present, then unchanged; WARN names the URL; no install; returns 2 |
-| builder, non-key input | returns 2 (not 1); keyring absent |
+| builder, non-key input | final keyring pre-seeded and asserted present; returns 2 (not 1); final keyring byte-identical afterwards |
 | albert, wrong fingerprint | pre-seeded `albert.list` asserted present, then absent; WARN prints the fetched fingerprint and `ALBERT_GPG_FPR`; no install; returns 2 |
-| albert, temp dir | curl is invoked with `-o`, and the logged `-o` target starts with `${_ALBERT_TMP_ROOT}/albert-key.`; `_ALBERT_TMP_ROOT` is empty afterwards, on both the success and fetch-fail paths |
+| albert, temp dir | curl is invoked with `-o`, and the logged `-o` target starts with `${_APT_KEY_TMP_ROOT}/albert-key.`; `_APT_KEY_TMP_ROOT` is empty afterwards, on both the success and fetch-fail paths |
 | gui_tools propagation | albert returning 2 makes `_install_ubuntu_gui_tools` return non-zero, and `install_ubuntu_packages` names `gui_tools` |
 | gui_tools success path | albert succeeds and the step's last command is made to fail (`MOCK_SNAP_EXIT`, `HAS_FLATPAK` unset); the non-zero return survives |
 | legacy cleanup | every file in §5 seeded and asserted present; then removed, including a glob-matched `archive_uri-…-resolute.list` |
@@ -252,7 +268,7 @@ then on each:
 
 ## Requirements
 
-- **R1.** `_build_pinned_keyring` leaves no keyring on any failure, returning 2 when no `pub:` record could be read (gpg non-zero or a non-key body) and 1 when the listing does not hold exactly one `pub:` record whose fingerprint equals the pin.
+- **R1.** `_build_pinned_keyring` builds and verifies in a temporary directory, installs onto the final path with `sudo install -m 0644` only on success, and never modifies the final path on failure, returning 2 when no `pub:` record could be read (gpg non-zero or a non-key body) and 1 when the listing does not hold exactly one `pub:` record whose fingerprint equals the pin.
 - **R2.** `_install_ubuntu_edge_source` builds its keyring through `_build_pinned_keyring`, and no existing edge test is modified.
 - **R3.** `_install_ubuntu_brew_packages` installs `azure-cli`, and `lib/linux_ubuntu.sh` contains no `packages.microsoft.com/repos/azure-cli` URL, no `add-apt-repository` call for azure-cli and no `apt install azure-cli`.
 - **R4.** `_install_ubuntu_brew_packages` runs `sudo DEBIAN_FRONTEND=noninteractive apt-get remove -y azure-cli` only when `"$(brew --prefix)/bin/az" version` exits 0 and `dpkg -s azure-cli` prints `Status: install ok installed`, and records a failed removal in `_failed` as `azure-cli-apt-remove`.
@@ -260,10 +276,10 @@ then on each:
 - **R6.** On success `_install_ubuntu_albert` writes `${_APT_SOURCES_DIR}/albert.list` with an `https://download.opensuse.org/` URL and `signed-by=${_APT_KEYRINGS_DIR}/albert-obs.gpg`, and returns 0.
 - **R7.** On a key fetch failure, or when no key can be read from the fetched body, `_install_ubuntu_albert` leaves an existing `albert.list` and `albert-obs.gpg` unchanged, logs a WARN naming the URL, skips `apt install albert`, and returns 2.
 - **R8.** On a key mismatch (builder returns 1) `_install_ubuntu_albert` removes `albert.list`, logs a WARN printing the fetched fingerprint(s) and `ALBERT_GPG_FPR`, skips `apt install albert`, and returns 2.
-- **R9.** The albert key is fetched into a directory created under `_ALBERT_TMP_ROOT` with an explicit `mktemp -d` template, removed on every path.
+- **R9.** The albert key fetch and the builder's temporary keyring live in directories created under `_APT_KEY_TMP_ROOT` with explicit `mktemp -d` templates, removed on every path.
 - **R10.** A non-zero return from `_install_ubuntu_albert` makes `_install_ubuntu_gui_tools` return non-zero after the rest of the step runs, without changing its return on the success path.
 - **R11.** The legacy files in Design §5, including the globbed `archive_uri-http_packages_microsoft_com_repos_azure-cli_-*.list`, are removed on every run, before any new key work.
-- **R12.** `_APT_SOURCES_DIR`, `_APT_TRUSTED_DIR`, `_APT_KEYRINGS_DIR`, `_ALBERT_TMP_ROOT` and `_ALBERT_KEY_URL` are honoured by the code, and the first four are set at setup scope in `tests/setup_env/linux_ubuntu.bats`.
+- **R12.** `_APT_SOURCES_DIR`, `_APT_TRUSTED_DIR`, `_APT_KEYRINGS_DIR`, `_APT_KEY_TMP_ROOT` and `_ALBERT_KEY_URL` are honoured by the code, and the first four are set at setup scope in `tests/setup_env/linux_ubuntu.bats`.
 - **R13.** Tests cover every row of the Testing table with real gpg and `tests/fixtures/albert-obs.asc` fed per test through `MOCK_CURL_STDOUT`, and the tests at `linux_ubuntu.bats:1416`, `:1454`, `:1487`, `:1497` and `:1568` are changed as the Testing section states.
 - **V1.** After merge, `./setup_env.sh -t developer` on `claude` and on `workstation` leaves no legacy key in `/etc/apt/trusted.gpg.d/`, and `sudo apt update` exits 0 with no `NO_PUBKEY`.
 - **V2.** After that setup on each of `claude` and `workstation`, `dpkg -s azure-cli` reports not installed, `command -v az` resolves under `/home/linuxbrew`, and `az version` and `albert --version` run.
@@ -400,4 +416,21 @@ unreadable key, which keeps the source (§2, §3, R1, R7); F2: removal gated on 
 F5: `azure-cli-apt-remove`. F6 Accepted, reason: reported, and `az` keeps working. Review
 stopped here by operator decision: remaining risk is test-harness, which Phase 2's first red
 test catches more cheaply.
+
+[Forward note, added with round 4: round 2's and round 3's references to `_ALBERT_TMP_ROOT`
+are frozen as written. That seam became `_APT_KEY_TMP_ROOT`, shared by the albert fetch and
+the builder, when the builder moved to build-then-install.]
+
+### Round 4 (external architectural review via the operator, reviewed at commit `dc5fb70a`)
+
+Finding: (1) §2 dearmored straight into the final keyring and `rm -f`'d it on failure, so a
+non-key body truncated and deleted the verified `albert-obs.gpg` that R7 promises to keep;
+`albert.list`'s `signed-by` would then name a missing file. Fix: build and verify in a temp
+directory, install with `sudo install -m 0644` only on success, never touch the final path on
+failure. (2) On the first run, legacy cleanup removes the albert source before any
+`albert.list` exists, so a fetch failure on that run leaves no albert source: the one case
+the keep-last-good rule cannot cover. State it.
+Author check: confirmed (1) against §2 steps 1 and 3 at `dc5fb70a`. Edge's own failure path
+removes its keyring in edge's code, so R2 still holds.
+Disposition:
 
