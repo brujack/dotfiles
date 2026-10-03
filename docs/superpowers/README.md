@@ -163,8 +163,9 @@ Add a new row to the group that matches its priority and type.
 
 ### P1 — bugs and security
 
-| Feature | Notes |
-| ------- | ----- |
+| Feature                                    | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Commits authored as `Test <test@test.com>` | workstation's dotfiles checkout has repo-local `user.name = Test` in `.git/config`, overriding the global identity; 264 of 561 non-PR `master` commits since 2026-06-01 carry it, the earliest seen 2026-05-26. Unset it, find which test wrote it (likely a fixture's `git config` reaching the real repo through a leaked `GIT_DIR`), and add a guard so a fixture cannot write a real checkout's config. Found 2026-10-02 while specifying the master guard. |
 
 ### P2 — bugs and security
 
