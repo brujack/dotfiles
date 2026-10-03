@@ -552,8 +552,25 @@ two-second grep appears to refute the rule.
   - Set `_AWS_BIN` in every `install_aws_tools` test on this machine — a real `aws` exists at `/usr/local/bin/aws`, so without the seam the already-installed guard is always taken and the install path is never asserted. → `dotfiles-test-seams.md` § `_AWS_BIN seam`
 
 - `_EDGE_SOURCES_DIR`/`_EDGE_BOOTSTRAP_KEYRING` (`lib/linux_ubuntu.sh:_install_ubuntu_edge_source`)
-  - Set both at setup scope in `tests/setup_env/linux_ubuntu.bats` — `tests/mocks/sudo` execs real commands, so unset seams let the edge source write the real `/etc/apt/sources.list.d` and `/usr/share/keyrings`. The edge tests call the helper directly, so they do not run the unseamed albert write; every test that runs `_install_ubuntu_gui_tools` with `HAS_SNAP` set does.
+  - Set both at setup scope in `tests/setup_env/linux_ubuntu.bats` — `tests/mocks/sudo` execs real commands, so unset seams let the edge source write the real `/etc/apt/sources.list.d` and `/usr/share/keyrings`.
   - A `.sources` is live only with a `URIs:` line and every `Enabled:` line affirmative (`yes|true|with|on|enable|1`); anything else, including a zero-byte file, is inert and takes the bootstrap branch. The bootstrap `.list` is always `signed-by` the keyring built from `keys/microsoft.asc`; it fails closed (WARN, no source written, never an unsigned line) when gpg exits non-zero, even if it still emitted bytes, when the keyring cannot be written, or when the built keyring does not list the pinned fingerprint `MS_GPG_FPR` — GnuPG 2.5 exits 0 on a truncated key (2.4 exits 2) and still writes bytes.
+
+- `_APT_SOURCES_DIR`/`_APT_TRUSTED_DIR`/`_APT_KEYRINGS_DIR` (`lib/linux_ubuntu.sh:_install_ubuntu_albert`, and the legacy azure-cli cleanup in `_install_ubuntu_cloud_tools`)
+  - Set all three at setup scope in `tests/setup_env/linux_ubuntu.bats` — `tests/mocks/sudo` execs real commands, so unset seams let albert and the azure legacy cleanup write and `rm -f` under the real `/etc/apt` and `/usr/share/keyrings`.
+
+- `_APT_KEY_TMP_ROOT` (`lib/linux_ubuntu.sh:_build_pinned_keyring`, `_install_ubuntu_albert`)
+  - Point it at a test-owned directory: BSD `mktemp -d` with a template ignores `TMPDIR`, so a `TMPDIR`-based isolation or cleanup assertion is silently inert on the Studio.
+
+- `_ALBERT_KEY_URL` (`lib/linux_ubuntu.sh:_install_ubuntu_albert`)
+  - A production escape hatch for the key URL. Tests feed the key through `MOCK_CURL_STDOUT` per test, never at setup scope, so each case controls which key the fetch returns.
+
+- `_BREW_AZ_BIN` (azure-cli migration in `lib/linux_ubuntu.sh:_install_ubuntu_brew_packages`)
+  - `load_mocks` exports it to a stub under `BATS_TEST_TMPDIR` (`MOCK_BREW_AZ_EXIT` sets its exit code), because `tests/mocks/brew` prints nothing for `--prefix` unless `MOCK_BREW_PREFIX` is set. Tests of the prefix branches unset it.
+  - Production refuses a probe of `/bin/az` or `/usr/bin/az`: on a merged-usr Ubuntu that is the apt az, which would "prove" itself and then be removed.
+
+- `_build_pinned_keyring <key> <keyring> <fpr>` (`lib/linux_ubuntu.sh`) is the shared builder for the edge and albert keyrings.
+  - It dearmors and verifies in a temp dir, pins the PRIMARY key's fingerprint only (a subkey fingerprint never satisfies the pin), stages to `<keyring>.new`, then `mv`s into place.
+  - Returns 0 installed, 1 the key is not the pinned one, 2 no key readable, 3 local failure; the final keyring is never modified on failure.
 
 - Every cadence seam exists because the delivery arm and the LaunchAgent installer resolve absolute paths and external binaries that a `PATH` mock cannot reach; none grants a capability beyond what editing `PATH` or the plist directly would already grant. → `dotfiles-test-seams.md` § `Cadence seams overview (scripts/cadence-notify.sh, lib/launch_agents.sh)`
 
