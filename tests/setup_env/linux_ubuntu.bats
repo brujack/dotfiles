@@ -2296,6 +2296,9 @@ _albert_assert_last_good_untouched() {
   [ "$status" -eq 2 ]
   _albert_assert_last_good_untouched
   [[ "$stderr" == *"download.opensuse.org"* ]]
+  [[ "$stderr" == *"fetch failed"* ]]
+  [[ "$stderr" != *"no key could be read"* ]]
+  [[ "$stderr" == *"keeping last verified source"* ]]
   grep -q "^curl " "${MOCK_CALLS_FILE}"
   refute_grep "apt install albert" "${MOCK_CALLS_FILE}"
 }
@@ -2307,6 +2310,8 @@ _albert_assert_last_good_untouched() {
   [ "$status" -eq 2 ]
   _albert_assert_last_good_untouched
   [[ "$stderr" == *"download.opensuse.org"* ]]
+  [[ "$stderr" == *"no key could be read"* ]]
+  [[ "$stderr" != *"fetch failed"* ]]
   grep -q "^curl " "${MOCK_CALLS_FILE}"
   refute_grep "apt install albert" "${MOCK_CALLS_FILE}"
 }
@@ -2392,7 +2397,7 @@ _albert_assert_last_good_untouched() {
   unset HAS_DEVTOOLS HAS_FLATPAK
   export MOCK_CURL_EXIT=22
   run _install_ubuntu_gui_tools
-  [ "$status" -ne 0 ]
+  [ "$status" -eq 2 ]
   grep -q "apt install microsoft-edge-stable" "${MOCK_CALLS_FILE}"
 }
 
@@ -2409,16 +2414,76 @@ _albert_assert_last_good_untouched() {
   run --separate-stderr install_ubuntu_packages
   [ "$status" -eq 2 ]
   [[ "$stderr" == *"failed: gui_tools"* ]]
+  [[ "$stderr" == *"albert key fetch failed"* ]]
 }
 
-@test "_install_ubuntu_gui_tools: albert success with a failing last snap command keeps the step's own status" {
+@test "_install_ubuntu_gui_tools: albert succeeding returns 0 (the step's own tail status)" {
   export HAS_SNAP=1
   unset HAS_DEVTOOLS HAS_FLATPAK
   _albert_good_key
-  export MOCK_SNAP_EXIT=1
   run _install_ubuntu_gui_tools
-  # The step ends in `if [[ -n ${HAS_FLATPAK} ]]`, which is 0 when unset, so the
-  # step's own status is 0 and albert's success must not change it.
+  # The step ends in `if [[ -n ${HAS_FLATPAK} ]]` with no else, so its tail status
+  # is 0 by construction today; this pins that albert's success does not alter it.
   [ "$status" -eq 0 ]
   grep -q "apt install albert" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_albert: no existing source says no verified source is present" {
+  [ ! -e "${_APT_SOURCES_DIR}/albert.list" ]
+  export MOCK_CURL_EXIT=22
+  run --separate-stderr _install_ubuntu_albert
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"no verified albert source is present"* ]]
+  [[ "$stderr" != *"keeping last verified source"* ]]
+}
+
+@test "_install_ubuntu_albert: removes legacy files even when the fetch fails" {
+  export MOCK_CURL_EXIT=22
+  printf 'x' > "${_APT_TRUSTED_DIR}/home_manuelschneid3r.gpg"
+  printf 'x' > "${_APT_SOURCES_DIR}/home:manuelschneid3r.list"
+  [ -f "${_APT_TRUSTED_DIR}/home_manuelschneid3r.gpg" ]
+  [ -f "${_APT_SOURCES_DIR}/home:manuelschneid3r.list" ]
+  run _install_ubuntu_albert
+  [ "$status" -eq 2 ]
+  [ ! -e "${_APT_TRUSTED_DIR}/home_manuelschneid3r.gpg" ]
+  [ ! -e "${_APT_SOURCES_DIR}/home:manuelschneid3r.list" ]
+}
+
+@test "_install_ubuntu_albert: a failed apt install albert warns and returns 2" {
+  _albert_good_key
+  export MOCK_APT_EXIT=1
+  run --separate-stderr _install_ubuntu_albert
+  [ "$status" -eq 2 ]
+  grep -q "apt install albert" "${MOCK_CALLS_FILE}"
+  [[ "$stderr" == *"apt install albert failed"* ]]
+}
+
+@test "_install_ubuntu_albert: a failed source write warns and returns 2" {
+  _albert_good_key
+  export MOCK_TEE_EXIT=1
+  run --separate-stderr _install_ubuntu_albert
+  [ "$status" -eq 2 ]
+  grep -q "^tee " "${MOCK_CALLS_FILE}"
+  refute_grep "apt install albert" "${MOCK_CALLS_FILE}"
+  [[ "$stderr" == *"could not write ${_APT_SOURCES_DIR}/albert.list"* ]]
+}
+
+@test "_install_ubuntu_albert: mismatch WARN lists only the primary fingerprint, never a subkey" {
+  export MOCK_CURL_STDOUT
+  MOCK_CURL_STDOUT="$(cat "${REPO_ROOT}/tests/fixtures/subkey-pin.asc")"
+  run --separate-stderr _install_ubuntu_albert
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"0F6868553876AAD0A8C17C72591C21DEFD39878D"* ]]
+  [[ "$stderr" == *"not the pinned key"* ]]
+  [[ "$stderr" != *"05E7C322791E474134B4CC27A3B2ED738EF1BBCA"* ]]
+}
+
+@test "_install_ubuntu_albert: mismatch WARN uses multi-key wording when several primary keys arrive" {
+  export MOCK_CURL_STDOUT
+  MOCK_CURL_STDOUT="$(cat "${REPO_ROOT}/keys/microsoft.asc" "${REPO_ROOT}/tests/fixtures/albert-obs.asc")"
+  run --separate-stderr _install_ubuntu_albert
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"2 primary keys"* ]]
+  [[ "$stderr" == *"${_MS_FPR}"* ]]
+  [[ "$stderr" != *"not the pinned key"* ]]
 }

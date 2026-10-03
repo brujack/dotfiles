@@ -872,12 +872,15 @@ _install_ubuntu_albert() {
   local _trusted="${_APT_TRUSTED_DIR:-/etc/apt/trusted.gpg.d}"
   local _list="${_sources}/albert.list"
   local _ring="${_keyrings}/albert-obs.gpg"
-  local _release _url _dir _brc
-
-  printf "Installing Albert Ubuntu Noble\\n"
-  sudo rm -f "${_trusted}/home_manuelschneid3r.gpg" "${_sources}/home:manuelschneid3r.list"
+  local _release _url _dir _brc _have _fprs _npub _f
+  _have="keeping last verified source"
 
   _release="$(lsb_release -rs)"
+  printf "Installing Albert Ubuntu %s\\n" "${_release}"
+  # Legacy cleanup runs first, before any fetch, so it happens on every path.
+  sudo rm -f "${_trusted}/home_manuelschneid3r.gpg" "${_sources}/home:manuelschneid3r.list"
+  [[ -e ${_list} ]] || _have="no verified albert source is present yet"
+
   _url="${_ALBERT_KEY_URL:-https://download.opensuse.org/repositories/home:manuelschneid3r/xUbuntu_${_release}/Release.key}"
   _dir="$(mktemp -d "${_APT_KEY_TMP_ROOT:-${TMPDIR:-/tmp}}/albert-key.XXXXXXXX")" || {
     log_warn "albert: could not create a temp dir for the key from ${_url}"
@@ -886,7 +889,7 @@ _install_ubuntu_albert() {
 
   if ! curl -fsSL -o "${_dir}/albert-key.asc" "${_url}"; then
     rm -rf "${_dir}"
-    log_warn "albert key fetch failed (${_url}); keeping last verified source"
+    log_warn "albert key fetch failed (${_url}); ${_have}"
     return 2
   fi
 
@@ -895,29 +898,48 @@ _install_ubuntu_albert() {
   case ${_brc} in
     0) ;;
     1)
-      log_warn "albert key from ${_url} is not the pinned key: fetched fingerprint(s) $("${_MS_GPG_BIN:-gpg}" --show-keys --with-colons "${_dir}/albert-key.asc" 2> /dev/null | awk -F: '$1 == "fpr" {printf "%s ", $10}') but ALBERT_GPG_FPR is ${ALBERT_GPG_FPR}; removing the albert source and keyring. Verify the new key out of band, then edit ALBERT_GPG_FPR in lib/constants.sh"
+      # Throwaway homedir: never read or write the operator's GNUPGHOME.
+      _fprs=""
+      _npub=0
+      if mkdir -m 700 "${_dir}/gh"; then
+        _fprs="$("${_MS_GPG_BIN:-gpg}" --homedir "${_dir}/gh" --batch --show-keys --with-colons "${_dir}/albert-key.asc" 2> /dev/null \
+          | awk -F: '$1 == "pub" {want = 1; next} $1 == "fpr" && want {printf "%s ", $10; want = 0}')"
+      fi
+      for _f in ${_fprs}; do _npub=$((_npub + 1)); done
+      [[ -n ${_fprs} ]] || _fprs="(unreadable)"
+      if [[ ${_npub} -gt 1 ]]; then
+        log_warn "albert key from ${_url} holds ${_npub} primary keys (${_fprs}), not exactly one; expected ALBERT_GPG_FPR ${ALBERT_GPG_FPR}. Removing the albert source and keyring. Verify the key out of band, then edit ALBERT_GPG_FPR in lib/constants.sh"
+      else
+        log_warn "albert key from ${_url} is not the pinned key: fetched primary fingerprint ${_fprs} but ALBERT_GPG_FPR is ${ALBERT_GPG_FPR}; removing the albert source and keyring. Verify the new key out of band, then edit ALBERT_GPG_FPR in lib/constants.sh"
+      fi
       rm -rf "${_dir}"
       sudo rm -f "${_list}" "${_ring}"
       return 2
       ;;
     2)
       rm -rf "${_dir}"
-      log_warn "albert: no key could be read from ${_url}; keeping last verified source"
+      log_warn "albert: no key could be read from ${_url}; ${_have}"
       return 2
       ;;
     *)
       rm -rf "${_dir}"
-      log_warn "albert: could not install the keyring ${_ring}; keeping last verified source"
+      log_warn "albert: could not install the keyring ${_ring}; ${_have}"
       return 2
       ;;
   esac
   rm -rf "${_dir}"
 
-  printf 'deb [signed-by=%s] https://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_%s/ /\n' "${_ring}" "${_release}" | sudo tee "${_list}" > /dev/null || return 2
+  if ! printf 'deb [signed-by=%s] https://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_%s/ /\n' "${_ring}" "${_release}" | sudo tee "${_list}" > /dev/null; then
+    log_warn "albert: could not write ${_list}"
+    return 2
+  fi
   sudo -H DEBIAN_FRONTEND=noninteractive apt update
-  sudo -H DEBIAN_FRONTEND=noninteractive apt install albert -y
+  if ! sudo -H DEBIAN_FRONTEND=noninteractive apt install albert -y; then
+    log_warn "albert: apt install albert failed"
+    return 2
+  fi
   if [[ -x $(command -v albert) ]]; then
-    printf "Albert is installed Ubuntu Noble\\n"
+    printf "Albert is installed Ubuntu %s\\n" "${_release}"
   fi
   return 0
 }
