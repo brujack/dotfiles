@@ -1,5 +1,7 @@
 # Scoped apt keys for albert; azure-cli to linuxbrew — Implementation Plan
 
+> **Status: DONE** — merged in dotfiles#309 (2e9fc839), 2026-10-03.
+
 spec: docs/superpowers/specs/2026-10-03-scoped-apt-keys-azure-albert-design.md
 
 **Spec:** [2026-10-03-scoped-apt-keys-azure-albert-design.md](../specs/2026-10-03-scoped-apt-keys-azure-albert-design.md)
