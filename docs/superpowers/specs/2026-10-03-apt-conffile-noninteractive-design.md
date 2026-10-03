@@ -250,6 +250,10 @@ The real-tool proof is V1 and V2 below. The bats suite never runs a real apt or 
 - **N6.** `_doctor_check_conffile_dist` does not run `find` under sudo, and does not move, delete or merge any `.dpkg-dist` or `.ucf-dist` file.
 - **N7.** No `.dpkg-dist` reporting is added to `run_update`, `run_setup_or_developer` or `_UPDATE_SECTION_ORDER`.
 
+## Amendments
+
+- V1 -> On claude, re-run the §2 `dotfiles-cfprobe` probe through a changed `xargs … nala install` line (stdin `/dev/null`, edited conffile, v1 to v2). Expect rc 0, state `ii`, local edit kept, `.dpkg-dist` written, and `setup_env.sh -t doctor` WARNing on it. Then delete only the probe's `.dpkg-dist` and confirm the next doctor run no longer names it; `/etc/default/grub.ucf-dist` is left for the operator. — plan-time non-goal check: deleting a pre-existing operator file is not the plan's call.
+
 ## Multi-Lens Review
 
 Reviewed at commit: `992dcc3d` (Step 7 self-review commit, before Step 8 dispatch)
