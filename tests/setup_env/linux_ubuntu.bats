@@ -1,5 +1,7 @@
 #!/usr/bin/env bats
 
+bats_require_minimum_version 1.5.0
+
 setup() {
   REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
   source "${REPO_ROOT}/tests/helpers/common.bash"
@@ -28,7 +30,7 @@ setup() {
   # Same rule for the edge block of _install_ubuntu_gui_tools: it reads and
   # writes an apt sources dir and a keyring, and tests/mocks/sudo execs real
   # commands, so without these the edge block would touch the real /etc/apt and
-  # /usr/share/keyrings. (Other HAS_SNAP writes, e.g. albert, are not seamed.)
+  # /usr/share/keyrings. (albert is seamed via the _APT_* variables below.)
   export _EDGE_SOURCES_DIR="${BATS_TEST_TMPDIR}/apt-sources"
   export _EDGE_BOOTSTRAP_KEYRING="${BATS_TEST_TMPDIR}/edge-bootstrap.gpg"
   mkdir -p "${_EDGE_SOURCES_DIR}"
@@ -36,6 +38,13 @@ setup() {
   # can assert nothing is left behind and never touch the system temp dir.
   export _APT_KEY_TMP_ROOT="${BATS_TEST_TMPDIR}/apt-key-tmp"
   mkdir -p "${_APT_KEY_TMP_ROOT}"
+  # _install_ubuntu_albert writes a source, a keyring and removes legacy files;
+  # tests/mocks/sudo execs real commands, so without these it would touch the
+  # real /etc/apt and /usr/share/keyrings.
+  export _APT_SOURCES_DIR="${BATS_TEST_TMPDIR}/albert-sources"
+  export _APT_TRUSTED_DIR="${BATS_TEST_TMPDIR}/albert-trusted"
+  export _APT_KEYRINGS_DIR="${BATS_TEST_TMPDIR}/albert-keyrings"
+  mkdir -p "${_APT_SOURCES_DIR}" "${_APT_TRUSTED_DIR}" "${_APT_KEYRINGS_DIR}"
   # _install_ubuntu_powershell verifies packages-microsoft-prod.deb before
   # installing it. tests/mocks/gpg cannot verify anything, so point the seam at
   # the real gpg, and have the wget mock hand back the real signed .deb. The
@@ -1572,6 +1581,7 @@ STUB
 @test "_install_ubuntu_gui_tools: HAS_SNAP installs albert" {
   export HAS_SNAP=1
   unset HAS_DEVTOOLS
+  _albert_good_key
   run _install_ubuntu_gui_tools
   [ "$status" -eq 0 ]
   grep -q "apt install albert" "${MOCK_CALLS_FILE}"
@@ -1792,6 +1802,7 @@ _edge_live_sources() {
 @test "_install_ubuntu_gui_tools: HAS_SNAP wires the edge source helper and installs edge" {
   export HAS_SNAP=1
   unset HAS_DEVTOOLS
+  _albert_good_key
   run _install_ubuntu_gui_tools
   [ "$status" -eq 0 ]
   grep -q "packages.microsoft.com/repos/edge stable main" "${_EDGE_SOURCES_DIR}/microsoft-edge.list"
@@ -2231,4 +2242,183 @@ _seed_ring() {
 @test "_keyring_has_pinned_fpr: an empty homedir argument is refused with 2" {
   run _keyring_has_pinned_fpr "${REPO_ROOT}/keys/microsoft.asc" "${MS_GPG_FPR}" ""
   [ "$status" -eq 2 ]
+}
+
+# ── _install_ubuntu_albert ───────────────────────────────────────────────────
+
+_ALBERT_FPR="A4B83CD05FDF5C5178482D4A1488EB46E192A257"
+_MS_FPR="BC528686B50D79E339D3721CEB3E94ADBE1229CF"
+
+_albert_good_key() {
+  local _k
+  _k="$(cat "${REPO_ROOT}/tests/fixtures/albert-obs.asc")"
+  export MOCK_CURL_STDOUT="${_k}"
+}
+
+_albert_wrong_key() {
+  local _k
+  _k="$(cat "${REPO_ROOT}/keys/microsoft.asc")"
+  export MOCK_CURL_STDOUT="${_k}"
+}
+
+# Pre-seed a last-known-good source and keyring, asserting they exist first.
+_albert_seed_last_good() {
+  printf 'deb [signed-by=x] https://old.example/ /\n' > "${_APT_SOURCES_DIR}/albert.list"
+  printf 'OLDKEYRING' > "${_APT_KEYRINGS_DIR}/albert-obs.gpg"
+  [ -f "${_APT_SOURCES_DIR}/albert.list" ]
+  [ -f "${_APT_KEYRINGS_DIR}/albert-obs.gpg" ]
+  cp "${_APT_SOURCES_DIR}/albert.list" "${BATS_TEST_TMPDIR}/list.orig"
+  cp "${_APT_KEYRINGS_DIR}/albert-obs.gpg" "${BATS_TEST_TMPDIR}/ring.orig"
+}
+
+_albert_assert_last_good_untouched() {
+  [ -f "${_APT_SOURCES_DIR}/albert.list" ]
+  [ -f "${_APT_KEYRINGS_DIR}/albert-obs.gpg" ]
+  cmp "${_APT_SOURCES_DIR}/albert.list" "${BATS_TEST_TMPDIR}/list.orig"
+  cmp "${_APT_KEYRINGS_DIR}/albert-obs.gpg" "${BATS_TEST_TMPDIR}/ring.orig"
+}
+
+@test "_install_ubuntu_albert: good key writes an https signed-by source and installs albert" {
+  _albert_good_key
+  run --separate-stderr _install_ubuntu_albert
+  [ "$status" -eq 0 ]
+  [ -s "${_APT_KEYRINGS_DIR}/albert-obs.gpg" ]
+  grep -q "https://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_" "${_APT_SOURCES_DIR}/albert.list"
+  grep -q "signed-by=${_APT_KEYRINGS_DIR}/albert-obs.gpg" "${_APT_SOURCES_DIR}/albert.list"
+  refute_grep "deb http://" "${_APT_SOURCES_DIR}/albert.list"
+  grep -q "apt install albert" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_albert: curl failure keeps the last good source and returns 2" {
+  _albert_seed_last_good
+  export MOCK_CURL_EXIT=22
+  run --separate-stderr _install_ubuntu_albert
+  [ "$status" -eq 2 ]
+  _albert_assert_last_good_untouched
+  [[ "$stderr" == *"download.opensuse.org"* ]]
+  grep -q "^curl " "${MOCK_CALLS_FILE}"
+  refute_grep "apt install albert" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_albert: a non-key body keeps the last good source and returns 2" {
+  _albert_seed_last_good
+  export MOCK_CURL_STDOUT='<html>captive portal</html>'
+  run --separate-stderr _install_ubuntu_albert
+  [ "$status" -eq 2 ]
+  _albert_assert_last_good_untouched
+  [[ "$stderr" == *"download.opensuse.org"* ]]
+  grep -q "^curl " "${MOCK_CALLS_FILE}"
+  refute_grep "apt install albert" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_albert: wrong fingerprint removes the source and keyring, warns with both fingerprints" {
+  _albert_seed_last_good
+  _albert_wrong_key
+  run --separate-stderr _install_ubuntu_albert
+  [ "$status" -eq 2 ]
+  [ ! -e "${_APT_SOURCES_DIR}/albert.list" ]
+  [ ! -e "${_APT_KEYRINGS_DIR}/albert-obs.gpg" ]
+  [[ "$stderr" == *"${_MS_FPR}"* ]]
+  [[ "$stderr" == *"${_ALBERT_FPR}"* ]]
+  grep -q "^curl " "${MOCK_CALLS_FILE}"
+  refute_grep "apt install albert" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_albert: keyring install failure (builder 3) keeps the last good source and returns 2" {
+  _albert_seed_last_good
+  _albert_good_key
+  _build_pinned_keyring() { return 3; }
+  run --separate-stderr _install_ubuntu_albert
+  [ "$status" -eq 2 ]
+  _albert_assert_last_good_untouched
+  [[ "$stderr" == *"${_APT_KEYRINGS_DIR}/albert-obs.gpg"* ]]
+  grep -q "^curl " "${MOCK_CALLS_FILE}"
+  refute_grep "apt install albert" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_albert: fetches into a temp dir under _APT_KEY_TMP_ROOT and leaves it empty (success)" {
+  _albert_good_key
+  run _install_ubuntu_albert
+  [ "$status" -eq 0 ]
+  grep -q "curl .*-o ${_APT_KEY_TMP_ROOT}/albert-key\." "${MOCK_CALLS_FILE}"
+  [ -z "$(ls -A "${_APT_KEY_TMP_ROOT}")" ]
+}
+
+@test "_install_ubuntu_albert: leaves the temp root empty after a curl failure" {
+  export MOCK_CURL_EXIT=22
+  run _install_ubuntu_albert
+  [ "$status" -eq 2 ]
+  grep -q "curl .*-o ${_APT_KEY_TMP_ROOT}/albert-key\." "${MOCK_CALLS_FILE}"
+  [ -z "$(ls -A "${_APT_KEY_TMP_ROOT}")" ]
+}
+
+@test "_install_ubuntu_albert: removes the legacy global key and http source on success" {
+  _albert_good_key
+  printf 'x' > "${_APT_TRUSTED_DIR}/home_manuelschneid3r.gpg"
+  printf 'x' > "${_APT_SOURCES_DIR}/home:manuelschneid3r.list"
+  [ -f "${_APT_TRUSTED_DIR}/home_manuelschneid3r.gpg" ]
+  [ -f "${_APT_SOURCES_DIR}/home:manuelschneid3r.list" ]
+  run _install_ubuntu_albert
+  [ "$status" -eq 0 ]
+  [ ! -e "${_APT_TRUSTED_DIR}/home_manuelschneid3r.gpg" ]
+  [ ! -e "${_APT_SOURCES_DIR}/home:manuelschneid3r.list" ]
+}
+
+@test "_install_ubuntu_albert: removes the legacy global key and http source on the wrong-fingerprint path" {
+  _albert_wrong_key
+  printf 'x' > "${_APT_TRUSTED_DIR}/home_manuelschneid3r.gpg"
+  printf 'x' > "${_APT_SOURCES_DIR}/home:manuelschneid3r.list"
+  [ -f "${_APT_TRUSTED_DIR}/home_manuelschneid3r.gpg" ]
+  [ -f "${_APT_SOURCES_DIR}/home:manuelschneid3r.list" ]
+  run _install_ubuntu_albert
+  [ "$status" -eq 2 ]
+  [ ! -e "${_APT_TRUSTED_DIR}/home_manuelschneid3r.gpg" ]
+  [ ! -e "${_APT_SOURCES_DIR}/home:manuelschneid3r.list" ]
+}
+
+@test "_install_ubuntu_albert: a second run leaves albert.list byte-identical" {
+  _albert_good_key
+  run _install_ubuntu_albert
+  [ "$status" -eq 0 ]
+  [ -s "${_APT_SOURCES_DIR}/albert.list" ]
+  cp "${_APT_SOURCES_DIR}/albert.list" "${BATS_TEST_TMPDIR}/first.list"
+  run _install_ubuntu_albert
+  [ "$status" -eq 0 ]
+  cmp "${_APT_SOURCES_DIR}/albert.list" "${BATS_TEST_TMPDIR}/first.list"
+}
+
+@test "_install_ubuntu_gui_tools: an albert failure makes the step return non-zero after the rest runs" {
+  export HAS_SNAP=1
+  unset HAS_DEVTOOLS HAS_FLATPAK
+  export MOCK_CURL_EXIT=22
+  run _install_ubuntu_gui_tools
+  [ "$status" -ne 0 ]
+  grep -q "apt install microsoft-edge-stable" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_ubuntu_packages: names gui_tools when albert fails" {
+  unset MACOS
+  export LINUX=1 UBUNTU=1 NOBLE=1 HAS_SNAP=1
+  unset HAS_DEVTOOLS HAS_FLATPAK
+  export MOCK_CURL_EXIT=22
+  _install_ubuntu_base_packages() { :; }
+  local _s
+  for _s in workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust misc; do
+    eval "_install_ubuntu_${_s}() { :; }"
+  done
+  run --separate-stderr install_ubuntu_packages
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"failed: gui_tools"* ]]
+}
+
+@test "_install_ubuntu_gui_tools: albert success with a failing last snap command keeps the step's own status" {
+  export HAS_SNAP=1
+  unset HAS_DEVTOOLS HAS_FLATPAK
+  _albert_good_key
+  export MOCK_SNAP_EXIT=1
+  run _install_ubuntu_gui_tools
+  # The step ends in `if [[ -n ${HAS_FLATPAK} ]]`, which is 0 when unset, so the
+  # step's own status is 0 and albert's success must not change it.
+  [ "$status" -eq 0 ]
+  grep -q "apt install albert" "${MOCK_CALLS_FILE}"
 }

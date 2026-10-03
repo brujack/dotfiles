@@ -830,7 +830,7 @@ _build_pinned_keyring() {
 }
 
 # Own function so tests can drive the edge source logic without also running the
-# albert writes (still unseamed) that share _install_ubuntu_gui_tools.
+# albert writes that share _install_ubuntu_gui_tools.
 _install_ubuntu_edge_source() {
   # The package owns microsoft-edge.sources, but do-release-upgrade can leave it
   # disabled, so existence is not enough: a live one has a URIs: line (an empty or
@@ -858,6 +858,70 @@ _install_ubuntu_edge_source() {
   fi
 }
 
+# Albert's apt source, pinned to ALBERT_GPG_FPR. The key is fetched (OBS extends
+# its expiry without changing the fingerprint, so the pin follows an extension)
+# and the source is https + signed-by a dedicated keyring rather than a global
+# trusted.gpg.d key. Returns 0 installed; 2 anything else. On a fetch failure,
+# an unreadable key, or a local keyring failure the last verified source is kept,
+# so a network blip does not drop a working source; on a fingerprint mismatch
+# both are removed. No EXIT/RETURN trap (check-lib-exit-traps.sh; shell.md): every
+# path below reaches the one rm -rf.
+_install_ubuntu_albert() {
+  local _sources="${_APT_SOURCES_DIR:-/etc/apt/sources.list.d}"
+  local _keyrings="${_APT_KEYRINGS_DIR:-/usr/share/keyrings}"
+  local _trusted="${_APT_TRUSTED_DIR:-/etc/apt/trusted.gpg.d}"
+  local _list="${_sources}/albert.list"
+  local _ring="${_keyrings}/albert-obs.gpg"
+  local _release _url _dir _brc
+
+  printf "Installing Albert Ubuntu Noble\\n"
+  sudo rm -f "${_trusted}/home_manuelschneid3r.gpg" "${_sources}/home:manuelschneid3r.list"
+
+  _release="$(lsb_release -rs)"
+  _url="${_ALBERT_KEY_URL:-https://download.opensuse.org/repositories/home:manuelschneid3r/xUbuntu_${_release}/Release.key}"
+  _dir="$(mktemp -d "${_APT_KEY_TMP_ROOT:-${TMPDIR:-/tmp}}/albert-key.XXXXXXXX")" || {
+    log_warn "albert: could not create a temp dir for the key from ${_url}"
+    return 2
+  }
+
+  if ! curl -fsSL -o "${_dir}/albert-key.asc" "${_url}"; then
+    rm -rf "${_dir}"
+    log_warn "albert key fetch failed (${_url}); keeping last verified source"
+    return 2
+  fi
+
+  _build_pinned_keyring "${_dir}/albert-key.asc" "${_ring}" "${ALBERT_GPG_FPR}"
+  _brc=$?
+  case ${_brc} in
+    0) ;;
+    1)
+      log_warn "albert key from ${_url} is not the pinned key: fetched fingerprint(s) $("${_MS_GPG_BIN:-gpg}" --show-keys --with-colons "${_dir}/albert-key.asc" 2> /dev/null | awk -F: '$1 == "fpr" {printf "%s ", $10}') but ALBERT_GPG_FPR is ${ALBERT_GPG_FPR}; removing the albert source and keyring. Verify the new key out of band, then edit ALBERT_GPG_FPR in lib/constants.sh"
+      rm -rf "${_dir}"
+      sudo rm -f "${_list}" "${_ring}"
+      return 2
+      ;;
+    2)
+      rm -rf "${_dir}"
+      log_warn "albert: no key could be read from ${_url}; keeping last verified source"
+      return 2
+      ;;
+    *)
+      rm -rf "${_dir}"
+      log_warn "albert: could not install the keyring ${_ring}; keeping last verified source"
+      return 2
+      ;;
+  esac
+  rm -rf "${_dir}"
+
+  printf 'deb [signed-by=%s] https://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_%s/ /\n' "${_ring}" "${_release}" | sudo tee "${_list}" > /dev/null || return 2
+  sudo -H DEBIAN_FRONTEND=noninteractive apt update
+  sudo -H DEBIAN_FRONTEND=noninteractive apt install albert -y
+  if [[ -x $(command -v albert) ]]; then
+    printf "Albert is installed Ubuntu Noble\\n"
+  fi
+  return 0
+}
+
 _install_ubuntu_gui_tools() {
   if [[ -n ${HAS_DEVTOOLS} ]]; then
     printf "Installing Virtualbox\\n"
@@ -872,16 +936,9 @@ _install_ubuntu_gui_tools() {
     fi
   fi
 
+  local _albert_rc=0 _tail_rc
   if [[ -n ${HAS_SNAP} ]]; then
-    printf "Installing Albert Ubuntu Noble\\n"
-    echo "deb http://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_$(lsb_release -rs)/ /" | sudo tee /etc/apt/sources.list.d/home:manuelschneid3r.list
-    # shellcheck disable=SC2046 # `lsb_release -rs` emits one token (e.g. 24.04) inside a URL path; there is nothing to split
-    curl -fsSL https://download.opensuse.org/repositories/home:manuelschneid3r/xUbuntu_$(lsb_release -rs)/Release.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/home_manuelschneid3r.gpg > /dev/null
-    sudo -H apt update
-    sudo -H DEBIAN_FRONTEND=noninteractive apt install albert -y
-    if [[ -x $(command -v albert) ]]; then
-      printf "Albert is installed Ubuntu Noble\\n"
-    fi
+    _install_ubuntu_albert || _albert_rc=$?
   fi
 
   if [[ -n ${HAS_SNAP} ]]; then
@@ -908,6 +965,10 @@ _install_ubuntu_gui_tools() {
       printf "Steam is installed\\n"
     fi
   fi
+  # Capture first, so a clean albert hands back the step's own status unchanged.
+  _tail_rc=$?
+  [[ ${_albert_rc} -ne 0 ]] && return "${_albert_rc}"
+  return "${_tail_rc}"
 }
 
 # Installs a checksum-verified release binary, skipping when the copy already
