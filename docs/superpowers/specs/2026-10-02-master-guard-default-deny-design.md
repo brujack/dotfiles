@@ -1,7 +1,7 @@
 # Direct-to-master guard: default-deny
 
 **Date:** 2026-10-02
-**Status:** Draft, revised after round 2, awaiting operator review
+**Status:** Draft, revised after round 3, awaiting operator review
 
 ## Problem
 
@@ -90,13 +90,27 @@ the path cannot change the suite's result. A path is inert only when both hold:
    a `docs/evil.md` and a root `LICENSE` starting `#!/usr/bin/env bash` both joined
    `SHELL_FILES`.
 
-If `git cat-file -e <local_sha>:<path>` says the blob does not exist, the path was deleted
-and is judged by name alone. If the blob exists but cannot be read, the path is not inert.
+How the content is read matters, and round 3 found the obvious way wrong. `git cat-file -p
+<sha>:<path> | head -c 2` returns 141 under `pipefail` for any blob larger than the pipe
+buffer (measured: a 300 KB blob gave 141), and `CLAUDE.md` and `docs/superpowers/README.md`
+are both larger than that. Without `pipefail` a failed read is invisible instead. So:
+
+- `git cat-file -e <local_sha>:<path>` fails: the path was deleted; judge it by name alone.
+- `git cat-file -t <local_sha>:<path>` is not `blob` (a gitlink, say): not inert.
+- Otherwise read the first two bytes with `head -c 2 < <(git cat-file blob <local_sha>:<path>)`,
+  a process substitution, so no pipeline status is involved.
+
+The check refuses any `#!`, while `make lint` selects only bash and sh shebangs. That is
+stricter than needed and costs nothing: no tracked `.md` or `LICENSE` starts with `#!`.
 
 Everything else is not inert, including any file type added in future. There is no rule
 for other files under `docs/`. The one non-`.md` file the weekly digest writes,
 `docs/anthropic-new-features/.platform-state.txt`, is renamed to `.platform-state.md` in
-this change, together with the one line in `scripts/whats-new-anthropic.sh` that names it.
+this change with `git mv`, so its content carries over, together with the one line in
+`scripts/whats-new-anthropic.sh` that names it, `docs/anthropic-new-features/README.md:8`,
+and the six lines of `tests/scripts/whats-new-anthropic.bats` that use the name. Without the
+content, the first digest after the rename finds no state and reports the whole platform
+release-notes page as new.
 
 The function is only ever called in a conditional context (`if`, `&&`, `||`), because the
 hook runs under `set -e` and a bare call returning 1 would kill the hook with no message.
@@ -119,15 +133,20 @@ the safe direction and is accepted.
 ### The refusal messages
 
 **When paths are refused**, the message names every one, says that only `.md` files and
-`LICENSE` may go to `master` directly, and gives the recovery for where the push came from:
+`LICENSE` may go to `master` directly, and gives the recovery for what was pushed. The choice
+is made from the ref line's `local_ref`, not from the current branch, because a session on
+`feat` can still run a push of local `master`:
 
-- Pushing local `master` (the current branch is `master`): create a branch from it (the
-  refused commits come with you), push that branch and run `gh pr create --fill`, then
+- `local_ref` is `refs/heads/master`: create a branch from local `master` (the refused
+  commits come with it), push that branch and run `gh pr create --fill`, then
   `git switch master && git reset --keep origin/master`. If `reset --keep` refuses because an
   uncommitted change touches a file in those commits, commit or set aside that change first;
-  nothing has been lost.
-- Pushing a feature branch to `master` (usual in a worktree): push the branch itself with
-  `-u origin HEAD` and run `gh pr create --fill`.
+  nothing has been lost. In a worktree, where `master` is checked out elsewhere, run the
+  reset in the main checkout.
+- `local_ref` is another branch, `refs/heads/<b>`: push `<b>` itself
+  (`git push -u origin <b>`) and run `gh pr create --fill`.
+- `local_ref` is `HEAD` (a detached HEAD): create a branch first (`git switch -c <name>`),
+  then as above.
 - In an emergency (`hotfix-cycle`, `rollback-cycle --reason ci-red`): open the PR the same
   way and merge it with `gh pr merge --admin`, which bypasses failing required checks because
   `enforce_admins` is off. Do not use `--no-verify`; `hotfix-cycle` forbids it.
@@ -184,30 +203,34 @@ push is the main checkout's copy, not the branch being pushed. So:
 
 All rows run the real hook against fixture repositories in `tests/scripts/pre_push.bats`.
 
-| check                                                                                                                                                                              | expected                                                      |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| Push to `master` carrying, one per case: a `tests/mocks/` file, a `.py`, `.zshrc`, `uv.lock`, `ci.yml`, `.warp/settings.toml`, `renovate.json`, `docs/x/.state.txt`, `foo.unknown` | refused; message names the path                               |
-| `docs/a.md`, `README.md`, root `LICENSE`, a non-ASCII `docs/café.md` pushed to `master`                                                                                            | allowed                                                       |
-| `docs/evil.md` and root `LICENSE` each starting `#!/usr/bin/env bash`, pushed to `master`                                                                                          | refused                                                       |
-| `tests/a.md`, `x/LICENSE`, `a.md.sh`, a path containing a newline, pushed to `master`                                                                                              | refused                                                       |
-| `foo/tests/a.md` pushed to `master`                                                                                                                                                | allowed (only the root `tests/` is test-owned)                |
-| `git mv x.sh x.md`, pushed to `master`                                                                                                                                             | refused, naming `x.sh`                                        |
-| A commit deleting a tracked `.sh`, pushed to `master`                                                                                                                              | refused                                                       |
-| A commit deleting a tracked `docs/old.md`, pushed to `master`                                                                                                                      | allowed                                                       |
-| Push to `master` whose `remote_sha` the fixture repo does not have                                                                                                                 | refused with the fetch-and-retry message, not the PR recipe   |
-| Refused push from local `master`                                                                                                                                                   | message contains `gh pr create --fill` and `reset --keep`     |
-| Refused push of a feature branch to `master`                                                                                                                                       | message contains `-u origin HEAD` and not `git switch master` |
-| A docs commit stacked on an unpushed code commit, pushed to `master`                                                                                                               | refused (range, not tip)                                      |
-| `ci.yml` alone pushed to a branch                                                                                                                                                  | suite runs (was skipped)                                      |
-| `docs/a.md` alone pushed to a branch                                                                                                                                               | suite skipped                                                 |
-| A non-inert path pushed to a branch                                                                                                                                                | suite runs, push not refused                                  |
-| `scripts/whats-new-anthropic.sh` writes and stages `.platform-state.md` (existing digest tests, updated)                                                                           | passes                                                        |
-| Mutation: restore the old deny list in a scratch copy                                                                                                                              | the refusal rows go red                                       |
-| Mutation: drop the content check                                                                                                                                                   | the shebang row goes red                                      |
-| Mutation: drop `--no-renames`                                                                                                                                                      | the rename row goes red                                       |
-| Mutation: drop the unresolvable-range refusal                                                                                                                                      | that row goes red                                             |
-| Mutation: call `_path_is_inert` bare, outside a conditional                                                                                                                        | a row goes red with the hook exiting before its message       |
-| `make test` on `claude`, and `test-macos` in CI                                                                                                                                    | green                                                         |
+| check                                                                                                                                                                              | expected                                                                                                |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Push to `master` carrying, one per case: a `tests/mocks/` file, a `.py`, `.zshrc`, `uv.lock`, `ci.yml`, `.warp/settings.toml`, `renovate.json`, `docs/x/.state.txt`, `foo.unknown` | refused; message names the path                                                                         |
+| `docs/a.md`, `README.md`, root `LICENSE`, a non-ASCII `docs/café.md` pushed to `master`                                                                                            | allowed                                                                                                 |
+| `docs/evil.md` and root `LICENSE` each starting `#!/usr/bin/env bash`, pushed to `master`                                                                                          | refused                                                                                                 |
+| `tests/a.md`, `x/LICENSE`, `a.md.sh`, a path containing a newline, pushed to `master`                                                                                              | refused                                                                                                 |
+| `foo/tests/a.md` pushed to `master`                                                                                                                                                | allowed (only the root `tests/` is test-owned)                                                          |
+| `git mv x.sh x.md`, pushed to `master`                                                                                                                                             | refused, naming `x.sh`                                                                                  |
+| A commit deleting a tracked `.sh`, pushed to `master`                                                                                                                              | refused                                                                                                 |
+| A commit deleting a tracked `docs/old.md`, pushed to `master`                                                                                                                      | allowed                                                                                                 |
+| Push to `master` whose `remote_sha` the fixture repo does not have                                                                                                                 | refused with the fetch-and-retry message, not the PR recipe                                             |
+| Refused push with `local_ref` `refs/heads/master`, run while the current branch is `feat`                                                                                          | message contains `gh pr create --fill` and `reset --keep`, and does not tell the session to push `feat` |
+| Refused push with `local_ref` `refs/heads/feat`                                                                                                                                    | message names `feat` in its push command and does not contain `reset --keep`                            |
+| Refused push from a detached HEAD                                                                                                                                                  | message contains `git switch -c`                                                                        |
+| Any refused push                                                                                                                                                                   | message contains `gh pr merge --admin` and does not contain `--no-verify`                               |
+| A `.md` larger than the pipe buffer (300 KB) pushed to `master`                                                                                                                    | allowed                                                                                                 |
+| A docs commit stacked on an unpushed code commit, pushed to `master`                                                                                                               | refused (range, not tip)                                                                                |
+| `ci.yml` alone pushed to a branch                                                                                                                                                  | suite runs (was skipped)                                                                                |
+| `docs/a.md` alone pushed to a branch                                                                                                                                               | suite skipped                                                                                           |
+| A non-inert path pushed to a branch                                                                                                                                                | suite runs, push not refused                                                                            |
+| `scripts/whats-new-anthropic.sh` reads and writes `.platform-state.md` (existing digest tests, updated)                                                                            | passes                                                                                                  |
+| After the rename, `.platform-state.md` holds the content `.platform-state.txt` held                                                                                                | identical                                                                                               |
+| Mutation: restore the old deny list in a scratch copy                                                                                                                              | the refusal rows go red                                                                                 |
+| Mutation: drop the content check                                                                                                                                                   | the shebang row goes red                                                                                |
+| Mutation: drop `--no-renames`                                                                                                                                                      | the rename row goes red                                                                                 |
+| Mutation: drop the unresolvable-range refusal                                                                                                                                      | that row goes red                                                                                       |
+| Mutation: call `_path_is_inert` bare, outside a conditional                                                                                                                        | a row goes red with the hook exiting before its message                                                 |
+| `make test` on `claude`, and `test-macos` in CI                                                                                                                                    | green                                                                                                   |
 
 Both directions of the predicate are covered: always-inert fails the refusal rows;
 never-inert fails the allowed rows and the "suite skipped" row.
@@ -317,3 +340,23 @@ newline paths arrive C-quoted, not split; a failed blob read looked like "no she
 Assumption: The digest scripts push from an up-to-date `master`. If not, they hit the
 fetch-and-retry message weekly; a fetch clears it.
 Disposition:
+
+### Round 3 (scoped: Risk, Design and Verification only)
+
+Reviewed at commit: `98d89ef8`. Round 2's rewrite removed mechanism, so one scoped lens
+re-read only the rewritten sections.
+
+Finding: Design: reading the first bytes through a pipe returns 141 under `pipefail` for a
+blob larger than the pipe buffer, which would refuse `CLAUDE.md` and the plan index; the
+recovery was keyed on the current branch rather than `local_ref`, and failed for a detached
+HEAD; the rename must carry the state file's content. Apparatus: no large-`.md` row; the
+recovery rows could pass with a message printing every recipe; no row for the emergency text.
+Harmless: refusing any `#!` is stricter than `make lint`; no tracked `.md` starts with one.
+Assumption: No `make test` prerequisite reads a tracked `.md`. True today
+(`test: lint check-lock check-requirements-ci test-python`; `check-agent-guidance` reads
+`CLAUDE.md` and is not a prerequisite); nothing enforces it.
+Disposition:
+
+Review stops here. Round 3's findings are about how the hook reads a blob and what the
+message prints, which the first red tests in Phase 2 exercise directly, and the design got
+smaller in round 2 and did not grow in round 3.
