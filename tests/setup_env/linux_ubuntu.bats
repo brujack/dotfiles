@@ -45,12 +45,6 @@ setup() {
   export _APT_TRUSTED_DIR="${BATS_TEST_TMPDIR}/albert-trusted"
   export _APT_KEYRINGS_DIR="${BATS_TEST_TMPDIR}/albert-keyrings"
   mkdir -p "${_APT_SOURCES_DIR}" "${_APT_TRUSTED_DIR}" "${_APT_KEYRINGS_DIR}"
-  # The azure-cli migration probes the brew az. tests/mocks/brew prints nothing
-  # for `--prefix`, so without this seam the code would exec /bin/az -- on a
-  # machine with the apt package that is the REAL az (tdd.md E2).
-  export _BREW_AZ_BIN="${BATS_TEST_TMPDIR}/brew-az"
-  printf '#!/usr/bin/env bash\nprintf "brew-az %%s\\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"\nexit "${MOCK_BREW_AZ_EXIT:-0}"\n' > "${_BREW_AZ_BIN}"
-  chmod +x "${_BREW_AZ_BIN}"
   # _install_ubuntu_powershell verifies packages-microsoft-prod.deb before
   # installing it. tests/mocks/gpg cannot verify anything, so point the seam at
   # the real gpg, and have the wget mock hand back the real signed .deb. The
@@ -1530,6 +1524,51 @@ _az_cloud_env() {
   [ "$status" -eq 0 ]
   grep -q "brew-az version" "${MOCK_CALLS_FILE}"
   grep -q "dpkg -s azure-cli" "${MOCK_CALLS_FILE}"
+  refute_grep "apt-get remove" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_brew_packages: does not remove azure-cli when dpkg status is deinstall ok installed" {
+  export MOCK_DPKG_S_STATUS="deinstall ok installed"
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 0 ]
+  grep -q "brew-az version" "${MOCK_CALLS_FILE}"
+  grep -q "dpkg -s azure-cli" "${MOCK_CALLS_FILE}"
+  refute_grep "apt-get remove" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_brew_packages: probes <brew prefix>/bin/az when no override is set" {
+  unset _BREW_AZ_BIN
+  local _prefix="${BATS_TEST_TMPDIR}/brew-prefix"
+  mkdir -p "${_prefix}/bin"
+  printf '#!/usr/bin/env bash\nprintf "prefix-az %%s\\n" "$*" >> "${MOCK_CALLS_FILE}"\n' > "${_prefix}/bin/az"
+  chmod +x "${_prefix}/bin/az"
+  export MOCK_BREW_PREFIX="${_prefix}"
+  export MOCK_DPKG_S_STATUS="install ok installed"
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 0 ]
+  grep -q "prefix-az version" "${MOCK_CALLS_FILE}"
+  grep -q "apt-get remove -y azure-cli" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_brew_packages: empty brew prefix skips the migration without probing any az" {
+  unset _BREW_AZ_BIN
+  unset MOCK_BREW_PREFIX
+  export MOCK_DPKG_S_STATUS="install ok installed"
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 0 ]
+  grep -q "brew install azure-cli" "${MOCK_CALLS_FILE}"
+  refute_grep "az version" "${MOCK_CALLS_FILE}"
+  refute_grep "dpkg -s azure-cli" "${MOCK_CALLS_FILE}"
+  refute_grep "apt-get remove" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_brew_packages: never treats /usr/bin/az as the brew az" {
+  export _BREW_AZ_BIN="/usr/bin/az"
+  export MOCK_DPKG_S_STATUS="install ok installed"
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 0 ]
+  grep -q "brew install azure-cli" "${MOCK_CALLS_FILE}"
+  refute_grep "dpkg -s azure-cli" "${MOCK_CALLS_FILE}"
   refute_grep "apt-get remove" "${MOCK_CALLS_FILE}"
 }
 

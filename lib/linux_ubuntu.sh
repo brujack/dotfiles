@@ -177,7 +177,7 @@ _install_ubuntu_powershell() {
   # Microsoft publishes a 26.04 config (HTTP 200) whose `resolute` dist carries
   # ZERO powershell packages -- measured 2026-09-12, against 54 in 24.04/noble.
   # So `apt install powershell` fails with "Unable to locate package" even
-  # though every step before it succeeded. Unlike the azure-cli and WARP cases
+  # though every step before it succeeded. Unlike the WARP case
   # the fallback belongs on the CONFIG url, not on a dist codename.
   local _ms_rel="${_MS_CONFIG_REL:-$(lsb_release -rs)}"
   [[ -n "${RESOLUTE:-}" ]] && _ms_rel="24.04"
@@ -638,10 +638,12 @@ _install_ubuntu_cloud_tools() {
   # the legacy Microsoft key and source files an earlier version of this function
   # left behind; the glob stays outside the quotes and an unmatched one is harmless.
   local _apt_sources="${_APT_SOURCES_DIR:-/etc/apt/sources.list.d}"
-  sudo rm -f "${_APT_TRUSTED_DIR:-/etc/apt/trusted.gpg.d}/microsoft.asc.gpg" \
+  local _apt_trusted="${_APT_TRUSTED_DIR:-/etc/apt/trusted.gpg.d}"
+  sudo rm -f "${_apt_trusted}/microsoft.asc.gpg" \
     "${_apt_sources}"/archive_uri-http_packages_microsoft_com_repos_azure-cli_-*.list \
     "${_apt_sources}/packages.microsoft.com_repos_azure-cli.list" \
-    "${_apt_sources}/azure-cli.list"
+    "${_apt_sources}/azure-cli.list" \
+    || log_warn "could not remove legacy azure-cli apt key/sources under ${_apt_trusted} and ${_apt_sources}"
 
   printf "Installing gcloud-sdk\\n"
   if [[ ! -f /etc/apt/sources.list.d/google-cloud-sdk.list ]]; then
@@ -713,9 +715,17 @@ _install_ubuntu_brew_packages() {
 
   # Migration: once the brew az demonstrably runs, drop the apt package it replaces.
   # Gated on dpkg's exact Status line so a config-files-only residue is not re-removed.
-  if "${_BREW_AZ_BIN:-$(brew --prefix)/bin/az}" version > /dev/null 2>&1 \
-    && dpkg -s azure-cli 2> /dev/null | grep -qx 'Status: install ok installed'; then
-    sudo DEBIAN_FRONTEND=noninteractive apt-get remove -y azure-cli || _failed+=(azure-cli-apt-remove)
+  # An empty or failed `brew --prefix` must skip, never fall back to /bin/az: on a
+  # merged-usr Ubuntu that IS the apt az, which would "prove" itself and then be removed.
+  local _bp _az_probe
+  _bp="$(brew --prefix 2> /dev/null)"
+  if [[ -n ${_BREW_AZ_BIN:-} || -n ${_bp} ]]; then
+    _az_probe="${_BREW_AZ_BIN:-${_bp}/bin/az}"
+    if [[ ${_az_probe} != /bin/az && ${_az_probe} != /usr/bin/az ]] \
+      && "${_az_probe}" version > /dev/null 2>&1 \
+      && dpkg -s azure-cli 2> /dev/null | grep -qx 'Status: install ok installed'; then
+      sudo DEBIAN_FRONTEND=noninteractive apt-get remove -y azure-cli || _failed+=(azure-cli-apt-remove)
+    fi
   fi
 
   # Homebrew rather than apt deliberately: apt ships shfmt 3.8.0 on noble and

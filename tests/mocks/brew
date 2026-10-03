@@ -38,6 +38,12 @@ case "$1" in
     fi
     exit "${MOCK_BREW_UPGRADE_EXIT:-0}"
     ;;
+  --prefix)
+    # Prints MOCK_BREW_PREFIX when set, nothing when unset (real brew's prefix is
+    # a path; callers must cope with an empty answer).
+    [[ -n "${MOCK_BREW_PREFIX:-}" ]] && printf "%s\n" "${MOCK_BREW_PREFIX}"
+    exit 0
+    ;;
   cleanup)
     exit "${MOCK_BREW_CLEANUP_EXIT:-0}"
     ;;

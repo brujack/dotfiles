@@ -31,6 +31,20 @@ load_mocks() {
   # /home/linuxbrew on claude), so without this default an update_rust test
   # would run a real `rustup update` (tdd.md E2). Tests that exercise the keg
   # branch point it at a fixture.
+  # The azure-cli migration probes the brew az before removing the apt one.
+  # tests/mocks/brew prints no prefix by default, so without this default a
+  # probe could resolve to the REAL az on a machine with the apt package
+  # (tdd.md E2). Stub lives under BATS_TEST_TMPDIR; tests of the prefix
+  # branches unset it.
+  export _BREW_AZ_BIN="${BATS_TEST_TMPDIR:-/nonexistent}/brew-az"
+  if [[ -n "${BATS_TEST_TMPDIR:-}" ]]; then
+    cat > "${_BREW_AZ_BIN}" << 'STUB'
+#!/usr/bin/env bash
+printf "brew-az %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+exit "${MOCK_BREW_AZ_EXIT:-0}"
+STUB
+    chmod +x "${_BREW_AZ_BIN}"
+  fi
   export _OVERRIDE_RUSTUP_BREW_KEGS="${BATS_TEST_TMPDIR:-/nonexistent}/no-rustup-keg"
   # Every run_update/run_setup_user test runs under a redirected HOME with no
   # settings file; point the claude plugin manifest reader at a per-test COPY
