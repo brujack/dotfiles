@@ -30,15 +30,26 @@ setup() {
 #   - tests/mocks/ is not scanned (only *.bats, *.py and helpers/*)
 #   - reads done by scripts a test invokes, e.g. sync-agent-guidance.sh defaults
 #     to the real CLAUDE.md when _OVERRIDE_CLAUDE_MD_PATH is unset
-#   - make recipe scan covers `$(MAKE)`/`make` invocations and literal .md paths
-#     in recipe text; a recipe that builds a .md path from a variable is not seen
+#   - BATS_TEST_DIRNAME inside a tests/helpers/ file: the scanner resolves it
+#     against the helper's own directory, while at run time it is the calling
+#     test's directory
+#   - a recipe that builds a .md path from a variable is not seen
+#
+# The recipe scan is deliberately fail-closed rather than a parser: any .md
+# named in a test-chain recipe fails (even `echo "see README.md"`), and any
+# sub-make ($(MAKE), ${MAKE}, or make as a command word) fails whatever its
+# flags or targets, because a sub-make has to be reviewed by hand for .md reads.
+
+# awk regex for the text after `target:` that is a variable assignment
+# (`t: VAR = x`, `t: VAR := x`, `t := x`) rather than a prerequisite list.
+_ASSIGN_RE='^[ \t]*([^ \t:]+[ \t]*)?[:+?!]?='
 
 # Prints the prerequisites of every rule for target $2 in the make database
 # dump $1. Order-only prerequisites (after |) are included: they still run.
 # Handles `t::`, and skips variable assignments (`t: VAR = x`, `t := x`).
 _rule_prereqs() {
   local _db="${1}" _target="${2}"
-  printf '%s\n' "${_db}" | awk -v t="${_target}" '
+  printf '%s\n' "${_db}" | awk -v t="${_target}" -v asg="${_ASSIGN_RE}" '
     {
       n = length(t)
       if (substr($0, 1, n) != t) next
@@ -46,8 +57,7 @@ _rule_prereqs() {
       if (substr(rest, 1, 2) == "::") rest = substr(rest, 3)
       else if (substr(rest, 1, 1) == ":") rest = substr(rest, 2)
       else next
-      if (rest ~ /^[ \t]*[:+?!]?=/) next
-      if (rest ~ /^[ \t]*[^ \t:]+[ \t]*[:+?!]?=/) next
+      if (rest ~ asg) next
       gsub(/\|/, " ", rest)
       print rest
     }'
@@ -56,13 +66,13 @@ _rule_prereqs() {
 # Prints the recipe lines of every rule for target $2 in the database dump $1.
 _rule_recipe() {
   local _db="${1}" _target="${2}"
-  printf '%s\n' "${_db}" | awk -v t="${_target}" '
+  printf '%s\n' "${_db}" | awk -v t="${_target}" -v asg="${_ASSIGN_RE}" '
     {
       n = length(t)
       if (substr($0, 1, n) == t && substr($0, n + 1, 1) == ":") {
         rest = substr($0, n + 2)
         sub(/^:/, "", rest)
-        if (rest ~ /^[ \t]*[:+?!]?=/ || rest ~ /^[ \t]*[^ \t:]+[ \t]*[:+?!]?=/) { in_r = 0; next }
+        if (rest ~ asg) { in_r = 0; next }
         in_r = 1
         next
       }
@@ -93,29 +103,19 @@ _make_db() {
   printf '%s\n' "${_out}"
 }
 
-# _recipe_violations <db> <target>: print one line per recipe problem. A recipe
-# fails if it names a .md path or runs a sub-make on a target outside the
-# allowlist.
+# _recipe_violations <db> <target>: print one line per recipe problem. Fail
+# closed: any .md named in the recipe, and any sub-make, whatever its flags.
 _recipe_violations() {
-  local _db="${1}" _t="${2}" _line _rest _tok _skip=0
-  local _re='(\$[({]MAKE[)}]|(^|[^A-Za-z0-9_-])make)[[:space:]]+(.*)'
+  local _db="${1}" _t="${2}" _line
+  local _md_re='\.md([^A-Za-z0-9]|$)'
+  local _make_re='(^|[;&|])[[:space:]]*[@+-]*[[:space:]]*make([[:space:]]|$)'
   while IFS= read -r _line; do
     [[ -z "${_line}" ]] && continue
-    if [[ "${_line}" == *.md* ]]; then
+    if [[ "${_line}" =~ ${_md_re} ]]; then
       printf 'recipe of %s names a .md path: %s\n' "${_t}" "${_line}"
     fi
-    if [[ "${_line}" =~ ${_re} ]]; then
-      _rest="${BASH_REMATCH[3]}"
-      _rest="${_rest%%[;&|]*}"
-      _skip=0
-      for _tok in ${_rest}; do
-        if [[ "${_skip}" -eq 1 ]]; then _skip=0; continue; fi
-        case "${_tok}" in
-          -C | -f) _skip=1; continue ;;
-          -* | *=*) continue ;;
-        esac
-        _is_allowed_prereq "${_tok}" || printf 'recipe of %s runs sub-make on %s\n' "${_t}" "${_tok}"
-      done
+    if [[ "${_line}" == *'$(MAKE)'* || "${_line}" == *'${MAKE}'* || "${_line}" =~ ${_make_re} ]]; then
+      printf 'recipe of %s runs a sub-make, which must be reviewed by hand for .md reads: %s\n' "${_t}" "${_line}"
     fi
   done < <(_rule_recipe "${_db}" "${_t}")
 }
@@ -134,7 +134,7 @@ _check_prereqs() {
     _queue=("${_queue[@]:1}")
     [[ "${_seen}" == *" ${_t} "* ]] && continue
     _seen+="${_t} "
-    if [[ "${_t}" == *.md ]]; then
+    if [[ "${_t}" =~ \.md$ && "${_t}" != tests/* ]]; then
       printf 'FAIL: make test depends on the .md file %s\n' "${_t}" >&2
       _fail=1
     fi
@@ -377,9 +377,9 @@ _fixture_makefile() {
   [[ "${output}" == *check-agent-guidance* ]]
 }
 
-@test "fixture: a recipe invoking a sub-make on a recorded target passes" {
+@test "fixture: a recipe invoking a sub-make on a recorded target fails" {
   _fixture_makefile "${BATS_TEST_TMPDIR}/fx" "$(printf 'test: lint\n\t@$(MAKE) lint')"
-  run -0 _check_prereqs "${BATS_TEST_TMPDIR}/fx"
+  run -1 _check_prereqs "${BATS_TEST_TMPDIR}/fx"
 }
 
 @test "fixture: a recipe naming a .md path fails" {
@@ -406,4 +406,61 @@ _fixture_makefile() {
   run -1 _check_prereqs "${BATS_TEST_TMPDIR}/fx"
   [[ "${output}" == *check-agent-guidance* ]]
   [[ "${output}" != *JOBS* && "${output}" != *"= "* ]]
+}
+
+@test "fixture: chained sub-makes in a recipe fail" {
+  _fixture_makefile "${BATS_TEST_TMPDIR}/fx" "$(printf 'test: lint\n\t@$(MAKE) lint && $(MAKE) check-agent-guidance')"
+  run -1 _check_prereqs "${BATS_TEST_TMPDIR}/fx"
+  [[ "${output}" == *"sub-make"* ]]
+}
+
+@test "fixture: a sub-make on a recorded target fails too, whatever its flags" {
+  _fixture_makefile "${BATS_TEST_TMPDIR}/fx" "$(printf 'test: lint\n\t@$(MAKE) -j 4 lint')"
+  run -1 _check_prereqs "${BATS_TEST_TMPDIR}/fx"
+  [[ "${output}" == *"sub-make"* ]]
+}
+
+@test "fixture: make as a bare command word after a separator fails" {
+  _fixture_makefile "${BATS_TEST_TMPDIR}/fx" "$(printf 'test: lint\n\t@true; -make lint')"
+  run -1 _check_prereqs "${BATS_TEST_TMPDIR}/fx"
+  [[ "${output}" == *"sub-make"* ]]
+}
+
+@test "fixture: the word make inside a quoted string is not a sub-make" {
+  _fixture_makefile "${BATS_TEST_TMPDIR}/fx" "$(printf 'test: lint\n\t@printf "make lint failed\\\\n"')"
+  run -0 _check_prereqs "${BATS_TEST_TMPDIR}/fx"
+}
+
+@test "fixture: a recipe naming x.mdc is not a .md read" {
+  _fixture_makefile "${BATS_TEST_TMPDIR}/fx" "$(printf 'test: lint\n\t@cat rules/x.mdc')"
+  run -0 _check_prereqs "${BATS_TEST_TMPDIR}/fx"
+}
+
+@test "fixture: a recipe merely mentioning README.md fails (deliberately fail-closed)" {
+  _fixture_makefile "${BATS_TEST_TMPDIR}/fx" "$(printf 'test: lint\n\t@echo "see README.md"')"
+  run -1 _check_prereqs "${BATS_TEST_TMPDIR}/fx"
+  [[ "${output}" == *README.md* ]]
+}
+
+@test "fixture: a .md prerequisite under tests/ is exempt" {
+  _fixture_makefile "${BATS_TEST_TMPDIR}/fx" "test: lint tests/fixtures/a.md"
+  mkdir -p "${BATS_TEST_TMPDIR}/fx/tests/fixtures"
+  printf 'x\n' >"${BATS_TEST_TMPDIR}/fx/tests/fixtures/a.md"
+  run -0 _check_prereqs "${BATS_TEST_TMPDIR}/fx"
+}
+
+@test "fixture: an x.mdc prerequisite is not a .md file" {
+  _fixture_makefile "${BATS_TEST_TMPDIR}/fx" "test: lint x.mdc"
+  printf 'x\n' >"${BATS_TEST_TMPDIR}/fx/x.mdc"
+  run -0 _check_prereqs "${BATS_TEST_TMPDIR}/fx"
+}
+
+@test "fixture: a double-colon test rule with only recorded prerequisites passes" {
+  _fixture_makefile "${BATS_TEST_TMPDIR}/fx" "test:: lint"
+  run -0 _check_prereqs "${BATS_TEST_TMPDIR}/fx"
+}
+
+@test "fixture: a prerequisite that exists as a plain file is not an unrecorded target" {
+  _fixture_makefile "${BATS_TEST_TMPDIR}/fx" "test: lint Makefile"
+  run -0 _check_prereqs "${BATS_TEST_TMPDIR}/fx"
 }
