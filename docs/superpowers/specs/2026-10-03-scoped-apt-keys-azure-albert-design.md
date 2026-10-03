@@ -2,6 +2,7 @@
 
 - **Date:** 2026-10-03
 - **Backlog row:** "Unscoped Microsoft apt key and http azure-cli source" (P2 — bugs and security)
+- **Approved:** 2026-10-03
 
 ## Problem
 
@@ -432,5 +433,5 @@ failure. (2) On the first run, legacy cleanup removes the albert source before a
 the keep-last-good rule cannot cover. State it.
 Author check: confirmed (1) against §2 steps 1 and 3 at `dc5fb70a`. Edge's own failure path
 removes its keyring in edge's code, so R2 still holds.
-Disposition:
+Disposition: Addressed (operator, 2026-10-03: "yes to both") — F1: builder builds and verifies in a temp directory and installs with `sudo install -m 0644` only on success (§2, R1); F2: first-run caveat stated in §5. Follow-up from the same reviewer: R8 and its test row now remove `albert-obs.gpg` as well as `albert.list` (`72fae2a9`).
 
