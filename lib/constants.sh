@@ -156,6 +156,10 @@ AWSCLI_GPG_FPR="FB5DB77FD5C118B80511ADA8A6310ACC4672475C"
 # 2026-09-29 against two keyrings apt installed on claude by separate routes.
 # read by lib/linux_ubuntu.sh:_ms_verify_deb
 MS_GPG_FPR="BC528686B50D79E339D3721CEB3E94ADBE1229CF"
+# home:manuelschneid3r OBS Project <home:manuelschneid3r@build.opensuse.org>, primary
+# key; the key is fetched, so this pin is what gates it.
+# read by lib/linux_ubuntu.sh:_install_ubuntu_albert
+ALBERT_GPG_FPR="A4B83CD05FDF5C5178482D4A1488EB46E192A257"
 # read by lib/developer.sh:_aws_verify_pkg and tests/setup_env/developer.bats
 AWSCLI_APPLE_TEAM_ID="94KV3E626L"
 

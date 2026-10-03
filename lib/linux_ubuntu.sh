@@ -177,7 +177,7 @@ _install_ubuntu_powershell() {
   # Microsoft publishes a 26.04 config (HTTP 200) whose `resolute` dist carries
   # ZERO powershell packages -- measured 2026-09-12, against 54 in 24.04/noble.
   # So `apt install powershell` fails with "Unable to locate package" even
-  # though every step before it succeeded. Unlike the azure-cli and WARP cases
+  # though every step before it succeeded. Unlike the WARP case
   # the fallback belongs on the CONFIG url, not on a dist codename.
   local _ms_rel="${_MS_CONFIG_REL:-$(lsb_release -rs)}"
   [[ -n "${RESOLUTE:-}" ]] && _ms_rel="24.04"
@@ -634,26 +634,16 @@ _install_ubuntu_cloud_tools() {
     fi
   fi
 
-  printf "Installing azure-cli\\n"
-  curl -sL http://packages.microsoft.com/keys/microsoft.asc | \
-  gpg --dearmor | \
-  sudo tee /etc/apt/trusted.gpg.d/microsoft.asc.gpg > /dev/null
-  AZ_REPO=$(lsb_release -cs)
-  # Azure CLI has no Ubuntu 26.04 packages yet; fall back to noble
-  [[ -n "${RESOLUTE:-}" ]] && AZ_REPO="noble"
-  # Purge stale azure-cli APT sources before re-adding: add-apt-repository
-  # appends a new dist line rather than replacing the old one, so a prior run
-  # with 'resolute' (before the noble fallback) leaves a stale entry that
-  # causes apt-get update to 404 on every subsequent run.
-  sudo rm -f /etc/apt/sources.list.d/packages.microsoft.com_repos_azure-cli.list 2>/dev/null || true
-  sudo rm -f /etc/apt/sources.list.d/azure-cli.list 2>/dev/null || true
-  sudo -H add-apt-repository \
-  "deb [arch=$(dpkg --print-architecture)] http://packages.microsoft.com/repos/azure-cli/ $AZ_REPO main"
-  sudo -H apt update
-  sudo -H DEBIAN_FRONTEND=noninteractive apt install azure-cli -y
-  if [[ -x $(command -v az) ]]; then
-    printf "az is installed\\n"
-  fi
+  # azure-cli now comes from linuxbrew (see _install_ubuntu_brew_packages). Remove
+  # the legacy Microsoft key and source files an earlier version of this function
+  # left behind; the glob stays outside the quotes and an unmatched one is harmless.
+  local _apt_sources="${_APT_SOURCES_DIR:-/etc/apt/sources.list.d}"
+  local _apt_trusted="${_APT_TRUSTED_DIR:-/etc/apt/trusted.gpg.d}"
+  sudo rm -f "${_apt_trusted}/microsoft.asc.gpg" \
+    "${_apt_sources}"/archive_uri-http_packages_microsoft_com_repos_azure-cli_-*.list \
+    "${_apt_sources}/packages.microsoft.com_repos_azure-cli.list" \
+    "${_apt_sources}/azure-cli.list" \
+    || log_warn "could not remove legacy azure-cli apt key/sources under ${_apt_trusted} and ${_apt_sources}"
 
   printf "Installing gcloud-sdk\\n"
   if [[ ! -f /etc/apt/sources.list.d/google-cloud-sdk.list ]]; then
@@ -715,13 +705,28 @@ _install_ubuntu_brew_packages() {
     pyenv pyenv-virtualenv rbenv ripgrep rustup \
     starship tgenv uv zig zoxide redpanda-data/tap/redpanda \
     git-cliff kcov mdbook bun getagentseal/codeburn/codeburn \
-    go-task; do
+    go-task azure-cli; do
     # go-task is `go-task`, NOT `go-task/tap/go-task`: the tap-qualified name resolves
     # to a macOS Cask that shells out to /usr/bin/xattr and exits 127 on Linux. Core
     # ships the formula now. Same for `bun` over `oven-sh/bun/bun`, and `codeburn` is
     # only ever the tap-qualified name -- bare `codeburn` resolves to nothing.
     brew_install_formula "${_f}" || _failed+=("${_f}")
   done
+
+  # Migration: once the brew az demonstrably runs, drop the apt package it replaces.
+  # Gated on dpkg's exact Status line so a config-files-only residue is not re-removed.
+  # An empty or failed `brew --prefix` must skip, never fall back to /bin/az: on a
+  # merged-usr Ubuntu that IS the apt az, which would "prove" itself and then be removed.
+  local _bp _az_probe
+  _bp="$(brew --prefix 2> /dev/null)"
+  if [[ -n ${_BREW_AZ_BIN:-} || -n ${_bp} ]]; then
+    _az_probe="${_BREW_AZ_BIN:-${_bp}/bin/az}"
+    if ! _is_system_az_path "${_az_probe}" \
+      && "${_az_probe}" version > /dev/null 2>&1 \
+      && dpkg -s azure-cli 2> /dev/null | grep -qx 'Status: install ok installed'; then
+      sudo DEBIAN_FRONTEND=noninteractive apt-get remove -y azure-cli || _failed+=(azure-cli-apt-remove)
+    fi
+  fi
 
   # Homebrew rather than apt deliberately: apt ships shfmt 3.8.0 on noble and
   # 3.12.0 on resolute, against 3.13.1 from brew. A formatter's output is the
@@ -770,23 +775,75 @@ _install_ubuntu_brew_packages() {
   fi
 }
 
+# True for the apt-packaged az, which on a merged-usr Ubuntu is also what a bare
+# /bin/az resolves to; the brew migration must never accept it as the brew az.
+_is_system_az_path() {
+  [[ $1 == /bin/az || $1 == /usr/bin/az ]]
+}
+
 # gpg 2.5 exits 0 when it dearmors a truncated key and still writes bytes, so
-# the keyring is judged by its content: it must list MS_GPG_FPR exactly. Any
-# failure of the listing itself (gpg missing, unreadable keyring) is "no".
-_edge_keyring_has_pinned_fpr() {
-  local _ring="$1" _home _listing _rc
-  # No EXIT trap: scripts/check-lib-exit-traps.sh ratchets those in lib/, and
-  # this body has no early exit that would skip the rm below.
-  _home="$(mktemp -d)" || return 1
+# a keyring is judged by its content: it must hold exactly one primary key and
+# the fingerprint of that primary key (the fpr: record right after its pub:
+# record, never a subkey's) must equal the pin. Returns 0 match, 1 mismatch,
+# 2 when the listing failed or showed no usable primary key (gpg missing, junk
+# input, a pub: record with no fpr: record after it, or an empty homedir
+# argument). <home> is a throwaway gpg homedir the caller owns and removes; an
+# empty one would make gpg use the operator's ~/.gnupg.
+_keyring_has_pinned_fpr() {
+  local _ring="$1" _fpr="$2" _home="$3" _listing _rc _pubs _primary
+  [[ -n ${_home} ]] || return 2
   _listing="$("${_MS_GPG_BIN:-gpg}" --homedir "${_home}" --batch --show-keys --with-colons "${_ring}" 2> /dev/null)"
   _rc=$?
-  rm -rf "${_home}"
-  [[ ${_rc} -eq 0 ]] || return 1
-  printf '%s\n' "${_listing}" | grep -qxF "fpr:::::::::${MS_GPG_FPR}:"
+  [[ ${_rc} -eq 0 ]] || return 2
+  _pubs="$(printf '%s\n' "${_listing}" | grep -c '^pub:')"
+  [[ ${_pubs} -ge 1 ]] || return 2
+  [[ ${_pubs} -eq 1 ]] || return 1
+  _primary="$(printf '%s\n' "${_listing}" | awk -F: '/^pub:/{p=1;next} p&&/^fpr:/{print $10;exit}')"
+  [[ -n ${_primary} ]] || return 2
+  [[ -n ${_fpr} ]] || return 1
+  [[ ${_primary} == "${_fpr}" ]] || return 1
+}
+
+# Dearmor <key_file> into a temp dir, verify it holds exactly the pinned key,
+# and only then install it at <keyring>. The final path is never modified on
+# failure, so a keyring that already works survives a bad fetch: the install
+# is staged to <keyring>.new and renamed into place, because GNU install
+# unlinks its target before copying.
+# Returns 0 installed; 1 the key is not the pinned one (not exactly one primary
+# key, or its fingerprint differs); 2 no usable key could be read (gpg failed,
+# the input held no key, or a primary key had no fingerprint); 3 a local
+# failure (temp dir, staging, install) that left the final path unchanged.
+# No EXIT/RETURN trap: scripts/check-lib-exit-traps.sh ratchets `trap ... EXIT`
+# in lib/, and a RETURN trap is not function-scoped (shell.md), so every path
+# below reaches the single rm -rf instead.
+_build_pinned_keyring() {
+  local _key="$1" _ring="$2" _fpr="$3" _dir _gpg_rc _rc
+  [[ -n ${_key} && -n ${_ring} && -n ${_fpr} ]] || return 3
+  _dir="$(mktemp -d "${_APT_KEY_TMP_ROOT:-${TMPDIR:-/tmp}}/apt-key.XXXXXXXX")" || return 3
+  if ! mkdir -m 700 "${_dir}/home"; then
+    rm -rf "${_dir}"
+    return 3
+  fi
+  { "${_MS_GPG_BIN:-gpg}" --dearmor < "${_key}" > "${_dir}/k.gpg"; } 2> /dev/null
+  _gpg_rc=$?
+  if [[ ${_gpg_rc} -ne 0 ]]; then
+    _rc=2
+  else
+    _keyring_has_pinned_fpr "${_dir}/k.gpg" "${_fpr}" "${_dir}/home"
+    _rc=$?
+  fi
+  if [[ ${_rc} -eq 0 ]]; then
+    if ! { sudo install -m 0644 "${_dir}/k.gpg" "${_ring}.new" && sudo mv -f "${_ring}.new" "${_ring}"; }; then
+      sudo rm -f "${_ring}.new"
+      _rc=3
+    fi
+  fi
+  rm -rf "${_dir}"
+  return "${_rc}"
 }
 
 # Own function so tests can drive the edge source logic without also running the
-# unseamed albert writes that share _install_ubuntu_gui_tools.
+# albert writes that share _install_ubuntu_gui_tools.
 _install_ubuntu_edge_source() {
   # The package owns microsoft-edge.sources, but do-release-upgrade can leave it
   # disabled, so existence is not enough: a live one has a URIs: line (an empty or
@@ -804,13 +861,7 @@ _install_ubuntu_edge_source() {
     sudo rm -f "${_edge_list}" "${_edge_keyring}"
   else
     local _edge_key="${_MS_KEY_PATH:-${DOTFILES_REPO_ROOT}/keys/microsoft.asc}"
-    "${_MS_GPG_BIN:-gpg}" --dearmor < "${_edge_key}" 2> /dev/null | sudo tee "${_edge_keyring}" > /dev/null
-    # gpg's own status, not tee's: on GnuPG 2.4 a truncated key exits non-zero
-    # yet still emits bytes; 2.5 exits 0, which the fingerprint check below
-    # catches. Either way a non-empty keyring alone does not prove it worked.
-    local _edge_gpg_rc="${PIPESTATUS[0]}"
-    if [[ ${_edge_gpg_rc} -eq 0 && -s "${_edge_keyring}" ]] \
-      && _edge_keyring_has_pinned_fpr "${_edge_keyring}"; then
+    if _build_pinned_keyring "${_edge_key}" "${_edge_keyring}" "${MS_GPG_FPR}"; then
       # Microsoft Edge has no ARM64 Linux build — amd64 only
       printf 'deb [arch=amd64 signed-by=%s] https://packages.microsoft.com/repos/edge stable main\n' "${_edge_keyring}" | sudo tee "${_edge_list}" > /dev/null
     else
@@ -818,6 +869,92 @@ _install_ubuntu_edge_source() {
       sudo rm -f "${_edge_list}" "${_edge_keyring}"
     fi
   fi
+}
+
+# Albert's apt source, pinned to ALBERT_GPG_FPR. The key is fetched (OBS extends
+# its expiry without changing the fingerprint, so the pin follows an extension)
+# and the source is https + signed-by a dedicated keyring rather than a global
+# trusted.gpg.d key. Returns 0 installed; 2 anything else. On a fetch failure,
+# an unreadable key, or a local keyring failure the last verified source is kept,
+# so a network blip does not drop a working source; on a fingerprint mismatch
+# both are removed. No EXIT/RETURN trap (check-lib-exit-traps.sh; shell.md): every
+# path below reaches the one rm -rf.
+_install_ubuntu_albert() {
+  local _sources="${_APT_SOURCES_DIR:-/etc/apt/sources.list.d}"
+  local _keyrings="${_APT_KEYRINGS_DIR:-/usr/share/keyrings}"
+  local _trusted="${_APT_TRUSTED_DIR:-/etc/apt/trusted.gpg.d}"
+  local _list="${_sources}/albert.list"
+  local _ring="${_keyrings}/albert-obs.gpg"
+  local _release _url _dir _brc _keep_note _fprs _npub _f
+  _keep_note="keeping last verified source"
+
+  _release="$(lsb_release -rs)"
+  printf "Installing Albert Ubuntu %s\\n" "${_release}"
+  # Legacy cleanup runs first, before any fetch, so it happens on every path.
+  sudo rm -f "${_trusted}/home_manuelschneid3r.gpg" "${_sources}/home:manuelschneid3r.list"
+  [[ -e ${_list} ]] || _keep_note="no verified albert source is present yet"
+
+  _url="${_ALBERT_KEY_URL:-https://download.opensuse.org/repositories/home:manuelschneid3r/xUbuntu_${_release}/Release.key}"
+  _dir="$(mktemp -d "${_APT_KEY_TMP_ROOT:-${TMPDIR:-/tmp}}/albert-key.XXXXXXXX")" || {
+    log_warn "albert: could not create a temp dir for the key from ${_url}"
+    return 2
+  }
+
+  if ! curl -fsSL -o "${_dir}/albert-key.asc" "${_url}"; then
+    rm -rf "${_dir}"
+    log_warn "albert key fetch failed (${_url}); ${_keep_note}"
+    return 2
+  fi
+
+  _build_pinned_keyring "${_dir}/albert-key.asc" "${_ring}" "${ALBERT_GPG_FPR}"
+  _brc=$?
+  case ${_brc} in
+    0) ;;
+    1)
+      # Throwaway homedir: never read or write the operator's GNUPGHOME.
+      _fprs=""
+      _npub=0
+      if mkdir -m 700 "${_dir}/gh"; then
+        _fprs="$("${_MS_GPG_BIN:-gpg}" --homedir "${_dir}/gh" --batch --show-keys --with-colons "${_dir}/albert-key.asc" 2> /dev/null \
+          | awk -F: '$1 == "pub" {want = 1; next} $1 == "fpr" && want {printf "%s ", $10; want = 0}')"
+      fi
+      for _f in ${_fprs}; do _npub=$((_npub + 1)); done
+      [[ -n ${_fprs} ]] || _fprs="(unreadable)"
+      if [[ ${_npub} -gt 1 ]]; then
+        log_warn "albert key from ${_url} holds ${_npub} primary keys (${_fprs}), not exactly one; expected ALBERT_GPG_FPR ${ALBERT_GPG_FPR}. Removing the albert source and keyring. Verify the key out of band, then edit ALBERT_GPG_FPR in lib/constants.sh"
+      else
+        log_warn "albert key from ${_url} is not the pinned key: fetched primary fingerprint ${_fprs} but ALBERT_GPG_FPR is ${ALBERT_GPG_FPR}; removing the albert source and keyring. Verify the new key out of band, then edit ALBERT_GPG_FPR in lib/constants.sh"
+      fi
+      rm -rf "${_dir}"
+      sudo rm -f "${_list}" "${_ring}"
+      return 2
+      ;;
+    2)
+      rm -rf "${_dir}"
+      log_warn "albert: no key could be read from ${_url}; ${_keep_note}"
+      return 2
+      ;;
+    *)
+      rm -rf "${_dir}"
+      log_warn "albert: could not install the keyring ${_ring}; ${_keep_note}"
+      return 2
+      ;;
+  esac
+  rm -rf "${_dir}"
+
+  if ! printf 'deb [signed-by=%s] https://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_%s/ /\n' "${_ring}" "${_release}" | sudo tee "${_list}" > /dev/null; then
+    log_warn "albert: could not write ${_list}"
+    return 2
+  fi
+  sudo -H DEBIAN_FRONTEND=noninteractive apt update
+  if ! sudo -H DEBIAN_FRONTEND=noninteractive apt install albert -y; then
+    log_warn "albert: apt install albert failed"
+    return 2
+  fi
+  if [[ -x $(command -v albert) ]]; then
+    printf "Albert is installed Ubuntu %s\\n" "${_release}"
+  fi
+  return 0
 }
 
 _install_ubuntu_gui_tools() {
@@ -834,16 +971,9 @@ _install_ubuntu_gui_tools() {
     fi
   fi
 
+  local _albert_rc=0 _tail_rc
   if [[ -n ${HAS_SNAP} ]]; then
-    printf "Installing Albert Ubuntu Noble\\n"
-    echo "deb http://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_$(lsb_release -rs)/ /" | sudo tee /etc/apt/sources.list.d/home:manuelschneid3r.list
-    # shellcheck disable=SC2046 # `lsb_release -rs` emits one token (e.g. 24.04) inside a URL path; there is nothing to split
-    curl -fsSL https://download.opensuse.org/repositories/home:manuelschneid3r/xUbuntu_$(lsb_release -rs)/Release.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/home_manuelschneid3r.gpg > /dev/null
-    sudo -H apt update
-    sudo -H DEBIAN_FRONTEND=noninteractive apt install albert -y
-    if [[ -x $(command -v albert) ]]; then
-      printf "Albert is installed Ubuntu Noble\\n"
-    fi
+    _install_ubuntu_albert || _albert_rc=$?
   fi
 
   if [[ -n ${HAS_SNAP} ]]; then
@@ -870,6 +1000,12 @@ _install_ubuntu_gui_tools() {
       printf "Steam is installed\\n"
     fi
   fi
+  # Captures the status of the HAS_FLATPAK `if` block directly above (0 when it is
+  # skipped); keep this capture directly after it so a clean albert hands back that
+  # step's own status unchanged.
+  _tail_rc=$?
+  [[ ${_albert_rc} -ne 0 ]] && return "${_albert_rc}"
+  return "${_tail_rc}"
 }
 
 # Installs a checksum-verified release binary, skipping when the copy already

@@ -544,7 +544,7 @@ two-second grep appears to refute the rule.
   - `_AWS_KEY_PATH` defaults via `DOTFILES_REPO_ROOT`, resolved at **source time** in `lib/constants.sh` as a **plain assignment**, never a `${VAR:-}` self-guard — tried and retired, since a guard only adds an env-settable name selecting where a trust anchor is read from. Never re-derive the expression inline as `$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)`, which returns empty once the caller (e.g. `update_aws_cli`) has already `cd`'d elsewhere.
   - An absolute-path suite (bats' `load_setup_env`) can't exercise this cwd-sensitivity; regression tests must `source ./lib/...` relatively, `cd` away, then assert on the **post-import failure message** — never on absence (tdd.md E5), which an unrelated skip satisfies equally. → `dotfiles-test-seams.md` § `_AWS_GPG_BIN / _AWS_PKGUTIL_BIN / _AWS_KEY_PATH seams`
 
-- `_MS_GPG_BIN`/`_MS_AR_BIN`/`_MS_KEY_PATH` (`lib/linux_ubuntu.sh:_ms_verify_deb`; `_MS_GPG_BIN` and `_MS_KEY_PATH` are also read by `_install_ubuntu_edge_source`)
+- `_MS_GPG_BIN`/`_MS_AR_BIN`/`_MS_KEY_PATH` (`lib/linux_ubuntu.sh:_ms_verify_deb`; `_MS_KEY_PATH` is also read by `_install_ubuntu_edge_source`; `_MS_GPG_BIN` also selects the gpg used by `_build_pinned_keyring`, `_keyring_has_pinned_fpr` and `_install_ubuntu_albert`, so it governs the albert OBS key too)
   - `_install_ubuntu_powershell` verifies `packages-microsoft-prod.deb`'s debsig signature (`_gpgorigin`) against the vendored Microsoft key, pinned by `MS_GPG_FPR`, before `sudo dpkg -i`; a failure warns and skips. A sha256 pin cannot work, because Microsoft rewrites that file in place per release. The archive must list exactly `debian-binary control.tar.gz data.tar.gz _gpgorigin`, in order: dpkg reads the first control/data member while `ar x` keeps the last of a repeated name, so any other layout could verify one set of members and install another.
   - `tests/mocks/gpg` cannot verify anything, so `tests/setup_env/linux_ubuntu.bats` points `_MS_GPG_BIN` at the real gpg at setup scope and sets `MOCK_WGET_FILE` to the real signed fixture `tests/fixtures/packages-microsoft-prod.deb`, which the wget mock copies to its `-O` target. The verifier needs GNU `ar` (Apple's cannot read Microsoft's GNU member names, and still exits 0): on macOS without it the verifier tests skip and the install-flow tests stub the verifier; off macOS a missing GNU `ar` fails the tests rather than skipping them.
 
@@ -552,8 +552,25 @@ two-second grep appears to refute the rule.
   - Set `_AWS_BIN` in every `install_aws_tools` test on this machine — a real `aws` exists at `/usr/local/bin/aws`, so without the seam the already-installed guard is always taken and the install path is never asserted. → `dotfiles-test-seams.md` § `_AWS_BIN seam`
 
 - `_EDGE_SOURCES_DIR`/`_EDGE_BOOTSTRAP_KEYRING` (`lib/linux_ubuntu.sh:_install_ubuntu_edge_source`)
-  - Set both at setup scope in `tests/setup_env/linux_ubuntu.bats` — `tests/mocks/sudo` execs real commands, so unset seams let the edge source write the real `/etc/apt/sources.list.d` and `/usr/share/keyrings`. The edge tests call the helper directly, so they do not run the unseamed albert write; every test that runs `_install_ubuntu_gui_tools` with `HAS_SNAP` set does.
+  - Set both at setup scope in `tests/setup_env/linux_ubuntu.bats` — `tests/mocks/sudo` execs real commands, so unset seams let the edge source write the real `/etc/apt/sources.list.d` and `/usr/share/keyrings`.
   - A `.sources` is live only with a `URIs:` line and every `Enabled:` line affirmative (`yes|true|with|on|enable|1`); anything else, including a zero-byte file, is inert and takes the bootstrap branch. The bootstrap `.list` is always `signed-by` the keyring built from `keys/microsoft.asc`; it fails closed (WARN, no source written, never an unsigned line) when gpg exits non-zero, even if it still emitted bytes, when the keyring cannot be written, or when the built keyring does not list the pinned fingerprint `MS_GPG_FPR` — GnuPG 2.5 exits 0 on a truncated key (2.4 exits 2) and still writes bytes.
+
+- `_APT_SOURCES_DIR`/`_APT_TRUSTED_DIR`/`_APT_KEYRINGS_DIR` (`lib/linux_ubuntu.sh:_install_ubuntu_albert`, and the legacy azure-cli cleanup in `_install_ubuntu_cloud_tools`)
+  - Set all three at setup scope in `tests/setup_env/linux_ubuntu.bats` — `tests/mocks/sudo` execs real commands, so unset seams let albert and the azure legacy cleanup write and `rm -f` under the real `/etc/apt` and `/usr/share/keyrings`.
+
+- `_APT_KEY_TMP_ROOT` (`lib/linux_ubuntu.sh:_build_pinned_keyring`, `_install_ubuntu_albert`)
+  - Point it at a test-owned directory: BSD `mktemp -d` with a template ignores `TMPDIR`, so a `TMPDIR`-based isolation or cleanup assertion is silently inert on the Studio.
+
+- `_ALBERT_KEY_URL` (`lib/linux_ubuntu.sh:_install_ubuntu_albert`)
+  - A production escape hatch for the key URL. Tests feed the key through `MOCK_CURL_STDOUT` per test, never at setup scope, so each case controls which key the fetch returns.
+
+- `_BREW_AZ_BIN` (azure-cli migration in `lib/linux_ubuntu.sh:_install_ubuntu_brew_packages`)
+  - `load_mocks` exports it to a stub under `BATS_TEST_TMPDIR` (`MOCK_BREW_AZ_EXIT` sets its exit code), because `tests/mocks/brew` prints nothing for `--prefix` unless `MOCK_BREW_PREFIX` is set. Tests of the prefix branches unset it.
+  - Production refuses a probe of `/bin/az` or `/usr/bin/az`: on a merged-usr Ubuntu that is the apt az, which would "prove" itself and then be removed.
+
+- `_build_pinned_keyring <key> <keyring> <fpr>` (`lib/linux_ubuntu.sh`) is the shared builder for the edge and albert keyrings.
+  - It dearmors and verifies in a temp dir, pins the PRIMARY key's fingerprint only (a subkey fingerprint never satisfies the pin), stages to `<keyring>.new`, then `mv`s into place.
+  - Returns 0 installed, 1 the key is not the pinned one, 2 no key readable, 3 local failure; the final keyring is never modified on failure.
 
 - Every cadence seam exists because the delivery arm and the LaunchAgent installer resolve absolute paths and external binaries that a `PATH` mock cannot reach; none grants a capability beyond what editing `PATH` or the plist directly would already grant. → `dotfiles-test-seams.md` § `Cadence seams overview (scripts/cadence-notify.sh, lib/launch_agents.sh)`
 

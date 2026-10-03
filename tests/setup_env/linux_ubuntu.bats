@@ -1,5 +1,7 @@
 #!/usr/bin/env bats
 
+bats_require_minimum_version 1.5.0
+
 setup() {
   REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
   source "${REPO_ROOT}/tests/helpers/common.bash"
@@ -28,10 +30,21 @@ setup() {
   # Same rule for the edge block of _install_ubuntu_gui_tools: it reads and
   # writes an apt sources dir and a keyring, and tests/mocks/sudo execs real
   # commands, so without these the edge block would touch the real /etc/apt and
-  # /usr/share/keyrings. (Other HAS_SNAP writes, e.g. albert, are not seamed.)
+  # /usr/share/keyrings. (albert is seamed via the _APT_* variables below.)
   export _EDGE_SOURCES_DIR="${BATS_TEST_TMPDIR}/apt-sources"
   export _EDGE_BOOTSTRAP_KEYRING="${BATS_TEST_TMPDIR}/edge-bootstrap.gpg"
   mkdir -p "${_EDGE_SOURCES_DIR}"
+  # _build_pinned_keyring builds in a temp dir under this root; seamed so tests
+  # can assert nothing is left behind and never touch the system temp dir.
+  export _APT_KEY_TMP_ROOT="${BATS_TEST_TMPDIR}/apt-key-tmp"
+  mkdir -p "${_APT_KEY_TMP_ROOT}"
+  # _install_ubuntu_albert writes a source, a keyring and removes legacy files;
+  # tests/mocks/sudo execs real commands, so without these it would touch the
+  # real /etc/apt and /usr/share/keyrings.
+  export _APT_SOURCES_DIR="${BATS_TEST_TMPDIR}/albert-sources"
+  export _APT_TRUSTED_DIR="${BATS_TEST_TMPDIR}/albert-trusted"
+  export _APT_KEYRINGS_DIR="${BATS_TEST_TMPDIR}/albert-keyrings"
+  mkdir -p "${_APT_SOURCES_DIR}" "${_APT_TRUSTED_DIR}" "${_APT_KEYRINGS_DIR}"
   # _install_ubuntu_powershell verifies packages-microsoft-prod.deb before
   # installing it. tests/mocks/gpg cannot verify anything, so point the seam at
   # the real gpg, and have the wget mock hand back the real signed .deb. The
@@ -1413,15 +1426,6 @@ STUB
 
 # ── _install_ubuntu_cloud_tools ──────────────────────────────────────────────
 
-@test "_install_ubuntu_cloud_tools: always calls apt install azure-cli" {
-  export CF_TERRAFORMING_VER="0.13.0"
-  export CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v0.13.0/cf-terraforming_0.13.0_linux_amd64.tar.gz"
-  unset HAS_DEVTOOLS
-  run _install_ubuntu_cloud_tools
-  [ "$status" -eq 0 ]
-  grep -q "apt install azure-cli" "${MOCK_CALLS_FILE}"
-}
-
 @test "_install_ubuntu_cloud_tools: installs google-cloud-cli packages, not retired google-cloud-sdk names" {
   export CF_TERRAFORMING_VER="0.13.0"
   export CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v0.13.0/cf-terraforming_0.13.0_linux_amd64.tar.gz"
@@ -1451,16 +1455,6 @@ STUB
   ! grep -q "apt install teleport" "${MOCK_CALLS_FILE}"
 }
 
-@test "_install_ubuntu_cloud_tools: azure-cli APT stanza uses dpkg --print-architecture" {
-  export CF_TERRAFORMING_VER="0.27.0"
-  export CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v0.27.0/cf-terraforming_0.27.0_linux_arm64.tar.gz"
-  export MOCK_DPKG_PRINT_ARCH="arm64"
-  unset HAS_DEVTOOLS
-  run _install_ubuntu_cloud_tools
-  [ "$status" -eq 0 ]
-  grep -q 'add-apt-repository.*arch=arm64.*azure-cli' "${MOCK_CALLS_FILE}"
-}
-
 @test "_install_ubuntu_cloud_tools: cf-terraforming filename uses _LINUX_ARCH" {
   export CF_TERRAFORMING_VER="0.27.0"
   export CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v0.27.0/cf-terraforming_0.27.0_linux_arm64.tar.gz"
@@ -1484,29 +1478,163 @@ STUB
   [ "$status" -ne 0 ]
 }
 
-@test "_install_ubuntu_cloud_tools: on RESOLUTE uses noble for azure-cli repo" {
-  export RESOLUTE=1
+# ── azure-cli via linuxbrew ──────────────────────────────────────────────────
+
+_az_cloud_env() {
+  export CF_TERRAFORMING_VER="0.13.0"
+  export CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v0.13.0/cf-terraforming_0.13.0_linux_amd64.tar.gz"
   unset HAS_DEVTOOLS
-  export CF_TERRAFORMING_VER="0.27.0"
-  export CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v0.27.0/cf-terraforming_0.27.0_linux_amd64.tar.gz"
-  run _install_ubuntu_cloud_tools
-  [ "$status" -eq 0 ]
-  grep -q 'add-apt-repository.*azure-cli.*noble' "${MOCK_CALLS_FILE}"
 }
 
-@test "_install_ubuntu_cloud_tools: removes stale azure-cli sources before add-apt-repository" {
-  # add-apt-repository appends new dist lines rather than replacing old ones,
-  # leaving a 'resolute' entry alongside the new 'noble' entry; the stale entry
-  # causes apt-get update to 404 on every subsequent run.
-  unset HAS_DEVTOOLS
-  export CF_TERRAFORMING_VER="0.27.0"
-  export CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v0.27.0/cf-terraforming_0.27.0_linux_amd64.tar.gz"
+@test "_install_ubuntu_brew_packages: installs azure-cli via brew" {
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 0 ]
+  grep -q "brew install azure-cli" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_brew_packages: removes the apt azure-cli once brew az runs" {
+  export MOCK_DPKG_S_STATUS="install ok installed"
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 0 ]
+  grep -q "brew-az version" "${MOCK_CALLS_FILE}"
+  grep -q "apt-get remove -y azure-cli" "${MOCK_CALLS_FILE}"
+  grep -q "sudo DEBIAN_FRONTEND=noninteractive apt-get remove -y azure-cli" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_brew_packages: keeps the apt azure-cli when brew az is broken" {
+  export MOCK_DPKG_S_STATUS="install ok installed"
+  export MOCK_BREW_AZ_EXIT=1
+  run _install_ubuntu_brew_packages
+  grep -q "brew-az version" "${MOCK_CALLS_FILE}"
+  refute_grep "apt-get remove" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_brew_packages: does not remove azure-cli when dpkg says config-files only" {
+  export MOCK_DPKG_S_STATUS="deinstall ok config-files"
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 0 ]
+  grep -q "brew-az version" "${MOCK_CALLS_FILE}"
+  grep -q "dpkg -s azure-cli" "${MOCK_CALLS_FILE}"
+  refute_grep "apt-get remove" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_brew_packages: does not remove azure-cli when dpkg reports nothing" {
+  unset MOCK_DPKG_S_STATUS
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 0 ]
+  grep -q "brew-az version" "${MOCK_CALLS_FILE}"
+  grep -q "dpkg -s azure-cli" "${MOCK_CALLS_FILE}"
+  refute_grep "apt-get remove" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_brew_packages: does not remove azure-cli when dpkg status is deinstall ok installed" {
+  export MOCK_DPKG_S_STATUS="deinstall ok installed"
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 0 ]
+  grep -q "brew-az version" "${MOCK_CALLS_FILE}"
+  grep -q "dpkg -s azure-cli" "${MOCK_CALLS_FILE}"
+  refute_grep "apt-get remove" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_brew_packages: probes <brew prefix>/bin/az when no override is set" {
+  unset _BREW_AZ_BIN
+  local _prefix="${BATS_TEST_TMPDIR}/brew-prefix"
+  mkdir -p "${_prefix}/bin"
+  printf '#!/usr/bin/env bash\nprintf "prefix-az %%s\\n" "$*" >> "${MOCK_CALLS_FILE}"\n' > "${_prefix}/bin/az"
+  chmod +x "${_prefix}/bin/az"
+  export MOCK_BREW_PREFIX="${_prefix}"
+  export MOCK_DPKG_S_STATUS="install ok installed"
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 0 ]
+  grep -q "prefix-az version" "${MOCK_CALLS_FILE}"
+  grep -q "apt-get remove -y azure-cli" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_brew_packages: empty brew prefix skips the migration without probing any az" {
+  unset _BREW_AZ_BIN
+  unset MOCK_BREW_PREFIX
+  export MOCK_DPKG_S_STATUS="install ok installed"
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 0 ]
+  grep -q "brew install azure-cli" "${MOCK_CALLS_FILE}"
+  refute_grep "az version" "${MOCK_CALLS_FILE}"
+  refute_grep "dpkg -s azure-cli" "${MOCK_CALLS_FILE}"
+  refute_grep "apt-get remove" "${MOCK_CALLS_FILE}"
+}
+
+@test "_is_system_az_path: true for exactly /bin/az and /usr/bin/az, false otherwise" {
+  # Pure string predicate: no az is ever executed here.
+  run _is_system_az_path /bin/az
+  [ "$status" -eq 0 ]
+  run _is_system_az_path /usr/bin/az
+  [ "$status" -eq 0 ]
+  run ! _is_system_az_path /home/linuxbrew/.linuxbrew/bin/az
+  run ! _is_system_az_path ""
+  run ! _is_system_az_path /usr/bin/az2
+}
+
+@test "_install_ubuntu_brew_packages: never probes a path _is_system_az_path flags" {
+  # A stub stands in for the system az: a literal /usr/bin/az here would run the
+  # operator's real az the day this guard regresses (tdd.md E2). The literal
+  # paths are covered by the _is_system_az_path unit test, which runs nothing.
+  local _sys="${BATS_TEST_TMPDIR}/system-az"
+  printf '#!/usr/bin/env bash\nprintf "system-az %%s\\n" "$*" >> "%s"\n' "${MOCK_CALLS_FILE}" > "${_sys}"
+  chmod +x "${_sys}"
+  export _BREW_AZ_BIN="${_sys}"
+  _is_system_az_path() { [[ $1 == "${_BREW_AZ_BIN}" ]]; }
+  export MOCK_DPKG_S_STATUS="install ok installed"
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 0 ]
+  grep -q "brew install azure-cli" "${MOCK_CALLS_FILE}"
+  refute_grep "^system-az " "${MOCK_CALLS_FILE}"
+  refute_grep "dpkg -s azure-cli" "${MOCK_CALLS_FILE}"
+  refute_grep "apt-get remove" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_brew_packages: names azure-cli-apt-remove and returns 2 when removal fails" {
+  export MOCK_DPKG_S_STATUS="install ok installed"
+  export MOCK_APT_EXIT=1
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"azure-cli-apt-remove"* ]]
+}
+
+@test "_install_ubuntu_cloud_tools: has no azure apt path but still installs gcloud" {
+  _az_cloud_env
   run _install_ubuntu_cloud_tools
   [ "$status" -eq 0 ]
-  # Both the add-apt-repository auto-named file and a canonical azure-cli.list
-  # must be purged so no stale codename persists in apt sources.
-  run grep -E "rm.*(packages.microsoft.com_repos_azure-cli|azure-cli).*\.list" "${MOCK_CALLS_FILE}"
+  grep -q "apt install google-cloud-cli -y" "${MOCK_CALLS_FILE}"
+  refute_grep "add-apt-repository" "${MOCK_CALLS_FILE}"
+  refute_grep "apt install azure-cli" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_cloud_tools: removes every legacy azure-cli key and source" {
+  _az_cloud_env
+  local _files=(
+    "${_APT_TRUSTED_DIR}/microsoft.asc.gpg"
+    "${_APT_SOURCES_DIR}/archive_uri-http_packages_microsoft_com_repos_azure-cli_-resolute.list"
+    "${_APT_SOURCES_DIR}/packages.microsoft.com_repos_azure-cli.list"
+    "${_APT_SOURCES_DIR}/azure-cli.list"
+  )
+  local _f
+  for _f in "${_files[@]}"; do
+    printf 'x\n' > "${_f}"
+    [ -e "${_f}" ]
+  done
+  run _install_ubuntu_cloud_tools
   [ "$status" -eq 0 ]
+  for _f in "${_files[@]}"; do
+    [ ! -e "${_f}" ]
+  done
+}
+
+@test "_install_ubuntu_cloud_tools: warns when the legacy azure-cli cleanup cannot remove a file" {
+  # tests/mocks/rm swallows a real EACCES (/bin/rm ... || true), so a 0555 directory
+  # cannot fail the cleanup under the mock; MOCK_RM_EXIT is the mock's failure seam.
+  _az_cloud_env
+  printf 'x\n' > "${_APT_SOURCES_DIR}/azure-cli.list"
+  MOCK_RM_EXIT=1 run --separate-stderr _install_ubuntu_cloud_tools
+  [[ "$stderr" == *"could not remove legacy azure-cli apt key/sources"* ]]
 }
 
 # ── _install_ubuntu_brew_packages ────────────────────────────────────────────
@@ -1568,6 +1696,7 @@ STUB
 @test "_install_ubuntu_gui_tools: HAS_SNAP installs albert" {
   export HAS_SNAP=1
   unset HAS_DEVTOOLS
+  _albert_good_key
   run _install_ubuntu_gui_tools
   [ "$status" -eq 0 ]
   grep -q "apt install albert" "${MOCK_CALLS_FILE}"
@@ -1788,6 +1917,7 @@ _edge_live_sources() {
 @test "_install_ubuntu_gui_tools: HAS_SNAP wires the edge source helper and installs edge" {
   export HAS_SNAP=1
   unset HAS_DEVTOOLS
+  _albert_good_key
   run _install_ubuntu_gui_tools
   [ "$status" -eq 0 ]
   grep -q "packages.microsoft.com/repos/edge stable main" "${_EDGE_SOURCES_DIR}/microsoft-edge.list"
@@ -2080,4 +2210,418 @@ _edge_live_sources() {
     _install_go_from_tarball() { :; }
     GO_VER='1.26' _GO_BIN='${_bin_dir}/go' _install_ubuntu_go"
   [[ "$output" == *"Go 1.26 is installed"* ]]
+}
+
+# --- _build_pinned_keyring: build in temp, verify the pin, install only on success ---
+
+_fpr_of_ring() {
+  "${_MS_GPG_BIN}" --homedir "${BATS_TEST_TMPDIR}/fprhome" --batch --show-keys --with-colons "$1" 2> /dev/null \
+    | grep '^fpr:' | cut -d: -f10
+}
+
+_seed_ring() {
+  _ring="${BATS_TEST_TMPDIR}/final.gpg"
+  printf 'old' > "${_ring}"
+  [ -f "${_ring}" ]
+}
+
+@test "_build_pinned_keyring: pinned key installs a 0644 keyring listing exactly the pinned fingerprint" {
+  mkdir -p "${BATS_TEST_TMPDIR}/fprhome"
+  local _ring="${BATS_TEST_TMPDIR}/final.gpg"
+  run _build_pinned_keyring "${REPO_ROOT}/keys/microsoft.asc" "${_ring}" "${MS_GPG_FPR}"
+  [ "$status" -eq 0 ]
+  [ "$(_fpr_of_ring "${_ring}")" = "${MS_GPG_FPR}" ]
+  [ "$(stat -c %a "${_ring}" 2> /dev/null || stat -f %Lp "${_ring}")" = "644" ]
+  [ -z "$(ls -A "${_APT_KEY_TMP_ROOT}")" ]
+}
+
+@test "_build_pinned_keyring: a different single key returns 1 and leaves the existing keyring untouched" {
+  _seed_ring
+  printf 'old' > "${BATS_TEST_TMPDIR}/expect"
+  run _build_pinned_keyring "${REPO_ROOT}/tests/fixtures/albert-obs.asc" "${_ring}" "${MS_GPG_FPR}"
+  [ "$status" -eq 1 ]
+  cmp "${BATS_TEST_TMPDIR}/expect" "${_ring}"
+  [ -z "$(ls -A "${_APT_KEY_TMP_ROOT}")" ]
+}
+
+@test "_build_pinned_keyring: two keys in one file returns 1 and leaves the existing keyring untouched" {
+  _seed_ring
+  printf 'old' > "${BATS_TEST_TMPDIR}/expect"
+  cat "${REPO_ROOT}/keys/microsoft.asc" "${REPO_ROOT}/tests/fixtures/albert-obs.asc" > "${BATS_TEST_TMPDIR}/two.asc"
+  run _build_pinned_keyring "${BATS_TEST_TMPDIR}/two.asc" "${_ring}" "${MS_GPG_FPR}"
+  [ "$status" -eq 1 ]
+  cmp "${BATS_TEST_TMPDIR}/expect" "${_ring}"
+  [ -z "$(ls -A "${_APT_KEY_TMP_ROOT}")" ]
+}
+
+@test "_build_pinned_keyring: a truncated key returns 2 and leaves the existing keyring untouched" {
+  _seed_ring
+  printf 'old' > "${BATS_TEST_TMPDIR}/expect"
+  head -c 200 "${REPO_ROOT}/keys/microsoft.asc" > "${BATS_TEST_TMPDIR}/trunc.asc"
+  run _build_pinned_keyring "${BATS_TEST_TMPDIR}/trunc.asc" "${_ring}" "${MS_GPG_FPR}"
+  [ "$status" -eq 2 ]
+  cmp "${BATS_TEST_TMPDIR}/expect" "${_ring}"
+  [ -z "$(ls -A "${_APT_KEY_TMP_ROOT}")" ]
+}
+
+@test "_build_pinned_keyring: a non-key body returns 2 and leaves the existing keyring untouched" {
+  _seed_ring
+  printf 'old' > "${BATS_TEST_TMPDIR}/expect"
+  printf '<html>x</html>' > "${BATS_TEST_TMPDIR}/html.asc"
+  run _build_pinned_keyring "${BATS_TEST_TMPDIR}/html.asc" "${_ring}" "${MS_GPG_FPR}"
+  [ "$status" -eq 2 ]
+  cmp "${BATS_TEST_TMPDIR}/expect" "${_ring}"
+  [ -z "$(ls -A "${_APT_KEY_TMP_ROOT}")" ]
+}
+
+@test "_build_pinned_keyring: gpg exiting non-zero returns 2 even when it still wrote a good key" {
+  _seed_ring
+  printf 'old' > "${BATS_TEST_TMPDIR}/expect"
+  # Fails ONLY the dearmor, after writing the correct bytes, so the fingerprint
+  # check alone would pass: only the dearmor exit-status check can return 2 here.
+  printf '#!/usr/bin/env bash\nif [[ $1 == --dearmor ]]; then "%s" --dearmor; exit 2; fi\nexec "%s" "$@"\n' "${_MS_GPG_BIN}" "${_MS_GPG_BIN}" > "${BATS_TEST_TMPDIR}/gpg-fail"
+  chmod +x "${BATS_TEST_TMPDIR}/gpg-fail"
+  _MS_GPG_BIN="${BATS_TEST_TMPDIR}/gpg-fail" run _build_pinned_keyring "${REPO_ROOT}/keys/microsoft.asc" "${_ring}" "${MS_GPG_FPR}"
+  [ "$status" -eq 2 ]
+  cmp "${BATS_TEST_TMPDIR}/expect" "${_ring}"
+  [ -z "$(ls -A "${_APT_KEY_TMP_ROOT}")" ]
+}
+
+# tests/fixtures/subkey-pin.asc: an rsa2048 primary (0F686855...F39878D) carrying a
+# cv25519 encryption subkey, generated once offline so no test needs a gpg-agent
+# (a keygen under BATS_TEST_TMPDIR overflows macOS's unix-socket path limit).
+@test "_build_pinned_keyring: a pin equal to a SUBKEY fingerprint returns 1 and leaves the existing keyring untouched" {
+  _seed_ring
+  printf 'old' > "${BATS_TEST_TMPDIR}/expect"
+  run _build_pinned_keyring "${REPO_ROOT}/tests/fixtures/subkey-pin.asc" "${_ring}" "05E7C322791E474134B4CC27A3B2ED738EF1BBCA"
+  [ "$status" -eq 1 ]
+  cmp "${BATS_TEST_TMPDIR}/expect" "${_ring}"
+  [ -z "$(ls -A "${_APT_KEY_TMP_ROOT}")" ]
+}
+
+@test "_build_pinned_keyring: the fixture's primary fingerprint does install" {
+  _seed_ring
+  run _build_pinned_keyring "${REPO_ROOT}/tests/fixtures/subkey-pin.asc" "${_ring}" "0F6868553876AAD0A8C17C72591C21DEFD39878D"
+  [ "$status" -eq 0 ]
+  ! cmp -s <(printf 'old') "${_ring}"
+}
+
+@test "_build_pinned_keyring: install ok but mv failing returns 3, keeps the keyring and removes the staged file" {
+  _seed_ring
+  printf 'old' > "${BATS_TEST_TMPDIR}/expect"
+  mkdir "${BATS_TEST_TMPDIR}/mvstub"
+  printf '#!/usr/bin/env bash\nexit 1\n' > "${BATS_TEST_TMPDIR}/mvstub/mv"
+  chmod +x "${BATS_TEST_TMPDIR}/mvstub/mv"
+  PATH="${BATS_TEST_TMPDIR}/mvstub:${PATH}" run _build_pinned_keyring "${REPO_ROOT}/keys/microsoft.asc" "${_ring}" "${MS_GPG_FPR}"
+  [ "$status" -eq 3 ]
+  cmp "${BATS_TEST_TMPDIR}/expect" "${_ring}"
+  [ ! -e "${_ring}.new" ]
+  [ -z "$(ls -A "${_APT_KEY_TMP_ROOT}")" ]
+}
+
+@test "_keyring_has_pinned_fpr: an empty pin returns 1" {
+  local _h
+  _h="$(mktemp -d "${_APT_KEY_TMP_ROOT}/h.XXXXXXXX")"
+  "${_MS_GPG_BIN}" --dearmor < "${REPO_ROOT}/keys/microsoft.asc" > "${BATS_TEST_TMPDIR}/ms.gpg"
+  run _keyring_has_pinned_fpr "${BATS_TEST_TMPDIR}/ms.gpg" "" "${_h}"
+  [ "$status" -eq 1 ]
+}
+
+@test "_build_pinned_keyring: an empty keyring path, key path or pin is refused before anything runs" {
+  run _build_pinned_keyring "${REPO_ROOT}/keys/microsoft.asc" "" "${MS_GPG_FPR}"
+  [ "$status" -eq 3 ]
+  run _build_pinned_keyring "" "${BATS_TEST_TMPDIR}/final.gpg" "${MS_GPG_FPR}"
+  [ "$status" -eq 3 ]
+  [ ! -e "${BATS_TEST_TMPDIR}/final.gpg" ]
+  run _build_pinned_keyring "${REPO_ROOT}/keys/microsoft.asc" "${BATS_TEST_TMPDIR}/final.gpg" ""
+  [ "$status" -eq 3 ]
+  [ ! -e "${BATS_TEST_TMPDIR}/final.gpg" ]
+}
+
+@test "_build_pinned_keyring: an unwritable keyring directory returns 3, keeps the keyring and leaves no staging file" {
+  if [[ ${EUID} -eq 0 ]]; then
+    skip "root can write into a 0555 directory, so the install cannot be made to fail"
+  fi
+  mkdir "${BATS_TEST_TMPDIR}/ro"
+  local _ring="${BATS_TEST_TMPDIR}/ro/final.gpg"
+  printf 'old' > "${_ring}"
+  printf 'old' > "${BATS_TEST_TMPDIR}/expect"
+  chmod 555 "${BATS_TEST_TMPDIR}/ro"
+  [ -f "${_ring}" ]
+  run _build_pinned_keyring "${REPO_ROOT}/keys/microsoft.asc" "${_ring}" "${MS_GPG_FPR}"
+  chmod 755 "${BATS_TEST_TMPDIR}/ro"
+  [ "$status" -eq 3 ]
+  cmp "${BATS_TEST_TMPDIR}/expect" "${_ring}"
+  [ ! -e "${_ring}.new" ]
+  [ -z "$(ls -A "${_APT_KEY_TMP_ROOT}")" ]
+}
+
+@test "_keyring_has_pinned_fpr: a listing with no pub: record returns 2" {
+  local _h
+  _h="$(mktemp -d "${_APT_KEY_TMP_ROOT}/h.XXXXXXXX")"
+  printf '#!/usr/bin/env bash\nprintf "tru::1:0:0:0:0:0\\n"\nexit 0\n' > "${BATS_TEST_TMPDIR}/gpg-nopub"
+  chmod +x "${BATS_TEST_TMPDIR}/gpg-nopub"
+  _MS_GPG_BIN="${BATS_TEST_TMPDIR}/gpg-nopub" run _keyring_has_pinned_fpr "${BATS_TEST_TMPDIR}/any.gpg" "${MS_GPG_FPR}" "${_h}"
+  [ "$status" -eq 2 ]
+}
+
+@test "_keyring_has_pinned_fpr: a pub: record with no fpr: record returns 2" {
+  local _h
+  _h="$(mktemp -d "${_APT_KEY_TMP_ROOT}/h.XXXXXXXX")"
+  printf '#!/usr/bin/env bash\nprintf "pub:-:2048:1:591C21DEFD39878D:1:::::scESC:\\n"\nexit 0\n' > "${BATS_TEST_TMPDIR}/gpg-nofpr"
+  chmod +x "${BATS_TEST_TMPDIR}/gpg-nofpr"
+  _MS_GPG_BIN="${BATS_TEST_TMPDIR}/gpg-nofpr" run _keyring_has_pinned_fpr "${BATS_TEST_TMPDIR}/any.gpg" "${MS_GPG_FPR}" "${_h}"
+  [ "$status" -eq 2 ]
+}
+
+@test "_keyring_has_pinned_fpr: an empty homedir argument is refused with 2" {
+  run _keyring_has_pinned_fpr "${REPO_ROOT}/keys/microsoft.asc" "${MS_GPG_FPR}" ""
+  [ "$status" -eq 2 ]
+}
+
+# ── _install_ubuntu_albert ───────────────────────────────────────────────────
+
+_ALBERT_FPR="A4B83CD05FDF5C5178482D4A1488EB46E192A257"
+_MS_FPR="BC528686B50D79E339D3721CEB3E94ADBE1229CF"
+
+_albert_good_key() {
+  local _k
+  _k="$(cat "${REPO_ROOT}/tests/fixtures/albert-obs.asc")"
+  export MOCK_CURL_STDOUT="${_k}"
+}
+
+_albert_wrong_key() {
+  local _k
+  _k="$(cat "${REPO_ROOT}/keys/microsoft.asc")"
+  export MOCK_CURL_STDOUT="${_k}"
+}
+
+# Pre-seed a last-known-good source and keyring, asserting they exist first.
+_albert_seed_last_good() {
+  printf 'deb [signed-by=x] https://old.example/ /\n' > "${_APT_SOURCES_DIR}/albert.list"
+  printf 'OLDKEYRING' > "${_APT_KEYRINGS_DIR}/albert-obs.gpg"
+  [ -f "${_APT_SOURCES_DIR}/albert.list" ]
+  [ -f "${_APT_KEYRINGS_DIR}/albert-obs.gpg" ]
+  cp "${_APT_SOURCES_DIR}/albert.list" "${BATS_TEST_TMPDIR}/list.orig"
+  cp "${_APT_KEYRINGS_DIR}/albert-obs.gpg" "${BATS_TEST_TMPDIR}/ring.orig"
+}
+
+_albert_assert_last_good_untouched() {
+  [ -f "${_APT_SOURCES_DIR}/albert.list" ]
+  [ -f "${_APT_KEYRINGS_DIR}/albert-obs.gpg" ]
+  cmp "${_APT_SOURCES_DIR}/albert.list" "${BATS_TEST_TMPDIR}/list.orig"
+  cmp "${_APT_KEYRINGS_DIR}/albert-obs.gpg" "${BATS_TEST_TMPDIR}/ring.orig"
+}
+
+@test "_install_ubuntu_albert: good key writes an https signed-by source and installs albert" {
+  _albert_good_key
+  run --separate-stderr _install_ubuntu_albert
+  [ "$status" -eq 0 ]
+  [ -s "${_APT_KEYRINGS_DIR}/albert-obs.gpg" ]
+  grep -q "https://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_" "${_APT_SOURCES_DIR}/albert.list"
+  grep -q "signed-by=${_APT_KEYRINGS_DIR}/albert-obs.gpg" "${_APT_SOURCES_DIR}/albert.list"
+  refute_grep "deb http://" "${_APT_SOURCES_DIR}/albert.list"
+  grep -q "apt install albert" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_albert: curl failure keeps the last good source and returns 2" {
+  _albert_seed_last_good
+  export MOCK_CURL_EXIT=22
+  run --separate-stderr _install_ubuntu_albert
+  [ "$status" -eq 2 ]
+  _albert_assert_last_good_untouched
+  [[ "$stderr" == *"download.opensuse.org"* ]]
+  [[ "$stderr" == *"fetch failed"* ]]
+  [[ "$stderr" != *"no key could be read"* ]]
+  [[ "$stderr" == *"keeping last verified source"* ]]
+  grep -q "^curl " "${MOCK_CALLS_FILE}"
+  refute_grep "apt install albert" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_albert: a non-key body keeps the last good source and returns 2" {
+  _albert_seed_last_good
+  export MOCK_CURL_STDOUT='<html>captive portal</html>'
+  run --separate-stderr _install_ubuntu_albert
+  [ "$status" -eq 2 ]
+  _albert_assert_last_good_untouched
+  [[ "$stderr" == *"download.opensuse.org"* ]]
+  [[ "$stderr" == *"no key could be read"* ]]
+  [[ "$stderr" != *"fetch failed"* ]]
+  grep -q "^curl " "${MOCK_CALLS_FILE}"
+  refute_grep "apt install albert" "${MOCK_CALLS_FILE}"
+  [ -z "$(ls -A "${_APT_KEY_TMP_ROOT}")" ]
+}
+
+@test "_install_ubuntu_albert: wrong fingerprint removes the source and keyring, warns with both fingerprints" {
+  _albert_seed_last_good
+  _albert_wrong_key
+  run --separate-stderr _install_ubuntu_albert
+  [ "$status" -eq 2 ]
+  [ ! -e "${_APT_SOURCES_DIR}/albert.list" ]
+  [ ! -e "${_APT_KEYRINGS_DIR}/albert-obs.gpg" ]
+  [[ "$stderr" == *"${_MS_FPR}"* ]]
+  [[ "$stderr" == *"${_ALBERT_FPR}"* ]]
+  grep -q "^curl " "${MOCK_CALLS_FILE}"
+  refute_grep "apt install albert" "${MOCK_CALLS_FILE}"
+  [ -z "$(ls -A "${_APT_KEY_TMP_ROOT}")" ]
+}
+
+@test "_install_ubuntu_albert: keyring install failure (builder 3) keeps the last good source and returns 2" {
+  _albert_seed_last_good
+  _albert_good_key
+  _build_pinned_keyring() { return 3; }
+  run --separate-stderr _install_ubuntu_albert
+  [ "$status" -eq 2 ]
+  _albert_assert_last_good_untouched
+  [[ "$stderr" == *"${_APT_KEYRINGS_DIR}/albert-obs.gpg"* ]]
+  grep -q "^curl " "${MOCK_CALLS_FILE}"
+  refute_grep "apt install albert" "${MOCK_CALLS_FILE}"
+  [ -z "$(ls -A "${_APT_KEY_TMP_ROOT}")" ]
+}
+
+@test "_install_ubuntu_albert: fetches into a temp dir under _APT_KEY_TMP_ROOT and leaves it empty (success)" {
+  _albert_good_key
+  run _install_ubuntu_albert
+  [ "$status" -eq 0 ]
+  grep -q "curl .*-o ${_APT_KEY_TMP_ROOT}/albert-key\." "${MOCK_CALLS_FILE}"
+  [ -z "$(ls -A "${_APT_KEY_TMP_ROOT}")" ]
+}
+
+@test "_install_ubuntu_albert: leaves the temp root empty after a curl failure" {
+  export MOCK_CURL_EXIT=22
+  run _install_ubuntu_albert
+  [ "$status" -eq 2 ]
+  grep -q "curl .*-o ${_APT_KEY_TMP_ROOT}/albert-key\." "${MOCK_CALLS_FILE}"
+  [ -z "$(ls -A "${_APT_KEY_TMP_ROOT}")" ]
+}
+
+@test "_install_ubuntu_albert: removes the legacy global key and http source on success" {
+  _albert_good_key
+  printf 'x' > "${_APT_TRUSTED_DIR}/home_manuelschneid3r.gpg"
+  printf 'x' > "${_APT_SOURCES_DIR}/home:manuelschneid3r.list"
+  [ -f "${_APT_TRUSTED_DIR}/home_manuelschneid3r.gpg" ]
+  [ -f "${_APT_SOURCES_DIR}/home:manuelschneid3r.list" ]
+  run _install_ubuntu_albert
+  [ "$status" -eq 0 ]
+  [ ! -e "${_APT_TRUSTED_DIR}/home_manuelschneid3r.gpg" ]
+  [ ! -e "${_APT_SOURCES_DIR}/home:manuelschneid3r.list" ]
+}
+
+@test "_install_ubuntu_albert: removes the legacy global key and http source on the wrong-fingerprint path" {
+  _albert_wrong_key
+  printf 'x' > "${_APT_TRUSTED_DIR}/home_manuelschneid3r.gpg"
+  printf 'x' > "${_APT_SOURCES_DIR}/home:manuelschneid3r.list"
+  [ -f "${_APT_TRUSTED_DIR}/home_manuelschneid3r.gpg" ]
+  [ -f "${_APT_SOURCES_DIR}/home:manuelschneid3r.list" ]
+  run _install_ubuntu_albert
+  [ "$status" -eq 2 ]
+  [ ! -e "${_APT_TRUSTED_DIR}/home_manuelschneid3r.gpg" ]
+  [ ! -e "${_APT_SOURCES_DIR}/home:manuelschneid3r.list" ]
+}
+
+@test "_install_ubuntu_albert: a second run leaves albert.list byte-identical" {
+  _albert_good_key
+  run _install_ubuntu_albert
+  [ "$status" -eq 0 ]
+  [ -s "${_APT_SOURCES_DIR}/albert.list" ]
+  cp "${_APT_SOURCES_DIR}/albert.list" "${BATS_TEST_TMPDIR}/first.list"
+  run _install_ubuntu_albert
+  [ "$status" -eq 0 ]
+  cmp "${_APT_SOURCES_DIR}/albert.list" "${BATS_TEST_TMPDIR}/first.list"
+}
+
+@test "_install_ubuntu_gui_tools: an albert failure makes the step return non-zero after the rest runs" {
+  export HAS_SNAP=1
+  unset HAS_DEVTOOLS HAS_FLATPAK
+  export MOCK_CURL_EXIT=22
+  run _install_ubuntu_gui_tools
+  [ "$status" -eq 2 ]
+  grep -q "apt install microsoft-edge-stable" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_ubuntu_packages: names gui_tools when albert fails" {
+  unset MACOS
+  export LINUX=1 UBUNTU=1 NOBLE=1 HAS_SNAP=1
+  unset HAS_DEVTOOLS HAS_FLATPAK
+  export MOCK_CURL_EXIT=22
+  _install_ubuntu_base_packages() { :; }
+  local _s
+  for _s in workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust misc; do
+    eval "_install_ubuntu_${_s}() { :; }"
+  done
+  run --separate-stderr install_ubuntu_packages
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"failed: gui_tools"* ]]
+  [[ "$stderr" == *"albert key fetch failed"* ]]
+}
+
+@test "_install_ubuntu_gui_tools: albert succeeding returns 0 (the step's own tail status)" {
+  export HAS_SNAP=1
+  unset HAS_DEVTOOLS HAS_FLATPAK
+  _albert_good_key
+  run _install_ubuntu_gui_tools
+  # The step ends in `if [[ -n ${HAS_FLATPAK} ]]` with no else, so its tail status
+  # is 0 by construction today; this pins that albert's success does not alter it.
+  [ "$status" -eq 0 ]
+  grep -q "apt install albert" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_albert: no existing source says no verified source is present" {
+  [ ! -e "${_APT_SOURCES_DIR}/albert.list" ]
+  export MOCK_CURL_EXIT=22
+  run --separate-stderr _install_ubuntu_albert
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"no verified albert source is present"* ]]
+  [[ "$stderr" != *"keeping last verified source"* ]]
+}
+
+@test "_install_ubuntu_albert: removes legacy files even when the fetch fails" {
+  export MOCK_CURL_EXIT=22
+  printf 'x' > "${_APT_TRUSTED_DIR}/home_manuelschneid3r.gpg"
+  printf 'x' > "${_APT_SOURCES_DIR}/home:manuelschneid3r.list"
+  [ -f "${_APT_TRUSTED_DIR}/home_manuelschneid3r.gpg" ]
+  [ -f "${_APT_SOURCES_DIR}/home:manuelschneid3r.list" ]
+  run _install_ubuntu_albert
+  [ "$status" -eq 2 ]
+  [ ! -e "${_APT_TRUSTED_DIR}/home_manuelschneid3r.gpg" ]
+  [ ! -e "${_APT_SOURCES_DIR}/home:manuelschneid3r.list" ]
+}
+
+@test "_install_ubuntu_albert: a failed apt install albert warns and returns 2" {
+  _albert_good_key
+  export MOCK_APT_EXIT=1
+  run --separate-stderr _install_ubuntu_albert
+  [ "$status" -eq 2 ]
+  grep -q "apt install albert" "${MOCK_CALLS_FILE}"
+  [[ "$stderr" == *"apt install albert failed"* ]]
+}
+
+@test "_install_ubuntu_albert: a failed source write warns and returns 2" {
+  _albert_good_key
+  export MOCK_TEE_EXIT=1
+  run --separate-stderr _install_ubuntu_albert
+  [ "$status" -eq 2 ]
+  grep -q "^tee " "${MOCK_CALLS_FILE}"
+  refute_grep "apt install albert" "${MOCK_CALLS_FILE}"
+  [[ "$stderr" == *"could not write ${_APT_SOURCES_DIR}/albert.list"* ]]
+}
+
+@test "_install_ubuntu_albert: mismatch WARN lists only the primary fingerprint, never a subkey" {
+  export MOCK_CURL_STDOUT
+  MOCK_CURL_STDOUT="$(cat "${REPO_ROOT}/tests/fixtures/subkey-pin.asc")"
+  run --separate-stderr _install_ubuntu_albert
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"0F6868553876AAD0A8C17C72591C21DEFD39878D"* ]]
+  [[ "$stderr" == *"not the pinned key"* ]]
+  [[ "$stderr" != *"05E7C322791E474134B4CC27A3B2ED738EF1BBCA"* ]]
+}
+
+@test "_install_ubuntu_albert: mismatch WARN uses multi-key wording when several primary keys arrive" {
+  export MOCK_CURL_STDOUT
+  MOCK_CURL_STDOUT="$(cat "${REPO_ROOT}/keys/microsoft.asc" "${REPO_ROOT}/tests/fixtures/albert-obs.asc")"
+  run --separate-stderr _install_ubuntu_albert
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"2 primary keys"* ]]
+  [[ "$stderr" == *"${_MS_FPR}"* ]]
+  [[ "$stderr" != *"not the pinned key"* ]]
 }
