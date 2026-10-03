@@ -14,15 +14,22 @@ fi
 # shell files by first line, whatever their name). Call only in a conditional:
 # this hook runs under set -e.
 _path_is_inert() {
-    local _path="${1}" _sha="${2}" _head
+    local _path="${1}" _sha="${2}" _head _entry _mode
     case "${_path}" in
         tests/*) return 1 ;;
         LICENSE | *.md) ;;
         *) return 1 ;;
     esac
-    # Deleted at the tip: never lands, so judged by name alone.
-    git cat-file -e "${_sha}:${_path}" 2>/dev/null || return 0
-    [[ "$(git cat-file -t "${_sha}:${_path}" 2>/dev/null)" == "blob" ]] || return 1
+    # Decide from the tree entry at the pushed commit, never from the object:
+    # an object can be absent from this repo while the path is present (a
+    # gitlink to a commit never fetched). --literal-pathspecs stops [ * ? in a
+    # name acting as globs. A failing ls-tree is not inert.
+    _entry="$(git --literal-pathspecs ls-tree "${_sha}" -- "${_path}")" || return 1
+    # No entry: absent at the tip (deleted), so it never lands.
+    [[ -z "${_entry}" ]] && return 0
+    _mode="${_entry%% *}"
+    # Only regular files; a symlink (120000) or gitlink (160000) is not inert.
+    [[ "${_mode}" == "100644" || "${_mode}" == "100755" ]] || return 1
     # Process substitution rather than a pipe: a pipe would be harmless here
     # (no pipefail), and this stays quiet about SIGPIPE if pipefail is ever added.
     # A blob that exists but cannot be read is not inert; note only head's own

@@ -920,3 +920,60 @@ _master_push_of() {
   [[ "$output" == *"not a branch"* ]]
   [[ "$output" != *"detached"* ]]
 }
+
+# ── inertness is decided from the pushed tree entry, not the object ─────────
+# Commit a single index entry of any mode: _mode _object _path.
+_commit_entry() {
+  local _mode="${1}" _obj="${2}" _path="${3}"
+  bash -c "
+    export PATH='${CLEAN_PATH}'
+    unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
+    git -C '${REPO_DIR}' update-index --add --cacheinfo '${_mode},${_obj},${_path}'
+    git -C '${REPO_DIR}' commit --quiet -m 'chore: entry'
+    git -C '${REPO_DIR}' rev-parse HEAD
+  "
+}
+
+@test "master guard refuses a gitlink named .md whose commit is not in the repo" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_entry 160000 "1111111111111111111111111111111111111111" "docs/sub.md")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  _assert_refused
+  [[ "$output" == *"docs/sub.md"* ]]
+}
+
+@test "master guard refuses a gitlink named .md whose commit IS in the repo" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_entry 160000 "${base_sha}" "docs/sub2.md")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  _assert_refused
+  [[ "$output" == *"docs/sub2.md"* ]]
+}
+
+@test "master guard refuses a symlink named .md" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  blob=$(printf '../scripts/s.sh' | _git_clean "hash-object -w --stdin")
+  local_sha=$(_commit_entry 120000 "${blob}" "docs/link.md")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  _assert_refused
+  [[ "$output" == *"docs/link.md"* ]]
+}
+
+@test "master guard allows a markdown name containing glob characters" {
+  _master_push_of "docs/[x].md" "x"
+  [ "$status" -eq 0 ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
+@test "master guard allows a markdown name that looks like pathspec magic" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  blob=$(printf 'x' | _git_clean "hash-object -w --stdin")
+  local_sha=$(_commit_entry 100644 "${blob}" ":(x).md")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
