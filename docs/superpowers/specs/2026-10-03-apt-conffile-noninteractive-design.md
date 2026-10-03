@@ -92,14 +92,22 @@ readonly -a APT_CONFFILE_OPTS=(-o Dpkg::Options::=--force-confdef -o Dpkg::Optio
   and nowhere else. No other `dpkg -i`/`--install` exists in `lib/`, `setup_env.sh` or
   `scripts/` today; one added later needs confdef+confold from the gate and gets confmiss only
   by adding it to the gate's allow-set (see Enforcement).
-- **`.dpkg-dist` doctor check.** confold means the operator is no longer prompted when a package
+- **Kept-conffile doctor check.** confold means the operator is no longer prompted when a package
   ships a changed conffile; dpkg writes the package copy beside it as `<file>.dpkg-dist` and moves
-  on. A new `_doctor_check_dpkg_dist` (`lib/helpers.sh`), registered in `run_doctor`, runs on
-  Linux only (`[[ -n ${LINUX} ]] || return 0`, the early-return shape `_doctor_check_gnu_coreutils`
-  uses). It runs `find <root> -name '*.dpkg-dist'` with `<root>` from a seam
-  `_OVERRIDE_DPKG_DIST_ROOT` defaulting to `/etc`. Each file gets one `doctor_warn` naming it and
-  the remedy (`diff <file> <file>.dpkg-dist`, merge what you want, delete the `.dpkg-dist`); none
-  gives one `doctor_pass`. WARN does not fail doctor. The file keeps being reported until the
+  on. ucf-managed configs (17 registered in `/var/lib/ucf/hashfile` on claude, among them
+  `/etc/default/grub` and `apt.conf.d/50unattended-upgrades`) do the same under
+  `DEBIAN_FRONTEND=noninteractive` but write `<file>.ucf-dist`. A new `_doctor_check_conffile_dist`
+  (`lib/helpers.sh`), registered in `run_doctor`, runs on Linux only (`[[ -n ${LINUX} ]] || return 0`,
+  the same early-return shape `_doctor_check_gnu_coreutils` uses with `RESOLUTE`). It reads `<root>`
+  from a seam `_OVERRIDE_CONFFILE_DIST_ROOT` defaulting to `/etc`. If `<root>` is not a readable
+  directory it emits one `doctor_warn` saying the scan could not run, and stops: `find` exits 1
+  both for a missing root and for the unreadable subdirectories every real `/etc` has, so its exit
+  code cannot separate "clean" from "never searched", and a PASS there would be false. Otherwise it
+  runs `find <root> \( -name '*.dpkg-dist' -o -name '*.ucf-dist' \)`. Each file gets one
+  `doctor_warn` naming it and the remedy (`diff` it against the live file, merge what you want,
+  delete it; an empty diff means just delete it); none gives one `doctor_pass`.
+  `*.dpkg-new` and `*.ucf-new` are not matched: they mark an interrupted install, a different state
+  with a different remedy. WARN does not fail doctor. The file keeps being reported until the
   operator resolves it, which is the point: confold took away the one-time prompt, and a one-time
   warning would repeat the loss.
 
@@ -114,8 +122,10 @@ readonly -a APT_CONFFILE_OPTS=(-o Dpkg::Options::=--force-confdef -o Dpkg::Optio
   (`/etc/multipath`, `/etc/credstore`, `/etc/credstore.encrypted`, `/etc/lvm/backup`,
   `/etc/lvm/archive`, `/etc/polkit-1/rules.d`, `/etc/ssl/private`), and none of the 1028
   conffiles `dpkg-query -W -f='${Conffiles}'` lists lives under any of them. That is one machine;
-  the helper's header comment states the boundary. Also on claude: 0 `.dpkg-dist` files exist
-  today, unprivileged or under sudo, so the check starts silent.
+  the helper's header comment states the boundary. Also on claude: 0 `.dpkg-dist` files exist,
+  unprivileged or under sudo, but `/etc/default/grub.ucf-dist` does, byte-identical to
+  `/etc/default/grub`. The check will WARN on it on its first run there, and the remedy is to
+  delete it.
 
 Rejected:
 
@@ -177,13 +187,16 @@ TDD, vertical slices:
    separate argument for an xargs+nala site, a direct `apt install` site, the powershell
    `dpkg -i` and one volian `dpkg --install`, plus `--force-confmiss` for the last two. This shows
    the array expands at run time, which a text check cannot.
-3. **`.dpkg-dist` doctor check.** Point `_OVERRIDE_DPKG_DIST_ROOT` at a fixture directory (the
-   real `/etc` is never searched under bats). Cases: a `.dpkg-dist` in a nested subdirectory is
-   reported with its path and the `diff` remedy; one whose mtime is set to 2020 with `touch -d` is
-   still reported, pinning the measured defect class; an empty root gives one PASS and no WARN;
-   `LINUX` unset gives no output; the check never sets `_DOCTOR_FAILED`. The end-to-end
-   `run_doctor` tests in `tests/setup_env/unit.bats` stub every sub-check by name, so they gain a
-   `_doctor_check_dpkg_dist` stub.
+3. **Kept-conffile doctor check.** Point `_OVERRIDE_CONFFILE_DIST_ROOT` at a fixture directory
+   (the real `/etc` is never searched under bats). Cases: a `.dpkg-dist` and a `.ucf-dist` in a
+   nested subdirectory are each reported with path and remedy; a `.dpkg-dist` whose mtime is set to
+   2020 with `touch -d` is still reported, pinning the measured defect class; a `.dpkg-new` is not
+   reported; an empty root gives one PASS and no WARN; a missing root gives one WARN and no PASS;
+   `LINUX` unset gives no output; `_DOCTOR_FAILED` stays `0` (`lib/helpers.sh` initialises it to
+   0, so "unset" is never the state). The end-to-end `run_doctor` tests stub every sub-check by
+   name: 4 in `tests/setup_env/unit.bats` and 1 in `tests/setup_env/plugin_node_paths.bats`, as
+   counted at `69642b86`. Each gains a `_doctor_check_conffile_dist` stub; re-count with
+   `grep -rn '_doctor_check_plugin_node_paths() {' tests` before relying on these numbers.
 4. **Mutation check.** Remove `"${APT_CONFFILE_OPTS[@]}"` from one xargs line and confirm both
    the gate and the argv test go red. Remove `--force-confmiss` from one volian line and confirm
    the confmiss check goes red. Make the configuring-verb list match nothing and confirm the
@@ -208,12 +221,12 @@ The real-tool proof is V1 and V2 below. The bats suite never runs a real apt or 
 - **R12.** `[PR1]` A `bad` conffile record's failure message names the file and line, the array (or the two literal options for a file that cannot source `lib/constants.sh`) as the apt fix, `--force-confdef --force-confold` as the dpkg fix, and `dotfiles-apt-upgrade-hazards.md` §2.
 - **R13.** `[PR1]` Fixture cases cover: array token after the verb `ok`, array token before the verb `ok`, literal pair `ok`, missing options `bad`, only one of the pair `bad`, dpkg force flags after the archive path `ok`, and a `remove` call not judged.
 - **R14.** `[PR1]` Argv-recording tests assert the options arrive as separate arguments at an xargs+nala site, a direct `apt install` site, the powershell `dpkg -i` and one volian `dpkg --install`, the last two also receiving `--force-confmiss`.
-- **R15.** `[PR1]` `_doctor_check_dpkg_dist` in `lib/helpers.sh`, called from `run_doctor`, returns immediately unless `LINUX` is set, lists every `*.dpkg-dist` under the root given by `_OVERRIDE_DPKG_DIST_ROOT` (default `/etc`) with no timestamp test, emits one `doctor_warn` per file naming it and the `diff` remedy, and one `doctor_pass` when there are none.
-- **R16.** `[PR1]` `_doctor_check_dpkg_dist` never calls `doctor_fail`, and its header comment states that an unprivileged `find` misses files under root-only directories.
-- **R17.** `[PR1]` Tests cover: a nested `.dpkg-dist` reported with path and remedy, a `.dpkg-dist` with a 2020 mtime still reported, an empty root giving one PASS, `LINUX` unset giving no output, and `_DOCTOR_FAILED` left unset.
-- **R18.** `[PR1]` Every end-to-end `run_doctor` test that stubs sub-checks by name also stubs `_doctor_check_dpkg_dist`.
+- **R15.** `[PR1]` `_doctor_check_conffile_dist` in `lib/helpers.sh`, called from `run_doctor`, returns immediately unless `LINUX` is set, and lists every `*.dpkg-dist` and `*.ucf-dist` under the root given by `_OVERRIDE_CONFFILE_DIST_ROOT` (default `/etc`) with no timestamp test, emitting one `doctor_warn` per file naming it and the `diff`/merge/delete remedy, and one `doctor_pass` when there are none.
+- **R16.** `[PR1]` When the root is not a readable directory, `_doctor_check_conffile_dist` emits one `doctor_warn` saying the scan could not run and no `doctor_pass`; it never calls `doctor_fail`; its header comment states that an unprivileged `find` misses files under root-only directories and that `*.dpkg-new`/`*.ucf-new` are deliberately not matched.
+- **R17.** `[PR1]` Tests cover: a nested `.dpkg-dist` and a nested `.ucf-dist` each reported with path and remedy, a `.dpkg-dist` with a 2020 mtime still reported, a `.dpkg-new` not reported, an empty root giving one PASS, a missing root giving one WARN and no PASS, `LINUX` unset giving no output, and `_DOCTOR_FAILED` equal to 0 after every case.
+- **R18.** `[PR1]` Every end-to-end `run_doctor` test that stubs sub-checks by name also stubs `_doctor_check_conffile_dist`.
 - **R19.** `[PR1]` A backlog row is added for repairing packages other than the three R5 packages that are already left at `iU` by an earlier conffile failure.
-- **V1.** On claude, re-run the §2 `dotfiles-cfprobe` probe through a changed `xargs … nala install` line (stdin `/dev/null`, edited conffile, v1 to v2). Expect rc 0, state `ii`, local edit kept, `.dpkg-dist` written, and `setup_env.sh -t doctor` WARNing on it; delete it and confirm the next doctor run PASSes.
+- **V1.** On claude, re-run the §2 `dotfiles-cfprobe` probe through a changed `xargs … nala install` line (stdin `/dev/null`, edited conffile, v1 to v2). Expect rc 0, state `ii`, local edit kept, `.dpkg-dist` written, and `setup_env.sh -t doctor` WARNing on it. Then delete it and `/etc/default/grub.ucf-dist` (identical to `/etc/default/grub`, verified by `diff`) and confirm the next doctor run PASSes.
 - **V2.** Done at spec time on claude, 2026-10-03, recorded in Decision: same-version `dpkg -i --force-confdef --force-confold --force-confmiss` over an `iU` package with a deleted conffile gave rc 0, `ii`, file restored; without confmiss, rc 0, `ii`, file still absent. Re-run with the R5 command copied from the final code before merge.
 - **V3.** Mutation: dropping the array from one xargs line turns both the R8 gate and the R14 argv test red; dropping `--force-confmiss` from one volian line turns the R11 check red; making the configuring-verb list match nothing turns the R9 count red; making the doctor `find` match nothing turns the R17 reported-file cases red.
 - **N1.** No file is written under `/etc/apt/apt.conf.d/` or anywhere else outside the repo.
@@ -221,7 +234,7 @@ The real-tool proof is V1 and V2 below. The bats suite never runs a real apt or 
 - **N3.** `remove`, `purge`, `autoremove` and `autopurge` calls are not changed.
 - **N4.** `Vagrantfile` is not changed; it has its own backlog row.
 - **N5.** No wrapper function is introduced between `sudo` and apt, apt-get, nala or dpkg.
-- **N6.** `_doctor_check_dpkg_dist` does not run `find` under sudo, and does not move, delete or merge any `.dpkg-dist` file.
+- **N6.** `_doctor_check_conffile_dist` does not run `find` under sudo, and does not move, delete or merge any `.dpkg-dist` or `.ucf-dist` file.
 - **N7.** No `.dpkg-dist` reporting is added to `run_update`, `run_setup_or_developer` or `_UPDATE_SECTION_ORDER`.
 
 ## Multi-Lens Review
@@ -251,13 +264,20 @@ Disposition: Addressed (operator, 2026-10-03) — (1) R9 and R11; (2) R14 argv t
 Reviewed at commit: `931f40e0` (round-1 revisions). All three lenses re-run in full, since round 1 changed design substance.
 
 **Goal-Fit (r2).** Finding: R1–R14 core proportionate and sound. The run-scoped `.dpkg-dist` advisory (old R15–R18) reports nothing in production: dpkg keeps the archive mtime on `.dpkg-dist`, so `find -newer started_at` misses it; four of its six cases pass on a helper that finds nothing. Simpler path: one persistent `doctor` check with no marker. Assumption: `.dpkg-dist` mtime is the archive's, not install time. Measured by the author on claude with the probe package: mtime `2020-01-01`, `-newer` 0, `-cnewer` 1 — holds.
-Disposition: Addressed (operator, 2026-10-03) — operator chose the doctor check; old R15–R18 replaced by `_doctor_check_dpkg_dist` (new R15–R18), N7 added.
+Disposition: Addressed (operator, 2026-10-03) — operator chose the doctor check; old R15–R18 replaced by `_doctor_check_dpkg_dist` [renamed `_doctor_check_conffile_dist` in round 3] (new R15–R18), N7 added.
 
 **Ergonomics (r2).** Finding: same mtime defect; R15/R17 mismatch (helper's only output was `log_warn` on stderr, so `run_update` had no found/none signal); no SKIP arms for the `conffiles` row; warning shown once then gone; unreadable-directory misses invisible to the operator. Assumption: same as Goal-Fit, settled the same way.
 Disposition: Addressed (operator, 2026-10-03) — doctor check removes the marker, the summary row and the SKIP question; the warning persists until resolved and carries the `diff` remedy; unreadable directories measured (7 on claude, 0 conffiles under them) and stated as a boundary in R16.
 
 **Risk (r2).** Finding: same mtime defect, with a `dpkg-deb -x` reproduction; `_DOTFILES_RUN_TMPDIR`/`started_at` wiring, summary width, ordering tests, volian confmiss blast radius, R11 exact-match and the array-token skip all checked clean. Assumption: whether conffiles that would get a `.dpkg-dist` live under root-only `/etc` directories. Measured by the author on claude: 7 unreadable directories, 0 of 1028 conffiles under them — holds on that machine.
 Disposition: Addressed (operator, 2026-10-03) — advisory replaced by the doctor check; boundary measured and recorded in Decision.
+
+### Round 3 (scoped)
+
+Reviewed at commit: `69642b86`. Risk lens only, scoped to the new doctor-check text (Decision bullet, Testing steps 3–4, R15–R18, V1, V3, N6–N7); the rest was unchanged since round 2.
+
+**Risk (r3).** Finding: (1) ucf-managed configs keep-local as `*.ucf-dist`, which the check never matched; `/etc/default/grub.ucf-dist` already exists on claude (17 ucf-registered files). (2) `find` exits 1 for both a missing root and the unreadable subdirectories of a real `/etc`, so "none" can PASS over a scan that never ran. (3) `_DOCTOR_FAILED` is initialised to 0, never unset; the stubbing tests are 4 in `unit.bats` plus 1 in `plugin_node_paths.bats`. macOS gating, WARN-cannot-fail, speed (8 ms) and mounts checked clean. Assumption: every kept-local divergence lands as `*.dpkg-dist` — refuted on claude by the ucf class.
+Disposition: Addressed (operator, 2026-10-03) — operator chose to widen to `*.ucf-dist` (check renamed `_doctor_check_conffile_dist`); root-readable guard WARNs instead of PASSing; R17 asserts `-eq 0`; Testing step 3 names both stub files. Operator chose no further lens round: every round has removed surface, and these fixes are a pattern, a guard and wording.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
