@@ -289,6 +289,10 @@ then on each:
 - **N3.** No test reaches the network or writes under the real `/etc/apt` or `/usr/share/keyrings`.
 - **N4.** No key-validity (revoked/expired) check in the builder.
 
+## Amendments
+
+- N3 -> No test reaches the network, and no code path this change adds writes under the real `/etc/apt` or `/usr/share/keyrings`; a test that runs a whole pre-existing step inherits that step's existing unseamed writes. — the plan's non-goal check found that tests running all of `_install_ubuntu_cloud_tools` reach the unseamed gcloud block, which nine existing tests already reach and which N1 forbids changing; that exposure is tracked by the Backlog row "`_install_ubuntu_*` tests reach real `/etc/apt/sources.list.d` paths".
+
 ## Multi-Lens Review
 
 Reviewed at commit: `3e3b7ab5` (Step 7 self-review commit, before Step 8 dispatch)
