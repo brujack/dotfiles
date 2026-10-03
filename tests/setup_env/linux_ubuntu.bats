@@ -1573,12 +1573,20 @@ _az_cloud_env() {
   run ! _is_system_az_path /usr/bin/az2
 }
 
-@test "_install_ubuntu_brew_packages: never treats /usr/bin/az as the brew az" {
-  export _BREW_AZ_BIN="/usr/bin/az"
+@test "_install_ubuntu_brew_packages: never probes a path _is_system_az_path flags" {
+  # A stub stands in for the system az: a literal /usr/bin/az here would run the
+  # operator's real az the day this guard regresses (tdd.md E2). The literal
+  # paths are covered by the _is_system_az_path unit test, which runs nothing.
+  local _sys="${BATS_TEST_TMPDIR}/system-az"
+  printf '#!/usr/bin/env bash\nprintf "system-az %%s\\n" "$*" >> "%s"\n' "${MOCK_CALLS_FILE}" > "${_sys}"
+  chmod +x "${_sys}"
+  export _BREW_AZ_BIN="${_sys}"
+  _is_system_az_path() { [[ $1 == "${_BREW_AZ_BIN}" ]]; }
   export MOCK_DPKG_S_STATUS="install ok installed"
   run _install_ubuntu_brew_packages
   [ "$status" -eq 0 ]
   grep -q "brew install azure-cli" "${MOCK_CALLS_FILE}"
+  refute_grep "^system-az " "${MOCK_CALLS_FILE}"
   refute_grep "dpkg -s azure-cli" "${MOCK_CALLS_FILE}"
   refute_grep "apt-get remove" "${MOCK_CALLS_FILE}"
 }

@@ -785,9 +785,10 @@ _is_system_az_path() {
 # a keyring is judged by its content: it must hold exactly one primary key and
 # the fingerprint of that primary key (the fpr: record right after its pub:
 # record, never a subkey's) must equal the pin. Returns 0 match, 1 mismatch,
-# 2 when the listing failed or showed no primary key (gpg missing, junk input,
-# a pub: record with no fpr: record after it, or an empty homedir argument). <home> is a throwaway gpg homedir the caller
-# owns and removes; an empty one would make gpg use the operator's ~/.gnupg.
+# 2 when the listing failed or showed no usable primary key (gpg missing, junk
+# input, a pub: record with no fpr: record after it, or an empty homedir
+# argument). <home> is a throwaway gpg homedir the caller owns and removes; an
+# empty one would make gpg use the operator's ~/.gnupg.
 _keyring_has_pinned_fpr() {
   local _ring="$1" _fpr="$2" _home="$3" _listing _rc _pubs _primary
   [[ -n ${_home} ]] || return 2
@@ -809,8 +810,8 @@ _keyring_has_pinned_fpr() {
 # is staged to <keyring>.new and renamed into place, because GNU install
 # unlinks its target before copying.
 # Returns 0 installed; 1 the key is not the pinned one (not exactly one primary
-# key, or its fingerprint differs); 2 no key could be read (gpg failed, or the
-# input held no key); 3 a local failure (temp dir, staging, install) that left
+# key, or its fingerprint differs); 2 no usable key could be read (gpg failed,
+# the input held no key, or a primary key had no fingerprint); 3 a local failure (temp dir, staging, install) that left
 # the final path unchanged.
 # No EXIT/RETURN trap: scripts/check-lib-exit-traps.sh ratchets `trap ... EXIT`
 # in lib/, and a RETURN trap is not function-scoped (shell.md), so every path
