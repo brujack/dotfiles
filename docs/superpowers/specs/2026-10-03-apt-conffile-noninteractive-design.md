@@ -66,11 +66,23 @@ runs as part of a dotfiles workflow:
   | `dpkg -i` v2, no force (reproduces §2b)                                      | 1   | `iU`  | absent               |
   | `dpkg -i --force-confdef --force-confold --force-confmiss` v2, same version  | 0   | `ii`  | restored (v2 copy)   |
   | control, from a fresh `iU`: `--force-confdef --force-confold` only           | 0   | `ii`  | **still absent**     |
+  | from `ii` with the conffile deleted: same-version reinstall, confdef+confold | 0   | `ii`  | **still absent**     |
+  | same, plus `--force-confmiss`                                                | 0   | `ii`  | restored (v2 copy)   |
 
   Without confmiss the call stops wedging but leaves the keyring missing. For an archive-setup
   package that means a configured source with no key, and every later `apt update` fails on it.
   The probe also settles a question §2b left open: §2b repaired with `dpkg --configure`, and a
-  re-run of `dpkg -i` with the **same** version over an `iU` package repairs the same way.
+  re-run of `dpkg -i` with the **same** version over an `iU` package repairs the same way. The
+  last two rows (measured later the same day, same package) show it also repairs a package
+  already `ii` whose conffile was deleted after configuration.
+
+  **The repair reaches a machine only when the call runs.** Each R5 call sits behind its
+  caller's install guard: `_install_ubuntu_powershell` returns early when `_pwsh_probe_runs`
+  succeeds (`lib/linux_ubuntu.sh:171`), and `check_and_install_nala` installs only when nala is
+  not `ii` (`lib/helpers.sh:270`). So on a machine where pwsh or nala already works and the
+  vendor keyring was deleted afterwards, the call is skipped and nothing is restored; the symptom
+  there is `apt update` failing on a missing `signed-by` file. This spec does not change the
+  guards. That state goes to the backlog (R19).
 
 ### Mechanism
 
@@ -208,7 +220,7 @@ The real-tool proof is V1 and V2 below. The bats suite never runs a real apt or 
 ## Requirements
 
 - **R1.** `[PR1]` `lib/constants.sh` defines `APT_CONFFILE_OPTS` as a readonly array holding exactly `-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold`.
-- **R2.** `[PR1]` Every `sudo` call in tracked `lib/*.sh` and `setup_env.sh` running `apt`, `apt-get` or `nala` with `install`, `reinstall`, `upgrade`, `full-upgrade`, `dist-upgrade` or `build-dep` carries `"${APT_CONFFILE_OPTS[@]}"`.
+- **R2.** `[PR1]` Every `sudo` call the R8 gate judges as `apt`, `apt-get` or `nala` with `install`, `reinstall`, `upgrade`, `full-upgrade`, `dist-upgrade` or `build-dep`, in any tracked `lib/*.sh`, `setup_env.sh` or `scripts/*.sh`, carries `"${APT_CONFFILE_OPTS[@]}"`, or, in a file that cannot source `lib/constants.sh`, the two `-o Dpkg::Options::=` options literally.
 - **R3.** `[PR1]` The five `xargs -r sudo … nala install -y` lines in `lib/linux_ubuntu.sh` carry `"${APT_CONFFILE_OPTS[@]}"` in the fixed part of the command, before the package names xargs appends.
 - **R4.** `[PR1]` `update_apt_packages`' `nala full-upgrade` in `lib/linux_shared.sh` uses `"${APT_CONFFILE_OPTS[@]}"` in place of its literal options.
 - **R5.** `[PR1]` `_install_ubuntu_powershell`'s `dpkg -i` of `packages-microsoft-prod.deb` and `check_and_install_nala`'s two `dpkg --install` calls of `volian-archive-keyring_0.2.0_all.deb` and `volian-archive-nala_0.2.0_all.deb` each carry `--force-confdef --force-confold --force-confmiss`, with a comment at each saying why confmiss is there and nowhere else.
@@ -225,7 +237,7 @@ The real-tool proof is V1 and V2 below. The bats suite never runs a real apt or 
 - **R16.** `[PR1]` When the root is not a readable directory, `_doctor_check_conffile_dist` emits one `doctor_warn` saying the scan could not run and no `doctor_pass`; it never calls `doctor_fail`; its header comment states that an unprivileged `find` misses files under root-only directories and that `*.dpkg-new`/`*.ucf-new` are deliberately not matched.
 - **R17.** `[PR1]` Tests cover: a nested `.dpkg-dist` and a nested `.ucf-dist` each reported with path and remedy, a `.dpkg-dist` with a 2020 mtime still reported, a `.dpkg-new` not reported, an empty root giving one PASS, a missing root giving one WARN and no PASS, `LINUX` unset giving no output, and `_DOCTOR_FAILED` equal to 0 after every case.
 - **R18.** `[PR1]` Every end-to-end `run_doctor` test that stubs sub-checks by name also stubs `_doctor_check_conffile_dist`.
-- **R19.** `[PR1]` A backlog row is added for repairing packages other than the three R5 packages that are already left at `iU` by an earlier conffile failure.
+- **R19.** `[PR1]` One backlog row covers machines this change does not repair: packages other than the three R5 packages already left at `iU` by an earlier conffile failure, and the three R5 packages at `ii` with a vendor keyring or source deleted, which the R5 callers' install guards skip.
 - **V1.** On claude, re-run the §2 `dotfiles-cfprobe` probe through a changed `xargs … nala install` line (stdin `/dev/null`, edited conffile, v1 to v2). Expect rc 0, state `ii`, local edit kept, `.dpkg-dist` written, and `setup_env.sh -t doctor` WARNing on it. Then delete it and `/etc/default/grub.ucf-dist` (identical to `/etc/default/grub`, verified by `diff`) and confirm the next doctor run PASSes.
 - **V2.** Done at spec time on claude, 2026-10-03, recorded in Decision: same-version `dpkg -i --force-confdef --force-confold --force-confmiss` over an `iU` package with a deleted conffile gave rc 0, `ii`, file restored; without confmiss, rc 0, `ii`, file still absent. Re-run with the R5 command copied from the final code before merge.
 - **V3.** Mutation: dropping the array from one xargs line turns both the R8 gate and the R14 argv test red; dropping `--force-confmiss` from one volian line turns the R11 check red; making the configuring-verb list match nothing turns the R9 count red; making the doctor `find` match nothing turns the R17 reported-file cases red.
@@ -278,6 +290,12 @@ Reviewed at commit: `69642b86`. Risk lens only, scoped to the new doctor-check t
 
 **Risk (r3).** Finding: (1) ucf-managed configs keep-local as `*.ucf-dist`, which the check never matched; `/etc/default/grub.ucf-dist` already exists on claude (17 ucf-registered files). (2) `find` exits 1 for both a missing root and the unreadable subdirectories of a real `/etc`, so "none" can PASS over a scan that never ran. (3) `_DOCTOR_FAILED` is initialised to 0, never unset; the stubbing tests are 4 in `unit.bats` plus 1 in `plugin_node_paths.bats`. macOS gating, WARN-cannot-fail, speed (8 ms) and mounts checked clean. Assumption: every kept-local divergence lands as `*.dpkg-dist` — refuted on claude by the ucf class.
 Disposition: Addressed (operator, 2026-10-03) — operator chose to widen to `*.ucf-dist` (check renamed `_doctor_check_conffile_dist`); root-readable guard WARNs instead of PASSing; R17 asserts `-eq 0`; Testing step 3 names both stub files. Operator chose no further lens round: every round has removed surface, and these fixes are a pattern, a guard and wording.
+[Correction, 2026-10-03, from the operator's external architectural review: "every round has removed surface" is false for the change as a whole. Round 1 added the run-scoped advisory, round 2 replaced it with a doctor check (still a component round 0 did not have), and round 3 widened its pattern and added a guard. Shrinkage held only within the advisory component. The stop rests on artifact location instead: round 3's findings were a pattern, a guard and wording inside the newest text, and none touched the R1–R14 core already re-verified in rounds 1 and 2.]
+
+### External review (operator's architect session, after round 3)
+
+Findings: (1) the R5 confmiss repair only runs past each caller's install guard, so an `ii` package with a deleted keyring on a machine with working pwsh/nala is never repaired, and the probe had not measured `ii`; (2) R8 judges `scripts/*.sh` but only R7 named a `scripts/` site; (3) the round-3 stop rationale read the direction signal on the component rather than the whole change.
+Disposition: Addressed (author, 2026-10-03, at operator's direction) — (1) measured on claude: same-version reinstall over `ii` with the conffile deleted restores it only with confmiss; guard dependency stated in Decision, R19 widened to the guarded `ii` state; (2) R2 widened to every call the gate judges, with the literal-options rule; `git ls-files 'scripts/*.sh'` shows `bootstrap_linux.sh:35` is the only such site today; (3) correction note added above.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
