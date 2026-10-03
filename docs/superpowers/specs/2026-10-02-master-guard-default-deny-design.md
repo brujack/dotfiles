@@ -1,7 +1,7 @@
 # Direct-to-master guard: default-deny
 
 **Date:** 2026-10-02
-**Status:** Draft, revised after round 1, awaiting operator review
+**Status:** Draft, revised after round 2, awaiting operator review
 
 ## Problem
 
@@ -44,7 +44,7 @@ The 10 commits this design refuses that today's list would not: `.warp/settings.
 `renovate.json` (3), `ubuntu_common_packages.txt` (1), `scripts/phrase_check.py` with its
 test (1), `.github/workflows/ci.yml` (1). About three a month.
 
-**Two scripts push to `master` every week**, and an `.md`-only rule would break both.
+**Two scripts push to `master` every week.** One of them writes a non-`.md` state file.
 `scripts/whats-new-anthropic.sh` and `scripts/whats-new-claude-code.sh` commit a digest
 under `docs/` together with a state file (`docs/anthropic-new-features/.platform-state.txt`
 and similar) and push it; a refused push leaves the commit on local `master`, unpushed, and
@@ -80,18 +80,23 @@ prerequisite of `make test`. That premise holds today and nothing enforces it.
 ### One predicate
 
 `scripts/pre-push` gets one function, `_path_is_inert <path> <local_sha>`, returning 0 when
-the path cannot change the suite's result. A path is inert when it is one of:
+the path cannot change the suite's result. A path is inert only when both hold:
 
-1. a `.md` file, anywhere except under the repository-root `tests/` directory
-2. `LICENSE` at the repository root
-3. a file under `docs/` whose blob at `<local_sha>` does not start with `#!`, and whose name
-   does not end in `.sh`, `.bash`, `.bats`, `.zsh` or `.py`
+1. **By name:** it is a `.md` file anywhere except under the repository-root `tests/`
+   directory, or it is `LICENSE` at the repository root.
+2. **By content:** its blob at `<local_sha>` does not start with `#!`. `make lint` selects
+   shell files by their first line, whatever their name (`scripts/list-shell-files.sh`), so
+   a `.md` that starts with a bash shebang is linted and is not inert. Measured in round 2:
+   a `docs/evil.md` and a root `LICENSE` starting `#!/usr/bin/env bash` both joined
+   `SHELL_FILES`.
 
-Everything else is not inert, including any file type added in future. Rule 3 exists for the
-weekly digest state files. The shebang check is there because `make lint` walks every tracked
-file and lints any that starts with a bash or sh shebang, wherever it lives. A path whose
-blob is absent at `<local_sha>` (a deletion) is judged by rules 1 to 3 on its name alone,
-with rule 3's shebang test skipped.
+If `git cat-file -e <local_sha>:<path>` says the blob does not exist, the path was deleted
+and is judged by name alone. If the blob exists but cannot be read, the path is not inert.
+
+Everything else is not inert, including any file type added in future. There is no rule
+for other files under `docs/`. The one non-`.md` file the weekly digest writes,
+`docs/anthropic-new-features/.platform-state.txt`, is renamed to `.platform-state.md` in
+this change, together with the one line in `scripts/whats-new-anthropic.sh` that names it.
 
 The function is only ever called in a conditional context (`if`, `&&`, `||`), because the
 hook runs under `set -e` and a bare call returning 1 would kill the hook with no message.
@@ -99,55 +104,67 @@ hook runs under `set -e` and a bare call returning 1 would kill the hook with no
 Both decisions use it:
 
 - **Suite trigger:** run `make test` unless every changed path is inert (ADR-0017's shape).
-  Behavioural change: `.github/*.yml` now triggers; non-shell files under `docs/` no longer do.
+  Behavioural change: `.github/*.yml` now triggers.
 - **Direct-to-master guard:** refuse a push to `refs/heads/master` when any path in the range
-  is not inert, **or when the range cannot be resolved**.
+  is not inert, or when the range cannot be resolved.
 
 ### Changed paths
 
 Both decisions read `git -c core.quotePath=false diff --no-renames --name-only "${range}"`,
-one path per line, so a rename reports both paths and a non-ASCII name arrives as written. A
-path containing a newline splits into pieces that match nothing, so it is refused; that is
+one path per line, so a rename reports both paths and a non-ASCII name arrives as written.
+Git still C-quotes a path containing a newline, tab, `"` or `\` (measured: `"docs/nl\nx.md"`
+arrives as one quoted line). A quoted path matches no inert name, so it is refused. That is
 the safe direction and is accepted.
 
-### The refusal message
+### The refusal messages
 
-It names every refused path, says that only docs may go direct, and gives the recovery for
-a commit that is already on local `master`:
+**When paths are refused**, the message names every one, says that only `.md` files and
+`LICENSE` may go to `master` directly, and gives the recovery for where the push came from:
 
-```
-git switch -c <name>             # the commits come with you
-git push -u origin <name> && gh pr create
-git switch master && git reset --keep origin/master
-```
+- Pushing local `master` (the current branch is `master`): create a branch from it (the
+  refused commits come with you), push that branch and run `gh pr create --fill`, then
+  `git switch master && git reset --keep origin/master`. If `reset --keep` refuses because an
+  uncommitted change touches a file in those commits, commit or set aside that change first;
+  nothing has been lost.
+- Pushing a feature branch to `master` (usual in a worktree): push the branch itself with
+  `-u origin HEAD` and run `gh pr create --fill`.
+- In an emergency (`hotfix-cycle`, `rollback-cycle --reason ci-red`): open the PR the same
+  way and merge it with `gh pr merge --admin`, which bypasses failing required checks because
+  `enforce_admins` is off. Do not use `--no-verify`; `hotfix-cycle` forbids it.
 
-`--keep` rather than `--hard`, so uncommitted work in the tree is refused rather than lost.
-It no longer says "executable files", which is false for a `.toml` or `.txt`.
+**When the range cannot be resolved**, a separate message says so, names the ref, and says
+to `git fetch` and retry. Measured in round 2: a shallow, stale checkout whose remote had
+moved on reaches the hook with a `remote_sha` it does not have, for a push git is about to
+reject as "fetch first" anyway. A fetch clears it.
+
+Because the hook decides for the whole push, a single push carrying both a branch and a
+refused `master` refuses the branch too. The message says to push the branch on its own.
 
 ### Unchanged behaviour
 
-- The guard evaluates the whole push range, not the tip commit.
+- The guard evaluates the whole push range, not the tip commit. Only the tip's content lands
+  on `master`, so the content check reads the blob at `<local_sha>`.
 - The refusal is accumulated inside the stdin loop and read after it, before the
   `needs_test` early exit.
 - Branch pushes are never refused; they only decide whether the suite runs.
 - A deletion-only ref line (`local_sha` all zeros) is skipped, as today.
-- `--no-verify` still bypasses the hook. Accepted, as today.
+- `--no-verify` still bypasses the hook.
 
 ### What newly needs a PR, and what that costs
 
-`.warp/settings.toml`, `renovate.json`, `.gitleaks.toml`, `.gitignore`, `starship.toml`,
-`ubuntu_*_packages.txt`, `.claude/settings.json`, workflow files, and every code file. The
-measured cost is the 10 commits listed above over four months.
+Every file that is not an inert `.md` or `LICENSE`: `.warp/settings.toml`, `renovate.json`,
+`.gitleaks.toml`, `.gitignore`, `starship.toml`, `ubuntu_*_packages.txt`,
+`.claude/settings.json`, workflow files, `docs/cursor/plans/.gitkeep`, and all code. The
+measured cost is the 10 commits listed in the Problem section over four months.
 
-Two consequences to know in advance:
-
-- **ai-config's `sdlc-branch-guard` hook permits some of these direct to master** (`*.txt`, `renovate.json`, `.gitleaks.toml`, `.gitignore`, some `settings.json`
-  keys). A session can commit one to `master` with that hook's blessing and then be refused
-  at push. The refusal message's recovery covers it. Aligning the two is out of scope.
-- **The emergency route changes.** `rollback-cycle --reason ci-red` delivers a revert direct
-  to `master`, and the likeliest reason every PR goes red is a `ci.yml` defect. A `ci.yml`
-  revert can no longer go direct. It goes through a PR merged by an admin past failing
-  checks (`gh pr merge --admin`; `enforce_admins` is off). The ADR states this.
+**Other layers still say some of these may go direct**, and a session reads them before it
+reaches this hook: the global `git-workflow.md` standard (`renovate.json`, `.gitleaks.toml`,
+some `.claude/settings.json` keys) and ai-config's `sdlc-branch-guard` (`*.txt`,
+`renovate.json`, `.gitleaks.toml`, `.editorconfig`, `.gitignore`); `hotfix-cycle` and
+`rollback-cycle` authorize direct pushes in general. In dotfiles the hook is the stricter
+rule and wins. The refusal message is where a session learns that, so it carries the
+recovery and the emergency route. `CLAUDE.md` states the rule too. Aligning the global
+standard and the ai-config guard is an ai-config backlog row, not part of this change.
 
 ### The hook can block every push, including its own fix
 
@@ -157,9 +174,9 @@ push is the main checkout's copy, not the branch being pushed. So:
 
 - While this change is developed, the old hook judges its pushes; the new logic is exercised
   only by bats.
-- Once merged, a defect that makes the hook exit non-zero blocks branch pushes too, so the
-  "branch + PR" remedy is unavailable. The recovery is a fix branch pushed with
-  `--no-verify`, which then goes through PR and CI. `CLAUDE.md` states this.
+- Once merged, a defect that makes the hook exit non-zero blocks branch pushes too. The
+  recovery is a fix branch pushed with `--no-verify`, which then goes through PR and CI.
+  `CLAUDE.md` states this as the one sanctioned use.
 - The tests below run the real hook end to end under `set -e`, so a silent death fails a
   test rather than every push.
 
@@ -167,24 +184,33 @@ push is the main checkout's copy, not the branch being pushed. So:
 
 All rows run the real hook against fixture repositories in `tests/scripts/pre_push.bats`.
 
-| check                                                                                                                                                         | expected                                                           |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| Push to `master` carrying, one per case: a `tests/mocks/` file, a `.py`, `.zshrc`, `uv.lock`, `ci.yml`, `.warp/settings.toml`, `renovate.json`, `foo.unknown` | refused; message names the path and contains the recovery commands |
-| `git mv x.sh x.md`, pushed to `master`                                                                                                                        | refused, naming `x.sh`                                             |
-| A commit deleting a tracked `.sh`, pushed to `master`                                                                                                         | refused                                                            |
-| Push to `master` whose `remote_sha` the fixture repo does not have                                                                                            | refused                                                            |
-| `docs/a.md`, `README.md`, root `LICENSE`, a non-ASCII `docs/café.md`, `docs/x/.state.txt` pushed to `master`                                                  | allowed                                                            |
-| `tests/a.md`, `x/LICENSE`, `a.md.sh`, `docs/run.sh`, an extensionless `docs/tool` starting with `#!/usr/bin/env bash` pushed to `master`                      | refused                                                            |
-| `foo/tests/a.md` pushed to `master`                                                                                                                           | allowed (only the root `tests/` is test-owned)                     |
-| A docs commit stacked on an unpushed code commit, pushed to `master`                                                                                          | refused (range, not tip)                                           |
-| `ci.yml` alone pushed to a branch                                                                                                                             | suite runs (was skipped)                                           |
-| `docs/x/.state.txt` alone pushed to a branch                                                                                                                  | suite skipped (was run)                                            |
-| A non-inert path pushed to a branch                                                                                                                           | suite runs, push not refused                                       |
-| Mutation: restore the old deny list in a scratch copy                                                                                                         | the new refusal rows go red                                        |
-| Mutation: drop `--no-renames`                                                                                                                                 | the rename row goes red                                            |
-| Mutation: drop the unresolvable-range refusal                                                                                                                 | that row goes red                                                  |
-| Mutation: call `_path_is_inert` bare, outside a conditional                                                                                                   | a row goes red with the hook exiting before its message            |
-| `make test` on `claude`, and `test-macos` in CI                                                                                                               | green                                                              |
+| check                                                                                                                                                                              | expected                                                      |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| Push to `master` carrying, one per case: a `tests/mocks/` file, a `.py`, `.zshrc`, `uv.lock`, `ci.yml`, `.warp/settings.toml`, `renovate.json`, `docs/x/.state.txt`, `foo.unknown` | refused; message names the path                               |
+| `docs/a.md`, `README.md`, root `LICENSE`, a non-ASCII `docs/café.md` pushed to `master`                                                                                            | allowed                                                       |
+| `docs/evil.md` and root `LICENSE` each starting `#!/usr/bin/env bash`, pushed to `master`                                                                                          | refused                                                       |
+| `tests/a.md`, `x/LICENSE`, `a.md.sh`, a path containing a newline, pushed to `master`                                                                                              | refused                                                       |
+| `foo/tests/a.md` pushed to `master`                                                                                                                                                | allowed (only the root `tests/` is test-owned)                |
+| `git mv x.sh x.md`, pushed to `master`                                                                                                                                             | refused, naming `x.sh`                                        |
+| A commit deleting a tracked `.sh`, pushed to `master`                                                                                                                              | refused                                                       |
+| A commit deleting a tracked `docs/old.md`, pushed to `master`                                                                                                                      | allowed                                                       |
+| Push to `master` whose `remote_sha` the fixture repo does not have                                                                                                                 | refused with the fetch-and-retry message, not the PR recipe   |
+| Refused push from local `master`                                                                                                                                                   | message contains `gh pr create --fill` and `reset --keep`     |
+| Refused push of a feature branch to `master`                                                                                                                                       | message contains `-u origin HEAD` and not `git switch master` |
+| A docs commit stacked on an unpushed code commit, pushed to `master`                                                                                                               | refused (range, not tip)                                      |
+| `ci.yml` alone pushed to a branch                                                                                                                                                  | suite runs (was skipped)                                      |
+| `docs/a.md` alone pushed to a branch                                                                                                                                               | suite skipped                                                 |
+| A non-inert path pushed to a branch                                                                                                                                                | suite runs, push not refused                                  |
+| `scripts/whats-new-anthropic.sh` writes and stages `.platform-state.md` (existing digest tests, updated)                                                                           | passes                                                        |
+| Mutation: restore the old deny list in a scratch copy                                                                                                                              | the refusal rows go red                                       |
+| Mutation: drop the content check                                                                                                                                                   | the shebang row goes red                                      |
+| Mutation: drop `--no-renames`                                                                                                                                                      | the rename row goes red                                       |
+| Mutation: drop the unresolvable-range refusal                                                                                                                                      | that row goes red                                             |
+| Mutation: call `_path_is_inert` bare, outside a conditional                                                                                                                        | a row goes red with the hook exiting before its message       |
+| `make test` on `claude`, and `test-macos` in CI                                                                                                                                    | green                                                         |
+
+Both directions of the predicate are covered: always-inert fails the refusal rows;
+never-inert fails the allowed rows and the "suite skipped" row.
 
 The existing tests "skips when only a .github/workflows file changed" and "skips a .github
 workflow using the .yaml spelling" invert.
@@ -192,8 +218,8 @@ workflow using the .yaml spelling" invert.
 ## Documentation
 
 - `CLAUDE.md` Testing section: replace the pre-push bullets on the inert set and the guard
-  with the single predicate, the docs-only rule, the refusal recovery and the hook-defect
-  recovery.
+  with the single predicate, the `.md`-and-`LICENSE` rule, the recoveries, the emergency
+  route, and the hook-defect recovery.
 - New ADR: direct-to-master is default-deny over one shared inert predicate. It amends
   ADR-0017's inert set, supersedes the guard's deliberately narrow scope, and records the
   emergency route.
@@ -203,13 +229,13 @@ workflow using the .yaml spelling" invert.
 ## Out of scope
 
 - **Branch protection.** Adding `test-macos` and `bash-coverage` to required checks is a
-  repository setting, given to the operator to run.
+  repository setting, given to the operator to run. It does not affect `gh pr merge --admin`.
 - **`enforce_admins`.** Stays off: docs pushes and the emergency admin merge depend on it.
-- **Aligning ai-config's `sdlc-branch-guard`** with this predicate. Backlog row in ai-config.
-- **264 of the 561 non-PR commits since 2026-06-01 are authored `Test <test@test.com>`**,
-  including two today. Cause found: workstation's dotfiles checkout carries a repo-local
-  `user.name = Test` in `.git/config`, overriding the global identity. The operator unsets it;
-  which test wrote it is a backlog row.
+- **Aligning the global `git-workflow.md` and ai-config's `sdlc-branch-guard`** with this
+  rule. ai-config backlog row.
+- **Commits authored `Test <test@test.com>`.** Workstation's dotfiles checkout carries a
+  repo-local `user.name = Test`; 264 of the non-PR commits since 2026-06-01 carry it. P1
+  backlog row in this repo.
 
 ## Multi-Lens Review
 
@@ -252,3 +278,42 @@ Disposition:
 #### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+### Round 2
+
+Reviewed at commit: `b4be2dd5`. References are to the spec as it stood at that commit; the
+body above was revised in response. All three lenses re-ran, because round 1 changed the
+design's substance.
+
+#### Goal-Fit
+
+Finding: Rule 3 (non-shell files under `docs/` inert) served one file,
+`.platform-state.txt`; renaming it gives the same 28 refusals with less mechanism. The
+shebang reasoning was applied to rule 3 only, though `make lint` selects by content
+everywhere. Cost table re-derived on the deep clone: 28 refused, the 10 newly refused match.
+Assumption: No test or lint target reads tracked `.md` content; one `test:` prerequisite
+change would break it. Checked: no such reader today; nothing enforces it.
+Disposition:
+
+#### Ergonomics
+
+Finding: The recovery recipe failed in two of three cases (`reset --keep` refuses when the
+dirty file is in the refused commit; `git switch master` fails in a worktree) and
+`gh pr create` needs `--fill` non-interactively. The global standard and ai-config's guard
+tell sessions some non-`.md` files may go direct, so the refusal is the first they hear.
+`hotfix-cycle` and `rollback-cycle` authorize direct pushes and forbid `--no-verify`, with no
+stated route here. Admin merge past red required checks verified to work.
+Assumption: No workflow that authorizes a direct push runs in dotfiles without reading this
+repo's rule. Addressed by putting the emergency route in the refusal message itself.
+Disposition:
+
+#### Risk
+
+Finding: Design: rules 1 and 2 lacked the content check (measured: shebang `.md` and
+`LICENSE` join `SHELL_FILES`); rule 3's extension list missed `.zsh-theme`; the
+unresolvable-range refusal fires on an ordinary stale push with the wrong recovery, and a
+single push of a branch plus a refused `master` now refuses the branch too. Apparatus:
+newline paths arrive C-quoted, not split; a failed blob read looked like "no shebang".
+Assumption: The digest scripts push from an up-to-date `master`. If not, they hit the
+fetch-and-retry message weekly; a fetch clears it.
+Disposition:
