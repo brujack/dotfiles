@@ -811,8 +811,8 @@ _keyring_has_pinned_fpr() {
 # unlinks its target before copying.
 # Returns 0 installed; 1 the key is not the pinned one (not exactly one primary
 # key, or its fingerprint differs); 2 no usable key could be read (gpg failed,
-# the input held no key, or a primary key had no fingerprint); 3 a local failure (temp dir, staging, install) that left
-# the final path unchanged.
+# the input held no key, or a primary key had no fingerprint); 3 a local
+# failure (temp dir, staging, install) that left the final path unchanged.
 # No EXIT/RETURN trap: scripts/check-lib-exit-traps.sh ratchets `trap ... EXIT`
 # in lib/, and a RETURN trap is not function-scoped (shell.md), so every path
 # below reaches the single rm -rf instead.
