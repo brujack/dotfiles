@@ -144,14 +144,10 @@ In `_install_ubuntu_cloud_tools`, where the azure block was:
 - `${_APT_SOURCES_DIR}/packages.microsoft.com_repos_azure-cli.list`
 - `${_APT_SOURCES_DIR}/azure-cli.list`
 
-In `_install_ubuntu_gui_tools`, **outside** the `HAS_SNAP` gate, before the albert call:
+In `_install_ubuntu_albert`:
 
 - `${_APT_TRUSTED_DIR}/home_manuelschneid3r.gpg`
 - `${_APT_SOURCES_DIR}/home:manuelschneid3r.list`
-
-Outside the gate because a machine-wide third-party key must go whatever the profile:
-`cruncher` (`wsl2_workstation`) has no `snap` capability, so `_install_ubuntu_albert` never
-runs there, and a key left from an earlier profile would otherwise stay trusted.
 
 The azure source must go with the key: a source left behind without its key fails
 `apt update` with `NO_PUBKEY`.
@@ -196,7 +192,6 @@ is by fingerprint and `--show-keys` lists expired keys, so expiry does not break
 | gui_tools propagation | albert returning 2 makes `_install_ubuntu_gui_tools` return non-zero, and `install_ubuntu_packages` names `gui_tools` |
 | gui_tools success path | with albert succeeding, `_install_ubuntu_gui_tools`' return is unchanged from today |
 | legacy cleanup | every file in §5 seeded and asserted present; then removed, including a glob-matched `archive_uri-…-resolute.list` |
-| albert legacy cleanup without `HAS_SNAP` | seeded and asserted present; `HAS_SNAP` unset; both albert legacy files removed and `_install_ubuntu_albert` not called |
 | legacy cleanup on a key failure | seeded and asserted present; global keys removed even when the albert keyring fails |
 | second run | `albert.list` asserted present; byte-identical after a second run |
 | azure brew install | `brew install azure-cli` called by `_install_ubuntu_brew_packages` |
@@ -251,7 +246,7 @@ then on each:
 - **R8.** On a key failure `_install_ubuntu_albert` removes `albert.list`, logs a WARN printing the fetched fingerprint(s) and `ALBERT_GPG_FPR`, skips `apt install albert`, and returns 2.
 - **R9.** The albert key is fetched into a directory created under `_ALBERT_TMP_ROOT` with an explicit `mktemp -d` template, removed on every path.
 - **R10.** A non-zero return from `_install_ubuntu_albert` makes `_install_ubuntu_gui_tools` return non-zero after the rest of the step runs, without changing its return on the success path.
-- **R11.** The legacy files in Design §5, including the globbed `archive_uri-http_packages_microsoft_com_repos_azure-cli_-*.list`, are removed on every run, before any new key work; the albert legacy files are removed regardless of `HAS_SNAP`.
+- **R11.** The legacy files in Design §5, including the globbed `archive_uri-http_packages_microsoft_com_repos_azure-cli_-*.list`, are removed on every run, before any new key work.
 - **R12.** `_APT_SOURCES_DIR`, `_APT_TRUSTED_DIR`, `_APT_KEYRINGS_DIR`, `_ALBERT_TMP_ROOT` and `_ALBERT_KEY_URL` are honoured by the code, and the first four are set at setup scope in `tests/setup_env/linux_ubuntu.bats`.
 - **R13.** Tests cover every row of the Testing table with real gpg and `tests/fixtures/albert-obs.asc` fed per test through `MOCK_CURL_STDOUT`, and the tests at `linux_ubuntu.bats:1416`, `:1454`, `:1487`, `:1497` and `:1568` are changed as the Testing section states.
 - **V1.** After merge, `./setup_env.sh -t developer` on `claude` and on `workstation` leaves no legacy key in `/etc/apt/trusted.gpg.d/`, and `sudo apt update` exits 0 with no `NO_PUBKEY`.
