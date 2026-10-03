@@ -582,6 +582,8 @@ _assert_suite_ran() { grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"; }
 # Guard tests push to refs/heads/master. _on_branch sets the checkout the hook
 # sees, because a local_ref of HEAD is resolved from it.
 
+ZERO_SHA="0000000000000000000000000000000000000000"
+
 _on_branch() { _git_clean "checkout --quiet -B ${1}"; }
 
 _assert_refused() {
@@ -804,7 +806,7 @@ _master_push_of() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
   _assert_refused
-  [[ "$output" == *"git switch -c"* ]]
+  [[ "$output" == *"git switch -c <name> master"* ]]
   [[ "$output" == *"git reset --keep origin/master"* ]]
   [[ "$output" != *"git push -u origin feat"* ]]
 }
@@ -872,13 +874,47 @@ _master_push_of() {
   _assert_suite_ran
 }
 
-@test "master guard resets live_paths per ref: second inert ref does not hide the first, first does not leak into second" {
+@test "live_paths is reset per ref: a branch's non-inert path does not leak into a master ref" {
   base_sha=$(_commit_file "README.md" "v1" "docs: v1")
   sha1=$(_commit_file "deploy.sh" "echo hi" "feat: deploy")
   sha2=$(_commit_file "docs/a.md" "x" "docs: a")
   _write_make_mock 0
-  run _run_pre_push "refs/heads/master ${sha1} refs/heads/master ${base_sha}\nrefs/heads/master ${sha2} refs/heads/master ${sha1}\n"
+  run _run_pre_push "refs/heads/feat/x ${sha1} refs/heads/feat/x ${base_sha}\nrefs/heads/master ${sha2} refs/heads/master ${sha1}\n"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"refusing"* ]]
+  _assert_suite_ran
+}
+
+@test "first push to an empty master refuses a single commit carrying a.py" {
+  local_sha=$(_commit_file "a.py" "print(1)" "feat: first")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${ZERO_SHA}\n"
   _assert_refused
-  [[ "$output" == *"deploy.sh"* ]]
-  [[ "$output" != *"docs/a.md"* ]]
+  [[ "$output" == *"a.py"* ]]
+}
+
+@test "first push to an empty master allows a single docs/a.md commit" {
+  local_sha=$(_commit_file "docs/a.md" "x" "docs: first")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${ZERO_SHA}\n"
+  [ "$status" -eq 0 ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
+@test "first push of a single-commit branch carrying a.py runs the suite" {
+  local_sha=$(_commit_file "a.py" "print(1)" "feat: first")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${ZERO_SHA}\n"
+  [ "$status" -eq 0 ]
+  _assert_suite_ran
+}
+
+@test "a tag source is called not a branch, not detached HEAD" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "deploy.sh" "echo hi" "feat: deploy")
+  _write_make_mock 0
+  run _run_pre_push "refs/tags/v1 ${local_sha} refs/heads/master ${base_sha}\n"
+  _assert_refused
+  [[ "$output" == *"not a branch"* ]]
+  [[ "$output" != *"detached"* ]]
 }

@@ -35,7 +35,7 @@ _path_is_inert() {
 # current branch: a session on feat can still push local master. git hands the
 # hook local_ref=HEAD when the push names HEAD as its source, so HEAD is resolved.
 _print_recovery() {
-    local _ref="${1}" _branch
+    local _ref="${1}" _branch="" _kind="detached"
     case "${_ref}" in
         refs/heads/*) _branch="${_ref#refs/heads/}" ;;
         HEAD)
@@ -43,11 +43,11 @@ _print_recovery() {
                 _branch=""
             fi
             ;;
-        *) _branch="" ;;
+        *) _kind="notbranch" ;;
     esac
     if [[ "${_branch}" == "master" ]]; then
         printf 'Move the commits onto a branch, open a PR, then reset local master:\n' >&2
-        printf '  git switch -c <name>\n' >&2
+        printf '  git switch -c <name> master\n' >&2
         printf '  git push -u origin <name> && gh pr create --fill\n' >&2
         printf '  git switch master && git reset --keep origin/master\n' >&2
         printf 'If reset --keep refuses, commit or set aside the uncommitted change first;\n' >&2
@@ -55,6 +55,9 @@ _print_recovery() {
     elif [[ -n "${_branch}" ]]; then
         printf 'Push the branch itself and open a PR:\n' >&2
         printf '  git push -u origin %s && gh pr create --fill\n' "${_branch}" >&2
+    elif [[ "${_kind}" == "notbranch" ]]; then
+        printf 'The push source %s is not a branch. Create a branch at that commit, push it, open a PR:\n' "${_ref}" >&2
+        printf '  git branch <name> <commit> && git push -u origin <name> && gh pr create --fill\n' >&2
     else
         printf 'Create a branch first (detached HEAD), then push it and open a PR:\n' >&2
         printf '  git switch -c <name>\n' >&2
@@ -70,8 +73,12 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     [[ "${local_sha}" == "0000000000000000000000000000000000000000" ]] && continue
 
     if [[ "${remote_sha}" == "0000000000000000000000000000000000000000" ]]; then
-        base="$(git merge-base "${local_sha}" origin/master 2>/dev/null \
-            || git rev-list --max-parents=0 "${local_sha}")"
+        # No shared history with origin/master (first push to an empty remote):
+        # diff from the empty tree so the root commit's own files are included;
+        # a root..sha range would leave them out and fail open.
+        if ! base="$(git merge-base "${local_sha}" origin/master 2>/dev/null)"; then
+            base="$(git hash-object -t tree /dev/null)"
+        fi
         range="${base}..${local_sha}"
     else
         range="${remote_sha}..${local_sha}"
