@@ -54,10 +54,15 @@ azure half no longer needs an apt key at all. Only albert keeps an apt source.
 - The azure block in `_install_ubuntu_cloud_tools` is deleted: the `http://` key fetch, the
   `add-apt-repository` call, the stale-source `rm` lines and `apt install azure-cli`.
 - **Migration, in `_install_ubuntu_brew_packages` after the formula loop:** only when
-  `brew_formula_installed azure-cli` succeeds **and** `dpkg -s azure-cli` reports it
-  installed, run `sudo DEBIAN_FRONTEND=noninteractive apt-get remove -y azure-cli`. Gating
-  on the brew install means a failed brew install never leaves the machine with no `az`.
-  The removal's failure is added to `_failed`.
+  `"$(brew --prefix)/bin/az" version` exits 0 **and** `dpkg -s azure-cli` prints
+  `Status: install ok installed`, run
+  `sudo DEBIAN_FRONTEND=noninteractive apt-get remove -y azure-cli`. Gating on brew's `az`
+  actually running, not on `brew list`, means a missing or broken brew install never leaves
+  the machine without a working `az` (the same judgement `install_cargo_tools` makes with
+  `--help`). Reading the `Status:` line rather than `dpkg -s`'s exit skips a package left in
+  `rc` (config-files) state. The removal's failure is added to `_failed` as
+  `azure-cli-apt-remove`, so it does not read as a failed brew install. Measured on `claude`
+  2026-10-03: `brew install azure-cli` then `az version` both exit 0, `azure-cli 2.90.0`.
 - `az` then resolves from linuxbrew, which interactive zsh puts on `PATH`
   (`6_path.zsh`). Nothing in `lib/` or `setup_env.sh` invokes `az`; a non-interactive actor
   loses `/usr/bin/az` (accepted: no such caller exists).
@@ -72,7 +77,9 @@ A new `_build_pinned_keyring <key_file> <keyring> <fpr>`:
 2. Succeeds only if gpg's own exit status (`PIPESTATUS[0]`) is 0 **and** the
    `--show-keys --with-colons` listing holds exactly one `pub:` record whose `fpr` equals
    the pin. An empty keyring fails the count.
-3. On any failure, `sudo rm -f` the keyring and return 1.
+3. On any failure, `sudo rm -f` the keyring. Return 2 when no `pub:` record could be read
+   (gpg missing or non-zero, or a body that is not a key); return 1 when keys were read but
+   the single-key or fingerprint rule failed. Edge treats both as failure, unchanged.
 
 **The single-key rule is new and load-bearing.** Today's check passes if *any* `fpr:` line
 matches. Albert's key arrives over the network, so a response carrying the real key plus an
@@ -109,8 +116,13 @@ Extracted from `_install_ubuntu_gui_tools`; still gated on `HAS_SNAP`.
   untouched, since both were verified against the pin when written. `log_warn "albert key
   fetch failed (<url>); keeping last verified source"`, skip `apt install`, return 2.
   (Operator decision, 2026-10-03: a network blip must not drop a working source.)
-- **Key failure** (the builder returns 1: wrong fingerprint, more than one key, gpg
-  failure): remove `albert.list`, WARN with the fetched fingerprint(s) beside
+- **Unreadable key** (gpg cannot run, or the fetched body yields no `pub:` record at all,
+  e.g. a captive portal or proxy error page served with HTTP 200): treated as a fetch
+  failure. Keep the last verified source, WARN naming the URL and that no key could be read,
+  skip `apt install`, return 2. The builder reports this as a distinct return (2) from a
+  pin mismatch (1), so the caller can tell them apart.
+- **Key mismatch** (the builder returns 1: one or more valid keys, but not exactly one
+  whose fingerprint equals the pin): remove `albert.list`, WARN with the fetched fingerprint(s) beside
   `ALBERT_GPG_FPR` and the remedy (verify the new key out of band, then edit
   `lib/constants.sh`), skip `apt install`, return 2.
 - **Key expiry.** The key on the fleet expires 2027-02-10. Only `-t developer`/`-t setup`
@@ -187,17 +199,21 @@ is by fingerprint and `--show-keys` lists expired keys, so expiry does not break
 | builder, gpg exits non-zero | as above |
 | albert, good key | `albert.list` holds `https://` and `signed-by=`; `apt install albert` called; returns 0 |
 | albert, fetch fails (`MOCK_CURL_EXIT`) | a pre-seeded `albert.list` and keyring asserted present, then unchanged afterwards; WARN names the URL; no install; returns 2 |
+| albert, non-key body (HTML via `MOCK_CURL_STDOUT`) | pre-seeded `albert.list` and keyring asserted present, then unchanged; WARN names the URL; no install; returns 2 |
+| builder, non-key input | returns 2 (not 1); keyring absent |
 | albert, wrong fingerprint | pre-seeded `albert.list` asserted present, then absent; WARN prints the fetched fingerprint and `ALBERT_GPG_FPR`; no install; returns 2 |
-| albert, temp dir | `_ALBERT_TMP_ROOT` holds a directory during the run (asserted via the fixture) and is empty after, on both the success and fetch-fail paths |
+| albert, temp dir | curl is invoked with `-o`, and the logged `-o` target starts with `${_ALBERT_TMP_ROOT}/albert-key.`; `_ALBERT_TMP_ROOT` is empty afterwards, on both the success and fetch-fail paths |
 | gui_tools propagation | albert returning 2 makes `_install_ubuntu_gui_tools` return non-zero, and `install_ubuntu_packages` names `gui_tools` |
-| gui_tools success path | with albert succeeding, `_install_ubuntu_gui_tools`' return is unchanged from today |
+| gui_tools success path | albert succeeds and the step's last command is made to fail (`MOCK_SNAP_EXIT`, `HAS_FLATPAK` unset); the non-zero return survives |
 | legacy cleanup | every file in §5 seeded and asserted present; then removed, including a glob-matched `archive_uri-…-resolute.list` |
 | legacy cleanup on a key failure | seeded and asserted present; global keys removed even when the albert keyring fails |
 | second run | `albert.list` asserted present; byte-identical after a second run |
 | azure brew install | `brew install azure-cli` called by `_install_ubuntu_brew_packages` |
-| azure apt migration | with brew `azure-cli` present and `dpkg -s azure-cli` succeeding: `apt-get remove -y azure-cli` called with `DEBIAN_FRONTEND=noninteractive` on the sudo line |
-| azure apt migration skipped | with brew `azure-cli` absent: no `apt-get remove azure-cli` |
-| no azure apt path left | `_install_ubuntu_cloud_tools` calls neither `add-apt-repository` nor `apt install azure-cli` |
+| azure apt migration | brew `az version` exits 0 and dpkg prints `install ok installed`: `apt-get remove -y azure-cli` called with `DEBIAN_FRONTEND=noninteractive` on the sudo line |
+| azure apt migration, brew az broken | brew `az version` exits non-zero: no `apt-get remove azure-cli`; brew install asserted called in the same test |
+| azure apt migration, not apt-installed | dpkg prints no `install ok installed` (absent, or `rc` state): no `apt-get remove`; brew `az version` asserted called in the same test |
+| azure apt migration, remove fails | `_failed` names `azure-cli-apt-remove`; returns 2 |
+| no azure apt path left | `_install_ubuntu_cloud_tools` calls neither `add-apt-repository` nor `apt install azure-cli`; the gcloud install asserted called in the same test |
 
 Every row asserting an absence, an equality or an unchanged file carries its own presence
 assertion in the same test (`tdd.md` E5).
@@ -236,14 +252,14 @@ then on each:
 
 ## Requirements
 
-- **R1.** `_build_pinned_keyring` returns 1 and leaves no keyring when gpg exits non-zero, the listing does not hold exactly one `pub:` record, or that record's fingerprint differs from the pin.
+- **R1.** `_build_pinned_keyring` leaves no keyring on any failure, returning 2 when no `pub:` record could be read (gpg non-zero or a non-key body) and 1 when the listing does not hold exactly one `pub:` record whose fingerprint equals the pin.
 - **R2.** `_install_ubuntu_edge_source` builds its keyring through `_build_pinned_keyring`, and no existing edge test is modified.
 - **R3.** `_install_ubuntu_brew_packages` installs `azure-cli`, and `lib/linux_ubuntu.sh` contains no `packages.microsoft.com/repos/azure-cli` URL, no `add-apt-repository` call for azure-cli and no `apt install azure-cli`.
-- **R4.** When brew's `azure-cli` is installed and `dpkg -s azure-cli` succeeds, `_install_ubuntu_brew_packages` runs `sudo DEBIAN_FRONTEND=noninteractive apt-get remove -y azure-cli`; when brew's `azure-cli` is absent it does not.
+- **R4.** `_install_ubuntu_brew_packages` runs `sudo DEBIAN_FRONTEND=noninteractive apt-get remove -y azure-cli` only when `"$(brew --prefix)/bin/az" version` exits 0 and `dpkg -s azure-cli` prints `Status: install ok installed`, and records a failed removal in `_failed` as `azure-cli-apt-remove`.
 - **R5.** `lib/constants.sh` defines `ALBERT_GPG_FPR="A4B83CD05FDF5C5178482D4A1488EB46E192A257"`.
 - **R6.** On success `_install_ubuntu_albert` writes `${_APT_SOURCES_DIR}/albert.list` with an `https://download.opensuse.org/` URL and `signed-by=${_APT_KEYRINGS_DIR}/albert-obs.gpg`, and returns 0.
-- **R7.** On a key fetch failure `_install_ubuntu_albert` leaves an existing `albert.list` and `albert-obs.gpg` unchanged, logs a WARN naming the URL, skips `apt install albert`, and returns 2.
-- **R8.** On a key failure `_install_ubuntu_albert` removes `albert.list`, logs a WARN printing the fetched fingerprint(s) and `ALBERT_GPG_FPR`, skips `apt install albert`, and returns 2.
+- **R7.** On a key fetch failure, or when no key can be read from the fetched body, `_install_ubuntu_albert` leaves an existing `albert.list` and `albert-obs.gpg` unchanged, logs a WARN naming the URL, skips `apt install albert`, and returns 2.
+- **R8.** On a key mismatch (builder returns 1) `_install_ubuntu_albert` removes `albert.list`, logs a WARN printing the fetched fingerprint(s) and `ALBERT_GPG_FPR`, skips `apt install albert`, and returns 2.
 - **R9.** The albert key is fetched into a directory created under `_ALBERT_TMP_ROOT` with an explicit `mktemp -d` template, removed on every path.
 - **R10.** A non-zero return from `_install_ubuntu_albert` makes `_install_ubuntu_gui_tools` return non-zero after the rest of the step runs, without changing its return on the success path.
 - **R11.** The legacy files in Design §5, including the globbed `archive_uri-http_packages_microsoft_com_repos_azure-cli_-*.list`, are removed on every run, before any new key work.
@@ -365,4 +381,23 @@ Assumption: every location redirects pool `.deb`s to an https mirror.
 Disposition: Addressed (same answer) — F1: `:1568` sets `MOCK_CURL_STDOUT` (R13); F2:
 pre-seeded rows; F3: rule dropped (N4). Assumption Accepted, reason: 10 of 10 https from
 `claude` and the mirrorlist names no http mirror.
+
+### Round 3 (scoped Risk, reviewed at commit `95817e2e`)
+
+Finding: (1) a 200 response that is not a key, or gpg failing to run, deletes the working
+albert source; (2) the apt removal is gated on `brew list`, not on brew's `az` running;
+(3) the `dpkg -s` gate is untested (mock always 0) and passes for `rc` state; (4) four rows
+pass on a null implementation (migration skipped, no azure apt path, gui_tools success
+path, temp dir); (5) a failed removal logged as `azure-cli` reads as a failed brew install;
+(6) with brew unavailable, apt `az` stays installed without a source (reported via the brew
+step).
+Assumption: linuxbrew's `azure-cli` installs and runs on 26.04. Checked by the author on
+`claude` 2026-10-03 with operator approval: `brew install azure-cli` rc 0, `az version`
+rc 0, `azure-cli 2.90.0`. Confirmed.
+Disposition: Addressed (operator, 2026-10-03: "yes to both") — F1: builder returns 2 for an
+unreadable key, which keeps the source (§2, §3, R1, R7); F2: removal gated on `az version`
+(§1, R4); F3: `Status:` line and two new rows; F4: rows rewritten with same-test controls;
+F5: `azure-cli-apt-remove`. F6 Accepted, reason: reported, and `az` keeps working. Review
+stopped here by operator decision: remaining risk is test-harness, which Phase 2's first red
+test catches more cheaply.
 
