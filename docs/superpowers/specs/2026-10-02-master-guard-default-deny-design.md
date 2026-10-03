@@ -1,7 +1,7 @@
 # Direct-to-master guard: default-deny
 
 **Date:** 2026-10-02
-**Status:** Draft, revised after round 3, awaiting operator review
+**Status:** Approved 2026-10-02
 
 ## Problem
 
@@ -185,6 +185,30 @@ rule and wins. The refusal message is where a session learns that, so it carries
 recovery and the emergency route. `CLAUDE.md` states the rule too. Aligning the global
 standard and the ai-config guard is an ai-config backlog row, not part of this change.
 
+### The docs-are-inert premise is pinned by a test
+
+Direct `.md` pushes are untested, which is safe only while nothing `make test` runs reads a
+tracked `.md` outside `tests/`. That holds today and three review lenses named it as the
+design's remaining assumption, so a new bats file, `tests/scripts/docs_inert_premise.bats`,
+pins it in two parts:
+
+1. **The prerequisite chain is an allowlist.** The test reads `make`'s own database
+   (`make -pn test`) for the prerequisites of `test` and compares them, recursively, with a
+   recorded list: today `lint check-lock check-requirements-ci test-python`. A new
+   prerequisite fails the test with a message saying to check whether it reads a tracked
+   `.md` and, if not, add it to the list. `check-agent-guidance`, which reads `CLAUDE.md`,
+   is named in the message as the known reader.
+2. **No test reads a real `.md` by path.** It scans `tests/**/*.bats`, `tests/**/*.py` and
+   `tests/helpers/*` for a path built from the repository root that ends in `.md` outside
+   `tests/` (shell forms such as `"${REPO_ROOT}/CLAUDE.md"`, Python forms such as
+   `REPO_ROOT / "CLAUDE.md"`). Today there are none. An entry on a recorded allowlist, with
+   its reason, exempts a file; `tests/test_relocation_check.py` needs none, because it reads
+   `CLAUDE.md` only through `git show 2e38f5e4:CLAUDE.md` at a pinned revision.
+
+Both parts are heuristics over text, so each carries a positive control: a scratch copy
+with `check-agent-guidance` added to `test:` must fail part 1, and a fixture test file
+reading `"${REPO_ROOT}/README.md"` must fail part 2.
+
 ### The hook can block every push, including its own fix
 
 `.git/hooks/pre-push` is a symlink to the main checkout's `scripts/pre-push`, on every
@@ -230,6 +254,9 @@ All rows run the real hook against fixture repositories in `tests/scripts/pre_pu
 | Mutation: drop `--no-renames`                                                                                                                                                      | the rename row goes red                                                                                 |
 | Mutation: drop the unresolvable-range refusal                                                                                                                                      | that row goes red                                                                                       |
 | Mutation: call `_path_is_inert` bare, outside a conditional                                                                                                                        | a row goes red with the hook exiting before its message                                                 |
+| `tests/scripts/docs_inert_premise.bats` on the real repo                                                                                                                           | passes                                                                                                  |
+| Mutation: add `check-agent-guidance` to `test:` in a scratch copy                                                                                                                  | the prerequisite part goes red, naming it                                                               |
+| Mutation: a fixture test reading `"${REPO_ROOT}/README.md"`                                                                                                                        | the reader part goes red, naming the file                                                               |
 | `make test` on `claude`, and `test-macos` in CI                                                                                                                                    | green                                                                                                   |
 
 Both directions of the predicate are covered: always-inert fails the refusal rows;
@@ -277,7 +304,7 @@ Assumption: The hook is live in every checkout that pushes `master`, and no comm
 `master` another way. Checked after the review: the hook resolves to `scripts/pre-push` on
 `claude`, Studio and workstation; no non-PR commit since 2026-06-01 has a `GitHub` committer.
 CI-authored commits (`github-actions[bot]`, 12) reach `master` without any local hook.
-Disposition:
+Disposition: Addressed — guard refuses an unresolvable range; rows added for it, a code deletion and a nested tests/*.md. Operator, 2026-10-02.
 
 #### Ergonomics
 
@@ -286,7 +313,7 @@ weekly digest scripts push non-`.md` state files to `master` and would break eve
 two guards disagree and the spec gave no recovery recipe; the refusal message says
 "executable files". Verification lacks negative anchoring cases and a message check.
 Assumption: The scripted weekly digest push should keep going direct. Settled by the operator.
-Disposition:
+Disposition: Addressed — cost re-measured on a deep clone; the digest state file renamed; recovery recipes added. Operator, 2026-10-02.
 
 #### Risk
 
@@ -296,7 +323,7 @@ call under `set -e` dies silently. The design closes the `rollback-cycle --reaso
 route for a `ci.yml` revert. Non-ASCII paths are quoted. Deletion-only pushes unmentioned.
 Assumption: Every route that legitimately writes `master` is an interactive human docs push.
 Refuted by measurement: two scheduled scripts write `master` weekly.
-Disposition:
+Disposition: Addressed — unresolvable range refused, emergency route stated, non-ASCII paths handled, deletion-only pushes stated. Operator, 2026-10-02.
 
 #### Adversarial Spec Review (comparison/judge designs only)
 
@@ -316,7 +343,7 @@ shebang reasoning was applied to rule 3 only, though `make lint` selects by cont
 everywhere. Cost table re-derived on the deep clone: 28 refused, the 10 newly refused match.
 Assumption: No test or lint target reads tracked `.md` content; one `test:` prerequisite
 change would break it. Checked: no such reader today; nothing enforces it.
-Disposition:
+Disposition: Addressed — the docs/ rule dropped and the state file renamed; the content check applies to every path. Operator, 2026-10-02.
 
 #### Ergonomics
 
@@ -328,7 +355,7 @@ tell sessions some non-`.md` files may go direct, so the refusal is the first th
 stated route here. Admin merge past red required checks verified to work.
 Assumption: No workflow that authorizes a direct push runs in dotfiles without reading this
 repo's rule. Addressed by putting the emergency route in the refusal message itself.
-Disposition:
+Disposition: Addressed — recovery recipes per case, emergency route in the refusal message; aligning the global standard and ai-config's guard is an ai-config backlog row. Operator, 2026-10-02.
 
 #### Risk
 
@@ -339,7 +366,7 @@ single push of a branch plus a refused `master` now refuses the branch too. Appa
 newline paths arrive C-quoted, not split; a failed blob read looked like "no shebang".
 Assumption: The digest scripts push from an up-to-date `master`. If not, they hit the
 fetch-and-retry message weekly; a fetch clears it.
-Disposition:
+Disposition: Addressed — content check on every path, no extension list, a separate fetch-and-retry message. Operator, 2026-10-02.
 
 ### Round 3 (scoped: Risk, Design and Verification only)
 
@@ -355,7 +382,7 @@ Harmless: refusing any `#!` is stricter than `make lint`; no tracked `.md` start
 Assumption: No `make test` prerequisite reads a tracked `.md`. True today
 (`test: lint check-lock check-requirements-ci test-python`; `check-agent-guidance` reads
 `CLAUDE.md` and is not a prerequisite); nothing enforces it.
-Disposition:
+Disposition: Addressed — blob read without a pipe, recovery keyed on local_ref, rename with git mv; the open assumption is now pinned by tests/scripts/docs_inert_premise.bats. Operator, 2026-10-02.
 
 Review stops here. Round 3's findings are about how the hook reads a blob and what the
 message prints, which the first red tests in Phase 2 exercise directly, and the design got
