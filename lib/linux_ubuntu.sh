@@ -771,22 +771,51 @@ _install_ubuntu_brew_packages() {
 }
 
 # gpg 2.5 exits 0 when it dearmors a truncated key and still writes bytes, so
-# the keyring is judged by its content: it must list MS_GPG_FPR exactly. Any
-# failure of the listing itself (gpg missing, unreadable keyring) is "no".
-_edge_keyring_has_pinned_fpr() {
-  local _ring="$1" _home _listing _rc
-  # No EXIT trap: scripts/check-lib-exit-traps.sh ratchets those in lib/, and
-  # this body has no early exit that would skip the rm below.
-  _home="$(mktemp -d)" || return 1
+# a keyring is judged by its content: it must hold exactly one primary key and
+# that key's fingerprint must equal the pin. Returns 0 match, 1 mismatch, 2 when
+# the listing itself failed or showed no primary key (gpg missing, junk input).
+# Takes the work dir so its throwaway homedir is removed with the caller's dir.
+_keyring_has_pinned_fpr() {
+  local _ring="$1" _fpr="$2" _home="$3" _listing _rc _pubs
   _listing="$("${_MS_GPG_BIN:-gpg}" --homedir "${_home}" --batch --show-keys --with-colons "${_ring}" 2> /dev/null)"
   _rc=$?
-  rm -rf "${_home}"
-  [[ ${_rc} -eq 0 ]] || return 1
-  printf '%s\n' "${_listing}" | grep -qxF "fpr:::::::::${MS_GPG_FPR}:"
+  [[ ${_rc} -eq 0 ]] || return 2
+  _pubs="$(printf '%s\n' "${_listing}" | grep -c '^pub:')"
+  [[ ${_pubs} -ge 1 ]] || return 2
+  [[ ${_pubs} -eq 1 ]] || return 1
+  printf '%s\n' "${_listing}" | grep -qxF "fpr:::::::::${_fpr}:" || return 1
+}
+
+# Dearmor <key_file> into a temp dir, verify it holds exactly the pinned key,
+# and only then install it at <keyring>. The final path is never written or
+# removed on failure, so a keyring that already works survives a bad fetch.
+# Returns 0 installed, 1 key mismatch (or install failed), 2 unusable key input.
+# No EXIT/RETURN trap: scripts/check-lib-exit-traps.sh forbids new ones in lib/,
+# and every path below reaches the single rm -rf.
+_build_pinned_keyring() {
+  local _key="$1" _ring="$2" _fpr="$3" _dir _gpg_rc _rc
+  _dir="$(mktemp -d "${_APT_KEY_TMP_ROOT:-${TMPDIR:-/tmp}}/apt-key.XXXXXXXX")" || return 1
+  if ! mkdir -m 700 "${_dir}/home"; then
+    rm -rf "${_dir}"
+    return 1
+  fi
+  { "${_MS_GPG_BIN:-gpg}" --dearmor < "${_key}" > "${_dir}/k.gpg"; } 2> /dev/null
+  _gpg_rc=$?
+  if [[ ${_gpg_rc} -ne 0 ]]; then
+    _rc=2
+  else
+    _keyring_has_pinned_fpr "${_dir}/k.gpg" "${_fpr}" "${_dir}/home"
+    _rc=$?
+  fi
+  if [[ ${_rc} -eq 0 ]]; then
+    sudo install -m 0644 "${_dir}/k.gpg" "${_ring}" || _rc=1
+  fi
+  rm -rf "${_dir}"
+  return "${_rc}"
 }
 
 # Own function so tests can drive the edge source logic without also running the
-# unseamed albert writes that share _install_ubuntu_gui_tools.
+# albert writes (still unseamed) that share _install_ubuntu_gui_tools.
 _install_ubuntu_edge_source() {
   # The package owns microsoft-edge.sources, but do-release-upgrade can leave it
   # disabled, so existence is not enough: a live one has a URIs: line (an empty or
@@ -804,13 +833,7 @@ _install_ubuntu_edge_source() {
     sudo rm -f "${_edge_list}" "${_edge_keyring}"
   else
     local _edge_key="${_MS_KEY_PATH:-${DOTFILES_REPO_ROOT}/keys/microsoft.asc}"
-    "${_MS_GPG_BIN:-gpg}" --dearmor < "${_edge_key}" 2> /dev/null | sudo tee "${_edge_keyring}" > /dev/null
-    # gpg's own status, not tee's: on GnuPG 2.4 a truncated key exits non-zero
-    # yet still emits bytes; 2.5 exits 0, which the fingerprint check below
-    # catches. Either way a non-empty keyring alone does not prove it worked.
-    local _edge_gpg_rc="${PIPESTATUS[0]}"
-    if [[ ${_edge_gpg_rc} -eq 0 && -s "${_edge_keyring}" ]] \
-      && _edge_keyring_has_pinned_fpr "${_edge_keyring}"; then
+    if _build_pinned_keyring "${_edge_key}" "${_edge_keyring}" "${MS_GPG_FPR}"; then
       # Microsoft Edge has no ARM64 Linux build — amd64 only
       printf 'deb [arch=amd64 signed-by=%s] https://packages.microsoft.com/repos/edge stable main\n' "${_edge_keyring}" | sudo tee "${_edge_list}" > /dev/null
     else

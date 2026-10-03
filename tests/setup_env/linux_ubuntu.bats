@@ -32,6 +32,10 @@ setup() {
   export _EDGE_SOURCES_DIR="${BATS_TEST_TMPDIR}/apt-sources"
   export _EDGE_BOOTSTRAP_KEYRING="${BATS_TEST_TMPDIR}/edge-bootstrap.gpg"
   mkdir -p "${_EDGE_SOURCES_DIR}"
+  # _build_pinned_keyring builds in a temp dir under this root; seamed so tests
+  # can assert nothing is left behind and never touch the system temp dir.
+  export _APT_KEY_TMP_ROOT="${BATS_TEST_TMPDIR}/apt-key-tmp"
+  mkdir -p "${_APT_KEY_TMP_ROOT}"
   # _install_ubuntu_powershell verifies packages-microsoft-prod.deb before
   # installing it. tests/mocks/gpg cannot verify anything, so point the seam at
   # the real gpg, and have the wget mock hand back the real signed .deb. The
@@ -2080,4 +2084,75 @@ _edge_live_sources() {
     _install_go_from_tarball() { :; }
     GO_VER='1.26' _GO_BIN='${_bin_dir}/go' _install_ubuntu_go"
   [[ "$output" == *"Go 1.26 is installed"* ]]
+}
+
+# --- _build_pinned_keyring: build in temp, verify the pin, install only on success ---
+
+_fpr_of_ring() {
+  "${_MS_GPG_BIN}" --homedir "${BATS_TEST_TMPDIR}/fprhome" --batch --show-keys --with-colons "$1" 2> /dev/null \
+    | grep '^fpr:' | cut -d: -f10
+}
+
+_seed_ring() {
+  _ring="${BATS_TEST_TMPDIR}/final.gpg"
+  printf 'old' > "${_ring}"
+  [ -f "${_ring}" ]
+}
+
+@test "_build_pinned_keyring: pinned key installs a 0644 keyring listing exactly the pinned fingerprint" {
+  mkdir -p "${BATS_TEST_TMPDIR}/fprhome"
+  local _ring="${BATS_TEST_TMPDIR}/final.gpg"
+  run _build_pinned_keyring "${REPO_ROOT}/keys/microsoft.asc" "${_ring}" "${MS_GPG_FPR}"
+  [ "$status" -eq 0 ]
+  [ "$(_fpr_of_ring "${_ring}")" = "${MS_GPG_FPR}" ]
+  [ "$(stat -c %a "${_ring}" 2> /dev/null || stat -f %Lp "${_ring}")" = "644" ]
+  [ -z "$(ls -A "${_APT_KEY_TMP_ROOT}")" ]
+}
+
+@test "_build_pinned_keyring: a different single key returns 1 and leaves the existing keyring untouched" {
+  _seed_ring
+  printf 'old' > "${BATS_TEST_TMPDIR}/expect"
+  run _build_pinned_keyring "${REPO_ROOT}/tests/fixtures/albert-obs.asc" "${_ring}" "${MS_GPG_FPR}"
+  [ "$status" -eq 1 ]
+  cmp "${BATS_TEST_TMPDIR}/expect" "${_ring}"
+  [ -z "$(ls -A "${_APT_KEY_TMP_ROOT}")" ]
+}
+
+@test "_build_pinned_keyring: two keys in one file returns 1 and leaves the existing keyring untouched" {
+  _seed_ring
+  printf 'old' > "${BATS_TEST_TMPDIR}/expect"
+  cat "${REPO_ROOT}/keys/microsoft.asc" "${REPO_ROOT}/tests/fixtures/albert-obs.asc" > "${BATS_TEST_TMPDIR}/two.asc"
+  run _build_pinned_keyring "${BATS_TEST_TMPDIR}/two.asc" "${_ring}" "${MS_GPG_FPR}"
+  [ "$status" -eq 1 ]
+  cmp "${BATS_TEST_TMPDIR}/expect" "${_ring}"
+}
+
+@test "_build_pinned_keyring: a truncated key returns 2 and leaves the existing keyring untouched" {
+  _seed_ring
+  printf 'old' > "${BATS_TEST_TMPDIR}/expect"
+  head -c 200 "${REPO_ROOT}/keys/microsoft.asc" > "${BATS_TEST_TMPDIR}/trunc.asc"
+  run _build_pinned_keyring "${BATS_TEST_TMPDIR}/trunc.asc" "${_ring}" "${MS_GPG_FPR}"
+  [ "$status" -eq 2 ]
+  cmp "${BATS_TEST_TMPDIR}/expect" "${_ring}"
+  [ -z "$(ls -A "${_APT_KEY_TMP_ROOT}")" ]
+}
+
+@test "_build_pinned_keyring: a non-key body returns 2 and leaves the existing keyring untouched" {
+  _seed_ring
+  printf 'old' > "${BATS_TEST_TMPDIR}/expect"
+  printf '<html>x</html>' > "${BATS_TEST_TMPDIR}/html.asc"
+  run _build_pinned_keyring "${BATS_TEST_TMPDIR}/html.asc" "${_ring}" "${MS_GPG_FPR}"
+  [ "$status" -eq 2 ]
+  cmp "${BATS_TEST_TMPDIR}/expect" "${_ring}"
+}
+
+@test "_build_pinned_keyring: gpg exiting non-zero returns 2 and leaves the existing keyring untouched" {
+  _seed_ring
+  printf 'old' > "${BATS_TEST_TMPDIR}/expect"
+  printf '#!/usr/bin/env bash\nexit 2\n' > "${BATS_TEST_TMPDIR}/gpg-fail"
+  chmod +x "${BATS_TEST_TMPDIR}/gpg-fail"
+  _MS_GPG_BIN="${BATS_TEST_TMPDIR}/gpg-fail" run _build_pinned_keyring "${REPO_ROOT}/keys/microsoft.asc" "${_ring}" "${MS_GPG_FPR}"
+  [ "$status" -eq 2 ]
+  cmp "${BATS_TEST_TMPDIR}/expect" "${_ring}"
+  [ -z "$(ls -A "${_APT_KEY_TMP_ROOT}")" ]
 }
