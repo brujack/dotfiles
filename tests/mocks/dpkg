@@ -8,4 +8,8 @@ fi
 if [[ "$*" == "--print-architecture" ]] && [[ -n "${MOCK_DPKG_PRINT_ARCH:-}" ]]; then
   printf "%s\n" "${MOCK_DPKG_PRINT_ARCH}"
 fi
+# When called as 'dpkg -s <pkg>', print the mock Status line if set.
+if [[ "$1" == "-s" ]] && [[ -n "${MOCK_DPKG_S_STATUS:-}" ]]; then
+  printf "Status: %s\n" "${MOCK_DPKG_S_STATUS}"
+fi
 exit "${MOCK_DPKG_EXIT:-0}"

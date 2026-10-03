@@ -45,6 +45,12 @@ setup() {
   export _APT_TRUSTED_DIR="${BATS_TEST_TMPDIR}/albert-trusted"
   export _APT_KEYRINGS_DIR="${BATS_TEST_TMPDIR}/albert-keyrings"
   mkdir -p "${_APT_SOURCES_DIR}" "${_APT_TRUSTED_DIR}" "${_APT_KEYRINGS_DIR}"
+  # The azure-cli migration probes the brew az. tests/mocks/brew prints nothing
+  # for `--prefix`, so without this seam the code would exec /bin/az -- on a
+  # machine with the apt package that is the REAL az (tdd.md E2).
+  export _BREW_AZ_BIN="${BATS_TEST_TMPDIR}/brew-az"
+  printf '#!/usr/bin/env bash\nprintf "brew-az %%s\\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"\nexit "${MOCK_BREW_AZ_EXIT:-0}"\n' > "${_BREW_AZ_BIN}"
+  chmod +x "${_BREW_AZ_BIN}"
   # _install_ubuntu_powershell verifies packages-microsoft-prod.deb before
   # installing it. tests/mocks/gpg cannot verify anything, so point the seam at
   # the real gpg, and have the wget mock hand back the real signed .deb. The
@@ -1426,15 +1432,6 @@ STUB
 
 # ── _install_ubuntu_cloud_tools ──────────────────────────────────────────────
 
-@test "_install_ubuntu_cloud_tools: always calls apt install azure-cli" {
-  export CF_TERRAFORMING_VER="0.13.0"
-  export CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v0.13.0/cf-terraforming_0.13.0_linux_amd64.tar.gz"
-  unset HAS_DEVTOOLS
-  run _install_ubuntu_cloud_tools
-  [ "$status" -eq 0 ]
-  grep -q "apt install azure-cli" "${MOCK_CALLS_FILE}"
-}
-
 @test "_install_ubuntu_cloud_tools: installs google-cloud-cli packages, not retired google-cloud-sdk names" {
   export CF_TERRAFORMING_VER="0.13.0"
   export CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v0.13.0/cf-terraforming_0.13.0_linux_amd64.tar.gz"
@@ -1464,16 +1461,6 @@ STUB
   ! grep -q "apt install teleport" "${MOCK_CALLS_FILE}"
 }
 
-@test "_install_ubuntu_cloud_tools: azure-cli APT stanza uses dpkg --print-architecture" {
-  export CF_TERRAFORMING_VER="0.27.0"
-  export CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v0.27.0/cf-terraforming_0.27.0_linux_arm64.tar.gz"
-  export MOCK_DPKG_PRINT_ARCH="arm64"
-  unset HAS_DEVTOOLS
-  run _install_ubuntu_cloud_tools
-  [ "$status" -eq 0 ]
-  grep -q 'add-apt-repository.*arch=arm64.*azure-cli' "${MOCK_CALLS_FILE}"
-}
-
 @test "_install_ubuntu_cloud_tools: cf-terraforming filename uses _LINUX_ARCH" {
   export CF_TERRAFORMING_VER="0.27.0"
   export CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v0.27.0/cf-terraforming_0.27.0_linux_arm64.tar.gz"
@@ -1497,29 +1484,90 @@ STUB
   [ "$status" -ne 0 ]
 }
 
-@test "_install_ubuntu_cloud_tools: on RESOLUTE uses noble for azure-cli repo" {
-  export RESOLUTE=1
+# ── azure-cli via linuxbrew ──────────────────────────────────────────────────
+
+_az_cloud_env() {
+  export CF_TERRAFORMING_VER="0.13.0"
+  export CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v0.13.0/cf-terraforming_0.13.0_linux_amd64.tar.gz"
   unset HAS_DEVTOOLS
-  export CF_TERRAFORMING_VER="0.27.0"
-  export CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v0.27.0/cf-terraforming_0.27.0_linux_amd64.tar.gz"
-  run _install_ubuntu_cloud_tools
-  [ "$status" -eq 0 ]
-  grep -q 'add-apt-repository.*azure-cli.*noble' "${MOCK_CALLS_FILE}"
 }
 
-@test "_install_ubuntu_cloud_tools: removes stale azure-cli sources before add-apt-repository" {
-  # add-apt-repository appends new dist lines rather than replacing old ones,
-  # leaving a 'resolute' entry alongside the new 'noble' entry; the stale entry
-  # causes apt-get update to 404 on every subsequent run.
-  unset HAS_DEVTOOLS
-  export CF_TERRAFORMING_VER="0.27.0"
-  export CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v0.27.0/cf-terraforming_0.27.0_linux_amd64.tar.gz"
+@test "_install_ubuntu_brew_packages: installs azure-cli via brew" {
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 0 ]
+  grep -q "brew install azure-cli" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_brew_packages: removes the apt azure-cli once brew az runs" {
+  export MOCK_DPKG_S_STATUS="install ok installed"
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 0 ]
+  grep -q "brew-az version" "${MOCK_CALLS_FILE}"
+  grep -q "apt-get remove -y azure-cli" "${MOCK_CALLS_FILE}"
+  grep -q "sudo DEBIAN_FRONTEND=noninteractive apt-get remove -y azure-cli" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_brew_packages: keeps the apt azure-cli when brew az is broken" {
+  export MOCK_DPKG_S_STATUS="install ok installed"
+  export MOCK_BREW_AZ_EXIT=1
+  run _install_ubuntu_brew_packages
+  grep -q "brew-az version" "${MOCK_CALLS_FILE}"
+  refute_grep "apt-get remove" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_brew_packages: does not remove azure-cli when dpkg says config-files only" {
+  export MOCK_DPKG_S_STATUS="deinstall ok config-files"
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 0 ]
+  grep -q "brew-az version" "${MOCK_CALLS_FILE}"
+  grep -q "dpkg -s azure-cli" "${MOCK_CALLS_FILE}"
+  refute_grep "apt-get remove" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_brew_packages: does not remove azure-cli when dpkg reports nothing" {
+  unset MOCK_DPKG_S_STATUS
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 0 ]
+  grep -q "brew-az version" "${MOCK_CALLS_FILE}"
+  grep -q "dpkg -s azure-cli" "${MOCK_CALLS_FILE}"
+  refute_grep "apt-get remove" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_brew_packages: names azure-cli-apt-remove and returns 2 when removal fails" {
+  export MOCK_DPKG_S_STATUS="install ok installed"
+  export MOCK_APT_EXIT=1
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"azure-cli-apt-remove"* ]]
+}
+
+@test "_install_ubuntu_cloud_tools: has no azure apt path but still installs gcloud" {
+  _az_cloud_env
   run _install_ubuntu_cloud_tools
   [ "$status" -eq 0 ]
-  # Both the add-apt-repository auto-named file and a canonical azure-cli.list
-  # must be purged so no stale codename persists in apt sources.
-  run grep -E "rm.*(packages.microsoft.com_repos_azure-cli|azure-cli).*\.list" "${MOCK_CALLS_FILE}"
+  grep -q "apt install google-cloud-cli -y" "${MOCK_CALLS_FILE}"
+  refute_grep "add-apt-repository" "${MOCK_CALLS_FILE}"
+  refute_grep "apt install azure-cli" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_cloud_tools: removes every legacy azure-cli key and source" {
+  _az_cloud_env
+  local _files=(
+    "${_APT_TRUSTED_DIR}/microsoft.asc.gpg"
+    "${_APT_SOURCES_DIR}/archive_uri-http_packages_microsoft_com_repos_azure-cli_-resolute.list"
+    "${_APT_SOURCES_DIR}/packages.microsoft.com_repos_azure-cli.list"
+    "${_APT_SOURCES_DIR}/azure-cli.list"
+  )
+  local _f
+  for _f in "${_files[@]}"; do
+    printf 'x\n' > "${_f}"
+    [ -e "${_f}" ]
+  done
+  run _install_ubuntu_cloud_tools
   [ "$status" -eq 0 ]
+  for _f in "${_files[@]}"; do
+    [ ! -e "${_f}" ]
+  done
 }
 
 # ── _install_ubuntu_brew_packages ────────────────────────────────────────────

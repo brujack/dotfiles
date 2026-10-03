@@ -634,26 +634,14 @@ _install_ubuntu_cloud_tools() {
     fi
   fi
 
-  printf "Installing azure-cli\\n"
-  curl -sL http://packages.microsoft.com/keys/microsoft.asc | \
-  gpg --dearmor | \
-  sudo tee /etc/apt/trusted.gpg.d/microsoft.asc.gpg > /dev/null
-  AZ_REPO=$(lsb_release -cs)
-  # Azure CLI has no Ubuntu 26.04 packages yet; fall back to noble
-  [[ -n "${RESOLUTE:-}" ]] && AZ_REPO="noble"
-  # Purge stale azure-cli APT sources before re-adding: add-apt-repository
-  # appends a new dist line rather than replacing the old one, so a prior run
-  # with 'resolute' (before the noble fallback) leaves a stale entry that
-  # causes apt-get update to 404 on every subsequent run.
-  sudo rm -f /etc/apt/sources.list.d/packages.microsoft.com_repos_azure-cli.list 2>/dev/null || true
-  sudo rm -f /etc/apt/sources.list.d/azure-cli.list 2>/dev/null || true
-  sudo -H add-apt-repository \
-  "deb [arch=$(dpkg --print-architecture)] http://packages.microsoft.com/repos/azure-cli/ $AZ_REPO main"
-  sudo -H apt update
-  sudo -H DEBIAN_FRONTEND=noninteractive apt install azure-cli -y
-  if [[ -x $(command -v az) ]]; then
-    printf "az is installed\\n"
-  fi
+  # azure-cli now comes from linuxbrew (see _install_ubuntu_brew_packages). Remove
+  # the legacy Microsoft key and source files an earlier version of this function
+  # left behind; the glob stays outside the quotes and an unmatched one is harmless.
+  local _apt_sources="${_APT_SOURCES_DIR:-/etc/apt/sources.list.d}"
+  sudo rm -f "${_APT_TRUSTED_DIR:-/etc/apt/trusted.gpg.d}/microsoft.asc.gpg" \
+    "${_apt_sources}"/archive_uri-http_packages_microsoft_com_repos_azure-cli_-*.list \
+    "${_apt_sources}/packages.microsoft.com_repos_azure-cli.list" \
+    "${_apt_sources}/azure-cli.list"
 
   printf "Installing gcloud-sdk\\n"
   if [[ ! -f /etc/apt/sources.list.d/google-cloud-sdk.list ]]; then
@@ -715,13 +703,20 @@ _install_ubuntu_brew_packages() {
     pyenv pyenv-virtualenv rbenv ripgrep rustup \
     starship tgenv uv zig zoxide redpanda-data/tap/redpanda \
     git-cliff kcov mdbook bun getagentseal/codeburn/codeburn \
-    go-task; do
+    go-task azure-cli; do
     # go-task is `go-task`, NOT `go-task/tap/go-task`: the tap-qualified name resolves
     # to a macOS Cask that shells out to /usr/bin/xattr and exits 127 on Linux. Core
     # ships the formula now. Same for `bun` over `oven-sh/bun/bun`, and `codeburn` is
     # only ever the tap-qualified name -- bare `codeburn` resolves to nothing.
     brew_install_formula "${_f}" || _failed+=("${_f}")
   done
+
+  # Migration: once the brew az demonstrably runs, drop the apt package it replaces.
+  # Gated on dpkg's exact Status line so a config-files-only residue is not re-removed.
+  if "${_BREW_AZ_BIN:-$(brew --prefix)/bin/az}" version > /dev/null 2>&1 \
+    && dpkg -s azure-cli 2> /dev/null | grep -qx 'Status: install ok installed'; then
+    sudo DEBIAN_FRONTEND=noninteractive apt-get remove -y azure-cli || _failed+=(azure-cli-apt-remove)
+  fi
 
   # Homebrew rather than apt deliberately: apt ships shfmt 3.8.0 on noble and
   # 3.12.0 on resolute, against 3.13.1 from brew. A formatter's output is the
