@@ -1111,8 +1111,10 @@ _install_fetched_binary() {
   _bin="${_DL_BIN_DIR:-/usr/local/bin}/${_dest_name}"
 
   if [[ ${_resolve} -eq 1 ]]; then
-    _resolved="$(curl -fsSIL -o /dev/null -w '%{url_effective}' "${_url}")" || _resolved=""
-    if [[ -z ${_resolved} || ${_resolved} == "${_url}" ]]; then
+    _resolved="$(curl -fsSIL --proto-redir =https -o /dev/null -w '%{url_effective}' "${_url}")" || _resolved=""
+    # The resolved URL becomes the download target, so anything but https is
+    # a failed resolution even if curl was somehow told to follow it.
+    if [[ -z ${_resolved} || ${_resolved} != https://* || ${_resolved} == "${_url}" ]]; then
       if [[ -f ${_stamp} && -x ${_bin} && -s ${_bin} ]]; then
         log_warn "${_name}: could not resolve ${_url}; keeping installed copy"
         return 0

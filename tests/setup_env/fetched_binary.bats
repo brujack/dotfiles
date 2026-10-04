@@ -272,6 +272,23 @@ _make_tar() {
   [ "$(cat "${STAMP}")" = "https://example.invalid/v2" ]
 }
 
+@test "_install_fetched_binary: a resolution that redirects to plain http is a failed resolution" {
+  export MOCK_CURL_STDOUT="http://example.invalid/v2"
+  run _install_fetched_binary tool "${URL}" bin "" --resolve
+  [ "$status" -eq 1 ]
+  [[ "${output}" == *"tool: resolve failed"* ]]
+  [ "$(_wget_count)" -eq 0 ]
+  [ ! -e "${STAMP}" ]
+  [ "$(cat "${DEST}")" = "old" ]
+}
+
+@test "_install_fetched_binary: the resolve call restricts redirects to https" {
+  export MOCK_CURL_STDOUT="https://example.invalid/v2"
+  run _install_fetched_binary tool "${URL}" bin "" --resolve
+  [ "$status" -eq 0 ]
+  grep -q '^curl .*--proto-redir =https' "${MOCK_CALLS_FILE}"
+}
+
 @test "_install_fetched_binary: dest-name followed by --resolve are both honoured" {
   export MOCK_CURL_STDOUT="https://example.invalid/v2"
   run _install_fetched_binary tool "${URL}" bin "" renamed --resolve
