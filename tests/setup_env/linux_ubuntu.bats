@@ -780,7 +780,7 @@ _ms_require_gnu_ar() {
   _PWSH_BIN="$(_pwsh_stub_bin 1)"
   unset MOCK_WGET_FILE  # the wget mock then writes an empty, unverifiable file
   run _install_ubuntu_powershell
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ]
   [[ "$output" == *"failed verification"* ]]
   [ "$(grep -c "dpkg -i" "${MOCK_CALLS_FILE}")" -eq 0 ]
   [ "$(grep -c "apt install powershell" "${MOCK_CALLS_FILE}")" -eq 0 ]
@@ -841,7 +841,7 @@ _ms_require_gnu_ar() {
   # naming the real cause is present.
   _PWSH_BIN="$(_pwsh_stub_bin 1)"
   run _install_ubuntu_powershell
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ]
   [[ "$output" == *"[WARN]"* ]]
   [[ "$output" == *"apt install succeeded but pwsh still does not run"* ]]
   [[ "$output" != *"pwsh is installed"* ]]
@@ -896,7 +896,7 @@ EOF
 @test "_install_ubuntu_powershell: wget failure warns naming wget and skips dpkg/apt" {
   export MOCK_WGET_EXIT=1
   run _install_ubuntu_powershell
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ]
   [[ "$output" == *"[WARN]"* ]]
   [[ "$output" == *"wget"* ]]
   refute_grep "dpkg -i" "${MOCK_CALLS_FILE}"
@@ -906,7 +906,7 @@ EOF
 @test "_install_ubuntu_powershell: dpkg failure warns naming dpkg and skips apt" {
   export MOCK_DPKG_EXIT=1
   run _install_ubuntu_powershell
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ]
   [[ "$output" == *"[WARN]"* ]]
   [[ "$output" == *"dpkg"* ]]
   grep -q "wget.*packages-microsoft-prod.deb" "${MOCK_CALLS_FILE}"
@@ -916,7 +916,7 @@ EOF
 @test "_install_ubuntu_powershell: apt update failure warns naming apt update and skips apt install" {
   export MOCK_APT_EXIT=1
   run _install_ubuntu_powershell
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ]
   [[ "$output" == *"[WARN]"* ]]
   [[ "$output" == *"apt update"* ]]
   grep -q "dpkg -i" "${MOCK_CALLS_FILE}"
@@ -938,7 +938,7 @@ exit 0
 EOF
   chmod +x "${_stub_dir}/apt"
   PATH="${_stub_dir}:${PATH}" run _install_ubuntu_powershell
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ]
   [[ "$output" == *"[WARN]"* ]]
   [[ "$output" == *"apt install"* ]]
   grep -q "apt update" "${MOCK_CALLS_FILE}"
@@ -3249,11 +3249,17 @@ _gui_env() {
   export DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64"
   export YQ_VER="4.40.5"
   export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
-  touch "${HOME}/software_downloads/docker-compose_2.24.0"
+  # Idempotency is the stamp (URL) plus an executable destination, not a file
+  # left in ~/software_downloads.
+  printf 'old' > "${_DL_BIN_DIR}/docker-compose"
+  chmod 0755 "${_DL_BIN_DIR}/docker-compose"
+  mkdir -p "${_DL_STAMP_DIR}"
+  printf '%s\n' "${DOCKER_COMPOSE_URL}" > "${_DL_STAMP_DIR}/docker-compose"
   unset HAS_DEVTOOLS
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
-  ! grep -q "wget.*docker-compose_2.24.0" "${MOCK_CALLS_FILE}"
+  [[ "$output" == *"docker-compose: up to date"* ]]
+  ! grep -qF "wget -O" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_misc: HAS_DEVTOOLS installs yq" {
@@ -3270,7 +3276,8 @@ _gui_env() {
   _install_ubuntu_tfenv() { :; }
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
-  grep -qF "wget -O ${HOME}/software_downloads/yq_${YQ_VER} ${YQ_URL}" "${MOCK_CALLS_FILE}"
+  grep -qE "wget -O .* ${YQ_URL}$" "${MOCK_CALLS_FILE}"
+  [ -x "${_DL_BIN_DIR}/yq" ]
 }
 
 @test "_install_ubuntu_misc: no HAS_DEVTOOLS skips yq" {
@@ -3394,7 +3401,7 @@ _gui_env() {
   _install_ubuntu_tfenv() { :; }
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
-  grep -q "mkdir.*-p.*/etc/apt/keyrings" "${MOCK_CALLS_FILE}"
+  grep -qF "sudo mkdir -p ${_APT_KEYRINGS_DIR}" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_misc: opentofu already present skips install" {
@@ -3416,6 +3423,127 @@ _gui_env() {
   [ "$status" -eq 0 ]
   run grep "apt-get install -y tofu" "${MOCK_CALLS_FILE}"
   [ "$status" -ne 0 ]
+}
+
+# HAS_DEVTOOLS misc with seamed fetch targets. The dotnet/tflint/tfsec/tfenv
+# members are stubbed: they are advisory and have their own coverage.
+_misc_env() {
+  export DOCKER_COMPOSE_VER="2.24.0"
+  export DOCKER_COMPOSE_URL="https://dc.example/dl/docker-compose-linux-x86_64"
+  export YQ_VER="4.40.5"
+  export YQ_URL="https://yq.example/dl/yq_linux_amd64"
+  export HAS_DEVTOOLS=1
+  export _FORCE_OPENTOFU_INSTALL=1
+  _install_ubuntu_shellcheck() { :; }
+  _install_ubuntu_tflint() { :; }
+  _install_ubuntu_tfsec() { :; }
+  _install_ubuntu_tfenv() { :; }
+  export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/fetched-body"
+  printf 'body' > "${MOCK_WGET_FILE}"
+}
+
+@test "_install_ubuntu_misc: a clean run installs both binaries, stamps them, and returns 0" {
+  _misc_env
+  run --separate-stderr _install_ubuntu_misc
+  [ "$status" -eq 0 ]
+  [ -x "${_DL_BIN_DIR}/docker-compose" ]
+  [ -x "${_DL_BIN_DIR}/yq" ]
+  [ "$(cat "${_DL_STAMP_DIR}/docker-compose")" = "${DOCKER_COMPOSE_URL}" ]
+  [ "$(cat "${_DL_STAMP_DIR}/yq")" = "${YQ_URL}" ]
+  [ -s "${_APT_SOURCES_DIR}/opentofu.list" ]
+  grep -q "apt-get install.* tofu" "${MOCK_CALLS_FILE}"
+  [[ "$stderr" != *"misc:"* ]]
+}
+
+@test "_install_ubuntu_misc: a failed docker-compose download returns 1 and leaves destination, stamp and workdir alone; yq still installs" {
+  _misc_env
+  printf 'old' > "${_DL_BIN_DIR}/docker-compose"
+  chmod 0755 "${_DL_BIN_DIR}/docker-compose"
+  export MOCK_WGET_FAIL_URL="docker-compose"
+  run --separate-stderr _install_ubuntu_misc
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"docker-compose: download failed"* ]]
+  grep -q "wget .*docker-compose" "${MOCK_CALLS_FILE}"
+  [ "$(cat "${_DL_BIN_DIR}/docker-compose")" = "old" ]
+  [ ! -e "${_DL_STAMP_DIR}/docker-compose" ]
+  [ -z "$(find "${_DL_TMP_ROOT}" -mindepth 1)" ]
+  # Positive control: the sibling was not held up.
+  [ -x "${_DL_BIN_DIR}/yq" ]
+  [ -s "${_DL_STAMP_DIR}/yq" ]
+}
+
+@test "_install_ubuntu_misc: a failed yq download returns 1 and docker-compose still installs" {
+  _misc_env
+  printf 'old' > "${_DL_BIN_DIR}/yq"
+  chmod 0755 "${_DL_BIN_DIR}/yq"
+  export MOCK_WGET_FAIL_URL="yq.example"
+  run --separate-stderr _install_ubuntu_misc
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"yq: download failed"* ]]
+  grep -q "wget .*yq.example" "${MOCK_CALLS_FILE}"
+  [ "$(cat "${_DL_BIN_DIR}/yq")" = "old" ]
+  [ ! -e "${_DL_STAMP_DIR}/yq" ]
+  [ -x "${_DL_BIN_DIR}/docker-compose" ]
+  [ -s "${_DL_STAMP_DIR}/docker-compose" ]
+}
+
+@test "_install_ubuntu_misc: a failed opentofu keyring fetch with no keyring returns 1, writes no list, and skips with a warning" {
+  _misc_env
+  export MOCK_CURL_FAIL_URL="packages.opentofu.org"
+  run --separate-stderr _install_ubuntu_misc
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"misc: opentofu: keyring install failed"* ]]
+  [[ "$stderr" == *"misc: opentofu: source write skipped (no keyring)"* ]]
+  [ ! -e "${_APT_SOURCES_DIR}/opentofu.list" ]
+  # Positive controls: the fetch was attempted; the earlier tools completed.
+  grep -q "curl .*packages.opentofu.org" "${MOCK_CALLS_FILE}"
+  [ -x "${_DL_BIN_DIR}/yq" ]
+}
+
+@test "_install_ubuntu_misc: a failed opentofu source list write returns 1" {
+  _misc_env
+  export SHIM_TEE_FAIL_ARGS="opentofu.list"
+  run --separate-stderr _install_ubuntu_misc
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"misc: opentofu: source list write failed"* ]]
+  # Positive control: the write was attempted, and only that failed.
+  grep -q "tee .*opentofu.list" "${MOCK_CALLS_FILE}"
+  [[ "$stderr" != *"keyring install failed"* ]]
+}
+
+@test "_install_ubuntu_misc: a failed opentofu package install returns 1" {
+  _misc_env
+  export SHIM_APT_FAIL_PKGS="tofu"
+  run --separate-stderr _install_ubuntu_misc
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"misc: opentofu: install failed"* ]]
+  grep -q "apt-get install.* tofu" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_misc: a failed nala autoremove warns and still returns 0" {
+  _misc_env
+  export MOCK_NALA_EXIT=1
+  run --separate-stderr _install_ubuntu_misc
+  [ "$status" -eq 0 ]
+  [[ "$stderr" == *"misc: nala autoremove failed"* ]]
+  # Positive control: autoremove was attempted.
+  grep -q "nala autoremove" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_misc: the opentofu source line is signed-by the seamed keyring" {
+  _misc_env
+  run --separate-stderr _install_ubuntu_misc
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_APT_SOURCES_DIR}/opentofu.list")" = "deb [signed-by=${_APT_KEYRINGS_DIR}/opentofu-archive-keyring.gpg] https://packages.opentofu.org/opentofu/tofu/any/ any main" ]
+}
+
+@test "_install_ubuntu_misc: a failed apt-get update does not mask the install result" {
+  _misc_env
+  export MOCK_APT_FAIL_SUBCMD="update"
+  run --separate-stderr _install_ubuntu_misc
+  [ "$status" -eq 0 ]
+  grep -q "apt-get update" "${MOCK_CALLS_FILE}"
+  grep -q "apt-get install.* tofu" "${MOCK_CALLS_FILE}"
 }
 
 # ── Ubuntu 26.04 (resolute) provisioning gaps, both measured on `claude` ─────
