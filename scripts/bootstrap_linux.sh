@@ -4,7 +4,8 @@
 # Installs Homebrew prerequisites and Homebrew.
 
 # shellcheck source=lib/constants.sh
-source "$(dirname "${BASH_SOURCE[0]}")/../lib/constants.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../lib/constants.sh" \
+  || { printf "[ERROR] cannot source lib/constants.sh\n" >&2; exit 1; }
 
 _bootstrap_check_linux() {
   if [[ $(uname -s) != "Linux" ]]; then

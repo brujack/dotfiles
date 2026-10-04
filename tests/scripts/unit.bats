@@ -737,6 +737,17 @@ teardown() {
 }
 
 # ── bootstrap_linux.sh ────────────────────────────────────────────────────────
+@test "bootstrap_linux.sh: fails closed when lib/constants.sh cannot be sourced" {
+  # Without constants.sh APT_CONFFILE_OPTS is empty and apt-get would run without
+  # the conffile options, so a failed source must stop the script.
+  local _fx="${BATS_TEST_TMPDIR}/fixture"
+  mkdir -p "${_fx}/scripts" "${_fx}/lib"
+  cp "${REPO_ROOT}/scripts/bootstrap_linux.sh" "${_fx}/scripts/"
+  run bash "${_fx}/scripts/bootstrap_linux.sh"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"[ERROR] cannot source lib/constants.sh"* ]]
+}
+
 
 @test "_bootstrap_check_linux passes on Linux" {
   source "${REPO_ROOT}/scripts/bootstrap_linux.sh"
