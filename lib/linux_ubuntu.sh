@@ -12,23 +12,32 @@
 # tri-state; its rc 2 counts as a failed step here too.
 install_ubuntu_packages() {
   local -a _failed=()
-  local _base_rc=0
+  local _base_rc=0 _docker_core=0
   _install_ubuntu_base_packages || _base_rc=$?
   ((_base_rc == 1)) && return 1
   ((_base_rc == 0)) || _failed+=(base)
   local _step
   # Order matters: the nvidia container toolkit configures docker's runtime,
-  # so nvidia runs after docker and is skipped when docker failed, driver
-  # install included. It would otherwise rewrite a daemon.json docker's own
+  # so nvidia runs after docker and is skipped when docker's core failed (rc 3),
+  # driver install included. It would otherwise rewrite a daemon.json docker's own
   # step rejected, then restart docker on a box running live CI runners.
   for _step in workstation powershell go docker nvidia k8s_tools hashicorp \
     cloud_tools brew_packages rust gui_tools misc; do
-    if [[ ${_step} == nvidia ]] && [[ " ${_failed[*]} " == *" docker "* ]]; then
+    if [[ ${_step} == nvidia ]] && ((_docker_core == 1)); then
       printf 'ubuntu packages: skipping nvidia because docker failed\n' >&2
       _failed+=("${_step}")
       continue
     fi
-    "_install_ubuntu_${_step}" || _failed+=("${_step}")
+    local _step_rc=0
+    "_install_ubuntu_${_step}" || _step_rc=$?
+    if ((_step_rc != 0)); then
+      _failed+=("${_step}")
+      # Only docker's rc 3 (a core install or daemon.json failure) skips nvidia;
+      # a failed plugin or usermod leaves docker usable for the toolkit.
+      if [[ ${_step} == docker ]] && ((_step_rc == 3)); then
+        _docker_core=1
+      fi
+    fi
   done
 
   if ((${#_failed[@]} > 0)); then
@@ -496,15 +505,25 @@ _install_ubuntu_nvidia() {
   local _list="${_OVERRIDE_NVIDIA_LIST:-/etc/apt/sources.list.d/nvidia-container-toolkit.list}"
 
   if [[ ! -f ${_keyring} ]]; then
-    curl -fsSL "${NVIDIA_CONTAINER_GPGKEY_URL}" | sudo -H gpg --dearmor -o "${_keyring}" || return 1
+    _install_apt_keyring "${NVIDIA_CONTAINER_GPGKEY_URL}" "${_keyring}" armored || return 1
   fi
 
   if [[ ! -f ${_list} ]]; then
     # NVIDIA serves no per-release list -- ubuntu26.04 and ubuntu24.04 both 404 while
     # stable/deb returns 200 and is distro-agnostic. Measured 2026-09-12.
-    curl -fsSL "${NVIDIA_CONTAINER_LIST_URL}" \
-      | sed "s#deb https://#deb [signed-by=${_keyring}] https://#g" \
-      | sudo -H tee "${_list}" > /dev/null || return 1
+    # Fetched, rewritten and installed as three checked stages: in a pipe the
+    # last command's status masks a failed fetch and an empty list gets written.
+    local _ltmp
+    _ltmp="$(mktemp -d "${_APT_KEY_TMP_ROOT:-${TMPDIR:-/tmp}}/nvidia-list.XXXXXXXX")" || return 1
+    # shellcheck disable=SC2024 # the redirect is read by the invoking user on purpose: the throwaway dir is user-owned and sudo only needs the content on stdin
+    if ! curl -fsSL -o "${_ltmp}/list" "${NVIDIA_CONTAINER_LIST_URL}" \
+      || ! sed "s#deb https://#deb [signed-by=${_keyring}] https://#g" "${_ltmp}/list" > "${_ltmp}/list.signed" \
+      || ! sudo -H tee "${_list}" < "${_ltmp}/list.signed" > /dev/null; then
+      log_warn "nvidia: container toolkit source list failed"
+      rm -rf "${_ltmp}"
+      return 1
+    fi
+    rm -rf "${_ltmp}"
     sudo -H apt update || return 1
   fi
 
@@ -534,73 +553,103 @@ _install_ubuntu_nvidia() {
 }
 
 _install_ubuntu_docker() {
-  if [[ -n ${HAS_DOCKER} ]]; then
-    printf "Installing docker\\n"
-    sudo mkdir -p /etc/apt/keyrings
-    if [[ -f /etc/apt/keyrings/docker.gpg ]]; then
-      sudo rm -f /etc/apt/keyrings/docker.gpg
+  [[ -n ${HAS_DOCKER} ]] || return 0
+  printf "Installing docker\\n"
+  # rc 3 when a core piece failed (docker-ce, docker-ce-cli, containerd.io or
+  # daemon.json) -- install_ubuntu_packages skips nvidia on exactly that; rc 1
+  # for any other failure (keyring, source, plugins, usermod); 0 otherwise.
+  local _core=0 _other=0
+  local _keyring="${_DOCKER_KEYRING:-/etc/apt/keyrings/docker.asc}"
+  local _list="${_DOCKER_SOURCES_LIST:-/etc/apt/sources.list.d/docker.list}"
+  local _pkg
+  sudo mkdir -p "$(dirname "${_keyring}")"
+  if [[ -f /etc/apt/keyrings/docker.gpg ]]; then
+    sudo rm -f /etc/apt/keyrings/docker.gpg
+  fi
+  # A keyring or source failure does not stop the installs below: apt is the
+  # authoritative check on whether the repo is usable.
+  _install_apt_keyring https://download.docker.com/linux/ubuntu/gpg "${_keyring}" binary || {
+    log_warn "docker: keyring: install failed"
+    _other=1
+  }
+  printf 'deb [arch=%s signed-by=%s] https://download.docker.com/linux/ubuntu %s stable\n' \
+    "$(dpkg --print-architecture)" "${_keyring}" "$(. /etc/os-release && echo "${VERSION_CODENAME}")" \
+    | sudo tee "${_list}" > /dev/null || {
+    log_warn "docker: source list: write failed"
+    _other=1
+  }
+  # base owns the update warning; a failed refresh must not mask the install result.
+  sudo -H apt update || :
+  for _pkg in docker-ce docker-ce-cli containerd.io; do
+    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" "${_pkg}" -y || {
+      log_warn "docker: ${_pkg}: install failed"
+      _core=1
+    }
+  done
+  for _pkg in docker-buildx-plugin docker-compose-plugin; do
+    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" "${_pkg}" -y || {
+      log_warn "docker: ${_pkg}: install failed"
+      _other=1
+    }
+  done
+  local _daemon_json="${_DOCKER_DAEMON_JSON:-/etc/docker/daemon.json}"
+  if [[ ! -f ${_daemon_json} ]]; then
+    printf "Configuring Docker for cgroup v2\\n"
+    # SINGLE-quoted, so the escape is \n and not \\n. Every other printf in
+    # this file is double-quoted -- `printf "Docker is installed\\n"` -- where
+    # the shell collapses \\ to \ and printf then sees \n and emits a newline.
+    # Inside single quotes nothing collapses: printf receives \\n, turns \\
+    # into a literal backslash, and the n stays an n. The correct idiom
+    # inverts when copied across the quoting boundary, and the result is
+    # 46 bytes of valid JSON followed by two bytes of garbage.
+    #
+    # Measured on claude 2026-09-12: 48 bytes, `dockerd --validate` refusing
+    # it with "invalid character '\\' after top-level value". It was latent
+    # rather than visible -- dockerd had started before the file was written
+    # and never re-read it -- so docker info, systemctl is-active and every
+    # functional check passed, and only a cold start would have exposed it.
+    # It surfaced when a second daemon (docker-ci) parsed the file on its own
+    # cold start and restart-looped.
+    if ! printf '{"exec-opts": ["native.cgroupdriver=systemd"]}\n' | \
+      sudo tee "${_daemon_json}" > /dev/null; then
+      log_warn "docker: daemon.json: write failed"
+      _core=1
     fi
-    sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-    sudo chmod a+r /etc/apt/keyrings/docker.asc
-    echo \
-    "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
-    $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
-    sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-    sudo -H apt update
-    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" docker-ce -y
-    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" docker-ce-cli -y
-    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" containerd.io -y
-    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" docker-buildx-plugin -y
-    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" docker-compose-plugin -y
-    local _daemon_json="${_DOCKER_DAEMON_JSON:-/etc/docker/daemon.json}"
-    if [[ ! -f ${_daemon_json} ]]; then
-      printf "Configuring Docker for cgroup v2\\n"
-      # SINGLE-quoted, so the escape is \n and not \\n. Every other printf in
-      # this file is double-quoted -- `printf "Docker is installed\\n"` -- where
-      # the shell collapses \\ to \ and printf then sees \n and emits a newline.
-      # Inside single quotes nothing collapses: printf receives \\n, turns \\
-      # into a literal backslash, and the n stays an n. The correct idiom
-      # inverts when copied across the quoting boundary, and the result is
-      # 46 bytes of valid JSON followed by two bytes of garbage.
-      #
-      # Measured on claude 2026-09-12: 48 bytes, `dockerd --validate` refusing
-      # it with "invalid character '\\' after top-level value". It was latent
-      # rather than visible -- dockerd had started before the file was written
-      # and never re-read it -- so docker info, systemctl is-active and every
-      # functional check passed, and only a cold start would have exposed it.
-      # It surfaced when a second daemon (docker-ci) parsed the file on its own
-      # cold start and restart-looped.
-      printf '{"exec-opts": ["native.cgroupdriver=systemd"]}\n' | \
-        sudo tee "${_daemon_json}" > /dev/null
-      # Write, then prove the artifact is loadable. The escaping bug above was
-      # only half the defect: the write had no post-condition, so a file dockerd
-      # could not parse looked identical to a good one. dockerd holds whatever
-      # config it read at start, so `docker info`, `systemctl is-active` and
-      # every functional check keep passing over a broken file -- the only
-      # observable is a cold start, which may be days away and will land on
-      # whoever reboots rather than on whoever provisioned.
-      #
-      # dockerd --validate is the authoritative reader and exits non-zero with
-      # the parse error. _DOCKER_VALIDATE_BIN seams it for the suite, which runs
-      # on macs where dockerd does not exist -- same absolute-binary problem
-      # _OVERRIDE_KEYCHAIN_BIN and _AWS_GPG_BIN carry.
-      local _docker_validate="${_DOCKER_VALIDATE_BIN:-dockerd}"
-      if command -v "${_docker_validate}" > /dev/null 2>&1; then
-        if ! sudo "${_docker_validate}" --validate --config-file "${_daemon_json}" > /dev/null 2>&1; then
-          log_error "${_daemon_json} did not validate — refusing to leave a config dockerd cannot parse"
-          return 1
-        fi
-      else
-        # Absent validator is not evidence the file is good. Say so rather than
-        # passing silently, which is the shape that let the original bug ship.
-        log_warn "dockerd not resolvable — ${_daemon_json} written but NOT validated"
+    # Write, then prove the artifact is loadable. The escaping bug above was
+    # only half the defect: the write had no post-condition, so a file dockerd
+    # could not parse looked identical to a good one. dockerd holds whatever
+    # config it read at start, so `docker info`, `systemctl is-active` and
+    # every functional check keep passing over a broken file -- the only
+    # observable is a cold start, which may be days away and will land on
+    # whoever reboots rather than on whoever provisioned.
+    #
+    # dockerd --validate is the authoritative reader and exits non-zero with
+    # the parse error. _DOCKER_VALIDATE_BIN seams it for the suite, which runs
+    # on macs where dockerd does not exist -- same absolute-binary problem
+    # _OVERRIDE_KEYCHAIN_BIN and _AWS_GPG_BIN carry.
+    local _docker_validate="${_DOCKER_VALIDATE_BIN:-dockerd}"
+    if command -v "${_docker_validate}" > /dev/null 2>&1; then
+      if ! sudo "${_docker_validate}" --validate --config-file "${_daemon_json}" > /dev/null 2>&1; then
+        log_error "${_daemon_json} did not validate — refusing to leave a config dockerd cannot parse"
+        log_warn "docker: daemon.json: validation failed"
+        _core=1
       fi
-    fi
-    sudo usermod -a -G docker bruce
-    if [[ -x $(command -v docker) ]]; then
-      printf "Docker is installed\\n"
+    else
+      # Absent validator is not evidence the file is good. Say so rather than
+      # passing silently, which is the shape that let the original bug ship.
+      log_warn "dockerd not resolvable — ${_daemon_json} written but NOT validated"
     fi
   fi
+  sudo usermod -a -G docker bruce || {
+    log_warn "docker: usermod: group add failed"
+    _other=1
+  }
+  if [[ -x $(command -v docker) ]]; then
+    printf "Docker is installed\\n"
+  fi
+  ((_core == 0)) || return 3
+  ((_other == 0)) || return 1
+  return 0
 }
 
 _install_ubuntu_k8s_tools() {
