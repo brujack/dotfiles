@@ -896,6 +896,95 @@ _install_apt_keyring() {
   return 0
 }
 
+# Fetch a binary into a throwaway dir, install it last, and stamp the URL only
+# after the install succeeds, so an interrupted run leaves the destination
+# untouched and the next run fetches again. The stamp is the idempotency check:
+# a stamp equal to the (resolved) URL plus an executable destination is a skip.
+# Usage: _install_fetched_binary <name> <url> <bin|zip|tar> <member> [<dest-name>] [--resolve]
+# <member> is the path inside a zip/tar (ignored for bin); <dest-name> defaults
+# to <name>. --resolve follows redirects first and uses the final URL as the
+# identity (for "latest" links); a failed resolution keeps a stamped, non-empty,
+# executable copy and otherwise fails.
+# Returns 0 installed, up to date, or kept; 1 on bad arguments or a failed stage
+# (named in a warning). A stamp that cannot be written warns and still returns 0.
+# Seams, read at call time: _DL_STAMP_DIR, _DL_TMP_ROOT, _DL_BIN_DIR,
+# _DL_UNZIP_BIN, _DL_TAR_BIN. No EXIT/RETURN trap (check-lib-exit-traps.sh;
+# shell.md): every path below reaches an explicit rm -rf.
+_install_fetched_binary() {
+  local _name="$1" _url="$2" _kind="$3" _member="$4"
+  local _dest_name="" _resolve=0 _arg _stamp _bin _tmp _src _stage="" _resolved
+  [[ -n ${_name} && -n ${_url} ]] || return 1
+  [[ ${_kind} == "bin" || ${_kind} == "zip" || ${_kind} == "tar" ]] || return 1
+  shift 4
+  for _arg in "$@"; do
+    if [[ ${_arg} == "--resolve" ]]; then
+      _resolve=1
+    else
+      _dest_name="${_arg}"
+    fi
+  done
+  _dest_name="${_dest_name:-${_name}}"
+  _stamp="${_DL_STAMP_DIR:-${HOME}/.local/share/dotfiles/installed}/${_name}"
+  _bin="${_DL_BIN_DIR:-/usr/local/bin}/${_dest_name}"
+
+  if [[ ${_resolve} -eq 1 ]]; then
+    _resolved="$(curl -fsSIL -o /dev/null -w '%{url_effective}' "${_url}")" || _resolved=""
+    if [[ -z ${_resolved} || ${_resolved} == "${_url}" ]]; then
+      if [[ -f ${_stamp} && -x ${_bin} && -s ${_bin} ]]; then
+        log_warn "${_name}: could not resolve ${_url}; keeping installed copy"
+        return 0
+      fi
+      log_warn "${_name}: resolve failed"
+      return 1
+    fi
+    _url="${_resolved}"
+  fi
+
+  if [[ -f ${_stamp} && -x ${_bin} && "$(< "${_stamp}")" == "${_url}" ]]; then
+    printf '%s: up to date (stamp %s); rm it to force a re-install\n' "${_name}" "${_stamp}"
+    return 0
+  fi
+
+  mkdir -p "${_DL_TMP_ROOT:-${HOME}/software_downloads}" || {
+    log_warn "${_name}: workdir failed"
+    return 1
+  }
+  _tmp="$(mktemp -d "${_DL_TMP_ROOT:-${HOME}/software_downloads}/.dl.XXXXXXXX")" || {
+    log_warn "${_name}: workdir failed"
+    return 1
+  }
+
+  if ! wget -O "${_tmp}/dl" "${_url}"; then
+    _stage="download"
+  elif [[ ${_kind} == "bin" ]]; then
+    _src="${_tmp}/dl"
+  else
+    mkdir -p "${_tmp}/x"
+    if [[ ${_kind} == "zip" ]]; then
+      "${_DL_UNZIP_BIN:-unzip}" -o -q "${_tmp}/dl" -d "${_tmp}/x" || _stage="extract"
+    else
+      "${_DL_TAR_BIN:-tar}" -xzf "${_tmp}/dl" -C "${_tmp}/x" || _stage="extract"
+    fi
+    _src="${_tmp}/x/${_member}"
+  fi
+  if [[ -z ${_stage} && ! -s ${_src} ]]; then
+    _stage="extract"
+  fi
+  if [[ -z ${_stage} ]] && ! sudo install -m 0755 "${_src}" "${_bin}"; then
+    _stage="install"
+  fi
+  rm -rf "${_tmp}"
+  if [[ -n ${_stage} ]]; then
+    log_warn "${_name}: ${_stage} failed"
+    return 1
+  fi
+
+  if ! { mkdir -p "$(dirname "${_stamp}")" && printf '%s\n' "${_url}" > "${_stamp}"; } 2> /dev/null; then
+    log_warn "${_name}: could not write stamp ${_stamp}; it will be re-installed next run"
+  fi
+  return 0
+}
+
 # Own function so tests can drive the edge source logic without also running the
 # albert writes that share _install_ubuntu_gui_tools.
 _install_ubuntu_edge_source() {
