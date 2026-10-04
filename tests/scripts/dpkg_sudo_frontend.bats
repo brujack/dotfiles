@@ -200,7 +200,6 @@ _expect_single() {
   for _spec in \
     'lib/linux_shared.sh|sudo.*nala full-upgrade' \
     'lib/linux_ubuntu.sh|sudo.*dpkg -i' \
-    'lib/helpers.sh|sudo.*dpkg --install' \
     'scripts/bootstrap_linux.sh|sudo.*apt-get install'; do
     _file="${_spec%%|*}"
     _pat="${_spec#*|}"
@@ -492,9 +491,9 @@ _detect_verdicts() {
   fi
 }
 
-@test "--force-confmiss appears exactly at the three archive-setup debs" {
+@test "--force-confmiss appears only at the packages-microsoft-prod.deb install" {
   local _files=() _f _calls _deb _n _line
-  local _CONFMISS_DEBS=(packages-microsoft-prod.deb volian-archive-keyring_0.2.0_all.deb volian-archive-nala_0.2.0_all.deb)
+  local _CONFMISS_DEBS=(packages-microsoft-prod.deb)
   while IFS= read -r _f; do _files+=("${_f}"); done < <(_tracked_shell_files)
   _calls="$(_conffile_calls "${_files[@]}" | grep ':confmiss:' || true)"
   for _deb in "${_CONFMISS_DEBS[@]}"; do

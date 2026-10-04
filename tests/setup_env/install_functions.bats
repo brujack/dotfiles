@@ -133,6 +133,7 @@ teardown() {
 
 @test "check_and_install_nala does nothing on non-Linux" {
   export MOCK_UNAME_S=Darwin
+  unset RESOLUTE
   run check_and_install_nala
   [ "$status" -eq 0 ]
   ! grep -q "dpkg" "${MOCK_CALLS_FILE}"
@@ -141,22 +142,10 @@ teardown() {
 @test "check_and_install_nala does nothing on non-Ubuntu Linux" {
   export MOCK_UNAME_S=Linux
   export MOCK_AWK_OS_NAME="Fedora"
+  unset RESOLUTE
   run check_and_install_nala
   [ "$status" -eq 0 ]
   ! grep -q "dpkg" "${MOCK_CALLS_FILE}"
-}
-
-@test "check_and_install_nala installs nala via dpkg and apt on Ubuntu when absent" {
-  export MOCK_UNAME_S=Linux
-  export MOCK_AWK_OS_NAME="Ubuntu"
-  export HOME="${BATS_TEST_TMPDIR}"
-  mkdir -p "${BATS_TEST_TMPDIR}/software_downloads"
-  # The function checks 'dpkg -l nala | grep -q "^ii"' to detect nala.
-  # The dpkg mock outputs nothing, so grep -q fails, taking the install branch.
-  run check_and_install_nala
-  [ "$status" -eq 0 ]
-  grep -q "dpkg --install" "${MOCK_CALLS_FILE}"
-  grep -q "apt install nala" "${MOCK_CALLS_FILE}"
 }
 
 @test "check_and_install_nala skips install when nala is already installed" {
@@ -165,6 +154,7 @@ teardown() {
   export HOME="${BATS_TEST_TMPDIR}"
   # Simulate nala already installed: make dpkg -l output an 'ii' line.
   export MOCK_DPKG_L_NALA="ii  nala  0.15.0  amd64  Commandline Package Manager"
+  unset RESOLUTE
   run check_and_install_nala
   [ "$status" -eq 0 ]
   refute_grep "dpkg --install" "${MOCK_CALLS_FILE}"
@@ -187,69 +177,32 @@ teardown() {
   grep -qE '^frontend: apt install nala .*DEBIAN_FRONTEND=noninteractive$' "${MOCK_CALLS_FILE}"
 }
 
-@test "check_and_install_nala: volian dpkg --install sees DEBIAN_FRONTEND=noninteractive" {
-  export MOCK_UNAME_S=Linux
-  export MOCK_AWK_OS_NAME="Ubuntu"
-  export NOBLE=1
-  unset RESOLUTE
-  export HOME="${BATS_TEST_TMPDIR}"
-  mkdir -p "${BATS_TEST_TMPDIR}/software_downloads"
-  unset DEBIAN_FRONTEND
-  local _stub_dir
-  _stub_dir="$(frontend_probe_stub_path dpkg)"
-  PATH="${_stub_dir}:${PATH}" run check_and_install_nala
-  [ "$status" -eq 0 ]
-  # Each .deb is its own call site: assert both, so deleting the assignment from
-  # either one is red. No dpkg --install may have seen the variable unset.
-  grep -qE '^frontend: dpkg --install .*volian-archive-keyring.*DEBIAN_FRONTEND=noninteractive$' "${MOCK_CALLS_FILE}"
-  grep -qE '^frontend: dpkg --install .*volian-archive-nala.*DEBIAN_FRONTEND=noninteractive$' "${MOCK_CALLS_FILE}"
-  refute_grep '^frontend: dpkg --install .*DEBIAN_FRONTEND=<unset>$' "${MOCK_CALLS_FILE}" -E
-}
-
-@test "conffile argv: volian dpkg --install restores deleted conffiles (confmiss) on both debs" {
-  export MOCK_UNAME_S=Linux
-  export MOCK_AWK_OS_NAME="Ubuntu"
-  export NOBLE=1
-  unset RESOLUTE
-  export HOME="${BATS_TEST_TMPDIR}"
-  mkdir -p "${BATS_TEST_TMPDIR}/software_downloads"
-  unset DEBIAN_FRONTEND
-  local _stub_dir
-  _stub_dir="$(argv_probe_stub_path dpkg)"
-  PATH="${_stub_dir}:${PATH}" run check_and_install_nala
-  [ "$status" -eq 0 ]
-  [ "$(grep -c '^argv: dpkg \[--install\]' "${MOCK_CALLS_FILE}")" -eq 2 ]
-  grep -qE '^argv: dpkg \[--install\]\[--force-confdef\]\[--force-confold\]\[--force-confmiss\]\[.*volian-archive-keyring_0\.2\.0_all\.deb\]$' "${MOCK_CALLS_FILE}"
-  grep -qE '^argv: dpkg \[--install\]\[--force-confdef\]\[--force-confold\]\[--force-confmiss\]\[.*volian-archive-nala_0\.2\.0_all\.deb\]$' "${MOCK_CALLS_FILE}"
-}
-
-@test "check_and_install_nala on RESOLUTE uses apt install, skips volian wget" {
+@test "check_and_install_nala on RESOLUTE installs nala from the Ubuntu archive" {
   export MOCK_UNAME_S=Linux
   export MOCK_AWK_OS_NAME="Ubuntu"
   export RESOLUTE=1
   export HOME="${BATS_TEST_TMPDIR}"
-  mkdir -p "${BATS_TEST_TMPDIR}/software_downloads"
   run check_and_install_nala
   [ "$status" -eq 0 ]
-  run grep -q "apt install nala" "${MOCK_CALLS_FILE}"
-  [ "$status" -eq 0 ]
-  run grep -q "wget" "${MOCK_CALLS_FILE}"
-  [ "$status" -ne 0 ]
+  grep -q "apt install nala" "${MOCK_CALLS_FILE}"
+  [ "$(grep -c "wget" "${MOCK_CALLS_FILE}" || true)" -eq 0 ]
+  [ "$(grep -c "dpkg --install" "${MOCK_CALLS_FILE}" || true)" -eq 0 ]
 }
 
-@test "check_and_install_nala on NOBLE uses volian wget path" {
+@test "check_and_install_nala on NOBLE installs nala from the Ubuntu archive" {
   export MOCK_UNAME_S=Linux
   export MOCK_AWK_OS_NAME="Ubuntu"
   export NOBLE=1
   unset RESOLUTE
   export HOME="${BATS_TEST_TMPDIR}"
-  mkdir -p "${BATS_TEST_TMPDIR}/software_downloads"
-  run check_and_install_nala
+  unset DEBIAN_FRONTEND
+  local _stub_dir
+  _stub_dir="$(argv_probe_stub_path apt)"
+  PATH="${_stub_dir}:${PATH}" run check_and_install_nala
   [ "$status" -eq 0 ]
-  run grep -q "wget" "${MOCK_CALLS_FILE}"
-  [ "$status" -eq 0 ]
-  run grep -q "dpkg --install" "${MOCK_CALLS_FILE}"
-  [ "$status" -eq 0 ]
+  [ "$(grep -cxF 'argv: apt [install][-o][Dpkg::Options::=--force-confdef][-o][Dpkg::Options::=--force-confold][nala][-y]' "${MOCK_CALLS_FILE}" || true)" -eq 1 ]
+  [ "$(grep -c "wget" "${MOCK_CALLS_FILE}" || true)" -eq 0 ]
+  [ "$(grep -c "dpkg --install" "${MOCK_CALLS_FILE}" || true)" -eq 0 ]
 }
 
 # ── install_homebrew ─────────────────────────────────────────────────────────
