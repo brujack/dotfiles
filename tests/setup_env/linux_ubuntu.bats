@@ -176,6 +176,103 @@ EOF
   [[ "$output" == *"Unsupported Ubuntu version"* ]]
 }
 
+# Tri-state: 0 clean, 1 unsupported release, 2 an install failed.
+@test "_install_ubuntu_base_packages: clean run returns 0 with no warning" {
+  export NOBLE=1
+  unset RESOLUTE HAS_SNAP
+  cd "${REPO_ROOT}"
+  run _install_ubuntu_base_packages
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"base:"*"failed"* ]]
+}
+
+@test "_install_ubuntu_base_packages: failed common list returns 2 and names it" {
+  export NOBLE=1
+  unset RESOLUTE HAS_SNAP
+  cd "${REPO_ROOT}"
+  export MOCK_XARGS_EXIT=1
+  run _install_ubuntu_base_packages
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"base: common list failed"* ]]
+  # Positive control: the release list still ran after the common list failed.
+  grep -q "xargs-stdin" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_base_packages: failed hwe kernel install returns 2" {
+  export NOBLE=1
+  unset RESOLUTE HAS_SNAP
+  cd "${REPO_ROOT}"
+  export MOCK_APT_FAIL_SUBCMD=install
+  run _install_ubuntu_base_packages
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"base: hwe kernel failed"* ]]
+  # Positive control: the package lists were still attempted.
+  grep -q "^xargs " "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_base_packages: apt update failure warns exactly once and is not a failure" {
+  export NOBLE=1
+  unset RESOLUTE HAS_SNAP
+  cd "${REPO_ROOT}"
+  export MOCK_APT_FAIL_SUBCMD=update
+  run _install_ubuntu_base_packages
+  [ "$status" -eq 0 ]
+  [ "$(printf '%s\n' "${output}" | grep -c 'apt update reported errors')" -eq 1 ]
+  grep -q "^xargs " "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_base_packages: a missing package list is a failure" {
+  export NOBLE=1
+  unset RESOLUTE HAS_SNAP
+  local _empty="${BATS_TEST_TMPDIR}/nolists"
+  mkdir -p "${_empty}"
+  cd "${_empty}"
+  run _install_ubuntu_base_packages
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"base: common list failed"* ]]
+}
+
+@test "_install_ubuntu_base_packages: a package list with no packages is not a failure" {
+  export NOBLE=1
+  unset RESOLUTE HAS_SNAP
+  local _d="${BATS_TEST_TMPDIR}/emptylists"
+  mkdir -p "${_d}"
+  printf '# only a comment\n' > "${_d}/ubuntu_common_packages.txt"
+  printf '# only a comment\n' > "${_d}/ubuntu_2404_packages.txt"
+  cd "${_d}"
+  run _install_ubuntu_base_packages
+  [ "$status" -eq 0 ]
+}
+
+@test "install_ubuntu_packages: base rc 2 is named and every later step still runs" {
+  unset MACOS
+  export LINUX=1 UBUNTU=1 NOBLE=1
+  _install_ubuntu_base_packages() { return 2; }
+  local _s
+  for _s in workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
+    eval "_install_ubuntu_${_s}() { printf 'ran ${_s}\\n' >> \"\${MOCK_CALLS_FILE}\"; }"
+  done
+  run --separate-stderr install_ubuntu_packages
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"ubuntu packages: failed: base"* ]]
+  [ "$(grep -c '^ran ' "${MOCK_CALLS_FILE}")" -eq 12 ]
+}
+
+@test "install_ubuntu_packages: base rc 1 stops before any later step" {
+  unset MACOS NOBLE RESOLUTE
+  export LINUX=1 UBUNTU=1
+  local _s
+  for _s in workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
+    eval "_install_ubuntu_${_s}() { printf 'ran ${_s}\\n' >> \"\${MOCK_CALLS_FILE}\"; }"
+  done
+  : > "${MOCK_CALLS_FILE}"
+  run install_ubuntu_packages
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Unsupported Ubuntu version"* ]]
+  run grep -c '^ran ' "${MOCK_CALLS_FILE}"
+  [ "$output" -eq 0 ]
+}
+
 @test "_install_ubuntu_base_packages: NOBLE uses nala for package installs" {
   export NOBLE=1
   unset RESOLUTE HAS_SNAP
