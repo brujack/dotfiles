@@ -160,3 +160,23 @@ _assert_untouched() {
   run ! grep -q '^curl ' "${MOCK_CALLS_FILE}"
   _assert_untouched
 }
+
+# _write_apt_source_list <step> <tool> <keyring> <list> <line>: a source signed-by
+# a missing or empty keyring would break every later apt update, so it is written
+# only when the keyring is a non-empty file.
+
+@test "_write_apt_source_list: a zero-byte keyring writes no list and warns (no keyring)" {
+  local _ring="${BATS_TEST_TMPDIR}/keyrings/empty.gpg" _list="${BATS_TEST_TMPDIR}/empty.list"
+  : > "${_ring}"
+  run _write_apt_source_list step tool "${_ring}" "${_list}" "deb http://example.invalid stable main"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"step: tool: source write skipped (no keyring)"* ]]
+  [ ! -e "${_list}" ]
+}
+
+@test "_write_apt_source_list: a non-empty keyring writes the list" {
+  local _list="${BATS_TEST_TMPDIR}/ok.list"
+  run _write_apt_source_list step tool "${KEYRING}" "${_list}" "deb http://example.invalid stable main"
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_list}")" = "deb http://example.invalid stable main" ]
+}
