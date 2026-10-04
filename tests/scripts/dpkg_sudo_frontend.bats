@@ -44,7 +44,7 @@ setup() {
 # classes only, no gawk extensions.
 # Mode `conffile` prints the second verdict instead: `<file>:<line>:conffile:ok|bad`
 # for each configuring call, and `<file>:<line>:confmiss:yes|no:<deb basename or ->`
-# for each dpkg -i/--install/--configure call.
+# for each configuring call too (deb is `-` for apt-family calls).
 _dpkg_awk() {
   local _mode="$1"
   shift
@@ -99,15 +99,15 @@ _dpkg_awk() {
         if (t[k] == CONFFILE_ARR) conf = 1
         # apt takes the options only as Dpkg::Options::=..., dpkg only as bare flags.
         v = t[k]
-        gsub(/"/, "", v)
+        gsub("[\"\047]", "", v)
         if (apt) sub(/^Dpkg::Options::=/, "dpkg-opt:", v)
         if (v == (apt ? "dpkg-opt:--force-confdef" : "--force-confdef")) def = 1
         if (v == (apt ? "dpkg-opt:--force-confold" : "--force-confold")) old = 1
-        if (v ~ /^--force-confmiss$/) miss = 1
+        if (v == (apt ? "dpkg-opt:--force-confmiss" : "--force-confmiss")) miss = 1
         if (t[k] ~ /\.deb"?$/) { b = t[k]; sub(/"$/, "", b); sub(/.*\//, "", b); deb = b }
       }
       printf "%s:%d:conffile:%s\n", fname, start, ((conf || (def && old)) ? "ok" : "bad")
-      if (t[i] == "dpkg") printf "%s:%d:confmiss:%s:%s\n", fname, start, (miss ? "yes" : "no"), deb
+      printf "%s:%d:confmiss:%s:%s\n", fname, start, (miss ? "yes" : "no"), deb
     }
     function flush(   rest, seg, cut) {
       if (cmd == "") return
@@ -336,15 +336,20 @@ _detect_conffile() {
   _conffile_calls "${_fx}" | sed "s|^${_fx}:||"
 }
 
+# Only the conffile verdict records, for tests that do not look at confmiss.
+_detect_verdicts() {
+  _detect_conffile "$@" | grep ':conffile:'
+}
+
 @test "the conffile detector accepts the shared array after the verb" {
-  run _detect_conffile 'sudo -H DEBIAN_FRONTEND=noninteractive apt install x "${APT_CONFFILE_OPTS[@]}" -y'
+  run _detect_verdicts 'sudo -H DEBIAN_FRONTEND=noninteractive apt install x "${APT_CONFFILE_OPTS[@]}" -y'
   [ "$status" -eq 0 ]
   [ "$output" = "1:conffile:ok" ]
 }
 
 @test "the conffile detector accepts the shared array before the verb and the frontend verdict still judges it" {
   local _line='sudo DEBIAN_FRONTEND=noninteractive apt "${APT_CONFFILE_OPTS[@]}" install x -y'
-  run _detect_conffile "${_line}"
+  run _detect_verdicts "${_line}"
   [ "$status" -eq 0 ]
   [ "$output" = "1:conffile:ok" ]
   # The array token must be skipped by classify(), or the verb is never found.
@@ -352,20 +357,20 @@ _detect_conffile() {
 }
 
 @test "the conffile detector accepts the literal option pair" {
-  run _detect_conffile \
+  run _detect_verdicts \
     'sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install -y x'
   [ "$status" -eq 0 ]
   [ "$output" = "1:conffile:ok" ]
 }
 
 @test "the conffile detector rejects a configuring call with no options" {
-  run _detect_conffile 'sudo DEBIAN_FRONTEND=noninteractive apt install x -y'
+  run _detect_verdicts 'sudo DEBIAN_FRONTEND=noninteractive apt install x -y'
   [ "$status" -eq 0 ]
   [ "$output" = "1:conffile:bad" ]
 }
 
 @test "the conffile detector rejects confdef without confold" {
-  run _detect_conffile \
+  run _detect_verdicts \
     'sudo DEBIAN_FRONTEND=noninteractive apt -o Dpkg::Options::=--force-confdef install x -y'
   [ "$status" -eq 0 ]
   [ "$output" = "1:conffile:bad" ]
@@ -392,13 +397,13 @@ _detect_conffile() {
 }
 
 @test "the conffile detector rejects bare confdef/confold flags on apt" {
-  run _detect_conffile 'sudo DEBIAN_FRONTEND=noninteractive apt install x --force-confdef --force-confold -y'
+  run _detect_verdicts 'sudo DEBIAN_FRONTEND=noninteractive apt install x --force-confdef --force-confold -y'
   [ "$status" -eq 0 ]
   [ "$output" = "1:conffile:bad" ]
 }
 
 @test "the conffile detector ignores options that sit in a trailing comment" {
-  run _detect_conffile \
+  run _detect_verdicts \
     'sudo DEBIAN_FRONTEND=noninteractive apt install x # --force-confdef --force-confold' \
     'sudo DEBIAN_FRONTEND=noninteractive apt install y # -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold'
   [ "$status" -eq 0 ]
@@ -423,18 +428,33 @@ _detect_conffile() {
 }
 
 @test "the conffile detector accepts a quoted option value" {
-  run _detect_conffile \
+  run _detect_verdicts \
     'sudo DEBIAN_FRONTEND=noninteractive apt install x -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -y'
   [ "$status" -eq 0 ]
   [ "$output" = "1:conffile:ok" ]
 }
 
 @test "the conffile detector judges the configuring call on line 2 and not the removal on line 1" {
-  run _detect_conffile \
+  run _detect_verdicts \
     'sudo DEBIAN_FRONTEND=noninteractive apt remove x -y' \
     'sudo DEBIAN_FRONTEND=noninteractive apt install y -y'
   [ "$status" -eq 0 ]
   [ "$output" = "2:conffile:bad" ]
+}
+
+@test "the conffile detector reports confmiss on apt-family calls with no deb" {
+  run _detect_conffile \
+    'sudo DEBIAN_FRONTEND=noninteractive apt install x -y -o Dpkg::Options::=--force-confmiss' \
+    'sudo DEBIAN_FRONTEND=noninteractive apt install y -y'
+  [ "$status" -eq 0 ]
+  [ "$output" = "$(printf '1:conffile:bad\n1:confmiss:yes:-\n2:conffile:bad\n2:confmiss:no:-')" ]
+}
+
+@test "the conffile detector accepts single-quoted option values" {
+  run _detect_conffile \
+    "sudo DEBIAN_FRONTEND=noninteractive apt install x -o 'Dpkg::Options::=--force-confdef' -o 'Dpkg::Options::=--force-confold' -y"
+  [ "$status" -eq 0 ]
+  [ "$output" = "$(printf '1:conffile:ok\n1:confmiss:no:-')" ]
 }
 
 @test "every configuring apt/dpkg sudo call carries the conffile options" {
