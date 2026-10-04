@@ -39,18 +39,18 @@ _install_ubuntu_base_packages() {
   sudo -H apt update
   if [[ -n ${NOBLE} ]]; then
     printf "Installing hwe, common, and 24.04 packages\\n"
-    sudo -H DEBIAN_FRONTEND=noninteractive apt install --install-recommends linux-generic-hwe-24.04 -y
+    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" --install-recommends linux-generic-hwe-24.04 -y
     check_and_install_nala
     # Strip comments/blank lines: xargs -a feeds every line to nala, and a
     # comment token like '--user' aborts the whole install ("No such option").
-    grep -vE '^[[:space:]]*(#|$)' ./ubuntu_common_packages.txt | xargs -r sudo DEBIAN_FRONTEND=noninteractive nala install -y
-    grep -vE '^[[:space:]]*(#|$)' ./ubuntu_2404_packages.txt | xargs -r sudo DEBIAN_FRONTEND=noninteractive nala install -y
+    grep -vE '^[[:space:]]*(#|$)' ./ubuntu_common_packages.txt | xargs -r sudo DEBIAN_FRONTEND=noninteractive nala install "${APT_CONFFILE_OPTS[@]}" -y
+    grep -vE '^[[:space:]]*(#|$)' ./ubuntu_2404_packages.txt | xargs -r sudo DEBIAN_FRONTEND=noninteractive nala install "${APT_CONFFILE_OPTS[@]}" -y
   elif [[ -n ${RESOLUTE} ]]; then
     printf "Installing hwe, common, and 26.04 packages\\n"
-    sudo -H DEBIAN_FRONTEND=noninteractive apt install --install-recommends linux-generic-hwe-26.04 -y
+    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" --install-recommends linux-generic-hwe-26.04 -y
     check_and_install_nala
-    grep -vE '^[[:space:]]*(#|$)' ./ubuntu_common_packages.txt | xargs -r sudo DEBIAN_FRONTEND=noninteractive nala install -y
-    grep -vE '^[[:space:]]*(#|$)' ./ubuntu_2604_packages.txt | xargs -r sudo DEBIAN_FRONTEND=noninteractive nala install -y
+    grep -vE '^[[:space:]]*(#|$)' ./ubuntu_common_packages.txt | xargs -r sudo DEBIAN_FRONTEND=noninteractive nala install "${APT_CONFFILE_OPTS[@]}" -y
+    grep -vE '^[[:space:]]*(#|$)' ./ubuntu_2604_packages.txt | xargs -r sudo DEBIAN_FRONTEND=noninteractive nala install "${APT_CONFFILE_OPTS[@]}" -y
   else
     log_error "Unsupported Ubuntu version: ${UBUNTU_VERSION:-unknown}"
     return 1
@@ -67,7 +67,7 @@ _install_ubuntu_base_packages() {
 _install_ubuntu_workstation() {
   [[ -n ${HAS_SNAP} ]] || return 0
   printf "Installing workstation packages\\n"
-  grep -vE '^[[:space:]]*(#|$)' ./ubuntu_workstation_packages.txt | xargs -r sudo DEBIAN_FRONTEND=noninteractive nala install -y
+  grep -vE '^[[:space:]]*(#|$)' ./ubuntu_workstation_packages.txt | xargs -r sudo DEBIAN_FRONTEND=noninteractive nala install "${APT_CONFFILE_OPTS[@]}" -y
 
   printf "Installing workstation snap packages\\n"
   grep -vE '^[[:space:]]*(#|$)' ./ubuntu_workstation_snap_packages.txt | xargs -r sudo snap install
@@ -199,7 +199,12 @@ _install_ubuntu_powershell() {
     return 0
   fi
 
-  if ! sudo -H DEBIAN_FRONTEND=noninteractive dpkg -i "${HOME}"/software_downloads/packages-microsoft-prod.deb; then
+  # --force-confmiss: this package carries only a vendor apt keyring/source, so
+  # restoring a conffile the operator deleted is always right here. Without it a
+  # deleted keyring stays missing and every later `apt update` fails (measured,
+  # spec 2026-10-03-apt-conffile-noninteractive-design.md Decision table).
+  # confmiss is used on these archive-setup debs only, nowhere else.
+  if ! sudo -H DEBIAN_FRONTEND=noninteractive dpkg -i --force-confdef --force-confold --force-confmiss "${HOME}"/software_downloads/packages-microsoft-prod.deb; then
     log_warn "powershell: dpkg -i packages-microsoft-prod.deb failed; skipping"
     return 0
   fi
@@ -209,7 +214,7 @@ _install_ubuntu_powershell() {
     return 0
   fi
 
-  if ! sudo -H DEBIAN_FRONTEND=noninteractive apt install powershell -y; then
+  if ! sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" powershell -y; then
     log_warn "powershell: apt install powershell failed; skipping"
     return 0
   fi
@@ -381,7 +386,7 @@ _install_ubuntu_nvidia() {
   printf "Installing NVIDIA driver and container toolkit\\n"
 
   if ! dpkg -l "nvidia-driver-${NVIDIA_DRIVER_VER}" 2> /dev/null | grep -q '^ii'; then
-    sudo -H DEBIAN_FRONTEND=noninteractive apt install -y "nvidia-driver-${NVIDIA_DRIVER_VER}" || return 1
+    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" -y "nvidia-driver-${NVIDIA_DRIVER_VER}" || return 1
     log_warn "NVIDIA driver installed — reboot required before the nvidia module replaces nouveau"
   fi
 
@@ -402,7 +407,7 @@ _install_ubuntu_nvidia() {
   fi
 
   if ! dpkg -l nvidia-container-toolkit 2> /dev/null | grep -q '^ii'; then
-    sudo -H DEBIAN_FRONTEND=noninteractive apt install -y nvidia-container-toolkit || return 1
+    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" -y nvidia-container-toolkit || return 1
   fi
 
   # Installing the toolkit does NOT register it with docker. Measured on claude
@@ -440,11 +445,11 @@ _install_ubuntu_docker() {
     $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
     sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
     sudo -H apt update
-    sudo -H DEBIAN_FRONTEND=noninteractive apt install docker-ce -y
-    sudo -H DEBIAN_FRONTEND=noninteractive apt install docker-ce-cli -y
-    sudo -H DEBIAN_FRONTEND=noninteractive apt install containerd.io -y
-    sudo -H DEBIAN_FRONTEND=noninteractive apt install docker-buildx-plugin -y
-    sudo -H DEBIAN_FRONTEND=noninteractive apt install docker-compose-plugin -y
+    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" docker-ce -y
+    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" docker-ce-cli -y
+    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" containerd.io -y
+    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" docker-buildx-plugin -y
+    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" docker-compose-plugin -y
     local _daemon_json="${_DOCKER_DAEMON_JSON:-/etc/docker/daemon.json}"
     if [[ ! -f ${_daemon_json} ]]; then
       printf "Configuring Docker for cgroup v2\\n"
@@ -533,7 +538,7 @@ _install_ubuntu_k8s_tools() {
   printf 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/%s/deb/ /\n' "${KUBERNETES_VER}" \
     | sudo tee /etc/apt/sources.list.d/kubernetes.list
   sudo -H apt update
-  sudo -H DEBIAN_FRONTEND=noninteractive apt install kubectl -y
+  sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" kubectl -y
 
   if [[ -n ${HAS_SNAP} ]]; then
     sudo snap install helm --classic
@@ -612,7 +617,7 @@ _install_ubuntu_cloud_tools() {
     sudo rm -f /etc/apt/sources.list.d/archive_uri-https_deb_releases_teleport_dev_-noble.list
     echo "deb [signed-by=/usr/share/keyrings/teleport-pubkey.gpg] https://deb.releases.teleport.dev/ stable main" | sudo tee /etc/apt/sources.list.d/teleport.list
     sudo -H apt update
-    sudo -H DEBIAN_FRONTEND=noninteractive apt install teleport -y
+    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" teleport -y
     if [[ -x $(command -v tsh) ]]; then
       printf "Teleport is installed\\n"
     fi
@@ -628,7 +633,7 @@ _install_ubuntu_cloud_tools() {
     curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
     echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ ${_cf_codename} main" | sudo tee "${_cf_sources}"
     sudo apt-get update
-    sudo DEBIAN_FRONTEND=noninteractive apt-get install cloudflare-warp -y
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install "${APT_CONFFILE_OPTS[@]}" cloudflare-warp -y
     if [[ -x $(command -v cloudflared) ]]; then
       printf "cloudflared is installed\\n"
     fi
@@ -651,8 +656,8 @@ _install_ubuntu_cloud_tools() {
     echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
   fi
   sudo apt update
-  sudo -H DEBIAN_FRONTEND=noninteractive apt install google-cloud-cli -y
-  sudo -H DEBIAN_FRONTEND=noninteractive apt install google-cloud-cli-app-engine-go -y
+  sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" google-cloud-cli -y
+  sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" google-cloud-cli-app-engine-go -y
 
   printf "Installing cf-terraforming Ubuntu\\n"
   if [[ ! -f ${HOME}/software_downloads/cf-terraforming_${CF_TERRAFORMING_VER}_linux_${_LINUX_ARCH}.tar.gz ]]; then
@@ -947,7 +952,7 @@ _install_ubuntu_albert() {
     return 2
   fi
   sudo -H DEBIAN_FRONTEND=noninteractive apt update
-  if ! sudo -H DEBIAN_FRONTEND=noninteractive apt install albert -y; then
+  if ! sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" albert -y; then
     log_warn "albert: apt install albert failed"
     return 2
   fi
@@ -965,7 +970,7 @@ _install_ubuntu_gui_tools() {
     echo "deb [arch=amd64 signed-by=/usr/share/keyrings/oracle-virtualbox-2016.gpg] http://download.virtualbox.org/virtualbox/debian $(. /etc/os-release && echo "$VERSION_CODENAME") contrib" | sudo tee /etc/apt/sources.list.d/virtualbox.list
     sudo -H apt update
     # shellcheck disable=SC2086 # package-name slot: apt install takes a list, and VIRTUALBOX_VER may hold more than one package
-    sudo -H DEBIAN_FRONTEND=noninteractive apt install ${VIRTUALBOX_VER} -y
+    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" ${VIRTUALBOX_VER} -y
     if [[ -x $(command -v vboxmanage) ]]; then
       printf "Virtualbox is installed\\n"
     fi
@@ -980,7 +985,7 @@ _install_ubuntu_gui_tools() {
     printf "Installing microsoft edge\\n"
     _install_ubuntu_edge_source
     sudo -H apt update
-    sudo -H DEBIAN_FRONTEND=noninteractive apt install microsoft-edge-stable -y
+    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" microsoft-edge-stable -y
   fi
 
   if [[ -n ${HAS_SNAP} ]]; then
@@ -1288,7 +1293,7 @@ _install_ubuntu_misc() {
     # 10.0 is stock on both live releases: noble 10.0.112-0ubuntu1~24.04.1 and
     # resolute 10.0.112-0ubuntu1~26.04.1, measured 2026-09-13. The guard stays for
     # whichever release drops 10.0 next.
-    sudo -H DEBIAN_FRONTEND=noninteractive apt install dotnet-sdk-10.0 -y || log_warn "dotnet-sdk-10.0 not available on this Ubuntu release; skipping"
+    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" dotnet-sdk-10.0 -y || log_warn "dotnet-sdk-10.0 not available on this Ubuntu release; skipping"
   fi
 
   if [[ -n ${HAS_DEVTOOLS} ]]; then
@@ -1308,7 +1313,7 @@ _install_ubuntu_misc() {
       # Installing `opentofu` failed with "Unable to locate package" on every
       # Ubuntu release, silently, because the `command -v tofu` check below
       # simply never fired. Measured on claude 2026-09-12.
-      sudo DEBIAN_FRONTEND=noninteractive apt-get install -y tofu
+      sudo DEBIAN_FRONTEND=noninteractive apt-get install "${APT_CONFFILE_OPTS[@]}" -y tofu
       if command -v tofu &>/dev/null; then
         printf "opentofu is installed\\n"
       fi

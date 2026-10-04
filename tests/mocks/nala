@@ -1,3 +1,9 @@
 #!/usr/bin/env bash
-printf "nala %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+# Drop APT_CONFFILE_OPTS from the recorded line so call-text assertions stay about the
+# command; the options are asserted by the "conffile argv" tests in
+# tests/setup_env/linux_ubuntu.bats and the full-upgrade argv test in
+# tests/setup_env/linux_shared.bats. ($* must be flattened first:
+# ${*//pat/} applies the pattern to each argument separately.)
+_all="$*"
+printf "nala %s\n" "${_all//-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold /}" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
 exit "${MOCK_NALA_EXIT:-0}"

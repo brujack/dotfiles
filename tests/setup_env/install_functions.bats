@@ -206,6 +206,23 @@ teardown() {
   refute_grep '^frontend: dpkg --install .*DEBIAN_FRONTEND=<unset>$' "${MOCK_CALLS_FILE}" -E
 }
 
+@test "conffile argv: volian dpkg --install restores deleted conffiles (confmiss) on both debs" {
+  export MOCK_UNAME_S=Linux
+  export MOCK_AWK_OS_NAME="Ubuntu"
+  export NOBLE=1
+  unset RESOLUTE
+  export HOME="${BATS_TEST_TMPDIR}"
+  mkdir -p "${BATS_TEST_TMPDIR}/software_downloads"
+  unset DEBIAN_FRONTEND
+  local _stub_dir
+  _stub_dir="$(argv_probe_stub_path dpkg)"
+  PATH="${_stub_dir}:${PATH}" run check_and_install_nala
+  [ "$status" -eq 0 ]
+  [ "$(grep -c '^argv: dpkg \[--install\]' "${MOCK_CALLS_FILE}")" -eq 2 ]
+  grep -qE '^argv: dpkg \[--install\]\[--force-confdef\]\[--force-confold\]\[--force-confmiss\]\[.*volian-archive-keyring_0\.2\.0_all\.deb\]$' "${MOCK_CALLS_FILE}"
+  grep -qE '^argv: dpkg \[--install\]\[--force-confdef\]\[--force-confold\]\[--force-confmiss\]\[.*volian-archive-nala_0\.2\.0_all\.deb\]$' "${MOCK_CALLS_FILE}"
+}
+
 @test "check_and_install_nala on RESOLUTE uses apt install, skips volian wget" {
   export MOCK_UNAME_S=Linux
   export MOCK_AWK_OS_NAME="Ubuntu"

@@ -513,7 +513,7 @@ install_github_cli_linux() {
     sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
     sudo -H apt update
-    sudo -H DEBIAN_FRONTEND=noninteractive apt install gh
+    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" gh
     if [[ -x $(command -v gh) ]]; then
       printf "gh is installed Ubuntu\\n"
     fi
@@ -528,7 +528,7 @@ setup_ansible() {
       # ubuntu_common_packages.txt has these, but they may be absent when
       # running -t ansible without -t developer, or if nala failed on a new
       # Ubuntu release (e.g. 26.04 resolute where zlib1g-dev caused BUILD FAILED).
-      sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+      sudo DEBIAN_FRONTEND=noninteractive apt-get install "${APT_CONFFILE_OPTS[@]}" -y \
         zlib1g-dev libssl-dev libbz2-dev libffi-dev \
         libreadline-dev libsqlite3-dev liblzma-dev tk-dev \
         uuid-dev libdb-dev libgdbm-dev libgdbm-compat-dev libnss3-dev \

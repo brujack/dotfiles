@@ -216,6 +216,57 @@ EOF
   [ "$status" -ne 0 ]
 }
 
+# One bracketed line per xargs invocation; every one must carry the options after
+# `nala install` and before -y, so a dropped -o or a misplaced array fails.
+_NALA_CONFFILE_ARGV='argv: xargs [-r][sudo][DEBIAN_FRONTEND=noninteractive][nala][install][-o][Dpkg::Options::=--force-confdef][-o][Dpkg::Options::=--force-confold][-y]'
+
+@test "conffile argv: noble base install passes the conffile options on every nala call" {
+  cd "${REPO_ROOT}"
+  export NOBLE=1
+  unset RESOLUTE HAS_SNAP
+  local _stub_dir
+  _stub_dir="$(argv_probe_stub_path xargs)"
+  PATH="${_stub_dir}:${PATH}" run _install_ubuntu_base_packages
+  [ "$status" -eq 0 ]
+  [ "$(grep -c '^argv: xargs ' "${MOCK_CALLS_FILE}")" -eq 2 ]
+  [ "$(grep -cxF "${_NALA_CONFFILE_ARGV}" "${MOCK_CALLS_FILE}")" -eq 2 ]
+}
+
+@test "conffile argv: resolute base install passes the conffile options on every nala call" {
+  cd "${REPO_ROOT}"
+  export RESOLUTE=1
+  unset NOBLE HAS_SNAP
+  local _stub_dir
+  _stub_dir="$(argv_probe_stub_path xargs)"
+  PATH="${_stub_dir}:${PATH}" run _install_ubuntu_base_packages
+  [ "$status" -eq 0 ]
+  [ "$(grep -c '^argv: xargs ' "${MOCK_CALLS_FILE}")" -eq 2 ]
+  [ "$(grep -cxF "${_NALA_CONFFILE_ARGV}" "${MOCK_CALLS_FILE}")" -eq 2 ]
+}
+
+@test "conffile argv: workstation install passes the conffile options on its nala call" {
+  cd "${REPO_ROOT}"
+  export NOBLE=1 HAS_SNAP=1
+  unset RESOLUTE
+  local _stub_dir
+  _stub_dir="$(argv_probe_stub_path xargs)"
+  PATH="${_stub_dir}:${PATH}" run _install_ubuntu_workstation
+  [ "$status" -eq 0 ]
+  # Two xargs calls: the nala package install and the snap install (no apt, no options).
+  [ "$(grep -c '^argv: xargs ' "${MOCK_CALLS_FILE}")" -eq 2 ]
+  [ "$(grep -cxF "${_NALA_CONFFILE_ARGV}" "${MOCK_CALLS_FILE}")" -eq 1 ]
+}
+
+@test "conffile argv: powershell apt install gets the conffile options in order" {
+  _PWSH_BIN="$(_pwsh_stub_bin 1)"
+  unset DEBIAN_FRONTEND
+  local _stub_dir
+  _stub_dir="$(argv_probe_stub_path apt)"
+  PATH="${_stub_dir}:${PATH}" run _install_ubuntu_powershell
+  [ "$status" -eq 0 ]
+  grep -qxF 'argv: apt [install][-o][Dpkg::Options::=--force-confdef][-o][Dpkg::Options::=--force-confold][powershell][-y]' "${MOCK_CALLS_FILE}"
+}
+
 @test "_install_ubuntu_workstation: HAS_SNAP uses nala for workstation packages" {
   cd "${REPO_ROOT}"
   export NOBLE=1
@@ -505,6 +556,17 @@ _ms_require_gnu_ar() {
   PATH="${_stub_dir}:${PATH}" run _install_ubuntu_powershell
   [ "$status" -eq 0 ]
   grep -qE '^frontend: dpkg -i .*DEBIAN_FRONTEND=noninteractive$' "${MOCK_CALLS_FILE}"
+}
+
+@test "conffile argv: powershell dpkg -i restores a deleted conffile (confmiss) and keeps the rest" {
+  _PWSH_BIN="$(_pwsh_stub_bin 1)"
+  unset DEBIAN_FRONTEND
+  local _stub_dir
+  _stub_dir="$(argv_probe_stub_path dpkg)"
+  PATH="${_stub_dir}:${PATH}" run _install_ubuntu_powershell
+  [ "$status" -eq 0 ]
+  [ "$(grep -c '^argv: dpkg ' "${MOCK_CALLS_FILE}")" -eq 1 ]
+  grep -qE '^argv: dpkg \[-i\]\[--force-confdef\]\[--force-confold\]\[--force-confmiss\]\[.*packages-microsoft-prod\.deb\]$' "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_powershell: apt install succeeding does not mean pwsh runs" {

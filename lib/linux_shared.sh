@@ -21,7 +21,7 @@ install_git_linux() {
     || log_warn "PPA add failed — continuing with distro git"
   sudo -H apt update \
     || log_warn "apt update failed — package index may be stale"
-  sudo -H DEBIAN_FRONTEND=noninteractive apt install git -y \
+  sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" git -y \
     || { log_error "Failed to install git"; return 1; }
   log_info "Installed git"
 }
@@ -35,7 +35,7 @@ install_zsh_linux() {
   log_info "Installing zsh via apt"
   sudo -H apt update \
     || log_warn "apt update failed — package index may be stale"
-  sudo -H DEBIAN_FRONTEND=noninteractive apt install zsh zsh-doc -y \
+  sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" zsh zsh-doc -y \
     || { log_error "Failed to install zsh"; return 1; }
   log_info "Installed zsh"
 }
@@ -47,7 +47,7 @@ install_bats_linux() {
   fi
 
   log_info "Installing bats"
-  sudo -H DEBIAN_FRONTEND=noninteractive apt-get install -y bats
+  sudo -H DEBIAN_FRONTEND=noninteractive apt-get install "${APT_CONFFILE_OPTS[@]}" -y bats
 }
 
 update_apt_packages() {
@@ -61,14 +61,13 @@ update_apt_packages() {
   #
   # With stdin closed dpkg cannot answer a conffile prompt: it fails "end of file
   # on stdin at conffile prompt" and leaves the package unpacked but unconfigured.
-  # confdef+confold keeps the local edit and writes the package copy as
+  # APT_CONFFILE_OPTS (confdef+confold) keeps the local edit and writes the package copy as
   # .dpkg-dist, the same choice unattended-upgrades makes. Measured 2026-09-16.
   #
   # DEBIAN_FRONTEND is set as well, for a different hang: apt's needrestart
   # Post-Invoke hook raises a debconf dialog when stdout is not a tty, and sudo
   # does not pass the caller's value through, so it must sit on this command line.
-  sudo -H DEBIAN_FRONTEND=noninteractive nala full-upgrade -y \
-    -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold \
+  sudo -H DEBIAN_FRONTEND=noninteractive nala full-upgrade "${APT_CONFFILE_OPTS[@]}" -y \
     < /dev/null || { log_error "nala full-upgrade failed"; return 1; }
   sudo -H DEBIAN_FRONTEND=noninteractive nala autoremove -y < /dev/null || { log_error "nala autoremove failed"; return 1; }
   log_info "Updated apt packages"

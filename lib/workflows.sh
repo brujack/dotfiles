@@ -416,7 +416,7 @@ run_setup_user() {
   if [[ -d ${HOME}/bin ]]; then
     if [[ -n ${UBUNTU} ]]; then
       sudo -H apt update
-      sudo -H DEBIAN_FRONTEND=noninteractive apt install curl -y
+      sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" curl -y
     fi
     curl -fsS -o "${HOME}/bin/cht.sh" https://cht.sh/:cht.sh \
       && chmod 750 "${HOME}"/bin/cht.sh

@@ -4,7 +4,8 @@
 # Installs Homebrew prerequisites and Homebrew.
 
 # shellcheck source=lib/constants.sh
-source "$(dirname "${BASH_SOURCE[0]}")/../lib/constants.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../lib/constants.sh" \
+  || { printf "[ERROR] cannot source lib/constants.sh\n" >&2; exit 1; }
 
 _bootstrap_check_linux() {
   if [[ $(uname -s) != "Linux" ]]; then
@@ -32,7 +33,7 @@ _bootstrap_linux_install_prereqs() {
     ubuntu)
       printf "[INFO]  Installing Homebrew prerequisites (Ubuntu)...\n"
       sudo apt-get update || return 1
-      sudo DEBIAN_FRONTEND=noninteractive apt-get install -y build-essential curl file git procps || return 1
+      sudo DEBIAN_FRONTEND=noninteractive apt-get install "${APT_CONFFILE_OPTS[@]}" -y build-essential curl file git procps || return 1
       ;;
     *)
       printf "[WARN]  Unknown distro. Ensure Homebrew prerequisites are installed: build tools, curl, file, git, procps.\n"

@@ -1021,6 +1021,7 @@ EOF
   _doctor_check_aws_key_expiry() { :; }
   _doctor_check_gnu_coreutils() { :; }
   _doctor_check_pyenv_shims()   { :; }
+  _doctor_check_conffile_dist() { :; }
   _doctor_check_plugin_node_paths() { :; }
   run_doctor
   [ "${_called}" -eq 1 ]
@@ -1040,6 +1041,7 @@ EOF
   _doctor_check_github_mcp()    { doctor_warn "test" "a warning"; }
   _doctor_check_gnu_coreutils() { :; }
   _doctor_check_pyenv_shims()   { :; }
+  _doctor_check_conffile_dist() { :; }
   _doctor_check_plugin_node_paths() { :; }
   run run_doctor
   [[ "$output" == *"1 warnings"* ]]
@@ -1448,6 +1450,7 @@ EOF
   _doctor_check_github_mcp()    { :; }
   _doctor_check_gnu_coreutils() { :; }
   _doctor_check_pyenv_shims()   { :; }
+  _doctor_check_conffile_dist() { :; }
   _doctor_check_plugin_node_paths() { :; }
   export PROFILE="unknown"
   _PROFILES_LOADED=1
@@ -2510,6 +2513,7 @@ STUB
   _doctor_check_aws_key_expiry() { :; }
   _doctor_check_github_mcp()    { :; }
   _doctor_check_pyenv_shims()   { :; }
+  _doctor_check_conffile_dist() { :; }
   _doctor_check_plugin_node_paths() { :; }
   run_doctor
   [ "${_called}" -eq 1 ]
@@ -2549,4 +2553,12 @@ STUB
   _block="$(awk '/^Host github\.com$/{f=1;next} /^Host /{f=0} f' "${REPO_ROOT}/.ssh/config")"
   [ -n "${_block}" ]
   printf '%s\n' "${_block}" | grep -qE '^[[:space:]]*IdentityFile[[:space:]]+~/\.ssh/github$'
+}
+
+@test "APT_CONFFILE_OPTS is the exact four-element conffile option list" {
+  [ "${#APT_CONFFILE_OPTS[@]}" -eq 4 ]
+  [ "${APT_CONFFILE_OPTS[0]}" = "-o" ]
+  [ "${APT_CONFFILE_OPTS[1]}" = "Dpkg::Options::=--force-confdef" ]
+  [ "${APT_CONFFILE_OPTS[2]}" = "-o" ]
+  [ "${APT_CONFFILE_OPTS[3]}" = "Dpkg::Options::=--force-confold" ]
 }

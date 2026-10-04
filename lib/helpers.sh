@@ -272,12 +272,16 @@ check_and_install_nala() {
         if [[ -z ${RESOLUTE} ]]; then
           # Noble and earlier: bootstrap via volian archive .deb
           wget -O "${HOME}"/software_downloads/volian-archive-keyring_0.2.0_all.deb https://gitlab.com/-/project/39215670/uploads/d9473098bc12525687dc9aca43d50159/volian-archive-keyring_0.2.0_all.deb
-          sudo -H DEBIAN_FRONTEND=noninteractive dpkg --install "${HOME}"/software_downloads/volian-archive-keyring_0.2.0_all.deb
+          # --force-confmiss: vendor keyring/source only, restoring a deleted conffile is
+          # always right here (see _install_ubuntu_powershell in lib/linux_ubuntu.sh);
+          # used on these archive-setup debs only.
+          sudo -H DEBIAN_FRONTEND=noninteractive dpkg --install --force-confdef --force-confold --force-confmiss "${HOME}"/software_downloads/volian-archive-keyring_0.2.0_all.deb
           wget -O "${HOME}"/software_downloads/volian-archive-nala_0.2.0_all.deb https://gitlab.com/-/project/39215670/uploads/d00e44faaf2cc8aad526ca520165a0af/volian-archive-nala_0.2.0_all.deb
-          sudo -H DEBIAN_FRONTEND=noninteractive dpkg --install "${HOME}"/software_downloads/volian-archive-nala_0.2.0_all.deb
+          # --force-confmiss: vendor apt source/pin only; see the keyring call above.
+          sudo -H DEBIAN_FRONTEND=noninteractive dpkg --install --force-confdef --force-confold --force-confmiss "${HOME}"/software_downloads/volian-archive-nala_0.2.0_all.deb
           sudo -H apt update
         fi
-        sudo -H DEBIAN_FRONTEND=noninteractive apt install nala -y
+        sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" nala -y
       fi
     fi
   fi
@@ -475,6 +479,7 @@ run_doctor() {
   _doctor_check_aws_key_expiry
   _doctor_check_github_mcp
   _doctor_check_gnu_coreutils
+  _doctor_check_conffile_dist
   _doctor_check_pyenv_shims
   _doctor_check_plugin_node_paths
   _doctor_check_renovate_cadence
@@ -909,6 +914,38 @@ _doctor_check_github_mcp() {
   else
     doctor_pass "GITHUB_PAT_EXPIRY (${GITHUB_PAT_EXPIRY}, ${_diff_days} days)"
   fi
+}
+
+_doctor_check_conffile_dist() {
+  # Why this exists: apt/dpkg installs here answer conffile prompts unattended
+  # (confold keeps the operator's file), which removed the prompt that used to
+  # surface the packaged version. The package's copy lands beside the live file
+  # as *.dpkg-dist (or *.ucf-dist for ucf-managed files), and this check keeps
+  # reporting it on every doctor run until someone merges and deletes it.
+  # No timestamp test: dpkg preserves the archive mtime on .dpkg-dist, so age
+  # says nothing about when it was written. Run unprivileged, find skips
+  # root-only directories under /etc (7 on claude, none holding conffiles).
+  # *.dpkg-new / *.ucf-new are deliberately not matched: they mean an
+  # interrupted install, which needs a different remedy. Reports only; never
+  # moves or deletes, and never fails (the file is the operator's to decide).
+  # Spec: docs/superpowers/specs/2026-10-03-apt-conffile-noninteractive-design.md
+  [[ -n ${LINUX} ]] || return 0
+  printf "\nKept conffile copies:\n"
+  local _root="${_OVERRIDE_CONFFILE_DIST_ROOT:-/etc}" _f _live _n=0
+  if [[ ! -d "${_root}" || ! -r "${_root}" ]]; then
+    doctor_warn "${_root}" "not a readable directory; cannot scan for .dpkg-dist/.ucf-dist"
+    return 0
+  fi
+  while IFS= read -r -d '' _f; do
+    _n=$(( _n + 1 ))
+    # Strip exactly one known suffix, so foo.conf.dpkg-dist -> foo.conf.
+    case "${_f}" in
+      *.dpkg-dist) _live="${_f%.dpkg-dist}" ;;
+      *) _live="${_f%.ucf-dist}" ;;
+    esac
+    doctor_warn "${_f}" "package copy kept beside your file; diff it against ${_live}, merge, then delete it (empty diff: just delete)"
+  done < <(find "${_root}" \( -name '*.dpkg-dist' -o -name '*.ucf-dist' \) -print0 2>/dev/null)
+  [[ ${_n} -gt 0 ]] || doctor_pass "no .dpkg-dist or .ucf-dist under ${_root}"
 }
 
 _doctor_check_gnu_coreutils() {

@@ -252,7 +252,10 @@ The real-tool proof is V1 and V2 below. The bats suite never runs a real apt or 
 
 ## Amendments
 
+- R7 -> `scripts/bootstrap_linux.sh`'s `apt-get install` carries `"${APT_CONFFILE_OPTS[@]}"`. — the spec's premise was false: the script sources `lib/constants.sh` at its line 7, before any install (found by the Task 2 code-quality review).
 - V1 -> On claude, re-run the §2 `dotfiles-cfprobe` probe through a changed `xargs … nala install` line (stdin `/dev/null`, edited conffile, v1 to v2). Expect rc 0, state `ii`, local edit kept, `.dpkg-dist` written, and `setup_env.sh -t doctor` WARNing on it. Then delete only the probe's `.dpkg-dist` and confirm the next doctor run no longer names it; `/etc/default/grub.ucf-dist` is left for the operator. — plan-time non-goal check: deleting a pre-existing operator file is not the plan's call.
+- finding R5 (2026-10-04, reviewer A): DIFFERS — All three dpkg calls carry --force-confdef --force-confold --force-confmiss and the powershell and volian-keyring comments say why and that confmiss is used on these debs only, but the volian-archive-nala comment (helpers.sh:280) says only 'vendor apt source/pin only; see the keyring call above' and does not itself state that confmiss is used nowhere else.
+- R5 reviewed: the volian-archive-nala comment points to the keyring comment directly above it, which states confmiss is limited to these vendor debs; together they meet R5 — not a deviation.
 
 ## Multi-Lens Review
 
@@ -305,3 +308,26 @@ Disposition: Addressed (author, 2026-10-03, at operator's direction) — (1) mea
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+## Spec alignment (2026-10-04)
+
+- spec: docs/superpowers/specs/2026-10-03-apt-conffile-noninteractive-design.md
+- anchor: bd9e5ccf44b3f3c68fc7635f3d83ce98c40efa69
+- in scope: R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14, R15, R16, R17, R18, R19
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+| R5 | A | DIFFERS | All three dpkg calls carry --force-confdef --force-confold --force-confmiss and the powershell and volian-keyring comments say why and that confmiss is used on these debs only, but the volian-archive-nala comment (helpers.sh:280) says only 'vendor apt source/pin only; see the keyring call above' and does not itself state that confmiss is used nowhere else. | - R5 reviewed: the volian-archive-nala comment points to the keyring comment directly above it, which states confmiss is limited to these vendor debs; together they meet R5 — not a deviation. |
+
+### Reviewed
+
+- R5 reviewed: the volian-archive-nala comment points to the keyring comment directly above it, which states confmiss is limited to these vendor debs; together they meet R5 — not a deviation.
+
+### Verifications
+
+- V1: claude 2026-10-03: real xargs+nala line (identical to linux_ubuntu.sh:46 bar the list file), stdin /dev/null, edited conffile, v1->v2: rc 0, ii 2.0, local edit kept, .dpkg-dist written; setup_env.sh -t doctor WARNed on it; after deleting only the probe .dpkg-dist the next doctor run no longer named it; grub.ucf-dist left alone. Probe purged, source removed.
+- V2: claude 2026-10-03, flags copied from final linux_ubuntu.sh dpkg -i (--force-confdef --force-confold --force-confmiss): iU with deleted conffile -> rc 0, ii, file restored; ii with deleted conffile, same-version reinstall -> rc 0, ii, file restored. Probe purged.
+- V3: Orchestrator O3 at 76a6e91d: array off linux_ubuntu.sh:46 -> real-tree gate + noble argv test red; confmiss off volian keyring -> confmiss test + volian argv red; stray apt confmiss -> confmiss test red; verb list NOMATCH -> fixtures red, and after 0598cdc9 the real-tree per-family count red; doctor find nomatch -> nested/old-mtime cases red.
