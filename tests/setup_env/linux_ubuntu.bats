@@ -982,6 +982,25 @@ _go_stamp() { printf '%s/go' "${_DL_STAMP_DIR}"; }
   [ ! -e "${_GO_INSTALL_ROOT}/go.old/go" ]
 }
 
+@test "_install_ubuntu_go: a go.old that survives its delete is never moved onto, so nothing nests" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  _seed_go
+  mkdir -p "${_GO_INSTALL_ROOT}/go.old/bin"
+  printf 'stale' > "${_GO_INSTALL_ROOT}/go.old/bin/v"
+  # An rm that leaves go.old alone, as a delete that silently did nothing would.
+  local _shim="${BATS_TEST_TMPDIR}/rmshim"
+  mkdir -p "${_shim}"
+  printf '#!/usr/bin/env bash\n[[ "$*" == *go.old* ]] && exit 0\nexec /bin/rm "$@"\n' > "${_shim}/rm"
+  /bin/chmod +x "${_shim}/rm"
+  PATH="${_shim}:${PATH}" run _install_ubuntu_go
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"go: swap failed"* ]]
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "old" ]
+  [ ! -e "${_GO_INSTALL_ROOT}/go.old/go" ]
+  refute_grep "^mv " "${MOCK_CALLS_FILE}"
+}
+
 @test "_install_ubuntu_go: an unwritable stamp warns and still succeeds" {
   _make_go_tarball
   _go_stub 1.27.1
@@ -1389,35 +1408,33 @@ exit 0'
 
 # ── _install_go_from_tarball ──────────────────────────────────────────────────
 
-@test "_install_go_from_tarball: moves software_downloads/go to /usr/local/go when present" {
-  export GO_VER="1.26"
-  export GO_DOWNLOAD_FILENAME="go1.26.linux-amd64.tar.gz"
-  export GO_DOWNLOAD_URL="https://dl.google.com/go/go1.26.linux-amd64.tar.gz"
-  mkdir -p "${HOME}/software_downloads/go"
-  export MOCK_SUDO_EXIT=1
+@test "_install_go_from_tarball: moves the extracted tree into the install root" {
+  _make_go_tarball
   run _install_go_from_tarball
   [ "$status" -eq 0 ]
-  grep -q "sudo mv.*software_downloads/go" "${MOCK_CALLS_FILE}"
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "new" ]
+  grep -q "^mv .*/go ${_GO_INSTALL_ROOT}/go\$" "${MOCK_CALLS_FILE}"
 }
 
-@test "_install_go_from_tarball: wget failure returns non-zero and does not call sudo rm -rf" {
-  export GO_VER="1.27"
-  export GO_DOWNLOAD_FILENAME="go1.27.1.linux-amd64.tar.gz"
-  export GO_DOWNLOAD_URL="https://go.dev/dl/go1.27.1.linux-amd64.tar.gz"
+@test "_install_go_from_tarball: wget failure returns non-zero and leaves the installed tree" {
+  _seed_go
   export MOCK_WGET_EXIT=1
   run _install_go_from_tarball
   [ "$status" -ne 0 ]
-  ! grep -qF "sudo rm -rf /usr/local/go" "${MOCK_CALLS_FILE}"
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "old" ]
+  refute_grep "^mv " "${MOCK_CALLS_FILE}"
 }
 
-@test "_install_go_from_tarball: tar failure returns non-zero and does not call sudo rm -rf" {
-  export GO_VER="1.27"
-  export GO_DOWNLOAD_FILENAME="go1.27.1.linux-amd64.tar.gz"
-  export GO_DOWNLOAD_URL="https://go.dev/dl/go1.27.1.linux-amd64.tar.gz"
+@test "_install_go_from_tarball: tar failure returns non-zero and leaves the installed tree" {
+  _seed_go
+  # The recording tar mock, not the real one the setup seam selects.
+  unset _DL_TAR_BIN
   export MOCK_TAR_EXIT=1
   run _install_go_from_tarball
   [ "$status" -ne 0 ]
-  ! grep -qF "sudo rm -rf /usr/local/go" "${MOCK_CALLS_FILE}"
+  grep -q "^tar " "${MOCK_CALLS_FILE}"
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "old" ]
+  refute_grep "^mv " "${MOCK_CALLS_FILE}"
 }
 
 # ── _install_ubuntu_docker ───────────────────────────────────────────────────

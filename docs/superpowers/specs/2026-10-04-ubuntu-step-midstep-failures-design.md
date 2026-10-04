@@ -379,6 +379,7 @@ Every new check gets a mutation control: delete the check and confirm its test g
 ## Amendments
 
 - N5 -> No sha256 pins are added for the helper-installed tools, and no file under `~/software_downloads` that existed before the run is deleted; the helpers' own throwaway directories there are created and removed by the run. — plan non-goal check found the throwaway directory literally violated the original wording.
+- R12 -> Go is extracted in a throwaway directory, chowned to `root:root` before the swap, and swapped in with plain `mv` after verifying each move's destination is absent; a `go.old` is deleted beforehand only when `/usr/local/go` exists, and is moved back instead when it does not, a failed move-back failing the sub-install without touching `go.old`; if the new tree's move fails after the old tree was moved aside, the old tree is restored; `go.old` is deleted only after the new tree is in place; the stamp is written only after the swap succeeded; the throwaway directory is removed with `sudo rm -rf`. — macOS `mv` has no `-T` and the test-macos job runs this suite; an absence check before each move gives the same no-nesting guarantee.
 
 ## Multi-Lens Review
 

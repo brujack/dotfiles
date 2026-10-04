@@ -231,40 +231,108 @@ _install_ubuntu_powershell() {
   printf "pwsh is installed\\n"
 }
 
+# Install the pinned Go tarball into ${_GO_INSTALL_ROOT:-/usr/local}/go. The
+# tarball is extracted in a throwaway directory under the same root (so the
+# moves below are renames), chowned to root:root (tar ran as the user and a
+# rename keeps ownership), then swapped in. Every move's destination is checked
+# absent first instead of using `mv -T`, which macOS mv lacks and the
+# test-macos job runs this suite. The previous tree is kept as go.old until the
+# new one is in place and is restored if the new tree's move fails. The stamp
+# `go` holds the URL and is written only after the swap succeeded, so an
+# interrupted run installs again next time.
+# Returns 0 installed or up to date; 1 on a failed stage (named in a warning).
+# Seams, read at call time: _GO_INSTALL_ROOT, _DL_STAMP_DIR, _DL_TAR_BIN. The
+# owner is hardcoded root:root so an inherited variable cannot choose it.
+# No EXIT/RETURN trap (check-lib-exit-traps.sh; shell.md): every path after
+# mktemp reaches the explicit sudo rm -rf below.
 _install_go_from_tarball() {
-  if [[ ! -f ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} ]]; then
-    wget -O "${HOME}"/software_downloads/"${GO_DOWNLOAD_FILENAME}" "${GO_DOWNLOAD_URL}" || return 1
-    tar xvf "${HOME}"/software_downloads/"${GO_DOWNLOAD_FILENAME}" -C "${HOME}"/software_downloads/ || return 1
-    if [[ -d ${HOME}/software_downloads/go ]]; then
-      # Only remove the existing installation once we know extraction succeeded
-      if [[ -d /usr/local/go ]]; then
-        sudo rm -rf /usr/local/go
-      fi
-      sudo mv "${HOME}"/software_downloads/go /usr/local/go
-      sudo chmod 755 /usr/local/go
-      sudo chown -R root:root /usr/local/go
-    fi
-    if [[ -d ${HOME}/software_downloads/go ]]; then
-      rm -rf "${HOME}"/software_downloads/go
+  local _root="${_GO_INSTALL_ROOT:-/usr/local}"
+  local _stamp="${_DL_STAMP_DIR:-${HOME}/.local/share/dotfiles/installed}/go"
+  local _tmp _stage="" _moved=0
+
+  if [[ -f ${_stamp} && -x ${_root}/go/bin/go && "$(< "${_stamp}")" == "${GO_DOWNLOAD_URL}" ]]; then
+    printf 'go: up to date (stamp %s); rm it to force a re-install\n' "${_stamp}"
+    return 0
+  fi
+
+  mkdir -p "${_DL_TMP_ROOT:-${HOME}/software_downloads}" || {
+    log_warn "go: workdir failed"
+    return 1
+  }
+  _tmp="$(mktemp -d "${_DL_TMP_ROOT:-${HOME}/software_downloads}/.dl.XXXXXXXX")" || {
+    log_warn "go: workdir failed"
+    return 1
+  }
+
+  if ! wget -O "${_tmp}/go.tgz" "${GO_DOWNLOAD_URL}"; then
+    _stage="download"
+  elif ! "${_DL_TAR_BIN:-tar}" -xzf "${_tmp}/go.tgz" -C "${_tmp}"; then
+    _stage="extract"
+  elif ! [[ -f ${_tmp}/go/bin/go && ! -L ${_tmp}/go/bin/go && -s ${_tmp}/go/bin/go ]]; then
+    _stage="extract"
+  elif ! sudo chown -R root:root "${_tmp}/go"; then
+    _stage="chown"
+  elif [[ ! -e ${_root}/go && ( -e ${_root}/go.old || -L ${_root}/go.old ) ]] \
+    && ! sudo mv "${_root}/go.old" "${_root}/go"; then
+    # A previous run's restore failed, so go.old may be the only good copy.
+    _stage="restore"
+  fi
+  if [[ -z ${_stage} ]]; then
+    # Reached with go.old either absent or beside a live go; it is stale now.
+    if [[ -e ${_root}/go ]]; then
+      sudo rm -rf "${_root}/go.old" || _stage="swap"
     fi
   fi
+  if [[ -z ${_stage} && -e ${_root}/go ]]; then
+    if [[ -e ${_root}/go.old || -L ${_root}/go.old ]] || ! sudo mv "${_root}/go" "${_root}/go.old"; then
+      _stage="swap"
+    else
+      _moved=1
+    fi
+  fi
+  if [[ -z ${_stage} ]]; then
+    if [[ -e ${_root}/go || -L ${_root}/go ]] || ! sudo mv "${_tmp}/go" "${_root}/go"; then
+      _stage="install"
+      if [[ ${_moved} -eq 1 ]] && ! sudo mv "${_root}/go.old" "${_root}/go"; then
+        log_warn "go: could not restore the previous tree; it is at ${_root}/go.old"
+      fi
+    elif [[ ${_moved} -eq 1 ]]; then
+      sudo rm -rf "${_root}/go.old" || log_warn "go: could not remove ${_root}/go.old"
+    fi
+  fi
+  sudo rm -rf "${_tmp}"
+  if [[ -n ${_stage} ]]; then
+    log_warn "go: ${_stage} failed"
+    return 1
+  fi
+
+  if ! { mkdir -p "$(dirname "${_stamp}")" && printf '%s\n' "${GO_DOWNLOAD_URL}" > "${_stamp}"; } 2> /dev/null; then
+    log_warn "go: could not write stamp ${_stamp}; it will be re-installed next run"
+  fi
+  return 0
 }
 
 _install_ubuntu_go() {
   printf "Installing Go Ubuntu\\n"
-  sudo -H apt update
-  _install_go_from_tarball
+  # Best effort: the Go install below does not use apt, so a stale index here
+  # must not block it (the base step reports apt update failures once).
+  sudo -H apt update || :
+  _install_go_from_tarball || return 1
   # /usr/local/go/bin reaches PATH only via 6_path.zsh, which interactive zsh
   # alone sources -- so during a provision this probe resolved nothing and
   # printed "go: command not found" twice. Prefer the absolute install path,
   # fall back to PATH so an existing `go` (and the suite's mock) still drives it.
   local _go_bin="${_GO_BIN:-}"
   if [[ -z "${_go_bin}" ]]; then
-    if [[ -x /usr/local/go/bin/go ]]; then _go_bin=/usr/local/go/bin/go; else _go_bin=go; fi
+    if [[ -x ${_GO_INSTALL_ROOT:-/usr/local}/go/bin/go ]]; then _go_bin="${_GO_INSTALL_ROOT:-/usr/local}/go/bin/go"; else _go_bin=go; fi
   fi
   INSTALLED_GO_VER=$("${_go_bin}" version 2>/dev/null | awk '{print $3}' | sed 's/go//g')
-  if [[ ${INSTALLED_GO_VER} == "${GO_VER}" ]]; then
+  # GO_VER is a series ("1.27") while the toolchain reports a patch ("1.27.1").
+  if [[ ${INSTALLED_GO_VER} == "${GO_VER}" || ${INSTALLED_GO_VER} == "${GO_VER}".* ]]; then
     printf "Go %s is installed\\n" "${GO_VER}"
+  else
+    log_warn "go: version check failed (installed ${INSTALLED_GO_VER:-none}, want ${GO_VER})"
+    return 1
   fi
 }
 
