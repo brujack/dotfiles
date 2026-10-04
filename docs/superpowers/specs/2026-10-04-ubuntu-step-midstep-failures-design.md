@@ -42,9 +42,25 @@ four distinct shapes. The first is worse than the row describes.
    `_install_ubuntu_base_packages` returns 0 after unchecked installs (`:58-62`) for the same
    historical reason.
 
-Steps that already check every command, and are out of scope: `_install_ubuntu_rust`,
-`_install_ubuntu_nvidia`, `_install_ubuntu_brew_packages` (tri-state) and
-`_install_ubuntu_albert`.
+5. **Guards keyed on the download, not the install.** kind, the five HashiCorp tools,
+   cf-terraforming, docker-compose, yq and Go skip their whole sub-install when the downloaded
+   file or extracted directory exists in `~/software_downloads` (`:235`, `:506`, `:551-600`,
+   `:663`, `:1264`, `:1277`). So any failure after the download (the `cp`, the `mv`, a
+   `chmod`) leaves an artifact that makes every later run skip the tool and report success,
+   with the tool never installed. cf-terraforming extracts with `-C ~/software_downloads`, into
+   the directory every other tool's guard lives in.
+6. **Keyrings written in place.** `curl … | sudo gpg --dearmor --yes -o <live keyring>`
+   (teleport `:616`, cloudflare `:633`) truncates the live keyring even when curl fails:
+   measured on gpg 2.4.8, a keyring holding `old` given empty input through
+   `--batch --yes --dearmor -o` exits 2 and leaves 0 bytes. docker's `sudo curl -o` writes its
+   key straight onto the live file (`:441`). A failed fetch therefore breaks that source for
+   every later `apt update` until the step runs clean again.
+
+Steps out of scope: `_install_ubuntu_rust`, `_install_ubuntu_brew_packages` (tri-state) and
+`_install_ubuntu_albert` already check every command. `_install_ubuntu_nvidia` checks every
+command but has two producer-blind pipelines (`curl | sudo gpg --dearmor`, and
+`curl | sed | sudo tee` for its source list); those two lines come into scope and nothing else
+in nvidia changes.
 
 ## Design
 
@@ -55,70 +71,127 @@ each HashiCorp product; teleport, cloudflared, gcloud and cf-terraforming inside
 The full list is in the table below.
 
 - **Inside a sub-install, fail fast.** The first failed command stops that sub-install
-  before any later command runs. In particular, a failed download stops before the `cp`,
-  `mv`, `install` or `unzip` that would consume it.
-- **A failed download or extract removes what it left behind.** `wget -O` leaves a 0-byte
-  file on failure, and the go, kind, consul, vault, nomad, packer, vagrant, cf-terraforming,
-  docker-compose and yq sub-installs skip the download whenever that file (or the extracted
-  directory) exists. Without cleanup, fail-fast turns one network blip into a failure no
-  re-run can clear. So the failing branch deletes the partial download and any partial
-  extraction directory before returning.
+  before any later command runs.
 - **Across sub-installs, degrade.** A failed sub-install does not stop its siblings. One dead
   release URL must not cost kubectl, just as one failed step no longer costs the next step.
   This costs a per-URL mock knob and a sibling assertion per test, and it is worth paying: a
   re-run recovers only if the operator notices the failure, and a fail-the-step design would
   re-create inside a step the coupling #298 removed between steps.
 - **Name each failure.** A failed sub-install logs
-  `log_warn "<step>: <tool>: <action> failed"`. `<action>` is the command that failed, e.g.
+  `log_warn "<step>: <tool>: <action> failed"`. `<action>` is the stage that failed, e.g.
   `download`, `extract`, `install`, `apt install docker-ce`.
-- **Step status.** A step returns 0 only when every sub-install it attempted succeeded.
-  Otherwise it returns 1. The dispatcher already treats any non-zero step status as a failed
-  step.
+- **Step status.** A step returns 0 only when every sub-install it attempted succeeded,
+  otherwise 1 (docker: 3 or 1, below). The step ends with an explicit status, so no step can
+  end on a skipped `if` again.
 
-The idiom is a step-local `_failed` array with one function or block per sub-install. Each
-sub-install chains its commands with `|| { log_warn …; return 1; }` inside its own function,
-or uses a `|| _failed+=(…)` guard. This mirrors `_install_ubuntu_brew_packages`, the only step
-that already has the shape. The step ends with an explicit
-`(( ${#_failed[@]} == 0 ))`, so no step can end on a skipped `if` again.
+The idiom is a step-local `_failed` array with one function or block per sub-install,
+mirroring `_install_ubuntu_brew_packages`.
 
-Where a sub-install already has a per-tool download/verify/install helper
-(`_install_pinned_release_binary`, `_install_go_from_tarball`), the fix lands in the helper.
-Where several sub-installs share the identical wget → cp → chmod → chown shape (kind,
-telepresence, docker-compose, yq, and the five HashiCorp zips), one local helper replaces the
-copies. The second shape is one helper with an unzip stage. This is permitted, not mandatory:
-the plan decides whether the duplication justifies it.
+### Downloaded binaries: fetch into a throwaway directory, install last, stamp on success
+
+Shapes 2 and 5 share one cause: the download is written somewhere persistent, and the guard
+reads that artifact. Cleaning up the artifact on each failure path (round 2's revision) has a
+failure path of its own at every stage. This design removes the persistent artifact instead.
+
+One helper, `_install_fetched_binary <name> <url> <kind> <member> [<dest-name>]`, replaces the
+copies in kind, telepresence, consul, vault, nomad, packer, vagrant, cf-terraforming,
+docker-compose and yq. `<kind>` is `bin`, `zip` or `tar`; `<member>` is the path inside the
+archive (ignored for `bin`).
+
+1. **Skip guard.** If `${_DL_STAMP_DIR}/<name>` exists, holds exactly `<url>`, and
+   `${_DL_BIN_DIR:-/usr/local/bin}/<dest-name>` is executable, return 0 without fetching. `_DL_STAMP_DIR`
+   defaults to `~/.local/share/dotfiles/installed`. The URL carries the pinned version for
+   every tool except telepresence, so a version bump changes the URL and re-installs.
+   telepresence's URL ends in `latest`, so it never skips on the stamp: it always fetches, and
+   skips the install step when `cmp -s` finds the fetched file identical to the installed one.
+2. **Fetch and extract** into `mktemp -d "${_DL_TMP_ROOT:-${HOME}/software_downloads}/.dl.XXXXXXXX"`.
+   Each stage is checked.
+3. **Install** with `sudo install -m 0755 -o root -g root <tmp>/<member> ${_DL_BIN_DIR:-/usr/local/bin}/<dest-name>`,
+   checked. `install` unlinks the target before writing, so replacing a running binary does not
+   fail with "Text file busy" (measured: `cp -a` onto an executing binary gives ETXTBSY, rc 1),
+   and nothing is ever written to `/usr/local/bin` before every earlier stage succeeded.
+4. **Stamp** `<url>` into `${_DL_STAMP_DIR}/<name>` only after the install succeeded.
+5. `rm -rf <tmp>` on every path, success and failure, with one explicit call before each
+   `return` (no RETURN/EXIT trap; `scripts/check-lib-exit-traps.sh` ratchets them and a
+   RETURN trap is not function-scoped).
+
+A failure at any stage leaves no stamp, so the next run retries from the fetch. Existing
+artifacts in `~/software_downloads` are left alone: nothing reads them any more, and deleting
+them is not this change's job.
+
+**First run after merge re-installs every tool once**, because no stamps exist yet. That is
+about ten downloads on each Linux development box, once. The alternative, back-filling stamps
+from the old artifacts, would trust exactly the artifacts this change exists to stop trusting.
+
+This helper does not add checksum verification. These ten tools have no sha256 pins today,
+and adding them is a separate change (N5). `_install_pinned_release_binary` stays as it is for
+tflint and tfsec.
+
+### Go
+
+Go uses the same throwaway-directory and stamp shape, through its own function because it
+installs a directory, not a binary:
+
+1. Skip when the stamp `go` holds `GO_DOWNLOAD_URL` and `/usr/local/go/bin/go` is executable.
+2. Fetch and extract into a throwaway directory under `_DL_TMP_ROOT`, which defaults to a path
+   on the same filesystem as `/usr/local` on both development boxes (measured by the round-2
+   risk lens with `df`), so the moves below are renames.
+3. Swap: `sudo rm -rf /usr/local/go.old`, then `sudo mv -T /usr/local/go /usr/local/go.old` if
+   `/usr/local/go` exists, then `sudo mv -T <tmp>/go /usr/local/go`. If that last move fails,
+   `sudo mv -T /usr/local/go.old /usr/local/go` restores the old tree. `-T` stops `mv` nesting
+   the tree inside an existing directory (measured: without it, a leftover `go.old` gets the
+   tree nested as `go.old/go`). Delete `go.old` only after the new tree is in place.
+4. Stamp, then remove the throwaway directory.
+5. The version postcondition compares the series: `[[ ${v} == "${GO_VER}" || ${v} == "${GO_VER}".* ]]`.
+   `GO_VER="1.27"` while the toolchain reports `go1.27.1`; the current `==` at `:266` has never
+   matched on any machine running the pinned tarball. A mismatch is a go failure.
+
+`_GO_INSTALL_ROOT` (default `/usr/local`) is a new seam so tests run the swap against a fixture.
+
+### Keyrings: fetch to a file, dearmor to a staging path, rename
+
+Shape 6 and the pipeline half of shape 3 share one fix: never point a consumer at the live
+keyring. One helper, `_install_apt_keyring <url> <keyring> <armored|binary>`:
+
+1. Fetch with `curl -fsSL -o <tmp>/key` into a throwaway directory. Checked.
+2. `armored`: `sudo gpg --batch --yes --dearmor -o <keyring>.new < <tmp>/key`. `binary` (docker's
+   `.asc`, which apt reads directly): `sudo install -m 0644 <tmp>/key <keyring>.new`. Checked,
+   and the staged file must be non-empty.
+3. `sudo mv -f <keyring>.new <keyring>`. Checked; on any failure `sudo rm -f <keyring>.new`.
+4. Remove the throwaway directory.
+
+The live keyring changes only by rename, so a failed fetch leaves a working keyring working.
+Call sites: docker, kubernetes, teleport, cloudflare, gcloud, VirtualBox, opentofu, nvidia. This
+pins no fingerprints; `_build_pinned_keyring` stays the pinned path for edge and albert.
+
+nvidia's source list (`curl | sed | sudo tee`) is fetched to a file first, then `sed`'d and
+written with the existing `tee`, each checked. These are the only nvidia changes.
+
+After this, no pipeline in scope has a producer that can fail, so there are no `PIPESTATUS`
+reads.
 
 ### Rules
 
 - **`apt update` failure is a warning, not a sub-install failure.** One unreachable or
   unsigned third-party source makes `apt update` exit non-zero for every caller (asserted from
-  apt's documented behaviour, not measured here; V3 measures it). Nine steps call it (base, go,
-  docker, k8s_tools, cloud_tools, gui_tools, misc, powershell, nvidia), so checking it as a
-  failure would fail most of them for one cause and name the wrong ones. The
-  `apt install` that follows is the check for that sub-install's own package: it fails when a
-  newly added source left the package unreachable. **Only base warns.** Base's `apt update`
-  runs first, and apt's own `E:`/`W:` lines, already on the terminal, name the broken
-  source; base adds one `log_warn "base: apt update reported errors (see apt's E:/W: lines
-above); continuing"`. Every later `apt update` is `|| :` with a comment pointing at base, so a
-  permanently broken source produces one warning per run, not eight. Exception:
-  `_install_ubuntu_powershell` keeps checking `apt update` as a failure, because there it
-  directly follows adding the Microsoft source, and its existing tests pin that.
-- **Every pipeline element is checked.** A pipeline whose producer can fail (`curl`, `wget
--O-`) copies `${PIPESTATUS[@]}` immediately after the pipeline, with no command between,
-  not even a `local` declaration (a `local` resets `PIPESTATUS`, measured), or
-  is split into a fetch to a temp file followed by the consumer. `printf … | sudo tee` needs
-  only the last element checked, since `printf`/`echo` of a literal cannot fail.
+  apt's documented behaviour, not measured here; V3 measures it). Checking it as a failure
+  would fail most steps for one cause and name the wrong ones. **Only base warns.** Base's
+  `apt update` runs first, and apt's own `E:`/`W:` lines, already on the terminal, name the
+  broken source; base adds one `log_warn "base: apt update reported errors (see apt's E:/W:
+  lines above); continuing"`. Every later `apt update` is `|| :` with a comment pointing at
+  base. Exceptions: `_install_ubuntu_powershell` and `_install_ubuntu_nvidia` keep checking
+  `apt update` as a failure, because each runs it directly after adding its own source, and
+  their existing tests pin that.
 - **Advisory commands stay advisory**, unchanged: cleanup (`sudo rm -f … || true`), the
   "X is installed" probes, `brew trust`, the existing warn-and-skip on dotnet, tflint, tfsec
-  and tfenv, and `nala autoremove` (cleanup; it gains a `log_warn` on failure, not a failed
-  status).
+  and tfenv, and `nala autoremove` (it gains a `log_warn` on failure, not a failed status).
 - **`_install_ubuntu_powershell` returns 1 on failure.** Every `log_warn …; return 0` becomes
   `return 1`. The stale dispatcher comment is deleted.
 - **Base packages become tri-state.** `_install_ubuntu_base_packages` returns 1 for an
   unsupported release, exactly as today, and that still aborts `install_ubuntu_packages` with
-  rc 1. It returns 2 when any install in it failed. The dispatcher records `base` as a failed
-  step and runs every later step. This is the brew_packages convention: rc 2 means partial.
-  The dispatcher's `_install_ubuntu_base_packages || return 1` changes accordingly.
+  rc 1. It returns 2 when any install in it failed; the dispatcher records `base` as a failed
+  step and runs every later step. The dispatcher's `_install_ubuntu_base_packages || return 1`
+  changes accordingly.
 - **The nvidia skip fires on a docker core failure only.** The skip exists because, if
   `docker-ce` is absent, `nvidia-ctk runtime configure` creates `daemon.json` first and
   docker's `[[ ! -f daemon.json ]]` guard then never writes the cgroup `exec-opts`; and it
@@ -127,44 +200,32 @@ above); continuing"`. Every later `apt update` is `|| :` with a comment pointing
   neither. So `_install_ubuntu_docker` returns **3** when an `apt install` of `docker-ce`,
   `docker-ce-cli` or `containerd.io` failed, or `daemon.json` failed validation, and **1** for
   any other failed sub-install. The dispatcher records docker as failed for any non-zero
-  status, and skips nvidia only on 3. A docker keyring or source failure with `docker-ce`
-  already installed is rc 1; with `docker-ce` absent, the core `apt install` that follows
-  fails and makes it rc 3.
-- **Go's version check compares the series, not the patch.** `GO_VER="1.27"` while the
-  installed toolchain reports `go1.27.1`; the current `==` comparison at `:266` has never
-  matched on any machine running the pinned tarball. The check becomes
-  `[[ ${INSTALLED_GO_VER} == "${GO_VER}" || ${INSTALLED_GO_VER} == "${GO_VER}".* ]]`, so `1.27`
-  and `1.27.1` pass and `1.270` does not; a mismatch after install is a go failure.
-- **Go replaces `/usr/local/go` by moving, not deleting first.** `_install_go_from_tarball`
-  runs `sudo rm -rf /usr/local/go` before an unchecked `sudo mv` (`:241-243`), so a failed
-  move leaves no Go at all. It becomes: move the old tree to `/usr/local/go.old`, move the new
-  tree in, and on failure move `go.old` back; delete `go.old` only after the new tree is in
-  place.
+  status and skips nvidia only on 3.
 
 ### Sub-install inventory
 
-| step        | sub-installs                                                                                                           |
-| ----------- | ---------------------------------------------------------------------------------------------------------------------- |
-| base        | hwe kernel, `check_and_install_nala`, common list, release list                                                        |
-| workstation | nala list, snap list                                                                                                   |
-| powershell  | (one sub-install; return 0 becomes 1)                                                                                  |
-| go          | apt update (silent), tarball download, extract, move into `/usr/local/go` (move-aside), version check by series        |
+| step        | sub-installs                                                                                       |
+| ----------- | -------------------------------------------------------------------------------------------------- |
+| base        | hwe kernel, `check_and_install_nala`, common list, release list                                    |
+| workstation | nala list, snap list                                                                               |
+| powershell  | (one sub-install; return 0 becomes 1)                                                              |
+| go          | Go (throwaway dir, swap, stamp, series check)                                                      |
 | docker      | keyring, source, core (`docker-ce`, `docker-ce-cli`, `containerd.io`, `daemon.json`) → rc 3; plugins, `usermod` → rc 1 |
-| k8s_tools   | kind, telepresence, kubectl (key, source, install), helm snap                                                          |
-| hashicorp   | consul, vault, nomad, packer, vagrant                                                                                  |
-| cloud_tools | teleport, cloudflared, gcloud, cf-terraforming; azure cleanup stays advisory                                           |
-| gui_tools   | virtualbox, edge (source helper, install), snaps (each `snap install`, `snap set`), steam; albert unchanged            |
-| misc        | docker-compose, yq, opentofu; dotnet/tflint/tfsec/tfenv unchanged; autoremove advisory                                 |
+| k8s_tools   | kind, telepresence (helper), kubectl (keyring helper, source, install), helm snap                  |
+| hashicorp   | consul, vault, nomad, packer, vagrant (helper, `zip`)                                               |
+| cloud_tools | teleport, cloudflared, gcloud (keyring helper each), cf-terraforming (helper, `tar`); azure cleanup stays advisory |
+| gui_tools   | virtualbox (keyring helper), edge (source helper, install), snaps (each `snap install`, `snap set`), steam; albert unchanged |
+| misc        | docker-compose, yq (helper, `bin`), opentofu (keyring helper); dotnet/tflint/tfsec/tfenv unchanged; autoremove advisory |
+| nvidia      | keyring (helper) and source list (fetch to file) only                                              |
 
 `_install_ubuntu_edge_source`'s own status is currently ignored by gui_tools. It becomes part
 of the edge sub-install.
 
 ## Error handling
 
-The changes add failure reporting, stop consuming bad artifacts, and clean up partial
-downloads. On a clean run every step still returns 0. The success path gains only the
-`PIPESTATUS` reads and, when a new Go tarball is installed, the move-aside of the old tree and
-its deletion afterwards.
+On a clean run every step still returns 0. The success path changes in three ways: downloads
+go through a throwaway directory and `install`, keyrings are staged and renamed, and each
+helper-installed tool is fetched and installed once more on the first run after merge.
 
 A run that previously reported success over a broken install now returns rc 2 from
 `install_ubuntu_packages` and prints `ubuntu packages: failed: …`. `run_setup_or_developer`
@@ -174,88 +235,96 @@ unchanged.
 
 ## Testing
 
-Tests go in `tests/setup_env/linux_ubuntu.bats`, which already has 204 tests and per-step
-fixtures. Existing whole-binary knobs: `MOCK_WGET_EXIT`, `MOCK_CURL_EXIT`, `MOCK_APT_EXIT`,
-`MOCK_NALA_EXIT`, `MOCK_UNZIP_EXIT`, `MOCK_TAR_EXIT`, `MOCK_SNAP_EXIT`, `MOCK_CP_EXIT`.
-`MOCK_APT_ONLY_EXIT` is **not** subcommand-scoped: `tests/mocks/apt` exits with it for every
-call. `tests/mocks/cp` passes through with `|| true`, so a copy-stage failure is driven only
-by `MOCK_CP_EXIT`.
+Tests go in `tests/setup_env/linux_ubuntu.bats` (204 tests today) plus one file for each
+helper. Existing whole-binary knobs: `MOCK_WGET_EXIT`, `MOCK_CURL_EXIT`, `MOCK_APT_EXIT`,
+`MOCK_NALA_EXIT`, `MOCK_UNZIP_EXIT`, `MOCK_TAR_EXIT`, `MOCK_SNAP_EXIT`, `MOCK_CP_EXIT`,
+`MOCK_MV_EXIT`. `MOCK_APT_ONLY_EXIT` is **not** subcommand-scoped. `tests/mocks/mv` and
+`tests/mocks/cp` pass through with `|| true`, hiding real failures. There is no `install` mock;
+`tests/mocks/sudo` execs the real `install`, so every test points `/usr/local/bin` and
+`/usr/local/go` at fixtures through new seams (`_DL_BIN_DIR`, `_GO_INSTALL_ROOT`), never the
+real paths (`tdd.md` E2).
 
-Two new mock knobs, each with its own mock test:
+New mock knobs, each with its own mock test:
 
-- `MOCK_WGET_FAIL_URL` (and `MOCK_CURL_FAIL_URL`): fail only a call whose argv contains the
-  substring, like `tests/mocks/claude`'s `MOCK_CLAUDE_FAIL_ARGS`. A shared `MOCK_WGET_EXIT`
-  fails every sibling at once and cannot show R3.
-- `MOCK_APT_FAIL_SUBCMD` (and the same for `apt-get`, `nala`): fail only when the first
-  non-option argument equals the value, e.g. `update` or `install`, so the two branches of
-  the `apt update` rule are drivable separately.
+- `MOCK_WGET_FAIL_URL` / `MOCK_CURL_FAIL_URL`: fail only a call whose argv contains the
+  substring. Like today's whole-binary knob, the failing branch writes a 0-byte `-O`/`-o`
+  target first, so it models truncation.
+- `MOCK_APT_FAIL_SUBCMD` (and for `apt-get`, `nala`): fail only when the first non-option
+  argument equals the value.
+- `MOCK_MV_FAIL_ARGS`: fail only an `mv` whose argv contains the substring, so the Go swap's
+  third move can fail while the first two succeed.
 
 For each sub-install, one failure test asserts five things:
 
 1. the step's status is non-zero (3 for docker's core, 1 otherwise);
 2. stderr names the step and the tool;
-3. **positive control:** `MOCK_CALLS_FILE` holds the failing call for that tool (its URL, or
-   its package name), so the sub-install demonstrably started;
-4. the consuming command never ran (no `cp`/`unzip`/`mv` for that tool), and the partial
-   download file is gone;
+3. **positive control:** `MOCK_CALLS_FILE` holds the failing call for that tool;
+4. the destination (fixture `/usr/local/bin/<tool>`, or the live keyring path) is byte-for-byte
+   what it was before the run, no stamp was written, and no throwaway directory remains;
 5. a sibling sub-install in the same step still ran.
 
-Item 5 is what separates design B from a bare `|| return 1`. Item 4 is the destructive-path
-guard (`tdd.md` E2); item 3 is what keeps item 4 from passing when the sub-install never ran
-(`tdd.md` E5).
+Helper tests, each stage failing in turn (fetch, extract, install, stamp-write): no stamp, no
+throwaway directory, destination unchanged; then a second call with the failure cleared fetches
+again (two fetch calls in `MOCK_CALLS_FILE`) and stamps. Plus: a matching stamp with an
+executable destination skips the fetch (no fetch call), and a matching stamp with the
+destination missing does not skip.
+
+Go tests, with a fixture `_GO_INSTALL_ROOT` seeded with `go/bin/v` holding `old`:
+
+- third `mv` failing → `go/bin/v` still holds `old`, and `MOCK_CALLS_FILE` shows the first move
+  to `go.old` happened (the restore path ran, not a no-op);
+- a leftover `go.old` holding `stale` → after a clean run `go/bin/v` holds the new content and
+  no `go/go` exists;
+- version: `_GO_BIN` stub printing `go version go1.27.1 linux/amd64` with `GO_VER=1.27` → 0;
+  printing `go1.26.3` → non-zero. Every go test sets `_GO_BIN` (`tdd.md` pitfall G).
+
+Keyring helper tests: fetch failing → the live keyring fixture holds its old bytes and no
+`.new` remains; dearmor producing nothing → same; success → keyring replaced.
 
 Additional cases:
 
-- **apt update, both branches.** With `MOCK_APT_FAIL_SUBCMD=update`, base stays 0 and prints
-  its one warning, and a later step stays 0 and prints nothing about `apt update`. With
+- **apt update, both branches.** With `MOCK_APT_FAIL_SUBCMD=update`, base stays 0 and prints its
+  one warning, and in the same run a later step stays 0, its `apt update` call is in
+  `MOCK_CALLS_FILE` (positive control), and it prints nothing about `apt update`. With
   `MOCK_APT_FAIL_SUBCMD=install`, the step is non-zero.
-- **Partial download is retried.** A failed go download leaves no tarball, so a second call
-  with the network knob cleared downloads again (`MOCK_CALLS_FILE` holds two `wget`s).
-- **Go version, real strings.** With `_GO_BIN` pointing at a stub that prints
-  `go version go1.27.1 linux/amd64` and `GO_VER=1.27`, the go step returns 0; with the stub
-  printing `go1.26.3`, it returns non-zero. Every go test sets `_GO_BIN`, so none reads the
-  machine's real `go` (`tdd.md` pitfall G).
-- **Go move-aside.** With the move of the new tree failing, `/usr/local/go`'s old contents
-  are restored (the test points the install root at a fixture via a new
-  `_GO_INSTALL_ROOT` seam).
-- **Pipeline producer.** curl fails while gpg succeeds, and the sub-install is still reported
-  failed. Without the `PIPESTATUS` check this test passes only when gpg happens to reject
-  empty input, so the mock gpg must succeed on empty input to make the case discriminate.
-- **Dispatcher, both branches.** With `apt install docker-ce` failing for real (not a stubbed
-  `_install_ubuntu_docker`), nvidia is skipped and both are named. With only
-  `docker-buildx-plugin` failing, docker is named failed and nvidia still runs.
+- **telepresence busy.** With the fixture destination identical to the fetched file, no
+  `install` call is made; with it different, `install` is called once.
+- **Dispatcher, both branches.** With `apt install docker-ce` failing for real, nvidia is skipped
+  and both are named. With only `docker-buildx-plugin` failing, docker is named failed and
+  nvidia still runs.
 - **Base rc 2.** A failed common-list install records `base` and later steps still run.
   Unsupported release still returns 1 and runs nothing else.
-- **Clean run, discriminating.** A new dispatcher-level test runs every step with all mocks
-  succeeding and with each step's install probe satisfied (`_GO_BIN` printing the real
-  `go1.27.1` string, docker/kind/etc. resolvable), and asserts both rc 0 **and** that
-  `MOCK_CALLS_FILE` holds each step's core install call. The second half stops it passing when
-  every step does nothing. Existing tests that asserted the old return-0-on-failure behaviour,
-  e.g. powershell's, change with this PR.
+- **Clean run, discriminating.** A dispatcher-level test runs every step with all mocks
+  succeeding and asserts both rc 0 **and** that `MOCK_CALLS_FILE` holds each step's core install
+  call. A second run in the same test, with stamps now present, asserts no helper fetch calls.
 
 Every new check gets a mutation control: delete the check and confirm its test goes red.
 
 ## Requirements
 
 - **R1.** `[PR1]` Each of `_install_ubuntu_docker`, `_install_ubuntu_k8s_tools`, `_install_ubuntu_hashicorp`, `_install_ubuntu_cloud_tools`, `_install_ubuntu_gui_tools`, `_install_ubuntu_misc`, `_install_ubuntu_workstation` and `_install_ubuntu_go` returns non-zero when any sub-install it attempted failed, and 0 only when all attempted sub-installs succeeded.
-- **R2.** `[PR1]` A failed download, extract, key fetch or source write stops its sub-install before any command that consumes the artifact runs, and removes the partial download file and partial extraction directory it left.
+- **R2.** `[PR1]` kind, telepresence, consul, vault, nomad, packer, vagrant, cf-terraforming, docker-compose and yq are installed through `_install_fetched_binary`, which downloads and extracts only inside a throwaway directory, writes the destination only with `sudo install` after every earlier stage succeeded, writes the stamp only after the install succeeded, and removes the throwaway directory on every path.
 - **R3.** `[PR1]` A failed sub-install does not prevent sibling sub-installs in the same step from running.
 - **R4.** `[PR1]` Each failed sub-install is named on stderr with its step and tool.
-- **R5.** `[PR1]` A pipeline whose producer is `curl` or `wget` reports the producer's failure even when the last element succeeds.
-- **R6.** `[PR1]` An `apt update` failure does not by itself fail a step, except in `_install_ubuntu_powershell`; base's logs exactly one warning, and no other step's logs one.
+- **R5.** `[PR1]` Every apt keyring written by the in-scope steps, nvidia's included, is fetched to a file and replaced only by renaming a non-empty staged file; a failed fetch or dearmor leaves the live keyring unchanged.
+- **R6.** `[PR1]` An `apt update` failure does not by itself fail a step, except in `_install_ubuntu_powershell` and `_install_ubuntu_nvidia`; base's logs exactly one warning, and no other step's logs one.
 - **R7.** `[PR1]` `_install_ubuntu_powershell` returns 1 on every failure path it currently returns 0 from.
 - **R8.** `[PR1]` `_install_ubuntu_base_packages` returns 1 for an unsupported release and 2 when any of its installs failed; `install_ubuntu_packages` returns 1 for the former and records `base` as a failed step and continues for the latter.
 - **R9.** `[PR1]` `_install_ubuntu_docker` returns 3 when an `apt install` of `docker-ce`, `docker-ce-cli` or `containerd.io` failed or `daemon.json` failed validation, and 1 for any other failed sub-install; `install_ubuntu_packages` skips nvidia only when docker returned 3.
 - **R10.** `[PR1]` A run where every command succeeds returns 0 from every step, and each step's core install call is made.
 - **R11.** `[PR1]` The go step accepts an installed version equal to `GO_VER` or beginning with `GO_VER.`, and fails on any other version after install.
-- **R12.** `[PR1]` `_install_go_from_tarball` never leaves `/usr/local/go` absent when it was present before: the old tree is moved aside, restored if the new tree's move fails, and deleted only after the new tree is in place.
+- **R12.** `[PR1]` Go is extracted in a throwaway directory and swapped in with `mv -T` after removing any stale `go.old`; if the new tree's move fails, the old tree is restored; `go.old` is deleted only after the new tree is in place; the stamp is written only after the swap succeeded.
+- **R13.** `[PR1]` A helper-installed tool whose stamp matches its URL and whose destination is executable is not fetched; telepresence is always fetched and is installed only when the fetched file differs from the installed one.
 - **V1.** Every new check has a mutation control: removing it turns its test red. Record each removal and the red test name in the PR body.
 - **V2.** `make test` passes on the Linux development box and in CI.
 - **V3.** On a Linux box, add a source pointing at an unreachable host to a scratch sources directory and run `apt update` with `-o Dir::Etc::sourcelist` scoped to it; record its exit code. If it exits 0, R6's rationale is moot but the rule stays harmless. Then, with a scoped source for an already-installed package pointing at the unreachable host, run `apt install -y <package>` and record its exit code; an rc 0 ("already the newest version") is correct behaviour under R6, since the package is installed and base's warning reports the dead source.
-- **N1.** No change to `_install_ubuntu_rust`, `_install_ubuntu_nvidia`, `_install_ubuntu_brew_packages` or `_install_ubuntu_albert`.
-- **N2.** No `set -e`, `set -o pipefail` or ERR/EXIT trap is introduced.
+- **V4.** Before merge, on `claude`: for each snap the workstation list and gui_tools install, run the exact `sudo snap install …` invocation the code uses against the already-installed snap, and the exact `sudo snap set certbot trust-plugin-with-root=ok`; record each exit code. Any non-zero result is fixed or exempted in this PR, so a provisioned box reports rc 0.
+- **V5.** After merge, run `setup_env.sh -t developer` on `claude` and record `install_ubuntu_packages`' rc and any `failed:` line; a second run reports no helper downloads.
+- **N1.** No change to `_install_ubuntu_rust`, `_install_ubuntu_brew_packages` or `_install_ubuntu_albert`, and none to `_install_ubuntu_nvidia` beyond its keyring and source-list fetch.
+- **N2.** No `set -e`, `set -o pipefail` or ERR/EXIT/RETURN trap is introduced.
 - **N3.** No change to `run_setup_or_developer`'s handling of `install_ubuntu_packages`' return codes.
 - **N4.** Cleanup commands and "is installed" probes do not become failures.
+- **N5.** No sha256 pins are added for the helper-installed tools, and no file under `~/software_downloads` is deleted.
 
 ## Multi-Lens Review
 
@@ -282,3 +351,26 @@ Disposition: Addressed — go blocker (R11; every go test sets `_GO_BIN`), R9 na
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+## Multi-Lens Review, round 2
+
+Reviewed at commit: `06685c70` (round-1 revisions). All three lenses re-run because the revision changed design substance.
+
+### Goal-Fit (round 2)
+
+Finding: (1) Install-stage failure still becomes silent success: every download guard keys on the artifact, and R2's cleanup covered download/extract only, so a failed `cp`/`mv` leaves the artifact and the next run skips the tool and reports 0; for Go, every later run reports `failed: go` permanently. (2) R6 false for nvidia, which runs `sudo -H apt update || return 1` right after adding its source, while N1 froze nvidia. (3) N1's premise that nvidia checks every command is wrong: `curl | sudo gpg --dearmor -o … || return 1` and `curl | sed | sudo tee || return 1` are producer-blind. Go move-aside test must seed and assert content.
+Assumption: A failed install leaves no download artifact behind; true only for download/extract failures. Settled by a bats case with `MOCK_CP_EXIT=1` for kind, re-run cleared, checking for a second `wget`.
+Disposition: Addressed — artifact-keyed guards replaced by a throwaway directory plus a stamp written only after install (R2, R13); nvidia named as R6's second exception and its two pipelines brought into scope (R5, N1). Operator, 2026-10-04: chose "round 3" on the combined spec over the author's recommended split.
+
+### Ergonomics (round 2)
+
+Finding: (1) R5's PIPESTATUS option still lets a fetch failure wipe a live keyring: `curl | sudo gpg --dearmor --yes -o <live>` truncates it (measured, 0 bytes); docker's `sudo curl -o` writes in place. Only fetch-to-temp then install is safe. (2) telepresence: `cp -a` onto a running binary fails with ETXTBSY (measured), so a connected telepresence reports rc 2 every run; use `install` or skip on `cmp`. (3) `mv go go.old` with a leftover `go.old` nests the tree (measured); require `rm -rf` first or `mv -T`. Vacuous risks: the URL-scoped wget knob must still create the `-O` target; the "later step prints nothing about apt update" case needs a positive control.
+Assumption: telepresence daemons are alive during a typical reprovision; settled by `pgrep -af telepresence` on both boxes at reprovision time.
+Disposition: Addressed — keyring helper stages and renames (R5); `install` plus `cmp` skip for telepresence (R2, R13); `rm -rf go.old` then `mv -T` (R12); mock-knob and positive-control requirements added. Operator, 2026-10-04: "round 3".
+
+### Risk (round 2)
+
+Finding: (1) The R12 restore test was vacuous: `tests/mocks/mv` fails every call under `MOCK_MV_EXIT`, so the first move fails and nothing is restored; needs an argument-scoped mv knob and a positive control. (2) Leftover `go.old` nests (measured `go/go/bin/v`). (3) Same install-stage gap as Goal-Fit. (4) cf-terraforming extracts with `-C ~/software_downloads`, so a literal "delete the partial extraction" wipes every tool's artifacts. (5) URL knob must touch the `-O` target; the apt-update absence case needs its base-warning control. R9/R1 and R8/N3 consistent; `/home` and `/usr/local` share a filesystem on both boxes.
+Assumption: every newly checked `snap install`/`snap set` exits 0 on a provisioned `claude`; settled by running each exact invocation against the installed snaps.
+Disposition: Addressed — `MOCK_MV_FAIL_ARGS` and a content-seeded Go fixture; `mv -T`; throwaway directory removes the cf-terraforming hazard and the cleanup class; assumption made V4, a pre-merge measurement. Operator, 2026-10-04: "round 3".
+
