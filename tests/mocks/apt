@@ -1,3 +1,7 @@
 #!/usr/bin/env bash
-printf "apt %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+# Drop APT_CONFFILE_OPTS from the recorded line so call-text assertions stay about the
+# command; tests/setup_env/linux_ubuntu.bats "conffile argv" tests assert the options. ($* must be flattened first:
+# ${*//pat/} applies the pattern to each argument separately.)
+_all="$*"
+printf "apt %s\n" "${_all//-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold /}" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
 exit "${MOCK_APT_ONLY_EXIT:-${MOCK_APT_EXIT:-0}}"

@@ -216,6 +216,31 @@ EOF
   [ "$status" -ne 0 ]
 }
 
+@test "conffile argv: base package install hands xargs the conffile options as separate arguments" {
+  cd "${REPO_ROOT}"
+  export NOBLE=1
+  unset RESOLUTE HAS_SNAP
+  local _stub_dir
+  _stub_dir="$(argv_probe_stub_path xargs)"
+  PATH="${_stub_dir}:${PATH}" run _install_ubuntu_base_packages
+  [ "$status" -eq 0 ]
+  grep -qx 'argv: xargs -o' "${MOCK_CALLS_FILE}"
+  grep -qx 'argv: xargs Dpkg::Options::=--force-confdef' "${MOCK_CALLS_FILE}"
+  grep -qx 'argv: xargs Dpkg::Options::=--force-confold' "${MOCK_CALLS_FILE}"
+}
+
+@test "conffile argv: powershell apt install gets the conffile options as separate arguments" {
+  _PWSH_BIN="$(_pwsh_stub_bin 1)"
+  unset DEBIAN_FRONTEND
+  local _stub_dir
+  _stub_dir="$(argv_probe_stub_path apt)"
+  PATH="${_stub_dir}:${PATH}" run _install_ubuntu_powershell
+  [ "$status" -eq 0 ]
+  grep -qx 'argv: apt -o' "${MOCK_CALLS_FILE}"
+  grep -qx 'argv: apt Dpkg::Options::=--force-confdef' "${MOCK_CALLS_FILE}"
+  grep -qx 'argv: apt Dpkg::Options::=--force-confold' "${MOCK_CALLS_FILE}"
+}
+
 @test "_install_ubuntu_workstation: HAS_SNAP uses nala for workstation packages" {
   cd "${REPO_ROOT}"
   export NOBLE=1

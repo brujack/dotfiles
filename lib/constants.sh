@@ -183,6 +183,11 @@ BREWFILE_LOC="${HOME}/brew"
 DOTFILES="dotfiles"
 GITREPOS="${HOME}/git-repos"
 PERSONAL_GITREPOS="${GITREPOS}/personal"
+# Answers dpkg's conffile prompt without a terminal: keeps the local file and writes the
+# package copy as .dpkg-dist, so an unattended install never stops at the prompt. Add
+# it after the verb of every configuring apt/apt-get/nala call (ai-config
+# docs/knowledge/dotfiles-apt-upgrade-hazards.md section 2).
+readonly -a APT_CONFFILE_OPTS=(-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
 readonly AI_CONFIG="ai-config"
 # read by lib/helpers.sh:setup_dotfile_symlinks and lib/workflows.sh:setup_claude_mcp/setup_ai_config
 readonly AI_CONFIG_DIR="${PERSONAL_GITREPOS}/${AI_CONFIG}"

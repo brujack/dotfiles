@@ -32,7 +32,8 @@ _bootstrap_linux_install_prereqs() {
     ubuntu)
       printf "[INFO]  Installing Homebrew prerequisites (Ubuntu)...\n"
       sudo apt-get update || return 1
-      sudo DEBIAN_FRONTEND=noninteractive apt-get install -y build-essential curl file git procps || return 1
+      # Literal conffile options: this runs before lib/constants.sh (APT_CONFFILE_OPTS) is sourced.
+      sudo DEBIAN_FRONTEND=noninteractive apt-get install -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold -y build-essential curl file git procps || return 1
       ;;
     *)
       printf "[WARN]  Unknown distro. Ensure Homebrew prerequisites are installed: build tools, curl, file, git, procps.\n"

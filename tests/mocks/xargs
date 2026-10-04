@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # Mock xargs for testing
-printf "xargs %s\n" "$*" >> "${MOCK_CALLS_FILE}"
+# Drop APT_CONFFILE_OPTS from the recorded line so call-text assertions stay about the
+# command; tests/setup_env/linux_ubuntu.bats "conffile argv" tests assert the options. ($* must be flattened first:
+# ${*//pat/} applies the pattern to each argument separately.)
+_all="$*"
+printf "xargs %s\n" "${_all//-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold /}" >> "${MOCK_CALLS_FILE}"
 # Drain piped stdin (the filtered package list) and record each token so tests
 # can assert which packages reached the install command. Guarded on a non-tty
 # stdin so the legacy `xargs -a <file>` form (no pipe) does not block.

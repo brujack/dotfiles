@@ -110,7 +110,26 @@ frontend_probe_stub_path() {
   _bash_bin="$(command -v bash)"
   cat > "${_dir}/${_name}" << EOF
 #!${_bash_bin}
-printf 'frontend: %s %s DEBIAN_FRONTEND=%s\n' "${_name}" "\$*" "\${DEBIAN_FRONTEND:-<unset>}" >> "\${MOCK_CALLS_FILE}"
+_all="\$*"
+printf 'frontend: %s %s DEBIAN_FRONTEND=%s\n' "${_name}" "\${_all//-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold /}" "\${DEBIAN_FRONTEND:-<unset>}" >> "\${MOCK_CALLS_FILE}"
+exit 0
+EOF
+  chmod +x "${_dir}/${_name}"
+  printf '%s' "${_dir}"
+}
+
+# Like frontend_probe_stub_path, but records the stub's argv ONE LINE PER ARGUMENT
+# ("argv: <name> <arg>") so a test can assert that an option arrived as its own
+# argument rather than glued into another one. Prints the stub directory.
+argv_probe_stub_path() {
+  local _name="$1" _dir _bash_bin
+  _dir="$(mktemp -d -p "${BATS_TEST_TMPDIR}")"
+  _bash_bin="$(command -v bash)"
+  cat > "${_dir}/${_name}" << EOF
+#!${_bash_bin}
+for _a in "\$@"; do
+  printf 'argv: %s %s\n' "${_name}" "\${_a}" >> "\${MOCK_CALLS_FILE}"
+done
 exit 0
 EOF
   chmod +x "${_dir}/${_name}"

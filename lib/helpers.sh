@@ -277,7 +277,7 @@ check_and_install_nala() {
           sudo -H DEBIAN_FRONTEND=noninteractive dpkg --install "${HOME}"/software_downloads/volian-archive-nala_0.2.0_all.deb
           sudo -H apt update
         fi
-        sudo -H DEBIAN_FRONTEND=noninteractive apt install nala -y
+        sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" nala -y
       fi
     fi
   fi

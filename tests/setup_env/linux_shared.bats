@@ -110,7 +110,7 @@ EOF
   printf 'CALLER-STDIN\n%.0s' 1 2 3 > "${_stdin}"
   PATH="${_stub_dir}:${PATH}" run update_apt_packages < "${_stdin}"
   [ "$status" -eq 0 ]
-  grep -qE '^nala full-upgrade -y( .*)? stdin=\[\]$' "${MOCK_CALLS_FILE}"
+  grep -qE '^nala full-upgrade( .*)? -y( .*)? stdin=\[\]$' "${MOCK_CALLS_FILE}"
   grep -qF "nala autoremove -y stdin=[]" "${MOCK_CALLS_FILE}"
 }
 
@@ -120,9 +120,13 @@ EOF
 # copy beside it. Measured on claude 2026-09-16 through apt's install path.
 @test "update_apt_packages: nala full-upgrade answers conffile prompts non-interactively" {
   export UBUNTU=1
-  run update_apt_packages
+  local _stub_dir
+  _stub_dir="$(argv_probe_stub_path nala)"
+  PATH="${_stub_dir}:${PATH}" run update_apt_packages
   [ "$status" -eq 0 ]
-  grep -qF -- "nala full-upgrade -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold" "${MOCK_CALLS_FILE}"
+  grep -qx 'argv: nala full-upgrade' "${MOCK_CALLS_FILE}"
+  grep -qx 'argv: nala Dpkg::Options::=--force-confdef' "${MOCK_CALLS_FILE}"
+  grep -qx 'argv: nala Dpkg::Options::=--force-confold' "${MOCK_CALLS_FILE}"
 }
 
 # needrestart's apt Post-Invoke hook raises a debconf dialog when stdout is not a
