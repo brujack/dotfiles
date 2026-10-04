@@ -93,6 +93,7 @@ _dpkg_awk() {
         return
       }
       if (!cfg) return
+      if (mode == "judged") { printf "%s:%d:%s\n", fname, start, (t[i] == "dpkg" ? "dpkg" : "apt"); return }
       def = 0; old = 0; miss = 0; conf = 0; deb = "-"
       apt = (t[i] != "dpkg")
       for (k = i; k <= n; k++) {
@@ -140,6 +141,9 @@ _dpkg_awk() {
 
 _dpkg_sudo_calls() { _dpkg_awk frontend "$@"; }
 _conffile_calls() { _dpkg_awk conffile "$@"; }
+# One `<file>:<line>:apt|dpkg` record per configuring call, so a test can count
+# each tool family separately.
+_judged_calls() { _dpkg_awk judged "$@"; }
 
 _tracked_shell_files() {
   PATH="${_CLEAN_PATH}" env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
@@ -464,6 +468,17 @@ _detect_verdicts() {
   _calls="$(_conffile_calls "${_files[@]}")"
   # An empty enumeration must fail, not pass: it would mean the detector is blind.
   [ "$(printf '%s\n' "${_calls}" | grep -c ':conffile:')" -gt 0 ]
+  # Per family, so one family being judged cannot hide the other going blind.
+  local _judged
+  _judged="$(_judged_calls "${_files[@]}")"
+  if [ "$(printf '%s\n' "${_judged}" | grep -c ':apt$')" -eq 0 ]; then
+    printf 'no apt-family call was judged: the configuring-verb table matches nothing\n' >&2
+    return 1
+  fi
+  if [ "$(printf '%s\n' "${_judged}" | grep -c ':dpkg$')" -eq 0 ]; then
+    printf 'no dpkg call was judged: the dpkg flag table matches nothing\n' >&2
+    return 1
+  fi
   _bad="$(printf '%s\n' "${_calls}" | grep ':conffile:bad$' | sed "s|^${REPO_ROOT}/||" || true)"
   if [[ -n "${_bad}" ]]; then
     printf 'configuring sudo apt/dpkg call without the conffile options:\n%s\n' "${_bad}" >&2
