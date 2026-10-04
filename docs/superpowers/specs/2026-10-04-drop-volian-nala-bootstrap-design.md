@@ -120,8 +120,8 @@ Mutation checks:
 - **R5.** `[PR1]` The real-tree enumeration test in `tests/scripts/dpkg_sudo_frontend.bats` no longer names a `lib/helpers.sh` dpkg site, and still names at least one `dpkg` site.
 - **R6.** `[PR1]` `CLAUDE.md` states that `--force-confmiss` appears only at the `packages-microsoft-prod.deb` install.
 - **R7.** `[PR1]` `docs/adr/0040-apt-conffile-prompts-answered-unattended.md` carries a dated amendment note naming the volian removal, this spec, and the manual cleanup command for a machine provisioned through the old path; its original Decision text is unchanged.
-- **R9.** `[PR1]` No test that exercises `check_and_install_nala` asserts a `dpkg --install` call, and every such test sets or unsets `RESOLUTE` explicitly.
 - **R8.** `[PR1]` `docs/superpowers/README.md` has no volian backlog row, and its repair-gap row names only the Microsoft package and `_pwsh_probe_runs`.
+- **R9.** `[PR1]` No test that exercises `check_and_install_nala` asserts a `dpkg --install` call, and every such test sets or unsets `RESOLUTE` explicitly.
 - **V1.** Mutations: re-adding a volian `wget` turns the R3 test red; adding `--force-confmiss` to another dpkg or apt call turns the confmiss test red; deleting the nala `apt install` line turns the NOBLE and RESOLUTE tests red; dropping the options array from that line turns the R3 test red.
 - **V2.** `make test` passes, and the changed bats files pass on the Mac Studio (bundle clone, bare env).
 - **N1.** No code removes volian packages or sources from machines that already have them.
