@@ -155,3 +155,30 @@ Disposition: Addressed (operator, 2026-10-04): the RESOLUTE test and the confmis
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+## Amendments
+
+- finding R9 (2026-10-04, reviewer A): NOT-BUILT — The diff unsets or sets RESOLUTE in the non-Linux, non-Ubuntu, already-installed, RESOLUTE and NOBLE tests, and removes every `dpkg --install` positive assertion. It does not show the unchanged test that ends just before the RESOLUTE test, at new line ~177 (`grep -qE '^frontend: apt install nala .*DEBIAN_FRONTEND=noninteractive$'`), which exercises check_and_install_nala. I found no evidence that this test sets or unsets RESOLUTE explicitly.
+- R9 reviewed: the unchanged test at tests/setup_env/install_functions.bats:167 ("apt install nala sees DEBIAN_FRONTEND=noninteractive") sets `export RESOLUTE=1` at line 170; it sat outside the diff hunk, so the reviewer could not see it. All six tests exercising check_and_install_nala set or unset RESOLUTE (lines 136, 145, 157, 170, 183, 196); workflows.bats:706 only stubs the function. No test asserts dpkg --install.
+
+## Spec alignment (2026-10-04)
+
+- spec: docs/superpowers/specs/2026-10-04-drop-volian-nala-bootstrap-design.md
+- anchor: f67c5b6db9c2e9d3787f571cca0356dad9f459b7
+- in scope: R1, R2, R3, R4, R5, R6, R7, R8, R9
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+| R9 | A | NOT-BUILT | The diff unsets or sets RESOLUTE in the non-Linux, non-Ubuntu, already-installed, RESOLUTE and NOBLE tests, and removes every `dpkg --install` positive assertion. It does not show the unchanged test that ends just before the RESOLUTE test, at new line ~177 (`grep -qE '^frontend: apt install nala .*DEBIAN_FRONTEND=noninteractive$'`), which exercises check_and_install_nala. I found no evidence that this test sets or unsets RESOLUTE explicitly. | - R9 reviewed: the unchanged test at tests/setup_env/install_functions.bats:167 ("apt install nala sees DEBIAN_FRONTEND=noninteractive") sets `export RESOLUTE=1` at line 170; it sat outside the diff hunk, so the reviewer could not see it. All six tests exercising check_and_install_nala set or unset RESOLUTE (lines 136, 145, 157, 170, 183, 196); workflows.bats:706 only stubs the function. No test asserts dpkg --install. |
+
+### Reviewed
+
+- R9 reviewed: the unchanged test at tests/setup_env/install_functions.bats:167 ("apt install nala sees DEBIAN_FRONTEND=noninteractive") sets `export RESOLUTE=1` at line 170; it sat outside the diff hunk, so the reviewer could not see it. All six tests exercising check_and_install_nala set or unset RESOLUTE (lines 136, 145, 157, 170, 183, 196); workflows.bats:706 only stubs the function. No test asserts dpkg --install.
+
+### Verifications
+
+- V1: All four mutations red: re-added volian wget -> NOBLE and RESOLUTE tests red; dropped options array -> NOBLE test red; deleted nala apt install line -> NOBLE, RESOLUTE and DEBIAN_FRONTEND tests red; stray --force-confmiss on the powershell apt line -> confmiss test red.
+- V2: make test 2396/2396 ok, rc 0, at 80a6da69; Mac Studio bundle clone, bare env: 80/80 ok for the two changed bats files.

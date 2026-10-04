@@ -19,7 +19,9 @@ sections 2 and 2b. #280 fixed this for `full-upgrade` only.
    (`-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold`), is carried by every
    configuring `sudo apt|apt-get|nala` call. The operator's edited file is kept and dpkg writes
    the package copy beside it as `.dpkg-dist`.
-2. `--force-confmiss` is added only at the three archive-setup `dpkg` installs:
+2. [Superseded in part: the volian debs were removed on 2026-10-04 and confmiss now sits only on
+   `packages-microsoft-prod.deb` — see Amendment (2026-10-04) below.]
+   `--force-confmiss` is added only at the three archive-setup `dpkg` installs:
    `packages-microsoft-prod.deb` and the two volian debs. Each package carries only vendor apt
    archive configuration (the volian pair: a keyring, a `.sources` file and a `preferences.d`
    pin, no maintainer scripts, checked with `dpkg-deb -c`), so restoring a deleted file is
@@ -71,3 +73,13 @@ sections 2 and 2b. #280 fixed this for `full-upgrade` only.
 - Plan: `docs/superpowers/plans/2026-10-03-apt-conffile-noninteractive.md`
 - ADR-0039; #280
 - `ai-config/docs/knowledge/dotfiles-apt-upgrade-hazards.md`
+
+## Amendment (2026-10-04)
+
+The volian nala bootstrap was removed: nala now comes from the Ubuntu archive on every release (Noble's archive carries nala 0.15.1 in universe). `--force-confmiss` therefore applies only to the `packages-microsoft-prod.deb` install. See `docs/superpowers/specs/2026-10-04-drop-volian-nala-bootstrap-design.md`.
+
+Manual cleanup for a machine provisioned via the old path:
+
+```bash
+sudo rm -f /etc/apt/sources.list.d/volian-archive-scar-unstable.sources /etc/apt/preferences.d/volian-archive-scar-unstable.pref && sudo apt purge -y volian-archive-keyring volian-archive-nala && sudo apt update
+```
