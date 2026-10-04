@@ -199,7 +199,12 @@ _install_ubuntu_powershell() {
     return 0
   fi
 
-  if ! sudo -H DEBIAN_FRONTEND=noninteractive dpkg -i "${HOME}"/software_downloads/packages-microsoft-prod.deb; then
+  # --force-confmiss: this package carries only a vendor apt keyring/source, so
+  # restoring a conffile the operator deleted is always right here. Without it a
+  # deleted keyring stays missing and every later `apt update` fails (measured,
+  # spec 2026-10-03-apt-conffile-noninteractive-design.md Decision table).
+  # confmiss is used on these archive-setup debs only, nowhere else.
+  if ! sudo -H DEBIAN_FRONTEND=noninteractive dpkg -i --force-confdef --force-confold --force-confmiss "${HOME}"/software_downloads/packages-microsoft-prod.deb; then
     log_warn "powershell: dpkg -i packages-microsoft-prod.deb failed; skipping"
     return 0
   fi

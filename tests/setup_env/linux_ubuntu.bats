@@ -558,6 +558,17 @@ _ms_require_gnu_ar() {
   grep -qE '^frontend: dpkg -i .*DEBIAN_FRONTEND=noninteractive$' "${MOCK_CALLS_FILE}"
 }
 
+@test "conffile argv: powershell dpkg -i restores a deleted conffile (confmiss) and keeps the rest" {
+  _PWSH_BIN="$(_pwsh_stub_bin 1)"
+  unset DEBIAN_FRONTEND
+  local _stub_dir
+  _stub_dir="$(argv_probe_stub_path dpkg)"
+  PATH="${_stub_dir}:${PATH}" run _install_ubuntu_powershell
+  [ "$status" -eq 0 ]
+  [ "$(grep -c '^argv: dpkg ' "${MOCK_CALLS_FILE}")" -eq 1 ]
+  grep -qE '^argv: dpkg \[-i\]\[--force-confdef\]\[--force-confold\]\[--force-confmiss\]\[.*packages-microsoft-prod\.deb\]$' "${MOCK_CALLS_FILE}"
+}
+
 @test "_install_ubuntu_powershell: apt install succeeding does not mean pwsh runs" {
   # The condition this task exists for, one level out: apt exits 0 for
   # "powershell is already the newest version" even when the installed

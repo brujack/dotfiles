@@ -272,9 +272,11 @@ check_and_install_nala() {
         if [[ -z ${RESOLUTE} ]]; then
           # Noble and earlier: bootstrap via volian archive .deb
           wget -O "${HOME}"/software_downloads/volian-archive-keyring_0.2.0_all.deb https://gitlab.com/-/project/39215670/uploads/d9473098bc12525687dc9aca43d50159/volian-archive-keyring_0.2.0_all.deb
-          sudo -H DEBIAN_FRONTEND=noninteractive dpkg --install "${HOME}"/software_downloads/volian-archive-keyring_0.2.0_all.deb
+          # --force-confmiss: vendor keyring/source only, restoring a deleted conffile is
+          # always right here (see _install_ubuntu_powershell in lib/linux_ubuntu.sh).
+          sudo -H DEBIAN_FRONTEND=noninteractive dpkg --install --force-confdef --force-confold --force-confmiss "${HOME}"/software_downloads/volian-archive-keyring_0.2.0_all.deb
           wget -O "${HOME}"/software_downloads/volian-archive-nala_0.2.0_all.deb https://gitlab.com/-/project/39215670/uploads/d00e44faaf2cc8aad526ca520165a0af/volian-archive-nala_0.2.0_all.deb
-          sudo -H DEBIAN_FRONTEND=noninteractive dpkg --install "${HOME}"/software_downloads/volian-archive-nala_0.2.0_all.deb
+          sudo -H DEBIAN_FRONTEND=noninteractive dpkg --install --force-confdef --force-confold --force-confmiss "${HOME}"/software_downloads/volian-archive-nala_0.2.0_all.deb
           sudo -H apt update
         fi
         sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" nala -y
