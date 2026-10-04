@@ -252,6 +252,7 @@ The real-tool proof is V1 and V2 below. The bats suite never runs a real apt or 
 
 ## Amendments
 
+- R7 -> `scripts/bootstrap_linux.sh`'s `apt-get install` carries `"${APT_CONFFILE_OPTS[@]}"`. — the spec's premise was false: the script sources `lib/constants.sh` at its line 7, before any install (found by the Task 2 code-quality review).
 - V1 -> On claude, re-run the §2 `dotfiles-cfprobe` probe through a changed `xargs … nala install` line (stdin `/dev/null`, edited conffile, v1 to v2). Expect rc 0, state `ii`, local edit kept, `.dpkg-dist` written, and `setup_env.sh -t doctor` WARNing on it. Then delete only the probe's `.dpkg-dist` and confirm the next doctor run no longer names it; `/etc/default/grub.ucf-dist` is left for the operator. — plan-time non-goal check: deleting a pre-existing operator file is not the plan's call.
 
 ## Multi-Lens Review
