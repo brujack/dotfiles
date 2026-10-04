@@ -620,6 +620,23 @@ two-second grep appears to refute the rule.
 - `_RELEASE_TMP_ROOT` (`lib/linux_ubuntu.sh:_install_pinned_release_binary`)
   - Set `_RELEASE_TMP_ROOT` when asserting the failure-path cleanup of `_install_pinned_release_binary` — BSD `mktemp -d` with a template argument ignores `TMPDIR` entirely, and the Studio's `mktemp` is BSD, so a `TMPDIR`-based assertion is silently inert there (same fix as `_OVERRIDE_RUN_TMPDIR_ROOT`). → `dotfiles-test-seams.md` § `_RELEASE_TMP_ROOT seam`
 
+- `_DL_STAMP_DIR`/`_DL_TMP_ROOT`/`_DL_BIN_DIR`/`_DL_UNZIP_BIN`/`_DL_TAR_BIN` (`lib/linux_ubuntu.sh:_install_fetched_binary`, `_install_go_from_tarball`)
+  - Defaults: `~/.local/share/dotfiles/installed`, `~/software_downloads`, `/usr/local/bin`, `unzip`, `tar`. `tests/mocks/sudo` execs real commands, so set all five at setup scope or an install writes the real `/usr/local/bin`; `unzip`/`tar` resolve to the real binaries because their mocks only record.
+  - A tool is skipped only when its stamp file holds the current URL and the binary is executable; the skip line `<tool>: up to date (stamp <path>); rm it to force a re-install` names the stamp, so `rm` it to force a re-install.
+
+- `_GO_INSTALL_ROOT` (`lib/linux_ubuntu.sh:_install_go_from_tarball`, `_install_ubuntu_go`)
+  - Default `/usr/local`; set at setup scope, or a go test replaces the real `/usr/local/go`. Pair it with `_GO_BIN` (a stub printing the version) per test.
+
+- `_APT_KEY_GPG_BIN` (`lib/linux_ubuntu.sh:_install_apt_keyring`)
+  - Default `gpg`; tests point it at `tests/mocks/gpg-dearmor`, because `tests/mocks/gpg` never writes its `-o` target and an empty keyring counts as a failed fetch.
+
+- `_DOCKER_KEYRING`/`_DOCKER_SOURCES_LIST` (`lib/linux_ubuntu.sh:_install_ubuntu_docker`)
+  - Defaults `/etc/apt/keyrings/docker.asc` and `/etc/apt/sources.list.d/docker.list`; set both at setup scope so the sudo mock cannot write the real `/etc/apt`.
+
+- `MOCK_WGET_FAIL_URL`/`MOCK_CURL_FAIL_URL`/`MOCK_APT_FAIL_SUBCMD`/`MOCK_MV_FAIL_ARGS`, and the `SHIM_DIR` shims in `tests/setup_env/linux_ubuntu.bats`
+  - Each fails only the call whose argv contains the value (`MOCK_APT_FAIL_SUBCMD` matches the subcommand), so one command in a step fails while its siblings succeed. A set `MOCK_WGET_EXIT`/`MOCK_CURL_EXIT` wins over the URL knob.
+  - `SHIM_DIR` holds per-argument wrappers (`SHIM_APT_FAIL_PKGS`, `SHIM_SNAP_FAIL_ARGS`, `SHIM_TEE_FAIL_ARGS`, `SHIM_USERMOD_EXIT`, `SHIM_FLATPAK_*`) and the `usermod`/`flatpak` shims, because no mock exists for them and the real binaries would run. Set the `SHIM_*` variable in the test, never at setup scope.
+
 - `_TFLINT_URL`/`_TFLINT_SHA256`/`_TFSEC_URL`/`_TFSEC_SHA256` (`lib/linux_ubuntu.sh:_install_ubuntu_tflint`/`_install_ubuntu_tfsec`)
   - Drive `_install_pinned_release_binary` with a local fixture URL and a deliberately wrong checksum via these four vars; never mock `sha256sum` itself, mirroring the rustup rule — mocking it would make every mismatch case vacuous. → `dotfiles-test-seams.md` § `_TFLINT_URL / _TFLINT_SHA256 / _TFSEC_URL / _TFSEC_SHA256 seams`
 
@@ -659,6 +676,7 @@ two-second grep appears to refute the rule.
 
 - `tests/mocks/ln`, `chmod`, `mv`, `cp` and `tee` pass through to the real binary (`/bin/cmd "$@" 2>/dev/null || true`), so a test asserting real filesystem state gets a real result.
 - Set the mock's exit-code variable to a non-zero value to simulate a failure instead of calling through. → `dotfiles-bats-test-infrastructure.md` § `Mock Pattern: pass-through mocks (ln, chmod, mv, cp, tee)`
+- `tests/mocks/cp`, `mv` and `tee` swallow real failures (`|| true`); drive a failure with `MOCK_CP_EXIT` / `MOCK_MV_FAIL_ARGS` / `MOCK_TEE_EXIT`, or a `SHIM_DIR` shim, never by expecting the real binary to fail.
 - `tests/mocks/sudo` execs its command with the caller's environment, except `DEBIAN_FRONTEND`, which it unsets unless given on the sudo command line — as real sudo does — so a test can tell `sudo VAR=x cmd` from `VAR=x sudo cmd`. `tests/setup_env/mocks_sudo.bats` pins that contract.
 
 - `env -i` strips `PATH`, so a `PATH`-injected pyenv mock is invisible to `setup_ansible()`'s pyenv calls — place the mock binary at the absolute path `${HOME}/.pyenv/bin/pyenv` instead. → `dotfiles-bats-test-infrastructure.md` § `Mock Pattern: env -i strips PATH (pyenv mock placement) -- CLAUDE.md addendum`
