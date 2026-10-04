@@ -699,7 +699,7 @@ _stub_ubuntu_steps() {
 nvidia" ]
 }
 
-@test "_install_ubuntu_base_packages returns 0 when a package install fails on a supported release" {
+@test "_install_ubuntu_base_packages returns 2 when a package install fails on a supported release" {
   unset MACOS RESOLUTE
   export LINUX=1 UBUNTU=1 NOBLE=1
   export MOCK_XARGS_EXIT=1
@@ -708,8 +708,8 @@ nvidia" ]
   # gets no input, nala never runs, and the 0 below would prove nothing.
   cd "${REPO_ROOT}"
   run _install_ubuntu_base_packages
-  [ "$status" -eq 0 ]
-  # The failing install really ran: the 0 above is the explicit return, not a skip.
+  [ "$status" -eq 2 ]
+  # The failing install really ran: the 2 above is a reported failure, not a skip.
   grep -q "^xargs -r sudo DEBIAN_FRONTEND=noninteractive nala install" "${MOCK_CALLS_FILE}"
 }
 
