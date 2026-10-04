@@ -124,9 +124,7 @@ EOF
   _stub_dir="$(argv_probe_stub_path nala)"
   PATH="${_stub_dir}:${PATH}" run update_apt_packages
   [ "$status" -eq 0 ]
-  grep -qx 'argv: nala full-upgrade' "${MOCK_CALLS_FILE}"
-  grep -qx 'argv: nala Dpkg::Options::=--force-confdef' "${MOCK_CALLS_FILE}"
-  grep -qx 'argv: nala Dpkg::Options::=--force-confold' "${MOCK_CALLS_FILE}"
+  grep -qxF 'argv: nala [full-upgrade][-o][Dpkg::Options::=--force-confdef][-o][Dpkg::Options::=--force-confold][-y]' "${MOCK_CALLS_FILE}"
 }
 
 # needrestart's apt Post-Invoke hook raises a debconf dialog when stdout is not a

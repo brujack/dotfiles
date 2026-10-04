@@ -2550,3 +2550,11 @@ STUB
   [ -n "${_block}" ]
   printf '%s\n' "${_block}" | grep -qE '^[[:space:]]*IdentityFile[[:space:]]+~/\.ssh/github$'
 }
+
+@test "APT_CONFFILE_OPTS is the exact four-element conffile option list" {
+  [ "${#APT_CONFFILE_OPTS[@]}" -eq 4 ]
+  [ "${APT_CONFFILE_OPTS[0]}" = "-o" ]
+  [ "${APT_CONFFILE_OPTS[1]}" = "Dpkg::Options::=--force-confdef" ]
+  [ "${APT_CONFFILE_OPTS[2]}" = "-o" ]
+  [ "${APT_CONFFILE_OPTS[3]}" = "Dpkg::Options::=--force-confold" ]
+}

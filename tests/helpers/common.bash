@@ -118,18 +118,16 @@ EOF
   printf '%s' "${_dir}"
 }
 
-# Like frontend_probe_stub_path, but records the stub's argv ONE LINE PER ARGUMENT
-# ("argv: <name> <arg>") so a test can assert that an option arrived as its own
-# argument rather than glued into another one. Prints the stub directory.
+# Like frontend_probe_stub_path, but records ONE line per invocation with every
+# argument bracketed ("argv: <name> [a][b][c]"), so a test can assert the exact
+# contiguous argument order and count invocations. Prints the stub directory.
 argv_probe_stub_path() {
   local _name="$1" _dir _bash_bin
   _dir="$(mktemp -d -p "${BATS_TEST_TMPDIR}")"
   _bash_bin="$(command -v bash)"
   cat > "${_dir}/${_name}" << EOF
 #!${_bash_bin}
-for _a in "\$@"; do
-  printf 'argv: %s %s\n' "${_name}" "\${_a}" >> "\${MOCK_CALLS_FILE}"
-done
+printf 'argv: %s %s\n' "${_name}" "\$(printf '[%s]' "\$@")" >> "\${MOCK_CALLS_FILE}"
 exit 0
 EOF
   chmod +x "${_dir}/${_name}"
