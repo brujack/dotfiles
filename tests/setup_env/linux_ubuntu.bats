@@ -1001,6 +1001,69 @@ _go_stamp() { printf '%s/go' "${_DL_STAMP_DIR}"; }
   refute_grep "^mv " "${MOCK_CALLS_FILE}"
 }
 
+# A mv that logs like the mock, fails any call whose argv contains $1 (a
+# substring), optionally leaving a go dir behind as a half-done move would.
+_mv_shim() {
+  local _fail="$1" _leave="${2:-}" _shim="${BATS_TEST_TMPDIR}/mvshim"
+  mkdir -p "${_shim}"
+  cat > "${_shim}/mv" << EOF
+#!/usr/bin/env bash
+printf 'mv %s\n' "\$*" >> "\${MOCK_CALLS_FILE}"
+if [[ "\$*" == *"${_fail}"* ]]; then
+  [[ -n "${_leave}" ]] && mkdir -p "${_leave}"
+  exit 1
+fi
+exec /bin/mv "\$@"
+EOF
+  /bin/chmod +x "${_shim}/mv"
+  printf '%s' "${_shim}"
+}
+
+@test "_install_ubuntu_go: an up-to-date stamp still runs the version check" {
+  _make_go_tarball
+  _go_stub 1.26.3
+  _seed_go
+  mkdir -p "${_DL_STAMP_DIR}"
+  printf '%s\n' "${GO_DOWNLOAD_URL}" > "$(_go_stamp)"
+  export GO_VER="1.27"
+  run _install_ubuntu_go
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"go: version check failed (installed 1.26.3, want 1.27)"* ]]
+  refute_grep "^wget " "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_go: restore is not attempted onto a go that exists" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  _seed_go
+  local _shim
+  _shim="$(_mv_shim ".dl." "${_GO_INSTALL_ROOT}/go")"
+  PATH="${_shim}:${PATH}" run _install_ubuntu_go
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"could not restore"* ]]
+  [[ "$output" == *"${_GO_INSTALL_ROOT}/go.old"* ]]
+  [ "$(< "${_GO_INSTALL_ROOT}/go.old/bin/v")" = "old" ]
+  # No nesting: the restore must not have moved go.old into the existing go.
+  [ ! -e "${_GO_INSTALL_ROOT}/go/go.old" ]
+  [ ! -e "$(_go_stamp)" ]
+}
+
+@test "_install_ubuntu_go: new-tree move and restore both failing keeps the old tree in go.old" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  _seed_go
+  local _shim
+  _shim="$(_mv_shim "NEVER-MATCHES")"
+  # Fail both the new-tree move and the go.old -> go restore.
+  printf '#!/usr/bin/env bash\nprintf "mv %%s\\n" "$*" >> "${MOCK_CALLS_FILE}"\n[[ "$*" == *.dl.* || "$*" == "%s/go.old %s/go" ]] && exit 1\nexec /bin/mv "$@"\n' "${_GO_INSTALL_ROOT}" "${_GO_INSTALL_ROOT}" > "${_shim}/mv"
+  PATH="${_shim}:${PATH}" run _install_ubuntu_go
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"go: install failed"* ]]
+  [[ "$output" == *"could not restore the previous tree; it is at ${_GO_INSTALL_ROOT}/go.old"* ]]
+  [ "$(< "${_GO_INSTALL_ROOT}/go.old/bin/v")" = "old" ]
+  [ ! -e "$(_go_stamp)" ]
+}
+
 @test "_install_ubuntu_go: an unwritable stamp warns and still succeeds" {
   _make_go_tarball
   _go_stub 1.27.1

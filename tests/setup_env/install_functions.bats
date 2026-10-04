@@ -380,7 +380,12 @@ teardown() {
   export HOME="${_home}"
   export GO_VER="1.18"
   export PATH="${BATS_TEST_DIRNAME}/../mocks:${PATH}"
+  printf '#!/usr/bin/env bash\nprintf "go version go1.18 linux/amd64\\n"\n' > "${BATS_TEST_TMPDIR}/gostub"
+  chmod +x "${BATS_TEST_TMPDIR}/gostub"
+  export _GO_BIN="${BATS_TEST_TMPDIR}/gostub"
   run _install_ubuntu_go
+  # Positive control: the tarball path ran, so the grep below can fail for a reason.
+  grep -q "^wget " "${MOCK_CALLS_FILE}"
   run grep "add-apt-repository" "${MOCK_CALLS_FILE}"
   [ "$status" -ne 0 ]
 }
@@ -398,6 +403,7 @@ teardown() {
   # test is only about the tarball path being taken.
   run _install_ubuntu_go
   [ "$status" -eq 1 ]
+  [[ "$output" == *"go: extract failed"* ]]
   grep -q "^wget " "${MOCK_CALLS_FILE}"
 }
 

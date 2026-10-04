@@ -232,14 +232,16 @@ _install_ubuntu_powershell() {
 }
 
 # Install the pinned Go tarball into ${_GO_INSTALL_ROOT:-/usr/local}/go. The
-# tarball is extracted in a throwaway directory under the same root (so the
-# moves below are renames), chowned to root:root (tar ran as the user and a
-# rename keeps ownership), then swapped in. Every move's destination is checked
-# absent first instead of using `mv -T`, which macOS mv lacks and the
-# test-macos job runs this suite. The previous tree is kept as go.old until the
-# new one is in place and is restored if the new tree's move fails. The stamp
-# `go` holds the URL and is written only after the swap succeeded, so an
-# interrupted run installs again next time.
+# tarball is extracted in a throwaway directory under _DL_TMP_ROOT, chowned to
+# root:root (tar ran as the user and a rename keeps ownership), then swapped in.
+# The moves are renames only because ~/software_downloads and /usr/local share a
+# filesystem on claude and workstation (measured); on a separate /home they
+# become copies. Every move's destination is checked absent first instead of
+# using `mv -T`, which macOS mv lacks and the test-macos job runs this suite.
+# The previous tree is kept as go.old until the new one is in place and is
+# restored if the new tree's move fails. The stamp `go` holds the URL and is
+# written only after the swap succeeded, so an interrupted run installs again
+# next time.
 # Returns 0 installed or up to date; 1 on a failed stage (named in a warning).
 # Seams, read at call time: _GO_INSTALL_ROOT, _DL_STAMP_DIR, _DL_TAR_BIN. The
 # owner is hardcoded root:root so an inherited variable cannot choose it.
@@ -272,7 +274,7 @@ _install_go_from_tarball() {
     _stage="extract"
   elif ! sudo chown -R root:root "${_tmp}/go"; then
     _stage="chown"
-  elif [[ ! -e ${_root}/go && ( -e ${_root}/go.old || -L ${_root}/go.old ) ]] \
+  elif [[ ! -e ${_root}/go && ! -L ${_root}/go && ( -e ${_root}/go.old || -L ${_root}/go.old ) ]] \
     && ! sudo mv "${_root}/go.old" "${_root}/go"; then
     # A previous run's restore failed, so go.old may be the only good copy.
     _stage="restore"
@@ -293,14 +295,15 @@ _install_go_from_tarball() {
   if [[ -z ${_stage} ]]; then
     if [[ -e ${_root}/go || -L ${_root}/go ]] || ! sudo mv "${_tmp}/go" "${_root}/go"; then
       _stage="install"
-      if [[ ${_moved} -eq 1 ]] && ! sudo mv "${_root}/go.old" "${_root}/go"; then
+      if [[ ${_moved} -eq 1 ]] \
+        && { [[ -e ${_root}/go || -L ${_root}/go ]] || ! sudo mv "${_root}/go.old" "${_root}/go"; }; then
         log_warn "go: could not restore the previous tree; it is at ${_root}/go.old"
       fi
     elif [[ ${_moved} -eq 1 ]]; then
       sudo rm -rf "${_root}/go.old" || log_warn "go: could not remove ${_root}/go.old"
     fi
   fi
-  sudo rm -rf "${_tmp}"
+  sudo rm -rf "${_tmp}" || log_warn "go: could not remove ${_tmp}"
   if [[ -n ${_stage} ]]; then
     log_warn "go: ${_stage} failed"
     return 1
