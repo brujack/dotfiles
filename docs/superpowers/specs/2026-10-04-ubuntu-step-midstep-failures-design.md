@@ -25,7 +25,7 @@ four distinct shapes. The first is worse than the row describes.
 2. **Unchecked mid-step commands that then act on their output.** `wget -O <file>` truncates
    its target before it fails. Measured: a file holding `old`, then `wget -O` against a closed
    port, gives rc 4 and 0 bytes. The following `sudo cp -a <file> /usr/local/bin/` still runs.
-   telepresence is re-downloaded on every run (`:497`, no existence guard), so one failed
+   telepresence is re-downloaded on every run (`:520-524`, no existence guard), so one failed
    fetch overwrites a working `/usr/local/bin/telepresence` with an empty file and reports success.
    kind, consul, vault, nomad, packer, vagrant, cf-terraforming, docker-compose and yq have the
    same shape. Their existence guard limits it to the first run, or to a run after a version
@@ -100,27 +100,41 @@ archive (ignored for `bin`).
 
 1. **Skip guard.** If `${_DL_STAMP_DIR}/<name>` exists, holds exactly `<url>`, and
    `${_DL_BIN_DIR:-/usr/local/bin}/<dest-name>` is executable, return 0 without fetching. `_DL_STAMP_DIR`
-   defaults to `~/.local/share/dotfiles/installed`. The URL carries the pinned version for
-   every tool except telepresence, so a version bump changes the URL and re-installs.
-   telepresence's URL ends in `latest`, so it never skips on the stamp: it always fetches, and
-   skips the install step when `cmp -s` finds the fetched file identical to the installed one.
+   defaults to `~/.local/share/dotfiles/installed`. On a skip it prints
+   `<tool>: up to date (stamp <path>); rm it to force a re-install`, so the skip is visible and
+   the recovery is named. The URL carries the pinned version for every tool except
+   telepresence, so a version bump changes the URL and re-installs.
+   telepresence's `TELEPRESENCE_URL` ends in `latest`, which redirects to a versioned URL
+   (measured: `…/tel2/linux/amd64/2.20.2/telepresence`). Its `<url>` is therefore resolved first
+   with `curl -fsSIL -o /dev/null -w '%{url_effective}'`, and the stamp and skip use the
+   resolved URL, so telepresence skips like the other nine and is fetched only when upstream
+   publishes a new version. If resolution fails and the destination is executable, the helper
+   warns and returns 0 (a network blip on a provisioned box is not a failure); if the
+   destination is missing, it is a failure.
 2. **Fetch and extract** into `mktemp -d "${_DL_TMP_ROOT:-${HOME}/software_downloads}/.dl.XXXXXXXX"`.
    Each stage is checked.
-3. **Install** with `sudo install -m 0755 -o root -g root <tmp>/<member> ${_DL_BIN_DIR:-/usr/local/bin}/<dest-name>`,
+3. **Install** with `sudo install -m 0755 <tmp>/<member> ${_DL_BIN_DIR:-/usr/local/bin}/<dest-name>`,
    checked. `install` unlinks the target before writing, so replacing a running binary does not
    fail with "Text file busy" (measured: `cp -a` onto an executing binary gives ETXTBSY, rc 1),
-   and nothing is ever written to `/usr/local/bin` before every earlier stage succeeded.
-4. **Stamp** `<url>` into `${_DL_STAMP_DIR}/<name>` only after the install succeeded.
+   and nothing is ever written to `/usr/local/bin` before every earlier stage succeeded. No
+   `-o root -g root`: real sudo already makes root the owner, and under the test harness
+   (`tests/mocks/sudo` execs the real `install` as the user) `-o`/`-g` fails with "cannot
+   change ownership", rc 1 (measured). `_install_pinned_release_binary` (`:1126`) omits them for
+   the same reason.
+4. **Stamp** `<url>` into `${_DL_STAMP_DIR}/<name>` only after the install succeeded. A failed
+   stamp write is a `log_warn`, not a sub-install failure: the tool is installed and working, and
+   the only cost is that the next run installs it again.
 5. `rm -rf <tmp>` on every path, success and failure, with one explicit call before each
    `return` (no RETURN/EXIT trap; `scripts/check-lib-exit-traps.sh` ratchets them and a
    RETURN trap is not function-scoped).
 
-A failure at any stage leaves no stamp, so the next run retries from the fetch. Existing
+A failure at any stage before the stamp leaves no stamp, so the next run retries from the fetch. Existing
 artifacts in `~/software_downloads` are left alone: nothing reads them any more, and deleting
 them is not this change's job.
 
 **First run after merge re-installs every tool once**, because no stamps exist yet. That is
-about ten downloads on each Linux development box, once. The alternative, back-filling stamps
+about 450 MB of downloads plus a Go tree swap on each Linux development box, once (measured
+from the artifact sizes in `~/software_downloads` on `claude`). The alternative, back-filling stamps
 from the old artifacts, would trust exactly the artifacts this change exists to stop trusting.
 
 This helper does not add checksum verification. These ten tools have no sha256 pins today,
@@ -136,17 +150,34 @@ installs a directory, not a binary:
 2. Fetch and extract into a throwaway directory under `_DL_TMP_ROOT`, which defaults to a path
    on the same filesystem as `/usr/local` on both development boxes (measured by the round-2
    risk lens with `df`), so the moves below are renames.
-3. Swap: `sudo rm -rf /usr/local/go.old`, then `sudo mv -T /usr/local/go /usr/local/go.old` if
-   `/usr/local/go` exists, then `sudo mv -T <tmp>/go /usr/local/go`. If that last move fails,
-   `sudo mv -T /usr/local/go.old /usr/local/go` restores the old tree. `-T` stops `mv` nesting
-   the tree inside an existing directory (measured: without it, a leftover `go.old` gets the
-   tree nested as `go.old/go`). Delete `go.old` only after the new tree is in place.
-4. Stamp, then remove the throwaway directory.
-5. The version postcondition compares the series: `[[ ${v} == "${GO_VER}" || ${v} == "${GO_VER}".* ]]`.
+3. Own: `sudo chown -R root:root <tmp>/go`, checked. `tar` runs as the user and a rename keeps
+   ownership, so without this `/usr/local/go` becomes a user-writable toolchain under a root path.
+   Today both boxes show it `root:root` (measured), set by `sudo chown -R` at `:245`.
+4. Swap:
+   - If `/usr/local/go` is missing and `/usr/local/go.old` exists, a previous run's restore
+     failed and `go.old` may be the only good copy: move it back to `/usr/local/go` first and
+     do not delete it.
+   - Otherwise `sudo rm -rf /usr/local/go.old`.
+   - If `/usr/local/go` exists, `sudo mv -T /usr/local/go /usr/local/go.old`, and remember that
+     this move happened.
+   - `sudo mv -T <tmp>/go /usr/local/go`. If it fails and the earlier move happened,
+     `sudo mv -T /usr/local/go.old /usr/local/go` restores the old tree. If no earlier move
+     happened there is nothing to restore.
+   - `-T` stops `mv` nesting the tree inside an existing directory (measured: without it, a
+     leftover `go.old` gets the tree nested as `go.old/go`). Delete `go.old` only after the new
+     tree is in place.
+5. Stamp (a failed stamp write warns, as above), then remove the throwaway directory with
+   `sudo rm -rf`, since after step 3 it may hold a root-owned tree.
+6. The version postcondition compares the series: `[[ ${v} == "${GO_VER}" || ${v} == "${GO_VER}".* ]]`.
    `GO_VER="1.27"` while the toolchain reports `go1.27.1`; the current `==` at `:266` has never
    matched on any machine running the pinned tarball. A mismatch is a go failure.
 
 `_GO_INSTALL_ROOT` (default `/usr/local`) is a new seam so tests run the swap against a fixture.
+A fixture cannot be chowned to root as the user, so `_GO_OWNER` (default `root:root`) is the
+owner the `chown` step applies; tests set it to the user and assert the `chown` call carries it.
+
+CLAUDE.md's Test Seams section gains one entry naming the stamp directory, the skip line, and
+the recovery (`rm` the stamp).
 
 ### Keyrings: fetch to a file, dearmor to a staging path, rename
 
@@ -263,16 +294,22 @@ For each sub-install, one failure test asserts five things:
    what it was before the run, no stamp was written, and no throwaway directory remains;
 5. a sibling sub-install in the same step still ran.
 
-Helper tests, each stage failing in turn (fetch, extract, install, stamp-write): no stamp, no
-throwaway directory, destination unchanged; then a second call with the failure cleared fetches
-again (two fetch calls in `MOCK_CALLS_FILE`) and stamps. Plus: a matching stamp with an
-executable destination skips the fetch (no fetch call), and a matching stamp with the
-destination missing does not skip.
+Helper tests, with the destination fixture seeded with known bytes, each of fetch, extract and
+install failing in turn: the `mktemp`/fetch call is in `MOCK_CALLS_FILE` (positive control), no
+stamp, no throwaway directory, destination holds its seeded bytes; then a second call with the
+failure cleared fetches again (two fetch calls) and stamps. Stamp-write failing (stamp directory
+unwritable): destination replaced, no stamp, status 0, a warning printed. A matching stamp with
+an executable destination makes no fetch call **and** prints the skip line; the same fixture
+without the stamp makes exactly one fetch call. A matching stamp with the destination missing
+does not skip.
 
 Go tests, with a fixture `_GO_INSTALL_ROOT` seeded with `go/bin/v` holding `old`:
 
 - third `mv` failing → `go/bin/v` still holds `old`, and `MOCK_CALLS_FILE` shows the first move
   to `go.old` happened (the restore path ran, not a no-op);
+- no `go` and no `go.old` before, new-tree move failing → no restore `mv` is attempted;
+- no `go` but a `go.old` holding `old` → `go.old` is moved back first and not deleted;
+- the `chown` call carries `_GO_OWNER` and targets the extracted tree, before the swap;
 - a leftover `go.old` holding `stale` → after a clean run `go/bin/v` holds the new content and
   no `go/go` exists;
 - version: `_GO_BIN` stub printing `go version go1.27.1 linux/amd64` with `GO_VER=1.27` → 0;
@@ -287,8 +324,11 @@ Additional cases:
   one warning, and in the same run a later step stays 0, its `apt update` call is in
   `MOCK_CALLS_FILE` (positive control), and it prints nothing about `apt update`. With
   `MOCK_APT_FAIL_SUBCMD=install`, the step is non-zero.
-- **telepresence busy.** With the fixture destination identical to the fetched file, no
-  `install` call is made; with it different, `install` is called once.
+- **telepresence.** With `MOCK_CURL_STDOUT` giving a resolved URL that matches the stamp and an
+  executable destination: the resolution call is present, no fetch, the skip line printed. With
+  a different resolved URL: one fetch, one `install`, the new URL stamped. With resolution
+  failing and an executable destination: status 0 and a warning; with the destination missing:
+  non-zero.
 - **Dispatcher, both branches.** With `apt install docker-ce` failing for real, nvidia is skipped
   and both are named. With only `docker-buildx-plugin` failing, docker is named failed and
   nvidia still runs.
@@ -296,14 +336,15 @@ Additional cases:
   Unsupported release still returns 1 and runs nothing else.
 - **Clean run, discriminating.** A dispatcher-level test runs every step with all mocks
   succeeding and asserts both rc 0 **and** that `MOCK_CALLS_FILE` holds each step's core install
-  call. A second run in the same test, with stamps now present, asserts no helper fetch calls.
+  call, including every helper's fetch call. A second run in the same test, with stamps now
+  present, asserts no helper fetch calls **and** that every helper's skip line was printed.
 
 Every new check gets a mutation control: delete the check and confirm its test goes red.
 
 ## Requirements
 
 - **R1.** `[PR1]` Each of `_install_ubuntu_docker`, `_install_ubuntu_k8s_tools`, `_install_ubuntu_hashicorp`, `_install_ubuntu_cloud_tools`, `_install_ubuntu_gui_tools`, `_install_ubuntu_misc`, `_install_ubuntu_workstation` and `_install_ubuntu_go` returns non-zero when any sub-install it attempted failed, and 0 only when all attempted sub-installs succeeded.
-- **R2.** `[PR1]` kind, telepresence, consul, vault, nomad, packer, vagrant, cf-terraforming, docker-compose and yq are installed through `_install_fetched_binary`, which downloads and extracts only inside a throwaway directory, writes the destination only with `sudo install` after every earlier stage succeeded, writes the stamp only after the install succeeded, and removes the throwaway directory on every path.
+- **R2.** `[PR1]` kind, telepresence, consul, vault, nomad, packer, vagrant, cf-terraforming, docker-compose and yq are installed through `_install_fetched_binary`, which downloads and extracts only inside a throwaway directory, writes the destination only with `sudo install` after every earlier stage succeeded, writes the stamp only after the install succeeded, treats a failed stamp write as a warning, and removes the throwaway directory on every path.
 - **R3.** `[PR1]` A failed sub-install does not prevent sibling sub-installs in the same step from running.
 - **R4.** `[PR1]` Each failed sub-install is named on stderr with its step and tool.
 - **R5.** `[PR1]` Every apt keyring written by the in-scope steps, nvidia's included, is fetched to a file and replaced only by renaming a non-empty staged file; a failed fetch or dearmor leaves the live keyring unchanged.
@@ -313,13 +354,13 @@ Every new check gets a mutation control: delete the check and confirm its test g
 - **R9.** `[PR1]` `_install_ubuntu_docker` returns 3 when an `apt install` of `docker-ce`, `docker-ce-cli` or `containerd.io` failed or `daemon.json` failed validation, and 1 for any other failed sub-install; `install_ubuntu_packages` skips nvidia only when docker returned 3.
 - **R10.** `[PR1]` A run where every command succeeds returns 0 from every step, and each step's core install call is made.
 - **R11.** `[PR1]` The go step accepts an installed version equal to `GO_VER` or beginning with `GO_VER.`, and fails on any other version after install.
-- **R12.** `[PR1]` Go is extracted in a throwaway directory and swapped in with `mv -T` after removing any stale `go.old`; if the new tree's move fails, the old tree is restored; `go.old` is deleted only after the new tree is in place; the stamp is written only after the swap succeeded.
-- **R13.** `[PR1]` A helper-installed tool whose stamp matches its URL and whose destination is executable is not fetched; telepresence is always fetched and is installed only when the fetched file differs from the installed one.
+- **R12.** `[PR1]` Go is extracted in a throwaway directory, chowned to `_GO_OWNER` (default `root:root`) before the swap, and swapped in with `mv -T`; a `go.old` is deleted beforehand only when `/usr/local/go` exists, and is moved back instead when it does not; if the new tree's move fails after the old tree was moved aside, the old tree is restored; `go.old` is deleted only after the new tree is in place; the stamp is written only after the swap succeeded; the throwaway directory is removed with `sudo rm -rf`.
+- **R13.** `[PR1]` A helper-installed tool whose stamp matches its URL and whose destination is executable is not fetched, and the skip prints a line naming the stamp path; for telepresence the URL is the one `TELEPRESENCE_URL` resolves to, and a failed resolution with an executable destination is a warning, not a failure.
 - **V1.** Every new check has a mutation control: removing it turns its test red. Record each removal and the red test name in the PR body.
 - **V2.** `make test` passes on the Linux development box and in CI.
 - **V3.** On a Linux box, add a source pointing at an unreachable host to a scratch sources directory and run `apt update` with `-o Dir::Etc::sourcelist` scoped to it; record its exit code. If it exits 0, R6's rationale is moot but the rule stays harmless. Then, with a scoped source for an already-installed package pointing at the unreachable host, run `apt install -y <package>` and record its exit code; an rc 0 ("already the newest version") is correct behaviour under R6, since the package is installed and base's warning reports the dead source.
 - **V4.** Before merge, on `claude`: for each snap the workstation list and gui_tools install, run the exact `sudo snap install …` invocation the code uses against the already-installed snap, and the exact `sudo snap set certbot trust-plugin-with-root=ok`; record each exit code. Any non-zero result is fixed or exempted in this PR, so a provisioned box reports rc 0.
-- **V5.** After merge, run `setup_env.sh -t developer` on `claude` and record `install_ubuntu_packages`' rc and any `failed:` line; a second run reports no helper downloads.
+- **V5.** After merge, run `setup_env.sh -t developer` on `claude` and record `install_ubuntu_packages`' rc and any `failed:` line; a second run prints the skip line for each of the ten helper tools and downloads none.
 - **N1.** No change to `_install_ubuntu_rust`, `_install_ubuntu_brew_packages` or `_install_ubuntu_albert`, and none to `_install_ubuntu_nvidia` beyond its keyring and source-list fetch.
 - **N2.** No `set -e`, `set -o pipefail` or ERR/EXIT/RETURN trap is introduced.
 - **N3.** No change to `run_setup_or_developer`'s handling of `install_ubuntu_packages`' return codes.
@@ -374,3 +415,25 @@ Finding: (1) The R12 restore test was vacuous: `tests/mocks/mv` fails every call
 Assumption: every newly checked `snap install`/`snap set` exits 0 on a provisioned `claude`; settled by running each exact invocation against the installed snaps.
 Disposition: Addressed — `MOCK_MV_FAIL_ARGS` and a content-seeded Go fixture; `mv -T`; throwaway directory removes the cf-terraforming hazard and the cleanup class; assumption made V4, a pre-merge measurement. Operator, 2026-10-04: "round 3".
 
+
+## Multi-Lens Review, round 3
+
+Reviewed at commit: `5281b018` (round-2 revisions: stamped installs, keyring staging). All three lenses re-run.
+
+### Goal-Fit (round 3)
+
+Finding: Premise re-verified; combined scope now coherent and the stamp passes the reads-it test (every run's skip guard reads it). (1) The clean-run test and V5 asserted "no fetches" on a second run, contradicting R13's always-fetched telepresence, and both were absence assertions. (2) The stamp-write stage's test asserted "destination unchanged" after the install had already replaced it, and a stamp-write failure was undefined. (3) The Go swap drops root ownership: today `:245` runs `sudo chown -R root:root`; extracting as the user then renaming leaves a user-owned `/usr/local/go`, and a root-owned tree then needs `sudo rm -rf` to clean. Telepresence line reference stale.
+Assumption: Each zip/tar holds a single executable at `<member>`. Settled by the author: the old extracted `vagrant_2.4.9` and `consul_2.0.0` directories on `claude` each hold the binary plus `LICENSE.txt`, and today's code copies only the binary.
+Disposition: Addressed — telepresence stamps its resolved URL (R13) so the second-run checks are uniform and carry positive controls; stamp-write failure is a warning with its own test (R2); Go tree chowned to `_GO_OWNER` before the swap and cleaned with `sudo rm -rf` (R12). Operator, 2026-10-04: "yes".
+
+### Ergonomics (round 3)
+
+Finding: ETXTBSY premise re-measured (`cp` rc 1, `install` rc 0). (1) Same stamp-write contradiction. (2) Stamps invisible: no log line, doctor check or doc names the stamp directory, so a wrong-but-executable binary is skipped forever. (3) telepresence still downloads 114 MB every run and a network blip becomes rc 2; `latest` redirects to a versioned URL. (4) First-run cost understated: ~450 MB plus a Go swap. (5) Four cases would pass on silence (stamp skip, telepresence busy, second clean run, V5).
+Assumption: Every exact `snap install`/`snap set` exits 0 against installed snaps (V4).
+Disposition: Addressed — skip line naming the stamp path plus a CLAUDE.md Test Seams entry; telepresence stamps the resolved URL and a failed resolution with an executable destination warns; cost stated; positive controls added. Assumption remains V4, pre-merge. Operator, 2026-10-04: "yes".
+
+### Risk (round 3)
+
+Finding: (1) `sudo install -o root -g root` fails under the harness (`tests/mocks/sudo` execs the real `install` as the user: measured rc 1, "cannot change ownership"), so every success-path helper test would fail; real sudo already makes root the owner. (2) Same Go ownership gap as Goal-Fit, plus the cleanup needing `sudo`. (3) Same R13/clean-run/V5 contradiction. (4) Go deletes `go.old` unconditionally, which loses the only good copy after a failed restore, and attempts a restore when no move happened. (5) Helper-stage absence assertions need `mktemp`/fetch positive controls and a seeded destination. Archive members, same-filesystem (`/` on both boxes), keyring dearmor, stamp-dir ownership and the `mv` mock path checked and clean.
+Assumption: Same as Ergonomics (V4).
+Disposition: Addressed — `-o`/`-g` dropped, matching `:1126`; Go swap moves a lone `go.old` back instead of deleting it and restores only after a move happened; helper tests seeded and positive-controlled. Operator, 2026-10-04: "yes" (approving the fixes and a scoped Risk re-review in place of a full round 4).
