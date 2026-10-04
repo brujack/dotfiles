@@ -87,6 +87,15 @@ setup() {
   _GO_CLEAN_PATH="$(printf '%s' "${PATH}" | tr ':' '\n' | grep -v 'tests/mocks' | tr '\n' ':' | sed 's/:$//')"
   _DL_TAR_BIN="$(PATH="${_GO_CLEAN_PATH}" command -v tar)"
   export _DL_TAR_BIN="${_DL_TAR_BIN:-/nonexistent/tar}"
+  # k8s_tools and hashicorp install through _install_fetched_binary, which
+  # writes under _DL_BIN_DIR (default /usr/local/bin) via the exec-ing sudo mock.
+  # unzip and zip are the real ones: the mocks only record.
+  export _DL_BIN_DIR="${BATS_TEST_TMPDIR}/dl-bin"
+  mkdir -p "${_DL_BIN_DIR}"
+  _DL_UNZIP_BIN="$(PATH="${_GO_CLEAN_PATH}" command -v unzip)"
+  export _DL_UNZIP_BIN="${_DL_UNZIP_BIN:-/nonexistent/unzip}"
+  _ZIP_BIN="$(PATH="${_GO_CLEAN_PATH}" command -v zip)"
+  _ZIP_BIN="${_ZIP_BIN:-/nonexistent/zip}"
   # _install_ubuntu_docker and _install_ubuntu_nvidia fetch keyrings through
   # _install_apt_keyring and write a docker source list; tests/mocks/sudo execs
   # real commands, so these keep every write under the test tmpdir. The gpg stub
@@ -2021,71 +2030,133 @@ _nvidia_seams() {
 
 # ── _install_ubuntu_k8s_tools ────────────────────────────────────────────────
 
-@test "_install_ubuntu_k8s_tools: HAS_K8S calls wget for kind" {
+# kind and telepresence go through _install_fetched_binary (a plain file as the
+# download); telepresence resolves its "latest" link first, so curl's stdout must
+# name a different URL. The same curl stdout is the kubectl key body.
+_k8s_env() {
   export HAS_K8S=1
   export KIND_VER="0.22.0"
-  export KIND_URL="https://kind.sigs.k8s.io/dl/v0.22.0/kind-linux-amd64"
+  export KIND_URL="https://kind.example/dl/kind-linux-amd64"
   export KUBERNETES_VER="v1.29"
-  export TELEPRESENCE_URL="https://app.getambassador.io/download/tel2/linux/amd64/latest/telepresence"
+  export TELEPRESENCE_URL="https://tp.example/latest/telepresence"
   unset HAS_SNAP
-  run _install_ubuntu_k8s_tools
-  [ "$status" -eq 0 ]
-  grep -q "wget.*kind" "${MOCK_CALLS_FILE}"
+  export MOCK_CURL_STDOUT="https://resolved.example/telepresence-2.20"
+  printf 'binary-body' > "${BATS_TEST_TMPDIR}/blob"
+  export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/blob"
 }
 
-@test "_install_ubuntu_k8s_tools: HAS_K8S skips kind wget when already downloaded" {
-  export HAS_K8S=1
-  export KIND_VER="0.22.0"
-  export KIND_URL="https://kind.sigs.k8s.io/dl/v0.22.0/kind-linux-amd64"
-  export KUBERNETES_VER="v1.29"
-  export TELEPRESENCE_URL="https://app.getambassador.io/download/tel2/linux/amd64/latest/telepresence"
-  touch "${HOME}/software_downloads/kind_0.22.0"
-  unset HAS_SNAP
+@test "_install_ubuntu_k8s_tools: clean run returns 0 and installs kind, telepresence and the kubectl source" {
+  _k8s_env
   run _install_ubuntu_k8s_tools
   [ "$status" -eq 0 ]
-  ! grep -q "wget.*kind_0.22.0" "${MOCK_CALLS_FILE}"
+  [ -x "${_DL_BIN_DIR}/kind" ]
+  [ -x "${_DL_BIN_DIR}/telepresence" ]
+  [ -f "${_DL_STAMP_DIR}/kind" ]
+  [ -s "${_APT_KEYRINGS_DIR}/kubernetes-apt-keyring.gpg" ]
+  grep -q "signed-by=${_APT_KEYRINGS_DIR}/kubernetes-apt-keyring.gpg" "${_APT_SOURCES_DIR}/kubernetes.list"
+  grep -q "apt install kubectl" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_k8s_tools: a stamped, installed kind is not fetched again" {
+  _k8s_env
+  mkdir -p "${_DL_STAMP_DIR}"
+  printf '%s\n' "${KIND_URL}" > "${_DL_STAMP_DIR}/kind"
+  printf 'old' > "${_DL_BIN_DIR}/kind"
+  chmod 0755 "${_DL_BIN_DIR}/kind"
+  run _install_ubuntu_k8s_tools
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"kind: up to date"* ]]
+  refute_grep "wget .*kind.example" "${MOCK_CALLS_FILE}"
+  grep -q "wget .*resolved.example" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_k8s_tools: a failed kind download returns 1, names kind and leaves telepresence installed" {
+  _k8s_env
+  export MOCK_WGET_FAIL_URL="kind.example"
+  run --separate-stderr _install_ubuntu_k8s_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"k8s_tools: kind:"* ]]
+  # Positive control: the kind fetch was really attempted.
+  grep -q "wget .*kind.example" "${MOCK_CALLS_FILE}"
+  [ ! -e "${_DL_BIN_DIR}/kind" ]
+  [ ! -e "${_DL_STAMP_DIR}/kind" ]
+  # Sibling still ran.
+  [ -x "${_DL_BIN_DIR}/telepresence" ]
+  [ -f "${_DL_STAMP_DIR}/telepresence" ]
 }
 
 @test "_install_ubuntu_k8s_tools: no HAS_K8S skips kind and telepresence" {
-  unset HAS_K8S HAS_SNAP
-  export KUBERNETES_VER="v1.29"
+  _k8s_env
+  unset HAS_K8S
   run _install_ubuntu_k8s_tools
   [ "$status" -eq 0 ]
-  ! grep -q "wget.*kind" "${MOCK_CALLS_FILE}"
+  refute_grep "wget" "${MOCK_CALLS_FILE}"
+  [ ! -e "${_DL_BIN_DIR}/kind" ]
 }
 
 @test "_install_ubuntu_k8s_tools: removes stale helm-stable-debian.list before apt update" {
   # baltocdn sources.list.d file written by pre-PR#155 runs must be purged so
   # apt-get update does not hit the NOSPLIT/unsigned repo on subsequent runs.
-  unset HAS_SNAP HAS_K8S
-  export KUBERNETES_VER="v1.29"
+  _k8s_env
+  unset HAS_K8S
+  printf 'stale\n' > "${_APT_SOURCES_DIR}/helm-stable-debian.list"
   run _install_ubuntu_k8s_tools
   [ "$status" -eq 0 ]
-  run grep -q "rm.*helm-stable-debian.list" "${MOCK_CALLS_FILE}"
-  [ "$status" -eq 0 ]
+  [ ! -e "${_APT_SOURCES_DIR}/helm-stable-debian.list" ]
 }
 
 @test "_install_ubuntu_k8s_tools: HAS_SNAP installs helm via snap" {
+  _k8s_env
   export HAS_SNAP=1
-  export HAS_K8S=1
-  export KIND_VER="0.22.0"
-  export KIND_URL="https://kind.sigs.k8s.io/dl/v0.22.0/kind-linux-amd64"
-  export KUBERNETES_VER="v1.29"
-  export TELEPRESENCE_URL="https://app.getambassador.io/download/tel2/linux/amd64/latest/telepresence"
   run _install_ubuntu_k8s_tools
   [ "$status" -eq 0 ]
   grep -q "snap install helm" "${MOCK_CALLS_FILE}"
 }
 
+@test "_install_ubuntu_k8s_tools: a failed helm snap install returns 1 and kubectl is still installed" {
+  _k8s_env
+  export HAS_SNAP=1
+  export MOCK_SNAP_EXIT=1
+  run --separate-stderr _install_ubuntu_k8s_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"k8s_tools: helm:"* ]]
+  grep -q "snap install helm" "${MOCK_CALLS_FILE}"
+  grep -q "apt install kubectl" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_k8s_tools: a failed kubectl keyring fetch returns 1 and the kubectl install is still attempted" {
+  _k8s_env
+  export MOCK_CURL_FAIL_URL="pkgs.k8s.io"
+  run --separate-stderr _install_ubuntu_k8s_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"k8s_tools: kubectl: keyring"* ]]
+  grep -q "curl .*pkgs.k8s.io" "${MOCK_CALLS_FILE}"
+  grep -q "apt install kubectl" "${MOCK_CALLS_FILE}"
+  [ ! -e "${_APT_KEYRINGS_DIR}/kubernetes-apt-keyring.gpg" ]
+}
+
+@test "_install_ubuntu_k8s_tools: a failed kubectl source list write returns 1" {
+  _k8s_env
+  export MOCK_TEE_EXIT=1
+  run --separate-stderr _install_ubuntu_k8s_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"k8s_tools: kubectl: source list"* ]]
+  grep -q "apt install kubectl" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_k8s_tools: a failed kubectl apt install returns 1" {
+  _k8s_env
+  export MOCK_APT_FAIL_SUBCMD=install
+  run --separate-stderr _install_ubuntu_k8s_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"k8s_tools: kubectl: install failed"* ]]
+  grep -q "apt install kubectl" "${MOCK_CALLS_FILE}"
+}
+
 @test "_install_ubuntu_k8s_tools: does not call get-helm-3 curl installer" {
   # helm curl installer removed; brew handles the no-snap case via
   # _install_ubuntu_brew_packages.
-  unset HAS_SNAP
-  export HAS_K8S=1
-  export KIND_VER="0.22.0"
-  export KIND_URL="https://kind.sigs.k8s.io/dl/v0.22.0/kind-linux-amd64"
-  export KUBERNETES_VER="v1.29"
-  export TELEPRESENCE_URL="https://app.getambassador.io/download/tel2/linux/amd64/latest/telepresence"
+  _k8s_env
   run _install_ubuntu_k8s_tools
   [ "$status" -eq 0 ]
   run grep "get-helm-3" "${MOCK_CALLS_FILE}"
@@ -2095,11 +2166,7 @@ _nvidia_seams() {
 @test "_install_ubuntu_k8s_tools: does not call install_kustomize curl installer" {
   # kustomize curl installer removed; brew handles it via
   # _install_ubuntu_brew_packages.
-  export HAS_K8S=1
-  export KIND_VER="0.22.0"
-  export KIND_URL="https://kind.sigs.k8s.io/dl/v0.22.0/kind-linux-amd64"
-  export KUBERNETES_VER="v1.29"
-  export TELEPRESENCE_URL="https://app.getambassador.io/download/tel2/linux/amd64/latest/telepresence"
+  _k8s_env
   run _install_ubuntu_k8s_tools
   [ "$status" -eq 0 ]
   run grep "install_kustomize.sh" "${MOCK_CALLS_FILE}"
@@ -2120,38 +2187,74 @@ _nvidia_seams() {
 
 # ── _install_ubuntu_hashicorp ────────────────────────────────────────────────
 
-@test "_install_ubuntu_hashicorp: calls wget for consul when dir does not exist" {
+# One real zip holding all five members serves every download.
+_hc_env() {
   export CONSUL_VER="1.17.0"
   export VAULT_VER="1.15.0"
   export NOMAD_VER="1.7.0"
   export PACKER_VER="1.10.0"
   export VAGRANT_VER="2.4.0"
   export HASHICORP_URL="https://releases.hashicorp.com"
+  local _src="${BATS_TEST_TMPDIR}/hc-src" _t
+  mkdir -p "${_src}"
+  for _t in consul vault nomad packer vagrant; do
+    printf '%s-body' "${_t}" > "${_src}/${_t}"
+  done
+  (cd "${_src}" && "${_ZIP_BIN}" -q "${BATS_TEST_TMPDIR}/hc.zip" consul vault nomad packer vagrant)
+  export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/hc.zip"
+}
+
+@test "_install_ubuntu_hashicorp: clean run returns 0 and installs all five tools" {
+  _hc_env
+  run _install_ubuntu_hashicorp
+  [ "$status" -eq 0 ]
+  local _t
+  for _t in consul vault nomad packer vagrant; do
+    [ -x "${_DL_BIN_DIR}/${_t}" ]
+    [ -f "${_DL_STAMP_DIR}/${_t}" ]
+  done
+}
+
+@test "_install_ubuntu_hashicorp: calls wget for consul when not stamped" {
+  _hc_env
   run _install_ubuntu_hashicorp
   [ "$status" -eq 0 ]
   grep -q "wget.*consul" "${MOCK_CALLS_FILE}"
 }
 
-@test "_install_ubuntu_hashicorp: skips consul wget when dir already exists" {
-  export CONSUL_VER="1.17.0"
-  export VAULT_VER="1.15.0"
-  export NOMAD_VER="1.7.0"
-  export PACKER_VER="1.10.0"
-  export VAGRANT_VER="2.4.0"
-  export HASHICORP_URL="https://releases.hashicorp.com"
-  mkdir -p "${HOME}/software_downloads/consul_1.17.0"
+@test "_install_ubuntu_hashicorp: a stamped, installed consul is not fetched again" {
+  _hc_env
+  mkdir -p "${_DL_STAMP_DIR}"
+  printf '%s\n' "${HASHICORP_URL}/consul/1.17.0/consul_1.17.0_linux_${_LINUX_ARCH}.zip" > "${_DL_STAMP_DIR}/consul"
+  printf 'old' > "${_DL_BIN_DIR}/consul"
+  chmod 0755 "${_DL_BIN_DIR}/consul"
   run _install_ubuntu_hashicorp
   [ "$status" -eq 0 ]
-  ! grep -q "wget.*consul_1.17.0" "${MOCK_CALLS_FILE}"
+  [[ "$output" == *"consul: up to date"* ]]
+  refute_grep "wget .*consul_1.17.0" "${MOCK_CALLS_FILE}"
+  grep -q "wget .*vault" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_hashicorp: a failed consul download returns 1, names consul and still installs vault" {
+  _hc_env
+  export MOCK_WGET_FAIL_URL="consul/"
+  run --separate-stderr _install_ubuntu_hashicorp
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"hashicorp: consul:"* ]]
+  grep -q "wget .*consul/" "${MOCK_CALLS_FILE}"
+  [ ! -e "${_DL_BIN_DIR}/consul" ]
+  [ ! -e "${_DL_STAMP_DIR}/consul" ]
+  [ -x "${_DL_BIN_DIR}/vault" ]
+  [ -f "${_DL_STAMP_DIR}/vault" ]
 }
 
 @test "_install_ubuntu_hashicorp: uses _LINUX_ARCH in consul URL (arm64)" {
+  _hc_env
   export CONSUL_VER="2.0.0"
   export VAULT_VER="2.0.2"
   export NOMAD_VER="2.0.3"
   export PACKER_VER="1.15.4"
   export VAGRANT_VER="2.4.9"
-  export HASHICORP_URL="https://releases.hashicorp.com"
   export _LINUX_ARCH="arm64"
   run _install_ubuntu_hashicorp
   [ "$status" -eq 0 ]
@@ -2159,12 +2262,12 @@ _nvidia_seams() {
 }
 
 @test "_install_ubuntu_hashicorp: vagrant always uses amd64 regardless of _LINUX_ARCH" {
+  _hc_env
   export CONSUL_VER="2.0.0"
   export VAULT_VER="2.0.2"
   export NOMAD_VER="2.0.3"
   export PACKER_VER="1.15.4"
   export VAGRANT_VER="2.4.9"
-  export HASHICORP_URL="https://releases.hashicorp.com"
   export _LINUX_ARCH="arm64"
   run _install_ubuntu_hashicorp
   [ "$status" -eq 0 ]
