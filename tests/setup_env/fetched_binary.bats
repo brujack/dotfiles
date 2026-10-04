@@ -114,6 +114,38 @@ _make_tar() {
   [ "$(cat "${STAMP}")" = "${URL}" ]
 }
 
+# The member check alone would accept these: the extractor wrote a good member
+# and then reported failure, so only the exit status can refuse the install.
+@test "_install_fetched_binary: an unzip that writes the member then exits non-zero fails the extract stage" {
+  _make_zip
+  local _stub="${BATS_TEST_TMPDIR}/unzip-then-fail"
+  printf '#!/usr/bin/env bash\n"%s" "$@"\nexit 1\n' "${_DL_UNZIP_BIN}" > "${_stub}"
+  chmod +x "${_stub}"
+  export _DL_UNZIP_BIN="${_stub}"
+  run _install_fetched_binary tool "${URL}" zip tool
+  [ "$status" -eq 1 ]
+  [[ "${output}" == *"tool: extract failed"* ]]
+  _assert_tmp_was_used
+  [ "$(cat "${DEST}")" = "old" ]
+  [ ! -e "${STAMP}" ]
+  _assert_root_empty
+}
+
+@test "_install_fetched_binary: a tar that writes the member then exits non-zero fails the extract stage" {
+  _make_tar
+  local _stub="${BATS_TEST_TMPDIR}/tar-then-fail"
+  printf '#!/usr/bin/env bash\n"%s" "$@"\nexit 1\n' "${_DL_TAR_BIN}" > "${_stub}"
+  chmod +x "${_stub}"
+  export _DL_TAR_BIN="${_stub}"
+  run _install_fetched_binary tool "${URL}" tar pkg/bin/tool
+  [ "$status" -eq 1 ]
+  [[ "${output}" == *"tool: extract failed"* ]]
+  _assert_tmp_was_used
+  [ "$(cat "${DEST}")" = "old" ]
+  [ ! -e "${STAMP}" ]
+  _assert_root_empty
+}
+
 @test "_install_fetched_binary: install failure leaves dest, no stamp, no workdir, then retry succeeds" {
   chmod 0555 "${_DL_BIN_DIR}"
   run _install_fetched_binary tool "${URL}" bin ""
