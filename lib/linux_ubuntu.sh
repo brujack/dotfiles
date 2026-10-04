@@ -240,17 +240,16 @@ _install_ubuntu_powershell() {
   # (see above) left a stale/wrong .deb behind, and only a fresh download and
   # a fresh dpkg -i repair it -- measured on `claude`, 2026-09-17. Every step
   # below checks its own exit status, so one broken upstream repository warns
-  # and returns rather than aborting the whole bootstrap (the dispatcher
-  # calls this function with `|| return 1`).
+  # and returns 1 rather than aborting the whole bootstrap.
   if ! wget -O "${HOME}"/software_downloads/packages-microsoft-prod.deb \
     "https://packages.microsoft.com/config/ubuntu/${_ms_rel}/packages-microsoft-prod.deb"; then
     log_warn "powershell: wget for packages-microsoft-prod.deb failed; skipping"
-    return 0
+    return 1
   fi
 
   if ! _ms_verify_deb "${HOME}"/software_downloads/packages-microsoft-prod.deb; then
     log_warn "powershell: packages-microsoft-prod.deb failed verification; skipping"
-    return 0
+    return 1
   fi
 
   # --force-confmiss: this package carries only a vendor apt keyring/source, so
@@ -260,17 +259,17 @@ _install_ubuntu_powershell() {
   # confmiss is used on these archive-setup debs only, nowhere else.
   if ! sudo -H DEBIAN_FRONTEND=noninteractive dpkg -i --force-confdef --force-confold --force-confmiss "${HOME}"/software_downloads/packages-microsoft-prod.deb; then
     log_warn "powershell: dpkg -i packages-microsoft-prod.deb failed; skipping"
-    return 0
+    return 1
   fi
 
   if ! sudo apt update; then
     log_warn "powershell: apt update failed; skipping"
-    return 0
+    return 1
   fi
 
   if ! sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" powershell -y; then
     log_warn "powershell: apt install powershell failed; skipping"
-    return 0
+    return 1
   fi
 
   # apt exits 0 for "powershell is already the newest version" even when the
@@ -279,7 +278,7 @@ _install_ubuntu_powershell() {
   # trusting apt's own exit status for this claim.
   if ! _pwsh_probe_runs; then
     log_warn "powershell: apt install succeeded but pwsh still does not run"
-    return 0
+    return 1
   fi
 
   printf "pwsh is installed\\n"
@@ -804,6 +803,7 @@ _install_ubuntu_cloud_tools() {
     }
     _write_apt_source_list cloud_tools cloudflared "${_ring}" "${_cf_sources}" \
       "deb [signed-by=${_ring}] https://pkg.cloudflareclient.com/ ${_cf_codename} main" || _cloud_rc=1
+    # base owns the update warning; a failed refresh must not mask the install result.
     sudo apt-get update || :
     sudo DEBIAN_FRONTEND=noninteractive apt-get install "${APT_CONFFILE_OPTS[@]}" cloudflare-warp -y || {
       log_warn "cloud_tools: cloudflared: install failed"
@@ -836,6 +836,7 @@ _install_ubuntu_cloud_tools() {
     _write_apt_source_list cloud_tools gcloud "${_ring}" "${_list}" \
       "deb [signed-by=${_ring}] https://packages.cloud.google.com/apt cloud-sdk main" || _cloud_rc=1
   fi
+  # base owns the update warning; a failed refresh must not mask the install result.
   sudo apt update || :
   sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" google-cloud-cli -y || {
     log_warn "cloud_tools: gcloud: google-cloud-cli install failed"
@@ -1317,6 +1318,7 @@ _install_ubuntu_gui_tools() {
       log_warn "gui_tools: edge: source setup failed"
       _gui_rc=1
     }
+    # base owns the update warning; a failed refresh must not mask the install result.
     sudo -H apt update || :
     sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" microsoft-edge-stable -y || {
       log_warn "gui_tools: edge: install failed"
@@ -1609,30 +1611,16 @@ _install_ubuntu_tfenv() {
 }
 
 _install_ubuntu_misc() {
+  # rc 1 when docker-compose, yq or opentofu failed; each is named in a warning
+  # and the rest are still attempted. dotnet, tflint, tfsec, tfenv and the nala
+  # cleanup are advisory.
+  local _misc_rc=0
   printf "Installing docker-compose Ubuntu\\n"
-  if [[ ! -f ${HOME}/software_downloads/docker-compose_${DOCKER_COMPOSE_VER} ]]; then
-    wget -O "${HOME}"/software_downloads/docker-compose_"${DOCKER_COMPOSE_VER}" "${DOCKER_COMPOSE_URL}"
-    sudo cp -a "${HOME}"/software_downloads/docker-compose_"${DOCKER_COMPOSE_VER}" /usr/local/bin/
-    sudo mv /usr/local/bin/docker-compose_"${DOCKER_COMPOSE_VER}" /usr/local/bin/docker-compose
-    sudo chmod 755 /usr/local/bin/docker-compose
-    sudo chown root:root /usr/local/bin/docker-compose
-    if [[ -x $(command -v docker-compose) ]]; then
-      printf "docker-compose is installed\\n"
-    fi
-  fi
+  _install_fetched_binary docker-compose "${DOCKER_COMPOSE_URL}" bin docker-compose || _misc_rc=1
 
   if [[ -n ${HAS_DEVTOOLS} ]]; then
-    if [[ ! -f ${HOME}/software_downloads/yq_${YQ_VER} ]]; then
-      printf "Installing yq\\n"
-      wget -O "${HOME}"/software_downloads/yq_"${YQ_VER}" "${YQ_URL}"
-      sudo cp -a "${HOME}"/software_downloads/yq_"${YQ_VER}" /usr/local/bin/
-      sudo mv /usr/local/bin/yq_"${YQ_VER}" /usr/local/bin/yq
-      sudo chmod 755 /usr/local/bin/yq
-      sudo chown root:root /usr/local/bin/yq
-      if [[ -x $(command -v yq) ]]; then
-        printf "yq is installed\\n"
-      fi
-    fi
+    printf "Installing yq\\n"
+    _install_fetched_binary yq "${YQ_URL}" bin yq || _misc_rc=1
   fi
 
   if [[ -n ${HAS_DEVTOOLS} ]]; then
@@ -1651,18 +1639,28 @@ _install_ubuntu_misc() {
     # Unset in normal operation — identical to `! command -v tofu`.
     if [[ -n ${_FORCE_OPENTOFU_INSTALL:-} ]] || ! command -v tofu &>/dev/null; then
       printf "Installing opentofu\\n"
-      sudo mkdir -p /etc/apt/keyrings
-      curl -fsSL https://packages.opentofu.org/opentofu/tofu/gpgkey \
-        | sudo gpg --dearmor -o /etc/apt/keyrings/opentofu-archive-keyring.gpg
-      printf "deb [signed-by=/etc/apt/keyrings/opentofu-archive-keyring.gpg] https://packages.opentofu.org/opentofu/tofu/any/ any main\n" \
-        | sudo DEBIAN_FRONTEND=noninteractive tee /etc/apt/sources.list.d/opentofu.list > /dev/null
-      sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq
+      local _tofu_keyrings="${_APT_KEYRINGS_DIR:-/etc/apt/keyrings}"
+      local _tofu_ring="${_tofu_keyrings}/opentofu-archive-keyring.gpg"
+      # Advisory: if the directory cannot be made, the keyring install below
+      # fails and names the cause.
+      sudo mkdir -p "${_tofu_keyrings}" || :
+      _install_apt_keyring https://packages.opentofu.org/opentofu/tofu/gpgkey "${_tofu_ring}" armored || {
+        log_warn "misc: opentofu: keyring install failed"
+        _misc_rc=1
+      }
+      _write_apt_source_list misc opentofu "${_tofu_ring}" "${_APT_SOURCES_DIR:-/etc/apt/sources.list.d}/opentofu.list" \
+        "deb [signed-by=${_tofu_ring}] https://packages.opentofu.org/opentofu/tofu/any/ any main" || _misc_rc=1
+      # base owns the update warning; a failed refresh must not mask the install result.
+      sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq || :
       # The package in packages.opentofu.org/opentofu/tofu/any is named `tofu`,
       # not `opentofu` -- its amd64 index carries exactly that one package.
       # Installing `opentofu` failed with "Unable to locate package" on every
       # Ubuntu release, silently, because the `command -v tofu` check below
       # simply never fired. Measured on claude 2026-09-12.
-      sudo DEBIAN_FRONTEND=noninteractive apt-get install "${APT_CONFFILE_OPTS[@]}" -y tofu
+      sudo DEBIAN_FRONTEND=noninteractive apt-get install "${APT_CONFFILE_OPTS[@]}" -y tofu || {
+        log_warn "misc: opentofu: install failed"
+        _misc_rc=1
+      }
       if command -v tofu &>/dev/null; then
         printf "opentofu is installed\\n"
       fi
@@ -1683,7 +1681,8 @@ _install_ubuntu_misc() {
 
   check_and_install_nala
   # </dev/null: same job-control hang as update_apt_packages in lib/linux_shared.sh.
-  sudo -H DEBIAN_FRONTEND=noninteractive nala autoremove -y < /dev/null
+  sudo -H DEBIAN_FRONTEND=noninteractive nala autoremove -y < /dev/null || log_warn "misc: nala autoremove failed"
+  return "${_misc_rc}"
 }
 
 [[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0

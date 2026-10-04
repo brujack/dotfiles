@@ -471,7 +471,7 @@ _NALA_CONFFILE_ARGV='argv: xargs [-r][sudo][DEBIAN_FRONTEND=noninteractive][nala
   local _stub_dir
   _stub_dir="$(argv_probe_stub_path apt)"
   PATH="${_stub_dir}:${PATH}" run _install_ubuntu_powershell
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ] # post-install probe fails: the stub pwsh never runs
   grep -qxF 'argv: apt [install][-o][Dpkg::Options::=--force-confdef][-o][Dpkg::Options::=--force-confold][powershell][-y]' "${MOCK_CALLS_FILE}"
 }
 
@@ -803,7 +803,7 @@ _ms_require_gnu_ar() {
   # it. This is the case a command-v mutation of the guard cannot pass.
   _PWSH_BIN="$(_pwsh_stub_bin 1)"
   run _install_ubuntu_powershell
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ] # post-install probe fails: the stub pwsh never runs
   grep -q "wget.*packages-microsoft-prod.deb" "${MOCK_CALLS_FILE}"
   grep -q "dpkg -i" "${MOCK_CALLS_FILE}"
   grep -q "apt update" "${MOCK_CALLS_FILE}"
@@ -816,7 +816,7 @@ _ms_require_gnu_ar() {
   local _stub_dir
   _stub_dir="$(frontend_probe_stub_path dpkg)"
   PATH="${_stub_dir}:${PATH}" run _install_ubuntu_powershell
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ] # post-install probe fails: the stub pwsh never runs
   grep -qE '^frontend: dpkg -i .*DEBIAN_FRONTEND=noninteractive$' "${MOCK_CALLS_FILE}"
 }
 
@@ -826,7 +826,7 @@ _ms_require_gnu_ar() {
   local _stub_dir
   _stub_dir="$(argv_probe_stub_path dpkg)"
   PATH="${_stub_dir}:${PATH}" run _install_ubuntu_powershell
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ] # post-install probe fails: the stub pwsh never runs
   [ "$(grep -c '^argv: dpkg ' "${MOCK_CALLS_FILE}")" -eq 1 ]
   grep -qE '^argv: dpkg \[-i\]\[--force-confdef\]\[--force-confold\]\[--force-confmiss\]\[.*packages-microsoft-prod\.deb\]$' "${MOCK_CALLS_FILE}"
 }
@@ -874,7 +874,7 @@ EOF
 
 @test "_install_ubuntu_powershell: calls wget for packages-microsoft-prod.deb" {
   run _install_ubuntu_powershell
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ] # post-install probe fails: the stub pwsh never runs
   grep -q "wget.*packages-microsoft-prod.deb" "${MOCK_CALLS_FILE}"
 }
 
@@ -886,7 +886,7 @@ EOF
   # 2026-09-17. The guard must now be independent of any pre-existing .deb.
   touch "${HOME}/software_downloads/packages-microsoft-prod.deb"
   run _install_ubuntu_powershell
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ] # post-install probe fails: the stub pwsh never runs
   grep -q "wget.*packages-microsoft-prod.deb" "${MOCK_CALLS_FILE}"
   grep -q "dpkg -i" "${MOCK_CALLS_FILE}"
   grep -q "apt update" "${MOCK_CALLS_FILE}"
@@ -963,7 +963,7 @@ EOF
   _end="$(date +%s)"
   _elapsed=$(( _end - _start ))
 
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ] # post-install probe fails: the stub pwsh never runs
   [ "${_elapsed}" -lt 20 ]
   [[ "$output" == *"apt install succeeded but pwsh still does not run"* ]]
 }
@@ -3500,6 +3500,21 @@ _misc_env() {
   [ -x "${_DL_BIN_DIR}/yq" ]
 }
 
+@test "_install_ubuntu_misc: a failed opentofu keyring fetch with a prior keyring returns 1 and keeps it" {
+  _misc_env
+  local _ring="${_APT_KEYRINGS_DIR}/opentofu-archive-keyring.gpg"
+  printf 'old' > "${_ring}"
+  export MOCK_CURL_FAIL_URL="packages.opentofu.org"
+  run --separate-stderr _install_ubuntu_misc
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"misc: opentofu: keyring install failed"* ]]
+  grep -q "curl .*packages.opentofu.org" "${MOCK_CALLS_FILE}"
+  [ "$(cat "${_ring}")" = "old" ]
+  # The prior keyring still backs the source list, so only the keyring failed.
+  [[ "$stderr" != *"source write skipped"* ]]
+  [ -s "${_APT_SOURCES_DIR}/opentofu.list" ]
+}
+
 @test "_install_ubuntu_misc: a failed opentofu source list write returns 1" {
   _misc_env
   export SHIM_TEE_FAIL_ARGS="opentofu.list"
@@ -3555,7 +3570,7 @@ _misc_env() {
   # code builds a 26.04 URL and this test can actually go red.
   export MOCK_LSB_RELEASE_RS="26.04"
   run _install_ubuntu_powershell
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ] # post-install probe fails: the stub pwsh never runs
   # packages.microsoft.com/config/ubuntu/26.04 exists (HTTP 200) and its
   # resolute dist carries ZERO powershell packages, measured 2026-09-12;
   # 24.04/noble carries 54. So the config URL, not the dist, is what falls back.
@@ -3570,7 +3585,7 @@ _misc_env() {
   # trivially true whenever the mock does not emit 26.04 in the first place.
   export MOCK_LSB_RELEASE_RS="24.10"
   run _install_ubuntu_powershell
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ] # post-install probe fails: the stub pwsh never runs
   grep -qE "wget.*config/ubuntu/24\.10/packages-microsoft-prod\.deb" "${MOCK_CALLS_FILE}"
 }
 
