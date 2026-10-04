@@ -938,8 +938,10 @@ _doctor_check_conffile_dist() {
   while IFS= read -r -d '' _f; do
     _n=$(( _n + 1 ))
     # Strip exactly one known suffix, so foo.conf.dpkg-dist -> foo.conf.
-    _live="${_f%.dpkg-dist}"
-    _live="${_live%.ucf-dist}"
+    case "${_f}" in
+      *.dpkg-dist) _live="${_f%.dpkg-dist}" ;;
+      *) _live="${_f%.ucf-dist}" ;;
+    esac
     doctor_warn "${_f}" "package copy kept beside your file; diff it against ${_live}, merge, then delete it (empty diff: just delete)"
   done < <(find "${_root}" \( -name '*.dpkg-dist' -o -name '*.ucf-dist' \) -print0 2>/dev/null)
   [[ ${_n} -gt 0 ]] || doctor_pass "no .dpkg-dist or .ucf-dist under ${_root}"

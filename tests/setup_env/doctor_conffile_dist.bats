@@ -25,6 +25,7 @@ setup() {
   mkdir -p "${FAKE_ETC}/sub/dir"
   : > "${FAKE_ETC}/sub/dir/foo.conf.dpkg-dist"
   run _doctor_check_conffile_dist
+  [[ "$output" != *"[FAIL]"* ]]
   [ "$status" -eq 0 ]
   [ "$(grep -c '\[WARN\]' <<<"$output")" -eq 1 ]
   [ "$(grep -c '\[PASS\]' <<<"$output")" -eq 0 ]
@@ -37,6 +38,7 @@ setup() {
   mkdir -p "${FAKE_ETC}/default"
   : > "${FAKE_ETC}/default/grub.ucf-dist"
   run _doctor_check_conffile_dist
+  [[ "$output" != *"[FAIL]"* ]]
   [ "$(grep -c '\[WARN\]' <<<"$output")" -eq 1 ]
   [[ "$output" == *"${FAKE_ETC}/default/grub.ucf-dist"* ]]
   [[ "$output" == *"diff it against ${FAKE_ETC}/default/grub,"* ]]
@@ -47,6 +49,7 @@ setup() {
   : > "${FAKE_ETC}/old.conf.dpkg-dist"
   touch -d 2020-01-01 "${FAKE_ETC}/old.conf.dpkg-dist"
   run _doctor_check_conffile_dist
+  [[ "$output" != *"[FAIL]"* ]]
   [ "$(grep -c '\[WARN\]' <<<"$output")" -eq 1 ]
   [[ "$output" == *"old.conf.dpkg-dist"* ]]
 }
@@ -56,6 +59,7 @@ setup() {
   : > "${FAKE_ETC}/a.dpkg-dist"
   : > "${FAKE_ETC}/b.ucf-dist"
   run _doctor_check_conffile_dist
+  [[ "$output" != *"[FAIL]"* ]]
   [ "$(grep -c '\[WARN\]' <<<"$output")" -eq 2 ]
   [ "$(grep -c '\[PASS\]' <<<"$output")" -eq 0 ]
 }
@@ -65,6 +69,7 @@ setup() {
   : > "${FAKE_ETC}/x.conf.dpkg-new"
   : > "${FAKE_ETC}/y.conf.ucf-new"
   run _doctor_check_conffile_dist
+  [[ "$output" != *"[FAIL]"* ]]
   [ "$(grep -c '\[WARN\]' <<<"$output")" -eq 0 ]
   [ "$(grep -c '\[PASS\]' <<<"$output")" -eq 1 ]
 }
@@ -72,6 +77,7 @@ setup() {
 @test "empty root gives exactly one PASS and no WARN" {
   export LINUX=1
   run _doctor_check_conffile_dist
+  [[ "$output" != *"[FAIL]"* ]]
   [ "$status" -eq 0 ]
   [ "$(grep -c '\[PASS\]' <<<"$output")" -eq 1 ]
   [ "$(grep -c '\[WARN\]' <<<"$output")" -eq 0 ]
@@ -81,6 +87,7 @@ setup() {
   export LINUX=1
   export _OVERRIDE_CONFFILE_DIST_ROOT="${BATS_TEST_TMPDIR}/does-not-exist"
   run _doctor_check_conffile_dist
+  [[ "$output" != *"[FAIL]"* ]]
   [ "$status" -eq 0 ]
   [ "$(grep -c '\[WARN\]' <<<"$output")" -eq 1 ]
   [ "$(grep -c '\[PASS\]' <<<"$output")" -eq 0 ]
@@ -91,6 +98,7 @@ setup() {
   unset LINUX
   : > "${FAKE_ETC}/a.dpkg-dist"
   run _doctor_check_conffile_dist
+  [[ "$output" != *"[FAIL]"* ]]
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
@@ -103,4 +111,13 @@ setup() {
   [ "${_DOCTOR_FAIL}" -eq 0 ]
   [ "${_DOCTOR_WARN}" -eq 1 ]
   [ -e "${FAKE_ETC}/a.dpkg-dist" ]
+}
+
+@test "a name carrying both suffixes loses exactly one" {
+  export LINUX=1
+  : > "${FAKE_ETC}/x.ucf-dist.dpkg-dist"
+  run _doctor_check_conffile_dist
+  [[ "$output" != *"[FAIL]"* ]]
+  [ "$(grep -c '\[WARN\]' <<<"$output")" -eq 1 ]
+  [[ "$output" == *"diff it against ${FAKE_ETC}/x.ucf-dist,"* ]]
 }
