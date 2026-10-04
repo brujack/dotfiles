@@ -2,6 +2,7 @@
 
 - **Date:** 2026-10-04
 - **Backlog row closed:** "Volian archive debs install as root with no integrity check" (P2 — bugs and security).
+- **Approved:** 2026-10-04, operator: "Approved and get er done"
 
 ## Problem
 
