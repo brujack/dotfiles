@@ -48,6 +48,14 @@ elif [[ -n "${MOCK_CURL_HTTP_STATUS:-}" ]] && [[ "${has_f}" -eq 1 ]] \
 else
   mock_exit=0
 fi
+# MOCK_CURL_FAIL_URL: fail only calls whose argv contains this substring. It
+# only adds a failure -- an explicit MOCK_CURL_EXIT keeps precedence -- and
+# truncates the -o target, modelling a partial download.
+if [[ "${mock_exit}" -eq 0 ]] && [[ -n "${MOCK_CURL_FAIL_URL:-}" ]] \
+  && [[ "${ORIG_ARGS}" == *"${MOCK_CURL_FAIL_URL}"* ]]; then
+  [[ -n "${outfile}" ]] && : > "${outfile}"
+  exit 22
+fi
 # -o's write is deferred until here -- a simulated failure must leave a
 # pre-seeded target unchanged, mirroring real curl. When no content is
 # supplied, stay a touch (today's behaviour) so the shared mock remains inert

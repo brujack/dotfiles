@@ -6,4 +6,17 @@
 # ${*//pat/} applies the pattern to each argument separately.)
 _all="$*"
 printf "apt %s\n" "${_all//-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold /}" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+# MOCK_APT_FAIL_SUBCMD: fail only the named subcommand (first argument that
+# does not start with "-"), so one step of a multi-step install can break.
+# "-o <value>" consumes its value, so APT_CONFFILE_OPTS never reads as one.
+_skip=0
+for _a in "$@"; do
+  if [[ "${_skip}" -eq 1 ]]; then _skip=0; continue; fi
+  if [[ "${_a}" == "-o" ]]; then _skip=1; continue; fi
+  [[ "${_a}" == -* ]] && continue
+  if [[ -n "${MOCK_APT_FAIL_SUBCMD:-}" ]] && [[ "${_a}" == "${MOCK_APT_FAIL_SUBCMD}" ]]; then
+    exit 100
+  fi
+  break
+done
 exit "${MOCK_APT_ONLY_EXIT:-${MOCK_APT_EXIT:-0}}"

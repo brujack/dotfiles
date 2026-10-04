@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 printf "wget %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+# MOCK_WGET_FAIL_URL: fail only calls whose argv contains this substring,
+# leaving a 0-byte -O target (a truncated download).
+_fail_url=0
+[[ -n "${MOCK_WGET_FAIL_URL:-}" ]] && [[ "$*" == *"${MOCK_WGET_FAIL_URL}"* ]] && _fail_url=1
 i=1
 while [[ $i -le $# ]]; do
   if [[ "${!i}" == "-O" ]]; then
@@ -7,7 +11,9 @@ while [[ $i -le $# ]]; do
     mkdir -p "$(dirname "${!j}")" 2>/dev/null
     # MOCK_WGET_FILE: copy this file to the -O target instead of an empty one,
     # for callers that verify what they downloaded.
-    if [[ -n "${MOCK_WGET_FILE:-}" ]]; then
+    if [[ "${_fail_url}" -eq 1 ]]; then
+      : > "${!j}" 2>/dev/null || true
+    elif [[ -n "${MOCK_WGET_FILE:-}" ]]; then
       cp "${MOCK_WGET_FILE}" "${!j}" || { printf 'mock wget: cannot copy MOCK_WGET_FILE=%s\n' "${MOCK_WGET_FILE}" >&2; exit 1; }
     else
       touch "${!j}" 2>/dev/null || true
@@ -16,4 +22,5 @@ while [[ $i -le $# ]]; do
   fi
   ((i++))
 done
+[[ "${_fail_url}" -eq 1 ]] && exit 4
 exit "${MOCK_WGET_EXIT:-0}"
