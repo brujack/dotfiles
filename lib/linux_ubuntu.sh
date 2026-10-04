@@ -1616,11 +1616,17 @@ _install_ubuntu_misc() {
   # cleanup are advisory.
   local _misc_rc=0
   printf "Installing docker-compose Ubuntu\\n"
-  _install_fetched_binary docker-compose "${DOCKER_COMPOSE_URL}" bin docker-compose || _misc_rc=1
+  _install_fetched_binary docker-compose "${DOCKER_COMPOSE_URL}" bin docker-compose || {
+    log_warn "misc: docker-compose: install failed"
+    _misc_rc=1
+  }
 
   if [[ -n ${HAS_DEVTOOLS} ]]; then
     printf "Installing yq\\n"
-    _install_fetched_binary yq "${YQ_URL}" bin yq || _misc_rc=1
+    _install_fetched_binary yq "${YQ_URL}" bin yq || {
+      log_warn "misc: yq: install failed"
+      _misc_rc=1
+    }
   fi
 
   if [[ -n ${HAS_DEVTOOLS} ]]; then

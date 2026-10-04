@@ -3268,6 +3268,28 @@ _gui_env() {
   grep -q "wget.*docker-compose" "${MOCK_CALLS_FILE}"
 }
 
+@test "_install_ubuntu_misc: a docker-compose fetch failure is named misc: docker-compose and returns 1" {
+  export DOCKER_COMPOSE_URL="https://example.invalid/docker-compose"
+  export YQ_URL="https://example.invalid/yq"
+  export MOCK_WGET_FAIL_URL="${DOCKER_COMPOSE_URL}"
+  unset HAS_DEVTOOLS
+  run _install_ubuntu_misc
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"misc: docker-compose: install failed"* ]]
+}
+
+@test "_install_ubuntu_misc: a yq fetch failure is named misc: yq and returns 1, docker-compose unaffected" {
+  export DOCKER_COMPOSE_URL="https://example.invalid/docker-compose"
+  export YQ_URL="https://example.invalid/yq"
+  export MOCK_WGET_FAIL_URL="${YQ_URL}"
+  export HAS_DEVTOOLS=1
+  run _install_ubuntu_misc
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"misc: yq: install failed"* ]]
+  [[ "$output" != *"misc: docker-compose:"* ]]
+  [ -x "${_DL_BIN_DIR}/docker-compose" ]
+}
+
 @test "_install_ubuntu_misc: nala autoremove does not inherit the caller's stdin" {
   export DOCKER_COMPOSE_VER="2.24.0"
   export DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64"
