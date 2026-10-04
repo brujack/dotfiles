@@ -20,8 +20,10 @@ sections 2 and 2b. #280 fixed this for `full-upgrade` only.
    configuring `sudo apt|apt-get|nala` call. The operator's edited file is kept and dpkg writes
    the package copy beside it as `.dpkg-dist`.
 2. `--force-confmiss` is added only at the three archive-setup `dpkg` installs:
-   `packages-microsoft-prod.deb` and the two volian debs. Each package carries only a vendor apt
-   keyring and/or source, so restoring a deleted file is always right. Elsewhere confmiss would
+   `packages-microsoft-prod.deb` and the two volian debs. Each package carries only vendor apt
+   archive configuration (the volian pair: a keyring, a `.sources` file and a `preferences.d`
+   pin, no maintainer scripts, checked with `dpkg-deb -c`), so restoring a deleted file is
+   always right. Elsewhere confmiss would
    undo a deliberate deletion. It is load-bearing, measured on `claude` with a throwaway
    one-conffile package:
 
