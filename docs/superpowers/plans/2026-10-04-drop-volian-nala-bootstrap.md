@@ -1,3 +1,5 @@
+> **Status: DONE** — merged in #311 (2026-10-04).
+
 # Drop Volian Nala Bootstrap Implementation Plan
 
 spec: docs/superpowers/specs/2026-10-04-drop-volian-nala-bootstrap-design.md
