@@ -847,37 +847,47 @@ _build_pinned_keyring() {
   return "${_rc}"
 }
 
-# Fetch a key to a file, convert it into <keyring>.new, then rename over <keyring>.
-# A piped fetch cannot be checked (the consumer's status masks curl's), and a
-# half-written keyring is a trusted-key file apt then reads, so every stage is
-# separate and any failure leaves the existing <keyring> untouched.
+# Fetch a key to a file, convert it in a throwaway dir as the invoking user (a
+# root-run gpg writes a umask-dependent 0600 file apt cannot read), then install
+# it 0644 to <keyring>.new and rename over <keyring>. A piped fetch cannot be
+# checked (the consumer's status masks curl's), and a stale .new from an
+# interrupted run would pass the non-empty check, so it is removed first. Any
+# failure leaves the existing <keyring> untouched and no .new behind.
 # Usage: _install_apt_keyring <url> <keyring> <armored|binary>
 # Returns 0 installed; 1 on bad arguments or any failed stage (named in a warning).
-# No EXIT/RETURN trap, for the reason given above _build_pinned_keyring.
+# gpg is _APT_KEY_GPG_BIN (default gpg). No EXIT/RETURN trap, for the reason
+# given above _build_pinned_keyring.
 _install_apt_keyring() {
-  local _url="$1" _ring="$2" _kind="$3" _dir _ok=1
+  local _url="$1" _ring="$2" _kind="$3" _dir _src _stage=""
   [[ -n ${_url} && -n ${_ring} ]] || return 1
   [[ ${_kind} == "armored" || ${_kind} == "binary" ]] || return 1
   _dir="$(mktemp -d "${_APT_KEY_TMP_ROOT:-${TMPDIR:-/tmp}}/apt-key.XXXXXXXX")" || return 1
+  if ! sudo rm -f "${_ring}.new"; then
+    log_warn "${_ring}: stale .new could not be removed"
+    rm -rf "${_dir}"
+    return 1
+  fi
   if ! curl -fsSL -o "${_dir}/key" "${_url}"; then
     log_warn "${_ring}: key download failed"
     rm -rf "${_dir}"
     return 1
   fi
+  _src="${_dir}/key"
   if [[ ${_kind} == "armored" ]]; then
-    # shellcheck disable=SC2024 # the shell reads ${_dir}/key (our own file); sudo only needs to write -o
-    sudo "${_MS_GPG_BIN:-gpg}" --batch --yes --dearmor -o "${_ring}.new" < "${_dir}/key" && _ok=0
-  else
-    sudo install -m 0644 "${_dir}/key" "${_ring}.new" && _ok=0
+    _src="${_dir}/ring"
+    "${_APT_KEY_GPG_BIN:-gpg}" --batch --yes --dearmor -o "${_src}" < "${_dir}/key" || _stage="conversion"
   fi
-  if [[ ${_ok} -ne 0 || ! -s "${_ring}.new" ]]; then
-    log_warn "${_ring}: key conversion failed"
-    sudo rm -f "${_ring}.new"
-    rm -rf "${_dir}"
-    return 1
+  if [[ -z ${_stage} && ! -s ${_src} ]]; then
+    _stage="conversion"
   fi
-  if ! sudo mv -f "${_ring}.new" "${_ring}"; then
-    log_warn "${_ring}: key install failed"
+  if [[ -z ${_stage} ]] && ! sudo install -m 0644 "${_src}" "${_ring}.new"; then
+    _stage="install"
+  fi
+  if [[ -z ${_stage} ]] && ! sudo mv -f "${_ring}.new" "${_ring}"; then
+    _stage="rename"
+  fi
+  if [[ -n ${_stage} ]]; then
+    log_warn "${_ring}: key ${_stage} failed"
     sudo rm -f "${_ring}.new"
     rm -rf "${_dir}"
     return 1

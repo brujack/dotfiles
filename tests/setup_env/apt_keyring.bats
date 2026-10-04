@@ -21,11 +21,22 @@ setup() {
   mkdir -p "$(dirname "${KEYRING}")"
   printf 'old' > "${KEYRING}"
   URL="https://example.invalid/key"
+  # Armored conversion runs unprivileged in the throwaway dir; the stub writes
+  # its -o target, which tests/mocks/gpg does not.
+  export _APT_KEY_GPG_BIN="${REPO_ROOT}/tests/mocks/gpg-dearmor"
 }
 
 # The real gpg, resolved with the mocks directory stripped from PATH.
 _real_gpg() {
   PATH="$(printf '%s' "${PATH}" | tr ':' '\n' | grep -v 'tests/mocks' | tr '\n' ':' | sed 's/:$//')" command -v gpg
+}
+
+# Positive control for the "root is empty" assertions: the fetch really wrote
+# under the throwaway root, so empty afterwards means cleaned, not never used.
+_assert_tmp_was_used() {
+  local _o
+  _o="$(grep '^curl ' "${MOCK_CALLS_FILE}" | head -1 | sed -E 's/.* -o ([^ ]+) .*/\1/')"
+  [[ "${_o}" == "${_APT_KEY_TMP_ROOT}/apt-key."* ]]
 }
 
 _assert_untouched() {
@@ -39,18 +50,55 @@ _assert_untouched() {
   run _install_apt_keyring "${URL}" "${KEYRING}" armored
   [ "$status" -eq 1 ]
   grep -q '^curl ' "${MOCK_CALLS_FILE}"
+  _assert_tmp_was_used
   _assert_untouched
 }
 
-@test "_install_apt_keyring: armored conversion producing nothing fails on the -s check" {
+@test "_install_apt_keyring: empty dearmor output fails on the -s check" {
   export MOCK_CURL_STDOUT="not a real key"
-  # The gpg mock exits 0 and writes no -o file: only the non-empty check can fail it.
-  export _MS_GPG_BIN="${REPO_ROOT}/tests/mocks/gpg"
+  export MOCK_GPG_DEARMOR_EMPTY=1
   run _install_apt_keyring "${URL}" "${KEYRING}" armored
   [ "$status" -eq 1 ]
   grep -q '^curl ' "${MOCK_CALLS_FILE}"
-  grep -q '^gpg ' "${MOCK_CALLS_FILE}"
+  grep -q '^gpg-dearmor ' "${MOCK_CALLS_FILE}"
   _assert_untouched
+}
+
+@test "_install_apt_keyring: conversion that writes then fails leaves the keyring untouched" {
+  export MOCK_CURL_STDOUT="not a real key"
+  export MOCK_GPG_DEARMOR_EXIT=2
+  run _install_apt_keyring "${URL}" "${KEYRING}" armored
+  [ "$status" -eq 1 ]
+  grep -q '^gpg-dearmor ' "${MOCK_CALLS_FILE}"
+  _assert_untouched
+}
+
+@test "_install_apt_keyring: a stale .new is removed even when conversion then fails" {
+  export MOCK_CURL_STDOUT="not a real key"
+  export MOCK_GPG_DEARMOR_EMPTY=1
+  printf 'STALE' > "${KEYRING}.new"
+  run _install_apt_keyring "${URL}" "${KEYRING}" armored
+  [ "$status" -eq 1 ]
+  grep -q '^gpg-dearmor ' "${MOCK_CALLS_FILE}"
+  _assert_untouched
+}
+
+@test "_install_apt_keyring: a stale .new is removed even when the fetch fails" {
+  export MOCK_CURL_FAIL_URL="example.invalid"
+  printf 'STALE' > "${KEYRING}.new"
+  run _install_apt_keyring "${URL}" "${KEYRING}" armored
+  [ "$status" -eq 1 ]
+  grep -q '^curl ' "${MOCK_CALLS_FILE}"
+  _assert_untouched
+}
+
+@test "_install_apt_keyring: a stale .new never reaches the keyring on success" {
+  export MOCK_CURL_STDOUT="not a real key"
+  printf 'STALE' > "${KEYRING}.new"
+  run _install_apt_keyring "${URL}" "${KEYRING}" armored
+  [ "$status" -eq 0 ]
+  [ "$(cat "${KEYRING}")" = "dearmored-test-keyring" ]
+  [ ! -e "${KEYRING}.new" ]
 }
 
 @test "_install_apt_keyring: rename failure leaves the keyring untouched and no .new" {
@@ -62,17 +110,26 @@ _assert_untouched() {
   _assert_untouched
 }
 
-@test "_install_apt_keyring: armored success with real gpg replaces the keyring" {
-  local _gpg
-  _gpg="$(_real_gpg)" || skip "no real gpg"
-  export _MS_GPG_BIN="${_gpg}"
+@test "_install_apt_keyring: armored success with real gpg yields a readable binary keyring" {
+  export _APT_KEY_GPG_BIN="${_REAL_GPG:-$(_real_gpg)}"
+  _APT_KEY_GPG_BIN="${_APT_KEY_GPG_BIN:-/nonexistent/gpg}"
   MOCK_CURL_STDOUT="$(cat "${REPO_ROOT}/keys/microsoft.asc")"
   export MOCK_CURL_STDOUT
   run _install_apt_keyring "${URL}" "${KEYRING}" armored
   [ "$status" -eq 0 ]
   grep -q '^curl ' "${MOCK_CALLS_FILE}"
   [ -s "${KEYRING}" ]
-  [ "$(cat "${KEYRING}")" != "old" ]
+  run ! grep -q 'BEGIN PGP' "${KEYRING}"
+  local _home="${BATS_TEST_TMPDIR}/gnupg"
+  mkdir -m 700 "${_home}"
+  run "${_APT_KEY_GPG_BIN}" --homedir "${_home}" --show-keys --with-colons "${KEYRING}"
+  [ "$status" -eq 0 ]
+  [[ "${output}" == *"${MS_GPG_FPR}"* ]]
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    [ "$(stat -f %Lp "${KEYRING}")" = "644" ]
+  else
+    [ "$(stat -c %a "${KEYRING}")" = "644" ]
+  fi
   [ ! -e "${KEYRING}.new" ]
   [ -z "$(ls -A "${_APT_KEY_TMP_ROOT}")" ]
 }
@@ -83,6 +140,7 @@ _assert_untouched() {
   [ "$status" -eq 0 ]
   grep -q '^curl ' "${MOCK_CALLS_FILE}"
   [ "$(cat "${KEYRING}")" = "binary-key-bytes" ]
+  _assert_tmp_was_used
   [ ! -e "${KEYRING}.new" ]
   [ -z "$(ls -A "${_APT_KEY_TMP_ROOT}")" ]
 }

@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Mock gpg for --dearmor callers: unlike tests/mocks/gpg it writes its -o target.
+# MOCK_GPG_DEARMOR_EMPTY=1 writes a zero-byte target and exits 0;
+# MOCK_GPG_DEARMOR_EXIT=<n> writes the normal content, then exits n.
+printf "gpg-dearmor %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+_out=""
+while [[ $# -gt 0 ]]; do
+  if [[ "$1" == "-o" ]]; then
+    _out="$2"
+    shift
+  fi
+  shift
+done
+while IFS= read -r _; do
+  :
+done
+if [[ -n "${_out}" ]]; then
+  if [[ "${MOCK_GPG_DEARMOR_EMPTY:-}" == "1" ]]; then
+    : > "${_out}"
+  else
+    printf 'dearmored-test-keyring' > "${_out}"
+  fi
+fi
+exit "${MOCK_GPG_DEARMOR_EXIT:-0}"
