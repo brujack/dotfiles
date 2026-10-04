@@ -1235,6 +1235,10 @@ _assert_go_extract_refused() {
   _go_stub 1.27.1
   mkdir -p "${_GO_INSTALL_ROOT}/go.old/bin"
   printf 'old' > "${_GO_INSTALL_ROOT}/go.old/bin/v"
+  # A real previous install has a go binary; the restored tree must pass the
+  # intactness check before go.old is replaced.
+  printf 'old' > "${_GO_INSTALL_ROOT}/go.old/bin/go"
+  /bin/chmod +x "${_GO_INSTALL_ROOT}/go.old/bin/go"
   run _install_ubuntu_go
   [ "$status" -eq 0 ]
   local _tmp _r="${_GO_INSTALL_ROOT}"
