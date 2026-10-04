@@ -334,8 +334,15 @@ _install_go_from_tarball() {
   fi
   if [[ -z ${_stage} ]]; then
     # Reached with go.old either absent or beside a live go; it is stale now.
+    # go.old may be the only good copy when go is a damaged tree, so it is
+    # deleted only once go is a real, non-empty, executable go binary.
     if [[ -e ${_root}/go ]]; then
-      sudo rm -rf "${_root}/go.old" || _stage="swap"
+      if [[ -f ${_root}/go/bin/go && ! -L ${_root}/go/bin/go && -x ${_root}/go/bin/go && -s ${_root}/go/bin/go ]]; then
+        sudo rm -rf "${_root}/go.old" || _stage="swap"
+      else
+        log_warn "go: ${_root}/go is not intact; keeping ${_root}/go.old"
+        _stage="swap"
+      fi
     fi
   fi
   if [[ -z ${_stage} && -e ${_root}/go ]]; then

@@ -1284,6 +1284,34 @@ _assert_go_extract_refused() {
   [ ! -e "${_GO_INSTALL_ROOT}/go.old/go" ]
 }
 
+@test "_install_ubuntu_go: a partial go beside an intact go.old keeps go.old and fails the swap" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  # go has no bin/go (a half-extracted or damaged tree); go.old is the good copy.
+  mkdir -p "${_GO_INSTALL_ROOT}/go/bin" "${_GO_INSTALL_ROOT}/go.old/bin"
+  printf 'partial' > "${_GO_INSTALL_ROOT}/go/bin/v"
+  printf 'old' > "${_GO_INSTALL_ROOT}/go.old/bin/v"
+  run _install_ubuntu_go
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"go: swap failed"* ]]
+  [ "$(< "${_GO_INSTALL_ROOT}/go.old/bin/v")" = "old" ]
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "partial" ]
+  [ ! -e "$(_go_stamp)" ]
+  [ -z "$(ls -A "${_DL_TMP_ROOT}")" ]
+}
+
+@test "_install_ubuntu_go: an intact go beside a stale go.old still replaces go.old" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  _seed_go
+  mkdir -p "${_GO_INSTALL_ROOT}/go.old/bin"
+  printf 'stale' > "${_GO_INSTALL_ROOT}/go.old/bin/v"
+  run _install_ubuntu_go
+  [ "$status" -eq 0 ]
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "new" ]
+  [ ! -e "${_GO_INSTALL_ROOT}/go.old" ]
+}
+
 @test "_install_ubuntu_go: a go.old that survives its delete is never moved onto, so nothing nests" {
   _make_go_tarball
   _go_stub 1.27.1
