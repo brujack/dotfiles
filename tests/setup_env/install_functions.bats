@@ -7,6 +7,11 @@ setup() {
   load_mocks
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
   export MOCK_ID_U=1000
+  # The Go install writes under these; unset it would reach the real /usr/local.
+  export _GO_INSTALL_ROOT="${BATS_TEST_TMPDIR}/go-root"
+  export _DL_STAMP_DIR="${BATS_TEST_TMPDIR}/stamps"
+  export _DL_TMP_ROOT="${BATS_TEST_TMPDIR}/dl-tmp"
+  mkdir -p "${_GO_INSTALL_ROOT}" "${_DL_TMP_ROOT}"
 }
 
 teardown() {
@@ -375,7 +380,7 @@ teardown() {
   export HOME="${_home}"
   export GO_VER="1.18"
   export PATH="${BATS_TEST_DIRNAME}/../mocks:${PATH}"
-  _install_ubuntu_go
+  run _install_ubuntu_go
   run grep "add-apt-repository" "${MOCK_CALLS_FILE}"
   [ "$status" -ne 0 ]
 }
@@ -389,8 +394,11 @@ teardown() {
   export HOME="${_home}"
   export GO_VER="1.18"
   export PATH="${BATS_TEST_DIRNAME}/../mocks:${PATH}"
-  _install_ubuntu_go
-  grep -q "wget" "${MOCK_CALLS_FILE}"
+  # The mock wget writes an empty file, so the install fails at extract; this
+  # test is only about the tarball path being taken.
+  run _install_ubuntu_go
+  [ "$status" -eq 1 ]
+  grep -q "^wget " "${MOCK_CALLS_FILE}"
 }
 
 # ── install_terraform_skill ───────────────────────────────────────────────────

@@ -76,6 +76,17 @@ setup() {
   # silently take the early-return "already installed" branch and assert
   # nothing about the install path it meant to exercise.
   export _PWSH_BIN="${BATS_TEST_TMPDIR}/nonexistent-pwsh"
+  # Go installs into _GO_INSTALL_ROOT, stamps into _DL_STAMP_DIR and extracts
+  # under _DL_TMP_ROOT. tests/mocks/sudo execs real commands, so without these a
+  # go test would write the real /usr/local/go. tar is the real one: the mock
+  # only records, and the swap tests need a tree to move.
+  export _GO_INSTALL_ROOT="${BATS_TEST_TMPDIR}/go-root"
+  export _DL_STAMP_DIR="${BATS_TEST_TMPDIR}/stamps"
+  export _DL_TMP_ROOT="${BATS_TEST_TMPDIR}/dl-tmp"
+  mkdir -p "${_GO_INSTALL_ROOT}" "${_DL_TMP_ROOT}"
+  _GO_CLEAN_PATH="$(printf '%s' "${PATH}" | tr ':' '\n' | grep -v 'tests/mocks' | tr '\n' ':' | sed 's/:$//')"
+  _DL_TAR_BIN="$(PATH="${_GO_CLEAN_PATH}" command -v tar)"
+  export _DL_TAR_BIN="${_DL_TAR_BIN:-/nonexistent/tar}"
   # Truncate AFTER seeding: cp and chmod are pass-through mocks that log their own
   # invocation, so the seed writes a line containing "rustup" into the call log and
   # breaks any test asserting that string is absent. Every test already assumes it
@@ -708,70 +719,278 @@ EOF
 
 # ── _install_ubuntu_go ───────────────────────────────────────────────────────
 
-@test "_install_ubuntu_go: any version calls wget for tarball (no PPA path)" {
-  export GO_VER="1.20"
-  export GO_DOWNLOAD_FILENAME="go1.20.linux-amd64.tar.gz"
-  export GO_DOWNLOAD_URL="https://dl.google.com/go/go1.20.linux-amd64.tar.gz"
-  run _install_ubuntu_go
-  [ "$status" -eq 0 ]
-  grep -q "wget.*${GO_DOWNLOAD_FILENAME}" "${MOCK_CALLS_FILE}"
+# A go tarball whose go/bin/go and go/bin/v both hold "new".
+_make_go_tarball() {
+  local _src="${BATS_TEST_TMPDIR}/gosrc"
+  mkdir -p "${_src}/go/bin"
+  printf 'new' > "${_src}/go/bin/go"
+  printf 'new' > "${_src}/go/bin/v"
+  /bin/chmod +x "${_src}/go/bin/go"
+  "${_DL_TAR_BIN}" -czf "${BATS_TEST_TMPDIR}/go.tgz" -C "${_src}" go
+  export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/go.tgz"
 }
 
-@test "_install_ubuntu_go: version >=1.21 calls wget for tarball" {
+# Stub go reporting <version>; every go test sets _GO_BIN (tdd.md pitfall G).
+_go_stub() {
+  local _v="${1:-1.27.1}"
+  printf '#!/usr/bin/env bash\nprintf "go version go%s linux/amd64\\n"\n' "${_v}" > "${BATS_TEST_TMPDIR}/gostub"
+  /bin/chmod +x "${BATS_TEST_TMPDIR}/gostub"
+  export _GO_BIN="${BATS_TEST_TMPDIR}/gostub"
+}
+
+# An existing install in the fixture root whose go/bin/v holds "old".
+_seed_go() {
+  mkdir -p "${_GO_INSTALL_ROOT}/go/bin"
+  printf 'old' > "${_GO_INSTALL_ROOT}/go/bin/v"
+  printf 'old' > "${_GO_INSTALL_ROOT}/go/bin/go"
+  /bin/chmod +x "${_GO_INSTALL_ROOT}/go/bin/go"
+}
+
+_go_tmpdir_from_calls() {
+  grep '^wget ' "${MOCK_CALLS_FILE}" | head -1 | sed -E 's/.* -O ([^ ]+)\/go\.tgz .*/\1/'
+}
+
+_go_stamp() { printf '%s/go' "${_DL_STAMP_DIR}"; }
+
+@test "_install_ubuntu_go: fetches the pinned URL, installs the tree and stamps it" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  run _install_ubuntu_go
+  [ "$status" -eq 0 ]
+  grep -q "^wget .*${GO_DOWNLOAD_URL}" "${MOCK_CALLS_FILE}"
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "new" ]
+  [ "$(< "$(_go_stamp)")" = "${GO_DOWNLOAD_URL}" ]
+}
+
+@test "_install_ubuntu_go: an up-to-date stamp skips the fetch and prints the skip line" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  _seed_go
+  mkdir -p "${_DL_STAMP_DIR}"
+  printf '%s\n' "${GO_DOWNLOAD_URL}" > "$(_go_stamp)"
+  run _install_ubuntu_go
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"go: up to date (stamp $(_go_stamp)); rm it to force a re-install"* ]]
+  refute_grep "^wget " "${MOCK_CALLS_FILE}"
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "old" ]
+}
+
+@test "_install_ubuntu_go: a stamp with no installed go does not skip" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  mkdir -p "${_DL_STAMP_DIR}"
+  printf '%s\n' "${GO_DOWNLOAD_URL}" > "$(_go_stamp)"
+  run _install_ubuntu_go
+  [ "$status" -eq 0 ]
+  grep -q "^wget " "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_go: a stamp for a different URL does not skip" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  _seed_go
+  mkdir -p "${_DL_STAMP_DIR}"
+  printf 'https://example.invalid/older.tar.gz\n' > "$(_go_stamp)"
+  run _install_ubuntu_go
+  [ "$status" -eq 0 ]
+  grep -q "^wget " "${MOCK_CALLS_FILE}"
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "new" ]
+  [ "$(< "$(_go_stamp)")" = "${GO_DOWNLOAD_URL}" ]
+}
+
+@test "_install_ubuntu_go: series match, go1.27.1 against GO_VER 1.27, succeeds" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  export GO_VER="1.27"
+  run _install_ubuntu_go
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Go 1.27 is installed"* ]]
+}
+
+@test "_install_ubuntu_go: an exact version equal to GO_VER succeeds" {
+  _make_go_tarball
+  _go_stub 1.26
   export GO_VER="1.26"
-  export GO_DOWNLOAD_FILENAME="go1.26.linux-amd64.tar.gz"
-  export GO_DOWNLOAD_URL="https://dl.google.com/go/go1.26.linux-amd64.tar.gz"
   run _install_ubuntu_go
   [ "$status" -eq 0 ]
-  grep -q "wget.*${GO_DOWNLOAD_FILENAME}" "${MOCK_CALLS_FILE}"
 }
 
-@test "_install_ubuntu_go: version >=1.21 skips wget when tarball already exists" {
-  export GO_VER="1.26"
-  export GO_DOWNLOAD_FILENAME="go1.26.linux-amd64.tar.gz"
-  touch "${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME}"
+@test "_install_ubuntu_go: a different series fails with the version warning" {
+  _make_go_tarball
+  _go_stub 1.26.3
+  export GO_VER="1.27"
   run _install_ubuntu_go
-  [ "$status" -eq 0 ]
-  ! grep -q "wget.*${GO_DOWNLOAD_FILENAME}" "${MOCK_CALLS_FILE}"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"go: version check failed (installed 1.26.3, want 1.27)"* ]]
 }
 
-@test "_install_ubuntu_go: prints success when go version matches after install" {
-  export GO_VER="1.26"
-  export GO_DOWNLOAD_FILENAME="go1.26.linux-amd64.tar.gz"
-  export GO_DOWNLOAD_URL="https://dl.google.com/go/go1.26.linux-amd64.tar.gz"
-  # Pre-create tarball so wget/tar are skipped
-  touch "${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME}"
-  # Fake go binary that reports matching version
-  local _bin_dir="${BATS_TEST_TMPDIR}/gobin"
-  mkdir -p "${_bin_dir}"
-  printf '#!/usr/bin/env bash\nprintf "go version go1.26 linux/amd64\\n"\n' > "${_bin_dir}/go"
-  chmod +x "${_bin_dir}/go"
-  export PATH="${_bin_dir}:${PATH}"
-  # PATH alone does not reach this function: _install_ubuntu_go prefers the
-  # absolute /usr/local/go/bin/go when it exists, deliberately, because that
-  # path reaches PATH only via 6_path.zsh and a provision run is not
-  # interactive. So on any box with Go actually installed the stub above is
-  # bypassed and the real `go version` answers -- measured 2026-09-18 on claude
-  # and workstation (both go1.27.1), where this test failed while passing on
-  # macOS, which has no /usr/local/go/bin/go. That is shell.md's
-  # absolute-path-default pitfall, and `make test` failing here means the
-  # pre-push hook refuses every source push from those two boxes.
-  #
-  # _GO_BIN is the seam the function already reads for exactly this; the test
-  # at the foot of this file has always set it.
-  export _GO_BIN="${_bin_dir}/go"
+@test "_install_ubuntu_go: a longer series sharing a prefix does not match" {
+  _make_go_tarball
+  _go_stub 1.270.1
+  export GO_VER="1.27"
   run _install_ubuntu_go
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"Go 1.26 is installed"* ]]
+  [ "$status" -eq 1 ]
 }
 
-@test "_install_ubuntu_go: any version succeeds (no version range guard)" {
-  export GO_VER="1.99"
-  export GO_DOWNLOAD_FILENAME="go1.99.linux-amd64.tar.gz"
-  export GO_DOWNLOAD_URL="https://dl.google.com/go/go1.99.linux-amd64.tar.gz"
+@test "_install_ubuntu_go: a failed download leaves the install, no stamp and no temp dir" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  _seed_go
+  export MOCK_WGET_FAIL_URL="${GO_DOWNLOAD_URL}"
+  run _install_ubuntu_go
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"go: download failed"* ]]
+  # Positive control: the fetch really targeted the throwaway root.
+  [[ "$(_go_tmpdir_from_calls)" == "${_DL_TMP_ROOT}/.dl."* ]]
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "old" ]
+  [ ! -e "$(_go_stamp)" ]
+  [ -z "$(ls -A "${_DL_TMP_ROOT}")" ]
+}
+
+@test "_install_ubuntu_go: a tarball without go/bin/go fails the extract stage and cleans up" {
+  _go_stub 1.27.1
+  _seed_go
+  printf 'not a tarball' > "${BATS_TEST_TMPDIR}/junk"
+  export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/junk"
+  run _install_ubuntu_go
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"go: extract failed"* ]]
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "old" ]
+  [ ! -e "$(_go_stamp)" ]
+  [ -z "$(ls -A "${_DL_TMP_ROOT}")" ]
+}
+
+@test "_install_ubuntu_go: the new tree is chowned root:root before the first swap move" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  _seed_go
   run _install_ubuntu_go
   [ "$status" -eq 0 ]
-  grep -q "wget.*${GO_DOWNLOAD_FILENAME}" "${MOCK_CALLS_FILE}"
+  local _tmp _chown_line _mv_line
+  _tmp="$(_go_tmpdir_from_calls)"
+  _chown_line="$(grep -n "^chown -R root:root ${_tmp}/go\$" "${MOCK_CALLS_FILE}" | head -1 | cut -d: -f1)"
+  _mv_line="$(grep -n '^mv ' "${MOCK_CALLS_FILE}" | head -1 | cut -d: -f1)"
+  [ -n "${_chown_line}" ]
+  [ -n "${_mv_line}" ]
+  [ "${_chown_line}" -lt "${_mv_line}" ]
+}
+
+@test "_install_ubuntu_go: a failed chown fails the sub-install and leaves the install" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  _seed_go
+  export MOCK_CHOWN_EXIT=1
+  run _install_ubuntu_go
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"go: chown failed"* ]]
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "old" ]
+  [ -z "$(ls -A "${_DL_TMP_ROOT}")" ]
+}
+
+@test "_install_ubuntu_go: replacing an install moves the old tree aside, then the new one in" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  _seed_go
+  run _install_ubuntu_go
+  [ "$status" -eq 0 ]
+  local _tmp
+  _tmp="$(_go_tmpdir_from_calls)"
+  [ "$(grep '^mv ' "${MOCK_CALLS_FILE}" | sed -n 1p)" = "mv ${_GO_INSTALL_ROOT}/go ${_GO_INSTALL_ROOT}/go.old" ]
+  [ "$(grep '^mv ' "${MOCK_CALLS_FILE}" | sed -n 2p)" = "mv ${_tmp}/go ${_GO_INSTALL_ROOT}/go" ]
+  # go.old is deleted only once the new tree is in place.
+  [ ! -e "${_GO_INSTALL_ROOT}/go.old" ]
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "new" ]
+}
+
+@test "_install_ubuntu_go: a failing new-tree move restores the old tree" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  _seed_go
+  export MOCK_MV_FAIL_ARGS=".dl."
+  run _install_ubuntu_go
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"go: install failed"* ]]
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "old" ]
+  [ ! -e "$(_go_stamp)" ]
+  # The aside move happened, then the restore ran (not a no-op).
+  [ "$(grep '^mv ' "${MOCK_CALLS_FILE}" | sed -n 1p)" = "mv ${_GO_INSTALL_ROOT}/go ${_GO_INSTALL_ROOT}/go.old" ]
+  [ "$(grep '^mv ' "${MOCK_CALLS_FILE}" | sed -n 3p)" = "mv ${_GO_INSTALL_ROOT}/go.old ${_GO_INSTALL_ROOT}/go" ]
+  [ -z "$(ls -A "${_DL_TMP_ROOT}")" ]
+}
+
+@test "_install_ubuntu_go: no old tree and a failing new-tree move attempts no restore" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  export MOCK_MV_FAIL_ARGS=".dl."
+  run _install_ubuntu_go
+  [ "$status" -eq 1 ]
+  [ "$(grep -c '^mv ' "${MOCK_CALLS_FILE}")" -eq 1 ]
+  grep -q "^mv .*\.dl\..*/go ${_GO_INSTALL_ROOT}/go\$" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_go: a go.old with no go is moved back first, then swapped in order" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  mkdir -p "${_GO_INSTALL_ROOT}/go.old/bin"
+  printf 'old' > "${_GO_INSTALL_ROOT}/go.old/bin/v"
+  run _install_ubuntu_go
+  [ "$status" -eq 0 ]
+  local _tmp _r="${_GO_INSTALL_ROOT}"
+  _tmp="$(_go_tmpdir_from_calls)"
+  [ "$(grep '^mv ' "${MOCK_CALLS_FILE}" | sed -n 1p)" = "mv ${_r}/go.old ${_r}/go" ]
+  [ "$(grep '^mv ' "${MOCK_CALLS_FILE}" | sed -n 2p)" = "mv ${_r}/go ${_r}/go.old" ]
+  [ "$(grep '^mv ' "${MOCK_CALLS_FILE}" | sed -n 3p)" = "mv ${_tmp}/go ${_r}/go" ]
+  [ "$(< "${_r}/go/bin/v")" = "new" ]
+}
+
+@test "_install_ubuntu_go: a go.old with no go and a failing new-tree move leaves the old content in go" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  mkdir -p "${_GO_INSTALL_ROOT}/go.old/bin"
+  printf 'old' > "${_GO_INSTALL_ROOT}/go.old/bin/v"
+  export MOCK_MV_FAIL_ARGS=".dl."
+  run _install_ubuntu_go
+  [ "$status" -eq 1 ]
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "old" ]
+}
+
+@test "_install_ubuntu_go: a failing move-back fails the sub-install without touching go.old" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  mkdir -p "${_GO_INSTALL_ROOT}/go.old/bin"
+  printf 'old' > "${_GO_INSTALL_ROOT}/go.old/bin/v"
+  export MOCK_MV_FAIL_ARGS="go.old ${_GO_INSTALL_ROOT}/go"
+  run _install_ubuntu_go
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"go: restore failed"* ]]
+  [ "$(< "${_GO_INSTALL_ROOT}/go.old/bin/v")" = "old" ]
+  [ ! -e "${_GO_INSTALL_ROOT}/go" ]
+  [ "$(grep -c '^mv ' "${MOCK_CALLS_FILE}")" -eq 1 ]
+  [ ! -e "$(_go_stamp)" ]
+}
+
+@test "_install_ubuntu_go: a leftover go.old is replaced and the tree is not nested" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  _seed_go
+  mkdir -p "${_GO_INSTALL_ROOT}/go.old/bin"
+  printf 'stale' > "${_GO_INSTALL_ROOT}/go.old/bin/v"
+  run _install_ubuntu_go
+  [ "$status" -eq 0 ]
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "new" ]
+  [ ! -e "${_GO_INSTALL_ROOT}/go/go" ]
+  [ ! -e "${_GO_INSTALL_ROOT}/go.old/go" ]
+}
+
+@test "_install_ubuntu_go: an unwritable stamp warns and still succeeds" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  printf 'file' > "${BATS_TEST_TMPDIR}/not-a-dir"
+  export _DL_STAMP_DIR="${BATS_TEST_TMPDIR}/not-a-dir/stamps"
+  run _install_ubuntu_go
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"go: could not write stamp"* ]]
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "new" ]
 }
 
 # ── _install_ubuntu_rust ─────────────────────────────────────────────────────
