@@ -376,6 +376,10 @@ Every new check gets a mutation control: delete the check and confirm its test g
 - **N4.** Cleanup commands and "is installed" probes do not become failures.
 - **N5.** No sha256 pins are added for the helper-installed tools, and no file under `~/software_downloads` is deleted.
 
+## Amendments
+
+- N5 -> No sha256 pins are added for the helper-installed tools, and no file under `~/software_downloads` that existed before the run is deleted; the helpers' own throwaway directories there are created and removed by the run. — plan non-goal check found the throwaway directory literally violated the original wording.
+
 ## Multi-Lens Review
 
 Reviewed at commit: `4a11dcb3` (Step 7 self-review commit, before Step 8 dispatch)
