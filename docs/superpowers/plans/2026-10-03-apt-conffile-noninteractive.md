@@ -1,3 +1,5 @@
+> **Status: DONE** — merged in #310 (2026-10-04).
+
 # apt/dpkg Conffile Prompts Implementation Plan
 
 spec: docs/superpowers/specs/2026-10-03-apt-conffile-noninteractive-design.md
