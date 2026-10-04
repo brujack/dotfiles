@@ -6,6 +6,8 @@ bats_require_minimum_version 1.5.0
 # fetch into a throwaway dir, install last, stamp the URL only on success. A
 # failure at any stage must leave the destination untouched, no stamp, and no
 # throwaway directory behind.
+# The chmod-based tests (read-only dirs) assume a non-root runner; root ignores
+# those permission bits.
 
 setup() {
   REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
@@ -278,13 +280,99 @@ _make_tar() {
   [ "$(_wget_count)" -eq 0 ]
 }
 
-@test "_install_fetched_binary: unknown kind and missing arguments are rejected before any fetch" {
+@test "_install_fetched_binary: unknown kind and missing or surplus arguments are rejected before any fetch" {
   run _install_fetched_binary tool "${URL}" bogus ""
   [ "$status" -eq 1 ]
   run _install_fetched_binary "" "${URL}" bin ""
   [ "$status" -eq 1 ]
   run _install_fetched_binary tool "" bin ""
   [ "$status" -eq 1 ]
+  run _install_fetched_binary tool "${URL}" bin
+  [ "$status" -eq 1 ]
+  run _install_fetched_binary tool "${URL}"
+  [ "$status" -eq 1 ]
+  run _install_fetched_binary tool "${URL}" bin "" one two
+  [ "$status" -eq 1 ]
+  [ "$(_wget_count)" -eq 0 ]
+  [ ! -e "${_DL_BIN_DIR}/bin" ]
+  [ "$(cat "${DEST}")" = "old" ]
+}
+
+_assert_extract_failed_clean() {
+  [ "$status" -eq 1 ]
+  [[ "${output}" == *"tool: extract failed"* ]]
+  [ "$(_wget_count)" -eq 1 ]
+  _assert_tmp_was_used
+  [ ! -e "${STAMP}" ]
+  _assert_root_empty
+  [ "$(cat "${DEST}")" = "old" ]
+}
+
+@test "_install_fetched_binary: a tar member that is a symlink is refused" {
+  local _src="${BATS_TEST_TMPDIR}/lsrc"
+  mkdir -p "${_src}/pkg/bin"
+  printf 'secret' > "${_src}/real"
+  chmod 0600 "${_src}/real"
+  ln -s "${_src}/real" "${_src}/pkg/bin/tool"
+  "${_DL_TAR_BIN}" -czf "${BATS_TEST_TMPDIR}/link.tgz" -C "${_src}" pkg
+  export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/link.tgz"
+  run _install_fetched_binary tool "${URL}" tar pkg/bin/tool
+  _assert_extract_failed_clean
+}
+
+@test "_install_fetched_binary: a tar member that is a directory is refused" {
+  local _src="${BATS_TEST_TMPDIR}/dsrc"
+  mkdir -p "${_src}/pkg/bin/tool"
+  printf 'x' > "${_src}/pkg/bin/tool/inner"
+  "${_DL_TAR_BIN}" -czf "${BATS_TEST_TMPDIR}/dir.tgz" -C "${_src}" pkg
+  export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/dir.tgz"
+  run _install_fetched_binary tool "${URL}" tar pkg/bin/tool
+  _assert_extract_failed_clean
+}
+
+@test "_install_fetched_binary: a tar lacking the member is refused" {
+  _make_tar
+  run _install_fetched_binary tool "${URL}" tar pkg/bin/missing
+  _assert_extract_failed_clean
+}
+
+@test "_install_fetched_binary: a successful but empty download is refused" {
+  : > "${BATS_TEST_TMPDIR}/empty"
+  export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/empty"
+  run _install_fetched_binary tool "${URL}" bin ""
+  _assert_extract_failed_clean
+}
+
+@test "_install_fetched_binary: failed resolution with a stamp but a missing dest fails" {
+  mkdir -p "${_DL_STAMP_DIR}"
+  printf '%s\n' "https://example.invalid/v1" > "${STAMP}"
+  rm -f "${DEST}"
+  export MOCK_CURL_EXIT=22
+  run _install_fetched_binary tool "${URL}" bin "" --resolve
+  [ "$status" -eq 1 ]
+  [[ "${output}" == *"tool: resolve failed"* ]]
+  [ "$(_wget_count)" -eq 0 ]
+}
+
+@test "_install_fetched_binary: failed resolution with a stamp but a non-executable dest fails" {
+  mkdir -p "${_DL_STAMP_DIR}"
+  printf '%s\n' "https://example.invalid/v1" > "${STAMP}"
+  chmod 0644 "${DEST}"
+  export MOCK_CURL_EXIT=22
+  run _install_fetched_binary tool "${URL}" bin "" --resolve
+  [ "$status" -eq 1 ]
+  [[ "${output}" == *"tool: resolve failed"* ]]
+  [ "$(_wget_count)" -eq 0 ]
+}
+
+@test "_install_fetched_binary: an uncreatable workdir fails before any fetch" {
+  mkdir -p "${BATS_TEST_TMPDIR}/ro2"
+  chmod 0555 "${BATS_TEST_TMPDIR}/ro2"
+  export _DL_TMP_ROOT="${BATS_TEST_TMPDIR}/ro2/tmp"
+  run _install_fetched_binary tool "${URL}" bin ""
+  [ "$status" -eq 1 ]
+  [[ "${output}" == *"tool: workdir failed"* ]]
   [ "$(_wget_count)" -eq 0 ]
   [ "$(cat "${DEST}")" = "old" ]
+  [ ! -e "${STAMP}" ]
 }

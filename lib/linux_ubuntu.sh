@@ -911,6 +911,7 @@ _install_apt_keyring() {
 # _DL_UNZIP_BIN, _DL_TAR_BIN. No EXIT/RETURN trap (check-lib-exit-traps.sh;
 # shell.md): every path below reaches an explicit rm -rf.
 _install_fetched_binary() {
+  [[ $# -ge 4 ]] || return 1
   local _name="$1" _url="$2" _kind="$3" _member="$4"
   local _dest_name="" _resolve=0 _arg _stamp _bin _tmp _src _stage="" _resolved
   [[ -n ${_name} && -n ${_url} ]] || return 1
@@ -920,6 +921,7 @@ _install_fetched_binary() {
     if [[ ${_arg} == "--resolve" ]]; then
       _resolve=1
     else
+      [[ -z ${_dest_name} ]] || return 1
       _dest_name="${_arg}"
     fi
   done
@@ -967,7 +969,8 @@ _install_fetched_binary() {
     fi
     _src="${_tmp}/x/${_member}"
   fi
-  if [[ -z ${_stage} && ! -s ${_src} ]]; then
+  # -s alone passes a directory and follows a symlink to any non-empty file.
+  if [[ -z ${_stage} ]] && ! [[ -f ${_src} && ! -L ${_src} && -s ${_src} ]]; then
     _stage="extract"
   fi
   if [[ -z ${_stage} ]] && ! sudo install -m 0755 "${_src}" "${_bin}"; then
