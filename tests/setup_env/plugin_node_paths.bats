@@ -262,6 +262,7 @@ _make_plugin() {
   _doctor_check_github_mcp()     { :; }
   _doctor_check_gnu_coreutils()  { :; }
   _doctor_check_pyenv_shims()    { :; }
+  _doctor_check_conffile_dist() { :; }
   _doctor_check_renovate_cadence()     { :; }
   _doctor_check_ledger_drift_cadence() { :; }
 
