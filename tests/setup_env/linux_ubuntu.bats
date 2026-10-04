@@ -1879,6 +1879,72 @@ STUB
   grep -q "usermod" "${MOCK_CALLS_FILE}"
 }
 
+@test "_install_ubuntu_docker: a failed source list write returns 1 and the installs still run" {
+  export HAS_DOCKER=1
+  _docker_fetch_ok
+  # tests/mocks/tee swallows real write errors; MOCK_TEE_EXIT is its failure knob.
+  export MOCK_TEE_EXIT=1
+  run --separate-stderr _install_ubuntu_docker
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"docker: source list: write failed"* ]]
+  grep -q "^tee ${_DOCKER_SOURCES_LIST}" "${MOCK_CALLS_FILE}"
+  grep -q "apt install docker-ce " "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_docker: a failed docker-ce-cli install is core, rc 3" {
+  export HAS_DOCKER=1
+  _docker_fetch_ok
+  export SHIM_APT_FAIL_PKGS="docker-ce-cli"
+  run _install_ubuntu_docker
+  [ "$status" -eq 3 ]
+}
+
+@test "_install_ubuntu_docker: a failed apt update is not a failure" {
+  export HAS_DOCKER=1
+  _docker_fetch_ok
+  export SHIM_APT_FAIL_PKGS="update"
+  run _install_ubuntu_docker
+  [ "$status" -eq 0 ]
+  # Positive control: update really failed, and the installs still ran.
+  grep -q "^apt update" "${MOCK_CALLS_FILE}"
+  grep -q "apt install docker-ce " "${MOCK_CALLS_FILE}"
+  grep -q "apt install containerd.io" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_docker: a failed daemon.json write with no validator is rc 1, not core" {
+  export HAS_DOCKER=1
+  _docker_fetch_ok
+  rm -f "${_DOCKER_DAEMON_JSON}"
+  export MOCK_TEE_EXIT=1
+  export _DOCKER_VALIDATE_BIN="/nonexistent/dockerd"
+  run --separate-stderr _install_ubuntu_docker
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"docker: daemon.json: write failed"* ]]
+  # Positive control: both writes failed (list and daemon.json), only core would be 3.
+  grep -q "^tee ${_DOCKER_DAEMON_JSON}" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_docker: a keyring failure plus a core failure returns 3 and names both" {
+  export HAS_DOCKER=1
+  _docker_fetch_ok
+  export MOCK_CURL_FAIL_URL="download.docker.com"
+  export SHIM_APT_FAIL_PKGS="docker-ce"
+  run --separate-stderr _install_ubuntu_docker
+  [ "$status" -eq 3 ]
+  [[ "$stderr" == *"docker: keyring: install failed"* ]]
+  [[ "$stderr" == *"docker: docker-ce: install failed"* ]]
+}
+
+@test "_install_ubuntu_docker: removes a legacy docker.gpg beside the keyring" {
+  export HAS_DOCKER=1
+  _docker_fetch_ok
+  mkdir -p "$(dirname "${_DOCKER_KEYRING}")"
+  printf 'legacy' > "$(dirname "${_DOCKER_KEYRING}")/docker.gpg"
+  run _install_ubuntu_docker
+  [ "$status" -eq 0 ]
+  [ ! -e "$(dirname "${_DOCKER_KEYRING}")/docker.gpg" ]
+}
+
 _stub_all_steps_but_docker() {
   local _s
   for _s in workstation powershell go nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
@@ -1947,6 +2013,7 @@ _nvidia_seams() {
   export MOCK_CURL_FAIL_URL="libnvidia-container/gpgkey"
   run _install_ubuntu_nvidia
   [ "$status" -eq 1 ]
+  [[ "$output" == *"nvidia: keyring: install failed"* ]]
   grep -q "curl .*gpgkey" "${MOCK_CALLS_FILE}"
   [ ! -e "${_OVERRIDE_NVIDIA_KEYRING}" ]
   [ ! -e "${_OVERRIDE_NVIDIA_LIST}" ]

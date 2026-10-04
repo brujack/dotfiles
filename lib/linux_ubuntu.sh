@@ -505,7 +505,10 @@ _install_ubuntu_nvidia() {
   local _list="${_OVERRIDE_NVIDIA_LIST:-/etc/apt/sources.list.d/nvidia-container-toolkit.list}"
 
   if [[ ! -f ${_keyring} ]]; then
-    _install_apt_keyring "${NVIDIA_CONTAINER_GPGKEY_URL}" "${_keyring}" armored || return 1
+    _install_apt_keyring "${NVIDIA_CONTAINER_GPGKEY_URL}" "${_keyring}" armored || {
+      log_warn "nvidia: keyring: install failed"
+      return 1
+    }
   fi
 
   if [[ ! -f ${_list} ]]; then
@@ -563,8 +566,8 @@ _install_ubuntu_docker() {
   local _list="${_DOCKER_SOURCES_LIST:-/etc/apt/sources.list.d/docker.list}"
   local _pkg
   sudo mkdir -p "$(dirname "${_keyring}")"
-  if [[ -f /etc/apt/keyrings/docker.gpg ]]; then
-    sudo rm -f /etc/apt/keyrings/docker.gpg
+  if [[ -f "$(dirname "${_keyring}")/docker.gpg" ]]; then
+    sudo rm -f "$(dirname "${_keyring}")/docker.gpg"
   fi
   # A keyring or source failure does not stop the installs below: apt is the
   # authoritative check on whether the repo is usable.
@@ -613,7 +616,7 @@ _install_ubuntu_docker() {
     if ! printf '{"exec-opts": ["native.cgroupdriver=systemd"]}\n' | \
       sudo tee "${_daemon_json}" > /dev/null; then
       log_warn "docker: daemon.json: write failed"
-      _core=1
+      _other=1
     fi
     # Write, then prove the artifact is loadable. The escaping bug above was
     # only half the defect: the write had no post-condition, so a file dockerd
