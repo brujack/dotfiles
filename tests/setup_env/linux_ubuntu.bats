@@ -940,7 +940,10 @@ EOF
   PATH="${_stub_dir}:${PATH}" run _install_ubuntu_powershell
   [ "$status" -eq 1 ]
   [[ "$output" == *"[WARN]"* ]]
-  [[ "$output" == *"apt install"* ]]
+  [[ "$output" == *"apt install powershell failed"* ]]
+  # The post-install probe also returns 1 and also says "apt install", so
+  # without this the test passes even with the install check removed.
+  [[ "$output" != *"still does not run"* ]]
   grep -q "apt update" "${MOCK_CALLS_FILE}"
   grep -q "apt install powershell" "${MOCK_CALLS_FILE}"
 }
