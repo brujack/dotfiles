@@ -71,3 +71,13 @@ sections 2 and 2b. #280 fixed this for `full-upgrade` only.
 - Plan: `docs/superpowers/plans/2026-10-03-apt-conffile-noninteractive.md`
 - ADR-0039; #280
 - `ai-config/docs/knowledge/dotfiles-apt-upgrade-hazards.md`
+
+## Amendment (2026-10-04)
+
+The volian nala bootstrap was removed: nala now comes from the Ubuntu archive on every release (Noble's archive carries nala 0.15.1 in universe). `--force-confmiss` therefore applies only to the `packages-microsoft-prod.deb` install. See `docs/superpowers/specs/2026-10-04-drop-volian-nala-bootstrap-design.md`.
+
+Manual cleanup for a machine provisioned via the old path:
+
+```bash
+sudo rm -f /etc/apt/sources.list.d/volian-archive-scar-unstable.sources /etc/apt/preferences.d/volian-archive-scar-unstable.pref && sudo apt purge -y volian-archive-keyring volian-archive-nala && sudo apt update
+```
