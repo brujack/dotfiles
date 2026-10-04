@@ -2,7 +2,8 @@
 # lib/linux_ubuntu.sh — Ubuntu-specific install functions
 
 # install_ubuntu_packages -- 0 when every step succeeded, 1 when the base
-# step failed (only on an unsupported release), 2 when any later step failed.
+# step hit an unsupported release (nothing else runs), 2 when any step failed,
+# base included (_install_ubuntu_base_packages returns 2 for a failed install).
 # Every step after the base packages runs regardless of the others, and the
 # failed ones are named on stderr: most steps return whatever their LAST
 # command returned, so chaining them with `|| return 1` let one flaky
@@ -10,9 +11,11 @@
 # the whole pyenv/ansible half. _install_ubuntu_brew_packages is itself
 # tri-state; its rc 2 counts as a failed step here too.
 install_ubuntu_packages() {
-  _install_ubuntu_base_packages || return 1
-
   local -a _failed=()
+  local _base_rc=0
+  _install_ubuntu_base_packages || _base_rc=$?
+  ((_base_rc == 1)) && return 1
+  ((_base_rc == 0)) || _failed+=(base)
   local _step
   # Order matters: the nvidia container toolkit configures docker's runtime,
   # so nvidia runs after docker and is skipped when docker failed, driver
@@ -35,30 +38,58 @@ install_ubuntu_packages() {
   return 0
 }
 
+# Install the packages named in a list file, skipping comments and blank lines.
+# A missing list is a failure; a list with no packages is not (xargs -r then
+# runs nothing). The grep|xargs status is read from PIPESTATUS, which the very
+# next line must copy: any command in between, `local` included, resets it.
+_install_ubuntu_package_list() {
+  local _list="$1"
+  [[ -r ${_list} ]] || return 1
+  grep -vE '^[[:space:]]*(#|$)' "${_list}" | xargs -r sudo DEBIAN_FRONTEND=noninteractive nala install "${APT_CONFFILE_OPTS[@]}" -y
+  local -a _ps=("${PIPESTATUS[@]}")
+  # grep exits 1 for "no lines selected", which is a legitimate empty list.
+  ((_ps[0] <= 1 && _ps[1] == 0))
+}
+
 _install_ubuntu_base_packages() {
-  sudo -H apt update
+  local _release _hwe
   if [[ -n ${NOBLE} ]]; then
+    _release=2404
+    _hwe=linux-generic-hwe-24.04
     printf "Installing hwe, common, and 24.04 packages\\n"
-    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" --install-recommends linux-generic-hwe-24.04 -y
-    check_and_install_nala
-    # Strip comments/blank lines: xargs -a feeds every line to nala, and a
-    # comment token like '--user' aborts the whole install ("No such option").
-    grep -vE '^[[:space:]]*(#|$)' ./ubuntu_common_packages.txt | xargs -r sudo DEBIAN_FRONTEND=noninteractive nala install "${APT_CONFFILE_OPTS[@]}" -y
-    grep -vE '^[[:space:]]*(#|$)' ./ubuntu_2404_packages.txt | xargs -r sudo DEBIAN_FRONTEND=noninteractive nala install "${APT_CONFFILE_OPTS[@]}" -y
   elif [[ -n ${RESOLUTE} ]]; then
+    _release=2604
+    _hwe=linux-generic-hwe-26.04
     printf "Installing hwe, common, and 26.04 packages\\n"
-    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" --install-recommends linux-generic-hwe-26.04 -y
-    check_and_install_nala
-    grep -vE '^[[:space:]]*(#|$)' ./ubuntu_common_packages.txt | xargs -r sudo DEBIAN_FRONTEND=noninteractive nala install "${APT_CONFFILE_OPTS[@]}" -y
-    grep -vE '^[[:space:]]*(#|$)' ./ubuntu_2604_packages.txt | xargs -r sudo DEBIAN_FRONTEND=noninteractive nala install "${APT_CONFFILE_OPTS[@]}" -y
   else
     log_error "Unsupported Ubuntu version: ${UBUNTU_VERSION:-unknown}"
     return 1
   fi
-  # Only an unsupported release is fatal here. Without this the function
-  # returned its last install's status, so one flaky package aborted every
-  # later step and the pyenv/ansible half. The installs above are unchecked,
-  # like the mid-step commands the backlog records.
+
+  # A failed update is one warning, not a failure: the installs below still
+  # work from the cached indexes, and apt names the offending source itself.
+  sudo -H apt update || log_warn "base: apt update reported errors (see apt's E:/W: lines above); continuing"
+
+  local -a _failed=()
+  sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" --install-recommends "${_hwe}" -y || {
+    log_warn "base: hwe kernel failed"
+    _failed+=("hwe kernel")
+  }
+  check_and_install_nala || {
+    log_warn "base: nala failed"
+    _failed+=("nala")
+  }
+  # Strip comments/blank lines: xargs -a feeds every line to nala, and a
+  # comment token like '--user' aborts the whole install ("No such option").
+  _install_ubuntu_package_list ./ubuntu_common_packages.txt || {
+    log_warn "base: common list failed"
+    _failed+=("common list")
+  }
+  _install_ubuntu_package_list "./ubuntu_${_release}_packages.txt" || {
+    log_warn "base: release list failed"
+    _failed+=("release list")
+  }
+  ((${#_failed[@]} == 0)) || return 2
   return 0
 }
 
