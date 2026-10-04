@@ -87,6 +87,33 @@ setup() {
   _GO_CLEAN_PATH="$(printf '%s' "${PATH}" | tr ':' '\n' | grep -v 'tests/mocks' | tr '\n' ':' | sed 's/:$//')"
   _DL_TAR_BIN="$(PATH="${_GO_CLEAN_PATH}" command -v tar)"
   export _DL_TAR_BIN="${_DL_TAR_BIN:-/nonexistent/tar}"
+  # _install_ubuntu_docker and _install_ubuntu_nvidia fetch keyrings through
+  # _install_apt_keyring and write a docker source list; tests/mocks/sudo execs
+  # real commands, so these keep every write under the test tmpdir. The gpg stub
+  # writes its -o target, which tests/mocks/gpg does not.
+  export _APT_KEY_GPG_BIN="${REPO_ROOT}/tests/mocks/gpg-dearmor"
+  export _DOCKER_KEYRING="${BATS_TEST_TMPDIR}/docker-keyrings/docker.asc"
+  export _DOCKER_SOURCES_LIST="${BATS_TEST_TMPDIR}/docker.list"
+  # There is no usermod mock, and the real one would run against the invoking
+  # account. A shim directory on PATH holds a usermod that succeeds and an apt
+  # wrapper that fails only for the packages named in SHIM_APT_FAIL_PKGS.
+  export SHIM_DIR="${BATS_TEST_TMPDIR}/shims"
+  mkdir -p "${SHIM_DIR}"
+  printf '#!/usr/bin/env bash\nprintf "usermod %%s\\n" "$*" >> "${MOCK_CALLS_FILE}"\nexit "${SHIM_USERMOD_EXIT:-0}"\n' > "${SHIM_DIR}/usermod"
+  cat > "${SHIM_DIR}/apt" << SHIM
+#!/usr/bin/env bash
+for _a in "\$@"; do
+  for _p in \${SHIM_APT_FAIL_PKGS:-}; do
+    if [[ "\${_a}" == "\${_p}" ]]; then
+      printf 'apt %s\n' "\$*" >> "\${MOCK_CALLS_FILE}"
+      exit 100
+    fi
+  done
+done
+exec "${REPO_ROOT}/tests/mocks/apt" "\$@"
+SHIM
+  /bin/chmod +x "${SHIM_DIR}/usermod" "${SHIM_DIR}/apt"
+  PATH="${SHIM_DIR}:${PATH}"
   # Truncate AFTER seeding: cp and chmod are pass-through mocks that log their own
   # invocation, so the seed writes a line containing "rustup" into the call log and
   # breaks any test asserting that string is absent. Every test already assumes it
@@ -1632,6 +1659,13 @@ exit 0'
 
 # ── _install_ubuntu_docker ───────────────────────────────────────────────────
 
+# The binary keyring needs a non-empty fetched body to count as a key.
+_docker_fetch_ok() {
+  export MOCK_CURL_STDOUT="docker-key-body"
+  export _DOCKER_DAEMON_JSON="${BATS_TEST_TMPDIR}/daemon.json"
+  printf '{"existing": "config"}\n' > "${_DOCKER_DAEMON_JSON}"
+}
+
 @test "_install_ubuntu_docker: HAS_DOCKER unset does nothing" {
   unset HAS_DOCKER
   run _install_ubuntu_docker
@@ -1641,6 +1675,7 @@ exit 0'
 
 @test "_install_ubuntu_docker: HAS_DOCKER set installs docker-ce" {
   export HAS_DOCKER=1
+  MOCK_CURL_STDOUT="docker-key-body"; export MOCK_CURL_STDOUT
   # Both seams, even though this test is about the apt call. Unseamed,
   # _daemon_json falls back to the REAL /etc/docker/daemon.json — and since
   # `tee` is a pass-through mock and tests/mocks/sudo execs a resolvable
@@ -1663,6 +1698,7 @@ exit 0'
 
 @test "_install_ubuntu_docker: writes daemon.json when absent" {
   export HAS_DOCKER=1
+  MOCK_CURL_STDOUT="docker-key-body"; export MOCK_CURL_STDOUT
   export _DOCKER_DAEMON_JSON="${BATS_TEST_TMPDIR}/daemon.json"
   # Seam the validator even though this test is about the written CONTENT.
   # ubuntu-latest has docker installed, so an unseamed run would resolve the
@@ -1704,6 +1740,7 @@ exit 0'
 
 @test "_install_ubuntu_docker: skips daemon.json when already exists" {
   export HAS_DOCKER=1
+  MOCK_CURL_STDOUT="docker-key-body"; export MOCK_CURL_STDOUT
   export _DOCKER_DAEMON_JSON="${BATS_TEST_TMPDIR}/daemon.json"
   printf '{"existing": "config"}\n' > "${_DOCKER_DAEMON_JSON}"
   run _install_ubuntu_docker
@@ -1748,6 +1785,7 @@ STUB
 # than skipping the branch entirely.
 @test "_install_ubuntu_docker: succeeds when the written daemon.json validates" {
   export HAS_DOCKER=1
+  MOCK_CURL_STDOUT="docker-key-body"; export MOCK_CURL_STDOUT
   export _DOCKER_DAEMON_JSON="${BATS_TEST_TMPDIR}/daemon.json"
   local _stub="${BATS_TEST_TMPDIR}/dockerd-accept"
   cat > "${_stub}" << 'STUB'
@@ -1761,6 +1799,157 @@ STUB
   [ "$status" -eq 0 ]
   [[ "$output" != *"did not validate"* ]]
   python3 -c "import json,sys; json.load(open(sys.argv[1]))" "${_DOCKER_DAEMON_JSON}"
+}
+
+# ── docker: rc 3 core / rc 1 other, and the dispatcher's nvidia skip ─────────
+
+@test "_install_ubuntu_docker: clean run returns 0 and installs the keyring and source list" {
+  export HAS_DOCKER=1
+  _docker_fetch_ok
+  run _install_ubuntu_docker
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_DOCKER_KEYRING}")" = "docker-key-body" ]
+  grep -q "signed-by=${_DOCKER_KEYRING}" "${_DOCKER_SOURCES_LIST}"
+  grep -q "apt install docker-ce" "${MOCK_CALLS_FILE}"
+  grep -q "usermod -a -G docker bruce" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_docker: a failed docker-ce install returns 3 and later installs still run" {
+  export HAS_DOCKER=1
+  _docker_fetch_ok
+  export SHIM_APT_FAIL_PKGS="docker-ce"
+  run --separate-stderr _install_ubuntu_docker
+  [ "$status" -eq 3 ]
+  [[ "$stderr" == *"docker: docker-ce: install failed"* ]]
+  grep -q "docker-compose-plugin" "${MOCK_CALLS_FILE}"
+  grep -q "usermod" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_docker: a failed containerd.io install is core, rc 3" {
+  export HAS_DOCKER=1
+  _docker_fetch_ok
+  export SHIM_APT_FAIL_PKGS="containerd.io"
+  run _install_ubuntu_docker
+  [ "$status" -eq 3 ]
+}
+
+@test "_install_ubuntu_docker: a daemon.json that does not validate returns 3" {
+  export HAS_DOCKER=1
+  _docker_fetch_ok
+  rm -f "${_DOCKER_DAEMON_JSON}"
+  local _stub="${BATS_TEST_TMPDIR}/dockerd-reject-core"
+  printf '#!/usr/bin/env bash\nexit 1\n' > "${_stub}"
+  chmod +x "${_stub}"
+  export _DOCKER_VALIDATE_BIN="${_stub}"
+  run _install_ubuntu_docker
+  [ "$status" -eq 3 ]
+}
+
+@test "_install_ubuntu_docker: a failed plugin install returns 1 and the other plugin is still tried" {
+  export HAS_DOCKER=1
+  _docker_fetch_ok
+  export SHIM_APT_FAIL_PKGS="docker-buildx-plugin"
+  run --separate-stderr _install_ubuntu_docker
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"docker: docker-buildx-plugin: install failed"* ]]
+  grep -q "apt install docker-compose-plugin" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_docker: a failed keyring fetch returns 1 and the core installs still run" {
+  export HAS_DOCKER=1
+  _docker_fetch_ok
+  export MOCK_CURL_FAIL_URL="download.docker.com"
+  run --separate-stderr _install_ubuntu_docker
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"docker: keyring: install failed"* ]]
+  # Positive control: the fetch was attempted, so absence below is a failure, not a skip.
+  grep -q "curl .*download.docker.com" "${MOCK_CALLS_FILE}"
+  [ ! -e "${_DOCKER_KEYRING}" ]
+  grep -q "apt install docker-ce " "${MOCK_CALLS_FILE}"
+  grep -q "apt install containerd.io" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_docker: a failed usermod returns 1" {
+  export HAS_DOCKER=1
+  _docker_fetch_ok
+  export SHIM_USERMOD_EXIT=1
+  run --separate-stderr _install_ubuntu_docker
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"docker: usermod: group add failed"* ]]
+  grep -q "usermod" "${MOCK_CALLS_FILE}"
+}
+
+_stub_all_steps_but_docker() {
+  local _s
+  for _s in workstation powershell go nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
+    eval "_install_ubuntu_${_s}() { printf 'ran ${_s}\\n' >> \"\${MOCK_CALLS_FILE}\"; }"
+  done
+  _install_ubuntu_base_packages() { return 0; }
+}
+
+@test "install_ubuntu_packages: docker core failure skips nvidia and names both" {
+  _stub_all_steps_but_docker
+  export HAS_DOCKER=1
+  _docker_fetch_ok
+  export SHIM_APT_FAIL_PKGS="docker-ce"
+  run --separate-stderr install_ubuntu_packages
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"skipping nvidia because docker failed"* ]]
+  [[ "$stderr" == *"ubuntu packages: failed: docker nvidia"* ]]
+  refute_grep '^ran nvidia' "${MOCK_CALLS_FILE}"
+  # Positive control: later steps ran, so nvidia's absence is the skip.
+  grep -q '^ran k8s_tools' "${MOCK_CALLS_FILE}"
+}
+
+@test "install_ubuntu_packages: a docker plugin failure is named but nvidia still runs" {
+  _stub_all_steps_but_docker
+  export HAS_DOCKER=1
+  _docker_fetch_ok
+  export SHIM_APT_FAIL_PKGS="docker-buildx-plugin"
+  run --separate-stderr install_ubuntu_packages
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"ubuntu packages: failed: docker"* ]]
+  [[ "$stderr" != *"skipping nvidia"* ]]
+  grep -q '^ran nvidia' "${MOCK_CALLS_FILE}"
+}
+
+# ── nvidia: keyring and list fetched safely ──────────────────────────────────
+
+_nvidia_seams() {
+  export _OVERRIDE_NVIDIA_GPU_PRESENT=0
+  export _OVERRIDE_NVIDIA_KEYRING="${BATS_TEST_TMPDIR}/nvidia-keyring.gpg"
+  export _OVERRIDE_NVIDIA_LIST="${BATS_TEST_TMPDIR}/nvidia-container-toolkit.list"
+  export _OVERRIDE_DOCKER_DAEMON_JSON="${BATS_TEST_TMPDIR}/nvidia-daemon.json"
+}
+
+@test "_install_ubuntu_nvidia: a failed list fetch returns 1 and leaves the list untouched" {
+  _nvidia_seams
+  export MOCK_CURL_FAIL_URL="stable/deb/nvidia-container-toolkit.list"
+  run --separate-stderr _install_ubuntu_nvidia
+  [ "$status" -eq 1 ]
+  # Positive control: the list fetch was attempted.
+  grep -q "curl .*nvidia-container-toolkit.list" "${MOCK_CALLS_FILE}"
+  [ ! -e "${_OVERRIDE_NVIDIA_LIST}" ]
+  [ -z "$(ls -A "${_APT_KEY_TMP_ROOT}")" ]
+}
+
+@test "_install_ubuntu_nvidia: a successful list fetch writes a signed-by list and leaves no tmp dir" {
+  _nvidia_seams
+  export MOCK_CURL_STDOUT="deb https://nvidia.github.io/libnvidia-container/stable/deb/\$(ARCH) /"
+  run _install_ubuntu_nvidia
+  [ "$status" -eq 0 ]
+  grep -q "signed-by=${_OVERRIDE_NVIDIA_KEYRING}" "${_OVERRIDE_NVIDIA_LIST}"
+  [ -z "$(ls -A "${_APT_KEY_TMP_ROOT}")" ]
+}
+
+@test "_install_ubuntu_nvidia: a failed keyring fetch returns 1 and creates no keyring or list" {
+  _nvidia_seams
+  export MOCK_CURL_FAIL_URL="libnvidia-container/gpgkey"
+  run _install_ubuntu_nvidia
+  [ "$status" -eq 1 ]
+  grep -q "curl .*gpgkey" "${MOCK_CALLS_FILE}"
+  [ ! -e "${_OVERRIDE_NVIDIA_KEYRING}" ]
+  [ ! -e "${_OVERRIDE_NVIDIA_LIST}" ]
 }
 
 # ── _install_ubuntu_k8s_tools ────────────────────────────────────────────────

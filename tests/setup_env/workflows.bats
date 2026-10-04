@@ -678,7 +678,7 @@ _stub_ubuntu_steps() {
   unset MACOS
   export LINUX=1 UBUNTU=1 NOBLE=1
   _stub_ubuntu_steps
-  _install_ubuntu_docker() { return 1; }
+  _install_ubuntu_docker() { return 3; }
   _install_ubuntu_nvidia() { printf 'NVIDIA_STEP_RAN\n'; }
   run --separate-stderr install_ubuntu_packages
   [ "$status" -eq 2 ]
