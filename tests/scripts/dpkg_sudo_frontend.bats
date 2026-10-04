@@ -18,6 +18,8 @@
 #   sudo env|nice|command apt install (a wrapper between sudo and the tool)
 #   verbs and flags absent from the tables in classify() (apt satisfy, dpkg --unpack,
 #   apt-get --option X=Y install, combined dpkg flags such as -Ei)
+#   an unquoted ${APT_CONFFILE_OPTS[@]} before the verb (read as the verb, so
+#   neither verdict judges the call; quote it, or put it after the verb)
 # The confmiss record names only the LAST .deb of a dpkg call that installs several.
 # Falsely reported `bad`: `sudo apt install` text inside a string, heredoc or trailing
 # comment, and a quoted value (DEBIAN_FRONTEND="noninteractive").
