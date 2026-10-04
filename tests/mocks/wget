@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 printf "wget %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
 # MOCK_WGET_FAIL_URL: fail only calls whose argv contains this substring,
-# leaving a 0-byte -O target (a truncated download).
+# leaving a 0-byte -O target (a truncated download). Precedence: a SET
+# MOCK_WGET_EXIT (non-empty, "0" included) wins; the knob only adds a failure.
 _fail_url=0
-[[ -n "${MOCK_WGET_FAIL_URL:-}" ]] && [[ "$*" == *"${MOCK_WGET_FAIL_URL}"* ]] && _fail_url=1
+[[ -z "${MOCK_WGET_EXIT:-}" ]] && [[ -n "${MOCK_WGET_FAIL_URL:-}" ]] && [[ "$*" == *"${MOCK_WGET_FAIL_URL}"* ]] && _fail_url=1
 i=1
 while [[ $i -le $# ]]; do
   if [[ "${!i}" == "-O" ]]; then

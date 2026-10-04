@@ -49,9 +49,9 @@ else
   mock_exit=0
 fi
 # MOCK_CURL_FAIL_URL: fail only calls whose argv contains this substring. It
-# only adds a failure -- an explicit MOCK_CURL_EXIT keeps precedence -- and
-# truncates the -o target, modelling a partial download.
-if [[ "${mock_exit}" -eq 0 ]] && [[ -n "${MOCK_CURL_FAIL_URL:-}" ]] \
+# only adds a failure -- a SET MOCK_CURL_EXIT (non-empty, "0" included) wins --
+# and truncates the -o target, modelling a partial download.
+if [[ -z "${MOCK_CURL_EXIT:-}" ]] && [[ -n "${MOCK_CURL_FAIL_URL:-}" ]] \
   && [[ "${ORIG_ARGS}" == *"${MOCK_CURL_FAIL_URL}"* ]]; then
   [[ -n "${outfile}" ]] && : > "${outfile}"
   exit 22

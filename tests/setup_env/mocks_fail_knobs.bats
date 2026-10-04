@@ -40,6 +40,32 @@ setup() {
   [ -s "${BATS_TEST_TMPDIR}/good" ]
 }
 
+@test "wget mock: a set MOCK_WGET_EXIT wins over MOCK_WGET_FAIL_URL; unset, the URL knob gives rc 4" {
+  export MOCK_WGET_FAIL_URL="bad.example"
+  export MOCK_WGET_EXIT=8
+  run "${MOCKS}/wget" -O "${BATS_TEST_TMPDIR}/a" https://bad.example/x.deb
+  [ "$status" -eq 8 ]
+  export MOCK_WGET_EXIT=0
+  run "${MOCKS}/wget" -O "${BATS_TEST_TMPDIR}/b" https://bad.example/x.deb
+  [ "$status" -eq 0 ]
+  unset MOCK_WGET_EXIT
+  run "${MOCKS}/wget" -O "${BATS_TEST_TMPDIR}/c" https://bad.example/x.deb
+  [ "$status" -eq 4 ]
+}
+
+@test "curl mock: a set MOCK_CURL_EXIT wins over MOCK_CURL_FAIL_URL; unset, the URL knob gives rc 22" {
+  export MOCK_CURL_FAIL_URL="bad.example"
+  export MOCK_CURL_EXIT=7
+  run "${MOCKS}/curl" -fsS -o "${BATS_TEST_TMPDIR}/a" https://bad.example/k
+  [ "$status" -eq 7 ]
+  export MOCK_CURL_EXIT=0
+  run "${MOCKS}/curl" -fsS -o "${BATS_TEST_TMPDIR}/b" https://bad.example/k
+  [ "$status" -eq 0 ]
+  unset MOCK_CURL_EXIT
+  run "${MOCKS}/curl" -fsS -o "${BATS_TEST_TMPDIR}/c" https://bad.example/k
+  [ "$status" -eq 22 ]
+}
+
 @test "curl mock: MOCK_CURL_FAIL_URL fails the matching URL with rc 22 and a 0-byte target" {
   export MOCK_CURL_FAIL_URL="bad.example"
   run "${MOCKS}/curl" -fsS -o "${BATS_TEST_TMPDIR}/bad" https://bad.example/k.asc
@@ -85,6 +111,8 @@ setup() {
   run "${MOCKS}/apt" -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install x
   [ "$status" -eq 100 ]
   grep -q '^apt install x$' "${MOCK_CALLS_FILE}"
+  run "${MOCKS}/apt" -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold update
+  [ "$status" -eq 0 ]
 }
 
 @test "apt-get mock: MOCK_APT_FAIL_SUBCMD fails the named subcommand only" {
@@ -96,6 +124,10 @@ setup() {
   export MOCK_APT_FAIL_SUBCMD=install
   run "${MOCKS}/apt-get" -y install x
   [ "$status" -eq 100 ]
+  run "${MOCKS}/apt-get" -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install x
+  [ "$status" -eq 100 ]
+  run "${MOCKS}/apt-get" -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold update
+  [ "$status" -eq 0 ]
 }
 
 @test "nala mock: MOCK_APT_FAIL_SUBCMD fails the named subcommand only" {
@@ -107,6 +139,10 @@ setup() {
   export MOCK_APT_FAIL_SUBCMD=install
   run "${MOCKS}/nala" -y install x
   [ "$status" -eq 100 ]
+  run "${MOCKS}/nala" -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install x
+  [ "$status" -eq 100 ]
+  run "${MOCKS}/nala" -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold update
+  [ "$status" -eq 0 ]
 }
 
 @test "mv mock: MOCK_MV_FAIL_ARGS fails a matching call, records it, and leaves the source" {
