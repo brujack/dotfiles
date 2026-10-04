@@ -1114,6 +1114,54 @@ _go_stamp() { printf '%s/go' "${_DL_STAMP_DIR}"; }
   [ -z "$(ls -A "${_DL_TMP_ROOT}")" ]
 }
 
+# The extract stage has three independent checks; each test below satisfies the
+# other two so only the named one can fail it.
+_assert_go_extract_refused() {
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"go: extract failed"* ]]
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "old" ]
+  [ ! -e "$(_go_stamp)" ]
+  [ -z "$(ls -A "${_DL_TMP_ROOT}")" ]
+}
+
+@test "_install_ubuntu_go: a real tarball with go/ but no bin/go fails the extract stage" {
+  _go_stub 1.27.1
+  _seed_go
+  local _src="${BATS_TEST_TMPDIR}/gosrc-nobin"
+  mkdir -p "${_src}/go/bin"
+  printf 'new' > "${_src}/go/bin/v"
+  "${_DL_TAR_BIN}" -czf "${BATS_TEST_TMPDIR}/nobin.tgz" -C "${_src}" go
+  export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/nobin.tgz"
+  run _install_ubuntu_go
+  _assert_go_extract_refused
+}
+
+@test "_install_ubuntu_go: a go/bin/go that is a symlink fails the extract stage" {
+  _go_stub 1.27.1
+  _seed_go
+  local _src="${BATS_TEST_TMPDIR}/gosrc-link"
+  mkdir -p "${_src}/go/bin"
+  printf 'new' > "${_src}/go/bin/v"
+  ln -s v "${_src}/go/bin/go"
+  "${_DL_TAR_BIN}" -czf "${BATS_TEST_TMPDIR}/link.tgz" -C "${_src}" go
+  export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/link.tgz"
+  run _install_ubuntu_go
+  _assert_go_extract_refused
+}
+
+@test "_install_ubuntu_go: a tar that extracts a good tree and then exits non-zero fails the extract stage" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  _seed_go
+  local _real="${_DL_TAR_BIN}"
+  local _stub="${BATS_TEST_TMPDIR}/tar-then-fail"
+  printf '#!/usr/bin/env bash\n"%s" "$@"\nexit 1\n' "${_real}" > "${_stub}"
+  /bin/chmod +x "${_stub}"
+  export _DL_TAR_BIN="${_stub}"
+  run _install_ubuntu_go
+  _assert_go_extract_refused
+}
+
 @test "_install_ubuntu_go: the new tree is chowned root:root before the first swap move" {
   _make_go_tarball
   _go_stub 1.27.1
