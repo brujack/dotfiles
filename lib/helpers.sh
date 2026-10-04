@@ -277,6 +277,7 @@ check_and_install_nala() {
           # used on these archive-setup debs only.
           sudo -H DEBIAN_FRONTEND=noninteractive dpkg --install --force-confdef --force-confold --force-confmiss "${HOME}"/software_downloads/volian-archive-keyring_0.2.0_all.deb
           wget -O "${HOME}"/software_downloads/volian-archive-nala_0.2.0_all.deb https://gitlab.com/-/project/39215670/uploads/d00e44faaf2cc8aad526ca520165a0af/volian-archive-nala_0.2.0_all.deb
+          # --force-confmiss: vendor apt source/pin only; see the keyring call above.
           sudo -H DEBIAN_FRONTEND=noninteractive dpkg --install --force-confdef --force-confold --force-confmiss "${HOME}"/software_downloads/volian-archive-nala_0.2.0_all.deb
           sudo -H apt update
         fi
