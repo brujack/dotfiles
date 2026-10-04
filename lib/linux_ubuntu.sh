@@ -1154,8 +1154,11 @@ _install_fetched_binary() {
   if [[ -z ${_stage} ]] && ! [[ -f ${_src} && ! -L ${_src} && -s ${_src} ]]; then
     _stage="extract"
   fi
-  if [[ -z ${_stage} ]] && ! sudo install -m 0755 "${_src}" "${_bin}"; then
+  # Stage beside the destination and rename over it: a copy that dies midway
+  # then leaves a stray .new, never a truncated binary at the destination.
+  if [[ -z ${_stage} ]] && ! { sudo install -m 0755 "${_src}" "${_bin}.new" && sudo mv -f "${_bin}.new" "${_bin}"; }; then
     _stage="install"
+    sudo rm -f "${_bin}.new" || log_warn "${_name}: could not remove ${_bin}.new"
   fi
   rm -rf "${_tmp}"
   if [[ -n ${_stage} ]]; then

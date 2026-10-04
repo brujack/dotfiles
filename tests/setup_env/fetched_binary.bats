@@ -164,6 +164,21 @@ _make_tar() {
   [ "$(cat "${STAMP}")" = "${URL}" ]
 }
 
+@test "_install_fetched_binary: a failing rename leaves dest, no .new, no stamp, and fails" {
+  # tests/mocks/mv is the failure knob; the staged copy is made by the real install.
+  export MOCK_MV_FAIL_ARGS=".new"
+  run _install_fetched_binary tool "${URL}" bin ""
+  [ "$status" -eq 1 ]
+  [[ "${output}" == *"tool: install failed"* ]]
+  # Positive control: the rename was attempted, so the absences below are a
+  # failed rename cleaned up, not a rename never reached.
+  grep -q "^mv -f ${DEST}.new ${DEST}\$" "${MOCK_CALLS_FILE}"
+  [ "$(cat "${DEST}")" = "old" ]
+  [ ! -e "${DEST}.new" ]
+  [ ! -e "${STAMP}" ]
+  _assert_root_empty
+}
+
 @test "_install_fetched_binary: an unwritable stamp dir warns naming the path but still succeeds" {
   mkdir -p "${BATS_TEST_TMPDIR}/ro"
   chmod 0555 "${BATS_TEST_TMPDIR}/ro"
