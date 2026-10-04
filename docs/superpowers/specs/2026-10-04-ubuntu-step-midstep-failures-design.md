@@ -196,3 +196,29 @@ Every new check gets a mutation control: delete the check and confirm its test g
 - **N2.** No `set -e`, `set -o pipefail` or ERR/EXIT trap is introduced.
 - **N3.** No change to `run_setup_or_developer`'s handling of `install_ubuntu_packages`' return codes.
 - **N4.** Cleanup commands and "is installed" probes do not become failures.
+
+## Multi-Lens Review
+
+Reviewed at commit: `4a11dcb3` (Step 7 self-review commit, before Step 8 dispatch)
+
+### Goal-Fit
+
+Finding: Worth building; premise verified (docker ends on a no-true-branch `if`, rc 0; `wget -O` truncates to 0 bytes; telepresence has no existence guard). Reads-it test: R2 changes behaviour (a working binary is no longer clobbered) and is the highest-value part; R4's stderr naming and rc 2 change no decision, since `run_setup_or_developer` warns and `-t developer` exits 0, and nothing persists past scrollback. R9 widens blast radius: under R1 any docker sub-install failure (buildx plugin, `usermod`) skips the NVIDIA driver install on a GPU box, though only `docker-ce`/containerd/`daemon.json` failure endangers what the guard protects. R3 plus a per-URL mock knob plus four assertions per ~30 sub-installs is the expensive part and is assumed, not argued, on a re-runnable installer. Test item 3 ("consumer never ran") is an absence assertion (tdd.md E5) needing a positive control; the clean-run case names no test that discriminates, since existing rc-0 tests predate any step being able to fail.
+Assumption: A step-level docker failure is the right trigger for skipping nvidia. Settled by asking the operator whether a failed buildx plugin or `usermod` should withhold the NVIDIA driver, and by tracing whether `daemon.json` is at risk with `docker-ce` installed but a plugin failed.
+Disposition:
+
+### Ergonomics
+
+Finding: (1) Blocker: the go version clause fails every run. `GO_VER="1.27"` (`constants.sh:36`), tarball `go1.27.1`, `/usr/local/go/bin/go version` prints `go1.27.1`, compared with `==` at `:266`. Under R1 every setup on claude/workstation reports `failed: go` with Go correctly installed, training the operator to ignore rc 2. (2) Fail-fast without cleanup makes a failure permanent: `wget -O` leaves an empty file and `_install_go_from_tarball`, kind, consul etc. skip the download whenever the file exists, so one blip never clears. R2 must require removing the partial artifact. (3) A permanently broken source yields up to 8 identical `apt update` warnings per run, none naming the source. Checked and not raised: `usermod` (user exists, idempotent), re-install of installed packages exits 0, workstation lists resolve on 26.04.
+Assumption: Every newly-checked command exits 0 on a fully provisioned box; the uncertain one is `dnsutils` in `ubuntu_common_packages.txt`, a virtual package on 26.04 (`apt-cache policy dnsutils` → `Candidate: (none)`, verified by the author). apt resolves it; whether nala 0.16.0 does is unknown. If not, base reports rc 2 on every reprovision. Settled by `sudo nala install -y dnsutils; echo $?` on claude.
+Disposition:
+
+### Risk
+
+Finding: (1) Same go blocker as Ergonomics, measured independently; tests not setting `_GO_BIN` (set at only two sites) read the real binary and become machine-dependent (pitfall G). (2) Same R9 over-breadth as Goal-Fit; the one real case the skip protects: if `docker-ce` failed, `nvidia-ctk runtime configure` creates `daemon.json` first and docker's `[[ ! -f daemon.json ]]` (`:455`) never writes the cgroup `exec-opts`. Narrow the predicate to docker-ce/containerd or `daemon.json` failure. (3) Mock gaps: `tests/mocks/apt` uses one exit code for every subcommand (`MOCK_APT_ONLY_EXIT` is not subcommand-scoped, verified by the author), so R6's both-branches case needs a new knob; `tests/mocks/cp` passes through with `|| true`, so install-stage failure needs `MOCK_CP_EXIT`. Mock wget models truncation; mock gpg exits 0 on empty input, so the pipeline case discriminates. (4) Positive control needed for test item 3 (same as Goal-Fit); clean run passes if every step does nothing. (5) Destructive path left armed: `_install_go_from_tarball` runs `sudo rm -rf /usr/local/go` before an unchecked `sudo mv` (`:241-243`); move the old tree aside instead. (6) The dispatcher's `|| return 1` at `:13` must change for R8 (wording); PIPESTATUS must be read with no command between, not even `local` (measured). Not over-engineered.
+Assumption: `apt install` of an already-installed package exits non-zero when its source is unreachable, making it "the authoritative check". If it exits 0 ("already the newest version"), a dead source on a provisioned box is reported only by the `apt update` warning. Settled by extending V3: with docker-ce installed, point `docker.list` at an unreachable host, run `apt update` then `apt install docker-ce -y`, record both rcs.
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
