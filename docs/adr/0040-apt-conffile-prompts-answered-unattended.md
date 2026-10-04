@@ -19,7 +19,9 @@ sections 2 and 2b. #280 fixed this for `full-upgrade` only.
    (`-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold`), is carried by every
    configuring `sudo apt|apt-get|nala` call. The operator's edited file is kept and dpkg writes
    the package copy beside it as `.dpkg-dist`.
-2. `--force-confmiss` is added only at the three archive-setup `dpkg` installs:
+2. [Superseded in part: the volian debs were removed on 2026-10-04 and confmiss now sits only on
+   `packages-microsoft-prod.deb` — see Amendment (2026-10-04) below.]
+   `--force-confmiss` is added only at the three archive-setup `dpkg` installs:
    `packages-microsoft-prod.deb` and the two volian debs. Each package carries only vendor apt
    archive configuration (the volian pair: a keyring, a `.sources` file and a `preferences.d`
    pin, no maintainer scripts, checked with `dpkg-deb -c`), so restoring a deleted file is
