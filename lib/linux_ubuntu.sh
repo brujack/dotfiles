@@ -700,18 +700,10 @@ _install_ubuntu_k8s_tools() {
     log_warn "k8s_tools: kubectl: keyring install failed"
     _k8s_rc=1
   }
-  # A source signed-by a missing keyring would break every later apt update, so
-  # write it only when a non-empty keyring exists (a previous one is kept on failure).
-  if [[ -s ${_keyring} ]]; then
-    printf 'deb [signed-by=%s] https://pkgs.k8s.io/core:/stable:/%s/deb/ /\n' "${_keyring}" "${KUBERNETES_VER}" \
-      | sudo tee "${_sources}/kubernetes.list" > /dev/null || {
-      log_warn "k8s_tools: kubectl: source list write failed"
-      _k8s_rc=1
-    }
-  else
-    log_warn "k8s_tools: kubectl: source write skipped (no keyring)"
-    _k8s_rc=1
-  fi
+  # A source signed-by a missing keyring would break every later apt update; the
+  # helper writes it only when a non-empty keyring exists (a previous one is kept on failure).
+  _write_apt_source_list k8s_tools kubectl "${_keyring}" "${_sources}/kubernetes.list" \
+    "deb [signed-by=${_keyring}] https://pkgs.k8s.io/core:/stable:/${KUBERNETES_VER}/deb/ /" || _k8s_rc=1
   # base owns the update warning; a failed refresh must not mask the install result.
   sudo -H apt update || :
   sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" kubectl -y || {
@@ -1195,6 +1187,7 @@ _install_ubuntu_edge_source() {
     else
       log_warn "edge: could not build ${_edge_keyring} (gpg missing or failed on ${_edge_key}, the keyring lacks the pinned fingerprint, or it is not writable); writing no Edge source"
       sudo rm -f "${_edge_list}" "${_edge_keyring}"
+      return 1
     fi
   fi
 }

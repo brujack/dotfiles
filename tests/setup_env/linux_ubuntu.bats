@@ -136,7 +136,23 @@ case "$1" in
 esac
 exit 0
 SHIM
-  /bin/chmod +x "${SHIM_DIR}/usermod" "${SHIM_DIR}/apt" "${SHIM_DIR}/apt-get" "${SHIM_DIR}/flatpak"
+  # Per-argument failure wrappers, so one sub-install can fail on its own while
+  # its siblings succeed: SHIM_SNAP_FAIL_ARGS / SHIM_TEE_FAIL_ARGS fail only a call
+  # whose arguments contain that substring, and otherwise exec the repo mock.
+  local _b
+  for _b in snap tee; do
+    cat > "${SHIM_DIR}/${_b}" << SHIM
+#!/usr/bin/env bash
+_failvar=SHIM_${_b^^}_FAIL_ARGS
+if [[ -n "\${!_failvar:-}" && "\$*" == *"\${!_failvar}"* ]]; then
+  cat > /dev/null 2>&1 < /dev/null
+  printf '${_b} %s\\n' "\$*" >> "\${MOCK_CALLS_FILE}"
+  exit 1
+fi
+exec "${REPO_ROOT}/tests/mocks/${_b}" "\$@"
+SHIM
+  done
+  /bin/chmod +x "${SHIM_DIR}/usermod" "${SHIM_DIR}/apt" "${SHIM_DIR}/apt-get" "${SHIM_DIR}/flatpak" "${SHIM_DIR}/snap" "${SHIM_DIR}/tee"
   PATH="${SHIM_DIR}:${PATH}"
   # Truncate AFTER seeding: cp and chmod are pass-through mocks that log their own
   # invocation, so the seed writes a line containing "rustup" into the call log and
@@ -501,6 +517,16 @@ _ws_dir() {
   run --separate-stderr _install_ubuntu_workstation
   [ "$status" -eq 1 ]
   [[ "$stderr" == *"workstation: snap list failed"* ]]
+}
+
+@test "_install_ubuntu_workstation: a snap list holding only comments is an empty list, not a failure" {
+  _ws_dir
+  printf '# nothing yet\n\n' > "${BATS_TEST_TMPDIR}/ws/ubuntu_workstation_snap_packages.txt"
+  run --separate-stderr _install_ubuntu_workstation
+  [ "$status" -eq 0 ]
+  [[ "$stderr" != *"workstation:"* ]]
+  # Positive control: the package list ran.
+  grep -q "xargs-stdin font-manager" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_workstation: HAS_SNAP uses nala for workstation packages" {
@@ -2510,6 +2536,74 @@ _cloud_env() {
   [ -s "${_APT_SOURCES_DIR}/teleport.list" ]
 }
 
+@test "_install_ubuntu_cloud_tools: a failed teleport apt install returns 1" {
+  _cloud_env
+  export SHIM_APT_FAIL_PKGS="teleport"
+  run --separate-stderr _install_ubuntu_cloud_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"cloud_tools: teleport: install failed"* ]]
+  grep -q "apt install teleport" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_cloud_tools: a failed google-cloud-cli-app-engine-go install returns 1" {
+  _cloud_env
+  export SHIM_APT_FAIL_PKGS="google-cloud-cli-app-engine-go"
+  run --separate-stderr _install_ubuntu_cloud_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"cloud_tools: gcloud: google-cloud-cli-app-engine-go install failed"* ]]
+  # Positive control: the first package was not the one that failed.
+  [[ "$stderr" != *"gcloud: google-cloud-cli install failed"* ]]
+}
+
+_cloud_tee_failure() {
+  _cloud_env
+  export SHIM_TEE_FAIL_ARGS="$1"
+  run --separate-stderr _install_ubuntu_cloud_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"cloud_tools: $2: source list write failed"* ]]
+  # Positive control: the write was really attempted, and only that one failed.
+  grep -q "tee .*$1" "${MOCK_CALLS_FILE}"
+  [ "$(grep -c 'source list write failed' <<< "${stderr}")" -eq 1 ]
+}
+
+@test "_install_ubuntu_cloud_tools: a failed teleport source list write returns 1" {
+  _cloud_tee_failure "teleport.list" teleport
+}
+
+@test "_install_ubuntu_cloud_tools: a failed cloudflared source list write returns 1" {
+  _cloud_tee_failure "cloudflare-client.list" cloudflared
+}
+
+@test "_install_ubuntu_cloud_tools: a failed gcloud source list write returns 1" {
+  _cloud_tee_failure "google-cloud-sdk.list" gcloud
+}
+
+_cloud_keyring_failure() {
+  _cloud_env
+  local _ring="${_APT_KEYRINGS_DIR}/$1"
+  printf 'old' > "${_ring}"
+  export MOCK_CURL_FAIL_URL="$2"
+  run --separate-stderr _install_ubuntu_cloud_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"cloud_tools: $3: keyring install failed"* ]]
+  grep -q "curl .*$2" "${MOCK_CALLS_FILE}"
+  [ "$(cat "${_ring}")" = "old" ]
+  # The prior keyring still backs the source list, so only the keyring failed.
+  [[ "$stderr" != *"source write skipped"* ]]
+}
+
+@test "_install_ubuntu_cloud_tools: a failed teleport keyring fetch with a prior keyring returns 1 and keeps it" {
+  _cloud_keyring_failure teleport-pubkey.gpg deb.releases.teleport.dev teleport
+}
+
+@test "_install_ubuntu_cloud_tools: a failed cloudflared keyring fetch with a prior keyring returns 1 and keeps it" {
+  _cloud_keyring_failure cloudflare-warp-archive-keyring.gpg pkg.cloudflareclient.com cloudflared
+}
+
+@test "_install_ubuntu_cloud_tools: a failed gcloud keyring fetch with a prior keyring returns 1 and keeps it" {
+  _cloud_keyring_failure cloud.google.gpg packages.cloud.google.com gcloud
+}
+
 # ── azure-cli via linuxbrew ──────────────────────────────────────────────────
 
 _az_cloud_env() {
@@ -2793,7 +2887,7 @@ _edge_live_sources() {
 @test "_install_ubuntu_edge_source: fails closed when the key cannot be read" {
   printf 'deb stale\n' > "${_EDGE_SOURCES_DIR}/microsoft-edge.list"
   _MS_KEY_PATH="${BATS_TEST_TMPDIR}/no-such-key.asc" run _install_ubuntu_edge_source
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ]
   [[ "$output" == *"edge: could not build ${_EDGE_BOOTSTRAP_KEYRING} (gpg missing or failed on"* ]]
   [ ! -e "${_EDGE_SOURCES_DIR}/microsoft-edge.list" ]
   [ ! -e "${_EDGE_BOOTSTRAP_KEYRING}" ]
@@ -2884,7 +2978,7 @@ _edge_live_sources() {
   head -c 400 "${REPO_ROOT}/keys/microsoft.asc" > "${BATS_TEST_TMPDIR}/trunc.asc"
   printf 'deb stale\n' > "${_EDGE_SOURCES_DIR}/microsoft-edge.list"
   _MS_KEY_PATH="${BATS_TEST_TMPDIR}/trunc.asc" run _install_ubuntu_edge_source
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ]
   [[ "$output" == *"edge: could not build ${_EDGE_BOOTSTRAP_KEYRING} (gpg missing or failed on"* ]]
   [ ! -e "${_EDGE_SOURCES_DIR}/microsoft-edge.list" ]
   [ ! -e "${_EDGE_BOOTSTRAP_KEYRING}" ]
@@ -2900,7 +2994,7 @@ _edge_live_sources() {
   chmod +x "${_stub}"
   printf 'deb stale\n' > "${_EDGE_SOURCES_DIR}/microsoft-edge.list"
   _MS_GPG_BIN="${_stub}" run _install_ubuntu_edge_source
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ]
   [[ "$output" == *"edge: could not build ${_EDGE_BOOTSTRAP_KEYRING}"* ]]
   [[ "$output" == *"fingerprint"* ]]
   [ ! -e "${_EDGE_SOURCES_DIR}/microsoft-edge.list" ]
@@ -2918,7 +3012,7 @@ _edge_live_sources() {
   [ -s "${BATS_TEST_TMPDIR}/other-edge.asc" ]
   printf 'deb stale\n' > "${_EDGE_SOURCES_DIR}/microsoft-edge.list"
   _MS_KEY_PATH="${BATS_TEST_TMPDIR}/other-edge.asc" run _install_ubuntu_edge_source
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ]
   [[ "$output" == *"edge: could not build ${_EDGE_BOOTSTRAP_KEYRING}"* ]]
   [ ! -e "${_EDGE_SOURCES_DIR}/microsoft-edge.list" ]
   [ ! -e "${_EDGE_BOOTSTRAP_KEYRING}" ]
@@ -2932,7 +3026,7 @@ _edge_live_sources() {
   chmod +x "${_stub}"
   printf 'deb stale\n' > "${_EDGE_SOURCES_DIR}/microsoft-edge.list"
   _MS_GPG_BIN="${_stub}" run _install_ubuntu_edge_source
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ]
   [[ "$output" == *"edge: could not build ${_EDGE_BOOTSTRAP_KEYRING}"* ]]
   [ ! -e "${_EDGE_SOURCES_DIR}/microsoft-edge.list" ]
   [ ! -e "${_EDGE_BOOTSTRAP_KEYRING}" ]
@@ -2941,7 +3035,7 @@ _edge_live_sources() {
 @test "_install_ubuntu_edge_source: fails closed when gpg is missing" {
   printf 'deb stale\n' > "${_EDGE_SOURCES_DIR}/microsoft-edge.list"
   _MS_GPG_BIN=/nonexistent/gpg run _install_ubuntu_edge_source
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ]
   [[ "$output" == *"edge: could not build ${_EDGE_BOOTSTRAP_KEYRING} (gpg missing or failed on"* ]]
   [ ! -e "${_EDGE_SOURCES_DIR}/microsoft-edge.list" ]
   [ ! -e "${_EDGE_BOOTSTRAP_KEYRING}" ]
@@ -3055,6 +3149,59 @@ _gui_env() {
   [ "$status" -eq 1 ]
   [[ "$stderr" == *"gui_tools: steam: flathub remote-add failed"* ]]
   grep -q "flatpak remote-add" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_gui_tools: a failed virtualbox apt install returns 1" {
+  _gui_env
+  export SHIM_APT_FAIL_PKGS="${VIRTUALBOX_VER}"
+  run --separate-stderr _install_ubuntu_gui_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"gui_tools: virtualbox: install failed"* ]]
+  grep -q "apt install ${VIRTUALBOX_VER}" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_gui_tools: a failed virtualbox source list write returns 1" {
+  _gui_env
+  export SHIM_TEE_FAIL_ARGS="virtualbox.list"
+  run --separate-stderr _install_ubuntu_gui_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"gui_tools: virtualbox: source list write failed"* ]]
+  grep -q "tee .*virtualbox.list" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_gui_tools: a failed 'snap set certbot' returns 1 and the route53 plugin is still installed" {
+  _gui_env
+  export SHIM_SNAP_FAIL_ARGS="set certbot"
+  run --separate-stderr _install_ubuntu_gui_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"gui_tools: snap certbot: trust-plugin-with-root failed"* ]]
+  [[ "$stderr" != *"certbot-dns-route53: install failed"* ]]
+  grep -q "snap set certbot trust-plugin-with-root=ok" "${MOCK_CALLS_FILE}"
+  grep -q "snap install certbot-dns-route53" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_gui_tools: a failed certbot-dns-route53 install returns 1" {
+  _gui_env
+  export SHIM_SNAP_FAIL_ARGS="certbot-dns-route53"
+  run --separate-stderr _install_ubuntu_gui_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"gui_tools: snap certbot-dns-route53: install failed"* ]]
+  [[ "$stderr" != *"trust-plugin-with-root failed"* ]]
+  grep -q "snap install certbot-dns-route53" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_gui_tools: the real edge helper failing to build its keyring returns 1 and names the edge source" {
+  _gui_env
+  unset HAS_DEVTOOLS HAS_FLATPAK
+  export _MS_KEY_PATH="${BATS_TEST_TMPDIR}/no-such-key.asc"
+  run --separate-stderr _install_ubuntu_gui_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"gui_tools: edge: source setup failed"* ]]
+  [[ "$stderr" == *"edge: could not build"* ]]
+  [ ! -e "${_EDGE_SOURCES_DIR}/microsoft-edge.list" ]
+  # Positive control: albert was fine, and the edge package install still ran.
+  [ -s "${_APT_SOURCES_DIR}/albert.list" ]
+  grep -q "apt install microsoft-edge-stable" "${MOCK_CALLS_FILE}"
 }
 
 # ── _install_ubuntu_misc ─────────────────────────────────────────────────────
