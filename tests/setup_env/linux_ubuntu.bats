@@ -4204,6 +4204,18 @@ SHIM
   _cf_tarball
   [ -s "${BATS_TEST_TMPDIR}/hc.zip" ] && [ -s "${BATS_TEST_TMPDIR}/blob" ]
   _dispatch_wget_shim
+  # --resolve's curl asks for %{url_effective}, which must be an https URL
+  # different from the link; every other curl (key fetches) keeps the key body.
+  cat > "${SHIM_DIR}/curl" << SHIM
+#!/usr/bin/env bash
+if [[ "\$*" == *'%{url_effective}'* ]]; then
+  printf 'curl %s\\n' "\$*" >> "\${MOCK_CALLS_FILE}"
+  printf 'https://example.invalid/telepresence-resolved'
+  exit 0
+fi
+exec "${REPO_ROOT}/tests/mocks/curl" "\$@"
+SHIM
+  /bin/chmod +x "${SHIM_DIR}/curl"
 
   run --separate-stderr install_ubuntu_packages
   [ "$status" -eq 0 ]
