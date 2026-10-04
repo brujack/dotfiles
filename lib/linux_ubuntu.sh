@@ -106,11 +106,25 @@ _install_ubuntu_base_packages() {
 # snap is one failed step rather than a failed base.
 _install_ubuntu_workstation() {
   [[ -n ${HAS_SNAP} ]] || return 0
+  # rc 1 when either list failed; both are attempted regardless.
+  local _ws_rc=0
   printf "Installing workstation packages\\n"
-  grep -vE '^[[:space:]]*(#|$)' ./ubuntu_workstation_packages.txt | xargs -r sudo DEBIAN_FRONTEND=noninteractive nala install "${APT_CONFFILE_OPTS[@]}" -y
+  _install_ubuntu_package_list ./ubuntu_workstation_packages.txt || {
+    log_warn "workstation: package list failed"
+    _ws_rc=1
+  }
 
   printf "Installing workstation snap packages\\n"
+  # Same PIPESTATUS shape as _install_ubuntu_package_list: copy it on the very
+  # next line, and read grep's 1 ("no lines selected") as an empty list.
   grep -vE '^[[:space:]]*(#|$)' ./ubuntu_workstation_snap_packages.txt | xargs -r sudo snap install
+  local -a _ps=("${PIPESTATUS[@]}")
+  ((_ps[0] <= 1 && _ps[1] == 0)) || {
+    log_warn "workstation: snap list failed"
+    _ws_rc=1
+  }
+  ((_ws_rc == 0)) || return 1
+  return 0
 }
 
 # Whether pwsh actually runs, bounded by `timeout` so a hung binary cannot
@@ -738,14 +752,47 @@ _install_ubuntu_hashicorp() {
   return 0
 }
 
+# Write an apt source list only when its keyring is a non-empty file: a source
+# signed-by a missing keyring would break every later apt update. Returns 1 (with a
+# warning naming <step>: <tool>) when the keyring is absent or the write fails.
+# Usage: _write_apt_source_list <step> <tool> <keyring> <list> <line>
+_write_apt_source_list() {
+  local _step="$1" _tool="$2" _ring="$3" _list="$4" _line="$5"
+  if [[ ! -s ${_ring} ]]; then
+    log_warn "${_step}: ${_tool}: source write skipped (no keyring)"
+    return 1
+  fi
+  printf '%s\n' "${_line}" | sudo tee "${_list}" > /dev/null || {
+    log_warn "${_step}: ${_tool}: source list write failed"
+    return 1
+  }
+  return 0
+}
+
 _install_ubuntu_cloud_tools() {
+  # rc 1 when any tool failed; each is named in a warning. Every tool is
+  # attempted regardless of an earlier failure.
+  local _cloud_rc=0
+  local _sources="${_APT_SOURCES_DIR:-/etc/apt/sources.list.d}"
+  local _keyrings="${_APT_KEYRINGS_DIR:-/usr/share/keyrings}"
+  local _ring _list
   if [[ -n ${HAS_DEVTOOLS} ]]; then
     printf "Installing teleport\\n"
-    curl -fsSL https://deb.releases.teleport.dev/teleport-pubkey.asc | sudo gpg --dearmor --yes --output /usr/share/keyrings/teleport-pubkey.gpg
-    sudo rm -f /etc/apt/sources.list.d/archive_uri-https_deb_releases_teleport_dev_-noble.list
-    echo "deb [signed-by=/usr/share/keyrings/teleport-pubkey.gpg] https://deb.releases.teleport.dev/ stable main" | sudo tee /etc/apt/sources.list.d/teleport.list
-    sudo -H apt update
-    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" teleport -y
+    _ring="${_keyrings}/teleport-pubkey.gpg"
+    _install_apt_keyring "https://deb.releases.teleport.dev/teleport-pubkey.asc" "${_ring}" armored || {
+      log_warn "cloud_tools: teleport: keyring install failed"
+      _cloud_rc=1
+    }
+    # Advisory cleanup of a stale source: a failure here is not a failed install.
+    sudo rm -f "${_sources}/archive_uri-https_deb_releases_teleport_dev_-noble.list" 2> /dev/null || true
+    _write_apt_source_list cloud_tools teleport "${_ring}" "${_sources}/teleport.list" \
+      "deb [signed-by=${_ring}] https://deb.releases.teleport.dev/ stable main" || _cloud_rc=1
+    # base owns the update warning; a failed refresh must not mask the install result.
+    sudo -H apt update || :
+    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" teleport -y || {
+      log_warn "cloud_tools: teleport: install failed"
+      _cloud_rc=1
+    }
     if [[ -x $(command -v tsh) ]]; then
       printf "Teleport is installed\\n"
     fi
@@ -757,11 +804,19 @@ _install_ubuntu_cloud_tools() {
     _cf_codename="$(lsb_release -cs)"
     # Cloudflare WARP has no Ubuntu 26.04 packages yet; fall back to noble
     [[ -n "${RESOLUTE:-}" ]] && _cf_codename="noble"
-    local _cf_sources="${_CF_SOURCES_LIST:-/etc/apt/sources.list.d/cloudflare-client.list}"
-    curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
-    echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ ${_cf_codename} main" | sudo tee "${_cf_sources}"
-    sudo apt-get update
-    sudo DEBIAN_FRONTEND=noninteractive apt-get install "${APT_CONFFILE_OPTS[@]}" cloudflare-warp -y
+    local _cf_sources="${_CF_SOURCES_LIST:-${_sources}/cloudflare-client.list}"
+    _ring="${_keyrings}/cloudflare-warp-archive-keyring.gpg"
+    _install_apt_keyring "https://pkg.cloudflareclient.com/pubkey.gpg" "${_ring}" armored || {
+      log_warn "cloud_tools: cloudflared: keyring install failed"
+      _cloud_rc=1
+    }
+    _write_apt_source_list cloud_tools cloudflared "${_ring}" "${_cf_sources}" \
+      "deb [signed-by=${_ring}] https://pkg.cloudflareclient.com/ ${_cf_codename} main" || _cloud_rc=1
+    sudo apt-get update || :
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install "${APT_CONFFILE_OPTS[@]}" cloudflare-warp -y || {
+      log_warn "cloud_tools: cloudflared: install failed"
+      _cloud_rc=1
+    }
     if [[ -x $(command -v cloudflared) ]]; then
       printf "cloudflared is installed\\n"
     fi
@@ -779,34 +834,33 @@ _install_ubuntu_cloud_tools() {
     || log_warn "could not remove legacy azure-cli apt key/sources under ${_apt_trusted} and ${_apt_sources}"
 
   printf "Installing gcloud-sdk\\n"
-  if [[ ! -f /etc/apt/sources.list.d/google-cloud-sdk.list ]]; then
-    curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
-    echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+  _ring="${_keyrings}/cloud.google.gpg"
+  _list="${_sources}/google-cloud-sdk.list"
+  if [[ ! -f ${_list} ]]; then
+    _install_apt_keyring "https://packages.cloud.google.com/apt/doc/apt-key.gpg" "${_ring}" armored || {
+      log_warn "cloud_tools: gcloud: keyring install failed"
+      _cloud_rc=1
+    }
+    _write_apt_source_list cloud_tools gcloud "${_ring}" "${_list}" \
+      "deb [signed-by=${_ring}] https://packages.cloud.google.com/apt cloud-sdk main" || _cloud_rc=1
   fi
-  sudo apt update
-  sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" google-cloud-cli -y
-  sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" google-cloud-cli-app-engine-go -y
+  sudo apt update || :
+  sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" google-cloud-cli -y || {
+    log_warn "cloud_tools: gcloud: google-cloud-cli install failed"
+    _cloud_rc=1
+  }
+  sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" google-cloud-cli-app-engine-go -y || {
+    log_warn "cloud_tools: gcloud: google-cloud-cli-app-engine-go install failed"
+    _cloud_rc=1
+  }
 
   printf "Installing cf-terraforming Ubuntu\\n"
-  if [[ ! -f ${HOME}/software_downloads/cf-terraforming_${CF_TERRAFORMING_VER}_linux_${_LINUX_ARCH}.tar.gz ]]; then
-    wget -O "${HOME}"/software_downloads/cf-terraforming_"${CF_TERRAFORMING_VER}"_linux_"${_LINUX_ARCH}".tar.gz "${CF_TERRAFORMING_URL}"
-    tar xvf "${HOME}"/software_downloads/cf-terraforming_"${CF_TERRAFORMING_VER}"_linux_"${_LINUX_ARCH}".tar.gz -C "${HOME}"/software_downloads
-    if [[ -f ${HOME}/software_downloads/CHANGELOG.md ]]; then
-      rm "${HOME}"/software_downloads/CHANGELOG.md
-    fi
-    if [[ -f ${HOME}/software_downloads/LICENSE ]]; then
-      rm "${HOME}"/software_downloads/LICENSE
-    fi
-    if [[ -f ${HOME}/software_downloads/README.md ]]; then
-      rm "${HOME}"/software_downloads/README.md
-    fi
-    sudo cp -a "${HOME}"/software_downloads/cf-terraforming /usr/local/bin/
-    sudo chmod 755 /usr/local/bin/cf-terraforming
-    sudo chown root:root /usr/local/bin/cf-terraforming
-    if [[ -x $(command -v cf-terraforming) ]]; then
-      printf "cf-terraforming is installed\\n"
-    fi
-  fi
+  _install_fetched_binary cf-terraforming "${CF_TERRAFORMING_URL}" tar cf-terraforming || {
+    log_warn "cloud_tools: cf-terraforming: install failed"
+    _cloud_rc=1
+  }
+  ((_cloud_rc == 0)) || return 1
+  return 0
 }
 
 # Returns 0 clean, 1 hard failure, 2 partial success with the failed packages named.
@@ -1232,54 +1286,87 @@ _install_ubuntu_albert() {
 }
 
 _install_ubuntu_gui_tools() {
+  # Returns albert's own rc when it is non-zero (as before); otherwise 1 when any
+  # other sub-install failed, each named in a warning, else 0. Every sub-install
+  # is attempted regardless of an earlier failure.
+  local _gui_rc=0 _albert_rc=0 _ring _snap
+  local _sources="${_APT_SOURCES_DIR:-/etc/apt/sources.list.d}"
+  local _keyrings="${_APT_KEYRINGS_DIR:-/usr/share/keyrings}"
   if [[ -n ${HAS_DEVTOOLS} ]]; then
     printf "Installing Virtualbox\\n"
-    wget -O- https://www.virtualbox.org/download/oracle_vbox_2016.asc | sudo gpg --dearmor --yes --output /usr/share/keyrings/oracle-virtualbox-2016.gpg
+    _ring="${_keyrings}/oracle-virtualbox-2016.gpg"
+    _install_apt_keyring "https://www.virtualbox.org/download/oracle_vbox_2016.asc" "${_ring}" armored || {
+      log_warn "gui_tools: virtualbox: keyring install failed"
+      _gui_rc=1
+    }
     # VirtualBox has no ARM64 Linux build — amd64 only
-    echo "deb [arch=amd64 signed-by=/usr/share/keyrings/oracle-virtualbox-2016.gpg] http://download.virtualbox.org/virtualbox/debian $(. /etc/os-release && echo "$VERSION_CODENAME") contrib" | sudo tee /etc/apt/sources.list.d/virtualbox.list
-    sudo -H apt update
+    _write_apt_source_list gui_tools virtualbox "${_ring}" "${_sources}/virtualbox.list" \
+      "deb [arch=amd64 signed-by=${_ring}] http://download.virtualbox.org/virtualbox/debian $(. /etc/os-release && echo "$VERSION_CODENAME") contrib" || _gui_rc=1
+    # base owns the update warning; a failed refresh must not mask the install result.
+    sudo -H apt update || :
     # shellcheck disable=SC2086 # package-name slot: apt install takes a list, and VIRTUALBOX_VER may hold more than one package
-    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" ${VIRTUALBOX_VER} -y
+    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" ${VIRTUALBOX_VER} -y || {
+      log_warn "gui_tools: virtualbox: install failed"
+      _gui_rc=1
+    }
     if [[ -x $(command -v vboxmanage) ]]; then
       printf "Virtualbox is installed\\n"
     fi
   fi
 
-  local _albert_rc=0 _tail_rc
   if [[ -n ${HAS_SNAP} ]]; then
     _install_ubuntu_albert || _albert_rc=$?
   fi
 
   if [[ -n ${HAS_SNAP} ]]; then
     printf "Installing microsoft edge\\n"
-    _install_ubuntu_edge_source
-    sudo -H apt update
-    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" microsoft-edge-stable -y
+    _install_ubuntu_edge_source || {
+      log_warn "gui_tools: edge: source setup failed"
+      _gui_rc=1
+    }
+    sudo -H apt update || :
+    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" microsoft-edge-stable -y || {
+      log_warn "gui_tools: edge: install failed"
+      _gui_rc=1
+    }
   fi
 
   if [[ -n ${HAS_SNAP} ]]; then
     printf "snap software with classic option, the other snap packages are installed in ubuntu_workstation_snap_packages.txt\\n"
-    sudo snap install code --classic
-    sudo snap install slack --classic
-    sudo snap install certbot --classic
-    sudo snap set certbot trust-plugin-with-root=ok
-    sudo snap install certbot-dns-route53
+    for _snap in code slack certbot; do
+      sudo snap install "${_snap}" --classic || {
+        log_warn "gui_tools: snap ${_snap}: install failed"
+        _gui_rc=1
+      }
+    done
+    sudo snap set certbot trust-plugin-with-root=ok || {
+      log_warn "gui_tools: snap certbot: trust-plugin-with-root failed"
+      _gui_rc=1
+    }
+    sudo snap install certbot-dns-route53 || {
+      log_warn "gui_tools: snap certbot-dns-route53: install failed"
+      _gui_rc=1
+    }
   fi
 
   if [[ -n ${HAS_FLATPAK} ]]; then
     printf "Installing Steam via Flatpak\\n"
-    sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-    sudo flatpak install flathub com.valvesoftware.Steam -y
+    sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo || {
+      log_warn "gui_tools: steam: flathub remote-add failed"
+      _gui_rc=1
+    }
+    sudo flatpak install flathub com.valvesoftware.Steam -y || {
+      log_warn "gui_tools: steam: install failed"
+      _gui_rc=1
+    }
+    # Advisory probe: the message below is informational, not a status.
     if sudo flatpak list | grep -q com.valvesoftware.Steam; then
       printf "Steam is installed\\n"
     fi
   fi
-  # Captures the status of the HAS_FLATPAK `if` block directly above (0 when it is
-  # skipped); keep this capture directly after it so a clean albert hands back that
-  # step's own status unchanged.
-  _tail_rc=$?
   [[ ${_albert_rc} -ne 0 ]] && return "${_albert_rc}"
-  return "${_tail_rc}"
+  ((_gui_rc == 0)) || return 1
+  return 0
 }
 
 # Installs a checksum-verified release binary, skipping when the copy already
