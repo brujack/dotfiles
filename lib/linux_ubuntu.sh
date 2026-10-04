@@ -588,12 +588,11 @@ _install_ubuntu_docker() {
     log_warn "docker: keyring: install failed"
     _other=1
   }
-  printf 'deb [arch=%s signed-by=%s] https://download.docker.com/linux/ubuntu %s stable\n' \
-    "$(dpkg --print-architecture)" "${_keyring}" "$(. /etc/os-release && echo "${VERSION_CODENAME}")" \
-    | sudo tee "${_list}" > /dev/null || {
-    log_warn "docker: source list: write failed"
-    _other=1
-  }
+  # Same rule as every other apt repo: no source without a non-empty keyring, so
+  # a failed fetch cannot leave a signed-by line that breaks every later apt update.
+  _write_apt_source_list docker "source list" "${_keyring}" "${_list}" \
+    "deb [arch=$(dpkg --print-architecture) signed-by=${_keyring}] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "${VERSION_CODENAME}") stable" \
+    || _other=1
   # base owns the update warning; a failed refresh must not mask the install result.
   sudo -H apt update || :
   for _pkg in docker-ce docker-ce-cli containerd.io; do

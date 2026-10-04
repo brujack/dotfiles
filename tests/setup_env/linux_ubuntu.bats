@@ -2014,6 +2014,33 @@ STUB
   grep -q "apt install containerd.io" "${MOCK_CALLS_FILE}"
 }
 
+@test "_install_ubuntu_docker: a failed keyring fetch with no existing keyring writes no source list" {
+  export HAS_DOCKER=1
+  _docker_fetch_ok
+  export MOCK_CURL_FAIL_URL="download.docker.com"
+  run --separate-stderr _install_ubuntu_docker
+  # Core installs succeed here (the apt shim), so rc 1 is the keyring alone.
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"docker: keyring: install failed"* ]]
+  [[ "$stderr" == *"docker: source list: source write skipped (no keyring)"* ]]
+  [ ! -e "${_DOCKER_KEYRING}" ]
+  [ ! -e "${_DOCKER_SOURCES_LIST}" ]
+  grep -q "apt install docker-ce " "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_docker: a failed keyring fetch over an existing keyring still writes the source list" {
+  export HAS_DOCKER=1
+  _docker_fetch_ok
+  mkdir -p "$(dirname "${_DOCKER_KEYRING}")"
+  printf 'previous-key' > "${_DOCKER_KEYRING}"
+  export MOCK_CURL_FAIL_URL="download.docker.com"
+  run --separate-stderr _install_ubuntu_docker
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"docker: keyring: install failed"* ]]
+  [ "$(cat "${_DOCKER_KEYRING}")" = "previous-key" ]
+  grep -q "signed-by=${_DOCKER_KEYRING}" "${_DOCKER_SOURCES_LIST}"
+}
+
 @test "_install_ubuntu_docker: a failed usermod returns 1" {
   export HAS_DOCKER=1
   _docker_fetch_ok
@@ -2031,7 +2058,7 @@ STUB
   export MOCK_TEE_EXIT=1
   run --separate-stderr _install_ubuntu_docker
   [ "$status" -eq 1 ]
-  [[ "$stderr" == *"docker: source list: write failed"* ]]
+  [[ "$stderr" == *"docker: source list: source list write failed"* ]]
   grep -q "^tee ${_DOCKER_SOURCES_LIST}" "${MOCK_CALLS_FILE}"
   grep -q "apt install docker-ce " "${MOCK_CALLS_FILE}"
 }
