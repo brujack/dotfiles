@@ -194,8 +194,25 @@ EOF
   run _install_ubuntu_base_packages
   [ "$status" -eq 2 ]
   [[ "$output" == *"base: common list failed"* ]]
-  # Positive control: the release list still ran after the common list failed.
-  grep -q "xargs-stdin" "${MOCK_CALLS_FILE}"
+  # Both lists must be attempted and both failures recorded: the common list
+  # failing must not short-circuit the release list.
+  [[ "$output" == *"base: release list failed"* ]]
+  [ "$(grep -c '^xargs ' "${MOCK_CALLS_FILE}")" -eq 2 ]
+}
+
+@test "_install_ubuntu_base_packages: only the release list failing is named alone" {
+  export NOBLE=1
+  unset RESOLUTE HAS_SNAP
+  local _d="${BATS_TEST_TMPDIR}/commononly"
+  mkdir -p "${_d}"
+  printf 'build-essential\n' > "${_d}/ubuntu_common_packages.txt"
+  cd "${_d}"
+  run _install_ubuntu_base_packages
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"base: release list failed"* ]]
+  [[ "$output" != *"base: common list failed"* ]]
+  # Positive control: the common list's install really ran.
+  [ "$(grep -c '^xargs ' "${MOCK_CALLS_FILE}")" -eq 1 ]
 }
 
 @test "_install_ubuntu_base_packages: failed hwe kernel install returns 2" {
@@ -248,6 +265,22 @@ EOF
   unset MACOS
   export LINUX=1 UBUNTU=1 NOBLE=1
   _install_ubuntu_base_packages() { return 2; }
+  local _s
+  for _s in workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
+    eval "_install_ubuntu_${_s}() { printf 'ran ${_s}\\n' >> \"\${MOCK_CALLS_FILE}\"; }"
+  done
+  run --separate-stderr install_ubuntu_packages
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"ubuntu packages: failed: base"* ]]
+  [ "$(grep -c '^ran ' "${MOCK_CALLS_FILE}")" -eq 12 ]
+}
+
+@test "install_ubuntu_packages: real base with a failed install is named and later steps run" {
+  unset MACOS
+  export LINUX=1 UBUNTU=1 NOBLE=1
+  unset RESOLUTE HAS_SNAP
+  cd "${REPO_ROOT}"
+  export MOCK_XARGS_EXIT=1
   local _s
   for _s in workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
     eval "_install_ubuntu_${_s}() { printf 'ran ${_s}\\n' >> \"\${MOCK_CALLS_FILE}\"; }"
