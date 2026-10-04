@@ -656,112 +656,77 @@ _install_ubuntu_docker() {
 }
 
 _install_ubuntu_k8s_tools() {
+  # rc 1 when any tool failed; each is named in a warning. Every tool is
+  # attempted regardless of an earlier failure.
+  local _k8s_rc=0
+  local _sources="${_APT_SOURCES_DIR:-/etc/apt/sources.list.d}"
+  local _keyring="${_APT_KEYRINGS_DIR:-/etc/apt/keyrings}/kubernetes-apt-keyring.gpg"
   if [[ -n ${HAS_K8S} ]]; then
-    if [[ ! -f ${HOME}/software_downloads/kind_${KIND_VER} ]]; then
-      printf "Installing kind\\n"
-      wget -O "${HOME}"/software_downloads/kind_"${KIND_VER}" "${KIND_URL}"
-      sudo cp -a "${HOME}"/software_downloads/kind_"${KIND_VER}" /usr/local/bin/
-      sudo mv /usr/local/bin/kind_"${KIND_VER}" /usr/local/bin/kind
-      sudo chmod 755 /usr/local/bin/kind
-      sudo chown root:root /usr/local/bin/kind
-      if [[ -x $(command -v kind) ]]; then
-        printf "kind is installed\\n"
-      fi
-    fi
-  fi
-
-  if [[ -n ${HAS_K8S} ]]; then
+    printf "Installing kind\\n"
+    _install_fetched_binary kind "${KIND_URL}" bin kind || {
+      log_warn "k8s_tools: kind: install failed"
+      _k8s_rc=1
+    }
     printf "Installing telepresence\\n"
-    wget -O "${HOME}"/software_downloads/telepresence "${TELEPRESENCE_URL}"
-    sudo cp -a "${HOME}"/software_downloads/telepresence /usr/local/bin/
-    sudo chmod 755 /usr/local/bin/telepresence
-    sudo chown root:root /usr/local/bin/telepresence
-    if [[ -x $(command -v telepresence) ]]; then
-      printf "telepresence is installed\\n"
-    fi
+    _install_fetched_binary telepresence "${TELEPRESENCE_URL}" bin telepresence --resolve || {
+      log_warn "k8s_tools: telepresence: install failed"
+      _k8s_rc=1
+    }
   fi
 
   # Purge stale baltocdn helm APT source left by pre-PR#155 runs — the repo
   # serves unsigned/NOSPLIT data and has no resolute suite, causing apt update
   # to fail on every subsequent setup run even after the code was fixed.
-  sudo rm -f /etc/apt/sources.list.d/helm-stable-debian.list 2>/dev/null || true
+  # Advisory cleanup: a failure here is not a failed install.
+  sudo rm -f "${_sources}/helm-stable-debian.list" 2> /dev/null || true
 
-  sudo mkdir -p /etc/apt/keyrings
-  curl -fsSL "https://pkgs.k8s.io/core:/stable:/${KUBERNETES_VER}/deb/Release.key" \
-    | sudo gpg --dearmor --yes -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-  printf 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/%s/deb/ /\n' "${KUBERNETES_VER}" \
-    | sudo tee /etc/apt/sources.list.d/kubernetes.list
-  sudo -H apt update
-  sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" kubectl -y
+  _install_apt_keyring "https://pkgs.k8s.io/core:/stable:/${KUBERNETES_VER}/deb/Release.key" "${_keyring}" armored || {
+    log_warn "k8s_tools: kubectl: keyring install failed"
+    _k8s_rc=1
+  }
+  printf 'deb [signed-by=%s] https://pkgs.k8s.io/core:/stable:/%s/deb/ /\n' "${_keyring}" "${KUBERNETES_VER}" \
+    | sudo tee "${_sources}/kubernetes.list" > /dev/null || {
+    log_warn "k8s_tools: kubectl: source list write failed"
+    _k8s_rc=1
+  }
+  # base owns the update warning; a failed refresh must not mask the install result.
+  sudo -H apt update || :
+  sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" kubectl -y || {
+    log_warn "k8s_tools: kubectl: install failed"
+    _k8s_rc=1
+  }
 
   if [[ -n ${HAS_SNAP} ]]; then
-    sudo snap install helm --classic
+    sudo snap install helm --classic || {
+      log_warn "k8s_tools: helm: snap install failed"
+      _k8s_rc=1
+    }
   fi
   # helm and kustomize on non-snap systems are installed via brew in
   # _install_ubuntu_brew_packages(); no curl installer needed here.
+  ((_k8s_rc == 0)) || return 1
+  return 0
 }
 
 _install_ubuntu_hashicorp() {
-  printf "Installing Hashicorp Consul Ubuntu\\n"
-  if [[ ! -d ${HOME}/software_downloads/consul_${CONSUL_VER} ]]; then
-    wget -O "${HOME}"/software_downloads/consul_"${CONSUL_VER}"_linux_"${_LINUX_ARCH}".zip "${HASHICORP_URL}"/consul/"${CONSUL_VER}"/consul_"${CONSUL_VER}"_linux_"${_LINUX_ARCH}".zip
-    unzip "${HOME}"/software_downloads/consul_"${CONSUL_VER}"_linux_"${_LINUX_ARCH}".zip -d "${HOME}"/software_downloads/consul_"${CONSUL_VER}"
-    sudo cp -a "${HOME}"/software_downloads/consul_"${CONSUL_VER}"/consul /usr/local/bin/
-    sudo chmod 755 /usr/local/bin/consul
-    sudo chown root:root /usr/local/bin/consul
-    if [[ -x $(command -v consul) ]]; then
-      printf "consul is installed\\n"
-    fi
-  fi
-
-  printf "Installing Hashicorp Vault Ubuntu\\n"
-  if [[ ! -d ${HOME}/software_downloads/vault_${VAULT_VER} ]]; then
-    wget -O "${HOME}"/software_downloads/vault_"${VAULT_VER}"_linux_"${_LINUX_ARCH}".zip "${HASHICORP_URL}"/vault/"${VAULT_VER}"/vault_"${VAULT_VER}"_linux_"${_LINUX_ARCH}".zip
-    unzip "${HOME}"/software_downloads/vault_"${VAULT_VER}"_linux_"${_LINUX_ARCH}".zip -d "${HOME}"/software_downloads/vault_"${VAULT_VER}"
-    sudo cp -a "${HOME}"/software_downloads/vault_"${VAULT_VER}"/vault /usr/local/bin/
-    sudo chmod 755 /usr/local/bin/vault
-    sudo chown root:root /usr/local/bin/vault
-    if [[ -x $(command -v vault) ]]; then
-      printf "vault is installed\\n"
-    fi
-  fi
-
-  printf "Installing Hashicorp Nomad Ubuntu\\n"
-  if [[ ! -d ${HOME}/software_downloads/nomad_${NOMAD_VER} ]]; then
-    wget -O "${HOME}"/software_downloads/nomad_"${NOMAD_VER}"_linux_"${_LINUX_ARCH}".zip "${HASHICORP_URL}"/nomad/"${NOMAD_VER}"/nomad_"${NOMAD_VER}"_linux_"${_LINUX_ARCH}".zip
-    unzip "${HOME}"/software_downloads/nomad_"${NOMAD_VER}"_linux_"${_LINUX_ARCH}".zip -d "${HOME}"/software_downloads/nomad_"${NOMAD_VER}"
-    sudo cp -a "${HOME}"/software_downloads/nomad_"${NOMAD_VER}"/nomad /usr/local/bin/
-    sudo chmod 755 /usr/local/bin/nomad
-    sudo chown root:root /usr/local/bin/nomad
-    if [[ -x $(command -v nomad) ]]; then
-      printf "nomad is installed\\n"
-    fi
-  fi
-
-  printf "Installing Hashicorp Packer Ubuntu\\n"
-  if [[ ! -d ${HOME}/software_downloads/packer_${PACKER_VER} ]]; then
-    wget -O "${HOME}"/software_downloads/packer_"${PACKER_VER}"_linux_"${_LINUX_ARCH}".zip "${HASHICORP_URL}"/packer/"${PACKER_VER}"/packer_"${PACKER_VER}"_linux_"${_LINUX_ARCH}".zip
-    unzip "${HOME}"/software_downloads/packer_"${PACKER_VER}"_linux_"${_LINUX_ARCH}".zip -d "${HOME}"/software_downloads/packer_"${PACKER_VER}"
-    sudo cp -a "${HOME}"/software_downloads/packer_"${PACKER_VER}"/packer /usr/local/bin/
-    sudo chmod 755 /usr/local/bin/packer
-    sudo chown root:root /usr/local/bin/packer
-    if [[ -x $(command -v packer) ]]; then
-      printf "packer is installed\\n"
-    fi
-  fi
-
-  printf "Installing Hashicorp Vagrant Ubuntu\\n"
-  if [[ ! -d ${HOME}/software_downloads/vagrant_${VAGRANT_VER} ]]; then
+  # rc 1 when any tool failed; the helper names the failing stage and each
+  # failure is named here. Every tool is attempted regardless.
+  local _hc_rc=0 _tool _ver _var _arch
+  for _tool in consul vault nomad packer vagrant; do
+    printf "Installing Hashicorp %s Ubuntu\\n" "${_tool}"
+    _var="${_tool^^}_VER"
+    _ver="${!_var}"
+    _arch="${_LINUX_ARCH}"
     # vagrant has no ARM64 Linux build — amd64 only
-    wget -O "${HOME}"/software_downloads/vagrant_"${VAGRANT_VER}"_linux_amd64.zip "${HASHICORP_URL}"/vagrant/"${VAGRANT_VER}"/vagrant_"${VAGRANT_VER}"_linux_amd64.zip
-    unzip "${HOME}"/software_downloads/vagrant_"${VAGRANT_VER}"_linux_amd64.zip -d "${HOME}"/software_downloads/vagrant_"${VAGRANT_VER}"
-    sudo cp -a "${HOME}"/software_downloads/vagrant_"${VAGRANT_VER}"/vagrant /usr/local/bin/
-    sudo chmod 755 /usr/local/bin/vagrant
-    sudo chown root:root /usr/local/bin/vagrant
-    if [[ -x $(command -v vagrant) ]]; then
-      printf "vagrant is installed\\n"
-    fi
-  fi
+    [[ ${_tool} == "vagrant" ]] && _arch="amd64"
+    _install_fetched_binary "${_tool}" \
+      "${HASHICORP_URL}/${_tool}/${_ver}/${_tool}_${_ver}_linux_${_arch}.zip" zip "${_tool}" || {
+      log_warn "hashicorp: ${_tool}: install failed"
+      _hc_rc=1
+    }
+  done
+  ((_hc_rc == 0)) || return 1
+  return 0
 }
 
 _install_ubuntu_cloud_tools() {
