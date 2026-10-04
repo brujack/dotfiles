@@ -4026,3 +4026,92 @@ _albert_assert_last_good_untouched() {
   [[ "$stderr" == *"${_MS_FPR}"* ]]
   [[ "$stderr" != *"not the pinned key"* ]]
 }
+
+# ── install_ubuntu_packages: clean run, every step real ──────────────────────
+
+# wget shim that hands back the right fixture per URL: the Go tarball, the
+# HashiCorp zip, the cf-terraforming tarball, or a plain body. tests/mocks/wget
+# serves one MOCK_WGET_FILE for every call, which cannot satisfy a dispatcher run.
+_dispatch_wget_shim() {
+  cat > "${SHIM_DIR}/wget" << SHIM
+#!/usr/bin/env bash
+case "\$*" in
+  *"${GO_DOWNLOAD_URL}"*) export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/go.tgz" ;;
+  *releases.hashicorp.com*) export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/hc.zip" ;;
+  *cf-terraforming*) export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/cf.tgz" ;;
+  *) export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/blob" ;;
+esac
+exec "${REPO_ROOT}/tests/mocks/wget" "\$@"
+SHIM
+  /bin/chmod +x "${SHIM_DIR}/wget"
+}
+
+@test "install_ubuntu_packages: a clean run reaches every step, and a second run re-fetches nothing" {
+  unset MACOS RESOLUTE
+  export LINUX=1 UBUNTU=1 NOBLE=1
+  export HAS_DOCKER=1 HAS_K8S=1 HAS_DEVTOOLS=1 HAS_SNAP=1 HAS_FLATPAK=1
+  export _OVERRIDE_NVIDIA_GPU_PRESENT=1
+  # Stubbed: brew_packages and rust (linuxbrew and rustup have their own tests and
+  # would reach the network); everything else runs for real.
+  _install_ubuntu_brew_packages() { :; }
+  _install_ubuntu_rust() { :; }
+  _ws_dir
+  cd "${REPO_ROOT}"
+  _hc_env
+  _cloud_env
+  _misc_env
+  _k8s_env
+  _gui_env
+  _docker_fetch_ok
+  _go_stub 1.27.1
+  _PWSH_BIN="$(_pwsh_stub_bin 0)"
+  export _PWSH_BIN
+  # The albert key is the one fixture with a pinned fingerprint, so it is the curl
+  # body for every fetch; it is also the "resolved" telepresence URL (!= its link).
+  _albert_good_key
+  # _make_go_tarball and _cf_tarball write go.tgz and cf.tgz where the shim reads them;
+  # _hc_env wrote hc.zip and _k8s_env wrote blob.
+  _make_go_tarball
+  _cf_tarball
+  [ -s "${BATS_TEST_TMPDIR}/hc.zip" ] && [ -s "${BATS_TEST_TMPDIR}/blob" ]
+  _dispatch_wget_shim
+
+  run --separate-stderr install_ubuntu_packages
+  [ "$status" -eq 0 ]
+  [[ "$stderr" != *"ubuntu packages: failed"* ]]
+  grep -q "nala install" "${MOCK_CALLS_FILE}"
+  grep -q "snap install" "${MOCK_CALLS_FILE}"
+  grep -q "^wget .*${GO_DOWNLOAD_URL}" "${MOCK_CALLS_FILE}"
+  grep -q "apt install docker-ce" "${MOCK_CALLS_FILE}"
+  grep -q "apt install kubectl" "${MOCK_CALLS_FILE}"
+  local _t
+  for _t in consul vault nomad packer vagrant; do
+    grep -q "^wget .*releases.hashicorp.com/${_t}/" "${MOCK_CALLS_FILE}"
+  done
+  grep -q "^wget .*${KIND_URL}" "${MOCK_CALLS_FILE}"
+  grep -q "^wget .*${CF_TERRAFORMING_URL}" "${MOCK_CALLS_FILE}"
+  grep -q "^wget .*${DOCKER_COMPOSE_URL}" "${MOCK_CALLS_FILE}"
+  grep -q "^wget .*${YQ_URL}" "${MOCK_CALLS_FILE}"
+  # Its wget URL is the resolved one (the key body here), so assert on the stamp.
+  [ -s "${_DL_STAMP_DIR}/telepresence" ]
+  grep -q "apt install teleport" "${MOCK_CALLS_FILE}"
+  grep -q "apt-get install.* cloudflare-warp" "${MOCK_CALLS_FILE}"
+  grep -q "apt install google-cloud-cli" "${MOCK_CALLS_FILE}"
+  grep -q "apt install ${VIRTUALBOX_VER}" "${MOCK_CALLS_FILE}"
+  grep -q "apt install .*microsoft-edge" "${MOCK_CALLS_FILE}"
+  grep -q "snap install certbot-dns-route53" "${MOCK_CALLS_FILE}"
+  grep -q "flatpak install flathub" "${MOCK_CALLS_FILE}"
+  grep -q "apt-get install.* tofu" "${MOCK_CALLS_FILE}"
+
+  local _before _after
+  _before="$(grep -c '^wget ' "${MOCK_CALLS_FILE}")"
+  run --separate-stderr install_ubuntu_packages
+  [ "$status" -eq 0 ]
+  [[ "$stderr" != *"ubuntu packages: failed"* ]]
+  _after="$(grep -c '^wget ' "${MOCK_CALLS_FILE}")"
+  # Go is stamped too, so the only wget the second run may add is none.
+  [ "${_after}" -eq "${_before}" ]
+  for _t in go consul vault nomad packer vagrant kind telepresence cf-terraforming docker-compose yq; do
+    [[ "$output$stderr" == *"${_t}: up to date (stamp"* ]]
+  done
+}
