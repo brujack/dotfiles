@@ -18,6 +18,7 @@
 #   sudo env|nice|command apt install (a wrapper between sudo and the tool)
 #   verbs and flags absent from the tables in classify() (apt satisfy, dpkg --unpack,
 #   apt-get --option X=Y install, combined dpkg flags such as -Ei)
+# The confmiss record names only the LAST .deb of a dpkg call that installs several.
 # Falsely reported `bad`: `sudo apt install` text inside a string, heredoc or trailing
 # comment, and a quoted value (DEBIAN_FRONTEND="noninteractive").
 # On a false positive, reword the line (unquote the value, move the text to a
@@ -32,9 +33,8 @@ setup() {
   _CLEAN_PATH="$(printf '%s' "${PATH}" | tr ':' '\n' | grep -v 'tests/mocks' | tr '\n' ':' | sed 's/:$//')"
 }
 
-# Mode `frontend` (the default; see _dpkg_sudo_calls) prints `<file>:<line>:ok`
-# or `<file>:<line>:bad` for every dpkg-running sudo
-# call in the given files, one record per call (a line holding two calls yields
+# Mode `frontend` (see _dpkg_sudo_calls) prints `<file>:<line>:ok` or
+# `<file>:<line>:bad` for every dpkg-running sudo call in the given files, one record per call (a line holding two calls yields
 # two records). A logical command is a run of physical lines joined by trailing
 # backslashes, reported at its first line. Whole-line comments are skipped.
 # A call is `ok` only if DEBIAN_FRONTEND=noninteractive follows `sudo` and its
@@ -63,15 +63,17 @@ _dpkg_awk() {
         if (verb ~ /^(install|reinstall|upgrade|full-upgrade|dist-upgrade|build-dep)$/) cfg = 1
         if (verb ~ /^(install|reinstall|build-dep|full-upgrade|dist-upgrade|upgrade|autoremove|autopurge|remove|purge)$/) hit = 1
       } else if (tool == "dpkg") {
-        for (j = i + 1; j <= n && t[j] ~ /^-/; j++)
+        for (j = i + 1; j <= n && t[j] ~ /^-/; j++) {
           if (t[j] ~ /^(-i|--install|-r|--remove|-P|--purge|--configure)$/) hit = 1
-        for (j = i + 1; j <= n && t[j] ~ /^-/; j++)
           if (t[j] ~ /^(-i|--install|--configure)$/) cfg = 1
+        }
       } else if (tool == "dpkg-reconfigure") {
         hit = 1
       }
     }
-    function judge(seg,   t, n, i, has, k, conf, def, old, miss, deb, b) {
+    function judge(seg,   t, n, i, has, k, conf, def, old, miss, deb, b, v, apt) {
+      # A trailing comment is not part of the call.
+      sub(/[[:space:]]#.*$/, "", seg)
       n = split(seg, t, /[[:space:]]+/)
       i = 1
       while (i <= n && t[i] == "") i++
@@ -90,11 +92,16 @@ _dpkg_awk() {
       }
       if (!cfg) return
       def = 0; old = 0; miss = 0; conf = 0; deb = "-"
+      apt = (t[i] != "dpkg")
       for (k = i; k <= n; k++) {
         if (t[k] == CONFFILE_ARR) conf = 1
-        if (t[k] ~ /(^|=)--force-confdef$/) def = 1
-        if (t[k] ~ /(^|=)--force-confold$/) old = 1
-        if (t[k] ~ /(^|=)--force-confmiss$/) miss = 1
+        # apt takes the options only as Dpkg::Options::=..., dpkg only as bare flags.
+        v = t[k]
+        gsub(/"/, "", v)
+        if (apt) sub(/^Dpkg::Options::=/, "dpkg-opt:", v)
+        if (v == (apt ? "dpkg-opt:--force-confdef" : "--force-confdef")) def = 1
+        if (v == (apt ? "dpkg-opt:--force-confold" : "--force-confold")) old = 1
+        if (v ~ /^--force-confmiss$/) miss = 1
         if (t[k] ~ /\.deb"?$/) { b = t[k]; sub(/"$/, "", b); sub(/.*\//, "", b); deb = b }
       }
       printf "%s:%d:conffile:%s\n", fname, start, ((conf || (def && old)) ? "ok" : "bad")
@@ -375,17 +382,57 @@ _detect_conffile() {
   [ "$output" = "$(printf '1:conffile:bad\n1:confmiss:no:x.deb')" ]
 }
 
-@test "the conffile detector emits no record for a non-configuring verb" {
-  run _detect_conffile 'sudo DEBIAN_FRONTEND=noninteractive apt remove x -y'
-  [ "$status" -eq 0 ]
-  [ -z "$output" ]
-}
-
 @test "the conffile detector reports confmiss and the deb basename" {
   run _detect_conffile \
     'sudo -H DEBIAN_FRONTEND=noninteractive dpkg -i "${HOME}"/dl/x.deb --force-confdef --force-confold --force-confmiss'
   [ "$status" -eq 0 ]
   [ "$output" = "$(printf '1:conffile:ok\n1:confmiss:yes:x.deb')" ]
+}
+
+@test "the conffile detector rejects bare confdef/confold flags on apt" {
+  run _detect_conffile 'sudo DEBIAN_FRONTEND=noninteractive apt install x --force-confdef --force-confold -y'
+  [ "$status" -eq 0 ]
+  [ "$output" = "1:conffile:bad" ]
+}
+
+@test "the conffile detector ignores options that sit in a trailing comment" {
+  run _detect_conffile \
+    'sudo DEBIAN_FRONTEND=noninteractive apt install x # --force-confdef --force-confold' \
+    'sudo DEBIAN_FRONTEND=noninteractive apt install y # -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold'
+  [ "$status" -eq 0 ]
+  [ "$output" = "$(printf '1:conffile:bad\n2:conffile:bad')" ]
+}
+
+@test "the conffile detector rejects near-miss and unconfigured forms" {
+  local _line
+  for _line in \
+    'sudo DEBIAN_FRONTEND=noninteractive dpkg -i x.deb --force-confdefault --force-confold' \
+    'sudo DEBIAN_FRONTEND=noninteractive apt install x ${APT_CONFFILE_OPTS[@]} -y' \
+    'sudo DEBIAN_FRONTEND=noninteractive dpkg --configure -a' \
+    'sudo DEBIAN_FRONTEND=noninteractive nala install x -y' \
+    'sudo DEBIAN_FRONTEND=noninteractive apt reinstall x -y' \
+    'sudo DEBIAN_FRONTEND=noninteractive apt build-dep x -y'; do
+    run _detect_conffile "${_line}"
+    if ! printf '%s\n' "${output}" | grep -qx '1:conffile:bad'; then
+      printf 'expected 1:conffile:bad for: %s\ngot: %s\n' "${_line}" "${output}" >&2
+      return 1
+    fi
+  done
+}
+
+@test "the conffile detector accepts a quoted option value" {
+  run _detect_conffile \
+    'sudo DEBIAN_FRONTEND=noninteractive apt install x -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -y'
+  [ "$status" -eq 0 ]
+  [ "$output" = "1:conffile:ok" ]
+}
+
+@test "the conffile detector judges the configuring call on line 2 and not the removal on line 1" {
+  run _detect_conffile \
+    'sudo DEBIAN_FRONTEND=noninteractive apt remove x -y' \
+    'sudo DEBIAN_FRONTEND=noninteractive apt install y -y'
+  [ "$status" -eq 0 ]
+  [ "$output" = "2:conffile:bad" ]
 }
 
 @test "every configuring apt/dpkg sudo call carries the conffile options" {
@@ -429,7 +476,7 @@ _detect_conffile() {
     _deb="${_line##*:confmiss:yes:}"
     case " ${_CONFMISS_DEBS[*]} " in
       *" ${_deb} "*) ;;
-      *) printf '--force-confmiss on a deb outside the allow-set: %s\n' "${_line}" >&2; return 1 ;;
+      *) printf -- '--force-confmiss on a deb outside the allow-set: %s\n' "${_line}" >&2; return 1 ;;
     esac
   done <<< "${_calls}"
 }
