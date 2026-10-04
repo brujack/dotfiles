@@ -121,7 +121,22 @@ for _a in "\$@"; do
 done
 exec "${REPO_ROOT}/tests/mocks/apt" "\$@"
 SHIM
-  /bin/chmod +x "${SHIM_DIR}/usermod" "${SHIM_DIR}/apt"
+  # cloud_tools installs cloudflare-warp through apt-get, so it needs the same
+  # per-package failure wrapper.
+  sed 's#tests/mocks/apt"#tests/mocks/apt-get"#' "${SHIM_DIR}/apt" > "${SHIM_DIR}/apt-get"
+  # A real flatpak is installed on this box and tests/mocks/sudo execs real
+  # commands, so without a shim `sudo flatpak ...` reaches the real binary
+  # (tdd.md E2). SHIM_FLATPAK_REMOTE_EXIT / SHIM_FLATPAK_EXIT drive failures.
+  cat > "${SHIM_DIR}/flatpak" << 'SHIM'
+#!/usr/bin/env bash
+printf 'flatpak %s\n' "$*" >> "${MOCK_CALLS_FILE}"
+case "$1" in
+  remote-add) exit "${SHIM_FLATPAK_REMOTE_EXIT:-0}" ;;
+  install) exit "${SHIM_FLATPAK_EXIT:-0}" ;;
+esac
+exit 0
+SHIM
+  /bin/chmod +x "${SHIM_DIR}/usermod" "${SHIM_DIR}/apt" "${SHIM_DIR}/apt-get" "${SHIM_DIR}/flatpak"
   PATH="${SHIM_DIR}:${PATH}"
   # Truncate AFTER seeding: cp and chmod are pass-through mocks that log their own
   # invocation, so the seed writes a line containing "rustup" into the call log and
@@ -442,6 +457,50 @@ _NALA_CONFFILE_ARGV='argv: xargs [-r][sudo][DEBIAN_FRONTEND=noninteractive][nala
   PATH="${_stub_dir}:${PATH}" run _install_ubuntu_powershell
   [ "$status" -eq 0 ]
   grep -qxF 'argv: apt [install][-o][Dpkg::Options::=--force-confdef][-o][Dpkg::Options::=--force-confold][powershell][-y]' "${MOCK_CALLS_FILE}"
+}
+
+# A scratch directory holding the two workstation lists, so one can be removed
+# without touching the repo's own.
+_ws_dir() {
+  mkdir -p "${BATS_TEST_TMPDIR}/ws"
+  printf 'font-manager\n' > "${BATS_TEST_TMPDIR}/ws/ubuntu_workstation_packages.txt"
+  printf 'vlc\n' > "${BATS_TEST_TMPDIR}/ws/ubuntu_workstation_snap_packages.txt"
+  cd "${BATS_TEST_TMPDIR}/ws" || return 1
+  export HAS_SNAP=1
+}
+
+@test "_install_ubuntu_workstation: clean run returns 0" {
+  _ws_dir
+  run _install_ubuntu_workstation
+  [ "$status" -eq 0 ]
+  grep -q "xargs-stdin font-manager" "${MOCK_CALLS_FILE}"
+  grep -q "xargs-stdin vlc" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_workstation: an unreadable snap list returns 1 after the package list was installed" {
+  _ws_dir
+  rm "${BATS_TEST_TMPDIR}/ws/ubuntu_workstation_snap_packages.txt"
+  run --separate-stderr _install_ubuntu_workstation
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"workstation: snap list failed"* ]]
+  grep -q "xargs-stdin font-manager" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_workstation: an unreadable package list returns 1 and the snap list is still installed" {
+  _ws_dir
+  rm "${BATS_TEST_TMPDIR}/ws/ubuntu_workstation_packages.txt"
+  run --separate-stderr _install_ubuntu_workstation
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"workstation: package list failed"* ]]
+  grep -q "xargs-stdin vlc" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_workstation: a failing snap install returns 1" {
+  _ws_dir
+  export MOCK_XARGS_EXIT=1
+  run --separate-stderr _install_ubuntu_workstation
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"workstation: snap list failed"* ]]
 }
 
 @test "_install_ubuntu_workstation: HAS_SNAP uses nala for workstation packages" {
@@ -2312,9 +2371,30 @@ _hc_env() {
 
 # ── _install_ubuntu_cloud_tools ──────────────────────────────────────────────
 
+# cf-terraforming arrives as a tarball holding the binary; _install_fetched_binary
+# fetches it through the wget mock, which copies MOCK_WGET_FILE to the -O target.
+_cf_tarball() {
+  mkdir -p "${BATS_TEST_TMPDIR}/cfsrc"
+  printf 'cf-body' > "${BATS_TEST_TMPDIR}/cfsrc/cf-terraforming"
+  chmod 0755 "${BATS_TEST_TMPDIR}/cfsrc/cf-terraforming"
+  "${_DL_TAR_BIN}" -czf "${BATS_TEST_TMPDIR}/cf.tgz" -C "${BATS_TEST_TMPDIR}/cfsrc" cf-terraforming
+  export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/cf.tgz"
+}
+
+# HAS_DEVTOOLS cloud_tools run with a good cf-terraforming tarball and a URL
+# naming its version; everything else is seamed by setup().
+_cloud_env() {
+  export HAS_DEVTOOLS=1
+  export CF_TERRAFORMING_VER="0.13.0"
+  export CF_TERRAFORMING_URL="https://cf.example/dl/cf-terraforming_0.13.0_linux_amd64.tar.gz"
+  unset RESOLUTE
+  _cf_tarball
+}
+
 @test "_install_ubuntu_cloud_tools: installs google-cloud-cli packages, not retired google-cloud-sdk names" {
   export CF_TERRAFORMING_VER="0.13.0"
   export CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v0.13.0/cf-terraforming_0.13.0_linux_amd64.tar.gz"
+  _cf_tarball
   unset HAS_DEVTOOLS
   run _install_ubuntu_cloud_tools
   [ "$status" -eq 0 ]
@@ -2327,6 +2407,7 @@ _hc_env() {
   export HAS_DEVTOOLS=1
   export CF_TERRAFORMING_VER="0.13.0"
   export CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v0.13.0/cf-terraforming_0.13.0_linux_amd64.tar.gz"
+  _cf_tarball
   run _install_ubuntu_cloud_tools
   [ "$status" -eq 0 ]
   grep -q "apt install teleport" "${MOCK_CALLS_FILE}"
@@ -2336,6 +2417,7 @@ _hc_env() {
   unset HAS_DEVTOOLS
   export CF_TERRAFORMING_VER="0.13.0"
   export CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v0.13.0/cf-terraforming_0.13.0_linux_amd64.tar.gz"
+  _cf_tarball
   run _install_ubuntu_cloud_tools
   [ "$status" -eq 0 ]
   ! grep -q "apt install teleport" "${MOCK_CALLS_FILE}"
@@ -2344,6 +2426,7 @@ _hc_env() {
 @test "_install_ubuntu_cloud_tools: cf-terraforming filename uses _LINUX_ARCH" {
   export CF_TERRAFORMING_VER="0.27.0"
   export CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v0.27.0/cf-terraforming_0.27.0_linux_arm64.tar.gz"
+  _cf_tarball
   export _LINUX_ARCH="arm64"
   unset HAS_DEVTOOLS
   run _install_ubuntu_cloud_tools
@@ -2356,6 +2439,7 @@ _hc_env() {
   export HAS_DEVTOOLS=1
   export CF_TERRAFORMING_VER="0.27.0"
   export CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v0.27.0/cf-terraforming_0.27.0_linux_amd64.tar.gz"
+  _cf_tarball
   export _CF_SOURCES_LIST="${BATS_TEST_TMPDIR}/cloudflare.list"
   run _install_ubuntu_cloud_tools
   [ "$status" -eq 0 ]
@@ -2364,11 +2448,74 @@ _hc_env() {
   [ "$status" -ne 0 ]
 }
 
+@test "_install_ubuntu_cloud_tools: clean run returns 0, writes the source lists and installs cf-terraforming" {
+  _cloud_env
+  run _install_ubuntu_cloud_tools
+  [ "$status" -eq 0 ]
+  grep -q "signed-by=${_APT_KEYRINGS_DIR}/teleport-pubkey.gpg" "${_APT_SOURCES_DIR}/teleport.list"
+  grep -q "signed-by=${_APT_KEYRINGS_DIR}/cloudflare-warp-archive-keyring.gpg" "${_APT_SOURCES_DIR}/cloudflare-client.list"
+  grep -q "signed-by=${_APT_KEYRINGS_DIR}/cloud.google.gpg" "${_APT_SOURCES_DIR}/google-cloud-sdk.list"
+  [ "$(cat "${_DL_BIN_DIR}/cf-terraforming")" = "cf-body" ]
+  [ "$(cat "${_DL_STAMP_DIR}/cf-terraforming")" = "${CF_TERRAFORMING_URL}" ]
+  [ -z "$(find "${_DL_TMP_ROOT}" -mindepth 1)" ]
+}
+
+@test "_install_ubuntu_cloud_tools: a failed teleport keyring fetch with no keyring returns 1, writes no list, and the siblings still run" {
+  _cloud_env
+  export MOCK_CURL_FAIL_URL="deb.releases.teleport.dev"
+  run --separate-stderr _install_ubuntu_cloud_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"cloud_tools: teleport: keyring"* ]]
+  [[ "$stderr" == *"cloud_tools: teleport: source write skipped (no keyring)"* ]]
+  [ ! -e "${_APT_SOURCES_DIR}/teleport.list" ]
+  # Positive controls: the fetch was attempted and the siblings completed.
+  grep -q "curl .*deb.releases.teleport.dev" "${MOCK_CALLS_FILE}"
+  [ -s "${_APT_SOURCES_DIR}/cloudflare-client.list" ]
+  [ -s "${_APT_SOURCES_DIR}/google-cloud-sdk.list" ]
+  [ -x "${_DL_BIN_DIR}/cf-terraforming" ]
+}
+
+@test "_install_ubuntu_cloud_tools: a failed cloudflared apt install returns 1 and gcloud is still attempted" {
+  _cloud_env
+  export SHIM_APT_FAIL_PKGS="cloudflare-warp"
+  run --separate-stderr _install_ubuntu_cloud_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"cloud_tools: cloudflared: install failed"* ]]
+  grep -q "apt-get install.*cloudflare-warp" "${MOCK_CALLS_FILE}"
+  grep -q "apt install google-cloud-cli -y" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_cloud_tools: a failed gcloud package install returns 1 and the second package is still attempted" {
+  _cloud_env
+  export SHIM_APT_FAIL_PKGS="google-cloud-cli"
+  run --separate-stderr _install_ubuntu_cloud_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"cloud_tools: gcloud: google-cloud-cli install failed"* ]]
+  grep -q "apt install google-cloud-cli-app-engine-go" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_cloud_tools: a failed cf-terraforming download returns 1 and leaves the destination, stamp and workdir alone" {
+  _cloud_env
+  printf 'old' > "${_DL_BIN_DIR}/cf-terraforming"
+  chmod 0755 "${_DL_BIN_DIR}/cf-terraforming"
+  export MOCK_WGET_FAIL_URL="cf-terraforming"
+  run --separate-stderr _install_ubuntu_cloud_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"cloud_tools: cf-terraforming: install failed"* ]]
+  grep -q "wget .*cf-terraforming" "${MOCK_CALLS_FILE}"
+  [ "$(cat "${_DL_BIN_DIR}/cf-terraforming")" = "old" ]
+  [ ! -e "${_DL_STAMP_DIR}/cf-terraforming" ]
+  [ -z "$(find "${_DL_TMP_ROOT}" -mindepth 1)" ]
+  # The earlier tools were not held up by it.
+  [ -s "${_APT_SOURCES_DIR}/teleport.list" ]
+}
+
 # ── azure-cli via linuxbrew ──────────────────────────────────────────────────
 
 _az_cloud_env() {
   export CF_TERRAFORMING_VER="0.13.0"
   export CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v0.13.0/cf-terraforming_0.13.0_linux_amd64.tar.gz"
+  _cf_tarball
   unset HAS_DEVTOOLS
 }
 
@@ -2833,6 +2980,81 @@ _edge_live_sources() {
   [ "$status" -eq 0 ]
   run grep "sudo flatpak install" "${MOCK_CALLS_FILE}"
   [ "$status" -ne 0 ]
+}
+
+# gui_tools with every sub-install enabled; the albert key is good so a failure
+# in a test below is that test's own doing.
+_gui_env() {
+  export HAS_DEVTOOLS=1 HAS_SNAP=1 HAS_FLATPAK=1
+  export VIRTUALBOX_VER="virtualbox-7.0"
+  _albert_good_key
+}
+
+@test "_install_ubuntu_gui_tools: clean run with every capability returns 0" {
+  _gui_env
+  run _install_ubuntu_gui_tools
+  [ "$status" -eq 0 ]
+  grep -q "signed-by=${_APT_KEYRINGS_DIR}/oracle-virtualbox-2016.gpg" "${_APT_SOURCES_DIR}/virtualbox.list"
+  grep -q "apt install ${VIRTUALBOX_VER}" "${MOCK_CALLS_FILE}"
+  grep -q "snap install certbot-dns-route53" "${MOCK_CALLS_FILE}"
+  grep -q "flatpak install flathub" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_gui_tools: a failed virtualbox keyring fetch with no keyring returns 1, writes no list, and the snaps still install" {
+  _gui_env
+  export MOCK_CURL_FAIL_URL="virtualbox.org"
+  run --separate-stderr _install_ubuntu_gui_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"gui_tools: virtualbox: keyring"* ]]
+  [[ "$stderr" == *"gui_tools: virtualbox: source write skipped (no keyring)"* ]]
+  [ ! -e "${_APT_SOURCES_DIR}/virtualbox.list" ]
+  grep -q "curl .*virtualbox.org" "${MOCK_CALLS_FILE}"
+  grep -q "snap install code --classic" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_gui_tools: a failed snap install returns 1 and steam is still attempted" {
+  _gui_env
+  export MOCK_SNAP_EXIT=1
+  run --separate-stderr _install_ubuntu_gui_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"gui_tools: snap code: install failed"* ]]
+  grep -q "snap install code --classic" "${MOCK_CALLS_FILE}"
+  grep -q "flatpak install flathub" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_gui_tools: a failed edge source setup returns 1 and the edge package install is still attempted" {
+  _gui_env
+  _install_ubuntu_edge_source() { return 1; }
+  run --separate-stderr _install_ubuntu_gui_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"gui_tools: edge: source setup failed"* ]]
+  grep -q "apt install microsoft-edge-stable" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_gui_tools: a failed edge package install returns 1" {
+  _gui_env
+  export SHIM_APT_FAIL_PKGS="microsoft-edge-stable"
+  run --separate-stderr _install_ubuntu_gui_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"gui_tools: edge: install failed"* ]]
+}
+
+@test "_install_ubuntu_gui_tools: a failed steam flatpak install returns 1" {
+  _gui_env
+  export SHIM_FLATPAK_EXIT=1
+  run --separate-stderr _install_ubuntu_gui_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"gui_tools: steam: install failed"* ]]
+  grep -q "flatpak install flathub" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_gui_tools: a failed flathub remote-add returns 1" {
+  _gui_env
+  export SHIM_FLATPAK_REMOTE_EXIT=1
+  run --separate-stderr _install_ubuntu_gui_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"gui_tools: steam: flathub remote-add failed"* ]]
+  grep -q "flatpak remote-add" "${MOCK_CALLS_FILE}"
 }
 
 # ── _install_ubuntu_misc ─────────────────────────────────────────────────────
