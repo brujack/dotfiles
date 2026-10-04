@@ -1,7 +1,6 @@
 tap "cloudflare/cloudflare"                  # [HAS_DEVTOOLS]
 tap "getagentseal/codeburn"                  # [HAS_DEVTOOLS]
 tap "datawire/blackbird"                     # [HAS_K8S]
-tap "go-task/tap"                            # [HAS_DEVTOOLS]
 tap "oven-sh/bun"                            # [HAS_DEVTOOLS]
 tap "redpanda-data/tap"                      # [HAS_DEVTOOLS]
 tap "snyk/tap"                               # [HAS_DEVTOOLS]
@@ -17,7 +16,7 @@ brew "bison"                                 # [HAS_DEVTOOLS]
 brew "oven-sh/bun/bun"                       # [HAS_DEVTOOLS]
 brew "bzip2"
 brew "chruby"                                # [HAS_DEVTOOLS]
-brew "codeburn"                              # [HAS_DEVTOOLS]
+brew "getagentseal/codeburn/codeburn"        # [HAS_DEVTOOLS]
 brew "cloudflared"                           # [HAS_DEVTOOLS]
 brew "consul"                                # [HAS_DEVTOOLS]
 brew "coreutils"
@@ -39,7 +38,7 @@ brew "glances"                               # [HAS_DEVTOOLS]
 brew "gmp"
 brew "gnupg"                                 # [HAS_DEVTOOLS]
 brew "go"                                    # [HAS_DEVTOOLS]
-brew "go-task/tap/go-task"                   # [HAS_DEVTOOLS]
+brew "go-task"                               # [HAS_DEVTOOLS]
 brew "hadolint"                              # [HAS_DOCKER]
 brew "helm"                                  # [HAS_K8S]
 brew "htop"
