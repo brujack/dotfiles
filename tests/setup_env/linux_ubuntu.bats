@@ -2073,16 +2073,33 @@ _k8s_env() {
 @test "_install_ubuntu_k8s_tools: a failed kind download returns 1, names kind and leaves telepresence installed" {
   _k8s_env
   export MOCK_WGET_FAIL_URL="kind.example"
+  printf 'old' > "${_DL_BIN_DIR}/kind"
+  chmod 0755 "${_DL_BIN_DIR}/kind"
   run --separate-stderr _install_ubuntu_k8s_tools
   [ "$status" -eq 1 ]
   [[ "$stderr" == *"k8s_tools: kind:"* ]]
   # Positive control: the kind fetch was really attempted.
   grep -q "wget .*kind.example" "${MOCK_CALLS_FILE}"
-  [ ! -e "${_DL_BIN_DIR}/kind" ]
+  [ "$(cat "${_DL_BIN_DIR}/kind")" = "old" ]
   [ ! -e "${_DL_STAMP_DIR}/kind" ]
+  [ -z "$(find "${_DL_TMP_ROOT}" -mindepth 1)" ]
   # Sibling still ran.
   [ -x "${_DL_BIN_DIR}/telepresence" ]
   [ -f "${_DL_STAMP_DIR}/telepresence" ]
+}
+
+@test "_install_ubuntu_k8s_tools: a failed telepresence resolve returns 1, names telepresence and leaves kind installed" {
+  _k8s_env
+  export MOCK_CURL_FAIL_URL="tp.example"
+  run --separate-stderr _install_ubuntu_k8s_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"k8s_tools: telepresence:"* ]]
+  # Positive control: the resolve was really attempted.
+  grep -q "curl .*tp.example" "${MOCK_CALLS_FILE}"
+  [ ! -e "${_DL_BIN_DIR}/telepresence" ]
+  [ ! -e "${_DL_STAMP_DIR}/telepresence" ]
+  [ -x "${_DL_BIN_DIR}/kind" ]
+  [ -f "${_DL_STAMP_DIR}/kind" ]
 }
 
 @test "_install_ubuntu_k8s_tools: no HAS_K8S skips kind and telepresence" {
@@ -2127,12 +2144,26 @@ _k8s_env() {
 @test "_install_ubuntu_k8s_tools: a failed kubectl keyring fetch returns 1 and the kubectl install is still attempted" {
   _k8s_env
   export MOCK_CURL_FAIL_URL="pkgs.k8s.io"
+  printf 'old' > "${_APT_KEYRINGS_DIR}/kubernetes-apt-keyring.gpg"
   run --separate-stderr _install_ubuntu_k8s_tools
   [ "$status" -eq 1 ]
   [[ "$stderr" == *"k8s_tools: kubectl: keyring"* ]]
   grep -q "curl .*pkgs.k8s.io" "${MOCK_CALLS_FILE}"
   grep -q "apt install kubectl" "${MOCK_CALLS_FILE}"
-  [ ! -e "${_APT_KEYRINGS_DIR}/kubernetes-apt-keyring.gpg" ]
+  [ "$(cat "${_APT_KEYRINGS_DIR}/kubernetes-apt-keyring.gpg")" = "old" ]
+  [ -z "$(find "${_DL_TMP_ROOT}" -mindepth 1)" ]
+  # An existing non-empty keyring still backs a source list.
+  [ -f "${_APT_SOURCES_DIR}/kubernetes.list" ]
+}
+
+@test "_install_ubuntu_k8s_tools: a failed keyring fetch with no keyring writes no source list" {
+  _k8s_env
+  export MOCK_CURL_FAIL_URL="pkgs.k8s.io"
+  run --separate-stderr _install_ubuntu_k8s_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"k8s_tools: kubectl: source write skipped (no keyring)"* ]]
+  [ ! -e "${_APT_SOURCES_DIR}/kubernetes.list" ]
+  grep -q "apt install kubectl" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_k8s_tools: a failed kubectl source list write returns 1" {
@@ -2141,6 +2172,8 @@ _k8s_env() {
   run --separate-stderr _install_ubuntu_k8s_tools
   [ "$status" -eq 1 ]
   [[ "$stderr" == *"k8s_tools: kubectl: source list"* ]]
+  # Positive control: the write was really attempted.
+  grep -q "tee .*kubernetes.list" "${MOCK_CALLS_FILE}"
   grep -q "apt install kubectl" "${MOCK_CALLS_FILE}"
 }
 
@@ -2238,11 +2271,14 @@ _hc_env() {
 @test "_install_ubuntu_hashicorp: a failed consul download returns 1, names consul and still installs vault" {
   _hc_env
   export MOCK_WGET_FAIL_URL="consul/"
+  printf 'old' > "${_DL_BIN_DIR}/consul"
+  chmod 0755 "${_DL_BIN_DIR}/consul"
   run --separate-stderr _install_ubuntu_hashicorp
   [ "$status" -eq 1 ]
   [[ "$stderr" == *"hashicorp: consul:"* ]]
   grep -q "wget .*consul/" "${MOCK_CALLS_FILE}"
-  [ ! -e "${_DL_BIN_DIR}/consul" ]
+  [ "$(cat "${_DL_BIN_DIR}/consul")" = "old" ]
+  [ -z "$(find "${_DL_TMP_ROOT}" -mindepth 1)" ]
   [ ! -e "${_DL_STAMP_DIR}/consul" ]
   [ -x "${_DL_BIN_DIR}/vault" ]
   [ -f "${_DL_STAMP_DIR}/vault" ]

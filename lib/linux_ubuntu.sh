@@ -680,15 +680,24 @@ _install_ubuntu_k8s_tools() {
   # Advisory cleanup: a failure here is not a failed install.
   sudo rm -f "${_sources}/helm-stable-debian.list" 2> /dev/null || true
 
+  # Advisory: the keyring helper's own install reports a real failure.
+  sudo mkdir -p "$(dirname "${_keyring}")" || log_warn "k8s_tools: kubectl: keyring directory could not be created"
   _install_apt_keyring "https://pkgs.k8s.io/core:/stable:/${KUBERNETES_VER}/deb/Release.key" "${_keyring}" armored || {
     log_warn "k8s_tools: kubectl: keyring install failed"
     _k8s_rc=1
   }
-  printf 'deb [signed-by=%s] https://pkgs.k8s.io/core:/stable:/%s/deb/ /\n' "${_keyring}" "${KUBERNETES_VER}" \
-    | sudo tee "${_sources}/kubernetes.list" > /dev/null || {
-    log_warn "k8s_tools: kubectl: source list write failed"
+  # A source signed-by a missing keyring would break every later apt update, so
+  # write it only when a non-empty keyring exists (a previous one is kept on failure).
+  if [[ -s ${_keyring} ]]; then
+    printf 'deb [signed-by=%s] https://pkgs.k8s.io/core:/stable:/%s/deb/ /\n' "${_keyring}" "${KUBERNETES_VER}" \
+      | sudo tee "${_sources}/kubernetes.list" > /dev/null || {
+      log_warn "k8s_tools: kubectl: source list write failed"
+      _k8s_rc=1
+    }
+  else
+    log_warn "k8s_tools: kubectl: source write skipped (no keyring)"
     _k8s_rc=1
-  }
+  fi
   # base owns the update warning; a failed refresh must not mask the install result.
   sudo -H apt update || :
   sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" kubectl -y || {
