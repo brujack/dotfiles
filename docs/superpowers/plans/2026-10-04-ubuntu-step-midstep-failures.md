@@ -1,5 +1,7 @@
 # Ubuntu Step Mid-Step Failures Implementation Plan
 
+> **Status: DONE** — merged in #313 (c4153124), 2026-10-05.
+
 spec: docs/superpowers/specs/2026-10-04-ubuntu-step-midstep-failures-design.md
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
