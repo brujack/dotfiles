@@ -565,6 +565,20 @@ teardown() {
   [ "$status" -ne 0 ]
 }
 
+@test "install_macos_packages continues when only a cask upgrade failed (brew_update rc 2)" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile"
+  mkdir -p "${HOME}/scripts"
+  touch "${HOME}/scripts/.osx.sh"
+  chmod +x "${HOME}/scripts/.osx.sh"
+  brew_update() { return 2; }
+  install_macos_casks() { echo "CASKS_RAN"; return 0; }
+  run install_macos_packages
+  [[ "$output" == *"CASKS_RAN"* ]]
+  grep -q "softwareupdate" "${MOCK_CALLS_FILE}"
+}
+
 @test "install_macos_packages does not call softwareupdate when brew_update fails" {
   export MACOS=1
   unset LINUX UBUNTU
@@ -1171,6 +1185,17 @@ EOF
   [ "$status" -ne 0 ]
 }
 
+@test "run_brew_install continues when only a cask upgrade failed (brew_update rc 2)" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile"
+  brew_update() { return 2; }
+  install_macos_casks() { return 0; }
+  run run_brew_install
+  [ "$status" -eq 0 ]
+  grep -q "brew cleanup" "${MOCK_CALLS_FILE}"
+}
+
 @test "run_brew_install does not call brew cleanup when brew_update fails" {
   export MACOS=1
   unset LINUX UBUNTU
@@ -1464,6 +1489,31 @@ setup_constants_copy() {
   if [[ -f "${MOCK_CALLS_FILE}" ]]; then
     ! grep -q "^softwareupdate" "${MOCK_CALLS_FILE}"
   fi
+}
+
+@test "run_update records brew as WARN (not OK) when brew_update returns 2" {
+  brew_update() { echo "Error: firefox: It seems there is already an App"; return 2; }
+  export MACOS=1
+  unset LINUX UBUNTU REDHAT FEDORA CENTOS
+  export UPDATE_BREW=1
+  export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
+  run_update
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew")" = "WARN" ]
+  # The WARN keeps the normal brew result (what upgraded) and appends the cask
+  # failure, so a WARN never hides formulae that did upgrade.
+  [[ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_brew")" == *"no changes"* ]]
+  [[ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_brew")" == *"cask upgrade"*"failed"* ]]
+  [[ "$(cat "${_DOTFILES_RUN_TMPDIR}/detail_brew")" == *"Error: firefox"* ]]
+}
+
+@test "run_update records brew as FAIL when brew_update returns 1" {
+  brew_update() { echo "Failed to upgrade formulae"; return 1; }
+  export MACOS=1
+  unset LINUX UBUNTU REDHAT FEDORA CENTOS
+  export UPDATE_BREW=1
+  export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
+  run_update || true
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew")" = "FAIL" ]
 }
 
 @test "run_update skips brew when neither macOS nor Linux" {

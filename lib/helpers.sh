@@ -142,6 +142,8 @@ uv_sync_venv() {
   UV_PROJECT_ENVIRONMENT="${_venv}" "${_uv}" "${_args[@]}"
 }
 
+# brew_update -- returns 0 on success, 1 on a hard failure, 2 when only a cask
+# upgrade failed.
 brew_update() {
   if ! ensure_not_root; then
     return 1
@@ -166,9 +168,14 @@ brew_update() {
     return 1
   fi
 
+  # A failed cask upgrade does not stop the run (a cask can fail on an app
+  # its own updater already replaced), but it must not read as success:
+  # return 2 so callers can report it.
+  local _rc=0
   log_info "Upgrading installed casks..."
   if ! brew upgrade --cask --greedy --yes; then
     log_warn "Some casks failed to upgrade; continuing."
+    _rc=2
   fi
 
   log_info "Cleaning Homebrew up..."
@@ -177,8 +184,8 @@ brew_update() {
     return 1
   fi
 
-  log_info "Homebrew update process completed successfully."
-  return 0
+  [[ ${_rc} -eq 0 ]] && log_info "Homebrew update process completed successfully."
+  return "${_rc}"
 }
 
 ensure_not_root() {
