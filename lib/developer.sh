@@ -790,12 +790,13 @@ _cargo_tool_state() {
 # (_cargo_tool_state), not by the version string cargo reports -- a listed
 # version says nothing about whether the binary loads.
 #
-# _CARGO_BIN is read unconditionally, ahead of ${HOME}/.cargo/bin/cargo and
-# a PATH cargo. tests/helpers/common.bash's load_mocks exports it at the
-# recording mock by default, so any suite that calls load_mocks cannot
-# reach a real cargo and compile crates for real (tdd.md E2) -- except a
-# test that deliberately unsets _CARGO_BIN to exercise the other
-# resolution branches, which is then responsible for its own isolation.
+# _CARGO_BIN is read unconditionally, ahead of ${HOME}/.cargo/bin/cargo, a
+# Homebrew keg cargo and a PATH cargo. tests/helpers/common.bash's
+# load_mocks exports it at the recording mock by default, so any suite that
+# calls load_mocks cannot reach a real cargo and compile crates for real
+# (tdd.md E2) -- except a test that deliberately unsets _CARGO_BIN to
+# exercise the other resolution branches, which is then responsible for its
+# own isolation.
 install_cargo_tools() {
   if [[ -z ${HAS_RUST} ]]; then
     printf '%s\n' 'cargo tools: skipped (HAS_RUST unset)'
@@ -807,11 +808,26 @@ install_cargo_tools() {
     _cargo="${_CARGO_BIN}"
   elif [[ -x "${HOME}/.cargo/bin/cargo" ]]; then
     _cargo="${HOME}/.cargo/bin/cargo"
-  elif command -v cargo > /dev/null 2>&1; then
-    _cargo="cargo"
   else
-    printf '%s\n' 'cargo not found' >&2
-    return 1
+    # Homebrew's rustup is keg-only, so its cargo is on PATH only in an
+    # interactive shell; search the kegs in _resolve_rustup's order.
+    local -a _kegs
+    read -r -a _kegs <<< "${_OVERRIDE_RUSTUP_BREW_KEGS:-${RUSTUP_BREW_KEGS}}"
+    local _keg
+    for _keg in "${_kegs[@]}"; do
+      if [[ -x ${_keg}/cargo ]]; then
+        _cargo="${_keg}/cargo"
+        break
+      fi
+    done
+  fi
+  if [[ -z ${_cargo} ]]; then
+    if command -v cargo > /dev/null 2>&1; then
+      _cargo="cargo"
+    else
+      printf '%s\n' 'cargo not found' >&2
+      return 1
+    fi
   fi
 
   # Below the floor every install fails on its own, each blaming its crate
