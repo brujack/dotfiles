@@ -602,7 +602,11 @@ run_brew_install() {
   if ! quiet_which brew; then
     install_homebrew || return 1
   fi
-  brew_update || return 1
+  local _brew_rc
+  brew_update
+  _brew_rc=$?
+  # rc 2 (a cask upgrade failed) is reported by brew_update and does not stop the install.
+  [[ ${_brew_rc} -ne 0 && ${_brew_rc} -ne 2 ]] && return 1
   brew_tap_if_missing homebrew/bundle || return 1
   if [[ -n ${MACOS} ]]; then
     install_macos_casks || return 1
@@ -657,7 +661,12 @@ run_update() {
     if [[ -n ${MACOS} ]] || [[ -n ${LINUX} ]]; then
       _update_record_start "brew"
       brew_update 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_brew"
-      _update_record_end "brew" "${PIPESTATUS[0]}"
+      local _brew_rc="${PIPESTATUS[0]}"
+      _update_record_end "brew" "$(( _brew_rc == 2 ? 0 : _brew_rc ))"
+      if [[ ${_brew_rc} -eq 2 ]]; then
+        _update_warn "brew" "one or more cask upgrades failed — see detail"
+        _update_write_detail_from_err "brew" "warning output"
+      fi
 
       if [[ -n ${MACOS} ]]; then
         _update_record_start "softwareupdate"

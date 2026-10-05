@@ -214,7 +214,11 @@ install_macos_packages() {
   if ! [[ -x "$(command -v brew)" ]]; then
     install_homebrew || return 1
   else
-    brew_update || return 1
+    local _brew_rc
+    brew_update
+    _brew_rc=$?
+    # rc 2 (a cask upgrade failed) is reported by brew_update and does not stop setup.
+    [[ ${_brew_rc} -ne 0 && ${_brew_rc} -ne 2 ]] && return 1
     printf "Installing other brew stuff...\n"
     brew_tap_if_missing homebrew/bundle || return 1
     install_macos_casks || return 1

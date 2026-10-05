@@ -503,13 +503,21 @@ _gnubin_present() {
   [[ "$output" == *"Failed to upgrade formulae"* ]]
 }
 
-@test "brew_update warns but continues when cask upgrade fails" {
+@test "brew_update returns 2 when a cask upgrade fails, and still cleans up" {
   export MOCK_ID_U=1000
   export MOCK_BREW_UPGRADE_CASK_EXIT=1
   run brew_update
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 2 ]
   [[ "$output" == *"Some casks failed to upgrade"* ]]
-  [[ "$output" == *"Homebrew update process completed successfully"* ]]
+  [[ "$output" != *"completed successfully"* ]]
+  grep -q "^brew cleanup" "${MOCK_CALLS_FILE}"
+}
+
+@test "brew_update returns 0 when every upgrade succeeds" {
+  export MOCK_ID_U=1000
+  run brew_update
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"completed successfully"* ]]
 }
 
 @test "brew_update returns 1 when brew cleanup fails" {
