@@ -128,6 +128,10 @@ argv_probe_stub_path() {
   cat > "${_dir}/${_name}" << EOF
 #!${_bash_bin}
 printf 'argv: %s %s\n' "${_name}" "\$(printf '[%s]' "\$@")" >> "\${MOCK_CALLS_FILE}"
+# Drain a piped stdin as the real command would, or the writer upstream can
+# die of SIGPIPE and a PIPESTATUS check reads that as a failure. Never read a
+# non-pipe stdin: an inherited socket would block forever.
+[[ -p /dev/stdin ]] && cat > /dev/null
 exit 0
 EOF
   chmod +x "${_dir}/${_name}"

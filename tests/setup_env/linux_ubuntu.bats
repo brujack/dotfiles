@@ -76,6 +76,84 @@ setup() {
   # silently take the early-return "already installed" branch and assert
   # nothing about the install path it meant to exercise.
   export _PWSH_BIN="${BATS_TEST_TMPDIR}/nonexistent-pwsh"
+  # Go installs into _GO_INSTALL_ROOT, stamps into _DL_STAMP_DIR and extracts
+  # under _DL_TMP_ROOT. tests/mocks/sudo execs real commands, so without these a
+  # go test would write the real /usr/local/go. tar is the real one: the mock
+  # only records, and the swap tests need a tree to move.
+  export _GO_INSTALL_ROOT="${BATS_TEST_TMPDIR}/go-root"
+  export _DL_STAMP_DIR="${BATS_TEST_TMPDIR}/stamps"
+  export _DL_TMP_ROOT="${BATS_TEST_TMPDIR}/dl-tmp"
+  mkdir -p "${_GO_INSTALL_ROOT}" "${_DL_TMP_ROOT}"
+  _GO_CLEAN_PATH="$(printf '%s' "${PATH}" | tr ':' '\n' | grep -v 'tests/mocks' | tr '\n' ':' | sed 's/:$//')"
+  _DL_TAR_BIN="$(PATH="${_GO_CLEAN_PATH}" command -v tar)"
+  export _DL_TAR_BIN="${_DL_TAR_BIN:-/nonexistent/tar}"
+  # k8s_tools and hashicorp install through _install_fetched_binary, which
+  # writes under _DL_BIN_DIR (default /usr/local/bin) via the exec-ing sudo mock.
+  # unzip and zip are the real ones: the mocks only record.
+  export _DL_BIN_DIR="${BATS_TEST_TMPDIR}/dl-bin"
+  mkdir -p "${_DL_BIN_DIR}"
+  _DL_UNZIP_BIN="$(PATH="${_GO_CLEAN_PATH}" command -v unzip)"
+  export _DL_UNZIP_BIN="${_DL_UNZIP_BIN:-/nonexistent/unzip}"
+  _ZIP_BIN="$(PATH="${_GO_CLEAN_PATH}" command -v zip)"
+  _ZIP_BIN="${_ZIP_BIN:-/nonexistent/zip}"
+  # _install_ubuntu_docker and _install_ubuntu_nvidia fetch keyrings through
+  # _install_apt_keyring and write a docker source list; tests/mocks/sudo execs
+  # real commands, so these keep every write under the test tmpdir. The gpg stub
+  # writes its -o target, which tests/mocks/gpg does not.
+  export _APT_KEY_GPG_BIN="${REPO_ROOT}/tests/mocks/gpg-dearmor"
+  export _DOCKER_KEYRING="${BATS_TEST_TMPDIR}/docker-keyrings/docker.asc"
+  export _DOCKER_SOURCES_LIST="${BATS_TEST_TMPDIR}/docker.list"
+  # There is no usermod mock, and the real one would run against the invoking
+  # account. A shim directory on PATH holds a usermod that succeeds and an apt
+  # wrapper that fails only for the packages named in SHIM_APT_FAIL_PKGS.
+  export SHIM_DIR="${BATS_TEST_TMPDIR}/shims"
+  mkdir -p "${SHIM_DIR}"
+  printf '#!/usr/bin/env bash\nprintf "usermod %%s\\n" "$*" >> "${MOCK_CALLS_FILE}"\nexit "${SHIM_USERMOD_EXIT:-0}"\n' > "${SHIM_DIR}/usermod"
+  cat > "${SHIM_DIR}/apt" << SHIM
+#!/usr/bin/env bash
+for _a in "\$@"; do
+  for _p in \${SHIM_APT_FAIL_PKGS:-}; do
+    if [[ "\${_a}" == "\${_p}" ]]; then
+      printf 'apt %s\n' "\$*" >> "\${MOCK_CALLS_FILE}"
+      exit 100
+    fi
+  done
+done
+exec "${REPO_ROOT}/tests/mocks/apt" "\$@"
+SHIM
+  # cloud_tools installs cloudflare-warp through apt-get, so it needs the same
+  # per-package failure wrapper.
+  sed 's#tests/mocks/apt"#tests/mocks/apt-get"#' "${SHIM_DIR}/apt" > "${SHIM_DIR}/apt-get"
+  # A real flatpak is installed on this box and tests/mocks/sudo execs real
+  # commands, so without a shim `sudo flatpak ...` reaches the real binary
+  # (tdd.md E2). SHIM_FLATPAK_REMOTE_EXIT / SHIM_FLATPAK_EXIT drive failures.
+  cat > "${SHIM_DIR}/flatpak" << 'SHIM'
+#!/usr/bin/env bash
+printf 'flatpak %s\n' "$*" >> "${MOCK_CALLS_FILE}"
+case "$1" in
+  remote-add) exit "${SHIM_FLATPAK_REMOTE_EXIT:-0}" ;;
+  install) exit "${SHIM_FLATPAK_EXIT:-0}" ;;
+esac
+exit 0
+SHIM
+  # Per-argument failure wrappers, so one sub-install can fail on its own while
+  # its siblings succeed: SHIM_SNAP_FAIL_ARGS / SHIM_TEE_FAIL_ARGS fail only a call
+  # whose arguments contain that substring, and otherwise exec the repo mock.
+  local _b
+  for _b in snap tee; do
+    cat > "${SHIM_DIR}/${_b}" << SHIM
+#!/usr/bin/env bash
+_failvar=SHIM_${_b^^}_FAIL_ARGS
+if [[ -n "\${!_failvar:-}" && "\$*" == *"\${!_failvar}"* ]]; then
+  cat > /dev/null 2>&1 < /dev/null
+  printf '${_b} %s\\n' "\$*" >> "\${MOCK_CALLS_FILE}"
+  exit 1
+fi
+exec "${REPO_ROOT}/tests/mocks/${_b}" "\$@"
+SHIM
+  done
+  /bin/chmod +x "${SHIM_DIR}/usermod" "${SHIM_DIR}/apt" "${SHIM_DIR}/apt-get" "${SHIM_DIR}/flatpak" "${SHIM_DIR}/snap" "${SHIM_DIR}/tee"
+  PATH="${SHIM_DIR}:${PATH}"
   # Truncate AFTER seeding: cp and chmod are pass-through mocks that log their own
   # invocation, so the seed writes a line containing "rustup" into the call log and
   # breaks any test asserting that string is absent. Every test already assumes it
@@ -163,6 +241,136 @@ EOF
   run _install_ubuntu_base_packages
   [ "$status" -ne 0 ]
   [[ "$output" == *"Unsupported Ubuntu version"* ]]
+}
+
+# Tri-state: 0 clean, 1 unsupported release, 2 an install failed.
+@test "_install_ubuntu_base_packages: clean run returns 0 with no warning" {
+  export NOBLE=1
+  unset RESOLUTE HAS_SNAP
+  cd "${REPO_ROOT}"
+  run _install_ubuntu_base_packages
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"base:"*"failed"* ]]
+}
+
+@test "_install_ubuntu_base_packages: failed common list returns 2 and names it" {
+  export NOBLE=1
+  unset RESOLUTE HAS_SNAP
+  cd "${REPO_ROOT}"
+  export MOCK_XARGS_EXIT=1
+  run _install_ubuntu_base_packages
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"base: common list failed"* ]]
+  # Both lists must be attempted and both failures recorded: the common list
+  # failing must not short-circuit the release list.
+  [[ "$output" == *"base: release list failed"* ]]
+  [ "$(grep -c '^xargs ' "${MOCK_CALLS_FILE}")" -eq 2 ]
+}
+
+@test "_install_ubuntu_base_packages: only the release list failing is named alone" {
+  export NOBLE=1
+  unset RESOLUTE HAS_SNAP
+  local _d="${BATS_TEST_TMPDIR}/commononly"
+  mkdir -p "${_d}"
+  printf 'build-essential\n' > "${_d}/ubuntu_common_packages.txt"
+  cd "${_d}"
+  run _install_ubuntu_base_packages
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"base: release list failed"* ]]
+  [[ "$output" != *"base: common list failed"* ]]
+  # Positive control: the common list's install really ran.
+  [ "$(grep -c '^xargs ' "${MOCK_CALLS_FILE}")" -eq 1 ]
+}
+
+@test "_install_ubuntu_base_packages: failed hwe kernel install returns 2" {
+  export NOBLE=1
+  unset RESOLUTE HAS_SNAP
+  cd "${REPO_ROOT}"
+  export MOCK_APT_FAIL_SUBCMD=install
+  run _install_ubuntu_base_packages
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"base: hwe kernel failed"* ]]
+  # Positive control: the package lists were still attempted.
+  grep -q "^xargs " "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_base_packages: apt update failure warns exactly once and is not a failure" {
+  export NOBLE=1
+  unset RESOLUTE HAS_SNAP
+  cd "${REPO_ROOT}"
+  export MOCK_APT_FAIL_SUBCMD=update
+  run _install_ubuntu_base_packages
+  [ "$status" -eq 0 ]
+  [ "$(printf '%s\n' "${output}" | grep -c 'apt update reported errors')" -eq 1 ]
+  grep -q "^xargs " "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_base_packages: a missing package list is a failure" {
+  export NOBLE=1
+  unset RESOLUTE HAS_SNAP
+  local _empty="${BATS_TEST_TMPDIR}/nolists"
+  mkdir -p "${_empty}"
+  cd "${_empty}"
+  run _install_ubuntu_base_packages
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"base: common list failed"* ]]
+}
+
+@test "_install_ubuntu_base_packages: a package list with no packages is not a failure" {
+  export NOBLE=1
+  unset RESOLUTE HAS_SNAP
+  local _d="${BATS_TEST_TMPDIR}/emptylists"
+  mkdir -p "${_d}"
+  printf '# only a comment\n' > "${_d}/ubuntu_common_packages.txt"
+  printf '# only a comment\n' > "${_d}/ubuntu_2404_packages.txt"
+  cd "${_d}"
+  run _install_ubuntu_base_packages
+  [ "$status" -eq 0 ]
+}
+
+@test "install_ubuntu_packages: base rc 2 is named and every later step still runs" {
+  unset MACOS
+  export LINUX=1 UBUNTU=1 NOBLE=1
+  _install_ubuntu_base_packages() { return 2; }
+  local _s
+  for _s in workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
+    eval "_install_ubuntu_${_s}() { printf 'ran ${_s}\\n' >> \"\${MOCK_CALLS_FILE}\"; }"
+  done
+  run --separate-stderr install_ubuntu_packages
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"ubuntu packages: failed: base"* ]]
+  [ "$(grep -c '^ran ' "${MOCK_CALLS_FILE}")" -eq 12 ]
+}
+
+@test "install_ubuntu_packages: real base with a failed install is named and later steps run" {
+  unset MACOS
+  export LINUX=1 UBUNTU=1 NOBLE=1
+  unset RESOLUTE HAS_SNAP
+  cd "${REPO_ROOT}"
+  export MOCK_XARGS_EXIT=1
+  local _s
+  for _s in workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
+    eval "_install_ubuntu_${_s}() { printf 'ran ${_s}\\n' >> \"\${MOCK_CALLS_FILE}\"; }"
+  done
+  run --separate-stderr install_ubuntu_packages
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"ubuntu packages: failed: base"* ]]
+  [ "$(grep -c '^ran ' "${MOCK_CALLS_FILE}")" -eq 12 ]
+}
+
+@test "install_ubuntu_packages: base rc 1 stops before any later step" {
+  unset MACOS NOBLE RESOLUTE
+  export LINUX=1 UBUNTU=1
+  local _s
+  for _s in workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
+    eval "_install_ubuntu_${_s}() { printf 'ran ${_s}\\n' >> \"\${MOCK_CALLS_FILE}\"; }"
+  done
+  : > "${MOCK_CALLS_FILE}"
+  run install_ubuntu_packages
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Unsupported Ubuntu version"* ]]
+  run grep -c '^ran ' "${MOCK_CALLS_FILE}"
+  [ "$output" -eq 0 ]
 }
 
 @test "_install_ubuntu_base_packages: NOBLE uses nala for package installs" {
@@ -263,8 +471,62 @@ _NALA_CONFFILE_ARGV='argv: xargs [-r][sudo][DEBIAN_FRONTEND=noninteractive][nala
   local _stub_dir
   _stub_dir="$(argv_probe_stub_path apt)"
   PATH="${_stub_dir}:${PATH}" run _install_ubuntu_powershell
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ] # post-install probe fails: the stub pwsh never runs
   grep -qxF 'argv: apt [install][-o][Dpkg::Options::=--force-confdef][-o][Dpkg::Options::=--force-confold][powershell][-y]' "${MOCK_CALLS_FILE}"
+}
+
+# A scratch directory holding the two workstation lists, so one can be removed
+# without touching the repo's own.
+_ws_dir() {
+  mkdir -p "${BATS_TEST_TMPDIR}/ws"
+  printf 'font-manager\n' > "${BATS_TEST_TMPDIR}/ws/ubuntu_workstation_packages.txt"
+  printf 'vlc\n' > "${BATS_TEST_TMPDIR}/ws/ubuntu_workstation_snap_packages.txt"
+  cd "${BATS_TEST_TMPDIR}/ws" || return 1
+  export HAS_SNAP=1
+}
+
+@test "_install_ubuntu_workstation: clean run returns 0" {
+  _ws_dir
+  run _install_ubuntu_workstation
+  [ "$status" -eq 0 ]
+  grep -q "xargs-stdin font-manager" "${MOCK_CALLS_FILE}"
+  grep -q "xargs-stdin vlc" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_workstation: an unreadable snap list returns 1 after the package list was installed" {
+  _ws_dir
+  rm "${BATS_TEST_TMPDIR}/ws/ubuntu_workstation_snap_packages.txt"
+  run --separate-stderr _install_ubuntu_workstation
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"workstation: snap list failed"* ]]
+  grep -q "xargs-stdin font-manager" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_workstation: an unreadable package list returns 1 and the snap list is still installed" {
+  _ws_dir
+  rm "${BATS_TEST_TMPDIR}/ws/ubuntu_workstation_packages.txt"
+  run --separate-stderr _install_ubuntu_workstation
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"workstation: package list failed"* ]]
+  grep -q "xargs-stdin vlc" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_workstation: a failing snap install returns 1" {
+  _ws_dir
+  export MOCK_XARGS_EXIT=1
+  run --separate-stderr _install_ubuntu_workstation
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"workstation: snap list failed"* ]]
+}
+
+@test "_install_ubuntu_workstation: a snap list holding only comments is an empty list, not a failure" {
+  _ws_dir
+  printf '# nothing yet\n\n' > "${BATS_TEST_TMPDIR}/ws/ubuntu_workstation_snap_packages.txt"
+  run --separate-stderr _install_ubuntu_workstation
+  [ "$status" -eq 0 ]
+  [[ "$stderr" != *"workstation:"* ]]
+  # Positive control: the package list ran.
+  grep -q "xargs-stdin font-manager" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_workstation: HAS_SNAP uses nala for workstation packages" {
@@ -518,7 +780,7 @@ _ms_require_gnu_ar() {
   _PWSH_BIN="$(_pwsh_stub_bin 1)"
   unset MOCK_WGET_FILE  # the wget mock then writes an empty, unverifiable file
   run _install_ubuntu_powershell
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ]
   [[ "$output" == *"failed verification"* ]]
   [ "$(grep -c "dpkg -i" "${MOCK_CALLS_FILE}")" -eq 0 ]
   [ "$(grep -c "apt install powershell" "${MOCK_CALLS_FILE}")" -eq 0 ]
@@ -541,7 +803,7 @@ _ms_require_gnu_ar() {
   # it. This is the case a command-v mutation of the guard cannot pass.
   _PWSH_BIN="$(_pwsh_stub_bin 1)"
   run _install_ubuntu_powershell
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ] # post-install probe fails: the stub pwsh never runs
   grep -q "wget.*packages-microsoft-prod.deb" "${MOCK_CALLS_FILE}"
   grep -q "dpkg -i" "${MOCK_CALLS_FILE}"
   grep -q "apt update" "${MOCK_CALLS_FILE}"
@@ -554,7 +816,7 @@ _ms_require_gnu_ar() {
   local _stub_dir
   _stub_dir="$(frontend_probe_stub_path dpkg)"
   PATH="${_stub_dir}:${PATH}" run _install_ubuntu_powershell
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ] # post-install probe fails: the stub pwsh never runs
   grep -qE '^frontend: dpkg -i .*DEBIAN_FRONTEND=noninteractive$' "${MOCK_CALLS_FILE}"
 }
 
@@ -564,7 +826,7 @@ _ms_require_gnu_ar() {
   local _stub_dir
   _stub_dir="$(argv_probe_stub_path dpkg)"
   PATH="${_stub_dir}:${PATH}" run _install_ubuntu_powershell
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ] # post-install probe fails: the stub pwsh never runs
   [ "$(grep -c '^argv: dpkg ' "${MOCK_CALLS_FILE}")" -eq 1 ]
   grep -qE '^argv: dpkg \[-i\]\[--force-confdef\]\[--force-confold\]\[--force-confmiss\]\[.*packages-microsoft-prod\.deb\]$' "${MOCK_CALLS_FILE}"
 }
@@ -579,7 +841,7 @@ _ms_require_gnu_ar() {
   # naming the real cause is present.
   _PWSH_BIN="$(_pwsh_stub_bin 1)"
   run _install_ubuntu_powershell
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ]
   [[ "$output" == *"[WARN]"* ]]
   [[ "$output" == *"apt install succeeded but pwsh still does not run"* ]]
   [[ "$output" != *"pwsh is installed"* ]]
@@ -612,7 +874,7 @@ EOF
 
 @test "_install_ubuntu_powershell: calls wget for packages-microsoft-prod.deb" {
   run _install_ubuntu_powershell
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ] # post-install probe fails: the stub pwsh never runs
   grep -q "wget.*packages-microsoft-prod.deb" "${MOCK_CALLS_FILE}"
 }
 
@@ -624,7 +886,7 @@ EOF
   # 2026-09-17. The guard must now be independent of any pre-existing .deb.
   touch "${HOME}/software_downloads/packages-microsoft-prod.deb"
   run _install_ubuntu_powershell
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ] # post-install probe fails: the stub pwsh never runs
   grep -q "wget.*packages-microsoft-prod.deb" "${MOCK_CALLS_FILE}"
   grep -q "dpkg -i" "${MOCK_CALLS_FILE}"
   grep -q "apt update" "${MOCK_CALLS_FILE}"
@@ -634,7 +896,7 @@ EOF
 @test "_install_ubuntu_powershell: wget failure warns naming wget and skips dpkg/apt" {
   export MOCK_WGET_EXIT=1
   run _install_ubuntu_powershell
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ]
   [[ "$output" == *"[WARN]"* ]]
   [[ "$output" == *"wget"* ]]
   refute_grep "dpkg -i" "${MOCK_CALLS_FILE}"
@@ -644,7 +906,7 @@ EOF
 @test "_install_ubuntu_powershell: dpkg failure warns naming dpkg and skips apt" {
   export MOCK_DPKG_EXIT=1
   run _install_ubuntu_powershell
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ]
   [[ "$output" == *"[WARN]"* ]]
   [[ "$output" == *"dpkg"* ]]
   grep -q "wget.*packages-microsoft-prod.deb" "${MOCK_CALLS_FILE}"
@@ -654,7 +916,7 @@ EOF
 @test "_install_ubuntu_powershell: apt update failure warns naming apt update and skips apt install" {
   export MOCK_APT_EXIT=1
   run _install_ubuntu_powershell
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ]
   [[ "$output" == *"[WARN]"* ]]
   [[ "$output" == *"apt update"* ]]
   grep -q "dpkg -i" "${MOCK_CALLS_FILE}"
@@ -676,9 +938,12 @@ exit 0
 EOF
   chmod +x "${_stub_dir}/apt"
   PATH="${_stub_dir}:${PATH}" run _install_ubuntu_powershell
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ]
   [[ "$output" == *"[WARN]"* ]]
-  [[ "$output" == *"apt install"* ]]
+  [[ "$output" == *"apt install powershell failed"* ]]
+  # The post-install probe also returns 1 and also says "apt install", so
+  # without this the test passes even with the install check removed.
+  [[ "$output" != *"still does not run"* ]]
   grep -q "apt update" "${MOCK_CALLS_FILE}"
   grep -q "apt install powershell" "${MOCK_CALLS_FILE}"
 }
@@ -701,77 +966,630 @@ EOF
   _end="$(date +%s)"
   _elapsed=$(( _end - _start ))
 
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ] # post-install probe fails: the stub pwsh never runs
   [ "${_elapsed}" -lt 20 ]
   [[ "$output" == *"apt install succeeded but pwsh still does not run"* ]]
 }
 
 # ── _install_ubuntu_go ───────────────────────────────────────────────────────
 
-@test "_install_ubuntu_go: any version calls wget for tarball (no PPA path)" {
-  export GO_VER="1.20"
-  export GO_DOWNLOAD_FILENAME="go1.20.linux-amd64.tar.gz"
-  export GO_DOWNLOAD_URL="https://dl.google.com/go/go1.20.linux-amd64.tar.gz"
-  run _install_ubuntu_go
-  [ "$status" -eq 0 ]
-  grep -q "wget.*${GO_DOWNLOAD_FILENAME}" "${MOCK_CALLS_FILE}"
+# A go tarball whose go/bin/go and go/bin/v both hold "new".
+_make_go_tarball() {
+  local _src="${BATS_TEST_TMPDIR}/gosrc"
+  mkdir -p "${_src}/go/bin"
+  printf 'new' > "${_src}/go/bin/go"
+  printf 'new' > "${_src}/go/bin/v"
+  /bin/chmod +x "${_src}/go/bin/go"
+  "${_DL_TAR_BIN}" -czf "${BATS_TEST_TMPDIR}/go.tgz" -C "${_src}" go
+  export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/go.tgz"
 }
 
-@test "_install_ubuntu_go: version >=1.21 calls wget for tarball" {
+# Stub go reporting <version>; every go test sets _GO_BIN (tdd.md pitfall G).
+_go_stub() {
+  local _v="${1:-1.27.1}"
+  printf '#!/usr/bin/env bash\nprintf "go version go%s linux/amd64\\n"\n' "${_v}" > "${BATS_TEST_TMPDIR}/gostub"
+  /bin/chmod +x "${BATS_TEST_TMPDIR}/gostub"
+  export _GO_BIN="${BATS_TEST_TMPDIR}/gostub"
+}
+
+# An existing install in the fixture root whose go/bin/v holds "old".
+_seed_go() {
+  mkdir -p "${_GO_INSTALL_ROOT}/go/bin"
+  printf 'old' > "${_GO_INSTALL_ROOT}/go/bin/v"
+  printf 'old' > "${_GO_INSTALL_ROOT}/go/bin/go"
+  /bin/chmod +x "${_GO_INSTALL_ROOT}/go/bin/go"
+}
+
+_go_tmpdir_from_calls() {
+  grep '^wget ' "${MOCK_CALLS_FILE}" | head -1 | sed -E 's/.* -O ([^ ]+)\/go\.tgz .*/\1/'
+}
+
+_go_stamp() { printf '%s/go' "${_DL_STAMP_DIR}"; }
+
+@test "_install_ubuntu_go: fetches the pinned URL, installs the tree and stamps it" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  run _install_ubuntu_go
+  [ "$status" -eq 0 ]
+  grep -q "^wget .*${GO_DOWNLOAD_URL}" "${MOCK_CALLS_FILE}"
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "new" ]
+  [ "$(< "$(_go_stamp)")" = "${GO_DOWNLOAD_URL}" ]
+}
+
+@test "_install_ubuntu_go: an up-to-date stamp skips the fetch and prints the skip line" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  _seed_go
+  mkdir -p "${_DL_STAMP_DIR}"
+  printf '%s\n' "${GO_DOWNLOAD_URL}" > "$(_go_stamp)"
+  run _install_ubuntu_go
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"go: up to date (stamp $(_go_stamp)); rm it to force a re-install"* ]]
+  refute_grep "^wget " "${MOCK_CALLS_FILE}"
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "old" ]
+}
+
+@test "_install_ubuntu_go: a stamp with no installed go does not skip" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  mkdir -p "${_DL_STAMP_DIR}"
+  printf '%s\n' "${GO_DOWNLOAD_URL}" > "$(_go_stamp)"
+  run _install_ubuntu_go
+  [ "$status" -eq 0 ]
+  grep -q "^wget " "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_go: a stamp for a different URL does not skip" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  _seed_go
+  mkdir -p "${_DL_STAMP_DIR}"
+  printf 'https://example.invalid/older.tar.gz\n' > "$(_go_stamp)"
+  run _install_ubuntu_go
+  [ "$status" -eq 0 ]
+  grep -q "^wget " "${MOCK_CALLS_FILE}"
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "new" ]
+  [ "$(< "$(_go_stamp)")" = "${GO_DOWNLOAD_URL}" ]
+}
+
+@test "_install_ubuntu_go: series match, go1.27.1 against GO_VER 1.27, succeeds" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  export GO_VER="1.27"
+  run _install_ubuntu_go
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Go 1.27 is installed"* ]]
+}
+
+@test "_install_ubuntu_go: an exact version equal to GO_VER succeeds" {
+  _make_go_tarball
+  _go_stub 1.26
   export GO_VER="1.26"
-  export GO_DOWNLOAD_FILENAME="go1.26.linux-amd64.tar.gz"
-  export GO_DOWNLOAD_URL="https://dl.google.com/go/go1.26.linux-amd64.tar.gz"
   run _install_ubuntu_go
   [ "$status" -eq 0 ]
-  grep -q "wget.*${GO_DOWNLOAD_FILENAME}" "${MOCK_CALLS_FILE}"
 }
 
-@test "_install_ubuntu_go: version >=1.21 skips wget when tarball already exists" {
-  export GO_VER="1.26"
-  export GO_DOWNLOAD_FILENAME="go1.26.linux-amd64.tar.gz"
-  touch "${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME}"
+@test "_install_ubuntu_go: a different series fails with the version warning" {
+  _make_go_tarball
+  _go_stub 1.26.3
+  export GO_VER="1.27"
   run _install_ubuntu_go
-  [ "$status" -eq 0 ]
-  ! grep -q "wget.*${GO_DOWNLOAD_FILENAME}" "${MOCK_CALLS_FILE}"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"go: version check failed (installed 1.26.3, want 1.27)"* ]]
 }
 
-@test "_install_ubuntu_go: prints success when go version matches after install" {
-  export GO_VER="1.26"
-  export GO_DOWNLOAD_FILENAME="go1.26.linux-amd64.tar.gz"
-  export GO_DOWNLOAD_URL="https://dl.google.com/go/go1.26.linux-amd64.tar.gz"
-  # Pre-create tarball so wget/tar are skipped
-  touch "${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME}"
-  # Fake go binary that reports matching version
-  local _bin_dir="${BATS_TEST_TMPDIR}/gobin"
-  mkdir -p "${_bin_dir}"
-  printf '#!/usr/bin/env bash\nprintf "go version go1.26 linux/amd64\\n"\n' > "${_bin_dir}/go"
-  chmod +x "${_bin_dir}/go"
-  export PATH="${_bin_dir}:${PATH}"
-  # PATH alone does not reach this function: _install_ubuntu_go prefers the
-  # absolute /usr/local/go/bin/go when it exists, deliberately, because that
-  # path reaches PATH only via 6_path.zsh and a provision run is not
-  # interactive. So on any box with Go actually installed the stub above is
-  # bypassed and the real `go version` answers -- measured 2026-09-18 on claude
-  # and workstation (both go1.27.1), where this test failed while passing on
-  # macOS, which has no /usr/local/go/bin/go. That is shell.md's
-  # absolute-path-default pitfall, and `make test` failing here means the
-  # pre-push hook refuses every source push from those two boxes.
-  #
-  # _GO_BIN is the seam the function already reads for exactly this; the test
-  # at the foot of this file has always set it.
-  export _GO_BIN="${_bin_dir}/go"
+@test "_install_ubuntu_go: a longer series sharing a prefix does not match" {
+  _make_go_tarball
+  _go_stub 1.270.1
+  export GO_VER="1.27"
   run _install_ubuntu_go
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"Go 1.26 is installed"* ]]
+  [ "$status" -eq 1 ]
 }
 
-@test "_install_ubuntu_go: any version succeeds (no version range guard)" {
-  export GO_VER="1.99"
-  export GO_DOWNLOAD_FILENAME="go1.99.linux-amd64.tar.gz"
-  export GO_DOWNLOAD_URL="https://dl.google.com/go/go1.99.linux-amd64.tar.gz"
+@test "_install_ubuntu_go: a failed download leaves the install, no stamp and no temp dir" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  _seed_go
+  export MOCK_WGET_FAIL_URL="${GO_DOWNLOAD_URL}"
+  run _install_ubuntu_go
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"go: download failed"* ]]
+  # Positive control: the fetch really targeted the throwaway root.
+  [[ "$(_go_tmpdir_from_calls)" == "${_DL_TMP_ROOT}/.dl."* ]]
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "old" ]
+  [ ! -e "$(_go_stamp)" ]
+  [ -z "$(ls -A "${_DL_TMP_ROOT}")" ]
+}
+
+@test "_install_ubuntu_go: a tarball without go/bin/go fails the extract stage and cleans up" {
+  _go_stub 1.27.1
+  _seed_go
+  printf 'not a tarball' > "${BATS_TEST_TMPDIR}/junk"
+  export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/junk"
+  run _install_ubuntu_go
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"go: extract failed"* ]]
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "old" ]
+  [ ! -e "$(_go_stamp)" ]
+  [ -z "$(ls -A "${_DL_TMP_ROOT}")" ]
+}
+
+# The extract stage has three independent checks; each test below satisfies the
+# other two so only the named one can fail it.
+_assert_go_extract_refused() {
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"go: extract failed"* ]]
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "old" ]
+  [ ! -e "$(_go_stamp)" ]
+  [ -z "$(ls -A "${_DL_TMP_ROOT}")" ]
+}
+
+@test "_install_ubuntu_go: a real tarball with go/ but no bin/go fails the extract stage" {
+  _go_stub 1.27.1
+  _seed_go
+  local _src="${BATS_TEST_TMPDIR}/gosrc-nobin"
+  mkdir -p "${_src}/go/bin"
+  printf 'new' > "${_src}/go/bin/v"
+  "${_DL_TAR_BIN}" -czf "${BATS_TEST_TMPDIR}/nobin.tgz" -C "${_src}" go
+  export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/nobin.tgz"
+  run _install_ubuntu_go
+  _assert_go_extract_refused
+}
+
+@test "_install_ubuntu_go: a go/bin/go that is a symlink fails the extract stage" {
+  _go_stub 1.27.1
+  _seed_go
+  local _src="${BATS_TEST_TMPDIR}/gosrc-link"
+  mkdir -p "${_src}/go/bin"
+  printf 'new' > "${_src}/go/bin/v"
+  ln -s v "${_src}/go/bin/go"
+  "${_DL_TAR_BIN}" -czf "${BATS_TEST_TMPDIR}/link.tgz" -C "${_src}" go
+  export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/link.tgz"
+  run _install_ubuntu_go
+  _assert_go_extract_refused
+}
+
+@test "_install_ubuntu_go: a tar that extracts a good tree and then exits non-zero fails the extract stage" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  _seed_go
+  local _real="${_DL_TAR_BIN}"
+  local _stub="${BATS_TEST_TMPDIR}/tar-then-fail"
+  printf '#!/usr/bin/env bash\n"%s" "$@"\nexit 1\n' "${_real}" > "${_stub}"
+  /bin/chmod +x "${_stub}"
+  export _DL_TAR_BIN="${_stub}"
+  run _install_ubuntu_go
+  _assert_go_extract_refused
+}
+
+@test "_install_ubuntu_go: the new tree is chowned root:root before the first swap move" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  _seed_go
   run _install_ubuntu_go
   [ "$status" -eq 0 ]
-  grep -q "wget.*${GO_DOWNLOAD_FILENAME}" "${MOCK_CALLS_FILE}"
+  local _tmp _chown_line _mv_line
+  _tmp="$(_go_tmpdir_from_calls)"
+  _chown_line="$(grep -n "^chown -R root:root ${_tmp}/go\$" "${MOCK_CALLS_FILE}" | head -1 | cut -d: -f1)"
+  _mv_line="$(grep -n '^mv ' "${MOCK_CALLS_FILE}" | head -1 | cut -d: -f1)"
+  [ -n "${_chown_line}" ]
+  [ -n "${_mv_line}" ]
+  [ "${_chown_line}" -lt "${_mv_line}" ]
+}
+
+@test "_install_ubuntu_go: a failed chown fails the sub-install and leaves the install" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  _seed_go
+  export MOCK_CHOWN_EXIT=1
+  run _install_ubuntu_go
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"go: chown failed"* ]]
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "old" ]
+  [ -z "$(ls -A "${_DL_TMP_ROOT}")" ]
+}
+
+@test "_install_ubuntu_go: replacing an install moves the old tree aside, then the new one in" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  _seed_go
+  run _install_ubuntu_go
+  [ "$status" -eq 0 ]
+  local _tmp
+  _tmp="$(_go_tmpdir_from_calls)"
+  [ "$(grep '^mv ' "${MOCK_CALLS_FILE}" | sed -n 1p)" = "mv ${_GO_INSTALL_ROOT}/go ${_GO_INSTALL_ROOT}/go.old" ]
+  [ "$(grep '^mv ' "${MOCK_CALLS_FILE}" | sed -n 2p)" = "mv ${_tmp}/go ${_GO_INSTALL_ROOT}/go" ]
+  # go.old is deleted only once the new tree is in place.
+  [ ! -e "${_GO_INSTALL_ROOT}/go.old" ]
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "new" ]
+}
+
+@test "_install_ubuntu_go: a failing new-tree move restores the old tree" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  _seed_go
+  export MOCK_MV_FAIL_ARGS=".dl."
+  run _install_ubuntu_go
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"go: install failed"* ]]
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "old" ]
+  [ ! -e "$(_go_stamp)" ]
+  # The aside move happened, then the restore ran (not a no-op).
+  [ "$(grep '^mv ' "${MOCK_CALLS_FILE}" | sed -n 1p)" = "mv ${_GO_INSTALL_ROOT}/go ${_GO_INSTALL_ROOT}/go.old" ]
+  [ "$(grep '^mv ' "${MOCK_CALLS_FILE}" | sed -n 3p)" = "mv ${_GO_INSTALL_ROOT}/go.old ${_GO_INSTALL_ROOT}/go" ]
+  [ -z "$(ls -A "${_DL_TMP_ROOT}")" ]
+}
+
+@test "_install_ubuntu_go: no old tree and a failing new-tree move attempts no restore" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  export MOCK_MV_FAIL_ARGS=".dl."
+  run _install_ubuntu_go
+  [ "$status" -eq 1 ]
+  [ "$(grep -c '^mv ' "${MOCK_CALLS_FILE}")" -eq 1 ]
+  grep -q "^mv .*\.dl\..*/go ${_GO_INSTALL_ROOT}/go\$" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_go: a go.old with no go is moved back first, then swapped in order" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  mkdir -p "${_GO_INSTALL_ROOT}/go.old/bin"
+  printf 'old' > "${_GO_INSTALL_ROOT}/go.old/bin/v"
+  # A real previous install has a go binary; the restored tree must pass the
+  # intactness check before go.old is replaced.
+  printf 'old' > "${_GO_INSTALL_ROOT}/go.old/bin/go"
+  /bin/chmod +x "${_GO_INSTALL_ROOT}/go.old/bin/go"
+  run _install_ubuntu_go
+  [ "$status" -eq 0 ]
+  local _tmp _r="${_GO_INSTALL_ROOT}"
+  _tmp="$(_go_tmpdir_from_calls)"
+  [ "$(grep '^mv ' "${MOCK_CALLS_FILE}" | sed -n 1p)" = "mv ${_r}/go.old ${_r}/go" ]
+  [ "$(grep '^mv ' "${MOCK_CALLS_FILE}" | sed -n 2p)" = "mv ${_r}/go ${_r}/go.old" ]
+  [ "$(grep '^mv ' "${MOCK_CALLS_FILE}" | sed -n 3p)" = "mv ${_tmp}/go ${_r}/go" ]
+  [ "$(< "${_r}/go/bin/v")" = "new" ]
+}
+
+@test "_install_ubuntu_go: a go.old with no go and a failing new-tree move leaves the old content in go" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  mkdir -p "${_GO_INSTALL_ROOT}/go.old/bin"
+  printf 'old' > "${_GO_INSTALL_ROOT}/go.old/bin/v"
+  _seed_intact_go_old
+  export MOCK_MV_FAIL_ARGS=".dl."
+  run _install_ubuntu_go
+  [ "$status" -eq 1 ]
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "old" ]
+}
+
+@test "_install_ubuntu_go: a failing move-back fails the sub-install without touching go.old" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  mkdir -p "${_GO_INSTALL_ROOT}/go.old/bin"
+  printf 'old' > "${_GO_INSTALL_ROOT}/go.old/bin/v"
+  _seed_intact_go_old
+  export MOCK_MV_FAIL_ARGS="go.old ${_GO_INSTALL_ROOT}/go"
+  run _install_ubuntu_go
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"go: restore failed"* ]]
+  [ "$(< "${_GO_INSTALL_ROOT}/go.old/bin/v")" = "old" ]
+  [ ! -e "${_GO_INSTALL_ROOT}/go" ]
+  [ "$(grep -c '^mv ' "${MOCK_CALLS_FILE}")" -eq 1 ]
+  [ ! -e "$(_go_stamp)" ]
+}
+
+@test "_install_ubuntu_go: a leftover go.old is replaced and the tree is not nested" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  _seed_go
+  mkdir -p "${_GO_INSTALL_ROOT}/go.old/bin"
+  printf 'stale' > "${_GO_INSTALL_ROOT}/go.old/bin/v"
+  run _install_ubuntu_go
+  [ "$status" -eq 0 ]
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "new" ]
+  [ ! -e "${_GO_INSTALL_ROOT}/go/go" ]
+  [ ! -e "${_GO_INSTALL_ROOT}/go.old/go" ]
+}
+
+# An intact go.old (bin/go a real executable) holding "old" in bin/v.
+_seed_intact_go_old() {
+  mkdir -p "${_GO_INSTALL_ROOT}/go.old/bin"
+  printf 'old' > "${_GO_INSTALL_ROOT}/go.old/bin/v"
+  printf 'old' > "${_GO_INSTALL_ROOT}/go.old/bin/go"
+  /bin/chmod +x "${_GO_INSTALL_ROOT}/go.old/bin/go"
+}
+
+# With the new-tree move failing, a damaged go (and damaged go.old) must have
+# been deleted rather than kept or restored: go is absent, or a real directory
+# without the damaged trees' marker. The fixture is restored afterwards.
+_go_probe_damaged_dropped() {
+  local _r="${_GO_INSTALL_ROOT}" _snap="${BATS_TEST_TMPDIR}/gosnap"
+  rm -rf "${_snap}"; mkdir -p "${_snap}"
+  cp -a "${_r}/." "${_snap}/"
+  MOCK_MV_FAIL_ARGS=".dl." run _install_ubuntu_go
+  [ "$status" -eq 1 ]
+  # Explicit if: a failing `a || b` list does not trip bats' errexit here.
+  if ! { { [ ! -e "${_r}/go" ] && [ ! -L "${_r}/go" ]; } \
+    || { [ -d "${_r}/go" ] && [ ! -L "${_r}/go" ] && [ ! -e "${_r}/go/bin/marker" ]; }; }; then
+    return 1
+  fi
+  rm -rf "${_r}/go" "${_r}/go.old"
+  cp -a "${_snap}/." "${_r}/"
+}
+
+# Run _install_ubuntu_go twice; both must succeed (a damaged tree must heal).
+_go_twice_ok() {
+  run _install_ubuntu_go
+  [ "$status" -eq 0 ]
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "new" ]
+  [ -f "$(_go_stamp)" ]
+  run _install_ubuntu_go
+  [ "$status" -eq 0 ]
+}
+
+@test "_install_ubuntu_go: a damaged go (no bin/go) is replaced, and a second run succeeds" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  mkdir -p "${_GO_INSTALL_ROOT}/go/bin"
+  printf 'partial' > "${_GO_INSTALL_ROOT}/go/bin/v"
+  : > "${_GO_INSTALL_ROOT}/go/bin/marker"
+  _go_probe_damaged_dropped
+  _go_twice_ok
+  [[ "$output" == *"up to date"* ]]
+}
+
+@test "_install_ubuntu_go: a damaged go beside an intact go.old is replaced and go.old removed" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  mkdir -p "${_GO_INSTALL_ROOT}/go/bin"
+  printf 'partial' > "${_GO_INSTALL_ROOT}/go/bin/v"
+  _seed_intact_go_old
+  : > "${_GO_INSTALL_ROOT}/go/bin/marker"
+  _go_probe_damaged_dropped
+  _go_twice_ok
+  [ ! -e "${_GO_INSTALL_ROOT}/go.old" ]
+}
+
+@test "_install_ubuntu_go: a damaged go beside a damaged go.old is replaced" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  mkdir -p "${_GO_INSTALL_ROOT}/go/bin" "${_GO_INSTALL_ROOT}/go.old/bin"
+  printf 'partial' > "${_GO_INSTALL_ROOT}/go/bin/v"
+  printf 'partial' > "${_GO_INSTALL_ROOT}/go.old/bin/v"
+  : > "${_GO_INSTALL_ROOT}/go/bin/marker"
+  : > "${_GO_INSTALL_ROOT}/go.old/bin/marker"
+  _go_probe_damaged_dropped
+  _go_twice_ok
+  [ ! -e "${_GO_INSTALL_ROOT}/go.old" ]
+}
+
+@test "_install_ubuntu_go: a damaged go.old with no go is not restored" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  mkdir -p "${_GO_INSTALL_ROOT}/go.old/bin"
+  : > "${_GO_INSTALL_ROOT}/go.old/bin/marker"
+  _go_probe_damaged_dropped
+  _go_twice_ok
+}
+
+@test "_install_ubuntu_go: an intact go.old beside an intact go is removed after the swap" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  _seed_go
+  _seed_intact_go_old
+  _go_twice_ok
+  [ ! -e "${_GO_INSTALL_ROOT}/go.old" ]
+}
+
+@test "_install_ubuntu_go: a plain file at go is replaced" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  printf 'junk' > "${_GO_INSTALL_ROOT}/go"
+  _go_probe_damaged_dropped
+  _go_twice_ok
+}
+
+@test "_install_ubuntu_go: a 0-byte go/bin/go is damaged and replaced" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  mkdir -p "${_GO_INSTALL_ROOT}/go/bin"
+  : > "${_GO_INSTALL_ROOT}/go/bin/go"
+  /bin/chmod +x "${_GO_INSTALL_ROOT}/go/bin/go"
+  _seed_intact_go_old
+  export MOCK_MV_FAIL_ARGS=".dl."
+  run _install_ubuntu_go
+  [ "$status" -eq 1 ]
+  # The intact go.old was the restore source.
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "old" ]
+  unset MOCK_MV_FAIL_ARGS
+  rm -rf "${_GO_INSTALL_ROOT}/go"
+  mkdir -p "${_GO_INSTALL_ROOT}/go/bin"
+  : > "${_GO_INSTALL_ROOT}/go/bin/go"
+  /bin/chmod +x "${_GO_INSTALL_ROOT}/go/bin/go"
+  _go_twice_ok
+}
+
+@test "_install_ubuntu_go: a symlinked go/bin/go is damaged and replaced" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  mkdir -p "${_GO_INSTALL_ROOT}/go/bin"
+  ln -s "${BATS_TEST_TMPDIR}/gostub" "${_GO_INSTALL_ROOT}/go/bin/go"
+  _seed_intact_go_old
+  export MOCK_MV_FAIL_ARGS=".dl."
+  run _install_ubuntu_go
+  [ "$status" -eq 1 ]
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "old" ]
+  unset MOCK_MV_FAIL_ARGS
+  rm -rf "${_GO_INSTALL_ROOT}/go"
+  mkdir -p "${_GO_INSTALL_ROOT}/go/bin"
+  ln -s "${BATS_TEST_TMPDIR}/gostub" "${_GO_INSTALL_ROOT}/go/bin/go"
+  _go_twice_ok
+}
+
+@test "_install_ubuntu_go: a directory at go/bin/go is damaged and replaced" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  mkdir -p "${_GO_INSTALL_ROOT}/go/bin/go"
+  printf 'x' > "${_GO_INSTALL_ROOT}/go/bin/go/f"
+  : > "${_GO_INSTALL_ROOT}/go/bin/marker"
+  _go_probe_damaged_dropped
+  _go_twice_ok
+}
+
+@test "_install_ubuntu_go: a symlink at go to an intact tree is damaged and replaced" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  mkdir -p "${BATS_TEST_TMPDIR}/elsewhere/bin"
+  printf 'old' > "${BATS_TEST_TMPDIR}/elsewhere/bin/go"
+  /bin/chmod +x "${BATS_TEST_TMPDIR}/elsewhere/bin/go"
+  ln -s "${BATS_TEST_TMPDIR}/elsewhere" "${_GO_INSTALL_ROOT}/go"
+  _go_probe_damaged_dropped
+  _go_twice_ok
+  [ ! -L "${_GO_INSTALL_ROOT}/go" ]
+}
+
+@test "_install_ubuntu_go: a non-executable go/bin/go is damaged and replaced" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  mkdir -p "${_GO_INSTALL_ROOT}/go/bin"
+  printf 'x' > "${_GO_INSTALL_ROOT}/go/bin/go"
+  /bin/chmod -x "${_GO_INSTALL_ROOT}/go/bin/go"
+  _seed_intact_go_old
+  export MOCK_MV_FAIL_ARGS=".dl."
+  run _install_ubuntu_go
+  [ "$status" -eq 1 ]
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "old" ]
+  unset MOCK_MV_FAIL_ARGS
+  rm -rf "${_GO_INSTALL_ROOT}/go"
+  mkdir -p "${_GO_INSTALL_ROOT}/go/bin"
+  printf 'x' > "${_GO_INSTALL_ROOT}/go/bin/go"
+  /bin/chmod -x "${_GO_INSTALL_ROOT}/go/bin/go"
+  _go_twice_ok
+}
+
+@test "_install_ubuntu_go: an intact go beside a stale go.old still replaces go.old" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  _seed_go
+  mkdir -p "${_GO_INSTALL_ROOT}/go.old/bin"
+  printf 'stale' > "${_GO_INSTALL_ROOT}/go.old/bin/v"
+  run _install_ubuntu_go
+  [ "$status" -eq 0 ]
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "new" ]
+  [ ! -e "${_GO_INSTALL_ROOT}/go.old" ]
+}
+
+@test "_install_ubuntu_go: a go.old that survives its delete is never moved onto, so nothing nests" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  _seed_go
+  mkdir -p "${_GO_INSTALL_ROOT}/go.old/bin"
+  printf 'stale' > "${_GO_INSTALL_ROOT}/go.old/bin/v"
+  # An rm that leaves go.old alone, as a delete that silently did nothing would.
+  local _shim="${BATS_TEST_TMPDIR}/rmshim"
+  mkdir -p "${_shim}"
+  printf '#!/usr/bin/env bash\n[[ "$*" == *go.old* ]] && exit 0\nexec /bin/rm "$@"\n' > "${_shim}/rm"
+  /bin/chmod +x "${_shim}/rm"
+  PATH="${_shim}:${PATH}" run _install_ubuntu_go
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"go: swap failed"* ]]
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "old" ]
+  [ ! -e "${_GO_INSTALL_ROOT}/go.old/go" ]
+  refute_grep "^mv " "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_go: a failed removal of a damaged go fails the run and keeps the intact go.old" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  mkdir -p "${_GO_INSTALL_ROOT}/go"
+  printf 'damaged' > "${_GO_INSTALL_ROOT}/go/marker"
+  _seed_intact_go_old
+  # An rm that refuses exactly the damaged go and nothing else.
+  local _shim="${BATS_TEST_TMPDIR}/rmshim"
+  mkdir -p "${_shim}"
+  printf '#!/usr/bin/env bash\n[[ "$*" == "-rf %s/go" ]] && exit 1\nexec /bin/rm "$@"\n' "${_GO_INSTALL_ROOT}" > "${_shim}/rm"
+  /bin/chmod +x "${_shim}/rm"
+  PATH="${_shim}:${PATH}" run _install_ubuntu_go
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"go: swap failed"* ]]
+  # The cause, not just the stage: go.old is the only good copy and must survive.
+  [ "$(< "${_GO_INSTALL_ROOT}/go.old/bin/v")" = "old" ]
+  [ -f "${_GO_INSTALL_ROOT}/go/marker" ]
+  [ ! -e "${_DL_STAMP_DIR}/go" ]
+  refute_grep "^mv " "${MOCK_CALLS_FILE}"
+}
+
+# A mv that logs like the mock, fails any call whose argv contains $1 (a
+# substring), optionally leaving a go dir behind as a half-done move would.
+_mv_shim() {
+  local _fail="$1" _leave="${2:-}" _shim="${BATS_TEST_TMPDIR}/mvshim"
+  mkdir -p "${_shim}"
+  cat > "${_shim}/mv" << EOF
+#!/usr/bin/env bash
+printf 'mv %s\n' "\$*" >> "\${MOCK_CALLS_FILE}"
+if [[ "\$*" == *"${_fail}"* ]]; then
+  [[ -n "${_leave}" ]] && mkdir -p "${_leave}"
+  exit 1
+fi
+exec /bin/mv "\$@"
+EOF
+  /bin/chmod +x "${_shim}/mv"
+  printf '%s' "${_shim}"
+}
+
+@test "_install_ubuntu_go: an up-to-date stamp still runs the version check" {
+  _make_go_tarball
+  _go_stub 1.26.3
+  _seed_go
+  mkdir -p "${_DL_STAMP_DIR}"
+  printf '%s\n' "${GO_DOWNLOAD_URL}" > "$(_go_stamp)"
+  export GO_VER="1.27"
+  run _install_ubuntu_go
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"go: version check failed (installed 1.26.3, want 1.27)"* ]]
+  refute_grep "^wget " "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_go: restore is not attempted onto a go that exists" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  _seed_go
+  local _shim
+  _shim="$(_mv_shim ".dl." "${_GO_INSTALL_ROOT}/go")"
+  PATH="${_shim}:${PATH}" run _install_ubuntu_go
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"could not restore"* ]]
+  [[ "$output" == *"${_GO_INSTALL_ROOT}/go.old"* ]]
+  [ "$(< "${_GO_INSTALL_ROOT}/go.old/bin/v")" = "old" ]
+  # No nesting: the restore must not have moved go.old into the existing go.
+  [ ! -e "${_GO_INSTALL_ROOT}/go/go.old" ]
+  [ ! -e "$(_go_stamp)" ]
+}
+
+@test "_install_ubuntu_go: new-tree move and restore both failing keeps the old tree in go.old" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  _seed_go
+  local _shim
+  _shim="$(_mv_shim "NEVER-MATCHES")"
+  # Fail both the new-tree move and the go.old -> go restore.
+  printf '#!/usr/bin/env bash\nprintf "mv %%s\\n" "$*" >> "${MOCK_CALLS_FILE}"\n[[ "$*" == *.dl.* || "$*" == "%s/go.old %s/go" ]] && exit 1\nexec /bin/mv "$@"\n' "${_GO_INSTALL_ROOT}" "${_GO_INSTALL_ROOT}" > "${_shim}/mv"
+  PATH="${_shim}:${PATH}" run _install_ubuntu_go
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"go: install failed"* ]]
+  [[ "$output" == *"could not restore the previous tree; it is at ${_GO_INSTALL_ROOT}/go.old"* ]]
+  [ "$(< "${_GO_INSTALL_ROOT}/go.old/bin/v")" = "old" ]
+  [ ! -e "$(_go_stamp)" ]
+}
+
+@test "_install_ubuntu_go: an unwritable stamp warns and still succeeds" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  printf 'file' > "${BATS_TEST_TMPDIR}/not-a-dir"
+  export _DL_STAMP_DIR="${BATS_TEST_TMPDIR}/not-a-dir/stamps"
+  run _install_ubuntu_go
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"go: could not write stamp"* ]]
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "new" ]
 }
 
 # ── _install_ubuntu_rust ─────────────────────────────────────────────────────
@@ -1170,38 +1988,43 @@ exit 0'
 
 # ── _install_go_from_tarball ──────────────────────────────────────────────────
 
-@test "_install_go_from_tarball: moves software_downloads/go to /usr/local/go when present" {
-  export GO_VER="1.26"
-  export GO_DOWNLOAD_FILENAME="go1.26.linux-amd64.tar.gz"
-  export GO_DOWNLOAD_URL="https://dl.google.com/go/go1.26.linux-amd64.tar.gz"
-  mkdir -p "${HOME}/software_downloads/go"
-  export MOCK_SUDO_EXIT=1
+@test "_install_go_from_tarball: moves the extracted tree into the install root" {
+  _make_go_tarball
   run _install_go_from_tarball
   [ "$status" -eq 0 ]
-  grep -q "sudo mv.*software_downloads/go" "${MOCK_CALLS_FILE}"
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "new" ]
+  grep -q "^mv .*/go ${_GO_INSTALL_ROOT}/go\$" "${MOCK_CALLS_FILE}"
 }
 
-@test "_install_go_from_tarball: wget failure returns non-zero and does not call sudo rm -rf" {
-  export GO_VER="1.27"
-  export GO_DOWNLOAD_FILENAME="go1.27.1.linux-amd64.tar.gz"
-  export GO_DOWNLOAD_URL="https://go.dev/dl/go1.27.1.linux-amd64.tar.gz"
+@test "_install_go_from_tarball: wget failure returns non-zero and leaves the installed tree" {
+  _seed_go
   export MOCK_WGET_EXIT=1
   run _install_go_from_tarball
   [ "$status" -ne 0 ]
-  ! grep -qF "sudo rm -rf /usr/local/go" "${MOCK_CALLS_FILE}"
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "old" ]
+  refute_grep "^mv " "${MOCK_CALLS_FILE}"
 }
 
-@test "_install_go_from_tarball: tar failure returns non-zero and does not call sudo rm -rf" {
-  export GO_VER="1.27"
-  export GO_DOWNLOAD_FILENAME="go1.27.1.linux-amd64.tar.gz"
-  export GO_DOWNLOAD_URL="https://go.dev/dl/go1.27.1.linux-amd64.tar.gz"
+@test "_install_go_from_tarball: tar failure returns non-zero and leaves the installed tree" {
+  _seed_go
+  # The recording tar mock, not the real one the setup seam selects.
+  unset _DL_TAR_BIN
   export MOCK_TAR_EXIT=1
   run _install_go_from_tarball
   [ "$status" -ne 0 ]
-  ! grep -qF "sudo rm -rf /usr/local/go" "${MOCK_CALLS_FILE}"
+  grep -q "^tar " "${MOCK_CALLS_FILE}"
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "old" ]
+  refute_grep "^mv " "${MOCK_CALLS_FILE}"
 }
 
 # ── _install_ubuntu_docker ───────────────────────────────────────────────────
+
+# The binary keyring needs a non-empty fetched body to count as a key.
+_docker_fetch_ok() {
+  export MOCK_CURL_STDOUT="docker-key-body"
+  export _DOCKER_DAEMON_JSON="${BATS_TEST_TMPDIR}/daemon.json"
+  printf '{"existing": "config"}\n' > "${_DOCKER_DAEMON_JSON}"
+}
 
 @test "_install_ubuntu_docker: HAS_DOCKER unset does nothing" {
   unset HAS_DOCKER
@@ -1212,6 +2035,7 @@ exit 0'
 
 @test "_install_ubuntu_docker: HAS_DOCKER set installs docker-ce" {
   export HAS_DOCKER=1
+  MOCK_CURL_STDOUT="docker-key-body"; export MOCK_CURL_STDOUT
   # Both seams, even though this test is about the apt call. Unseamed,
   # _daemon_json falls back to the REAL /etc/docker/daemon.json — and since
   # `tee` is a pass-through mock and tests/mocks/sudo execs a resolvable
@@ -1234,6 +2058,7 @@ exit 0'
 
 @test "_install_ubuntu_docker: writes daemon.json when absent" {
   export HAS_DOCKER=1
+  MOCK_CURL_STDOUT="docker-key-body"; export MOCK_CURL_STDOUT
   export _DOCKER_DAEMON_JSON="${BATS_TEST_TMPDIR}/daemon.json"
   # Seam the validator even though this test is about the written CONTENT.
   # ubuntu-latest has docker installed, so an unseamed run would resolve the
@@ -1275,6 +2100,7 @@ exit 0'
 
 @test "_install_ubuntu_docker: skips daemon.json when already exists" {
   export HAS_DOCKER=1
+  MOCK_CURL_STDOUT="docker-key-body"; export MOCK_CURL_STDOUT
   export _DOCKER_DAEMON_JSON="${BATS_TEST_TMPDIR}/daemon.json"
   printf '{"existing": "config"}\n' > "${_DOCKER_DAEMON_JSON}"
   run _install_ubuntu_docker
@@ -1319,6 +2145,7 @@ STUB
 # than skipping the branch entirely.
 @test "_install_ubuntu_docker: succeeds when the written daemon.json validates" {
   export HAS_DOCKER=1
+  MOCK_CURL_STDOUT="docker-key-body"; export MOCK_CURL_STDOUT
   export _DOCKER_DAEMON_JSON="${BATS_TEST_TMPDIR}/daemon.json"
   local _stub="${BATS_TEST_TMPDIR}/dockerd-accept"
   cat > "${_stub}" << 'STUB'
@@ -1334,73 +2161,413 @@ STUB
   python3 -c "import json,sys; json.load(open(sys.argv[1]))" "${_DOCKER_DAEMON_JSON}"
 }
 
-# ── _install_ubuntu_k8s_tools ────────────────────────────────────────────────
+# ── docker: rc 3 core / rc 1 other, and the dispatcher's nvidia skip ─────────
 
-@test "_install_ubuntu_k8s_tools: HAS_K8S calls wget for kind" {
-  export HAS_K8S=1
-  export KIND_VER="0.22.0"
-  export KIND_URL="https://kind.sigs.k8s.io/dl/v0.22.0/kind-linux-amd64"
-  export KUBERNETES_VER="v1.29"
-  export TELEPRESENCE_URL="https://app.getambassador.io/download/tel2/linux/amd64/latest/telepresence"
-  unset HAS_SNAP
-  run _install_ubuntu_k8s_tools
+@test "_install_ubuntu_docker: clean run returns 0 and installs the keyring and source list" {
+  export HAS_DOCKER=1
+  _docker_fetch_ok
+  run _install_ubuntu_docker
   [ "$status" -eq 0 ]
-  grep -q "wget.*kind" "${MOCK_CALLS_FILE}"
+  [ "$(cat "${_DOCKER_KEYRING}")" = "docker-key-body" ]
+  grep -q "signed-by=${_DOCKER_KEYRING}" "${_DOCKER_SOURCES_LIST}"
+  grep -q "apt install docker-ce" "${MOCK_CALLS_FILE}"
+  grep -q "usermod -a -G docker bruce" "${MOCK_CALLS_FILE}"
 }
 
-@test "_install_ubuntu_k8s_tools: HAS_K8S skips kind wget when already downloaded" {
+@test "_install_ubuntu_docker: a failed docker-ce install returns 3 and later installs still run" {
+  export HAS_DOCKER=1
+  _docker_fetch_ok
+  export SHIM_APT_FAIL_PKGS="docker-ce"
+  run --separate-stderr _install_ubuntu_docker
+  [ "$status" -eq 3 ]
+  [[ "$stderr" == *"docker: docker-ce: install failed"* ]]
+  grep -q "docker-compose-plugin" "${MOCK_CALLS_FILE}"
+  grep -q "usermod" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_docker: a failed containerd.io install is core, rc 3" {
+  export HAS_DOCKER=1
+  _docker_fetch_ok
+  export SHIM_APT_FAIL_PKGS="containerd.io"
+  run _install_ubuntu_docker
+  [ "$status" -eq 3 ]
+}
+
+@test "_install_ubuntu_docker: a daemon.json that does not validate returns 3" {
+  export HAS_DOCKER=1
+  _docker_fetch_ok
+  rm -f "${_DOCKER_DAEMON_JSON}"
+  local _stub="${BATS_TEST_TMPDIR}/dockerd-reject-core"
+  printf '#!/usr/bin/env bash\nexit 1\n' > "${_stub}"
+  chmod +x "${_stub}"
+  export _DOCKER_VALIDATE_BIN="${_stub}"
+  run _install_ubuntu_docker
+  [ "$status" -eq 3 ]
+}
+
+@test "_install_ubuntu_docker: a failed plugin install returns 1 and the other plugin is still tried" {
+  export HAS_DOCKER=1
+  _docker_fetch_ok
+  export SHIM_APT_FAIL_PKGS="docker-buildx-plugin"
+  run --separate-stderr _install_ubuntu_docker
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"docker: docker-buildx-plugin: install failed"* ]]
+  grep -q "apt install docker-compose-plugin" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_docker: a failed keyring fetch returns 1 and the core installs still run" {
+  export HAS_DOCKER=1
+  _docker_fetch_ok
+  export MOCK_CURL_FAIL_URL="download.docker.com"
+  run --separate-stderr _install_ubuntu_docker
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"docker: keyring: install failed"* ]]
+  # Positive control: the fetch was attempted, so absence below is a failure, not a skip.
+  grep -q "curl .*download.docker.com" "${MOCK_CALLS_FILE}"
+  [ ! -e "${_DOCKER_KEYRING}" ]
+  grep -q "apt install docker-ce " "${MOCK_CALLS_FILE}"
+  grep -q "apt install containerd.io" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_docker: a failed keyring fetch with no existing keyring writes no source list" {
+  export HAS_DOCKER=1
+  _docker_fetch_ok
+  export MOCK_CURL_FAIL_URL="download.docker.com"
+  run --separate-stderr _install_ubuntu_docker
+  # Core installs succeed here (the apt shim), so rc 1 is the keyring alone.
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"docker: keyring: install failed"* ]]
+  [[ "$stderr" == *"docker: source list: source write skipped (no keyring)"* ]]
+  [ ! -e "${_DOCKER_KEYRING}" ]
+  [ ! -e "${_DOCKER_SOURCES_LIST}" ]
+  grep -q "apt install docker-ce " "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_docker: a failed keyring fetch over an existing keyring still writes the source list" {
+  export HAS_DOCKER=1
+  _docker_fetch_ok
+  mkdir -p "$(dirname "${_DOCKER_KEYRING}")"
+  printf 'previous-key' > "${_DOCKER_KEYRING}"
+  export MOCK_CURL_FAIL_URL="download.docker.com"
+  run --separate-stderr _install_ubuntu_docker
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"docker: keyring: install failed"* ]]
+  [ "$(cat "${_DOCKER_KEYRING}")" = "previous-key" ]
+  grep -q "signed-by=${_DOCKER_KEYRING}" "${_DOCKER_SOURCES_LIST}"
+}
+
+@test "_install_ubuntu_docker: a failed usermod returns 1" {
+  export HAS_DOCKER=1
+  _docker_fetch_ok
+  export SHIM_USERMOD_EXIT=1
+  run --separate-stderr _install_ubuntu_docker
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"docker: usermod: group add failed"* ]]
+  grep -q "usermod" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_docker: a failed source list write returns 1 and the installs still run" {
+  export HAS_DOCKER=1
+  _docker_fetch_ok
+  # tests/mocks/tee swallows real write errors; MOCK_TEE_EXIT is its failure knob.
+  export MOCK_TEE_EXIT=1
+  run --separate-stderr _install_ubuntu_docker
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"docker: source list: source list write failed"* ]]
+  grep -q "^tee ${_DOCKER_SOURCES_LIST}" "${MOCK_CALLS_FILE}"
+  grep -q "apt install docker-ce " "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_docker: a failed docker-ce-cli install is core, rc 3" {
+  export HAS_DOCKER=1
+  _docker_fetch_ok
+  export SHIM_APT_FAIL_PKGS="docker-ce-cli"
+  run _install_ubuntu_docker
+  [ "$status" -eq 3 ]
+}
+
+@test "_install_ubuntu_docker: a failed apt update is not a failure" {
+  export HAS_DOCKER=1
+  _docker_fetch_ok
+  export SHIM_APT_FAIL_PKGS="update"
+  run _install_ubuntu_docker
+  [ "$status" -eq 0 ]
+  # Positive control: update really failed, and the installs still ran.
+  grep -q "^apt update" "${MOCK_CALLS_FILE}"
+  grep -q "apt install docker-ce " "${MOCK_CALLS_FILE}"
+  grep -q "apt install containerd.io" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_docker: a failed daemon.json write with no validator is rc 1, not core" {
+  export HAS_DOCKER=1
+  _docker_fetch_ok
+  rm -f "${_DOCKER_DAEMON_JSON}"
+  export MOCK_TEE_EXIT=1
+  export _DOCKER_VALIDATE_BIN="/nonexistent/dockerd"
+  run --separate-stderr _install_ubuntu_docker
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"docker: daemon.json: write failed"* ]]
+  # Positive control: both writes failed (list and daemon.json), only core would be 3.
+  grep -q "^tee ${_DOCKER_DAEMON_JSON}" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_docker: a keyring failure plus a core failure returns 3 and names both" {
+  export HAS_DOCKER=1
+  _docker_fetch_ok
+  export MOCK_CURL_FAIL_URL="download.docker.com"
+  export SHIM_APT_FAIL_PKGS="docker-ce"
+  run --separate-stderr _install_ubuntu_docker
+  [ "$status" -eq 3 ]
+  [[ "$stderr" == *"docker: keyring: install failed"* ]]
+  [[ "$stderr" == *"docker: docker-ce: install failed"* ]]
+}
+
+@test "_install_ubuntu_docker: removes a legacy docker.gpg beside the keyring" {
+  export HAS_DOCKER=1
+  _docker_fetch_ok
+  mkdir -p "$(dirname "${_DOCKER_KEYRING}")"
+  printf 'legacy' > "$(dirname "${_DOCKER_KEYRING}")/docker.gpg"
+  run _install_ubuntu_docker
+  [ "$status" -eq 0 ]
+  [ ! -e "$(dirname "${_DOCKER_KEYRING}")/docker.gpg" ]
+}
+
+_stub_all_steps_but_docker() {
+  local _s
+  for _s in workstation powershell go nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
+    eval "_install_ubuntu_${_s}() { printf 'ran ${_s}\\n' >> \"\${MOCK_CALLS_FILE}\"; }"
+  done
+  _install_ubuntu_base_packages() { return 0; }
+}
+
+@test "install_ubuntu_packages: docker core failure skips nvidia and names both" {
+  _stub_all_steps_but_docker
+  export HAS_DOCKER=1
+  _docker_fetch_ok
+  export SHIM_APT_FAIL_PKGS="docker-ce"
+  run --separate-stderr install_ubuntu_packages
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"skipping nvidia because docker failed"* ]]
+  [[ "$stderr" == *"ubuntu packages: failed: docker nvidia"* ]]
+  refute_grep '^ran nvidia' "${MOCK_CALLS_FILE}"
+  # Positive control: later steps ran, so nvidia's absence is the skip.
+  grep -q '^ran k8s_tools' "${MOCK_CALLS_FILE}"
+}
+
+@test "install_ubuntu_packages: a docker plugin failure is named but nvidia still runs" {
+  _stub_all_steps_but_docker
+  export HAS_DOCKER=1
+  _docker_fetch_ok
+  export SHIM_APT_FAIL_PKGS="docker-buildx-plugin"
+  run --separate-stderr install_ubuntu_packages
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"ubuntu packages: failed: docker"* ]]
+  [[ "$stderr" != *"skipping nvidia"* ]]
+  grep -q '^ran nvidia' "${MOCK_CALLS_FILE}"
+}
+
+# ── nvidia: keyring and list fetched safely ──────────────────────────────────
+
+_nvidia_seams() {
+  export _OVERRIDE_NVIDIA_GPU_PRESENT=0
+  export _OVERRIDE_NVIDIA_KEYRING="${BATS_TEST_TMPDIR}/nvidia-keyring.gpg"
+  export _OVERRIDE_NVIDIA_LIST="${BATS_TEST_TMPDIR}/nvidia-container-toolkit.list"
+  export _OVERRIDE_DOCKER_DAEMON_JSON="${BATS_TEST_TMPDIR}/nvidia-daemon.json"
+}
+
+@test "_install_ubuntu_nvidia: a failed list fetch returns 1 and leaves the list untouched" {
+  _nvidia_seams
+  export MOCK_CURL_FAIL_URL="stable/deb/nvidia-container-toolkit.list"
+  run --separate-stderr _install_ubuntu_nvidia
+  [ "$status" -eq 1 ]
+  # Positive control: the list fetch was attempted.
+  grep -q "curl .*nvidia-container-toolkit.list" "${MOCK_CALLS_FILE}"
+  [ ! -e "${_OVERRIDE_NVIDIA_LIST}" ]
+  [ -z "$(ls -A "${_APT_KEY_TMP_ROOT}")" ]
+}
+
+@test "_install_ubuntu_nvidia: a successful list fetch writes a signed-by list and leaves no tmp dir" {
+  _nvidia_seams
+  export MOCK_CURL_STDOUT="deb https://nvidia.github.io/libnvidia-container/stable/deb/\$(ARCH) /"
+  run _install_ubuntu_nvidia
+  [ "$status" -eq 0 ]
+  grep -q "signed-by=${_OVERRIDE_NVIDIA_KEYRING}" "${_OVERRIDE_NVIDIA_LIST}"
+  [ -z "$(ls -A "${_APT_KEY_TMP_ROOT}")" ]
+}
+
+@test "_install_ubuntu_nvidia: a failed keyring fetch returns 1 and creates no keyring or list" {
+  _nvidia_seams
+  export MOCK_CURL_FAIL_URL="libnvidia-container/gpgkey"
+  run _install_ubuntu_nvidia
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"nvidia: keyring: install failed"* ]]
+  grep -q "curl .*gpgkey" "${MOCK_CALLS_FILE}"
+  [ ! -e "${_OVERRIDE_NVIDIA_KEYRING}" ]
+  [ ! -e "${_OVERRIDE_NVIDIA_LIST}" ]
+}
+
+# ── _install_ubuntu_k8s_tools ────────────────────────────────────────────────
+
+# kind and telepresence go through _install_fetched_binary (a plain file as the
+# download); telepresence resolves its "latest" link first, so curl's stdout must
+# name a different URL. The same curl stdout is the kubectl key body.
+_k8s_env() {
   export HAS_K8S=1
   export KIND_VER="0.22.0"
-  export KIND_URL="https://kind.sigs.k8s.io/dl/v0.22.0/kind-linux-amd64"
+  export KIND_URL="https://kind.example/dl/kind-linux-amd64"
   export KUBERNETES_VER="v1.29"
-  export TELEPRESENCE_URL="https://app.getambassador.io/download/tel2/linux/amd64/latest/telepresence"
-  touch "${HOME}/software_downloads/kind_0.22.0"
+  export TELEPRESENCE_URL="https://tp.example/latest/telepresence"
   unset HAS_SNAP
+  export MOCK_CURL_STDOUT="https://resolved.example/telepresence-2.20"
+  printf 'binary-body' > "${BATS_TEST_TMPDIR}/blob"
+  export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/blob"
+}
+
+@test "_install_ubuntu_k8s_tools: clean run returns 0 and installs kind, telepresence and the kubectl source" {
+  _k8s_env
   run _install_ubuntu_k8s_tools
   [ "$status" -eq 0 ]
-  ! grep -q "wget.*kind_0.22.0" "${MOCK_CALLS_FILE}"
+  [ -x "${_DL_BIN_DIR}/kind" ]
+  [ -x "${_DL_BIN_DIR}/telepresence" ]
+  [ -f "${_DL_STAMP_DIR}/kind" ]
+  [ -s "${_APT_KEYRINGS_DIR}/kubernetes-apt-keyring.gpg" ]
+  grep -q "signed-by=${_APT_KEYRINGS_DIR}/kubernetes-apt-keyring.gpg" "${_APT_SOURCES_DIR}/kubernetes.list"
+  grep -q "apt install kubectl" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_k8s_tools: a stamped, installed kind is not fetched again" {
+  _k8s_env
+  mkdir -p "${_DL_STAMP_DIR}"
+  printf '%s\n' "${KIND_URL}" > "${_DL_STAMP_DIR}/kind"
+  printf 'old' > "${_DL_BIN_DIR}/kind"
+  chmod 0755 "${_DL_BIN_DIR}/kind"
+  run _install_ubuntu_k8s_tools
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"kind: up to date"* ]]
+  refute_grep "wget .*kind.example" "${MOCK_CALLS_FILE}"
+  grep -q "wget .*resolved.example" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_k8s_tools: a failed kind download returns 1, names kind and leaves telepresence installed" {
+  _k8s_env
+  export MOCK_WGET_FAIL_URL="kind.example"
+  printf 'old' > "${_DL_BIN_DIR}/kind"
+  chmod 0755 "${_DL_BIN_DIR}/kind"
+  run --separate-stderr _install_ubuntu_k8s_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"k8s_tools: kind:"* ]]
+  # Positive control: the kind fetch was really attempted.
+  grep -q "wget .*kind.example" "${MOCK_CALLS_FILE}"
+  [ "$(cat "${_DL_BIN_DIR}/kind")" = "old" ]
+  [ ! -e "${_DL_STAMP_DIR}/kind" ]
+  [ -z "$(find "${_DL_TMP_ROOT}" -mindepth 1)" ]
+  # Sibling still ran.
+  [ -x "${_DL_BIN_DIR}/telepresence" ]
+  [ -f "${_DL_STAMP_DIR}/telepresence" ]
+}
+
+@test "_install_ubuntu_k8s_tools: a failed telepresence resolve returns 1, names telepresence and leaves kind installed" {
+  _k8s_env
+  export MOCK_CURL_FAIL_URL="tp.example"
+  run --separate-stderr _install_ubuntu_k8s_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"k8s_tools: telepresence:"* ]]
+  # Positive control: the resolve was really attempted.
+  grep -q "curl .*tp.example" "${MOCK_CALLS_FILE}"
+  [ ! -e "${_DL_BIN_DIR}/telepresence" ]
+  [ ! -e "${_DL_STAMP_DIR}/telepresence" ]
+  [ -x "${_DL_BIN_DIR}/kind" ]
+  [ -f "${_DL_STAMP_DIR}/kind" ]
 }
 
 @test "_install_ubuntu_k8s_tools: no HAS_K8S skips kind and telepresence" {
-  unset HAS_K8S HAS_SNAP
-  export KUBERNETES_VER="v1.29"
+  _k8s_env
+  unset HAS_K8S
   run _install_ubuntu_k8s_tools
   [ "$status" -eq 0 ]
-  ! grep -q "wget.*kind" "${MOCK_CALLS_FILE}"
+  refute_grep "wget" "${MOCK_CALLS_FILE}"
+  [ ! -e "${_DL_BIN_DIR}/kind" ]
 }
 
 @test "_install_ubuntu_k8s_tools: removes stale helm-stable-debian.list before apt update" {
   # baltocdn sources.list.d file written by pre-PR#155 runs must be purged so
   # apt-get update does not hit the NOSPLIT/unsigned repo on subsequent runs.
-  unset HAS_SNAP HAS_K8S
-  export KUBERNETES_VER="v1.29"
+  _k8s_env
+  unset HAS_K8S
+  printf 'stale\n' > "${_APT_SOURCES_DIR}/helm-stable-debian.list"
   run _install_ubuntu_k8s_tools
   [ "$status" -eq 0 ]
-  run grep -q "rm.*helm-stable-debian.list" "${MOCK_CALLS_FILE}"
-  [ "$status" -eq 0 ]
+  [ ! -e "${_APT_SOURCES_DIR}/helm-stable-debian.list" ]
 }
 
 @test "_install_ubuntu_k8s_tools: HAS_SNAP installs helm via snap" {
+  _k8s_env
   export HAS_SNAP=1
-  export HAS_K8S=1
-  export KIND_VER="0.22.0"
-  export KIND_URL="https://kind.sigs.k8s.io/dl/v0.22.0/kind-linux-amd64"
-  export KUBERNETES_VER="v1.29"
-  export TELEPRESENCE_URL="https://app.getambassador.io/download/tel2/linux/amd64/latest/telepresence"
   run _install_ubuntu_k8s_tools
   [ "$status" -eq 0 ]
   grep -q "snap install helm" "${MOCK_CALLS_FILE}"
 }
 
+@test "_install_ubuntu_k8s_tools: a failed helm snap install returns 1 and kubectl is still installed" {
+  _k8s_env
+  export HAS_SNAP=1
+  export MOCK_SNAP_EXIT=1
+  run --separate-stderr _install_ubuntu_k8s_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"k8s_tools: helm:"* ]]
+  grep -q "snap install helm" "${MOCK_CALLS_FILE}"
+  grep -q "apt install kubectl" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_k8s_tools: a failed kubectl keyring fetch returns 1 and the kubectl install is still attempted" {
+  _k8s_env
+  export MOCK_CURL_FAIL_URL="pkgs.k8s.io"
+  printf 'old' > "${_APT_KEYRINGS_DIR}/kubernetes-apt-keyring.gpg"
+  run --separate-stderr _install_ubuntu_k8s_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"k8s_tools: kubectl: keyring"* ]]
+  grep -q "curl .*pkgs.k8s.io" "${MOCK_CALLS_FILE}"
+  grep -q "apt install kubectl" "${MOCK_CALLS_FILE}"
+  [ "$(cat "${_APT_KEYRINGS_DIR}/kubernetes-apt-keyring.gpg")" = "old" ]
+  [ -z "$(find "${_DL_TMP_ROOT}" -mindepth 1)" ]
+  # An existing non-empty keyring still backs a source list.
+  [ -f "${_APT_SOURCES_DIR}/kubernetes.list" ]
+}
+
+@test "_install_ubuntu_k8s_tools: a failed keyring fetch with no keyring writes no source list" {
+  _k8s_env
+  export MOCK_CURL_FAIL_URL="pkgs.k8s.io"
+  run --separate-stderr _install_ubuntu_k8s_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"k8s_tools: kubectl: source write skipped (no keyring)"* ]]
+  [ ! -e "${_APT_SOURCES_DIR}/kubernetes.list" ]
+  grep -q "apt install kubectl" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_k8s_tools: a failed kubectl source list write returns 1" {
+  _k8s_env
+  export MOCK_TEE_EXIT=1
+  run --separate-stderr _install_ubuntu_k8s_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"k8s_tools: kubectl: source list"* ]]
+  # Positive control: the write was really attempted.
+  grep -q "tee .*kubernetes.list" "${MOCK_CALLS_FILE}"
+  grep -q "apt install kubectl" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_k8s_tools: a failed kubectl apt install returns 1" {
+  _k8s_env
+  export MOCK_APT_FAIL_SUBCMD=install
+  run --separate-stderr _install_ubuntu_k8s_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"k8s_tools: kubectl: install failed"* ]]
+  grep -q "apt install kubectl" "${MOCK_CALLS_FILE}"
+}
+
 @test "_install_ubuntu_k8s_tools: does not call get-helm-3 curl installer" {
   # helm curl installer removed; brew handles the no-snap case via
   # _install_ubuntu_brew_packages.
-  unset HAS_SNAP
-  export HAS_K8S=1
-  export KIND_VER="0.22.0"
-  export KIND_URL="https://kind.sigs.k8s.io/dl/v0.22.0/kind-linux-amd64"
-  export KUBERNETES_VER="v1.29"
-  export TELEPRESENCE_URL="https://app.getambassador.io/download/tel2/linux/amd64/latest/telepresence"
+  _k8s_env
   run _install_ubuntu_k8s_tools
   [ "$status" -eq 0 ]
   run grep "get-helm-3" "${MOCK_CALLS_FILE}"
@@ -1410,11 +2577,7 @@ STUB
 @test "_install_ubuntu_k8s_tools: does not call install_kustomize curl installer" {
   # kustomize curl installer removed; brew handles it via
   # _install_ubuntu_brew_packages.
-  export HAS_K8S=1
-  export KIND_VER="0.22.0"
-  export KIND_URL="https://kind.sigs.k8s.io/dl/v0.22.0/kind-linux-amd64"
-  export KUBERNETES_VER="v1.29"
-  export TELEPRESENCE_URL="https://app.getambassador.io/download/tel2/linux/amd64/latest/telepresence"
+  _k8s_env
   run _install_ubuntu_k8s_tools
   [ "$status" -eq 0 ]
   run grep "install_kustomize.sh" "${MOCK_CALLS_FILE}"
@@ -1435,38 +2598,77 @@ STUB
 
 # ── _install_ubuntu_hashicorp ────────────────────────────────────────────────
 
-@test "_install_ubuntu_hashicorp: calls wget for consul when dir does not exist" {
+# One real zip holding all five members serves every download.
+_hc_env() {
   export CONSUL_VER="1.17.0"
   export VAULT_VER="1.15.0"
   export NOMAD_VER="1.7.0"
   export PACKER_VER="1.10.0"
   export VAGRANT_VER="2.4.0"
   export HASHICORP_URL="https://releases.hashicorp.com"
+  local _src="${BATS_TEST_TMPDIR}/hc-src" _t
+  mkdir -p "${_src}"
+  for _t in consul vault nomad packer vagrant; do
+    printf '%s-body' "${_t}" > "${_src}/${_t}"
+  done
+  (cd "${_src}" && "${_ZIP_BIN}" -q "${BATS_TEST_TMPDIR}/hc.zip" consul vault nomad packer vagrant)
+  export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/hc.zip"
+}
+
+@test "_install_ubuntu_hashicorp: clean run returns 0 and installs all five tools" {
+  _hc_env
+  run _install_ubuntu_hashicorp
+  [ "$status" -eq 0 ]
+  local _t
+  for _t in consul vault nomad packer vagrant; do
+    [ -x "${_DL_BIN_DIR}/${_t}" ]
+    [ -f "${_DL_STAMP_DIR}/${_t}" ]
+  done
+}
+
+@test "_install_ubuntu_hashicorp: calls wget for consul when not stamped" {
+  _hc_env
   run _install_ubuntu_hashicorp
   [ "$status" -eq 0 ]
   grep -q "wget.*consul" "${MOCK_CALLS_FILE}"
 }
 
-@test "_install_ubuntu_hashicorp: skips consul wget when dir already exists" {
-  export CONSUL_VER="1.17.0"
-  export VAULT_VER="1.15.0"
-  export NOMAD_VER="1.7.0"
-  export PACKER_VER="1.10.0"
-  export VAGRANT_VER="2.4.0"
-  export HASHICORP_URL="https://releases.hashicorp.com"
-  mkdir -p "${HOME}/software_downloads/consul_1.17.0"
+@test "_install_ubuntu_hashicorp: a stamped, installed consul is not fetched again" {
+  _hc_env
+  mkdir -p "${_DL_STAMP_DIR}"
+  printf '%s\n' "${HASHICORP_URL}/consul/1.17.0/consul_1.17.0_linux_${_LINUX_ARCH}.zip" > "${_DL_STAMP_DIR}/consul"
+  printf 'old' > "${_DL_BIN_DIR}/consul"
+  chmod 0755 "${_DL_BIN_DIR}/consul"
   run _install_ubuntu_hashicorp
   [ "$status" -eq 0 ]
-  ! grep -q "wget.*consul_1.17.0" "${MOCK_CALLS_FILE}"
+  [[ "$output" == *"consul: up to date"* ]]
+  refute_grep "wget .*consul_1.17.0" "${MOCK_CALLS_FILE}"
+  grep -q "wget .*vault" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_hashicorp: a failed consul download returns 1, names consul and still installs vault" {
+  _hc_env
+  export MOCK_WGET_FAIL_URL="consul/"
+  printf 'old' > "${_DL_BIN_DIR}/consul"
+  chmod 0755 "${_DL_BIN_DIR}/consul"
+  run --separate-stderr _install_ubuntu_hashicorp
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"hashicorp: consul:"* ]]
+  grep -q "wget .*consul/" "${MOCK_CALLS_FILE}"
+  [ "$(cat "${_DL_BIN_DIR}/consul")" = "old" ]
+  [ -z "$(find "${_DL_TMP_ROOT}" -mindepth 1)" ]
+  [ ! -e "${_DL_STAMP_DIR}/consul" ]
+  [ -x "${_DL_BIN_DIR}/vault" ]
+  [ -f "${_DL_STAMP_DIR}/vault" ]
 }
 
 @test "_install_ubuntu_hashicorp: uses _LINUX_ARCH in consul URL (arm64)" {
+  _hc_env
   export CONSUL_VER="2.0.0"
   export VAULT_VER="2.0.2"
   export NOMAD_VER="2.0.3"
   export PACKER_VER="1.15.4"
   export VAGRANT_VER="2.4.9"
-  export HASHICORP_URL="https://releases.hashicorp.com"
   export _LINUX_ARCH="arm64"
   run _install_ubuntu_hashicorp
   [ "$status" -eq 0 ]
@@ -1474,12 +2676,12 @@ STUB
 }
 
 @test "_install_ubuntu_hashicorp: vagrant always uses amd64 regardless of _LINUX_ARCH" {
+  _hc_env
   export CONSUL_VER="2.0.0"
   export VAULT_VER="2.0.2"
   export NOMAD_VER="2.0.3"
   export PACKER_VER="1.15.4"
   export VAGRANT_VER="2.4.9"
-  export HASHICORP_URL="https://releases.hashicorp.com"
   export _LINUX_ARCH="arm64"
   run _install_ubuntu_hashicorp
   [ "$status" -eq 0 ]
@@ -1488,9 +2690,30 @@ STUB
 
 # ── _install_ubuntu_cloud_tools ──────────────────────────────────────────────
 
+# cf-terraforming arrives as a tarball holding the binary; _install_fetched_binary
+# fetches it through the wget mock, which copies MOCK_WGET_FILE to the -O target.
+_cf_tarball() {
+  mkdir -p "${BATS_TEST_TMPDIR}/cfsrc"
+  printf 'cf-body' > "${BATS_TEST_TMPDIR}/cfsrc/cf-terraforming"
+  chmod 0755 "${BATS_TEST_TMPDIR}/cfsrc/cf-terraforming"
+  "${_DL_TAR_BIN}" -czf "${BATS_TEST_TMPDIR}/cf.tgz" -C "${BATS_TEST_TMPDIR}/cfsrc" cf-terraforming
+  export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/cf.tgz"
+}
+
+# HAS_DEVTOOLS cloud_tools run with a good cf-terraforming tarball and a URL
+# naming its version; everything else is seamed by setup().
+_cloud_env() {
+  export HAS_DEVTOOLS=1
+  export CF_TERRAFORMING_VER="0.13.0"
+  export CF_TERRAFORMING_URL="https://cf.example/dl/cf-terraforming_0.13.0_linux_amd64.tar.gz"
+  unset RESOLUTE
+  _cf_tarball
+}
+
 @test "_install_ubuntu_cloud_tools: installs google-cloud-cli packages, not retired google-cloud-sdk names" {
   export CF_TERRAFORMING_VER="0.13.0"
   export CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v0.13.0/cf-terraforming_0.13.0_linux_amd64.tar.gz"
+  _cf_tarball
   unset HAS_DEVTOOLS
   run _install_ubuntu_cloud_tools
   [ "$status" -eq 0 ]
@@ -1503,6 +2726,7 @@ STUB
   export HAS_DEVTOOLS=1
   export CF_TERRAFORMING_VER="0.13.0"
   export CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v0.13.0/cf-terraforming_0.13.0_linux_amd64.tar.gz"
+  _cf_tarball
   run _install_ubuntu_cloud_tools
   [ "$status" -eq 0 ]
   grep -q "apt install teleport" "${MOCK_CALLS_FILE}"
@@ -1512,6 +2736,7 @@ STUB
   unset HAS_DEVTOOLS
   export CF_TERRAFORMING_VER="0.13.0"
   export CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v0.13.0/cf-terraforming_0.13.0_linux_amd64.tar.gz"
+  _cf_tarball
   run _install_ubuntu_cloud_tools
   [ "$status" -eq 0 ]
   ! grep -q "apt install teleport" "${MOCK_CALLS_FILE}"
@@ -1520,6 +2745,7 @@ STUB
 @test "_install_ubuntu_cloud_tools: cf-terraforming filename uses _LINUX_ARCH" {
   export CF_TERRAFORMING_VER="0.27.0"
   export CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v0.27.0/cf-terraforming_0.27.0_linux_arm64.tar.gz"
+  _cf_tarball
   export _LINUX_ARCH="arm64"
   unset HAS_DEVTOOLS
   run _install_ubuntu_cloud_tools
@@ -1532,6 +2758,7 @@ STUB
   export HAS_DEVTOOLS=1
   export CF_TERRAFORMING_VER="0.27.0"
   export CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v0.27.0/cf-terraforming_0.27.0_linux_amd64.tar.gz"
+  _cf_tarball
   export _CF_SOURCES_LIST="${BATS_TEST_TMPDIR}/cloudflare.list"
   run _install_ubuntu_cloud_tools
   [ "$status" -eq 0 ]
@@ -1540,11 +2767,142 @@ STUB
   [ "$status" -ne 0 ]
 }
 
+@test "_install_ubuntu_cloud_tools: clean run returns 0, writes the source lists and installs cf-terraforming" {
+  _cloud_env
+  run _install_ubuntu_cloud_tools
+  [ "$status" -eq 0 ]
+  grep -q "signed-by=${_APT_KEYRINGS_DIR}/teleport-pubkey.gpg" "${_APT_SOURCES_DIR}/teleport.list"
+  grep -q "signed-by=${_APT_KEYRINGS_DIR}/cloudflare-warp-archive-keyring.gpg" "${_APT_SOURCES_DIR}/cloudflare-client.list"
+  grep -q "signed-by=${_APT_KEYRINGS_DIR}/cloud.google.gpg" "${_APT_SOURCES_DIR}/google-cloud-sdk.list"
+  [ "$(cat "${_DL_BIN_DIR}/cf-terraforming")" = "cf-body" ]
+  [ "$(cat "${_DL_STAMP_DIR}/cf-terraforming")" = "${CF_TERRAFORMING_URL}" ]
+  [ -z "$(find "${_DL_TMP_ROOT}" -mindepth 1)" ]
+}
+
+@test "_install_ubuntu_cloud_tools: a failed teleport keyring fetch with no keyring returns 1, writes no list, and the siblings still run" {
+  _cloud_env
+  export MOCK_CURL_FAIL_URL="deb.releases.teleport.dev"
+  run --separate-stderr _install_ubuntu_cloud_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"cloud_tools: teleport: keyring"* ]]
+  [[ "$stderr" == *"cloud_tools: teleport: source write skipped (no keyring)"* ]]
+  [ ! -e "${_APT_SOURCES_DIR}/teleport.list" ]
+  # Positive controls: the fetch was attempted and the siblings completed.
+  grep -q "curl .*deb.releases.teleport.dev" "${MOCK_CALLS_FILE}"
+  [ -s "${_APT_SOURCES_DIR}/cloudflare-client.list" ]
+  [ -s "${_APT_SOURCES_DIR}/google-cloud-sdk.list" ]
+  [ -x "${_DL_BIN_DIR}/cf-terraforming" ]
+}
+
+@test "_install_ubuntu_cloud_tools: a failed cloudflared apt install returns 1 and gcloud is still attempted" {
+  _cloud_env
+  export SHIM_APT_FAIL_PKGS="cloudflare-warp"
+  run --separate-stderr _install_ubuntu_cloud_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"cloud_tools: cloudflared: install failed"* ]]
+  grep -q "apt-get install.*cloudflare-warp" "${MOCK_CALLS_FILE}"
+  grep -q "apt install google-cloud-cli -y" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_cloud_tools: a failed gcloud package install returns 1 and the second package is still attempted" {
+  _cloud_env
+  export SHIM_APT_FAIL_PKGS="google-cloud-cli"
+  run --separate-stderr _install_ubuntu_cloud_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"cloud_tools: gcloud: google-cloud-cli install failed"* ]]
+  grep -q "apt install google-cloud-cli-app-engine-go" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_cloud_tools: a failed cf-terraforming download returns 1 and leaves the destination, stamp and workdir alone" {
+  _cloud_env
+  printf 'old' > "${_DL_BIN_DIR}/cf-terraforming"
+  chmod 0755 "${_DL_BIN_DIR}/cf-terraforming"
+  export MOCK_WGET_FAIL_URL="cf-terraforming"
+  run --separate-stderr _install_ubuntu_cloud_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"cloud_tools: cf-terraforming: install failed"* ]]
+  grep -q "wget .*cf-terraforming" "${MOCK_CALLS_FILE}"
+  [ "$(cat "${_DL_BIN_DIR}/cf-terraforming")" = "old" ]
+  [ ! -e "${_DL_STAMP_DIR}/cf-terraforming" ]
+  [ -z "$(find "${_DL_TMP_ROOT}" -mindepth 1)" ]
+  # The earlier tools were not held up by it.
+  [ -s "${_APT_SOURCES_DIR}/teleport.list" ]
+}
+
+@test "_install_ubuntu_cloud_tools: a failed teleport apt install returns 1" {
+  _cloud_env
+  export SHIM_APT_FAIL_PKGS="teleport"
+  run --separate-stderr _install_ubuntu_cloud_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"cloud_tools: teleport: install failed"* ]]
+  grep -q "apt install teleport" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_cloud_tools: a failed google-cloud-cli-app-engine-go install returns 1" {
+  _cloud_env
+  export SHIM_APT_FAIL_PKGS="google-cloud-cli-app-engine-go"
+  run --separate-stderr _install_ubuntu_cloud_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"cloud_tools: gcloud: google-cloud-cli-app-engine-go install failed"* ]]
+  # Positive control: the first package was not the one that failed.
+  [[ "$stderr" != *"gcloud: google-cloud-cli install failed"* ]]
+}
+
+_cloud_tee_failure() {
+  _cloud_env
+  export SHIM_TEE_FAIL_ARGS="$1"
+  run --separate-stderr _install_ubuntu_cloud_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"cloud_tools: $2: source list write failed"* ]]
+  # Positive control: the write was really attempted, and only that one failed.
+  grep -q "tee .*$1" "${MOCK_CALLS_FILE}"
+  [ "$(grep -c 'source list write failed' <<< "${stderr}")" -eq 1 ]
+}
+
+@test "_install_ubuntu_cloud_tools: a failed teleport source list write returns 1" {
+  _cloud_tee_failure "teleport.list" teleport
+}
+
+@test "_install_ubuntu_cloud_tools: a failed cloudflared source list write returns 1" {
+  _cloud_tee_failure "cloudflare-client.list" cloudflared
+}
+
+@test "_install_ubuntu_cloud_tools: a failed gcloud source list write returns 1" {
+  _cloud_tee_failure "google-cloud-sdk.list" gcloud
+}
+
+_cloud_keyring_failure() {
+  _cloud_env
+  local _ring="${_APT_KEYRINGS_DIR}/$1"
+  printf 'old' > "${_ring}"
+  export MOCK_CURL_FAIL_URL="$2"
+  run --separate-stderr _install_ubuntu_cloud_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"cloud_tools: $3: keyring install failed"* ]]
+  grep -q "curl .*$2" "${MOCK_CALLS_FILE}"
+  [ "$(cat "${_ring}")" = "old" ]
+  # The prior keyring still backs the source list, so only the keyring failed.
+  [[ "$stderr" != *"source write skipped"* ]]
+}
+
+@test "_install_ubuntu_cloud_tools: a failed teleport keyring fetch with a prior keyring returns 1 and keeps it" {
+  _cloud_keyring_failure teleport-pubkey.gpg deb.releases.teleport.dev teleport
+}
+
+@test "_install_ubuntu_cloud_tools: a failed cloudflared keyring fetch with a prior keyring returns 1 and keeps it" {
+  _cloud_keyring_failure cloudflare-warp-archive-keyring.gpg pkg.cloudflareclient.com cloudflared
+}
+
+@test "_install_ubuntu_cloud_tools: a failed gcloud keyring fetch with a prior keyring returns 1 and keeps it" {
+  _cloud_keyring_failure cloud.google.gpg packages.cloud.google.com gcloud
+}
+
 # ── azure-cli via linuxbrew ──────────────────────────────────────────────────
 
 _az_cloud_env() {
   export CF_TERRAFORMING_VER="0.13.0"
   export CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v0.13.0/cf-terraforming_0.13.0_linux_amd64.tar.gz"
+  _cf_tarball
   unset HAS_DEVTOOLS
 }
 
@@ -1764,6 +3122,23 @@ _az_cloud_env() {
   grep -q "apt install albert" "${MOCK_CALLS_FILE}"
 }
 
+@test "_install_ubuntu_gui_tools: a failing albert install is named and its rc propagates" {
+  export HAS_SNAP=1
+  unset HAS_DEVTOOLS
+  _install_ubuntu_albert() { return 2; }
+  run _install_ubuntu_gui_tools
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"gui_tools: albert: install failed"* ]]
+}
+
+@test "_install_ubuntu_gui_tools: a clean albert install logs no albert failure" {
+  export HAS_SNAP=1
+  unset HAS_DEVTOOLS
+  _install_ubuntu_albert() { return 0; }
+  run _install_ubuntu_gui_tools
+  [[ "$output" != *"gui_tools: albert: install failed"* ]]
+}
+
 # Fixture for a package-owned, enabled Edge source (deb822).
 _edge_live_sources() {
   printf 'Types: deb\nURIs: https://packages.microsoft.com/repos/edge-stable\nSuites: stable\n' \
@@ -1822,7 +3197,7 @@ _edge_live_sources() {
 @test "_install_ubuntu_edge_source: fails closed when the key cannot be read" {
   printf 'deb stale\n' > "${_EDGE_SOURCES_DIR}/microsoft-edge.list"
   _MS_KEY_PATH="${BATS_TEST_TMPDIR}/no-such-key.asc" run _install_ubuntu_edge_source
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ]
   [[ "$output" == *"edge: could not build ${_EDGE_BOOTSTRAP_KEYRING} (gpg missing or failed on"* ]]
   [ ! -e "${_EDGE_SOURCES_DIR}/microsoft-edge.list" ]
   [ ! -e "${_EDGE_BOOTSTRAP_KEYRING}" ]
@@ -1913,7 +3288,7 @@ _edge_live_sources() {
   head -c 400 "${REPO_ROOT}/keys/microsoft.asc" > "${BATS_TEST_TMPDIR}/trunc.asc"
   printf 'deb stale\n' > "${_EDGE_SOURCES_DIR}/microsoft-edge.list"
   _MS_KEY_PATH="${BATS_TEST_TMPDIR}/trunc.asc" run _install_ubuntu_edge_source
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ]
   [[ "$output" == *"edge: could not build ${_EDGE_BOOTSTRAP_KEYRING} (gpg missing or failed on"* ]]
   [ ! -e "${_EDGE_SOURCES_DIR}/microsoft-edge.list" ]
   [ ! -e "${_EDGE_BOOTSTRAP_KEYRING}" ]
@@ -1929,7 +3304,7 @@ _edge_live_sources() {
   chmod +x "${_stub}"
   printf 'deb stale\n' > "${_EDGE_SOURCES_DIR}/microsoft-edge.list"
   _MS_GPG_BIN="${_stub}" run _install_ubuntu_edge_source
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ]
   [[ "$output" == *"edge: could not build ${_EDGE_BOOTSTRAP_KEYRING}"* ]]
   [[ "$output" == *"fingerprint"* ]]
   [ ! -e "${_EDGE_SOURCES_DIR}/microsoft-edge.list" ]
@@ -1947,7 +3322,7 @@ _edge_live_sources() {
   [ -s "${BATS_TEST_TMPDIR}/other-edge.asc" ]
   printf 'deb stale\n' > "${_EDGE_SOURCES_DIR}/microsoft-edge.list"
   _MS_KEY_PATH="${BATS_TEST_TMPDIR}/other-edge.asc" run _install_ubuntu_edge_source
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ]
   [[ "$output" == *"edge: could not build ${_EDGE_BOOTSTRAP_KEYRING}"* ]]
   [ ! -e "${_EDGE_SOURCES_DIR}/microsoft-edge.list" ]
   [ ! -e "${_EDGE_BOOTSTRAP_KEYRING}" ]
@@ -1961,7 +3336,7 @@ _edge_live_sources() {
   chmod +x "${_stub}"
   printf 'deb stale\n' > "${_EDGE_SOURCES_DIR}/microsoft-edge.list"
   _MS_GPG_BIN="${_stub}" run _install_ubuntu_edge_source
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ]
   [[ "$output" == *"edge: could not build ${_EDGE_BOOTSTRAP_KEYRING}"* ]]
   [ ! -e "${_EDGE_SOURCES_DIR}/microsoft-edge.list" ]
   [ ! -e "${_EDGE_BOOTSTRAP_KEYRING}" ]
@@ -1970,7 +3345,7 @@ _edge_live_sources() {
 @test "_install_ubuntu_edge_source: fails closed when gpg is missing" {
   printf 'deb stale\n' > "${_EDGE_SOURCES_DIR}/microsoft-edge.list"
   _MS_GPG_BIN=/nonexistent/gpg run _install_ubuntu_edge_source
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ]
   [[ "$output" == *"edge: could not build ${_EDGE_BOOTSTRAP_KEYRING} (gpg missing or failed on"* ]]
   [ ! -e "${_EDGE_SOURCES_DIR}/microsoft-edge.list" ]
   [ ! -e "${_EDGE_BOOTSTRAP_KEYRING}" ]
@@ -2011,6 +3386,134 @@ _edge_live_sources() {
   [ "$status" -ne 0 ]
 }
 
+# gui_tools with every sub-install enabled; the albert key is good so a failure
+# in a test below is that test's own doing.
+_gui_env() {
+  export HAS_DEVTOOLS=1 HAS_SNAP=1 HAS_FLATPAK=1
+  export VIRTUALBOX_VER="virtualbox-7.0"
+  _albert_good_key
+}
+
+@test "_install_ubuntu_gui_tools: clean run with every capability returns 0" {
+  _gui_env
+  run _install_ubuntu_gui_tools
+  [ "$status" -eq 0 ]
+  grep -q "signed-by=${_APT_KEYRINGS_DIR}/oracle-virtualbox-2016.gpg" "${_APT_SOURCES_DIR}/virtualbox.list"
+  grep -q "apt install ${VIRTUALBOX_VER}" "${MOCK_CALLS_FILE}"
+  grep -q "snap install certbot-dns-route53" "${MOCK_CALLS_FILE}"
+  grep -q "flatpak install flathub" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_gui_tools: a failed virtualbox keyring fetch with no keyring returns 1, writes no list, and the snaps still install" {
+  _gui_env
+  export MOCK_CURL_FAIL_URL="virtualbox.org"
+  run --separate-stderr _install_ubuntu_gui_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"gui_tools: virtualbox: keyring"* ]]
+  [[ "$stderr" == *"gui_tools: virtualbox: source write skipped (no keyring)"* ]]
+  [ ! -e "${_APT_SOURCES_DIR}/virtualbox.list" ]
+  grep -q "curl .*virtualbox.org" "${MOCK_CALLS_FILE}"
+  grep -q "snap install code --classic" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_gui_tools: a failed snap install returns 1 and steam is still attempted" {
+  _gui_env
+  export MOCK_SNAP_EXIT=1
+  run --separate-stderr _install_ubuntu_gui_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"gui_tools: snap code: install failed"* ]]
+  grep -q "snap install code --classic" "${MOCK_CALLS_FILE}"
+  grep -q "flatpak install flathub" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_gui_tools: a failed edge source setup returns 1 and the edge package install is still attempted" {
+  _gui_env
+  _install_ubuntu_edge_source() { return 1; }
+  run --separate-stderr _install_ubuntu_gui_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"gui_tools: edge: source setup failed"* ]]
+  grep -q "apt install microsoft-edge-stable" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_gui_tools: a failed edge package install returns 1" {
+  _gui_env
+  export SHIM_APT_FAIL_PKGS="microsoft-edge-stable"
+  run --separate-stderr _install_ubuntu_gui_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"gui_tools: edge: install failed"* ]]
+}
+
+@test "_install_ubuntu_gui_tools: a failed steam flatpak install returns 1" {
+  _gui_env
+  export SHIM_FLATPAK_EXIT=1
+  run --separate-stderr _install_ubuntu_gui_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"gui_tools: steam: install failed"* ]]
+  grep -q "flatpak install flathub" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_gui_tools: a failed flathub remote-add returns 1" {
+  _gui_env
+  export SHIM_FLATPAK_REMOTE_EXIT=1
+  run --separate-stderr _install_ubuntu_gui_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"gui_tools: steam: flathub remote-add failed"* ]]
+  grep -q "flatpak remote-add" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_gui_tools: a failed virtualbox apt install returns 1" {
+  _gui_env
+  export SHIM_APT_FAIL_PKGS="${VIRTUALBOX_VER}"
+  run --separate-stderr _install_ubuntu_gui_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"gui_tools: virtualbox: install failed"* ]]
+  grep -q "apt install ${VIRTUALBOX_VER}" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_gui_tools: a failed virtualbox source list write returns 1" {
+  _gui_env
+  export SHIM_TEE_FAIL_ARGS="virtualbox.list"
+  run --separate-stderr _install_ubuntu_gui_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"gui_tools: virtualbox: source list write failed"* ]]
+  grep -q "tee .*virtualbox.list" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_gui_tools: a failed 'snap set certbot' returns 1 and the route53 plugin is still installed" {
+  _gui_env
+  export SHIM_SNAP_FAIL_ARGS="set certbot"
+  run --separate-stderr _install_ubuntu_gui_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"gui_tools: snap certbot: trust-plugin-with-root failed"* ]]
+  [[ "$stderr" != *"certbot-dns-route53: install failed"* ]]
+  grep -q "snap set certbot trust-plugin-with-root=ok" "${MOCK_CALLS_FILE}"
+  grep -q "snap install certbot-dns-route53" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_gui_tools: a failed certbot-dns-route53 install returns 1" {
+  _gui_env
+  export SHIM_SNAP_FAIL_ARGS="certbot-dns-route53"
+  run --separate-stderr _install_ubuntu_gui_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"gui_tools: snap certbot-dns-route53: install failed"* ]]
+  [[ "$stderr" != *"trust-plugin-with-root failed"* ]]
+  grep -q "snap install certbot-dns-route53" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_gui_tools: the real edge helper failing to build its keyring returns 1 and names the edge source" {
+  _gui_env
+  unset HAS_DEVTOOLS HAS_FLATPAK
+  export _MS_KEY_PATH="${BATS_TEST_TMPDIR}/no-such-key.asc"
+  run --separate-stderr _install_ubuntu_gui_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"gui_tools: edge: source setup failed"* ]]
+  [[ "$stderr" == *"edge: could not build"* ]]
+  [ ! -e "${_EDGE_SOURCES_DIR}/microsoft-edge.list" ]
+  # Positive control: albert was fine, and the edge package install still ran.
+  [ -s "${_APT_SOURCES_DIR}/albert.list" ]
+  grep -q "apt install microsoft-edge-stable" "${MOCK_CALLS_FILE}"
+}
+
 # ── _install_ubuntu_misc ─────────────────────────────────────────────────────
 
 @test "_install_ubuntu_misc: calls wget for docker-compose when file does not exist" {
@@ -2022,6 +3525,49 @@ _edge_live_sources() {
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
   grep -q "wget.*docker-compose" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_misc: a docker-compose fetch failure is named misc: docker-compose and returns 1" {
+  export DOCKER_COMPOSE_URL="https://example.invalid/docker-compose"
+  export YQ_URL="https://example.invalid/yq"
+  export MOCK_WGET_FAIL_URL="${DOCKER_COMPOSE_URL}"
+  unset HAS_DEVTOOLS
+  run _install_ubuntu_misc
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"misc: docker-compose: install failed"* ]]
+}
+
+@test "_install_ubuntu_misc: a yq fetch failure is named misc: yq and returns 1, docker-compose unaffected" {
+  export DOCKER_COMPOSE_URL="https://example.invalid/docker-compose"
+  export YQ_URL="https://example.invalid/yq"
+  export MOCK_WGET_FAIL_URL="${YQ_URL}"
+  export HAS_DEVTOOLS=1
+  run _install_ubuntu_misc
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"misc: yq: install failed"* ]]
+  [[ "$output" != *"misc: docker-compose:"* ]]
+  [ -x "${_DL_BIN_DIR}/docker-compose" ]
+}
+
+@test "_install_ubuntu_misc: a failing nala install is named, returns 1 and autoremove is still attempted" {
+  export DOCKER_COMPOSE_URL="https://example.invalid/docker-compose"
+  export YQ_URL="https://example.invalid/yq"
+  unset HAS_DEVTOOLS
+  check_and_install_nala() { return 1; }
+  run _install_ubuntu_misc
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"misc: nala: install failed"* ]]
+  grep -q "nala autoremove" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_misc: a successful nala install logs no nala failure" {
+  export DOCKER_COMPOSE_URL="https://example.invalid/docker-compose"
+  export YQ_URL="https://example.invalid/yq"
+  unset HAS_DEVTOOLS
+  check_and_install_nala() { return 0; }
+  run _install_ubuntu_misc
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"misc: nala: install failed"* ]]
 }
 
 @test "_install_ubuntu_misc: nala autoremove does not inherit the caller's stdin" {
@@ -2056,11 +3602,17 @@ _edge_live_sources() {
   export DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64"
   export YQ_VER="4.40.5"
   export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
-  touch "${HOME}/software_downloads/docker-compose_2.24.0"
+  # Idempotency is the stamp (URL) plus an executable destination, not a file
+  # left in ~/software_downloads.
+  printf 'old' > "${_DL_BIN_DIR}/docker-compose"
+  chmod 0755 "${_DL_BIN_DIR}/docker-compose"
+  mkdir -p "${_DL_STAMP_DIR}"
+  printf '%s\n' "${DOCKER_COMPOSE_URL}" > "${_DL_STAMP_DIR}/docker-compose"
   unset HAS_DEVTOOLS
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
-  ! grep -q "wget.*docker-compose_2.24.0" "${MOCK_CALLS_FILE}"
+  [[ "$output" == *"docker-compose: up to date"* ]]
+  ! grep -qF "wget -O" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_misc: HAS_DEVTOOLS installs yq" {
@@ -2077,7 +3629,8 @@ _edge_live_sources() {
   _install_ubuntu_tfenv() { :; }
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
-  grep -qF "wget -O ${HOME}/software_downloads/yq_${YQ_VER} ${YQ_URL}" "${MOCK_CALLS_FILE}"
+  grep -qE "wget -O .* ${YQ_URL}$" "${MOCK_CALLS_FILE}"
+  [ -x "${_DL_BIN_DIR}/yq" ]
 }
 
 @test "_install_ubuntu_misc: no HAS_DEVTOOLS skips yq" {
@@ -2137,10 +3690,15 @@ _edge_live_sources() {
   export YQ_VER="4.40.5"
   export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
   export HAS_DEVTOOLS=1
-  export MOCK_APT_EXIT=1
+  # Fail dotnet only. A blanket MOCK_APT_EXIT also failed the opentofu install,
+  # which runs only on a host without tofu, so the test passed or failed by host.
+  export SHIM_APT_FAIL_PKGS="dotnet-sdk-10.0"
+  export _FORCE_OPENTOFU_INSTALL=1
   _install_ubuntu_tflint() { :; }
   _install_ubuntu_tfsec() { :; }
   _install_ubuntu_tfenv() { :; }
+  # nala install failure is now fatal for misc; keep this test about dotnet only.
+  check_and_install_nala() { return 0; }
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
   [[ "$output" == *"dotnet-sdk-10.0 not available"* ]]
@@ -2201,7 +3759,7 @@ _edge_live_sources() {
   _install_ubuntu_tfenv() { :; }
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
-  grep -q "mkdir.*-p.*/etc/apt/keyrings" "${MOCK_CALLS_FILE}"
+  grep -qF "sudo mkdir -p ${_APT_KEYRINGS_DIR}" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_misc: opentofu already present skips install" {
@@ -2225,6 +3783,142 @@ _edge_live_sources() {
   [ "$status" -ne 0 ]
 }
 
+# HAS_DEVTOOLS misc with seamed fetch targets. The dotnet/tflint/tfsec/tfenv
+# members are stubbed: they are advisory and have their own coverage.
+_misc_env() {
+  export DOCKER_COMPOSE_VER="2.24.0"
+  export DOCKER_COMPOSE_URL="https://dc.example/dl/docker-compose-linux-x86_64"
+  export YQ_VER="4.40.5"
+  export YQ_URL="https://yq.example/dl/yq_linux_amd64"
+  export HAS_DEVTOOLS=1
+  export _FORCE_OPENTOFU_INSTALL=1
+  _install_ubuntu_shellcheck() { :; }
+  _install_ubuntu_tflint() { :; }
+  _install_ubuntu_tfsec() { :; }
+  _install_ubuntu_tfenv() { :; }
+  export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/fetched-body"
+  printf 'body' > "${MOCK_WGET_FILE}"
+}
+
+@test "_install_ubuntu_misc: a clean run installs both binaries, stamps them, and returns 0" {
+  _misc_env
+  run --separate-stderr _install_ubuntu_misc
+  [ "$status" -eq 0 ]
+  [ -x "${_DL_BIN_DIR}/docker-compose" ]
+  [ -x "${_DL_BIN_DIR}/yq" ]
+  [ "$(cat "${_DL_STAMP_DIR}/docker-compose")" = "${DOCKER_COMPOSE_URL}" ]
+  [ "$(cat "${_DL_STAMP_DIR}/yq")" = "${YQ_URL}" ]
+  [ -s "${_APT_SOURCES_DIR}/opentofu.list" ]
+  grep -q "apt-get install.* tofu" "${MOCK_CALLS_FILE}"
+  [[ "$stderr" != *"misc:"* ]]
+}
+
+@test "_install_ubuntu_misc: a failed docker-compose download returns 1 and leaves destination, stamp and workdir alone; yq still installs" {
+  _misc_env
+  printf 'old' > "${_DL_BIN_DIR}/docker-compose"
+  chmod 0755 "${_DL_BIN_DIR}/docker-compose"
+  export MOCK_WGET_FAIL_URL="docker-compose"
+  run --separate-stderr _install_ubuntu_misc
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"docker-compose: download failed"* ]]
+  grep -q "wget .*docker-compose" "${MOCK_CALLS_FILE}"
+  [ "$(cat "${_DL_BIN_DIR}/docker-compose")" = "old" ]
+  [ ! -e "${_DL_STAMP_DIR}/docker-compose" ]
+  [ -z "$(find "${_DL_TMP_ROOT}" -mindepth 1)" ]
+  # Positive control: the sibling was not held up.
+  [ -x "${_DL_BIN_DIR}/yq" ]
+  [ -s "${_DL_STAMP_DIR}/yq" ]
+}
+
+@test "_install_ubuntu_misc: a failed yq download returns 1 and docker-compose still installs" {
+  _misc_env
+  printf 'old' > "${_DL_BIN_DIR}/yq"
+  chmod 0755 "${_DL_BIN_DIR}/yq"
+  export MOCK_WGET_FAIL_URL="yq.example"
+  run --separate-stderr _install_ubuntu_misc
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"yq: download failed"* ]]
+  grep -q "wget .*yq.example" "${MOCK_CALLS_FILE}"
+  [ "$(cat "${_DL_BIN_DIR}/yq")" = "old" ]
+  [ ! -e "${_DL_STAMP_DIR}/yq" ]
+  [ -x "${_DL_BIN_DIR}/docker-compose" ]
+  [ -s "${_DL_STAMP_DIR}/docker-compose" ]
+}
+
+@test "_install_ubuntu_misc: a failed opentofu keyring fetch with no keyring returns 1, writes no list, and skips with a warning" {
+  _misc_env
+  export MOCK_CURL_FAIL_URL="packages.opentofu.org"
+  run --separate-stderr _install_ubuntu_misc
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"misc: opentofu: keyring install failed"* ]]
+  [[ "$stderr" == *"misc: opentofu: source write skipped (no keyring)"* ]]
+  [ ! -e "${_APT_SOURCES_DIR}/opentofu.list" ]
+  # Positive controls: the fetch was attempted; the earlier tools completed.
+  grep -q "curl .*packages.opentofu.org" "${MOCK_CALLS_FILE}"
+  [ -x "${_DL_BIN_DIR}/yq" ]
+}
+
+@test "_install_ubuntu_misc: a failed opentofu keyring fetch with a prior keyring returns 1 and keeps it" {
+  _misc_env
+  local _ring="${_APT_KEYRINGS_DIR}/opentofu-archive-keyring.gpg"
+  printf 'old' > "${_ring}"
+  export MOCK_CURL_FAIL_URL="packages.opentofu.org"
+  run --separate-stderr _install_ubuntu_misc
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"misc: opentofu: keyring install failed"* ]]
+  grep -q "curl .*packages.opentofu.org" "${MOCK_CALLS_FILE}"
+  [ "$(cat "${_ring}")" = "old" ]
+  # The prior keyring still backs the source list, so only the keyring failed.
+  [[ "$stderr" != *"source write skipped"* ]]
+  [ -s "${_APT_SOURCES_DIR}/opentofu.list" ]
+}
+
+@test "_install_ubuntu_misc: a failed opentofu source list write returns 1" {
+  _misc_env
+  export SHIM_TEE_FAIL_ARGS="opentofu.list"
+  run --separate-stderr _install_ubuntu_misc
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"misc: opentofu: source list write failed"* ]]
+  # Positive control: the write was attempted, and only that failed.
+  grep -q "tee .*opentofu.list" "${MOCK_CALLS_FILE}"
+  [[ "$stderr" != *"keyring install failed"* ]]
+}
+
+@test "_install_ubuntu_misc: a failed opentofu package install returns 1" {
+  _misc_env
+  export SHIM_APT_FAIL_PKGS="tofu"
+  run --separate-stderr _install_ubuntu_misc
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"misc: opentofu: install failed"* ]]
+  grep -q "apt-get install.* tofu" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_misc: a failed nala autoremove warns and still returns 0" {
+  _misc_env
+  export MOCK_NALA_EXIT=1
+  run --separate-stderr _install_ubuntu_misc
+  [ "$status" -eq 0 ]
+  [[ "$stderr" == *"misc: nala autoremove failed"* ]]
+  # Positive control: autoremove was attempted.
+  grep -q "nala autoremove" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_misc: the opentofu source line is signed-by the seamed keyring" {
+  _misc_env
+  run --separate-stderr _install_ubuntu_misc
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_APT_SOURCES_DIR}/opentofu.list")" = "deb [signed-by=${_APT_KEYRINGS_DIR}/opentofu-archive-keyring.gpg] https://packages.opentofu.org/opentofu/tofu/any/ any main" ]
+}
+
+@test "_install_ubuntu_misc: a failed apt-get update does not mask the install result" {
+  _misc_env
+  export MOCK_APT_FAIL_SUBCMD="update"
+  run --separate-stderr _install_ubuntu_misc
+  [ "$status" -eq 0 ]
+  grep -q "apt-get update" "${MOCK_CALLS_FILE}"
+  grep -q "apt-get install.* tofu" "${MOCK_CALLS_FILE}"
+}
+
 # ── Ubuntu 26.04 (resolute) provisioning gaps, both measured on `claude` ─────
 
 @test "_install_ubuntu_powershell: RESOLUTE pins the Microsoft config to 24.04" {
@@ -2234,7 +3928,7 @@ _edge_live_sources() {
   # code builds a 26.04 URL and this test can actually go red.
   export MOCK_LSB_RELEASE_RS="26.04"
   run _install_ubuntu_powershell
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ] # post-install probe fails: the stub pwsh never runs
   # packages.microsoft.com/config/ubuntu/26.04 exists (HTTP 200) and its
   # resolute dist carries ZERO powershell packages, measured 2026-09-12;
   # 24.04/noble carries 54. So the config URL, not the dist, is what falls back.
@@ -2249,7 +3943,7 @@ _edge_live_sources() {
   # trivially true whenever the mock does not emit 26.04 in the first place.
   export MOCK_LSB_RELEASE_RS="24.10"
   run _install_ubuntu_powershell
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ] # post-install probe fails: the stub pwsh never runs
   grep -qE "wget.*config/ubuntu/24\.10/packages-microsoft-prod\.deb" "${MOCK_CALLS_FILE}"
 }
 
@@ -2686,4 +4380,105 @@ _albert_assert_last_good_untouched() {
   [[ "$stderr" == *"2 primary keys"* ]]
   [[ "$stderr" == *"${_MS_FPR}"* ]]
   [[ "$stderr" != *"not the pinned key"* ]]
+}
+
+# ── install_ubuntu_packages: clean run, every step real ──────────────────────
+
+# wget shim that hands back the right fixture per URL: the Go tarball, the
+# HashiCorp zip, the cf-terraforming tarball, or a plain body. tests/mocks/wget
+# serves one MOCK_WGET_FILE for every call, which cannot satisfy a dispatcher run.
+_dispatch_wget_shim() {
+  cat > "${SHIM_DIR}/wget" << SHIM
+#!/usr/bin/env bash
+case "\$*" in
+  *"${GO_DOWNLOAD_URL}"*) export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/go.tgz" ;;
+  *releases.hashicorp.com*) export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/hc.zip" ;;
+  *cf-terraforming*) export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/cf.tgz" ;;
+  *) export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/blob" ;;
+esac
+exec "${REPO_ROOT}/tests/mocks/wget" "\$@"
+SHIM
+  /bin/chmod +x "${SHIM_DIR}/wget"
+}
+
+@test "install_ubuntu_packages: a clean run reaches every step, and a second run re-fetches nothing" {
+  unset MACOS RESOLUTE
+  export LINUX=1 UBUNTU=1 NOBLE=1
+  export HAS_DOCKER=1 HAS_K8S=1 HAS_DEVTOOLS=1 HAS_SNAP=1 HAS_FLATPAK=1
+  export _OVERRIDE_NVIDIA_GPU_PRESENT=1
+  # Stubbed: brew_packages and rust (linuxbrew and rustup have their own tests and
+  # would reach the network); everything else runs for real.
+  _install_ubuntu_brew_packages() { :; }
+  _install_ubuntu_rust() { :; }
+  _ws_dir
+  cd "${REPO_ROOT}"
+  _hc_env
+  _cloud_env
+  _misc_env
+  _k8s_env
+  _gui_env
+  _docker_fetch_ok
+  _go_stub 1.27.1
+  _PWSH_BIN="$(_pwsh_stub_bin 0)"
+  export _PWSH_BIN
+  # The albert key is the one fixture with a pinned fingerprint, so it is the curl
+  # body for every fetch; it is also the "resolved" telepresence URL (!= its link).
+  _albert_good_key
+  # _make_go_tarball and _cf_tarball write go.tgz and cf.tgz where the shim reads them;
+  # _hc_env wrote hc.zip and _k8s_env wrote blob.
+  _make_go_tarball
+  _cf_tarball
+  [ -s "${BATS_TEST_TMPDIR}/hc.zip" ] && [ -s "${BATS_TEST_TMPDIR}/blob" ]
+  _dispatch_wget_shim
+  # --resolve's curl asks for %{url_effective}, which must be an https URL
+  # different from the link; every other curl (key fetches) keeps the key body.
+  cat > "${SHIM_DIR}/curl" << SHIM
+#!/usr/bin/env bash
+if [[ "\$*" == *'%{url_effective}'* ]]; then
+  printf 'curl %s\\n' "\$*" >> "\${MOCK_CALLS_FILE}"
+  printf 'https://example.invalid/telepresence-resolved'
+  exit 0
+fi
+exec "${REPO_ROOT}/tests/mocks/curl" "\$@"
+SHIM
+  /bin/chmod +x "${SHIM_DIR}/curl"
+
+  run --separate-stderr install_ubuntu_packages
+  [ "$status" -eq 0 ]
+  [[ "$stderr" != *"ubuntu packages: failed"* ]]
+  grep -q "nala install" "${MOCK_CALLS_FILE}"
+  grep -q "snap install" "${MOCK_CALLS_FILE}"
+  grep -q "^wget .*${GO_DOWNLOAD_URL}" "${MOCK_CALLS_FILE}"
+  grep -q "apt install docker-ce" "${MOCK_CALLS_FILE}"
+  grep -q "apt install kubectl" "${MOCK_CALLS_FILE}"
+  local _t
+  for _t in consul vault nomad packer vagrant; do
+    grep -q "^wget .*releases.hashicorp.com/${_t}/" "${MOCK_CALLS_FILE}"
+  done
+  grep -q "^wget .*${KIND_URL}" "${MOCK_CALLS_FILE}"
+  grep -q "^wget .*${CF_TERRAFORMING_URL}" "${MOCK_CALLS_FILE}"
+  grep -q "^wget .*${DOCKER_COMPOSE_URL}" "${MOCK_CALLS_FILE}"
+  grep -q "^wget .*${YQ_URL}" "${MOCK_CALLS_FILE}"
+  # Its wget URL is the resolved one (the key body here), so assert on the stamp.
+  [ -s "${_DL_STAMP_DIR}/telepresence" ]
+  grep -q "apt install teleport" "${MOCK_CALLS_FILE}"
+  grep -q "apt-get install.* cloudflare-warp" "${MOCK_CALLS_FILE}"
+  grep -q "apt install google-cloud-cli" "${MOCK_CALLS_FILE}"
+  grep -q "apt install ${VIRTUALBOX_VER}" "${MOCK_CALLS_FILE}"
+  grep -q "apt install .*microsoft-edge" "${MOCK_CALLS_FILE}"
+  grep -q "snap install certbot-dns-route53" "${MOCK_CALLS_FILE}"
+  grep -q "flatpak install flathub" "${MOCK_CALLS_FILE}"
+  grep -q "apt-get install.* tofu" "${MOCK_CALLS_FILE}"
+
+  local _before _after
+  _before="$(grep -c '^wget ' "${MOCK_CALLS_FILE}")"
+  run --separate-stderr install_ubuntu_packages
+  [ "$status" -eq 0 ]
+  [[ "$stderr" != *"ubuntu packages: failed"* ]]
+  _after="$(grep -c '^wget ' "${MOCK_CALLS_FILE}")"
+  # Go is stamped too, so the only wget the second run may add is none.
+  [ "${_after}" -eq "${_before}" ]
+  for _t in go consul vault nomad packer vagrant kind telepresence cf-terraforming docker-compose yq; do
+    [[ "$output$stderr" == *"${_t}: up to date (stamp"* ]]
+  done
 }

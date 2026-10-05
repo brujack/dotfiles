@@ -2,7 +2,8 @@
 # lib/linux_ubuntu.sh — Ubuntu-specific install functions
 
 # install_ubuntu_packages -- 0 when every step succeeded, 1 when the base
-# step failed (only on an unsupported release), 2 when any later step failed.
+# step hit an unsupported release (nothing else runs), 2 when any step failed,
+# base included (_install_ubuntu_base_packages returns 2 for a failed install).
 # Every step after the base packages runs regardless of the others, and the
 # failed ones are named on stderr: most steps return whatever their LAST
 # command returned, so chaining them with `|| return 1` let one flaky
@@ -10,22 +11,33 @@
 # the whole pyenv/ansible half. _install_ubuntu_brew_packages is itself
 # tri-state; its rc 2 counts as a failed step here too.
 install_ubuntu_packages() {
-  _install_ubuntu_base_packages || return 1
-
   local -a _failed=()
+  local _base_rc=0 _docker_core=0
+  _install_ubuntu_base_packages || _base_rc=$?
+  ((_base_rc == 1)) && return 1
+  ((_base_rc == 0)) || _failed+=(base)
   local _step
   # Order matters: the nvidia container toolkit configures docker's runtime,
-  # so nvidia runs after docker and is skipped when docker failed, driver
-  # install included. It would otherwise rewrite a daemon.json docker's own
+  # so nvidia runs after docker and is skipped when docker's core failed (rc 3),
+  # driver install included. It would otherwise rewrite a daemon.json docker's own
   # step rejected, then restart docker on a box running live CI runners.
   for _step in workstation powershell go docker nvidia k8s_tools hashicorp \
     cloud_tools brew_packages rust gui_tools misc; do
-    if [[ ${_step} == nvidia ]] && [[ " ${_failed[*]} " == *" docker "* ]]; then
+    if [[ ${_step} == nvidia ]] && ((_docker_core == 1)); then
       printf 'ubuntu packages: skipping nvidia because docker failed\n' >&2
       _failed+=("${_step}")
       continue
     fi
-    "_install_ubuntu_${_step}" || _failed+=("${_step}")
+    local _step_rc=0
+    "_install_ubuntu_${_step}" || _step_rc=$?
+    if ((_step_rc != 0)); then
+      _failed+=("${_step}")
+      # Only docker's rc 3 (a core install or daemon.json failure) skips nvidia;
+      # a failed plugin or usermod leaves docker usable for the toolkit.
+      if [[ ${_step} == docker ]] && ((_step_rc == 3)); then
+        _docker_core=1
+      fi
+    fi
   done
 
   if ((${#_failed[@]} > 0)); then
@@ -35,30 +47,58 @@ install_ubuntu_packages() {
   return 0
 }
 
+# Install the packages named in a list file, skipping comments and blank lines.
+# A missing list is a failure; a list with no packages is not (xargs -r then
+# runs nothing). The grep|xargs status is read from PIPESTATUS, which the very
+# next line must copy: any command in between, `local` included, resets it.
+_install_ubuntu_package_list() {
+  local _list="$1"
+  [[ -r ${_list} ]] || return 1
+  grep -vE '^[[:space:]]*(#|$)' "${_list}" | xargs -r sudo DEBIAN_FRONTEND=noninteractive nala install "${APT_CONFFILE_OPTS[@]}" -y
+  local -a _ps=("${PIPESTATUS[@]}")
+  # grep exits 1 for "no lines selected", which is a legitimate empty list.
+  ((_ps[0] <= 1 && _ps[1] == 0))
+}
+
 _install_ubuntu_base_packages() {
-  sudo -H apt update
+  local _release _hwe
   if [[ -n ${NOBLE} ]]; then
+    _release=2404
+    _hwe=linux-generic-hwe-24.04
     printf "Installing hwe, common, and 24.04 packages\\n"
-    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" --install-recommends linux-generic-hwe-24.04 -y
-    check_and_install_nala
-    # Strip comments/blank lines: xargs -a feeds every line to nala, and a
-    # comment token like '--user' aborts the whole install ("No such option").
-    grep -vE '^[[:space:]]*(#|$)' ./ubuntu_common_packages.txt | xargs -r sudo DEBIAN_FRONTEND=noninteractive nala install "${APT_CONFFILE_OPTS[@]}" -y
-    grep -vE '^[[:space:]]*(#|$)' ./ubuntu_2404_packages.txt | xargs -r sudo DEBIAN_FRONTEND=noninteractive nala install "${APT_CONFFILE_OPTS[@]}" -y
   elif [[ -n ${RESOLUTE} ]]; then
+    _release=2604
+    _hwe=linux-generic-hwe-26.04
     printf "Installing hwe, common, and 26.04 packages\\n"
-    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" --install-recommends linux-generic-hwe-26.04 -y
-    check_and_install_nala
-    grep -vE '^[[:space:]]*(#|$)' ./ubuntu_common_packages.txt | xargs -r sudo DEBIAN_FRONTEND=noninteractive nala install "${APT_CONFFILE_OPTS[@]}" -y
-    grep -vE '^[[:space:]]*(#|$)' ./ubuntu_2604_packages.txt | xargs -r sudo DEBIAN_FRONTEND=noninteractive nala install "${APT_CONFFILE_OPTS[@]}" -y
   else
     log_error "Unsupported Ubuntu version: ${UBUNTU_VERSION:-unknown}"
     return 1
   fi
-  # Only an unsupported release is fatal here. Without this the function
-  # returned its last install's status, so one flaky package aborted every
-  # later step and the pyenv/ansible half. The installs above are unchecked,
-  # like the mid-step commands the backlog records.
+
+  # A failed update is one warning, not a failure: the installs below still
+  # work from the cached indexes, and apt names the offending source itself.
+  sudo -H apt update || log_warn "base: apt update reported errors (see apt's E:/W: lines above); continuing"
+
+  local -a _failed=()
+  sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" --install-recommends "${_hwe}" -y || {
+    log_warn "base: hwe kernel failed"
+    _failed+=("hwe kernel")
+  }
+  check_and_install_nala || {
+    log_warn "base: nala failed"
+    _failed+=("nala")
+  }
+  # Strip comments/blank lines: xargs -a feeds every line to nala, and a
+  # comment token like '--user' aborts the whole install ("No such option").
+  _install_ubuntu_package_list ./ubuntu_common_packages.txt || {
+    log_warn "base: common list failed"
+    _failed+=("common list")
+  }
+  _install_ubuntu_package_list "./ubuntu_${_release}_packages.txt" || {
+    log_warn "base: release list failed"
+    _failed+=("release list")
+  }
+  ((${#_failed[@]} == 0)) || return 2
   return 0
 }
 
@@ -66,11 +106,25 @@ _install_ubuntu_base_packages() {
 # snap is one failed step rather than a failed base.
 _install_ubuntu_workstation() {
   [[ -n ${HAS_SNAP} ]] || return 0
+  # rc 1 when either list failed; both are attempted regardless.
+  local _ws_rc=0
   printf "Installing workstation packages\\n"
-  grep -vE '^[[:space:]]*(#|$)' ./ubuntu_workstation_packages.txt | xargs -r sudo DEBIAN_FRONTEND=noninteractive nala install "${APT_CONFFILE_OPTS[@]}" -y
+  _install_ubuntu_package_list ./ubuntu_workstation_packages.txt || {
+    log_warn "workstation: package list failed"
+    _ws_rc=1
+  }
 
   printf "Installing workstation snap packages\\n"
+  # Same PIPESTATUS shape as _install_ubuntu_package_list: copy it on the very
+  # next line, and read grep's 1 ("no lines selected") as an empty list.
   grep -vE '^[[:space:]]*(#|$)' ./ubuntu_workstation_snap_packages.txt | xargs -r sudo snap install
+  local -a _ps=("${PIPESTATUS[@]}")
+  ((_ps[0] <= 1 && _ps[1] == 0)) || {
+    log_warn "workstation: snap list failed"
+    _ws_rc=1
+  }
+  ((_ws_rc == 0)) || return 1
+  return 0
 }
 
 # Whether pwsh actually runs, bounded by `timeout` so a hung binary cannot
@@ -186,17 +240,16 @@ _install_ubuntu_powershell() {
   # (see above) left a stale/wrong .deb behind, and only a fresh download and
   # a fresh dpkg -i repair it -- measured on `claude`, 2026-09-17. Every step
   # below checks its own exit status, so one broken upstream repository warns
-  # and returns rather than aborting the whole bootstrap (the dispatcher
-  # calls this function with `|| return 1`).
+  # and returns 1 rather than aborting the whole bootstrap.
   if ! wget -O "${HOME}"/software_downloads/packages-microsoft-prod.deb \
     "https://packages.microsoft.com/config/ubuntu/${_ms_rel}/packages-microsoft-prod.deb"; then
     log_warn "powershell: wget for packages-microsoft-prod.deb failed; skipping"
-    return 0
+    return 1
   fi
 
   if ! _ms_verify_deb "${HOME}"/software_downloads/packages-microsoft-prod.deb; then
     log_warn "powershell: packages-microsoft-prod.deb failed verification; skipping"
-    return 0
+    return 1
   fi
 
   # --force-confmiss: this package carries only a vendor apt keyring/source, so
@@ -206,17 +259,17 @@ _install_ubuntu_powershell() {
   # confmiss is used on these archive-setup debs only, nowhere else.
   if ! sudo -H DEBIAN_FRONTEND=noninteractive dpkg -i --force-confdef --force-confold --force-confmiss "${HOME}"/software_downloads/packages-microsoft-prod.deb; then
     log_warn "powershell: dpkg -i packages-microsoft-prod.deb failed; skipping"
-    return 0
+    return 1
   fi
 
   if ! sudo apt update; then
     log_warn "powershell: apt update failed; skipping"
-    return 0
+    return 1
   fi
 
   if ! sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" powershell -y; then
     log_warn "powershell: apt install powershell failed; skipping"
-    return 0
+    return 1
   fi
 
   # apt exits 0 for "powershell is already the newest version" even when the
@@ -225,46 +278,135 @@ _install_ubuntu_powershell() {
   # trusting apt's own exit status for this claim.
   if ! _pwsh_probe_runs; then
     log_warn "powershell: apt install succeeded but pwsh still does not run"
-    return 0
+    return 1
   fi
 
   printf "pwsh is installed\\n"
 }
 
+# A Go tree is intact when bin/go is a regular, non-symlink, executable,
+# non-empty file in a real directory.
+_go_tree_intact() {
+  [[ -d $1 && ! -L $1 && -f $1/bin/go && ! -L $1/bin/go && -x $1/bin/go && -s $1/bin/go ]]
+}
+
+# Delete <path> when it exists (or is a symlink) and is not an intact tree.
+_go_remove_damaged() {
+  [[ -e $1 || -L $1 ]] || return 0
+  _go_tree_intact "$1" && return 0
+  sudo rm -rf "$1"
+}
+
+# Install the pinned Go tarball into ${_GO_INSTALL_ROOT:-/usr/local}/go. The
+# tarball is extracted in a throwaway directory under _DL_TMP_ROOT, chowned to
+# root:root (tar ran as the user and a rename keeps ownership), then swapped in.
+# The moves are renames only because ~/software_downloads and /usr/local share a
+# filesystem on claude and workstation (measured); on a separate /home they
+# become copies. Every move's destination is checked absent first instead of
+# using `mv -T`, which macOS mv lacks and the test-macos job runs this suite.
+# The previous tree is kept as go.old until the new one is in place and is
+# restored if the new tree's move fails. The stamp `go` holds the URL and is
+# written only after the swap succeeded, so an interrupted run installs again
+# next time.
+# Returns 0 installed or up to date; 1 on a failed stage (named in a warning).
+# Seams, read at call time: _GO_INSTALL_ROOT, _DL_STAMP_DIR, _DL_TAR_BIN. The
+# owner is hardcoded root:root so an inherited variable cannot choose it.
+# No EXIT/RETURN trap (check-lib-exit-traps.sh; shell.md): every path after
+# mktemp reaches the explicit sudo rm -rf below.
 _install_go_from_tarball() {
-  if [[ ! -f ${HOME}/software_downloads/${GO_DOWNLOAD_FILENAME} ]]; then
-    wget -O "${HOME}"/software_downloads/"${GO_DOWNLOAD_FILENAME}" "${GO_DOWNLOAD_URL}" || return 1
-    tar xvf "${HOME}"/software_downloads/"${GO_DOWNLOAD_FILENAME}" -C "${HOME}"/software_downloads/ || return 1
-    if [[ -d ${HOME}/software_downloads/go ]]; then
-      # Only remove the existing installation once we know extraction succeeded
-      if [[ -d /usr/local/go ]]; then
-        sudo rm -rf /usr/local/go
-      fi
-      sudo mv "${HOME}"/software_downloads/go /usr/local/go
-      sudo chmod 755 /usr/local/go
-      sudo chown -R root:root /usr/local/go
-    fi
-    if [[ -d ${HOME}/software_downloads/go ]]; then
-      rm -rf "${HOME}"/software_downloads/go
+  local _root="${_GO_INSTALL_ROOT:-/usr/local}"
+  local _stamp="${_DL_STAMP_DIR:-${HOME}/.local/share/dotfiles/installed}/go"
+  local _tmp _stage="" _moved=0
+
+  if [[ -f ${_stamp} && -x ${_root}/go/bin/go && "$(< "${_stamp}")" == "${GO_DOWNLOAD_URL}" ]]; then
+    printf 'go: up to date (stamp %s); rm it to force a re-install\n' "${_stamp}"
+    return 0
+  fi
+
+  mkdir -p "${_DL_TMP_ROOT:-${HOME}/software_downloads}" || {
+    log_warn "go: workdir failed"
+    return 1
+  }
+  _tmp="$(mktemp -d "${_DL_TMP_ROOT:-${HOME}/software_downloads}/.dl.XXXXXXXX")" || {
+    log_warn "go: workdir failed"
+    return 1
+  }
+
+  if ! wget -O "${_tmp}/go.tgz" "${GO_DOWNLOAD_URL}"; then
+    _stage="download"
+  elif ! "${_DL_TAR_BIN:-tar}" -xzf "${_tmp}/go.tgz" -C "${_tmp}"; then
+    _stage="extract"
+  elif ! [[ -f ${_tmp}/go/bin/go && ! -L ${_tmp}/go/bin/go && -s ${_tmp}/go/bin/go ]]; then
+    _stage="extract"
+  elif ! sudo chown -R root:root "${_tmp}/go"; then
+    _stage="chown"
+  elif ! _go_remove_damaged "${_root}/go" || ! _go_remove_damaged "${_root}/go.old"; then
+    # A damaged tree is never a restore source and would otherwise fail every
+    # run without changing anything on disk.
+    _stage="swap"
+  elif [[ ! -e ${_root}/go && ! -L ${_root}/go && ( -e ${_root}/go.old || -L ${_root}/go.old ) ]] \
+    && ! sudo mv "${_root}/go.old" "${_root}/go"; then
+    # A previous run's restore failed, so go.old may be the only good copy.
+    _stage="restore"
+  fi
+  if [[ -z ${_stage} ]]; then
+    # Reached with go absent or intact (damaged trees were removed above) and
+    # go.old absent or intact; beside an intact go, go.old is stale now.
+    if [[ -e ${_root}/go ]]; then
+      sudo rm -rf "${_root}/go.old" || _stage="swap"
     fi
   fi
+  if [[ -z ${_stage} && -e ${_root}/go ]]; then
+    if [[ -e ${_root}/go.old || -L ${_root}/go.old ]] || ! sudo mv "${_root}/go" "${_root}/go.old"; then
+      _stage="swap"
+    else
+      _moved=1
+    fi
+  fi
+  if [[ -z ${_stage} ]]; then
+    if [[ -e ${_root}/go || -L ${_root}/go ]] || ! sudo mv "${_tmp}/go" "${_root}/go"; then
+      _stage="install"
+      if [[ ${_moved} -eq 1 ]] \
+        && { [[ -e ${_root}/go || -L ${_root}/go ]] || ! sudo mv "${_root}/go.old" "${_root}/go"; }; then
+        log_warn "go: could not restore the previous tree; it is at ${_root}/go.old"
+      fi
+    elif [[ ${_moved} -eq 1 ]]; then
+      sudo rm -rf "${_root}/go.old" || log_warn "go: could not remove ${_root}/go.old"
+    fi
+  fi
+  sudo rm -rf "${_tmp}" || log_warn "go: could not remove ${_tmp}"
+  if [[ -n ${_stage} ]]; then
+    log_warn "go: ${_stage} failed"
+    return 1
+  fi
+
+  if ! { mkdir -p "$(dirname "${_stamp}")" && printf '%s\n' "${GO_DOWNLOAD_URL}" > "${_stamp}"; } 2> /dev/null; then
+    log_warn "go: could not write stamp ${_stamp}; it will be re-installed next run"
+  fi
+  return 0
 }
 
 _install_ubuntu_go() {
   printf "Installing Go Ubuntu\\n"
-  sudo -H apt update
-  _install_go_from_tarball
+  # Best effort: the Go install below does not use apt, so a stale index here
+  # must not block it (the base step reports apt update failures once).
+  sudo -H apt update || :
+  _install_go_from_tarball || return 1
   # /usr/local/go/bin reaches PATH only via 6_path.zsh, which interactive zsh
   # alone sources -- so during a provision this probe resolved nothing and
   # printed "go: command not found" twice. Prefer the absolute install path,
   # fall back to PATH so an existing `go` (and the suite's mock) still drives it.
   local _go_bin="${_GO_BIN:-}"
   if [[ -z "${_go_bin}" ]]; then
-    if [[ -x /usr/local/go/bin/go ]]; then _go_bin=/usr/local/go/bin/go; else _go_bin=go; fi
+    if [[ -x ${_GO_INSTALL_ROOT:-/usr/local}/go/bin/go ]]; then _go_bin="${_GO_INSTALL_ROOT:-/usr/local}/go/bin/go"; else _go_bin=go; fi
   fi
   INSTALLED_GO_VER=$("${_go_bin}" version 2>/dev/null | awk '{print $3}' | sed 's/go//g')
-  if [[ ${INSTALLED_GO_VER} == "${GO_VER}" ]]; then
+  # GO_VER is a series ("1.27") while the toolchain reports a patch ("1.27.1").
+  if [[ ${INSTALLED_GO_VER} == "${GO_VER}" || ${INSTALLED_GO_VER} == "${GO_VER}".* ]]; then
     printf "Go %s is installed\\n" "${GO_VER}"
+  else
+    log_warn "go: version check failed (installed ${INSTALLED_GO_VER:-none}, want ${GO_VER})"
+    return 1
   fi
 }
 
@@ -394,15 +536,28 @@ _install_ubuntu_nvidia() {
   local _list="${_OVERRIDE_NVIDIA_LIST:-/etc/apt/sources.list.d/nvidia-container-toolkit.list}"
 
   if [[ ! -f ${_keyring} ]]; then
-    curl -fsSL "${NVIDIA_CONTAINER_GPGKEY_URL}" | sudo -H gpg --dearmor -o "${_keyring}" || return 1
+    _install_apt_keyring "${NVIDIA_CONTAINER_GPGKEY_URL}" "${_keyring}" armored || {
+      log_warn "nvidia: keyring: install failed"
+      return 1
+    }
   fi
 
   if [[ ! -f ${_list} ]]; then
     # NVIDIA serves no per-release list -- ubuntu26.04 and ubuntu24.04 both 404 while
     # stable/deb returns 200 and is distro-agnostic. Measured 2026-09-12.
-    curl -fsSL "${NVIDIA_CONTAINER_LIST_URL}" \
-      | sed "s#deb https://#deb [signed-by=${_keyring}] https://#g" \
-      | sudo -H tee "${_list}" > /dev/null || return 1
+    # Fetched, rewritten and installed as three checked stages: in a pipe the
+    # last command's status masks a failed fetch and an empty list gets written.
+    local _ltmp
+    _ltmp="$(mktemp -d "${_APT_KEY_TMP_ROOT:-${TMPDIR:-/tmp}}/nvidia-list.XXXXXXXX")" || return 1
+    # shellcheck disable=SC2024 # the redirect is read by the invoking user on purpose: the throwaway dir is user-owned and sudo only needs the content on stdin
+    if ! curl -fsSL -o "${_ltmp}/list" "${NVIDIA_CONTAINER_LIST_URL}" \
+      || ! sed "s#deb https://#deb [signed-by=${_keyring}] https://#g" "${_ltmp}/list" > "${_ltmp}/list.signed" \
+      || ! sudo -H tee "${_list}" < "${_ltmp}/list.signed" > /dev/null; then
+      log_warn "nvidia: container toolkit source list failed"
+      rm -rf "${_ltmp}"
+      return 1
+    fi
+    rm -rf "${_ltmp}"
     sudo -H apt update || return 1
   fi
 
@@ -432,192 +587,220 @@ _install_ubuntu_nvidia() {
 }
 
 _install_ubuntu_docker() {
-  if [[ -n ${HAS_DOCKER} ]]; then
-    printf "Installing docker\\n"
-    sudo mkdir -p /etc/apt/keyrings
-    if [[ -f /etc/apt/keyrings/docker.gpg ]]; then
-      sudo rm -f /etc/apt/keyrings/docker.gpg
+  [[ -n ${HAS_DOCKER} ]] || return 0
+  printf "Installing docker\\n"
+  # rc 3 when a core piece failed (docker-ce, docker-ce-cli, containerd.io or
+  # daemon.json) -- install_ubuntu_packages skips nvidia on exactly that; rc 1
+  # for any other failure (keyring, source, plugins, usermod); 0 otherwise.
+  local _core=0 _other=0
+  local _keyring="${_DOCKER_KEYRING:-/etc/apt/keyrings/docker.asc}"
+  local _list="${_DOCKER_SOURCES_LIST:-/etc/apt/sources.list.d/docker.list}"
+  local _pkg
+  sudo mkdir -p "$(dirname "${_keyring}")"
+  if [[ -f "$(dirname "${_keyring}")/docker.gpg" ]]; then
+    sudo rm -f "$(dirname "${_keyring}")/docker.gpg"
+  fi
+  # A keyring or source failure does not stop the installs below: apt is the
+  # authoritative check on whether the repo is usable.
+  _install_apt_keyring https://download.docker.com/linux/ubuntu/gpg "${_keyring}" binary || {
+    log_warn "docker: keyring: install failed"
+    _other=1
+  }
+  # Same rule as every other apt repo: no source without a non-empty keyring, so
+  # a failed fetch cannot leave a signed-by line that breaks every later apt update.
+  _write_apt_source_list docker "source list" "${_keyring}" "${_list}" \
+    "deb [arch=$(dpkg --print-architecture) signed-by=${_keyring}] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "${VERSION_CODENAME}") stable" \
+    || _other=1
+  # base owns the update warning; a failed refresh must not mask the install result.
+  sudo -H apt update || :
+  for _pkg in docker-ce docker-ce-cli containerd.io; do
+    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" "${_pkg}" -y || {
+      log_warn "docker: ${_pkg}: install failed"
+      _core=1
+    }
+  done
+  for _pkg in docker-buildx-plugin docker-compose-plugin; do
+    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" "${_pkg}" -y || {
+      log_warn "docker: ${_pkg}: install failed"
+      _other=1
+    }
+  done
+  local _daemon_json="${_DOCKER_DAEMON_JSON:-/etc/docker/daemon.json}"
+  if [[ ! -f ${_daemon_json} ]]; then
+    printf "Configuring Docker for cgroup v2\\n"
+    # SINGLE-quoted, so the escape is \n and not \\n. Every other printf in
+    # this file is double-quoted -- `printf "Docker is installed\\n"` -- where
+    # the shell collapses \\ to \ and printf then sees \n and emits a newline.
+    # Inside single quotes nothing collapses: printf receives \\n, turns \\
+    # into a literal backslash, and the n stays an n. The correct idiom
+    # inverts when copied across the quoting boundary, and the result is
+    # 46 bytes of valid JSON followed by two bytes of garbage.
+    #
+    # Measured on claude 2026-09-12: 48 bytes, `dockerd --validate` refusing
+    # it with "invalid character '\\' after top-level value". It was latent
+    # rather than visible -- dockerd had started before the file was written
+    # and never re-read it -- so docker info, systemctl is-active and every
+    # functional check passed, and only a cold start would have exposed it.
+    # It surfaced when a second daemon (docker-ci) parsed the file on its own
+    # cold start and restart-looped.
+    if ! printf '{"exec-opts": ["native.cgroupdriver=systemd"]}\n' | \
+      sudo tee "${_daemon_json}" > /dev/null; then
+      log_warn "docker: daemon.json: write failed"
+      _other=1
     fi
-    sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-    sudo chmod a+r /etc/apt/keyrings/docker.asc
-    echo \
-    "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
-    $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
-    sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-    sudo -H apt update
-    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" docker-ce -y
-    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" docker-ce-cli -y
-    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" containerd.io -y
-    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" docker-buildx-plugin -y
-    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" docker-compose-plugin -y
-    local _daemon_json="${_DOCKER_DAEMON_JSON:-/etc/docker/daemon.json}"
-    if [[ ! -f ${_daemon_json} ]]; then
-      printf "Configuring Docker for cgroup v2\\n"
-      # SINGLE-quoted, so the escape is \n and not \\n. Every other printf in
-      # this file is double-quoted -- `printf "Docker is installed\\n"` -- where
-      # the shell collapses \\ to \ and printf then sees \n and emits a newline.
-      # Inside single quotes nothing collapses: printf receives \\n, turns \\
-      # into a literal backslash, and the n stays an n. The correct idiom
-      # inverts when copied across the quoting boundary, and the result is
-      # 46 bytes of valid JSON followed by two bytes of garbage.
-      #
-      # Measured on claude 2026-09-12: 48 bytes, `dockerd --validate` refusing
-      # it with "invalid character '\\' after top-level value". It was latent
-      # rather than visible -- dockerd had started before the file was written
-      # and never re-read it -- so docker info, systemctl is-active and every
-      # functional check passed, and only a cold start would have exposed it.
-      # It surfaced when a second daemon (docker-ci) parsed the file on its own
-      # cold start and restart-looped.
-      printf '{"exec-opts": ["native.cgroupdriver=systemd"]}\n' | \
-        sudo tee "${_daemon_json}" > /dev/null
-      # Write, then prove the artifact is loadable. The escaping bug above was
-      # only half the defect: the write had no post-condition, so a file dockerd
-      # could not parse looked identical to a good one. dockerd holds whatever
-      # config it read at start, so `docker info`, `systemctl is-active` and
-      # every functional check keep passing over a broken file -- the only
-      # observable is a cold start, which may be days away and will land on
-      # whoever reboots rather than on whoever provisioned.
-      #
-      # dockerd --validate is the authoritative reader and exits non-zero with
-      # the parse error. _DOCKER_VALIDATE_BIN seams it for the suite, which runs
-      # on macs where dockerd does not exist -- same absolute-binary problem
-      # _OVERRIDE_KEYCHAIN_BIN and _AWS_GPG_BIN carry.
-      local _docker_validate="${_DOCKER_VALIDATE_BIN:-dockerd}"
-      if command -v "${_docker_validate}" > /dev/null 2>&1; then
-        if ! sudo "${_docker_validate}" --validate --config-file "${_daemon_json}" > /dev/null 2>&1; then
-          log_error "${_daemon_json} did not validate — refusing to leave a config dockerd cannot parse"
-          return 1
-        fi
-      else
-        # Absent validator is not evidence the file is good. Say so rather than
-        # passing silently, which is the shape that let the original bug ship.
-        log_warn "dockerd not resolvable — ${_daemon_json} written but NOT validated"
+    # Write, then prove the artifact is loadable. The escaping bug above was
+    # only half the defect: the write had no post-condition, so a file dockerd
+    # could not parse looked identical to a good one. dockerd holds whatever
+    # config it read at start, so `docker info`, `systemctl is-active` and
+    # every functional check keep passing over a broken file -- the only
+    # observable is a cold start, which may be days away and will land on
+    # whoever reboots rather than on whoever provisioned.
+    #
+    # dockerd --validate is the authoritative reader and exits non-zero with
+    # the parse error. _DOCKER_VALIDATE_BIN seams it for the suite, which runs
+    # on macs where dockerd does not exist -- same absolute-binary problem
+    # _OVERRIDE_KEYCHAIN_BIN and _AWS_GPG_BIN carry.
+    local _docker_validate="${_DOCKER_VALIDATE_BIN:-dockerd}"
+    if command -v "${_docker_validate}" > /dev/null 2>&1; then
+      if ! sudo "${_docker_validate}" --validate --config-file "${_daemon_json}" > /dev/null 2>&1; then
+        log_error "${_daemon_json} did not validate — refusing to leave a config dockerd cannot parse"
+        log_warn "docker: daemon.json: validation failed"
+        _core=1
       fi
-    fi
-    sudo usermod -a -G docker bruce
-    if [[ -x $(command -v docker) ]]; then
-      printf "Docker is installed\\n"
+    else
+      # Absent validator is not evidence the file is good. Say so rather than
+      # passing silently, which is the shape that let the original bug ship.
+      log_warn "dockerd not resolvable — ${_daemon_json} written but NOT validated"
     fi
   fi
+  sudo usermod -a -G docker bruce || {
+    log_warn "docker: usermod: group add failed"
+    _other=1
+  }
+  if [[ -x $(command -v docker) ]]; then
+    printf "Docker is installed\\n"
+  fi
+  ((_core == 0)) || return 3
+  ((_other == 0)) || return 1
+  return 0
 }
 
 _install_ubuntu_k8s_tools() {
+  # rc 1 when any tool failed; each is named in a warning. Every tool is
+  # attempted regardless of an earlier failure.
+  local _k8s_rc=0
+  local _sources="${_APT_SOURCES_DIR:-/etc/apt/sources.list.d}"
+  local _keyring="${_APT_KEYRINGS_DIR:-/etc/apt/keyrings}/kubernetes-apt-keyring.gpg"
   if [[ -n ${HAS_K8S} ]]; then
-    if [[ ! -f ${HOME}/software_downloads/kind_${KIND_VER} ]]; then
-      printf "Installing kind\\n"
-      wget -O "${HOME}"/software_downloads/kind_"${KIND_VER}" "${KIND_URL}"
-      sudo cp -a "${HOME}"/software_downloads/kind_"${KIND_VER}" /usr/local/bin/
-      sudo mv /usr/local/bin/kind_"${KIND_VER}" /usr/local/bin/kind
-      sudo chmod 755 /usr/local/bin/kind
-      sudo chown root:root /usr/local/bin/kind
-      if [[ -x $(command -v kind) ]]; then
-        printf "kind is installed\\n"
-      fi
-    fi
-  fi
-
-  if [[ -n ${HAS_K8S} ]]; then
+    printf "Installing kind\\n"
+    _install_fetched_binary kind "${KIND_URL}" bin kind || {
+      log_warn "k8s_tools: kind: install failed"
+      _k8s_rc=1
+    }
     printf "Installing telepresence\\n"
-    wget -O "${HOME}"/software_downloads/telepresence "${TELEPRESENCE_URL}"
-    sudo cp -a "${HOME}"/software_downloads/telepresence /usr/local/bin/
-    sudo chmod 755 /usr/local/bin/telepresence
-    sudo chown root:root /usr/local/bin/telepresence
-    if [[ -x $(command -v telepresence) ]]; then
-      printf "telepresence is installed\\n"
-    fi
+    _install_fetched_binary telepresence "${TELEPRESENCE_URL}" bin telepresence --resolve || {
+      log_warn "k8s_tools: telepresence: install failed"
+      _k8s_rc=1
+    }
   fi
 
   # Purge stale baltocdn helm APT source left by pre-PR#155 runs — the repo
   # serves unsigned/NOSPLIT data and has no resolute suite, causing apt update
   # to fail on every subsequent setup run even after the code was fixed.
-  sudo rm -f /etc/apt/sources.list.d/helm-stable-debian.list 2>/dev/null || true
+  # Advisory cleanup: a failure here is not a failed install.
+  sudo rm -f "${_sources}/helm-stable-debian.list" 2> /dev/null || true
 
-  sudo mkdir -p /etc/apt/keyrings
-  curl -fsSL "https://pkgs.k8s.io/core:/stable:/${KUBERNETES_VER}/deb/Release.key" \
-    | sudo gpg --dearmor --yes -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-  printf 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/%s/deb/ /\n' "${KUBERNETES_VER}" \
-    | sudo tee /etc/apt/sources.list.d/kubernetes.list
-  sudo -H apt update
-  sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" kubectl -y
+  # Advisory: the keyring helper's own install reports a real failure.
+  sudo mkdir -p "$(dirname "${_keyring}")" || log_warn "k8s_tools: kubectl: keyring directory could not be created"
+  _install_apt_keyring "https://pkgs.k8s.io/core:/stable:/${KUBERNETES_VER}/deb/Release.key" "${_keyring}" armored || {
+    log_warn "k8s_tools: kubectl: keyring install failed"
+    _k8s_rc=1
+  }
+  # A source signed-by a missing keyring would break every later apt update; the
+  # helper writes it only when a non-empty keyring exists (a previous one is kept on failure).
+  _write_apt_source_list k8s_tools kubectl "${_keyring}" "${_sources}/kubernetes.list" \
+    "deb [signed-by=${_keyring}] https://pkgs.k8s.io/core:/stable:/${KUBERNETES_VER}/deb/ /" || _k8s_rc=1
+  # base owns the update warning; a failed refresh must not mask the install result.
+  sudo -H apt update || :
+  sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" kubectl -y || {
+    log_warn "k8s_tools: kubectl: install failed"
+    _k8s_rc=1
+  }
 
   if [[ -n ${HAS_SNAP} ]]; then
-    sudo snap install helm --classic
+    sudo snap install helm --classic || {
+      log_warn "k8s_tools: helm: snap install failed"
+      _k8s_rc=1
+    }
   fi
   # helm and kustomize on non-snap systems are installed via brew in
   # _install_ubuntu_brew_packages(); no curl installer needed here.
+  ((_k8s_rc == 0)) || return 1
+  return 0
 }
 
 _install_ubuntu_hashicorp() {
-  printf "Installing Hashicorp Consul Ubuntu\\n"
-  if [[ ! -d ${HOME}/software_downloads/consul_${CONSUL_VER} ]]; then
-    wget -O "${HOME}"/software_downloads/consul_"${CONSUL_VER}"_linux_"${_LINUX_ARCH}".zip "${HASHICORP_URL}"/consul/"${CONSUL_VER}"/consul_"${CONSUL_VER}"_linux_"${_LINUX_ARCH}".zip
-    unzip "${HOME}"/software_downloads/consul_"${CONSUL_VER}"_linux_"${_LINUX_ARCH}".zip -d "${HOME}"/software_downloads/consul_"${CONSUL_VER}"
-    sudo cp -a "${HOME}"/software_downloads/consul_"${CONSUL_VER}"/consul /usr/local/bin/
-    sudo chmod 755 /usr/local/bin/consul
-    sudo chown root:root /usr/local/bin/consul
-    if [[ -x $(command -v consul) ]]; then
-      printf "consul is installed\\n"
-    fi
-  fi
-
-  printf "Installing Hashicorp Vault Ubuntu\\n"
-  if [[ ! -d ${HOME}/software_downloads/vault_${VAULT_VER} ]]; then
-    wget -O "${HOME}"/software_downloads/vault_"${VAULT_VER}"_linux_"${_LINUX_ARCH}".zip "${HASHICORP_URL}"/vault/"${VAULT_VER}"/vault_"${VAULT_VER}"_linux_"${_LINUX_ARCH}".zip
-    unzip "${HOME}"/software_downloads/vault_"${VAULT_VER}"_linux_"${_LINUX_ARCH}".zip -d "${HOME}"/software_downloads/vault_"${VAULT_VER}"
-    sudo cp -a "${HOME}"/software_downloads/vault_"${VAULT_VER}"/vault /usr/local/bin/
-    sudo chmod 755 /usr/local/bin/vault
-    sudo chown root:root /usr/local/bin/vault
-    if [[ -x $(command -v vault) ]]; then
-      printf "vault is installed\\n"
-    fi
-  fi
-
-  printf "Installing Hashicorp Nomad Ubuntu\\n"
-  if [[ ! -d ${HOME}/software_downloads/nomad_${NOMAD_VER} ]]; then
-    wget -O "${HOME}"/software_downloads/nomad_"${NOMAD_VER}"_linux_"${_LINUX_ARCH}".zip "${HASHICORP_URL}"/nomad/"${NOMAD_VER}"/nomad_"${NOMAD_VER}"_linux_"${_LINUX_ARCH}".zip
-    unzip "${HOME}"/software_downloads/nomad_"${NOMAD_VER}"_linux_"${_LINUX_ARCH}".zip -d "${HOME}"/software_downloads/nomad_"${NOMAD_VER}"
-    sudo cp -a "${HOME}"/software_downloads/nomad_"${NOMAD_VER}"/nomad /usr/local/bin/
-    sudo chmod 755 /usr/local/bin/nomad
-    sudo chown root:root /usr/local/bin/nomad
-    if [[ -x $(command -v nomad) ]]; then
-      printf "nomad is installed\\n"
-    fi
-  fi
-
-  printf "Installing Hashicorp Packer Ubuntu\\n"
-  if [[ ! -d ${HOME}/software_downloads/packer_${PACKER_VER} ]]; then
-    wget -O "${HOME}"/software_downloads/packer_"${PACKER_VER}"_linux_"${_LINUX_ARCH}".zip "${HASHICORP_URL}"/packer/"${PACKER_VER}"/packer_"${PACKER_VER}"_linux_"${_LINUX_ARCH}".zip
-    unzip "${HOME}"/software_downloads/packer_"${PACKER_VER}"_linux_"${_LINUX_ARCH}".zip -d "${HOME}"/software_downloads/packer_"${PACKER_VER}"
-    sudo cp -a "${HOME}"/software_downloads/packer_"${PACKER_VER}"/packer /usr/local/bin/
-    sudo chmod 755 /usr/local/bin/packer
-    sudo chown root:root /usr/local/bin/packer
-    if [[ -x $(command -v packer) ]]; then
-      printf "packer is installed\\n"
-    fi
-  fi
-
-  printf "Installing Hashicorp Vagrant Ubuntu\\n"
-  if [[ ! -d ${HOME}/software_downloads/vagrant_${VAGRANT_VER} ]]; then
+  # rc 1 when any tool failed; the helper names the failing stage and each
+  # failure is named here. Every tool is attempted regardless.
+  local _hc_rc=0 _tool _ver _var _arch
+  for _tool in consul vault nomad packer vagrant; do
+    printf "Installing Hashicorp %s Ubuntu\\n" "${_tool}"
+    _var="${_tool^^}_VER"
+    _ver="${!_var}"
+    _arch="${_LINUX_ARCH}"
     # vagrant has no ARM64 Linux build — amd64 only
-    wget -O "${HOME}"/software_downloads/vagrant_"${VAGRANT_VER}"_linux_amd64.zip "${HASHICORP_URL}"/vagrant/"${VAGRANT_VER}"/vagrant_"${VAGRANT_VER}"_linux_amd64.zip
-    unzip "${HOME}"/software_downloads/vagrant_"${VAGRANT_VER}"_linux_amd64.zip -d "${HOME}"/software_downloads/vagrant_"${VAGRANT_VER}"
-    sudo cp -a "${HOME}"/software_downloads/vagrant_"${VAGRANT_VER}"/vagrant /usr/local/bin/
-    sudo chmod 755 /usr/local/bin/vagrant
-    sudo chown root:root /usr/local/bin/vagrant
-    if [[ -x $(command -v vagrant) ]]; then
-      printf "vagrant is installed\\n"
-    fi
+    [[ ${_tool} == "vagrant" ]] && _arch="amd64"
+    _install_fetched_binary "${_tool}" \
+      "${HASHICORP_URL}/${_tool}/${_ver}/${_tool}_${_ver}_linux_${_arch}.zip" zip "${_tool}" || {
+      log_warn "hashicorp: ${_tool}: install failed"
+      _hc_rc=1
+    }
+  done
+  ((_hc_rc == 0)) || return 1
+  return 0
+}
+
+# Write an apt source list only when its keyring is a non-empty file: a source
+# signed-by a missing keyring would break every later apt update. Returns 1 (with a
+# warning naming <step>: <tool>) when the keyring is absent or the write fails.
+# Usage: _write_apt_source_list <step> <tool> <keyring> <list> <line>
+_write_apt_source_list() {
+  local _step="$1" _tool="$2" _ring="$3" _list="$4" _line="$5"
+  if [[ ! -s ${_ring} ]]; then
+    log_warn "${_step}: ${_tool}: source write skipped (no keyring)"
+    return 1
   fi
+  printf '%s\n' "${_line}" | sudo tee "${_list}" > /dev/null || {
+    log_warn "${_step}: ${_tool}: source list write failed"
+    return 1
+  }
+  return 0
 }
 
 _install_ubuntu_cloud_tools() {
+  # rc 1 when any tool failed; each is named in a warning. Every tool is
+  # attempted regardless of an earlier failure.
+  local _cloud_rc=0
+  local _sources="${_APT_SOURCES_DIR:-/etc/apt/sources.list.d}"
+  local _keyrings="${_APT_KEYRINGS_DIR:-/usr/share/keyrings}"
+  local _ring _list
   if [[ -n ${HAS_DEVTOOLS} ]]; then
     printf "Installing teleport\\n"
-    curl -fsSL https://deb.releases.teleport.dev/teleport-pubkey.asc | sudo gpg --dearmor --yes --output /usr/share/keyrings/teleport-pubkey.gpg
-    sudo rm -f /etc/apt/sources.list.d/archive_uri-https_deb_releases_teleport_dev_-noble.list
-    echo "deb [signed-by=/usr/share/keyrings/teleport-pubkey.gpg] https://deb.releases.teleport.dev/ stable main" | sudo tee /etc/apt/sources.list.d/teleport.list
-    sudo -H apt update
-    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" teleport -y
+    _ring="${_keyrings}/teleport-pubkey.gpg"
+    _install_apt_keyring "https://deb.releases.teleport.dev/teleport-pubkey.asc" "${_ring}" armored || {
+      log_warn "cloud_tools: teleport: keyring install failed"
+      _cloud_rc=1
+    }
+    # Advisory cleanup of a stale source: a failure here is not a failed install.
+    sudo rm -f "${_sources}/archive_uri-https_deb_releases_teleport_dev_-noble.list" 2> /dev/null || true
+    _write_apt_source_list cloud_tools teleport "${_ring}" "${_sources}/teleport.list" \
+      "deb [signed-by=${_ring}] https://deb.releases.teleport.dev/ stable main" || _cloud_rc=1
+    # base owns the update warning; a failed refresh must not mask the install result.
+    sudo -H apt update || :
+    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" teleport -y || {
+      log_warn "cloud_tools: teleport: install failed"
+      _cloud_rc=1
+    }
     if [[ -x $(command -v tsh) ]]; then
       printf "Teleport is installed\\n"
     fi
@@ -629,11 +812,20 @@ _install_ubuntu_cloud_tools() {
     _cf_codename="$(lsb_release -cs)"
     # Cloudflare WARP has no Ubuntu 26.04 packages yet; fall back to noble
     [[ -n "${RESOLUTE:-}" ]] && _cf_codename="noble"
-    local _cf_sources="${_CF_SOURCES_LIST:-/etc/apt/sources.list.d/cloudflare-client.list}"
-    curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
-    echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ ${_cf_codename} main" | sudo tee "${_cf_sources}"
-    sudo apt-get update
-    sudo DEBIAN_FRONTEND=noninteractive apt-get install "${APT_CONFFILE_OPTS[@]}" cloudflare-warp -y
+    local _cf_sources="${_CF_SOURCES_LIST:-${_sources}/cloudflare-client.list}"
+    _ring="${_keyrings}/cloudflare-warp-archive-keyring.gpg"
+    _install_apt_keyring "https://pkg.cloudflareclient.com/pubkey.gpg" "${_ring}" armored || {
+      log_warn "cloud_tools: cloudflared: keyring install failed"
+      _cloud_rc=1
+    }
+    _write_apt_source_list cloud_tools cloudflared "${_ring}" "${_cf_sources}" \
+      "deb [signed-by=${_ring}] https://pkg.cloudflareclient.com/ ${_cf_codename} main" || _cloud_rc=1
+    # base owns the update warning; a failed refresh must not mask the install result.
+    sudo apt-get update || :
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install "${APT_CONFFILE_OPTS[@]}" cloudflare-warp -y || {
+      log_warn "cloud_tools: cloudflared: install failed"
+      _cloud_rc=1
+    }
     if [[ -x $(command -v cloudflared) ]]; then
       printf "cloudflared is installed\\n"
     fi
@@ -651,34 +843,34 @@ _install_ubuntu_cloud_tools() {
     || log_warn "could not remove legacy azure-cli apt key/sources under ${_apt_trusted} and ${_apt_sources}"
 
   printf "Installing gcloud-sdk\\n"
-  if [[ ! -f /etc/apt/sources.list.d/google-cloud-sdk.list ]]; then
-    curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
-    echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+  _ring="${_keyrings}/cloud.google.gpg"
+  _list="${_sources}/google-cloud-sdk.list"
+  if [[ ! -f ${_list} ]]; then
+    _install_apt_keyring "https://packages.cloud.google.com/apt/doc/apt-key.gpg" "${_ring}" armored || {
+      log_warn "cloud_tools: gcloud: keyring install failed"
+      _cloud_rc=1
+    }
+    _write_apt_source_list cloud_tools gcloud "${_ring}" "${_list}" \
+      "deb [signed-by=${_ring}] https://packages.cloud.google.com/apt cloud-sdk main" || _cloud_rc=1
   fi
-  sudo apt update
-  sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" google-cloud-cli -y
-  sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" google-cloud-cli-app-engine-go -y
+  # base owns the update warning; a failed refresh must not mask the install result.
+  sudo apt update || :
+  sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" google-cloud-cli -y || {
+    log_warn "cloud_tools: gcloud: google-cloud-cli install failed"
+    _cloud_rc=1
+  }
+  sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" google-cloud-cli-app-engine-go -y || {
+    log_warn "cloud_tools: gcloud: google-cloud-cli-app-engine-go install failed"
+    _cloud_rc=1
+  }
 
   printf "Installing cf-terraforming Ubuntu\\n"
-  if [[ ! -f ${HOME}/software_downloads/cf-terraforming_${CF_TERRAFORMING_VER}_linux_${_LINUX_ARCH}.tar.gz ]]; then
-    wget -O "${HOME}"/software_downloads/cf-terraforming_"${CF_TERRAFORMING_VER}"_linux_"${_LINUX_ARCH}".tar.gz "${CF_TERRAFORMING_URL}"
-    tar xvf "${HOME}"/software_downloads/cf-terraforming_"${CF_TERRAFORMING_VER}"_linux_"${_LINUX_ARCH}".tar.gz -C "${HOME}"/software_downloads
-    if [[ -f ${HOME}/software_downloads/CHANGELOG.md ]]; then
-      rm "${HOME}"/software_downloads/CHANGELOG.md
-    fi
-    if [[ -f ${HOME}/software_downloads/LICENSE ]]; then
-      rm "${HOME}"/software_downloads/LICENSE
-    fi
-    if [[ -f ${HOME}/software_downloads/README.md ]]; then
-      rm "${HOME}"/software_downloads/README.md
-    fi
-    sudo cp -a "${HOME}"/software_downloads/cf-terraforming /usr/local/bin/
-    sudo chmod 755 /usr/local/bin/cf-terraforming
-    sudo chown root:root /usr/local/bin/cf-terraforming
-    if [[ -x $(command -v cf-terraforming) ]]; then
-      printf "cf-terraforming is installed\\n"
-    fi
-  fi
+  _install_fetched_binary cf-terraforming "${CF_TERRAFORMING_URL}" tar cf-terraforming || {
+    log_warn "cloud_tools: cf-terraforming: install failed"
+    _cloud_rc=1
+  }
+  ((_cloud_rc == 0)) || return 1
+  return 0
 }
 
 # Returns 0 clean, 1 hard failure, 2 partial success with the failed packages named.
@@ -847,6 +1039,152 @@ _build_pinned_keyring() {
   return "${_rc}"
 }
 
+# Fetch a key to a file, convert it in a throwaway dir as the invoking user (a
+# root-run gpg writes a umask-dependent 0600 file apt cannot read), then install
+# it 0644 to <keyring>.new and rename over <keyring>. A piped fetch cannot be
+# checked (the consumer's status masks curl's), and a stale .new from an
+# interrupted run would pass the non-empty check, so it is removed first. Any
+# failure leaves the existing <keyring> untouched and no .new behind.
+# Usage: _install_apt_keyring <url> <keyring> <armored|binary>
+# Returns 0 installed; 1 on bad arguments or any failed stage (named in a warning).
+# gpg is _APT_KEY_GPG_BIN (default gpg). No EXIT/RETURN trap, for the reason
+# given above _build_pinned_keyring.
+_install_apt_keyring() {
+  local _url="$1" _ring="$2" _kind="$3" _dir _src _stage=""
+  [[ -n ${_url} && -n ${_ring} ]] || return 1
+  [[ ${_kind} == "armored" || ${_kind} == "binary" ]] || return 1
+  _dir="$(mktemp -d "${_APT_KEY_TMP_ROOT:-${TMPDIR:-/tmp}}/apt-key.XXXXXXXX")" || return 1
+  if ! sudo rm -f "${_ring}.new"; then
+    log_warn "${_ring}: stale .new could not be removed"
+    rm -rf "${_dir}"
+    return 1
+  fi
+  if ! curl -fsSL -o "${_dir}/key" "${_url}"; then
+    log_warn "${_ring}: key download failed"
+    rm -rf "${_dir}"
+    return 1
+  fi
+  _src="${_dir}/key"
+  if [[ ${_kind} == "armored" ]]; then
+    _src="${_dir}/ring"
+    "${_APT_KEY_GPG_BIN:-gpg}" --batch --yes --dearmor -o "${_src}" < "${_dir}/key" || _stage="conversion"
+  fi
+  if [[ -z ${_stage} && ! -s ${_src} ]]; then
+    _stage="conversion"
+  fi
+  if [[ -z ${_stage} ]] && ! sudo install -m 0644 "${_src}" "${_ring}.new"; then
+    _stage="install"
+  fi
+  if [[ -z ${_stage} ]] && ! sudo mv -f "${_ring}.new" "${_ring}"; then
+    _stage="rename"
+  fi
+  if [[ -n ${_stage} ]]; then
+    log_warn "${_ring}: key ${_stage} failed"
+    sudo rm -f "${_ring}.new"
+    rm -rf "${_dir}"
+    return 1
+  fi
+  rm -rf "${_dir}"
+  return 0
+}
+
+# Fetch a binary into a throwaway dir, install it last, and stamp the URL only
+# after the install succeeds, so an interrupted run leaves the destination
+# untouched and the next run fetches again. The stamp is the idempotency check:
+# a stamp equal to the (resolved) URL plus an executable destination is a skip.
+# Usage: _install_fetched_binary <name> <url> <bin|zip|tar> <member> [<dest-name>] [--resolve]
+# <member> is the path inside a zip/tar (ignored for bin); <dest-name> defaults
+# to <name>. --resolve follows redirects first and uses the final URL as the
+# identity (for "latest" links); a failed resolution keeps a stamped, non-empty,
+# executable copy and otherwise fails.
+# Returns 0 installed, up to date, or kept; 1 on bad arguments or a failed stage
+# (named in a warning). A stamp that cannot be written warns and still returns 0.
+# Seams, read at call time: _DL_STAMP_DIR, _DL_TMP_ROOT, _DL_BIN_DIR,
+# _DL_UNZIP_BIN, _DL_TAR_BIN. No EXIT/RETURN trap (check-lib-exit-traps.sh;
+# shell.md): every path below reaches an explicit rm -rf.
+_install_fetched_binary() {
+  [[ $# -ge 4 ]] || return 1
+  local _name="$1" _url="$2" _kind="$3" _member="$4"
+  local _dest_name="" _resolve=0 _arg _stamp _bin _tmp _src _stage="" _resolved
+  [[ -n ${_name} && -n ${_url} ]] || return 1
+  [[ ${_kind} == "bin" || ${_kind} == "zip" || ${_kind} == "tar" ]] || return 1
+  shift 4
+  for _arg in "$@"; do
+    if [[ ${_arg} == "--resolve" ]]; then
+      _resolve=1
+    else
+      [[ -z ${_dest_name} ]] || return 1
+      _dest_name="${_arg}"
+    fi
+  done
+  _dest_name="${_dest_name:-${_name}}"
+  _stamp="${_DL_STAMP_DIR:-${HOME}/.local/share/dotfiles/installed}/${_name}"
+  _bin="${_DL_BIN_DIR:-/usr/local/bin}/${_dest_name}"
+
+  if [[ ${_resolve} -eq 1 ]]; then
+    _resolved="$(curl -fsSIL --proto-redir =https -o /dev/null -w '%{url_effective}' "${_url}")" || _resolved=""
+    # The resolved URL becomes the download target, so anything but https is
+    # a failed resolution even if curl was somehow told to follow it.
+    if [[ -z ${_resolved} || ${_resolved} != https://* || ${_resolved} == "${_url}" ]]; then
+      if [[ -f ${_stamp} && -x ${_bin} && -s ${_bin} ]]; then
+        log_warn "${_name}: could not resolve ${_url}; keeping installed copy"
+        return 0
+      fi
+      log_warn "${_name}: resolve failed"
+      return 1
+    fi
+    _url="${_resolved}"
+  fi
+
+  if [[ -f ${_stamp} && -x ${_bin} && "$(< "${_stamp}")" == "${_url}" ]]; then
+    printf '%s: up to date (stamp %s); rm it to force a re-install\n' "${_name}" "${_stamp}"
+    return 0
+  fi
+
+  mkdir -p "${_DL_TMP_ROOT:-${HOME}/software_downloads}" || {
+    log_warn "${_name}: workdir failed"
+    return 1
+  }
+  _tmp="$(mktemp -d "${_DL_TMP_ROOT:-${HOME}/software_downloads}/.dl.XXXXXXXX")" || {
+    log_warn "${_name}: workdir failed"
+    return 1
+  }
+
+  if ! wget -O "${_tmp}/dl" "${_url}"; then
+    _stage="download"
+  elif [[ ${_kind} == "bin" ]]; then
+    _src="${_tmp}/dl"
+  else
+    mkdir -p "${_tmp}/x"
+    if [[ ${_kind} == "zip" ]]; then
+      "${_DL_UNZIP_BIN:-unzip}" -o -q "${_tmp}/dl" -d "${_tmp}/x" || _stage="extract"
+    else
+      "${_DL_TAR_BIN:-tar}" -xzf "${_tmp}/dl" -C "${_tmp}/x" || _stage="extract"
+    fi
+    _src="${_tmp}/x/${_member}"
+  fi
+  # -s alone passes a directory and follows a symlink to any non-empty file.
+  if [[ -z ${_stage} ]] && ! [[ -f ${_src} && ! -L ${_src} && -s ${_src} ]]; then
+    _stage="extract"
+  fi
+  # Stage beside the destination and rename over it: a copy that dies midway
+  # then leaves a stray .new, never a truncated binary at the destination.
+  if [[ -z ${_stage} ]] && ! { sudo install -m 0755 "${_src}" "${_bin}.new" && sudo mv -f "${_bin}.new" "${_bin}"; }; then
+    _stage="install"
+    sudo rm -f "${_bin}.new" || log_warn "${_name}: could not remove ${_bin}.new"
+  fi
+  rm -rf "${_tmp}"
+  if [[ -n ${_stage} ]]; then
+    log_warn "${_name}: ${_stage} failed"
+    return 1
+  fi
+
+  if ! { mkdir -p "$(dirname "${_stamp}")" && printf '%s\n' "${_url}" > "${_stamp}"; } 2> /dev/null; then
+    log_warn "${_name}: could not write stamp ${_stamp}; it will be re-installed next run"
+  fi
+  return 0
+}
+
 # Own function so tests can drive the edge source logic without also running the
 # albert writes that share _install_ubuntu_gui_tools.
 _install_ubuntu_edge_source() {
@@ -872,6 +1210,7 @@ _install_ubuntu_edge_source() {
     else
       log_warn "edge: could not build ${_edge_keyring} (gpg missing or failed on ${_edge_key}, the keyring lacks the pinned fingerprint, or it is not writable); writing no Edge source"
       sudo rm -f "${_edge_list}" "${_edge_keyring}"
+      return 1
     fi
   fi
 }
@@ -963,54 +1302,91 @@ _install_ubuntu_albert() {
 }
 
 _install_ubuntu_gui_tools() {
+  # Returns albert's own rc when it is non-zero (as before); otherwise 1 when any
+  # other sub-install failed, each named in a warning, else 0. Every sub-install
+  # is attempted regardless of an earlier failure.
+  local _gui_rc=0 _albert_rc=0 _ring _snap
+  local _sources="${_APT_SOURCES_DIR:-/etc/apt/sources.list.d}"
+  local _keyrings="${_APT_KEYRINGS_DIR:-/usr/share/keyrings}"
   if [[ -n ${HAS_DEVTOOLS} ]]; then
     printf "Installing Virtualbox\\n"
-    wget -O- https://www.virtualbox.org/download/oracle_vbox_2016.asc | sudo gpg --dearmor --yes --output /usr/share/keyrings/oracle-virtualbox-2016.gpg
+    _ring="${_keyrings}/oracle-virtualbox-2016.gpg"
+    _install_apt_keyring "https://www.virtualbox.org/download/oracle_vbox_2016.asc" "${_ring}" armored || {
+      log_warn "gui_tools: virtualbox: keyring install failed"
+      _gui_rc=1
+    }
     # VirtualBox has no ARM64 Linux build — amd64 only
-    echo "deb [arch=amd64 signed-by=/usr/share/keyrings/oracle-virtualbox-2016.gpg] http://download.virtualbox.org/virtualbox/debian $(. /etc/os-release && echo "$VERSION_CODENAME") contrib" | sudo tee /etc/apt/sources.list.d/virtualbox.list
-    sudo -H apt update
+    _write_apt_source_list gui_tools virtualbox "${_ring}" "${_sources}/virtualbox.list" \
+      "deb [arch=amd64 signed-by=${_ring}] http://download.virtualbox.org/virtualbox/debian $(. /etc/os-release && echo "$VERSION_CODENAME") contrib" || _gui_rc=1
+    # base owns the update warning; a failed refresh must not mask the install result.
+    sudo -H apt update || :
     # shellcheck disable=SC2086 # package-name slot: apt install takes a list, and VIRTUALBOX_VER may hold more than one package
-    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" ${VIRTUALBOX_VER} -y
+    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" ${VIRTUALBOX_VER} -y || {
+      log_warn "gui_tools: virtualbox: install failed"
+      _gui_rc=1
+    }
     if [[ -x $(command -v vboxmanage) ]]; then
       printf "Virtualbox is installed\\n"
     fi
   fi
 
-  local _albert_rc=0 _tail_rc
   if [[ -n ${HAS_SNAP} ]]; then
-    _install_ubuntu_albert || _albert_rc=$?
+    _install_ubuntu_albert || {
+      _albert_rc=$?
+      log_warn "gui_tools: albert: install failed"
+    }
   fi
 
   if [[ -n ${HAS_SNAP} ]]; then
     printf "Installing microsoft edge\\n"
-    _install_ubuntu_edge_source
-    sudo -H apt update
-    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" microsoft-edge-stable -y
+    _install_ubuntu_edge_source || {
+      log_warn "gui_tools: edge: source setup failed"
+      _gui_rc=1
+    }
+    # base owns the update warning; a failed refresh must not mask the install result.
+    sudo -H apt update || :
+    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" microsoft-edge-stable -y || {
+      log_warn "gui_tools: edge: install failed"
+      _gui_rc=1
+    }
   fi
 
   if [[ -n ${HAS_SNAP} ]]; then
     printf "snap software with classic option, the other snap packages are installed in ubuntu_workstation_snap_packages.txt\\n"
-    sudo snap install code --classic
-    sudo snap install slack --classic
-    sudo snap install certbot --classic
-    sudo snap set certbot trust-plugin-with-root=ok
-    sudo snap install certbot-dns-route53
+    for _snap in code slack certbot; do
+      sudo snap install "${_snap}" --classic || {
+        log_warn "gui_tools: snap ${_snap}: install failed"
+        _gui_rc=1
+      }
+    done
+    sudo snap set certbot trust-plugin-with-root=ok || {
+      log_warn "gui_tools: snap certbot: trust-plugin-with-root failed"
+      _gui_rc=1
+    }
+    sudo snap install certbot-dns-route53 || {
+      log_warn "gui_tools: snap certbot-dns-route53: install failed"
+      _gui_rc=1
+    }
   fi
 
   if [[ -n ${HAS_FLATPAK} ]]; then
     printf "Installing Steam via Flatpak\\n"
-    sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-    sudo flatpak install flathub com.valvesoftware.Steam -y
+    sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo || {
+      log_warn "gui_tools: steam: flathub remote-add failed"
+      _gui_rc=1
+    }
+    sudo flatpak install flathub com.valvesoftware.Steam -y || {
+      log_warn "gui_tools: steam: install failed"
+      _gui_rc=1
+    }
+    # Advisory probe: the message below is informational, not a status.
     if sudo flatpak list | grep -q com.valvesoftware.Steam; then
       printf "Steam is installed\\n"
     fi
   fi
-  # Captures the status of the HAS_FLATPAK `if` block directly above (0 when it is
-  # skipped); keep this capture directly after it so a clean albert hands back that
-  # step's own status unchanged.
-  _tail_rc=$?
   [[ ${_albert_rc} -ne 0 ]] && return "${_albert_rc}"
-  return "${_tail_rc}"
+  ((_gui_rc == 0)) || return 1
+  return 0
 }
 
 # Installs a checksum-verified release binary, skipping when the copy already
@@ -1260,30 +1636,22 @@ _install_ubuntu_tfenv() {
 }
 
 _install_ubuntu_misc() {
+  # rc 1 when docker-compose, yq, opentofu or the nala install failed; each is
+  # named in a warning and the rest are still attempted. dotnet, tflint, tfsec,
+  # tfenv and nala autoremove are advisory.
+  local _misc_rc=0
   printf "Installing docker-compose Ubuntu\\n"
-  if [[ ! -f ${HOME}/software_downloads/docker-compose_${DOCKER_COMPOSE_VER} ]]; then
-    wget -O "${HOME}"/software_downloads/docker-compose_"${DOCKER_COMPOSE_VER}" "${DOCKER_COMPOSE_URL}"
-    sudo cp -a "${HOME}"/software_downloads/docker-compose_"${DOCKER_COMPOSE_VER}" /usr/local/bin/
-    sudo mv /usr/local/bin/docker-compose_"${DOCKER_COMPOSE_VER}" /usr/local/bin/docker-compose
-    sudo chmod 755 /usr/local/bin/docker-compose
-    sudo chown root:root /usr/local/bin/docker-compose
-    if [[ -x $(command -v docker-compose) ]]; then
-      printf "docker-compose is installed\\n"
-    fi
-  fi
+  _install_fetched_binary docker-compose "${DOCKER_COMPOSE_URL}" bin docker-compose || {
+    log_warn "misc: docker-compose: install failed"
+    _misc_rc=1
+  }
 
   if [[ -n ${HAS_DEVTOOLS} ]]; then
-    if [[ ! -f ${HOME}/software_downloads/yq_${YQ_VER} ]]; then
-      printf "Installing yq\\n"
-      wget -O "${HOME}"/software_downloads/yq_"${YQ_VER}" "${YQ_URL}"
-      sudo cp -a "${HOME}"/software_downloads/yq_"${YQ_VER}" /usr/local/bin/
-      sudo mv /usr/local/bin/yq_"${YQ_VER}" /usr/local/bin/yq
-      sudo chmod 755 /usr/local/bin/yq
-      sudo chown root:root /usr/local/bin/yq
-      if [[ -x $(command -v yq) ]]; then
-        printf "yq is installed\\n"
-      fi
-    fi
+    printf "Installing yq\\n"
+    _install_fetched_binary yq "${YQ_URL}" bin yq || {
+      log_warn "misc: yq: install failed"
+      _misc_rc=1
+    }
   fi
 
   if [[ -n ${HAS_DEVTOOLS} ]]; then
@@ -1302,18 +1670,28 @@ _install_ubuntu_misc() {
     # Unset in normal operation — identical to `! command -v tofu`.
     if [[ -n ${_FORCE_OPENTOFU_INSTALL:-} ]] || ! command -v tofu &>/dev/null; then
       printf "Installing opentofu\\n"
-      sudo mkdir -p /etc/apt/keyrings
-      curl -fsSL https://packages.opentofu.org/opentofu/tofu/gpgkey \
-        | sudo gpg --dearmor -o /etc/apt/keyrings/opentofu-archive-keyring.gpg
-      printf "deb [signed-by=/etc/apt/keyrings/opentofu-archive-keyring.gpg] https://packages.opentofu.org/opentofu/tofu/any/ any main\n" \
-        | sudo DEBIAN_FRONTEND=noninteractive tee /etc/apt/sources.list.d/opentofu.list > /dev/null
-      sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq
+      local _tofu_keyrings="${_APT_KEYRINGS_DIR:-/etc/apt/keyrings}"
+      local _tofu_ring="${_tofu_keyrings}/opentofu-archive-keyring.gpg"
+      # Advisory: if the directory cannot be made, the keyring install below
+      # fails and names the cause.
+      sudo mkdir -p "${_tofu_keyrings}" || :
+      _install_apt_keyring https://packages.opentofu.org/opentofu/tofu/gpgkey "${_tofu_ring}" armored || {
+        log_warn "misc: opentofu: keyring install failed"
+        _misc_rc=1
+      }
+      _write_apt_source_list misc opentofu "${_tofu_ring}" "${_APT_SOURCES_DIR:-/etc/apt/sources.list.d}/opentofu.list" \
+        "deb [signed-by=${_tofu_ring}] https://packages.opentofu.org/opentofu/tofu/any/ any main" || _misc_rc=1
+      # base owns the update warning; a failed refresh must not mask the install result.
+      sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq || :
       # The package in packages.opentofu.org/opentofu/tofu/any is named `tofu`,
       # not `opentofu` -- its amd64 index carries exactly that one package.
       # Installing `opentofu` failed with "Unable to locate package" on every
       # Ubuntu release, silently, because the `command -v tofu` check below
       # simply never fired. Measured on claude 2026-09-12.
-      sudo DEBIAN_FRONTEND=noninteractive apt-get install "${APT_CONFFILE_OPTS[@]}" -y tofu
+      sudo DEBIAN_FRONTEND=noninteractive apt-get install "${APT_CONFFILE_OPTS[@]}" -y tofu || {
+        log_warn "misc: opentofu: install failed"
+        _misc_rc=1
+      }
       if command -v tofu &>/dev/null; then
         printf "opentofu is installed\\n"
       fi
@@ -1332,9 +1710,13 @@ _install_ubuntu_misc() {
   # contract ever changes.
   _install_ubuntu_tfenv || log_warn "tfenv install failed; skipping"
 
-  check_and_install_nala
+  check_and_install_nala || {
+    log_warn "misc: nala: install failed"
+    _misc_rc=1
+  }
   # </dev/null: same job-control hang as update_apt_packages in lib/linux_shared.sh.
-  sudo -H DEBIAN_FRONTEND=noninteractive nala autoremove -y < /dev/null
+  sudo -H DEBIAN_FRONTEND=noninteractive nala autoremove -y < /dev/null || log_warn "misc: nala autoremove failed"
+  return "${_misc_rc}"
 }
 
 [[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0

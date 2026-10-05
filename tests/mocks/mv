@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 printf "mv %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+# MOCK_MV_FAIL_ARGS: fail (without moving) any call whose argv contains this.
+if [[ -n "${MOCK_MV_FAIL_ARGS:-}" ]] && [[ "$*" == *"${MOCK_MV_FAIL_ARGS}"* ]]; then
+  exit 1
+fi
 if [[ "${MOCK_MV_EXIT:-0}" -ne 0 ]]; then
   exit "${MOCK_MV_EXIT}"
 fi
