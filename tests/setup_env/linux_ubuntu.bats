@@ -3511,6 +3511,27 @@ _gui_env() {
   [ -x "${_DL_BIN_DIR}/docker-compose" ]
 }
 
+@test "_install_ubuntu_misc: a failing nala install is named, returns 1 and autoremove is still attempted" {
+  export DOCKER_COMPOSE_URL="https://example.invalid/docker-compose"
+  export YQ_URL="https://example.invalid/yq"
+  unset HAS_DEVTOOLS
+  check_and_install_nala() { return 1; }
+  run _install_ubuntu_misc
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"misc: nala: install failed"* ]]
+  grep -q "nala autoremove" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_misc: a successful nala install logs no nala failure" {
+  export DOCKER_COMPOSE_URL="https://example.invalid/docker-compose"
+  export YQ_URL="https://example.invalid/yq"
+  unset HAS_DEVTOOLS
+  check_and_install_nala() { return 0; }
+  run _install_ubuntu_misc
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"misc: nala: install failed"* ]]
+}
+
 @test "_install_ubuntu_misc: nala autoremove does not inherit the caller's stdin" {
   export DOCKER_COMPOSE_VER="2.24.0"
   export DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64"
@@ -3635,6 +3656,8 @@ _gui_env() {
   _install_ubuntu_tflint() { :; }
   _install_ubuntu_tfsec() { :; }
   _install_ubuntu_tfenv() { :; }
+  # nala install failure is now fatal for misc; keep this test about dotnet only.
+  check_and_install_nala() { return 0; }
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
   [[ "$output" == *"dotnet-sdk-10.0 not available"* ]]

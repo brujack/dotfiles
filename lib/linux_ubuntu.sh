@@ -1707,7 +1707,10 @@ _install_ubuntu_misc() {
   # contract ever changes.
   _install_ubuntu_tfenv || log_warn "tfenv install failed; skipping"
 
-  check_and_install_nala
+  check_and_install_nala || {
+    log_warn "misc: nala: install failed"
+    _misc_rc=1
+  }
   # </dev/null: same job-control hang as update_apt_packages in lib/linux_shared.sh.
   sudo -H DEBIAN_FRONTEND=noninteractive nala autoremove -y < /dev/null || log_warn "misc: nala autoremove failed"
   return "${_misc_rc}"
