@@ -1636,9 +1636,9 @@ _install_ubuntu_tfenv() {
 }
 
 _install_ubuntu_misc() {
-  # rc 1 when docker-compose, yq or opentofu failed; each is named in a warning
-  # and the rest are still attempted. dotnet, tflint, tfsec, tfenv and the nala
-  # cleanup are advisory.
+  # rc 1 when docker-compose, yq, opentofu or the nala install failed; each is
+  # named in a warning and the rest are still attempted. dotnet, tflint, tfsec,
+  # tfenv and nala autoremove are advisory.
   local _misc_rc=0
   printf "Installing docker-compose Ubuntu\\n"
   _install_fetched_binary docker-compose "${DOCKER_COMPOSE_URL}" bin docker-compose || {
