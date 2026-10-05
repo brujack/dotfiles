@@ -169,7 +169,6 @@ cask "istat-menus"
 cask "iterm2"                                # [HAS_DEVTOOLS]
 cask "lens"                                  # [HAS_K8S]
 cask "logi-options+"
-cask "macdown"
 cask "malwarebytes"
 cask "microsoft-auto-update"
 cask "microsoft-office"
