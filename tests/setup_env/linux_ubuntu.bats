@@ -3101,6 +3101,23 @@ _az_cloud_env() {
   grep -q "apt install albert" "${MOCK_CALLS_FILE}"
 }
 
+@test "_install_ubuntu_gui_tools: a failing albert install is named and its rc propagates" {
+  export HAS_SNAP=1
+  unset HAS_DEVTOOLS
+  _install_ubuntu_albert() { return 2; }
+  run _install_ubuntu_gui_tools
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"gui_tools: albert: install failed"* ]]
+}
+
+@test "_install_ubuntu_gui_tools: a clean albert install logs no albert failure" {
+  export HAS_SNAP=1
+  unset HAS_DEVTOOLS
+  _install_ubuntu_albert() { return 0; }
+  run _install_ubuntu_gui_tools
+  [[ "$output" != *"gui_tools: albert: install failed"* ]]
+}
+
 # Fixture for a package-owned, enabled Edge source (deb822).
 _edge_live_sources() {
   printf 'Types: deb\nURIs: https://packages.microsoft.com/repos/edge-stable\nSuites: stable\n' \

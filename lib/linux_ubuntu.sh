@@ -1331,7 +1331,10 @@ _install_ubuntu_gui_tools() {
   fi
 
   if [[ -n ${HAS_SNAP} ]]; then
-    _install_ubuntu_albert || _albert_rc=$?
+    _install_ubuntu_albert || {
+      _albert_rc=$?
+      log_warn "gui_tools: albert: install failed"
+    }
   fi
 
   if [[ -n ${HAS_SNAP} ]]; then
