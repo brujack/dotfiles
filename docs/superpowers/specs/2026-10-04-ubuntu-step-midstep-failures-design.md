@@ -395,6 +395,10 @@ Every new check gets a mutation control: delete the check and confirm its test g
 - finding N4 (2026-10-04, reviewer B): VIOLATED — A removal of a stale leftover file now fails the keyring install (and so the calling step); likewise `sudo rm -rf "${_root}/go.old" || _stage="swap"` (:367) fails go on a failed stale-go.old removal -- both are removals of leftovers that became failure paths, though each gates a later check (non-empty .new / absent mv destination), so this may be judged a precondition rather than cleanup.
 - N4 reviewed: the stale `<keyring>.new` removal and the damaged `go.old` removal are preconditions, not cleanup — the non-empty `.new` check and the absent-destination `mv` that follow are only valid once they succeed; advisory cleanup (helm/teleport legacy lists, nala autoremove) stays advisory.
 - R12 -> Go is extracted in a throwaway directory, chowned to `root:root` before the swap, and swapped in with plain `mv` after verifying each move's destination is absent. Before the swap, a `${root}/go` or `${root}/go.old` that exists but is not intact (intact: a real directory whose `bin/go` is a regular, non-symlink, executable, non-empty file) is removed; a removal failure fails the sub-install. Then a missing `go` with an intact `go.old` is moved back first (a failed move-back fails the sub-install without touching `go.old`); an intact `go` replaces a stale `go.old`; if the new tree's move fails after the old tree was moved aside, the old tree is restored; `go.old` is deleted only after the new tree is in place; the stamp is written only after the swap succeeded; the throwaway directory is removed with `sudo rm -rf`. — bug-scan found the previous rule made a damaged `go` fail every run forever, since nothing on disk changed; a damaged tree holds nothing worth keeping.
+- finding R2 (2026-10-04, reviewer both): DIFFERS — All ten tools go through _install_fetched_binary with a throwaway dir, `sudo install -m 0755` to `<dest>.new` then `mv -f` (lib/linux_ubuntu.sh:1172), stamp after rename and warn-on-stamp-failure (1182), but `<dest>.new` is removed only on the install/rename failure path (1174); the download and extract failure paths remove the throwaway dir but leave any pre-existing `<dest>.new` (e.g. from an interrupted earlier run), unlike _install_apt_keyring which removes a stale .new first, so 'any <dest>.new on every failure path' is not met.
+- R2 -> kind, telepresence, consul, vault, nomad, packer, vagrant, cf-terraforming, docker-compose and yq are installed through `_install_fetched_binary`, which downloads and extracts only inside a throwaway directory, stages the binary with `sudo install -m 0755` to `<dest>.new` and renames it over the destination only after every earlier stage succeeded, writes the stamp only after the rename succeeded, treats a failed stamp write as a warning, removes the throwaway directory on every path, and removes a `<dest>.new` it staged when the install or rename fails. — a `.new` left by an interrupted earlier run is overwritten by the next successful install (verified by security-review), so only the run's own staging file needs removing.
+- finding R6 (2026-10-04, reviewer B): DIFFERS — base logs one warning (:228) and docker/k8s/cloud_tools/gui_tools/misc/go use `|| :` silently, but _install_ubuntu_powershell still logs 'powershell: apt update failed; skipping' (:310) on an apt update failure, so 'no other step's logs one' does not hold literally unless the powershell/nvidia exception is read as covering the warning too.
+- R6 reviewed: powershell's `powershell: apt update failed; skipping` predates this branch and belongs to the named exception — powershell and nvidia keep checking `apt update` as a failure, and a failure there is reported by that step, not by base.
 
 ## Multi-Lens Review
 
@@ -475,3 +479,32 @@ Finding: (1) `_GO_OWNER`'s stated reason was false: `tests/mocks/chown` records 
 Assumption: `…/latest/telepresence` keeps redirecting; a direct 200 would make `url_effective` equal the input and freeze the stamp. Guard: treat an unchanged URL as a failed resolution.
 Disposition: Addressed — seam dropped and `root:root` hardcoded; `mv`-order assertion and failed move-back defined (R12); `wget` named as the fetch tool; warn-and-skip on failed resolution requires a stamp and a non-empty executable, and an unchanged resolved URL counts as failed (R13); stamp-write warning names the path. Operator, 2026-10-04: "1-5 addressed".
 
+## Spec alignment (2026-10-04)
+
+- spec: docs/superpowers/specs/2026-10-04-ubuntu-step-midstep-failures-design.md
+- anchor: b57cefe850126dd282106e9b647b88e0bdd1ec9b
+- in scope: R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+| R2 | both | DIFFERS | All ten tools go through _install_fetched_binary with a throwaway dir, `sudo install -m 0755` to `<dest>.new` then `mv -f` (lib/linux_ubuntu.sh:1172), stamp after rename and warn-on-stamp-failure (1182), but `<dest>.new` is removed only on the install/rename failure path (1174); the download and extract failure paths remove the throwaway dir but leave any pre-existing `<dest>.new` (e.g. from an interrupted earlier run), unlike _install_apt_keyring which removes a stale .new first, so 'any <dest>.new on every failure path' is not met. | - R2 -> kind, telepresence, consul, vault, nomad, packer, vagrant, cf-terraforming, docker-compose and yq are installed through `_install_fetched_binary`, which downloads and extracts only inside a throwaway directory, stages the binary with `sudo install -m 0755` to `<dest>.new` and renames it over the destination only after every earlier stage succeeded, writes the stamp only after the rename succeeded, treats a failed stamp write as a warning, removes the throwaway directory on every path, and removes a `<dest>.new` it staged when the install or rename fails. — a `.new` left by an interrupted earlier run is overwritten by the next successful install (verified by security-review), so only the run's own staging file needs removing. |
+| R6 | B | DIFFERS | base logs one warning (:228) and docker/k8s/cloud_tools/gui_tools/misc/go use `\|\| :` silently, but _install_ubuntu_powershell still logs 'powershell: apt update failed; skipping' (:310) on an apt update failure, so 'no other step's logs one' does not hold literally unless the powershell/nvidia exception is read as covering the warning too. | - R6 reviewed: powershell's `powershell: apt update failed; skipping` predates this branch and belongs to the named exception — powershell and nvidia keep checking `apt update` as a failure, and a failure there is reported by that step, not by base. |
+
+### Reviewed
+
+- R4 reviewed: fixed in 11f11d84 — misc now warns `misc: docker-compose: install failed` and `misc: yq: install failed`, with tests asserting both.
+- R1 reviewed: fixed in 5656fb24 — misc now warns `misc: nala: install failed` and fails the step when check_and_install_nala fails; nala autoremove stays advisory.
+- R4 reviewed: fixed in 1c244e27 — gui_tools warns `gui_tools: albert: install failed` before propagating albert's rc.
+- N4 reviewed: the stale `<keyring>.new` removal and the damaged `go.old` removal are preconditions, not cleanup — the non-empty `.new` check and the absent-destination `mv` that follow are only valid once they succeed; advisory cleanup (helm/teleport legacy lists, nala autoremove) stays advisory.
+- R6 reviewed: powershell's `powershell: apt update failed; skipping` predates this branch and belongs to the named exception — powershell and nvidia keep checking `apt update` as a failure, and a failure there is reported by that step, not by base.
+
+### Verifications
+
+- V1: per-task mutation controls in Phase 2 reviews and Phase 3 test-quality rounds
+- V2: make test 2571 ok / 0 not ok on claude at 1c244e27; CI pending
+- V3: measured 2026-10-04 on claude: apt-get update with an unresolvable host exits 0 (W: only); with a missing Release file exits 100 (E:); apt install -y bash with the dead source exits 0
+- V4: measured 2026-10-04 on claude: workstation snap list via xargs, snap install helm/code/slack/certbot --classic, snap set certbot trust-plugin-with-root=ok, snap install certbot-dns-route53 all exit 0 on installed snaps
+- V5: post-merge, pending
