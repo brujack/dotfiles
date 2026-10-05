@@ -1497,6 +1497,27 @@ _go_twice_ok() {
   refute_grep "^mv " "${MOCK_CALLS_FILE}"
 }
 
+@test "_install_ubuntu_go: a failed removal of a damaged go fails the run and keeps the intact go.old" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  mkdir -p "${_GO_INSTALL_ROOT}/go"
+  printf 'damaged' > "${_GO_INSTALL_ROOT}/go/marker"
+  _seed_intact_go_old
+  # An rm that refuses exactly the damaged go and nothing else.
+  local _shim="${BATS_TEST_TMPDIR}/rmshim"
+  mkdir -p "${_shim}"
+  printf '#!/usr/bin/env bash\n[[ "$*" == "-rf %s/go" ]] && exit 1\nexec /bin/rm "$@"\n' "${_GO_INSTALL_ROOT}" > "${_shim}/rm"
+  /bin/chmod +x "${_shim}/rm"
+  PATH="${_shim}:${PATH}" run _install_ubuntu_go
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"go: swap failed"* ]]
+  # The cause, not just the stage: go.old is the only good copy and must survive.
+  [ "$(< "${_GO_INSTALL_ROOT}/go.old/bin/v")" = "old" ]
+  [ -f "${_GO_INSTALL_ROOT}/go/marker" ]
+  [ ! -e "${_DL_STAMP_DIR}/go" ]
+  refute_grep "^mv " "${MOCK_CALLS_FILE}"
+}
+
 # A mv that logs like the mock, fails any call whose argv contains $1 (a
 # substring), optionally leaving a go dir behind as a half-done move would.
 _mv_shim() {
