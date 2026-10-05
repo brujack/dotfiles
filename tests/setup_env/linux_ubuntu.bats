@@ -1254,6 +1254,7 @@ _assert_go_extract_refused() {
   _go_stub 1.27.1
   mkdir -p "${_GO_INSTALL_ROOT}/go.old/bin"
   printf 'old' > "${_GO_INSTALL_ROOT}/go.old/bin/v"
+  _seed_intact_go_old
   export MOCK_MV_FAIL_ARGS=".dl."
   run _install_ubuntu_go
   [ "$status" -eq 1 ]
@@ -1265,6 +1266,7 @@ _assert_go_extract_refused() {
   _go_stub 1.27.1
   mkdir -p "${_GO_INSTALL_ROOT}/go.old/bin"
   printf 'old' > "${_GO_INSTALL_ROOT}/go.old/bin/v"
+  _seed_intact_go_old
   export MOCK_MV_FAIL_ARGS="go.old ${_GO_INSTALL_ROOT}/go"
   run _install_ubuntu_go
   [ "$status" -eq 1 ]
@@ -1288,20 +1290,180 @@ _assert_go_extract_refused() {
   [ ! -e "${_GO_INSTALL_ROOT}/go.old/go" ]
 }
 
-@test "_install_ubuntu_go: a partial go beside an intact go.old keeps go.old and fails the swap" {
+# An intact go.old (bin/go a real executable) holding "old" in bin/v.
+_seed_intact_go_old() {
+  mkdir -p "${_GO_INSTALL_ROOT}/go.old/bin"
+  printf 'old' > "${_GO_INSTALL_ROOT}/go.old/bin/v"
+  printf 'old' > "${_GO_INSTALL_ROOT}/go.old/bin/go"
+  /bin/chmod +x "${_GO_INSTALL_ROOT}/go.old/bin/go"
+}
+
+# With the new-tree move failing, a damaged go (and damaged go.old) must have
+# been deleted rather than kept or restored: go is absent, or a real directory
+# without the damaged trees' marker. The fixture is restored afterwards.
+_go_probe_damaged_dropped() {
+  local _r="${_GO_INSTALL_ROOT}" _snap="${BATS_TEST_TMPDIR}/gosnap"
+  rm -rf "${_snap}"; mkdir -p "${_snap}"
+  cp -a "${_r}/." "${_snap}/"
+  MOCK_MV_FAIL_ARGS=".dl." run _install_ubuntu_go
+  [ "$status" -eq 1 ]
+  # Explicit if: a failing `a || b` list does not trip bats' errexit here.
+  if ! { { [ ! -e "${_r}/go" ] && [ ! -L "${_r}/go" ]; } \
+    || { [ -d "${_r}/go" ] && [ ! -L "${_r}/go" ] && [ ! -e "${_r}/go/bin/marker" ]; }; }; then
+    return 1
+  fi
+  rm -rf "${_r}/go" "${_r}/go.old"
+  cp -a "${_snap}/." "${_r}/"
+}
+
+# Run _install_ubuntu_go twice; both must succeed (a damaged tree must heal).
+_go_twice_ok() {
+  run _install_ubuntu_go
+  [ "$status" -eq 0 ]
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "new" ]
+  [ -f "$(_go_stamp)" ]
+  run _install_ubuntu_go
+  [ "$status" -eq 0 ]
+}
+
+@test "_install_ubuntu_go: a damaged go (no bin/go) is replaced, and a second run succeeds" {
   _make_go_tarball
   _go_stub 1.27.1
-  # go has no bin/go (a half-extracted or damaged tree); go.old is the good copy.
+  mkdir -p "${_GO_INSTALL_ROOT}/go/bin"
+  printf 'partial' > "${_GO_INSTALL_ROOT}/go/bin/v"
+  : > "${_GO_INSTALL_ROOT}/go/bin/marker"
+  _go_probe_damaged_dropped
+  _go_twice_ok
+  [[ "$output" == *"up to date"* ]]
+}
+
+@test "_install_ubuntu_go: a damaged go beside an intact go.old is replaced and go.old removed" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  mkdir -p "${_GO_INSTALL_ROOT}/go/bin"
+  printf 'partial' > "${_GO_INSTALL_ROOT}/go/bin/v"
+  _seed_intact_go_old
+  : > "${_GO_INSTALL_ROOT}/go/bin/marker"
+  _go_probe_damaged_dropped
+  _go_twice_ok
+  [ ! -e "${_GO_INSTALL_ROOT}/go.old" ]
+}
+
+@test "_install_ubuntu_go: a damaged go beside a damaged go.old is replaced" {
+  _make_go_tarball
+  _go_stub 1.27.1
   mkdir -p "${_GO_INSTALL_ROOT}/go/bin" "${_GO_INSTALL_ROOT}/go.old/bin"
   printf 'partial' > "${_GO_INSTALL_ROOT}/go/bin/v"
-  printf 'old' > "${_GO_INSTALL_ROOT}/go.old/bin/v"
+  printf 'partial' > "${_GO_INSTALL_ROOT}/go.old/bin/v"
+  : > "${_GO_INSTALL_ROOT}/go/bin/marker"
+  : > "${_GO_INSTALL_ROOT}/go.old/bin/marker"
+  _go_probe_damaged_dropped
+  _go_twice_ok
+  [ ! -e "${_GO_INSTALL_ROOT}/go.old" ]
+}
+
+@test "_install_ubuntu_go: a damaged go.old with no go is not restored" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  mkdir -p "${_GO_INSTALL_ROOT}/go.old/bin"
+  : > "${_GO_INSTALL_ROOT}/go.old/bin/marker"
+  _go_probe_damaged_dropped
+  _go_twice_ok
+}
+
+@test "_install_ubuntu_go: an intact go.old beside an intact go is removed after the swap" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  _seed_go
+  _seed_intact_go_old
+  _go_twice_ok
+  [ ! -e "${_GO_INSTALL_ROOT}/go.old" ]
+}
+
+@test "_install_ubuntu_go: a plain file at go is replaced" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  printf 'junk' > "${_GO_INSTALL_ROOT}/go"
+  _go_probe_damaged_dropped
+  _go_twice_ok
+}
+
+@test "_install_ubuntu_go: a 0-byte go/bin/go is damaged and replaced" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  mkdir -p "${_GO_INSTALL_ROOT}/go/bin"
+  : > "${_GO_INSTALL_ROOT}/go/bin/go"
+  /bin/chmod +x "${_GO_INSTALL_ROOT}/go/bin/go"
+  _seed_intact_go_old
+  export MOCK_MV_FAIL_ARGS=".dl."
   run _install_ubuntu_go
   [ "$status" -eq 1 ]
-  [[ "$output" == *"go: swap failed"* ]]
-  [ "$(< "${_GO_INSTALL_ROOT}/go.old/bin/v")" = "old" ]
-  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "partial" ]
-  [ ! -e "$(_go_stamp)" ]
-  [ -z "$(ls -A "${_DL_TMP_ROOT}")" ]
+  # The intact go.old was the restore source.
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "old" ]
+  unset MOCK_MV_FAIL_ARGS
+  rm -rf "${_GO_INSTALL_ROOT}/go"
+  mkdir -p "${_GO_INSTALL_ROOT}/go/bin"
+  : > "${_GO_INSTALL_ROOT}/go/bin/go"
+  /bin/chmod +x "${_GO_INSTALL_ROOT}/go/bin/go"
+  _go_twice_ok
+}
+
+@test "_install_ubuntu_go: a symlinked go/bin/go is damaged and replaced" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  mkdir -p "${_GO_INSTALL_ROOT}/go/bin"
+  ln -s "${BATS_TEST_TMPDIR}/gostub" "${_GO_INSTALL_ROOT}/go/bin/go"
+  _seed_intact_go_old
+  export MOCK_MV_FAIL_ARGS=".dl."
+  run _install_ubuntu_go
+  [ "$status" -eq 1 ]
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "old" ]
+  unset MOCK_MV_FAIL_ARGS
+  rm -rf "${_GO_INSTALL_ROOT}/go"
+  mkdir -p "${_GO_INSTALL_ROOT}/go/bin"
+  ln -s "${BATS_TEST_TMPDIR}/gostub" "${_GO_INSTALL_ROOT}/go/bin/go"
+  _go_twice_ok
+}
+
+@test "_install_ubuntu_go: a directory at go/bin/go is damaged and replaced" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  mkdir -p "${_GO_INSTALL_ROOT}/go/bin/go"
+  printf 'x' > "${_GO_INSTALL_ROOT}/go/bin/go/f"
+  : > "${_GO_INSTALL_ROOT}/go/bin/marker"
+  _go_probe_damaged_dropped
+  _go_twice_ok
+}
+
+@test "_install_ubuntu_go: a symlink at go to an intact tree is damaged and replaced" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  mkdir -p "${BATS_TEST_TMPDIR}/elsewhere/bin"
+  printf 'old' > "${BATS_TEST_TMPDIR}/elsewhere/bin/go"
+  /bin/chmod +x "${BATS_TEST_TMPDIR}/elsewhere/bin/go"
+  ln -s "${BATS_TEST_TMPDIR}/elsewhere" "${_GO_INSTALL_ROOT}/go"
+  _go_probe_damaged_dropped
+  _go_twice_ok
+  [ ! -L "${_GO_INSTALL_ROOT}/go" ]
+}
+
+@test "_install_ubuntu_go: a non-executable go/bin/go is damaged and replaced" {
+  _make_go_tarball
+  _go_stub 1.27.1
+  mkdir -p "${_GO_INSTALL_ROOT}/go/bin"
+  printf 'x' > "${_GO_INSTALL_ROOT}/go/bin/go"
+  /bin/chmod -x "${_GO_INSTALL_ROOT}/go/bin/go"
+  _seed_intact_go_old
+  export MOCK_MV_FAIL_ARGS=".dl."
+  run _install_ubuntu_go
+  [ "$status" -eq 1 ]
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "old" ]
+  unset MOCK_MV_FAIL_ARGS
+  rm -rf "${_GO_INSTALL_ROOT}/go"
+  mkdir -p "${_GO_INSTALL_ROOT}/go/bin"
+  printf 'x' > "${_GO_INSTALL_ROOT}/go/bin/go"
+  /bin/chmod -x "${_GO_INSTALL_ROOT}/go/bin/go"
+  _go_twice_ok
 }
 
 @test "_install_ubuntu_go: an intact go beside a stale go.old still replaces go.old" {

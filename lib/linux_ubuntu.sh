@@ -284,6 +284,19 @@ _install_ubuntu_powershell() {
   printf "pwsh is installed\\n"
 }
 
+# A Go tree is intact when bin/go is a regular, non-symlink, executable,
+# non-empty file in a real directory.
+_go_tree_intact() {
+  [[ -d $1 && ! -L $1 && -f $1/bin/go && ! -L $1/bin/go && -x $1/bin/go && -s $1/bin/go ]]
+}
+
+# Delete <path> when it exists (or is a symlink) and is not an intact tree.
+_go_remove_damaged() {
+  [[ -e $1 || -L $1 ]] || return 0
+  _go_tree_intact "$1" && return 0
+  sudo rm -rf "$1"
+}
+
 # Install the pinned Go tarball into ${_GO_INSTALL_ROOT:-/usr/local}/go. The
 # tarball is extracted in a throwaway directory under _DL_TMP_ROOT, chowned to
 # root:root (tar ran as the user and a rename keeps ownership), then swapped in.
@@ -327,22 +340,20 @@ _install_go_from_tarball() {
     _stage="extract"
   elif ! sudo chown -R root:root "${_tmp}/go"; then
     _stage="chown"
+  elif ! _go_remove_damaged "${_root}/go" || ! _go_remove_damaged "${_root}/go.old"; then
+    # A damaged tree is never a restore source and would otherwise fail every
+    # run without changing anything on disk.
+    _stage="swap"
   elif [[ ! -e ${_root}/go && ! -L ${_root}/go && ( -e ${_root}/go.old || -L ${_root}/go.old ) ]] \
     && ! sudo mv "${_root}/go.old" "${_root}/go"; then
     # A previous run's restore failed, so go.old may be the only good copy.
     _stage="restore"
   fi
   if [[ -z ${_stage} ]]; then
-    # Reached with go.old either absent or beside a live go; it is stale now.
-    # go.old may be the only good copy when go is a damaged tree, so it is
-    # deleted only once go is a real, non-empty, executable go binary.
+    # Reached with go absent or intact (damaged trees were removed above) and
+    # go.old absent or intact; beside an intact go, go.old is stale now.
     if [[ -e ${_root}/go ]]; then
-      if [[ -f ${_root}/go/bin/go && ! -L ${_root}/go/bin/go && -x ${_root}/go/bin/go && -s ${_root}/go/bin/go ]]; then
-        sudo rm -rf "${_root}/go.old" || _stage="swap"
-      else
-        log_warn "go: ${_root}/go is not intact; keeping ${_root}/go.old"
-        _stage="swap"
-      fi
+      sudo rm -rf "${_root}/go.old" || _stage="swap"
     fi
   fi
   if [[ -z ${_stage} && -e ${_root}/go ]]; then
