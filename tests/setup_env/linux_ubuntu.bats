@@ -3690,7 +3690,10 @@ _gui_env() {
   export YQ_VER="4.40.5"
   export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
   export HAS_DEVTOOLS=1
-  export MOCK_APT_EXIT=1
+  # Fail dotnet only. A blanket MOCK_APT_EXIT also failed the opentofu install,
+  # which runs only on a host without tofu, so the test passed or failed by host.
+  export SHIM_APT_FAIL_PKGS="dotnet-sdk-10.0"
+  export _FORCE_OPENTOFU_INSTALL=1
   _install_ubuntu_tflint() { :; }
   _install_ubuntu_tfsec() { :; }
   _install_ubuntu_tfenv() { :; }
