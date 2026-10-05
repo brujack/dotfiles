@@ -664,7 +664,9 @@ run_update() {
       local _brew_rc="${PIPESTATUS[0]}"
       _update_record_end "brew" "$(( _brew_rc == 2 ? 0 : _brew_rc ))"
       if [[ ${_brew_rc} -eq 2 ]]; then
-        _update_warn "brew" "one or more cask upgrades failed — see detail"
+        # Keep what _update_record_end summarized (the formulae and casks that did
+        # upgrade); _update_warn replaces the result line.
+        _update_warn "brew" "$(cat "${_DOTFILES_RUN_TMPDIR}/result_brew"); one or more cask upgrades failed — see detail"
         _update_write_detail_from_err "brew" "warning output"
       fi
 

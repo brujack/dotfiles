@@ -1499,7 +1499,10 @@ setup_constants_copy() {
   export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
   run_update
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew")" = "WARN" ]
-  [[ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_brew")" == *"cask"* ]]
+  # The WARN keeps the normal brew result (what upgraded) and appends the cask
+  # failure, so a WARN never hides formulae that did upgrade.
+  [[ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_brew")" == *"no changes"* ]]
+  [[ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_brew")" == *"cask upgrade"*"failed"* ]]
   [[ "$(cat "${_DOTFILES_RUN_TMPDIR}/detail_brew")" == *"Error: firefox"* ]]
 }
 
