@@ -297,6 +297,36 @@ cargo-denylist v9.9.9:
   grep -qF "pathcargo install --list" "${MOCK_CALLS_FILE}"
 }
 
+@test "install_cargo_tools: falls back to a Homebrew keg cargo when \${HOME}/.cargo/bin/cargo is absent" {
+  # laptop-1: keg-only brew rustup, no ~/.cargo/bin/cargo, keg not on PATH.
+  export HAS_RUST=1
+  unset _CARGO_BIN
+  local _keg="${BATS_TEST_TMPDIR}/keg/bin"
+  _write_distinct_cargo_mock "${_keg}/cargo" "kegcargo"
+  export _OVERRIDE_RUSTUP_BREW_KEGS="${BATS_TEST_TMPDIR}/nokeg ${_keg}"
+  export MOCK_CARGO_LIST
+  MOCK_CARGO_LIST="$(_cargo_list_fixture)"
+  run install_cargo_tools
+  [ "$status" -eq 0 ]
+  grep -qF "kegcargo install --list" "${MOCK_CALLS_FILE}"
+  refute_grep "^cargo install --list$" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_cargo_tools: \${HOME}/.cargo/bin/cargo outranks a Homebrew keg cargo" {
+  export HAS_RUST=1
+  unset _CARGO_BIN
+  _write_distinct_cargo_mock "${HOME}/.cargo/bin/cargo" "homecargo"
+  local _keg="${BATS_TEST_TMPDIR}/keg/bin"
+  _write_distinct_cargo_mock "${_keg}/cargo" "kegcargo"
+  export _OVERRIDE_RUSTUP_BREW_KEGS="${_keg}"
+  export MOCK_CARGO_LIST
+  MOCK_CARGO_LIST="$(_cargo_list_fixture)"
+  run install_cargo_tools
+  [ "$status" -eq 0 ]
+  grep -qF "homecargo install --list" "${MOCK_CALLS_FILE}"
+  refute_grep "kegcargo" "${MOCK_CALLS_FILE}"
+}
+
 @test "install_cargo_tools: _CARGO_BIN outranks \${HOME}/.cargo/bin/cargo when both are present" {
   export HAS_RUST=1
   # _CARGO_BIN is already the tests/mocks/cargo default from load_mocks
