@@ -46,10 +46,14 @@ setup_claude_mcp() {
     return 1
   fi
   # shellcheck disable=SC2016 # single quotes intentional — envsubst variable list, not shell expansion
-  if ! GITHUB_PAT="${GITHUB_PAT}" envsubst '${GITHUB_PAT}' < "${_template}" > "${_tmp}" \
-    || ! mv -f "${_tmp}" "${_output}"; then
+  if ! GITHUB_PAT="${GITHUB_PAT}" envsubst '${GITHUB_PAT}' < "${_template}" > "${_tmp}"; then
     rm -f "${_tmp}"
     log_error "Failed to generate ${_output} from template"
+    return 1
+  fi
+  if ! mv -f "${_tmp}" "${_output}"; then
+    rm -f "${_tmp}"
+    log_error "Failed to move the rendered file into ${_output}"
     return 1
   fi
   log_info "GitHub MCP configured (${_output})"

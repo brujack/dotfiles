@@ -113,6 +113,7 @@ _mode_of() {
   envsubst() { printf 'partial'; return 1; }
   run setup_claude_mcp
   [ "$status" -eq 1 ]
+  [[ "$output" == *"Failed to generate"* ]]
   grep -q "old-token" "${HOME}/.claude/mcp.json"
   [ "$(find "${HOME}/.claude" -name 'mcp.json.*' | wc -l | tr -d ' ')" = "0" ]
 }
@@ -124,9 +125,16 @@ _mode_of() {
   printf '{"auth":"Bearer ${GITHUB_PAT}"}\n' \
     > "${_OVERRIDE_AI_CONFIG_DIR}/.claude/mcp.json.template"
   printf '{"auth":"Bearer old-token"}\n' > "${HOME}/.claude/mcp.json"
-  mv() { return 1; }
+  # Record the source mv was given: the temp file must sit beside the target,
+  # or the rename is not atomic and the token lingers in a shared temp dir --
+  # and the find below would then look in the wrong directory.
+  mv() { printf '%s\n' "$@" > "${BATS_TEST_TMPDIR}/mv.args"; return 1; }
   run setup_claude_mcp
   [ "$status" -eq 1 ]
+  [[ "$output" == *"Failed to move the rendered file"* ]]
+  local _src
+  _src="$(sed -n 2p "${BATS_TEST_TMPDIR}/mv.args")"
+  [[ "${_src}" == "${HOME}/.claude/mcp.json."?????? ]]
   grep -q "old-token" "${HOME}/.claude/mcp.json"
   [ "$(find "${HOME}/.claude" -name 'mcp.json.*' | wc -l | tr -d ' ')" = "0" ]
 }
@@ -140,6 +148,10 @@ _mode_of() {
   mktemp() { return 1; }
   run setup_claude_mcp
   [ "$status" -eq 1 ]
+  # The envsubst branch also returns 1 on an empty _tmp, so status alone
+  # cannot tell the mktemp guard fired.
+  [[ "$output" == *"Failed to create a temp file"* ]]
+  [[ "$output" != *"Failed to generate"* ]]
   [[ ! -e "${HOME}/.claude/mcp.json" ]]
 }
 
