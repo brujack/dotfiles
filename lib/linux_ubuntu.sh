@@ -964,7 +964,7 @@ _install_ubuntu_brew_packages() {
   fi
 
   # Trust third-party taps for Homebrew 6.0 (idempotent — no-op if already trusted or tap absent)
-  brew trust cloudflare/cloudflare datawire/blackbird getagentseal/codeburn gitguardian/tap go-task/tap oven-sh/bun redpanda-data/tap snyk/tap 2> /dev/null || true
+  brew trust cloudflare/cloudflare datawire/blackbird getagentseal/codeburn gitguardian/tap oven-sh/bun redpanda-data/tap snyk/tap 2> /dev/null || true
 
   if [[ ${#_failed[@]} -gt 0 ]]; then
     log_warn "brew: ${#_failed[@]} package(s) failed: ${_failed[*]}"

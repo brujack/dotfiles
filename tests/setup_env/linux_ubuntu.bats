@@ -3093,6 +3093,7 @@ _az_cloud_env() {
   [ "$status" -eq 0 ]
   grep -q "brew trust.*getagentseal/codeburn" "${MOCK_CALLS_FILE}"
   grep -q "brew trust.*oven-sh/bun" "${MOCK_CALLS_FILE}"
+  refute_grep "brew trust.* go-task/tap" "${MOCK_CALLS_FILE}"
 }
 
 # ── _install_ubuntu_gui_tools ────────────────────────────────────────────────

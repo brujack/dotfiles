@@ -66,6 +66,7 @@ brew "libtool"
 brew "libunistring"
 brew "libyaml"
 brew "linkerd"                               # [HAS_K8S]
+brew "llama.cpp"                             # [HAS_DEVTOOLS]
 brew "make"
 brew "mas"                                   # [HAS_PRINTING]
 brew "mdbook"                                # [HAS_DEVTOOLS]
@@ -81,9 +82,11 @@ brew "nomad"                                 # [HAS_DEVTOOLS]
 brew "ntfy"                                  # [HAS_DEVTOOLS]
 brew "openssl@3"
 brew "packer"                                # [HAS_DEVTOOLS]
+brew "parallel"                              # [HAS_DEVTOOLS]
 brew "pcre"
 brew "perl"                                  # [HAS_DEVTOOLS]
 brew "pkgconf"
+brew "poppler"                               # [HAS_DEVTOOLS]
 brew "postgresql@15"                         # [HAS_DEVTOOLS]
 brew "powershell"                            # [HAS_DEVTOOLS]
 brew "pwgen"
@@ -110,6 +113,7 @@ brew "snyk/tap/snyk"                         # [HAS_DEVTOOLS]
 brew "sops"                                  # [HAS_DEVTOOLS]
 brew "sqlite"
 brew "starship"                              # [HAS_DEVTOOLS]
+brew "syft"                                  # [HAS_DEVTOOLS]
 brew "teamookla/speedtest/speedtest"         # [HAS_DEVTOOLS]
 brew "teleport"                              # [HAS_DEVTOOLS]
 brew "opentofu"                              # [HAS_DEVTOOLS]
@@ -164,7 +168,6 @@ cask "gcloud-cli"                            # [HAS_DEVTOOLS]
 cask "github"                                # [HAS_DEVTOOLS]
 cask "google-chrome"
 cask "iina"
-cask "inspec"                                # [HAS_DEVTOOLS]
 cask "istat-menus"
 cask "iterm2"                                # [HAS_DEVTOOLS]
 cask "lens"                                  # [HAS_K8S]
