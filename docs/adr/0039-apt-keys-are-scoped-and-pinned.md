@@ -36,6 +36,9 @@ trusted the attacker's primary.
 
 - A caller decides what each return means for its source. Albert keeps its last verified
   source on 2 and 3 (a network or local failure) and removes it on 1 (a different key).
+  Edge removed its source on every non-zero return until #317 (2026-10-05), so a transient
+  gpg failure deleted a working keyring; it now follows the same split, and also removes the
+  `.list` on 2 or 3 when no non-empty keyring exists.
 - On the first run after migration there is no previous albert source to keep.
 - `az` now resolves only through linuxbrew, which interactive zsh alone puts on `PATH`.
 - `migration-classifier` records this kind of host-provisioning change as code-only; a revert
