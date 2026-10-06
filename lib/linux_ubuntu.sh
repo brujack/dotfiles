@@ -1216,8 +1216,10 @@ _install_ubuntu_edge_source() {
       return 1
     elif [[ -s ${_edge_keyring} ]]; then
       # gpg or a local step failed; _build_pinned_keyring left the keyring it
-      # verified on an earlier run untouched, so keep it and its source.
-      log_warn "edge: could not build ${_edge_keyring} (gpg missing or failed, no usable key read from ${_edge_key}, or a local failure); keeping last verified source"
+      # verified on an earlier run untouched, so keep it and any .list it signs.
+      local _keep_note="keeping last verified source"
+      [[ -e ${_edge_list} ]] || _keep_note="no verified edge source is present"
+      log_warn "edge: could not build ${_edge_keyring} (gpg missing or failed, no usable key read from ${_edge_key}, or a local failure); ${_keep_note}"
       return 1
     else
       # No verified keyring to keep: a .list signed by a missing keyring only fails apt.
