@@ -37,9 +37,23 @@ setup_claude_mcp() {
   fi
 
   mkdir -p "$(dirname "${_output}")"
+  # The output holds the expanded PAT. Render into a same-directory mktemp file
+  # (always 0600, whatever the umask) and mv it over the target: a redirect would
+  # take the caller's umask for a new file and keep an existing file's looser mode.
+  local _tmp
+  if ! _tmp="$(mktemp "${_output}.XXXXXX")"; then
+    log_error "Failed to create a temp file beside ${_output}"
+    return 1
+  fi
   # shellcheck disable=SC2016 # single quotes intentional — envsubst variable list, not shell expansion
-  if ! GITHUB_PAT="${GITHUB_PAT}" envsubst '${GITHUB_PAT}' < "${_template}" > "${_output}"; then
+  if ! GITHUB_PAT="${GITHUB_PAT}" envsubst '${GITHUB_PAT}' < "${_template}" > "${_tmp}"; then
+    rm -f "${_tmp}"
     log_error "Failed to generate ${_output} from template"
+    return 1
+  fi
+  if ! mv -f "${_tmp}" "${_output}"; then
+    rm -f "${_tmp}"
+    log_error "Failed to move the rendered file into ${_output}"
     return 1
   fi
   log_info "GitHub MCP configured (${_output})"
