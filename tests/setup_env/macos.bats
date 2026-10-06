@@ -283,6 +283,18 @@ _stub_bats_present() {
   grep -q "brew trust.*getagentseal/codeburn" "${MOCK_CALLS_FILE}"
 }
 
+@test "install_macos_casks: trusts every tap the Brewfile needs, and not go-task/tap" {
+  export DOTFILES="dotfiles"
+  mkdir -p "${BREWFILE_LOC}" "${PERSONAL_GITREPOS}/${DOTFILES}"
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.gui"
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.devtools"
+  ln -sf "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.gui" "${BREWFILE_LOC}/Brewfile"
+  unset HAS_GUI HAS_DEVTOOLS
+  run install_macos_casks
+  [ "$status" -eq 0 ]
+  _assert_trust_covers_brewfile
+}
+
 # ── install_homebrew (xcodebuild license failure) ────────────────────────────
 
 @test "install_homebrew: xcodebuild fails after xcode install - returns 1 with license error" {

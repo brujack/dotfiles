@@ -520,6 +520,13 @@ _gnubin_present() {
   [[ "$output" == *"completed successfully"* ]]
 }
 
+@test "brew_update trusts every tap the Brewfile needs, and not go-task/tap" {
+  export MOCK_ID_U=1000
+  run brew_update
+  [ "$status" -eq 0 ]
+  _assert_trust_covers_brewfile
+}
+
 @test "brew_update returns 1 when brew cleanup fails" {
   export MOCK_ID_U=1000
   export MOCK_BREW_CLEANUP_EXIT=1

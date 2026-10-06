@@ -151,3 +151,25 @@ load_setup_env() {
   # trailing `exit 0` as making everything after this `source` unreachable.
   export BATS_VER  # export so mock scripts can reference it
 }
+
+# _brewfile_required_taps -- every non-core tap the real Brewfile needs: its
+# `tap` lines plus the owner/repo of each tap-qualified brew or cask entry.
+_brewfile_required_taps() {
+  {
+    sed -En 's/^tap "([^"]*)".*/\1/p' "${REPO_ROOT}/Brewfile"
+    sed -En 's/^(brew|cask) "([^"/]+\/[^"/]+)\/[^"]*".*/\2/p' "${REPO_ROOT}/Brewfile"
+  } | sort -u
+}
+
+# _assert_trust_covers_brewfile -- the recorded `brew trust` call names every
+# tap _brewfile_required_taps lists, and never the retired go-task/tap.
+_assert_trust_covers_brewfile() {
+  local _trust _tap
+  _trust="$(grep '^brew trust ' "${MOCK_CALLS_FILE}")"
+  [[ -n ${_trust} ]]
+  [[ "$(_brewfile_required_taps | wc -l)" -gt 0 ]]
+  while IFS= read -r _tap; do
+    [[ " ${_trust} " == *" ${_tap} "* ]] || { printf 'not trusted: %s\n' "${_tap}" >&2; return 1; }
+  done < <(_brewfile_required_taps)
+  [[ " ${_trust} " != *" go-task/tap "* ]]
+}
