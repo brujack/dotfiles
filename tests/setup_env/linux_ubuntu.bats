@@ -3242,6 +3242,16 @@ _edge_working_source() {
   [ ! -e "${_EDGE_BOOTSTRAP_KEYRING}" ]
 }
 
+@test "_install_ubuntu_edge_source: does not keep a zero-byte keyring when the key cannot be read (rc 2)" {
+  : > "${_EDGE_BOOTSTRAP_KEYRING}"
+  printf 'deb stale\n' > "${_EDGE_SOURCES_DIR}/microsoft-edge.list"
+  _MS_KEY_PATH="${BATS_TEST_TMPDIR}/no-such-key.asc" run _install_ubuntu_edge_source
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no verified keyring present"* ]]
+  [ ! -e "${_EDGE_SOURCES_DIR}/microsoft-edge.list" ]
+  [ ! -e "${_EDGE_BOOTSTRAP_KEYRING}" ]
+}
+
 @test "_install_ubuntu_edge_source: .sources absent writes bootstrap .list and no .sources" {
   run _install_ubuntu_edge_source
   [ "$status" -eq 0 ]
