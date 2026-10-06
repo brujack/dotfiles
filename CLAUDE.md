@@ -105,8 +105,8 @@ Dotfiles live at the repo root and in the ai-config repo (`.claude/`/`.cursor/`)
   **The live `~/.claude/mcp.json` is ALSO a symlink, and template generation is unreachable — this line
   claimed the opposite until 2026-09-14.** The loop above links every item in `ai-config/.claude/` except
   `projects` and `rules`, and `mcp.json` is tracked there, so it is linked by `setup_dotfile_symlinks`
-  (`lib/workflows.sh:157`). `setup_claude_mcp` runs afterwards at `:188`, finds a valid symlink, and returns 0
-  with two WARN lines rather than writing credentials into a tracked file (`lib/workflows.sh:32`). The ordering
+  (called from `run_setup_user`, `lib/workflows.sh`). `setup_claude_mcp` runs later in that same function, finds a valid symlink, and returns 0
+  with two WARN lines rather than writing credentials into a tracked file (its `-L` guard). The ordering
   makes that every run on every machine, not a race. Verified on the Studio 2026-09-14: the live file resolves
   into `ai-config/.claude/mcp.json`, and that tracked target holds 1 `mcpServers`
   key, 0 credential-shaped strings and 0 unexpanded `$GITHUB_PAT` placeholders — so the guard is working and
