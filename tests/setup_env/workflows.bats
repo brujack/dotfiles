@@ -70,6 +70,79 @@ teardown() {
   ! grep -q '\${GITHUB_PAT}' "${HOME}/.claude/mcp.json"
 }
 
+# The file holds the expanded PAT, so its mode must not follow the caller's
+# umask. GNU stat first: BSD stat rejects -c cleanly with nothing on stdout.
+_mode_of() {
+  stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"
+}
+
+@test "setup_claude_mcp writes mcp.json mode 600 under a permissive umask" {
+  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
+  export GITHUB_PAT="test-token-abc"
+  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude"
+  printf '{"auth":"Bearer ${GITHUB_PAT}"}\n' \
+    > "${_OVERRIDE_AI_CONFIG_DIR}/.claude/mcp.json.template"
+  umask 0002
+  setup_claude_mcp
+  grep -q "test-token-abc" "${HOME}/.claude/mcp.json"
+  [ "$(_mode_of "${HOME}/.claude/mcp.json")" = "600" ]
+}
+
+@test "setup_claude_mcp tightens a pre-existing world-readable mcp.json to 600" {
+  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
+  export GITHUB_PAT="new-token"
+  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude" "${HOME}/.claude"
+  printf '{"auth":"Bearer ${GITHUB_PAT}"}\n' \
+    > "${_OVERRIDE_AI_CONFIG_DIR}/.claude/mcp.json.template"
+  printf '{"auth":"Bearer old-token"}\n' > "${HOME}/.claude/mcp.json"
+  chmod 666 "${HOME}/.claude/mcp.json"
+  # Positive control: the fixture really is loose before the call.
+  [ "$(_mode_of "${HOME}/.claude/mcp.json")" = "666" ]
+  setup_claude_mcp
+  grep -q "new-token" "${HOME}/.claude/mcp.json"
+  [ "$(_mode_of "${HOME}/.claude/mcp.json")" = "600" ]
+}
+
+@test "setup_claude_mcp keeps the existing mcp.json and no temp file when envsubst fails" {
+  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
+  export GITHUB_PAT="new-token"
+  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude" "${HOME}/.claude"
+  printf '{"auth":"Bearer ${GITHUB_PAT}"}\n' \
+    > "${_OVERRIDE_AI_CONFIG_DIR}/.claude/mcp.json.template"
+  printf '{"auth":"Bearer old-token"}\n' > "${HOME}/.claude/mcp.json"
+  envsubst() { printf 'partial'; return 1; }
+  run setup_claude_mcp
+  [ "$status" -eq 1 ]
+  grep -q "old-token" "${HOME}/.claude/mcp.json"
+  [ "$(find "${HOME}/.claude" -name 'mcp.json.*' | wc -l | tr -d ' ')" = "0" ]
+}
+
+@test "setup_claude_mcp keeps the existing mcp.json and no temp file when mv fails" {
+  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
+  export GITHUB_PAT="new-token"
+  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude" "${HOME}/.claude"
+  printf '{"auth":"Bearer ${GITHUB_PAT}"}\n' \
+    > "${_OVERRIDE_AI_CONFIG_DIR}/.claude/mcp.json.template"
+  printf '{"auth":"Bearer old-token"}\n' > "${HOME}/.claude/mcp.json"
+  mv() { return 1; }
+  run setup_claude_mcp
+  [ "$status" -eq 1 ]
+  grep -q "old-token" "${HOME}/.claude/mcp.json"
+  [ "$(find "${HOME}/.claude" -name 'mcp.json.*' | wc -l | tr -d ' ')" = "0" ]
+}
+
+@test "setup_claude_mcp returns 1 when a temp file cannot be created beside mcp.json" {
+  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
+  export GITHUB_PAT="new-token"
+  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude" "${HOME}/.claude"
+  printf '{"auth":"Bearer ${GITHUB_PAT}"}\n' \
+    > "${_OVERRIDE_AI_CONFIG_DIR}/.claude/mcp.json.template"
+  mktemp() { return 1; }
+  run setup_claude_mcp
+  [ "$status" -eq 1 ]
+  [[ ! -e "${HOME}/.claude/mcp.json" ]]
+}
+
 @test "setup_claude_mcp returns 0 when GITHUB_PAT is unset" {
   export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
   unset GITHUB_PAT
