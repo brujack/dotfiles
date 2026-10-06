@@ -3252,6 +3252,17 @@ _edge_working_source() {
   [ ! -e "${_EDGE_BOOTSTRAP_KEYRING}" ]
 }
 
+@test "_install_ubuntu_edge_source: keep note says no source is present when the keyring has no .list (rc 2)" {
+  _edge_working_source
+  rm -f "${_EDGE_SOURCES_DIR}/microsoft-edge.list"
+  _MS_KEY_PATH="${BATS_TEST_TMPDIR}/no-such-key.asc" run _install_ubuntu_edge_source
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no verified edge source is present"* ]]
+  [[ "$output" != *"keeping last verified source"* ]]
+  [ "$(cksum < "${_EDGE_BOOTSTRAP_KEYRING}")" = "${_ring_sum}" ]
+  [ ! -e "${_EDGE_SOURCES_DIR}/microsoft-edge.list" ]
+}
+
 @test "_install_ubuntu_edge_source: .sources absent writes bootstrap .list and no .sources" {
   run _install_ubuntu_edge_source
   [ "$status" -eq 0 ]
