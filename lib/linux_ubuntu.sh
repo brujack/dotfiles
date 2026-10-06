@@ -1203,12 +1203,25 @@ _install_ubuntu_edge_source() {
     && ! grep -iE '^Enabled:' "${_edge_src}" | grep -qviE '^Enabled:[[:space:]]*(yes|true|with|on|enable|1)[[:space:]]*$'; then
     sudo rm -f "${_edge_list}" "${_edge_keyring}"
   else
-    local _edge_key="${_MS_KEY_PATH:-${DOTFILES_REPO_ROOT}/keys/microsoft.asc}"
-    if _build_pinned_keyring "${_edge_key}" "${_edge_keyring}" "${MS_GPG_FPR}"; then
+    local _edge_key="${_MS_KEY_PATH:-${DOTFILES_REPO_ROOT}/keys/microsoft.asc}" _brc
+    _build_pinned_keyring "${_edge_key}" "${_edge_keyring}" "${MS_GPG_FPR}"
+    _brc=$?
+    if [[ ${_brc} -eq 0 ]]; then
       # Microsoft Edge has no ARM64 Linux build — amd64 only
       printf 'deb [arch=amd64 signed-by=%s] https://packages.microsoft.com/repos/edge stable main\n' "${_edge_keyring}" | sudo tee "${_edge_list}" > /dev/null
+    elif [[ ${_brc} -eq 1 ]]; then
+      # The key is not the pinned one, so nothing signed by it may stay trusted.
+      log_warn "edge: could not build ${_edge_keyring}: ${_edge_key} is not the pinned key (MS_GPG_FPR ${MS_GPG_FPR}: not exactly one primary key, or a different fingerprint); removing the Edge source and keyring"
+      sudo rm -f "${_edge_list}" "${_edge_keyring}"
+      return 1
+    elif [[ -s ${_edge_keyring} ]]; then
+      # gpg or a local step failed; _build_pinned_keyring left the keyring it
+      # verified on an earlier run untouched, so keep it and its source.
+      log_warn "edge: could not build ${_edge_keyring} (gpg missing or failed, no usable key read from ${_edge_key}, or a local failure); keeping last verified source"
+      return 1
     else
-      log_warn "edge: could not build ${_edge_keyring} (gpg missing or failed on ${_edge_key}, the keyring lacks the pinned fingerprint, or it is not writable); writing no Edge source"
+      # No verified keyring to keep: a .list signed by a missing keyring only fails apt.
+      log_warn "edge: could not build ${_edge_keyring} (gpg missing or failed, no usable key read from ${_edge_key}, or a local failure); no verified keyring present, writing no Edge source"
       sudo rm -f "${_edge_list}" "${_edge_keyring}"
       return 1
     fi
