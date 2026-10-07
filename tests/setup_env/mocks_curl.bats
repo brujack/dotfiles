@@ -14,7 +14,7 @@ setup() {
   # A var exported in the developer's own shell must not leak into "unset"
   # assertions below -- tests/scripts/osx.bats's teardown unset convention,
   # applied here at setup() since these are read at the START of each test.
-  unset MOCK_CURL_EXIT MOCK_CURL_HTTP_STATUS MOCK_CURL_STDOUT
+  unset MOCK_CURL_EXIT MOCK_CURL_HTTP_STATUS MOCK_CURL_STDOUT MOCK_CURL_STDIN_FILE
 }
 
 @test "curl mock: -fsS with MOCK_CURL_HTTP_STATUS=404 exits non-zero" {
@@ -138,4 +138,28 @@ setup() {
   run "${CURL_MOCK}" -fsS http://x
   [ "$status" -eq 0 ]
   [[ "$output" != *"value too great for base"* ]]
+}
+
+@test "curl mock: MOCK_CURL_STDIN_FILE captures the header sent via -H @-" {
+  export MOCK_CURL_STDIN_FILE="${BATS_TEST_TMPDIR}/stdin_hdr"
+  run bash -c "printf 'Authorization: Bearer t1\n' | '${CURL_MOCK}' -sf -H @- http://x/a"
+  [ "$status" -eq 0 ]
+  [ "$(cat "${MOCK_CURL_STDIN_FILE}")" = "Authorization: Bearer t1" ]
+  grep -q 'http://x/a' "${MOCK_CALLS_FILE}"
+}
+
+@test "curl mock: MOCK_CURL_STDIN_FILE is not written without -H @- (positive control: call recorded)" {
+  export MOCK_CURL_STDIN_FILE="${BATS_TEST_TMPDIR}/stdin_hdr_none"
+  run bash -c "printf 'junk\n' | '${CURL_MOCK}' -sf http://x/b"
+  [ "$status" -eq 0 ]
+  [ ! -e "${MOCK_CURL_STDIN_FILE}" ]
+  grep -q 'http://x/b' "${MOCK_CALLS_FILE}"
+}
+
+@test "curl mock: MOCK_CURL_STDIN_FILE still captures when the call fails (MOCK_CURL_EXIT=22)" {
+  export MOCK_CURL_STDIN_FILE="${BATS_TEST_TMPDIR}/stdin_hdr_fail"
+  export MOCK_CURL_EXIT=22
+  run bash -c "printf 'Authorization: Bearer t2\n' | '${CURL_MOCK}' -sf -H @- http://x/c"
+  [ "$status" -eq 22 ]
+  [ "$(cat "${MOCK_CURL_STDIN_FILE}")" = "Authorization: Bearer t2" ]
 }
