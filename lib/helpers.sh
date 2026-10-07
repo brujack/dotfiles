@@ -881,11 +881,17 @@ _doctor_check_github_mcp() {
   fi
   doctor_pass "GITHUB_PAT (set)"
 
-  # Check token is live
+  # Token goes to curl on stdin: argv is readable by every uid. Capture first so
+  # a refused token returns before curl runs -- a pipe could not stop it.
+  local _hdr
+  if ! _hdr=$(_github_auth_header "${GITHUB_PAT}"); then
+    doctor_fail "GITHUB_PAT" "contains a line break — fix config/local.sh"
+    return
+  fi
+
   local _curl_rc=0
-  curl --max-time 5 --silent --fail \
-    -H "Authorization: Bearer ${GITHUB_PAT}" \
-    https://api.github.com/user > /dev/null 2>&1 || _curl_rc=$?
+  printf '%s\n' "${_hdr}" | curl --max-time 5 --silent --fail -H @- \
+    "${_GITHUB_API:-https://api.github.com}/user" > /dev/null 2>&1 || _curl_rc=$?
 
   if [[ ${_curl_rc} -eq 22 ]]; then
     doctor_fail "GitHub PAT" "invalid or revoked — rotate at https://github.com/settings/tokens"

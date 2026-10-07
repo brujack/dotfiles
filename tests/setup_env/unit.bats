@@ -30,6 +30,8 @@ setup() {
 }
 
 teardown() {
+  # Defined only once a test has sourced tests/helpers/http_listener.bash.
+  declare -F stop_http_listener >/dev/null && stop_http_listener
   rm -rf "${TMPDIR_TEST}"
   # _aws_key_make_fixture (below) spawns a real gpg-agent/scdaemon bound to
   # each homedir it creates via --quick-generate-key; kill them here rather
@@ -2312,6 +2314,61 @@ STUB
   export MOCK_CURL_EXIT=0
   run _doctor_check_github_mcp
   [[ "$output" == *"GITHUB_PAT_EXPIRY"* ]]
+}
+
+@test "_doctor_check_github_mcp keeps the token out of argv" {
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  export GITHUB_PAT="argv-tok-77"
+  unset GITHUB_PAT_EXPIRY
+  mkdir -p "${HOME}/.claude"
+  printf '{"mcpServers":{}}\n' > "${HOME}/.claude/mcp.json"
+  export MOCK_CURL_EXIT=0 MOCK_CURL_STDIN_FILE="${BATS_TEST_TMPDIR}/stdin"
+  _doctor_check_github_mcp
+  # Positive control: curl was called for the live check.
+  grep -q 'api.github.com/user' "${MOCK_CALLS_FILE}"
+  grep -q -- '-H @-' "${MOCK_CALLS_FILE}"
+  ! grep -q 'argv-tok-77' "${MOCK_CALLS_FILE}"
+}
+
+@test "_doctor_check_github_mcp sends the Authorization header on stdin" {
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  export GITHUB_PAT="argv-tok-77"
+  unset GITHUB_PAT_EXPIRY
+  mkdir -p "${HOME}/.claude"
+  printf '{"mcpServers":{}}\n' > "${HOME}/.claude/mcp.json"
+  export MOCK_CURL_EXIT=0 MOCK_CURL_STDIN_FILE="${BATS_TEST_TMPDIR}/stdin"
+  _doctor_check_github_mcp
+  [ "$(cat "${MOCK_CURL_STDIN_FILE}")" = "Authorization: Bearer argv-tok-77" ]
+}
+
+@test "_doctor_check_github_mcp refuses a token with a line break without calling curl" {
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  export GITHUB_PAT=$'a\nb'
+  unset GITHUB_PAT_EXPIRY
+  mkdir -p "${HOME}/.claude"
+  printf '{"mcpServers":{}}\n' > "${HOME}/.claude/mcp.json"
+  export MOCK_CURL_EXIT=0
+  _doctor_check_github_mcp
+  [ "${_DOCTOR_FAIL}" -eq 1 ]
+  # Control for the absence: the argv test above uses this harness and records a curl call.
+  ! grep -q 'curl' "${MOCK_CALLS_FILE}" 2>/dev/null
+}
+
+@test "_doctor_check_github_mcp real curl delivers the header on stdin" {
+  source "${REPO_ROOT}/tests/helpers/http_listener.bash"
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  export GITHUB_PAT="real-tok-55"
+  unset GITHUB_PAT_EXPIRY MOCK_CURL_EXIT
+  mkdir -p "${HOME}/.claude"
+  printf '{"mcpServers":{}}\n' > "${HOME}/.claude/mcp.json"
+  local _clean_path
+  _clean_path="$(printf '%s' "${PATH}" | tr ':' '\n' | grep -v 'tests/mocks' | tr '\n' ':' | sed 's/:$//')"
+  start_http_listener "${BATS_TEST_TMPDIR}"
+  export _GITHUB_API="${HTTP_LISTENER_URL}"
+  PATH="${_clean_path}" _doctor_check_github_mcp
+  [ "${_DOCTOR_FAIL}" -eq 0 ]
+  [ "${_DOCTOR_PASS}" -ge 1 ]
+  grep -q 'Authorization: Bearer real-tok-55' "${HTTP_LISTENER_HEADERS}"
 }
 
 @test "_doctor_check_github_mcp passes when all checks pass" {
