@@ -844,6 +844,20 @@ _doctor_check_aws_key_expiry() {
   fi
 }
 
+# Prints the GitHub auth header for `curl -H @-`, so the token reaches curl on
+# stdin instead of argv (argv is readable by every uid via /proc/<pid>/cmdline).
+# A line break would inject a second header, and -H @- has no escape, so refuse.
+_github_auth_header() {
+  local _token="$1"
+  case "${_token}" in
+    *$'\n'* | *$'\r'*)
+      printf "GitHub token contains a line break -- refusing to send it\n" >&2
+      return 1
+      ;;
+  esac
+  printf 'Authorization: Bearer %s\n' "${_token}"
+}
+
 _doctor_check_github_mcp() {
   printf "\nGitHub MCP:\n"
   local _mcp_file="${HOME}/.claude/mcp.json"

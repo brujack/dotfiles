@@ -2152,6 +2152,44 @@ STUB
   [ "${_DOCTOR_FAILED}" -eq 0 ]
 }
 
+# ── _github_auth_header ──────────────────────────────────────────────────────
+
+@test "_github_auth_header prints the bearer header for a plain token" {
+  local _out _rc
+  _out="$(_github_auth_header tok123 2>/dev/null)"
+  _rc=$?
+  [ "${_rc}" -eq 0 ]
+  [ "${_out}" = "Authorization: Bearer tok123" ]
+}
+
+@test "_github_auth_header passes quotes and backslashes through unescaped" {
+  local _out _rc
+  _out="$(_github_auth_header 'a"b\c' 2>/dev/null)"
+  _rc=$?
+  [ "${_rc}" -eq 0 ]
+  [ "${_out}" = 'Authorization: Bearer a"b\c' ]
+}
+
+@test "_github_auth_header refuses a token containing a newline" {
+  local _out _rc=0
+  _out="$(_github_auth_header $'a\nX-Injected: 1' 2>/dev/null)" || _rc=$?
+  [ "${_rc}" -eq 1 ]
+  [ -z "${_out}" ]
+}
+
+@test "_github_auth_header refuses a token containing a carriage return" {
+  local _out _rc=0
+  _out="$(_github_auth_header $'a\rb' 2>/dev/null)" || _rc=$?
+  [ "${_rc}" -eq 1 ]
+  [ -z "${_out}" ]
+}
+
+@test "_github_auth_header names the line break on stderr when refusing" {
+  local _err
+  _err="$(_github_auth_header $'a\nb' 2>&1 >/dev/null)" || true
+  [[ "${_err}" == *"line break"* ]]
+}
+
 # ── _doctor_check_github_mcp ─────────────────────────────────────────────────
 
 @test "_doctor_check_github_mcp fails when ~/.claude/mcp.json is missing" {
