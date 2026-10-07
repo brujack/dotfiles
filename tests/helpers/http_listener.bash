@@ -11,6 +11,14 @@ start_http_listener() {
   python3 -I - "${_ready}" "${HTTP_LISTENER_HEADERS}" "${HTTP_LISTENER_DEADLINE:-10}" \
     3>&- >"${_dir}/listener.log" 2>&1 <<'PY' &
 import http.server, os, sys
+# 3>&- closes bats' fd 3 only. A caller (a git hook, for one) can hand down
+# other pipes, so close every inherited fd above stderr before binding.
+for _fd in [int(n) for n in os.listdir("/dev/fd")]:
+    if _fd > 2:
+        try:
+            os.close(_fd)
+        except OSError:
+            pass
 ready, out, deadline = sys.argv[1], sys.argv[2], float(sys.argv[3])
 class H(http.server.BaseHTTPRequestHandler):
     def do_GET(self):

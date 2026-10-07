@@ -37,7 +37,12 @@ teardown() {
 
 @test "listener holds neither bats' fd 3 nor the test's output pipe" {
   [[ -d /proc/self/fd ]] || skip "needs /proc"
-  start_http_listener "${BATS_TEST_TMPDIR}"
+  # Hand the listener an extra inherited pipe on fd 7, as a git hook can, and
+  # prove the fixture really supplies one before trusting the absence below.
+  {
+    [[ "$(readlink /proc/self/fd/7)" == pipe:* ]]
+    start_http_listener "${BATS_TEST_TMPDIR}"
+  } 7< <(:)
   [[ -d /proc/${HTTP_LISTENER_PID}/fd ]] || skip "needs /proc"
   # Positive control: $! is python itself, and fd 0 exists to inspect.
   [[ "$(ps -o comm= -p "${HTTP_LISTENER_PID}")" == *python* ]]
