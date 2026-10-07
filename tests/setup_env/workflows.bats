@@ -1495,6 +1495,8 @@ setup_constants_copy() {
   export GITHUB_TOKEN=$'a\nb'
   export MOCK_CURL_STDOUT='  "tag_name": "v1.0.0",'
   run --separate-stderr _fetch_github_latest "some/repo"
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"line break"* ]]
   [ -z "$output" ]
   ! grep -q 'curl' "${MOCK_CALLS_FILE}"
 }
@@ -1508,6 +1510,8 @@ setup_constants_copy() {
   export _GITHUB_API="${HTTP_LISTENER_URL}"
   # A dead-port proxy: without --noproxy the token would go to it, not the listener.
   export http_proxy="http://127.0.0.1:9" HTTP_PROXY="http://127.0.0.1:9"
+  # An inherited no_proxy naming 127.0.0.1 would bypass the dead proxy by itself.
+  unset no_proxy NO_PROXY all_proxy ALL_PROXY
   local _out
   _out="$(PATH="${_clean_path}" _fetch_github_latest "some/repo")"
   [ "${_out}" = "9.9.9" ]

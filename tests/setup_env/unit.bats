@@ -2498,6 +2498,8 @@ STUB
   export _GITHUB_API="${HTTP_LISTENER_URL}"
   # A dead-port proxy: without --noproxy the token would go to it, not the listener.
   export http_proxy="http://127.0.0.1:9" HTTP_PROXY="http://127.0.0.1:9"
+  # An inherited no_proxy naming 127.0.0.1 would bypass the dead proxy by itself.
+  unset no_proxy NO_PROXY all_proxy ALL_PROXY
   local _out
   _out="$(PATH="${_clean_path}" _doctor_check_github_mcp 2>&1)"
   [[ "${_out}" == *"[PASS]"*"GitHub PAT (live)"* ]]

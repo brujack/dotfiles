@@ -1468,7 +1468,7 @@ run_check_versions() {
   printf "=== Version Check ===\n\n"
 
   if [[ -n ${GITHUB_TOKEN:-} ]] && ! _github_auth_header "${GITHUB_TOKEN}" >/dev/null 2>&1; then
-    printf "  [WARN]     GITHUB_TOKEN contains a line break -- GitHub release checks not run; fix the variable\n"
+    printf "  [WARN]     GITHUB_TOKEN contains a line break -- the 7 checks that send it were not run; fix the variable\n"
     _token_refused=1
   fi
 
