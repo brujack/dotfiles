@@ -2340,8 +2340,7 @@ STUB
 
 @test "_github_api_base honours a 127.0.0.1 port" {
   export _GITHUB_API="http://127.0.0.1:8080"
-  # The warn branch prints the same default URL, so stdout alone cannot tell
-  # an accepted value from a rejected one; empty stderr is what pins this arm.
+  # Empty stderr pins that the loopback arm is honoured silently, not warned on.
   local _out _err
   _out="$(_github_api_base 2>/dev/null)"
   _err="$(_github_api_base 2>&1 >/dev/null)"
