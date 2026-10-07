@@ -45,3 +45,4 @@ Cross-cutting decisions that apply across personal repos. Repo-specific decision
 | [0039](0039-apt-keys-are-scoped-and-pinned.md) | Third-party apt keys are scoped and pinned, never global | 2026-10-03 | Accepted |
 | [0040](0040-apt-conffile-prompts-answered-unattended.md) | apt/dpkg conffile prompts are answered unattended | 2026-10-03 | Accepted |
 | [0041](0041-ubuntu-installs-stage-then-rename-and-stamp.md) | Ubuntu installs stage, then rename, and stamp on success | 2026-10-05 | Accepted |
+| [0042](0042-credentials-reach-curl-on-stdin.md) | GitHub credentials reach curl on stdin, and credential-carrying seams are allowlisted | 2026-10-07 | Accepted |
