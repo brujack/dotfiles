@@ -17,6 +17,15 @@ On `claude` and `workstation` that reader is concrete. Measured on `claude` 2026
 namespace (`pid:[4026531836]`, identical to the operator's shell). A CI job, which can run
 PR-supplied code, can therefore read the operator's curl argv.
 
+**This change is hygiene on those two hosts, not the fix for that reader.** `github-runner`
+is in the `docker` group (`docker:x:983:bruce,github-runner` on `claude`, measured
+2026-10-07; the round 2 Goal-fit lens reports the same on `workstation`), and the socket is
+`root:docker 660`. A job can therefore mount `/home/bruce` into a container and read
+`config/local.sh` at any time, which outranks a 5-second argv window. That defect is tracked
+as a P1 backlog row in `terraform_ansible`, which provisions the runners. Moving the token
+off argv still closes the window for any cross-uid reader without docker or filesystem
+access: system daemons, and any future unprivileged account.
+
 `GITHUB_PAT` is exported by `config/local.sh`. `GITHUB_TOKEN` is set nowhere in the repo, so
 the doctor site is the live leak and the check-versions site leaks only when the operator
 exports the variable by hand.
@@ -75,9 +84,14 @@ listener (or a real network path) that accepts and never answers cannot hang the
 ### `_fetch_github_latest` and `run_check_versions`
 
 - Token unset or empty: no `-H @-`, no stdin, unauthenticated request. Unchanged.
-- `run_check_versions` checks `GITHUB_TOKEN` once, before the per-tool loop. On refusal it
-  prints one line naming `GITHUB_TOKEN` and the reason, and returns 1 without fetching
-  anything. This avoids one reason line per tool and a WARN per tool blaming the network.
+- `run_check_versions` checks `GITHUB_TOKEN` once, before the `_run_cv_check` tools. On
+  refusal it prints one `[WARN]` line naming `GITHUB_TOKEN` and the reason, skips only the
+  `_run_cv_check` tools (the only ones that read the token), and still runs every other
+  check: `CARGO_TOOLS` (crates.io), `_check_cv_oh_my_zsh` and `_check_cv_homebrew_install`.
+  The header and summary print as usual. It then returns **2**, never 1. Return 1 keeps its
+  documented meaning, "a pin is outdated" (`setup_env.sh:73` exits with this rc), and a
+  refused token takes precedence over it. `CLAUDE.md`'s `check-versions` entry documents
+  rc 2.
 - `_fetch_github_latest` keeps its own capture-then-pipe guard for any other caller. On
   refusal it prints nothing on stdout and returns without invoking curl.
 
@@ -107,10 +121,22 @@ using the same harness with a valid token, which shows a recorded call.
   call recorded, plus the site's documented outcome. `run_check_versions` prints the
   reason line exactly once.
 - Real curl, per site: with the mocks directory stripped from `PATH`, `_GITHUB_API` points
-  at a python3 listener. The listener binds port 0 and writes its port to a readiness file
-  that the test polls, bounded, so the test is safe under `bats --jobs 24`. Each test
-  asserts the listener received `Authorization: Bearer <token>`. This is `tdd.md` pitfall F:
-  a mock that records stdin cannot show that real curl sends the header.
+  at a python3 listener. Each test asserts the listener received
+  `Authorization: Bearer <token>`. This is `tdd.md` pitfall F: a mock that records stdin
+  cannot show that real curl sends the header.
+- The listener lives in one shared helper under `tests/helpers/`, never inlined per test,
+  because an orphaned listener hangs the suite rather than failing it. Measured by the
+  round 2 Risk lens: a backgrounded listener with no teardown made `timeout 15 bats`
+  return 124. The helper:
+  - binds port 0 and writes the port to a readiness file atomically (temp file, then `mv`);
+    the test polls it with `-s`, bounded;
+  - is launched with `3>&-` and its stdout and stderr redirected to a file, so it cannot
+    hold bats' fd 3 or output pipe;
+  - carries its own deadline (a server-side socket timeout and a request cap), so it exits
+    even if never killed;
+  - is killed by PID in `teardown()`, not in the test body.
+- `run_check_versions` refusal test runs the real function, not a redefinition, with the
+  tool list stubbed so it does not depend on what the developer's machine has installed.
 - The existing test `_fetch_github_latest adds Authorization header when GITHUB_TOKEN is set`
   asserts the header is in argv, which is the defect. It is replaced, not kept.
 
@@ -134,8 +160,9 @@ using the same harness with a valid token, which shows a recorded call.
 - **R9.** `[PR1]` One bats test per site drives real curl through the production function at a `_GITHUB_API` listener and asserts the received `Authorization` header.
 - **R10.** `[PR1]` Both sites build their URL from `${_GITHUB_API:-https://api.github.com}`.
 - **R11.** `[PR1]` `_fetch_github_latest` passes `--max-time 10` to curl.
-- **R12.** `[PR1]` On a refused `GITHUB_TOKEN`, `run_check_versions` prints one reason line and returns 1 before any fetch.
-- **R13.** `[PR1]` `CLAUDE.md` Test Seams documents `_GITHUB_API` and `MOCK_CURL_STDIN_FILE`.
+- **R12.** `[PR1]` On a refused `GITHUB_TOKEN`, `run_check_versions` prints one reason line, skips only the `_run_cv_check` tools, runs the remaining checks, and returns 2.
+- **R13.** `[PR1]` `CLAUDE.md` Test Seams documents `_GITHUB_API` and `MOCK_CURL_STDIN_FILE`, and the `check-versions` entry documents rc 2.
+- **R14.** `[PR1]` The real-curl listener is a shared `tests/helpers/` helper launched with `3>&-`, with a server-side deadline, and killed in `teardown()`.
 - **V1.** `make test` exits 0 on the Linux box and in CI, including `test-macos`.
 - **V2.** During `./setup_env.sh -t doctor` with the real `GITHUB_PAT`, a `ps -eo args` sampling loop catches at least one `curl ... api.github.com/user` argv (positive control) and no argv containing the token. Run it against the pre-change code too, where it must catch the token.
 - **V3.** `-H @-` delivers the header on the Studio's curl, measured over `ssh` against a listener.
@@ -168,3 +195,16 @@ Disposition: Addressed — seam chosen and its scope stated; capture-then-pipe m
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+### Round 2
+
+Reviewed at commit: `40ec644d`. All three lenses, fresh subagents, prior section framed as history.
+
+Goal-Fit — Finding: the cited reader is dominated: `github-runner` is in the `docker` group on `claude` and `workstation`, so a job can read `config/local.sh` from disk at any time; this change is hygiene there. The seam, timeout and refusal path serve a site whose token is set nowhere. Lens ran `docker run --network none -v /home/bruce:/h:ro` to prove readability, outside its read-only brief; nothing was written. Assumption: no cross-uid reader worth defending lacks docker and filesystem access — open; the docker-group defect goes to `terraform_ansible`.
+Disposition: Addressed — Problem section states hygiene and names the docker-group reader; both sites kept as cheap hygiene (operator chose scope (a)); P1 row filed in `terraform_ansible`.
+
+Ergonomics — Finding: rc 1 on a refused token collides with "outdated" and skips token-free checks; listener harness can hang the suite; R12 test must run the real function. Assumption: a `ps` sampler catches a ~150 ms curl — measured by the author 10/10, confirmed.
+Disposition: Addressed — rc 2, skip only `_run_cv_check` tools; shared listener helper (R14); real-function test with stubbed tool list.
+
+Risk — Finding: no listener teardown; reproduced a hang (rc 124 under `timeout 15`). Same rc-1 collision. Verified `-H @-` header bytes identical to argv form for whitespace, `:`, `@`, `;`, empty token; no new argv or trace leak. Assumption: macOS curl handles `-H @-` like curl 8.22 — unmeasured (`ssh studio` hung); stays V3.
+Disposition: Addressed — R14 (`3>&-`, server deadline, teardown kill, `-s` atomic readiness file); rc 2.
