@@ -30,6 +30,8 @@ setup() {
 }
 
 teardown() {
+  # Defined only once a test has sourced tests/helpers/http_listener.bash.
+  declare -F stop_http_listener >/dev/null && stop_http_listener
   rm -rf "${TMPDIR_TEST}"
   # _aws_key_make_fixture (below) spawns a real gpg-agent/scdaemon bound to
   # each homedir it creates via --quick-generate-key; kill them here rather
@@ -2152,6 +2154,58 @@ STUB
   [ "${_DOCTOR_FAILED}" -eq 0 ]
 }
 
+# ── _github_auth_header ──────────────────────────────────────────────────────
+
+@test "_github_auth_header prints the bearer header for a plain token" {
+  local _out _rc
+  _out="$(_github_auth_header tok123 2>/dev/null)"
+  _rc=$?
+  [ "${_rc}" -eq 0 ]
+  [ "${_out}" = "Authorization: Bearer tok123" ]
+}
+
+@test "_github_auth_header passes quotes and backslashes through unescaped" {
+  local _out _rc
+  _out="$(_github_auth_header 'a"b\c' 2>/dev/null)"
+  _rc=$?
+  [ "${_rc}" -eq 0 ]
+  [ "${_out}" = 'Authorization: Bearer a"b\c' ]
+}
+
+@test "_github_auth_header refuses a token containing a newline" {
+  local _out _rc=0
+  _out="$(_github_auth_header $'a\nX-Injected: 1' 2>/dev/null)" || _rc=$?
+  [ "${_rc}" -eq 1 ]
+  [ -z "${_out}" ]
+}
+
+@test "_github_auth_header refuses a token containing a carriage return" {
+  local _out _rc=0
+  _out="$(_github_auth_header $'a\rb' 2>/dev/null)" || _rc=$?
+  [ "${_rc}" -eq 1 ]
+  [ -z "${_out}" ]
+}
+
+@test "_github_auth_header names the line break on stderr when refusing" {
+  local _err
+  _err="$(_github_auth_header $'a\nb' 2>&1 >/dev/null)" || true
+  [[ "${_err}" == *"line break"* ]]
+}
+
+@test "_github_auth_header refuses a token with a leading line break" {
+  local _out _rc=0
+  _out="$(_github_auth_header $'\nabc' 2>/dev/null)" || _rc=$?
+  [ "${_rc}" -eq 1 ]
+  [ -z "${_out}" ]
+}
+
+@test "_github_auth_header refuses a token with a trailing line break" {
+  local _out _rc=0
+  _out="$(_github_auth_header $'abc\n' 2>/dev/null)" || _rc=$?
+  [ "${_rc}" -eq 1 ]
+  [ -z "${_out}" ]
+}
+
 # ── _doctor_check_github_mcp ─────────────────────────────────────────────────
 
 @test "_doctor_check_github_mcp fails when ~/.claude/mcp.json is missing" {
@@ -2260,6 +2314,214 @@ STUB
   export MOCK_CURL_EXIT=0
   run _doctor_check_github_mcp
   [[ "$output" == *"GITHUB_PAT_EXPIRY"* ]]
+}
+
+@test "_github_api_base defaults when _GITHUB_API is unset" {
+  unset _GITHUB_API
+  # The warn branch prints the same default URL, so stdout alone cannot tell
+  # an accepted value from a rejected one; empty stderr is what pins this arm.
+  local _out _err
+  _out="$(_github_api_base 2>/dev/null)"
+  _err="$(_github_api_base 2>&1 >/dev/null)"
+  [ "${_out}" = "https://api.github.com" ]
+  [ -z "${_err}" ]
+}
+
+@test "_github_api_base accepts the exact default" {
+  export _GITHUB_API="https://api.github.com"
+  # The warn branch prints the same default URL, so stdout alone cannot tell
+  # an accepted value from a rejected one; empty stderr is what pins this arm.
+  local _out _err
+  _out="$(_github_api_base 2>/dev/null)"
+  _err="$(_github_api_base 2>&1 >/dev/null)"
+  [ "${_out}" = "https://api.github.com" ]
+  [ -z "${_err}" ]
+}
+
+@test "_github_api_base honours a 127.0.0.1 port" {
+  export _GITHUB_API="http://127.0.0.1:8080"
+  # Empty stderr pins that the loopback arm is honoured silently, not warned on.
+  local _out _err
+  _out="$(_github_api_base 2>/dev/null)"
+  _err="$(_github_api_base 2>&1 >/dev/null)"
+  [ "${_out}" = "http://127.0.0.1:8080" ]
+  [ -z "${_err}" ]
+}
+
+@test "_github_api_base ignores an off-host URL" {
+  export _GITHUB_API="https://evil.example"
+  local _out _err
+  _out="$(_github_api_base 2>/dev/null)"
+  _err="$(_github_api_base 2>&1 >/dev/null)"
+  [ "${_out}" = "https://api.github.com" ]
+  [[ "${_err}" == *ignoring* ]]
+}
+
+@test "_github_api_base ignores a suffixed default" {
+  export _GITHUB_API="https://api.github.com.evil"
+  local _out _err
+  _out="$(_github_api_base 2>/dev/null)"
+  _err="$(_github_api_base 2>&1 >/dev/null)"
+  [ "${_out}" = "https://api.github.com" ]
+  [[ "${_err}" == *ignoring* ]]
+}
+
+@test "_github_api_base ignores a look-alike loopback host" {
+  export _GITHUB_API="http://127.0.0.1.evil:1"
+  local _out _err
+  _out="$(_github_api_base 2>/dev/null)"
+  _err="$(_github_api_base 2>&1 >/dev/null)"
+  [ "${_out}" = "https://api.github.com" ]
+  [[ "${_err}" == *ignoring* ]]
+}
+
+@test "_github_api_base ignores a loopback with no port" {
+  export _GITHUB_API="http://127.0.0.1:"
+  local _out _err
+  _out="$(_github_api_base 2>/dev/null)"
+  _err="$(_github_api_base 2>&1 >/dev/null)"
+  [ "${_out}" = "https://api.github.com" ]
+  [[ "${_err}" == *ignoring* ]]
+}
+
+@test "_github_api_base ignores a default with a trailing slash" {
+  export _GITHUB_API="https://api.github.com/"
+  local _out _err
+  _out="$(_github_api_base 2>/dev/null)"
+  _err="$(_github_api_base 2>&1 >/dev/null)"
+  [ "${_out}" = "https://api.github.com" ]
+  [[ "${_err}" == *ignoring* ]]
+}
+
+@test "_github_api_base ignores a loopback with a path" {
+  export _GITHUB_API="http://127.0.0.1:80/x"
+  local _out _err
+  _out="$(_github_api_base 2>/dev/null)"
+  _err="$(_github_api_base 2>&1 >/dev/null)"
+  [ "${_out}" = "https://api.github.com" ]
+  [[ "${_err}" == *ignoring* ]]
+}
+
+@test "_github_api_base ignores a leading space" {
+  export _GITHUB_API=" http://127.0.0.1:1"
+  local _out _err
+  _out="$(_github_api_base 2>/dev/null)"
+  _err="$(_github_api_base 2>&1 >/dev/null)"
+  [ "${_out}" = "https://api.github.com" ]
+  [[ "${_err}" == *ignoring* ]]
+}
+
+@test "_github_api_base ignores a prefixed scheme" {
+  export _GITHUB_API="xhttp://127.0.0.1:1"
+  local _out _err
+  _out="$(_github_api_base 2>/dev/null)"
+  _err="$(_github_api_base 2>&1 >/dev/null)"
+  [ "${_out}" = "https://api.github.com" ]
+  [[ "${_err}" == *ignoring* ]]
+}
+
+@test "_github_api_base ignores an embedded newline" {
+  export _GITHUB_API=$'http://127.0.0.1:1\nhttps://evil'
+  local _out _err
+  _out="$(_github_api_base 2>/dev/null)"
+  _err="$(_github_api_base 2>&1 >/dev/null)"
+  [ "${_out}" = "https://api.github.com" ]
+  [[ "${_err}" == *ignoring* ]]
+}
+
+@test "_github_api_base ignores a six-digit port" {
+  export _GITHUB_API="http://127.0.0.1:123456"
+  local _out _err
+  _out="$(_github_api_base 2>/dev/null)"
+  _err="$(_github_api_base 2>&1 >/dev/null)"
+  [ "${_out}" = "https://api.github.com" ]
+  [[ "${_err}" == *ignoring* ]]
+}
+
+@test "_github_api_base ignores Arabic-Indic digits" {
+  local _loc
+  _loc="$(locale -a | grep -iE '^en_US\.utf-?8$' | head -n1)"
+  [ -n "${_loc}" ] || _loc="$(locale -a | grep -iE '^C\.utf-?8$' | head -n1)"
+  [ -n "${_loc}" ] || skip "no UTF-8 locale"
+  export LC_ALL="${_loc}"
+  export _GITHUB_API="http://127.0.0.1:١٢"
+  local _out _err
+  _out="$(_github_api_base 2>/dev/null)"
+  _err="$(_github_api_base 2>&1 >/dev/null)"
+  [ "${_out}" = "https://api.github.com" ]
+  [[ "${_err}" == *ignoring* ]]
+}
+
+@test "_doctor_check_github_mcp ignores an off-host _GITHUB_API" {
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  export GITHUB_PAT="host-tok-1" _GITHUB_API="https://evil.example"
+  unset GITHUB_PAT_EXPIRY
+  mkdir -p "${HOME}/.claude"
+  printf '{"mcpServers":{}}\n' > "${HOME}/.claude/mcp.json"
+  export MOCK_CURL_EXIT=0
+  _doctor_check_github_mcp > /dev/null 2>&1
+  grep -q 'api.github.com/user' "${MOCK_CALLS_FILE}"
+  ! grep -q 'evil.example' "${MOCK_CALLS_FILE}"
+}
+
+@test "_doctor_check_github_mcp keeps the token out of argv" {
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  export GITHUB_PAT="argv-tok-77"
+  unset GITHUB_PAT_EXPIRY
+  mkdir -p "${HOME}/.claude"
+  printf '{"mcpServers":{}}\n' > "${HOME}/.claude/mcp.json"
+  export MOCK_CURL_EXIT=0 MOCK_CURL_STDIN_FILE="${BATS_TEST_TMPDIR}/stdin"
+  _doctor_check_github_mcp
+  # Positive control: curl was called for the live check.
+  grep -q 'api.github.com/user' "${MOCK_CALLS_FILE}"
+  grep -q -- '-H @-' "${MOCK_CALLS_FILE}"
+  ! grep -q 'argv-tok-77' "${MOCK_CALLS_FILE}"
+}
+
+@test "_doctor_check_github_mcp sends the Authorization header on stdin" {
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  export GITHUB_PAT="argv-tok-77"
+  unset GITHUB_PAT_EXPIRY
+  mkdir -p "${HOME}/.claude"
+  printf '{"mcpServers":{}}\n' > "${HOME}/.claude/mcp.json"
+  export MOCK_CURL_EXIT=0 MOCK_CURL_STDIN_FILE="${BATS_TEST_TMPDIR}/stdin"
+  _doctor_check_github_mcp
+  [ "$(cat "${MOCK_CURL_STDIN_FILE}")" = "Authorization: Bearer argv-tok-77" ]
+}
+
+@test "_doctor_check_github_mcp refuses a token with a line break without calling curl" {
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  export GITHUB_PAT=$'a\nb'
+  unset GITHUB_PAT_EXPIRY
+  mkdir -p "${HOME}/.claude"
+  printf '{"mcpServers":{}}\n' > "${HOME}/.claude/mcp.json"
+  export MOCK_CURL_EXIT=0
+  _doctor_check_github_mcp
+  [ "${_DOCTOR_FAIL}" -eq 1 ]
+  # Control for the absence: the argv test above uses this harness and records a curl call.
+  ! grep -q 'curl' "${MOCK_CALLS_FILE}" 2>/dev/null
+}
+
+@test "_doctor_check_github_mcp real curl delivers the header on stdin" {
+  source "${REPO_ROOT}/tests/helpers/http_listener.bash"
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  export GITHUB_PAT="real-tok-55"
+  unset GITHUB_PAT_EXPIRY MOCK_CURL_EXIT
+  mkdir -p "${HOME}/.claude"
+  printf '{"mcpServers":{}}\n' > "${HOME}/.claude/mcp.json"
+  local _clean_path
+  _clean_path="$(printf '%s' "${PATH}" | tr ':' '\n' | grep -v 'tests/mocks' | tr '\n' ':' | sed 's/:$//')"
+  start_http_listener "${BATS_TEST_TMPDIR}"
+  export _GITHUB_API="${HTTP_LISTENER_URL}"
+  # A dead-port proxy: without --noproxy the token would go to it, not the listener.
+  export http_proxy="http://127.0.0.1:9" HTTP_PROXY="http://127.0.0.1:9"
+  # An inherited no_proxy naming 127.0.0.1 would bypass the dead proxy by itself.
+  unset no_proxy NO_PROXY all_proxy ALL_PROXY
+  local _out
+  _out="$(PATH="${_clean_path}" _doctor_check_github_mcp 2>&1)"
+  [[ "${_out}" == *"[PASS]"*"GitHub PAT (live)"* ]]
+  [[ "${_out}" != *FAIL* ]]
+  grep -q 'Authorization: Bearer real-tok-55' "${HTTP_LISTENER_HEADERS}"
 }
 
 @test "_doctor_check_github_mcp passes when all checks pass" {

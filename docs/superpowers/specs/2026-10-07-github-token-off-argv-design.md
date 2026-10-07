@@ -180,6 +180,16 @@ using the same harness with a valid token, which shows a recorded call.
 - **N2.** No unauthenticated fallback when a set token is refused.
 - **N3.** No change to `_doctor_check_github_mcp`'s rc classification for curl exit codes.
 
+
+## Amendments
+
+- R10 -> Both sites build their URL from `_github_api_base`, which honours `_GITHUB_API` only when it equals `https://api.github.com` or matches `^http://127\.0\.0\.1:[0-9]+$`, and otherwise writes one stderr line and uses `https://api.github.com`. — a background security review of `cd8d08cf` flagged the unrestricted seam as credential exfiltration: a stray export would send the real PAT to any host; operator chose the allowlist on 2026-10-07.
+- adds R15 [PR1]: `_github_api_base` has tests for the default, the exact default, an accepted `127.0.0.1` port, and at least six rejected values, and each site has a test showing an off-host `_GITHUB_API` is not contacted. — pins the R10 allowlist at the helper and at both call sites.
+- finding R6 (2026-10-07, reviewer B): DIFFERS — workflows.sh:1277 returns 1 before curl and prints nothing to stdout, but the helper's `GitHub token contains a line break -- refusing to send it` line reaches stderr unsuppressed, so the function does print one line; the requirement says it prints nothing, while R4 specifies only 'no stdout' for the helper.
+- R6 -> On a refused token `_fetch_github_latest` writes nothing to stdout, lets `_github_auth_header`'s one refusal line reach stderr, and does not invoke curl. — the stderr line is the intended diagnosis; the caller tests only stdout for emptiness, so "prints nothing" meant stdout, matching R4.
+- finding R10 (2026-10-07, reviewer both): DIFFERS — lib/helpers.sh:854 matches `^http://127\.0\.0\.1:[0123456789]{1,5}$`, which caps the port at 5 digits, but the requirement says `[0-9]+` (unbounded). A 6-digit port that the requirement would honour is rejected instead, and the test '_github_api_base ignores a six-digit port' pins the narrower behaviour. Both sites do use _github_api_base, and the fallback does write one stderr line.
+- R10 -> Both sites build their URL from `_github_api_base`. Unset, empty or exactly `https://api.github.com` returns that default with no stderr output; a value matching `^http://127\.0\.0\.1:[0123456789]{1,5}$` is honoured; any other value writes one stderr line and returns `https://api.github.com`. — Phase 3 security review found `[0-9]` follows the locale (Unicode digits passed under en_US.UTF-8) and ports were unbounded; ASCII digits capped at 5 is deliberate and test-pinned.
+
 ## Multi-Lens Review
 
 Reviewed at commit: `4448cbcb` (Step 7 self-review commit, before Step 8 dispatch)
@@ -225,3 +235,25 @@ Reviewed at commit: `a16cb60e`. Risk lens only, scoped to the round 2 diff (`40e
 
 Risk — Finding: on a refused token the summary line omits the 7 skipped tools from every count, so rc 2 is the only sign; count them. `_run_cv_check` is nested and cannot be stubbed; stub its callees. Teardown must kill python's own PID. Verified: skip-only is implementable; `--update` unaffected; nothing else consumes rc 2; `3>&-` plus redirect alone prevented an orphan hang on bats 1.13 / Linux (`timeout 30 bats --jobs 2` rc 0 in 1 s). Assumption: the same holds on bats 1.10 (ubuntu-latest) and the macOS runner — unmeasured; the teardown kill and server deadline are the backstop if not.
 Disposition: Addressed — "not checked" count in summary (R12); callee stubs; teardown kills python's own PID. Operator: "addressed, approved".
+
+## Spec alignment (2026-10-07)
+
+- spec: docs/superpowers/specs/2026-10-07-github-token-off-argv-design.md
+- anchor: 4901bde54b21fe4872a6040cf1ee778edd382c3e
+- in scope: R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14, R15
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: no evidence recorded
+- V2: no evidence recorded
+- V3: no evidence recorded

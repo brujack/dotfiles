@@ -1267,13 +1267,19 @@ run_update() {
 }
 
 _fetch_github_latest() {
-  local _repo="$1"
-  local -a _curl_args=(-sf)
+  local _repo="$1" _hdr=""
+  # --noproxy: the 127.0.0.1 test form would otherwise send the bearer
+  # token in cleartext to any http_proxy; harmless for the https default.
+  local -a _curl_args=(-sf --max-time 10 --noproxy 127.0.0.1)
+  # Token goes to curl on stdin (-H @-), not argv, which every uid can read.
+  # Capture first: a refused token must stop here, not fall back unauthenticated.
   if [[ -n ${GITHUB_TOKEN:-} ]]; then
-    _curl_args+=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
+    _hdr=$(_github_auth_header "${GITHUB_TOKEN}") || return 1
+    _curl_args+=(-H @-)
   fi
-  curl "${_curl_args[@]}" \
-    "https://api.github.com/repos/${_repo}/releases/latest" \
+  { [[ -n "${_hdr}" ]] && printf '%s\n' "${_hdr}"; } \
+    | curl "${_curl_args[@]}" \
+      "$(_github_api_base)/repos/${_repo}/releases/latest" \
     | grep '"tag_name"' \
     | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/' \
     | sed 's/^v//'
@@ -1457,13 +1463,19 @@ _check_one_cargo_version() {
 }
 
 run_check_versions() {
-  local _outdated=0 _skipped=0 _warned=0 _ok=0
+  local _outdated=0 _skipped=0 _warned=0 _ok=0 _unchecked=0 _token_refused=0
 
   printf "=== Version Check ===\n\n"
+
+  if [[ -n ${GITHUB_TOKEN:-} ]] && ! _github_auth_header "${GITHUB_TOKEN}" >/dev/null 2>&1; then
+    printf "  [WARN]     GITHUB_TOKEN contains a line break -- the 7 checks that send it were not run; fix the variable\n"
+    _token_refused=1
+  fi
 
   _run_cv_check() {
     local _tool="$1" _pinned="$2" _repo="$3" _cmd="$4" _regex="$5" _var="$6"
     local _out _latest
+    if [[ ${_token_refused} -eq 1 ]]; then _unchecked=$(( _unchecked + 1 )); return 0; fi
     _out=$(_check_one_version "${_tool}" "${_pinned}" "${_repo}" "${_cmd}" "${_regex}" 2>&1)
     printf '%s\n' "${_out}"
     if [[ "${_out}" == *"[SKIP]"* ]];       then _skipped=$(( _skipped + 1 ))
@@ -1509,9 +1521,14 @@ run_check_versions() {
     fi
   done
 
-  printf "\n%d outdated, %d skipped, %d warnings, %d OK\n" \
+  printf "\n%d outdated, %d skipped, %d warnings, %d OK" \
     "${_outdated}" "${_skipped}" "${_warned}" "${_ok}"
+  [[ ${_unchecked} -gt 0 ]] && printf ", %d not checked" "${_unchecked}"
+  printf "\n"
 
+  # A refused token outranks "outdated" (rc 1): the caller cannot act on a
+  # version verdict that skipped seven of its inputs.
+  [[ ${_token_refused} -eq 1 ]] && return 2
   [[ ${_outdated} -eq 0 ]]
 }
 

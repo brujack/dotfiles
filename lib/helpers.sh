@@ -844,6 +844,36 @@ _doctor_check_aws_key_expiry() {
   fi
 }
 
+# Base URL for GitHub calls that carry a bearer token. _GITHUB_API lets a test
+# aim real curl at a local listener; any other value could send the token
+# off-host, so only the default or a 127.0.0.1 port is honoured.
+_github_api_base() {
+  local _default="https://api.github.com" _want="${_GITHUB_API:-}"
+  if [[ -z "${_want}" || "${_want}" == "${_default}" ]]; then
+    printf '%s\n' "${_default}"
+  elif [[ "${_want}" =~ ^http://127\.0\.0\.1:[0123456789]{1,5}$ ]]; then
+    printf '%s\n' "${_want}"
+  else
+    printf "_GITHUB_API=%s is not api.github.com or 127.0.0.1 -- ignoring it\n" "${_want}" >&2
+    printf '%s\n' "${_default}"
+  fi
+}
+
+# Prints the GitHub auth header for `curl -H @-`, so the token reaches curl on
+# stdin instead of argv (argv is readable by every uid via /proc/<pid>/cmdline).
+# A line break would inject a second header, and -H @- has no escape, so refuse.
+# Callers must guard an empty token: it would send "Authorization: Bearer " (a 401, not anonymous).
+_github_auth_header() {
+  local _token="$1"
+  case "${_token}" in
+    *$'\n'* | *$'\r'*)
+      printf "GitHub token contains a line break -- refusing to send it\n" >&2
+      return 1
+      ;;
+  esac
+  printf 'Authorization: Bearer %s\n' "${_token}"
+}
+
 _doctor_check_github_mcp() {
   printf "\nGitHub MCP:\n"
   local _mcp_file="${HOME}/.claude/mcp.json"
@@ -866,11 +896,18 @@ _doctor_check_github_mcp() {
   fi
   doctor_pass "GITHUB_PAT (set)"
 
-  # Check token is live
+  # Token goes to curl on stdin: argv is readable by every uid. Capture first so
+  # a refused token returns before curl runs -- a pipe could not stop it.
+  local _hdr
+  if ! _hdr=$(_github_auth_header "${GITHUB_PAT}"); then
+    doctor_fail "GITHUB_PAT" "contains a line break — fix config/local.sh"
+    return
+  fi
+
   local _curl_rc=0
-  curl --max-time 5 --silent --fail \
-    -H "Authorization: Bearer ${GITHUB_PAT}" \
-    https://api.github.com/user > /dev/null 2>&1 || _curl_rc=$?
+  # --noproxy: a proxy env var would otherwise carry the token in cleartext to the proxy on the 127.0.0.1 seam form.
+  printf '%s\n' "${_hdr}" | curl --max-time 5 --silent --fail --noproxy 127.0.0.1 -H @- \
+    "$(_github_api_base)/user" > /dev/null 2>&1 || _curl_rc=$?
 
   if [[ ${_curl_rc} -eq 22 ]]; then
     doctor_fail "GitHub PAT" "invalid or revoked — rotate at https://github.com/settings/tokens"
