@@ -53,7 +53,9 @@ setup() {
 }
 
 teardown() {
-  :
+  # Defined only once a test has sourced tests/helpers/http_listener.bash.
+  if declare -F stop_http_listener >/dev/null; then stop_http_listener; fi
+  return 0
 }
 
 # ── setup_claude_mcp ─────────────────────────────────────────────────────────
@@ -1454,18 +1456,71 @@ setup_constants_copy() {
   [ -z "$output" ]
 }
 
-@test "_fetch_github_latest adds Authorization header when GITHUB_TOKEN is set" {
-  export GITHUB_TOKEN="mytoken"
+@test "_fetch_github_latest keeps the token off argv" {
+  export GITHUB_TOKEN="gt-argv-1"
   export MOCK_CURL_STDOUT='  "tag_name": "v2.0.0",'
-  _fetch_github_latest "some/repo"
-  grep -q "Authorization: Bearer mytoken" "${MOCK_CALLS_FILE}"
+  export MOCK_CURL_STDIN_FILE="${BATS_TEST_TMPDIR}/stdin"
+  run _fetch_github_latest "some/repo"
+  [ "$status" -eq 0 ]
+  [ "$output" = "2.0.0" ]
+  grep -q 'releases/latest' "${MOCK_CALLS_FILE}"
+  grep -q -- '-H @-' "${MOCK_CALLS_FILE}"
+  ! grep -q 'gt-argv-1' "${MOCK_CALLS_FILE}"
 }
 
-@test "_fetch_github_latest omits Authorization header without GITHUB_TOKEN" {
+@test "_fetch_github_latest sends the header on stdin" {
+  export GITHUB_TOKEN="gt-argv-1"
+  export MOCK_CURL_STDOUT='  "tag_name": "v2.0.0",'
+  export MOCK_CURL_STDIN_FILE="${BATS_TEST_TMPDIR}/stdin"
+  _fetch_github_latest "some/repo" >/dev/null
+  [ "$(cat "${MOCK_CURL_STDIN_FILE}")" = "Authorization: Bearer gt-argv-1" ]
+}
+
+@test "_fetch_github_latest omits the stdin header argv without GITHUB_TOKEN" {
   unset GITHUB_TOKEN
   export MOCK_CURL_STDOUT='  "tag_name": "v1.0.0",'
-  _fetch_github_latest "some/repo"
-  ! grep -q "Authorization" "${MOCK_CALLS_FILE}"
+  _fetch_github_latest "some/repo" >/dev/null
+  grep -q 'releases/latest' "${MOCK_CALLS_FILE}"
+  ! grep -q -- '-H @-' "${MOCK_CALLS_FILE}"
+}
+
+@test "_fetch_github_latest passes max-time 10" {
+  unset GITHUB_TOKEN
+  export MOCK_CURL_STDOUT='  "tag_name": "v1.0.0",'
+  _fetch_github_latest "some/repo" >/dev/null
+  grep -q -- '--max-time 10' "${MOCK_CALLS_FILE}"
+}
+
+@test "_fetch_github_latest refuses a token with a line break" {
+  export GITHUB_TOKEN=$'a\nb'
+  export MOCK_CURL_STDOUT='  "tag_name": "v1.0.0",'
+  run --separate-stderr _fetch_github_latest "some/repo"
+  [ -z "$output" ]
+  ! grep -q 'curl' "${MOCK_CALLS_FILE}"
+}
+
+@test "_fetch_github_latest real curl delivers the header on stdin" {
+  source "${REPO_ROOT}/tests/helpers/http_listener.bash"
+  export GITHUB_TOKEN="gt-real-9"
+  local _clean_path
+  _clean_path="$(printf '%s' "${PATH}" | tr ':' '\n' | grep -v 'tests/mocks' | tr '\n' ':' | sed 's/:$//')"
+  start_http_listener "${BATS_TEST_TMPDIR}"
+  export _GITHUB_API="${HTTP_LISTENER_URL}"
+  # A dead-port proxy: without --noproxy the token would go to it, not the listener.
+  export http_proxy="http://127.0.0.1:9" HTTP_PROXY="http://127.0.0.1:9"
+  local _out
+  _out="$(PATH="${_clean_path}" _fetch_github_latest "some/repo")"
+  [ "${_out}" = "9.9.9" ]
+  grep -q 'Authorization: Bearer gt-real-9' "${HTTP_LISTENER_HEADERS}"
+}
+
+@test "_fetch_github_latest ignores an off-host _GITHUB_API" {
+  unset GITHUB_TOKEN
+  export _GITHUB_API="https://evil.example"
+  export MOCK_CURL_STDOUT='  "tag_name": "v2.0.0",'
+  _fetch_github_latest "some/repo" >/dev/null 2>&1
+  grep -q 'api.github.com/repos/' "${MOCK_CALLS_FILE}"
+  ! grep -q 'evil.example' "${MOCK_CALLS_FILE}"
 }
 
 # ── run_check_versions — tool inclusion ───────────────────────────────────────
@@ -2999,6 +3054,38 @@ assert_all_npm_globals_pinned() {
   _out=$(_check_one_version "git" "2.5.1" "some/repo" "printf '2.5.1'" "[0-9]+\.[0-9]+\.[0-9]+")
   [[ "${_out}" == *"pinned=2.5.1"* ]]
   [[ "${_out}" == *"latest=2.5.1"* ]]
+}
+
+_stub_cv_callees() {
+  : > "${BATS_TEST_TMPDIR}/rec"
+  _check_one_version() { printf '_check_one_version\n' >> "${BATS_TEST_TMPDIR}/rec"; printf '  [OK] %s\n' "$1"; }
+  _check_cv_oh_my_zsh() { printf '_check_cv_oh_my_zsh\n' >> "${BATS_TEST_TMPDIR}/rec"; printf '  [OK] omz\n'; }
+  _check_cv_homebrew_install() { printf '_check_cv_homebrew_install\n' >> "${BATS_TEST_TMPDIR}/rec"; printf '  [OK] brew\n'; }
+  _check_one_cargo_version() { printf '_check_one_cargo_version\n' >> "${BATS_TEST_TMPDIR}/rec"; printf '  [OK] %s\n' "$1"; }
+  # shellcheck disable=SC2034 # read by run_check_versions, sourced from setup_env.sh
+  CARGO_TOOLS=(foo@1.0.0)
+}
+
+@test "run_check_versions reports GitHub checks not checked on a token with a line break" {
+  _stub_cv_callees
+  export GITHUB_TOKEN=$'a\nb'
+  run run_check_versions
+  [ "$status" -eq 2 ]
+  [ "$(grep -c '^_check_one_version$' "${BATS_TEST_TMPDIR}/rec")" -eq 0 ]
+  [ "$(grep -c '^_check_cv_oh_my_zsh$' "${BATS_TEST_TMPDIR}/rec")" -eq 1 ]
+  [ "$(grep -c '^_check_cv_homebrew_install$' "${BATS_TEST_TMPDIR}/rec")" -eq 1 ]
+  [ "$(grep -c '^_check_one_cargo_version$' "${BATS_TEST_TMPDIR}/rec")" -eq 1 ]
+  [[ "$output" == *"7 not checked"* ]]
+  [ "$(printf '%s\n' "$output" | grep -c 'GITHUB_TOKEN')" -eq 1 ]
+}
+
+@test "run_check_versions runs all seven GitHub checks with a valid token" {
+  _stub_cv_callees
+  export GITHUB_TOKEN="ok-tok"
+  run run_check_versions
+  [ "$status" -eq 0 ]
+  [ "$(grep -c '^_check_one_version$' "${BATS_TEST_TMPDIR}/rec")" -eq 7 ]
+  [[ "$output" != *"not checked"* ]]
 }
 
 # ── run_check_versions summary counting ──────────────────────────────────────
