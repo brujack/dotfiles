@@ -42,8 +42,26 @@ teardown() {
   # Positive control: $! is python itself, and fd 0 exists to inspect.
   [[ "$(ps -o comm= -p "${HTTP_LISTENER_PID}")" == *python* ]]
   [ -e "/proc/${HTTP_LISTENER_PID}/fd/0" ]
-  # python reuses the closed fd 3 for its own listening socket, so fd 3 must
-  # be that socket and not the inherited bats descriptor (a pipe or file).
-  [[ "$(readlink "/proc/${HTTP_LISTENER_PID}/fd/3")" == socket:* ]]
+  # python reuses the closed fd 3 for its own listening socket, so assert on
+  # what must be absent instead: no inherited pipe on any fd but 0.
+  local _fd
+  for _fd in /proc/"${HTTP_LISTENER_PID}"/fd/*; do
+    [[ "${_fd##*/}" == 0 ]] && continue
+    [[ "$(readlink "${_fd}")" != pipe:* ]]
+  done
   [ "$(readlink "/proc/${HTTP_LISTENER_PID}/fd/1")" = "${BATS_TEST_TMPDIR}/listener.log" ]
+}
+
+@test "stop_http_listener is safe under errexit after the listener already exited" {
+  run bash -c '
+    set -e
+    source "$1"; source "$2"
+    start_http_listener "$3"
+    curl -sf "${HTTP_LISTENER_URL}/x" >/dev/null
+    stop_http_listener
+    stop_http_listener
+    printf after
+  ' _ "${BATS_TEST_DIRNAME}/helpers/common.bash" "${BATS_TEST_DIRNAME}/helpers/http_listener.bash" "${BATS_TEST_TMPDIR}"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *after* ]]
 }

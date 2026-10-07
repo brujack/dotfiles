@@ -4,7 +4,6 @@
 # hangs the suite instead of failing it (measured: `timeout 15 bats` rc 124).
 # handle_request() serves one request or returns after srv.timeout, so the
 # process ends even if teardown never runs.
-# shellcheck disable=SC2034 # HTTP_LISTENER_URL/PID are the interface read by sourcing tests
 start_http_listener() {
   local _dir="$1" _i
   HTTP_LISTENER_HEADERS="${_dir}/headers"
@@ -34,16 +33,22 @@ PY
   HTTP_LISTENER_PID=$!
   for _i in $(seq 100); do
     [[ -s "${_ready}" ]] && break
+    kill -0 "${HTTP_LISTENER_PID}" 2>/dev/null || break
     sleep 0.05
   done
-  [[ -s "${_ready}" ]] || return 1
+  if [[ ! -s "${_ready}" ]]; then
+    cat "${_dir}/listener.log" >&2
+    return 1
+  fi
+  # shellcheck disable=SC2034 # HTTP_LISTENER_URL is read by the sourcing test
   HTTP_LISTENER_URL="http://127.0.0.1:$(<"${_ready}")"
 }
 
 stop_http_listener() {
   [[ -n "${HTTP_LISTENER_PID:-}" ]] || return 0
-  kill "${HTTP_LISTENER_PID}" 2>/dev/null
-  wait "${HTTP_LISTENER_PID}" 2>/dev/null
+  # Cleanup site: the listener usually exited already, so both may fail.
+  kill "${HTTP_LISTENER_PID}" 2>/dev/null || :
+  wait "${HTTP_LISTENER_PID}" 2>/dev/null || :
   HTTP_LISTENER_PID=""
   return 0
 }
