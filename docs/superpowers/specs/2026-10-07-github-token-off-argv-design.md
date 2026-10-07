@@ -93,3 +93,29 @@ contains `-K -`, the mock copies its stdin to that file. Unset, behaviour is unc
 - **N1.** No change to `scripts/cadence-notify.sh`.
 - **N2.** No unauthenticated fallback when a set token is refused.
 - **N3.** No change to `_doctor_check_github_mcp`'s rc classification for curl exit codes.
+
+## Multi-Lens Review
+
+Reviewed at commit: `4448cbcb` (Step 7 self-review commit, before Step 8 dispatch)
+
+### Goal-Fit
+
+Finding: Worth building, but the Problem section omits the concrete reader. Same-uid processes can already read `/proc/<pid>/environ`, so the real exposure is cross-uid: `github-runner` jobs on `claude`/`workstation`, which can run PR-supplied code. Measured by the author after the lens: `/proc` is mounted without `hidepid`, and `github-runner` processes share the host PID namespace (`pid:[4026531836]`). Second: `curl -H @-` reads the header line from stdin with no config-file quoting, which deletes R5 and its escape-order logic. Measured by the author on curl 8.22 / Linux against a python3 listener: `tok"x\y` arrives verbatim, and an embedded `\n` injects a second header (`X-Injected: 1` received), so R4 still applies. macOS curl unverified. Third: `GITHUB_PAT` is set in `config/local.sh` while `GITHUB_TOKEN` is set nowhere, so the doctor site is the live leak, and V2 samples only the dormant site.
+Assumption: Runner processes share the host PID namespace. Measured: confirmed.
+Disposition:
+
+### Ergonomics
+
+Finding: R9 cannot reach either call site, because both hardcode `https://api.github.com/...` and no URL seam exists. A bare `helper | curl` against a listener tests curl, not the wiring. A seam needs a name, a default, a Test Seams entry, an ephemeral-port listener (port 0, readiness file) for `bats --jobs 24`, and `--max-time` on `_fetch_github_latest`. Second: the absence assertions (token not in argv, no `-K`, curl not invoked) pass if curl never ran; each needs a positive control in the same test. Third: "piped into curl" invites `helper | curl`, which runs curl unauthenticated on refusal and violates N2; the Design must state capture-then-pipe. Minor: under `-t check-versions` a refused token prints one reason line per tool, and each WARN blames the network; `doctor_fail` says "newline" for a `\r`.
+Assumption: R9 can exercise the production call sites without a URL seam. Refuted by `grep -n 'api.github.com' lib/workflows.sh lib/helpers.sh`.
+Disposition:
+
+### Risk
+
+Finding: Same R9 seam gap. Option (a), a hand-built pipe, is the same derivation run twice. Option (b), a `_GITHUB_API` seam, lets an env var direct the token to any host. That is no new capability over editing `PATH`, but it must be stated, and it needs `--max-time` on `_fetch_github_latest` so a silent listener cannot hang the suite. Measured: `( exit 1 ) | curl -sf -K - <url>` sends an unauthenticated request and returns rc 0, so capture-then-pipe is mandatory. V2's `ps` sampling loop passes when it sees nothing; it needs a positive control, such as seeing at least one `curl ... api.github.com` argv or catching the token in pre-change code. Not raised: stdin contention, xtrace (no regression), escaping order (verified correct with real curl).
+Assumption: Same as Ergonomics. Refuted.
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
