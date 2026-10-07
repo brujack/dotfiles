@@ -1,3 +1,5 @@
+> **Status: DONE** — merged in #320 (`326ae7ef`), 2026-10-07.
+
 # GitHub Tokens Off curl's argv Implementation Plan
 
 spec: docs/superpowers/specs/2026-10-07-github-token-off-argv-design.md
