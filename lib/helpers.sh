@@ -847,6 +847,7 @@ _doctor_check_aws_key_expiry() {
 # Prints the GitHub auth header for `curl -H @-`, so the token reaches curl on
 # stdin instead of argv (argv is readable by every uid via /proc/<pid>/cmdline).
 # A line break would inject a second header, and -H @- has no escape, so refuse.
+# Callers must guard an empty token: it would send "Authorization: Bearer " (a 401, not anonymous).
 _github_auth_header() {
   local _token="$1"
   case "${_token}" in

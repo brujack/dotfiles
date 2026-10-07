@@ -2190,6 +2190,20 @@ STUB
   [[ "${_err}" == *"line break"* ]]
 }
 
+@test "_github_auth_header refuses a token with a leading line break" {
+  local _out _rc=0
+  _out="$(_github_auth_header $'\nabc' 2>/dev/null)" || _rc=$?
+  [ "${_rc}" -eq 1 ]
+  [ -z "${_out}" ]
+}
+
+@test "_github_auth_header refuses a token with a trailing line break" {
+  local _out _rc=0
+  _out="$(_github_auth_header $'abc\n' 2>/dev/null)" || _rc=$?
+  [ "${_rc}" -eq 1 ]
+  [ -z "${_out}" ]
+}
+
 # ── _doctor_check_github_mcp ─────────────────────────────────────────────────
 
 @test "_doctor_check_github_mcp fails when ~/.claude/mcp.json is missing" {
