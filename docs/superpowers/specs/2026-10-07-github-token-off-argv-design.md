@@ -235,3 +235,25 @@ Reviewed at commit: `a16cb60e`. Risk lens only, scoped to the round 2 diff (`40e
 
 Risk — Finding: on a refused token the summary line omits the 7 skipped tools from every count, so rc 2 is the only sign; count them. `_run_cv_check` is nested and cannot be stubbed; stub its callees. Teardown must kill python's own PID. Verified: skip-only is implementable; `--update` unaffected; nothing else consumes rc 2; `3>&-` plus redirect alone prevented an orphan hang on bats 1.13 / Linux (`timeout 30 bats --jobs 2` rc 0 in 1 s). Assumption: the same holds on bats 1.10 (ubuntu-latest) and the macOS runner — unmeasured; the teardown kill and server deadline are the backstop if not.
 Disposition: Addressed — "not checked" count in summary (R12); callee stubs; teardown kills python's own PID. Operator: "addressed, approved".
+
+## Spec alignment (2026-10-07)
+
+- spec: docs/superpowers/specs/2026-10-07-github-token-off-argv-design.md
+- anchor: 4901bde54b21fe4872a6040cf1ee778edd382c3e
+- in scope: R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14, R15
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: no evidence recorded
+- V2: no evidence recorded
+- V3: no evidence recorded
