@@ -2318,17 +2318,35 @@ STUB
 
 @test "_github_api_base defaults when _GITHUB_API is unset" {
   unset _GITHUB_API
-  [ "$(_github_api_base)" = "https://api.github.com" ]
+  # The warn branch prints the same default URL, so stdout alone cannot tell
+  # an accepted value from a rejected one; empty stderr is what pins this arm.
+  local _out _err
+  _out="$(_github_api_base 2>/dev/null)"
+  _err="$(_github_api_base 2>&1 >/dev/null)"
+  [ "${_out}" = "https://api.github.com" ]
+  [ -z "${_err}" ]
 }
 
 @test "_github_api_base accepts the exact default" {
   export _GITHUB_API="https://api.github.com"
-  [ "$(_github_api_base)" = "https://api.github.com" ]
+  # The warn branch prints the same default URL, so stdout alone cannot tell
+  # an accepted value from a rejected one; empty stderr is what pins this arm.
+  local _out _err
+  _out="$(_github_api_base 2>/dev/null)"
+  _err="$(_github_api_base 2>&1 >/dev/null)"
+  [ "${_out}" = "https://api.github.com" ]
+  [ -z "${_err}" ]
 }
 
 @test "_github_api_base honours a 127.0.0.1 port" {
   export _GITHUB_API="http://127.0.0.1:8080"
-  [ "$(_github_api_base)" = "http://127.0.0.1:8080" ]
+  # The warn branch prints the same default URL, so stdout alone cannot tell
+  # an accepted value from a rejected one; empty stderr is what pins this arm.
+  local _out _err
+  _out="$(_github_api_base 2>/dev/null)"
+  _err="$(_github_api_base 2>&1 >/dev/null)"
+  [ "${_out}" = "http://127.0.0.1:8080" ]
+  [ -z "${_err}" ]
 }
 
 @test "_github_api_base ignores an off-host URL" {
