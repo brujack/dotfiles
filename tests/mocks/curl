@@ -38,9 +38,15 @@ while [[ $# -gt 0 ]]; do
 done
 # Real curl reads the stdin of `-H @-` as header lines; the mock records it so
 # a test can assert what a caller sent off argv. Done before the exit code is
-# decided so a simulated failure still captures.
-if [[ -n "${MOCK_CURL_STDIN_FILE:-}" && ${stdin_hdr} -eq 1 ]]; then
-  cat > "${MOCK_CURL_STDIN_FILE}"
+# decided so a simulated failure still captures. With no capture file the
+# stdin is still drained, as real curl would, so a `printf | curl -H @-` writer
+# never races our exit into SIGPIPE.
+if [[ ${stdin_hdr} -eq 1 ]]; then
+  if [[ -n "${MOCK_CURL_STDIN_FILE:-}" ]]; then
+    cat > "${MOCK_CURL_STDIN_FILE}"
+  else
+    cat > /dev/null
+  fi
 fi
 # Precedence: MOCK_CURL_EXIT is the pre-existing explicit knob and wins when
 # set. MOCK_CURL_HTTP_STATUS applies only when MOCK_CURL_EXIT is unset AND an

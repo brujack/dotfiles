@@ -14,7 +14,7 @@ setup() {
   # A var exported in the developer's own shell must not leak into "unset"
   # assertions below -- tests/scripts/osx.bats's teardown unset convention,
   # applied here at setup() since these are read at the START of each test.
-  unset MOCK_CURL_EXIT MOCK_CURL_HTTP_STATUS MOCK_CURL_STDOUT MOCK_CURL_STDIN_FILE
+  unset MOCK_CURL_EXIT MOCK_CURL_HTTP_STATUS MOCK_CURL_STDOUT MOCK_CURL_STDIN_FILE MOCK_CURL_FAIL_URL MOCK_CURL_PLATFORM_STDOUT MOCK_CURL_SDK_STDOUT
 }
 
 @test "curl mock: -fsS with MOCK_CURL_HTTP_STATUS=404 exits non-zero" {
@@ -162,4 +162,12 @@ setup() {
   run bash -c "printf 'Authorization: Bearer t2\n' | '${CURL_MOCK}' -sf -H @- http://x/c"
   [ "$status" -eq 22 ]
   [ "$(cat "${MOCK_CURL_STDIN_FILE}")" = "Authorization: Bearer t2" ]
+}
+
+@test "curl mock: MOCK_CURL_STDIN_FILE captures before the MOCK_CURL_FAIL_URL early exit" {
+  export MOCK_CURL_STDIN_FILE="${BATS_TEST_TMPDIR}/stdin_hdr_failurl"
+  export MOCK_CURL_FAIL_URL="http://x/d"
+  run bash -c "printf 'Authorization: Bearer t3\n' | '${CURL_MOCK}' -sf -H @- http://x/d"
+  [ "$status" -eq 22 ]
+  [ "$(cat "${MOCK_CURL_STDIN_FILE}")" = "Authorization: Bearer t3" ]
 }
