@@ -1,7 +1,7 @@
 # GitHub tokens off curl's argv
 
-
 - **Approved:** 2026-10-07
+
 ## Problem
 
 Two call sites hand a GitHub credential to curl as a command-line argument:

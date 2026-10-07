@@ -17,6 +17,7 @@ Master status index for all specs and implementation plans in this directory.
 
 | Date       | Plan                                                                                       | Spec                                                                                                                                      | Status                                                                                  |
 | ---------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| 2026-10-07 | [github-token-off-argv](plans/2026-10-07-github-token-off-argv.md) | [spec](specs/2026-10-07-github-token-off-argv-design.md) | In Progress |
 | 2026-10-04 | [ubuntu-step-midstep-failures](plans/2026-10-04-ubuntu-step-midstep-failures.md) | [spec](specs/2026-10-04-ubuntu-step-midstep-failures-design.md) | Done |
 | 2026-10-04 | [drop-volian-nala-bootstrap](plans/2026-10-04-drop-volian-nala-bootstrap.md) | [spec](specs/2026-10-04-drop-volian-nala-bootstrap-design.md) | Done |
 | 2026-10-03 | [apt-conffile-noninteractive](plans/2026-10-03-apt-conffile-noninteractive.md) | [spec](specs/2026-10-03-apt-conffile-noninteractive-design.md) | Done |
