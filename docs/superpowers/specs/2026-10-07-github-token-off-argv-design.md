@@ -180,6 +180,11 @@ using the same harness with a valid token, which shows a recorded call.
 - **N2.** No unauthenticated fallback when a set token is refused.
 - **N3.** No change to `_doctor_check_github_mcp`'s rc classification for curl exit codes.
 
+
+## Amendments
+
+- R10 -> Both sites build their URL from `_github_api_base`, which honours `_GITHUB_API` only when it equals `https://api.github.com` or matches `^http://127\.0\.0\.1:[0-9]+$`, and otherwise writes one stderr line and uses `https://api.github.com`. — a background security review of `cd8d08cf` flagged the unrestricted seam as credential exfiltration: a stray export would send the real PAT to any host; operator chose the allowlist on 2026-10-07.
+- adds R15 [PR1]: `_github_api_base` has tests for the default, the exact default, an accepted `127.0.0.1` port, and at least six rejected values, and each site has a test showing an off-host `_GITHUB_API` is not contacted. — pins the R10 allowlist at the helper and at both call sites.
 ## Multi-Lens Review
 
 Reviewed at commit: `4448cbcb` (Step 7 self-review commit, before Step 8 dispatch)

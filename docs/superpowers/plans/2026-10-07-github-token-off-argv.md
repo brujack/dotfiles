@@ -6,7 +6,7 @@ spec: docs/superpowers/specs/2026-10-07-github-token-off-argv-design.md
 
 **Goal:** Send the GitHub bearer token to curl on stdin (`-H @-`) at both call sites, so it never appears in curl's argv.
 
-**Architecture:** A new `_github_auth_header` in `lib/helpers.sh` prints the header line or refuses a token containing a line break. `_doctor_check_github_mcp` and `_fetch_github_latest` capture that line first, then pipe it to `curl -H @-`, building the URL from `${_GITHUB_API:-https://api.github.com}`. `run_check_versions` checks the token once and skips only the seven GitHub-release checks on refusal, returning 2. Tests use a recording curl mock (new `MOCK_CURL_STDIN_FILE`) plus one real-curl test per site against a shared python3 listener helper.
+**Architecture:** A new `_github_auth_header` in `lib/helpers.sh` prints the header line or refuses a token containing a line break. `_doctor_check_github_mcp` and `_fetch_github_latest` capture that line first, then pipe it to `curl -H @-`, building the URL from `$(_github_api_base)`, an allowlisted seam. `run_check_versions` checks the token once and skips only the seven GitHub-release checks on refusal, returning 2. Tests use a recording curl mock (new `MOCK_CURL_STDIN_FILE`) plus one real-curl test per site against a shared python3 listener helper.
 
 **Tech Stack:** bash, bats-core, curl, python3 (test listener only).
 
@@ -15,7 +15,7 @@ spec: docs/superpowers/specs/2026-10-07-github-token-off-argv-design.md
 - Work in worktree `../dotfiles-ghtoken` on branch `fix/github-token-off-argv`, created from `origin/master`. Never commit in the main checkout.
 - Capture, then pipe. `_hdr=$(_github_auth_header "$t") || <site outcome>` and only then `printf '%s\n' "${_hdr}" | curl ... -H @- ...`. `_github_auth_header "$t" | curl` is forbidden (N2): a pipe cannot stop curl, which then sends an unauthenticated request and exits 0.
 - Never escape the token. `-H @-` takes the header line verbatim. Refuse `\n` and `\r`.
-- Both sites build the URL from `${_GITHUB_API:-https://api.github.com}`.
+- Both sites build the URL from `$(_github_api_base)` (Task 5), which honours `_GITHUB_API` only when it is `https://api.github.com` or `http://127.0.0.1:<port>`; anything else warns and falls back to the default.
 - `run_check_versions` returns 2 on a refused token, taking precedence over 1 ("a pin is outdated").
 - No change to `scripts/cadence-notify.sh` (N1). No change to doctor's curl rc classification (22 fail; 28/6 warn; other warn; 0 pass) (N3).
 - Every absence assertion has a positive control in the same test: the request URL appears in `MOCK_CALLS_FILE`.
@@ -29,7 +29,7 @@ spec: docs/superpowers/specs/2026-10-07-github-token-off-argv-design.md
 ## Session-level verification
 
 - `make test` exits 0 on the branch, with the new test counts above zero (each task's `--count` gate).
-- V1: CI green on all six jobs, including `test-macos` and `bash-coverage`. The orchestrator also runs `make bash-coverage` once after Task 5. It takes about 19 min in CI, so run it in the background and poll; it is not a per-task gate.
+- V1: CI green on all six jobs, including `test-macos` and `bash-coverage`. The orchestrator also runs `make bash-coverage` once after Task 6. It takes about 19 min in CI, so run it in the background and poll; it is not a per-task gate.
 - V2 (operator machine, real `GITHUB_PAT`): run a `ps -eo args` sampler at 20 ms during `./setup_env.sh -t doctor`. On the branch it must match `curl .* api.github.com/user` at least once (positive control) and never match the token. On `origin/master` it must catch the token. The sampler prints only match counts, never argv.
 - V3: on the Studio over `ssh`, `printf 'Authorization: Bearer x\n' | curl -s -H @- http://127.0.0.1:<port>/` against a header-logging listener delivers exactly `Bearer x`.
 
@@ -259,15 +259,70 @@ Leave the rc branches below unchanged.
 
 - [ ] Run the gates. The existing 22/28/6/7 tests must stay green, which covers N3. Then commit.
 
-### Task 5: check-versions site
+### Task 5: allowlist the `_GITHUB_API` seam
+
+> Spliced in during Phase 2, 2026-10-07. A background security review of `cd8d08cf` flagged the unrestricted seam as a credential-exfiltration path: a stray `export _GITHUB_API=...` would send the real PAT to that host. Operator chose the allowlist. R10 is amended and R15 added in the spec's `## Amendments`.
 
 ```yaml-task
 id: 5
+description: Add _github_api_base, honouring _GITHUB_API only for https://api.github.com or http://127.0.0.1:<port>, and wire the doctor site to it.
+role: executor
+model: sonnet
+tdd: required
+requirements: [R10, R15]
+acceptance:
+  - cmd: bats -f "_github_api_base|_doctor_check_github_mcp" tests/setup_env/unit.bats
+    exit_code: 0
+  - cmd: '[ "$(bats --count -f "_github_api_base" tests/setup_env/unit.bats)" -ge 8 ]'
+    exit_code: 0
+  - cmd: make test
+    exit_code: 0
+max_retries: 3
+files_touched: [lib/helpers.sh, tests/setup_env/unit.bats]
+depends_on: [4]
+```
+
+**Interfaces:**
+
+- Produces: `_github_api_base` prints one URL on stdout, rc 0. Unset, empty or exactly `https://api.github.com` prints `https://api.github.com`. A value matching `^http://127\.0\.0\.1:[0-9]+$` prints itself. Anything else prints `https://api.github.com` and writes one stderr line containing `ignoring`.
+
+- [ ] Write failing tests named `_github_api_base <phrase>`:
+  1. unset -> default; 2. exact default -> default; 3. `http://127.0.0.1:8080` -> itself.
+  4-9. Each of `https://evil.example`, `https://api.github.com.evil`, `http://127.0.0.1.evil:1`, `http://127.0.0.1:`, `https://api.github.com/`, `http://127.0.0.1:80/x` prints the default, and stderr contains `ignoring`. Capture stderr with `2>&1 >/dev/null` into its own variable.
+- [ ] Add `_doctor_check_github_mcp ignores an off-host _GITHUB_API`: `_GITHUB_API=https://evil.example`, mocked curl. `MOCK_CALLS_FILE` contains `api.github.com/user` and does not contain `evil.example`.
+- [ ] Tighten `_doctor_check_github_mcp real curl delivers the header on stdin`. Capture its output (`_out="$(PATH=... _doctor_check_github_mcp 2>&1)"`) and assert it contains the live-check pass line. Read `doctor_pass` for the exact text, which `_doctor_check_github_mcp` passes as `GitHub PAT (live)`. Assert it contains no `FAIL`, and keep the header grep. The current `_DOCTOR_PASS -ge 1` is satisfied before curl runs (both Task 4 reviews).
+- [ ] Run them and confirm RED.
+- [ ] Add above `_github_auth_header` in `lib/helpers.sh`:
+
+```bash
+# Base URL for GitHub calls that carry a bearer token. _GITHUB_API lets a test
+# aim real curl at a local listener; any other value could send the token
+# off-host, so only the default or a 127.0.0.1 port is honoured.
+_github_api_base() {
+  local _default="https://api.github.com" _want="${_GITHUB_API:-}"
+  if [[ -z "${_want}" || "${_want}" == "${_default}" ]]; then
+    printf '%s\n' "${_default}"
+  elif [[ "${_want}" =~ ^http://127\.0\.0\.1:[0-9]+$ ]]; then
+    printf '%s\n' "${_want}"
+  else
+    printf "_GITHUB_API=%s is not api.github.com or 127.0.0.1 -- ignoring it\n" "${_want}" >&2
+    printf '%s\n' "${_default}"
+  fi
+}
+```
+
+- [ ] In `_doctor_check_github_mcp` replace `"${_GITHUB_API:-https://api.github.com}/user"` with `"$(_github_api_base)/user"`.
+- [ ] Run the gates, then commit.
+
+### Task 6: check-versions site
+
+```yaml-task
+id: 6
 description: _fetch_github_latest sends GITHUB_TOKEN via -H @- with --max-time 10 to ${_GITHUB_API}; run_check_versions refuses once, skips the 7 GitHub checks, returns 2.
 role: executor
 model: sonnet
 tdd: required
-requirements: [R1, R3, R5, R6, R8, R9, R10, R11, R12]
+requirements: [R1, R3, R5, R6, R8, R9, R10, R11, R12, R15]
 acceptance:
   - cmd: bats -f "_fetch_github_latest|run_check_versions" tests/setup_env/workflows.bats
     exit_code: 0
@@ -277,7 +332,7 @@ acceptance:
     exit_code: 0
 max_retries: 3
 files_touched: [lib/workflows.sh, tests/setup_env/workflows.bats]
-depends_on: [1, 2, 3]
+depends_on: [5]
 ```
 
 **Interfaces:**
@@ -293,7 +348,8 @@ depends_on: [1, 2, 3]
   6. **real curl**: strip mocks, listener, `_GITHUB_API="${HTTP_LISTENER_URL}"`, `GITHUB_TOKEN=gt-real-9`. Output is `9.9.9`, and the headers contain `Authorization: Bearer gt-real-9`.
   7. **run_check_versions not checked**: run the real function with `GITHUB_TOKEN=$'a\nb'` and `CARGO_TOOLS=(foo@1.0.0)`, after defining recorder stubs that append their name to `${BATS_TEST_TMPDIR}/rec` and print `[OK]`: `_check_one_version`, `_check_cv_oh_my_zsh`, `_check_cv_homebrew_install` and `_check_one_cargo_version`. Status is 2, `rec` has 0 `_check_one_version` lines and one line for each of the other three, output contains `7 not checked`, and exactly one output line contains `GITHUB_TOKEN`.
   8. **run_check_versions control**: same stubs with `GITHUB_TOKEN=ok-tok`. Status is 0, `rec` has 7 `_check_one_version` lines, and the output does not contain `not checked`.
-- [ ] Name tests 1-6 `_fetch_github_latest <phrase>` and tests 7-8 `run_check_versions <phrase>`, where the phrase contains the bold keyword (`argv`, `stdin`, `max-time`, `line break`, `real curl`, `not checked`; the control needs none). Task 5's count gate matches on them.
+  9. **off-host**: `_GITHUB_API=https://evil.example`, `MOCK_CURL_STDOUT` as in test 1. `MOCK_CALLS_FILE` contains `api.github.com/repos/` and does not contain `evil.example`. Name it `_fetch_github_latest ignores an off-host _GITHUB_API`.
+- [ ] Name tests 1-6 `_fetch_github_latest <phrase>` and tests 7-8 `run_check_versions <phrase>`, where the phrase contains the bold keyword (`argv`, `stdin`, `max-time`, `line break`, `real curl`, `not checked`; the control needs none). Task 6's count gate matches on them.
 - [ ] Run them and confirm each fails for its stated reason.
 - [ ] Rewrite `_fetch_github_latest`:
 
@@ -309,7 +365,7 @@ _fetch_github_latest() {
   fi
   { [[ -n "${_hdr}" ]] && printf '%s\n' "${_hdr}"; } \
     | curl "${_curl_args[@]}" \
-      "${_GITHUB_API:-https://api.github.com}/repos/${_repo}/releases/latest" \
+      "$(_github_api_base)/repos/${_repo}/releases/latest" \
     | grep '"tag_name"' \
     | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/' \
     | sed 's/^v//'
@@ -344,10 +400,10 @@ _fetch_github_latest() {
 
 - [ ] Run the gates, then commit.
 
-### Task 6: documentation
+### Task 7: documentation
 
 ```yaml-task
-id: 6
+id: 7
 description: Document _GITHUB_API, MOCK_CURL_STDIN_FILE, the listener helper and check-versions rc 2 in CLAUDE.md, and remove the backlog row (docs-only, no behaviour change, so tdd not-applicable).
 role: executor
 model: sonnet
@@ -364,14 +420,14 @@ acceptance:
     exit_code: 0
 max_retries: 2
 files_touched: [CLAUDE.md, docs/superpowers/README.md]
-depends_on: [4, 5]
+depends_on: [4, 6]
 ```
 
-The suite reads no tracked `.md` outside `tests/` (`tests/scripts/docs_inert_premise.bats`), so this task's gates are scoped. The orchestrator ran `make test` after Task 5.
+The suite reads no tracked `.md` outside `tests/` (`tests/scripts/docs_inert_premise.bats`), so this task's gates are scoped. The orchestrator ran `make test` after Task 6.
 
 - [ ] In `CLAUDE.md` Entry Points, add to the `check-versions` bullet: "Exits 2 when `GITHUB_TOKEN` contains a line break: the seven GitHub-release checks are not run and the summary counts them as `not checked`; rc 2 takes precedence over the rc 1 'outdated' verdict."
 - [ ] In `CLAUDE.md` Test Seams, after the `_CRATES_API` bullet, add:
-  - `_GITHUB_API` (`lib/helpers.sh:_doctor_check_github_mcp`, `lib/workflows.sh:_fetch_github_latest`): the API base, default `https://api.github.com`. It exists so a test can point real curl at `tests/helpers/http_listener.bash`. It directs the bearer token wherever it points, which is no wider than putting a `curl` on `PATH`.
+  - `_GITHUB_API` (`lib/helpers.sh:_doctor_check_github_mcp`, `lib/workflows.sh:_fetch_github_latest`): the API base, default `https://api.github.com`. It exists so a test can point real curl at `tests/helpers/http_listener.bash`. Read through `_github_api_base`, which honours it only for `https://api.github.com` or `http://127.0.0.1:<port>`; any other value warns and is ignored, so a stray export cannot send the token off-host.
   - `MOCK_CURL_STDIN_FILE` (`tests/mocks/curl`): records the stdin of a call carrying `-H @-`, the route both GitHub sites use to keep the token off argv.
   - `tests/helpers/http_listener.bash`: the only sanctioned listener. It closes fd 3, redirects output, carries a deadline, and is stopped from `teardown()`. Inlining a listener risks hanging the suite.
 - [ ] In `docs/superpowers/README.md` Backlog, delete the row beginning ``| `_fetch_github_latest` passes `GITHUB_TOKEN` in curl argv``.
