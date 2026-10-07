@@ -1,5 +1,7 @@
 # GitHub tokens off curl's argv
 
+
+- **Approved:** 2026-10-07
 ## Problem
 
 Two call sites hand a GitHub credential to curl as a command-line argument:
@@ -222,4 +224,4 @@ Disposition: Addressed — R14 (`3>&-`, server deadline, teardown kill, `-s` ato
 Reviewed at commit: `a16cb60e`. Risk lens only, scoped to the round 2 diff (`40ec644d..a16cb60e`).
 
 Risk — Finding: on a refused token the summary line omits the 7 skipped tools from every count, so rc 2 is the only sign; count them. `_run_cv_check` is nested and cannot be stubbed; stub its callees. Teardown must kill python's own PID. Verified: skip-only is implementable; `--update` unaffected; nothing else consumes rc 2; `3>&-` plus redirect alone prevented an orphan hang on bats 1.13 / Linux (`timeout 30 bats --jobs 2` rc 0 in 1 s). Assumption: the same holds on bats 1.10 (ubuntu-latest) and the macOS runner — unmeasured; the teardown kill and server deadline are the backstop if not.
-Disposition:
+Disposition: Addressed — "not checked" count in summary (R12); callee stubs; teardown kills python's own PID. Operator: "addressed, approved".
