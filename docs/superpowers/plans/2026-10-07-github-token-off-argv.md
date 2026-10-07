@@ -345,7 +345,7 @@ depends_on: [5]
   3. **no token, argv**: `GITHUB_TOKEN` unset. `MOCK_CALLS_FILE` has `releases/latest` and not `-H @-`.
   4. **max-time**: `MOCK_CALLS_FILE` contains `--max-time 10`.
   5. **line break**: `GITHUB_TOKEN=$'a\nb'`. Output is empty, and `MOCK_CALLS_FILE` has no `curl` line.
-  6. **real curl**: strip mocks, listener, `_GITHUB_API="${HTTP_LISTENER_URL}"`, `GITHUB_TOKEN=gt-real-9`. Output is `9.9.9`, and the headers contain `Authorization: Bearer gt-real-9`.
+  6. **real curl**: strip mocks, listener, `_GITHUB_API="${HTTP_LISTENER_URL}"`, `GITHUB_TOKEN=gt-real-9`. Output is `9.9.9`, and the headers contain `Authorization: Bearer gt-real-9`. Also export `http_proxy=http://127.0.0.1:9` and `HTTP_PROXY` to the same dead port, so the test fails if `--noproxy 127.0.0.1` is dropped.
   7. **run_check_versions not checked**: run the real function with `GITHUB_TOKEN=$'a\nb'` and `CARGO_TOOLS=(foo@1.0.0)`, after defining recorder stubs that append their name to `${BATS_TEST_TMPDIR}/rec` and print `[OK]`: `_check_one_version`, `_check_cv_oh_my_zsh`, `_check_cv_homebrew_install` and `_check_one_cargo_version`. Status is 2, `rec` has 0 `_check_one_version` lines and one line for each of the other three, output contains `7 not checked`, and exactly one output line contains `GITHUB_TOKEN`.
   8. **run_check_versions control**: same stubs with `GITHUB_TOKEN=ok-tok`. Status is 0, `rec` has 7 `_check_one_version` lines, and the output does not contain `not checked`.
   9. **off-host**: `_GITHUB_API=https://evil.example`, `MOCK_CURL_STDOUT` as in test 1. `MOCK_CALLS_FILE` contains `api.github.com/repos/` and does not contain `evil.example`. Name it `_fetch_github_latest ignores an off-host _GITHUB_API`.
@@ -356,7 +356,9 @@ depends_on: [5]
 ```bash
 _fetch_github_latest() {
   local _repo="$1" _hdr=""
-  local -a _curl_args=(-sf --max-time 10)
+  # --noproxy: the 127.0.0.1 test form would otherwise send the bearer
+  # token in cleartext to any http_proxy; harmless for the https default.
+  local -a _curl_args=(-sf --max-time 10 --noproxy 127.0.0.1)
   # Token goes to curl on stdin (-H @-), not argv, which every uid can read.
   # Capture first: a refused token must stop here, not fall back unauthenticated.
   if [[ -n ${GITHUB_TOKEN:-} ]]; then
