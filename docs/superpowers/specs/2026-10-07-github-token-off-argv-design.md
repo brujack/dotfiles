@@ -19,8 +19,8 @@ PR-supplied code, can therefore read the operator's curl argv.
 
 **This change is hygiene on those two hosts, not the fix for that reader.** `github-runner`
 is in the `docker` group (`docker:x:983:bruce,github-runner` on `claude`, measured
-2026-10-07; the round 2 Goal-fit lens reports the same on `workstation`), and the socket is
-`root:docker 660`. A job can therefore mount `/home/bruce` into a container and read
+2026-10-07, and `docker:x:984:bruce,github-runner` on `workstation`, measured over `ssh`
+the same day), and the socket is `root:docker 660` on both. A job can therefore mount `/home/bruce` into a container and read
 `config/local.sh` at any time, which outranks a 5-second argv window. That defect is tracked
 as a P1 backlog row in `terraform_ansible`, which provisions the runners. Moving the token
 off argv still closes the window for any cross-uid reader without docker or filesystem
@@ -88,7 +88,9 @@ listener (or a real network path) that accepts and never answers cannot hang the
   refusal it prints one `[WARN]` line naming `GITHUB_TOKEN` and the reason, skips only the
   `_run_cv_check` tools (the only ones that read the token), and still runs every other
   check: `CARGO_TOOLS` (crates.io), `_check_cv_oh_my_zsh` and `_check_cv_homebrew_install`.
-  The header and summary print as usual. It then returns **2**, never 1. Return 1 keeps its
+  The header and summary print as usual, and each skipped tool is counted in a separate
+  "not checked" figure in the summary line, so the summary cannot hide the skip. It then
+  returns **2**, never 1. Return 1 keeps its
   documented meaning, "a pin is outdated" (`setup_env.sh:73` exits with this rc), and a
   refused token takes precedence over it. `CLAUDE.md`'s `check-versions` entry documents
   rc 2.
@@ -135,8 +137,14 @@ using the same harness with a valid token, which shows a recorded call.
   - carries its own deadline (a server-side socket timeout and a request cap), so it exits
     even if never killed;
   - is killed by PID in `teardown()`, not in the test body.
-- `run_check_versions` refusal test runs the real function, not a redefinition, with the
-  tool list stubbed so it does not depend on what the developer's machine has installed.
+- `run_check_versions` refusal test runs the real function, not a redefinition.
+  `_run_cv_check` is a nested function redefined on every call, so it cannot be stubbed;
+  the test stubs what it calls instead. `_check_one_version` is a recorder asserted at 0
+  calls, and `_check_cv_oh_my_zsh`, `_check_cv_homebrew_install` and the `CARGO_TOOLS`
+  check are recorders each asserted as called. The test asserts the "not checked" count
+  is 7 and the rc is 2.
+- The listener helper's teardown kills the python process's own PID, never a wrapping
+  subshell or `timeout`.
 - The existing test `_fetch_github_latest adds Authorization header when GITHUB_TOKEN is set`
   asserts the header is in argv, which is the defect. It is replaced, not kept.
 
@@ -160,7 +168,7 @@ using the same harness with a valid token, which shows a recorded call.
 - **R9.** `[PR1]` One bats test per site drives real curl through the production function at a `_GITHUB_API` listener and asserts the received `Authorization` header.
 - **R10.** `[PR1]` Both sites build their URL from `${_GITHUB_API:-https://api.github.com}`.
 - **R11.** `[PR1]` `_fetch_github_latest` passes `--max-time 10` to curl.
-- **R12.** `[PR1]` On a refused `GITHUB_TOKEN`, `run_check_versions` prints one reason line, skips only the `_run_cv_check` tools, runs the remaining checks, and returns 2.
+- **R12.** `[PR1]` On a refused `GITHUB_TOKEN`, `run_check_versions` prints one reason line, skips only the `_run_cv_check` tools, runs the remaining checks, reports the skipped tools as a "not checked" count in the summary, and returns 2.
 - **R13.** `[PR1]` `CLAUDE.md` Test Seams documents `_GITHUB_API` and `MOCK_CURL_STDIN_FILE`, and the `check-versions` entry documents rc 2.
 - **R14.** `[PR1]` The real-curl listener is a shared `tests/helpers/` helper launched with `3>&-`, with a server-side deadline, and killed in `teardown()`.
 - **V1.** `make test` exits 0 on the Linux box and in CI, including `test-macos`.
@@ -208,3 +216,10 @@ Disposition: Addressed — rc 2, skip only `_run_cv_check` tools; shared listene
 
 Risk — Finding: no listener teardown; reproduced a hang (rc 124 under `timeout 15`). Same rc-1 collision. Verified `-H @-` header bytes identical to argv form for whitespace, `:`, `@`, `;`, empty token; no new argv or trace leak. Assumption: macOS curl handles `-H @-` like curl 8.22 — unmeasured (`ssh studio` hung); stays V3.
 Disposition: Addressed — R14 (`3>&-`, server deadline, teardown kill, `-s` atomic readiness file); rc 2.
+
+### Round 3 (scoped)
+
+Reviewed at commit: `a16cb60e`. Risk lens only, scoped to the round 2 diff (`40ec644d..a16cb60e`).
+
+Risk — Finding: on a refused token the summary line omits the 7 skipped tools from every count, so rc 2 is the only sign; count them. `_run_cv_check` is nested and cannot be stubbed; stub its callees. Teardown must kill python's own PID. Verified: skip-only is implementable; `--update` unaffected; nothing else consumes rc 2; `3>&-` plus redirect alone prevented an orphan hang on bats 1.13 / Linux (`timeout 30 bats --jobs 2` rc 0 in 1 s). Assumption: the same holds on bats 1.10 (ubuntu-latest) and the macOS runner — unmeasured; the teardown kill and server deadline are the backstop if not.
+Disposition:
