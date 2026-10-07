@@ -10,7 +10,7 @@ start_http_listener() {
   local _ready="${_dir}/port"
   python3 -I - "${_ready}" "${HTTP_LISTENER_HEADERS}" "${HTTP_LISTENER_DEADLINE:-10}" \
     3>&- >"${_dir}/listener.log" 2>&1 <<'PY' &
-import http.server, os, sys
+import http.server, os, socketserver, sys
 # 3>&- closes bats' fd 3 only. A caller (a git hook, for one) can hand down
 # other pipes, so close every inherited fd above stderr before binding.
 for _fd in [int(n) for n in os.listdir("/dev/fd")]:
@@ -31,7 +31,10 @@ class H(http.server.BaseHTTPRequestHandler):
         self.wfile.write(body)
     def log_message(self, *a):
         pass
-srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+# TCPServer, not http.server.HTTPServer: HTTPServer.server_bind() calls
+# socket.getfqdn(), a reverse lookup that blocks on macOS mDNS and kept the
+# listener from ever writing its port on the macos-latest runner.
+srv = socketserver.TCPServer(("127.0.0.1", 0), H)
 srv.timeout = deadline
 with open(ready + ".tmp", "w") as f:
     f.write(str(srv.server_address[1]))
