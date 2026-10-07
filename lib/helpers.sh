@@ -844,6 +844,21 @@ _doctor_check_aws_key_expiry() {
   fi
 }
 
+# Base URL for GitHub calls that carry a bearer token. _GITHUB_API lets a test
+# aim real curl at a local listener; any other value could send the token
+# off-host, so only the default or a 127.0.0.1 port is honoured.
+_github_api_base() {
+  local _default="https://api.github.com" _want="${_GITHUB_API:-}"
+  if [[ -z "${_want}" || "${_want}" == "${_default}" ]]; then
+    printf '%s\n' "${_default}"
+  elif [[ "${_want}" =~ ^http://127\.0\.0\.1:[0-9]+$ ]]; then
+    printf '%s\n' "${_want}"
+  else
+    printf "_GITHUB_API=%s is not api.github.com or 127.0.0.1 -- ignoring it\n" "${_want}" >&2
+    printf '%s\n' "${_default}"
+  fi
+}
+
 # Prints the GitHub auth header for `curl -H @-`, so the token reaches curl on
 # stdin instead of argv (argv is readable by every uid via /proc/<pid>/cmdline).
 # A line break would inject a second header, and -H @- has no escape, so refuse.
@@ -891,7 +906,7 @@ _doctor_check_github_mcp() {
 
   local _curl_rc=0
   printf '%s\n' "${_hdr}" | curl --max-time 5 --silent --fail -H @- \
-    "${_GITHUB_API:-https://api.github.com}/user" > /dev/null 2>&1 || _curl_rc=$?
+    "$(_github_api_base)/user" > /dev/null 2>&1 || _curl_rc=$?
 
   if [[ ${_curl_rc} -eq 22 ]]; then
     doctor_fail "GitHub PAT" "invalid or revoked — rotate at https://github.com/settings/tokens"

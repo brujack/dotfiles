@@ -2316,6 +2316,87 @@ STUB
   [[ "$output" == *"GITHUB_PAT_EXPIRY"* ]]
 }
 
+@test "_github_api_base defaults when _GITHUB_API is unset" {
+  unset _GITHUB_API
+  [ "$(_github_api_base)" = "https://api.github.com" ]
+}
+
+@test "_github_api_base accepts the exact default" {
+  export _GITHUB_API="https://api.github.com"
+  [ "$(_github_api_base)" = "https://api.github.com" ]
+}
+
+@test "_github_api_base honours a 127.0.0.1 port" {
+  export _GITHUB_API="http://127.0.0.1:8080"
+  [ "$(_github_api_base)" = "http://127.0.0.1:8080" ]
+}
+
+@test "_github_api_base ignores an off-host URL" {
+  export _GITHUB_API="https://evil.example"
+  local _out _err
+  _out="$(_github_api_base 2>/dev/null)"
+  _err="$(_github_api_base 2>&1 >/dev/null)"
+  [ "${_out}" = "https://api.github.com" ]
+  [[ "${_err}" == *ignoring* ]]
+}
+
+@test "_github_api_base ignores a suffixed default" {
+  export _GITHUB_API="https://api.github.com.evil"
+  local _out _err
+  _out="$(_github_api_base 2>/dev/null)"
+  _err="$(_github_api_base 2>&1 >/dev/null)"
+  [ "${_out}" = "https://api.github.com" ]
+  [[ "${_err}" == *ignoring* ]]
+}
+
+@test "_github_api_base ignores a look-alike loopback host" {
+  export _GITHUB_API="http://127.0.0.1.evil:1"
+  local _out _err
+  _out="$(_github_api_base 2>/dev/null)"
+  _err="$(_github_api_base 2>&1 >/dev/null)"
+  [ "${_out}" = "https://api.github.com" ]
+  [[ "${_err}" == *ignoring* ]]
+}
+
+@test "_github_api_base ignores a loopback with no port" {
+  export _GITHUB_API="http://127.0.0.1:"
+  local _out _err
+  _out="$(_github_api_base 2>/dev/null)"
+  _err="$(_github_api_base 2>&1 >/dev/null)"
+  [ "${_out}" = "https://api.github.com" ]
+  [[ "${_err}" == *ignoring* ]]
+}
+
+@test "_github_api_base ignores a default with a trailing slash" {
+  export _GITHUB_API="https://api.github.com/"
+  local _out _err
+  _out="$(_github_api_base 2>/dev/null)"
+  _err="$(_github_api_base 2>&1 >/dev/null)"
+  [ "${_out}" = "https://api.github.com" ]
+  [[ "${_err}" == *ignoring* ]]
+}
+
+@test "_github_api_base ignores a loopback with a path" {
+  export _GITHUB_API="http://127.0.0.1:80/x"
+  local _out _err
+  _out="$(_github_api_base 2>/dev/null)"
+  _err="$(_github_api_base 2>&1 >/dev/null)"
+  [ "${_out}" = "https://api.github.com" ]
+  [[ "${_err}" == *ignoring* ]]
+}
+
+@test "_doctor_check_github_mcp ignores an off-host _GITHUB_API" {
+  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
+  export GITHUB_PAT="host-tok-1" _GITHUB_API="https://evil.example"
+  unset GITHUB_PAT_EXPIRY
+  mkdir -p "${HOME}/.claude"
+  printf '{"mcpServers":{}}\n' > "${HOME}/.claude/mcp.json"
+  export MOCK_CURL_EXIT=0
+  _doctor_check_github_mcp > /dev/null 2>&1
+  grep -q 'api.github.com/user' "${MOCK_CALLS_FILE}"
+  ! grep -q 'evil.example' "${MOCK_CALLS_FILE}"
+}
+
 @test "_doctor_check_github_mcp keeps the token out of argv" {
   _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
   export GITHUB_PAT="argv-tok-77"
@@ -2365,9 +2446,10 @@ STUB
   _clean_path="$(printf '%s' "${PATH}" | tr ':' '\n' | grep -v 'tests/mocks' | tr '\n' ':' | sed 's/:$//')"
   start_http_listener "${BATS_TEST_TMPDIR}"
   export _GITHUB_API="${HTTP_LISTENER_URL}"
-  PATH="${_clean_path}" _doctor_check_github_mcp
-  [ "${_DOCTOR_FAIL}" -eq 0 ]
-  [ "${_DOCTOR_PASS}" -ge 1 ]
+  local _out
+  _out="$(PATH="${_clean_path}" _doctor_check_github_mcp 2>&1)"
+  [[ "${_out}" == *"[PASS]"*"GitHub PAT (live)"* ]]
+  [[ "${_out}" != *FAIL* ]]
   grep -q 'Authorization: Bearer real-tok-55' "${HTTP_LISTENER_HEADERS}"
 }
 
