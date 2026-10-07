@@ -2385,6 +2385,56 @@ STUB
   [[ "${_err}" == *ignoring* ]]
 }
 
+@test "_github_api_base ignores a leading space" {
+  export _GITHUB_API=" http://127.0.0.1:1"
+  local _out _err
+  _out="$(_github_api_base 2>/dev/null)"
+  _err="$(_github_api_base 2>&1 >/dev/null)"
+  [ "${_out}" = "https://api.github.com" ]
+  [[ "${_err}" == *ignoring* ]]
+}
+
+@test "_github_api_base ignores a prefixed scheme" {
+  export _GITHUB_API="xhttp://127.0.0.1:1"
+  local _out _err
+  _out="$(_github_api_base 2>/dev/null)"
+  _err="$(_github_api_base 2>&1 >/dev/null)"
+  [ "${_out}" = "https://api.github.com" ]
+  [[ "${_err}" == *ignoring* ]]
+}
+
+@test "_github_api_base ignores an embedded newline" {
+  export _GITHUB_API=$'http://127.0.0.1:1\nhttps://evil'
+  local _out _err
+  _out="$(_github_api_base 2>/dev/null)"
+  _err="$(_github_api_base 2>&1 >/dev/null)"
+  [ "${_out}" = "https://api.github.com" ]
+  [[ "${_err}" == *ignoring* ]]
+}
+
+@test "_github_api_base ignores a six-digit port" {
+  export _GITHUB_API="http://127.0.0.1:123456"
+  local _out _err
+  _out="$(_github_api_base 2>/dev/null)"
+  _err="$(_github_api_base 2>&1 >/dev/null)"
+  [ "${_out}" = "https://api.github.com" ]
+  [[ "${_err}" == *ignoring* ]]
+}
+
+@test "_github_api_base ignores Arabic-Indic digits" {
+  local _loc
+  _loc="$(locale -a | grep -iE '^en_US\.utf-?8$' | head -n1)"
+  [ -n "${_loc}" ] || _loc="$(locale -a | grep -iE '^C\.utf-?8$' | head -n1)"
+  [ -n "${_loc}" ] || skip "no UTF-8 locale"
+  export LC_ALL="${_loc}"
+  export _GITHUB_API="http://127.0.0.1:١٢"
+  local _out _err
+  _out="$(_github_api_base 2>/dev/null)"
+  _err="$(_github_api_base 2>&1 >/dev/null)"
+  [ "${_out}" = "https://api.github.com" ]
+  [[ "${_err}" == *ignoring* ]]
+}
+
 @test "_doctor_check_github_mcp ignores an off-host _GITHUB_API" {
   _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
   export GITHUB_PAT="host-tok-1" _GITHUB_API="https://evil.example"
@@ -2446,6 +2496,8 @@ STUB
   _clean_path="$(printf '%s' "${PATH}" | tr ':' '\n' | grep -v 'tests/mocks' | tr '\n' ':' | sed 's/:$//')"
   start_http_listener "${BATS_TEST_TMPDIR}"
   export _GITHUB_API="${HTTP_LISTENER_URL}"
+  # A dead-port proxy: without --noproxy the token would go to it, not the listener.
+  export http_proxy="http://127.0.0.1:9" HTTP_PROXY="http://127.0.0.1:9"
   local _out
   _out="$(PATH="${_clean_path}" _doctor_check_github_mcp 2>&1)"
   [[ "${_out}" == *"[PASS]"*"GitHub PAT (live)"* ]]

@@ -851,7 +851,7 @@ _github_api_base() {
   local _default="https://api.github.com" _want="${_GITHUB_API:-}"
   if [[ -z "${_want}" || "${_want}" == "${_default}" ]]; then
     printf '%s\n' "${_default}"
-  elif [[ "${_want}" =~ ^http://127\.0\.0\.1:[0-9]+$ ]]; then
+  elif [[ "${_want}" =~ ^http://127\.0\.0\.1:[0123456789]{1,5}$ ]]; then
     printf '%s\n' "${_want}"
   else
     printf "_GITHUB_API=%s is not api.github.com or 127.0.0.1 -- ignoring it\n" "${_want}" >&2
@@ -905,7 +905,8 @@ _doctor_check_github_mcp() {
   fi
 
   local _curl_rc=0
-  printf '%s\n' "${_hdr}" | curl --max-time 5 --silent --fail -H @- \
+  # --noproxy: a proxy env var would otherwise carry the token in cleartext to the proxy on the 127.0.0.1 seam form.
+  printf '%s\n' "${_hdr}" | curl --max-time 5 --silent --fail --noproxy 127.0.0.1 -H @- \
     "$(_github_api_base)/user" > /dev/null 2>&1 || _curl_rc=$?
 
   if [[ ${_curl_rc} -eq 22 ]]; then
