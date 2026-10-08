@@ -73,15 +73,28 @@ WARN; that is accepted (see Failure path).
 1. **Delete `_check_cv_oh_my_zsh`** and its call in `run_check_versions`. Rewrite the
    `OH_MY_ZSH_VER` comment in `lib/constants.sh` so it no longer names a check-versions
    consumer or update command. `OH_MY_ZSH_VER` itself stays: `git clone --branch` still reads it.
-2. **Fix `_check_cv_homebrew_install`'s endpoint** to `Homebrew/install/commits/HEAD`.
-   `HEAD` resolves to the default branch, so a future rename cannot break it again. The
-   `grep '"sha"' | head -1` parse is unchanged: the commit's own `sha` is the first key.
-3. **Add `--max-time 10`** to `_check_cv_homebrew_install`'s and `_check_one_cargo_version`'s
+2. **Point `_check_cv_homebrew_install` at the installer's own history:**
+   `Homebrew/install/commits?path=install.sh&per_page=1`. The pin guards `install.sh`, not
+   the repo, so the reference is the newest commit that touched that file. Over the 90 days
+   to 2026-10-07 the repo took 74 commits and 9 touched `install.sh` (latest `09c62fc5…`,
+   2026-10-01), so a repo-tip reference would report OUTDATED for unrelated churn about 8
+   times in 9. The response is a one-element list whose object starts with `"sha"`, so the
+   existing `grep '"sha"' | head -1 | cut -d'"' -f4` parse is unchanged (measured: returns
+   `09c62fc5…`). The path query follows the default branch, so a future rename cannot
+   break it the way `commits/master` broke.
+3. **Make homebrew-install report-only.** On OUTDATED it no longer calls
+   `_prompt_version_update`, even under `--update`. Instead the OUTDATED line is followed by
+   `https://github.com/Homebrew/install/compare/<pin>...<latest>`, so reviewing the
+   installer diff is one click. The pin is executed by `lib/macos.sh:82` and both bootstrap
+   scripts, and `_update_version_pin` is a bare `sed` with no diff shown; fixing the check
+   would otherwise make a one-keystroke, unreviewed bump of that pin reachable for the first
+   time. Bumping stays a manual edit.
+4. **Add `--max-time 10`** to `_check_cv_homebrew_install`'s and `_check_one_cargo_version`'s
    curl, matching `_fetch_github_latest`'s value and spelling.
 
 No new constant, helper or seam. `HOMEBREW_INSTALL_SHA` is not bumped: the first fixed run
-reports it OUTDATED, and bumping it means reviewing the installer-script diff, a separate
-decision.
+reports it OUTDATED (pin `5e78e698…`, 2026-06-21; installer last changed `09c62fc5…`), and
+bumping it means reviewing the installer diff, a separate decision.
 
 Worst case on a fully stalled network: 7 + 1 + 8 calls at 10 s each, at most 160 s.
 
@@ -105,16 +118,25 @@ and the Studio, unchecked on `workstation` and CI.
 
 - **homebrew-install, endpoint + bound:** one case running `_check_cv_homebrew_install`
   against `tests/mocks/curl` (no `curl()` override) that asserts a single
-  `MOCK_CALLS_FILE` line carries both `Homebrew/install/commits/HEAD` and `--max-time 10`
-  (`grep -- '--max-time 10' | grep -q 'commits/HEAD'`), so the flag is tied to that call and
-  the case fails if the function stops calling curl. RED before both edits.
+  `MOCK_CALLS_FILE` line carries both `commits?path=install.sh` and `--max-time 10`
+  (`grep -- '--max-time 10' | grep -qF 'commits?path=install.sh'`), so the flag is tied to
+  that call and the case fails if the function stops calling curl.
+- **homebrew-install, report-only:** with `UPDATE_VERSIONS=1` and a differing SHA, a
+  recorder stub for `_prompt_version_update` is never called, and the output contains
+  `https://github.com/Homebrew/install/compare/<pin>...<latest>`. A positive control in the
+  same test asserts the OUTDATED line was printed, so the not-called assertion cannot pass
+  because the function printed nothing.
 - **cargo, bound:** one case in `tests/setup_env/check_versions_cargo.bats`, whose `setup()`
   points `_CRATES_API` at a sentinel host, asserting a single line carries both the sentinel
   crate URL and `--max-time 10`.
-- **oh-my-zsh removal:** delete `_check_cv_oh_my_zsh`'s own tests and its stubs; the
-  ordering/call-count test (`workflows.bats` ~`:3066-3080`) asserts `_check_cv_oh_my_zsh` is
-  **not** called. The WARN-count comment at ~`:3104` and any count it guards are updated to
-  the new total, re-derived from the code.
+- **oh-my-zsh removal:** delete `run_check_versions checks oh-my-zsh tag` (`workflows.bats`
+  ~`:1541`) and `_check_cv_oh_my_zsh emits WARN…` (~`:1555`). In the call-recording test
+  (~`:3066-3080`) **keep** the `_check_cv_oh_my_zsh` recorder stub and flip its assertion
+  from `-eq 1` to `-eq 0`, alongside the existing `-eq 1` for `_check_cv_homebrew_install`
+  as the positive control: without the stub a reinstated call fails only with "command not
+  found" on stderr and the count stays 0 regardless. The WARN-count literal at ~`:3115`
+  goes from 17 to 16. The no-op `_check_cv_oh_my_zsh` stubs in `check_versions_cargo.bats`
+  (`:46`, `:67`, `:96`) are removed.
 - Existing tests that override `curl()` as a function ignore argv and are unaffected.
 
 A real-curl silent-listener test is not added: the timeout behaviour is curl's and is
@@ -123,29 +145,32 @@ measured above, and each case would cost the full 10 s bound in suite time.
 ### Docs
 
 `CLAUDE.md` `check-versions` bullet: drop `_check_cv_oh_my_zsh` from the list of checks that
-still run without the token.
+still run without the token, and say homebrew-install is report-only under `--update`.
 
 ### Out of scope
 
 - The four cheat.sh curls in `-t update` (`lib/workflows.sh:435`, `:445`, `:1156`, `:1166`).
   Backlog row already committed with the first version of this spec.
-- Authenticating the homebrew call through `_github_api_base` / `_github_auth_header`.
+- Authenticating the homebrew call through `_github_api_base` / `_github_auth_header`. The
+  call stays on the unauthenticated 60/h limit; a 403 reads as `could not fetch latest SHA`.
 - Bumping `HOMEBREW_INSTALL_SHA`.
 
 ## Requirements
 
 - **R1.** `[PR1]` `_check_cv_oh_my_zsh` no longer exists in `lib/workflows.sh`, and `run_check_versions` does not call it.
 - **R2.** `[PR1]` `OH_MY_ZSH_VER` remains in `lib/constants.sh`, and its comment names no check-versions consumer.
-- **R3.** `[PR1]` `_check_cv_homebrew_install`'s curl requests `https://api.github.com/repos/Homebrew/install/commits/HEAD` with `--max-time 10`.
+- **R3.** `[PR1]` `_check_cv_homebrew_install`'s curl requests `https://api.github.com/repos/Homebrew/install/commits?path=install.sh&per_page=1` with `--max-time 10`.
 - **R4.** `[PR1]` `_check_one_cargo_version`'s curl passes `--max-time 10`.
-- **R5.** `[PR1]` A `workflows.bats` case asserts one curl call line carrying both `commits/HEAD` and `--max-time 10`.
-- **R6.** `[PR1]` A `check_versions_cargo.bats` case asserts one curl call line carrying both the `_CRATES_API` crate URL and `--max-time 10`.
-- **R7.** `[PR1]` A test asserts `run_check_versions` does not call `_check_cv_oh_my_zsh`.
-- **R8.** `[PR1]` `CLAUDE.md`'s `check-versions` bullet does not name `_check_cv_oh_my_zsh`.
-- **R9.** `[PR1]` The backlog row for this bug is removed from `docs/superpowers/README.md`.
-- **V1.** R5 and R6 each fail with their `--max-time 10` removed; R5 also fails with the endpoint reverted to `commits/master`.
+- **R5.** `[PR1]` On OUTDATED, `_check_cv_homebrew_install` never calls `_prompt_version_update`, and prints `https://github.com/Homebrew/install/compare/<pin>...<latest>`.
+- **R6.** `[PR1]` A `workflows.bats` case asserts one curl call line carrying both `commits?path=install.sh` and `--max-time 10`.
+- **R7.** `[PR1]` A `workflows.bats` case with `UPDATE_VERSIONS=1` asserts the OUTDATED line and compare URL are printed and `_prompt_version_update` is not called.
+- **R8.** `[PR1]` A `check_versions_cargo.bats` case asserts one curl call line carrying both the `_CRATES_API` crate URL and `--max-time 10`.
+- **R9.** `[PR1]` The call-recording test keeps a `_check_cv_oh_my_zsh` recorder stub and asserts it is called 0 times, beside a 1-time assertion for `_check_cv_homebrew_install`.
+- **R10.** `[PR1]` `CLAUDE.md`'s `check-versions` bullet does not name `_check_cv_oh_my_zsh` and states homebrew-install is report-only.
+- **R11.** `[PR1]` The backlog row for this bug is removed from `docs/superpowers/README.md`.
+- **V1.** Each of R6, R7, R8, R9 goes red under its mutation: R6 and R8 with `--max-time 10` removed, R6 also with the endpoint reverted to `commits/master`; R7 with the `_prompt_version_update` call restored; R9 with the `_check_cv_oh_my_zsh` call restored in `run_check_versions`.
 - **V2.** `make test` exits 0 on the branch.
-- **V3.** A real `./setup_env.sh -t check-versions` on `claude` prints homebrew-install as OK or OUTDATED, not WARN, and prints no oh-my-zsh line.
+- **V3.** A real `./setup_env.sh -t check-versions` on `claude`, with GitHub rate-limit headroom, prints homebrew-install as OK or OUTDATED with a compare URL, not WARN, and prints no oh-my-zsh line.
 - **N1.** No change to the output line, counter or exit code of any check other than oh-my-zsh and homebrew-install.
 - **N2.** No new constant, helper function, or environment-variable seam.
 - **N3.** No change to the cheat.sh curls, to how the homebrew call authenticates, or to `HOMEBREW_INSTALL_SHA`'s value.
@@ -164,14 +189,22 @@ Disposition: Addressed — operator chose "Fix both + bound" (2026-10-07); spec 
 
 Finding: Same partial-body misattribution for cargo. Endpoint and `--max-time 10` should be matched on one line, not two greps.
 Assumption: every newly bounded response finishes within 10 s on a slow but working link. Measured: refuted at 20 KB/s for cargo-deny (10.4 s) and cargo-tarpaulin (11.3 s).
-Disposition:
+Disposition: Addressed — operator, 2026-10-07: failure-path claim narrowed; slow-link WARN accepted.
 
 ### Risk
 
 Finding: Minor. Put the cargo case in `check_versions_cargo.bats` (has the `_CRATES_API` sentinel); tie endpoint and flag to one grep. Confirmed the three sites are the complete unbounded set on the check-versions path.
 Assumption: `--max-time` bounds DNS only where curl has `AsynchDNS`; confirmed on `claude` and the Studio, unchecked on `workstation` and CI.
-Disposition:
+Disposition: Addressed — operator, 2026-10-07: cargo case moved, one-grep form adopted; AsynchDNS gap accepted as documented.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+### Round 2
+
+Reviewed at commit: `91fabd46` (all three lenses; rescoped body)
+
+- **Goal-Fit.** Finding: `commits/HEAD` is the wrong reference; the pin guards `install.sh`, and most repo commits do not touch it, so OUTDATED would be near-permanent. Assumption checked by the orchestrator: 74 commits in 90 days, 9 touching `install.sh`. Disposition: Addressed — operator chose the `install.sh` path reference, 2026-10-07.
+- **Ergonomics.** Finding: same reference problem; and fixing the check makes `--update`'s one-keystroke, no-diff bump of an executed installer pin reachable. Assumption: whether the operator bumps promptly; moot under the path reference. Disposition: Addressed — operator chose report-only plus compare URL, 2026-10-07.
+- **Risk.** Finding: R7 as written was vacuous once the recorder stub was deleted; exact test edits unstated (`:1541`, `:3079`, `:3115` 17 to 16). Assumption: top-level `sha` precedes nested ones; measured true for both object and list responses, left as the existing parse. Revision made: recorder stub kept with `-eq 0` plus positive control, edits stated, mutation added to V1. Disposition:
