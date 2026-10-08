@@ -1573,8 +1573,9 @@ setup_constants_copy() {
 @test "_check_cv_homebrew_install queries install.sh history with max-time 10" {
   local _ok=0 _outdated=0 _warned=0
   _check_cv_homebrew_install >/dev/null
-  grep -- '--max-time 10' "${MOCK_CALLS_FILE}" \
-    | grep -qF 'https://api.github.com/repos/Homebrew/install/commits?path=install.sh&per_page=1'
+  # Whole tokens: a substring match would accept --max-time 100 or per_page=10.
+  grep -E -- '--max-time 10( |$)' "${MOCK_CALLS_FILE}" \
+    | grep -qE 'https://api\.github\.com/repos/Homebrew/install/commits\?path=install\.sh&per_page=1( |$)'
 }
 
 @test "_check_cv_homebrew_install is report-only under --update and prints a compare URL" {
