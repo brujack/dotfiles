@@ -135,3 +135,29 @@ zsh -i -c 'echo $PARALLEL_JOBS'      # 18 on claude, 12 on workstation
 - **N1.** No change to `fs.inotify.max_user_watches` or any other sysctl.
 - **N2.** No sysctl write from `-t update` or `-t setup_user`.
 - **N3.** No change to the terraform_ansible Makefile.
+
+## Multi-Lens Review
+
+Reviewed at commit: `a341e58c` (Step 7 self-review commit, before Step 8 dispatch)
+
+### Goal-Fit
+
+Finding: (1) Section 3 goes live in every new shell at merge, while the sysctl changes only on the next setup/developer run, so `claude` runs 18 jobs against limit 128: the measured failing configuration. Gate the export on the live value. (2) N3 rules out putting the per-host default in terraform_ansible's own `ansible/Makefile`, with no mechanism given; there it would reach every actor and sit next to its consumer. (3) Name who runs the matrix on `claude`. (4) An empty or non-numeric `_INOTIFY_PROC` read compares as 0; gate on `^[0-9]+$`. (5) V2 run from a shell that inherited the variable passes regardless; no case covers the ordering in (1).
+Assumption: the 15/32 failures at 18 jobs are `max_user_instances` exhaustion, not `max_user_watches`, docker contention or memory. Refute by running the matrix at 18 on the default limit and grepping failed logs for `inotify_init`/`EMFILE`.
+Disposition:
+
+### Ergonomics
+
+Finding: (1) Long-lived sessions keep their launch environment (the Bash tool sources a frozen snapshot; the ansible session on workstation is ~6 days old), so the export reaches nothing until relaunch from a fresh shell; the spec's mechanism sentence is wrong. (2) V2 checks a fresh shell, not the consumer process. (3) Doctor's remedy names `-t developer`, a 10+ minute full install; name the direct one-line apply instead. (4) "Source and call" over ssh leaves `HAS_DOCKER` unset, so the step silently returns 0. (5) N2 means routine `update` never applies it. (6) `_OVERRIDE_HOSTNAME` needs a Test Seams entry.
+Assumption: the matrix runs from a process started after merge. Check `/proc/<ansible session pid>/environ` for `PARALLEL_JOBS` after merge. (Orchestrator check: `sudo -n true` succeeds on `claude` and `workstation`.)
+Disposition:
+
+### Risk
+
+Finding: (1) HIGH: `_stub_ubuntu_steps` (`tests/setup_env/workflows.bats:715`) stubs 13 steps by name and not the new one, and dev shells export `HAS_DOCKER=1`, so the real step runs with production paths: `make test` goes red on `claude`, green in CI. `linux_ubuntu.bats:4464` exports `HAS_DOCKER=1` explicitly. Set the three seams at `setup()` scope and add the step to the stub list. (2) The "would set the live kernel value" claim is wrong as uid 1000; the real hazard is `tests/mocks/tee` swallowing failures. Verify the write by reading the file back; drive write failure with `MOCK_TEE_EXIT`. (3) WSL2 (`cruncher`) carries `HAS_DOCKER`; without systemd in WSL the conf is never applied at boot and doctor fails after every restart. (4) Unreadable `/proc` read reports "below target"; give it its own message. (5) Raising workstation from 6 to 12 adds docker contention next to its 6 live runners; the measurement covers wall time, not runner interference.
+Assumption: `HAS_DOCKER` hosts run systemd-sysctl at boot. Holds on `workstation`; unknown on `cruncher` (ssh refused 2026-10-08, so unmeasured).
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A: spec has no comparison/evaluator/ambiguous-criteria trigger.
